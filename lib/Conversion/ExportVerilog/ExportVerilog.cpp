@@ -2779,6 +2779,7 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
 
   // This is invoked for expressions that have a non-single use.  This could
   // either be because they are dead or because they have multiple uses.
+  // todo: use_empty should be marked as pruned prior to emission.
   if (op->getResult(0).use_empty()) {
     indent() << "// Unused: ";
     --numStatementsEmitted;
@@ -3866,6 +3867,12 @@ LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
 }
 
 void StmtEmitter::emitStatement(Operation *op) {
+  // If this op has been marked as pruned, prefix the line with a comment.
+  if (auto pruningReason = op->getAttrOfType<StringAttr>("pruned")) {
+    indent() << "// Pruned (" << pruningReason.str() << "): ";
+    --numStatementsEmitted;
+  }
+
   // Expressions may either be ignored or emitted as an expression statements.
   if (isVerilogExpression(op)) {
     if (emitter.outOfLineExpressions.count(op)) {

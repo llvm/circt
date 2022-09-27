@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "ExportVerilogInternals.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
@@ -60,10 +60,15 @@ public:
   }
 };
 
-// The PruningConversionPattern will aggressively remove any operation which has
-// a zero-valued operand.
+// Marks the provided 'op' as pruned.
+static void pruneZeroWidthOp(Operation *op) {
+  op->setAttr("pruned", StringAttr::get(op->getContext(), "Zero Width"));
+}
+
+// The NoI0OperandsConversionPattern will aggressively remove any operation
+// which has a zero-valued operand.
 template <typename TOp>
-struct PruningConversionPattern : public OpConversionPattern<TOp> {
+struct NoI0OperandsConversionPattern : public OpConversionPattern<TOp> {
 public:
   using OpConversionPattern<TOp>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<TOp>::OpAdaptor;
@@ -74,16 +79,17 @@ public:
     if (noI0TypedValue(adaptor.getOperands()))
       return failure();
 
-    // Part of i0-typed logic - erase!
-    rewriter.eraseOp(op);
-    return success();
+    // Part of i0-typed logic - prune!
+    pruneZeroWidthOp(op);
+    return failure();
   }
 };
 
 template <typename... TOp>
-static void addNoI0TypedOperandsLegalizationPattern(ConversionTarget &target) {
-  target.addDynamicallyLegalOp<TOp...>(
-      [&](auto op) { return noI0TypedValue(op->getOperands()); });
+static void addNoI0OperandsLegalizationPattern(ConversionTarget &target) {
+  target.addDynamicallyLegalOp<TOp...>([&](auto op) {
+    return op->hasAttr("pruned") || noI0TypedValue(op->getOperands());
+  });
 }
 
 // A generic pruning pattern which prunes any operation which has an operand
@@ -91,9 +97,9 @@ static void addNoI0TypedOperandsLegalizationPattern(ConversionTarget &target) {
 // operands are not i0 typed.
 template <typename TOp>
 struct NoI0OperandPruningPattern {
-  using ConversionPattern = PruningConversionPattern<TOp>;
+  using ConversionPattern = NoI0OperandsConversionPattern<TOp>;
   static void addLegalizer(ConversionTarget &target) {
-    addNoI0TypedOperandsLegalizationPattern<TOp>(target);
+    addNoI0OperandsLegalizationPattern<TOp>(target);
   }
 };
 
@@ -103,23 +109,26 @@ template <typename... TPattern>
 static void addPruningPattern(ConversionTarget &target,
                               RewritePatternSet &patterns,
                               PruneTypeConverter &typeConverter) {
-  (patterns.add<TPattern::ConversionPattern>(typeConverter,
-                                             patterns.getContext()),
+  (patterns.add<typename TPattern::ConversionPattern>(typeConverter,
+                                                      patterns.getContext()),
    ...);
-  (TOp::addLegalizer(target), ...);
+  (TPattern::addLegalizer(target), ...);
 }
 } // namespace
 
 LogicalResult ExportVerilog::pruneZeroValuedLogic(hw::HWModuleOp module) {
-  ConversionTarget target(getContext());
-  RewritePatternSet patterns(&getContext());
+  ConversionTarget target(*module.getContext());
+  RewritePatternSet patterns(module.getContext());
   PruneTypeConverter typeConverter;
+
+  target.addLegalDialect<sv::SVDialect, comb::CombDialect, hw::HWDialect>();
 
   // Generic conversion and legalization patterns for operations that we
   // expect to be using i0 valued logic.
   addPruningPattern<NoI0OperandPruningPattern<sv::PAssignOp>,
-                    NoI0OperandPruningPattern<sv::BPAssignOp>>(target, patterns,
-                                                               typeConverter);
+                    NoI0OperandPruningPattern<sv::BPAssignOp>,
+                    NoI0OperandPruningPattern<sv::AssignOp>>(target, patterns,
+                                                             typeConverter);
 
   return applyPartialConversion(module, target, std::move(patterns));
 }

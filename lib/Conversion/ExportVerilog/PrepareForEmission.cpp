@@ -973,6 +973,9 @@ void ExportVerilog::prepareHWModule(hw::HWModuleOp module,
   // Legalization.
   legalizeHWModule(*module.getBodyBlock(), options);
 
+  // Zero-valued logic pruning.
+  pruneZeroValuedLogic(module);
+
   EmittedExpressionStateManager expressionStateManager(options);
   // Spill wires to prettify verilog outputs.
   prettifyAfterLegalization(*module.getBodyBlock(), expressionStateManager);
