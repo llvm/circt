@@ -30,6 +30,16 @@ def PrintHWModuleGraph : Pass<"hw-print-module-graph", "mlir::ModuleOp"> {
   ];
 }
 
+def FlattenIO : Pass<"hw-flatten-io", "mlir::ModuleOp"> {
+  let summary = "Flattens hw::Structure typed in- and output ports.";
+  let constructor =  "circt::hw::createFlattenIOPass()";
+  
+  let options = [
+    Option<"verboseEdges", "verbose-edges", "bool", "false",
+      "Print information on SSA edges (types, operand #, ...)">,
+  ];
+}
+
 def HWSpecialize : Pass<"hw-specialize", "mlir::ModuleOp"> {
   let summary = "Specializes instances of parametric hw.modules";
   let constructor = "circt::hw::createHWSpecializePass()";
