@@ -7,7 +7,7 @@ circuit ConstantSinking : %[[
       {
         "class": "sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source": "~ConstantSinking|ConstantSinking>w",
-        "wireName": "~ConstantSinking|ConstantSinking>t"
+        "sink": "~ConstantSinking|ConstantSinking>t"
       }
     ]
   },
