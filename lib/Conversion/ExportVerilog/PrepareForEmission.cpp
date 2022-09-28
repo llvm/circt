@@ -345,6 +345,20 @@ rewriteAddWithNegativeConstant(comb::AddOp add, hw::ConstantOp rhsCst,
   return negCst;
 }
 
+// Transforms a hw.struct_explode operation into a set of hw.struct_extract
+// operations.
+static void lowerStructExplodeOp(hw::StructExplodeOp op) {
+  ImplicitLocOpBuilder builder(op.getLoc(), op);
+  StructType structType = op.getInput().getType().cast<StructType>();
+  for (auto [res, field] :
+       llvm::zip(op.getResults(), structType.getElements())) {
+    auto extract =
+        builder.create<hw::StructExtractOp>(op.getInput(), field.name);
+    res.replaceAllUsesWith(extract);
+  }
+  op.erase();
+}
+
 /// Given an operation in a procedural region, scan up the region tree to find
 /// the first operation in a graph region (typically an always or initial op).
 ///
@@ -872,6 +886,13 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
           continue;
         }
       }
+    }
+
+    // Lower hw.struct_explode ops into a set of hw.struct_extract ops which
+    // have well-defined SV emission semantics.
+    if (auto structExplodeOp = dyn_cast<hw::StructExplodeOp>(op)) {
+      lowerStructExplodeOp(structExplodeOp);
+      continue;
     }
 
     // Try to anticipate expressions that ExportVerilog may spill to a temporary
