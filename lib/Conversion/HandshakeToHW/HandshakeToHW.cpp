@@ -78,6 +78,8 @@ static Type toValidType(Type t) {
           types.push_back(toValidType(innerType));
         return mlir::TupleType::get(types[0].getContext(), types);
       })
+      .Case<NoneType>(
+          [&](NoneType nt) { return IntegerType::get(nt.getContext(), 0); })
       .Default([&](Type t) { return t; });
 }
 
@@ -1542,8 +1544,9 @@ public:
     // For now, always build seq buffers.
     if (op.getInitValues())
       initValues = op.getInitValueArray();
-    lastStage = buildSeqBufferLogic(s, bb, op.getDataType(), op.getNumSlots(),
-                                    input, output, initValues);
+    lastStage =
+        buildSeqBufferLogic(s, bb, toValidType(op.getDataType()),
+                            op.getNumSlots(), input, output, initValues);
 
     // Connect the last stage to the output handshake.
     output.data->setValue(lastStage.data);
