@@ -1,10 +1,10 @@
 // RUN: circt-opt -lower-handshake-to-hw -split-input-file %s | FileCheck %s
 
 // CHECK-LABEL:   hw.module @handshake_load_in_ui64_ui32_out_ui32_ui64(
-// CHECK-SAME:          %[[VAL_0:.*]]: !esi.channel<i64>, %[[VAL_1:.*]]: !esi.channel<i32>, %[[VAL_2:.*]]: !esi.channel<none>) -> (dataOut: !esi.channel<i32>, addrOut0: !esi.channel<i64>) {
+// CHECK-SAME:          %[[VAL_0:.*]]: !esi.channel<i64>, %[[VAL_1:.*]]: !esi.channel<i32>, %[[VAL_2:.*]]: !esi.channel<i0>) -> (dataOut: !esi.channel<i32>, addrOut0: !esi.channel<i64>) {
 // CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i64
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_8:.*]] : i32
-// CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = esi.unwrap.vr %[[VAL_2]], %[[VAL_5]] : none
+// CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = esi.unwrap.vr %[[VAL_2]], %[[VAL_5]] : i0
 // CHECK:           %[[VAL_11:.*]], %[[VAL_8]] = esi.wrap.vr %[[VAL_6]], %[[VAL_7]] : i32
 // CHECK:           %[[VAL_12:.*]], %[[VAL_13:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_14:.*]] : i64
 // CHECK:           %[[VAL_14]] = comb.and %[[VAL_4]], %[[VAL_10]] : i1
@@ -13,10 +13,10 @@
 // CHECK:         }
 
 // CHECK-LABEL:   hw.module @handshake_store_in_ui64_ui32_out_ui32_ui64(
-// CHECK-SAME:         %[[VAL_0:.*]]: !esi.channel<i64>, %[[VAL_1:.*]]: !esi.channel<i32>, %[[VAL_2:.*]]: !esi.channel<none>) -> (dataToMem: !esi.channel<i32>, addrOut0: !esi.channel<i64>) {
+// CHECK-SAME:         %[[VAL_0:.*]]: !esi.channel<i64>, %[[VAL_1:.*]]: !esi.channel<i32>, %[[VAL_2:.*]]: !esi.channel<i0>) -> (dataToMem: !esi.channel<i32>, addrOut0: !esi.channel<i64>) {
 // CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i64
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_5]] : i32
-// CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = esi.unwrap.vr %[[VAL_2]], %[[VAL_5]] : none
+// CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = esi.unwrap.vr %[[VAL_2]], %[[VAL_5]] : i0
 // CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = esi.wrap.vr %[[VAL_6]], %[[VAL_12:.*]] : i32
 // CHECK:           %[[VAL_13:.*]], %[[VAL_14:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_12]] : i64
 // CHECK:           %[[VAL_15:.*]] = comb.and %[[VAL_11]], %[[VAL_14]] : i1

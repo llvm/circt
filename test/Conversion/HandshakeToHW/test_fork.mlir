@@ -1,10 +1,10 @@
 // RUN: circt-opt -lower-handshake-to-hw -split-input-file %s | FileCheck %s
 
 // CHECK-LABEL:   hw.module @handshake_fork_1ins_2outs_ctrl(
-// CHECK-SAME:            %[[VAL_0:.*]]: !esi.channel<none>, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1) -> (out0: !esi.channel<none>, out1: !esi.channel<none>) {
-// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : none
-// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_8:.*]] : none
-// CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_11:.*]] : none
+// CHECK-SAME:            %[[VAL_0:.*]]: !esi.channel<i0>, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1) -> (out0: !esi.channel<i0>, out1: !esi.channel<i0>) {
+// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i0
+// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_8:.*]] : i0
+// CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_11:.*]] : i0
 // CHECK:           %[[VAL_12:.*]] = hw.constant false
 // CHECK:           %[[VAL_13:.*]] = hw.constant true
 // CHECK:           %[[VAL_14:.*]] = comb.xor %[[VAL_5]], %[[VAL_13]] : i1
@@ -22,7 +22,7 @@
 // CHECK:           %[[VAL_25:.*]] = comb.and %[[VAL_10]], %[[VAL_4]] : i1
 // CHECK:           %[[VAL_22]] = comb.and %[[VAL_25]], %[[VAL_23]] : i1
 // CHECK:           %[[VAL_5]] = comb.and %[[VAL_16]], %[[VAL_22]] : i1
-// CHECK:           hw.output %[[VAL_6]], %[[VAL_9]] : !esi.channel<none>, !esi.channel<none>
+// CHECK:           hw.output %[[VAL_6]], %[[VAL_9]] : !esi.channel<i0>, !esi.channel<i0>
 // CHECK:         }
 
 handshake.func @test_fork(%arg0: none, %arg1: none, ...) -> (none, none, none) {

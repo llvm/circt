@@ -43,7 +43,7 @@ void RandomAccessMemoryDeclOp::getPortList(
       {hw::StructType::FieldInfo{StringAttr::get(ctxt, "address"), addressType},
        hw::StructType::FieldInfo{StringAttr::get(ctxt, "data"),
                                  getInnerType()}});
-  ports.push_back(createPort("write", writeType, NoneType::get(ctxt)));
+  ports.push_back(createPort("write", writeType, IntegerType::get(ctxt, 0)));
 
   // Read port
   ports.push_back(createPort("read", addressType, getInnerType()));

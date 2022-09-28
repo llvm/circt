@@ -23,15 +23,6 @@ def ChannelOpInterface : OpInterface<"ChannelOpInterface"> {
       "circt::esi::ChannelType", "channelType"
     >,
     InterfaceMethod<
-        "Returns true if this channel carries data.",
-        "bool",
-        "hasData",
-        (ins),
-        /*methodBody=*/"",
-        /*defaultImplementation=*/[{
-          return $_op.channelType().hasData();
-        }]>,
-    InterfaceMethod<
         [{"Returns the inner type of this channel. This will be the type of the
            data value of the channel, if the channel carries data semantics. Else,
            return NoneType."}],
@@ -40,8 +31,6 @@ def ChannelOpInterface : OpInterface<"ChannelOpInterface"> {
         (ins),
         /*methodBody=*/"",
         /*defaultImplementation=*/[{
-          if(!$_op.hasData())
-            return mlir::NoneType::get($_op.getContext());
           return $_op.channelType().getInner();
         }]>
   ];

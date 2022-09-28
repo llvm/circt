@@ -88,6 +88,10 @@ static esi::ChannelType esiWrapper(Type t) {
       .Case<esi::ChannelType>([](auto t) { return t; })
       .Case<TupleType>(
           [&](TupleType tt) { return esiWrapper(tupleToStruct(tt)); })
+      .Case<NoneType>([](NoneType nt) {
+        // todo: change when handshake switches to i0
+        return esiWrapper(IntegerType::get(nt.getContext(), 0));
+      })
       .Default([](auto t) {
         return esi::ChannelType::get(t.getContext(), toValidType(t));
       });
@@ -488,12 +492,18 @@ struct RTLBuilder {
       : b(builder), loc(loc), clk(clk), rst(rst) {}
 
   Value constant(const APInt &apv, Location *extLoc = nullptr) {
-    auto it = constants.find(apv);
-    if (it != constants.end())
-      return it->second;
+    // Cannot use zero-width APInt's in DenseMap's, see
+    // https://github.com/llvm/llvm-project/issues/58013
+    bool isZeroWidth = apv.getBitWidth() == 0;
+    if (!isZeroWidth) {
+      auto it = constants.find(apv);
+      if (it != constants.end())
+        return it->second;
+    }
 
     auto cval = b.create<hw::ConstantOp>(getLoc(extLoc), apv);
-    constants[apv] = cval;
+    if (!isZeroWidth)
+      constants[apv] = cval;
     return cval;
   }
 
@@ -644,13 +654,11 @@ struct RTLBuilder {
            "one-hot select can't mux inputs");
 
     // Start the mux tree with zero value.
-    // Todo: clean up when i0 support is available.
-    Value muxValue;
+    // Todo: clean up when handshake supports i0.
     auto dataType = inputs[0].getType();
-    if (dataType.isa<NoneType>())
-      muxValue = b.create<esi::NoneSourceOp>(getLoc(extLoc));
-    else
-      muxValue = constant(dataType.getIntOrFloatBitWidth(), 0, extLoc);
+    unsigned width =
+        dataType.isa<NoneType>() ? 0 : dataType.getIntOrFloatBitWidth();
+    Value muxValue = constant(width, 0, extLoc);
 
     // Iteratively chain together muxes from the high bit to the low bit.
     for (size_t i = numInputs - 1; i == 0; --i) {
@@ -1070,8 +1078,7 @@ public:
                    hw::HWModulePortAccessor &ports) const override {
     auto unwrappedIO = unwrapIO(s, bb, ports);
     buildJoinLogic(s, unwrappedIO.inputs, unwrappedIO.outputs[0]);
-    unwrappedIO.outputs[0].data->setValue(
-        s.b.create<esi::NoneSourceOp>(s.getLoc()));
+    unwrappedIO.outputs[0].data->setValue(s.constant(0, 0));
   };
 };
 
@@ -1393,10 +1400,9 @@ public:
   void buildModule(SourceOp op, BackedgeBuilder &bb, RTLBuilder &s,
                    hw::HWModulePortAccessor &ports) const override {
     auto unwrappedIO = this->unwrapIO(s, bb, ports);
-    // A source always provides a new (none-typed) value.
+    // A source always provides a new (i0-typed) value.
     unwrappedIO.outputs[0].valid->setValue(s.constant(1, 1));
-    unwrappedIO.outputs[0].data->setValue(
-        s.b.create<esi::NoneSourceOp>(s.getLoc()));
+    unwrappedIO.outputs[0].data->setValue(s.constant(0, 0));
   };
 };
 
@@ -1445,10 +1451,9 @@ public:
         : dataType(dataType), preStage(preStage), s(s), bb(bb), index(index) {
 
       // Todo: Change when i0 support is added.
-      if (dataType.isa<NoneType>())
-        c0s = s.b.create<esi::NoneSourceOp>(s.getLoc());
-      else
-        c0s = s.constant(dataType.getIntOrFloatBitWidth(), 0);
+      unsigned width =
+          dataType.isa<NoneType>() ? 0 : dataType.getIntOrFloatBitWidth();
+      c0s = s.constant(width, 0);
       currentStage.ready = std::make_shared<Backedge>(bb.get(s.b.getI1Type()));
 
       auto hasInitValue = s.constant(1, initValue.has_value());
