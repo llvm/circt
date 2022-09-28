@@ -284,6 +284,9 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
   auto keyAttr = tryGetAs<ArrayAttr>(anno, anno, "keys", loc, dataTapsClass);
   if (!keyAttr)
     return failure();
+  auto noDedupAnnoClassName = StringAttr::get(context, noDedupAnnoClass);
+  auto noDedupAnno = DictionaryAttr::get(
+      context, {{StringAttr::get(context, "class"), noDedupAnnoClassName}});
   for (size_t i = 0, e = keyAttr.size(); i != e; ++i) {
     auto b = keyAttr[i];
     auto path = ("keys[" + Twine(i) + "]").str();
@@ -468,8 +471,13 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
           return state.getNamespace(mod);
         },
         &state.targetCaches);
-    ImplicitLocOpBuilder refResolveBuilder(wireTarget->ref.getModule().getLoc(),
-                                           wireTarget->ref.getModule());
+    ImplicitLocOpBuilder refResolveBuilder(wireModule.getLoc(), wireModule);
+    AnnotationSet annos(wireModule);
+    if (!annos.hasAnnotation(noDedupAnnoClassName)) {
+      annos.addAnnotations(noDedupAnno);
+      annos.applyToOperation(wireModule);
+    }
+
     if (remoteXMR.isa<BlockArgument>())
       refResolveBuilder.setInsertionPointToStart(wireModule.getBodyBlock());
     else
