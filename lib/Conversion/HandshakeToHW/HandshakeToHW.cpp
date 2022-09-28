@@ -364,9 +364,8 @@ static Operation *checkSubModuleOp(mlir::ModuleOp parentModule,
   return moduleOp;
 }
 
-static ModulePortInfo getPortInfoForOp(ConversionPatternRewriter &rewriter,
-                                       Operation *op, TypeRange inputs,
-                                       TypeRange outputs) {
+static ModulePortInfo getPortInfoForOp(OpBuilder &builder, Operation *op,
+                                       TypeRange inputs, TypeRange outputs) {
   ModulePortInfo ports({}, {});
   HandshakePortNameGenerator portNames(op);
 
@@ -388,23 +387,131 @@ static ModulePortInfo getPortInfoForOp(ConversionPatternRewriter &rewriter,
 
   // Add clock and reset signals.
   if (op->hasTrait<mlir::OpTrait::HasClock>()) {
-    ports.inputs.push_back({rewriter.getStringAttr("clock"),
-                            PortDirection::INPUT, rewriter.getI1Type(), inIdx++,
+    ports.inputs.push_back({builder.getStringAttr("clock"),
+                            PortDirection::INPUT, builder.getI1Type(), inIdx++,
                             StringAttr{}});
-    ports.inputs.push_back({rewriter.getStringAttr("reset"),
-                            PortDirection::INPUT, rewriter.getI1Type(), inIdx,
+    ports.inputs.push_back({builder.getStringAttr("reset"),
+                            PortDirection::INPUT, builder.getI1Type(), inIdx,
                             StringAttr{}});
   }
 
   return ports;
 }
 
-/// Returns a vector of PortInfo's which defines the FIRRTL interface of the
+/// Returns a vector of PortInfo's which defines the HW interface of the
 /// to-be-converted op.
-static ModulePortInfo getPortInfoForOp(ConversionPatternRewriter &rewriter,
-                                       Operation *op) {
-  return getPortInfoForOp(rewriter, op, op->getOperandTypes(),
+static ModulePortInfo getPortInfoForOp(OpBuilder &builder, Operation *op) {
+  return getPortInfoForOp(builder, op, op->getOperandTypes(),
                           op->getResultTypes());
+}
+
+// Returns the in- and out types associated with a given handshake.extmemory
+// operation. This defines the set of types associated with any given memref
+// (which much be referenced by a single extmemory operation).
+static ModulePortInfo getMemrefType(ConversionPatternRewriter &rewriter,
+                                    ExternalMemoryOp extmemOp) {
+  // Get a handle to the submodule which will wrap the external memory
+  auto extmemPortInfo = getPortInfoForOp(rewriter, extmemOp);
+
+  // Drop the first port info; this one will be a handshake associated with the
+  // memref type.
+  extmemPortInfo.inputs.erase(extmemPortInfo.inputs.begin());
+
+  return extmemPortInfo;
+}
+
+static llvm::SmallVector<hw::detail::FieldInfo>
+portToFieldInfo(llvm::ArrayRef<hw::PortInfo> portInfo) {
+  llvm::SmallVector<hw::detail::FieldInfo> fieldInfo;
+  for (auto &port : portInfo)
+    fieldInfo.push_back({port.name, port.type});
+
+  return fieldInfo;
+}
+
+// Convert any handshake.extmemory operations and the top-level I/O
+// associated with these.
+static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
+  ModuleOp parentModule = mod->getParentOfType<ModuleOp>();
+  auto ports = mod.getPorts();
+  auto *ctx = mod.getContext();
+
+  // Gather memref ports to be converted.
+  llvm::DenseMap<unsigned, Value> memrefPorts;
+  for (auto [i, arg] : llvm::enumerate(mod.getArguments())) {
+    auto channel = arg.getType().dyn_cast<esi::ChannelType>();
+    if (channel && channel.getInner().isa<MemRefType>())
+      memrefPorts[i] = arg;
+  }
+
+  if (memrefPorts.empty())
+    return success(); // nothing to do.
+
+  OpBuilder b(mod);
+
+  auto getMemoryIOInfo = [&](Location loc, Twine portName, unsigned argIdx,
+                             ArrayRef<hw::PortInfo> info,
+                             hw::PortDirection direction) {
+    auto type = hw::StructType::get(ctx, portToFieldInfo(info));
+    auto portInfo =
+        hw::PortInfo{b.getStringAttr(portName), direction, type, argIdx};
+    return portInfo;
+  };
+
+  for (auto [i, arg] : memrefPorts) {
+    // Insert ports into the module
+    hw::StructType ins, outs;
+    auto memName = mod.getArgNames()[i].cast<StringAttr>();
+
+    // Get the attached extmemory external module.
+    auto extmemInstance = cast<hw::InstanceOp>(*arg.getUsers().begin());
+    auto extmemMod =
+        cast<hw::HWModuleExternOp>(extmemInstance.getReferencedModule());
+    auto portInfo = extmemMod.getPorts();
+
+    // The extmemory external module's interface is a direct wrapping of the
+    // original handshake.extmemory operation in- and output types. Remove the
+    // first input argument (the !esi.channel<memref> op) since that is what
+    // we're replacing with a materialized interface.
+    portInfo.inputs.erase(portInfo.inputs.begin());
+
+    // Add memory input - this is the output of the extmemory op.
+    auto inPortInfo =
+        getMemoryIOInfo(arg.getLoc(), memName.strref() + "_in", i,
+                        portInfo.outputs, hw::PortDirection::INPUT);
+    mod.insertPorts({{i, inPortInfo}}, {});
+    auto newInPort = mod.getArgument(i);
+    // Replace the extmemory submodule outputs with the newly created inputs.
+    b.setInsertionPointToStart(mod.getBodyBlock());
+    auto newInPortExploded = b.create<hw::StructExplodeOp>(
+        arg.getLoc(), extmemMod.getResultTypes(), newInPort);
+    extmemInstance.replaceAllUsesWith(newInPortExploded.getResults());
+
+    // Add memory output - this is the inputs of the extmemory op (without the
+    // first argument);
+    unsigned outArgI = mod.getNumResults();
+    auto outPortInfo =
+        getMemoryIOInfo(arg.getLoc(), memName.strref() + "_out", outArgI,
+                        portInfo.inputs, hw::PortDirection::OUTPUT);
+
+    auto memOutputArgs = extmemInstance.getOperands().drop_front();
+    b.setInsertionPoint(mod.getBodyBlock()->getTerminator());
+    auto memOutputStruct = b.create<hw::StructCreateOp>(
+        arg.getLoc(), outPortInfo.type, memOutputArgs);
+    mod.appendOutputs({{outPortInfo.name, memOutputStruct}});
+
+    // Erase the extmemory submodule instace since the i/o has now been
+    // plumbed.
+    extmemMod.erase();
+    extmemInstance.erase();
+
+    // Erase the original memref argument of the top-level i/o now that it's use
+    // has been removed.
+    mod.modifyPorts(/*insertInputs*/ {}, /*insertOutputs*/ {},
+                    /*eraseInputs*/ {i + 1}, /*eraseOutputs*/ {});
+  }
+
+  return success();
 }
 
 namespace {
@@ -1743,6 +1850,12 @@ public:
         return;
       }
     }
+
+    // Second stage: Convert any handshake.extmemory operations and the
+    // top-level I/O associated with these.
+    for (auto hwModule : mod.getOps<hw::HWModuleOp>())
+      if (failed(convertExtMemoryOps(hwModule)))
+        return signalPassFailure();
   }
 };
 } // end anonymous namespace
