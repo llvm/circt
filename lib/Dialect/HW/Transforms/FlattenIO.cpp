@@ -135,10 +135,11 @@ static void addSignatureConversion(DenseMap<Operation *, IOInfo> &ioMap,
     auto ioInfo = ioInfoIt->second;
 
     auto compareTypes = [&](TypeRange oldTypes, TypeRange newTypes) {
-      for (auto [oldType, newType] : llvm::zip(oldTypes, newTypes))
-        if (oldType != newType) // A conversion took place
-          return true;
-      return false;
+      return llvm::any_of(llvm::zip(oldTypes, newTypes), [&](auto typePair) {
+        auto oldType = std::get<0>(typePair);
+        auto newType = std::get<1>(typePair);
+        return oldType != newType;
+      });
     };
     if (compareTypes(moduleLikeOp.getResultTypes(), ioInfo.resTypes) ||
         compareTypes(moduleLikeOp.getArgumentTypes(), ioInfo.argTypes))
@@ -177,14 +178,14 @@ static void updateNameAttribute(FunctionOpInterface op, StringRef attrName,
       // No, keep old name.
       newNames.push_back(StringAttr::get(op.getContext(), oldName));
       continue;
-    } else {
-      // Yes - create new names from the struct fields and the old name at the
-      // index.
-      auto structType = it->second;
-      for (auto field : structType.getElements())
-        newNames.push_back(
-            StringAttr::get(op.getContext(), oldName + "." + field.name.str()));
     }
+
+    // Yes - create new names from the struct fields and the old name at the
+    // index.
+    auto structType = it->second;
+    for (auto field : structType.getElements())
+      newNames.push_back(
+          StringAttr::get(op.getContext(), oldName + "." + field.name.str()));
   }
   op.getOperation()->setAttr(attrName,
                              ArrayAttr::get(op.getContext(), newNames));
