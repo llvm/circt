@@ -526,6 +526,7 @@ void FIRRTLModuleLowering::runOnOperation() {
   circuitAnno.removeAnnotationsWithClass(
       extractAssertAnnoClass, extractAssumeAnnoClass, extractCoverageAnnoClass);
 
+  // Pass along the testbench directory for ExtractTestCode to use later.
   if (state.testBenchDirectory)
     getOperation()->setAttr("firrtl.extract.testbench",
                             state.testBenchDirectory);

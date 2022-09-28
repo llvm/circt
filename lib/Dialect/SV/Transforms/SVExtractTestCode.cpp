@@ -444,6 +444,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       op.removeAttr("firrtl.extract.cover.extra");
       op.removeAttr("firrtl.extract.assume.extra");
     }
+  top->removeAttr("firrtl.extract.testbench");
 }
 
 std::unique_ptr<Pass> circt::sv::createSVExtractTestCodePass() {
