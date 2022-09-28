@@ -195,10 +195,6 @@ StringAttr getArgSym(Operation *op, unsigned i);
 /// argument.
 StringAttr getResultSym(Operation *op, unsigned i);
 
-/// Creates an i0-typed constant.
-Value getI0Constant(OpBuilder &builder, Location loc);
-Value getI0Constant(ImplicitLocOpBuilder &builder);
-
 // A class for providing access to the in- and output ports of a module through
 // use of the HWModuleBuilder.
 class HWModulePortAccessor {
