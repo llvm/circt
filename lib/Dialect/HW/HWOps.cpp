@@ -60,8 +60,7 @@ bool hw::isCombinational(Operation *op) {
          IsCombClassifier().dispatchTypeOpVisitor(op);
 }
 
-static std::optional<Value> foldStructExtract(Operation *inputOp,
-                                              StringRef field) {
+static Value foldStructExtract(Operation *inputOp, StringRef field) {
   // A struct extract of a struct create -> corresponding struct create operand.
   if (auto structCreate = dyn_cast_or_null<StructCreateOp>(inputOp)) {
     auto ty = type_cast<StructType>(structCreate.getResult().getType());
@@ -2082,11 +2081,11 @@ void StructExplodeOp::print(OpAsmPrinter &printer) {
 
 LogicalResult StructExplodeOp::canonicalize(StructExplodeOp op,
                                             PatternRewriter &rewriter) {
-  auto inputOp = op.getInput().getDefiningOp();
+  auto *inputOp = op.getInput().getDefiningOp();
   auto elements = op.getInput().getType().cast<StructType>().getElements();
   for (auto [element, res] : llvm::zip(elements, op.getResults())) {
     if (auto foldResult = foldStructExtract(inputOp, element.name.str()))
-      res.replaceAllUsesWith(*foldResult);
+      res.replaceAllUsesWith(foldResult);
   }
   return failure();
 }
@@ -2161,7 +2160,7 @@ void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
 OpFoldResult StructExtractOp::fold(ArrayRef<Attribute> operands) {
   if (auto foldResult =
           foldStructExtract(getInput().getDefiningOp(), getField()))
-    return *foldResult;
+    return foldResult;
   return {};
 }
 
