@@ -132,3 +132,20 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
     }
   }
 }
+
+// -----
+// Check "empty" modules are extracted
+
+// CHECK-LABEL: @WillBeEmpty(
+// CHECK-SAME: output_file = #hw.output_file<"cover/", excludeFromFileList, includeReplicatedOps>
+module attributes {firrtl.extract.cover = #hw.output_file<"cover/", excludeFromFileList, includeReplicatedOps>} {
+  hw.module @WillBeEmpty(%clock: i1, %cond: i1) -> () {
+    sv.always posedge %clock  {
+      sv.cover %cond, immediate
+    }
+  }
+
+  hw.module @Top(%clock: i1, %cond: i1) -> () {
+    hw.instance "empty" @WillBeEmpty(clock: %clock: i1, cond: %cond: i1) -> ()
+  }
+}

@@ -269,6 +269,17 @@ static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
     }
 }
 
+// Move any old modules that are test code only to the test code area.
+static void maybeMoveToTestCode(hw::HWModuleOp oldMod, Attribute path) {
+  // Ensure we have a valid test code path.
+  if (!path)
+    return;
+
+  // Check if the module only has inputs. If so, move it to the test code path.
+  if (oldMod.getNumOutputs() == 0)
+    oldMod->setAttr("output_file", path);
+}
+
 //===----------------------------------------------------------------------===//
 // StubExternalModules Pass
 //===----------------------------------------------------------------------===//
@@ -322,6 +333,8 @@ private:
     // erase old operations of interest
     for (auto op : roots)
       op->erase();
+    // Move any old modules that are test code only to the test code area.
+    maybeMoveToTestCode(module, path);
   }
 };
 
