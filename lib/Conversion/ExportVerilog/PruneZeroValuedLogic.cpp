@@ -24,8 +24,6 @@ using namespace mlir;
 using namespace circt;
 using namespace hw;
 
-namespace {
-
 // Returns true if 't' is zero-width logic.
 // For now, this strictly relies on the announced bit-width of the type.
 static bool isZeroWidthLogic(Type t) {
@@ -49,6 +47,13 @@ static SmallVector<Value> removeI0Typed(ValueRange values) {
   return result;
 }
 
+// Marks the provided 'op' as pruned.
+static void pruneZeroWidthOp(Operation *op) {
+  op->setAttr("pruned", StringAttr::get(op->getContext(), "Zero Width"));
+}
+
+namespace {
+
 class PruneTypeConverter : public mlir::TypeConverter {
 public:
   PruneTypeConverter() {
@@ -59,11 +64,6 @@ public:
     });
   }
 };
-
-// Marks the provided 'op' as pruned.
-static void pruneZeroWidthOp(Operation *op) {
-  op->setAttr("pruned", StringAttr::get(op->getContext(), "Zero Width"));
-}
 
 // The NoI0OperandsConversionPattern will aggressively remove any operation
 // which has a zero-valued operand.
@@ -116,7 +116,7 @@ static void addPruningPattern(ConversionTarget &target,
 }
 } // namespace
 
-LogicalResult ExportVerilog::pruneZeroValuedLogic(hw::HWModuleOp module) {
+void ExportVerilog::pruneZeroValuedLogic(hw::HWModuleOp module) {
   ConversionTarget target(*module.getContext());
   RewritePatternSet patterns(module.getContext());
   PruneTypeConverter typeConverter;
@@ -130,5 +130,5 @@ LogicalResult ExportVerilog::pruneZeroValuedLogic(hw::HWModuleOp module) {
                     NoI0OperandPruningPattern<sv::AssignOp>>(target, patterns,
                                                              typeConverter);
 
-  return applyPartialConversion(module, target, std::move(patterns));
+  (void)applyPartialConversion(module, target, std::move(patterns));
 }

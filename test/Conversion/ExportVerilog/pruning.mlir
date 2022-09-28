@@ -2,7 +2,9 @@
 
 // CHECK-LABEL: module zeroWidthPAssign(
 // CHECK:       always_ff @(posedge clk) begin        
-// CHECK-NEXT:    // Pruned (Zero Width):     _GEN <= arg0;   
+// CHECK-NEXT:  /* Pruned (Zero Width):
+// CHECK-NEXT:  _GEN <= arg0;
+// CHECK-NEXT:  */
 // CHECK-NEXT:  end
 hw.module @zeroWidthPAssign(%arg0: i0, %clk: i1) -> (out: i0) {
   %0 = sv.reg  {hw.verilogName = "_GEN"} : !hw.inout<i0>
@@ -14,7 +16,9 @@ hw.module @zeroWidthPAssign(%arg0: i0, %clk: i1) -> (out: i0) {
 }
 // CHECK-LABEL: module zeroWidthAssign(
 // CHECK:       // Zero width: wire /*Zero Width*/ _GEN;      
-// CHECK-NEXT:  // Pruned (Zero Width):   assign _GEN = _GEN; 
+// CHECK-NEXT:  /* Pruned (Zero Width):
+// CHECK-NEXT:  assign _GEN = _GEN;
+// CHECK-NEXT:  */
 // CHECK-NEXT:  // Zero width: assign out = _GEN;     
 hw.module @zeroWidthAssign(%arg0: i0, %clk: i1, %a: i0, %b: i1) -> (out: i0) {
   sv.assign %0, %1 : i0

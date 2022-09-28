@@ -970,11 +970,11 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
 
 void ExportVerilog::prepareHWModule(hw::HWModuleOp module,
                                     const LoweringOptions &options) {
-  // Legalization.
-  legalizeHWModule(*module.getBodyBlock(), options);
-
   // Zero-valued logic pruning.
   pruneZeroValuedLogic(module);
+
+  // Legalization.
+  legalizeHWModule(*module.getBodyBlock(), options);
 
   EmittedExpressionStateManager expressionStateManager(options);
   // Spill wires to prettify verilog outputs.

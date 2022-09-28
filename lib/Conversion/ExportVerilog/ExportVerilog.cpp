@@ -37,6 +37,7 @@
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FileSystem.h"
@@ -3868,9 +3869,15 @@ LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
 
 void StmtEmitter::emitStatement(Operation *op) {
   // If this op has been marked as pruned, prefix the line with a comment.
+  auto closePruneBlockComment = [&]() { indent() << "*/\n"; };
+  using tCloseGuard = decltype(llvm::make_scope_exit(closePruneBlockComment));
+  std::unique_ptr<tCloseGuard> closePruneBlockCommentGuard;
+
   if (auto pruningReason = op->getAttrOfType<StringAttr>("pruned")) {
-    indent() << "// Pruned (" << pruningReason.str() << "): ";
+    indent() << "/* Pruned (" << pruningReason.str() << "):\n";
     --numStatementsEmitted;
+    closePruneBlockCommentGuard = std::make_unique<tCloseGuard>(
+        llvm::make_scope_exit(closePruneBlockComment));
   }
 
   // Expressions may either be ignored or emitted as an expression statements.
