@@ -527,9 +527,13 @@ void FIRRTLModuleLowering::runOnOperation() {
       extractAssertAnnoClass, extractAssumeAnnoClass, extractCoverageAnnoClass);
 
   // Pass along the testbench directory for ExtractTestCode to use later.
-  if (state.testBenchDirectory)
-    getOperation()->setAttr("firrtl.extract.testbench",
-                            state.testBenchDirectory);
+  if (auto tbAnno = circuitAnno.getAnnotation(testBenchDirAnnoClass)) {
+    auto dirName = tbAnno.getMember<StringAttr>("dirname");
+    auto testBenchDir = hw::OutputFileAttr::getAsDirectory(
+        &getContext(), dirName.getValue(), /*excludeFromFileList=*/true,
+        /*includeReplicatedOps=*/true);
+    getOperation()->setAttr("firrtl.extract.testbench", testBenchDir);
+  }
 
   state.processRemainingAnnotations(circuit, circuitAnno);
   // Iterate through each operation in the circuit body, transforming any

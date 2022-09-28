@@ -293,7 +293,7 @@ struct SVExtractTestCodeImplPass
 private:
   void doModule(hw::HWModuleOp module, std::function<bool(Operation *)> fn,
                 StringRef suffix, Attribute path, Attribute bindFile,
-                Attribute testbenchDir) {
+                Attribute testBenchDir) {
     bool hasError = false;
     // Find Operations of interest.
     SetVector<Operation *> roots;
@@ -335,7 +335,7 @@ private:
     for (auto op : roots)
       op->erase();
     // Move any old modules that are test code only to the test code area.
-    maybeMoveToTestCode(module, testbenchDir);
+    maybeMoveToTestCode(module, testBenchDir);
   }
 };
 
@@ -350,7 +350,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.assume");
   auto coverDir =
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.cover");
-  auto testbenchDir =
+  auto testBenchDir =
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.testbench");
   auto assertBindFile =
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.assert.bindfile");
@@ -429,11 +429,11 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       }
 
       doModule(rtlmod, isAssert, "_assert", assertDir, assertBindFile,
-               testbenchDir);
+               testBenchDir);
       doModule(rtlmod, isAssume, "_assume", assumeDir, assumeBindFile,
-               testbenchDir);
+               testBenchDir);
       doModule(rtlmod, isCover, "_cover", coverDir, coverBindFile,
-               testbenchDir);
+               testBenchDir);
     }
   }
   // We have to wait until all the instances are processed to clean up the
