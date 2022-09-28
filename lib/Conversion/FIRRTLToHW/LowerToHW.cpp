@@ -526,6 +526,10 @@ void FIRRTLModuleLowering::runOnOperation() {
   circuitAnno.removeAnnotationsWithClass(
       extractAssertAnnoClass, extractAssumeAnnoClass, extractCoverageAnnoClass);
 
+  if (state.testBenchDirectory)
+    getOperation()->setAttr("firrtl.extract.testbench",
+                            state.testBenchDirectory);
+
   state.processRemainingAnnotations(circuit, circuitAnno);
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across. If any module fails to lower, return early.
