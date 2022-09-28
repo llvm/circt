@@ -60,6 +60,24 @@ bool hw::isCombinational(Operation *op) {
          IsCombClassifier().dispatchTypeOpVisitor(op);
 }
 
+static std::optional<Value> foldStructExtract(Operation *inputOp,
+                                              StringRef field) {
+  // A struct extract of a struct create -> corresponding struct create operand.
+  if (auto structCreate = dyn_cast_or_null<StructCreateOp>(inputOp)) {
+    auto ty = type_cast<StructType>(structCreate.getResult().getType());
+    if (auto idx = ty.getFieldIndex(field))
+      return structCreate.getOperand(*idx);
+    return {};
+  }
+  // Extracting injected field -> corresponding field
+  if (auto structInject = dyn_cast_or_null<StructInjectOp>(inputOp)) {
+    if (structInject.getField() != field)
+      return {};
+    return structInject.getNewValue();
+  }
+  return {};
+}
+
 /// Get a special name to use when printing the entry block arguments of the
 /// region contained by an operation in this dialect.
 static void getAsmBlockArgumentNamesImpl(mlir::Region &region,
@@ -2062,6 +2080,17 @@ void StructExplodeOp::print(OpAsmPrinter &printer) {
   printer << " : " << getInput().getType();
 }
 
+LogicalResult StructExplodeOp::canonicalize(StructExplodeOp op,
+                                            PatternRewriter &rewriter) {
+  auto inputOp = op.getInput().getDefiningOp();
+  auto elements = op.getInput().getType().cast<StructType>().getElements();
+  for (auto [element, res] : llvm::zip(elements, op.getResults())) {
+    if (auto foldResult = foldStructExtract(inputOp, element.name.str()))
+      res.replaceAllUsesWith(*foldResult);
+  }
+  return failure();
+}
+
 //===----------------------------------------------------------------------===//
 // StructExtractOp
 //===----------------------------------------------------------------------===//
@@ -2130,20 +2159,9 @@ void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
 }
 
 OpFoldResult StructExtractOp::fold(ArrayRef<Attribute> operands) {
-  auto inputOp = getInput().getDefiningOp();
-  // A struct extract of a struct create -> corresponding struct create operand.
-  if (auto structCreate = dyn_cast_or_null<StructCreateOp>(inputOp)) {
-    auto ty = type_cast<StructType>(getInput().getType());
-    if (auto idx = ty.getFieldIndex(getField()))
-      return structCreate.getOperand(*idx);
-    return {};
-  }
-  // Extracting injected field -> corresponding field
-  if (auto structInject = dyn_cast_or_null<StructInjectOp>(inputOp)) {
-    if (structInject.getField() != getField())
-      return {};
-    return structInject.getNewValue();
-  }
+  if (auto foldResult =
+          foldStructExtract(getInput().getDefiningOp(), getField()))
+    return *foldResult;
   return {};
 }
 

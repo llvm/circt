@@ -1071,6 +1071,14 @@ hw.module @struct_extract1(%a0: i3, %a1: i5) -> (r0: i3) {
   hw.output %r0 : i3
 }
 
+// CHECK-LABEL: hw.module @struct_explode(%a0: i3, %a1: i5) -> (r0: i3)
+// CHECK-NEXT:    hw.output %a0 : i3
+hw.module @struct_explode(%a0: i3, %a1: i5) -> (r0: i3) {
+  %s = hw.struct_create (%a0, %a1) : !hw.struct<foo: i3, bar: i5>
+  %r0:2 = hw.struct_explode %s : !hw.struct<foo: i3, bar: i5>
+  hw.output %r0#0 : i3
+}
+
 // Ensure that canonicalizer works with hw.enum.constant.
 
 hw.module @enum_constant() -> () {
