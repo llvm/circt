@@ -1342,7 +1342,7 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [{
   keys = [
     {
        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
-       source = "~Top|Top/foo:Foo/b:Bar>inv", wireName = "~Top|Top>tap"
+       source = "~Top|Top/foo:Foo/b:Bar>inv", sink = "~Top|Top>tap"
     }
   ]}]} {
   // CHECK-LABEL: firrtl.circuit "Top"  {
@@ -1381,7 +1381,7 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [
         class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey",
         internalPath = "random.something",
         module = "~Top|Bar",
-        wireName = "~Top|Top>tap"
+        sink = "~Top|Top>tap"
       }
     ]}]} {
   firrtl.module private @Bar() {

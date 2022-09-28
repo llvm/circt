@@ -12,16 +12,7 @@ circuit Top : %[[
   {
     "class":"sifive.enterprise.grandcentral.MemTapAnnotation",
     "source":"~Top|DUTModule>rf",
-    "wireName":[
-      "~Top|Top>memTap[0]",
-      "~Top|Top>memTap[1]",
-      "~Top|Top>memTap[2]",
-      "~Top|Top>memTap[3]",
-      "~Top|Top>memTap[4]",
-      "~Top|Top>memTap[5]",
-      "~Top|Top>memTap[6]",
-      "~Top|Top>memTap[7]"
-    ]
+    "sink":"~Top|Top>memTap"
   }
 ]]
   module DUTModule :

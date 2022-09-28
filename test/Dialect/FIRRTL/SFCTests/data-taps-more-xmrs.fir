@@ -7,32 +7,32 @@ circuit Top : %[[
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top/dut:DUT/submodule:Submodule>wire_Submodule",
-        "wireName":"~Top|Submodule>tap_0"
+        "sink":"~Top|Submodule>tap_0"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top/dut:DUT>wire_DUT",
-        "wireName":"~Top|Submodule>tap_1"
+        "sink":"~Top|Submodule>tap_1"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top>wire_Top",
-        "wireName":"~Top|Submodule>tap_2"
+        "sink":"~Top|Submodule>tap_2"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top/dut:DUT/submodule:Submodule>port_Submodule",
-        "wireName":"~Top|Submodule>tap_3"
+        "sink":"~Top|Submodule>tap_3"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top/dut:DUT>port_DUT",
-        "wireName":"~Top|Submodule>tap_4"
+        "sink":"~Top|Submodule>tap_4"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top>port_Top",
-        "wireName":"~Top|Submodule>tap_5"
+        "sink":"~Top|Submodule>tap_5"
       }
     ]
   },
@@ -42,32 +42,32 @@ circuit Top : %[[
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top/dut:DUT/submodule:Submodule>wire_Submodule",
-        "wireName":"~Top|DUT>tap_0"
+        "sink":"~Top|DUT>tap_0"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top/dut:DUT>wire_DUT",
-        "wireName":"~Top|DUT>tap_1"
+        "sink":"~Top|DUT>tap_1"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top>wire_Top",
-        "wireName":"~Top|DUT>tap_2"
+        "sink":"~Top|DUT>tap_2"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top/dut:DUT/submodule:Submodule>port_Submodule",
-        "wireName":"~Top|DUT>tap_3"
+        "sink":"~Top|DUT>tap_3"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top/dut:DUT>port_DUT",
-        "wireName":"~Top|DUT>tap_4"
+        "sink":"~Top|DUT>tap_4"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top>port_Top",
-        "wireName":"~Top|DUT>tap_5"
+        "sink":"~Top|DUT>tap_5"
       }
     ]
   },
@@ -77,32 +77,32 @@ circuit Top : %[[
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top/dut:DUT/submodule:Submodule>wire_Submodule",
-        "wireName":"~Top|Top>tap[0]"
+        "sink":"~Top|Top>tap[0]"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top/dut:DUT>wire_DUT",
-        "wireName":"~Top|Top>tap[1]"
+        "sink":"~Top|Top>tap[1]"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top>wire_Top",
-        "wireName":"~Top|Top>tap[2]"
+        "sink":"~Top|Top>tap[2]"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top/dut:DUT/submodule:Submodule>port_Submodule",
-        "wireName":"~Top|Top>tap[3]"
+        "sink":"~Top|Top>tap[3]"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top/dut:DUT>port_DUT",
-        "wireName":"~Top|Top>tap[4]"
+        "sink":"~Top|Top>tap[4]"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top>port_Top",
-        "wireName":"~Top|Top>tap[5]"
+        "sink":"~Top|Top>tap[5]"
       }
     ]
   },

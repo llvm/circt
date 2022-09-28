@@ -306,11 +306,11 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
                  .attachNote()
              << "The full Annotation is reprodcued here: " << anno << "\n";
 
-    auto wireNameAttr =
-        tryGetAs<StringAttr>(bDict, anno, "wireName", loc, dataTapsClass, path);
+    auto sinkNameAttr =
+        tryGetAs<StringAttr>(bDict, anno, "sink", loc, dataTapsClass, path);
     std::string wirePathStr;
-    if (wireNameAttr)
-      wirePathStr = canonicalizeTarget(wireNameAttr.getValue());
+    if (sinkNameAttr)
+      wirePathStr = canonicalizeTarget(sinkNameAttr.getValue());
     if (!wirePathStr.empty())
       if (!tokenizePath(wirePathStr))
         wirePathStr.clear();
@@ -325,7 +325,7 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
     if (!wireTarget->ref.getImpl().isOp())
       return mlir::emitError(loc, "Annotation '" + Twine(dataTapsClass) +
                                       "' with path '" + path + ".class" +
-                                      +"' cannot specify a port for wireName.");
+                                      +"' cannot specify a port for sink.");
     // Extract the name of the wire, used for datatap.
     auto tapName = StringAttr::get(
         context, wirePathStr.substr(wirePathStr.find_last_of('>') + 1));
@@ -683,9 +683,13 @@ LogicalResult applyGCTMemTapsWithWires(const AnnoPathValue &target,
   if (!srcTarget)
     return mlir::emitError(loc, "cannot resolve source target path '")
            << sourceTargetStr << "'";
-  auto tapsAttr = tryGetAs<ArrayAttr>(anno, anno, "wireName", loc, memTapClass);
-  if (!tapsAttr || tapsAttr.empty())
-    return mlir::emitError(loc, "wireName must have at least one entry");
+  auto tapsAttr = tryGetAs<StringAttr>(anno, anno, "sink", loc, memTapClass);
+  if (!tapsAttr) {
+    return mlir::emitError(loc, "Annotation '" + Twine(memTapClass) +
+                                    "contained an unknown sink attribute.")
+               .attachNote()
+           << "The full Annotation is reprodcued here: " << anno << "\n";
+  }
   if (auto combMem = dyn_cast<chirrtl::CombMemOp>(srcTarget->ref.getOp())) {
     if (!combMem.getType().getElementType().isGround())
       return combMem.emitOpError(
@@ -711,25 +715,12 @@ LogicalResult applyGCTMemTapsWithWires(const AnnoPathValue &target,
             "exist and unique instance cannot be resolved");
       srcTarget->instances.append(path.back().begin(), path.back().end());
     }
-    if (tapsAttr.size() != combMem.getType().getNumElements())
-      return mlir::emitError(
-          loc,
-          "wireName cannot specify more taps than the depth of the memory");
   } else
     return srcTarget->ref.getOp()->emitOpError(
         "unsupported operation, only CombMem can be used as the source of "
         "MemTap");
 
-  auto tap = tapsAttr[0].dyn_cast_or_null<StringAttr>();
-  if (!tap) {
-    return mlir::emitError(
-               loc, "Annotation '" + Twine(memTapClass) +
-                        "' with path '.taps[0" +
-                        "]' contained an unexpected type (expected a string).")
-               .attachNote()
-           << "The full Annotation is reprodcued here: " << anno << "\n";
-  }
-  auto wireTargetStr = canonicalizeTarget(tap.getValue());
+  auto wireTargetStr = canonicalizeTarget(tapsAttr.getValue());
   if (!tokenizePath(wireTargetStr))
     return failure();
   Optional<AnnoPathValue> wireTarget = resolvePath(

@@ -7,19 +7,19 @@ circuit Top : %[[
       {
         "class": "sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source": "~Top|Top/foo:Foo/b:Bar>inv",
-        "wireName": "~Top|Top>tap"
+        "sink": "~Top|Top>tap"
       },
       {
         "class":"sifive.enterprise.grandcentral.DataTapModuleSignalKey",
         "module":"~Top|BlackBox",
         "internalPath":"random.something",
-        "wireName": "~Top|Top>tap2"
+        "sink": "~Top|Top>tap2"
       },
       {
         "class":"sifive.enterprise.grandcentral.DataTapModuleSignalKey",
         "module":"~Top|InternalPathChild",
         "internalPath":"io_out",
-        "wireName": "~Top|Top/unsigned:ChildWrapper/signed:Child>tap"
+        "sink": "~Top|Top/unsigned:ChildWrapper/signed:Child>tap"
       }
     ]
   },
