@@ -1552,6 +1552,20 @@ hw.module private @InlineReadInout() -> () {
   }
 }
 
+// CHECK-LABEL: module ConditionalComments(
+hw.module @ConditionalComments() {
+  sv.ifdef "FOO"  {             // CHECK-NEXT: `ifdef FOO
+    sv.verbatim "`define FOO_A" // CHECK-NEXT:   `define FOO_A
+  } else  {                     // CHECK-NEXT: `else  // FOO
+    sv.verbatim "`define FOO_B" // CHECK-NEXT:   `define FOO_B
+  }                             // CHECK-NEXT: `endif // FOO
+
+  sv.ifdef "BAR"  {             // CHECK-NEXT: `ifndef BAR
+  } else  {
+    sv.verbatim "`define X"     // CHECK-NEXT:   `define X
+  }                             // CHECK-NEXT: `endif // not def BAR
+}
+
 hw.module @bindInMod() {
   sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst>
   sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst3>
