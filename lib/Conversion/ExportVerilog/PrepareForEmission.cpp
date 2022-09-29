@@ -209,11 +209,11 @@ findLogicOpInsertionPoint(Operation *op) {
 }
 
 /// Emit an explicit wire or logic to assign operation's result. This function
-/// is used to create a temporary to legalize a verilog epression or to
+/// is used to create a temporary to legalize a verilog expression or to
 /// resolve use-before-def in a graph region. If `emitWireAtBlockBegin` is true,
-/// a temporary wire will be created at the beggining of the block. Otherwise,
+/// a temporary wire will be created at the beginning of the block. Otherwise,
 /// a wire is created just after op's position so that we can inline the
-/// assignement into its wire declaration.
+/// assignment into its wire declaration.
 static void lowerUsersToTemporaryWire(Operation &op,
                                       DenseMap<Value, size_t> &operandMap,
                                       bool emitWireAtBlockBegin = false) {
