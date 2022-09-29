@@ -87,7 +87,7 @@ def HWModuleOp : HWModuleOpBase<"module",
       return getAllModulePortInfos(*this);
     }
 
-    /// Returns the number of in or input ports.
+    /// Returns the number of in or inout ports.
     size_t getNumInOrInoutPorts() { return getArgumentTypes().size(); }
 
     /// Return the PortInfo for the specified input or inout port.
