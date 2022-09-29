@@ -516,7 +516,7 @@ static void modifyModuleArgs(
   if (body)
     erasedIndices.resize(oldArgCount + insertArgs.size());
 
-  for (unsigned argIdx = 0; argIdx <= oldArgCount; ++argIdx) {
+  for (unsigned argIdx = 0, idx = 0; argIdx <= oldArgCount; ++argIdx, ++idx) {
     // Insert new ports at this position.
     while (!insertArgs.empty() && insertArgs[0].first == argIdx) {
       auto port = insertArgs[0].second;
@@ -533,7 +533,7 @@ static void modifyModuleArgs(
       newArgAttrs.push_back(attr);
       insertArgs = insertArgs.drop_front();
       if (body)
-        body->insertArgument(argIdx, port.type, UnknownLoc::get(context));
+        body->insertArgument(idx++, port.type, UnknownLoc::get(context));
     }
     if (argIdx == oldArgCount)
       break;
@@ -544,15 +544,16 @@ static void modifyModuleArgs(
       removeArgs = removeArgs.drop_front();
       removed = true;
     }
-    if (!removed) {
+
+    if (removed) {
+      if (body)
+        erasedIndices.set(idx);
+    } else {
       newArgNames.push_back(oldArgNames[argIdx]);
       newArgTypes.push_back(oldArgTypes[argIdx]);
       newArgAttrs.push_back(oldArgAttrs.empty() ? emptyDictAttr
                                                 : oldArgAttrs[argIdx]);
     }
-
-    if (body && removed)
-      erasedIndices.set(argIdx);
   }
 
   if (body)
