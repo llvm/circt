@@ -13,12 +13,15 @@
 #ifndef CIRCT_TRANSLATION_EXPORTVERILOG_H
 #define CIRCT_TRANSLATION_EXPORTVERILOG_H
 
+#include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 
 namespace circt {
 
 std::unique_ptr<mlir::Pass> createTestPrepareForEmissionPass();
+std::unique_ptr<mlir::Pass>
+createPrepareForEmissionPass(LoweringOptions options = LoweringOptions());
 
 std::unique_ptr<mlir::Pass> createExportVerilogPass(llvm::raw_ostream &os);
 std::unique_ptr<mlir::Pass> createExportVerilogPass();
