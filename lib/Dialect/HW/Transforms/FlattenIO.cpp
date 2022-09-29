@@ -216,7 +216,7 @@ static DenseMap<Operation *, IOInfo> populateIOInfoMap(mlir::ModuleOp module) {
 }
 
 template <typename T>
-static LogicalResult flattenOpsOfType(ModuleOp module) {
+static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
   auto *ctx = module.getContext();
   FlattenIOTypeConverter typeConverter;
 
@@ -252,6 +252,10 @@ static LogicalResult flattenOpsOfType(ModuleOp module) {
       updateNameAttribute(op, "argNames", ioInfo.argStructs);
       updateNameAttribute(op, "resultNames", ioInfo.resStructs);
     }
+
+    // Break if we've only lowering a single level of structs.
+    if (!recursive)
+      break;
   }
   return success();
 }
@@ -261,8 +265,8 @@ static LogicalResult flattenOpsOfType(ModuleOp module) {
 //===----------------------------------------------------------------------===//
 
 template <typename... TOps>
-static bool flattenIO(ModuleOp module) {
-  return (failed(flattenOpsOfType<TOps>(module)) || ...);
+static bool flattenIO(ModuleOp module, bool recursive) {
+  return (failed(flattenOpsOfType<TOps>(module, recursive)) || ...);
 }
 
 namespace {
@@ -272,7 +276,7 @@ public:
   void runOnOperation() override {
     ModuleOp module = getOperation();
     if (flattenIO<hw::HWModuleOp, hw::HWModuleExternOp,
-                  hw::HWModuleGeneratedOp>(module))
+                  hw::HWModuleGeneratedOp>(module, recursive))
       signalPassFailure();
   };
 };

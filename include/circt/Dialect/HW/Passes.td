@@ -35,8 +35,8 @@ def FlattenIO : Pass<"hw-flatten-io", "mlir::ModuleOp"> {
   let constructor =  "circt::hw::createFlattenIOPass()";
   
   let options = [
-    Option<"verboseEdges", "verbose-edges", "bool", "false",
-      "Print information on SSA edges (types, operand #, ...)">,
+    Option<"recursive", "recursive", "bool", "false",
+      "Recursively flatten nested structs.">,
   ];
 }
 
