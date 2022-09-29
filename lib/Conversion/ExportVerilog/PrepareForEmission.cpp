@@ -73,9 +73,10 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
     return true;
 
   // Don't inline mux operations if requested not to, unless RHS of an assign.
-  if (options.disallowInlineMux && isa<MuxOp>(op) && !isOnlyUsedInAssignment(op))
+  if (options.disallowInlineMux && isa<MuxOp>(op) &&
+      !isOnlyUsedInAssignment(op))
     return true;
- 
+
   // Work around Verilator #3405. Large expressions inside a concat is worst
   // case O(n^2) in a certain Verilator optimization, and can effectively hang
   // Verilator on large designs. Verilator 4.224+ works around this by having a
