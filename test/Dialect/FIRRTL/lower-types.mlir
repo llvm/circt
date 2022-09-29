@@ -1106,6 +1106,12 @@ firrtl.module private @is1436_FOO() {
     // CHECK:  firrtl.strictconnect %c_1, %3 : !firrtl.uint<1>
   }
 
+  // CHECK-LABEL: firrtl.module private @ForeignTypes
+  firrtl.module private @ForeignTypes() {
+    // CHECK-NEXT: firrtl.wire : index
+    %0 = firrtl.wire : index
+  }
+
 } // CIRCUIT
 
 // Check that we don't lose the DontTouchAnnotation when it is not the last
