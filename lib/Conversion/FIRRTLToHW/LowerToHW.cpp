@@ -526,6 +526,15 @@ void FIRRTLModuleLowering::runOnOperation() {
   circuitAnno.removeAnnotationsWithClass(
       extractAssertAnnoClass, extractAssumeAnnoClass, extractCoverageAnnoClass);
 
+  // Pass along the testbench directory for ExtractTestCode to use later.
+  if (auto tbAnno = circuitAnno.getAnnotation(testBenchDirAnnoClass)) {
+    auto dirName = tbAnno.getMember<StringAttr>("dirname");
+    auto testBenchDir = hw::OutputFileAttr::getAsDirectory(
+        &getContext(), dirName.getValue(), /*excludeFromFileList=*/true,
+        /*includeReplicatedOps=*/true);
+    getOperation()->setAttr("firrtl.extract.testbench", testBenchDir);
+  }
+
   state.processRemainingAnnotations(circuit, circuitAnno);
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across. If any module fails to lower, return early.
