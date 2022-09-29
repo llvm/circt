@@ -2,8 +2,9 @@
 ### a Logical Equivalence Checking tool
 #### Building
 circt-lec depends on the Z3 theorem prover: the build system will attempt to
-deduce its location, otherwise a path can be specified with the `Z3_DIR` cmake
-option.
+deduce its location, otherwise a path to a custom installation directory could
+be specified with the `Z3_DIR` cmake option (it should provide a cmake package
+configuration file like `Z3Config.cmake`).
 Avoiding building the tool can instead be done by specifying `CIRC_LEC_DISABLE`
 as a cmake option.
 

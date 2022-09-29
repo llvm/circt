@@ -481,15 +481,19 @@ if(CIRC_LEC_DISABLE)
   message (STATUS "Disabling circt-lec")
 else()
   if(Z3_DIR)
-    # Custom path specified, appending to the runpath for linking
+    # Search and load the package configuration file in the specified directory.
+    find_package(Z3 CONFIG REQUIRED)
+    # Append the given path to the runpath for linking.
     list(APPEND CMAKE_INSTALL_RPATH ${Z3_DIR})
     set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+  else()
+    # Attempt initialising Z3 according to LLVM's `FindZ3.cmake`.
+    find_package(Z3)
   endif()
-
-  find_package(Z3 CONFIG)
+  
   if(Z3_FOUND)
-    message(STATUS "Z3 identified as a logical backend")
-    # Can proceed building circt-lec
+    message(STATUS "Z3 identified as a logical backend.")
+    # Signal to proceed building circt-lec.
     set(CIRCT_LEC_ENABLED ON)
   endif()
 endif()
