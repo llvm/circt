@@ -30,6 +30,7 @@ std::unique_ptr<mlir::Pass> createHandshakeMaterializeForksSinksPass();
 std::unique_ptr<mlir::Pass> createHandshakeDematerializeForksSinksPass();
 std::unique_ptr<mlir::Pass> createHandshakeRemoveBuffersPass();
 std::unique_ptr<mlir::Pass> createHandshakeAddIDsPass();
+std::unique_ptr<mlir::Pass> createHandshakeLowerExtmemToHWPass();
 std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
 createHandshakeInsertBuffersPass(const std::string &strategy = "all",
                                  unsigned bufferSize = 2);

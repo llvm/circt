@@ -35,6 +35,20 @@
 namespace circt {
 namespace handshake {
 
+struct ExtMemLoadInterface {
+  unsigned index;
+  mlir::Value addressIn;
+  mlir::Value dataOut;
+  mlir::Value doneOut;
+};
+
+struct ExtMemStoreInterface {
+  unsigned index;
+  mlir::Value addressIn;
+  mlir::Value dataIn;
+  mlir::Value doneOut;
+};
+
 class TerminatorOp;
 
 #include "circt/Dialect/Handshake/HandshakeInterfaces.h.inc"

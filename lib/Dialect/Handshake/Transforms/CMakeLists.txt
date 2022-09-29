@@ -4,6 +4,7 @@ add_circt_dialect_library(CIRCTHandshakeTransforms
   Materialization.cpp
   Buffers.cpp
   LockFunctions.cpp
+  LowerExtmemToHW.cpp
 
   DEPENDS
   CIRCTHandshakeTransformsIncGen
