@@ -143,6 +143,9 @@ struct LoweringOptions {
   /// Some lint tools dislike expressions being inlined into input ports so this
   /// option avoids such warnings.
   bool disallowExpressionInliningInPorts = false;
+
+  /// If true, do not emit mux operations inline (spill to wire).
+  bool disallowInlineMux = false;
 };
 
 /// Register commandline options for the verilog emitter.

@@ -52,6 +52,13 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
   return isa<WireOp, RegOp, LogicOp, XMROp>(readSrc);
 }
 
+/// Check if operation is only used in an assign.
+static bool isOnlyUsedInAssignment(Operation &op) {
+  return op.hasOneUse() &&
+         isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp, sv::PAssignOp>(
+             *op.getUsers().begin());
+}
+
 // Check if the value is deemed worth spilling into a wire.
 static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
   auto isConcat = [](Operation *op) { return isa<ConcatOp>(op); };
@@ -65,6 +72,10 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
       !ExportVerilog::isExpressionEmittedInline(&op))
     return true;
 
+  // Don't inline mux operations if requested not to, unless RHS of an assign.
+  if (options.disallowInlineMux && isa<MuxOp>(op) && !isOnlyUsedInAssignment(op))
+    return true;
+ 
   // Work around Verilator #3405. Large expressions inside a concat is worst
   // case O(n^2) in a certain Verilator optimization, and can effectively hang
   // Verilator on large designs. Verilator 4.224+ works around this by having a
@@ -613,9 +624,7 @@ bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
 
   // If the operation is only used by an assignment, the op is already spilled
   // to a wire.
-  if (op.hasOneUse() &&
-      isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp, sv::PAssignOp>(
-          *op.getUsers().begin()))
+  if (isOnlyUsedInAssignment(op))
     return false;
 
   // If the term size is greater than `maximumNumberOfTermsPerExpression`,

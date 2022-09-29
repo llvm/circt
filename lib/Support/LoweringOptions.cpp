@@ -102,6 +102,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       useOldEmissionMode = true;
     } else if (option == "disallowExpressionInliningInPorts") {
       disallowExpressionInliningInPorts = true;
+    } else if (option == "disallowInlineMux") {
+      disallowInlineMux = true;
     } else if (option.consume_front("maximumNumberOfVariadicOperands=")) {
       if (option.getAsInteger(10, maximumNumberOfVariadicOperands)) {
         errorHandler("expected integer for number of variadic operands");
@@ -158,6 +160,8 @@ std::string LoweringOptions::toString() const {
     options += "wireSpillingHeuristic=spillLargeTermsWithNamehints,";
   if (disallowExpressionInliningInPorts)
     options += "disallowExpressionInliningInPorts,";
+  if (disallowInlineMux)
+    options += "disallowInlineMux,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
@@ -228,7 +232,7 @@ struct LoweringCLOptions {
           "emitReplicatedOpsToHeader, "
           "locationInfoStyle={plain,wrapInAtSquareBracket,none}, "
           "disallowPortDeclSharing, printDebugInfo, useOldEmissionMode, "
-          "disallowExpressionInliningInPorts"),
+          "disallowExpressionInliningInPorts, disallowInlineMux"),
       llvm::cl::value_desc("option")};
 };
 } // namespace

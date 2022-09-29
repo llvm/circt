@@ -92,6 +92,7 @@ The current set of "style" Lowering Options is:
    declaration when possible.
  * `printDebugInfo` (default=`false`). If true, emit additional debug information
    (e.g. inner symbols) into comments.
+ * `disallowInlineMux` (default=`false`).  If true, always spill mux expressions.
 
 The current set of "lint warnings fix" Lowering Options is:
 
