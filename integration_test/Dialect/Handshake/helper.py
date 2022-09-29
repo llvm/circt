@@ -1,5 +1,5 @@
 import cocotb.clock
-from cocotb.triggers import RisingEdge, ReadWrite
+from cocotb.triggers import RisingEdge, ReadOnly
 
 
 class HandshakePort:
@@ -34,7 +34,7 @@ class HandshakePort:
 
   async def awaitHandshake(self):
     # Make sure that changes to ready are propagated before it is checked.
-    await ReadWrite()
+    await ReadOnly()
     directSend = self.isReady()
     await self.waitUntilReady()
 
@@ -44,11 +44,6 @@ class HandshakePort:
       await RisingEdge(self.dut.clock)
 
     self.setValid(0)
-
-    if (not directSend):
-      # The handshake happend already, so we only have to ensure that valid 0
-      # gets communicated correctly.
-      await RisingEdge(self.dut.clock)
 
   async def send(self, val=None):
     self.setValid(1)
