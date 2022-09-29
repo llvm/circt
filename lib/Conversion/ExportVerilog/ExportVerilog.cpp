@@ -4995,7 +4995,7 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 // Unified Emitter
 //===----------------------------------------------------------------------===//
 
-LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
+static LogicalResult exportVerilogImpl(ModuleOp module, llvm::raw_ostream &os) {
   GlobalNameTable globalNames = legalizeGlobalNames(module);
 
   LoweringOptions options(module);
@@ -5034,6 +5034,15 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   return failure(emitter.encounteredError);
 }
 
+LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
+  LoweringOptions options(module);
+  SmallVector<HWModuleOp> modulesToPrepare;
+  module.walk([&](HWModuleOp op) { modulesToPrepare.push_back(op); });
+  parallelForEach(module->getContext(), modulesToPrepare,
+                  [&](auto op) { prepareHWModule(op, options); });
+  return exportVerilogImpl(module, os);
+}
+
 namespace {
 
 struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
@@ -5051,7 +5060,7 @@ struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
     modulePM.addPass(createPrepareForEmissionPass(options));
     (void)runPipeline(preparePM, getOperation());
 
-    if (failed(exportVerilog(getOperation(), os)))
+    if (failed(exportVerilogImpl(getOperation(), os)))
       signalPassFailure();
   }
 
@@ -5119,7 +5128,8 @@ static void createSplitOutputFile(StringAttr fileName, FileInfo &file,
   output->keep();
 }
 
-LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
+static LogicalResult exportSplitVerilogImpl(ModuleOp module,
+                                            StringRef dirname) {
   // Prepare the ops in the module for emission and legalize the names that will
   // end up in the output.
   LoweringOptions options(module);
@@ -5180,6 +5190,15 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   }
 
   return failure(emitter.encounteredError);
+}
+
+LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
+  LoweringOptions options(module);
+  SmallVector<HWModuleOp> modulesToPrepare;
+  module.walk([&](HWModuleOp op) { modulesToPrepare.push_back(op); });
+  parallelForEach(module->getContext(), modulesToPrepare,
+                  [&](auto op) { prepareHWModule(op, options); });
+  return exportSplitVerilogImpl(module, dirname);
 }
 
 namespace {
