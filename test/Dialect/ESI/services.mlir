@@ -157,18 +157,18 @@ msft.module @LoopbackCosimTop {} (%clk: i1, %rst: i1) {
 // CONN:         %MemA = sv.reg  : !hw.inout<uarray<20xi64>>
 // CONN:         %chanOutput, %ready = esi.wrap.vr %c0_i0, %write_done : i0
 // CONN:         %rawOutput, %valid = esi.unwrap.vr %write, %ready : !hw.struct<address: i5, data: i64>
-// CONN:         %0 = hw.struct_extract %rawOutput["address"] : !hw.struct<address: i5, data: i64>
-// CONN:         %1 = hw.struct_extract %rawOutput["data"] : !hw.struct<address: i5, data: i64>
-// CONN:         %2 = comb.and %valid, %ready {sv.namehint = "write_go"} : i1
-// CONN:         %write_done = seq.compreg sym @write_done %2, %clk, %rst, %false  : i1
-// CONN:         %chanOutput_0, %ready_1 = esi.wrap.vr %4, %valid_3 : i64
+// CONN:         %address = hw.struct_extract %rawOutput["address"] : !hw.struct<address: i5, data: i64>
+// CONN:         %data = hw.struct_extract %rawOutput["data"] : !hw.struct<address: i5, data: i64>
+// CONN:         %[[ANDVR:.*]] = comb.and %valid, %ready {sv.namehint = "write_go"} : i1
+// CONN:         %write_done = seq.compreg sym @write_done %[[ANDVR]], %clk, %rst, %false  : i1
+// CONN:         %chanOutput_0, %ready_1 = esi.wrap.vr %[[MEMREAD:.*]], %valid_3 : i64
 // CONN:         %rawOutput_2, %valid_3 = esi.unwrap.vr %readAddress, %ready_1 : i5
-// CONN:         %3 = sv.array_index_inout %MemA[%rawOutput_2] : !hw.inout<uarray<20xi64>>, i5
-// CONN:         %4 = sv.read_inout %3 : !hw.inout<i64>
+// CONN:         %[[MEMREADIO:.*]] = sv.array_index_inout %MemA[%rawOutput_2] : !hw.inout<uarray<20xi64>>, i5
+// CONN:         %[[MEMREAD]] = sv.read_inout %[[MEMREADIO]] : !hw.inout<i64>
 // CONN:         sv.alwaysff(posedge %clk) {
-// CONN:           sv.if %2 {
-// CONN:             %5 = sv.array_index_inout %MemA[%0] : !hw.inout<uarray<20xi64>>, i5
-// CONN:             sv.passign %5, %1 : i64
+// CONN:           sv.if %[[ANDVR]] {
+// CONN:             %[[ARRIDX:.*]] = sv.array_index_inout %MemA[%address] : !hw.inout<uarray<20xi64>>, i5
+// CONN:             sv.passign %[[ARRIDX]], %data : i64
 // CONN:           }
 // CONN:         }(syncreset : posedge %rst) {
 // CONN:         }
