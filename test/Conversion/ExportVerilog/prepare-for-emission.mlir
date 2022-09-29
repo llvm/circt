@@ -131,7 +131,7 @@ module attributes {circt.loweringOptions =
                   "wireSpillingHeuristic=spillLargeTermsWithNamehints,wireSpillingNamehintTermLimit=3"} {
   // CHECK-LABEL: namehints
   hw.module @namehints(%a: i8) -> (b: i8) {
-    // "foo" should be spilled because it has a meaningfull name.
+    // "foo" should be spilled because it has a meaningful name.
     // CHECK: %foo = sv.wire
     %0 = comb.add %a, %a {sv.namehint = "foo" } : i8
     // "_foo" should not be spilled because it has a name which starts with "_" and the term size is 2.
