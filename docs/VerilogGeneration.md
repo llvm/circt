@@ -93,7 +93,7 @@ The current set of "style" Lowering Options is:
  * `printDebugInfo` (default=`false`). If true, emit additional debug information
    (e.g. inner symbols) into comments.
  * `wireSpillingHeuristic` (default=`spillNone`). This controls extra wire spilling performed
-   in PrepareForEmission to improve readablitiy and debuggability. It is possible to combine
+   in PrepareForEmission to improve readability and debuggability. It is possible to combine
    several heuristics by specifying `wireSpillingHeuristic` multiple times.
    (e.g. `wireSpillingHeuristic=spillLargeTermsWithNamehints,wireSpillingHeuristic=spillAllMux`).
    * `spillLargeTermsWithNamehints`: If spillLargeTermsWithNamehints is specified, expressions
