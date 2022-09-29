@@ -4,6 +4,7 @@ add_circt_translation_library(CIRCTExportVerilog
   LegalizeNames.cpp
   PrepareForEmission.cpp
   RearrangableOStream.cpp
+  PruneZeroValuedLogic.cpp
 
   ADDITIONAL_HEADER_DIRS
 
@@ -20,4 +21,5 @@ add_circt_translation_library(CIRCTExportVerilog
   CIRCTSV
   MLIRPass
   MLIRSideEffectInterfaces
+  MLIRTransforms
   )

@@ -2779,6 +2779,7 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
 
   // This is invoked for expressions that have a non-single use.  This could
   // either be because they are dead or because they have multiple uses.
+  // todo: use_empty could be prurned prior to emission.
   if (op->getResult(0).use_empty()) {
     indent() << "// Unused: ";
     --numStatementsEmitted;
