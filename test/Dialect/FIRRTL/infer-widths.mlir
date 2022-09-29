@@ -825,4 +825,15 @@ firrtl.circuit "Foo" {
     %res = firrtl.ref.resolve %sub_x : !firrtl.ref<uint>
     firrtl.connect %r, %res : !firrtl.uint, !firrtl.uint
   }
+
+  // CHECK-LABEL: @ForeignTypes
+  firrtl.module @ForeignTypes(in %a: !firrtl.uint<42>, out %b: !firrtl.uint) {
+    %0 = firrtl.wire : index
+    %1 = firrtl.wire : index
+    firrtl.strictconnect %0, %1 : index
+    firrtl.connect %b, %a : !firrtl.uint, !firrtl.uint<42>
+    // CHECK-NEXT: [[W0:%.+]] = firrtl.wire : index
+    // CHECK-NEXT: [[W1:%.+]] = firrtl.wire : index
+    // CHECK-NEXT: firrtl.strictconnect [[W0]], [[W1]] : index
+  }
 }
