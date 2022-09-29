@@ -33,37 +33,36 @@ namespace cl = llvm::cl;
 
 static cl::OptionCategory mainCategory("circt-lec Options");
 
-static cl::opt<std::string> moduleName1("c1",
-  cl::desc("Specify a named module for the first circuit of the comparison"),
-  cl::value_desc("module name"),
-  cl::cat(mainCategory));
+static cl::opt<std::string> moduleName1(
+    "c1",
+    cl::desc("Specify a named module for the first circuit of the comparison"),
+    cl::value_desc("module name"), cl::cat(mainCategory));
 
-static cl::opt<std::string> moduleName2("c2",
-  cl::desc("Specify a named module for the second circuit of the comparison"),
-  cl::value_desc("module name"),
-  cl::cat(mainCategory));
+static cl::opt<std::string> moduleName2(
+    "c2",
+    cl::desc("Specify a named module for the second circuit of the comparison"),
+    cl::value_desc("module name"), cl::cat(mainCategory));
 
 static cl::opt<std::string> fileName1(cl::Positional, cl::Required,
                                       cl::desc("<input file>"),
                                       cl::cat(mainCategory));
 
-static cl::opt<std::string> fileName2(cl::Positional,
-                                      cl::desc("[input file]"),
+static cl::opt<std::string> fileName2(cl::Positional, cl::desc("[input file]"),
                                       cl::cat(mainCategory));
 
 // The following options are stored externally for their value to be accessible
 // to other components of the tool; see `Utility.h` for more definitions.
 bool verboseOpt;
 static cl::opt<bool, true>
-verbose("v", cl::location(verboseOpt), cl::init(false),
-  cl::desc("Print extensive execution progress information"),
-  cl::cat(mainCategory));
+    verbose("v", cl::location(verboseOpt), cl::init(false),
+            cl::desc("Print extensive execution progress information"),
+            cl::cat(mainCategory));
 
 bool statisticsOpt;
-static cl::opt<bool, true>
-statistics("s", cl::location(statisticsOpt), cl::init(false),
-  cl::desc("Print statistics about the logical engine's execution"),
-  cl::cat(mainCategory));
+static cl::opt<bool, true> statistics(
+    "s", cl::location(statisticsOpt), cl::init(false),
+    cl::desc("Print statistics about the logical engine's execution"),
+    cl::cat(mainCategory));
 
 //===----------------------------------------------------------------------===//
 // Tool implementation
@@ -130,13 +129,14 @@ int main(int argc, char **argv) {
   cl::HideUnrelatedOptions(mainCategory);
   mlir::registerMLIRContextCLOptions();
   cl::AddExtraVersionPrinter(
-    [](llvm::raw_ostream &os) { os << circt::getCirctVersion() << '\n'; });
+      [](llvm::raw_ostream &os) { os << circt::getCirctVersion() << '\n'; });
 
   // Parse the command-line options provided by the user.
-  cl::ParseCommandLineOptions(argc, argv,
-    "circt-lec - logical equivalence checker\n\n"
-    "\tThis tool compares two input circuit descriptions to determine whether"
-    " they are logically equivalent.\n");
+  cl::ParseCommandLineOptions(
+      argc, argv,
+      "circt-lec - logical equivalence checker\n\n"
+      "\tThis tool compares two input circuit descriptions to determine whether"
+      " they are logically equivalent.\n");
 
   // Register all the CIRCT dialects and create a context to work with.
   mlir::DialectRegistry registry;

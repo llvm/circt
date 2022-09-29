@@ -35,14 +35,10 @@ void Solver::Circuit::addOutput(mlir::Value value) {
 }
 
 /// Recover the inputs.
-llvm::ArrayRef<z3::expr> Solver::Circuit::getInputs() {
-  return inputs;
-}
+llvm::ArrayRef<z3::expr> Solver::Circuit::getInputs() { return inputs; }
 
 /// Recover the outputs.
-llvm::ArrayRef<z3::expr> Solver::Circuit::getOutputs() {
-  return outputs;
-}
+llvm::ArrayRef<z3::expr> Solver::Circuit::getOutputs() { return outputs; }
 
 //===----------------------------------------------------------------------===//
 // `hw` dialect operations
@@ -55,8 +51,9 @@ void Solver::Circuit::addConstant(mlir::Value opResult, mlir::APInt opValue) {
 }
 
 void Solver::Circuit::addInstance(circt::StringRef instanceName,
-circt::hw::HWModuleOp op, circt::OperandRange arguments,
-mlir::ResultRange results) {
+                                  circt::hw::HWModuleOp op,
+                                  circt::OperandRange arguments,
+                                  mlir::ResultRange results) {
   LLVM_DEBUG(lec::dbgs << name << " addInstance\n");
   INDENT();
   LLVM_DEBUG(lec::dbgs << "instance name: " << instanceName << "\n");
@@ -100,33 +97,32 @@ mlir::ResultRange results) {
 // This macro implements the perform function for a `comb` operation accepting
 // a variadic number of operands.
 #define performVariadicCombOp(OP_NAME, Z3_OPERATION)                           \
-void Solver::Circuit::perform##OP_NAME(mlir::Value result,                     \
-circt::OperandRange operands) {                                                \
-  LLVM_DEBUG(lec::dbgs << name << " perform" #OP_NAME "\n");                   \
-  INDENT();                                                                    \
-  variadicOperation(result, operands, [](auto op1, auto op2){                  \
-    return Z3_OPERATION;                                                       \
-  });                                                                          \
-}
+  void Solver::Circuit::perform##OP_NAME(mlir::Value result,                   \
+                                         circt::OperandRange operands) {       \
+    LLVM_DEBUG(lec::dbgs << name << " perform" #OP_NAME "\n");                 \
+    INDENT();                                                                  \
+    variadicOperation(result, operands,                                        \
+                      [](auto op1, auto op2) { return Z3_OPERATION; });        \
+  }
 
 // This macro implements the perform function for a `comb` operation accepting
 // two operands.
 #define performBinaryCombOp(OP_NAME, Z3_OPERATION)                             \
-void Solver::Circuit::perform##OP_NAME(mlir::Value result,                     \
-circt::Value lhs, circt::Value rhs) {                                          \
-  LLVM_DEBUG(lec::dbgs << name << " perform" #OP_NAME "\n");                   \
-  INDENT();                                                                    \
-  LLVM_DEBUG(lec::dbgs << "lhs:\n");                                           \
-  z3::expr lhsExpr = fetchExpr(lhs);                                           \
-  LLVM_DEBUG(lec::dbgs << "rhs:\n");                                           \
-  z3::expr rhsExpr = fetchExpr(rhs);                                           \
-  z3::expr op = z3::Z3_OPERATION(lhsExpr, rhsExpr);                            \
-  constrainResult(result, op);                                                 \
-}
+  void Solver::Circuit::perform##OP_NAME(mlir::Value result, circt::Value lhs, \
+                                         circt::Value rhs) {                   \
+    LLVM_DEBUG(lec::dbgs << name << " perform" #OP_NAME "\n");                 \
+    INDENT();                                                                  \
+    LLVM_DEBUG(lec::dbgs << "lhs:\n");                                         \
+    z3::expr lhsExpr = fetchExpr(lhs);                                         \
+    LLVM_DEBUG(lec::dbgs << "rhs:\n");                                         \
+    z3::expr rhsExpr = fetchExpr(rhs);                                         \
+    z3::expr op = z3::Z3_OPERATION(lhsExpr, rhsExpr);                          \
+    constrainResult(result, op);                                               \
+  }
 
 performVariadicCombOp(Add, op1 + op2);
 
-performVariadicCombOp(And, op1 & op2);
+performVariadicCombOp(And, z3::operator&(op1, op2));
 
 performVariadicCombOp(Concat, z3::concat(op1, op2));
 
@@ -135,19 +131,20 @@ performBinaryCombOp(DivS, operator/);
 performBinaryCombOp(DivU, udiv);
 
 void Solver::Circuit::performExtract(mlir::Value result, mlir::Value input,
-uint32_t lowBit) {
+                                     uint32_t lowBit) {
   LLVM_DEBUG(lec::dbgs << name << " performExtract\n");
   INDENT();
   LLVM_DEBUG(lec::dbgs << "input:\n");
   z3::expr inputExpr = fetchExpr(input);
   unsigned width = result.getType().getIntOrFloatBitWidth();
   LLVM_DEBUG(lec::dbgs << "width: " << width << "\n");
-  z3::expr extract = inputExpr.extract(lowBit+width-1, lowBit);
+  z3::expr extract = inputExpr.extract(lowBit + width - 1, lowBit);
   constrainResult(result, extract);
 }
 
 void Solver::Circuit::performICmp(mlir::Value result,
-circt::comb::ICmpPredicate predicate, mlir::Value lhs, mlir::Value rhs) {
+                                  circt::comb::ICmpPredicate predicate,
+                                  mlir::Value lhs, mlir::Value rhs) {
   LLVM_DEBUG(lec::dbgs << name << " performICmp\n");
   INDENT();
   LLVM_DEBUG(lec::dbgs << "lhs:\n");
@@ -157,42 +154,42 @@ circt::comb::ICmpPredicate predicate, mlir::Value lhs, mlir::Value rhs) {
   z3::expr icmp(solver->context);
 
   switch (predicate) {
-    case circt::comb::ICmpPredicate::eq:
-    // Multi-valued logic is not accounted for.
-    case circt::comb::ICmpPredicate::ceq:
-    case circt::comb::ICmpPredicate::weq:
-      icmp = boolToBv(lhsExpr == rhsExpr);
-      break;
-    case circt::comb::ICmpPredicate::ne:
-    // Multi-valued logic is not accounted for.
-    case circt::comb::ICmpPredicate::cne:
-    case circt::comb::ICmpPredicate::wne:
-      icmp = boolToBv(lhsExpr != rhsExpr);
-      break;
-    case circt::comb::ICmpPredicate::slt:
-      icmp = boolToBv(z3::slt(lhsExpr, rhsExpr));
-      break;
-    case circt::comb::ICmpPredicate::sle:
-      icmp = boolToBv(z3::sle(lhsExpr, rhsExpr));
-      break;
-    case circt::comb::ICmpPredicate::sgt:
-      icmp = boolToBv(z3::sgt(lhsExpr, rhsExpr));
-      break;
-    case circt::comb::ICmpPredicate::sge:
-      icmp = boolToBv(z3::sge(lhsExpr, rhsExpr));
-      break;
-    case circt::comb::ICmpPredicate::ult:
-      icmp = boolToBv(z3::ult(lhsExpr, rhsExpr));
-      break;
-    case circt::comb::ICmpPredicate::ule:
-      icmp = boolToBv(z3::ule(lhsExpr, rhsExpr));
-      break;
-    case circt::comb::ICmpPredicate::ugt:
-      icmp = boolToBv(z3::ugt(lhsExpr, rhsExpr));
-      break;
-    case circt::comb::ICmpPredicate::uge:
-      icmp = boolToBv(z3::uge(lhsExpr, rhsExpr));
-      break;
+  case circt::comb::ICmpPredicate::eq:
+  // Multi-valued logic is not accounted for.
+  case circt::comb::ICmpPredicate::ceq:
+  case circt::comb::ICmpPredicate::weq:
+    icmp = boolToBv(lhsExpr == rhsExpr);
+    break;
+  case circt::comb::ICmpPredicate::ne:
+  // Multi-valued logic is not accounted for.
+  case circt::comb::ICmpPredicate::cne:
+  case circt::comb::ICmpPredicate::wne:
+    icmp = boolToBv(lhsExpr != rhsExpr);
+    break;
+  case circt::comb::ICmpPredicate::slt:
+    icmp = boolToBv(z3::slt(lhsExpr, rhsExpr));
+    break;
+  case circt::comb::ICmpPredicate::sle:
+    icmp = boolToBv(z3::sle(lhsExpr, rhsExpr));
+    break;
+  case circt::comb::ICmpPredicate::sgt:
+    icmp = boolToBv(z3::sgt(lhsExpr, rhsExpr));
+    break;
+  case circt::comb::ICmpPredicate::sge:
+    icmp = boolToBv(z3::sge(lhsExpr, rhsExpr));
+    break;
+  case circt::comb::ICmpPredicate::ult:
+    icmp = boolToBv(z3::ult(lhsExpr, rhsExpr));
+    break;
+  case circt::comb::ICmpPredicate::ule:
+    icmp = boolToBv(z3::ule(lhsExpr, rhsExpr));
+    break;
+  case circt::comb::ICmpPredicate::ugt:
+    icmp = boolToBv(z3::ugt(lhsExpr, rhsExpr));
+    break;
+  case circt::comb::ICmpPredicate::uge:
+    icmp = boolToBv(z3::uge(lhsExpr, rhsExpr));
+    break;
   };
 
   constrainResult(result, icmp);
@@ -202,10 +199,11 @@ performBinaryCombOp(ModS, smod);
 
 performBinaryCombOp(ModU, urem);
 
-performVariadicCombOp(Mul, op1 * op2);
+performVariadicCombOp(Mul, op1 *op2);
 
 void Solver::Circuit::performMux(mlir::Value result, mlir::Value cond,
-mlir::Value trueValue, mlir::Value falseValue) {
+                                 mlir::Value trueValue,
+                                 mlir::Value falseValue) {
   LLVM_DEBUG(lec::dbgs << name << " performMux\n");
   INDENT();
   LLVM_DEBUG(lec::dbgs << "cond:\n");
@@ -232,7 +230,7 @@ void Solver::Circuit::performParity(mlir::Value result, mlir::Value input) {
   // input has 1 or more bits
   z3::expr parity = inputExpr.extract(0, 0);
   // calculate parity with every other bit
-  for(unsigned int i=1; i < width; i++) {
+  for (unsigned int i = 1; i < width; i++) {
     parity = parity ^ inputExpr.extract(i, i);
   }
 
@@ -251,7 +249,7 @@ void Solver::Circuit::performReplicate(mlir::Value result, mlir::Value input) {
   LLVM_DEBUG(lec::dbgs << "replies: " << times << "\n");
 
   z3::expr replicate = inputExpr;
-  for(unsigned int i=1; i < times; i++) {
+  for (unsigned int i = 1; i < times; i++) {
     replicate = z3::concat(replicate, inputExpr);
   }
 
@@ -272,9 +270,10 @@ performVariadicCombOp(Xor, op1 ^ op2);
 
 /// Helper function for performing a variadic operation: it executes a lambda
 /// over a range of operands.
-void Solver::Circuit::variadicOperation(mlir::Value result,
-circt::OperandRange operands,
-mlir::function_ref<z3::expr(const z3::expr&, const z3::expr&)> operation) {
+void Solver::Circuit::variadicOperation(
+    mlir::Value result, circt::OperandRange operands,
+    mlir::function_ref<z3::expr(const z3::expr &, const z3::expr &)>
+        operation) {
   LLVM_DEBUG(lec::dbgs << "variadic operation\n");
   INDENT();
   // Vacuous base case.
@@ -288,7 +287,7 @@ mlir::function_ref<z3::expr(const z3::expr&, const z3::expr&)> operation) {
   }
   ++it;
   // Inductive step.
-  while(it != operands.end()) {
+  while (it != operands.end()) {
     operand = *it;
     varOp = operation(varOp, exprTable.find(operand)->second);
     {
@@ -326,11 +325,11 @@ z3::expr Solver::Circuit::allocateValue(mlir::Value value) {
 /// Allocates a constant value in the logical backend and returns its
 /// representing expression.
 void Solver::Circuit::allocateConstant(mlir::Value result,
-const mlir::APInt &value) {
+                                       const mlir::APInt &value) {
   // `The constant operation produces a constant value
   //  of standard integer type without a sign`
-  const z3::expr constant = solver->context.bv_val(value.getZExtValue(),
-    value.getBitWidth());
+  const z3::expr constant =
+      solver->context.bv_val(value.getZExtValue(), value.getBitWidth());
   auto insertion = exprTable.insert(std::pair(result, constant));
   assert(insertion.second && "Constant not inserted in expression table");
   LLVM_DEBUG(lec::printExpr(constant));
@@ -367,16 +366,15 @@ void Solver::Circuit::constrainResult(mlir::Value &result, z3::expr &expr) {
 }
 
 /// Convert from bitvector to bool sort.
-z3::expr Solver::Circuit::bvToBool(z3::expr& condition) {
+z3::expr Solver::Circuit::bvToBool(z3::expr &condition) {
   // bitvector is true if it's different from 0
   return condition != 0;
 }
 
 /// Convert from a boolean sort to the corresponding 1-width bitvector.
 z3::expr Solver::Circuit::boolToBv(z3::expr condition) {
-  return z3::ite(condition,
-    solver->context.bv_val(1, 1),
-    solver->context.bv_val(0, 1));
+  return z3::ite(condition, solver->context.bv_val(1, 1),
+                 solver->context.bv_val(0, 1));
 }
 
 #undef DEBUG_TYPE

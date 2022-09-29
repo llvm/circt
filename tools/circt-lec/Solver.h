@@ -24,10 +24,10 @@
 /// engine. First spawn two circuits through `addCircuit`; after collecting
 /// their logical constraints, the `solve` method will compare them and report
 /// whether they result to be equivalent or, when not, also printing a model
-/// acting as a counterexample. 
+/// acting as a counterexample.
 class Solver {
 public:
-  Solver() : circuits{}, context(), solver(context) {};
+  Solver() : circuits{}, context(), solver(context){};
   ~Solver();
 
   /// Solve the equivalence problem between the two circuits, then present the
@@ -36,7 +36,7 @@ public:
 
   class Circuit;
   /// Create a new circuit to be compared and return it.
-  Circuit* addCircuit(circt::StringRef name, bool firstCircuit);
+  Circuit *addCircuit(circt::StringRef name, bool firstCircuit);
 
 private:
   /// Prints a model satisfying the solved constraints.
@@ -59,7 +59,7 @@ private:
   /// A map from internal solver symbols to the IR values they represent.
   llvm::DenseMap<std::string, mlir::Value> symbolTable;
   /// The two circuits to be compared.
-  llvm::SmallVector<Circuit*, 2> circuits;
+  llvm::SmallVector<Circuit *, 2> circuits;
   /// The Z3 context of reference, owning all the declared values, constants
   /// and expressions.
   z3::context context;
@@ -70,7 +70,7 @@ private:
 namespace llvm {
 /// Implementation of DenseMapInfo for std::string
 /// needed by Solver::symbolTable.
-template<>
+template <>
 struct DenseMapInfo<std::string> {
   static inline std::string getEmptyKey() {
     std::string empty("<<<EMPTY KEY>>>");

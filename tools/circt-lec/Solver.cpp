@@ -37,17 +37,17 @@ mlir::LogicalResult Solver::solve() {
   // equivalent. Otherwise, print a model to act as a counterexample.
   mlir::LogicalResult outcome = mlir::success();
   switch (solver.check()) {
-    case z3::unsat:
-      lec::outs << "c1 == c2\n";
-      break;
-    case z3::sat:
-      lec::outs << "c1 != c2\n";
-      printModel();
-      outcome = mlir::failure();
-      break;
-    case z3::unknown:
-      outcome = mlir::failure();
-      lec::errs << "circt-lec error: solver ran out of time\n";
+  case z3::unsat:
+    lec::outs << "c1 == c2\n";
+    break;
+  case z3::sat:
+    lec::outs << "c1 != c2\n";
+    printModel();
+    outcome = mlir::failure();
+    break;
+  case z3::unknown:
+    outcome = mlir::failure();
+    lec::errs << "circt-lec error: solver ran out of time\n";
   }
 
   // Print further relevant information as requested.
@@ -59,14 +59,14 @@ mlir::LogicalResult Solver::solve() {
 }
 
 /// Create a new circuit to be compared and return it.
-Solver::Circuit* Solver::addCircuit(circt::StringRef name, bool firstCircuit) {
+Solver::Circuit *Solver::addCircuit(circt::StringRef name, bool firstCircuit) {
   // Hack: entities within the logical engine are namespaced by the circuit
   // they belong to, which may cause shadowing when parsing two files with a
   // similar module naming scheme.
   // To avoid that, they're differentiated by a prefix.
   std::string prefix = firstCircuit ? "c1@" : "c2@";
   circuits.push_back(new Solver::Circuit(prefix + name, this));
-  assert(circuits.size()<=2 && "expected to solve two circuits");
+  assert(circuits.size() <= 2 && "expected to solve two circuits");
   return circuits.back();
 }
 
@@ -85,24 +85,22 @@ void Solver::printModel() {
     mlir::emitRemark(value.getLoc(), "");
     // Explicitly unfolded the asm printing for `mlir::Value`.
     if (auto *op = value.getDefiningOp()) {
-      // SSA value of an operation
-    }
-    else {
+      // It's a SSA'ed value of an operation.
+    } else {
       // Value is an argument.
       mlir::BlockArgument arg = value.cast<mlir::BlockArgument>();
       mlir::Operation *parentOp = value.getParentRegion()->getParentOp();
       if (auto op = llvm::dyn_cast<circt::hw::HWModuleOp>(parentOp)) {
         // Argument of a `hw.module`.
-        lec::dbgs << "argument name: " <<
-          op.getArgNames()[arg.getArgNumber()] << "\n";
-      }
-      else {
+        lec::dbgs << "argument name: " << op.getArgNames()[arg.getArgNumber()]
+                  << "\n";
+      } else {
         // Argument of a different operation.
-        lec::dbgs << "<block argument> of type '" <<
-          arg.getType() << "' at index: " << arg.getArgNumber() << "\n";
+        lec::dbgs << "<block argument> of type '" << arg.getType()
+                  << "' at index: " << arg.getArgNumber() << "\n";
       }
     }
-    // Accompanying model information
+    // Accompanying model information.
     lec::dbgs << "internal symbol: " << symbol << "\n";
     lec::dbgs << "model interpretation: " << e.to_string() << "\n\n";
   }
@@ -125,7 +123,7 @@ void Solver::printStatistics() {
   lec::dbgs << "SMT solver statistics:\n";
   INDENT();
   z3::stats stats = solver.statistics();
-  for (unsigned i=0; i<stats.size(); i++) {
+  for (unsigned i = 0; i < stats.size(); i++) {
     lec::dbgs << stats.key(i) << " : " << stats.uint_value(i) << "\n";
   }
 }
@@ -151,10 +149,10 @@ mlir::LogicalResult Solver::constrainCircuits() {
 
   const auto *c1inIt = c1Inputs.begin();
   const auto *c2inIt = c2Inputs.begin();
-  for(unsigned i=0; i < nc1Inputs; i++) {
+  for (unsigned i = 0; i < nc1Inputs; i++) {
     // Can't compare two circuits when their ith inputs differ in type.
     if (c1inIt->get_sort().bv_size() != c2inIt->get_sort().bv_size()) {
-      lec::errs << "circt-lec error: input #" << i+1 << " type mismatch\n";
+      lec::errs << "circt-lec error: input #" << i + 1 << " type mismatch\n";
       return mlir::failure();
     }
     // Their ith inputs have to be equivalent.
@@ -174,10 +172,10 @@ mlir::LogicalResult Solver::constrainCircuits() {
 
   const auto *c1outIt = c1Outputs.begin();
   const auto *c2outIt = c2Outputs.begin();
-  for(unsigned i=0; i < nc1Outputs; i++) {
+  for (unsigned i = 0; i < nc1Outputs; i++) {
     // Can't compare two circuits when their ith outputs differ in type.
     if (c1outIt->get_sort().bv_size() != c2outIt->get_sort().bv_size()) {
-      lec::errs << "circt-lec error: output #" << i+1 << " type mismatch\n";
+      lec::errs << "circt-lec error: output #" << i + 1 << " type mismatch\n";
       return mlir::failure();
     }
     // Their ith outputs have to be equivalent.
