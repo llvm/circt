@@ -3345,11 +3345,11 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
 
   if (!op->getRegion(1).empty()) {
     if (!hasEmptyThen)
-      indent() << "`else\n";
+      indent() << "`else  // " << ident << "\n";
     emitStatementBlock(op->getRegion(1).front());
   }
 
-  indent() << "`endif\n";
+  indent() << "`endif // " << (hasEmptyThen ? "not def " : "") << ident << "\n";
 
   // We don't know how many statements we emitted, so assume conservatively
   // that a lot got put out. This will make sure we get a begin/end block around
