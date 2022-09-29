@@ -1762,10 +1762,12 @@ LogicalResult InferResetsPass::verifyNoAbstractReset() {
   for (FModuleLike module :
        getOperation().getBodyBlock()->getOps<FModuleLike>()) {
     for (PortInfo port : module.getPorts()) {
-      if (getBaseType(port.type).isa<ResetType>()) {
-        module->emitOpError()
-            << "contains an abstract reset type after InferResets";
-        hasAbstractResetPorts = true;
+      if (auto portType = port.type.dyn_cast<FIRRTLType>()) {
+        if (getBaseType(portType).isa<ResetType>()) {
+          module->emitOpError()
+              << "contains an abstract reset type after InferResets";
+          hasAbstractResetPorts = true;
+        }
       }
     }
   }

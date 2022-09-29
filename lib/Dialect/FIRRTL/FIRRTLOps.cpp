@@ -382,7 +382,7 @@ LogicalResult CircuitOp::verify() {
     // has zero false positives.
     for (auto p : llvm::zip(ports, collidingPorts)) {
       StringAttr aName = std::get<0>(p).name, bName = std::get<1>(p).name;
-      FIRRTLType aType = std::get<0>(p).type, bType = std::get<1>(p).type;
+      Type aType = std::get<0>(p).type, bType = std::get<1>(p).type;
 
       if (aName != bName)
         return extModule.emitOpError()
@@ -2154,12 +2154,13 @@ LogicalResult ConnectOp::verify() {
 }
 
 LogicalResult StrictConnectOp::verify() {
-  auto type = getDest().getType().cast<FIRRTLType>();
-  auto baseType = type.dyn_cast<FIRRTLBaseType>();
+  if (auto type = getDest().getType().dyn_cast<FIRRTLType>()) {
+    auto baseType = type.dyn_cast<FIRRTLBaseType>();
 
-  // Analog types cannot be connected and must be attached.
-  if (baseType && baseType.containsAnalog())
-    return emitError("analog types may not be connected");
+    // Analog types cannot be connected and must be attached.
+    if (baseType && baseType.containsAnalog())
+      return emitError("analog types may not be connected");
+  }
 
   // Check that the flows make sense.
   if (failed(checkConnectFlow(*this)))

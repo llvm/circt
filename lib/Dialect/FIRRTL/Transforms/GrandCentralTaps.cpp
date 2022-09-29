@@ -851,10 +851,16 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
     auto key = getKey(anno);
     annos.insert({key, anno});
     assert(!tappedPorts.count(key) && "ambiguous tap annotation");
-    auto portWidth = cast<FModuleLike>(port.first)
-                         .getPortType(port.second)
-                         .cast<FIRRTLBaseType>()
-                         .getBitWidthOrSentinel();
+    auto portType = cast<FModuleLike>(port.first).getPortType(port.second);
+    auto firrtlPortType = portType.dyn_cast<FIRRTLType>();
+    if (!firrtlPortType) {
+      port.first->emitError("data tap cannot target port with non-FIRRTL type ")
+          << portType;
+      return signalPassFailure();
+    }
+
+    auto portWidth =
+        firrtlPortType.cast<FIRRTLBaseType>().getBitWidthOrSentinel();
     // If the port width is non-zero, process it normally.  Otherwise, record it
     // as being zero-width.
     if (portWidth)

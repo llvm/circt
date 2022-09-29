@@ -1659,4 +1659,51 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK: hw.output %count : i2
   }
+  // CHECK-LABEL: hw.module @passThroughForeignTypes
+  // CHECK-SAME:      (%inOpaque: index) -> (outOpaque: index) {
+  // CHECK-NEXT:    %sub2.bar = hw.instance "sub2" @moreForeignTypes(foo: %sub1.bar: index) -> (bar: index)
+  // CHECK-NEXT:    %sub1.bar = hw.instance "sub1" @moreForeignTypes(foo: %inOpaque: index) -> (bar: index)
+  // CHECK-NEXT:    hw.output %sub2.bar : index
+  // CHECK-NEXT:  }
+  // CHECK-LABEL: hw.module @moreForeignTypes
+  // CHECK-SAME:      (%foo: index) -> (bar: index) {
+  // CHECK-NEXT:    hw.output %foo : index
+  // CHECK-NEXT:  }
+  firrtl.module @passThroughForeignTypes(in %inOpaque: index, out %outOpaque: index) {
+    // Declaration order intentionally reversed to enforce use-before-def in HW
+    %sub2_foo, %sub2_bar = firrtl.instance sub2 @moreForeignTypes(in foo: index, out bar: index)
+    %sub1_foo, %sub1_bar = firrtl.instance sub1 @moreForeignTypes(in foo: index, out bar: index)
+    firrtl.strictconnect %sub1_foo, %inOpaque : index
+    firrtl.strictconnect %sub2_foo, %sub1_bar : index
+    firrtl.strictconnect %outOpaque, %sub2_bar : index
+  }
+  firrtl.module @moreForeignTypes(in %foo: index, out %bar: index) {
+    firrtl.strictconnect %bar, %foo : index
+  }
+
+  // CHECK-LABEL: hw.module @foreignOpsOnForeignTypes
+  // CHECK-SAME:      (%x: f32) -> (y: f32) {
+  // CHECK-NEXT:    [[TMP:%.+]] = arith.addf %x, %x : f32
+  // CHECK-NEXT:    hw.output [[TMP]] : f32
+  // CHECK-NEXT:  }
+  firrtl.module @foreignOpsOnForeignTypes(in %x: f32, out %y: f32) {
+    %0 = arith.addf %x, %x : f32
+    firrtl.strictconnect %y, %0 : f32
+  }
+
+  // CHECK-LABEL: hw.module @wiresWithForeignTypes
+  // CHECK-SAME:      (%in: f32) -> (out: f32) {
+  // CHECK-NEXT:    [[ADD1:%.+]] = arith.addf [[ADD2:%.+]], [[ADD2]] : f32
+  // CHECK-NEXT:    [[ADD2]] = arith.addf %in, [[ADD2]] : f32
+  // CHECK-NEXT:    hw.output [[ADD1]] : f32
+  // CHECK-NEXT:  }
+  firrtl.module @wiresWithForeignTypes(in %in: f32, out %out: f32) {
+    %w1 = firrtl.wire : f32
+    %w2 = firrtl.wire : f32
+    firrtl.strictconnect %out, %w2 : f32
+    %0 = arith.addf %w1, %w1 : f32
+    firrtl.strictconnect %w2, %0 : f32
+    %1 = arith.addf %in, %w1 : f32
+    firrtl.strictconnect %w1, %1 : f32
+  }
 }

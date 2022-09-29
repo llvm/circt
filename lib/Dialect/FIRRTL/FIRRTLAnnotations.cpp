@@ -666,7 +666,7 @@ PortAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
 FIRRTLType PortAnnoTarget::getType() const {
   auto *op = getOp();
   if (auto module = llvm::dyn_cast<FModuleLike>(op))
-    return module.getPortType(getPortNo());
+    return module.getPortType(getPortNo()).cast<FIRRTLType>();
   if (llvm::isa<MemOp, InstanceOp>(op))
     return op->getResult(getPortNo()).getType().cast<FIRRTLType>();
   llvm_unreachable("unknow operation kind");

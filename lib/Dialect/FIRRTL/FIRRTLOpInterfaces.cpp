@@ -25,13 +25,10 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   // Verify port types first.  This is used as the basis for the number of
   // ports required everywhere else.
   auto portTypes = module.getPortTypesAttr();
-  if (!portTypes)
-    return module.emitOpError("requires valid port types");
-  if (llvm::any_of(portTypes.getValue(), [](Attribute attr) {
-        auto typeAttr = attr.dyn_cast<TypeAttr>();
-        return !typeAttr || !typeAttr.getValue().isa<FIRRTLType>();
+  if (!portTypes || llvm::any_of(portTypes.getValue(), [](Attribute attr) {
+        return !attr.isa<TypeAttr>();
       }))
-    return module.emitOpError("ports should all be FIRRTL types");
+    return module.emitOpError("requires valid port types");
 
   auto numPorts = portTypes.size();
 
