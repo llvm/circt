@@ -512,6 +512,10 @@ static void modifyModuleArgs(
   auto exportPortAttrName = StringAttr::get(context, "hw.exportPort");
   auto emptyDictAttr = DictionaryAttr::get(context, {});
 
+  BitVector erasedIndices;
+  if (body)
+    erasedIndices.resize(oldArgCount + insertArgs.size());
+
   for (unsigned argIdx = 0; argIdx <= oldArgCount; ++argIdx) {
     // Insert new ports at this position.
     while (!insertArgs.empty() && insertArgs[0].first == argIdx) {
@@ -548,8 +552,11 @@ static void modifyModuleArgs(
     }
 
     if (body && removed)
-      body->eraseArgument(argIdx);
+      erasedIndices.set(argIdx);
   }
+
+  if (body)
+    body->eraseArguments(erasedIndices);
 
   assert(newArgNames.size() == newArgCount);
   assert(newArgTypes.size() == newArgCount);
