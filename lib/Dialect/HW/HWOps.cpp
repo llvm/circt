@@ -2082,7 +2082,7 @@ void StructExplodeOp::print(OpAsmPrinter &printer) {
 LogicalResult StructExplodeOp::canonicalize(StructExplodeOp op,
                                             PatternRewriter &rewriter) {
   auto *inputOp = op.getInput().getDefiningOp();
-  auto elements = op.getInput().getType().cast<StructType>().getElements();
+  auto elements = type_cast<StructType>(op.getInput().getType()).getElements();
   for (auto [element, res] : llvm::zip(elements, op.getResults())) {
     if (auto foldResult = foldStructExtract(inputOp, element.name.str()))
       res.replaceAllUsesWith(foldResult);
