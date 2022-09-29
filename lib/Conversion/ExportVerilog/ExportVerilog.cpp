@@ -5058,7 +5058,8 @@ struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
     mlir::OpPassManager preparePM("builtin.module");
     auto &modulePM = preparePM.nest<hw::HWModuleOp>();
     modulePM.addPass(createPrepareForEmissionPass(options));
-    (void)runPipeline(preparePM, getOperation());
+    if (failed(runPipeline(preparePM, getOperation())))
+      signalPassFailure();
 
     if (failed(exportVerilogImpl(getOperation(), os)))
       signalPassFailure();
@@ -5219,7 +5220,8 @@ struct ExportSplitVerilogPass
     mlir::OpPassManager preparePM("builtin.module");
     auto &modulePM = preparePM.nest<hw::HWModuleOp>();
     modulePM.addPass(createPrepareForEmissionPass(options));
-    (void)runPipeline(preparePM, getOperation());
+    if (failed(runPipeline(preparePM, getOperation())))
+      signalPassFailure();
 
     if (failed(exportSplitVerilog(getOperation(), directoryName)))
       signalPassFailure();
