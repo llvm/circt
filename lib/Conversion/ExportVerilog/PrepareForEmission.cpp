@@ -255,7 +255,7 @@ static void lowerUsersToTemporaryWire(Operation &op,
     }
   };
 
-  // If the op has a single result, infer a meaningfull name from the
+  // If the op has a single result, infer a meaningful name from the
   // value.
   if (op.getNumResults() == 1) {
     auto namehint = inferStructuralNameForTemporary(op.getResult(0));
@@ -481,6 +481,8 @@ public:
   // Get or caluculate an emitted expression state.
   EmittedExpressionState getExpressionState(Value value);
 
+  bool dispatchHeuristic(Operation &op);
+
   // Return true if the operation is worth spilling based on the expression
   // state of the op.
   bool shouldSpillWireBasedOnState(Operation &op);
@@ -601,6 +603,25 @@ static bool reuseExistingInOut(Operation *op) {
   return true;
 }
 
+bool EmittedExpressionStateManager::dispatchHeuristic(Operation &op) {
+  // TODO: Consider using virtual functions.
+  if (options.isWireSpillingHeuristicEnabled(
+          LoweringOptions::SpillLargeTermsWithNamehints))
+    if (auto hint = op.getAttrOfType<StringAttr>("sv.namehint")) {
+      // Spill wires if the name doesn't have a prefix "_".
+      if (!hint.getValue().startswith("_"))
+        return true;
+      // If the name has prefix "_", spill if the size is greater than the
+      // threshould.
+      if (getExpressionState(op.getResult(0)).size >=
+          options.wireSpillingNamehintTermLimit)
+        return true;
+    }
+
+  return options.isWireSpillingHeuristicEnabled(LoweringOptions::SpillAllMux) &&
+         isa<MuxOp>(op);
+}
+
 /// Return true if it is beneficial to spill the operation under the specified
 /// spilling heuristic.
 bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
@@ -623,18 +644,7 @@ bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
   if (options.maximumNumberOfTermsPerExpression <
       getExpressionState(op.getResult(0)).size)
     return true;
-
-  switch (options.wireSpillingHeuristic) {
-  case LoweringOptions::SpillLargeTermsWithNamehints:
-    if (op.hasAttr("sv.namehint") && getExpressionState(op.getResult(0)).size >=
-                                         options.wireSpillingNamehintTermLimit)
-      return true;
-    break;
-  default:
-    break;
-  }
-
-  return false;
+  return dispatchHeuristic(op);
 }
 
 /// After the legalization, we are able to know accurate verilog AST structures.
