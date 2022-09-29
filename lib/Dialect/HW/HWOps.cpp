@@ -17,10 +17,13 @@
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
+#include "circt/Support/Namespace.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/StringSet.h"
 
 using namespace circt;
 using namespace hw;
@@ -1132,6 +1135,25 @@ static LogicalResult verifyModuleCommon(Operation *module) {
 LogicalResult HWModuleOp::verify() { return verifyModuleCommon(*this); }
 
 LogicalResult HWModuleExternOp::verify() { return verifyModuleCommon(*this); }
+
+std::pair<StringAttr, BlockArgument>
+HWModuleOp::insertInput(unsigned index, StringAttr name, Type ty) {
+  // Find a unique name for the wire.
+  Namespace ns;
+  for (auto port : getAllPorts())
+    ns.newName(port.name.getValue());
+  auto nameAttr = StringAttr::get(getContext(), ns.newName(name.getValue()));
+
+  // Create a new port for the host clock.
+  PortInfo port;
+  port.name = nameAttr;
+  port.direction = PortDirection::INPUT;
+  port.type = ty;
+  insertPorts({std::make_pair(index, port)}, {});
+
+  // Add a new argument.
+  return {nameAttr, getBody().getArgument(index)};
+}
 
 void HWModuleOp::insertOutputs(unsigned index,
                                ArrayRef<std::pair<StringAttr, Value>> outputs) {

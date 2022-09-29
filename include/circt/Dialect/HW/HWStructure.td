@@ -87,6 +87,9 @@ def HWModuleOp : HWModuleOpBase<"module",
       return getAllModulePortInfos(*this);
     }
 
+    /// Returns the number of in or input ports.
+    size_t getNumInOrInoutPorts() { return getArgumentTypes().size(); }
+
     /// Return the PortInfo for the specified input or inout port.
     PortInfo getInOrInoutPort(size_t i) {
       return getModuleInOrInoutPort(*this, i);
@@ -95,6 +98,29 @@ def HWModuleOp : HWModuleOpBase<"module",
     /// Return the PortInfo for the specified output port.
     PortInfo getOutputPort(size_t i) {
       return getModuleOutputPort(*this, i);
+    }
+
+    /// Append an input with a given name and type to the port list.
+    /// If the name is not unique, a unique name is created and returned.
+    std::pair<StringAttr, BlockArgument>
+    appendInput(const Twine &name, Type ty) {
+      return insertInput(getNumInOrInoutPorts(), name, ty);
+    }
+
+    std::pair<StringAttr, BlockArgument>
+    appendInput(StringAttr name, Type ty) {
+      return insertInput(getNumInOrInoutPorts(), name.getValue(), ty);
+    }
+
+    /// Insert an input with a given name and type into the port list.
+    /// The input is added at the specified index.
+    std::pair<StringAttr, BlockArgument>
+    insertInput(unsigned index, StringAttr name, Type ty);
+
+    std::pair<StringAttr, BlockArgument>
+    insertInput(unsigned index, const Twine &name, Type ty) {
+      ::mlir::StringAttr nameAttr = ::mlir::StringAttr::get(getContext(), name);
+      return insertInput(index, nameAttr, ty);
     }
 
     /// Inserts a list of output ports into the port list at a specific
