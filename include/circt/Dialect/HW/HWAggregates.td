@@ -209,6 +209,7 @@ def StructExplodeOp : HWOp<"struct_explode", [NoSideEffect]> {
   let arguments = (ins StructType:$input);
   let results = (outs Variadic<HWNonInOutType>:$result);
   let hasCustomAssemblyFormat = 1;
+  let hasCanonicalizeMethod = 1;
  }
 
 //===----------------------------------------------------------------------===//
