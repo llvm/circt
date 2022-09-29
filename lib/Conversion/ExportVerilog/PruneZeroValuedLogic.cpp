@@ -47,11 +47,6 @@ static SmallVector<Value> removeI0Typed(ValueRange values) {
   return result;
 }
 
-// Marks the provided 'op' as pruned.
-static void pruneZeroWidthOp(Operation *op) {
-  op->setAttr("pruned", StringAttr::get(op->getContext(), "Zero Width"));
-}
-
 namespace {
 
 class PruneTypeConverter : public mlir::TypeConverter {
@@ -80,16 +75,15 @@ public:
       return failure();
 
     // Part of i0-typed logic - prune!
-    pruneZeroWidthOp(op);
-    return failure();
+    rewriter.eraseOp(op);
+    return success();
   }
 };
 
 template <typename... TOp>
 static void addNoI0OperandsLegalizationPattern(ConversionTarget &target) {
-  target.addDynamicallyLegalOp<TOp...>([&](auto op) {
-    return op->hasAttr("pruned") || noI0TypedValue(op->getOperands());
-  });
+  target.addDynamicallyLegalOp<TOp...>(
+      [&](auto op) { return noI0TypedValue(op->getOperands()); });
 }
 
 // A generic pruning pattern which prunes any operation which has an operand
