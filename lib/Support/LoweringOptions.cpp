@@ -45,7 +45,6 @@ static Optional<LoweringOptions::WireSpillingHeuristic>
 parseWireSpillingHeuristic(StringRef option) {
   return llvm::StringSwitch<
              llvm::Optional<LoweringOptions::WireSpillingHeuristic>>(option)
-      .Case("spillNone", LoweringOptions::SpillNone)
       .Case("spillLargeTermsWithNamehints",
             LoweringOptions::SpillLargeTermsWithNamehints)
       .Case("spillAllMux", LoweringOptions::SpillAllMux)

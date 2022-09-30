@@ -130,14 +130,13 @@ struct LoweringOptions {
   /// This controls extra wire spilling performed in PrepareForEmission to
   /// improve readablitiy and debuggability.
   enum WireSpillingHeuristic : unsigned {
-    SpillNone = 0,                    // Default
     SpillLargeTermsWithNamehints = 1, // Spill wires for expressions with
                                       // namehints if the term size is greater
                                       // than `wireSpillingNamehintTermLimit`.
     SpillAllMux = 1 << 1,             //  Spill wires for all ternary mux.
   };
 
-  unsigned wireSpillingHeuristicSet = SpillNone;
+  unsigned wireSpillingHeuristicSet = 0;
 
   bool isWireSpillingHeuristicEnabled(WireSpillingHeuristic heurisic) const {
     return static_cast<bool>(wireSpillingHeuristicSet & heurisic);
