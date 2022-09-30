@@ -787,6 +787,7 @@ static Value createZeroDataConst(RTLBuilder &s, Location loc, Type type) {
       .Default([&](Type) -> Value {
         emitError(loc) << "unsupported type for zero value: " << type;
         assert(false);
+        return {};
       });
 }
 
@@ -1037,7 +1038,7 @@ public:
 
     for (size_t i = numInputs; i > 0; --i) {
       size_t inputIndex = i - 1;
-      size_t oneHotIndex = 1 << inputIndex;
+      size_t oneHotIndex = size_t{1} << inputIndex;
       auto constIndex = s.constant(numInputs, oneHotIndex);
       indexMapping[inputIndex] = constIndex;
       priorityArb = s.mux(inputs[inputIndex], {constIndex, priorityArb});
