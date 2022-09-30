@@ -149,21 +149,7 @@ struct LoweringOptions {
   /// Some lint tools dislike expressions being inlined into input ports so this
   /// option avoids such warnings.
   bool disallowExpressionInliningInPorts = false;
-}; // namespace circt
-
-/// Register commandline options for the verilog emitter.
-void registerLoweringCLOptions();
-
-/// Apply any command line specified style options to the mlir module.
-void applyLoweringCLOptions(ModuleOp module);
-
-/// Get a lowering option from CLI option or module op. This function first
-/// tries constructing a lowering option from cli, and if it failed, lowering
-/// option associated with `module` is used. This function doesn't change an
-/// attribute of `module` so that it can be used by child operations of
-/// mlir::ModuleOp in multi-threading environment.
-LoweringOptions getLoweringCLIOption(ModuleOp module,
-                                     LoweringOptions::ErrorHandlerT);
+};
 } // namespace circt
 
 #endif // CIRCT_SUPPORT_LOWERINGOPTIONS_H

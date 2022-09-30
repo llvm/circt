@@ -50,6 +50,7 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Support/LoweringOptions.h"
+#include "circt/Support/LoweringOptionsParser.h"
 #include "circt/Transforms/Passes.h"
 
 #include "circt/InitAllDialects.h"
@@ -163,6 +164,8 @@ static cl::opt<std::string>
 static cl::opt<unsigned> bufferSize("buffer-size",
                                     cl::desc("Number of slots in each buffer"),
                                     cl::init(2), cl::cat(mainCategory));
+
+static loweringOptionsOption loweringOptions(mainCategory);
 
 // --------------------------------------------------------------------------
 // (Configurable) pass pipelines
@@ -346,7 +349,8 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
   addIRLevel(HLSFlowDynamicIRLevel::Sv, [&]() { loadHWLoweringPipeline(pm); });
 
   if (outputFormat == OutputVerilog) {
-    applyLoweringCLOptions(module);
+    if (loweringOptions.getNumOccurrences())
+      loweringOptions.setAsAttribute(module);
     pm.addPass(createExportVerilogPass(outputFile.value()->os()));
   }
 
@@ -492,7 +496,6 @@ int main(int argc, char **argv) {
   registerPassManagerCLOptions();
   registerDefaultTimingManagerCLOptions();
   registerAsmPrinterCLOptions();
-  registerLoweringCLOptions();
 
   // Parse pass names in main to ensure static initialization completed.
   cl::ParseCommandLineOptions(argc, argv, "CIRCT HLS tool\n");

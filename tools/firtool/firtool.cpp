@@ -26,6 +26,7 @@
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Support/LoweringOptions.h"
+#include "circt/Support/LoweringOptionsParser.h"
 #include "circt/Support/Version.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Bytecode/BytecodeReader.h"
@@ -408,6 +409,8 @@ static cl::opt<BuildMode> buildMode(
       }
     }));
 
+static loweringOptionsOption loweringOptions(mainCategory);
+
 /// Create a simple canonicalizer pass.
 static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
   mlir::GreedyRewriteConfig config;
@@ -757,7 +760,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   // Load the emitter options from the command line. Command line options if
   // specified will override any module options.
-  applyLoweringCLOptions(module.get());
+  if (loweringOptions.getNumOccurrences())
+    loweringOptions.setAsAttribute(module.get());
 
   if (failed(pm.run(module.get())))
     return failure();
@@ -811,10 +815,6 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     // pick up any changes that verilog emission made.
     if (exportModuleHierarchy)
       exportPm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
-
-    // Load the emitter options from the command line. Command line options if
-    // specified will override any module options.
-    applyLoweringCLOptions(module.get());
 
     if (failed(exportPm.run(module.get())))
       return failure();
@@ -1004,7 +1004,6 @@ int main(int argc, char **argv) {
   registerPassManagerCLOptions();
   registerDefaultTimingManagerCLOptions();
   registerAsmPrinterCLOptions();
-  registerLoweringCLOptions();
   cl::AddExtraVersionPrinter(
       [](raw_ostream &os) { os << getCirctVersion() << '\n'; });
   // Parse pass names in main to ensure static initialization completed.
