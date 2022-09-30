@@ -114,6 +114,23 @@ def SVExtractTestCode : Pass<"sv-extract-test-code", "ModuleOp"> {
   let dependentDialects = ["circt::sv::SVDialect"];
 }
 
+def SVTraceIVerilog : Pass<"sv-trace-iverilog", "hw::HWModuleOp"> {
+  let summary = "Add tracing to an iverilog simulated module";
+  let description = [{
+    This pass adds the necessary instrumentation to a HWModule to trigger
+    tracing in an iverilog simulation.
+  }];
+
+  let constructor = "circt::sv::createSVTraceIVerilogPass()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+  let options = [
+    Option<"targetModuleName", "module", "std::string", "",
+            "Module to trace. If not provided, will trace all modules">,
+    Option<"directoryName", "dir-name", "std::string", "\"./\"",
+            "Directory to emit into">
+  ];
+}
+
 def HWExportModuleHierarchy : Pass<"hw-export-module-hierarchy",
                                    "mlir::ModuleOp"> {
   let summary = "Export module and instance hierarchy information";
