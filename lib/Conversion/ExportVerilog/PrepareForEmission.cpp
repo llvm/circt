@@ -25,8 +25,8 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include "llvm/Support/Debug.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "prepare-for-emission"
 
@@ -1033,8 +1033,6 @@ struct PrepareForEmissionPass
 
 } // end anonymous namespace
 
-
-std::unique_ptr<mlir::Pass>
-circt::createPrepareForEmissionPass() {
+std::unique_ptr<mlir::Pass> circt::createPrepareForEmissionPass() {
   return std::make_unique<PrepareForEmissionPass>();
 }
