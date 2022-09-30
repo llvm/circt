@@ -195,11 +195,11 @@ static void addInstancesToCloneSet(
     opsToErase.insert(definingOp);
     for (auto *forwardOp : forwardSlice)
       opsToErase.insert(forwardOp);
-
-    // Remove any inputs marked for removal.
-    for (auto v : inputsToRemove)
-      inputs.remove(v);
   }
+
+  // Remove any inputs marked for removal.
+  for (auto v : inputsToRemove)
+    inputs.remove(v);
 }
 
 static StringRef getNameForPort(Value val, ArrayAttr modulePorts) {
