@@ -310,7 +310,8 @@ struct Equivalence {
       if (aArg.has_value()) {
         emitMissingPort(aArg.value(), a, b);
         return failure();
-      } else if (bArg.has_value()) {
+      }
+      if (bArg.has_value()) {
         emitMissingPort(bArg.value(), b, a);
         return failure();
       }
