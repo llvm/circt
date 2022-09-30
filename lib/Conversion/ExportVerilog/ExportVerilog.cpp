@@ -5222,7 +5222,7 @@ struct ExportSplitVerilogPass
     if (failed(runPipeline(preparePM, getOperation())))
       return signalPassFailure();
 
-    if (failed(exportSplitVerilog(getOperation(), directoryName)))
+    if (failed(exportSplitVerilogImpl(getOperation(), directoryName)))
       return signalPassFailure();
   }
 };
