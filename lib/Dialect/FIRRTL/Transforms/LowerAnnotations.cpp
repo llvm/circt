@@ -512,6 +512,9 @@ void LowerAnnotationsPass::runOnOperation() {
       ++numFailures;
   }
 
+  if (applyDataTaps(state).failed())
+    ++numFailures;
+
   // Update statistics
   numRawAnnotations += annotations.size();
   numAddedAnnos += numAdded;

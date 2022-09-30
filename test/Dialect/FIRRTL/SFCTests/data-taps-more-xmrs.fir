@@ -238,21 +238,21 @@ circuit Top : %[[
     ; CHECK-NEXT: wire tap_4 = 1'h0
     ; CHECK:      assign tap_0 = Submodule.wire_Submodule
     ; CHECK-NEXT: assign tap_1 = DUT.wire_DUT
-    ; CHECK-NEXT: assign tap_2 = Top.wire_Top
     ; CHECK-NEXT: assign tap_5 = Top.port_Top
+    ; CHECK-NEXT: assign tap_2 = Top.wire_Top
 
     ; CHECK: module DUT
     ; CHECK:      wire tap_3 = 1'h0
     ; CHECK-NEXT: wire tap_4 = 1'h0
     ; CHECK:      assign tap_0 = DUT.submodule.wire_Submodule
     ; CHECK-NEXT: assign tap_1 = DUT.wire_DUT
-    ; CHECK-NEXT: assign tap_2 = Top.wire_Top
     ; CHECK-NEXT: assign tap_5 = Top.port_Top
+    ; CHECK-NEXT: assign tap_2 = Top.wire_Top
 
     ; CHECK: module Top
     ; CHECK:      wire tap_3 = 1'h0
     ; CHECK-NEXT: wire tap_4 = 1'h0
     ; CHECK:      assign tap_0 = Top.dut.submodule.wire_Submodule
     ; CHECK-NEXT: assign tap_1 = Top.dut.wire_DUT
-    ; CHECK-NEXT: assign tap_2 = Top.wire_Top
     ; CHECK-NEXT: assign tap_5 = Top.port_Top
+    ; CHECK-NEXT: assign tap_2 = Top.wire_Top

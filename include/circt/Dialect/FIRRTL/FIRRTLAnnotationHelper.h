@@ -208,6 +208,9 @@ struct ApplyState {
   InstancePathCache &instancePathCache;
   DenseMap<Attribute, FlatSymbolRefAttr> instPathToNLAMap;
   size_t numReusedHierPaths = 0;
+  // Record all the data taps, to sort them later before adding the RefType
+  // ports. This will be very large and defaults to heap allocation.
+  SmallVector<DictionaryAttr, 0> listOfDataTaps;
 
   ModuleNamespace &getNamespace(FModuleLike module) {
     auto &ptr = namespaces[module];
@@ -231,6 +234,12 @@ LogicalResult applyGCTView(const AnnoPathValue &target, DictionaryAttr anno,
 
 LogicalResult applyGCTDataTaps(const AnnoPathValue &target, DictionaryAttr anno,
                                ApplyState &state);
+
+// Sort the list of recorded data taps and then add the RefType connections.
+LogicalResult applyDataTaps(ApplyState &state);
+
+LogicalResult recordGCTDataTaps(const AnnoPathValue &target,
+                                DictionaryAttr anno, ApplyState &state);
 
 LogicalResult applyGCTMemTaps(const AnnoPathValue &target, DictionaryAttr anno,
                               ApplyState &state);

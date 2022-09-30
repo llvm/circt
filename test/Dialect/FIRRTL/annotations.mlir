@@ -1343,30 +1343,42 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [{
     {
        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
        source = "~Top|Top/foo:Foo/b:Bar>inv", sink = "~Top|Top>tap"
+    },
+    {
+       class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+       source = "~Top|Top/foo:Foo/b:Bar>anv", sink = "~Top|Top>atap"
     }
   ]}]} {
   // CHECK-LABEL: firrtl.circuit "Top"  {
   // CHECK-NOT:   "sifive.enterprise.grandcentral.DataTapsAnnotation"
-  // CHECK:  firrtl.module private @Bar(out %_gen_tap: !firrtl.ref<uint<1>>)
+  // CHECK:  firrtl.module private @Bar(out %_gen_atap: !firrtl.ref<uint<1>>, out %_gen_tap: !firrtl.ref<uint<1>>)
   firrtl.module private @Bar() {
     %inv = firrtl.wire interesting_name  : !firrtl.uint<1>
-    // CHECK:  %0 = firrtl.ref.send %inv : !firrtl.uint<1>
-    // CHECK:  firrtl.connect %_gen_tap, %0 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+    // CHECK:  %[[v0:.+]] = firrtl.ref.send %inv : !firrtl.uint<1>
+    %anv = firrtl.wire interesting_name  : !firrtl.uint<1>
+    // CHECK:  %[[v1:.+]] = firrtl.ref.send %anv : !firrtl.uint<1>
+    // CHECK:  firrtl.connect %_gen_atap, %[[v1]] : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+    // CHECK:  firrtl.connect %_gen_tap, %[[v0]] : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
   }
-  // CHECK-LABEL: firrtl.module private @Foo
+  // CHECK-LABEL:  firrtl.module private @Foo(out %_gen_atap: !firrtl.ref<uint<1>>, out %_gen_tap: !firrtl.ref<uint<1>>)
   firrtl.module private @Foo() {
     firrtl.instance b interesting_name  @Bar()
-    // CHECK:  %b__gen_tap = firrtl.instance b interesting_name  @Bar(out _gen_tap: !firrtl.ref<uint<1>>)
+    // CHECK:  %b__gen_atap, %b__gen_tap = firrtl.instance b interesting_name  @Bar(out _gen_atap: !firrtl.ref<uint<1>>, out _gen_tap: !firrtl.ref<uint<1>>)
+    // CHECK:  firrtl.connect %_gen_atap, %b__gen_atap : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
     // CHECK:  firrtl.connect %_gen_tap, %b__gen_tap : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
   }
   // CHECK: firrtl.module @Top() attributes {annotations = [{class = "firrtl.transforms.NoDedupAnnotation"}]}
   firrtl.module @Top() {
     firrtl.instance foo interesting_name  @Foo()
     %tap = firrtl.wire interesting_name  : !firrtl.uint<1>
-    // CHECK:  %foo__gen_tap = firrtl.instance foo interesting_name  @Foo(out _gen_tap: !firrtl.ref<uint<1>>)
-    // CHECK:  %0 = firrtl.ref.resolve %foo__gen_tap : !firrtl.ref<uint<1>>
+    %atap = firrtl.wire interesting_name  : !firrtl.uint<1>
+    // CHECK:  %foo__gen_atap, %foo__gen_tap = firrtl.instance foo interesting_name  @Foo(out _gen_atap: !firrtl.ref<uint<1>>, out _gen_tap: !firrtl.ref<uint<1>>)
+    // CHECK:  %[[v0:.+]] = firrtl.ref.resolve %foo__gen_tap : !firrtl.ref<uint<1>>
+    // CHECK:  %[[v1:.+]] = firrtl.ref.resolve %foo__gen_atap : !firrtl.ref<uint<1>>
     // CHECK:  %tap = firrtl.wire interesting_name  : !firrtl.uint<1>
-    // CHECK:  firrtl.connect %tap, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:  %atap = firrtl.wire interesting_name  : !firrtl.uint<1>
+    // CHECK:  firrtl.connect %atap, %[[v1]] : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:  firrtl.connect %tap, %[[v0]] : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 

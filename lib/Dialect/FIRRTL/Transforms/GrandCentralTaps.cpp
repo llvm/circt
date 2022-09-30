@@ -273,40 +273,39 @@ static FailureOr<Literal> parseIntegerLiteral(MLIRContext *context,
   return lit;
 }
 
-LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
-                                                  DictionaryAttr anno,
-                                                  ApplyState &state) {
-  auto *context = state.circuit.getContext();
+LogicalResult circt::firrtl::applyDataTaps(ApplyState &state) {
   auto loc = state.circuit.getLoc();
+  auto context = state.circuit.getContext();
 
-  // Process all the taps.
-  auto keyAttr = tryGetAs<ArrayAttr>(anno, anno, "keys", loc, dataTapsClass);
-  if (!keyAttr)
-    return failure();
   auto noDedupAnnoClassName = StringAttr::get(context, noDedupAnnoClass);
   auto noDedupAnno = DictionaryAttr::get(
       context, {{StringAttr::get(context, "class"), noDedupAnnoClassName}});
-  for (size_t i = 0, e = keyAttr.size(); i != e; ++i) {
-    auto b = keyAttr[i];
-    auto path = ("keys[" + Twine(i) + "]").str();
-    auto bDict = b.cast<DictionaryAttr>();
-    auto classAttr =
-        tryGetAs<StringAttr>(bDict, anno, "class", loc, dataTapsClass, path);
-    if (!classAttr)
-      return failure();
-    // Can only handle ReferenceDataTapKey and DataTapModuleSignalKey
-    if (classAttr.getValue() != referenceKeyClass &&
-        classAttr.getValue() != internalKeyClass)
-      return mlir::emitError(loc, "Annotation '" + Twine(dataTapsClass) +
-                                      "' with path '" + path + ".class" +
-                                      +"' contained an unknown/unimplemented "
-                                       "DataTapKey class '" +
-                                      classAttr.getValue() + "'.")
-                 .attachNote()
-             << "The full Annotation is reprodcued here: " << anno << "\n";
-
+  // Sort the data taps based on the source path. The main motivation for this
+  // is to ensure modules marked with must-dedup have the data tap ports added
+  // in a deterministic order. The assumption being, alphabetically sorting the
+  // source attribute ensures that, RefType ports of modules expected to dedup
+  // are in exactly the same order.
+  llvm::sort(state.listOfDataTaps, [](DictionaryAttr a, DictionaryAttr b) {
+    auto sourceAttrA = a.getAs<StringAttr>("source");
+    auto sinkAttrA = a.getAs<StringAttr>("sink");
+    if (!sourceAttrA || !sinkAttrA)
+      return false;
+    auto srcA = sourceAttrA.getValue();
+    auto sinkA = sinkAttrA.getValue();
+    auto sourceAttrB = b.getAs<StringAttr>("source");
+    auto sinkAttrB = b.getAs<StringAttr>("sink");
+    if (!sourceAttrB || !sinkAttrB)
+      return false;
+    auto srcB = sourceAttrB.getValue();
+    auto sinkB = sinkAttrB.getValue();
+    return (srcA == srcB ? sinkA < sinkB : srcA < srcB);
+  });
+  // Process all the taps.
+  for (auto dataTapAnno : llvm::enumerate(state.listOfDataTaps)) {
+    auto anno = dataTapAnno.value();
+    auto classAttr = anno.getAs<StringAttr>("class");
     auto sinkNameAttr =
-        tryGetAs<StringAttr>(bDict, anno, "sink", loc, dataTapsClass, path);
+        tryGetAs<StringAttr>(anno, anno, "sink", loc, dataTapsClass);
     std::string wirePathStr;
     if (sinkNameAttr)
       wirePathStr = canonicalizeTarget(sinkNameAttr.getValue());
@@ -323,7 +322,6 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
                                       "' couldnot be resolved.");
     if (!wireTarget->ref.getImpl().isOp())
       return mlir::emitError(loc, "Annotation '" + Twine(dataTapsClass) +
-                                      "' with path '" + path + ".class" +
                                       +"' cannot specify a port for sink.");
     // Extract the name of the wire, used for datatap.
     auto tapName = StringAttr::get(
@@ -335,10 +333,10 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
       // a suffix to the instance name for the module inside a VerbatimExprOp.
       // This verbatim represents an intermediate xmr, which is then used by a
       // ref.send to be read remotely.
-      auto internalPathAttr = tryGetAs<StringAttr>(bDict, anno, "internalPath",
-                                                   loc, dataTapsClass, path);
+      auto internalPathAttr =
+          tryGetAs<StringAttr>(anno, anno, "internalPath", loc, dataTapsClass);
       auto moduleAttr =
-          tryGetAs<StringAttr>(bDict, anno, "module", loc, dataTapsClass, path);
+          tryGetAs<StringAttr>(anno, anno, "module", loc, dataTapsClass);
       if (!internalPathAttr || !moduleAttr)
         return failure();
       auto moduleTargetStr = canonicalizeTarget(moduleAttr.getValue());
@@ -391,7 +389,7 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
     } else {
       // Now handle ReferenceDataTapKey. Get the source from annotation.
       auto sourceAttr =
-          tryGetAs<StringAttr>(bDict, anno, "source", loc, dataTapsClass, path);
+          tryGetAs<StringAttr>(anno, anno, "source", loc, dataTapsClass);
       if (!sourceAttr)
         return failure();
       auto sourcePathStr = canonicalizeTarget(sourceAttr.getValue());
@@ -431,9 +429,8 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
                           state)
             .failed())
       return mlir::emitError(
-          loc, "Annotation '" + Twine(dataTapsClass) + "' with path '" + path +
-                   ".class" +
-                   +"' failed to find a uinque path from source to wire.");
+          loc, "Annotation '" + Twine(dataTapsClass) +
+                   "' failed to find a uinque path from source to wire.");
     LLVM_DEBUG(llvm::dbgs() << "\n lca :" << lcaModule.getNameAttr();
                for (auto i
                     : pathFromSrcToWire) llvm::dbgs()
@@ -504,6 +501,38 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
                           wireTarget->ref.getOp()->getResult(0),
                           wireTarget->fieldIdx),
         resolveResult);
+  }
+  return success();
+}
+
+LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
+                                                  DictionaryAttr anno,
+                                                  ApplyState &state) {
+  auto loc = state.circuit.getLoc();
+
+  auto keyAttr = tryGetAs<ArrayAttr>(anno, anno, "keys", loc, dataTapsClass);
+  if (!keyAttr)
+    return failure();
+  for (size_t i = 0, e = keyAttr.size(); i != e; ++i) {
+    auto b = keyAttr[i];
+    auto path = ("keys[" + Twine(i) + "]").str();
+    auto bDict = b.cast<DictionaryAttr>();
+    auto classAttr =
+        tryGetAs<StringAttr>(bDict, anno, "class", loc, dataTapsClass, path);
+    if (!classAttr)
+      return failure();
+    // Can only handle ReferenceDataTapKey and DataTapModuleSignalKey
+    if (classAttr.getValue() != referenceKeyClass &&
+        classAttr.getValue() != internalKeyClass)
+      return mlir::emitError(loc, "Annotation '" + Twine(dataTapsClass) +
+                                      "' with path '" + path + ".class" +
+                                      +"' contained an unknown/unimplemented "
+                                       "DataTapKey class '" +
+                                      classAttr.getValue() + "'.")
+                 .attachNote()
+             << "The full Annotation is reprodcued here: " << anno << "\n";
+
+    state.listOfDataTaps.push_back(bDict);
   }
 
   return success();
