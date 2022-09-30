@@ -476,8 +476,8 @@ llvm_canonicalize_cmake_booleans(CIRCT_LLHD_SIM_ENABLED)
 # circt-lec Configuration
 #-------------------------------------------------------------------------------
 # If circt-lec hasn't been explicitly disabled, find it.
-option(CIRCT_LEC_DISABLE "Disable the Logical Equivalence Checker")
-if(CIRC_LEC_DISABLE)
+option(CIRCT_LEC_DISABLE "Disable the Logical Equivalence Checker" OFF)
+if(CIRCT_LEC_DISABLE)
   message (STATUS "Disabling circt-lec")
 else()
   if(Z3_DIR)

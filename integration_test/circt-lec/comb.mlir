@@ -1,3 +1,6 @@
+// These tests will be only enabled if circt-lec is built.
+// REQUIRES: circt-lec
+
 hw.module @basic(%in: i1) -> (out: i1) {
   hw.output %in : i1
 }

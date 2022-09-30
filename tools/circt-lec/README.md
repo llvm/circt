@@ -5,7 +5,7 @@ circt-lec depends on the Z3 theorem prover: the build system will attempt to
 deduce its location, otherwise a path to a custom installation directory could
 be specified with the `Z3_DIR` cmake option (it should provide a cmake package
 configuration file like `Z3Config.cmake`).
-Avoiding building the tool can instead be done by specifying `CIRC_LEC_DISABLE`
+Avoiding building the tool can instead be done by specifying `CIRCT_LEC_DISABLE`
 as a cmake option.
 
 #### Usage
@@ -31,4 +31,4 @@ be selected.
 ##### Regression testing
 The tool can be tested by running the following command from the circt directory
 when built with the default paths:
-```./llvm/build/./bin/llvm-lit -vs build/test/circt-lec```
+```./llvm/build/./bin/llvm-lit -vs build/integration_test/circt-lec```
