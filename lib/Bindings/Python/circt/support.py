@@ -149,6 +149,10 @@ def attribute_to_var(attr):
   except ValueError:
     pass
   try:
+    return ir.FlatSymbolRefAttr(attr).value
+  except ValueError:
+    pass
+  try:
     return ir.TypeAttr(attr).value
   except ValueError:
     pass
