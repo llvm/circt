@@ -80,7 +80,7 @@ static void bufferResults(OpBuilder &builder, Operation *op, unsigned numSlots,
       continue;
     insertBuffer(op->getLoc(), res, builder, numSlots, bufferType);
   }
-};
+}
 
 // Add a buffer to any un-buffered channel.
 static void bufferAllStrategy(Region &r, OpBuilder &builder, unsigned numSlots,

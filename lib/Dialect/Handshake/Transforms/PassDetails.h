@@ -16,6 +16,7 @@
 #ifndef DIALECT_HANDSHAKE_TRANSFORMS_PASSDETAILS_H
 #define DIALECT_HANDSHAKE_TRANSFORMS_PASSDETAILS_H
 
+#include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "mlir/Pass/Pass.h"
 

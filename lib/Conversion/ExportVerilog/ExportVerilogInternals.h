@@ -305,6 +305,8 @@ bool isExpressionEmittedInline(Operation *op);
 void prepareHWModule(Block &block, const LoweringOptions &options);
 void prepareHWModule(hw::HWModuleOp module, const LoweringOptions &options);
 
+void pruneZeroValuedLogic(hw::HWModuleOp module);
+
 /// Rewrite module names and interfaces to not conflict with each other or with
 /// Verilog keywords.
 GlobalNameTable legalizeGlobalNames(ModuleOp topLevel);

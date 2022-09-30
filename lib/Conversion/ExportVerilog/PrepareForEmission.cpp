@@ -210,11 +210,11 @@ findLogicOpInsertionPoint(Operation *op) {
 }
 
 /// Emit an explicit wire or logic to assign operation's result. This function
-/// is used to create a temporary to legalize a verilog epression or to
+/// is used to create a temporary to legalize a verilog expression or to
 /// resolve use-before-def in a graph region. If `emitWireAtBlockBegin` is true,
-/// a temporary wire will be created at the beggining of the block. Otherwise,
+/// a temporary wire will be created at the beginning of the block. Otherwise,
 /// a wire is created just after op's position so that we can inline the
-/// assignement into its wire declaration.
+/// assignment into its wire declaration.
 static void lowerUsersToTemporaryWire(Operation &op,
                                       DenseMap<Value, size_t> &operandMap,
                                       bool emitWireAtBlockBegin = false) {
@@ -255,7 +255,7 @@ static void lowerUsersToTemporaryWire(Operation &op,
     }
   };
 
-  // If the op has a single result, infer a meaningfull name from the
+  // If the op has a single result, infer a meaningful name from the
   // value.
   if (op.getNumResults() == 1) {
     auto namehint = inferStructuralNameForTemporary(op.getResult(0));
@@ -343,6 +343,24 @@ rewriteAddWithNegativeConstant(comb::AddOp add, hw::ConstantOp rhsCst,
   if (rhsCst.use_empty())
     rhsCst.erase();
   return negCst;
+}
+
+// Transforms a hw.struct_explode operation into a set of hw.struct_extract
+// operations, and returns the first op generated.
+static Operation *lowerStructExplodeOp(hw::StructExplodeOp op) {
+  Operation *firstOp = nullptr;
+  ImplicitLocOpBuilder builder(op.getLoc(), op);
+  StructType structType = op.getInput().getType().cast<StructType>();
+  for (auto [res, field] :
+       llvm::zip(op.getResults(), structType.getElements())) {
+    auto extract =
+        builder.create<hw::StructExtractOp>(op.getInput(), field.name);
+    if (!firstOp)
+      firstOp = extract;
+    res.replaceAllUsesWith(extract);
+  }
+  op.erase();
+  return firstOp;
 }
 
 /// Given an operation in a procedural region, scan up the region tree to find
@@ -481,6 +499,8 @@ public:
   // Get or caluculate an emitted expression state.
   EmittedExpressionState getExpressionState(Value value);
 
+  bool dispatchHeuristic(Operation &op);
+
   // Return true if the operation is worth spilling based on the expression
   // state of the op.
   bool shouldSpillWireBasedOnState(Operation &op);
@@ -601,6 +621,25 @@ static bool reuseExistingInOut(Operation *op) {
   return true;
 }
 
+bool EmittedExpressionStateManager::dispatchHeuristic(Operation &op) {
+  // TODO: Consider using virtual functions.
+  if (options.isWireSpillingHeuristicEnabled(
+          LoweringOptions::SpillLargeTermsWithNamehints))
+    if (auto hint = op.getAttrOfType<StringAttr>("sv.namehint")) {
+      // Spill wires if the name doesn't have a prefix "_".
+      if (!hint.getValue().startswith("_"))
+        return true;
+      // If the name has prefix "_", spill if the size is greater than the
+      // threshould.
+      if (getExpressionState(op.getResult(0)).size >=
+          options.wireSpillingNamehintTermLimit)
+        return true;
+    }
+
+  return options.isWireSpillingHeuristicEnabled(LoweringOptions::SpillAllMux) &&
+         isa<MuxOp>(op);
+}
+
 /// Return true if it is beneficial to spill the operation under the specified
 /// spilling heuristic.
 bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
@@ -623,18 +662,7 @@ bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
   if (options.maximumNumberOfTermsPerExpression <
       getExpressionState(op.getResult(0)).size)
     return true;
-
-  switch (options.wireSpillingHeuristic) {
-  case LoweringOptions::SpillLargeTermsWithNamehints:
-    if (op.hasAttr("sv.namehint") && getExpressionState(op.getResult(0)).size >=
-                                         options.wireSpillingNamehintTermLimit)
-      return true;
-    break;
-  default:
-    break;
-  }
-
-  return false;
+  return dispatchHeuristic(op);
 }
 
 /// After the legalization, we are able to know accurate verilog AST structures.
@@ -874,6 +902,14 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
       }
     }
 
+    // Lower hw.struct_explode ops into a set of hw.struct_extract ops which
+    // have well-defined SV emission semantics.
+    if (auto structExplodeOp = dyn_cast<hw::StructExplodeOp>(op)) {
+      Operation *firstOp = lowerStructExplodeOp(structExplodeOp);
+      opIterator = Block::iterator(firstOp);
+      continue;
+    }
+
     // Try to anticipate expressions that ExportVerilog may spill to a temporary
     // inout, and re-use an existing inout when possible. This is legal when op
     // is an expression in a non-procedural region.
@@ -970,6 +1006,9 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
 
 void ExportVerilog::prepareHWModule(hw::HWModuleOp module,
                                     const LoweringOptions &options) {
+  // Zero-valued logic pruning.
+  pruneZeroValuedLogic(module);
+
   // Legalization.
   legalizeHWModule(*module.getBodyBlock(), options);
 

@@ -273,7 +273,6 @@ static FailureOr<Literal> parseIntegerLiteral(MLIRContext *context,
   return lit;
 }
 
-
 LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
                                                   DictionaryAttr anno,
                                                   ApplyState &state) {
@@ -306,11 +305,11 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
                  .attachNote()
              << "The full Annotation is reprodcued here: " << anno << "\n";
 
-    auto wireNameAttr =
-        tryGetAs<StringAttr>(bDict, anno, "wireName", loc, dataTapsClass, path);
+    auto sinkNameAttr =
+        tryGetAs<StringAttr>(bDict, anno, "sink", loc, dataTapsClass, path);
     std::string wirePathStr;
-    if (wireNameAttr)
-      wirePathStr = canonicalizeTarget(wireNameAttr.getValue());
+    if (sinkNameAttr)
+      wirePathStr = canonicalizeTarget(sinkNameAttr.getValue());
     if (!wirePathStr.empty())
       if (!tokenizePath(wirePathStr))
         wirePathStr.clear();
@@ -325,7 +324,7 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
     if (!wireTarget->ref.getImpl().isOp())
       return mlir::emitError(loc, "Annotation '" + Twine(dataTapsClass) +
                                       "' with path '" + path + ".class" +
-                                      +"' cannot specify a port for wireName.");
+                                      +"' cannot specify a port for sink.");
     // Extract the name of the wire, used for datatap.
     auto tapName = StringAttr::get(
         context, wirePathStr.substr(wirePathStr.find_last_of('>') + 1));
@@ -683,9 +682,9 @@ LogicalResult applyGCTMemTapsWithWires(const AnnoPathValue &target,
   if (!srcTarget)
     return mlir::emitError(loc, "cannot resolve source target path '")
            << sourceTargetStr << "'";
-  auto tapsAttr = tryGetAs<ArrayAttr>(anno, anno, "wireName", loc, memTapClass);
+  auto tapsAttr = tryGetAs<ArrayAttr>(anno, anno, "sink", loc, memTapClass);
   if (!tapsAttr || tapsAttr.empty())
-    return mlir::emitError(loc, "wireName must have at least one entry");
+    return mlir::emitError(loc, "sink must have at least one entry");
   if (auto combMem = dyn_cast<chirrtl::CombMemOp>(srcTarget->ref.getOp())) {
     if (!combMem.getType().getElementType().isGround())
       return combMem.emitOpError(
@@ -713,8 +712,7 @@ LogicalResult applyGCTMemTapsWithWires(const AnnoPathValue &target,
     }
     if (tapsAttr.size() != combMem.getType().getNumElements())
       return mlir::emitError(
-          loc,
-          "wireName cannot specify more taps than the depth of the memory");
+          loc, "sink cannot specify more taps than the depth of the memory");
   } else
     return srcTarget->ref.getOp()->emitOpError(
         "unsupported operation, only CombMem can be used as the source of "
@@ -853,10 +851,16 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
     auto key = getKey(anno);
     annos.insert({key, anno});
     assert(!tappedPorts.count(key) && "ambiguous tap annotation");
-    auto portWidth = cast<FModuleLike>(port.first)
-                         .getPortType(port.second)
-                         .cast<FIRRTLBaseType>()
-                         .getBitWidthOrSentinel();
+    auto portType = cast<FModuleLike>(port.first).getPortType(port.second);
+    auto firrtlPortType = portType.dyn_cast<FIRRTLType>();
+    if (!firrtlPortType) {
+      port.first->emitError("data tap cannot target port with non-FIRRTL type ")
+          << portType;
+      return signalPassFailure();
+    }
+
+    auto portWidth =
+        firrtlPortType.cast<FIRRTLBaseType>().getBitWidthOrSentinel();
     // If the port width is non-zero, process it normally.  Otherwise, record it
     // as being zero-width.
     if (portWidth)

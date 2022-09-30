@@ -558,7 +558,9 @@ bool TypeLoweringVisitor::lowerProducer(
     llvm::function_ref<Operation *(const FlatBundleFieldEntry &, ArrayAttr)>
         clone) {
   // If this is not a bundle, there is nothing to do.
-  auto srcType = op->getResult(0).getType().cast<FIRRTLType>();
+  auto srcType = op->getResult(0).getType().dyn_cast<FIRRTLType>();
+  if (!srcType)
+    return false;
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
 
   if (!peelType(srcType, fieldTypes, aggregatePreservationMode))

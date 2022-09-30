@@ -105,10 +105,10 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     }]>,
 
     InterfaceMethod<"Get a port type",
-    "FIRRTLType", "getPortType", (ins "size_t":$portIndex), [{}],
+    "Type", "getPortType", (ins "size_t":$portIndex), [{}],
     /*defaultImplementation=*/[{
       auto typeAttr = $_op.getPortTypeAttr(portIndex);
-      return typeAttr.getValue().template cast<FIRRTLType>();
+      return typeAttr.getValue();
     }]>,
 
     //===------------------------------------------------------------------===//

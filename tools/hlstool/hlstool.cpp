@@ -335,9 +335,10 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
     });
   } else {
     // HW path.
-    addIRLevel(HLSFlowDynamicIRLevel::Firrtl,
-               [&]() { pm.addPass(circt::createHandshakeToHWPass()); });
-
+    addIRLevel(HLSFlowDynamicIRLevel::Firrtl, [&]() {
+      pm.addPass(circt::createHandshakeToHWPass());
+      pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
+    });
     addIRLevel(HLSFlowDynamicIRLevel::Rtl,
                [&]() { loadESILoweringPipeline(pm); });
   }

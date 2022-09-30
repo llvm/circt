@@ -46,7 +46,6 @@ LogicalResult scheduling::scheduleCPSAT(SharedOperatorsProblem &prob,
 
   CpModelBuilder cpModel;
   auto &tasks = prob.getOperations();
-  auto &resources = prob.getOperatorTypes();
 
   DenseMap<Operation *, IntVar> taskStarts;
   DenseMap<Operation *, IntVar> taskEnds;

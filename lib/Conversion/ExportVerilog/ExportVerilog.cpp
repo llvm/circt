@@ -707,8 +707,18 @@ private:
   /// added.
   StringRef getName(ValueOrOp valueOrOp) {
     auto entry = nameTable.find(valueOrOp);
-    assert(entry != nameTable.end() &&
-           "value expected a name but doesn't have one");
+    if (entry == nameTable.end()) {
+      llvm::errs() << "Name: ";
+      if (auto v = valueOrOp.dyn_cast<Value>())
+        v.print(llvm::errs());
+      else
+        valueOrOp.get<Operation *>()->print(llvm::errs());
+      llvm::errs()
+          << " Not found in name table! Most likely indicates that the given "
+             "op did not have an emitter in ExportVerilog, and should have "
+             "been lowered away before reaching this point.";
+      assert(false && "name not found (see above error)");
+    }
     return entry->getSecond();
   }
 
@@ -2780,6 +2790,7 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
 
   // This is invoked for expressions that have a non-single use.  This could
   // either be because they are dead or because they have multiple uses.
+  // todo: use_empty could be prurned prior to emission.
   if (op->getResult(0).use_empty()) {
     indent() << "// Unused: ";
     --numStatementsEmitted;
@@ -3344,11 +3355,11 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
 
   if (!op->getRegion(1).empty()) {
     if (!hasEmptyThen)
-      indent() << "`else\n";
+      indent() << "`else  // " << ident << "\n";
     emitStatementBlock(op->getRegion(1).front());
   }
 
-  indent() << "`endif\n";
+  indent() << "`endif // " << (hasEmptyThen ? "not def " : "") << ident << "\n";
 
   // We don't know how many statements we emitted, so assume conservatively
   // that a lot got put out. This will make sure we get a begin/end block around

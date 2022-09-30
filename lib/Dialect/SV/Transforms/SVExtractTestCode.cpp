@@ -21,8 +21,11 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Builders.h"
+#include "llvm/Support/Debug.h"
 
 #include <set>
+
+#define DEBUG_TYPE "extract-test-code"
 
 using namespace mlir;
 using namespace circt;
@@ -269,6 +272,72 @@ static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
     }
 }
 
+// Check if the module has already been bound.
+static bool isBound(hw::HWModuleLike op, hw::InstanceGraph &instanceGraph) {
+  auto *node = instanceGraph.lookup(op);
+  return llvm::any_of(node->uses(), [](hw::InstanceRecord *a) {
+    auto inst = a->getInstance();
+    if (!inst)
+      return false;
+    return inst->hasAttr("doNotPrint");
+  });
+}
+
+// Move any old modules that are test code only to the test code area.
+static void maybeMoveToTestCode(hw::HWModuleOp oldMod, Attribute testBenchDir,
+                                Attribute bindFile,
+                                hw::InstanceGraph &instanceGraph) {
+  // Ensure we have a valid test code path.
+  if (!testBenchDir)
+    return;
+
+  // Check if the module only has inputs.
+  if (oldMod.getNumOutputs() != 0)
+    return;
+
+  // Check if this module has been bound already, and return early if so. This
+  // can happen, for example, if a module is input only, but exists to feed both
+  // asserts and covers. In such cases, the binds end up in the bind file for
+  // the first kind of test code statement we saw, and we expect this to not
+  // cause issues.
+  if (isBound(oldMod, instanceGraph)) {
+    LLVM_DEBUG(oldMod->emitWarning("already bound, skipping for ") << bindFile);
+    return;
+  }
+
+  // Move the module to the test code path.
+  oldMod->setAttr("output_file", testBenchDir);
+
+  // Replace its instances with binds.
+  hw::InstanceGraphNode *node = instanceGraph.lookup(oldMod);
+  OpBuilder b = OpBuilder(oldMod.getContext());
+  for (hw::InstanceRecord *use : node->uses()) {
+    OpBuilder::InsertionGuard g(b);
+
+    hw::HWInstanceLike instLike = use->getInstance();
+    if (!instLike)
+      continue;
+
+    // Mark the instance to not be printed.
+    hw::InstanceOp inst = cast<hw::InstanceOp>(instLike.getOperation());
+    hw::HWModuleLike parent = use->getParent()->getModule();
+    inst->setAttr("doNotPrint", b.getBoolAttr(true));
+
+    // Give the instance an inner sym if it needs one.
+    if (!inst.getInnerSym().has_value())
+      inst.setInnerSymAttr(
+          b.getStringAttr("__" + inst.getInstanceName() + "__"));
+
+    // Create the bind.
+    b.setInsertionPointToEnd(
+        &oldMod->getParentOfType<mlir::ModuleOp>()->getRegion(0).front());
+    auto bindOp = b.create<sv::BindOp>(inst.getLoc(), parent.moduleNameAttr(),
+                                       inst.getInnerSymAttr());
+    if (bindFile)
+      bindOp->setAttr("output_file", bindFile);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // StubExternalModules Pass
 //===----------------------------------------------------------------------===//
@@ -281,7 +350,8 @@ struct SVExtractTestCodeImplPass
 
 private:
   void doModule(hw::HWModuleOp module, std::function<bool(Operation *)> fn,
-                StringRef suffix, Attribute path, Attribute bindFile) {
+                StringRef suffix, Attribute path, Attribute bindFile,
+                Attribute testBenchDir, hw::InstanceGraph &instanceGraph) {
     bool hasError = false;
     // Find Operations of interest.
     SetVector<Operation *> roots;
@@ -322,6 +392,8 @@ private:
     // erase old operations of interest
     for (auto op : roots)
       op->erase();
+    // Move any old modules that are test code only to the test code area.
+    maybeMoveToTestCode(module, testBenchDir, bindFile, instanceGraph);
   }
 };
 
@@ -336,6 +408,8 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.assume");
   auto coverDir =
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.cover");
+  auto testBenchDir =
+      top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.testbench");
   auto assertBindFile =
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.assert.bindfile");
   auto assumeBindFile =
@@ -386,15 +460,6 @@ void SVExtractTestCodeImplPass::runOnOperation() {
   };
 
   auto &instanceGraph = getAnalysis<circt::hw::InstanceGraph>();
-  auto isBound = [&instanceGraph](hw::HWModuleLike op) -> bool {
-    auto *node = instanceGraph.lookup(op);
-    return llvm::any_of(node->uses(), [](hw::InstanceRecord *a) {
-      auto inst = a->getInstance();
-      if (!inst)
-        return false;
-      return inst->hasAttr("doNotPrint");
-    });
-  };
 
   for (auto &op : topLevelModule->getOperations()) {
     if (auto rtlmod = dyn_cast<hw::HWModuleOp>(op)) {
@@ -403,7 +468,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       // module is bound, then extraction is skipped.  This avoids problems
       // where certain simulators dislike having binds that target bound
       // modules.
-      if (isBound(rtlmod))
+      if (isBound(rtlmod, instanceGraph))
         continue;
 
       // In the module is in test harness, we don't have to extract from it.
@@ -412,9 +477,12 @@ void SVExtractTestCodeImplPass::runOnOperation() {
         continue;
       }
 
-      doModule(rtlmod, isAssert, "_assert", assertDir, assertBindFile);
-      doModule(rtlmod, isAssume, "_assume", assumeDir, assumeBindFile);
-      doModule(rtlmod, isCover, "_cover", coverDir, coverBindFile);
+      doModule(rtlmod, isAssert, "_assert", assertDir, assertBindFile,
+               testBenchDir, instanceGraph);
+      doModule(rtlmod, isAssume, "_assume", assumeDir, assumeBindFile,
+               testBenchDir, instanceGraph);
+      doModule(rtlmod, isCover, "_cover", coverDir, coverBindFile, testBenchDir,
+               instanceGraph);
     }
   }
   // We have to wait until all the instances are processed to clean up the
@@ -425,6 +493,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       op.removeAttr("firrtl.extract.cover.extra");
       op.removeAttr("firrtl.extract.assume.extra");
     }
+  top->removeAttr("firrtl.extract.testbench");
 }
 
 std::unique_ptr<Pass> circt::sv::createSVExtractTestCodePass() {

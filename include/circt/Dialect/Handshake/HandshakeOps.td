@@ -665,7 +665,7 @@ def MemoryOp : Handshake_Op<"memory", [
     The memory op represents a flat, unidimensional memory.
     Operands: all stores (stdata1, staddr1, stdata2, staddr2, ...), then all loads (ldaddr1, ldaddr2,...)
     Outputs: all load outputs, ordered the same as
-    load addresses (lddata1, lddata2, ...), followed by all none outputs,
+    load data (lddata1, lddata2, ...), followed by all none outputs,
     ordered as operands (stnone1, stnone2,...ldnone1, ldnone2,...)
   }];
   let arguments = (ins Variadic<AnyType> : $inputs,
@@ -727,6 +727,9 @@ def ExternalMemoryOp : Handshake_Op<"extmemory", [
     mlir::MemRefType getMemRefType() {
       return getMemref().getType().cast<mlir::MemRefType>();
     }
+
+    llvm::SmallVector<handshake::ExtMemLoadInterface> getLoadPorts();
+    llvm::SmallVector<handshake::ExtMemStoreInterface> getStorePorts();
   }];
 }
 

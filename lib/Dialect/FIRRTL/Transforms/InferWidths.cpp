@@ -1211,7 +1211,12 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
     if (auto mux = dyn_cast<MuxPrimOp>(op))
       if (hasUninferredWidth(mux.getSel().getType()))
         allWidthsKnown = false;
-    if (!hasUninferredWidth(result.getType()))
+    // Only consider FIRRTL types for width constraints. Ignore any foreign
+    // types as they don't participate in the width inference process.
+    auto resultTy = result.getType().dyn_cast<FIRRTLType>();
+    if (!resultTy)
+      continue;
+    if (!hasUninferredWidth(resultTy))
       declareVars(result, op->getLoc());
     else
       allWidthsKnown = false;
@@ -1532,7 +1537,13 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         declareVars(op.getResult(), op.getLoc());
         constrainTypes(op.getResult(), op.getRef());
       })
-
+      .Case<mlir::UnrealizedConversionCastOp>([&](auto op) {
+        for (Value result : op.getResults()) {
+          auto ty = result.getType();
+          if (ty.isa<FIRRTLType>())
+            declareVars(result, op.getLoc());
+        }
+      })
       .Default([&](auto op) {
         op->emitOpError("not supported in width inference");
         mappingFailed = true;
@@ -1618,8 +1629,12 @@ void InferenceMapping::maximumOfTypes(Value result, Value rhs, Value lhs) {
 ///
 /// This function is used to apply regular connects.
 void InferenceMapping::constrainTypes(Value larger, Value smaller) {
-  // Recurse to every leaf element and set larger >= smaller.
-  auto type = larger.getType().cast<FIRRTLType>();
+  // Recurse to every leaf element and set larger >= smaller. Ignore foreign
+  // types as these do not participate in width inference.
+  auto type = larger.getType().dyn_cast<FIRRTLType>();
+  if (!type)
+    return;
+
   auto fieldID = 0;
   std::function<void(FIRRTLBaseType, Value, Value)> constrain =
       [&](FIRRTLBaseType type, Value larger, Value smaller) {

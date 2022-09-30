@@ -38,6 +38,9 @@ def FIRRTLBaseType : FIRRTLDialectType<
     All base types are FIRRTLType's, and inherit from FIRRTLBaseType.
   }]>;
 
+def ForeignType : FIRRTLDialectType<CPred<"!$_self.isa<FIRRTLType>()">,
+                                    "foreign type", "::mlir::Type">;
+
 def ClockType : FIRRTLDialectType<CPred<"$_self.isa<ClockType>()">,
     "clock", "::circt::firrtl::ClockType">,
   BuildableType<"ClockType::get($_builder.getContext())">;
@@ -78,6 +81,12 @@ def SizedBaseOrRefType : FIRRTLDialectType<
           "!$_self.cast<RefType>().getType().hasUninferredWidth()">,
     ]>,
   "a sized base or ref type (contains no uninferred widths)", "::circt::firrtl::FIRRTLType">;
+
+def SizedType : FIRRTLDialectType<CPred<"$_self.isa<FIRRTLBaseType>() && "
+    "!$_self.cast<FIRRTLBaseType>().hasUninferredWidth()">,
+    "a sized type (contains no unifered widths)", "::circt::firrtl::FIRRTLType">;
+def SizedOrForeignType : AnyTypeOf<[SizedType, ForeignType]>;
+def SizedBaseOrRefTypeOrForeignType : AnyTypeOf<[SizedBaseOrRefType, ForeignType]>;
 
 def UInt1Type : FIRRTLDialectType<
     CPred<"$_self.isa<UIntType>() && "

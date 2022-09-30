@@ -35,7 +35,7 @@ class FIRRTLType;
 /// This holds the name and type that describes the module's ports.
 struct PortInfo {
   StringAttr name;
-  FIRRTLType type;
+  Type type;
   Direction direction;
   InnerSymAttr sym = {};
   Location loc = UnknownLoc::get(type.getContext());
@@ -45,16 +45,28 @@ struct PortInfo {
 
   /// Return true if this is a simple output-only port.  If you want the
   /// direction of the port, use the \p direction parameter.
-  bool isOutput() { return direction == Direction::Out && !isInOut(); }
+  bool isOutput() {
+    if (direction != Direction::Out)
+      return false;
+    if (type.isa<FIRRTLType>())
+      return !isInOut();
+    return true;
+  }
 
   /// Return true if this is a simple input-only port.  If you want the
   /// direction of the port, use the \p direction parameter.
-  bool isInput() { return direction == Direction::In && !isInOut(); }
+  bool isInput() {
+    if (direction != Direction::In)
+      return false;
+    if (type.isa<FIRRTLType>())
+      return !isInOut();
+    return true;
+  }
 
   /// Return true if this is an inout port.  This will be true if the port
   /// contains either bi-directional signals or analog types.
   bool isInOut() {
-    auto flags = TypeSwitch<FIRRTLType, RecursiveTypeProperties>(type)
+    auto flags = TypeSwitch<Type, RecursiveTypeProperties>(type)
                      .Case<FIRRTLBaseType>([](auto base) {
                        return base.getRecursiveTypeProperties();
                      })
@@ -69,9 +81,8 @@ struct PortInfo {
   }
 
   /// Default constructors
-  PortInfo(StringAttr name, FIRRTLType type, Direction dir,
-           StringAttr symName = {}, Optional<Location> location = {},
-           Optional<AnnotationSet> annos = {})
+  PortInfo(StringAttr name, Type type, Direction dir, StringAttr symName = {},
+           Optional<Location> location = {}, Optional<AnnotationSet> annos = {})
       : name(name), type(type), direction(dir) {
     if (symName)
       sym = InnerSymAttr::get(symName);
@@ -80,7 +91,7 @@ struct PortInfo {
     if (annos)
       annotations = *annos;
   };
-  PortInfo(StringAttr name, FIRRTLType type, Direction dir, InnerSymAttr sym,
+  PortInfo(StringAttr name, Type type, Direction dir, InnerSymAttr sym,
            Location loc, AnnotationSet annos)
       : name(name), type(type), direction(dir), sym(sym), loc(loc),
         annotations(annos) {}

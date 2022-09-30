@@ -48,12 +48,13 @@ using hw::PortDirection;
 /// annotated module should be dumped to a file.
 static const char moduleHierarchyFileAttrName[] = "firrtl.moduleHierarchyFile";
 
-/// Given a FIRRTL type, return the corresponding type for the HW dialect.
-/// This returns a null type if it cannot be lowered.
+/// Given a type, return the corresponding lowered type for the HW dialect.
+/// Non-FIRRTL types are simply passed through. This returns a null type if it
+/// cannot be lowered.
 static Type lowerType(Type type) {
   auto firType = type.dyn_cast<FIRRTLBaseType>();
   if (!firType)
-    return {};
+    return type;
 
   // Ignore flip types.
   firType = firType.getPassiveType();
@@ -82,11 +83,11 @@ static Type lowerType(Type type) {
   return {};
 }
 
-/// Return true if the specified FIRRTL type is a sized type (Int or Analog)
+/// Return true if the specified type is a sized FIRRTL type (Int or Analog)
 /// with zero bits.
 static bool isZeroBitFIRRTLType(Type type) {
-  return type.cast<FIRRTLBaseType>().getPassiveType().getBitWidthOrSentinel() ==
-         0;
+  auto ftype = type.dyn_cast<FIRRTLBaseType>();
+  return ftype && ftype.getPassiveType().getBitWidthOrSentinel() == 0;
 }
 
 // Return a single source value in the operands of the given attach op if
@@ -151,18 +152,17 @@ static IntType getWidestIntType(Type t1, Type t2) {
   return t2c.getWidth() > t1c.getWidth() ? t2c : t1c;
 }
 
-/// Cast from a standard type to a FIRRTL type, potentially with a flip.
+/// Cast a value to a desired target type. This will insert struct casts and
+/// unrealized conversion casts as necessary.
 static Value castToFIRRTLType(Value val, Type type,
                               ImplicitLocOpBuilder &builder) {
-  auto firType = type.cast<FIRRTLType>();
-
   // Use HWStructCastOp for a bundle type.
   if (BundleType bundle = type.dyn_cast<BundleType>())
     val = builder.createOrFold<HWStructCastOp>(bundle.getPassiveType(), val);
 
   if (type != val.getType())
-    val = builder.create<mlir::UnrealizedConversionCastOp>(firType, val)
-              .getResult(0);
+    val = builder.create<mlir::UnrealizedConversionCastOp>(type, val).getResult(
+        0);
 
   return val;
 }
@@ -525,6 +525,15 @@ void FIRRTLModuleLowering::runOnOperation() {
                 "firrtl.extract.cover");
   circuitAnno.removeAnnotationsWithClass(
       extractAssertAnnoClass, extractAssumeAnnoClass, extractCoverageAnnoClass);
+
+  // Pass along the testbench directory for ExtractTestCode to use later.
+  if (auto tbAnno = circuitAnno.getAnnotation(testBenchDirAnnoClass)) {
+    auto dirName = tbAnno.getMember<StringAttr>("dirname");
+    auto testBenchDir = hw::OutputFileAttr::getAsDirectory(
+        &getContext(), dirName.getValue(), /*excludeFromFileList=*/true,
+        /*includeReplicatedOps=*/true);
+    getOperation()->setAttr("firrtl.extract.testbench", testBenchDir);
+  }
 
   state.processRemainingAnnotations(circuit, circuitAnno);
   // Iterate through each operation in the circuit body, transforming any
@@ -1200,7 +1209,6 @@ static Value tryEliminatingAttachesToAnalogValue(Value value,
 /// location is where a 'hw.merge' operation should be inserted if needed.
 static Value tryEliminatingConnectsToValue(Value flipValue,
                                            Operation *insertPoint) {
-  assert(flipValue.getType().isa<FIRRTLBaseType>());
   // Handle analog's separately.
   if (flipValue.getType().isa<AnalogType>())
     return tryEliminatingAttachesToAnalogValue(flipValue, insertPoint);
@@ -1235,6 +1243,12 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   ImplicitLocOpBuilder builder(insertPoint->getLoc(), insertPoint);
 
   auto connectSrc = connectOp->getOperand(1);
+
+  // Directly forward foreign types.
+  if (!connectSrc.getType().isa<FIRRTLType>()) {
+    connectOp->erase();
+    return connectSrc;
+  }
 
   // Convert fliped sources to passive sources.
   if (!connectSrc.getType().cast<FIRRTLBaseType>().isPassive())
@@ -1812,8 +1826,7 @@ Value FIRRTLLowering::getOrCreateIntConstant(const APInt &value) {
 /// zero bit, or returns failure() if it was some other kind of failure.
 static LogicalResult handleZeroBit(Value failedOperand,
                                    std::function<LogicalResult()> fn) {
-  assert(failedOperand && failedOperand.getType().isa<FIRRTLType>() &&
-         "Should be called on the failed FIRRTL operand");
+  assert(failedOperand && "Should be called on the failed operand");
   if (!isZeroBitFIRRTLType(failedOperand.getType()))
     return failure();
   return fn();
@@ -2484,6 +2497,13 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
+  // Foreign types lower to a backedge that needs to be resolved by a later
+  // connect op.
+  if (!op.getType().isa<FIRRTLType>()) {
+    createBackedge(op, op.getType());
+    return success();
+  }
+
   auto resultType = lowerType(op.getResult().getType());
   if (!resultType)
     return failure();
@@ -2896,6 +2916,12 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
           continue;
         }
       }
+    }
+
+    // Directly materialize foreign types.
+    if (!port.type.isa<FIRRTLType>()) {
+      operands.push_back(createBackedge(portResult, portType));
+      continue;
     }
 
     // Create a wire for each input/inout operand, so there is
