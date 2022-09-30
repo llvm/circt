@@ -114,7 +114,7 @@ def SVExtractTestCode : Pass<"sv-extract-test-code", "ModuleOp"> {
   let dependentDialects = ["circt::sv::SVDialect"];
 }
 
-def SVTraceIVerilog : Pass<"sv-trace-iverilog", "ModuleOp"> {
+def SVTraceIVerilog : Pass<"sv-trace-iverilog", "hw::HWModuleOp"> {
   let summary = "Add tracing to an iverilog simulated module";
   let description = [{
     This pass adds the necessary instrumentation to a HWModule to trigger
