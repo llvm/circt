@@ -285,9 +285,9 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
-  // expected-note@below {{modules have a different number of ports}}
+  // expected-note@below {{port 'a' only exists in one of the modules}}
   firrtl.module @Test0(in %a : !firrtl.uint<1>) { }
-  // expected-note@below {{second module here}}
+  // expected-note@below {{second module to be deduped that does not have the port}}
   firrtl.module @Test1() { }
   firrtl.module @MustDedup() {
     firrtl.instance test0 @Test0(in a : !firrtl.uint<1>)
@@ -426,3 +426,19 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
   }
 }
 
+// -----
+
+// expected-error@below {{module "Test1" not deduplicated with "Test0"}}
+firrtl.circuit "MustDedup" attributes {annotations = [{
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
+    }]} {
+  // expected-note@below {{module port 'a', mismatch in data taps with two modules marked with must dedup. types don't match, first type is '!firrtl.uint<1>'}}
+  firrtl.module @Test0(in %a : !firrtl.ref<uint<1>>, in %b : !firrtl.ref<uint<2>>) { }
+  // expected-note@below {{second type is '!firrtl.uint<2>'}}
+  firrtl.module @Test1(in %a : !firrtl.ref<uint<2>>, in %b : !firrtl.ref<uint<1>>) { }
+  firrtl.module @MustDedup() {
+    firrtl.instance test0 @Test0(in a : !firrtl.ref<uint<1>>, in b : !firrtl.ref<uint<2>>)
+    firrtl.instance test1 @Test1(in a : !firrtl.ref<uint<2>>, in b : !firrtl.ref<uint<1>>)
+  }
+}
