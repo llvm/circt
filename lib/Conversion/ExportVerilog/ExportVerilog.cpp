@@ -5059,20 +5059,15 @@ namespace {
 struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
   ExportVerilogPass(raw_ostream &os) : os(os) {}
   void runOnOperation() override {
-    // Make sure LoweringOptions are applied to the module if it was overridden
-    // on the command line.
-    // TODO: This should be moved up to circt-opt and circt-translate.
-    applyLoweringCLOptions(getOperation());
-
     // Prepare the ops in the module for emission.
     mlir::OpPassManager preparePM("builtin.module");
     auto &modulePM = preparePM.nest<hw::HWModuleOp>();
     modulePM.addPass(createPrepareForEmissionPass());
     if (failed(runPipeline(preparePM, getOperation())))
-      signalPassFailure();
+      return signalPassFailure();
 
     if (failed(exportVerilogImpl(getOperation(), os)))
-      signalPassFailure();
+      return signalPassFailure();
   }
 
 private:
@@ -5220,20 +5215,15 @@ struct ExportSplitVerilogPass
     directoryName = directory.str();
   }
   void runOnOperation() override {
-    // Make sure LoweringOptions are applied to the module if it was overridden
-    // on the command line.
-    // TODO: This should be moved up to circt-opt and circt-translate.
-    applyLoweringCLOptions(getOperation());
-
     // Prepare the ops in the module for emission.
     mlir::OpPassManager preparePM("builtin.module");
     auto &modulePM = preparePM.nest<hw::HWModuleOp>();
     modulePM.addPass(createPrepareForEmissionPass());
     if (failed(runPipeline(preparePM, getOperation())))
-      signalPassFailure();
+      return signalPassFailure();
 
     if (failed(exportSplitVerilog(getOperation(), directoryName)))
-      signalPassFailure();
+      return signalPassFailure();
   }
 };
 } // end anonymous namespace

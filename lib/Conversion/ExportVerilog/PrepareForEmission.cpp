@@ -1023,9 +1023,7 @@ struct PrepareForEmissionPass
     : public PrepareForEmissionBase<PrepareForEmissionPass> {
   void runOnOperation() override {
     HWModuleOp module = getOperation();
-    LoweringOptions options = getLoweringCLIOption(
-        cast<mlir::ModuleOp>(module->getParentOp()),
-        [&](llvm::Twine twine) { module.emitError(twine); });
+    LoweringOptions options(cast<mlir::ModuleOp>(module->getParentOp()));
     prepareHWModule(module, options);
   }
 };

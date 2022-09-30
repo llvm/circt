@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t.mlir --lowering-options=useOldEmissionMode | FileCheck %s --strict-whitespace --check-prefixes=CHECK,OLD
+// RUN: circt-opt %s -test-apply-lowering-options="options=useOldEmissionMode" -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s --strict-whitespace --check-prefixes=CHECK,OLD
 // RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s --check-prefixes=CHECK,NEW
 
 // CHECK-LABEL: // external module E

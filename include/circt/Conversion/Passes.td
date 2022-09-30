@@ -75,6 +75,23 @@ def ExportSplitChiselInterface : Pass<"export-split-chisel-interface", "firrtl::
 // ExportVerilog and ExportSplitVerilog
 //===----------------------------------------------------------------------===//
 
+def TestApplyLoweringOption : Pass<"test-apply-lowering-options",
+                                   "mlir::ModuleOp"> {
+  let summary = "Apply lowering options";
+  let description = [{
+    This pass allows overriding lowering options.  It is intended for test
+    construction.
+  }];
+
+  let constructor = "createTestApplyLoweringOptionPass()";
+  let dependentDialects = [
+    "circt::sv::SVDialect", "circt::comb::CombDialect", "circt::hw::HWDialect"
+  ];
+  let options = [
+    Option<"options", "options", "std::string", "", "Lowering Options">
+  ];
+}
+
 def PrepareForEmission : Pass<"prepare-for-emission",
                               "hw::HWModuleOp"> {
   let summary = "Prepare IR for ExportVerilog";

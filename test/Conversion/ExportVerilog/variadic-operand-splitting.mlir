@@ -1,5 +1,5 @@
-// RUN: circt-opt -lowering-options=maximumNumberOfVariadicOperands=8 -export-verilog %s | FileCheck %s -check-prefixes=CHECK,MAX_8
-// RUN: circt-opt -lowering-options=maximumNumberOfVariadicOperands=4 -export-verilog %s | FileCheck %s -check-prefixes=CHECK,MAX_4
+// RUN: circt-opt -test-apply-lowering-options='options=maximumNumberOfVariadicOperands=8' -export-verilog %s | FileCheck %s -check-prefixes=CHECK,MAX_8
+// RUN: circt-opt -test-apply-lowering-options='options=maximumNumberOfVariadicOperands=4' -export-verilog %s | FileCheck %s -check-prefixes=CHECK,MAX_4
 
 hw.module @Baz(
   %a0: i1, %a1: i1, %a2: i1, %a3: i1,
