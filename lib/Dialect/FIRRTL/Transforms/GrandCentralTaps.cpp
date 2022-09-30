@@ -275,7 +275,7 @@ static FailureOr<Literal> parseIntegerLiteral(MLIRContext *context,
 
 LogicalResult circt::firrtl::applyDataTaps(ApplyState &state) {
   auto loc = state.circuit.getLoc();
-  auto context = state.circuit.getContext();
+  auto *context = state.circuit.getContext();
 
   auto noDedupAnnoClassName = StringAttr::get(context, noDedupAnnoClass);
   auto noDedupAnno = DictionaryAttr::get(
@@ -301,7 +301,7 @@ LogicalResult circt::firrtl::applyDataTaps(ApplyState &state) {
     return (srcA == srcB ? sinkA < sinkB : srcA < srcB);
   });
   // Process all the taps.
-  for (auto dataTapAnno : llvm::enumerate(state.listOfDataTaps)) {
+  for (const auto &dataTapAnno : llvm::enumerate(state.listOfDataTaps)) {
     auto anno = dataTapAnno.value();
     auto classAttr = anno.getAs<StringAttr>("class");
     auto sinkNameAttr =
