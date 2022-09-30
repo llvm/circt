@@ -716,7 +716,7 @@ private:
           << " Not found in name table! Most likely indicates that the given "
              "op did not have an emitter in ExportVerilog, and should have "
              "been lowered away before reaching this point.";
-      assert(false);
+      assert(false && "name not found (see above error)");
     }
     return entry->getSecond();
   }
