@@ -123,3 +123,14 @@ handshake.func @test_buffer_data(%arg0: index, %arg1: none, ...) -> (index, none
   %0 = buffer [2] seq %arg0 : index
   return %0, %arg1 : index, none
 }
+
+// -----
+
+// CHECK-LABEL: hw.module @handshake_buffer_in_tuple_ui32_ui32_out_tuple_ui32_ui32_2slots_seq(%in0: !esi.channel<!hw.struct<field0: i32, field1: i32>>, %clock: i1, %reset: i1) -> (out0: !esi.channel<!hw.struct<field0: i32, field1: i32>>) {
+// CHECK:         %[[CZERO:.*]] = hw.struct_create (%c0_i32, %c0_i32) : !hw.struct<field0: i32, field1: i32>
+// CHECK:         %data0_reg = seq.compreg %4, %clock, %reset, %[[CZERO]]  : !hw.struct<field0: i32, field1: i32>
+
+handshake.func @test_buffer_tuple_seq(%t: tuple<i32, i32>, %arg0: none, ...) -> (tuple<i32, i32>, none) {
+  %0 = buffer [2] seq %t : tuple<i32, i32>
+  return %0, %arg0 : tuple<i32, i32>, none
+}

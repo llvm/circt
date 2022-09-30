@@ -76,7 +76,8 @@ static Type toValidType(Type t) {
         llvm::SmallVector<Type> types;
         for (auto innerType : tt)
           types.push_back(toValidType(innerType));
-        return mlir::TupleType::get(types[0].getContext(), types);
+        return tupleToStruct(
+            mlir::TupleType::get(types[0].getContext(), types));
       })
       .Case<NoneType>(
           [&](NoneType nt) { return IntegerType::get(nt.getContext(), 0); })
@@ -768,6 +769,26 @@ struct RTLBuilder {
   Value clk, rst;
   DenseMap<APInt, Value> constants;
 };
+
+/// Creates a Value that has an assigned zero value. For structs, this
+/// corresponds to assigning zero to each element recursively.
+static Value createZeroDataConst(RTLBuilder &s, Location loc, Type type) {
+  return TypeSwitch<Type, Value>(type)
+      .Case<NoneType>([&](NoneType) { return s.constant(0, 0); })
+      .Case<IntType, IntegerType>([&](auto type) {
+        return s.constant(type.getIntOrFloatBitWidth(), 0);
+      })
+      .Case<hw::StructType>([&](auto structType) {
+        SmallVector<Value> zeroValues;
+        for (auto field : structType.getElements())
+          zeroValues.push_back(createZeroDataConst(s, loc, field.type));
+        return s.b.create<hw::StructCreateOp>(loc, structType, zeroValues);
+      })
+      .Default([&](Type) -> Value {
+        emitError(loc) << "unsupported type for zero value: " << type;
+        assert(false);
+      });
+}
 
 static void
 addSequentialIOOperandsIfNeeded(Operation *op,
@@ -1544,9 +1565,7 @@ public:
         : dataType(dataType), preStage(preStage), s(s), bb(bb), index(index) {
 
       // Todo: Change when i0 support is added.
-      unsigned width =
-          dataType.isa<NoneType>() ? 0 : dataType.getIntOrFloatBitWidth();
-      c0s = s.constant(width, 0);
+      c0s = createZeroDataConst(s, s.getLoc(), dataType);
       currentStage.ready = std::make_shared<Backedge>(bb.get(s.b.getI1Type()));
 
       auto hasInitValue = s.constant(1, initValue.has_value());
