@@ -13,7 +13,6 @@
 #ifndef CIRCT_TRANSLATION_EXPORTVERILOG_H
 #define CIRCT_TRANSLATION_EXPORTVERILOG_H
 
-#include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 
