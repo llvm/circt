@@ -584,3 +584,17 @@ hw.module private @SelfConnect(%clock: i1, %reset: i1) -> () {
   //VERILOG: always @(posedge clock)
   //VERILOG:   r <= r;
 }
+
+// CHECK-LABEL: Issue4030
+hw.module @Issue4030(%a: i1, %clock: i1, %in1: !hw.array<2xi1>) -> (b: !hw.array<5xi1>) {
+  %c0_i3 = hw.constant 0 : i3
+  %false = hw.constant false
+  %0 = hw.array_get %in1[%false] : !hw.array<2xi1>, i1
+  %r = sv.reg  : !hw.inout<array<5xi1>>
+  %1 = sv.array_index_inout %r[%c0_i3] : !hw.inout<array<5xi1>>, i3
+  %2 = sv.read_inout %r : !hw.inout<array<5xi1>>
+  sv.always posedge %clock {
+    sv.passign %1, %0 : i1
+  }
+  hw.output %2 : !hw.array<5xi1>
+}
