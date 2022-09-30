@@ -21,6 +21,7 @@
 #include "ExportVerilogInternals.h"
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -1029,22 +1030,8 @@ struct TestPrepareForEmissionPass
     prepareHWModule(module, options);
   }
 };
-
-struct PrepareForEmissionPass
-    : public PrepareForEmissionBase<PrepareForEmissionPass> {
-  PrepareForEmissionPass(LoweringOptions options) : options(options) {}
-  void runOnOperation() override { prepareHWModule(getOperation(), options); }
-
-protected:
-  LoweringOptions options;
-};
 } // end anonymous namespace
 
 std::unique_ptr<mlir::Pass> circt::createTestPrepareForEmissionPass() {
   return std::make_unique<TestPrepareForEmissionPass>();
-}
-
-std::unique_ptr<mlir::Pass>
-circt::createPrepareForEmissionPass(LoweringOptions options) {
-  return std::make_unique<PrepareForEmissionPass>(options);
 }

@@ -90,26 +90,6 @@ def TestPrepareForEmission : Pass<"test-prepare-for-emission",
   ];
 }
 
-def PrepareForEmission : Pass<"prepare-for-emission",
-                              "hw::HWModuleOp"> {
-  let summary = "Prepare IR for ExportVerilog";
-  let description = [{
-    This pass runs only PrepareForEmission logic.
-    It is not necessary for users to run this pass explicitly since
-    ExportVerilog internally schedules PrepareForEmission.
-  }];
-
-  let constructor = "createPrepareForEmissionPass()";
-  let dependentDialects = [
-    "circt::sv::SVDialect", "circt::comb::CombDialect", "circt::hw::HWDialect"
-  ];
-  let options = [
-    Option<"options", "opts", "LoweringOptions",
-            "", "Lowering options">
- ];
-
-}
-
 def ExportVerilog : Pass<"export-verilog", "mlir::ModuleOp"> {
   let summary = "Emit the IR to a (System)Verilog file";
   let description = [{
