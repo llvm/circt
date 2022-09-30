@@ -1,4 +1,4 @@
-// RUN: circt-opt --hw-flatten-io %s | FileCheck %s
+// RUN: circt-opt --hw-flatten-io="recursive=true" %s | FileCheck %s
 
 // Ensure that non-struct-using modules pass cleanly through the pass.
 
