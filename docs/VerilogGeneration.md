@@ -92,6 +92,15 @@ The current set of "style" Lowering Options is:
    declaration when possible.
  * `printDebugInfo` (default=`false`). If true, emit additional debug information
    (e.g. inner symbols) into comments.
+ * `wireSpillingHeuristic` (default=`spillNone`). This controls extra wire spilling performed
+   in PrepareForEmission to improve readability and debuggability. It is possible to combine
+   several heuristics by specifying `wireSpillingHeuristic` multiple times.
+   (e.g. `wireSpillingHeuristic=spillLargeTermsWithNamehints,wireSpillingHeuristic=spillAllMux`).
+   * `spillLargeTermsWithNamehints`: If spillLargeTermsWithNamehints is specified, expressions
+     with meaningful namehints (i.e. names which start with "\_") are spilled to wires.
+     For a namehint with "\_" prefix, if the term size is greater than `wireSpillingNamehintTermLimit`
+     (default=3), then the expression is spilled.
+   * `spillAllMux`: If enabled, spill wires for all muxes.
 
 The current set of "lint warnings fix" Lowering Options is:
 

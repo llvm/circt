@@ -129,12 +129,18 @@ struct LoweringOptions {
 
   /// This controls extra wire spilling performed in PrepareForEmission to
   /// improve readablitiy and debuggability.
-  enum WireSpillingHeuristic {
-    SpillNone,                   // Default
-    SpillLargeTermsWithNamehints // Spill wires for expressions with
-                                 // namehints if the term size is greater
-                                 // than `wireSpillingNamehintTermLimit`.
-  } wireSpillingHeuristic = SpillNone;
+  enum WireSpillingHeuristic : unsigned {
+    SpillLargeTermsWithNamehints = 1, // Spill wires for expressions with
+                                      // namehints if the term size is greater
+                                      // than `wireSpillingNamehintTermLimit`.
+    SpillAllMux = 1 << 1,             //  Spill wires for all ternary mux.
+  };
+
+  unsigned wireSpillingHeuristicSet = 0;
+
+  bool isWireSpillingHeuristicEnabled(WireSpillingHeuristic heurisic) const {
+    return static_cast<bool>(wireSpillingHeuristicSet & heurisic);
+  }
 
   enum { DEFAULT_NAMEHINT_TERM_LIMIT = 3 };
   unsigned wireSpillingNamehintTermLimit = DEFAULT_NAMEHINT_TERM_LIMIT;
@@ -143,7 +149,7 @@ struct LoweringOptions {
   /// Some lint tools dislike expressions being inlined into input ports so this
   /// option avoids such warnings.
   bool disallowExpressionInliningInPorts = false;
-};
+}; // namespace circt
 
 /// Register commandline options for the verilog emitter.
 void registerLoweringCLOptions();
