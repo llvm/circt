@@ -29,11 +29,11 @@ struct HandshakeMemType {
   llvm::SmallVector<NamedType> inputTypes, outputTypes;
 };
 
-struct LoadNames {
+struct LoadName {
   StringAttr dataIn;
   StringAttr addrOut;
 
-  static LoadNames get(MLIRContext *ctx, unsigned idx) {
+  static LoadName get(MLIRContext *ctx, unsigned idx) {
     return {StringAttr::get(ctx, "ld" + std::to_string(idx) + ".data"),
             StringAttr::get(ctx, "ld" + std::to_string(idx) + ".addr")};
   }
@@ -60,7 +60,7 @@ static HandshakeMemType getMemTypeForExtmem(Value v) {
 
   // Add load ports.
   for (auto [i, ldif] : llvm::enumerate(extmemOp.getLoadPorts())) {
-    auto names = LoadNames::get(ctx, i);
+    auto names = LoadName::get(ctx, i);
     memType.inputTypes.push_back({names.dataIn, ldif.dataOut.getType()});
     memType.outputTypes.push_back({names.addrOut, ldif.addressIn.getType()});
   }
@@ -89,14 +89,14 @@ struct HandshakeLowerExtmemToHWPass
   void runOnOperation() override {
     auto op = getOperation();
     for (auto func : op.getOps<handshake::FuncOp>()) {
-      if (failed(LowerExtmemToHW(func))) {
+      if (failed(lowerExtmemToHW(func))) {
         signalPassFailure();
         return;
       }
     }
   };
 
-  LogicalResult LowerExtmemToHW(handshake::FuncOp func);
+  LogicalResult lowerExtmemToHW(handshake::FuncOp func);
 };
 
 static Value plumbLoadPort(Location loc, OpBuilder &b,
@@ -161,13 +161,12 @@ static void eraseFromArrayAttr(Operation *op, StringRef attrName,
 }
 
 LogicalResult
-HandshakeLowerExtmemToHWPass::LowerExtmemToHW(handshake::FuncOp func) {
+HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
   // Gather memref ports to be converted.
   llvm::DenseMap<unsigned, Value> memrefArgs;
-  for (auto [i, arg] : llvm::enumerate(func.getArguments())) {
+  for (auto [i, arg] : llvm::enumerate(func.getArguments()))
     if (arg.getType().isa<MemRefType>())
       memrefArgs[i] = arg;
-  }
 
   if (memrefArgs.empty())
     return success(); // nothing to do.
@@ -180,7 +179,6 @@ HandshakeLowerExtmemToHWPass::LowerExtmemToHW(handshake::FuncOp func) {
     auto loc = arg.getLoc();
     // Get the attached extmemory external module.
     auto extmemOp = cast<handshake::ExternalMemoryOp>(*arg.getUsers().begin());
-    OpBuilder b(extmemOp);
     b.setInsertionPoint(extmemOp);
 
     // Add memory input - this is the output of the extmemory op.
