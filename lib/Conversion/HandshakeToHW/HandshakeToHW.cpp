@@ -38,15 +38,6 @@ using namespace circt::hw;
 
 using NameUniquer = std::function<std::string(Operation *)>;
 
-namespace {
-
-// Shared state used by various functions; captured in a struct to reduce the
-// number of arguments that we have to pass around.
-struct HandshakeLoweringState {
-  ModuleOp parentModule;
-  NameUniquer nameUniquer;
-};
-
 // NOLINTNEXTLINE(misc-no-recursion)
 static Type tupleToStruct(TupleType tuple) {
   auto *ctx = tuple.getContext();
@@ -68,7 +59,7 @@ static Type tupleToStruct(TypeRange types) {
 
 // Converts 't' into a valid HW type. This is strictly used for converting
 // 'index' types into a fixed-width type.
-static Type toValidType(Type t) {
+Type handshake::toValidType(Type t) {
   return TypeSwitch<Type, Type>(t)
       .Case<IndexType>(
           [&](IndexType it) { return IntegerType::get(it.getContext(), 64); })
@@ -79,6 +70,13 @@ static Type toValidType(Type t) {
         return tupleToStruct(
             mlir::TupleType::get(types[0].getContext(), types));
       })
+      .Case<StructType>([&](StructType st) {
+        llvm::SmallVector<hw::StructType::FieldInfo> structFields(
+            st.getElements());
+        for (auto &field : structFields)
+          field.type = toValidType(field.type);
+        return hw::StructType::get(st.getContext(), structFields);
+      })
       .Case<NoneType>(
           [&](NoneType nt) { return IntegerType::get(nt.getContext(), 0); })
       .Default([&](Type t) { return t; });
@@ -86,7 +84,7 @@ static Type toValidType(Type t) {
 
 // Wraps a type into an ESI ChannelType type. The inner type is converted to
 // ensure comprehensability by the RTL dialects.
-static esi::ChannelType esiWrapper(Type t) {
+esi::ChannelType handshake::esiWrapper(Type t) {
   return TypeSwitch<Type, esi::ChannelType>(t)
       .Case<esi::ChannelType>([](auto t) { return t; })
       .Case<TupleType>(
@@ -99,6 +97,15 @@ static esi::ChannelType esiWrapper(Type t) {
         return esi::ChannelType::get(t.getContext(), toValidType(t));
       });
 }
+
+namespace {
+
+// Shared state used by various functions; captured in a struct to reduce the
+// number of arguments that we have to pass around.
+struct HandshakeLoweringState {
+  ModuleOp parentModule;
+  NameUniquer nameUniquer;
+};
 
 // A type converter is needed to perform the in-flight materialization of "raw"
 // (non-ESI channel) types to their ESI channel correspondents. This comes into
@@ -376,10 +383,14 @@ static Operation *checkSubModuleOp(mlir::ModuleOp parentModule,
   return moduleOp;
 }
 
-static ModulePortInfo getPortInfoForOp(OpBuilder &builder, Operation *op,
-                                       TypeRange inputs, TypeRange outputs) {
+hw::ModulePortInfo handshake::getPortInfoForOpTypes(Operation *op,
+                                                    TypeRange inputs,
+                                                    TypeRange outputs) {
   ModulePortInfo ports({}, {});
   HandshakePortNameGenerator portNames(op);
+  auto *ctx = op->getContext();
+
+  Type i1Type = IntegerType::get(ctx, 1);
 
   // Add all inputs of funcOp.
   unsigned inIdx = 0;
@@ -399,12 +410,10 @@ static ModulePortInfo getPortInfoForOp(OpBuilder &builder, Operation *op,
 
   // Add clock and reset signals.
   if (op->hasTrait<mlir::OpTrait::HasClock>()) {
-    ports.inputs.push_back({builder.getStringAttr("clock"),
-                            PortDirection::INPUT, builder.getI1Type(), inIdx++,
-                            StringAttr{}});
-    ports.inputs.push_back({builder.getStringAttr("reset"),
-                            PortDirection::INPUT, builder.getI1Type(), inIdx,
-                            StringAttr{}});
+    ports.inputs.push_back({StringAttr::get(ctx, "clock"), PortDirection::INPUT,
+                            i1Type, inIdx++, StringAttr{}});
+    ports.inputs.push_back({StringAttr::get(ctx, "reset"), PortDirection::INPUT,
+                            i1Type, inIdx, StringAttr{}});
   }
 
   return ports;
@@ -412,9 +421,8 @@ static ModulePortInfo getPortInfoForOp(OpBuilder &builder, Operation *op,
 
 /// Returns a vector of PortInfo's which defines the HW interface of the
 /// to-be-converted op.
-static ModulePortInfo getPortInfoForOp(OpBuilder &builder, Operation *op) {
-  return getPortInfoForOp(builder, op, op->getOperandTypes(),
-                          op->getResultTypes());
+static ModulePortInfo getPortInfoForOp(Operation *op) {
+  return getPortInfoForOpTypes(op, op->getOperandTypes(), op->getResultTypes());
 }
 
 static llvm::SmallVector<hw::detail::FieldInfo>
@@ -857,7 +865,7 @@ public:
     // builder.
     hw::HWModuleLike implModule = checkSubModuleOp(ls.parentModule, op);
     if (!implModule) {
-      auto portInfo = ModulePortInfo(getPortInfoForOp(rewriter, op));
+      auto portInfo = ModulePortInfo(getPortInfoForOp(op));
 
       implModule = submoduleBuilder.create<hw::HWModuleOp>(
           op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
@@ -1798,7 +1806,7 @@ public:
 
     hw::HWModuleLike implModule = checkSubModuleOp(ls.parentModule, op);
     if (!implModule) {
-      auto portInfo = ModulePortInfo(getPortInfoForOp(rewriter, op));
+      auto portInfo = ModulePortInfo(getPortInfoForOp(op));
       implModule = submoduleBuilder.create<hw::HWModuleExternOp>(
           op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
           portInfo);
@@ -1823,8 +1831,8 @@ public:
   LogicalResult
   matchAndRewrite(handshake::FuncOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    ModulePortInfo ports = getPortInfoForOp(rewriter, op, op.getArgumentTypes(),
-                                            op.getResultTypes());
+    ModulePortInfo ports = getPortInfoForOpTypes(
+        rewriter, op, op.getArgumentTypes(), op.getResultTypes());
 
     if (op.isExternal()) {
       rewriter.create<hw::HWModuleExternOp>(
