@@ -407,21 +407,6 @@ static ModulePortInfo getPortInfoForOp(OpBuilder &builder, Operation *op) {
                           op->getResultTypes());
 }
 
-// Returns the in- and out types associated with a given handshake.extmemory
-// operation. This defines the set of types associated with any given memref
-// (which much be referenced by a single extmemory operation).
-static ModulePortInfo getMemrefType(ConversionPatternRewriter &rewriter,
-                                    ExternalMemoryOp extmemOp) {
-  // Get a handle to the submodule which will wrap the external memory
-  auto extmemPortInfo = getPortInfoForOp(rewriter, extmemOp);
-
-  // Drop the first port info; this one will be a handshake associated with the
-  // memref type.
-  extmemPortInfo.inputs.erase(extmemPortInfo.inputs.begin());
-
-  return extmemPortInfo;
-}
-
 static llvm::SmallVector<hw::detail::FieldInfo>
 portToFieldInfo(llvm::ArrayRef<hw::PortInfo> portInfo) {
   llvm::SmallVector<hw::detail::FieldInfo> fieldInfo;
@@ -434,7 +419,6 @@ portToFieldInfo(llvm::ArrayRef<hw::PortInfo> portInfo) {
 // Convert any handshake.extmemory operations and the top-level I/O
 // associated with these.
 static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
-  ModuleOp parentModule = mod->getParentOfType<ModuleOp>();
   auto ports = mod.getPorts();
   auto *ctx = mod.getContext();
 
@@ -462,7 +446,6 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
 
   for (auto [i, arg] : memrefPorts) {
     // Insert ports into the module
-    hw::StructType ins, outs;
     auto memName = mod.getArgNames()[i].cast<StringAttr>();
 
     // Get the attached extmemory external module.

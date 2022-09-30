@@ -40,13 +40,6 @@ static bool noI0TypedValue(ValueRange values) {
   return noI0Type(values.getTypes());
 }
 
-static SmallVector<Value> removeI0Typed(ValueRange values) {
-  SmallVector<Value> result;
-  llvm::copy_if(values, std::back_inserter(result),
-                [](Value value) { return !isZeroWidthLogic(value.getType()); });
-  return result;
-}
-
 namespace {
 
 class PruneTypeConverter : public mlir::TypeConverter {
