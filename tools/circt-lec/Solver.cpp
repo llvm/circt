@@ -14,6 +14,7 @@
 #include "Circuit.h"
 #include "LogicExporter.h"
 #include "Utility.h"
+#include "mlir/IR/Builders.h"
 #include <string>
 #include <z3++.h>
 
@@ -79,7 +80,9 @@ void Solver::printModel() {
     // Recover the corresponding mlir::Value for the z3::expression
     // then emit a remark for its location.
     z3::func_decl f = model.get_const_decl(i);
-    std::string symbol = f.name().str();
+    mlir::Builder builder(mlirCtx);
+    std::string symbolStr = f.name().str();
+    mlir::StringAttr symbol = builder.getStringAttr(symbolStr);
     mlir::Value value = symbolTable.find(symbol)->second;
     z3::expr e = model.get_const_interp(f);
     mlir::emitRemark(value.getLoc(), "");

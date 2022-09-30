@@ -14,8 +14,8 @@
 #define LEC_SOLVER_H
 
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Value.h"
-#include <string>
 #include <z3++.h>
 
 /// A satisfiability checker for circuit equivalence
@@ -27,7 +27,8 @@
 /// acting as a counterexample.
 class Solver {
 public:
-  Solver() : circuits{}, context(), solver(context){};
+  Solver(mlir::MLIRContext *mlirCtx)
+      : circuits{}, mlirCtx(mlirCtx), context(), solver(context){};
   ~Solver();
 
   /// Solve the equivalence problem between the two circuits, then present the
@@ -57,39 +58,16 @@ private:
   mlir::LogicalResult constrainCircuits();
 
   /// A map from internal solver symbols to the IR values they represent.
-  llvm::DenseMap<std::string, mlir::Value> symbolTable;
+  llvm::DenseMap<mlir::StringAttr, mlir::Value> symbolTable;
   /// The two circuits to be compared.
   llvm::SmallVector<Circuit *, 2> circuits;
+  /// The MLIR context of reference, owning all the MLIR entities.
+  mlir::MLIRContext *mlirCtx;
   /// The Z3 context of reference, owning all the declared values, constants
   /// and expressions.
   z3::context context;
   /// The Z3 solver acting as the logical engine backend.
   z3::solver solver;
 };
-
-namespace llvm {
-/// Implementation of DenseMapInfo for std::string
-/// needed by Solver::symbolTable.
-template <>
-struct DenseMapInfo<std::string> {
-  static inline std::string getEmptyKey() {
-    std::string empty("<<<EMPTY KEY>>>");
-    return empty;
-  }
-
-  static inline std::string getTombstoneKey() {
-    std::string tombstone("<<<TOMBSTONE KEY>>>");
-    return tombstone;
-  }
-
-  static unsigned getHashValue(const std::string &val) {
-    return std::hash<std::string>{}(val);
-  }
-
-  static bool isEqual(const std::string &lhs, const std::string &rhs) {
-    return lhs == rhs;
-  }
-};
-} // namespace llvm
 
 #endif // LEC_SOLVER_H

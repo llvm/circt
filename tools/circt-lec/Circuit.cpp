@@ -15,6 +15,7 @@
 #include "LogicExporter.h"
 #include "Solver.h"
 #include "Utility.h"
+#include "mlir/IR/Builders.h"
 
 #define DEBUG_TYPE "circuit"
 
@@ -317,7 +318,9 @@ z3::expr Solver::Circuit::allocateValue(mlir::Value value) {
   LLVM_DEBUG(lec::printValue(value));
   auto exprInsertion = exprTable.insert(std::pair(value, expr));
   assert(exprInsertion.second && "Value not inserted in expression table");
-  auto symInsertion = solver->symbolTable.insert(std::pair(valueName, value));
+  mlir::Builder builder(solver->mlirCtx);
+  mlir::StringAttr symbol = builder.getStringAttr(valueName);
+  auto symInsertion = solver->symbolTable.insert(std::pair(symbol, value));
   assert(symInsertion.second && "Value not inserted in symbol table");
   return expr;
 }

@@ -91,7 +91,7 @@ static mlir::LogicalResult executeLEC(mlir::MLIRContext &context) {
     VERBOSE(lec::outs << "Second input file not specified\n");
 
   // Initiliaze the constraints solver and the circuits to be compared.
-  Solver s;
+  Solver s(&context);
   Solver::Circuit *c1 = s.addCircuit(moduleName1, true);
   Solver::Circuit *c2 = s.addCircuit(moduleName2, false);
 
