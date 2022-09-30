@@ -947,6 +947,15 @@ hw.module @structExtractFromTemporary(%cond: i1, %a: !hw.struct<c: i1>, %b: !hw.
     hw.output %1 : i1
 }
 
+// CHECK-LABEL: structExplodeLowering
+hw.module @structExplodeLowering(%a: !hw.struct<a: i1, b: i1>) -> (outA: i1, outB: i1) {
+  // CHECK: assign outA = a.a;
+  // CHECK: assign outB = a.b;
+  %0:2 = hw.struct_explode %a : !hw.struct<a: i1, b: i1>
+  hw.output %0#0, %0#1 : i1, i1
+}
+
+
 // Rename field names
 // CHECK-LABEL: renameKeyword(
 // CHECK-NEXT:  input  struct packed {logic repeat_0; logic repeat_0_1; } a,
