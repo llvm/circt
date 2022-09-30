@@ -1021,7 +1021,6 @@ namespace {
 
 struct PrepareForEmissionPass
     : public PrepareForEmissionBase<PrepareForEmissionPass> {
-  PrepareForEmissionPass() {}
   void runOnOperation() override {
     HWModuleOp module = getOperation();
     LoweringOptions options = getLoweringCLIOption(
