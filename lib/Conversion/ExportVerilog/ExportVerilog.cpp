@@ -707,8 +707,18 @@ private:
   /// added.
   StringRef getName(ValueOrOp valueOrOp) {
     auto entry = nameTable.find(valueOrOp);
-    assert(entry != nameTable.end() &&
-           "value expected a name but doesn't have one");
+    if (entry == nameTable.end()) {
+      llvm::errs() << "Name: ";
+      if (auto v = valueOrOp.dyn_cast<Value>())
+        v.print(llvm::errs());
+      else
+        valueOrOp.get<Operation *>()->print(llvm::errs());
+      llvm::errs()
+          << " Not found in name table! Most likely indicates that the given "
+             "op did not have an emitter in ExportVerilog, and should have "
+             "been lowered away before reaching this point.";
+      assert(false && "name not found (see above error)");
+    }
     return entry->getSecond();
   }
 
