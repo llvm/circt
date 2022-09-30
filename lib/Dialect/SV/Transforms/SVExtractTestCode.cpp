@@ -156,44 +156,50 @@ static SetVector<Operation *> computeCloneSet(SetVector<Operation *> &roots) {
 // Find instances that only feed the clone set, and add them if possible. This
 // also returns a list of ops that should be erased, which includes such
 // instances and their forward dataflow slices.
-static void addInstancesToCloneSet(SetVector<Value> &inputs,
-                                   SetVector<Operation *> &opsToClone,
-                                   SmallPtrSetImpl<Operation *> &opsToErase) {
+static void addInstancesToCloneSet(
+    SetVector<Value> &inputs, SetVector<Operation *> &opsToClone,
+    SmallPtrSetImpl<Operation *> &opsToErase,
+    DenseMap<StringAttr, SmallPtrSet<Operation *, 32>> &extractedInstances) {
   // Track inputs to remove, which come from instances that will be cloned.
   SmallVector<Value> inputsToRemove;
 
   // Check each input into the clone set.
   for (auto value : inputs) {
-    // Check if the input comes from an instance.
+    // Check if the input comes from an instance, and it isn't already added to
+    // the clone set.
     auto *definingOp = value.getDefiningOp();
-    if (isa_and_nonnull<hw::InstanceOp>(definingOp) &&
-        !opsToClone.contains(definingOp)) {
-      // Compute the instance's forward slice. If it wasn't fully contained in
-      // the clone set, move along.
-      SetVector<Operation *> forwardSlice;
-      if (!getForwardSliceSimple(definingOp, opsToClone, forwardSlice))
-        continue;
+    auto instance = dyn_cast_or_null<hw::InstanceOp>(definingOp);
+    if (!instance)
+      continue;
+    if (opsToClone.contains(instance))
+      continue;
 
-      // Add the instance to the clone set and mark the input to be removed from
-      // the input set.
-      opsToClone.insert(definingOp);
-      inputsToRemove.push_back(value);
+    // Compute the instance's forward slice. If it wasn't fully contained in
+    // the clone set, move along.
+    SetVector<Operation *> forwardSlice;
+    if (!getForwardSliceSimple(definingOp, opsToClone, forwardSlice))
+      continue;
 
-      // Mark the instance and its forward dataflow to be erased from the pass.
-      // Normally, ops in the clone set are canonicalized away later, but for
-      // this case, we have to proactively erase them. The instances must be
-      // erased because we can't canonicalize away instanes with unused inputs
-      // in general. The forward dataflow must be erased because the instance is
-      // being erased, and we can't leave null operands after this pass.
-      opsToErase.insert(definingOp);
-      for (auto *forwardOp : forwardSlice)
-        opsToErase.insert(forwardOp);
-    }
+    // Add the instance to the clone set and mark the input to be removed from
+    // the input set. Also add it to the map of extracted instances by module.
+    opsToClone.insert(definingOp);
+    inputsToRemove.push_back(value);
+    extractedInstances[instance.getModuleNameAttr().getAttr()].insert(instance);
+
+    // Mark the instance and its forward dataflow to be erased from the pass.
+    // Normally, ops in the clone set are canonicalized away later, but for
+    // this case, we have to proactively erase them. The instances must be
+    // erased because we can't canonicalize away instanes with unused inputs
+    // in general. The forward dataflow must be erased because the instance is
+    // being erased, and we can't leave null operands after this pass.
+    opsToErase.insert(definingOp);
+    for (auto *forwardOp : forwardSlice)
+      opsToErase.insert(forwardOp);
+
+    // Remove any inputs marked for removal.
+    for (auto v : inputsToRemove)
+      inputs.remove(v);
   }
-
-  // Remove any inputs marked for removal.
-  for (auto v : inputsToRemove)
-    inputs.remove(v);
 }
 
 static StringRef getNameForPort(Value val, ArrayAttr modulePorts) {
@@ -454,7 +460,7 @@ private:
 
     // Find instances that only feed the clone set, and add them if possible.
     SmallPtrSet<Operation *, 32> opsToErase;
-    addInstancesToCloneSet(inputs, opsToClone, opsToErase);
+    addInstancesToCloneSet(inputs, opsToClone, opsToErase, extractedInstances);
     numOpsErased += opsToErase.size();
 
     // Make a module to contain the clone set, with arguments being the cut
@@ -476,6 +482,35 @@ private:
     // Move any old modules that are test code only to the test code area.
     maybeMoveToTestCode(module, testBenchDir, bindFile, instanceGraph);
   }
+
+  void maybeMoveExtractedModule(hw::InstanceGraph &instanceGraph,
+                                Attribute testBenchDir) {
+    // Ensure we have a valid test code path.
+    if (!testBenchDir)
+      return;
+
+    // Check each module that had instances extracted.
+    for (auto &pair : extractedInstances) {
+      hw::InstanceGraphNode *node = instanceGraph.lookup(pair.first);
+
+      // See if all instances were extracted.
+      bool allInstancesExtracted = true;
+      for (hw::InstanceRecord *use : node->uses()) {
+        allInstancesExtracted &= extractedInstances[pair.first].contains(
+            use->getInstance().getOperation());
+      }
+
+      if (!allInstancesExtracted)
+        continue;
+
+      // If so, move the module to the test code path.
+      hw::HWModuleLike mod = node->getModule();
+      mod->setAttr("output_file", testBenchDir);
+    }
+  }
+
+  // Map from module name to set of extracted instances for that module.
+  DenseMap<StringAttr, SmallPtrSet<Operation *, 32>> extractedInstances;
 };
 
 } // end anonymous namespace
