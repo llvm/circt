@@ -10,9 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/ExportVerilog.h"
 #include "../PassDetail.h"
 #include "ExportVerilogInternals.h"
+#include "circt/Conversion/ExportVerilog.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -25,35 +25,31 @@
 
 using namespace circt;
 
-
 namespace {
 
 struct testApplyLoweringOptionPass
     : public TestApplyLoweringOptionBase<testApplyLoweringOptionPass> {
-  testApplyLoweringOptionPass(StringRef _options) {
-    options = _options.str();
-  }
+  testApplyLoweringOptionPass(StringRef _options) { options = _options.str(); }
   testApplyLoweringOptionPass() = default;
   void runOnOperation() override {
     if (!options.hasValue()) {
-        markAllAnalysesPreserved();
-        return;
+      markAllAnalysesPreserved();
+      return;
     }
     LoweringOptions opts(options, [this](llvm::Twine tw) {
-        getOperation().emitError(tw);
-        signalPassFailure();
+      getOperation().emitError(tw);
+      signalPassFailure();
     });
     opts.setAsAttribute(getOperation());
-  }  
+  }
 };
-}
+} // namespace
 
 std::unique_ptr<mlir::Pass>
 circt::createTestApplyLoweringOptionPass(std::string options) {
   return std::make_unique<testApplyLoweringOptionPass>(options);
 }
 
-std::unique_ptr<mlir::Pass>
-circt::createTestApplyLoweringOptionPass() {
+std::unique_ptr<mlir::Pass> circt::createTestApplyLoweringOptionPass() {
   return std::make_unique<testApplyLoweringOptionPass>();
 }
