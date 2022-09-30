@@ -1256,6 +1256,49 @@ void MemoryOp::build(OpBuilder &builder, OperationState &result,
   }
 }
 
+llvm::SmallVector<handshake::ExtMemLoadInterface>
+ExternalMemoryOp::getLoadPorts() {
+  llvm::SmallVector<ExtMemLoadInterface> ports;
+  // Extmem interface refresher:
+  // Operands:
+  //   all stores (stdata1, staddr1, stdata2, staddr2, ...)
+  //   then all loads (ldaddr1, ldaddr2,...)
+  // Outputs: load addresses (lddata1, lddata2, ...), followed by all none
+  // outputs, ordered as operands(stnone1, stnone2, ... ldnone1, ldnone2, ...)
+  unsigned stCount = getStCount();
+  unsigned ldCount = getLdCount();
+  for (unsigned i = 0, e = ldCount; i != e; ++i) {
+    ExtMemLoadInterface ldif;
+    ldif.index = i;
+    ldif.addressIn = getInputs()[stCount * 2 + i];
+    ldif.dataOut = getResult(i);
+    ldif.doneOut = getResult(ldCount + stCount + i);
+    ports.push_back(ldif);
+  }
+  return ports;
+}
+
+llvm::SmallVector<handshake::ExtMemStoreInterface>
+ExternalMemoryOp::getStorePorts() {
+  llvm::SmallVector<ExtMemStoreInterface> ports;
+  // Extmem interface refresher:
+  // Operands:
+  //   all stores (stdata1, staddr1, stdata2, staddr2, ...)
+  //   then all loads (ldaddr1, ldaddr2,...)
+  // Outputs: load data (lddata1, lddata2, ...), followed by all none
+  // outputs, ordered as operands(stnone1, stnone2, ... ldnone1, ldnone2, ...)
+  unsigned ldCount = getLdCount();
+  for (unsigned i = 0, e = ldCount; i != e; ++i) {
+    ExtMemStoreInterface stif;
+    stif.index = i;
+    stif.dataIn = getInputs()[i * 2];
+    stif.addressIn = getInputs()[i * 2 + 1];
+    stif.doneOut = getResult(ldCount + i);
+    ports.push_back(stif);
+  }
+  return ports;
+}
+
 bool handshake::MemoryOp::allocateMemory(
     llvm::DenseMap<unsigned, unsigned> &memoryMap,
     std::vector<std::vector<llvm::Any>> &store,
