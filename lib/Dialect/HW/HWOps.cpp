@@ -2120,6 +2120,13 @@ LogicalResult StructExplodeOp::canonicalize(StructExplodeOp op,
   return failure();
 }
 
+void StructExplodeOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  auto structType = type_cast<StructType>(getInput().getType());
+  for (auto [res, field] : llvm::zip(getResults(), structType.getElements()))
+    setNameFn(res, field.name.str());
+}
+
 //===----------------------------------------------------------------------===//
 // StructExtractOp
 //===----------------------------------------------------------------------===//
@@ -2208,6 +2215,17 @@ LogicalResult StructExtractOp::canonicalize(StructExtractOp op,
   }
 
   return failure();
+}
+
+void StructExtractOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  auto structType = type_cast<StructType>(getInput().getType());
+  for (auto field : structType.getElements()) {
+    if (field.name == getField()) {
+      setNameFn(getResult(), field.name.str());
+      return;
+    }
+  }
 }
 
 //===----------------------------------------------------------------------===//

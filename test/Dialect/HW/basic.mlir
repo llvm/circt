@@ -83,14 +83,14 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i5
   // CHECK-NEXT: [[STR:%[0-9]+]] = hw.struct_create ({{.*}}, {{.*}}) : !hw.struct<foo: i19, bar: i7>
   %s0 = hw.struct_create (%small1, %mux) : !hw.struct<foo: i19, bar: i7>
 
-  // CHECK-NEXT: = hw.struct_extract [[STR]]["foo"] : !hw.struct<foo: i19, bar: i7>
-  %sf1 = hw.struct_extract %s0["foo"] : !hw.struct<foo: i19, bar: i7>
+  // CHECK-NEXT: %foo = hw.struct_extract [[STR]]["foo"] : !hw.struct<foo: i19, bar: i7>
+  %foo = hw.struct_extract %s0["foo"] : !hw.struct<foo: i19, bar: i7>
 
   // CHECK-NEXT: = hw.struct_inject [[STR]]["foo"], {{.*}} : !hw.struct<foo: i19, bar: i7>
-  %s1 = hw.struct_inject %s0["foo"], %sf1 : !hw.struct<foo: i19, bar: i7>
+  %s1 = hw.struct_inject %s0["foo"], %foo : !hw.struct<foo: i19, bar: i7>
 
-  // CHECK-NEXT: :2 = hw.struct_explode [[STR]] : !hw.struct<foo: i19, bar: i7>
-  %se:2 = hw.struct_explode %s0 : !hw.struct<foo: i19, bar: i7>
+  // CHECK-NEXT:  %foo_1, %bar = hw.struct_explode [[STR]] : !hw.struct<foo: i19, bar: i7>
+  %foo_1, %bar = hw.struct_explode %s0 : !hw.struct<foo: i19, bar: i7>
 
   // CHECK-NEXT: hw.bitcast [[STR]] : (!hw.struct<foo: i19, bar: i7>)
   %structBits = hw.bitcast %s0 : (!hw.struct<foo: i19, bar: i7>) -> i26
