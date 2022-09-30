@@ -423,8 +423,8 @@ struct InferResetsPass : public InferResetsBase<InferResetsPass> {
   void traceResets(InstanceOp inst);
   void traceResets(Value dst, Value src, Location loc);
   void traceResets(Value value);
-  void traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
-                   FIRRTLType srcType, Value src, unsigned srcID, Location loc);
+  void traceResets(Type dstType, Value dst, unsigned dstID, Type srcType,
+                   Value src, unsigned srcID, Location loc);
 
   LogicalResult inferAndUpdateResets();
   FailureOr<ResetKind> inferReset(ResetNetwork net);
@@ -829,15 +829,13 @@ void InferResetsPass::traceResets(InstanceOp inst) {
 /// Each drive involving a `ResetType` is recorded.
 void InferResetsPass::traceResets(Value dst, Value src, Location loc) {
   // Analyze the actual connection.
-  auto dstType = dst.getType().cast<FIRRTLType>();
-  auto srcType = src.getType().cast<FIRRTLType>();
-  traceResets(dstType, dst, 0, srcType, src, 0, loc);
+  traceResets(dst.getType(), dst, 0, src.getType(), src, 0, loc);
 }
 
 /// Analyze a connect of one (possibly aggregate) value to another.
 /// Each drive involving a `ResetType` is recorded.
-void InferResetsPass::traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
-                                  FIRRTLType srcType, Value src, unsigned srcID,
+void InferResetsPass::traceResets(Type dstType, Value dst, unsigned dstID,
+                                  Type srcType, Value src, unsigned srcID,
                                   Location loc) {
   if (auto dstBundle = dstType.dyn_cast<BundleType>()) {
     auto srcBundle = srcType.cast<BundleType>();
@@ -890,50 +888,49 @@ void InferResetsPass::traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
                        srcID, loc);
   }
 
-  auto dstBase = dstType.cast<FIRRTLBaseType>();
-  auto srcBase = srcType.cast<FIRRTLBaseType>();
-  if (dstBase.isGround()) {
-    if (dstBase.isa<ResetType>() || srcBase.isa<ResetType>()) {
-      FieldRef dstField(dst, dstID);
-      FieldRef srcField(src, srcID);
-      LLVM_DEBUG(llvm::dbgs()
-                 << "Visiting driver '" << dstField << "' = '" << srcField
-                 << "' (" << dstType << " = " << srcType << ")\n");
-
-      // Determine the leaders for the dst and src reset networks before we make
-      // the connection. This will allow us to later detect if dst got merged
-      // into src, or src into dst.
-      ResetSignal dstLeader =
-          *resetClasses.findLeader(resetClasses.insert({dstField, dstBase}));
-      ResetSignal srcLeader =
-          *resetClasses.findLeader(resetClasses.insert({srcField, srcBase}));
-
-      // Unify the two reset networks.
-      ResetSignal unionLeader = *resetClasses.unionSets(dstLeader, srcLeader);
-      assert(unionLeader == dstLeader || unionLeader == srcLeader);
-
-      // If dst got merged into src, append dst's drives to src's, or vice
-      // versa. Also, remove dst's or src's entry in resetDrives, because they
-      // will never come up as a leader again.
-      if (dstLeader != srcLeader) {
-        auto &unionDrives = resetDrives[unionLeader]; // needed before finds
-        auto mergedDrivesIt =
-            resetDrives.find(unionLeader == dstLeader ? srcLeader : dstLeader);
-        if (mergedDrivesIt != resetDrives.end()) {
-          unionDrives.append(mergedDrivesIt->second);
-          resetDrives.erase(mergedDrivesIt);
-        }
-      }
-
-      // Keep note of this drive so we can point the user at the right location
-      // in case something goes wrong.
-      resetDrives[unionLeader].push_back(
-          {{dstField, dstBase}, {srcField, srcBase}, loc});
-    }
+  // Handle reset connections.
+  auto dstBase = dstType.dyn_cast<FIRRTLBaseType>();
+  auto srcBase = srcType.dyn_cast<FIRRTLBaseType>();
+  if (!dstBase || !srcBase)
     return;
+  if (!dstBase.isa<ResetType>() && !srcBase.isa<ResetType>())
+    return;
+
+  FieldRef dstField(dst, dstID);
+  FieldRef srcField(src, srcID);
+  LLVM_DEBUG(llvm::dbgs() << "Visiting driver '" << dstField << "' = '"
+                          << srcField << "' (" << dstType << " = " << srcType
+                          << ")\n");
+
+  // Determine the leaders for the dst and src reset networks before we make
+  // the connection. This will allow us to later detect if dst got merged
+  // into src, or src into dst.
+  ResetSignal dstLeader =
+      *resetClasses.findLeader(resetClasses.insert({dstField, dstBase}));
+  ResetSignal srcLeader =
+      *resetClasses.findLeader(resetClasses.insert({srcField, srcBase}));
+
+  // Unify the two reset networks.
+  ResetSignal unionLeader = *resetClasses.unionSets(dstLeader, srcLeader);
+  assert(unionLeader == dstLeader || unionLeader == srcLeader);
+
+  // If dst got merged into src, append dst's drives to src's, or vice
+  // versa. Also, remove dst's or src's entry in resetDrives, because they
+  // will never come up as a leader again.
+  if (dstLeader != srcLeader) {
+    auto &unionDrives = resetDrives[unionLeader]; // needed before finds
+    auto mergedDrivesIt =
+        resetDrives.find(unionLeader == dstLeader ? srcLeader : dstLeader);
+    if (mergedDrivesIt != resetDrives.end()) {
+      unionDrives.append(mergedDrivesIt->second);
+      resetDrives.erase(mergedDrivesIt);
+    }
   }
 
-  llvm_unreachable("unknown type");
+  // Keep note of this drive so we can point the user at the right location
+  // in case something goes wrong.
+  resetDrives[unionLeader].push_back(
+      {{dstField, dstBase}, {srcField, srcBase}, loc});
 }
 
 //===----------------------------------------------------------------------===//

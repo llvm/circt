@@ -326,6 +326,19 @@ firrtl.module @ShouldAdjustExtModule2() {
   firrtl.connect %x_reset, %c1_ui1 : !firrtl.reset, !firrtl.uint<1>
 }
 
+// Should not crash if there are connects with foreign types.
+// CHECK-LABEL: firrtl.module @ForeignTypes
+firrtl.module @ForeignTypes(out %out: !firrtl.reset) {
+  %0 = firrtl.wire : index
+  %1 = firrtl.wire : index
+  firrtl.strictconnect %0, %1 : index
+  // CHECK-NEXT: [[W0:%.+]] = firrtl.wire : index
+  // CHECK-NEXT: [[W1:%.+]] = firrtl.wire : index
+  // CHECK-NEXT: firrtl.strictconnect [[W0]], [[W1]] : index
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  firrtl.connect %out, %c1_ui1 : !firrtl.reset, !firrtl.uint<1>
+}
+
 
 //===----------------------------------------------------------------------===//
 // Full Async Reset
