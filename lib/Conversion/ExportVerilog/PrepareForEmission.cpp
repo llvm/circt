@@ -26,6 +26,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/CommandLine.h"
 
 #define DEBUG_TYPE "prepare-for-emission"
 
@@ -979,9 +980,9 @@ void ExportVerilog::prepareHWModule(hw::HWModuleOp module,
 
 namespace {
 
-struct TestPrepareForEmissionPass
-    : public TestPrepareForEmissionBase<TestPrepareForEmissionPass> {
-  TestPrepareForEmissionPass() {}
+struct PrepareForEmissionPass
+    : public PrepareForEmissionBase<PrepareForEmissionPass> {
+  PrepareForEmissionPass() {}
   void runOnOperation() override {
     HWModuleOp module = getOperation();
     LoweringOptions options = getLoweringCLIOption(
@@ -991,21 +992,10 @@ struct TestPrepareForEmissionPass
   }
 };
 
-struct PrepareForEmissionPass
-    : public PrepareForEmissionBase<PrepareForEmissionPass> {
-  PrepareForEmissionPass(LoweringOptions options) : options(options) {}
-  void runOnOperation() override { prepareHWModule(getOperation(), options); }
-
-protected:
-  LoweringOptions options;
-};
 } // end anonymous namespace
 
-std::unique_ptr<mlir::Pass> circt::createTestPrepareForEmissionPass() {
-  return std::make_unique<TestPrepareForEmissionPass>();
-}
 
 std::unique_ptr<mlir::Pass>
-circt::createPrepareForEmissionPass(LoweringOptions options) {
-  return std::make_unique<PrepareForEmissionPass>(options);
+circt::createPrepareForEmissionPass() {
+  return std::make_unique<PrepareForEmissionPass>();
 }

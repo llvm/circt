@@ -5054,10 +5054,9 @@ struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
     applyLoweringCLOptions(getOperation());
 
     // Prepare the ops in the module for emission.
-    LoweringOptions options(getOperation());
     mlir::OpPassManager preparePM("builtin.module");
     auto &modulePM = preparePM.nest<hw::HWModuleOp>();
-    modulePM.addPass(createPrepareForEmissionPass(options));
+    modulePM.addPass(createPrepareForEmissionPass());
     if (failed(runPipeline(preparePM, getOperation())))
       signalPassFailure();
 
@@ -5216,10 +5215,9 @@ struct ExportSplitVerilogPass
     applyLoweringCLOptions(getOperation());
 
     // Prepare the ops in the module for emission.
-    LoweringOptions options(getOperation());
     mlir::OpPassManager preparePM("builtin.module");
     auto &modulePM = preparePM.nest<hw::HWModuleOp>();
-    modulePM.addPass(createPrepareForEmissionPass(options));
+    modulePM.addPass(createPrepareForEmissionPass());
     if (failed(runPipeline(preparePM, getOperation())))
       signalPassFailure();
 

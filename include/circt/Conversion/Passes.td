@@ -75,39 +75,19 @@ def ExportSplitChiselInterface : Pass<"export-split-chisel-interface", "firrtl::
 // ExportVerilog and ExportSplitVerilog
 //===----------------------------------------------------------------------===//
 
-def TestPrepareForEmission : Pass<"test-prepare-for-emission",
-                                  "hw::HWModuleOp"> {
-  let summary = "Prepare IR for ExportVerilog";
-  let description = [{
-    This pass runs only PrepareForEmission logic for testing purpose.
-    It is not necessary for users to run this pass explicitly since
-    ExportVerilog internally runs PrepareForEmission.
-  }];
-
-  let constructor = "createTestPrepareForEmissionPass()";
-  let dependentDialects = [
-    "circt::sv::SVDialect", "circt::comb::CombDialect", "circt::hw::HWDialect"
-  ];
-}
-
 def PrepareForEmission : Pass<"prepare-for-emission",
                               "hw::HWModuleOp"> {
   let summary = "Prepare IR for ExportVerilog";
   let description = [{
-    This pass runs only PrepareForEmission logic.
+    This pass runs only PrepareForEmission.
     It is not necessary for users to run this pass explicitly since
-    ExportVerilog internally schedules PrepareForEmission.
+    ExportVerilog internally runs PrepareForEmission.
   }];
 
   let constructor = "createPrepareForEmissionPass()";
   let dependentDialects = [
     "circt::sv::SVDialect", "circt::comb::CombDialect", "circt::hw::HWDialect"
   ];
-  let options = [
-    Option<"options", "opts", "LoweringOptions",
-            "", "Lowering options">
- ];
-
 }
 
 def ExportVerilog : Pass<"export-verilog", "mlir::ModuleOp"> {
