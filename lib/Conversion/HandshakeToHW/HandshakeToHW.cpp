@@ -787,6 +787,7 @@ static Value createZeroDataConst(RTLBuilder &s, Location loc, Type type) {
       .Default([&](Type) -> Value {
         emitError(loc) << "unsupported type for zero value: " << type;
         assert(false);
+        return {};
       });
 }
 
