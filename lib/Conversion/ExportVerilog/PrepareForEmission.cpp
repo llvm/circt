@@ -346,17 +346,21 @@ rewriteAddWithNegativeConstant(comb::AddOp add, hw::ConstantOp rhsCst,
 }
 
 // Transforms a hw.struct_explode operation into a set of hw.struct_extract
-// operations.
-static void lowerStructExplodeOp(hw::StructExplodeOp op) {
+// operations, and returns the first op generated.
+static Operation *lowerStructExplodeOp(hw::StructExplodeOp op) {
+  Operation *firstOp = nullptr;
   ImplicitLocOpBuilder builder(op.getLoc(), op);
   StructType structType = op.getInput().getType().cast<StructType>();
   for (auto [res, field] :
        llvm::zip(op.getResults(), structType.getElements())) {
     auto extract =
         builder.create<hw::StructExtractOp>(op.getInput(), field.name);
+    if (!firstOp)
+      firstOp = extract;
     res.replaceAllUsesWith(extract);
   }
   op.erase();
+  return firstOp;
 }
 
 /// Given an operation in a procedural region, scan up the region tree to find
@@ -891,7 +895,8 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
     // Lower hw.struct_explode ops into a set of hw.struct_extract ops which
     // have well-defined SV emission semantics.
     if (auto structExplodeOp = dyn_cast<hw::StructExplodeOp>(op)) {
-      lowerStructExplodeOp(structExplodeOp);
+      Operation *firstOp = lowerStructExplodeOp(structExplodeOp);
+      opIterator = Block::iterator(firstOp);
       continue;
     }
 
