@@ -101,7 +101,7 @@ static bool isSelfWrite(Value dst, Value src) {
       })
       .Case<hw::ArrayGetOp>([&](auto get) {
         auto toGet = dyn_cast<sv::ArrayIndexInOutOp>(dstOp);
-        if (!toGet)
+        if (!toGet || toGet.getIndex().getType() != get.getIndex().getType())
           return false;
         auto toIdx = getInt(toGet.getIndex());
         auto fromIdx = getInt(get.getIndex());
