@@ -558,3 +558,10 @@ hw.module @DeeplyNestedIfs(%a_0: i1, %a_1: i1, %a_2: i1, %c_0_0: i1, %c_0_1: i1,
   %51 = comb.mux bin %a_0, %50, %r_1 : i1
   hw.output %r_0, %r_1 : i1, i1
 }
+
+// CHECK-LABEL @keepSelfConnection
+hw.module @keepSelfConnection(%a: i1, %clock: i1) -> (b: i1) {
+  // CHECK: passign %r
+  %r = seq.firreg %r clock %clock {firrtl.random_init_start = 0 : ui64} : i1
+  hw.output %r : i1
+}
