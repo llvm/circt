@@ -310,9 +310,20 @@ FirRegLower::RegLowerInfo FirRegLower::lower(hw::HWModuleOp module,
       svReg.asyncResetValue = reg.getResetValue();
     }
   } else {
-    addToAlwaysBlock(
-        module.getBodyBlock(), sv::EventControl::AtPosEdge, reg.getClk(),
-        [&](OpBuilder &b) { createTree(b, svReg.reg, reg, reg.getNext()); });
+    addToAlwaysBlock(module.getBodyBlock(), sv::EventControl::AtPosEdge,
+                     reg.getClk(), [&](OpBuilder &b) {
+                       // `createTree` will elide self connections of registers.
+                       // However, xprop build reguires all registers to be
+                       // assigned at least once. Hence for a reset-less
+                       // register, if its next value is the same as the
+                       // register itself then we have to create an assignment.
+                       if (reg.getResult() == reg.getNext()) {
+                         b.create<sv::PAssignOp>(loc, svReg.reg,
+                                                 reg.getResult());
+                         return;
+                       }
+                       createTree(b, svReg.reg, reg, reg.getNext());
+                     });
   }
 
   reg.replaceAllUsesWith(regVal.getResult());
