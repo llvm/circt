@@ -27,10 +27,9 @@ using namespace circt;
 
 namespace {
 
-struct testApplyLoweringOptionPass
-    : public TestApplyLoweringOptionBase<testApplyLoweringOptionPass> {
-  testApplyLoweringOptionPass(StringRef _options) { options = _options.str(); }
-  testApplyLoweringOptionPass() = default;
+struct TestApplyLoweringOptionPass
+    : public TestApplyLoweringOptionBase<TestApplyLoweringOptionPass> {
+  TestApplyLoweringOptionPass() = default;
   void runOnOperation() override {
     if (!options.hasValue()) {
       markAllAnalysesPreserved();
@@ -42,14 +41,17 @@ struct testApplyLoweringOptionPass
     });
     opts.setAsAttribute(getOperation());
   }
+  void setOptions(const std::string &opts) { options = opts; }
 };
 } // namespace
 
 std::unique_ptr<mlir::Pass>
 circt::createTestApplyLoweringOptionPass(std::string options) {
-  return std::make_unique<testApplyLoweringOptionPass>(options);
+  auto pass = std::make_unique<TestApplyLoweringOptionPass>();
+  pass->setOptions(options);
+  return pass;
 }
 
 std::unique_ptr<mlir::Pass> circt::createTestApplyLoweringOptionPass() {
-  return std::make_unique<testApplyLoweringOptionPass>();
+  return std::make_unique<TestApplyLoweringOptionPass>();
 }

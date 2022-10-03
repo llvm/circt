@@ -15,6 +15,7 @@
 
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/CommandLine.h"
 
 namespace circt {
 

@@ -13,10 +13,9 @@
 
 #include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "llvm/Support/CommandLine.h"
-#include "llvm/Support/ManagedStatic.h"
 
 using namespace circt;
+using namespace mlir;
 
 //===----------------------------------------------------------------------===//
 // LoweringOptions

@@ -13,8 +13,9 @@
 #ifndef CIRCT_SUPPORT_LOWERINGOPTIONS_H
 #define CIRCT_SUPPORT_LOWERINGOPTIONS_H
 
-#include "circt/Support/LLVM.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Twine.h"
 
 namespace mlir {
 class ModuleOp;
@@ -25,14 +26,14 @@ namespace circt {
 /// Options which control the emission from CIRCT to Verilog.
 struct LoweringOptions {
   /// Error callback type used to indicate errors parsing the options string.
-  using ErrorHandlerT = function_ref<void(llvm::Twine)>;
+  using ErrorHandlerT = llvm::function_ref<void(llvm::Twine)>;
 
   /// Create a LoweringOptions with the default values.
   LoweringOptions() = default;
 
   /// Create a LoweringOptions and read in options from a string,
   /// overriding only the set options in the string.
-  LoweringOptions(StringRef options, ErrorHandlerT errorHandler);
+  LoweringOptions(llvm::StringRef options, ErrorHandlerT errorHandler);
 
   /// Create a LoweringOptions with values loaded from an MLIR ModuleOp. This
   /// loads a string attribute with the key `circt.loweringOptions`. If there is
@@ -42,11 +43,11 @@ struct LoweringOptions {
 
   /// Return the value of the `circt.loweringOptions` in the specified module
   /// if present, or a null attribute if not.
-  static StringAttr getAttributeFrom(ModuleOp module);
+  static mlir::StringAttr getAttributeFrom(mlir::ModuleOp module);
 
   /// Read in options from a string, overriding only the set options in the
   /// string.
-  void parse(StringRef options, ErrorHandlerT callback);
+  void parse(llvm::StringRef options, ErrorHandlerT callback);
 
   /// Returns a string representation of the options.
   std::string toString() const;
