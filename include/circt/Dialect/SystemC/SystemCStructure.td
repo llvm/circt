@@ -70,11 +70,11 @@ def SCModuleOp : SystemCOp<"module", [
       return getFunctionType().getResults();
     }
 
-    // Use FunctionOpInterface traits's getBody method.
-    using mlir::detail::FunctionOpInterfaceTrait<SCModuleOp>::getBody;
+    // Use FunctionOpInterface traits's getFunctionBody method.
+    using mlir::detail::FunctionOpInterfaceTrait<SCModuleOp>::getFunctionBody;
 
     /// Return the block corresponding to the region.
-    Block *getBodyBlock() { return &getBody().front(); }
+    Block *getBodyBlock() { return &getFunctionBody().front(); }
 
     /// Return the symbol name of this module as string.
     StringRef getModuleName();
