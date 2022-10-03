@@ -486,8 +486,9 @@ private:
     maybeMoveToTestCode(module, testBenchDir, bindFile, instanceGraph);
   }
 
-  void maybeMoveExtractedModule(hw::InstanceGraph &instanceGraph,
-                                Attribute testBenchDir) {
+  // Move any modules that had all instances extracted to the testbench path.
+  void maybeMoveExtractedModules(hw::InstanceGraph &instanceGraph,
+                                 Attribute testBenchDir) {
     // Ensure we have a valid test code path.
     if (!testBenchDir)
       return;
@@ -604,6 +605,11 @@ void SVExtractTestCodeImplPass::runOnOperation() {
                instanceGraph);
     }
   }
+
+  // After all instances are processed, move any modules that had all instances
+  // extracted to the testbench path.
+  maybeMoveExtractedModules(instanceGraph, testBenchDir);
+
   // We have to wait until all the instances are processed to clean up the
   // annotations.
   for (auto &op : topLevelModule->getOperations())
