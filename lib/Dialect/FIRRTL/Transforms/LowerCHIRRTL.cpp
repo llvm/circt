@@ -600,7 +600,7 @@ void LowerCHIRRTLPass::cloneSubindexOpForMemory(OpType op, Value input,
   }
 
   // If the subaccess operation is used to write to the memory, we need to clone
-  // it to write to the the wdata and the wmask fields.
+  // it to write to the wdata and the wmask fields.
   if (direction == MemDirAttr::Write || direction == MemDirAttr::ReadWrite) {
     auto writeData = wdataValues[input];
     auto write = builder.create<OpType>(writeData.data, operands...);
