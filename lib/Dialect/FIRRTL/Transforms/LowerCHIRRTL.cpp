@@ -107,9 +107,9 @@ struct LowerCHIRRTLPass : public LowerCHIRRTLPassBase<LowerCHIRRTLPass>,
 
   /// This maps a subfield-like operation from a MemoryPortOp to a new subfield
   /// operation which can be used to write to the memory, the mask value which
-  /// should be set to 1, and the the correspoding wmode port of the memory
-  /// which should be set to 1.  Not all memories have wmodes, so this field
-  /// can be null. This is used to update operations to write to the new memory.
+  /// should be set to 1, and the corresponding wmode port of the memory which
+  /// should be set to 1.  Not all memories have wmodes, so this field can
+  /// be null. This is used to update operations to write to the new memory.
   struct WDataInfo {
     Value data;
     Value mask;
