@@ -589,11 +589,11 @@ struct UnwrappedIO {
 // verbosity.
 // @todo: should be moved to support.
 struct RTLBuilder {
-  RTLBuilder(OpBuilder &builder, Location loc, Value clk = Value(),
-             Value rst = Value())
-      : b(builder), loc(loc), clk(clk), rst(rst) {}
+  RTLBuilder(hw::ModulePortInfo info, OpBuilder &builder, Location loc,
+             Value clk = Value(), Value rst = Value())
+      : info(std::move(info)), b(builder), loc(loc), clk(clk), rst(rst) {}
 
-  Value constant(const APInt &apv, Location *extLoc = nullptr) {
+  Value constant(const APInt &apv, std::optional<StringRef> name = {}) {
     // Cannot use zero-width APInt's in DenseMap's, see
     // https://github.com/llvm/llvm-project/issues/58013
     bool isZeroWidth = apv.getBitWidth() == 0;
@@ -603,30 +603,30 @@ struct RTLBuilder {
         return it->second;
     }
 
-    auto cval = b.create<hw::ConstantOp>(getLoc(extLoc), apv);
+    auto cval = b.create<hw::ConstantOp>(loc, apv);
     if (!isZeroWidth)
       constants[apv] = cval;
     return cval;
   }
 
-  Value constant(unsigned width, int64_t value, Location *extLoc = nullptr) {
-    return constant(APInt(width, value), extLoc);
+  Value constant(unsigned width, int64_t value,
+                 std::optional<StringRef> name = {}) {
+    return constant(APInt(width, value));
   }
   std::pair<Value, Value> wrap(Value data, Value valid,
-                               Location *extLoc = nullptr) {
-    auto wrapOp = b.create<esi::WrapValidReadyOp>(getLoc(extLoc), data, valid);
+                               std::optional<StringRef> name = {}) {
+    auto wrapOp = b.create<esi::WrapValidReadyOp>(loc, data, valid);
     return {wrapOp.getResult(0), wrapOp.getResult(1)};
   }
   std::pair<Value, Value> unwrap(Value channel, Value ready,
-                                 Location *extLoc = nullptr) {
-    auto unwrapOp =
-        b.create<esi::UnwrapValidReadyOp>(getLoc(extLoc), channel, ready);
+                                 std::optional<StringRef> name = {}) {
+    auto unwrapOp = b.create<esi::UnwrapValidReadyOp>(loc, channel, ready);
     return {unwrapOp.getResult(0), unwrapOp.getResult(1)};
   }
 
   // Various syntactic sugar functions.
   Value reg(StringRef name, Value in, Value rstValue, Value clk = Value(),
-            Value rst = Value(), Location *extLoc = nullptr) {
+            Value rst = Value()) {
     Value resolvedClk = clk ? clk : this->clk;
     Value resolvedRst = rst ? rst : this->rst;
     assert(resolvedClk &&
@@ -636,120 +636,145 @@ struct RTLBuilder {
            "No global reset provided to this RTLBuilder - a reset "
            "signal must be provided to the reg(...) function.");
 
-    return b.create<seq::CompRegOp>(getLoc(extLoc), in.getType(), in,
-                                    resolvedClk, name, resolvedRst, rstValue,
-                                    StringAttr());
+    return b.create<seq::CompRegOp>(loc, in.getType(), in, resolvedClk, name,
+                                    resolvedRst, rstValue, StringAttr());
   }
 
   Value cmp(Value lhs, Value rhs, comb::ICmpPredicate predicate,
-            Location *extLoc = nullptr) {
-    return b.create<comb::ICmpOp>(getLoc(extLoc), predicate, lhs, rhs);
+            std::optional<StringRef> name = {}) {
+    return b.create<comb::ICmpOp>(loc, predicate, lhs, rhs);
+  }
+
+  Value buildNamedOp(llvm::function_ref<Value()> f,
+                     std::optional<StringRef> name) {
+    Value v = f();
+    StringAttr nameAttr;
+    Operation *op = v.getDefiningOp();
+    if (name.has_value()) {
+      op->setAttr("sv.namehint", b.getStringAttr(*name));
+      nameAttr = b.getStringAttr(*name);
+    }
+    return v;
   }
 
   // Bitwise 'and'.
-  Value bAnd(ValueRange values, Location *extLoc = nullptr) {
-    return b.create<comb::AndOp>(getLoc(extLoc), values).getResult();
+  Value bAnd(ValueRange values, std::optional<StringRef> name = {}) {
+    return buildNamedOp([&]() { return b.create<comb::AndOp>(loc, values); },
+                        name);
   }
 
-  Value bOr(ValueRange values, Location *extLoc = nullptr) {
-    return b.create<comb::OrOp>(getLoc(extLoc), values).getResult();
+  Value bOr(ValueRange values, std::optional<StringRef> name = {}) {
+    return buildNamedOp([&]() { return b.create<comb::OrOp>(loc, values); },
+                        name);
   }
 
   // Bitwise 'not'.
-  Value bNot(Value value, Location *extLoc = nullptr) {
+  Value bNot(Value value, std::optional<StringRef> name = {}) {
     auto allOnes = constant(value.getType().getIntOrFloatBitWidth(), -1);
+    return buildNamedOp(
+        [&]() { return b.create<comb::XorOp>(loc, value, allOnes); }, name);
+
     return b.createOrFold<comb::XorOp>(loc, value, allOnes, false);
   }
 
-  Value shl(Value value, Value shift, Location *extLoc = nullptr) {
-    return b.create<comb::ShlOp>(getLoc(extLoc), value, shift).getResult();
+  Value shl(Value value, Value shift, std::optional<StringRef> name = {}) {
+    return buildNamedOp(
+        [&]() { return b.create<comb::ShlOp>(loc, value, shift); }, name);
   }
 
-  Value concat(ValueRange values, Location *extLoc = nullptr) {
-    return b.create<comb::ConcatOp>(getLoc(extLoc), values).getResult();
+  Value concat(ValueRange values, std::optional<StringRef> name = {}) {
+    return buildNamedOp([&]() { return b.create<comb::ConcatOp>(loc, values); },
+                        name);
   }
 
   // Packs a list of values into a hw.struct.
-  Value pack(ValueRange values, Location *extLoc = nullptr) {
+  Value pack(ValueRange values, std::optional<StringRef> name = {}) {
     Type structType = tupleToStruct(values.getTypes());
-    return b.create<hw::StructCreateOp>(getLoc(extLoc), structType, values);
+    return buildNamedOp(
+        [&]() { return b.create<hw::StructCreateOp>(loc, structType, values); },
+        name);
   }
 
   // Unpacks a hw.struct into a list of values.
-  ValueRange unpack(Value value, Location *extLoc = nullptr) {
+  ValueRange unpack(Value value) {
     auto structType = value.getType().cast<hw::StructType>();
     llvm::SmallVector<Type> innerTypes;
     structType.getInnerTypes(innerTypes);
-    return b.create<hw::StructExplodeOp>(getLoc(extLoc), innerTypes, value)
-        .getResults();
+    return b.create<hw::StructExplodeOp>(loc, innerTypes, value).getResults();
   }
 
-  llvm::SmallVector<Value> toBits(Value v, Location *extLoc = nullptr) {
+  llvm::SmallVector<Value> toBits(Value v, std::optional<StringRef> name = {}) {
     llvm::SmallVector<Value> bits;
     for (unsigned i = 0, e = v.getType().getIntOrFloatBitWidth(); i != e; ++i)
-      bits.push_back(
-          b.create<comb::ExtractOp>(getLoc(extLoc), v, i, /*bitWidth=*/1));
+      bits.push_back(b.create<comb::ExtractOp>(loc, v, i, /*bitWidth=*/1));
     return bits;
   }
 
   // OR-reduction of the bits in 'v'.
-  Value rOr(Value v, Location *extLoc = nullptr) {
-    return bOr(toBits(v, extLoc), extLoc);
+  Value rOr(Value v, std::optional<StringRef> name = {}) {
+    return buildNamedOp([&]() { return bOr(toBits(v)); }, name);
   }
 
   // Extract bits v[hi:lo] (inclusive).
-  Value extract(Value v, unsigned lo, unsigned hi, Location *extLoc = nullptr) {
+  Value extract(Value v, unsigned lo, unsigned hi,
+                std::optional<StringRef> name = {}) {
     unsigned width = hi - lo + 1;
-    return b.create<comb::ExtractOp>(getLoc(extLoc), v, lo, width).getResult();
+    return buildNamedOp(
+        [&]() { return b.create<comb::ExtractOp>(loc, v, lo, width); }, name);
   }
 
   // Truncates 'value' to its lower 'width' bits.
-  Value truncate(Value value, unsigned width, Location *extLoc = nullptr) {
-    return extract(value, 0, width - 1, extLoc);
+  Value truncate(Value value, unsigned width,
+                 std::optional<StringRef> name = {}) {
+    return extract(value, 0, width - 1, name);
   }
 
-  Value zext(Value value, unsigned outWidth, Location *extLoc = nullptr) {
+  Value zext(Value value, unsigned outWidth,
+             std::optional<StringRef> name = {}) {
     unsigned inWidth = value.getType().getIntOrFloatBitWidth();
     assert(inWidth <= outWidth && "zext: input width must be <- output width.");
     if (inWidth == outWidth)
       return value;
-    auto c0 = constant(outWidth - inWidth, 0, extLoc);
-    return concat({c0, value}, extLoc);
+    auto c0 = constant(outWidth - inWidth, 0);
+    return concat({c0, value}, name);
   }
 
-  Value sext(Value value, unsigned outWidth, Location *extLoc = nullptr) {
-    return comb::createOrFoldSExt(getLoc(extLoc), value,
-                                  b.getIntegerType(outWidth), b);
+  Value sext(Value value, unsigned outWidth,
+             std::optional<StringRef> name = {}) {
+    return comb::createOrFoldSExt(loc, value, b.getIntegerType(outWidth), b);
   }
 
   // Extracts a single bit v[bit].
-  Value bit(Value v, unsigned index, Location *extLoc = nullptr) {
-    return extract(v, index, index, extLoc);
+  Value bit(Value v, unsigned index, std::optional<StringRef> name = {}) {
+    return extract(v, index, index, name);
   }
 
   // Creates a hw.array of the given values.
-  Value arrayCreate(ValueRange values, Location *extLoc = nullptr) {
-    return b.create<hw::ArrayCreateOp>(getLoc(extLoc), values).getResult();
+  Value arrayCreate(ValueRange values, std::optional<StringRef> name = {}) {
+    return buildNamedOp(
+        [&]() { return b.create<hw::ArrayCreateOp>(loc, values); }, name);
   }
 
   // Extract the 'index'th value from the input array.
-  Value arrayGet(Value array, Value index, Location *extLoc = nullptr) {
-    return b.create<hw::ArrayGetOp>(getLoc(extLoc), array, index).getResult();
+  Value arrayGet(Value array, Value index, std::optional<StringRef> name = {}) {
+    return buildNamedOp(
+        [&]() { return b.create<hw::ArrayGetOp>(loc, array, index); }, name);
   }
 
   // Muxes a range of values.
   // The select signal is expected to be a decimal value which selects starting
   // from the lowest index of value.
-  Value mux(Value index, ValueRange values, Location *extLoc = nullptr) {
+  Value mux(Value index, ValueRange values,
+            std::optional<StringRef> name = {}) {
     if (values.size() == 2)
-      return b.create<comb::MuxOp>(getLoc(extLoc), index, values[1], values[0]);
+      return b.create<comb::MuxOp>(loc, index, values[1], values[0]);
 
-    return arrayGet(arrayCreate(values, extLoc), index, extLoc);
+    return arrayGet(arrayCreate(values), index, name);
   }
 
   // Muxes a range of values. The select signal is expected to be a 1-hot
   // encoded value.
-  Value ohMux(Value index, ValueRange inputs, Location *extLoc = nullptr) {
+  Value ohMux(Value index, ValueRange inputs) {
     // Confirm the select input can be a one-hot encoding for the inputs.
     unsigned numInputs = inputs.size();
     assert(numInputs == index.getType().getIntOrFloatBitWidth() &&
@@ -760,19 +785,19 @@ struct RTLBuilder {
     auto dataType = inputs[0].getType();
     unsigned width =
         dataType.isa<NoneType>() ? 0 : dataType.getIntOrFloatBitWidth();
-    Value muxValue = constant(width, 0, extLoc);
+    Value muxValue = constant(width, 0);
 
     // Iteratively chain together muxes from the high bit to the low bit.
     for (size_t i = numInputs - 1; i == 0; --i) {
       Value input = inputs[i];
-      Value selectBit = bit(index, i, extLoc);
-      muxValue = mux(selectBit, {muxValue, input}, extLoc);
+      Value selectBit = bit(index, i);
+      muxValue = mux(selectBit, {muxValue, input});
     }
 
     return muxValue;
   }
 
-  Location getLoc(Location *extLoc = nullptr) { return extLoc ? *extLoc : loc; }
+  hw::ModulePortInfo info;
   OpBuilder &b;
   Location loc;
   Value clk, rst;
@@ -846,7 +871,7 @@ public:
             }
 
             BackedgeBuilder bb(b, op.getLoc());
-            RTLBuilder s(b, op.getLoc(), clk, rst);
+            RTLBuilder s(ports.getModulePortInfo(), b, op.getLoc(), clk, rst);
             this->buildModule(op, bb, s, ports);
           });
     }
@@ -968,16 +993,17 @@ public:
     auto c0I1 = s.constant(1, 0);
     llvm::SmallVector<Value> doneWires;
     for (auto [i, output] : llvm::enumerate(outputs)) {
-      auto done = bb.get(s.b.getI1Type());
-      auto emitted = s.bAnd({done, s.bNot(*input.ready)});
+      auto doneBE = bb.get(s.b.getI1Type());
+      auto emitted = s.bAnd({doneBE, s.bNot(*input.ready)});
       auto emittedReg = s.reg("emitted_" + std::to_string(i), emitted, c0I1);
       auto outValid = s.bAnd({s.bNot(emittedReg), input.valid});
       output.valid->setValue(outValid);
-      auto validReady = s.bAnd({output.ready, input.valid});
-      done.setValue(s.bAnd({validReady, emittedReg}));
+      auto validReady = s.bAnd({output.ready, outValid});
+      auto done = s.bOr({validReady, emittedReg}, "done" + std::to_string(i));
+      doneBE.setValue(done);
       doneWires.push_back(done);
     }
-    input.ready->setValue(s.bAnd(doneWires));
+    input.ready->setValue(s.bAnd(doneWires, "allDone"));
   }
 
   // Builds a unit-rate actor around an inner operation. 'unitBuilder' is a
@@ -1575,7 +1601,7 @@ public:
         : dataType(dataType), preStage(preStage), s(s), bb(bb), index(index) {
 
       // Todo: Change when i0 support is added.
-      c0s = createZeroDataConst(s, s.getLoc(), dataType);
+      c0s = createZeroDataConst(s, s.loc, dataType);
       currentStage.ready = std::make_shared<Backedge>(bb.get(s.b.getI1Type()));
 
       auto hasInitValue = s.constant(1, initValue.has_value());

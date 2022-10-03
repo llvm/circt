@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-handshake-to-hw --split-input-file -split-input-file %s | FileCheck %s
+// RUN: circt-opt -lower-handshake-to-hw --split-input-file %s | FileCheck %s
 
 // CHECK-LABEL:   hw.module @handshake_buffer_3slots_seq_1ins_1outs_ctrl(
 // CHECK-SAME:          %[[VAL_0:.*]]: !esi.channel<i0>, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1) -> (out0: !esi.channel<i0>) {

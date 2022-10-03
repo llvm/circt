@@ -12,16 +12,16 @@
 // CHECK:           %[[VAL_17:.*]] = seq.compreg %[[VAL_15]], %[[VAL_1]], %[[VAL_2]], %[[VAL_12]]  : i1
 // CHECK:           %[[VAL_18:.*]] = comb.xor %[[VAL_17]], %[[VAL_13]] : i1
 // CHECK:           %[[VAL_8]] = comb.and %[[VAL_18]], %[[VAL_4]] : i1
-// CHECK:           %[[VAL_19:.*]] = comb.and %[[VAL_7]], %[[VAL_4]] : i1
-// CHECK:           %[[VAL_16]] = comb.and %[[VAL_19]], %[[VAL_17]] : i1
+// CHECK:           %[[VAL_19:.*]] = comb.and %[[VAL_7]], %[[VAL_8]] : i1
+// CHECK:           %[[VAL_16]] = comb.or %[[VAL_19]], %[[VAL_17]] {sv.namehint = "done0"} : i1
 // CHECK:           %[[VAL_20:.*]] = comb.xor %[[VAL_5]], %[[VAL_13]] : i1
 // CHECK:           %[[VAL_21:.*]] = comb.and %[[VAL_22:.*]], %[[VAL_20]] : i1
 // CHECK:           %[[VAL_23:.*]] = seq.compreg %[[VAL_21]], %[[VAL_1]], %[[VAL_2]], %[[VAL_12]]  : i1
 // CHECK:           %[[VAL_24:.*]] = comb.xor %[[VAL_23]], %[[VAL_13]] : i1
 // CHECK:           %[[VAL_11]] = comb.and %[[VAL_24]], %[[VAL_4]] : i1
-// CHECK:           %[[VAL_25:.*]] = comb.and %[[VAL_10]], %[[VAL_4]] : i1
-// CHECK:           %[[VAL_22]] = comb.and %[[VAL_25]], %[[VAL_23]] : i1
-// CHECK:           %[[VAL_5]] = comb.and %[[VAL_16]], %[[VAL_22]] : i1
+// CHECK:           %[[VAL_25:.*]] = comb.and %[[VAL_10]], %[[VAL_11]] : i1
+// CHECK:           %[[VAL_22]] = comb.or %[[VAL_25]], %[[VAL_23]] {sv.namehint = "done1"} : i1
+// CHECK:           %[[VAL_5]] = comb.and %[[VAL_16]], %[[VAL_22]] {sv.namehint = "allDone"} : i1
 // CHECK:           hw.output %[[VAL_6]], %[[VAL_9]] : !esi.channel<i0>, !esi.channel<i0>
 // CHECK:         }
 
@@ -44,16 +44,16 @@ handshake.func @test_fork(%arg0: none, %arg1: none, ...) -> (none, none, none) {
 // CHECK:           %[[VAL_17:.*]] = seq.compreg %[[VAL_15]], %[[VAL_1]], %[[VAL_2]], %[[VAL_12]]  : i1
 // CHECK:           %[[VAL_18:.*]] = comb.xor %[[VAL_17]], %[[VAL_13]] : i1
 // CHECK:           %[[VAL_8]] = comb.and %[[VAL_18]], %[[VAL_4]] : i1
-// CHECK:           %[[VAL_19:.*]] = comb.and %[[VAL_7]], %[[VAL_4]] : i1
-// CHECK:           %[[VAL_16]] = comb.and %[[VAL_19]], %[[VAL_17]] : i1
+// CHECK:           %[[VAL_19:.*]] = comb.and %[[VAL_7]], %[[VAL_8]] : i1
+// CHECK:           %[[VAL_16]] = comb.or %[[VAL_19]], %[[VAL_17]] {sv.namehint = "done0"} : i1
 // CHECK:           %[[VAL_20:.*]] = comb.xor %[[VAL_5]], %[[VAL_13]] : i1
 // CHECK:           %[[VAL_21:.*]] = comb.and %[[VAL_22:.*]], %[[VAL_20]] : i1
 // CHECK:           %[[VAL_23:.*]] = seq.compreg %[[VAL_21]], %[[VAL_1]], %[[VAL_2]], %[[VAL_12]]  : i1
 // CHECK:           %[[VAL_24:.*]] = comb.xor %[[VAL_23]], %[[VAL_13]] : i1
 // CHECK:           %[[VAL_11]] = comb.and %[[VAL_24]], %[[VAL_4]] : i1
-// CHECK:           %[[VAL_25:.*]] = comb.and %[[VAL_10]], %[[VAL_4]] : i1
-// CHECK:           %[[VAL_22]] = comb.and %[[VAL_25]], %[[VAL_23]] : i1
-// CHECK:           %[[VAL_5]] = comb.and %[[VAL_16]], %[[VAL_22]] : i1
+// CHECK:           %[[VAL_25:.*]] = comb.and %[[VAL_10]], %[[VAL_11]] : i1
+// CHECK:           %[[VAL_22]] = comb.or %[[VAL_25]], %[[VAL_23]] {sv.namehint = "done1"} : i1
+// CHECK:           %[[VAL_5]] = comb.and %[[VAL_16]], %[[VAL_22]] {sv.namehint = "allDone"} : i1
 // CHECK:           hw.output %[[VAL_6]], %[[VAL_9]] : !esi.channel<i64>, !esi.channel<i64>
 // CHECK:         }
 
