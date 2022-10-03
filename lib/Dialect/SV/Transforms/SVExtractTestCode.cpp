@@ -460,7 +460,6 @@ private:
 
     // Find the data-flow and structural ops to clone.  Result includes roots.
     auto opsToClone = computeCloneSet(roots);
-    numOpsExtracted += opsToClone.size();
 
     // Find the dataflow into the clone set
     SetVector<Value> inputs;
@@ -474,6 +473,7 @@ private:
     // Find instances that only feed the clone set, and add them if possible.
     SmallPtrSet<Operation *, 32> opsToErase;
     addInstancesToCloneSet(inputs, opsToClone, opsToErase, extractedInstances);
+    numOpsExtracted += opsToClone.size();
     numOpsErased += opsToErase.size();
 
     // Make a module to contain the clone set, with arguments being the cut
