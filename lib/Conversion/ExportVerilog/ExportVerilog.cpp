@@ -2735,9 +2735,6 @@ private:
   /// Track the legalized names.
   ModuleNameManager &names;
 
-  /// This is the index of the start of the current statement being emitted.
-  RearrangableOStream::Cursor statementBeginning;
-
   /// This keeps track of the number of statements emitted, important for
   /// determining if we need to put out a begin/end marker in a block
   /// declaration.
@@ -2778,10 +2775,6 @@ void StmtEmitter::emitSVAttributes(Operation *op) {
 }
 
 void StmtEmitter::emitStatementExpression(Operation *op) {
-  // Know where the start of this statement is in case any out-of-band precursor
-  // statements need to be emitted.
-  statementBeginning = rearrangableStream.getCursor();
-
   // This is invoked for expressions that have a non-single use.  This could
   // either be because they are dead or because they have multiple uses.
   // todo: use_empty could be prurned prior to emission.
@@ -3876,10 +3869,6 @@ void StmtEmitter::emitStatement(Operation *op) {
 
   ++numStatementsEmitted;
 
-  // Know where the start of this statement is in case any out-of-band precursor
-  // statements need to be emitted.
-  statementBeginning = rearrangableStream.getCursor();
-
   // Handle HW statements.
   if (succeeded(dispatchStmtVisitor(op)))
     return;
@@ -4174,8 +4163,6 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
 
   // Okay, now that we have measured the things to emit, emit the things.
   for (const auto &record : valuesToEmit) {
-    statementBeginning = rearrangableStream.getCursor();
-
     // We have two different sorts of things that we proactively emit:
     // declarations (wires, regs, localpamarams, etc) and expressions that
     // cannot be emitted inline (e.g. because of limitations around subscripts).
