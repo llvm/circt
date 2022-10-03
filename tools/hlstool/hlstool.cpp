@@ -336,6 +336,9 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
   } else {
     // HW path.
     addIRLevel(HLSFlowDynamicIRLevel::Firrtl, [&]() {
+      pm.nest<handshake::FuncOp>().addPass(
+          circt::handshake::createHandshakeLowerExtmemToHWPass());
+      pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
       pm.addPass(circt::createHandshakeToHWPass());
       pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
     });

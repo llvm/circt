@@ -1780,31 +1780,32 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
                   SyncConversionPattern>(typeConverter, op.getContext(),
                                          moduleBuilder, ls);
 
-  patterns.insert<ExtModuleConversionPattern<handshake::ExternalMemoryOp>,
-                  ConditionalBranchConversionPattern, MuxConversionPattern,
-                  SelectConversionPattern,
-                  UnitRateConversionPattern<arith::AddIOp, comb::AddOp>,
-                  UnitRateConversionPattern<arith::SubIOp, comb::SubOp>,
-                  UnitRateConversionPattern<arith::MulIOp, comb::MulOp>,
-                  UnitRateConversionPattern<arith::DivUIOp, comb::DivSOp>,
-                  UnitRateConversionPattern<arith::DivSIOp, comb::DivUOp>,
-                  UnitRateConversionPattern<arith::RemUIOp, comb::ModUOp>,
-                  UnitRateConversionPattern<arith::RemSIOp, comb::ModSOp>,
-                  UnitRateConversionPattern<arith::AndIOp, comb::AndOp>,
-                  UnitRateConversionPattern<arith::OrIOp, comb::OrOp>,
-                  UnitRateConversionPattern<arith::XOrIOp, comb::XorOp>,
-                  UnitRateConversionPattern<arith::ShLIOp, comb::OrOp>,
-                  UnitRateConversionPattern<arith::ShRUIOp, comb::ShrUOp>,
-                  UnitRateConversionPattern<arith::ShRSIOp, comb::ShrSOp>,
-                  PackConversionPattern, UnpackConversionPattern,
-                  ComparisonConversionPattern, BufferConversionPattern,
-                  SourceConversionPattern, SinkConversionPattern,
-                  ConstantConversionPattern, MergeConversionPattern,
-                  ControlMergeConversionPattern, LoadConversionPattern,
-                  StoreConversionPattern,
-                  ExtendConversionPattern<arith::ExtUIOp, /*signExtend=*/false>,
-                  ExtendConversionPattern<arith::ExtSIOp, /*signExtend=*/true>,
-                  TruncateConversionPattern, IndexCastConversionPattern>(
+  patterns.insert<
+      // Comb operations.
+      UnitRateConversionPattern<arith::AddIOp, comb::AddOp>,
+      UnitRateConversionPattern<arith::SubIOp, comb::SubOp>,
+      UnitRateConversionPattern<arith::MulIOp, comb::MulOp>,
+      UnitRateConversionPattern<arith::DivUIOp, comb::DivSOp>,
+      UnitRateConversionPattern<arith::DivSIOp, comb::DivUOp>,
+      UnitRateConversionPattern<arith::RemUIOp, comb::ModUOp>,
+      UnitRateConversionPattern<arith::RemSIOp, comb::ModSOp>,
+      UnitRateConversionPattern<arith::AndIOp, comb::AndOp>,
+      UnitRateConversionPattern<arith::OrIOp, comb::OrOp>,
+      UnitRateConversionPattern<arith::XOrIOp, comb::XorOp>,
+      UnitRateConversionPattern<arith::ShLIOp, comb::OrOp>,
+      UnitRateConversionPattern<arith::ShRUIOp, comb::ShrUOp>,
+      UnitRateConversionPattern<arith::ShRSIOp, comb::ShrSOp>,
+      // Handshake operations.
+      ConditionalBranchConversionPattern, MuxConversionPattern,
+      SelectConversionPattern, PackConversionPattern, UnpackConversionPattern,
+      ComparisonConversionPattern, BufferConversionPattern,
+      SourceConversionPattern, SinkConversionPattern, ConstantConversionPattern,
+      MergeConversionPattern, ControlMergeConversionPattern,
+      LoadConversionPattern, StoreConversionPattern,
+      // Arith operations.
+      ExtendConversionPattern<arith::ExtUIOp, /*signExtend=*/false>,
+      ExtendConversionPattern<arith::ExtSIOp, /*signExtend=*/true>,
+      TruncateConversionPattern, IndexCastConversionPattern>(
       typeConverter, op.getContext(), moduleBuilder, ls);
 
   if (failed(applyPartialConversion(op, target, std::move(patterns))))
