@@ -1076,131 +1076,9 @@ public:
       size_t oneHotIndex = size_t{1} << inputIndex;
       auto constIndex = s.constant(numInputs, oneHotIndex);
       indexMapping[inputIndex] = constIndex;
-      priorityArb = s.mux(inputs[inputIndex], {constIndex, priorityArb});
+      priorityArb = s.mux(inputs[inputIndex], {priorityArb, constIndex});
     }
     return priorityArb;
-  }
-
-  // Builds merge-logic. If 'resIndex' is provided, resIndex is assigned the
-  // index of the input which was selected.
-  void buildMergeLogic(RTLBuilder &s, BackedgeBuilder &bb,
-                       UnwrappedIO &unwrappedIO, OutputHandshake &resData,
-                       OutputHandshake *resIndex = nullptr) const {
-    // Define some common types and values that will be used.
-    unsigned numInputs = unwrappedIO.inputs.size();
-    auto indexType = s.b.getIntegerType(numInputs);
-    Value noWinner = s.constant(numInputs, 0);
-    Value c0I1 = s.constant(1, 0);
-
-    // Declare register for storing arbitration winner.
-    auto won = bb.get(indexType);
-    Value wonReg = s.reg("won_reg", won, noWinner);
-
-    // Declare wire for arbitration winner.
-    auto win = bb.get(indexType);
-
-    // Declare wire for whether the circuit just fired and emitted both
-    // outputs.
-    auto fired = bb.get(s.b.getI1Type());
-
-    // Declare registers for storing if each output has been emitted.
-    auto resultEmitted = bb.get(s.b.getI1Type());
-    Value resultEmittedReg = s.reg("result_emitted_reg", resultEmitted, c0I1);
-    std::unique_ptr<Backedge> indexEmitted;
-    Value indexEmittedReg;
-    if (resIndex) {
-      indexEmitted = std::make_unique<Backedge>(bb.get(s.b.getI1Type()));
-      indexEmittedReg = s.reg("index_emitted_reg", *indexEmitted, c0I1);
-    }
-
-    // Declare wires for if each output is done.
-    auto resultDone = bb.get(s.b.getI1Type());
-    std::unique_ptr<Backedge> indexDone;
-    if (resIndex)
-      indexDone = std::make_unique<Backedge>(bb.get(s.b.getI1Type()));
-
-    // Create predicates to assert if the win wire or won register hold a
-    // valid index.
-    auto hasWinnerCondition = s.rOr({win});
-    auto hadWinnerCondition = s.rOr({wonReg});
-
-    // Create an arbiter based on a simple priority-encoding scheme to assign
-    // an index to the win wire. If the won register is set, just use that. In
-    // the case that won is not set and no input is valid, set a sentinel
-    // value to indicate no winner was chosen. The constant values are
-    // remembered in a map so they can be re-used later to assign the arg
-    // ready outputs.
-    DenseMap<size_t, Value> argIndexValues;
-    Value priorityArb = buildPriorityArbiter(s, unwrappedIO.getInputValids(),
-                                             noWinner, argIndexValues);
-    priorityArb = s.mux(hadWinnerCondition, {priorityArb, wonReg});
-    win.setValue(priorityArb);
-
-    // Create the logic to assign the result and index outputs. The result
-    // valid output will always be assigned, and if isControl is not set, the
-    // result data output will also be assigned. The index valid and data
-    // outputs will always be assigned. The win wire from the arbiter is used
-    // to index into a tree of muxes to select the chosen input's signal(s),
-    // and is fed directly to the index output. Both the result and index
-    // valid outputs are gated on the win wire being set to something other
-    // than the sentinel value.
-    auto resultNotEmitted = s.bNot(resultEmittedReg);
-    auto resultValid = s.bAnd({hasWinnerCondition, resultNotEmitted});
-    resData.valid->setValue(resultValid);
-    resData.data->setValue(s.ohMux(win, unwrappedIO.getInputDatas()));
-
-    auto indexNotEmitted = s.bNot(indexEmittedReg);
-    auto indexValid = s.bAnd({hasWinnerCondition, indexNotEmitted});
-    if (resIndex) {
-      resIndex->valid->setValue(indexValid);
-
-      // Use the one-hot win wire to select the index to output in the index
-      // data.
-      SmallVector<Value, 8> indexOutputs;
-      for (size_t i = 0; i < numInputs; ++i)
-        indexOutputs.push_back(s.constant(64, i));
-
-      auto indexOutput = s.ohMux(win, indexOutputs);
-      resIndex->data->setValue(indexOutput);
-    }
-
-    // Create the logic to set the won register. If the fired wire is
-    // asserted, we have finished this round and can and reset the register to
-    // the sentinel value that indicates there is no winner. Otherwise, we
-    // need to hold the value of the win register until we can fire.
-    won.setValue(s.mux(fired, {win, noWinner}));
-
-    // Create the logic to set the done wires for the result and index. For
-    // both outputs, the done wire is asserted when the output is valid and
-    // ready, or the emitted register for that output is set.
-    auto resultValidAndReady = s.bAnd({resultValid, resData.ready});
-    resultDone.setValue(s.bOr({resultValidAndReady, resultEmittedReg}));
-
-    if (resIndex) {
-      auto indexValidAndReady = s.bAnd({indexValid, resIndex->ready});
-      indexDone->setValue(s.bOr({indexValidAndReady, indexEmittedReg}));
-
-      // Create the logic to set the fired wire. It is asserted when both result
-      // and index are done.
-      fired.setValue(s.bAnd({resultDone, *indexDone}));
-    }
-
-    // Create the logic to assign the emitted registers. If the fired wire is
-    // asserted, we have finished this round and can reset the registers to 0.
-    // Otherwise, we need to hold the values of the done registers until we
-    // can fire.
-    resultEmitted.setValue(s.mux(fired, {resultDone, c0I1}));
-    if (resIndex)
-      indexEmitted->setValue(s.mux(fired, {*indexDone, c0I1}));
-
-    // Create the logic to assign the arg ready outputs. The logic is
-    // identical for each arg. If the fired wire is asserted, and the win wire
-    // holds an arg's index, that arg is ready.
-    auto winnerOrDefault = s.mux(fired, {noWinner, win});
-    for (auto [i, ir] : llvm::enumerate(unwrappedIO.getInputReadys())) {
-      auto &indexValue = argIndexValues[i];
-      ir->setValue(s.cmp(winnerOrDefault, indexValue, comb::ICmpPredicate::eq));
-    }
   }
 
 private:
@@ -1455,7 +1333,111 @@ public:
     auto unwrappedIO = this->unwrapIO(s, bb, ports);
     auto resData = unwrappedIO.outputs[0];
     auto resIndex = unwrappedIO.outputs[1];
-    buildMergeLogic(s, bb, unwrappedIO, resData, &resIndex);
+
+    // Define some common types and values that will be used.
+    unsigned numInputs = unwrappedIO.inputs.size();
+    auto indexType = s.b.getIntegerType(numInputs);
+    Value noWinner = s.constant(numInputs, 0);
+    Value c0I1 = s.constant(1, 0);
+
+    // Declare register for storing arbitration winner.
+    auto won = bb.get(indexType);
+    Value wonReg = s.reg("won_reg", won, noWinner);
+
+    // Declare wire for arbitration winner.
+    auto win = bb.get(indexType);
+
+    // Declare wire for whether the circuit just fired and emitted both
+    // outputs.
+    auto fired = bb.get(s.b.getI1Type());
+
+    // Declare registers for storing if each output has been emitted.
+    auto resultEmitted = bb.get(s.b.getI1Type());
+    Value resultEmittedReg = s.reg("result_emitted_reg", resultEmitted, c0I1);
+    auto indexEmitted = bb.get(s.b.getI1Type());
+    Value indexEmittedReg = s.reg("index_emitted_reg", indexEmitted, c0I1);
+
+    // Declare wires for if each output is done.
+    auto resultDone = bb.get(s.b.getI1Type());
+    auto indexDone = bb.get(s.b.getI1Type());
+
+    // Create predicates to assert if the win wire or won register hold a
+    // valid index.
+    auto hasWinnerCondition = s.rOr({win});
+    auto hadWinnerCondition = s.rOr({wonReg});
+
+    // Create an arbiter based on a simple priority-encoding scheme to assign
+    // an index to the win wire. If the won register is set, just use that. In
+    // the case that won is not set and no input is valid, set a sentinel
+    // value to indicate no winner was chosen. The constant values are
+    // remembered in a map so they can be re-used later to assign the arg
+    // ready outputs.
+    DenseMap<size_t, Value> argIndexValues;
+    Value priorityArb = buildPriorityArbiter(s, unwrappedIO.getInputValids(),
+                                             noWinner, argIndexValues);
+    priorityArb = s.mux(hadWinnerCondition, {priorityArb, wonReg});
+    win.setValue(priorityArb);
+
+    // Create the logic to assign the result and index outputs. The result
+    // valid output will always be assigned, and if isControl is not set, the
+    // result data output will also be assigned. The index valid and data
+    // outputs will always be assigned. The win wire from the arbiter is used
+    // to index into a tree of muxes to select the chosen input's signal(s),
+    // and is fed directly to the index output. Both the result and index
+    // valid outputs are gated on the win wire being set to something other
+    // than the sentinel value.
+    auto resultNotEmitted = s.bNot(resultEmittedReg);
+    auto resultValid = s.bAnd({hasWinnerCondition, resultNotEmitted});
+    resData.valid->setValue(resultValid);
+    resData.data->setValue(s.ohMux(win, unwrappedIO.getInputDatas()));
+
+    auto indexNotEmitted = s.bNot(indexEmittedReg);
+    auto indexValid = s.bAnd({hasWinnerCondition, indexNotEmitted});
+    resIndex.valid->setValue(indexValid);
+
+    // Use the one-hot win wire to select the index to output in the index
+    // data.
+    SmallVector<Value, 8> indexOutputs;
+    for (size_t i = 0; i < numInputs; ++i)
+      indexOutputs.push_back(s.constant(64, i));
+
+    auto indexOutput = s.ohMux(win, indexOutputs);
+    resIndex.data->setValue(indexOutput);
+
+    // Create the logic to set the won register. If the fired wire is
+    // asserted, we have finished this round and can and reset the register to
+    // the sentinel value that indicates there is no winner. Otherwise, we
+    // need to hold the value of the win register until we can fire.
+    won.setValue(s.mux(fired, {win, noWinner}));
+
+    // Create the logic to set the done wires for the result and index. For
+    // both outputs, the done wire is asserted when the output is valid and
+    // ready, or the emitted register for that output is set.
+    auto resultValidAndReady = s.bAnd({resultValid, resData.ready});
+    resultDone.setValue(s.bOr({resultValidAndReady, resultEmittedReg}));
+
+    auto indexValidAndReady = s.bAnd({indexValid, resIndex.ready});
+    indexDone.setValue(s.bOr({indexValidAndReady, indexEmittedReg}));
+
+    // Create the logic to set the fired wire. It is asserted when both result
+    // and index are done.
+    fired.setValue(s.bAnd({resultDone, indexDone}));
+
+    // Create the logic to assign the emitted registers. If the fired wire is
+    // asserted, we have finished this round and can reset the registers to 0.
+    // Otherwise, we need to hold the values of the done registers until we
+    // can fire.
+    resultEmitted.setValue(s.mux(fired, {resultDone, c0I1}));
+    indexEmitted.setValue(s.mux(fired, {indexDone, c0I1}));
+
+    // Create the logic to assign the arg ready outputs. The logic is
+    // identical for each arg. If the fired wire is asserted, and the win wire
+    // holds an arg's index, that arg is ready.
+    auto winnerOrDefault = s.mux(fired, {noWinner, win});
+    for (auto [i, ir] : llvm::enumerate(unwrappedIO.getInputReadys())) {
+      auto &indexValue = argIndexValues[i];
+      ir->setValue(s.cmp(winnerOrDefault, indexValue, comb::ICmpPredicate::eq));
+    }
   };
 };
 
@@ -1466,7 +1448,49 @@ public:
                    hw::HWModulePortAccessor &ports) const override {
     auto unwrappedIO = this->unwrapIO(s, bb, ports);
     auto resData = unwrappedIO.outputs[0];
-    buildMergeLogic(s, bb, unwrappedIO, resData);
+
+    // Define some common types and values that will be used.
+    unsigned numInputs = unwrappedIO.inputs.size();
+    auto indexType = s.b.getIntegerType(numInputs);
+    Value noWinner = s.constant(numInputs, 0);
+
+    // Declare wire for arbitration winner.
+    auto win = bb.get(indexType);
+
+    // Create predicates to assert if the win wire holds a valid index.
+    auto hasWinnerCondition = s.rOr(win);
+
+    // Create an arbiter based on a simple priority-encoding scheme to assign an
+    // index to the win wire. In the case that no input is valid, set a sentinel
+    // value to indicate no winner was chosen. The constant values are
+    // remembered in a map so they can be re-used later to assign the arg ready
+    // outputs.
+    DenseMap<size_t, Value> argIndexValues;
+    Value priorityArb = buildPriorityArbiter(s, unwrappedIO.getInputValids(),
+                                             noWinner, argIndexValues);
+    win.setValue(priorityArb);
+
+    // Create the logic to assign the result outputs. The result valid and data
+    // outputs will always be assigned. The win wire from the arbiter is used to
+    // index into a tree of muxes to select the chosen input's signal(s). The
+    // result outputs are gated on the win wire being non-zero.
+
+    resData.valid->setValue(hasWinnerCondition);
+    resData.data->setValue(s.ohMux(win, unwrappedIO.getInputDatas()));
+
+    // Create the logic to set the done wires for the result. The done wire is
+    // asserted when the output is valid and ready, or the emitted register is
+    // set.
+    auto resultValidAndReady = s.bAnd({hasWinnerCondition, resData.ready});
+
+    // Create the logic to assign the arg ready outputs. The logic is
+    // identical for each arg. If the fired wire is asserted, and the win wire
+    // holds an arg's index, that arg is ready.
+    auto winnerOrDefault = s.mux(resultValidAndReady, {noWinner, win});
+    for (auto [i, ir] : llvm::enumerate(unwrappedIO.getInputReadys())) {
+      auto &indexValue = argIndexValues[i];
+      ir->setValue(s.cmp(winnerOrDefault, indexValue, comb::ICmpPredicate::eq));
+    }
   };
 };
 
@@ -1584,6 +1608,7 @@ public:
     // For now, always build seq buffers.
     if (op.getInitValues())
       initValues = op.getInitValueArray();
+
     lastStage =
         buildSeqBufferLogic(s, bb, toValidType(op.getDataType()),
                             op.getNumSlots(), input, output, initValues);
@@ -1609,24 +1634,31 @@ public:
       auto validReg = s.reg(getRegName("valid"), validBE, hasInitValue);
       auto readyBE = bb.get(s.b.getI1Type());
 
+      Value initValueCs = c0s;
+      if (initValue.has_value())
+        initValueCs = s.constant(dataType.getIntOrFloatBitWidth(), *initValue);
+
       // This could/should be revised but needs a larger rethinking to avoid
       // introducing new bugs. Implement similarly to HandshakeToFIRRTL.
-      buildDataBufferLogic(validReg, initValue, validBE, readyBE);
-      buildControlBufferLogic(validReg, readyBE);
+      Value dataReg =
+          buildDataBufferLogic(validReg, initValueCs, validBE, readyBE);
+      buildControlBufferLogic(validReg, readyBE, dataReg);
     }
 
     StringAttr getRegName(StringRef name) {
       return s.b.getStringAttr(name + std::to_string(index) + "_reg");
     }
 
-    void buildControlBufferLogic(Value validReg, Backedge &readyBE) {
+    void buildControlBufferLogic(Value validReg, Backedge &readyBE,
+                                 Value dataReg) {
       auto c0I1 = s.constant(1, 0);
       auto readyRegWire = bb.get(s.b.getI1Type());
       auto readyReg = s.reg(getRegName("ready"), readyRegWire, c0I1);
 
       // Create the logic to drive the current stage valid and potentially
       // data.
-      currentStage.valid = s.mux(readyReg, {validReg, readyReg});
+      currentStage.valid = s.mux(readyReg, {validReg, readyReg},
+                                 "controlValid" + std::to_string(index));
 
       // Create the logic to drive the current stage ready.
       auto notReadyReg = s.bNot(readyReg);
@@ -1644,16 +1676,16 @@ public:
       // Add same logic for the data path if necessary.
       auto ctrlDataRegBE = bb.get(dataType);
       auto ctrlDataReg = s.reg(getRegName("ctrl_data"), ctrlDataRegBE, c0s);
-      auto dataResult = s.mux(readyReg, {preStage.data, ctrlDataReg});
+      auto dataResult = s.mux(readyReg, {dataReg, ctrlDataReg});
       currentStage.data = dataResult;
 
-      auto dataNotReadyMux = s.mux(neitherReady, {ctrlDataReg, preStage.data});
+      auto dataNotReadyMux = s.mux(neitherReady, {ctrlDataReg, dataReg});
       auto dataResetSignal = s.mux(bothReady, {dataNotReadyMux, c0s});
       ctrlDataRegBE.setValue(dataResetSignal);
     }
 
-    void buildDataBufferLogic(Value validReg, std::optional<int64_t> initValue,
-                              Backedge &validBE, Backedge &readyBE) {
+    Value buildDataBufferLogic(Value validReg, Value initValue,
+                               Backedge &validBE, Backedge &readyBE) {
       // Create a signal for when the valid register is empty or the successor
       // is ready to accept new token.
       auto notValidReg = s.bNot(validReg);
@@ -1673,8 +1705,9 @@ public:
       auto dataRegBE = bb.get(dataType);
       auto dataReg =
           s.reg(getRegName("data"),
-                s.mux(emptyOrReady, {dataRegBE, preStage.data}), c0s);
+                s.mux(emptyOrReady, {dataRegBE, preStage.data}), initValue);
       dataRegBE.setValue(dataReg);
+      return dataReg;
     }
 
     InputHandshake getOutput() { return currentStage; }

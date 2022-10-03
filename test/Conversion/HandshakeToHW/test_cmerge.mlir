@@ -20,9 +20,9 @@
 // CHECK:           %[[VAL_31:.*]] = comb.extract %[[VAL_20]] from 1 : (i2) -> i1
 // CHECK:           %[[VAL_32:.*]] = comb.or %[[VAL_30]], %[[VAL_31]] : i1
 // CHECK:           %[[VAL_33:.*]] = hw.constant -2 : i2
-// CHECK:           %[[VAL_34:.*]] = comb.mux %[[VAL_8]], %[[VAL_18]], %[[VAL_33]] : i2
+// CHECK:           %[[VAL_34:.*]] = comb.mux %[[VAL_8]], %[[VAL_33]], %[[VAL_18]] : i2
 // CHECK:           %[[VAL_35:.*]] = hw.constant 1 : i2
-// CHECK:           %[[VAL_36:.*]] = comb.mux %[[VAL_5]], %[[VAL_34]], %[[VAL_35]] : i2
+// CHECK:           %[[VAL_36:.*]] = comb.mux %[[VAL_5]], %[[VAL_35]], %[[VAL_34]] : i2
 // CHECK:           %[[VAL_27]] = comb.mux %[[VAL_32]], %[[VAL_20]], %[[VAL_36]] : i2
 // CHECK:           %[[VAL_37:.*]] = hw.constant true
 // CHECK:           %[[VAL_38:.*]] = comb.xor %[[VAL_22]], %[[VAL_37]] : i1
@@ -76,11 +76,11 @@ handshake.func @test_cmerge(%arg0: none, %arg1: none, %arg2: none, ...) -> (none
 // CHECK:           %[[VAL_36:.*]] = comb.extract %[[VAL_23]] from 2 : (i3) -> i1
 // CHECK:           %[[VAL_37:.*]] = comb.or %[[VAL_34]], %[[VAL_35]], %[[VAL_36]] : i1
 // CHECK:           %[[VAL_38:.*]] = hw.constant -4 : i3
-// CHECK:           %[[VAL_39:.*]] = comb.mux %[[VAL_12]], %[[VAL_21]], %[[VAL_38]] : i3
+// CHECK:           %[[VAL_39:.*]] = comb.mux %[[VAL_12]], %[[VAL_38]], %[[VAL_21]] : i3
 // CHECK:           %[[VAL_40:.*]] = hw.constant 2 : i3
-// CHECK:           %[[VAL_41:.*]] = comb.mux %[[VAL_9]], %[[VAL_39]], %[[VAL_40]] : i3
+// CHECK:           %[[VAL_41:.*]] = comb.mux %[[VAL_9]], %[[VAL_40]], %[[VAL_39]] : i3
 // CHECK:           %[[VAL_42:.*]] = hw.constant 1 : i3
-// CHECK:           %[[VAL_43:.*]] = comb.mux %[[VAL_6]], %[[VAL_41]], %[[VAL_42]] : i3
+// CHECK:           %[[VAL_43:.*]] = comb.mux %[[VAL_6]], %[[VAL_42]], %[[VAL_41]] : i3
 // CHECK:           %[[VAL_30]] = comb.mux %[[VAL_37]], %[[VAL_23]], %[[VAL_43]] : i3
 // CHECK:           %[[VAL_44:.*]] = hw.constant true
 // CHECK:           %[[VAL_45:.*]] = comb.xor %[[VAL_25]], %[[VAL_44]] : i1
