@@ -30,18 +30,6 @@ handshake.func @foo(%ctrl : none) -> none{
 }
 
 handshake.func @invalid_instance_op(%arg0 : i32, %ctrl : none) -> none {
-  // expected-error @+1 {{'handshake.instance' op last operand must be a control (none-typed) operand.}}
-  instance @foo(%ctrl, %arg0) : (none, i32) -> ()
-  return %ctrl : none
-}
-
-// -----
-
-handshake.func @foo(%ctrl : none) -> none{
-  return %ctrl : none
-}
-
-handshake.func @invalid_instance_op(%arg0 : i32, %ctrl : none) -> none {
   // expected-error @+1 {{'handshake.instance' op incorrect number of operands for the referenced handshake function}}
   instance @foo(%arg0, %ctrl) : (i32, none) -> ()
   return %ctrl : none
@@ -82,18 +70,6 @@ handshake.func @foo(%ctrl : none) -> (i32, none) {
 handshake.func @invalid_instance_op(%arg0 : i32, %ctrl : none) -> none {
   // expected-error @+1 {{'handshake.instance' op result type mismatch: expected result type 'i32', but provided 'i64' for result number 0}}
   %0, %outCtrl = instance @foo(%ctrl) : (none) -> (i64, none)
-  return %ctrl : none
-}
-
-// -----
-
-handshake.func @foo(%ctrl : none) -> none{
-  return %ctrl : none
-}
-
-handshake.func @invalid_instance_op(%ctrl : none) -> none {
-  // expected-error @+1 {{'handshake.instance' op must provide at least a control operand.}}
-  instance @foo() : () -> ()
   return %ctrl : none
 }
 
