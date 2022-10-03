@@ -92,16 +92,19 @@ static void getBackwardSliceSimple(Operation *rootOp,
 static bool getForwardSliceSimple(Operation *rootOp,
                                   SetVector<Operation *> &opsToClone,
                                   SetVector<Operation *> &forwardSlice) {
+  SmallPtrSet<Operation *, 32> visited;
   SmallVector<Operation *> worklist;
   worklist.push_back(rootOp);
 
   while (!worklist.empty()) {
     Operation *op = worklist.pop_back_val();
     forwardSlice.insert(op);
+    visited.insert(op);
     for (auto *user : op->getUsers()) {
       if (!opsToClone.contains(user))
         return false;
-      worklist.push_back(user);
+      if (!visited.contains(user))
+        worklist.push_back(user);
     }
   }
 
