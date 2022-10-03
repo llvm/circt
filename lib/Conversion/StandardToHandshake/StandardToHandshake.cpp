@@ -520,11 +520,11 @@ static ConditionalBranchOp getControlCondBranch(Block *block) {
 static void reconnectMergeOps(Region &f,
                               HandshakeLowering::BlockOps blockMerges,
                               HandshakeLowering::blockArgPairs &mergePairs) {
-  // All merge operands are initially set to original (defining) value
+  // All merge operands are initially set to original (defining) value.
   // We here replace defining value with appropriate value from predecessor
-  // block The predecessor can either be a merge, the original defining value,
-  // or a branch Operand Operand(0) is helper defining value for identifying
-  // matching merges, it does not correspond to any predecessor block
+  // block. The predecessor can either be a merge, the original defining value,
+  // or a branch Operand. Operand(0) is helper defining value for identifying
+  // matching merges, it does not correspond to any predecessor block.
 
   for (Block &block : f) {
     for (Operation *op : blockMerges[&block]) {
