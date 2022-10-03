@@ -1060,11 +1060,11 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
 
     // The InstanceOp `instance` might not have a symbol, if it does not
     // participate in any HierPathOp. But the reTop might add a symbol to it, if
-    // a HierPathOp is is added to this Op. If we're about to inline a module
-    // that contains a non-local annotation that starts at that module, then we
-    // need to both update the mutable NLA to indicate that this has a new top
-    // and add an annotation on the instance saying that this now participates
-    // in this new NLA.
+    // a HierPathOp is added to this Op. If we're about to inline a module that
+    // contains a non-local annotation that starts at that module, then we need
+    // to both update the mutable NLA to indicate that this has a new top and
+    // add an annotation on the instance saying that this now participates in
+    // this new NLA.
     DenseMap<Attribute, Attribute> symbolRenames;
     if (!rootMap[childModule.getNameAttr()].empty()) {
       for (auto sym : rootMap[childModule.getNameAttr()]) {
