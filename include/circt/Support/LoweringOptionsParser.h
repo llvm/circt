@@ -34,9 +34,9 @@ struct LoweringOptionsParser : public llvm::cl::parser<LoweringOptions> {
   }
 };
 
-struct loweringOptionsOption
+struct LoweringOptionsOption
     : llvm::cl::opt<LoweringOptions, false, LoweringOptionsParser> {
-  loweringOptionsOption(llvm::cl::OptionCategory &cat)
+  LoweringOptionsOption(llvm::cl::OptionCategory &cat)
       : llvm::cl::opt<LoweringOptions, false, LoweringOptionsParser>{
             "lowering-options",
             llvm::cl::desc(

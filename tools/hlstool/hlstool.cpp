@@ -165,7 +165,7 @@ static cl::opt<unsigned> bufferSize("buffer-size",
                                     cl::desc("Number of slots in each buffer"),
                                     cl::init(2), cl::cat(mainCategory));
 
-static loweringOptionsOption loweringOptions(mainCategory);
+static LoweringOptionsOption loweringOptions(mainCategory);
 
 // --------------------------------------------------------------------------
 // (Configurable) pass pipelines

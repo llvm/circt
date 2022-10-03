@@ -409,7 +409,7 @@ static cl::opt<BuildMode> buildMode(
       }
     }));
 
-static loweringOptionsOption loweringOptions(mainCategory);
+static LoweringOptionsOption loweringOptions(mainCategory);
 
 /// Create a simple canonicalizer pass.
 static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
