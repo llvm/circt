@@ -607,7 +607,7 @@ private:
     }
     DenseSet<StringAttr> hPaths(instPaths.begin(), instPaths.end());
     // Only the hierPaths that this instance participates in, and is active in
-    // the the current path must be kept active for the child modules.
+    // the current path must be kept active for the child modules.
     llvm::set_intersect(activeHierpaths, hPaths);
     // Also, the nlas, that have current instance as the top must be added to
     // the active set.
