@@ -879,7 +879,7 @@ void EmitterBase::emitTextWithSubstitutions(
     // operations to this module's `names`, which is reserved for things named
     // *within* this module. Instead, you have to rely on those remote
     // operations to have been named inside the global names table. If they
-    // haven't, take a look at name name legalization first.
+    // haven't, take a look at name legalization first.
     if (auto itemOp = item.getOp()) {
       if (item.hasPort()) {
         return getPortVerilogName(itemOp, item.getPort());

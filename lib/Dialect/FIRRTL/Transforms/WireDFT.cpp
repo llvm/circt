@@ -303,8 +303,8 @@ void WireDFTPass::runOnOperation() {
     return clone;
   };
 
-  // At this point we have found the the enable signal, all important clock
-  // gates, and the ancestor of these. From here we need wire the enable signal
+  // At this point we have found the enable signal, all important clock gates,
+  // and the ancestor of these. From here we need wire the enable signal
   // upward to the LCA, and then wire the enable signal down to all clock
   // gates.
 

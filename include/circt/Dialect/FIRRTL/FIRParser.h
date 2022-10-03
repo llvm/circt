@@ -44,7 +44,7 @@ mlir::OwningOpRef<mlir::ModuleOp> importFIRFile(llvm::SourceMgr &sourceMgr,
                                                 FIRParserOptions options = {});
 
 // Decode a source locator string `spelling`, returning a pair indicating that
-// the the `spelling` was correct and an optional location attribute.  The
+// the `spelling` was correct and an optional location attribute.  The
 // `skipParsing` option can be used to short-circuit parsing and just do
 // validation of the `spelling`.  This require both an Identifier and a
 // FileLineColLoc to use for caching purposes and context as the cache may be
