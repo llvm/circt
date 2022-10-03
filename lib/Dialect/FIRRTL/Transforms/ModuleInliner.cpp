@@ -1158,7 +1158,7 @@ void Inliner::inlineInstances(FModuleOp parent) {
 
     // The InstanceOp `instance` might not have a symbol, if it does not
     // participate in any HierPathOp. But the reTop might add a symbol to it, if
-    // a HierPathOp is is added to this Op.
+    // a HierPathOp is added to this Op.
     DenseMap<Attribute, Attribute> symbolRenames;
     if (!rootMap[target.getNameAttr()].empty()) {
       for (auto sym : rootMap[target.getNameAttr()]) {
