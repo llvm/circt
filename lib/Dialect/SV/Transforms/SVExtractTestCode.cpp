@@ -163,7 +163,10 @@ static void addInstancesToCloneSet(
     SetVector<Value> &inputs, SetVector<Operation *> &opsToClone,
     SmallPtrSetImpl<Operation *> &opsToErase,
     DenseMap<StringAttr, SmallPtrSet<Operation *, 32>> &extractedInstances) {
-  // Track inputs to remove, which come from instances that will be cloned.
+  // Track inputs to add, which are used by the instance that will be extracted.
+  SmallVector<Value> inputsToAdd;
+
+  // Track inputs to remove, which come from instances that will be extracted.
   SmallVector<Value> inputsToRemove;
 
   // Check each input into the clone set.
@@ -180,22 +183,25 @@ static void addInstancesToCloneSet(
     // Compute the instance's forward slice. If it wasn't fully contained in
     // the clone set, move along.
     SetVector<Operation *> forwardSlice;
-    if (!getForwardSliceSimple(definingOp, opsToClone, forwardSlice))
+    if (!getForwardSliceSimple(instance, opsToClone, forwardSlice))
       continue;
 
     // Add the instance to the clone set and mark the input to be removed from
-    // the input set. Also add it to the map of extracted instances by module.
-    opsToClone.insert(definingOp);
+    // the input set. Add any instance inputs to the input set. Also add the
+    // instance to the map of extracted instances by module.
+    opsToClone.insert(instance);
+    for (auto operand : instance.getOperands())
+      inputsToAdd.push_back(operand);
     inputsToRemove.push_back(value);
     extractedInstances[instance.getModuleNameAttr().getAttr()].insert(instance);
 
     // Mark the instance and its forward dataflow to be erased from the pass.
     // Normally, ops in the clone set are canonicalized away later, but for
     // this case, we have to proactively erase them. The instances must be
-    // erased because we can't canonicalize away instanes with unused inputs
+    // erased because we can't canonicalize away instances with unused results
     // in general. The forward dataflow must be erased because the instance is
     // being erased, and we can't leave null operands after this pass.
-    opsToErase.insert(definingOp);
+    opsToErase.insert(instance);
     for (auto *forwardOp : forwardSlice)
       opsToErase.insert(forwardOp);
   }
@@ -203,6 +209,10 @@ static void addInstancesToCloneSet(
   // Remove any inputs marked for removal.
   for (auto v : inputsToRemove)
     inputs.remove(v);
+
+  // Add any inputs marked for addition.
+  for (auto v : inputsToAdd)
+    inputs.insert(v);
 }
 
 static StringRef getNameForPort(Value val, ArrayAttr modulePorts) {
@@ -478,6 +488,8 @@ private:
 
     // Erase any instances that were extracted, and their forward dataflow.
     for (auto *op : opsToErase) {
+      if (roots.contains(op))
+        continue;
       op->dropAllUses();
       op->erase();
     }
