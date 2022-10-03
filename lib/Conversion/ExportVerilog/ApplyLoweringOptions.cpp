@@ -11,16 +11,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "../PassDetail.h"
-#include "ExportVerilogInternals.h"
 #include "circt/Conversion/ExportVerilog.h"
+#include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/Comb/CombDialect.h"
-#include "circt/Dialect/Comb/CombVisitors.h"
-#include "circt/Dialect/HW/HWAttributes.h"
-#include "circt/Dialect/HW/HWTypes.h"
-#include "circt/Dialect/HW/HWVisitors.h"
-#include "circt/Dialect/SV/SVAttributes.h"
-#include "circt/Dialect/SV/SVOps.h"
-#include "circt/Dialect/SV/SVVisitors.h"
+#include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Support/LoweringOptions.h"
 
 using namespace circt;
