@@ -12,7 +12,6 @@
 
 #include "PassDetails.h"
 #include "circt/Conversion/HandshakeToHW.h"
-#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
