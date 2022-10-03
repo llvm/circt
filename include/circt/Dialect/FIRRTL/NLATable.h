@@ -132,18 +132,18 @@ public:
   }
 
   /// Replace the module `oldModule` with `newModule` in the namepath of the nla
-  /// `nlaName`. This moves the nla from from the list of `oldModule` to
-  /// `newModule`. Move `nlaName` from the list of NLAs that `oldModule`
-  /// participates in to `newModule`. This can delete and invalidate any
-  /// reference returned by `lookup`.
+  /// `nlaName`. This moves the nla from the list of `oldModule` to `newModule`.
+  /// Move `nlaName` from the list of NLAs that `oldModule` participates in to
+  /// `newModule`. This can delete and invalidate any reference returned by
+  /// `lookup`.
   void updateModuleInNLA(StringAttr nlaName, StringAttr oldModule,
                          StringAttr newModule);
 
   /// Replace the module `oldModule` with `newModule` in the namepath of the nla
-  /// `nlaName`. This moves the nla from from the list of `oldModule` to
-  /// `newModule`. Move `nlaName` from the list of NLAs that `oldModule`
-  /// participates in to `newModule`. This can delete and invalidate any
-  /// reference returned by `lookup`.
+  /// `nlaOp`. This moves the nla from the list of `oldModule` to `newModule`.
+  /// Move `nlaOp` from the list of NLAs that `oldModule` participates in to
+  /// `newModule`. This can delete and invalidate any reference returned by
+  /// `lookup`.
   void updateModuleInNLA(HierPathOp nlaOp, StringAttr oldModule,
                          StringAttr newModule);
 
