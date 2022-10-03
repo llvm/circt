@@ -35,12 +35,12 @@ struct TestApplyLoweringOptionPass
     });
     opts.setAsAttribute(getOperation());
   }
-  void setOptions(const std::string &opts) { options = opts; }
+  void setOptions(llvm::StringRef opts) { options = opts.str(); }
 };
 } // namespace
 
 std::unique_ptr<mlir::Pass>
-circt::createTestApplyLoweringOptionPass(std::string options) {
+circt::createTestApplyLoweringOptionPass(llvm::StringRef options) {
   auto pass = std::make_unique<TestApplyLoweringOptionPass>();
   pass->setOptions(options);
   return pass;

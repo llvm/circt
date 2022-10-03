@@ -19,7 +19,7 @@
 namespace circt {
 
 std::unique_ptr<mlir::Pass>
-createTestApplyLoweringOptionPass(std::string options);
+createTestApplyLoweringOptionPass(llvm::StringRef options);
 std::unique_ptr<mlir::Pass> createTestApplyLoweringOptionPass();
 
 std::unique_ptr<mlir::Pass> createPrepareForEmissionPass();
