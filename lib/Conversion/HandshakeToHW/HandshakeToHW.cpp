@@ -788,7 +788,7 @@ struct RTLBuilder {
     Value muxValue = constant(width, 0);
 
     // Iteratively chain together muxes from the high bit to the low bit.
-    for (size_t i = numInputs - 1; i == 0; --i) {
+    for (size_t i = numInputs - 1; i != 0; --i) {
       Value input = inputs[i];
       Value selectBit = bit(index, i);
       muxValue = mux(selectBit, {muxValue, input});
@@ -1040,9 +1040,9 @@ public:
 
   void buildExtendLogic(RTLBuilder &s, UnwrappedIO &unwrappedIO,
                         bool signExtend) const {
-    size_t outWidth = static_cast<Value>(*unwrappedIO.outputs[0].data)
-                          .getType()
-                          .getIntOrFloatBitWidth();
+    size_t outWidth =
+        toValidType(static_cast<Value>(*unwrappedIO.outputs[0].data).getType())
+            .getIntOrFloatBitWidth();
     buildUnitRateJoinLogic(s, unwrappedIO, [&](ValueRange inputs) {
       if (signExtend)
         return s.sext(inputs[0], outWidth);
@@ -1052,9 +1052,9 @@ public:
 
   void buildTruncateLogic(RTLBuilder &s, UnwrappedIO &unwrappedIO,
                           unsigned targetWidth) const {
-    size_t outWidth = static_cast<Value>(*unwrappedIO.outputs[0].data)
-                          .getType()
-                          .getIntOrFloatBitWidth();
+    size_t outWidth =
+        toValidType(static_cast<Value>(*unwrappedIO.outputs[0].data).getType())
+            .getIntOrFloatBitWidth();
     buildUnitRateJoinLogic(s, unwrappedIO, [&](ValueRange inputs) {
       return s.truncate(inputs[0], outWidth);
     });
@@ -1164,11 +1164,29 @@ public:
 
     // Extract select signal from the unwrapped IO.
     auto select = unwrappedIO.inputs[0];
-    unwrappedIO.inputs.erase(unwrappedIO.inputs.begin());
+    auto trueIn = unwrappedIO.inputs[1];
+    auto falseIn = unwrappedIO.inputs[2];
+    auto out = unwrappedIO.outputs[0];
 
-    // Swap order of inputs to match MuxOp (0 => input[0], 1 => input[1]).
-    std::swap(unwrappedIO.inputs[0], unwrappedIO.inputs[1]);
-    buildMuxLogic(s, unwrappedIO, select);
+    // Mux the true and false data to the output.
+    auto muxedData = s.mux(select.data, {falseIn.data, trueIn.data});
+    out.data->setValue(muxedData);
+
+    // 'and' the arg valids and select valid
+    Value allValid = s.bAnd({select.valid, trueIn.valid, falseIn.valid});
+
+    // Connect that to the result valid.
+    out.valid->setValue(allValid);
+
+    // 'and' the result valid with the result ready.
+    auto resValidAndReady = s.bAnd({allValid, out.ready});
+
+    // Connect that to the 'ready' signal of all inputs. This implies that all
+    // inputs + select is transacted when all are valid (and the output is
+    // ready), but only the selected data is forwarded.
+    select.ready->setValue(resValidAndReady);
+    trueIn.ready->setValue(resValidAndReady);
+    falseIn.ready->setValue(resValidAndReady);
   };
 };
 
@@ -1319,7 +1337,8 @@ public:
   void buildModule(arith::TruncIOp op, BackedgeBuilder &bb, RTLBuilder &s,
                    hw::HWModulePortAccessor &ports) const override {
     auto unwrappedIO = this->unwrapIO(s, bb, ports);
-    unsigned targetBits = op.getResult().getType().getIntOrFloatBitWidth();
+    unsigned targetBits =
+        toValidType(op.getResult().getType()).getIntOrFloatBitWidth();
     buildTruncateLogic(s, unwrappedIO, targetBits);
   };
 };
@@ -1752,8 +1771,10 @@ public:
   void buildModule(arith::IndexCastOp op, BackedgeBuilder &bb, RTLBuilder &s,
                    hw::HWModulePortAccessor &ports) const override {
     auto unwrappedIO = this->unwrapIO(s, bb, ports);
-    unsigned sourceBits = op.getIn().getType().getIntOrFloatBitWidth();
-    unsigned targetBits = op.getResult().getType().getIntOrFloatBitWidth();
+    unsigned sourceBits =
+        toValidType(op.getIn().getType()).getIntOrFloatBitWidth();
+    unsigned targetBits =
+        toValidType(op.getResult().getType()).getIntOrFloatBitWidth();
     if (targetBits < sourceBits)
       buildTruncateLogic(s, unwrappedIO, targetBits);
     else
@@ -1804,11 +1825,17 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     ModulePortInfo ports = getPortInfoForOp(rewriter, op, op.getArgumentTypes(),
                                             op.getResultTypes());
-    auto hwModule = rewriter.create<hw::HWModuleOp>(
-        op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
-    auto args = hwModule.getArguments().drop_back(2);
-    rewriter.mergeBlockBefore(&op.getBody().front(),
-                              hwModule.getBodyBlock()->getTerminator(), args);
+
+    if (op.isExternal()) {
+      rewriter.create<hw::HWModuleExternOp>(
+          op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
+    } else {
+      auto hwModule = rewriter.create<hw::HWModuleOp>(
+          op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
+      auto args = hwModule.getArguments().drop_back(2);
+      rewriter.mergeBlockBefore(&op.getBody().front(),
+                                hwModule.getBodyBlock()->getTerminator(), args);
+    }
     rewriter.eraseOp(op);
     return success();
   }
