@@ -1548,17 +1548,6 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
-LogicalResult InstanceOp::verify() {
-  if ((*this)->getNumOperands() == 0)
-    return emitOpError() << "must provide at least a control operand.";
-
-  if (!getControl().getType().dyn_cast<NoneType>())
-    return emitOpError()
-           << "last operand must be a control (none-typed) operand.";
-
-  return success();
-}
-
 FunctionType InstanceOp::getModuleType() {
   return FunctionType::get(getContext(), getOperandTypes(), getResultTypes());
 }
