@@ -591,7 +591,7 @@ struct UnwrappedIO {
 struct RTLBuilder {
   RTLBuilder(hw::ModulePortInfo info, OpBuilder &builder, Location loc,
              Value clk = Value(), Value rst = Value())
-      : info(info), b(builder), loc(loc), clk(clk), rst(rst) {}
+      : info(std::move(info)), b(builder), loc(loc), clk(clk), rst(rst) {}
 
   Value constant(const APInt &apv, std::optional<StringRef> name = {}) {
     // Cannot use zero-width APInt's in DenseMap's, see
