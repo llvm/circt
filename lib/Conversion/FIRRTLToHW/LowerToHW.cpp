@@ -1012,7 +1012,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   // Build the new hw.module op.
   auto builder = OpBuilder::atBlockEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
-  // Map over parameters if present.  Drop all values as we do so so there are
+  // Map over parameters if present.  Drop all values as we do so, so there are
   // no known default values in the extmodule.  This ensures that the
   // hw.instance will print all the parameters when generating verilog.
   auto parameters = getHWParameters(oldModule, /*ignoreValues=*/true);
