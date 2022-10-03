@@ -50,9 +50,7 @@ struct loweringOptionsOption
                 "locationInfoStyle={plain,wrapInAtSquareBracket,none}, "
                 "disallowPortDeclSharing, printDebugInfo, useOldEmissionMode, "
                 "disallowExpressionInliningInPorts"),
-            llvm::cl::cat(cat), llvm::cl::value_desc("option")} {
-    llvm::errs() << "\n\nConstructed\n\n";
-  }
+            llvm::cl::cat(cat), llvm::cl::value_desc("option")} {}
 };
 
 } // namespace circt
