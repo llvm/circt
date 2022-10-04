@@ -251,6 +251,7 @@ static void loadFIRRTLLoweringPipeline(OpPassManager &pm) {
 }
 
 static void loadHWLoweringPipeline(OpPassManager &pm) {
+  pm.addPass(createSimpleCanonicalizerPass());
   pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass());
   pm.addPass(sv::createHWMemSimImplPass(false, false));
   pm.addPass(seq::createSeqLowerToSVPass());
@@ -258,6 +259,7 @@ static void loadHWLoweringPipeline(OpPassManager &pm) {
 
   // Legalize unsupported operations within the modules.
   pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
+  pm.addPass(createSimpleCanonicalizerPass());
 
   // Tidy up the IR to improve verilog emission quality.
   auto &modulePM = pm.nest<hw::HWModuleOp>();
@@ -348,7 +350,7 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
       pm.addPass(circt::handshake::createHandshakeLowerExtmemToHWPass());
       pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
       pm.addPass(circt::createHandshakeToHWPass());
-      pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
+      pm.addPass(createSimpleCanonicalizerPass());
     });
     addIRLevel(HLSFlowDynamicIRLevel::Rtl,
                [&]() { loadESILoweringPipeline(pm); });

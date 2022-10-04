@@ -22,8 +22,8 @@
 // CHECK:           %[[VAL_26:.*]] = comb.and %[[VAL_23]], %[[VAL_19]] : i1
 // CHECK:           %[[VAL_20]] = comb.mux %[[VAL_26]], %[[VAL_11]], %[[VAL_25]] : i1
 // CHECK:           %[[VAL_27:.*]] = seq.compreg %[[VAL_28:.*]], %[[VAL_1]], %[[VAL_2]], %[[VAL_10]]  : i0
-// CHECK:           %[[VAL_29:.*]] = comb.mux %[[VAL_19]], %[[VAL_27]], %[[VAL_3]] : i0
-// CHECK:           %[[VAL_30:.*]] = comb.mux %[[VAL_24]], %[[VAL_3]], %[[VAL_27]] : i0
+// CHECK:           %[[VAL_29:.*]] = comb.mux %[[VAL_19]], %[[VAL_27]], %[[VAL_18]] : i0
+// CHECK:           %[[VAL_30:.*]] = comb.mux %[[VAL_24]], %[[VAL_18]], %[[VAL_27]] : i0
 // CHECK:           %[[VAL_28]] = comb.mux %[[VAL_26]], %[[VAL_10]], %[[VAL_30]] : i0
 // CHECK:           %[[VAL_31:.*]] = hw.constant 0 : i0
 // CHECK:           %[[VAL_32:.*]] = seq.compreg %[[VAL_33:.*]], %[[VAL_1]], %[[VAL_2]], %[[VAL_11]]  : i1
@@ -41,8 +41,8 @@
 // CHECK:           %[[VAL_45:.*]] = comb.and %[[VAL_42]], %[[VAL_38]] : i1
 // CHECK:           %[[VAL_39]] = comb.mux %[[VAL_45]], %[[VAL_11]], %[[VAL_44]] : i1
 // CHECK:           %[[VAL_46:.*]] = seq.compreg %[[VAL_47:.*]], %[[VAL_1]], %[[VAL_2]], %[[VAL_31]]  : i0
-// CHECK:           %[[VAL_48:.*]] = comb.mux %[[VAL_38]], %[[VAL_46]], %[[VAL_29]] : i0
-// CHECK:           %[[VAL_49:.*]] = comb.mux %[[VAL_43]], %[[VAL_29]], %[[VAL_46]] : i0
+// CHECK:           %[[VAL_48:.*]] = comb.mux %[[VAL_38]], %[[VAL_46]], %[[VAL_37]] : i0
+// CHECK:           %[[VAL_49:.*]] = comb.mux %[[VAL_43]], %[[VAL_37]], %[[VAL_46]] : i0
 // CHECK:           %[[VAL_47]] = comb.mux %[[VAL_45]], %[[VAL_31]], %[[VAL_49]] : i0
 // CHECK:           %[[VAL_50:.*]] = hw.constant 0 : i0
 // CHECK:           %[[VAL_51:.*]] = seq.compreg %[[VAL_52:.*]], %[[VAL_1]], %[[VAL_2]], %[[VAL_11]]  : i1
@@ -60,8 +60,8 @@
 // CHECK:           %[[VAL_62:.*]] = comb.and %[[VAL_7]], %[[VAL_57]] : i1
 // CHECK:           %[[VAL_58]] = comb.mux %[[VAL_62]], %[[VAL_11]], %[[VAL_61]] : i1
 // CHECK:           %[[VAL_63:.*]] = seq.compreg %[[VAL_64:.*]], %[[VAL_1]], %[[VAL_2]], %[[VAL_50]]  : i0
-// CHECK:           %[[VAL_8]] = comb.mux %[[VAL_57]], %[[VAL_63]], %[[VAL_48]] : i0
-// CHECK:           %[[VAL_65:.*]] = comb.mux %[[VAL_60]], %[[VAL_48]], %[[VAL_63]] : i0
+// CHECK:           %[[VAL_8]] = comb.mux %[[VAL_57]], %[[VAL_63]], %[[VAL_56]] : i0
+// CHECK:           %[[VAL_65:.*]] = comb.mux %[[VAL_60]], %[[VAL_56]], %[[VAL_63]] : i0
 // CHECK:           %[[VAL_64]] = comb.mux %[[VAL_62]], %[[VAL_50]], %[[VAL_65]] : i0
 // CHECK:           hw.output %[[VAL_6]] : !esi.channel<i0>
 // CHECK:         }
@@ -95,8 +95,8 @@ handshake.func @test_buffer_none(%arg0: none, %arg1: none, ...) -> (none, none) 
 // CHECK:           %[[VAL_26:.*]] = comb.and %[[VAL_23]], %[[VAL_19]] : i1
 // CHECK:           %[[VAL_20]] = comb.mux %[[VAL_26]], %[[VAL_11]], %[[VAL_25]] : i1
 // CHECK:           %[[VAL_27:.*]] = seq.compreg %[[VAL_28:.*]], %[[VAL_1]], %[[VAL_2]], %[[VAL_10]]  : i64
-// CHECK:           %[[VAL_29:.*]] = comb.mux %[[VAL_19]], %[[VAL_27]], %[[VAL_3]] : i64
-// CHECK:           %[[VAL_30:.*]] = comb.mux %[[VAL_24]], %[[VAL_3]], %[[VAL_27]] : i64
+// CHECK:           %[[VAL_29:.*]] = comb.mux %[[VAL_19]], %[[VAL_27]], %[[VAL_18]] : i64
+// CHECK:           %[[VAL_30:.*]] = comb.mux %[[VAL_24]], %[[VAL_18]], %[[VAL_27]] : i64
 // CHECK:           %[[VAL_28]] = comb.mux %[[VAL_26]], %[[VAL_10]], %[[VAL_30]] : i64
 // CHECK:           %[[VAL_31:.*]] = seq.compreg %[[VAL_32:.*]], %[[VAL_1]], %[[VAL_2]], %[[VAL_11]]  : i1
 // CHECK:           %[[VAL_33:.*]] = comb.xor %[[VAL_31]], %[[VAL_14]] : i1
@@ -113,8 +113,8 @@ handshake.func @test_buffer_none(%arg0: none, %arg1: none, ...) -> (none, none) 
 // CHECK:           %[[VAL_42:.*]] = comb.and %[[VAL_7]], %[[VAL_37]] : i1
 // CHECK:           %[[VAL_38]] = comb.mux %[[VAL_42]], %[[VAL_11]], %[[VAL_41]] : i1
 // CHECK:           %[[VAL_43:.*]] = seq.compreg %[[VAL_44:.*]], %[[VAL_1]], %[[VAL_2]], %[[VAL_10]]  : i64
-// CHECK:           %[[VAL_8]] = comb.mux %[[VAL_37]], %[[VAL_43]], %[[VAL_29]] : i64
-// CHECK:           %[[VAL_45:.*]] = comb.mux %[[VAL_40]], %[[VAL_29]], %[[VAL_43]] : i64
+// CHECK:           %[[VAL_8]] = comb.mux %[[VAL_37]], %[[VAL_43]], %[[VAL_36]] : i64
+// CHECK:           %[[VAL_45:.*]] = comb.mux %[[VAL_40]], %[[VAL_36]], %[[VAL_43]] : i64
 // CHECK:           %[[VAL_44]] = comb.mux %[[VAL_42]], %[[VAL_10]], %[[VAL_45]] : i64
 // CHECK:           hw.output %[[VAL_6]] : !esi.channel<i64>
 // CHECK:         }
