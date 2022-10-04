@@ -95,15 +95,16 @@ static bool getForwardSliceSimple(Operation *rootOp,
   SmallPtrSet<Operation *, 32> visited;
   SmallVector<Operation *> worklist;
   worklist.push_back(rootOp);
+  visited.insert(rootOp);
 
   while (!worklist.empty()) {
     Operation *op = worklist.pop_back_val();
     forwardSlice.insert(op);
-    visited.insert(op);
+
     for (auto *user : op->getUsers()) {
       if (!opsToClone.contains(user))
         return false;
-      if (!visited.contains(user))
+      if (visited.insert(user).second)
         worklist.push_back(user);
     }
   }
@@ -173,8 +174,7 @@ static void addInstancesToCloneSet(
   for (auto value : inputs) {
     // Check if the input comes from an instance, and it isn't already added to
     // the clone set.
-    auto *definingOp = value.getDefiningOp();
-    auto instance = dyn_cast_or_null<hw::InstanceOp>(definingOp);
+    auto instance = value.getDefiningOp<hw::InstanceOp>();
     if (!instance)
       continue;
     if (opsToClone.contains(instance))
