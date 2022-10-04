@@ -303,7 +303,7 @@ firrtl.circuit "GCTDataMemTapsPrefix" {
   }
 }
 
-// Test the the NonLocalAnchor is properly updated.
+// Test the NonLocalAnchor is properly updated.
 // CHECK-LABEL: firrtl.circuit "FixNLA" {
   firrtl.circuit "FixNLA"   {
     firrtl.hierpath private @nla_1 [@FixNLA::@bar, @Bar::@baz, @Baz]

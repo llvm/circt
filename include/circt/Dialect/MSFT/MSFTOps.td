@@ -150,7 +150,7 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
 
   let extraModuleClassDeclaration = [{
     using mlir::detail::FunctionOpInterfaceTrait<MSFTModuleOp>::front;
-    using mlir::detail::FunctionOpInterfaceTrait<MSFTModuleOp>::getBody;
+    using mlir::detail::FunctionOpInterfaceTrait<MSFTModuleOp>::getFunctionBody;
 
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) {
@@ -174,7 +174,7 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
     SmallVector<unsigned>
     removePorts(llvm::BitVector inputs, llvm::BitVector outputs);
 
-    Block *getBodyBlock() { return &getBody().front(); }
+    Block *getBodyBlock() { return &getFunctionBody().front(); }
   }];
 
   let hasCustomAssemblyFormat = 1;

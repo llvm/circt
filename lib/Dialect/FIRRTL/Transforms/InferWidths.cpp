@@ -364,7 +364,7 @@ namespace {
 ///
 /// The inequality separately tracks recursive (a, b) and non-recursive (c)
 /// constraints on `x`. This allows it to properly identify the combination of
-/// the two constraints constraints `x >= x-1` and `x >= 4` to be satisfiable as
+/// the two constraints `x >= x-1` and `x >= 4` to be satisfiable as
 /// `x >= max(x-1, 4)`. If it only tracked inequality as `x >= a*x+b`, the
 /// combination of these two constraints would be `x >= x+4` (due to max(-1,4) =
 /// 4), which would be unsatisfiable.

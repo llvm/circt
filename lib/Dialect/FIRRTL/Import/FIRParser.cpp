@@ -1327,7 +1327,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
   switch (getToken().getKind()) {
 
     // Handle all the primitive ops: primop exp* intLit*  ')'.  There is a
-    // redundant definition of TOK_LPKEYWORD_PRIM which is needed to to get
+    // redundant definition of TOK_LPKEYWORD_PRIM which is needed to get
     // around a bug in the MSVC preprocessor to properly paste together the
     // tokens lp_##SPELLING.
 #define TOK_LPKEYWORD(SPELLING) case FIRToken::lp_##SPELLING:

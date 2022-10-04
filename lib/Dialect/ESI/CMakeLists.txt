@@ -27,7 +27,7 @@ set(ESI_LinkLibs
   MLIRTransforms
   MLIRControlFlowDialect
   MLIRFuncDialect
-  MLIRArithmeticDialect
+  MLIRArithDialect
   MLIRTranslateLib
 )
 

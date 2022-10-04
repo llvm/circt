@@ -580,7 +580,7 @@ static Value createPriorityArbiter(ArrayRef<Value> inputs, Value defaultValue,
 
   for (size_t i = numInputs; i > 0; --i) {
     size_t inputIndex = i - 1;
-    size_t oneHotIndex = 1 << inputIndex;
+    size_t oneHotIndex = size_t{1} << inputIndex;
 
     auto constIndex = createConstantOp(indexType, APInt(numInputs, oneHotIndex),
                                        insertLoc, rewriter);

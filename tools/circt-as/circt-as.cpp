@@ -14,7 +14,7 @@
 #include "circt/Support/Version.h"
 #include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/EmitC/IR/EmitC.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
   registry.insert<mlir::LLVM::LLVMDialect>();
   registry.insert<mlir::memref::MemRefDialect>();
   registry.insert<mlir::func::FuncDialect>();
-  registry.insert<mlir::arith::ArithmeticDialect>();
+  registry.insert<mlir::arith::ArithDialect>();
   registry.insert<mlir::cf::ControlFlowDialect>();
   registry.insert<mlir::scf::SCFDialect>();
   registry.insert<mlir::emitc::EmitCDialect>();

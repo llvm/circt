@@ -879,7 +879,7 @@ void EmitterBase::emitTextWithSubstitutions(
     // operations to this module's `names`, which is reserved for things named
     // *within* this module. Instead, you have to rely on those remote
     // operations to have been named inside the global names table. If they
-    // haven't, take a look at name name legalization first.
+    // haven't, take a look at name legalization first.
     if (auto itemOp = item.getOp()) {
       if (item.hasPort()) {
         return getPortVerilogName(itemOp, item.getPort());
@@ -2735,14 +2735,6 @@ private:
   /// Track the legalized names.
   ModuleNameManager &names;
 
-  /// This is the index of the start of the current statement being emitted.
-  RearrangableOStream::Cursor statementBeginning;
-
-  /// This is the index of the end of the declaration region of the current
-  /// 'begin' block, used to emit variable declarations.
-  RearrangableOStream::Cursor blockDeclarationInsertPoint;
-  unsigned blockDeclarationIndentLevel = INDENT_AMOUNT;
-
   /// This keeps track of the number of statements emitted, important for
   /// determining if we need to put out a begin/end marker in a block
   /// declaration.
@@ -2783,10 +2775,6 @@ void StmtEmitter::emitSVAttributes(Operation *op) {
 }
 
 void StmtEmitter::emitStatementExpression(Operation *op) {
-  // Know where the start of this statement is in case any out-of-band precursor
-  // statements need to be emitted.
-  statementBeginning = rearrangableStream.getCursor();
-
   // This is invoked for expressions that have a non-single use.  This could
   // either be because they are dead or because they have multiple uses.
   // todo: use_empty could be prurned prior to emission.
@@ -3386,13 +3374,6 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
   RearrangableOStream::Cursor beginInsertPoint = rearrangableStream.getCursor();
   emitLocationInfoAndNewLine(locationOps);
 
-  // Change the blockDeclarationInsertPointIndex for the statements in this
-  // block, and restore it back when we move on to code after the block.
-  llvm::SaveAndRestore<RearrangableOStream::Cursor> x(
-      blockDeclarationInsertPoint, rearrangableStream.getCursor());
-  llvm::SaveAndRestore<unsigned> x2(blockDeclarationIndentLevel,
-                                    state.currentIndent + INDENT_AMOUNT);
-
   auto numEmittedBefore = getNumStatementsEmitted();
   emitStatementBlock(*block);
 
@@ -3888,10 +3869,6 @@ void StmtEmitter::emitStatement(Operation *op) {
 
   ++numStatementsEmitted;
 
-  // Know where the start of this statement is in case any out-of-band precursor
-  // statements need to be emitted.
-  statementBeginning = rearrangableStream.getCursor();
-
   // Handle HW statements.
   if (succeeded(dispatchStmtVisitor(op)))
     return;
@@ -4137,7 +4114,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
 bool StmtEmitter::emitDeclarationForTemporary(Operation *op) {
   StringRef declWord = getVerilogDeclWord(op, state.options);
 
-  os.indent(blockDeclarationIndentLevel) << declWord;
+  indent() << declWord;
   if (!declWord.empty())
     os << ' ';
   if (emitter.printPackedType(stripUnpackedTypes(op->getResult(0).getType()),
@@ -4186,8 +4163,6 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
 
   // Okay, now that we have measured the things to emit, emit the things.
   for (const auto &record : valuesToEmit) {
-    statementBeginning = rearrangableStream.getCursor();
-
     // We have two different sorts of things that we proactively emit:
     // declarations (wires, regs, localpamarams, etc) and expressions that
     // cannot be emitted inline (e.g. because of limitations around subscripts).
@@ -4261,13 +4236,6 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
     os << ';';
     emitLocationInfoAndNewLine(opsForLocation);
     ++numStatementsEmitted;
-
-    // If any sub-expressions are too large to fit on a line and need a
-    // temporary declaration, put it after the already-emitted declarations.
-    // This is important to maintain incrementally after each statement, because
-    // each statement can generate spills when they are overly-long.
-    blockDeclarationInsertPoint = rearrangableStream.getCursor();
-    blockDeclarationIndentLevel = state.currentIndent;
   }
 
   os << '\n';

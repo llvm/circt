@@ -142,7 +142,7 @@ public:
   /// As majority signals are smaller than 64 bits, this implementation
   /// is much faster as it avoided memcpy in most cases.
   /// @param v Pointer to signal value
-  /// @return return true when signal is updated, false when not
+  /// @return true when signal is updated, false when not
   bool updateWhenChanged(const uint64_t *v) {
     switch (size) {
     case 1: {
