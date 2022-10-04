@@ -1483,3 +1483,11 @@ hw.module @GetOfUniformArray(%in: i42, %address: i2) -> (out: i42) {
   %1 = hw.array_get %0[%address] : !hw.array<4xi42>, i2
   hw.output %1 : i42
 }
+
+// CHECK-LABEL: ArraySlice
+hw.module @ArraySlice(%arr: !hw.array<128xi1>) -> (a: !hw.array<128xi1>) {
+  %c0_i7 = hw.constant 0 : i7
+  // CHECK: hw.output %arr
+  %1 = hw.array_slice %arr[%c0_i7] : (!hw.array<128xi1>) -> !hw.array<128xi1>
+  hw.output %1 : !hw.array<128xi1>
+}
