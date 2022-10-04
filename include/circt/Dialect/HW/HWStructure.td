@@ -72,7 +72,7 @@ def HWModuleOp : HWModuleOpBase<"module",
 
   let extraModuleClassDeclaration = [{
     using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::front;
-    using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::getBody;
+    using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::getFunctionBody;
 
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
@@ -129,9 +129,7 @@ def HWModuleOp : HWModuleOpBase<"module",
     void insertOutputs(unsigned index,
                        ArrayRef<std::pair<StringAttr, Value>> outputs);
 
-    // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
-    // squatting on the name.
-    Block *getBodyBlock() { return &getBody().front(); }
+    Block *getBodyBlock() { return &getFunctionBody().front(); }
 
     // Get the module's symbolic name as StringAttr.
     StringAttr getNameAttr() {
