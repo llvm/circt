@@ -1552,6 +1552,18 @@ hw.module private @InlineReadInout() -> () {
   }
 }
 
+// CHECK-LABEL: IndexPartSelectInoutArray
+hw.module @IndexPartSelectInoutArray(%a: !hw.array<2xi1>, %c: i1, %d: i1) {
+  %c0_i2 = hw.constant 0 : i2
+  %r1 = sv.reg  : !hw.inout<array<3xi1>>
+  sv.always posedge %d {
+    // CHECK: r1[2'h0 +: 2] <= a;
+    %1 = sv.indexed_part_select_inout %r1[%c0_i2 : 2] : !hw.inout<array<3xi1>>, i2
+    sv.passign %1, %a : !hw.array<2xi1>
+  }
+  hw.output
+}
+
 // CHECK-LABEL: module ConditionalComments(
 hw.module @ConditionalComments() {
   sv.ifdef "FOO"  {             // CHECK-NEXT: `ifdef FOO
