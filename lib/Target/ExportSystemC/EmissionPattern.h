@@ -86,22 +86,6 @@ private:
   Precedence precedence;
 };
 
-/// This class is returned to a pattern that requested inlined emission of a
-/// value. It allows the pattern to emit additional characters before the
-/// requested expression depending on the precedence.
-class InlineEmitter {
-public:
-  InlineEmitter(std::function<void()> emitter, Precedence precedence)
-      : precedence(precedence), emitter(std::move(emitter)) {}
-
-  Precedence getPrecedence() const { return precedence; }
-  void emit() const { emitter(); }
-
-private:
-  Precedence precedence;
-  std::function<void()> emitter;
-};
-
 //===----------------------------------------------------------------------===//
 // Emission pattern base classes.
 //===----------------------------------------------------------------------===//
@@ -164,6 +148,20 @@ struct TypeEmissionPatternBase : PatternBase {
   virtual void emitType(Type type, EmissionPrinter &p) = 0;
 };
 
+/// This is intended to be the base class for all emission patterns matching on
+/// attributes.
+struct AttrEmissionPatternBase : PatternBase {
+  explicit AttrEmissionPatternBase(TypeID typeId)
+      : PatternBase(typeId.getAsOpaquePointer()) {}
+  virtual ~AttrEmissionPatternBase() = default;
+
+  /// Checks if this pattern is applicable to the given attribute.
+  virtual bool match(Attribute attr) = 0;
+
+  /// Emit the given attribute to the emission printer.
+  virtual void emitAttr(Attribute attr, EmissionPrinter &p) = 0;
+};
+
 /// This is a convenience class providing default implementations for operation
 /// emission patterns.
 template <typename Op>
@@ -210,6 +208,24 @@ struct TypeEmissionPattern : TypeEmissionPatternBase {
 
   /// Emit the given type to the emission printer.
   virtual void emitType(Ty type, EmissionPrinter &p) = 0;
+};
+
+/// This is a convenience class providing default implementations for attribute
+/// emission patterns.
+template <typename A>
+struct AttrEmissionPattern : AttrEmissionPatternBase {
+  AttrEmissionPattern() : AttrEmissionPatternBase(TypeID::get<A>()) {}
+
+  void emitAttr(Attribute attr, EmissionPrinter &p) final {
+    emitAttr(attr.cast<A>(), p);
+  }
+
+  /// Checks if this pattern is applicable to the given attribute. Matches to
+  /// the attribute given as template argument by default.
+  bool match(Attribute attr) override { return attr.isa<A>(); }
+
+  /// Emit the given attribute to the emission printer.
+  virtual void emitAttr(A attr, EmissionPrinter &p) = 0;
 };
 
 //===----------------------------------------------------------------------===//

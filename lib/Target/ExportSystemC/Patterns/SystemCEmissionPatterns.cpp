@@ -18,18 +18,6 @@ using namespace circt;
 using namespace circt::systemc;
 using namespace circt::ExportSystemC;
 
-static void parenthesizeOnLowerPrecedence(InlineEmitter &emitter,
-                                          Precedence prec, EmissionPrinter &p) {
-  bool needParens = emitter.getPrecedence() >= prec;
-  if (needParens)
-    p << "(";
-
-  emitter.emit();
-
-  if (needParens)
-    p << ")";
-}
-
 //===----------------------------------------------------------------------===//
 // Operation emission patterns.
 //===----------------------------------------------------------------------===//
@@ -70,16 +58,6 @@ struct SCModuleEmitter : OpEmissionPattern<SCModuleOp> {
     }
 
     p.emitRegion(module.getRegion(), scope);
-  }
-};
-
-/// Emit the builtin module op by emitting all children in sequence. As a
-/// result, we don't have to hard-code the behavior in ExportSytemC.
-struct BuiltinModuleEmitter : OpEmissionPattern<ModuleOp> {
-  using OpEmissionPattern::OpEmissionPattern;
-  void emitStatement(ModuleOp op, EmissionPrinter &p) override {
-    auto scope = p.getOstream().scope("", "", false);
-    p.emitRegion(op.getRegion(), scope);
   }
 };
 
@@ -217,16 +195,8 @@ struct BindPortEmitter : OpEmissionPattern<BindPortOp> {
   using OpEmissionPattern::OpEmissionPattern;
 
   void emitStatement(BindPortOp op, EmissionPrinter &p) override {
-    auto instEmitter = p.getInlinable(op.getInstance());
-    bool parenthesize = instEmitter.getPrecedence() > Precedence::MEMBER_ACCESS;
-
-    if (parenthesize)
-      p << "(";
-
-    instEmitter.emit();
-
-    if (parenthesize)
-      p << ")";
+    p.getInlinable(op.getInstance())
+        .emitWithParensOnLowerPrecedence(Precedence::MEMBER_ACCESS);
 
     p << "." << op.getPortName() << "(";
     p.getInlinable(op.getChannel()).emit();
@@ -239,12 +209,11 @@ struct AssignEmitter : OpEmissionPattern<AssignOp> {
   using OpEmissionPattern::OpEmissionPattern;
 
   void emitStatement(AssignOp op, EmissionPrinter &p) override {
-    auto sourceEmitter = p.getInlinable(op.getSource());
-    auto destEmitter = p.getInlinable(op.getDest());
-
-    parenthesizeOnLowerPrecedence(destEmitter, Precedence::ASSIGN, p);
+    p.getInlinable(op.getDest())
+        .emitWithParensOnLowerPrecedence(Precedence::ASSIGN);
     p << " = ";
-    parenthesizeOnLowerPrecedence(sourceEmitter, Precedence::ASSIGN, p);
+    p.getInlinable(op.getSource())
+        .emitWithParensOnLowerPrecedence(Precedence::ASSIGN);
     p << ";\n";
   }
 };
@@ -269,8 +238,8 @@ struct VariableEmitter : OpEmissionPattern<VariableOp> {
 
     if (op.getInit()) {
       p << " = ";
-      auto initEmitter = p.getInlinable(op.getInit());
-      parenthesizeOnLowerPrecedence(initEmitter, Precedence::ASSIGN, p);
+      p.getInlinable(op.getInit())
+          .emitWithParensOnLowerPrecedence(Precedence::ASSIGN);
     }
 
     p << ";\n";
@@ -326,10 +295,10 @@ struct DynIntegerTypeEmitter : public TypeEmissionPattern<Ty> {
 
 void circt::ExportSystemC::populateSystemCOpEmitters(
     OpEmissionPatternSet &patterns, MLIRContext *context) {
-  patterns.add<BuiltinModuleEmitter, SCModuleEmitter, SignalWriteEmitter,
-               SignalReadEmitter, CtorEmitter, SCFuncEmitter, MethodEmitter,
-               ThreadEmitter, SignalEmitter, InstanceDeclEmitter,
-               BindPortEmitter, AssignEmitter, VariableEmitter>(context);
+  patterns.add<SCModuleEmitter, SignalWriteEmitter, SignalReadEmitter,
+               CtorEmitter, SCFuncEmitter, MethodEmitter, ThreadEmitter,
+               SignalEmitter, InstanceDeclEmitter, BindPortEmitter,
+               AssignEmitter, VariableEmitter>(context);
 }
 
 void circt::ExportSystemC::populateSystemCTypeEmitters(

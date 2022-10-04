@@ -59,7 +59,9 @@ static LogicalResult emitFile(ArrayRef<Operation *> operations,
     registerAllOpEmitters(opPatterns, operations[0]->getContext());
     TypeEmissionPatternSet typePatterns;
     registerAllTypeEmitters(typePatterns);
-    EmissionPrinter printer(ios, opPatterns, typePatterns,
+    AttrEmissionPatternSet attrPatterns;
+    registerAllAttrEmitters(attrPatterns);
+    EmissionPrinter printer(ios, opPatterns, typePatterns, attrPatterns,
                             operations[0]->getLoc());
 
     for (auto *op : operations)
