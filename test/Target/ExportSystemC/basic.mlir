@@ -199,4 +199,37 @@ systemc.module @emitcEmission () {
   }
 }
 
+// CHECK-LABEL: SC_MODULE(CppEmission)
+systemc.module @CppEmission () {
+  // CHECK-EMPTY:
+
+  // Test: systemc.cpp.destructor
+  // CHECK-NEXT: ~CppEmission() override {
+  systemc.cpp.destructor {
+    // Test: systemc.cpp.new w/o arguments
+    // CHECK-NEXT: submodule* v0 = new submodule;
+    %0 = systemc.cpp.new() : () -> !emitc.ptr<!emitc.opaque<"submodule">>
+    %v0 = systemc.cpp.variable %0 : !emitc.ptr<!emitc.opaque<"submodule">>
+
+    // Test: systemc.cpp.new with arguments, w/o parens due to precedence
+    // CHECK-NEXT: std::tuple<uint32_t, uint32_t>* v1 = new std::tuple<uint32_t, uint32_t>(1, 2);
+    %3 = hw.constant 1 : i32
+    %4 = hw.constant 2 : i32
+    %5 = systemc.cpp.new(%3, %4) : (i32, i32) -> !emitc.ptr<!emitc.opaque<"std::tuple<uint32_t, uint32_t>">>
+    %v1 = systemc.cpp.variable %5 : !emitc.ptr<!emitc.opaque<"std::tuple<uint32_t, uint32_t>">>
+
+    // Test: systemc.cpp.new w arguments, with parens due to precedence
+    // TODO: there is currently no appropriate inlinable operation implemented with lower precedence
+
+    // Test: systemc.cpp.delete w/o parens due to precedence
+    // CHECK-NEXT: delete v0;
+    systemc.cpp.delete %v0 : !emitc.ptr<!emitc.opaque<"submodule">>
+
+    // Test: systemc.cpp.delete with parens due to precedence
+    // TODO: there is currently no appropriate inlinable operation implemented with lower precedence
+
+  // CHECK-NEXT: }
+  }
+}
+
 // CHECK: #endif // STDOUT_H

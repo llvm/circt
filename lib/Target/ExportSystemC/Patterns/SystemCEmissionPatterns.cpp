@@ -91,6 +91,32 @@ struct SignalReadEmitter : OpEmissionPattern<SignalReadOp> {
   }
 };
 
+/// Emit a systemc.cpp.new operation.
+struct NewEmitter : OpEmissionPattern<NewOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  MatchResult matchInlinable(Value value) override {
+    if (value.getDefiningOp<NewOp>())
+      return Precedence::NEW;
+    return {};
+  }
+
+  void emitInlined(Value value, EmissionPrinter &p) override {
+    p << "new ";
+    p.emitType(value.getType().cast<mlir::emitc::PointerType>().getPointee());
+
+    auto newOp = value.getDefiningOp<NewOp>();
+    if (newOp.getArgs().empty())
+      return;
+
+    p << "(";
+    llvm::interleaveComma(newOp.getArgs(), p, [&](Value arg) {
+      p.getInlinable(arg).emitWithParensOnLowerPrecedence(Precedence::COMMA);
+    });
+    p << ")";
+  }
+};
+
 /// Emit a systemc.ctor operation by using the SC_CTOR macro.
 struct CtorEmitter : OpEmissionPattern<CtorOp> {
   using OpEmissionPattern::OpEmissionPattern;
@@ -100,6 +126,23 @@ struct CtorEmitter : OpEmissionPattern<CtorOp> {
     // readability.
     p << "\nSC_CTOR(" << op->getParentOfType<SCModuleOp>().getModuleName()
       << ") ";
+    p.emitRegion(op.getBody());
+  }
+};
+
+/// Emit a systemc.cpp.destructor operation.
+struct DestructorEmitter : OpEmissionPattern<DestructorOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  void emitStatement(DestructorOp op, EmissionPrinter &p) override {
+    // Emit a new line before the destructor to ensure an empty line for better
+    // readability.
+    // TODO: the 'override' keyword is hardcoded here because the destructor can
+    // only be inside a class inheriting from 'sc_module', if we ever support
+    // custom classes the override should probably be a unitAttr on the
+    // destructor operation.
+    p << "\n~" << op->getParentOfType<SCModuleOp>().getModuleName()
+      << "() override ";
     p.emitRegion(op.getBody());
   }
 };
@@ -145,6 +188,18 @@ struct ThreadEmitter : OpEmissionPattern<ThreadOp> {
     p << "SC_THREAD(";
     p.getInlinable(op.getFuncHandle()).emit();
     p << ");\n";
+  }
+};
+
+/// Emit a systemc.cpp.delete operation.
+struct DeleteEmitter : OpEmissionPattern<DeleteOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  void emitStatement(DeleteOp op, EmissionPrinter &p) override {
+    p << "delete ";
+    p.getInlinable(op.getPointer())
+        .emitWithParensOnLowerPrecedence(Precedence::DELETE);
+    p << ";\n";
   }
 };
 
@@ -295,10 +350,15 @@ struct DynIntegerTypeEmitter : public TypeEmissionPattern<Ty> {
 
 void circt::ExportSystemC::populateSystemCOpEmitters(
     OpEmissionPatternSet &patterns, MLIRContext *context) {
-  patterns.add<SCModuleEmitter, SignalWriteEmitter, SignalReadEmitter,
-               CtorEmitter, SCFuncEmitter, MethodEmitter, ThreadEmitter,
-               SignalEmitter, InstanceDeclEmitter, BindPortEmitter,
-               AssignEmitter, VariableEmitter>(context);
+  patterns.add<SCModuleEmitter, CtorEmitter, SCFuncEmitter, MethodEmitter,
+               ThreadEmitter,
+               // Signal and port related emitters
+               SignalWriteEmitter, SignalReadEmitter, SignalEmitter,
+               // Instance-related emitters
+               InstanceDeclEmitter, BindPortEmitter,
+               // CPP-level operation emitters
+               AssignEmitter, VariableEmitter, NewEmitter, DestructorEmitter,
+               DeleteEmitter>(context);
 }
 
 void circt::ExportSystemC::populateSystemCTypeEmitters(
@@ -308,24 +368,21 @@ void circt::ExportSystemC::populateSystemCTypeEmitters(
   static constexpr const char out[] = "sc_out";
   static constexpr const char signal[] = "sc_signal";
 
-  // clang-format off
-  patterns.add<SignalTypeEmitter<InputType, in>, 
-               SignalTypeEmitter<InOutType, inout>,
-               SignalTypeEmitter<OutputType, out>,
-               SignalTypeEmitter<SignalType, signal>,
-               IntegerTypeEmitter<IntType>,
-               IntegerTypeEmitter<UIntType>,
-               IntegerTypeEmitter<BigIntType>,
-               IntegerTypeEmitter<BigUIntType>,
-               IntegerTypeEmitter<BitVectorType>,
-               IntegerTypeEmitter<LogicVectorType>,
-               DynIntegerTypeEmitter<IntBaseType>,
-               DynIntegerTypeEmitter<UIntBaseType>,
-               DynIntegerTypeEmitter<SignedType>,
-               DynIntegerTypeEmitter<UnsignedType>,
-               DynIntegerTypeEmitter<BitVectorBaseType>,
-               DynIntegerTypeEmitter<LogicVectorBaseType>,
-               DynIntegerTypeEmitter<LogicType>,
-               ModuleTypeEmitter>();
-  // clang-format on
+  patterns.add<
+      // Port and signal types
+      SignalTypeEmitter<InputType, in>, SignalTypeEmitter<InOutType, inout>,
+      SignalTypeEmitter<OutputType, out>, SignalTypeEmitter<SignalType, signal>,
+      // SystemC integers with statically known bit-width
+      IntegerTypeEmitter<IntType>, IntegerTypeEmitter<UIntType>,
+      IntegerTypeEmitter<BigIntType>, IntegerTypeEmitter<BigUIntType>,
+      // SystemC integers without statically known bit-width
+      DynIntegerTypeEmitter<IntBaseType>, DynIntegerTypeEmitter<UIntBaseType>,
+      DynIntegerTypeEmitter<SignedType>, DynIntegerTypeEmitter<UnsignedType>,
+      // Vector types with statically known bit-width
+      IntegerTypeEmitter<BitVectorType>, IntegerTypeEmitter<LogicVectorType>,
+      // Vector types without statically known bit-width
+      DynIntegerTypeEmitter<BitVectorBaseType>,
+      DynIntegerTypeEmitter<LogicVectorBaseType>,
+      // Misc types
+      DynIntegerTypeEmitter<LogicType>, ModuleTypeEmitter>();
 }
