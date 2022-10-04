@@ -106,18 +106,14 @@ struct NewEmitter : OpEmissionPattern<NewOp> {
     p.emitType(value.getType().cast<mlir::emitc::PointerType>().getPointee());
 
     auto newOp = value.getDefiningOp<NewOp>();
-    if (!newOp.getArgs().empty()) {
-      p << "(";
-      bool first = true;
-      for (auto arg : newOp.getArgs()) {
-        if (!first)
-          p << ", ";
+    if (newOp.getArgs().empty())
+      return;
 
-        p.getInlinable(arg).emitWithParensOnLowerPrecedence(Precedence::COMMA);
-        first = false;
-      }
-      p << ")";
-    }
+    p << "(";
+    llvm::interleaveComma(newOp.getArgs(), p, [&](Value arg) {
+      p.getInlinable(arg).emitWithParensOnLowerPrecedence(Precedence::COMMA);
+    });
+    p << ")";
   }
 };
 
@@ -354,23 +350,15 @@ struct DynIntegerTypeEmitter : public TypeEmissionPattern<Ty> {
 
 void circt::ExportSystemC::populateSystemCOpEmitters(
     OpEmissionPatternSet &patterns, MLIRContext *context) {
-  // clang-format off
-  patterns.add<SCModuleEmitter,
-               SignalWriteEmitter,
-               SignalReadEmitter,
-               CtorEmitter,
-               SCFuncEmitter,
-               MethodEmitter,
+  patterns.add<SCModuleEmitter, CtorEmitter, SCFuncEmitter, MethodEmitter,
                ThreadEmitter,
-               SignalEmitter,
-               InstanceDeclEmitter,
-               BindPortEmitter,
-               AssignEmitter,
-               VariableEmitter,
-               NewEmitter,
-               DestructorEmitter,
+               // Signal and port related emitters
+               SignalWriteEmitter, SignalReadEmitter, SignalEmitter,
+               // Instance-related emitters
+               InstanceDeclEmitter, BindPortEmitter,
+               // CPP-level operation emitters
+               AssignEmitter, VariableEmitter, NewEmitter, DestructorEmitter,
                DeleteEmitter>(context);
-  // clang-format on
 }
 
 void circt::ExportSystemC::populateSystemCTypeEmitters(
@@ -380,24 +368,21 @@ void circt::ExportSystemC::populateSystemCTypeEmitters(
   static constexpr const char out[] = "sc_out";
   static constexpr const char signal[] = "sc_signal";
 
-  // clang-format off
-  patterns.add<SignalTypeEmitter<InputType, in>, 
-               SignalTypeEmitter<InOutType, inout>,
-               SignalTypeEmitter<OutputType, out>,
-               SignalTypeEmitter<SignalType, signal>,
-               IntegerTypeEmitter<IntType>,
-               IntegerTypeEmitter<UIntType>,
-               IntegerTypeEmitter<BigIntType>,
-               IntegerTypeEmitter<BigUIntType>,
-               IntegerTypeEmitter<BitVectorType>,
-               IntegerTypeEmitter<LogicVectorType>,
-               DynIntegerTypeEmitter<IntBaseType>,
-               DynIntegerTypeEmitter<UIntBaseType>,
-               DynIntegerTypeEmitter<SignedType>,
-               DynIntegerTypeEmitter<UnsignedType>,
-               DynIntegerTypeEmitter<BitVectorBaseType>,
-               DynIntegerTypeEmitter<LogicVectorBaseType>,
-               DynIntegerTypeEmitter<LogicType>,
-               ModuleTypeEmitter>();
-  // clang-format on
+  patterns.add<
+      // Port and signal types
+      SignalTypeEmitter<InputType, in>, SignalTypeEmitter<InOutType, inout>,
+      SignalTypeEmitter<OutputType, out>, SignalTypeEmitter<SignalType, signal>,
+      // SystemC integers with statically known bit-width
+      IntegerTypeEmitter<IntType>, IntegerTypeEmitter<UIntType>,
+      IntegerTypeEmitter<BigIntType>, IntegerTypeEmitter<BigUIntType>,
+      // SystemC integers without statically known bit-width
+      DynIntegerTypeEmitter<IntBaseType>, DynIntegerTypeEmitter<UIntBaseType>,
+      DynIntegerTypeEmitter<SignedType>, DynIntegerTypeEmitter<UnsignedType>,
+      // Vector types with statically known bit-width
+      IntegerTypeEmitter<BitVectorType>, IntegerTypeEmitter<LogicVectorType>,
+      // Vector types without statically known bit-width
+      DynIntegerTypeEmitter<BitVectorBaseType>,
+      DynIntegerTypeEmitter<LogicVectorBaseType>,
+      // Misc types
+      DynIntegerTypeEmitter<LogicType>, ModuleTypeEmitter>();
 }
