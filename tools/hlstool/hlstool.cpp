@@ -154,6 +154,15 @@ static cl::opt<OutputFormatKind> outputFormat(
                clEnumValN(OutputVerilog, "verilog", "Emit Verilog")),
     cl::init(OutputVerilog), cl::cat(mainCategory));
 
+static cl::opt<bool>
+    traceIVerilog("sv-trace-iverilog",
+                  cl::desc("Add tracing to an iverilog simulated module"),
+                  cl::init(false), cl::cat(mainCategory));
+
+// --------------------------------------------------------------------------
+// Handshake options
+// --------------------------------------------------------------------------
+
 static cl::opt<std::string>
     bufferingStrategy("buffering-strategy",
                       cl::desc("Strategy to apply. Possible values are: "
@@ -346,6 +355,9 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
   }
 
   addIRLevel(HLSFlowDynamicIRLevel::Sv, [&]() { loadHWLoweringPipeline(pm); });
+
+  if (traceIVerilog)
+    pm.addPass(circt::sv::createSVTraceIVerilogPass());
 
   if (outputFormat == OutputVerilog) {
     applyLoweringCLOptions(module);
