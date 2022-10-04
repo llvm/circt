@@ -61,9 +61,6 @@ int main(int argc, char **argv) {
   circt::test::registerAnalysisTestPasses();
   circt::test::registerSchedulingTestPasses();
 
-  // Other command line options.
-  circt::registerLoweringCLOptions();
-
   return mlir::failed(mlir::MlirOptMain(
       argc, argv, "CIRCT modular optimizer driver", registry));
 }

@@ -34,6 +34,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
@@ -4969,26 +4970,14 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
   }
 }
 
-/// Prepare the given MLIR module for emission.
-static void prepareForEmission(ModuleOp module,
-                               const LoweringOptions &options) {
-  SmallVector<HWModuleOp> modulesToPrepare;
-  module.walk([&](HWModuleOp op) { modulesToPrepare.push_back(op); });
-  parallelForEach(module->getContext(), modulesToPrepare,
-                  [&](auto op) { prepareHWModule(op, options); });
-}
-
 //===----------------------------------------------------------------------===//
 // Unified Emitter
 //===----------------------------------------------------------------------===//
 
-LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
-  // Prepare the ops in the module for emission and legalize the names that will
-  // end up in the output.
-  LoweringOptions options(module);
-  prepareForEmission(module, options);
+static LogicalResult exportVerilogImpl(ModuleOp module, llvm::raw_ostream &os) {
   GlobalNameTable globalNames = legalizeGlobalNames(module);
 
+  LoweringOptions options(module);
   SharedEmitterState emitter(module, options, std::move(globalNames));
   emitter.gatherFiles(false);
 
@@ -5024,18 +5013,29 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   return failure(emitter.encounteredError);
 }
 
+LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
+  LoweringOptions options(module);
+  SmallVector<HWModuleOp> modulesToPrepare;
+  module.walk([&](HWModuleOp op) { modulesToPrepare.push_back(op); });
+  parallelForEach(module->getContext(), modulesToPrepare,
+                  [&](auto op) { prepareHWModule(op, options); });
+  return exportVerilogImpl(module, os);
+}
+
 namespace {
 
 struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
   ExportVerilogPass(raw_ostream &os) : os(os) {}
   void runOnOperation() override {
-    // Make sure LoweringOptions are applied to the module if it was overridden
-    // on the command line.
-    // TODO: This should be moved up to circt-opt and circt-translate.
-    applyLoweringCLOptions(getOperation());
+    // Prepare the ops in the module for emission.
+    mlir::OpPassManager preparePM("builtin.module");
+    auto &modulePM = preparePM.nest<hw::HWModuleOp>();
+    modulePM.addPass(createPrepareForEmissionPass());
+    if (failed(runPipeline(preparePM, getOperation())))
+      return signalPassFailure();
 
-    if (failed(exportVerilog(getOperation(), os)))
-      signalPassFailure();
+    if (failed(exportVerilogImpl(getOperation(), os)))
+      return signalPassFailure();
   }
 
 private:
@@ -5102,11 +5102,11 @@ static void createSplitOutputFile(StringAttr fileName, FileInfo &file,
   output->keep();
 }
 
-LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
+static LogicalResult exportSplitVerilogImpl(ModuleOp module,
+                                            StringRef dirname) {
   // Prepare the ops in the module for emission and legalize the names that will
   // end up in the output.
   LoweringOptions options(module);
-  prepareForEmission(module, options);
   GlobalNameTable globalNames = legalizeGlobalNames(module);
 
   SharedEmitterState emitter(module, options, std::move(globalNames));
@@ -5166,6 +5166,15 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   return failure(emitter.encounteredError);
 }
 
+LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
+  LoweringOptions options(module);
+  SmallVector<HWModuleOp> modulesToPrepare;
+  module.walk([&](HWModuleOp op) { modulesToPrepare.push_back(op); });
+  parallelForEach(module->getContext(), modulesToPrepare,
+                  [&](auto op) { prepareHWModule(op, options); });
+  return exportSplitVerilogImpl(module, dirname);
+}
+
 namespace {
 
 struct ExportSplitVerilogPass
@@ -5174,12 +5183,15 @@ struct ExportSplitVerilogPass
     directoryName = directory.str();
   }
   void runOnOperation() override {
-    // Make sure LoweringOptions are applied to the module if it was overridden
-    // on the command line.
-    // TODO: This should be moved up to circt-opt and circt-translate.
-    applyLoweringCLOptions(getOperation());
-    if (failed(exportSplitVerilog(getOperation(), directoryName)))
-      signalPassFailure();
+    // Prepare the ops in the module for emission.
+    mlir::OpPassManager preparePM("builtin.module");
+    auto &modulePM = preparePM.nest<hw::HWModuleOp>();
+    modulePM.addPass(createPrepareForEmissionPass());
+    if (failed(runPipeline(preparePM, getOperation())))
+      return signalPassFailure();
+
+    if (failed(exportSplitVerilogImpl(getOperation(), directoryName)))
+      return signalPassFailure();
   }
 };
 } // end anonymous namespace

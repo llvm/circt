@@ -1,5 +1,5 @@
 // RUN: circt-opt --export-verilog %s | FileCheck %s
-// RUN: circt-opt --lowering-options=disallowLocalVariables --export-verilog %s | FileCheck %s --check-prefix=DISALLOW -strict-whitespace
+// RUN: circt-opt --test-apply-lowering-options='options=disallowLocalVariables' --export-verilog %s | FileCheck %s --check-prefix=DISALLOW -strict-whitespace
 
 // This checks ExportVerilog's support for "disallowLocalVariables" which
 // prevents emitting 'automatic logic' and other local declarations.
