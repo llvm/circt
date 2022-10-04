@@ -100,34 +100,24 @@ private:
     p << callOp.getCallee();
 
     p << "(";
-    bool first = true;
 
     if (!callOp.getArgs()) {
-      for (Value operand : callOp.getOperands()) {
-        if (!first)
-          p << ", ";
-
+      llvm::interleaveComma(callOp.getOperands(), p, [&](Value operand) {
         p.getInlinable(operand).emitWithParensOnLowerPrecedence(
             Precedence::COMMA);
-        first = false;
-      }
+      });
     } else {
-      for (Attribute attr : callOp.getArgs().value()) {
-        if (!first)
-          p << ", ";
-
-        first = false;
-
+      llvm::interleaveComma(callOp.getArgs().value(), p, [&](Attribute attr) {
         if (auto idx = attr.dyn_cast<IntegerAttr>()) {
           if (idx.getType().isa<IndexType>()) {
             p.getInlinable(callOp.getOperands()[idx.getInt()])
                 .emitWithParensOnLowerPrecedence(Precedence::COMMA);
-            continue;
+            return;
           }
         }
 
         p.emitAttr(attr);
-      }
+      });
     }
 
     p << ")";
