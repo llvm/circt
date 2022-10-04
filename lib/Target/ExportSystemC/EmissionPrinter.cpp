@@ -108,6 +108,19 @@ void EmissionPrinter::emitRegion(
   }
 }
 
+InFlightDiagnostic EmissionPrinter::emitError(Operation *op,
+                                              const Twine &message) {
+  emissionFailed = true;
+  os << "<<ERROR (" << message << ")>>";
+  return op->emitOpError();
+}
+
+InFlightDiagnostic EmissionPrinter::emitError(const Twine &message) {
+  emissionFailed = true;
+  os << "<<ERROR (" << message << ")>>";
+  return mlir::emitError(currentLoc, message);
+}
+
 EmissionPrinter &EmissionPrinter::operator<<(StringRef str) {
   os << str;
   return *this;

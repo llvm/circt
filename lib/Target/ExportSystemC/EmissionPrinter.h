@@ -93,6 +93,15 @@ public:
   void emitRegion(Region &region,
                   mlir::raw_indented_ostream::DelimitedScope &scope);
 
+  /// Emit an error on the operation and fail emission. Preferred for
+  /// operations, especially the ones that will be inlined, because it places
+  /// the error more precisely.
+  InFlightDiagnostic emitError(Operation *op, const Twine &message);
+  /// Emit an error at the current location of the printer (the newest operation
+  /// to be emitted as a statement). This is primarily intended for types and
+  /// attributes for which no location is available directly.
+  InFlightDiagnostic emitError(const Twine &message);
+
   EmissionPrinter &operator<<(StringRef str);
   EmissionPrinter &operator<<(int64_t num);
 

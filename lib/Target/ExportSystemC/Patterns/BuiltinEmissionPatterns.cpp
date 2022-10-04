@@ -66,7 +66,9 @@ struct IntegerTypeEmitter : TypeEmissionPattern<IntegerType> {
       p << (type.isSigned() ? "" : "u") << "int" << bitWidth << "_t";
       break;
     default:
-      assert(false && "All cases allowed by match function must be covered.");
+      p.emitError("in the IntegerType emitter all cases allowed by the 'match' "
+                  "function must be covered")
+          << ", got uncovered case " << type;
     }
   }
 };
