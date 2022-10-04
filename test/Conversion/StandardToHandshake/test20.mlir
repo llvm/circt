@@ -2,7 +2,7 @@
 // RUN: circt-opt -lower-std-to-handshake %s | FileCheck %s
 // CHECK-LABEL:   handshake.func @min_reduction_tree(
 // CHECK-SAME:                                       %[[VAL_0:.*]]: index,
-// CHECK-SAME:                                       %[[VAL_1:.*]]: none, ...) -> none attributes {argNames = ["in0", "inCtrl"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                                       %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]] = merge %[[VAL_0]] : index
 // CHECK:           %[[VAL_3:.*]]:14 = fork [14] %[[VAL_2]] : index
 // CHECK:           %[[VAL_4:.*]]:3 = fork [3] %[[VAL_1]] : none

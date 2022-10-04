@@ -43,3 +43,9 @@ handshake.func @gcd(%arg0: i32, %arg1: i32, %arg2: none, ...) -> (i32, none) {
   %14 = arith.subi %falseResult_9, %13#1 : i32
   return %falseResult_3, %falseResult : i32, none
 }
+
+// -----
+
+// CHECK-LABEL:   handshake.func @external(
+// CHECK-SAME:      i32, none, ...) -> none
+handshake.func @external(%arg0: i32, %ctrl: none, ...) -> none

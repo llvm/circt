@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --firrtl-grand-central-taps --split-input-file | FileCheck %s
+// RUN: circt-opt %s --firrtl-grand-central-taps --symbol-dce --split-input-file | FileCheck %s
 
 firrtl.circuit "TestHarness" attributes {
   annotations = [{
@@ -349,9 +349,9 @@ firrtl.circuit "NLAGarbageCollection" {
   // CHECK-NOT: @nla_1
   // CHECK-NOT: @nla_2
   // CHECK-NOT: @nla_3
-  firrtl.hierpath @nla_1 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@foo]
-  firrtl.hierpath @nla_2 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@port]
-  firrtl.hierpath @nla_3 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@bar_0]
+  firrtl.hierpath private @nla_1 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@foo]
+  firrtl.hierpath private @nla_2 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@port]
+  firrtl.hierpath private @nla_3 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@bar_0]
   firrtl.module private @Submodule(
     in %port: !firrtl.uint<1> sym @port [
       {circt.nonlocal = @nla_2,
@@ -407,22 +407,12 @@ firrtl.circuit "NLAGarbageCollection" {
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
     ]
   } {
-    %submodule_port = firrtl.instance submodule sym @submodule  {
-      annotations = [
-        {circt.nonlocal = @nla_1, class = "circt.nonlocal"},
-        {circt.nonlocal = @nla_2, class = "circt.nonlocal"},
-        {circt.nonlocal = @nla_3, class = "circt.nonlocal"}]
-    } @Submodule(in port : !firrtl.uint<1>)
+    %submodule_port = firrtl.instance submodule sym @submodule @Submodule(in port : !firrtl.uint<1>)
     %MemTap_0 = firrtl.instance mem_tap_MemTap  @MemTap(out mem_0: !firrtl.uint<1>)
     %DataTap_0, %DataTap_1 = firrtl.instance DataTap_1  @DataTap_1(out _1: !firrtl.uint<1>, out _0: !firrtl.uint<1>)
   }
   firrtl.module @NLAGarbageCollection() {
-    firrtl.instance dut sym @dut {
-      annotations = [
-        {circt.nonlocal = @nla_1, class = "circt.nonlocal"},
-        {circt.nonlocal = @nla_2, class = "circt.nonlocal"},
-        {circt.nonlocal = @nla_3, class = "circt.nonlocal"}]
-    } @DUT()
+    firrtl.instance dut sym @dut @DUT()
   }
 }
 
@@ -435,8 +425,8 @@ firrtl.circuit "NLAGarbageCollection" {
 firrtl.circuit "NLAUsedInWiring"  {
   // CHECK-NOT: @nla_1
   // CHECK-NOT: @nla_2
-  firrtl.hierpath @nla_1 [@NLAUsedInWiring::@foo, @Foo::@f]
-  firrtl.hierpath @nla_2 [@NLAUsedInWiring::@foo, @Foo::@g]
+  firrtl.hierpath private @nla_1 [@NLAUsedInWiring::@foo, @Foo::@f]
+  firrtl.hierpath private @nla_2 [@NLAUsedInWiring::@foo, @Foo::@g]
 
   // CHECK-LABEL: firrtl.module private @DataTap
   // CHECK-NEXT: [[TMP:%.+]] = firrtl.verbatim.expr
@@ -486,10 +476,7 @@ firrtl.circuit "NLAUsedInWiring"  {
   }
 
   firrtl.module @NLAUsedInWiring() {
-    %foo_g = firrtl.instance foo sym @foo {annotations = [
-      {circt.nonlocal = @nla_1, class = "circt.nonlocal"},
-      {circt.nonlocal = @nla_2, class = "circt.nonlocal"}
-    ]} @Foo(out g: !firrtl.uint<1>)
+    %foo_g = firrtl.instance foo sym @foo @Foo(out g: !firrtl.uint<1>)
     %bar_g = firrtl.instance bar @Foo(out g: !firrtl.uint<1>)
     %k = firrtl.wire sym @k {annotations = [{
       class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source",
@@ -506,8 +493,8 @@ firrtl.circuit "NLAUsedInWiring"  {
 // See https://github.com/llvm/circt/issues/2767.
 
 firrtl.circuit "Top" {
-  firrtl.hierpath @nla_0 [@DUT::@submodule_1, @Submodule::@bar_0]
-  firrtl.hierpath @nla [@DUT::@submodule_2, @Submodule::@bar_0]
+  firrtl.hierpath private @nla_0 [@DUT::@submodule_1, @Submodule::@bar_0]
+  firrtl.hierpath private @nla [@DUT::@submodule_2, @Submodule::@bar_0]
   firrtl.module private @Submodule(in %clock: !firrtl.clock, out %out: !firrtl.uint<1>) {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -524,9 +511,9 @@ firrtl.circuit "Top" {
     firrtl.strictconnect %out, %3 : !firrtl.uint<1>
   }
   firrtl.module private @DUT(in %clock: !firrtl.clock, out %out: !firrtl.uint<1>) {
-    %submodule_1_clock, %submodule_1_out = firrtl.instance submodule_1 sym @submodule_1  {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @Submodule(in clock: !firrtl.clock, out out: !firrtl.uint<1>)
+    %submodule_1_clock, %submodule_1_out = firrtl.instance submodule_1 sym @submodule_1 @Submodule(in clock: !firrtl.clock, out out: !firrtl.uint<1>)
     firrtl.strictconnect %submodule_1_clock, %clock : !firrtl.clock
-    %submodule_2_clock, %submodule_2_out = firrtl.instance submodule_2 sym @submodule_2  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @Submodule(in clock: !firrtl.clock, out out: !firrtl.uint<1>)
+    %submodule_2_clock, %submodule_2_out = firrtl.instance submodule_2 sym @submodule_2 @Submodule(in clock: !firrtl.clock, out out: !firrtl.uint<1>)
     firrtl.strictconnect %submodule_2_clock, %clock : !firrtl.clock
     %0 = firrtl.or %submodule_1_out, %submodule_2_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.strictconnect %out, %0 : !firrtl.uint<1>

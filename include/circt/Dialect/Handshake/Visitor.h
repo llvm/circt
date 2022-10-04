@@ -14,7 +14,7 @@
 #define CIRCT_DIALECT_HANDSHAKE_VISITORS_H
 
 #include "circt/Dialect/Handshake/HandshakeOps.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -34,8 +34,8 @@ public:
             BranchOp, BufferOp, ConditionalBranchOp, ConstantOp, ControlMergeOp,
             EndOp, ForkOp, FuncOp, InstanceOp, JoinOp, LazyForkOp, LoadOp,
             MemoryOp, ExternalMemoryOp, MergeOp, MuxOp, ReturnOp, SinkOp,
-            handshake::SelectOp, SourceOp, StartOp, StoreOp, TerminatorOp,
-            PackOp, UnpackOp>([&](auto opNode) -> ResultType {
+            handshake::SelectOp, SourceOp, StartOp, StoreOp, SyncOp,
+            TerminatorOp, PackOp, UnpackOp>([&](auto opNode) -> ResultType {
           return thisCast->visitHandshake(opNode, args...);
         })
         .Default([&](auto opNode) -> ResultType {
@@ -83,6 +83,7 @@ public:
   HANDLE(SourceOp);
   HANDLE(StartOp);
   HANDLE(StoreOp);
+  HANDLE(SyncOp);
   HANDLE(TerminatorOp);
   HANDLE(PackOp);
   HANDLE(UnpackOp);

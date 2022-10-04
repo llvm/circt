@@ -182,8 +182,6 @@ def InstanceOp : Handshake_Op<"instance", [
   let assemblyFormat = [{
     $module `(` $opOperands `)` attr-dict `:` functional-type($opOperands, results)
   }];
-
-  let hasVerifier = 1;
 }
 
 // This is almost exactly like a standard FuncOp, except that it has some
@@ -665,7 +663,7 @@ def MemoryOp : Handshake_Op<"memory", [
     The memory op represents a flat, unidimensional memory.
     Operands: all stores (stdata1, staddr1, stdata2, staddr2, ...), then all loads (ldaddr1, ldaddr2,...)
     Outputs: all load outputs, ordered the same as
-    load addresses (lddata1, lddata2, ...), followed by all none outputs,
+    load data (lddata1, lddata2, ...), followed by all none outputs,
     ordered as operands (stnone1, stnone2,...ldnone1, ldnone2,...)
   }];
   let arguments = (ins Variadic<AnyType> : $inputs,
@@ -722,6 +720,15 @@ def ExternalMemoryOp : Handshake_Op<"extmemory", [
       "int":$id)>
   ];
   let assemblyFormat = "`[` `ld` `=` $ldCount `,` `st` `=`  $stCount `]` `(` $memref `:` qualified(type($memref)) `)` `(` $inputs `)` attr-dict `:` functional-type($inputs, $outputs)";
+
+  let extraClassDeclaration = [{
+    mlir::MemRefType getMemRefType() {
+      return getMemref().getType().cast<mlir::MemRefType>();
+    }
+
+    llvm::SmallVector<handshake::ExtMemLoadInterface> getLoadPorts();
+    llvm::SmallVector<handshake::ExtMemStoreInterface> getStorePorts();
+  }];
 }
 
 def LoadOp : Handshake_Op<"load", [
@@ -808,6 +815,33 @@ def JoinOp : Handshake_Op<"join", [
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(ins "ValueRange":$operands)>];
   let hasCustomAssemblyFormat = 1;
+}
+
+def SyncOp : Handshake_Op<"sync", [
+  HasClock, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<GeneralOpInterface>,
+  AllTypesMatch<["operands", "results"]>
+]> {
+  let summary = "sync operation";
+  let description = [{
+    Synchronizes an arbitrary set of inputs. Synchronization implies applying
+    join semantics in between all in- and output ports.
+
+    Example:
+    ```mlir
+    %aSynced, %bSynced, %cSynced = sync %a, %b, %c : i32, i1, none
+    ```
+  }];
+  let arguments = (ins Variadic<AnyType> : $operands);
+  let results = (outs Variadic<AnyType> : $results);
+
+  let skipDefaultBuilders = 1;
+  let builders = [OpBuilder<
+    (ins "ValueRange":$operands), [{
+      $_state.addOperands(operands);
+      $_state.addTypes(operands.getTypes());
+  }]>];
+  let assemblyFormat = [{ $operands attr-dict `:` type($operands)}];
 }
 
 def I4 : I<4>;

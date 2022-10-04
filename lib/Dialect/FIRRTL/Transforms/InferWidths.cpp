@@ -364,7 +364,7 @@ namespace {
 ///
 /// The inequality separately tracks recursive (a, b) and non-recursive (c)
 /// constraints on `x`. This allows it to properly identify the combination of
-/// the two constraints constraints `x >= x-1` and `x >= 4` to be satisfiable as
+/// the two constraints `x >= x-1` and `x >= 4` to be satisfiable as
 /// `x >= max(x-1, 4)`. If it only tracked inequality as `x >= a*x+b`, the
 /// combination of these two constraints would be `x >= x+4` (due to max(-1,4) =
 /// 4), which would be unsatisfiable.
@@ -1211,7 +1211,12 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
     if (auto mux = dyn_cast<MuxPrimOp>(op))
       if (hasUninferredWidth(mux.getSel().getType()))
         allWidthsKnown = false;
-    if (!hasUninferredWidth(result.getType()))
+    // Only consider FIRRTL types for width constraints. Ignore any foreign
+    // types as they don't participate in the width inference process.
+    auto resultTy = result.getType().dyn_cast<FIRRTLType>();
+    if (!resultTy)
+      continue;
+    if (!hasUninferredWidth(resultTy))
       declareVars(result, op->getLoc());
     else
       allWidthsKnown = false;
@@ -1466,10 +1471,14 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
 
       // Handle memories.
-      .Case<MemOp>([&](auto op) {
+      .Case<MemOp>([&](MemOp op) {
         // Create constraint variables for all ports.
-        for (auto result : op.getResults())
-          declareVars(result, op.getLoc());
+        unsigned nonDebugPort = 0;
+        for (const auto &result : llvm::enumerate(op.getResults())) {
+          declareVars(result.value(), op.getLoc());
+          if (!result.value().getType().cast<FIRRTLType>().isa<RefType>())
+            nonDebugPort = result.index();
+        }
 
         // A helper function that returns the indeces of the "data", "rdata",
         // and "wdata" fields in the bundle corresponding to a memory port.
@@ -1481,6 +1490,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
             return ArrayRef<unsigned>(indices, 1); // {3}
           case MemOp::PortKind::ReadWrite:
             return ArrayRef<unsigned>(indices); // {3, 5}
+          case MemOp::PortKind::Debug:
+            return ArrayRef<unsigned>({0});
           }
           llvm_unreachable("Imposible PortKind");
         };
@@ -1489,17 +1500,27 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // actually want is for all data ports to share the same variable. To do
         // this, we find the first data port declared, and use that port's vars
         // for all the other ports.
-        unsigned firstFieldIndex = dataFieldIndices(op.getPortKind(0))[0];
-        FieldRef firstData(op.getResult(0), op.getPortType(0)
-                                                .getPassiveType()
-                                                .template cast<BundleType>()
-                                                .getFieldID(firstFieldIndex));
+        unsigned firstFieldIndex =
+            dataFieldIndices(op.getPortKind(nonDebugPort))[0];
+        FieldRef firstData(op.getResult(nonDebugPort),
+                           op.getPortType(nonDebugPort)
+                               .getPassiveType()
+                               .template cast<BundleType>()
+                               .getFieldID(firstFieldIndex));
         LLVM_DEBUG(llvm::dbgs() << "Adjusting memory port variables:\n");
 
         // Reuse data port variables.
         auto dataType = op.getDataType();
         for (unsigned i = 0, e = op.getResults().size(); i < e; ++i) {
           auto result = op.getResult(i);
+          if (result.getType().cast<FIRRTLType>().isa<RefType>()) {
+            // Debug ports are firrtl.ref<vector<data-type, depth>>
+            // Use FieldRef of 1, to indicate the first vector element must be
+            // of the dataType.
+            unifyTypes(firstData, FieldRef(result, 1), dataType);
+            continue;
+          }
+
           auto portType =
               op.getPortType(i).getPassiveType().template cast<BundleType>();
           for (auto fieldIndex : dataFieldIndices(op.getPortKind(i)))
@@ -1516,7 +1537,13 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         declareVars(op.getResult(), op.getLoc());
         constrainTypes(op.getResult(), op.getRef());
       })
-
+      .Case<mlir::UnrealizedConversionCastOp>([&](auto op) {
+        for (Value result : op.getResults()) {
+          auto ty = result.getType();
+          if (ty.isa<FIRRTLType>())
+            declareVars(result, op.getLoc());
+        }
+      })
       .Default([&](auto op) {
         op->emitOpError("not supported in width inference");
         mappingFailed = true;
@@ -1602,8 +1629,12 @@ void InferenceMapping::maximumOfTypes(Value result, Value rhs, Value lhs) {
 ///
 /// This function is used to apply regular connects.
 void InferenceMapping::constrainTypes(Value larger, Value smaller) {
-  // Recurse to every leaf element and set larger >= smaller.
-  auto type = larger.getType().cast<FIRRTLType>();
+  // Recurse to every leaf element and set larger >= smaller. Ignore foreign
+  // types as these do not participate in width inference.
+  auto type = larger.getType().dyn_cast<FIRRTLType>();
+  if (!type)
+    return;
+
   auto fieldID = 0;
   std::function<void(FIRRTLBaseType, Value, Value)> constrain =
       [&](FIRRTLBaseType type, Value larger, Value smaller) {

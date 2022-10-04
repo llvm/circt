@@ -18,6 +18,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/FunctionInterfaces.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"
@@ -108,11 +109,13 @@ PortInfo getModuleOutputPort(Operation *op, size_t idx);
 /// be in ascending order. The indices refer to the port positions before any
 /// insertion or removal occurs. Ports inserted at the same index will appear in
 /// the module in the same order as they were listed in the `insert*` array.
+/// If 'body' is provided, additionally inserts/removes the corresponding
+/// block arguments.
 void modifyModulePorts(Operation *op,
                        ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
                        ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
                        ArrayRef<unsigned> removeInputs,
-                       ArrayRef<unsigned> removeOutputs);
+                       ArrayRef<unsigned> removeOutputs, Block *body = nullptr);
 
 // Helpers for working with modules.
 
@@ -160,6 +163,10 @@ static inline StringRef getModuleResultName(Operation *module,
   auto attr = getModuleResultNameAttr(module, resultNo);
   return attr ? attr.getValue() : StringRef();
 }
+
+// Index width should be exactly clog2 (size of array), or either 0 or 1 if the
+// array is a singleton.
+bool isValidIndexBitWidth(Value index, Value array);
 
 void setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names);
 void setModuleResultNames(Operation *module, ArrayRef<Attribute> names);

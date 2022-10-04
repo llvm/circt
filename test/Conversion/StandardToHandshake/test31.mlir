@@ -2,7 +2,7 @@
 // RUN: circt-opt -lower-std-to-handshake %s | FileCheck %s
 // CHECK-LABEL:   handshake.func @affine_load(
 // CHECK-SAME:                                %[[VAL_0:.*]]: index,
-// CHECK-SAME:                                %[[VAL_1:.*]]: none, ...) -> none attributes {argNames = ["in0", "inCtrl"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                                %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]]:3 = memory[ld = 1, st = 1] (%[[VAL_3:.*]], %[[VAL_4:.*]], %[[VAL_5:.*]]) {id = 1 : i32, lsq = false} : memref<10xf32>, (f32, index, index) -> (f32, none, none)
 // CHECK:           %[[VAL_6:.*]]:2 = fork [2] %[[VAL_2]]#2 : none
 // CHECK:           %[[VAL_7:.*]]:4 = memory[ld = 2, st = 0] (%[[VAL_8:.*]], %[[VAL_9:.*]]) {id = 0 : i32, lsq = false} : memref<10xf32>, (index, index) -> (f32, f32, none, none)

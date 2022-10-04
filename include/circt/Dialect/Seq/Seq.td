@@ -57,12 +57,18 @@ def CompRegOp : SeqOp<"compreg",
                    input, clk, sym_name, Value(), Value(),
                    StringAttr::get($_builder.getContext(), sym_name));
     }]>,
+    OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$rst,
+                   "Value":$rstValue, "StringRef":$sym_name), [{
+      return build($_builder, $_state, input.getType(),
+                   input, clk, sym_name, rst, rstValue,
+                   StringAttr::get($_builder.getContext(), sym_name));
+    }]>,
   ];
 }
 
 def FirRegOp : SeqOp<"firreg",
     [NoSideEffect, AllTypesMatch<["next", "data"/*, "resetValue"*/]>,
-     SameVariadicOperandSize,
+     SameVariadicOperandSize, MemoryEffects<[MemWrite, MemRead, MemAlloc]>,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
       // AllTypesMatch doesn't work with Optional types yet.
 

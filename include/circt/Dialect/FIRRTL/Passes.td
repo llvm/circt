@@ -39,6 +39,8 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
        "Total number of annotations processed">,
     Statistic<"numUnhandled", "num-unhandled-annos",
       "Number of unhandled annotations">,
+    Statistic<"numReusedHierPathOps", "num-reused-hierpath",
+      "Number of reused HierPathOp's">,
   ];
 }
 

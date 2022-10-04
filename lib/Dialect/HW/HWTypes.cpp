@@ -46,8 +46,7 @@ mlir::Type circt::hw::getCanonicalType(mlir::Type type) {
 }
 
 /// Return true if the specified type is a value HW Integer type.  This checks
-/// that it is a signless standard dialect type, that it isn't zero bits, or a
-/// hw::IntType.
+/// that it is a signless standard dialect type or a hw::IntType.
 bool circt::hw::isHWIntegerType(mlir::Type type) {
   Type canonicalType = getCanonicalType(type);
 
@@ -58,7 +57,7 @@ bool circt::hw::isHWIntegerType(mlir::Type type) {
   if (!intType || !intType.isSignless())
     return false;
 
-  return intType.getWidth() != 0;
+  return true;
 }
 
 bool circt::hw::isHWEnumType(mlir::Type type) {

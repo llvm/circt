@@ -4,8 +4,8 @@ from helper import initDut
 
 @cocotb.test()
 async def oneInput(dut):
-  [in0, inCtrl], [out0, outCtrl] = await initDut(dut, ["in0", "inCtrl"],
-                                                 ["out0", "outCtrl"])
+  [in0, inCtrl], [out0, outCtrl] = await initDut(dut, ["in0", "in1"],
+                                                 ["out0", "out1"])
   out0Check = cocotb.start_soon(out0.checkOutputs([4]))
 
   in0Send = cocotb.start_soon(in0.send(2))
@@ -19,8 +19,8 @@ async def oneInput(dut):
 
 @cocotb.test()
 async def sendMultiple(dut):
-  [in0, inCtrl], [out0, outCtrl] = await initDut(dut, ["in0", "inCtrl"],
-                                                 ["out0", "outCtrl"])
+  [in0, inCtrl], [out0, outCtrl] = await initDut(dut, ["in0", "in1"],
+                                                 ["out0", "out1"])
 
   N = 10
   # sum_{i = 0}^n (sum_{j=0}^i i) = 1/6 * (n^3 + 3n^2 + 2n)

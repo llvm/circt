@@ -164,9 +164,9 @@ firrtl.circuit "Top" {
 }
 
 
-// Updates should be made to a Grand Central interface to add a "prefix" field
-// and the annotations associated with the parent and companion should have
-// their "name" field prefixed.
+// Updates should be made to a Grand Central interface to add a "prefix" field.
+// The annotatinos associated with the parent and companion should be
+// unmodified.
 // CHECK-LABEL: firrtl.circuit "GCTInterfacePrefix"
 // CHECK-SAME:    name = "MyView", prefix = "FOO_"
 firrtl.circuit "GCTInterfacePrefix"
@@ -177,7 +177,7 @@ firrtl.circuit "GCTInterfacePrefix"
     id = 0 : i64,
     name = "MyView"}]}  {
   // CHECK:      firrtl.module @FOO_MyView_companion
-  // CHECK-SAME:   name = "FOO_MyView"
+  // CHECK-SAME:   name = "MyView"
   firrtl.module @MyView_companion()
     attributes {annotations = [{
       class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
@@ -185,7 +185,7 @@ firrtl.circuit "GCTInterfacePrefix"
       name = "MyView",
       type = "companion"}]} {}
   // CHECK:      firrtl.module @FOO_DUT
-  // CHECK-SAME:   name = "FOO_MyView"
+  // CHECK-SAME:   name = "MyView"
   firrtl.module @DUT()
     attributes {annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
@@ -205,10 +205,10 @@ firrtl.circuit "GCTInterfacePrefix"
 // CHECK: firrtl.circuit "T_NLATop"
 firrtl.circuit "NLATop" {
 
-  firrtl.hierpath @nla [@NLATop::@test, @Aardvark::@test, @Zebra]
-  firrtl.hierpath @nla_1 [@NLATop::@test,@Aardvark::@test_1, @Zebra]
-  // CHECK: firrtl.hierpath @nla [@T_NLATop::@test, @T_Aardvark::@test, @T_A_Z_Zebra]
-  // CHECK: firrtl.hierpath @nla_1 [@T_NLATop::@test, @T_Aardvark::@test_1, @T_A_Z_Zebra]
+  firrtl.hierpath private @nla [@NLATop::@test, @Aardvark::@test, @Zebra]
+  firrtl.hierpath private @nla_1 [@NLATop::@test,@Aardvark::@test_1, @Zebra]
+  // CHECK: firrtl.hierpath private @nla [@T_NLATop::@test, @T_Aardvark::@test, @T_A_Z_Zebra]
+  // CHECK: firrtl.hierpath private @nla_1 [@T_NLATop::@test, @T_Aardvark::@test_1, @T_A_Z_Zebra]
   // CHECK: firrtl.module @T_NLATop
   firrtl.module @NLATop()
     attributes {annotations = [{
@@ -303,17 +303,17 @@ firrtl.circuit "GCTDataMemTapsPrefix" {
   }
 }
 
-// Test the the NonLocalAnchor is properly updated.
+// Test the NonLocalAnchor is properly updated.
 // CHECK-LABEL: firrtl.circuit "FixNLA" {
   firrtl.circuit "FixNLA"   {
-    firrtl.hierpath @nla_1 [@FixNLA::@bar, @Bar::@baz, @Baz]
-    // CHECK:   firrtl.hierpath @nla_1 [@FixNLA::@bar, @Bar::@baz, @Baz]
-    firrtl.hierpath @nla_2 [@FixNLA::@foo, @Foo::@bar, @Bar::@baz, @Baz::@s1]
-    // CHECK:   firrtl.hierpath @nla_2 [@FixNLA::@foo, @X_Foo::@bar, @X_Bar::@baz, @X_Baz::@s1]
-    firrtl.hierpath @nla_3 [@FixNLA::@bar, @Bar::@baz, @Baz]
-    // CHECK:   firrtl.hierpath @nla_3 [@FixNLA::@bar, @Bar::@baz, @Baz]
-    firrtl.hierpath @nla_4 [@Foo::@bar, @Bar::@baz, @Baz]
-    // CHECK:       firrtl.hierpath @nla_4 [@X_Foo::@bar, @X_Bar::@baz, @X_Baz]
+    firrtl.hierpath private @nla_1 [@FixNLA::@bar, @Bar::@baz, @Baz]
+    // CHECK:   firrtl.hierpath private @nla_1 [@FixNLA::@bar, @Bar::@baz, @Baz]
+    firrtl.hierpath private @nla_2 [@FixNLA::@foo, @Foo::@bar, @Bar::@baz, @Baz::@s1]
+    // CHECK:   firrtl.hierpath private @nla_2 [@FixNLA::@foo, @X_Foo::@bar, @X_Bar::@baz, @X_Baz::@s1]
+    firrtl.hierpath private @nla_3 [@FixNLA::@bar, @Bar::@baz, @Baz]
+    // CHECK:   firrtl.hierpath private @nla_3 [@FixNLA::@bar, @Bar::@baz, @Baz]
+    firrtl.hierpath private @nla_4 [@Foo::@bar, @Bar::@baz, @Baz]
+    // CHECK:       firrtl.hierpath private @nla_4 [@X_Foo::@bar, @X_Bar::@baz, @X_Baz]
     // CHECK-LABEL: firrtl.module @FixNLA()
     firrtl.module @FixNLA() {
       firrtl.instance foo sym @foo  @Foo()
@@ -349,10 +349,10 @@ firrtl.circuit "GCTDataMemTapsPrefix" {
 
 // Test that NonLocalAnchors are properly updated with memmodules.
 firrtl.circuit "Test"   {
-  // CHECK: firrtl.hierpath @nla_1 [@Test::@foo1, @A_Foo1::@bar, @A_Bar]
-  firrtl.hierpath @nla_1 [@Test::@foo1, @Foo1::@bar, @Bar]
-  // CHECK: firrtl.hierpath @nla_2 [@Test::@foo2, @B_Foo2::@bar, @B_Bar]
-  firrtl.hierpath @nla_2 [@Test::@foo2, @Foo2::@bar, @Bar]
+  // CHECK: firrtl.hierpath private @nla_1 [@Test::@foo1, @A_Foo1::@bar, @A_Bar]
+  firrtl.hierpath private @nla_1 [@Test::@foo1, @Foo1::@bar, @Bar]
+  // CHECK: firrtl.hierpath private @nla_2 [@Test::@foo2, @B_Foo2::@bar, @B_Bar]
+  firrtl.hierpath private @nla_2 [@Test::@foo2, @Foo2::@bar, @Bar]
 
   firrtl.module @Test() {
     firrtl.instance foo1 sym @foo1 @Foo1()

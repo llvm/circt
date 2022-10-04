@@ -1072,7 +1072,7 @@ hw.module @MultiUseReadInOut(%auto_in_ar_bits_id : i2) -> (aa: i3, bb: i3){
   // CHECK: wire [3:0][2:0] [[WIRE:.+]] = {{.}}{a}, {b}, {c}, {d}};
   // CHECK-NEXT: assign aa = [[WIRE]][auto_in_ar_bits_id];
   %127 = hw.array_create %124, %123, %125, %126 : i3
-  %128 = hw.array_get %127[%auto_in_ar_bits_id] : !hw.array<4xi3>
+  %128 = hw.array_get %127[%auto_in_ar_bits_id] : !hw.array<4xi3>, i2
 
   // CHECK: assign bb = 3'(b + a);
   %xx = comb.add %123, %124 : i3
@@ -1550,6 +1550,20 @@ hw.module private @InlineReadInout() -> () {
     %5 = comb.extract %4 from 0 : (i32) -> i2
     sv.bpassign %r1, %5 : i2
   }
+}
+
+// CHECK-LABEL: module ConditionalComments(
+hw.module @ConditionalComments() {
+  sv.ifdef "FOO"  {             // CHECK-NEXT: `ifdef FOO
+    sv.verbatim "`define FOO_A" // CHECK-NEXT:   `define FOO_A
+  } else  {                     // CHECK-NEXT: `else  // FOO
+    sv.verbatim "`define FOO_B" // CHECK-NEXT:   `define FOO_B
+  }                             // CHECK-NEXT: `endif // FOO
+
+  sv.ifdef "BAR"  {             // CHECK-NEXT: `ifndef BAR
+  } else  {
+    sv.verbatim "`define X"     // CHECK-NEXT:   `define X
+  }                             // CHECK-NEXT: `endif // not def BAR
 }
 
 hw.module @bindInMod() {

@@ -25,6 +25,9 @@ jobs:
             cxx: clang++
           - cc: gcc
             cxx: g++
+        exclude:
+          - build-type: Debug
+            compiler: {cc: gcc, cxx: g++}
 
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone

@@ -3,10 +3,11 @@
 firrtl.circuit "TLRAM" {
 // Test the case when the enable is a simple not of write enable.
 // CHECK-LABEL: firrtl.module @TLRAM
-    firrtl.module @TLRAM(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %index: !firrtl.uint<4>, in %index2: !firrtl.uint<4>, in %data_0: !firrtl.uint<8>, in %wen: !firrtl.uint<1>, in %_T_29: !firrtl.uint<1>, out %auto_0: !firrtl.uint<8>) {
+    firrtl.module @TLRAM(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %index: !firrtl.uint<4>, in %index2: !firrtl.uint<4>, in %data_0: !firrtl.uint<8>, in %wen: !firrtl.uint<1>, in %_T_29: !firrtl.uint<1>, out %auto_0: !firrtl.uint<8>, out %dbg_0: !firrtl.ref<vector<uint<8>, 16>>) {
       %mem_MPORT_en = firrtl.wire  : !firrtl.uint<1>
       %mem_MPORT_data_0 = firrtl.wire  : !firrtl.uint<8>
-      %mem_0_MPORT, %mem_0_MPORT_1 = firrtl.mem Undefined  {depth = 16 : i64, groupID = 2 : ui32, name = "mem_0", portNames = ["MPORT", "MPORT_1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+      %debug, %mem_0_MPORT, %mem_0_MPORT_1 = firrtl.mem Undefined  {depth = 16 : i64, groupID = 2 : ui32, name = "mem_0", portNames = ["dbgs", "MPORT", "MPORT_1"], readLatency = 1 : i32, writeLatency = 1 : i32} :  !firrtl.ref<vector<uint<8>, 16>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+      firrtl.strictconnect %dbg_0, %debug : !firrtl.ref<vector<uint<8>, 16>>
       %0 = firrtl.subfield %mem_0_MPORT(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>) -> !firrtl.uint<4>
       firrtl.connect %0, %index2 : !firrtl.uint<4>, !firrtl.uint<4>
       %1 = firrtl.subfield %mem_0_MPORT(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>) -> !firrtl.uint<1>
@@ -35,11 +36,12 @@ firrtl.circuit "TLRAM" {
       %11 = firrtl.mux(%REG, %mem_MPORT_data_0, %r_0) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
       firrtl.connect %auto_0, %11 : !firrtl.uint<8>, !firrtl.uint<8>
 
-// CHECK: %mem_0_rw = firrtl.mem Undefined  {depth = 16 : i64, groupID = 2 : ui32, name = "mem_0", portNames = ["rw"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<1>>
+// CHECK: %mem_0_dbgs, %mem_0_rw = firrtl.mem  Undefined  {depth = 16 : i64, groupID = 2 : ui32, name = "mem_0", portNames = ["dbgs", "rw"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.ref<vector<uint<8>, 16>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<1>>
 // CHECK:  %[[v7:.+]] = firrtl.mux(%[[writeEnable:.+]], %[[writeAddr:.+]], %[[readAddr:.+]]) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
 // CHECK:  firrtl.strictconnect %[[v0:.+]], %[[v7]] : !firrtl.uint<4>
 // CHECK:  %[[v8:.+]] = firrtl.or %[[readEnable:.+]], %[[writeEnable]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:  firrtl.strictconnect %[[v1:.+]], %[[v8]] : !firrtl.uint<1>
+// CHECK:  firrtl.strictconnect %dbg_0, %mem_0_dbgs : !firrtl.ref<vector<uint<8>, 16>>
 // CHECK:  firrtl.connect %[[readAddr]], %[[index2:.+]] : !firrtl.uint<4>, !firrtl.uint<4>
 // CHECK:  firrtl.connect %[[readEnable]], %mem_MPORT_en : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:  firrtl.connect %[[writeAddr]], %index : !firrtl.uint<4>, !firrtl.uint<4>
@@ -182,8 +184,8 @@ firrtl.circuit "TLRAM" {
 // CHECK-LABEL: firrtl.module @memTest3t
   firrtl.module @memTest3t(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io_en: !firrtl.uint<1>, in %io_wen: !firrtl.uint<1>, in %io_waddr: !firrtl.uint<8>, in %io_wdata: !firrtl.uint<32>, in %io_raddr: !firrtl.uint<8>, out %io_rdata: !firrtl.uint<32>) {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    %mem_T_3, %mem_T_5 = firrtl.mem Undefined  {depth = 128 : i64, name = "mem", portNames = ["T_3", "T_5"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, data flip: uint<32>>, !firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>
-// CHECK: %mem_rw = firrtl.mem Undefined  {depth = 128 : i64, name = "mem", portNames = ["rw"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, rdata flip: uint<32>, wmode: uint<1>, wdata: uint<32>, wmask: uint<1>>
+    %dbg0, %mem_T_3, %mem_T_5, %dbg = firrtl.mem Undefined  {depth = 128 : i64, name = "mem", portNames = ["dbg0", "T_3", "T_5", "dbg"], readLatency = 1 : i32, writeLatency = 1 : i32} :  !firrtl.ref<vector<uint<32>,128>>, !firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, data flip: uint<32>>, !firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>, !firrtl.ref<vector<uint<32>,128>>
+// CHECK: %mem_dbg0, %mem_dbg, %mem_rw = firrtl.mem  Undefined  {depth = 128 : i64, name = "mem", portNames = ["dbg0", "dbg", "rw"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.ref<vector<uint<32>, 128>>, !firrtl.ref<vector<uint<32>, 128>>, !firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, rdata flip: uint<32>, wmode: uint<1>, wdata: uint<32>, wmask: uint<1>>
     %0 = firrtl.subfield %mem_T_3(0) : (!firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, data flip: uint<32>>) -> !firrtl.uint<7>
     %1 = firrtl.subfield %mem_T_3(1) : (!firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, data flip: uint<32>>) -> !firrtl.uint<1>
     %2 = firrtl.subfield %mem_T_3(2) : (!firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, data flip: uint<32>>) -> !firrtl.clock

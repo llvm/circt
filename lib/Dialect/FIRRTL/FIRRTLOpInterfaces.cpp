@@ -25,13 +25,10 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   // Verify port types first.  This is used as the basis for the number of
   // ports required everywhere else.
   auto portTypes = module.getPortTypesAttr();
-  if (!portTypes)
-    return module.emitOpError("requires valid port types");
-  if (llvm::any_of(portTypes.getValue(), [](Attribute attr) {
-        auto typeAttr = attr.dyn_cast<TypeAttr>();
-        return !typeAttr || !typeAttr.getValue().isa<FIRRTLType>();
+  if (!portTypes || llvm::any_of(portTypes.getValue(), [](Attribute attr) {
+        return !attr.isa<TypeAttr>();
       }))
-    return module.emitOpError("ports should all be FIRRTL types");
+    return module.emitOpError("requires valid port types");
 
   auto numPorts = portTypes.size();
 
@@ -51,13 +48,9 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
     return module.emitOpError("requires valid port names");
   if (portNames.size() != numPorts)
     return module.emitOpError("requires ") << numPorts << " port names";
-  SmallDenseSet<Attribute> names;
-  for (auto name : portNames.getValue()) {
-    if (!name.isa<StringAttr>())
-      return module.emitOpError("port names should all be string attributes");
-    if (!names.insert(name).second)
-      return module.emitOpError("port names should be unique");
-  }
+  if (llvm::any_of(portNames.getValue(),
+                   [](Attribute attr) { return !attr.isa<StringAttr>(); }))
+    return module.emitOpError("port names should all be string attributes");
 
   // Verify the port annotations.
   auto portAnnotations = module.getPortAnnotationsAttr();

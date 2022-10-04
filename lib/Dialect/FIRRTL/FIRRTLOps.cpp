@@ -97,6 +97,16 @@ bool firrtl::isDuplexValue(Value val) {
 
 /// Return the kind of port this is given the port type from a 'mem' decl.
 static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
+  constexpr unsigned int addr = 1 << 0;
+  constexpr unsigned int en = 1 << 1;
+  constexpr unsigned int clk = 1 << 2;
+  constexpr unsigned int data = 1 << 3;
+  constexpr unsigned int mask = 1 << 4;
+  constexpr unsigned int rdata = 1 << 5;
+  constexpr unsigned int wdata = 1 << 6;
+  constexpr unsigned int wmask = 1 << 7;
+  constexpr unsigned int wmode = 1 << 8;
+  constexpr unsigned int def = 1 << 9;
   // Get the kind of port based on the fields of the Bundle.
   auto portType = type.dyn_cast<BundleType>();
   if (!portType)
@@ -105,25 +115,22 @@ static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
   // Get the kind of port based on the fields of the Bundle.
   for (auto elem : portType.getElements()) {
     fields |= llvm::StringSwitch<unsigned>(elem.name.getValue())
-                  .Case("addr", 1)
-                  .Case("en", 2)
-                  .Case("clk", 4)
-                  .Case("data", 8)
-                  .Case("mask", 16)
-                  .Case("rdata", 32)
-                  .Case("wdata", 64)
-                  .Case("wmask", 128)
-                  .Case("wmode", 256)
-                  .Default(512);
+                  .Case("addr", addr)
+                  .Case("en", en)
+                  .Case("clk", clk)
+                  .Case("data", data)
+                  .Case("mask", mask)
+                  .Case("rdata", rdata)
+                  .Case("wdata", wdata)
+                  .Case("wmask", wmask)
+                  .Case("wmode", wmode)
+                  .Default(def);
   }
-  // addr, en, clk, data
-  if (fields == 15)
+  if (fields == (addr | en | clk | data))
     return MemOp::PortKind::Read;
-  // addr, en, clk, data, mask
-  if (fields == 31)
+  if (fields == (addr | en | clk | data | mask))
     return MemOp::PortKind::Write;
-  // addr, en, clk, wdata, wmask, rdata, wmode
-  if (fields == 487)
+  if (fields == (addr | en | clk | wdata | wmask | rdata | wmode))
     return MemOp::PortKind::ReadWrite;
   return MemOp::PortKind::Debug;
 }
@@ -161,7 +168,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
         return foldFlow(op.getInput(),
                         op.isFieldFlipped() ? swap() : accumulatedFlow);
       })
-      .Case<SubindexOp, SubaccessOp>(
+      .Case<SubindexOp, SubaccessOp, RefSubOp>(
           [&](auto op) { return foldFlow(op.getInput(), accumulatedFlow); })
       // Registers, Wires, and behavioral memory ports are always Duplex.
       .Case<RegOp, RegResetOp, WireOp, MemoryPortOp>(
@@ -375,7 +382,7 @@ LogicalResult CircuitOp::verify() {
     // has zero false positives.
     for (auto p : llvm::zip(ports, collidingPorts)) {
       StringAttr aName = std::get<0>(p).name, bName = std::get<1>(p).name;
-      FIRRTLType aType = std::get<0>(p).type, bType = std::get<1>(p).type;
+      Type aType = std::get<0>(p).type, bType = std::get<1>(p).type;
 
       if (aName != bName)
         return extModule.emitOpError()
@@ -1632,13 +1639,16 @@ void MemOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
 
 // Get the number of read, write and read-write ports.
 void MemOp::getNumPorts(size_t &numReadPorts, size_t &numWritePorts,
-                        size_t &numReadWritePorts) {
+                        size_t &numReadWritePorts, size_t &numDbgsPorts) {
   numReadPorts = 0;
   numWritePorts = 0;
   numReadWritePorts = 0;
+  numDbgsPorts = 0;
   for (size_t i = 0, e = getNumResults(); i != e; ++i) {
     auto portKind = getPortKind(i);
-    if (portKind == MemOp::PortKind::Read)
+    if (portKind == MemOp::PortKind::Debug)
+      ++numDbgsPorts;
+    else if (portKind == MemOp::PortKind::Read)
       ++numReadPorts;
     else if (portKind == MemOp::PortKind::Write) {
       ++numWritePorts;
@@ -1877,7 +1887,8 @@ size_t MemOp::getMaskBits() {
     if (res.getType().isa<RefType>())
       continue;
     auto firstPortType = res.getType().cast<FIRRTLBaseType>();
-    if (getMemPortKindFromType(firstPortType) == PortKind::Read)
+    if (getMemPortKindFromType(firstPortType) == PortKind::Read ||
+        getMemPortKindFromType(firstPortType) == PortKind::Debug)
       continue;
 
     FIRRTLBaseType mType;
@@ -2143,12 +2154,13 @@ LogicalResult ConnectOp::verify() {
 }
 
 LogicalResult StrictConnectOp::verify() {
-  auto type = getDest().getType().cast<FIRRTLType>();
-  auto baseType = type.dyn_cast<FIRRTLBaseType>();
+  if (auto type = getDest().getType().dyn_cast<FIRRTLType>()) {
+    auto baseType = type.dyn_cast<FIRRTLBaseType>();
 
-  // Analog types cannot be connected and must be attached.
-  if (baseType && baseType.containsAnalog())
-    return emitError("analog types may not be connected");
+    // Analog types cannot be connected and must be attached.
+    if (baseType && baseType.containsAnalog())
+      return emitError("analog types may not be connected");
+  }
 
   // Check that the flows make sense.
   if (failed(checkConnectFlow(*this)))
@@ -3774,6 +3786,13 @@ LogicalResult HierPathOp::verifyInnerRefs(InnerRefNamespace &ns) {
 
 void HierPathOp::print(OpAsmPrinter &p) {
   p << " ";
+
+  // Print visibility if present.
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility =
+          getOperation()->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+
   p.printSymbolName(getSymName());
   p << " [";
   llvm::interleaveComma(getNamepath().getValue(), p, [&](Attribute attr) {
@@ -3786,11 +3805,15 @@ void HierPathOp::print(OpAsmPrinter &p) {
     }
   });
   p << "]";
-  p.printOptionalAttrDict((*this)->getAttrs(),
-                          {SymbolTable::getSymbolAttrName(), "namepath"});
+  p.printOptionalAttrDict(
+      (*this)->getAttrs(),
+      {SymbolTable::getSymbolAttrName(), "namepath", visibilityAttrName});
 }
 
 ParseResult HierPathOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse the visibility attribute.
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
   // Parse the symbol name.
   StringAttr symName;
   if (parser.parseSymbolName(symName, SymbolTable::getSymbolAttrName(),
@@ -4012,6 +4035,43 @@ void RefResolveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 void RefSendOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
+}
+
+void RefSubOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
+                                     ArrayRef<NamedAttribute> attrs,
+                                     Optional<Location> loc) {
+  auto inType = operands[0].getType().cast<RefType>().getType();
+  auto fieldIdx =
+      getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
+
+  if (auto vectorType = inType.dyn_cast<FVectorType>()) {
+    if (fieldIdx < vectorType.getNumElements())
+      return RefType::get(vectorType.getElementType());
+    if (loc)
+      mlir::emitError(*loc, "out of range index '")
+          << fieldIdx << "' in RefType of vector type "
+          << operands[0].getType();
+    return {};
+  }
+  if (auto bundleType = inType.dyn_cast<BundleType>()) {
+    if (fieldIdx >= bundleType.getNumElements()) {
+      if (loc)
+        mlir::emitError(*loc,
+                        "subfield element index is greater than the number "
+                        "of fields in the bundle type");
+      return {};
+    }
+    return RefType::get(bundleType.getElement(fieldIdx).type);
+  }
+
+  if (loc)
+    mlir::emitError(
+        *loc, "ref.sub op requires a RefType of vector or bundle base type");
+  return {};
 }
 
 //===----------------------------------------------------------------------===//

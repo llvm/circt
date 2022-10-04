@@ -118,13 +118,8 @@ def ArraySliceOp : HWOp<"array_slice", [NoSideEffect]> {
 }
 
 class IndexBitWidthConstraint<string index, string input>
-  : TypesMatchWith<"Index width should be exactly clog2 (size of array)",
-                   input, index,
-                   [{
-    IntegerType::get($_self.getContext(),
-                     type_cast<ArrayType>($_self).getSize() == 1 ? 1 :
-                     llvm::Log2_64_Ceil(type_cast<ArrayType>($_self).getSize()))
-                   }]>;
+  : PredOpTrait<"Index width should be exactly clog2 (size of array), or either 0 or 1 if the array is a singleton.",
+                   CPred<"isValidIndexBitWidth($" # index # ", $" # input # ")">>;
 
 class ArrayElementTypeConstraint<string result, string input>
   : TypesMatchWith<"Result must be arrays element type",
@@ -140,7 +135,7 @@ def ArrayGetOp : HWOp<"array_get",
   let results = (outs HWNonInOutType:$result);
 
   let assemblyFormat = [{
-    $input`[`$index`]` attr-dict `:` qualified(type($input))
+    $input`[`$index`]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))
   }];
 
   let builders = [
@@ -164,7 +159,10 @@ def StructCreateOp : HWOp<"struct_create", [NoSideEffect]> {
 }
 
 // Extract the value of a field of a structure.
-def StructExtractOp : HWOp<"struct_extract", [NoSideEffect]> {
+def StructExtractOp : HWOp<"struct_extract",
+    [NoSideEffect,
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
+  ]> {
   let summary = "Extract a named field from a struct.";
   let description = [{
     ```
@@ -204,7 +202,9 @@ def StructInjectOp : HWOp<"struct_inject", [NoSideEffect,
   let hasCanonicalizeMethod = 1;
 }
 
-def StructExplodeOp : HWOp<"struct_explode", [NoSideEffect]> {
+def StructExplodeOp : HWOp<"struct_explode", [NoSideEffect,
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
+  ]> {
   let summary = "Expand a struct into its constituent parts.";
   let description = [{
     ```
@@ -214,6 +214,7 @@ def StructExplodeOp : HWOp<"struct_explode", [NoSideEffect]> {
   let arguments = (ins StructType:$input);
   let results = (outs Variadic<HWNonInOutType>:$result);
   let hasCustomAssemblyFormat = 1;
+  let hasCanonicalizeMethod = 1;
  }
 
 //===----------------------------------------------------------------------===//

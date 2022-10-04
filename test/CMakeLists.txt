@@ -19,6 +19,8 @@ set(CIRCT_TEST_DEPENDS
   FileCheck count not
   split-file
   circt-capi-ir-test
+  circt-as
+  circt-dis
   circt-opt
   circt-translate
   circt-reduce

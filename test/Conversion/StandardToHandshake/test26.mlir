@@ -3,7 +3,7 @@
 // RUN: circt-opt -lower-std-to-handshake %s | FileCheck %s
 
 // CHECK-LABEL:   handshake.func @if_only(
-// CHECK-SAME:                            %[[VAL_0:.*]]: none, ...) -> none attributes {argNames = ["inCtrl"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                            %[[VAL_0:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_1:.*]]:4 = fork [4] %[[VAL_0]] : none
 // CHECK:           %[[VAL_2:.*]] = constant %[[VAL_1]]#2 {value = 0 : index} : index
 // CHECK:           %[[VAL_3:.*]]:2 = fork [2] %[[VAL_2]] : index

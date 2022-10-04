@@ -13,7 +13,7 @@
 #include "PassDetail.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -103,8 +103,8 @@ struct LoadOpConversion : public OpConversionPattern<memref::LoadOp> {
         /*Already converted?*/ op.getIndices().size() == 1)
       return failure();
     Value finalIdx =
-        flattenIndices(rewriter, op, adaptor.indices(), op.getMemRefType());
-    rewriter.replaceOpWithNewOp<memref::LoadOp>(op, adaptor.memref(),
+        flattenIndices(rewriter, op, adaptor.getIndices(), op.getMemRefType());
+    rewriter.replaceOpWithNewOp<memref::LoadOp>(op, adaptor.getMemref(),
 
                                                 SmallVector<Value>{finalIdx});
     return success();
@@ -122,9 +122,10 @@ struct StoreOpConversion : public OpConversionPattern<memref::StoreOp> {
         /*Already converted?*/ op.getIndices().size() == 1)
       return failure();
     Value finalIdx =
-        flattenIndices(rewriter, op, adaptor.indices(), op.getMemRefType());
-    rewriter.replaceOpWithNewOp<memref::StoreOp>(
-        op, adaptor.value(), adaptor.memref(), SmallVector<Value>{finalIdx});
+        flattenIndices(rewriter, op, adaptor.getIndices(), op.getMemRefType());
+    rewriter.replaceOpWithNewOp<memref::StoreOp>(op, adaptor.getValue(),
+                                                 adaptor.getMemref(),
+                                                 SmallVector<Value>{finalIdx});
     return success();
   }
 };
@@ -235,7 +236,7 @@ void addGenericLegalityConstraint(ConversionTarget &target) {
 }
 
 static void populateFlattenMemRefsLegality(ConversionTarget &target) {
-  target.addLegalDialect<arith::ArithmeticDialect>();
+  target.addLegalDialect<arith::ArithDialect>();
   target.addDynamicallyLegalOp<memref::AllocOp>(
       [](memref::AllocOp op) { return isUniDimensional(op.getType()); });
   target.addDynamicallyLegalOp<memref::StoreOp>(

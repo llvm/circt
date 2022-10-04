@@ -226,7 +226,8 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module) {
         auto portType = sramPort.type;
         // Record the extra port.
         extraPorts.push_back(
-            {firstPortIndex, {portName, portType, portDirection}});
+            {firstPortIndex,
+             {portName, portType.cast<FIRRTLType>(), portDirection}});
         // Record the instance result for now, so that we can connect it to the
         // parent module port after we actually add the ports.
         values.push_back(inst.getResult(firstSubIndex + i));

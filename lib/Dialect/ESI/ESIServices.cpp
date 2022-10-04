@@ -8,24 +8,28 @@
 
 #include "PassDetails.h"
 
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/ESI/ESIServices.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/MSFT/MSFTPasses.h"
+#include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Support/BackedgeBuilder.h"
 
-#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 
-#include <map>
 #include <memory>
 
 using namespace circt;
 using namespace circt::esi;
 
-LogicalResult ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req) {
+LogicalResult
+ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req,
+                                     ServiceDeclOpInterface decl) {
   // Lookup based on 'impl_type' attribute and pass through the generate request
   // if found.
   auto genF = genLookupTable.find(req.getImplTypeAttr().getValue());
@@ -35,14 +39,14 @@ LogicalResult ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req) {
              << req.getImplTypeAttr() << "'";
     return success();
   }
-  return genF->second(req);
+  return genF->second(req, decl);
 }
 
 /// The generator for the "cosim" impl_type.
-static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req) {
+static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req,
+                                                 ServiceDeclOpInterface decl) {
   auto *ctxt = req.getContext();
   OpBuilder b(req);
-  Block *portReqs = &req.getPortReqs().getBlocks().front();
   Value clk = req.getOperand(0);
   Value rst = req.getOperand(1);
 
@@ -62,12 +66,6 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req) {
     llvm::interleave(strArr.getAsValueRange<StringAttr>(), os, ".");
     return StringAttr::get(ctxt, os.str());
   };
-
-  // Since outgoing data gets passed in through block args, we need to translate
-  // internal Values (with the block) to the external Values driving them.
-  BlockAndValueMapping argMap;
-  for (unsigned i = 0, e = portReqs->getArguments().size(); i < e; ++i)
-    argMap.map(portReqs->getArgument(i), req->getOperand(i + 2));
 
   llvm::DenseMap<RequestToClientConnectionOp, unsigned> toClientResultNum;
   for (auto toClient : req.getOps<RequestToClientConnectionOp>())
@@ -89,14 +87,14 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req) {
 
     Value toServerValue;
     if (toServer)
-      toServerValue = argMap.lookup(toServer.getSending());
+      toServerValue = toServer.getToServer();
     else
       toServerValue =
           b.create<NullSourceOp>(loc, ChannelType::get(ctxt, b.getI1Type()));
 
     Type toClientType;
     if (toClient)
-      toClientType = toClient.getReceiving().getType();
+      toClientType = toClient.getToClient().getType();
     else
       toClientType = ChannelType::get(ctxt, b.getI1Type());
 
@@ -115,8 +113,134 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req) {
   return success();
 }
 
+// Generator for "sv_mem" implementation type. Emits SV ops for an unpacked
+// array, hopefully inferred as a memory to the SV compiler.
+static LogicalResult
+instantiateSystemVerilogMemory(ServiceImplementReqOp req,
+                               ServiceDeclOpInterface decl) {
+  ImplicitLocOpBuilder b(req.getLoc(), req);
+  BackedgeBuilder bb(b, req.getLoc());
+
+  RandomAccessMemoryDeclOp ramDecl =
+      dyn_cast<RandomAccessMemoryDeclOp>(decl.getOperation());
+  if (!ramDecl)
+    return req.emitOpError("'sv_mem' implementation type can only be used to "
+                           "implement RandomAccessMemory declarations");
+
+  if (req.getNumOperands() != 2)
+    return req.emitOpError("Implementation requires clk and rst operands");
+  auto clk = req.getOperand(0);
+  auto rst = req.getOperand(1);
+  auto write = b.getStringAttr("write");
+  auto read = b.getStringAttr("read");
+  auto none = b.create<hw::ConstantOp>(
+      APInt(/*numBits*/ 0, /*val*/ 0, /*isSigned*/ false));
+  auto i1 = b.getI1Type();
+  auto c0 = b.create<hw::ConstantOp>(i1, 0);
+
+  // Assemble a mapping of toClient results to actual consumers.
+  DenseMap<Value, Value> outputMap;
+  for (auto [bout, reqout] : llvm::zip_longest(
+           req.getOps<RequestToClientConnectionOp>(), req.getResults())) {
+    assert(bout.has_value());
+    assert(reqout.has_value());
+    outputMap[*bout] = *reqout;
+  }
+
+  // Create the SV memory.
+  hw::UnpackedArrayType memType =
+      hw::UnpackedArrayType::get(ramDecl.getInnerType(), ramDecl.getDepth());
+  auto mem = b.create<sv::RegOp>(memType, req.getServiceSymbolAttr().getAttr())
+                 .getResult();
+
+  // Get the request pairs.
+  llvm::SmallVector<
+      std::pair<RequestToServerConnectionOp, RequestToClientConnectionOp>, 8>
+      reqPairs;
+  req.gatherPairedReqs(reqPairs);
+
+  // Do everything which doesn't actually write to the memory, store the signals
+  // needed for the actual memory writes for later.
+  SmallVector<std::tuple<Value, Value, Value>> writeGoAddressData;
+  for (auto [toServerReq, toClientReq] : reqPairs) {
+    assert(toServerReq && toClientReq); // All of our interfaces are inout.
+    assert(toServerReq.getServicePort() == toClientReq.getServicePort());
+    auto port = toServerReq.getServicePort().getName();
+    WrapValidReadyOp toClientResp;
+
+    if (port == write) {
+      // If this pair is doing a write...
+
+      // Construct the response channel.
+      auto doneValid = bb.get(i1);
+      toClientResp = b.create<WrapValidReadyOp>(none, doneValid);
+
+      // Unwrap the write request and 'explode' the struct.
+      auto unwrap = b.create<UnwrapValidReadyOp>(toServerReq.getToServer(),
+                                                 toClientResp.getReady());
+
+      Value address = b.create<hw::StructExtractOp>(unwrap.getRawOutput(),
+                                                    b.getStringAttr("address"));
+      Value data = b.create<hw::StructExtractOp>(unwrap.getRawOutput(),
+                                                 b.getStringAttr("data"));
+
+      // Determine if the write should occur this cycle.
+      auto go = b.create<comb::AndOp>(unwrap.getValid(), unwrap.getReady());
+      go->setAttr("sv.namehint", b.getStringAttr("write_go"));
+      // Register the 'go' signal and use it as the done message.
+      doneValid.setValue(
+          b.create<seq::CompRegOp>(go, clk, rst, c0, "write_done"));
+      // Store the necessary data for the 'always' memory writing block.
+      writeGoAddressData.push_back(std::make_tuple(go, address, data));
+
+    } else if (port == read) {
+      // If it's a read...
+
+      // Construct the response channel.
+      auto dataValid = bb.get(i1);
+      auto data = bb.get(ramDecl.getInnerType());
+      toClientResp = b.create<WrapValidReadyOp>(data, dataValid);
+
+      // Unwrap the requested address and read from that memory location.
+      auto addressUnwrap = b.create<UnwrapValidReadyOp>(
+          toServerReq.getToServer(), toClientResp.getReady());
+      Value memLoc =
+          b.create<sv::ArrayIndexInOutOp>(mem, addressUnwrap.getRawOutput());
+      auto readData = b.create<sv::ReadInOutOp>(memLoc);
+
+      // Set the data on the response.
+      data.setValue(readData);
+      dataValid.setValue(addressUnwrap.getValid());
+    } else {
+      assert(false && "Port should be either 'read' or 'write'");
+    }
+
+    outputMap[toClientReq.getToClient()].replaceAllUsesWith(
+        toClientResp.getChanOutput());
+  }
+
+  // Now construct the memory writes.
+  b.create<sv::AlwaysFFOp>(
+      sv::EventControl::AtPosEdge, clk, ResetType::SyncReset,
+      sv::EventControl::AtPosEdge, rst, [&] {
+        for (auto [go, address, data] : writeGoAddressData) {
+          Value a = address, d = data; // So the lambda can capture.
+          // If we're told to go, do the write.
+          b.create<sv::IfOp>(go, [&] {
+            Value memLoc = b.create<sv::ArrayIndexInOutOp>(mem, a);
+            b.create<sv::PAssignOp>(memLoc, d);
+          });
+        }
+      });
+
+  req.erase();
+  return success();
+}
+
 static ServiceGeneratorDispatcher
-    globalDispatcher({{"cosim", instantiateCosimEndpointOps}}, false);
+    globalDispatcher({{"cosim", instantiateCosimEndpointOps},
+                      {"sv_mem", instantiateSystemVerilogMemory}},
+                     false);
 
 ServiceGeneratorDispatcher &ServiceGeneratorDispatcher::globalDispatcher() {
   return ::globalDispatcher;
@@ -208,12 +332,12 @@ LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
   mod.walk([&](RequestInOutChannelOp reqInOut) {
     ImplicitLocOpBuilder b(reqInOut.getLoc(), reqInOut);
     b.create<RequestToServerConnectionOp>(reqInOut.getServicePortAttr(),
-                                          reqInOut.getSending(),
+                                          reqInOut.getToServer(),
                                           reqInOut.getClientNamePathAttr());
     auto toClientReq = b.create<RequestToClientConnectionOp>(
-        reqInOut.getReceiving().getType(), reqInOut.getServicePortAttr(),
+        reqInOut.getToClient().getType(), reqInOut.getServicePortAttr(),
         reqInOut.getClientNamePathAttr());
-    reqInOut.getReceiving().replaceAllUsesWith(toClientReq.getReceiving());
+    reqInOut.getToClient().replaceAllUsesWith(toClientReq.getToClient());
     reqInOut.erase();
   });
 
@@ -289,8 +413,8 @@ void ESIConnectServicesPass::copyMetadata(hw::HWMutableModuleLike mod) {
 }
 
 /// Create an op which contains metadata about the soon-to-be implemented
-/// service. To be used by later passes which require these data (e.g. automated
-/// software API creation).
+/// service. To be used by later passes which require these data (e.g.
+/// automated software API creation).
 static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
   ImplicitLocOpBuilder b(implReqOp.getLoc(), implReqOp);
 
@@ -307,13 +431,13 @@ static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
       clientNamePath = toServer.getClientNamePathAttr();
       servicePort = toServer.getServicePortAttr();
       clientAttrs.push_back(b.getNamedAttr(
-          "to_server_type", TypeAttr::get(toServer.getSending().getType())));
+          "to_server_type", TypeAttr::get(toServer.getToServer().getType())));
     }
     if (toClient) {
       clientNamePath = toClient.getClientNamePathAttr();
       servicePort = toClient.getServicePortAttr();
       clientAttrs.push_back(b.getNamedAttr(
-          "to_client_type", TypeAttr::get(toClient.getReceiving().getType())));
+          "to_client_type", TypeAttr::get(toClient.getToClient().getType())));
     }
 
     clientAttrs.push_back(b.getNamedAttr("port", servicePort));
@@ -333,29 +457,24 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
                                                   Block *portReqs) {
   assert(portReqs);
 
+  auto decl = dyn_cast_or_null<ServiceDeclOpInterface>(
+      topLevelSyms.getDefinition(instOp.getServiceSymbolAttr()));
+  if (!decl)
+    return instOp.emitOpError("Could not find service declaration ")
+           << instOp.getServiceSymbolAttr();
+
   // Compute the result types for the new op -- the instance op's output types
   // + the to_client types.
   SmallVector<Type, 8> resultTypes(instOp.getResultTypes().begin(),
                                    instOp.getResultTypes().end());
   for (auto toClient : portReqs->getOps<RequestToClientConnectionOp>())
-    resultTypes.push_back(toClient.getReceiving().getType());
-
-  // Compute the operands for the new op -- the instance op's operands + the
-  // to_server types. Reassign the reqs' operand to the new blocks arguments.
-  SmallVector<Value, 8> operands(instOp.getOperands().begin(),
-                                 instOp.getOperands().end());
-  for (auto toServer : portReqs->getOps<RequestToServerConnectionOp>()) {
-    Value sending = toServer.getSending();
-    operands.push_back(sending);
-    toServer.getSendingMutable().assign(
-        portReqs->addArgument(sending.getType(), toServer.getLoc()));
-  }
+    resultTypes.push_back(toClient.getToClient().getType());
 
   // Create the generation request op.
   OpBuilder b(instOp);
   auto implOp = b.create<ServiceImplementReqOp>(
       instOp.getLoc(), resultTypes, instOp.getServiceSymbolAttr(),
-      instOp.getImplTypeAttr(), instOp.getImplOptsAttr(), operands);
+      instOp.getImplTypeAttr(), instOp.getImplOptsAttr(), instOp.getOperands());
   implOp->setDialectAttrs(instOp->getDialectAttrs());
   implOp.getPortReqs().push_back(portReqs);
 
@@ -365,13 +484,13 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
   unsigned instOpNumResults = instOp.getNumResults();
   for (auto e :
        llvm::enumerate(portReqs->getOps<RequestToClientConnectionOp>()))
-    e.value().getReceiving().replaceAllUsesWith(
+    e.value().getToClient().replaceAllUsesWith(
         implOp.getResult(e.index() + instOpNumResults));
 
   emitServiceMetadata(implOp);
 
   // Try to generate the service provider.
-  if (failed(genDispatcher.generate(implOp)))
+  if (failed(genDispatcher.generate(implOp, decl)))
     return instOp.emitOpError("failed to generate server");
 
   instOp.erase();
@@ -390,47 +509,46 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
   unsigned origNumInputs = mod.getNumInputs();
   SmallVector<std::pair<unsigned, hw::PortInfo>> newInputs;
   unsigned origNumOutputs = mod.getNumOutputs();
-  SmallVector<std::pair<unsigned, hw::PortInfo>> newOutputs;
+  SmallVector<std::pair<mlir::StringAttr, Value>> newOutputs;
 
   // Assemble a port name from an array.
-  auto getPortName = [](ArrayAttr namePath) {
+  auto getPortName = [&](ArrayAttr namePath) {
     std::string portName;
     llvm::raw_string_ostream nameOS(portName);
     llvm::interleave(
         namePath.getValue(), nameOS,
         [&](Attribute attr) { nameOS << attr.cast<StringAttr>().getValue(); },
         ".");
-    return nameOS.str();
+    return StringAttr::get(ctxt, nameOS.str());
   };
 
-  // Append input ports to new port list and replace uses with new block args
-  // which will correspond to said ports.
-  unsigned inputCounter = origNumInputs;
+  // Insert new module input ESI ports.
   for (auto toClient : toClientReqs) {
     newInputs.push_back(std::make_pair(
-        origNumInputs,
-        hw::PortInfo{
-            StringAttr::get(ctxt, getPortName(toClient.getClientNamePath())),
-            hw::PortDirection::INPUT, toClient.getType(), inputCounter++}));
-    toClient.replaceAllUsesWith(modBlock.addArgument(
-        toClient.getReceiving().getType(), toClient.getLoc()));
+        origNumInputs, hw::PortInfo{getPortName(toClient.getClientNamePath()),
+                                    hw::PortDirection::INPUT,
+                                    toClient.getType(), origNumInputs}));
   }
+  mod.insertPorts(newInputs, {});
+  Block *body = &mod->getRegion(0).front();
+
+  // Replace uses with new block args which will correspond to said ports.
+  // Note: no zip or enumerate here because we need mutable access to
+  // toClientReqs.
+  int i = 0;
+  for (auto toClient : toClientReqs) {
+    toClient.replaceAllUsesWith(body->getArguments()[origNumInputs + i]);
+    ++i;
+  }
+
   // Append output ports to new port list and redirect toServer inputs to
   // output op.
   unsigned outputCounter = origNumOutputs;
-  for (auto toServer : toServerReqs) {
-    newOutputs.push_back(std::make_pair(
-        origNumOutputs,
-        hw::PortInfo{
-            StringAttr::get(ctxt, getPortName(toServer.getClientNamePath())),
-            hw::PortDirection::OUTPUT, toServer.getSending().getType(),
-            outputCounter++}));
-    modTerminator->insertOperands(modTerminator->getNumOperands(),
-                                  toServer.getSending());
-  }
+  for (auto toServer : toServerReqs)
+    newOutputs.push_back(
+        {getPortName(toServer.getClientNamePath()), toServer.getToServer()});
 
-  // Insert new module ESI ports.
-  mod.insertPorts(newInputs, newOutputs);
+  mod.appendOutputs(newOutputs);
 
   // Prepend a name to the instance tracking array.
   auto prependNamePart = [&](ArrayAttr namePath, StringRef part) {
@@ -460,12 +578,12 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
       auto instToClient = cast<RequestToClientConnectionOp>(b.clone(*toClient));
       instToClient.setClientNamePathAttr(prependNamePart(
           instToClient.getClientNamePath(), inst.instanceName()));
-      newOperands.push_back(instToClient.getReceiving());
+      newOperands.push_back(instToClient.getToClient());
     }
 
     // Append the results for the to_server requests.
     for (auto newPort : newOutputs)
-      newResultTypes.push_back(newPort.second.type);
+      newResultTypes.push_back(newPort.second.getType());
 
     // Create a replacement instance of the same operation type.
     SmallVector<NamedAttribute> newAttrs;
@@ -513,10 +631,7 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
   return success();
 }
 
-namespace circt {
-namespace esi {
-std::unique_ptr<OperationPass<ModuleOp>> createESIConnectServicesPass() {
+std::unique_ptr<OperationPass<ModuleOp>>
+circt::esi::createESIConnectServicesPass() {
   return std::make_unique<ESIConnectServicesPass>();
 }
-} // namespace esi
-} // namespace circt

@@ -206,6 +206,8 @@ struct ApplyState {
   CircuitTargetCache targetCaches;
   AddToWorklistFn addToWorklistFn;
   InstancePathCache &instancePathCache;
+  DenseMap<Attribute, FlatSymbolRefAttr> instPathToNLAMap;
+  size_t numReusedHierPaths = 0;
 
   ModuleNamespace &getNamespace(FModuleLike module) {
     auto &ptr = namespaces[module];
@@ -299,6 +301,16 @@ Value borePortsOnPath(
     StringRef newNameHint, InstancePathCache &instancePathcache,
     llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
     CircuitTargetCache *targetCachesInstancePathCache);
+
+/// Find the lowest-common-ancestor `lcaModule`, between `srcTarget` and
+/// `dstTarget`, and set `pathFromSrcToWire` with the path between them through
+/// the `lcaModule`. The assumption here is that the srcTarget and dstTarget can
+/// be uniquely identified. Either the instnaces field of their AnnoPathValue is
+/// set or there exists a single path from Top.
+LogicalResult findLCAandSetPath(AnnoPathValue &srcTarget,
+                                AnnoPathValue &dstTarget,
+                                SmallVector<InstanceOp> &pathFromSrcToWire,
+                                FModuleOp &lcaModule, ApplyState &state);
 } // namespace firrtl
 } // namespace circt
 

@@ -40,7 +40,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                        UnitAttr:$lowerToBind,
                        OptionalAttr<InnerSymAttr>:$inner_sym);
 
-  let results = (outs Variadic<FIRRTLType>:$results);
+  let results = (outs Variadic<AnyType>:$results);
 
   let hasCustomAssemblyFormat = 1;
 
@@ -195,7 +195,8 @@ def MemOp : ReferableDeclOp<"mem"> {
     void setAllPortAnnotations(ArrayRef<Attribute> annotations);
 
     /// Get the number of read ports, write ports and read write ports.
-    void getNumPorts(size_t &numReadPorts, size_t &numWritePorts, size_t &numReadWritePorts);
+    void getNumPorts(size_t &numReadPorts, size_t &numWritePorts,
+                      size_t &numReadWritePorts, size_t &numDbgsPorts);
 
     // Extract the relevant attributes from the MemOp and return a FirMemory object.
     FirMemory getSummary();
@@ -353,7 +354,7 @@ def WireOp : ReferableDeclOp<"wire"> {
   let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs FIRRTLBaseType:$result);
+  let results = (outs AnyType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,

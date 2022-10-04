@@ -24,6 +24,7 @@ void Backedge::setValue(mlir::Value newValue) {
   assert(value.getType() == newValue.getType());
   assert(!set && "backedge already set to a value!");
   value.replaceAllUsesWith(newValue);
+  value = newValue; // In case the backedge is still referred to after setting.
   set = true;
 
   // If the backedge is referenced again, it should now point to the updated

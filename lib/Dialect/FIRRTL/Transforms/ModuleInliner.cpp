@@ -607,7 +607,7 @@ private:
     }
     DenseSet<StringAttr> hPaths(instPaths.begin(), instPaths.end());
     // Only the hierPaths that this instance participates in, and is active in
-    // the the current path must be kept active for the child modules.
+    // the current path must be kept active for the child modules.
     llvm::set_intersect(activeHierpaths, hPaths);
     // Also, the nlas, that have current instance as the top must be added to
     // the active set.
@@ -1060,11 +1060,11 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
 
     // The InstanceOp `instance` might not have a symbol, if it does not
     // participate in any HierPathOp. But the reTop might add a symbol to it, if
-    // a HierPathOp is is added to this Op. If we're about to inline a module
-    // that contains a non-local annotation that starts at that module, then we
-    // need to both update the mutable NLA to indicate that this has a new top
-    // and add an annotation on the instance saying that this now participates
-    // in this new NLA.
+    // a HierPathOp is added to this Op. If we're about to inline a module that
+    // contains a non-local annotation that starts at that module, then we need
+    // to both update the mutable NLA to indicate that this has a new top and
+    // add an annotation on the instance saying that this now participates in
+    // this new NLA.
     DenseMap<Attribute, Attribute> symbolRenames;
     if (!rootMap[childModule.getNameAttr()].empty()) {
       for (auto sym : rootMap[childModule.getNameAttr()]) {
@@ -1158,7 +1158,7 @@ void Inliner::inlineInstances(FModuleOp parent) {
 
     // The InstanceOp `instance` might not have a symbol, if it does not
     // participate in any HierPathOp. But the reTop might add a symbol to it, if
-    // a HierPathOp is is added to this Op.
+    // a HierPathOp is added to this Op.
     DenseMap<Attribute, Attribute> symbolRenames;
     if (!rootMap[target.getNameAttr()].empty()) {
       for (auto sym : rootMap[target.getNameAttr()]) {

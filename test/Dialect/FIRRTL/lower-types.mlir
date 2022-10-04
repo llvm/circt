@@ -87,6 +87,13 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %out2, %3 : !firrtl.sint<64>, !firrtl.sint<64>
   }
 
+  // CHECK-LABEL: firrtl.module private @Uniquification
+  // CHECK-SAME: in %[[FLATTENED_ARG:a_b]]: [[FLATTENED_TYPE:!firrtl.uint<1>]],
+  // CHECK-NOT: %[[FLATTENED_ARG]]
+  // CHECK-SAME: in %[[RENAMED_ARG:a_b.+]]: [[RENAMED_TYPE:!firrtl.uint<1>]]
+  // CHECK-SAME: {portNames = ["a_b", "a_b"]}
+  firrtl.module private @Uniquification(in %a: !firrtl.bundle<b: uint<1>>, in %a_b: !firrtl.uint<1>) {
+  }
 
   // CHECK-LABEL: firrtl.module private @Top
   firrtl.module private @Top(in %in : !firrtl.bundle<a: uint<1>, b: uint<1>>,
@@ -1050,6 +1057,61 @@ firrtl.module private @is1436_FOO() {
     // CHECK-NEXT: firrtl.connect %z, %0 : !firrtl.uint<10>, !firrtl.uint<10>
   }
 
+  firrtl.module private @SendRefTypeBundles1(in %source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>, out %sink: !firrtl.ref<bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>>) {
+    // CHECK:  firrtl.module private @SendRefTypeBundles1(
+    // CHECK-SAME:  in %source_valid: !firrtl.uint<1>,
+    // CHECK-SAME:  in %source_ready: !firrtl.uint<1>,
+    // CHECK-SAME:  in %source_data: !firrtl.uint<64>,
+    // CHECK-SAME:  out %sink_valid: !firrtl.ref<uint<1>>,
+    // CHECK-SAME:  out %sink_ready: !firrtl.ref<uint<1>>,
+    // CHECK-SAME:  out %sink_data: !firrtl.ref<uint<64>>) {
+    %0 = firrtl.ref.send %source : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+    // CHECK:  %0 = firrtl.ref.send %source_valid : !firrtl.uint<1>
+    // CHECK:  %1 = firrtl.ref.send %source_ready : !firrtl.uint<1>
+    // CHECK:  %2 = firrtl.ref.send %source_data : !firrtl.uint<64>
+    firrtl.strictconnect %sink, %0 : !firrtl.ref<bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>>
+    // CHECK:  firrtl.strictconnect %sink_valid, %0 : !firrtl.ref<uint<1>>
+    // CHECK:  firrtl.strictconnect %sink_ready, %1 : !firrtl.ref<uint<1>>
+    // CHECK:  firrtl.strictconnect %sink_data, %2 : !firrtl.ref<uint<64>>
+  }
+  firrtl.module private @SendRefTypeVectors1(in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.ref<vector<uint<1>, 2>>) {
+    // CHECK-LABEL: firrtl.module private @SendRefTypeVectors1
+    // CHECK-SAME: in %a_0: !firrtl.uint<1>, in %a_1: !firrtl.uint<1>, out %b_0: !firrtl.ref<uint<1>>, out %b_1: !firrtl.ref<uint<1>>)
+    %0 = firrtl.ref.send %a : !firrtl.vector<uint<1>, 2>
+    // CHECK:  %0 = firrtl.ref.send %a_0 : !firrtl.uint<1>
+    // CHECK:  %1 = firrtl.ref.send %a_1 : !firrtl.uint<1>
+    firrtl.strictconnect %b, %0 : !firrtl.ref<vector<uint<1>, 2>>
+    // CHECK:  firrtl.strictconnect %b_0, %0 : !firrtl.ref<uint<1>>
+    // CHECK:  firrtl.strictconnect %b_1, %1 : !firrtl.ref<uint<1>>
+  }
+  firrtl.module private @RefTypeBundles2() {
+    %x = firrtl.wire   : !firrtl.bundle<a: uint<1>, b: uint<2>>
+    %0 = firrtl.ref.send %x : !firrtl.bundle<a: uint<1>, b: uint<2>>
+    // CHECK:   %0 = firrtl.ref.send %x_a : !firrtl.uint<1>
+    // CHECK:   %1 = firrtl.ref.send %x_b : !firrtl.uint<2>
+    %1 = firrtl.ref.resolve %0 : !firrtl.ref<bundle<a: uint<1>, b: uint<2>>>
+    // CHECK:   %2 = firrtl.ref.resolve %0 : !firrtl.ref<uint<1>>
+    // CHECK:   %3 = firrtl.ref.resolve %1 : !firrtl.ref<uint<2>>
+  }
+  firrtl.module private @RefTypeVectors(out %c: !firrtl.vector<uint<1>, 2>) {
+    %x = firrtl.wire   : !firrtl.vector<uint<1>, 2>
+    %0 = firrtl.ref.send %x : !firrtl.vector<uint<1>, 2>
+    // CHECK:  %0 = firrtl.ref.send %x_0 : !firrtl.uint<1>
+    // CHECK:  %1 = firrtl.ref.send %x_1 : !firrtl.uint<1>
+    %1 = firrtl.ref.resolve %0 : !firrtl.ref<vector<uint<1>, 2>>
+    // CHECK:  %2 = firrtl.ref.resolve %0 : !firrtl.ref<uint<1>>
+    // CHECK:  %3 = firrtl.ref.resolve %1 : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %c, %1 : !firrtl.vector<uint<1>, 2>
+    // CHECK:  firrtl.strictconnect %c_0, %2 : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %c_1, %3 : !firrtl.uint<1>
+  }
+
+  // CHECK-LABEL: firrtl.module private @ForeignTypes
+  firrtl.module private @ForeignTypes() {
+    // CHECK-NEXT: firrtl.wire : index
+    %0 = firrtl.wire : index
+  }
+
 } // CIRCUIT
 
 // Check that we don't lose the DontTouchAnnotation when it is not the last
@@ -1067,7 +1129,7 @@ firrtl.circuit "DontTouch" {
 
 // Check that we don't create symbols for non-local annotations.
 firrtl.circuit "Foo"  {
-  firrtl.hierpath @nla [@Foo::@bar, @Bar]
+  firrtl.hierpath private @nla [@Foo::@bar, @Bar]
   // CHECK:       firrtl.module private @Bar(in %a_b:
   // CHECK-SAME:    !firrtl.uint<1> [{circt.nonlocal = @nla, class = "circt.test"}])
   firrtl.module private @Bar(in %a: !firrtl.bundle<b: uint<1>>

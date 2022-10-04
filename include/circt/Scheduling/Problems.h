@@ -254,10 +254,9 @@ public:
   virtual LogicalResult verify();
 };
 
-/// This class models a cyclic scheduling problem. Its solution solution can be
-/// used to construct a pipelined datapath with a fixed, integer initiation
-/// interval, in which the execution of multiple iterations/samples/etc. may
-/// overlap.
+/// This class models a cyclic scheduling problem. Its solution can be used to
+/// construct a pipelined datapath with a fixed, integer initiation interval,
+/// in which the execution of multiple iterations/samples/etc. may overlap.
 class CyclicProblem : public virtual Problem {
   DEFINE_FACTORY_METHOD(CyclicProblem)
 

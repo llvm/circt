@@ -36,14 +36,6 @@ def ChannelType : ESI_Port<"Channel"> {
   let parameters = (ins "Type":$inner);
 
   let assemblyFormat = "`<` $inner `>`";
-
-  let extraClassDeclaration = [{
-    /// Returns true if this channel carries a data value.
-    bool hasData() {
-      return !getInner().isa<mlir::NoneType>();
-    }
-  }];
-
 }
 
 //=========

@@ -130,13 +130,6 @@ hw.module @union(%b: i42) {
 
 // -----
 
-hw.module @invalid_add(%a: i0) {  // i0 ports are ok.
-  // expected-error @+1 {{'comb.add' op operand #0 must be an integer bitvector of one or more bits, but got 'i0'}}
-  %b = comb.add %a, %a: i0
-}
-
-// -----
-
 // expected-note @+1 {{module declared here}}
 hw.module @empty() -> () {
   hw.output

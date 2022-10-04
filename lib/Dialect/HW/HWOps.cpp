@@ -17,10 +17,13 @@
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
+#include "circt/Support/Namespace.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/StringSet.h"
 
 using namespace circt;
 using namespace hw;
@@ -39,6 +42,16 @@ PortDirection hw::flip(PortDirection direction) {
   llvm_unreachable("unknown PortDirection");
 }
 
+bool hw::isValidIndexBitWidth(Value index, Value array) {
+  hw::ArrayType arrayType =
+      hw::getCanonicalType(array.getType()).dyn_cast<hw::ArrayType>();
+  assert(arrayType && "expected array type");
+  unsigned indexWidth = index.getType().getIntOrFloatBitWidth();
+  auto requiredWidth = llvm::Log2_64_Ceil(arrayType.getSize());
+  return requiredWidth == 0 ? (indexWidth == 0 || indexWidth == 1)
+                            : indexWidth == requiredWidth;
+}
+
 /// Return true if the specified operation is a combinational logic op.
 bool hw::isCombinational(Operation *op) {
   struct IsCombClassifier : public TypeOpVisitor<IsCombClassifier, bool> {
@@ -48,6 +61,23 @@ bool hw::isCombinational(Operation *op) {
 
   return (op->getDialect() && op->getDialect()->getNamespace() == "comb") ||
          IsCombClassifier().dispatchTypeOpVisitor(op);
+}
+
+static Value foldStructExtract(Operation *inputOp, StringRef field) {
+  // A struct extract of a struct create -> corresponding struct create operand.
+  if (auto structCreate = dyn_cast_or_null<StructCreateOp>(inputOp)) {
+    auto ty = type_cast<StructType>(structCreate.getResult().getType());
+    if (auto idx = ty.getFieldIndex(field))
+      return structCreate.getOperand(*idx);
+    return {};
+  }
+  // Extracting injected field -> corresponding field
+  if (auto structInject = dyn_cast_or_null<StructInjectOp>(inputOp)) {
+    if (structInject.getField() != field)
+      return {};
+    return structInject.getNewValue();
+  }
+  return {};
 }
 
 /// Get a special name to use when printing the entry block arguments of the
@@ -462,7 +492,7 @@ static void modifyModuleArgs(
     ArrayRef<unsigned> removeArgs, ArrayRef<Attribute> oldArgNames,
     ArrayRef<Type> oldArgTypes, ArrayRef<Attribute> oldArgAttrs,
     SmallVector<Attribute> &newArgNames, SmallVector<Type> &newArgTypes,
-    SmallVector<Attribute> &newArgAttrs) {
+    SmallVector<Attribute> &newArgAttrs, Block *body = nullptr) {
 
 #ifndef NDEBUG
   // Check that the `insertArgs` and `removeArgs` indices are in ascending
@@ -485,7 +515,11 @@ static void modifyModuleArgs(
   auto exportPortAttrName = StringAttr::get(context, "hw.exportPort");
   auto emptyDictAttr = DictionaryAttr::get(context, {});
 
-  for (unsigned argIdx = 0; argIdx <= oldArgCount; ++argIdx) {
+  BitVector erasedIndices;
+  if (body)
+    erasedIndices.resize(oldArgCount + insertArgs.size());
+
+  for (unsigned argIdx = 0, idx = 0; argIdx <= oldArgCount; ++argIdx, ++idx) {
     // Insert new ports at this position.
     while (!insertArgs.empty() && insertArgs[0].first == argIdx) {
       auto port = insertArgs[0].second;
@@ -501,6 +535,8 @@ static void modifyModuleArgs(
       newArgTypes.push_back(port.type);
       newArgAttrs.push_back(attr);
       insertArgs = insertArgs.drop_front();
+      if (body)
+        body->insertArgument(idx++, port.type, UnknownLoc::get(context));
     }
     if (argIdx == oldArgCount)
       break;
@@ -511,13 +547,20 @@ static void modifyModuleArgs(
       removeArgs = removeArgs.drop_front();
       removed = true;
     }
-    if (!removed) {
+
+    if (removed) {
+      if (body)
+        erasedIndices.set(idx);
+    } else {
       newArgNames.push_back(oldArgNames[argIdx]);
       newArgTypes.push_back(oldArgTypes[argIdx]);
       newArgAttrs.push_back(oldArgAttrs.empty() ? emptyDictAttr
                                                 : oldArgAttrs[argIdx]);
     }
   }
+
+  if (body)
+    body->eraseArguments(erasedIndices);
 
   assert(newArgNames.size() == newArgCount);
   assert(newArgTypes.size() == newArgCount);
@@ -533,7 +576,8 @@ static void modifyModuleArgs(
 void hw::modifyModulePorts(
     Operation *op, ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
-    ArrayRef<unsigned> removeInputs, ArrayRef<unsigned> removeOutputs) {
+    ArrayRef<unsigned> removeInputs, ArrayRef<unsigned> removeOutputs,
+    Block *body) {
   auto moduleOp = cast<mlir::FunctionOpInterface>(op);
 
   auto arrayOrEmpty = [](ArrayAttr attr) {
@@ -562,7 +606,7 @@ void hw::modifyModulePorts(
 
   modifyModuleArgs(moduleOp.getContext(), insertInputs, removeInputs,
                    oldArgNames, oldArgTypes, oldArgAttrs, newArgNames,
-                   newArgTypes, newArgAttrs);
+                   newArgTypes, newArgAttrs, body);
 
   modifyModuleArgs(moduleOp.getContext(), insertOutputs, removeOutputs,
                    oldResultNames, oldResultTypes, oldResultAttrs,
@@ -632,7 +676,7 @@ void HWModuleOp::modifyPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
     ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
   hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
-                        eraseOutputs);
+                        eraseOutputs, getBodyBlock());
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -1091,6 +1135,25 @@ static LogicalResult verifyModuleCommon(Operation *module) {
 LogicalResult HWModuleOp::verify() { return verifyModuleCommon(*this); }
 
 LogicalResult HWModuleExternOp::verify() { return verifyModuleCommon(*this); }
+
+std::pair<StringAttr, BlockArgument>
+HWModuleOp::insertInput(unsigned index, StringAttr name, Type ty) {
+  // Find a unique name for the wire.
+  Namespace ns;
+  for (auto port : getAllPorts())
+    ns.newName(port.name.getValue());
+  auto nameAttr = StringAttr::get(getContext(), ns.newName(name.getValue()));
+
+  // Create a new port for the host clock.
+  PortInfo port;
+  port.name = nameAttr;
+  port.direction = PortDirection::INPUT;
+  port.type = ty;
+  insertPorts({std::make_pair(index, port)}, {});
+
+  // Add a new argument.
+  return {nameAttr, getBody().getArgument(index)};
+}
 
 void HWModuleOp::insertOutputs(unsigned index,
                                ArrayRef<std::pair<StringAttr, Value>> outputs) {
@@ -2046,6 +2109,24 @@ void StructExplodeOp::print(OpAsmPrinter &printer) {
   printer << " : " << getInput().getType();
 }
 
+LogicalResult StructExplodeOp::canonicalize(StructExplodeOp op,
+                                            PatternRewriter &rewriter) {
+  auto *inputOp = op.getInput().getDefiningOp();
+  auto elements = type_cast<StructType>(op.getInput().getType()).getElements();
+  for (auto [element, res] : llvm::zip(elements, op.getResults())) {
+    if (auto foldResult = foldStructExtract(inputOp, element.name.str()))
+      res.replaceAllUsesWith(foldResult);
+  }
+  return failure();
+}
+
+void StructExplodeOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  auto structType = type_cast<StructType>(getInput().getType());
+  for (auto [res, field] : llvm::zip(getResults(), structType.getElements()))
+    setNameFn(res, field.name.str());
+}
+
 //===----------------------------------------------------------------------===//
 // StructExtractOp
 //===----------------------------------------------------------------------===//
@@ -2114,20 +2195,9 @@ void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
 }
 
 OpFoldResult StructExtractOp::fold(ArrayRef<Attribute> operands) {
-  auto inputOp = getInput().getDefiningOp();
-  // A struct extract of a struct create -> corresponding struct create operand.
-  if (auto structCreate = dyn_cast_or_null<StructCreateOp>(inputOp)) {
-    auto ty = type_cast<StructType>(getInput().getType());
-    if (auto idx = ty.getFieldIndex(getField()))
-      return structCreate.getOperand(*idx);
-    return {};
-  }
-  // Extracting injected field -> corresponding field
-  if (auto structInject = dyn_cast_or_null<StructInjectOp>(inputOp)) {
-    if (structInject.getField() != getField())
-      return {};
-    return structInject.getNewValue();
-  }
+  if (auto foldResult =
+          foldStructExtract(getInput().getDefiningOp(), getField()))
+    return foldResult;
   return {};
 }
 
@@ -2145,6 +2215,17 @@ LogicalResult StructExtractOp::canonicalize(StructExtractOp op,
   }
 
   return failure();
+}
+
+void StructExtractOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  auto structType = type_cast<StructType>(getInput().getType());
+  for (auto field : structType.getElements()) {
+    if (field.name == getField()) {
+      setNameFn(getResult(), field.name.str());
+      return;
+    }
+  }
 }
 
 //===----------------------------------------------------------------------===//

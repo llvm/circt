@@ -322,7 +322,8 @@ static cl::opt<OutputFormatKind> outputFormat(
     cl::desc("Specify output format:"),
     cl::values(
         clEnumValN(OutputParseOnly, "parse-only",
-                   "Emit FIR dialect after parsing"),
+                   "Emit FIR dialect after parsing, verification, and "
+                   "annotation lowering"),
         clEnumValN(OutputIRFir, "ir-fir", "Emit FIR dialect after pipeline"),
         clEnumValN(OutputIRHW, "ir-hw", "Emit HW dialect"),
         clEnumValN(OutputIRSV, "ir-sv", "Emit SV dialect"),
@@ -472,7 +473,7 @@ static bool checkBytecodeOutputToConsole(raw_ostream &os) {
 /// requested and politely avoiding dumping to terminal unless forced.
 static void printOp(Operation *op, raw_ostream &os) {
   if (emitBytecode && (force || !checkBytecodeOutputToConsole(os)))
-    writeBytecodeToFile(op, os, getCirctVersion());
+    writeBytecodeToFile(op, os, mlir::BytecodeWriterConfig(getCirctVersion()));
   else
     op->print(os);
 }
@@ -537,14 +538,6 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
                  << " sec\n";
   }
 
-  // If the user asked for just a parse, stop here.
-  if (outputFormat == OutputParseOnly) {
-    mlir::ModuleOp theModule = module.release();
-    auto outputTimer = ts.nest("Print .mlir output");
-    printOp(theModule, outputFile.value()->os());
-    return success();
-  }
-
   // Apply any pass manager command line options.
   PassManager pm(&context);
   pm.enableVerifier(verifyPasses);
@@ -555,6 +548,15 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
       disableAnnotationsUnknown, disableAnnotationsClassless));
+
+  // If the user asked for --parse-only, stop after running LowerAnnotations.
+  if (outputFormat == OutputParseOnly) {
+    if (failed(pm.run(module.get())))
+      return failure();
+    auto outputTimer = ts.nest("Print .mlir output");
+    printOp(*module, outputFile.value()->os());
+    return success();
+  }
 
   // TODO: Move this to the O1 pipeline.
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
@@ -677,6 +679,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         firrtl::createGrandCentralSignalMappingsPass(outputFilename));
   }
 
+  // Run SymbolDCE after GC for hierpathop's and just for general cleanup.
+  pm.addNestedPass<firrtl::CircuitOp>(mlir::createSymbolDCEPass());
+
   // Read black box source files into the IR.
   StringRef blackBoxRoot = blackBoxRootPath.empty()
                                ? llvm::sys::path::parent_path(inputFilename)
@@ -725,6 +730,14 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         modulePM.addPass(createSimpleCanonicalizerPass());
       }
     } else {
+      // If enabled, run the optimizer.
+      if (!disableOptimization) {
+        auto &modulePM = pm.nest<hw::HWModuleOp>();
+        modulePM.addPass(createCSEPass());
+        modulePM.addPass(createSimpleCanonicalizerPass());
+        modulePM.addPass(createCSEPass());
+      }
+
       pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass());
       pm.addPass(sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem));
 
@@ -973,6 +986,7 @@ int main(int argc, char **argv) {
     registerCSEPass();
     registerCanonicalizerPass();
     registerStripDebugInfoPass();
+    registerSymbolDCEPass();
 
     // Dialect passes:
     firrtl::registerPasses();

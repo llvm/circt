@@ -41,6 +41,16 @@ parseLocationInfoStyle(StringRef option) {
       .Default(llvm::None);
 }
 
+static Optional<LoweringOptions::WireSpillingHeuristic>
+parseWireSpillingHeuristic(StringRef option) {
+  return llvm::StringSwitch<
+             llvm::Optional<LoweringOptions::WireSpillingHeuristic>>(option)
+      .Case("spillLargeTermsWithNamehints",
+            LoweringOptions::SpillLargeTermsWithNamehints)
+      .Case("spillAllMux", LoweringOptions::SpillAllMux)
+      .Default(llvm::None);
+}
+
 void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
   while (!text.empty()) {
     // Remove the first option from the text.
@@ -97,6 +107,19 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
         errorHandler("expected integer for number of variadic operands");
         maximumNumberOfVariadicOperands = DEFAULT_VARIADIC_OPERAND_LIMIT;
       }
+    } else if (option.consume_front("wireSpillingHeuristic=")) {
+      if (auto heuristic = parseWireSpillingHeuristic(option)) {
+        wireSpillingHeuristicSet |= *heuristic;
+      } else {
+        errorHandler("expected 'spillNone', 'spillLargeTermsWithNamehints' or "
+                     "'spillAllMux'");
+      }
+    } else if (option.consume_front("wireSpillingNamehintTermLimit=")) {
+      if (option.getAsInteger(10, wireSpillingNamehintTermLimit)) {
+        errorHandler(
+            "expected integer for number of namehint heurstic term limit");
+        wireSpillingNamehintTermLimit = DEFAULT_NAMEHINT_TERM_LIMIT;
+      }
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
@@ -131,6 +154,11 @@ std::string LoweringOptions::toString() const {
     options += "printDebugInfo,";
   if (useOldEmissionMode)
     options += "useOldEmissionMode,";
+  if (isWireSpillingHeuristicEnabled(
+          WireSpillingHeuristic::SpillLargeTermsWithNamehints))
+    options += "wireSpillingHeuristic=spillLargeTermsWithNamehints,";
+  if (isWireSpillingHeuristicEnabled(WireSpillingHeuristic::SpillAllMux))
+    options += "wireSpillingHeuristic=spillAllMux,";
   if (disallowExpressionInliningInPorts)
     options += "disallowExpressionInliningInPorts,";
 
@@ -194,7 +222,7 @@ struct LoweringCLOptions {
   llvm::cl::opt<LoweringOptions, false, LoweringOptionsParser> loweringOptions{
       "lowering-options",
       llvm::cl::desc(
-          "Style options.  Valid flags include: alwaysFF, "
+          "Style options.  Valid flags include: "
           "noAlwaysComb, exprInEventControl, disallowPackedArrays, "
           "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
           "maximumNumberOfTermsPerExpression=<n>, "

@@ -141,9 +141,9 @@ notable differences: for example:
    designed to be extensible by other dialects, and thus being permissive here
    is useful.  That said, the [Verilog exporter](../../VerilogGeneration.md) does not
    support arbitrary user-defined types.
- - The `comb` dialect in particular does not use signed integer types, its
-   operators do not support zero-width integer types.  Modules in the `hw` dialect,
-   on the other hand, do support both of these.  Zero width ports are omitted (printed as
+ - The `comb` dialect in particular does not use signed integer types, but do
+   support zero-width integer types.  Modules in the `hw` dialect,
+   support both of these.  Zero width ports and wires are omitted (printed as
    comments) when generating Verilog.
 
 ### GlobalRefOp

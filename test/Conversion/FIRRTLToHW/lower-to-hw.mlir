@@ -802,8 +802,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module private @SimpleStruct(%source: !hw.struct<valid: i1, ready: i1, data: i64>) -> (fldout: i64) {
-  // CHECK-NEXT:    %0 = hw.struct_extract %source["data"] : !hw.struct<valid: i1, ready: i1, data: i64>
-  // CHECK-NEXT:    hw.output %0 : i64
+  // CHECK-NEXT:    %data = hw.struct_extract %source["data"] : !hw.struct<valid: i1, ready: i1, data: i64>
+  // CHECK-NEXT:    hw.output %data : i64
   // CHECK-NEXT:  }
   firrtl.module private @SimpleStruct(in %source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>,
                               out %fldout: !firrtl.uint<64>) {
@@ -1102,10 +1102,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %r2, %0 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
     firrtl.connect %o1, %r1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %o2, %r2 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
-    // CHECK:      %r1 = seq.firreg %1 clock %clock : i1
-    // CHECK-NEXT: %r2 = seq.firreg %0 clock %clock : !hw.array<1xi1>
-    // CHECK-NEXT: %0 = hw.array_get %a[%x] : !hw.array<1xarray<1xi1>>
-    // CHECK-NEXT: %1 = hw.array_get %0[%y] : !hw.array<1xi1>
+    // CHECK:      %r1 = seq.firreg %5 clock %clock : i1
+    // CHECK-NEXT: %r2 = seq.firreg %2 clock %clock : !hw.array<1xi1>
+    // CHECK-NEXT: %0 = sv.wire
+    // CHECK-NEXT: %1 = hw.array_get %a[%x] {sv.attributes = #sv.attributes<[#sv.attribute<"cadence map_to_mux">], emitAsComments>}
+    // CHECK-NEXT: sv.assign %0, %1 {sv.attributes = #sv.attributes<[#sv.attribute<"synopsys infer_mux_override">], emitAsComments>}
+    // CHECK-NEXT: %2 = sv.read_inout %0 : !hw.inout<array<1xi1>> 
+    // CHECK-NEXT: %3 = sv.wire : !hw.inout<i1>
+    // CHECK-NEXT: %4 = hw.array_get %2[%y] {sv.attributes = #sv.attributes<[#sv.attribute<"cadence map_to_mux">], emitAsComments>}
+    // CHECK-NEXT: sv.assign %3, %4 {sv.attributes = #sv.attributes<[#sv.attribute<"synopsys infer_mux_override">], emitAsComments>}
+    // CHECK-NEXT: %5 = sv.read_inout %3 : !hw.inout<i1>
     // CHECK-NEXT: hw.output %r1, %r2 : i1, !hw.array<1xi1>
   }
 
@@ -1124,16 +1130,24 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module private @SubAccessDestination
-  firrtl.module private @SubAccessDestination(in %x: !firrtl.uint<2>, in %y: !firrtl.uint<2>, in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 3>, out %b: !firrtl.vector<uint<1>, 3>) {
-    %0 = firrtl.subaccess %b[%x] : !firrtl.vector<uint<1>, 3>, !firrtl.uint<2>
-    %1 = firrtl.subaccess %a[%y] : !firrtl.vector<uint<1>, 3>, !firrtl.uint<2>
+  firrtl.module private @SubAccessDestination(in %x: !firrtl.uint<2>, in %y: !firrtl.uint<2>, in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 5>, out %b: !firrtl.vector<uint<1>, 5>) {
+    %0 = firrtl.subaccess %b[%x] : !firrtl.vector<uint<1>, 5>, !firrtl.uint<2>
+    %1 = firrtl.subaccess %a[%y] : !firrtl.vector<uint<1>, 5>, !firrtl.uint<2>
     firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK-NEXT: %.b.output = sv.wire
-    // CHECK-NEXT: %0 = sv.read_inout %.b.output : !hw.inout<array<3xi1>>
-    // CHECK-NEXT: %1 = sv.array_index_inout %.b.output[%x] : !hw.inout<array<3xi1>>, i2
-    // CHECK-NEXT: %2 = hw.array_get %a[%y] : !hw.array<3xi1>
-    // CHECK-NEXT: sv.assign %1, %2 : i1
-    // CHECK-NEXT: hw.output %0 : !hw.array<3xi1>
+    // CHECK:      %.b.output = sv.wire  : !hw.inout<array<5xi1>>
+    // CHECK-NEXT: %0 = sv.read_inout %.b.output
+    // CHECK-NEXT: %[[indexExt:.+]] = comb.concat %false, %x : i1, i2
+    // CHECK-NEXT: %2 = sv.array_index_inout %.b.output[%[[indexExt]]]
+    // CHECK-NEXT: %3 = comb.concat %false, %y : i1, i2
+    // CHECK-NEXT: %[[valWire:.+]] = sv.wire  : !hw.inout<i1>
+    // CHECK-NEXT: %5 = hw.array_get %a[%3] {sv.attributes = #sv.attributes<[#sv.attribute<"cadence map_to_mux">], emitAsComments>}
+    // CHECK-NEXT: sv.assign %[[valWire]], %5 {sv.attributes = #sv.attributes<[#sv.attribute<"synopsys infer_mux_override">], emitAsComments>}
+    // CHECK-NEXT: %6 = sv.read_inout %[[valWire]]
+    // CHECK-NEXT: %[[zeroVal:.+]] = hw.array_get %a[%c0_i3]
+    // CHECK-NEXT: %8 = comb.icmp bin uge %3, %c-3_i3 : i3
+    // CHECK-NEXT: %9 = comb.mux bin %8, %[[zeroVal]], %6 : i1
+    // CHECK-NEXT: sv.assign %2, %9 : i1
+    // CHECK-NEXT: hw.output %0 : !hw.array<5xi1>
   }
 
   // CHECK-LABEL: hw.module private @zero_width_constant()
@@ -1178,7 +1192,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: [[A:%.*]] = hw.struct_extract %init["a"] : !hw.struct<a: i2>
     // CHECK-NEXT: [[PADDED:%.*]] = comb.concat [[FALSE]], [[A]] : i1, i2
     // CHECK-NEXT: [[STRUCT:%.*]] = hw.struct_create ([[PADDED]]) : !hw.struct<a: i3>
-    // CHECK-NEXT: %reg = seq.firreg %reg clock %clock reset sync %reset, %2 : !hw.struct<a: i3>
+    // CHECK-NEXT: %reg = seq.firreg %reg clock %clock reset sync %reset, [[STRUCT]] : !hw.struct<a: i3>
     %reg = firrtl.regreset %clock, %reset, %init  : !firrtl.uint<1>, !firrtl.bundle<a: uint<2>>, !firrtl.bundle<a: uint<3>>
   }
 
@@ -1190,8 +1204,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK:      %.sink.output = sv.wire
     // CHECK-NEXT: %0 = sv.read_inout %.sink.output : !hw.inout<struct<a: !hw.struct<b: i1>>>
     // CHECK-NEXT: %1 = sv.struct_field_inout %.sink.output["a"] : !hw.inout<struct<a: !hw.struct<b: i1>>>
-    // CHECK-NEXT: %2 = hw.struct_extract %source["a"] : !hw.struct<a: !hw.struct<b: i1>>
-    // CHECK-NEXT: sv.assign %1, %2 : !hw.struct<b: i1>
+    // CHECK-NEXT: %a = hw.struct_extract %source["a"] : !hw.struct<a: !hw.struct<b: i1>>
+    // CHECK-NEXT: sv.assign %1, %a : !hw.struct<b: i1>
     // CHECK-NEXT: hw.output %0 : !hw.struct<a: !hw.struct<b: i1>>
   }
 
@@ -1224,8 +1238,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module private @ForceNameSubmodule
-  firrtl.hierpath @nla_1 [@ForceNameTop::@sym_foo, @ForceNameSubmodule]
-  firrtl.hierpath @nla_2 [@ForceNameTop::@sym_bar, @ForceNameSubmodule]
+  firrtl.hierpath private @nla_1 [@ForceNameTop::@sym_foo, @ForceNameSubmodule]
+  firrtl.hierpath private @nla_2 [@ForceNameTop::@sym_bar, @ForceNameSubmodule]
   firrtl.module private @ForceNameSubmodule() attributes {annotations = [
     {circt.nonlocal = @nla_2,
      class = "chisel3.util.experimental.ForceNameAnnotation", name = "Bar"},
@@ -1387,13 +1401,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                                  in %value: !firrtl.uint<2>,
                                  out %result: !firrtl.bundle<a: uint<2>>) {
     %count = firrtl.reg %clock: !firrtl.bundle<a: uint<2>>
-    // CHECK: %count = seq.firreg %1 clock %clock : !hw.struct<a: i2>
+    // CHECK: %count = seq.firreg %0 clock %clock : !hw.struct<a: i2>
 
     firrtl.strictconnect %result, %count : !firrtl.bundle<a: uint<2>>
     %field = firrtl.subfield %count(0) : (!firrtl.bundle<a: uint<2>>) -> !firrtl.uint<2>
     firrtl.strictconnect %field, %value : !firrtl.uint<2>
 
-    // CHECK: %1 = hw.struct_inject %count["a"], %value : !hw.struct<a: i2>
+    // CHECK: %a = hw.struct_extract %count["a"] : !hw.struct<a: i2>
+    // CHECK: %0 = hw.struct_inject %count["a"], %value : !hw.struct<a: i2>
 
     // CHECK: hw.output %count : !hw.struct<a: i2>
   }
@@ -1426,16 +1441,18 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                                        in %value: !firrtl.uint<2>,
                                        out %result: !firrtl.bundle<a: bundle<b: uint<2>>>) {
     %count = firrtl.reg %clock: !firrtl.bundle<a: bundle<b: uint<2>>>
-    // CHECK: %count = seq.firreg %4 clock %clock : !hw.struct<a: !hw.struct<b: i2>>
+    // CHECK: %count = seq.firreg %1 clock %clock : !hw.struct<a: !hw.struct<b: i2>>
 
     firrtl.strictconnect %result, %count : !firrtl.bundle<a: bundle<b: uint<2>>>
     %field0 = firrtl.subfield %count(0) : (!firrtl.bundle<a: bundle<b: uint<2>>>) -> !firrtl.bundle<b: uint<2>>
     %field1 = firrtl.subfield %field0(0) : (!firrtl.bundle<b: uint<2>>) -> !firrtl.uint<2>
     firrtl.strictconnect %field1, %value : !firrtl.uint<2>
 
-    // CHECK: %2 = hw.struct_extract %count["a"] : !hw.struct<a: !hw.struct<b: i2>>
-    // CHECK: %3 = hw.struct_inject %2["b"], %value : !hw.struct<b: i2>
-    // CHECK: %4 = hw.struct_inject %count["a"], %3 : !hw.struct<a: !hw.struct<b: i2>>
+    // CHECK: %a = hw.struct_extract %count["a"] : !hw.struct<a: !hw.struct<b: i2>>
+    // CHECK: %b = hw.struct_extract %a["b"] : !hw.struct<b: i2>
+    // CHECK: %a_0 = hw.struct_extract %count["a"] : !hw.struct<a: !hw.struct<b: i2>>
+    // CHECK: %0 = hw.struct_inject %a_0["b"], %value : !hw.struct<b: i2>
+    // CHECK: %1 = hw.struct_inject %count["a"], %0 : !hw.struct<a: !hw.struct<b: i2>>
 
     // CHECK: hw.output %count : !hw.struct<a: !hw.struct<b: i2>>
   }
@@ -1452,24 +1469,25 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %field4 = firrtl.subfield %field3(0) : (!firrtl.bundle<b: uint<2>>) -> !firrtl.uint<2>
     firrtl.strictconnect %field4, %value : !firrtl.uint<2>
 
-    // CHECK: %count = seq.firreg %17 clock %clock : !hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>
-    // CHECK-DAG: %1 = hw.array_get %count[%c1_i3] : !hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>
-    // CHECK-DAG: %2 = hw.struct_extract %1["a"] : !hw.struct<a: !hw.array<3xstruct<b: i2>>>
-    // CHECK-DAG: %3 = hw.array_get %2[%c1_i2] : !hw.array<3xstruct<b: i2>>
-    // CHECK-DAG: %4 = hw.struct_extract %3["b"] : !hw.struct<b: i2>
-    // CHECK-DAG: %5 = hw.array_get %count[%c1_i3_0] : !hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>
-    // CHECK-DAG: %6 = hw.struct_extract %5["a"] : !hw.struct<a: !hw.array<3xstruct<b: i2>>>
-    // CHECK-DAG: %7 = hw.array_get %6[%c1_i2_1] : !hw.array<3xstruct<b: i2>>
-    // CHECK-DAG: %8 = hw.struct_inject %7["b"], %value : !hw.struct<b: i2>
-    // CHECK-DAG: [[L0_LO:%.+]] = hw.array_slice %6[%c0_i2] : (!hw.array<3xstruct<b: i2>>) -> !hw.array<1xstruct<b: i2>>
-    // CHECK-DAG: [[L0_MID:%.+]] = hw.array_create %8 : !hw.struct<b: i2>
-    // CHECK-DAG: [[L0_HI:%.+]] = hw.array_slice %6[%c-2_i2] : (!hw.array<3xstruct<b: i2>>) -> !hw.array<1xstruct<b: i2>>
-    // CHECK-DAG: %12 = hw.array_concat [[L0_HI]], [[L0_MID]], [[L0_LO]] : !hw.array<1xstruct<b: i2>>, !hw.array<1xstruct<b: i2>>, !hw.array<1xstruct<b: i2>>
-    // CHECK-DAG: %13 = hw.struct_inject %5["a"], %12 : !hw.struct<a: !hw.array<3xstruct<b: i2>>>
-    // CHECK-DAG: [[L1_LO:%.+]] = hw.array_slice %count[%c0_i3] : (!hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>) -> !hw.array<1xstruct<a: !hw.array<3xstruct<b: i2>>>>
-    // CHECK-DAG: [[L1_MID:%.+]] = hw.array_create %13 : !hw.struct<a: !hw.array<3xstruct<b: i2>>>
-    // CHECK-DAG: [[L1_HI:%.+]] = hw.array_slice %count[%c2_i3] : (!hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>) -> !hw.array<3xstruct<a: !hw.array<3xstruct<b: i2>>>>
-    // CHECK-DAG: %17 = hw.array_concat [[L1_HI]], [[L1_MID]], [[L1_LO]] : !hw.array<3xstruct<a: !hw.array<3xstruct<b: i2>>>>, !hw.array<1xstruct<a: !hw.array<3xstruct<b: i2>>>>, !hw.array<1xstruct<a: !hw.array<3xstruct<b: i2>>>>
+    // CHECK:           %[[VAL_10:.*]] = seq.firreg %[[VAL_11:.*]] clock %clock : !hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>
+    // CHECK:           %[[VAL_12:.*]] = hw.array_get %[[VAL_10]]{{\[}}%c1_i3] : !hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>
+    // CHECK:           %[[VAL_13:.*]] = hw.struct_extract %[[VAL_12]]["a"] : !hw.struct<a: !hw.array<3xstruct<b: i2>>>
+    // CHECK:           %[[VAL_14:.*]] = hw.array_get %[[VAL_13]]{{\[}}%c1_i2] : !hw.array<3xstruct<b: i2>>
+    // CHECK:           %[[VAL_15:.*]] = hw.struct_extract %[[VAL_14]]["b"] : !hw.struct<b: i2>
+    // CHECK:           %[[VAL_16:.*]] = hw.constant 1 : i3
+    // CHECK:           %[[VAL_17:.*]] = hw.array_get %[[VAL_10]]{{\[}}%[[VAL_16]]] : !hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>
+    // CHECK:           %[[VAL_18:.*]] = hw.struct_extract %[[VAL_17]]["a"] : !hw.struct<a: !hw.array<3xstruct<b: i2>>>
+    // CHECK:           %[[VAL_20:.*]] = hw.array_get %[[VAL_18]]{{\[}}%c1_i2_2] : !hw.array<3xstruct<b: i2>>
+    // CHECK:           %[[VAL_21:.*]] = hw.struct_inject %[[VAL_20]]["b"], %value : !hw.struct<b: i2>
+    // CHECK:           %[[L0_HI:.*]] = hw.array_slice %[[VAL_18]]{{\[}}%c-2_i2] : (!hw.array<3xstruct<b: i2>>) -> !hw.array<1xstruct<b: i2>>
+    // CHECK:           %[[L0_MID:.*]] = hw.array_create %[[VAL_21]] : !hw.struct<b: i2>
+    // CHECK:           %[[L0_LO:.*]] = hw.array_slice %[[VAL_18]]{{\[}}%c0_i2] : (!hw.array<3xstruct<b: i2>>) -> !hw.array<1xstruct<b: i2>>
+    // CHECK:           %[[VAL_25:.*]] = hw.array_concat %[[L0_HI]], %[[L0_MID]], %[[L0_LO]] : !hw.array<1xstruct<b: i2>>, !hw.array<1xstruct<b: i2>>, !hw.array<1xstruct<b: i2>>
+    // CHECK:           %[[VAL_26:.*]] = hw.struct_inject %[[VAL_17]]["a"], %[[VAL_25]] : !hw.struct<a: !hw.array<3xstruct<b: i2>>>
+    // CHECK:           %[[L1_HI:.*]] = hw.array_slice %[[VAL_10]]{{\[}}%c2_i3] : (!hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>) -> !hw.array<3xstruct<a: !hw.array<3xstruct<b: i2>>>>
+    // CHECK:           %[[L1_MID:.*]] = hw.array_create %[[VAL_26]] : !hw.struct<a: !hw.array<3xstruct<b: i2>>>
+    // CHECK:           %[[L1_LO:.*]] = hw.array_slice %[[VAL_10]]{{\[}}%c0_i3] : (!hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>) -> !hw.array<1xstruct<a: !hw.array<3xstruct<b: i2>>>>
+    // CHECK:           %[[VAL_11]] = hw.array_concat %[[L1_HI]], %[[L1_MID]], %[[L1_LO]] : !hw.array<3xstruct<a: !hw.array<3xstruct<b: i2>>>>, !hw.array<1xstruct<a: !hw.array<3xstruct<b: i2>>>>, !hw.array<1xstruct<a: !hw.array<3xstruct<b: i2>>>>
   }
 
   // CHECK-LABEL: hw.module @ConnectSubindex(%clock: i1, %reset: i1, %value: i2) -> (result: !hw.array<3xi2>)
@@ -1644,5 +1662,52 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.strictconnect %result, %count : !firrtl.uint<2>
 
     // CHECK: hw.output %count : i2
+  }
+  // CHECK-LABEL: hw.module @passThroughForeignTypes
+  // CHECK-SAME:      (%inOpaque: index) -> (outOpaque: index) {
+  // CHECK-NEXT:    %sub2.bar = hw.instance "sub2" @moreForeignTypes(foo: %sub1.bar: index) -> (bar: index)
+  // CHECK-NEXT:    %sub1.bar = hw.instance "sub1" @moreForeignTypes(foo: %inOpaque: index) -> (bar: index)
+  // CHECK-NEXT:    hw.output %sub2.bar : index
+  // CHECK-NEXT:  }
+  // CHECK-LABEL: hw.module @moreForeignTypes
+  // CHECK-SAME:      (%foo: index) -> (bar: index) {
+  // CHECK-NEXT:    hw.output %foo : index
+  // CHECK-NEXT:  }
+  firrtl.module @passThroughForeignTypes(in %inOpaque: index, out %outOpaque: index) {
+    // Declaration order intentionally reversed to enforce use-before-def in HW
+    %sub2_foo, %sub2_bar = firrtl.instance sub2 @moreForeignTypes(in foo: index, out bar: index)
+    %sub1_foo, %sub1_bar = firrtl.instance sub1 @moreForeignTypes(in foo: index, out bar: index)
+    firrtl.strictconnect %sub1_foo, %inOpaque : index
+    firrtl.strictconnect %sub2_foo, %sub1_bar : index
+    firrtl.strictconnect %outOpaque, %sub2_bar : index
+  }
+  firrtl.module @moreForeignTypes(in %foo: index, out %bar: index) {
+    firrtl.strictconnect %bar, %foo : index
+  }
+
+  // CHECK-LABEL: hw.module @foreignOpsOnForeignTypes
+  // CHECK-SAME:      (%x: f32) -> (y: f32) {
+  // CHECK-NEXT:    [[TMP:%.+]] = arith.addf %x, %x : f32
+  // CHECK-NEXT:    hw.output [[TMP]] : f32
+  // CHECK-NEXT:  }
+  firrtl.module @foreignOpsOnForeignTypes(in %x: f32, out %y: f32) {
+    %0 = arith.addf %x, %x : f32
+    firrtl.strictconnect %y, %0 : f32
+  }
+
+  // CHECK-LABEL: hw.module @wiresWithForeignTypes
+  // CHECK-SAME:      (%in: f32) -> (out: f32) {
+  // CHECK-NEXT:    [[ADD1:%.+]] = arith.addf [[ADD2:%.+]], [[ADD2]] : f32
+  // CHECK-NEXT:    [[ADD2]] = arith.addf %in, [[ADD2]] : f32
+  // CHECK-NEXT:    hw.output [[ADD1]] : f32
+  // CHECK-NEXT:  }
+  firrtl.module @wiresWithForeignTypes(in %in: f32, out %out: f32) {
+    %w1 = firrtl.wire : f32
+    %w2 = firrtl.wire : f32
+    firrtl.strictconnect %out, %w2 : f32
+    %0 = arith.addf %w1, %w1 : f32
+    firrtl.strictconnect %w2, %0 : f32
+    %1 = arith.addf %in, %w1 : f32
+    firrtl.strictconnect %w1, %1 : f32
   }
 }

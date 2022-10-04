@@ -537,6 +537,9 @@ void Emitter::emitStatement(MemOp op) {
     case MemOp::PortKind::ReadWrite:
       add(readwriter, port.first);
       break;
+    case MemOp::PortKind::Debug:
+      emitOpError(op, "has unsupported 'debug' port");
+      return;
     }
   }
   if (!reader.empty())

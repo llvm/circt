@@ -51,6 +51,7 @@ target_link_libraries(circt-opt
   CIRCTStandardToHandshake
   CIRCTPipelineOps
   CIRCTPipelineToHW
+  CIRCTPipelineTransforms
   CIRCTPipelineToCalyx
   CIRCTSV
   CIRCTSVTransforms

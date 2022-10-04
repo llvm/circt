@@ -81,7 +81,7 @@ private:
   /// InstanceGraph to determine modules which are under the DUT.
   InstanceGraph *instanceGraph;
 
-  /// A cache of the the modules which have been marked as DUT or a testbench.
+  /// A cache of the modules which have been marked as DUT or a testbench.
   /// This is used to determine the output directory.
   DenseMap<Operation *, bool> dutModuleMap;
 };

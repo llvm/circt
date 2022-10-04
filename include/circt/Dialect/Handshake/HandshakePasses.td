@@ -62,6 +62,17 @@ def HandshakeRemoveBuffers : Pass<"handshake-remove-buffers", "handshake::FuncOp
   let constructor = "circt::handshake::createHandshakeRemoveBuffersPass()";
 }
 
+def HandshakeLowerExtmemToHW : Pass<"handshake-lower-extmem-to-hw", "mlir::ModuleOp"> {
+  let summary = "Lowers handshake.extmem and memref inputs to ports.";
+  let description = [{
+    Lowers handshake.extmem and memref inputs to a hardware-targeting
+    memory accessing scheme (explicit load- and store ports on the top
+    level interface).
+  }];
+  let constructor = "circt::handshake::createHandshakeLowerExtmemToHWPass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
+}
+
 def HandshakeAddIDs : Pass<"handshake-add-ids", "handshake::FuncOp"> {
   let summary = "Add an ID to each operation in a handshake function.";
   let description = [{
@@ -85,6 +96,16 @@ def HandshakeInsertBuffers
     Option<"bufferSize", "buffer-size", "unsigned", /*default=*/"2",
            "Number of slots in each buffer">,
   ];
+}
+
+def HandshakeLockFunctions : Pass<"handshake-lock-functions", "handshake::FuncOp"> {
+  let summary = "Lock each function to only allow single invocations.";
+  let description = [{
+    This pass adds a locking mechanism to each handshake function. This mechanism
+    ensures that only one control token can be active in a function at each point
+    in time.
+  }];
+  let constructor = "circt::handshake::createHandshakeLockFunctionsPass()";
 }
 
 #endif // CIRCT_DIALECT_HANDSHAKE_HANDSHAKEPASSES_TD

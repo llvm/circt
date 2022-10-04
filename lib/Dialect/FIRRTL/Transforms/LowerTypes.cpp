@@ -107,7 +107,9 @@ static bool isOneDimVectorType(FIRRTLType type) {
   return TypeSwitch<FIRRTLType, bool>(type)
       .Case<BundleType>([&](auto bundle) { return false; })
       .Case<FVectorType>([&](FVectorType vector) {
-        return vector.getElementType().isGround();
+        // When the size is 1, lower the vector into a scalar.
+        return vector.getElementType().isGround() &&
+               vector.getNumElements() > 1;
       })
       .Default([](auto groundType) { return true; });
 }
@@ -129,7 +131,8 @@ static bool isPreservableAggregateType(Type type,
   if (mode == PreserveAggregate::None)
     return false;
 
-  auto firrtlType = type.dyn_cast<FIRRTLBaseType>();
+  auto firrtlType = type.isa<RefType>() ? type.cast<RefType>().getType()
+                                        : type.dyn_cast<FIRRTLBaseType>();
   if (!firrtlType)
     return false;
 
@@ -160,6 +163,8 @@ static bool peelType(Type type, SmallVectorImpl<FlatBundleFieldEntry> &fields,
   if (isPreservableAggregateType(type, mode))
     return false;
 
+  if (auto refType = type.dyn_cast<RefType>())
+    type = refType.getType();
   return TypeSwitch<Type, bool>(type)
       .Case<BundleType>([&](auto bundle) {
         SmallString<16> tmpSuffix;
@@ -378,6 +383,8 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitExpr(MuxPrimOp op);
   bool visitExpr(mlir::UnrealizedConversionCastOp op);
   bool visitExpr(BitCastOp op);
+  bool visitExpr(RefSendOp op);
+  bool visitExpr(RefResolveOp op);
   bool visitStmt(ConnectOp op);
   bool visitStmt(StrictConnectOp op);
   bool visitStmt(WhenOp op);
@@ -450,6 +457,8 @@ Value TypeLoweringVisitor::getSubWhatever(Value val, size_t index) {
     return builder->create<SubfieldOp>(val, index);
   } else if (FVectorType fvector = val.getType().dyn_cast<FVectorType>()) {
     return builder->create<SubindexOp>(val, index);
+  } else if (val.getType().isa<RefType>()) {
+    return builder->create<RefSubOp>(val, index);
   }
   llvm_unreachable("Unknown aggregate type");
   return nullptr;
@@ -549,7 +558,9 @@ bool TypeLoweringVisitor::lowerProducer(
     llvm::function_ref<Operation *(const FlatBundleFieldEntry &, ArrayAttr)>
         clone) {
   // If this is not a bundle, there is nothing to do.
-  auto srcType = op->getResult(0).getType().cast<FIRRTLType>();
+  auto srcType = op->getResult(0).getType().dyn_cast<FIRRTLType>();
+  if (!srcType)
+    return false;
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
 
   if (!peelType(srcType, fieldTypes, aggregatePreservationMode))
@@ -610,10 +621,42 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
       Value repl = mapping[sfo.getFieldIndex()];
       sfo.replaceAllUsesWith(repl);
       sfo.erase();
+    } else if (auto refSub = dyn_cast<RefSubOp>(user)) {
+      Value repl = mapping[refSub.getIndex()];
+      refSub.replaceAllUsesWith(repl);
+      refSub.erase();
     } else {
-      val.dump();
-      val.getDefiningOp()->getParentOfType<FModuleOp>()->dump();
-      llvm_unreachable("Unknown aggregate user");
+      // This means, we have already processed the user, and it didn't lower its
+      // inputs. This is an opaque user, which will continue to have aggregate
+      // type as input, even after LowerTypes. So, construct the vector/bundle
+      // back from the lowered elements to ensure a valid input into the opaque
+      // op. This only supports Bundle or vector of ground type elements.
+      // Recursive aggregate types are not yet supported.
+
+      // This builder ensures that the aggregate construction happens at the
+      // user location, and the LowerTypes algorithm will not touch them any
+      // more, because LowerTypes was reverse iterating on the block and the
+      // user has already been processed.
+      ImplicitLocOpBuilder b(user->getLoc(), user);
+      // Cat all the field elements.
+      Value accumulate;
+      for (auto v : mapping) {
+        if (!v.getType().cast<FIRRTLBaseType>().isGround()) {
+          user->emitError("cannot handle an opaque user of aggregate types "
+                          "with non-ground type elements");
+          return;
+        }
+        if (val.getType().cast<FIRRTLType>().isa<FVectorType>())
+          accumulate =
+              (accumulate ? b.createOrFold<CatPrimOp>(v, accumulate) : v);
+        else
+          // Bundle subfields are filled from MSB to LSB.
+          accumulate =
+              (accumulate ? b.createOrFold<CatPrimOp>(accumulate, v) : v);
+      }
+      // Cast it back to the original aggregate type.
+      auto input = b.createOrFold<BitCastOp>(val.getType(), accumulate);
+      user->replaceUsesOfWith(val, input);
     }
   }
 }
@@ -633,10 +676,13 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
                             unsigned insertPtOffset, FIRRTLType srcType,
                             FlatBundleFieldEntry field, PortInfo &oldArg) {
   Value newValue;
+  FIRRTLType fieldType = srcType.isa<RefType>()
+                             ? FIRRTLType(RefType::get(field.type))
+                             : field.type;
   if (auto mod = dyn_cast<FModuleOp>(module)) {
     Block *body = mod.getBodyBlock();
     // Append the new argument.
-    newValue = body->insertArgument(insertPt, field.type, oldArg.loc);
+    newValue = body->insertArgument(insertPt, fieldType, oldArg.loc);
   }
 
   // Save the name attribute for the new argument.
@@ -656,7 +702,7 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
   auto direction = (Direction)((unsigned)oldArg.direction ^ field.isOutput);
 
   return std::make_pair(newValue, PortInfo{name,
-                                           field.type,
+                                           fieldType,
                                            direction,
                                            {},
                                            oldArg.loc,
@@ -720,8 +766,18 @@ void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
   }
 }
 
+static bool
+canLowerConnect(FConnectLike op,
+                PreserveAggregate::PreserveMode aggregatePreservationMode) {
+  auto destType = op.getDest().getType();
+  return !(destType.isa<RefType>() &&
+           isPreservableAggregateType(destType, aggregatePreservationMode));
+}
+
 // Expand connects of aggregates
 bool TypeLoweringVisitor::visitStmt(ConnectOp op) {
+  if (!canLowerConnect(op, aggregatePreservationMode))
+    return false;
   if (processSAPath(op))
     return true;
 
@@ -745,6 +801,8 @@ bool TypeLoweringVisitor::visitStmt(ConnectOp op) {
 
 // Expand connects of aggregates
 bool TypeLoweringVisitor::visitStmt(StrictConnectOp op) {
+  if (!canLowerConnect(op, aggregatePreservationMode))
+    return false;
   if (processSAPath(op))
     return true;
 
@@ -759,7 +817,7 @@ bool TypeLoweringVisitor::visitStmt(StrictConnectOp op) {
   for (const auto &field : llvm::enumerate(fields)) {
     Value src = getSubWhatever(op.getSrc(), field.index());
     Value dest = getSubWhatever(op.getDest(), field.index());
-    if (field.value().isOutput)
+    if (field.value().isOutput && !op.getDest().getType().isa<RefType>())
       std::swap(src, dest);
     builder->create<StrictConnectOp>(dest, src);
   }
@@ -796,6 +854,10 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
   // Wires for old ports
   for (unsigned int index = 0, end = op.getNumResults(); index < end; ++index) {
     auto result = op.getResult(index);
+    if (op.getPortKind(index) == MemOp::PortKind::Debug) {
+      op.emitOpError("cannot lower memory with debug port");
+      return false;
+    }
     auto wire = builder->create<WireOp>(
         result.getType(),
         (op.getName() + "_" + op.getPortName(index).getValue()).str());
@@ -1120,6 +1182,24 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
   return true;
 }
 
+bool TypeLoweringVisitor::visitExpr(RefSendOp op) {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Operation * {
+    return builder->create<RefSendOp>(
+        getSubWhatever(op.getBase(), field.index));
+  };
+  return lowerProducer(op, clone);
+}
+
+bool TypeLoweringVisitor::visitExpr(RefResolveOp op) {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Operation * {
+    Value src = getSubWhatever(op.getRef(), field.index);
+    return builder->create<RefResolveOp>(src);
+  };
+  return lowerProducer(op, clone);
+}
+
 bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   bool skip = true;
   SmallVector<Type, 8> resultTypes;
@@ -1150,7 +1230,9 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       for (const auto &field : fieldTypes) {
         newDirs.push_back(direction::get((unsigned)oldDir ^ field.isOutput));
         newNames.push_back(builder->getStringAttr(oldName + field.suffix));
-        resultTypes.push_back(field.type);
+        resultTypes.push_back(srcType.isa<RefType>()
+                                  ? FIRRTLType(RefType::get(field.type))
+                                  : FIRRTLType(field.type));
         auto annos = filterAnnotations(
             context, oldPortAnno[i].dyn_cast_or_null<ArrayAttr>(), srcType,
             field);

@@ -580,7 +580,7 @@ static Value createPriorityArbiter(ArrayRef<Value> inputs, Value defaultValue,
 
   for (size_t i = numInputs; i > 0; --i) {
     size_t inputIndex = i - 1;
-    size_t oneHotIndex = 1 << inputIndex;
+    size_t oneHotIndex = size_t{1} << inputIndex;
 
     auto constIndex = createConstantOp(indexType, APInt(numInputs, oneHotIndex),
                                        insertLoc, rewriter);
@@ -633,27 +633,34 @@ static void extractValues(ArrayRef<ValueVector *> valueVectors, size_t index,
 /// circuit is pure combinational logic. If graph cycle exists, at least one
 /// buffer is required to be inserted for breaking the cycle, which will be
 /// supported in the next patch.
-static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
-                                   ConversionPatternRewriter &rewriter,
-                                   bool setFlattenAttr) {
-  llvm::SmallVector<PortInfo, 8> ports;
+template <typename TModuleOp>
+static FailureOr<TModuleOp>
+createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
+                  ConversionPatternRewriter &rewriter, bool setFlattenAttr) {
+  llvm::SmallVector<PortInfo> ports;
 
   // Add all inputs of funcOp.
-  for (auto &arg : llvm::enumerate(funcOp.getArguments())) {
-    auto portName = funcOp.getArgName(arg.index());
+  for (auto &[i, argType] :
+       llvm::enumerate(funcOp.getFunctionType().getInputs())) {
+    auto portName = funcOp.getArgName(i);
     FIRRTLBaseType bundlePortType;
-    if (arg.value().getType().isa<MemRefType>())
-      bundlePortType =
-          getMemrefBundleType(rewriter, arg.value(), /*flip=*/true);
-    else
-      bundlePortType = getBundleType(arg.value().getType());
+    if (argType.template isa<MemRefType>()) {
+      if (funcOp.isExternal())
+        return funcOp.emitError(
+            "external functions with memory arguments are not supported");
+
+      BlockArgument arg = funcOp.getArgument(i);
+      bundlePortType = getMemrefBundleType(rewriter, arg, /*flip=*/true);
+    } else
+      bundlePortType = getBundleType(argType);
 
     if (!bundlePortType)
-      funcOp.emitError("Unsupported data type. Supported data types: integer "
-                       "(signed, unsigned, signless), index, none.");
+      return funcOp.emitError(
+          "Unsupported data type. Supported data types: integer "
+          "(signed, unsigned, signless), index, none.");
 
     ports.push_back({portName, bundlePortType, Direction::In, StringAttr{},
-                     arg.value().getLoc()});
+                     funcOp.getLoc()});
   }
 
   auto funcLoc = funcOp.getLoc();
@@ -664,8 +671,9 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
     auto bundlePortType = getBundleType(portType.value());
 
     if (!bundlePortType)
-      funcOp.emitError("Unsupported data type. Supported data types: integer "
-                       "(signed, unsigned, signless), index, none.");
+      return funcOp.emitError(
+          "Unsupported data type. Supported data types: integer "
+          "(signed, unsigned, signless), index, none.");
 
     ports.push_back(
         {portName, bundlePortType, Direction::Out, StringAttr{}, funcLoc});
@@ -691,19 +699,24 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
                        StringAttr{}, funcLoc});
     }
   }
-
   // Create a FIRRTL module and inline the funcOp into the FIRRTL module.
-  auto topModuleOp = rewriter.create<FModuleOp>(
+  auto topModuleOp = rewriter.create<TModuleOp>(
       funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()), ports);
 
-  if (setFlattenAttr) {
+  if (setFlattenAttr)
     topModuleOp->setAttr(
         "annotations",
         rewriter.getArrayAttr(rewriter.getDictionaryAttr(
             llvm::SmallVector<NamedAttribute>{rewriter.getNamedAttr(
                 "class", rewriter.getStringAttr(
                              "firrtl.transforms.FlattenAnnotation"))})));
-  }
+
+  return topModuleOp;
+}
+
+/// Inlines the region of the handshake function into the FIRRTL module.
+static void inlineFuncRegion(handshake::FuncOp funcOp, FModuleOp topModuleOp,
+                             ConversionPatternRewriter &rewriter) {
 
   rewriter.inlineRegionBefore(funcOp.getBody(), topModuleOp.getBody(),
                               topModuleOp.getBody().end());
@@ -728,7 +741,6 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   entryBlock->getOperations().splice(entryBlock->end(),
                                      secondBlock->getOperations());
   rewriter.eraseBlock(secondBlock);
-  return topModuleOp;
 }
 
 //===----------------------------------------------------------------------===//
@@ -739,11 +751,11 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
 /// the FIRRTL circt. Return the matched submodule if true, otherwise return
 /// nullptr.
 ///
-static FModuleOp checkSubModuleOp(CircuitOp circuitOp, StringRef modName) {
-  return circuitOp.lookupSymbol<FModuleOp>(modName);
+static FModuleLike checkSubModuleOp(CircuitOp circuitOp, StringRef modName) {
+  return circuitOp.lookupSymbol<FModuleLike>(modName);
 }
 
-static FModuleOp checkSubModuleOp(CircuitOp circuitOp, Operation *oldOp) {
+static FModuleLike checkSubModuleOp(CircuitOp circuitOp, Operation *oldOp) {
   auto moduleOp = checkSubModuleOp(circuitOp, getSubModuleName(oldOp));
 
   if (isa<handshake::InstanceOp>(oldOp))
@@ -945,7 +957,7 @@ bool StdExprBuilder::visitStdExpr(arith::ExtSIOp op) {
 }
 
 bool StdExprBuilder::visitStdExpr(arith::TruncIOp op) {
-  return buildTruncateOp(getFIRRTLType(getOperandDataType(op.getOperand()))
+  return buildTruncateOp(getFIRRTLType(getOperandDataType(op.getResult()))
                              .getBitWidthOrSentinel());
 }
 
@@ -1046,6 +1058,7 @@ public:
   bool visitHandshake(handshake::SelectOp op);
   bool visitHandshake(SinkOp op);
   bool visitHandshake(SourceOp op);
+  bool visitHandshake(SyncOp op);
   bool visitHandshake(handshake::StoreOp op);
   bool visitHandshake(PackOp op);
   bool visitHandshake(UnpackOp op);
@@ -1198,6 +1211,54 @@ bool HandshakeBuilder::visitHandshake(JoinOp op) {
     inputs.push_back(&portList[i]);
 
   return buildJoinLogic(inputs, output);
+}
+
+// Joins all the input control signals and connects the resulting control
+// signals in a fork like manner to the outputs. Data logic is forwarded
+// directly between in- and outputs.
+bool HandshakeBuilder::visitHandshake(SyncOp op) {
+  size_t numRes = op->getNumResults();
+  unsigned portNum = portList.size();
+  assert(portNum == 2 * numRes + 2);
+
+  // Create wires that will be used to connect the join and the fork logic
+  auto bitType = UIntType::get(op->getContext(), 1);
+  ValueVector connector;
+  connector.push_back(rewriter.create<WireOp>(insertLoc, bitType, "allValid"));
+  connector.push_back(rewriter.create<WireOp>(insertLoc, bitType, "allReady"));
+
+  // Collect all input ports.
+  SmallVector<ValueVector *, 4> inputs;
+  for (unsigned i = 0, e = numRes; i < e; ++i)
+    inputs.push_back(&portList[i]);
+
+  // Collect all output ports.
+  SmallVector<ValueVector *, 4> outputs;
+  for (unsigned i = numRes, e = 2 * numRes; i < e; ++i)
+    outputs.push_back(&portList[i]);
+
+  // connect data ports
+  for (auto [in, out] : llvm::zip(inputs, outputs)) {
+    if (in->size() == 2)
+      continue;
+
+    rewriter.create<ConnectOp>(insertLoc, (*out)[2], (*in)[2]);
+  }
+
+  if (!buildJoinLogic(inputs, &connector))
+    return false;
+
+  // The clock and reset signals will be used for registers.
+  auto clock = portList[portNum - 2][0];
+  auto reset = portList[portNum - 1][0];
+
+  // The state-keeping fork logic is required here, as the circuit isn't allowed
+  // to wait for all the consumers to be ready.
+  // Connecting the ready signals of the outputs to their corresponding valid
+  // signals leads to combinatorial cycles. The paper which introduced
+  // compositional dataflow circuits explicitly mentions this limitation:
+  // http://arcade.cs.columbia.edu/df-memocode17.pdf
+  return buildForkLogic(&connector, outputs, clock, reset, true);
 }
 
 /// Please refer to test_mux.mlir test case.
@@ -2269,7 +2330,7 @@ bool HandshakeBuilder::buildFIFOBufferLogic(int64_t numStage,
 
   // Instantiate the inner FIFO. Check if we already have one of the
   // appropriate type, else, generate it.
-  FModuleOp innerFifoModule = checkSubModuleOp(circuit, innerFifoModName);
+  FModuleLike innerFifoModule = checkSubModuleOp(circuit, innerFifoModName);
   if (!innerFifoModule)
     innerFifoModule = buildInnerFIFO(circuit, innerFifoModName, numStage,
                                      isControl, dataType);
@@ -2900,7 +2961,7 @@ bool HandshakeBuilder::visitHandshake(UnpackOp op) {
 
 /// Create InstanceOp in the top-module. This will be called after the
 /// corresponding sub-module and combinational logic are created.
-static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
+static void createInstOp(Operation *oldOp, FModuleLike subModuleOp,
                          FModuleOp topModuleOp, unsigned clockDomain,
                          ConversionPatternRewriter &rewriter,
                          NameUniquer &instanceNameGen) {
@@ -3008,8 +3069,20 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
   matchAndRewrite(handshake::FuncOp funcOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.setInsertionPointToStart(circuitOp.getBodyBlock());
-    auto topModuleOp =
-        createTopModuleOp(funcOp, /*numClocks=*/1, rewriter, setFlattenAttr);
+    if (funcOp.isExternal()) {
+      if (failed(createTopModuleOp<FExtModuleOp>(funcOp, /*numClocks=*/1,
+                                                 rewriter, setFlattenAttr)))
+        return failure();
+      rewriter.eraseOp(funcOp);
+      return success();
+    }
+
+    auto maybeTopModuleOp = createTopModuleOp<FModuleOp>(
+        funcOp, /*numClocks=*/1, rewriter, setFlattenAttr);
+    if (failed(maybeTopModuleOp))
+      return failure();
+    auto topModuleOp = maybeTopModuleOp.value();
+    inlineFuncRegion(funcOp, topModuleOp, rewriter);
 
     NameUniquer instanceUniquer = [&](Operation *op) {
       std::string instName = getInstanceName(op);
@@ -3035,18 +3108,20 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       // This branch takes care of all non-timing operations that require to
       // be instantiated in the top-module.
       else if (op.getDialect()->getNamespace() != "firrtl") {
-        FModuleOp subModuleOp = checkSubModuleOp(circuitOp, &op);
+        FModuleLike subModuleOp = checkSubModuleOp(circuitOp, &op);
 
         // Check if the sub-module already exists.
         if (!subModuleOp) {
-          subModuleOp = createSubModuleOp(topModuleOp, &op, rewriter);
+          FModuleOp newSubModuleOp =
+              createSubModuleOp(topModuleOp, &op, rewriter);
+          subModuleOp = newSubModuleOp;
 
-          Location insertLoc = subModuleOp.getLoc();
-          auto *bodyBlock = subModuleOp.getBodyBlock();
+          Location insertLoc = newSubModuleOp.getLoc();
+          auto *bodyBlock = newSubModuleOp.getBodyBlock();
           rewriter.setInsertionPoint(bodyBlock, bodyBlock->end());
 
           ValueVectorList portList =
-              extractSubfields(subModuleOp, insertLoc, rewriter);
+              extractSubfields(newSubModuleOp, insertLoc, rewriter);
 
           if (HandshakeBuilder(circuitOp, portList, insertLoc, rewriter)
                   .dispatchHandshakeVisitor(&op)) {

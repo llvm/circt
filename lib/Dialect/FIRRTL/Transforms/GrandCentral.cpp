@@ -572,10 +572,6 @@ private:
 
   NLATable *nlaTable;
 
-  /// The set of NLAs that are dead after this pass.  These will be removed
-  /// before the pass finishes.
-  DenseSet<StringAttr> deadNLAs;
-
   /// The design-under-test (DUT) as determined by the presence of a
   /// "sifive.enterprise.firrtl.MarkDUTAnnotation".  This will be null if no DUT
   /// was found.
@@ -725,83 +721,6 @@ private:
 // Code related to handling Grand Central View annotations
 //===----------------------------------------------------------------------===//
 
-/// Get the path from `lcaModule` to `targetModule`.  The last `InstanceOp` in
-/// the path must instantiate `targetModule` and the first must be inside the
-/// `lcaModule`. If `nonlocalPath` is empty, get the path from InstanceGraph,
-/// else get the path from the `nonlocalPath`. Emit error and return None, if
-/// there are multiple paths between `lcaModule` and `targetModule`. The caller
-/// must handle the None return value and error out.
-static Optional<ArrayRef<InstanceOp>>
-getPath(FModuleLike targetModule, FModuleOp lcaModule,
-        SmallVector<InstanceOp> &nonlocalPath, ApplyState &state) {
-  ArrayRef<InstanceOp> pathToSend;
-  if (targetModule == lcaModule)
-    return pathToSend;
-  auto isInstanceInlcaModule = [&](InstanceOp inst) {
-    return (inst->getParentOfType<FModuleOp>() == lcaModule);
-  };
-  if (nonlocalPath.empty()) {
-    // For all paths from root to `targetModule`. Get the path that passes
-    // through the `lcaModule`. Only one such path must exist.
-    for (auto path : state.instancePathCache.getAbsolutePaths(targetModule)) {
-      // If `lcaModule` exists in the path
-      if (llvm::find_if(path, isInstanceInlcaModule) != path.end()) {
-        // If already found one path, and another path exists, emit error.
-        if (!pathToSend.empty()) {
-          targetModule.emitOpError(
-              "cannot handle multiple paths from the parent module ")
-              << lcaModule.moduleNameAttr()
-              << " till the GrandCentral view target";
-          return None;
-        }
-
-        // Store the path from `lcaModule`.
-        pathToSend = path.drop_until(isInstanceInlcaModule);
-      }
-    }
-  } else // Get the path from the `lcaModule` in the `nonlocalPath`.
-    pathToSend = ArrayRef<InstanceOp>(
-        llvm::find_if(nonlocalPath, isInstanceInlcaModule), nonlocalPath.end());
-  return pathToSend;
-}
-
-/// Set the `pathFromSrcToCompanion` with the path from `srcTarget` to
-/// `companionTarget` via the `lcaModule`. The `lcaModule` denotes the least
-/// common ancestor for the source and destination modules. The first
-/// `InstanceOp` in the `pathFromSrcToCompanion` must instantiate the module of
-/// `srcTarget` and the last must instantiate the module `companionTarget`.
-static LogicalResult
-computeRefPortsPathViaLCA(AnnoPathValue &srcTarget,
-                          AnnoPathValue &companionTarget,
-                          SmallVector<InstanceOp> &pathFromSrcToCompanion,
-                          FModuleOp &lcaModule, ApplyState &state) {
-  if (isa<FExtModuleOp>(srcTarget.ref.getOp()))
-    return srcTarget.ref.getOp()->emitError(
-        "RefType source cannot be an extern module port, it must be moved to "
-        "the instance of the extern module");
-  pathFromSrcToCompanion.clear();
-
-  auto srcModule = cast<FModuleOp>(srcTarget.ref.getModule());
-  auto companionModule = cast<FModuleOp>(companionTarget.ref.getModule());
-  if (srcModule == companionModule)
-    return success();
-  auto pathToSrc = getPath(srcModule, lcaModule, srcTarget.instances, state);
-  if (!pathToSrc)
-    return lcaModule.emitError("cannot find a unique path from parent to src");
-  auto pathToCompanion =
-      getPath(companionModule, lcaModule, companionTarget.instances, state);
-  if (!pathToCompanion)
-    return lcaModule.emitError("cannot find path from parent to companion");
-  // The paths can be empty, if
-  // 1. `srcModule` == `lcaModule`, or
-  // 2. `lcaModule` == `companionModule`.
-
-  pathFromSrcToCompanion.append(pathToSrc->rbegin(), pathToSrc->rend());
-  pathFromSrcToCompanion.append(pathToCompanion->begin(),
-                                pathToCompanion->end());
-  return success();
-}
-
 /// Add a RefType cross-module connection from the `refSendTarget` to the
 /// `companionTarget`, via the `parentModule`. Add the RefSendOp and the
 /// corresponding RefResolveOps for the RefType connection. Return the name for
@@ -843,10 +762,17 @@ static StringAttr borePortsFromViewToCompanion(AnnoPathValue &refSendTarget,
   FModuleOp lcaModule = parentModule;
   SmallVector<InstanceOp> pathFromSrcToCompanion;
   // Compute the path and set `pathFromSrcToCompanion`.
-  if (computeRefPortsPathViaLCA(refSendTarget, companionTarget,
-                                pathFromSrcToCompanion, lcaModule, state)
+  if (findLCAandSetPath(refSendTarget, companionTarget, pathFromSrcToCompanion,
+                        lcaModule, state)
           .failed())
     return {};
+  LLVM_DEBUG({
+    llvm::dbgs() << "\n Path via LCA :\n";
+    for (auto inst : pathFromSrcToCompanion)
+      llvm::dbgs()
+          << ":" << inst->getParentOfType<FModuleOp>().getNameAttr().getValue()
+          << ">" << inst.getNameAttr().getValue();
+  });
   // Now drill ports to connect the `sendVal` to the `wireTarget`.
   auto remoteXMR = borePortsOnPath(
       pathFromSrcToCompanion, lcaModule, sendVal, viewName.getValue(),
@@ -1160,6 +1086,8 @@ static Optional<DictionaryAttr> parseAugmentedType(
       // DontTouch. Which implies the remote signal can be optimized away, but
       // the XMR should still point to a legal value or a constant after the
       // optimization.
+      LLVM_DEBUG(llvm::dbgs() << "\n view from :" << targetAttr.getValue()
+                              << " to \n " << companionAttr.getValue());
       auto resolveTargetName = borePortsFromViewToCompanion(
           *xmrSrcTarget, parentModule, state, *companionTarget, name);
       if (!resolveTargetName) {
@@ -2039,8 +1967,6 @@ void GrandCentralPass::runOnOperation() {
                 annotation.getMember<FlatSymbolRefAttr>("circt.nonlocal");
             leafMap[*maybeID] = {{op.getResult(), annotation.getFieldID()},
                                  sym};
-            if (sym)
-              deadNLAs.insert(sym.getAttr());
             ++numAnnosRemoved;
             return true;
           });
@@ -2095,8 +2021,6 @@ void GrandCentralPass::runOnOperation() {
                 annotation.getMember<FlatSymbolRefAttr>("circt.nonlocal");
             leafMap[*maybeID] = {{op.getArgument(i), annotation.getFieldID()},
                                  sym};
-            if (sym)
-              deadNLAs.insert(sym.getAttr());
             ++numAnnosRemoved;
             return true;
           });
@@ -2377,8 +2301,8 @@ void GrandCentralPass::runOnOperation() {
         getInterfaceName(bundle.getPrefix(), bundle) + "__");
 
     // Recursively walk the AugmentedBundleType to generate interfaces and XMRs.
-    // Error out if this returns None (indicating that the annotation annotation
-    // is malformed in some way).  A good error message is generated inside
+    // Error out if this returns None (indicating that the annotation is
+    // malformed in some way).  A good error message is generated inside
     // `traverseBundle` or the functions it calls.
     auto instanceSymbol =
         hw::InnerRefAttr::get(SymbolTable::getSymbolName(companionModule),
@@ -2433,38 +2357,6 @@ void GrandCentralPass::runOnOperation() {
                       &getContext(), maybeHierarchyFileYAML->getValue(),
                       /*excludFromFileList=*/true));
     LLVM_DEBUG({ llvm::dbgs() << "Generated YAML:" << yamlString << "\n"; });
-  }
-
-  // Garbage collect dead NLAs.
-  auto symTable = getSymbolTable();
-  for (auto &op :
-       llvm::make_early_inc_range(circuitOp.getBodyBlock()->getOperations())) {
-
-    // Remove NLA operations.
-    if (auto nla = dyn_cast<HierPathOp>(op)) {
-      if (deadNLAs.count(nla.getSymNameAttr())) {
-        nlaTable->erase(nla);
-        symTable.erase(nla);
-      }
-      continue;
-    }
-
-    auto fmodule = dyn_cast<FModuleOp>(op);
-    if (!fmodule)
-      continue;
-
-    auto isDead = [&](Annotation anno) -> bool {
-      auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
-      if (!sym)
-        return false;
-      bool remove = deadNLAs.count(sym.getAttr());
-      numAnnosRemoved += remove;
-      return remove;
-    };
-
-    // Visit module bodies to remove any dead NLA breadcrumbs.
-    for (auto op : fmodule.getBodyBlock()->getOps<InstanceOp>())
-      AnnotationSet::removeAnnotations(op, isDead);
   }
 
   // Signal pass failure if any errors were found while examining circuit

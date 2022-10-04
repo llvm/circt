@@ -438,6 +438,19 @@ bool JoinOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
   return tryToExecute(getOperation(), valueMap, timeMap, scheduleList, 1);
 }
 
+void SyncOp::execute(std::vector<llvm::Any> &ins,
+                     std::vector<llvm::Any> &outs) {
+  outs = ins;
+}
+
+bool SyncOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+                        llvm::DenseMap<unsigned, unsigned> & /*memoryMap*/,
+                        llvm::DenseMap<mlir::Value, double> &timeMap,
+                        std::vector<std::vector<llvm::Any>> & /*store*/,
+                        std::vector<mlir::Value> &scheduleList) {
+  return tryToExecute(getOperation(), valueMap, timeMap, scheduleList, 1);
+}
+
 void StoreOp::execute(std::vector<llvm::Any> &ins,
                       std::vector<llvm::Any> &outs) {
   // Forward the address and data to the memory op.

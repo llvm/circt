@@ -12,7 +12,7 @@
 
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Support/LLVM.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -542,12 +542,11 @@ LogicalResult FuncOp::verify() {
 /// Parses a FuncOp signature using
 /// mlir::function_interface_impl::parseFunctionSignature while getting access
 /// to the parsed SSA names to store as attributes.
-static ParseResult parseFuncOpArgs(
-    OpAsmParser &parser, SmallVectorImpl<OpAsmParser::Argument> &entryArgs,
-    SmallVectorImpl<Attribute> &argNames, SmallVectorImpl<Type> &resTypes,
-    SmallVectorImpl<DictionaryAttr> &resAttrs) {
-  auto *context = parser.getContext();
-
+static ParseResult
+parseFuncOpArgs(OpAsmParser &parser,
+                SmallVectorImpl<OpAsmParser::Argument> &entryArgs,
+                SmallVectorImpl<Type> &resTypes,
+                SmallVectorImpl<DictionaryAttr> &resAttrs) {
   bool isVariadic;
   if (mlir::function_interface_impl::parseFunctionSignature(
           parser, /*allowVariadic=*/true, entryArgs, isVariadic, resTypes,
@@ -555,26 +554,16 @@ static ParseResult parseFuncOpArgs(
           .failed())
     return failure();
 
-  llvm::transform(entryArgs, std::back_inserter(argNames), [&](auto arg) {
-    return StringAttr::get(context, arg.ssaName.name.drop_front());
-  });
-
   return success();
 }
 
 /// Generates names for a handshake.func input and output arguments, based on
 /// the number of args as well as a prefix.
-static SmallVector<Attribute> getFuncOpNames(Builder &builder, TypeRange types,
+static SmallVector<Attribute> getFuncOpNames(Builder &builder, unsigned cnt,
                                              StringRef prefix) {
   SmallVector<Attribute> resNames;
-  llvm::transform(
-      llvm::enumerate(types), std::back_inserter(resNames), [&](auto it) {
-        bool lastOperand = it.index() == types.size() - 1;
-        std::string suffix = lastOperand && it.value().template isa<NoneType>()
-                                 ? "Ctrl"
-                                 : std::to_string(it.index());
-        return builder.getStringAttr(prefix + suffix);
-      });
+  for (unsigned i = 0; i < cnt; ++i)
+    resNames.push_back(builder.getStringAttr(prefix + std::to_string(i)));
   return resNames;
 }
 
@@ -615,8 +604,8 @@ void handshake::FuncOp::resolveArgAndResNames() {
 
   /// Generate a set of fallback names. These are used in case names are
   /// missing from the currently set arg- and res name attributes.
-  auto fallbackArgNames = getFuncOpNames(builder, getArgumentTypes(), "in");
-  auto fallbackResNames = getFuncOpNames(builder, getResultTypes(), "out");
+  auto fallbackArgNames = getFuncOpNames(builder, getNumArguments(), "in");
+  auto fallbackResNames = getFuncOpNames(builder, getNumResults(), "out");
   auto argNames = getArgNames().getValue();
   auto resNames = getResNames().getValue();
 
@@ -648,7 +637,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   // Parse signature
   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
                              result.attributes) ||
-      parseFuncOpArgs(parser, args, argNames, resTypes, resAttributes))
+      parseFuncOpArgs(parser, args, resTypes, resAttributes))
     return failure();
   mlir::function_interface_impl::addArgAndResultAttrs(builder, result, args,
                                                       resAttributes);
@@ -662,6 +651,18 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
       handshake::FuncOp::getTypeAttrName(),
       TypeAttr::get(builder.getFunctionType(argTypes, resTypes)));
 
+  // Determine the names of the arguments. If no SSA values are present, use
+  // fallback names.
+  bool noSSANames =
+      llvm::any_of(args, [](auto arg) { return arg.ssaName.name.empty(); });
+  if (noSSANames) {
+    argNames = getFuncOpNames(builder, args.size(), "in");
+  } else {
+    llvm::transform(args, std::back_inserter(argNames), [&](auto arg) {
+      return builder.getStringAttr(arg.ssaName.name.drop_front());
+    });
+  }
+
   // Parse attributes
   if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
     return failure();
@@ -671,13 +672,27 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   if (!result.attributes.get("argNames"))
     result.addAttribute("argNames", builder.getArrayAttr(argNames));
   if (!result.attributes.get("resNames")) {
-    auto resNames = getFuncOpNames(builder, resTypes, "out");
+    auto resNames = getFuncOpNames(builder, resTypes.size(), "out");
     result.addAttribute("resNames", builder.getArrayAttr(resNames));
   }
 
-  // Parse region
+  // Parse the optional function body. The printer will not print the body if
+  // its empty, so disallow parsing of empty body in the parser.
   auto *body = result.addRegion();
-  return parser.parseRegion(*body, args);
+  llvm::SMLoc loc = parser.getCurrentLocation();
+  auto parseResult = parser.parseOptionalRegion(*body, args,
+                                                /*enableNameShadowing=*/false);
+  if (!parseResult.has_value())
+    return success();
+
+  if (failed(*parseResult))
+    return failure();
+  // Function body was parsed, make sure its not empty.
+  if (body->empty())
+    return parser.emitError(loc, "expected non-empty function body");
+
+  // If a body was parsed, the arg and res names need to be resolved
+  return success();
 }
 
 void FuncOp::print(OpAsmPrinter &p) {
@@ -1241,6 +1256,49 @@ void MemoryOp::build(OpBuilder &builder, OperationState &result,
   }
 }
 
+llvm::SmallVector<handshake::ExtMemLoadInterface>
+ExternalMemoryOp::getLoadPorts() {
+  llvm::SmallVector<ExtMemLoadInterface> ports;
+  // Extmem interface refresher:
+  // Operands:
+  //   all stores (stdata1, staddr1, stdata2, staddr2, ...)
+  //   then all loads (ldaddr1, ldaddr2,...)
+  // Outputs: load addresses (lddata1, lddata2, ...), followed by all none
+  // outputs, ordered as operands(stnone1, stnone2, ... ldnone1, ldnone2, ...)
+  unsigned stCount = getStCount();
+  unsigned ldCount = getLdCount();
+  for (unsigned i = 0, e = ldCount; i != e; ++i) {
+    ExtMemLoadInterface ldif;
+    ldif.index = i;
+    ldif.addressIn = getInputs()[stCount * 2 + i];
+    ldif.dataOut = getResult(i);
+    ldif.doneOut = getResult(ldCount + stCount + i);
+    ports.push_back(ldif);
+  }
+  return ports;
+}
+
+llvm::SmallVector<handshake::ExtMemStoreInterface>
+ExternalMemoryOp::getStorePorts() {
+  llvm::SmallVector<ExtMemStoreInterface> ports;
+  // Extmem interface refresher:
+  // Operands:
+  //   all stores (stdata1, staddr1, stdata2, staddr2, ...)
+  //   then all loads (ldaddr1, ldaddr2,...)
+  // Outputs: load data (lddata1, lddata2, ...), followed by all none
+  // outputs, ordered as operands(stnone1, stnone2, ... ldnone1, ldnone2, ...)
+  unsigned ldCount = getLdCount();
+  for (unsigned i = 0, e = ldCount; i != e; ++i) {
+    ExtMemStoreInterface stif;
+    stif.index = i;
+    stif.dataIn = getInputs()[i * 2];
+    stif.addressIn = getInputs()[i * 2 + 1];
+    stif.doneOut = getResult(ldCount + i);
+    ports.push_back(stif);
+  }
+  return ports;
+}
+
 bool handshake::MemoryOp::allocateMemory(
     llvm::DenseMap<unsigned, unsigned> &memoryMap,
     std::vector<std::vector<llvm::Any>> &store,
@@ -1486,17 +1544,6 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
       return emitOpError("result type mismatch: expected result type ")
              << fnType.getResult(i) << ", but provided "
              << getResult(i).getType() << " for result number " << i;
-
-  return success();
-}
-
-LogicalResult InstanceOp::verify() {
-  if ((*this)->getNumOperands() == 0)
-    return emitOpError() << "must provide at least a control operand.";
-
-  if (!getControl().getType().dyn_cast<NoneType>())
-    return emitOpError()
-           << "last operand must be a control (none-typed) operand.";
 
   return success();
 }

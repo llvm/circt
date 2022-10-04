@@ -132,3 +132,26 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
     }
   }
 }
+
+// -----
+// Check "empty" modules are extracted
+
+// CHECK-LABEL: @InputOnly(
+// CHECK-SAME: output_file = #hw.output_file<"testbench/", excludeFromFileList, includeReplicatedOps>
+// CHECK: hw.instance "input_only" sym @[[sym_name:[^ ]+]] @InputOnly
+// CHECK: sv.bind <@Top::@[[sym_name]]> {output_file = #hw.output_file<"cover/bind.sv", excludeFromFileList, includeReplicatedOps>}
+module attributes {
+  firrtl.extract.cover.bindfile = #hw.output_file<"cover/bind.sv", excludeFromFileList, includeReplicatedOps>,
+  firrtl.extract.testbench = #hw.output_file<"testbench/", excludeFromFileList, includeReplicatedOps>
+} {
+  hw.module @InputOnly(%clock: i1, %cond: i1) -> () {
+    sv.always posedge %clock  {
+      sv.cover %cond, immediate
+    }
+  }
+
+  hw.module @Top(%clock: i1, %cond: i1) -> (foo: i1) {
+    hw.instance "input_only" @InputOnly(clock: %clock: i1, cond: %cond: i1) -> ()
+    hw.output %cond : i1
+  }
+}

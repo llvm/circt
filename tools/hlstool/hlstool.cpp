@@ -14,7 +14,7 @@
 
 #include "mlir/Conversion/Passes.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -41,6 +41,8 @@
 
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/Passes.h"
+#include "circt/Dialect/ESI/ESIDialect.h"
+#include "circt/Dialect/ESI/ESIPasses.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -63,46 +65,74 @@ using namespace circt;
 // Tool options
 // --------------------------------------------------------------------------
 
-static cl::opt<std::string>
-    inputFilename(cl::Positional, cl::desc("<input file>"), cl::init("-"));
+static cl::OptionCategory mainCategory("hlstool Options");
 
-static cl::opt<std::string>
-    outputFilename("o",
-                   cl::desc("Output filename, or directory for split output"),
-                   cl::value_desc("filename"), cl::init("-"));
+static cl::opt<std::string> inputFilename(cl::Positional,
+                                          cl::desc("<input file>"),
+                                          cl::init("-"), cl::cat(mainCategory));
+
+static cl::opt<std::string> outputFilename(
+    "o", cl::desc("Output filename, or directory for split output"),
+    cl::value_desc("filename"), cl::init("-"), cl::cat(mainCategory));
 
 static cl::opt<bool>
     splitInputFile("split-input-file",
                    cl::desc("Split the input file into pieces and process each "
                             "chunk independently"),
-                   cl::init(false), cl::Hidden);
+                   cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
 static cl::opt<bool>
     verifyDiagnostics("verify-diagnostics",
                       cl::desc("Check that emitted diagnostics match "
                                "expected-* lines on the corresponding line"),
-                      cl::init(false), cl::Hidden);
+                      cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
 static cl::opt<bool>
     verbosePassExecutions("verbose-pass-executions",
                           cl::desc("Log executions of toplevel module passes"),
-                          cl::init(false));
+                          cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool>
     verifyPasses("verify-each",
                  cl::desc("Run the verifier after each transformation pass"),
-                 cl::init(true));
+                 cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     allowUnregisteredDialects("allow-unregistered-dialects",
                               cl::desc("Allow unknown dialects in the input"),
-                              cl::init(false), cl::Hidden);
+                              cl::init(false), cl::Hidden,
+                              cl::cat(mainCategory));
 
-enum HLSFlow { HLSFlowDynamic };
+enum HLSFlow { HLSFlowDynamicFIRRTL, HLSFlowDynamicHW };
 
-static cl::opt<HLSFlow> hlsFlow(
-    cl::desc("HLS flow"),
-    cl::values(clEnumValN(HLSFlowDynamic, "dynamic", "Dynamically scheduled")));
+static cl::opt<HLSFlow>
+    hlsFlow(cl::desc("HLS flow"),
+            cl::values(clEnumValN(HLSFlowDynamicFIRRTL, "dynamic-firrtl",
+                                  "Dynamically scheduled (FIRRTL path)"),
+                       clEnumValN(HLSFlowDynamicHW, "dynamic-hw",
+                                  "Dynamically scheduled (HW path)")),
+            cl::cat(mainCategory));
+
+enum DynamicParallelismKind {
+  DynamicParallelismNone,
+  DynamicParallelismLocking,
+  DynamicParallelismPipelining
+};
+
+static cl::opt<DynamicParallelismKind> dynParallelism(
+    "dynamic-parallelism", cl::desc("Specify the DHLS task parallelism kind"),
+    cl::values(
+        clEnumValN(DynamicParallelismNone, "none",
+                   "Add no protection mechanisms that could prevent data races "
+                   "when a function has multiple active invocations."),
+        clEnumValN(DynamicParallelismLocking, "locking",
+                   "Add function locking protection mechanism which ensures "
+                   "that only one function invocation is active."),
+        clEnumValN(DynamicParallelismPipelining, "pipelining",
+                   "Add function pipelining mechanism that enables a "
+                   "pipelined execution of multiple function invocations while "
+                   "preserving correctness.")),
+    cl::init(DynamicParallelismPipelining), cl::cat(mainCategory));
 
 enum OutputFormatKind { OutputIR, OutputVerilog };
 
@@ -110,19 +140,29 @@ static cl::opt<int>
     irInputLevel("ir-input-level",
                  cl::desc("Level at which to input IR at. It is flow-defined "
                           "which value corersponds to which IR level."),
-                 cl::init(-1));
+                 cl::init(-1), cl::cat(mainCategory));
 
 static cl::opt<int>
     irOutputLevel("ir-output-level",
                   cl::desc("Level at which to output IR at. It is flow-defined "
                            "which value corersponds to which IR level."),
-                  cl::init(-1));
+                  cl::init(-1), cl::cat(mainCategory));
 
 static cl::opt<OutputFormatKind> outputFormat(
     cl::desc("Specify output format:"),
     cl::values(clEnumValN(OutputIR, "ir", "Emit post-HLS IR"),
                clEnumValN(OutputVerilog, "verilog", "Emit Verilog")),
-    cl::init(OutputVerilog));
+    cl::init(OutputVerilog), cl::cat(mainCategory));
+
+static cl::opt<std::string>
+    bufferingStrategy("buffering-strategy",
+                      cl::desc("Strategy to apply. Possible values are: "
+                               "cycles, allFIFO, all (default)"),
+                      cl::init("all"), cl::cat(mainCategory));
+
+static cl::opt<unsigned> bufferSize("buffer-size",
+                                    cl::desc("Number of slots in each buffer"),
+                                    cl::init(2), cl::cat(mainCategory));
 
 // --------------------------------------------------------------------------
 // (Configurable) pass pipelines
@@ -143,7 +183,18 @@ static void loadDHLSPipeline(OpPassManager &pm) {
   pm.addPass(circt::createFlattenMemRefPass());
 
   // DHLS conversion
-  pm.addPass(circt::createStandardToHandshakePass());
+  pm.addPass(circt::createStandardToHandshakePass(
+      /*sourceConstants=*/false,
+      /*disableTaskPipelining=*/dynParallelism !=
+          DynamicParallelismPipelining));
+  if (dynParallelism == DynamicParallelismLocking) {
+    pm.nest<handshake::FuncOp>().addPass(
+        circt::handshake::createHandshakeLockFunctionsPass());
+    // The locking pass does not adapt forks, thus this additional pass is
+    // required
+    pm.nest<handshake::FuncOp>().addPass(
+        handshake::createHandshakeMaterializeForksSinksPass());
+  }
 }
 
 static void loadHandshakeTransformsPipeline(OpPassManager &pm) {
@@ -151,10 +202,16 @@ static void loadHandshakeTransformsPipeline(OpPassManager &pm) {
   pm.nest<handshake::FuncOp>().addPass(
       handshake::createHandshakeMaterializeForksSinksPass());
   pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
-  // Todo: arguments
   pm.nest<handshake::FuncOp>().addPass(
-      handshake::createHandshakeInsertBuffersPass());
+      handshake::createHandshakeInsertBuffersPass(bufferingStrategy,
+                                                  bufferSize));
   pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
+}
+
+static void loadESILoweringPipeline(OpPassManager &pm) {
+  pm.addPass(circt::esi::createESIPortLoweringPass());
+  pm.addPass(circt::esi::createESIPhysicalLoweringPass());
+  pm.addPass(circt::esi::createESItoHWPass());
 }
 
 static void loadFIRRTLLoweringPipeline(OpPassManager &pm) {
@@ -265,14 +322,29 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
   addIRLevel(HLSFlowDynamicIRLevel::High, [&]() { loadDHLSPipeline(pm); });
   addIRLevel(HLSFlowDynamicIRLevel::Handshake,
              [&]() { loadHandshakeTransformsPipeline(pm); });
-  addIRLevel(HLSFlowDynamicIRLevel::Firrtl, [&]() {
-    pm.addPass(circt::createHandshakeToFIRRTLPass());
-    loadFIRRTLLoweringPipeline(pm);
-  });
-  addIRLevel(HLSFlowDynamicIRLevel::Rtl, [&]() {
-    pm.addPass(createLowerFIRRTLToHWPass(/*enableAnnotationWarning=*/false,
-                                         /*emitChiselAssertsAsSVA=*/false));
-  });
+
+  if (hlsFlow == HLSFlowDynamicFIRRTL) {
+    // FIRRTL path.
+    addIRLevel(HLSFlowDynamicIRLevel::Firrtl, [&]() {
+      pm.addPass(circt::createHandshakeToFIRRTLPass());
+      loadFIRRTLLoweringPipeline(pm);
+    });
+    addIRLevel(HLSFlowDynamicIRLevel::Rtl, [&]() {
+      pm.addPass(createLowerFIRRTLToHWPass(/*enableAnnotationWarning=*/false,
+                                           /*emitChiselAssertsAsSVA=*/false));
+    });
+  } else {
+    // HW path.
+    addIRLevel(HLSFlowDynamicIRLevel::Firrtl, [&]() {
+      pm.addPass(circt::handshake::createHandshakeLowerExtmemToHWPass());
+      pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
+      pm.addPass(circt::createHandshakeToHWPass());
+      pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
+    });
+    addIRLevel(HLSFlowDynamicIRLevel::Rtl,
+               [&]() { loadESILoweringPipeline(pm); });
+  }
+
   addIRLevel(HLSFlowDynamicIRLevel::Sv, [&]() { loadHWLoweringPipeline(pm); });
 
   if (outputFormat == OutputVerilog) {
@@ -321,9 +393,11 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   pm.enableTiming(ts);
   applyPassManagerCLOptions(pm);
 
-  if (hlsFlow == HLSFlow::HLSFlowDynamic)
+  if (hlsFlow == HLSFlow::HLSFlowDynamicFIRRTL ||
+      hlsFlow == HLSFlow::HLSFlowDynamicHW) {
     if (failed(doHLSFlowDynamic(pm, module.get(), outputFile)))
       return failure();
+  }
 
   // We intentionally "leak" the Module into the MLIRContext instead of
   // deallocating it.  There is no need to deallocate it right before process
@@ -411,6 +485,10 @@ static LogicalResult executeHlstool(MLIRContext &context) {
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
 
+  // Hide default LLVM options, other than for this tool.
+  // MLIR options are added below.
+  cl::HideUnrelatedOptions(mainCategory);
+
   // Register any pass manager command line options.
   registerMLIRContextCLOptions();
   registerPassManagerCLOptions();
@@ -426,7 +504,7 @@ int main(int argc, char **argv) {
   registry.insert<mlir::AffineDialect>();
   registry.insert<mlir::memref::MemRefDialect>();
   registry.insert<mlir::func::FuncDialect>();
-  registry.insert<mlir::arith::ArithmeticDialect>();
+  registry.insert<mlir::arith::ArithDialect>();
   registry.insert<mlir::cf::ControlFlowDialect>();
   registry.insert<mlir::scf::SCFDialect>();
 
@@ -437,9 +515,9 @@ int main(int argc, char **argv) {
   mlir::registerCanonicalizerPass();
 
   // Register CIRCT dialects.
-  registry
-      .insert<firrtl::FIRRTLDialect, hw::HWDialect, comb::CombDialect,
-              seq::SeqDialect, sv::SVDialect, handshake::HandshakeDialect>();
+  registry.insert<firrtl::FIRRTLDialect, hw::HWDialect, comb::CombDialect,
+                  seq::SeqDialect, sv::SVDialect, handshake::HandshakeDialect,
+                  esi::ESIDialect>();
 
   // Do the guts of the hlstool process.
   MLIRContext context(registry);

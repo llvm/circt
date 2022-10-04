@@ -7,8 +7,9 @@
 // CHECK-NEXT:      sv.fwrite [[FD]], "Reachable2"
 // CHECK-NEXT:      sv.fwrite [[FD]], "Reachable3"
 // CHECK-NEXT:      sv.fwrite [[FD]], "Reachable4"
-// CHECK-NEXT:    }
-// CHECK-NEXT:    return
+// CHECK-NEXT:      sv.if
+// CHECK-NOT:       else
+// CHECK:           return
 // CHECK-NEXT:  }
 
 func.func @if_dead_condition(%arg0: i1) {
@@ -45,6 +46,11 @@ func.func @if_dead_condition(%arg0: i1) {
     } else {
       sv.fwrite %fd, "Reachable4"
     }
+
+    sv.if %arg0 {
+      sv.verbatim "foo"
+    } else {}
+
   }
 
   return

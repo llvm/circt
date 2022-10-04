@@ -706,8 +706,18 @@ private:
   /// added.
   StringRef getName(ValueOrOp valueOrOp) {
     auto entry = nameTable.find(valueOrOp);
-    assert(entry != nameTable.end() &&
-           "value expected a name but doesn't have one");
+    if (entry == nameTable.end()) {
+      llvm::errs() << "Name: ";
+      if (auto v = valueOrOp.dyn_cast<Value>())
+        v.print(llvm::errs());
+      else
+        valueOrOp.get<Operation *>()->print(llvm::errs());
+      llvm::errs()
+          << " Not found in name table! Most likely indicates that the given "
+             "op did not have an emitter in ExportVerilog, and should have "
+             "been lowered away before reaching this point.";
+      assert(false && "name not found (see above error)");
+    }
     return entry->getSecond();
   }
 
@@ -869,7 +879,7 @@ void EmitterBase::emitTextWithSubstitutions(
     // operations to this module's `names`, which is reserved for things named
     // *within* this module. Instead, you have to rely on those remote
     // operations to have been named inside the global names table. If they
-    // haven't, take a look at name name legalization first.
+    // haven't, take a look at name legalization first.
     if (auto itemOp = item.getOp()) {
       if (item.hasPort()) {
         return getPortVerilogName(itemOp, item.getPort());
@@ -1812,22 +1822,6 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   if (!isa<AddOp, MulOp, AndOp, OrOp, XorOp>(op))
     rhsPrec = VerilogPrecedence(prec - 1);
 
-  // Introduce extra parentheses to specific patterns of expressions.
-  // If op is "AndOp", and rhs is Reduction And, the output is like `a & &b`.
-  // This is syntactically valid but some tool produces LINT warnings. Also it
-  // would be confusing for users to read such expressions.
-  bool emitRhsParentheses = false;
-  if (auto rhsICmp = op->getOperand(1).getDefiningOp<ICmpOp>()) {
-    if ((rhsICmp.isEqualAllOnes() && isa<AndOp>(op)) ||
-        (rhsICmp.isNotEqualZero() && isa<OrOp>(op))) {
-      if (isExpressionEmittedInline(rhsICmp)) {
-        os << '(';
-        emitRhsParentheses = true;
-        rhsPrec = LowestPrecedence;
-      }
-    }
-  }
-
   // If the RHS operand has self-determined width and always treated as
   // unsigned, inform emitSubExpr of this.  This is true for the shift amount in
   // a shift operation.
@@ -1839,8 +1833,6 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
 
   auto rhsInfo = emitSubExpr(op->getOperand(1), rhsPrec, operandSignReq,
                              rhsIsUnsignedValueWithSelfDeterminedWidth);
-  if (emitRhsParentheses)
-    os << ')';
 
   // SystemVerilog 11.8.1 says that the result of a binary expression is signed
   // only if both operands are signed.
@@ -1864,7 +1856,11 @@ SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
 
   os << syntax;
   auto signedness = emitSubExpr(op->getOperand(0), Selection).signedness;
-  return {Unary, resultAlwaysUnsigned ? IsUnsigned : signedness};
+  // For reduction operators "&" and "|", make precedence lowest to avoid
+  // emitting an expression like `a & &b`, which is syntactically valid but some
+  // tools produce LINT warnings.
+  return {isa<ICmpOp>(op) ? LowestPrecedence : Unary,
+          resultAlwaysUnsigned ? IsUnsigned : signedness};
 }
 
 /// Emit SystemVerilog attributes attached to the expression op as dialect
@@ -2259,7 +2255,17 @@ SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
 SubExprInfo ExprEmitter::visitTypeOp(ArrayGetOp op) {
   emitSubExpr(op.getInput(), Selection);
   os << '[';
-  emitSubExpr(op.getIndex(), LowestPrecedence);
+  if (isZeroBitType(op.getIndex().getType())) {
+    // Due to the singleton memory, [1'b0] will always be syntactically valid
+    // as an indexing into the provided array.
+    // Emit the index expression as a comment for tracability (all other i0
+    // values referenced within the index expression will similarly be commented
+    // out).
+    os << "/*Zero width: ";
+    emitSubExpr(op.getIndex(), LowestPrecedence);
+    os << "*/ 1\'b0";
+  } else
+    emitSubExpr(op.getIndex(), LowestPrecedence);
   os << ']';
   emitSVAttributes(op);
   return {Selection, IsUnsigned};
@@ -2729,14 +2735,6 @@ private:
   /// Track the legalized names.
   ModuleNameManager &names;
 
-  /// This is the index of the start of the current statement being emitted.
-  RearrangableOStream::Cursor statementBeginning;
-
-  /// This is the index of the end of the declaration region of the current
-  /// 'begin' block, used to emit variable declarations.
-  RearrangableOStream::Cursor blockDeclarationInsertPoint;
-  unsigned blockDeclarationIndentLevel = INDENT_AMOUNT;
-
   /// This keeps track of the number of statements emitted, important for
   /// determining if we need to put out a begin/end marker in a block
   /// declaration.
@@ -2777,12 +2775,9 @@ void StmtEmitter::emitSVAttributes(Operation *op) {
 }
 
 void StmtEmitter::emitStatementExpression(Operation *op) {
-  // Know where the start of this statement is in case any out-of-band precursor
-  // statements need to be emitted.
-  statementBeginning = rearrangableStream.getCursor();
-
   // This is invoked for expressions that have a non-single use.  This could
   // either be because they are dead or because they have multiple uses.
+  // todo: use_empty could be prurned prior to emission.
   if (op->getResult(0).use_empty()) {
     indent() << "// Unused: ";
     --numStatementsEmitted;
@@ -3347,11 +3342,11 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
 
   if (!op->getRegion(1).empty()) {
     if (!hasEmptyThen)
-      indent() << "`else\n";
+      indent() << "`else  // " << ident << "\n";
     emitStatementBlock(op->getRegion(1).front());
   }
 
-  indent() << "`endif\n";
+  indent() << "`endif // " << (hasEmptyThen ? "not def " : "") << ident << "\n";
 
   // We don't know how many statements we emitted, so assume conservatively
   // that a lot got put out. This will make sure we get a begin/end block around
@@ -3378,13 +3373,6 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
   // emit the begin, and if so, emit the begin retroactively.
   RearrangableOStream::Cursor beginInsertPoint = rearrangableStream.getCursor();
   emitLocationInfoAndNewLine(locationOps);
-
-  // Change the blockDeclarationInsertPointIndex for the statements in this
-  // block, and restore it back when we move on to code after the block.
-  llvm::SaveAndRestore<RearrangableOStream::Cursor> x(
-      blockDeclarationInsertPoint, rearrangableStream.getCursor());
-  llvm::SaveAndRestore<unsigned> x2(blockDeclarationIndentLevel,
-                                    state.currentIndent + INDENT_AMOUNT);
 
   auto numEmittedBefore = getNumStatementsEmitted();
   emitStatementBlock(*block);
@@ -3881,10 +3869,6 @@ void StmtEmitter::emitStatement(Operation *op) {
 
   ++numStatementsEmitted;
 
-  // Know where the start of this statement is in case any out-of-band precursor
-  // statements need to be emitted.
-  statementBeginning = rearrangableStream.getCursor();
-
   // Handle HW statements.
   if (succeeded(dispatchStmtVisitor(op)))
     return;
@@ -4130,7 +4114,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
 bool StmtEmitter::emitDeclarationForTemporary(Operation *op) {
   StringRef declWord = getVerilogDeclWord(op, state.options);
 
-  os.indent(blockDeclarationIndentLevel) << declWord;
+  indent() << declWord;
   if (!declWord.empty())
     os << ' ';
   if (emitter.printPackedType(stripUnpackedTypes(op->getResult(0).getType()),
@@ -4179,8 +4163,6 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
 
   // Okay, now that we have measured the things to emit, emit the things.
   for (const auto &record : valuesToEmit) {
-    statementBeginning = rearrangableStream.getCursor();
-
     // We have two different sorts of things that we proactively emit:
     // declarations (wires, regs, localpamarams, etc) and expressions that
     // cannot be emitted inline (e.g. because of limitations around subscripts).
@@ -4254,13 +4236,6 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
     os << ';';
     emitLocationInfoAndNewLine(opsForLocation);
     ++numStatementsEmitted;
-
-    // If any sub-expressions are too large to fit on a line and need a
-    // temporary declaration, put it after the already-emitted declarations.
-    // This is important to maintain incrementally after each statement, because
-    // each statement can generate spills when they are overly-long.
-    blockDeclarationInsertPoint = rearrangableStream.getCursor();
-    blockDeclarationIndentLevel = state.currentIndent;
   }
 
   os << '\n';
@@ -4407,13 +4382,25 @@ StringRef ModuleEmitter::getNameRemotely(Value value,
 
   Operation *valueOp = value.getDefiningOp();
 
-  // Handle wires/registers, likely as instance inputs.
+  // Handle wires/registers/XMR references, likely as instance inputs.
   if (auto readinout = dyn_cast<ReadInOutOp>(valueOp)) {
     auto *wireInput = readinout.getInput().getDefiningOp();
     if (!wireInput)
       return {};
     if (isa<WireOp, RegOp, LogicOp>(wireInput))
       return getSymOpName(wireInput);
+
+    if (auto xmr = dyn_cast<XMROp>(wireInput)) {
+      SmallString<16> xmrString;
+      if (xmr.getIsRooted())
+        xmrString.append("$root.");
+      for (auto s : xmr.getPath()) {
+        xmrString.append(s.cast<StringAttr>().getValue());
+        xmrString.append(".");
+      }
+      xmrString.append(xmr.getTerminal());
+      return StringAttr::get(value.getContext(), xmrString);
+    }
   }
 
   // Handle values being driven onto wires, likely as instance outputs.
@@ -4987,9 +4974,8 @@ static void prepareForEmission(ModuleOp module,
                                const LoweringOptions &options) {
   SmallVector<HWModuleOp> modulesToPrepare;
   module.walk([&](HWModuleOp op) { modulesToPrepare.push_back(op); });
-  parallelForEach(module->getContext(), modulesToPrepare, [&](auto op) {
-    prepareHWModule(*op.getBodyBlock(), options);
-  });
+  parallelForEach(module->getContext(), modulesToPrepare,
+                  [&](auto op) { prepareHWModule(op, options); });
 }
 
 //===----------------------------------------------------------------------===//

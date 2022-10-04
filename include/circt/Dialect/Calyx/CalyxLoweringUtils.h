@@ -19,7 +19,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Pipeline/Pipeline.h"
 #include "circt/Support/LLVM.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -293,7 +293,7 @@ public:
   const DenseMap<unsigned, calyx::RegisterOp> &getBlockArgRegs(Block *block);
 
   /// Register 'grp' as a group which performs block argument
-  /// register transfer when transitioning from basic block from to to.
+  /// register transfer when transitioning from basic block 'from' to 'to'.
   void addBlockArgGroup(Block *from, Block *to, calyx::GroupOp grp);
 
   /// Returns a list of groups to be evaluated to perform the block argument

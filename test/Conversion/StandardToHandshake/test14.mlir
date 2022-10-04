@@ -2,7 +2,7 @@
 // RUN: circt-opt -lower-std-to-handshake %s | FileCheck %s
 // CHECK-LABEL:   handshake.func @affine_store(
 // CHECK-SAME:                                 %[[VAL_0:.*]]: index,
-// CHECK-SAME:                                 %[[VAL_1:.*]]: none, ...) -> none attributes {argNames = ["in0", "inCtrl"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                                 %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]] = memory[ld = 0, st = 1] (%[[VAL_3:.*]], %[[VAL_4:.*]]) {id = 0 : i32, lsq = false} : memref<10xf32>, (f32, index) -> none
 // CHECK:           %[[VAL_5:.*]] = merge %[[VAL_0]] : index
 // CHECK:           %[[VAL_6:.*]]:5 = fork [5] %[[VAL_1]] : none

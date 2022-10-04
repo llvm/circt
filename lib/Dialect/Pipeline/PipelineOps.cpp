@@ -12,7 +12,7 @@
 
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/Pipeline/Pipeline.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
@@ -294,6 +294,17 @@ void PipelineWhileOp::build(OpBuilder &builder, OperationState &state,
   builder.setInsertionPointToEnd(&stagesBlock);
   builder.create<PipelineTerminatorOp>(builder.getUnknownLoc(), ValueRange(),
                                        ValueRange());
+}
+
+//===----------------------------------------------------------------------===//
+// PipelineStageRegisterOp
+//===----------------------------------------------------------------------===//
+
+void PipelineStageRegisterOp::build(OpBuilder &builder, OperationState &state,
+                                    Value when, ValueRange regIns) {
+  PipelineStageRegisterOp::build(builder, state, regIns.getTypes(), regIns,
+                                 when);
+  state.addTypes({when.getType()});
 }
 
 //===----------------------------------------------------------------------===//

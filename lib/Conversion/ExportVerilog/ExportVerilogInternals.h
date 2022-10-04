@@ -9,9 +9,12 @@
 #ifndef CONVERSION_EXPORTVERILOG_EXPORTVERILOGINTERNAL_H
 #define CONVERSION_EXPORTVERILOG_EXPORTVERILOGINTERNAL_H
 
+#include "circt/Dialect/Comb/CombVisitors.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
+#include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/SV/SVVisitors.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include <atomic>
@@ -300,6 +303,9 @@ bool isExpressionEmittedInline(Operation *op);
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 void prepareHWModule(Block &block, const LoweringOptions &options);
+void prepareHWModule(hw::HWModuleOp module, const LoweringOptions &options);
+
+void pruneZeroValuedLogic(hw::HWModuleOp module);
 
 /// Rewrite module names and interfaces to not conflict with each other or with
 /// Verilog keywords.

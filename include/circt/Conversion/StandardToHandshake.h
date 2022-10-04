@@ -217,7 +217,8 @@ std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 createHandshakeAnalysisPass();
 
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
-createStandardToHandshakePass();
+createStandardToHandshakePass(bool sourceConstants = false,
+                              bool disableTaskPipelining = false);
 
 std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
 createHandshakeCanonicalizePass();

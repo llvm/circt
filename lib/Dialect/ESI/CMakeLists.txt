@@ -11,6 +11,7 @@ set(srcs
   ESIOps.cpp
   ESIPasses.cpp
   ESIServices.cpp
+  ESIStdServices.cpp
   ESITranslations.cpp
   ESITypes.cpp
 )
@@ -26,7 +27,7 @@ set(ESI_LinkLibs
   MLIRTransforms
   MLIRControlFlowDialect
   MLIRFuncDialect
-  MLIRArithmeticDialect
+  MLIRArithDialect
   MLIRTranslateLib
 )
 

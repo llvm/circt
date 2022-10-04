@@ -279,11 +279,11 @@ firrtl.circuit "MainWithNLA" attributes {
     }
   ]} {
   // Starting from DUT
-  firrtl.hierpath @nla_dut_rel [@DUT::@l, @Leaf::@w]
+  firrtl.hierpath private @nla_dut_rel [@DUT::@l, @Leaf::@w]
   // Not through DUT, describes multiple paths
-  firrtl.hierpath @nla_segment [@Mid::@l, @Leaf::@in]
+  firrtl.hierpath private @nla_segment [@Mid::@l, @Leaf::@in]
   // Top to leaf, through the DUT
-  firrtl.hierpath @nla_top_thru_dut_to_w [@MainWithNLA::@dut, @DUT::@m, @Mid::@l, @Leaf::@w]
+  firrtl.hierpath private @nla_top_thru_dut_to_w [@MainWithNLA::@dut, @DUT::@m, @Mid::@l, @Leaf::@w]
   firrtl.module private @Leaf(
     in %in: !firrtl.uint<1> sym @in [{
       circt.nonlocal = @nla_segment,
@@ -473,11 +473,11 @@ firrtl.circuit "MainWithnewNLA" attributes {
     }
   ]} {
   // Starting from DUT
-  firrtl.hierpath @nla_dut_rel [@DUT::@l, @Leaf]
+  firrtl.hierpath private @nla_dut_rel [@DUT::@l, @Leaf]
   // Not through DUT, describes multiple paths
-  firrtl.hierpath @nla_segment [@Mid::@l, @Leaf]
+  firrtl.hierpath private @nla_segment [@Mid::@l, @Leaf]
   // Top to leaf, through the DUT
-  firrtl.hierpath @nla_top_thru_dut_to_w [@MainWithnewNLA::@dut, @DUT::@m, @Mid::@l, @Leaf]
+  firrtl.hierpath private @nla_top_thru_dut_to_w [@MainWithnewNLA::@dut, @DUT::@m, @Mid::@l, @Leaf]
   firrtl.module private @Leaf(
     in %in: !firrtl.uint<1> [{
       circt.nonlocal = @nla_segment,

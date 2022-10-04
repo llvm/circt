@@ -54,10 +54,10 @@ hw.module @muxConstantInputsNegated(%cond: i1) -> (o: i2) {
 
 // CHECK-LABEL: @notMux
 hw.module @notMux(%a: i4, %b: i4, %cond: i1, %cond2: i1) -> (o: i4, o2: i4) {
-  // CHECK-NEXT: comb.mux %cond, %b, %a : i4
+  // CHECK-NEXT: comb.mux bin %cond, %b, %a : i4
   %c1 = hw.constant 1 : i1
   %0 = comb.xor %cond, %c1 : i1
-  %1 = comb.mux %0, %a, %b : i4
+  %1 = comb.mux bin %0, %a, %b : i4
 
   // CHECK-NEXT: %1 = comb.and %cond, %cond2 : i1
   // CHECK-NEXT: %2 = comb.mux %1, %b, %a : i4

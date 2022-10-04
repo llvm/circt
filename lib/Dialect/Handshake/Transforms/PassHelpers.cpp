@@ -15,7 +15,7 @@
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Support/LLVM.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/IR/PatternMatch.h"
@@ -105,6 +105,8 @@ LogicalResult resolveInstanceGraph(ModuleOp moduleOp,
 }
 
 LogicalResult verifyAllValuesHasOneUse(handshake::FuncOp funcOp) {
+  if (funcOp.isExternal())
+    return success();
   for (auto &subOp : funcOp.getOps()) {
     for (auto res : llvm::enumerate(subOp.getResults())) {
       if (!res.value().hasOneUse())

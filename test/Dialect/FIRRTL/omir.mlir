@@ -267,8 +267,8 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
 // CHECK-SAME:    e = {{{[^{}]+}} value = {id = [[eID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = {{"OM[a-zA-Z]+"}}
 // CHECK-SAME:    f = {{{[^{}]+}} value = {id = [[fID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = {{"OM[a-zA-Z]+"}}
 // CHECK-SAME:    g = {{{[^{}]+}} value = {id = [[gID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = {{"OM[a-zA-Z]+"}}
-// CHECK:       firrtl.hierpath @[[Foo_cC_C:nla[_0-9]*]]
-// CHECK-NEXT:  firrtl.hierpath @[[Foo_eE_E:nla[_0-9]*]]
+// CHECK:       firrtl.hierpath private @[[Foo_cC_C:nla[_0-9]*]]
+// CHECK-NEXT:  firrtl.hierpath private @[[Foo_eE_E:nla[_0-9]*]]
 // CHECK:       firrtl.module private @C
 // CHECK-SAME:    {circt.nonlocal = @[[Foo_cC_C]], class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[cID]] : i64}
 // CHECK:       firrtl.module private @D

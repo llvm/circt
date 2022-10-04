@@ -260,7 +260,7 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
 
   // If there are no required prefixes of this module, then this module is a
   // top-level module, and there is an implicit requirement that it has an empty
-  // prefix. This empty prefix will be applied to to all modules instantiated by
+  // prefix. This empty prefix will be applied to all modules instantiated by
   // this module.
   if (prefixes.empty())
     prefixes.push_back("");
@@ -304,36 +304,8 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
 
   // If this module contains a Grand Central interface, then also apply renames
   // to that, but only if there are prefixes to apply.
-  AnnotationSet annotations(module);
-  if (!annotations.hasAnnotation(parentAnnoClass) &&
-      !annotations.hasAnnotation(companionAnnoClass))
-    return;
-  SmallVector<Attribute> newAnnotations;
-  for (auto anno : annotations) {
-    if (!anno.isClass(parentAnnoClass) && !anno.isClass(companionAnnoClass)) {
-      newAnnotations.push_back(anno.getDict());
-      continue;
-    }
-
-    NamedAttrList newAnno;
-    for (auto attr : anno) {
-      if (attr.getName() == "name") {
-        newAnno.append(attr.getName(),
-                       (Attribute)builder.getStringAttr(
-                           Twine(prefixFull) +
-                           attr.getValue().cast<StringAttr>().getValue()));
-        continue;
-      }
-      newAnno.append(attr.getName(), attr.getValue());
-    }
-    newAnnotations.push_back(
-        DictionaryAttr::getWithSorted(builder.getContext(), newAnno));
-
-    // Record that we need to apply this prefix to the interface definition.
-    if (anno.getMember<StringAttr>("type").getValue() == "parent")
-      interfacePrefixMap[anno.getMember<IntegerAttr>("id")] = prefixFull;
-  }
-  AnnotationSet(newAnnotations, builder.getContext()).applyToOperation(module);
+  if (auto anno = AnnotationSet(module).getAnnotation(parentAnnoClass))
+    interfacePrefixMap[anno.getMember<IntegerAttr>("id")] = prefixFull;
 }
 
 /// Apply prefixes from the `prefixMap` to an external module.  No modifications
