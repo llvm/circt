@@ -114,7 +114,7 @@ def SVExtractTestCode : Pass<"sv-extract-test-code", "ModuleOp"> {
   let dependentDialects = ["circt::sv::SVDialect"];
 }
 
-def SVTraceIVerilog : Pass<"sv-trace-iverilog", "hw::HWModuleOp"> {
+def SVTraceIVerilog : Pass<"sv-trace-iverilog", "ModuleOp"> {
   let summary = "Add tracing to an iverilog simulated module";
   let description = [{
     This pass adds the necessary instrumentation to a HWModule to trigger
@@ -124,6 +124,8 @@ def SVTraceIVerilog : Pass<"sv-trace-iverilog", "hw::HWModuleOp"> {
   let constructor = "circt::sv::createSVTraceIVerilogPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
   let options = [
+    Option<"topOnly", "top-only", "bool", "true",
+            "If true, will only add tracing to the top-level module.">,
     Option<"targetModuleName", "module", "std::string", "",
             "Module to trace. If not provided, will trace all modules">,
     Option<"directoryName", "dir-name", "std::string", "\"./\"",
