@@ -240,7 +240,7 @@ jobs:
           make check-circt -j$(nproc)
 
       - name: Test PyCDE/ESI
-        if: $RUN_PYCDE_TESTS
+        if: ${{ env.RUN_PYCDE_TESTS == '1' }}
         run: |
           cd build
           make check-pycde -j$(nproc)
