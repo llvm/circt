@@ -214,7 +214,7 @@ jobs:
       # Build and test CIRCT
       # --------
 
-      - name: Build and Test CIRCT
+      - name: Build CIRCT Test CIRCT
         run: |
           mkdir build
           cd build
@@ -229,11 +229,18 @@ jobs:
             -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} \
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-          make check-circt -j$(nproc)
           make circt-doc
 
+          # PR CI gates
+          echo "RUN_PYCDE_TESTS=$(python3 .github/workflows/scripts/pr_gate.py '(PyCDE)')" >> $GITHUB_ENV
+
+      -name: Test CIRCT
+        run: |
+          cd build
+          make check-circt -j$(nproc)
+
       - name: Test PyCDE/ESI
-        #if: python3 .github/workflows/scripts/pr_gate.py '(PyCDE)'
+        if: $RUN_PYCDE_TESTS
         run: |
           cd build
           make check-pycde -j$(nproc)
