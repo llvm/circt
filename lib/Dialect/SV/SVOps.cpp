@@ -1391,7 +1391,8 @@ void ArrayIndexInOutOp::build(OpBuilder &builder, OperationState &result,
 // IndexedPartSelectInOutOp
 //===----------------------------------------------------------------------===//
 
-static Type inferReturn(Type type, int32_t width) {
+// A helper function to infer a return type of IndexedPartSelectInOutOp.
+static Type getElementTypeOfWidth(Type type, int32_t width) {
   auto elemTy = type.cast<hw::InOutType>().getElementType();
   if (elemTy.isa<IntegerType>())
     return hw::InOutType::get(IntegerType::get(type.getContext(), width));
@@ -1400,10 +1401,11 @@ static Type inferReturn(Type type, int32_t width) {
         elemTy.cast<hw::ArrayType>().getElementType(), width));
   return {};
 }
+
 void IndexedPartSelectInOutOp::build(OpBuilder &builder, OperationState &result,
                                      Value input, Value base, int32_t width,
                                      bool decrement) {
-  Type resultType = inferReturn(input.getType(), width);
+  Type resultType = getElementTypeOfWidth(input.getType(), width);
   build(builder, result, resultType, input, base, width, decrement);
 }
 
@@ -1415,8 +1417,9 @@ LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
   if (!width)
     return failure();
 
-  auto typ = inferReturn(operands[0].getType(),
-                         width.cast<IntegerAttr>().getValue().getZExtValue());
+  auto typ = getElementTypeOfWidth(
+      operands[0].getType(),
+      width.cast<IntegerAttr>().getValue().getZExtValue());
   if (!typ)
     return failure();
   results.push_back(typ);
@@ -1433,14 +1436,14 @@ LogicalResult IndexedPartSelectInOutOp::verify() {
   else if (auto i = hw::type_cast<hw::ArrayType>(inputElemTy))
     inputWidth = i.getSize();
   else
-    return emitError("input element type must be Integer");
+    return emitError("input element type must be Integer or Array");
 
   if (auto resType = resultElemTy.dyn_cast<IntegerType>())
     resultWidth = resType.getWidth();
   else if (auto resType = hw::type_cast<hw::ArrayType>(resultElemTy))
     resultWidth = resType.getSize();
   else
-    return emitError("result element type must be Integer");
+    return emitError("result element type must be Integer or Array");
 
   if (opWidth > inputWidth)
     return emitError("slice width should not be greater than input width");
