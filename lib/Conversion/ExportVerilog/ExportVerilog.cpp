@@ -4245,6 +4245,13 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
 void StmtEmitter::emitStatementBlock(Block &body) {
   addIndent();
 
+  // Ensure decl alignment values are preserved after the block is emitted.
+  // These values were computed for and from all declarations in the current
+  // block (before/after this nested block), so be sure they're restored
+  // and not overwritten by the declaration alignment within the block.
+  llvm::SaveAndRestore x(maxDeclNameWidth);
+  llvm::SaveAndRestore x2(maxTypeWidth);
+
   // Build up the symbol table for all of the values that need names in the
   // module.  #ifdef's in procedural regions are special because local variables
   // are all emitted at the top of their enclosing blocks.
