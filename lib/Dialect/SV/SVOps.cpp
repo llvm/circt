@@ -1402,13 +1402,6 @@ static Type getElementTypeOfWidth(Type type, int32_t width) {
   return {};
 }
 
-void IndexedPartSelectInOutOp::build(OpBuilder &builder, OperationState &result,
-                                     Value input, Value base, int32_t width,
-                                     bool decrement) {
-  Type resultType = getElementTypeOfWidth(input.getType(), width);
-  build(builder, result, resultType, input, base, width, decrement);
-}
-
 LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
     MLIRContext *context, Optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::RegionRange regions,
@@ -1461,13 +1454,6 @@ OpFoldResult IndexedPartSelectInOutOp::fold(ArrayRef<Attribute> constants) {
 //===----------------------------------------------------------------------===//
 // IndexedPartSelectOp
 //===----------------------------------------------------------------------===//
-
-void IndexedPartSelectOp::build(OpBuilder &builder, OperationState &result,
-                                Value input, Value base, int32_t width,
-                                bool decrement) {
-  auto resultType = (IntegerType::get(builder.getContext(), width));
-  build(builder, result, resultType, input, base, width, decrement);
-}
 
 LogicalResult IndexedPartSelectOp::inferReturnTypes(
     MLIRContext *context, Optional<Location> loc, ValueRange operands,

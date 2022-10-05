@@ -659,13 +659,13 @@ struct RTLBuilder {
 
   // Bitwise 'and'.
   Value bAnd(ValueRange values, std::optional<StringRef> name = {}) {
-    return buildNamedOp([&]() { return b.create<comb::AndOp>(loc, values); },
-                        name);
+    return buildNamedOp(
+        [&]() { return b.create<comb::AndOp>(loc, values, false); }, name);
   }
 
   Value bOr(ValueRange values, std::optional<StringRef> name = {}) {
-    return buildNamedOp([&]() { return b.create<comb::OrOp>(loc, values); },
-                        name);
+    return buildNamedOp(
+        [&]() { return b.create<comb::OrOp>(loc, values, false); }, name);
   }
 
   // Bitwise 'not'.
@@ -1220,7 +1220,10 @@ public:
     this->buildUnitRateJoinLogic(s, unwrappedIO, [&](ValueRange inputs) {
       // Create TOut - it is assumed that TOut trivially
       // constructs from the input data signals of TIn.
-      return s.b.create<TOut>(op.getLoc(), inputs);
+      // To disambiguate ambiguous builders with default arguments (e.g.,
+      // twoState UnitAttr), specify attribute array explicitly.
+      return s.b.create<TOut>(op.getLoc(), inputs,
+                              /* attributes */ ArrayRef<NamedAttribute>{});
     });
   };
 };
