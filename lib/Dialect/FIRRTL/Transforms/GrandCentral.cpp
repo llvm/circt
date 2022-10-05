@@ -775,7 +775,7 @@ static StringAttr borePortsFromViewToCompanion(AnnoPathValue &refSendTarget,
   });
   // Now drill ports to connect the `sendVal` to the `wireTarget`.
   auto remoteXMR = borePortsOnPath(
-      pathFromSrcToCompanion, lcaModule, sendVal, viewName.getValue(),
+      pathFromSrcToCompanion, lcaModule, sendVal, viewName.getValue(), None,
       state.instancePathCache,
       [&](FModuleLike mod) -> ModuleNamespace & {
         return state.getNamespace(mod);

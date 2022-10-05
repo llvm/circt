@@ -286,6 +286,9 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
   auto noDedupAnnoClassName = StringAttr::get(context, noDedupAnnoClass);
   auto noDedupAnno = DictionaryAttr::get(
       context, {{StringAttr::get(context, "class"), noDedupAnnoClassName}});
+  // Generate an arbitrary identifier to use for caching when using
+  // `maybeStringToLocation`.
+  StringAttr locatorFilenameCache = StringAttr::get(context, ".");
   for (size_t i = 0, e = keyAttr.size(); i != e; ++i) {
     auto b = keyAttr[i];
     auto path = ("keys[" + Twine(i) + "]").str();
@@ -307,6 +310,18 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
 
     auto sinkNameAttr =
         tryGetAs<StringAttr>(bDict, anno, "sink", loc, dataTapsClass, path);
+    auto locInfoAttr =
+        tryGetAs<StringAttr>(bDict, anno, "info", loc, dataTapsClass, path);
+    Location loc = UnknownLoc::get(context);
+    if (locInfoAttr) {
+      FileLineColLoc fileLineColLocCache;
+      // Convert location from a string to a location attribute.
+      auto maybeLoc = maybeStringToLocation(locInfoAttr.getValue(), false,
+                                            locatorFilenameCache,
+                                            fileLineColLocCache, context);
+      if (maybeLoc.first)
+        loc = maybeLoc.second.value();
+    }
     std::string wirePathStr;
     if (sinkNameAttr)
       wirePathStr = canonicalizeTarget(sinkNameAttr.getValue());
@@ -372,6 +387,8 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
       auto source = builder.create<VerbatimExprOp>(
           wireType, "{{0}}." + internalPathAttr.getValue(), ValueRange{},
           symbols);
+      if (loc.isa<FileLineColLoc>())
+        source->setLoc(loc);
       source->setAttr(
           StringAttr::get(context, "name"),
           StringAttr::get(
@@ -420,6 +437,8 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
       // Instance port cannot be used as an annotation target, so use a NodeOp.
       auto node = builder.create<NodeOp>(lastInst.getType(portNo),
                                          lastInst.getResult(portNo));
+      if (loc.isa<FileLineColLoc>())
+        node->setLoc(loc);
       AnnotationSet::addDontTouch(node);
       srcTarget->ref = AnnoTarget(circt::firrtl::detail::AnnoTargetImpl(node));
     }
@@ -462,9 +481,11 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
     // Note: No DontTouch added to refSendTarget, it can be constantprop'ed or
     // CSE'ed.
     auto sendVal = refSendBuilder.create<RefSendOp>(refSendBase);
+    if (loc.isa<FileLineColLoc>())
+      sendVal->setLoc(loc);
     // Now drill ports to connect the `sendVal` to the `wireTarget`.
     auto remoteXMR = borePortsOnPath(
-        pathFromSrcToWire, lcaModule, sendVal, tapName.getValue(),
+        pathFromSrcToWire, lcaModule, sendVal, tapName.getValue(), loc,
         state.instancePathCache,
         [&](FModuleLike mod) -> ModuleNamespace & {
           return state.getNamespace(mod);
@@ -482,6 +503,8 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
     else
       refResolveBuilder.setInsertionPointAfter(remoteXMR.getDefiningOp());
     auto refResolve = refResolveBuilder.create<RefResolveOp>(remoteXMR);
+    if (loc.isa<FileLineColLoc>())
+      refResolve->setLoc(loc);
     refResolveBuilder.setInsertionPointToEnd(
         wireTarget->ref.getOp()->getBlock());
     auto wireType = wireTarget->ref.getOp()
@@ -499,11 +522,13 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
         resolveResult =
             refResolveBuilder.create<AsAsyncResetPrimOp>(refResolve);
     }
-    refResolveBuilder.create<ConnectOp>(
+    auto con = refResolveBuilder.create<ConnectOp>(
         getValueByFieldID(refResolveBuilder,
                           wireTarget->ref.getOp()->getResult(0),
                           wireTarget->fieldIdx),
         resolveResult);
+    if (loc.isa<FileLineColLoc>())
+      con->setLoc(loc);
   }
 
   return success();
@@ -752,7 +777,8 @@ LogicalResult applyGCTMemTapsWithWires(const AnnoPathValue &target,
   auto sendVal = memDbgPort;
   // Now drill ports to connect the `sendVal` to the `wireTarget`.
   auto remoteXMR = borePortsOnPath(
-      pathFromSrcToWire, lcaModule, sendVal, "memTap", state.instancePathCache,
+      pathFromSrcToWire, lcaModule, sendVal, "memTap", None,
+      state.instancePathCache,
       [&](FModuleLike mod) -> ModuleNamespace & {
         return state.getNamespace(mod);
       },
