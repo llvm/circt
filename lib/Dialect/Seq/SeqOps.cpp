@@ -268,6 +268,10 @@ void FirRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
+  // If the register has a symbol, we can't optimize it away.
+  if (op.getInnerSymAttr())
+    return failure();
+ 
   // If the register's value is itself, we can replace the register.
   if (op.getNext().getDefiningOp() != op)
     return failure();
