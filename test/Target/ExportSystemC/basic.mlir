@@ -232,4 +232,24 @@ systemc.module @CppEmission () {
   }
 }
 
+// CHECK-LABEL: SC_MODULE(MemberAccess)
+systemc.module @MemberAccess () {
+  // CHECK-NEXT: std::pair<int, int> member;
+  // CHECK-NEXT: int result;
+  %member = systemc.cpp.variable : !emitc.opaque<"std::pair<int, int>">
+  %c5 = "emitc.constant"() {value = #emitc.opaque<"5"> : !emitc.opaque<"int">} : () -> !emitc.opaque<"int">
+  %result = systemc.cpp.variable : !emitc.opaque<"int">
+  // CHECK-EMPTY:
+  // CHECK-NEXT: SC_CTOR(MemberAccess) {
+  systemc.ctor {
+    // CHECK-NEXT: result = member.first;
+    %0 = systemc.cpp.member_access %member dot "first" : (!emitc.opaque<"std::pair<int, int>">) -> !emitc.opaque<"int">
+    systemc.cpp.assign %result = %0 : !emitc.opaque<"int">
+    // CHECK-NEXT: result = (new std::pair<int, int>(5, 5))->second;
+    %1 = systemc.cpp.new (%c5, %c5) : (!emitc.opaque<"int">, !emitc.opaque<"int">) -> !emitc.ptr<!emitc.opaque<"std::pair<int, int>">>
+    %2 = systemc.cpp.member_access %1 arrow "second" : (!emitc.ptr<!emitc.opaque<"std::pair<int, int>">>) -> !emitc.opaque<"int">
+    systemc.cpp.assign %result = %2 : !emitc.opaque<"int">
+  }
+}
+
 // CHECK: #endif // STDOUT_H
