@@ -232,6 +232,12 @@ jobs:
           make check-circt -j$(nproc)
           make circt-doc
 
+      - name: Test PyCDE/ESI
+        #if: python3 .github/workflows/scripts/pr_gate.py '(PyCDE)'
+        run: |
+          cd build
+          make check-pycde -j$(nproc)
+
       # --------
       # Lint the CIRCT C++ code.
       # -------
