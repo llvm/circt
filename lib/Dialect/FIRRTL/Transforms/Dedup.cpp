@@ -252,10 +252,12 @@ struct Equivalence {
                    bType.cast<BundleType>());
     if (aType.isa<RefType>() && bType.isa<RefType>())
       return (check(diag,
-                    message + ", mismatch in data taps with two modules marked "
-                              "with must dedup.",
+                    message + ", mismatch in RefType (can be due to difference "
+                              "in Grand Central Tap or View of two modules "
+                              "marked with must dedup), base",
                     a, aType.cast<RefType>().getType(), b,
                     bType.cast<RefType>().getType()));
+
     diag.attachNote(a->getLoc())
         << message << " types don't match, first type is " << aType;
     diag.attachNote(b->getLoc()) << "second type is " << bType;
@@ -277,10 +279,13 @@ struct Equivalence {
           portName = portNameAttr.getValue();
       if (existsVal.getType().isa<RefType>()) {
         diag.attachNote(opExists->getLoc())
-            << " contains a datap source port named '" + portName +
-                   "' that only exists in one of the modules";
+            << " contains a RefType port named '" + portName +
+                   "' that only exists in one of the modules (can be due to "
+                   "difference in Grand Central Tap or View of two modules "
+                   "marked with must dedup)";
         diag.attachNote(opDoesNotExist->getLoc())
-            << "second module to be deduped that does not have the data tap";
+            << "second module to be deduped that does not have the RefType "
+               "port";
       } else {
         diag.attachNote(opExists->getLoc())
             << "port '" + portName + "' only exists in one of the modules";
@@ -288,6 +293,7 @@ struct Equivalence {
             << "second module to be deduped that does not have the port";
       }
     };
+
     for (auto argPair :
          llvm::zip_longest(aBlock.getArguments(), bBlock.getArguments())) {
       auto &aArg = std::get<0>(argPair);
@@ -305,6 +311,7 @@ struct Equivalence {
                          aArg->getType(), b, bArg->getType())))
           return failure();
         map.map(aArg.value(), bArg.value());
+        portNo++;
         continue;
       }
       if (aArg.has_value()) {
@@ -315,7 +322,6 @@ struct Equivalence {
         emitMissingPort(bArg.value(), b, a);
         return failure();
       }
-      portNo++;
     }
 
     // Blocks operations.
