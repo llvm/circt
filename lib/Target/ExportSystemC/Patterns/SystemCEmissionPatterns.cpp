@@ -273,7 +273,14 @@ struct MemberAccessEmitter : OpEmissionPattern<MemberAccessOp> {
     auto op = value.getDefiningOp<MemberAccessOp>();
     p.getInlinable(op.getObject())
         .emitWithParensOnLowerPrecedence(Precedence::MEMBER_ACCESS);
-    p << (op.getDeref() ? "->" : ".");
+
+    if (op.getAccessKind() == MemberAccessKind::Arrow)
+      p << "->";
+    else if (op.getAccessKind() == MemberAccessKind::Dot)
+      p << ".";
+    else
+      p.emitError(op, "member access kind not implemented");
+
     p << op.getMemberName();
   }
 };

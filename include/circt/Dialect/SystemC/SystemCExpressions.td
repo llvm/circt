@@ -83,6 +83,13 @@ def NewOp : SystemCOp<"cpp.new", [NoSideEffect]> {
   }];
 }
 
+def Dot : I32EnumAttrCase<"Dot", 0, "dot">;
+def Arrow : I32EnumAttrCase<"Arrow", 1, "arrow">;
+
+def MemberAccessKindAttr : I32EnumAttr<"MemberAccessKind",
+                                       "C++ member access kind",
+                                       [Dot, Arrow]> {}
+
 def MemberAccessOp : SystemCOp<"cpp.member_access", [NoSideEffect]> {
   let summary = "A C++ member access expression.";
   let description = [{
@@ -95,11 +102,13 @@ def MemberAccessOp : SystemCOp<"cpp.member_access", [NoSideEffect]> {
     varbatim types such as `emitc.opaque`.
   }];
 
-  let arguments = (ins AnyType:$object, StrAttr:$memberName, UnitAttr:$deref);
+  let arguments = (ins AnyType:$object,
+                       StrAttr:$memberName,
+                       MemberAccessKindAttr:$accessKind);
   let results = (outs AnyType:$result);
 
   let assemblyFormat = [{
-    $object `[` $memberName `]` (`deref` $deref^)? attr-dict `:`
+    $object $accessKind $memberName attr-dict `:`
     functional-type($object, $result)
   }];
 }
