@@ -8,10 +8,12 @@ import os
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(
       description=
-      """Check if any of the files in the current diff match a pattern.
-     If so, returns true, else returns false.""")
+      """Check if any of the files in the current diff match the provided pattern.
+     If so, prints 1, else prints 0.""")
   parser.add_argument("pattern", help="Pattern to match", type=str)
   args = parser.parse_args()
+
+  print("=== PR Gate ===")
 
   repo_path = "./"
   repo = git.Repo(repo_path, search_parent_directories=True)
