@@ -184,8 +184,8 @@ LogicalResult circt::esi::exportCosimSchema(ModuleOp module,
 void circt::esi::registerESITranslations() {
 #ifdef CAPNP
   mlir::TranslateFromMLIRRegistration cosimToCapnp(
-      "export-esi-capnp", exportCosimSchema,
-      [](mlir::DialectRegistry &registry) {
+      "export-esi-capnp", "ESI Cosim Cap'nProto schema generation",
+      exportCosimSchema, [](mlir::DialectRegistry &registry) {
         registry.insert<ESIDialect, circt::hw::HWDialect, circt::sv::SVDialect,
                         mlir::func::FuncDialect, mlir::BuiltinDialect>();
       });

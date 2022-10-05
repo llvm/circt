@@ -817,7 +817,7 @@ mlir::LogicalResult circt::firrtl::exportFIRFile(mlir::ModuleOp module,
 
 void circt::firrtl::registerToFIRFileTranslation() {
   static mlir::TranslateFromMLIRRegistration toFIR(
-      "export-firrtl",
+      "export-firrtl", "emit FIRRTL dialect operations to .fir output",
       [](ModuleOp module, llvm::raw_ostream &os) {
         return exportFIRFile(module, os);
       },
