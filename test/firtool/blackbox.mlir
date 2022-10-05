@@ -1,3 +1,4 @@
+// REQUIRES: linux
 // RUN: rm -rf %t
 // RUN: firtool %s --split-verilog -o=%t --blackbox-path=%S
 // RUN: FileCheck %s --check-prefix=VERILOG-TOP < %t/test_mod.sv

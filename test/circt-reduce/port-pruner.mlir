@@ -1,3 +1,4 @@
+// REQUIRES: linux
 // RUN: circt-reduce %s --test %S/test.sh --test-arg cat --test-arg "firrtl.module private @Bar" --keep-best=0 --include firrtl-remove-unused-ports --test-must-fail | FileCheck %s
 
 firrtl.circuit "Foo" {

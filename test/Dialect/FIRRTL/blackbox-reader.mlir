@@ -1,3 +1,4 @@
+// REQUIRES: linux
 // RUN: split-file %s %t
 // RUN: sed 's?@DIR@?%t?' %t/Foo.mlir.orig > %t/Foo.mlir
 // RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-blackbox-reader)' %t/Foo.mlir | FileCheck %t/Foo.mlir

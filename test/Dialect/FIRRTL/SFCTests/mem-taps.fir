@@ -1,3 +1,4 @@
+; REQUIRES: linux
 ; RUN: firtool --verilog %s | FileCheck %s
 
 circuit Top : %[[

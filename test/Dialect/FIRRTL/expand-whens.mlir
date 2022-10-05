@@ -1,3 +1,4 @@
+// REQUIRES: linux
 // RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(firrtl-expand-whens))' %s | FileCheck %s
 firrtl.circuit "ExpandWhens" {
 firrtl.module @ExpandWhens () {}

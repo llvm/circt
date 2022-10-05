@@ -1,3 +1,4 @@
+; REQUIRES: linux
 ; RUN: firtool %s --annotation-file %s.anno.json --repl-seq-mem --repl-seq-mem-file="metadata/dutModule.conf" |  FileCheck %s
 
 

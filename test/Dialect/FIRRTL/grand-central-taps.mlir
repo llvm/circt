@@ -1,3 +1,4 @@
+// REQUIRES: linux
 // RUN: circt-opt %s --firrtl-grand-central-taps --symbol-dce --split-input-file | FileCheck %s
 
 firrtl.circuit "TestHarness" attributes {

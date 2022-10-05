@@ -1,3 +1,4 @@
+; REQUIRES: linux
 ; RUN: firtool --repl-seq-mem --repl-seq-mem-file="dummy" -disable-imdce %s | FileCheck %s
 
 ; This is testing that CHIRRTL enable inference is working as intended.  If the

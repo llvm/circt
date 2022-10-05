@@ -80,5 +80,6 @@ jobs:
             -DLLVM_EXTERNAL_LIT="$(pwd)/../llvm/build/bin/llvm-lit.py" `
             -DCMAKE_BUILD_TYPE=Release
           cmake --build . --config Release
+          cmake --build . --target check-circt
 
     # --- end of build-circt job.
