@@ -4,6 +4,8 @@ import random
 
 inNames = [f"in{i}" for i in range(8)] + ["in8"]
 
+random.seed(0)
+
 
 def genInOutPair():
   inputs = [random.randint(0, 1000) for _ in range(8)]

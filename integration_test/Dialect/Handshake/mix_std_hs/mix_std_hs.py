@@ -2,6 +2,8 @@ import cocotb
 from helper import initDut
 import random
 
+random.seed(0)
+
 
 def kernel(e):
   if (e >> 1) & 0x1:
