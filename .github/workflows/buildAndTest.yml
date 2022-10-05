@@ -232,7 +232,7 @@ jobs:
           make circt-doc
 
           # PR CI gates
-          echo "RUN_PYCDE_TESTS=$(python3 .github/workflows/scripts/pr_gate.py '(PyCDE)')" >> $GITHUB_ENV
+          echo "RUN_PYCDE_TESTS=$(python3 ../.github/workflows/scripts/pr_gate.py '(PyCDE)')" >> $GITHUB_ENV
 
       - name: Test CIRCT
         run: |
