@@ -28,17 +28,17 @@ extern "C" {
 #endif
 /// Register an endpoint.
 DPI int sv2cCosimserverEpRegister(char *endpointId, long long sendTypeId,
-                                     int sendTypeSize, long long recvTypeId,
-                                     int recvTypeSize);
+                                  int sendTypeSize, long long recvTypeId,
+                                  int recvTypeSize);
 /// Try to get a message from a client.
 DPI int sv2cCosimserverEpTryGet(char *endpointId,
-                                   // NOLINTNEXTLINE(misc-misplaced-const)
-                                   const svOpenArrayHandle data,
-                                   unsigned int *sizeBytes);
+                                // NOLINTNEXTLINE(misc-misplaced-const)
+                                const svOpenArrayHandle data,
+                                unsigned int *sizeBytes);
 /// Send a message to a client.
 DPI int sv2cCosimserverEpTryPut(char *endpointId,
-                                   // NOLINTNEXTLINE(misc-misplaced-const)
-                                   const svOpenArrayHandle data, int dataLimit);
+                                // NOLINTNEXTLINE(misc-misplaced-const)
+                                const svOpenArrayHandle data, int dataLimit);
 
 /// Start the server. Not required as the first endpoint registration will do
 /// this. Provided if one wants to start the server early.
