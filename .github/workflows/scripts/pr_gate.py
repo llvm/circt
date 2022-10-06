@@ -14,8 +14,8 @@ if __name__ == "__main__":
 
   print("=== PR Gate ===", file=sys.stderr)
 
-  head_ref = os.getenv("GITHUB_BASE_REF")
-  base_ref = os.getenv("GITHUB_HEAD_REF")
+  head_ref = os.getenv("GITHUB_HEAD_REF")
+  base_ref = os.getenv("GITHUB_BASE_REF")
 
   if base_ref == head_ref:
     print("Base and head refs are the same, skipping", file=sys.stderr)
