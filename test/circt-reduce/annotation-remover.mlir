@@ -1,4 +1,4 @@
-// REQUIRES: linux
+// REQUIRES: not-windows
 // RUN: circt-reduce %s --test %S/test.sh --test-arg cat --test-arg "%anotherWire = firrtl.wire  :" --keep-best=0 --include annotation-remover | FileCheck %s
 
 firrtl.circuit "Foo" {

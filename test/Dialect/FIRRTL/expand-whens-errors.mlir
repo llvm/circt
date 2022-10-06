@@ -1,4 +1,4 @@
-// REQUIRES: linux
+// REQUIRES: not-windows
 // RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(firrtl-expand-whens))' -verify-diagnostics --split-input-file %s
 
 // This test is checking each kind of declaration to ensure that it is caught

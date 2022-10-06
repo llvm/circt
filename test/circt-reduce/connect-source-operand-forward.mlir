@@ -1,4 +1,4 @@
-// REQUIRES: linux
+// REQUIRES: not-windows
 // RUN: circt-reduce %s --test %S/test.sh --test-arg cat --test-arg "firrtl.module @Foo" --keep-best=0 --include connect-source-operand-0-forwarder --test-must-fail | FileCheck %s
 firrtl.circuit "Foo" {
   // CHECK-LABEL: firrtl.module @Foo

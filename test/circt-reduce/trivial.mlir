@@ -1,4 +1,4 @@
-// REQUIRES: linux
+// REQUIRES: not-windows
 // RUN: circt-reduce %s --test %S/test.sh --test-arg firtool --test-arg "error: sink \"x1.x\" not fully initialized" --keep-best=0 --test-must-fail | FileCheck %s
 
 firrtl.circuit "Foo" {

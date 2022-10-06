@@ -1,4 +1,4 @@
-// REQUIRES: linux
+// REQUIRES: not-windows
 // RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-grand-central,symbol-dce)' -split-input-file %s | FileCheck %s
 
 firrtl.circuit "InterfaceGroundType" attributes {

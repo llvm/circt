@@ -1,4 +1,4 @@
-; REQUIRES: linux
+; REQUIRES: not-windows
 ; RUN: firtool %s --format=fir --ir-fir    | circt-opt | FileCheck %s --check-prefix=MLIR
 ; RUN: firtool %s --format=fir --parse-only --annotation-file %s.anno.json,%s.anno.1.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
 ; RUN: firtool %s --format=fir --parse-only --annotation-file %s.anno.json --annotation-file %s.anno.1.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS

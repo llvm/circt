@@ -1,4 +1,4 @@
-; REQUIRES: linux
+; REQUIRES: not-windows
 ; RUN: firtool %s --annotation-file %s.anno.json -emit-metadata -repl-seq-mem -repl-seq-mem-file="metadata/test.conf" |  FileCheck %s
 
 circuit test:

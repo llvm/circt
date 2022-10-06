@@ -1,4 +1,4 @@
-; REQUIRES: linux
+; REQUIRES: not-windows
 ; RUN: firtool -split-input-file -verilog %s | FileCheck %s
 
 ; This test checks end-to-end compliance with the Scala FIRRTL Compiler (SFC)

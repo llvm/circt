@@ -1,4 +1,4 @@
-; REQUIRES: linux
+; REQUIRES: not-windows
 ; RUN: firtool --annotation-file %S/Wire.anno.json --annotation-file %S/Extract.anno.json %s | FileCheck %s --check-prefixes CHECK,EXTRACT
 ; RUN: firtool --preserve-values=named --annotation-file %S/Wire.anno.json %s | FileCheck %s --check-prefixes CHECK,NOEXTRACT
 ; RUN: firtool --annotation-file %S/Wire.anno.json --annotation-file %S/Extract.anno.json %s --annotation-file %S/YAML.anno.json | FileCheck %s --check-prefixes YAML

@@ -1,4 +1,4 @@
-; REQUIRES: linux
+; REQUIRES: not-windows
 ; RUN: firtool %s --repl-seq-mem --repl-seq-mem-file=test.txt --ir-fir | FileCheck %s 
 ; RUN: firtool %s --repl-seq-mem --repl-seq-mem-file=test.txt --ir-sv | FileCheck --check-prefix=HW %s
 

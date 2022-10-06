@@ -79,7 +79,7 @@ if config.llhd_sim_enabled:
   config.available_features.add('llhd-sim')
   tools.append('llhd-sim')
 
-if 'Linux' in config.host_os:
-  config.available_features.add("linux")
+if 'Windows' not in config.host_os:
+  config.available_features.add("not-windows")
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
