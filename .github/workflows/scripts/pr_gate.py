@@ -1,4 +1,3 @@
-import git
 import sys
 import subprocess
 import argparse
@@ -13,10 +12,7 @@ if __name__ == "__main__":
   parser.add_argument("pattern", help="Pattern to match", type=str)
   args = parser.parse_args()
 
-  print("=== PR Gate ===")
-
-  repo_path = "./"
-  repo = git.Repo(repo_path, search_parent_directories=True)
+  print("=== PR Gate ===", file=sys.stderr)
 
   head_ref = os.getenv("GITHUB_BASE_REF")
   base_ref = os.getenv("GITHUB_HEAD_REF")
@@ -36,4 +32,5 @@ if __name__ == "__main__":
       print("1")
       sys.exit(0)
 
+  print("No file in the diff matched the provided pattern", file=sys.stderr)
   print("0")
