@@ -6,6 +6,7 @@
 
 from pycde import dim, module, generator, types, Clock, Input, Output
 import pycde
+
 import sys
 
 
