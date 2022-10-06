@@ -4249,8 +4249,8 @@ void StmtEmitter::emitStatementBlock(Block &body) {
   // These values were computed for and from all declarations in the current
   // block (before/after this nested block), so be sure they're restored
   // and not overwritten by the declaration alignment within the block.
-  llvm::SaveAndRestore x(maxDeclNameWidth);
-  llvm::SaveAndRestore x2(maxTypeWidth);
+  llvm::SaveAndRestore<size_t> x(maxDeclNameWidth);
+  llvm::SaveAndRestore<size_t> x2(maxTypeWidth);
 
   // Build up the symbol table for all of the values that need names in the
   // module.  #ifdef's in procedural regions are special because local variables
