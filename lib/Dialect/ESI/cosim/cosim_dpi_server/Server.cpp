@@ -21,7 +21,6 @@
 #include "circt/Dialect/ESI/cosim/CosimDpi.capnp.h"
 #include <capnp/ez-rpc.h>
 #include <thread>
-#include <unistd.h>
 
 using namespace capnp;
 using namespace circt::esi::cosim;
