@@ -20,7 +20,7 @@
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Pass/Pass.h"
 
 namespace circt {

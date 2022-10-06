@@ -1775,8 +1775,8 @@ public:
   LogicalResult
   matchAndRewrite(handshake::FuncOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    ModulePortInfo ports = getPortInfoForOpTypes(
-        rewriter, op, op.getArgumentTypes(), op.getResultTypes());
+    ModulePortInfo ports =
+        getPortInfoForOpTypes(op, op.getArgumentTypes(), op.getResultTypes());
 
     if (op.isExternal()) {
       rewriter.create<hw::HWModuleExternOp>(

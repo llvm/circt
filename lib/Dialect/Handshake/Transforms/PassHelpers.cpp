@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Support/LLVM.h"
@@ -157,7 +158,7 @@ Type toValidType(Type t) {
         return tupleToStruct(
             mlir::TupleType::get(types[0].getContext(), types));
       })
-      .Case<StructType>([&](StructType st) {
+      .Case<hw::StructType>([&](auto st) {
         llvm::SmallVector<hw::StructType::FieldInfo> structFields(
             st.getElements());
         for (auto &field : structFields)

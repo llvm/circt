@@ -23,6 +23,11 @@ class Pass;
 } // namespace mlir
 
 namespace circt {
+
+namespace esi {
+class ChannelType;
+}
+
 std::unique_ptr<mlir::Pass> createHandshakeToHWPass();
 
 namespace handshake {

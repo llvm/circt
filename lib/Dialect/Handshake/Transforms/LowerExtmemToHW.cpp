@@ -18,7 +18,7 @@
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Support/BackedgeBuilder.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Rewrite/FrozenRewritePatternSet.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -188,6 +188,7 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
 
     // Create service requests. This MUST follow the order of which ports were
     // added in other parts of this pass (load ports first, then store ports).
+    b.setInsertionPointToStart(wrapperMod.getBodyBlock());
 
     // Load ports:
     auto loadServicePort = hw::InnerRefAttr::get(memServiceDecl.getNameAttr(),
@@ -201,8 +202,8 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
     }
 
     // Store ports:
-    auto storeServicePort =
-        hw::InnerRefAttr::get(memServiceInstName, b.getStringAttr("write"));
+    auto storeServicePort = hw::InnerRefAttr::get(memServiceDecl.getNameAttr(),
+                                                  b.getStringAttr("write"));
     for (unsigned i = 0; i < memType.storePorts; ++i) {
       auto storeReq = b.create<esi::RequestInOutChannelOp>(
           loc, handshake::esiWrapper(b.getIntegerType(0)), storeServicePort,
