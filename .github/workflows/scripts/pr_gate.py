@@ -3,6 +3,7 @@ import subprocess
 import argparse
 import re
 import os
+import git
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(
@@ -14,8 +15,15 @@ if __name__ == "__main__":
 
   print("=== PR Gate ===", file=sys.stderr)
 
-  head_ref = os.getenv("GITHUB_HEAD_REF")
-  base_ref = os.getenv("GITHUB_BASE_REF")
+  repo_path = "./"
+  repo = git.Repo(repo_path, search_parent_directories=True)
+
+  def get_env_sha(env):
+    ref_name = os.getenv(env)
+    return repo.git.rev_parse(ref_name)
+
+  head_ref = get_env_sha("GITHUB_HEAD_REF")
+  base_ref = get_env_sha("GITHUB_BASE_REF")
 
   if base_ref == head_ref:
     print("Base and head refs are the same, skipping", file=sys.stderr)
