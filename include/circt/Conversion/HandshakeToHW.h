@@ -25,10 +25,6 @@ class Pass;
 namespace circt {
 std::unique_ptr<mlir::Pass> createHandshakeToHWPass();
 
-namespace esi {
-class ChannelType;
-}
-
 namespace handshake {
 
 // Converts 't' into a valid HW type. This is strictly used for converting

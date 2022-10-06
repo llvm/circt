@@ -186,21 +186,12 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
 
     SmallVector<Value> instanceArgsFromThisMem;
 
-    // Create a service instance.
-    b.setInsertionPointToStart(wrapperMod.getBodyBlock());
-    auto memServiceInst = b.create<esi::ServiceInstanceOp>(
-        loc, llvm::SmallVector<Type>(),
-        FlatSymbolRefAttr::get(memServiceDecl.getNameAttr()),
-        /*todo: what do we put here? impl=*/b.getStringAttr("cosim"),
-        b.getDictionaryAttr({}), clkRes);
-    auto memServiceInstName = memServiceInst.getServiceSymbolAttr().getAttr();
-
     // Create service requests. This MUST follow the order of which ports were
     // added in other parts of this pass (load ports first, then store ports).
 
     // Load ports:
-    auto loadServicePort =
-        hw::InnerRefAttr::get(memServiceInstName, b.getStringAttr("read"));
+    auto loadServicePort = hw::InnerRefAttr::get(memServiceDecl.getNameAttr(),
+                                                 b.getStringAttr("read"));
     for (unsigned i = 0; i < memType.loadPorts; ++i) {
       auto loadReq = b.create<esi::RequestInOutChannelOp>(
           loc, handshake::esiWrapper(dataType), loadServicePort,

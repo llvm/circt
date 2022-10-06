@@ -26,6 +26,11 @@ using namespace handshake;
 using namespace mlir;
 
 namespace circt {
+
+namespace esi {
+class ChannelType;
+}
+
 namespace handshake {
 
 /// Iterates over the handshake::FuncOp's in the program to build an instance
@@ -122,6 +127,62 @@ LogicalResult verifyAllValuesHasOneUse(handshake::FuncOp funcOp) {
              << "argument " << barg.index() << " has multiple uses.";
   }
   return success();
+}
+
+// NOLINTNEXTLINE(misc-no-recursion)
+static Type tupleToStruct(TupleType tuple) {
+  auto *ctx = tuple.getContext();
+  mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
+  for (auto [i, innerType] : llvm::enumerate(tuple)) {
+    Type convertedInnerType = innerType;
+    if (auto tupleInnerType = innerType.dyn_cast<TupleType>())
+      convertedInnerType = tupleToStruct(tupleInnerType);
+    hwfields.push_back({StringAttr::get(ctx, "field" + std::to_string(i)),
+                        convertedInnerType});
+  }
+
+  return hw::StructType::get(ctx, hwfields);
+}
+
+// Converts 't' into a valid HW type. This is strictly used for converting
+// 'index' types into a fixed-width type.
+Type toValidType(Type t) {
+  return TypeSwitch<Type, Type>(t)
+      .Case<IndexType>(
+          [&](IndexType it) { return IntegerType::get(it.getContext(), 64); })
+      .Case<TupleType>([&](TupleType tt) {
+        llvm::SmallVector<Type> types;
+        for (auto innerType : tt)
+          types.push_back(toValidType(innerType));
+        return tupleToStruct(
+            mlir::TupleType::get(types[0].getContext(), types));
+      })
+      .Case<StructType>([&](StructType st) {
+        llvm::SmallVector<hw::StructType::FieldInfo> structFields(
+            st.getElements());
+        for (auto &field : structFields)
+          field.type = toValidType(field.type);
+        return hw::StructType::get(st.getContext(), structFields);
+      })
+      .Case<NoneType>(
+          [&](NoneType nt) { return IntegerType::get(nt.getContext(), 0); })
+      .Default([&](Type t) { return t; });
+}
+
+// Wraps a type into an ESI ChannelType type. The inner type is converted to
+// ensure comprehensability by the RTL dialects.
+esi::ChannelType esiWrapper(Type t) {
+  return TypeSwitch<Type, esi::ChannelType>(t)
+      .Case<esi::ChannelType>([](auto t) { return t; })
+      .Case<TupleType>(
+          [&](TupleType tt) { return esiWrapper(tupleToStruct(tt)); })
+      .Case<NoneType>([](NoneType nt) {
+        // todo: change when handshake switches to i0
+        return esiWrapper(IntegerType::get(nt.getContext(), 0));
+      })
+      .Default([](auto t) {
+        return esi::ChannelType::get(t.getContext(), toValidType(t));
+      });
 }
 
 } // namespace handshake
