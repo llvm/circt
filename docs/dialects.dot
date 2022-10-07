@@ -59,6 +59,7 @@ digraph G {
       Seq [URL="https://circt.llvm.org/docs/Dialects/Seq/"]
       HW [URL="https://circt.llvm.org/docs/Dialects/HW/"]
       Comb [URL="https://circt.llvm.org/docs/Dialects/Comb/"]
+      Interop [URL="https://circt.llvm.org/docs/Dialects/Interop/"]
     }
     LLHD [URL="https://circt.llvm.org/docs/Dialects/LLHD/"]
 
