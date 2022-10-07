@@ -1441,8 +1441,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   void runWithInsertionPointAtEndOfBlock(std::function<void(void)> fn,
                                          Region &region);
 
-  /// Return an `sv::ReadInOutOp` for the specified value, auto-uniquing them.
-  Value getReadInOutOp(Value v);
+  /// Return a read value for the specified inout value, auto-uniquing them.
+  Value getReadValue(Value v);
 
   void addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
                         ::ResetType resetStyle, sv::EventControl resetEdge,
@@ -1640,7 +1640,7 @@ private:
   /// We auto-unique "ReadInOut" ops from wires and regs, enabling
   /// optimizations and CSEs of the read values to be more obvious.  This
   /// caches a known ReadInOutOp for the given value and is managed by
-  /// `getReadInOutOp(v)`.
+  /// `getReadValue(v)`.
   DenseMap<Value, Value> readInOutCreated;
 
   // We auto-unique graph-level blocks to reduce the amount of generated
@@ -1875,7 +1875,7 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
   // If we got an inout value, implicitly read it.  FIRRTL allows direct use
   // of wires and other things that lower to inout type.
   if (result.getType().isa<hw::InOutType>())
-    return getReadInOutOp(result);
+    return getReadValue(result);
 
   return result;
 }
@@ -2218,24 +2218,35 @@ void FIRRTLLowering::runWithInsertionPointAtEndOfBlock(
   builder.restoreInsertionPoint(oldIP);
 }
 
-/// Return an `sv::ReadInOutOp` for the specified value, auto-uniquing them.
-Value FIRRTLLowering::getReadInOutOp(Value v) {
-  Value &result = readInOutCreated[v];
+/// Return a read value for the specified inout operation, auto-uniquing them.
+Value FIRRTLLowering::getReadValue(Value v) {
+  Value result = readInOutCreated.lookup(v);
   if (result)
     return result;
 
-  // Make sure to put the "ReadInOut" at the correct scope so it dominates all
+  // Make sure to put the read value at the correct scope so it dominates all
   // future uses.
   auto oldIP = builder.saveInsertionPoint();
   if (auto *vOp = v.getDefiningOp()) {
     builder.setInsertionPointAfter(vOp);
   } else {
-    // For reads of ports, just put the ReadInOut at the top of the module.
+    // For reads of ports, just set the insertion point at the top of the
+    // module.
     builder.setInsertionPoint(&theModule.getBodyBlock()->front());
   }
 
-  result = builder.createOrFold<sv::ReadInOutOp>(v);
+  // Instead of creating `ReadInOutOp` for `ArrayIndexInOutOp`, create
+  // `ArrayGetOp` for root arrays.
+  if (auto arrayIndexInout = v.getDefiningOp<sv::ArrayIndexInOutOp>()) {
+    result = getReadValue(arrayIndexInout.getInput());
+    result = builder.createOrFold<hw::ArrayGetOp>(result,
+                                                  arrayIndexInout.getIndex());
+  } else {
+    // Otherwise, create a read inout operation.
+    result = builder.createOrFold<sv::ReadInOutOp>(v);
+  }
   builder.restoreInsertionPoint(oldIP);
+  readInOutCreated.insert({v, result});
   return result;
 }
 
@@ -2750,7 +2761,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
           else
             a->eraseOperand(0);
         }
-        wire = getReadInOutOp(wire);
+        wire = getReadValue(wire);
         if (!field2.empty()) {
           // This handles the case, when the single bit mask field is removed,
           // and the enable is updated after 'And' with mask bit.
@@ -2767,7 +2778,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
             else
               a->eraseOperand(0);
           }
-          wire = builder.createOrFold<comb::AndOp>(wire, getReadInOutOp(wire2),
+          wire = builder.createOrFold<comb::AndOp>(wire, getReadValue(wire2),
                                                    true);
         }
 
@@ -2935,7 +2946,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
     // inout ports directly use the wire, but normal inputs read it.
     if (!port.isInOut())
-      wire = getReadInOutOp(wire);
+      wire = getReadValue(wire);
 
     operands.push_back(wire);
   }
@@ -4013,7 +4024,7 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
       [&]() {
         SmallVector<Value, 4> values;
         for (size_t i = 0, e = inoutValues.size(); i != e; ++i)
-          values.push_back(getReadInOutOp(inoutValues[i]));
+          values.push_back(getReadValue(inoutValues[i]));
 
         for (size_t i1 = 0, e = inoutValues.size(); i1 != e; ++i1) {
           for (size_t i2 = 0; i2 != e; ++i2)
