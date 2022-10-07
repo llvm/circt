@@ -3433,9 +3433,7 @@ Value FIRRTLLowering::createArrayIndexing(Value array, Value index) {
     auto extValue = builder.create<hw::ArrayGetOp>(array, extElem);
     SmallVector<Value> temp(llvm::NextPowerOf2(size) - size, extValue);
     auto ext = builder.create<hw::ArrayCreateOp>(temp);
-    SmallVector<Value> temp2;
-    temp2.push_back(ext.getResult());
-    temp2.push_back(array);
+    Value temp2[] = {ext.getResult(), array};
     array = builder.create<hw::ArrayConcatOp>(temp2);
   }
 
