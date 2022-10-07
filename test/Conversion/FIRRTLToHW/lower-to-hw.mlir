@@ -32,6 +32,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-DAG: hw.constant 2 : i3
     %c2_si3 = firrtl.constant 2 : !firrtl.sint<3>
 
+
     // CHECK: %out4 = sv.wire sym @__Simple__out4 : !hw.inout<i4>
     // CHECK: %out5 = sv.wire sym @__Simple__out5 : !hw.inout<i4>
     %out4 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
@@ -290,8 +291,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK:      %[[ZEXT_INDEX:.+]] = comb.concat %false, {{.*}} : i1, i1
     // CHECK-NEXT: %[[ARRAY:.+]] = hw.array_create %false, %false, %false
     // CHECK-NEXT: %[[WIRE:.+]] = sv.wire
-    // CHECK-NEXT: %[[C0:.+]] = hw.constant 0 : i2
-    // CHECK-NEXT: %[[GET0:.+]] = hw.array_get %[[ARRAY]][%[[C0]]]
+    // CHECK-NEXT: %[[GET0:.+]] = hw.array_get %[[ARRAY]][%c0_i2]
     // CHECK-NEXT: %[[FILLER:.+]] = hw.array_create %[[GET0]] : i1
     // CHECK-NEXT: %[[EXT:.+]] = hw.array_concat %[[FILLER]], %[[ARRAY]]
     // CHECK-NEXT: %[[ARRAY_GET:.+]] = hw.array_get %[[EXT]][%[[ZEXT_INDEX]]]
@@ -1135,13 +1135,13 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %0 = firrtl.subaccess %b[%x] : !firrtl.vector<uint<1>, 5>, !firrtl.uint<2>
     %1 = firrtl.subaccess %a[%y] : !firrtl.vector<uint<1>, 5>, !firrtl.uint<2>
     firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:      %[[EXTIndex:.+]] = hw.constant 0 : i3 
     // CHECK:      %.b.output = sv.wire  : !hw.inout<array<5xi1>>
     // CHECK-NEXT: %0 = sv.read_inout %.b.output
     // CHECK-NEXT: %[[indexExt:.+]] = comb.concat %false, %x : i1, i2
     // CHECK-NEXT: %2 = sv.array_index_inout %.b.output[%[[indexExt]]]
     // CHECK-NEXT: %3 = comb.concat %false, %y : i1, i2
     // CHECK-NEXT: %[[valWire:.+]] = sv.wire  : !hw.inout<i1>
-    // CHECK-NEXT: %[[EXTIndex:.+]] = hw.constant 0 : i3 
     // CHECK-NEXT: %[[EXTValue:.+]] = hw.array_get %a[%[[EXTIndex]]] 
     // CHECK-NEXT: %[[EXTArray:.+]] = hw.array_create %[[EXTValue]], %[[EXTValue]], %[[EXTValue]] 
     // CHECK-NEXT: %[[Array:.+]] = hw.array_concat %[[EXTArray]], %a 
@@ -1269,13 +1269,13 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %bar = firrtl.dshl %a, %b {name = "anothername"} : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
   }
 
-  // CHECK-LABEL: hw.module private @MutlibitMux(%source_0: i1, %source_1: i1, %source_2: i1, %index: i2) -> (sink: i1) {
-  firrtl.module private @MutlibitMux(in %source_0: !firrtl.uint<1>, in %source_1: !firrtl.uint<1>, in %source_2: !firrtl.uint<1>, out %sink: !firrtl.uint<1>, in %index: !firrtl.uint<2>) {
+  // CHECK-LABEL: hw.module private @MultibitMux(%source_0: i1, %source_1: i1, %source_2: i1, %index: i2) -> (sink: i1) {
+  firrtl.module private @MultibitMux(in %source_0: !firrtl.uint<1>, in %source_1: !firrtl.uint<1>, in %source_2: !firrtl.uint<1>, out %sink: !firrtl.uint<1>, in %index: !firrtl.uint<2>) {
     %0 = firrtl.multibit_mux %index, %source_2, %source_1, %source_0 : !firrtl.uint<2>, !firrtl.uint<1>
     firrtl.connect %sink, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:      %c0_i2 = hw.constant 0 : i2 
     // CHECK:      %0 = hw.array_create %source_2, %source_1, %source_0 : i1
     // CHECK-NEXT: %1 = sv.wire : !hw.inout<i1>
-    // CHECK-NEXT: %c0_i2 = hw.constant 0 : i2 
     // CHECK-NEXT: %2 = hw.array_get %0[%c0_i2]
     // CHECK-NEXT: %3 = hw.array_create %2 : i1 
     // CHECK-NEXT: %4 = hw.array_concat %3, %0
