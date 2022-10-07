@@ -360,6 +360,10 @@ static cl::list<std::string> inputAnnotationFilenames(
     "annotation-file", cl::desc("Optional input annotation file"),
     cl::CommaSeparated, cl::value_desc("filename"), cl::cat(mainCategory));
 
+static cl::opt<std::string> outputAnnotationFilename(
+    "output-annotation-file", cl::desc("Optional output annotation file"),
+    cl::CommaSeparated, cl::value_desc("filename"), cl::cat(mainCategory));
+
 static cl::list<std::string> inputOMIRFilenames(
     "omir-file", cl::desc("Optional input object model 2.0 file"),
     cl::CommaSeparated, cl::value_desc("filename"), cl::cat(mainCategory));
@@ -731,6 +735,14 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {
+
+    // Remove TraceAnnotations and write their updated paths to an output
+    // annotation file.
+    if (outputAnnotationFilename.empty())
+      pm.nest<firrtl::CircuitOp>().addPass(firrtl::createResolveTracesPass());
+    else
+      pm.nest<firrtl::CircuitOp>().addPass(
+          firrtl::createResolveTracesPass(outputAnnotationFilename.getValue()));
 
     // Lower the ref.resolve and ref.send ops and remove the RefType ports.
     // LowerToHW cannot handle RefType so, this pass must be run to remove all
