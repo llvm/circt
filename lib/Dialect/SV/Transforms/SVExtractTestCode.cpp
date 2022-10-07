@@ -319,7 +319,6 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
     // Inline the body at the instantiation site.
     hw::HWModuleOp instParent =
         cast<hw::HWModuleOp>(use->getParent()->getModule());
-    OpBuilder::InsertionGuard g(b);
     b.setInsertionPoint(inst);
     for (auto &op : *oldMod.getBodyBlock()) {
       // For instances in the bind table, update the bind with the new parent.
