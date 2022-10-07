@@ -28,8 +28,7 @@ using namespace mlir;
 using namespace circt;
 using namespace sv;
 
-using BindTable =
-    SmallDenseMap<Attribute, SmallDenseMap<Attribute, sv::BindOp>>;
+using BindTable = DenseMap<Attribute, SmallDenseMap<Attribute, sv::BindOp>>;
 
 //===----------------------------------------------------------------------===//
 // StubExternalModules Helpers
@@ -291,7 +290,7 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
   if (oldMod.getNumOutputs() != 0)
     return;
 
-  // Iterate through each of the module's inputs.
+  // Iterate through each instance of the module.
   hw::InstanceGraphNode *node = instanceGraph.lookup(oldMod);
   OpBuilder b(oldMod);
   bool allInlined = true;
@@ -322,7 +321,7 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
         cast<hw::HWModuleOp>(use->getParent()->getModule());
     OpBuilder::InsertionGuard g(b);
     b.setInsertionPoint(inst);
-    for (auto &op : llvm::make_early_inc_range(*oldMod.getBodyBlock())) {
+    for (auto &op : *oldMod.getBodyBlock()) {
       // For instances in the bind table, update the bind with the new parent.
       if (auto innerInst = dyn_cast<hw::InstanceOp>(op)) {
         if (auto innerInstSym = innerInst.getInnerSymAttr()) {
