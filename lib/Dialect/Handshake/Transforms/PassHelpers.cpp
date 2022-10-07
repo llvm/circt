@@ -28,10 +28,6 @@ using namespace mlir;
 
 namespace circt {
 
-namespace esi {
-class ChannelType;
-}
-
 namespace handshake {
 
 /// Iterates over the handshake::FuncOp's in the program to build an instance
