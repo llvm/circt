@@ -3424,10 +3424,12 @@ Value FIRRTLLowering::createArrayIndexing(Value array, Value index) {
   auto valWire = builder.create<sv::WireOp>(
       hw::type_cast<hw::ArrayType>(array.getType()).getElementType());
 
-  // Extend to power of 2
+  // Extend to power of 2.  FIRRTL semantics say out-of-bounds access result in
+  // an indeterminate value.  Existing chisel code depends on this behavior
+  // being "return index 0".  Ideally, we would tail extend the array to improve
+  // optimization.
   if (!llvm::isPowerOf2_64(size)) {
-    auto extElem =
-        builder.create<hw::ConstantOp>(APInt(llvm::Log2_64_Ceil(size), 0));
+    auto extElem = getOrCreateIntConstant(APInt(llvm::Log2_64_Ceil(size), 0));
     auto extValue = builder.create<hw::ArrayGetOp>(array, extElem);
     SmallVector<Value> temp(llvm::NextPowerOf2(size) - size, extValue);
     auto ext = builder.create<hw::ArrayCreateOp>(temp);
