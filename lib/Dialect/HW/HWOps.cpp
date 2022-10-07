@@ -2411,7 +2411,7 @@ OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
       return {};
     auto constant = inputConsatnt.getValue();
     // Calculate the index. Make sure to zero-extend the index value before
-    // multplying the element width.
+    // multiplying the element width.
     auto startIdx = constIdx.getValue().zext(constant.getBitWidth()) *
                     getType().getIntOrFloatBitWidth();
     // Extract [startIdx + width - 1: startIdx].
