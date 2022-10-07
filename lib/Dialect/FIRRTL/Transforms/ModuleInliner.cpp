@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -30,7 +31,6 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FormatVariadic.h"
-#include "llvm/Support/Parallel.h"
 
 #define DEBUG_TYPE "firrtl-inliner"
 
@@ -470,34 +470,6 @@ static void replaceRefEdges(SmallVectorImpl<Backedge> &edges) {
   }
 
   edges.clear();
-}
-
-/// Wrapper for llvm::parallelTransformReduce that performs the transform_reduce
-/// serially when MLIR multi-threading is disabled.
-/// Does not add a ParallelDiagnosticHandler like mlir::parallelFor.
-template <class IterTy, class ResultTy, class ReduceFuncTy,
-          class TransformFuncTy>
-static ResultTy transformReduce(MLIRContext *context, IterTy Begin, IterTy End,
-                                ResultTy Init, ReduceFuncTy Reduce,
-                                TransformFuncTy Transform) {
-  // Parallel when enabled
-  if (context->isMultithreadingEnabled())
-    return llvm::parallelTransformReduce(Begin, End, Init, Reduce, Transform);
-
-  // Serial fallback (from llvm::parallelTransformReduce)
-  for (IterTy I = Begin; I != End; ++I)
-    Init = Reduce(std::move(Init), Transform(*I));
-  return std::move(Init);
-}
-
-/// Range wrapper
-template <class RangeTy, class ResultTy, class ReduceFuncTy,
-          class TransformFuncTy>
-static ResultTy transformReduce(MLIRContext *context, RangeTy &&R,
-                                ResultTy Init, ReduceFuncTy Reduce,
-                                TransformFuncTy Transform) {
-  return transformReduce(context, std::begin(R), std::end(R), Init, Reduce,
-                         Transform);
 }
 
 //===----------------------------------------------------------------------===//
