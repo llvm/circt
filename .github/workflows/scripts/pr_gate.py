@@ -20,7 +20,9 @@ if __name__ == "__main__":
 
   def get_env_sha(env):
     ref_name = os.getenv(env)
-    return repo.git.rev_parse(ref_name)
+    sha = repo.git.rev_parse(ref_name)
+    print(f"{env} = {ref_name} = {sha}", file=sys.stderr)
+    return sha
 
   head_ref = get_env_sha("GITHUB_HEAD_REF")
   base_ref = get_env_sha("GITHUB_BASE_REF")
