@@ -157,8 +157,8 @@ static SetVector<Operation *> computeCloneSet(SetVector<Operation *> &roots) {
   return results;
 }
 
-// Find instances that only feed the clone set, and add them if possible. This
-// also returns a list of ops that should be erased, which includes such
+// Find instances that directly feed the clone set, and add them if possible.
+// This also returns a list of ops that should be erased, which includes such
 // instances and their forward dataflow slices.
 static void addInstancesToCloneSet(
     SetVector<Value> &inputs, SetVector<Operation *> &opsToClone,
@@ -470,7 +470,8 @@ private:
           inputs.insert(arg);
       }
 
-    // Find instances that only feed the clone set, and add them if possible.
+    // Find instances that directly feed the clone set, and add them if
+    // possible.
     SmallPtrSet<Operation *, 32> opsToErase;
     addInstancesToCloneSet(inputs, opsToClone, opsToErase, extractedInstances);
     numOpsExtracted += opsToClone.size();
