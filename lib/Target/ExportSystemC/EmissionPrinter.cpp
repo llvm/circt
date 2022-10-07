@@ -51,6 +51,22 @@ void EmissionPrinter::emitType(Type type) {
   emissionFailed = true;
 }
 
+void EmissionPrinter::emitAttr(Attribute attr) {
+  auto patterns =
+      attrPatterns.getSpecificNativePatterns().lookup(attr.getTypeID());
+  for (auto *pat : patterns) {
+    if (pat->match(attr)) {
+      pat->emitAttr(attr, *this);
+      return;
+    }
+  }
+
+  mlir::emitError(currentLoc, "no emission pattern found for attribute ")
+      << attr << "\n";
+  os << "<<UNSUPPORTED ATTRIBUTE (" << attr << ")>>";
+  emissionFailed = true;
+}
+
 InlineEmitter EmissionPrinter::getInlinable(Value value) {
   auto *op = value.isa<BlockArgument>() ? value.getParentRegion()->getParentOp()
                                         : value.getDefiningOp();
@@ -61,7 +77,7 @@ InlineEmitter EmissionPrinter::getInlinable(Value value) {
     MatchResult match = pat->matchInlinable(value);
     if (!match.failed()) {
       return InlineEmitter([=]() { pat->emitInlined(value, *this); },
-                           match.getPrecedence());
+                           match.getPrecedence(), *this);
     }
   }
 
@@ -74,7 +90,7 @@ InlineEmitter EmissionPrinter::getInlinable(Value value) {
   err.attachNote(requestLoc) << "requested to be inlined here";
   return InlineEmitter(
       [&]() { os << "<<INVALID VALUE TO INLINE (" << value << ")>>"; },
-      Precedence::LIT);
+      Precedence::LIT, *this);
 }
 
 void EmissionPrinter::emitRegion(Region &region) {
@@ -92,6 +108,19 @@ void EmissionPrinter::emitRegion(
   }
 }
 
+InFlightDiagnostic EmissionPrinter::emitError(Operation *op,
+                                              const Twine &message) {
+  emissionFailed = true;
+  os << "<<ERROR (" << message << ")>>";
+  return op->emitOpError();
+}
+
+InFlightDiagnostic EmissionPrinter::emitError(const Twine &message) {
+  emissionFailed = true;
+  os << "<<ERROR (" << message << ")>>";
+  return mlir::emitError(currentLoc, message);
+}
+
 EmissionPrinter &EmissionPrinter::operator<<(StringRef str) {
   os << str;
   return *this;
@@ -100,4 +129,16 @@ EmissionPrinter &EmissionPrinter::operator<<(StringRef str) {
 EmissionPrinter &EmissionPrinter::operator<<(int64_t num) {
   os << std::to_string(num);
   return *this;
+}
+
+void InlineEmitter::emitWithParensOnLowerPrecedence(Precedence prec,
+                                                    StringRef lParen,
+                                                    StringRef rParen) const {
+  if (precedence >= prec)
+    printer << lParen;
+
+  emitter();
+
+  if (precedence >= prec)
+    printer << rParen;
 }

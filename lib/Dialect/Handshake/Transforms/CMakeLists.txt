@@ -11,6 +11,7 @@ add_circt_dialect_library(CIRCTHandshakeTransforms
 
   LINK_LIBS PUBLIC
   CIRCTHW
+  CIRCTESI
   CIRCTHandshake
   CIRCTSupport
   MLIRIR

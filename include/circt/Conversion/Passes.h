@@ -37,12 +37,6 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 
-namespace mlir {
-namespace arith {
-class ArithmeticDialect;
-} // namespace arith
-} // namespace mlir
-
 namespace circt {
 
 // Generate the code for registering conversion passes.

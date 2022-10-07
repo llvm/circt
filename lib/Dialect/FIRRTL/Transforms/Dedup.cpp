@@ -250,6 +250,18 @@ struct Equivalence {
     if (aType.isa<BundleType>() && bType.isa<BundleType>())
       return check(diag, message, a, aType.cast<BundleType>(), b,
                    bType.cast<BundleType>());
+    if (aType.isa<RefType>() && bType.isa<RefType>() && aType != bType) {
+      diag.attachNote(a->getLoc())
+          << message << ", has a RefType with a different base type "
+          << aType.cast<RefType>().getType()
+          << " in the same position of the two modules marked as 'must dedup'. "
+             "(This may be due to Grand Central Taps or Views being different "
+             "between the two modules.)";
+      diag.attachNote(b->getLoc())
+          << "the second module has a different base type "
+          << bType.cast<RefType>().getType();
+      return failure();
+    }
     diag.attachNote(a->getLoc())
         << message << " types don't match, first type is " << aType;
     diag.attachNote(b->getLoc()) << "second type is " << bType;
@@ -260,34 +272,58 @@ struct Equivalence {
                       Operation *a, Block &aBlock, Operation *b,
                       Block &bBlock) {
 
-    // Block Arguments.
-    if (aBlock.getNumArguments() != bBlock.getNumArguments()) {
-      diag.attachNote(a->getLoc())
-          << "modules have a different number of ports";
-      diag.attachNote(b->getLoc()) << "second module here";
-      return failure();
-    }
-
     // Block argument types.
     auto portNames = a->getAttrOfType<ArrayAttr>("portNames");
     auto portNo = 0;
-    for (auto argPair :
-         llvm::zip(aBlock.getArguments(), bBlock.getArguments())) {
-      auto &aArg = std::get<0>(argPair);
-      auto &bArg = std::get<1>(argPair);
-      // TODO: we should print the port number if there are no port names, but
-      // there are always port names ;).
+    auto emitMissingPort = [&](Value existsVal, Operation *opExists,
+                               Operation *opDoesNotExist) {
       StringRef portName;
-      if (portNames) {
+      auto portNames = opExists->getAttrOfType<ArrayAttr>("portNames");
+      if (portNames)
         if (auto portNameAttr = portNames[portNo].dyn_cast<StringAttr>())
           portName = portNameAttr.getValue();
+      if (existsVal.getType().isa<RefType>()) {
+        diag.attachNote(opExists->getLoc())
+            << " contains a RefType port named '" + portName +
+                   "' that only exists in one of the modules (can be due to "
+                   "difference in Grand Central Tap or View of two modules "
+                   "marked with must dedup)";
+        diag.attachNote(opDoesNotExist->getLoc())
+            << "second module to be deduped that does not have the RefType "
+               "port";
+      } else {
+        diag.attachNote(opExists->getLoc())
+            << "port '" + portName + "' only exists in one of the modules";
+        diag.attachNote(opDoesNotExist->getLoc())
+            << "second module to be deduped that does not have the port";
       }
-      // Assumption here that block arguments correspond to ports.
-      if (failed(check(diag, "module port '" + portName + "'", a,
-                       aArg.getType(), b, bArg.getType())))
-        return failure();
-      map.map(aArg, bArg);
-      portNo++;
+      return failure();
+    };
+
+    for (auto argPair :
+         llvm::zip_longest(aBlock.getArguments(), bBlock.getArguments())) {
+      auto &aArg = std::get<0>(argPair);
+      auto &bArg = std::get<1>(argPair);
+      if (aArg.has_value() && bArg.has_value()) {
+        // TODO: we should print the port number if there are no port names, but
+        // there are always port names ;).
+        StringRef portName;
+        if (portNames) {
+          if (auto portNameAttr = portNames[portNo].dyn_cast<StringAttr>())
+            portName = portNameAttr.getValue();
+        }
+        // Assumption here that block arguments correspond to ports.
+        if (failed(check(diag, "module port '" + portName + "'", a,
+                         aArg->getType(), b, bArg->getType())))
+          return failure();
+        map.map(aArg.value(), bArg.value());
+        portNo++;
+        continue;
+      }
+      if (!aArg.has_value())
+        std::swap(a, b);
+      return emitMissingPort(aArg.has_value() ? aArg.value() : bArg.value(), a,
+                             b);
     }
 
     // Blocks operations.

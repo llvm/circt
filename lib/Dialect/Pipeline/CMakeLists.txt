@@ -13,7 +13,7 @@ add_circt_dialect_library(CIRCTPipelineOps
 
   LINK_LIBS PUBLIC
   CIRCTESI
-  MLIRArithmeticDialect
+  MLIRArithDialect
   MLIRFuncDialect
   MLIRIR
 

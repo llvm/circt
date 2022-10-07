@@ -341,7 +341,7 @@ static void printModuleLikeOp(mlir::FunctionOpInterface moduleLike,
                           omittedAttrs);
 
   // Print the body if this is not an external function.
-  Region &mbody = moduleLike.getBody();
+  Region &mbody = moduleLike.getFunctionBody();
   if (!mbody.empty()) {
     p << ' ';
     p.printRegion(mbody, /*printEntryBlockArgs=*/false,

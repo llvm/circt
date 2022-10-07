@@ -119,6 +119,10 @@ def _findPort(dut, name):
   valid = getattr(dut, validName)
   data = getattr(dut, dataName, None)
 
+  if data is None:
+    # Try with just the base name - this is the case for HandshakeToHW (ESI standard)
+    data = getattr(dut, name, None)
+
   # Needed, as it otherwise would try to resolve the value
   hasData = not isinstance(data, type(None))
   if hasData:

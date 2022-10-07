@@ -422,6 +422,7 @@ else()
   endif()
 
   if(CapnProto_FOUND)
+    message(STATUS "Found Cap'nProto at ${CapnProto_DIR}.")
     set(CMAKE_INSTALL_RPATH ${capnp_LIBDIR})
     set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
   endif()

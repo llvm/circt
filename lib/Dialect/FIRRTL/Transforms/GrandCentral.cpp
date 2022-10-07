@@ -2301,8 +2301,8 @@ void GrandCentralPass::runOnOperation() {
         getInterfaceName(bundle.getPrefix(), bundle) + "__");
 
     // Recursively walk the AugmentedBundleType to generate interfaces and XMRs.
-    // Error out if this returns None (indicating that the annotation annotation
-    // is malformed in some way).  A good error message is generated inside
+    // Error out if this returns None (indicating that the annotation is
+    // malformed in some way).  A good error message is generated inside
     // `traverseBundle` or the functions it calls.
     auto instanceSymbol =
         hw::InnerRefAttr::get(SymbolTable::getSymbolName(companionModule),

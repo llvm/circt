@@ -260,7 +260,7 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
 
   // If there are no required prefixes of this module, then this module is a
   // top-level module, and there is an implicit requirement that it has an empty
-  // prefix. This empty prefix will be applied to to all modules instantiated by
+  // prefix. This empty prefix will be applied to all modules instantiated by
   // this module.
   if (prefixes.empty())
     prefixes.push_back("");

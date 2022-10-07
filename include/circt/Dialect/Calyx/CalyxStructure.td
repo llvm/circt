@@ -79,7 +79,7 @@ def ComponentOp : CalyxOp<"component", [
 
   let extraClassDeclaration = [{
       using mlir::detail::FunctionOpInterfaceTrait<ComponentOp>::front;
-      using mlir::detail::FunctionOpInterfaceTrait<ComponentOp>::getBody;
+      using mlir::detail::FunctionOpInterfaceTrait<ComponentOp>::getFunctionBody;
 
       /// Returns the type of this function.
       FunctionType getFunctionType() {
@@ -104,13 +104,13 @@ def ComponentOp : CalyxOp<"component", [
 
       /// Returns the body of a Calyx component.
       Block *getBodyBlock() {
-        Region* region = &getOperation()->getRegion(0);
+        Region* region = getRegion();
         assert(region->hasOneBlock() && "The body should have one Block.");
         return &region->front();
       }
 
       /// Returns the region of a Calyx component.
-      Region *getRegion() { return &getOperation()->getRegion(0); }
+      Region *getRegion() { return &getFunctionBody(); }
 
       /// Returns the port information for this component.
       SmallVector<PortInfo> getPortInfo();

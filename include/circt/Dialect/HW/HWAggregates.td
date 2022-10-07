@@ -109,6 +109,7 @@ def ArraySliceOp : HWOp<"array_slice", [NoSideEffect]> {
   let results = (outs ArrayType:$dst);
 
   let hasVerifier = 1;
+  let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
 
   let assemblyFormat = [{

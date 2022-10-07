@@ -17,7 +17,7 @@
 
 namespace mlir {
 namespace arith {
-class ArithmeticDialect;
+class ArithDialect;
 } // namespace arith
 
 namespace cf {

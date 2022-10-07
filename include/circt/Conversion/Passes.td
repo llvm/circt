@@ -29,7 +29,7 @@ def AffineToPipeline : Pass<"convert-affine-to-pipeline", "mlir::func::FuncOp"> 
   let constructor = "circt::createAffineToPipeline()";
   let dependentDialects = [
     "circt::pipeline::PipelineDialect",
-    "mlir::arith::ArithmeticDialect",
+    "mlir::arith::ArithDialect",
     "mlir::cf::ControlFlowDialect",
     "mlir::memref::MemRefDialect",
     "mlir::scf::SCFDialect",

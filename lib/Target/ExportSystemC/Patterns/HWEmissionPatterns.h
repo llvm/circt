@@ -19,7 +19,6 @@
 namespace circt {
 namespace ExportSystemC {
 void populateHWEmitters(OpEmissionPatternSet &patterns, MLIRContext *context);
-void populateHWTypeEmitters(TypeEmissionPatternSet &patterns);
 } // namespace ExportSystemC
 } // namespace circt
 

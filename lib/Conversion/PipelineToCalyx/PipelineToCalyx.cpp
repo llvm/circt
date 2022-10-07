@@ -20,7 +20,7 @@
 #include "circt/Dialect/Pipeline/Pipeline.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -394,7 +394,7 @@ private:
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      memref::LoadOp loadOp) const {
-  Value memref = loadOp.memref();
+  Value memref = loadOp.getMemref();
   auto memoryInterface =
       getState<ComponentLoweringState>().getMemoryInterface(memref);
   if (calyx::noStoresToMemory(memref) && calyx::singleLoadFromMemory(memref)) {
@@ -448,8 +448,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      memref::StoreOp storeOp) const {
-  auto memoryInterface =
-      getState<ComponentLoweringState>().getMemoryInterface(storeOp.memref());
+  auto memoryInterface = getState<ComponentLoweringState>().getMemoryInterface(
+      storeOp.getMemref());
   auto group = createGroupForOp<calyx::GroupOp>(rewriter, storeOp);
 
   // This is a sequential group, so register it as being scheduleable for the
@@ -1337,7 +1337,7 @@ class LateSSAReplacement : public calyx::FuncOpPartialLoweringPattern {
         /// values with their memoryOp readData output.
         loadOp.getResult().replaceAllUsesWith(
             getState<ComponentLoweringState>()
-                .getMemoryInterface(loadOp.memref())
+                .getMemoryInterface(loadOp.getMemref())
                 .readData());
       }
     });
@@ -1426,7 +1426,7 @@ public:
 
     // Only accept std operations which we've added lowerings for
     target.addIllegalDialect<FuncDialect>();
-    target.addIllegalDialect<ArithmeticDialect>();
+    target.addIllegalDialect<ArithDialect>();
     target.addLegalOp<AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp, AndIOp,
                       XOrIOp, OrIOp, ExtUIOp, TruncIOp, CondBranchOp, BranchOp,
                       MulIOp, DivUIOp, DivSIOp, RemUIOp, RemSIOp, ReturnOp,

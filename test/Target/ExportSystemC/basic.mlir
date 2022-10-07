@@ -133,4 +133,123 @@ systemc.module @systemCTypes (%p0: !systemc.in<!systemc.int_base>,
                               %p11: !systemc.in<!systemc.lv<1024>>,
                               %p12: !systemc.in<!systemc.logic>) {}
 
+// CHECK-LABEL: SC_MODULE(emitcEmission)
+systemc.module @emitcEmission () {
+  // CHECK: SC_CTOR
+  systemc.ctor {
+    // Test: emitc.constant
+    // CHECK-NEXT: int five = 5;
+    %0 = "emitc.constant"() {value = #emitc.opaque<"5"> : !emitc.opaque<"int">} : () -> !emitc.opaque<"int">
+    %five = systemc.cpp.variable %0 : !emitc.opaque<"int">
+
+    // Test: emitc.apply "&" without having to emit parentheses
+    // CHECK-NEXT: int* fiveptr = &five;
+    %1 = emitc.apply "&"(%five) : (!emitc.opaque<"int">) -> !emitc.ptr<!emitc.opaque<"int">>
+    %fiveptr = systemc.cpp.variable %1: !emitc.ptr<!emitc.opaque<"int">>
+
+    // Test: emitc.apply "&" with parentheses to conform to the precedence rules
+    // TODO: add this test-case once we have support for an inlinable operation that has lower precedence
+
+    // Test: emitc.apply "*" without having to emit parentheses
+    // CHECK-NEXT: int fivederef = *fiveptr;
+    %2 = emitc.apply "*"(%fiveptr) : (!emitc.ptr<!emitc.opaque<"int">>) -> !emitc.opaque<"int">
+    %fivederef = systemc.cpp.variable %2: !emitc.opaque<"int">
+
+    // Test: emitc.apply "*" with parentheses to conform to the precedence rules
+    // TODO: add this test-case once we have support for an inlinable operation that has lower precedence
+
+    // Test: emit.call without a result is emitted as a statement, having operands and attribute arguments
+    // CHECK-NEXT: printf("result: %d, %d\0A", five, 6);
+    emitc.call "printf" (%five) {args=["result: %d, %d\n", 0 : index, 6 : i32]} : (!emitc.opaque<"int">) -> ()
+
+    // Test: emit.call without a result is emitted as a statement and having attribute arguments only
+    // CHECK-NEXT: printf("result: %d\0A", 6);
+    emitc.call "printf" () {args=["result: %d\n", 6 : i32]} : () -> ()
+
+    // Test: emit.call without a result is emitted as a statement, no operands, no attribute arguments
+    // CHECK-NEXT: printf();
+    emitc.call "printf" () : () -> ()
+
+    // Test: emitc.call with a result is inlined properly, having operands only
+    // CHECK-NEXT: void* v0 = malloc(4);
+    %3 = hw.constant 4 : i32
+    %4 = emitc.call "malloc" (%3) : (i32) -> !emitc.ptr<!emitc.opaque<"void">>
+    %v0 = systemc.cpp.variable %4 : !emitc.ptr<!emitc.opaque<"void">>
+
+    // Test: emitc.call with a result is inlined properly, attribute arguments only
+    // CHECK-NEXT: void* v1 = malloc(4);
+    %5 = emitc.call "malloc" () {args=[4 : i32]}: () -> !emitc.ptr<!emitc.opaque<"void">>
+    %v1 = systemc.cpp.variable %5 : !emitc.ptr<!emitc.opaque<"void">>
+
+    // Test: emitc.call properly inserts parentheses when an argument has COMMA precedence
+    // TODO: no operation having COMMA precedence supported yet
+
+    // Test: emit.cast adds parentheses around the operand when it has higher precedence than the operand
+    // TODO: no applicable operation having lower precedence than CAST supported yet
+
+    // Test: emit.cast does not add parentheses around the operand when it has lower precedence than the operand
+    // CHECK-NEXT: int* v2 = (int*) malloc(4);
+    %6 = emitc.call "malloc" () {args=[4 : i32]} : () -> !emitc.ptr<!emitc.opaque<"void">>
+    %7 = emitc.cast %6 : !emitc.ptr<!emitc.opaque<"void">> to !emitc.ptr<!emitc.opaque<"int">>
+    %v2 = systemc.cpp.variable %7 : !emitc.ptr<!emitc.opaque<"int">>
+
+    // Test: index -> size_t
+    // CHECK-NEXT: size_t idx;
+    %idx = systemc.cpp.variable : index
+  }
+}
+
+// CHECK-LABEL: SC_MODULE(CppEmission)
+systemc.module @CppEmission () {
+  // CHECK-EMPTY:
+
+  // Test: systemc.cpp.destructor
+  // CHECK-NEXT: ~CppEmission() override {
+  systemc.cpp.destructor {
+    // Test: systemc.cpp.new w/o arguments
+    // CHECK-NEXT: submodule* v0 = new submodule;
+    %0 = systemc.cpp.new() : () -> !emitc.ptr<!emitc.opaque<"submodule">>
+    %v0 = systemc.cpp.variable %0 : !emitc.ptr<!emitc.opaque<"submodule">>
+
+    // Test: systemc.cpp.new with arguments, w/o parens due to precedence
+    // CHECK-NEXT: std::tuple<uint32_t, uint32_t>* v1 = new std::tuple<uint32_t, uint32_t>(1, 2);
+    %3 = hw.constant 1 : i32
+    %4 = hw.constant 2 : i32
+    %5 = systemc.cpp.new(%3, %4) : (i32, i32) -> !emitc.ptr<!emitc.opaque<"std::tuple<uint32_t, uint32_t>">>
+    %v1 = systemc.cpp.variable %5 : !emitc.ptr<!emitc.opaque<"std::tuple<uint32_t, uint32_t>">>
+
+    // Test: systemc.cpp.new w arguments, with parens due to precedence
+    // TODO: there is currently no appropriate inlinable operation implemented with lower precedence
+
+    // Test: systemc.cpp.delete w/o parens due to precedence
+    // CHECK-NEXT: delete v0;
+    systemc.cpp.delete %v0 : !emitc.ptr<!emitc.opaque<"submodule">>
+
+    // Test: systemc.cpp.delete with parens due to precedence
+    // TODO: there is currently no appropriate inlinable operation implemented with lower precedence
+
+  // CHECK-NEXT: }
+  }
+}
+
+// CHECK-LABEL: SC_MODULE(MemberAccess)
+systemc.module @MemberAccess () {
+  // CHECK-NEXT: std::pair<int, int> member;
+  // CHECK-NEXT: int result;
+  %member = systemc.cpp.variable : !emitc.opaque<"std::pair<int, int>">
+  %c5 = "emitc.constant"() {value = #emitc.opaque<"5"> : !emitc.opaque<"int">} : () -> !emitc.opaque<"int">
+  %result = systemc.cpp.variable : !emitc.opaque<"int">
+  // CHECK-EMPTY:
+  // CHECK-NEXT: SC_CTOR(MemberAccess) {
+  systemc.ctor {
+    // CHECK-NEXT: result = member.first;
+    %0 = systemc.cpp.member_access %member dot "first" : (!emitc.opaque<"std::pair<int, int>">) -> !emitc.opaque<"int">
+    systemc.cpp.assign %result = %0 : !emitc.opaque<"int">
+    // CHECK-NEXT: result = (new std::pair<int, int>(5, 5))->second;
+    %1 = systemc.cpp.new (%c5, %c5) : (!emitc.opaque<"int">, !emitc.opaque<"int">) -> !emitc.ptr<!emitc.opaque<"std::pair<int, int>">>
+    %2 = systemc.cpp.member_access %1 arrow "second" : (!emitc.ptr<!emitc.opaque<"std::pair<int, int>">>) -> !emitc.opaque<"int">
+    systemc.cpp.assign %result = %2 : !emitc.opaque<"int">
+  }
+}
+
 // CHECK: #endif // STDOUT_H

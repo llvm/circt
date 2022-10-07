@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines type type system for the FIRRTL Dialect.
+// This file defines the type system for the FIRRTL Dialect.
 //
 //===----------------------------------------------------------------------===//
 

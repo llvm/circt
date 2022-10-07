@@ -453,7 +453,7 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
   if (!record) {
     ++numUnhandled;
     if (!ignoreUnhandledAnno)
-      return mlir::emitWarning(state.circuit.getLoc())
+      return mlir::emitError(state.circuit.getLoc())
              << "Unhandled annotation: " << anno;
 
     // Try again, requesting the fallback handler.

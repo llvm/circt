@@ -31,24 +31,34 @@ func.func @test2(%arg0: memref<?xi32>, %arg1: memref<?xi32>) {
 
 // CHECK-LABEL: func @test3
 func.func @test3(%arg0: memref<?xi32>) {
+  // CHECK: %[[A0:.+]] = memref.alloca
   %0 = memref.alloca() : memref<1xi32>
+  // CHECK: %[[A1:.+]] = memref.alloca
   %1 = memref.alloca() : memref<1xi32>
+  // CHECK: %[[A2:.+]] = memref.alloca
   %2 = memref.alloca() : memref<1xi32>
   affine.for %arg1 = 0 to 10 {
-    // CHECK{LITERAL}: %3 = affine.load %2[0] {dependences = [[[1, 9]]]}
+    // CHECK: %[[A3:.+]] = affine.load %[[A2]][0]
+    // CHECK-SAME{LITERAL}: {dependences = [[[1, 9]]]}
     %3 = affine.load %2[0] : memref<1xi32>
-    // CHECK{LITERAL}: %4 = affine.load %1[0] {dependences = [[[1, 9]]]}
+    // CHECK: %[[A4:.+]] = affine.load %[[A1]][0]
+    // CHECK-SAME{LITERAL}: {dependences = [[[1, 9]]]}
     %4 = affine.load %1[0] : memref<1xi32>
-    // CHECK{LITERAL}: affine.store %4, %2[0] {dependences = [[[1, 9]], [[0, 0]]]}
+    // CHECK: affine.store %[[A4]], %[[A2]][0]
+    // CHECK-SAME{LITERAL}: {dependences = [[[1, 9]], [[0, 0]]]}
     affine.store %4, %2[0] : memref<1xi32>
-    // CHECK{LITERAL}: %5 = affine.load %0[0] {dependences = [[[1, 9]]]}
+    // CHECK: %[[A5:.+]] = affine.load %[[A0]][0]
+    // CHECK-SAME{LITERAL}: {dependences = [[[1, 9]]]}
     %5 = affine.load %0[0] : memref<1xi32>
-    // CHECK{LITERAL}: affine.store %5, %1[0] {dependences = [[[1, 9]], [[0, 0]]]}
+    // CHECK: affine.store %[[A5]], %[[A1]][0]
+    // CHECK-SAME{LITERAL}: {dependences = [[[1, 9]], [[0, 0]]]}
     affine.store %5, %1[0] : memref<1xi32>
-    // CHECK: affine.load %arg0[%arg1] {dependences = []}
+    // CHECK: %[[A6:.+]] = affine.load %arg0[%arg1] {dependences = []}
     %6 = affine.load %arg0[%arg1] : memref<?xi32>
+    // CHECK: %[[A7:.+]] = arith.addi %[[A3]], %[[A6]]
     %7 = arith.addi %3, %6 : i32
-    // CHECK{LITERAL}: affine.store %7, %0[0] {dependences = [[[1, 9]], [[0, 0]]]}
+    // CHECK: affine.store %[[A7]], %[[A0]][0]
+    // CHECK-SAME{LITERAL}: {dependences = [[[1, 9]], [[0, 0]]]}
     affine.store %7, %0[0] : memref<1xi32>
   }
   return
