@@ -1483,3 +1483,14 @@ hw.module @GetOfUniformArray(%in: i42, %address: i2) -> (out: i42) {
   %1 = hw.array_get %0[%address] : !hw.array<4xi42>, i2
   hw.output %1 : i42
 }
+
+// CHECK-LABEL: hw.module @GetOfConstantArray
+hw.module @GetOfConstantArray() -> (b: i4) {
+  %c1_i2 = hw.constant 1 : i2
+  %c0_i16 = hw.constant 311 : i16
+  %0 = hw.bitcast %c0_i16 : (i16) -> !hw.array<4xi4>
+  // %0 = {0000, 0001, 0011, 0111}
+  %1 = hw.array_get %0[%c1_i2] : !hw.array<4xi4>, i2
+  // CHECK: hw.output %c3_i4
+  hw.output %1 : i4
+}
