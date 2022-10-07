@@ -14,7 +14,7 @@ set(Calyx_LinkLibs
   CIRCTComb
   CIRCTSV
   CIRCTHW
-  MLIRArithmeticDialect
+  MLIRArithDialect
   MLIRIR
   MLIRMemRefDialect
   MLIRTransforms

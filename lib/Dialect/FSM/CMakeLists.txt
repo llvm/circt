@@ -11,7 +11,7 @@ add_circt_dialect_library(CIRCTFSM
   MLIRIR
   CIRCTHW
   MLIRFuncDialect
-  MLIRArithmeticDialect
+  MLIRArithDialect
   )
 
 add_subdirectory(Transforms)

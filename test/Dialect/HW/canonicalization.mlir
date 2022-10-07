@@ -1494,3 +1494,11 @@ hw.module @GetOfConstantArray() -> (b: i4) {
   // CHECK: hw.output %c3_i4
   hw.output %1 : i4
 }
+
+// CHECK-LABEL: ArraySlice
+hw.module @ArraySlice(%arr: !hw.array<128xi1>) -> (a: !hw.array<128xi1>) {
+  %c0_i7 = hw.constant 0 : i7
+  // CHECK: hw.output %arr
+  %1 = hw.array_slice %arr[%c0_i7] : (!hw.array<128xi1>) -> !hw.array<128xi1>
+  hw.output %1 : !hw.array<128xi1>
+}

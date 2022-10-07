@@ -14,7 +14,7 @@
 
 #include "mlir/Conversion/Passes.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -50,6 +50,7 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Support/LoweringOptions.h"
+#include "circt/Support/LoweringOptionsParser.h"
 #include "circt/Transforms/Passes.h"
 
 #include "circt/InitAllDialects.h"
@@ -154,6 +155,15 @@ static cl::opt<OutputFormatKind> outputFormat(
                clEnumValN(OutputVerilog, "verilog", "Emit Verilog")),
     cl::init(OutputVerilog), cl::cat(mainCategory));
 
+static cl::opt<bool>
+    traceIVerilog("sv-trace-iverilog",
+                  cl::desc("Add tracing to an iverilog simulated module"),
+                  cl::init(false), cl::cat(mainCategory));
+
+// --------------------------------------------------------------------------
+// Handshake options
+// --------------------------------------------------------------------------
+
 static cl::opt<std::string>
     bufferingStrategy("buffering-strategy",
                       cl::desc("Strategy to apply. Possible values are: "
@@ -163,6 +173,8 @@ static cl::opt<std::string>
 static cl::opt<unsigned> bufferSize("buffer-size",
                                     cl::desc("Number of slots in each buffer"),
                                     cl::init(2), cl::cat(mainCategory));
+
+static LoweringOptionsOption loweringOptions(mainCategory);
 
 // --------------------------------------------------------------------------
 // (Configurable) pass pipelines
@@ -242,6 +254,7 @@ static void loadFIRRTLLoweringPipeline(OpPassManager &pm) {
 }
 
 static void loadHWLoweringPipeline(OpPassManager &pm) {
+  pm.addPass(createSimpleCanonicalizerPass());
   pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass());
   pm.addPass(sv::createHWMemSimImplPass(false, false));
   pm.addPass(seq::createSeqLowerToSVPass());
@@ -249,6 +262,7 @@ static void loadHWLoweringPipeline(OpPassManager &pm) {
 
   // Legalize unsupported operations within the modules.
   pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
+  pm.addPass(createSimpleCanonicalizerPass());
 
   // Tidy up the IR to improve verilog emission quality.
   auto &modulePM = pm.nest<hw::HWModuleOp>();
@@ -336,8 +350,10 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
   } else {
     // HW path.
     addIRLevel(HLSFlowDynamicIRLevel::Firrtl, [&]() {
-      pm.addPass(circt::createHandshakeToHWPass());
+      pm.addPass(circt::handshake::createHandshakeLowerExtmemToHWPass());
       pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
+      pm.addPass(circt::createHandshakeToHWPass());
+      pm.addPass(createSimpleCanonicalizerPass());
     });
     addIRLevel(HLSFlowDynamicIRLevel::Rtl,
                [&]() { loadESILoweringPipeline(pm); });
@@ -345,8 +361,12 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
 
   addIRLevel(HLSFlowDynamicIRLevel::Sv, [&]() { loadHWLoweringPipeline(pm); });
 
+  if (traceIVerilog)
+    pm.addPass(circt::sv::createSVTraceIVerilogPass());
+
   if (outputFormat == OutputVerilog) {
-    applyLoweringCLOptions(module);
+    if (loweringOptions.getNumOccurrences())
+      loweringOptions.setAsAttribute(module);
     pm.addPass(createExportVerilogPass(outputFile.value()->os()));
   }
 
@@ -492,7 +512,6 @@ int main(int argc, char **argv) {
   registerPassManagerCLOptions();
   registerDefaultTimingManagerCLOptions();
   registerAsmPrinterCLOptions();
-  registerLoweringCLOptions();
 
   // Parse pass names in main to ensure static initialization completed.
   cl::ParseCommandLineOptions(argc, argv, "CIRCT HLS tool\n");
@@ -502,7 +521,7 @@ int main(int argc, char **argv) {
   registry.insert<mlir::AffineDialect>();
   registry.insert<mlir::memref::MemRefDialect>();
   registry.insert<mlir::func::FuncDialect>();
-  registry.insert<mlir::arith::ArithmeticDialect>();
+  registry.insert<mlir::arith::ArithDialect>();
   registry.insert<mlir::cf::ControlFlowDialect>();
   registry.insert<mlir::scf::SCFDialect>();
 

@@ -73,8 +73,8 @@ def LLHD_EntityOp : LLHD_Op<"entity", [
     /// Verifies the body of the function.
     LogicalResult verifyBody();
 
-    // Use FunctionOpInterface traits's getBody method.
-    using mlir::detail::FunctionOpInterfaceTrait<EntityOp>::getBody;
+    // Use FunctionOpInterface traits's getFunctionBody method.
+    using mlir::detail::FunctionOpInterfaceTrait<EntityOp>::getFunctionBody;
 
     /// Return the block corresponding to the region.
     Block *getBodyBlock() { return &getBody().front(); }

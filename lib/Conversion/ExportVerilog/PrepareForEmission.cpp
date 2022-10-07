@@ -21,11 +21,11 @@
 #include "ExportVerilogInternals.h"
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "prepare-for-emission"
@@ -1019,19 +1019,17 @@ void ExportVerilog::prepareHWModule(hw::HWModuleOp module,
 
 namespace {
 
-struct TestPrepareForEmissionPass
-    : public TestPrepareForEmissionBase<TestPrepareForEmissionPass> {
-  TestPrepareForEmissionPass() {}
+struct PrepareForEmissionPass
+    : public PrepareForEmissionBase<PrepareForEmissionPass> {
   void runOnOperation() override {
     HWModuleOp module = getOperation();
-    LoweringOptions options = getLoweringCLIOption(
-        cast<mlir::ModuleOp>(module->getParentOp()),
-        [&](llvm::Twine twine) { module.emitError(twine); });
+    LoweringOptions options(cast<mlir::ModuleOp>(module->getParentOp()));
     prepareHWModule(module, options);
   }
 };
+
 } // end anonymous namespace
 
-std::unique_ptr<mlir::Pass> circt::createTestPrepareForEmissionPass() {
-  return std::make_unique<TestPrepareForEmissionPass>();
+std::unique_ptr<mlir::Pass> circt::createPrepareForEmissionPass() {
+  return std::make_unique<PrepareForEmissionPass>();
 }

@@ -182,8 +182,6 @@ def InstanceOp : Handshake_Op<"instance", [
   let assemblyFormat = [{
     $module `(` $opOperands `)` attr-dict `:` functional-type($opOperands, results)
   }];
-
-  let hasVerifier = 1;
 }
 
 // This is almost exactly like a standard FuncOp, except that it has some

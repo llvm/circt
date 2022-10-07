@@ -33,16 +33,16 @@ handshake.func @test_pack(%arg0: i64, %arg1: i32, %ctrl: none, ...) -> (tuple<i6
 // CHECK:           %[[VAL_19:.*]] = seq.compreg %[[VAL_17]], %[[VAL_1]], %[[VAL_2]], %[[VAL_14]]  : i1
 // CHECK:           %[[VAL_20:.*]] = comb.xor %[[VAL_19]], %[[VAL_15]] : i1
 // CHECK:           %[[VAL_9]] = comb.and %[[VAL_20]], %[[VAL_4]] : i1
-// CHECK:           %[[VAL_21:.*]] = comb.and %[[VAL_7]], %[[VAL_4]] : i1
-// CHECK:           %[[VAL_18]] = comb.and %[[VAL_21]], %[[VAL_19]] : i1
+// CHECK:           %[[VAL_21:.*]] = comb.and %[[VAL_7]], %[[VAL_9]] : i1
+// CHECK:           %[[VAL_18]] = comb.or %[[VAL_21]], %[[VAL_19]] {sv.namehint = "done0"} : i1
 // CHECK:           %[[VAL_22:.*]] = comb.xor %[[VAL_5]], %[[VAL_15]] : i1
 // CHECK:           %[[VAL_23:.*]] = comb.and %[[VAL_24:.*]], %[[VAL_22]] : i1
 // CHECK:           %[[VAL_25:.*]] = seq.compreg %[[VAL_23]], %[[VAL_1]], %[[VAL_2]], %[[VAL_14]]  : i1
 // CHECK:           %[[VAL_26:.*]] = comb.xor %[[VAL_25]], %[[VAL_15]] : i1
 // CHECK:           %[[VAL_13]] = comb.and %[[VAL_26]], %[[VAL_4]] : i1
-// CHECK:           %[[VAL_27:.*]] = comb.and %[[VAL_11]], %[[VAL_4]] : i1
-// CHECK:           %[[VAL_24]] = comb.and %[[VAL_27]], %[[VAL_25]] : i1
-// CHECK:           %[[VAL_5]] = comb.and %[[VAL_18]], %[[VAL_24]] : i1
+// CHECK:           %[[VAL_27:.*]] = comb.and %[[VAL_11]], %[[VAL_13]] : i1
+// CHECK:           %[[VAL_24]] = comb.or %[[VAL_27]], %[[VAL_25]] {sv.namehint = "done1"} : i1
+// CHECK:           %[[VAL_5]] = comb.and %[[VAL_18]], %[[VAL_24]] {sv.namehint = "allDone"} : i1
 // CHECK:           %[[VAL_8]], %[[VAL_12]] = hw.struct_explode %[[VAL_3]] : !hw.struct<field0: i64, field1: i32>
 // CHECK:           hw.output %[[VAL_6]], %[[VAL_10]] : !esi.channel<i64>, !esi.channel<i32>
 // CHECK:         }

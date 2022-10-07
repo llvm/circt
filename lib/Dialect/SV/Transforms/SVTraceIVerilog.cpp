@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetail.h"
+#include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "mlir/IR/Builders.h"
@@ -36,17 +37,37 @@ struct SVTraceIVerilogPass
 } // end anonymous namespace
 
 void SVTraceIVerilogPass::runOnOperation() {
-  hw::HWModuleOp mod = getOperation();
-  if (!targetModuleName.empty() && mod.getName() != targetModuleName.getValue())
-    return;
+  mlir::ModuleOp mod = getOperation();
 
-  OpBuilder builder(mod.getBodyBlock(), mod.getBodyBlock()->begin());
-  std::string traceMacro;
-  llvm::raw_string_ostream ss(traceMacro);
-  auto modName = mod.getName();
-  ss << "initial begin\n  $dumpfile (\"" << directoryName.getValue() << modName
-     << ".vcd\");\n  $dumpvars (0, " << modName << ");\n  #1;\nend\n";
-  builder.create<sv::VerbatimOp>(mod.getLoc(), ss.str());
+  if (topOnly) {
+    auto graph = InstanceGraph(mod);
+    auto topLevelNodes = graph.getInferredTopLevelNodes();
+    if (failed(topLevelNodes) || topLevelNodes->size() != 1) {
+      mod.emitError("Expected exactly one top level node");
+      return signalPassFailure();
+    }
+    hw::HWModuleOp top =
+        dyn_cast_or_null<hw::HWModuleOp>(topLevelNodes->front()->getModule());
+    if (!top) {
+      mod.emitError("top module is not a HWModuleOp");
+      return signalPassFailure();
+    }
+    targetModuleName.setValue(top.getName().str());
+  }
+
+  for (auto hwmod : mod.getOps<hw::HWModuleOp>()) {
+    if (!targetModuleName.empty() &&
+        hwmod.getName() != targetModuleName.getValue())
+      continue;
+    OpBuilder builder(hwmod.getBodyBlock(), hwmod.getBodyBlock()->begin());
+    std::string traceMacro;
+    llvm::raw_string_ostream ss(traceMacro);
+    auto modName = hwmod.getName();
+    ss << "initial begin\n  $dumpfile (\"" << directoryName.getValue()
+       << modName << ".vcd\");\n  $dumpvars (0, " << modName
+       << ");\n  #1;\nend\n";
+    builder.create<sv::VerbatimOp>(hwmod.getLoc(), ss.str());
+  }
 }
 
 std::unique_ptr<Pass> circt::sv::createSVTraceIVerilogPass() {

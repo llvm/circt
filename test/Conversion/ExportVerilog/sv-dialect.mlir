@@ -1,5 +1,5 @@
-// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=exprInEventControl,explicitBitcast,maximumNumberOfTermsInConcat=10,useOldEmissionMode | FileCheck %s --strict-whitespace --check-prefixes=CHECK,OLD
-// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=exprInEventControl,explicitBitcast,maximumNumberOfTermsInConcat=10 | FileCheck %s --check-prefixes=CHECK,NEW
+// RUN: circt-opt %s -test-apply-lowering-options='options=exprInEventControl,explicitBitcast,maximumNumberOfTermsInConcat=10,useOldEmissionMode' -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace --check-prefixes=CHECK,OLD
+// RUN: circt-opt %s -test-apply-lowering-options='options=exprInEventControl,explicitBitcast,maximumNumberOfTermsInConcat=10' -export-verilog -verify-diagnostics | FileCheck %s --check-prefixes=CHECK,NEW
 
 // CHECK-LABEL: module M1
 // CHECK-NEXT:    #(parameter [41:0] param1) (
@@ -1550,6 +1550,18 @@ hw.module private @InlineReadInout() -> () {
     %5 = comb.extract %4 from 0 : (i32) -> i2
     sv.bpassign %r1, %5 : i2
   }
+}
+
+// CHECK-LABEL: IndexPartSelectInoutArray
+hw.module @IndexPartSelectInoutArray(%a: !hw.array<2xi1>, %c: i1, %d: i1) {
+  %c0_i2 = hw.constant 0 : i2
+  %r1 = sv.reg  : !hw.inout<array<3xi1>>
+  sv.always posedge %d {
+    // CHECK: r1[2'h0 +: 2] <= a;
+    %1 = sv.indexed_part_select_inout %r1[%c0_i2 : 2] : !hw.inout<array<3xi1>>, i2
+    sv.passign %1, %a : !hw.array<2xi1>
+  }
+  hw.output
 }
 
 // CHECK-LABEL: module ConditionalComments(

@@ -134,3 +134,15 @@ systemc.module @variableAndAssign () {
     systemc.cpp.assign %varwithinit = %varname : i32
   }
 }
+
+// CHECK-LABEL: @member_access
+systemc.module @member_access () {
+  %member = systemc.cpp.variable : !emitc.opaque<"std::vector<int>">
+  %ptrmember = systemc.cpp.variable : !emitc.ptr<!emitc.opaque<"std::vector<int>">>
+  systemc.ctor {
+    // CHECK: %{{.+}} = systemc.cpp.member_access %member dot "clear" : (!emitc.opaque<"std::vector<int>">) -> (() -> ())
+    %0 = systemc.cpp.member_access %member dot "clear" : (!emitc.opaque<"std::vector<int>">) -> (() -> ())
+    // CHECK-NEXT: %{{.+}} = systemc.cpp.member_access %ptrmember arrow "clear" : (!emitc.ptr<!emitc.opaque<"std::vector<int>">>) -> (() -> ())
+    %1 = systemc.cpp.member_access %ptrmember arrow "clear" : (!emitc.ptr<!emitc.opaque<"std::vector<int>">>) -> (() -> ())
+  }
+}

@@ -37,7 +37,7 @@ class SystemCOp<string mnemonic, list<Trait> traits = []> :
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
                          ["getAsmResultNames"]>;
 
-include "circt/Dialect/SystemC/SystemCAttributesImpl.td"
+include "circt/Dialect/SystemC/SystemCAttributes.td"
 include "circt/Dialect/SystemC/SystemCTypes.td"
 include "circt/Dialect/SystemC/SystemCExpressions.td"
 include "circt/Dialect/SystemC/SystemCStatements.td"

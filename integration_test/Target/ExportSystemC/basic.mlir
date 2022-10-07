@@ -3,6 +3,7 @@
 // RUN: clang-tidy --extra-arg=-frtti %t.cpp
 
 emitc.include <"systemc.h">
+emitc.include <"tuple">
 
 systemc.module @submodule (%in0: !systemc.in<!systemc.uint<32>>, %in1: !systemc.in<!systemc.uint<32>>, %out0: !systemc.out<!systemc.uint<32>>) {}
 
@@ -61,3 +62,52 @@ systemc.module @systemCTypes (%p0: !systemc.in<!systemc.int_base>,
                               %p10: !systemc.in<!systemc.lv_base>,
                               %p11: !systemc.in<!systemc.lv<1024>>,
                               %p12: !systemc.in<!systemc.logic>) {}
+
+systemc.module @emitcEmission () {
+  systemc.ctor {
+    %0 = "emitc.constant"() {value = #emitc.opaque<"5"> : !emitc.opaque<"int">} : () -> !emitc.opaque<"int">
+    %five = systemc.cpp.variable %0 : !emitc.opaque<"int">
+    %1 = emitc.apply "&"(%five) : (!emitc.opaque<"int">) -> !emitc.ptr<!emitc.opaque<"int">>
+    %2 = emitc.apply "*"(%1) : (!emitc.ptr<!emitc.opaque<"int">>) -> !emitc.opaque<"int">
+    %3 = emitc.cast %2: !emitc.opaque<"int"> to !emitc.opaque<"long">
+    emitc.call "printf" (%3) {args=["result: %ld\n", 0 : index]} : (!emitc.opaque<"long">) -> ()
+
+    %idx = systemc.cpp.variable : index
+
+    %4 = hw.constant 4 : i32
+    %5 = emitc.call "malloc" (%4) : (i32) -> !emitc.ptr<!emitc.opaque<"void">>
+    %6 = emitc.cast %5 : !emitc.ptr<!emitc.opaque<"void">> to !emitc.ptr<!emitc.opaque<"int">>
+    %somePtr = systemc.cpp.variable %6 : !emitc.ptr<!emitc.opaque<"int">>
+  }
+}
+
+systemc.module @CppEmission () {
+  systemc.cpp.destructor {
+    %0 = systemc.cpp.new() : () -> !emitc.ptr<!emitc.opaque<"submodule">>
+    systemc.cpp.delete %0 : !emitc.ptr<!emitc.opaque<"submodule">>
+
+    %1 = systemc.cpp.new() : () -> !emitc.ptr<!emitc.opaque<"int[5]">>
+    %2 = emitc.cast %1 : !emitc.ptr<!emitc.opaque<"int[5]">> to !emitc.ptr<!emitc.opaque<"int">>
+    %arr = systemc.cpp.variable %2 : !emitc.ptr<!emitc.opaque<"int">>
+    systemc.cpp.delete %arr : !emitc.ptr<!emitc.opaque<"int">>
+
+    %3 = hw.constant 1 : i32
+    %4 = hw.constant 2 : i32
+    %5 = systemc.cpp.new(%3, %4) : (i32, i32) -> !emitc.ptr<!emitc.opaque<"std::tuple<uint32_t, uint32_t>">>
+    %tup = systemc.cpp.variable %5 : !emitc.ptr<!emitc.opaque<"std::tuple<uint32_t, uint32_t>">>
+    systemc.cpp.delete %tup : !emitc.ptr<!emitc.opaque<"std::tuple<uint32_t, uint32_t>">>
+  }
+}
+
+systemc.module @MemberAccess () {
+  %member = systemc.cpp.variable : !emitc.opaque<"std::pair<int, int>">
+  %c5 = "emitc.constant"() {value = #emitc.opaque<"5"> : !emitc.opaque<"int">} : () -> !emitc.opaque<"int">
+  %result = systemc.cpp.variable : !emitc.opaque<"int">
+  systemc.ctor {
+    %0 = systemc.cpp.member_access %member dot "first" : (!emitc.opaque<"std::pair<int, int>">) -> !emitc.opaque<"int">
+    systemc.cpp.assign %result = %0 : !emitc.opaque<"int">
+    %1 = systemc.cpp.new (%c5, %c5) : (!emitc.opaque<"int">, !emitc.opaque<"int">) -> !emitc.ptr<!emitc.opaque<"std::pair<int, int>">>
+    %2 = systemc.cpp.member_access %1 arrow "second" : (!emitc.ptr<!emitc.opaque<"std::pair<int, int>">>) -> !emitc.opaque<"int">
+    systemc.cpp.assign %result = %2 : !emitc.opaque<"int">
+  }
+}

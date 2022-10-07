@@ -1,5 +1,6 @@
 
 add_circt_translation_library(CIRCTExportVerilog
+  ApplyLoweringOptions.cpp
   ExportVerilog.cpp
   LegalizeNames.cpp
   PrepareForEmission.cpp

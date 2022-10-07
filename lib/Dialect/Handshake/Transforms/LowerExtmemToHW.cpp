@@ -11,11 +11,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Conversion/HandshakeToHW.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
+#include "circt/Support/BackedgeBuilder.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Rewrite/FrozenRewritePatternSet.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -27,6 +30,8 @@ namespace {
 using NamedType = std::pair<StringAttr, Type>;
 struct HandshakeMemType {
   llvm::SmallVector<NamedType> inputTypes, outputTypes;
+  MemRefType memRefType;
+  unsigned loadPorts, storePorts;
 };
 
 struct LoadName {
@@ -51,6 +56,14 @@ struct StoreNames {
 
 } // namespace
 
+static Type indexToMemAddr(Type t, MemRefType memRef) {
+  assert(t.isa<IndexType>() && "Expected index type");
+  auto shape = memRef.getShape();
+  assert(shape.size() == 1 && "Expected 1D memref");
+  unsigned addrWidth = llvm::Log2_64_Ceil(shape[0]);
+  return IntegerType::get(t.getContext(), addrWidth);
+}
+
 static HandshakeMemType getMemTypeForExtmem(Value v) {
   auto *ctx = v.getContext();
   assert(v.getType().isa<mlir::MemRefType>() && "Value is not a memref type");
@@ -58,11 +71,18 @@ static HandshakeMemType getMemTypeForExtmem(Value v) {
   HandshakeMemType memType;
   llvm::SmallVector<hw::detail::FieldInfo> inFields, outFields;
 
+  // Add memory type.
+  memType.memRefType = v.getType().cast<MemRefType>();
+  memType.loadPorts = extmemOp.getLdCount();
+  memType.storePorts = extmemOp.getStCount();
+
   // Add load ports.
   for (auto [i, ldif] : llvm::enumerate(extmemOp.getLoadPorts())) {
     auto names = LoadName::get(ctx, i);
     memType.inputTypes.push_back({names.dataIn, ldif.dataOut.getType()});
-    memType.outputTypes.push_back({names.addrOut, ldif.addressIn.getType()});
+    memType.outputTypes.push_back(
+        {names.addrOut,
+         indexToMemAddr(ldif.addressIn.getType(), memType.memRefType)});
   }
 
   // Add store ports.
@@ -72,18 +92,19 @@ static HandshakeMemType getMemTypeForExtmem(Value v) {
     // Incoming store data and address
     llvm::SmallVector<hw::StructType::FieldInfo> storeOutFields;
     storeOutFields.push_back(
-        {StringAttr::get(ctx, "data"), stif.dataIn.getType()});
+        {StringAttr::get(ctx, "address"),
+         indexToMemAddr(stif.addressIn.getType(), memType.memRefType)});
     storeOutFields.push_back(
-        {StringAttr::get(ctx, "addr"), stif.addressIn.getType()});
+        {StringAttr::get(ctx, "data"), stif.dataIn.getType()});
     auto inType = hw::StructType::get(ctx, storeOutFields);
     memType.outputTypes.push_back({names.out, inType});
     memType.inputTypes.push_back({names.doneIn, stif.doneOut.getType()});
   }
+
   return memType;
 }
 
 namespace {
-
 struct HandshakeLowerExtmemToHWPass
     : public HandshakeLowerExtmemToHWBase<HandshakeLowerExtmemToHWPass> {
   void runOnOperation() override {
@@ -97,11 +118,152 @@ struct HandshakeLowerExtmemToHWPass
   };
 
   LogicalResult lowerExtmemToHW(handshake::FuncOp func);
+  LogicalResult
+  wrapESI(handshake::FuncOp func, hw::ModulePortInfo origPorts,
+          llvm::DenseMap<unsigned, HandshakeMemType> argReplacements);
 };
+
+LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
+    handshake::FuncOp func, hw::ModulePortInfo origPorts,
+    llvm::DenseMap<unsigned, HandshakeMemType> argReplacements) {
+  auto *ctx = func.getContext();
+  OpBuilder b(func);
+  auto loc = func.getLoc();
+
+  // Create external module which will match the interface of 'func' after it's
+  // been lowered to HW.
+  b.setInsertionPoint(func);
+  auto newPortInfo = handshake::getPortInfoForOpTypes(
+      func, func.getArgumentTypes(), func.getResultTypes());
+  auto extMod = b.create<hw::HWModuleExternOp>(
+      loc, StringAttr::get(ctx, "_" + func.getName() + "_hw"), newPortInfo);
+
+  // Create wrapper module. This will have the same ports as the original
+  // module, sans the replaced arguments.
+  auto wrapperModPortInfo = origPorts;
+  llvm::SmallVector<unsigned> argReplacementsIdxs;
+  llvm::transform(argReplacements, std::back_inserter(argReplacementsIdxs),
+                  [](auto &pair) { return pair.first; });
+  for (auto i : llvm::reverse(argReplacementsIdxs))
+    wrapperModPortInfo.inputs.erase(wrapperModPortInfo.inputs.begin() + i);
+  auto wrapperMod = b.create<hw::HWModuleOp>(
+      loc, StringAttr::get(ctx, func.getName() + "_esi_wrapper"),
+      wrapperModPortInfo);
+  Value clk = wrapperMod.getArgument(wrapperMod.getNumArguments() - 2);
+  Value rst = wrapperMod.getArgument(wrapperMod.getNumArguments() - 1);
+  SmallVector<Value> clkRes = {clk, rst};
+
+  b.setInsertionPointToStart(wrapperMod.getBodyBlock());
+  BackedgeBuilder bb(b, loc);
+
+  // Create backedges for the results of the external module. These will be
+  // replaced by the service instance requests if associated with a memory.
+  llvm::SmallVector<Backedge> backedges;
+  for (auto resType : extMod.getResultTypes())
+    backedges.push_back(bb.get(resType));
+
+  // Maintain which index we're currently at in the lowered handshake module's
+  // return.
+  unsigned resIdx = origPorts.outputs.size();
+
+  // Maintain the arguments which each memory will add to the inner module
+  // instance.
+  llvm::SmallVector<ValueRange> instanceArgsForMem;
+
+  for (auto [i, memType] : argReplacements) {
+
+    b.setInsertionPoint(wrapperMod);
+    // Create a memory service declaration for each memref argument that was
+    // served.
+    auto origPortInfo = origPorts.inputs[i];
+    auto memrefShape = memType.memRefType.getShape();
+    auto dataType = memType.memRefType.getElementType();
+    assert(memrefShape.size() == 1 && "Only 1D memrefs are supported");
+    unsigned memrefSize = memrefShape[0];
+    auto memServiceDecl = b.create<esi::RandomAccessMemoryDeclOp>(
+        loc, origPortInfo.name, TypeAttr::get(dataType),
+        b.getI64IntegerAttr(memrefSize));
+
+    SmallVector<Value> instanceArgsFromThisMem;
+
+    // Create service requests. This MUST follow the order of which ports were
+    // added in other parts of this pass (load ports first, then store ports).
+    b.setInsertionPointToStart(wrapperMod.getBodyBlock());
+
+    // Load ports:
+    auto loadServicePort = hw::InnerRefAttr::get(memServiceDecl.getNameAttr(),
+                                                 b.getStringAttr("read"));
+    for (unsigned i = 0; i < memType.loadPorts; ++i) {
+      auto loadReq = b.create<esi::RequestInOutChannelOp>(
+          loc, handshake::esiWrapper(dataType), loadServicePort,
+          backedges[resIdx], b.getArrayAttr({}));
+      instanceArgsFromThisMem.push_back(loadReq);
+      ++resIdx;
+    }
+
+    // Store ports:
+    auto storeServicePort = hw::InnerRefAttr::get(memServiceDecl.getNameAttr(),
+                                                  b.getStringAttr("write"));
+    for (unsigned i = 0; i < memType.storePorts; ++i) {
+      auto storeReq = b.create<esi::RequestInOutChannelOp>(
+          loc, handshake::esiWrapper(b.getIntegerType(0)), storeServicePort,
+          backedges[resIdx], b.getArrayAttr({}));
+      instanceArgsFromThisMem.push_back(storeReq);
+      ++resIdx;
+    }
+
+    instanceArgsForMem.push_back(instanceArgsFromThisMem);
+  }
+
+  // Stitch together arguments from the top-level ESI wrapper and the instance
+  // arguments generated from the service requests.
+  llvm::SmallVector<Value> instanceArgs;
+  for (unsigned i = 0, e = wrapperMod.getNumArguments(); i < e; ++i) {
+    if (argReplacements.count(i)) {
+      // This index was originally a memref - pop the instance arguments for the
+      // next-in-line memory and add them.
+      auto memArgs = instanceArgsForMem.front();
+      instanceArgsForMem.erase(instanceArgsForMem.begin());
+      instanceArgs.append(memArgs.begin(), memArgs.end());
+    }
+    // Add the argument from the wrapper mod.
+    instanceArgs.push_back(wrapperMod.getArgument(i));
+  }
+
+  // Instantiate the inner module.
+  auto instance =
+      b.create<hw::InstanceOp>(loc, extMod, func.getName(), instanceArgs);
+
+  // And resolve the backedges.
+  for (auto [res, be] : llvm::zip(instance.getResults(), backedges))
+    be.setValue(res);
+
+  // Finally, grab the (non-memory) outputs from the inner module and return
+  // them through the wrapper.
+  auto outputOp =
+      cast<hw::OutputOp>(wrapperMod.getBodyBlock()->getTerminator());
+  b.setInsertionPoint(outputOp);
+  b.create<hw::OutputOp>(outputOp.getLoc(), instance.getResults().take_front(
+                                                wrapperMod.getNumResults()));
+  outputOp.erase();
+
+  return success();
+}
+
+// Truncates the index-typed 'v' into an integer-type of the same width as the
+// 'memref' argument.
+// Uses arith operations since these are supported in the HandshakeToHW
+// lowering.
+static Value truncateToMemoryWidth(Location loc, OpBuilder &b, Value v,
+                                   MemRefType memRefType) {
+  assert(v.getType().isa<IndexType>() && "Expected an index-typed value");
+  auto addrWidth = llvm::Log2_64_Ceil(memRefType.getShape().front());
+  return b.create<arith::IndexCastOp>(loc, b.getIntegerType(addrWidth), v);
+}
 
 static Value plumbLoadPort(Location loc, OpBuilder &b,
                            const handshake::ExtMemLoadInterface &ldif,
-                           Value loadData) {
+                           Value loadData, MemRefType memrefType) {
   // We need to feed both the load data and the load done outputs.
   // Fork the extracted load data into two, and 'join' the second one to
   // generate a none-typed output to drive the load done.
@@ -114,16 +276,20 @@ static Value plumbLoadPort(Location loc, OpBuilder &b,
   ldif.dataOut.replaceAllUsesWith(dataOut);
   ldif.doneOut.replaceAllUsesWith(dataDone);
 
-  // Return load address, to be fed to the top-level output.
-  return ldif.addressIn;
+  // Return load address, to be fed to the top-level output, truncated to the
+  // width of the memory that is accessed.
+  return truncateToMemoryWidth(loc, b, ldif.addressIn, memrefType);
 }
 
 static Value plumbStorePort(Location loc, OpBuilder &b,
                             const handshake::ExtMemStoreInterface &stif,
-                            Value done, Type outType) {
+                            Value done, Type outType, MemRefType memrefType) {
   stif.doneOut.replaceAllUsesWith(done);
-  // Return the store and data to be fed to the top-level output.
-  llvm::SmallVector<Value> structArgs = {stif.dataIn, stif.addressIn};
+  // Return the store address and data to be fed to the top-level output.
+  // Address is truncated to the width of the memory that is accessed.
+  llvm::SmallVector<Value> structArgs = {
+      truncateToMemoryWidth(loc, b, stif.addressIn, memrefType), stif.dataIn};
+
   return b
       .create<hw::StructCreateOp>(loc, outType.cast<hw::StructType>(),
                                   structArgs)
@@ -160,6 +326,12 @@ static void eraseFromArrayAttr(Operation *op, StringRef attrName,
   op->setAttr(attrName, ArrayAttr::get(ctx, newArr));
 }
 
+struct ArgTypeReplacement {
+  unsigned index;
+  TypeRange ins;
+  TypeRange outs;
+};
+
 LogicalResult
 HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
   // Gather memref ports to be converted.
@@ -170,6 +342,13 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
 
   if (memrefArgs.empty())
     return success(); // nothing to do.
+
+  // Record which arg indices were replaces with handshake memory ports.
+  llvm::DenseMap<unsigned, HandshakeMemType> argReplacements;
+
+  // Record the hw.module i/o of the original func (used for ESI wrapper).
+  auto origPortInfo = handshake::getPortInfoForOpTypes(
+      func, func.getArgumentTypes(), func.getResultTypes());
 
   OpBuilder b(func);
   for (auto it : memrefArgs) {
@@ -183,6 +362,7 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
 
     // Add memory input - this is the output of the extmemory op.
     auto memIOTypes = getMemTypeForExtmem(arg);
+    MemRefType memrefType = arg.getType().cast<MemRefType>();
 
     auto oldReturnOp =
         cast<handshake::ReturnOp>(func.getBody().front().getTerminator());
@@ -211,7 +391,8 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
     for (auto loadPort : extmemOp.getLoadPorts()) {
       auto newInPort = addArgRes(loadPort.index, memIOTypes.inputTypes[portIdx],
                                  memIOTypes.outputTypes[portIdx]);
-      newReturnOperands.push_back(plumbLoadPort(loc, b, loadPort, newInPort));
+      newReturnOperands.push_back(
+          plumbLoadPort(loc, b, loadPort, newInPort, memrefType));
       ++portIdx;
     }
 
@@ -222,7 +403,7 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
                     memIOTypes.outputTypes[portIdx]);
       newReturnOperands.push_back(
           plumbStorePort(loc, b, storePort, newInPort,
-                         memIOTypes.outputTypes[portIdx].second));
+                         memIOTypes.outputTypes[portIdx].second, memrefType));
       ++portIdx;
     }
 
@@ -240,7 +421,13 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
     // use has been removed.
     func.eraseArgument(i + addedInPorts);
     eraseFromArrayAttr(func, "argNames", i + addedInPorts);
+
+    argReplacements[i] = memIOTypes;
   }
+
+  if (createESIWrapper)
+    if (failed(wrapESI(func, origPortInfo, argReplacements)))
+      return failure();
 
   return success();
 }

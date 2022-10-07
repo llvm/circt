@@ -1810,6 +1810,13 @@ LogicalResult ArraySliceOp::verify() {
   return success();
 }
 
+OpFoldResult ArraySliceOp::fold(ArrayRef<Attribute> constants) {
+  // If we are slicing the entire input, then return it.
+  if (getType() == getInput().getType())
+    return getInput();
+  return {};
+}
+
 LogicalResult ArraySliceOp::canonicalize(ArraySliceOp op,
                                          PatternRewriter &rewriter) {
   auto sliceTy = hw::type_cast<ArrayType>(op.getType());

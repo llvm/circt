@@ -28,14 +28,18 @@ template <typename PatternTy, typename KeyTy>
 class FrozenEmissionPatternSet;
 struct OpEmissionPatternBase;
 struct TypeEmissionPatternBase;
+struct AttrEmissionPatternBase;
 
 using OpEmissionPatternSet = EmissionPatternSet<OpEmissionPatternBase>;
 using TypeEmissionPatternSet = EmissionPatternSet<TypeEmissionPatternBase>;
+using AttrEmissionPatternSet = EmissionPatternSet<AttrEmissionPatternBase>;
 
 using FrozenOpEmissionPatternSet =
     FrozenEmissionPatternSet<OpEmissionPatternBase, OperationName>;
 using FrozenTypeEmissionPatternSet =
     FrozenEmissionPatternSet<TypeEmissionPatternBase, TypeID>;
+using FrozenAttrEmissionPatternSet =
+    FrozenEmissionPatternSet<AttrEmissionPatternBase, TypeID>;
 
 } // namespace ExportSystemC
 } // namespace circt

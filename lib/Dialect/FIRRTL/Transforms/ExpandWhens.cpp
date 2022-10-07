@@ -477,9 +477,9 @@ void LastConnectResolver<ConcreteT>::processWhenOp(WhenOp whenOp,
   auto condition = whenOp.getCondition();
   auto ui1Type = condition.getType();
 
-  // Process both sides of the the WhenOp, fixing up all simulation
-  // contructs, and resolving last connect semantics in each block. This
-  // process returns the set of connects in each side of the when op.
+  // Process both sides of the WhenOp, fixing up all simulation constructs,
+  // and resolving last connect semantics in each block. This process returns
+  // the set of connects in each side of the when op.
 
   // Process the `then` block. If we are already in a whenblock, the we need to
   // conjoin ('and') the outer conditions.

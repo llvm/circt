@@ -2,6 +2,8 @@ import cocotb
 from helper import initDut
 import random
 
+random.seed(0)
+
 
 @cocotb.test()
 async def oneInput(dut):

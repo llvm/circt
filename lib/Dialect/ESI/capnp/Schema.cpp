@@ -319,7 +319,7 @@ static int64_t size(capnp::schema::Node::Struct::Reader cStruct,
   auto cFields = cStruct.getFields();
   for (Field::Reader cField : cFields) {
     assert(!cField.isGroup() && "Capnp groups are not supported");
-    // Capnp code order is the index in the the MLIR fields array.
+    // Capnp code order is the index in the MLIR fields array.
     assert(cField.getCodeOrder() < mFields.size());
 
     // The size of the thing to which the pointer is pointing, not the size of

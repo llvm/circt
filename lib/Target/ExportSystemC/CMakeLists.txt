@@ -1,6 +1,7 @@
 add_circt_translation_library(CIRCTExportSystemC
   EmissionPrinter.cpp
   ExportSystemC.cpp
+  Patterns/BuiltinEmissionPatterns.cpp
   Patterns/EmitCEmissionPatterns.cpp
   Patterns/HWEmissionPatterns.cpp
   Patterns/SystemCEmissionPatterns.cpp

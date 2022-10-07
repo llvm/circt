@@ -18,7 +18,11 @@
 
 namespace circt {
 
-std::unique_ptr<mlir::Pass> createTestPrepareForEmissionPass();
+std::unique_ptr<mlir::Pass>
+createTestApplyLoweringOptionPass(llvm::StringRef options);
+std::unique_ptr<mlir::Pass> createTestApplyLoweringOptionPass();
+
+std::unique_ptr<mlir::Pass> createPrepareForEmissionPass();
 
 std::unique_ptr<mlir::Pass> createExportVerilogPass(llvm::raw_ostream &os);
 std::unique_ptr<mlir::Pass> createExportVerilogPass();

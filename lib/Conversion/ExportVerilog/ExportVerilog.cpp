@@ -34,6 +34,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
@@ -879,7 +880,7 @@ void EmitterBase::emitTextWithSubstitutions(
     // operations to this module's `names`, which is reserved for things named
     // *within* this module. Instead, you have to rely on those remote
     // operations to have been named inside the global names table. If they
-    // haven't, take a look at name name legalization first.
+    // haven't, take a look at name legalization first.
     if (auto itemOp = item.getOp()) {
       if (item.hasPort()) {
         return getPortVerilogName(itemOp, item.getPort());
@@ -2735,14 +2736,6 @@ private:
   /// Track the legalized names.
   ModuleNameManager &names;
 
-  /// This is the index of the start of the current statement being emitted.
-  RearrangableOStream::Cursor statementBeginning;
-
-  /// This is the index of the end of the declaration region of the current
-  /// 'begin' block, used to emit variable declarations.
-  RearrangableOStream::Cursor blockDeclarationInsertPoint;
-  unsigned blockDeclarationIndentLevel = INDENT_AMOUNT;
-
   /// This keeps track of the number of statements emitted, important for
   /// determining if we need to put out a begin/end marker in a block
   /// declaration.
@@ -2783,10 +2776,6 @@ void StmtEmitter::emitSVAttributes(Operation *op) {
 }
 
 void StmtEmitter::emitStatementExpression(Operation *op) {
-  // Know where the start of this statement is in case any out-of-band precursor
-  // statements need to be emitted.
-  statementBeginning = rearrangableStream.getCursor();
-
   // This is invoked for expressions that have a non-single use.  This could
   // either be because they are dead or because they have multiple uses.
   // todo: use_empty could be prurned prior to emission.
@@ -3386,13 +3375,6 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
   RearrangableOStream::Cursor beginInsertPoint = rearrangableStream.getCursor();
   emitLocationInfoAndNewLine(locationOps);
 
-  // Change the blockDeclarationInsertPointIndex for the statements in this
-  // block, and restore it back when we move on to code after the block.
-  llvm::SaveAndRestore<RearrangableOStream::Cursor> x(
-      blockDeclarationInsertPoint, rearrangableStream.getCursor());
-  llvm::SaveAndRestore<unsigned> x2(blockDeclarationIndentLevel,
-                                    state.currentIndent + INDENT_AMOUNT);
-
   auto numEmittedBefore = getNumStatementsEmitted();
   emitStatementBlock(*block);
 
@@ -3888,10 +3870,6 @@ void StmtEmitter::emitStatement(Operation *op) {
 
   ++numStatementsEmitted;
 
-  // Know where the start of this statement is in case any out-of-band precursor
-  // statements need to be emitted.
-  statementBeginning = rearrangableStream.getCursor();
-
   // Handle HW statements.
   if (succeeded(dispatchStmtVisitor(op)))
     return;
@@ -4137,7 +4115,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
 bool StmtEmitter::emitDeclarationForTemporary(Operation *op) {
   StringRef declWord = getVerilogDeclWord(op, state.options);
 
-  os.indent(blockDeclarationIndentLevel) << declWord;
+  indent() << declWord;
   if (!declWord.empty())
     os << ' ';
   if (emitter.printPackedType(stripUnpackedTypes(op->getResult(0).getType()),
@@ -4186,8 +4164,6 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
 
   // Okay, now that we have measured the things to emit, emit the things.
   for (const auto &record : valuesToEmit) {
-    statementBeginning = rearrangableStream.getCursor();
-
     // We have two different sorts of things that we proactively emit:
     // declarations (wires, regs, localpamarams, etc) and expressions that
     // cannot be emitted inline (e.g. because of limitations around subscripts).
@@ -4261,13 +4237,6 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
     os << ';';
     emitLocationInfoAndNewLine(opsForLocation);
     ++numStatementsEmitted;
-
-    // If any sub-expressions are too large to fit on a line and need a
-    // temporary declaration, put it after the already-emitted declarations.
-    // This is important to maintain incrementally after each statement, because
-    // each statement can generate spills when they are overly-long.
-    blockDeclarationInsertPoint = rearrangableStream.getCursor();
-    blockDeclarationIndentLevel = state.currentIndent;
   }
 
   os << '\n';
@@ -4275,6 +4244,13 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
 
 void StmtEmitter::emitStatementBlock(Block &body) {
   addIndent();
+
+  // Ensure decl alignment values are preserved after the block is emitted.
+  // These values were computed for and from all declarations in the current
+  // block (before/after this nested block), so be sure they're restored
+  // and not overwritten by the declaration alignment within the block.
+  llvm::SaveAndRestore<size_t> x(maxDeclNameWidth);
+  llvm::SaveAndRestore<size_t> x2(maxTypeWidth);
 
   // Build up the symbol table for all of the values that need names in the
   // module.  #ifdef's in procedural regions are special because local variables
@@ -5001,26 +4977,14 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
   }
 }
 
-/// Prepare the given MLIR module for emission.
-static void prepareForEmission(ModuleOp module,
-                               const LoweringOptions &options) {
-  SmallVector<HWModuleOp> modulesToPrepare;
-  module.walk([&](HWModuleOp op) { modulesToPrepare.push_back(op); });
-  parallelForEach(module->getContext(), modulesToPrepare,
-                  [&](auto op) { prepareHWModule(op, options); });
-}
-
 //===----------------------------------------------------------------------===//
 // Unified Emitter
 //===----------------------------------------------------------------------===//
 
-LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
-  // Prepare the ops in the module for emission and legalize the names that will
-  // end up in the output.
-  LoweringOptions options(module);
-  prepareForEmission(module, options);
+static LogicalResult exportVerilogImpl(ModuleOp module, llvm::raw_ostream &os) {
   GlobalNameTable globalNames = legalizeGlobalNames(module);
 
+  LoweringOptions options(module);
   SharedEmitterState emitter(module, options, std::move(globalNames));
   emitter.gatherFiles(false);
 
@@ -5056,18 +5020,29 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   return failure(emitter.encounteredError);
 }
 
+LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
+  LoweringOptions options(module);
+  SmallVector<HWModuleOp> modulesToPrepare;
+  module.walk([&](HWModuleOp op) { modulesToPrepare.push_back(op); });
+  parallelForEach(module->getContext(), modulesToPrepare,
+                  [&](auto op) { prepareHWModule(op, options); });
+  return exportVerilogImpl(module, os);
+}
+
 namespace {
 
 struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
   ExportVerilogPass(raw_ostream &os) : os(os) {}
   void runOnOperation() override {
-    // Make sure LoweringOptions are applied to the module if it was overridden
-    // on the command line.
-    // TODO: This should be moved up to circt-opt and circt-translate.
-    applyLoweringCLOptions(getOperation());
+    // Prepare the ops in the module for emission.
+    mlir::OpPassManager preparePM("builtin.module");
+    auto &modulePM = preparePM.nest<hw::HWModuleOp>();
+    modulePM.addPass(createPrepareForEmissionPass());
+    if (failed(runPipeline(preparePM, getOperation())))
+      return signalPassFailure();
 
-    if (failed(exportVerilog(getOperation(), os)))
-      signalPassFailure();
+    if (failed(exportVerilogImpl(getOperation(), os)))
+      return signalPassFailure();
   }
 
 private:
@@ -5134,11 +5109,11 @@ static void createSplitOutputFile(StringAttr fileName, FileInfo &file,
   output->keep();
 }
 
-LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
+static LogicalResult exportSplitVerilogImpl(ModuleOp module,
+                                            StringRef dirname) {
   // Prepare the ops in the module for emission and legalize the names that will
   // end up in the output.
   LoweringOptions options(module);
-  prepareForEmission(module, options);
   GlobalNameTable globalNames = legalizeGlobalNames(module);
 
   SharedEmitterState emitter(module, options, std::move(globalNames));
@@ -5198,6 +5173,15 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   return failure(emitter.encounteredError);
 }
 
+LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
+  LoweringOptions options(module);
+  SmallVector<HWModuleOp> modulesToPrepare;
+  module.walk([&](HWModuleOp op) { modulesToPrepare.push_back(op); });
+  parallelForEach(module->getContext(), modulesToPrepare,
+                  [&](auto op) { prepareHWModule(op, options); });
+  return exportSplitVerilogImpl(module, dirname);
+}
+
 namespace {
 
 struct ExportSplitVerilogPass
@@ -5206,12 +5190,15 @@ struct ExportSplitVerilogPass
     directoryName = directory.str();
   }
   void runOnOperation() override {
-    // Make sure LoweringOptions are applied to the module if it was overridden
-    // on the command line.
-    // TODO: This should be moved up to circt-opt and circt-translate.
-    applyLoweringCLOptions(getOperation());
-    if (failed(exportSplitVerilog(getOperation(), directoryName)))
-      signalPassFailure();
+    // Prepare the ops in the module for emission.
+    mlir::OpPassManager preparePM("builtin.module");
+    auto &modulePM = preparePM.nest<hw::HWModuleOp>();
+    modulePM.addPass(createPrepareForEmissionPass());
+    if (failed(runPipeline(preparePM, getOperation())))
+      return signalPassFailure();
+
+    if (failed(exportSplitVerilogImpl(getOperation(), directoryName)))
+      return signalPassFailure();
   }
 };
 } // end anonymous namespace

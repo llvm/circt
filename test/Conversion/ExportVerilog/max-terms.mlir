@@ -1,4 +1,4 @@
-// RUN: circt-opt -lowering-options=maximumNumberOfTermsPerExpression=4,disallowLocalVariables --export-verilog %s | FileCheck %s
+// RUN: circt-opt -test-apply-lowering-options='options=maximumNumberOfTermsPerExpression=4,disallowLocalVariables' --export-verilog %s | FileCheck %s
 
 // CHECK-LABEL: module large_use_in_procedural
 hw.module @large_use_in_procedural(%clock: i1, %a: i1) {

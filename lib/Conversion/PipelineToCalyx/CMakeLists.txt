@@ -13,7 +13,7 @@ add_circt_conversion_library(CIRCTPipelineToCalyx
   CIRCTPipelineOps
   MLIRIR
   MLIRPass
-  MLIRArithmeticDialect
+  MLIRArithDialect
   MLIRFuncDialect
   MLIRSupport
   MLIRTransforms

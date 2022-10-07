@@ -12,7 +12,7 @@
 
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Support/LLVM.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -1544,17 +1544,6 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
       return emitOpError("result type mismatch: expected result type ")
              << fnType.getResult(i) << ", but provided "
              << getResult(i).getType() << " for result number " << i;
-
-  return success();
-}
-
-LogicalResult InstanceOp::verify() {
-  if ((*this)->getNumOperands() == 0)
-    return emitOpError() << "must provide at least a control operand.";
-
-  if (!getControl().getType().dyn_cast<NoneType>())
-    return emitOpError()
-           << "last operand must be a control (none-typed) operand.";
 
   return success();
 }
