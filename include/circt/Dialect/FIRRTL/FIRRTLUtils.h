@@ -153,27 +153,27 @@ std::pair<bool, Optional<mlir::LocationAttr>> maybeStringToLocation(
 /// Does not add a ParallelDiagnosticHandler like mlir::parallelFor.
 template <class IterTy, class ResultTy, class ReduceFuncTy,
           class TransformFuncTy>
-static ResultTy transformReduce(MLIRContext *context, IterTy Begin, IterTy End,
-                                ResultTy Init, ReduceFuncTy Reduce,
-                                TransformFuncTy Transform) {
+static ResultTy transformReduce(MLIRContext *context, IterTy begin, IterTy end,
+                                ResultTy init, ReduceFuncTy reduce,
+                                TransformFuncTy transform) {
   // Parallel when enabled
   if (context->isMultithreadingEnabled())
-    return llvm::parallelTransformReduce(Begin, End, Init, Reduce, Transform);
+    return llvm::parallelTransformReduce(begin, end, init, reduce, transform);
 
   // Serial fallback (from llvm::parallelTransformReduce)
-  for (IterTy I = Begin; I != End; ++I)
-    Init = Reduce(std::move(Init), Transform(*I));
-  return std::move(Init);
+  for (IterTy i = begin; i != end; ++i)
+    init = reduce(std::move(init), transform(*i));
+  return std::move(init);
 }
 
 /// Range wrapper
 template <class RangeTy, class ResultTy, class ReduceFuncTy,
           class TransformFuncTy>
-static ResultTy transformReduce(MLIRContext *context, RangeTy &&R,
-                                ResultTy Init, ReduceFuncTy Reduce,
-                                TransformFuncTy Transform) {
-  return transformReduce(context, std::begin(R), std::end(R), Init, Reduce,
-                         Transform);
+static ResultTy transformReduce(MLIRContext *context, RangeTy &&r,
+                                ResultTy init, ReduceFuncTy reduce,
+                                TransformFuncTy transform) {
+  return transformReduce(context, std::begin(r), std::end(r), init, reduce,
+                         transform);
 }
 
 } // namespace firrtl
