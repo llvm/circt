@@ -3423,6 +3423,20 @@ Value FIRRTLLowering::createArrayIndexing(Value array, Value index) {
   auto size = hw::type_cast<hw::ArrayType>(array.getType()).getSize();
   auto valWire = builder.create<sv::WireOp>(
       hw::type_cast<hw::ArrayType>(array.getType()).getElementType());
+
+  // Extend to power of 2
+  if (!llvm::isPowerOf2_64(size)) {
+    auto extElem =
+        builder.create<hw::ConstantOp>(APInt(llvm::Log2_64_Ceil(size), 0));
+    auto extValue = builder.create<hw::ArrayGetOp>(array, extElem);
+    SmallVector<Value> temp(llvm::NextPowerOf2(size) - size, extValue);
+    auto ext = builder.create<hw::ArrayCreateOp>(temp);
+    SmallVector<Value> temp2;
+    temp2.push_back(ext.getResult());
+    temp2.push_back(array);
+    array = builder.create<hw::ArrayConcatOp>(temp2);
+  }
+
   auto arrayGet = builder.create<hw::ArrayGetOp>(array, index);
 
   // Use SV attributes to annotate pragmas.
@@ -3437,30 +3451,7 @@ Value FIRRTLLowering::createArrayIndexing(Value array, Value index) {
                                                 {"synopsys infer_mux_override"},
                                                 /*emitAsComments=*/true));
 
-  Value inBoundsRead = builder.create<sv::ReadInOutOp>(valWire);
-
-  // If the array indexing can never have an out-of-bounds read, then lower it
-  // into a hw.array_get.
-  if (llvm::isPowerOf2_64(size))
-    return inBoundsRead;
-
-  // If the array indexing can have an out-of-bounds read (the size of the array
-  // is not a power-of-two), then generate a mux that will return the zeroth
-  // element for any out-of-bounds reads.  This is done to match SFC behavior
-  // for subaccesses.
-  //
-  // TODO: Explore alternatives that don't rely on SFC-exact behavior or guard
-  // against this situation happeneing, e.g., by emitting an SV assertion to
-  // error if an out-of-bounds read ever occurs.
-  Value zerothRead = builder.create<hw::ArrayGetOp>(
-      array,
-      getOrCreateIntConstant(index.getType().getIntOrFloatBitWidth(), 0));
-  Value isOutOfBounds = builder.create<comb::ICmpOp>(
-      ICmpPredicate::uge, index,
-      getOrCreateIntConstant(index.getType().getIntOrFloatBitWidth(), size),
-      true);
-  return builder.create<comb::MuxOp>(inBoundsRead.getType(), isOutOfBounds,
-                                     zerothRead, inBoundsRead, true);
+  return builder.create<sv::ReadInOutOp>(valWire);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
