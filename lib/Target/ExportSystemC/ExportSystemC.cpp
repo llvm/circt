@@ -132,7 +132,7 @@ void ExportSystemC::registerExportSystemCTranslation() {
       llvm::cl::init("./"));
 
   static mlir::TranslateFromMLIRRegistration toSystemC(
-      "export-systemc",
+      "export-systemc", "export SystemC",
       [](ModuleOp module, raw_ostream &output) {
         return ExportSystemC::exportSystemC(module, output);
       },
@@ -142,7 +142,7 @@ void ExportSystemC::registerExportSystemCTranslation() {
       });
 
   static mlir::TranslateFromMLIRRegistration toSplitSystemC(
-      "export-split-systemc",
+      "export-split-systemc", "export SystemC (split)",
       [](ModuleOp module, raw_ostream &output) {
         return ExportSystemC::exportSplitSystemC(module, directory);
       },

@@ -3360,7 +3360,8 @@ circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
 
 void circt::firrtl::registerFromFIRFileTranslation() {
   static mlir::TranslateToMLIRRegistration fromFIR(
-      "import-firrtl", [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
+      "import-firrtl", "import .fir",
+      [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
         mlir::TimingScope ts;
         return importFIRFile(sourceMgr, context, ts);
       });

@@ -25,12 +25,6 @@ class BinOp<string mnemonic, list<Trait> traits = []> :
 
   let assemblyFormat =
     "$lhs `,` $rhs (`bin` $twoState^)? attr-dict `:` functional-type($args, $results)";
-
-  let builders = [
-    OpBuilder<(ins "Value":$lhs, "Value":$rhs), [{
-      return build($_builder, $_state, lhs, rhs, false);
-    }]>
-  ];
 }
 
 // Binary operator with uniform input/result types.
@@ -138,12 +132,6 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
 
   let assemblyFormat = "(`bin` $twoState^)? $predicate $lhs `,` $rhs attr-dict `:` qualified(type($lhs))";
 
-  let builders = [
-    OpBuilder<(ins "ICmpPredicate":$predicate, "Value":$lhs, "Value":$rhs), [{
-      return build($_builder, $_state, predicate, lhs, rhs, false);
-    }]>
-  ];
-
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
 
@@ -181,12 +169,6 @@ class UnaryI1ReductionOp<string mnemonic, list<Trait> traits = []> :
   let hasFolder = 1;
 
   let assemblyFormat = "(`bin` $twoState^)? $input attr-dict `:` qualified(type($input))";
-
-  let builders = [
-    OpBuilder<(ins "Value":$input), [{
-      return build($_builder, $_state, input, false);
-    }]>
-  ];
 }
 
 def ParityOp : UnaryI1ReductionOp<"parity">;
@@ -303,10 +285,4 @@ def MuxOp : CombOp<"mux",
 
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
-
-  let builders = [
-    OpBuilder<(ins "Value":$cond, "Value":$trueValue, "Value":$falseValue), [{
-      return build($_builder, $_state, cond, trueValue, falseValue, false);
-    }]>
-  ];
 }
