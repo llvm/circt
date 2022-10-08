@@ -168,7 +168,7 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
 
   // Maintain the arguments which each memory will add to the inner module
   // instance.
-  llvm::SmallVector<ValueRange> instanceArgsForMem;
+  llvm::SmallVector<llvm::OwningArrayRef<Value>> instanceArgsForMem;
 
   for (auto [i, memType] : argReplacements) {
 
@@ -212,7 +212,7 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
       ++resIdx;
     }
 
-    instanceArgsForMem.push_back(instanceArgsFromThisMem);
+    instanceArgsForMem.emplace_back(instanceArgsFromThisMem);
   }
 
   // Stitch together arguments from the top-level ESI wrapper and the instance
@@ -222,9 +222,9 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
     if (argReplacements.count(i)) {
       // This index was originally a memref - pop the instance arguments for the
       // next-in-line memory and add them.
-      auto memArgs = instanceArgsForMem.front();
-      instanceArgsForMem.erase(instanceArgsForMem.begin());
+      auto &memArgs = instanceArgsForMem.front();
       instanceArgs.append(memArgs.begin(), memArgs.end());
+      instanceArgsForMem.erase(instanceArgsForMem.begin());
     }
     // Add the argument from the wrapper mod.
     instanceArgs.push_back(wrapperMod.getArgument(i));
