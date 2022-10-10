@@ -98,7 +98,9 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
                 "false", "Prepare seq mems for macro replacement">,
     Option<"ignoreReadEnableMem", "ignore-read-enable-mem", "bool",
                 "false",
-    "ignore the read enable signal, instead of assigning X on read disable">
+    "ignore the read enable signal, instead of assigning X on read disable">,
+    Option<"stripMuxPragmas", "strip-mux-pragmas", "bool", "false",
+            "Do not annotate mux pragmas to memory reads">
    ];
 }
 

@@ -258,11 +258,12 @@ struct CircuitLoweringState {
   std::atomic<bool> used_RANDOMIZE_GARBAGE_ASSIGN{false};
 
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
-                       bool emitChiselAssertsAsSVA,
+                       bool emitChiselAssertsAsSVA, bool stripMuxPragmas,
                        InstanceGraph *instanceGraph, NLATable *nlaTable)
       : circuitOp(circuitOp), instanceGraph(instanceGraph),
         enableAnnotationWarning(enableAnnotationWarning),
-        emitChiselAssertsAsSVA(emitChiselAssertsAsSVA), nlaTable(nlaTable) {
+        emitChiselAssertsAsSVA(emitChiselAssertsAsSVA),
+        stripMuxPragmas(stripMuxPragmas), nlaTable(nlaTable) {
     auto *context = circuitOp.getContext();
 
     // Get the testbench output directory.
@@ -356,6 +357,7 @@ private:
   std::mutex annotationPrintingMtx;
 
   const bool emitChiselAssertsAsSVA;
+  const bool stripMuxPragmas;
 
   // Records any sv::BindOps that are found during the course of execution.
   // This is unsafe to access directly and should only be used through addBind.
@@ -449,6 +451,7 @@ struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
   void runOnOperation() override;
   void setEnableAnnotationWarning() { enableAnnotationWarning = true; }
   void setEmitChiselAssertAsSVA() { emitChiselAssertsAsSVA = true; }
+  void setStripMuxPragmas() { stripMuxPragmas = true; }
 
 private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
@@ -479,12 +482,15 @@ private:
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass>
 circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning,
-                                 bool emitChiselAssertsAsSVA) {
+                                 bool emitChiselAssertsAsSVA,
+                                 bool stripMuxPragmas) {
   auto pass = std::make_unique<FIRRTLModuleLowering>();
   if (enableAnnotationWarning)
     pass->setEnableAnnotationWarning();
   if (emitChiselAssertsAsSVA)
     pass->setEmitChiselAssertAsSVA();
+  if (stripMuxPragmas)
+    pass->setStripMuxPragmas();
   return pass;
 }
 
@@ -511,7 +517,7 @@ void FIRRTLModuleLowering::runOnOperation() {
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
   CircuitLoweringState state(
-      circuit, enableAnnotationWarning, emitChiselAssertsAsSVA,
+      circuit, enableAnnotationWarning, emitChiselAssertsAsSVA, stripMuxPragmas,
       &getAnalysis<InstanceGraph>(), &getAnalysis<NLATable>());
 
   SmallVector<FModuleOp, 32> modulesToProcess;
@@ -3421,9 +3427,6 @@ LogicalResult FIRRTLLowering::visitExpr(MuxPrimOp op) {
 Value FIRRTLLowering::createArrayIndexing(Value array, Value index) {
 
   auto size = hw::type_cast<hw::ArrayType>(array.getType()).getSize();
-  auto valWire = builder.create<sv::WireOp>(
-      hw::type_cast<hw::ArrayType>(array.getType()).getElementType());
-
   // Extend to power of 2.  FIRRTL semantics say out-of-bounds access result in
   // an indeterminate value.  Existing chisel code depends on this behavior
   // being "return index 0".  Ideally, we would tail extend the array to improve
@@ -3437,21 +3440,30 @@ Value FIRRTLLowering::createArrayIndexing(Value array, Value index) {
     array = builder.create<hw::ArrayConcatOp>(temp2);
   }
 
-  auto arrayGet = builder.create<hw::ArrayGetOp>(array, index);
+  Value inBoundsRead;
+  // If `stripMuxPragmas` is specified, just lower to a vanilla array
+  // indexing.
+  if (circuitState.stripMuxPragmas) {
+    inBoundsRead = builder.create<hw::ArrayGetOp>(array, index);
+  } else {
+    auto arrayGet = builder.create<hw::ArrayGetOp>(array, index);
+    auto valWire = builder.create<sv::WireOp>(
+        hw::type_cast<hw::ArrayType>(array.getType()).getElementType());
+    // Use SV attributes to annotate pragmas.
+    circt::sv::setSVAttributes(
+        arrayGet,
+        sv::SVAttributesAttr::get(builder.getContext(), {"cadence map_to_mux"},
+                                  /*emitAsComments=*/true));
 
-  // Use SV attributes to annotate pragmas.
-  circt::sv::setSVAttributes(
-      arrayGet,
-      sv::SVAttributesAttr::get(builder.getContext(), {"cadence map_to_mux"},
-                                /*emitAsComments=*/true));
+    auto assignOp = builder.create<sv::AssignOp>(valWire, arrayGet);
+    sv::setSVAttributes(
+        assignOp, sv::SVAttributesAttr::get(builder.getContext(),
+                                            {"synopsys infer_mux_override"},
+                                            /*emitAsComments=*/true));
+    inBoundsRead = builder.create<sv::ReadInOutOp>(valWire);
+  }
 
-  auto assignOp = builder.create<sv::AssignOp>(valWire, arrayGet);
-  sv::setSVAttributes(assignOp,
-                      sv::SVAttributesAttr::get(builder.getContext(),
-                                                {"synopsys infer_mux_override"},
-                                                /*emitAsComments=*/true));
-
-  return builder.create<sv::ReadInOutOp>(valWire);
+  return inBoundsRead;
 }
 
 LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {

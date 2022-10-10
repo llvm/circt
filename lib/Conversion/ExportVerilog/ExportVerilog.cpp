@@ -1690,9 +1690,9 @@ private:
 
   // Noop cast operators.
   SubExprInfo visitSV(ReadInOutOp op) {
-    if (hasSVAttributes(op))
-      emitError(op, "SV attributes emission is unimplemented for the op");
-    return emitSubExpr(op->getOperand(0), LowestPrecedence);
+    auto result = emitSubExpr(op->getOperand(0), LowestPrecedence);
+    emitSVAttributes(op);
+    return result;
   }
   SubExprInfo visitSV(ArrayIndexInOutOp op);
   SubExprInfo visitSV(IndexedPartSelectInOutOp op);

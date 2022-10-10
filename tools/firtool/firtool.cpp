@@ -109,6 +109,10 @@ static cl::opt<bool>
                            cl::desc("Convert all chisel asserts into SVA"),
                            cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool> stripMuxPragmas("strip-mux-pragmas",
+                                     cl::desc("Don't emit mux pragmas"),
+                                     cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool> disableAnnotationsClassless(
     "disable-annotation-classless",
     cl::desc("Ignore annotations without a class when parsing"),
@@ -724,7 +728,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerXMRPass());
 
     pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue(),
-                                         emitChiselAssertsAsSVA.getValue()));
+                                         emitChiselAssertsAsSVA.getValue(),
+                                         stripMuxPragmas.getValue()));
 
     if (outputFormat == OutputIRHW) {
       if (!disableOptimization) {
@@ -742,7 +747,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       }
 
       pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass());
-      pm.addPass(sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem));
+      pm.addPass(sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem,
+                                            stripMuxPragmas));
 
       if (extractTestCode)
         pm.addPass(sv::createSVExtractTestCodePass());
