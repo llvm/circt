@@ -24,6 +24,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
@@ -274,7 +275,9 @@ void CircuitOp::build(OpBuilder &builder, OperationState &result,
 }
 
 // Return the main module that is the entry point of the circuit.
-FModuleLike CircuitOp::getMainModule() {
+FModuleLike CircuitOp::getMainModule(mlir::SymbolTable *symtbl) {
+  if (symtbl)
+    return symtbl->lookup<FModuleLike>(getName());
   return dyn_cast_or_null<FModuleLike>(lookupSymbol(getName()));
 }
 
@@ -308,8 +311,10 @@ LogicalResult CircuitOp::verify() {
     return failure();
   }
 
+  mlir::SymbolTable symtbl(getOperation());
+
   // Check that a module matching the "main" module exists in the circuit.
-  auto mainModule = getMainModule();
+  auto mainModule = getMainModule(&symtbl);
   if (!mainModule) {
     emitOpError("must contain one module that matches main name '" + main +
                 "'");
@@ -337,12 +342,11 @@ LogicalResult CircuitOp::verify() {
 
     // Check that this extmodule's defname does not conflict with
     // the symbol name of any module.
-    auto *collidingModule = lookupSymbol(defname.getValue());
-    if (isa_and_nonnull<FModuleOp>(collidingModule))
+    if (auto collidingModule = symtbl.lookup<FModuleOp>(defname.getValue()))
       return extModule.emitOpError()
           .append("attribute 'defname' with value ", defname,
                   " conflicts with the name of another module in the circuit")
-          .attachNote(collidingModule->getLoc())
+          .attachNote(collidingModule.getLoc())
           .append("previous module declared here");
 
     // Find an optional extmodule with a defname collision. Update

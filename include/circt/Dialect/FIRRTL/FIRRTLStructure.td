@@ -43,8 +43,8 @@ def CircuitOp : FIRRTLOp<"circuit",
     Block *getBodyBlock();
 
     // Return the main module that is the entry point of the circuit.  This may
-    // be either an FModuleOp or an FExtModuleOp.
-    FModuleLike getMainModule();
+    // be either an FModuleOp or an FExtModuleOp.  A SymbolTable is optional.
+    FModuleLike getMainModule(mlir::SymbolTable* symtbl = nullptr);
   }];
 
   let assemblyFormat = "$name custom<CircuitOpAttrs>(attr-dict) $body";
