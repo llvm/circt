@@ -1721,8 +1721,8 @@ public:
     // with the newly created module and erase the predeclaration.
     if (auto predecl =
             op->getAttrOfType<FlatSymbolRefAttr>(kPredeclarationAttr)) {
-      auto parentOp = op->getParentOp();
-      auto predeclModule =
+      auto *parentOp = op->getParentOp();
+      auto *predeclModule =
           SymbolTable::lookupSymbolIn(parentOp, predecl.getValue());
       if (failed(SymbolTable::replaceAllSymbolUses(
               predeclModule, hwModule.moduleNameAttr(), parentOp)))
