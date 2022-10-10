@@ -196,3 +196,60 @@ firrtl.circuit "bundleRegInit"   {
     firrtl.connect %0, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+// -----
+
+module  {
+  // Multiple simple loops in one SCC
+  // CHECK-NOT: firrtl.circuit "hasloops"
+  firrtl.circuit "hasloops"   {
+    // expected-error @+1 {{detected combinational cycle in a FIRRTL module}}
+    firrtl.module @hasloops(in %i: !firrtl.uint<1>, out %o: !firrtl.uint<1>) {
+      %w = firrtl.wire     : !firrtl.vector<uint<1>,10>
+      // expected-note @+1 {{this operation is part of the combinational cycle}}
+      %a = firrtl.subindex %w[0]  : !firrtl.vector<uint<1>,10>
+      // expected-note @+1 {{this operation is part of the combinational cycle}}
+      %b = firrtl.subindex %w[1]  : !firrtl.vector<uint<1>,10>
+      // expected-note @+1 {{this operation is part of the combinational cycle}}
+      %c = firrtl.subindex %w[2]  : !firrtl.vector<uint<1>,10>
+      // expected-note @+1 {{this operation is part of the combinational cycle}}
+      %d = firrtl.subindex %w[3]  : !firrtl.vector<uint<1>,10>
+      // expected-note @+1 {{this operation is part of the combinational cycle}}
+      %e = firrtl.subindex %w[4]  : !firrtl.vector<uint<1>,10>
+      // expected-note @+1 {{this operation is part of the combinational cycle}}
+      %0 = firrtl.and %c, %i : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+      firrtl.connect %a, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+      // expected-note @+1 {{this operation is part of the combinational cycle}}
+      %1 = firrtl.and %a, %d : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+      firrtl.connect %b, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+      firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+      // expected-note @+1 {{this operation is part of the combinational cycle}}
+      %2 = firrtl.and %c, %e : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+      firrtl.connect %d, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+      firrtl.connect %e, %b : !firrtl.uint<1>, !firrtl.uint<1>
+      firrtl.connect %o, %e : !firrtl.uint<1>, !firrtl.uint<1>
+    }
+  }
+}
+
+// -----
+
+module  {
+  // Node combinational loop through vector subindex
+  // CHECK-NOT: firrtl.circuit "hasloops"
+  firrtl.circuit "hasloops"   {
+    // expected-error @+1 {{detected combinational cycle in a FIRRTL module}}
+    firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
+      %w = firrtl.wire  : !firrtl.vector<uint<1>,10>
+      // expected-note @+1 {{this operation is part of the combinational cycle}}
+      %y = firrtl.subindex %w[3]  : !firrtl.vector<uint<1>,10>
+      firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+      // expected-note @+1 {{this operation is part of the combinational cycle}}
+      %0 = firrtl.and %c, %y : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+      // expected-note @+1 {{this operation is part of the combinational cycle}}
+      %z = firrtl.node %0  : !firrtl.uint<1>
+      firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
+      firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
+    }
+  }
+}

@@ -55,12 +55,16 @@ namespace {
 /// The node class of combinational graph.
 struct Node {
   Value value;
+  unsigned fieldIdx;
   NodeContext *context;
 
-  explicit Node(Value value = nullptr, NodeContext *context = nullptr)
-      : value(value), context(context) {}
+  explicit Node(Value value = nullptr, unsigned fieldIdx = 0,
+                NodeContext *context = nullptr)
+      : value(value), fieldIdx(fieldIdx), context(context) {}
 
-  bool operator==(const Node &rhs) const { return value == rhs.value; }
+  bool operator==(const Node &rhs) const {
+    return value == rhs.value && fieldIdx == rhs.fieldIdx;
+  }
   bool operator!=(const Node &rhs) const { return !(*this == rhs); }
   bool isNull() const { return value == nullptr; }
 };
@@ -79,8 +83,10 @@ class ChildIterator
                                  Value> {
   void skipToNextValidChild() {
     auto isChild = [&]() {
-      if (auto connect = dyn_cast<FConnectLike>(childIt->getOwner()))
-        return childIt->get() == connect.getSrc();
+      if (auto connect = dyn_cast<FConnectLike>(childIt->getOwner())) {
+        return getFieldRefFromValue(childIt->get()) ==
+               getFieldRefFromValue(connect.getSrc());
+      }
       return childIt->getOwner()->getNumResults() > 0;
     };
     while (childIt != childEnd && !isChild())
@@ -147,7 +153,7 @@ public:
   using llvm::iterator_facade_base<NodeIterator, std::forward_iterator_tag,
                                    Node>::operator++;
   NodeIterator &operator++() { return ++child, *this; }
-  Node operator*() { return Node(*child, node.context); }
+  Node operator*() { return Node(*child, 0, node.context); }
 
   bool operator==(const NodeIterator &rhs) const { return child == rhs.child; }
   bool operator!=(const NodeIterator &rhs) const { return !(*this == rhs); }
@@ -319,7 +325,9 @@ public:
   Node operator*() {
     assert(connect != node.context->connects.end() &&
            "dereferencing the end iterator");
-    return Node((*connect).getDest(), node.context);
+    auto dst = (*connect).getDest();
+    auto fieldRef = getFieldRefFromValue(dst);
+    return Node(fieldRef.getValue(), fieldRef.getFieldID(), node.context);
   }
 
   bool operator==(const DummySourceNodeIterator &rhs) const {
@@ -468,12 +476,12 @@ namespace llvm {
 template <>
 struct DenseMapInfo<Node> {
   static Node getEmptyKey() {
-    auto pointer = llvm::DenseMapInfo<void *>::getEmptyKey();
-    return Node(Value::getFromOpaquePointer(pointer));
+    auto pointer = llvm::DenseMapInfo<Value>::getEmptyKey();
+    return Node(pointer);
   }
   static Node getTombstoneKey() {
-    auto pointer = llvm::DenseMapInfo<void *>::getTombstoneKey();
-    return Node(Value::getFromOpaquePointer(pointer));
+    Value pointer = llvm::DenseMapInfo<Value>::getTombstoneKey();
+    return Node(pointer);
   }
 
   static unsigned getHashValue(const Node &node) {
@@ -646,8 +654,8 @@ void dumpPathBetweenModulePorts(SmallString<16> &instancePath,
   unsigned instancePathSize = instancePath.size();
   instancePath += ".";
   instancePath += instance.getName();
-  auto start = Node(module.getArgument(inputPort), context);
-  auto end = Node(module.getArgument(outputPort), context);
+  auto start = Node(module.getArgument(inputPort), 0, context);
+  auto end = Node(module.getArgument(outputPort), 0, context);
   llvm::DenseMap<Node, Node> previousNode;
   // Find a shortest path from input port to output port by BFS.
   std::queue<Node> que;
@@ -711,7 +719,7 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
       if (auto module = dyn_cast<FModuleOp>(*node->getModule())) {
         NodeContext context(&map, &instanceGraph,
                             module.getOps<FConnectLike>());
-        auto dummyNode = Node(nullptr, &context);
+        auto dummyNode = Node(nullptr, 0, &context);
 
         // Traversing SCCs in the combinational graph to detect cycles. As
         // FIRRTL module is an SSA region, all cycles must contain at least one
@@ -753,7 +761,7 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
             combPaths.push_back(outputVec);
             continue;
           }
-          Node inputNode(arg, &context);
+          Node inputNode(arg, 0, &context);
           for (auto node : llvm::depth_first_ext<Node>(inputNode, nodeSet)) {
             if (auto output = node.value.dyn_cast<BlockArgument>())
               if (directionVec[output.getArgNumber()])

@@ -115,3 +115,52 @@ module  {
     }
   }
 }
+
+// -----
+
+// Simple loop to same bundle subfield
+firrtl.circuit "bundleWire"   {
+  // expected-error @+1 {{detected combinational cycle in a FIRRTL module}}
+  firrtl.module @bundleWire() {
+    %reg = firrtl.wire     : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %0 = firrtl.subfield %reg(0) : (!firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.uint<1>
+    %2 = firrtl.subfield %reg(0) : (!firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.uint<1>
+    firrtl.connect %0, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+module  {
+  // Simple combinational loop to bundle subfield
+  // CHECK-NOT: firrtl.circuit "hasloopsBundle"
+  firrtl.circuit "hasloopsBundle"   {
+    // expected-error @+1 {{detected combinational cycle in a FIRRTL module}}
+    firrtl.module @hasloopsBundle(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
+      %yb = firrtl.wire  : !firrtl.bundle<a: uint<1>, b: uint<1>>
+      %y = firrtl.subfield %yb(0): (!firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.uint<1>
+      %zb = firrtl.wire  : !firrtl.bundle<a: uint<1>, b: uint<1>>
+      %z = firrtl.subfield %zb(0): (!firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.uint<1>
+      firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+      firrtl.connect %z, %y : !firrtl.uint<1>, !firrtl.uint<1>
+      firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
+      firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
+    }
+  }
+}
+
+// -----
+
+module  {
+  // vector subindex loop
+  // CHECK-NOT: firrtl.circuit "hasloops"
+  firrtl.circuit "hasloops"   {
+    // expected-error @+1 {{detected combinational cycle in a FIRRTL module}}
+    firrtl.module @hasloops(in %i: !firrtl.uint<1>, out %o: !firrtl.uint<1>) {
+      %vec = firrtl.wire  : !firrtl.vector<uint<1>,10>
+      %b = firrtl.subindex %vec[4] : !firrtl.vector<uint<1>,10>
+      %c = firrtl.subindex %vec[4] : !firrtl.vector<uint<1>,10>
+      firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    }
+  }
+}
