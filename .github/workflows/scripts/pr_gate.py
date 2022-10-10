@@ -11,34 +11,15 @@ if __name__ == "__main__":
       """Check if any of the files in the current diff match the provided pattern.
      If so, prints 1, else prints 0.""")
   parser.add_argument("pattern", help="Pattern to match", type=str)
+  parser.add_argument("base",
+                      help="SHA of the base commit to compare against",
+                      type=str)
   args = parser.parse_args()
-
-  print("=== PR Gate ===", file=sys.stderr)
-
   repo_path = "./"
   repo = git.Repo(repo_path, search_parent_directories=True)
-  print("pre-fetch", file=sys.stderr)
-  [print(r.name, file=sys.stderr) for r in repo.remote().refs]
-  repo.remotes["origin"].fetch()
-  print("post-fetch", file=sys.stderr)
-  [print(r.name, file=sys.stderr) for r in repo.remote().refs]
-
-  def get_env_sha(env):
-    ref_name = os.getenv(env)
-    sha = repo.git.rev_parse(ref_name)
-    print(f"{env} = {ref_name} = {sha}", file=sys.stderr)
-    return sha
-
-  head_ref = get_env_sha("GITHUB_HEAD_REF")
-  base_ref = get_env_sha("GITHUB_BASE_REF")
-
-  if base_ref == head_ref:
-    print("Base and head refs are the same, skipping", file=sys.stderr)
-    print("0")
-    sys.exit(0)
 
   # Get files changed in the diff.
-  command = f"git diff --name-only --diff-filter=ADMR {base_ref}..{head_ref}"
+  command = f"git diff --name-only --diff-filter=ADMR {args.base}..HEAD"
   output = subprocess.check_output(command, shell=True).decode("utf-8")
   pattern = re.compile(args.pattern)
   for file in output.splitlines():
