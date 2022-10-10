@@ -31,18 +31,20 @@ DPI int sv2cCosimserverEpRegister(char *endpointId, long long sendTypeId,
                                   int sendTypeSize, long long recvTypeId,
                                   int recvTypeSize);
 
+// clang-format off
+
 /// Try to get a message from a client.
 DPI int sv2cCosimserverEpTryGet(char *endpointId,
-                                // NOLINTNEXTLINE(misc-misplaced-const,
-                                // readability-avoid-const-params-in-decls)
+                                // NOLINTNEXTLINE(misc-misplaced-const, readability-avoid-const-params-in-decls)
                                 const svOpenArrayHandle data,
                                 unsigned int *sizeBytes);
 
 /// Send a message to a client.
 DPI int sv2cCosimserverEpTryPut(char *endpointId,
-                                // NOLINTNEXTLINE(misc-misplaced-const,
-                                // readability-avoid-const-params-in-decls)
+                                // NOLINTNEXTLINE(misc-misplaced-const, readability-avoid-const-params-in-decls)
                                 const svOpenArrayHandle data, int dataLimit);
+
+// clang-format on
 
 /// Start the server. Not required as the first endpoint registration will do
 /// this. Provided if one wants to start the server early.
