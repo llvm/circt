@@ -216,6 +216,7 @@ jobs:
 
       - name: Build CIRCT Test CIRCT
         run: |
+          set -e
           mkdir build
           cd build
           cmake .. \
