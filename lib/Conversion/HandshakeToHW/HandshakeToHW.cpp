@@ -155,6 +155,10 @@ static std::string getTypeName(Location loc, Type type) {
     typeName += "_tuple";
     for (auto elementType : tupleType.getTypes())
       typeName += getTypeName(loc, elementType);
+  } else if (auto structType = type.dyn_cast<hw::StructType>()) {
+    typeName += "_struct";
+    for (auto element : structType.getElements())
+      typeName += "_" + element.name.str() + getTypeName(loc, element.type);
   } else
     emitError(loc) << "unsupported data type '" << type << "'";
 
@@ -541,8 +545,10 @@ struct RTLBuilder {
   }
 
   // Packs a list of values into a hw.struct.
-  Value pack(ValueRange values, std::optional<StringRef> name = {}) {
-    Type structType = tupleToStruct(values.getTypes());
+  Value pack(ValueRange values, Type structType = Type(),
+             std::optional<StringRef> name = {}) {
+    if (!structType)
+      structType = tupleToStruct(values.getTypes());
     return buildNamedOp(
         [&]() { return b.create<hw::StructCreateOp>(loc, structType, values); },
         name);
@@ -1089,6 +1095,21 @@ public:
     auto unwrappedIO = unwrapIO(s, bb, ports);
     buildUnitRateJoinLogic(s, unwrappedIO,
                            [&](ValueRange inputs) { return s.pack(inputs); });
+  };
+};
+
+class StructCreateConversionPattern
+    : public HandshakeConversionPattern<hw::StructCreateOp> {
+public:
+  using HandshakeConversionPattern<
+      hw::StructCreateOp>::HandshakeConversionPattern;
+  void buildModule(hw::StructCreateOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = unwrapIO(s, bb, ports);
+    auto structType = op.getResult().getType();
+    buildUnitRateJoinLogic(s, unwrappedIO, [&](ValueRange inputs) {
+      return s.pack(inputs, structType);
+    });
   };
 };
 
@@ -1746,6 +1767,8 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
       UnitRateConversionPattern<arith::ShLIOp, comb::OrOp>,
       UnitRateConversionPattern<arith::ShRUIOp, comb::ShrUOp>,
       UnitRateConversionPattern<arith::ShRSIOp, comb::ShrSOp>,
+      // HW operations.
+      StructCreateConversionPattern,
       // Handshake operations.
       ConditionalBranchConversionPattern, MuxConversionPattern,
       SelectConversionPattern, PackConversionPattern, UnpackConversionPattern,
@@ -1790,7 +1813,9 @@ public:
 
     ESITypeConverter typeConverter;
     ConversionTarget target(getContext());
-    target.addLegalDialect<HWDialect>();
+    // All top-level logic of a handshake module will be the interconnectivity
+    // between instantiated modules.
+    target.addLegalOp<hw::HWModuleOp, hw::OutputOp, hw::InstanceOp>();
     target.addIllegalDialect<handshake::HandshakeDialect>();
 
     // Convert the handshake.func operations in post-order wrt. the instance
