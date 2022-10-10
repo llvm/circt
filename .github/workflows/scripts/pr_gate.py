@@ -17,6 +17,11 @@ if __name__ == "__main__":
 
   repo_path = "./"
   repo = git.Repo(repo_path, search_parent_directories=True)
+  print("pre-fetch", file=sys.stderr)
+  [print(r.name, file=sys.stderr) for r in repo.remote().refs]
+  repo.remotes["origin"].fetch()
+  print("post-fetch", file=sys.stderr)
+  [print(r.name, file=sys.stderr) for r in repo.remote().refs]
 
   def get_env_sha(env):
     ref_name = os.getenv(env)
