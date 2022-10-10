@@ -41,7 +41,7 @@ function Get-Capnp {
     Push-Location "$capnp"
     Push-Location "capnproto-c++-$version"
     # Build without fiber support (requires exceptions, disabled by LLVM).
-    cmake . -DCMAKE_CXX_FLAGS="-DKJ_USE_FIBERS=0" -DCMAKE_BUILD_TYPE=$config -DCMAKE_INSTALL_PREFIX="$extDir"
+    cmake -DWITH_FIBERS=OFF -DCMAKE_BUILD_TYPE=$config -DCMAKE_INSTALL_PREFIX="$extDir" .
     cmake --build . --config $config
     cmake --install .
 
