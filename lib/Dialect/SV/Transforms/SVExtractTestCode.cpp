@@ -511,9 +511,6 @@ private:
       op->erase();
     }
 
-    // Move any old modules that are test code only to the test code area.
-    maybeMoveToTestCode(module, testBenchDir, bindFile, instanceGraph);
-
     return true;
   }
 
@@ -559,6 +556,8 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.assume");
   auto coverDir =
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.cover");
+  auto testBenchDir =
+      top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.testbench");
   auto assertBindFile =
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.assert.bindfile");
   auto assumeBindFile =
