@@ -13,9 +13,26 @@
 #include "circt/Dialect/HWArith/HWArithDialect.h"
 #include "circt/Dialect/HWArith/HWArithOps.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/Transforms/InliningUtils.h"
 
 using namespace circt;
 using namespace circt::hwarith;
+
+//===----------------------------------------------------------------------===//
+// HWArithDialect Interfaces
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct HWArithInlinerInterface : public mlir::DialectInlinerInterface {
+  using mlir::DialectInlinerInterface::DialectInlinerInterface;
+  // Operations in the hwarith dialect are always legal to inline since they are
+  // pure.
+  bool isLegalToInline(Operation *, Region *, bool,
+                       BlockAndValueMapping &) const final {
+    return true;
+  }
+};
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Dialect specification.
@@ -27,6 +44,9 @@ void HWArithDialect::initialize() {
 #define GET_OP_LIST
 #include "circt/Dialect/HWArith/HWArith.cpp.inc"
       >();
+
+  // Register interface implementations
+  addInterfaces<HWArithInlinerInterface>();
 }
 
 // Provide implementations for the enums we use.
