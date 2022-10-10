@@ -136,7 +136,12 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
   auto newPortInfo = handshake::getPortInfoForOpTypes(
       func, func.getArgumentTypes(), func.getResultTypes());
   auto extMod = b.create<hw::HWModuleExternOp>(
-      loc, StringAttr::get(ctx, "_" + func.getName() + "_hw"), newPortInfo);
+      loc, StringAttr::get(ctx, "__" + func.getName() + "_hw"), newPortInfo);
+
+  // Add an attribute to the original handshake function to indicate that it
+  // needs to resolve to extMod in a later pass.
+  func->setAttr(kPredeclarationAttr,
+                FlatSymbolRefAttr::get(ctx, extMod.getName()));
 
   // Create wrapper module. This will have the same ports as the original
   // module, sans the replaced arguments.
