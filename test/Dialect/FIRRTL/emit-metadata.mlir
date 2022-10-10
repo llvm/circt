@@ -1,4 +1,4 @@
-// REQUIRES: not-windows
+// UNSUPPORTED: system-windows
 // RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-emit-metadata{repl-seq-mem=true repl-seq-mem-file="metadata/dut.conf"})' %s | FileCheck %s
 
 firrtl.circuit "empty" {

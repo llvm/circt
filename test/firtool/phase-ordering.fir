@@ -1,4 +1,4 @@
-; REQUIRES: not-windows
+; UNSUPPORTED: system-windows
 ; RUN: firtool %s --format=fir --ir-fir | FileCheck %s
 
 ; Temporary wires should not be introduced by type lowering, and if they are,

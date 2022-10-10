@@ -1,4 +1,4 @@
-// REQUIRES: not-windows
+// UNSUPPORTED: system-windows
 // RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(firrtl-expand-whens))' --mlir-print-local-scope  --mlir-print-debuginfo %s | FileCheck %s
 
 firrtl.circuit "Basic"  {

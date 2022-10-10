@@ -1,4 +1,4 @@
-; REQUIRES: not-windows
+; UNSUPPORTED: system-windows
 ; RUN: firtool %s --format=fir --ir-sv | FileCheck %s
 
 circuit Qux: %[[{

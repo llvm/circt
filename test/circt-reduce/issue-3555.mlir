@@ -1,4 +1,4 @@
-// REQUIRES: not-windows
+// UNSUPPORTED: system-windows
 // RUN: circt-reduce %s --test %S/test.sh --test-arg firtool --test-arg "error: sink \"x1.x\" not fully initialized" --keep-best=0 --include root-port-pruner --test-must-fail | FileCheck %s
 
 // https://github.com/llvm/circt/issues/3555

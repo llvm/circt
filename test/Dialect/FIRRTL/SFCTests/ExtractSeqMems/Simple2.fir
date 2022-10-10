@@ -1,4 +1,4 @@
-; REQUIRES: not-windows
+; UNSUPPORTED: system-windows
 ; RUN: rm -rf %t
 ; RUN: firtool --repl-seq-mem --repl-seq-mem-file=mems.conf --split-verilog -o=%t %s
 ; RUN: FileCheck %s --check-prefix=TESTHARNESS < %t/TestHarness.sv

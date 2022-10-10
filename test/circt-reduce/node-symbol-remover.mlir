@@ -1,4 +1,4 @@
-// REQUIRES: not-windows
+// UNSUPPORTED: system-windows
 // RUN: circt-reduce %s --test %S/test.sh --test-arg cat --test-arg "%anotherWire = firrtl.node" --keep-best=0 --include node-symbol-remover --test-must-fail | FileCheck %s
 
 firrtl.circuit "Foo" {

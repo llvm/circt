@@ -1,4 +1,4 @@
-// REQUIRES: not-windows
+// UNSUPPORTED: system-windows
 // RUN: circt-opt -firrtl-add-seqmem-ports %s | FileCheck %s
 
 // Should create the output file even if there are no seqmems.
