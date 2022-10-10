@@ -196,11 +196,6 @@ def IndexedPartSelectOp
                       UnitAttr:$decrement);
   let results = (outs HWIntegerType:$result);
 
-  let builders = [
-    OpBuilder<(ins "Value":$input, "Value":$base, "int32_t":$width,
-                                                CArg<"bool", "false">:$decrement)>
-  ];
-
   let hasVerifier = 1;
 
   let extraClassDeclaration = [{

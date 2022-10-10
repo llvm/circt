@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Support/LLVM.h"
@@ -26,6 +27,7 @@ using namespace handshake;
 using namespace mlir;
 
 namespace circt {
+
 namespace handshake {
 
 /// Iterates over the handshake::FuncOp's in the program to build an instance
@@ -122,6 +124,161 @@ LogicalResult verifyAllValuesHasOneUse(handshake::FuncOp funcOp) {
              << "argument " << barg.index() << " has multiple uses.";
   }
   return success();
+}
+
+// NOLINTNEXTLINE(misc-no-recursion)
+static Type tupleToStruct(TupleType tuple) {
+  auto *ctx = tuple.getContext();
+  mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
+  for (auto [i, innerType] : llvm::enumerate(tuple)) {
+    Type convertedInnerType = innerType;
+    if (auto tupleInnerType = innerType.dyn_cast<TupleType>())
+      convertedInnerType = tupleToStruct(tupleInnerType);
+    hwfields.push_back({StringAttr::get(ctx, "field" + std::to_string(i)),
+                        convertedInnerType});
+  }
+
+  return hw::StructType::get(ctx, hwfields);
+}
+
+// Converts 't' into a valid HW type. This is strictly used for converting
+// 'index' types into a fixed-width type.
+Type toValidType(Type t) {
+  return TypeSwitch<Type, Type>(t)
+      .Case<IndexType>(
+          [&](IndexType it) { return IntegerType::get(it.getContext(), 64); })
+      .Case<TupleType>([&](TupleType tt) {
+        llvm::SmallVector<Type> types;
+        for (auto innerType : tt)
+          types.push_back(toValidType(innerType));
+        return tupleToStruct(
+            mlir::TupleType::get(types[0].getContext(), types));
+      })
+      .Case<hw::StructType>([&](auto st) {
+        llvm::SmallVector<hw::StructType::FieldInfo> structFields(
+            st.getElements());
+        for (auto &field : structFields)
+          field.type = toValidType(field.type);
+        return hw::StructType::get(st.getContext(), structFields);
+      })
+      .Case<NoneType>(
+          [&](NoneType nt) { return IntegerType::get(nt.getContext(), 0); })
+      .Default([&](Type t) { return t; });
+}
+
+// Wraps a type into an ESI ChannelType type. The inner type is converted to
+// ensure comprehensability by the RTL dialects.
+esi::ChannelType esiWrapper(Type t) {
+  return TypeSwitch<Type, esi::ChannelType>(t)
+      .Case<esi::ChannelType>([](auto t) { return t; })
+      .Case<TupleType>(
+          [&](TupleType tt) { return esiWrapper(tupleToStruct(tt)); })
+      .Case<NoneType>([](NoneType nt) {
+        // todo: change when handshake switches to i0
+        return esiWrapper(IntegerType::get(nt.getContext(), 0));
+      })
+      .Default([](auto t) {
+        return esi::ChannelType::get(t.getContext(), toValidType(t));
+      });
+}
+
+namespace {
+
+/// A class to be used with getPortInfoForOp. Provides an opaque interface for
+/// generating the port names of an operation; handshake operations generate
+/// names by the Handshake NamedIOInterface;  and other operations, such as
+/// arith ops, are assigned default names.
+class HandshakePortNameGenerator {
+public:
+  explicit HandshakePortNameGenerator(Operation *op)
+      : builder(op->getContext()) {
+    auto namedOpInterface = dyn_cast<handshake::NamedIOInterface>(op);
+    if (namedOpInterface)
+      inferFromNamedOpInterface(namedOpInterface);
+    else if (auto funcOp = dyn_cast<handshake::FuncOp>(op))
+      inferFromFuncOp(funcOp);
+    else
+      inferDefault(op);
+  }
+
+  StringAttr inputName(unsigned idx) { return inputs[idx]; }
+  StringAttr outputName(unsigned idx) { return outputs[idx]; }
+
+private:
+  using IdxToStrF = const std::function<std::string(unsigned)> &;
+  void infer(Operation *op, IdxToStrF &inF, IdxToStrF &outF) {
+    llvm::transform(
+        llvm::enumerate(op->getOperandTypes()), std::back_inserter(inputs),
+        [&](auto it) { return builder.getStringAttr(inF(it.index())); });
+    llvm::transform(
+        llvm::enumerate(op->getResultTypes()), std::back_inserter(outputs),
+        [&](auto it) { return builder.getStringAttr(outF(it.index())); });
+  }
+
+  void inferDefault(Operation *op) {
+    infer(
+        op, [](unsigned idx) { return "in" + std::to_string(idx); },
+        [](unsigned idx) { return "out" + std::to_string(idx); });
+  }
+
+  void inferFromNamedOpInterface(handshake::NamedIOInterface op) {
+    infer(
+        op, [&](unsigned idx) { return op.getOperandName(idx); },
+        [&](unsigned idx) { return op.getResultName(idx); });
+  }
+
+  void inferFromFuncOp(handshake::FuncOp op) {
+    auto inF = [&](unsigned idx) { return op.getArgName(idx).str(); };
+    auto outF = [&](unsigned idx) { return op.getResName(idx).str(); };
+    llvm::transform(
+        llvm::enumerate(op.getArgumentTypes()), std::back_inserter(inputs),
+        [&](auto it) { return builder.getStringAttr(inF(it.index())); });
+    llvm::transform(
+        llvm::enumerate(op.getResultTypes()), std::back_inserter(outputs),
+        [&](auto it) { return builder.getStringAttr(outF(it.index())); });
+  }
+
+  Builder builder;
+  llvm::SmallVector<StringAttr> inputs;
+  llvm::SmallVector<StringAttr> outputs;
+};
+} // namespace
+
+hw::ModulePortInfo getPortInfoForOpTypes(Operation *op, TypeRange inputs,
+                                         TypeRange outputs) {
+  hw::ModulePortInfo ports({}, {});
+  HandshakePortNameGenerator portNames(op);
+  auto *ctx = op->getContext();
+
+  Type i1Type = IntegerType::get(ctx, 1);
+
+  // Add all inputs of funcOp.
+  unsigned inIdx = 0;
+  for (auto &arg : llvm::enumerate(inputs)) {
+    ports.inputs.push_back({portNames.inputName(arg.index()),
+                            hw::PortDirection::INPUT, esiWrapper(arg.value()),
+                            arg.index(), StringAttr{}});
+    inIdx++;
+  }
+
+  // Add all outputs of funcOp.
+  for (auto &res : llvm::enumerate(outputs)) {
+    ports.outputs.push_back({portNames.outputName(res.index()),
+                             hw::PortDirection::OUTPUT, esiWrapper(res.value()),
+                             res.index(), StringAttr{}});
+  }
+
+  // Add clock and reset signals.
+  if (op->hasTrait<mlir::OpTrait::HasClock>()) {
+    ports.inputs.push_back({StringAttr::get(ctx, "clock"),
+                            hw::PortDirection::INPUT, i1Type, inIdx++,
+                            StringAttr{}});
+    ports.inputs.push_back({StringAttr::get(ctx, "reset"),
+                            hw::PortDirection::INPUT, i1Type, inIdx,
+                            StringAttr{}});
+  }
+
+  return ports;
 }
 
 } // namespace handshake

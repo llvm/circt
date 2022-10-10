@@ -1358,7 +1358,7 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
         rewriter.create<hw::ConstantOp>(op.getLoc(), (one << value) + one);
 
     std::array<Value, 2> factors = {shlOp.getLhs(), rhs};
-    auto mulOp = rewriter.create<comb::MulOp>(op.getLoc(), factors);
+    auto mulOp = rewriter.create<comb::MulOp>(op.getLoc(), factors, false);
 
     SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
     newOperands.push_back(mulOp);
@@ -1376,7 +1376,7 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
     APInt one(/*numBits=*/value.getBitWidth(), 1, /*isSigned=*/false);
     auto rhs = rewriter.create<hw::ConstantOp>(op.getLoc(), value + one);
     std::array<Value, 2> factors = {mulOp.getInputs()[0], rhs};
-    auto newMulOp = rewriter.create<comb::MulOp>(op.getLoc(), factors);
+    auto newMulOp = rewriter.create<comb::MulOp>(op.getLoc(), factors, false);
 
     SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
     newOperands.push_back(newMulOp);
@@ -2209,7 +2209,8 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
     };
 
     if (isa<AndOp>(condOp) && getInvertedOperands()) {
-      auto newOr = rewriter.createOrFold<OrOp>(op.getLoc(), invertedOperands);
+      auto newOr =
+          rewriter.createOrFold<OrOp>(op.getLoc(), invertedOperands, false);
       replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, newOr,
                                            op.getFalseValue(),
                                            op.getTrueValue(), op.getTwoState());

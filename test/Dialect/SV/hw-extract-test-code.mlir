@@ -170,3 +170,69 @@ module {
     hw.output %cond : i1
   }
 }
+
+// -----
+// Check instance extraction
+
+// All instances of Baz are extracted, so it should be output to the testbench.
+// CHECK-LABEL: @Baz
+// CHECK-SAME: output_file = #hw.output_file<"testbench/", excludeFromFileList, includeReplicatedOps>
+
+// In AllExtracted, instances foo, bar, and baz should be extracted.
+// CHECK-LABEL: @AllExtracted_cover
+// CHECK: hw.instance "foo"
+// CHECK: hw.instance "bar"
+// CHECK: hw.instance "baz"
+
+// In SomeExtracted, only instance baz should be extracted.
+// CHECK-LABEL: @SomeExtracted_cover
+// CHECK-NOT: hw.instance "foo"
+// CHECK-NOT: hw.instance "bar"
+// CHECK: hw.instance "baz"
+
+// In CycleExtracted, instance foo should be extracted despite combinational cycle.
+// CHECK-LABEL: @CycleExtracted_cover
+// CHECK: hw.instance "foo"
+
+module attributes {
+  firrtl.extract.testbench = #hw.output_file<"testbench/", excludeFromFileList, includeReplicatedOps>
+} {
+  hw.module private @Foo(%a: i1) -> (b: i1) {
+    hw.output %a : i1
+  }
+
+  hw.module.extern private @Bar(%a: i1) -> (b: i1)
+
+  hw.module.extern private @Baz(%a: i1) -> (b: i1)
+
+  hw.module @AllExtracted(%clock: i1, %in: i1) {
+    %foo.b = hw.instance "foo" @Foo(a: %in: i1) -> (b: i1)
+    %bar.b = hw.instance "bar" @Bar(a: %in: i1) -> (b: i1)
+    %baz.b = hw.instance "baz" @Baz(a: %in: i1) -> (b: i1)
+    sv.always posedge %clock {
+      sv.cover %foo.b, immediate
+      sv.cover %bar.b, immediate
+      sv.cover %baz.b, immediate
+    }
+  }
+
+  hw.module @SomeExtracted(%clock: i1, %in: i1) -> (out0: i1, out1: i1) {
+    %foo.b = hw.instance "foo" @Foo(a: %in: i1) -> (b: i1)
+    %bar.b = hw.instance "bar" @Bar(a: %in: i1) -> (b: i1)
+    %baz.b = hw.instance "baz" @Baz(a: %in: i1) -> (b: i1)
+    sv.always posedge %clock {
+      sv.cover %foo.b, immediate
+      sv.cover %bar.b, immediate
+      sv.cover %baz.b, immediate
+    }
+    hw.output %foo.b, %bar.b : i1, i1
+  }
+
+  hw.module @CycleExtracted(%clock: i1, %in: i1) {
+    %foo.b = hw.instance "foo" @Foo(a: %in: i1) -> (b: i1)
+    %0 = comb.or %0, %foo.b : i1
+    sv.always posedge %clock {
+      sv.cover %0, immediate
+    }
+  }
+}

@@ -40,65 +40,16 @@ using NameUniquer = std::function<std::string(Operation *)>;
 
 namespace {
 
+static Type tupleToStruct(TypeRange types) {
+  return toValidType(mlir::TupleType::get(types[0].getContext(), types));
+}
+
 // Shared state used by various functions; captured in a struct to reduce the
 // number of arguments that we have to pass around.
 struct HandshakeLoweringState {
   ModuleOp parentModule;
   NameUniquer nameUniquer;
 };
-
-// NOLINTNEXTLINE(misc-no-recursion)
-static Type tupleToStruct(TupleType tuple) {
-  auto *ctx = tuple.getContext();
-  mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
-  for (auto [i, innerType] : llvm::enumerate(tuple)) {
-    Type convertedInnerType = innerType;
-    if (auto tupleInnerType = innerType.dyn_cast<TupleType>())
-      convertedInnerType = tupleToStruct(tupleInnerType);
-    hwfields.push_back({StringAttr::get(ctx, "field" + std::to_string(i)),
-                        convertedInnerType});
-  }
-
-  return hw::StructType::get(ctx, hwfields);
-}
-
-static Type tupleToStruct(TypeRange types) {
-  return tupleToStruct(mlir::TupleType::get(types[0].getContext(), types));
-}
-
-// Converts 't' into a valid HW type. This is strictly used for converting
-// 'index' types into a fixed-width type.
-static Type toValidType(Type t) {
-  return TypeSwitch<Type, Type>(t)
-      .Case<IndexType>(
-          [&](IndexType it) { return IntegerType::get(it.getContext(), 64); })
-      .Case<TupleType>([&](TupleType tt) {
-        llvm::SmallVector<Type> types;
-        for (auto innerType : tt)
-          types.push_back(toValidType(innerType));
-        return tupleToStruct(
-            mlir::TupleType::get(types[0].getContext(), types));
-      })
-      .Case<NoneType>(
-          [&](NoneType nt) { return IntegerType::get(nt.getContext(), 0); })
-      .Default([&](Type t) { return t; });
-}
-
-// Wraps a type into an ESI ChannelType type. The inner type is converted to
-// ensure comprehensability by the RTL dialects.
-static esi::ChannelType esiWrapper(Type t) {
-  return TypeSwitch<Type, esi::ChannelType>(t)
-      .Case<esi::ChannelType>([](auto t) { return t; })
-      .Case<TupleType>(
-          [&](TupleType tt) { return esiWrapper(tupleToStruct(tt)); })
-      .Case<NoneType>([](NoneType nt) {
-        // todo: change when handshake switches to i0
-        return esiWrapper(IntegerType::get(nt.getContext(), 0));
-      })
-      .Default([](auto t) {
-        return esi::ChannelType::get(t.getContext(), toValidType(t));
-      });
-}
 
 // A type converter is needed to perform the in-flight materialization of "raw"
 // (non-ESI channel) types to their ESI channel correspondents. This comes into
@@ -204,72 +155,15 @@ static std::string getTypeName(Location loc, Type type) {
     typeName += "_tuple";
     for (auto elementType : tupleType.getTypes())
       typeName += getTypeName(loc, elementType);
+  } else if (auto structType = type.dyn_cast<hw::StructType>()) {
+    typeName += "_struct";
+    for (auto element : structType.getElements())
+      typeName += "_" + element.name.str() + getTypeName(loc, element.type);
   } else
     emitError(loc) << "unsupported data type '" << type << "'";
 
   return typeName;
 }
-
-namespace {
-
-/// A class to be used with getPortInfoForOp. Provides an opaque interface for
-/// generating the port names of an operation; handshake operations generate
-/// names by the Handshake NamedIOInterface;  and other operations, such as
-/// arith ops, are assigned default names.
-class HandshakePortNameGenerator {
-public:
-  explicit HandshakePortNameGenerator(Operation *op)
-      : builder(op->getContext()) {
-    auto namedOpInterface = dyn_cast<handshake::NamedIOInterface>(op);
-    if (namedOpInterface)
-      inferFromNamedOpInterface(namedOpInterface);
-    else if (auto funcOp = dyn_cast<handshake::FuncOp>(op))
-      inferFromFuncOp(funcOp);
-    else
-      inferDefault(op);
-  }
-
-  StringAttr inputName(unsigned idx) { return inputs[idx]; }
-  StringAttr outputName(unsigned idx) { return outputs[idx]; }
-
-private:
-  using IdxToStrF = const std::function<std::string(unsigned)> &;
-  void infer(Operation *op, IdxToStrF &inF, IdxToStrF &outF) {
-    llvm::transform(
-        llvm::enumerate(op->getOperandTypes()), std::back_inserter(inputs),
-        [&](auto it) { return builder.getStringAttr(inF(it.index())); });
-    llvm::transform(
-        llvm::enumerate(op->getResultTypes()), std::back_inserter(outputs),
-        [&](auto it) { return builder.getStringAttr(outF(it.index())); });
-  }
-
-  void inferDefault(Operation *op) {
-    infer(
-        op, [](unsigned idx) { return "in" + std::to_string(idx); },
-        [](unsigned idx) { return "out" + std::to_string(idx); });
-  }
-
-  void inferFromNamedOpInterface(handshake::NamedIOInterface op) {
-    infer(
-        op, [&](unsigned idx) { return op.getOperandName(idx); },
-        [&](unsigned idx) { return op.getResultName(idx); });
-  }
-
-  void inferFromFuncOp(handshake::FuncOp op) {
-    auto inF = [&](unsigned idx) { return op.getArgName(idx).str(); };
-    auto outF = [&](unsigned idx) { return op.getResName(idx).str(); };
-    llvm::transform(
-        llvm::enumerate(op.getArgumentTypes()), std::back_inserter(inputs),
-        [&](auto it) { return builder.getStringAttr(inF(it.index())); });
-    llvm::transform(
-        llvm::enumerate(op.getResultTypes()), std::back_inserter(outputs),
-        [&](auto it) { return builder.getStringAttr(outF(it.index())); });
-  }
-
-  Builder builder;
-  llvm::SmallVector<StringAttr> inputs;
-  llvm::SmallVector<StringAttr> outputs;
-};
 
 /// Construct a name for creating HW sub-module.
 static std::string getSubModuleName(Operation *oldOp) {
@@ -347,8 +241,6 @@ static std::string getSubModuleName(Operation *oldOp) {
   return subModuleName;
 }
 
-} // namespace
-
 //===----------------------------------------------------------------------===//
 // HW Sub-module Related Functions
 //===----------------------------------------------------------------------===//
@@ -376,45 +268,10 @@ static Operation *checkSubModuleOp(mlir::ModuleOp parentModule,
   return moduleOp;
 }
 
-static ModulePortInfo getPortInfoForOp(OpBuilder &builder, Operation *op,
-                                       TypeRange inputs, TypeRange outputs) {
-  ModulePortInfo ports({}, {});
-  HandshakePortNameGenerator portNames(op);
-
-  // Add all inputs of funcOp.
-  unsigned inIdx = 0;
-  for (auto &arg : llvm::enumerate(inputs)) {
-    ports.inputs.push_back({portNames.inputName(arg.index()),
-                            PortDirection::INPUT, esiWrapper(arg.value()),
-                            arg.index(), StringAttr{}});
-    inIdx++;
-  }
-
-  // Add all outputs of funcOp.
-  for (auto &res : llvm::enumerate(outputs)) {
-    ports.outputs.push_back({portNames.outputName(res.index()),
-                             PortDirection::OUTPUT, esiWrapper(res.value()),
-                             res.index(), StringAttr{}});
-  }
-
-  // Add clock and reset signals.
-  if (op->hasTrait<mlir::OpTrait::HasClock>()) {
-    ports.inputs.push_back({builder.getStringAttr("clock"),
-                            PortDirection::INPUT, builder.getI1Type(), inIdx++,
-                            StringAttr{}});
-    ports.inputs.push_back({builder.getStringAttr("reset"),
-                            PortDirection::INPUT, builder.getI1Type(), inIdx,
-                            StringAttr{}});
-  }
-
-  return ports;
-}
-
 /// Returns a vector of PortInfo's which defines the HW interface of the
 /// to-be-converted op.
-static ModulePortInfo getPortInfoForOp(OpBuilder &builder, Operation *op) {
-  return getPortInfoForOp(builder, op, op->getOperandTypes(),
-                          op->getResultTypes());
+static ModulePortInfo getPortInfoForOp(Operation *op) {
+  return getPortInfoForOpTypes(op, op->getOperandTypes(), op->getResultTypes());
 }
 
 static llvm::SmallVector<hw::detail::FieldInfo>
@@ -659,13 +516,13 @@ struct RTLBuilder {
 
   // Bitwise 'and'.
   Value bAnd(ValueRange values, std::optional<StringRef> name = {}) {
-    return buildNamedOp([&]() { return b.create<comb::AndOp>(loc, values); },
-                        name);
+    return buildNamedOp(
+        [&]() { return b.create<comb::AndOp>(loc, values, false); }, name);
   }
 
   Value bOr(ValueRange values, std::optional<StringRef> name = {}) {
-    return buildNamedOp([&]() { return b.create<comb::OrOp>(loc, values); },
-                        name);
+    return buildNamedOp(
+        [&]() { return b.create<comb::OrOp>(loc, values, false); }, name);
   }
 
   // Bitwise 'not'.
@@ -688,8 +545,10 @@ struct RTLBuilder {
   }
 
   // Packs a list of values into a hw.struct.
-  Value pack(ValueRange values, std::optional<StringRef> name = {}) {
-    Type structType = tupleToStruct(values.getTypes());
+  Value pack(ValueRange values, Type structType = Type(),
+             std::optional<StringRef> name = {}) {
+    if (!structType)
+      structType = tupleToStruct(values.getTypes());
     return buildNamedOp(
         [&]() { return b.create<hw::StructCreateOp>(loc, structType, values); },
         name);
@@ -857,7 +716,7 @@ public:
     // builder.
     hw::HWModuleLike implModule = checkSubModuleOp(ls.parentModule, op);
     if (!implModule) {
-      auto portInfo = ModulePortInfo(getPortInfoForOp(rewriter, op));
+      auto portInfo = ModulePortInfo(getPortInfoForOp(op));
 
       implModule = submoduleBuilder.create<hw::HWModuleOp>(
           op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
@@ -1220,7 +1079,10 @@ public:
     this->buildUnitRateJoinLogic(s, unwrappedIO, [&](ValueRange inputs) {
       // Create TOut - it is assumed that TOut trivially
       // constructs from the input data signals of TIn.
-      return s.b.create<TOut>(op.getLoc(), inputs);
+      // To disambiguate ambiguous builders with default arguments (e.g.,
+      // twoState UnitAttr), specify attribute array explicitly.
+      return s.b.create<TOut>(op.getLoc(), inputs,
+                              /* attributes */ ArrayRef<NamedAttribute>{});
     });
   };
 };
@@ -1233,6 +1095,21 @@ public:
     auto unwrappedIO = unwrapIO(s, bb, ports);
     buildUnitRateJoinLogic(s, unwrappedIO,
                            [&](ValueRange inputs) { return s.pack(inputs); });
+  };
+};
+
+class StructCreateConversionPattern
+    : public HandshakeConversionPattern<hw::StructCreateOp> {
+public:
+  using HandshakeConversionPattern<
+      hw::StructCreateOp>::HandshakeConversionPattern;
+  void buildModule(hw::StructCreateOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = unwrapIO(s, bb, ports);
+    auto structType = op.getResult().getType();
+    buildUnitRateJoinLogic(s, unwrappedIO, [&](ValueRange inputs) {
+      return s.pack(inputs, structType);
+    });
   };
 };
 
@@ -1798,7 +1675,7 @@ public:
 
     hw::HWModuleLike implModule = checkSubModuleOp(ls.parentModule, op);
     if (!implModule) {
-      auto portInfo = ModulePortInfo(getPortInfoForOp(rewriter, op));
+      auto portInfo = ModulePortInfo(getPortInfoForOp(op));
       implModule = submoduleBuilder.create<hw::HWModuleExternOp>(
           op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
           portInfo);
@@ -1823,8 +1700,8 @@ public:
   LogicalResult
   matchAndRewrite(handshake::FuncOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    ModulePortInfo ports = getPortInfoForOp(rewriter, op, op.getArgumentTypes(),
-                                            op.getResultTypes());
+    ModulePortInfo ports =
+        getPortInfoForOpTypes(op, op.getArgumentTypes(), op.getResultTypes());
 
     if (op.isExternal()) {
       rewriter.create<hw::HWModuleExternOp>(
@@ -1890,6 +1767,8 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
       UnitRateConversionPattern<arith::ShLIOp, comb::OrOp>,
       UnitRateConversionPattern<arith::ShRUIOp, comb::ShrUOp>,
       UnitRateConversionPattern<arith::ShRSIOp, comb::ShrSOp>,
+      // HW operations.
+      StructCreateConversionPattern,
       // Handshake operations.
       ConditionalBranchConversionPattern, MuxConversionPattern,
       SelectConversionPattern, PackConversionPattern, UnpackConversionPattern,
@@ -1934,7 +1813,9 @@ public:
 
     ESITypeConverter typeConverter;
     ConversionTarget target(getContext());
-    target.addLegalDialect<HWDialect>();
+    // All top-level logic of a handshake module will be the interconnectivity
+    // between instantiated modules.
+    target.addLegalOp<hw::HWModuleOp, hw::OutputOp, hw::InstanceOp>();
     target.addIllegalDialect<handshake::HandshakeDialect>();
 
     // Convert the handshake.func operations in post-order wrt. the instance

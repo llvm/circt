@@ -157,11 +157,6 @@ def IndexedPartSelectInOutOp : SVOp<"indexed_part_select_inout",
                       UnitAttr:$decrement);
   let results = (outs InOutType:$result);
 
-  let builders = [
-    OpBuilder<(ins "Value":$input, "Value":$base, "int32_t":$width,
-                                 CArg<"bool", "false">:$decrement)>
-  ];
-
   let hasVerifier = 1;
 
   let extraClassDeclaration = [{

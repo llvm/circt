@@ -841,7 +841,7 @@ mlir::LogicalResult circt::calyx::exportCalyx(mlir::ModuleOp module,
 
 void circt::calyx::registerToCalyxTranslation() {
   static mlir::TranslateFromMLIRRegistration toCalyx(
-      "export-calyx",
+      "export-calyx", "export Calyx",
       [](ModuleOp module, llvm::raw_ostream &os) {
         return exportCalyx(module, os);
       },

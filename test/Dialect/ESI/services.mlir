@@ -182,3 +182,4 @@ hw.module @MemoryAccess1(%clk: i1, %rst: i1, %write: !esi.channel<!write>, %read
   %readData = esi.service.req.inout %readAddress -> <@MemA::@read> ([]) : !esi.channel<i5> -> !esi.channel<i64>
   hw.output %readData, %done : !esi.channel<i64>, !esi.channel<i0>
 }
+
