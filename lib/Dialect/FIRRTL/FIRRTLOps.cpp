@@ -278,8 +278,7 @@ void CircuitOp::build(OpBuilder &builder, OperationState &result,
 FModuleLike CircuitOp::getMainModule(mlir::SymbolTable *symtbl) {
   if (symtbl)
     return symtbl->lookup<FModuleLike>(getName());
-  else
-    return dyn_cast_or_null<FModuleLike>(lookupSymbol(getName()));
+  return dyn_cast_or_null<FModuleLike>(lookupSymbol(getName()));
 }
 
 static ParseResult parseCircuitOpAttrs(OpAsmParser &parser,
