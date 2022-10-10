@@ -2395,8 +2395,30 @@ void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
 // An array_get of an array_create with a constant index can just be the
 // array_create operand at the constant index. If the array_create has a single
 // uniform value for each element, just return that value regardless of the
-// index.
+// index. If the array is constructed from a constant by a bitcast operation, we
+// can fold into a constant.
 OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
+  // array_get(bitcast(c), i) -> c[i*w+w-1:i*w]
+  if (auto bitcast = getInput().getDefiningOp<hw::BitcastOp>()) {
+    auto intTy = getType().dyn_cast<IntegerType>();
+    if (!intTy)
+      return {};
+    auto inputConsatnt = bitcast.getInput().getDefiningOp<hw::ConstantOp>();
+    if (!inputConsatnt)
+      return {};
+    IntegerAttr constIdx = operands[1].dyn_cast_or_null<IntegerAttr>();
+    if (!constIdx)
+      return {};
+    auto constant = inputConsatnt.getValue();
+    // Calculate the index. Make sure to zero-extend the index value before
+    // multiplying the element width.
+    auto startIdx = constIdx.getValue().zext(constant.getBitWidth()) *
+                    getType().getIntOrFloatBitWidth();
+    // Extract [startIdx + width - 1: startIdx].
+    return IntegerAttr::get(
+        intTy, constant.lshr(startIdx).trunc(intTy.getIntOrFloatBitWidth()));
+  }
+
   auto inputCreate =
       dyn_cast_or_null<ArrayCreateOp>(getInput().getDefiningOp());
   if (!inputCreate)
