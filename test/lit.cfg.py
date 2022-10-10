@@ -79,5 +79,4 @@ if config.llhd_sim_enabled:
   config.available_features.add('llhd-sim')
   tools.append('llhd-sim')
 
-
 llvm_config.add_tool_substitutions(tools, tool_dirs)
