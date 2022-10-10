@@ -11,8 +11,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/PatternMatch.h"
 
 #include "llvm/ADT/SmallString.h"
 
@@ -263,6 +265,33 @@ void FirRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the register has an optional 'name' attribute, use it.
   if (!getName().empty())
     setNameFn(getResult(), getName());
+}
+
+LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
+  // If the register has a symbol, we can't optimize it away.
+  if (op.getInnerSymAttr())
+    return failure();
+
+  // If the register's value is itself, we can replace the register.
+  if (op.getNext().getDefiningOp() != op)
+    return failure();
+
+  // If the register has a reset value, we can replace it with that.
+  if (auto resetValue = op.getResetValue()) {
+    rewriter.replaceOp(op, resetValue);
+    return success();
+  }
+
+  auto type = op.getType();
+
+  // Otherwise we want to replae the register with a constant 0. For now this
+  // only works with integer types.
+  auto intType = type.dyn_cast<IntegerType>();
+  if (!intType)
+    return failure();
+
+  rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, intType, 0);
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
