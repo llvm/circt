@@ -84,6 +84,34 @@ static void getBackwardSliceSimple(Operation *rootOp,
   backwardSlice.remove(rootOp);
 }
 
+// Reimplemented and simplified from SliceAnalysis to use a worklist rather than
+// recursion and not consider nested regions. Also accepts a clone set
+// representing a backward dataflow slice. As soon as a use is found outside the
+// backward slice, return false. Otherwise, the whole forward slice is contained
+// in the backward slice, and return true.
+static bool getForwardSliceSimple(Operation *rootOp,
+                                  SetVector<Operation *> &opsToClone,
+                                  SetVector<Operation *> &forwardSlice) {
+  SmallPtrSet<Operation *, 32> visited;
+  SmallVector<Operation *> worklist;
+  worklist.push_back(rootOp);
+  visited.insert(rootOp);
+
+  while (!worklist.empty()) {
+    Operation *op = worklist.pop_back_val();
+    forwardSlice.insert(op);
+
+    for (auto *user : op->getUsers()) {
+      if (!opsToClone.contains(user))
+        return false;
+      if (visited.insert(user).second)
+        worklist.push_back(user);
+    }
+  }
+
+  return true;
+}
+
 // Compute the dataflow for a set of ops.
 static void dataflowSlice(SetVector<Operation *> &ops,
                           SetVector<Operation *> &results) {
@@ -127,6 +155,64 @@ static SetVector<Operation *> computeCloneSet(SetVector<Operation *> &roots) {
   results.insert(blocks.begin(), blocks.end());
 
   return results;
+}
+
+// Find instances that directly feed the clone set, and add them if possible.
+// This also returns a list of ops that should be erased, which includes such
+// instances and their forward dataflow slices.
+static void addInstancesToCloneSet(
+    SetVector<Value> &inputs, SetVector<Operation *> &opsToClone,
+    SmallPtrSetImpl<Operation *> &opsToErase,
+    DenseMap<StringAttr, SmallPtrSet<Operation *, 32>> &extractedInstances) {
+  // Track inputs to add, which are used by the instance that will be extracted.
+  SmallVector<Value> inputsToAdd;
+
+  // Track inputs to remove, which come from instances that will be extracted.
+  SmallVector<Value> inputsToRemove;
+
+  // Check each input into the clone set.
+  for (auto value : inputs) {
+    // Check if the input comes from an instance, and it isn't already added to
+    // the clone set.
+    auto instance = value.getDefiningOp<hw::InstanceOp>();
+    if (!instance)
+      continue;
+    if (opsToClone.contains(instance))
+      continue;
+
+    // Compute the instance's forward slice. If it wasn't fully contained in
+    // the clone set, move along.
+    SetVector<Operation *> forwardSlice;
+    if (!getForwardSliceSimple(instance, opsToClone, forwardSlice))
+      continue;
+
+    // Add the instance to the clone set and mark the input to be removed from
+    // the input set. Add any instance inputs to the input set. Also add the
+    // instance to the map of extracted instances by module.
+    opsToClone.insert(instance);
+    for (auto operand : instance.getOperands())
+      inputsToAdd.push_back(operand);
+    inputsToRemove.push_back(value);
+    extractedInstances[instance.getModuleNameAttr().getAttr()].insert(instance);
+
+    // Mark the instance and its forward dataflow to be erased from the pass.
+    // Normally, ops in the clone set are canonicalized away later, but for
+    // this case, we have to proactively erase them. The instances must be
+    // erased because we can't canonicalize away instances with unused results
+    // in general. The forward dataflow must be erased because the instance is
+    // being erased, and we can't leave null operands after this pass.
+    opsToErase.insert(instance);
+    for (auto *forwardOp : forwardSlice)
+      opsToErase.insert(forwardOp);
+  }
+
+  // Remove any inputs marked for removal.
+  for (auto v : inputsToRemove)
+    inputs.remove(v);
+
+  // Add any inputs marked for addition.
+  for (auto v : inputsToAdd)
+    inputs.insert(v);
 }
 
 static StringRef getNameForPort(Value val, ArrayAttr modulePorts) {
@@ -374,6 +460,7 @@ private:
 
     // Find the data-flow and structural ops to clone.  Result includes roots.
     auto opsToClone = computeCloneSet(roots);
+
     // Find the dataflow into the clone set
     SetVector<Value> inputs;
     for (auto op : opsToClone)
@@ -382,6 +469,13 @@ private:
         if (!opsToClone.count(argOp))
           inputs.insert(arg);
       }
+
+    // Find instances that directly feed the clone set, and add them if
+    // possible.
+    SmallPtrSet<Operation *, 32> opsToErase;
+    addInstancesToCloneSet(inputs, opsToClone, opsToErase, extractedInstances);
+    numOpsExtracted += opsToClone.size();
+    numOpsErased += opsToErase.size();
 
     // Make a module to contain the clone set, with arguments being the cut
     BlockAndValueMapping cutMap;
@@ -392,9 +486,48 @@ private:
     // erase old operations of interest
     for (auto op : roots)
       op->erase();
+
+    // Erase any instances that were extracted, and their forward dataflow.
+    for (auto *op : opsToErase) {
+      if (roots.contains(op))
+        continue;
+      op->dropAllUses();
+      op->erase();
+    }
+
     // Move any old modules that are test code only to the test code area.
     maybeMoveToTestCode(module, testBenchDir, bindFile, instanceGraph);
   }
+
+  // Move any modules that had all instances extracted to the testbench path.
+  void maybeMoveExtractedModules(hw::InstanceGraph &instanceGraph,
+                                 Attribute testBenchDir) {
+    // Ensure we have a valid test code path.
+    if (!testBenchDir)
+      return;
+
+    // Check each module that had instances extracted.
+    for (auto &pair : extractedInstances) {
+      hw::InstanceGraphNode *node = instanceGraph.lookup(pair.first);
+
+      // See if all instances were extracted.
+      bool allInstancesExtracted = true;
+      for (hw::InstanceRecord *use : node->uses()) {
+        allInstancesExtracted &= extractedInstances[pair.first].contains(
+            use->getInstance().getOperation());
+      }
+
+      if (!allInstancesExtracted)
+        continue;
+
+      // If so, move the module to the test code path.
+      hw::HWModuleLike mod = node->getModule();
+      mod->setAttr("output_file", testBenchDir);
+    }
+  }
+
+  // Map from module name to set of extracted instances for that module.
+  DenseMap<StringAttr, SmallPtrSet<Operation *, 32>> extractedInstances;
 };
 
 } // end anonymous namespace
@@ -485,6 +618,11 @@ void SVExtractTestCodeImplPass::runOnOperation() {
                instanceGraph);
     }
   }
+
+  // After all instances are processed, move any modules that had all instances
+  // extracted to the testbench path.
+  maybeMoveExtractedModules(instanceGraph, testBenchDir);
+
   // We have to wait until all the instances are processed to clean up the
   // annotations.
   for (auto &op : topLevelModule->getOperations())
