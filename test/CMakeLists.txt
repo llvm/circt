@@ -45,6 +45,6 @@ add_lit_testsuite(check-circt "Running the CIRCT regression tests"
   )
 set_target_properties(check-circt PROPERTIES FOLDER "Tests")
 
-add_lit_testsuites(CIRCT ${CMAKE_CURRENT_SOURCE_DIR}
-  DEPENDS ${CIRCT_TEST_DEPS}
-)
+add_lit_testsuites(CIRCT ${CMAKE_CURRENT_BINARY_DIR}
+  DEPENDS ${CIRCT_TEST_DEPENDS}
+  )
