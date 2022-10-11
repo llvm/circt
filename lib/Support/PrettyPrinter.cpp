@@ -112,26 +112,25 @@ void PrettyPrinter::add(Token &t) {
 
 /// Break encountered, set sizes of begin/breaks in scanStack that we now know.
 void PrettyPrinter::checkStack(uint depth) {
-  if (scanStack.empty())
-    return;
-  auto x = scanStack.back();
-  auto &t = tokens[x - tokenOffset];
-  if (auto *b = llvm::dyn_cast<BeginToken>(&t.token)) {
-    if (depth > 0) {
+  while (!scanStack.empty()) {
+    auto x = scanStack.back();
+    auto &t = tokens[x - tokenOffset];
+    if (auto *b = llvm::dyn_cast<BeginToken>(&t.token)) {
+      if (depth == 0)
+        break;
       scanStack.pop_back();
       t.size += rightTotal;
-      checkStack(depth - 1);
+      --depth;
+    } else if (auto *e = llvm::dyn_cast<EndToken>(&t.token)) {
+      scanStack.pop_back();
+      t.size = 1;
+      ++depth;
+    } else {
+      scanStack.pop_back();
+      t.size += rightTotal;
+      if (depth == 0)
+        break;
     }
-  } else if (auto *e = llvm::dyn_cast<EndToken>(&t.token)) {
-    scanStack.pop_back();
-    t.size = 1;
-    checkStack(depth + 1);
-  } else {
-    // break, not string (?)
-    scanStack.pop_back();
-    t.size += rightTotal;
-    if (depth > 0)
-      checkStack(depth);
   }
 }
 
