@@ -100,7 +100,8 @@ jobs:
             -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$PWD/..\
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
             -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
-            -DCIRCT_ENABLE_FRONTENDS=PyCDE
+            -DCIRCT_ENABLE_FRONTENDS=PyCDE \
+            -DPython3_EXECUTABLE=/usr/bin/python3.8
       
       - name: Build
         if: ${{ env.RUN_PYCDE_CI == '1' }}
