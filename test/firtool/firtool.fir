@@ -264,9 +264,9 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     output b : UInt<1>
     b <= a[sel]
 ; VERILOG-LABEL: module MultibitMux(
-; VERILOG:  wire [[T1:.*]];
 ; VERILOG:  wire [3:0] [[T2:.*]] =
 ; VERILOG-SAME{LITERAL}: {{a_0}, {a_2}, {a_1}, {a_0}};
+; VERILOG:  wire [[T1:.*]];
 ; VERILOG-NEXT:  /* synopsys infer_mux_override */
 ; VERILOG-NEXT:  assign [[T1]] = [[T2]][sel] /* cadence map_to_mux */;
 ; VERILOG-NEXT:  assign b = [[T1]];
