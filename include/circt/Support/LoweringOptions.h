@@ -113,10 +113,6 @@ struct LoweringOptions {
   /// Print debug info.
   bool printDebugInfo = false;
 
-  /// If true, ExportVerilog uses an old emission. This flag should be
-  /// deprecated once the old emission mode is no longer necessary.
-  bool useOldEmissionMode = false;
-
   /// This controls extra wire spilling performed in PrepareForEmission to
   /// improve readablitiy and debuggability.
   enum WireSpillingHeuristic : unsigned {

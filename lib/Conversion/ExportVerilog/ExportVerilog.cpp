@@ -1174,11 +1174,6 @@ public:
   /// This is the current module being emitted for a HWModuleOp.
   HWModuleOp currentModuleOp;
 
-  /// This set keeps track of all of the expression nodes that need to be
-  /// emitted as standalone wire declarations.  This can happen because they are
-  /// multiply-used or because the user requires a name to reference.
-  SmallPtrSet<Operation *, 16> outOfLineExpressions;
-
   /// This set keeps track of expressions that were emitted into their
   /// 'automatic logic' or 'localparam' declaration.  This is only used for
   /// expressions in a procedural region, because we otherwise just emit wires
@@ -1952,11 +1947,6 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
   auto *op = exp.getDefiningOp();
   bool shouldEmitInlineExpr = op && isVerilogExpression(op);
 
-  // Don't emit this expression inline if it has multiple uses.
-  if (shouldEmitInlineExpr && parenthesizeIfLooserThan != ForceEmitMultiUse &&
-      emitter.outOfLineExpressions.count(op))
-    shouldEmitInlineExpr = false;
-
   // If this is a non-expr or shouldn't be done inline, just refer to its name.
   if (!shouldEmitInlineExpr) {
     // All wires are declared as unsigned, so if the client needed it signed,
@@ -2029,8 +2019,7 @@ SubExprInfo ExprEmitter::visitComb(ReplicateOp op) {
   // If the subexpression is an inline concat, we can emit it as part of the
   // replicate.
   if (auto concatOp = op.getOperand().getDefiningOp<ConcatOp>()) {
-    if (op.getOperand().hasOneUse() &&
-        !emitter.outOfLineExpressions.count(concatOp)) {
+    if (op.getOperand().hasOneUse()) {
       llvm::interleaveComma(concatOp.getOperands(), os,
                             [&](Value v) { emitSubExpr(v, LowestPrecedence); });
       os << "}}";
@@ -2438,25 +2427,6 @@ SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
 // NameCollector
 //===----------------------------------------------------------------------===//
 
-static std::pair<ConstantOp, AssignOp> isSingleConstantAssign(Operation *op) {
-  auto wire = dyn_cast<WireOp>(op);
-  if (!wire)
-    return {};
-  ConstantOp con;
-  AssignOp assignOp;
-  for (auto *user : wire->getUsers()) {
-    auto assign = dyn_cast<AssignOp>(*user);
-    if (assign && assignOp)
-      return {};
-    assignOp = assign;
-  }
-  if (!assignOp)
-    return {};
-  return std::make_pair(
-      dyn_cast_or_null<ConstantOp>(assignOp.getSrc().getDefiningOp()),
-      assignOp);
-}
-
 namespace {
 class NameCollector {
 public:
@@ -2489,7 +2459,6 @@ private:
 } // namespace
 
 void NameCollector::collectNames(Block &block) {
-  bool isBlockProcedural = block.getParentOp()->hasTrait<ProceduralRegion>();
 
   SmallString<32> nameTmp;
 
@@ -2525,47 +2494,29 @@ void NameCollector::collectNames(Block &block) {
       continue;
 
     bool isExpr = isVerilogExpression(&op);
-    bool isInlineExpr = isExpr && isExpressionEmittedInline(&op);
-    for (auto result : op.getResults()) {
-      // If this is an expression emitted inline or unused, it doesn't need a
-      // name.
-      if (isExpr) {
-        // If this expression is dead, or can be emitted inline, ignore it.
-        if (result.use_empty() || isInlineExpr)
-          continue;
+    assert((!isExpr || isExpressionEmittedInline(&op)) &&
+           "If 'op' is a verilog expression, the expression must be inlinable. "
+           "Otherwise, it is a bug of PrepareForEmission");
 
-        // Remember that this expression should be emitted out of line.
-        moduleEmitter.outOfLineExpressions.insert(&op);
+    if (!isExpr) {
+      for (auto result : op.getResults()) {
+        // Measure this name and the length of its type, and ensure it is
+        // emitted later.
+        valuesToEmit.push_back(ValuesToEmitRecord{result, {}});
+        auto &typeString = valuesToEmit.back().typeString;
 
-        // Get an explicitly set name or try to infer a name from the structure
-        // of the expression.
-        names.addName(result,
-                      ExportVerilog::inferStructuralNameForTemporary(result));
+        StringRef declName =
+            getVerilogDeclWord(&op, moduleEmitter.state.options);
+        maxDeclNameWidth = std::max(declName.size(), maxDeclNameWidth);
 
-        // Don't measure or emit wires that are emitted inline (i.e. the wire
-        // definition is emitted on the line of the expression instead of a
-        // block at the top of the module).
-        // Procedural blocks always emit out of line variable declarations,
-        // because Verilog requires that they all be at the top of a block.
-        if (!isBlockProcedural)
-          continue;
+        // Convert the port's type to a string and measure it.
+        {
+          llvm::raw_svector_ostream stringStream(typeString);
+          moduleEmitter.printPackedType(stripUnpackedTypes(result.getType()),
+                                        stringStream, op.getLoc());
+        }
+        maxTypeWidth = std::max(typeString.size(), maxTypeWidth);
       }
-
-      // Measure this name and the length of its type, and ensure it is
-      // emitted later.
-      valuesToEmit.push_back(ValuesToEmitRecord{result, {}});
-      auto &typeString = valuesToEmit.back().typeString;
-
-      StringRef declName = getVerilogDeclWord(&op, moduleEmitter.state.options);
-      maxDeclNameWidth = std::max(declName.size(), maxDeclNameWidth);
-
-      // Convert the port's type to a string and measure it.
-      {
-        llvm::raw_svector_ostream stringStream(typeString);
-        moduleEmitter.printPackedType(stripUnpackedTypes(result.getType()),
-                                      stringStream, op.getLoc());
-      }
-      maxTypeWidth = std::max(typeString.size(), maxTypeWidth);
     }
 
     // Notice and renamify the labels on verification statements.
@@ -3860,13 +3811,8 @@ LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
 
 void StmtEmitter::emitStatement(Operation *op) {
   // Expressions may either be ignored or emitted as an expression statements.
-  if (isVerilogExpression(op)) {
-    if (emitter.outOfLineExpressions.count(op)) {
-      ++numStatementsEmitted;
-      emitStatementExpression(op);
-    }
+  if (isVerilogExpression(op))
     return;
-  }
 
   ++numStatementsEmitted;
 
@@ -4007,12 +3953,6 @@ static bool checkDominanceOfUsers(Operation *op1, Operation *op2) {
 }
 
 LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
-  // If useOldEmissionMode option is enabled, use the previous emission
-  // method.
-  // TODO: Once ExportVerilog simplification finished, remove this condition.
-  if (state.options.useOldEmissionMode)
-    return emitNoop();
-
   emitSVAttributes(op);
   auto value = op->getResult(0);
   SmallPtrSet<Operation *, 8> opsForLocation;
@@ -4154,92 +4094,6 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
 
   if (maxTypeWidth > 0) // add a space if any type exists
     maxTypeWidth += 1;
-
-  // In the new emission mode, we don't do forward declarations.
-  // TODO: Remove the below once we enabled the new emission mode by default.
-  if (!state.options.useOldEmissionMode)
-    return;
-
-  SmallPtrSet<Operation *, 8> opsForLocation;
-
-  // Okay, now that we have measured the things to emit, emit the things.
-  for (const auto &record : valuesToEmit) {
-    // We have two different sorts of things that we proactively emit:
-    // declarations (wires, regs, localpamarams, etc) and expressions that
-    // cannot be emitted inline (e.g. because of limitations around subscripts).
-    auto *op = record.value.getDefiningOp();
-    opsForLocation.clear();
-    opsForLocation.insert(op);
-
-    // If we have SV attributes attached to the op, those need to be emitted
-    // first.
-    if (auto regOp = dyn_cast<RegOp>(op))
-      emitSVAttributes(op);
-    else if (auto wireOp = dyn_cast<WireOp>(op))
-      emitSVAttributes(op);
-
-    // Emit the leading word, like 'wire' or 'reg'.
-    auto type = record.value.getType();
-    auto word = getVerilogDeclWord(op, state.options);
-    if (!isZeroBitType(type)) {
-      indent() << word;
-      auto extraIndent = word.empty() ? 0 : 1;
-      os.indent(maxDeclNameWidth - word.size() + extraIndent);
-    } else {
-      indent() << "// Zero width: " << word << ' ';
-    }
-
-    // Emit the type.
-    os << record.typeString;
-    if (record.typeString.size() < maxTypeWidth)
-      os.indent(maxTypeWidth - record.typeString.size());
-
-    // Emit the name.
-    os << names.getName(record.value);
-
-    // Print out any array subscripts or other post-name stuff.
-    emitter.printUnpackedTypePostfix(type, os);
-
-    // Print debug info.
-    if (state.options.printDebugInfo && isa<WireOp, RegOp>(op)) {
-      StringAttr sym = op->getAttr("inner_sym").dyn_cast_or_null<StringAttr>();
-      if (sym && !sym.getValue().empty())
-        os << " /* inner_sym: " << sym.getValue() << " */";
-    }
-
-    if (auto localparam = dyn_cast<LocalParamOp>(op)) {
-      os << " = ";
-      emitter.printParamValue(localparam.getValue(), os, [&]() {
-        return op->emitOpError("invalid localparam value");
-      });
-    }
-
-    // Constants carry their assignment directly in the declaration.
-    if (isExpressionEmittedInlineIntoProceduralDeclaration(op, *this)) {
-      os << " = ";
-      emitExpression(op->getResult(0), opsForLocation, ForceEmitMultiUse);
-
-      // Remember that we emitted this inline into the declaration so we don't
-      // emit it and we know the value is available for other declaration
-      // expressions who might want to reference it.
-      emitter.expressionsEmittedIntoDecl.insert(op);
-    }
-
-    // Inline assigned constant op into wire declarations unless the assignment
-    // has SV attributes.
-    auto [constOp, assignOp] = isSingleConstantAssign(op);
-    if (constOp && !hasSVAttributes(assignOp)) {
-      os << " = ";
-      emitExpression(constOp, opsForLocation, ForceEmitMultiUse);
-      emitter.assignsInlined.insert(assignOp);
-    }
-
-    os << ';';
-    emitLocationInfoAndNewLine(opsForLocation);
-    ++numStatementsEmitted;
-  }
-
-  os << '\n';
 }
 
 void StmtEmitter::emitStatementBlock(Block &body) {
