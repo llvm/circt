@@ -88,6 +88,9 @@ jobs:
       - name: Test CIRCT
         run: |
           ninja -C build check-circt -j$(nproc)
+      - name: Unit Test CIRCT
+        run: |
+          ninja -C build check-circt-unit -j$(nproc)
       - name: Integration Test CIRCT
         run: |
           ninja -C build check-circt-integration -j$(nproc)

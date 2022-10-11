@@ -119,7 +119,7 @@ jobs:
             -DCIRCT_RELEASE_TAG=${{ github.ref_name }} \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF
           ninja
-          ninja check-circt
+          ninja check-circt check-circt-unit
       - name: Display Files
         run: file build/bin/*
       - name: Package Binaries
