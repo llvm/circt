@@ -380,7 +380,7 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
   hw::InstanceGraphNode *node = instanceGraph.lookup(oldMod);
   OpBuilder b(oldMod);
   bool allInlined = true;
-  for (hw::InstanceRecord *use : node->uses()) {
+  for (hw::InstanceRecord *use : llvm::make_early_inc_range(node->uses())) {
     // If there is no instance, move on.
     hw::HWInstanceLike instLike = use->getInstance();
     if (!instLike) {
