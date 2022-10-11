@@ -120,11 +120,7 @@ private:
   };
 
   /// Print out tokens we know sizes for, and drop from token buffer.
-  void advanceLeft() {
-    assert(!tokens.empty());
-    advanceLeft(tokens.front());
-  }
-  void advanceLeft(FormattedToken t);
+  void advanceLeft();
 
   /// Break encountered, set sizes of begin/breaks in scanStack we now know.
   void checkStack(uint depth);

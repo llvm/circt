@@ -157,22 +157,21 @@ void PrettyPrinter::checkStream() {
 }
 
 /// Print out tokens we know sizes for, and drop from token buffer.
-void PrettyPrinter::advanceLeft(FormattedToken t) {
-  assert(&t.token);
-  if (t.size < 0)
-    return;
-  print(t);
-  leftTotal += llvm::TypeSwitch<Token *, sint>(&t.token)
-                   .Case([&](BreakToken *b) { return b->spaces; })
-                   .Case([&](StringToken *s) { return s->text.size(); })
-                   .Default([](auto *) { return 0; });
-  if (tokens.empty())
-    return;
-  tokens.pop_front();
-  ++tokenOffset;
-  if (tokens.empty())
-    return; // eep
-  advanceLeft();
+void PrettyPrinter::advanceLeft() {
+  assert(!tokens.empty());
+
+  while (!tokens.empty() && tokens.front().size >= 0) {
+    auto t = tokens.front();
+    tokens.pop_front();
+    ++tokenOffset;
+
+    assert(&t.token);
+    print(t);
+    leftTotal += llvm::TypeSwitch<Token *, sint>(&t.token)
+                     .Case([&](BreakToken *b) { return b->spaces; })
+                     .Case([&](StringToken *s) { return s->text.size(); })
+                     .Default([](auto *) { return 0; });
+  }
 }
 
 /// Print a token, maintaining printStack for context.
