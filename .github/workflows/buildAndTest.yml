@@ -268,7 +268,7 @@ jobs:
       - name: resolve PR gates
         run: |
           pip3 install GitPython # until https://github.com/circt/images/pull/22 lands
-          echo "RUN_PYCDE_TESTS=$(python3 .github/workflows/scripts/pr_gate.py '(PyCDE)') $DIFF_COMMIT" >> $GITHUB_ENV
+          echo "RUN_PYCDE_TESTS=$(python3 .github/workflows/scripts/pr_gate.py '(PyCDE)' $DIFF_COMMIT)" >> $GITHUB_ENV
 
       - name: Test CIRCT
         run: |
