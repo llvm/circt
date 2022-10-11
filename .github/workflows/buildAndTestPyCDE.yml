@@ -88,7 +88,8 @@ jobs:
       - name: Configure Unified Build
         if: ${{ env.RUN_PYCDE_CI == '1' }}
         run: |
-          pip3 install numpy # also move into image
+          # move into image
+          /usr/bin/python3.8 -m pip install numpy
           mkdir build
           cd build
           cmake ../llvm/llvm \
