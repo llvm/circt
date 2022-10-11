@@ -109,7 +109,7 @@ jobs:
         if: ${{ env.RUN_PYCDE_CI == '1' }}
         run: |
           cd build
-          cmake --build . --target check-circt-pycde
+          cmake --build . 
 
       - name: Test PyCDE
         if: ${{ env.RUN_PYCDE_CI == '1' }}
