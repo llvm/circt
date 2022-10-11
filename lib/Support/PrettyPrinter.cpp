@@ -138,22 +138,18 @@ void PrettyPrinter::checkStack(uint depth) {
 /// Check if there's enough tokens to hit width, if so print.
 /// If scan size is wider than line, it's infinity.
 void PrettyPrinter::checkStream() {
-  // If there's more space, do nothing.
-  if (rightTotal - leftTotal <= space || scanStack.empty())
-    return;
-
   // While buffer needs more than 1 line to print, print and consume.
+  assert(!tokens.empty());
+  while (rightTotal - leftTotal > space && !tokens.empty()) {
 
-  // Ran out of space, set size to infinity and take off scan stack.
-  // No need to keep track as we know enough to know this won't fit.
-  if (tokenOffset == scanStack.front()) {
-    tokens.front().size = 0xFFFFF; // ~sint{0}; // INFINITY
-    scanStack.pop_front();
+    // Ran out of space, set size to infinity and take off scan stack.
+    // No need to keep track as we know enough to know this won't fit.
+    if (!scanStack.empty() && tokenOffset == scanStack.front()) {
+      tokens.front().size = 0xFFFFF; // ~sint{0}; // INFINITY
+      scanStack.pop_front();
+    }
+    advanceLeft();
   }
-  advanceLeft();
-  // TODO: don't recurse
-  if (!tokens.empty())
-    checkStream();
 }
 
 /// Print out tokens we know sizes for, and drop from token buffer.
