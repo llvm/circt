@@ -89,7 +89,7 @@ jobs:
         if: ${{ env.RUN_PYCDE_CI == '1' }}
         run: |
           # move into image
-          /usr/bin/python3.8 -m pip install numpy
+          /usr/bin/python3.8 -m pip install numpy pybind11
           mkdir build
           cd build
           cmake ../llvm/llvm \
