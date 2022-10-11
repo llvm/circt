@@ -32,6 +32,10 @@ std::unique_ptr<mlir::Pass> createHandshakeToHWPass();
 
 namespace handshake {
 
+// Attribute name for the name of a predeclaration of the to-be-lowered
+// hw.module from a handshake function.
+static constexpr const char *kPredeclarationAttr = "handshake.module_name";
+
 // Converts 't' into a valid HW type. This is strictly used for converting
 // 'index' types into a fixed-width type.
 Type toValidType(Type t);
