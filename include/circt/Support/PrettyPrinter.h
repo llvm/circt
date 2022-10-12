@@ -30,10 +30,6 @@
 namespace circt {
 namespace pretty {
 
-// TODO: revisit integer types, don't use sint/uint, consider packing.
-using sint = int32_t;
-using uint = uint32_t;
-
 //===----------------------------------------------------------------------===//
 // Tokens
 //===----------------------------------------------------------------------===//
@@ -43,44 +39,86 @@ enum class Breaks { Consistent, Inconsistent };
 class Token {
 public:
   enum class Kind { String, Break, Begin, End };
+  struct StringInfo {
+    const char *str;
+    uint32_t len;
+  };
+  struct BreakInfo {
+    uint32_t spaces; // how many spaces when not broken
+    int32_t offset;  // amount to adjust indentation level by if breaks here
+  };
+  struct BeginInfo {
+    int32_t offset;
+    Breaks breaks;
+  };
+  struct EndInfo {
+    // Nothing
+  };
 
 private:
+  union {
+    StringInfo stringInfo;
+    BreakInfo breakInfo;
+    BeginInfo beginInfo;
+    EndInfo endInfo;
+  } data;
   const Kind kind;
 
 protected:
+  template <Kind k>
+  auto &getInfoImpl() {
+    if constexpr (k == Kind::String)
+      return data.stringInfo;
+    if constexpr (k == Kind::Break)
+      return data.breakInfo;
+    if constexpr (k == Kind::Begin)
+      return data.beginInfo;
+    if constexpr (k == Kind::End)
+      return data.endInfo;
+    llvm_unreachable("unhandled token kind");
+  }
+
   Token(Kind k) : kind(k) {}
 
 public:
-  Kind getKind() const { return kind; }
-  virtual ~Token() = default;
+  auto getKind() const { return kind; }
 };
 
 /// Helper class to CRTP-derive common functions.
 template <class DerivedT, Token::Kind DerivedKind>
 struct TokenBase : public Token {
-  TokenBase() : Token(DerivedKind) {}
   static bool classof(const Token *t) { return t->getKind() == DerivedKind; }
-  ~TokenBase() override = default;
+
+protected:
+  TokenBase() : Token(DerivedKind) {}
+  auto &getInfoMut() { return getInfoImpl<DerivedKind>(); }
+
+public:
+  const auto &getInfo() { return getInfoMut(); }
 };
 
 struct StringToken : public TokenBase<StringToken, Token::Kind::String> {
-  llvm::StringRef text;
-  StringToken(llvm::StringRef text) : text(text) {}
+  StringToken(llvm::StringRef text) {
+    assert(text.size() == (uint32_t)text.size());
+    getInfoMut() = {text.data(), (uint32_t)text.size()};
+  }
+  StringRef text() { return StringRef(getInfo().str, getInfo().len); }
 };
 
 struct BreakToken : public TokenBase<BreakToken, Token::Kind::Break> {
-  uint spaces; // how many spaces when not broken
-  sint offset; // amount to adjust indentation level by if breaks here
-  // ... extras
-  BreakToken(uint spaces = 1, sint offset = 0)
-      : spaces(spaces), offset(offset) {}
+  BreakToken(uint32_t spaces = 1, int32_t offset = 0) {
+    getInfoMut() = {spaces, offset};
+  }
+  auto spaces() { return getInfo().spaces; }
+  auto offset() { return getInfo().offset; }
 };
 
 struct BeginToken : public TokenBase<BeginToken, Token::Kind::Begin> {
-  sint offset;
-  Breaks breaks;
-  BeginToken(ssize_t offset = 2, Breaks breaks = Breaks::Inconsistent)
-      : offset(offset), breaks(breaks) {}
+  BeginToken(int32_t offset = 2, Breaks breaks = Breaks::Inconsistent) {
+    getInfoMut() = {offset, breaks};
+  }
+  auto offset() { return getInfo().offset; }
+  auto breaks() { return getInfo().breaks; }
 };
 
 struct EndToken : public TokenBase<EndToken, Token::Kind::End> {};
@@ -91,11 +129,11 @@ struct EndToken : public TokenBase<EndToken, Token::Kind::End> {};
 
 class PrettyPrinter {
 public:
-  PrettyPrinter(llvm::raw_ostream &os, uint margin)
+  PrettyPrinter(llvm::raw_ostream &os, uint32_t margin)
       : space(margin), margin(margin), os(os) {}
 
   /// Add token for printing.  In Oppen, this is "scan".
-  void add(Token &t);
+  void add(Token t);
 
   void eof() {
     if (!scanStack.empty()) {
@@ -107,15 +145,15 @@ public:
 private:
   /// Format token with tracked size.
   struct FormattedToken {
-    Token &token; /// underlying token
-    sint size;    /// calculate size when positive.
+    Token token;  /// underlying token
+    int32_t size; /// calculate size when positive.
   };
 
   enum class PrintBreaks { Consistent, Inconsistent, Fits };
 
   /// Printing information for active scope, stored in printStack.
   struct PrintEntry {
-    uint offset;
+    uint32_t offset;
     PrintBreaks breaks;
   };
 
@@ -123,7 +161,7 @@ private:
   void advanceLeft();
 
   /// Break encountered, set sizes of begin/breaks in scanStack we now know.
-  void checkStack(uint depth);
+  void checkStack(uint32_t depth);
 
   /// Check if there's enough tokens to hit width, if so print.
   /// If scan size is wider than line, it's infinity.
@@ -133,36 +171,36 @@ private:
   void print(FormattedToken f);
 
   /// Characters left on this line.
-  sint space;
+  int32_t space;
 
   /// Sizes: printed, enqueued
-  sint leftTotal;
-  sint rightTotal;
+  int32_t leftTotal;
+  int32_t rightTotal;
 
   /// Unprinted tokens, combination of 'token' and 'size' in Oppen.
   std::deque<FormattedToken> tokens;
   /// index of first token, for resolving scanStack entries.
-  uint tokenOffset = 0;
+  uint32_t tokenOffset = 0;
 
   /// Stack of begin/break tokens, adjust by tokenOffset to index into tokens.
-  std::deque<uint> scanStack;
+  std::deque<uint32_t> scanStack;
 
   /// Stack of printing contexts (indentation + breaking behavior).
   std::vector<PrintEntry> printStack;
 
   /// Current indentation level
   // TODO: implement this!
-  // uint indent;
+  // uint32_t indent;
 
   /// Whitespace to print before next, tracked to avoid trailing whitespace.
   // TODO: implement this!
-  // uint pendingIndentation;
+  // uint32_t pendingIndentation;
 
   // sizeInfinity
   // printStack
 
   /// Target line width.
-  uint margin;
+  uint32_t margin;
 
   /// Output stream.
   llvm::raw_ostream &os;

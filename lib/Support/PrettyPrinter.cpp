@@ -69,11 +69,11 @@ namespace pretty {
 auto constexpr debug = false;
 
 /// Add token for printing.  In Oppen, this is "scan".
-void PrettyPrinter::add(Token &t) {
+void PrettyPrinter::add(Token t) {
   llvm::TypeSwitch<Token *, void>(&t)
       .Case([&](StringToken *s) {
         // If nothing on stack, directly print
-        FormattedToken f{t, (sint)s->text.size()};
+        FormattedToken f{t, (int32_t)s->text().size()};
         if (scanStack.empty())
           return print(f);
         tokens.push_back(f);
@@ -91,7 +91,7 @@ void PrettyPrinter::add(Token &t) {
         }
         tokens.push_back({t, -rightTotal});
         scanStack.push_back(tokenOffset + tokens.size() - 1);
-        rightTotal += b->spaces;
+        rightTotal += b->spaces();
       })
       .Case([&](BeginToken *b) {
         if (scanStack.empty()) {
@@ -111,7 +111,7 @@ void PrettyPrinter::add(Token &t) {
 }
 
 /// Break encountered, set sizes of begin/breaks in scanStack that we now know.
-void PrettyPrinter::checkStack(uint depth) {
+void PrettyPrinter::checkStack(uint32_t depth) {
   while (!scanStack.empty()) {
     auto x = scanStack.back();
     auto &t = tokens[x - tokenOffset];
@@ -144,7 +144,7 @@ void PrettyPrinter::checkStream() {
     // Ran out of space, set size to infinity and take off scan stack.
     // No need to keep track as we know enough to know this won't fit.
     if (!scanStack.empty() && tokenOffset == scanStack.front()) {
-      tokens.front().size = 0xFFFFF; // ~sint{0}; // INFINITY
+      tokens.front().size = 0xFFFFF; // ~int32_t{0}; // INFINITY
       scanStack.pop_front();
     }
     advanceLeft();
@@ -156,15 +156,14 @@ void PrettyPrinter::advanceLeft() {
   assert(!tokens.empty());
 
   while (!tokens.empty() && tokens.front().size >= 0) {
-    auto t = tokens.front();
+    auto f = tokens.front();
     tokens.pop_front();
     ++tokenOffset;
 
-    assert(&t.token);
-    print(t);
-    leftTotal += llvm::TypeSwitch<Token *, sint>(&t.token)
-                     .Case([&](BreakToken *b) { return b->spaces; })
-                     .Case([&](StringToken *s) { return s->text.size(); })
+    print(f);
+    leftTotal += llvm::TypeSwitch<Token *, int32_t>(&f.token)
+                     .Case([&](BreakToken *b) { return b->spaces(); })
+                     .Case([&](StringToken *s) { return s->text().size(); })
                      .Default([](auto *) { return 0; });
   }
 }
@@ -174,7 +173,7 @@ void PrettyPrinter::print(FormattedToken f) {
   llvm::TypeSwitch<Token *, void>(&f.token)
       .Case([&](StringToken *s) {
         space -= f.size;
-        os << s->text;
+        os << s->text();
       })
       .Case([&](BreakToken *b) {
         // If nothing on print stack (no begin context),
@@ -185,8 +184,8 @@ void PrettyPrinter::print(FormattedToken f) {
             frame.breaks == PrintBreaks::Fits ||
             (frame.breaks == PrintBreaks::Inconsistent && f.size <= space);
         if (fits) {
-          space -= b->spaces;
-          os.indent(b->spaces);
+          space -= b->spaces();
+          os.indent(b->spaces());
         } else {
           if (debug) {
             if (space)
@@ -197,16 +196,16 @@ void PrettyPrinter::print(FormattedToken f) {
               os << "┇";
           }
           os << "\n";
-          space = frame.offset - b->offset;
+          space = frame.offset - b->offset();
           os.indent(std::max<ssize_t>(ssize_t(margin) - space, 0));
         }
       })
       .Case([&](BeginToken *b) {
         if (f.size > space) {
-          auto breaks = b->breaks == Breaks::Consistent
+          auto breaks = b->breaks() == Breaks::Consistent
                             ? PrintBreaks::Consistent
                             : PrintBreaks::Inconsistent;
-          printStack.push_back({uint(space - b->offset), breaks});
+          printStack.push_back({uint32_t(space - b->offset()), breaks});
         } else {
           printStack.push_back({0, PrintBreaks::Fits});
         }
