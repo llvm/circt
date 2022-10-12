@@ -129,6 +129,7 @@ struct EndToken : public TokenBase<EndToken, Token::Kind::End> {};
 
 class PrettyPrinter {
 public:
+  // TODO: allow setting starting indentation level!
   PrettyPrinter(llvm::raw_ostream &os, uint32_t margin)
       : space(margin), margin(margin), os(os) {
     assert(margin < kInfinity / 2);
