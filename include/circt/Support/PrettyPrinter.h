@@ -142,13 +142,7 @@ public:
       add(t);
   }
 
-  void eof() {
-    if (!scanStack.empty()) {
-      checkStack(0);
-      advanceLeft();
-    }
-  }
-
+  void eof();
 private:
   /// Format token with tracked size.
   struct FormattedToken {
@@ -176,6 +170,9 @@ private:
 
   /// Print a token, maintaining printStack for context.
   void print(FormattedToken f);
+
+  /// Clear token buffer, scanStack must be empty.
+  void clear();
 
   /// Characters left on this line.
   int32_t space;

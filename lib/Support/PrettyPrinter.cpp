@@ -81,24 +81,17 @@ void PrettyPrinter::add(Token t) {
         checkStream();
       })
       .Case([&](BreakToken *b) {
-        if (scanStack.empty()) {
-          leftTotal = rightTotal = 1;
-          tokens.clear();
-          tokenOffset = 0;
-        } else {
-          // Update sizes of prev begin/break/end
+        if (scanStack.empty())
+          clear();
+        else
           checkStack(0);
-        }
         tokens.push_back({t, -rightTotal});
         scanStack.push_back(tokenOffset + tokens.size() - 1);
         rightTotal += b->spaces();
       })
       .Case([&](BeginToken *b) {
-        if (scanStack.empty()) {
-          leftTotal = rightTotal = 1;
-          tokens.clear();
-          tokenOffset = 0;
-        }
+        if (scanStack.empty())
+          clear();
         tokens.push_back({t, -rightTotal});
         scanStack.push_back(tokenOffset + tokens.size() - 1);
       })
@@ -108,6 +101,23 @@ void PrettyPrinter::add(Token t) {
         tokens.push_back({t, -1});
         scanStack.push_back(tokenOffset + tokens.size() - 1);
       });
+}
+
+void PrettyPrinter::eof() {
+  if (!scanStack.empty()) {
+    checkStack(0);
+    advanceLeft();
+  }
+  assert(scanStack.empty() && "unclosed groups at EOF");
+  if (scanStack.empty())
+    clear();
+}
+
+void PrettyPrinter::clear() {
+  assert(scanStack.empty() && "clearing tokens while still on scan stack");
+  leftTotal = rightTotal = 1;
+  tokens.clear();
+  tokenOffset = 0;
 }
 
 /// Break encountered, set sizes of begin/breaks in scanStack that we now know.
