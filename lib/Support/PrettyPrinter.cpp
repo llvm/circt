@@ -84,7 +84,7 @@ void PrettyPrinter::add(Token t) {
         if (scanStack.empty())
           clear();
         else
-          checkStack(0);
+          checkStack();
         tokens.push_back({t, -rightTotal});
         scanStack.push_back(tokenOffset + tokens.size() - 1);
         rightTotal += b->spaces();
@@ -105,7 +105,7 @@ void PrettyPrinter::add(Token t) {
 
 void PrettyPrinter::eof() {
   if (!scanStack.empty()) {
-    checkStack(0);
+    checkStack();
     advanceLeft();
   }
   assert(scanStack.empty() && "unclosed groups at EOF");
@@ -121,7 +121,8 @@ void PrettyPrinter::clear() {
 }
 
 /// Break encountered, set sizes of begin/breaks in scanStack that we now know.
-void PrettyPrinter::checkStack(uint32_t depth) {
+void PrettyPrinter::checkStack() {
+  unsigned depth = 0;
   while (!scanStack.empty()) {
     auto x = scanStack.back();
     auto &t = tokens[x - tokenOffset];

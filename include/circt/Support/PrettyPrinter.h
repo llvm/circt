@@ -166,7 +166,7 @@ private:
   void advanceLeft();
 
   /// Break encountered, set sizes of begin/breaks in scanStack we now know.
-  void checkStack(uint32_t depth);
+  void checkStack();
 
   /// Check if there's enough tokens to hit width, if so print.
   /// If scan size is wider than line, it's infinity.
