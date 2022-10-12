@@ -194,6 +194,14 @@ module {
 // CHECK-LABEL: @CycleExtracted_cover
 // CHECK: hw.instance "foo"
 
+// In ChildShouldInline, instance child should be inlined while it's instance foo is still extracted.
+// CHECK-NOT: hw.module @ShouldBeInlined(
+// CHECK-LABEL: @ShouldBeInlined_cover
+// CHECK: hw.instance "foo"
+// CHECK-LABEL: @ChildShouldInline
+// CHECK-NOT: hw.instance "child"
+// CHECK: hw.instance {{.+}} @ShouldBeInlined_cover
+
 module attributes {
   firrtl.extract.testbench = #hw.output_file<"testbench/", excludeFromFileList, includeReplicatedOps>
 } {
@@ -210,7 +218,11 @@ module attributes {
     %bar.b = hw.instance "bar" @Bar(a: %in: i1) -> (b: i1)
     %baz.b = hw.instance "baz" @Baz(a: %in: i1) -> (b: i1)
     sv.always posedge %clock {
-      sv.cover %foo.b, immediate
+      sv.if %foo.b {
+        sv.if %bar.b {
+          sv.cover %foo.b, immediate
+        }
+      }
       sv.cover %bar.b, immediate
       sv.cover %baz.b, immediate
     }
@@ -234,5 +246,16 @@ module attributes {
     sv.always posedge %clock {
       sv.cover %0, immediate
     }
+  }
+
+  hw.module private @ShouldBeInlined(%clock: i1, %in: i1) {
+    %foo.b = hw.instance "foo" @Foo(a: %in: i1) -> (b: i1)
+    sv.always posedge %clock {
+      sv.cover %foo.b, immediate
+    }
+  }
+
+  hw.module @ChildShouldInline(%clock: i1, %in: i1) {
+    hw.instance "child" @ShouldBeInlined(clock: %clock: i1, in: %in: i1) -> ()
   }
 }
