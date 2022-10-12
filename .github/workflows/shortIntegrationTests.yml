@@ -128,7 +128,7 @@ jobs:
             -DLLVM_USE_LINKER=lld \
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
             -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
-            $RUN_PYCDE_CI \
+            $PYCDE_CMAKE_CMD \
             -DLLVM_LIT_ARGS='-sv --show-unsupported'
       - name: Test CIRCT
         run: |
