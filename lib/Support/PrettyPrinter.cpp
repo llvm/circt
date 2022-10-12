@@ -116,6 +116,7 @@ void PrettyPrinter::eof() {
 void PrettyPrinter::clear() {
   assert(scanStack.empty() && "clearing tokens while still on scan stack");
   leftTotal = rightTotal = 1;
+  assert(tokens.empty());
   tokens.clear();
   tokenOffset = 0;
 }
@@ -171,6 +172,7 @@ void PrettyPrinter::advanceLeft() {
     tokens.pop_front();
     ++tokenOffset;
 
+    assert(&f.token);
     print(f);
     leftTotal += llvm::TypeSwitch<Token *, int32_t>(&f.token)
                      .Case([&](BreakToken *b) { return b->spaces(); })
