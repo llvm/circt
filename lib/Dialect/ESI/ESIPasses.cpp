@@ -1329,7 +1329,9 @@ void ESItoHWPass::runOnOperation() {
 
 static llvm::json::Value toJSON(Type type) {
   // TODO: This is far from complete. Build out as necessary.
+  using llvm::json::Array;
   using llvm::json::Object;
+  using llvm::json::Value;
 
   StringRef dialect = type.getDialect().getNamespace();
   std::string m;
@@ -1341,6 +1343,14 @@ static llvm::json::Value toJSON(Type type) {
                  .Case([&](AnyType t) {
                    m = "any";
                    return Object();
+                 })
+                 .Case([&](StructType t) {
+                   m = "struct";
+                   Array fields;
+                   for (auto field : t.getElements())
+                     fields.push_back(Object({{"name", field.name.getValue()},
+                                              {"type", toJSON(field.type)}}));
+                   return Object({{"fields", Value(std::move(fields))}});
                  })
                  .Default([&](Type t) {
                    llvm::raw_string_ostream(m) << t;

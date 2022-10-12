@@ -2,7 +2,6 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from multiprocessing.sharedctypes import Value
 import capnp
 import time
 import typing
@@ -13,7 +12,7 @@ class Type:
   def __init__(self, type_id: typing.Optional[int] = None):
     self.type_id = type_id
 
-  def is_valid(self, obj):
+  def is_valid(self, obj) -> bool:
     """Is a Python object compatible with HW type."""
     assert False, "unimplemented"
 
@@ -28,7 +27,7 @@ class IntType(Type):
     self.width = width
     self.signed = signed
 
-  def is_valid(self, obj):
+  def is_valid(self, obj) -> bool:
     if not isinstance(obj, int):
       return False
     if obj >= 2**self.width:
@@ -40,14 +39,41 @@ class IntType(Type):
       f"int{self.width}"
 
 
+class StructType(Type):
+
+  def __init__(self,
+               fields: typing.Dict[str, Type],
+               type_id: typing.Optional[int] = None):
+    super().__init__(type_id)
+    self.fields = fields
+
+  def is_valid(self, obj) -> bool:
+    fields_count = 0
+    if isinstance(obj, dict):
+      for (fname, ftype) in self.fields.items():
+        if fname not in obj:
+          return False
+        if not ftype.is_valid(obj[fname]):
+          return False
+        fields_count += 1
+      if fields_count != len(obj):
+        return False
+      return True
+    return False
+
+
 class Port:
 
   def __init__(self,
                client_path: typing.List[str],
                backend,
+               impl_type: str,
                read_type: typing.Optional[Type] = None,
                write_type: typing.Optional[Type] = None):
-    self._backend = backend.get_port(client_path, read_type, write_type)
+    if backend.supports_impl(impl_type):
+      self._backend = backend.get_port(client_path, read_type, write_type)
+    else:
+      self._backend = None
     self.client_path = client_path
     self.read_type = read_type
     self.write_type = write_type
@@ -59,16 +85,27 @@ class WritePort(Port):
     assert self.write_type is not None, "Expected non-None write_type"
     if not self.write_type.is_valid(msg):
       raise ValueError(f"'{msg}' cannot be converted to '{self.write_type}'")
+    if self._backend is None:
+      raise ValueError("Backend does not support implementation of port")
     return self._backend.write(msg)
 
 
 class ReadPort(Port):
 
   def read(self, blocking_timeout: typing.Optional[float] = 1.0):
+    if self._backend is None:
+      raise ValueError("Backend does not support implementation of port")
     return self._backend.read(blocking_timeout)
 
 
 class ReadWritePort(Port):
+
+  def __call__(self,
+               msg,
+               blocking_timeout: typing.Optional[float] = 1.0) -> typing.Any:
+    if not self.write(msg):
+      raise RuntimeError(f"Could not send message '{msg}'")
+    return self.read(blocking_timeout)
 
   def write(self, msg) -> bool:
     assert self.write_type is not None, "Expected non-None write_type"
@@ -86,6 +123,9 @@ class _CosimNode:
   def __init__(self, root, prefix: typing.List[str]):
     self._root: Cosim = root
     self._endpoint_prefix = prefix
+
+  def supports_impl(self, impl_type: str) -> bool:
+    return impl_type == "cosim"
 
   def get_child(self, child_name: str):
     """When instantiating a child instance, get the backend node with which it
@@ -169,8 +209,17 @@ class _CosimPort:
     def read(self, capnp_resp) -> int:
       return capnp_resp.as_struct(self.capnp_type).i
 
+  class _StructConverter(_TypeConverter):
+    """Convert python ints to and from capnp messages."""
+
+    def write(self, py_dict: dict):
+      return self.capnp_type.new_message(**py_dict)
+
+    def read(self, capnp_resp) -> int:
+      return capnp_resp.as_struct(self.capnp_type)
+
   # Lookup table for getting the correct type converter for a given type.
-  ConvertLookup = {IntType: _IntConverter}
+  ConvertLookup = {IntType: _IntConverter, StructType: _StructConverter}
 
   def __init__(self, node: _CosimNode, endpoint,
                read_type: typing.Optional[Type],

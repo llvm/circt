@@ -2,6 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+from dataclasses import field
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from io import FileIO
@@ -132,16 +133,25 @@ class PythonApiBuilder(SoftwareApiBuilder):
     """Get a Python code string instantiating 'type'."""
 
     def py_type(type: Dict):
-      if type["dialect"] == "esi" and type["mnemonic"] == "channel":
+      dialect = type["dialect"]
+      mn: str = type["mnemonic"]
+      if dialect == "esi" and mn == "channel":
         return py_type(type["inner"])
-      if type["dialect"] == "builtin":
-        m: str = type["mnemonic"]
-        if m.startswith("i") or m.startswith("ui"):
-          width = int(m.strip("ui"))
+      if dialect == "builtin":
+        if mn.startswith("i") or mn.startswith("ui"):
+          width = int(mn.strip("ui"))
           return f"IntType({width}, False)"
-        if m.startswith("i") or m.startswith("si"):
-          width = int(m.strip("si"))
+        if mn.startswith("i") or mn.startswith("si"):
+          width = int(mn.strip("si"))
           return f"IntType({width}, True)"
+      elif dialect == "hw":
+        if mn == "struct":
+          fields = [
+              f"'{x['name']}': {py_type(x['type'])}" for x in type["fields"]
+          ]
+          fields_str = ", ".join(fields)
+          return "StructType({" + fields_str + "})"
+
       assert False, "unimplemented type"
 
     return py_type(type_dict["type_desc"])

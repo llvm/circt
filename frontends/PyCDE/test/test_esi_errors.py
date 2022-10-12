@@ -31,7 +31,7 @@ class Consumer:
 
   @generator
   def construct(ports):
-    HostComms.to_host("loopback_out", ports.int_in)
+    HostComms.to_host(ports.int_in, "loopback_out")
 
 
 @unittestmodule(print=True)
