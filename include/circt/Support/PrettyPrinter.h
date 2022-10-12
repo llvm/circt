@@ -148,8 +148,8 @@ public:
 
   /// Add a range of tokens.
   template <typename R>
-  void addTokens(R &&TokenRange) {
-    for (Token &t : TokenRange)
+  void addTokens(R &&tokens) {
+    for (Token &t : tokens)
       add(t);
   }
 

@@ -174,7 +174,6 @@ void PrettyPrinter::advanceLeft() {
     tokens.pop_front();
     ++tokenOffset;
 
-    assert(&f.token);
     print(f);
     leftTotal += llvm::TypeSwitch<Token *, int32_t>(&f.token)
                      .Case([&](BreakToken *b) { return b->spaces(); })
