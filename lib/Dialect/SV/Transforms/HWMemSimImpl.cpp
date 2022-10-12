@@ -47,6 +47,7 @@ namespace {
 
 class HWMemSimImpl {
   bool ignoreReadEnableMem;
+  bool stripMuxPragmas;
 
   SmallVector<sv::RegOp> registers;
 
@@ -56,8 +57,9 @@ class HWMemSimImpl {
   sv::AlwaysOp lastPipelineAlwaysOp;
 
 public:
-  HWMemSimImpl(bool ignoreReadEnableMem)
-      : ignoreReadEnableMem(ignoreReadEnableMem) {}
+  HWMemSimImpl(bool ignoreReadEnableMem, bool stripMuxPragmas)
+      : ignoreReadEnableMem(ignoreReadEnableMem),
+        stripMuxPragmas(stripMuxPragmas) {}
 
   void generateMemory(HWModuleOp op, FirMemory mem);
 };
@@ -67,6 +69,7 @@ struct HWMemSimImplPass : public sv::HWMemSimImplBase<HWMemSimImplPass> {
 
   using sv::HWMemSimImplBase<HWMemSimImplPass>::ignoreReadEnableMem;
   using sv::HWMemSimImplBase<HWMemSimImplPass>::replSeqMem;
+  using sv::HWMemSimImplBase<HWMemSimImplPass>::stripMuxPragmas;
 };
 
 } // end anonymous namespace
@@ -107,6 +110,36 @@ static bool valueDefinedBeforeOp(Value value, Operation *op) {
     op = op->getParentOp();
   return valueBlock == op->getBlock() &&
          (!valueOp || valueOp->isBeforeInBlock(op));
+}
+
+//
+// Construct memory read annotated with mux pragmas in the following
+// form:
+// ```
+//   wire GEN;
+//   /* synopsys infer_mux_override */
+//   assign GEN = memory[addr] /* cadence map_to_mux */;
+// ```
+// If `stripMuxPragmas` is enabled, just return the read value without
+// annotations.
+static Value getMemoryRead(ImplicitLocOpBuilder &b, Value memory, Value addr,
+                           bool stripMuxPragmas) {
+  auto slot =
+      b.create<sv::ReadInOutOp>(b.create<sv::ArrayIndexInOutOp>(memory, addr));
+  // If we don't want to add mux pragmas, just return the read value.
+  if (stripMuxPragmas)
+    return slot;
+  circt::sv::setSVAttributes(
+      slot, sv::SVAttributesAttr::get(b.getContext(), {"cadence map_to_mux"},
+                                      /*emitAsComments=*/true));
+  auto valWire = b.create<sv::WireOp>(slot.getType());
+  auto assignOp = b.create<sv::AssignOp>(valWire, slot);
+  sv::setSVAttributes(assignOp,
+                      sv::SVAttributesAttr::get(b.getContext(),
+                                                {"synopsys infer_mux_override"},
+                                                /*emitAsComments=*/true));
+
+  return b.create<sv::ReadInOutOp>(valWire);
 }
 
 Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
@@ -198,8 +231,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     }
 
     // Read Logic
-    Value rdata =
-        b.create<sv::ReadInOutOp>(b.create<sv::ArrayIndexInOutOp>(reg, addr));
+    Value rdata = getMemoryRead(b, reg, addr, stripMuxPragmas);
     if (!ignoreReadEnableMem) {
       Value x = b.create<sv::ConstantXOp>(rdata.getType());
       rdata = b.create<comb::MuxOp>(en, rdata, x, false);
@@ -273,10 +305,10 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
             comb::ICmpPredicate::eq, read_wmode,
             b.createOrFold<ConstantOp>(read_wmode.getType(), 0), false),
         false);
-    Value slotReg = b.create<sv::ArrayIndexInOutOp>(reg, read_addr);
-    Value slot = b.create<sv::ReadInOutOp>(slotReg);
-    Value x = b.create<sv::ConstantXOp>(slot.getType());
-    b.create<sv::AssignOp>(rWire, b.create<comb::MuxOp>(rcond, slot, x, false));
+
+    auto val = getMemoryRead(b, reg, read_addr, stripMuxPragmas);
+    Value x = b.create<sv::ConstantXOp>(val.getType());
+    b.create<sv::AssignOp>(rWire, b.create<comb::MuxOp>(rcond, val, x, false));
 
     // Write logic gaurded by the corresponding mask bit.
     for (auto wmask : llvm::enumerate(maskValues)) {
@@ -552,7 +584,8 @@ void HWMemSimImplPass::runOnOperation() {
         newModule.setCommentAttr(
             builder.getStringAttr("VCS coverage exclude_file"));
 
-        HWMemSimImpl(ignoreReadEnableMem).generateMemory(newModule, mem);
+        HWMemSimImpl(ignoreReadEnableMem, stripMuxPragmas)
+            .generateMemory(newModule, mem);
       }
 
       oldModule.erase();
@@ -565,9 +598,11 @@ void HWMemSimImplPass::runOnOperation() {
 }
 
 std::unique_ptr<Pass>
-circt::sv::createHWMemSimImplPass(bool replSeqMem, bool ignoreReadEnableMem) {
+circt::sv::createHWMemSimImplPass(bool replSeqMem, bool ignoreReadEnableMem,
+                                  bool stripMuxPragmas) {
   auto pass = std::make_unique<HWMemSimImplPass>();
   pass->replSeqMem = replSeqMem;
   pass->ignoreReadEnableMem = ignoreReadEnableMem;
+  pass->stripMuxPragmas = stripMuxPragmas;
   return pass;
 }

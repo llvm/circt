@@ -53,30 +53,12 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
 }
 
 // Check if the value is deemed worth spilling into a wire.
-static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
-  auto isConcat = [](Operation *op) { return isa<ConcatOp>(op); };
-
+static bool shouldSpillWire(Operation &op) {
   if (!isVerilogExpression(&op))
     return false;
 
-  // In the new emission mode, spill temporary wires if it is not possible to
-  // inline.
-  if (!options.useOldEmissionMode &&
-      !ExportVerilog::isExpressionEmittedInline(&op))
-    return true;
-
-  // Work around Verilator #3405. Large expressions inside a concat is worst
-  // case O(n^2) in a certain Verilator optimization, and can effectively hang
-  // Verilator on large designs. Verilator 4.224+ works around this by having a
-  // hard limit on its recursion. Here we break large expressions inside concats
-  // according to a configurable limit to work around the same issue.
-  // See https://github.com/verilator/verilator/issues/3405.
-  if (op.getNumOperands() > options.maximumNumberOfTermsInConcat &&
-      op.getNumResults() == 1 &&
-      llvm::any_of(op.getResult(0).getUsers(), isConcat))
-    return true;
-
-  return false;
+  // Spill temporary wires if it is not possible to inline.
+  return !ExportVerilog::isExpressionEmittedInline(&op);
 }
 
 // Given an instance, make sure all inputs are driven from wires or ports.
@@ -216,7 +198,6 @@ findLogicOpInsertionPoint(Operation *op) {
 /// a wire is created just after op's position so that we can inline the
 /// assignment into its wire declaration.
 static void lowerUsersToTemporaryWire(Operation &op,
-                                      DenseMap<Value, size_t> &operandMap,
                                       bool emitWireAtBlockBegin = false) {
   Block *block = op.getBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
@@ -261,24 +242,19 @@ static void lowerUsersToTemporaryWire(Operation &op,
     auto namehint = inferStructuralNameForTemporary(op.getResult(0));
     op.removeAttr("sv.namehint");
     createWireForResult(op.getResult(0), namehint);
-    operandMap[op.getResult(0)] = 1;
     return;
   }
 
   // If the op has multiple results, create wires for each result.
-  for (auto result : op.getResults()) {
+  for (auto result : op.getResults())
     createWireForResult(result, StringAttr());
-    operandMap[result] = 1;
-  }
 }
 
 /// Lower a variadic fully-associative operation into an expression tree.  This
 /// enables long-line splitting to work with them.
 /// NOLINTNEXTLINE(misc-no-recursion)
 static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
-                                     SmallVector<Operation *> &newOps,
-                                     DenseMap<Value, size_t> &operandMap,
-                                     const LoweringOptions &options) {
+                                     SmallVector<Operation *> &newOps) {
   // save the top level name
   auto name = op.getAttr("sv.namehint");
   if (name)
@@ -296,19 +272,9 @@ static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
     break;
   default:
     auto firstHalf = operands.size() / 2;
-    lhs = lowerFullyAssociativeOp(op, operands.take_front(firstHalf), newOps,
-                                  operandMap, options);
-    rhs = lowerFullyAssociativeOp(op, operands.drop_front(firstHalf), newOps,
-                                  operandMap, options);
+    lhs = lowerFullyAssociativeOp(op, operands.take_front(firstHalf), newOps);
+    rhs = lowerFullyAssociativeOp(op, operands.drop_front(firstHalf), newOps);
     break;
-  }
-
-  if (operandMap[lhs] + operandMap[rhs] >
-      options.maximumNumberOfVariadicOperands) {
-    if (lhs.getDefiningOp())
-      lowerUsersToTemporaryWire(*lhs.getDefiningOp(), operandMap);
-    if (rhs.getDefiningOp())
-      lowerUsersToTemporaryWire(*rhs.getDefiningOp(), operandMap);
   }
 
   OperationState state(op.getLoc(), op.getName());
@@ -319,18 +285,13 @@ static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
   newOps.push_back(newOp);
   if (name)
     newOp->setAttr("sv.namehint", name);
-  size_t size = 0;
-  for (auto a : newOp->getOperands())
-    size += operandMap[a];
-  operandMap[newOp->getResult(0)] = size;
   return newOp->getResult(0);
 }
 
 /// Transform "a + -cst" ==> "a - cst" for prettier output.  This returns the
 /// first operation emitted.
-static Operation *
-rewriteAddWithNegativeConstant(comb::AddOp add, hw::ConstantOp rhsCst,
-                               DenseMap<Value, size_t> &operandMap) {
+static Operation *rewriteAddWithNegativeConstant(comb::AddOp add,
+                                                 hw::ConstantOp rhsCst) {
   ImplicitLocOpBuilder builder(add.getLoc(), add);
 
   // Get the positive constant.
@@ -338,7 +299,6 @@ rewriteAddWithNegativeConstant(comb::AddOp add, hw::ConstantOp rhsCst,
   auto sub =
       builder.create<comb::SubOp>(add.getOperand(0), negCst, add.getTwoState());
   add.getResult().replaceAllUsesWith(sub);
-  operandMap.erase(add.getResult());
   add.erase();
   if (rhsCst.use_empty())
     rhsCst.erase();
@@ -674,13 +634,11 @@ static void prettifyAfterLegalization(
   if (block.getParentOp()->hasTrait<ProceduralRegion>())
     return;
 
-  // TODO: Refactor `lowerUsersToTemporaryWire` to remove operandMap.
-  DenseMap<Value, size_t> operandMap;
   for (auto &op : llvm::make_early_inc_range(block)) {
     if (!isVerilogExpression(&op))
       continue;
     if (expressionStateManager.shouldSpillWireBasedOnState(op)) {
-      lowerUsersToTemporaryWire(op, operandMap);
+      lowerUsersToTemporaryWire(op);
       continue;
     }
   }
@@ -697,10 +655,6 @@ static void prettifyAfterLegalization(
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 static void legalizeHWModule(Block &block, const LoweringOptions &options) {
-
-  /// A cache of the number of operands that feed into an operation.  This
-  /// avoids the need to look backwards across ops repeatedly.
-  DenseMap<Value, size_t> operandMap;
 
   // First step, check any nested blocks that exist in this region.  This walk
   // can pull things out to our level of the hierarchy.
@@ -724,12 +678,6 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
   for (Block::iterator opIterator = block.begin(), e = block.end();
        opIterator != e;) {
     auto &op = *opIterator++;
-
-    size_t totalOperands = 0;
-    for (auto a : op.getOperands())
-      totalOperands += operandMap.count(a) ? operandMap[a] : 1;
-    if (op.getNumResults() == 1)
-      operandMap[op.getResult(0)] = totalOperands;
 
     // Name legalization should have happened in a different pass for these sv
     // elements and we don't want to change their name through re-legalization
@@ -835,7 +783,7 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
     }
 
     // If this expression is deemed worth spilling into a wire, do it here.
-    if (shouldSpillWire(op, options)) {
+    if (shouldSpillWire(op)) {
       // We first check that it is possible to reuse existing wires as a spilled
       // wire. Otherwise, create a new wire op.
       if (isProceduralRegion || !reuseExistingInOut(&op)) {
@@ -847,7 +795,7 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
             // If op is moved to a non-procedural region, create a temporary
             // wire.
             if (!op.getParentOp()->hasTrait<ProceduralRegion>())
-              lowerUsersToTemporaryWire(op, operandMap);
+              lowerUsersToTemporaryWire(op);
 
             // If we're in a procedural region, we move on to the next op in the
             // block. The expression splitting and canonicalization below will
@@ -860,7 +808,7 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
           // If `disallowLocalVariables` is not enabled, we can spill the
           // expression to automatic logic declarations even when the op is in a
           // procedural region.
-          lowerUsersToTemporaryWire(op, operandMap);
+          lowerUsersToTemporaryWire(op);
         }
       }
     }
@@ -878,9 +826,7 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
          (op.getAttrs().size() == 1 && op.hasAttr("sv.namehint")))) {
       // Lower this operation to a balanced binary tree of the same operation.
       SmallVector<Operation *> newOps;
-      auto result = lowerFullyAssociativeOp(op, op.getOperands(), newOps,
-                                            operandMap, options);
-      operandMap.erase(op.getResult(0));
+      auto result = lowerFullyAssociativeOp(op, op.getOperands(), newOps);
       op.getResult(0).replaceAllUsesWith(result);
       op.erase();
 
@@ -894,8 +840,7 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
       if (auto cst = addOp.getOperand(1).getDefiningOp<hw::ConstantOp>()) {
         assert(addOp.getNumOperands() == 2 && "commutative lowering is done");
         if (cst.getValue().isNegative()) {
-          Operation *firstOp =
-              rewriteAddWithNegativeConstant(addOp, cst, operandMap);
+          Operation *firstOp = rewriteAddWithNegativeConstant(addOp, cst);
           opIterator = Block::iterator(firstOp);
           continue;
         }
@@ -999,7 +944,7 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
     }
 
     // Otherwise, we need to lower this to a wire to resolve this.
-    lowerUsersToTemporaryWire(op, operandMap,
+    lowerUsersToTemporaryWire(op,
                               /*emitWireAtBlockBegin=*/true);
   }
 }

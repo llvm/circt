@@ -134,17 +134,31 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 }
 
 // -----
-// Check "empty" modules are extracted
+// Check "empty" modules are inlined
 
-// CHECK-LABEL: @InputOnly(
-// CHECK-SAME: output_file = #hw.output_file<"testbench/", excludeFromFileList, includeReplicatedOps>
-// CHECK: hw.instance "input_only" sym @[[sym_name:[^ ]+]] @InputOnly
-// CHECK: sv.bind <@Top::@[[sym_name]]> {output_file = #hw.output_file<"cover/bind.sv", excludeFromFileList, includeReplicatedOps>}
-module attributes {
-  firrtl.extract.cover.bindfile = #hw.output_file<"cover/bind.sv", excludeFromFileList, includeReplicatedOps>,
-  firrtl.extract.testbench = #hw.output_file<"testbench/", excludeFromFileList, includeReplicatedOps>
-} {
-  hw.module @InputOnly(%clock: i1, %cond: i1) -> () {
+// CHECK-NOT: @InputOnly(
+// CHECK-DAG: @InputOnly_assert(
+// CHECK-DAG: @InputOnly_cover(
+// CHECK-DAG: @InputOnlySym_cover(
+// CHECK-LABEL: @InputOnlySym(
+// CHECK: hw.instance "{{[^ ]+}}" sym @[[input_only_sym_cover:[^ ]+]] @InputOnlySym_cover
+// CHECK-LABEL: @Top
+// CHECK: hw.instance "{{[^ ]+}}" sym @[[input_only_assert:[^ ]+]] @InputOnly_assert
+// CHECK: hw.instance "{{[^ ]+}}" sym @[[input_only_cover:[^ ]+]] @InputOnly_cover
+// CHECK: hw.instance "{{[^ ]+}}" {{.+}} @InputOnlySym
+// CHECK-NOT: sv.bind <@InputOnly::
+// CHECK-DAG: sv.bind <@Top::@[[input_only_assert]]>
+// CHECK-DAG: sv.bind <@Top::@[[input_only_cover]]>
+// CHECK-DAG: sv.bind <@InputOnlySym::@[[input_only_sym_cover]]>
+module {
+  hw.module private @InputOnly(%clock: i1, %cond: i1) -> () {
+    sv.always posedge %clock  {
+      sv.cover %cond, immediate
+      sv.assert %cond, immediate
+    }
+  }
+
+  hw.module private @InputOnlySym(%clock: i1, %cond: i1) -> () {
     sv.always posedge %clock  {
       sv.cover %cond, immediate
     }
@@ -152,6 +166,7 @@ module attributes {
 
   hw.module @Top(%clock: i1, %cond: i1) -> (foo: i1) {
     hw.instance "input_only" @InputOnly(clock: %clock: i1, cond: %cond: i1) -> ()
+    hw.instance "input_only_sym" sym @foo @InputOnlySym(clock: %clock: i1, cond: %cond: i1) -> ()
     hw.output %cond : i1
   }
 }
@@ -179,6 +194,14 @@ module attributes {
 // CHECK-LABEL: @CycleExtracted_cover
 // CHECK: hw.instance "foo"
 
+// In ChildShouldInline, instance child should be inlined while it's instance foo is still extracted.
+// CHECK-NOT: hw.module @ShouldBeInlined(
+// CHECK-LABEL: @ShouldBeInlined_cover
+// CHECK: hw.instance "foo"
+// CHECK-LABEL: @ChildShouldInline
+// CHECK-NOT: hw.instance "child"
+// CHECK: hw.instance {{.+}} @ShouldBeInlined_cover
+
 module attributes {
   firrtl.extract.testbench = #hw.output_file<"testbench/", excludeFromFileList, includeReplicatedOps>
 } {
@@ -195,7 +218,11 @@ module attributes {
     %bar.b = hw.instance "bar" @Bar(a: %in: i1) -> (b: i1)
     %baz.b = hw.instance "baz" @Baz(a: %in: i1) -> (b: i1)
     sv.always posedge %clock {
-      sv.cover %foo.b, immediate
+      sv.if %foo.b {
+        sv.if %bar.b {
+          sv.cover %foo.b, immediate
+        }
+      }
       sv.cover %bar.b, immediate
       sv.cover %baz.b, immediate
     }
@@ -219,5 +246,16 @@ module attributes {
     sv.always posedge %clock {
       sv.cover %0, immediate
     }
+  }
+
+  hw.module private @ShouldBeInlined(%clock: i1, %in: i1) {
+    %foo.b = hw.instance "foo" @Foo(a: %in: i1) -> (b: i1)
+    sv.always posedge %clock {
+      sv.cover %foo.b, immediate
+    }
+  }
+
+  hw.module @ChildShouldInline(%clock: i1, %in: i1) {
+    hw.instance "child" @ShouldBeInlined(clock: %clock: i1, in: %in: i1) -> ()
   }
 }

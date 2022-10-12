@@ -1,5 +1,4 @@
-// RUN: circt-opt %s -test-apply-lowering-options='options=exprInEventControl,explicitBitcast,maximumNumberOfTermsInConcat=10,useOldEmissionMode' -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace --check-prefixes=CHECK,OLD
-// RUN: circt-opt %s -test-apply-lowering-options='options=exprInEventControl,explicitBitcast,maximumNumberOfTermsInConcat=10' -export-verilog -verify-diagnostics | FileCheck %s --check-prefixes=CHECK,NEW
+// RUN: circt-opt %s -test-apply-lowering-options='options=exprInEventControl,explicitBitcast,maximumNumberOfTermsPerExpression=10' -export-verilog -verify-diagnostics | FileCheck %s
 
 // CHECK-LABEL: module M1
 // CHECK-NEXT:    #(parameter [41:0] param1) (
@@ -17,22 +16,18 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   // CHECK: localparam [41:0]{{ *}} param_y = param1;
   %param_y = sv.localparam : i42 { value = #hw.param.decl.ref<"param1">: i42 }
 
-  // OLD:        logic{{ *}} [7:0]{{ *}} logic_op;
-  // NEW:        logic{{ *}} [7:0]{{ *}} logic_op = val;
+  // CHECK:        logic{{ *}} [7:0]{{ *}} logic_op = val;
   // CHECK-NEXT: struct packed {logic b; } logic_op_struct;
-  // OLD:        assign logic_op = val;
   %logic_op = sv.logic : !hw.inout<i8>
   %logic_op_struct = sv.logic : !hw.inout<struct<b: i1>>
   sv.assign %logic_op, %val: i8
 
   // CHECK:      always @(posedge clock) begin
   sv.always posedge %clock {
-    // OLD: automatic logic [7:0]                     logic_op_procedural;
-    // NEW: automatic logic [7:0]                     logic_op_procedural = val;
+    // CHECK: automatic logic [7:0]                     logic_op_procedural = val;
     // CHECK-NEXT: automatic       struct packed {logic b; } logic_op_struct_procedural
 
     // CHECK: force forceWire = cond;
-    // OLD: logic_op_procedural = val;
     sv.force %forceWire, %cond : i1
     %logic_op_procedural = sv.logic : !hw.inout<i8>
     %logic_op_struct_procedural = sv.logic : !hw.inout<struct<b: i1>>
@@ -601,8 +596,7 @@ hw.module @exprInlineTestIssue439(%clk: i1) {
   sv.always posedge %clk {
     %c = hw.constant 0 : i32
 
-    // OLD: localparam [31:0] _GEN = 32'h0;
-    // NEW: automatic logic [31:0] _GEN = 32'h0;
+    // CHECK: automatic logic [31:0] _GEN = 32'h0;
     %e = comb.extract %c from 0 : (i32) -> i16
     %f = comb.add %e, %e : i16
     sv.fwrite %fd, "%d"(%f) : i16
@@ -754,8 +748,7 @@ hw.module @issue720(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
 
   // CHECK: always @(posedge clock) begin
   sv.always posedge %clock  {
-    // OLD:   automatic logic _GEN = arg1 & arg2;
-    // NEW:   automatic logic _GEN = arg1 & arg2;
+    // CHECK:   automatic logic _GEN = arg1 & arg2;
 
     // CHECK:   if (arg1)
     // CHECK:     $fatal;
@@ -904,11 +897,9 @@ hw.module @inlineProceduralWiresWithLongNames(%clock: i1, %in: i1) {
 // https://github.com/llvm/circt/issues/859
 // CHECK-LABEL: module oooReg(
 hw.module @oooReg(%in: i1) -> (result: i1) {
-  // OLD: wire abc;
-  // NEW: wire abc = in;
+  // CHECK: wire abc = in;
   %0 = sv.read_inout %abc : !hw.inout<i1>
 
-  // OLD: assign abc = in;
   sv.assign %abc, %in : i1
   %abc = sv.wire  : !hw.inout<i1>
 
@@ -946,8 +937,7 @@ hw.module @ConstResetValueMustBeInlined(%clock: i1, %reset: i1, %d: i42) -> (q: 
 
 // CHECK-LABEL: module OutOfLineConstantsInAlwaysSensitivity
 hw.module @OutOfLineConstantsInAlwaysSensitivity() {
-  // OLD-NEXT: localparam _GEN = 1'h0;
-  // NEW-NEXT: wire _GEN = 1'h0;
+  // CHECK-NEXT: wire _GEN = 1'h0;
   // CHECK-NEXT: always_ff @(posedge _GEN)
   %clock = hw.constant 0 : i1
   sv.alwaysff(posedge %clock) {}
@@ -1193,20 +1183,13 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
 
   // CHECK: initial begin
   sv.initial {
-    // OLD: automatic logic [41:0] [[THING:.+]] = `THING;
-    // OLD: automatic logic [41:0] [[THING3:.+]] = 42'([[THING]] + {{..}}31{really_really_long_port[10]}},
-    // OLD-SAME: really_really_long_port});
-    // OLD: automatic logic [41:0] [[MANYTHING:.+]] =
-    // OLD-SAME: [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] |
-    // OLD:  [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] |
-    // OLD:  [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]] | [[THING]];
-    // NEW: automatic logic [41:0] [[THING:.+]];
-    // NEW: automatic logic [41:0] [[THING3:.+]];
-    // NEW: automatic logic [41:0] [[MANYTHING:.+]];
-    // NEW: [[THING]] = `THING;
-    // NEW: [[THING3]] = 42'([[THING]] + {{..}}31{really_really_long_port[10]}}
-    // NEW-SAME: really_really_long_port})
-    // NEW: [[MANYTHING]] = [[THING]] | [[THING]] |
+    // CHECK: automatic logic [41:0] [[THING:.+]];
+    // CHECK: automatic logic [41:0] [[THING3:.+]];
+    // CHECK: automatic logic [41:0] [[MANYTHING:.+]];
+    // CHECK: [[THING]] = `THING;
+    // CHECK: [[THING3]] = 42'([[THING]] + {{..}}31{really_really_long_port[10]}}
+    // CHECK-SAME: really_really_long_port})
+    // CHECK: [[MANYTHING]] = [[THING]] | [[THING]] |
 
     // Check the indentation level of temporaries.  Issue #1625
     %thing = sv.verbatim.expr.se "`THING" : () -> i42
@@ -1255,10 +1238,8 @@ hw.module @AggregateTemporay(%clock: i1, %foo: i1, %bar: i25) {
   %temp1 = sv.reg  : !hw.inout<!hw.struct<b: i1>>
   %temp2 = sv.reg  : !hw.inout<!hw.array<5x!hw.array<5x!hw.struct<b: i1>>>>
   sv.always posedge %clock  {
-    // OLD: automatic struct packed {logic b; } [[T0:.+]] = foo;
-    // OLD: automatic struct packed {logic b; }[4:0][4:0] [[T1:.+]] = /*cast(bit[4:0][4:0])*/bar;
-    // NEW: automatic struct packed {logic b; } [[T0:.+]];
-    // NEW: automatic struct packed {logic b; }[4:0][4:0] [[T1:.+]];
+    // CHECK: automatic struct packed {logic b; } [[T0:.+]];
+    // CHECK: automatic struct packed {logic b; }[4:0][4:0] [[T1:.+]];
     %0 = hw.bitcast %foo : (i1) -> !hw.struct<b: i1>
     sv.passign %temp1, %0 : !hw.struct<b: i1>
     sv.passign %temp1, %0 : !hw.struct<b: i1>
@@ -1322,21 +1303,16 @@ hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
   hw.instance "a2" sym @bindInst2 @extInst(_h: %mywire_rd: i1, _i: %myreg_rd: i1, _j: %j: i1, _k: %0: i1, _z: %z: i0) -> () {doNotPrint=1}
   hw.instance "signed" sym @bindInst3 @extInst2(signed: %mywire_rd1 : i1, _i: %myreg_rd1 : i1, _j: %j: i1, _k: %0: i1, _z: %z: i0) -> () {doNotPrint=1}
 // CHECK: wire _signed__k
-// OLD-NEXT: wire _a2__k
-// OLD-NEXT: wire _a1__k
-// NEW-NEXT: wire _a2__k = 1'h1;
-// NEW-NEXT: wire _a1__k = 1'h1;
+// CHECK-NEXT: wire _a2__k = 1'h1;
+// CHECK-NEXT: wire _a1__k = 1'h1;
 // CHECK-NEXT: wire mywire
 // CHECK-NEXT: myreg
 // CHECK-NEXT: wire signed_0
 // CHECK-NEXT: reg  output_1
-// OLD:        assign _a1__k = 1'h1
 // CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
 // CHECK-NEXT:    extInst a1
-// OLD: assign _a2__k = 1'h1
 // CHECK: /* This instance is elsewhere emitted as a bind statement
 // CHECK-NEXT:    extInst a2
-// OLD:  assign _signed__k = 1'h1
 // CHECK:      /* This instance is elsewhere emitted as a bind statement
 // CHECK-NEXT:    extInst2 signed_2
 // CHECK-NEXT:    .signed_0 (signed_0)
@@ -1396,16 +1372,10 @@ hw.module @DoNotChainElseIf(%clock: i1, %flag1 : i1, %flag2: i1) {
 }
 
 // CHECK-LABEL: NestedElseIfHoist
-// OLD: automatic logic [[FLAG:.*]] = flag2 & flag4;
-// OLD: if (flag1)
-// OLD: else if ([[FLAG]])
-// OLD: else if (flag3 & [[FLAG]])
-// OLD: else
-// OLD: arg0 | arg1 | arg2
-// NEW: if (flag1)
-// NEW: else begin
-// NEW: automatic logic _GEN;
-// NEW: _GEN = flag2 & flag4;
+// CHECK: if (flag1)
+// CHECK: else begin
+// CHECK: automatic logic _GEN;
+// CHECK: _GEN = flag2 & flag4;
 hw.module @NestedElseIfHoist(%clock: i1, %flag1 : i1, %flag2: i1, %flag3: i1, %flag4 : i1, %arg0: i32, %arg1: i32, %arg2: i32) {
   %fd = hw.constant 0x80000002 : i32
 
@@ -1482,12 +1452,8 @@ hw.module @ProhibitReuseOfExistingInOut(%a: i1) -> (out1: i1) {
 
 // See https://github.com/verilator/verilator/issues/3405.
 // CHECK-LABEL: Verilator3405
-// OLD-DAG: wire [[GEN0:.+]];
-// OLD-DAG: wire [[GEN1:.+]];
-// OLD-DAG: assign [[GEN0]] = {{.+}} | {{.+}} | {{.+}}
-// OLD-DAG: assign [[GEN1]] = {{.+}} | {{.+}} | {{.+}}
-// NEW-DAG: wire [[GEN0:.+]] = {{.+}} | {{.+}} | {{.+}}
-// NEW-DAG: wire [[GEN1:.+]] = {{.+}} | {{.+}} | {{.+}}
+// CHECK-DAG: wire [[GEN0:.+]] = {{.+}} | {{.+}} | {{.+}}
+// CHECK-DAG: wire [[GEN1:.+]] = {{.+}} | {{.+}} | {{.+}}
 
 // CHECK: assign out = {[[GEN0]], [[GEN1]]}
 hw.module @Verilator3405(
@@ -1521,11 +1487,8 @@ hw.module @prohiditInline(%a:i4, %b:i1, %c:i1, %d: i4) {
 
 // CHECK-LABEL: module CollectNamesOrder
 hw.module @CollectNamesOrder(%in: i1) -> (out: i1) {
-  // OLD: wire _GEN;
-  // OLD: wire [[EXTRA_GEN:.+]] = {{.+}};
-  // OLD: assign {{.+}} = [[EXTRA_GEN]]
-  // NEW: wire _GEN_0 = in | in;
-  // NEW: wire _GEN;
+  // CHECK: wire _GEN_0 = in | in;
+  // CHECK: wire _GEN;
   %0 = comb.or %in, %in : i1
   %1 = comb.or %0, %0 : i1
   %foo = sv.wire {hw.verilogName = "_GEN" } : !hw.inout<i1>

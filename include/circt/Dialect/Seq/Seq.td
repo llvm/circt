@@ -111,6 +111,7 @@ def FirRegOp : SeqOp<"firreg",
   let results = (outs AnyType:$data);
 
   let skipDefaultBuilders = 1;
+  let hasCanonicalizeMethod = true;
   let builders = [
     OpBuilder<(ins "Value":$next, "Value":$clk,
                    "StringAttr":$name,

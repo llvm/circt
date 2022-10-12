@@ -1,4 +1,6 @@
 // RUN: circt-opt -hw-memory-sim %s | FileCheck %s
+// RUN: circt-opt -hw-memory-sim{strip-mux-pragmas} %s | FileCheck %s --check-prefix=STRIP
+// STRIP-NOT: sv.attributes
 
 hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "readUnderWrite", "writeUnderWrite", "writeClockIDs"]
 
@@ -72,7 +74,10 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-SAME:  attributes {comment = "VCS coverage exclude_file"}
 //CHECK:       %Memory = sv.reg  : !hw.inout<uarray<10xi16>>
 //CHECK-NEXT:  %[[rslot:.+]] = sv.array_index_inout %Memory[%ro_addr_0]
-//CHECK-NEXT:  %[[read:.+]] = sv.read_inout %[[rslot]]
+//CHECK-NEXT:  %[[read:.+]] = sv.read_inout %[[rslot]] {sv.attributes = #sv.attributes<[#sv.attribute<"cadence map_to_mux">], emitAsComments>}
+//CHECK-NEXT:  %[[valWire:.+]] = sv.wire : !hw.inout<i16>
+//CHECK-NEXT:  sv.assign %[[valWire]], %[[read]] {sv.attributes = #sv.attributes<[#sv.attribute<"synopsys infer_mux_override">], emitAsComments>}
+//CHECK-NEXT:  %[[read:.+]] = sv.read_inout %[[valWire]]
 //CHECK-NEXT:  %[[x:.+]] = sv.constantX
 //CHECK-NEXT:  %[[readres:.+]] = comb.mux %ro_en_0, %[[read]], %[[x]]
 //CHECK-NEXT:  %true = hw.constant true
@@ -82,9 +87,12 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:  %[[rwrcondpre:.+]] = comb.icmp eq %rw_wmode_0, %false
 //CHECK-NEXT:  %[[rwrcond:.+]] = comb.and %rw_en_0, %[[rwrcondpre]]
 //CHECK-NEXT:  %[[rwrslot:.+]] = sv.array_index_inout %Memory[%rw_addr_0]
-//CHECK-NEXT:  %[[rwdata:.+]] = sv.read_inout %[[rwrslot]] :
+//CHECK-NEXT:  %[[rwdata:.+]] = sv.read_inout %[[rwrslot]] {sv.attributes = #sv.attributes<[#sv.attribute<"cadence map_to_mux">], emitAsComments>}
+//CHECK-NEXT:  %[[valwire:.+]] = sv.wire
+//CHECK-NEXT:  sv.assign %[[valwire]], %[[rwdata]] {sv.attributes = #sv.attributes<[#sv.attribute<"synopsys infer_mux_override">], emitAsComments>}
+//CHECK-NEXT:  %[[val:.+]] = sv.read_inout %[[valwire]]
 //CHECK-NEXT:  %[[x2:.+]] = sv.constantX
-//CHECK-NEXT:  %[[rwdata2:.+]] = comb.mux %[[rwrcond]], %[[rwdata]], %[[x2]]
+//CHECK-NEXT:  %[[rwdata2:.+]] = comb.mux %[[rwrcond]], %[[val]], %[[x2]]
 //CHECK-NEXT:  sv.assign %[[rwtmp]], %[[rwdata2:.+]]
 //CHECK-NEXT:    sv.always posedge %rw_clock_0 {
 //CHECK-NEXT:      %[[rwwcondpre:.+]] = comb.and %true, %rw_wmode_0
@@ -170,7 +178,10 @@ hw.module.generated @FIRRTLMemTwoAlways, @FIRRTLMem( %wo_addr_0: i4, %wo_en_0: i
   // CHECK-SAME: (%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i32, %W0_mask: i4) -> (R0_data: i32)
   // CHECK-NEXT:   %[[Memory:.+]] = sv.reg  : !hw.inout<uarray<16xi32>>
   // CHECK:        %[[v4:.+]] = sv.array_index_inout %[[Memory]][%[[v3:.+]]] :
-  // CHECK:        %[[v12:.+]] = sv.read_inout %[[v4]] : !hw.inout<i32>
+  // CHECK-NEXT:   %[[v12:.+]] = sv.read_inout %[[v4]] {sv.attributes = #sv.attributes<[#sv.attribute<"cadence map_to_mux">], emitAsComments>}
+  // CHECK-NEXT:   %[[wire:.+]] = sv.wire
+  // CHECK-NEXT:   sv.assign %[[wire]], %[[v12]] {sv.attributes = #sv.attributes<[#sv.attribute<"synopsys infer_mux_override">], emitAsComments>}
+  // CHECK-NEXT:   %[[v12:.+]] = sv.read_inout %[[wire]]
   // CHECK-NEXT:   %[[x_i32:.+]] = sv.constantX : i32
   // CHECK-NEXT:   %[[v13:.+]] = comb.mux %[[v1:.+]], %[[v12]], %[[x_i32]] : i32
   // CHECK-NEXT:   %[[v14:.+]] = comb.extract %W0_mask from 0 : (i4) -> i1
@@ -239,7 +250,7 @@ numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32,maskGran = 8 :ui32, numWri
 // CHECK-SAME: %wo_data_0: i16, %wo_mask_0: i2
 // CHECK:    %[[Memory0:.+]] = sv.reg  : !hw.inout<uarray<10xi16>>
 // CHECK:    %[[v8:.+]] = sv.array_index_inout %[[Memory0]][%[[v7:.+]]] :
-// CHECK:    %[[v12:.+]] = sv.read_inout %[[v8]] : !hw.inout<i16>
+// CHECK:    %[[v12:.+]] = sv.read_inout %[[v8]]
 // CHECK:    sv.always posedge %rw_clock_0 {
 // CHECK:      sv.passign %[[v38:.+]], %rw_wmask_0 : i2
 // CHECK:    %[[v44:.+]] = comb.extract %[[v43:.+]] from 0 : (i2) -> i1
@@ -247,7 +258,7 @@ numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32,maskGran = 8 :ui32, numWri
 // CHECK:    %[[v46:.+]] = comb.extract %[[v43]] from 1 : (i2) -> i1
 // CHECK:    %[[v47:.+]] = comb.extract %[[v37]] from 8 : (i16) -> i8
 // CHECK:    %[[v52:.+]] = sv.array_index_inout %[[Memory0]][%[[v19:.+]]] :
-// CHECK:    %[[v56:.+]] = sv.read_inout %[[v52]] :
+// CHECK:    %[[v56:.+]] = sv.read_inout %[[v52]]
 // CHECK:    sv.always posedge %wo_clock_0 {
 // CHECK:      sv.passign %[[v70:.+]], %wo_data_0 : i16
 // CHECK:      sv.passign %[[v76:.+]], %wo_mask_0 : i2

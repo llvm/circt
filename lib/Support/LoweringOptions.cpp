@@ -82,11 +82,6 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
         errorHandler("expected integer source width");
         maximumNumberOfTermsPerExpression = DEFAULT_TERM_LIMIT;
       }
-    } else if (option.consume_front("maximumNumberOfTermsInConcat=")) {
-      if (option.getAsInteger(10, maximumNumberOfTermsInConcat)) {
-        errorHandler("expected integer source width");
-        maximumNumberOfTermsInConcat = DEFAULT_CONCAT_TERM_LIMIT;
-      }
     } else if (option.consume_front("locationInfoStyle=")) {
       if (auto style = parseLocationInfoStyle(option)) {
         locationInfoStyle = *style;
@@ -97,15 +92,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       disallowPortDeclSharing = true;
     } else if (option == "printDebugInfo") {
       printDebugInfo = true;
-    } else if (option == "useOldEmissionMode") {
-      useOldEmissionMode = true;
     } else if (option == "disallowExpressionInliningInPorts") {
       disallowExpressionInliningInPorts = true;
-    } else if (option.consume_front("maximumNumberOfVariadicOperands=")) {
-      if (option.getAsInteger(10, maximumNumberOfVariadicOperands)) {
-        errorHandler("expected integer for number of variadic operands");
-        maximumNumberOfVariadicOperands = DEFAULT_VARIADIC_OPERAND_LIMIT;
-      }
     } else if (option.consume_front("wireSpillingHeuristic=")) {
       if (auto heuristic = parseWireSpillingHeuristic(option)) {
         wireSpillingHeuristicSet |= *heuristic;
@@ -151,8 +139,6 @@ std::string LoweringOptions::toString() const {
     options += "disallowPortDeclSharing,";
   if (printDebugInfo)
     options += "printDebugInfo,";
-  if (useOldEmissionMode)
-    options += "useOldEmissionMode,";
   if (isWireSpillingHeuristicEnabled(
           WireSpillingHeuristic::SpillLargeTermsWithNamehints))
     options += "wireSpillingHeuristic=spillLargeTermsWithNamehints,";
@@ -166,12 +152,6 @@ std::string LoweringOptions::toString() const {
   if (maximumNumberOfTermsPerExpression != DEFAULT_TERM_LIMIT)
     options += "maximumNumberOfTermsPerExpression=" +
                std::to_string(maximumNumberOfTermsPerExpression) + ',';
-  if (maximumNumberOfTermsInConcat != DEFAULT_CONCAT_TERM_LIMIT)
-    options += "maximumNumberOfTermsInConcat=" +
-               std::to_string(maximumNumberOfTermsInConcat) + ',';
-  if (maximumNumberOfVariadicOperands != DEFAULT_VARIADIC_OPERAND_LIMIT)
-    options += "maximumNumberOfVariadicOperands=" +
-               std::to_string(maximumNumberOfVariadicOperands) + ',';
 
   // Remove a trailing comma if present.
   if (!options.empty()) {

@@ -1703,16 +1703,33 @@ public:
     ModulePortInfo ports =
         getPortInfoForOpTypes(op, op.getArgumentTypes(), op.getResultTypes());
 
+    HWModuleLike hwModule;
     if (op.isExternal()) {
-      rewriter.create<hw::HWModuleExternOp>(
+      hwModule = rewriter.create<hw::HWModuleExternOp>(
           op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
     } else {
-      auto hwModule = rewriter.create<hw::HWModuleOp>(
+      auto hwModuleOp = rewriter.create<hw::HWModuleOp>(
           op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
-      auto args = hwModule.getArguments().drop_back(2);
+      auto args = hwModuleOp.getArguments().drop_back(2);
       rewriter.mergeBlockBefore(&op.getBody().front(),
-                                hwModule.getBodyBlock()->getTerminator(), args);
+                                hwModuleOp.getBodyBlock()->getTerminator(),
+                                args);
+      hwModule = hwModuleOp;
     }
+
+    // Was any predeclaration associated with this func? If so, replace uses
+    // with the newly created module and erase the predeclaration.
+    if (auto predecl =
+            op->getAttrOfType<FlatSymbolRefAttr>(kPredeclarationAttr)) {
+      auto *parentOp = op->getParentOp();
+      auto *predeclModule =
+          SymbolTable::lookupSymbolIn(parentOp, predecl.getValue());
+      if (failed(SymbolTable::replaceAllSymbolUses(
+              predeclModule, hwModule.moduleNameAttr(), parentOp)))
+        return failure();
+      rewriter.eraseOp(predeclModule);
+    }
+
     rewriter.eraseOp(op);
     return success();
   }

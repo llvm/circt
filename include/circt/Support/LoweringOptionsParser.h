@@ -44,11 +44,9 @@ struct LoweringOptionsOption
                 "noAlwaysComb, exprInEventControl, disallowPackedArrays, "
                 "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
                 "maximumNumberOfTermsPerExpression=<n>, "
-                "maximumNumberOfTermsInConcat=<n>, explicitBitcast, "
-                "maximumNumberOfVariadicOperands=<n>, "
-                "emitReplicatedOpsToHeader, "
+                "explicitBitcast, emitReplicatedOpsToHeader, "
                 "locationInfoStyle={plain,wrapInAtSquareBracket,none}, "
-                "disallowPortDeclSharing, printDebugInfo, useOldEmissionMode, "
+                "disallowPortDeclSharing, printDebugInfo, "
                 "disallowExpressionInliningInPorts"),
             llvm::cl::cat(cat), llvm::cl::value_desc("option")} {}
 };

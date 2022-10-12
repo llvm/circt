@@ -1,4 +1,6 @@
 ; RUN: firtool %s --format=fir --ir-sv | FileCheck %s
+; RUN: firtool %s --format=fir --ir-sv -strip-mux-pragmas | FileCheck %s --check-prefix=STRIP
+; STRIP-NOT: sv.attributes
 
 circuit Qux: %[[{
     "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
@@ -71,12 +73,12 @@ circuit Qux: %[[{
 ;CHECK:    %[[addr:.+]] = sv.reg
 ;CHECK:    %[[v4:.+]] = sv.read_inout %[[addr]]
 ;CHECK:    %[[v5:.+]] = hw.array_create
-;CHECK:    %[[multbit_mux_wire:.+]] = sv.wire  : !hw.inout<i8>
 ;CHECK:    %[[array_get:.+]] = hw.array_get %[[v5]][%[[v4]]]
+;CHECK:    %[[multbit_mux_wire:.+]] = sv.wire  : !hw.inout<i8>
 ;CHECK:    sv.assign %[[multbit_mux_wire]], %[[array_get]]
 ;CHECK:    %[[v6:.+]] = sv.read_inout %[[multbit_mux_wire]] : !hw.inout<i8>
-;CHECK:    %[[multbit_mux_wire:.+]] = sv.wire  : !hw.inout<i8>
 ;CHECK:    %[[array_get:.+]] = hw.array_get %[[v5]][%rwAddr]
+;CHECK:    %[[multbit_mux_wire:.+]] = sv.wire  : !hw.inout<i8>
 ;CHECK:    %[[v7:.+]] = sv.read_inout %[[multbit_mux_wire]] : !hw.inout<i8>
 ;CHECK:    %12 = comb.icmp eq %rwAddr, %c0_i2 : i2
 ;CHECK:    %13 = comb.and %rwEn, %rwMode, %rwMask, %12 : i1
