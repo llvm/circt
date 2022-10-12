@@ -1,5 +1,4 @@
-// RUN: circt-opt %s -test-apply-lowering-options="options=useOldEmissionMode" -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s --strict-whitespace --check-prefixes=CHECK,OLD
-// RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s --check-prefixes=CHECK,NEW
+// RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s
 
 // CHECK-LABEL: // external module E
 hw.module.extern @E(%a: i1, %b: i1, %c: i1)
@@ -343,8 +342,7 @@ hw.module @wires(%in4: i4, %in8: i8) -> (a: i4, b: i8, c: i8) {
   // CHECK-EMPTY:
 
   // Wires.
-  // NEW-NEXT: wire [3:0]            myWire = in4;
-  // OLD-NEXT: wire [3:0]            myWire;
+  // CHECK-NEXT: wire [3:0]            myWire = in4;
   %myWire = sv.wire : !hw.inout<i4>
 
   // Packed arrays.
@@ -363,8 +361,6 @@ hw.module @wires(%in4: i4, %in8: i8) -> (a: i4, b: i8, c: i8) {
   %myUArray2 = sv.wire : !hw.inout<uarray<14 x uarray<12 x array<10 x i8>>>>
 
   // Wires.
-
-  // OLD: assign myWire = in4;
   sv.assign %myWire, %in4 : i4
   %wireout = sv.read_inout %myWire : !hw.inout<i4>
 
@@ -690,10 +686,7 @@ hw.module @StrurctExtractInline(%a: !hw.struct<v: i1>) -> (b: i1, c: i1) {
 
 // CHECK-LABEL: NoExtraTemporaryWireForAssign
 hw.module @NoExtraTemporaryWireForAssign(%a: i2, %b: i4) {
-  // OLD: wire struct packed {logic [1:0] foo; logic [3:0] bar; } _GEN;
-  // OLD-EMPTY:
-  // OLD-NEXT: assign _GEN = '{foo: a, bar: b};
-  // NEW: wire struct packed {logic [1:0] foo; logic [3:0] bar; } _GEN = '{foo: a, bar: b};
+  // CHECK: wire struct packed {logic [1:0] foo; logic [3:0] bar; } _GEN = '{foo: a, bar: b};
   %0 = hw.struct_create (%a, %b) : !hw.struct<foo: i2, bar: i4>
   %1 = sv.wire : !hw.inout<!hw.struct<foo: i2, bar: i4>>
   sv.assign %1, %0: !hw.struct<foo: i2, bar: i4>
@@ -1131,9 +1124,8 @@ hw.module @UseParameterValue<xx: i42>(%arg0: i8)
   // CHECK-NEXT: ) inst3 (
   %c = hw.instance "inst3" @parameters2<p1: i42 = #hw.param.expr.mul<#hw.param.expr.add<#hw.param.verbatim<"xx">, 17>, #hw.param.verbatim<"yy">>, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
 
-  // OLD: localparam [41:0] _GEN = xx + 42'd17;
   // FIXME: Decl word should be localparam.
-  // NEW: wire [41:0] _GEN = xx + 42'd17;
+  // CHECK: wire [41:0] _GEN = xx + 42'd17;
   // CHECK-NEXT: assign out3 = _GEN[7:0] + _GEN[7:0];
   %d = hw.param.value i42 = #hw.param.expr.add<#hw.param.decl.ref<"xx">, 17>
   %e = comb.extract %d from 0 : (i42) -> i8
