@@ -253,3 +253,27 @@ module  {
     }
   }
 }
+
+// -----
+
+  // Node combinational loop through vector subindex
+  // CHECK-NOT: firrtl.circuit "hasloops"
+firrtl.circuit "hasloops"   {
+  // expected-error @+1 {{detected combinational cycle in a FIRRTL module}}
+  firrtl.module @hasloops(out %b: !firrtl.vector<uint<1>, 2>) {
+    %bar_a = firrtl.wire : !firrtl.vector<uint<1>, 2>
+    %bar_b = firrtl.wire : !firrtl.vector<uint<1>, 2>
+    %0 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
+    // expected-note @+1 {{this operation is part of the combinational cycle}}
+    %1 = firrtl.subindex %bar_a[0] : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+    %4 = firrtl.subindex %bar_b[0] : !firrtl.vector<uint<1>, 2>
+    // expected-note @+1 {{this operation is part of the combinational cycle}}
+    %5 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %5, %4 : !firrtl.uint<1>
+    %v0 = firrtl.subindex %bar_a[0] : !firrtl.vector<uint<1>, 2>
+    // expected-note @+1 {{this operation is part of the combinational cycle}}
+    %v1 = firrtl.subindex %bar_b[0] : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %v1, %v0 : !firrtl.uint<1>
+  }
+}

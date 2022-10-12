@@ -135,14 +135,12 @@ public:
             } else if (use.getOwner()->getNumResults() > 0)
               aggregateUsers.push_back(use.getOwner());
           }
+          if (auto connect = dyn_cast<FConnectLike>(use.getOwner())) {
+            if (fieldRef == getFieldRefFromValue(connect.getSrc()))
+              aggregateUsers.push_back(use.getOwner());
+          } else if (use.getOwner()->getNumResults() > 0)
+            aggregateUsers.push_back(use.getOwner());
         }
-        aggregateChildIt = end ? aggregateUsers.size():0;
-        llvm::errs() << "\n aggregateChildIt=" << aggregateChildIt << ", end="<< aggregateUsers.end();
-        childIt = nullptr;
-      } else {
-      skipToNextValidChild();
-      if (childIt != childEnd)
-        llvm::errs() << "\n val:"<< v <<" interesting child :"<< *childIt->getOwner();
       }
       llvm::errs() << "\n child iter :"<< aggregateUsers.end() << "::"<< aggregateChildIt;
     }
