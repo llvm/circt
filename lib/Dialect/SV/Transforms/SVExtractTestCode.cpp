@@ -635,13 +635,11 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       // Erase any instances that were extracted, and their forward dataflow.
       // Also erase old instances that were inlined and can now be cleaned up.
       // Parts of the forward dataflow may have been nested under other ops to
-      // erase, so keep track of what's being erased as we go to avoid erasing
-      // children of ops that were already erased.
-      SmallPtrSet<Operation *, 32> erasedOps;
-      for (auto *op : opsToErase) {
-        if (erasedOps.contains(op))
-          continue;
-        op->walk([&](Operation *erasedOp) { erasedOps.insert(erasedOp); });
+      // erase, so as we visit ops to erase, we remove them and all their
+      // children from the set of ops to erase until nothing is left.
+      while (!opsToErase.empty()) {
+        Operation *op = *opsToErase.begin();
+        op->walk([&](Operation *erasedOp) { opsToErase.erase(erasedOp); });
         op->dropAllUses();
         op->erase();
       }
