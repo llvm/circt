@@ -37,7 +37,7 @@ class Consumer:
 
   @generator
   def construct(ports):
-    HostComms.to_host("loopback_out", ports.int_in)
+    HostComms.to_host(ports.int_in, "loopback_out")
 
 
 # CHECK-LABEL: msft.module @LoopbackTop {} (%clk: i1, %rst: i1)
@@ -87,7 +87,7 @@ class LoopbackInOutTop:
     esi.Cosim(HostComms, ports.clk, ports.rst)
 
     loopback = Wire(types.channel(types.i16))
-    from_host = HostComms.req_resp("loopback_inout", loopback)
+    from_host = HostComms.req_resp(loopback, "loopback_inout")
     ready = Wire(types.i1)
     wide_data, valid = from_host.unwrap(ready)
     data = wide_data[0:16]

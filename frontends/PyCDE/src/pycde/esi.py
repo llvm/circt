@@ -93,7 +93,7 @@ class _RequestConnection:
 
 class _RequestToServerConn(_RequestConnection):
 
-  def __call__(self, chan_name: str, chan: ChannelValue):
+  def __call__(self, chan: ChannelValue, chan_name: str = ""):
     self.decl._materialize_service_decl()
     raw_esi.RequestToServerConnectionOp(
         self.service_port, chan.value,
@@ -102,7 +102,7 @@ class _RequestToServerConn(_RequestConnection):
 
 class _RequestToClientConn(_RequestConnection):
 
-  def __call__(self, chan_name: str, type: Optional[PyCDEType] = None):
+  def __call__(self, chan_name: str = "", type: Optional[PyCDEType] = None):
     self.decl._materialize_service_decl()
     if type is None:
       type = self.to_client_type
@@ -120,11 +120,12 @@ class _RequestToClientConn(_RequestConnection):
 class _RequestToFromServerConn(_RequestConnection):
 
   def __call__(self,
-               chan_name: str,
                to_server_channel: ChannelValue,
+               chan_name: str = "",
                to_client_type: Optional[PyCDEType] = None):
     self.decl._materialize_service_decl()
-    if to_client_type is None:
+    type = to_client_type
+    if type is None:
       type = self.to_client_type
       if type == types.any:
         raise ValueError(
