@@ -55,6 +55,15 @@ esi.service.decl @HostComms {
   esi.service.inout @ReqResp : !esi.channel<i8> -> !esi.channel<i16>
 }
 
+msft.module @SendStruct {} (%clk: i1) -> () {
+  %c2_i3 = hw.constant 2 : i3
+  %s = hw.struct_create (%c2_i3) : !hw.struct<foo: i3>
+  %c1_i1 = hw.constant 1 : i1
+  %schan, %ready = esi.wrap.vr %s, %c1_i1 : !hw.struct<foo: i3>
+  esi.service.req.to_server %schan -> <@HostComms::@Send> ([]): !esi.channel<!hw.struct<foo: i3>>
+  msft.output
+}
+
 msft.module @InOutLoopback {} (%clk: i1) -> () {
   %dataIn = esi.service.req.inout %dataTrunc -> <@HostComms::@ReqResp> (["loopback_inout"]) : !esi.channel<i8> -> !esi.channel<i16>
   %unwrap, %valid = esi.unwrap.vr %dataIn, %rdy: i16
@@ -66,6 +75,7 @@ msft.module @InOutLoopback {} (%clk: i1) -> () {
 msft.module @LoopbackCosimTop {} (%clk: i1, %rst: i1) {
   esi.service.instance @HostComms impl as "cosim" (%clk, %rst) : (i1, i1) -> ()
   msft.instance @m1 @InOutLoopback(%clk) : (i1) -> ()
+  msft.instance @m2 @SendStruct(%clk) : (i1) -> ()
   msft.output
 }
 
@@ -123,6 +133,38 @@ msft.module @LoopbackCosimTop {} (%clk: i1, %rst: i1) {
 // CHECK-NEXT:                   "inner": {
 // CHECK-NEXT:                     "dialect": "builtin",
 // CHECK-NEXT:                     "mnemonic": "i8"
+// CHECK-NEXT:                   },
+// CHECK-NEXT:                   "mnemonic": "channel"
+// CHECK-NEXT:                 }
+// CHECK-NEXT:               }
+// CHECK-NEXT:             }
+// CHECK-NEXT:             {
+// CHECK-NEXT:               "client_name": [
+// CHECK-NEXT:                 "m2"
+// CHECK-NEXT:               ],
+// CHECK-NEXT:               "port": {
+// CHECK-NEXT:                 "inner": "Send",
+// CHECK-NEXT:                 "outer_sym": "HostComms"
+// CHECK-NEXT:               },
+// CHECK-NEXT:               "to_server_type": {
+// CHECK-NEXT:                 "capnp_name": "Struct12633565592854986228",
+// CHECK-NEXT:                 "capnp_type_id": 12633565592854986228,
+// CHECK-NEXT:                 "hw_bitwidth": 3,
+// CHECK-NEXT:                 "mlir_name": "!esi.channel<!hw.struct<foo: i3>>",
+// CHECK-NEXT:                 "type_desc": {
+// CHECK-NEXT:                   "dialect": "esi",
+// CHECK-NEXT:                   "inner": {
+// CHECK-NEXT:                     "dialect": "hw",
+// CHECK-NEXT:                     "fields": [
+// CHECK-NEXT:                       {
+// CHECK-NEXT:                         "name": "foo",
+// CHECK-NEXT:                         "type": {
+// CHECK-NEXT:                           "dialect": "builtin",
+// CHECK-NEXT:                           "mnemonic": "i3"
+// CHECK-NEXT:                         }
+// CHECK-NEXT:                       }
+// CHECK-NEXT:                     ],
+// CHECK-NEXT:                     "mnemonic": "struct"
 // CHECK-NEXT:                   },
 // CHECK-NEXT:                   "mnemonic": "channel"
 // CHECK-NEXT:                 }

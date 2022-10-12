@@ -8,7 +8,7 @@ from io import FileIO
 import json
 import pathlib
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 __dir__ = pathlib.Path(__file__).parent
 
@@ -132,16 +132,25 @@ class PythonApiBuilder(SoftwareApiBuilder):
     """Get a Python code string instantiating 'type'."""
 
     def py_type(type: Dict):
-      if type["dialect"] == "esi" and type["mnemonic"] == "channel":
+      dialect = type["dialect"]
+      mn: str = type["mnemonic"]
+      if dialect == "esi" and mn == "channel":
         return py_type(type["inner"])
-      if type["dialect"] == "builtin":
-        m: str = type["mnemonic"]
-        if m.startswith("i") or m.startswith("ui"):
-          width = int(m.strip("ui"))
+      if dialect == "builtin":
+        if mn.startswith("i") or mn.startswith("ui"):
+          width = int(mn.strip("ui"))
           return f"IntType({width}, False)"
-        if m.startswith("i") or m.startswith("si"):
-          width = int(m.strip("si"))
+        if mn.startswith("i") or mn.startswith("si"):
+          width = int(mn.strip("si"))
           return f"IntType({width}, True)"
+      elif dialect == "hw":
+        if mn == "struct":
+          fields = [
+              f"'{x['name']}': {py_type(x['type'])}" for x in type["fields"]
+          ]
+          fields_str = ", ".join(fields)
+          return "StructType({" + fields_str + "})"
+
       assert False, "unimplemented type"
 
     return py_type(type_dict["type_desc"])

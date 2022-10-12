@@ -2,7 +2,6 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from multiprocessing.sharedctypes import Value
 import capnp
 import time
 import typing
@@ -13,7 +12,7 @@ class Type:
   def __init__(self, type_id: typing.Optional[int] = None):
     self.type_id = type_id
 
-  def is_valid(self, obj):
+  def is_valid(self, obj) -> bool:
     """Is a Python object compatible with HW type."""
     assert False, "unimplemented"
 
@@ -28,7 +27,7 @@ class IntType(Type):
     self.width = width
     self.signed = signed
 
-  def is_valid(self, obj):
+  def is_valid(self, obj) -> bool:
     if not isinstance(obj, int):
       return False
     if obj >= 2**self.width:
@@ -38,6 +37,29 @@ class IntType(Type):
   def __str__(self):
     return ("" if self.signed else "u") + \
       f"int{self.width}"
+
+
+class StructType(Type):
+
+  def __init__(self,
+               fields: typing.Dict[str, Type],
+               type_id: typing.Optional[int] = None):
+    super().__init__(type_id)
+    self.fields = fields
+
+  def is_valid(self, obj) -> bool:
+    fields_count = 0
+    if isinstance(obj, dict):
+      for (fname, ftype) in self.fields.items():
+        if fname not in obj:
+          return False
+        if not ftype.is_valid(obj[fname]):
+          return False
+        fields_count += 1
+      if fields_count != len(obj):
+        return False
+      return True
+    return False
 
 
 class Port:
@@ -169,8 +191,22 @@ class _CosimPort:
     def read(self, capnp_resp) -> int:
       return capnp_resp.as_struct(self.capnp_type).i
 
+  class _StructConverter(_TypeConverter):
+    """Convert python ints to and from capnp messages."""
+
+    def write(self, py_dict: dict):
+      return self.capnp_type.new_message(**py_dict)
+
+    def read(self, capnp_resp) -> int:
+      capnp_msg = capnp_resp.as_struct(self.capnp_type)
+      ret = {}
+      for (fname, _) in self.esi_type.fields.items():
+        if hasattr(capnp_msg, fname):
+          ret[fname] = getattr(capnp_msg, fname)
+      return ret
+
   # Lookup table for getting the correct type converter for a given type.
-  ConvertLookup = {IntType: _IntConverter}
+  ConvertLookup = {IntType: _IntConverter, StructType: _StructConverter}
 
   def __init__(self, node: _CosimNode, endpoint,
                read_type: typing.Optional[Type],
