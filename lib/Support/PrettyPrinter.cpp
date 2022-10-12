@@ -224,7 +224,10 @@ void PrettyPrinter::print(FormattedToken f) {
         }
       })
       .Case([&](EndToken *) {
-        printStack.pop_back(); // breaks
+        assert(!printStack.empty() && "more ends than begins?");
+        // Try to tolerate this when assertions are disabled.
+        if (!printStack.empty())
+          printStack.pop_back(); // breaks
       });
 }
 } // end namespace pretty
