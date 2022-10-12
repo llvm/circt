@@ -154,7 +154,7 @@ void PrettyPrinter::checkStream() {
     // Ran out of space, set size to infinity and take off scan stack.
     // No need to keep track as we know enough to know this won't fit.
     if (!scanStack.empty() && tokenOffset == scanStack.front()) {
-      tokens.front().size = 0xFFFFF; // ~int32_t{0}; // INFINITY
+      tokens.front().size = kInfinity;
       scanStack.pop_front();
     }
     advanceLeft();

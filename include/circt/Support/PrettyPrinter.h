@@ -130,7 +130,9 @@ struct EndToken : public TokenBase<EndToken, Token::Kind::End> {};
 class PrettyPrinter {
 public:
   PrettyPrinter(llvm::raw_ostream &os, uint32_t margin)
-      : space(margin), margin(margin), os(os) {}
+      : space(margin), margin(margin), os(os) {
+    assert(margin < kInfinity / 2);
+  }
 
   /// Add token for printing.  In Oppen, this is "scan".
   void add(Token t);
@@ -143,6 +145,8 @@ public:
   }
 
   void eof();
+
+  static constexpr uint32_t kInfinity = 0xFFFFFU;
 private:
   /// Format token with tracked size.
   struct FormattedToken {

@@ -59,8 +59,6 @@ protected:
   }
 
   void SetUp() override {
-    auto constexpr ppInfinity = 0xffffU;
-
     using namespace pretty;
 
     buildArgs();
@@ -71,7 +69,7 @@ protected:
                          BeginToken(0, Breaks::Inconsistent), BreakToken(0)});
       funcTokens.append(argTokens);
       funcTokens.append({BreakToken(0), EndToken(), StringToken(");"),
-                         BreakToken(ppInfinity)});
+                         BreakToken(PrettyPrinter::kInfinity)});
     }
     {
       // baroo(AR..  barooga(ARGS) .. GS)
@@ -95,7 +93,7 @@ protected:
                            /* BreakToken(0), */});
       nestedTokens.append(argMiddle, argTokens.end());
       nestedTokens.append({BreakToken(0), EndToken(), StringToken(");"),
-                           BreakToken(ppInfinity)});
+                           BreakToken(PrettyPrinter::kInfinity)});
     }
     {
       // wahoo(ARGS)
@@ -127,7 +125,7 @@ protected:
       indentNestedTokens.append(argMiddle, argTokens.end());
       indentNestedTokens.append({EndToken(), BreakToken(0, -2),
                                  StringToken(");"), EndToken(),
-                                 BreakToken(ppInfinity)});
+                                 BreakToken(PrettyPrinter::kInfinity)});
     }
   }
 
