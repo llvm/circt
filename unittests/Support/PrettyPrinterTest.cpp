@@ -21,14 +21,15 @@ namespace {
 class FuncTest : public testing::Test {
 protected:
   // Test inputs.
-  SmallVector<pretty::Token *> funcTokens;
-  SmallVector<pretty::Token *> nestedTokens;
-  SmallVector<pretty::Token *> indentNestedTokens;
+  SmallVector<pretty::Token> funcTokens;
+  SmallVector<pretty::Token> nestedTokens;
+  SmallVector<pretty::Token> indentNestedTokens;
 
   /// Scratch buffer used by print.
   SmallString<256> out;
 
-  void addArgs(SmallVectorImpl<pretty::Token *> &t) {
+  SmallVector<pretty::Token> argTokens;
+  void buildArgs() {
     // Build argument list with comma + break between tokens.
     using namespace pretty;
     auto args = {"int a",
@@ -50,10 +51,10 @@ protected:
                  "float xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"};
 
     llvm::interleave(
-        args, [&](auto &arg) { t.push_back(new StringToken(arg)); },
+        args, [&](auto &arg) { argTokens.push_back(StringToken(arg)); },
         [&]() {
-          t.push_back(new StringToken(","));
-          t.push_back(new BreakToken());
+          argTokens.push_back(StringToken(","));
+          argTokens.push_back(BreakToken());
         });
   }
 
@@ -62,97 +63,80 @@ protected:
 
     using namespace pretty;
 
+    buildArgs();
     {
       // foooooo(ARGS)
       // With ARGS in an ibox.
-      funcTokens.append({new StringToken("foooooo"), new StringToken("("),
-                         new BeginToken(0, Breaks::Inconsistent),
-                         new BreakToken(0)});
-      addArgs(funcTokens);
-      funcTokens.append({new BreakToken(0), new EndToken(),
-                         new StringToken(");"), new BreakToken(ppInfinity)});
+      funcTokens.append({StringToken("foooooo"), StringToken("("),
+                         BeginToken(0, Breaks::Inconsistent), BreakToken(0)});
+      funcTokens.append(argTokens);
+      funcTokens.append({BreakToken(0), EndToken(), StringToken(");"),
+                         BreakToken(ppInfinity)});
     }
     {
       // baroo(AR..  barooga(ARGS) .. GS)
       // Nested function call, nested method wrapped in cbox(0) w/breaks.
-      nestedTokens.append({new StringToken("baroo"), new StringToken("("),
-                           new BeginToken(0, Breaks::Inconsistent),
-                           new BreakToken(0)});
-      SmallVector<Token *> argTokens;
-      addArgs(argTokens);
-      SmallVectorImpl<Token *>::iterator argMiddle =
+      nestedTokens.append({StringToken("baroo"), StringToken("("),
+                           BeginToken(0, Breaks::Inconsistent), BreakToken(0)});
+      SmallVectorImpl<Token>::iterator argMiddle =
           argTokens.begin() + argTokens.size() / 2;
       nestedTokens.append(argTokens.begin(), argMiddle);
 
       nestedTokens.append({
-          new BeginToken(0, Breaks::Consistent),
-          new StringToken("barooga"),
-          new StringToken("("),
-          new BeginToken(0, Breaks::Inconsistent),
-          new BreakToken(0),
+          BeginToken(0, Breaks::Consistent),
+          StringToken("barooga"),
+          StringToken("("),
+          BeginToken(0, Breaks::Inconsistent),
+          BreakToken(0),
       });
-      addArgs(nestedTokens);
-      nestedTokens.append({new BreakToken(0), new EndToken(),
-                           new StringToken("),"), new BreakToken(),
-                           new EndToken(),
-                           /* new BreakToken(0), */});
+      nestedTokens.append(argTokens);
+      nestedTokens.append({BreakToken(0), EndToken(), StringToken("),"),
+                           BreakToken(), EndToken(),
+                           /* BreakToken(0), */});
       nestedTokens.append(argMiddle, argTokens.end());
-      nestedTokens.append({new BreakToken(0), new EndToken(),
-                           new StringToken(");"), new BreakToken(ppInfinity)});
+      nestedTokens.append({BreakToken(0), EndToken(), StringToken(");"),
+                           BreakToken(ppInfinity)});
     }
     {
       // wahoo(ARGS)
       // If wrap args, indent on next line
       indentNestedTokens.append({
-          new BeginToken(2, Breaks::Consistent),
-          new StringToken("wahoo"),
-          new StringToken("("),
-          new BreakToken(0),
-          new BeginToken(0, Breaks::Inconsistent),
+          BeginToken(2, Breaks::Consistent),
+          StringToken("wahoo"),
+          StringToken("("),
+          BreakToken(0),
+          BeginToken(0, Breaks::Inconsistent),
       });
 
-      SmallVector<Token *> argTokens;
-      addArgs(argTokens);
-      SmallVectorImpl<Token *>::iterator argMiddle =
+      SmallVectorImpl<Token>::iterator argMiddle =
           argTokens.begin() + argTokens.size() / 2;
       indentNestedTokens.append(argTokens.begin(), argMiddle);
 
       indentNestedTokens.append({
-          new BeginToken(0, Breaks::Consistent),
-          new StringToken("yahooooooo"),
-          new StringToken("("),
-          new BeginToken(0, Breaks::Inconsistent),
-          new BreakToken(0),
+          BeginToken(0, Breaks::Consistent),
+          StringToken("yahooooooo"),
+          StringToken("("),
+          BeginToken(0, Breaks::Inconsistent),
+          BreakToken(0),
       });
-      addArgs(indentNestedTokens);
+      indentNestedTokens.append(argTokens);
       indentNestedTokens.append({
-          new BreakToken(0), new EndToken(), new StringToken("),"),
-          new BreakToken(), new EndToken(), /* new BreakToken(0), */
+          BreakToken(0), EndToken(), StringToken("),"), BreakToken(),
+          EndToken(), /* BreakToken(0), */
       });
       indentNestedTokens.append(argMiddle, argTokens.end());
-      indentNestedTokens.append({new EndToken(), new BreakToken(0, -2),
-                                 new StringToken(");"), new EndToken(),
-                                 new BreakToken(ppInfinity)});
+      indentNestedTokens.append({EndToken(), BreakToken(0, -2),
+                                 StringToken(");"), EndToken(),
+                                 BreakToken(ppInfinity)});
     }
   }
 
-  template <typename R>
-  void clear(R &&tokens) {
-    for (const auto *t : tokens)
-      delete t;
-  }
-  void TearDown() override {
-    clear(funcTokens);
-    clear(nestedTokens);
-    clear(indentNestedTokens);
-  }
-
-  void print(SmallVectorImpl<pretty::Token *> &tokens, size_t margin) {
+  void print(SmallVectorImpl<pretty::Token> &tokens, size_t margin) {
     out = "\n";
     raw_svector_ostream os(out);
     pretty::PrettyPrinter pp(os, margin);
-    for (auto *t : tokens)
-      pp.add(*t);
+    for (auto &t : tokens)
+      pp.add(t);
     pp.eof();
   }
 };
