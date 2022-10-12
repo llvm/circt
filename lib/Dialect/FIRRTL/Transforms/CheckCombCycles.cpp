@@ -326,7 +326,7 @@ class EndIterator
     : public llvm::iterator_facade_base<NodeIterator, std::forward_iterator_tag,
                                         Node> {
 public:
-  explicit EndIterator() {}
+  explicit EndIterator() = default;
 
   using llvm::iterator_facade_base<NodeIterator, std::forward_iterator_tag,
                                    Node>::operator++;
