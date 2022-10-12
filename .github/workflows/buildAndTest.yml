@@ -214,7 +214,7 @@ jobs:
       # Build and test CIRCT
       # --------
 
-      - name: Build and Test CIRCT
+      - name: Build CIRCT Test CIRCT
         run: |
           mkdir build
           cd build
@@ -229,12 +229,7 @@ jobs:
             -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} \
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-          make check-circt -j$(nproc)
           make circt-doc
-
-      # --------
-      # Lint the CIRCT C++ code.
-      # -------
 
       # Choose the git commit to diff against for the purposes of linting.
       # Since this workflow is triggered on both pushes and pull requests, we
@@ -269,6 +264,26 @@ jobs:
             DIFF_COMMIT_SHA=$( git rev-parse origin/$DIFF_COMMIT_NAME )
           fi
           echo "DIFF_COMMIT=$DIFF_COMMIT_SHA" >> $GITHUB_ENV
+
+      - name: resolve PR gates
+        run: |
+          pip3 install GitPython # until https://github.com/circt/images/pull/22 lands
+          echo "RUN_PYCDE_TESTS=$(python3 .github/workflows/scripts/pr_gate.py '(PyCDE)' $DIFF_COMMIT)" >> $GITHUB_ENV
+
+      - name: Test CIRCT
+        run: |
+          cd build
+          make check-circt -j$(nproc)
+
+      - name: Test PyCDE/ESI
+        if: ${{ env.RUN_PYCDE_TESTS == '1' }}
+        run: |
+          cd build
+          make check-pycde -j$(nproc)
+
+      # --------
+      # Lint the CIRCT C++ code.
+      # -------
 
       # Run clang-tidy against only the changes. The 'clang-tidy-diff' script
       # does this if supplied with the diff.

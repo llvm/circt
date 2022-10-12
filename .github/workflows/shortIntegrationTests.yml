@@ -49,6 +49,52 @@ jobs:
         with:
           max-size: 1G
 
+      # Choose the git commit to diff against for the purposes of PR gates.
+      # Since this workflow is triggered on both pushes and pull requests, we
+      # have to determine if the pull request target branch is set (which it
+      # will only be on the PR triggered flow). If it's not, then compare
+      # against the last commit.
+      - name: choose-commit
+        if: ${{ always() }}
+        env:
+          # Base ref is the target branch, in text form (not hash)
+          PR_BASE: ${{ github.base_ref }}
+        run: |
+          # Run clang-format
+          if [ -z "$PR_BASE" ]; then
+            DIFF_COMMIT_NAME="HEAD^"
+          else
+            DIFF_COMMIT_NAME="$PR_BASE"
+          fi
+          echo "DIFF_COMMIT_NAME=$DIFF_COMMIT_NAME" >> $GITHUB_ENV
+
+      # Since we did a shallow fetch for this repo, we must fetch the commit
+      # upon which we be diff'ing. The last step set the ref name in the
+      # $DIFF_COMMIT_NAME environment variable. When running the fetch, resolve
+      # it to the commit hash and pass that hash along to subsequent steps.
+      - name: git fetch base commit
+        continue-on-error: true
+        run: |
+          if echo "$DIFF_COMMIT_NAME" | grep -q HEAD; then
+            DIFF_COMMIT_SHA=$( git rev-parse $DIFF_COMMIT_NAME )
+          else
+            git fetch --recurse-submodules=no origin $DIFF_COMMIT_NAME
+            DIFF_COMMIT_SHA=$( git rev-parse origin/$DIFF_COMMIT_NAME )
+          fi
+          echo "DIFF_COMMIT=$DIFF_COMMIT_SHA" >> $GITHUB_ENV
+
+      - name: PyCDE test execution gate
+        run: |
+          # If this is a PR, run the PR gate
+          if [ ${{ github.event.action }} == "opened" ] || [ ${{ github.event.action }} == "synchronize" ] || [ ${{ github.event.action }} == "reopened" ] ]; then
+            # Only run the job if there is a change in anything PyCDE-related.
+            pip3 install GitPython # until https://github.com/circt/images/pull/23 lands
+            echo "RUN_PYCDE_CI=1" >> $GITHUB_ENV
+          else
+            echo "This is a manually triggered build. Running PyCDE CI."
+            echo "RUN_PYCDE_CI=1" >> $GITHUB_ENV
+          fi
+
       # --------
       # Build and test CIRCT
       # --------
@@ -76,6 +122,7 @@ jobs:
             -DLLVM_USE_LINKER=lld \
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
             -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
+            -DCIRCT_ENABLE_FRONTENDS=PyCDE \
             -DLLVM_LIT_ARGS='-sv --show-unsupported'
       - name: Test CIRCT
         run: |
@@ -83,6 +130,16 @@ jobs:
       - name: Integration Test CIRCT
         run: |
           ninja -C build check-circt-integration -j$(nproc)
+
+      - name: Test PyCDE
+        if: ${{ env.RUN_PYCDE_CI == '1' }}
+        run: |
+          ninja -C build check-pycde -j$(nproc)
+      
+      - name: Test PyCDE integration tests
+        if: ${{ env.RUN_PYCDE_CI == '1' }}
+        run: |
+          ninja -C build check-pycde-integration -j$(nproc)
 
       - name: Ccache stats
         run: |
