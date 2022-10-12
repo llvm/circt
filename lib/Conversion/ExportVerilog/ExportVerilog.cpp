@@ -2554,11 +2554,11 @@ public:
   void emitStatementBlock(Block &body);
   size_t getNumStatementsEmitted() const { return numStatementsEmitted; }
 
-  /// Emit the declaration.
+  /// Emit a declaration.
   LogicalResult emitDeclaration(Operation *op);
 
 private:
-  void collectNamesAndCalculateDeclrationWidths(Block &block);
+  void collectNamesAndCalculateDeclarationWidths(Block &block);
 
   void
   emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
@@ -3994,7 +3994,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
   return success();
 }
 
-void StmtEmitter::collectNamesAndCalculateDeclrationWidths(Block &block) {
+void StmtEmitter::collectNamesAndCalculateDeclarationWidths(Block &block) {
   // In the first pass, we fill in the symbol table, calculate the max width
   // of the declaration words and the max type width.
   NameCollector collector(emitter, names);
@@ -4022,7 +4022,7 @@ void StmtEmitter::emitStatementBlock(Block &body) {
   // module.  #ifdef's in procedural regions are special because local variables
   // are all emitted at the top of their enclosing blocks.
   if (!isa<IfDefProceduralOp>(body.getParentOp()))
-    collectNamesAndCalculateDeclrationWidths(body);
+    collectNamesAndCalculateDeclarationWidths(body);
 
   // Emit the body.
   for (auto &op : body) {
