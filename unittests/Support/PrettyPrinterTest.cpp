@@ -15,23 +15,23 @@
 
 using namespace llvm;
 using namespace circt;
+using namespace pretty;
 
 namespace {
 
 class FuncTest : public testing::Test {
 protected:
   // Test inputs.
-  SmallVector<pretty::Token> funcTokens;
-  SmallVector<pretty::Token> nestedTokens;
-  SmallVector<pretty::Token> indentNestedTokens;
+  SmallVector<Token> funcTokens;
+  SmallVector<Token> nestedTokens;
+  SmallVector<Token> indentNestedTokens;
 
   /// Scratch buffer used by print.
   SmallString<256> out;
 
-  SmallVector<pretty::Token> argTokens;
+  SmallVector<Token> argTokens;
   void buildArgs() {
     // Build argument list with comma + break between tokens.
-    using namespace pretty;
     auto args = {"int a",
                  "int b",
                  "int a1",
@@ -59,7 +59,6 @@ protected:
   }
 
   void SetUp() override {
-    using namespace pretty;
 
     buildArgs();
     {
@@ -129,12 +128,11 @@ protected:
     }
   }
 
-  void print(SmallVectorImpl<pretty::Token> &tokens, size_t margin) {
+  void print(SmallVectorImpl<Token> &tokens, size_t margin) {
     out = "\n";
     raw_svector_ostream os(out);
-    pretty::PrettyPrinter pp(os, margin);
-    for (auto &t : tokens)
-      pp.add(t);
+    PrettyPrinter pp(os, margin);
+    pp.addTokens(tokens);
     pp.eof();
   }
 };
