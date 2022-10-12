@@ -371,7 +371,8 @@ static bool isBound(hw::HWModuleLike op, hw::InstanceGraph &instanceGraph) {
 // Inline any modules that only have inputs for test code.
 static void inlineInputOnly(hw::HWModuleOp oldMod,
                             hw::InstanceGraph &instanceGraph,
-                            BindTable &bindTable) {
+                            BindTable &bindTable,
+                            SmallPtrSetImpl<Operation *> &opsToErase) {
   // Check if the module only has inputs.
   if (oldMod.getNumOutputs() != 0)
     return;
@@ -380,7 +381,7 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
   hw::InstanceGraphNode *node = instanceGraph.lookup(oldMod);
   OpBuilder b(oldMod);
   bool allInlined = true;
-  for (hw::InstanceRecord *use : node->uses()) {
+  for (hw::InstanceRecord *use : llvm::make_early_inc_range(node->uses())) {
     // If there is no instance, move on.
     hw::HWInstanceLike instLike = use->getInstance();
     if (!instLike) {
@@ -429,13 +430,13 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
     // Erase the old instantiation site.
     assert(inst.use_empty() && "inlined instance should have no uses");
     use->erase();
-    inst.erase();
+    opsToErase.insert(inst);
   }
 
   // If all instances were inlined, remove the module.
   if (allInlined) {
     instanceGraph.erase(node);
-    oldMod->erase();
+    opsToErase.insert(oldMod);
   }
 }
 
@@ -453,7 +454,8 @@ private:
   // Run the extraction on a module, and return true if test code was extracted.
   bool doModule(hw::HWModuleOp module, std::function<bool(Operation *)> fn,
                 StringRef suffix, Attribute path, Attribute bindFile,
-                BindTable &bindTable) {
+                BindTable &bindTable,
+                SmallPtrSetImpl<Operation *> &opsToErase) {
     bool hasError = false;
     // Find Operations of interest.
     SetVector<Operation *> roots;
@@ -488,7 +490,6 @@ private:
 
     // Find instances that directly feed the clone set, and add them if
     // possible.
-    SmallPtrSet<Operation *, 32> opsToErase;
     addInstancesToCloneSet(inputs, opsToClone, opsToErase, extractedInstances);
     numOpsExtracted += opsToClone.size();
     numOpsErased += opsToErase.size();
@@ -500,16 +501,8 @@ private:
     // do the clone
     migrateOps(module, bmod, opsToClone, cutMap);
     // erase old operations of interest
-    for (auto op : roots)
-      op->erase();
-
-    // Erase any instances that were extracted, and their forward dataflow.
-    for (auto *op : opsToErase) {
-      if (roots.contains(op))
-        continue;
-      op->dropAllUses();
-      op->erase();
-    }
+    for (auto *op : roots)
+      opsToErase.insert(op);
 
     return true;
   }
@@ -626,17 +619,30 @@ void SVExtractTestCodeImplPass::runOnOperation() {
         continue;
       }
 
+      SmallPtrSet<Operation *, 32> opsToErase;
       bool anyThingExtracted = false;
       anyThingExtracted |= doModule(rtlmod, isAssert, "_assert", assertDir,
-                                    assertBindFile, bindTable);
+                                    assertBindFile, bindTable, opsToErase);
       anyThingExtracted |= doModule(rtlmod, isAssume, "_assume", assumeDir,
-                                    assumeBindFile, bindTable);
+                                    assumeBindFile, bindTable, opsToErase);
       anyThingExtracted |= doModule(rtlmod, isCover, "_cover", coverDir,
-                                    coverBindFile, bindTable);
+                                    coverBindFile, bindTable, opsToErase);
 
       // Inline any modules that only have inputs for test code.
       if (anyThingExtracted)
-        inlineInputOnly(rtlmod, instanceGraph, bindTable);
+        inlineInputOnly(rtlmod, instanceGraph, bindTable, opsToErase);
+
+      // Erase any instances that were extracted, and their forward dataflow.
+      // Also erase old instances that were inlined and can now be cleaned up.
+      // Parts of the forward dataflow may have been nested under other ops to
+      // erase, so as we visit ops to erase, we remove them and all their
+      // children from the set of ops to erase until nothing is left.
+      while (!opsToErase.empty()) {
+        Operation *op = *opsToErase.begin();
+        op->walk([&](Operation *erasedOp) { opsToErase.erase(erasedOp); });
+        op->dropAllUses();
+        op->erase();
+      }
     }
   }
 

@@ -69,20 +69,20 @@ LogicalResult scheduling::computeChainBreakingDependences(
         chains[op][origin] = std::max(delay + *prob.getOutgoingDelay(predOpr),
                                       chains[op][origin]);
       }
+    }
 
-      // All chains/accumulated delays incoming at `op` are now known.
-      auto opr = *prob.getLinkedOperatorType(op);
-      for (auto incomingChain : chains[op]) {
-        Operation *origin = incomingChain.first;
-        float delay = incomingChain.second;
-        // Check whether `op` could be appended to the incoming chain without
-        // violating the cycle time constraint.
-        if (delay + *prob.getIncomingDelay(opr) > cycleTime) {
-          // If not, add a chain-breaking auxiliary dep ...
-          result.emplace_back(origin, op);
-          // ... and end the chain here.
-          chains[op].erase(origin);
-        }
+    // All chains/accumulated delays incoming at `op` are now known.
+    auto opr = *prob.getLinkedOperatorType(op);
+    for (auto incomingChain : chains[op]) {
+      Operation *origin = incomingChain.first;
+      float delay = incomingChain.second;
+      // Check whether `op` could be appended to the incoming chain without
+      // violating the cycle time constraint.
+      if (delay + *prob.getIncomingDelay(opr) > cycleTime) {
+        // If not, add a chain-breaking auxiliary dep ...
+        result.emplace_back(origin, op);
+        // ... and end the chain here.
+        chains[op].erase(origin);
       }
     }
 
@@ -108,18 +108,21 @@ LogicalResult scheduling::computeStartTimesInCycle(ChainingProblem &prob) {
         return failure(); // Predecessor hasn't been handled yet.
 
       auto predOpr = *prob.getLinkedOperatorType(pred);
-      unsigned endTime = *prob.getStartTime(pred) + *prob.getLatency(predOpr);
+      unsigned predStartTime = *prob.getStartTime(pred);
+      unsigned predEndTime = predStartTime + *prob.getLatency(predOpr);
 
-      if (endTime < startTime)
+      if (predEndTime < startTime)
         // Incoming value is completely registered/available with the beginning
         // of the cycle.
         continue;
 
       // So, `pred` ends in the same cycle as `op` starts.
-      assert(endTime == startTime);
-      startTimeInCycle =
-          std::max(*predStartTimeInCycle + *prob.getOutgoingDelay(predOpr),
-                   startTimeInCycle);
+      assert(predEndTime == startTime);
+      // If `pred` uses a multi-cycle operator, only its outgoing delay counts.
+      float predEndTimeInCycle =
+          (predStartTime == predEndTime ? *predStartTimeInCycle : 0.0f) +
+          *prob.getOutgoingDelay(predOpr);
+      startTimeInCycle = std::max(predEndTimeInCycle, startTimeInCycle);
     }
 
     prob.setStartTimeInCycle(op, startTimeInCycle);
