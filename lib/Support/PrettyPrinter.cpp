@@ -16,10 +16,10 @@
 // This has been adjusted from the paper:
 // * Deque for tokens instead of ringbuffer + left/right cursors.
 //   This is simpler to reason about and allows us to easily grow the buffer
-//   to accomodate longer widths when needed.
+//   to accommodate longer widths when needed (and not reserve 3*linewidth).
 //   Since scanStack references buffered tokens by index, we track an offset
 //   that we increase when dropping off the front.
-//   When the scan stack is cleared the bufffer is reset, including this offset.
+//   When the scan stack is cleared the buffer is reset, including this offset.
 // * Optionally, minimum amount of space is granted regardless of indentation.
 //   To avoid forcing expressions against the line limit, never try to print
 //   an expression in, say, 2 columns, as this is unlikely to produce good
@@ -35,14 +35,14 @@
 // on this algorithm.
 //
 // Implementations of note that have interesting modifications for their
-// languages and modernization of the paper's algorithm.
+// languages and modernization of the paper's algorithm:
 // * prettyplease / rustc_ast_pretty
 //   Pretty-printers for rust, the first being useful for rustfmt-like output.
 //   These have largely the same code and were based on one another.
 //     https://github.com/dtolnay/prettyplease
 //     https://github.com/rust-lang/rust/tree/master/compiler/rustc_ast_pretty
 //   This is closest to the paper's algorithm with modernizations,
-//   and most of the initial tweaks also implemented here (thanks!).
+//   and most of the initial tweaks have also been implemented here (thanks!).
 // * swift-format: https://github.com/apple/swift-format/
 //
 // If we want fancier output or need to handle more complicated constructs,
