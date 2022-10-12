@@ -4,7 +4,8 @@
 
 from __future__ import annotations
 
-from circt.dialects import esi, msft
+from circt.dialects import esi as raw_esi, msft
+from .pycde_types import ChannelType
 
 import mlir.ir
 
@@ -33,8 +34,8 @@ class OutputChannel(Output):
   """Create an ESI output channel port."""
 
   def __init__(self, type: mlir.ir.Type, name: str = None):
-    esi_type = esi.ChannelType.get(type)
-    super().__init__(esi_type, name)
+    type = ChannelType(raw_esi.ChannelType.get(type))
+    super().__init__(type, name)
 
 
 class Input(ModuleDecl):
@@ -52,8 +53,8 @@ class InputChannel(Input):
   """Create an ESI input channel port."""
 
   def __init__(self, type: mlir.ir.Type, name: str = None):
-    esi_type = esi.ChannelType.get(type)
-    super().__init__(esi_type, name)
+    type = ChannelType(raw_esi.ChannelType.get(type))
+    super().__init__(type, name)
 
 
 class AppID:
