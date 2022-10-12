@@ -129,9 +129,17 @@ struct EndToken : public TokenBase<EndToken, Token::Kind::End> {};
 
 class PrettyPrinter {
 public:
+  /// Listener to Token storage events.
+  struct Listener {
+    virtual ~Listener();
+    /// No tokens referencing external memory are present.
+    virtual void clear(){};
+  };
+
   // TODO: allow setting starting indentation level!
-  PrettyPrinter(llvm::raw_ostream &os, uint32_t margin)
-      : space(margin), margin(margin), os(os) {
+  PrettyPrinter(llvm::raw_ostream &os, uint32_t margin,
+                Listener *listener = nullptr)
+      : space(margin), margin(margin), os(os), listener(listener) {
     assert(margin < kInfinity / 2);
   }
 
@@ -147,7 +155,11 @@ public:
 
   void eof();
 
+  void setListener(Listener *newListener) { listener = newListener; };
+  auto *getListener() const { return listener; }
+
   static constexpr uint32_t kInfinity = 0xFFFFFU;
+
 private:
   /// Format token with tracked size.
   struct FormattedToken {
@@ -213,6 +225,8 @@ private:
 
   /// Output stream.
   llvm::raw_ostream &os;
+
+  Listener *listener = nullptr;
 };
 
 } // end namespace pretty

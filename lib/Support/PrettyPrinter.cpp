@@ -57,9 +57,6 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
 
-// TODO: clear token storage when possible (left=right, maybe scanStack empty).
-//       also reset offsets/cursors.
-
 namespace circt {
 namespace pretty {
 
@@ -67,6 +64,9 @@ namespace pretty {
 // auto constexpr MIN_SPACE = 20;
 
 auto constexpr debug = false;
+
+/// Destructor, anchor.
+PrettyPrinter::Listener::~Listener() = default;
 
 /// Add token for printing.  In Oppen, this is "scan".
 void PrettyPrinter::add(Token t) {
@@ -119,6 +119,8 @@ void PrettyPrinter::clear() {
   assert(tokens.empty());
   tokens.clear();
   tokenOffset = 0;
+  if (listener)
+    listener->clear();
 }
 
 /// Break encountered, set sizes of begin/breaks in scanStack that we now know.
