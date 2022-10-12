@@ -2430,29 +2430,18 @@ SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
 namespace {
 class NameCollector {
 public:
-  // This is information we keep track of for each wire/reg/interface
-  // declaration we're going to emit.
-  struct ValuesToEmitRecord {
-    Value value;
-    SmallString<8> typeString;
-  };
-
   NameCollector(ModuleEmitter &moduleEmitter, ModuleNameManager &names)
       : moduleEmitter(moduleEmitter), names(names) {}
 
   // Scan operations in the specified block, collecting information about
-  // those that need to be emitted out of line.
+  // those that need to be emitted as declarations.
   void collectNames(Block &block);
 
   size_t getMaxDeclNameWidth() const { return maxDeclNameWidth; }
   size_t getMaxTypeWidth() const { return maxTypeWidth; }
-  const SmallVectorImpl<ValuesToEmitRecord> &getValuesToEmit() const {
-    return valuesToEmit;
-  }
 
 private:
   size_t maxDeclNameWidth = 0, maxTypeWidth = 0;
-  SmallVector<ValuesToEmitRecord, 16> valuesToEmit;
   ModuleEmitter &moduleEmitter;
   ModuleNameManager &names;
 };
@@ -2500,14 +2489,10 @@ void NameCollector::collectNames(Block &block) {
 
     if (!isExpr) {
       for (auto result : op.getResults()) {
-        // Measure this name and the length of its type, and ensure it is
-        // emitted later.
-        valuesToEmit.push_back(ValuesToEmitRecord{result, {}});
-        auto &typeString = valuesToEmit.back().typeString;
-
         StringRef declName =
             getVerilogDeclWord(&op, moduleEmitter.state.options);
         maxDeclNameWidth = std::max(declName.size(), maxDeclNameWidth);
+        SmallString<16> typeString;
 
         // Convert the port's type to a string and measure it.
         {
@@ -2569,15 +2554,11 @@ public:
   void emitStatementBlock(Block &body);
   size_t getNumStatementsEmitted() const { return numStatementsEmitted; }
 
-  /// Emit the declaration for the temporary operation. If the operation is not
-  /// a constant, emit no initializer and no semicolon, e.g. `wire foo`, and
-  /// return false. If the operation *is* a constant, also emit the initializer
-  /// and semicolon, e.g. `localparam K = 1'h0;`, and return true.
-  bool emitDeclarationForTemporary(Operation *op);
+  /// Emit the declaration.
   LogicalResult emitDeclaration(Operation *op);
 
 private:
-  void collectNamesEmitDecls(Block &block);
+  void collectNamesAndCaluculateDeclrationWidths(Block &block);
 
   void
   emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
@@ -2670,7 +2651,6 @@ private:
   LogicalResult visitSV(InterfaceSignalOp op);
   LogicalResult visitSV(InterfaceModportOp op);
   LogicalResult visitSV(AssignInterfaceSignalOp op);
-  void emitStatementExpression(Operation *op);
 
   void emitBlockAsStatement(Block *block,
                             SmallPtrSet<Operation *, 8> &locationOps,
@@ -2724,40 +2704,6 @@ void StmtEmitter::emitSVAttributes(Operation *op) {
   indent();
   emitSVAttributesImpl(os, svAttrs);
   os << '\n';
-}
-
-void StmtEmitter::emitStatementExpression(Operation *op) {
-  // This is invoked for expressions that have a non-single use.  This could
-  // either be because they are dead or because they have multiple uses.
-  // todo: use_empty could be prurned prior to emission.
-  if (op->getResult(0).use_empty()) {
-    indent() << "// Unused: ";
-    --numStatementsEmitted;
-  } else if (isZeroBitType(op->getResult(0).getType())) {
-    indent() << "// Zero width: ";
-    --numStatementsEmitted;
-  } else if (op->getParentOp()->hasTrait<ProceduralRegion>()) {
-    // Some expressions in procedural regions can be emitted inline into their
-    // "automatic logic" or "localparam" definitions.  Don't redundantly emit
-    // them.
-    if (emitter.expressionsEmittedIntoDecl.count(op)) {
-      --numStatementsEmitted;
-      return;
-    }
-    indent() << names.getName(op->getResult(0)) << " = ";
-  } else {
-    if (emitDeclarationForTemporary(op))
-      return;
-    os << " = ";
-  }
-
-  // Emit the expression with a special precedence level so it knows to do a
-  // "deep" emission even though there are multiple uses, not just emitting the
-  // name.
-  SmallPtrSet<Operation *, 8> emittedExprs;
-  emitExpression(op->getResult(0), emittedExprs, ForceEmitMultiUse);
-  os << ';';
-  emitLocationInfoAndNewLine(emittedExprs);
 }
 
 LogicalResult StmtEmitter::visitSV(AssignOp op) {
@@ -4048,45 +3994,11 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
   return success();
 }
 
-/// Emit the declaration for the temporary operation. If the operation is not
-/// a constant, emit no initializer and no semicolon, e.g. `wire foo`, and
-/// return false. If the operation *is* a constant, also emit the initializer
-/// and semicolon, e.g. `localparam K = 1'h0`, and return true.
-bool StmtEmitter::emitDeclarationForTemporary(Operation *op) {
-  StringRef declWord = getVerilogDeclWord(op, state.options);
-
-  indent() << declWord;
-  if (!declWord.empty())
-    os << ' ';
-  if (emitter.printPackedType(stripUnpackedTypes(op->getResult(0).getType()),
-                              os, op->getLoc()))
-    os << ' ';
-  os << names.getName(op->getResult(0));
-
-  // Emit the initializer expression for this declaration inline if safe.
-  if (!isExpressionEmittedInlineIntoProceduralDeclaration(op, *this))
-    return false;
-
-  // Keep track that we emitted this.
-  emitter.expressionsEmittedIntoDecl.insert(op);
-
-  os << " = ";
-  SmallPtrSet<Operation *, 8> emittedExprs;
-  emitExpression(op->getResult(0), emittedExprs, ForceEmitMultiUse);
-  os << ';';
-  emitLocationInfoAndNewLine(emittedExprs);
-  return true;
-}
-
-void StmtEmitter::collectNamesEmitDecls(Block &block) {
+void StmtEmitter::collectNamesAndCaluculateDeclrationWidths(Block &block) {
   // In the first pass, we fill in the symbol table, calculate the max width
   // of the declaration words and the max type width.
   NameCollector collector(emitter, names);
   collector.collectNames(block);
-
-  auto &valuesToEmit = collector.getValuesToEmit();
-  if (valuesToEmit.empty())
-    return;
 
   // Record maxDeclNameWidth and maxTypeWidth in the current scope.
   maxDeclNameWidth = collector.getMaxDeclNameWidth();
@@ -4110,7 +4022,7 @@ void StmtEmitter::emitStatementBlock(Block &body) {
   // module.  #ifdef's in procedural regions are special because local variables
   // are all emitted at the top of their enclosing blocks.
   if (!isa<IfDefProceduralOp>(body.getParentOp()))
-    collectNamesEmitDecls(body);
+    collectNamesAndCaluculateDeclrationWidths(body);
 
   // Emit the body.
   for (auto &op : body) {
