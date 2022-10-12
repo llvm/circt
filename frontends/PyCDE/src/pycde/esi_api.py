@@ -2,14 +2,13 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from dataclasses import field
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from io import FileIO
 import json
 import pathlib
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 __dir__ = pathlib.Path(__file__).parent
 

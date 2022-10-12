@@ -216,7 +216,12 @@ class _CosimPort:
       return self.capnp_type.new_message(**py_dict)
 
     def read(self, capnp_resp) -> int:
-      return capnp_resp.as_struct(self.capnp_type)
+      capnp_msg = capnp_resp.as_struct(self.capnp_type)
+      ret = {}
+      for (fname, _) in self.esi_type.fields.items():
+        if hasattr(capnp_msg, fname):
+          ret[fname] = getattr(capnp_msg, fname)
+      return ret
 
   # Lookup table for getting the correct type converter for a given type.
   ConvertLookup = {IntType: _IntConverter, StructType: _StructConverter}

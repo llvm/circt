@@ -311,6 +311,10 @@ class ChannelType(PyCDEType):
   def __str__(self):
     return f"channel<{self.inner_type}>"
 
+  @property
+  def inner(self):
+    return self.inner_type
+
   def wrap(self, value, valid):
     from .support import _obj_to_value
     value = _obj_to_value(value, self._type.inner)

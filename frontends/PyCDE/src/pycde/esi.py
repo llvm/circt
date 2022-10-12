@@ -19,8 +19,8 @@ class ToFromServer:
   """A bidirectional channel declaration."""
 
   def __init__(self, to_server_type: Type, to_client_type: Type):
-    self.to_server_type = raw_esi.ChannelType.get(to_server_type)
-    self.to_client_type = raw_esi.ChannelType.get(to_client_type)
+    self.to_server_type = ChannelType(raw_esi.ChannelType.get(to_server_type))
+    self.to_client_type = ChannelType(raw_esi.ChannelType.get(to_client_type))
 
 
 class ServiceDecl(_PyProxy):

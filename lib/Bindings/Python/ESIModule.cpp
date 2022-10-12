@@ -72,6 +72,8 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
   mlir_type_subclass(m, "ChannelType", circtESITypeIsAChannelType)
       .def_classmethod("get",
                        [](py::object cls, MlirType inner) {
+                         if (circtESITypeIsAChannelType(inner))
+                           return cls(inner);
                          return cls(circtESIChannelTypeGet(inner));
                        })
       .def_property_readonly(

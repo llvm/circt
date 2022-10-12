@@ -5,6 +5,7 @@
 # PY: from esi_ram import run_cosim
 # PY: run_cosim(tmpdir, rpcschemapath, simhostport)
 
+from this import d
 import pycde
 from pycde import (Clock, Input, module, generator, types)
 from pycde.constructs import Wire
@@ -20,6 +21,8 @@ WriteType = RamI64x8.write.to_server_type
 class MemComms:
   write = esi.FromServer(WriteType)
   read = esi.ToFromServer(to_server_type=types.i64, to_client_type=types.i3)
+  loopback = esi.ToFromServer(to_server_type=WriteType,
+                              to_client_type=WriteType)
 
 
 @module
@@ -51,6 +54,9 @@ class top:
     read_data = RamI64x8.read(read_address)
     read_address.assign(MemComms.read(read_data, "read"))
 
+    loopback_wire = Wire(WriteType)
+    loopback_wire.assign(MemComms.loopback(loopback_wire, "loopback"))
+
     RamI64x8.instantiate_builtin("sv_mem",
                                  result_types=[],
                                  inputs=[ports.clk, ports.rst])
@@ -69,12 +75,16 @@ def run_cosim(tmpdir=".", schema_path="schema.capnp", rpchostport=None):
   print(cosim.list())
   top = esi_sys.top(cosim)
 
+  write_cmd = {"address": 2, "data": 42}
+  loopback_result = top.mem_comms.loopback[0](write_cmd)
+  assert loopback_result == write_cmd
+
   read_result = top.mem_comms.read[0](2)
   assert read_result == 0
   read_result = top.mem_comms.read[0](3)
   assert read_result == 0
 
-  top.mem_comms.write[0].write({"address": 2, "data": 42})
+  top.mem_comms.write[0].write(write_cmd)
   read_result = top.mem_comms.read[0](2)
   assert read_result == 42
   read_result = top.mem_comms.read[0](3)

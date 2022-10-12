@@ -34,8 +34,7 @@ class OutputChannel(Output):
   """Create an ESI output channel port."""
 
   def __init__(self, type: mlir.ir.Type, name: str = None):
-    if not isinstance(type, ChannelType):
-      type = raw_esi.ChannelType.get(type)
+    type = ChannelType(raw_esi.ChannelType.get(type))
     super().__init__(type, name)
 
 
@@ -54,8 +53,7 @@ class InputChannel(Input):
   """Create an ESI input channel port."""
 
   def __init__(self, type: mlir.ir.Type, name: str = None):
-    if not isinstance(type, ChannelType):
-      type = raw_esi.ChannelType.get(type)
+    type = ChannelType(raw_esi.ChannelType.get(type))
     super().__init__(type, name)
 
 
