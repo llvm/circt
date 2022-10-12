@@ -140,14 +140,12 @@ jobs:
       - name: Test PyCDE
         if: ${{ env.RUN_PYCDE_CI == '1' }}
         run: |
-          cd build
-          make check-pycde -j$(nproc)
+          ninja -C build check-pycde -j$(nproc)
       
       - name: Test PyCDE integration tests
         if: ${{ env.RUN_PYCDE_CI == '1' }}
         run: |
-          cd build
-          make check-pycde-integration -j$(nproc)
+          ninja -C build check-pycde-integration -j$(nproc)
 
       - name: Ccache stats
         run: |
