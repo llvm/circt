@@ -86,19 +86,13 @@ jobs:
       - name: PyCDE test execution gate
         run: |
           # If this is a PR, run the PR gate
-          RUN_PYCDE_CI=0
           if [ ${{ github.event.action }} == "opened" ] || [ ${{ github.event.action }} == "synchronize" ] || [ ${{ github.event.action }} == "reopened" ] ]; then
             # Only run the job if there is a change in anything PyCDE-related.
             pip3 install GitPython # until https://github.com/circt/images/pull/23 lands
-            RUN_PYCDE_CI=1
+            echo "RUN_PYCDE_CI=1" >> $GITHUB_ENV
           else
             echo "This is a manually triggered build. Running PyCDE CI."
-            RUN_PYCDE_CI=1
-          fi
-
-          if [ $RUN_PYCDE_CI -eq 1 ]; then
             echo "RUN_PYCDE_CI=1" >> $GITHUB_ENV
-            echo "PYCDE_CMAKE_CMD=\"-DCIRCT_ENABLE_FRONTENDS=PyCDE\"" >> $GITHUB_ENV
           fi
 
       # --------
@@ -128,7 +122,7 @@ jobs:
             -DLLVM_USE_LINKER=lld \
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
             -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
-            $PYCDE_CMAKE_CMD \
+            -DCIRCT_ENABLE_FRONTENDS=PyCDE \
             -DLLVM_LIT_ARGS='-sv --show-unsupported'
       - name: Test CIRCT
         run: |
