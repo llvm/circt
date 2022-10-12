@@ -135,6 +135,13 @@ public:
   /// Add token for printing.  In Oppen, this is "scan".
   void add(Token t);
 
+  /// Add a range of tokens.
+  template <typename R>
+  void addTokens(R &&TokenRange) {
+    for (Token &t : TokenRange)
+      add(t);
+  }
+
   void eof() {
     if (!scanStack.empty()) {
       checkStack(0);
