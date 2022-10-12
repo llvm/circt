@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Support/PrettyPrinter.h"
+#include "circt/Support/PrettyPrinterBuilder.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/raw_ostream.h"
@@ -324,6 +325,125 @@ TEST(CIRCTSupportTests, TrailingSpace) {
   pp.addTokens(tokens);
   pp.eof();
   EXPECT_EQ(out.str(), StringRef("test test\n"));
+}
+
+TEST(CIRCTSupportTests, Builder) {
+  SmallString<128> out;
+  raw_svector_ostream os(out);
+
+  PPBuilder b(os, 7);
+
+  {
+    auto ib = b.scopedIBox();
+    b.literal("test");
+    b.space();
+    b.literal("test");
+    b.space();
+    b.literal("test");
+  }
+  EXPECT_EQ(out.str(), StringRef("test\ntest\ntest"));
+}
+
+TEST(CIRCTSupportTests, Stream) {
+  SmallString<128> out;
+  raw_svector_ostream os(out);
+
+  PPStream ps(os, 20);
+  {
+    auto ib = ps.scopedIBox();
+    ps << "test" << PP::space << "test" << PP::space << "test";
+  }
+  ps << PP::eof;
+  EXPECT_EQ(out.str(), StringRef("test test test"));
+}
+
+TEST(CIRCTSupportTests, StreamQuoted) {
+  SmallString<128> out;
+  raw_svector_ostream os(out);
+
+  PPStream ps(os, 20);
+  out = "\n";
+  {
+    auto ib = ps.scopedIBox(2);
+    ps << "test" << PP::space;
+    ps.writeQuotedEscaped("quote\"me");
+    ps << PP::space << "test";
+  }
+  ps << PP::newline << PP::eof;
+  EXPECT_EQ(out.str(), StringRef(R"""(
+test "quote\"me"
+  test
+)"""));
+}
+
+TEST(CIRCTSupportTests, Expr) {
+  SmallString<128> out;
+  raw_svector_ostream os(out);
+
+  auto sumExpr = [](auto &ps) {
+    ps << "(";
+    {
+      auto ib = ps.scopedIBox(0);
+      auto vars = {"a", "b", "c", "d", "e", "f"};
+      llvm::interleave(
+          vars, [&](const char *each) { ps << each; },
+          [&]() { ps << PP::space << "+" << PP::space; });
+    }
+    ps << ")";
+  };
+
+  auto test = [&](const char *id, auto margin) {
+    PPStream ps(os, margin);
+    out = "\n";
+    {
+      auto ib = ps.scopedIBox(2);
+      {
+        // TODO: let this wrap.
+        ps << "assign" << PP::nbsp << id << PP::nbsp << "=";
+      }
+      ps << PP::space;
+      auto ib3 = ps.scopedIBox(0);
+      sumExpr(ps);
+      ps << PP::space << "*" << PP::space;
+      sumExpr(ps);
+      ps << ";";
+    }
+    ps << PP::newline << PP::eof;
+  };
+
+  test("foo", 8);
+  EXPECT_EQ(out.str(), StringRef(R"""(
+assign foo =
+  (a + b
+   + c +
+   d + e
+   + f)
+  *
+  (a + b
+   + c +
+   d + e
+   + f);
+)"""));
+  test("foo", 12);
+  EXPECT_EQ(out.str(), StringRef(R"""(
+assign foo =
+  (a + b + c
+   + d + e +
+   f) *
+  (a + b + c
+   + d + e +
+   f);
+)"""));
+  test("foo", 30);
+  EXPECT_EQ(out.str(), StringRef(R"""(
+assign foo =
+  (a + b + c + d + e + f) *
+  (a + b + c + d + e + f);
+)"""));
+  test("foo", 80);
+  EXPECT_EQ(out.str(), StringRef(R"""(
+assign foo = (a + b + c + d + e + f) * (a + b + c + d + e + f);
+)"""));
 }
 
 } // end anonymous namespace

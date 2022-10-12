@@ -12,6 +12,7 @@ add_circt_library(CIRCTSupport
   LoweringOptions.cpp
   Path.cpp
   PrettyPrinter.cpp
+  PrettyPrinterBuilder.cpp
   SymCache.cpp
   ValueMapper.cpp
   "${VERSION_CPP}"
