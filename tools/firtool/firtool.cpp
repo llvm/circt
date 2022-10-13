@@ -312,6 +312,16 @@ static cl::opt<bool> disableInferRW("disable-infer-rw",
                                     cl::init(false), cl::Hidden,
                                     cl::cat(mainCategory));
 
+static cl::opt<bool> etcDisableInstanceExtraction(
+    "etc-disable-instance-extraction",
+    cl::desc("Disable extracting instances only that feed test code"),
+    cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool> etcDisableModuleInlining(
+    "etc-disable-module-inlining",
+    cl::desc("Disable inlining modules that only feed test code"),
+    cl::init(false), cl::cat(mainCategory));
+
 enum OutputFormatKind {
   OutputParseOnly,
   OutputIRFir,
@@ -751,7 +761,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
                                             stripMuxPragmas));
 
       if (extractTestCode)
-        pm.addPass(sv::createSVExtractTestCodePass());
+        pm.addPass(sv::createSVExtractTestCodePass(etcDisableInstanceExtraction,
+                                                   etcDisableModuleInlining));
 
       // If enabled, run the optimizer.
       if (!disableOptimization) {
