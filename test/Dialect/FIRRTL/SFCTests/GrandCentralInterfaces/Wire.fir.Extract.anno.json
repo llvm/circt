@@ -1,7 +1,7 @@
 [
   {
-    "class":"sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-    "directory":"Wire/firrtl/gct",
-    "filename":"Wire/firrtl/bindings.sv"
+    "class": "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+    "directory": "Wire/firrtl/gct",
+    "filename": "Wire/firrtl/bindings.sv"
   }
 ]
