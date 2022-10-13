@@ -1282,7 +1282,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
       })
       .Case<EnumType>([&](EnumType enumType) {
         os << "enum {";
-        llvm::interleaveComma(enumType.getFields(), os,
+        llvm::interleaveComma(enumType.getScopedFields(), os,
                               [&](Attribute enumerator) {
                                 os << enumerator.cast<StringAttr>().getValue();
                               });
@@ -2424,7 +2424,7 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(EnumConstantOp op) {
-  os << op.getField().getField().getValue();
+  os << op.getField().getScopedField().getValue();
   return {Selection, IsUnsigned};
 }
 

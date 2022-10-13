@@ -142,13 +142,13 @@ def StructTypeImpl : HWType<"Struct"> {
 def EnumTypeImpl : HWType<"Enum"> {
   let summary = "HW Enum type";
   let description = [{
-    Represents an enumeration of values. Enums are interpreted as integers with
-    a synthesis-defined encoding.
-    !hw.enum<field1, field2>
+    Represents a scoped enumeration of values. Enums are interpreted as integers
+    with a synthesis-defined encoding.
+    !hw.enum<foo: [field1, field2]>
   }];
   let mnemonic = "enum";
-  let parameters = (
-    ins "mlir::ArrayAttr":$fields
+  let parameters = (ins
+    "mlir::StringAttr":$name, "mlir::ArrayAttr":$fields
   );
 
   let extraClassDeclaration = [{
@@ -158,6 +158,9 @@ def EnumTypeImpl : HWType<"Enum"> {
     /// Returns the index of the requested field, or a nullopt if the field is
     // not part of this enum.
     llvm::Optional<size_t> indexOf(mlir::StringRef field);
+
+    /// Returns the scoped names of the fields of this enum.
+    llvm::SmallVector<StringAttr> getScopedFields();
   }];
   
   let hasCustomAssemblyFormat = 1;
