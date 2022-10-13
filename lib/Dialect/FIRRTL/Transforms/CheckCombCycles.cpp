@@ -21,8 +21,6 @@
 #include "llvm/ADT/SmallSet.h"
 #include <variant>
 
-#define DEBUG_TYPE "check-comb-cycles"
-
 using namespace circt;
 using namespace firrtl;
 
@@ -54,34 +52,18 @@ struct NodeContext {
 namespace {
 /// The node class of combinational graph.
 struct Node {
-  Value value;
+  FieldRef valueRef;
   NodeContext *context;
 
   explicit Node(Value value = nullptr, NodeContext *context = nullptr)
-      : value(value), context(context) {
-      
-        if (value != llvm::DenseMapInfo<Value>::getEmptyKey() && value != llvm::DenseMapInfo<Value>::getTombstoneKey() && value!= nullptr){
-          //if (!value.isa<BlockArgument>())
-          //  if (isa<SubfieldOp>(value.getDefiningOp()) || isa<SubindexOp>(value.getDefiningOp())) {
-          //    auto field = getFieldRefFromValue(value);
-          //    value = field.getValue();
-          //    fieldIdx = field.getFieldID();
-          //  }
-          //    
-          llvm::errs() << "\n NodeConstructor ::"<< value ;
-        }
-      }
+      : valueRef(getFieldRefFromValue(value)), context(context) {}
 
   bool operator==(const Node &rhs) const {
-        if (value != llvm::DenseMapInfo<Value>::getEmptyKey() && value != llvm::DenseMapInfo<Value>::getTombstoneKey() && value!= nullptr)
-        if (rhs.value != llvm::DenseMapInfo<Value>::getEmptyKey() && rhs.value != llvm::DenseMapInfo<Value>::getTombstoneKey() && rhs.value!= nullptr){
-          llvm::errs() << "\n Compare ::"<< value <<"=="<< rhs.value ;
-          return getFieldRefFromValue(value) == getFieldRefFromValue(rhs.value);
-        }
-    return value == rhs.value ;
+      //if (auto memOp = dyn_cast_or_null<MemOp>(valueRef.getDefiningOp()))
+      //  return valueRef.getValue() == rhs.valueRef.getValue();
+    return valueRef == rhs.valueRef;
   }
   bool operator!=(const Node &rhs) const { return !(*this == rhs); }
-  bool isNull() const { return value == nullptr; }
 };
 } // namespace
 
@@ -108,89 +90,79 @@ class ChildIterator
 
 public:
   ChildIterator() = default;
-  explicit ChildIterator(Value v)
-      : childEnd(v.use_end()), childIt(v.use_begin()) {
-
-    LLVM_DEBUG(if (childIt != childEnd) llvm::dbgs()
-               << "\n ChildIterator constructor for uses of:" << v);
-    skipToNextValidChild();
-  }
-  explicit ChildIterator(Value v, bool end = false)
-    : childEnd(v.use_end()), childIt(end ? childEnd : v.use_begin()) {
-        llvm::errs() << "\n ChildIterator constructor"<< v <<","<<end;
-      auto fieldRef = getFieldRefFromValue(v);
-      if (fieldRef.getFieldID() != 0) {
-        SmallVector<Value> worklist;
-        worklist.push_back(fieldRef.getValue());
-        while (!worklist.empty()){
-          auto val = worklist.pop_back_val();
-          for (auto &use : val.getUses()){
-            if (isa<SubfieldOp, SubindexOp>(use.getOwner())) {
-              worklist.push_back(use.getOwner()->getResult(0));
-              continue;
-            }
-            if (auto connect = dyn_cast<FConnectLike>(use.getOwner())){
-              if (fieldRef == getFieldRefFromValue(connect.getSrc()))
-                aggregateUsers.push_back(use.getOwner());
-            } else if (use.getOwner()->getNumResults() > 0)
-              aggregateUsers.push_back(use.getOwner());
+  explicit ChildIterator(FieldRef fieldRef) {
+    //if (fieldRef.getValue() == llvm::DenseMapInfo<Value>::getEmptyKey() || fieldRef.getValue() == llvm::DenseMapInfo<Value>::getTombstoneKey())
+    //  return;
+    aggregateChildIt = 0;
+    if (fieldRef.getFieldID() != 0) {
+      SmallVector<Value> worklist;
+      worklist.push_back(fieldRef.getValue());
+      while (!worklist.empty()) {
+        auto val = worklist.pop_back_val();
+        for (auto &use : val.getUses()) {
+          if (isa<SubfieldOp, SubindexOp>(use.getOwner())) {
+            worklist.push_back(use.getOwner()->getResult(0));
+            continue;
           }
           if (auto connect = dyn_cast<FConnectLike>(use.getOwner())) {
-            if (fieldRef == getFieldRefFromValue(connect.getSrc()))
+            auto srcRef = getFieldRefFromValue(connect.getSrc());
+            if (fieldRef == srcRef || (isa_and_nonnull<MemOp>(srcRef.getValue().getDefiningOp()) && srcRef.getValue() == fieldRef.getValue()))
               aggregateUsers.push_back(use.getOwner());
           } else if (use.getOwner()->getNumResults() > 0)
             aggregateUsers.push_back(use.getOwner());
         }
       }
-      llvm::errs() << "\n child iter :"<< aggregateUsers.end() << "::"<< aggregateChildIt;
+      childIt = nullptr;
+    } else {
+      childIt = fieldRef.getValue().use_begin();
+      childEnd = fieldRef.getValue().use_end();
+      skipToNextValidChild();
     }
+  }
 
   /// The iterator is empty or at the end.
-  bool isAtEnd() const { return childIt == nullptr || childIt == childEnd; }
+  bool isAtEnd() const {
+    return aggregateUsers.empty() ? (childIt == nullptr || childIt == childEnd)
+                                  : aggregateChildIt == aggregateUsers.size();
+  }
 
   using llvm::iterator_facade_base<ChildIterator, std::forward_iterator_tag,
                                    Value>::operator++;
   ChildIterator &operator++() {
-    if (aggregateUsers.empty())  {
-      if (auto connect = dyn_cast<FConnectLike>(childIt->getOwner()))
-        llvm::errs() << "\n Incrementing Child it :"<< connect;
-    }else 
-        llvm::errs() << "\n Incrementing Child it :"<< aggregateUsers[aggregateChildIt];
     assert(!isAtEnd() && "incrementing the end iterator");
     if (aggregateUsers.empty()) {
       ++childIt;
       skipToNextValidChild();
-    } else 
+    } else
       ++aggregateChildIt;
     return *this;
   }
 
   Value operator*() {
-    if (aggregateUsers.empty())  {
-      if (auto connect = dyn_cast<FConnectLike>(childIt->getOwner()))
-        llvm::errs() << "\n *Child it :"<< *connect;
-    }else 
-        llvm::errs() << "\n *Child it :"<< *aggregateUsers[aggregateChildIt];
     assert(!isAtEnd() && "dereferencing the end iterator");
-    LLVM_DEBUG(llvm::dbgs()
-               << "\n ChildIterator dereference :" << *childIt->getOwner());
-    if (auto connect = dyn_cast<FConnectLike>(childIt->getOwner()))
+    Operation *op;
+    if (aggregateUsers.empty())
+      op = childIt->getOwner();
+    else
+      op = aggregateUsers[aggregateChildIt];
+
+    if (auto connect = dyn_cast<FConnectLike>(op))
       return connect.getDest();
-    return childIt->getOwner()->getResult(0);
+    return op->getResult(0);
   }
 
   bool operator==(const ChildIterator &rhs) const {
-    return (childIt == rhs.childIt && 
-        ((aggregateChildIt == aggregateUsers.size()) == (rhs.aggregateChildIt == rhs.aggregateUsers.size())));
+    return (childIt == rhs.childIt &&
+            ((aggregateChildIt == aggregateUsers.size()) ==
+             (rhs.aggregateChildIt == rhs.aggregateUsers.size())));
   }
   bool operator!=(const ChildIterator &rhs) const { return !(*this == rhs); }
 
+private:
   Value::use_iterator childEnd;
   Value::use_iterator childIt;
   SmallVector<Operation *> aggregateUsers;
   unsigned aggregateChildIt;
-  bool end;
-
 };
 } // namespace
 
@@ -204,11 +176,8 @@ class NodeIterator
     : public llvm::iterator_facade_base<NodeIterator, std::forward_iterator_tag,
                                         Node> {
 public:
-  explicit NodeIterator(Node node) : node(node) {
-    // If value is non-null then set the childIt.
-    if (node.value)
-      child = ChildIterator(node.value);
-  }
+  explicit NodeIterator(Node node)
+      : node(node), child(ChildIterator(node.valueRef)) {}
 
   using llvm::iterator_facade_base<NodeIterator, std::forward_iterator_tag,
                                    Node>::operator++;
@@ -218,7 +187,7 @@ public:
   bool operator==(const NodeIterator &rhs) const { return child == rhs.child; }
   bool operator!=(const NodeIterator &rhs) const { return !(*this == rhs); }
 
-  Value getValue() { return node.value; }
+  Value getValue() { return node.valueRef.getValue(); }
   CombPathsMap *getCombPathsMap() {
     assert(node.context && "invalid node context");
     return node.context->map;
@@ -228,7 +197,6 @@ public:
     return node.context->graph;
   }
   bool isAtEnd() const { return child.isAtEnd(); }
-  bool isEndIterator() const { return node.isNull(); }
 
 private:
   Node node;
@@ -248,7 +216,7 @@ class InstanceNodeIterator : public NodeIterator {
   void skipToNextValidPort() {
     ChildIterator newChild;
     while (portIt != portEnd) {
-      newChild = ChildIterator(instance.getResult(*portIt));
+      newChild = ChildIterator(getFieldRefFromValue(instance.getResult(*portIt)));
       if (newChild.isAtEnd())
         ++portIt;
       else
@@ -274,12 +242,8 @@ public:
   }
 
   InstanceNodeIterator &operator++() {
-    if (!child.isAtEnd())
-      ++child;
-    else {
-      ++portIt;
-      skipToNextValidPort();
-    }
+    ++portIt;
+    skipToNextValidPort();
     return *this;
   }
 
@@ -301,7 +265,7 @@ class SubfieldNodeIterator : public NodeIterator {
 public:
   explicit SubfieldNodeIterator(SubfieldOp subfield, Node node)
       : NodeIterator(node) {
-    assert(subfield == node.value.getDefiningOp<SubfieldOp>() &&
+    assert(subfield == node.valueRef.getDefiningOp<SubfieldOp>() &&
            "subfield must be the defining op of the node value");
 
     auto memory = subfield.getInput().getDefiningOp<MemOp>();
@@ -339,7 +303,7 @@ public:
            index == (unsigned)ReadPortSubfield::data) ||
           (portKind == MemOp::PortKind::ReadWrite &&
            index == (unsigned)ReadWritePortSubfield::rdata)) {
-        child = ChildIterator(currentSubfield.getResult());
+        child = ChildIterator(getFieldRefFromValue(currentSubfield.getResult()));
         dataPort = currentSubfield.getResult();
         return;
       }
@@ -347,10 +311,7 @@ public:
   }
 
   SubfieldNodeIterator &operator++() {
-    if (!child.isAtEnd())
-      ++child;
-    else
-      child = ChildIterator();
+    child = ChildIterator();
     return *this;
   }
 
@@ -371,16 +332,9 @@ class DummySourceNodeIterator
     : public llvm::iterator_facade_base<DummySourceNodeIterator,
                                         std::forward_iterator_tag, Node> {
 public:
-  explicit DummySourceNodeIterator(Node node, bool end = false)
-      : node(node), connect(end ? node.context->connects.end()
-                                : node.context->connects.begin()) {
-        //for (auto c : node.context->connects)
-        //  llvm::errs() << "DummySourceNodeIterator : connect:"<<c;
-      
-      }
-  bool isAtEnd() const {
-    return connect == node.context->connects.end();
-  }
+  explicit DummySourceNodeIterator(Node node)
+      : node(node), connect(node.context->connects.begin()) {}
+  bool isAtEnd() const { return connect == node.context->connects.end(); }
 
   using llvm::iterator_facade_base<DummySourceNodeIterator,
                                    std::forward_iterator_tag, Node>::operator++;
@@ -392,7 +346,6 @@ public:
   Node operator*() {
     assert(connect != node.context->connects.end() &&
            "dereferencing the end iterator");
-    llvm::errs() << "\n node * " << *connect;
     return Node((*connect).getDest(), node.context);
   }
 
@@ -402,7 +355,6 @@ public:
   bool operator!=(const DummySourceNodeIterator &rhs) const {
     return !(*this == rhs);
   }
-  bool isAtEnd() const { return connect == node.context->connects.end(); }
 
 private:
   Node node;
@@ -415,23 +367,20 @@ private:
 //===----------------------------------------------------------------------===//
 
 namespace {
-<<<<<<< HEAD
-=======
 class EndIterator
     : public llvm::iterator_facade_base<NodeIterator, std::forward_iterator_tag,
                                         Node> {
 public:
-  explicit EndIterator(){}
+  explicit EndIterator() = default;
 
   using llvm::iterator_facade_base<NodeIterator, std::forward_iterator_tag,
                                    Node>::operator++;
   EndIterator &operator++() { return *this; }
   Node operator*() { return Node(); }
 
-  bool operator==(const EndIterator &rhs) const { return true;}
+  bool operator==(const EndIterator &rhs) const { return true; }
   bool operator!=(const EndIterator &rhs) const { return false; }
 };
->>>>>>> 5c0f92f47... Checkpoint: loop detection working
 
 class CombGraphIterator
     : public llvm::iterator_facade_base<CombGraphIterator,
@@ -446,15 +395,11 @@ public:
 
   variant_iterator dispatchConstructor(Node node, bool end) {
     if (end)
-<<<<<<< HEAD
-      return NodeIterator(Node(nullptr, node.context));
-=======
       return EndIterator();
->>>>>>> 5c0f92f47... Checkpoint: loop detection working
-    if (!node.value)
-      return DummySourceNodeIterator(node, end);
+    if (!node.valueRef)
+      return DummySourceNodeIterator(node);
 
-    auto defOp = node.value.getDefiningOp();
+    auto defOp = node.valueRef.getDefiningOp();
     if (!defOp)
       return NodeIterator(node);
 
@@ -463,27 +408,24 @@ public:
           return InstanceNodeIterator(instance, node);
         })
         .Case<SubfieldOp>([&](SubfieldOp subfield) {
-          if (isa_and_nonnull<MemOp>(subfield.getInput().getDefiningOp()))
-            return static_cast<variant_iterator>(
-                SubfieldNodeIterator(subfield, node));
+         // if (isa_and_nonnull<MemOp>(subfield.getInput().getDefiningOp()))
+         //   return static_cast<variant_iterator>(
+         //       SubfieldNodeIterator(subfield, node));
           // This is required to explicitly ignore self loops of register.
           if (isa_and_nonnull<RegOp, RegResetOp>(
                   getFieldRefFromValue(subfield).getDefiningOp()))
-            return static_cast<variant_iterator>(
-                NodeIterator(Node(nullptr, node.context)));
+            return static_cast<variant_iterator>(EndIterator());
           return static_cast<variant_iterator>(NodeIterator(node));
         })
         .Case<SubindexOp>([&](SubindexOp sub) {
           // This is required to explicitly ignore self loops of register.
           if (isa_and_nonnull<RegOp, RegResetOp>(
                   getFieldRefFromValue(sub).getDefiningOp()))
-            return static_cast<variant_iterator>(
-                NodeIterator(Node(nullptr, node.context)));
+            return static_cast<variant_iterator>(EndIterator());
           return static_cast<variant_iterator>(NodeIterator(node));
         })
         // The children of reg or regreset op are not iterated.
-        .Case<RegOp, RegResetOp>(
-            [&](auto) { return NodeIterator(Node(nullptr, node.context)); })
+        .Case<RegOp, RegResetOp>([&](auto) { return EndIterator(); })
         .Default([&](auto) { return NodeIterator(node); });
   }
 
@@ -526,44 +468,20 @@ public:
   }
 
   bool operator==(const CombGraphIterator &rhs) const {
-<<<<<<< HEAD
     // Comparing with EndIterator, implies just check isAtEnd.
-    auto isAtEnd = [](const CombGraphIterator &a,
-                      const CombGraphIterator &endIt) {
-      switch (a.impl.index()) {
-      case 0:
-        return std::get<NodeIterator>(a.impl).isAtEnd();
-      case 1:
-        return std::get<InstanceNodeIterator>(a.impl).isAtEnd();
-      case 2:
-        return std::get<SubfieldNodeIterator>(a.impl).isAtEnd();
-      case 3:
-        return std::get<DummySourceNodeIterator>(a.impl).isAtEnd();
-      default:
-        return llvm_unreachable("invalid iterator variant"), true;
-      }
-    };
-
-    if (rhs.impl.index() == 0 &&
-        std::get<NodeIterator>(rhs.impl).isEndIterator())
-      return isAtEnd(*this, rhs);
-    if (impl.index() == 0 && std::get<NodeIterator>(impl).isEndIterator())
-      return isAtEnd(rhs, *this);
-=======
     if (rhs.impl.index() == 4)
       switch (impl.index()) {
-        case 0:
-          return std::get<NodeIterator>(impl).isAtEnd();
-        case 1:
-          return std::get<InstanceNodeIterator>(impl).isAtEnd();
-        case 2:
-          return std::get<SubfieldNodeIterator>(impl).isAtEnd();
-        case 3:
-          return std::get<DummySourceNodeIterator>(impl).isAtEnd();
-        default:
-          return true;
+      case 0:
+        return std::get<NodeIterator>(impl).isAtEnd();
+      case 1:
+        return std::get<InstanceNodeIterator>(impl).isAtEnd();
+      case 2:
+        return std::get<SubfieldNodeIterator>(impl).isAtEnd();
+      case 3:
+        return std::get<DummySourceNodeIterator>(impl).isAtEnd();
+      default:
+        return true;
       }
->>>>>>> 5c0f92f47... Checkpoint: loop detection working
     return impl == rhs.impl;
   }
   bool operator!=(const CombGraphIterator &rhs) const {
@@ -592,7 +510,7 @@ struct DenseMapInfo<Node> {
   }
 
   static unsigned getHashValue(const Node &node) {
-    return mlir::hash_value(node.value);
+    return circt::hash_value(node.valueRef);
   }
   static bool isEqual(const Node &lhs, const Node &rhs) { return lhs == rhs; }
 };
@@ -687,7 +605,8 @@ void dumpPath(SmallVector<Node> &path, SmallString<16> &instancePath,
   unsigned pathSize = isCycle ? path.size() + 1 : path.size();
   for (unsigned i = 0, e = pathSize; i < e; ++i) {
     Node current = path[i % path.size()];
-    Value currentValue = current.value;
+    Value currentValue = current.valueRef.getValue();
+    auto fieldName = getFieldName(current.valueRef);
     bool isCycleEnd = i == path.size();
     auto attachInfo = [&]() -> mlir::Diagnostic & {
       return diag.attachNote(currentValue.getLoc()) << instancePath << ".";
@@ -695,15 +614,15 @@ void dumpPath(SmallVector<Node> &path, SmallString<16> &instancePath,
 
     // If the currentValue is port, emit its name.
     if (auto arg = currentValue.dyn_cast<BlockArgument>()) {
-      attachInfo() << module.getPortName(arg.getArgNumber());
+      attachInfo() << fieldName ;
       continue;
     }
 
     TypeSwitch<Operation *>(currentValue.getDefiningOp())
-        .Case<WireOp, RegOp, RegResetOp>(
+        .Case<WireOp, RegOp, RegResetOp, MemOp>(
             // For operations which declare signals, we simply print signal
             // names.
-            [&](auto op) { attachInfo() << op.getName(); })
+            [&](auto op) { attachInfo() << fieldName ; })
         .Case<InstanceOp, SubfieldOp>([&](auto op) {
           // If the op is InstanceOp or SubfieldOp, it is necessary to
           // investigate the next value since output values do not expilicty
@@ -712,7 +631,7 @@ void dumpPath(SmallVector<Node> &path, SmallString<16> &instancePath,
           for (auto iter = GT::child_begin(current),
                     end = GT::child_end(current);
                iter != end; ++iter) {
-            if ((*iter).value != next.value)
+            if ((*iter).valueRef != next.valueRef)
               continue;
 
             auto iterImpl = iter.getIteratorImpl();
@@ -724,7 +643,7 @@ void dumpPath(SmallVector<Node> &path, SmallString<16> &instancePath,
                   std::get<InstanceNodeIterator>(iterImpl).getPortNumber();
               if (isCycleEnd)
                 attachInfo() << instance.getName() << "."
-                             << instance.getPortName(inputPort).str();
+                             << fieldName;
               else
                 dumpPathBetweenModulePorts(instancePath, instance, inputPort,
                                            outputPort, current.context, diag);
@@ -787,7 +706,7 @@ void dumpPathBetweenModulePorts(SmallString<16> &instancePath,
   SmallVector<Node> path;
   Node current = end;
   // Reconstruct a path backwardly.
-  while (current.value) {
+  while (current.valueRef) {
     path.push_back(current);
     current = previousNode[current];
   }
@@ -843,7 +762,7 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
               dumpSimpleCycle(combSCC, module, errorDiag);
             else {
               for (auto node : *combSCC) {
-                auto &noteDiag = errorDiag.attachNote(node.value.getLoc());
+                auto &noteDiag = errorDiag.attachNote(node.valueRef.getLoc());
                 noteDiag << "this operation is part of the combinational cycle";
               }
             }
@@ -870,7 +789,7 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
           }
           Node inputNode(arg, &context);
           for (auto node : llvm::depth_first_ext<Node>(inputNode, nodeSet)) {
-            if (auto output = node.value.dyn_cast<BlockArgument>())
+            if (auto output = node.valueRef.getValue().dyn_cast<BlockArgument>())
               if (directionVec[output.getArgNumber()])
                 outputVec.push_back(output.getArgNumber());
           }
