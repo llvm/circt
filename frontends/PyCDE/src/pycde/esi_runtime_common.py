@@ -70,6 +70,8 @@ class Port:
                impl_type: str,
                read_type: typing.Optional[Type] = None,
                write_type: typing.Optional[Type] = None):
+    # If a backend doesn't support a particular implementation type, just skip
+    # it. We don't want to error out on services which aren't being used.
     if backend.supports_impl(impl_type):
       self._backend = backend.get_port(client_path, read_type, write_type)
     else:
@@ -125,6 +127,7 @@ class _CosimNode:
     self._endpoint_prefix = prefix
 
   def supports_impl(self, impl_type: str) -> bool:
+    """The cosim backend only supports cosim connectivity implementations."""
     return impl_type == "cosim"
 
   def get_child(self, child_name: str):
