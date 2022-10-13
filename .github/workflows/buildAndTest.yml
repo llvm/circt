@@ -229,7 +229,7 @@ jobs:
             -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} \
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-          make check-circt -j$(nproc)
+          make check-circt check-circt-unit -j$(nproc)
           make circt-doc
 
       # --------

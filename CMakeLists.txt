@@ -141,6 +141,8 @@ else()
   include_directories(SYSTEM ${MLIR_TABLEGEN_OUTPUT_DIR})
 
   set(BACKEND_PACKAGE_STRING "${PACKAGE_STRING}")
+
+  set(CIRCT_GTEST_AVAILABLE 1)
 endif()
 
 # Define the default arguments to use with 'lit', and an option for the user to
