@@ -40,24 +40,53 @@ struct HashTableStack {
   using ScopeT = typename llvm::MapVector<KeyT, ValueT>;
   using StackT = typename llvm::SmallVector<ScopeT, 3>;
 
+  struct Iterator {
+    Iterator(typename StackT::iterator stackIt,
+             typename ScopeT::iterator scopeIt)
+        : stackIt(stackIt), scopeIt(scopeIt) {}
+
+    bool operator==(const Iterator &rhs) const {
+      return stackIt == rhs.stackIt && scopeIt == rhs.scopeIt;
+    }
+
+    bool operator!=(const Iterator &rhs) const { return !(*this == rhs); }
+
+    std::pair<KeyT, ValueT> &operator*() const { return *scopeIt; }
+
+    Iterator &operator++() {
+      if (scopeIt == stackIt->end())
+        scopeIt = (++stackIt)->begin();
+      else
+        ++scopeIt;
+      return *this;
+    }
+
+    typename StackT::iterator stackIt;
+    typename ScopeT::iterator scopeIt;
+  };
+
   HashTableStack() {
     // We require at least one scope.
     pushScope();
   }
 
-  // TODO: This class will need its own iterator eventually.
-  using iterator = typename ScopeT::iterator;
+  using iterator = Iterator;
 
-  iterator end() { return iterator(); }
+  iterator begin() {
+    return Iterator(mapStack.begin(), mapStack.first().begin());
+  }
+
+  iterator end() { return Iterator(mapStack.end() - 1, mapStack.back().end()); }
 
   iterator find(const KeyT &key) {
     // Try to find a hashtable with the missing value.
-    for (auto &map : llvm::reverse(mapStack)) {
+    for (auto i = mapStack.size(); i > 0; --i) {
+      auto &map = mapStack[i - 1];
       auto it = map.find(key);
       if (it != map.end())
-        return it;
+        return Iterator(mapStack.begin() + i - 1, it);
     }
-    return iterator();
+    return end();
   }
 
   ScopeT &getLastScope() { return mapStack.back(); }
