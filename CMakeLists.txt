@@ -94,7 +94,7 @@ endif ()
       add_llvm_library(llvm_gtest
         ${UNITTEST_DIR}/googletest/src/gtest-all.cc
         ${UNITTEST_DIR}/googlemock/src/gmock-all.cc
-        LINK_LIBS pthread
+        LINK_LIBS Threads:Threads
         LINK_COMPONENTS Support # llvm::raw_ostream
         BUILDTREE_ONLY
       )
