@@ -310,4 +310,20 @@ wahoo(int a, int b, int a1, int b1, int a2, int b2, int a3, int b3, yahooooooo(i
   }
 }
 
+TEST(CIRCTSupportTests, TrailingSpace) {
+  SmallString<128> out;
+  raw_svector_ostream os(out);
+
+  PrettyPrinter pp(os, 20);
+  SmallVector<Token> tokens = {BeginToken(2),
+                               StringToken("test"),
+                               BreakToken(),
+                               StringToken("test"),
+                               BreakToken(PrettyPrinter::kInfinity),
+                               EndToken()};
+  pp.addTokens(tokens);
+  pp.eof();
+  EXPECT_EQ(out.str(), StringRef("test test\n"));
+}
+
 } // end anonymous namespace
