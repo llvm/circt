@@ -4,7 +4,7 @@ firrtl.circuit "TestHarness" attributes {
   annotations = [{
     class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
     directory = "outputDirectory",
-    filename = "outputDirectory/bindings.sv"
+    filename = "bindings.sv"
   }]
 } {
   // CHECK: firrtl.module private @Bar
@@ -131,7 +131,7 @@ firrtl.circuit "TestHarness" attributes {
   // CHECK-SAME: out %_2: !firrtl.uint<1>
   // CHECK-SAME: out %_1: !firrtl.clock
   // CHECK-SAME: out %_0: !firrtl.uint<1>
-  // CHECK-SAME: #hw.output_file<"outputDirectory/[[DT]].sv">
+  // CHECK-SAME: #hw.output_file<"outputDirectory{{[/\]}}[[DT]].sv">
   // CHECK-NEXT: [[V11:%.+]] = firrtl.verbatim.expr
   // CHECK-SAME{LITERAL}: "{{0}}.{{1}}.{{2}}.{{3}}[1]"
   // CHECK-SAME:   @TestHarness,
@@ -230,7 +230,7 @@ firrtl.circuit "TestHarness" attributes {
   // CHECK-SAME: out %mem_0: !firrtl.uint<1>
   // CHECK-SAME: out %mem_1: !firrtl.uint<1>
   // CHECK-SAME: class = "firrtl.transforms.NoDedupAnnotation"
-  // CHECK-SAME: #hw.output_file<"outputDirectory/[[MT]].sv">
+  // CHECK-SAME: #hw.output_file<"outputDirectory{{[/\]}}[[MT]].sv">
   // CHECK-NEXT: [[V0:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}}.{{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}}"
   // CHECK-SAME:   @TestHarness,
   // CHECK-SAME:   #hw.innerNameRef<@TestHarness::[[FOO]]>,
@@ -262,7 +262,7 @@ firrtl.circuit "TestHarness" attributes {
   // CHECK-SAME: out %mem_0: !firrtl.uint<1>
   // CHECK-SAME: out %mem_1: !firrtl.uint<1>
   // CHECK-SAME: class = "firrtl.transforms.NoDedupAnnotation"
-  // CHECK-SAME: #hw.output_file<"outputDirectory/[[MT2]].sv">
+  // CHECK-SAME: #hw.output_file<"outputDirectory{{[/\]}}[[MT2]].sv">
   // CHECK-NEXT: [[V0:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}}.{{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}}.Memory[0]"
   // CHECK-SAME:   @TestHarness,
   // CHECK-SAME:   #hw.innerNameRef<@TestHarness::[[FOO]]>,

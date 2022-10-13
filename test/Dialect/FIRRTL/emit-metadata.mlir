@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-emit-metadata{repl-seq-mem=true repl-seq-mem-file="metadata/dut.conf"})' %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-emit-metadata{repl-seq-mem=true repl-seq-mem-file="dut.conf"})' %s | FileCheck %s
 
 firrtl.circuit "empty" {
   firrtl.module @empty() {
@@ -113,9 +113,9 @@ firrtl.circuit "top"
 {
   firrtl.module @top() { }
   // When there are no memories, we still need to emit the memory metadata.
-  // CHECK: sv.verbatim "[]" {output_file = #hw.output_file<"metadata/tb_seq_mems.json", excludeFromFileList>, symbols = []}
-  // CHECK: sv.verbatim "[]" {output_file = #hw.output_file<"metadata/seq_mems.json", excludeFromFileList>, symbols = []}
-  // CHECK: sv.verbatim "" {output_file = #hw.output_file<"\22metadata/dut.conf\22", excludeFromFileList>, symbols = []}
+  // CHECK: sv.verbatim "[]" {output_file = #hw.output_file<"metadata{{[/\]}}tb_seq_mems.json", excludeFromFileList>, symbols = []}
+  // CHECK: sv.verbatim "[]" {output_file = #hw.output_file<"metadata{{[/\]}}seq_mems.json", excludeFromFileList>, symbols = []}
+  // CHECK: sv.verbatim "" {output_file = #hw.output_file<"\22dut.conf\22", excludeFromFileList>, symbols = []}
 }
 
 // CHECK-LABEL: firrtl.circuit "OneMemory"
@@ -125,7 +125,7 @@ firrtl.circuit "OneMemory" {
   }
   firrtl.memmodule @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>, in user_input: !firrtl.uint<5>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [{direction = "input", name = "user_input", width = 5 : ui32}], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
   // CHECK: "[\0A {\0A \22module_name\22: \22MWrite_ext\22,\0A \22depth\22: 12,\0A \22width\22: 42,\0A \22masked\22: false,\0A \22read\22: false,\0A \22write\22: true,\0A \22readwrite\22: false,\0A \22extra_ports\22: [\0A {\0A \22name\22: \22user_input\22,\0A \22direction\22: \22input\22,\0A \22width\22: 5\0A }\0A ],\0A \22hierarchy\22: [\0A \22OneMemory.MWrite_ext\22\0A ]\0A }\0A]"
-  // CHECK: sv.verbatim "name MWrite_ext depth 12 width 42 ports write\0A" {output_file = #hw.output_file<"\22metadata/dut.conf\22"
+  // CHECK: sv.verbatim "name MWrite_ext depth 12 width 42 ports write\0A" {output_file = #hw.output_file<"\22dut.conf\22"
 }
 
 // CHECK-LABEL: firrtl.circuit "top"
@@ -154,9 +154,9 @@ firrtl.circuit "top" {
     firrtl.memmodule private @memory_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<8>, in RW0_addr: !firrtl.uint<4>, in RW0_en: !firrtl.uint<1>, in RW0_clk: !firrtl.clock, in RW0_wmode: !firrtl.uint<1>, in RW0_wdata: !firrtl.uint<8>, out RW0_rdata: !firrtl.uint<8>) attributes {dataWidth = 8 : ui32, depth = 16 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 0 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
     firrtl.memmodule private @dumm_ext(in R0_addr: !firrtl.uint<5>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<5>, in W0_addr: !firrtl.uint<5>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<5>) attributes {dataWidth = 5 : ui32, depth = 20 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
     // CHECK: sv.verbatim "[\0A  {\0A    \22module_name\22: \22head_ext\22,\0A    \22depth\22: 20,\0A    \22width\22: 5,\0A    \22masked\22: false,\0A    \22read\22: false,\0A    \22write\22: true,\0A    \22readwrite\22: false,\0A    \22extra_ports\22: [],\0A    \22hierarchy\22: [\0A      \22top.mem1.head_ext\22\0A    ]\0A  },\0A  {\0A    \22module_name\22: \22head_0_ext\22,\0A    \22depth\22: 20,\0A    \22width\22: 5,\0A    \22masked\22: false,\0A    \22read\22: false,\0A    \22write\22: true,\0A    \22readwrite\22: false,\0A    \22extra_ports\22: [],\0A    \22hierarchy\22: [\0A      \22top.mem2.head_0_ext\22\0A    ]\0A  }\0A]"
-    // CHECK-SAME:  {output_file = #hw.output_file<"metadata/tb_seq_mems.json", excludeFromFileList>, symbols = []}
+    // CHECK-SAME:  {output_file = #hw.output_file<"metadata{{[/\]}}tb_seq_mems.json", excludeFromFileList>, symbols = []}
     // CHECK: sv.verbatim "[\0A  {\0A    \22module_name\22: \22memory_ext\22,\0A    \22depth\22: 16,\0A    \22width\22: 8,\0A    \22masked\22: false,\0A    \22read\22: true,\0A    \22write\22: false,\0A    \22readwrite\22: true,\0A    \22extra_ports\22: [],\0A    \22hierarchy\22: [\0A      \22DUT.mem1.memory_ext\22\0A    ]\0A  },\0A  {\0A    \22module_name\22: \22dumm_ext\22,\0A    \22depth\22: 20,\0A    \22width\22: 5,\0A    \22masked\22: false,\0A    \22read\22: true,\0A    \22write\22: true,\0A    \22readwrite\22: false,\0A    \22extra_ports\22: [],\0A    \22hierarchy\22: [\0A      \22DUT.mem1.dumm_ext\22\0A    ]\0A  }\0A]"
-    // CHECK-SAME: output_file = #hw.output_file<"metadata/seq_mems.json", excludeFromFileList>, symbols = []
+    // CHECK-SAME: output_file = #hw.output_file<"metadata{{[/\]}}seq_mems.json", excludeFromFileList>, symbols = []
     // CHECK: sv.verbatim "name memory_ext depth 16 width 8 ports rw\0Aname dumm_ext depth 20 width 5 ports write,read\0Aname head_ext depth 20 width 5 ports write\0Aname head_0_ext depth 20 width 5 ports write\0A"
-    // CHECK-SAME: {output_file = #hw.output_file<"\22metadata/dut.conf\22", excludeFromFileList>, symbols = []}
+    // CHECK-SAME: {output_file = #hw.output_file<"\22dut.conf\22", excludeFromFileList>, symbols = []}
 }

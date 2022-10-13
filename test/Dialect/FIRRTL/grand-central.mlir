@@ -20,7 +20,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     filename = "bindings.sv"}]} {
   firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -61,7 +61,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-SAME: {
 
 // CHECK: firrtl.module private @View_companion
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir/View_companion.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{[/\]}}View_companion.sv"
 // CHECK-NEXT: sv.interface.instance sym @__View_Foo__ {name = "View"} : !sv.interface<@Foo>
 // CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.foo = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
 // CHECK-SAME:   #hw.innerNameRef<@View_companion::@__View_Foo__>
@@ -87,7 +87,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
 
 // CHECK: sv.interface @Foo
 // CHECK-SAME: comment = "VCS coverage exclude_file"
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{[/\]}}Foo.sv"
 // CHECK-NEXT: sv.verbatim "// description of foo"
 // CHECK-NEXT: sv.interface.signal @foo : i2
 // CHECK-NEXT: sv.verbatim "// multi\0A// line\0A// description\0A// of\0A// bar"
@@ -114,7 +114,7 @@ firrtl.circuit "InterfaceVectorType" attributes {
       name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     filename = "bindings.sv"}]} {
   firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -154,7 +154,7 @@ firrtl.circuit "InterfaceVectorType" attributes {
 // CHECK-SAME: {
 
 // CHECK: firrtl.module private @View_companion
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir/View_companion.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{[/\]}}View_companion.sv"
 
 // All Grand Central annotations are removed from the registers.
 // CHECK: firrtl.module private @DUT
@@ -165,7 +165,7 @@ firrtl.circuit "InterfaceVectorType" attributes {
 
 // CHECK: sv.interface @Foo
 // CHECK-SAME: comment = "VCS coverage exclude_file"
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{[/\]}}Foo.sv"
 // CHECK-NEXT: sv.verbatim "// description of foo"
 // CHECK-NEXT: sv.interface.signal @foo : !hw.uarray<2xi1>
 
@@ -191,7 +191,7 @@ firrtl.circuit "InterfaceBundleType" attributes {
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]}  {
+     filename = "bindings.sv"}]}  {
   firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -238,13 +238,13 @@ firrtl.circuit "InterfaceBundleType" attributes {
 
 // CHECK: sv.interface @Foo
 // CHECK-SAME: comment = "VCS coverage exclude_file"
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{[/\]}}Foo.sv"
 // CHECK-NEXT: sv.verbatim "// description of Bar"
 // CHECK-NEXT: Bar bar();
 
 // CHECK: sv.interface @Bar
 // CHECK-SAME: comment = "VCS coverage exclude_file"
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir/Bar.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{[/\]}}Bar.sv"
 // CHECK-NEXT: sv.interface.signal @b : i2
 // CHECK-NEXT: sv.interface.signal @a : i1
 
@@ -325,7 +325,7 @@ firrtl.circuit "VecOfVec" attributes {
       name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     filename = "bindings.sv"}]} {
   firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -379,7 +379,7 @@ firrtl.circuit "InterfaceNode" attributes {
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     filename = "bindings.sv"}]} {
   firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -422,7 +422,7 @@ firrtl.circuit "InterfaceNode" attributes {
 
 // CHECK: sv.interface @Foo
 // CHECK-SAME: comment = "VCS coverage exclude_file"
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{[/\]}}Foo.sv"
 // CHECK-NEXT: sv.verbatim "// some expression"
 // CHECK-NEXT: sv.interface.signal @foo : i2
 
@@ -441,7 +441,7 @@ firrtl.circuit "InterfacePort" attributes {
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     filename = "bindings.sv"}]} {
   firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -479,7 +479,7 @@ firrtl.circuit "InterfacePort" attributes {
 
 // CHECK: sv.interface @Foo
 // CHECK-SAME: comment = "VCS coverage exclude_file"
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{[/\]}}Foo.sv"
 // CHECK-NEXT: sv.verbatim "// description of foo"
 // CHECK-NEXT: sv.interface.signal @foo : i4
 
@@ -503,7 +503,7 @@ firrtl.circuit "UnsupportedTypes" attributes {
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     filename = "bindings.sv"}]} {
   firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -534,7 +534,7 @@ firrtl.circuit "UnsupportedTypes" attributes {
 
 // CHECK: sv.interface @Foo
 // CHECK-SAME: comment = "VCS coverage exclude_file"
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{[/\]}}Foo.sv"
 // CHECK-NEXT: sv.verbatim "// <unsupported string type> string;"
 // CHECK-NEXT: sv.verbatim "// <unsupported boolean type> boolean;"
 // CHECK-NEXT: sv.verbatim "// <unsupported integer type> integer;"
@@ -556,7 +556,7 @@ firrtl.circuit "BindInterfaceTest"  attributes {
   },
   {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     filename = "bindings.sv"}]} {
   firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -609,7 +609,7 @@ firrtl.circuit "BindInterfaceTest"  attributes {
 // The interface is added.
 // CHECK: sv.interface @InterfaceName
 // CHECK-SAME: comment = "VCS coverage exclude_file"
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir/InterfaceName.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{[/\]}}InterfaceName.sv"
 // CHECK-NEXT: sv.interface.signal @_a : i8
 
 // -----
@@ -634,7 +634,7 @@ firrtl.circuit "MultipleGroundTypeInterfaces" attributes {
      name = "View2"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     filename = "bindings.sv"}]} {
   firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -673,11 +673,11 @@ firrtl.circuit "MultipleGroundTypeInterfaces" attributes {
 
 // CHECK: sv.interface @Foo
 // CHECK-SAME: comment = "VCS coverage exclude_file"
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{[/\]}}Foo.sv"
 
 // CHECK: sv.interface @Bar
 // CHECK-SAME: comment = "VCS coverage exclude_file"
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir/Bar.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{[/\]}}Bar.sv"
 
 // -----
 
@@ -763,7 +763,7 @@ firrtl.circuit "NestedInterfaceVectorTypes" attributes {annotations = [
   {
     class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
     directory = "gct-dir",
-    filename = "gct-dir/bindings.sv"
+    filename = "bindings.sv"
   }
 ]} {
 
@@ -858,7 +858,7 @@ firrtl.circuit "VerbatimTypesInVector" attributes {annotations = [
   {
     class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
     directory = "gct-dir",
-    filename = "gct-dir/bindings.sv"
+    filename = "bindings.sv"
   }
 ]} {
 
@@ -896,7 +896,7 @@ firrtl.circuit "ParentIsMainModule" attributes {
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     filename = "bindings.sv"}]} {
   firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -1057,7 +1057,7 @@ firrtl.circuit "BlackBoxDirectoryBehavior" attributes {
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]} {
+     filename = "bindings.sv"}]} {
   firrtl.extmodule private @BlackBox_DUT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "DUTOnly.v", text = ""}]}
   firrtl.extmodule private @BlackBox_GCT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "GCTOnly.v", text = ""}]}
   firrtl.extmodule private @BlackBox_DUTAndGCT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "DUTAndGCT.v", text = ""}]}
@@ -1096,8 +1096,8 @@ firrtl.circuit "BlackBoxDirectoryBehavior" attributes {
 // CHECK-LABEL: "BlackBoxDirectoryBehavior"
 // CHECK:      firrtl.extmodule private @BlackBox_DUT()
 // CHECK-NOT:    output_file
-// CHECK-NEXT: firrtl.extmodule private @BlackBox_GCT() {{.+}} output_file = #hw.output_file<"gct-dir/">
-// CHECK-NEXT: firrtl.extmodule private @BlackBox_DUTAndGCT() {{.+}} output_file = #hw.output_file<"gct-dir/">
+// CHECK-NEXT: firrtl.extmodule private @BlackBox_GCT() {{.+}} output_file = #hw.output_file<"gct-dir{{[/\]}}">
+// CHECK-NEXT: firrtl.extmodule private @BlackBox_DUTAndGCT() {{.+}} output_file = #hw.output_file<"gct-dir{{[/\]}}">
 
 // -----
 
@@ -1114,7 +1114,7 @@ firrtl.circuit "InterfaceInTestHarness" attributes {
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"},
+     filename = "bindings.sv"},
     {class = "sifive.enterprise.firrtl.TestBenchDirAnnotation",
      dirname = "testbenchDir"}]} {
   firrtl.module @View_companion() attributes {
@@ -1161,7 +1161,7 @@ firrtl.circuit "InterfaceInTestHarness" attributes {
 // CHECK-NOT:       lowerToBind
 // CHECK-NEXT:  }
 // CHECK:       sv.interface
-// CHECK-SAME:    output_file = #hw.output_file<"testbenchDir/Foo.sv", excludeFromFileList>
+// CHECK-SAME:    output_file = #hw.output_file<"testbenchDir{{[/\]}}Foo.sv", excludeFromFileList>
 
 // -----
 
@@ -1288,9 +1288,9 @@ firrtl.circuit "YAMLOutputEmptyInterface" attributes {
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"},
+     filename = "bindings.sv"},
     {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
-     filename = "gct-dir/gct.yaml"}]} {
+     filename = "gct.yaml"}]} {
   firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -1317,7 +1317,7 @@ firrtl.circuit "YAMLOutputEmptyInterface" attributes {
 // CHECK-SAME:      - name: Foo
 // CHECK-SAME:        fields: []
 // CHECK-SAME:        instances: []
-// CHECK-SAME:      {output_file = #hw.output_file<"gct-dir/gct.yaml"
+// CHECK-SAME:      {output_file = #hw.output_file<"gct.yaml"
 //
 // CHECK-NOT:  class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation"
 
@@ -1337,9 +1337,9 @@ firrtl.circuit "YAMLOutputTwoInterfaces" attributes {
      name = "View2"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"},
+     filename = "bindings.sv"},
     {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
-     filename = "gct-dir/gct.yaml"}]} {
+     filename = "gct.yaml"}]} {
   firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -1394,9 +1394,9 @@ firrtl.circuit "YAMLOutputScalarField" attributes {
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"},
+     filename = "bindings.sv"},
     {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
-     filename = "gct-dir/gct.yaml"}]} {
+     filename = "gct.yaml"}]} {
   firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -1463,9 +1463,9 @@ firrtl.circuit "YAMLOutputVectorField" attributes {
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"},
+     filename = "bindings.sv"},
     {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
-     filename = "gct-dir/gct.yaml"}]} {
+     filename = "gct.yaml"}]} {
   firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -1519,9 +1519,9 @@ firrtl.circuit "YAMLOutputInstance" attributes {
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"},
+     filename = "bindings.sv"},
     {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
-     filename = "gct-dir/gct.yaml"}]} {
+     filename = "gct.yaml"}]} {
   firrtl.module private @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -1568,7 +1568,7 @@ firrtl.circuit "YAMLOutputInstance" attributes {
 firrtl.circuit "NoInterfaces" attributes {
   annotations = [
     {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
-     filename = "gct-dir/gct.yaml"}]} {
+     filename = "gct.yaml"}]} {
   firrtl.module @NoInterfaces() {}
 }
 

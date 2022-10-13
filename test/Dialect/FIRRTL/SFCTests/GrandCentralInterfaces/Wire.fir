@@ -1,8 +1,8 @@
-; RUN: firtool --annotation-file %S/Wire.anno.json --annotation-file %S/Extract.anno.json %s | FileCheck %s --check-prefixes CHECK,EXTRACT
-; RUN: firtool --preserve-values=named --annotation-file %S/Wire.anno.json %s | FileCheck %s --check-prefixes CHECK,NOEXTRACT
-; RUN: firtool --annotation-file %S/Wire.anno.json --annotation-file %S/Extract.anno.json %s --annotation-file %S/YAML.anno.json | FileCheck %s --check-prefixes YAML
-; RUN: firtool --split-verilog --annotation-file %S/Wire.anno.json %s -o %t.folder > %t  && cat %t.folder/MyView_companion.sv | FileCheck %s --check-prefixes MYVIEW_COMPANION
-; RUN: firtool --annotation-file %S/Wire.anno.json --annotation-file %S/Prefix.anno.json %s | FileCheck %s --check-prefixes PREFIX
+; RUN: firtool --annotation-file %s.anno.json --annotation-file %s.Extract.anno.json %s | FileCheck %s --check-prefixes CHECK,EXTRACT
+; RUN: firtool --preserve-values=named --annotation-file %s.anno.json %s | FileCheck %s --check-prefixes CHECK,NOEXTRACT
+; RUN: firtool --annotation-file %s.anno.json --annotation-file %s.Extract.anno.json %s --annotation-file %s.YAML.anno.json | FileCheck %s --check-prefixes YAML
+; RUN: firtool --split-verilog --annotation-file %s.anno.json %s -o %t.folder > %t  && cat %t.folder/MyView_companion.sv | FileCheck %s --check-prefixes MYVIEW_COMPANION
+; RUN: firtool --annotation-file %s.anno.json --annotation-file %s.Prefix.anno.json %s | FileCheck %s --check-prefixes PREFIX
 
 circuit Top :
   extmodule BlackBox_DUT :
@@ -224,18 +224,18 @@ circuit Top :
     ; EXTRACT-NEXT:     */
     ; NOEXTRACT:        {{^ *}}MyView_companion MyView_companion
 
-    ; EXTRACT:        FILE "./BlackBox_DUT.v"
-    ; EXTRACT:        FILE "Wire/firrtl/gct/BlackBox_GCT.v"
-    ; EXTRACT:        FILE "Wire/firrtl/gct/BlackBox_DUTAndGCT.v"
+    ; EXTRACT:        FILE ".{{[/\]}}BlackBox_DUT.v"
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}BlackBox_GCT.v"
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}BlackBox_DUTAndGCT.v"
 
     ; EXTRACT:        FILE "firrtl_black_box_resource_files.f"
     ; EXTRACT-NOT:    FILE
     ; EXTRACT:          BlackBox_DUT.v
-    ; EXTRACT-NEXT:     Wire/firrtl/gct/BlackBox_DUTAndGCT.v
-    ; EXTRACT-NEXT:     Wire/firrtl/gct/BlackBox_GCT.v
+    ; EXTRACT-NEXT:     Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}BlackBox_DUTAndGCT.v
+    ; EXTRACT-NEXT:     Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}BlackBox_GCT.v
 
-    ; EXTRACT:        FILE "Wire/firrtl/gct/MyView_companion.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/MyView_companion.sv
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}MyView_companion.sv"
+    ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}MyView_companion.sv
     ; EXTRACT:        module MyView_companion();
     ; EXTRACT:          MyInterface MyView();
     ; EXTRACT:          assign MyView.uint = DUT.in_uint;
@@ -267,13 +267,13 @@ circuit Top :
     ; EXTRACT-NEXT:     );
     ; EXTRACT-NEXT:   endmodule
 
-    ; EXTRACT:        FILE "Wire/firrtl/bindings.sv"
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}bindings.sv"
     ; EXTRACT-NOT:    FILE
     ; EXTRACT:        bind DUT MyView_companion MyView_companion{{ *}}();
-    ; NOEXTRACT-NOT:  FILE "Wire/firrtl/bindings.sv"
+    ; NOEXTRACT-NOT:  FILE "Wire{{[/\]}}firrtl{{[/\]}}bindings.sv"
 
-    ; EXTRACT:        FILE "Wire/firrtl/gct/MyInterface.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/MyInterface.sv
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}MyInterface.sv"
+    ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}MyInterface.sv
     ; PREFIX:         interface FOO_BAR_BAZ_MyInterface;
     ; CHECK:          interface MyInterface;
     ; CHECK-NEXT:       // a wire called 'uint'
@@ -295,38 +295,38 @@ circuit Top :
     ; CHECK-NEXT:       Sub_vecOfBundle sub_vecOfBundle[2]();
     ; CHECK-NEXT:     endinterface
 
-    ; EXTRACT:        FILE "Wire/firrtl/gct/VecOfBundle.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/VecOfBundle.sv
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}VecOfBundle.sv"
+    ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}VecOfBundle.sv
     ; PREFIX:         interface FOO_BAR_BAZ_VecOfBundle;
     ; CHECK:          interface VecOfBundle;
     ; CHECK-NEXT:       logic [1:0] sint;
     ; CHECK-NEXT:       logic [3:0] uint;
     ; CHECK-NEXT:     endinterface
 
-    ; EXTRACT:        FILE "Wire/firrtl/gct/OtherOther.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/OtherOther.sv
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}OtherOther.sv"
+    ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}OtherOther.sv
     ; PREFIX:         interface FOO_BAR_BAZ_OtherOther;
     ; CHECK:          interface OtherOther;
     ; CHECK-NEXT:       Other other();
     ; CHECK:          endinterface
 
-    ; EXTRACT:        FILE "Wire/firrtl/gct/Other.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/Other.sv
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}Other.sv"
+    ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}Other.sv
     ; PREFIX:         interface FOO_BAR_BAZ_Other;
     ; CHECK:          interface Other;
     ; CHECK-NEXT:       logic [1:0] sint;
     ; CHECK-NEXT:       logic [3:0] uint;
     ; CHECK:          endinterface
 
-    ; EXTRACT:        FILE "Wire/firrtl/gct/Sub_vecOfBundle.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/Sub_vecOfBundle.sv
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}Sub_vecOfBundle.sv"
+    ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}Sub_vecOfBundle.sv
     ; PREFIX:         interface FOO_BAR_BAZ_Sub_vecOfBundle;
     ; CHECK:          interface Sub_vecOfBundle;
     ; CHECK-NEXT:       logic [1:0] sint;
     ; CHECK-NEXT:       logic [3:0] uint;
     ; CHECK:          endinterface
 
-    ; YAML:           FILE "Wire/firrtl/gct/gct.yaml"
+    ; YAML:           FILE "Wire{{[/\]}}firrtl/gct/gct.yaml"
     ; YAML:             - name: MyInterface
     ; YAML-NEXT:          fields:
     ; YAML-NEXT:            - name: uint
