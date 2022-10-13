@@ -146,6 +146,9 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // CHECK: hw.instance "{{[^ ]+}}" sym @[[input_only_assert:[^ ]+]] @InputOnly_assert
 // CHECK: hw.instance "{{[^ ]+}}" sym @[[input_only_cover:[^ ]+]] @InputOnly_cover
 // CHECK: hw.instance "{{[^ ]+}}" {{.+}} @InputOnlySym
+// CHECK: %0 = comb.and %1
+// CHECK: %1 = comb.and %0
+// CHECK: hw.instance "{{[^ ]+}}" {{.+}} @InputOnlyCycle_cover
 // CHECK-NOT: sv.bind <@InputOnly::
 // CHECK-DAG: sv.bind <@Top::@[[input_only_assert]]>
 // CHECK-DAG: sv.bind <@Top::@[[input_only_cover]]>
@@ -164,9 +167,20 @@ module {
     }
   }
 
+  hw.module private @InputOnlyCycle(%clock: i1, %cond: i1) -> () {
+    // Arbitrary code that won't be extracted, should be inlined, and has a cycle.
+    %0 = comb.and %1 : i1
+    %1 = comb.and %0 : i1
+
+    sv.always posedge %clock  {
+      sv.cover %cond, immediate
+    }
+  }
+
   hw.module @Top(%clock: i1, %cond: i1) -> (foo: i1) {
     hw.instance "input_only" @InputOnly(clock: %clock: i1, cond: %cond: i1) -> ()
     hw.instance "input_only_sym" sym @foo @InputOnlySym(clock: %clock: i1, cond: %cond: i1) -> ()
+    hw.instance "input_only_cycle" @InputOnlyCycle(clock: %clock: i1, cond: %cond: i1) -> ()
     hw.output %cond : i1
   }
 }
