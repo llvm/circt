@@ -24,21 +24,5 @@ namespace pretty {
 
 void PPBuilderStringSaver::clear() { alloc.Reset(); }
 
-//===----------------------------------------------------------------------===//
-// Streaming support.
-//===----------------------------------------------------------------------===//
-
-PPStream &PPStream::writeQuotedEscaped(StringRef str, bool useHexEscapes,
-                                       StringRef left, StringRef right) {
-  SmallString<64> ss;
-  {
-    llvm::raw_svector_ostream os(ss);
-    os << left;
-    os.write_escaped(str, useHexEscapes);
-    os << right;
-  }
-  return *this << ss;
-}
-
 } // end namespace pretty
 } // end namespace circt

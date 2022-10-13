@@ -15,8 +15,11 @@
 
 #include "circt/Support/PrettyPrinter.h"
 #include "llvm/ADT/ScopeExit.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/Support/Allocator.h"
+#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/StringSaver.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace circt {
 namespace pretty {
@@ -25,12 +28,51 @@ namespace pretty {
 // Convenience builders.
 //===----------------------------------------------------------------------===//
 
-class PPBuilder : protected PrettyPrinter::Listener {
-  PrettyPrinter pp;
+/// Buffer tokens until EOF for clients that need to adjust things.
+struct BufferingPP {
+  using BufferVec = SmallVectorImpl<Token>;
+  BufferVec &tokens;
+  bool hasEOF = false;
+
+  BufferingPP(BufferVec &tokens) : tokens(tokens) {}
+
+  void add(Token t) {
+    assert(!hasEOF);
+    tokens.push_back(t);
+  }
+
+  /// Add a range of tokens.
+  template <typename R>
+  void addTokens(R &&tokens) {
+    assert(!hasEOF);
+    for (Token &t : tokens)
+      add(t);
+  }
+
+  /// Buffer a final EOF, no tokens allowed after this.
+  void eof() {
+    assert(!hasEOF);
+    hasEOF = true;
+  }
+
+  /// Flush buffered tokens to the specified pretty printer.
+  /// Emit the EOF is one was added.
+  void flush(PrettyPrinter &pp) {
+    pp.addTokens(tokens);
+    tokens.clear();
+    if (hasEOF) {
+      pp.eof();
+      hasEOF = false;
+    }
+  }
+};
+
+template <typename PPTy = PrettyPrinter>
+class PPBuilder {
+  PPTy &pp;
 
 public:
-  PPBuilder(llvm::raw_ostream &os, uint32_t margin, uint32_t indent = 0)
-      : pp(os, margin, indent, this){};
+  PPBuilder(PPTy &pp) : pp(pp) {}
 
   /// Add new token.
   template <typename T, typename... Args>
@@ -88,22 +130,19 @@ public:
   }
 };
 
-/// Variant that saves strings that are live in the pretty-printer.
+/// PrettyPrinter::Listener that saves strings while live.
 /// Once they're no longer referenced, memory is reset.
 /// Allows differentiating between strings to save and external strings.
-class PPBuilderStringSaver : public PPBuilder {
+class PPBuilderStringSaver : public PrettyPrinter::Listener {
   llvm::BumpPtrAllocator alloc;
   llvm::StringSaver strings;
 
 public:
-  PPBuilderStringSaver(llvm::raw_ostream &os, uint32_t margin,
-                       uint32_t indent = 0)
-      : PPBuilder(os, margin, indent), strings(alloc){};
+  PPBuilderStringSaver() : strings(alloc) {}
 
   /// Add string, save in storage.
-  void savedWord(StringRef str) { add<StringToken>(strings.save(str)); }
+  StringRef save(StringRef str) { return strings.save(str); }
 
-protected:
   /// PrettyPrinter::Listener::clear -- indicates no external refs.
   void clear() override;
 };
@@ -139,31 +178,42 @@ struct PPSaveString {
   explicit PPSaveString(StringRef str) : str(str) {}
 };
 
-class PPStream : public PPBuilderStringSaver {
+/// Wrap a PrettyPrinter with PPBuilder features as well as operator<<'s.
+/// String behavior:
+/// Strings streamed as `const char *` are assumed to have external storage,
+/// and StringRef's are saved until no longer needed.
+/// Use PPExtString() and PPSaveString() wrappers to specify/override behavior.
+template <typename PPTy = PrettyPrinter>
+class PPStream : public PPBuilder<PPTy> {
+  using Base = PPBuilder<PPTy>;
+  PPBuilderStringSaver &saver;
+
 public:
-  PPStream(llvm::raw_ostream &os, uint32_t margin, uint32_t indent = 0)
-      : PPBuilderStringSaver(os, margin, indent) {}
+  /// Create a PPStream using the specified PrettyPrinter and StringSaver
+  /// storage. Strings are saved in `saver`, which is generally the listener in
+  /// the PrettyPrinter, but may not be (e.g., using BufferingPP).
+  PPStream(PPTy &pp, PPBuilderStringSaver &saver) : Base(pp), saver(saver) {}
 
   /// Add a string literal (external storage).
   PPStream &operator<<(const char *s) {
-    literal(s);
+    Base::literal(s);
     return *this;
   }
   /// Add a string token (saved to storage).
   PPStream &operator<<(StringRef s) {
-    savedWord(s);
+    Base::template add<StringToken>(saver.save(s));
     return *this;
   }
 
   /// String has external storage.
-  PPStream &operator<<(PPExtString &&str) {
-    literal(str.str);
+  PPStream &operator<<(const PPExtString &str) {
+    Base::literal(str.str);
     return *this;
   }
 
   /// String must be saved.
-  PPStream &operator<<(PPSaveString &&str) {
-    savedWord(str.str);
+  PPStream &operator<<(const PPSaveString &str) {
+    Base::template add<StringToken>(saver.save(str.str));
     return *this;
   }
 
@@ -171,34 +221,34 @@ public:
   PPStream &operator<<(PP s) {
     switch (s) {
     case PP::space:
-      space();
+      Base::space();
       break;
     case PP::nbsp:
-      nbsp();
+      Base::nbsp();
       break;
     case PP::newline:
-      newline();
+      Base::newline();
       break;
     case PP::ibox0:
-      ibox();
+      Base::ibox();
       break;
     case PP::ibox2:
-      ibox(2);
+      Base::ibox(2);
       break;
     case PP::cbox0:
-      cbox();
+      Base::cbox();
       break;
     case PP::cbox2:
-      cbox(2);
+      Base::cbox(2);
       break;
     case PP::end:
-      end();
+      Base::end();
       break;
     case PP::zerobreak:
-      zerobreak();
+      Base::zerobreak();
       break;
     case PP::eof:
-      eof();
+      Base::eof();
       break;
     }
     return *this;
@@ -206,8 +256,28 @@ public:
 
   /// Stream support for user-created Token's.
   PPStream &operator<<(Token &&t) {
-    addToken(t);
+    Base::addToken(t);
     return *this;
+  }
+
+  /// General-purpose "format this" helper, for types not supported by
+  /// operator<< yet.
+  template <typename T>
+  PPStream &addAsString(T &&t) {
+    return *this << PPSaveString(llvm::formatv("{0}", t).str());
+  }
+
+  /// Helper to invoke code with a llvm::raw_ostream argument for compatibility.
+  /// All data is gathered into a single string token.
+  template <typename Callable>
+  auto invokeWithStringOS(Callable &&c) {
+    SmallString<128> ss;
+    llvm::raw_svector_ostream ssos(ss);
+    auto flush = llvm::make_scope_exit([&]() {
+      if (!ss.empty())
+        *this << ss;
+    });
+    return std::invoke(c, ssos);
   }
 
   /// Write escaped versions of the string, saved in storage.
@@ -215,7 +285,16 @@ public:
     return writeQuotedEscaped(str, useHexEscapes, "", "");
   }
   PPStream &writeQuotedEscaped(StringRef str, bool useHexEscapes = false,
-                               StringRef left = "\"", StringRef right = "\"");
+                               StringRef left = "\"", StringRef right = "\"") {
+    SmallString<64> ss;
+    {
+      llvm::raw_svector_ostream os(ss);
+      os << left;
+      os.write_escaped(str, useHexEscapes);
+      os << right;
+    }
+    return *this << ss;
+  }
 };
 
 } // end namespace pretty

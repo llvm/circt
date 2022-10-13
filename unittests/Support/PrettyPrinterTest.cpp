@@ -331,8 +331,8 @@ TEST(PrettyPrinterTest, Builder) {
   SmallString<128> out;
   raw_svector_ostream os(out);
 
-  PPBuilder b(os, 7);
-
+  PrettyPrinter pp(os, 7);
+  PPBuilder<> b(pp);
   {
     auto ib = b.scopedIBox();
     b.literal("test");
@@ -348,7 +348,9 @@ TEST(PrettyPrinterTest, Stream) {
   SmallString<128> out;
   raw_svector_ostream os(out);
 
-  PPStream ps(os, 20);
+  PrettyPrinter pp(os, 20);
+  PPBuilderStringSaver saver;
+  PPStream<> ps(pp, saver);
   {
     auto ib = ps.scopedIBox();
     ps << "test" << PP::space << "test" << PP::space << "test";
@@ -361,7 +363,9 @@ TEST(PrettyPrinterTest, StreamQuoted) {
   SmallString<128> out;
   raw_svector_ostream os(out);
 
-  PPStream ps(os, 20);
+  PrettyPrinter pp(os, 20);
+  PPBuilderStringSaver saver;
+  PPStream<> ps(pp, saver);
   out = "\n";
   {
     auto ib = ps.scopedIBox(2);
@@ -381,7 +385,9 @@ TEST(PrettyPrinterTest, IndentStyle) {
   raw_svector_ostream os(out);
 
   auto test = [&](auto margin, auto style) {
-    PPStream ps(os, margin);
+    PrettyPrinter pp(os, margin);
+    PPBuilderStringSaver saver;
+    PPStream<> ps(pp, saver);
     out = "\n";
     {
       ps << "start" << PP::nbsp;
@@ -429,7 +435,9 @@ TEST(PrettyPrinterTest, FuncArgsBlock) {
   raw_svector_ostream os(out);
 
   auto test = [&](auto margin) {
-    PPStream ps(os, margin);
+    PrettyPrinter pp(os, margin);
+    PPBuilderStringSaver saver;
+    PPStream<> ps(pp, saver);
     out = "\n";
     {
       ps << "foo(";
@@ -471,7 +479,9 @@ TEST(PrettyPrinterTest, FuncArgsVisual) {
   raw_svector_ostream os(out);
 
   auto test = [&](auto margin) {
-    PPStream ps(os, margin);
+    PrettyPrinter pp(os, margin);
+    PPBuilderStringSaver saver;
+    PPStream<> ps(pp, saver);
     out = "\n";
     {
       ps << "foo(";
@@ -519,7 +529,9 @@ TEST(PrettyPrinterTest, Expr) {
   };
 
   auto test = [&](const char *id, auto margin) {
-    PPStream ps(os, margin);
+    PrettyPrinter pp(os, margin);
+    PPBuilderStringSaver saver;
+    PPStream<> ps(pp, saver);
     out = "\n";
     {
       auto ib = ps.scopedIBox(2);
@@ -561,14 +573,84 @@ assign foo =
    f);
 )"""));
   test("foo", 30);
-  EXPECT_EQ(out.str(), StringRef(R"""(
+  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
 assign foo =
   (a + b + c + d + e + f) *
   (a + b + c + d + e + f);
 )"""));
   test("foo", 80);
-  EXPECT_EQ(out.str(), StringRef(R"""(
+  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
 assign foo = (a + b + c + d + e + f) * (a + b + c + d + e + f);
+)"""));
+}
+
+TEST(PrettyPrinterTest, InitWithBaseAndCurrentIndent) {
+  SmallString<128> out;
+  raw_svector_ostream os(out);
+
+  SmallVector<Token> tokens = {
+      StringToken("xxxxxxxxxxxxxxx"), BreakToken(),
+      StringToken("yyyyyyyyyyyyyyy"), BreakToken(),
+      StringToken("zzzzzzzzzzzzzzz"), BreakToken(PrettyPrinter::kInfinity)};
+
+  auto test = [&](auto base, auto current, bool populate = true,
+                  bool group = true) {
+    out = "\n";
+    for (int i = 0; populate && i < current; ++i)
+      os << ">";
+    PrettyPrinter pp(os, 35, base, current);
+    if (group)
+      pp.add(BeginToken(2));
+    pp.addTokens(tokens);
+    if (group)
+      pp.add(EndToken());
+    pp.eof();
+  };
+  test(0, 0);
+  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+xxxxxxxxxxxxxxx yyyyyyyyyyyyyyy
+  zzzzzzzzzzzzzzz
+)"""));
+
+  // Base = current.
+  test(2, 2);
+  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+>>xxxxxxxxxxxxxxx yyyyyyyyyyyyyyy
+    zzzzzzzzzzzzzzz
+)"""));
+  test(2, 2, false); // wrong 'current' column.
+  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+xxxxxxxxxxxxxxx yyyyyyyyyyyyyyy
+    zzzzzzzzzzzzzzz
+)"""));
+
+  // Base < current.
+  test(2, 6);
+  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+>>>>>>xxxxxxxxxxxxxxx
+        yyyyyyyyyyyyyyy
+        zzzzzzzzzzzzzzz
+)"""));
+  // Check behavior w/o grouping, respect 'base'.
+  test(2, 6, true, false);
+  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+>>>>>>xxxxxxxxxxxxxxx
+  yyyyyyyyyyyyyyy zzzzzzzzzzzzzzz
+)"""));
+
+  // Base > current.  PP should add whitespace.
+  test(6, 3);
+  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+>>>   xxxxxxxxxxxxxxx
+        yyyyyyyyyyyyyyy
+        zzzzzzzzzzzzzzz
+)"""));
+  // Check behavior w/o any group (default group).
+  test(6, 3, true, false);
+  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+>>>   xxxxxxxxxxxxxxx
+      yyyyyyyyyyyyyyy
+      zzzzzzzzzzzzzzz
 )"""));
 }
 

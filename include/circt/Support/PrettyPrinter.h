@@ -72,7 +72,7 @@ private:
     BeginInfo beginInfo;
     EndInfo endInfo;
   } data;
-  const Kind kind;
+  Kind kind;
 
 protected:
   template <Kind k>
@@ -148,12 +148,23 @@ public:
     virtual void clear(){};
   };
 
-  PrettyPrinter(llvm::raw_ostream &os, uint32_t margin, uint32_t indent = 0,
-                Listener *listener = nullptr)
-      : space(margin), defaultFrame{indent, PrintBreaks::Inconsistent},
-        indent(indent), margin(margin), os(os), listener(listener) {
+  /// PrettyPrinter for specified stream.
+  /// - margin: line width.
+  /// - baseIndent: always indent at least this much (starting 'indent' value).
+  /// - currentColumn: current column, used to calculate space remaining.
+  PrettyPrinter(llvm::raw_ostream &os, uint32_t margin, uint32_t baseIndent = 0,
+                uint32_t currentColumn = 0, Listener *listener = nullptr)
+      : space(margin - std::max(currentColumn, baseIndent)),
+        defaultFrame{baseIndent, PrintBreaks::Inconsistent}, indent(baseIndent),
+        margin(margin), os(os), listener(listener) {
     assert(margin < kInfinity / 2);
+    assert(margin > baseIndent);
+    assert(margin > currentColumn);
+    // Ensure first print advances to at least baseIndent.
+    pendingIndentation =
+        baseIndent > currentColumn ? baseIndent - currentColumn : 0;
   }
+  ~PrettyPrinter() { eof(); }
 
   /// Add token for printing.  In Oppen, this is "scan".
   void add(Token t);
@@ -177,7 +188,7 @@ public:
   void setListener(Listener *newListener) { listener = newListener; };
   auto *getListener() const { return listener; }
 
-  static constexpr uint32_t kInfinity = 0xFFFFFU;
+  static constexpr uint32_t kInfinity = 0xFFFFU;
 
 private:
   /// Format token with tracked size.
@@ -237,10 +248,10 @@ private:
   const PrintEntry defaultFrame;
 
   /// Current indentation level
-  uint32_t indent = 0;
+  uint32_t indent;
 
   /// Whitespace to print before next, tracked to avoid trailing whitespace.
-  uint32_t pendingIndentation = 0;
+  uint32_t pendingIndentation;
 
   /// Target line width.
   const uint32_t margin;

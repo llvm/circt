@@ -62,8 +62,6 @@
 namespace circt {
 namespace pretty {
 
-auto constexpr debug = false;
-
 /// Destructor, anchor.
 PrettyPrinter::Listener::~Listener() = default;
 
@@ -79,6 +77,8 @@ void PrettyPrinter::add(Token t) {
       .Case([&](StringToken *s) {
         // If nothing on stack, directly print
         FormattedToken f{t, (int32_t)s->text().size()};
+        // Empty string token isn't /wrong/ but can have unintended effect.
+        assert(!s->text().empty() && "empty string token");
         if (scanStack.empty())
           return print(f);
         tokens.push_back(f);
@@ -130,6 +130,7 @@ void PrettyPrinter::checkStack() {
   unsigned depth = 0;
   while (!scanStack.empty()) {
     auto x = scanStack.back();
+    assert(x >= tokenOffset && tokens.size() + tokenOffset > x);
     auto &t = tokens[x - tokenOffset];
     if (auto *b = llvm::dyn_cast<BeginToken>(&t.token)) {
       if (depth == 0)
@@ -155,6 +156,8 @@ void PrettyPrinter::checkStack() {
 void PrettyPrinter::checkStream() {
   // While buffer needs more than 1 line to print, print and consume.
   assert(!tokens.empty());
+  assert(leftTotal >= 0);
+  assert(rightTotal >= 0);
   while (rightTotal - leftTotal > space && !tokens.empty()) {
 
     // Ran out of space, set size to infinity and take off scan stack.
@@ -202,14 +205,6 @@ void PrettyPrinter::print(FormattedToken f) {
           space -= b->spaces();
           pendingIndentation += b->spaces();
         } else {
-          if (debug) {
-            if (space)
-              os << "┆";
-            if (space > 2)
-              os.indent(space - 2);
-            if (space > 1)
-              os << "┇";
-          }
           os << "\n";
           pendingIndentation =
               std::max<ssize_t>(ssize_t{indent} + b->offset(), 0);
@@ -237,7 +232,7 @@ void PrettyPrinter::print(FormattedToken f) {
         printStack.pop_back();
         auto &frame = getPrintFrame();
         if (frame.breaks != PrintBreaks::Fits)
-          indent = printStack.back().offset;
+          indent = frame.offset;
       });
 }
 } // end namespace pretty
