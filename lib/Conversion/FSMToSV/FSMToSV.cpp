@@ -706,6 +706,10 @@ void FSMToSVPass::runOnOperation() {
     instance.replaceAllUsesWith(hwInstance);
     instance.erase();
   }
+
+  // If the typescope is empty (no FSMs were converted), erase it.
+  if (typeScope.getBodyBlock()->empty())
+    typeScope.erase();
 }
 
 } // end anonymous namespace
