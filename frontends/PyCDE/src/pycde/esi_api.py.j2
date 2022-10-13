@@ -96,11 +96,11 @@ class DesignModules:
       {{port_name}} = [
         {% for pc in port_clients -%}
           {% if pc.to_client_type is defined and pc.to_server_type is defined -%}
-          ReadWritePort({{pc.client_name}}, backend, read_type=ESITypes.{{get_type_name(pc.to_server_type)}}, write_type=ESITypes.{{get_type_name(pc.to_client_type)}})
+          ReadWritePort({{pc.client_name}}, backend, "{{svc.impl_type}}", read_type=ESITypes.{{get_type_name(pc.to_server_type)}}, write_type=ESITypes.{{get_type_name(pc.to_client_type)}})
           {%- elif pc.to_client_type is defined -%}
-          WritePort({{pc.client_name}}, backend, write_type=ESITypes.{{get_type_name(pc.to_client_type)}})
+          WritePort({{pc.client_name}}, backend, "{{svc.impl_type}}", write_type=ESITypes.{{get_type_name(pc.to_client_type)}})
           {%- elif pc.to_server_type is defined -%}
-          ReadPort({{pc.client_name}}, backend, read_type=ESITypes.{{get_type_name(pc.to_server_type)}})
+          ReadPort({{pc.client_name}}, backend, "{{svc.impl_type}}", read_type=ESITypes.{{get_type_name(pc.to_server_type)}})
           {%- endif -%}
           {%- if not loop.last %}, {% endif %}
         {%- if not loop.last %}

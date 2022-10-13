@@ -67,9 +67,15 @@ class Port:
   def __init__(self,
                client_path: typing.List[str],
                backend,
+               impl_type: str,
                read_type: typing.Optional[Type] = None,
                write_type: typing.Optional[Type] = None):
-    self._backend = backend.get_port(client_path, read_type, write_type)
+    # If a backend doesn't support a particular implementation type, just skip
+    # it. We don't want to error out on services which aren't being used.
+    if backend.supports_impl(impl_type):
+      self._backend = backend.get_port(client_path, read_type, write_type)
+    else:
+      self._backend = None
     self.client_path = client_path
     self.read_type = read_type
     self.write_type = write_type
@@ -81,12 +87,16 @@ class WritePort(Port):
     assert self.write_type is not None, "Expected non-None write_type"
     if not self.write_type.is_valid(msg):
       raise ValueError(f"'{msg}' cannot be converted to '{self.write_type}'")
+    if self._backend is None:
+      raise ValueError("Backend does not support implementation of port")
     return self._backend.write(msg)
 
 
 class ReadPort(Port):
 
   def read(self, blocking_timeout: typing.Optional[float] = 1.0):
+    if self._backend is None:
+      raise ValueError("Backend does not support implementation of port")
     return self._backend.read(blocking_timeout)
 
 
@@ -108,6 +118,10 @@ class _CosimNode:
   def __init__(self, root, prefix: typing.List[str]):
     self._root: Cosim = root
     self._endpoint_prefix = prefix
+
+  def supports_impl(self, impl_type: str) -> bool:
+    """The cosim backend only supports cosim connectivity implementations."""
+    return impl_type == "cosim"
 
   def get_child(self, child_name: str):
     """When instantiating a child instance, get the backend node with which it
