@@ -1,7 +1,7 @@
 from pycde.system import System
 from .module import (Generator, _module_base, _BlockContext,
                      _GeneratorPortAccess, _SpecializedModule)
-from pycde.value import ChannelValue, ClockValue
+from pycde.value import ChannelValue, ClockValue, PyCDEValue, Value
 from .common import AppID, Input, Output, InputChannel, OutputChannel, _PyProxy
 from circt.dialects import esi as raw_esi, hw, msft
 from circt.support import BackedgeBuilder
@@ -28,6 +28,10 @@ class ServiceDecl(_PyProxy):
 
   def __init__(self, cls: Type):
     self.name = cls.__name__
+    if hasattr(cls, "_op"):
+      self._op = cls._op
+    else:
+      self._op = raw_esi.CustomServiceDeclOp
     for (attr_name, attr) in vars(cls).items():
       if isinstance(attr, InputChannel):
         setattr(self, attr_name,
@@ -56,22 +60,42 @@ class ServiceDecl(_PyProxy):
     sym_name = op_cache.get_pyproxy_symbol(self)
     if sym_name is None:
       sym_name, install = op_cache.create_symbol(self)
-      with curr_sys._get_ip():
-        decl = raw_esi.CustomServiceDeclOp(ir.StringAttr.get(sym_name))
-        install(decl)
-      ports_block = ir.Block.create_at_start(decl.ports, [])
-      with ir.InsertionPoint.at_block_begin(ports_block):
-        for (_, attr) in self.__dict__.items():
-          if isinstance(attr, _RequestToServerConn):
-            raw_esi.ToServerOp(attr._name, ir.TypeAttr.get(attr.to_server_type))
-          elif isinstance(attr, _RequestToClientConn):
-            raw_esi.ToClientOp(attr._name, ir.TypeAttr.get(attr.to_client_type))
-          elif isinstance(attr, _RequestToFromServerConn):
-            raw_esi.ServiceDeclInOutOp(attr._name,
-                                       ir.TypeAttr.get(attr.to_server_type),
-                                       ir.TypeAttr.get(attr.to_client_type))
       self.symbol = ir.StringAttr.get(sym_name)
+      with curr_sys._get_ip():
+        decl = self._op(self.symbol)
+        install(decl)
+
+      if self._op is raw_esi.CustomServiceDeclOp:
+        ports_block = ir.Block.create_at_start(decl.ports, [])
+        with ir.InsertionPoint.at_block_begin(ports_block):
+          for (_, attr) in self.__dict__.items():
+            if isinstance(attr, _RequestToServerConn):
+              raw_esi.ToServerOp(attr._name,
+                                 ir.TypeAttr.get(attr.to_server_type))
+            elif isinstance(attr, _RequestToClientConn):
+              raw_esi.ToClientOp(attr._name,
+                                 ir.TypeAttr.get(attr.to_client_type))
+            elif isinstance(attr, _RequestToFromServerConn):
+              raw_esi.ServiceDeclInOutOp(attr._name,
+                                         ir.TypeAttr.get(attr.to_server_type),
+                                         ir.TypeAttr.get(attr.to_client_type))
     return sym_name
+
+  def instantiate_builtin(self,
+                          builtin: str,
+                          result_types: List[PyCDEType] = [],
+                          inputs: List[PyCDEValue] = []):
+    """Implement a service using an implementation builtin to CIRCT. Needs the
+    input ports which the implementation expects and returns the outputs."""
+
+    # TODO: figure out a way to verify the ports during this call.
+    impl_results = raw_esi.ServiceInstanceOp(
+        result=result_types,
+        service_symbol=ir.FlatSymbolRefAttr.get(
+            self._materialize_service_decl()),
+        impl_type=ir.StringAttr.get(builtin),
+        inputs=[x.value for x in inputs]).operation.results
+    return [Value(x) for x in impl_results]
 
 
 class _RequestConnection:
@@ -79,12 +103,14 @@ class _RequestConnection:
   ServiceDecl class. Provides syntactic sugar for constructing service
   connection requests."""
 
-  def __init__(self, decl: ServiceDecl, to_server_type: Optional[PyCDEType],
-               to_client_type: Optional[PyCDEType], attr_name: str):
+  def __init__(self, decl: ServiceDecl, to_server_type: Optional[ir.Type],
+               to_client_type: Optional[ir.Type], attr_name: str):
     self.decl = decl
     self._name = ir.StringAttr.get(attr_name)
-    self.to_server_type = to_server_type
-    self.to_client_type = to_client_type
+    self.to_server_type = ChannelType(
+        to_server_type) if to_server_type is not None else None
+    self.to_client_type = ChannelType(
+        to_client_type) if to_client_type is not None else None
 
   @property
   def service_port(self) -> hw.InnerRefAttr:
@@ -139,14 +165,8 @@ class _RequestToFromServerConn(_RequestConnection):
 
 
 def Cosim(decl: ServiceDecl, clk, rst):
-
-  # TODO: better modeling and implementation capacity. The below is just
-  # temporary.
-  raw_esi.ServiceInstanceOp(result=[],
-                            service_symbol=ir.FlatSymbolRefAttr.get(
-                                decl._materialize_service_decl()),
-                            impl_type=ir.StringAttr.get("cosim"),
-                            inputs=[clk.value, rst.value])
+  """Implement a service via cosimulation."""
+  decl.instantiate_builtin("cosim", [], [clk, rst])
 
 
 class NamedChannelValue(ChannelValue):
@@ -337,3 +357,28 @@ class _ServiceGeneratorRegistry:
 
 
 _service_generator_registry = _ServiceGeneratorRegistry()
+
+
+def DeclareRandomAccessMemory(inner_type: PyCDEType,
+                              depth: int,
+                              name: Optional[str] = None):
+  """Declare an ESI RAM with elements of type 'inner_type' and has 'depth' of
+  them. Memories (as with all ESI services) are not actually instantiated until
+  the place where you specify the implementation."""
+
+  @ServiceDecl
+  class DeclareRandomAccessMemory:
+    __name__ = name
+    address_type = types.int((depth - 1).bit_length())
+    write_type = types.struct([('address', address_type), ('data', inner_type)])
+
+    read = ToFromServer(to_server_type=address_type, to_client_type=inner_type)
+    write = ToFromServer(to_server_type=write_type, to_client_type=types.i0)
+
+    @staticmethod
+    def _op(sym_name: ir.StringAttr):
+      return raw_esi.RandomAccessMemoryDeclOp(
+          sym_name, ir.TypeAttr.get(inner_type),
+          ir.IntegerAttr.get(ir.IntegerType.get_signless(64), depth))
+
+  return DeclareRandomAccessMemory

@@ -102,6 +102,20 @@ class ReadPort(Port):
 
 class ReadWritePort(Port):
 
+  def __call__(self,
+               msg,
+               blocking_timeout: typing.Optional[float] = 1.0) -> typing.Any:
+    """Send a message and wait for a response. If 'timeout' is exceeded while
+    waiting for a response, there may well be one coming. It is the caller's
+    responsibility to clear the response channel before sending another request
+    so as to ensure correlation between request and response.
+
+    Intended for blocking or synchronous interfaces."""
+
+    if not self.write(msg):
+      raise RuntimeError(f"Could not send message '{msg}'")
+    return self.read(blocking_timeout)
+
   def write(self, msg) -> bool:
     assert self.write_type is not None, "Expected non-None write_type"
     if not self.write_type.is_valid(msg):

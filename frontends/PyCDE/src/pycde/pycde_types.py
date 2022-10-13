@@ -122,8 +122,8 @@ class PyCDEType(mlir.ir.Type):
   __slots__ = ["_type"]
 
   def __init__(self, mlir_type: mlir.ir.Type):
-    super().__init__(mlir_type)
     self._type = circt.support.type_to_pytype(mlir_type)
+    super().__init__(self._type)
 
   @property
   def strip(self):
@@ -310,6 +310,10 @@ class ChannelType(PyCDEType):
 
   def __str__(self):
     return f"channel<{self.inner_type}>"
+
+  @property
+  def inner(self):
+    return self.inner_type
 
   def wrap(self, value, valid):
     from .support import _obj_to_value
