@@ -563,11 +563,11 @@ hw.module @DeeplyNestedIfs(%a_0: i1, %a_1: i1, %a_2: i1, %c_0_0: i1, %c_0_1: i1,
 hw.module @ArrayElements(%a: !hw.array<2xi1>, %clock: i1, %cond: i1) -> (b: !hw.array<2xi1>) {
   %false = hw.constant false
   %true = hw.constant true
-  %0 = hw.array_get %a[%true] : !hw.array<2xi1>
-  %1 = hw.array_get %a[%false] : !hw.array<2xi1>
+  %0 = hw.array_get %a[%true] : !hw.array<2xi1>, i1
+  %1 = hw.array_get %a[%false] : !hw.array<2xi1>, i1
   %r = seq.firreg %6 clock %clock {firrtl.random_init_start = 0 : ui64} : !hw.array<2xi1>
-  %2 = hw.array_get %r[%true] : !hw.array<2xi1>
-  %3 = hw.array_get %r[%false] : !hw.array<2xi1>
+  %2 = hw.array_get %r[%true] : !hw.array<2xi1>, i1
+  %3 = hw.array_get %r[%false] : !hw.array<2xi1>, i1
   %4 = comb.mux bin %cond, %1, %3 : i1
   %5 = comb.mux bin %cond, %0, %2 : i1
   %6 = hw.array_create %5, %4 : i1
