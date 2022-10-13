@@ -1069,7 +1069,7 @@ struct ArraySlice {
   // Get a struct from the value. Return std::nullopt if the value doesn't
   // represent an array slice.
   static std::optional<ArraySlice> getArraySlice(Value v) {
-    auto op = v.getDefiningOp();
+    auto *op = v.getDefiningOp();
     if (!op)
       return std::nullopt;
     return TypeSwitch<Operation *, std::optional<ArraySlice>>(op)
