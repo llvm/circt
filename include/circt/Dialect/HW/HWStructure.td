@@ -479,7 +479,7 @@ def InstanceOp : HWOp<"instance", [
 }
 
 def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
-                                NoSideEffect, ReturnLike]> {
+                                Pure, ReturnLike]> {
   let summary = "HW termination operation";
   let description = [{
     "hw.output" marks the end of a region in the HW dialect and the values

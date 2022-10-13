@@ -215,7 +215,7 @@ def BufferTypeEnum: I32EnumAttr<
 }
 def BufferTypeEnumAttr: EnumAttr<Handshake_Dialect, BufferTypeEnum, "buffer_type_enum">;
 
-def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
+def BufferOp : Handshake_Op<"buffer", [Pure, HasClock,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<GeneralOpInterface>]> {
   let summary = "buffer operation";
@@ -267,7 +267,7 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
 }
 
 def ForkOp : Handshake_Op<"fork", [
-  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  Pure, DeclareOpInterfaceMethods<ExecutableOpInterface>,
   HasClock, DeclareOpInterfaceMethods<GeneralOpInterface>
 ]> {
   let summary = "fork operation";
@@ -295,7 +295,7 @@ def ForkOp : Handshake_Op<"fork", [
   let hasCustomAssemblyFormat = 1;
 }
 
-def LazyForkOp : Handshake_Op<"lazy_fork", [NoSideEffect]> {
+def LazyForkOp : Handshake_Op<"lazy_fork", [Pure]> {
   let summary = "lazy fork operation";
   let description = [{
     The lazy_fork operation represents a lazy fork operation.
@@ -319,7 +319,7 @@ def LazyForkOp : Handshake_Op<"lazy_fork", [NoSideEffect]> {
 }
 
 def MergeOp : Handshake_Op<"merge", [
-  NoSideEffect, MergeLikeOpInterface,
+  Pure, MergeLikeOpInterface,
   DeclareOpInterfaceMethods<ExecutableOpInterface>
 ]> {
   let summary = "merge operation";
@@ -347,7 +347,7 @@ def MergeOp : Handshake_Op<"merge", [
 }
 
 def MuxOp : Handshake_Op<"mux", [
-  NoSideEffect, MergeLikeOpInterface,
+  Pure, MergeLikeOpInterface,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>
 ]> {
@@ -389,7 +389,7 @@ def MuxOp : Handshake_Op<"mux", [
 }
 
 def ControlMergeOp : Handshake_Op<"control_merge", [
-  NoSideEffect, MergeLikeOpInterface, HasClock,
+  Pure, MergeLikeOpInterface, HasClock,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getResultName"]>
 ]> {
@@ -425,7 +425,7 @@ def ControlMergeOp : Handshake_Op<"control_merge", [
 }
 
 def BranchOp : Handshake_Op<"br", [
-  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  Pure, DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<GeneralOpInterface>,
   AllTypesMatch<["dataOperand", "dataResult"]>
   ]> {
@@ -454,7 +454,7 @@ def BranchOp : Handshake_Op<"br", [
 }
 
 def ConditionalBranchOp : Handshake_Op<"cond_br", [
-  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  Pure, DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getResultName"]>,
   TypesMatchWith<"data operand type matches true branch result type",
@@ -489,7 +489,7 @@ def ConditionalBranchOp : Handshake_Op<"cond_br", [
 }
 
 def SelectOp : Handshake_Op<"select", [
-  NoSideEffect,
+  Pure,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>,
   TypesMatchWith<"data operand type matches true branch result type",
                     "trueOperand", "falseOperand", "$_self">,
@@ -547,7 +547,7 @@ def SinkOp
   let hasCustomAssemblyFormat = 1;
 }
 
-def SourceOp : Handshake_Op<"source", [NoSideEffect]> {
+def SourceOp : Handshake_Op<"source", [Pure]> {
   let summary = "source operation";
   let description = [{
     The source operation represents continuous token
@@ -561,7 +561,7 @@ def SourceOp : Handshake_Op<"source", [NoSideEffect]> {
   let builders = [OpBuilder<(ins)>];
 }
 
-def NeverOp : Handshake_Op<"never", [NoSideEffect]> {
+def NeverOp : Handshake_Op<"never", [Pure]> {
   let summary = "never operation";
   let description = [{
     The never operation represents disconnected data
@@ -574,7 +574,7 @@ def NeverOp : Handshake_Op<"never", [NoSideEffect]> {
 }
 
 def ConstantOp : Handshake_Op<"constant", [
-  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  Pure, DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<GeneralOpInterface>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>
 ]> {
@@ -618,7 +618,7 @@ def EndOp
 }
 
 def StartOp : Handshake_Op<"start", [
-  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>
+  Pure, DeclareOpInterfaceMethods<ExecutableOpInterface>
 ]> {
   let summary = "start operation";
   let description = [{
