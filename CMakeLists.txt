@@ -94,7 +94,6 @@ endif ()
       add_llvm_library(llvm_gtest
         ${UNITTEST_DIR}/googletest/src/gtest-all.cc
         ${UNITTEST_DIR}/googlemock/src/gmock-all.cc
-        LINK_LIBS Threads:Threads
         LINK_COMPONENTS Support # llvm::raw_ostream
         BUILDTREE_ONLY
       )
@@ -106,6 +105,7 @@ endif ()
         "${UNITTEST_DIR}/googletest"
         "${UNITTEST_DIR}/googlemock"
       )
+      target_link_libraries(llvm_gtest PUBLIC Threads::Threads)
       add_llvm_library(llvm_gtest_main
         ${UNITTEST_DIR}/UnitTestMain/TestMain.cpp
         LINK_LIBS llvm_gtest
