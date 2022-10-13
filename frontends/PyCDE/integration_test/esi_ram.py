@@ -5,7 +5,6 @@
 # PY: from esi_ram import run_cosim
 # PY: run_cosim(tmpdir, rpcschemapath, simhostport)
 
-from this import d
 import pycde
 from pycde import (Clock, Input, module, generator, types)
 from pycde.constructs import Wire
@@ -92,8 +91,6 @@ def run_cosim(tmpdir=".", schema_path="schema.capnp", rpchostport=None):
 
 
 if __name__ == "__main__":
-  # run_cosim()
-
   s = pycde.System([top], name="ESIMem", output_directory=sys.argv[1])
   s.generate()
   s.emit_outputs()

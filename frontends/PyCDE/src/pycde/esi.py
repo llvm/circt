@@ -85,6 +85,10 @@ class ServiceDecl(_PyProxy):
                           builtin: str,
                           result_types: List[PyCDEType] = [],
                           inputs: List[PyCDEValue] = []):
+    """Implement a service using an implementation builtin to CIRCT. Needs the
+    input ports which the implementation expects and returns the outputs."""
+
+    # TODO: figure out a way to verify the ports during this call.
     impl_results = raw_esi.ServiceInstanceOp(
         result=result_types,
         service_symbol=ir.FlatSymbolRefAttr.get(
@@ -161,14 +165,8 @@ class _RequestToFromServerConn(_RequestConnection):
 
 
 def Cosim(decl: ServiceDecl, clk, rst):
-
-  # TODO: better modeling and implementation capacity. The below is just
-  # temporary.
-  raw_esi.ServiceInstanceOp(result=[],
-                            service_symbol=ir.FlatSymbolRefAttr.get(
-                                decl._materialize_service_decl()),
-                            impl_type=ir.StringAttr.get("cosim"),
-                            inputs=[clk.value, rst.value])
+  """Implement a service via cosimulation."""
+  decl.instantiate_builtin("cosim", [], [clk, rst])
 
 
 class NamedChannelValue(ChannelValue):
@@ -364,6 +362,9 @@ _service_generator_registry = _ServiceGeneratorRegistry()
 def DeclareRandomAccessMemory(inner_type: PyCDEType,
                               depth: int,
                               name: Optional[str] = None):
+  """Declare an ESI RAM with elements of type 'inner_type' and has 'depth' of
+  them. Memories (as with all ESI services) are not actually instantiated until
+  the place where you specify the implementation."""
 
   @ServiceDecl
   class DeclareRandomAccessMemory:
