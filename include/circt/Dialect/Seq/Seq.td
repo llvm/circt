@@ -112,6 +112,7 @@ def FirRegOp : SeqOp<"firreg",
 
   let skipDefaultBuilders = 1;
   let hasCanonicalizeMethod = true;
+  let hasFolder = true;
   let builders = [
     OpBuilder<(ins "Value":$next, "Value":$clk,
                    "StringAttr":$name,
