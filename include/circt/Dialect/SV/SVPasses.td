@@ -114,6 +114,12 @@ def SVExtractTestCode : Pass<"sv-extract-test-code", "ModuleOp"> {
 
   let constructor = "circt::sv::createSVExtractTestCodePass()";
   let dependentDialects = ["circt::sv::SVDialect"];
+  let options = [
+    Option<"disableInstanceExtraction", "disable-instance-extraction", "bool",
+           "false", "Disable extracting instances only that feed test code">,
+    Option<"disableModuleInlining", "disable-module-inlining", "bool",
+           "false", "Disable inlining modules that only feed test code">
+  ];
   let statistics = [
     Statistic<"numOpsExtracted", "num-ops-extracted", "Number of ops extracted">,
     Statistic<"numOpsErased", "num-ops-erased", "Number of ops erased">

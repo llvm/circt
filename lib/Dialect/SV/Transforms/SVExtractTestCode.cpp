@@ -448,6 +448,11 @@ namespace {
 
 struct SVExtractTestCodeImplPass
     : public SVExtractTestCodeBase<SVExtractTestCodeImplPass> {
+  SVExtractTestCodeImplPass(bool disableInstanceExtraction,
+                            bool disableModuleInlining) {
+    this->disableInstanceExtraction = disableInstanceExtraction;
+    this->disableModuleInlining = disableModuleInlining;
+  }
   void runOnOperation() override;
 
 private:
@@ -490,7 +495,9 @@ private:
 
     // Find instances that directly feed the clone set, and add them if
     // possible.
-    addInstancesToCloneSet(inputs, opsToClone, opsToErase, extractedInstances);
+    if (!disableInstanceExtraction)
+      addInstancesToCloneSet(inputs, opsToClone, opsToErase,
+                             extractedInstances);
     numOpsExtracted += opsToClone.size();
     numOpsErased += opsToErase.size();
 
@@ -629,7 +636,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
                                     coverBindFile, bindTable, opsToErase);
 
       // Inline any modules that only have inputs for test code.
-      if (anyThingExtracted)
+      if (!disableModuleInlining && anyThingExtracted)
         inlineInputOnly(rtlmod, instanceGraph, bindTable, opsToErase);
 
       // Erase any instances that were extracted, and their forward dataflow.
@@ -661,6 +668,9 @@ void SVExtractTestCodeImplPass::runOnOperation() {
   top->removeAttr("firrtl.extract.testbench");
 }
 
-std::unique_ptr<Pass> circt::sv::createSVExtractTestCodePass() {
-  return std::make_unique<SVExtractTestCodeImplPass>();
+std::unique_ptr<Pass>
+circt::sv::createSVExtractTestCodePass(bool disableInstanceExtraction,
+                                       bool disableModuleInlining) {
+  return std::make_unique<SVExtractTestCodeImplPass>(disableInstanceExtraction,
+                                                     disableModuleInlining);
 }
