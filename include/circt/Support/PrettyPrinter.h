@@ -35,7 +35,15 @@ namespace pretty {
 // Tokens
 //===----------------------------------------------------------------------===//
 
+/// Style of breaking within a group:
+/// - Consistent: all fits or all breaks.
+/// - Inconsistent: best fit, break where needed.
 enum class Breaks { Consistent, Inconsistent };
+
+/// Style of indent when starting a group:
+/// - Visual: offset is relative to current column.
+/// - Block: offset is relative to current base indentation.
+enum class IndentStyle { Visual, Block };
 
 class Token {
 public:
@@ -51,6 +59,7 @@ public:
   struct BeginInfo {
     int32_t offset;
     Breaks breaks;
+    IndentStyle style;
   };
   struct EndInfo {
     // Nothing
@@ -115,11 +124,13 @@ struct BreakToken : public TokenBase<BreakToken, Token::Kind::Break> {
 };
 
 struct BeginToken : public TokenBase<BeginToken, Token::Kind::Begin> {
-  BeginToken(int32_t offset = 2, Breaks breaks = Breaks::Inconsistent) {
-    getInfoMut() = {offset, breaks};
+  BeginToken(int32_t offset = 2, Breaks breaks = Breaks::Inconsistent,
+             IndentStyle style = IndentStyle::Visual) {
+    getInfoMut() = {offset, breaks, style};
   }
   auto offset() { return getInfo().offset; }
   auto breaks() { return getInfo().breaks; }
+  auto style() { return getInfo().style; }
 };
 
 struct EndToken : public TokenBase<EndToken, Token::Kind::End> {};
@@ -137,10 +148,10 @@ public:
     virtual void clear(){};
   };
 
-  // TODO: allow setting starting indentation level!
-  PrettyPrinter(llvm::raw_ostream &os, uint32_t margin,
+  PrettyPrinter(llvm::raw_ostream &os, uint32_t margin, uint32_t indent = 0,
                 Listener *listener = nullptr)
-      : space(margin), margin(margin), os(os), listener(listener) {
+      : space(margin), defaultFrame{indent, PrintBreaks::Inconsistent},
+        indent(indent), margin(margin), os(os), listener(listener) {
     assert(margin < kInfinity / 2);
   }
 
@@ -199,6 +210,11 @@ private:
   /// Clear token buffer, scanStack must be empty.
   void clear();
 
+  /// Get current printing frame.
+  auto &getPrintFrame() {
+    return printStack.empty() ? defaultFrame : printStack.back();
+  }
+
   /// Characters left on this line.
   int32_t space;
 
@@ -217,18 +233,17 @@ private:
   /// Stack of printing contexts (indentation + breaking behavior).
   std::vector<PrintEntry> printStack;
 
+  /// Printing context when stack is empty.
+  const PrintEntry defaultFrame;
+
   /// Current indentation level
-  // TODO: implement this!
-  // uint32_t indent;
+  uint32_t indent = 0;
 
   /// Whitespace to print before next, tracked to avoid trailing whitespace.
   uint32_t pendingIndentation = 0;
 
-  // sizeInfinity
-  // printStack
-
   /// Target line width.
-  uint32_t margin;
+  const uint32_t margin;
 
   /// Output stream.
   llvm::raw_ostream &os;
