@@ -222,8 +222,7 @@ private:
   // uint32_t indent;
 
   /// Whitespace to print before next, tracked to avoid trailing whitespace.
-  // TODO: implement this!
-  // uint32_t pendingIndentation;
+  uint32_t pendingIndentation = 0;
 
   // sizeInfinity
   // printStack

@@ -187,6 +187,8 @@ void PrettyPrinter::print(FormattedToken f) {
   llvm::TypeSwitch<Token *, void>(&f.token)
       .Case([&](StringToken *s) {
         space -= f.size;
+        os.indent(pendingIndentation);
+        pendingIndentation = 0;
         os << s->text();
       })
       .Case([&](BreakToken *b) {
@@ -199,7 +201,7 @@ void PrettyPrinter::print(FormattedToken f) {
             (frame.breaks == PrintBreaks::Inconsistent && f.size <= space);
         if (fits) {
           space -= b->spaces();
-          os.indent(b->spaces());
+          pendingIndentation += b->spaces();
         } else {
           if (debug) {
             if (space)
@@ -211,7 +213,7 @@ void PrettyPrinter::print(FormattedToken f) {
           }
           os << "\n";
           space = frame.offset - b->offset();
-          os.indent(std::max<ssize_t>(ssize_t(margin) - space, 0));
+          pendingIndentation += std::max<ssize_t>(ssize_t(margin) - space, 0);
         }
       })
       .Case([&](BeginToken *b) {
