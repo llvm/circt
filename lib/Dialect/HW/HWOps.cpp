@@ -13,9 +13,11 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWVisitors.h"
+#include "circt/Dialect/HW/InstanceImplementation.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/Builders.h"
@@ -103,15 +105,16 @@ enum class Delimiter {
   OptionalLessGreater, // <> enclosed list or absent
 };
 
-/// Check parameter specified by `value` to see if it is valid within the scope
-/// of the specified module `module`.  If not, emit an error at the location of
-/// `usingOp` and return failure, otherwise return success.  If `usingOp` is
-/// null, then no diagnostic is generated.
+/// Check parameter specified by `value` to see if it is valid according to the
+/// module's parameters.  If not, emit an error to the diagnostic provided as an
+/// argument to the lambda 'instanceError' and return failure, otherwise return
+/// success.
 ///
 /// If `disallowParamRefs` is true, then parameter references are not allowed.
-LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
-                                          Operation *usingOp,
-                                          bool disallowParamRefs) {
+LogicalResult hw::checkParameterInContext(
+    Attribute value, ArrayAttr moduleParameters,
+    const instance_like_impl::EmitErrorFn &instanceError,
+    bool disallowParamRefs) {
   // Literals are always ok.  Their types are already known to match
   // expectations.
   if (value.isa<IntegerAttr>() || value.isa<FloatAttr>() ||
@@ -121,8 +124,8 @@ LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
   // Check both subexpressions of an expression.
   if (auto expr = value.dyn_cast<ParamExprAttr>()) {
     for (auto op : expr.getOperands())
-      if (failed(
-              checkParameterInContext(op, module, usingOp, disallowParamRefs)))
+      if (failed(checkParameterInContext(op, moduleParameters, instanceError,
+                                         disallowParamRefs)))
         return failure();
     return success();
   }
@@ -135,14 +138,16 @@ LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
     // Don't allow references to parameters from the default values of a
     // parameter list.
     if (disallowParamRefs) {
-      if (usingOp)
-        usingOp->emitOpError("parameter ")
-            << nameAttr << " cannot be used as a default value for a parameter";
+      instanceError([&](auto &diag) {
+        diag << "parameter " << nameAttr
+             << " cannot be used as a default value for a parameter";
+        return false;
+      });
       return failure();
     }
 
     // Find the corresponding attribute in the module.
-    for (auto param : module->getAttrOfType<ArrayAttr>("parameters")) {
+    for (auto param : moduleParameters) {
       auto paramAttr = param.cast<ParamDeclAttr>();
       if (paramAttr.getName() != nameAttr)
         continue;
@@ -151,25 +156,50 @@ LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
       if (paramAttr.getType() == parameterRef.getType())
         return success();
 
-      if (usingOp) {
-        auto diag = usingOp->emitOpError("parameter ")
-                    << nameAttr << " used with type " << parameterRef.getType()
-                    << "; should have type " << paramAttr.getType();
-        diag.attachNote(module->getLoc()) << "module declared here";
-      }
+      instanceError([&](auto &diag) {
+        diag << "parameter " << nameAttr << " used with type "
+             << parameterRef.getType() << "; should have type "
+             << paramAttr.getType();
+        return true;
+      });
       return failure();
     }
 
-    if (usingOp) {
-      auto diag = usingOp->emitOpError("use of unknown parameter ") << nameAttr;
-      diag.attachNote(module->getLoc()) << "module declared here";
-    }
+    instanceError([&](auto &diag) {
+      diag << "use of unknown parameter " << nameAttr;
+      return true;
+    });
     return failure();
   }
 
-  if (usingOp)
-    usingOp->emitOpError("invalid parameter value ") << value;
+  instanceError([&](auto &diag) {
+    diag << "invalid parameter value " << value;
+    return false;
+  });
   return failure();
+}
+
+/// Check parameter specified by `value` to see if it is valid within the scope
+/// of the specified module `module`.  If not, emit an error at the location of
+/// `usingOp` and return failure, otherwise return success.  If `usingOp` is
+/// null, then no diagnostic is generated.
+///
+/// If `disallowParamRefs` is true, then parameter references are not allowed.
+LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
+                                          Operation *usingOp,
+                                          bool disallowParamRefs) {
+  instance_like_impl::EmitErrorFn emitError =
+      [&](std::function<bool(InFlightDiagnostic &)> fn) {
+        if (usingOp) {
+          auto diag = usingOp->emitOpError();
+          if (fn(diag))
+            diag.attachNote(module->getLoc()) << "module declared here";
+        }
+      };
+
+  return checkParameterInContext(value,
+                                 module->getAttrOfType<ArrayAttr>("parameters"),
+                                 emitError, disallowParamRefs);
 }
 
 /// Return true if the specified attribute tree is made up of nodes that are
@@ -857,36 +887,6 @@ static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   return false;
 }
 
-/// Parse an parameter list if present.
-/// module-parameter-list ::= `<` parameter-decl (`,` parameter-decl)* `>`
-/// parameter-decl ::= identifier `:` type
-/// parameter-decl ::= identifier `:` type `=` attribute
-///
-static ParseResult parseOptionalParameters(OpAsmParser &parser,
-                                           SmallVector<Attribute> &parameters) {
-
-  return parser.parseCommaSeparatedList(
-      OpAsmParser::Delimiter::OptionalLessGreater, [&]() {
-        std::string name;
-        Type type;
-        Attribute value;
-
-        if (parser.parseKeywordOrString(&name) || parser.parseColonType(type))
-          return failure();
-
-        // Parse the default value if present.
-        if (succeeded(parser.parseOptionalEqual())) {
-          if (parser.parseAttribute(value, type))
-            return failure();
-        }
-
-        auto &builder = parser.getBuilder();
-        parameters.push_back(ParamDeclAttr::get(
-            builder.getContext(), builder.getStringAttr(name), type, value));
-        return success();
-      });
-}
-
 static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
                                    ExternModKind modKind = PlainMod) {
 
@@ -897,7 +897,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   SmallVector<OpAsmParser::Argument, 4> entryArgs;
   SmallVector<DictionaryAttr> resultAttrs;
   SmallVector<Type, 4> resultTypes;
-  SmallVector<Attribute> parameters;
+  ArrayAttr parameters;
   auto &builder = parser.getBuilder();
 
   // Parse the visibility attribute.
@@ -920,7 +920,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   // Parse the function signature.
   bool isVariadic = false;
   SmallVector<Attribute> resultNames;
-  if (parseOptionalParameters(parser, parameters) ||
+  if (parseOptionalParameterList(parser, parameters) ||
       module_like_impl::parseModuleFunctionSignature(
           parser, entryArgs, isVariadic, resultTypes, resultAttrs,
           resultNames) ||
@@ -964,7 +964,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   if (!hasAttribute("argNames", result.attributes))
     result.addAttribute("argNames", ArrayAttr::get(context, argNames));
   result.addAttribute("resultNames", ArrayAttr::get(context, resultNames));
-  result.addAttribute("parameters", ArrayAttr::get(context, parameters));
+  result.addAttribute("parameters", parameters);
   if (!hasAttribute("comment", result.attributes))
     result.addAttribute("comment", StringAttr::get(context, ""));
 
@@ -1003,23 +1003,6 @@ FunctionType getHWModuleOpType(Operation *op) {
   return typeAttr.getValue().cast<FunctionType>();
 }
 
-/// Print a parameter list for a module or instance.
-static void printParameterList(ArrayAttr parameters, OpAsmPrinter &p) {
-  if (parameters.empty())
-    return;
-
-  p << '<';
-  llvm::interleaveComma(parameters, p, [&](Attribute param) {
-    auto paramAttr = param.cast<ParamDeclAttr>();
-    p << paramAttr.getName().getValue() << ": " << paramAttr.getType();
-    if (auto value = paramAttr.getValue()) {
-      p << " = ";
-      p.printAttributeWithoutType(value);
-    }
-  });
-  p << '>';
-}
-
 static void printModuleOp(OpAsmPrinter &p, Operation *op,
                           ExternModKind modKind) {
   using namespace mlir::function_interface_impl;
@@ -1043,7 +1026,7 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
   }
 
   // Print the parameter list if present.
-  printParameterList(op->getAttrOfType<ArrayAttr>("parameters"), p);
+  printOptionalParameterList(p, op, op->getAttrOfType<ArrayAttr>("parameters"));
 
   bool needArgNamesAttr = false;
   module_like_impl::printModuleSignature(p, op, argTypes, /*isVariadic=*/false,
@@ -1246,27 +1229,22 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        Operation *module, StringAttr name,
                        ArrayRef<Value> inputs, ArrayAttr parameters,
                        StringAttr sym_name) {
-  assert(isAnyModule(module) && "Can only reference a module");
-
   if (!parameters)
     parameters = builder.getArrayAttr({});
 
+  auto [argNames, resultNames] =
+      instance_like_impl::getHWModuleArgAndResultNames(module);
   FunctionType modType = getModuleType(module);
   build(builder, result, modType.getResults(), name,
         FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputs,
-        module->getAttrOfType<ArrayAttr>("argNames"),
-        module->getAttrOfType<ArrayAttr>("resultNames"), parameters, sym_name);
+        argNames, resultNames, parameters, sym_name);
 }
 
 /// Lookup the module or extmodule for the symbol.  This returns null on
 /// invalid IR.
 Operation *InstanceOp::getReferencedModule(const HWSymbolCache *cache) {
-  if (cache)
-    if (auto *result = cache->getDefinition(getModuleNameAttr()))
-      return result;
-
-  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-  return topLevelModuleOp.lookupSymbol(getModuleName());
+  return instance_like_impl::getReferencedModule(cache, *this,
+                                                 getModuleNameAttr());
 }
 
 Operation *InstanceOp::getReferencedModule() {
@@ -1274,182 +1252,31 @@ Operation *InstanceOp::getReferencedModule() {
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto *module =
-      symbolTable.lookupNearestSymbolFrom(*this, getModuleNameAttr());
-  if (module == nullptr)
-    return emitError("Cannot find module definition '")
-           << getModuleName() << "'";
-
-  // It must be some sort of module.
-  if (!isAnyModule(module))
-    return emitError("symbol reference '")
-           << getModuleName() << "' isn't a module";
-
-  // Check that input and result types are consistent with the referenced
-  // module.
-  // Emit an error message on the instance, with a note indicating which module
-  // is being referenced.
-  auto emitError =
-      [&](std::function<void(InFlightDiagnostic & diag)> fn) -> LogicalResult {
-    auto diag = emitOpError();
-    fn(diag);
-    diag.attachNote(module->getLoc()) << "module declared here";
-    return failure();
-  };
-
-  // Make sure our port and result names match.
-  ArrayAttr argNames = getArgNamesAttr();
-  ArrayAttr modArgNames = module->getAttrOfType<ArrayAttr>("argNames");
-
-  // Check operand types first.
-  auto numOperands = getOperation()->getNumOperands();
-  auto expectedOperandTypes = getModuleType(module).getInputs();
-
-  if (expectedOperandTypes.size() != numOperands)
-    return emitError([&](auto &diag) {
-      diag << "has a wrong number of operands; expected "
-           << expectedOperandTypes.size() << " but got " << numOperands;
-    });
-
-  if (argNames.size() != numOperands)
-    return emitError([&](auto &diag) {
-      diag << "has a wrong number of input port names; expected " << numOperands
-           << " but got " << argNames.size();
-    });
-
-  for (size_t i = 0; i != numOperands; ++i) {
-    auto expectedType = evaluateParametricType(getLoc(), getParameters(),
-                                               expectedOperandTypes[i]);
-    if (failed(expectedType))
-      return emitError([&](auto &diag) {
-        diag << "failed to resolve parametric input of instantiated module";
-      });
-    auto operandType = getOperand(i).getType();
-    if (operandType != *expectedType) {
-      return emitError([&](auto &diag) {
-        diag << "operand type #" << i << " must be " << *expectedType
-             << ", but got " << operandType;
-      });
-    }
-
-    if (argNames[i] != modArgNames[i])
-      return emitError([&](auto &diag) {
-        diag << "input label #" << i << " must be " << modArgNames[i]
-             << ", but got " << argNames[i];
-      });
-  }
-
-  // Check result types and labels.
-  auto numResults = getOperation()->getNumResults();
-  auto expectedResultTypes = getModuleType(module).getResults();
-  ArrayAttr resultNames = getResultNamesAttr();
-  ArrayAttr modResultNames = module->getAttrOfType<ArrayAttr>("resultNames");
-
-  if (expectedResultTypes.size() != numResults)
-    return emitError([&](auto &diag) {
-      diag << "has a wrong number of results; expected "
-           << expectedResultTypes.size() << " but got " << numResults;
-    });
-  if (resultNames.size() != numResults)
-    return emitError([&](auto &diag) {
-      diag << "has a wrong number of results port labels; expected "
-           << numResults << " but got " << resultNames.size();
-    });
-
-  for (size_t i = 0; i != numResults; ++i) {
-    auto expectedType = evaluateParametricType(getLoc(), getParameters(),
-                                               expectedResultTypes[i]);
-    if (failed(expectedType))
-      return emitError([&](auto &diag) {
-        diag << "failed to resolve parametric input of instantiated module";
-      });
-    auto resultType = getResult(i).getType();
-    if (resultType != *expectedType)
-      return emitError([&](auto &diag) {
-        diag << "result type #" << i << " must be " << *expectedType
-             << ", but got " << resultType;
-      });
-
-    if (resultNames[i] != modResultNames[i])
-      return emitError([&](auto &diag) {
-        diag << "input label #" << i << " must be " << modResultNames[i]
-             << ", but got " << resultNames[i];
-      });
-  }
-
-  // Check parameters match up.
-  ArrayAttr parameters = this->getParameters();
-  ArrayAttr modParameters = module->getAttrOfType<ArrayAttr>("parameters");
-  auto numParameters = parameters.size();
-  if (numParameters != modParameters.size())
-    return emitError([&](auto &diag) {
-      diag << "expected " << modParameters.size() << " parameters but had "
-           << numParameters;
-    });
-
-  for (size_t i = 0; i != numParameters; ++i) {
-    auto param = parameters[i].cast<ParamDeclAttr>();
-    auto modParam = modParameters[i].cast<ParamDeclAttr>();
-
-    auto paramName = param.getName();
-    if (paramName != modParam.getName())
-      return emitError([&](auto &diag) {
-        diag << "parameter #" << i << " should have name " << modParam.getName()
-             << " but has name " << paramName;
-      });
-
-    if (param.getType() != modParam.getType())
-      return emitError([&](auto &diag) {
-        diag << "parameter " << paramName << " should have type "
-             << modParam.getType() << " but has type " << param.getType();
-      });
-
-    // All instance parameters must have a value.  Specify the same value as
-    // a module's default value if you want the default.
-    if (!param.getValue())
-      return emitOpError("parameter ") << paramName << " must have a value";
-  }
-
-  return success();
+  return instance_like_impl::verifyInstanceOfHWModule(
+      *this, getModuleNameAttr(), getInputs(), getResultTypes(), getArgNames(),
+      getResultNames(), getParameters(), symbolTable);
 }
 
 LogicalResult InstanceOp::verify() {
-  // Check that all the parameter values specified to the instance are
-  // structurally valid.
-  for (auto param : getParameters()) {
-    auto paramAttr = param.cast<ParamDeclAttr>();
-    auto value = paramAttr.getValue();
-    // The SymbolUses verifier which checks that this exists may not have been
-    // run yet. Let it issue the error.
-    if (!value)
-      continue;
-
-    auto typedValue = value.dyn_cast<TypedAttr>();
-    if (!typedValue)
-      return emitOpError("parameter ")
-             << paramAttr << " should have a typed value; has value " << value;
-
-    if (typedValue.getType() != paramAttr.getType())
-      return emitOpError("parameter ")
-             << paramAttr << " should have type " << paramAttr.getType()
-             << "; has type " << typedValue.getType();
-
-    if (failed(checkParameterInContext(
-            value, (*this)->getParentOfType<HWModuleOp>(), *this)))
-      return failure();
-  }
-  return success();
+  auto module = (*this)->getParentOfType<HWModuleOp>();
+  auto moduleParameters = module->getAttrOfType<ArrayAttr>("parameters");
+  instance_like_impl::EmitErrorFn emitError =
+      [&](std::function<bool(InFlightDiagnostic &)> fn) {
+        auto diag = emitOpError();
+        if (fn(diag))
+          diag.attachNote(module->getLoc()) << "module declared here";
+      };
+  return instance_like_impl::verifyParameterStructure(
+      getParameters(), moduleParameters, emitError);
 }
 
 ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
-  auto *context = result.getContext();
   StringAttr instanceNameAttr;
   StringAttr symNameAttr;
   FlatSymbolRefAttr moduleNameAttr;
   SmallVector<OpAsmParser::UnresolvedOperand, 4> inputsOperands;
-  SmallVector<Type> inputsTypes;
-  SmallVector<Type> allResultTypes;
-  SmallVector<Attribute> argNames, resultNames, parameters;
+  SmallVector<Type, 1> inputsTypes, allResultTypes;
+  ArrayAttr argNames, resultNames, parameters;
   auto noneType = parser.getBuilder().getType<NoneType>();
 
   if (parser.parseAttribute(instanceNameAttr, noneType, "instanceName",
@@ -1463,68 +1290,28 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
         symNameAttr, InnerName::getInnerNameAttrName(), result.attributes);
   }
 
-  auto parseInputPort = [&]() -> ParseResult {
-    std::string portName;
-    if (parser.parseKeywordOrString(&portName))
-      return failure();
-    argNames.push_back(StringAttr::get(context, portName));
-    inputsOperands.push_back({});
-    inputsTypes.push_back({});
-    return failure(parser.parseColon() ||
-                   parser.parseOperand(inputsOperands.back()) ||
-                   parser.parseColon() || parser.parseType(inputsTypes.back()));
-  };
-
-  auto parseResultPort = [&]() -> ParseResult {
-    std::string portName;
-    if (parser.parseKeywordOrString(&portName))
-      return failure();
-    resultNames.push_back(StringAttr::get(parser.getContext(), portName));
-    allResultTypes.push_back({});
-    return parser.parseColonType(allResultTypes.back());
-  };
-
   llvm::SMLoc parametersLoc, inputsOperandsLoc;
   if (parser.parseAttribute(moduleNameAttr, noneType, "moduleName",
                             result.attributes) ||
       parser.getCurrentLocation(&parametersLoc) ||
-      parseOptionalParameters(parser, parameters) ||
-      parser.getCurrentLocation(&inputsOperandsLoc) ||
-      parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
-                                     parseInputPort) ||
+      parseOptionalParameterList(parser, parameters) ||
+      parseInputPortList(parser, inputsOperands, inputsTypes, argNames) ||
       parser.resolveOperands(inputsOperands, inputsTypes, inputsOperandsLoc,
                              result.operands) ||
       parser.parseArrow() ||
-      parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
-                                     parseResultPort) ||
+      parseOutputPortList(parser, allResultTypes, resultNames) ||
       parser.parseOptionalAttrDict(result.attributes)) {
     return failure();
   }
 
-  result.addAttribute("argNames", parser.getBuilder().getArrayAttr(argNames));
-  result.addAttribute("resultNames",
-                      parser.getBuilder().getArrayAttr(resultNames));
-  result.addAttribute("parameters",
-                      parser.getBuilder().getArrayAttr(parameters));
+  result.addAttribute("argNames", argNames);
+  result.addAttribute("resultNames", resultNames);
+  result.addAttribute("parameters", parameters);
   result.addTypes(allResultTypes);
   return success();
 }
 
 void InstanceOp::print(OpAsmPrinter &p) {
-  ModulePortInfo portInfo = getModulePortInfo(*this);
-  size_t nextInputPort = 0, nextOutputPort = 0;
-
-  auto printPortName = [&](size_t &nextPort, SmallVector<PortInfo> &portList) {
-    // Allow printing mangled instances.
-    if (nextPort >= portList.size()) {
-      p << "<corrupt port>: ";
-      return;
-    }
-
-    p.printKeywordOrString(portList[nextPort++].name.getValue());
-    p << ": ";
-  };
-
   p << ' ';
   p.printAttributeWithoutType(getInstanceNameAttr());
   if (auto attr = getInnerSymAttr()) {
@@ -1533,18 +1320,12 @@ void InstanceOp::print(OpAsmPrinter &p) {
   }
   p << ' ';
   p.printAttributeWithoutType(getModuleNameAttr());
-  printParameterList(getParameters(), p);
-  p << '(';
-  llvm::interleaveComma(getInputs(), p, [&](Value op) {
-    printPortName(nextInputPort, portInfo.inputs);
-    p << op << ": " << op.getType();
-  });
-  p << ") -> (";
-  llvm::interleaveComma(getResults(), p, [&](Value res) {
-    printPortName(nextOutputPort, portInfo.outputs);
-    p << res.getType();
-  });
-  p << ')';
+  printOptionalParameterList(p, *this, getParameters());
+  printInputPortList(p, *this, getInputs(), getInputs().getTypes(),
+                     getArgNames());
+  p << " -> ";
+  printOutputPortList(p, *this, getResultTypes(), getResultNames());
+
   p.printOptionalAttrDict(
       (*this)->getAttrs(),
       /*elidedAttrs=*/{"instanceName", InnerName::getInnerNameAttrName(),
@@ -1554,59 +1335,30 @@ void InstanceOp::print(OpAsmPrinter &p) {
 /// Return the name of the specified input port or null if it cannot be
 /// determined.
 StringAttr InstanceOp::getArgumentName(size_t idx) {
-  auto names = getArgNames();
-  // Tolerate malformed IR here to enable debug printing etc.
-  if (names && idx < names.size())
-    return names[idx].cast<StringAttr>();
-  return StringAttr();
+  return instance_like_impl::getName(getArgNames(), idx);
 }
 
 /// Return the name of the specified result or null if it cannot be
 /// determined.
 StringAttr InstanceOp::getResultName(size_t idx) {
-  auto names = getResultNames();
-  // Tolerate malformed IR here to enable debug printing etc.
-  if (names && idx < names.size())
-    return names[idx].cast<StringAttr>();
-  return StringAttr();
+  return instance_like_impl::getName(getResultNames(), idx);
 }
 
 /// Change the name of the specified input port.
 void InstanceOp::setArgumentName(size_t i, StringAttr name) {
-  auto names = getArgNames();
-  SmallVector<Attribute> newNames(names.begin(), names.end());
-  if (newNames[i] == name)
-    return;
-  newNames[i] = name;
-  setArgumentNames(ArrayAttr::get(getContext(), names));
+  setArgumentNames(instance_like_impl::updateName(getArgNames(), i, name));
 }
 
 /// Change the name of the specified output port.
 void InstanceOp::setResultName(size_t i, StringAttr name) {
-  auto names = getResultNames();
-  SmallVector<Attribute> newNames(names.begin(), names.end());
-  if (newNames[i] == name)
-    return;
-  newNames[i] = name;
-  setResultNames(ArrayAttr::get(getContext(), names));
+  setResultNames(instance_like_impl::updateName(getResultNames(), i, name));
 }
 
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  // Provide default names for instance results.
-  std::string name = instanceName().str() + ".";
-  size_t baseNameLen = name.size();
-
-  for (size_t i = 0, e = getNumResults(); i != e; ++i) {
-    auto resName = getResultName(i);
-    name.resize(baseNameLen);
-    if (resName && !resName.getValue().empty())
-      name += resName.getValue().str();
-    else
-      name += std::to_string(i);
-    setNameFn(getResult(i), name);
-  }
+  instance_like_impl::getAsmResultNames(setNameFn, instanceName(),
+                                        getResultNames(), getResults());
 }
 
 //===----------------------------------------------------------------------===//
