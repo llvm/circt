@@ -591,6 +591,35 @@ LogicalResult VariableOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// InteropVerilatedOp
+//===----------------------------------------------------------------------===//
+
+/// Create a instance that refers to a known module.
+void InteropVerilatedOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                               Operation *module, StringAttr name,
+                               ArrayRef<Value> inputs) {
+  auto [argNames, resultNames] =
+      hw::instance_like_impl::getHWModuleArgAndResultNames(module);
+  build(odsBuilder, odsState, hw::getModuleType(module).getResults(), name,
+        FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), argNames,
+        resultNames, inputs);
+}
+
+LogicalResult
+InteropVerilatedOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return hw::instance_like_impl::verifyInstanceOfHWModule(
+      *this, getModuleNameAttr(), getInputs(), getResultTypes(),
+      getInputNames(), getResultNames(), ArrayAttr(), symbolTable);
+}
+
+/// Suggest a name for each result value based on the saved result names
+/// attribute.
+void InteropVerilatedOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  hw::instance_like_impl::getAsmResultNames(setNameFn, getInstanceName(),
+                                            getResultNames(), getResults());
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

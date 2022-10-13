@@ -146,3 +146,18 @@ systemc.module @member_access () {
     %1 = systemc.cpp.member_access %ptrmember arrow "clear" : (!emitc.ptr<!emitc.opaque<"std::vector<int>">>) -> (() -> ())
   }
 }
+
+hw.module.extern @inst() -> ()
+hw.module.extern @instWithArgs(%a: i32, %b: i8) -> (c: i32, d: i8)
+
+// CHECK-LABEL: @verilatorInteropInHwModule
+hw.module @verilatorInteropInHwModule(%arg0: i32, %arg1: i8) -> () {
+  // CHECK-NEXT: %verilated.c, %verilated.d = systemc.interop.verilated "verilated" @instWithArgs (a: %arg0: i32, b: %arg1: i8) -> (c: i32, d: i8)
+  %verilated.c, %verilated.d = systemc.interop.verilated "verilated" @instWithArgs (a: %arg0: i32, b: %arg1: i8) -> (c: i32, d: i8)
+}
+
+// CHECK-LABEL: @verilatorInteropInSystemCModule
+systemc.module @verilatorInteropInSystemCModule() {
+  // CHECK-NEXT: systemc.interop.verilated "verilated" @inst () -> ()
+  systemc.interop.verilated "verilated" @inst () -> ()
+}
