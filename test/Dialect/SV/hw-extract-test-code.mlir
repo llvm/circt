@@ -143,6 +143,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // CHECK-LABEL: @InputOnlySym(
 // CHECK: hw.instance "{{[^ ]+}}" sym @[[input_only_sym_cover:[^ ]+]] @InputOnlySym_cover
 // CHECK-LABEL: @Top
+// CHECK-NOT: hw.instance {{.+}} @Top{{.*}}
 // CHECK: hw.instance "{{[^ ]+}}" sym @[[input_only_assert:[^ ]+]] @InputOnly_assert
 // CHECK: hw.instance "{{[^ ]+}}" sym @[[input_only_cover:[^ ]+]] @InputOnly_cover
 // CHECK: hw.instance "{{[^ ]+}}" {{.+}} @InputOnlySym
