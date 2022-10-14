@@ -1713,4 +1713,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %1 = arith.addf %in, %w1 : f32
     firrtl.strictconnect %w1, %1 : f32
   }
+
+  // CHECK-LABEL: LowerReadArrayInoutIntoArrayGet
+  firrtl.module @LowerReadArrayInoutIntoArrayGet(in %a: !firrtl.uint<10>, out %b: !firrtl.uint<10>) {
+    %r = firrtl.wire   : !firrtl.vector<uint<10>, 1>
+    %0 = firrtl.subindex %r[0] : !firrtl.vector<uint<10>, 1>
+    // CHECK: %r = sv.wire  : !hw.inout<array<1xi10>>
+    // CHECK: %[[WIRE_VAL:.+]] = sv.read_inout %r : !hw.inout<array<1xi10>>
+    // CHECK: %[[RET:.+]] = hw.array_get %[[WIRE_VAL]][%false] : !hw.array<1xi10>, i1
+    // CHECK: hw.output %[[RET]]
+    firrtl.strictconnect %0, %a : !firrtl.uint<10>
+    firrtl.strictconnect %b, %0 : !firrtl.uint<10>
+  }
 }
