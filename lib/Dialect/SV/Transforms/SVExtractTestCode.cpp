@@ -191,7 +191,8 @@ static void addInstancesToCloneSet(
     opsToClone.insert(instance);
     for (auto operand : instance.getOperands())
       inputsToAdd.push_back(operand);
-    inputsToRemove.push_back(value);
+    for (auto result : instance.getResults())
+      inputsToRemove.push_back(result);
     extractedInstances[instance.getModuleNameAttr().getAttr()].insert(instance);
 
     // Mark the instance and its forward dataflow to be erased from the pass.
