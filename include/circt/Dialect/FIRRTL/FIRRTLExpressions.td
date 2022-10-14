@@ -20,7 +20,7 @@ def SameOperandsIntTypeKind : NativeOpTrait<"SameOperandsIntTypeKind"> {
 // A common base class for operations that implement type inference and parsed
 // argument validation.
 class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
-    FIRRTLOp<mnemonic, traits # [HasCustomSSAName, InferTypeOpInterface, NoSideEffect]> {
+    FIRRTLOp<mnemonic, traits # [HasCustomSSAName, InferTypeOpInterface, Pure]> {
 
   // The narrow operation-specific type inference method. Operations can
   // override this with an inline declaration for the class header, or just
@@ -78,7 +78,7 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
 }
 
 def ConstantOp : FIRRTLOp<"constant",
-      [NoSideEffect, ConstantLike, FirstAttrDerivedResultType,
+      [Pure, ConstantLike, FirstAttrDerivedResultType,
        HasCustomSSAName]> {
   let summary = "Produce a constant value";
   let description = [{
@@ -102,7 +102,7 @@ def ConstantOp : FIRRTLOp<"constant",
 }
 
 def SpecialConstantOp : FIRRTLOp<"specialconstant",
-      [NoSideEffect, ConstantLike, HasCustomSSAName]> {
+      [Pure, ConstantLike, HasCustomSSAName]> {
   let summary = "Produce a constant Reset or Clock value";
   let description = [{
     The constant operation produces a constant value of Reset, AsyncReset, or
@@ -121,7 +121,7 @@ def SpecialConstantOp : FIRRTLOp<"specialconstant",
 }
 
 def InvalidValueOp : FIRRTLOp<"invalidvalue",
-      [NoSideEffect, ConstantLike, HasCustomSSAName]> {
+      [Pure, ConstantLike, HasCustomSSAName]> {
   let summary = "InvalidValue primitive";
   let description = [{
     The InvalidValue operation returns an invalid value of a specified type:
@@ -567,7 +567,7 @@ def IsXVerifOp : FIRRTLExprOp<"verif_isX"> {
 //===----------------------------------------------------------------------===//
 
 def VerbatimExprOp : FIRRTLOp<"verbatim.expr",
-                              [NoSideEffect, HasCustomSSAName]> {
+                              [Pure, HasCustomSSAName]> {
   let summary = "Expression that expands to a value given SystemVerilog text";
   let description = [{
     This operation produces a typed value expressed by a string of
@@ -600,7 +600,7 @@ def VerbatimExprOp : FIRRTLOp<"verbatim.expr",
 }
 
 def VerbatimWireOp : FIRRTLOp<"verbatim.wire",
-                              [NoSideEffect, HasCustomSSAName]> {
+                              [Pure, HasCustomSSAName]> {
   let summary = "Expression with wire semantics that expands to a value given "
                 "SystemVerilog text";
   let description = [{
@@ -639,7 +639,7 @@ def VerbatimWireOp : FIRRTLOp<"verbatim.wire",
 
 // This operation converts from a struct to a bundle
 // type, or visa-versa.  FIRRTL source/destination types must be passive.
-def HWStructCastOp : FIRRTLOp<"hwStructCast", [NoSideEffect]> {
+def HWStructCastOp : FIRRTLOp<"hwStructCast", [Pure]> {
   let arguments = (ins AnyType:$input);
   let results = (outs AnyType:$result);
 
@@ -649,7 +649,7 @@ def HWStructCastOp : FIRRTLOp<"hwStructCast", [NoSideEffect]> {
   let hasVerifier = 1;
 }
 
-def BitCastOp: FIRRTLOp<"bitcast", [NoSideEffect]> {
+def BitCastOp: FIRRTLOp<"bitcast", [Pure]> {
   let summary = [{
     Reinterpret one value to another value of the same size and
     potentially different type. This op is lowered to hw::BitCastOp.

@@ -37,7 +37,7 @@ class SeqOp<string mnemonic, list<Trait> traits = []> :
     Op<SeqDialect, mnemonic, traits>;
 
 def CompRegOp : SeqOp<"compreg",
-    [NoSideEffect, AllTypesMatch<["input", "data"/*, "resetValue"*/]>,
+    [Pure, AllTypesMatch<["input", "data"/*, "resetValue"*/]>,
      SameVariadicOperandSize,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]> ]> {
        // AllTypesMatch doesn't work with Optional types yet.
@@ -68,7 +68,7 @@ def CompRegOp : SeqOp<"compreg",
 }
 
 def FirRegOp : SeqOp<"firreg",
-    [NoSideEffect, AllTypesMatch<["next", "data"/*, "resetValue"*/]>,
+    [Pure, AllTypesMatch<["next", "data"/*, "resetValue"*/]>,
      SameVariadicOperandSize, MemoryEffects<[MemWrite, MemRead, MemAlloc]>,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
       // AllTypesMatch doesn't work with Optional types yet.

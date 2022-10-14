@@ -16,7 +16,7 @@ def HWValueOrInOutType : AnyTypeOf<[HWValueType, InOutType]>;
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
                          ["getAsmResultNames"]>;
 
-def VerbatimExprOp : SVOp<"verbatim.expr", [NoSideEffect, HasCustomSSAName]> {
+def VerbatimExprOp : SVOp<"verbatim.expr", [Pure, HasCustomSSAName]> {
   let summary = "Expression that expands to a value given SystemVerilog text";
   let description = [{
     This operation produces a typed value expressed by a string of
@@ -82,7 +82,7 @@ def VerbatimExprSEOp : SVOp<"verbatim.expr.se", [HasCustomSSAName]> {
   ];
 }
 
-def MacroRefExprOp : SVOp<"macro.ref", [NoSideEffect, HasCustomSSAName]> {
+def MacroRefExprOp : SVOp<"macro.ref", [Pure, HasCustomSSAName]> {
   let summary = "Expression to refer to a SystemVerilog macro";
   let description = [{
     This operation produces a value by referencing a named macro.
@@ -128,7 +128,7 @@ def MacroRefExprSEOp : SVOp<"macro.ref.se", [HasCustomSSAName]> {
   ];
 }
 
-def ConstantXOp : SVOp<"constantX", [NoSideEffect, HasCustomSSAName]> {
+def ConstantXOp : SVOp<"constantX", [Pure, HasCustomSSAName]> {
   let summary = "A constant of value 'x'";
   let description = [{
     This operation produces a constant value of 'x'.  This 'x' follows the
@@ -146,7 +146,7 @@ def ConstantXOp : SVOp<"constantX", [NoSideEffect, HasCustomSSAName]> {
   }];
 }
 
-def ConstantZOp : SVOp<"constantZ", [NoSideEffect, HasCustomSSAName]> {
+def ConstantZOp : SVOp<"constantZ", [Pure, HasCustomSSAName]> {
   let summary = "A constant of value 'z'";
   let description = [{
     This operation produces a constant value of 'z'.  This 'z' follows the
@@ -165,7 +165,7 @@ def ConstantZOp : SVOp<"constantZ", [NoSideEffect, HasCustomSSAName]> {
 }
 
 def LocalParamOp : SVOp<"localparam",
-      [FirstAttrDerivedResultType, NoSideEffect, HasCustomSSAName]> {
+      [FirstAttrDerivedResultType, Pure, HasCustomSSAName]> {
   let summary = "Declare a localparam";
   let description = [{
     The localparam operation produces a `localparam` declaration. See SV spec
@@ -184,7 +184,7 @@ def LocalParamOp : SVOp<"localparam",
 
 def IndexedPartSelectOp
  : SVOp<"indexed_part_select",
-        [NoSideEffect, InferTypeOpInterface]> {
+        [Pure, InferTypeOpInterface]> {
   let summary = "Read several contiguous bits of an int type."
                 "This is an indexed part-select operator."
                 "The base is an integer expression and the width is an "

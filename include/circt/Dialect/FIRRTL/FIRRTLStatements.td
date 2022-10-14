@@ -73,7 +73,7 @@ def PrintFOp : FIRRTLOp<"printf"> {
   }];
 }
 
-def SkipOp : FIRRTLOp<"skip", [NoSideEffect]> {
+def SkipOp : FIRRTLOp<"skip", [Pure]> {
   let summary = "Skip statement";
   let description = [{
     Skip Statement:
@@ -145,7 +145,7 @@ def CoverOp : VerifOp<"cover"> {
 }
 
 def WhenOp : FIRRTLOp<"when", [SingleBlock, NoTerminator, NoRegionArguments,
-                               RecursiveSideEffects]> {
+                               RecursiveMemoryEffects, RecursivelySpeculatable]> {
   let summary = "When Statement";
   let description = [{
     The "firrtl.when" operation represents a conditional.  Connections within

@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 def ChannelBufferOp : ESI_Abstract_Op<"buffer", [
-    NoSideEffect,
+    Pure,
     DeclareOpInterfaceMethods<ChannelOpInterface>
   ]> {
   let summary = "Control options for an ESI channel.";
@@ -50,7 +50,7 @@ def ChannelBufferOp : ESI_Abstract_Op<"buffer", [
 }
 
 def PipelineStageOp : ESI_Physical_Op<"stage", [
-    NoSideEffect,
+    Pure,
     DeclareOpInterfaceMethods<ChannelOpInterface>
   ]> {
   let summary = "An elastic buffer stage.";
@@ -97,7 +97,7 @@ def RtlBitArrayType : Type<CPred<"$_self.isa<::circt::hw::ArrayType>()"
  " && $_self.cast<::circt::hw::ArrayType>().getElementType() =="
  "   ::mlir::IntegerType::get($_self.getContext(), 1)">, "an HW bit array">;
 
-def CapnpDecodeOp : ESI_Physical_Op<"decode.capnp", [NoSideEffect]> {
+def CapnpDecodeOp : ESI_Physical_Op<"decode.capnp", [Pure]> {
   let summary = "Translate bits in Cap'nProto messages to HW typed data";
 
   let arguments = (ins I1:$clk, I1:$valid, RtlBitArrayType:$capnpBits);
@@ -109,7 +109,7 @@ def CapnpDecodeOp : ESI_Physical_Op<"decode.capnp", [NoSideEffect]> {
   }];
 }
 
-def CapnpEncodeOp : ESI_Physical_Op<"encode.capnp", [NoSideEffect]> {
+def CapnpEncodeOp : ESI_Physical_Op<"encode.capnp", [Pure]> {
   let summary = "Translate HW typed data to Cap'nProto";
 
   let arguments = (ins I1:$clk, I1:$valid, AnyType:$dataToEncode);
@@ -121,7 +121,7 @@ def CapnpEncodeOp : ESI_Physical_Op<"encode.capnp", [NoSideEffect]> {
   }];
 }
 
-def NullSourceOp : ESI_Physical_Op<"null", [NoSideEffect]> {
+def NullSourceOp : ESI_Physical_Op<"null", [Pure]> {
   let summary = "An op which never produces messages.";
 
   let arguments = (ins);

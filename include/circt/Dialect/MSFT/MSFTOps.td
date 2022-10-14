@@ -238,7 +238,7 @@ def DesignPartitionOp : MSFTOp<"partition",
 }
 
 def OutputOp : MSFTOp<"output", [Terminator, ParentOneOf<["MSFTModuleOp", "LinearOp"]>,
-                                NoSideEffect, ReturnLike]> {
+                                Pure, ReturnLike]> {
   let summary = "termination operation";
 
   let arguments = (ins Variadic<AnyType>:$operands);

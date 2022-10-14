@@ -143,10 +143,13 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // CHECK-LABEL: @InputOnlySym(
 // CHECK: hw.instance "{{[^ ]+}}" sym @[[input_only_sym_cover:[^ ]+]] @InputOnlySym_cover
 // CHECK-LABEL: @Top
+// CHECK-NOT: hw.instance {{.+}} @Top{{.*}}
 // CHECK: hw.instance "{{[^ ]+}}" sym @[[input_only_assert:[^ ]+]] @InputOnly_assert
 // CHECK: hw.instance "{{[^ ]+}}" sym @[[input_only_cover:[^ ]+]] @InputOnly_cover
 // CHECK: hw.instance "{{[^ ]+}}" {{.+}} @InputOnlySym
-// CHECK-NOT: hw.instance {{.+}} @Top{{.*}}
+// CHECK: %0 = comb.and %1
+// CHECK: %1 = comb.and %0
+// CHECK: hw.instance "{{[^ ]+}}" {{.+}} @InputOnlyCycle_cover
 // CHECK-NOT: sv.bind <@InputOnly::
 // CHECK-DAG: sv.bind <@Top::@[[input_only_assert]]>
 // CHECK-DAG: sv.bind <@Top::@[[input_only_cover]]>
@@ -165,9 +168,20 @@ module {
     }
   }
 
+  hw.module private @InputOnlyCycle(%clock: i1, %cond: i1) -> () {
+    // Arbitrary code that won't be extracted, should be inlined, and has a cycle.
+    %0 = comb.and %1 : i1
+    %1 = comb.and %0 : i1
+
+    sv.always posedge %clock  {
+      sv.cover %cond, immediate
+    }
+  }
+
   hw.module @Top(%clock: i1, %cond: i1) -> (foo: i1) {
     hw.instance "input_only" @InputOnly(clock: %clock: i1, cond: %cond: i1) -> ()
     hw.instance "input_only_sym" sym @foo @InputOnlySym(clock: %clock: i1, cond: %cond: i1) -> ()
+    hw.instance "input_only_cycle" @InputOnlyCycle(clock: %clock: i1, cond: %cond: i1) -> ()
     hw.output %cond : i1
   }
 }
@@ -203,6 +217,13 @@ module {
 // CHECK-NOT: hw.instance "child"
 // CHECK: hw.instance {{.+}} @ShouldBeInlined_cover
 
+// In MultiResultExtracted, instance qux should be extracted without leaving null operands to the extracted instance
+// CHECK-LABEL: @MultiResultExtracted_cover
+// CHECK: hw.instance "qux"
+// CHECK-LABEL: @MultiResultExtracted
+// CHECK-SAME: (%[[clock:.+]]: i1, %[[in:.+]]: i1)
+// CHECK: hw.instance {{.+}} @MultiResultExtracted_cover([[clock]]: %[[clock]]: i1, [[in]]: %[[in]]: i1)
+
 module attributes {
   firrtl.extract.testbench = #hw.output_file<"testbench/", excludeFromFileList, includeReplicatedOps>
 } {
@@ -213,6 +234,8 @@ module attributes {
   hw.module.extern private @Bar(%a: i1) -> (b: i1)
 
   hw.module.extern private @Baz(%a: i1) -> (b: i1)
+
+  hw.module.extern private @Qux(%a: i1) -> (b: i1, c: i1)
 
   hw.module @AllExtracted(%clock: i1, %in: i1) {
     %foo.b = hw.instance "foo" @Foo(a: %in: i1) -> (b: i1)
@@ -258,5 +281,13 @@ module attributes {
 
   hw.module @ChildShouldInline(%clock: i1, %in: i1) {
     hw.instance "child" @ShouldBeInlined(clock: %clock: i1, in: %in: i1) -> ()
+  }
+
+  hw.module @MultiResultExtracted(%clock: i1, %in: i1) {
+    %qux.b, %qux.c = hw.instance "qux" @Qux(a: %in: i1) -> (b: i1, c: i1)
+    sv.always posedge %clock {
+      sv.cover %qux.b, immediate
+      sv.cover %qux.c, immediate
+    }
   }
 }

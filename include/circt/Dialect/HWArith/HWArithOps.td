@@ -19,7 +19,7 @@ include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def ConstantOp : HWArithOp<"constant",
-    [ConstantLike, NoSideEffect, FirstAttrDerivedResultType]> {
+    [ConstantLike, Pure, FirstAttrDerivedResultType]> {
   let summary = "Produce a constant value";
   let description = [{
     The constant operation produces a sign-aware constant value.
@@ -43,7 +43,7 @@ def ConstantOp : HWArithOp<"constant",
 
 // Base class for binary operators.
 class BinOp<string mnemonic, list<Trait> traits = []> :
-      HWArithOp<mnemonic, traits # [NoSideEffect, InferTypeOpInterface]> {
+      HWArithOp<mnemonic, traits # [Pure, InferTypeOpInterface]> {
   let arguments = (ins Variadic<HWArithIntegerType>:$inputs);
   let results = (outs HWArithIntegerType:$result);
 
@@ -165,7 +165,7 @@ def DivOp : BinOp<"div"> {
   }];
 }
 
-def HWArith_CastOp : HWArithOp<"cast", [NoSideEffect]> {
+def HWArith_CastOp : HWArithOp<"cast", [Pure]> {
   let arguments = (ins AnyInteger:$in);
   let results = (outs AnyInteger:$out);
 
@@ -221,7 +221,7 @@ def ICmpPredicate : I64EnumAttr<
     [ICmpPredicateEQ, ICmpPredicateNE, ICmpPredicateLT,
      ICmpPredicateGE, ICmpPredicateLE, ICmpPredicateGT]>;
 
-def ICmpOp : HWArithOp<"icmp", [NoSideEffect]> {
+def ICmpOp : HWArithOp<"icmp", [Pure]> {
   let summary = "Sign- and bitwidth-aware integer comparison.";
   let description = [{
     The `icmp` operation compares two integers using a predicate. If the

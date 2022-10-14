@@ -193,8 +193,8 @@ def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
 
 
 def AlwaysOp : SVOp<"always", [SingleBlock, NoTerminator, NoRegionArguments,
-                               RecursiveSideEffects, ProceduralRegion,
-                               NonProceduralOp]> {
+                               RecursiveMemoryEffects, RecursivelySpeculatable,
+                               ProceduralRegion, NonProceduralOp]> {
   let summary = "'always @' block";
   let description = "See SV Spec 9.2, and 9.4.2.2.";
 
@@ -228,7 +228,9 @@ def AlwaysOp : SVOp<"always", [SingleBlock, NoTerminator, NoRegionArguments,
 }
 
 def AlwaysCombOp : SVOp<"alwayscomb", [SingleBlock, NoTerminator,
-                                       NoRegionArguments, RecursiveSideEffects,
+                                       NoRegionArguments,
+                                       RecursiveMemoryEffects,
+                                       RecursivelySpeculatable,
                                        ProceduralRegion, NonProceduralOp]> {
   let summary = "'alwayscomb block";
   let description = "See SV Spec 9.2, and 9.2.2.2.";
@@ -258,8 +260,8 @@ def ResetTypeAttr : I32EnumAttr<"ResetType", "reset type",
 
 
 def AlwaysFFOp : SVOp<"alwaysff", [SingleBlock, NoTerminator, NoRegionArguments,
-                                   RecursiveSideEffects, ProceduralRegion,
-                                   NonProceduralOp]> {
+                                   RecursiveMemoryEffects, RecursivelySpeculatable,
+                                   ProceduralRegion, NonProceduralOp]> {
   let summary = "'alwaysff @' block with optional reset";
   let description = [{
     alwaysff blocks represent always_ff verilog nodes, which enforce inference
@@ -303,8 +305,9 @@ def AlwaysFFOp : SVOp<"alwaysff", [SingleBlock, NoTerminator, NoRegionArguments,
 
 
 def InitialOp : SVOp<"initial", [SingleBlock, NoTerminator, NoRegionArguments,
-                                 RecursiveSideEffects, ProceduralRegion,
-                                 NonProceduralOp]> {
+                                 RecursiveMemoryEffects,
+                                 RecursivelySpeculatable,
+                                 ProceduralRegion, NonProceduralOp]> {
   let summary = "'initial' block";
   let description = "See SV Spec 9.2.1.";
 
@@ -363,7 +366,7 @@ def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
   let hasCanonicalizeMethod = 1;
-  
+
   let builders = [
     /// This ctor allows you to build a CaseZ with some number of cases, getting
     /// a callback for each case.
@@ -531,7 +534,7 @@ def VerbatimOp : SVOp<"verbatim"> {
 // Bind Statements
 //===----------------------------------------------------------------------===//
 
-def BindOp : SVOp<"bind", 
+def BindOp : SVOp<"bind",
     [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "indirect instantiation statement";
   let description = [{
@@ -557,7 +560,7 @@ def BindOp : SVOp<"bind",
   }];
 }
 
-def BindInterfaceOp : SVOp<"bind.interface", 
+def BindInterfaceOp : SVOp<"bind.interface",
     [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "indirectly instantiate an interface";
   let description = [{
@@ -706,7 +709,7 @@ def InfoOp : NonfatalMessageOp<"info"> {
   }] # messageDescription;
 }
 
-def DepositOp : SVOp<"nonstandard.deposit", 
+def DepositOp : SVOp<"nonstandard.deposit",
     [ProceduralOp, VendorExtension, InOutTypeConstraint<"src", "dest">]> {
   let summary = "`$deposit` system task";
   let description = [{
