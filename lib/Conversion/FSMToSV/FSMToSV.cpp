@@ -136,20 +136,19 @@ StateEncoding::StateEncoding(OpBuilder &b, hw::TypeScopeOp typeScope,
     : typeScope(typeScope), b(b), machine(machine), hwModule(hwModule) {
   Location loc = machine.getLoc();
   llvm::SmallVector<Attribute> stateNames;
-  std::string enumName = hwModule.getName().str() + "_state";
 
   for (auto state : machine.getBody().getOps<StateOp>())
     stateNames.push_back(b.getStringAttr(state.getName()));
 
   // Create an enum typedef for the states.
-  Type rawEnumType = hw::EnumType::get(
-      b.getContext(), b.getStringAttr(enumName), b.getArrayAttr(stateNames));
+  Type rawEnumType =
+      hw::EnumType::get(b.getContext(), b.getArrayAttr(stateNames));
 
   OpBuilder::InsertionGuard guard(b);
   b.setInsertionPointToStart(&typeScope.getBodyRegion().front());
-  auto typedeclEnumType =
-      b.create<hw::TypedeclOp>(loc, b.getStringAttr(enumName + "_t"),
-                               TypeAttr::get(rawEnumType), nullptr);
+  auto typedeclEnumType = b.create<hw::TypedeclOp>(
+      loc, b.getStringAttr(hwModule.getName() + "_state_t"),
+      TypeAttr::get(rawEnumType), nullptr);
 
   stateType = hw::TypeAliasType::get(
       SymbolRefAttr::get(typeScope.getSymNameAttr(),

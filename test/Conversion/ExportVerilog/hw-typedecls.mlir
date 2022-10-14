@@ -17,8 +17,8 @@ hw.type_scope @__hw_typedecls {
   hw.typedecl @qux, "customName" : i32
   // CHECK: typedef struct packed {foo a; _other_scope_foo b; } nestedRef;
   hw.typedecl @nestedRef : !hw.struct<a: !hw.typealias<@__hw_typedecls::@foo,i1>, b: !hw.typealias<@_other_scope::@foo,i2>>
-  // CHECK: typedef enum {myEnum_A, myEnum_B, myEnum_C} myEnum;
-  hw.typedecl @myEnum : !hw.enum<myEnum: [A, B, C]>
+  // CHECK: typedef enum {A, B, C} myEnum;
+  hw.typedecl @myEnum : !hw.enum<A, B, C>
 }
 
 hw.type_scope @_other_scope {
@@ -49,7 +49,7 @@ hw.module @testTypeAlias(
   // CHECK: input  bar      structArg,
   %structArg: !hw.typealias<@__hw_typedecls::@bar,!hw.struct<a: i1, b: i1>>,
   // CHECK: input  myEnum   enumArg,
-  %enumArg: !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<myEnum: [A, B, C]>>) ->
+  %enumArg: !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<A, B, C>>) ->
   // CHECK: output foo      out
   (out: !hw.typealias<@__hw_typedecls::@foo, i1>) {
   // CHECK: out = arg0 + arg1
@@ -85,7 +85,7 @@ hw.module @testAggregateInout(%i: i1) -> (out1: i8, out2: i1) {
   %array = sv.wire : !hw.inout<!hw.typealias<@__hw_typedecls::@arr, !hw.array<16xi8>>>
   %str = sv.wire : !hw.inout<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
   %c0_i4 = hw.constant 0 : i4
-%0 = sv.array_index_inout %array[%c0_i4] : !hw.inout<!hw.typealias<@__hw_typedecls::@arr, !hw.array<16xi8>>>, i4
+  %0 = sv.array_index_inout %array[%c0_i4] : !hw.inout<!hw.typealias<@__hw_typedecls::@arr, !hw.array<16xi8>>>, i4
   %1 = sv.struct_field_inout %str["a"] : !hw.inout<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
   %2 = sv.read_inout %0 : !hw.inout<i8>
   %3 = sv.read_inout %1 : !hw.inout<i1>
@@ -93,8 +93,8 @@ hw.module @testAggregateInout(%i: i1) -> (out1: i8, out2: i1) {
 }
 
 // CHECK-LABEL: module testEnumOps
-hw.module @testEnumOps() -> (out1: !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<myEnum: [A, B, C]>>) {
-  // CHECK: assign out1 = myEnum_A;
-  %0 = hw.enum.constant A : !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<myEnum: [A, B, C]>>
-  hw.output %0 : !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<myEnum: [A, B, C]>>
+hw.module @testEnumOps() -> (out1: !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<A, B, C>>) {
+  // CHECK: assign out1 = A;
+  %0 = hw.enum.constant A : !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<A, B, C>>
+  hw.output %0 : !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<A, B, C>>
 }

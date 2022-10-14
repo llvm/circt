@@ -277,7 +277,7 @@ def EnumFieldAttr : AttrDef<HWDialect, "EnumField"> {
     
     Examples:
     ```mlir
-      #hw.enum.value<A, !hw.enum<foo: [A, B, C]>>
+      #hw.enum.value<A, !hw.enum<A, B, C>>
     ```
   }];
   let mnemonic = "enum.field";
@@ -292,9 +292,6 @@ def EnumFieldAttr : AttrDef<HWDialect, "EnumField"> {
     /// Builds a new EnumFieldAttr of the provided value.
     /// This will fail if the value is not a member of the provided enum type.
     static EnumFieldAttr get(::mlir::Location loc, ::mlir::StringAttr value, mlir::Type type);
-
-    /// Returns the value of the enum field scoped by its parent enum name.
-    mlir::StringAttr getScopedField();
   }];
 }
 

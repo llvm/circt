@@ -321,31 +321,27 @@ Type UnionType::getFieldType(mlir::StringRef fieldName) {
 //===----------------------------------------------------------------------===//
 
 Type EnumType::parse(AsmParser &p) {
-  auto *ctx = p.getContext();
   llvm::SmallVector<Attribute> fields;
-  std::string enumName;
 
-  // Parse the enum fields.
-  if (p.parseLess() || p.parseKeywordOrString(&enumName) || p.parseColon() ||
-      p.parseLSquare() || p.parseCommaSeparatedList([&]() {
+  if (p.parseLess() || p.parseCommaSeparatedList([&]() {
         StringRef name;
         if (p.parseKeyword(&name))
           return failure();
-        fields.push_back(StringAttr::get(ctx, name));
+        fields.push_back(StringAttr::get(p.getContext(), name));
         return success();
       }) ||
-      p.parseRSquare() || p.parseGreater())
+      p.parseGreater())
     return Type();
 
-  return get(ctx, StringAttr::get(ctx, enumName), ArrayAttr::get(ctx, fields));
+  return get(p.getContext(), ArrayAttr::get(p.getContext(), fields));
 }
 
 void EnumType::print(AsmPrinter &p) const {
-  p << '<' << getName().str() << ": [";
+  p << '<';
   llvm::interleaveComma(getFields(), p, [&](Attribute enumerator) {
     p << enumerator.cast<StringAttr>().getValue();
   });
-  p << "]>";
+  p << ">";
 }
 
 bool EnumType::contains(mlir::StringRef field) {
@@ -357,15 +353,6 @@ Optional<size_t> EnumType::indexOf(mlir::StringRef field) {
     if (it.value().cast<StringAttr>().getValue() == field)
       return it.index();
   return {};
-}
-
-llvm::SmallVector<StringAttr> EnumType::getScopedFields() {
-  llvm::SmallVector<StringAttr> fields;
-  auto *ctx = getContext();
-  for (auto field : getFields().getAsRange<StringAttr>())
-    fields.push_back(EnumFieldAttr::get(UnknownLoc::get(ctx), field, *this)
-                         .getScopedField());
-  return fields;
 }
 
 //===----------------------------------------------------------------------===//

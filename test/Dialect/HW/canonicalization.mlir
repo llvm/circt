@@ -1082,7 +1082,7 @@ hw.module @struct_explode(%a0: i3, %a1: i5) -> (r0: i3) {
 // Ensure that canonicalizer works with hw.enum.constant.
 
 hw.module @enum_constant() -> () {
-  %0 = hw.enum.constant A : !hw.enum<foo: [A, B, C]>
+  %0 = hw.enum.constant A : !hw.enum<A, B, C>
 }
 
 

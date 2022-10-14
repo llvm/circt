@@ -764,7 +764,7 @@ auto CaseOp::getCases() -> SmallVector<CaseInfo, 4> {
 }
 
 StringRef CaseEnumPattern::getFieldValue() const {
-  return enumAttr.cast<hw::EnumFieldAttr>().getScopedField().strref();
+  return enumAttr.cast<hw::EnumFieldAttr>().getField();
 }
 
 /// Parse case op.

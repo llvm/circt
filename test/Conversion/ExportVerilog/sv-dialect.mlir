@@ -980,31 +980,31 @@ hw.module @ConstantDefBeforeUse() {
 
 
 // CHECK-LABEL: module AnFSM
-// CHECK:   enum {myEnum_A, myEnum_B, myEnum_C} reg_0;
+// CHECK:   enum {A, B, C} reg_0;
 // CHECK:   always @(posedge clock) begin
 // CHECK:     case (reg_0)
-// CHECK:       myEnum_A:
-// CHECK:         reg_0 <= myEnum_B;
-// CHECK:       myEnum_B:
-// CHECK:         reg_0 <= myEnum_C;
+// CHECK:       A:
+// CHECK:         reg_0 <= B;
+// CHECK:       B:
+// CHECK:         reg_0 <= C;
 // CHECK:       default:
-// CHECK:         reg_0 <= myEnum_A;
+// CHECK:         reg_0 <= A;
 // CHECK:     endcase
 // CHECK:   end
 
 hw.module @AnFSM(%clock : i1) {
-  %reg = sv.reg : !hw.inout<!hw.enum<myEnum: [A, B, C]>>
-  %reg_read = sv.read_inout %reg : !hw.inout<!hw.enum<myEnum: [A, B, C]>>
+  %reg = sv.reg : !hw.inout<!hw.enum<A, B, C>>
+  %reg_read = sv.read_inout %reg : !hw.inout<!hw.enum<A, B, C>>
   
-  %A = hw.enum.constant A : !hw.enum<myEnum: [A, B, C]>
-  %B = hw.enum.constant B : !hw.enum<myEnum: [A, B, C]>
-  %C = hw.enum.constant C : !hw.enum<myEnum: [A, B, C]>
+  %A = hw.enum.constant A : !hw.enum<A, B, C>
+  %B = hw.enum.constant B : !hw.enum<A, B, C>
+  %C = hw.enum.constant C : !hw.enum<A, B, C>
 
   sv.always posedge %clock {
-    sv.case case %reg_read : !hw.enum<myEnum: [A, B, C]>
-      case A : { sv.passign %reg, %B : !hw.enum<myEnum: [A, B, C]> }
-       case B : { sv.passign %reg, %C : !hw.enum<myEnum: [A, B, C]> }
-      default : { sv.passign %reg, %A : !hw.enum<myEnum: [A, B, C]> }
+    sv.case case %reg_read : !hw.enum<A, B, C>
+      case A : { sv.passign %reg, %B : !hw.enum<A, B, C> }
+       case B : { sv.passign %reg, %C : !hw.enum<A, B, C> }
+      default : { sv.passign %reg, %A : !hw.enum<A, B, C> }
   }
 }
 

@@ -203,15 +203,6 @@ EnumFieldAttr EnumFieldAttr::get(Location loc, StringAttr value,
   return Base::get(value.getContext(), value, TypeAttr::get(type));
 }
 
-StringAttr EnumFieldAttr::getScopedField() {
-  auto fieldName = getField();
-  auto enumName = getCanonicalType(getType().getValue())
-                      .cast<hw::EnumType>()
-                      .getName()
-                      .strref();
-  return StringAttr::get(getContext(), enumName + "_" + fieldName.getValue());
-}
-
 //===----------------------------------------------------------------------===//
 // InnerRefAttr
 //===----------------------------------------------------------------------===//
