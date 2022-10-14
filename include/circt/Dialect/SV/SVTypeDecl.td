@@ -253,7 +253,7 @@ def InterfaceInstanceOp : SVOp<"interface.instance"> {
   }];
 }
 
-def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
+def GetModportOp: SVOp<"modport.get", [Pure]> {
   let summary = "Get a modport out of an interface instance";
   let description = [{
     Use this to extract a modport view to an instantiated interface. For
@@ -313,7 +313,7 @@ def AssignInterfaceSignalOp : SVOp<"interface.signal.assign", []> {
   let hasVerifier = 1;
 }
 
-def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
+def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [Pure]> {
   let summary = "Access the data in an interface's signal.";
   let description = [{
     This is an expression to access a signal inside of an interface.

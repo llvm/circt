@@ -19,7 +19,7 @@ include "mlir/IR/EnumAttr.td"
 
 // Base class for binary operators.
 class BinOp<string mnemonic, list<Trait> traits = []> :
-      CombOp<mnemonic, traits # [NoSideEffect]> {
+      CombOp<mnemonic, traits # [Pure]> {
   let arguments = (ins HWIntegerType:$lhs, HWIntegerType:$rhs, UnitAttr:$twoState);
   let results = (outs HWIntegerType:$result);
 
@@ -36,7 +36,7 @@ class UTBinOp<string mnemonic, list<Trait> traits = []> :
 
 // Base class for variadic operators.
 class VariadicOp<string mnemonic, list<Trait> traits = []> :
-      CombOp<mnemonic, traits # [NoSideEffect]> {
+      CombOp<mnemonic, traits # [Pure]> {
   let arguments = (ins Variadic<HWIntegerType>:$inputs, UnitAttr:$twoState);
   let results = (outs HWIntegerType:$result);
 }
@@ -114,7 +114,7 @@ def ICmpPredicate : I64EnumAttr<
      ICmpPredicateUGT, ICmpPredicateUGE, ICmpPredicateCEQ, ICmpPredicateCNE,
      ICmpPredicateWEQ, ICmpPredicateWNE]>;
 
-def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
+def ICmpOp : CombOp<"icmp", [Pure, SameTypeOperands]> {
   let summary = "Compare two integer values";
   let description = [{
     This operation compares two integers using a predicate.  If the predicate is
@@ -163,7 +163,7 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
 
 // Base class for unary reduction operations that produce an i1.
 class UnaryI1ReductionOp<string mnemonic, list<Trait> traits = []> :
-      CombOp<mnemonic, traits # [NoSideEffect]> {
+      CombOp<mnemonic, traits # [Pure]> {
   let arguments = (ins HWIntegerType:$input, UnitAttr:$twoState);
   let results = (outs I1:$result);
   let hasFolder = 1;
@@ -178,7 +178,7 @@ def ParityOp : UnaryI1ReductionOp<"parity">;
 //===----------------------------------------------------------------------===//
 
 // Extract a range of bits from the specified input.
-def ExtractOp : CombOp<"extract", [NoSideEffect]> {
+def ExtractOp : CombOp<"extract", [Pure]> {
   let summary = "Extract a range of bits into a smaller value, lowBit "
                 "specifies the lowest bit included.";
 
@@ -203,7 +203,7 @@ def ExtractOp : CombOp<"extract", [NoSideEffect]> {
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
-def ConcatOp : CombOp<"concat", [InferTypeOpInterface, NoSideEffect]> {
+def ConcatOp : CombOp<"concat", [InferTypeOpInterface, Pure]> {
   let summary = "Concatenate a variadic list of operands together.";
   let description = [{
     See the comb rationale document for details on operand ordering.
@@ -236,7 +236,7 @@ def ConcatOp : CombOp<"concat", [InferTypeOpInterface, NoSideEffect]> {
   }];
 }
 
-def ReplicateOp : CombOp<"replicate", [NoSideEffect]> {
+def ReplicateOp : CombOp<"replicate", [Pure]> {
   let summary = "Concatenate the operand a constant number of times";
 
   let arguments = (ins HWIntegerType:$input);
@@ -268,7 +268,7 @@ def ReplicateOp : CombOp<"replicate", [NoSideEffect]> {
 
 // Select one of two values based on a condition.
 def MuxOp : CombOp<"mux",
- [NoSideEffect, AllTypesMatch<["trueValue", "falseValue", "result"]>]> {
+ [Pure, AllTypesMatch<["trueValue", "falseValue", "result"]>]> {
   let summary = "Return one or the other operand depending on a selector bit";
   let description = [{
     ```

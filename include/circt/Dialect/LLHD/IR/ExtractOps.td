@@ -48,7 +48,7 @@ class SmallerOrEqualResultTypeWidthConstraint<string result, string input>
 //===----------------------------------------------------------------------===//
 
 def LLHD_SigExtractOp : LLHD_Op<"sig.extract",
-    [NoSideEffect,
+    [Pure,
      SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
      SigPtrIndexBitWidthConstraint<"lowBit", "input">]> {
 
@@ -75,7 +75,7 @@ def LLHD_SigExtractOp : LLHD_Op<"sig.extract",
 }
 
 def LLHD_PtrExtractOp : LLHD_Op<"ptr.extract",
-    [NoSideEffect,
+    [Pure,
      SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
      SigPtrIndexBitWidthConstraint<"lowBit", "input">]> {
 
@@ -106,7 +106,7 @@ def LLHD_PtrExtractOp : LLHD_Op<"ptr.extract",
 //===----------------------------------------------------------------------===//
 
 def LLHD_SigArraySliceOp : LLHD_Op<"sig.array_slice",
-    [NoSideEffect,
+    [Pure,
      SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
      SameSigPtrArrayElementTypeConstraint<"result", "input">,
      SigPtrIndexBitWidthConstraint<"lowIndex", "input">]> {
@@ -157,7 +157,7 @@ def LLHD_SigArraySliceOp : LLHD_Op<"sig.array_slice",
 }
 
 def LLHD_PtrArraySliceOp : LLHD_Op<"ptr.array_slice",
-    [NoSideEffect,
+    [Pure,
      SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
      SameSigPtrArrayElementTypeConstraint<"result", "input">,
      SigPtrIndexBitWidthConstraint<"lowIndex", "input">]> {
@@ -208,7 +208,7 @@ def LLHD_PtrArraySliceOp : LLHD_Op<"ptr.array_slice",
 }
 
 def LLHD_SigArrayGetOp : LLHD_Op<"sig.array_get",
-    [NoSideEffect,
+    [Pure,
      SigPtrIndexBitWidthConstraint<"index", "input">,
      SigArrayElementTypeConstraint<"result", "input">]> {
 
@@ -240,7 +240,7 @@ def LLHD_SigArrayGetOp : LLHD_Op<"sig.array_get",
 }
 
 def LLHD_PtrArrayGetOp : LLHD_Op<"ptr.array_get",
-    [NoSideEffect,
+    [Pure,
      SigPtrIndexBitWidthConstraint<"index", "input">,
      PtrArrayElementTypeConstraint<"result", "input">]> {
 
@@ -275,7 +275,7 @@ def LLHD_PtrArrayGetOp : LLHD_Op<"ptr.array_get",
 // Structure Operations
 //===----------------------------------------------------------------------===//
 
-def LLHD_SigStructExtractOp : LLHD_Op<"sig.struct_extract", [NoSideEffect,
+def LLHD_SigStructExtractOp : LLHD_Op<"sig.struct_extract", [Pure,
   DeclareOpInterfaceMethods<InferTypeOpInterface>, InferTypeOpInterface]> {
   let summary = "Extract a field from a signal of a struct.";
   let description = [{
@@ -305,7 +305,7 @@ def LLHD_SigStructExtractOp : LLHD_Op<"sig.struct_extract", [NoSideEffect,
   }];
 }
 
-def LLHD_PtrStructExtractOp : LLHD_Op<"ptr.struct_extract", [NoSideEffect,
+def LLHD_PtrStructExtractOp : LLHD_Op<"ptr.struct_extract", [Pure,
   DeclareOpInterfaceMethods<InferTypeOpInterface>, InferTypeOpInterface]> {
   let summary = "Extract a field from a pointer to a struct.";
   let description = [{

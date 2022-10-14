@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 def ConstantOp
- : HWOp<"constant", [NoSideEffect, ConstantLike, FirstAttrDerivedResultType,
+ : HWOp<"constant", [Pure, ConstantLike, FirstAttrDerivedResultType,
          DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Produce a constant value";
   let description = [{
@@ -47,7 +47,7 @@ def ConstantOp
 def KnownBitWidthType : Type<CPred<[{getBitWidth($_self) != -1}]>,
   "Type wherein the bitwidth in hardware is known">;
 
-def BitcastOp: HWOp<"bitcast", [NoSideEffect]> {
+def BitcastOp: HWOp<"bitcast", [Pure]> {
   let summary = [{
     Reinterpret one value to another value of the same size and
     potentially different type.  See the `hw` dialect rationale document for
@@ -64,7 +64,7 @@ def BitcastOp: HWOp<"bitcast", [NoSideEffect]> {
 }
 
 def ParamValueOp : HWOp<"param.value",
-                        [FirstAttrDerivedResultType, NoSideEffect,
+                        [FirstAttrDerivedResultType, Pure,
                          ConstantLike]> {
   let summary = [{
     Return the value of a parameter expression as an SSA value that may be used
@@ -78,7 +78,7 @@ def ParamValueOp : HWOp<"param.value",
   let hasFolder = true;
 }
 
-def EnumConstantOp : HWOp<"enum.constant", [NoSideEffect, ConstantLike,
+def EnumConstantOp : HWOp<"enum.constant", [Pure, ConstantLike,
          DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Produce a constant enumeration value.";
   let description = [{

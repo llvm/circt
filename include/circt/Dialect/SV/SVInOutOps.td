@@ -103,7 +103,7 @@ def XMROp : SVOp<"xmr", []> {
 
 def ReadInOutOp
  : SVOp<"read_inout",
-        [NoSideEffect, InOutElementConstraint<"result", "input">]> {
+        [Pure, InOutElementConstraint<"result", "input">]> {
   let summary = "Get the value of from something of inout type (e.g. a wire or"
                 " inout port) as the value itself.";
   let arguments = (ins InOutType:$input);
@@ -129,7 +129,7 @@ class InOutIndexConstraint<string value, string inoutValue>
 
 def ArrayIndexInOutOp
  : SVOp<"array_index_inout",
-        [NoSideEffect, InOutIndexConstraint<"result", "input">]> {
+        [Pure, InOutIndexConstraint<"result", "input">]> {
   let summary = "Index an inout memory to produce an inout element";
   let description = "See SV Spec 11.5.2.";
   let arguments = (ins InOutArrayType:$input, HWIntegerType:$index);
@@ -144,7 +144,7 @@ def ArrayIndexInOutOp
 }
 
 def IndexedPartSelectInOutOp : SVOp<"indexed_part_select_inout",
-                         [NoSideEffect, InferTypeOpInterface]> {
+                         [Pure, InferTypeOpInterface]> {
   let summary = "Address several contiguous bits of an inout type (e.g. a wire"
                 " or inout port). This is an indexed part-select operator."
                 "The base is an integer expression and the width is an "
@@ -179,7 +179,7 @@ def InOutStructType
          "an inout type with struct field", "::circt::hw::InOutType">;
 
 def StructFieldInOutOp : SVOp<"struct_field_inout",
-                              [NoSideEffect, InferTypeOpInterface]> {
+                              [Pure, InferTypeOpInterface]> {
   let summary = "Create an subfield inout memory to produce an inout element.";
   let description = "See SV Spec 7.2.";
 

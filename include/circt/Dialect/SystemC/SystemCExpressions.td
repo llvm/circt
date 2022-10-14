@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-def SignalReadOp : SystemCOp<"signal.read", [NoSideEffect,
+def SignalReadOp : SystemCOp<"signal.read", [Pure,
                                              InferTypeOpInterface]> {
   let summary = "Returns the current value of a signal or port.";
   let description = [{
@@ -39,7 +39,7 @@ def SignalReadOp : SystemCOp<"signal.read", [NoSideEffect,
   }];
 }
 
-def ConvertOp : SystemCOp<"convert", [NoSideEffect]> {
+def ConvertOp : SystemCOp<"convert", [Pure]> {
   let summary = "Converts between various integer and bit vector types.";
   let description = [{
     Allows conversions between the various integer and bit vector types in
@@ -66,7 +66,7 @@ def ConvertOp : SystemCOp<"convert", [NoSideEffect]> {
 // Operations that model C++-level features.
 //===----------------------------------------------------------------------===//
 
-def NewOp : SystemCOp<"cpp.new", [NoSideEffect]> {
+def NewOp : SystemCOp<"cpp.new", [Pure]> {
   let summary = "A C++ 'new' expression.";
   let description = [{
     Creates and initializes C++ objects using dynamic storage.
@@ -90,7 +90,7 @@ def MemberAccessKindAttr : I32EnumAttr<"MemberAccessKind",
                                        "C++ member access kind",
                                        [Dot, Arrow]> {}
 
-def MemberAccessOp : SystemCOp<"cpp.member_access", [NoSideEffect]> {
+def MemberAccessOp : SystemCOp<"cpp.member_access", [Pure]> {
   let summary = "A C++ member access expression.";
   let description = [{
     Represents the C++ member access operators `.` and `->`.
