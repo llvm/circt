@@ -127,10 +127,8 @@ int Engine::simulate(int n, uint64_t maxTime) {
     while (i < e) {
       const auto sigIndex = pop.changes[i].first;
       auto &curr = state->signals[sigIndex];
-      APInt buff(
-          curr.getSize() * 8,
-          llvm::makeArrayRef(reinterpret_cast<uint64_t *>(curr.getValue()),
-                             llvm::divideCeil(curr.getSize(), 8)));
+      APInt buff(curr.getSize() * 8, 0);
+      llvm::LoadIntFromMemory(buff, curr.getValue(), curr.getSize());
 
       // Apply the changes to the buffer until we reach the next signal.
       while (i < e && pop.changes[i].first == sigIndex) {
