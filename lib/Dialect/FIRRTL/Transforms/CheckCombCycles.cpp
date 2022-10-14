@@ -21,6 +21,8 @@
 #include "llvm/ADT/SmallSet.h"
 #include <variant>
 
+#define DEBUG_TYPE "check-comb-cycles"
+
 using namespace circt;
 using namespace firrtl;
 
@@ -41,11 +43,10 @@ namespace {
 struct NodeContext {
   CombPathsMap *map;
   InstanceGraph *graph;
-  ConnectRange connects;
+  DenseSet<FConnectLike> connects;
 
-  explicit NodeContext(CombPathsMap *map, InstanceGraph *graph,
-                       ConnectRange connects)
-      : map(map), graph(graph), connects(connects) {}
+  explicit NodeContext(CombPathsMap *map, InstanceGraph *graph)
+      : map(map), graph(graph) {}
 };
 } // namespace
 
@@ -60,6 +61,7 @@ struct Node {
 
   bool operator==(const Node &rhs) const { return value == rhs.value; }
   bool operator!=(const Node &rhs) const { return !(*this == rhs); }
+  bool isNull() const { return value == nullptr; }
 };
 } // namespace
 
@@ -88,6 +90,8 @@ public:
   ChildIterator() = default;
   explicit ChildIterator(Value v)
       : childEnd(v.use_end()), childIt(v.use_begin()) {
+    
+    LLVM_DEBUG(if (childIt != childEnd) llvm::dbgs() << "\n ChildIterator constructor for uses of:" << v);
     skipToNextValidChild();
   }
 
@@ -105,6 +109,8 @@ public:
 
   Value operator*() {
     assert(!isAtEnd() && "dereferencing the end iterator");
+    LLVM_DEBUG(llvm::dbgs()
+               << "\n ChildIterator dereference :" << *childIt->getOwner());
     if (auto connect = dyn_cast<FConnectLike>(childIt->getOwner()))
       return connect.getDest();
     return childIt->getOwner()->getResult(0);
@@ -115,7 +121,6 @@ public:
   }
   bool operator!=(const ChildIterator &rhs) const { return !(*this == rhs); }
 
-private:
   Value::use_iterator childEnd;
   Value::use_iterator childIt;
 };
@@ -131,13 +136,22 @@ class NodeIterator
     : public llvm::iterator_facade_base<NodeIterator, std::forward_iterator_tag,
                                         Node> {
 public:
-  explicit NodeIterator(Node node)
-      : node(node), child(ChildIterator(node.value)) {}
+  explicit NodeIterator(Node node) : node(node) {
+    // If value is non-null then set the childIt.
+    if (node.value)
+      child = ChildIterator(node.value);
+  }
 
   using llvm::iterator_facade_base<NodeIterator, std::forward_iterator_tag,
                                    Node>::operator++;
   NodeIterator &operator++() { return ++child, *this; }
-  Node operator*() { return Node(*child, node.context); }
+  Node operator*() {
+    // Record the connect op after it is traversed.
+    if (auto connect = dyn_cast<FConnectLike>(child.childIt->getOwner()))
+      node.context->connects.insert(connect);
+
+    return Node(*child, node.context);
+  }
 
   bool operator==(const NodeIterator &rhs) const { return child == rhs.child; }
   bool operator!=(const NodeIterator &rhs) const { return !(*this == rhs); }
@@ -152,6 +166,7 @@ public:
     return node.context->graph;
   }
   bool isAtEnd() const { return child.isAtEnd(); }
+  bool isEndIterator() const { return node.isNull(); }
 
 private:
   Node node;
@@ -278,71 +293,16 @@ private:
 } // namespace
 
 //===----------------------------------------------------------------------===//
-// DummySourceNodeIterator class
-//===----------------------------------------------------------------------===//
-
-namespace {
-/// A dummy source node iterator on the `dest`s of all connect ops.
-class DummySourceNodeIterator
-    : public llvm::iterator_facade_base<DummySourceNodeIterator,
-                                        std::forward_iterator_tag, Node> {
-public:
-  explicit DummySourceNodeIterator(Node node)
-      : node(node), connect(node.context->connects.begin()) {}
-  bool isAtEnd() const { return connect == node.context->connects.end(); }
-
-  using llvm::iterator_facade_base<DummySourceNodeIterator,
-                                   std::forward_iterator_tag, Node>::operator++;
-  DummySourceNodeIterator &operator++() {
-    assert(connect != node.context->connects.end() &&
-           "incrementing the end iterator");
-    return ++connect, *this;
-  }
-  Node operator*() {
-    assert(connect != node.context->connects.end() &&
-           "dereferencing the end iterator");
-    return Node((*connect).getDest(), node.context);
-  }
-
-  bool operator==(const DummySourceNodeIterator &rhs) const {
-    return connect == rhs.connect;
-  }
-  bool operator!=(const DummySourceNodeIterator &rhs) const {
-    return !(*this == rhs);
-  }
-
-private:
-  Node node;
-  ConnectIterator connect;
-};
-} // namespace
-
-//===----------------------------------------------------------------------===//
 // CombGraphIterator class
 //===----------------------------------------------------------------------===//
 
 namespace {
-class EndIterator
-    : public llvm::iterator_facade_base<NodeIterator, std::forward_iterator_tag,
-                                        Node> {
-public:
-  explicit EndIterator() = default;
-
-  using llvm::iterator_facade_base<NodeIterator, std::forward_iterator_tag,
-                                   Node>::operator++;
-  EndIterator &operator++() { return *this; }
-  Node operator*() { return Node(); }
-
-  bool operator==(const EndIterator &rhs) const { return true; }
-  bool operator!=(const EndIterator &rhs) const { return false; }
-};
 
 class CombGraphIterator
     : public llvm::iterator_facade_base<CombGraphIterator,
                                         std::forward_iterator_tag, Node> {
   using variant_iterator =
-      std::variant<NodeIterator, InstanceNodeIterator, SubfieldNodeIterator,
-                   DummySourceNodeIterator, EndIterator>;
+      std::variant<NodeIterator, InstanceNodeIterator, SubfieldNodeIterator>;
 
 public:
   explicit CombGraphIterator(Node node, bool end = false)
@@ -350,9 +310,7 @@ public:
 
   variant_iterator dispatchConstructor(Node node, bool end) {
     if (end)
-      return EndIterator();
-    if (!node.value)
-      return DummySourceNodeIterator(node);
+      return NodeIterator(Node(nullptr, node.context));
 
     auto defOp = node.value.getDefiningOp();
     if (!defOp)
@@ -369,18 +327,21 @@ public:
           // This is required to explicitly ignore self loops of register.
           if (isa_and_nonnull<RegOp, RegResetOp>(
                   getFieldRefFromValue(subfield).getDefiningOp()))
-            return static_cast<variant_iterator>(EndIterator());
+            return static_cast<variant_iterator>(
+                NodeIterator(Node(nullptr, node.context)));
           return static_cast<variant_iterator>(NodeIterator(node));
         })
         .Case<SubindexOp>([&](SubindexOp sub) {
           // This is required to explicitly ignore self loops of register.
           if (isa_and_nonnull<RegOp, RegResetOp>(
                   getFieldRefFromValue(sub).getDefiningOp()))
-            return static_cast<variant_iterator>(EndIterator());
+            return static_cast<variant_iterator>(
+                NodeIterator(Node(nullptr, node.context)));
           return static_cast<variant_iterator>(NodeIterator(node));
         })
         // The children of reg or regreset op are not iterated.
-        .Case<RegOp, RegResetOp>([&](auto) { return EndIterator(); })
+        .Case<RegOp, RegResetOp>(
+            [&](auto) { return NodeIterator(Node(nullptr, node.context)); })
         .Default([&](auto) { return NodeIterator(node); });
   }
 
@@ -394,10 +355,6 @@ public:
       return ++std::get<InstanceNodeIterator>(impl), *this;
     case 2:
       return ++std::get<SubfieldNodeIterator>(impl), *this;
-    case 3:
-      return ++std::get<DummySourceNodeIterator>(impl), *this;
-    case 4:
-      return ++std::get<EndIterator>(impl), *this;
     default:
       return llvm_unreachable("invalid iterator variant"), *this;
     }
@@ -413,10 +370,6 @@ public:
       return *std::get<InstanceNodeIterator>(impl);
     case 2:
       return *std::get<SubfieldNodeIterator>(impl);
-    case 3:
-      return *std::get<DummySourceNodeIterator>(impl);
-    case 4:
-      return *std::get<EndIterator>(impl);
     default:
       return llvm_unreachable("invalid iterator variant"), Node();
     }
@@ -424,7 +377,8 @@ public:
 
   bool operator==(const CombGraphIterator &rhs) const {
     // Comparing with EndIterator, implies just check isAtEnd.
-    if (rhs.impl.index() == 4)
+    if (rhs.impl.index() == 0 &&
+        std::get<NodeIterator>(rhs.impl).isEndIterator())
       switch (impl.index()) {
       case 0:
         return std::get<NodeIterator>(impl).isAtEnd();
@@ -432,8 +386,17 @@ public:
         return std::get<InstanceNodeIterator>(impl).isAtEnd();
       case 2:
         return std::get<SubfieldNodeIterator>(impl).isAtEnd();
-      case 3:
-        return std::get<DummySourceNodeIterator>(impl).isAtEnd();
+      default:
+        return llvm_unreachable("invalid iterator variant"), true;
+      }
+    if (impl.index() == 0 && std::get<NodeIterator>(impl).isEndIterator())
+      switch (rhs.impl.index()) {
+      case 0:
+        return std::get<NodeIterator>(rhs.impl).isAtEnd();
+      case 1:
+        return std::get<InstanceNodeIterator>(rhs.impl).isAtEnd();
+      case 2:
+        return std::get<SubfieldNodeIterator>(rhs.impl).isAtEnd();
       default:
         return true;
       }
@@ -697,27 +660,34 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
     // before we handle its parent modules.
     for (auto node : llvm::post_order<InstanceGraph *>(&instanceGraph)) {
       if (auto module = dyn_cast<FModuleOp>(*node->getModule())) {
-        NodeContext context(&map, &instanceGraph,
-                            module.getOps<FConnectLike>());
-        auto dummyNode = Node(nullptr, &context);
+        LLVM_DEBUG(llvm::dbgs() << "\n Module :" << module.getNameAttr());
+        NodeContext context(&map, &instanceGraph);
+        for (auto connect : module.getOps<FConnectLike>()) {
+          LLVM_DEBUG(llvm::dbgs()
+                     << "\n Start traversal from dest of " << connect);
+          auto entryNode = Node(connect.getDest(), &context);
 
-        // Traversing SCCs in the combinational graph to detect cycles. As
-        // FIRRTL module is an SSA region, all cycles must contain at least one
-        // connect op. Thus we introduce a dummy source node to iterate on the
-        // `dest`s of all connect ops in the module.
-        for (auto combSCC = SCCIterator::begin(dummyNode); !combSCC.isAtEnd();
-             ++combSCC) {
-          if (combSCC.hasCycle()) {
-            detectedCycle = true;
-            auto errorDiag = mlir::emitError(
-                module.getLoc(),
-                "detected combinational cycle in a FIRRTL module");
-            if (printSimpleCycle)
-              dumpSimpleCycle(combSCC, module, errorDiag);
-            else {
-              for (auto node : *combSCC) {
-                auto &noteDiag = errorDiag.attachNote(node.value.getLoc());
-                noteDiag << "this operation is part of the combinational cycle";
+          // Traversing SCCs in the combinational graph to detect cycles. As
+          // FIRRTL module is an SSA region, all cycles must contain at least
+          // one connect op. Thus we introduce a dummy source node to iterate on
+          // the `dest`s of all connect ops in the module.
+          unsigned indexS = 0;
+          for (auto combSCC = SCCIterator::begin(entryNode); !combSCC.isAtEnd();
+               ++combSCC) {
+            LLVM_DEBUG(llvm::dbgs() << "\n SCCIterator loop index:" << indexS++);
+            if (combSCC.hasCycle()) {
+              detectedCycle = true;
+              auto errorDiag = mlir::emitError(
+                  module.getLoc(),
+                  "detected combinational cycle in a FIRRTL module");
+              if (printSimpleCycle)
+                dumpSimpleCycle(combSCC, module, errorDiag);
+              else {
+                for (auto node : *combSCC) {
+                  auto &noteDiag = errorDiag.attachNote(node.value.getLoc());
+                  noteDiag
+                      << "this operation is part of the combinational cycle";
+                }
               }
             }
           }
