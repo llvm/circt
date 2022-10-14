@@ -663,6 +663,8 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
         LLVM_DEBUG(llvm::dbgs() << "\n Module :" << module.getNameAttr());
         NodeContext context(&map, &instanceGraph);
         for (auto connect : module.getOps<FConnectLike>()) {
+          if (context.connects.count(connect))
+            continue;
           LLVM_DEBUG(llvm::dbgs()
                      << "\n Start traversal from dest of " << connect);
           auto entryNode = Node(connect.getDest(), &context);
