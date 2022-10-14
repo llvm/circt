@@ -562,7 +562,7 @@ static bool isFlowSensitiveOp(Operation *op) {
 /// of its operands. This can help pruning large parts of the expression tree
 /// rapidly.
 template <unsigned OpNum>
-struct OperandForwarder : public Reduction {
+struct FIRRTLOperandForwarder : public Reduction {
   uint64_t match(Operation *op) override {
     if (op->getNumResults() != 1 || op->getNumOperands() < 2 ||
         OpNum >= op->getNumOperands())
@@ -602,13 +602,42 @@ struct OperandForwarder : public Reduction {
     return success();
   }
   std::string getName() const override {
-    return ("operand" + Twine(OpNum) + "-forwarder").str();
+    return ("firrtl-operand" + Twine(OpNum) + "-forwarder").str();
   }
 };
 
-/// A sample reduction pattern that replaces operations with a constant zero of
-/// their type.
-struct Constantifier : public Reduction {
+/// A sample reduction pattern that replaces all uses of an operation with one
+/// of its operands. This can help pruning large parts of the expression tree
+/// rapidly.
+template <unsigned OpNum>
+struct HWOperandForwarder : public Reduction {
+  uint64_t match(Operation *op) override {
+    if (op->getNumResults() != 1 || op->getNumOperands() < 2 ||
+        OpNum >= op->getNumOperands())
+      return 0;
+    auto resultTy = op->getResult(0).getType().dyn_cast<IntegerType>();
+    auto opTy = op->getOperand(OpNum).getType().dyn_cast<IntegerType>();
+    return resultTy && opTy && resultTy == opTy;
+  }
+  LogicalResult rewrite(Operation *op) override {
+    assert(match(op));
+    ImplicitLocOpBuilder builder(op->getLoc(), op);
+    auto result = op->getResult(0);
+    auto operand = op->getOperand(OpNum);
+    LLVM_DEBUG(llvm::dbgs()
+               << "Forwarding " << operand << " in " << *op << "\n");
+    result.replaceAllUsesWith(operand);
+    pruneUnusedOps(op, *this);
+    return success();
+  }
+  std::string getName() const override {
+    return ("hw-operand" + Twine(OpNum) + "-forwarder").str();
+  }
+};
+
+/// A sample reduction pattern that replaces FIRRTL operations with a constant
+/// zero of their type.
+struct FIRRTLConstantifier : public Reduction {
   uint64_t match(Operation *op) override {
     if (op->getNumResults() != 1 || op->getNumOperands() == 0)
       return 0;
@@ -630,7 +659,31 @@ struct Constantifier : public Reduction {
     pruneUnusedOps(op, *this);
     return success();
   }
-  std::string getName() const override { return "constantifier"; }
+  std::string getName() const override { return "firrtl-constantifier"; }
+};
+
+/// A sample reduction pattern that replaces integer operations with a constant
+/// zero of their type.
+struct HWConstantifier : public Reduction {
+  uint64_t match(Operation *op) override {
+    if (op->getNumResults() == 0 || op->getNumOperands() == 0)
+      return 0;
+    return llvm::any_of(op->getResults(), [](Value result) {
+      return result.getType().isa<IntegerType>();
+    });
+  }
+  LogicalResult rewrite(Operation *op) override {
+    assert(match(op));
+    OpBuilder builder(op);
+    for (auto result : op->getResults()) {
+      auto type = result.getType().cast<IntegerType>();
+      auto newOp = builder.create<hw::ConstantOp>(op->getLoc(), type, 0);
+      result.replaceAllUsesWith(newOp);
+    }
+    pruneUnusedOps(op, *this);
+    return success();
+  }
+  std::string getName() const override { return "hw-constantifier"; }
 };
 
 /// A sample reduction pattern that replaces the right-hand-side of
@@ -1089,10 +1142,14 @@ void circt::createAllReductions(
   add(std::make_unique<NodeSymbolRemover>());
   add(std::make_unique<ConnectForwarder>());
   add(std::make_unique<ConnectInvalidator>());
-  add(std::make_unique<Constantifier>());
-  add(std::make_unique<OperandForwarder<0>>());
-  add(std::make_unique<OperandForwarder<1>>());
-  add(std::make_unique<OperandForwarder<2>>());
+  add(std::make_unique<FIRRTLConstantifier>());
+  add(std::make_unique<HWConstantifier>());
+  add(std::make_unique<FIRRTLOperandForwarder<0>>());
+  add(std::make_unique<FIRRTLOperandForwarder<1>>());
+  add(std::make_unique<FIRRTLOperandForwarder<2>>());
+  add(std::make_unique<HWOperandForwarder<0>>());
+  add(std::make_unique<HWOperandForwarder<1>>());
+  add(std::make_unique<HWOperandForwarder<2>>());
   add(std::make_unique<OperationPruner>());
   add(std::make_unique<DetachSubaccesses>());
   add(std::make_unique<AnnotationRemover>());
