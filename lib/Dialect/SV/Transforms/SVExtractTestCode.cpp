@@ -507,9 +507,11 @@ private:
                                    bindFile, bindTable);
     // do the clone
     migrateOps(module, bmod, opsToClone, cutMap);
-    // erase old operations of interest
-    for (auto *op : roots)
-      opsToErase.insert(op);
+    // erase old operations of interest eagerly, removing from erase set.
+    for (auto *op : roots) {
+      opsToErase.erase(op);
+      op->erase();
+    }
 
     return true;
   }
