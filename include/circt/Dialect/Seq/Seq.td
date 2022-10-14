@@ -50,6 +50,7 @@ def CompRegOp : SeqOp<"compreg",
     OptionalAttr<SymbolNameAttr>:$sym_name);
   let results = (outs AnyType:$data);
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 
   let builders = [
     OpBuilder<(ins "Value":$input, "Value":$clk, "StringRef":$sym_name), [{

@@ -58,6 +58,7 @@ class PyCDEValue:
   def reg(self,
           clk=None,
           rst=None,
+          rst_value=None,
           name=None,
           cycles=1,
           sv_attributes=None,
@@ -72,7 +73,8 @@ class PyCDEValue:
       if clk is None:
         raise ValueError("If 'clk' not specified, must be in clock block")
 
-    from .dialects import seq
+    from .dialects import seq, hw
+    from .pycde_types import types, BitVectorType
     if name is None:
       basename = None
       if self.name is not None:
@@ -88,6 +90,12 @@ class PyCDEValue:
           basename = self.name
           starting_reg = 1
     with get_user_loc():
+      # If rst without reset value, provide a default '0'.
+      if rst_value is None and rst is not None:
+        rst_value = types.int(self.type.bitwidth)(0)
+        if not isinstance(self.type, BitVectorType):
+          rst_value = hw.BitcastOp(self.type, rst_value)
+
       reg = self.value
       for i in range(cycles):
         give_name = name
@@ -97,6 +105,7 @@ class PyCDEValue:
                             input=reg,
                             clk=clk,
                             reset=rst,
+                            reset_value=rst_value,
                             name=give_name,
                             sym_name=give_name)
       if sv_attributes is not None:

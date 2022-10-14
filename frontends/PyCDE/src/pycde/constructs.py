@@ -53,7 +53,7 @@ def Reg(type: PyCDEType,
 
   # Create a wire and register it.
   wire = Wire(type)
-  value = RegisterValue(wire.reg(clk, rst, rst_value), type)
+  value = RegisterValue(wire.reg(clk=clk, rst=rst, rst_value=rst_value), type)
   value._wire = wire
   return value
 

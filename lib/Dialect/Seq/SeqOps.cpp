@@ -126,6 +126,13 @@ void CompRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), getName());
 }
 
+LogicalResult CompRegOp::verify() {
+  if ((getReset() && !getResetValue()) || (!getReset() && getResetValue()))
+    return emitOpError(
+        "either reset and resetValue or neither must be specified");
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // FirRegOp
 
