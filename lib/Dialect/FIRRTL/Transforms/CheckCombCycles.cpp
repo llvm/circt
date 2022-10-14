@@ -43,10 +43,11 @@ namespace {
 struct NodeContext {
   CombPathsMap *map;
   InstanceGraph *graph;
-  DenseSet<FConnectLike> connects;
+  ConnectRange connects;
 
-  explicit NodeContext(CombPathsMap *map, InstanceGraph *graph)
-      : map(map), graph(graph) {}
+  explicit NodeContext(CombPathsMap *map, InstanceGraph *graph,
+                       ConnectRange connects)
+      : map(map), graph(graph), connects(connects) {}
 };
 } // namespace
 
@@ -90,8 +91,9 @@ public:
   ChildIterator() = default;
   explicit ChildIterator(Value v)
       : childEnd(v.use_end()), childIt(v.use_begin()) {
-    
-    LLVM_DEBUG(if (childIt != childEnd) llvm::dbgs() << "\n ChildIterator constructor for uses of:" << v);
+
+    LLVM_DEBUG(if (childIt != childEnd) llvm::dbgs()
+               << "\n ChildIterator constructor for uses of:" << v);
     skipToNextValidChild();
   }
 
@@ -145,13 +147,7 @@ public:
   using llvm::iterator_facade_base<NodeIterator, std::forward_iterator_tag,
                                    Node>::operator++;
   NodeIterator &operator++() { return ++child, *this; }
-  Node operator*() {
-    // Record the connect op after it is traversed.
-    if (auto connect = dyn_cast<FConnectLike>(child.childIt->getOwner()))
-      node.context->connects.insert(connect);
-
-    return Node(*child, node.context);
-  }
+  Node operator*() { return Node(*child, node.context); }
 
   bool operator==(const NodeIterator &rhs) const { return child == rhs.child; }
   bool operator!=(const NodeIterator &rhs) const { return !(*this == rhs); }
@@ -293,6 +289,47 @@ private:
 } // namespace
 
 //===----------------------------------------------------------------------===//
+// DummySourceNodeIterator class
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// A dummy source node iterator on the `dest`s of all connect ops.
+class DummySourceNodeIterator
+    : public llvm::iterator_facade_base<DummySourceNodeIterator,
+                                        std::forward_iterator_tag, Node> {
+public:
+  explicit DummySourceNodeIterator(Node node, bool end = false)
+      : node(node), connect(end ? node.context->connects.end()
+                                : node.context->connects.begin()) {}
+
+  using llvm::iterator_facade_base<DummySourceNodeIterator,
+                                   std::forward_iterator_tag, Node>::operator++;
+  DummySourceNodeIterator &operator++() {
+    assert(connect != node.context->connects.end() &&
+           "incrementing the end iterator");
+    return ++connect, *this;
+  }
+  Node operator*() {
+    assert(connect != node.context->connects.end() &&
+           "dereferencing the end iterator");
+    return Node((*connect).getDest(), node.context);
+  }
+
+  bool operator==(const DummySourceNodeIterator &rhs) const {
+    return connect == rhs.connect;
+  }
+  bool operator!=(const DummySourceNodeIterator &rhs) const {
+    return !(*this == rhs);
+  }
+  bool isAtEnd() const { return connect == node.context->connects.end(); }
+
+private:
+  Node node;
+  ConnectIterator connect;
+};
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // CombGraphIterator class
 //===----------------------------------------------------------------------===//
 
@@ -302,7 +339,8 @@ class CombGraphIterator
     : public llvm::iterator_facade_base<CombGraphIterator,
                                         std::forward_iterator_tag, Node> {
   using variant_iterator =
-      std::variant<NodeIterator, InstanceNodeIterator, SubfieldNodeIterator>;
+      std::variant<NodeIterator, InstanceNodeIterator, SubfieldNodeIterator,
+                   DummySourceNodeIterator>;
 
 public:
   explicit CombGraphIterator(Node node, bool end = false)
@@ -311,6 +349,8 @@ public:
   variant_iterator dispatchConstructor(Node node, bool end) {
     if (end)
       return NodeIterator(Node(nullptr, node.context));
+    if (!node.value)
+      return DummySourceNodeIterator(node, end);
 
     auto defOp = node.value.getDefiningOp();
     if (!defOp)
@@ -355,6 +395,8 @@ public:
       return ++std::get<InstanceNodeIterator>(impl), *this;
     case 2:
       return ++std::get<SubfieldNodeIterator>(impl), *this;
+    case 3:
+      return ++std::get<DummySourceNodeIterator>(impl), *this;
     default:
       return llvm_unreachable("invalid iterator variant"), *this;
     }
@@ -370,6 +412,8 @@ public:
       return *std::get<InstanceNodeIterator>(impl);
     case 2:
       return *std::get<SubfieldNodeIterator>(impl);
+    case 3:
+      return *std::get<DummySourceNodeIterator>(impl);
     default:
       return llvm_unreachable("invalid iterator variant"), Node();
     }
@@ -386,6 +430,8 @@ public:
         return std::get<InstanceNodeIterator>(impl).isAtEnd();
       case 2:
         return std::get<SubfieldNodeIterator>(impl).isAtEnd();
+      case 3:
+        return std::get<DummySourceNodeIterator>(impl).isAtEnd();
       default:
         return llvm_unreachable("invalid iterator variant"), true;
       }
@@ -397,6 +443,8 @@ public:
         return std::get<InstanceNodeIterator>(rhs.impl).isAtEnd();
       case 2:
         return std::get<SubfieldNodeIterator>(rhs.impl).isAtEnd();
+      case 3:
+        return std::get<DummySourceNodeIterator>(rhs.impl).isAtEnd();
       default:
         return true;
       }
@@ -660,36 +708,27 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
     // before we handle its parent modules.
     for (auto node : llvm::post_order<InstanceGraph *>(&instanceGraph)) {
       if (auto module = dyn_cast<FModuleOp>(*node->getModule())) {
-        LLVM_DEBUG(llvm::dbgs() << "\n Module :" << module.getNameAttr());
-        NodeContext context(&map, &instanceGraph);
-        for (auto connect : module.getOps<FConnectLike>()) {
-          if (context.connects.count(connect))
-            continue;
-          LLVM_DEBUG(llvm::dbgs()
-                     << "\n Start traversal from dest of " << connect);
-          auto entryNode = Node(connect.getDest(), &context);
+        NodeContext context(&map, &instanceGraph,
+                            module.getOps<FConnectLike>());
+        auto dummyNode = Node(nullptr, &context);
 
-          // Traversing SCCs in the combinational graph to detect cycles. As
-          // FIRRTL module is an SSA region, all cycles must contain at least
-          // one connect op. Thus we introduce a dummy source node to iterate on
-          // the `dest`s of all connect ops in the module.
-          unsigned indexS = 0;
-          for (auto combSCC = SCCIterator::begin(entryNode); !combSCC.isAtEnd();
-               ++combSCC) {
-            LLVM_DEBUG(llvm::dbgs() << "\n SCCIterator loop index:" << indexS++);
-            if (combSCC.hasCycle()) {
-              detectedCycle = true;
-              auto errorDiag = mlir::emitError(
-                  module.getLoc(),
-                  "detected combinational cycle in a FIRRTL module");
-              if (printSimpleCycle)
-                dumpSimpleCycle(combSCC, module, errorDiag);
-              else {
-                for (auto node : *combSCC) {
-                  auto &noteDiag = errorDiag.attachNote(node.value.getLoc());
-                  noteDiag
-                      << "this operation is part of the combinational cycle";
-                }
+        // Traversing SCCs in the combinational graph to detect cycles. As
+        // FIRRTL module is an SSA region, all cycles must contain at least one
+        // connect op. Thus we introduce a dummy source node to iterate on the
+        // `dest`s of all connect ops in the module.
+        for (auto combSCC = SCCIterator::begin(dummyNode); !combSCC.isAtEnd();
+             ++combSCC) {
+          if (combSCC.hasCycle()) {
+            detectedCycle = true;
+            auto errorDiag = mlir::emitError(
+                module.getLoc(),
+                "detected combinational cycle in a FIRRTL module");
+            if (printSimpleCycle)
+              dumpSimpleCycle(combSCC, module, errorDiag);
+            else {
+              for (auto node : *combSCC) {
+                auto &noteDiag = errorDiag.attachNote(node.value.getLoc());
+                noteDiag << "this operation is part of the combinational cycle";
               }
             }
           }
