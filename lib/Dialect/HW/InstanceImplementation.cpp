@@ -233,7 +233,7 @@ LogicalResult instance_like_impl::verifyInstanceOfHWModule(
   // is being referenced. The error message on the instance is added by the
   // verification function this lambda is passed to.
   EmitErrorFn emitError =
-      [&](std::function<bool(InFlightDiagnostic & diag)> fn) {
+      [&](const std::function<bool(InFlightDiagnostic & diag)> &fn) {
         auto diag = instance->emitOpError();
         if (fn(diag))
           diag.attachNote(module->getLoc()) << "module declared here";

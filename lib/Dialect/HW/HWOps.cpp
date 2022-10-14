@@ -189,7 +189,7 @@ LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
                                           Operation *usingOp,
                                           bool disallowParamRefs) {
   instance_like_impl::EmitErrorFn emitError =
-      [&](std::function<bool(InFlightDiagnostic &)> fn) {
+      [&](const std::function<bool(InFlightDiagnostic &)> &fn) {
         if (usingOp) {
           auto diag = usingOp->emitOpError();
           if (fn(diag))
@@ -1261,7 +1261,7 @@ LogicalResult InstanceOp::verify() {
   auto module = (*this)->getParentOfType<HWModuleOp>();
   auto moduleParameters = module->getAttrOfType<ArrayAttr>("parameters");
   instance_like_impl::EmitErrorFn emitError =
-      [&](std::function<bool(InFlightDiagnostic &)> fn) {
+      [&](const std::function<bool(InFlightDiagnostic &)> &fn) {
         auto diag = emitOpError();
         if (fn(diag))
           diag.attachNote(module->getLoc()) << "module declared here";
