@@ -1150,9 +1150,9 @@ static LogicalResult mergeNeiboringAssignments(AssignTy op,
   if (!dest.isMergableSlice(nextDest) || !src.isMergableSlice(nextSrc))
     return failure();
 
-  auto width = (nextDest.end - dest.start).getZExtValue();
-  if (width == 0)
+  if (dest.start.getBitWidth() > 63)
     return failure();
+  auto width = nextDest.end.getZExtValue() - dest.start.getZExtValue();
 
   // From here, construct assignments of array slices.
   auto destStart =
