@@ -211,8 +211,8 @@ struct Emitter {
   }
 
   // Component emission
-  void emitComponent(ComponentOp op);
-  void emitComponentPorts(ComponentOp op);
+  void emitComponent(ComponentInterface op);
+  void emitComponentPorts(ComponentInterface op);
 
   // HWModuleExtern emission
   void emitPrimitiveExtern(hw::HWModuleExternOp op);
@@ -534,7 +534,7 @@ LogicalResult Emitter::finalize() { return failure(encounteredError); }
 /// Emit an entire program.
 void Emitter::emitModule(ModuleOp op) {
   for (auto &bodyOp : *op.getBody()) {
-    if (auto componentOp = dyn_cast<ComponentOp>(bodyOp))
+    if (auto componentOp = dyn_cast<ComponentInterface>(bodyOp))
       emitComponent(componentOp);
     else if (auto hwModuleExternOp = dyn_cast<hw::HWModuleExternOp>(bodyOp))
       emitPrimitiveExtern(hwModuleExternOp);
@@ -544,8 +544,10 @@ void Emitter::emitModule(ModuleOp op) {
 }
 
 /// Emit a component.
-void Emitter::emitComponent(ComponentOp op) {
-  indent() << "component " << op.getName() << getAttributes(op);
+void Emitter::emitComponent(ComponentInterface op) {
+  std::string pre = op.isComb() ? "comb " : "";
+
+  indent() << pre << "component " << op.getName() << getAttributes(op);
   // Emit the ports.
   emitComponentPorts(op);
   os << space() << LBraceEndL();
@@ -588,13 +590,14 @@ void Emitter::emitComponent(ComponentOp op) {
   });
 
   emitWires(wires);
-  emitControl(control);
+  if (control != nullptr)
+    emitControl(control);
   reduceIndent();
   os << RBraceEndL();
 }
 
 /// Emit the ports of a component.
-void Emitter::emitComponentPorts(ComponentOp op) {
+void Emitter::emitComponentPorts(ComponentInterface op) {
   auto emitPorts = [&](auto ports) {
     os << LParen();
     for (size_t i = 0, e = ports.size(); i < e; ++i) {
