@@ -1552,6 +1552,9 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
 
     auto oneConst = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(1));
+
+    // This assumes that alloca does always allocate full bytes (round up to a
+    // multiple of 8 bits).
     auto alloca = rewriter.create<LLVM::AllocaOp>(
         op->getLoc(), LLVM::LLVMPointerType::get(valTy), oneConst, 4);
     rewriter.create<LLVM::StoreOp>(op->getLoc(), castVal, alloca);
