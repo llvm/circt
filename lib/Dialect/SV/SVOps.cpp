@@ -1305,6 +1305,13 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), nameAttr.getValue());
 }
 
+static bool isOffset(Value base, Value index, uint64_t offset) {
+  if (auto constBase = base.getDefiningOp<hw::ConstantOp>())
+    if (auto constIndex = index.getDefiningOp<hw::ConstantOp>())
+      return constBase.getValue() + offset == constIndex.getValue();
+  return false;
+}
+
 // If this wire is only written to, delete the wire and all writers.
 LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
   // Block if op has SV attributes.
@@ -1315,44 +1322,137 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
   if (wire.getInnerSymAttr())
     return failure();
 
+  // Find the type of the wire.
+  Type elemTy =
+      hw::type_cast<hw::InOutType>(wire.getResult().getType()).getElementType();
+
   // Wires have inout type, so they'll have assigns and read_inout operations
   // that work on them.  If anything unexpected is found then leave it alone.
   SmallVector<sv::ReadInOutOp> reads;
   sv::AssignOp write;
+  DenseMap<uint64_t, sv::AssignOp> indexWrites;
 
   for (auto *user : wire->getUsers()) {
-    if (auto read = dyn_cast<sv::ReadInOutOp>(user)) {
-      reads.push_back(read);
+    if (auto readOp = dyn_cast<sv::ReadInOutOp>(user)) {
+      reads.push_back(readOp);
       continue;
     }
 
-    // Otherwise must be an assign, and we must not have seen a write yet.
-    auto assign = dyn_cast<sv::AssignOp>(user);
-    // Either the wire has more than one write or another kind of Op (other than
-    // AssignOp and ReadInOutOp), then can't optimize.
-    if (!assign || write)
+    if (auto assignOp = dyn_cast<sv::AssignOp>(user)) {
+      // If the assign op has SV attributes, we don't want to delete the
+      // assignment.
+      if (hasSVAttributes(assignOp))
+        return failure();
+
+      // Either the wire has more than one write or another kind of Op (other
+      // than AssignOp and ReadInOutOp), then can't optimize.
+      if (write)
+        return failure();
+
+      write = assignOp;
+      continue;
+    }
+
+    if (auto arrayIndexOp = dyn_cast<sv::ArrayIndexInOutOp>(user)) {
+      // Collect read-write accesses to a single index.
+      auto indexOp = arrayIndexOp.getIndex().getDefiningOp<hw::ConstantOp>();
+      if (!indexOp)
+        return failure();
+
+      IntegerAttr indexAttr = indexOp.getValueAttr();
+      if (indexAttr.getValue().getBitWidth() > 64)
+        return failure();
+      int64_t index = indexAttr.getValue().getZExtValue();
+
+      sv::AssignOp indexWrite;
+      for (auto *indexUser : arrayIndexOp->getUsers()) {
+        if (auto assign = dyn_cast<sv::AssignOp>(indexUser)) {
+          if (hasSVAttributes(assign))
+            return failure();
+          if (indexWrite)
+            return failure();
+          indexWrite = assign;
+          continue;
+        }
+
+        // Unknown access which cannot be optimised.
+        return failure();
+      }
+
+      // The field accesses should be first canonicalized to a single one.
+      auto it = indexWrites.try_emplace(index, indexWrite);
+      if (!it.second)
+        return failure();
+      continue;
+    }
+
+    // Unknown access which cannot be optimised.
+    return failure();
+  }
+
+  if (!indexWrites.empty()) {
+    // Writes to the whole object are not optimised.
+    if (write)
       return failure();
 
-    // If the assign op has SV attributes, we don't want to delete the
-    // assignment.
-    if (hasSVAttributes(assign))
+    // Check whether the series of assignments truncates a source.
+    auto arrayTy = hw::type_cast<hw::ArrayType>(elemTy);
+    if (indexWrites.size() != arrayTy.getSize())
       return failure();
 
-    write = assign;
+    Value lowIndex;
+    Value input;
+    for (uint64_t i = 0, n = arrayTy.getSize(); i < n; ++i) {
+      auto it = indexWrites.find(i);
+      assert(it != indexWrites.end() && "missing access");
+
+      auto get = it->second.getSrc().getDefiningOp<hw::ArrayGetOp>();
+      if (!get)
+        return failure();
+
+      if (i == 0) {
+        input = get.getInput();
+        lowIndex = get.getIndex();
+        continue;
+      }
+      if (get.getInput() != input)
+        return failure();
+
+      if (!isOffset(lowIndex, get.getIndex(), i))
+        return failure();
+    }
+
+    if (arrayTy != input.getType()) {
+      // If the index sequence does not cover the whole source, create a slice
+      // op to replace the sequence of copies.  Replace the wire with the slice.
+      input = rewriter.create<hw::ArraySliceOp>(wire.getLoc(), arrayTy, input,
+                                                lowIndex);
+    }
+
+    for (auto read : reads)
+      rewriter.replaceOp(read, input);
+
+    for (auto &[index, write] : indexWrites) {
+      auto dest = write.getDest();
+      rewriter.eraseOp(write);
+      rewriter.eraseOp(dest.getDefiningOp());
+    }
+
+    rewriter.eraseOp(wire);
+    return success();
   }
 
   Value connected;
   if (!write) {
     // If no write and only reads, then replace with XOp.
-    connected = rewriter.create<ConstantXOp>(
-        wire.getLoc(),
-        wire.getResult().getType().cast<InOutType>().getElementType());
-  } else if (isa<hw::HWModuleOp>(write->getParentOp()))
+    connected = rewriter.create<ConstantXOp>(wire.getLoc(), elemTy);
+  } else if (isa<hw::HWModuleOp>(write->getParentOp())) {
     connected = write.getSrc();
-  else
+  } else {
     // If the write is happening at the module level then we don't have any
     // use-before-def checking to do, so we only handle that for now.
     return failure();
+  }
 
   // Ok, we can do this.  Replace all the reads with the connected value.
   for (auto read : reads)
