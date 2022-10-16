@@ -1785,6 +1785,96 @@ LogicalResult ArrayCreateOp::verify() {
   return success();
 }
 
+// Check whether an integer value is an offset from a base.
+static bool isOffset(Value base, Value index, uint64_t offset) {
+  if (auto constBase = base.getDefiningOp<hw::ConstantOp>()) {
+    if (auto constIndex = index.getDefiningOp<hw::ConstantOp>()) {
+      // If both values are a constant, check if index == base + offset.
+      // To account for overflow, the addition is performed with an extra bit
+      // and the offset is asserted to fit in the bit width of the base.
+      auto baseValue = constBase.getValue();
+      auto indexValue = constIndex.getValue();
+
+      unsigned bits = baseValue.getBitWidth();
+      assert(bits == indexValue.getBitWidth() && "mismatched widths");
+
+      if (bits < 64 && offset >= (1ull << bits))
+        return false;
+
+      APInt baseExt = baseValue.zextOrTrunc(bits + 1);
+      APInt indexExt = indexValue.zextOrTrunc(bits + 1);
+      return baseExt + offset == indexExt;
+    }
+  }
+  return false;
+}
+
+// Canonicalize a create of consecutive elements to a slice.
+static LogicalResult foldCreateToSlice(ArrayCreateOp op,
+                                       PatternRewriter &rewriter) {
+  // Do not canonicalize create of get into a slice.
+  auto arrayTy = hw::type_cast<ArrayType>(op.getType());
+  if (arrayTy.getSize() <= 1)
+    return failure();
+  auto elemTy = arrayTy.getElementType();
+
+  // Check if create arguments are consecutive elements of the same array.
+  // Attempt to break a create of gets into a sequence of consecutive intervals.
+  struct Chunk {
+    Value input;
+    Value index;
+    size_t size;
+  };
+  SmallVector<Chunk> chunks;
+  for (Value value : llvm::reverse(op.getInputs())) {
+    auto get = value.getDefiningOp<ArrayGetOp>();
+    if (!get)
+      return failure();
+
+    Value input = get.getInput();
+    Value index = get.getIndex();
+    if (!chunks.empty()) {
+      auto &c = *chunks.rbegin();
+      if (c.input == get.getInput() && isOffset(c.index, index, c.size)) {
+        c.size++;
+        continue;
+      }
+    }
+
+    chunks.push_back(Chunk{input, index, 1});
+  }
+
+  // If there is a single slice, eliminate the create.
+  if (chunks.size() == 1) {
+    auto &chunk = chunks[0];
+    rewriter.replaceOp(op, rewriter.createOrFold<ArraySliceOp>(
+                               op.getLoc(), arrayTy, chunk.input, chunk.index));
+    return success();
+  }
+
+  // If the number of chunks is significantly less than the number of
+  // elements, replace the create with a concat of the identified slices.
+  if (chunks.size() * 2 < arrayTy.getSize()) {
+    SmallVector<Value> slices;
+    for (auto &chunk : llvm::reverse(chunks)) {
+      auto sliceTy = ArrayType::get(elemTy, chunk.size);
+      slices.push_back(rewriter.createOrFold<ArraySliceOp>(
+          op.getLoc(), sliceTy, chunk.input, chunk.index));
+    }
+    rewriter.replaceOpWithNewOp<ArrayConcatOp>(op, arrayTy, slices);
+    return success();
+  }
+
+  return failure();
+}
+
+LogicalResult ArrayCreateOp::canonicalize(ArrayCreateOp op,
+                                          PatternRewriter &rewriter) {
+  if (succeeded(foldCreateToSlice(op, rewriter)))
+    return success();
+  return failure();
+}
+
 Value ArrayCreateOp::getUniformElement() {
   if (!getInputs().empty() && llvm::all_equal(getInputs()))
     return getInputs()[0];
@@ -2393,10 +2483,10 @@ void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
 }
 
 // An array_get of an array_create with a constant index can just be the
-// array_create operand at the constant index. If the array_create has a single
-// uniform value for each element, just return that value regardless of the
-// index. If the array is constructed from a constant by a bitcast operation, we
-// can fold into a constant.
+// array_create operand at the constant index. If the array_create has a
+// single uniform value for each element, just return that value regardless of
+// the index. If the array is constructed from a constant by a bitcast
+// operation, we can fold into a constant.
 OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
   // array_get(bitcast(c), i) -> c[i*w+w-1:i*w]
   if (auto bitcast = getInput().getDefiningOp<hw::BitcastOp>()) {
