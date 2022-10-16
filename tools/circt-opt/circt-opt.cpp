@@ -62,6 +62,7 @@ int main(int argc, char **argv) {
   mlir::registerInlinerPass();
   mlir::registerCanonicalizerPass();
   mlir::registerSymbolDCEPass();
+  mlir::registerStripDebugInfoPass();
 
   // Register test passes
   circt::test::registerAnalysisTestPasses();

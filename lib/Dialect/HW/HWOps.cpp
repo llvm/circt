@@ -256,6 +256,30 @@ InnerSymAttr hw::getResultSym(Operation *op, unsigned i) {
   return sym;
 }
 
+// Check whether an integer value is an offset from a base.
+bool hw::isOffset(Value base, Value index, uint64_t offset) {
+  if (auto constBase = base.getDefiningOp<hw::ConstantOp>()) {
+    if (auto constIndex = index.getDefiningOp<hw::ConstantOp>()) {
+      // If both values are a constant, check if index == base + offset.
+      // To account for overflow, the addition is performed with an extra bit
+      // and the offset is asserted to fit in the bit width of the base.
+      auto baseValue = constBase.getValue();
+      auto indexValue = constIndex.getValue();
+
+      unsigned bits = baseValue.getBitWidth();
+      assert(bits == indexValue.getBitWidth() && "mismatched widths");
+
+      if (bits < 64 && offset >= (1ull << bits))
+        return false;
+
+      APInt baseExt = baseValue.zextOrTrunc(bits + 1);
+      APInt indexExt = indexValue.zextOrTrunc(bits + 1);
+      return baseExt + offset == indexExt;
+    }
+  }
+  return false;
+}
+
 HWModulePortAccessor::HWModulePortAccessor(Location loc,
                                            const ModulePortInfo &info,
                                            Region &bodyRegion)
@@ -1718,9 +1742,101 @@ static LogicalResult foldCreateToSlice(ArrayCreateOp op,
   return failure();
 }
 
+template <typename From, typename To>
+To rewrite(PatternRewriter &rewriter, Operation *op, Operation *first,
+           ArrayRef<Value> vecs) {
+  if (!isa<From, To>(first))
+    return {};
+  auto arrayTy = hw::type_cast<ArrayType>(op->getResult(0).getType());
+  unsigned numElems = hw::type_cast<ArrayType>(vecs[0].getType()).getSize();
+  auto newArrayTy = ArrayType::get(arrayTy.getElementType(), numElems);
+  return rewriter.create<To>(op->getLoc(), newArrayTy, vecs);
+}
+
+static Operation *rewriteVector(PatternRewriter &rewriter, Operation *op,
+                                Operation *first, ArrayRef<Value> vecs) {
+  if (auto arr = rewrite<comb::AndOp, ArrayAndOp>(rewriter, op, first, vecs))
+    return arr;
+  if (auto arr = rewrite<comb::OrOp, ArrayOrOp>(rewriter, op, first, vecs))
+    return arr;
+  if (auto arr = rewrite<comb::XorOp, ArrayXorOp>(rewriter, op, first, vecs))
+    return arr;
+  if (auto arr = rewrite<comb::ICmpOp, ArrayEqOp>(rewriter, op, first, vecs))
+    return arr;
+  if (auto arr = rewrite<comb::MuxOp, ArrayMuxOp>(rewriter, op, first, vecs))
+    return arr;
+  return {};
+}
+
+static LogicalResult vectorize(ArrayCreateOp op, PatternRewriter &rewriter) {
+  if (op.getInputs().empty() || op.isUniform())
+    return failure();
+
+  auto ty = hw::type_cast<ArrayType>(op.getType());
+  if (ty.getSize() <= 4)
+    return failure();
+
+  // Check the operands to the array create.  Ensure all of them are the
+  // same op with the same number of operands.
+  auto inputs = op.getInputs();
+  Operation *first = inputs[0].getDefiningOp();
+  if (!first)
+    return failure();
+
+  if (auto cmpOp = dyn_cast<comb::ICmpOp>(first)) {
+    if (cmpOp.getPredicate() != comb::ICmpPredicate::eq)
+      return failure();
+  } else {
+    if (!isa<comb::AndOp, comb::OrOp, comb::XorOp, comb::MuxOp>(first))
+      return failure();
+  }
+
+  SmallVector<SmallVector<Value>> args(first->getNumOperands());
+  for (auto &[index, arg] : llvm::enumerate(first->getOperands()))
+    args[index].push_back(arg);
+
+  SmallVector<Location> locs{first->getLoc()};
+  for (size_t i = 1, n = inputs.size(); i < n; ++i) {
+    auto input = inputs[i].getDefiningOp();
+    if (!input)
+      return failure();
+
+    if (first->getName() != input->getName())
+      return failure();
+    if (first->getNumOperands() != input->getNumOperands())
+      return failure();
+
+    for (auto &[index, arg] : llvm::enumerate(input->getOperands())) {
+      if (args[index].begin()->getType() != arg.getType())
+        return failure();
+      args[index].push_back(arg);
+    }
+
+    locs.push_back(input->getLoc());
+  }
+
+  auto loc = FusedLoc::get(op.getContext(), locs);
+
+  // Replace the create with an aggregate operation.  Push the create op
+  // into the operands of the aggregate operation.
+  SmallVector<Value> vecs;
+  for (auto values : args) {
+    assert(values.size() == ty.getSize() && "invalid argument count");
+    auto vecTy = ArrayType::get(values[0].getType(), inputs.size());
+    vecs.push_back(rewriter.create<ArrayCreateOp>(loc, vecTy, values));
+  }
+
+  auto newOp = rewriteVector(rewriter, op, first, vecs);
+  assert(newOp && "failed to rewrite op");
+  rewriter.replaceOp(op, newOp->getResults());
+  return success();
+}
+
 LogicalResult ArrayCreateOp::canonicalize(ArrayCreateOp op,
                                           PatternRewriter &rewriter) {
   if (succeeded(foldCreateToSlice(op, rewriter)))
+    return success();
+  if (succeeded(vectorize(op, rewriter)))
     return success();
   return failure();
 }
@@ -1923,16 +2039,119 @@ OpFoldResult ArrayConcatOp::fold(ArrayRef<Attribute> constants) {
 
 // Flatten a concatenation of array creates into a single create.
 static bool flattenConcatOp(ArrayConcatOp op, PatternRewriter &rewriter) {
-  for (auto input : op.getInputs())
-    if (!input.getDefiningOp<ArrayCreateOp>())
-      return false;
-
+  // concat(create(a1, ...), create(a3, ...), ...) -> create(a1, ..., a3, ...)
+  // concat(..., concat(a1, a2), ...) -> concat(..., a1, a2, ...)
+  // concat(create(...), create(...), ...) -> concat(create(...), ...)
   SmallVector<Value> items;
+
+  bool changed = false;
+  SmallVector<ArrayCreateOp> creates;
+  auto flush = [&] {
+    switch (creates.size()) {
+    case 0:
+      return;
+    case 1: {
+      items.push_back(creates[0]);
+      break;
+    }
+    default: {
+      SmallVector<Value> inputs;
+      SmallVector<Location> locs;
+      for (auto create : creates) {
+        locs.push_back(create.getLoc());
+        for (auto input : create.getInputs()) {
+          inputs.push_back(input);
+        }
+      }
+      auto loc = FusedLoc::get(op.getContext(), locs);
+      items.push_back(rewriter.create<ArrayCreateOp>(loc, inputs));
+      changed = true;
+      break;
+    }
+    }
+    creates.clear();
+  };
+
   for (auto input : op.getInputs()) {
-    auto create = cast<ArrayCreateOp>(input.getDefiningOp());
-    for (auto item : create.getInputs())
-      items.push_back(item);
+    if (auto create = input.getDefiningOp<ArrayCreateOp>()) {
+      creates.push_back(create);
+      continue;
+    }
+
+    flush();
+    if (auto concat = input.getDefiningOp<ArrayConcatOp>()) {
+      for (auto concatInput : concat.getInputs())
+        items.push_back(concatInput);
+      changed = true;
+      continue;
+    }
+    items.push_back(input);
   }
+  flush();
+  assert(creates.empty() && "create ops not flushed");
+
+  if (!changed)
+    return false;
+
+  if (items.size() == 1)
+    rewriter.replaceOp(op, items[0]);
+  else
+    rewriter.replaceOpWithNewOp<ArrayConcatOp>(op, items);
+  return true;
+}
+
+static bool mergeVectors(ArrayConcatOp op, PatternRewriter &rewriter) {
+  SmallVector<Value> items;
+
+  bool changed = false;
+  SmallVector<Operation *> ops;
+  auto flush = [&] {
+    switch (ops.size()) {
+    case 0:
+      return;
+    case 1:
+      items.push_back(ops[0]->getResult(0));
+      break;
+    default: {
+      SmallVector<SmallVector<Value>> args(ops[0]->getNumOperands());
+      for (auto op : ops) {
+        for (auto &[idx, arg] : llvm::enumerate(op->getOperands())) {
+          args[idx].push_back(arg);
+        }
+      }
+      SmallVector<Value> vecs;
+      for (auto &values : args)
+        vecs.push_back(rewriter.create<ArrayConcatOp>(op.getLoc(), values));
+
+      auto newOp = rewriteVector(rewriter, op, ops[0], vecs);
+      assert(newOp && "failed to rewrite op");
+      items.push_back(newOp->getResult(0));
+      changed = true;
+      break;
+    }
+    }
+    ops.clear();
+  };
+
+  for (auto input : op.getInputs()) {
+    auto *op = input.getDefiningOp();
+    if (!op ||
+        !isa<ArrayAndOp, ArrayOrOp, ArrayXorOp, ArrayEqOp, ArrayMuxOp>(op)) {
+      flush();
+      items.push_back(input);
+      continue;
+    }
+
+    if (!ops.empty() && (*ops.rbegin())->getName() != op->getName()) {
+      flush();
+      items.push_back(input);
+      continue;
+    }
+
+    ops.push_back(op);
+  }
+  flush();
+  assert(ops.empty() && "ops not flushed");
 
   rewriter.replaceOpWithNewOp<ArrayCreateOp>(op, items);
   return true;
@@ -2010,16 +2229,13 @@ static bool mergeConcatSlices(ArrayConcatOp op, PatternRewriter &rewriter) {
     items.push_back(item);
   }
   concatenate();
-
   if (!changed)
     return false;
 
-  if (items.size() == 1) {
+  if (items.size() == 1)
     rewriter.replaceOp(op, items[0]);
-  } else {
-    std::reverse(items.begin(), items.end());
+  else
     rewriter.replaceOpWithNewOp<ArrayConcatOp>(op, items);
-  }
   return true;
 }
 
@@ -2033,7 +2249,10 @@ LogicalResult ArrayConcatOp::canonicalize(ArrayConcatOp op,
   if (mergeConcatSlices(op, rewriter))
     return success();
 
-  return success();
+  if (mergeVectors(op, rewriter))
+    return success();
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
@@ -2076,6 +2295,65 @@ void EnumConstantOp::getAsmResultNames(
 OpFoldResult EnumConstantOp::fold(ArrayRef<Attribute> constants) {
   assert(constants.empty() && "constant has no operands");
   return getFieldAttr();
+}
+
+//===----------------------------------------------------------------------===//
+// Array Operations
+//===----------------------------------------------------------------------===//
+
+LogicalResult ArrayAndOp::canonicalize(ArrayAndOp op,
+                                       PatternRewriter &rewriter) {
+  return failure();
+}
+
+LogicalResult ArrayOrOp::canonicalize(ArrayOrOp op, PatternRewriter &rewriter) {
+  return failure();
+}
+
+LogicalResult ArrayXorOp::canonicalize(ArrayXorOp op,
+                                       PatternRewriter &rewriter) {
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// ArrayEqOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+ArrayEqOp::inferReturnTypes(MLIRContext *context, Optional<Location> location,
+                            ValueRange operands, DictionaryAttr attributes,
+                            mlir::RegionRange regions,
+                            SmallVectorImpl<Type> &inferReturnTypes) {
+  if (operands.empty())
+    return failure();
+  auto arrayTy = hw::type_dyn_cast<ArrayType>(operands[0].getType());
+  inferReturnTypes.push_back(
+      ArrayType::get(IntegerType::get(context, 1), arrayTy.getSize()));
+  return success();
+}
+
+LogicalResult ArrayEqOp::canonicalize(ArrayEqOp op, PatternRewriter &rewriter) {
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// ArrayMuxOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+ArrayMuxOp::inferReturnTypes(MLIRContext *, Optional<Location> location,
+                             ValueRange operands, DictionaryAttr attributes,
+                             mlir::RegionRange regions,
+                             SmallVectorImpl<Type> &inferReturnTypes) {
+  if (operands.size() <= 1)
+    return failure();
+  inferReturnTypes.push_back(operands[1].getType());
+  return success();
+}
+
+LogicalResult ArrayMuxOp::canonicalize(ArrayMuxOp op,
+                                       PatternRewriter &rewriter) {
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
@@ -2567,6 +2845,33 @@ LogicalResult ArrayGetOp::canonicalize(ArrayGetOp op,
     }
     return failure();
   }
+
+  /*
+  if (auto inputMux = dyn_cast_or_null<comb::MuxOp>(inputOp)) {
+    auto loc = FusedLoc::get(op.getContext(), {inputMux.getLoc(), op.getLoc()});
+
+    auto trueVal = inputMux.getTrueValue();
+    auto falseVal = inputMux.getFalseValue();
+    auto size = hw::type_cast<ArrayType>(trueVal.getType()).getSize();
+    if ((size & (size - 1)) != 0)
+      return failure();
+
+    auto arrayTy = ArrayType::get(op.getType(), size * 2);
+    auto array = rewriter.create<ArrayConcatOp>(loc, arrayTy,
+                                                ValueRange{falseVal, trueVal});
+
+    Value index;
+    if (size == 1) {
+      index = inputMux.getCond();
+    } else {
+      index = rewriter.create<comb::ConcatOp>(loc, op.getIndex(),
+                                              inputMux.getCond());
+    }
+
+    rewriter.replaceOpWithNewOp<ArrayGetOp>(op, array, index);
+    return success();
+  }
+  */
 
   return failure();
 }

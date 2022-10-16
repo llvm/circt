@@ -40,6 +40,8 @@ def AggregateConstantOp : HWOp<"aggregate_constant", [Pure, ConstantLike]> {
 // Packed Array Processing Operations
 //===----------------------------------------------------------------------===//
 
+include "mlir/Interfaces/InferTypeOpInterface.td"
+
 def ArrayCreateOp : HWOp<"array_create", [Pure, SameTypeOperands]> {
   let summary = "Create an array from values";
   let description = [{
@@ -171,6 +173,69 @@ def ArrayGetOp : HWOp<"array_get",
   ];
 
   let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// Element-wise operations on arrays.
+//===----------------------------------------------------------------------===//
+
+// Binary operator for arrays.
+class ArrayBinaryOp<string mnemonic, list<Trait> traits = []> :
+      HWOp<"array_" # mnemonic, traits # [Pure, SameTypeOperands]> {
+  let arguments = (ins ArrayType:$lhs, ArrayType:$rhs);
+  let results = (outs ArrayType:$result);
+
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` qualified(type($lhs))
+  }];
+
+  let hasCanonicalizeMethod = 1;
+}
+
+// Element-wise variadic operator with uniform input/result types.
+class ArrayVariadicOp<string mnemonic, list<Trait> traits = []> :
+      HWOp<"array_" # mnemonic,
+           traits # [Commutative, Pure,
+                     SameTypeOperands, SameOperandsAndResultType]> {
+
+  let arguments = (ins Variadic<ArrayType>:$inputs);
+  let results = (outs ArrayType:$result);
+
+  let assemblyFormat = [{
+    $inputs attr-dict `:` qualified(type($result))
+  }];
+
+  let builders = [
+    OpBuilder<(ins "Value":$lhs, "Value":$rhs), [{
+      return build($_builder, $_state, lhs.getType(), ValueRange{lhs, rhs});
+    }]>
+  ];
+
+  let hasCanonicalizeMethod = 1;
+}
+
+// Arithmetic and Logical Operations.
+def ArrayAndOp : ArrayVariadicOp<"and">;
+def ArrayOrOp  : ArrayVariadicOp<"or">;
+def ArrayXorOp : ArrayVariadicOp<"xor">;
+
+def ArrayEqOp  : ArrayBinaryOp<"eq", [DeclareOpInterfaceMethods<InferTypeOpInterface>]>;
+
+// Binary operator for arrays.
+def ArrayMuxOp : HWOp<"array_mux", [
+  Pure,
+  AllTypesMatch<["trueValue", "falseValue"]>,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>
+]> {
+
+  let arguments = (ins ArrayType:$cond, ArrayType:$falseValue, ArrayType:$trueValue);
+  let results = (outs ArrayType:$result);
+
+  let assemblyFormat = [{
+    $cond `,` $falseValue `,` $trueValue attr-dict `:` qualified(type($cond)) `,` qualified(type($falseValue))
+  }];
+
   let hasCanonicalizeMethod = 1;
 }
 

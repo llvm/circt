@@ -1934,6 +1934,10 @@ private:
   SubExprInfo visitTypeOp(StructExtractOp op);
   SubExprInfo visitTypeOp(StructInjectOp op);
   SubExprInfo visitTypeOp(EnumConstantOp op);
+  SubExprInfo visitTypeOp(ArrayAndOp op);
+  SubExprInfo visitTypeOp(ArrayOrOp op);
+  SubExprInfo visitTypeOp(ArrayXorOp op);
+  SubExprInfo visitTypeOp(ArrayEqOp op);
 
   // Comb Dialect Operations
   using CombinationalVisitor::visitComb;
@@ -2818,6 +2822,26 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
 SubExprInfo ExprEmitter::visitTypeOp(EnumConstantOp op) {
   ps << PPSaveString(emitter.fieldNameResolver.getEnumFieldName(op.getField()));
   return {Selection, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(ArrayAndOp op) {
+  assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
+  return emitBinary(op, And, "&");
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(ArrayOrOp op) {
+  assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
+  return emitBinary(op, Or, "|");
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(ArrayXorOp op) {
+  assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
+  return emitBinary(op, Xor, "&");
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(ArrayEqOp op) {
+  assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
+  return emitBinary(op, Equality, "==");
 }
 
 SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {

@@ -1522,6 +1522,23 @@ void ReadInOutOp::build(OpBuilder &builder, OperationState &result,
   build(builder, result, resultType, input);
 }
 
+/*
+LogicalResult ReadInOutOp::canonicalize(ReadInOutOp op,
+                                        PatternRewriter &rewriter) {
+  ReadInOutOp nextRead = dyn_cast_or_null<ReadInOutOp>(op->getNextNode());
+  if (nextRead) {
+    op.dump();
+    nextRead.dump();
+  }
+  if (!nextRead || nextRead.getInput() != op.getInput())
+    return failure();
+
+  rewriter.eraseOp(op);
+  rewriter.replaceOp(op, nextRead.getResult());
+  return success();
+}
+*/
+
 //===----------------------------------------------------------------------===//
 // ArrayIndexInOutOp
 //===----------------------------------------------------------------------===//

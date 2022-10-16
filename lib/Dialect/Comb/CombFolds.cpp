@@ -536,8 +536,31 @@ static bool extractFromReplicate(ExtractOp op, ReplicateOp replicate,
   return false;
 }
 
+// Hoists an extract into the arguments of the mux.
+static bool extractFromMux(ExtractOp op, MuxOp mux, PatternRewriter &rewriter) {
+  auto falseValue = rewriter.create<ExtractOp>(
+      op.getLoc(), op.getType(), mux.getFalseValue(), op.getLowBit());
+  auto trueValue = rewriter.create<ExtractOp>(
+      op.getLoc(), op.getType(), mux.getTrueValue(), op.getLowBit());
+  rewriter.replaceOpWithNewOp<MuxOp>(op, mux.getCond(), falseValue, trueValue);
+  return true;
+}
+
 LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   auto *inputOp = op.getInput().getDefiningOp();
+
+  // Try to fold this op to an identical on in the IR.
+  for (auto user : op.getInput().getUsers()) {
+    auto nextOp = dyn_cast<ExtractOp>(user);
+    if (!nextOp || nextOp == op)
+      continue;
+    if (nextOp.getLowBit() != op.getLowBit())
+      continue;
+    if (nextOp.getType() != op.getType())
+      continue;
+    rewriter.replaceOp(op, nextOp->getResults());
+    return success();
+  }
 
   // If the extracted bits are all known, then return the result.
   auto knownBits = computeKnownBits(op.getInput())
@@ -622,6 +645,11 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
                                                 false);
           return success();
         }
+
+  // extract(mux(cond, a, b)) -> mux(cond, extract(a), extract(b))
+  if (auto mux = dyn_cast_or_null<MuxOp>(inputOp))
+    if (extractFromMux(op, mux, rewriter))
+      return success();
 
   return failure();
 }
@@ -1604,6 +1632,127 @@ OpFoldResult ConcatOp::fold(ArrayRef<Attribute> constants) {
   return getIntAttr(result, getContext());
 }
 
+static Value mergeSlices(Value lhs, Value rhs, PatternRewriter &rewriter) {
+  if (lhs.isa<BlockArgument>())
+    return {};
+
+  MLIRContext *context = lhs.getContext();
+
+  auto loc = FusedLoc::get(context, {lhs.getLoc(), rhs.getLoc()});
+  auto width = hw::getBitWidth(lhs.getType()) + hw::getBitWidth(rhs.getType());
+
+  return TypeSwitch<Operation *, Value>(lhs.getDefiningOp())
+      .Case<hw::ArrayGetOp>([&](hw::ArrayGetOp lhsGet) -> Value {
+        if (auto rhsGet = rhs.getDefiningOp<hw::ArrayGetOp>()) {
+          if (lhsGet.getInput() != rhsGet.getInput())
+            return {};
+          if (!isOffset(lhsGet.getIndex(), rhsGet.getIndex(), 1))
+            return {};
+
+          auto sliceTy = hw::ArrayType::get(lhsGet.getType(), 2);
+          auto slice = rewriter.create<hw::ArraySliceOp>(
+              loc, sliceTy, lhsGet.getInput(), lhsGet.getIndex());
+
+          return rewriter.create<hw::BitcastOp>(
+              loc, IntegerType::get(context, width), slice);
+        }
+
+        auto rhsCast = rhs.getDefiningOp<hw::BitcastOp>();
+        if (!rhsCast)
+          return {};
+        auto rhsInput = rhsCast.getInput();
+
+        if (auto rhsSlice = rhsInput.getDefiningOp<hw::ArraySliceOp>()) {
+          if (rhsSlice.getInput() != lhsGet.getInput())
+            return {};
+
+          if (!isOffset(lhsGet.getIndex(), rhsSlice.getLowIndex(), 1))
+            return {};
+
+          auto rhsType = hw::type_cast<hw::ArrayType>(rhsSlice.getType());
+          auto size = rhsType.getSize() + 1;
+
+          auto sliceTy = hw::ArrayType::get(lhsGet.getType(), size);
+          auto slice = rewriter.create<hw::ArraySliceOp>(
+              loc, sliceTy, rhsSlice.getInput(), rhsSlice.getLowIndex());
+
+          return rewriter.create<hw::BitcastOp>(
+              loc, IntegerType::get(context, width), slice);
+        }
+        return {};
+      })
+      .Case<hw::BitcastOp>([&](hw::BitcastOp lhsCast) -> Value {
+        auto lhsSlice = lhsCast.getInput().getDefiningOp<hw::ArraySliceOp>();
+        if (!lhsSlice)
+          return {};
+
+        if (auto rhsGet = rhs.getDefiningOp<hw::ArrayGetOp>()) {
+          if (lhsSlice.getInput() != rhsGet.getInput())
+            return {};
+
+          auto lhsType = hw::type_cast<hw::ArrayType>(lhsSlice.getType());
+          auto offset = lhsType.getSize();
+          if (!isOffset(lhsSlice.getLowIndex(), rhsGet.getIndex(), offset))
+            return {};
+
+          auto sliceTy = hw::ArrayType::get(rhsGet.getType(), offset + 1);
+          auto slice = rewriter.create<hw::ArraySliceOp>(
+              loc, sliceTy, lhsSlice.getInput(), lhsSlice.getLowIndex());
+
+          return rewriter.create<hw::BitcastOp>(
+              loc, IntegerType::get(context, width), slice);
+        }
+
+        if (auto rhsSlice = rhs.getDefiningOp<hw::ArraySliceOp>()) {
+          if (lhsSlice.getInput() != rhsSlice.getInput())
+            return {};
+
+          llvm_unreachable("not implemented");
+        }
+        return {};
+      })
+      .Default([&](auto op) { return Value{}; });
+}
+
+static bool foldConcatOfArrayElements(ConcatOp op, PatternRewriter &rewriter) {
+  SmallVector<Value> items;
+
+  bool changed = false;
+
+  Value last;
+  for (auto input : llvm::reverse(op.getInputs())) {
+    if (!last) {
+      last = input;
+      continue;
+    }
+
+    if (auto merged = mergeSlices(last, input, rewriter)) {
+      changed = true;
+      last = merged;
+      continue;
+    }
+
+    if (last)
+      items.push_back(last);
+
+    last = input;
+  }
+
+  if (last)
+    items.push_back(last);
+
+  if (!changed)
+    return false;
+
+  if (items.size() == 1) {
+    rewriter.replaceOp(op, items[0]);
+  } else {
+    std::reverse(items.begin(), items.end());
+    rewriter.replaceOpWithNewOp<ConcatOp>(op, items);
+  }
+  return true;
+}
+
 LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
   auto inputs = op.getInputs();
   auto size = inputs.size();
@@ -1758,6 +1907,10 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
                                                commonOperand);
     return success();
   }
+
+  // Flatten concatenations of array elements.
+  if (foldConcatOfArrayElements(op, rewriter))
+    return success();
 
   return failure();
 }

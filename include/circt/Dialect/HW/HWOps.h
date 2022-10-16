@@ -23,6 +23,7 @@
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
+#include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/ADT/StringExtras.h"
 
@@ -241,6 +242,9 @@ private:
 
 using HWModuleBuilder =
     llvm::function_ref<void(OpBuilder &, HWModulePortAccessor &)>;
+
+/// Returns true if the index == base + offset.
+bool isOffset(Value base, Value index, uint64_t offset);
 
 } // namespace hw
 } // namespace circt

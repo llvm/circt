@@ -30,6 +30,7 @@ public:
         .template Case<ConstantOp, AggregateConstantOp,
                        // Array operations
                        ArraySliceOp, ArrayCreateOp, ArrayConcatOp, ArrayGetOp,
+                       ArrayAndOp, ArrayOrOp, ArrayXorOp, ArrayEqOp,
                        // Struct operations
                        StructCreateOp, StructExtractOp, StructInjectOp,
                        // Cast operation
@@ -72,6 +73,10 @@ public:
   HANDLE(ArrayGetOp, Unhandled);
   HANDLE(ArrayCreateOp, Unhandled);
   HANDLE(ArrayConcatOp, Unhandled);
+  HANDLE(ArrayAndOp, Unhandled);
+  HANDLE(ArrayOrOp, Unhandled);
+  HANDLE(ArrayXorOp, Unhandled);
+  HANDLE(ArrayEqOp, Unhandled);
   HANDLE(EnumConstantOp, Unhandled);
 #undef HANDLE
 };
