@@ -1305,6 +1305,93 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), nameAttr.getValue());
 }
 
+/// Fold wires of array types whose individual fields are set by assignments
+/// to a wire that is assigned an array created by `hw.array_create`.
+static LogicalResult foldToArrayCreate(WireOp op, PatternRewriter &rewriter) {
+  auto type = hw::type_dyn_cast<hw::ArrayType>(
+      hw::type_cast<hw::InOutType>(op->getResult(0).getType())
+          .getElementType());
+  if (!type)
+    return failure();
+
+  // Find indices which are set by assignments.
+  unsigned numElements = 0;
+  SmallVector<AssignOp> elements(type.getSize());
+  for (auto *user : op->getUsers()) {
+    // Immutable reads from the array are unaffected.
+    if (isa<ReadInOutOp>(user))
+      continue;
+
+    if (auto arrayIndexOp = dyn_cast<ArrayIndexInOutOp>(user)) {
+      // Read-only accesses are allowed and are unaffected.
+      bool isReadOnly = true;
+      for (auto *indexUser : arrayIndexOp->getUsers()) {
+        if (!isa<ReadInOutOp>(indexUser)) {
+          isReadOnly = false;
+          break;
+        }
+      }
+      if (isReadOnly)
+        continue;
+
+      // Collect read-write accesses to a single index.
+      auto indexOp = arrayIndexOp.getIndex().getDefiningOp<hw::ConstantOp>();
+      if (!indexOp)
+        return failure();
+      APInt indexVal = indexOp.getValue();
+      if (indexVal.uge(elements.size()))
+        return failure();
+      auto index = indexVal.getZExtValue();
+
+      // Find assignments to this index.
+      for (auto *indexUser : arrayIndexOp->getUsers()) {
+        // Reads from the element will be allowed.
+        if (isa<ReadInOutOp>(indexUser))
+          continue;
+
+        // Record the assignment, one per element allowed.
+        if (auto assign = dyn_cast<AssignOp>(indexUser)) {
+          if (assign.getDest() != arrayIndexOp)
+            return failure();
+          if (elements[index])
+            return failure();
+          elements[index] = assign;
+          numElements++;
+          continue;
+        }
+
+        return failure();
+      }
+      continue;
+    }
+
+    // All other ops are unsupported.
+    return failure();
+  }
+
+  // If not all elements are written, bail out.
+  if (numElements == 0 || numElements != type.getSize())
+    return failure();
+
+  SmallVector<Value> args;
+  SmallVector<Location> locs;
+  for (auto assign : llvm::reverse(elements)) {
+    locs.push_back(assign.getLoc());
+    args.push_back(assign.getSrc());
+  }
+
+  // Replace the series of assignments with a single assignment of an array.
+  auto loc = FusedLoc::get(op->getContext(), locs);
+  rewriter.setInsertionPointAfter(*elements.rbegin());
+  auto array = rewriter.create<hw::ArrayCreateOp>(loc, type, args);
+  rewriter.create<AssignOp>(loc, op->getResult(0), array);
+
+  for (auto assign : elements)
+    rewriter.eraseOp(assign);
+
+  return success();
+}
+
 // If this wire is only written to, delete the wire and all writers.
 LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
   // Block if op has SV attributes.
@@ -1314,6 +1401,9 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
   // If the wire has a symbol, then we can't delete it.
   if (wire.getInnerSymAttr())
     return failure();
+
+  if (succeeded(foldToArrayCreate(wire, rewriter)))
+    return success();
 
   // Wires have inout type, so they'll have assigns and read_inout operations
   // that work on them.  If anything unexpected is found then leave it alone.
