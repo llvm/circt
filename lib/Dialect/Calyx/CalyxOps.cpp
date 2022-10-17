@@ -688,12 +688,6 @@ void ComponentOp::getAsmBlockArgumentNames(
     setNameFn(block->getArgument(i), ports[i].cast<StringAttr>().getValue());
 }
 
-// Block* ComponentOp::getBodyBlock() {
-//   Region* region = getRegion();
-//   assert(region->hasOneBlock() && "The body should have one Block.");
-//   return &region->front();
-// }
-
 //===----------------------------------------------------------------------===//
 // CombComponentOp
 //===----------------------------------------------------------------------===//
@@ -772,7 +766,8 @@ void CombComponentOp::print(OpAsmPrinter &p) {
   p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
 }
 
-ParseResult CombComponentOp::parse(OpAsmParser &parser, OperationState &result) {
+ParseResult CombComponentOp::parse(OpAsmParser &parser,
+                                   OperationState &result) {
   using namespace mlir::function_interface_impl;
 
   StringAttr componentName;
@@ -810,8 +805,7 @@ LogicalResult CombComponentOp::verify() {
   // Verify there is exactly one of each the wires and control operations.
   auto wIt = getBodyBlock()->getOps<WiresOp>();
   if (std::distance(wIt.begin(), wIt.end()) != 1)
-    return emitOpError(
-        "requires exactly one 'calyx.wires' op.");
+    return emitOpError("requires exactly one 'calyx.wires' op.");
 
   // Verify the component actually does something: has continuous assignments.
   bool hasNoAssignments =
@@ -826,7 +820,7 @@ LogicalResult CombComponentOp::verify() {
 }
 
 void CombComponentOp::build(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<PortInfo> ports) {
+                            StringAttr name, ArrayRef<PortInfo> ports) {
   using namespace mlir::function_interface_impl;
 
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
@@ -888,12 +882,6 @@ void CombComponentOp::getAsmBlockArgumentNames(
     setNameFn(block->getArgument(i), ports[i].cast<StringAttr>().getValue());
 }
 
-// Block* CombComponentOp::getBodyBlock() {
-//   Region* region = getRegion();
-//   assert(region->hasOneBlock() && "The body should have one Block.");
-//   return &region->front();
-// }
-
 //===----------------------------------------------------------------------===//
 // ControlOp
 //===----------------------------------------------------------------------===//
@@ -953,8 +941,9 @@ LogicalResult WiresOp::verify() {
       auto group = cast<GroupInterface>(op);
       auto groupName = group.symName();
       if (mlir::SymbolTable::symbolKnownUseEmpty(groupName, control))
-        return op.emitOpError() << "with name: " << groupName
-                                << " is unused in the control execution schedule";
+        return op.emitOpError()
+               << "with name: " << groupName
+               << " is unused in the control execution schedule";
     }
   }
 
@@ -1406,8 +1395,9 @@ ComponentInterface InstanceOp::getReferencedComponent() {
 /// Verifies the port information in comparison with the referenced component
 /// of an instance. This helper function avoids conducting a lookup for the
 /// referenced component twice.
-static LogicalResult verifyInstanceOpType(InstanceOp instance,
-                                          ComponentInterface referencedComponent) {
+static LogicalResult
+verifyInstanceOpType(InstanceOp instance,
+                     ComponentInterface referencedComponent) {
   auto module = instance->getParentOfType<ModuleOp>();
   StringRef entryPointName =
       module->getAttrOfType<StringAttr>("calyx.entrypoint");
@@ -1459,8 +1449,10 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitError() << "recursive instantiation of its parent component: '"
                        << getComponentName() << "'";
 
-  assert(isa<ComponentInterface>(referencedComponent) && "Should be a ComponentInterface.");
-  return verifyInstanceOpType(*this, cast<ComponentInterface>(referencedComponent));
+  assert(isa<ComponentInterface>(referencedComponent) &&
+         "Should be a ComponentInterface.");
+  return verifyInstanceOpType(*this,
+                              cast<ComponentInterface>(referencedComponent));
 }
 
 /// Provide meaningful names to the result values of an InstanceOp.
