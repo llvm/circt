@@ -796,7 +796,7 @@ static Value getCommonOperand(Op op) {
   if (!op.getType().isInteger(1))
     return Value();
 
-  auto inputs = op.inputs();
+  auto inputs = op.getInputs();
   size_t size = inputs.size();
 
   auto sourceOp = inputs[0].template getDefiningOp<ExtractOp>();
@@ -809,14 +809,14 @@ static Value getCommonOperand(Op op) {
     return Value();
 
   // Tracks the bits that were encountered.
-  auto bits = llvm::BitVector(size);
-  bits.set(sourceOp.lowBit());
+  llvm::BitVector bits(size);
+  bits.set(sourceOp.getLowBit());
 
   for (size_t i = 1; i != size; ++i) {
     auto extractOp = inputs[i].template getDefiningOp<ExtractOp>();
     if (!extractOp || extractOp.getOperand() != source)
       return Value();
-    bits.set(extractOp.lowBit());
+    bits.set(extractOp.getLowBit());
   }
 
   return bits.all() ? source : Value();
