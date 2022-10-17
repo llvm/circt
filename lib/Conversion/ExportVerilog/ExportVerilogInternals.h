@@ -238,8 +238,10 @@ struct SharedEmitterState {
   // Emitter options extracted from the top-level module.
   const LoweringOptions &options;
 
-  /// This keeps track of prefixes assigned to enum field values.
-  DenseMap<hw::EnumType, StringAttr> enumPrefixes;
+  /// This keeps track of prefixes assigned to enum types. The key may be any
+  /// type - this implies that enum types which alias in their fields, but have
+  /// been typedecl'd to different names may be assigned different prefixes.
+  DenseMap<Type, StringAttr> enumPrefixes;
 
   /// Returns the field name for an enum field of a given enum field attr. In
   /// case a prefix exists for the provided enum type, the prefix will be
@@ -255,7 +257,7 @@ struct SharedEmitterState {
 
   explicit SharedEmitterState(ModuleOp designOp, const LoweringOptions &options,
                               GlobalNameTable globalNames,
-                              DenseMap<hw::EnumType, StringAttr> enumPrefixes)
+                              DenseMap<Type, StringAttr> enumPrefixes)
       : designOp(designOp), options(options), enumPrefixes(enumPrefixes),
         globalNames(std::move(globalNames)) {}
   void gatherFiles(bool separateModules);

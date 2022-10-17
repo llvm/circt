@@ -228,22 +228,21 @@ StringRef getPortVerilogName(Operation *module, PortInfo port) {
 }
 
 // Gathers prefixes of enum types by investigating typescopes in the module.
-static DenseMap<hw::EnumType, StringAttr>
-gatherEnumPrefixes(mlir::ModuleOp module) {
+static void gatherEnumPrefixes(mlir::ModuleOp module,
+                               DenseMap<Type, StringAttr> &enumPrefixes) {
   auto *ctx = module.getContext();
-  DenseMap<hw::EnumType, StringAttr> enumPrefixes;
   for (auto typeScope : module.getOps<hw::TypeScopeOp>()) {
     for (auto typeDecl : typeScope.getOps<hw::TypedeclOp>()) {
-      auto enumType =
-          getCanonicalType(typeDecl.getType()).dyn_cast<hw::EnumType>();
+      auto enumType = typeDecl.getType().dyn_cast<hw::EnumType>();
       if (!enumType)
         continue;
 
-      enumPrefixes[enumType] =
-          StringAttr::get(ctx, typeDecl.getSymNameAttr().strref());
+      // Register the enum type as the alias type of the typedecl, since this is
+      // how users will request the prefix.
+      enumPrefixes[typeDecl.getAliasType()] =
+          StringAttr::get(ctx, typeDecl.getPreferredName());
     }
   }
-  return enumPrefixes;
 }
 
 /// This predicate returns true if the specified operation is considered a
@@ -1161,6 +1160,8 @@ public:
 
   /// Print the specified packed portion of the type to the specified stream,
   ///
+  ///  * 'optionalAliasType' can be provided to perform any alias-aware printing
+  ///    of the inner type.
   ///  * When `implicitIntType` is false, a "logic" is printed.  This is used in
   ///        struct fields and typedefs.
   ///  * When `singleBitDefaultType` is false, single bit values are printed as
@@ -1168,7 +1169,7 @@ public:
   ///
   /// This returns true if anything was printed.
   bool printPackedType(Type type, raw_ostream &os, Location loc,
-                       bool implicitIntType = true,
+                       Type optionalAliasType = {}, bool implicitIntType = true,
                        bool singleBitDefaultType = true);
 
   /// Output the unpacked array dimensions.  This is the part of the type that
@@ -1262,12 +1263,15 @@ void ModuleEmitter::emitTypeDims(Type type, Location loc, raw_ostream &os) {
 /// those to the left of the name in verilog. implicitIntType controls whether
 /// to print a base type for (logic) for inteters or whether the caller will
 /// have handled this (with logic, wire, reg, etc).
+/// optionalAliasType can be provided to perform any necessary alias-aware
+/// printing of 'type'.
 ///
 /// Returns true when anything was printed out.
 static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                 SmallVectorImpl<Attribute> &dims,
                                 bool implicitIntType, bool singleBitDefaultType,
-                                ModuleEmitter &emitter) {
+                                ModuleEmitter &emitter,
+                                Type optionalAliasType = {}) {
   return TypeSwitch<Type, bool>(type)
       .Case<IntegerType>([&](IntegerType integerType) {
         if (!implicitIntType)
@@ -1301,11 +1305,12 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
       })
       .Case<EnumType>([&](EnumType enumType) {
         os << "enum {";
+        Type enumPrefixType = optionalAliasType ? optionalAliasType : enumType;
         llvm::interleaveComma(
             enumType.getFields().getAsRange<StringAttr>(), os,
             [&](auto enumerator) {
               os << emitter.state.shared.getEnumFieldName(
-                  hw::EnumFieldAttr::get(loc, enumerator, enumType));
+                  hw::EnumFieldAttr::get(loc, enumerator, enumPrefixType));
             });
         os << "}";
         return true;
@@ -1371,11 +1376,12 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
 ///
 /// This returns true if anything was printed.
 bool ModuleEmitter::printPackedType(Type type, raw_ostream &os, Location loc,
+                                    Type optionalAliasType,
                                     bool implicitIntType,
                                     bool singleBitDefaultType) {
   SmallVector<Attribute, 8> packedDimensions;
   return printPackedTypeImpl(type, os, loc, packedDimensions, implicitIntType,
-                             singleBitDefaultType, *this);
+                             singleBitDefaultType, *this, optionalAliasType);
 }
 
 /// Output the unpacked array dimensions.  This is the part of the type that is
@@ -3006,7 +3012,7 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
 
   os << "typedef ";
   emitter.printPackedType(stripUnpackedTypes(op.getType()), os, op.getLoc(),
-                          false);
+                          op.getAliasType(), false);
   os << ' ' << op.getPreferredName();
   emitter.printUnpackedTypePostfix(op.getType(), os);
   os << ";\n";
@@ -3851,7 +3857,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
   if (isZeroBitType(op.getType()))
     os << "// ";
   emitter.printPackedType(stripUnpackedTypes(op.getType()), os, op->getLoc(),
-                          false);
+                          Type(), false);
   os << ' ' << getSymOpName(op);
   emitter.printUnpackedTypePostfix(op.getType(), os);
   os << ";\n";
@@ -4533,6 +4539,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
         }
 
       printPackedType(type, sstream, module->getLoc(),
+                      /*optionalPackedType=*/Type(),
                       /*implicitIntType=*/true,
                       // Print single-bit values as explicit `[0:0]` type.
                       /*singleBitDefaultType=*/false);
@@ -4873,8 +4880,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
 
 std::string SharedEmitterState::getEnumFieldName(hw::EnumFieldAttr attr) const {
   auto fieldName = attr.getField().strref();
-  auto prefixIt = enumPrefixes.find(
-      getCanonicalType(attr.getType().getValue()).cast<hw::EnumType>());
+  auto prefixIt = enumPrefixes.find(attr.getType().getValue());
   if (prefixIt != enumPrefixes.end())
     return (prefixIt->second.strref() + "_" + fieldName).str();
 
@@ -5017,7 +5023,8 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 
 static LogicalResult exportVerilogImpl(ModuleOp module, llvm::raw_ostream &os) {
   GlobalNameTable globalNames = legalizeGlobalNames(module);
-  DenseMap<hw::EnumType, StringAttr> enumPrefixes = gatherEnumPrefixes(module);
+  DenseMap<Type, StringAttr> enumPrefixes;
+  gatherEnumPrefixes(module, enumPrefixes);
 
   LoweringOptions options(module);
   SharedEmitterState emitter(module, options, std::move(globalNames),
@@ -5151,7 +5158,8 @@ static LogicalResult exportSplitVerilogImpl(ModuleOp module,
   // end up in the output.
   LoweringOptions options(module);
   GlobalNameTable globalNames = legalizeGlobalNames(module);
-  DenseMap<hw::EnumType, StringAttr> enumPrefixes = gatherEnumPrefixes(module);
+  DenseMap<Type, StringAttr> enumPrefixes;
+  gatherEnumPrefixes(module, enumPrefixes);
 
   SharedEmitterState emitter(module, options, std::move(globalNames),
                              enumPrefixes);
