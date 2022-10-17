@@ -172,6 +172,14 @@ static LogicalResult verifyControlBody(Operation *op) {
   return success();
 }
 
+LogicalResult calyx::verifyComponent(Operation *op) {
+  auto *opParent = op->getParentOp();
+  if (!isa<ModuleOp>(opParent))
+    return op->emitOpError()
+           << "has parent: " << opParent << ", expected ModuleOp.";
+  return success();
+}
+
 LogicalResult calyx::verifyCell(Operation *op) {
   auto opParent = op->getParentOp();
   if (!isa<ComponentOp>(opParent))

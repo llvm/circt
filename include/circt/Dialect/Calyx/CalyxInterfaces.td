@@ -259,5 +259,5 @@ def ComponentOpInterface : OpInterface<"ComponentInterface"> {
     >
   ];
 
-  /* let verify = [{ return verifyComponent(op); }]; */
+  let verify = [{ return verifyComponent(op); }];
 }

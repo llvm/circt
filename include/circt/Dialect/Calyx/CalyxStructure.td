@@ -103,22 +103,8 @@ def ComponentOp : CalyxOp<"component", [
         return success();
       }
 
-      /// Returns the body of a Calyx component.
-      /* Block *getBodyBlock() { */
-      /*   Region* region = getRegion(); */
-      /*   assert(region->hasOneBlock() && "The body should have one Block."); */
-      /*   return &region->front(); */
-      /*   /1* return this->getBodyBlock(); *1/ */
-      /* } */
-
       /// Returns the region of a Calyx component.
       Region *getRegion() { return &getFunctionBody(); }
-
-      /// Returns the input port information for this component.
-      /* SmallVector<PortInfo> getInputPortInfo(); */
-
-      /// Returns the input port information for this component.
-      /* SmallVector<PortInfo> getOutputPortInfo(); */
 
       /// Returns the WiresOp of a Calyx Component.
       WiresOp getWiresOp();
@@ -224,22 +210,8 @@ def CombComponentOp : CalyxOp<"comb_component", [
         return success();
       }
 
-      /// Returns the body of a Calyx component.
-      /* Block *getBodyBlock() { */
-        /* Region* region = getRegion(); */
-        /* assert(region->hasOneBlock() && "The body should have one Block."); */
-        /* return &region->front(); */
-      /*   /1* return this->getBodyBlock(); *1/ */
-      /* } */
-
       /// Returns the region of a Calyx component.
       Region *getRegion() { return &getFunctionBody(); }
-
-      /// Returns the input port information for this component.
-      /* SmallVector<PortInfo> getInputPortInfo(); */
-
-      /// Returns the input port information for this component.
-      /* SmallVector<PortInfo> getOutputPortInfo(); */
 
       /// Returns the WiresOp of a Calyx Component.
       WiresOp getWiresOp();
