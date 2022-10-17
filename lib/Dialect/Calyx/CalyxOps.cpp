@@ -816,6 +816,27 @@ LogicalResult CombComponentOp::verify() {
         "continuous assignments in the Wires region or control constructs in "
         "the Control region.");
 
+  // Check that all cells are combinational
+  auto cells = getOps<CellInterface>();
+  for (auto cell : cells) {
+    if (!cell.isCombinational())
+      return emitOpError()
+             << "Combinational component contains non-combinational cell "
+             << cell.instanceName();
+  }
+
+  // Check that the component has no groups
+  auto groups = getWiresOp().getOps<GroupOp>();
+  auto combGroups = getWiresOp().getOps<CombGroupOp>();
+
+  if (!groups.empty())
+    return emitOpError() << "Combinational component contains group "
+                         << (*groups.begin()).getSymName();
+
+  if (!combGroups.empty())
+    return emitOpError() << "Combinational component contains comb group "
+                         << (*combGroups.begin()).getSymName();
+
   return success();
 }
 
@@ -1481,6 +1502,11 @@ SmallVector<DictionaryAttr> InstanceOp::portAttributes() {
   return portAttributes;
 }
 
+bool InstanceOp::isCombinational() {
+  auto comp = getReferencedComponent();
+  return isa<CombComponentOp>(comp);
+}
+
 //===----------------------------------------------------------------------===//
 // PrimitiveOp
 //===----------------------------------------------------------------------===//
@@ -1627,6 +1653,8 @@ SmallVector<Direction> PrimitiveOp::portDirections() {
     portDirections.push_back(convertHWDirectionToCalyx(port.direction));
   return portDirections;
 }
+
+bool PrimitiveOp::isCombinational() { return false; }
 
 /// Returns a new DictionaryAttr containing only the calyx dialect attrs
 /// in the input DictionaryAttr. Also strips the 'calyx.' prefix from these
@@ -1813,6 +1841,8 @@ SmallVector<DictionaryAttr> RegisterOp::portAttributes() {
   };
 }
 
+bool RegisterOp::isCombinational() { return false; }
+
 //===----------------------------------------------------------------------===//
 // MemoryOp
 //===----------------------------------------------------------------------===//
@@ -1861,6 +1891,8 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
   );
   return portAttributes;
 }
+
+bool MemoryOp::isCombinational() { return false; }
 
 void MemoryOp::build(OpBuilder &builder, OperationState &state,
                      StringRef instanceName, int64_t width,
@@ -2207,7 +2239,9 @@ LogicalResult WhileOp::canonicalize(WhileOp whileOp,
         DictionaryAttr::get(context), /* Out    */                             \
         done.getDictionary(context)   /* Done   */                             \
     };                                                                         \
-  }
+  }                                                                            \
+                                                                               \
+  bool OpType::isCombinational() { return false; }
 
 ImplBinPipeOpCellInterface(MultPipeLibOp, "out");
 ImplBinPipeOpCellInterface(DivUPipeLibOp, "out_quotient");
@@ -2242,6 +2276,7 @@ LogicalResult SliceLibOp::verify() {
     return {DictionaryAttr::get(getContext()),                                 \
             DictionaryAttr::get(getContext())};                                \
   }                                                                            \
+  bool OpType::isCombinational() { return true; }                              \
   void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
     getCellAsmResultNames(setNameFn, *this, this->portNames());                \
   }
@@ -2256,6 +2291,7 @@ LogicalResult SliceLibOp::verify() {
   void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
     getCellAsmResultNames(setNameFn, *this, this->portNames());                \
   }                                                                            \
+  bool OpType::isCombinational() { return true; }                              \
   SmallVector<DictionaryAttr> OpType::portAttributes() {                       \
     return {DictionaryAttr::get(getContext()),                                 \
             DictionaryAttr::get(getContext()),                                 \

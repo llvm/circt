@@ -215,6 +215,10 @@ def CellOpInterface : OpInterface<"CellInterface"> {
         }
         return filteredPorts;
       }]
+    >,
+    InterfaceMethod<
+      "This returns true iff the cell is combinational",
+      "bool", "isCombinational"
     >
   ];
 
