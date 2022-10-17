@@ -15,7 +15,7 @@ fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
   %c256_i16 = arith.constant 256 : i16
   %true = arith.constant true
   %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
-  fsm.state "IDLE" output {
+  fsm.state @IDLE output {
     fsm.output %true : i1
   } transitions {
     fsm.transition @BUSY guard {
@@ -24,7 +24,7 @@ fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
       fsm.update %cnt, %c256_i16 : i16
     }
   }
-  fsm.state "BUSY" output {
+  fsm.state @BUSY output {
     fsm.output %false : i1
   } transitions {
     fsm.transition @BUSY guard {

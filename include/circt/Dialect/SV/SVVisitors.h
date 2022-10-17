@@ -30,9 +30,9 @@ public:
             // Expressions
             ReadInOutOp, ArrayIndexInOutOp, VerbatimExprOp, VerbatimExprSEOp,
             IndexedPartSelectInOutOp, IndexedPartSelectOp, StructFieldInOutOp,
-            ConstantXOp, ConstantZOp, MacroRefExprOp,
+            ConstantXOp, ConstantZOp, MacroRefExprOp, MacroRefExprSEOp,
             // Declarations.
-            RegOp, WireOp, LocalParamOp, XMROp,
+            RegOp, WireOp, LogicOp, LocalParamOp, XMROp,
             // Control flow.
             OrderedOutputOp, IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp,
             AlwaysCombOp, AlwaysFFOp, InitialOp, CaseOp,
@@ -52,6 +52,8 @@ public:
             StopOp, FinishOp, ExitOp,
             // Severity message tasks
             FatalOp, ErrorOp, WarningOp, InfoOp,
+            // Generate statements
+            GenerateOp, GenerateCaseOp,
             // Sampled value functiions
             SampledOp>([&](auto expr) -> ResultType {
           return thisCast->visitSV(expr, args...);
@@ -81,6 +83,7 @@ public:
   // Declarations
   HANDLE(RegOp, Unhandled);
   HANDLE(WireOp, Unhandled);
+  HANDLE(LogicOp, Unhandled);
   HANDLE(LocalParamOp, Unhandled);
   HANDLE(XMROp, Unhandled);
 
@@ -95,6 +98,7 @@ public:
   HANDLE(ConstantXOp, Unhandled);
   HANDLE(ConstantZOp, Unhandled);
   HANDLE(MacroRefExprOp, Unhandled);
+  HANDLE(MacroRefExprSEOp, Unhandled);
 
   // Control flow.
   HANDLE(OrderedOutputOp, Unhandled);
@@ -147,6 +151,10 @@ public:
   HANDLE(ErrorOp, Unhandled);
   HANDLE(WarningOp, Unhandled);
   HANDLE(InfoOp, Unhandled);
+
+  // Generate statements
+  HANDLE(GenerateOp, Unhandled);
+  HANDLE(GenerateCaseOp, Unhandled);
 
   // Sampled Value Functions
   HANDLE(SampledOp, Unhandled);

@@ -24,3 +24,9 @@ handshake.func @foo(%arg0 : i32, %ctrl : none) -> (i32, none) {
   %2:2 = fork [2] %1 : i32
   return %2#1, %ctrl : i32, none
 }
+
+// -----
+
+// CHECK-LABEL:   handshake.func @external(
+// CHECK-SAME:      i32, none, ...) -> none
+handshake.func @external(%arg0: i32, %ctrl: none, ...) -> none

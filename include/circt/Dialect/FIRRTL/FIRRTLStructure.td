@@ -34,18 +34,17 @@ def CircuitOp : FIRRTLOp<"circuit",
 
   let extraClassDeclaration = [{
     OpBuilder getBodyBuilder() {
-      assert(!body().empty() && "Unexpected empty 'body' region.");
-      Block &bodyBlock = body().front();
+      assert(!getBody().empty() && "Unexpected empty 'body' region.");
+      Block &bodyBlock = getBody().front();
       return OpBuilder::atBlockEnd(&bodyBlock);
     }
 
     /// Return body of this circuit.
-    Region &getBodyRegion();
-    Block *getBody();
+    Block *getBodyBlock();
 
     // Return the main module that is the entry point of the circuit.  This may
-    // be either an FModuleOp or an FExtModuleOp.
-    FModuleLike getMainModule();
+    // be either an FModuleOp or an FExtModuleOp.  A SymbolTable is optional.
+    FModuleLike getMainModule(mlir::SymbolTable* symtbl = nullptr);
   }];
 
   let assemblyFormat = "$name custom<CircuitOpAttrs>(attr-dict) $body";
@@ -77,31 +76,30 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
   ];
 
   let extraClassDeclaration = [{
-    Block *getBody() { return &body().front(); }
+    Block *getBodyBlock() { return &getBody().front(); }
 
     using iterator = Block::iterator;
-    iterator begin() { return getBody()->begin(); }
-    iterator end() { return getBody()->end(); }
+    iterator begin() { return getBodyBlock()->begin(); }
+    iterator end() { return getBodyBlock()->end(); }
 
     Block::BlockArgListType getArguments() {
-      return getBody()->getArguments();
+      return getBodyBlock()->getArguments();
     }
 
     // Return the block argument for the port with the specified index.
     BlockArgument getArgument(size_t portNumber);
 
     OpBuilder getBodyBuilder() {
-      assert(!body().empty() && "Unexpected empty 'body' region.");
-      Block &bodyBlock = body().front();
+      assert(!getBody().empty() && "Unexpected empty 'body' region.");
+      Block &bodyBlock = getBody().front();
       return OpBuilder::atBlockEnd(&bodyBlock);
     }
 
     /// Inserts the given ports.
     void insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
 
-    /// Erases the ports listed in `portIndices`.  `portIndices` is expected to
-    /// be in order and unique.
-    void erasePorts(ArrayRef<unsigned> portIndices);
+    /// Erases the ports that have their corresponding bit set in `portIndices`.
+    void erasePorts(const llvm::BitVector &portIndices);
 
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
@@ -111,7 +109,7 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
 
 def FExtModuleOp : FIRRTLOp<"extmodule",
       [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">, OpAsmOpInterface,
-       DeclareOpInterfaceMethods<FModuleLike>,
+       DeclareOpInterfaceMethods<FModuleLike>, InnerSymbolTable,
        DeclareOpInterfaceMethods<HWModuleLike>]> {
   let summary = "FIRRTL extmodule";
   let description = [{
@@ -146,7 +144,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
 
 def FMemModuleOp : FIRRTLOp<"memmodule",
       [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">, OpAsmOpInterface,
-       DeclareOpInterfaceMethods<FModuleLike>,
+       DeclareOpInterfaceMethods<FModuleLike>, InnerSymbolTable,
        DeclareOpInterfaceMethods<HWModuleLike>]> {
   let summary = "FIRRTL Generated Module";
   let description = [{
@@ -177,7 +175,7 @@ def FMemModuleOp : FIRRTLOp<"memmodule",
 
   let extraClassDeclaration = [{
     /// Return true if this memory has a mask.
-    bool isMasked() { return maskBits() > 1; }
+    bool isMasked() { return getMaskBits() > 1; }
 
     /// Inserts the given ports.
     void insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);

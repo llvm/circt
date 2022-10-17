@@ -13,8 +13,9 @@
 #ifndef CIRCT_SUPPORT_LOWERINGOPTIONS_H
 #define CIRCT_SUPPORT_LOWERINGOPTIONS_H
 
-#include "circt/Support/LLVM.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Twine.h"
 
 namespace mlir {
 class ModuleOp;
@@ -25,14 +26,14 @@ namespace circt {
 /// Options which control the emission from CIRCT to Verilog.
 struct LoweringOptions {
   /// Error callback type used to indicate errors parsing the options string.
-  using ErrorHandlerT = function_ref<void(llvm::Twine)>;
+  using ErrorHandlerT = llvm::function_ref<void(llvm::Twine)>;
 
   /// Create a LoweringOptions with the default values.
   LoweringOptions() = default;
 
   /// Create a LoweringOptions and read in options from a string,
   /// overriding only the set options in the string.
-  LoweringOptions(StringRef options, ErrorHandlerT errorHandler);
+  LoweringOptions(llvm::StringRef options, ErrorHandlerT errorHandler);
 
   /// Create a LoweringOptions with values loaded from an MLIR ModuleOp. This
   /// loads a string attribute with the key `circt.loweringOptions`. If there is
@@ -42,11 +43,11 @@ struct LoweringOptions {
 
   /// Return the value of the `circt.loweringOptions` in the specified module
   /// if present, or a null attribute if not.
-  static StringAttr getAttributeFrom(ModuleOp module);
+  static mlir::StringAttr getAttributeFrom(mlir::ModuleOp module);
 
   /// Read in options from a string, overriding only the set options in the
   /// string.
-  void parse(StringRef options, ErrorHandlerT callback);
+  void parse(llvm::StringRef options, ErrorHandlerT callback);
 
   /// Returns a string representation of the options.
   std::string toString() const;
@@ -86,11 +87,6 @@ struct LoweringOptions {
   enum { DEFAULT_TERM_LIMIT = 256 };
   unsigned maximumNumberOfTermsPerExpression = DEFAULT_TERM_LIMIT;
 
-  /// This is the maximum number of terms in an expression used in a concat
-  /// before that expression spills a wire.
-  enum { DEFAULT_CONCAT_TERM_LIMIT = 10 };
-  unsigned maximumNumberOfTermsInConcat = DEFAULT_CONCAT_TERM_LIMIT;
-
   /// This is the target width of lines in an emitted Verilog source file in
   /// columns.
   enum { DEFAULT_LINE_LENGTH = 90 };
@@ -116,21 +112,30 @@ struct LoweringOptions {
 
   /// Print debug info.
   bool printDebugInfo = false;
+
+  /// This controls extra wire spilling performed in PrepareForEmission to
+  /// improve readablitiy and debuggability.
+  enum WireSpillingHeuristic : unsigned {
+    SpillLargeTermsWithNamehints = 1, // Spill wires for expressions with
+                                      // namehints if the term size is greater
+                                      // than `wireSpillingNamehintTermLimit`.
+    SpillAllMux = 1 << 1,             //  Spill wires for all ternary mux.
+  };
+
+  unsigned wireSpillingHeuristicSet = 0;
+
+  bool isWireSpillingHeuristicEnabled(WireSpillingHeuristic heurisic) const {
+    return static_cast<bool>(wireSpillingHeuristicSet & heurisic);
+  }
+
+  enum { DEFAULT_NAMEHINT_TERM_LIMIT = 3 };
+  unsigned wireSpillingNamehintTermLimit = DEFAULT_NAMEHINT_TERM_LIMIT;
+
+  /// If true, every expression passed to an instance port is driven by a wire.
+  /// Some lint tools dislike expressions being inlined into input ports so this
+  /// option avoids such warnings.
+  bool disallowExpressionInliningInPorts = false;
 };
-
-/// Register commandline options for the verilog emitter.
-void registerLoweringCLOptions();
-
-/// Apply any command line specified style options to the mlir module.
-void applyLoweringCLOptions(ModuleOp module);
-
-/// Get a lowering option from CLI option or module op. This function first
-/// tries constructing a lowering option from cli, and if it failed, lowering
-/// option associated with `module` is used. This function doesn't change an
-/// attribute of `module` so that it can be used by child operations of
-/// mlir::ModuleOp in multi-threading environment.
-LoweringOptions getLoweringCLIOption(ModuleOp module,
-                                     LoweringOptions::ErrorHandlerT);
 } // namespace circt
 
 #endif // CIRCT_SUPPORT_LOWERINGOPTIONS_H

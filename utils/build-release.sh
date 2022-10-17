@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 ##===- utils/build-release.sh - Build Release ----------------*- Script -*-===##
 # 
 # Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -41,6 +41,8 @@ cd ../circt && \
 cmake ../.. \
     -DMLIR_DIR=../llvm/lib/cmake/mlir \
     -DLLVM_DIR=../llvm/lib/cmake/llvm \
+    -DCMAKE_C_COMPILER=clang \
+    -DCMAKE_CXX_COMPILER=clang++ \
     -DLLVM_ENABLE_ASSERTIONS=OFF \
     -DCMAKE_BUILD_TYPE=RELEASE \
     -DLLVM_STATIC_LINK_CXX_STDLIB=ON \

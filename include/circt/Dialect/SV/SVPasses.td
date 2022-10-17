@@ -98,7 +98,9 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
                 "false", "Prepare seq mems for macro replacement">,
     Option<"ignoreReadEnableMem", "ignore-read-enable-mem", "bool",
                 "false",
-    "ignore the read enable signal, instead of assigning X on read disable">
+    "ignore the read enable signal, instead of assigning X on read disable">,
+    Option<"stripMuxPragmas", "strip-mux-pragmas", "bool", "false",
+            "Do not annotate mux pragmas to memory reads">
    ];
 }
 
@@ -112,6 +114,35 @@ def SVExtractTestCode : Pass<"sv-extract-test-code", "ModuleOp"> {
 
   let constructor = "circt::sv::createSVExtractTestCodePass()";
   let dependentDialects = ["circt::sv::SVDialect"];
+  let options = [
+    Option<"disableInstanceExtraction", "disable-instance-extraction", "bool",
+           "false", "Disable extracting instances only that feed test code">,
+    Option<"disableModuleInlining", "disable-module-inlining", "bool",
+           "false", "Disable inlining modules that only feed test code">
+  ];
+  let statistics = [
+    Statistic<"numOpsExtracted", "num-ops-extracted", "Number of ops extracted">,
+    Statistic<"numOpsErased", "num-ops-erased", "Number of ops erased">
+  ];
+}
+
+def SVTraceIVerilog : Pass<"sv-trace-iverilog", "ModuleOp"> {
+  let summary = "Add tracing to an iverilog simulated module";
+  let description = [{
+    This pass adds the necessary instrumentation to a HWModule to trigger
+    tracing in an iverilog simulation.
+  }];
+
+  let constructor = "circt::sv::createSVTraceIVerilogPass()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+  let options = [
+    Option<"topOnly", "top-only", "bool", "true",
+            "If true, will only add tracing to the top-level module.">,
+    Option<"targetModuleName", "module", "std::string", "",
+            "Module to trace. If not provided, will trace all modules">,
+    Option<"directoryName", "dir-name", "std::string", "\"./\"",
+            "Directory to emit into">
+  ];
 }
 
 def HWExportModuleHierarchy : Pass<"hw-export-module-hierarchy",

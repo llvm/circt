@@ -31,7 +31,7 @@ import "DPI-C" sv2cCosimserverFinish = function void cosim_finish();
 import "DPI-C" sv2cCosimserverEpRegister =
   function int cosim_ep_register(
     // The endpoint ID.
-    input int endpoint_id,
+    input string endpoint_id,
     // The capnp type id which the _RPC client_ is sending us.
     input longint send_type_id,
     // The send types max size, in bytes.
@@ -48,7 +48,7 @@ import "DPI-C" sv2cCosimserverEpRegister =
 import "DPI-C" sv2cCosimserverEpTryPut =
   function int cosim_ep_tryput(
     // The ID of the endpoint to which the data should be sent.
-    input int unsigned endpoint_id,
+    input string endpoint_id,
     // A data buffer.
     input byte unsigned data[],
     // (Optional) Size of the buffer. If negative, will be dynamically detected.
@@ -64,7 +64,7 @@ import "DPI-C" sv2cCosimserverEpTryPut =
 import "DPI-C" sv2cCosimserverEpTryGet =
   function int cosim_ep_tryget(
     // The ID of the endpoint from which data should be recieved.
-    input  int unsigned endpoint_id,
+    input string endpoint_id,
     // The buffer in which to put the data. This should be 'output', but the
     // open source simulator Verilator doesn't seem to have a way to do this.
     inout byte unsigned data[],

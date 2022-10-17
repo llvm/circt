@@ -1,17 +1,17 @@
-// RUN: circt-opt %s --firrtl-grand-central-taps --split-input-file | FileCheck %s
+// RUN: circt-opt %s --firrtl-grand-central-taps --symbol-dce --split-input-file | FileCheck %s
 
 firrtl.circuit "TestHarness" attributes {
   annotations = [{
     class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
     directory = "outputDirectory",
-    filename = "outputDirectory/bindings.sv"
+    filename = "bindings.sv"
   }]
 } {
-  // CHECK: firrtl.module @Bar
+  // CHECK: firrtl.module private @Bar
   // CHECK-SAME: in %clock: !firrtl.clock sym [[BAR_CLOCK:@[0-9a-zA-Z_]+]]
   // CHECK-SAME: in %reset: !firrtl.reset sym [[BAR_RESET:@[0-9a-zA-Z_]+]]
   // CHECK-NOT: class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source"
-  firrtl.module @Bar(
+  firrtl.module private @Bar(
     in %clock: !firrtl.clock,
     in %reset: !firrtl.reset,
     in %in: !firrtl.uint<1>,
@@ -71,6 +71,15 @@ firrtl.circuit "TestHarness" attributes {
       class = "firrtl.transforms.DontTouchAnnotation"
     }]} : !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
 
+    %array = firrtl.wire {annotations = [{
+      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source",
+      id = 0 : i64,
+      portID = 12 : i64,
+      circt.fieldID = 2
+    }, {
+      class = "firrtl.transforms.DontTouchAnnotation"
+    }]} : !firrtl.vector<uint<1>, 2>
+
     %mem_0 = firrtl.reg %clock  {annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 4 : i64, portID = 0 : i64}, {class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
     %mem_1 = firrtl.reg %clock  {annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 4 : i64, portID = 1 : i64}, {class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
     // CHECK:   %mem_0 = firrtl.reg sym @[[gct_sym_5:.+]] %clock  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
@@ -96,7 +105,7 @@ firrtl.circuit "TestHarness" attributes {
     firrtl.connect %out, %wire : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  firrtl.module @Foo(
+  firrtl.module private @Foo(
     in %clock: !firrtl.clock,
     in %reset: !firrtl.reset,
     in %in: !firrtl.uint<1>,
@@ -110,7 +119,7 @@ firrtl.circuit "TestHarness" attributes {
     firrtl.connect %out, %bar_out : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  // CHECK: firrtl.module @[[DT:DataTap.*]](
+  // CHECK: firrtl.module private @[[DT:DataTap.*]](
   // CHECK-SAME: out %_10: !firrtl.uint<4>
   // CHECK-SAME: out %_9: !firrtl.uint<1>
   // CHECK-SAME: out %_8: !firrtl.sint<8>
@@ -122,7 +131,12 @@ firrtl.circuit "TestHarness" attributes {
   // CHECK-SAME: out %_2: !firrtl.uint<1>
   // CHECK-SAME: out %_1: !firrtl.clock
   // CHECK-SAME: out %_0: !firrtl.uint<1>
-  // CHECK-SAME: #hw.output_file<"outputDirectory/[[DT]].sv">
+  // CHECK-SAME: #hw.output_file<"outputDirectory{{[/\]}}[[DT]].sv">
+  // CHECK-NEXT: [[V11:%.+]] = firrtl.verbatim.expr
+  // CHECK-SAME{LITERAL}: "{{0}}.{{1}}.{{2}}.{{3}}[1]"
+  // CHECK-SAME:   @TestHarness,
+  // CHECK-SAME:   #hw.innerNameRef<@TestHarness::[[HARNESSWIRE:@[0-9a-zA-Z_]+]]>
+  // CHECK-NEXT: firrtl.connect %_11, [[V11]]
   // CHECK-NEXT: [[V10:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}}.{{[{][{]1[}][}]}}"
   // CHECK-SAME:   @TestHarness,
   // CHECK-SAME:   #hw.innerNameRef<@TestHarness::[[HARNESSWIRE:@[0-9a-zA-Z_]+]]>
@@ -176,7 +190,8 @@ firrtl.circuit "TestHarness" attributes {
   // CHECK-SAME:   #hw.innerNameRef<@Foo::[[BAR]]>,
   // CHECK-SAME:   #hw.innerNameRef<@Bar::[[WIRE]]>
   // CHECK-NEXT: firrtl.connect %_0, [[V0]]
-  firrtl.extmodule @DataTap(
+  firrtl.extmodule private @DataTap(
+    out _11: !firrtl.uint<1>,
     out _10: !firrtl.uint<4>,
     out _9: !firrtl.uint<1>,
     out _8: !firrtl.sint<8>,
@@ -194,6 +209,7 @@ firrtl.circuit "TestHarness" attributes {
       { class = "firrtl.transforms.NoDedupAnnotation" }
     ],
     portAnnotations = [
+      [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port", id = 0 : i64, portID = 12 : i64}],
       [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port", id = 0 : i64, portID = 11 : i64}],
       [{class = "sifive.enterprise.grandcentral.LiteralDataTapKey", literal = "UInt<1>(\"h0\")", id = 0 : i64, portID = 10 : i64 }],
       [{class = "sifive.enterprise.grandcentral.LiteralDataTapKey", literal = "SInt<8>(\"h-2A\")", id = 0 : i64, portID = 9 : i64 }],
@@ -209,12 +225,12 @@ firrtl.circuit "TestHarness" attributes {
     defname = "DataTap"
   }
 
-  // CHECK: firrtl.module @[[MT:MemTap.*]](
+  // CHECK: firrtl.module private @[[MT:MemTap.*]](
   // CHECK-NOT: class = "sifive.enterprise.grandcentral.MemTapAnnotation.port"
   // CHECK-SAME: out %mem_0: !firrtl.uint<1>
   // CHECK-SAME: out %mem_1: !firrtl.uint<1>
   // CHECK-SAME: class = "firrtl.transforms.NoDedupAnnotation"
-  // CHECK-SAME: #hw.output_file<"outputDirectory/[[MT]].sv">
+  // CHECK-SAME: #hw.output_file<"outputDirectory{{[/\]}}[[MT]].sv">
   // CHECK-NEXT: [[V0:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}}.{{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}}"
   // CHECK-SAME:   @TestHarness,
   // CHECK-SAME:   #hw.innerNameRef<@TestHarness::[[FOO]]>,
@@ -227,7 +243,7 @@ firrtl.circuit "TestHarness" attributes {
   // CHECK-SAME:   #hw.innerNameRef<@Foo::[[BAR]]>,
   // CHECK-SAME:   #hw.innerNameRef<@Bar::@[[gct_sym_6]]>
   // CHECK-NEXT: firrtl.connect %mem_1, [[V1:%.+]]
-  firrtl.extmodule @MemTap(
+  firrtl.extmodule private @MemTap(
     out mem_0: !firrtl.uint<1>,
     out mem_1: !firrtl.uint<1>
   ) attributes {
@@ -241,12 +257,12 @@ firrtl.circuit "TestHarness" attributes {
     defname = "MemTap"
   }
 
-  // CHECK: firrtl.module @[[MT2:MemTap2.*]](
+  // CHECK: firrtl.module private @[[MT2:MemTap2.*]](
   // CHECK-NOT: class = "sifive.enterprise.grandcentral.MemTapAnnotation.port"
   // CHECK-SAME: out %mem_0: !firrtl.uint<1>
   // CHECK-SAME: out %mem_1: !firrtl.uint<1>
   // CHECK-SAME: class = "firrtl.transforms.NoDedupAnnotation"
-  // CHECK-SAME: #hw.output_file<"outputDirectory/[[MT2]].sv">
+  // CHECK-SAME: #hw.output_file<"outputDirectory{{[/\]}}[[MT2]].sv">
   // CHECK-NEXT: [[V0:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}}.{{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}}.Memory[0]"
   // CHECK-SAME:   @TestHarness,
   // CHECK-SAME:   #hw.innerNameRef<@TestHarness::[[FOO]]>,
@@ -259,7 +275,7 @@ firrtl.circuit "TestHarness" attributes {
   // CHECK-SAME:   #hw.innerNameRef<@Foo::[[BAR]]>,
   // CHECK-SAME:   #hw.innerNameRef<@Bar::@[[gct_sym_7]]>
   // CHECK-NEXT: firrtl.connect %mem_1, [[V1:%.+]]
-  firrtl.extmodule @MemTap2(
+  firrtl.extmodule private @MemTap2(
     out mem_0: !firrtl.uint<1>,
     out mem_1: !firrtl.uint<1>
   ) attributes {
@@ -273,9 +289,9 @@ firrtl.circuit "TestHarness" attributes {
     defname = "MemTap2"
   }
 
-  // CHECK-LABEL: firrtl.extmodule @BlackHole()
+  // CHECK-LABEL: firrtl.extmodule private @BlackHole()
   // CHECK-NOT: class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey.source"
-  firrtl.extmodule @BlackHole() attributes {
+  firrtl.extmodule private @BlackHole() attributes {
     annotations = [{
       class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey.source",
       internalPath = "schwarzschild.no.more",
@@ -283,9 +299,9 @@ firrtl.circuit "TestHarness" attributes {
       portID = 4 : i64 }]
   }
 
-  // CHECK-LABEL: firrtl.extmodule @ExtmoduleWithTappedPort
+  // CHECK-LABEL: firrtl.extmodule private @ExtmoduleWithTappedPort
   // CHECK-SAME: out out: !firrtl.uint<1> sym [[EXTMODULEWITHTAPPEDPORTOUT]]
-  firrtl.extmodule @ExtmoduleWithTappedPort(
+  firrtl.extmodule private @ExtmoduleWithTappedPort(
     out out: !firrtl.uint<1>) attributes {portAnnotations = [[{
       class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source",
       id = 0 : i64,
@@ -315,7 +331,7 @@ firrtl.circuit "TestHarness" attributes {
     // CHECK: firrtl.instance extmoduleWithTappedPort sym [[EXTMODULEWITHTAPPEDPORT]]
     %0 = firrtl.instance extmoduleWithTappedPort @ExtmoduleWithTappedPort(out out: !firrtl.uint<1>)
     // CHECK: firrtl.instance dataTap @[[DT]]
-    %DataTap_10, %DataTap_9, %DataTap_8, %DataTap_7, %DataTap_6, %DataTap_5, %DataTap_4, %DataTap_3, %DataTap_2, %DataTap_1, %DataTap_0 = firrtl.instance dataTap @DataTap(out _10: !firrtl.uint<4>, out _9: !firrtl.uint<1>, out _8: !firrtl.sint<8>, out _7: !firrtl.uint<1>, out _6: !firrtl.uint<1>, out _5: !firrtl.uint<1>, out _4: !firrtl.uint<1>, out _3: !firrtl.uint<1>, out _2: !firrtl.uint<1>, out _1: !firrtl.clock, out _0: !firrtl.uint<1>)
+    %DataTap_11, %DataTap_10, %DataTap_9, %DataTap_8, %DataTap_7, %DataTap_6, %DataTap_5, %DataTap_4, %DataTap_3, %DataTap_2, %DataTap_1, %DataTap_0 = firrtl.instance dataTap @DataTap(out _11: !firrtl.uint<1>, out _10: !firrtl.uint<4>, out _9: !firrtl.uint<1>, out _8: !firrtl.sint<8>, out _7: !firrtl.uint<1>, out _6: !firrtl.uint<1>, out _5: !firrtl.uint<1>, out _4: !firrtl.uint<1>, out _3: !firrtl.uint<1>, out _2: !firrtl.uint<1>, out _1: !firrtl.clock, out _0: !firrtl.uint<1>)
     // CHECK: firrtl.instance memTap @[[MT]]
     // CHECK: firrtl.instance memTap2 @[[MT2]]
     %MemTap_mem_0, %MemTap_mem_1 = firrtl.instance memTap @MemTap(out mem_0: !firrtl.uint<1>, out mem_1: !firrtl.uint<1>)
@@ -333,10 +349,10 @@ firrtl.circuit "NLAGarbageCollection" {
   // CHECK-NOT: @nla_1
   // CHECK-NOT: @nla_2
   // CHECK-NOT: @nla_3
-  firrtl.hierpath @nla_1 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@foo]
-  firrtl.hierpath @nla_2 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@port]
-  firrtl.hierpath @nla_3 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@bar_0]
-  firrtl.module @Submodule(
+  firrtl.hierpath private @nla_1 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@foo]
+  firrtl.hierpath private @nla_2 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@port]
+  firrtl.hierpath private @nla_3 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@bar_0]
+  firrtl.module private @Submodule(
     in %port: !firrtl.uint<1> sym @port [
       {circt.nonlocal = @nla_2,
        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source",
@@ -354,14 +370,14 @@ firrtl.circuit "NLAGarbageCollection" {
     %bar_out_MPORT_clk = firrtl.wire  : !firrtl.clock
     %bar_0 = firrtl.reg sym @bar_0 %bar_out_MPORT_clk  {annotations = [{circt.nonlocal = @nla_3, class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 0 : i64, portID = 0 : i64}]} : !firrtl.uint<1>
     // CHECK:  %bar_0 = firrtl.reg sym @[[bar_0:.+]] %bar_out_MPORT_clk  : !firrtl.uint<1>
-    %bar_out_MPORT = firrtl.mem sym Undefined {
+    %bar_out_MPORT = firrtl.mem Undefined {
       depth = 1 : i64,
       name = "bar",
       portNames = ["out_MPORT"],
       readLatency = 0 : i32,
       writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
   }
-  firrtl.extmodule @MemTap(
+  firrtl.extmodule private @MemTap(
     out mem_0: !firrtl.uint<1> [
       {class = "sifive.enterprise.grandcentral.MemTapAnnotation.port",
        id = 0 : i64,
@@ -371,7 +387,7 @@ firrtl.circuit "NLAGarbageCollection" {
       {class = "firrtl.transforms.NoDedupAnnotation"}],
     defname = "MemTap"
   }
-  firrtl.extmodule @DataTap_1(
+  firrtl.extmodule private @DataTap_1(
     out _1: !firrtl.uint<1> sym @_1 [
       {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port",
        id = 1 : i64,
@@ -386,27 +402,17 @@ firrtl.circuit "NLAGarbageCollection" {
       {class = "firrtl.transforms.DontTouchAnnotation"},
       {class = "firrtl.transforms.NoDedupAnnotation"}],
     defname = "DataTap_1"}
-  firrtl.module @DUT() attributes {
+  firrtl.module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
     ]
   } {
-    %submodule_port = firrtl.instance submodule sym @submodule  {
-      annotations = [
-        {circt.nonlocal = @nla_1, class = "circt.nonlocal"},
-        {circt.nonlocal = @nla_2, class = "circt.nonlocal"},
-        {circt.nonlocal = @nla_3, class = "circt.nonlocal"}]
-    } @Submodule(in port : !firrtl.uint<1>)
+    %submodule_port = firrtl.instance submodule sym @submodule @Submodule(in port : !firrtl.uint<1>)
     %MemTap_0 = firrtl.instance mem_tap_MemTap  @MemTap(out mem_0: !firrtl.uint<1>)
     %DataTap_0, %DataTap_1 = firrtl.instance DataTap_1  @DataTap_1(out _1: !firrtl.uint<1>, out _0: !firrtl.uint<1>)
   }
   firrtl.module @NLAGarbageCollection() {
-    firrtl.instance dut sym @dut {
-      annotations = [
-        {circt.nonlocal = @nla_1, class = "circt.nonlocal"},
-        {circt.nonlocal = @nla_2, class = "circt.nonlocal"},
-        {circt.nonlocal = @nla_3, class = "circt.nonlocal"}]
-    } @DUT()
+    firrtl.instance dut sym @dut @DUT()
   }
 }
 
@@ -419,10 +425,10 @@ firrtl.circuit "NLAGarbageCollection" {
 firrtl.circuit "NLAUsedInWiring"  {
   // CHECK-NOT: @nla_1
   // CHECK-NOT: @nla_2
-  firrtl.hierpath @nla_1 [@NLAUsedInWiring::@foo, @Foo::@f]
-  firrtl.hierpath @nla_2 [@NLAUsedInWiring::@foo, @Foo::@g]
+  firrtl.hierpath private @nla_1 [@NLAUsedInWiring::@foo, @Foo::@f]
+  firrtl.hierpath private @nla_2 [@NLAUsedInWiring::@foo, @Foo::@g]
 
-  // CHECK-LABEL: firrtl.module @DataTap
+  // CHECK-LABEL: firrtl.module private @DataTap
   // CHECK-NEXT: [[TMP:%.+]] = firrtl.verbatim.expr
   // CHECK-SAME:   symbols = [@NLAUsedInWiring, #hw.innerNameRef<@NLAUsedInWiring::@foo>, #hw.innerNameRef<@Foo::@f>]
   // CHECK-NEXT: firrtl.connect %b, [[TMP]] : !firrtl.uint<1>, !firrtl.uint<1>
@@ -432,7 +438,7 @@ firrtl.circuit "NLAUsedInWiring"  {
   // CHECK-NEXT: [[TMP:%.+]] = firrtl.verbatim.expr
   // CHECK-SAME:   symbols = [@NLAUsedInWiring, #hw.innerNameRef<@NLAUsedInWiring::@k>]
   // CHECK-NEXT: firrtl.connect %d, [[TMP]] : !firrtl.uint<1>, !firrtl.uint<1>
-  firrtl.extmodule @DataTap(
+  firrtl.extmodule private @DataTap(
     out b: !firrtl.uint<1> sym @b [{
       class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port",
       id = 0 : i64,
@@ -453,7 +459,7 @@ firrtl.circuit "NLAUsedInWiring"  {
     defname = "DataTap"
   }
 
-  firrtl.module @Foo(
+  firrtl.module private @Foo(
     out %g: !firrtl.uint<1> sym @g [{
       circt.nonlocal = @nla_2,
       class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source",
@@ -467,16 +473,10 @@ firrtl.circuit "NLAUsedInWiring"  {
       id = 0 : i64,
       portID = 1 : i64
     }]} : !firrtl.uint<1>
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    firrtl.connect %g, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %f, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
   firrtl.module @NLAUsedInWiring() {
-    %foo_g = firrtl.instance foo sym @foo {annotations = [
-      {circt.nonlocal = @nla_1, class = "circt.nonlocal"},
-      {circt.nonlocal = @nla_2, class = "circt.nonlocal"}
-    ]} @Foo(out g: !firrtl.uint<1>)
+    %foo_g = firrtl.instance foo sym @foo @Foo(out g: !firrtl.uint<1>)
     %bar_g = firrtl.instance bar @Foo(out g: !firrtl.uint<1>)
     %k = firrtl.wire sym @k {annotations = [{
       class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source",
@@ -484,8 +484,6 @@ firrtl.circuit "NLAUsedInWiring"  {
       portID = 3 : i64
     }]} : !firrtl.uint<1>
     %dataTap_b, %dataTap_c, %dataTap_d = firrtl.instance dataTap @DataTap(out b: !firrtl.uint<1>, out c: !firrtl.uint<1>, out d: !firrtl.uint<1>)
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    firrtl.connect %k, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 
@@ -495,9 +493,9 @@ firrtl.circuit "NLAUsedInWiring"  {
 // See https://github.com/llvm/circt/issues/2767.
 
 firrtl.circuit "Top" {
-  firrtl.hierpath @nla_0 [@DUT::@submodule_1, @Submodule::@bar_0]
-  firrtl.hierpath @nla [@DUT::@submodule_2, @Submodule::@bar_0]
-  firrtl.module @Submodule(in %clock: !firrtl.clock, out %out: !firrtl.uint<1>) {
+  firrtl.hierpath private @nla_0 [@DUT::@submodule_1, @Submodule::@bar_0]
+  firrtl.hierpath private @nla [@DUT::@submodule_2, @Submodule::@bar_0]
+  firrtl.module private @Submodule(in %clock: !firrtl.clock, out %out: !firrtl.uint<1>) {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %bar_0 = firrtl.reg sym @bar_0 %clock  {annotations = [{circt.nonlocal = @nla, class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 1 : i64, portID = 0 : i64}, {circt.nonlocal = @nla_0, class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 0 : i64, portID = 0 : i64}]} : !firrtl.uint<1>
@@ -512,10 +510,10 @@ firrtl.circuit "Top" {
     firrtl.strictconnect %2, %clock : !firrtl.clock
     firrtl.strictconnect %out, %3 : !firrtl.uint<1>
   }
-  firrtl.module @DUT(in %clock: !firrtl.clock, out %out: !firrtl.uint<1>) {
-    %submodule_1_clock, %submodule_1_out = firrtl.instance submodule_1 sym @submodule_1  {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @Submodule(in clock: !firrtl.clock, out out: !firrtl.uint<1>)
+  firrtl.module private @DUT(in %clock: !firrtl.clock, out %out: !firrtl.uint<1>) {
+    %submodule_1_clock, %submodule_1_out = firrtl.instance submodule_1 sym @submodule_1 @Submodule(in clock: !firrtl.clock, out out: !firrtl.uint<1>)
     firrtl.strictconnect %submodule_1_clock, %clock : !firrtl.clock
-    %submodule_2_clock, %submodule_2_out = firrtl.instance submodule_2 sym @submodule_2  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @Submodule(in clock: !firrtl.clock, out out: !firrtl.uint<1>)
+    %submodule_2_clock, %submodule_2_out = firrtl.instance submodule_2 sym @submodule_2 @Submodule(in clock: !firrtl.clock, out out: !firrtl.uint<1>)
     firrtl.strictconnect %submodule_2_clock, %clock : !firrtl.clock
     %0 = firrtl.or %submodule_1_out, %submodule_2_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.strictconnect %out, %0 : !firrtl.uint<1>
@@ -528,14 +526,14 @@ firrtl.circuit "Top" {
     firrtl.strictconnect %out, %dut_out : !firrtl.uint<1>
   }
 
-  // CHECK-LABEL: firrtl.module @MemTap_1_impl_0
+  // CHECK-LABEL: firrtl.module private @MemTap_1_impl_0
   // CHECK-NEXT{LITERAL}: firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}"
   // CHECK-SAME: symbols = [@DUT, #hw.innerNameRef<@DUT::@submodule_1>, #hw.innerNameRef<@Submodule::@[[bar_0]]>]
-  firrtl.extmodule @MemTap_1(out mem_0: !firrtl.uint<1> [{class = "sifive.enterprise.grandcentral.MemTapAnnotation.port", id = 0 : i64, portID = 0 : i64}]) attributes {defname = "MemTap"}
-  // CHECK-LABEL: firrtl.module @MemTap_2_impl_0
+  firrtl.extmodule private @MemTap_1(out mem_0: !firrtl.uint<1> [{class = "sifive.enterprise.grandcentral.MemTapAnnotation.port", id = 0 : i64, portID = 0 : i64}]) attributes {defname = "MemTap"}
+  // CHECK-LABEL: firrtl.module private @MemTap_2_impl_0
   // CHECK-NEXT{LITERAL}: firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}"
   // CHECK-SAME: symbols = [@DUT, #hw.innerNameRef<@DUT::@submodule_2>, #hw.innerNameRef<@Submodule::@[[bar_0]]>]
-  firrtl.extmodule @MemTap_2(out mem_0: !firrtl.uint<1> [{class = "sifive.enterprise.grandcentral.MemTapAnnotation.port", id = 1 : i64, portID = 0 : i64}]) attributes {defname = "MemTap"}
+  firrtl.extmodule private @MemTap_2(out mem_0: !firrtl.uint<1> [{class = "sifive.enterprise.grandcentral.MemTapAnnotation.port", id = 1 : i64, portID = 0 : i64}]) attributes {defname = "MemTap"}
 }
 
 // -----
@@ -554,12 +552,88 @@ firrtl.circuit "Top" {
     firrtl.instance dut @DUT()
   }
 }
-// ---
-// The HierpathOps that should be updated to end on a module:
-//  firrtl.hierpath @nla_1 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule]
-//  firrtl.hierpath @nla_2 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule]
-//  firrtl.hierpath @nla_3 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule]
-//  firrtl.hierpath @nla_1 [@NLAUsedInWiring::@foo, @Foo]
-//  firrtl.hierpath @nla_2 [@NLAUsedInWiring::@foo, @Foo]
-//  firrtl.hierpath @nla_0 [@DUT::@submodule_1, @Submodule]
-//  firrtl.hierpath @nla [@DUT::@submodule_2, @Submodule]
+
+// -----
+
+// Check that zero-width data taps are no-ops.  These should generate no XMRs.
+//
+firrtl.circuit "Top"  {
+  firrtl.extmodule private @DataTap(
+    out _0: !firrtl.uint<0> [
+      {
+        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port",
+        id = 0 : i64,
+        portID = 1 : i64
+      }
+    ],
+    out _1: !firrtl.uint<0> [
+      {
+        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port",
+        id = 0 : i64,
+        portID = 2 : i64
+      }
+    ]) attributes {annotations = [
+      {class = "sifive.enterprise.grandcentral.DataTapsAnnotation.blackbox"}
+    ]}
+  firrtl.module @Top(
+    out %p: !firrtl.uint<0> [
+      {
+        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source",
+        id = 0 : i64,
+        portID = 2 : i64
+      }
+    ]) {
+    %w = firrtl.wire {annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source",
+        id = 0 : i64,
+        portID = 1 : i64
+      }
+    ]} : !firrtl.uint<0>
+    %tap_0, %tap_1 = firrtl.instance tap @DataTap(
+      out _0: !firrtl.uint<0>,
+      out _1: !firrtl.uint<0>
+    )
+  }
+}
+
+// CHECK-NOT: firrtl.verbatim.expr
+
+// -----
+
+// Check that constants are sunk into XMRs and symbols are not unnecessarily
+// created.
+//
+// CHECK-LABEL: "ConstantSinking"
+firrtl.circuit "ConstantSinking"  {
+  // CHECK:      firrtl.module private @DataTap
+  // CHECK-NEXT:   %[[one:.+]] = firrtl.constant 1
+  // CHECK-NEXT:   firrtl.connect %a, %[[one]]
+  firrtl.extmodule private @DataTap(
+    out a: !firrtl.uint<1> [
+      {
+        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port",
+        id = 0 : i64,
+        portID = 1 : i64
+      }
+    ]) attributes {annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.DataTapsAnnotation.blackbox"
+      }
+    ]}
+  // CHECK: firrtl.module @ConstantSinking
+  firrtl.module @ConstantSinking() {
+    %dataTap_a = firrtl.instance dataTap interesting_name  @DataTap(out a: !firrtl.uint<1>)
+    // CHECK:    %w = firrtl.wire
+    // CHECK-NOT   sym
+    %w = firrtl.wire {annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source",
+        id = 0 : i64,
+        portID = 1 : i64
+      }
+    ]} : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.strictconnect %w, %c1_ui1 : !firrtl.uint<1>
+  }
+}

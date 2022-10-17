@@ -28,9 +28,27 @@ std::unique_ptr<mlir::Pass>
 createLowerFIRRTLAnnotationsPass(bool ignoreUnhandledAnnotations = false,
                                  bool ignoreClasslessAnnotations = false);
 
-std::unique_ptr<mlir::Pass>
-createLowerFIRRTLTypesPass(bool preserveAggregate = false,
-                           bool preservePublicTypes = true);
+/// Configure which aggregate values will be preserved by the LowerTypes pass.
+namespace PreserveAggregate {
+enum PreserveMode {
+  /// Don't preserve aggregate at all. This has been default behaivor and
+  /// compatible with SFC.
+  None,
+
+  /// Preserve only 1d vectors of ground type (e.g. UInt<2>[3]).
+  OneDimVec,
+
+  /// Preserve only vectors (e.g. UInt<2>[3][3]).
+  Vec,
+
+  /// Preserve all aggregate values.
+  All,
+};
+}
+
+std::unique_ptr<mlir::Pass> createLowerFIRRTLTypesPass(
+    PreserveAggregate::PreserveMode mode = PreserveAggregate::None,
+    bool preservePublicTypes = true);
 
 std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
 
@@ -47,8 +65,8 @@ std::unique_ptr<mlir::Pass> createInferReadWritePass();
 
 std::unique_ptr<mlir::Pass>
 createCreateSiFiveMetadataPass(bool replSeqMem = false,
-                               StringRef replSeqMemCircuit = "",
-                               StringRef replSeqMemFile = "");
+                               mlir::StringRef replSeqMemCircuit = "",
+                               mlir::StringRef replSeqMemFile = "");
 
 std::unique_ptr<mlir::Pass> createWireDFTPass();
 
@@ -56,7 +74,8 @@ std::unique_ptr<mlir::Pass> createAddSeqMemPortsPass();
 
 std::unique_ptr<mlir::Pass> createDedupPass();
 
-std::unique_ptr<mlir::Pass> createEmitOMIRPass(StringRef outputFilename = "");
+std::unique_ptr<mlir::Pass>
+createEmitOMIRPass(mlir::StringRef outputFilename = "");
 
 std::unique_ptr<mlir::Pass> createExpandWhensPass();
 
@@ -78,14 +97,14 @@ std::unique_ptr<mlir::Pass> createPrintInstanceGraphPass();
 std::unique_ptr<mlir::Pass> createPrintNLATablePass();
 
 std::unique_ptr<mlir::Pass>
-createBlackBoxReaderPass(llvm::Optional<StringRef> inputPrefix = {});
+createBlackBoxReaderPass(llvm::Optional<mlir::StringRef> inputPrefix = {});
 
 std::unique_ptr<mlir::Pass> createGrandCentralPass();
 
 std::unique_ptr<mlir::Pass> createGrandCentralTapsPass();
 
 std::unique_ptr<mlir::Pass>
-createGrandCentralSignalMappingsPass(StringRef outputFilename = "");
+createGrandCentralSignalMappingsPass(mlir::StringRef outputFilename = "");
 
 std::unique_ptr<mlir::Pass> createCheckCombCyclesPass();
 
@@ -96,12 +115,31 @@ createMergeConnectionsPass(bool enableAggressiveMerging = false);
 
 std::unique_ptr<mlir::Pass> createInjectDUTHierarchyPass();
 
-std::unique_ptr<mlir::Pass> createDropNamesPass();
+/// Configure which values will be explicitly preserved by the DropNames pass.
+namespace PreserveValues {
+enum PreserveMode {
+  /// Don't explicitly preserve any named values. Every named operation could
+  /// be optimized away by the compiler.
+  None,
+  // Explicitly preserved values with meaningful names.  If a name begins with
+  // an "_" it is not considered meaningful.
+  Named,
+  // Explicitly preserve all values.  No named operation should be optimized
+  // away by the compiler.
+  All,
+};
+}
+
+std::unique_ptr<mlir::Pass>
+createDropNamesPass(PreserveValues::PreserveMode mode = PreserveValues::None);
 
 std::unique_ptr<mlir::Pass> createExtractInstancesPass();
 
 std::unique_ptr<mlir::Pass> createIMDeadCodeElimPass();
 
+std::unique_ptr<mlir::Pass> createRandomizeRegisterInitPass();
+
+std::unique_ptr<mlir::Pass> createLowerXMRPass();
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/FIRRTL/Passes.h.inc"

@@ -163,10 +163,7 @@ firrtl.circuit "DontTouchAggregate" {
 
 firrtl.circuit "OutPortTop" {
   // Check that we don't propagate througth it.
-  firrtl.module @OutPortChild(out %out: !firrtl.vector<uint<1>, 2>) attributes {
-    portAnnotations = [[]],
-    portSyms = ["dntSym"]
-  }
+  firrtl.module @OutPortChild(out %out: !firrtl.vector<uint<1>, 2> sym @dntSym)
   {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %0 = firrtl.subindex %out[0] : !firrtl.vector<uint<1>, 2>
@@ -196,9 +193,9 @@ firrtl.circuit "InputPortTop"  {
     firrtl.strictconnect %2, %3 : !firrtl.uint<1>
   }
   // CHECK-LABEL: firrtl.module @InputPortChild
-  firrtl.module @InputPortChild(in %in0: !firrtl.bundle<v: uint<1>>, in %in1: !firrtl.bundle<v: uint<1>>, out %out: !firrtl.bundle<v: uint<1>>) attributes {
-    portAnnotations = [[], [], []], portSyms = ["", "dntSym", ""]
-  }
+  firrtl.module @InputPortChild(in %in0: !firrtl.bundle<v: uint<1>>,
+    in %in1: !firrtl.bundle<v: uint<1>> sym @dntSym,
+    out %out: !firrtl.bundle<v: uint<1>>)
   {
     %0 = firrtl.subfield %in1(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
     %1 = firrtl.subfield %in0(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
@@ -385,9 +382,32 @@ firrtl.circuit "dntOutput"  {
     %2 = firrtl.mux(%c, %1, %c2_ui3) : (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
     firrtl.strictconnect %0, %2 : !firrtl.uint<3>
   }
-  firrtl.module @foo(out %b: !firrtl.bundle<v: uint<3>>) attributes {portSyms = ["dntSym1"] }{
+  firrtl.module @foo(out %b: !firrtl.bundle<v: uint<3>> sym @dntSym1){
     %c1_ui3 = firrtl.constant 1 : !firrtl.uint<3>
     %0 = firrtl.subfield %b(0) : (!firrtl.bundle<v: uint<3>>) -> !firrtl.uint<3>
     firrtl.strictconnect %0, %c1_ui3 : !firrtl.uint<3>
+  }
+}
+
+// -----
+// Issue #3820.
+firrtl.circuit "Foo"  {
+  // CHECK-LABEL: firrtl.module private @Bar
+  firrtl.module private @Bar(in %a: !firrtl.vector<uint<1>, 1>, in %clock: !firrtl.clock, out %b: !firrtl.uint<1>) {
+    %0 = firrtl.subindex %a[0] : !firrtl.vector<uint<1>, 1>
+    %r = firrtl.reg  %clock  {firrtl.random_init_start = 0 : ui64} : !firrtl.uint<1>
+    firrtl.strictconnect %r, %0 : !firrtl.uint<1>
+    firrtl.strictconnect %b, %r : !firrtl.uint<1>
+    // CHECK: %r = firrtl.reg
+    // CHECK: firrtl.strictconnect %b, %r
+  }
+  // CHECK-LABEL: firrtl.module @Foo
+  firrtl.module @Foo(in %in: !firrtl.uint<1>, in %clock: !firrtl.clock, out %out: !firrtl.uint<1>) {
+    %bar_a, %bar_clock, %bar_b = firrtl.instance bar  @Bar(in a: !firrtl.vector<uint<1>, 1>, in clock: !firrtl.clock, out b: !firrtl.uint<1>)
+    %0 = firrtl.subindex %bar_a[0] : !firrtl.vector<uint<1>, 1>
+    firrtl.strictconnect %0, %in : !firrtl.uint<1>
+    firrtl.strictconnect %bar_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %out, %bar_b : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %out, %bar_b
   }
 }

@@ -29,7 +29,7 @@ struct CircuitNamespace : public Namespace {
   /// composed of any operation in the first level of the circuit that contains
   /// a symbol.
   void add(CircuitOp circuit) {
-    for (auto &op : *circuit.getBody())
+    for (auto &op : *circuit.getBodyBlock())
       if (auto symbol = op.getAttrOfType<mlir::StringAttr>(
               SymbolTable::getSymbolAttrName()))
         nextIndex.insert({symbol.getValue(), 0});
@@ -51,15 +51,23 @@ struct ModuleNamespace : public Namespace {
 
   /// Populate the namespace with the ports of a module-like operation.
   void addPorts(FModuleLike module) {
-    for (auto portSymbol : module.getPortSymbolsAttr().getAsRange<StringAttr>())
-      if (!portSymbol.getValue().empty())
-        nextIndex.insert({portSymbol.getValue(), 0});
+    for (auto portSymbol : module.getPortSymbolsAttr())
+      if (portSymbol)
+        static_cast<void>(
+            portSymbol.cast<InnerSymAttr>().walkSymbols([&](StringAttr sName) {
+              nextIndex.insert({sName.getValue(), 0});
+              return success();
+            }));
   }
 
   void addPorts(ArrayRef<PortInfo> ports) {
     for (auto port : ports)
       if (port.sym)
-        nextIndex.insert({port.sym.getValue(), 0});
+        static_cast<void>(
+            port.sym.cast<InnerSymAttr>().walkSymbols([&](StringAttr symName) {
+              nextIndex.insert({symName.getValue(), 0});
+              return success();
+            }));
   }
 
   /// Populate the namespace with the body of a module-like operation.

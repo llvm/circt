@@ -90,7 +90,7 @@ static ParseResult parseNameKind(OpAsmParser &parser,
   if (!parser.parseOptionalKeyword(&keyword,
                                    {"interesting_name", "droppable_name"})) {
     auto kind = symbolizeNameKindEnum(keyword);
-    result = NameKindEnumAttr::get(parser.getContext(), kind.getValue());
+    result = NameKindEnumAttr::get(parser.getContext(), kind.value());
     return success();
   }
 
@@ -139,25 +139,25 @@ LogicalResult MemoryPortOp::inferReturnTypes(MLIRContext *context,
 LogicalResult MemoryPortOp::verify() {
   // MemoryPorts require exactly 1 access. Right now there are no other
   // operations that could be using that value due to the types.
-  if (!port().hasOneUse())
+  if (!getPort().hasOneUse())
     return emitOpError("port should be used by a chirrtl.memoryport.access");
   return success();
 }
 
 MemoryPortAccessOp MemoryPortOp::getAccess() {
-  auto uses = port().use_begin();
-  if (uses == port().use_end())
+  auto uses = getPort().use_begin();
+  if (uses == getPort().use_end())
     return {};
   return cast<MemoryPortAccessOp>(uses->getOwner());
 }
 
 void MemoryPortOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
-  StringRef base = name();
+  StringRef base = getName();
   if (base.empty())
     base = "memport";
-  setNameFn(data(), (base + "_data").str());
-  setNameFn(port(), (base + "_port").str());
+  setNameFn(getData(), (base + "_data").str());
+  setNameFn(getPort(), (base + "_port").str());
 }
 
 static ParseResult parseMemoryPortOp(OpAsmParser &parser,
@@ -182,6 +182,61 @@ static void printMemoryPortOp(OpAsmPrinter &p, Operation *op,
 }
 
 //===----------------------------------------------------------------------===//
+// MemoryDebugPortOp
+//===----------------------------------------------------------------------===//
+
+void MemoryDebugPortOp::build(OpBuilder &builder, OperationState &result,
+                              Type dataType, Value memory, StringRef name,
+                              ArrayRef<Attribute> annotations) {
+  build(builder, result, dataType, memory, name,
+        builder.getArrayAttr(annotations));
+}
+
+LogicalResult MemoryDebugPortOp::inferReturnTypes(
+    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::RegionRange regions,
+    SmallVectorImpl<Type> &results) {
+  auto inType = operands[0].getType();
+  auto memType = inType.dyn_cast<CMemoryType>();
+  if (!memType) {
+    if (loc)
+      mlir::emitError(*loc, "memory port requires memory operand");
+    return failure();
+  }
+  results.push_back(RefType::get(
+      FVectorType::get(memType.getElementType(), memType.getNumElements())));
+  return success();
+}
+
+void MemoryDebugPortOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  StringRef base = getName();
+  if (base.empty())
+    base = "memport";
+  setNameFn(getData(), (base + "_data").str());
+}
+
+static ParseResult parseMemoryDebugPortOp(OpAsmParser &parser,
+                                          NamedAttrList &resultAttrs) {
+  // Add an empty annotation array if none were parsed.
+  auto result = parser.parseOptionalAttrDict(resultAttrs);
+  if (!resultAttrs.get("annotations"))
+    resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
+  return result;
+}
+
+/// Always elide "direction" and elide "annotations" if it exists or
+/// if it is empty.
+static void printMemoryDebugPortOp(OpAsmPrinter &p, Operation *op,
+                                   DictionaryAttr attr) {
+  SmallVector<StringRef, 1> elides;
+  // Annotations elided if empty.
+  if (op->getAttrOfType<ArrayAttr>("annotations").empty())
+    elides.push_back("annotations");
+  p.printOptionalAttrDict(op->getAttrs(), elides);
+}
+
+//===----------------------------------------------------------------------===//
 // CombMemOp
 //===----------------------------------------------------------------------===//
 
@@ -196,16 +251,17 @@ static void printCombMemOp(OpAsmPrinter &p, Operation *op,
 }
 
 void CombMemOp::build(OpBuilder &builder, OperationState &result,
-                      FIRRTLType elementType, uint64_t numElements,
+                      FIRRTLBaseType elementType, uint64_t numElements,
                       StringRef name, NameKindEnum nameKind,
                       ArrayAttr annotations, StringAttr innerSym) {
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), name,
-        nameKind, annotations, innerSym);
+        nameKind, annotations,
+        innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
 }
 
 void CombMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), name());
+  setNameFn(getResult(), getName());
 }
 
 //===----------------------------------------------------------------------===//
@@ -223,16 +279,17 @@ static void printSeqMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
 }
 
 void SeqMemOp::build(OpBuilder &builder, OperationState &result,
-                     FIRRTLType elementType, uint64_t numElements, RUWAttr ruw,
-                     StringRef name, NameKindEnum nameKind,
+                     FIRRTLBaseType elementType, uint64_t numElements,
+                     RUWAttr ruw, StringRef name, NameKindEnum nameKind,
                      ArrayAttr annotations, StringAttr innerSym) {
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), ruw,
-        name, nameKind, annotations, innerSym);
+        name, nameKind, annotations,
+        innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
 }
 
 void SeqMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), name());
+  setNameFn(getResult(), getName());
 }
 
 //===----------------------------------------------------------------------===//
@@ -291,9 +348,9 @@ void CMemoryType::print(AsmPrinter &printer) const {
 }
 
 Type CMemoryType::parse(AsmParser &parser) {
-  FIRRTLType elementType;
+  FIRRTLBaseType elementType;
   uint64_t numElements;
-  if (parser.parseLess() || firrtl::parseNestedType(elementType, parser) ||
+  if (parser.parseLess() || firrtl::parseNestedBaseType(elementType, parser) ||
       parser.parseComma() || parser.parseInteger(numElements) ||
       parser.parseGreater())
     return {};
@@ -301,7 +358,7 @@ Type CMemoryType::parse(AsmParser &parser) {
 }
 
 LogicalResult CMemoryType::verify(function_ref<InFlightDiagnostic()> emitError,
-                                  FIRRTLType elementType,
+                                  FIRRTLBaseType elementType,
                                   uint64_t numElements) {
   if (!elementType.isPassive()) {
     return emitError() << "behavioral memory element type must be passive";

@@ -30,7 +30,6 @@ class CompRegOp:
                reset_value=None,
                name=None,
                sym_name=None,
-               svAttributes=None,
                loc=None,
                ip=None):
     operands = []
@@ -49,8 +48,6 @@ class CompRegOp:
       attributes["name"] = StringAttr.get(name)
     if sym_name is not None:
       attributes["sym_name"] = StringAttr.get(sym_name)
-    if svAttributes is not None:
-      attributes["svAttributes"] = ArrayAttr.get(svAttributes)
 
     OpView.__init__(
         self,
@@ -70,7 +67,6 @@ class CompRegOp:
              reset_value=None,
              name=None,
              sym_name=None,
-             sv_attributes=None,
              **kwargs):
     return CompRegBuilder(cls,
                           result_type,
@@ -79,5 +75,4 @@ class CompRegOp:
                           reset_value=reset_value,
                           name=name,
                           sym_name=sym_name,
-                          svAttributes=sv_attributes,
                           needs_result_type=True)

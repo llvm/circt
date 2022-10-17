@@ -23,8 +23,7 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
      See SV Spec 6.7, pp97.
     }];
 
-  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym,
-                       OptionalAttr<SVAttributeArrayAttr>:$svAttributes);
+  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
@@ -39,14 +38,13 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict)
-    (`svattrs` $svAttributes^)? `:` qualified(type($result))
+    (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
   }];
   let hasCanonicalizeMethod = true;
 
   let extraClassDeclaration = [{
     Type getElementType() {
-      return result().getType().cast<InOutType>().getElementType();
+      return getResult().getType().cast<InOutType>().getElementType();
     }
   }];
 }
@@ -58,8 +56,7 @@ def RegOp : SVOp<"reg", [
      Declare a SystemVerilog Variable Declaration of 'reg' type.
      See SV Spec 6.8, pp100.
    }];
-  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym,
-                       OptionalAttr<SVAttributeArrayAttr>:$svAttributes);
+  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
@@ -72,13 +69,13 @@ def RegOp : SVOp<"reg", [
   // We handle the name in a custom way, so we use a customer parser/printer.
   let assemblyFormat = [{
     (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict)
-    (`svattrs` $svAttributes^)? `:` qualified(type($result))
+     `:` qualified(type($result))
   }];
   let hasCanonicalizeMethod = true;
 
   let extraClassDeclaration = [{
     Type getElementType() {
-      return result().getType().cast<InOutType>().getElementType();
+      return getResult().getType().cast<InOutType>().getElementType();
     }
   }];
 }
@@ -106,7 +103,7 @@ def XMROp : SVOp<"xmr", []> {
 
 def ReadInOutOp
  : SVOp<"read_inout",
-        [NoSideEffect, InOutElementConstraint<"result", "input">]> {
+        [Pure, InOutElementConstraint<"result", "input">]> {
   let summary = "Get the value of from something of inout type (e.g. a wire or"
                 " inout port) as the value itself.";
   let arguments = (ins InOutType:$input);
@@ -132,7 +129,7 @@ class InOutIndexConstraint<string value, string inoutValue>
 
 def ArrayIndexInOutOp
  : SVOp<"array_index_inout",
-        [NoSideEffect, InOutIndexConstraint<"result", "input">]> {
+        [Pure, InOutIndexConstraint<"result", "input">]> {
   let summary = "Index an inout memory to produce an inout element";
   let description = "See SV Spec 11.5.2.";
   let arguments = (ins InOutArrayType:$input, HWIntegerType:$index);
@@ -147,7 +144,7 @@ def ArrayIndexInOutOp
 }
 
 def IndexedPartSelectInOutOp : SVOp<"indexed_part_select_inout",
-                         [NoSideEffect, InferTypeOpInterface]> {
+                         [Pure, InferTypeOpInterface]> {
   let summary = "Address several contiguous bits of an inout type (e.g. a wire"
                 " or inout port). This is an indexed part-select operator."
                 "The base is an integer expression and the width is an "
@@ -159,11 +156,6 @@ def IndexedPartSelectInOutOp : SVOp<"indexed_part_select_inout",
   let arguments = (ins InOutType:$input, HWIntegerType:$base, I32Attr:$width,
                       UnitAttr:$decrement);
   let results = (outs InOutType:$result);
-
-  let builders = [
-    OpBuilder<(ins "Value":$input, "Value":$base, "int32_t":$width,
-                                 CArg<"bool", "false">:$decrement)>
-  ];
 
   let hasVerifier = 1;
 
@@ -187,7 +179,7 @@ def InOutStructType
          "an inout type with struct field", "::circt::hw::InOutType">;
 
 def StructFieldInOutOp : SVOp<"struct_field_inout",
-                              [NoSideEffect, InferTypeOpInterface]> {
+                              [Pure, InferTypeOpInterface]> {
   let summary = "Create an subfield inout memory to produce an inout element.";
   let description = "See SV Spec 7.2.";
 
@@ -207,4 +199,38 @@ def StructFieldInOutOp : SVOp<"struct_field_inout",
                                           SmallVectorImpl<Type> &results);
   }];
 
+}
+
+def LogicOp : SVOp<"logic", [DeclareOpInterfaceMethods<OpAsmOpInterface,
+                                                       ["getAsmResultNames"]>]> {
+  let summary = "Define a logic";
+  let description = [{
+    Declare a SystemVerilog Variable Declaration of 'logic' type.
+    See SV Spec 6.8, pp100.
+    }];
+
+  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym);
+  let results = (outs InOutType:$result);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$elementType,
+                      CArg<"StringAttr", "StringAttr()">:$name,
+                      CArg<"StringAttr", "StringAttr()">:$inner_sym)>,
+    OpBuilder<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
+      return build($_builder, $_state, elementType,
+                   $_builder.getStringAttr(name));
+    }]>
+  ];
+
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict) `:`
+                                                qualified(type($result))
+  }];
+
+  let extraClassDeclaration = [{
+    Type getElementType() {
+      return getResult().getType().cast<InOutType>().getElementType();
+    }
+  }];
 }

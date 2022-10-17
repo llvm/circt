@@ -4,7 +4,7 @@
 // CHECK-LABEL:   handshake.func @load_store(
 // CHECK-SAME:                               %[[VAL_0:.*]]: memref<4xi32>,
 // CHECK-SAME:                               %[[VAL_1:.*]]: index,
-// CHECK-SAME:                               %[[VAL_2:.*]]: none, ...) -> none attributes {argNames = ["in0", "in1", "inCtrl"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                               %[[VAL_2:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_3:.*]]:3 = extmemory[ld = 1, st = 1] (%[[VAL_0]] : memref<4xi32>) (%[[VAL_4:.*]], %[[VAL_5:.*]], %[[VAL_6:.*]]) {id = 0 : i32} : (i32, index, index) -> (i32, none, none)
 // CHECK:           %[[VAL_7:.*]]:2 = fork [2] %[[VAL_3]]#1 : none
 // CHECK:           %[[VAL_8:.*]] = merge %[[VAL_1]] : index

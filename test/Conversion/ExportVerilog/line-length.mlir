@@ -1,8 +1,8 @@
-// RUN: circt-opt --lowering-options=emittedLineLength=40 --export-verilog %s | FileCheck %s --check-prefixes=CHECK,SHORT
+// RUN: circt-opt --test-apply-lowering-options='options=emittedLineLength=40' --export-verilog %s | FileCheck %s --check-prefixes=CHECK,SHORT
 // RUN: circt-opt --export-verilog %s | FileCheck %s --check-prefixes=CHECK,DEFAULT
-// RUN: circt-opt --lowering-options=emittedLineLength=180 --export-verilog %s | FileCheck %s --check-prefixes=CHECK,LONG
-// RUN: circt-opt --lowering-options=emittedLineLength=40,maximumNumberOfTermsPerExpression=16 --export-verilog %s | FileCheck %s --check-prefixes=CHECK,LIMIT_SHORT
-// RUN: circt-opt --lowering-options=maximumNumberOfTermsPerExpression=32 --export-verilog %s | FileCheck %s --check-prefixes=CHECK,LIMIT_LONG
+// RUN: circt-opt --test-apply-lowering-options='options=emittedLineLength=180' --export-verilog %s | FileCheck %s --check-prefixes=CHECK,LONG
+// RUN: circt-opt --test-apply-lowering-options='options=emittedLineLength=40,maximumNumberOfTermsPerExpression=16' --export-verilog %s | FileCheck %s --check-prefixes=CHECK,LIMIT_SHORT
+// RUN: circt-opt --test-apply-lowering-options='options=maximumNumberOfTermsPerExpression=32' --export-verilog %s | FileCheck %s --check-prefixes=CHECK,LIMIT_LONG
 
 hw.module @longvariadic(%a: i8) -> (b: i8) {
   %1 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
@@ -30,13 +30,13 @@ hw.module @longvariadic(%a: i8) -> (b: i8) {
 // LONG:       assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
 // LONG-NEXT:             + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
 
-// LIMIT_SHORT:       assign b = a + a + a + a + a + a + a + a + a + a + a
-// LIMIT_SHORT-NEXT:                + a + a + a + a + a + a + a + a + a + a +
-// LIMIT_SHORT-NEXT:                a + a + a + a + a + a + a + a + a + a + a
-// LIMIT_SHORT-NEXT:                + a + a + a + a + a + a + a + a + a + a +
-// LIMIT_SHORT-NEXT:                a + a + a + a + a + a + a + a + a + a + a
-// LIMIT_SHORT-NEXT:                + a + a + a + a + a + a + a + a + a + a +
-// LIMIT_SHORT-NEXT:                a;
+// LIMIT_SHORT:       wire [7:0] _GEN = a + a + a + a + a + a + a + a + a + a + a
+// LIMIT_SHORT-NEXT:                       + a + a + a + a + a + a + a + a + a + a +
+// LIMIT_SHORT-NEXT:                       a + a + a + a + a + a + a + a + a + a + a;
+// LIMIT_SHORT-NEXT:  wire [7:0] _GEN_0 = a + a + a + a + a + a + a + a + a + a + a
+// LIMIT_SHORT-NEXT:                       + a + a + a + a + a + a + a + a + a + a +
+// LIMIT_SHORT-NEXT:                       a + a + a + a + a + a + a + a + a + a + a;
+// LIMIT_SHORT-NEXT:  assign b = _GEN + _GEN_0;
 
 // LIMIT_LONG:        assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
 // LIMIT_LONG-NEXT:                 a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +

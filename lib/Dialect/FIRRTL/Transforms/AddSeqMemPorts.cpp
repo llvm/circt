@@ -129,8 +129,8 @@ LogicalResult AddSeqMemPortsPass::processAnnos(CircuitOp circuit) {
   auto loc = circuit.getLoc();
 
   // Find the metadata directory.
-  auto dirAnno = AnnotationSet(circuit).getAnnotation(
-      "sifive.enterprise.firrtl.MetadataDirAnnotation");
+  auto dirAnno =
+      AnnotationSet(circuit).getAnnotation(metadataDirectoryAttrName);
   StringRef metadataDir = "metadata";
   if (dirAnno) {
     auto dir = dirAnno.getMember<StringAttr>("dirname");
@@ -145,11 +145,11 @@ LogicalResult AddSeqMemPortsPass::processAnnos(CircuitOp circuit) {
   AnnotationSet::removeAnnotations(circuit, [&](Annotation anno) {
     if (error)
       return false;
-    if (anno.isClass("sifive.enterprise.firrtl.AddSeqMemPortAnnotation")) {
+    if (anno.isClass(addSeqMemPortAnnoClass)) {
       error = failed(processAddPortAnno(loc, anno));
       return true;
     }
-    if (anno.isClass("sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation")) {
+    if (anno.isClass(addSeqMemPortsFileAnnoClass)) {
       error = failed(processFileAnno(loc, metadataDir, anno));
       return true;
     }
@@ -176,13 +176,13 @@ void AddSeqMemPortsPass::processMemModule(FMemModuleOp mem) {
     extraPorts.emplace_back(portIndex, p);
   mem.insertPorts(extraPorts);
   // Attach the extraPorts metadata.
-  mem.extraPortsAttr(extraPortsAttr);
+  mem.setExtraPortsAttr(extraPortsAttr);
 }
 
 LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module) {
   auto *context = &getContext();
   // Insert the new port connections at the end of the module.
-  auto builder = OpBuilder::atBlockEnd(module.getBody());
+  auto builder = OpBuilder::atBlockEnd(module.getBodyBlock());
   auto &memInfo = memInfoMap[module];
   auto &extraPorts = memInfo.extraPorts;
   // List of ports added to submodules which must be connected to this module's
@@ -192,7 +192,7 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module) {
   // The base index to use when adding ports to the current module.
   unsigned firstPortIndex = module.getNumPorts();
 
-  for (auto &op : llvm::make_early_inc_range(*module.getBody())) {
+  for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
     if (auto inst = dyn_cast<InstanceOp>(op)) {
       auto submodule = instanceGraph->getReferencedModule(inst);
       auto &subMemInfo = memInfoMap[submodule];
@@ -226,7 +226,8 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module) {
         auto portType = sramPort.type;
         // Record the extra port.
         extraPorts.push_back(
-            {firstPortIndex, {portName, portType, portDirection}});
+            {firstPortIndex,
+             {portName, portType.cast<FIRRTLType>(), portDirection}});
         // Record the instance result for now, so that we can connect it to the
         // parent module port after we actually add the ports.
         values.push_back(inst.getResult(firstSubIndex + i));
@@ -270,7 +271,7 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module) {
 void AddSeqMemPortsPass::createOutputFile(hw::HWModuleLike module) {
   // Insert the verbatim at the bottom of the circuit.
   auto circuit = getOperation();
-  auto builder = OpBuilder::atBlockEnd(circuit.getBody());
+  auto builder = OpBuilder::atBlockEnd(circuit.getBodyBlock());
 
   // Output buffer.
   std::string buffer;
@@ -352,13 +353,18 @@ void AddSeqMemPortsPass::runOnOperation() {
             context, userPort.direction == Direction::In ? "input" : "output"));
     attrs.emplace_back(
         StringAttr::get(context, "width"),
-        IntegerAttr::get(ui32Type, userPort.type.getBitWidthOrSentinel()));
+        IntegerAttr::get(
+            ui32Type,
+            userPort.type.cast<FIRRTLBaseType>().getBitWidthOrSentinel()));
     extraPorts.push_back(DictionaryAttr::get(context, attrs));
   }
   extraPortsAttr = ArrayAttr::get(context, extraPorts);
 
   // If there are no user ports, don't do anything.
   if (userPorts.size() > 0) {
+    // Update ports statistic.
+    numAddedPorts += userPorts.size();
+
     // Visit the nodes in post-order.
     for (auto *node : llvm::post_order(dutNode)) {
       auto op = node->getModule();

@@ -2,7 +2,7 @@
 
 
 // CHECK-LABEL:   handshake.func @simple_loop(
-// CHECK-SAME:                                %[[VAL_0:.*]]: none, ...) -> none attributes {argNames = ["arg0"], resNames = ["outCtrl"]} {
+// CHECK-SAME:                                %[[VAL_0:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_1:.*]] = br %[[VAL_0]] : none
 // CHECK:           %[[VAL_2:.*]], %[[VAL_3:.*]] = control_merge %[[VAL_1]] : none
 // CHECK:           %[[VAL_4:.*]] = buffer [2] fifo %[[VAL_3]] : index

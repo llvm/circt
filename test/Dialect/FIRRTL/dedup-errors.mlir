@@ -56,7 +56,8 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
 
 // -----
 
-// expected-error@below {{module "Mid1" not deduplicated with "Mid0"}}
+// expected-error@+2 {{module "Mid1" not deduplicated with "Mid0"}}
+// expected-note@+1 {{in instance "test0" of "Test0", and instance "test1" of "Test1"}}
 firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Mid0", "~MustDedup|Mid1"]
@@ -66,14 +67,11 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
     firrtl.instance mid1 @Mid1()
   }
   firrtl.module @Mid0() {
-    // expected-note@below {{first instance targets module "Test0"}}
     firrtl.instance test0 @Test0()
   }
   firrtl.module @Mid1() {
-    // expected-note@below {{second instance targets module "Test1"}}
     firrtl.instance test1 @Test1()
   }
-  // expected-error@below {{module "Test0" not deduplicated with "Test1"}}
   firrtl.module @Test0() {
     // expected-note@below {{first operation is a firrtl.wire}}
     %w = firrtl.wire : !firrtl.uint<8>
@@ -287,9 +285,9 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
-  // expected-note@below {{modules have a different number of ports}}
+  // expected-note@below {{port 'a' only exists in one of the modules}}
   firrtl.module @Test0(in %a : !firrtl.uint<1>) { }
-  // expected-note@below {{second module here}}
+  // expected-note@below {{second module to be deduped that does not have the port}}
   firrtl.module @Test1() { }
   firrtl.module @MustDedup() {
     firrtl.instance test0 @Test0(in a : !firrtl.uint<1>)
@@ -428,3 +426,53 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
   }
 }
 
+// -----
+
+// expected-error@below {{module "Test1" not deduplicated with "Test0"}}
+firrtl.circuit "MustDedup" attributes {annotations = [{
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
+    }]} {
+  // expected-note@below {{module port 'a', has a RefType with a different base type '!firrtl.uint<1>' in the same position of the two modules marked as 'must dedup'. (This may be due to Grand Central Taps or Views being different between the two modules.)}}
+  firrtl.module @Test0(in %a : !firrtl.ref<uint<1>>, in %b : !firrtl.ref<uint<2>>) { }
+  // expected-note@below {{the second module has a different base type '!firrtl.uint<2>'}}
+  firrtl.module @Test1(in %a : !firrtl.ref<uint<2>>, in %b : !firrtl.ref<uint<1>>) { }
+  firrtl.module @MustDedup() {
+    firrtl.instance test0 @Test0(in a : !firrtl.ref<uint<1>>, in b : !firrtl.ref<uint<2>>)
+    firrtl.instance test1 @Test1(in a : !firrtl.ref<uint<2>>, in b : !firrtl.ref<uint<1>>)
+  }
+}
+
+// -----
+
+// expected-error@below {{module "Test1" not deduplicated with "Test0"}}
+firrtl.circuit "MustDedup" attributes {annotations = [{
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
+    }]} {
+  // expected-note@below {{contains a RefType port named 'b' that only exists in one of the modules (can be due to difference in Grand Central Tap or View of two modules marked with must dedup)}}
+  firrtl.module @Test0(in %a : !firrtl.ref<uint<1>>, in %b : !firrtl.ref<uint<2>>) { }
+  // expected-note@below {{second module to be deduped that does not have the RefType port}}
+  firrtl.module @Test1(in %a : !firrtl.ref<uint<1>>) { }
+  firrtl.module @MustDedup() {
+    firrtl.instance test0 @Test0(in a : !firrtl.ref<uint<1>>, in b : !firrtl.ref<uint<2>>)
+    firrtl.instance test1 @Test1(in a : !firrtl.ref<uint<1>>)
+  }
+}
+
+// -----
+
+// expected-error@below {{module "Test1" not deduplicated with "Test0"}}
+firrtl.circuit "MustDedup" attributes {annotations = [{
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
+    }]} {
+  // expected-note@below {{contains a RefType port named 'b' that only exists in one of the modules (can be due to difference in Grand Central Tap or View of two modules marked with must dedup)}}
+  firrtl.module @Test1(in %a : !firrtl.ref<uint<1>>, in %b : !firrtl.ref<uint<2>>) { }
+  // expected-note@below {{second module to be deduped that does not have the RefType port}}
+  firrtl.module @Test0(in %a : !firrtl.ref<uint<1>>) { }
+  firrtl.module @MustDedup() {
+    firrtl.instance test0 @Test1(in a : !firrtl.ref<uint<1>>, in b : !firrtl.ref<uint<2>>)
+    firrtl.instance test1 @Test0(in a : !firrtl.ref<uint<1>>)
+  }
+}

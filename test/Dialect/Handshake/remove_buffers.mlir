@@ -13,3 +13,9 @@ handshake.func @simple_c(%arg0: i32, %arg1: i32, %arg2: none) -> (i32, none) {
   %4 = buffer [2] seq %arg2 : none
   return %3, %4 : i32, none
 }
+
+// -----
+
+// CHECK-LABEL:   handshake.func @external(
+// CHECK-SAME:      i32, none, ...) -> none
+handshake.func @external(%arg0: i32, %ctrl: none, ...) -> none

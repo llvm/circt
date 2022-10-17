@@ -11,22 +11,26 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/SetOperations.h"
+#include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FormatVariadic.h"
-#include "llvm/Support/Parallel.h"
 
 #define DEBUG_TYPE "firrtl-inliner"
 
@@ -76,7 +80,7 @@ class MutableNLA {
 
   /// Stores new roots for the NLA.  If this is non-empty, then it indicates
   /// that the NLA should be copied and re-topped using the roots stored here.
-  /// This is non-empty when athe NLA's root is inlined and the original NLA
+  /// This is non-empty when the NLA's root is inlined and the original NLA
   /// migrates to each instantiator of the original NLA.
   SmallVector<InnerRefAttr> newTops;
 
@@ -106,8 +110,8 @@ class MutableNLA {
 public:
   MutableNLA(HierPathOp nla, CircuitNamespace *circuitNamespace)
       : nla(nla), circuitNamespace(circuitNamespace),
-        inlinedSymbols(BitVector(nla.namepath().size(), true)),
-        size(nla.namepath().size()) {
+        inlinedSymbols(BitVector(nla.getNamepath().size(), true)),
+        size(nla.getNamepath().size()) {
     for (size_t i = 0, e = size; i != e; ++i)
       symIdx.insert({nla.modPart(i), i});
   }
@@ -117,9 +121,9 @@ public:
   /// constructor for the value type because its `[]` operator (which returns a
   /// reference) must default construct the value type for a non-existent key.
   /// This default constructor is never supposed to be used because the pass
-  /// prepulates a `DenseMap<Attribute, MutbaleNLA>` before it runs and thereby
-  /// guarantees that `[]` will always hit and never need to use the default
-  /// constructor.
+  /// prepopulates a `DenseMap<Attribute, MutableNLA>` before it runs and
+  /// thereby guarantees that `[]` will always hit and never need to use the
+  /// default constructor.
   MutableNLA() {
     llvm_unreachable(
         "the default constructor for MutableNLA should never be used");
@@ -161,7 +165,7 @@ public:
       SmallVector<Attribute> namepath;
       StringAttr lastMod;
 
-      // Root of the namepatch.
+      // Root of the namepath.
       if (!inlinedSymbols.test(1))
         lastMod = root;
       else
@@ -196,8 +200,10 @@ public:
       else
         namepath.push_back(FlatSymbolRefAttr::get(modPart));
 
-      return b.create<HierPathOp>(b.getUnknownLoc(), sym,
-                                  b.getArrayAttr(namepath));
+      auto hp = b.create<HierPathOp>(b.getUnknownLoc(), sym,
+                                     b.getArrayAttr(namepath));
+      hp.setVisibility(nla.getVisibility());
+      return hp;
     };
 
     HierPathOp last;
@@ -315,8 +321,7 @@ public:
 
   /// Returns true if this NLA is local.  For this to be local, every module
   /// after the root (up to the flatten point or the end) must be inlined.  The
-  /// root is never truly inlined as inlined as inlining the root just sets a
-  /// new root.
+  /// root is never truly inlined as inlining the root just sets a new root.
   bool isLocal() {
     unsigned end = flattenPoint > -1 ? flattenPoint + 1 : inlinedSymbols.size();
     return inlinedSymbols.find_first_in(1, end) == -1;
@@ -326,6 +331,11 @@ public:
   bool hasRoot(FModuleLike mod) {
     return (isDead() && nla.root() == mod.moduleNameAttr()) ||
            rootSet.contains(mod.moduleNameAttr());
+  }
+
+  /// Return true if either this NLA is rooted at modName, or is retoped to it.
+  bool hasRoot(StringAttr modName) {
+    return (nla.root() == modName) || rootSet.contains(modName);
   }
 
   /// Mark a module as inlined.  This will remove it from the NLA.
@@ -342,7 +352,7 @@ public:
   }
 
   /// Mark a module as flattened.  This has the effect of inlining all of its
-  /// children.  Also mark the NLA was dead if the leaf reference of this NLA is
+  /// children.  Also mark the NLA as dead if the leaf reference of this NLA is
   /// a module and the only target is a module.
   void flattenModule(FModuleOp module) {
     auto sym = module.getNameAttr();
@@ -356,7 +366,7 @@ public:
   }
 
   StringAttr reTop(FModuleOp module) {
-    StringAttr sym = nla.sym_nameAttr();
+    StringAttr sym = nla.getSymNameAttr();
     if (!newTops.empty())
       sym = StringAttr::get(nla.getContext(),
                             circuitNamespace->newName(sym.getValue()));
@@ -394,32 +404,72 @@ static void mapResultsToWires(BlockAndValueMapping &mapper,
   }
 }
 
-/// Wrapper for llvm::parallelTransformReduce that performs the transform_reduce
-/// serially when MLIR multi-threading is disabled.
-/// Does not add a ParallelDiagnosticHandler like mlir::parallelFor.
-template <class IterTy, class ResultTy, class ReduceFuncTy,
-          class TransformFuncTy>
-static ResultTy transformReduce(MLIRContext *context, IterTy Begin, IterTy End,
-                                ResultTy Init, ReduceFuncTy Reduce,
-                                TransformFuncTy Transform) {
-  // Parallel when enabled
-  if (context->isMultithreadingEnabled())
-    return llvm::parallelTransformReduce(Begin, End, Init, Reduce, Transform);
+/// Resolve RefType 'backedge' placeholder values.
+/// These should have at most one driver that isn't self-connect,
+/// replace each with their driver and remove connections to them.
+/// Also clears out 'edges'.
+static void replaceRefEdges(SmallVectorImpl<Backedge> &edges) {
+  /// Find connections to `val` and:
+  /// * Mark for removal.
+  /// * Identify the single non-self-connect as driver, return it.
+  /// * Check for other drivers and error.
+  auto getDriverAndRemoveConnects = [&](Value val) -> Value {
+    Value driver;
+    llvm::SmallPtrSet<Operation *, 16> toRemove;
+    for (Operation *use : val.getUsers())
+      if (auto connect = dyn_cast<FConnectLike>(use))
+        if (connect.getDest() == val) {
+          auto newdriver = connect.getSrc();
 
-  // Serial fallback (from llvm::parallelTransformReduce)
-  for (IterTy I = Begin; I != End; ++I)
-    Init = Reduce(std::move(Init), Transform(*I));
-  return std::move(Init);
-}
+          // Mark for removal all connections to the placeholder value.
+          toRemove.insert(connect);
 
-/// Range wrapper
-template <class RangeTy, class ResultTy, class ReduceFuncTy,
-          class TransformFuncTy>
-static ResultTy transformReduce(MLIRContext *context, RangeTy &&R,
-                                ResultTy Init, ReduceFuncTy Reduce,
-                                TransformFuncTy Transform) {
-  return transformReduce(context, std::begin(R), std::end(R), Init, Reduce,
-                         Transform);
+          // Self-connections are not drivers.
+          if (newdriver == val)
+            continue;
+          if (driver) {
+            auto diag = val.getDefiningOp()->emitError(
+                "refty should not have multiple drivers");
+            diag.attachNote(driver.getLoc()) << "first driver here";
+            diag.attachNote(newdriver.getLoc()) << "second driver here";
+            diag.attachNote(connect.getLoc()) << "second driver connected here";
+          }
+          assert(!driver && "unable to resolve through multiple drivers");
+          driver = newdriver;
+        }
+
+    // Drop connections to placeholder values.
+    for (auto *op : toRemove)
+      op->erase();
+
+    return driver;
+  };
+
+  // Ensure that all users of the `opToRemove` are defined after the driver.
+  // This is required to ensure the driver dominates the users.
+  auto moveUseAfterDef = [&](Operation *opToRemove, Operation *driver) {
+    for (Operation *user : opToRemove->getUsers())
+      if (user->isBeforeInBlock(driver))
+        user->moveAfter(driver);
+  };
+
+  for (auto &edge : edges) {
+    Value v = edge;
+    assert(v.getType().isa<RefType>());
+
+    auto driver = getDriverAndRemoveConnects(v);
+    if (!driver) {
+      v.getDefiningOp()->emitError(
+          "unable to find driver for refty placeholder");
+      continue;
+    }
+    if (!driver.isa<BlockArgument>())
+      moveUseAfterDef(v.getDefiningOp(), driver.getDefiningOp());
+    // Resolve the edge (RAUW to driver).
+    edge.setValue(driver);
+  }
+
+  edges.clear();
 }
 
 //===----------------------------------------------------------------------===//
@@ -476,11 +526,13 @@ private:
 
   /// Rewrite the ports of a module as wires.  This is similar to
   /// cloneAndRename, but operating on ports.
-  SmallVector<Value> mapPortsToWires(StringRef prefix, OpBuilder &b,
-                                     BlockAndValueMapping &mapper,
-                                     FModuleOp target,
-                                     const DenseSet<Attribute> &localSymbols,
-                                     ModuleNamespace &moduleNamespace);
+  void mapPortsToWires(StringRef prefix, OpBuilder &b,
+                       BlockAndValueMapping &mapper, BackedgeBuilder &beb,
+                       FModuleOp target,
+                       const DenseSet<Attribute> &localSymbols,
+                       ModuleNamespace &moduleNamespace,
+                       SmallVectorImpl<Value> &wires,
+                       SmallVectorImpl<Backedge> &edges);
 
   /// Returns true if the operation is annotated to be flattened.
   bool shouldFlatten(Operation *op);
@@ -488,17 +540,19 @@ private:
   /// Returns true if the operation is annotated to be inlined.
   bool shouldInline(Operation *op);
 
-  /// Flattens a target module in to the insertion point of the builder,
+  /// Flattens a target module into the insertion point of the builder,
   /// renaming all operations using the prefix.  This clones all operations from
   /// the target, and does not trigger inlining on the target itself.
   void flattenInto(StringRef prefix, OpBuilder &b, BlockAndValueMapping &mapper,
+                   BackedgeBuilder &beb, SmallVectorImpl<Backedge> &edges,
                    FModuleOp target, DenseSet<Attribute> localSymbols,
                    ModuleNamespace &moduleNamespace);
 
-  /// Inlines a target module in to the location of the build, prefixing all
-  /// operations with prefix.  This clones all operations from the target, and
-  /// does not trigger inlining on the target itself.
+  /// Inlines a target module into the insertion point of the builder,
+  /// prefixing all operations with prefix.  This clones all operations from
+  /// the target, and does not trigger inlining on the target itself.
   void inlineInto(StringRef prefix, OpBuilder &b, BlockAndValueMapping &mapper,
+                  BackedgeBuilder &beb, SmallVectorImpl<Backedge> &edges,
                   FModuleOp target,
                   DenseMap<Attribute, Attribute> &symbolRenames,
                   ModuleNamespace &moduleNamespace);
@@ -511,6 +565,28 @@ private:
 
   /// Identify all module-only NLA's, marking their MutableNLA's accordingly.
   void identifyNLAsTargetingOnlyModules();
+
+  /// Populate the activeHierpaths with the HierPaths that are active given the
+  /// current hierarchy. This is the set of HierPaths that were active in the
+  /// parent, and on the current instance. Also HierPaths that are rooted at
+  /// this module are also added to the active set.
+  void setActiveHierPaths(StringAttr moduleName, StringAttr instInnerSym) {
+    auto &instPaths =
+        instOpHierPaths[InnerRefAttr::get(moduleName, instInnerSym)];
+    if (currentPath.empty()) {
+      activeHierpaths.insert(instPaths.begin(), instPaths.end());
+      return;
+    }
+    DenseSet<StringAttr> hPaths(instPaths.begin(), instPaths.end());
+    // Only the hierPaths that this instance participates in, and is active in
+    // the current path must be kept active for the child modules.
+    llvm::set_intersect(activeHierpaths, hPaths);
+    // Also, the nlas, that have current instance as the top must be added to
+    // the active set.
+    for (auto hPath : instPaths)
+      if (nlaMap[hPath].hasRoot(moduleName))
+        activeHierpaths.insert(hPath);
+  }
 
   CircuitOp circuit;
   MLIRContext *context;
@@ -536,6 +612,8 @@ private:
   /// current instance or not.
   SmallVector<std::pair<Attribute, Attribute>> currentPath;
 
+  DenseSet<StringAttr> activeHierpaths;
+
   /// Record the HierPathOps that each InstanceOp participates in. This is a map
   /// from the InnerRefAttr to the list of HierPathOp names. The InnerRefAttr
   /// corresponds to the InstanceOp.
@@ -544,26 +622,10 @@ private:
 } // namespace
 
 /// Check if the NLA applies to our instance path. This works by verifying the
-/// instance paths backwords starting from the current module. We drop the back
+/// instance paths backwards starting from the current module. We drop the back
 /// element from the NLA because it obviously matches the current operation.
 bool Inliner::doesNLAMatchCurrentPath(HierPathOp nla) {
-  auto nlaPath = nla.namepath().getValue().drop_back();
-  auto nlaIt = nlaPath.rbegin();
-  auto nlaEnd = nlaPath.rend();
-  auto pathIt = currentPath.rbegin();
-  auto pathEnd = currentPath.rend();
-  while (nlaIt != nlaEnd && pathIt != pathEnd) {
-    auto innerRef = (*nlaIt++).cast<hw::InnerRefAttr>();
-    auto &[module, name] = (*pathIt++);
-    // Break if the NLA does not correspond to our instance.
-    if (innerRef.getModule() != module || innerRef.getName() != name)
-      return false;
-  }
-  // If we found a mismatch in the path, we should not copy this annotation into
-  // the current context.  Note: If we reached the end of the pathIt, it means
-  // that the NLA is still providing necessary context and *should* be copied
-  // over to the inlined operation.
-  return true;
+  return (activeHierpaths.find(nla.getSymNameAttr()) != activeHierpaths.end());
 }
 
 /// If this operation or any child operation has a name, add the prefix to that
@@ -596,7 +658,7 @@ void Inliner::rename(StringRef prefix, Operation *op,
     auto newSym = moduleNamespace.newName(sym.getValue());
     if (newSym != sym.getValue()) {
       auto newSymAttr = StringAttr::get(op->getContext(), newSym);
-      op->setAttr("inner_sym", newSymAttr);
+      op->setAttr("inner_sym", InnerSymAttr::get(newSymAttr));
       for (Annotation anno : AnnotationSet(op)) {
         auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
         if (!sym)
@@ -641,12 +703,15 @@ void Inliner::rename(StringRef prefix, Operation *op,
 /// module, create a wire, and assign a mapping from each module port to the
 /// wire. When the body of the module is cloned, the value of the wire will be
 /// used instead of the module's ports.
-SmallVector<Value>
-Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b,
-                         BlockAndValueMapping &mapper, FModuleOp target,
-                         const DenseSet<Attribute> &localSymbols,
-                         ModuleNamespace &moduleNamespace) {
-  SmallVector<Value> wires;
+/// Cannot have a RefType wire, so create backedge and put in 'edges' for
+/// resolution later.  Mapper and 'wires' will have the placeholder value.
+void Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b,
+                              BlockAndValueMapping &mapper,
+                              BackedgeBuilder &beb, FModuleOp target,
+                              const DenseSet<Attribute> &localSymbols,
+                              ModuleNamespace &moduleNamespace,
+                              SmallVectorImpl<Value> &wires,
+                              SmallVectorImpl<Backedge> &edges) {
   auto portInfo = target.getPorts();
   for (unsigned i = 0, e = target.getNumPorts(); i < e; ++i) {
     auto arg = target.getArgument(i);
@@ -655,9 +720,11 @@ Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b,
 
     // Compute a unique symbol if needed
     StringAttr newSym;
-    StringAttr oldSym = portInfo[i].sym;
-    if (!oldSym.getValue().empty())
+    StringAttr oldSym;
+    if (portInfo[i].sym) {
+      oldSym = portInfo[i].sym.getSymName();
       newSym = b.getStringAttr(moduleNamespace.newName(oldSym.getValue()));
+    }
 
     SmallVector<Attribute> newAnnotations;
     for (auto anno : AnnotationSet::forPort(target, i)) {
@@ -677,14 +744,37 @@ Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b,
       newAnnotations.push_back(anno.getAttr());
     }
 
-    auto wire = b.create<WireOp>(
-        target.getLoc(), type, (prefix + portInfo[i].getName()).str(),
-        NameKindEnum::DroppableName, ArrayAttr::get(context, newAnnotations),
-        newSym);
+    Value wire =
+        TypeSwitch<FIRRTLType, Value>(type)
+            .Case<FIRRTLBaseType>([&](auto base) {
+              return b.create<WireOp>(
+                  target.getLoc(), base, (prefix + portInfo[i].getName()).str(),
+                  NameKindEnum::DroppableName,
+                  ArrayAttr::get(context, newAnnotations), newSym);
+            })
+            .Case<RefType>([&](auto refty) {
+              // Symbols and annotations are not allowed, warn if dropping.
+              if (oldSym)
+                target.emitWarning("unexpected symbol ")
+                    .append(oldSym)
+                    .append(" on ref port ")
+                    .append(target.getPortName(arg.getArgNumber()))
+                    .append(" dropped during inlining")
+                    .attachNote(arg.getLoc())
+                    .append("ref port with symbol here");
+
+              if (!newAnnotations.empty())
+                target.emitWarning("unexpected annotations found on ref port ")
+                    .append(target.getPortName(arg.getArgNumber()))
+                    .append(" dropped during inlining")
+                    .attachNote(arg.getLoc())
+                    .append("ref port with annotations here");
+              edges.push_back(beb.get(refty, arg.getLoc()));
+              return edges.back();
+            });
     wires.push_back(wire);
-    mapper.map(arg, wire.getResult());
+    mapper.map(arg, wire);
   }
-  return wires;
 }
 
 /// Clone an operation, mapping used values and results with the mapper, and
@@ -725,29 +815,24 @@ void Inliner::cloneAndRename(
       // Get the innerRef to the original InstanceOp that is being inlined here.
       auto oldInnerRef = InnerRefAttr::get(
           instance->getParentOfType<FModuleOp>().getNameAttr(), instSym);
-      // Now get the currentPath, where this InstanceOp is being inlined.
-      auto &[inlineMod, inlineInst] = currentPath.back();
-      // Only the HierPathOps that participate at both the
-      // InstanceOp(`instance`) being inlined and at the place being
-      // inlined(inlineMod, inlineInst) must be valid after inlining.
-      if (inlineMod && inlineInst)
-        for (auto nlaAtInlineLoc : instOpHierPaths[InnerRefAttr::get(
-                 inlineMod.cast<StringAttr>(),
-                 inlineInst.cast<StringAttr>())]) {
-          // For all the HierPathOps that participate at the current path,
-          // inlining location.
-          for (auto old : instOpHierPaths[oldInnerRef])
-            // For all the HierPathOps that the instance being inlined
-            // participates in.
-            if (old == nlaAtInlineLoc)
+      // For all the HierPathOps that the instance being inlined participates
+      // in.
+      for (auto old : instOpHierPaths[oldInnerRef]) {
+        // If this HierPathOp is valid at the inlining context, where the
+        // instance is being inlined at. That is, if it exists in the
+        // activeHierpaths.
+        if (activeHierpaths.find(old) != activeHierpaths.end())
+          validHierPaths.push_back(old);
+        else
+          // The HierPathOp could have been renamed, check for the other retoped
+          // names, if they are active at the inlining context.
+          for (auto additionalSym : nlaMap[old].getAdditionalSymbols())
+            if (activeHierpaths.find(additionalSym.getName()) !=
+                activeHierpaths.end()) {
               validHierPaths.push_back(old);
-            else
-              // The HierPathOp name might not match, if it is duplicated after
-              // being retopped. Get all the retopped HierPathOp names.
-              for (auto renamedTops : nlaMap[old].getAdditionalSymbols())
-                if (renamedTops.getName() == nlaAtInlineLoc)
-                  validHierPaths.push_back(old);
-        }
+              break;
+            }
+      }
     }
   rename(prefix, newOp, moduleNamespace, validHierPaths);
   if (isa<InstanceOp>(&op)) {
@@ -756,7 +841,7 @@ void Inliner::cloneAndRename(
                           getInnerSymName(newOp));
     SmallVector<StringAttr> &nlaList = instOpHierPaths[innerRef];
     // Now rename the Updated HierPathOps that this InstanceOp participates in.
-    for (auto en : llvm::enumerate(nlaList)) {
+    for (const auto &en : llvm::enumerate(nlaList)) {
       auto oldNLA = en.value();
       if (auto newSym = symbolRenames.lookup(oldNLA))
         nlaList[en.index()] = newSym.cast<StringAttr>();
@@ -769,22 +854,24 @@ void Inliner::cloneAndRename(
 }
 
 bool Inliner::shouldFlatten(Operation *op) {
-  return AnnotationSet(op).hasAnnotation("firrtl.transforms.FlattenAnnotation");
+  return AnnotationSet(op).hasAnnotation(flattenAnnoClass);
 }
 
 bool Inliner::shouldInline(Operation *op) {
-  return AnnotationSet(op).hasAnnotation("firrtl.passes.InlineAnnotation");
+  return AnnotationSet(op).hasAnnotation(inlineAnnoClass);
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
 void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
-                          BlockAndValueMapping &mapper, FModuleOp parent,
+                          BlockAndValueMapping &mapper, BackedgeBuilder &beb,
+                          SmallVectorImpl<Backedge> &edges, FModuleOp target,
                           DenseSet<Attribute> localSymbols,
                           ModuleNamespace &moduleNamespace) {
-  auto moduleName = parent.getNameAttr();
+  auto moduleName = target.getNameAttr();
   DenseMap<Attribute, Attribute> symbolRenames;
-  for (auto &op : *parent.getBody()) {
-    // If its not an instance op, clone it and continue.
+  SmallVector<Value> wires;
+  for (auto &op : *target.getBodyBlock()) {
+    // If it's not an instance op, clone it and continue.
     auto instance = dyn_cast<InstanceOp>(op);
     if (!instance) {
       cloneAndRename(prefix, b, mapper, op, symbolRenames, localSymbols,
@@ -792,10 +879,10 @@ void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
       continue;
     }
 
-    // If its not a regular module we can't inline it. Mark is as live.
-    auto *module = symbolTable.lookup(instance.moduleName());
-    auto target = dyn_cast<FModuleOp>(module);
-    if (!target) {
+    // If it's not a regular module we can't inline it. Mark it as live.
+    auto *module = symbolTable.lookup(instance.getModuleName());
+    auto childModule = dyn_cast<FModuleOp>(module);
+    if (!childModule) {
       liveModules.insert(module);
       cloneAndRename(prefix, b, mapper, op, symbolRenames, localSymbols,
                      moduleNamespace);
@@ -805,18 +892,24 @@ void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
     // Add any NLAs which start at this instance to the localSymbols set.
     // Anything in this set will be made local during the recursive flattenInto
     // walk.
-    llvm::set_union(localSymbols, rootMap[target.getNameAttr()]);
-    currentPath.emplace_back(moduleName, getInnerSymName(instance));
+    llvm::set_union(localSymbols, rootMap[childModule.getNameAttr()]);
+    auto instInnerSym = getInnerSymName(instance);
+    auto parentActivePaths = activeHierpaths;
+    setActiveHierPaths(moduleName, instInnerSym);
+    currentPath.emplace_back(moduleName, instInnerSym);
 
     // Create the wire mapping for results + ports.
-    auto nestedPrefix = (prefix + instance.name() + "_").str();
-    auto wires = mapPortsToWires(nestedPrefix, b, mapper, target, localSymbols,
-                                 moduleNamespace);
+    auto nestedPrefix = (prefix + instance.getName() + "_").str();
+    mapPortsToWires(nestedPrefix, b, mapper, beb, childModule, localSymbols,
+                    moduleNamespace, wires, edges);
     mapResultsToWires(mapper, wires, instance);
 
     // Unconditionally flatten all instance operations.
-    flattenInto(nestedPrefix, b, mapper, target, localSymbols, moduleNamespace);
+    flattenInto(nestedPrefix, b, mapper, beb, edges, childModule, localSymbols,
+                moduleNamespace);
     currentPath.pop_back();
+    activeHierpaths = parentActivePaths;
+    wires.clear();
   }
 }
 
@@ -825,14 +918,18 @@ void Inliner::flattenInstances(FModuleOp module) {
   // Namespace used to generate new symbol names.
   ModuleNamespace moduleNamespace(module);
 
-  for (auto &op : llvm::make_early_inc_range(*module.getBody())) {
-    // If its not an instance op, skip it.
+  SmallVector<Value> wires;
+  SmallVector<Backedge> edges;
+  OpBuilder b(module.getContext());
+  BackedgeBuilder beb(b, module.getLoc());
+  for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
+    // If it's not an instance op, skip it.
     auto instance = dyn_cast<InstanceOp>(op);
     if (!instance)
       continue;
 
-    // If its not a regular module we can't inline it. Mark is as live.
-    auto *targetModule = symbolTable.lookup(instance.moduleName());
+    // If it's not a regular module we can't inline it. Mark it as live.
+    auto *targetModule = symbolTable.lookup(instance.getModuleName());
     auto target = dyn_cast<FModuleOp>(targetModule);
     if (!target) {
       liveModules.insert(targetModule);
@@ -853,91 +950,103 @@ void Inliner::flattenInstances(FModuleOp module) {
     // walk.
     DenseSet<Attribute> localSymbols;
     llvm::set_union(localSymbols, rootMap[target.getNameAttr()]);
-    currentPath.emplace_back(moduleName, getInnerSymName(instance));
+    auto instInnerSym = getInnerSymName(instance);
+    auto parentActivePaths = activeHierpaths;
+    setActiveHierPaths(moduleName, instInnerSym);
+    currentPath.emplace_back(moduleName, instInnerSym);
 
     // Create the wire mapping for results + ports. We RAUW the results instead
     // of mapping them.
     BlockAndValueMapping mapper;
-    OpBuilder b(instance);
-    auto nestedPrefix = (instance.name() + "_").str();
-    auto wires = mapPortsToWires(nestedPrefix, b, mapper, target, localSymbols,
-                                 moduleNamespace);
+    b.setInsertionPoint(instance);
+
+    auto nestedPrefix = (instance.getName() + "_").str();
+    mapPortsToWires(nestedPrefix, b, mapper, beb, target, localSymbols,
+                    moduleNamespace, wires, edges);
     for (unsigned i = 0, e = instance.getNumResults(); i < e; ++i)
       instance.getResult(i).replaceAllUsesWith(wires[i]);
 
     // Recursively flatten the target module.
-    flattenInto(nestedPrefix, b, mapper, target, localSymbols, moduleNamespace);
+    flattenInto(nestedPrefix, b, mapper, beb, edges, target, localSymbols,
+                moduleNamespace);
     currentPath.pop_back();
+    activeHierpaths = parentActivePaths;
 
     // Erase the replaced instance.
     instance.erase();
+    wires.clear();
   }
+
+  // Fixup edges for ref types.
+  replaceRefEdges(edges);
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
 void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
-                         BlockAndValueMapping &mapper, FModuleOp parent,
+                         BlockAndValueMapping &mapper, BackedgeBuilder &beb,
+                         SmallVectorImpl<Backedge> &edges, FModuleOp target,
                          DenseMap<Attribute, Attribute> &symbolRenames,
                          ModuleNamespace &moduleNamespace) {
-  auto moduleName = parent.getNameAttr();
+  auto moduleName = target.getNameAttr();
   // Inline everything in the module's body.
-  for (auto &op : *parent.getBody()) {
-    // If its not an instance op, clone it and continue.
+  SmallVector<Value> wires;
+  for (auto &op : *target.getBodyBlock()) {
+    // If it's not an instance op, clone it and continue.
     auto instance = dyn_cast<InstanceOp>(op);
     if (!instance) {
       cloneAndRename(prefix, b, mapper, op, symbolRenames, {}, moduleNamespace);
       continue;
     }
 
-    // If its not a regular module we can't inline it. Mark is as live.
-    auto *module = symbolTable.lookup(instance.moduleName());
-    auto target = dyn_cast<FModuleOp>(module);
-    if (!target) {
+    // If it's not a regular module we can't inline it. Mark it as live.
+    auto *module = symbolTable.lookup(instance.getModuleName());
+    auto childModule = dyn_cast<FModuleOp>(module);
+    if (!childModule) {
       liveModules.insert(module);
       cloneAndRename(prefix, b, mapper, op, symbolRenames, {}, moduleNamespace);
       continue;
     }
 
     // If we aren't inlining the target, add it to the work list.
-    if (!shouldInline(target)) {
-      if (liveModules.insert(target).second) {
-        worklist.push_back(target);
+    if (!shouldInline(childModule)) {
+      if (liveModules.insert(childModule).second) {
+        worklist.push_back(childModule);
       }
       cloneAndRename(prefix, b, mapper, op, symbolRenames, {}, moduleNamespace);
       continue;
     }
 
-    auto toBeFlattened = shouldFlatten(target);
+    auto toBeFlattened = shouldFlatten(childModule);
     if (auto instSym = getInnerSymName(instance)) {
       auto innerRef = InnerRefAttr::get(moduleName, instSym);
       // Preorder update of any non-local annotations this instance participates
-      // in.  This needs ot happen _before_ visiting modules so that internal
+      // in.  This needs to happen _before_ visiting modules so that internal
       // non-local annotations can be deleted if they are now local.
       for (auto sym : instOpHierPaths[innerRef]) {
         if (toBeFlattened)
-          nlaMap[sym].flattenModule(target);
+          nlaMap[sym].flattenModule(childModule);
         else
-          nlaMap[sym].inlineModule(target);
+          nlaMap[sym].inlineModule(childModule);
       }
     }
 
     // The InstanceOp `instance` might not have a symbol, if it does not
     // participate in any HierPathOp. But the reTop might add a symbol to it, if
-    // a HierPathOp is is added to this Op. If we're about to inline a module
-    // that contains a non-local annotation that starts at that module, then we
-    // need to both update the mutable NLA to indicate that this has a new top
-    // and add an annotation on the instance saying that this now participates
-    // in this new NLA.
+    // a HierPathOp is added to this Op. If we're about to inline a module that
+    // contains a non-local annotation that starts at that module, then we need
+    // to both update the mutable NLA to indicate that this has a new top and
+    // add an annotation on the instance saying that this now participates in
+    // this new NLA.
     DenseMap<Attribute, Attribute> symbolRenames;
-    if (!rootMap[target.getNameAttr()].empty()) {
-      for (auto sym : rootMap[target.getNameAttr()]) {
+    if (!rootMap[childModule.getNameAttr()].empty()) {
+      for (auto sym : rootMap[childModule.getNameAttr()]) {
         auto &mnla = nlaMap[sym];
-        sym = mnla.reTop(parent);
+        sym = mnla.reTop(target);
         StringAttr instSym = getInnerSymName(instance);
         if (!instSym) {
-          instSym = StringAttr::get(context,
-                                    moduleNamespace.newName(instance.name()));
-          instance.inner_symAttr(instSym);
+          instSym = StringAttr::get(
+              context, moduleNamespace.newName(instance.getName()));
+          instance.setInnerSymAttr(InnerSymAttr::get(instSym));
         }
         instOpHierPaths[InnerRefAttr::get(moduleName, instSym)].push_back(
             sym.cast<StringAttr>());
@@ -947,23 +1056,29 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
         symbolRenames.insert({mnla.getNLA().getNameAttr(), sym});
       }
     }
+    auto instInnerSym = getInnerSymName(instance);
+    auto parentActivePaths = activeHierpaths;
+    setActiveHierPaths(moduleName, instInnerSym);
     // This must be done after the reTop, since it might introduce an innerSym.
-    currentPath.emplace_back(moduleName, getInnerSymName(instance));
+    currentPath.emplace_back(moduleName, instInnerSym);
 
     // Create the wire mapping for results + ports.
-    auto nestedPrefix = (prefix + instance.name() + "_").str();
-    auto wires =
-        mapPortsToWires(nestedPrefix, b, mapper, target, {}, moduleNamespace);
+    auto nestedPrefix = (prefix + instance.getName() + "_").str();
+    mapPortsToWires(nestedPrefix, b, mapper, beb, childModule, {},
+                    moduleNamespace, wires, edges);
     mapResultsToWires(mapper, wires, instance);
 
     // Inline the module, it can be marked as flatten and inline.
     if (toBeFlattened) {
-      flattenInto(nestedPrefix, b, mapper, target, {}, moduleNamespace);
+      flattenInto(nestedPrefix, b, mapper, beb, edges, childModule, {},
+                  moduleNamespace);
     } else {
-      inlineInto(nestedPrefix, b, mapper, target, symbolRenames,
-                 moduleNamespace);
+      inlineInto(nestedPrefix, b, mapper, beb, edges, childModule,
+                 symbolRenames, moduleNamespace);
     }
     currentPath.pop_back();
+    activeHierpaths = parentActivePaths;
+    wires.clear();
   }
 }
 
@@ -972,14 +1087,19 @@ void Inliner::inlineInstances(FModuleOp parent) {
   ModuleNamespace moduleNamespace(parent);
   auto moduleName = parent.getNameAttr();
 
-  for (auto &op : llvm::make_early_inc_range(*parent.getBody())) {
-    // If its not an instance op, skip it.
+  SmallVector<Value> wires;
+  SmallVector<Backedge> edges;
+  OpBuilder b(parent.getContext());
+  BackedgeBuilder beb(b, parent.getLoc());
+
+  for (auto &op : llvm::make_early_inc_range(*parent.getBodyBlock())) {
+    // If it's not an instance op, skip it.
     auto instance = dyn_cast<InstanceOp>(op);
     if (!instance)
       continue;
 
-    // If its not a regular module we can't inline it. Mark is as live.
-    auto *module = symbolTable.lookup(instance.moduleName());
+    // If it's not a regular module we can't inline it. Mark it as live.
+    auto *module = symbolTable.lookup(instance.getModuleName());
     auto target = dyn_cast<FModuleOp>(module);
     if (!target) {
       liveModules.insert(module);
@@ -998,7 +1118,7 @@ void Inliner::inlineInstances(FModuleOp parent) {
     if (auto instSym = getInnerSymName(instance)) {
       auto innerRef = InnerRefAttr::get(moduleName, instSym);
       // Preorder update of any non-local annotations this instance participates
-      // in.  This needs ot happen _before_ visiting modules so that internal
+      // in.  This needs to happen _before_ visiting modules so that internal
       // non-local annotations can be deleted if they are now local.
       for (auto sym : instOpHierPaths[innerRef]) {
         if (toBeFlattened)
@@ -1010,7 +1130,7 @@ void Inliner::inlineInstances(FModuleOp parent) {
 
     // The InstanceOp `instance` might not have a symbol, if it does not
     // participate in any HierPathOp. But the reTop might add a symbol to it, if
-    // a HierPathOp is is added to this Op.
+    // a HierPathOp is added to this Op.
     DenseMap<Attribute, Attribute> symbolRenames;
     if (!rootMap[target.getNameAttr()].empty()) {
       for (auto sym : rootMap[target.getNameAttr()]) {
@@ -1018,9 +1138,9 @@ void Inliner::inlineInstances(FModuleOp parent) {
         sym = mnla.reTop(parent);
         StringAttr instSym = getInnerSymName(instance);
         if (!instSym) {
-          instSym = StringAttr::get(context,
-                                    moduleNamespace.newName(instance.name()));
-          instance.inner_symAttr(instSym);
+          instSym = StringAttr::get(
+              context, moduleNamespace.newName(instance.getName()));
+          instance.setInnerSymAttr(InnerSymAttr::get(instSym));
         }
         instOpHierPaths[InnerRefAttr::get(moduleName, instSym)].push_back(
             sym.cast<StringAttr>());
@@ -1030,30 +1150,39 @@ void Inliner::inlineInstances(FModuleOp parent) {
         symbolRenames.insert({mnla.getNLA().getNameAttr(), sym});
       }
     }
+    auto instInnerSym = getInnerSymName(instance);
+    auto parentActivePaths = activeHierpaths;
+    setActiveHierPaths(moduleName, instInnerSym);
     // This must be done after the reTop, since it might introduce an innerSym.
-    currentPath.emplace_back(moduleName, getInnerSymName(instance));
+    currentPath.emplace_back(moduleName, instInnerSym);
     // Create the wire mapping for results + ports. We RAUW the results instead
     // of mapping them.
     BlockAndValueMapping mapper;
-    OpBuilder b(instance);
-    auto nestedPrefix = (instance.name() + "_").str();
-    auto wires =
-        mapPortsToWires(nestedPrefix, b, mapper, target, {}, moduleNamespace);
+    b.setInsertionPoint(instance);
+    auto nestedPrefix = (instance.getName() + "_").str();
+    mapPortsToWires(nestedPrefix, b, mapper, beb, target, {}, moduleNamespace,
+                    wires, edges);
     for (unsigned i = 0, e = instance.getNumResults(); i < e; ++i)
       instance.getResult(i).replaceAllUsesWith(wires[i]);
 
     // Inline the module, it can be marked as flatten and inline.
     if (toBeFlattened) {
-      flattenInto(nestedPrefix, b, mapper, target, {}, moduleNamespace);
+      flattenInto(nestedPrefix, b, mapper, beb, edges, target, {},
+                  moduleNamespace);
     } else {
-      inlineInto(nestedPrefix, b, mapper, target, symbolRenames,
+      inlineInto(nestedPrefix, b, mapper, beb, edges, target, symbolRenames,
                  moduleNamespace);
     }
     currentPath.pop_back();
+    activeHierpaths = parentActivePaths;
 
     // Erase the replaced instance.
     instance.erase();
+    wires.clear();
   }
+
+  // Fixup edges for ref types.
+  replaceRefEdges(edges);
 }
 
 void Inliner::identifyNLAsTargetingOnlyModules() {
@@ -1091,7 +1220,7 @@ void Inliner::identifyNLAsTargetingOnlyModules() {
 
       // Check MemOp and InstanceOp port annotations, special case
       TypeSwitch<Operation *>(op).Case<MemOp, InstanceOp>([&](auto op) {
-        for (auto portAnnoAttr : op.portAnnotations())
+        for (auto portAnnoAttr : op.getPortAnnotations())
           scanAnnos(AnnotationSet(portAnnoAttr.template cast<ArrayAttr>()));
       });
     });
@@ -1116,7 +1245,7 @@ void Inliner::identifyNLAsTargetingOnlyModules() {
   // Mark NLA's that were not referenced as module-only
   for (auto &[_, mnla] : nlaMap) {
     auto nla = mnla.getNLA();
-    if (nla.isModule() && !nonModOnlyNLAs.count(nla.sym_nameAttr()))
+    if (nla.isModule() && !nonModOnlyNLAs.count(nla.getSymNameAttr()))
       mnla.markModuleOnly();
   }
 }
@@ -1128,13 +1257,13 @@ void Inliner::run() {
   CircuitNamespace circuitNamespace(circuit);
 
   // Gather all NLA's, build information about the instance ops used:
-  for (auto nla : circuit.getBody()->getOps<HierPathOp>()) {
+  for (auto nla : circuit.getBodyBlock()->getOps<HierPathOp>()) {
     auto mnla = MutableNLA(nla, &circuitNamespace);
-    nlaMap.insert({nla.sym_nameAttr(), mnla});
-    rootMap[mnla.getNLA().root()].push_back(nla.sym_nameAttr());
-    for (auto p : nla.namepath())
+    nlaMap.insert({nla.getSymNameAttr(), mnla});
+    rootMap[mnla.getNLA().root()].push_back(nla.getSymNameAttr());
+    for (auto p : nla.getNamepath())
       if (auto ref = p.dyn_cast<InnerRefAttr>())
-        instOpHierPaths[ref].push_back(nla.sym_nameAttr());
+        instOpHierPaths[ref].push_back(nla.getSymNameAttr());
   }
   // Mark 'module-only' the NLA's that only target modules.
   // These may be deleted when their module is inlined/flattened.
@@ -1158,8 +1287,7 @@ void Inliner::run() {
       // Delete the flatten annotation, the transform was performed.
       // Even if visited again in our walk (for inlining),
       // we've just flattened it and so the annotation is no longer needed.
-      AnnotationSet::removeAnnotations(module,
-                                       "firrtl.transforms.FlattenAnnotation");
+      AnnotationSet::removeAnnotations(module, flattenAnnoClass);
     } else {
       inlineInstances(module);
     }
@@ -1167,8 +1295,8 @@ void Inliner::run() {
 
   // Delete all unreferenced modules.  Mark any NLAs that originate from dead
   // modules as also dead.
-  for (auto mod :
-       llvm::make_early_inc_range(circuit.getBody()->getOps<FModuleLike>())) {
+  for (auto mod : llvm::make_early_inc_range(
+           circuit.getBodyBlock()->getOps<FModuleLike>())) {
     if (liveModules.count(mod))
       continue;
     for (auto nla : rootMap[mod.moduleNameAttr()])
@@ -1178,18 +1306,18 @@ void Inliner::run() {
 
   // Remove leftover inline annotations, and check no flatten annotations
   // remain as they should have been processed and removed.
-  for (auto mod : circuit.getBody()->getOps<FModuleLike>()) {
+  for (auto mod : circuit.getBodyBlock()->getOps<FModuleLike>()) {
     if (shouldInline(mod)) {
       assert(cast<hw::HWModuleLike>(*mod).isPublic() &&
              "non-public module with inline annotation still present");
-      AnnotationSet::removeAnnotations(mod, "firrtl.passes.InlineAnnotation");
+      AnnotationSet::removeAnnotations(mod, inlineAnnoClass);
     }
     assert(!shouldFlatten(mod) && "flatten annotation found on live module");
   }
 
   LLVM_DEBUG({
     llvm::dbgs() << "NLA modifications:\n";
-    for (auto nla : circuit.getBody()->getOps<HierPathOp>()) {
+    for (auto nla : circuit.getBodyBlock()->getOps<HierPathOp>()) {
       auto &mnla = nlaMap[nla.getNameAttr()];
       mnla.dump();
     }
@@ -1201,8 +1329,8 @@ void Inliner::run() {
 
   // Garbage collect any annotations which are now dead.  Duplicate annotations
   // which are now split.
-  for (auto fmodule : circuit.getBody()->getOps<FModuleOp>()) {
-    for (auto &op : *fmodule.getBody()) {
+  for (auto fmodule : circuit.getBodyBlock()->getOps<FModuleOp>()) {
+    for (auto &op : *fmodule.getBodyBlock()) {
       AnnotationSet annotations(&op);
       // Early exit to avoid adding an empty annotations attribute to operations
       // which did not previously have annotations.

@@ -11,7 +11,7 @@ add_circt_library(CIRCTHandshakeToHW
   CIRCTHandshakeTransforms
   MLIRIR
   MLIRPass
-  MLIRArithmeticDialect
+  MLIRArithDialect
   MLIRControlFlowDialect
   MLIRFuncDialect
   MLIRSupport

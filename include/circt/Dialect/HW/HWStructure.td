@@ -14,7 +14,9 @@
 /// the module-like operations.
 class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     HWOp<mnemonic, traits # [
-      DeclareOpInterfaceMethods<HWModuleLike>, FunctionOpInterface, Symbol,
+      DeclareOpInterfaceMethods<HWModuleLike>,
+      DeclareOpInterfaceMethods<HWMutableModuleLike>,
+      FunctionOpInterface, Symbol,
       OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;
@@ -32,20 +34,6 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       ArrayRef<unsigned> eraseInputs,
       ArrayRef<unsigned> eraseOutputs
     );
-
-    /// Insert ports into the module. Does not modify the block arguments of the
-    /// module body.
-    void insertPorts(
-      ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
-      ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs
-    ) { modifyPorts(insertInputs, insertOutputs, {}, {}); }
-
-    /// Erase ports from the module. Does not modify the block arguments of the
-    /// module body.
-    void erasePorts(
-      ArrayRef<unsigned> eraseInputs,
-      ArrayRef<unsigned> eraseOutputs
-    ) { modifyPorts({}, {}, eraseInputs, eraseOutputs); }
   }];
 }
 
@@ -73,12 +61,18 @@ def HWModuleOp : HWModuleOpBase<"module",
     OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
                    CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes,
+                   CArg<"StringAttr", "{}">:$comment,
+		   CArg<"bool", "true">:$shouldEnsureTerminator)>,
+    OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
+                   "HWModuleBuilder":$modBuilder,
+                   CArg<"ArrayAttr", "{}">:$parameters,
+                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes,
                    CArg<"StringAttr", "{}">:$comment)>
   ];
 
   let extraModuleClassDeclaration = [{
     using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::front;
-    using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::getBody;
+    using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::getFunctionBody;
 
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
@@ -93,6 +87,9 @@ def HWModuleOp : HWModuleOpBase<"module",
       return getAllModulePortInfos(*this);
     }
 
+    /// Returns the number of in or inout ports.
+    size_t getNumInOrInoutPorts() { return getArgumentTypes().size(); }
+
     /// Return the PortInfo for the specified input or inout port.
     PortInfo getInOrInoutPort(size_t i) {
       return getModuleInOrInoutPort(*this, i);
@@ -103,19 +100,36 @@ def HWModuleOp : HWModuleOpBase<"module",
       return getModuleOutputPort(*this, i);
     }
 
+    /// Append an input with a given name and type to the port list.
+    /// If the name is not unique, a unique name is created and returned.
+    std::pair<StringAttr, BlockArgument>
+    appendInput(const Twine &name, Type ty) {
+      return insertInput(getNumInOrInoutPorts(), name, ty);
+    }
+
+    std::pair<StringAttr, BlockArgument>
+    appendInput(StringAttr name, Type ty) {
+      return insertInput(getNumInOrInoutPorts(), name.getValue(), ty);
+    }
+
+    /// Insert an input with a given name and type into the port list.
+    /// The input is added at the specified index.
+    std::pair<StringAttr, BlockArgument>
+    insertInput(unsigned index, StringAttr name, Type ty);
+
+    std::pair<StringAttr, BlockArgument>
+    insertInput(unsigned index, const Twine &name, Type ty) {
+      ::mlir::StringAttr nameAttr = ::mlir::StringAttr::get(getContext(), name);
+      return insertInput(index, nameAttr, ty);
+    }
+
     /// Inserts a list of output ports into the port list at a specific
     /// location, shifting all subsequent ports.  Rewrites the output op
     /// to return the associated values.
     void insertOutputs(unsigned index,
                        ArrayRef<std::pair<StringAttr, Value>> outputs);
 
-    /// Appends output ports to the module with the specified names and
-    /// rewrites the output op to return the associated values.
-    void appendOutputs(ArrayRef<std::pair<StringAttr, Value>> outputs);
-
-    // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
-    // squatting on the name.
-    Block *getBodyBlock() { return &body().front(); }
+    Block *getBodyBlock() { return &getFunctionBody().front(); }
 
     // Get the module's symbolic name as StringAttr.
     StringAttr getNameAttr() {
@@ -430,26 +444,26 @@ def InstanceOp : HWOp<"instance", [
 
     /// Change the names of all the input ports.
     void setArgumentNames(ArrayAttr names) {
-      argNamesAttr(names);
+      setArgNamesAttr(names);
     }
 
     /// Change the names of all the result ports.
     void setResultNames(ArrayAttr names) {
-      resultNamesAttr(names);
+      setResultNamesAttr(names);
     }
 
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
-    Operation *getReferencedModule(const HWSymbolCache *cache = nullptr);
+    Operation *getReferencedModule(const HWSymbolCache *cache);
 
     /// Get the instances's name.
     StringAttr getName() {
-      return instanceNameAttr();
+      return getInstanceNameAttr();
     }
 
     /// Set the instance's name.
     void setName(StringAttr name) {
-      instanceNameAttr(name);
+      setInstanceNameAttr(name);
     }
 
     //===------------------------------------------------------------------===//
@@ -465,20 +479,20 @@ def InstanceOp : HWOp<"instance", [
 }
 
 def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
-                                NoSideEffect, ReturnLike]> {
+                                Pure, ReturnLike]> {
   let summary = "HW termination operation";
   let description = [{
     "hw.output" marks the end of a region in the HW dialect and the values
     to put on the output ports.
   }];
 
-  let arguments = (ins Variadic<AnyType>:$operands);
+  let arguments = (ins Variadic<AnyType>:$outputs);
 
   let builders = [
     OpBuilder<(ins), "build($_builder, $_state, llvm::None);">
   ];
 
-  let assemblyFormat = "attr-dict ($operands^ `:` qualified(type($operands)))?";
+  let assemblyFormat = "attr-dict ($outputs^ `:` qualified(type($outputs)))?";
 
   let hasVerifier = 1;
 }
@@ -509,9 +523,11 @@ def ProbeOp : HWOp<"probe", []> {
   }];
 
   let arguments = (ins SymbolNameAttr:$inner_sym,
-                       Variadic<AnyType>:$operands);
+                       Variadic<AnyType>:$captured);
   let results = (outs);
 
-  let assemblyFormat = "$inner_sym attr-dict (`,` $operands^ `:` qualified(type($operands)))?";
+  let assemblyFormat = [{
+    $inner_sym attr-dict (`,` $captured^ `:` qualified(type($captured)))?
+  }];
 
 }

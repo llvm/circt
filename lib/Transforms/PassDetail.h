@@ -26,11 +26,19 @@ namespace memref {
 class MemRefDialect;
 } // end namespace memref
 
+namespace cf {
+class ControlFlowDialect;
+} // namespace cf
+
+namespace func {
+class FuncDialect;
+} // namespace func
+} // end namespace mlir
+
 namespace circt {
 #define GEN_PASS_CLASSES
 #include "circt/Transforms/Passes.h.inc"
 
 } // namespace circt
-} // end namespace mlir
 
 #endif // TRANSFORMS_PASSDETAIL_H

@@ -72,8 +72,8 @@ firrtl.circuit "TestHarness" {
 
   // CHECK: firrtl.module @TestEn0(out %test_en: !firrtl.uint<1>)
   firrtl.module @TestEn0() {
-    // A bundle type should be work for the enable signal using SubAnnotations. 
-    %test_en = firrtl.wire {annotations = [#firrtl.subAnno<fieldID = 3, {class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}>]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    // A bundle type should be work for the enable signal using annotations with fieldIDs.
+    %test_en = firrtl.wire {annotations = [{circt.fieldID = 3 : i32, class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
     // CHECK: %0 = firrtl.subindex %test_en_0[0] : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
     // CHECK: %1 = firrtl.subfield %0(1) : (!firrtl.bundle<baz: uint<1>, qux: uint<1>>) -> !firrtl.uint<1>
     // CHECK: firrtl.connect %test_en, %1 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -113,3 +113,69 @@ firrtl.circuit "TestHarness" {
     // CHECK-NOT: firrtl.connect
   }
 }
+
+// Test enable signal as input to top module, and outside of DUT (issue #3784).
+// CHECK-LABEL: firrtl.circuit "EnableOutsideDUT"
+firrtl.circuit "EnableOutsideDUT" {
+  firrtl.extmodule @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+
+  // CHECK: firrtl.module @A(in %test_en: !firrtl.uint<1>)
+  firrtl.module @A() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    %in, %test_en, %en, %out = firrtl.instance eicg @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    // CHECK: firrtl.connect %eicg_test_en, %test_en : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+
+  // Regardless of enable signal origin, leave clocks outside DUT alone.
+  firrtl.module @OutsideDUT() {
+    %in, %test_en, %en, %out = firrtl.instance eicg @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    // CHECK-NOT: firrtl.connect
+  }
+
+  firrtl.module @EnableOutsideDUT(in %port_en: !firrtl.uint<1>) attributes {
+    portAnnotations = [[{class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]]
+  } {
+    // CHECK: firrtl.instance o @OutsideDUT
+    firrtl.instance o @OutsideDUT()
+
+    // CHECK: %a_test_en = firrtl.instance a  @A(in test_en: !firrtl.uint<1>)
+    firrtl.instance a @A()
+    // CHECK: firrtl.connect %a_test_en, %port_en
+  }
+}
+
+// Test enable signal outside DUT but not top.
+// CHECK-LABEL: firrtl.circuit "EnableOutsideDUT2"
+firrtl.circuit "EnableOutsideDUT2" {
+  firrtl.extmodule @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+
+  // CHECK: firrtl.module @A(in %test_en: !firrtl.uint<1>)
+  firrtl.module @A() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    %in, %test_en, %en, %out = firrtl.instance eicg @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    // CHECK: firrtl.connect %eicg_test_en, %test_en : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+
+  // Regardless of enable signal origin, leave clocks outside DUT alone.
+  // CHECK: @OutsideDUT()
+  firrtl.module @OutsideDUT() {
+    %in, %test_en, %en, %out = firrtl.instance eicg @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    // CHECK-NOT: firrtl.connect
+  }
+
+  // CHECK-LABEL: @enableSignal
+  firrtl.module @enableSignal() {
+    %test_en = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]} : !firrtl.uint<1>
+  }
+
+  // CHECK-LABEL: @EnableOutsideDUT2
+  firrtl.module @EnableOutsideDUT2() {
+    // CHECK: %[[en:.+]] = firrtl.instance en @enableSignal
+    firrtl.instance en @enableSignal()
+    // CHECK: firrtl.instance o @OutsideDUT
+    firrtl.instance o @OutsideDUT()
+
+    // CHECK: %[[a_en:.+]] = firrtl.instance a  @A(in test_en: !firrtl.uint<1>)
+    firrtl.instance a @A()
+    // CHECK: firrtl.connect %[[a_en]], %[[en]]
+  }
+}
+

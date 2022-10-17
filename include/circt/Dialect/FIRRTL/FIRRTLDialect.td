@@ -22,7 +22,7 @@ def FIRRTLDialect : Dialect {
   }];
 
   let hasConstantMaterializer = 1;
-  let useDefaultTypePrinterParser = 1;
+  let useDefaultTypePrinterParser = 0;
   let useDefaultAttributePrinterParser = 1;
 
   let dependentDialects = [
@@ -30,6 +30,9 @@ def FIRRTLDialect : Dialect {
   ];
 
   let extraClassDeclaration = [{
+     ::mlir::Type parseType(::mlir::DialectAsmParser &parser) const override;
+     void printType(::mlir::Type type, ::mlir::DialectAsmPrinter &printer) const override;
+
     /// Register all FIRRTL types.
     void registerTypes();
     /// Register all attributes.

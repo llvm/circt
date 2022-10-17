@@ -15,7 +15,7 @@
 
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/Simulation.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -790,8 +790,8 @@ HandshakeExecuter::HandshakeExecuter(
 
   // Initialize the value map for buffers with initial values.
   for (auto bufferOp : func.getOps<handshake::BufferOp>()) {
-    if (bufferOp.initValues().hasValue()) {
-      auto initValues = bufferOp.getInitValues();
+    if (bufferOp.getInitValues().has_value()) {
+      auto initValues = bufferOp.getInitValueArray();
       assert(initValues.size() == 1 &&
              "Handshake-runner only supports buffer initialization with a "
              "single buffer value.");
@@ -900,7 +900,7 @@ HandshakeExecuter::HandshakeExecuter(
 
     for (auto out : enumerate(op.getResults())) {
       LLVM_DEBUG(debugArg("OUT", out.value(), outValues[out.index()], time));
-      assert(outValues[out.index()].hasValue());
+      assert(outValues[out.index()].has_value());
       valueMap[out.value()] = outValues[out.index()];
       timeMap[out.value()] = time + 1;
       scheduleUses(readyList, valueMap, out.value());

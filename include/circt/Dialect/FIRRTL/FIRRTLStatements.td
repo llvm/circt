@@ -13,10 +13,10 @@
 def AttachOp : FIRRTLOp<"attach"> {
   let summary = "Analog Attach Statement";
 
-  let arguments = (ins Variadic<AnalogType>:$operands);
+  let arguments = (ins Variadic<AnalogType>:$attached);
   let results = (outs);
 
-  let assemblyFormat = "$operands attr-dict `:` qualified(type($operands))";
+  let assemblyFormat = "$attached attr-dict `:` qualified(type($attached))";
 
   let hasCanonicalizeMethod = true;
 }
@@ -30,7 +30,7 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
     ```
     }];
 
-  let arguments = (ins FIRRTLType:$dest, FIRRTLType:$src);
+  let arguments = (ins ConnectableType:$dest, ConnectableType:$src);
   let results = (outs);
 
   let assemblyFormat =
@@ -49,7 +49,8 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]
     ```
     }];
 
-  let arguments = (ins SizedType:$dest, SizedType:$src);
+  let arguments = (ins SizedBaseOrRefTypeOrForeignType:$dest,
+                       SizedBaseOrRefTypeOrForeignType:$src);
   let results = (outs);
   let hasCanonicalizeMethod = true;
 
@@ -63,16 +64,16 @@ def PrintFOp : FIRRTLOp<"printf"> {
   let summary = "Formatted Print Statement";
 
   let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$formatString,
-                       Variadic<FIRRTLType>:$operands, StrAttr:$name);
+                       Variadic<FIRRTLBaseType>:$substitutions, StrAttr:$name);
   let results = (outs);
 
   let assemblyFormat = [{
     $clock `,` $cond `,` $formatString custom<PrintfAttrs>(attr-dict)
-    (`(` $operands^ `)` `:` qualified(type($operands)))?
+    (`(` $substitutions^ `)` `:` qualified(type($substitutions)))?
   }];
 }
 
-def SkipOp : FIRRTLOp<"skip", [NoSideEffect]> {
+def SkipOp : FIRRTLOp<"skip", [Pure]> {
   let summary = "Skip statement";
   let description = [{
     Skip Statement:
@@ -116,15 +117,17 @@ class VerifOp<string mnemonic, list<Trait> traits = []> :
     UInt1Type:$predicate,
     UInt1Type:$enable,
     StrAttr:$message,
-    Variadic<AnyType>:$operands,
+    Variadic<AnyType>:$substitutions,
     StrAttr:$name,
     DefaultValuedAttr<BoolAttr,"false">:$isConcurrent,
     DefaultValuedAttr<EventControlAttr,"EventControl::AtPosEdge">:$eventControl
   );
 
+  let hasCanonicalizer = true;
+
   let assemblyFormat = [{
     $clock `,` $predicate `,` $enable `,`
-    $message (`(` $operands^ `)` `:` qualified(type($operands)))?
+    $message (`(` $substitutions^ `)` `:` qualified(type($substitutions)))?
     custom<VerifAttrs>(attr-dict)
   }];
 }
@@ -142,7 +145,7 @@ def CoverOp : VerifOp<"cover"> {
 }
 
 def WhenOp : FIRRTLOp<"when", [SingleBlock, NoTerminator, NoRegionArguments,
-                               RecursiveSideEffects]> {
+                               RecursiveMemoryEffects, RecursivelySpeculatable]> {
   let summary = "When Statement";
   let description = [{
     The "firrtl.when" operation represents a conditional.  Connections within
@@ -167,8 +170,8 @@ def WhenOp : FIRRTLOp<"when", [SingleBlock, NoTerminator, NoRegionArguments,
   let extraClassDeclaration = [{
 
     Block &getThenBlock() {
-      assert(!thenRegion().empty() && "Unexpected empty 'then' region.");
-      return thenRegion().front();
+      assert(!getThenRegion().empty() && "Unexpected empty 'then' region.");
+      return getThenRegion().front();
     }
 
     OpBuilder getThenBodyBuilder() {
@@ -177,14 +180,14 @@ def WhenOp : FIRRTLOp<"when", [SingleBlock, NoTerminator, NoRegionArguments,
     }
 
     bool hasElseRegion() {
-      return !elseRegion().empty();
+      return !getElseRegion().empty();
     }
 
     void createElseRegion();
 
     Block &getElseBlock() {
       assert(hasElseRegion() && "Unexpected empty 'else' region.");
-      return elseRegion().front();
+      return getElseRegion().front();
     }
 
     OpBuilder getElseBodyBuilder() {
@@ -197,7 +200,7 @@ def WhenOp : FIRRTLOp<"when", [SingleBlock, NoTerminator, NoRegionArguments,
 def ForceOp : FIRRTLOp<"force", [SameTypeOperands]> {
   let summary = "Force procedural statement";
   let description = "Maps to the corresponding `sv.force` operation.";
-  let arguments = (ins FIRRTLType:$dest, FIRRTLType:$src);
+  let arguments = (ins FIRRTLBaseType:$dest, FIRRTLBaseType:$src);
   let results = (outs);
   let assemblyFormat =
     "$dest `,` $src attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
@@ -208,9 +211,8 @@ def ProbeOp : FIRRTLOp<"probe"> {
   let description = [{
     Captures values without binding to any accidental name.
   }];
-  let arguments = (ins SymbolNameAttr:$inner_sym, Variadic<FIRRTLType>:$operands);
+  let arguments = (ins SymbolNameAttr:$inner_sym, Variadic<FIRRTLBaseType>:$captured);
   let results = (outs);
 
-  let assemblyFormat = "$inner_sym attr-dict ( `,` $operands^  `:` qualified(type($operands)))?";
+  let assemblyFormat = "$inner_sym attr-dict ( `,` $captured^  `:` qualified(type($captured)))?";
 }
-

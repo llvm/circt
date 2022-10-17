@@ -28,7 +28,8 @@ public:
   ResultType dispatchCHIRRTLVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<CombMemOp, MemoryPortOp, MemoryPortAccessOp, SeqMemOp>(
+        .template Case<CombMemOp, MemoryPortOp, MemoryDebugPortOp,
+                       MemoryPortAccessOp, SeqMemOp>(
             [&](auto opNode) -> ResultType {
               return thisCast->visitCHIRRTL(opNode, args...);
             })
@@ -57,6 +58,7 @@ public:
 
   HANDLE(CombMemOp);
   HANDLE(MemoryPortOp);
+  HANDLE(MemoryDebugPortOp);
   HANDLE(MemoryPortAccessOp);
   HANDLE(SeqMemOp);
 #undef HANDLE

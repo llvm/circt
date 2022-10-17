@@ -477,8 +477,8 @@ Optional<IntType::Kind> IntType::getKindFromDomainAndSize(Domain domain,
 
 IntType IntType::get(MLIRContext *context, Kind kind, Optional<Sign> sign) {
   return Base::get(context, detail::IntTypeStorage::pack(
-                                kind, sign.getValueOr(getDefaultSign(kind)),
-                                sign.hasValue()));
+                                kind, sign.value_or(getDefaultSign(kind)),
+                                sign.has_value()));
 }
 
 IntType::Kind IntType::getKind() const { return getImpl()->kind; }
@@ -770,7 +770,7 @@ Optional<Range> PackedDim::getRange() const {
 }
 
 Optional<unsigned> PackedDim::getSize() const {
-  return getRange().map([](auto r) { return r.size; });
+  return getRange().transform([](auto r) { return r.size; });
 }
 
 const detail::DimStorage *PackedDim::getImpl() const {
@@ -929,7 +929,7 @@ UnpackedType UnpackedAssocDim::getIndexType() const {
 
 UnpackedQueueDim UnpackedQueueDim::get(UnpackedType inner,
                                        Optional<unsigned> bound) {
-  auto type = Base::get(inner.getContext(), inner, bound.getValueOr(-1));
+  auto type = Base::get(inner.getContext(), inner, bound.value_or(-1));
   type.getImpl()->finalize<UnpackedQueueDim>(type, bound);
   return type;
 }
@@ -1121,7 +1121,7 @@ PackedStructType PackedStructType::get(StructKind kind,
          "packed struct members must be packed");
   return Base::get(loc.getContext(),
                    detail::StructTypeStorage::pack(
-                       kind, sign.getValueOr(Sign::Unsigned), sign.hasValue()),
+                       kind, sign.value_or(Sign::Unsigned), sign.has_value()),
                    members, name, loc);
 }
 
@@ -1245,13 +1245,13 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
       return failure();
     StringAttr name;
     auto result = parser.parseOptionalAttribute(name);
-    if (result.hasValue())
+    if (result.has_value())
       if (*result || parser.parseComma())
         return failure();
     LocationAttr loc;
     PackedType base;
     result = parser.parseOptionalAttribute(loc);
-    if (result.hasValue()) {
+    if (result.has_value()) {
       if (*result)
         return failure();
     } else {
@@ -1368,7 +1368,7 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
 
     StringAttr name;
     auto result = parser.parseOptionalAttribute(name);
-    if (result.hasValue())
+    if (result.has_value())
       if (*result || parser.parseComma())
         return failure();
 
@@ -1549,16 +1549,13 @@ static ParseResult parseMooreType(DialectAsmParser &parser, Subset subset,
                                   Type &type) {
   llvm::SMLoc loc = parser.getCurrentLocation();
   StringRef mnemonic;
-  if (parser.parseKeyword(&mnemonic))
-    return failure();
-
-  OptionalParseResult result = generatedTypeParser(parser, mnemonic, type);
-  if (result.hasValue())
-    return result.getValue();
+  OptionalParseResult result = generatedTypeParser(parser, &mnemonic, type);
+  if (result.has_value())
+    return result.value();
 
   result = customTypeParser(parser, mnemonic, subset, loc, type);
-  if (result.hasValue())
-    return result.getValue();
+  if (result.has_value())
+    return result.value();
 
   parser.emitError(loc) << "unknown type `" << mnemonic
                         << "` in dialect `moore`";

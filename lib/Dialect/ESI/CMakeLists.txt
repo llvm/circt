@@ -10,6 +10,8 @@ set(srcs
   ESIFolds.cpp
   ESIOps.cpp
   ESIPasses.cpp
+  ESIServices.cpp
+  ESIStdServices.cpp
   ESITranslations.cpp
   ESITypes.cpp
 )
@@ -17,19 +19,22 @@ set(srcs
 set(ESI_LinkLibs
   CIRCTSupport
   CIRCTComb
+  CIRCTMSFT
+  CIRCTMSFTTransforms
   CIRCTSV
   CIRCTHW
   MLIRIR
   MLIRTransforms
   MLIRControlFlowDialect
   MLIRFuncDialect
-  MLIRArithmeticDialect
+  MLIRArithDialect
   MLIRTranslateLib
 )
 
 set(ESI_Deps
   ${ESI_LinkLibs}
   MLIRESITransformsIncGen
+  MLIRESIInterfacesIncGen
 )
 
 if(CapnProto_FOUND)

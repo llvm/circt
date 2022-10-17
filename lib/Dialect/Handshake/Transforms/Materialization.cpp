@@ -15,7 +15,7 @@
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -132,6 +132,8 @@ struct HandshakeMaterializeForksSinksPass
           HandshakeMaterializeForksSinksPass> {
   void runOnOperation() override {
     handshake::FuncOp op = getOperation();
+    if (op.isExternal())
+      return;
     OpBuilder builder(op);
     if (addForkOps(op.getRegion(), builder).failed() ||
         addSinkOps(op.getRegion(), builder).failed() ||
@@ -145,6 +147,8 @@ struct HandshakeDematerializeForksSinksPass
           HandshakeDematerializeForksSinksPass> {
   void runOnOperation() override {
     handshake::FuncOp op = getOperation();
+    if (op.isExternal())
+      return;
     for (auto sinkOp :
          llvm::make_early_inc_range(op.getOps<handshake::SinkOp>()))
       sinkOp.erase();

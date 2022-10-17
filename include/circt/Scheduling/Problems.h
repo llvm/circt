@@ -62,7 +62,7 @@ namespace scheduling {
 /// are transparent to concrete algorithms.
 ///
 /// All components of the problem (operations, dependences, operator types, as
-/// well as the problem itself) can be annotated with *properties*. In this
+/// well as the instance itself) can be annotated with *properties*. In this
 /// basic problem, we model
 ///
 /// - `linkedOperatorType` maps operations to their operator types.
@@ -120,7 +120,7 @@ protected:
   template <typename T>
   using OperatorTypeProperty = llvm::DenseMap<OperatorType, Optional<T>>;
   template <typename T>
-  using ProblemProperty = Optional<T>;
+  using InstanceProperty = Optional<T>;
 
   //===--------------------------------------------------------------------===//
   // Containers for problem components and properties
@@ -254,16 +254,15 @@ public:
   virtual LogicalResult verify();
 };
 
-/// This class models a cyclic scheduling problem. Its solution solution can be
-/// used to construct a pipelined datapath with a fixed, integer initiation
-/// interval, in which the execution of multiple iterations/samples/etc. may
-/// overlap.
+/// This class models a cyclic scheduling problem. Its solution can be used to
+/// construct a pipelined datapath with a fixed, integer initiation interval,
+/// in which the execution of multiple iterations/samples/etc. may overlap.
 class CyclicProblem : public virtual Problem {
   DEFINE_FACTORY_METHOD(CyclicProblem)
 
 private:
   DependenceProperty<unsigned> distance;
-  ProblemProperty<unsigned> initiationInterval;
+  InstanceProperty<unsigned> initiationInterval;
 
 public:
   /// The distance determines whether a dependence has to be satisfied in the

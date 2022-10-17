@@ -1,4 +1,4 @@
-; RUN: firtool %s -dedup=false --lower-memory --format=fir --annotation-file %s.anno.json --repl-seq-mem --repl-seq-mem-file="metadata/dutModule.conf" --verilog |  FileCheck %s
+; RUN: firtool %s --annotation-file %s.anno.json --repl-seq-mem --repl-seq-mem-file="dutModule.conf" |  FileCheck %s
 
 
 circuit test:
@@ -175,7 +175,7 @@ circuit test:
 ; CHECK-LABEL: external module tbMemoryKind1_0_ext
 
 
-; CHECK-LABEL: FILE "metadata/tb_seq_mems.json"
+; CHECK-LABEL: FILE "metadata{{[/\]}}tb_seq_mems.json"
 ; CHECK:      [
 ; CHECK-NEXT:   {
 ; CHECK-NEXT:     "module_name": "tbMemoryKind1_ext",
@@ -206,7 +206,7 @@ circuit test:
 ; CHECK-NEXT: ]
 
 
-; CHECK-LABEL: FILE "metadata/seq_mems.json"
+; CHECK-LABEL: FILE "metadata{{[/\]}}seq_mems.json"
 ; CHECK:      [
 ; CHECK-NEXT:   {
 ; CHECK-NEXT:     "module_name": "dutMemory_ext",
@@ -224,7 +224,7 @@ circuit test:
 ; CHECK-NEXT: ]
 
 
-; CHECK-LABEL: FILE "metadata/dutModule.conf"
+; CHECK-LABEL: FILE "dutModule.conf"
 ; CHECK: name dutMemory_ext depth 32 width 8 ports write,read
 ; CHECK: name tbMemoryKind1_ext depth 16 width 8 ports write,read
 ; CHECK: name tbMemoryKind1_0_ext depth 16 width 8 ports write,read

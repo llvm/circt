@@ -11,7 +11,7 @@
 #ifndef CIRCT_C_DIALECT_SV_H
 #define CIRCT_C_DIALECT_SV_H
 
-#include "mlir-c/Registration.h"
+#include "mlir-c/IR.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,6 +30,14 @@ MLIR_CAPI_EXPORTED MlirAttribute svSVAttributeAttrGet(MlirContext cCtxt,
                                                       MlirStringRef expression);
 MLIR_CAPI_EXPORTED MlirStringRef svSVAttributeAttrGetName(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirStringRef svSVAttributeAttrGetExpression(MlirAttribute);
+
+MLIR_CAPI_EXPORTED bool svAttrIsASVAttributesAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirAttribute svSVAttributesAttrGet(MlirContext cCtxt,
+                                                       MlirAttribute attributes,
+                                                       bool emitAsComments);
+MLIR_CAPI_EXPORTED MlirAttribute svSVAttributesAttrGetAttributes(MlirAttribute);
+MLIR_CAPI_EXPORTED
+bool svSVAttributesAttrGetEmitAsComments(MlirAttribute);
 
 #ifdef __cplusplus
 }

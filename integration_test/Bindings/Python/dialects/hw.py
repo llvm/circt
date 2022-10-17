@@ -48,8 +48,8 @@ with Context() as ctx, Location.unknown():
       # CHECK: [[ARRAY2:%.+]] = hw.array_create %[[CONST]] : i32
       array2 = hw.ArrayCreateOp.create([constI32])
 
-      # CHECK: %false = hw.constant false
-      # CHECK: hw.array_get [[ARRAY2]][%false] : !hw.array<1xi32>
+      # CHECK: %c0_i0 = hw.constant 0 : i0
+      # CHECK: hw.array_get [[ARRAY2]][%c0_i0] : !hw.array<1xi32>
       hw.ArrayGetOp.create(array2, 0)
 
       # CHECK: [[STRUCT1:%.+]] = hw.struct_create (%c1_i32, %true) : !hw.struct<a: i32, b: i1>
@@ -74,14 +74,21 @@ with Context() as ctx, Location.unknown():
   print(typeAlias.scope)
   print(typeAlias.name)
 
-  pdecl = hw.ParamDeclAttr.get("param1", TypeAttr.get(i32),
-                               IntegerAttr.get(i32, 13))
-  # CHECK: #hw.param.decl<"param1": i32 = 13 : i32>
+  pdecl = hw.ParamDeclAttr.get("param1", i32, IntegerAttr.get(i32, 13))
+  # CHECK: #hw.param.decl<"param1": i32 = 13>
   print(pdecl)
 
-  pdecl = hw.ParamDeclAttr.get_nodefault("param2", TypeAttr.get(i32))
+  pdecl = hw.ParamDeclAttr.get_nodefault("param2", i32)
   # CHECK: #hw.param.decl<"param2": i32>
   print(pdecl)
+
+  # CHECK: #hw.param.decl.ref<"param2"> : i32
+  pdeclref = hw.ParamDeclRefAttr.get(ctx, "param2")
+  print(pdeclref)
+
+  # CHECK: !hw.int<#hw.param.decl.ref<"param2">>
+  pinttype = hw.ParamIntType.get_from_param(ctx, pdeclref)
+  print(pinttype)
 
   pverbatim = hw.ParamVerbatimAttr.get(StringAttr.get("this is verbatim"))
   # CHECK: #hw.param.verbatim<"this is verbatim">

@@ -73,11 +73,11 @@ def LLHD_EntityOp : LLHD_Op<"entity", [
     /// Verifies the body of the function.
     LogicalResult verifyBody();
 
-    // Use FunctionOpInterface traits's getBody method.
-    using mlir::detail::FunctionOpInterfaceTrait<EntityOp>::getBody;
+    // Use FunctionOpInterface traits's getFunctionBody method.
+    using mlir::detail::FunctionOpInterfaceTrait<EntityOp>::getFunctionBody;
 
     /// Return the block corresponding to the region.
-    Block *getBodyBlock() { return &body().front(); }
+    Block *getBodyBlock() { return &getBody().front(); }
   }];
 }
 
@@ -195,7 +195,6 @@ def LLHD_InstOp : LLHD_Op<"inst", [
   }];
 
   let extraClassDeclaration = [{
-    StringRef getCallee() { return callee(); }
     FunctionType getCalleeType();
 
     /// Get the argument operands to the called function.

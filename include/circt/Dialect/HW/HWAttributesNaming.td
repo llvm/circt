@@ -43,7 +43,8 @@ def InnerRefAttr : AttrDef<HWDialect, "InnerRef", [
     void walkImmediateSubElements(
         llvm::function_ref<void(mlir::Attribute)> walkAttrsFn,
         llvm::function_ref<void(mlir::Type)> walkTypesFn) {
-      walkAttrsFn(getModule());
+      walkAttrsFn(getModuleRef());
+      walkAttrsFn(getName());
     }
 
     /// Return the name of the referenced module.

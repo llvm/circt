@@ -28,7 +28,7 @@ def DeferAssertAttr : I32EnumAttr<
 
 /// A constraint forcing `cover` ops to have no message.
 def NoMessageVerif : PredOpTrait<"has no message",
-  CPred<"!$message && $operands.empty()">>;
+  CPred<"!$message && $substitutions.empty()">>;
 
 /// Immediate verification operations defined by the SV standard.
 class ImmediateVerifOp<string mnemonic, list<Trait> traits = []> :
@@ -37,13 +37,13 @@ class ImmediateVerifOp<string mnemonic, list<Trait> traits = []> :
     I1:$expression,
     DeferAssertAttr:$defer,
     OptionalAttr<StrAttr>:$label,
-    OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$operands);
+    OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$substitutions);
 
   let assemblyFormat = [{
     $expression `,` $defer
     (`label` $label^)?
-    (`message` $message^ (`(` $operands^ `)` `:` qualified(type($operands)))?)?
-    attr-dict
+    (`message` $message^ (`(` $substitutions^ `)` `:`
+    qualified(type($substitutions)))?)? attr-dict
   }];
 
   let builders = [
@@ -96,13 +96,13 @@ class ConcurrentVerifOp<string mnemonic, list<Trait> traits = []> :
   let arguments = (ins
     EventControlAttr:$event, I1:$clock, I1:$property,
     OptionalAttr<StrAttr>:$label,
-    OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$operands);
+    OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$substitutions);
 
   let assemblyFormat = [{
     $event $clock `,` $property
     (`label` $label^)?
-    (`message` $message^ (`(` $operands^ `)` `:` qualified(type($operands)))?)?
-    attr-dict
+    (`message` $message^ (`(` $substitutions^ `)` `:`
+    qualified(type($substitutions)))?)? attr-dict
   }];
 
   let builders = [

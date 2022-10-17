@@ -27,16 +27,16 @@
 extern "C" {
 #endif
 /// Register an endpoint.
-extern int sv2cCosimserverEpRegister(int endpointId, long long sendTypeId,
+extern int sv2cCosimserverEpRegister(char *endpointId, long long sendTypeId,
                                      int sendTypeSize, long long recvTypeId,
                                      int recvTypeSize);
 /// Try to get a message from a client.
-extern int sv2cCosimserverEpTryGet(unsigned int endpointId,
+extern int sv2cCosimserverEpTryGet(char *endpointId,
                                    // NOLINTNEXTLINE(misc-misplaced-const)
                                    const svOpenArrayHandle data,
                                    unsigned int *sizeBytes);
 /// Send a message to a client.
-extern int sv2cCosimserverEpTryPut(unsigned int endpointId,
+extern int sv2cCosimserverEpTryPut(char *endpointId,
                                    // NOLINTNEXTLINE(misc-misplaced-const)
                                    const svOpenArrayHandle data, int dataLimit);
 

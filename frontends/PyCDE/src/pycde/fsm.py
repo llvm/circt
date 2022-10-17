@@ -1,12 +1,10 @@
-from pycde import System, Input, Output, module, generator
+from pycde import Input, Output, module, generator
 from pycde.module import _SpecializedModule, Generator, _GeneratorPortAccess
 from pycde.dialects import fsm
 from pycde.pycde_types import types
 from typing import Callable
 
 from mlir.ir import InsertionPoint
-from collections import defaultdict
-from functools import lru_cache
 
 from pycde.support import _obj_to_attribute, attributes_of_type
 from circt.support import connect
@@ -29,13 +27,12 @@ class State:
       self.condition = condition
 
     def _emit(self, state_op, ports):
-      with InsertionPoint(state_op.transitions):
-        op = fsm.TransitionOp(self.to_state.name)
+      op = fsm.TransitionOp(self.to_state.name)
 
-        # If a condition function was specified, execute it on the ports and
-        # assign the result as the guard of this transition.
-        if self.condition:
-          op.set_guard(lambda: self.condition(ports))
+      # If a condition function was specified, execute it on the ports and
+      # assign the result as the guard of this transition.
+      if self.condition:
+        op.set_guard(lambda: self.condition(ports))
 
   def __init__(self, initial=False):
     self.initial = initial
@@ -47,6 +44,9 @@ class State:
 
   def set_transitions(self, *transitions):
     self.transitions = [State.Transition(*t) for t in transitions]
+
+  def add_transitions(self, *transitions):
+    self.transitions.extend([State.Transition(*t) for t in transitions])
 
   def _emit(self, spec_mod, ports):
     # Create state op
@@ -61,8 +61,9 @@ class State:
       fsm.OutputOp(*outputs)
 
     # Emit outgoing transitions from this state.
-    for transition in self.transitions:
-      transition._emit(state_op, ports)
+    with InsertionPoint(state_op.transitions):
+      for transition in self.transitions:
+        transition._emit(state_op, ports)
 
 
 def States(n):
@@ -82,8 +83,7 @@ def create_fsm_machine_op(sys, mod: _SpecializedModule, symbol):
 
   # Add attributes for clock and reset names.
   attributes["clock_name"] = _obj_to_attribute(mod.modcls.clock_name)
-  if mod.modcls.reset_name:
-    attributes["reset_name"] = _obj_to_attribute(mod.modcls.reset_name)
+  attributes["reset_name"] = _obj_to_attribute(mod.modcls.reset_name)
 
   return fsm.MachineOp(symbol,
                        mod.modcls._initial_state,
@@ -98,14 +98,14 @@ def generate_fsm_machine_op(generate_obj: Generator,
                             spec_mod: _SpecializedModule):
   """ Generator callback for generating an FSM op. """
   entry_block = spec_mod.circt_mod.body.blocks[0]
-  ports = _GeneratorPortAccess(spec_mod)
+  ports = _GeneratorPortAccess(spec_mod, entry_block.arguments)
 
   with InsertionPoint(entry_block), generate_obj.loc:
     for state in spec_mod.modcls.states:
       state._emit(spec_mod, ports)
 
 
-def machine(clock: str = 'clk', reset: str = None):
+def machine(clock: str = 'clk', reset: str = 'rst'):
   """
   Top-level FSM decorator which gives the user the option specify port
   names for the clock and (optional) reset signal.
@@ -249,3 +249,75 @@ def fsm_wrapper_class(fsm_mod, fsm_name, clock, reset=None):
   fsm_hw_mod.__name__ = fsm_name
   fsm_hw_mod.__module__ = fsm_name
   return fsm_hw_mod
+
+
+def gen_fsm(transitions: dict, name: str = "MyFSM"):
+  """
+  Generate a FSM from a dictionary of states and their transitions.
+
+  E.g.:
+  {
+    "a": [
+      ("c", "go"),
+      "b",
+    ],
+    "b": [],
+    "c": []
+  }
+
+  creates an FSM with 3 states (a, b, c). 'b' and 'c' have no outgoing transitions,
+  and 'a' has two outgoing transitions. The first transition ("c", "go") transitions
+  to 'c' whenever an input port 'go' is asserted. The second transition is a default
+  transition to 'b'.
+
+  Any state and guard referenced within the dictionary will automatically be created
+  as a state operation and top-level input, respectively.
+  """
+
+  class FSM:
+    pass
+
+  # Gather states and input variables
+  states = set()
+  inputs = set()
+  initial = True
+
+  def ensure_state(state, initial=False):
+    if state not in states:
+      setattr(FSM, state, State(initial=initial))
+      states.add(state)
+    return getattr(FSM, state)
+
+  def ensure_input(input):
+    if input not in inputs:
+      setattr(FSM, input, Input(types.i1))
+      inputs.add(input)
+
+  for (state, state_transitions) in transitions.items():
+    currentStateAttr = ensure_state(state, initial)
+    if not type(state_transitions) is list:
+      raise TypeError(f"Transitions for state '{state}' must be a list")
+
+    for transition in state_transitions:
+      guard_port = None
+      if isinstance(transition, tuple):
+        (nextState, guard_port) = transition
+      else:
+        if not type(transition) is str:
+          raise TypeError(
+              f"Transition for state '{state}' must be of the form 'nextstate' or ('nextstate', 'guard')"
+          )
+        nextState = transition
+
+      nextStateAttr = ensure_state(nextState)
+      if guard_port:
+        ensure_input(guard_port)
+        currentStateAttr.add_transitions(
+            (nextStateAttr,
+             lambda ports, guard_port=guard_port: getattr(ports, guard_port)))
+      else:
+        currentStateAttr.add_transitions((nextStateAttr,))
+
+  setattr(FSM, "__name__", name)
+  setattr(FSM, "__qualname__", name)
+  return machine()(FSM)

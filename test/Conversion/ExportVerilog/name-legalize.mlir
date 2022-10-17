@@ -146,9 +146,8 @@ hw.module @verif_renames(%cond: i1) {
 
 // CHECK-LABEL: module verbatim_renames(
 hw.module @verbatim_renames(%a: i1 {hw.exportPort = @asym}) {
-  // CHECK: wire wire_0;
-
   // CHECK: // VERB Module : reg_1 inout_0
+  // CHECK: wire wire_0;
   sv.verbatim "// VERB Module : {{0}} {{1}}" {symbols = [@reg, @inout]}
 
   // Make sure symbol references to wires and instances get renamed correctly.

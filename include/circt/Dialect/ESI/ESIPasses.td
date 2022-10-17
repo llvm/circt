@@ -16,6 +16,27 @@
 
 include "mlir/Pass/PassBase.td"
 
+def ESIConnectServices : Pass<"esi-connect-services", "mlir::ModuleOp"> {
+  let summary = "Connect up ESI service requests to service providers";
+  let constructor = "circt::esi::createESIConnectServicesPass()";
+  let dependentDialects = [
+    "circt::hw::HWDialect", "circt::sv::SVDialect", "circt::seq::SeqDialect",
+    "circt::comb::CombDialect"];
+}
+
+def ESIEmitCollateral: Pass<"esi-emit-collateral", "mlir::ModuleOp"> {
+  let summary = "Emit all the neccessary collateral";
+  let constructor = "circt::esi::createESIEmitCollateralPass()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+  let options = [
+    Option<"schemaFile", "schema-file", "std::string",
+           "", "File to output capnp schema into">,
+    ListOption<"tops", "tops", "std::string",
+               "List of top modules to export Tcl for",
+               "llvm::cl::ZeroOrMore,">
+  ];
+}
+
 def LowerESIToPhysical: Pass<"lower-esi-to-physical", "mlir::ModuleOp"> {
   let summary = "Lower ESI abstract Ops to ESI physical ops.";
   let constructor = "circt::esi::createESIPhysicalLoweringPass()";

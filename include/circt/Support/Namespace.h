@@ -55,7 +55,7 @@ public:
   ///
   /// 1. The original name is returned.
   /// 2. The name is given a `_<n>` suffix where `<n>` is a number starting from
-  ///    `_0` and incrementing by one each time.
+  ///    `0` and incrementing by one each time (`_0`, ...).
   StringRef newName(const Twine &name) {
     // Special case the situation where there is no name collision to avoid
     // messing with the SmallString allocation below.
@@ -86,15 +86,15 @@ public:
   /// returned name has the input `suffix`. Also add the new name to the
   /// internal namespace.
   /// There are two possible outcomes for the returned name:
-  /// 1. The original name  + suffix is returned.
+  /// 1. The original name + `_<suffix>` is returned.
   /// 2. The name is given a suffix `_<n>_<suffix>` where `<n>` is a number
-  /// starting from `_0` and incrementing by one each time.
+  ///    starting from `0` and incrementing by one each time.
   StringRef newName(const Twine &name, const Twine &suffix) {
     // Special case the situation where there is no name collision to avoid
     // messing with the SmallString allocation below.
     llvm::SmallString<64> tryName;
-    auto inserted =
-        nextIndex.insert({name.concat(suffix).toStringRef(tryName), 0});
+    auto inserted = nextIndex.insert(
+        {name.concat("_").concat(suffix).toStringRef(tryName), 0});
     if (inserted.second)
       return inserted.first->getKey();
 
@@ -106,6 +106,7 @@ public:
 
     // Get the initial number to start from.  Since `:` is not a valid character
     // in a verilog identifier, we use it separate the name and suffix.
+    // Next number for name+suffix is stored with key `name_:suffix`.
     tryName.push_back(':');
     suffix.toVector(tryName);
 
@@ -115,6 +116,7 @@ public:
     do {
       tryName.resize(baseLength);
       Twine(i++).toVector(tryName); // append integer to tryName
+      tryName.push_back('_');
       suffix.toVector(tryName);
       inserted = nextIndex.insert({tryName, 0});
     } while (!inserted.second);

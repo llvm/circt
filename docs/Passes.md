@@ -40,6 +40,10 @@ This document describes the available CIRCT passes and their contracts.
 
 [include "MSFTPasses.md"]
 
+## Pipeline Dialect Passes
+
+[include "PipelinePasses.md"]
+
 ## Seq Dialect Passes
 
 [include "SeqPasses.md"]

@@ -161,3 +161,14 @@ handshake.func @test_buffer_init(%arg0: index, %arg1: none, ...) -> (index, none
   %0 = buffer [2] seq %arg0 {initValues=[42, 24]} : index
   return %0, %arg1 : index, none
 }
+
+// -----
+
+
+// CHECK-LABEL: firrtl.module @handshake_buffer_1slots_seq_init_0_1ins_1outs_ctrl(
+// CHECK: %[[C1:.*]] = firrtl.constant 1 : !firrtl.uint<1>
+// CHECK: %validReg0 = firrtl.regreset  %clock, %reset, %[[C1]]  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+handshake.func @test_buffer_init_none_type(%arg0: none, ...) -> (none) {
+  %0 = buffer [1] seq %arg0 {initValues = [0]}: none
+  return %0 : none
+}

@@ -18,6 +18,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/FunctionInterfaces.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"
@@ -27,6 +28,8 @@
 
 namespace circt {
 namespace hw {
+
+class EnumFieldAttr;
 
 /// A module port direction.
 enum class PortDirection {
@@ -106,11 +109,13 @@ PortInfo getModuleOutputPort(Operation *op, size_t idx);
 /// be in ascending order. The indices refer to the port positions before any
 /// insertion or removal occurs. Ports inserted at the same index will appear in
 /// the module in the same order as they were listed in the `insert*` array.
+/// If 'body' is provided, additionally inserts/removes the corresponding
+/// block arguments.
 void modifyModulePorts(Operation *op,
                        ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
                        ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
                        ArrayRef<unsigned> removeInputs,
-                       ArrayRef<unsigned> removeOutputs);
+                       ArrayRef<unsigned> removeOutputs, Block *body = nullptr);
 
 // Helpers for working with modules.
 
@@ -159,6 +164,10 @@ static inline StringRef getModuleResultName(Operation *module,
   return attr ? attr.getValue() : StringRef();
 }
 
+// Index width should be exactly clog2 (size of array), or either 0 or 1 if the
+// array is a singleton.
+bool isValidIndexBitWidth(Value index, Value array);
+
 void setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names);
 void setModuleResultNames(Operation *module, ArrayRef<Attribute> names);
 
@@ -185,6 +194,38 @@ StringAttr getArgSym(Operation *op, unsigned i);
 /// Return the symbol (if any, else null) on the corresponding output port
 /// argument.
 StringAttr getResultSym(Operation *op, unsigned i);
+
+// A class for providing access to the in- and output ports of a module through
+// use of the HWModuleBuilder.
+class HWModulePortAccessor {
+
+public:
+  HWModulePortAccessor(Location loc, const ModulePortInfo &info,
+                       Region &bodyRegion);
+
+  // Returns the i'th/named input port of the module.
+  Value getInput(unsigned i);
+  Value getInput(StringRef name);
+  ValueRange getInputs() { return inputArgs; }
+
+  // Assigns the i'th/named output port of the module.
+  void setOutput(unsigned i, Value v);
+  void setOutput(StringRef name, Value v);
+
+  const ModulePortInfo &getModulePortInfo() const { return info; }
+  const llvm::SmallVector<Value> &getOutputOperands() const {
+    return outputOperands;
+  }
+
+private:
+  llvm::StringMap<unsigned> inputIdx, outputIdx;
+  llvm::SmallVector<Value> inputArgs;
+  llvm::SmallVector<Value> outputOperands;
+  ModulePortInfo info;
+};
+
+using HWModuleBuilder =
+    llvm::function_ref<void(OpBuilder &, HWModulePortAccessor &)>;
 
 } // namespace hw
 } // namespace circt

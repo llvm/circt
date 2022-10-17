@@ -24,12 +24,6 @@
 using namespace circt;
 using namespace firrtl;
 
-static size_t getPortCount(Operation *op) {
-  if (auto module = dyn_cast<FModuleLike>(op))
-    return module.getNumPorts();
-  return op->getNumResults();
-}
-
 static ArrayAttr getAnnotationsFrom(Operation *op) {
   if (auto annots = op->getAttrOfType<ArrayAttr>(getAnnotationAttrName()))
     return annots;
@@ -440,22 +434,14 @@ bool AnnotationSet::removePortAnnotations(
 //===----------------------------------------------------------------------===//
 
 DictionaryAttr Annotation::getDict() const {
-  if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>())
-    return subAnno.getAnnotations();
   return attr.cast<DictionaryAttr>();
 }
 
-void Annotation::setDict(DictionaryAttr dict) {
-  if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>())
-    attr = SubAnnotationAttr::get(subAnno.getContext(), subAnno.getFieldID(),
-                                  dict);
-  else
-    attr = dict;
-}
+void Annotation::setDict(DictionaryAttr dict) { attr = dict; }
 
 unsigned Annotation::getFieldID() const {
-  if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>())
-    return subAnno.getFieldID();
+  if (auto fieldID = getMember<IntegerAttr>("circt.fieldID"))
+    return fieldID.getInt();
   return 0;
 }
 
@@ -680,7 +666,7 @@ PortAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
 FIRRTLType PortAnnoTarget::getType() const {
   auto *op = getOp();
   if (auto module = llvm::dyn_cast<FModuleLike>(op))
-    return module.getPortType(getPortNo());
+    return module.getPortType(getPortNo()).cast<FIRRTLType>();
   if (llvm::isa<MemOp, InstanceOp>(op))
     return op->getResult(getPortNo()).getType().cast<FIRRTLType>();
   llvm_unreachable("unknow operation kind");

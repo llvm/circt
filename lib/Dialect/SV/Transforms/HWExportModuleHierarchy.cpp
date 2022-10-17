@@ -33,8 +33,8 @@ using namespace circt;
 struct HWExportModuleHierarchyPass
     : public sv::HWExportModuleHierarchyBase<HWExportModuleHierarchyPass> {
   HWExportModuleHierarchyPass(Optional<std::string> directory) {
-    if (directory.hasValue())
-      directoryName = directory.getValue();
+    if (directory)
+      directoryName = *directory;
   }
   void runOnOperation() override;
 };
@@ -42,7 +42,7 @@ struct HWExportModuleHierarchyPass
 /// Recursively print the module hierarchy as serialized as JSON.
 static void printHierarchy(hw::InstanceOp &inst, SymbolTable &symbolTable,
                            llvm::json::OStream &j) {
-  auto moduleOp = symbolTable.lookup(inst.moduleNameAttr().getValue());
+  auto moduleOp = symbolTable.lookup(inst.getModuleNameAttr().getValue());
 
   j.object([&] {
     j.attribute("instance_name", inst.instanceName());
@@ -114,7 +114,7 @@ void HWExportModuleHierarchyPass::runOnOperation() {
         return;
       }
 
-      extractHierarchyFromTop(op, symbolTable.getValue(), outputFile->os());
+      extractHierarchyFromTop(op, *symbolTable, outputFile->os());
 
       outputFile->keep();
     }

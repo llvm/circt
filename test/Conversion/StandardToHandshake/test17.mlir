@@ -2,7 +2,7 @@
 // RUN: circt-opt -lower-std-to-handshake %s | FileCheck %s
 // CHECK-LABEL:   handshake.func @affine_apply_floordiv(
 // CHECK-SAME:                                          %[[VAL_0:.*]]: index,
-// CHECK-SAME:                                          %[[VAL_1:.*]]: none, ...) -> (index, none) attributes {argNames = ["in0", "inCtrl"], resNames = ["out0", "outCtrl"]} {
+// CHECK-SAME:                                          %[[VAL_1:.*]]: none, ...) -> (index, none)
 // CHECK:           %[[VAL_2:.*]] = merge %[[VAL_0]] : index
 // CHECK:           %[[VAL_3:.*]]:3 = fork [3] %[[VAL_2]] : index
 // CHECK:           %[[VAL_4:.*]]:4 = fork [4] %[[VAL_1]] : none

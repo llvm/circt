@@ -1,5 +1,5 @@
 // RUN: circt-opt --export-verilog %s | FileCheck %s
-// RUN: circt-opt --lowering-options=disallowLocalVariables --export-verilog %s | FileCheck %s --check-prefix=DISALLOW -strict-whitespace
+// RUN: circt-opt --test-apply-lowering-options='options=disallowLocalVariables' --export-verilog %s | FileCheck %s --check-prefix=DISALLOW -strict-whitespace
 
 // This checks ExportVerilog's support for "disallowLocalVariables" which
 // prevents emitting 'automatic logic' and other local declarations.
@@ -11,12 +11,15 @@ hw.module @side_effect_expr(%clock: i1) -> (a: i1, a2: i1) {
   // CHECK: `ifdef FOO_MACRO
   // DISALLOW: `ifdef FOO_MACRO
   sv.ifdef "FOO_MACRO" {
-    // DISALLOW: {{^    }}reg [[SE_REG:[_A-Za-z0-9]+]];
+    // DISALLOW: logic logicOp;
+    // DISALLOW: {{^    }}reg   [[SE_REG:[_A-Za-z0-9]+]];
 
     // CHECK:    always @(posedge clock)
     // DISALLOW: always @(posedge clock)
     sv.always posedge %clock  {
       %0 = sv.verbatim.expr "INLINE_OK" : () -> i1
+      // CHECK: automatic logic logicOp;
+      %logicOp = sv.logic : !hw.inout<i1>
 
       // This shouldn't be pushed into a reg.
       // CHECK: if (INLINE_OK)
@@ -75,8 +78,8 @@ hw.module @hoist_expressions(%clock: i1, %x: i8, %y: i8, %z: i8) {
   }
 
   // Check out wires.
-  // CHECK: assign myWire = x;
-  // DISALLOW: assign myWire = x;
+  // CHECK: wire [7:0] myWire = x;
+  // DISALLOW: wire [7:0] myWire = x;
   %myWire = sv.wire : !hw.inout<i8>
   sv.assign %myWire, %x : i8
 
@@ -161,9 +164,8 @@ hw.module @ReadInoutAggregate(%clock: i1) {
     %4 = comb.concat %c0_i16, %3 : i16, i16
     sv.passign %1, %4 : i32
   }
-  // DISALLOW:      wire [31:0] [[READ:.+]] = register[1'h0].a;
-  // DISALLOW-NEXT: always @(
-  // DISALLOW-NEXT:  register[1'h0].a <= {16'h0, [[READ]][15:0]};
+  // DISALLOW: always @(
+  // DISALLOW-NEXT:  register[1'h0].a <= {16'h0, register[1'h0].a[15:0]};
   hw.output
 }
 
@@ -229,9 +231,7 @@ hw.module @AggregateInline(%clock: i1) {
   %1 = sv.struct_field_inout %register["a"] : !hw.inout<struct<a: i32>>
   %2 = sv.read_inout %1 : !hw.inout<i32>
   %3 = comb.extract %2 from 0 : (i32) -> i16
-  // DISALLOW: wire [31:0] [[GEN_2:.+]] = register.a;
-  // DISALLOW-NEXT: assign [[GEN]] = [[GEN_2]]
-  // CHECK: wire [31:0] [[GEN_2:.+]] = register.a;
-  // CHECK-NEXT: assign [[GEN]] = [[GEN_2]]
+  // DISALLOW: assign [[GEN]] = register.a[15:0]
+  // CHECK: assign [[GEN]] = register.a[15:0]
   hw.output
 }

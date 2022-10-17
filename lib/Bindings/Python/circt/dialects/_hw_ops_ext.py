@@ -336,6 +336,14 @@ class HWModuleOp(ModuleLike):
       ret[name] = self.entry_block.arguments[idx]
     return ret
 
+  def outputs(self) -> dict[str:Type]:
+    result_names = [
+        StringAttr(name).value
+        for name in ArrayAttr(self.attributes["resultNames"])
+    ]
+    result_types = self.type.results
+    return dict(zip(result_names, result_types))
+
   def add_entry_block(self):
     if not self.is_external:
       raise IndexError('The module already has an entry block')
@@ -393,7 +401,6 @@ class ArrayGetOp:
     array_type = support.get_self_or_inner(array_value.type)
     if isinstance(idx, int):
       idx_width = (array_type.size - 1).bit_length()
-      idx_width = max(1, idx_width)  # hw.constant cannot produce i0.
       idx_val = ConstantOp.create(IntegerType.get_signless(idx_width),
                                   idx).result
     else:

@@ -18,7 +18,7 @@
 // CHECK:   sv.assign %done, %true : i1
 // CHECK:   hw.output %0, %1 : i8, i1
 // CHECK: }
-calyx.program "main" {
+module attributes {calyx.entrypoint = "main"} {
   calyx.component @main(%in0: i4, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i8, %done: i1 {done}) {
     %true = hw.constant true
     %std_pad.in, %std_pad.out = calyx.std_pad @std_pad : i4, i8
@@ -52,7 +52,7 @@ calyx.program "main" {
 // CHECK:   sv.assign %done, %true : i1
 // CHECK:   hw.output %0, %1 : i8, i1
 
-calyx.program "main" {
+module attributes {calyx.entrypoint = "main"} {
   calyx.component @main(%in0: i4, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i8, %done: i1 {done}) {
     %true = hw.constant true
     %std_extsi.in, %std_extsi.out = calyx.std_extsi @std_extsi : i4, i8

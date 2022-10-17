@@ -2,7 +2,7 @@
 
 // CHECK-LABEL:   handshake.func @main(
 // CHECK-SAME:                         %[[VAL_0:.*]]: memref<4xi32>,
-// CHECK-SAME:                         %[[VAL_1:.*]]: none, ...) -> (i32, none) attributes {argNames = ["in0", "inCtrl"], resNames = ["out0", "outCtrl"]} {
+// CHECK-SAME:                         %[[VAL_1:.*]]: none, ...) -> (i32, none)
 // CHECK:           %[[VAL_2:.*]]:2 = extmemory[ld = 1, st = 0] (%[[VAL_0]] : memref<4xi32>) (%[[VAL_3:.*]]) {id = 0 : i32} : (index) -> (i32, none)
 // CHECK:           %[[VAL_4:.*]]:2 = fork [2] %[[VAL_1]] : none
 // CHECK:           %[[VAL_5:.*]]:2 = fork [2] %[[VAL_4]]#1 : none

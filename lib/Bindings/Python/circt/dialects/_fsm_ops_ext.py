@@ -70,11 +70,9 @@ class MachineOp:
     clock = support.BackedgeBuilder().create(
         IntegerType.get_signed(1),
         StringAttr(self.attributes['clock_name']).value, self)
-    reset = None
-    if 'reset_name' in self.attributes:
-      reset = support.BackedgeBuilder().create(
-          IntegerType.get_signed(1),
-          StringAttr(self.attributes['reset_name']).value, self)
+    reset = support.BackedgeBuilder().create(
+        IntegerType.get_signed(1),
+        StringAttr(self.attributes['reset_name']).value, self)
 
     op = fsm.HWInstanceOp(outputs=self.type.results,
                           inputs=inputs,

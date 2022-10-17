@@ -22,7 +22,7 @@ def FlattenMemRef : Pass<"flatten-memref", "::mlir::ModuleOp"> {
     Flattens multidimensional memories and accesses to them into
     single-dimensional memories.}];
   let constructor = "circt::createFlattenMemRefPass()";
-  let dependentDialects = ["memref::MemRefDialect"];
+  let dependentDialects = ["mlir::memref::MemRefDialect"];
 }
 
 def FlattenMemRefCalls : Pass<"flatten-memref-calls", "::mlir::ModuleOp"> {
@@ -35,7 +35,22 @@ def FlattenMemRefCalls : Pass<"flatten-memref-calls", "::mlir::ModuleOp"> {
     It is up to users of this pass to define how these rewritten functions are
     to be implemented.}];
   let constructor = "circt::createFlattenMemRefCallsPass()";
-  let dependentDialects = ["memref::MemRefDialect"];
+  let dependentDialects = ["mlir::memref::MemRefDialect"];
+}
+
+def StripDebugInfoWithPred : Pass<"strip-debuginfo-with-pred", "::mlir::ModuleOp"> {
+  let summary = "Selectively strip debug info from all operations";
+
+  let description = [{
+    This pass extends mlir::StrinpDebugInfoPass to selectively strip locations with a
+    given predicate.
+  }];
+  let constructor = "circt::createStripDebugInfoWithPredPass({})";
+  let options = [
+    Option<"dropSuffix", "drop-suffix", "std::string",
+           /*default=*/"",
+           "Drop file location info with the specified suffix. This option is"
+           "intended to be used for testing."> ];
 }
 
 #endif // CIRCT_TRANSFORMS_PASSES

@@ -21,13 +21,16 @@
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FSM/FSMOps.h"
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HWArith/HWArithDialect.h"
 #include "circt/Dialect/Handshake/HandshakeDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/Moore/MooreDialect.h"
+#include "circt/Dialect/Pipeline/Pipeline.h"
+#include "circt/Dialect/SSP/SSPDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
-#include "circt/Dialect/StaticLogic/StaticLogic.h"
+#include "circt/Dialect/SystemC/SystemCDialect.h"
 #include "mlir/IR/Dialect.h"
 
 namespace circt {
@@ -48,8 +51,11 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     moore::MooreDialect,
     hw::HWDialect,
     seq::SeqDialect,
-    staticlogic::StaticLogicDialect,
-    sv::SVDialect
+    ssp::SSPDialect,
+    pipeline::PipelineDialect,
+    sv::SVDialect,
+    hwarith::HWArithDialect,
+    systemc::SystemCDialect
   >();
   // clang-format on
 }

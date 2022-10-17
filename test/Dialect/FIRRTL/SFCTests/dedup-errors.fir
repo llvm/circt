@@ -14,7 +14,7 @@
 ; CHECK-LABEL: firrtl.circuit "Top"
 circuit Top : %[[
   {
-    "class": "hello",
+    "class": "circt.test",
      "target": "Top.Top.a2.y",
      "pin": "pin"
   }
@@ -25,7 +25,7 @@ circuit Top : %[[
     ; CHECK: inst a1 of A
     ; CHECK-NOT: SourceAnnotation
     ; CHECK: inst a2 of A
-    ; CHECK-SAME: [{class = "hello", pin = "pin"}]
+    ; CHECK-SAME: [{class = "circt.test", pin = "pin"}]
     inst a1 of A
     inst a2 of A_
     out <= and(a1.x, a2.y)
@@ -61,7 +61,7 @@ circuit Top : %[[
   module Top :
     inst a1 of A
     inst a2 of A_
-  ; CHECK: firrtl.hierpath @[[nlaSym]] [@Top::@[[a1Sym]], @A::@[[bSym:[_a-zA-Z0-9]+]]]
+  ; CHECK: firrtl.hierpath private @[[nlaSym]] [@Top::@[[a1Sym]], @A::@[[bSym:[_a-zA-Z0-9]+]]]
   module A :
     output x: UInt<1>
     ; CHECk-NEXT: firrtl.wire sym @[[bSym]] {annotations = [{circt.nonlocal = @[[nlaSym]], class = "firrtl.transforms.DontTouchAnnotation"}]}
@@ -101,8 +101,8 @@ circuit Top : %[[
   module Top :
     inst a1 of A
     inst a2 of A_
-  ; CHECK: firrtl.hierpath @[[nlaSym1]] [@Top::@[[a1Sym1]], @A::@[[bSym:[_a-zA-Z0-9]+]]]
-  ; CHECK: firrtl.hierpath @[[nlaSym2]] [@Top::@[[a1Sym2]], @A::@[[bSym]]]
+  ; CHECK: firrtl.hierpath private @[[nlaSym1]] [@Top::@[[a1Sym1]], @A::@[[bSym:[_a-zA-Z0-9]+]]]
+  ; CHECK: firrtl.hierpath private @[[nlaSym2]] [@Top::@[[a1Sym2]], @A::@[[bSym]]]
   module A :
     output x: UInt<1>
     ; CHECk-NEXT: firrtl.wire sym @[[bSym]]

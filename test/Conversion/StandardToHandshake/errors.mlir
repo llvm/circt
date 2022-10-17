@@ -22,7 +22,7 @@ func.func @dynsize(%dyn : index) -> i32{
 
 // Test non-canonical loops that have multiple entry points (irreducible cfg).
 
-// expected-error @+1 {{Non-canonical loop structures detected; a potential loop header has backedges not dominated by the loop header. This indicates that the loop has multiple entry points. Handshake lowering does not yet support this form of control flow, exiting.}}
+// expected-error @+1 {{Non-canonical loop structures detected; a potential loop header has backedges not dominated by the loop header. This indicates that the loop has multiple entry points.}}
 func.func @non_canon_loop(%arg0 : memref<100xi32>, %arg1 : i32) -> i32 {
     %c0_i32 = arith.constant 0 : i32
     %c100 = arith.constant 100 : index

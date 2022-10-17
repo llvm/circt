@@ -162,7 +162,7 @@ static size_t bitsEncoding(::capnp::schema::Type::Reader type) {
   case ty::TEXT:
     return 6;
   default:
-    assert(false && "Type not yet supported");
+    llvm_unreachable("Type not yet supported");
   }
 }
 
@@ -222,6 +222,7 @@ TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
   emitId(os, 0xFFFFFFFFFFFFFFFF) << ";\n";
   auto rc = write(os);
   assert(succeeded(rc) && "Failed schema text output.");
+  (void)rc;
   os.str();
 
   // Write `schemaText` to an in-memory filesystem then parse it. Yes, this is
@@ -248,7 +249,7 @@ TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
       return typeSchema;
     }
   }
-  assert(false && "A node with a matching ID should always be found.");
+  llvm_unreachable("A node with a matching ID should always be found.");
 }
 
 // We compute a deterministic hash based on the type. Since llvm::hash_value
@@ -318,7 +319,7 @@ static int64_t size(capnp::schema::Node::Struct::Reader cStruct,
   auto cFields = cStruct.getFields();
   for (Field::Reader cField : cFields) {
     assert(!cField.isGroup() && "Capnp groups are not supported");
-    // Capnp code order is the index in the the MLIR fields array.
+    // Capnp code order is the index in the MLIR fields array.
     assert(cField.getCodeOrder() < mFields.size());
 
     // The size of the thing to which the pointer is pointing, not the size of
@@ -355,6 +356,7 @@ static void emitName(Type type, uint64_t id, llvm::raw_ostream &os) {
         os << "ArrayOf" << arrTy.getSize() << 'x';
         emitName(arrTy.getElementType(), 0, os);
       })
+      .Case([&os](NoneType) { os << "None"; })
       .Case([&os, id](hw::StructType t) { os << "Struct" << id; })
       .Default([](Type) {
         assert(false && "Type not supported. Please check support first with "
@@ -759,7 +761,8 @@ private:
   void assertPred(Value val, ICmpPredicate pred, int64_t expected) {
     auto expectedVal = create<hw::ConstantOp>(loc, val.getType(), expected);
     create<sv::AssertOp>(
-        loc, create<comb::ICmpOp>(loc, getI1Type(), pred, val, expectedVal),
+        loc,
+        create<comb::ICmpOp>(loc, getI1Type(), pred, val, expectedVal, false),
         sv::DeferAssertAttr::get(loc.getContext(), sv::DeferAssert::Immediate));
   }
   Location loc;
@@ -1048,7 +1051,7 @@ static GasketComponent decodeList(hw::ArrayType type,
     expectedElemSizeField = 5;
     break;
   default:
-    assert(false && "bits() returned unexpected value");
+    llvm_unreachable("bits() returned unexpected value");
   }
   asserts.assertEqual(elemSize, expectedElemSizeField);
 
@@ -1065,7 +1068,7 @@ static GasketComponent decodeList(hw::ArrayType type,
       b, b.create<comb::ConcatOp>(loc, offset, gb.zero(6)));
   GasketComponent listOffset(
       b, b.create<comb::AddOp>(loc, offsetInBits,
-                               gb.constant(36, *ptrOffset + 64)));
+                               gb.constant(36, *ptrOffset + 64), false));
   listOffset.name(field.getName(), "_listOffset");
   auto listSlice =
       msg.slice(listOffset, type.getSize() * expectedElemSizeBits).name("list");
@@ -1148,6 +1151,8 @@ hw::HWModuleOp TypeSchemaImpl::buildDecoder(Value clk, Value valid,
   hw::ArrayType operandType = operandVal.getType().dyn_cast<hw::ArrayType>();
   assert(operandType && operandType.getSize() == size &&
          "Operand type and length must match the type's capnp size.");
+  (void)size;
+  (void)operandType;
 
   Slice operand(b, operandVal);
   operand.setLoc(loc);
@@ -1229,7 +1234,7 @@ llvm::SmallDenseMap<Type, hw::HWModuleOp>
     circt::esi::capnp::TypeSchema::encImplMods;
 
 circt::esi::capnp::TypeSchema::TypeSchema(Type type) {
-  circt::esi::ChannelPort chan = type.dyn_cast<circt::esi::ChannelPort>();
+  circt::esi::ChannelType chan = type.dyn_cast<circt::esi::ChannelType>();
   if (chan) // Unwrap the channel if it's a channel.
     type = chan.getInner();
   s = std::make_shared<detail::TypeSchemaImpl>(type);

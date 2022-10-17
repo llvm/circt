@@ -2,6 +2,7 @@
 // RUN: esi-cosim-runner.py %s %s
 // PY: import loopback as test
 // PY: rpc = test.LoopbackTester(rpcschemapath, simhostport)
+// PY: print(rpc.cosim.list().wait())
 // PY: rpc.test_list()
 // PY: rpc.test_open_close()
 // PY: rpc.test_3bytes(5)
@@ -10,7 +11,7 @@ import Cosim_DpiPkg::*;
 
 module top(
     input logic clk,
-    input logic rstn
+    input logic rst
 );
     localparam int TYPE_SIZE_BITS =
         (1 * 64) + // root message
@@ -26,7 +27,6 @@ module top(
     logic [TYPE_SIZE_BITS-1:0] DataIn;
 
     Cosim_Endpoint #(
-        .ENDPOINT_ID(1),
         .RECV_TYPE_ID(1),
         .RECV_TYPE_SIZE_BITS(TYPE_SIZE_BITS),
         .SEND_TYPE_ID(1),
@@ -37,7 +37,7 @@ module top(
 
     always@(posedge clk)
     begin
-        if (rstn)
+        if (~rst)
         begin
             if (DataOutValid && DataOutReady)
             begin

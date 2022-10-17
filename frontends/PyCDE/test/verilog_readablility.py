@@ -6,8 +6,8 @@ from pycde import (Output, Input, module, generator, types, dim, System)
 @module
 class WireNames:
   clk = Input(types.i1)
-  sel = Input(types.i2)
   data_in = Input(dim(32, 3))
+  sel = Input(types.i2)
 
   a = Output(types.i32)
   b = Output(types.i32)
@@ -27,7 +27,7 @@ sys = System([WireNames])
 sys.generate()
 sys.run_passes()
 sys.print()
-# CHECK-LABEL:  hw.module @WireNames<__INST_HIER: none>(%clk: i1, %data_in: !hw.array<3xi32>, %sel: i2) -> (a: i32, b: i32) {{.*}} {
+# CHECK-LABEL:  hw.module @WireNames<__INST_HIER: none = "INSTANTIATE_WITH_INSTANCE_PATH">(%clk: i1, %data_in: !hw.array<3xi32>, %sel: i2) -> (a: i32, b: i32) {{.*}} {
 # CHECK:    %c1_i32 = hw.constant 1 : i32
 # CHECK:    %c2_i32 = hw.constant 2 : i32
 # CHECK:    %c3_i32 = hw.constant 3 : i32

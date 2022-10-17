@@ -50,6 +50,16 @@ intptr_t hwArrayTypeGetSize(MlirType type) {
   return unwrap(type).cast<ArrayType>().getSize();
 }
 
+bool hwTypeIsAIntType(MlirType type) { return unwrap(type).isa<IntType>(); }
+
+MlirType hwParamIntTypeGet(MlirAttribute parameter) {
+  return wrap(IntType::get(unwrap(parameter)));
+}
+
+MlirAttribute hwParamIntTypeGetWidthAttr(MlirType type) {
+  return wrap(unwrap(type).cast<IntType>().getWidth());
+}
+
 MlirType hwInOutTypeGet(MlirType element) {
   return wrap(InOutType::get(unwrap(element)));
 }
@@ -166,9 +176,9 @@ MLIR_CAPI_EXPORTED bool hwAttrIsAParamDeclAttr(MlirAttribute attr) {
   return unwrap(attr).isa<ParamDeclAttr>();
 }
 MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGet(MlirStringRef cName,
-                                                    MlirAttribute cType,
+                                                    MlirType cType,
                                                     MlirAttribute cValue) {
-  TypeAttr type = unwrap(cType).cast<TypeAttr>();
+  auto type = unwrap(cType);
   auto name = StringAttr::get(type.getContext(), unwrap(cName));
   return wrap(
       ParamDeclAttr::get(type.getContext(), name, type, unwrap(cValue)));
@@ -176,11 +186,29 @@ MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGet(MlirStringRef cName,
 MLIR_CAPI_EXPORTED MlirStringRef hwParamDeclAttrGetName(MlirAttribute decl) {
   return wrap(unwrap(decl).cast<ParamDeclAttr>().getName().getValue());
 }
-MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGetType(MlirAttribute decl) {
+MLIR_CAPI_EXPORTED MlirType hwParamDeclAttrGetType(MlirAttribute decl) {
   return wrap(unwrap(decl).cast<ParamDeclAttr>().getType());
 }
 MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGetValue(MlirAttribute decl) {
   return wrap(unwrap(decl).cast<ParamDeclAttr>().getValue());
+}
+
+MLIR_CAPI_EXPORTED bool hwAttrIsAParamDeclRefAttr(MlirAttribute attr) {
+  return unwrap(attr).isa<ParamDeclRefAttr>();
+}
+
+MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclRefAttrGet(MlirContext ctx,
+                                                       MlirStringRef cName) {
+  auto name = StringAttr::get(unwrap(ctx), unwrap(cName));
+  return wrap(ParamDeclRefAttr::get(unwrap(ctx), name,
+                                    IntegerType::get(unwrap(ctx), 32)));
+}
+
+MLIR_CAPI_EXPORTED MlirStringRef hwParamDeclRefAttrGetName(MlirAttribute decl) {
+  return wrap(unwrap(decl).cast<ParamDeclRefAttr>().getName().getValue());
+}
+MLIR_CAPI_EXPORTED MlirType hwParamDeclRefAttrGetType(MlirAttribute decl) {
+  return wrap(unwrap(decl).cast<ParamDeclRefAttr>().getType());
 }
 
 MLIR_CAPI_EXPORTED bool hwAttrIsAParamVerbatimAttr(MlirAttribute attr) {

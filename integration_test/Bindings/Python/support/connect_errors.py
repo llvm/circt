@@ -5,15 +5,15 @@ import mlir
 import circt
 from circt.support import connect
 from circt.dialects import hw
-from circt.esi import types
 
 
 def build(top):
+  i32 = mlir.ir.IntegerType.get_signless(32)
   dummy = hw.HWModuleOp(name='dummy',
-                        input_ports=[('x', types.i32)],
-                        output_ports=[('y', types.i32)],
+                        input_ports=[('x', i32)],
+                        output_ports=[('y', i32)],
                         body_builder=lambda mod: {'y': mod.x})
-  const = hw.ConstantOp.create(types.i32, 0)
+  const = hw.ConstantOp.create(i32, 0)
   inst = dummy.instantiate("dummy_inst", x=const.result)
   try:
     # CHECK: cannot connect from source of type

@@ -1,8 +1,18 @@
-// RUN: circt-opt --split-input-file %s | FileCheck %s
+// RUN: circt-opt --split-input-file %s | circt-opt --split-input-file | FileCheck %s
+
+// CHECK: fsm.machine @foo(%arg0: i1) attributes {initialState = "IDLE"} {
+// CHECK:   fsm.state @IDLE
+// CHECK: }
+
+fsm.machine @foo(%arg0: i1) attributes {initialState = "IDLE"} {
+  fsm.state @IDLE
+}
+
+// -----
 
 // CHECK: fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
 // CHECK:   %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
-// CHECK:   fsm.state "IDLE" output  {
+// CHECK:   fsm.state @IDLE output  {
 // CHECK:     %true = arith.constant true
 // CHECK:     fsm.output %true : i1
 // CHECK:   } transitions  {
@@ -13,7 +23,7 @@
 // CHECK:       fsm.update %cnt, %c256_i16 : i16
 // CHECK:     }
 // CHECK:   }
-// CHECK:   fsm.state "BUSY" output  {
+// CHECK:   fsm.state @BUSY output  {
 // CHECK:     %false = arith.constant false
 // CHECK:     fsm.output %false : i1
 // CHECK:   } transitions  {
@@ -35,7 +45,7 @@
 // CHECK: }
 // CHECK: hw.module @bar(%clk: i1, %rst_n: i1) {
 // CHECK:   %true = hw.constant true
-// CHECK:   %0 = fsm.hw_instance "foo_inst" @foo(%true) : (i1) -> i1, clock %clk : i1, reset %rst_n : i1
+// CHECK:   %0 = fsm.hw_instance "foo_inst" @foo(%true), clock %clk, reset %rst_n : (i1) -> i1
 // CHECK:   hw.output
 // CHECK: }
 // CHECK: func @qux() {
@@ -50,7 +60,7 @@
 fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
   %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
 
-  fsm.state "IDLE" output  {
+  fsm.state @IDLE output  {
     %true = arith.constant true
     fsm.output %true : i1
   } transitions  {
@@ -63,7 +73,7 @@ fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
     }
   }
 
-  fsm.state "BUSY" output  {
+  fsm.state @BUSY output  {
     %false = arith.constant false
     fsm.output %false : i1
   } transitions  {
@@ -91,7 +101,7 @@ fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
 // Hardware-style instantiation.
 hw.module @bar(%clk: i1, %rst_n: i1) {
   %in = hw.constant true
-  %out = fsm.hw_instance "foo_inst" @foo(%in) : (i1) -> i1, clock %clk : i1, reset %rst_n : i1
+  %out = fsm.hw_instance "foo_inst" @foo(%in), clock %clk, reset %rst_n : (i1) -> i1
 }
 
 // Software-style instantiation and triggering.
@@ -110,17 +120,17 @@ func.func @qux() {
 
 // CHECK:   fsm.machine @foo(%[[VAL_0:.*]]: i1) -> i1 attributes {initialState = "A"} {
 // CHECK:           %[[VAL_1:.*]] = fsm.variable "cnt" {initValue = 0 : i16} : i16
-// CHECK:           fsm.state "A" output {
+// CHECK:           fsm.state @A output {
 // CHECK:             fsm.output %[[VAL_0]] : i1
 // CHECK:           } transitions {
 // CHECK:             fsm.transition @A
 // CHECK:           }
-// CHECK:           fsm.state "B" output {
+// CHECK:           fsm.state @B output {
 // CHECK:             fsm.output %[[VAL_0]] : i1
 // CHECK:           } transitions {
 // CHECK:             fsm.transition @B
 // CHECK:           }
-// CHECK:           fsm.state "C" output {
+// CHECK:           fsm.state @C output {
 // CHECK:             fsm.output %[[VAL_0]] : i1
 // CHECK:           } transitions {
 // CHECK:             fsm.transition @C
@@ -129,20 +139,20 @@ func.func @qux() {
 fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "A"} {
   %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
 
-  fsm.state "A" output  {
+  fsm.state @A output  {
     fsm.output %arg0 : i1
   } transitions {
     fsm.transition @A action  {
     }
   }
 
-  fsm.state "B" output  {
+  fsm.state @B output  {
     fsm.output %arg0 : i1
   } transitions {
     fsm.transition @B guard {}
   }
 
-  fsm.state "C" output  {
+  fsm.state @C output  {
     fsm.output %arg0 : i1
   } transitions {
     fsm.transition @C

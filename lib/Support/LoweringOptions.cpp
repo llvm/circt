@@ -13,10 +13,9 @@
 
 #include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "llvm/Support/CommandLine.h"
-#include "llvm/Support/ManagedStatic.h"
 
 using namespace circt;
+using namespace mlir;
 
 //===----------------------------------------------------------------------===//
 // LoweringOptions
@@ -38,6 +37,16 @@ parseLocationInfoStyle(StringRef option) {
       .Case("plain", LoweringOptions::Plain)
       .Case("wrapInAtSquareBracket", LoweringOptions::WrapInAtSquareBracket)
       .Case("none", LoweringOptions::None)
+      .Default(llvm::None);
+}
+
+static Optional<LoweringOptions::WireSpillingHeuristic>
+parseWireSpillingHeuristic(StringRef option) {
+  return llvm::StringSwitch<
+             llvm::Optional<LoweringOptions::WireSpillingHeuristic>>(option)
+      .Case("spillLargeTermsWithNamehints",
+            LoweringOptions::SpillLargeTermsWithNamehints)
+      .Case("spillAllMux", LoweringOptions::SpillAllMux)
       .Default(llvm::None);
 }
 
@@ -73,11 +82,6 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
         errorHandler("expected integer source width");
         maximumNumberOfTermsPerExpression = DEFAULT_TERM_LIMIT;
       }
-    } else if (option.consume_front("maximumNumberOfTermsInConcat=")) {
-      if (option.getAsInteger(10, maximumNumberOfTermsInConcat)) {
-        errorHandler("expected integer source width");
-        maximumNumberOfTermsInConcat = DEFAULT_CONCAT_TERM_LIMIT;
-      }
     } else if (option.consume_front("locationInfoStyle=")) {
       if (auto style = parseLocationInfoStyle(option)) {
         locationInfoStyle = *style;
@@ -88,6 +92,21 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       disallowPortDeclSharing = true;
     } else if (option == "printDebugInfo") {
       printDebugInfo = true;
+    } else if (option == "disallowExpressionInliningInPorts") {
+      disallowExpressionInliningInPorts = true;
+    } else if (option.consume_front("wireSpillingHeuristic=")) {
+      if (auto heuristic = parseWireSpillingHeuristic(option)) {
+        wireSpillingHeuristicSet |= *heuristic;
+      } else {
+        errorHandler("expected 'spillNone', 'spillLargeTermsWithNamehints' or "
+                     "'spillAllMux'");
+      }
+    } else if (option.consume_front("wireSpillingNamehintTermLimit=")) {
+      if (option.getAsInteger(10, wireSpillingNamehintTermLimit)) {
+        errorHandler(
+            "expected integer for number of namehint heurstic term limit");
+        wireSpillingNamehintTermLimit = DEFAULT_NAMEHINT_TERM_LIMIT;
+      }
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
@@ -120,15 +139,19 @@ std::string LoweringOptions::toString() const {
     options += "disallowPortDeclSharing,";
   if (printDebugInfo)
     options += "printDebugInfo,";
+  if (isWireSpillingHeuristicEnabled(
+          WireSpillingHeuristic::SpillLargeTermsWithNamehints))
+    options += "wireSpillingHeuristic=spillLargeTermsWithNamehints,";
+  if (isWireSpillingHeuristicEnabled(WireSpillingHeuristic::SpillAllMux))
+    options += "wireSpillingHeuristic=spillAllMux,";
+  if (disallowExpressionInliningInPorts)
+    options += "disallowExpressionInliningInPorts,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
   if (maximumNumberOfTermsPerExpression != DEFAULT_TERM_LIMIT)
     options += "maximumNumberOfTermsPerExpression=" +
                std::to_string(maximumNumberOfTermsPerExpression) + ',';
-  if (maximumNumberOfTermsInConcat != DEFAULT_CONCAT_TERM_LIMIT)
-    options += "maximumNumberOfTermsInConcat=" +
-               std::to_string(maximumNumberOfTermsInConcat) + ',';
 
   // Remove a trailing comma if present.
   if (!options.empty()) {
@@ -150,76 +173,4 @@ void LoweringOptions::setAsAttribute(ModuleOp module) {
 void LoweringOptions::parseFromAttribute(ModuleOp module) {
   if (auto styleAttr = getAttributeFrom(module))
     parse(styleAttr.getValue(), [&](Twine error) { module.emitError(error); });
-}
-
-//===----------------------------------------------------------------------===//
-// Command Line Option Processing
-//===----------------------------------------------------------------------===//
-
-namespace {
-/// Commandline parser for LoweringOptions.  Delegates to the parser
-/// defined by LoweringOptions.
-struct LoweringOptionsParser : public llvm::cl::parser<LoweringOptions> {
-
-  LoweringOptionsParser(llvm::cl::Option &option)
-      : llvm::cl::parser<LoweringOptions>(option) {}
-
-  bool parse(llvm::cl::Option &option, StringRef argName, StringRef argValue,
-             LoweringOptions &value) {
-    bool failed = false;
-    value.parse(argValue, [&](Twine error) { failed = option.error(error); });
-    return failed;
-  }
-};
-
-/// Commandline arguments for verilog emission.  Used to dynamically register
-/// the command line arguments in multiple tools.
-struct LoweringCLOptions {
-  llvm::cl::opt<LoweringOptions, false, LoweringOptionsParser> loweringOptions{
-      "lowering-options",
-      llvm::cl::desc(
-          "Style options.  Valid flags include: alwaysFF, "
-          "noAlwaysComb, exprInEventControl, disallowPackedArrays, "
-          "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
-          "maximumNumberOfTermsPerExpression=<n>, "
-          "maximumNumberOfTermsInConcat=<n>, explicitBitcast, "
-          "emitReplicatedOpsToHeader, "
-          "locationInfoStyle={plain,wrapInAtSquareBracket,none}, "
-          "disallowPortDeclSharing, printDebugInfo"),
-      llvm::cl::value_desc("option")};
-};
-} // namespace
-
-/// The staticly initialized command line options.
-static llvm::ManagedStatic<LoweringCLOptions> clOptions;
-
-void circt::registerLoweringCLOptions() { *clOptions; }
-
-void circt::applyLoweringCLOptions(ModuleOp module) {
-  // If the command line options were not registered in the first place, there
-  // is nothing to parse.
-  if (!clOptions.isConstructed())
-    return;
-
-  // If an output style is applied on the command line, all previous options are
-  // discarded.
-  if (clOptions->loweringOptions.getNumOccurrences()) {
-    clOptions->loweringOptions.setAsAttribute(module);
-  }
-}
-
-LoweringOptions
-circt::getLoweringCLIOption(mlir::ModuleOp module,
-                            LoweringOptions::ErrorHandlerT errorHandler) {
-  // If the command line options were not registered in the first place, use the
-  // lowering option associated with module op.
-  if (!clOptions.isConstructed() ||
-      !clOptions->loweringOptions.getNumOccurrences()) {
-    if (auto styleAttr = LoweringOptions::getAttributeFrom(module))
-      return LoweringOptions(styleAttr, errorHandler);
-    // If the module doesn't have a lowering option, then use the default value.
-    return LoweringOptions();
-  }
-
-  return clOptions->loweringOptions.getValue();
 }

@@ -36,15 +36,19 @@ using namespace circt::hw::detail;
 // Type Helpers
 //===----------------------------------------------------------------------===/
 
-/// Return true if the specified type is a value HW Integer type.  This checks
-/// that it is a signless standard dialect type, that it isn't zero bits, or a
-/// hw::IntType.
-bool circt::hw::isHWIntegerType(mlir::Type type) {
+mlir::Type circt::hw::getCanonicalType(mlir::Type type) {
   Type canonicalType;
   if (auto typeAlias = type.dyn_cast<TypeAliasType>())
     canonicalType = typeAlias.getCanonicalType();
   else
     canonicalType = type;
+  return canonicalType;
+}
+
+/// Return true if the specified type is a value HW Integer type.  This checks
+/// that it is a signless standard dialect type or a hw::IntType.
+bool circt::hw::isHWIntegerType(mlir::Type type) {
+  Type canonicalType = getCanonicalType(type);
 
   if (canonicalType.isa<hw::IntType>())
     return true;
@@ -53,7 +57,11 @@ bool circt::hw::isHWIntegerType(mlir::Type type) {
   if (!intType || !intType.isSignless())
     return false;
 
-  return intType.getWidth() != 0;
+  return true;
+}
+
+bool circt::hw::isHWEnumType(mlir::Type type) {
+  return getCanonicalType(type).isa<hw::EnumType>();
 }
 
 /// Return true if the specified type can be used as an HW value type, that is
@@ -61,7 +69,7 @@ bool circt::hw::isHWIntegerType(mlir::Type type) {
 /// hardware but not marker types like InOutType.
 bool circt::hw::isHWValueType(Type type) {
   // Signless and signed integer types are both valid.
-  if (type.isa<IntegerType>() || type.isa<IntType>())
+  if (type.isa<IntegerType, IntType, EnumType>())
     return true;
 
   if (auto array = type.dyn_cast<ArrayType>())
@@ -162,10 +170,8 @@ static ParseResult parseHWElementType(Type &result, AsmParser &p) {
       typeString.startswith("uarray<") || typeString.startswith("struct<") ||
       typeString.startswith("typealias<") || typeString.startswith("int<")) {
     llvm::StringRef mnemonic;
-    if (p.parseKeyword(&mnemonic))
-      llvm_unreachable("should have an array or inout keyword here");
-    auto parseResult = generatedTypeParser(p, mnemonic, result);
-    return parseResult.hasValue() ? success() : failure();
+    auto parseResult = generatedTypeParser(p, &mnemonic, result);
+    return parseResult.has_value() ? success() : failure();
   }
 
   return p.parseType(result);
@@ -181,7 +187,7 @@ static void printHWElementType(Type element, AsmPrinter &p) {
 // Int Type
 //===----------------------------------------------------------------------===//
 
-Type IntType::get(Attribute width) {
+Type IntType::get(mlir::TypedAttr width) {
   // The width expression must always be a 32-bit wide integer type itself.
   auto widthWidth = width.getType().dyn_cast<IntegerType>();
   assert(widthWidth && widthWidth.getWidth() == 32 &&
@@ -199,7 +205,7 @@ Type IntType::parse(AsmParser &p) {
   // The bitwidth of the parameter size is always 32 bits.
   auto int32Type = p.getBuilder().getIntegerType(32);
 
-  Attribute width;
+  mlir::TypedAttr width;
   if (p.parseLess() || p.parseAttribute(width, int32Type) || p.parseGreater())
     return Type();
   return get(width);
@@ -311,6 +317,45 @@ Type UnionType::getFieldType(mlir::StringRef fieldName) {
 }
 
 //===----------------------------------------------------------------------===//
+// Enum Type
+//===----------------------------------------------------------------------===//
+
+Type EnumType::parse(AsmParser &p) {
+  llvm::SmallVector<Attribute> fields;
+
+  if (p.parseLess() || p.parseCommaSeparatedList([&]() {
+        StringRef name;
+        if (p.parseKeyword(&name))
+          return failure();
+        fields.push_back(StringAttr::get(p.getContext(), name));
+        return success();
+      }) ||
+      p.parseGreater())
+    return Type();
+
+  return get(p.getContext(), ArrayAttr::get(p.getContext(), fields));
+}
+
+void EnumType::print(AsmPrinter &p) const {
+  p << '<';
+  llvm::interleaveComma(getFields(), p, [&](Attribute enumerator) {
+    p << enumerator.cast<StringAttr>().getValue();
+  });
+  p << ">";
+}
+
+bool EnumType::contains(mlir::StringRef field) {
+  return indexOf(field).has_value();
+}
+
+Optional<size_t> EnumType::indexOf(mlir::StringRef field) {
+  for (auto it : llvm::enumerate(getFields()))
+    if (it.value().cast<StringAttr>().getValue() == field)
+      return it.index();
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // ArrayType
 //===----------------------------------------------------------------------===//
 
@@ -321,9 +366,9 @@ static LogicalResult parseArray(AsmParser &p, Attribute &dim, Type &inner) {
   uint64_t dimLiteral;
   auto int64Type = p.getBuilder().getIntegerType(64);
 
-  if (auto res = p.parseOptionalInteger(dimLiteral); res.hasValue())
+  if (auto res = p.parseOptionalInteger(dimLiteral); res.has_value())
     dim = p.getBuilder().getI64IntegerAttr(dimLiteral);
-  else if (!p.parseOptionalAttribute(dim, int64Type).hasValue())
+  else if (!p.parseOptionalAttribute(dim, int64Type).has_value())
     return failure();
 
   if (!dim.isa<IntegerAttr, ParamExprAttr, ParamDeclRefAttr>()) {

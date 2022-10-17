@@ -90,10 +90,10 @@ PDPhysLocationOp PlacementDB::place(DynamicInstanceOp inst,
   if (!subPath.empty())
     subPathAttr = StringAttr::get(inst->getContext(), subPath);
   PDPhysLocationOp locOp =
-      OpBuilder(inst.body())
+      OpBuilder(inst.getBody())
           .create<PDPhysLocationOp>(srcLoc, loc, subPathAttr,
                                     FlatSymbolRefAttr());
-  if (succeeded(insertPlacement(locOp, locOp.loc())))
+  if (succeeded(insertPlacement(locOp, locOp.getLoc())))
     return locOp;
   locOp->erase();
   return {};
@@ -102,7 +102,7 @@ PDRegPhysLocationOp PlacementDB::place(DynamicInstanceOp inst,
                                        LocationVectorAttr locs,
                                        Location srcLoc) {
   PDRegPhysLocationOp locOp =
-      OpBuilder(inst.body())
+      OpBuilder(inst.getBody())
           .create<PDRegPhysLocationOp>(srcLoc, locs, FlatSymbolRefAttr());
   for (PhysLocationAttr loc : locs.getLocs())
     if (failed(insertPlacement(locOp, loc))) {
@@ -138,7 +138,7 @@ PDPhysRegionOp PlacementDB::placeIn(DynamicInstanceOp inst,
   if (!subPath.empty())
     subPathAttr = StringAttr::get(inst->getContext(), subPath);
   PDPhysRegionOp regOp =
-      OpBuilder::atBlockEnd(&inst.body().front())
+      OpBuilder::atBlockEnd(&inst.getBody().front())
           .create<PDPhysRegionOp>(srcLoc, FlatSymbolRefAttr::get(physregion),
                                   subPathAttr, FlatSymbolRefAttr());
   regionPlacements.push_back(regOp);
@@ -152,11 +152,11 @@ size_t PlacementDB::addPlacements(DynamicInstanceOp inst) {
   inst->walk([&](Operation *op) {
     LogicalResult added = TypeSwitch<Operation *, LogicalResult>(op)
                               .Case([&](PDPhysLocationOp op) {
-                                return insertPlacement(op, op.loc());
+                                return insertPlacement(op, op.getLoc());
                               })
                               .Case([&](PDRegPhysLocationOp op) {
                                 ArrayRef<PhysLocationAttr> locs =
-                                    op.locs().getLocs();
+                                    op.getLocs().getLocs();
                                 for (auto loc : locs)
                                   if (failed(insertPlacement(op, loc)))
                                     return failure();
@@ -185,7 +185,7 @@ size_t PlacementDB::addDesignPlacements() {
 /// Remove the placement at a given location. Returns failure if nothing was
 /// placed there.
 void PlacementDB::removePlacement(PDPhysLocationOp locOp) {
-  removePlacement(locOp, locOp.loc());
+  removePlacement(locOp, locOp.getLoc());
   locOp.erase();
 }
 
@@ -194,10 +194,10 @@ void PlacementDB::removePlacement(PDPhysLocationOp locOp) {
 /// placed at the new location.
 LogicalResult PlacementDB::movePlacement(PDPhysLocationOp locOp,
                                          PhysLocationAttr newLoc) {
-  PhysLocationAttr from = locOp.loc();
+  PhysLocationAttr from = locOp.getLoc();
   if (failed(movePlacementCheck(locOp, from, newLoc)))
     return failure();
-  locOp.locAttr(newLoc);
+  locOp.setLocAttr(newLoc);
   movePlacement(locOp, from, newLoc);
   return success();
 }
@@ -205,7 +205,7 @@ LogicalResult PlacementDB::movePlacement(PDPhysLocationOp locOp,
 /// Remove the placement at a given location. Returns failure if nothing was
 /// placed there.
 void PlacementDB::removePlacement(PDRegPhysLocationOp locOp) {
-  for (PhysLocationAttr loc : locOp.locs().getLocs())
+  for (PhysLocationAttr loc : locOp.getLocs().getLocs())
     if (loc)
       removePlacement(locOp, loc);
   locOp.erase();
@@ -216,7 +216,7 @@ void PlacementDB::removePlacement(PDRegPhysLocationOp locOp) {
 /// placed at the new location.
 LogicalResult PlacementDB::movePlacement(PDRegPhysLocationOp locOp,
                                          LocationVectorAttr newLocs) {
-  ArrayRef<PhysLocationAttr> fromLocs = locOp.locs().getLocs();
+  ArrayRef<PhysLocationAttr> fromLocs = locOp.getLocs().getLocs();
 
   // Check that each move/insert/delete will succeed before doing any of the
   // mutations.
@@ -245,7 +245,7 @@ LogicalResult PlacementDB::movePlacement(PDRegPhysLocationOp locOp,
       (void)insertPlacement(locOp, to);
   }
 
-  locOp.locsAttr(newLocs);
+  locOp.setLocsAttr(newLocs);
   return success();
 }
 
@@ -363,7 +363,7 @@ void PlacementDB::walkPlacements(
   // right data structure.
 
   auto maybeSort = [](auto &container, auto direction) {
-    if (!direction.hasValue())
+    if (!direction.has_value())
       return;
     if (*direction == Direction::NONE)
       return;
@@ -379,7 +379,7 @@ void PlacementDB::walkPlacements(
   // X loop.
   SmallVector<std::pair<size_t, DimYMap>> cols(placements.begin(),
                                                placements.end());
-  maybeSort(cols, walkOrder.map([](auto wo) { return wo.columns; }));
+  maybeSort(cols, walkOrder.transform([](auto wo) { return wo.columns; }));
   for (auto colF : cols) {
     size_t x = colF.first;
     if (x < xmin || x > xmax)
@@ -388,7 +388,7 @@ void PlacementDB::walkPlacements(
 
     // Y loop.
     SmallVector<std::pair<size_t, DimNumMap>> rows(yMap.begin(), yMap.end());
-    maybeSort(rows, walkOrder.map([](auto wo) { return wo.rows; }));
+    maybeSort(rows, walkOrder.transform([](auto wo) { return wo.rows; }));
     for (auto rowF : rows) {
       size_t y = rowF.first;
       if (y < ymin || y > ymax)

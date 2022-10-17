@@ -28,7 +28,7 @@
 //
 // futil -p pre-opt -p compile -p post-opt -p lower -p lower-guards -b mlir
 
-calyx.program "main" {
+// module attributes {calyx.entrypoint = "main"} {
   calyx.component @main(%a: i32, %b: i32, %go: i1 {go = 1 : i64}, %clk: i1 {clk = 1 : i64}, %reset: i1 {reset = 1 : i64}) -> (%out: i32, %done: i1 {done = 1 : i64}) {
     // CHECK-DAG:  %add_left = sv.wire
     // CHECK-DAG:  %[[ADD_LEFT_VAL:.+]] = sv.read_inout %add_left
@@ -131,4 +131,4 @@ calyx.program "main" {
     calyx.control {
     }
   }
-}
+// }

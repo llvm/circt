@@ -4,17 +4,31 @@
 # RUN: FileCheck %s --input-file %t/CompReg.tcl --check-prefix TCL
 
 import pycde
-from pycde import types, module, Clock, Input, Output
+from pycde import types, module, AppID, Clock, Input, Output
 from pycde.devicedb import LocationVector
 
 from pycde.module import generator
 
 import sys
 
+# CHECK: (* dont_merge *)
+# CHECK: reg [7:0] [[NAME:reg_.+]];
+# CHECK: always_ff @(posedge clk)
+# CHECK: [[NAME]] <= {{.+}}
+
+# CHECK: reg [7:0] [[NAME2:reg_.+]];
+# CHECK: always_ff @(posedge clk) begin
+# CHECK:   if (rst)
+# CHECK:     [[NAME2]] <= 8'h0;
+# CHECK:   else
+# CHECK:     [[NAME2]] <= [[NAME]];
+# CHECK: end
+
 
 @module
 class CompReg:
   clk = Clock()
+  rst = Input(types.i1)
   input = Input(types.i8)
   output = Output(types.i8)
 
@@ -22,7 +36,8 @@ class CompReg:
   def build(ports):
     with ports.clk:
       compreg = ports.input.reg(name="reg", sv_attributes=["dont_merge"])
-      ports.output = compreg
+      compreg.appid = AppID("reg", 0)
+      ports.output = compreg.reg(rst=ports.rst)
 
 
 mod = pycde.System([CompReg], name="CompReg", output_directory=sys.argv[1])
@@ -40,11 +55,6 @@ top_inst["reg"].place([(0, 0, 0), None, (0, 0, 2), (0, 0, 3), (0, 0, 4),
                        (0, 0, 5), (0, 0, 6), (0, 0, 7)])
 mod.print()
 mod.emit_outputs()
-
-# CHECK: (* dont_merge *)
-# CHECK: reg [7:0] [[NAME:reg_.]];
-# CHECK: always_ff @(posedge clk)
-# CHECK: [[NAME]] <= {{.+}}
 
 # TCL-DAG: set_location_assignment FF_X0_Y0_N7 -to $parent|reg_2[7]
 # TCL-DAG: set_location_assignment FF_X0_Y0_N6 -to $parent|reg_2[6]

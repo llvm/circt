@@ -157,12 +157,12 @@ struct IdExpr : public ExprBase<IdExpr, Expr::Kind::Id> {
 /// A known constant value.
 struct KnownExpr : public ExprBase<KnownExpr, Expr::Kind::Known> {
   KnownExpr(int32_t value) : ExprBase() { solution = value; }
-  void print(llvm::raw_ostream &os) const { os << solution.getValue(); }
+  void print(llvm::raw_ostream &os) const { os << solution.value(); }
   bool operator==(const KnownExpr &other) const {
-    return solution.getValue() == other.solution.getValue();
+    return solution.value() == other.solution.value();
   }
   llvm::hash_code hash_value() const {
-    return llvm::hash_combine(Expr::hash_value(), solution.getValue());
+    return llvm::hash_combine(Expr::hash_value(), solution.value());
   }
 };
 
@@ -364,7 +364,7 @@ namespace {
 ///
 /// The inequality separately tracks recursive (a, b) and non-recursive (c)
 /// constraints on `x`. This allows it to properly identify the combination of
-/// the two constraints constraints `x >= x-1` and `x >= 4` to be satisfiable as
+/// the two constraints `x >= x-1` and `x >= 4` to be satisfiable as
 /// `x >= max(x-1, 4)`. If it only tracked inequality as `x >= a*x+b`, the
 /// combination of these two constraints would be `x >= x+4` (due to max(-1,4) =
 /// 4), which would be unsatisfiable.
@@ -1144,9 +1144,11 @@ private:
 
 /// Check if a type contains any FIRRTL type with uninferred widths.
 static bool hasUninferredWidth(Type type) {
-  if (auto ftype = type.dyn_cast<FIRRTLType>())
-    return ftype.hasUninferredWidth();
-  return false;
+  return TypeSwitch<Type, bool>(type)
+      .Case<FIRRTLBaseType>([](auto base) { return base.hasUninferredWidth(); })
+      .Case<RefType>(
+          [](auto ref) { return ref.getType().hasUninferredWidth(); })
+      .Default([](auto) { return false; });
 }
 
 LogicalResult InferenceMapping::map(CircuitOp op) {
@@ -1189,7 +1191,7 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
 
     // Go through operations in the module, creating type variables for results,
     // and generating constraints.
-    auto result = module.getBody()->walk(
+    auto result = module.getBodyBlock()->walk(
         [&](Operation *op) { return WalkResult(mapOperation(op)); });
     if (result.wasInterrupted())
       return WalkResult::interrupt();
@@ -1207,9 +1209,14 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
   bool allWidthsKnown = true;
   for (auto result : op->getResults()) {
     if (auto mux = dyn_cast<MuxPrimOp>(op))
-      if (hasUninferredWidth(mux.sel().getType()))
+      if (hasUninferredWidth(mux.getSel().getType()))
         allWidthsKnown = false;
-    if (!hasUninferredWidth(result.getType()))
+    // Only consider FIRRTL types for width constraints. Ignore any foreign
+    // types as they don't participate in the width inference process.
+    auto resultTy = result.getType().dyn_cast<FIRRTLType>();
+    if (!resultTy)
+      continue;
+    if (!hasUninferredWidth(resultTy))
       declareVars(result, op->getLoc());
     else
       allWidthsKnown = false;
@@ -1230,7 +1237,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         if (auto width = op.getType().getWidth())
           e = solver.known(*width);
         else {
-          auto v = op.value();
+          auto v = op.getValue();
           auto w = v.getBitWidth() - (v.isNegative() ? v.countLeadingOnes()
                                                      : v.countLeadingZeros());
           if (v.isSigned())
@@ -1268,43 +1275,43 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         declareVars(op.getResult(), op.getLoc());
         // Contrain the register to be greater than or equal to the reset
         // signal.
-        constrainTypes(op.getResult(), op.resetValue());
+        constrainTypes(op.getResult(), op.getResetValue());
       })
       .Case<NodeOp>([&](auto op) {
         // Nodes have the same type as their input.
-        unifyTypes(FieldRef(op.getResult(), 0), FieldRef(op.input(), 0),
+        unifyTypes(FieldRef(op.getResult(), 0), FieldRef(op.getInput(), 0),
                    op.getType());
       })
 
       // Aggregate Values
       .Case<SubfieldOp>([&](auto op) {
-        auto bundleType = op.input().getType().template cast<BundleType>();
-        auto fieldID = bundleType.getFieldID(op.fieldIndex());
-        unifyTypes(FieldRef(op.getResult(), 0), FieldRef(op.input(), fieldID),
-                   op.getType());
+        auto bundleType = op.getInput().getType().template cast<BundleType>();
+        auto fieldID = bundleType.getFieldID(op.getFieldIndex());
+        unifyTypes(FieldRef(op.getResult(), 0),
+                   FieldRef(op.getInput(), fieldID), op.getType());
       })
       .Case<SubindexOp, SubaccessOp>([&](auto op) {
         // All vec fields unify to the same thing. Always use the first element
         // of the vector, which has a field ID of 1.
-        unifyTypes(FieldRef(op.getResult(), 0), FieldRef(op.input(), 1),
+        unifyTypes(FieldRef(op.getResult(), 0), FieldRef(op.getInput(), 1),
                    op.getType());
       })
 
       // Arithmetic and Logical Binary Primitives
       .Case<AddPrimOp, SubPrimOp>([&](auto op) {
-        auto lhs = getExpr(op.lhs());
-        auto rhs = getExpr(op.rhs());
+        auto lhs = getExpr(op.getLhs());
+        auto rhs = getExpr(op.getRhs());
         auto e = solver.add(solver.max(lhs, rhs), solver.known(1));
         setExpr(op.getResult(), e);
       })
       .Case<MulPrimOp>([&](auto op) {
-        auto lhs = getExpr(op.lhs());
-        auto rhs = getExpr(op.rhs());
+        auto lhs = getExpr(op.getLhs());
+        auto rhs = getExpr(op.getRhs());
         auto e = solver.add(lhs, rhs);
         setExpr(op.getResult(), e);
       })
       .Case<DivPrimOp>([&](auto op) {
-        auto lhs = getExpr(op.lhs());
+        auto lhs = getExpr(op.getLhs());
         Expr *e;
         if (op.getType().isSigned()) {
           e = solver.add(lhs, solver.known(1));
@@ -1314,45 +1321,45 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         setExpr(op.getResult(), e);
       })
       .Case<RemPrimOp>([&](auto op) {
-        auto lhs = getExpr(op.lhs());
-        auto rhs = getExpr(op.rhs());
+        auto lhs = getExpr(op.getLhs());
+        auto rhs = getExpr(op.getRhs());
         auto e = solver.min(lhs, rhs);
         setExpr(op.getResult(), e);
       })
       .Case<AndPrimOp, OrPrimOp, XorPrimOp>([&](auto op) {
-        auto lhs = getExpr(op.lhs());
-        auto rhs = getExpr(op.rhs());
+        auto lhs = getExpr(op.getLhs());
+        auto rhs = getExpr(op.getRhs());
         auto e = solver.max(lhs, rhs);
         setExpr(op.getResult(), e);
       })
 
       // Misc Binary Primitives
       .Case<CatPrimOp>([&](auto op) {
-        auto lhs = getExpr(op.lhs());
-        auto rhs = getExpr(op.rhs());
+        auto lhs = getExpr(op.getLhs());
+        auto rhs = getExpr(op.getRhs());
         auto e = solver.add(lhs, rhs);
         setExpr(op.getResult(), e);
       })
       .Case<DShlPrimOp>([&](auto op) {
-        auto lhs = getExpr(op.lhs());
-        auto rhs = getExpr(op.rhs());
+        auto lhs = getExpr(op.getLhs());
+        auto rhs = getExpr(op.getRhs());
         auto e = solver.add(lhs, solver.add(solver.pow(rhs), solver.known(-1)));
         setExpr(op.getResult(), e);
       })
       .Case<DShlwPrimOp, DShrPrimOp>([&](auto op) {
-        auto e = getExpr(op.lhs());
+        auto e = getExpr(op.getLhs());
         setExpr(op.getResult(), e);
       })
 
       // Unary operators
       .Case<NegPrimOp>([&](auto op) {
-        auto input = getExpr(op.input());
+        auto input = getExpr(op.getInput());
         auto e = solver.add(input, solver.known(1));
         setExpr(op.getResult(), e);
       })
       .Case<CvtPrimOp>([&](auto op) {
-        auto input = getExpr(op.input());
-        auto e = op.input().getType().template cast<IntType>().isSigned()
+        auto input = getExpr(op.getInput());
+        auto e = op.getInput().getType().template cast<IntType>().isSigned()
                      ? input
                      : solver.add(input, solver.known(1));
         setExpr(op.getResult(), e);
@@ -1360,35 +1367,36 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 
       // Miscellaneous
       .Case<BitsPrimOp>([&](auto op) {
-        setExpr(op.getResult(), solver.known(op.hi() - op.lo() + 1));
+        setExpr(op.getResult(), solver.known(op.getHi() - op.getLo() + 1));
       })
-      .Case<HeadPrimOp>(
-          [&](auto op) { setExpr(op.getResult(), solver.known(op.amount())); })
+      .Case<HeadPrimOp>([&](auto op) {
+        setExpr(op.getResult(), solver.known(op.getAmount()));
+      })
       .Case<TailPrimOp>([&](auto op) {
-        auto input = getExpr(op.input());
-        auto e = solver.add(input, solver.known(-op.amount()));
+        auto input = getExpr(op.getInput());
+        auto e = solver.add(input, solver.known(-op.getAmount()));
         setExpr(op.getResult(), e);
       })
       .Case<PadPrimOp>([&](auto op) {
-        auto input = getExpr(op.input());
-        auto e = solver.max(input, solver.known(op.amount()));
+        auto input = getExpr(op.getInput());
+        auto e = solver.max(input, solver.known(op.getAmount()));
         setExpr(op.getResult(), e);
       })
       .Case<ShlPrimOp>([&](auto op) {
-        auto input = getExpr(op.input());
-        auto e = solver.add(input, solver.known(op.amount()));
+        auto input = getExpr(op.getInput());
+        auto e = solver.add(input, solver.known(op.getAmount()));
         setExpr(op.getResult(), e);
       })
       .Case<ShrPrimOp>([&](auto op) {
-        auto input = getExpr(op.input());
-        auto e = solver.max(solver.add(input, solver.known(-op.amount())),
+        auto input = getExpr(op.getInput());
+        auto e = solver.max(solver.add(input, solver.known(-op.getAmount())),
                             solver.known(1));
         setExpr(op.getResult(), e);
       })
 
       // Handle operations whose output width matches the input width.
       .Case<NotPrimOp, AsSIntPrimOp, AsUIntPrimOp>(
-          [&](auto op) { setExpr(op.getResult(), getExpr(op.input())); })
+          [&](auto op) { setExpr(op.getResult(), getExpr(op.getInput())); })
       .Case<mlir::UnrealizedConversionCastOp>(
           [&](auto op) { setExpr(op.getResult(0), getExpr(op.getOperand(0))); })
 
@@ -1403,27 +1411,27 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
 
       .Case<MuxPrimOp>([&](auto op) {
-        auto sel = getExpr(op.sel());
+        auto sel = getExpr(op.getSel());
         constrainTypes(sel, solver.known(1));
-        maximumOfTypes(op.getResult(), op.high(), op.low());
+        maximumOfTypes(op.getResult(), op.getHigh(), op.getLow());
       })
 
       // Handle the various connect statements that imply a type constraint.
       .Case<ConnectOp, StrictConnectOp>([&](auto op) {
         // If the source is an invalid value, we don't set a constraint between
         // these two types.
-        if (dyn_cast_or_null<InvalidValueOp>(op.src().getDefiningOp()))
+        if (dyn_cast_or_null<InvalidValueOp>(op.getSrc().getDefiningOp()))
           return;
-        constrainTypes(op.dest(), op.src());
+        constrainTypes(op.getDest(), op.getSrc());
       })
       .Case<AttachOp>([&](auto op) {
         // Attach connects multiple analog signals together. All signals must
         // have the same bit width. Signals without bit width inherit from the
         // other signals.
-        if (op.operands().empty())
+        if (op.getAttached().empty())
           return;
-        auto prev = op.operands()[0];
-        for (auto operand : op.operands().drop_front()) {
+        auto prev = op.getAttached()[0];
+        for (auto operand : op.getAttached().drop_front()) {
           auto e1 = getExpr(prev);
           auto e2 = getExpr(operand);
           constrainTypes(e1, e2);
@@ -1442,13 +1450,13 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         auto module = dyn_cast<FModuleOp>(&*refdModule);
         if (!module) {
           auto diag = mlir::emitError(op.getLoc());
-          diag << "extern module `" << op.moduleName()
+          diag << "extern module `" << op.getModuleName()
                << "` has ports of uninferred width";
           diag.attachNote(op.getLoc())
               << "Only non-extern FIRRTL modules may contain unspecified "
                  "widths to be inferred automatically.";
           diag.attachNote(refdModule->getLoc())
-              << "Module `" << op.moduleName() << "` defined here:";
+              << "Module `" << op.getModuleName() << "` defined here:";
           mappingFailed = true;
           return;
         }
@@ -1463,10 +1471,14 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
 
       // Handle memories.
-      .Case<MemOp>([&](auto op) {
+      .Case<MemOp>([&](MemOp op) {
         // Create constraint variables for all ports.
-        for (auto result : op.results())
-          declareVars(result, op.getLoc());
+        unsigned nonDebugPort = 0;
+        for (const auto &result : llvm::enumerate(op.getResults())) {
+          declareVars(result.value(), op.getLoc());
+          if (!result.value().getType().cast<FIRRTLType>().isa<RefType>())
+            nonDebugPort = result.index();
+        }
 
         // A helper function that returns the indeces of the "data", "rdata",
         // and "wdata" fields in the bundle corresponding to a memory port.
@@ -1478,6 +1490,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
             return ArrayRef<unsigned>(indices, 1); // {3}
           case MemOp::PortKind::ReadWrite:
             return ArrayRef<unsigned>(indices); // {3, 5}
+          case MemOp::PortKind::Debug:
+            return ArrayRef<unsigned>({0});
           }
           llvm_unreachable("Imposible PortKind");
         };
@@ -1486,17 +1500,27 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // actually want is for all data ports to share the same variable. To do
         // this, we find the first data port declared, and use that port's vars
         // for all the other ports.
-        unsigned firstFieldIndex = dataFieldIndices(op.getPortKind(0))[0];
-        FieldRef firstData(op.getResult(0), op.getPortType(0)
-                                                .getPassiveType()
-                                                .template cast<BundleType>()
-                                                .getFieldID(firstFieldIndex));
+        unsigned firstFieldIndex =
+            dataFieldIndices(op.getPortKind(nonDebugPort))[0];
+        FieldRef firstData(op.getResult(nonDebugPort),
+                           op.getPortType(nonDebugPort)
+                               .getPassiveType()
+                               .template cast<BundleType>()
+                               .getFieldID(firstFieldIndex));
         LLVM_DEBUG(llvm::dbgs() << "Adjusting memory port variables:\n");
 
         // Reuse data port variables.
         auto dataType = op.getDataType();
-        for (unsigned i = 0, e = op.results().size(); i < e; ++i) {
+        for (unsigned i = 0, e = op.getResults().size(); i < e; ++i) {
           auto result = op.getResult(i);
+          if (result.getType().cast<FIRRTLType>().isa<RefType>()) {
+            // Debug ports are firrtl.ref<vector<data-type, depth>>
+            // Use FieldRef of 1, to indicate the first vector element must be
+            // of the dataType.
+            unifyTypes(firstData, FieldRef(result, 1), dataType);
+            continue;
+          }
+
           auto portType =
               op.getPortType(i).getPassiveType().template cast<BundleType>();
           for (auto fieldIndex : dataFieldIndices(op.getPortKind(i)))
@@ -1505,6 +1529,21 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         }
       })
 
+      .Case<RefSendOp>([&](auto op) {
+        declareVars(op.getResult(), op.getLoc());
+        constrainTypes(op.getResult(), op.getBase());
+      })
+      .Case<RefResolveOp>([&](auto op) {
+        declareVars(op.getResult(), op.getLoc());
+        constrainTypes(op.getResult(), op.getRef());
+      })
+      .Case<mlir::UnrealizedConversionCastOp>([&](auto op) {
+        for (Value result : op.getResults()) {
+          auto ty = result.getType();
+          if (ty.isa<FIRRTLType>())
+            declareVars(result, op.getLoc());
+        }
+      })
       .Default([&](auto op) {
         op->emitOpError("not supported in width inference");
         mappingFailed = true;
@@ -1521,7 +1560,7 @@ void InferenceMapping::declareVars(Value value, Location loc) {
   // Declare a variable for every unknown width in the type. If this is a Bundle
   // type or a FVector type, we will have to potentially create many variables.
   unsigned fieldID = 0;
-  std::function<void(FIRRTLType)> declare = [&](FIRRTLType type) {
+  std::function<void(FIRRTLBaseType)> declare = [&](FIRRTLBaseType type) {
     auto width = type.getBitWidthOrSentinel();
     if (width >= 0) {
       // Known width integer create a known expression.
@@ -1549,7 +1588,7 @@ void InferenceMapping::declareVars(Value value, Location loc) {
       llvm_unreachable("Unknown type inside a bundle!");
     }
   };
-  declare(ftype);
+  declare(getBaseType(ftype));
 }
 
 /// Assign the constraint expressions of the fields in the `result` argument as
@@ -1558,7 +1597,7 @@ void InferenceMapping::declareVars(Value value, Location loc) {
 void InferenceMapping::maximumOfTypes(Value result, Value rhs, Value lhs) {
   // Recurse to every leaf element and set larger >= smaller.
   auto fieldID = 0;
-  std::function<void(FIRRTLType)> maximize = [&](FIRRTLType type) {
+  std::function<void(FIRRTLBaseType)> maximize = [&](FIRRTLBaseType type) {
     if (auto bundleType = type.dyn_cast<BundleType>()) {
       fieldID++;
       for (auto &element : bundleType.getElements())
@@ -1580,7 +1619,7 @@ void InferenceMapping::maximumOfTypes(Value result, Value rhs, Value lhs) {
     }
   };
   auto type = result.getType().cast<FIRRTLType>();
-  maximize(type);
+  maximize(getBaseType(type));
 }
 
 /// Establishes constraints to ensure the sizes in the `larger` type are greater
@@ -1590,11 +1629,15 @@ void InferenceMapping::maximumOfTypes(Value result, Value rhs, Value lhs) {
 ///
 /// This function is used to apply regular connects.
 void InferenceMapping::constrainTypes(Value larger, Value smaller) {
-  // Recurse to every leaf element and set larger >= smaller.
-  auto type = larger.getType().cast<FIRRTLType>();
+  // Recurse to every leaf element and set larger >= smaller. Ignore foreign
+  // types as these do not participate in width inference.
+  auto type = larger.getType().dyn_cast<FIRRTLType>();
+  if (!type)
+    return;
+
   auto fieldID = 0;
-  std::function<void(FIRRTLType, Value, Value)> constrain =
-      [&](FIRRTLType type, Value larger, Value smaller) {
+  std::function<void(FIRRTLBaseType, Value, Value)> constrain =
+      [&](FIRRTLBaseType type, Value larger, Value smaller) {
         if (auto bundleType = type.dyn_cast<BundleType>()) {
           fieldID++;
           for (auto &element : bundleType.getElements()) {
@@ -1621,7 +1664,7 @@ void InferenceMapping::constrainTypes(Value larger, Value smaller) {
         }
       };
 
-  constrain(type, larger, smaller);
+  constrain(getBaseType(type), larger, smaller);
 }
 
 /// Establishes constraints to ensure the sizes in the `larger` type are greater
@@ -1651,7 +1694,7 @@ void InferenceMapping::unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type) {
   // Co-iterate the two field refs, recurring into every leaf element and set
   // them equal.
   auto fieldID = 0;
-  std::function<void(FIRRTLType)> unify = [&](FIRRTLType type) {
+  std::function<void(FIRRTLBaseType)> unify = [&](FIRRTLBaseType type) {
     if (type.isGround()) {
       // Leaf element, unify the fields!
       FieldRef lhsFieldRef(lhs.getValue(), lhs.getFieldID() + fieldID);
@@ -1680,12 +1723,12 @@ void InferenceMapping::unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type) {
       llvm_unreachable("Unknown type inside a bundle!");
     }
   };
-  unify(type);
+  unify(getBaseType(type));
 }
 
 /// Get the constraint expression for a value.
 Expr *InferenceMapping::getExpr(Value value) {
-  assert(value.getType().cast<FIRRTLType>().isGround());
+  assert(getBaseType(value.getType().cast<FIRRTLType>()).isGround());
   // A field ID of 0 indicates the entire value.
   return getExpr(FieldRef(value, 0));
 }
@@ -1704,7 +1747,7 @@ Expr *InferenceMapping::getExprOrNull(FieldRef fieldRef) {
 
 /// Associate a constraint expression with a value.
 void InferenceMapping::setExpr(Value value, Expr *expr) {
-  assert(value.getType().cast<FIRRTLType>().isGround());
+  assert(getBaseType(value.getType().cast<FIRRTLType>()).isGround());
   // A field ID of 0 indicates the entire value.
   setExpr(FieldRef(value, 0), expr);
 }
@@ -1734,7 +1777,7 @@ public:
   LogicalResult update(CircuitOp op);
   bool updateOperation(Operation *op);
   bool updateValue(Value value);
-  FIRRTLType updateType(FieldRef fieldRef, FIRRTLType type);
+  FIRRTLBaseType updateType(FieldRef fieldRef, FIRRTLBaseType type);
 
 private:
   bool anyFailed;
@@ -1787,10 +1830,14 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
   // that is wider than the LHS, in which case an additional BitsPrimOp is
   // necessary to truncate the value.
   if (auto con = dyn_cast<ConnectOp>(op)) {
-    auto lhs = con.dest();
-    auto rhs = con.src();
-    auto lhsType = lhs.getType().cast<FIRRTLType>();
-    auto rhsType = rhs.getType().cast<FIRRTLType>();
+    auto lhs = con.getDest();
+    auto rhs = con.getSrc();
+    auto lhsType = lhs.getType().dyn_cast<FIRRTLBaseType>();
+    auto rhsType = rhs.getType().dyn_cast<FIRRTLBaseType>();
+
+    // Nothing to do if not base types.
+    if (!lhsType || !rhsType)
+      return anyChanged;
 
     // If the source is an InvalidValue of unknown width, infer the type to be
     // the same as the destination.
@@ -1802,7 +1849,7 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
     auto rhsWidth = rhsType.getBitWidthOrSentinel();
     if (lhsWidth >= 0 && rhsWidth >= 0 && lhsWidth < rhsWidth) {
       OpBuilder builder(op);
-      auto trunc = builder.createOrFold<TailPrimOp>(con.getLoc(), con.src(),
+      auto trunc = builder.createOrFold<TailPrimOp>(con.getLoc(), con.getSrc(),
                                                     rhsWidth - lhsWidth);
       if (rhsType.isa<SIntType>())
         trunc =
@@ -1810,12 +1857,13 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
 
       LLVM_DEBUG(llvm::dbgs()
                  << "Truncating RHS to " << lhsType << " in " << con << "\n");
-      con->replaceUsesOfWith(con.src(), trunc);
+      con->replaceUsesOfWith(con.getSrc(), trunc);
     }
+    return anyChanged;
   }
 
   // If this is a module, update its ports.
-  if (auto module = dyn_cast<FModuleOp>(op)) {
+  else if (auto module = dyn_cast<FModuleOp>(op)) {
     // Update the block argument types.
     bool argsChanged = false;
     SmallVector<Attribute> argTypes;
@@ -1838,9 +1886,9 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
 }
 
 /// Resize a `uint`, `sint`, or `analog` type to a specific width.
-static FIRRTLType resizeType(FIRRTLType type, uint32_t newWidth) {
+static FIRRTLBaseType resizeType(FIRRTLBaseType type, uint32_t newWidth) {
   auto *context = type.getContext();
-  return TypeSwitch<FIRRTLType, FIRRTLType>(type)
+  return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(type)
       .Case<UIntType>(
           [&](auto type) { return UIntType::get(context, newWidth); })
       .Case<SIntType>(
@@ -1885,7 +1933,8 @@ bool InferenceTypeUpdate::updateValue(Value value) {
   // Recreate the type, substituting the solved widths.
   auto context = type.getContext();
   unsigned fieldID = 0;
-  std::function<FIRRTLType(FIRRTLType)> update = [&](FIRRTLType type) {
+  std::function<FIRRTLBaseType(FIRRTLBaseType)> updateBase =
+      [&](FIRRTLBaseType type) -> FIRRTLBaseType {
     auto width = type.getBitWidthOrSentinel();
     if (width >= 0) {
       // Known width integers return themselves.
@@ -1902,7 +1951,7 @@ bool InferenceTypeUpdate::updateValue(Value value) {
       llvm::SmallVector<BundleType::BundleElement, 3> elements;
       for (auto &element : bundleType) {
         elements.emplace_back(element.name, element.isFlip,
-                              update(element.type));
+                              updateBase(element.type));
       }
       return BundleType::get(elements, context);
     } else if (auto vecType = type.dyn_cast<FVectorType>()) {
@@ -1911,7 +1960,7 @@ bool InferenceTypeUpdate::updateValue(Value value) {
       // TODO: this should recurse into the element type of 0 length vectors and
       // set any unknown width to 0.
       if (vecType.getNumElements() > 0) {
-        auto newType = FVectorType::get(update(vecType.getElementType()),
+        auto newType = FVectorType::get(updateBase(vecType.getElementType()),
                                         vecType.getNumElements());
         fieldID = save + vecType.getMaxFieldID();
         return newType;
@@ -1923,7 +1972,7 @@ bool InferenceTypeUpdate::updateValue(Value value) {
   };
 
   // Update the type.
-  auto newType = update(type);
+  auto newType = mapBaseType(type, updateBase);
   LLVM_DEBUG(llvm::dbgs() << "Update " << value << " to " << newType << "\n");
   value.setType(newType);
 
@@ -1931,8 +1980,8 @@ bool InferenceTypeUpdate::updateValue(Value value) {
   // Unsized constants have APInts which are *at least* wide enough to hold
   // the value, but may be larger. This can trip up the verifier.
   if (auto op = value.getDefiningOp<ConstantOp>()) {
-    auto k = op.value();
-    auto bitwidth = op.getType().cast<FIRRTLType>().getBitWidthOrSentinel();
+    auto k = op.getValue();
+    auto bitwidth = op.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel();
     if (k.getBitWidth() > unsigned(bitwidth))
       k = k.trunc(bitwidth);
     op->setAttr("value", IntegerAttr::get(op.getContext(), k));
@@ -1942,12 +1991,13 @@ bool InferenceTypeUpdate::updateValue(Value value) {
 }
 
 /// Update a type.
-FIRRTLType InferenceTypeUpdate::updateType(FieldRef fieldRef, FIRRTLType type) {
+FIRRTLBaseType InferenceTypeUpdate::updateType(FieldRef fieldRef,
+                                               FIRRTLBaseType type) {
   assert(type.isGround() && "Can only pass in ground types.");
   auto value = fieldRef.getValue();
   // Get the inferred width.
   Expr *expr = mapping.getExprOrNull(fieldRef);
-  if (!expr || !expr->solution.hasValue()) {
+  if (!expr || !expr->solution) {
     // It should not be possible to arrive at an uninferred width at this point.
     // In case the constraints are not resolvable, checks before the calls to
     // `updateType` must have already caught the issues and aborted the pass
@@ -1956,7 +2006,7 @@ FIRRTLType InferenceTypeUpdate::updateType(FieldRef fieldRef, FIRRTLType type) {
     mlir::emitError(value.getLoc(), "width should have been inferred");
     return type;
   }
-  int32_t solution = expr->solution.getValue();
+  int32_t solution = *expr->solution;
   assert(solution >= 0); // The solver infers variables to be 0 or greater.
   return resizeType(type, solution);
 }

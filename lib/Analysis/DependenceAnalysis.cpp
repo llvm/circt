@@ -38,7 +38,7 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
       if (results.count(destination) == 0)
         results[destination] = SmallVector<MemoryDependence>();
 
-      // Look for for inter-iteration dependences on the same memory location.
+      // Look for inter-iteration dependences on the same memory location.
       MemRefAccess src(source);
       MemRefAccess dst(destination);
       FlatAffineValueConstraints dependenceConstraints;
@@ -63,9 +63,9 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
       // Look for the common parent that src and dst share. If there is none,
       // there is nothing more to do.
       SmallVector<Operation *> srcParents;
-      getEnclosingAffineForAndIfOps(*source, &srcParents);
+      getEnclosingAffineOps(*source, &srcParents);
       SmallVector<Operation *> dstParents;
-      getEnclosingAffineForAndIfOps(*destination, &dstParents);
+      getEnclosingAffineOps(*destination, &dstParents);
 
       Operation *commonParent = nullptr;
       for (auto *srcParent : llvm::reverse(srcParents)) {

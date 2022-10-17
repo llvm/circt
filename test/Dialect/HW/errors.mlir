@@ -130,13 +130,6 @@ hw.module @union(%b: i42) {
 
 // -----
 
-hw.module @invalid_add(%a: i0) {  // i0 ports are ok.
-  // expected-error @+1 {{'comb.add' op operand #0 must be an integer bitvector of one or more bits, but got 'i0'}}
-  %b = comb.add %a, %a: i0
-}
-
-// -----
-
 // expected-note @+1 {{module declared here}}
 hw.module @empty() -> () {
   hw.output
@@ -230,7 +223,7 @@ hw.module @Use(%a: i8) -> (xx: i8) {
 hw.module.extern @p<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8)
 
 hw.module @Use(%a: i8) -> (xx: i8) {
-  // expected-error @+1 {{op parameter "p2" should have type i1 but has type i2}}
+  // expected-error @+1 {{op parameter "p2" should have type 'i1' but has type 'i2'}}
   %r0 = hw.instance "inst1" @p<p1: i42 = 4, p2: i2 = 0>(arg0: %a: i8) -> (out: i8)
   hw.output %r0: i8
 }
@@ -284,9 +277,18 @@ hw.module @Use<xx: i41>() {
 
 // -----
 
-// expected-error @+1 {{parameter #hw.param.decl<"xx": i41> has the same name as a previous parameter}}
-hw.module @Use<xx: i41, xx: i41>() {
-}
+// expected-error @+1 {{parameter #hw.param.decl<"xx": i41> : i41 has the same name as a previous parameter}}
+hw.module @Use<xx: i41, xx: i41>() {}
+
+// -----
+
+// expected-error @+1 {{parameter #hw.param.decl<"xx": i41 = 1> : i41 has the same name as a previous parameter}}
+hw.module @Use<xx: i41, xx: i41 = 1>() {}
+
+// -----
+
+// expected-error @+1 {{parameter #hw.param.decl<"xx": none> has the same name as a previous parameter}}
+hw.module @Use<xx: none, xx: none>() {}
 
 // -----
 
@@ -329,3 +331,11 @@ module {
 
 // expected-error @+1 {{unsupported dimension kind in hw.array}}
 hw.module @bab<param: i32, N: i32> ( %array2d: !hw.array<i3 x i4>) {}
+
+// -----
+
+hw.module @foo() {
+  // expected-error @+1 {{enum value 'D' is not a member of enum type '!hw.enum<A, B, C>'}}
+  %0 = hw.enum.constant D : !hw.enum<A, B, C>
+  hw.output
+}

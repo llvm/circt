@@ -11,9 +11,9 @@ jobs:
   # integration testing prerequisite installed.
   build-circt:
     name: Build and Test
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-integration-test:v10.2
+      image: ghcr.io/circt/images/circt-integration-test:v11
     strategy:
       fail-fast: false
       matrix:
@@ -25,6 +25,9 @@ jobs:
             cxx: clang++
           - cc: gcc
             cxx: g++
+        exclude:
+          - build-type: Debug
+            compiler: {cc: gcc, cxx: g++}
 
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
@@ -80,10 +83,14 @@ jobs:
             -DLLVM_TARGETS_TO_BUILD="host" \
             -DLLVM_USE_LINKER=lld \
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
-            -DCIRCT_BINDINGS_PYTHON_ENABLED=ON
+            -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
+            -DLLVM_LIT_ARGS='-sv --show-unsupported'
       - name: Test CIRCT
         run: |
           ninja -C build check-circt -j$(nproc)
+      - name: Unit Test CIRCT
+        run: |
+          ninja -C build check-circt-unit -j$(nproc)
       - name: Integration Test CIRCT
         run: |
           ninja -C build check-circt-integration -j$(nproc)

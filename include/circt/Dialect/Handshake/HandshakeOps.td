@@ -13,6 +13,7 @@
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/BuiltinTypes.td"
+include "mlir/IR/BuiltinAttributeInterfaces.td"
 
 // This is almost exactly like a standard FuncOp, except that it has some
 // extra verification conditions.  In particular, each Value must
@@ -121,8 +122,8 @@ def InstanceOp : Handshake_Op<"instance", [
   let summary = "module instantiate operation";
   let description = [{
     The `instance` operation represents the instantiation of a module.  This
-	  is similar to a function call, except that different instances of the
-	  same module are guaranteed to have their own distinct state.
+    is similar to a function call, except that different instances of the
+    same module are guaranteed to have their own distinct state.
     The instantiated module is encoded as a symbol reference attribute named
     "module". An instance operation takes a control input as its last argument
     and returns a control output as its last result.
@@ -133,7 +134,7 @@ def InstanceOp : Handshake_Op<"instance", [
     ```
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$module, Variadic<AnyType>:$operands);
+  let arguments = (ins FlatSymbolRefAttr:$module, Variadic<AnyType>:$opOperands);
   let results = (outs Variadic<AnyType>);
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<
@@ -157,7 +158,6 @@ def InstanceOp : Handshake_Op<"instance", [
   }]>];
 
   let extraClassDeclaration = [{
-    StringRef getModule() { return module(); }
     FunctionType getModuleType();
 
     /// Get the argument operands to the called function.
@@ -180,10 +180,8 @@ def InstanceOp : Handshake_Op<"instance", [
   }];
 
   let assemblyFormat = [{
-    $module `(` $operands `)` attr-dict `:` functional-type($operands, results)
+    $module `(` $opOperands `)` attr-dict `:` functional-type($opOperands, results)
   }];
-
-  let hasVerifier = 1;
 }
 
 // This is almost exactly like a standard FuncOp, except that it has some
@@ -199,13 +197,11 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
     only operand(exit point of control - only network).
   }];
 
-  let arguments = (ins Variadic<AnyType> : $operands, NoneType : $control);
-
-  let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "ValueRange":$operands)>];
+  let arguments = (ins Variadic<AnyType> : $opOperands);
 
   let hasVerifier = 1;
-  let assemblyFormat = [{ operands attr-dict `:` qualified(type(operands)) }];
+  let assemblyFormat =
+    [{  attr-dict ($opOperands^ `:` type($opOperands))? }];
 }
 
 // Here use I32EnumAttr to better suit the BufferOp sequential
@@ -219,7 +215,7 @@ def BufferTypeEnum: I32EnumAttr<
 }
 def BufferTypeEnumAttr: EnumAttr<Handshake_Dialect, BufferTypeEnum, "buffer_type_enum">;
 
-def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
+def BufferOp : Handshake_Op<"buffer", [Pure, HasClock,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<GeneralOpInterface>]> {
   let summary = "buffer operation";
@@ -240,7 +236,7 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
 
   let arguments = (ins
     TypeAttr:$dataType,
-    Confined<I32Attr, [IntMinValue<1>]>:$size,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     AnyType:$operand,
     BufferTypeEnumAttr:$bufferType,
     OptionalAttr<I64ArrayAttr>:$initValues);
@@ -251,13 +247,13 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
 
   let extraClassDeclaration = [{
     bool isSequential() {
-      return this->bufferType() == BufferTypeEnum::seq;
+      return this->getBufferType() == BufferTypeEnum::seq;
     }
     int getNumSlots() {
       return (*this)->getAttrOfType<IntegerAttr>("size").getValue().getZExtValue();
     }
-    SmallVector<int64_t> getInitValues() {
-      assert(initValues() && "initValues attribute not set");
+    SmallVector<int64_t> getInitValueArray() {
+      assert(getInitValues() && "initValues attribute not set");
       SmallVector<int64_t> values;
       for (auto value : (*this)->getAttrOfType<ArrayAttr>("initValues"))
         values.push_back(value.cast<IntegerAttr>().getValue().getSExtValue());
@@ -271,7 +267,7 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
 }
 
 def ForkOp : Handshake_Op<"fork", [
-  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  Pure, DeclareOpInterfaceMethods<ExecutableOpInterface>,
   HasClock, DeclareOpInterfaceMethods<GeneralOpInterface>
 ]> {
   let summary = "fork operation";
@@ -289,7 +285,7 @@ def ForkOp : Handshake_Op<"fork", [
 
   let arguments = (ins
     TypeAttr:$dataType,
-    Confined<I32Attr, [IntMinValue<1>]>:$size,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     AnyType : $operand);
   let results = (outs Variadic<AnyType> : $result);
 
@@ -299,7 +295,7 @@ def ForkOp : Handshake_Op<"fork", [
   let hasCustomAssemblyFormat = 1;
 }
 
-def LazyForkOp : Handshake_Op<"lazy_fork", [NoSideEffect]> {
+def LazyForkOp : Handshake_Op<"lazy_fork", [Pure]> {
   let summary = "lazy fork operation";
   let description = [{
     The lazy_fork operation represents a lazy fork operation.
@@ -314,7 +310,7 @@ def LazyForkOp : Handshake_Op<"lazy_fork", [NoSideEffect]> {
 
   let arguments = (ins
     TypeAttr:$dataType,
-    Confined<I32Attr, [IntMinValue<1>]>:$size,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     AnyType : $operand);
   let results = (outs Variadic<AnyType> : $result);
   let hasCustomAssemblyFormat = 1;
@@ -323,7 +319,7 @@ def LazyForkOp : Handshake_Op<"lazy_fork", [NoSideEffect]> {
 }
 
 def MergeOp : Handshake_Op<"merge", [
-  NoSideEffect, MergeLikeOpInterface,
+  Pure, MergeLikeOpInterface,
   DeclareOpInterfaceMethods<ExecutableOpInterface>
 ]> {
   let summary = "merge operation";
@@ -341,7 +337,7 @@ def MergeOp : Handshake_Op<"merge", [
 
   let arguments = (ins
     TypeAttr:$dataType,
-    Confined<I32Attr, [IntMinValue<1>]>:$size,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     Variadic<AnyType>:$dataOperands);
   let results = (outs AnyType:$result);
   let hasCustomAssemblyFormat = 1;
@@ -351,7 +347,7 @@ def MergeOp : Handshake_Op<"merge", [
 }
 
 def MuxOp : Handshake_Op<"mux", [
-  NoSideEffect, MergeLikeOpInterface,
+  Pure, MergeLikeOpInterface,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>
 ]> {
@@ -375,9 +371,9 @@ def MuxOp : Handshake_Op<"mux", [
   }];
   let arguments = (ins
     TypeAttr:$dataType,
-    Confined<I32Attr, [IntMinValue<1>]>:$size,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     AnyType : $selectOperand,
-		Variadic<AnyType> : $dataOperands);
+    Variadic<AnyType> : $dataOperands);
   let results = (outs AnyType : $result);
   let skipDefaultBuilders = 1;
   let builders = [
@@ -393,7 +389,7 @@ def MuxOp : Handshake_Op<"mux", [
 }
 
 def ControlMergeOp : Handshake_Op<"control_merge", [
-  NoSideEffect, MergeLikeOpInterface, HasClock,
+  Pure, MergeLikeOpInterface, HasClock,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getResultName"]>
 ]> {
@@ -414,7 +410,7 @@ def ControlMergeOp : Handshake_Op<"control_merge", [
 
   let arguments = (ins
     TypeAttr:$dataType,
-    Confined<I32Attr, [IntMinValue<1>]>:$size,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     Variadic<AnyType> : $dataOperands);
   let results = (outs AnyType : $result, Index : $index);
 
@@ -429,7 +425,7 @@ def ControlMergeOp : Handshake_Op<"control_merge", [
 }
 
 def BranchOp : Handshake_Op<"br", [
-  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  Pure, DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<GeneralOpInterface>,
   AllTypesMatch<["dataOperand", "dataResult"]>
   ]> {
@@ -458,7 +454,7 @@ def BranchOp : Handshake_Op<"br", [
 }
 
 def ConditionalBranchOp : Handshake_Op<"cond_br", [
-  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  Pure, DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getResultName"]>,
   TypesMatchWith<"data operand type matches true branch result type",
@@ -493,7 +489,7 @@ def ConditionalBranchOp : Handshake_Op<"cond_br", [
 }
 
 def SelectOp : Handshake_Op<"select", [
-  NoSideEffect,
+  Pure,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>,
   TypesMatchWith<"data operand type matches true branch result type",
                     "trueOperand", "falseOperand", "$_self">,
@@ -551,7 +547,7 @@ def SinkOp
   let hasCustomAssemblyFormat = 1;
 }
 
-def SourceOp : Handshake_Op<"source", [NoSideEffect]> {
+def SourceOp : Handshake_Op<"source", [Pure]> {
   let summary = "source operation";
   let description = [{
     The source operation represents continuous token
@@ -565,7 +561,7 @@ def SourceOp : Handshake_Op<"source", [NoSideEffect]> {
   let builders = [OpBuilder<(ins)>];
 }
 
-def NeverOp : Handshake_Op<"never", [NoSideEffect]> {
+def NeverOp : Handshake_Op<"never", [Pure]> {
   let summary = "never operation";
   let description = [{
     The never operation represents disconnected data
@@ -578,7 +574,7 @@ def NeverOp : Handshake_Op<"never", [NoSideEffect]> {
 }
 
 def ConstantOp : Handshake_Op<"constant", [
-  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  Pure, DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<GeneralOpInterface>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>
 ]> {
@@ -594,16 +590,13 @@ def ConstantOp : Handshake_Op<"constant", [
     ```
   }];
 
-  let arguments = (ins AnyAttr:$value, NoneType:$ctrl);
+  let arguments = (ins TypedAttrInterface:$value, NoneType:$ctrl);
   let results = (outs AnyType : $result);
 
-  let builders = [OpBuilder<(ins "Attribute":$value, "Value":$ctrl)>];
+  let builders = [OpBuilder<(ins "mlir::TypedAttr":$value, "Value":$ctrl)>];
   let skipDefaultBuilders = 1;
 
   let hasCanonicalizer = 1;
-  let extraClassDeclaration = [{
-    Attribute getValue() { return (*this)->getAttr("value"); }
-  }];
   let assemblyFormat = [{ $ctrl attr-dict `:` qualified(type($result))}];
   let hasVerifier = 1;
 }
@@ -617,15 +610,15 @@ def EndOp
     all memory accesses have completed.  Currently not used(data
     returned through ReturnOp).
   }];
-  let arguments = (ins AnyType : $control, Variadic<AnyType> : $operands);
+  let arguments = (ins AnyType : $control, Variadic<AnyType> : $opOperands);
 
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(ins "Value":$operand)>];
-  let assemblyFormat = [{ operands attr-dict `:` qualified(type($control)) `,` qualified(type($operands))}];
+  let assemblyFormat = [{ operands attr-dict `:` qualified(type($control)) `,` qualified(type($opOperands))}];
 }
 
 def StartOp : Handshake_Op<"start", [
-  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>
+  Pure, DeclareOpInterfaceMethods<ExecutableOpInterface>
 ]> {
   let summary = "start operation";
   let description = [{
@@ -670,7 +663,7 @@ def MemoryOp : Handshake_Op<"memory", [
     The memory op represents a flat, unidimensional memory.
     Operands: all stores (stdata1, staddr1, stdata2, staddr2, ...), then all loads (ldaddr1, ldaddr2,...)
     Outputs: all load outputs, ordered the same as
-    load addresses (lddata1, lddata2, ...), followed by all none outputs,
+    load data (lddata1, lddata2, ...), followed by all none outputs,
     ordered as operands (stnone1, stnone2,...ldnone1, ldnone2,...)
   }];
   let arguments = (ins Variadic<AnyType> : $inputs,
@@ -727,6 +720,15 @@ def ExternalMemoryOp : Handshake_Op<"extmemory", [
       "int":$id)>
   ];
   let assemblyFormat = "`[` `ld` `=` $ldCount `,` `st` `=`  $stCount `]` `(` $memref `:` qualified(type($memref)) `)` `(` $inputs `)` attr-dict `:` functional-type($inputs, $outputs)";
+
+  let extraClassDeclaration = [{
+    mlir::MemRefType getMemRefType() {
+      return getMemref().getType().cast<mlir::MemRefType>();
+    }
+
+    llvm::SmallVector<handshake::ExtMemLoadInterface> getLoadPorts();
+    llvm::SmallVector<handshake::ExtMemStoreInterface> getStorePorts();
+  }];
 }
 
 def LoadOp : Handshake_Op<"load", [
@@ -804,15 +806,42 @@ def JoinOp : Handshake_Op<"join", [
 
     Example:
     ```mlir
-    %0 = join %a, %b, %c : i32
+    %0 = join %a, %b, %c : i32, i1, none
     ```
   }];
-  let arguments = (ins Variadic<NoneType> : $data);
+  let arguments = (ins Variadic<AnyType> : $data);
   let results = (outs NoneType : $result);
 
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(ins "ValueRange":$operands)>];
   let hasCustomAssemblyFormat = 1;
+}
+
+def SyncOp : Handshake_Op<"sync", [
+  HasClock, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<GeneralOpInterface>,
+  AllTypesMatch<["operands", "results"]>
+]> {
+  let summary = "sync operation";
+  let description = [{
+    Synchronizes an arbitrary set of inputs. Synchronization implies applying
+    join semantics in between all in- and output ports.
+
+    Example:
+    ```mlir
+    %aSynced, %bSynced, %cSynced = sync %a, %b, %c : i32, i1, none
+    ```
+  }];
+  let arguments = (ins Variadic<AnyType> : $operands);
+  let results = (outs Variadic<AnyType> : $results);
+
+  let skipDefaultBuilders = 1;
+  let builders = [OpBuilder<
+    (ins "ValueRange":$operands), [{
+      $_state.addOperands(operands);
+      $_state.addTypes(operands.getTypes());
+  }]>];
+  let assemblyFormat = [{ $operands attr-dict `:` type($operands)}];
 }
 
 def I4 : I<4>;

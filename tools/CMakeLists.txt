@@ -1,4 +1,6 @@
 
+add_subdirectory(circt-as)
+add_subdirectory(circt-dis)
 add_subdirectory(circt-lsp-server)
 add_subdirectory(circt-opt)
 add_subdirectory(circt-reduce)
@@ -9,3 +11,4 @@ add_subdirectory(handshake-runner)
 add_subdirectory(firtool)
 add_subdirectory(llhd-sim)
 add_subdirectory(py-split-input-file)
+add_subdirectory(hlstool)

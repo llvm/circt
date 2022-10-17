@@ -12,7 +12,7 @@
 
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Support/LLVM.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -167,7 +167,7 @@ struct EliminateUnusedForkResultsPattern : mlir::OpRewritePattern<ForkOp> {
       unsigned i = 0;
       for (auto oldRes : llvm::enumerate(op.getResults()))
         if (unusedIndexes.count(oldRes.index()) == 0)
-          oldRes.value().replaceAllUsesWith(newFork.getResult(i++));
+          oldRes.value().replaceAllUsesWith(newFork.getResults()[i++]);
     });
     rewriter.eraseOp(op);
     return success();
@@ -187,7 +187,7 @@ struct EliminateForkToForkPattern : mlir::OpRewritePattern<ForkOp> {
     /// Keeping the op.operand() output may or may not be redundant (dependning
     /// on if op is the single user of the value), but we'll let
     /// EliminateUnusedForkResultsPattern apply in that case.
-    unsigned totalNumOuts = op.size() + parentForkOp.size();
+    unsigned totalNumOuts = op.getSize() + parentForkOp.getSize();
     rewriter.updateRootInPlace(parentForkOp, [&] {
       /// Create a new parent fork op which produces all of the fork outputs and
       /// replace all of the uses of the old results.
@@ -201,7 +201,8 @@ struct EliminateForkToForkPattern : mlir::OpRewritePattern<ForkOp> {
 
       /// Replace the results of the matches fork op with the corresponding
       /// results of the new parent fork op.
-      rewriter.replaceOp(op, newParentForkOp.getResults().take_back(op.size()));
+      rewriter.replaceOp(op,
+                         newParentForkOp.getResults().take_back(op.getSize()));
     });
     return success();
   }
@@ -304,8 +305,8 @@ struct EliminateSimpleMuxesPattern : mlir::OpRewritePattern<MuxOp> {
   using mlir::OpRewritePattern<MuxOp>::OpRewritePattern;
   LogicalResult matchAndRewrite(MuxOp op,
                                 PatternRewriter &rewriter) const override {
-    Value firstDataOperand = getDematerialized(op.dataOperands()[0]);
-    if (!llvm::all_of(op.dataOperands(), [&](Value operand) {
+    Value firstDataOperand = getDematerialized(op.getDataOperands()[0]);
+    if (!llvm::all_of(op.getDataOperands(), [&](Value operand) {
           return getDematerialized(operand) == firstDataOperand;
         }))
       return failure();
@@ -318,10 +319,10 @@ struct EliminateUnaryMuxesPattern : OpRewritePattern<MuxOp> {
   using mlir::OpRewritePattern<MuxOp>::OpRewritePattern;
   LogicalResult matchAndRewrite(MuxOp op,
                                 PatternRewriter &rewriter) const override {
-    if (op.dataOperands().size() != 1)
+    if (op.getDataOperands().size() != 1)
       return failure();
 
-    rewriter.replaceOp(op, op.dataOperands()[0]);
+    rewriter.replaceOp(op, op.getDataOperands()[0]);
     return success();
   }
 };
@@ -391,19 +392,19 @@ ParseResult MuxOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void MuxOp::print(OpAsmPrinter &p) {
-  Type selectType = selectOperand().getType();
+  Type selectType = getSelectOperand().getType();
   auto ops = getOperands();
   p << ' ' << ops.front();
   p << " [";
   p.printOperands(ops.drop_front());
   p << "]";
   p.printOptionalAttrDict((*this)->getAttrs(), {"dataType", "size", "control"});
-  p << " : " << selectType << ", " << dataType();
+  p << " : " << selectType << ", " << getDataType();
 }
 
 LogicalResult MuxOp::verify() {
-  unsigned numDataOperands = static_cast<int>(dataOperands().size());
-  auto selectType = selectOperand().getType();
+  unsigned numDataOperands = static_cast<int>(getDataOperands().size());
+  auto selectType = getSelectOperand().getType();
 
   unsigned selectBits;
   if (auto integerType = selectType.dyn_cast<IntegerType>())
@@ -541,12 +542,11 @@ LogicalResult FuncOp::verify() {
 /// Parses a FuncOp signature using
 /// mlir::function_interface_impl::parseFunctionSignature while getting access
 /// to the parsed SSA names to store as attributes.
-static ParseResult parseFuncOpArgs(
-    OpAsmParser &parser, SmallVectorImpl<OpAsmParser::Argument> &entryArgs,
-    SmallVectorImpl<Attribute> &argNames, SmallVectorImpl<Type> &resTypes,
-    SmallVectorImpl<DictionaryAttr> &resAttrs) {
-  auto *context = parser.getContext();
-
+static ParseResult
+parseFuncOpArgs(OpAsmParser &parser,
+                SmallVectorImpl<OpAsmParser::Argument> &entryArgs,
+                SmallVectorImpl<Type> &resTypes,
+                SmallVectorImpl<DictionaryAttr> &resAttrs) {
   bool isVariadic;
   if (mlir::function_interface_impl::parseFunctionSignature(
           parser, /*allowVariadic=*/true, entryArgs, isVariadic, resTypes,
@@ -554,26 +554,16 @@ static ParseResult parseFuncOpArgs(
           .failed())
     return failure();
 
-  llvm::transform(entryArgs, std::back_inserter(argNames), [&](auto arg) {
-    return StringAttr::get(context, arg.ssaName.name.drop_front());
-  });
-
   return success();
 }
 
 /// Generates names for a handshake.func input and output arguments, based on
 /// the number of args as well as a prefix.
-static SmallVector<Attribute> getFuncOpNames(Builder &builder, TypeRange types,
+static SmallVector<Attribute> getFuncOpNames(Builder &builder, unsigned cnt,
                                              StringRef prefix) {
   SmallVector<Attribute> resNames;
-  llvm::transform(
-      llvm::enumerate(types), std::back_inserter(resNames), [&](auto it) {
-        bool lastOperand = it.index() == types.size() - 1;
-        std::string suffix = lastOperand && it.value().template isa<NoneType>()
-                                 ? "Ctrl"
-                                 : std::to_string(it.index());
-        return builder.getStringAttr(prefix + suffix);
-      });
+  for (unsigned i = 0; i < cnt; ++i)
+    resNames.push_back(builder.getStringAttr(prefix + std::to_string(i)));
   return resNames;
 }
 
@@ -614,8 +604,8 @@ void handshake::FuncOp::resolveArgAndResNames() {
 
   /// Generate a set of fallback names. These are used in case names are
   /// missing from the currently set arg- and res name attributes.
-  auto fallbackArgNames = getFuncOpNames(builder, getArgumentTypes(), "in");
-  auto fallbackResNames = getFuncOpNames(builder, getResultTypes(), "out");
+  auto fallbackArgNames = getFuncOpNames(builder, getNumArguments(), "in");
+  auto fallbackResNames = getFuncOpNames(builder, getNumResults(), "out");
   auto argNames = getArgNames().getValue();
   auto resNames = getResNames().getValue();
 
@@ -647,7 +637,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   // Parse signature
   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
                              result.attributes) ||
-      parseFuncOpArgs(parser, args, argNames, resTypes, resAttributes))
+      parseFuncOpArgs(parser, args, resTypes, resAttributes))
     return failure();
   mlir::function_interface_impl::addArgAndResultAttrs(builder, result, args,
                                                       resAttributes);
@@ -661,6 +651,18 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
       handshake::FuncOp::getTypeAttrName(),
       TypeAttr::get(builder.getFunctionType(argTypes, resTypes)));
 
+  // Determine the names of the arguments. If no SSA values are present, use
+  // fallback names.
+  bool noSSANames =
+      llvm::any_of(args, [](auto arg) { return arg.ssaName.name.empty(); });
+  if (noSSANames) {
+    argNames = getFuncOpNames(builder, args.size(), "in");
+  } else {
+    llvm::transform(args, std::back_inserter(argNames), [&](auto arg) {
+      return builder.getStringAttr(arg.ssaName.name.drop_front());
+    });
+  }
+
   // Parse attributes
   if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
     return failure();
@@ -670,13 +672,27 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   if (!result.attributes.get("argNames"))
     result.addAttribute("argNames", builder.getArrayAttr(argNames));
   if (!result.attributes.get("resNames")) {
-    auto resNames = getFuncOpNames(builder, resTypes, "out");
+    auto resNames = getFuncOpNames(builder, resTypes.size(), "out");
     result.addAttribute("resNames", builder.getArrayAttr(resNames));
   }
 
-  // Parse region
+  // Parse the optional function body. The printer will not print the body if
+  // its empty, so disallow parsing of empty body in the parser.
   auto *body = result.addRegion();
-  return parser.parseRegion(*body, args);
+  llvm::SMLoc loc = parser.getCurrentLocation();
+  auto parseResult = parser.parseOptionalRegion(*body, args,
+                                                /*enableNameShadowing=*/false);
+  if (!parseResult.has_value())
+    return success();
+
+  if (failed(*parseResult))
+    return failure();
+  // Function body was parsed, make sure its not empty.
+  if (body->empty())
+    return parser.emitError(loc, "expected non-empty function body");
+
+  // If a body was parsed, the arg and res names need to be resolved
+  return success();
 }
 
 void FuncOp::print(OpAsmPrinter &p) {
@@ -695,8 +711,8 @@ struct EliminateSimpleControlMergesPattern
 
 LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
     ControlMergeOp op, PatternRewriter &rewriter) const {
-  auto dataResult = op.result();
-  auto choiceResult = op.index();
+  auto dataResult = op.getResult();
+  auto choiceResult = op.getIndex();
   auto choiceUnused = choiceResult.use_empty();
   if (!choiceUnused && !choiceResult.hasOneUse())
     return failure();
@@ -708,7 +724,7 @@ LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
       return failure();
   }
 
-  auto merge = rewriter.create<MergeOp>(op.getLoc(), op.dataOperands());
+  auto merge = rewriter.create<MergeOp>(op.getLoc(), op.getDataOperands());
 
   for (auto &use : dataResult.getUses()) {
     auto *user = use.getOwner();
@@ -804,7 +820,7 @@ ParseResult ConditionalBranchOp::parse(OpAsmParser &parser,
 }
 
 void ConditionalBranchOp::print(OpAsmPrinter &p) {
-  Type type = dataOperand().getType();
+  Type type = getDataOperand().getType();
   p << " " << getOperands();
   p.printOptionalAttrDict((*this)->getAttrs(), {"size", "dataType", "control"});
   p << " : " << type;
@@ -868,7 +884,7 @@ ParseResult SelectOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void SelectOp::print(OpAsmPrinter &p) {
-  Type type = trueOperand().getType();
+  Type type = getTrueOperand().getType();
   p << " " << getOperands();
   p.printOptionalAttrDict((*this)->getAttrs(), {"size", "dataType", "control"});
   p << " : " << type;
@@ -909,11 +925,6 @@ void StartOp::build(OpBuilder &builder, OperationState &result) {
 
 void EndOp::build(OpBuilder &builder, OperationState &result, Value operand) {
   result.addOperands(operand);
-}
-
-void handshake::ReturnOp::build(OpBuilder &builder, OperationState &result,
-                                ValueRange operands) {
-  result.addOperands(operands);
 }
 
 void SinkOp::build(OpBuilder &builder, OperationState &result, Value operand) {
@@ -975,15 +986,20 @@ void SourceOp::print(OpAsmPrinter &p) {
 
 LogicalResult ConstantOp::verify() {
   // Verify that the type of the provided value is equal to the result type.
-  if ((*this)->getAttr("value").getType() != getResult().getType())
-    return emitOpError()
-           << "constant value type differs from operation result type.";
+  auto typedValue = getValue().dyn_cast<mlir::TypedAttr>();
+  if (!typedValue)
+    return emitOpError("constant value must be a typed attribute; value is ")
+           << getValue();
+  if (typedValue.getType() != getResult().getType())
+    return emitOpError() << "constant value type " << typedValue.getType()
+                         << " differs from operation result type "
+                         << getResult().getType();
 
   return success();
 }
 
 void handshake::ConstantOp::build(OpBuilder &builder, OperationState &result,
-                                  Attribute value, Value operand) {
+                                  mlir::TypedAttr value, Value operand) {
   result.addOperands(operand);
 
   auto type = value.getType();
@@ -1006,15 +1022,15 @@ void handshake::TerminatorOp::build(OpBuilder &builder, OperationState &result,
 LogicalResult BufferOp::verify() {
   // Verify that exactly 'size' number of initial values have been provided, if
   // an initializer list have been provided.
-  if (initValues().hasValue()) {
+  if (auto initVals = getInitValues()) {
     if (!isSequential())
       return emitOpError()
              << "only bufferType buffers are allowed to have initial values.";
 
-    auto nInits = initValues().getValue().size();
-    if (nInits != size())
-      return emitOpError() << "expected " << size() << " init values but got "
-                           << nInits << ".";
+    auto nInits = initVals->size();
+    if (nInits != getSize())
+      return emitOpError() << "expected " << getSize()
+                           << " init values but got " << nInits << ".";
   }
 
   return success();
@@ -1067,7 +1083,7 @@ void BufferOp::print(OpAsmPrinter &p) {
   int size =
       (*this)->getAttrOfType<IntegerAttr>("size").getValue().getZExtValue();
   p << " [" << size << "]";
-  p << " " << stringifyEnum(bufferType());
+  p << " " << stringifyEnum(getBufferType());
   Type type = (*this)->getAttrOfType<TypeAttr>("dataType").getValue();
   p << " " << (*this)->getOperands();
   p.printOptionalAttrDict((*this)->getAttrs(),
@@ -1089,7 +1105,7 @@ static std::string getMemoryOperandName(unsigned nStores, unsigned idx) {
 }
 
 std::string handshake::MemoryOp::getOperandName(unsigned int idx) {
-  return getMemoryOperandName(stCount(), idx);
+  return getMemoryOperandName(getStCount(), idx);
 }
 
 static std::string getMemoryResultName(unsigned nLoads, unsigned nStores,
@@ -1105,11 +1121,11 @@ static std::string getMemoryResultName(unsigned nLoads, unsigned nStores,
 }
 
 std::string handshake::MemoryOp::getResultName(unsigned int idx) {
-  return getMemoryResultName(ldCount(), stCount(), idx);
+  return getMemoryResultName(getLdCount(), getStCount(), idx);
 }
 
 LogicalResult MemoryOp::verify() {
-  auto memrefType = memRefType();
+  auto memrefType = getMemRefType();
 
   if (memrefType.getNumDynamicDims() != 0)
     return emitOpError()
@@ -1117,16 +1133,16 @@ LogicalResult MemoryOp::verify() {
   if (memrefType.getShape().size() != 1)
     return emitOpError() << "memref must have only a single dimension.";
 
-  unsigned opStCount = stCount();
-  unsigned opLdCount = ldCount();
+  unsigned opStCount = getStCount();
+  unsigned opLdCount = getLdCount();
   int addressCount = memrefType.getShape().size();
 
-  auto inputType = inputs().getType();
-  auto outputType = outputs().getType();
+  auto inputType = getInputs().getType();
+  auto outputType = getOutputs().getType();
   Type dataType = memrefType.getElementType();
 
-  unsigned numOperands = static_cast<int>(inputs().size());
-  unsigned numResults = static_cast<int>(outputs().size());
+  unsigned numOperands = static_cast<int>(getInputs().size());
+  unsigned numResults = static_cast<int>(getOutputs().size());
   if (numOperands != (1 + addressCount) * opStCount + addressCount * opLdCount)
     return emitOpError("number of operands ")
            << numOperands << " does not match number expected of "
@@ -1184,11 +1200,11 @@ std::string handshake::ExternalMemoryOp::getOperandName(unsigned int idx) {
   if (idx == 0)
     return "extmem";
 
-  return getMemoryOperandName(stCount(), idx - 1);
+  return getMemoryOperandName(getStCount(), idx - 1);
 }
 
 std::string handshake::ExternalMemoryOp::getResultName(unsigned int idx) {
-  return getMemoryResultName(ldCount(), stCount(), idx);
+  return getMemoryResultName(getLdCount(), getStCount(), idx);
 }
 
 void ExternalMemoryOp::build(OpBuilder &builder, OperationState &result,
@@ -1240,14 +1256,57 @@ void MemoryOp::build(OpBuilder &builder, OperationState &result,
   }
 }
 
+llvm::SmallVector<handshake::ExtMemLoadInterface>
+ExternalMemoryOp::getLoadPorts() {
+  llvm::SmallVector<ExtMemLoadInterface> ports;
+  // Extmem interface refresher:
+  // Operands:
+  //   all stores (stdata1, staddr1, stdata2, staddr2, ...)
+  //   then all loads (ldaddr1, ldaddr2,...)
+  // Outputs: load addresses (lddata1, lddata2, ...), followed by all none
+  // outputs, ordered as operands(stnone1, stnone2, ... ldnone1, ldnone2, ...)
+  unsigned stCount = getStCount();
+  unsigned ldCount = getLdCount();
+  for (unsigned i = 0, e = ldCount; i != e; ++i) {
+    ExtMemLoadInterface ldif;
+    ldif.index = i;
+    ldif.addressIn = getInputs()[stCount * 2 + i];
+    ldif.dataOut = getResult(i);
+    ldif.doneOut = getResult(ldCount + stCount + i);
+    ports.push_back(ldif);
+  }
+  return ports;
+}
+
+llvm::SmallVector<handshake::ExtMemStoreInterface>
+ExternalMemoryOp::getStorePorts() {
+  llvm::SmallVector<ExtMemStoreInterface> ports;
+  // Extmem interface refresher:
+  // Operands:
+  //   all stores (stdata1, staddr1, stdata2, staddr2, ...)
+  //   then all loads (ldaddr1, ldaddr2,...)
+  // Outputs: load data (lddata1, lddata2, ...), followed by all none
+  // outputs, ordered as operands(stnone1, stnone2, ... ldnone1, ldnone2, ...)
+  unsigned ldCount = getLdCount();
+  for (unsigned i = 0, e = ldCount; i != e; ++i) {
+    ExtMemStoreInterface stif;
+    stif.index = i;
+    stif.dataIn = getInputs()[i * 2];
+    stif.addressIn = getInputs()[i * 2 + 1];
+    stif.doneOut = getResult(ldCount + i);
+    ports.push_back(stif);
+  }
+  return ports;
+}
+
 bool handshake::MemoryOp::allocateMemory(
     llvm::DenseMap<unsigned, unsigned> &memoryMap,
     std::vector<std::vector<llvm::Any>> &store,
     std::vector<double> &storeTimes) {
-  if (memoryMap.count(id()))
+  if (memoryMap.count(getId()))
     return false;
 
-  auto type = memRefType();
+  auto type = getMemRefType();
   std::vector<llvm::Any> in;
 
   ArrayRef<int64_t> shape = type.getShape();
@@ -1278,12 +1337,12 @@ bool handshake::MemoryOp::allocateMemory(
     }
   }
 
-  memoryMap[id()] = ptr;
+  memoryMap[getId()] = ptr;
   return true;
 }
 
 std::string handshake::LoadOp::getOperandName(unsigned int idx) {
-  unsigned nAddresses = addresses().size();
+  unsigned nAddresses = getAddresses().size();
   std::string opName;
   if (idx < nAddresses)
     opName = "addrIn" + std::to_string(idx);
@@ -1350,10 +1409,11 @@ static ParseResult parseMemoryAccessOp(OpAsmParser &parser,
 template <typename MemOp>
 static void printMemoryAccessOp(OpAsmPrinter &p, MemOp op) {
   p << " [";
-  p << op.addresses();
-  p << "] " << op.data() << ", " << op.ctrl() << " : ";
-  llvm::interleaveComma(op.addresses(), p, [&](Value v) { p << v.getType(); });
-  p << ", " << op.data().getType();
+  p << op.getAddresses();
+  p << "] " << op.getData() << ", " << op.getCtrl() << " : ";
+  llvm::interleaveComma(op.getAddresses(), p,
+                        [&](Value v) { p << v.getType(); });
+  p << ", " << op.getData().getType();
 }
 
 ParseResult LoadOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -1363,7 +1423,7 @@ ParseResult LoadOp::parse(OpAsmParser &parser, OperationState &result) {
 void LoadOp::print(OpAsmPrinter &p) { printMemoryAccessOp(p, *this); }
 
 std::string handshake::StoreOp::getOperandName(unsigned int idx) {
-  unsigned nAddresses = addresses().size();
+  unsigned nAddresses = getAddresses().size();
   std::string opName;
   if (idx < nAddresses)
     opName = "addrIn" + std::to_string(idx);
@@ -1376,7 +1436,7 @@ std::string handshake::StoreOp::getOperandName(unsigned int idx) {
 
 template <typename TMemoryOp>
 static LogicalResult verifyMemoryAccessOp(TMemoryOp op) {
-  if (op.addresses().size() == 0)
+  if (op.getAddresses().size() == 0)
     return op.emitOpError() << "No addresses were specified";
 
   return success();
@@ -1423,33 +1483,39 @@ void JoinOp::build(OpBuilder &builder, OperationState &result,
   result.types.push_back(type);
 
   result.addOperands(operands);
-  sost::addAttributes(result, operands.size(), type);
+  result.addAttribute("control", BoolAttr::get(result.getContext(), true));
 }
 
 ParseResult JoinOp::parse(OpAsmParser &parser, OperationState &result) {
-  SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
-  Type type;
-  ArrayRef<Type> operandTypes(type);
-  SmallVector<Type, 1> dataOperandsTypes;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> operands;
+  SmallVector<Type> types;
+
   llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
-  int size;
-  if (sost::parseOperation(parser, allOperands, result, size, type, false))
+  if (parser.parseOperandList(operands) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseTypeList(types))
     return failure();
 
-  dataOperandsTypes.assign(size, type);
-  result.addTypes({type});
-  if (parser.resolveOperands(allOperands, dataOperandsTypes, allOperandLoc,
-                             result.operands))
+  if (parser.resolveOperands(operands, types, allOperandLoc, result.operands))
     return failure();
+
+  if (!result.attributes.get("control"))
+    result.addAttribute("control", BoolAttr::get(result.getContext(), true));
+
+  result.addTypes(NoneType::get(result.getContext()));
   return success();
 }
 
-void JoinOp::print(OpAsmPrinter &p) { sost::printOp(p, *this, false); }
+void JoinOp::print(OpAsmPrinter &p) {
+  p << " " << getData();
+  p.printOptionalAttrDict((*this)->getAttrs(), {"control"});
+  p << " : " << getData().getTypes();
+}
 
 /// Based on mlir::func::CallOp::verifySymbolUses
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // Check that the module attribute was specified.
-  auto fnAttr = this->moduleAttr();
+  auto fnAttr = this->getModuleAttr();
   assert(fnAttr && "requires a 'module' symbol reference attribute");
 
   FuncOp fn = symbolTable.lookupNearestSymbolFrom<FuncOp>(*this, fnAttr);
@@ -1482,17 +1548,6 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
-LogicalResult InstanceOp::verify() {
-  if ((*this)->getNumOperands() == 0)
-    return emitOpError() << "must provide at least a control operand.";
-
-  if (!getControl().getType().dyn_cast<NoneType>())
-    return emitOpError()
-           << "last operand must be a control (none-typed) operand.";
-
-  return success();
-}
-
 FunctionType InstanceOp::getModuleType() {
   return FunctionType::get(getContext(), getOperandTypes(), getResultTypes());
 }
@@ -1515,9 +1570,9 @@ ParseResult UnpackOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void UnpackOp::print(OpAsmPrinter &p) {
-  p << " " << input();
+  p << " " << getInput();
   p.printOptionalAttrDict((*this)->getAttrs());
-  p << " : " << input().getType();
+  p << " : " << getInput().getType();
 }
 
 ParseResult PackOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -1540,9 +1595,9 @@ ParseResult PackOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void PackOp::print(OpAsmPrinter &p) {
-  p << " " << inputs();
+  p << " " << getInputs();
   p.printOptionalAttrDict((*this)->getAttrs());
-  p << " : " << result().getType();
+  p << " : " << getResult().getType();
 }
 
 //===----------------------------------------------------------------------===//

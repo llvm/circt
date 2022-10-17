@@ -24,21 +24,21 @@ hw.module @StructRcvr(%a: !esi.channel<!FooStruct>) {
 // CHECK:        %rawOutput, %valid = esi.unwrap.vr %a, %true : i1
 // CHECK-LABEL: hw.module @StructRcvr(%a: !esi.channel<!hw.struct<a: si4, b: !hw.array<3xui4>>>)
 
-hw.module @test(%clk: i1, %rstn: i1) {
+hw.module @test(%clk: i1, %rst: i1) {
   %esiChan = hw.instance "sender" @Sender() -> (x: !esi.channel<i1>)
-  %bufferedChan = esi.buffer %clk, %rstn, %esiChan : i1
+  %bufferedChan = esi.buffer %clk, %rst, %esiChan : i1
   hw.instance "recv" @Reciever (a: %bufferedChan: !esi.channel<i1>) -> ()
 
   // CHECK:  %sender.x = hw.instance "sender" @Sender() -> (x: !esi.channel<i1>)
-  // CHECK-NEXT:  %0 = esi.buffer %clk, %rstn, %sender.x : i1
+  // CHECK-NEXT:  %0 = esi.buffer %clk, %rst, %sender.x : i1
   // CHECK-NEXT:  hw.instance "recv" @Reciever(a: %0: !esi.channel<i1>) -> ()
 
   %esiChan2 = hw.instance "sender" @Sender() -> (x: !esi.channel<i1>)
-  %bufferedChan2 = esi.buffer %clk, %rstn, %esiChan2 { stages = 4 } : i1
+  %bufferedChan2 = esi.buffer %clk, %rst, %esiChan2 { stages = 4 } : i1
   hw.instance "recv" @Reciever (a: %bufferedChan2: !esi.channel<i1>) -> ()
 
   // CHECK-NEXT:  %sender.x_0 = hw.instance "sender" @Sender() -> (x: !esi.channel<i1>)
-  // CHECK-NEXT:  %1 = esi.buffer %clk, %rstn, %sender.x_0 {stages = 4 : i64} : i1
+  // CHECK-NEXT:  %1 = esi.buffer %clk, %rst, %sender.x_0 {stages = 4 : i64} : i1
   // CHECK-NEXT:  hw.instance "recv" @Reciever(a: %1: !esi.channel<i1>) -> ()
 
   %nullBit = esi.null : !esi.channel<i1>
@@ -81,4 +81,20 @@ hw.module @testIfaceWrap() {
   // CHECK-NEXT:     hw.instance "ifaceRcvr" @IFaceRcvr(x: %5: !sv.modport<@IData::@Sink>) -> ()
   // CHECK-NEXT:     %6 = sv.modport.get %4 @Sink : !sv.interface<@IData> -> !sv.modport<@IData::@Source>
   // CHECK-NEXT:     esi.unwrap.iface %3 into %6 : (!esi.channel<i32>, !sv.modport<@IData::@Source>)
+}
+
+// CHECK-LABEL: hw.module @i0Typed(%a: !esi.channel<i0>, %clk: i1, %rst: i1) -> (x: !esi.channel<i0>) {
+// CHECK-NEXT:    %0 = esi.buffer %clk, %rst, %a  : i0
+// CHECK-NEXT:    %1 = esi.stage %clk, %rst, %0  : i0
+// CHECK-NEXT:    %rawOutput, %valid = esi.unwrap.vr %1, %ready : i0
+// CHECK-NEXT:    %chanOutput, %ready = esi.wrap.vr %rawOutput, %valid : i0
+// CHECK-NEXT:    hw.output %chanOutput : !esi.channel<i0>
+// CHECK-NEXT:  }
+
+hw.module @i0Typed(%a: !esi.channel<i0>, %clk : i1, %rst : i1) -> (x: !esi.channel<i0>) {
+  %bufferedA = esi.buffer %clk, %rst, %a : i0
+  %stagedA = esi.stage %clk, %rst, %bufferedA : i0
+  %rawOutput, %valid = esi.unwrap.vr %stagedA, %rcvrRdy : i0
+  %ch, %rcvrRdy = esi.wrap.vr %rawOutput, %valid : i0
+  hw.output %ch : !esi.channel<i0>
 }

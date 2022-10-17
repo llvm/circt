@@ -39,6 +39,7 @@ using mlir::APFloat;
 using mlir::APInt;
 using mlir::APSInt;
 using mlir::ArrayRef;
+using mlir::BitVector;
 using mlir::cast;
 using mlir::cast_or_null;
 using mlir::DenseMap;
@@ -161,6 +162,7 @@ struct CallInterfaceCallable;
 struct LogicalResult;
 struct MemRefAccess;
 struct OperationState;
+class OperationName;
 
 template <typename T>
 class FailureOr;
@@ -237,6 +239,7 @@ using mlir::OpBuilder;                 // NOLINT(misc-unused-using-decls)
 using mlir::OpConversionPattern;       // NOLINT(misc-unused-using-decls)
 using mlir::OperandRange;              // NOLINT(misc-unused-using-decls)
 using mlir::Operation;                 // NOLINT(misc-unused-using-decls)
+using mlir::OperationName;             // NOLINT(misc-unused-using-decls)
 using mlir::OperationPass;             // NOLINT(misc-unused-using-decls)
 using mlir::OperationState;            // NOLINT(misc-unused-using-decls)
 using mlir::OpFoldResult;              // NOLINT(misc-unused-using-decls)

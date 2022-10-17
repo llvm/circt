@@ -13,6 +13,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/Debug.h"
 
@@ -53,14 +54,14 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
     FModuleOp module, InstanceGraphNode *instanceGraphNode) {
   LLVM_DEBUG(llvm::dbgs() << "Prune ports of module: " << module.getName()
                           << "\n");
-  // This tracks port indexes that can be erased.
-  SmallVector<unsigned> removalPortIndexes;
   // This tracks constant values of output ports. None indicates an invalid
   // value.
   SmallVector<llvm::Optional<APSInt>> outputPortConstants;
   auto ports = module.getPorts();
+  // This tracks port indexes that can be erased.
+  llvm::BitVector removalPortIndexes(ports.size());
 
-  for (auto e : llvm::enumerate(ports)) {
+  for (const auto &e : llvm::enumerate(ports)) {
     unsigned index = e.index();
     auto port = e.value();
     auto arg = module.getArgument(index);
@@ -92,8 +93,8 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
         outputPortConstants.push_back(None);
       } else if (llvm::all_of(instanceGraphNode->uses(), portIsUnused)) {
         // Replace the port with a wire if it is unused.
-        auto builder =
-            ImplicitLocOpBuilder::atBlockBegin(arg.getLoc(), module.getBody());
+        auto builder = ImplicitLocOpBuilder::atBlockBegin(
+            arg.getLoc(), module.getBodyBlock());
         auto wire = builder.create<WireOp>(arg.getType());
         arg.replaceAllUsesWith(wire);
         outputPortConstants.push_back(None);
@@ -104,12 +105,12 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
         auto connectLike = dyn_cast<FConnectLike>(op);
         if (!connectLike)
           continue;
-        auto *srcOp = connectLike.src().getDefiningOp();
+        auto *srcOp = connectLike.getSrc().getDefiningOp();
         if (!isa_and_nonnull<InvalidValueOp, ConstantOp>(srcOp))
           continue;
 
         if (auto constant = dyn_cast<ConstantOp>(srcOp))
-          outputPortConstants.push_back(constant.value());
+          outputPortConstants.push_back(constant.getValue());
         else {
           assert(isa<InvalidValueOp>(srcOp) && "only expect invalid");
           outputPortConstants.push_back(None);
@@ -126,16 +127,16 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
       }
     }
 
-    removalPortIndexes.push_back(index);
+    removalPortIndexes.set(index);
   }
 
   // If there is nothing to remove, abort.
-  if (removalPortIndexes.empty())
+  if (removalPortIndexes.none())
     return;
 
   // Delete ports from the module.
   module.erasePorts(removalPortIndexes);
-  LLVM_DEBUG(llvm::for_each(removalPortIndexes, [&](unsigned index) {
+  LLVM_DEBUG(llvm::for_each(removalPortIndexes.set_bits(), [&](unsigned index) {
                llvm::dbgs() << "Delete port: " << ports[index].name << "\n";
              }););
 
@@ -144,7 +145,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
     auto instance = ::cast<InstanceOp>(*use->getInstance());
     ImplicitLocOpBuilder builder(instance.getLoc(), instance);
     unsigned outputPortIndex = 0;
-    for (auto index : removalPortIndexes) {
+    for (auto index : removalPortIndexes.set_bits()) {
       auto result = instance.getResult(index);
       assert(!ports[index].isInOut() && "don't expect inout ports");
 
@@ -157,7 +158,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
         // used as temporary wires. In that case, we cannot erase connections.
         bool onlyWritten = llvm::all_of(result.getUsers(), [&](Operation *op) {
           if (auto connect = dyn_cast<FConnectLike>(op))
-            return connect.dest() == result;
+            return connect.getDest() == result;
           return false;
         });
 
@@ -195,7 +196,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
     instance.erase();
   }
 
-  numRemovedPorts += removalPortIndexes.size();
+  numRemovedPorts += removalPortIndexes.count();
 }
 
 std::unique_ptr<mlir::Pass>

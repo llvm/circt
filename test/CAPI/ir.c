@@ -17,7 +17,7 @@
 #include "mlir-c/AffineMap.h"
 #include "mlir-c/BuiltinTypes.h"
 #include "mlir-c/Diagnostics.h"
-#include "mlir-c/Registration.h"
+#include "mlir-c/IR.h"
 
 #include <assert.h>
 #include <math.h>

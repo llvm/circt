@@ -93,6 +93,10 @@ def type_to_pytype(t) -> ir.Type:
   except ValueError:
     pass
   try:
+    return ir.NoneType(t)
+  except ValueError:
+    pass
+  try:
     return hw.ArrayType(t)
   except ValueError:
     pass
@@ -145,6 +149,10 @@ def attribute_to_var(attr):
   except ValueError:
     pass
   try:
+    return ir.FlatSymbolRefAttr(attr).value
+  except ValueError:
+    pass
+  try:
     return ir.TypeAttr(attr).value
   except ValueError:
     pass
@@ -178,15 +186,17 @@ class BackedgeBuilder(AbstractContextManager):
     def __init__(self,
                  creator,
                  type: ir.Type,
-                 port_name: str,
+                 backedge_name: str,
                  op_view,
                  instance_of: ir.Operation,
                  loc: ir.Location = None):
       self.creator: BackedgeBuilder = creator
-      self.dummy_op = ir.Operation.create("TemporaryBackedge", [type], loc=loc)
+      self.dummy_op = ir.Operation.create("builtin.unrealized_conversion_cast",
+                                          [type],
+                                          loc=loc)
       self.instance_of = instance_of
       self.op_view = op_view
-      self.port_name = port_name
+      self.port_name = backedge_name
       self.erased = False
 
     @property
@@ -202,7 +212,6 @@ class BackedgeBuilder(AbstractContextManager):
 
   def __init__(self):
     self.edges = set()
-    ir.Context.current.allow_unregistered_dialects = True
 
   @staticmethod
   def current():
@@ -236,7 +245,7 @@ class BackedgeBuilder(AbstractContextManager):
     errors = []
     for edge in list(self.edges):
       # TODO: Make this use `UnconnectedSignalError`.
-      msg = "Port:       " + edge.port_name + "\n"
+      msg = "Backedge:   " + edge.port_name + "\n"
       if edge.instance_of is not None:
         msg += "InstanceOf: " + str(edge.instance_of).split(" {")[0] + "\n"
       if edge.op_view is not None:
@@ -245,7 +254,7 @@ class BackedgeBuilder(AbstractContextManager):
       errors.append(msg)
 
     if errors:
-      errors.insert(0, "Uninitialized ports remain in circuit!")
+      errors.insert(0, "Uninitialized backedges remain in circuit!")
       raise RuntimeError("\n".join(errors))
 
 
@@ -347,6 +356,10 @@ class NamedValueOpView:
       index = self.result_indices[name]
       value = self.opview.results[index]
       return OpOperand(self.opview.operation, index, value, self)
+
+    # Forward "attributes" attribute from the operation.
+    if name == "attributes":
+      return self.opview.operation.attributes
 
     # If we fell through to here, the name isn't a result.
     raise AttributeError(f"unknown port name {name}")

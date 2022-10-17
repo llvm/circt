@@ -97,7 +97,11 @@ inline MemDirAttr &operator|=(MemDirAttr &lhs, MemDirAttr rhs) {
 
 /// Return the StringAttr for the inner_sym name, if it exists.
 inline StringAttr getInnerSymName(Operation *op) {
-  return op->getAttrOfType<StringAttr>("inner_sym");
+  InnerSymAttr s = op->getAttrOfType<InnerSymAttr>(
+      InnerSymbolTable::getInnerSymbolAttrName());
+  if (s)
+    return s.getSymName();
+  return StringAttr();
 }
 
 /// Check whether a block argument ("port") or the operation defining a value

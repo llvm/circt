@@ -32,10 +32,14 @@ struct AddressIterator
   // This using statement is to get around a bug in MSVC.  Without it, it
   // tries to look up "It" as a member type of the parent class.
   using Iterator = It;
+  static typename Iterator::value_type *
+  addrOf(typename Iterator::value_type &v) noexcept {
+    return std::addressof(v);
+  }
   /* implicit */ AddressIterator(Iterator iterator)
       : llvm::mapped_iterator<It, typename Iterator::pointer (*)(
-                                      typename Iterator::reference)>(
-            iterator, &std::addressof<typename Iterator::value_type>) {}
+                                      typename Iterator::reference)>(iterator,
+                                                                     addrOf) {}
 };
 } // namespace detail
 
@@ -154,7 +158,7 @@ private:
   HWModuleLike module;
 
   /// List of instance operations in this module.  This member owns the
-  /// InstanceRecords, which may be pointed to by other InstanceGraohNode's use
+  /// InstanceRecords, which may be pointed to by other InstanceGraphNode's use
   /// lists.
   InstanceList instances;
 
@@ -197,6 +201,10 @@ public:
 
   /// Get the node corresponding to the top-level module of a circuit.
   virtual InstanceGraphNode *getTopLevelNode() = 0;
+
+  /// Get the nodes corresponding to the inferred top-level modules of a
+  /// circuit.
+  FailureOr<llvm::ArrayRef<InstanceGraphNode *>> getInferredTopLevelNodes();
 
   /// Return the parent under which all nodes are nested.
   Operation *getParent() { return parent; }
@@ -250,6 +258,9 @@ protected:
 
   /// This maps each operation to its graph node.
   llvm::DenseMap<Attribute, InstanceGraphNode *> nodeMap;
+
+  /// A caching of the inferred top level module(s).
+  llvm::SmallVector<InstanceGraphNode *> inferredTopLevelNodes;
 };
 
 } // namespace hw
@@ -322,7 +333,7 @@ struct llvm::GraphTraits<circt::hw::InstanceGraphBase *>
   }
 };
 
-// Graph traits for DOT labelling.
+// Graph traits for DOT labeling.
 template <>
 struct llvm::DOTGraphTraits<circt::hw::InstanceGraphBase *>
     : public llvm::DefaultDOTGraphTraits {

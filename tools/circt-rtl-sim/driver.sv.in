@@ -11,18 +11,18 @@
 //
 // - The testbench module is called 'top'.
 // - It exposes a pin named 'clk' (for the clock).
-// - It exposes a pin named 'rstn' (for the reset signal).
+// - It exposes a pin named 'rst' (for the reset signal).
 //
 //===----------------------------------------------------------------------===//
 
 module driver();
 
   logic clk = 0;
-  logic rstn = 0;
+  logic rst = 0;
 
   top top (
     .clk(clk),
-    .rstn(rstn)
+    .rst(rst)
   );
 
   always begin
@@ -36,13 +36,13 @@ module driver();
 
     $display("[driver] Starting simulation");
 
-    rstn = 0;
+    rst = 1;
     // Hold in reset for 4 cycles.
     @(posedge clk);
     @(posedge clk);
     @(posedge clk);
     @(posedge clk);
-    rstn = 1;
+    rst = 0;
 
     if ($value$plusargs ("cycles=%d", cycles)) begin
       int i;

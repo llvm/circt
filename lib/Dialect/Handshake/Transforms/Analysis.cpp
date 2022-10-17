@@ -14,7 +14,7 @@
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Support/LLVM.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/IR/PatternMatch.h"
@@ -213,7 +213,7 @@ static std::string dotPrintNode(mlir::raw_indented_ostream &outfile,
                      [&](auto) { return "cbranch"; })
                  .Case<handshake::BufferOp>([&](auto op) {
                    std::string n = "buffer ";
-                   n += stringifyEnum(op.bufferType());
+                   n += stringifyEnum(op.getBufferType());
                    return n;
                  })
                  .Case<arith::AddIOp>([&](auto) { return "+"; })

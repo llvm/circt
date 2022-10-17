@@ -14,6 +14,7 @@
 #ifndef DIALECT_SEQ_TRANSFORMS_PASSDETAILS_H
 #define DIALECT_SEQ_TRANSFORMS_PASSDETAILS_H
 
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/Pass/Pass.h"

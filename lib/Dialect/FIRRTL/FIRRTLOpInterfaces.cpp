@@ -14,6 +14,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/StringRef.h"
 
 using namespace mlir;
@@ -24,13 +25,10 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   // Verify port types first.  This is used as the basis for the number of
   // ports required everywhere else.
   auto portTypes = module.getPortTypesAttr();
-  if (!portTypes)
-    return module.emitOpError("requires valid port types");
-  if (llvm::any_of(portTypes.getValue(), [](Attribute attr) {
-        auto typeAttr = attr.dyn_cast<TypeAttr>();
-        return !typeAttr || !typeAttr.getValue().isa<FIRRTLType>();
+  if (!portTypes || llvm::any_of(portTypes.getValue(), [](Attribute attr) {
+        return !attr.isa<TypeAttr>();
       }))
-    return module.emitOpError("ports should all be FIRRTL types");
+    return module.emitOpError("requires valid port types");
 
   auto numPorts = portTypes.size();
 
@@ -68,7 +66,7 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
       return module.emitOpError(
           "requires port annotations be array attributes");
     if (llvm::any_of(arrayAttr.getValue(), [](Attribute attr) {
-          return !attr.isa<DictionaryAttr, SubAnnotationAttr>();
+          return !attr.isa<DictionaryAttr>();
         }))
       return module.emitOpError(
           "annotations must be dictionaries or subannotations");
@@ -80,9 +78,10 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
     return module.emitOpError("requires valid port symbols");
   if (!portSymbols.empty() && portSymbols.size() != numPorts)
     return module.emitOpError("requires ") << numPorts << " port symbols";
-  if (llvm::any_of(portSymbols.getValue(),
-                   [](Attribute attr) { return !attr.isa<StringAttr>(); }))
-    return module.emitOpError("port symbols should all be string attributes");
+  if (llvm::any_of(portSymbols.getValue(), [](Attribute attr) {
+        return !attr || !attr.isa<InnerSymAttr>();
+      }))
+    return module.emitOpError("port symbols should all be InnerSym attributes");
 
   // Verify the body.
   if (module->getNumRegions() != 1)
@@ -108,6 +107,54 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
           "block argument types should match signature types");
   }
 
+  return success();
+}
+
+LogicalResult circt::firrtl::verifyInnerSymAttr(InnerSymbolOpInterface op) {
+  auto innerSym = op.getInnerSymAttr();
+  // If does not have any inner sym then ignore.
+  if (!innerSym)
+    return success();
+  if (isa<InstanceOp>(&op) || op->getNumResults() != 1) {
+    // The inner sym can only be specified on fieldID=0.
+    if (innerSym.size() > 1 || !innerSym.getSymName()) {
+      op->emitOpError("cannot assign symbols to non-zero field id, for ops "
+                      "with zero or multiple results");
+      return failure();
+    }
+    return success();
+  }
+  auto resultType = op->getResultTypes()[0].dyn_cast<FIRRTLBaseType>();
+  if (!resultType)
+    return op->emitOpError("cannot attach symbols to non-base types");
+  auto maxFields = resultType.getMaxFieldID();
+  SmallBitVector indices(maxFields + 1);
+  SmallPtrSet<Attribute, 8> symNames;
+  // Ensure fieldID and symbol names are unique.
+  auto uniqSyms = [&](InnerSymPropertiesAttr p) {
+    if (maxFields < p.getFieldID()) {
+      op->emitOpError("field id:'" + Twine(p.getFieldID()) +
+                      "' is greater than the maximum field id:'" +
+                      Twine(maxFields) + "'");
+      return false;
+    }
+    if (indices.test(p.getFieldID())) {
+      op->emitOpError("cannot assign multiple symbol names to the field id:'" +
+                      Twine(p.getFieldID()) + "'");
+      return false;
+    }
+    indices.set(p.getFieldID());
+    auto it = symNames.insert(p.getName());
+    if (!it.second) {
+      op->emitOpError("cannot reuse symbol name:'" + p.getName().getValue() +
+                      "'");
+      return false;
+    }
+    return true;
+  };
+
+  if (!llvm::all_of(innerSym.getProps(), uniqSyms))
+    return failure();
   return success();
 }
 

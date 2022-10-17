@@ -1,7 +1,8 @@
-; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json --annotation-file %S/Extract.anno.json %s | FileCheck %s --check-prefixes CHECK,EXTRACT
-; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json %s | FileCheck %s --check-prefixes CHECK,NOEXTRACT
-; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json --annotation-file %S/Extract.anno.json %s --annotation-file %S/YAML.anno.json | FileCheck %s --check-prefixes YAML
-; RUN: firtool --firrtl-grand-central --split-verilog --annotation-file %S/Wire.anno.json %s -o %t.folder > %t  && cat %t.folder/MyView_companion.sv | FileCheck %s --check-prefixes MYVIEW_COMPANION
+; RUN: firtool --annotation-file %s.anno.json --annotation-file %s.Extract.anno.json %s | FileCheck %s --check-prefixes CHECK,EXTRACT
+; RUN: firtool --preserve-values=named --annotation-file %s.anno.json %s | FileCheck %s --check-prefixes CHECK,NOEXTRACT
+; RUN: firtool --annotation-file %s.anno.json --annotation-file %s.Extract.anno.json %s --annotation-file %s.YAML.anno.json | FileCheck %s --check-prefixes YAML
+; RUN: firtool --split-verilog --annotation-file %s.anno.json %s -o %t.folder > %t  && cat %t.folder/MyView_companion.sv | FileCheck %s --check-prefixes MYVIEW_COMPANION
+; RUN: firtool --annotation-file %s.anno.json --annotation-file %s.Prefix.anno.json %s | FileCheck %s --check-prefixes PREFIX
 
 circuit Top :
   extmodule BlackBox_DUT :
@@ -34,7 +35,7 @@ circuit Top :
     w.multivec[1][0] <= in.multivec[1][0]
     w.multivec[1][1] <= in.multivec[1][1]
     w.multivec[1][2] <= in.multivec[1][2]
-    w.uint <= in.uint
+    w.uint <= UInt<1>("h1")
     out.otherOther.other.sint <= w.otherOther.other.sint
     out.otherOther.other.uint <= w.otherOther.other.uint
     out.vecOfBundle[0].sint <= w.vecOfBundle[0].sint
@@ -182,80 +183,98 @@ circuit Top :
     out.multivec[1][2] <= dut.out.multivec[1][2]
     out.uint <= dut.out.uint
 
+    ; PREFIX:         module FOO_BAR_MyView_companion();
+    ; PREFIX:           FOO_BAR_BAZ_MyInterface MyView();
+
     ; NOEXTRACT:      module MyView_companion();
+    ; NOEXTRACT:        MyInterface MyView();
+    ; NOEXTRACT:        assign MyView.uint = DUT.w_uint;
+    ; NOEXTRACT-NEXT:   assign MyView.vec[0] = DUT.w_vec_0;
+    ; NOEXTRACT-NEXT:   assign MyView.vec[1] = DUT.w_vec_1;
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[0][0] = DUT.w_multivec_0_0;
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[0][1] = DUT.w_multivec_0_1;
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[0][2] = DUT.w_multivec_0_2;
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[1][0] = DUT.w_multivec_1_0;
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[1][1] = DUT.w_multivec_1_1;
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[1][2] = DUT.w_multivec_1_2;
+    ; NOEXTRACT-NEXT:   assign MyView.vecOfBundle[0].sint = DUT.w_vecOfBundle_0_sint;
+    ; NOEXTRACT-NEXT:   assign MyView.vecOfBundle[0].uint = DUT.w_vecOfBundle_0_uint;
+    ; NOEXTRACT-NEXT:   assign MyView.vecOfBundle[1].sint = DUT.w_vecOfBundle_1_sint;
+    ; NOEXTRACT-NEXT:   assign MyView.vecOfBundle[1].uint = DUT.w_vecOfBundle_1_uint;
+    ; NOEXTRACT-NEXT:   assign MyView.otherOther.other.sint = DUT.w_otherOther_other_sint;
+    ; NOEXTRACT-NEXT:   assign MyView.otherOther.other.uint = DUT.w_otherOther_other_uint;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_uint = 1'h1;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vec[0] = DUT.submodule.w_vec_0;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vec[1] = DUT.submodule.w_vec_1;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vecOfBundle[0].sint = DUT.submodule.w_vecOfBundle_0_sint;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vecOfBundle[0].uint = DUT.submodule.w_vecOfBundle_0_uint;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vecOfBundle[1].sint = DUT.submodule.w_vecOfBundle_1_sint;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vecOfBundle[1].uint = DUT.submodule.w_vecOfBundle_1_uint;
     ; NOEXTRACT:        Tap tap (
     ; NOEXTRACT-NEXT:     .b     (r),
     ; NOEXTRACT-NEXT:     .clock (clock),
     ; NOEXTRACT-NEXT:     .a     (_tap_a)
     ; NOEXTRACT-NEXT:   );
-    ; NOEXTRACT-NEXT:   MyView_mapping MyView_mapping{{ *}}();
     ; NOEXTRACT-NEXT: endmodule
 
     ; CHECK:          module DUT
     ; CHECK-NOT:      endmodule
-    ; EXTRACT:          // MyInterface MyView();
-    ; NOEXTRACT:        {{^ *}}MyInterface MyView();
     ; EXTRACT:          /* This instance is elsewhere emitted as a bind statement.
     ; EXTRACT-NEXT:        MyView_companion MyView_companion
     ; EXTRACT-NEXT:     */
     ; NOEXTRACT:        {{^ *}}MyView_companion MyView_companion
 
-    ; EXTRACT:        FILE "./BlackBox_DUT.v"
-    ; EXTRACT:        FILE "Wire/firrtl/gct/BlackBox_GCT.v"
-    ; EXTRACT:        FILE "Wire/firrtl/gct/BlackBox_DUTAndGCT.v"
+    ; EXTRACT:        FILE ".{{[/\]}}BlackBox_DUT.v"
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}BlackBox_GCT.v"
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}BlackBox_DUTAndGCT.v"
 
     ; EXTRACT:        FILE "firrtl_black_box_resource_files.f"
     ; EXTRACT-NOT:    FILE
     ; EXTRACT:          BlackBox_DUT.v
-    ; EXTRACT-NEXT:     Wire/firrtl/gct/BlackBox_DUTAndGCT.v
-    ; EXTRACT-NEXT:     Wire/firrtl/gct/BlackBox_GCT.v
+    ; EXTRACT-NEXT:     Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}BlackBox_DUTAndGCT.v
+    ; EXTRACT-NEXT:     Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}BlackBox_GCT.v
 
-    ; EXTRACT:        FILE "Wire/firrtl/bindings.sv"
-    ; EXTRACT-NOT:    FILE
-    ; EXTRACT:        bind DUT MyInterface MyView{{ *}}(.*);
-    ; EXTRACT:        bind DUT MyView_companion MyView_companion{{ *}}();
-    ; NOEXTRACT-NOT:  FILE "Wire/firrtl/bindings.sv"
-
-    ; EXTRACT:        FILE "Wire/firrtl/gct/MyView_companion.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/MyView_companion.sv
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}MyView_companion.sv"
+    ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}MyView_companion.sv
     ; EXTRACT:        module MyView_companion();
+    ; EXTRACT:          MyInterface MyView();
+    ; EXTRACT:          assign MyView.uint = DUT.in_uint;
+    ; EXTRACT-NEXT:     assign MyView.vec[0] = DUT.in_vec_0;
+    ; EXTRACT-NEXT:     assign MyView.vec[1] = DUT.in_vec_1;
+    ; EXTRACT-NEXT:     assign MyView.multivec[0][0] = DUT.in_multivec_0_0;
+    ; EXTRACT-NEXT:     assign MyView.multivec[0][1] = DUT.in_multivec_0_1;
+    ; EXTRACT-NEXT:     assign MyView.multivec[0][2] = DUT.in_multivec_0_2;
+    ; EXTRACT-NEXT:     assign MyView.multivec[1][0] = DUT.in_multivec_1_0;
+    ; EXTRACT-NEXT:     assign MyView.multivec[1][1] = DUT.in_multivec_1_1;
+    ; EXTRACT-NEXT:     assign MyView.multivec[1][2] = DUT.in_multivec_1_2;
+    ; EXTRACT-NEXT:     assign MyView.vecOfBundle[0].sint = DUT.in_vecOfBundle_0_sint;
+    ; EXTRACT-NEXT:     assign MyView.vecOfBundle[0].uint = DUT.in_vecOfBundle_0_uint;
+    ; EXTRACT-NEXT:     assign MyView.vecOfBundle[1].sint = DUT.in_vecOfBundle_1_sint;
+    ; EXTRACT-NEXT:     assign MyView.vecOfBundle[1].uint = DUT.in_vecOfBundle_1_uint;
+    ; EXTRACT-NEXT:     assign MyView.otherOther.other.sint = DUT.in_otherOther_other_sint;
+    ; EXTRACT-NEXT:     assign MyView.otherOther.other.uint = DUT.in_otherOther_other_uint;
+    ; EXTRACT-NEXT:     assign MyView.sub_uint = 1'h1;
+    ; EXTRACT-NEXT:     assign MyView.sub_vec[0] = DUT.submodule.in_vec_0;
+    ; EXTRACT-NEXT:     assign MyView.sub_vec[1] = DUT.submodule.in_vec_1;
+    ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[0].sint = DUT.submodule.in_vecOfBundle_0_sint;
+    ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[0].uint = DUT.submodule.in_vecOfBundle_0_uint;
+    ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[1].sint = DUT.submodule.in_vecOfBundle_1_sint;
+    ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[1].uint = DUT.submodule.in_vecOfBundle_1_uint;
     ; EXTRACT:          Tap tap (
     ; EXTRACT-NEXT:       .b     (r),
-    ; EXTRACT-NEXT:       .clock (clock),
+    ; EXTRACT-NEXT:       .clock (_tap_clock),
     ; EXTRACT-NEXT:       .a     (_tap_a)
     ; EXTRACT-NEXT:     );
-    ; EXTRACT-NEXT:     MyView_mapping MyView_mapping{{ *}}();
     ; EXTRACT-NEXT:   endmodule
 
-    ; EXTRACT:        FILE "Wire/firrtl/gct/MyView_mapping.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/MyView_mapping.sv
-    ; CHECK:          module MyView_mapping();
-    ; CHECK-NEXT:       assign MyView.uint = DUT.w_uint;
-    ; CHECK-NEXT:       assign MyView.vec[0] = DUT.w_vec_0;
-    ; CHECK-NEXT:       assign MyView.vec[1] = DUT.w_vec_1;
-    ; CHECK-NEXT:       assign MyView.multivec[0][0] = DUT.w_multivec_0_0;
-    ; CHECK-NEXT:       assign MyView.multivec[0][1] = DUT.w_multivec_0_1;
-    ; CHECK-NEXT:       assign MyView.multivec[0][2] = DUT.w_multivec_0_2;
-    ; CHECK-NEXT:       assign MyView.multivec[1][0] = DUT.w_multivec_1_0;
-    ; CHECK-NEXT:       assign MyView.multivec[1][1] = DUT.w_multivec_1_1;
-    ; CHECK-NEXT:       assign MyView.multivec[1][2] = DUT.w_multivec_1_2;
-    ; CHECK-NEXT:       assign MyView.vecOfBundle[0].sint = DUT.w_vecOfBundle_0_sint;
-    ; CHECK-NEXT:       assign MyView.vecOfBundle[0].uint = DUT.w_vecOfBundle_0_uint;
-    ; CHECK-NEXT:       assign MyView.vecOfBundle[1].sint = DUT.w_vecOfBundle_1_sint;
-    ; CHECK-NEXT:       assign MyView.vecOfBundle[1].uint = DUT.w_vecOfBundle_1_uint;
-    ; CHECK-NEXT:       assign MyView.otherOther.other.sint = DUT.w_otherOther_other_sint;
-    ; CHECK-NEXT:       assign MyView.otherOther.other.uint = DUT.w_otherOther_other_uint;
-    ; CHECK-NEXT:       assign MyView.sub_uint = DUT.submodule.w_uint;
-    ; CHECK-NEXT:       assign MyView.sub_vec[0] = DUT.submodule.w_vec_0;
-    ; CHECK-NEXT:       assign MyView.sub_vec[1] = DUT.submodule.w_vec_1;
-    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[0].sint = DUT.submodule.w_vecOfBundle_0_sint;
-    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[0].uint = DUT.submodule.w_vecOfBundle_0_uint;
-    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[1].sint = DUT.submodule.w_vecOfBundle_1_sint;
-    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[1].uint = DUT.submodule.w_vecOfBundle_1_uint;
-    ; CHECK:          endmodule
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}bindings.sv"
+    ; EXTRACT-NOT:    FILE
+    ; EXTRACT:        bind DUT MyView_companion MyView_companion{{ *}}();
+    ; NOEXTRACT-NOT:  FILE "Wire{{[/\]}}firrtl{{[/\]}}bindings.sv"
 
-    ; EXTRACT:        FILE "Wire/firrtl/gct/MyInterface.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/MyInterface.sv
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}MyInterface.sv"
+    ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}MyInterface.sv
+    ; PREFIX:         interface FOO_BAR_BAZ_MyInterface;
     ; CHECK:          interface MyInterface;
     ; CHECK-NEXT:       // a wire called 'uint'
     ; CHECK-NEXT:       logic uint;
@@ -276,34 +295,38 @@ circuit Top :
     ; CHECK-NEXT:       Sub_vecOfBundle sub_vecOfBundle[2]();
     ; CHECK-NEXT:     endinterface
 
-    ; EXTRACT:        FILE "Wire/firrtl/gct/VecOfBundle.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/VecOfBundle.sv
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}VecOfBundle.sv"
+    ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}VecOfBundle.sv
+    ; PREFIX:         interface FOO_BAR_BAZ_VecOfBundle;
     ; CHECK:          interface VecOfBundle;
     ; CHECK-NEXT:       logic [1:0] sint;
     ; CHECK-NEXT:       logic [3:0] uint;
     ; CHECK-NEXT:     endinterface
 
-    ; EXTRACT:        FILE "Wire/firrtl/gct/OtherOther.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/OtherOther.sv
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}OtherOther.sv"
+    ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}OtherOther.sv
+    ; PREFIX:         interface FOO_BAR_BAZ_OtherOther;
     ; CHECK:          interface OtherOther;
     ; CHECK-NEXT:       Other other();
     ; CHECK:          endinterface
 
-    ; EXTRACT:        FILE "Wire/firrtl/gct/Other.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/Other.sv
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}Other.sv"
+    ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}Other.sv
+    ; PREFIX:         interface FOO_BAR_BAZ_Other;
     ; CHECK:          interface Other;
     ; CHECK-NEXT:       logic [1:0] sint;
     ; CHECK-NEXT:       logic [3:0] uint;
     ; CHECK:          endinterface
 
-    ; EXTRACT:        FILE "Wire/firrtl/gct/Sub_vecOfBundle.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/Sub_vecOfBundle.sv
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}Sub_vecOfBundle.sv"
+    ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}Sub_vecOfBundle.sv
+    ; PREFIX:         interface FOO_BAR_BAZ_Sub_vecOfBundle;
     ; CHECK:          interface Sub_vecOfBundle;
     ; CHECK-NEXT:       logic [1:0] sint;
     ; CHECK-NEXT:       logic [3:0] uint;
     ; CHECK:          endinterface
 
-    ; YAML:           FILE "Wire/firrtl/gct/gct.yaml"
+    ; YAML:           FILE "Wire{{[/\]}}firrtl/gct/gct.yaml"
     ; YAML:             - name: MyInterface
     ; YAML-NEXT:          fields:
     ; YAML-NEXT:            - name: uint

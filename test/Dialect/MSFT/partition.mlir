@@ -90,13 +90,13 @@ msft.module @TopComplex {} (%clk : i1, %arr_in: !hw.array<4xi5>, %datain: i5, %v
 
   %mut_arr = msft.instance @b @Array(%arr_in) : (!hw.array<4xi5>) -> (!hw.array<4xi5>)
   %c0 = hw.constant 0 : i2
-  %a0 = hw.array_get %mut_arr[%c0] : !hw.array<4xi5>
+  %a0 = hw.array_get %mut_arr[%c0] : !hw.array<4xi5>, i2
   %c1 = hw.constant 1 : i2
-  %a1 = hw.array_get %mut_arr[%c1] : !hw.array<4xi5>
+  %a1 = hw.array_get %mut_arr[%c1] : !hw.array<4xi5>, i2
   %c2 = hw.constant 2 : i2
-  %a2 = hw.array_get %mut_arr[%c2] : !hw.array<4xi5>
+  %a2 = hw.array_get %mut_arr[%c2] : !hw.array<4xi5>, i2
   %c3 = hw.constant 3 : i2
-  %a3 = hw.array_get %mut_arr[%c3] : !hw.array<4xi5>
+  %a3 = hw.array_get %mut_arr[%c3] : !hw.array<4xi5>, i2
 
   %res1 = comb.add %a0, %a1 { targetDesignPartition = @TopComplex::@part2 } : i5
 
@@ -110,16 +110,16 @@ msft.module.extern @ExternI5 (%foo_a: i5) -> (foo_x: i5)
 
 msft.module @Array {} (%arr_in: !hw.array<4xi5>) -> (arr_out: !hw.array<4xi5>) {
   %c0 = hw.constant 0 : i2
-  %in0 = hw.array_get %arr_in[%c0] : !hw.array<4xi5>
+  %in0 = hw.array_get %arr_in[%c0] : !hw.array<4xi5>, i2
   %out0 = msft.instance @unit2 @ExternI5(%in0) { targetDesignPartition = @TopComplex::@part2 }: (i5) -> (i5)
   %c1 = hw.constant 1 : i2
-  %in1 = hw.array_get %arr_in[%c1] : !hw.array<4xi5>
+  %in1 = hw.array_get %arr_in[%c1] : !hw.array<4xi5>, i2
   %out1 = msft.instance @unit2 @ExternI5(%in1) { targetDesignPartition = @TopComplex::@part2 }: (i5) -> (i5)
   %c2 = hw.constant 2 : i2
-  %in2 = hw.array_get %arr_in[%c2] : !hw.array<4xi5>
+  %in2 = hw.array_get %arr_in[%c2] : !hw.array<4xi5>, i2
   %out2 = msft.instance @unit2 @ExternI5(%in2) { targetDesignPartition = @TopComplex::@part2 }: (i5) -> (i5)
   %c3 = hw.constant 3 : i2
-  %in3 = hw.array_get %arr_in[%c3] : !hw.array<4xi5>
+  %in3 = hw.array_get %arr_in[%c3] : !hw.array<4xi5>, i2
   %out3 = msft.instance @unit2 @ExternI5(%in3) { targetDesignPartition = @TopComplex::@part2 }: (i5) -> (i5)
   %arr_out = hw.array_create %out0, %out1, %out2, %out3 : i5
   msft.output %arr_out : !hw.array<4xi5>

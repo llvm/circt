@@ -30,9 +30,9 @@
 // CHECK:           %[[VAL_16:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_14]], 2] : (!llvm.ptr<struct<(i32, i32, ptr<array<0 x i1>>, struct<()>)>>, i32) -> !llvm.ptr<ptr<array<0 x i1>>>
 // CHECK:           %[[VAL_17:.*]] = llvm.load %[[VAL_16]] : !llvm.ptr<ptr<array<0 x i1>>>
 // CHECK:           %[[VAL_18:.*]] = llvm.bitcast %[[VAL_1]] : !llvm.ptr<struct<(i32, i32, ptr<array<0 x i1>>, struct<()>)>> to !llvm.ptr<i8>
-// CHECK:           %[[VAL_19:.*]] = llvm.extractvalue %[[VAL_11]][0 : i32] : !llvm.array<3 x i64>
-// CHECK:           %[[VAL_20:.*]] = llvm.extractvalue %[[VAL_11]][1 : i32] : !llvm.array<3 x i64>
-// CHECK:           %[[VAL_21:.*]] = llvm.extractvalue %[[VAL_11]][2 : i32] : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_19:.*]] = llvm.extractvalue %[[VAL_11]][0] : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_20:.*]] = llvm.extractvalue %[[VAL_11]][1] : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_21:.*]] = llvm.extractvalue %[[VAL_11]][2] : !llvm.array<3 x i64>
 // CHECK:           llvm.call @llhdSuspend(%[[VAL_0]], %[[VAL_18]], %[[VAL_19]], %[[VAL_20]], %[[VAL_21]]) : (!llvm.ptr<i8>, !llvm.ptr<i8>, i64, i64, i64) -> ()
 // CHECK:           llvm.return
 // CHECK:         ^bb4:
@@ -165,9 +165,9 @@ llhd.proc @convert_resume_observe_partial (%in0 : !llhd.sig<i1>, %in1 : !llhd.si
 // CHECK:           %[[VAL_23:.*]] = llvm.getelementptr %[[VAL_19]]{{\[}}%[[VAL_16]], %[[VAL_21]]] : (!llvm.ptr<array<1 x i1>>, i32, i64) -> !llvm.ptr<i1>
 // CHECK:           llvm.store %[[VAL_22]], %[[VAL_23]] : !llvm.ptr<i1>
 // CHECK:           %[[VAL_24:.*]] = llvm.bitcast %[[VAL_1]] : !llvm.ptr<struct<(i32, i32, ptr<array<1 x i1>>, struct<()>)>> to !llvm.ptr<i8>
-// CHECK:           %[[VAL_25:.*]] = llvm.extractvalue %[[VAL_13]][0 : i32] : !llvm.array<3 x i64>
-// CHECK:           %[[VAL_26:.*]] = llvm.extractvalue %[[VAL_13]][1 : i32] : !llvm.array<3 x i64>
-// CHECK:           %[[VAL_27:.*]] = llvm.extractvalue %[[VAL_13]][2 : i32] : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_25:.*]] = llvm.extractvalue %[[VAL_13]][0] : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_26:.*]] = llvm.extractvalue %[[VAL_13]][1] : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_27:.*]] = llvm.extractvalue %[[VAL_13]][2] : !llvm.array<3 x i64>
 // CHECK:           llvm.call @llhdSuspend(%[[VAL_0]], %[[VAL_24]], %[[VAL_25]], %[[VAL_26]], %[[VAL_27]]) : (!llvm.ptr<i8>, !llvm.ptr<i8>, i64, i64, i64) -> ()
 // CHECK:           llvm.return
 // CHECK:         ^bb4:

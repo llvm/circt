@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 ##===- utils/update-docs-dialects.sh - build dialect diagram -*- Script -*-===##
 #
 # Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.

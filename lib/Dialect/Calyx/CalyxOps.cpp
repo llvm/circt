@@ -12,7 +12,9 @@
 
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -63,7 +65,7 @@ struct CollapseUnaryControl : mlir::OpRewritePattern<CtrlOp> {
   using mlir::OpRewritePattern<CtrlOp>::OpRewritePattern;
   LogicalResult matchAndRewrite(CtrlOp ctrlOp,
                                 PatternRewriter &rewriter) const override {
-    auto &ops = ctrlOp.getBody()->getOperations();
+    auto &ops = ctrlOp.getBodyBlock()->getOperations();
     bool isUnaryControl = (ops.size() == 1) && isa<EnableOp>(ops.front()) &&
                           isa<SeqOp, ParOp>(ctrlOp->getParentOp());
     if (!isUnaryControl)
@@ -85,7 +87,7 @@ struct CollapseUnaryControl : mlir::OpRewritePattern<CtrlOp> {
 /// See: https://github.com/llvm/circt/pull/1774 for context.
 template <typename Op>
 static LogicalResult verifyNotComplexSource(Op op) {
-  Operation *definingOp = op.src().getDefiningOp();
+  Operation *definingOp = op.getSrc().getDefiningOp();
   if (definingOp == nullptr)
     // This is a port of the parent component.
     return success();
@@ -252,7 +254,7 @@ static void printGroupPort(OpAsmPrinter &p, GroupPortType op) {
 
   p << " ";
   // The guard is optional.
-  Value guard = op.guard(), source = op.src();
+  Value guard = op.getGuard(), source = op.getSrc();
   if (guard)
     p << guard << " ? ";
   p << source << " : " << source.getType();
@@ -267,7 +269,7 @@ static LogicalResult collapseControl(OpTy controlOp,
                 "Should be a SeqOp or ParOp.");
 
   if (isa<OpTy>(controlOp->getParentOp())) {
-    Block *controlBody = controlOp.getBody();
+    Block *controlBody = controlOp.getBodyBlock();
     for (auto &op : make_early_inc_range(*controlBody))
       op.moveBefore(controlOp);
 
@@ -280,7 +282,7 @@ static LogicalResult collapseControl(OpTy controlOp,
 
 template <typename OpTy>
 static LogicalResult emptyControl(OpTy controlOp, PatternRewriter &rewriter) {
-  if (controlOp.getBody()->empty()) {
+  if (controlOp.getBodyBlock()->empty()) {
     rewriter.eraseOp(controlOp);
     return success();
   }
@@ -297,13 +299,13 @@ static void eraseControlWithGroupAndConditional(OpTy op,
                 "This is only applicable to WhileOp and IfOp.");
 
   // Save information about the operation, and erase it.
-  Value cond = op.cond();
-  Optional<StringRef> groupName = op.groupName();
+  Value cond = op.getCond();
+  Optional<StringRef> groupName = op.getGroupName();
   auto component = op->template getParentOfType<ComponentOp>();
   rewriter.eraseOp(op);
 
   // Clean up the attached conditional and combinational group (if it exists).
-  if (groupName.hasValue()) {
+  if (groupName) {
     auto group = component.getWiresOp().template lookupSymbol<GroupInterface>(
         *groupName);
     if (SymbolTable::symbolKnownUseEmpty(group, component.getRegion()))
@@ -312,18 +314,6 @@ static void eraseControlWithGroupAndConditional(OpTy op,
   // Check the conditional after the Group, since it will be driven within.
   if (!cond.isa<BlockArgument>() && cond.getDefiningOp()->use_empty())
     rewriter.eraseOp(cond.getDefiningOp());
-}
-
-//===----------------------------------------------------------------------===//
-// ProgramOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult ProgramOp::verify() {
-  if (getEntryPointComponent() == nullptr)
-    return emitOpError() << "has undefined entry-point component: \""
-                         << entryPointName() << "\".";
-
-  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -336,7 +326,7 @@ LogicalResult ProgramOp::verify() {
 /// time with respect to the number of instances within the component.
 template <typename Op>
 static Op getControlOrWiresFrom(ComponentOp op) {
-  auto body = op.getBody();
+  auto body = op.getBodyBlock();
   // We verify there is a single WiresOp and ControlOp,
   // so this is safe.
   auto opIt = body->getOps<Op>().begin();
@@ -346,12 +336,12 @@ static Op getControlOrWiresFrom(ComponentOp op) {
 /// Returns the Block argument with the given name from a ComponentOp.
 /// If the name doesn't exist, returns an empty Value.
 static Value getBlockArgumentWithName(StringRef name, ComponentOp op) {
-  ArrayAttr portNames = op.portNames();
+  ArrayAttr portNames = op.getPortNames();
 
   for (size_t i = 0, e = portNames.size(); i != e; ++i) {
     auto portName = portNames[i].cast<StringAttr>();
     if (portName.getValue() == name)
-      return op.getBody()->getArgument(i);
+      return op.getBodyBlock()->getArgument(i);
   }
   return Value{};
 }
@@ -382,8 +372,8 @@ Value calyx::ComponentOp::getResetPort() {
 
 SmallVector<PortInfo> ComponentOp::getPortInfo() {
   auto portTypes = getArgumentTypes();
-  ArrayAttr portNamesAttr = portNames(), portAttrs = portAttributes();
-  APInt portDirectionsAttr = portDirections();
+  ArrayAttr portNamesAttr = getPortNames(), portAttrs = getPortAttributes();
+  APInt portDirectionsAttr = getPortDirections();
 
   SmallVector<PortInfo> results;
   for (size_t i = 0, e = portNamesAttr.size(); i != e; ++i) {
@@ -438,7 +428,7 @@ void ComponentOp::print(OpAsmPrinter &p) {
   printPortDefList(getOutputPortInfo());
 
   p << " ";
-  p.printRegion(body(), /*printEntryBlockArgs=*/false,
+  p.printRegion(getBody(), /*printEntryBlockArgs=*/false,
                 /*printBlockTerminators=*/false,
                 /*printEmptyBlock=*/false);
 
@@ -590,8 +580,8 @@ static LogicalResult hasRequiredPorts(ComponentOp op) {
 
 LogicalResult ComponentOp::verify() {
   // Verify there is exactly one of each the wires and control operations.
-  auto wIt = getBody()->getOps<WiresOp>();
-  auto cIt = getBody()->getOps<ControlOp>();
+  auto wIt = getBodyBlock()->getOps<WiresOp>();
+  auto cIt = getBodyBlock()->getOps<ControlOp>();
   if (std::distance(wIt.begin(), wIt.end()) +
           std::distance(cIt.begin(), cIt.end()) !=
       2)
@@ -604,8 +594,9 @@ LogicalResult ComponentOp::verify() {
   // Verify the component actually does something: has a non-empty Control
   // region, or continuous assignments.
   bool hasNoControlConstructs =
-      getControlOp().getBody()->getOperations().empty();
-  bool hasNoAssignments = getWiresOp().getBody()->getOps<AssignOp>().empty();
+      getControlOp().getBodyBlock()->getOperations().empty();
+  bool hasNoAssignments =
+      getWiresOp().getBodyBlock()->getOps<AssignOp>().empty();
   if (hasNoControlConstructs && hasNoAssignments)
     return emitOpError(
         "The component currently does nothing. It needs to either have "
@@ -682,7 +673,7 @@ void ComponentOp::getAsmBlockArgumentNames(
     mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
   if (region.empty())
     return;
-  auto ports = portNames();
+  auto ports = getPortNames();
   auto *block = &getRegion()->front();
   for (size_t i = 0, e = block->getNumArguments(); i != e; ++i)
     setNameFn(block->getArgument(i), ports[i].cast<StringAttr>().getValue());
@@ -713,8 +704,8 @@ LogicalResult ParOp::verify() {
 
   // Add loose requirement that the body of a ParOp may not enable the same
   // Group more than once, e.g. calyx.par { calyx.enable @G calyx.enable @G }
-  for (EnableOp op : getBody()->getOps<EnableOp>()) {
-    StringRef groupName = op.groupName();
+  for (EnableOp op : getBodyBlock()->getOps<EnableOp>()) {
+    StringRef groupName = op.getGroupName();
     if (groupNames.count(groupName))
       return emitOpError() << "cannot enable the same group: \"" << groupName
                            << "\" more than once.";
@@ -739,7 +730,7 @@ LogicalResult WiresOp::verify() {
   auto control = component.getControlOp();
 
   // Verify each group is referenced in the control section.
-  for (auto &&op : *getBody()) {
+  for (auto &&op : *getBodyBlock()) {
     if (!isa<GroupInterface>(op))
       continue;
     auto group = cast<GroupInterface>(op);
@@ -752,17 +743,17 @@ LogicalResult WiresOp::verify() {
   // Verify that:
   // - At most one continuous assignment exists for any given value
   // - A continuously assigned wire has no assignments inside groups.
-  for (auto thisAssignment : getBody()->getOps<AssignOp>()) {
+  for (auto thisAssignment : getBodyBlock()->getOps<AssignOp>()) {
     // Always assume guarded assignments will not be driven simultaneously. We
     // liberally assume that guards are mutually exclusive (more elaborate
     // static and dynamic checking can be performed to validate such cases).
-    if (thisAssignment.guard())
+    if (thisAssignment.getGuard())
       continue;
 
-    Value dest = thisAssignment.dest();
+    Value dest = thisAssignment.getDest();
     for (Operation *user : dest.getUsers()) {
       auto assignUser = dyn_cast<AssignOp>(user);
-      if (!assignUser || assignUser.dest() != dest ||
+      if (!assignUser || assignUser.getDest() != dest ||
           assignUser == thisAssignment)
         continue;
 
@@ -797,7 +788,7 @@ static LogicalResult isCombinational(Value value, GroupInterface group) {
 
   // Reads to MemoryOp and RegisterOp are combinational. Writes are not.
   if (auto r = dyn_cast<RegisterOp>(definingOp)) {
-    return value == r.out()
+    return value == r.getOut()
                ? success()
                : group->emitOpError()
                      << "with register: \"" << r.instanceName()
@@ -822,11 +813,11 @@ static LogicalResult isCombinational(Value value, GroupInterface group) {
 /// Verifies a combinational group may contain only combinational primitives or
 /// perform combinational logic.
 LogicalResult CombGroupOp::verify() {
-  for (auto &&op : *getBody()) {
+  for (auto &&op : *getBodyBlock()) {
     auto assign = dyn_cast<AssignOp>(op);
     if (assign == nullptr)
       continue;
-    Value dst = assign.dest(), src = assign.src();
+    Value dst = assign.getDest(), src = assign.getSrc();
     if (failed(isCombinational(dst, *this)) ||
         failed(isCombinational(src, *this)))
       return failure();
@@ -838,13 +829,13 @@ LogicalResult CombGroupOp::verify() {
 // GroupOp
 //===----------------------------------------------------------------------===//
 GroupGoOp GroupOp::getGoOp() {
-  auto goOps = getBody()->getOps<GroupGoOp>();
+  auto goOps = getBodyBlock()->getOps<GroupGoOp>();
   size_t nOps = std::distance(goOps.begin(), goOps.end());
   return nOps ? *goOps.begin() : GroupGoOp();
 }
 
 GroupDoneOp GroupOp::getDoneOp() {
-  auto body = this->getBody();
+  auto body = this->getBodyBlock();
   return cast<GroupDoneOp>(body->getTerminator());
 }
 
@@ -871,7 +862,7 @@ static bool portIsUsedInGroup(GroupInterface group, Value port, bool isDriven) {
     // (2) that assignment is found in the provided group.
 
     // If not driven, then read.
-    Value expected = isDriven ? assignOp.dest() : assignOp.src();
+    Value expected = isDriven ? assignOp.getDest() : assignOp.getSrc();
     return expected == port && group == parent;
   });
 }
@@ -951,7 +942,7 @@ LogicalResult CombGroupOp::readsAnyPort(ValueRange ports) {
 /// together.
 static LogicalResult verifyPrimitivePortDriving(AssignOp assign,
                                                 GroupInterface group) {
-  Operation *destDefiningOp = assign.dest().getDefiningOp();
+  Operation *destDefiningOp = assign.getDest().getDefiningOp();
   if (destDefiningOp == nullptr)
     return success();
   auto destCell = dyn_cast<CellInterface>(destDefiningOp);
@@ -963,8 +954,8 @@ static LogicalResult verifyPrimitivePortDriving(AssignOp assign,
           .Case<RegisterOp>([&](auto op) {
             // We only want to verify this is written to if the {write enable,
             // in} port is driven.
-            return succeeded(group.drivesAnyPort({op.write_en(), op.in()}))
-                       ? group.drivesAllPorts({op.write_en(), op.in()})
+            return succeeded(group.drivesAnyPort({op.getWriteEn(), op.getIn()}))
+                       ? group.drivesAllPorts({op.getWriteEn(), op.getIn()})
                        : success();
           })
           .Case<MemoryOp>([&](auto op) {
@@ -987,7 +978,7 @@ static LogicalResult verifyPrimitivePortDriving(AssignOp assign,
                 LtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, LshLibOp,
                 RshLibOp, SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp,
                 SleLibOp, SrshLibOp>([&](auto op) {
-            Value lhs = op.left(), rhs = op.right();
+            Value lhs = op.getLeft(), rhs = op.getRight();
             return succeeded(group.drivesAnyPort({lhs, rhs}))
                        ? group.drivesAllPorts({lhs, rhs})
                        : success();
@@ -1001,7 +992,7 @@ static LogicalResult verifyPrimitivePortDriving(AssignOp assign,
            << "\" is performing a write and failed to drive all necessary "
               "ports.";
 
-  Operation *srcDefiningOp = assign.src().getDefiningOp();
+  Operation *srcDefiningOp = assign.getSrc().getDefiningOp();
   if (srcDefiningOp == nullptr)
     return success();
   auto srcCell = dyn_cast<CellInterface>(srcDefiningOp);
@@ -1100,7 +1091,7 @@ static LogicalResult verifyPortDirection(AssignOp op, Value value,
 /// or source of the AssignOp is to be verified.
 static LogicalResult verifyAssignOpValue(AssignOp op, bool isDestination) {
   bool isSource = !isDestination;
-  Value value = isDestination ? op.dest() : op.src();
+  Value value = isDestination ? op.getDest() : op.getSrc();
   if (isPort(value))
     return verifyPortDirection(op, value, isDestination);
 
@@ -1168,9 +1159,9 @@ ParseResult AssignOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void AssignOp::print(OpAsmPrinter &p) {
-  p << " " << dest() << " = ";
+  p << " " << getDest() << " = ";
 
-  Value bguard = guard(), source = src();
+  Value bguard = getGuard(), source = getSrc();
   // The guard is optional.
   if (bguard)
     p << bguard << " ? ";
@@ -1187,11 +1178,11 @@ void AssignOp::print(OpAsmPrinter &p) {
 /// Lookup the component for the symbol. This returns null on
 /// invalid IR.
 ComponentOp InstanceOp::getReferencedComponent() {
-  auto program = (*this)->getParentOfType<ProgramOp>();
-  if (!program)
+  auto module = (*this)->getParentOfType<ModuleOp>();
+  if (!module)
     return nullptr;
 
-  return program.lookupSymbol<ComponentOp>(componentName());
+  return module.lookupSymbol<ComponentOp>(getComponentName());
 }
 
 /// Verifies the port information in comparison with the referenced component
@@ -1199,9 +1190,10 @@ ComponentOp InstanceOp::getReferencedComponent() {
 /// referenced component twice.
 static LogicalResult verifyInstanceOpType(InstanceOp instance,
                                           ComponentOp referencedComponent) {
-  auto program = instance->getParentOfType<ProgramOp>();
-  StringRef entryPointName = program.entryPointName();
-  if (instance.componentName() == entryPointName)
+  auto module = instance->getParentOfType<ModuleOp>();
+  StringRef entryPointName =
+      module->getAttrOfType<StringAttr>("calyx.entrypoint");
+  if (instance.getComponentName() == entryPointName)
     return instance.emitOpError()
            << "cannot reference the entry-point component: '" << entryPointName
            << "'.";
@@ -1230,15 +1222,15 @@ static LogicalResult verifyInstanceOpType(InstanceOp instance,
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   Operation *op = *this;
-  auto program = op->getParentOfType<ProgramOp>();
+  auto module = op->getParentOfType<ModuleOp>();
   Operation *referencedComponent =
-      symbolTable.lookupNearestSymbolFrom(program, componentNameAttr());
+      symbolTable.lookupNearestSymbolFrom(module, getComponentNameAttr());
   if (referencedComponent == nullptr)
-    return emitError() << "referencing component: '" << componentName()
+    return emitError() << "referencing component: '" << getComponentName()
                        << "', which does not exist.";
 
   Operation *shadowedComponentName =
-      symbolTable.lookupNearestSymbolFrom(program, sym_nameAttr());
+      symbolTable.lookupNearestSymbolFrom(module, getSymNameAttr());
   if (shadowedComponentName != nullptr)
     return emitError() << "instance symbol: '" << instanceName()
                        << "' is already a symbol for another component.";
@@ -1247,7 +1239,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto parentComponent = op->getParentOfType<ComponentOp>();
   if (parentComponent == referencedComponent)
     return emitError() << "recursive instantiation of its parent component: '"
-                       << componentName() << "'";
+                       << getComponentName() << "'";
 
   assert(isa<ComponentOp>(referencedComponent) && "Should be a ComponentOp.");
   return verifyInstanceOpType(*this, cast<ComponentOp>(referencedComponent));
@@ -1260,7 +1252,7 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 SmallVector<StringRef> InstanceOp::portNames() {
   SmallVector<StringRef> portNames;
-  for (Attribute name : getReferencedComponent().portNames())
+  for (Attribute name : getReferencedComponent().getPortNames())
     portNames.push_back(name.cast<StringAttr>().getValue());
   return portNames;
 }
@@ -1280,6 +1272,251 @@ SmallVector<DictionaryAttr> InstanceOp::portAttributes() {
 }
 
 //===----------------------------------------------------------------------===//
+// PrimitiveOp
+//===----------------------------------------------------------------------===//
+
+/// Lookup the component for the symbol. This returns null on
+/// invalid IR.
+hw::HWModuleExternOp PrimitiveOp::getReferencedPrimitive() {
+  auto module = (*this)->getParentOfType<ModuleOp>();
+  if (!module)
+    return nullptr;
+
+  return module.lookupSymbol<hw::HWModuleExternOp>(getPrimitiveName());
+}
+
+/// Verifies the port information in comparison with the referenced component
+/// of an instance. This helper function avoids conducting a lookup for the
+/// referenced component twice.
+static LogicalResult
+verifyPrimitiveOpType(PrimitiveOp instance,
+                      hw::HWModuleExternOp referencedPrimitive) {
+  auto module = instance->getParentOfType<ModuleOp>();
+  StringRef entryPointName =
+      module->getAttrOfType<StringAttr>("calyx.entrypoint");
+  if (instance.getPrimitiveName() == entryPointName)
+    return instance.emitOpError()
+           << "cannot reference the entry-point component: '" << entryPointName
+           << "'.";
+
+  // Verify the instance result ports with those of its referenced component.
+  SmallVector<hw::PortInfo> primitivePorts = referencedPrimitive.getAllPorts();
+  size_t numPorts = primitivePorts.size();
+
+  size_t numResults = instance.getNumResults();
+  if (numResults != numPorts)
+    return instance.emitOpError()
+           << "has a wrong number of results; expected: " << numPorts
+           << " but got " << numResults;
+
+  // Verify parameters match up
+  ArrayAttr modParameters = referencedPrimitive.getParameters();
+  ArrayAttr parameters = instance.getParameters().value_or(ArrayAttr());
+  size_t numExpected = modParameters.size();
+  size_t numParams = parameters.size();
+  if (numParams != numExpected)
+    return instance.emitOpError()
+           << "has the wrong number of parameters; expected: " << numExpected
+           << " but got " << numParams;
+
+  for (size_t i = 0; i != numExpected; ++i) {
+    auto param = parameters[i].cast<circt::hw::ParamDeclAttr>();
+    auto modParam = modParameters[i].cast<circt::hw::ParamDeclAttr>();
+
+    auto paramName = param.getName();
+    if (paramName != modParam.getName())
+      return instance.emitOpError()
+             << "parameter #" << i << " should have name " << modParam.getName()
+             << " but has name " << paramName;
+
+    if (param.getType() != modParam.getType())
+      return instance.emitOpError()
+             << "parameter " << paramName << " should have type "
+             << modParam.getType() << " but has type " << param.getType();
+
+    // All instance parameters must have a value.  Specify the same value as
+    // a module's default value if you want the default.
+    if (!param.getValue())
+      return instance.emitOpError("parameter ")
+             << paramName << " must have a value";
+  }
+
+  for (size_t i = 0; i != numResults; ++i) {
+    auto resultType = instance.getResult(i).getType();
+    auto expectedType = primitivePorts[i].type;
+    auto replacedType = hw::evaluateParametricType(
+        instance.getLoc(), instance.getParametersAttr(), expectedType);
+    if (failed(replacedType))
+      return failure();
+    if (resultType == replacedType)
+      continue;
+    return instance.emitOpError()
+           << "result type for " << primitivePorts[i].name << " must be "
+           << expectedType << ", but got " << resultType;
+  }
+  return success();
+}
+
+LogicalResult
+PrimitiveOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *op = *this;
+  auto module = op->getParentOfType<ModuleOp>();
+  Operation *referencedPrimitive =
+      symbolTable.lookupNearestSymbolFrom(module, getPrimitiveNameAttr());
+  if (referencedPrimitive == nullptr)
+    return emitError() << "referencing primitive: '" << getPrimitiveName()
+                       << "', which does not exist.";
+
+  Operation *shadowedPrimitiveName =
+      symbolTable.lookupNearestSymbolFrom(module, getSymNameAttr());
+  if (shadowedPrimitiveName != nullptr)
+    return emitError() << "instance symbol: '" << instanceName()
+                       << "' is already a symbol for another primitive.";
+
+  // Verify the referenced primitive is not instantiating itself.
+  auto parentPrimitive = op->getParentOfType<hw::HWModuleExternOp>();
+  if (parentPrimitive == referencedPrimitive)
+    return emitError() << "recursive instantiation of its parent primitive: '"
+                       << getPrimitiveName() << "'";
+
+  assert(isa<hw::HWModuleExternOp>(referencedPrimitive) &&
+         "Should be a HardwareModuleExternOp.");
+
+  return verifyPrimitiveOpType(*this,
+                               cast<hw::HWModuleExternOp>(referencedPrimitive));
+}
+
+/// Provide meaningful names to the result values of an PrimitiveOp.
+void PrimitiveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  getCellAsmResultNames(setNameFn, *this, this->portNames());
+}
+
+SmallVector<StringRef> PrimitiveOp::portNames() {
+  SmallVector<StringRef> portNames;
+  for (hw::PortInfo port : getReferencedPrimitive().getAllPorts())
+    portNames.push_back(port.name.getValue());
+
+  return portNames;
+}
+
+Direction convertHWDirectionToCalyx(hw::PortDirection direction) {
+  switch (direction) {
+  case hw::PortDirection::INPUT:
+    return Direction::Input;
+  case hw::PortDirection::OUTPUT:
+    return Direction::Output;
+  case hw::PortDirection::INOUT:
+    llvm_unreachable("InOut ports not supported by Calyx");
+  }
+  llvm_unreachable("Impossible port type");
+}
+
+SmallVector<Direction> PrimitiveOp::portDirections() {
+  SmallVector<Direction> portDirections;
+  for (hw::PortInfo port : getReferencedPrimitive().getAllPorts())
+    portDirections.push_back(convertHWDirectionToCalyx(port.direction));
+  return portDirections;
+}
+
+/// Returns a new DictionaryAttr containing only the calyx dialect attrs
+/// in the input DictionaryAttr. Also strips the 'calyx.' prefix from these
+/// attrs.
+static DictionaryAttr cleanCalyxPortAttrs(OpBuilder builder,
+                                          DictionaryAttr dict) {
+  if (!dict) {
+    return dict;
+  }
+  llvm::SmallVector<NamedAttribute> attrs;
+  for (NamedAttribute attr : dict) {
+    Dialect *dialect = attr.getNameDialect();
+    if (dialect == nullptr || !isa<CalyxDialect>(*dialect))
+      continue;
+    StringRef name = attr.getName().strref();
+    StringAttr newName = builder.getStringAttr(std::get<1>(name.split(".")));
+    attr.setName(newName);
+    attrs.push_back(attr);
+  }
+  return builder.getDictionaryAttr(attrs);
+}
+
+// Grabs calyx port attributes from the HWModuleExternOp arg/result attributes.
+SmallVector<DictionaryAttr> PrimitiveOp::portAttributes() {
+  SmallVector<DictionaryAttr> portAttributes;
+  OpBuilder builder(getContext());
+  hw::HWModuleExternOp prim = getReferencedPrimitive();
+  for (size_t i = 0, e = prim.getNumArguments(); i != e; ++i) {
+    DictionaryAttr dict = cleanCalyxPortAttrs(builder, prim.getArgAttrDict(i));
+    portAttributes.push_back(dict);
+  }
+  for (size_t i = 0, e = prim.getNumResults(); i != e; ++i) {
+    DictionaryAttr dict =
+        cleanCalyxPortAttrs(builder, prim.getResultAttrDict(i));
+    portAttributes.push_back(dict);
+  }
+  return portAttributes;
+}
+
+/// Parse an parameter list if present. Same format as HW dialect.
+/// module-parameter-list ::= `<` parameter-decl (`,` parameter-decl)* `>`
+/// parameter-decl ::= identifier `:` type
+/// parameter-decl ::= identifier `:` type `=` attribute
+///
+static ParseResult parseParameterList(OpAsmParser &parser,
+                                      SmallVector<Attribute> &parameters) {
+
+  return parser.parseCommaSeparatedList(
+      OpAsmParser::Delimiter::OptionalLessGreater, [&]() {
+        std::string name;
+        Type type;
+        Attribute value;
+
+        if (parser.parseKeywordOrString(&name) || parser.parseColonType(type))
+          return failure();
+
+        // Parse the default value if present.
+        if (succeeded(parser.parseOptionalEqual())) {
+          if (parser.parseAttribute(value, type))
+            return failure();
+        }
+
+        auto &builder = parser.getBuilder();
+        parameters.push_back(hw::ParamDeclAttr::get(
+            builder.getContext(), builder.getStringAttr(name), type, value));
+        return success();
+      });
+}
+
+/// Shim to also use this for the InstanceOp custom parser.
+static ParseResult parseParameterList(OpAsmParser &parser,
+                                      ArrayAttr &parameters) {
+  SmallVector<Attribute> parseParameters;
+  if (failed(parseParameterList(parser, parseParameters)))
+    return failure();
+
+  parameters = ArrayAttr::get(parser.getContext(), parseParameters);
+
+  return success();
+}
+
+/// Print a parameter list for a module or instance. Same format as HW dialect.
+static void printParameterList(OpAsmPrinter &p, Operation *op,
+                               ArrayAttr parameters) {
+  if (parameters.empty())
+    return;
+
+  p << '<';
+  llvm::interleaveComma(parameters, p, [&](Attribute param) {
+    auto paramAttr = param.cast<hw::ParamDeclAttr>();
+    p << paramAttr.getName().getValue() << ": " << paramAttr.getType();
+    if (auto value = paramAttr.getValue()) {
+      p << " = ";
+      p.printAttributeWithoutType(value);
+    }
+  });
+  p << '>';
+}
+
+//===----------------------------------------------------------------------===//
 // GroupGoOp
 //===----------------------------------------------------------------------===//
 
@@ -1288,7 +1525,7 @@ LogicalResult GroupGoOp::verify() { return verifyNotComplexSource(*this); }
 /// Provide meaningful names to the result value of a GroupGoOp.
 void GroupGoOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   auto parent = (*this)->getParentOfType<GroupOp>();
-  StringRef name = parent.sym_name();
+  StringRef name = parent.getSymName();
   std::string resultName = name.str() + ".go";
   setNameFn(getResult(), resultName);
 }
@@ -1308,8 +1545,8 @@ ParseResult GroupGoOp::parse(OpAsmParser &parser, OperationState &result) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult GroupDoneOp::verify() {
-  Operation *srcOp = src().getDefiningOp();
-  Value optionalGuard = guard();
+  Operation *srcOp = getSrc().getDefiningOp();
+  Value optionalGuard = getGuard();
   Operation *guardOp = optionalGuard ? optionalGuard.getDefiningOp() : nullptr;
   bool noGuard = (guardOp == nullptr);
 
@@ -1377,7 +1614,7 @@ void MemoryOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 SmallVector<StringRef> MemoryOp::portNames() {
   SmallVector<StringRef> portNames;
-  for (size_t i = 0, e = addrSizes().size(); i != e; ++i) {
+  for (size_t i = 0, e = getAddrSizes().size(); i != e; ++i) {
     auto nameAttr =
         StringAttr::get(this->getContext(), "addr" + std::to_string(i));
     portNames.push_back(nameAttr.getValue());
@@ -1388,7 +1625,7 @@ SmallVector<StringRef> MemoryOp::portNames() {
 
 SmallVector<Direction> MemoryOp::portDirections() {
   SmallVector<Direction> portDirections;
-  for (size_t i = 0, e = addrSizes().size(); i != e; ++i)
+  for (size_t i = 0, e = getAddrSizes().size(); i != e; ++i)
     portDirections.push_back(Input);
   portDirections.append({Input, Input, Input, Output, Output});
   return portDirections;
@@ -1397,7 +1634,7 @@ SmallVector<Direction> MemoryOp::portDirections() {
 SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
   SmallVector<DictionaryAttr> portAttributes;
   MLIRContext *context = getContext();
-  for (size_t i = 0, e = addrSizes().size(); i != e; ++i)
+  for (size_t i = 0, e = getAddrSizes().size(); i != e; ++i)
     portAttributes.push_back(DictionaryAttr::get(context)); // Addresses
 
   // Use a boolean to indicate this attribute is used.
@@ -1435,10 +1672,10 @@ void MemoryOp::build(OpBuilder &builder, OperationState &state,
 }
 
 LogicalResult MemoryOp::verify() {
-  ArrayRef<Attribute> opSizes = sizes().getValue();
-  ArrayRef<Attribute> opAddrSizes = addrSizes().getValue();
-  size_t numDims = sizes().size();
-  size_t numAddrs = addrSizes().size();
+  ArrayRef<Attribute> opSizes = getSizes().getValue();
+  ArrayRef<Attribute> opAddrSizes = getAddrSizes().getValue();
+  size_t numDims = getSizes().size();
+  size_t numAddrs = getAddrSizes().size();
   if (numDims != numAddrs)
     return emitOpError("mismatched number of dimensions (")
            << numDims << ") and address sizes (" << numAddrs << ")";
@@ -1466,7 +1703,7 @@ LogicalResult MemoryOp::verify() {
 LogicalResult EnableOp::verify() {
   auto component = (*this)->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
-  StringRef name = groupName();
+  StringRef name = getGroupName();
 
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(name);
   if (!groupOp)
@@ -1491,12 +1728,12 @@ LogicalResult IfOp::verify() {
   if (elseBodyExists() && getElseBody()->empty())
     return emitError() << "empty 'else' region.";
 
-  Optional<StringRef> optGroupName = groupName();
-  if (!optGroupName.hasValue()) {
+  Optional<StringRef> optGroupName = getGroupName();
+  if (!optGroupName) {
     // No combinational group was provided.
     return success();
   }
-  StringRef groupName = optGroupName.getValue();
+  StringRef groupName = *optGroupName;
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
   if (!groupOp)
     return emitOpError() << "with group '" << groupName
@@ -1506,9 +1743,9 @@ LogicalResult IfOp::verify() {
     return emitOpError() << "with group '" << groupName
                          << "', which is not a combinational group.";
 
-  if (failed(groupOp.drivesPort(cond())))
+  if (failed(groupOp.drivesPort(getCond())))
     return emitError() << "with conditional op: '"
-                       << valueName(component, cond())
+                       << valueName(component, getCond())
                        << "' expected to be driven from group: '" << groupName
                        << "' but no driver was found.";
 
@@ -1519,7 +1756,7 @@ LogicalResult IfOp::verify() {
 /// EnableOp was found (e.g. a "calyx.par" operation is present), returns
 /// None.
 static Optional<EnableOp> getLastEnableOp(SeqOp parent) {
-  auto &lastOp = parent.getBody()->back();
+  auto &lastOp = parent.getBodyBlock()->back();
   if (auto enableOp = dyn_cast<EnableOp>(lastOp))
     return enableOp;
   else if (auto seqOp = dyn_cast<SeqOp>(lastOp))
@@ -1532,9 +1769,9 @@ static Optional<EnableOp> getLastEnableOp(SeqOp parent) {
 /// the immediate ParOp's body.
 static llvm::StringMap<EnableOp> getAllEnableOpsInImmediateBody(ParOp parent) {
   llvm::StringMap<EnableOp> enables;
-  Block *body = parent.getBody();
+  Block *body = parent.getBodyBlock();
   for (EnableOp op : body->getOps<EnableOp>())
-    enables.insert(std::pair(op.groupName(), op));
+    enables.insert(std::pair(op.getGroupName(), op));
 
   return enables;
 }
@@ -1581,9 +1818,9 @@ struct CommonTailPatternWithSeq : mlir::OpRewritePattern<IfOp> {
     Optional<EnableOp> lastThenEnableOp = getLastEnableOp(thenControl),
                        lastElseEnableOp = getLastEnableOp(elseControl);
 
-    if (!lastThenEnableOp.hasValue() || !lastElseEnableOp.hasValue())
+    if (!lastThenEnableOp || !lastElseEnableOp)
       return failure();
-    if (lastThenEnableOp->groupName() != lastElseEnableOp->groupName())
+    if (lastThenEnableOp->getGroupName() != lastElseEnableOp->getGroupName())
       return failure();
 
     // Place the IfOp and pulled EnableOp inside a sequential region, in case
@@ -1591,11 +1828,11 @@ struct CommonTailPatternWithSeq : mlir::OpRewritePattern<IfOp> {
     // parallelizing the pulled out EnableOps.
     rewriter.setInsertionPointAfter(ifOp);
     SeqOp seqOp = rewriter.create<SeqOp>(ifOp.getLoc());
-    Block *body = seqOp.getBody();
+    Block *body = seqOp.getBodyBlock();
     ifOp->remove();
     body->push_back(ifOp);
     rewriter.setInsertionPointToEnd(body);
-    rewriter.create<EnableOp>(seqOp.getLoc(), lastThenEnableOp->groupName());
+    rewriter.create<EnableOp>(seqOp.getLoc(), lastThenEnableOp->getGroupName());
 
     // Erase the common EnableOp from the Then and Else regions.
     rewriter.eraseOp(*lastThenEnableOp);
@@ -1648,7 +1885,7 @@ struct CommonTailPatternWithPar : mlir::OpRewritePattern<IfOp> {
     // the pulled out EnableOps.
     rewriter.setInsertionPointAfter(ifOp);
     ParOp parOp = rewriter.create<ParOp>(ifOp.getLoc());
-    Block *body = parOp.getBody();
+    Block *body = parOp.getBodyBlock();
     ifOp->remove();
     body->push_back(ifOp);
 
@@ -1693,12 +1930,12 @@ LogicalResult WhileOp::verify() {
   auto component = (*this)->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
 
-  Optional<StringRef> optGroupName = groupName();
-  if (!optGroupName.hasValue()) {
+  Optional<StringRef> optGroupName = getGroupName();
+  if (!optGroupName) {
     /// No combinational group was provided
     return success();
   }
-  StringRef groupName = optGroupName.getValue();
+  StringRef groupName = *optGroupName;
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
   if (!groupOp)
     return emitOpError() << "with group '" << groupName
@@ -1708,8 +1945,8 @@ LogicalResult WhileOp::verify() {
     return emitOpError() << "with group '" << groupName
                          << "', which is not a combinational group.";
 
-  if (failed(groupOp.drivesPort(cond())))
-    return emitError() << "conditional op: '" << valueName(component, cond())
+  if (failed(groupOp.drivesPort(getCond())))
+    return emitError() << "conditional op: '" << valueName(component, getCond())
                        << "' expected to be driven from group: '" << groupName
                        << "' but no driver was found.";
 
@@ -1718,7 +1955,7 @@ LogicalResult WhileOp::verify() {
 
 LogicalResult WhileOp::canonicalize(WhileOp whileOp,
                                     PatternRewriter &rewriter) {
-  if (whileOp.getBody()->empty()) {
+  if (whileOp.getBodyBlock()->empty()) {
     eraseControlWithGroupAndConditional(whileOp, rewriter);
     return success();
   }
