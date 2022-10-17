@@ -784,8 +784,7 @@ ParseResult CombComponentOp::parse(OpAsmParser &parser,
 
   // Build the component's type for FunctionLike trait. All ports are listed
   // as arguments so they may be accessed within the component.
-  auto type =
-      parser.getBuilder().getFunctionType(portTypes, /*resultTypes=*/{});
+  auto type = parser.getBuilder().getFunctionType(portTypes, /*results=*/{});
   result.addAttribute(CombComponentOp::getTypeAttrName(), TypeAttr::get(type));
 
   auto *body = result.addRegion();
