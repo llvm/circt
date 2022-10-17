@@ -1376,6 +1376,23 @@ hw.module @propagateNamehint(%x: i16) -> (o: i1) {
   hw.output %0 : i1
 }
 
+// CHECK-LABEL: @extractToReductionOps
+hw.module @extractToReductionOps(%a: i1, %b: i2) -> (c: i1, d: i1, e: i1) {
+  // CHECK-NEXT: %c-1_i2 = hw.constant -1 : i2
+  // CHECK-NEXT: %c0_i2 = hw.constant 0 : i2
+  // CHECK-NEXT: %0 = comb.icmp ne %b, %c0_i2 : i2
+  // CHECK-NEXT: %1 = comb.icmp eq %b, %c-1_i2 : i2
+  // CHECK-NEXT: %2 = comb.parity %b : i2
+  // CHECK-NEXT: hw.output %0, %1, %2 : i1, i1, i1
+  %0 = comb.extract %b from 1 : (i2) -> i1
+  %1 = comb.extract %b from 0 : (i2) -> i1
+  %2 = comb.or %0, %1 : i1
+  %3 = comb.and %0, %1 : i1
+  %4 = comb.xor %0, %1 : i1
+
+  hw.output %2, %3, %4 : i1, i1, i1
+}
+
 // https://github.com/llvm/circt/issues/2546
 // CHECK-LABEL: @Issue2546
 hw.module @Issue2546() -> (b: i1) {
