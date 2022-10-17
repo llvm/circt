@@ -56,6 +56,12 @@ std::string Signal::toHexString(unsigned elemIndex) const {
   }
   return ret;
 }
+
+Signal::~Signal() {
+  std::free(value);
+  value = nullptr;
+}
+
 //===----------------------------------------------------------------------===//
 // Slot
 //===----------------------------------------------------------------------===//
@@ -186,6 +192,17 @@ void UpdateQueue::pop() {
 }
 
 //===----------------------------------------------------------------------===//
+// Instance
+//===----------------------------------------------------------------------===//
+
+Instance::~Instance() {
+  std::free(procState);
+  procState = nullptr;
+  std::free(entityState);
+  entityState = nullptr;
+}
+
+//===----------------------------------------------------------------------===//
 // State
 //===----------------------------------------------------------------------===//
 
@@ -231,7 +248,7 @@ void State::addProcPtr(std::string name, ProcState *procStatePtr) {
 
   // Store instance index in process state.
   procStatePtr->inst = it - instances.begin();
-  (*it).procState = std::unique_ptr<ProcState>(procStatePtr);
+  (*it).procState = procStatePtr;
 }
 
 int State::addSignalData(int index, std::string owner, uint8_t *value,
