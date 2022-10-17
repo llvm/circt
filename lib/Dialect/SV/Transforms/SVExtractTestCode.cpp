@@ -191,7 +191,8 @@ static void addInstancesToCloneSet(
     opsToClone.insert(instance);
     for (auto operand : instance.getOperands())
       inputsToAdd.push_back(operand);
-    inputsToRemove.push_back(value);
+    for (auto result : instance.getResults())
+      inputsToRemove.push_back(result);
     extractedInstances[instance.getModuleNameAttr().getAttr()].insert(instance);
 
     // Mark the instance and its forward dataflow to be erased from the pass.
@@ -321,15 +322,27 @@ static void addBlockMapping(BlockAndValueMapping &cutMap, Operation *oldOp,
   }
 }
 
+// Check if op has any operand using a value that isn't yet defined.
 static bool hasOoOArgs(hw::HWModuleOp newMod, Operation *op) {
   for (auto arg : op->getOperands()) {
-    auto argOp = arg.getDefiningOp(); // may be null
+    auto *argOp = arg.getDefiningOp(); // may be null
     if (!argOp)
       continue;
     if (argOp->getParentOfType<hw::HWModuleOp>() != newMod)
       return true;
   }
   return false;
+}
+
+// Update any operand which was emitted before its defining op was.
+static void updateOoOArgs(SmallVectorImpl<Operation *> &lateBoundOps,
+                          BlockAndValueMapping &cutMap) {
+  for (auto *op : lateBoundOps)
+    for (unsigned argidx = 0, e = op->getNumOperands(); argidx < e; ++argidx) {
+      Value arg = op->getOperand(argidx);
+      if (cutMap.contains(arg))
+        op->setOperand(argidx, cutMap.lookup(arg));
+    }
 }
 
 // Do the cloning, which is just a pre-order traversal over the module looking
@@ -348,13 +361,7 @@ static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
         lateBoundOps.push_back(newOp);
     }
   });
-  // update any operand which was emitted before it's defining op was.
-  for (auto op : lateBoundOps)
-    for (unsigned argidx = 0, e = op->getNumOperands(); argidx < e; ++argidx) {
-      Value arg = op->getOperand(argidx);
-      if (cutMap.contains(arg))
-        op->setOperand(argidx, cutMap.lookup(arg));
-    }
+  updateOoOArgs(lateBoundOps, cutMap);
 }
 
 // Check if the module has already been bound.
@@ -406,6 +413,7 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
     // Inline the body at the instantiation site.
     hw::HWModuleOp instParent =
         cast<hw::HWModuleOp>(use->getParent()->getModule());
+    SmallVector<Operation *, 16> lateBoundOps;
     b.setInsertionPoint(inst);
     for (auto &op : *oldMod.getBodyBlock()) {
       // For instances in the bind table, update the bind with the new parent.
@@ -423,9 +431,17 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
       }
 
       // For all ops besides the output, clone into the parent body.
-      if (!isa<hw::OutputOp>(op))
-        b.clone(op, mapping);
+      if (!isa<hw::OutputOp>(op)) {
+        Operation *clonedOp = b.clone(op, mapping);
+        // If some of the operands haven't been cloned over yet, due to cycles,
+        // remember to revisit this op.
+        if (hasOoOArgs(instParent, clonedOp))
+          lateBoundOps.push_back(clonedOp);
+      }
     }
+
+    // Map over any ops that didn't have their operands mapped when cloned.
+    updateOoOArgs(lateBoundOps, mapping);
 
     // Erase the old instantiation site.
     assert(inst.use_empty() && "inlined instance should have no uses");
@@ -448,6 +464,11 @@ namespace {
 
 struct SVExtractTestCodeImplPass
     : public SVExtractTestCodeBase<SVExtractTestCodeImplPass> {
+  SVExtractTestCodeImplPass(bool disableInstanceExtraction,
+                            bool disableModuleInlining) {
+    this->disableInstanceExtraction = disableInstanceExtraction;
+    this->disableModuleInlining = disableModuleInlining;
+  }
   void runOnOperation() override;
 
 private:
@@ -490,7 +511,9 @@ private:
 
     // Find instances that directly feed the clone set, and add them if
     // possible.
-    addInstancesToCloneSet(inputs, opsToClone, opsToErase, extractedInstances);
+    if (!disableInstanceExtraction)
+      addInstancesToCloneSet(inputs, opsToClone, opsToErase,
+                             extractedInstances);
     numOpsExtracted += opsToClone.size();
     numOpsErased += opsToErase.size();
 
@@ -500,9 +523,11 @@ private:
                                    bindFile, bindTable);
     // do the clone
     migrateOps(module, bmod, opsToClone, cutMap);
-    // erase old operations of interest
-    for (auto *op : roots)
-      opsToErase.insert(op);
+    // erase old operations of interest eagerly, removing from erase set.
+    for (auto *op : roots) {
+      opsToErase.erase(op);
+      op->erase();
+    }
 
     return true;
   }
@@ -629,7 +654,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
                                     coverBindFile, bindTable, opsToErase);
 
       // Inline any modules that only have inputs for test code.
-      if (anyThingExtracted)
+      if (!disableModuleInlining && anyThingExtracted)
         inlineInputOnly(rtlmod, instanceGraph, bindTable, opsToErase);
 
       // Erase any instances that were extracted, and their forward dataflow.
@@ -661,6 +686,9 @@ void SVExtractTestCodeImplPass::runOnOperation() {
   top->removeAttr("firrtl.extract.testbench");
 }
 
-std::unique_ptr<Pass> circt::sv::createSVExtractTestCodePass() {
-  return std::make_unique<SVExtractTestCodeImplPass>();
+std::unique_ptr<Pass>
+circt::sv::createSVExtractTestCodePass(bool disableInstanceExtraction,
+                                       bool disableModuleInlining) {
+  return std::make_unique<SVExtractTestCodeImplPass>(disableInstanceExtraction,
+                                                     disableModuleInlining);
 }

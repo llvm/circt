@@ -30,7 +30,7 @@ def Pipeline_Dialect : Dialect {
 
 def PipelineOp : Op<Pipeline_Dialect, "pipeline", [
     IsolatedFromAbove,
-    NoSideEffect,
+    Pure,
     SingleBlockImplicitTerminator<"ReturnOp">,
     RegionKindInterface,
     HasOnlyGraphRegion 

@@ -15,7 +15,7 @@
 // Packed Array Processing Operations
 //===----------------------------------------------------------------------===//
 
-def ArrayCreateOp : HWOp<"array_create", [NoSideEffect, SameTypeOperands]> {
+def ArrayCreateOp : HWOp<"array_create", [Pure, SameTypeOperands]> {
   let summary = "Create an array from values";
   let description = [{
     Creates an array from a variable set of values. One or more values must be
@@ -33,6 +33,7 @@ def ArrayCreateOp : HWOp<"array_create", [NoSideEffect, SameTypeOperands]> {
   let results = (outs ArrayType:$result);
 
   let hasVerifier = 1;
+  let hasCanonicalizeMethod = 1;
 
   let hasCustomAssemblyFormat = 1;
   let builders = [
@@ -49,7 +50,7 @@ def ArrayCreateOp : HWOp<"array_create", [NoSideEffect, SameTypeOperands]> {
   }];
 }
 
-def ArrayConcatOp : HWOp<"array_concat", [NoSideEffect]> {
+def ArrayConcatOp : HWOp<"array_concat", [Pure]> {
   let summary = "Concatenate some arrays";
   let description = [{
     Creates an array by concatenating a variable set of arrays. One or more
@@ -79,7 +80,7 @@ def ArrayConcatOp : HWOp<"array_concat", [NoSideEffect]> {
   let hasCanonicalizeMethod = 1;
 }
 
-def ArraySliceOp : HWOp<"array_slice", [NoSideEffect]> {
+def ArraySliceOp : HWOp<"array_slice", [Pure]> {
   let summary = "Get a range of values from an array";
   let description = [{
     Extracts a sub-range from an array. The range is from `lowIndex` to
@@ -129,7 +130,7 @@ class ArrayElementTypeConstraint<string result, string input>
 
 // hw.array_get does not work with unpacked arrays.
 def ArrayGetOp : HWOp<"array_get",
-    [NoSideEffect, IndexBitWidthConstraint<"index", "input">,
+    [Pure, IndexBitWidthConstraint<"index", "input">,
      ArrayElementTypeConstraint<"result", "input">]> {
   let summary = "Get the value in an array at the specified index";
   let arguments = (ins ArrayType:$input, HWIntegerType:$index);
@@ -151,7 +152,7 @@ def ArrayGetOp : HWOp<"array_get",
 // Structure Processing Operations
 //===----------------------------------------------------------------------===//
 
-def StructCreateOp : HWOp<"struct_create", [NoSideEffect]> {
+def StructCreateOp : HWOp<"struct_create", [Pure]> {
   let summary = "Create a struct from constituent parts.";
   let arguments = (ins Variadic<HWNonInOutType>:$input);
   let results = (outs StructType:$result);
@@ -161,7 +162,7 @@ def StructCreateOp : HWOp<"struct_create", [NoSideEffect]> {
 
 // Extract the value of a field of a structure.
 def StructExtractOp : HWOp<"struct_extract",
-    [NoSideEffect,
+    [Pure,
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
   ]> {
   let summary = "Extract a named field from a struct.";
@@ -185,7 +186,7 @@ def StructExtractOp : HWOp<"struct_extract",
 }
 
 // Create a structure by replacing a field with a value in an existing one.
-def StructInjectOp : HWOp<"struct_inject", [NoSideEffect,
+def StructInjectOp : HWOp<"struct_inject", [Pure,
                            AllTypesMatch<["input", "result"]>]> {
   let summary = "Inject a value into a named field of a struct.";
   let description = [{
@@ -203,7 +204,7 @@ def StructInjectOp : HWOp<"struct_inject", [NoSideEffect,
   let hasCanonicalizeMethod = 1;
 }
 
-def StructExplodeOp : HWOp<"struct_explode", [NoSideEffect,
+def StructExplodeOp : HWOp<"struct_explode", [Pure,
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
   ]> {
   let summary = "Expand a struct into its constituent parts.";
@@ -222,7 +223,7 @@ def StructExplodeOp : HWOp<"struct_explode", [NoSideEffect,
 // Union operations
 //===----------------------------------------------------------------------===//
 
-def UnionCreateOp : HWOp<"union_create", [NoSideEffect]> {
+def UnionCreateOp : HWOp<"union_create", [Pure]> {
   let summary = "Create a union with the specified value.";
   let description = [{
     Create a union with the value 'input', which can then be accessed via the
@@ -239,7 +240,7 @@ def UnionCreateOp : HWOp<"union_create", [NoSideEffect]> {
   let hasCustomAssemblyFormat = 1;
 }
 
-def UnionExtractOp : HWOp<"union_extract", [NoSideEffect]> {
+def UnionExtractOp : HWOp<"union_extract", [Pure]> {
   let summary = "Get a union member.";
   let description = [{
     Get the value of a union, interpreting it as the type of the specified

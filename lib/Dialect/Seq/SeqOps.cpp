@@ -126,6 +126,13 @@ void CompRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), getName());
 }
 
+LogicalResult CompRegOp::verify() {
+  if ((getReset() && !getResetValue()) || (!getReset() && getResetValue()))
+    return emitOpError(
+        "either reset and resetValue or neither must be specified");
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // FirRegOp
 
@@ -268,30 +275,57 @@ void FirRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
-  // If the register has a symbol, we can't optimize it away.
-  if (op.getInnerSymAttr())
-    return failure();
-
-  // If the register's value is itself, we can replace the register.
-  if (op.getNext().getDefiningOp() != op)
-    return failure();
-
-  // If the register has a reset value, we can replace it with that.
-  if (auto resetValue = op.getResetValue()) {
-    rewriter.replaceOp(op, resetValue);
-    return success();
+  // If the register has a constant zero reset, drop the reset and reset value
+  // altogether.
+  if (auto reset = op.getReset()) {
+    if (auto constOp = reset.getDefiningOp<hw::ConstantOp>()) {
+      if (constOp.getValue().isZero()) {
+        rewriter.replaceOpWithNewOp<FirRegOp>(op, op.getNext(), op.getClk(),
+                                              op.getNameAttr(),
+                                              op.getInnerSymAttr());
+        return success();
+      }
+    }
   }
 
-  auto type = op.getType();
+  return failure();
+}
 
-  // Otherwise we want to replae the register with a constant 0. For now this
+OpFoldResult FirRegOp::fold(ArrayRef<Attribute> constants) {
+  // If the register has a symbol, we can't optimize it away.
+  if (getInnerSymAttr())
+    return {};
+
+  // If the register is held in permanent reset, replace it with its reset
+  // value. This works trivially if the reset is asynchronous and therefore
+  // level-sensitive, in which case it will always immediately assume the reset
+  // value in silicon. If it is synchronous, the register value is undefined
+  // until the first clock edge at which point it becomes the reset value, in
+  // which case we simply define the initial value to already be the reset
+  // value.
+  if (auto reset = getReset())
+    if (auto constOp = reset.getDefiningOp<hw::ConstantOp>())
+      if (constOp.getValue().isOne())
+        return getResetValue();
+
+  // If the register's next value is trivially it's current value, or the
+  // register is never clocked, we can replace the register with a constant
+  // value.
+  bool isTrivialFeedback = (getNext() == getResult());
+  bool isNeverClocked = !!constants[1]; // clock operand is constant
+  if (!isTrivialFeedback && !isNeverClocked)
+    return {};
+
+  // If the register has a reset value, we can replace it with that.
+  if (auto resetValue = getResetValue())
+    return resetValue;
+
+  // Otherwise we want to replace the register with a constant 0. For now this
   // only works with integer types.
-  auto intType = type.dyn_cast<IntegerType>();
+  auto intType = getType().dyn_cast<IntegerType>();
   if (!intType)
-    return failure();
-
-  rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, intType, 0);
-  return success();
+    return {};
+  return IntegerAttr::get(intType, 0);
 }
 
 //===----------------------------------------------------------------------===//

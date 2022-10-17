@@ -37,7 +37,7 @@ class SeqOp<string mnemonic, list<Trait> traits = []> :
     Op<SeqDialect, mnemonic, traits>;
 
 def CompRegOp : SeqOp<"compreg",
-    [NoSideEffect, AllTypesMatch<["input", "data"/*, "resetValue"*/]>,
+    [Pure, AllTypesMatch<["input", "data"/*, "resetValue"*/]>,
      SameVariadicOperandSize,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]> ]> {
        // AllTypesMatch doesn't work with Optional types yet.
@@ -50,6 +50,7 @@ def CompRegOp : SeqOp<"compreg",
     OptionalAttr<SymbolNameAttr>:$sym_name);
   let results = (outs AnyType:$data);
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 
   let builders = [
     OpBuilder<(ins "Value":$input, "Value":$clk, "StringRef":$sym_name), [{
@@ -67,7 +68,7 @@ def CompRegOp : SeqOp<"compreg",
 }
 
 def FirRegOp : SeqOp<"firreg",
-    [NoSideEffect, AllTypesMatch<["next", "data"/*, "resetValue"*/]>,
+    [Pure, AllTypesMatch<["next", "data"/*, "resetValue"*/]>,
      SameVariadicOperandSize, MemoryEffects<[MemWrite, MemRead, MemAlloc]>,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
       // AllTypesMatch doesn't work with Optional types yet.
@@ -112,6 +113,7 @@ def FirRegOp : SeqOp<"firreg",
 
   let skipDefaultBuilders = 1;
   let hasCanonicalizeMethod = true;
+  let hasFolder = true;
   let builders = [
     OpBuilder<(ins "Value":$next, "Value":$clk,
                    "StringAttr":$name,

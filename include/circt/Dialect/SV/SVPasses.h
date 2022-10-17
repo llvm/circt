@@ -29,7 +29,9 @@ std::unique_ptr<mlir::Pass>
 createHWMemSimImplPass(bool replSeqMem = false,
                        bool ignoreReadEnableMem = false,
                        bool stripMuxPragmas = false);
-std::unique_ptr<mlir::Pass> createSVExtractTestCodePass();
+std::unique_ptr<mlir::Pass>
+createSVExtractTestCodePass(bool disableInstanceExtraction = false,
+                            bool disableModuleInlining = false);
 std::unique_ptr<mlir::Pass>
 createHWExportModuleHierarchyPass(llvm::Optional<std::string> directory = {});
 /// Generate the code for registering passes.

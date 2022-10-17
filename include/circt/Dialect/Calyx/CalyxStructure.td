@@ -19,7 +19,7 @@ def ParamDeclAttr : Attr<CPred<"$_self.isa<hw::ParamDeclAttr>()">>;
 def ParamDeclArrayAttr : TypedArrayAttrBase<ParamDeclAttr, "parameter array">;
 
 def UndefinedOp : CalyxOp<"undef", [
-    NoSideEffect
+    Pure
   ]> {
   let summary = "Calyx Undefined Value";
   let description = [{
