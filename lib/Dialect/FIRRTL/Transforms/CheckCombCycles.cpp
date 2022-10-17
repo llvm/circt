@@ -421,33 +421,27 @@ public:
 
   bool operator==(const CombGraphIterator &rhs) const {
     // Comparing with EndIterator, implies just check isAtEnd.
-    if (rhs.impl.index() == 0 &&
-        std::get<NodeIterator>(rhs.impl).isEndIterator())
-      switch (impl.index()) {
+    auto isAtEnd = [](const CombGraphIterator &a,
+                      const CombGraphIterator &endIt) {
+      switch (a.impl.index()) {
       case 0:
-        return std::get<NodeIterator>(impl).isAtEnd();
+        return std::get<NodeIterator>(a.impl).isAtEnd();
       case 1:
-        return std::get<InstanceNodeIterator>(impl).isAtEnd();
+        return std::get<InstanceNodeIterator>(a.impl).isAtEnd();
       case 2:
-        return std::get<SubfieldNodeIterator>(impl).isAtEnd();
+        return std::get<SubfieldNodeIterator>(a.impl).isAtEnd();
       case 3:
-        return std::get<DummySourceNodeIterator>(impl).isAtEnd();
+        return std::get<DummySourceNodeIterator>(a.impl).isAtEnd();
       default:
         return llvm_unreachable("invalid iterator variant"), true;
       }
+    };
+
+    if (rhs.impl.index() == 0 &&
+        std::get<NodeIterator>(rhs.impl).isEndIterator())
+      return isAtEnd(*this, rhs);
     if (impl.index() == 0 && std::get<NodeIterator>(impl).isEndIterator())
-      switch (rhs.impl.index()) {
-      case 0:
-        return std::get<NodeIterator>(rhs.impl).isAtEnd();
-      case 1:
-        return std::get<InstanceNodeIterator>(rhs.impl).isAtEnd();
-      case 2:
-        return std::get<SubfieldNodeIterator>(rhs.impl).isAtEnd();
-      case 3:
-        return std::get<DummySourceNodeIterator>(rhs.impl).isAtEnd();
-      default:
-        return true;
-      }
+      return isAtEnd(rhs, *this);
     return impl == rhs.impl;
   }
   bool operator!=(const CombGraphIterator &rhs) const {
