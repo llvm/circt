@@ -1008,6 +1008,43 @@ hw.module @AnFSM(%clock : i1) {
   }
 }
 
+hw.type_scope @__AnFSMTypedecl {
+  hw.typedecl @_state : !hw.enum<A, B2, C>
+}
+
+// CHECK:       typedef enum {_state_A, _state_B2, _state_C} _state;
+// CHECK-LABEL: module AnFSMTypedecl
+// CHECK:         _state reg_0;
+// CHECK:         always @(posedge clock) begin
+// CHECK:           case (reg_0)
+// CHECK:             _state_A:
+// CHECK:               reg_0 <= _state_B2;
+// CHECK:             _state_B2:
+// CHECK:               reg_0 <= _state_C;
+// CHECK:             default:
+// CHECK:               reg_0 <= _state_A;
+// CHECK:           endcase
+// CHECK:         end
+
+// sv.case with typedecl'd enum fields. B -> B2 to avoid aliasing with the prior
+// test (this would cause the emitter to also prefix the enum values of the 
+// prior test since both hw.module's are within the same top-level module).
+hw.module @AnFSMTypedecl(%clock : i1) {
+  %reg = sv.reg : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state,!hw.enum<A, B2, C>>>
+  %reg_read = sv.read_inout %reg : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state,!hw.enum<A, B2, C>>>
+  
+  %A = hw.enum.constant A : !hw.typealias<@__AnFSMTypedecl::@_state,!hw.enum<A, B2, C>>
+  %B = hw.enum.constant B2 : !hw.typealias<@__AnFSMTypedecl::@_state,!hw.enum<A, B2, C>>
+  %C = hw.enum.constant C : !hw.typealias<@__AnFSMTypedecl::@_state,!hw.enum<A, B2, C>>
+
+  sv.always posedge %clock {
+    sv.case case %reg_read : !hw.typealias<@__AnFSMTypedecl::@_state,!hw.enum<A, B2, C>>
+      case A : { sv.passign %reg, %B : !hw.typealias<@__AnFSMTypedecl::@_state,!hw.enum<A, B2, C>> }
+       case B2 : { sv.passign %reg, %C : !hw.typealias<@__AnFSMTypedecl::@_state,!hw.enum<A, B2, C>> }
+      default : { sv.passign %reg, %A : !hw.typealias<@__AnFSMTypedecl::@_state,!hw.enum<A, B2, C>> }
+  }
+}
+
 // Constants defined after use in non-procedural regions should be moved to the
 // top of the block.
 // CHECK-LABEL: module ConstantDefAfterUse

@@ -238,6 +238,14 @@ struct SharedEmitterState {
   // Emitter options extracted from the top-level module.
   const LoweringOptions &options;
 
+  /// This keeps track of prefixes assigned to enum field values.
+  DenseMap<hw::EnumType, StringAttr> enumPrefixes;
+
+  /// Returns the field name for an enum field of a given enum field attr. In
+  /// case a prefix exists for the provided enum type, the prefix will be
+  /// applied. If not, the raw field name is returned.
+  std::string getEnumFieldName(hw::EnumFieldAttr attr) const;
+
   /// This is a set is populated at "gather" time, containing the hw.module
   /// operations that have a sv.bind in them.
   SmallPtrSet<Operation *, 8> modulesContainingBinds;
@@ -246,8 +254,9 @@ struct SharedEmitterState {
   const GlobalNameTable globalNames;
 
   explicit SharedEmitterState(ModuleOp designOp, const LoweringOptions &options,
-                              GlobalNameTable globalNames)
-      : designOp(designOp), options(options),
+                              GlobalNameTable globalNames,
+                              DenseMap<hw::EnumType, StringAttr> enumPrefixes)
+      : designOp(designOp), options(options), enumPrefixes(enumPrefixes),
         globalNames(std::move(globalNames)) {}
   void gatherFiles(bool separateModules);
 

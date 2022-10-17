@@ -227,6 +227,25 @@ StringRef getPortVerilogName(Operation *module, PortInfo port) {
                               : port.argNum);
 }
 
+// Gathers prefixes of enum types by investigating typescopes in the module.
+static DenseMap<hw::EnumType, StringAttr>
+gatherEnumPrefixes(mlir::ModuleOp module) {
+  auto *ctx = module.getContext();
+  DenseMap<hw::EnumType, StringAttr> enumPrefixes;
+  for (auto typeScope : module.getOps<hw::TypeScopeOp>()) {
+    for (auto typeDecl : typeScope.getOps<hw::TypedeclOp>()) {
+      auto enumType =
+          getCanonicalType(typeDecl.getType()).dyn_cast<hw::EnumType>();
+      if (!enumType)
+        continue;
+
+      enumPrefixes[enumType] =
+          StringAttr::get(ctx, typeDecl.getSymNameAttr().strref());
+    }
+  }
+  return enumPrefixes;
+}
+
 /// This predicate returns true if the specified operation is considered a
 /// potentially inlinable Verilog expression.  These nodes always have a single
 /// result, but may have side effects (e.g. `sv.verbatim.expr.se`).
@@ -1282,10 +1301,12 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
       })
       .Case<EnumType>([&](EnumType enumType) {
         os << "enum {";
-        llvm::interleaveComma(enumType.getFields(), os,
-                              [&](Attribute enumerator) {
-                                os << enumerator.cast<StringAttr>().getValue();
-                              });
+        llvm::interleaveComma(
+            enumType.getFields().getAsRange<StringAttr>(), os,
+            [&](auto enumerator) {
+              os << emitter.state.shared.getEnumFieldName(
+                  hw::EnumFieldAttr::get(loc, enumerator, enumType));
+            });
         os << "}";
         return true;
       })
@@ -1300,7 +1321,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         for (auto &element : structType.getElements()) {
           SmallVector<Attribute, 8> structDims;
           printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
-                              structDims, /*implicitIntType=*/false,
+                              structDims,
+                              /*implicitIntType=*/false,
                               /*singleBitDefaultType=*/true, emitter);
           os << ' ' << emitter.getVerilogStructFieldName(element.name);
           emitter.printUnpackedTypePostfix(element.type, os);
@@ -2424,7 +2446,7 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(EnumConstantOp op) {
-  os << op.getField().getField().getValue();
+  os << state.shared.getEnumFieldName(op.getField());
   return {Selection, IsUnsigned};
 }
 
@@ -3621,8 +3643,10 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
           for (size_t bit = 0, e = bitPattern->getWidth(); bit != e; ++bit)
             os << getLetter(bitPattern->getBit(e - bit - 1));
         })
-        .Case<CaseEnumPattern>(
-            [&](auto enumPattern) { indent() << enumPattern->getFieldValue(); })
+        .Case<CaseEnumPattern>([&](auto enumPattern) {
+          indent() << state.shared.getEnumFieldName(
+              enumPattern->attr().template cast<hw::EnumFieldAttr>());
+        })
         .Case<CaseDefaultPattern>([&](auto) { indent() << "default"; })
         .Default([&](auto) { assert(false && "unhandled case pattern"); });
 
@@ -4847,6 +4871,16 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   symbolCache.freeze();
 }
 
+std::string SharedEmitterState::getEnumFieldName(hw::EnumFieldAttr attr) const {
+  auto fieldName = attr.getField().strref();
+  auto prefixIt = enumPrefixes.find(
+      getCanonicalType(attr.getType().getValue()).cast<hw::EnumType>());
+  if (prefixIt != enumPrefixes.end())
+    return (prefixIt->second.strref() + "_" + fieldName).str();
+
+  return fieldName.str();
+}
+
 /// Given a FileInfo, collect all the replicated and designated operations
 /// that go into it and append them to "thingsToEmit".
 void SharedEmitterState::collectOpsForFile(const FileInfo &file,
@@ -4983,9 +5017,11 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 
 static LogicalResult exportVerilogImpl(ModuleOp module, llvm::raw_ostream &os) {
   GlobalNameTable globalNames = legalizeGlobalNames(module);
+  DenseMap<hw::EnumType, StringAttr> enumPrefixes = gatherEnumPrefixes(module);
 
   LoweringOptions options(module);
-  SharedEmitterState emitter(module, options, std::move(globalNames));
+  SharedEmitterState emitter(module, options, std::move(globalNames),
+                             enumPrefixes);
   emitter.gatherFiles(false);
 
   if (emitter.options.emitReplicatedOpsToHeader)
@@ -5115,8 +5151,10 @@ static LogicalResult exportSplitVerilogImpl(ModuleOp module,
   // end up in the output.
   LoweringOptions options(module);
   GlobalNameTable globalNames = legalizeGlobalNames(module);
+  DenseMap<hw::EnumType, StringAttr> enumPrefixes = gatherEnumPrefixes(module);
 
-  SharedEmitterState emitter(module, options, std::move(globalNames));
+  SharedEmitterState emitter(module, options, std::move(globalNames),
+                             enumPrefixes);
   emitter.gatherFiles(true);
 
   if (emitter.options.emitReplicatedOpsToHeader) {
