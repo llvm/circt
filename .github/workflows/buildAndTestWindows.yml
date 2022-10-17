@@ -42,7 +42,7 @@ jobs:
           path: |
             llvm/build/bin/llvm-lit.py
             llvm/install
-          key: ${{ runner.os }}-llvm-relobj-${{ steps.get-llvm-hash.outputs.hash }}
+          key: ${{ runner.os }}-llvm-linkpool-${{ steps.get-llvm-hash.outputs.hash }}
 
       # Build LLVM if we didn't hit in the cache. Even though we build it in
       # the previous job, there is a low chance that it'll have been evicted by
@@ -58,7 +58,8 @@ jobs:
             -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_BUILD_EXAMPLES=OFF `
             -DLLVM_TARGETS_TO_BUILD="host" `
             -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLVM_ENABLE_ASSERTIONS=ON `
-            -DLLVM_INSTALL_UTILS=ON -DCMAKE_INSTALL_PREFIX="$(pwd)/../install"
+            -DLLVM_INSTALL_UTILS=ON -DCMAKE_INSTALL_PREFIX="$(pwd)/../install" `
+            -DLLVM_PARALLEL_LINK_JOBS=1
           cmake --build . --target install --config RelWithDebInfo
 
       # --------
