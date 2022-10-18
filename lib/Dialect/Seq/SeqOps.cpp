@@ -298,6 +298,12 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
   // canonicalization to the folder.
   if (op.getNext() == op.getResult() ||
       op.getClk().getDefiningOp<hw::ConstantOp>()) {
+    // If the register has a reset value, we can replace it with that.
+    if (auto resetValue = op.getResetValue()) {
+      rewriter.replaceOp(op, resetValue);
+      return success();
+    }
+
     auto constant = rewriter.create<hw::ConstantOp>(
         op.getLoc(), APInt::getZero(hw::getBitWidth(op.getType())));
     rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, op.getType(), constant);
