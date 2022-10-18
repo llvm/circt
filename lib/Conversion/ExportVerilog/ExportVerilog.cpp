@@ -227,24 +227,6 @@ StringRef getPortVerilogName(Operation *module, PortInfo port) {
                               : port.argNum);
 }
 
-// Gathers prefixes of enum types by investigating typescopes in the module.
-static void gatherEnumPrefixes(mlir::ModuleOp module,
-                               DenseMap<Type, StringAttr> &enumPrefixes) {
-  auto *ctx = module.getContext();
-  for (auto typeScope : module.getOps<hw::TypeScopeOp>()) {
-    for (auto typeDecl : typeScope.getOps<hw::TypedeclOp>()) {
-      auto enumType = typeDecl.getType().dyn_cast<hw::EnumType>();
-      if (!enumType)
-        continue;
-
-      // Register the enum type as the alias type of the typedecl, since this is
-      // how users will request the prefix.
-      enumPrefixes[typeDecl.getAliasType()] =
-          StringAttr::get(ctx, typeDecl.getPreferredName());
-    }
-  }
-}
-
 /// This predicate returns true if the specified operation is considered a
 /// potentially inlinable Verilog expression.  These nodes always have a single
 /// result, but may have side effects (e.g. `sv.verbatim.expr.se`).
@@ -1133,7 +1115,9 @@ namespace {
 
 class ModuleEmitter : public EmitterBase {
 public:
-  explicit ModuleEmitter(VerilogEmitterState &state) : EmitterBase(state) {}
+  explicit ModuleEmitter(VerilogEmitterState &state)
+      : EmitterBase(state),
+        fieldNameResolver(FieldNameResolver(state.globalNames)) {}
 
   void emitHWModule(HWModuleOp module);
   void emitHWExternModule(HWModuleExternOp module);
@@ -1309,7 +1293,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         llvm::interleaveComma(
             enumType.getFields().getAsRange<StringAttr>(), os,
             [&](auto enumerator) {
-              os << emitter.state.shared.getEnumFieldName(
+              os << emitter.fieldNameResolver.getEnumFieldName(
                   hw::EnumFieldAttr::get(loc, enumerator, enumPrefixType));
             });
         os << "}";
@@ -2452,7 +2436,7 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(EnumConstantOp op) {
-  os << state.shared.getEnumFieldName(op.getField());
+  os << emitter.fieldNameResolver.getEnumFieldName(op.getField());
   return {Selection, IsUnsigned};
 }
 
@@ -3650,7 +3634,7 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
             os << getLetter(bitPattern->getBit(e - bit - 1));
         })
         .Case<CaseEnumPattern>([&](auto enumPattern) {
-          indent() << state.shared.getEnumFieldName(
+          indent() << emitter.fieldNameResolver.getEnumFieldName(
               enumPattern->attr().template cast<hw::EnumFieldAttr>());
         })
         .Case<CaseDefaultPattern>([&](auto) { indent() << "default"; })
@@ -4539,7 +4523,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
         }
 
       printPackedType(type, sstream, module->getLoc(),
-                      /*optionalPackedType=*/Type(),
+                      /*optionalAliasType=*/Type(),
                       /*implicitIntType=*/true,
                       // Print single-bit values as explicit `[0:0]` type.
                       /*singleBitDefaultType=*/false);
@@ -4878,15 +4862,6 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   symbolCache.freeze();
 }
 
-std::string SharedEmitterState::getEnumFieldName(hw::EnumFieldAttr attr) const {
-  auto fieldName = attr.getField().strref();
-  auto prefixIt = enumPrefixes.find(attr.getType().getValue());
-  if (prefixIt != enumPrefixes.end())
-    return (prefixIt->second.strref() + "_" + fieldName).str();
-
-  return fieldName.str();
-}
-
 /// Given a FileInfo, collect all the replicated and designated operations
 /// that go into it and append them to "thingsToEmit".
 void SharedEmitterState::collectOpsForFile(const FileInfo &file,
@@ -5023,12 +4998,9 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 
 static LogicalResult exportVerilogImpl(ModuleOp module, llvm::raw_ostream &os) {
   GlobalNameTable globalNames = legalizeGlobalNames(module);
-  DenseMap<Type, StringAttr> enumPrefixes;
-  gatherEnumPrefixes(module, enumPrefixes);
 
   LoweringOptions options(module);
-  SharedEmitterState emitter(module, options, std::move(globalNames),
-                             enumPrefixes);
+  SharedEmitterState emitter(module, options, std::move(globalNames));
   emitter.gatherFiles(false);
 
   if (emitter.options.emitReplicatedOpsToHeader)
@@ -5158,11 +5130,8 @@ static LogicalResult exportSplitVerilogImpl(ModuleOp module,
   // end up in the output.
   LoweringOptions options(module);
   GlobalNameTable globalNames = legalizeGlobalNames(module);
-  DenseMap<Type, StringAttr> enumPrefixes;
-  gatherEnumPrefixes(module, enumPrefixes);
 
-  SharedEmitterState emitter(module, options, std::move(globalNames),
-                             enumPrefixes);
+  SharedEmitterState emitter(module, options, std::move(globalNames));
   emitter.gatherFiles(true);
 
   if (emitter.options.emitReplicatedOpsToHeader) {

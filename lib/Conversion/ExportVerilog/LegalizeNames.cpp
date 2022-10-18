@@ -74,6 +74,20 @@ StringAttr FieldNameResolver::getRenamedFieldName(StringAttr fieldName) {
   return newFieldNameAttr;
 }
 
+std::string FieldNameResolver::getEnumFieldName(hw::EnumFieldAttr attr) {
+  auto aliasType = attr.getType().getValue().dyn_cast<hw::TypeAliasType>();
+  if (!aliasType)
+    return attr.getField().getValue().str();
+
+  auto fieldStr = attr.getField().getValue().str();
+  auto prefix = globalNames.getEnumPrefix(aliasType);
+  if (prefix.has_value())
+    return (prefix->getValue() + "_" + fieldStr).str();
+
+  // No prefix registered, just use the bare field name.
+  return fieldStr;
+}
+
 //===----------------------------------------------------------------------===//
 // GlobalNameResolver
 //===----------------------------------------------------------------------===//
@@ -100,6 +114,9 @@ private:
   /// globalNameTable.
   void legalizeModuleNames(HWModuleOp module);
   void legalizeInterfaceNames(InterfaceOp interface);
+
+  // Gathers prefixes of enum types by inspecting typescopes in the module.
+  void gatherEnumPrefixes(mlir::ModuleOp topLevel);
 
   /// Set of globally visible names, to ensure uniqueness.
   NameCollisionResolver globalNameResolver;
@@ -144,6 +161,26 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
     if (auto interface = dyn_cast<InterfaceOp>(op)) {
       legalizeInterfaceNames(interface);
       continue;
+    }
+  }
+
+  // Gather enum prefixes.
+  gatherEnumPrefixes(topLevel);
+}
+
+// Gathers prefixes of enum types by investigating typescopes in the module.
+void GlobalNameResolver::gatherEnumPrefixes(mlir::ModuleOp topLevel) {
+  auto *ctx = topLevel.getContext();
+  for (auto typeScope : topLevel.getOps<hw::TypeScopeOp>()) {
+    for (auto typeDecl : typeScope.getOps<hw::TypedeclOp>()) {
+      auto enumType = typeDecl.getType().dyn_cast<hw::EnumType>();
+      if (!enumType)
+        continue;
+
+      // Register the enum type as the alias type of the typedecl, since this is
+      // how users will request the prefix.
+      globalNameTable.enumPrefixes[typeDecl.getAliasType()] =
+          StringAttr::get(ctx, typeDecl.getPreferredName());
     }
   }
 }

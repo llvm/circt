@@ -54,6 +54,12 @@ struct GlobalNameTable {
     return (it != renamedParams.end() ? it->second : paramName).getValue();
   }
 
+  std::optional<StringAttr> getEnumPrefix(Type type) const {
+    auto it = enumPrefixes.find(type);
+    return it != enumPrefixes.end() ? std::make_optional(it->second)
+                                    : std::nullopt;
+  }
+
 private:
   friend class GlobalNameResolver;
   GlobalNameTable() {}
@@ -69,6 +75,10 @@ private:
   /// This contains entries for any parameters that got renamed.  The key is a
   /// moduleop/paramName tuple, the value is the name to use.
   DenseMap<std::pair<Operation *, Attribute>, StringAttr> renamedParams;
+
+  // This contains prefixes for any typedecl'd enum types. Keys are type-aliases
+  // of enum types.
+  DenseMap<Type, StringAttr> enumPrefixes;
 };
 
 //===----------------------------------------------------------------------===//
@@ -104,9 +114,16 @@ private:
 //===----------------------------------------------------------------------===//
 
 struct FieldNameResolver {
-  FieldNameResolver() = default;
+  FieldNameResolver(const GlobalNameTable &globalNames)
+      : globalNames(globalNames){};
 
   StringAttr getRenamedFieldName(StringAttr fieldName);
+
+  /// Returns the field name for an enum field of a given enum field attr. In
+  /// case a prefix can be inferred for the provided enum type (the enum type is
+  /// a type alias), the prefix will be applied. If not, the raw field name
+  /// is returned.
+  std::string getEnumFieldName(hw::EnumFieldAttr attr);
 
 private:
   void setRenamedFieldName(StringAttr fieldName, StringAttr newFieldName);
@@ -122,6 +139,9 @@ private:
 
   /// Numeric suffix used as uniquification agent when resolving conflicts.
   size_t nextGeneratedNameID = 0;
+
+  // Handle to the global name table.
+  const GlobalNameTable &globalNames;
 };
 
 //===----------------------------------------------------------------------===//
@@ -238,16 +258,6 @@ struct SharedEmitterState {
   // Emitter options extracted from the top-level module.
   const LoweringOptions &options;
 
-  /// This keeps track of prefixes assigned to enum types. The key may be any
-  /// type - this implies that enum types which alias in their fields, but have
-  /// been typedecl'd to different names may be assigned different prefixes.
-  DenseMap<Type, StringAttr> enumPrefixes;
-
-  /// Returns the field name for an enum field of a given enum field attr. In
-  /// case a prefix exists for the provided enum type, the prefix will be
-  /// applied. If not, the raw field name is returned.
-  std::string getEnumFieldName(hw::EnumFieldAttr attr) const;
-
   /// This is a set is populated at "gather" time, containing the hw.module
   /// operations that have a sv.bind in them.
   SmallPtrSet<Operation *, 8> modulesContainingBinds;
@@ -256,9 +266,8 @@ struct SharedEmitterState {
   const GlobalNameTable globalNames;
 
   explicit SharedEmitterState(ModuleOp designOp, const LoweringOptions &options,
-                              GlobalNameTable globalNames,
-                              DenseMap<Type, StringAttr> enumPrefixes)
-      : designOp(designOp), options(options), enumPrefixes(enumPrefixes),
+                              GlobalNameTable globalNames)
+      : designOp(designOp), options(options),
         globalNames(std::move(globalNames)) {}
   void gatherFiles(bool separateModules);
 
