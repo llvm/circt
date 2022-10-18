@@ -2581,6 +2581,14 @@ StringRef TypedeclOp::getPreferredName() {
   return getVerilogName().value_or(getName());
 }
 
+Type TypedeclOp::getAliasType() {
+  auto parentScope = cast<hw::TypeScopeOp>(getOperation()->getParentOp());
+  return hw::TypeAliasType::get(
+      SymbolRefAttr::get(parentScope.getSymNameAttr(),
+                         {FlatSymbolRefAttr::get(*this)}),
+      getType());
+}
+
 //===----------------------------------------------------------------------===//
 // BitcastOp
 //===----------------------------------------------------------------------===//

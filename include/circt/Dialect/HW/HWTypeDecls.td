@@ -48,5 +48,8 @@ def TypedeclOp : HWOp<"typedecl", [Symbol, HasParent<"TypeScopeOp">]> {
 
   let extraClassDeclaration = [{
     StringRef getPreferredName();
+
+    // Returns the type alias type which this typedecl op defines.
+    Type getAliasType();
   }];
 }

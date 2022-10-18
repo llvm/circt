@@ -835,7 +835,7 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
                << enumType;
       casePatterns.push_back(
           hw::EnumFieldAttr::get(parser.getEncodedSourceLoc(loc),
-                                 builder.getStringAttr(caseVal), enumType));
+                                 builder.getStringAttr(caseVal), condType));
     } else {
       // Parse the pattern.  It always starts with b, so it is an MLIR
       // keyword.

@@ -1115,7 +1115,9 @@ namespace {
 
 class ModuleEmitter : public EmitterBase {
 public:
-  explicit ModuleEmitter(VerilogEmitterState &state) : EmitterBase(state) {}
+  explicit ModuleEmitter(VerilogEmitterState &state)
+      : EmitterBase(state),
+        fieldNameResolver(FieldNameResolver(state.globalNames)) {}
 
   void emitHWModule(HWModuleOp module);
   void emitHWExternModule(HWModuleExternOp module);
@@ -1142,6 +1144,8 @@ public:
 
   /// Print the specified packed portion of the type to the specified stream,
   ///
+  ///  * 'optionalAliasType' can be provided to perform any alias-aware printing
+  ///    of the inner type.
   ///  * When `implicitIntType` is false, a "logic" is printed.  This is used in
   ///        struct fields and typedefs.
   ///  * When `singleBitDefaultType` is false, single bit values are printed as
@@ -1149,7 +1153,7 @@ public:
   ///
   /// This returns true if anything was printed.
   bool printPackedType(Type type, raw_ostream &os, Location loc,
-                       bool implicitIntType = true,
+                       Type optionalAliasType = {}, bool implicitIntType = true,
                        bool singleBitDefaultType = true);
 
   /// Output the unpacked array dimensions.  This is the part of the type that
@@ -1238,12 +1242,15 @@ void ModuleEmitter::emitTypeDims(Type type, Location loc, raw_ostream &os) {
 /// those to the left of the name in verilog. implicitIntType controls whether
 /// to print a base type for (logic) for inteters or whether the caller will
 /// have handled this (with logic, wire, reg, etc).
+/// optionalAliasType can be provided to perform any necessary alias-aware
+/// printing of 'type'.
 ///
 /// Returns true when anything was printed out.
 static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                 SmallVectorImpl<Attribute> &dims,
                                 bool implicitIntType, bool singleBitDefaultType,
-                                ModuleEmitter &emitter) {
+                                ModuleEmitter &emitter,
+                                Type optionalAliasType = {}) {
   return TypeSwitch<Type, bool>(type)
       .Case<IntegerType>([&](IntegerType integerType) {
         if (!implicitIntType)
@@ -1277,10 +1284,13 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
       })
       .Case<EnumType>([&](EnumType enumType) {
         os << "enum {";
-        llvm::interleaveComma(enumType.getFields(), os,
-                              [&](Attribute enumerator) {
-                                os << enumerator.cast<StringAttr>().getValue();
-                              });
+        Type enumPrefixType = optionalAliasType ? optionalAliasType : enumType;
+        llvm::interleaveComma(
+            enumType.getFields().getAsRange<StringAttr>(), os,
+            [&](auto enumerator) {
+              os << emitter.fieldNameResolver.getEnumFieldName(
+                  hw::EnumFieldAttr::get(loc, enumerator, enumPrefixType));
+            });
         os << "}";
         return true;
       })
@@ -1295,7 +1305,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         for (auto &element : structType.getElements()) {
           SmallVector<Attribute, 8> structDims;
           printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
-                              structDims, /*implicitIntType=*/false,
+                              structDims,
+                              /*implicitIntType=*/false,
                               /*singleBitDefaultType=*/true, emitter);
           os << ' ' << emitter.getVerilogStructFieldName(element.name);
           emitter.printUnpackedTypePostfix(element.type, os);
@@ -1344,11 +1355,12 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
 ///
 /// This returns true if anything was printed.
 bool ModuleEmitter::printPackedType(Type type, raw_ostream &os, Location loc,
+                                    Type optionalAliasType,
                                     bool implicitIntType,
                                     bool singleBitDefaultType) {
   SmallVector<Attribute, 8> packedDimensions;
   return printPackedTypeImpl(type, os, loc, packedDimensions, implicitIntType,
-                             singleBitDefaultType, *this);
+                             singleBitDefaultType, *this, optionalAliasType);
 }
 
 /// Output the unpacked array dimensions.  This is the part of the type that is
@@ -2413,7 +2425,7 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(EnumConstantOp op) {
-  os << op.getField().getField().getValue();
+  os << emitter.fieldNameResolver.getEnumFieldName(op.getField());
   return {Selection, IsUnsigned};
 }
 
@@ -2881,7 +2893,7 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
 
   os << "typedef ";
   emitter.printPackedType(stripUnpackedTypes(op.getType()), os, op.getLoc(),
-                          false);
+                          op.getAliasType(), false);
   os << ' ' << op.getPreferredName();
   emitter.printUnpackedTypePostfix(op.getType(), os);
   os << ";\n";
@@ -3518,8 +3530,10 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
           for (size_t bit = 0, e = bitPattern->getWidth(); bit != e; ++bit)
             os << getLetter(bitPattern->getBit(e - bit - 1));
         })
-        .Case<CaseEnumPattern>(
-            [&](auto enumPattern) { indent() << enumPattern->getFieldValue(); })
+        .Case<CaseEnumPattern>([&](auto enumPattern) {
+          indent() << emitter.fieldNameResolver.getEnumFieldName(
+              enumPattern->attr().template cast<hw::EnumFieldAttr>());
+        })
         .Case<CaseDefaultPattern>([&](auto) { indent() << "default"; })
         .Default([&](auto) { assert(false && "unhandled case pattern"); });
 
@@ -3724,7 +3738,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
   if (isZeroBitType(op.getType()))
     os << "// ";
   emitter.printPackedType(stripUnpackedTypes(op.getType()), os, op->getLoc(),
-                          false);
+                          Type(), false);
   os << ' ' << getSymOpName(op);
   emitter.printUnpackedTypePostfix(op.getType(), os);
   os << ";\n";
@@ -4275,6 +4289,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
         }
 
       printPackedType(type, sstream, module->getLoc(),
+                      /*optionalAliasType=*/Type(),
                       /*implicitIntType=*/true,
                       // Print single-bit values as explicit `[0:0]` type.
                       /*singleBitDefaultType=*/false);

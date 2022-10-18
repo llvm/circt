@@ -54,6 +54,11 @@ struct GlobalNameTable {
     return (it != renamedParams.end() ? it->second : paramName).getValue();
   }
 
+  StringAttr getEnumPrefix(Type type) const {
+    auto it = enumPrefixes.find(type);
+    return it != enumPrefixes.end() ? it->second : StringAttr();
+  }
+
 private:
   friend class GlobalNameResolver;
   GlobalNameTable() {}
@@ -69,6 +74,10 @@ private:
   /// This contains entries for any parameters that got renamed.  The key is a
   /// moduleop/paramName tuple, the value is the name to use.
   DenseMap<std::pair<Operation *, Attribute>, StringAttr> renamedParams;
+
+  // This contains prefixes for any typedecl'd enum types. Keys are type-aliases
+  // of enum types.
+  DenseMap<Type, StringAttr> enumPrefixes;
 };
 
 //===----------------------------------------------------------------------===//
@@ -104,9 +113,16 @@ private:
 //===----------------------------------------------------------------------===//
 
 struct FieldNameResolver {
-  FieldNameResolver() = default;
+  FieldNameResolver(const GlobalNameTable &globalNames)
+      : globalNames(globalNames){};
 
   StringAttr getRenamedFieldName(StringAttr fieldName);
+
+  /// Returns the field name for an enum field of a given enum field attr. In
+  /// case a prefix can be inferred for the provided enum type (the enum type is
+  /// a type alias), the prefix will be applied. If not, the raw field name
+  /// is returned.
+  std::string getEnumFieldName(hw::EnumFieldAttr attr);
 
 private:
   void setRenamedFieldName(StringAttr fieldName, StringAttr newFieldName);
@@ -122,6 +138,9 @@ private:
 
   /// Numeric suffix used as uniquification agent when resolving conflicts.
   size_t nextGeneratedNameID = 0;
+
+  // Handle to the global name table.
+  const GlobalNameTable &globalNames;
 };
 
 //===----------------------------------------------------------------------===//
