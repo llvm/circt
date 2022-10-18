@@ -229,3 +229,26 @@ hw.module @CaseEnum() {
       sv.fwrite %fd, "x"
     }
 }
+
+// -----
+
+hw.module @simple(%arg: i16) {
+  %c2 = hw.constant 2 : i16
+  // expected-error @+1 {{Must have pairs of arguments}}
+  %xx1 = sv.inside %arg (%c2) : (i16) -> i16
+}
+
+// -----
+
+hw.module @simple(%arg: i15) {
+  %c2 = hw.constant 2 : i16
+  // expected-error @+1 {{op mismatch between set argument and test argument}}
+  %xx1 = sv.inside %arg (%c2, %c2) : (i16, i16) -> i15
+}
+
+// -----
+
+hw.module @simple(%arg: i15, %vals: !hw.uarray<3xi16>) {
+  // expected-error @+1 {{op mismatch between array argument and test argument}}
+  %xx1 = sv.inside %arg (%vals, %vals) : (!hw.uarray<3xi16>, !hw.uarray<3xi16>) -> i15
+}

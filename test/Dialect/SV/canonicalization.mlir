@@ -279,3 +279,25 @@ hw.module @case_stmt(%arg: i3) {
   }
 
   }
+
+// CHECK-LABEL: hw.module @can_or_inside
+hw.module @can_or_inside(%sel: i3) -> (y: i1) {
+  // CHECK: %0 = sv.inside %sel(%c2_i3, %c2_i3, %c1_i3, %c1_i3, %c0_i3, %c0_i3, %c3_i3, %c3_i3, %c-4_i3, %c-4_i3)
+  // CHECK-NEXT: hw.output %0
+  %c2_i2 = hw.constant 2 : i3
+  %0 = comb.icmp eq %sel, %c2_i2 : i3
+
+  %c1_i2 = hw.constant 1 : i3
+  %2 = comb.icmp eq %sel, %c1_i2 : i3
+
+  %c0_i2 = hw.constant 0 : i3
+  %4 = comb.icmp eq %sel, %c0_i2 : i3
+
+  %c3_i2 = hw.constant 3 : i3
+  %6 = comb.icmp eq %sel, %c3_i2 : i3
+  
+  %c4_i2 = hw.constant 4 : i3
+  %8 = comb.icmp eq %sel, %c4_i2 : i3
+  %9 = comb.or %0, %2, %4, %6, %8 : i1
+  hw.output %9 : i1
+}

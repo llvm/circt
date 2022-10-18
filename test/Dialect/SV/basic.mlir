@@ -352,3 +352,10 @@ hw.module @ordered_region(%a: i1) {
     }
   }
 }
+
+
+hw.module @simpleInside(%arg: i16, %vals: !hw.uarray<3xi16>) {
+  // expected-error @+1 {{op mismatch between array argument and test argument}}
+  %xx1 = sv.inside %arg (%vals, %vals) : (!hw.uarray<3xi16>, !hw.uarray<3xi16>) -> i16
+}
+

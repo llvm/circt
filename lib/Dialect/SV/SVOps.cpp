@@ -1021,6 +1021,31 @@ LogicalResult CaseOp::canonicalize(CaseOp op, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
+// SetInclusionOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SetInclusionOp::verify() {
+  auto p = getPairs();
+  if (p.size() % 2 != 0)
+    return emitOpError("Must have pairs of arguments");
+  Type t = getTest().getType();
+  for (size_t i = 0; i < p.size(); i += 2) {
+    if (t == p[i].getType() && t == p[i+1].getType())
+      continue;
+    if (p[i].getType() != p[i+1].getType())
+      return emitOpError("mismatch types in pair ") << p[i].getType() << " " << p[i + 1].getType();
+    // we know if the pair is an array, it doesn't match the test argument
+    if (auto uat = p[i].getType().dyn_cast<hw::UnpackedArrayType>()) {
+      if (uat.getElementType() != t)
+        return emitOpError("mismatch between array argument and test argument ") << uat.getElementType() << " " << t;
+      continue;
+    }
+    return emitOpError("mismatch between set argument and test argument ") << p[i].getType() << " " << t;
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // OrderedOutputOp
 //===----------------------------------------------------------------------===//
 

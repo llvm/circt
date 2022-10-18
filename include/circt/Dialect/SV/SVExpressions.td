@@ -183,15 +183,15 @@ def LocalParamOp : SVOp<"localparam",
 }
 
 def IndexedPartSelectOp
- : SVOp<"indexed_part_select",
-        [Pure, InferTypeOpInterface]> {
-  let summary = "Read several contiguous bits of an int type."
-                "This is an indexed part-select operator."
-                "The base is an integer expression and the width is an "
-                " integer constant. The bits start from base and the number "
-                "of bits selected is equal to width. If $decrement is true, "
-                " then part select decrements starting from $base."
-                "See SV Spec 11.5.1.";
+ : SVOp<"indexed_part_select", [Pure, InferTypeOpInterface]> {
+  let summary = "Read several contiguous bits of an int type";
+  let description = [{
+    This is an indexed part-select operator.  The base is an integer expression 
+    and the width is an integer constant. The bits start from base and the 
+    number of bits selected is equal to width. If $decrement is true, then part 
+    select decrements starting from $base.
+    See SV Spec 11.5.1.
+  }];
   let arguments = (ins HWIntegerType:$input, HWIntegerType:$base, I32Attr:$width,
                       UnitAttr:$decrement);
   let results = (outs HWIntegerType:$result);
@@ -220,10 +220,32 @@ def SampledOp : SVOp<"system.sampled", [SameOperandsAndResultType]> {
 
     A use of `$sampled` is to safely read the value of a net/variable in a
     concurrent assertion action block such that the value will be the same as
-    the value used when the assertion is triggered.  See Section 16.9.3 of the
-    SV 2017 specification for more information.
+    the value used when the assertion is triggered.
+    See Section 16.9.3 of the SV 2017 specification for more information.
   }];
   let arguments = (ins AnyType:$expression);
   let results = (outs AnyType:$sampledValue);
   let assemblyFormat = "$expression attr-dict `:` qualified(type($expression))";
+}
+
+def SetInclusionOp : SVOp<"inside", [Pure]> {
+  let summary = "Test for set inclusion";
+  let description = [{
+    The set inclusion operation tests if an argument is inside a set.  The set
+    can be any set of individual values or inclusive ranges.  If an element of
+    the set is an unpacked array, the elements of the array are considered part
+    of the set.  Some tools only support synthesis for this operation when all 
+    elements of the set are constants.  SV allows constants with wildcards.
+    See Section 11.4.13 of the SV 2017 specification for more information.
+
+    Elements are stored as inclusive ranges.  Singletons are stored as the
+    range <s, s>. 
+  }];
+  let arguments = (ins AnyType:$test, Variadic<AnyType>:$pairs);
+  let results = (outs I1:$result);
+
+  let hasVerifier = 1;
+  let hasCanonicalizeMethod = true;
+
+  let assemblyFormat = "$test `(` $pairs `)` attr-dict `:` functional-type($pairs, $test)";
 }

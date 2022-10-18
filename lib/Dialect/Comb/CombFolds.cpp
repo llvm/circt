@@ -9,6 +9,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/SetVector.h"
@@ -239,6 +240,7 @@ static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
   replaceOpAndCopyName(rewriter, op, newop);
   return true;
 }
+
 
 //===----------------------------------------------------------------------===//
 // Unary Operations
