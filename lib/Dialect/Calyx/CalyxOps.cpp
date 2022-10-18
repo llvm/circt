@@ -666,8 +666,9 @@ LogicalResult ComponentOp::verify() {
   if (std::distance(wIt.begin(), wIt.end()) +
           std::distance(cIt.begin(), cIt.end()) !=
       2)
-    return emitOpError(
-        "requires exactly one of each: 'calyx.wires', 'calyx.control'.");
+    return emitOpError() << "requires exactly one of each: '"
+                         << WiresOp::getOperationName() << "', '"
+                         << ControlOp::getOperationName() << "'.";
 
   if (failed(hasRequiredPorts(*this)))
     return failure();
@@ -758,12 +759,14 @@ LogicalResult CombComponentOp::verify() {
   // Verify there is exactly one wires operation.
   auto wIt = getBodyBlock()->getOps<WiresOp>();
   if (std::distance(wIt.begin(), wIt.end()) != 1)
-    return emitOpError("requires exactly one 'calyx.wires' op.");
+    return emitOpError() << "requires exactly one "
+                         << WiresOp::getOperationName() << " op.";
 
   // Verify there is not a control operation.
   auto cIt = getBodyBlock()->getOps<ControlOp>();
   if (std::distance(cIt.begin(), cIt.end()) != 0)
-    return emitOpError("requires no 'calyx.control' op.");
+    return emitOpError() << "requires exactly one `"
+                         << ControlOp::getOperationName() << "` op.";
 
   // Verify the component actually does something: has continuous assignments.
   bool hasNoAssignments =
