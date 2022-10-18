@@ -283,5 +283,5 @@ def MuxOp : CombOp<"mux",
     "(`bin` $twoState^)? $cond `,` $trueValue `,` $falseValue  attr-dict `:` qualified(type($result))";
 
   let hasFolder = true;
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
 }

@@ -1560,3 +1560,30 @@ hw.module @CreateOfSlices(%arr0: !hw.array<3xi1>, %arr1: !hw.array<5xi1>) -> (re
   hw.output %6 : !hw.array<6xi1>
 }
 
+// CHCEK-LABEL: @MuxOfArrays
+hw.module @MuxOfArrays(%cond: i1, %a0: i1, %a1: i1, %a2: i1, %b0: i1, %b1: i1, %b2: i1) -> (res: !hw.array<3xi1>) {
+  %mux0 = comb.mux %cond, %a0, %b0 : i1
+  %mux1 = comb.mux %cond, %a1, %b1 : i1
+  %mux2 = comb.mux %cond, %a2, %b2 : i1
+  %array = hw.array_create %mux2, %mux1, %mux0 : i1
+
+  // CHECK:      [[TRUE:%.+]] = hw.array_create %a2, %a1, %a0 : i1
+  // CHECK-NEXT: [[FALSE:%.+]] = hw.array_create %b2, %b1, %b0 : i1
+  // CHECK-NEXT: [[RESULT:%.+]] = comb.mux %cond, [[TRUE]], [[FALSE]] : !hw.array<3xi1>
+  // CHECK-NEXT: hw.output [[RESULT]] : !hw.array<3xi1>
+
+  hw.output %array : !hw.array<3xi1>
+}
+
+// CHCEK-LABEL: @MuxOfUniformArray
+hw.module @MuxOfUniformArray(%cond: i1, %a: i1, %b: i1) -> (res: !hw.array<3xi1>) {
+  %array_a = hw.array_create %a, %a, %a : i1
+  %array_b = hw.array_create %b, %b, %b : i1
+  %mux = comb.mux %cond, %array_a, %array_b : !hw.array<3xi1>
+
+  // CHECK:      [[MUX:%.+]] = comb.mux %cond, %a, %b : i1
+  // CHECK-NEXT: [[ARRAY:%.+]] = hw.array_create [[MUX]], [[MUX]], [[MUX]] : i1
+  // CHECK-NEXT: hw.output [[ARRAY]] : !hw.array<3xi1>
+
+  hw.output %mux : !hw.array<3xi1>
+}
