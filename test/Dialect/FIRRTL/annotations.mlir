@@ -1227,14 +1227,14 @@ firrtl.circuit "Sub"  attributes {
 
 firrtl.circuit "Top"  attributes {
   rawAnnotations = [
-  {class = "sifive.enterprise.grandcentral.ViewAnnotation", 
-  companion = "~Top|Companion", 
-  name = "MyView", 
-  parent = "~Top|DUT", 
-  view = {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "MyInterface", 
-  elements = [{ 
+  {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+  companion = "~Top|Companion",
+  name = "MyView",
+  parent = "~Top|DUT",
+  view = {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "MyInterface",
+  elements = [{
     name = "signed",
-    tpe = {class = "sifive.enterprise.grandcentral.AugmentedGroundType", 
+    tpe = {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
     ref = {circuit = "Top", component = [], module = "DUT", path = [], ref = "signed"},
     tpe = {class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"}
     }}]}}]} {
@@ -1278,13 +1278,13 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [{
   {description = "a vector called 'vec'", name = "vec",
   tpe = {class = "sifive.enterprise.grandcentral.AugmentedVectorType",
   elements = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-  ref = {circuit = "Top", component = 
+  ref = {circuit = "Top", component =
   [{class = "firrtl.annotations.TargetToken$Field", value = "vec"},
   {class = "firrtl.annotations.TargetToken$Index", value = 0 : i64}],
   module = "DUT", path = [], ref = "w"},
   tpe = {class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"}},
   {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-  ref = {circuit = "Top", 
+  ref = {circuit = "Top",
   component = [{class = "firrtl.annotations.TargetToken$Field", value = "vec"},
   {class = "firrtl.annotations.TargetToken$Index", value = 1 : i64}],
   module = "Submodule", path = [], ref = "w"},
@@ -1377,7 +1377,7 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [
   {
     class = "sifive.enterprise.grandcentral.DataTapsAnnotation",
     keys = [
-      { 
+      {
         class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey",
         internalPath = "random.something",
         module = "~Top|Bar",
@@ -1408,14 +1408,14 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [
 
 firrtl.circuit "Top"  attributes {
   rawAnnotations = [
-  {class = "sifive.enterprise.grandcentral.ViewAnnotation", 
-  companion = "~Top|Companion", 
-  name = "MyView", 
-  parent = "~Top|DUT", 
-  view = {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "MyInterface", 
-  elements = [{ 
+  {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+  companion = "~Top|Companion",
+  name = "MyView",
+  parent = "~Top|DUT",
+  view = {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "MyInterface",
+  elements = [{
     name = "signed",
-    tpe = {class = "sifive.enterprise.grandcentral.AugmentedGroundType", 
+    tpe = {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
     ref = {circuit = "Top", component = [], module = "Bar", path = [], ref = "signed"},
     tpe = {class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"}
     }}]}}]} {
