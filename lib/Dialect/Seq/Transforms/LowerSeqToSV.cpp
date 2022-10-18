@@ -118,15 +118,16 @@ private:
                     const std::function<void()> &trueSide,
                     const std::function<void()> &falseSide);
 
-  hw::ConstantOp getOrCreateConstant(const APInt &value) {
+  hw::ConstantOp getOrCreateConstant(Location loc, const APInt &value) {
     OpBuilder builder(module.getBody());
-    auto &it = constantCache[value];
-    if (it)
-      return it;
+    auto &constant = constantCache[value];
+    if (constant) {
+      constant->setLoc(builder.getFusedLoc(constant->getLoc(), loc));
+      return constant;
+    }
 
-    auto unknown = UnknownLoc::get(module.getContext());
-    it = builder.create<hw::ConstantOp>(unknown, value);
-    return it;
+    constant = builder.create<hw::ConstantOp>(loc, value);
+    return constant;
   }
 
   using AlwaysKeyType = std::tuple<Block *, sv::EventControl, Value, ResetType,
@@ -316,8 +317,10 @@ void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
            llvm::enumerate(llvm::reverse(array.getOperands()))) {
 
         // Create an index constant.
-        auto idxVal = getOrCreateConstant(APInt(
-            std::max(1u, llvm::Log2_64_Ceil(array.getOperands().size())), idx));
+        auto idxVal = getOrCreateConstant(
+            array.getLoc(),
+            APInt(std::max(1u, llvm::Log2_64_Ceil(array.getOperands().size())),
+                  idx));
 
         auto &index = arrayIndexCache[{reg, idx}];
         if (!index) {
