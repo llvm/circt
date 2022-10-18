@@ -326,6 +326,217 @@ static void eraseControlWithGroupAndConditional(OpTy op,
 }
 
 //===----------------------------------------------------------------------===//
+// ComponentInterface
+//===----------------------------------------------------------------------===//
+
+static void printComponentInterface(OpAsmPrinter &p, ComponentInterface comp) {
+  auto componentName = comp->template getAttrOfType<StringAttr>(
+                               ::mlir::SymbolTable::getSymbolAttrName())
+                           .getValue();
+  p << " ";
+  p.printSymbolName(componentName);
+
+  // Print the port definition list for input and output ports.
+  auto printPortDefList = [&](auto ports) {
+    p << "(";
+    llvm::interleaveComma(ports, p, [&](const PortInfo &port) {
+      p << "%" << port.name.getValue() << ": " << port.type;
+      if (!port.attributes.empty()) {
+        p << " ";
+        p.printAttributeWithoutType(port.attributes);
+      }
+    });
+    p << ")";
+  };
+  printPortDefList(comp.getInputPortInfo());
+  p << " -> ";
+  printPortDefList(comp.getOutputPortInfo());
+
+  p << " ";
+  p.printRegion(*comp.getRegion(), /*printEntryBlockArgs=*/false,
+                /*printBlockTerminators=*/false,
+                /*printEmptyBlock=*/false);
+
+  SmallVector<StringRef> elidedAttrs = {"portAttributes", "portNames",
+                                        "portDirections", "sym_name",
+                                        ComponentOp::getTypeAttrName()};
+  p.printOptionalAttrDict(comp->getAttrs(), elidedAttrs);
+}
+
+/// Parses the ports of a Calyx component signature, and adds the corresponding
+/// port names to `attrName`.
+static ParseResult
+parsePortDefList(OpAsmParser &parser, OperationState &result,
+                 SmallVectorImpl<OpAsmParser::Argument> &ports,
+                 SmallVectorImpl<Type> &portTypes,
+                 SmallVectorImpl<NamedAttrList> &portAttrs) {
+  auto parsePort = [&]() -> ParseResult {
+    OpAsmParser::Argument port;
+    Type portType;
+    // Expect each port to have the form `%<ssa-name> : <type>`.
+    if (parser.parseArgument(port) || parser.parseColon() ||
+        parser.parseType(portType))
+      return failure();
+    port.type = portType;
+    ports.push_back(port);
+    portTypes.push_back(portType);
+
+    NamedAttrList portAttr;
+    portAttrs.push_back(succeeded(parser.parseOptionalAttrDict(portAttr))
+                            ? portAttr
+                            : NamedAttrList());
+    return success();
+  };
+
+  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                        parsePort);
+}
+
+/// Parses the signature of a Calyx component.
+static ParseResult
+parseComponentSignature(OpAsmParser &parser, OperationState &result,
+                        SmallVectorImpl<OpAsmParser::Argument> &ports,
+                        SmallVectorImpl<Type> &portTypes) {
+  SmallVector<OpAsmParser::Argument> inPorts, outPorts;
+  SmallVector<Type> inPortTypes, outPortTypes;
+  SmallVector<NamedAttrList> portAttributes;
+
+  if (parsePortDefList(parser, result, inPorts, inPortTypes, portAttributes))
+    return failure();
+
+  if (parser.parseArrow() ||
+      parsePortDefList(parser, result, outPorts, outPortTypes, portAttributes))
+    return failure();
+
+  auto *context = parser.getBuilder().getContext();
+  // Add attribute for port names; these are currently
+  // just inferred from the SSA names of the component.
+  SmallVector<Attribute> portNames;
+  auto getPortName = [context](const auto &port) -> StringAttr {
+    StringRef name = port.ssaName.name;
+    if (name.startswith("%"))
+      name = name.drop_front();
+    return StringAttr::get(context, name);
+  };
+  llvm::transform(inPorts, std::back_inserter(portNames), getPortName);
+  llvm::transform(outPorts, std::back_inserter(portNames), getPortName);
+
+  result.addAttribute("portNames", ArrayAttr::get(context, portNames));
+  result.addAttribute(
+      "portDirections",
+      direction::packAttribute(context, inPorts.size(), outPorts.size()));
+
+  ports.append(inPorts);
+  ports.append(outPorts);
+  portTypes.append(inPortTypes);
+  portTypes.append(outPortTypes);
+
+  SmallVector<Attribute> portAttrs;
+  llvm::transform(portAttributes, std::back_inserter(portAttrs),
+                  [&](auto attr) { return attr.getDictionary(context); });
+  result.addAttribute("portAttributes", ArrayAttr::get(context, portAttrs));
+
+  return success();
+}
+
+static ParseResult parseComponentInterface(OpAsmParser &parser,
+                                           OperationState &result) {
+  using namespace mlir::function_interface_impl;
+
+  StringAttr componentName;
+  if (parser.parseSymbolName(componentName,
+                             ::mlir::SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  SmallVector<mlir::OpAsmParser::Argument> ports;
+
+  SmallVector<Type> portTypes;
+  if (parseComponentSignature(parser, result, ports, portTypes))
+    return failure();
+
+  // Build the component's type for FunctionLike trait. All ports are listed
+  // as arguments so they may be accessed within the component.
+  auto type = parser.getBuilder().getFunctionType(portTypes, /*results=*/{});
+  result.addAttribute(ComponentOp::getTypeAttrName(), TypeAttr::get(type));
+
+  auto *body = result.addRegion();
+  if (parser.parseRegion(*body, ports))
+    return failure();
+
+  if (body->empty())
+    body->push_back(new Block());
+
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  return success();
+}
+
+/// Returns a new vector containing the concatenation of vectors `a` and `b`.
+template <typename T>
+static SmallVector<T> concat(const SmallVectorImpl<T> &a,
+                             const SmallVectorImpl<T> &b) {
+  SmallVector<T> out;
+  out.append(a);
+  out.append(b);
+  return out;
+}
+
+static void buildComponentLike(OpBuilder &builder, OperationState &result,
+                               StringAttr name, ArrayRef<PortInfo> ports) {
+  using namespace mlir::function_interface_impl;
+
+  result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
+
+  std::pair<SmallVector<Type, 8>, SmallVector<Type, 8>> portIOTypes;
+  std::pair<SmallVector<Attribute, 8>, SmallVector<Attribute, 8>> portIONames;
+  std::pair<SmallVector<Attribute, 8>, SmallVector<Attribute, 8>>
+      portIOAttributes;
+  SmallVector<Direction, 8> portDirections;
+  // Avoid using llvm::partition or llvm::sort to preserve relative ordering
+  // between individual inputs and outputs.
+  for (auto &&port : ports) {
+    bool isInput = port.direction == Direction::Input;
+    (isInput ? portIOTypes.first : portIOTypes.second).push_back(port.type);
+    (isInput ? portIONames.first : portIONames.second).push_back(port.name);
+    (isInput ? portIOAttributes.first : portIOAttributes.second)
+        .push_back(port.attributes);
+  }
+  auto portTypes = concat(portIOTypes.first, portIOTypes.second);
+  auto portNames = concat(portIONames.first, portIONames.second);
+  auto portAttributes = concat(portIOAttributes.first, portIOAttributes.second);
+
+  // Build the function type of the component.
+  auto functionType = builder.getFunctionType(portTypes, {});
+  result.addAttribute(getTypeAttrName(), TypeAttr::get(functionType));
+
+  // Record the port names and number of input ports of the component.
+  result.addAttribute("portNames", builder.getArrayAttr(portNames));
+  result.addAttribute("portDirections",
+                      direction::packAttribute(builder.getContext(),
+                                               portIOTypes.first.size(),
+                                               portIOTypes.second.size()));
+  // Record the attributes of the ports.
+  result.addAttribute("portAttributes", builder.getArrayAttr(portAttributes));
+
+  // Create a single-blocked region.
+  Region *region = result.addRegion();
+  Block *body = new Block();
+  region->push_back(body);
+
+  // Add all ports to the body.
+  body->addArguments(portTypes, SmallVector<Location, 4>(
+                                    portTypes.size(), builder.getUnknownLoc()));
+
+  // Insert the WiresOp and ControlOp.
+  IRRewriter::InsertionGuard guard(builder);
+  builder.setInsertionPointToStart(body);
+  builder.create<WiresOp>(result.location);
+  builder.create<ControlOp>(result.location);
+}
+
+//===----------------------------------------------------------------------===//
 // ComponentOp
 //===----------------------------------------------------------------------===//
 
@@ -412,149 +623,10 @@ SmallVector<PortInfo> ComponentOp::getOutputPortInfo() {
       *this, [](const PortInfo &port) { return port.direction == Input; });
 }
 
-void ComponentOp::print(OpAsmPrinter &p) {
-  auto componentName =
-      (*this)
-          ->getAttrOfType<StringAttr>(::mlir::SymbolTable::getSymbolAttrName())
-          .getValue();
-  p << " ";
-  p.printSymbolName(componentName);
-
-  // Print the port definition list for input and output ports.
-  auto printPortDefList = [&](auto ports) {
-    p << "(";
-    llvm::interleaveComma(ports, p, [&](const PortInfo &port) {
-      p << "%" << port.name.getValue() << ": " << port.type;
-      if (!port.attributes.empty()) {
-        p << " ";
-        p.printAttributeWithoutType(port.attributes);
-      }
-    });
-    p << ")";
-  };
-  printPortDefList(getInputPortInfo());
-  p << " -> ";
-  printPortDefList(getOutputPortInfo());
-
-  p << " ";
-  p.printRegion(getBody(), /*printEntryBlockArgs=*/false,
-                /*printBlockTerminators=*/false,
-                /*printEmptyBlock=*/false);
-
-  SmallVector<StringRef> elidedAttrs = {"portAttributes", "portNames",
-                                        "portDirections", "sym_name",
-                                        ComponentOp::getTypeAttrName()};
-  p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
-}
-
-/// Parses the ports of a Calyx component signature, and adds the corresponding
-/// port names to `attrName`.
-static ParseResult
-parsePortDefList(OpAsmParser &parser, OperationState &result,
-                 SmallVectorImpl<OpAsmParser::Argument> &ports,
-                 SmallVectorImpl<Type> &portTypes,
-                 SmallVectorImpl<NamedAttrList> &portAttrs) {
-  auto parsePort = [&]() -> ParseResult {
-    OpAsmParser::Argument port;
-    Type portType;
-    // Expect each port to have the form `%<ssa-name> : <type>`.
-    if (parser.parseArgument(port) || parser.parseColon() ||
-        parser.parseType(portType))
-      return failure();
-    port.type = portType;
-    ports.push_back(port);
-    portTypes.push_back(portType);
-
-    NamedAttrList portAttr;
-    portAttrs.push_back(succeeded(parser.parseOptionalAttrDict(portAttr))
-                            ? portAttr
-                            : NamedAttrList());
-    return success();
-  };
-
-  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
-                                        parsePort);
-}
-
-/// Parses the signature of a Calyx component.
-static ParseResult
-parseComponentSignature(OpAsmParser &parser, OperationState &result,
-                        SmallVectorImpl<OpAsmParser::Argument> &ports,
-                        SmallVectorImpl<Type> &portTypes) {
-  SmallVector<OpAsmParser::Argument> inPorts, outPorts;
-  SmallVector<Type> inPortTypes, outPortTypes;
-  SmallVector<NamedAttrList> portAttributes;
-
-  if (parsePortDefList(parser, result, inPorts, inPortTypes, portAttributes))
-    return failure();
-
-  if (parser.parseArrow() ||
-      parsePortDefList(parser, result, outPorts, outPortTypes, portAttributes))
-    return failure();
-
-  auto *context = parser.getBuilder().getContext();
-  // Add attribute for port names; these are currently
-  // just inferred from the SSA names of the component.
-  SmallVector<Attribute> portNames;
-  auto getPortName = [context](const auto &port) -> StringAttr {
-    StringRef name = port.ssaName.name;
-    if (name.startswith("%"))
-      name = name.drop_front();
-    return StringAttr::get(context, name);
-  };
-  llvm::transform(inPorts, std::back_inserter(portNames), getPortName);
-  llvm::transform(outPorts, std::back_inserter(portNames), getPortName);
-
-  result.addAttribute("portNames", ArrayAttr::get(context, portNames));
-  result.addAttribute(
-      "portDirections",
-      direction::packAttribute(context, inPorts.size(), outPorts.size()));
-
-  ports.append(inPorts);
-  ports.append(outPorts);
-  portTypes.append(inPortTypes);
-  portTypes.append(outPortTypes);
-
-  SmallVector<Attribute> portAttrs;
-  llvm::transform(portAttributes, std::back_inserter(portAttrs),
-                  [&](auto attr) { return attr.getDictionary(context); });
-  result.addAttribute("portAttributes", ArrayAttr::get(context, portAttrs));
-
-  return success();
-}
+void ComponentOp::print(OpAsmPrinter &p) { printComponentInterface(p, *this); }
 
 ParseResult ComponentOp::parse(OpAsmParser &parser, OperationState &result) {
-  using namespace mlir::function_interface_impl;
-
-  StringAttr componentName;
-  if (parser.parseSymbolName(componentName,
-                             ::mlir::SymbolTable::getSymbolAttrName(),
-                             result.attributes))
-    return failure();
-
-  SmallVector<mlir::OpAsmParser::Argument> ports;
-
-  SmallVector<Type> portTypes;
-  if (parseComponentSignature(parser, result, ports, portTypes))
-    return failure();
-
-  // Build the component's type for FunctionLike trait. All ports are listed
-  // as arguments so they may be accessed within the component.
-  auto type =
-      parser.getBuilder().getFunctionType(portTypes, /*resultTypes=*/{});
-  result.addAttribute(ComponentOp::getTypeAttrName(), TypeAttr::get(type));
-
-  auto *body = result.addRegion();
-  if (parser.parseRegion(*body, ports))
-    return failure();
-
-  if (body->empty())
-    body->push_back(new Block());
-
-  if (parser.parseOptionalAttrDict(result.attributes))
-    return failure();
-
-  return success();
+  return parseComponentInterface(parser, result);
 }
 
 /// Determines whether the given ComponentOp has all the required ports.
@@ -615,67 +687,9 @@ LogicalResult ComponentOp::verify() {
   return success();
 }
 
-/// Returns a new vector containing the concatenation of vectors `a` and `b`.
-template <typename T>
-static SmallVector<T> concat(const SmallVectorImpl<T> &a,
-                             const SmallVectorImpl<T> &b) {
-  SmallVector<T> out;
-  out.append(a);
-  out.append(b);
-  return out;
-}
-
 void ComponentOp::build(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<PortInfo> ports) {
-  using namespace mlir::function_interface_impl;
-
-  result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
-
-  std::pair<SmallVector<Type, 8>, SmallVector<Type, 8>> portIOTypes;
-  std::pair<SmallVector<Attribute, 8>, SmallVector<Attribute, 8>> portIONames;
-  std::pair<SmallVector<Attribute, 8>, SmallVector<Attribute, 8>>
-      portIOAttributes;
-  SmallVector<Direction, 8> portDirections;
-  // Avoid using llvm::partition or llvm::sort to preserve relative ordering
-  // between individual inputs and outputs.
-  for (auto &&port : ports) {
-    bool isInput = port.direction == Direction::Input;
-    (isInput ? portIOTypes.first : portIOTypes.second).push_back(port.type);
-    (isInput ? portIONames.first : portIONames.second).push_back(port.name);
-    (isInput ? portIOAttributes.first : portIOAttributes.second)
-        .push_back(port.attributes);
-  }
-  auto portTypes = concat(portIOTypes.first, portIOTypes.second);
-  auto portNames = concat(portIONames.first, portIONames.second);
-  auto portAttributes = concat(portIOAttributes.first, portIOAttributes.second);
-
-  // Build the function type of the component.
-  auto functionType = builder.getFunctionType(portTypes, {});
-  result.addAttribute(getTypeAttrName(), TypeAttr::get(functionType));
-
-  // Record the port names and number of input ports of the component.
-  result.addAttribute("portNames", builder.getArrayAttr(portNames));
-  result.addAttribute("portDirections",
-                      direction::packAttribute(builder.getContext(),
-                                               portIOTypes.first.size(),
-                                               portIOTypes.second.size()));
-  // Record the attributes of the ports.
-  result.addAttribute("portAttributes", builder.getArrayAttr(portAttributes));
-
-  // Create a single-blocked region.
-  Region *region = result.addRegion();
-  Block *body = new Block();
-  region->push_back(body);
-
-  // Add all ports to the body.
-  body->addArguments(portTypes, SmallVector<Location, 4>(
-                                    portTypes.size(), builder.getUnknownLoc()));
-
-  // Insert the WiresOp and ControlOp.
-  IRRewriter::InsertionGuard guard(builder);
-  builder.setInsertionPointToStart(body);
-  builder.create<WiresOp>(result.location);
-  builder.create<ControlOp>(result.location);
+  buildComponentLike(builder, result, name, ports);
 }
 
 void ComponentOp::getAsmBlockArgumentNames(
@@ -732,79 +746,24 @@ SmallVector<PortInfo> CombComponentOp::getOutputPortInfo() {
 }
 
 void CombComponentOp::print(OpAsmPrinter &p) {
-  auto componentName =
-      (*this)
-          ->getAttrOfType<StringAttr>(::mlir::SymbolTable::getSymbolAttrName())
-          .getValue();
-  p << " ";
-  p.printSymbolName(componentName);
-
-  // Print the port definition list for input and output ports.
-  auto printPortDefList = [&](auto ports) {
-    p << "(";
-    llvm::interleaveComma(ports, p, [&](const PortInfo &port) {
-      p << "%" << port.name.getValue() << ": " << port.type;
-      if (!port.attributes.empty()) {
-        p << " ";
-        p.printAttributeWithoutType(port.attributes);
-      }
-    });
-    p << ")";
-  };
-  printPortDefList(getInputPortInfo());
-  p << " -> ";
-  printPortDefList(getOutputPortInfo());
-
-  p << " ";
-  p.printRegion(getBody(), /*printEntryBlockArgs=*/false,
-                /*printBlockTerminators=*/false,
-                /*printEmptyBlock=*/false);
-
-  SmallVector<StringRef> elidedAttrs = {"portAttributes", "portNames",
-                                        "portDirections", "sym_name",
-                                        ComponentOp::getTypeAttrName()};
-  p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
+  printComponentInterface(p, *this);
 }
 
 ParseResult CombComponentOp::parse(OpAsmParser &parser,
                                    OperationState &result) {
-  using namespace mlir::function_interface_impl;
-
-  StringAttr componentName;
-  if (parser.parseSymbolName(componentName,
-                             ::mlir::SymbolTable::getSymbolAttrName(),
-                             result.attributes))
-    return failure();
-
-  SmallVector<mlir::OpAsmParser::Argument> ports;
-
-  SmallVector<Type> portTypes;
-  if (parseComponentSignature(parser, result, ports, portTypes))
-    return failure();
-
-  // Build the component's type for FunctionLike trait. All ports are listed
-  // as arguments so they may be accessed within the component.
-  auto type = parser.getBuilder().getFunctionType(portTypes, /*results=*/{});
-  result.addAttribute(CombComponentOp::getTypeAttrName(), TypeAttr::get(type));
-
-  auto *body = result.addRegion();
-  if (parser.parseRegion(*body, ports))
-    return failure();
-
-  if (body->empty())
-    body->push_back(new Block());
-
-  if (parser.parseOptionalAttrDict(result.attributes))
-    return failure();
-
-  return success();
+  return parseComponentInterface(parser, result);
 }
 
 LogicalResult CombComponentOp::verify() {
-  // Verify there is exactly one of each the wires and control operations.
+  // Verify there is exactly one wires operation.
   auto wIt = getBodyBlock()->getOps<WiresOp>();
   if (std::distance(wIt.begin(), wIt.end()) != 1)
     return emitOpError("requires exactly one 'calyx.wires' op.");
+
+  // Verify there is not a control operation.
+  auto cIt = getBodyBlock()->getOps<ControlOp>();
+  if (std::distance(cIt.begin(), cIt.end()) != 0)
+    return emitOpError("requires no 'calyx.control' op.");
 
   // Verify the component actually does something: has continuous assignments.
   bool hasNoAssignments =
@@ -826,12 +785,14 @@ LogicalResult CombComponentOp::verify() {
 
   // Check that the component has no groups
   auto groups = getWiresOp().getOps<GroupOp>();
-  auto combGroups = getWiresOp().getOps<CombGroupOp>();
-
   if (!groups.empty())
     return emitOpError() << "Combinational component contains group "
                          << (*groups.begin()).getSymName();
 
+  // Combinational groups aren't allowed in combinational components either.
+  // For more information see here:
+  // https://docs.calyxir.org/lang/ref.html#comb-group-definitions
+  auto combGroups = getWiresOp().getOps<CombGroupOp>();
   if (!combGroups.empty())
     return emitOpError() << "Combinational component contains comb group "
                          << (*combGroups.begin()).getSymName();
@@ -841,55 +802,7 @@ LogicalResult CombComponentOp::verify() {
 
 void CombComponentOp::build(OpBuilder &builder, OperationState &result,
                             StringAttr name, ArrayRef<PortInfo> ports) {
-  using namespace mlir::function_interface_impl;
-
-  result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
-
-  std::pair<SmallVector<Type, 8>, SmallVector<Type, 8>> portIOTypes;
-  std::pair<SmallVector<Attribute, 8>, SmallVector<Attribute, 8>> portIONames;
-  std::pair<SmallVector<Attribute, 8>, SmallVector<Attribute, 8>>
-      portIOAttributes;
-  SmallVector<Direction, 8> portDirections;
-  // Avoid using llvm::partition or llvm::sort to preserve relative ordering
-  // between individual inputs and outputs.
-  for (auto &&port : ports) {
-    bool isInput = port.direction == Direction::Input;
-    (isInput ? portIOTypes.first : portIOTypes.second).push_back(port.type);
-    (isInput ? portIONames.first : portIONames.second).push_back(port.name);
-    (isInput ? portIOAttributes.first : portIOAttributes.second)
-        .push_back(port.attributes);
-  }
-  auto portTypes = concat(portIOTypes.first, portIOTypes.second);
-  auto portNames = concat(portIONames.first, portIONames.second);
-  auto portAttributes = concat(portIOAttributes.first, portIOAttributes.second);
-
-  // Build the function type of the component.
-  auto functionType = builder.getFunctionType(portTypes, {});
-  result.addAttribute(getTypeAttrName(), TypeAttr::get(functionType));
-
-  // Record the port names and number of input ports of the component.
-  result.addAttribute("portNames", builder.getArrayAttr(portNames));
-  result.addAttribute("portDirections",
-                      direction::packAttribute(builder.getContext(),
-                                               portIOTypes.first.size(),
-                                               portIOTypes.second.size()));
-  // Record the attributes of the ports.
-  result.addAttribute("portAttributes", builder.getArrayAttr(portAttributes));
-
-  // Create a single-blocked region.
-  Region *region = result.addRegion();
-  Block *body = new Block();
-  region->push_back(body);
-
-  // Add all ports to the body.
-  body->addArguments(portTypes, SmallVector<Location, 4>(
-                                    portTypes.size(), builder.getUnknownLoc()));
-
-  // Insert the WiresOp and ControlOp.
-  IRRewriter::InsertionGuard guard(builder);
-  builder.setInsertionPointToStart(body);
-  builder.create<WiresOp>(result.location);
-  builder.create<ControlOp>(result.location);
+  buildComponentLike(builder, result, name, ports);
 }
 
 void CombComponentOp::getAsmBlockArgumentNames(
@@ -1502,8 +1415,7 @@ SmallVector<DictionaryAttr> InstanceOp::portAttributes() {
 }
 
 bool InstanceOp::isCombinational() {
-  auto comp = getReferencedComponent();
-  return isa<CombComponentOp>(comp);
+  return isa<CombComponentOp>(getReferencedComponent());
 }
 
 //===----------------------------------------------------------------------===//

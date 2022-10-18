@@ -258,6 +258,10 @@ def ComponentOpInterface : OpInterface<"ComponentInterface"> {
       "bool", "isComb"
     >,
     InterfaceMethod<
+      "This returns the body region of the component.",
+      "Region*", "getRegion"
+    >,
+    InterfaceMethod<
       "This returns the body block of the component.",
       "Block*", "getBodyBlock"
     >

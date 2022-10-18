@@ -545,9 +545,10 @@ void Emitter::emitModule(ModuleOp op) {
 
 /// Emit a component.
 void Emitter::emitComponent(ComponentInterface op) {
-  std::string pre = op.isComb() ? "comb " : "";
+  std::string combinationalPrefix = op.isComb() ? "comb " : "";
 
-  indent() << pre << "component " << op.getName() << getAttributes(op);
+  indent() << combinationalPrefix << "component " << op.getName()
+           << getAttributes(op);
   // Emit the ports.
   emitComponentPorts(op);
   os << space() << LBraceEndL();
@@ -590,8 +591,7 @@ void Emitter::emitComponent(ComponentInterface op) {
   });
 
   emitWires(wires);
-  if (control != nullptr)
-    emitControl(control);
+  emitControl(control);
   reduceIndent();
   os << RBraceEndL();
 }
@@ -823,6 +823,9 @@ void Emitter::emitEnable(EnableOp enable) {
 }
 
 void Emitter::emitControl(ControlOp control) {
+  // A valid Calyx program does not necessarily need a control section.
+  if (control == nullptr)
+    return;
   emitCalyxSection("control",
                    [&]() { emitCalyxControl(control.getBodyBlock()); });
 }

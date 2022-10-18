@@ -103,9 +103,6 @@ def ComponentOp : CalyxOp<"component", [
         return success();
       }
 
-      /// Returns the region of a Calyx component.
-      Region *getRegion() { return &getFunctionBody(); }
-
       /// Returns the WiresOp of a Calyx Component.
       WiresOp getWiresOp();
 
@@ -142,6 +139,9 @@ def ComponentOp : CalyxOp<"component", [
       bool $cppClass::isComb() {
         return false;
       }
+
+      /// Returns the region of a Calyx component.
+      Region* $cppClass::getRegion() { return &getFunctionBody(); }
   }];
 
   let hasVerifier = 1;
@@ -210,9 +210,6 @@ def CombComponentOp : CalyxOp<"comb_component", [
         return success();
       }
 
-      /// Returns the region of a Calyx component.
-      Region *getRegion() { return &getFunctionBody(); }
-
       /// Returns the WiresOp of a Calyx Component.
       WiresOp getWiresOp();
 
@@ -234,6 +231,9 @@ def CombComponentOp : CalyxOp<"comb_component", [
       bool $cppClass::isComb() {
         return true;
       }
+
+      /// Returns the region of a Calyx component.
+      Region* $cppClass::getRegion() { return &getFunctionBody(); }
   }];
 
   let hasVerifier = 1;
