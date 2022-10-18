@@ -42,6 +42,10 @@ constexpr const char *decodeTableAnnotation =
     "chisel3.util.experimental.decode.DecodeTableAnnotation";
 constexpr const char *flattenAnnoClass = "firrtl.transforms.FlattenAnnotation";
 constexpr const char *inlineAnnoClass = "firrtl.passes.InlineAnnotation";
+constexpr const char *traceNameAnnoClass =
+    "chisel3.experimental.Trace$TraceNameAnnotation";
+constexpr const char *traceAnnoClass =
+    "chisel3.experimental.Trace$TraceAnnotation";
 
 constexpr const char *omirAnnoClass =
     "freechips.rocketchip.objectmodel.OMIRAnnotation";

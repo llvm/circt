@@ -568,8 +568,8 @@ def DropName : Pass<"firrtl-drop-names", "firrtl::FModuleOp"> {
   }];
   let constructor = "circt::firrtl::createDropNamesPass()";
   let options = [
-    Option<"preserveMode", "preserve-values", "PreserveValues::PreserveMode", 
-           "PreserveValues::None", 
+    Option<"preserveMode", "preserve-values", "PreserveValues::PreserveMode",
+           "PreserveValues::None",
            "specify the values which can be optimized away", [{
             ::llvm::cl::values(
               clEnumValN(PreserveValues::None, "none",
@@ -607,6 +607,24 @@ def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
     This pass lowers RefType ops and ports to verbatim encoded XMRs.
   }];
   let constructor = "circt::firrtl::createLowerXMRPass()";
+}
+
+def ResolveTraces : Pass<"firrtl-resolve-traces", "firrtl::CircuitOp"> {
+  let summary = "Write out TraceAnnotations to an output annotation file";
+  let description = [{
+    This pass implements Chisel's Trace API.  It collects all TraceAnnotations
+    that exist in the circuit, updates them with information about the final
+    target in a design, and writes these to an output annotation file.  This
+    exists for Chisel users to build tooling around them that needs to query the
+    final output name/path of some component in a Chisel circuit.
+
+    Note: this pass and API are expected to be eventually replaced via APIs and
+    language bindings that enable users to directly query the MLIR.
+  }];
+  let constructor = "circt::firrtl::createResolveTracesPass()";
+  let options = [Option<"outputAnnotationFilename", "file", "std::string", "",
+      "Output file for the JSON-serialized Trace Annotations">];
+  let dependentDialects = ["sv::SVDialect"];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

@@ -30,6 +30,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   PrintInstanceGraph.cpp
   PrintNLATable.cpp
   RandomizeRegisterInit.cpp
+  ResolveTraces.cpp
   RemoveUnusedPorts.cpp
   SFCCompat.cpp
   WireDFT.cpp

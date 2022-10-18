@@ -1446,3 +1446,52 @@ firrtl.circuit "Top"  attributes {
   }
 }
 
+// -----
+
+// Check that TraceNameAnnotation (which has don't touch semantics) is expanded
+// into a TraceAnnotation (which does not have don't touch semantics) and a
+// DontTouchAnnotation whenever this targets something that can be a legal
+// target of a DontTouchAnnotation.
+
+// CHECK-LABEL: firrtl.circuit "TraceNameAnnotation"
+firrtl.circuit "TraceNameAnnotation" attributes {rawAnnotations = [
+    {
+      class = "chisel3.experimental.Trace$TraceNameAnnotation",
+      chiselTarget = "~TraceNameAnnotation|TraceNameAnnotation",
+      target = "~TraceNameAnnotation|TraceNameAnnotation"
+    },
+    {
+      class = "chisel3.experimental.Trace$TraceNameAnnotation",
+      chiselTarget = "~TraceNameAnnotation|Foo",
+      target = "~TraceNameAnnotation|Foo"
+    },
+    {
+      class = "chisel3.experimental.Trace$TraceNameAnnotation",
+      chiselTarget = "~TraceNameAnnotation|TraceNameAnnotation/foo:Foo",
+      target = "~TraceNameAnnotation|TraceNameAnnotation/foo:Foo"
+    },
+    {
+      class = "chisel3.experimental.Trace$TraceNameAnnotation",
+      chiselTarget = "~TraceNameAnnotation|TraceNameAnnotation>w",
+      target = "~TraceNameAnnotation|TraceNameAnnotation>w"
+    }
+  ]} {
+  // CHECK:      firrtl.extmodule @Foo()
+  // CHECK-SAME:   {chiselTarget = "~TraceNameAnnotation|Foo"
+  // CHECK-SAME:    class = "chisel3.experimental.Trace$TraceAnnotation"}
+  // CHECK-SAME:   {chiselTarget = "~TraceNameAnnotation|TraceNameAnnotation/foo:Foo"
+  // CHECK-SAME:    circt.nonlocal =
+  // CHECK-SAME:    class = "chisel3.experimental.Trace$TraceAnnotation"}
+  firrtl.extmodule @Foo()
+  // CHECK:      firrtl.module @TraceNameAnnotation()
+  // CHECK-SAME:   {chiselTarget = "~TraceNameAnnotation|TraceNameAnnotation"
+  // CHECK-SAME:    class = "chisel3.experimental.Trace$TraceAnnotation"}
+  firrtl.module @TraceNameAnnotation() {
+    firrtl.instance foo @Foo()
+    // CHECK:      %w = firrtl.wire
+    // CHECK-SAME:   {chiselTarget = "~TraceNameAnnotation|TraceNameAnnotation>w"
+    // CHECK-SAME:    class = "chisel3.experimental.Trace$TraceAnnotation"}
+    // CHECK-SAME:   {class = "firrtl.transforms.DontTouchAnnotation"}
+    %w = firrtl.wire : !firrtl.uint<1>
+  }
+}
