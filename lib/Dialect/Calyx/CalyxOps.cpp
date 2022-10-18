@@ -765,8 +765,8 @@ LogicalResult CombComponentOp::verify() {
   // Verify there is not a control operation.
   auto cIt = getBodyBlock()->getOps<ControlOp>();
   if (std::distance(cIt.begin(), cIt.end()) != 0)
-    return emitOpError() << "requires exactly one `"
-                         << ControlOp::getOperationName() << "` op.";
+    return emitOpError() << "must not have a `" << ControlOp::getOperationName()
+                         << "` op.";
 
   // Verify the component actually does something: has continuous assignments.
   bool hasNoAssignments =
@@ -781,23 +781,21 @@ LogicalResult CombComponentOp::verify() {
   auto cells = getOps<CellInterface>();
   for (auto cell : cells) {
     if (!cell.isCombinational())
-      return emitOpError()
-             << "Combinational component contains non-combinational cell "
-             << cell.instanceName();
+      return emitOpError() << "contains non-combinational cell "
+                           << cell.instanceName();
   }
 
   // Check that the component has no groups
   auto groups = getWiresOp().getOps<GroupOp>();
   if (!groups.empty())
-    return emitOpError() << "Combinational component contains group "
-                         << (*groups.begin()).getSymName();
+    return emitOpError() << "contains group " << (*groups.begin()).getSymName();
 
   // Combinational groups aren't allowed in combinational components either.
   // For more information see here:
   // https://docs.calyxir.org/lang/ref.html#comb-group-definitions
   auto combGroups = getWiresOp().getOps<CombGroupOp>();
   if (!combGroups.empty())
-    return emitOpError() << "Combinational component contains comb group "
+    return emitOpError() << "contains comb group "
                          << (*combGroups.begin()).getSymName();
 
   return success();

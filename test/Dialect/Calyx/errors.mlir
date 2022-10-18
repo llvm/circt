@@ -864,6 +864,23 @@ module attributes {calyx.entrypoint = "main"} {
   }
 }
 
+
+// -----
+
+module attributes {calyx.entrypoint = "main"} {
+  // expected-error @+1 {{'calyx.component' op The component currently does nothing. It needs to either have continuous assignments in the Wires region or control constructs in the Control region.}}
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %std_lt_0.left, %std_lt_0.right, %std_lt_0.out = calyx.std_lt @std_lt_0 : i32, i32, i1
+    %c64_i32 = hw.constant 64 : i32
+    %c42_i32 = hw.constant 42 : i32
+    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i1, i1, i1, i1, i1, i1
+    calyx.wires {
+    }
+    calyx.control {
+    }
+  }
+}
+
 // -----
 module attributes {calyx.entrypoint = "A"} {
   hw.module.extern @params<WIDTH: i32>(%in: !hw.int<#hw.param.decl.ref<"WIDTH">>, %clk: i1 {calyx.clk}, %go: i1 {calyx.go = 1}) -> (out: !hw.int<#hw.param.decl.ref<"WIDTH">>, done: i1 {calyx.done}) attributes {filename = "test.v"}
@@ -916,4 +933,102 @@ module attributes {calyx.entrypoint = "A"} {
     }
     calyx.control {}
   } {static = 1}
+}
+
+// -----
+
+module attributes {calyx.entrypoint = "main"} {
+  // expected-error @+1 {{'calyx.comb_component' op must not have a `calyx.control` op.}}
+  calyx.comb_component @main() -> () {
+    %std_lt_0.left, %std_lt_0.right, %std_lt_0.out = calyx.std_lt @std_lt_0 : i32, i32, i1
+    %c64_i32 = hw.constant 64 : i32
+    %c42_i32 = hw.constant 42 : i32
+    calyx.wires {
+      calyx.assign %std_lt_0.left = %c64_i32 : i32
+    }
+    calyx.control {
+    }
+  }
+}
+
+// -----
+
+module attributes {calyx.entrypoint = "main"} {
+  // expected-error @+1 {{'calyx.comb_component' op requires exactly one calyx.wires op.}}
+  calyx.comb_component @main() -> () {
+    %std_lt_0.left, %std_lt_0.right, %std_lt_0.out = calyx.std_lt @std_lt_0 : i32, i32, i1
+    %c64_i32 = hw.constant 64 : i32
+    %c42_i32 = hw.constant 42 : i32
+    calyx.wires {
+      calyx.assign %std_lt_0.left = %c64_i32 : i32
+    }
+    calyx.wires {
+    }
+  }
+}
+
+// -----
+
+module attributes {calyx.entrypoint = "main"} {
+  // expected-error @+1 {{'calyx.comb_component' op The component currently does nothing. It needs to either have continuous assignments in the Wires region or control constructs in the Control region.}}
+  calyx.comb_component @main() -> () {
+    %std_lt_0.left, %std_lt_0.right, %std_lt_0.out = calyx.std_lt @std_lt_0 : i32, i32, i1
+    %c64_i32 = hw.constant 64 : i32
+    %c42_i32 = hw.constant 42 : i32
+    calyx.wires {
+    }
+  }
+}
+
+// -----
+
+module attributes {calyx.entrypoint = "main"} {
+  // expected-error @+1 {{'calyx.comb_component' op contains non-combinational cell mu}}
+  calyx.comb_component @main() -> () {
+    %std_lt_0.left, %std_lt_0.right, %std_lt_0.out = calyx.std_lt @std_lt_0 : i32, i32, i1
+    %c64_i32 = hw.constant 64 : i32
+    %c42_i32 = hw.constant 42 : i32
+    %mu.clk, %mu.reset, %mu.go, %mu.left, %mu.right, %mu.out, %mu.done = calyx.std_mult_pipe @mu : i1, i1, i1, i32, i32, i32, i1
+    calyx.wires {
+      calyx.assign %std_lt_0.left = %c64_i32 : i32
+    }
+  }
+}
+
+// -----
+
+module attributes {calyx.entrypoint = "main"} {
+  // expected-error @+1 {{'calyx.comb_component' op contains group A}}
+  calyx.comb_component @main() -> (%out: i32) {
+    %std_lt_0.left, %std_lt_0.right, %std_lt_0.out = calyx.std_lt @std_lt_0 : i32, i32, i1
+    %c64_i32 = hw.constant 64 : i32
+    %c42_i32 = hw.constant 42 : i32
+    %true = hw.constant 1 : i1
+    calyx.wires {
+      calyx.assign %out = %c42_i32 : i32
+      calyx.group @A {
+        calyx.assign %std_lt_0.left = %c42_i32 : i32
+        calyx.assign %std_lt_0.right = %c42_i32 : i32
+        calyx.group_done %true : i1
+      }
+    }
+  }
+}
+
+// -----
+
+module attributes {calyx.entrypoint = "main"} {
+  // expected-error @+1 {{'calyx.comb_component' op contains comb group A}}
+  calyx.comb_component @main() -> (%out: i32) {
+    %std_lt_0.left, %std_lt_0.right, %std_lt_0.out = calyx.std_lt @std_lt_0 : i32, i32, i1
+    %c64_i32 = hw.constant 64 : i32
+    %c42_i32 = hw.constant 42 : i32
+    calyx.wires {
+      calyx.assign %out = %c42_i32 : i32
+      calyx.comb_group @A {
+        calyx.assign %std_lt_0.left = %c42_i32 : i32
+        calyx.assign %std_lt_0.right = %c42_i32 : i32
+      }
+    }
+  }
 }
