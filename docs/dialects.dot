@@ -31,6 +31,14 @@ digraph G {
 
   subgraph cluster_circt {
     label = "CIRCT"
+    // Internal frontend tools
+    subgraph frontend_internal_tools{
+      node [fillcolor="#fdc086"]
+      FIRRTLParser
+      PyCDE [URL="https://circt.llvm.org/docs/PyCDE/"]
+      Scheduling [URL="https://circt.llvm.org/docs/Scheduling/"]
+    }
+
     // CIRCT dialects
     Handshake [URL="https://circt.llvm.org/docs/Dialects/Handshake/"]
     Calyx [URL="https://circt.llvm.org/docs/Dialects/Calyx/"]
@@ -40,28 +48,29 @@ digraph G {
     ESI [URL="https://circt.llvm.org/docs/Dialects/ESI/"]
     FSM [URL="https://circt.llvm.org/docs/Dialects/FSM/"]
     HWArith [URL="https://circt.llvm.org/docs/Dialects/HWArith/"]
-    SystemC [URL="https://circt.llvm.org/docs/Dialects/SystemC/"]
     MooreMIR [URL="https://circt.llvm.org/docs/Dialects/Moore/", label="Moore MIR"]
 
     // Invisible node to make space for RTL cluster's incoming edges.
     space_above_RTL [style = invis, label=""]
 
+    // Core dialects
     subgraph cluster_RTL {
       label = "Core dialects"
       Seq [URL="https://circt.llvm.org/docs/Dialects/Seq/"]
       HW [URL="https://circt.llvm.org/docs/Dialects/HW/"]
-      SV [URL="https://circt.llvm.org/docs/Dialects/SV/"]
       Comb [URL="https://circt.llvm.org/docs/Dialects/Comb/"]
     }
     LLHD [URL="https://circt.llvm.org/docs/Dialects/LLHD/"]
 
-    // Internal tools
-    subgraph internal_tools{
+    // Backend dialects
+    SV [URL="https://circt.llvm.org/docs/Dialects/SV/"]
+    SystemC [URL="https://circt.llvm.org/docs/Dialects/SystemC/"]
+
+    subgraph backend_internal_tools{
       node [fillcolor="#fdc086"]
-      FIRRTLParser llhd_sim ExportSystemC
+      llhd_sim [label="llhd-sim"]
+      ExportSystemC
       ExportVerilog [URL="https://circt.llvm.org/docs/VerilogGeneration/"]
-      PyCDE [URL="https://circt.llvm.org/docs/PyCDE/"]
-      Scheduling [URL="https://circt.llvm.org/docs/Scheduling/"]
     }
   }
 
@@ -105,10 +114,10 @@ digraph G {
 
   // Things that lower into a subset of the RTL-like dialects. Cluster these
   // together to avoid a massive clutter.
-  {FIRRTL FSM ESI MSFT HWArith MooreMIR} -> Seq [lhead=cluster_RTL]
+  {FIRRTL FSM ESI MSFT HWArith MooreMIR} -> HW [lhead=cluster_RTL]
   Seq -> SV
-  HW -> LLHD
-  HW -> SystemC
+  {HW MooreMIR} -> LLHD
+  Comb -> SystemC [ltail=cluster_RTL]
   ExportVerilog -> SVFile
 
   // Tool flows
@@ -116,10 +125,11 @@ digraph G {
   Chisel -> FIRFile
   FIRFile -> FIRRTLParser
   FIRRTLParser -> FIRRTL
-  {SystemC, Comb} -> ExportSystemC
+  SystemC -> ExportSystemC
   ExportSystemC -> SystemCFile
-  SV -> ExportVerilog [ltail=cluster_RTL]
-  SV -> llhd_sim [ltail=cluster_RTL]
+  SV -> ExportVerilog
+  Seq -> ExportVerilog [ltail=cluster_RTL]
+  HW -> llhd_sim [ltail=cluster_RTL]
   SVVHDL -> Moore [weight=999]
   Moore -> MooreMIR
   Calyx -> Calyx_native
