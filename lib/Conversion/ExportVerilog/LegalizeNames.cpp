@@ -80,9 +80,8 @@ std::string FieldNameResolver::getEnumFieldName(hw::EnumFieldAttr attr) {
     return attr.getField().getValue().str();
 
   auto fieldStr = attr.getField().getValue().str();
-  auto prefix = globalNames.getEnumPrefix(aliasType);
-  if (prefix.has_value())
-    return (prefix->getValue() + "_" + fieldStr).str();
+  if (auto prefix = globalNames.getEnumPrefix(aliasType))
+    return (prefix.getValue() + "_" + fieldStr).str();
 
   // No prefix registered, just use the bare field name.
   return fieldStr;

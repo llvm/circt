@@ -54,10 +54,9 @@ struct GlobalNameTable {
     return (it != renamedParams.end() ? it->second : paramName).getValue();
   }
 
-  std::optional<StringAttr> getEnumPrefix(Type type) const {
+  StringAttr getEnumPrefix(Type type) const {
     auto it = enumPrefixes.find(type);
-    return it != enumPrefixes.end() ? std::make_optional(it->second)
-                                    : std::nullopt;
+    return it != enumPrefixes.end() ? it->second : StringAttr();
   }
 
 private:
