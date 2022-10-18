@@ -140,6 +140,9 @@ std::unique_ptr<mlir::Pass> createIMDeadCodeElimPass();
 std::unique_ptr<mlir::Pass> createRandomizeRegisterInitPass();
 
 std::unique_ptr<mlir::Pass> createLowerXMRPass();
+
+std::unique_ptr<mlir::Pass>
+createResolveTracesPass(StringRef outputAnnotationFilename = "");
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/FIRRTL/Passes.h.inc"

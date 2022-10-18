@@ -398,7 +398,9 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {ignoreFullAsyncResetAnnoClass,
      {stdResolve, applyWithoutTarget<true, FModuleOp>}},
     {decodeTableAnnotation, {noResolve, drop}},
-    {blackBoxTargetDirAnnoClass, NoTargetAnnotation}
+    {blackBoxTargetDirAnnoClass, NoTargetAnnotation},
+    {traceNameAnnoClass, {stdResolve, applyTraceName}},
+    {traceAnnoClass, {stdResolve, applyWithoutTarget<true>}},
 
 }};
 
