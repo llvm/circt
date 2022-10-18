@@ -246,7 +246,6 @@ def ReplicateOp : CombOp<"replicate", [Pure]> {
     "$input attr-dict `:` functional-type($input, $result)";
 
   let hasFolder = true;
-  let hasCanonicalizeMethod = true;
   let hasVerifier = 1;
 
   let builders = [

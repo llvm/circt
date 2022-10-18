@@ -271,12 +271,6 @@ OpFoldResult ReplicateOp::fold(ArrayRef<Attribute> constants) {
   return {};
 }
 
-LogicalResult ReplicateOp::canonicalize(ReplicateOp op,
-                                        PatternRewriter &rewriter) {
-  // TODO.
-  return failure();
-}
-
 OpFoldResult ParityOp::fold(ArrayRef<Attribute> constants) {
   // Constant fold.
   if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>())
