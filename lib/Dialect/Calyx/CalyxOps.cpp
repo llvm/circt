@@ -484,7 +484,8 @@ static SmallVector<T> concat(const SmallVectorImpl<T> &a,
 }
 
 static void buildComponentLike(OpBuilder &builder, OperationState &result,
-                               StringAttr name, ArrayRef<PortInfo> ports) {
+                               StringAttr name, ArrayRef<PortInfo> ports,
+                               bool combinational) {
   using namespace mlir::function_interface_impl;
 
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
@@ -533,7 +534,8 @@ static void buildComponentLike(OpBuilder &builder, OperationState &result,
   IRRewriter::InsertionGuard guard(builder);
   builder.setInsertionPointToStart(body);
   builder.create<WiresOp>(result.location);
-  builder.create<ControlOp>(result.location);
+  if (!combinational)
+    builder.create<ControlOp>(result.location);
 }
 
 //===----------------------------------------------------------------------===//
@@ -690,7 +692,7 @@ LogicalResult ComponentOp::verify() {
 
 void ComponentOp::build(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<PortInfo> ports) {
-  buildComponentLike(builder, result, name, ports);
+  buildComponentLike(builder, result, name, ports, false);
 }
 
 void ComponentOp::getAsmBlockArgumentNames(
@@ -803,7 +805,7 @@ LogicalResult CombComponentOp::verify() {
 
 void CombComponentOp::build(OpBuilder &builder, OperationState &result,
                             StringAttr name, ArrayRef<PortInfo> ports) {
-  buildComponentLike(builder, result, name, ports);
+  buildComponentLike(builder, result, name, ports, true);
 }
 
 void CombComponentOp::getAsmBlockArgumentNames(
