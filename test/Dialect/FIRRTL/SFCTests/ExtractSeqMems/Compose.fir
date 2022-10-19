@@ -1,3 +1,5 @@
+; UNSUPPORTED: system-windows
+;   See https://github.com/llvm/circt/issues/4128
 ; RUN: rm -rf %t
 ; RUN: firtool --repl-seq-mem --repl-seq-mem-file=mems.conf --split-verilog --dedup --emit-omir -o=%t %s
 ; RUN: FileCheck %s --check-prefix=TESTHARNESS < %t/TestHarness.sv
