@@ -111,6 +111,9 @@ struct PortInfo {
   }
 };
 
+/// A helper function to verify each operation with the Ccomponent trait.
+LogicalResult verifyComponent(Operation *op);
+
 /// A helper function to verify each operation with the Cell trait.
 LogicalResult verifyCell(Operation *op);
 

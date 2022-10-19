@@ -29,6 +29,7 @@
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Casting.h"
 
 using namespace circt;
 using namespace circt::calyx;
@@ -126,9 +127,9 @@ static bool isPort(Value value) {
 /// Gets the port for a given BlockArgument.
 PortInfo calyx::getPortInfo(BlockArgument arg) {
   Operation *op = arg.getOwner()->getParentOp();
-  assert(isa<ComponentOp>(op) &&
-         "Only ComponentOp should support lookup by BlockArgument.");
-  return cast<ComponentOp>(op).getPortInfo()[arg.getArgNumber()];
+  assert(isa<ComponentInterface>(op) &&
+         "Only ComponentInterface should support lookup by BlockArgument.");
+  return cast<ComponentInterface>(op).getPortInfo()[arg.getArgNumber()];
 }
 
 /// Returns whether the given operation has a control region.
@@ -168,6 +169,14 @@ static LogicalResult verifyControlBody(Operation *op) {
           "has an invalid control sequence. Multiple control flow operations "
           "must all be nested in a single calyx.seq or calyx.par");
   }
+  return success();
+}
+
+LogicalResult calyx::verifyComponent(Operation *op) {
+  auto *opParent = op->getParentOp();
+  if (!isa<ModuleOp>(opParent))
+    return op->emitOpError()
+           << "has parent: " << opParent << ", expected ModuleOp.";
   return success();
 }
 
@@ -317,97 +326,13 @@ static void eraseControlWithGroupAndConditional(OpTy op,
 }
 
 //===----------------------------------------------------------------------===//
-// ComponentOp
+// ComponentInterface
 //===----------------------------------------------------------------------===//
 
-/// This is a helper function that should only be used to get the WiresOp or
-/// ControlOp of a ComponentOp, which are guaranteed to exist and generally at
-/// the end of a component's body. In the worst case, this will run in linear
-/// time with respect to the number of instances within the component.
-template <typename Op>
-static Op getControlOrWiresFrom(ComponentOp op) {
-  auto body = op.getBodyBlock();
-  // We verify there is a single WiresOp and ControlOp,
-  // so this is safe.
-  auto opIt = body->getOps<Op>().begin();
-  return *opIt;
-}
-
-/// Returns the Block argument with the given name from a ComponentOp.
-/// If the name doesn't exist, returns an empty Value.
-static Value getBlockArgumentWithName(StringRef name, ComponentOp op) {
-  ArrayAttr portNames = op.getPortNames();
-
-  for (size_t i = 0, e = portNames.size(); i != e; ++i) {
-    auto portName = portNames[i].cast<StringAttr>();
-    if (portName.getValue() == name)
-      return op.getBodyBlock()->getArgument(i);
-  }
-  return Value{};
-}
-
-WiresOp calyx::ComponentOp::getWiresOp() {
-  return getControlOrWiresFrom<WiresOp>(*this);
-}
-
-ControlOp calyx::ComponentOp::getControlOp() {
-  return getControlOrWiresFrom<ControlOp>(*this);
-}
-
-Value calyx::ComponentOp::getGoPort() {
-  return getBlockArgumentWithName("go", *this);
-}
-
-Value calyx::ComponentOp::getDonePort() {
-  return getBlockArgumentWithName("done", *this);
-}
-
-Value calyx::ComponentOp::getClkPort() {
-  return getBlockArgumentWithName("clk", *this);
-}
-
-Value calyx::ComponentOp::getResetPort() {
-  return getBlockArgumentWithName("reset", *this);
-}
-
-SmallVector<PortInfo> ComponentOp::getPortInfo() {
-  auto portTypes = getArgumentTypes();
-  ArrayAttr portNamesAttr = getPortNames(), portAttrs = getPortAttributes();
-  APInt portDirectionsAttr = getPortDirections();
-
-  SmallVector<PortInfo> results;
-  for (size_t i = 0, e = portNamesAttr.size(); i != e; ++i) {
-    results.push_back(PortInfo{portNamesAttr[i].cast<StringAttr>(),
-                               portTypes[i],
-                               direction::get(portDirectionsAttr[i]),
-                               portAttrs[i].cast<DictionaryAttr>()});
-  }
-  return results;
-}
-
-/// A helper function to return a filtered subset of a component's ports.
-template <typename Pred>
-static SmallVector<PortInfo> getFilteredPorts(ComponentOp op, Pred p) {
-  SmallVector<PortInfo> ports = op.getPortInfo();
-  llvm::erase_if(ports, p);
-  return ports;
-}
-
-SmallVector<PortInfo> ComponentOp::getInputPortInfo() {
-  return getFilteredPorts(
-      *this, [](const PortInfo &port) { return port.direction == Output; });
-}
-
-SmallVector<PortInfo> ComponentOp::getOutputPortInfo() {
-  return getFilteredPorts(
-      *this, [](const PortInfo &port) { return port.direction == Input; });
-}
-
-void ComponentOp::print(OpAsmPrinter &p) {
-  auto componentName =
-      (*this)
-          ->getAttrOfType<StringAttr>(::mlir::SymbolTable::getSymbolAttrName())
-          .getValue();
+static void printComponentInterface(OpAsmPrinter &p, ComponentInterface comp) {
+  auto componentName = comp->template getAttrOfType<StringAttr>(
+                               ::mlir::SymbolTable::getSymbolAttrName())
+                           .getValue();
   p << " ";
   p.printSymbolName(componentName);
 
@@ -423,19 +348,19 @@ void ComponentOp::print(OpAsmPrinter &p) {
     });
     p << ")";
   };
-  printPortDefList(getInputPortInfo());
+  printPortDefList(comp.getInputPortInfo());
   p << " -> ";
-  printPortDefList(getOutputPortInfo());
+  printPortDefList(comp.getOutputPortInfo());
 
   p << " ";
-  p.printRegion(getBody(), /*printEntryBlockArgs=*/false,
+  p.printRegion(*comp.getRegion(), /*printEntryBlockArgs=*/false,
                 /*printBlockTerminators=*/false,
                 /*printEmptyBlock=*/false);
 
   SmallVector<StringRef> elidedAttrs = {"portAttributes", "portNames",
                                         "portDirections", "sym_name",
                                         ComponentOp::getTypeAttrName()};
-  p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
+  p.printOptionalAttrDict(comp->getAttrs(), elidedAttrs);
 }
 
 /// Parses the ports of a Calyx component signature, and adds the corresponding
@@ -514,7 +439,8 @@ parseComponentSignature(OpAsmParser &parser, OperationState &result,
   return success();
 }
 
-ParseResult ComponentOp::parse(OpAsmParser &parser, OperationState &result) {
+static ParseResult parseComponentInterface(OpAsmParser &parser,
+                                           OperationState &result) {
   using namespace mlir::function_interface_impl;
 
   StringAttr componentName;
@@ -531,8 +457,7 @@ ParseResult ComponentOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // Build the component's type for FunctionLike trait. All ports are listed
   // as arguments so they may be accessed within the component.
-  auto type =
-      parser.getBuilder().getFunctionType(portTypes, /*resultTypes=*/{});
+  auto type = parser.getBuilder().getFunctionType(portTypes, /*results=*/{});
   result.addAttribute(ComponentOp::getTypeAttrName(), TypeAttr::get(type));
 
   auto *body = result.addRegion();
@@ -548,64 +473,6 @@ ParseResult ComponentOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-/// Determines whether the given ComponentOp has all the required ports.
-static LogicalResult hasRequiredPorts(ComponentOp op) {
-  // Get all identifiers from the component ports.
-  llvm::SmallVector<StringRef, 4> identifiers;
-  for (PortInfo &port : op.getPortInfo()) {
-    auto portIds = port.getAllIdentifiers();
-    identifiers.append(portIds.begin(), portIds.end());
-  }
-  // Sort the identifiers: a pre-condition for std::set_intersection.
-  std::sort(identifiers.begin(), identifiers.end());
-
-  llvm::SmallVector<StringRef, 4> intersection,
-      interfacePorts{"clk", "done", "go", "reset"};
-  // Find the intersection between all identifiers and required ports.
-  std::set_intersection(interfacePorts.begin(), interfacePorts.end(),
-                        identifiers.begin(), identifiers.end(),
-                        std::back_inserter(intersection));
-
-  if (intersection.size() == interfacePorts.size())
-    return success();
-
-  SmallVector<StringRef, 4> difference;
-  std::set_difference(interfacePorts.begin(), interfacePorts.end(),
-                      intersection.begin(), intersection.end(),
-                      std::back_inserter(difference));
-  return op->emitOpError()
-         << "is missing the following required port attribute identifiers: "
-         << difference;
-}
-
-LogicalResult ComponentOp::verify() {
-  // Verify there is exactly one of each the wires and control operations.
-  auto wIt = getBodyBlock()->getOps<WiresOp>();
-  auto cIt = getBodyBlock()->getOps<ControlOp>();
-  if (std::distance(wIt.begin(), wIt.end()) +
-          std::distance(cIt.begin(), cIt.end()) !=
-      2)
-    return emitOpError(
-        "requires exactly one of each: 'calyx.wires', 'calyx.control'.");
-
-  if (failed(hasRequiredPorts(*this)))
-    return failure();
-
-  // Verify the component actually does something: has a non-empty Control
-  // region, or continuous assignments.
-  bool hasNoControlConstructs =
-      getControlOp().getBodyBlock()->getOperations().empty();
-  bool hasNoAssignments =
-      getWiresOp().getBodyBlock()->getOps<AssignOp>().empty();
-  if (hasNoControlConstructs && hasNoAssignments)
-    return emitOpError(
-        "The component currently does nothing. It needs to either have "
-        "continuous assignments in the Wires region or control constructs in "
-        "the Control region.");
-
-  return success();
-}
-
 /// Returns a new vector containing the concatenation of vectors `a` and `b`.
 template <typename T>
 static SmallVector<T> concat(const SmallVectorImpl<T> &a,
@@ -616,8 +483,8 @@ static SmallVector<T> concat(const SmallVectorImpl<T> &a,
   return out;
 }
 
-void ComponentOp::build(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<PortInfo> ports) {
+static void buildComponentLike(OpBuilder &builder, OperationState &result,
+                               StringAttr name, ArrayRef<PortInfo> ports) {
   using namespace mlir::function_interface_impl;
 
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
@@ -669,7 +536,277 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
   builder.create<ControlOp>(result.location);
 }
 
+//===----------------------------------------------------------------------===//
+// ComponentOp
+//===----------------------------------------------------------------------===//
+
+/// This is a helper function that should only be used to get the WiresOp or
+/// ControlOp of a ComponentOp, which are guaranteed to exist and generally at
+/// the end of a component's body. In the worst case, this will run in linear
+/// time with respect to the number of instances within the component.
+template <typename Op>
+static Op getControlOrWiresFrom(ComponentOp op) {
+  auto *body = op.getBodyBlock();
+  // We verify there is a single WiresOp and ControlOp,
+  // so this is safe.
+  auto opIt = body->getOps<Op>().begin();
+  return *opIt;
+}
+
+/// Returns the Block argument with the given name from a ComponentOp.
+/// If the name doesn't exist, returns an empty Value.
+static Value getBlockArgumentWithName(StringRef name, ComponentOp op) {
+  ArrayAttr portNames = op.getPortNames();
+
+  for (size_t i = 0, e = portNames.size(); i != e; ++i) {
+    auto portName = portNames[i].cast<StringAttr>();
+    if (portName.getValue() == name)
+      return op.getBodyBlock()->getArgument(i);
+  }
+  return Value{};
+}
+
+WiresOp calyx::ComponentOp::getWiresOp() {
+  return getControlOrWiresFrom<WiresOp>(*this);
+}
+
+ControlOp calyx::ComponentOp::getControlOp() {
+  return getControlOrWiresFrom<ControlOp>(*this);
+}
+
+Value calyx::ComponentOp::getGoPort() {
+  return getBlockArgumentWithName("go", *this);
+}
+
+Value calyx::ComponentOp::getDonePort() {
+  return getBlockArgumentWithName("done", *this);
+}
+
+Value calyx::ComponentOp::getClkPort() {
+  return getBlockArgumentWithName("clk", *this);
+}
+
+Value calyx::ComponentOp::getResetPort() {
+  return getBlockArgumentWithName("reset", *this);
+}
+
+SmallVector<PortInfo> ComponentOp::getPortInfo() {
+  auto portTypes = getArgumentTypes();
+  ArrayAttr portNamesAttr = getPortNames(), portAttrs = getPortAttributes();
+  APInt portDirectionsAttr = getPortDirections();
+
+  SmallVector<PortInfo> results;
+  for (size_t i = 0, e = portNamesAttr.size(); i != e; ++i) {
+    results.push_back(PortInfo{portNamesAttr[i].cast<StringAttr>(),
+                               portTypes[i],
+                               direction::get(portDirectionsAttr[i]),
+                               portAttrs[i].cast<DictionaryAttr>()});
+  }
+  return results;
+}
+
+/// A helper function to return a filtered subset of a component's ports.
+template <typename Pred>
+static SmallVector<PortInfo> getFilteredPorts(ComponentOp op, Pred p) {
+  SmallVector<PortInfo> ports = op.getPortInfo();
+  llvm::erase_if(ports, p);
+  return ports;
+}
+
+SmallVector<PortInfo> ComponentOp::getInputPortInfo() {
+  return getFilteredPorts(
+      *this, [](const PortInfo &port) { return port.direction == Output; });
+}
+
+SmallVector<PortInfo> ComponentOp::getOutputPortInfo() {
+  return getFilteredPorts(
+      *this, [](const PortInfo &port) { return port.direction == Input; });
+}
+
+void ComponentOp::print(OpAsmPrinter &p) { printComponentInterface(p, *this); }
+
+ParseResult ComponentOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseComponentInterface(parser, result);
+}
+
+/// Determines whether the given ComponentOp has all the required ports.
+static LogicalResult hasRequiredPorts(ComponentOp op) {
+  // Get all identifiers from the component ports.
+  llvm::SmallVector<StringRef, 4> identifiers;
+  for (PortInfo &port : op.getPortInfo()) {
+    auto portIds = port.getAllIdentifiers();
+    identifiers.append(portIds.begin(), portIds.end());
+  }
+  // Sort the identifiers: a pre-condition for std::set_intersection.
+  std::sort(identifiers.begin(), identifiers.end());
+
+  llvm::SmallVector<StringRef, 4> intersection,
+      interfacePorts{"clk", "done", "go", "reset"};
+  // Find the intersection between all identifiers and required ports.
+  std::set_intersection(interfacePorts.begin(), interfacePorts.end(),
+                        identifiers.begin(), identifiers.end(),
+                        std::back_inserter(intersection));
+
+  if (intersection.size() == interfacePorts.size())
+    return success();
+
+  SmallVector<StringRef, 4> difference;
+  std::set_difference(interfacePorts.begin(), interfacePorts.end(),
+                      intersection.begin(), intersection.end(),
+                      std::back_inserter(difference));
+  return op->emitOpError()
+         << "is missing the following required port attribute identifiers: "
+         << difference;
+}
+
+LogicalResult ComponentOp::verify() {
+  // Verify there is exactly one of each the wires and control operations.
+  auto wIt = getBodyBlock()->getOps<WiresOp>();
+  auto cIt = getBodyBlock()->getOps<ControlOp>();
+  if (std::distance(wIt.begin(), wIt.end()) +
+          std::distance(cIt.begin(), cIt.end()) !=
+      2)
+    return emitOpError() << "requires exactly one of each: '"
+                         << WiresOp::getOperationName() << "', '"
+                         << ControlOp::getOperationName() << "'.";
+
+  if (failed(hasRequiredPorts(*this)))
+    return failure();
+
+  // Verify the component actually does something: has a non-empty Control
+  // region, or continuous assignments.
+  bool hasNoControlConstructs =
+      getControlOp().getBodyBlock()->getOperations().empty();
+  bool hasNoAssignments =
+      getWiresOp().getBodyBlock()->getOps<AssignOp>().empty();
+  if (hasNoControlConstructs && hasNoAssignments)
+    return emitOpError(
+        "The component currently does nothing. It needs to either have "
+        "continuous assignments in the Wires region or control constructs in "
+        "the Control region.");
+
+  return success();
+}
+
+void ComponentOp::build(OpBuilder &builder, OperationState &result,
+                        StringAttr name, ArrayRef<PortInfo> ports) {
+  buildComponentLike(builder, result, name, ports);
+}
+
 void ComponentOp::getAsmBlockArgumentNames(
+    mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
+  if (region.empty())
+    return;
+  auto ports = getPortNames();
+  auto *block = &getRegion()->front();
+  for (size_t i = 0, e = block->getNumArguments(); i != e; ++i)
+    setNameFn(block->getArgument(i), ports[i].cast<StringAttr>().getValue());
+}
+
+//===----------------------------------------------------------------------===//
+// CombComponentOp
+//===----------------------------------------------------------------------===//
+
+SmallVector<PortInfo> CombComponentOp::getPortInfo() {
+  auto portTypes = getArgumentTypes();
+  ArrayAttr portNamesAttr = getPortNames(), portAttrs = getPortAttributes();
+  APInt portDirectionsAttr = getPortDirections();
+
+  SmallVector<PortInfo> results;
+  for (size_t i = 0, e = portNamesAttr.size(); i != e; ++i) {
+    results.push_back(PortInfo{portNamesAttr[i].cast<StringAttr>(),
+                               portTypes[i],
+                               direction::get(portDirectionsAttr[i]),
+                               portAttrs[i].cast<DictionaryAttr>()});
+  }
+  return results;
+}
+
+WiresOp calyx::CombComponentOp::getWiresOp() {
+  auto *body = getBodyBlock();
+  auto opIt = body->getOps<WiresOp>().begin();
+  return *opIt;
+}
+
+/// A helper function to return a filtered subset of a comb component's ports.
+template <typename Pred>
+static SmallVector<PortInfo> getFilteredPorts(CombComponentOp op, Pred p) {
+  SmallVector<PortInfo> ports = op.getPortInfo();
+  llvm::erase_if(ports, p);
+  return ports;
+}
+
+SmallVector<PortInfo> CombComponentOp::getInputPortInfo() {
+  return getFilteredPorts(
+      *this, [](const PortInfo &port) { return port.direction == Output; });
+}
+
+SmallVector<PortInfo> CombComponentOp::getOutputPortInfo() {
+  return getFilteredPorts(
+      *this, [](const PortInfo &port) { return port.direction == Input; });
+}
+
+void CombComponentOp::print(OpAsmPrinter &p) {
+  printComponentInterface(p, *this);
+}
+
+ParseResult CombComponentOp::parse(OpAsmParser &parser,
+                                   OperationState &result) {
+  return parseComponentInterface(parser, result);
+}
+
+LogicalResult CombComponentOp::verify() {
+  // Verify there is exactly one wires operation.
+  auto wIt = getBodyBlock()->getOps<WiresOp>();
+  if (std::distance(wIt.begin(), wIt.end()) != 1)
+    return emitOpError() << "requires exactly one "
+                         << WiresOp::getOperationName() << " op.";
+
+  // Verify there is not a control operation.
+  auto cIt = getBodyBlock()->getOps<ControlOp>();
+  if (std::distance(cIt.begin(), cIt.end()) != 0)
+    return emitOpError() << "must not have a `" << ControlOp::getOperationName()
+                         << "` op.";
+
+  // Verify the component actually does something: has continuous assignments.
+  bool hasNoAssignments =
+      getWiresOp().getBodyBlock()->getOps<AssignOp>().empty();
+  if (hasNoAssignments)
+    return emitOpError(
+        "The component currently does nothing. It needs to either have "
+        "continuous assignments in the Wires region or control constructs in "
+        "the Control region.");
+
+  // Check that all cells are combinational
+  auto cells = getOps<CellInterface>();
+  for (auto cell : cells) {
+    if (!cell.isCombinational())
+      return emitOpError() << "contains non-combinational cell "
+                           << cell.instanceName();
+  }
+
+  // Check that the component has no groups
+  auto groups = getWiresOp().getOps<GroupOp>();
+  if (!groups.empty())
+    return emitOpError() << "contains group " << (*groups.begin()).getSymName();
+
+  // Combinational groups aren't allowed in combinational components either.
+  // For more information see here:
+  // https://docs.calyxir.org/lang/ref.html#comb-group-definitions
+  auto combGroups = getWiresOp().getOps<CombGroupOp>();
+  if (!combGroups.empty())
+    return emitOpError() << "contains comb group "
+                         << (*combGroups.begin()).getSymName();
+
+  return success();
+}
+
+void CombComponentOp::build(OpBuilder &builder, OperationState &result,
+                            StringAttr name, ArrayRef<PortInfo> ports) {
+  buildComponentLike(builder, result, name, ports);
+}
+
+void CombComponentOp::getAsmBlockArgumentNames(
     mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
   if (region.empty())
     return;
@@ -726,18 +863,22 @@ void ParOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 // WiresOp
 //===----------------------------------------------------------------------===//
 LogicalResult WiresOp::verify() {
-  auto component = (*this)->getParentOfType<ComponentOp>();
-  auto control = component.getControlOp();
+  auto componentInterface = (*this)->getParentOfType<ComponentInterface>();
+  if (llvm::isa<ComponentOp>(componentInterface)) {
+    auto component = llvm::cast<ComponentOp>(componentInterface);
+    auto control = component.getControlOp();
 
-  // Verify each group is referenced in the control section.
-  for (auto &&op : *getBodyBlock()) {
-    if (!isa<GroupInterface>(op))
-      continue;
-    auto group = cast<GroupInterface>(op);
-    auto groupName = group.symName();
-    if (mlir::SymbolTable::symbolKnownUseEmpty(groupName, control))
-      return op.emitOpError() << "with name: " << groupName
-                              << " is unused in the control execution schedule";
+    // Verify each group is referenced in the control section.
+    for (auto &&op : *getBodyBlock()) {
+      if (!isa<GroupInterface>(op))
+        continue;
+      auto group = cast<GroupInterface>(op);
+      auto groupName = group.symName();
+      if (mlir::SymbolTable::symbolKnownUseEmpty(groupName, control))
+        return op.emitOpError()
+               << "with name: " << groupName
+               << " is unused in the control execution schedule";
+    }
   }
 
   // Verify that:
@@ -1177,19 +1318,20 @@ void AssignOp::print(OpAsmPrinter &p) {
 
 /// Lookup the component for the symbol. This returns null on
 /// invalid IR.
-ComponentOp InstanceOp::getReferencedComponent() {
+ComponentInterface InstanceOp::getReferencedComponent() {
   auto module = (*this)->getParentOfType<ModuleOp>();
   if (!module)
     return nullptr;
 
-  return module.lookupSymbol<ComponentOp>(getComponentName());
+  return module.lookupSymbol<ComponentInterface>(getComponentName());
 }
 
 /// Verifies the port information in comparison with the referenced component
 /// of an instance. This helper function avoids conducting a lookup for the
 /// referenced component twice.
-static LogicalResult verifyInstanceOpType(InstanceOp instance,
-                                          ComponentOp referencedComponent) {
+static LogicalResult
+verifyInstanceOpType(InstanceOp instance,
+                     ComponentInterface referencedComponent) {
   auto module = instance->getParentOfType<ModuleOp>();
   StringRef entryPointName =
       module->getAttrOfType<StringAttr>("calyx.entrypoint");
@@ -1241,8 +1383,10 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitError() << "recursive instantiation of its parent component: '"
                        << getComponentName() << "'";
 
-  assert(isa<ComponentOp>(referencedComponent) && "Should be a ComponentOp.");
-  return verifyInstanceOpType(*this, cast<ComponentOp>(referencedComponent));
+  assert(isa<ComponentInterface>(referencedComponent) &&
+         "Should be a ComponentInterface.");
+  return verifyInstanceOpType(*this,
+                              cast<ComponentInterface>(referencedComponent));
 }
 
 /// Provide meaningful names to the result values of an InstanceOp.
@@ -1269,6 +1413,10 @@ SmallVector<DictionaryAttr> InstanceOp::portAttributes() {
   for (const PortInfo &port : getReferencedComponent().getPortInfo())
     portAttributes.push_back(port.attributes);
   return portAttributes;
+}
+
+bool InstanceOp::isCombinational() {
+  return isa<CombComponentOp>(getReferencedComponent());
 }
 
 //===----------------------------------------------------------------------===//
@@ -1417,6 +1565,8 @@ SmallVector<Direction> PrimitiveOp::portDirections() {
     portDirections.push_back(convertHWDirectionToCalyx(port.direction));
   return portDirections;
 }
+
+bool PrimitiveOp::isCombinational() { return false; }
 
 /// Returns a new DictionaryAttr containing only the calyx dialect attrs
 /// in the input DictionaryAttr. Also strips the 'calyx.' prefix from these
@@ -1603,6 +1753,8 @@ SmallVector<DictionaryAttr> RegisterOp::portAttributes() {
   };
 }
 
+bool RegisterOp::isCombinational() { return false; }
+
 //===----------------------------------------------------------------------===//
 // MemoryOp
 //===----------------------------------------------------------------------===//
@@ -1651,6 +1803,8 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
   );
   return portAttributes;
 }
+
+bool MemoryOp::isCombinational() { return false; }
 
 void MemoryOp::build(OpBuilder &builder, OperationState &state,
                      StringRef instanceName, int64_t width,
@@ -1997,7 +2151,9 @@ LogicalResult WhileOp::canonicalize(WhileOp whileOp,
         DictionaryAttr::get(context), /* Out    */                             \
         done.getDictionary(context)   /* Done   */                             \
     };                                                                         \
-  }
+  }                                                                            \
+                                                                               \
+  bool OpType::isCombinational() { return false; }
 
 ImplBinPipeOpCellInterface(MultPipeLibOp, "out");
 ImplBinPipeOpCellInterface(DivUPipeLibOp, "out_quotient");
@@ -2032,6 +2188,7 @@ LogicalResult SliceLibOp::verify() {
     return {DictionaryAttr::get(getContext()),                                 \
             DictionaryAttr::get(getContext())};                                \
   }                                                                            \
+  bool OpType::isCombinational() { return true; }                              \
   void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
     getCellAsmResultNames(setNameFn, *this, this->portNames());                \
   }
@@ -2046,6 +2203,7 @@ LogicalResult SliceLibOp::verify() {
   void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
     getCellAsmResultNames(setNameFn, *this, this->portNames());                \
   }                                                                            \
+  bool OpType::isCombinational() { return true; }                              \
   SmallVector<DictionaryAttr> OpType::portAttributes() {                       \
     return {DictionaryAttr::get(getContext()),                                 \
             DictionaryAttr::get(getContext()),                                 \

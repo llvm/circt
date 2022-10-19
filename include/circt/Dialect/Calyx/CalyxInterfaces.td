@@ -215,8 +215,57 @@ def CellOpInterface : OpInterface<"CellInterface"> {
         }
         return filteredPorts;
       }]
+    >,
+    InterfaceMethod<
+      "This returns true iff the cell is combinational",
+      "bool", "isCombinational"
     >
   ];
 
   let verify = [{ return verifyCell(op); }];
+}
+
+def ComponentOpInterface : OpInterface<"ComponentInterface"> {
+  let cppNamespace = "::circt::calyx";
+
+  let description = [{
+    This is an op interface for Calyx Components.
+  }];
+
+  let methods = [
+    InterfaceMethod<
+      "This returns the port names associated with the component.",
+      "ArrayAttr", "getPortNames"
+    >,
+    InterfaceMethod<
+      "This returns the port info associated with the component.",
+      "SmallVector<circt::calyx::PortInfo>", "getPortInfo"
+    >,
+    InterfaceMethod<
+      "This returns the input port info associated with the component.",
+      "SmallVector<circt::calyx::PortInfo>", "getInputPortInfo"
+    >,
+    InterfaceMethod<
+      "This returns the output port info associated with the component.",
+      "SmallVector<circt::calyx::PortInfo>", "getOutputPortInfo"
+    >,
+    InterfaceMethod<
+      "This returns the name of the component.",
+      "StringRef", "getName"
+    >,
+    InterfaceMethod<
+      "This returns true iff the component is combinational.",
+      "bool", "isComb"
+    >,
+    InterfaceMethod<
+      "This returns the body region of the component.",
+      "Region*", "getRegion"
+    >,
+    InterfaceMethod<
+      "This returns the body block of the component.",
+      "Block*", "getBodyBlock"
+    >
+  ];
+
+  let verify = [{ return verifyComponent(op); }];
 }

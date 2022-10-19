@@ -45,7 +45,8 @@ def ComponentOp : CalyxOp<"component", [
     IsolatedFromAbove,
     SingleBlock,
     NoTerminator,
-    OpAsmOpInterface
+    OpAsmOpInterface,
+    DeclareOpInterfaceMethods<ComponentOpInterface>
   ]> {
   let summary = "Calyx Component";
   let description = [{
@@ -102,25 +103,6 @@ def ComponentOp : CalyxOp<"component", [
         return success();
       }
 
-      /// Returns the body of a Calyx component.
-      Block *getBodyBlock() {
-        Region* region = getRegion();
-        assert(region->hasOneBlock() && "The body should have one Block.");
-        return &region->front();
-      }
-
-      /// Returns the region of a Calyx component.
-      Region *getRegion() { return &getFunctionBody(); }
-
-      /// Returns the port information for this component.
-      SmallVector<PortInfo> getPortInfo();
-
-      /// Returns the input port information for this component.
-      SmallVector<PortInfo> getInputPortInfo();
-
-      /// Returns the input port information for this component.
-      SmallVector<PortInfo> getOutputPortInfo();
-
       /// Returns the WiresOp of a Calyx Component.
       WiresOp getWiresOp();
 
@@ -143,12 +125,123 @@ def ComponentOp : CalyxOp<"component", [
                                     mlir::OpAsmSetValueNameFn setNameFn);
   }];
 
+  let extraClassDefinition = [{
+      Block* $cppClass::getBodyBlock() {
+        Region* region = getRegion();
+        assert(region->hasOneBlock() && "The body should have one Block.");
+        return &region->front();
+      }
+
+      StringRef $cppClass::getName() {
+        return cast<FunctionOpInterface>(**this).getName();
+      }
+
+      bool $cppClass::isComb() {
+        return false;
+      }
+
+      /// Returns the region of a Calyx component.
+      Region* $cppClass::getRegion() { return &getFunctionBody(); }
+  }];
+
+  let hasVerifier = 1;
+  let hasCustomAssemblyFormat = 1;
+}
+
+def CombComponentOp : CalyxOp<"comb_component", [
+    HasParent<"mlir::ModuleOp">,
+    SymbolTable, /* contains Cell names. */
+    Symbol,
+    FunctionOpInterface,
+    IsolatedFromAbove,
+    SingleBlock,
+    NoTerminator,
+    OpAsmOpInterface,
+    DeclareOpInterfaceMethods<ComponentOpInterface>
+  ]> {
+  let summary = "Calyx Combinational Component";
+  let description = [{
+    The "calyx.comb_component" operation represents a Calyx combinational component containing:
+    (1) In- and output port definitions that define the interface.
+    (2) Combinational cells and wires.
+
+    ```mlir
+      calyx.comb_component @C(%in: i32) -> (%out: i16) {
+        ...
+        calyx.wires { ... }
+      }
+    ```
+  }];
+
+  let arguments = (ins
+    ArrayAttr:$portNames,
+    ArrayAttr:$portAttributes,
+    APIntAttr:$portDirections
+  );
+  let results = (outs);
+  let regions = (region SizedRegion<1>: $body);
+
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports)>
+  ];
+
+  let extraClassDeclaration = [{
+      using mlir::detail::FunctionOpInterfaceTrait<CombComponentOp>::front;
+      using mlir::detail::FunctionOpInterfaceTrait<CombComponentOp>::getFunctionBody;
+
+      /// Returns the type of this function.
+      FunctionType getFunctionType() {
+        return getFunctionTypeAttr().getValue().cast<FunctionType>();
+      }
+
+      /// Returns the argument types of this function.
+      ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
+
+      /// Returns the result types of this function.
+      ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+
+      /// Verify the type attribute of this function. Returns failure and emits
+      /// an error if the attribute is invalid.
+      LogicalResult verifyType() {
+        auto type = getFunctionTypeAttr().getValue();
+        if (!type.isa<FunctionType>())
+          return emitOpError("requires '" + getTypeAttrName() +
+                             "' attribute of function type");
+        return success();
+      }
+
+      /// Returns the WiresOp of a Calyx Component.
+      WiresOp getWiresOp();
+
+      void getAsmBlockArgumentNames(mlir::Region &region,
+                                    mlir::OpAsmSetValueNameFn setNameFn);
+  }];
+
+  let extraClassDefinition = [{
+      Block* $cppClass::getBodyBlock() {
+        Region* region = getRegion();
+        assert(region->hasOneBlock() && "The body should have one Block.");
+        return &region->front();
+      }
+
+      StringRef $cppClass::getName() {
+        return cast<FunctionOpInterface>(**this).getName();
+      }
+
+      bool $cppClass::isComb() {
+        return true;
+      }
+
+      /// Returns the region of a Calyx component.
+      Region* $cppClass::getRegion() { return &getFunctionBody(); }
+  }];
+
   let hasVerifier = 1;
   let hasCustomAssemblyFormat = 1;
 }
 
 def WiresOp : CalyxContainer<"wires", [
-    HasParent<"ComponentOp">,
+    ParentOneOf<["ComponentOp", "CombComponentOp"]>,
     SymbolTable /* contains GroupInterface names. */,
     RegionKindInterface
   ]> {
@@ -204,7 +297,7 @@ def InstanceOp : CalyxCell<"instance", [
   let extraClassDeclaration = [{
     /// Lookup the component for the symbol. This returns null on
     /// invalid IR.
-    ComponentOp getReferencedComponent();
+    ComponentInterface getReferencedComponent();
   }];
 
   let arguments = (ins
