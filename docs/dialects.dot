@@ -117,8 +117,8 @@ digraph G {
 
   // Things that lower into a subset of the RTL-like dialects. Cluster these
   // together to avoid a massive clutter.
-  {HWArith MooreMIR} -> HW [lhead=cluster_RTL]
-  {ESI MSFT FIRRTL FSM} -> lower_to_sv_and_core [arrowhead=none]
+  {MSFT HWArith MooreMIR} -> HW [lhead=cluster_RTL]
+  {ESI FIRRTL FSM} -> lower_to_sv_and_core [arrowhead=none]
   lower_to_sv_and_core -> SV
   lower_to_sv_and_core -> Seq [lhead=cluster_RTL]
   Seq -> SV
@@ -139,7 +139,7 @@ digraph G {
   SVVHDL -> Moore [weight=999]
   Moore -> MooreMIR
   Calyx -> Calyx_native
-  Calyx_native -> Seq [lhead=cluster_RTL]
+  Calyx_native -> lower_to_sv_and_core [arrowhead=none]
   LLHD -> llhd_sim
   llhd_sim -> VCDTrace
   //ESI -> CapNProto
