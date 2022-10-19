@@ -65,12 +65,12 @@ hw.module @FirRegReset(%clk: i1, %in: i32, %r : i1, %v : i32) {
   // CHECK: hw.instance "reg3b" @Observe(x: %v: i32) -> ()
 }
 
-// This should not optimize anything until we have constant aggregate attribute
-// support.
 // CHECK-LABEL: @FirRegAggregate
 hw.module @FirRegAggregate(%clk: i1) -> (out : !hw.struct<foo: i32>) {
-  // CHECK: %reg = seq.firreg %reg clock %clk : !hw.struct<foo: i32>
-  // CHECK: hw.output %reg : !hw.struct<foo: i32>
+  // TODO: Use constant aggregate attribute once supported.
+  // CHECK:      %c0_i32 = hw.constant 0 : i32
+  // CHECK-NEXT: %0 = hw.bitcast %c0_i32 : (i32) -> !hw.struct<foo: i32>
+  // CHECK-NEXT: hw.output %0
   %reg = seq.firreg %reg clock %clk : !hw.struct<foo: i32>
   hw.output %reg : !hw.struct<foo: i32>
 }
