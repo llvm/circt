@@ -577,12 +577,12 @@ struct Equivalence {
 // Deduplication
 //===----------------------------------------------------------------------===//
 
+// Custom location merging.  This only keeps track of 8 annotations from ".fir"
+// files, and however many annotations come from "real" sources.  When
+// deduplicating, modules tend not to have scala source locators, so we wind
+// up fusing source locators for a module from every copy being deduped.  There
+// is little value in this (all the modules are identical by definition).
 static Location mergeLoc(MLIRContext *context, Location to, Location from) {
-  //    llvm::errs() << "TESTING \n";
-  //    to->dump();
-  //    from->dump();
-  //    llvm::errs() << "\n";
-
   // Unique the set of locations to be fused.
   llvm::SmallSetVector<Location, 4> decomposedLocs;
   // only track 8 "fir" locations
