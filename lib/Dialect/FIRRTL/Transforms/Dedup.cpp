@@ -577,6 +577,51 @@ struct Equivalence {
 // Deduplication
 //===----------------------------------------------------------------------===//
 
+static Location mergeLoc(MLIRContext* context, Location to, Location from) {
+//    llvm::errs() << "TESTING \n";
+//    to->dump();
+//    from->dump();
+//    llvm::errs() << "\n";
+
+  // Unique the set of locations to be fused.
+  llvm::SmallSetVector<Location, 4> decomposedLocs;
+  // only track 8 "fir" locations
+  unsigned seenFIR = 0;
+  for (auto loc : {to, from}) {
+    // If the location is a fused location we decompose it if it has no
+    // metadata or the metadata is the same as the top level metadata.
+    if (auto fusedLoc = loc.dyn_cast<FusedLoc>()) {
+        // UnknownLoc's have already been removed from FusedLocs so we can
+        // simply add all of the internal locations.
+        for (auto loc : fusedLoc.getLocations()) {
+            if (FileLineColLoc fileLoc = loc.dyn_cast<FileLineColLoc>()) {
+              if (fileLoc.getFilename().strref().endswith(".fir")) {
+                ++seenFIR;
+                if (seenFIR > 8)
+                  continue;
+              }
+            }
+            decomposedLocs.insert(loc);
+        }
+        continue;
+    }
+    // Otherwise, only add known locations to the set.
+    if (!loc.isa<UnknownLoc>())
+      decomposedLocs.insert(loc);
+  }
+
+  auto locs = decomposedLocs.getArrayRef();
+
+  // Handle the simple cases of less than two locations. Ensure the metadata (if
+  // provided) is not dropped.
+  if (locs.empty())
+    return UnknownLoc::get(context);
+  if (locs.size() == 1)
+    return locs.front();
+
+  return FusedLoc::get(context, locs);
+}
+
 struct Deduper {
 
   using RenameMap = DenseMap<StringAttr, StringAttr>;
@@ -1016,9 +1061,9 @@ private:
                 SmallVectorImpl<FlatSymbolRefAttr> &toNLAs, Operation *to,
                 FModuleLike fromModule,
                 SmallVectorImpl<FlatSymbolRefAttr> &fromNLAs, Operation *from) {
-    // Merge the operation locations if they are different.
+    // Merge the operation locations.
     if (to->getLoc() != from->getLoc())
-      to->setLoc(FusedLoc::get(context, {to->getLoc(), from->getLoc()}));
+    to->setLoc(mergeLoc(context, to->getLoc(), from->getLoc()));
 
     // Recurse into any regions.
     for (auto regions : llvm::zip(to->getRegions(), from->getRegions()))
