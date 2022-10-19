@@ -577,11 +577,11 @@ struct Equivalence {
 // Deduplication
 //===----------------------------------------------------------------------===//
 
-static Location mergeLoc(MLIRContext* context, Location to, Location from) {
-//    llvm::errs() << "TESTING \n";
-//    to->dump();
-//    from->dump();
-//    llvm::errs() << "\n";
+static Location mergeLoc(MLIRContext *context, Location to, Location from) {
+  //    llvm::errs() << "TESTING \n";
+  //    to->dump();
+  //    from->dump();
+  //    llvm::errs() << "\n";
 
   // Unique the set of locations to be fused.
   llvm::SmallSetVector<Location, 4> decomposedLocs;
@@ -591,19 +591,19 @@ static Location mergeLoc(MLIRContext* context, Location to, Location from) {
     // If the location is a fused location we decompose it if it has no
     // metadata or the metadata is the same as the top level metadata.
     if (auto fusedLoc = loc.dyn_cast<FusedLoc>()) {
-        // UnknownLoc's have already been removed from FusedLocs so we can
-        // simply add all of the internal locations.
-        for (auto loc : fusedLoc.getLocations()) {
-            if (FileLineColLoc fileLoc = loc.dyn_cast<FileLineColLoc>()) {
-              if (fileLoc.getFilename().strref().endswith(".fir")) {
-                ++seenFIR;
-                if (seenFIR > 8)
-                  continue;
-              }
-            }
-            decomposedLocs.insert(loc);
+      // UnknownLoc's have already been removed from FusedLocs so we can
+      // simply add all of the internal locations.
+      for (auto loc : fusedLoc.getLocations()) {
+        if (FileLineColLoc fileLoc = loc.dyn_cast<FileLineColLoc>()) {
+          if (fileLoc.getFilename().strref().endswith(".fir")) {
+            ++seenFIR;
+            if (seenFIR > 8)
+              continue;
+          }
         }
-        continue;
+        decomposedLocs.insert(loc);
+      }
+      continue;
     }
     // Otherwise, only add known locations to the set.
     if (!loc.isa<UnknownLoc>())
@@ -1063,7 +1063,7 @@ private:
                 SmallVectorImpl<FlatSymbolRefAttr> &fromNLAs, Operation *from) {
     // Merge the operation locations.
     if (to->getLoc() != from->getLoc())
-    to->setLoc(mergeLoc(context, to->getLoc(), from->getLoc()));
+      to->setLoc(mergeLoc(context, to->getLoc(), from->getLoc()));
 
     // Recurse into any regions.
     for (auto regions : llvm::zip(to->getRegions(), from->getRegions()))
