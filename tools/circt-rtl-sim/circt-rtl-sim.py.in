@@ -54,13 +54,13 @@ class Questa(IEEEDriver):
     elif "QUESTA_PATH" in os.environ:
       self.path = os.environ["QUESTA_PATH"]
 
-  def compile(self, sources):
+  def compile(self, sources, args):
     self.dpiLibs = filter(lambda fn: fn.endswith(".so") or fn.endswith(".dll"),
                           sources)
     sources = filter(lambda fn: not (fn.endswith(".so") or fn.endswith(".dll")),
                      sources)
     vlog = os.path.join(self.path, "vlog")
-    args = [vlog, "-sv"] + list(sources)
+    args = [vlog, "-sv"] + args.split() + list(sources) 
     if self.args.gui:
       args.append('+acc')
     return subprocess.run(args)
@@ -92,12 +92,12 @@ class Vivado(IEEEDriver):
     super().__init__(path, args)
     self.path = path
 
-  def compile(self, sources):
+  def compile(self, sources, args):
     sources = filter(lambda fn: not (fn.endswith(".so") or fn.endswith(".dll")),
                      sources)
     vlog = os.path.join(self.path, "xvlog")
     work = self.libname + "=" + self.libname + ".dir"
-    args = [vlog, "-sv", "-work", work] + list(sources)
+    args = [vlog, "-sv", "-work", work] + args.split() + list(sources)
     rc = subprocess.run(args)
     if rc.returncode != 0:
       return rc
@@ -147,9 +147,9 @@ class Iverilog(IEEEDriver):
     self.iverilog = args.sim
     self.vvp = os.path.join(os.path.dirname(self.iverilog), "vvp")
 
-  def compile(self, sources):
+  def compile(self, sources, args):
     return subprocess.run(
-        [self.iverilog, "-s", self.top, "-g2005-sv", "-o", "obj.vvp"] + sources)
+        [self.iverilog, "-s", self.top, "-g2005-sv", "-o", "obj.vvp"] + args.split() + sources)
 
   def run(self, cycles, args):
     print(self.top)
@@ -182,7 +182,7 @@ class Verilator:
 
     self.top = args.top
 
-  def compile(self, sources):
+  def compile(self, sources, args):
     dpiLibs = filter(lambda fn: fn.endswith(".so") or fn.endswith(".dll"),
                      sources)
     self.ldPaths = ":".join([os.path.dirname(x) for x in dpiLibs])
@@ -192,7 +192,7 @@ class Verilator:
     return subprocess.run([
         self.verilator, "--cc", "--top-module", self.top, "-sv", "--build",
         "--exe", "--assert"
-    ] + debugFlags + sources)
+    ] + debugFlags + args.split() + sources)
 
   def run(self, cycles, args):
     exe = os.path.join("obj_dir", "V" + self.top)
@@ -246,6 +246,10 @@ def __main__(args):
                          type=str,
                          default="",
                          help="Simulation arguments string.")
+  argparser.add_argument("--compileargs",
+                         type=str,
+                         default="",
+                         help="Compilation arguments string.")
   argparser.add_argument("--no-default-driver",
                          dest="no_default_driver",
                          action='store_true',
@@ -299,7 +303,7 @@ def __main__(args):
     args.sources.append(os.path.join(ThisFileDir, sim.DefaultDriver))
 
   if not args.no_compile:
-    rc = sim.compile(args.sources)
+    rc = sim.compile(args.sources, args.compileargs)
     if rc.returncode != 0:
       return rc
   if not args.no_run:
