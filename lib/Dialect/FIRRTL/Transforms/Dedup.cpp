@@ -605,6 +605,15 @@ static Location mergeLoc(MLIRContext *context, Location to, Location from) {
       }
       continue;
     }
+
+    // Might need to skip this fir.
+    if (FileLineColLoc fileLoc = loc.dyn_cast<FileLineColLoc>()) {
+      if (fileLoc.getFilename().strref().endswith(".fir")) {
+        ++seenFIR;
+        if (seenFIR > 8)
+          continue;
+      }
+    }
     // Otherwise, only add known locations to the set.
     if (!loc.isa<UnknownLoc>())
       decomposedLocs.insert(loc);
