@@ -1,3 +1,5 @@
+// UNSUPPORTED: system-windows
+//   See https://github.com/llvm/circt/issues/4129
 // RUN: circt-reduce %s --test %S.sh --test-arg cat --test-arg "firrtl.module @Foo" --keep-best=0 --include connect-source-operand-0-forwarder --test-must-fail | FileCheck %s
 firrtl.circuit "Foo" {
   // CHECK-LABEL: firrtl.module @Foo
