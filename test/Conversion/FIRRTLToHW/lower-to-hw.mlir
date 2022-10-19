@@ -568,21 +568,20 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK: sv.bind <@bindTest::@[[bazSymbol:.+]]>
   // CHECK-NOT: output_file
   // CHECK-NEXT: sv.bind <@bindTest::@[[quxSymbol:.+]]> {
-  // CHECK-SAME: output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>
+  // CHECK-SAME: output_file = #hw.output_file<"bindings.sv", excludeFromFileList>
   // CHECK-NEXT: hw.module private @bindTest()
   firrtl.module private @bindTest() {
     // CHECK: hw.instance "baz" sym @[[bazSymbol]] @bar
     %baz = firrtl.instance baz {lowerToBind} @bar(in io_cpu_flush: !firrtl.uint<1>)
     // CHECK: hw.instance "qux" sym @[[quxSymbol]] @bar
-    %qux = firrtl.instance qux {lowerToBind, output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>} @bar(in io_cpu_flush: !firrtl.uint<1>)
+    %qux = firrtl.instance qux {lowerToBind, output_file = #hw.output_file<"bindings.sv", excludeFromFileList>} @bar(in io_cpu_flush: !firrtl.uint<1>)
   }
 
 
   // CHECK-LABEL: hw.module private @output_fileTest
-  // CHECK-SAME: output_file = #hw.output_file<"output_fileTest/dir/output_fileTest.sv", excludeFromFileList>
-  firrtl.module private @output_fileTest() attributes {output_file = #hw.output_file<
-    "output_fileTest/dir/output_fileTest.sv", excludeFromFileList
-  >} {
+  // CHECK-SAME: output_file = #hw.output_file<"output_fileTest.sv", excludeFromFileList>
+  firrtl.module private @output_fileTest() attributes {
+      output_file = #hw.output_file<"output_fileTest.sv", excludeFromFileList >} {
   }
 
   // https://github.com/llvm/circt/issues/314

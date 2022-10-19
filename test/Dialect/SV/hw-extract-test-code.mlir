@@ -1,12 +1,12 @@
 // RUN:  circt-opt --sv-extract-test-code --split-input-file %s | FileCheck %s
-// CHECK-LABEL: module attributes {firrtl.extract.assert = #hw.output_file<"dir3/"
+// CHECK-LABEL: module attributes {firrtl.extract.assert = #hw.output_file<"dir3{{/|\\\\}}"
 // CHECK-NEXT: hw.module.extern @foo_cover
 // CHECK-NOT: attributes
 // CHECK-NEXT: hw.module.extern @foo_assume
 // CHECK-NOT: attributes
 // CHECK-NEXT: hw.module.extern @foo_assert
 // CHECK-NOT: attributes
-// CHECK: hw.module @issue1246_assert(%clock: i1) attributes {comment = "VCS coverage exclude_file", output_file = #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>}
+// CHECK: hw.module @issue1246_assert(%clock: i1) attributes {comment = "VCS coverage exclude_file", output_file = #hw.output_file<"dir3{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>}
 // CHECK: sv.assert
 // CHECK: sv.error "Assertion failed"
 // CHECK: sv.error "assert:"
@@ -191,7 +191,7 @@ module {
 
 // All instances of Baz are extracted, so it should be output to the testbench.
 // CHECK-LABEL: @Baz
-// CHECK-SAME: output_file = #hw.output_file<"testbench/", excludeFromFileList, includeReplicatedOps>
+// CHECK-SAME: output_file = #hw.output_file<"testbench{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>
 
 // In AllExtracted, instances foo, bar, and baz should be extracted.
 // CHECK-LABEL: @AllExtracted_cover

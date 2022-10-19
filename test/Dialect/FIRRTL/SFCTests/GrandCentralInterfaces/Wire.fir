@@ -326,7 +326,7 @@ circuit Top :
     ; CHECK-NEXT:       logic [3:0] uint;
     ; CHECK:          endinterface
 
-    ; YAML:           FILE "Wire{{[/\]}}firrtl/gct/gct.yaml"
+    ; YAML:           FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}gct.yaml"
     ; YAML:             - name: MyInterface
     ; YAML-NEXT:          fields:
     ; YAML-NEXT:            - name: uint
