@@ -1016,8 +1016,9 @@ private:
                 SmallVectorImpl<FlatSymbolRefAttr> &toNLAs, Operation *to,
                 FModuleLike fromModule,
                 SmallVectorImpl<FlatSymbolRefAttr> &fromNLAs, Operation *from) {
-    // Merge the operation locations.
-    to->setLoc(FusedLoc::get(context, {to->getLoc(), from->getLoc()}));
+    // Merge the operation locations if they are different.
+    if (to->getLoc() != from->getLoc())
+      to->setLoc(FusedLoc::get(context, {to->getLoc(), from->getLoc()}));
 
     // Recurse into any regions.
     for (auto regions : llvm::zip(to->getRegions(), from->getRegions()))
