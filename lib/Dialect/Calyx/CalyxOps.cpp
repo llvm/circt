@@ -692,7 +692,7 @@ LogicalResult ComponentOp::verify() {
 
 void ComponentOp::build(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<PortInfo> ports) {
-  buildComponentLike(builder, result, name, ports, false);
+  buildComponentLike(builder, result, name, ports, /*combinational=*/false);
 }
 
 void ComponentOp::getAsmBlockArgumentNames(
@@ -805,7 +805,7 @@ LogicalResult CombComponentOp::verify() {
 
 void CombComponentOp::build(OpBuilder &builder, OperationState &result,
                             StringAttr name, ArrayRef<PortInfo> ports) {
-  buildComponentLike(builder, result, name, ports, true);
+  buildComponentLike(builder, result, name, ports, /*combinational=*/true);
 }
 
 void CombComponentOp::getAsmBlockArgumentNames(
