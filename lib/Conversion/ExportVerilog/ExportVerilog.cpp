@@ -2883,7 +2883,11 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
 }
 
 LogicalResult StmtEmitter::visitStmt(TypeScopeOp op) {
+  auto typescopeDef = "_TYPESCOPE_" + op.getSymName();
+  os << "`ifndef " << typescopeDef << '\n';
+  os << "`define " << typescopeDef << '\n';
   emitStatementBlock(*op.getBodyBlock());
+  os << "`endif // " << typescopeDef << '\n';
   return success();
 }
 
