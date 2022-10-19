@@ -182,9 +182,9 @@ LogicalResult calyx::verifyComponent(Operation *op) {
 
 LogicalResult calyx::verifyCell(Operation *op) {
   auto opParent = op->getParentOp();
-  if (!isa<ComponentOp>(opParent))
+  if (!isa<ComponentInterface>(opParent))
     return op->emitOpError()
-           << "has parent: " << opParent << ", expected ComponentOp.";
+           << "has parent: " << opParent << ", expected ComponentInterface.";
   return success();
 }
 
