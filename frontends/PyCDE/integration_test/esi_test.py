@@ -97,6 +97,7 @@ if __name__ == "__main__":
 
 def run_cosim(tmpdir, schema_path, rpchostport):
   sys.path.append(tmpdir)
+  import time
   import esi_rt.ESILoopback as esi_sys
   from esi_rt.common import Cosim
 
@@ -108,12 +109,14 @@ def run_cosim(tmpdir, schema_path, rpchostport):
   assert top.mid.host_comms.to_host[0].read(blocking_timeout=None) is None
 
   assert top.mid.host_comms.req_resp[0].write(5) is True
+  time.sleep(0.05)
   assert top.mid.host_comms.to_host_read_any() is None
   assert top.mid.host_comms.to_host[0].read(blocking_timeout=None) is None
   assert top.mid.host_comms.req_resp[0].read() == 12
   assert top.mid.host_comms.req_resp[0].read(blocking_timeout=None) is None
 
   assert top.mid.host_comms.req_resp[0].write(9) is True
+  time.sleep(0.05)
   assert top.mid.host_comms.to_host_read_any() is None
   assert top.mid.host_comms.to_host[0].read(blocking_timeout=None) is None
   assert top.mid.host_comms.req_resp_read_any() == 16
@@ -121,12 +124,14 @@ def run_cosim(tmpdir, schema_path, rpchostport):
   assert top.mid.host_comms.req_resp[0].read(blocking_timeout=None) is None
 
   assert top.mid.host_comms.from_host[0].write(9) is True
+  time.sleep(0.05)
   assert top.mid.host_comms.req_resp_read_any() is None
   assert top.mid.host_comms.req_resp[0].read(blocking_timeout=None) is None
   assert top.mid.host_comms.to_host_read_any() == 9
   assert top.mid.host_comms.to_host[0].read(blocking_timeout=None) is None
 
   assert top.mid.host_comms.from_host[0].write(9) is True
+  time.sleep(0.05)
   assert top.mid.host_comms.req_resp_read_any() is None
   assert top.mid.host_comms.req_resp[0].read(blocking_timeout=None) is None
   assert top.mid.host_comms.to_host[0].read() == 9
