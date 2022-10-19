@@ -667,13 +667,14 @@ void FSMToSVPass::runOnOperation() {
   // Create a typescope shared by all of the FSMs. This typescope will be
   // emitted in a single separate file to avoid polluting each output file with
   // typedefs.
+  StringAttr typeScopeFilename = b.getStringAttr("fsm_enum_typedefs.sv");
   b.setInsertionPointToStart(module.getBody());
   auto typeScope = b.create<hw::TypeScopeOp>(
       module.getLoc(), b.getStringAttr("fsm_enum_typedecls"));
   typeScope.getBodyRegion().push_back(new Block());
   typeScope->setAttr(
       "output_file",
-      hw::OutputFileAttr::get(b.getStringAttr("fsm_enum_typedefs.sv"),
+      hw::OutputFileAttr::get(typeScopeFilename,
                               /*excludeFromFileList*/ b.getBoolAttr(false),
                               /*includeReplicatedOps*/ b.getBoolAttr(false)));
 
@@ -707,9 +708,16 @@ void FSMToSVPass::runOnOperation() {
     instance.erase();
   }
 
-  // If the typescope is empty (no FSMs were converted), erase it.
-  if (typeScope.getBodyBlock()->empty())
+  if (typeScope.getBodyBlock()->empty()) {
+    // If the typescope is empty (no FSMs were converted), erase it.
     typeScope.erase();
+  } else {
+    // Else, add an include directory to the top-level (will include typescope
+    // in all files).
+    b.setInsertionPointToStart(module.getBody());
+    b.create<sv::VerbatimOp>(
+        module.getLoc(), "`include \"" + typeScopeFilename.getValue() + "\"");
+  }
 }
 
 } // end anonymous namespace
