@@ -2562,16 +2562,40 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   // The ?: operator is right associative.
+#if 0
+  // Layout:
+  // cond ? a : b
+  // (long
+  //  + cond) ? a : b
+  // long
+  // + cond
+  //   ? a : b
+  // long
+  // + cond
+  //   ? a
+  //   : b
+  auto box = ps.scopedCBox(2);
+  {
+    auto innerbox = ps.scopedIBox(-2);
+    emitSubExpr(op.getCond(), VerilogPrecedence(Conditional - 1));
+  }
+  ps << PP::space;
+#else
+  // cond ? a : b
+  // cond ? a
+  //      : b
   auto box = ps.scopedIBox(2);
   emitSubExpr(op.getCond(), VerilogPrecedence(Conditional - 1));
-  ps << PP::nbsp << PP::cbox0;
+  ps << PP::nbsp;
+  auto cb = ps.scopedCBox(0);
+#endif
   ps << "? " << PP::ibox0;
   auto lhsInfo =
       emitSubExpr(op.getTrueValue(), VerilogPrecedence(Conditional - 1));
   ps << PP::end;
   ps << PP::space << ": " << PP::ibox0;
   auto rhsInfo = emitSubExpr(op.getFalseValue(), Conditional);
-  ps << PP::end << PP::end;
+  ps << PP::end;
 
   SubExprSignResult signedness = IsUnsigned;
   if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
