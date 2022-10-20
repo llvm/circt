@@ -208,8 +208,12 @@ public:
   }
 
   InstanceNodeIterator &operator++() {
-    ++portIt;
-    skipToNextValidPort();
+    if (!child.isAtEnd())
+      ++child;
+    else {
+      ++portIt;
+      skipToNextValidPort();
+    }
     return *this;
   }
 
@@ -277,7 +281,10 @@ public:
   }
 
   SubfieldNodeIterator &operator++() {
-    child = ChildIterator();
+    if (!child.isAtEnd())
+      ++child;
+    else
+      child = ChildIterator();
     return *this;
   }
 
