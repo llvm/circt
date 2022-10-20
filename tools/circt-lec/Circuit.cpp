@@ -51,9 +51,9 @@ void Solver::Circuit::addConstant(mlir::Value opResult, mlir::APInt opValue) {
   allocateConstant(opResult, opValue);
 }
 
-void Solver::Circuit::addInstance(circt::StringRef instanceName,
+void Solver::Circuit::addInstance(llvm::StringRef instanceName,
                                   circt::hw::HWModuleOp op,
-                                  circt::OperandRange arguments,
+                                  mlir::OperandRange arguments,
                                   mlir::ResultRange results) {
   LLVM_DEBUG(lec::dbgs << name << " addInstance\n");
   INDENT();
@@ -99,7 +99,7 @@ void Solver::Circuit::addInstance(circt::StringRef instanceName,
 // a variadic number of operands.
 #define performVariadicCombOp(OP_NAME, Z3_OPERATION)                           \
   void Solver::Circuit::perform##OP_NAME(mlir::Value result,                   \
-                                         circt::OperandRange operands) {       \
+                                         mlir::OperandRange operands) {        \
     LLVM_DEBUG(lec::dbgs << name << " perform" #OP_NAME "\n");                 \
     INDENT();                                                                  \
     variadicOperation(result, operands,                                        \
@@ -109,8 +109,8 @@ void Solver::Circuit::addInstance(circt::StringRef instanceName,
 // This macro implements the perform function for a `comb` operation accepting
 // two operands.
 #define performBinaryCombOp(OP_NAME, Z3_OPERATION)                             \
-  void Solver::Circuit::perform##OP_NAME(mlir::Value result, circt::Value lhs, \
-                                         circt::Value rhs) {                   \
+  void Solver::Circuit::perform##OP_NAME(mlir::Value result, mlir::Value lhs,  \
+                                         mlir::Value rhs) {                    \
     LLVM_DEBUG(lec::dbgs << name << " perform" #OP_NAME "\n");                 \
     INDENT();                                                                  \
     LLVM_DEBUG(lec::dbgs << "lhs:\n");                                         \
@@ -272,8 +272,8 @@ performVariadicCombOp(Xor, op1 ^ op2);
 /// Helper function for performing a variadic operation: it executes a lambda
 /// over a range of operands.
 void Solver::Circuit::variadicOperation(
-    mlir::Value result, circt::OperandRange operands,
-    mlir::function_ref<z3::expr(const z3::expr &, const z3::expr &)>
+    mlir::Value result, mlir::OperandRange operands,
+    llvm::function_ref<z3::expr(const z3::expr &, const z3::expr &)>
         operation) {
   LLVM_DEBUG(lec::dbgs << "variadic operation\n");
   INDENT();

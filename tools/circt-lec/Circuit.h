@@ -31,8 +31,7 @@
 /// declaring new constraints over a Z3 context.
 class Solver::Circuit {
 public:
-  Circuit(circt::Twine name, Solver *solver)
-      : name(name.str()), solver(solver) {
+  Circuit(llvm::Twine name, Solver *solver) : name(name.str()), solver(solver) {
     assignments = 0;
   };
   /// Add an input to the circuit; internally a new value gets allocated.
@@ -46,38 +45,38 @@ public:
 
   // `hw` dialect operations.
   void addConstant(mlir::Value result, mlir::APInt value);
-  void addInstance(circt::StringRef instanceName, circt::hw::HWModuleOp op,
-                   circt::OperandRange arguments, mlir::ResultRange results);
+  void addInstance(llvm::StringRef instanceName, circt::hw::HWModuleOp op,
+                   mlir::OperandRange arguments, mlir::ResultRange results);
 
   // `comb` dialect operations.
-  void performAdd(mlir::Value result, circt::OperandRange operands);
-  void performAnd(mlir::Value result, circt::OperandRange operands);
-  void performConcat(mlir::Value result, circt::OperandRange operands);
-  void performDivS(mlir::Value result, circt::Value lhs, circt::Value rhs);
-  void performDivU(mlir::Value result, circt::Value lhs, circt::Value rhs);
+  void performAdd(mlir::Value result, mlir::OperandRange operands);
+  void performAnd(mlir::Value result, mlir::OperandRange operands);
+  void performConcat(mlir::Value result, mlir::OperandRange operands);
+  void performDivS(mlir::Value result, mlir::Value lhs, mlir::Value rhs);
+  void performDivU(mlir::Value result, mlir::Value lhs, mlir::Value rhs);
   void performExtract(mlir::Value result, mlir::Value input, uint32_t lowBit);
   void performICmp(mlir::Value result, circt::comb::ICmpPredicate predicate,
                    mlir::Value lhs, mlir::Value rhs);
-  void performModS(mlir::Value result, circt::Value lhs, circt::Value rhs);
-  void performModU(mlir::Value result, circt::Value lhs, circt::Value rhs);
-  void performMul(mlir::Value result, circt::OperandRange operands);
+  void performModS(mlir::Value result, mlir::Value lhs, mlir::Value rhs);
+  void performModU(mlir::Value result, mlir::Value lhs, mlir::Value rhs);
+  void performMul(mlir::Value result, mlir::OperandRange operands);
   void performMux(mlir::Value result, mlir::Value cond, mlir::Value trueValue,
                   mlir::Value falseValue);
-  void performOr(mlir::Value result, circt::OperandRange operands);
+  void performOr(mlir::Value result, mlir::OperandRange operands);
   void performParity(mlir::Value result, mlir::Value input);
   void performReplicate(mlir::Value result, mlir::Value input);
-  void performShl(mlir::Value result, circt::Value lhs, circt::Value rhs);
-  void performShrS(mlir::Value result, circt::Value lhs, circt::Value rhs);
-  void performShrU(mlir::Value result, circt::Value lhs, circt::Value rhs);
-  void performSub(mlir::Value result, circt::OperandRange operands);
-  void performXor(mlir::Value result, circt::OperandRange operands);
+  void performShl(mlir::Value result, mlir::Value lhs, mlir::Value rhs);
+  void performShrS(mlir::Value result, mlir::Value lhs, mlir::Value rhs);
+  void performShrU(mlir::Value result, mlir::Value lhs, mlir::Value rhs);
+  void performSub(mlir::Value result, mlir::OperandRange operands);
+  void performXor(mlir::Value result, mlir::OperandRange operands);
 
 private:
   /// Helper function for performing a variadic operation: it executes a lambda
   /// over a range of operands.
   void variadicOperation(
-      mlir::Value result, circt::OperandRange operands,
-      mlir::function_ref<z3::expr(const z3::expr &, const z3::expr &)>
+      mlir::Value result, mlir::OperandRange operands,
+      llvm::function_ref<z3::expr(const z3::expr &, const z3::expr &)>
           operation);
   /// Allocates an IR value in the logical backend and returns its representing
   /// expression.

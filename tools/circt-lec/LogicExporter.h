@@ -33,7 +33,7 @@
 struct LogicExporter
     : public mlir::PassWrapper<LogicExporter, mlir::OperationPass<>> {
 public:
-  LogicExporter(circt::StringRef moduleName, Solver::Circuit *circuit)
+  LogicExporter(llvm::StringRef moduleName, Solver::Circuit *circuit)
       : moduleName(moduleName), circuit(circuit){};
 
   /// Initializes the pass by visiting the builtin module.
@@ -57,11 +57,11 @@ private:
                                          Solver::Circuit *circuit);
 
     /// Collects unhandled `hw` statement operations.
-    static mlir::LogicalResult visitStmt(circt::Operation *op,
+    static mlir::LogicalResult visitStmt(mlir::Operation *op,
                                          Solver::Circuit *circuit);
 
     /// Handles invalid `hw` statement operations.
-    mlir::LogicalResult visitInvalidStmt(circt::Operation *op,
+    mlir::LogicalResult visitInvalidStmt(mlir::Operation *op,
                                          Solver::Circuit *circuit);
 
     // TypeOpVisitor definitions
@@ -70,7 +70,7 @@ private:
                                            Solver::Circuit *circuit);
 
     /// Collects unhandled `hw` type operations.
-    static mlir::LogicalResult visitTypeOp(circt::Operation *op,
+    static mlir::LogicalResult visitTypeOp(mlir::Operation *op,
                                            Solver::Circuit *circuit);
 
     /// Handles invalid `hw` type operations.
@@ -122,7 +122,7 @@ private:
     /// Handles `builtin.module` logic exporting.
     static mlir::LogicalResult visitBuiltin(mlir::ModuleOp &op,
                                             Solver::Circuit *circuit,
-                                            circt::StringRef targetModule);
+                                            llvm::StringRef targetModule);
 
     /// Handles `hw.module` logic exporting.
     static mlir::LogicalResult visitHW(circt::hw::HWModuleOp &op,
@@ -138,7 +138,7 @@ private:
   /// Visits the given `builtin.module` in search of a specified `hw.module`
   /// and returns it.
   static circt::hw::HWModuleOp fetchModuleOp(mlir::ModuleOp builtinModule,
-                                             circt::StringRef targetModule);
+                                             llvm::StringRef targetModule);
 
   // For Solver::Circuit::addInstance to access Visitor::visitHW.
   friend Solver::Circuit;

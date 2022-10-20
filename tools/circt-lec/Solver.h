@@ -37,7 +37,7 @@ public:
 
   class Circuit;
   /// Create a new circuit to be compared and return it.
-  Circuit *addCircuit(circt::StringRef name, bool firstCircuit);
+  Circuit *addCircuit(llvm::StringRef name, bool firstCircuit);
 
 private:
   /// Prints a model satisfying the solved constraints.

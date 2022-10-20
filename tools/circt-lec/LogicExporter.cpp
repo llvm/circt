@@ -82,8 +82,8 @@ void LogicExporter::runOnOperation() {
 /// and returns it.
 circt::hw::HWModuleOp
 LogicExporter::fetchModuleOp(mlir::ModuleOp builtinModule,
-                             circt::StringRef targetModule) {
-  for (const circt::Operation &op : builtinModule.getOps()) {
+                             llvm::StringRef targetModule) {
+  for (const mlir::Operation &op : builtinModule.getOps()) {
     if (auto hwModule = llvm::dyn_cast<circt::hw::HWModuleOp>(op)) {
       llvm::StringRef moduleName = hwModule.getName();
       LLVM_DEBUG(lec::dbgs << "found `hw.module@" << moduleName << "`\n");
@@ -112,9 +112,9 @@ LogicExporter::Visitor::visitStmt(circt::hw::InstanceOp &op,
   LLVM_DEBUG(debugAttributes(op->getAttrs()));
   LLVM_DEBUG(debugOperands(op));
   LLVM_DEBUG(debugOpResults(&op));
-  circt::StringRef instanceName = op.instanceName();
+  llvm::StringRef instanceName = op.instanceName();
   LLVM_DEBUG(lec::dbgs << "Instance name: " << instanceName << "\n");
-  circt::StringRef targetModule = op.getModuleName();
+  llvm::StringRef targetModule = op.getModuleName();
   LLVM_DEBUG(lec::dbgs << "Target module name: " << targetModule << "\n");
   llvm::Optional<llvm::StringRef> innerSym = op.getInnerSym();
   LLVM_DEBUG(lec::dbgs << "Inner symbol: " << innerSym << "\n");
@@ -140,14 +140,14 @@ LogicExporter::Visitor::visitStmt(circt::hw::OutputOp &op,
 
 /// Collects unhandled `hw` statement operations.
 mlir::LogicalResult
-LogicExporter::Visitor::visitStmt(circt::Operation *op,
+LogicExporter::Visitor::visitStmt(mlir::Operation *op,
                                   Solver::Circuit *circuit) {
   return visitUnhandledOp(op);
 }
 
 /// Handles invalid `hw` statement operations.
 mlir::LogicalResult
-LogicExporter::Visitor::visitInvalidStmt(circt::Operation *op,
+LogicExporter::Visitor::visitInvalidStmt(mlir::Operation *op,
                                          Solver::Circuit *circuit) {
   // op is not valid for StmtVisitor.
   // Attempt dispatching it to TypeOpVisitor next.
@@ -173,14 +173,14 @@ LogicExporter::Visitor::visitTypeOp(circt::hw::ConstantOp &op,
 
 /// Collects unhandled `hw` type operations.
 mlir::LogicalResult
-LogicExporter::Visitor::visitTypeOp(circt::Operation *op,
+LogicExporter::Visitor::visitTypeOp(mlir::Operation *op,
                                     Solver::Circuit *circuit) {
   return visitUnhandledOp(op);
 }
 
 /// Handles invalid `hw` type operations.
 mlir::LogicalResult
-LogicExporter::Visitor::visitInvalidTypeOp(circt::Operation *op,
+LogicExporter::Visitor::visitInvalidTypeOp(mlir::Operation *op,
                                            Solver::Circuit *circuit) {
   // op is neither valid for StmtVisitor nor TypeOpVisitor.
   // Attempt dispatching it to CombinationalVisitor next.
@@ -321,10 +321,10 @@ visitVariadicCombOp(Xor, comb.xor, circt::comb::XorOp &);
 mlir::LogicalResult
 LogicExporter::Visitor::visitBuiltin(mlir::ModuleOp &op,
                                      Solver::Circuit *circuit,
-                                     circt::StringRef targetModule) {
+                                     llvm::StringRef targetModule) {
   LLVM_DEBUG(lec::dbgs << "Visiting `builtin.module`\n");
   INDENT();
-  for (circt::Operation &op : op.getOps()) {
+  for (mlir::Operation &op : op.getOps()) {
     if (auto hwModule = llvm::dyn_cast<circt::hw::HWModuleOp>(op)) {
       llvm::StringRef moduleName = hwModule.getName();
       LLVM_DEBUG(lec::dbgs << "found `hw.module@" << moduleName << "`\n");
@@ -363,7 +363,7 @@ mlir::LogicalResult LogicExporter::Visitor::visitHW(circt::hw::HWModuleOp &op,
 
   // Traverse the module's IR, dispatching the appropriate visiting function.
   Visitor visitor;
-  for (circt::Operation &op : op.getOps()) {
+  for (mlir::Operation &op : op.getOps()) {
     mlir::LogicalResult outcome = visitor.dispatch(&op, circuit);
     if (outcome.failed())
       return outcome;

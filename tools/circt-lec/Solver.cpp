@@ -60,7 +60,7 @@ mlir::LogicalResult Solver::solve() {
 }
 
 /// Create a new circuit to be compared and return it.
-Solver::Circuit *Solver::addCircuit(circt::StringRef name, bool firstCircuit) {
+Solver::Circuit *Solver::addCircuit(llvm::StringRef name, bool firstCircuit) {
   // Hack: entities within the logical engine are namespaced by the circuit
   // they belong to, which may cause shadowing when parsing two files with a
   // similar module naming scheme.

@@ -76,17 +76,17 @@ static cl::opt<bool, true> statistics(
 static mlir::LogicalResult executeLEC(mlir::MLIRContext &context) {
   // Parse the provided input files.
   VERBOSE(lec::outs << "Parsing input file\n");
-  mlir::OwningOpRef<circt::ModuleOp> file1 =
+  mlir::OwningOpRef<mlir::ModuleOp> file1 =
       mlir::parseSourceFile<mlir::ModuleOp>(fileName1, &context);
   if (!file1)
-    return circt::failure();
+    return mlir::failure();
 
   mlir::OwningOpRef<mlir::ModuleOp> file2;
   if (!fileName2.empty()) {
     VERBOSE(lec::outs << "Parsing second input file\n");
-    file2 = mlir::parseSourceFile<circt::ModuleOp>(fileName2, &context);
+    file2 = mlir::parseSourceFile<mlir::ModuleOp>(fileName2, &context);
     if (!file2)
-      return circt::failure();
+      return mlir::failure();
   } else
     VERBOSE(lec::outs << "Second input file not specified\n");
 
@@ -100,9 +100,9 @@ static mlir::LogicalResult executeLEC(mlir::MLIRContext &context) {
   VERBOSE(lec::outs << "Analyzing the first circuit\n";);
   mlir::PassManager pm(&context);
   pm.addPass(std::make_unique<LogicExporter>(moduleName1, c1));
-  circt::ModuleOp m = file1.get();
+  mlir::ModuleOp m = file1.get();
   if (failed(pm.run(m)))
-    return circt::failure();
+    return mlir::failure();
 
   // Repeat the same procedure for the second circuit.
   VERBOSE(lec::outs << "Analyzing the second circuit\n");
@@ -110,7 +110,7 @@ static mlir::LogicalResult executeLEC(mlir::MLIRContext &context) {
   pm2.addPass(std::make_unique<LogicExporter>(moduleName2, c2));
   // In case a second input file was not specified, the first input file will
   // be used instead.
-  circt::ModuleOp m2 = fileName2.empty() ? m : file2.get();
+  mlir::ModuleOp m2 = fileName2.empty() ? m : file2.get();
   if (failed(pm2.run(m2)))
     return mlir::failure();
 
