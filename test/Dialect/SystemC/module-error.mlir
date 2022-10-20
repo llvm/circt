@@ -385,96 +385,11 @@ func.func @invalidType (%arg0: !systemc.value_base>) {}
 
 // -----
 
+// Check that the verifySymbolUses function calls the instance impl library
+
 systemc.module @submodule () { }
 
 hw.module @verilatedCannotReferenceNonHWModule() {
   // expected-error @+1 {{symbol reference 'submodule' isn't a module}}
   systemc.interop.verilated "verilated" @submodule () -> ()
-}
-
-// -----
-
-hw.module @referenceNonExistentSymbol() {
-  // expected-error @+1 {{Cannot find module definition 'submodule'}}
-  systemc.interop.verilated "verilated" @submodule () -> ()
-}
-
-// -----
-
-// expected-note @+1 {{module declared here}}
-hw.module.extern @submodule (%arg0: i32) -> ()
-
-hw.module @wrongNumberOfOperands() {
-  // expected-error @+1 {{op has a wrong number of operands; expected 1 but got 0}}
-  systemc.interop.verilated "verilated" @submodule () -> ()
-}
-
-// -----
-
-// expected-note @+1 {{module declared here}}
-hw.module.extern @submodule (%arg0: i32) -> ()
-
-hw.module @wrongNumberOfInputNames(%arg0: i32) {
-  // expected-error @+1 {{has a wrong number of input port names; expected 1 but got 0}}
-  "systemc.interop.verilated"(%arg0) {instanceName="verilated", moduleName=@submodule, inputNames=[], resultNames=[]} : (i32) -> ()
-}
-
-// -----
-
-// expected-note @+1 {{module declared here}}
-hw.module.extern @submodule (%arg0: i32) -> ()
-
-hw.module @wrongOperandType(%arg0: i8) {
-  // expected-error @+1 {{operand type #0 must be 'i32', but got 'i8'}}
-  systemc.interop.verilated "verilated" @submodule (arg0: %arg0: i8) -> ()
-}
-
-// -----
-
-// expected-note @+1 {{module declared here}}
-hw.module.extern @submodule (%arg0: i32) -> ()
-
-hw.module @wrongOperandLabel(%arg0: i32) {
-  // expected-error @+1 {{input label #0 must be "arg0", but got "a"}}
-  systemc.interop.verilated "verilated" @submodule (a: %arg0: i32) -> ()
-}
-
-// -----
-
-// expected-note @+1 {{module declared here}}
-hw.module.extern @submodule () -> (out0: i32)
-
-hw.module @wrongNumResults() {
-  // expected-error @+1 {{has a wrong number of results; expected 1 but got 0}}
-  systemc.interop.verilated "verilated" @submodule () -> ()
-}
-
-// -----
-
-// expected-note @+1 {{module declared here}}
-hw.module.extern @submodule () -> (out0: i32)
-
-hw.module @wrongResultType() {
-  // expected-error @+1 {{result type #0 must be 'i32', but got 'i8'}}
-  %verilated.out0 = systemc.interop.verilated "verilated" @submodule () -> (out0: i8)
-}
-
-// -----
-
-// expected-note @+1 {{module declared here}}
-hw.module.extern @submodule () -> (out0: i32)
-
-hw.module @wrongNumberOfResultNames() {
-  // expected-error @+1 {{has a wrong number of results port labels; expected 1 but got 0}}
-  "systemc.interop.verilated"() {instanceName="verilated", moduleName=@submodule, inputNames=[], resultNames=[]} : () -> i32
-}
-
-// -----
-
-// expected-note @+1 {{module declared here}}
-hw.module.extern @submodule () -> (out0: i32)
-
-hw.module @wrongResultLabel() {
-  // expected-error @+1 {{input label #0 must be "out0", but got "o"}}
-  %verilated.out0 = systemc.interop.verilated "verilated" @submodule () -> (o: i32)
 }
