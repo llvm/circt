@@ -65,7 +65,7 @@ void Solver::Circuit::addInstance(circt::StringRef instanceName,
   Circuit instance(name + "@" + instanceName + suffix, solver);
   // Export logic to the instance's circuit by visiting the IR of the
   // instanced module.
-  auto res = LogicExporter::HW::visitModule(op, &instance);
+  auto res = LogicExporter::Visitor::visitHW(op, &instance);
   assert(res.succeeded() && "Instance visit failed");
 
   // Constrain the inputs and outputs of the instanced circuit to, respectively,

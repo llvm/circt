@@ -69,7 +69,7 @@ void LogicExporter::runOnOperation() {
   mlir::Operation *op = mlir::Pass::getOperation();
   if (auto builtinModule = llvm::dyn_cast<mlir::ModuleOp>(op)) {
     mlir::LogicalResult outcome =
-        Builtin::visitModule(builtinModule, circuit, moduleName);
+        Visitor::visitBuiltin(builtinModule, circuit, moduleName);
     if (mlir::failed(outcome))
       mlir::Pass::signalPassFailure();
   } else {
@@ -98,79 +98,14 @@ LogicExporter::fetchModuleOp(mlir::ModuleOp builtinModule,
 }
 
 //===----------------------------------------------------------------------===//
-// `Builtin` dialect implementation
+// Visitor implementation
+//===----------------------------------------------------------------------===//
+// StmtVisitor implementation
 //===----------------------------------------------------------------------===//
 
 mlir::LogicalResult
-LogicExporter::Builtin::visitModule(mlir::ModuleOp &op,
-                                    Solver::Circuit *circuit,
-                                    circt::StringRef targetModule) {
-  LLVM_DEBUG(lec::dbgs << "Visiting `builtin.module`\n");
-  INDENT();
-  for (circt::Operation &op : op.getOps()) {
-    if (auto hwModule = llvm::dyn_cast<circt::hw::HWModuleOp>(op)) {
-      llvm::StringRef moduleName = hwModule.getName();
-      LLVM_DEBUG(lec::dbgs << "found `hw.module@" << moduleName << "`\n");
-
-      // When no module name is specified the first module encountered is
-      // selected.
-      if (targetModule.empty() || moduleName == targetModule) {
-        INDENT();
-        LLVM_DEBUG(lec::dbgs << "proceeding with this module\n");
-        return LogicExporter::HW::visitModule(hwModule, circuit);
-      }
-    } else
-      op.emitWarning("only `hw.module` checking is implemented");
-    // return mlir::failure();
-  }
-  op.emitError("expected `" + targetModule + "` module not found");
-  return mlir::failure();
-}
-
-//===----------------------------------------------------------------------===//
-// `hw` dialect implementation
-//===----------------------------------------------------------------------===//
-
-mlir::LogicalResult LogicExporter::HW::visitConstant(circt::hw::ConstantOp &op,
-                                                     Solver::Circuit *circuit) {
-  LLVM_DEBUG(lec::dbgs << "Visiting hw.constant\n");
-  INDENT();
-  mlir::Value result = op.getResult();
-  LLVM_DEBUG(lec::printValue(result));
-  mlir::APInt value = op.getValue();
-  LLVM_DEBUG(lec::printAPInt(value));
-  circuit->addConstant(result, value);
-  return mlir::success();
-}
-
-mlir::LogicalResult LogicExporter::HW::visitModule(circt::hw::HWModuleOp &op,
-                                                   Solver::Circuit *circuit) {
-  LLVM_DEBUG(lec::dbgs << "Visiting `hw.module@" << op.getName() << "`\n");
-  INDENT();
-  LLVM_DEBUG(debugAttributes(op->getAttrs()));
-  LLVM_DEBUG(lec::dbgs << "Arguments:\n");
-  for (mlir::BlockArgument argument : op.getArguments()) {
-    INDENT();
-    LLVM_DEBUG(lec::dbgs << "Argument\n");
-    {
-      INDENT();
-      LLVM_DEBUG(lec::printValue(argument));
-    }
-    circuit->addInput(argument);
-  }
-
-  // Traverse the module's IR, dispatching the appropriate visiting function.
-  for (circt::Operation &op : op.getOps()) {
-    mlir::LogicalResult outcome = LogicExporter::visitOperation(&op, circuit);
-    if (outcome.failed())
-      return outcome;
-  }
-
-  return mlir::success();
-}
-
-mlir::LogicalResult LogicExporter::HW::visitInstance(circt::hw::InstanceOp &op,
-                                                     Solver::Circuit *circuit) {
+LogicExporter::Visitor::visitStmt(circt::hw::InstanceOp &op,
+                                  Solver::Circuit *circuit) {
   LLVM_DEBUG(lec::dbgs << "Visiting hw.instance\n");
   INDENT();
   LLVM_DEBUG(lec::dbgs << op->getName() << "\n");
@@ -192,8 +127,9 @@ mlir::LogicalResult LogicExporter::HW::visitInstance(circt::hw::InstanceOp &op,
   return mlir::success();
 }
 
-mlir::LogicalResult LogicExporter::HW::visitOutput(circt::hw::OutputOp &op,
-                                                   Solver::Circuit *circuit) {
+mlir::LogicalResult
+LogicExporter::Visitor::visitStmt(circt::hw::OutputOp &op,
+                                  Solver::Circuit *circuit) {
   LLVM_DEBUG(lec::dbgs << "Visiting hw.output\n");
   INDENT();
   LLVM_DEBUG(debugOperands(op));
@@ -202,14 +138,63 @@ mlir::LogicalResult LogicExporter::HW::visitOutput(circt::hw::OutputOp &op,
   return mlir::success();
 }
 
+/// Collects unhandled `hw` statement operations.
+mlir::LogicalResult
+LogicExporter::Visitor::visitStmt(circt::Operation *op,
+                                  Solver::Circuit *circuit) {
+  return visitUnhandledOp(op);
+}
+
+/// Handles invalid `hw` statement operations.
+mlir::LogicalResult
+LogicExporter::Visitor::visitInvalidStmt(circt::Operation *op,
+                                         Solver::Circuit *circuit) {
+  // op is not valid for StmtVisitor.
+  // Attempt dispatching it to TypeOpVisitor next.
+  return dispatchTypeOpVisitor(op, circuit);
+}
+
 //===----------------------------------------------------------------------===//
-// `comb` dialect implementation
+// TypeOpVisitor implementation
+//===----------------------------------------------------------------------===//
+
+mlir::LogicalResult
+LogicExporter::Visitor::visitTypeOp(circt::hw::ConstantOp &op,
+                                    Solver::Circuit *circuit) {
+  LLVM_DEBUG(lec::dbgs << "Visiting hw.constant\n");
+  INDENT();
+  mlir::Value result = op.getResult();
+  LLVM_DEBUG(lec::printValue(result));
+  mlir::APInt value = op.getValue();
+  LLVM_DEBUG(lec::printAPInt(value));
+  circuit->addConstant(result, value);
+  return mlir::success();
+}
+
+/// Collects unhandled `hw` type operations.
+mlir::LogicalResult
+LogicExporter::Visitor::visitTypeOp(circt::Operation *op,
+                                    Solver::Circuit *circuit) {
+  return visitUnhandledOp(op);
+}
+
+/// Handles invalid `hw` type operations.
+mlir::LogicalResult
+LogicExporter::Visitor::visitInvalidTypeOp(circt::Operation *op,
+                                           Solver::Circuit *circuit) {
+  // op is neither valid for StmtVisitor nor TypeOpVisitor.
+  // Attempt dispatching it to CombinationalVisitor next.
+  return dispatchCombinationalVisitor(op, circuit);
+}
+
+//===----------------------------------------------------------------------===//
+// CombinationalVisitor implementation
 //===----------------------------------------------------------------------===//
 
 // This macro implements the visiting function for a `comb` operation accepting
 // a variadic number of operands.
 #define visitVariadicCombOp(OP_NAME, MLIR_NAME, TYPE)                          \
-  mlir::LogicalResult LogicExporter::Comb::visit##OP_NAME(                     \
+  mlir::LogicalResult LogicExporter::Visitor::visitComb(                       \
       TYPE op, Solver::Circuit *circuit) {                                     \
     LLVM_DEBUG(lec::dbgs << "Visiting " #MLIR_NAME "\n");                      \
     INDENT();                                                                  \
@@ -223,7 +208,7 @@ mlir::LogicalResult LogicExporter::HW::visitOutput(circt::hw::OutputOp &op,
 // This macro implements the visiting function for a `comb` operation accepting
 // two operands.
 #define visitBinaryCombOp(OP_NAME, MLIR_NAME, TYPE)                            \
-  mlir::LogicalResult LogicExporter::Comb::visit##OP_NAME(                     \
+  mlir::LogicalResult LogicExporter::Visitor::visitComb(                       \
       TYPE op, Solver::Circuit *circuit) {                                     \
     LLVM_DEBUG(lec::dbgs << "Visiting " #MLIR_NAME "\n");                      \
     INDENT();                                                                  \
@@ -239,7 +224,7 @@ mlir::LogicalResult LogicExporter::HW::visitOutput(circt::hw::OutputOp &op,
 // This macro implements the visiting function for a `comb` operation accepting
 // one operand.
 #define visitUnaryCombOp(OP_NAME, MLIR_NAME, TYPE)                             \
-  mlir::LogicalResult LogicExporter::Comb::visit##OP_NAME(                     \
+  mlir::LogicalResult LogicExporter::Visitor::visitComb(                       \
       TYPE op, Solver::Circuit *circuit) {                                     \
     LLVM_DEBUG(lec::dbgs << "Visiting " #MLIR_NAME "\n");                      \
     INDENT();                                                                  \
@@ -262,7 +247,7 @@ visitBinaryCombOp(DivS, comb.divs, circt::comb::DivSOp &);
 visitBinaryCombOp(DivU, comb.divu, circt::comb::DivUOp &);
 
 mlir::LogicalResult
-LogicExporter::Comb::visitExtract(circt::comb::ExtractOp &op,
+LogicExporter::Visitor::visitComb(circt::comb::ExtractOp &op,
                                   Solver::Circuit *circuit) {
   LLVM_DEBUG(lec::dbgs << "Visiting comb.extract\n");
   INDENT();
@@ -276,8 +261,9 @@ LogicExporter::Comb::visitExtract(circt::comb::ExtractOp &op,
   return mlir::success();
 }
 
-mlir::LogicalResult LogicExporter::Comb::visitICmp(circt::comb::ICmpOp &op,
-                                                   Solver::Circuit *circuit) {
+mlir::LogicalResult
+LogicExporter::Visitor::visitComb(circt::comb::ICmpOp &op,
+                                  Solver::Circuit *circuit) {
   LLVM_DEBUG(lec::dbgs << "Visiting comb.icmp\n");
   INDENT();
   LLVM_DEBUG(debugOperands(op));
@@ -296,8 +282,9 @@ visitBinaryCombOp(ModU, comb.modu, circt::comb::ModUOp &);
 
 visitVariadicCombOp(Mul, comb.mul, circt::comb::MulOp &);
 
-mlir::LogicalResult LogicExporter::Comb::visitMux(circt::comb::MuxOp &op,
-                                                  Solver::Circuit *circuit) {
+mlir::LogicalResult
+LogicExporter::Visitor::visitComb(circt::comb::MuxOp &op,
+                                  Solver::Circuit *circuit) {
   LLVM_DEBUG(lec::dbgs << "Visiting comb.mux\n");
   INDENT();
   LLVM_DEBUG(debugOperands(op));
@@ -327,85 +314,78 @@ visitVariadicCombOp(Sub, comb.sub, circt::comb::SubOp &);
 visitVariadicCombOp(Xor, comb.xor, circt::comb::XorOp &);
 
 //===----------------------------------------------------------------------===//
-// Operation visitor
+// Additional Visitor implementations
 //===----------------------------------------------------------------------===//
 
+/// Handles `builtin.module` logic exporting.
+mlir::LogicalResult
+LogicExporter::Visitor::visitBuiltin(mlir::ModuleOp &op,
+                                     Solver::Circuit *circuit,
+                                     circt::StringRef targetModule) {
+  LLVM_DEBUG(lec::dbgs << "Visiting `builtin.module`\n");
+  INDENT();
+  for (circt::Operation &op : op.getOps()) {
+    if (auto hwModule = llvm::dyn_cast<circt::hw::HWModuleOp>(op)) {
+      llvm::StringRef moduleName = hwModule.getName();
+      LLVM_DEBUG(lec::dbgs << "found `hw.module@" << moduleName << "`\n");
+
+      // When no module name is specified the first module encountered is
+      // selected.
+      if (targetModule.empty() || moduleName == targetModule) {
+        INDENT();
+        LLVM_DEBUG(lec::dbgs << "proceeding with this module\n");
+        return visitHW(hwModule, circuit);
+      }
+    } else
+      op.emitWarning("only `hw.module` checking is implemented");
+    // return mlir::failure();
+  }
+  op.emitError("expected `" + targetModule + "` module not found");
+  return mlir::failure();
+}
+
+/// Handles `hw.module` logic exporting.
+mlir::LogicalResult LogicExporter::Visitor::visitHW(circt::hw::HWModuleOp &op,
+                                                    Solver::Circuit *circuit) {
+  LLVM_DEBUG(lec::dbgs << "Visiting `hw.module@" << op.getName() << "`\n");
+  INDENT();
+  LLVM_DEBUG(debugAttributes(op->getAttrs()));
+  LLVM_DEBUG(lec::dbgs << "Arguments:\n");
+  for (mlir::BlockArgument argument : op.getArguments()) {
+    INDENT();
+    LLVM_DEBUG(lec::dbgs << "Argument\n");
+    {
+      INDENT();
+      LLVM_DEBUG(lec::printValue(argument));
+    }
+    circuit->addInput(argument);
+  }
+
+  // Traverse the module's IR, dispatching the appropriate visiting function.
+  Visitor visitor;
+  for (circt::Operation &op : op.getOps()) {
+    mlir::LogicalResult outcome = visitor.dispatch(&op, circuit);
+    if (outcome.failed())
+      return outcome;
+  }
+
+  return mlir::success();
+}
+
+/// Reports a failure whenever an unhandled operation is visited.
+mlir::LogicalResult
+LogicExporter::Visitor::visitUnhandledOp(mlir::Operation *op) {
+  return mlir::failure();
+}
+
 /// Dispatches an operation to the appropriate visit function.
-mlir::LogicalResult LogicExporter::visitOperation(mlir::Operation *op,
-                                                  Solver::Circuit *circuit) {
-  mlir::LogicalResult outcome =
-      llvm::TypeSwitch<mlir::Operation *, mlir::LogicalResult>(op)
-          .Case<circt::hw::ConstantOp>([&](circt::hw::ConstantOp &op) {
-            return LogicExporter::HW::visitConstant(op, circuit);
-          })
-          .Case<circt::hw::InstanceOp>([&](circt::hw::InstanceOp &op) {
-            return LogicExporter::HW::visitInstance(op, circuit);
-          })
-          .Case<circt::hw::OutputOp>([&](circt::hw::OutputOp &op) {
-            return LogicExporter::HW::visitOutput(op, circuit);
-          })
-          .Case<circt::comb::AddOp>([&](circt::comb::AddOp &op) {
-            return LogicExporter::Comb::visitAdd(op, circuit);
-          })
-          .Case<circt::comb::AndOp>([&](circt::comb::AndOp &op) {
-            return LogicExporter::Comb::visitAnd(op, circuit);
-          })
-          .Case<circt::comb::ConcatOp>([&](circt::comb::ConcatOp &op) {
-            return LogicExporter::Comb::visitConcat(op, circuit);
-          })
-          .Case<circt::comb::DivSOp>([&](circt::comb::DivSOp &op) {
-            return LogicExporter::Comb::visitDivS(op, circuit);
-          })
-          .Case<circt::comb::DivUOp>([&](circt::comb::DivUOp &op) {
-            return LogicExporter::Comb::visitDivU(op, circuit);
-          })
-          .Case<circt::comb::ExtractOp>([&](circt::comb::ExtractOp &op) {
-            return LogicExporter::Comb::visitExtract(op, circuit);
-          })
-          .Case<circt::comb::ICmpOp>([&](circt::comb::ICmpOp &op) {
-            return LogicExporter::Comb::visitICmp(op, circuit);
-          })
-          .Case<circt::comb::ModSOp>([&](circt::comb::ModSOp &op) {
-            return LogicExporter::Comb::visitModS(op, circuit);
-          })
-          .Case<circt::comb::ModUOp>([&](circt::comb::ModUOp &op) {
-            return LogicExporter::Comb::visitModU(op, circuit);
-          })
-          .Case<circt::comb::MulOp>([&](circt::comb::MulOp &op) {
-            return LogicExporter::Comb::visitMul(op, circuit);
-          })
-          .Case<circt::comb::MuxOp>([&](circt::comb::MuxOp &op) {
-            return LogicExporter::Comb::visitMux(op, circuit);
-          })
-          .Case<circt::comb::OrOp>([&](circt::comb::OrOp &op) {
-            return LogicExporter::Comb::visitOr(op, circuit);
-          })
-          .Case<circt::comb::ParityOp>([&](circt::comb::ParityOp &op) {
-            return LogicExporter::Comb::visitParity(op, circuit);
-          })
-          .Case<circt::comb::ReplicateOp>([&](circt::comb::ReplicateOp &op) {
-            return LogicExporter::Comb::visitReplicate(op, circuit);
-          })
-          .Case<circt::comb::ShlOp>([&](circt::comb::ShlOp &op) {
-            return LogicExporter::Comb::visitShl(op, circuit);
-          })
-          .Case<circt::comb::ShrSOp>([&](circt::comb::ShrSOp &op) {
-            return LogicExporter::Comb::visitShrS(op, circuit);
-          })
-          .Case<circt::comb::ShrUOp>([&](circt::comb::ShrUOp &op) {
-            return LogicExporter::Comb::visitShrU(op, circuit);
-          })
-          .Case<circt::comb::SubOp>([&](circt::comb::SubOp &op) {
-            return LogicExporter::Comb::visitSub(op, circuit);
-          })
-          .Case<circt::comb::XorOp>([&](circt::comb::XorOp &op) {
-            return LogicExporter::Comb::visitXor(op, circuit);
-          })
-          .Default([](mlir::Operation *op) {
-            op->emitOpError("is not implemented");
-            return mlir::failure();
-          });
-  return outcome;
+mlir::LogicalResult LogicExporter::Visitor::dispatch(mlir::Operation *op,
+                                                     Solver::Circuit *circuit) {
+  // Attempt dispatching the operation to the StmtVisitor; if it is an invalid
+  // `hw` statement operation, the StmtVisitor will dispatch it to another
+  // visitor, and so on in a chain until it gets dispatched to the appropriate
+  // visitor.
+  return dispatchStmtVisitor(op, circuit);
 }
 
 #undef DEBUG_TYPE
