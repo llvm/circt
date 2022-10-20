@@ -2177,14 +2177,6 @@ LogicalResult SliceLibOp::verify() {
                                                                                \
   bool OpType::isCombinational() { return false; }
 
-// clang-format off
-ImplBinPipeOpCellInterface(MultPipeLibOp, "out")
-ImplBinPipeOpCellInterface(DivUPipeLibOp, "out_quotient")
-ImplBinPipeOpCellInterface(DivSPipeLibOp, "out_quotient")
-ImplBinPipeOpCellInterface(RemUPipeLibOp, "out_remainder")
-ImplBinPipeOpCellInterface(RemSPipeLibOp, "out_remainder")
-// clang-format on
-
 #define ImplUnaryOpCellInterface(OpType)                                       \
   SmallVector<StringRef> OpType::portNames() { return {"in", "out"}; }         \
   SmallVector<Direction> OpType::portDirections() { return {Input, Output}; }  \
@@ -2214,7 +2206,13 @@ ImplBinPipeOpCellInterface(RemSPipeLibOp, "out_remainder")
             DictionaryAttr::get(getContext())};                                \
   }
 
-    // clang-format off
+// clang-format off
+ImplBinPipeOpCellInterface(MultPipeLibOp, "out")
+ImplBinPipeOpCellInterface(DivUPipeLibOp, "out_quotient")
+ImplBinPipeOpCellInterface(DivSPipeLibOp, "out_quotient")
+ImplBinPipeOpCellInterface(RemUPipeLibOp, "out_remainder")
+ImplBinPipeOpCellInterface(RemSPipeLibOp, "out_remainder")
+
 ImplUnaryOpCellInterface(PadLibOp)
 ImplUnaryOpCellInterface(SliceLibOp)
 ImplUnaryOpCellInterface(NotLibOp)
