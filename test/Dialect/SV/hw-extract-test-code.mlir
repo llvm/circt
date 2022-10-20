@@ -237,6 +237,8 @@ module attributes {
 
   hw.module.extern private @Qux(%a: i1) -> (b: i1, c: i1)
 
+  hw.module.extern private @Bozo(%a: i1) -> (b: i1)
+
   hw.module @AllExtracted(%clock: i1, %in: i1) {
     %foo.b = hw.instance "foo" @Foo(a: %in: i1) -> (b: i1)
     %bar.b = hw.instance "bar" @Bar(a: %in: i1) -> (b: i1)
@@ -279,8 +281,19 @@ module attributes {
     }
   }
 
+  hw.module private @ShouldBeInlined2(%clock: i1, %in: i1) {
+    %bozo.b = hw.instance "bozo" @Bozo(a: %in: i1) -> (b: i1)
+    sv.always posedge %clock {
+      sv.cover %bozo.b, immediate
+    }
+  }
+
   hw.module @ChildShouldInline(%clock: i1, %in: i1) {
     hw.instance "child" @ShouldBeInlined(clock: %clock: i1, in: %in: i1) -> ()
+  }
+
+  hw.module @ChildShouldInline2(%clock: i1, %in: i1) {
+    hw.instance "child" @ShouldBeInlined2(clock: %clock: i1, in: %in: i1) -> ()
   }
 
   hw.module @MultiResultExtracted(%clock: i1, %in: i1) {

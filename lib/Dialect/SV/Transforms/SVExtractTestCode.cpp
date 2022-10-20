@@ -384,8 +384,12 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
   if (oldMod.getNumOutputs() != 0)
     return;
 
-  // Iterate through each instance of the module.
+  // Get the instance graph node for the old module.
   hw::InstanceGraphNode *node = instanceGraph.lookup(oldMod);
+  assert(!node->noUses() &&
+         "expected module for inlining to be instantiated at least once");
+
+  // Iterate through each instance of the module.
   OpBuilder b(oldMod);
   bool allInlined = true;
   for (hw::InstanceRecord *use : llvm::make_early_inc_range(node->uses())) {
@@ -413,6 +417,7 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
     // Inline the body at the instantiation site.
     hw::HWModuleOp instParent =
         cast<hw::HWModuleOp>(use->getParent()->getModule());
+    hw::InstanceGraphNode *instParentNode = instanceGraph.lookup(instParent);
     SmallVector<Operation *, 16> lateBoundOps;
     b.setInsertionPoint(inst);
     for (auto &op : *oldMod.getBodyBlock()) {
@@ -437,6 +442,14 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
         // remember to revisit this op.
         if (hasOoOArgs(instParent, clonedOp))
           lateBoundOps.push_back(clonedOp);
+
+        // If the cloned op is an instance, record it within the new parent in
+        // the instance graph.
+        if (auto innerInst = dyn_cast<hw::InstanceOp>(clonedOp)) {
+          hw::InstanceGraphNode *innerInstModule =
+              instanceGraph.lookup(innerInst.getModuleNameAttr().getAttr());
+          instParentNode->addInstance(innerInst, innerInstModule);
+        }
       }
     }
 
@@ -475,7 +488,7 @@ private:
   // Run the extraction on a module, and return true if test code was extracted.
   bool doModule(hw::HWModuleOp module, std::function<bool(Operation *)> fn,
                 StringRef suffix, Attribute path, Attribute bindFile,
-                BindTable &bindTable,
+                hw::InstanceGraph &instanceGraph, BindTable &bindTable,
                 SmallPtrSetImpl<Operation *> &opsToErase) {
     bool hasError = false;
     // Find Operations of interest.
@@ -523,6 +536,10 @@ private:
                                    bindFile, bindTable);
     // do the clone
     migrateOps(module, bmod, opsToClone, cutMap);
+
+    // Register the newly created module in the instance graph.
+    instanceGraph.addModule(bmod);
+
     // erase old operations of interest eagerly, removing from erase set.
     for (auto *op : roots) {
       opsToErase.erase(op);
@@ -542,6 +559,8 @@ private:
     // Check each module that had instances extracted.
     for (auto &pair : extractedInstances) {
       hw::InstanceGraphNode *node = instanceGraph.lookup(pair.first);
+      assert(!node->noUses() && "expected module whose instances were "
+                                "extracted to be instantiated at least once");
 
       // See if all instances were extracted.
       bool allInstancesExtracted = true;
@@ -646,12 +665,15 @@ void SVExtractTestCodeImplPass::runOnOperation() {
 
       SmallPtrSet<Operation *, 32> opsToErase;
       bool anyThingExtracted = false;
-      anyThingExtracted |= doModule(rtlmod, isAssert, "_assert", assertDir,
-                                    assertBindFile, bindTable, opsToErase);
-      anyThingExtracted |= doModule(rtlmod, isAssume, "_assume", assumeDir,
-                                    assumeBindFile, bindTable, opsToErase);
-      anyThingExtracted |= doModule(rtlmod, isCover, "_cover", coverDir,
-                                    coverBindFile, bindTable, opsToErase);
+      anyThingExtracted |=
+          doModule(rtlmod, isAssert, "_assert", assertDir, assertBindFile,
+                   instanceGraph, bindTable, opsToErase);
+      anyThingExtracted |=
+          doModule(rtlmod, isAssume, "_assume", assumeDir, assumeBindFile,
+                   instanceGraph, bindTable, opsToErase);
+      anyThingExtracted |=
+          doModule(rtlmod, isCover, "_cover", coverDir, coverBindFile,
+                   instanceGraph, bindTable, opsToErase);
 
       // Inline any modules that only have inputs for test code.
       if (!disableModuleInlining && anyThingExtracted)
