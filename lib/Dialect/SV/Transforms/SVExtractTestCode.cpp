@@ -488,7 +488,7 @@ private:
   // Run the extraction on a module, and return true if test code was extracted.
   bool doModule(hw::HWModuleOp module, std::function<bool(Operation *)> fn,
                 StringRef suffix, Attribute path, Attribute bindFile,
-                hw::InstanceGraph &instanceGraph, BindTable &bindTable,
+                BindTable &bindTable,
                 SmallPtrSetImpl<Operation *> &opsToErase) {
     bool hasError = false;
     // Find Operations of interest.
@@ -538,7 +538,7 @@ private:
     migrateOps(module, bmod, opsToClone, cutMap);
 
     // Register the newly created module in the instance graph.
-    instanceGraph.addModule(bmod);
+    instanceGraph->addModule(bmod);
 
     // erase old operations of interest eagerly, removing from erase set.
     for (auto *op : roots) {
@@ -580,11 +580,16 @@ private:
 
   // Map from module name to set of extracted instances for that module.
   DenseMap<StringAttr, SmallPtrSet<Operation *, 32>> extractedInstances;
+
+  // Instance graph we are using and maintaining.
+  hw::InstanceGraph *instanceGraph = nullptr;
 };
 
 } // end anonymous namespace
 
 void SVExtractTestCodeImplPass::runOnOperation() {
+  this->instanceGraph = &getAnalysis<circt::hw::InstanceGraph>();
+
   auto top = getOperation();
   auto *topLevelModule = top.getBody();
   auto assertDir =
@@ -644,8 +649,6 @@ void SVExtractTestCodeImplPass::runOnOperation() {
     return isa<CoverOp>(op) || isa<CoverConcurrentOp>(op);
   };
 
-  auto &instanceGraph = getAnalysis<circt::hw::InstanceGraph>();
-
   BindTable bindTable;
   for (auto &op : llvm::make_early_inc_range(topLevelModule->getOperations())) {
     if (auto rtlmod = dyn_cast<hw::HWModuleOp>(op)) {
@@ -654,7 +657,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       // module is bound, then extraction is skipped.  This avoids problems
       // where certain simulators dislike having binds that target bound
       // modules.
-      if (isBound(rtlmod, instanceGraph))
+      if (isBound(rtlmod, *instanceGraph))
         continue;
 
       // In the module is in test harness, we don't have to extract from it.
@@ -665,19 +668,16 @@ void SVExtractTestCodeImplPass::runOnOperation() {
 
       SmallPtrSet<Operation *, 32> opsToErase;
       bool anyThingExtracted = false;
-      anyThingExtracted |=
-          doModule(rtlmod, isAssert, "_assert", assertDir, assertBindFile,
-                   instanceGraph, bindTable, opsToErase);
-      anyThingExtracted |=
-          doModule(rtlmod, isAssume, "_assume", assumeDir, assumeBindFile,
-                   instanceGraph, bindTable, opsToErase);
-      anyThingExtracted |=
-          doModule(rtlmod, isCover, "_cover", coverDir, coverBindFile,
-                   instanceGraph, bindTable, opsToErase);
+      anyThingExtracted |= doModule(rtlmod, isAssert, "_assert", assertDir,
+                                    assertBindFile, bindTable, opsToErase);
+      anyThingExtracted |= doModule(rtlmod, isAssume, "_assume", assumeDir,
+                                    assumeBindFile, bindTable, opsToErase);
+      anyThingExtracted |= doModule(rtlmod, isCover, "_cover", coverDir,
+                                    coverBindFile, bindTable, opsToErase);
 
       // Inline any modules that only have inputs for test code.
       if (!disableModuleInlining && anyThingExtracted)
-        inlineInputOnly(rtlmod, instanceGraph, bindTable, opsToErase);
+        inlineInputOnly(rtlmod, *instanceGraph, bindTable, opsToErase);
 
       // Erase any instances that were extracted, and their forward dataflow.
       // Also erase old instances that were inlined and can now be cleaned up.
@@ -695,7 +695,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
 
   // After all instances are processed, move any modules that had all instances
   // extracted to the testbench path.
-  maybeMoveExtractedModules(instanceGraph, testBenchDir);
+  maybeMoveExtractedModules(*instanceGraph, testBenchDir);
 
   // We have to wait until all the instances are processed to clean up the
   // annotations.
@@ -706,6 +706,8 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       op.removeAttr("firrtl.extract.assume.extra");
     }
   top->removeAttr("firrtl.extract.testbench");
+
+  markAnalysesPreserved<circt::hw::InstanceGraph>();
 }
 
 std::unique_ptr<Pass>
