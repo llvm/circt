@@ -60,6 +60,24 @@ struct Node {
   explicit Node(Value value = nullptr, NodeContext *context = nullptr)
       : value(value), context(context) {}
 
+  explicit Node(Operation *op, NodeContext *nodeCtxt) : context(nodeCtxt) {
+    if (!op) {
+      value = nullptr;
+      return;
+    }
+    // Assumption is that the op can either be connect, or with only one result.
+    // This is ensured in ChildIterator::skipToNextValidChild.
+    TypeSwitch<Operation *>(op)
+        .Case<FConnectLike>([&](FConnectLike connect) {
+          value = connect.getDest();
+          return;
+        })
+        .Default([&](auto) {
+          value = op->getResult(0);
+          return;
+        });
+  }
+
   bool operator==(const Node &rhs) const { return value == rhs.value; }
   bool operator!=(const Node &rhs) const { return !(*this == rhs); }
   bool isNull() const { return value == nullptr; }
@@ -109,13 +127,11 @@ public:
     return *this;
   }
 
-  Value operator*() {
+  Operation *operator*() {
     assert(!isAtEnd() && "dereferencing the end iterator");
     LLVM_DEBUG(llvm::dbgs()
                << "\n ChildIterator dereference :" << *childIt->getOwner());
-    if (auto connect = dyn_cast<FConnectLike>(childIt->getOwner()))
-      return connect.getDest();
-    return childIt->getOwner()->getResult(0);
+    return childIt->getOwner();
   }
 
   bool operator==(const ChildIterator &rhs) const {
@@ -319,7 +335,7 @@ public:
   Node operator*() {
     assert(connect != node.context->connects.end() &&
            "dereferencing the end iterator");
-    return Node((*connect).getDest(), node.context);
+    return Node(*connect, node.context);
   }
 
   bool operator==(const DummySourceNodeIterator &rhs) const {
