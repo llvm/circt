@@ -329,6 +329,36 @@ module {
 
 // -----
 
+// expected-note @+1 {{module declared here}}
+hw.module.extern @submodule () -> (out0: i32)
+
+hw.module @wrongResultLabel() {
+  // expected-error @+1 {{result label #0 must be "out0", but got "o"}}
+  %inst0.out0 = hw.instance "inst0" @submodule () -> (o: i32)
+}
+
+// -----
+
+// expected-note @+1 {{module declared here}}
+hw.module.extern @submodule () -> (out0: i32)
+
+hw.module @wrongNumberOfResultNames() {
+  // expected-error @+1 {{has a wrong number of results port labels; expected 1 but got 0}}
+  "hw.instance"() {instanceName="inst0", moduleName=@submodule, argNames=[], resultNames=[], parameters=[]} : () -> i32
+}
+
+// -----
+
+// expected-note @+1 {{module declared here}}
+hw.module.extern @submodule (%arg0: i32) -> ()
+
+hw.module @wrongNumberOfInputNames(%arg0: i32) {
+  // expected-error @+1 {{has a wrong number of input port names; expected 1 but got 0}}
+  "hw.instance"(%arg0) {instanceName="inst0", moduleName=@submodule, argNames=[], resultNames=[], parameters=[]} : (i32) -> ()
+}
+
+// -----
+
 // expected-error @+1 {{unsupported dimension kind in hw.array}}
 hw.module @bab<param: i32, N: i32> ( %array2d: !hw.array<i3 x i4>) {}
 

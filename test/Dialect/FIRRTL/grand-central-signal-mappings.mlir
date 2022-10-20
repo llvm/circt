@@ -152,9 +152,9 @@ firrtl.circuit "GenerateJSON"  attributes {
   // CHECK-SAME:   \22vendor\22: {
   // CHECK-SAME:     \22vcs\22: {
   // CHECK-SAME:       \22vsrcs\22: [
-  // CHECK-SAME:         \22{{.+}}{{[/\]}}GenerateJSON_signal_mappings.sv\22,
-  // CHECK-SAME:         \22{{.+}}{{[/\]}}GenerateJSON.sv\22,
-  // CHECK-SAME:         \22{{.+}}{{[/\]}}InlineExternalModule.sv\22
+  // CHECK-SAME:         \22{{.+}}GenerateJSON_signal_mappings.sv\22,
+  // CHECK-SAME:         \22{{.+}}GenerateJSON.sv\22,
+  // CHECK-SAME:         \22{{.+}}InlineExternalModule.sv\22
   // CHECK-SAME:       ]
   // CHECK-SAME:     },
   // CHECK-SAME:     \22verilator\22: {

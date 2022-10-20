@@ -182,9 +182,9 @@ LogicalResult calyx::verifyComponent(Operation *op) {
 
 LogicalResult calyx::verifyCell(Operation *op) {
   auto opParent = op->getParentOp();
-  if (!isa<ComponentOp>(opParent))
+  if (!isa<ComponentInterface>(opParent))
     return op->emitOpError()
-           << "has parent: " << opParent << ", expected ComponentOp.";
+           << "has parent: " << opParent << ", expected ComponentInterface.";
   return success();
 }
 
@@ -2123,6 +2123,26 @@ LogicalResult WhileOp::canonicalize(WhileOp whileOp,
 // Calyx library ops
 //===----------------------------------------------------------------------===//
 
+LogicalResult PadLibOp::verify() {
+  unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
+  unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
+  if (inBits >= outBits)
+    return emitOpError("expected input bits (")
+           << inBits << ')' << " to be less than output bits (" << outBits
+           << ')';
+  return success();
+}
+
+LogicalResult SliceLibOp::verify() {
+  unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
+  unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
+  if (inBits <= outBits)
+    return emitOpError("expected input bits (")
+           << inBits << ')' << " to be greater than output bits (" << outBits
+           << ')';
+  return success();
+}
+
 #define ImplBinPipeOpCellInterface(OpType, outName)                            \
   SmallVector<StringRef> OpType::portNames() {                                 \
     return {"clk", "reset", "go", "left", "right", outName, "done"};           \
@@ -2157,32 +2177,6 @@ LogicalResult WhileOp::canonicalize(WhileOp whileOp,
                                                                                \
   bool OpType::isCombinational() { return false; }
 
-ImplBinPipeOpCellInterface(MultPipeLibOp, "out");
-ImplBinPipeOpCellInterface(DivUPipeLibOp, "out_quotient");
-ImplBinPipeOpCellInterface(DivSPipeLibOp, "out_quotient");
-ImplBinPipeOpCellInterface(RemUPipeLibOp, "out_remainder");
-ImplBinPipeOpCellInterface(RemSPipeLibOp, "out_remainder");
-
-LogicalResult PadLibOp::verify() {
-  unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
-  unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
-  if (inBits >= outBits)
-    return emitOpError("expected input bits (")
-           << inBits << ')' << " to be less than output bits (" << outBits
-           << ')';
-  return success();
-}
-
-LogicalResult SliceLibOp::verify() {
-  unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
-  unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
-  if (inBits <= outBits)
-    return emitOpError("expected input bits (")
-           << inBits << ')' << " to be greater than output bits (" << outBits
-           << ')';
-  return success();
-}
-
 #define ImplUnaryOpCellInterface(OpType)                                       \
   SmallVector<StringRef> OpType::portNames() { return {"in", "out"}; }         \
   SmallVector<Direction> OpType::portDirections() { return {Input, Output}; }  \
@@ -2213,6 +2207,12 @@ LogicalResult SliceLibOp::verify() {
   }
 
 // clang-format off
+ImplBinPipeOpCellInterface(MultPipeLibOp, "out")
+ImplBinPipeOpCellInterface(DivUPipeLibOp, "out_quotient")
+ImplBinPipeOpCellInterface(DivSPipeLibOp, "out_quotient")
+ImplBinPipeOpCellInterface(RemUPipeLibOp, "out_remainder")
+ImplBinPipeOpCellInterface(RemSPipeLibOp, "out_remainder")
+
 ImplUnaryOpCellInterface(PadLibOp)
 ImplUnaryOpCellInterface(SliceLibOp)
 ImplUnaryOpCellInterface(NotLibOp)

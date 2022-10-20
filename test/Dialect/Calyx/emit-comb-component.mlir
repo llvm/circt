@@ -3,9 +3,16 @@
 module attributes {calyx.entrypoint = "main"} {
   // CHECK-LABEL: comb component A(in: 32) -> (out: 32) {
   calyx.comb_component @A(%in: i32) -> (%out: i32) {
+    %0 = hw.constant 1 : i32
+    // CHECK: add0 = std_add(32);
+    %1:3 = calyx.std_add @add0 : i32, i32, i32
     calyx.wires {
-      // CHECK: out = in;
-      calyx.assign %out = %in : i32
+      // CHECK: add0.left = in;
+      calyx.assign %1#0 = %in : i32
+      // CHECK: add0.right = 32'd1;
+      calyx.assign %1#1 = %0 : i32
+      // CHECK: out = add0.out;
+      calyx.assign %out = %1#2 : i32
     }
   }
 

@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/SystemC/SystemCOps.h"
+#include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
@@ -18,19 +19,6 @@
 
 using namespace circt;
 using namespace circt::systemc;
-
-//===----------------------------------------------------------------------===//
-// ImplicitSSAName Custom Directive
-//===----------------------------------------------------------------------===//
-
-static ParseResult parseImplicitSSAName(OpAsmParser &parser,
-                                        StringAttr &nameAttr) {
-  nameAttr = parser.getBuilder().getStringAttr(parser.getResultName(0).first);
-  return success();
-}
-
-static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
-                                 StringAttr nameAttr) {}
 
 //===----------------------------------------------------------------------===//
 // SCModuleOp
@@ -600,6 +588,35 @@ LogicalResult VariableOp::verify() {
            << getInit().getType() << " and " << getVariable().getType();
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// InteropVerilatedOp
+//===----------------------------------------------------------------------===//
+
+/// Create a instance that refers to a known module.
+void InteropVerilatedOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                               Operation *module, StringAttr name,
+                               ArrayRef<Value> inputs) {
+  auto [argNames, resultNames] =
+      hw::instance_like_impl::getHWModuleArgAndResultNames(module);
+  build(odsBuilder, odsState, hw::getModuleType(module).getResults(), name,
+        FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), argNames,
+        resultNames, inputs);
+}
+
+LogicalResult
+InteropVerilatedOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return hw::instance_like_impl::verifyInstanceOfHWModule(
+      *this, getModuleNameAttr(), getInputs(), getResultTypes(),
+      getInputNames(), getResultNames(), ArrayAttr(), symbolTable);
+}
+
+/// Suggest a name for each result value based on the saved result names
+/// attribute.
+void InteropVerilatedOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  hw::instance_like_impl::getAsmResultNames(setNameFn, getInstanceName(),
+                                            getResultNames(), getResults());
 }
 
 //===----------------------------------------------------------------------===//

@@ -193,3 +193,40 @@ module attributes {calyx.entrypoint = "A"} {
     calyx.control {}
   } {static = 1}
 }
+
+// -----
+module attributes {calyx.entrypoint = "main"} {
+  // CHECK-LABEL: calyx.comb_component @A(%in: i32) -> (%out: i32) {
+  calyx.comb_component @A(%in: i32) -> (%out: i32) {
+    // CHECK: %c1_i32 = hw.constant 1 : i32
+    %0 = hw.constant 1 : i32
+    // CHECK: %add0.left, %add0.right, %add0.out = calyx.std_add @add0 : i32, i32, i32
+    %1:3 = calyx.std_add @add0 : i32, i32, i32
+    calyx.wires {
+      // CHECK: calyx.assign %add0.left = %in : i32
+      calyx.assign %1#0 = %in : i32
+      // CHECK: calyx.assign %add0.right = %c1_i32 : i32
+      calyx.assign %1#1 = %0 : i32
+      // CHECK: calyx.assign %out = %add0.out : i32
+      calyx.assign %out = %1#2 : i32
+    }
+  }
+
+  // CHECK-LABEL: calyx.component @main(%in: i32, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i32, %done: i1 {done}) {
+  calyx.component @main(%in: i32, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i32, %done: i1 {done}) {
+    // CHECK: %true = hw.constant true
+    %c1_1 = hw.constant 1 : i1
+    // CHECK: %A_0.in, %A_0.out = calyx.instance @A_0 of @A : i32, i32
+    %A_0.in, %A_0.out = calyx.instance @A_0 of @A : i32, i32
+
+    calyx.wires {
+      // CHECK: calyx.assign %done = %true : i1
+      calyx.assign %done = %c1_1 : i1
+      // CHECK: calyx.assign %A_0.in = %in : i32
+      calyx.assign %A_0.in = %in : i32
+      // CHECK: calyx.assign %out = %A_0.out : i32
+      calyx.assign %out = %A_0.out : i32
+    }
+    calyx.control {}
+  } {static = 1}
+}

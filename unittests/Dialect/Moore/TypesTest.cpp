@@ -182,7 +182,7 @@ TEST(TypesTest, UnpackedDim) {
   ASSERT_EQ(arrayType6.toString(), "string $ [$][string][*][1:0][42][]");
   ASSERT_EQ(arrayType7.toString(), "string $ [$:9][$][string][*][1:0][42][]");
 
-  ASSERT_EQ(arrayType2.getSize(), 42);
+  ASSERT_EQ(arrayType2.getSize(), 42u);
   ASSERT_EQ(arrayType3.getRange(), Range(2));
   ASSERT_EQ(arrayType4.getIndexType(), UnpackedType{});
   ASSERT_EQ(arrayType5.getIndexType(), stringType);

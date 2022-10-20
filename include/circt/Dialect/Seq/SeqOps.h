@@ -13,9 +13,13 @@
 #ifndef CIRCT_DIALECT_SEQ_SEQOPS_H
 #define CIRCT_DIALECT_SEQ_SEQOPS_H
 
-#include "circt/Dialect/Seq/SeqDialect.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
+
+#include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Seq/SeqTypes.h"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Seq/Seq.h.inc"

@@ -1,5 +1,7 @@
 // RUN: circt-opt %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
+// CHECK: `ifndef _TYPESCOPE___hw_typedecls
+// CHECK: `define _TYPESCOPE___hw_typedecls
 hw.type_scope @__hw_typedecls {
   // CHECK: typedef logic foo;
   hw.typedecl @foo : i1
@@ -20,11 +22,15 @@ hw.type_scope @__hw_typedecls {
   // CHECK: typedef enum {myEnum_A, myEnum_B, myEnum_C} myEnum;
   hw.typedecl @myEnum : !hw.enum<A, B, C>
 }
+// CHECK: `endif // _TYPESCOPE___hw_typedecls
 
+// CHECK: `ifndef _TYPESCOPE__other_scope
+// CHECK: `define _TYPESCOPE__other_scope
 hw.type_scope @_other_scope {
   // CHECK: typedef logic [1:0] _other_scope_foo;
   hw.typedecl @foo, "_other_scope_foo" : i2
 }
+// CHECK: `endif // _TYPESCOPE__other_scope
 
 // CHECK: `ifndef __PYCDE_TYPES__
 // CHECK:   typedef struct packed {logic a; } exTypedef;

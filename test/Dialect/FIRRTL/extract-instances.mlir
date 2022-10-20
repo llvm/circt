@@ -1,4 +1,4 @@
-// RUN: circt-opt --firrtl-extract-instances --verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt --firrtl-extract-instances %s | FileCheck %s
 
 // Tests extracted from:
 // - test/scala/firrtl/ExtractBlackBoxes.scala

@@ -71,18 +71,33 @@ void HWDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {
 
 static std::string canonicalizeFilename(const Twine &directory,
                                         const Twine &filename) {
+
+  // Convert the filename to a native style path.
+  SmallString<128> nativeFilename;
+  llvm::sys::path::native(filename, nativeFilename);
+
+  // If the filename is an absolute path, ignore the directory.
+  // e.g. `directory/` + `/etc/filename` -> `/etc/filename`.
+  if (llvm::sys::path::is_absolute(nativeFilename))
+    return std::string(nativeFilename);
+
+  // Convert the directory to a native style path.
+  SmallString<128> nativeDirectory;
+  llvm::sys::path::native(directory, nativeDirectory);
+
+  // If the filename component is empty, then ensure that the path ends in a
+  // separator and return it.
+  // e.g. `directory` + `` -> `directory/`.
+  auto separator = llvm::sys::path::get_separator();
+  if (nativeFilename.empty() && !nativeDirectory.endswith(separator)) {
+    nativeDirectory += separator;
+    return std::string(nativeDirectory);
+  }
+
+  // Append the directory and filename together.
+  // e.g. `/tmp/` + `out/filename` -> `/tmp/out/filename`.
   SmallString<128> fullPath;
-
-  // If the filename is an absolute path, we don't need the directory.
-  if (llvm::sys::path::is_absolute(filename))
-    filename.toVector(fullPath);
-  else
-    llvm::sys::path::append(fullPath, directory, filename);
-
-  // If this is a directory target, we need to ensure it ends with a `/`
-  if (filename.isTriviallyEmpty() && !fullPath.endswith("/"))
-    fullPath += "/";
-
+  llvm::sys::path::append(fullPath, nativeDirectory, nativeFilename);
   return std::string(fullPath);
 }
 
@@ -112,7 +127,7 @@ OutputFileAttr OutputFileAttr::getAsDirectory(MLIRContext *context,
 }
 
 bool OutputFileAttr::isDirectory() {
-  return getFilename().getValue().endswith("/");
+  return getFilename().getValue().endswith(llvm::sys::path::get_separator());
 }
 
 /// Option         ::= 'excludeFromFileList' | 'includeReplicatedOp'
@@ -141,11 +156,9 @@ Attribute OutputFileAttr::parse(AsmParser &p, Type type) {
   if (p.parseGreater())
     return Attribute();
 
-  auto *context = p.getContext();
-
-  return OutputFileAttr::get(context, filename,
-                             BoolAttr::get(context, excludeFromFileList),
-                             BoolAttr::get(context, includeReplicatedOps));
+  return OutputFileAttr::getFromFilename(p.getContext(), filename.getValue(),
+                                         excludeFromFileList,
+                                         includeReplicatedOps);
 }
 
 void OutputFileAttr::print(AsmPrinter &p) const {

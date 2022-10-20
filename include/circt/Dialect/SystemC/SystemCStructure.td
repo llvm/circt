@@ -173,6 +173,102 @@ def SCFuncOp : SystemCOp<"func", [
 }
 
 //===----------------------------------------------------------------------===//
+// Interoperability operations
+//===----------------------------------------------------------------------===//
+
+def InteropVerilatedOp : SystemCOp<"interop.verilated", [
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+  let summary = "Instantiates a verilated module.";
+  let description = [{
+    Instantiates a verilated module represented by a hw.module operation
+    (usually the extern variant).
+
+    This operation also encodes the interoparability layer to connect its
+    context (i.e. the surrounding operation, input values, result values, and
+    types) to the C++ code of the verilated module.
+    When residing in a context that understands C++ (e.g., inside a SystemC
+    module), this refers to the instantiation of the class, assignment of the
+    input ports, the call to the eval() function and reading the output ports.
+
+    Additionally, properties of the verilated module can be specified in
+    a config attribute which influences the interop layer code generation
+    (not yet implemented).
+  }];
+
+  let arguments = (ins StrAttr:$instanceName,
+                       FlatSymbolRefAttr:$moduleName,
+                       StrArrayAttr:$inputNames,
+                       StrArrayAttr:$resultNames,
+                       Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>:$results);
+
+  let builders = [
+    /// Create a instance that refers to a known module.
+    OpBuilder<(ins "Operation*":$module, "StringAttr":$name,
+                   "ArrayRef<Value>":$inputs)>,
+    /// Create a instance that refers to a known module.
+    OpBuilder<(ins "Operation*":$module, "StringRef":$name,
+                   "ArrayRef<Value>":$inputs), [{
+      build($_builder, $_state, module, $_builder.getStringAttr(name), inputs);
+    }]>,
+  ];
+
+  let extraClassDeclaration = [{
+    /// Return the name of the specified input port or null if it cannot be
+    /// determined.
+    StringAttr getInputName(size_t i) {
+      return hw::instance_like_impl::getName(getInputNames(), i);
+    }
+
+    /// Return the name of the specified result or null if it cannot be
+    /// determined.
+    StringAttr getResultName(size_t i) {
+      return hw::instance_like_impl::getName(getResultNames(), i);
+    }
+
+    /// Change the name of the specified input port.
+    void setInputName(size_t i, StringAttr name) {
+      setInputNamesAttr(
+        hw::instance_like_impl::updateName(getInputNames(), i, name));
+    }
+
+    /// Change the name of the specified output port.
+    void setResultName(size_t i, StringAttr name) {
+      setResultNamesAttr(
+        hw::instance_like_impl::updateName(getResultNames(), i, name));
+    }
+
+    /// Lookup the module or extmodule for the symbol.  This returns null on
+    /// invalid IR.
+    Operation *getReferencedModule(const hw::HWSymbolCache *cache) {
+      return hw::instance_like_impl::getReferencedModule(cache, *this,
+                                                        getModuleNameAttr());
+    }
+    Operation *getReferencedModule() { return getReferencedModule(nullptr); }
+
+    /// Get the instances's name.
+    StringAttr getName() { return getInstanceNameAttr(); }
+
+    /// Set the instance's name.
+    void setName(StringAttr name) { setInstanceNameAttr(name); }
+
+    //===------------------------------------------------------------------===//
+    // SymbolOpInterface Methods
+    //===------------------------------------------------------------------===//
+
+    /// An InstanceOp may optionally define a symbol.
+    bool isOptionalSymbol() { return true; }
+  }];
+
+  let assemblyFormat = [{
+    $instanceName $moduleName
+    custom<InputPortList>($inputs, type($inputs), $inputNames) `->`
+    custom<OutputPortList>(type($results), $resultNames) attr-dict
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Operations that model C++-level features.
 //===----------------------------------------------------------------------===//
 

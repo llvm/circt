@@ -971,8 +971,11 @@ hw.module @ConstantDefBeforeUse() {
 // Mixing !hw.enum types which alias in their fields - one anonymous enum
 // and two aliasing named enums.
 
+// CHECK: `ifndef _TYPESCOPE___AnFSMTypedecl
+// CHECK: `define _TYPESCOPE___AnFSMTypedecl
 // CHECK: typedef enum {_state1_A, _state1_B} _state1;
 // CHECK: typedef enum {_state2_A, _state2_B} _state2;
+// CHECK: `endif // _TYPESCOPE___AnFSMTypedecl
 // CHECK-LABEL: module AnFSM
 // CHECK:   enum {A, B} reg_0;
 // OLD:   _state1     reg_state1;
