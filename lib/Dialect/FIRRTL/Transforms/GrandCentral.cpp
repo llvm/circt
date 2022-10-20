@@ -575,7 +575,7 @@ private:
   /// The design-under-test (DUT) as determined by the presence of a
   /// "sifive.enterprise.firrtl.MarkDUTAnnotation".  This will be null if no DUT
   /// was found.
-  FModuleLike dut;
+  FModuleOp dut;
 
   /// An optional directory for testbench-related files.  This is null if no
   /// "TestBenchDirAnnotation" is found.
@@ -1827,23 +1827,9 @@ void GrandCentralPass::runOnOperation() {
 
   // Find the DUT if it exists.  This needs to be known before the circuit is
   // walked.
-  for (auto mod : circuitOp.getOps<FModuleLike>()) {
-    if (!AnnotationSet(mod).hasAnnotation(dutAnnoClass))
-      continue;
-
-    // TODO: This check is duplicated multiple places, e.g., in
-    // WireDFT.  This should be factored out as part of the annotation
-    // lowering pass.
-    if (dut) {
-      auto diag = emitError(mod.getLoc())
-                  << "is marked with a '" << dutAnnoClass << "', but '"
-                  << dut.moduleName()
-                  << "' also had such an annotation (this should "
-                     "be impossible!)";
-      diag.attachNote(dut.getLoc()) << "the first DUT was found here";
+  for (auto mod : circuitOp.getOps<FModuleOp>()) {
+    if (failed(extractDUT(mod, dut)))
       removalError = true;
-    }
-    dut = mod;
   }
 
   if (removalError)

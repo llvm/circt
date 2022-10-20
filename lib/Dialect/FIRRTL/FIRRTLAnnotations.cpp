@@ -684,3 +684,29 @@ bool circt::firrtl::isOMIRStringEncodedPassthrough(StringRef type) {
          type == "OMLong" || type == "OMString" || type == "OMDouble" ||
          type == "OMBigDecimal" || type == "OMDeleted" || type == "OMConstant";
 }
+
+//===----------------------------------------------------------------------===//
+// Utilities for Specific Annotations
+//
+// TODO: Remove these in favor of first-class annotations.
+//===----------------------------------------------------------------------===//
+
+LogicalResult circt::firrtl::extractDUT(const FModuleOp mod, FModuleOp &dut) {
+  if (!AnnotationSet(mod).hasAnnotation(dutAnnoClass))
+    return success();
+
+  // TODO: This check is duplicated multiple places, e.g., in
+  // WireDFT.  This should be factored out as part of the annotation
+  // lowering pass.
+  if (dut) {
+    auto diag = emitError(mod->getLoc())
+                << "is marked with a '" << dutAnnoClass << "', but '"
+                << dut.moduleName()
+                << "' also had such an annotation (this should "
+                   "be impossible!)";
+    diag.attachNote(dut.getLoc()) << "the first DUT was found here";
+    return failure();
+  }
+  dut = mod;
+  return success();
+}
