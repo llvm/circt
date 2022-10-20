@@ -1452,6 +1452,13 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
           auto diag = mlir::emitError(op.getLoc());
           diag << "extern module `" << op.getModuleName()
                << "` has ports of uninferred width";
+
+          auto fml = cast<FModuleLike>(&*refdModule);
+          auto ports = fml.getPorts();
+          for (auto &port : ports)
+            if (cast<FIRRTLBaseType>(port.type).hasUninferredWidth())
+              diag.attachNote(op.getLoc()) << "Port: " << port.name;
+
           diag.attachNote(op.getLoc())
               << "Only non-extern FIRRTL modules may contain unspecified "
                  "widths to be inferred automatically.";
