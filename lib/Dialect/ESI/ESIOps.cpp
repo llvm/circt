@@ -338,7 +338,7 @@ circt::esi::validateServiceConnectionRequest(ServiceDeclOpInterface decl,
     return ::validateRequest(decl, req);
   if (auto req = dyn_cast<RequestInOutChannelOp>(reqOp))
     return ::validateRequest(decl, req);
-  assert(false && "Did not recognize request op");
+  return reqOp->emitOpError("Did not recognize request op");
 }
 
 void CustomServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
