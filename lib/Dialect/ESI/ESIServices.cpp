@@ -502,8 +502,6 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
     ArrayRef<RequestToClientConnectionOp> toClientReqs,
     ArrayRef<RequestToServerConnectionOp> toServerReqs) {
   auto ctxt = mod.getContext();
-  Block &modBlock = mod->getRegion(0).front();
-  Operation *modTerminator = modBlock.getTerminator();
 
   // Track initial operand/result counts and the new IO.
   unsigned origNumInputs = mod.getNumInputs();
