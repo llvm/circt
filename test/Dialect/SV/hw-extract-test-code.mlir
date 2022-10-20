@@ -193,6 +193,10 @@ module {
 // CHECK-LABEL: @Baz
 // CHECK-SAME: output_file = #hw.output_file<"testbench{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>
 
+// All instances of Bozo should be extracted, but a copy of it is left in @ChildShouldInline2. It should not be output to the testbench in the current state.
+// CHECK-LABEL: @Bozo
+// CHECK-NOT: #hw.output_file<"testbench
+
 // In AllExtracted, instances foo, bar, and baz should be extracted.
 // CHECK-LABEL: @AllExtracted_cover
 // CHECK: hw.instance "foo"
@@ -216,6 +220,10 @@ module {
 // CHECK-LABEL: @ChildShouldInline
 // CHECK-NOT: hw.instance "child"
 // CHECK: hw.instance {{.+}} @ShouldBeInlined_cover
+
+// In ChildShouldInline2, instance bozo comes from the inlined child. The bozo instance shouldn't be duplicated like this, and when it's fixed, the below should become a check not.
+// CHECK-LABEL: hw.module @ChildShouldInline2
+// CHECK: hw.instance "bozo"
 
 // In MultiResultExtracted, instance qux should be extracted without leaving null operands to the extracted instance
 // CHECK-LABEL: @MultiResultExtracted_cover
