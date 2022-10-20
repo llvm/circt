@@ -155,7 +155,7 @@ LogicalResult instance_like_impl::verifyOutputs(
 
     if (resultNames[i] != moduleResultNames[i]) {
       emitError([&](auto &diag) {
-        diag << "input label #" << i << " must be " << moduleResultNames[i]
+        diag << "result label #" << i << " must be " << moduleResultNames[i]
              << ", but got " << resultNames[i];
         return true;
       });

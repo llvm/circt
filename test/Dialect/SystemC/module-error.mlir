@@ -382,3 +382,14 @@ systemc.module @variableNameCollision () {
 
 // expected-error @+1 {{unknown type `value_base` in dialect `systemc`}}
 func.func @invalidType (%arg0: !systemc.value_base>) {}
+
+// -----
+
+// Check that the verifySymbolUses function calls the instance impl library
+
+systemc.module @submodule () { }
+
+hw.module @verilatedCannotReferenceNonHWModule() {
+  // expected-error @+1 {{symbol reference 'submodule' isn't a module}}
+  systemc.interop.verilated "verilated" @submodule () -> ()
+}
