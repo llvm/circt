@@ -349,7 +349,9 @@ static void updateOoOArgs(SmallVectorImpl<Operation *> &lateBoundOps,
 // for marked ops.
 static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
                        SetVector<Operation *> &depOps,
-                       BlockAndValueMapping &cutMap) {
+                       BlockAndValueMapping &cutMap,
+                       hw::InstanceGraph &instanceGraph) {
+  hw::InstanceGraphNode *newModNode = instanceGraph.lookup(newMod);
   SmallVector<Operation *, 16> lateBoundOps;
   OpBuilder b = OpBuilder::atBlockBegin(newMod.getBodyBlock());
   oldMod.walk<WalkOrder::PreOrder>([&](Operation *op) {
@@ -359,6 +361,11 @@ static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
       addBlockMapping(cutMap, op, newOp);
       if (hasOoOArgs(newMod, newOp))
         lateBoundOps.push_back(newOp);
+      if (auto instance = dyn_cast<hw::InstanceOp>(op)) {
+        hw::InstanceGraphNode *instMod =
+            instanceGraph.lookup(instance.getModuleNameAttr().getAttr());
+        newModNode->addInstance(instance, instMod);
+      }
     }
   });
   updateOoOArgs(lateBoundOps, cutMap);
@@ -421,6 +428,10 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
     SmallVector<Operation *, 16> lateBoundOps;
     b.setInsertionPoint(inst);
     for (auto &op : *oldMod.getBodyBlock()) {
+      // If the op was erased by instance extraction, don't copy it over.
+      if (opsToErase.contains(&op))
+        continue;
+
       // For instances in the bind table, update the bind with the new parent.
       if (auto innerInst = dyn_cast<hw::InstanceOp>(op)) {
         if (auto innerInstSym = innerInst.getInnerSymAttr()) {
@@ -534,11 +545,12 @@ private:
     BlockAndValueMapping cutMap;
     auto bmod = createModuleForCut(module, inputs, cutMap, suffix, path,
                                    bindFile, bindTable);
-    // do the clone
-    migrateOps(module, bmod, opsToClone, cutMap);
 
     // Register the newly created module in the instance graph.
     instanceGraph->addModule(bmod);
+
+    // do the clone
+    migrateOps(module, bmod, opsToClone, cutMap, *instanceGraph);
 
     // erase old operations of interest eagerly, removing from erase set.
     for (auto *op : roots) {
