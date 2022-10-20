@@ -1288,7 +1288,7 @@ ExternalMemoryOp::getStorePorts() {
   // Outputs: load data (lddata1, lddata2, ...), followed by all none
   // outputs, ordered as operands(stnone1, stnone2, ... ldnone1, ldnone2, ...)
   unsigned ldCount = getLdCount();
-  for (unsigned i = 0, e = ldCount; i != e; ++i) {
+  for (unsigned i = 0, e = getStCount(); i != e; ++i) {
     ExtMemStoreInterface stif;
     stif.index = i;
     stif.dataIn = getInputs()[i * 2];
