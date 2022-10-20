@@ -437,6 +437,11 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
         // remember to revisit this op.
         if (hasOoOArgs(instParent, clonedOp))
           lateBoundOps.push_back(clonedOp);
+        // If the op is marked to be erased from the old module, also mark it to
+        // be erased from the new module. We copy it even though it will be
+        // erased to ensure the IR remains valid.
+        if (opsToErase.contains(&op))
+          opsToErase.insert(clonedOp);
       }
     }
 

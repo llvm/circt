@@ -214,6 +214,7 @@ module {
 // CHECK-LABEL: @ShouldBeInlined_cover
 // CHECK: hw.instance "foo"
 // CHECK-LABEL: @ChildShouldInline
+// CHECK-NOT: hw.instance "foo"
 // CHECK-NOT: hw.instance "child"
 // CHECK: hw.instance {{.+}} @ShouldBeInlined_cover
 
