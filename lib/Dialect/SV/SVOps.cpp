@@ -1057,15 +1057,46 @@ LogicalResult PAssignOp::verify() {
   return success();
 }
 
+// Return true if lhs + offset = rhs.
+static bool isOffset(Value lhs, uint64_t offset, Value rhs) {
+  if (auto constBase = lhs.getDefiningOp<hw::ConstantOp>()) {
+    if (auto constIndex = rhs.getDefiningOp<hw::ConstantOp>()) {
+      // If both values are a constant, check if index == base + offset.
+      // To account for overflow, the addition is performed with an extra bit
+      // and the offset is asserted to fit in the bit width of the base.
+      auto baseValue = constBase.getValue();
+      auto indexValue = constIndex.getValue();
+
+      unsigned bits = baseValue.getBitWidth();
+      assert(bits == indexValue.getBitWidth() && "mismatched widths");
+
+      if (bits < 64 && offset >= (1ull << bits))
+        return false;
+
+      APInt baseExt = baseValue.zextOrTrunc(bits + 1);
+      APInt indexExt = indexValue.zextOrTrunc(bits + 1);
+      return baseExt + offset == indexExt;
+    }
+  }
+  return false;
+}
+
 namespace {
 // This represents a slice of an array.
 struct ArraySlice {
   Value array;
-  APInt start, end; // Represent a range [satrt, end).
+  Value start;
+
+  uint64_t size; // Represent a range array[start, start + size).
 
   bool isMergableSlice(const ArraySlice &rhs) const {
-    return array == rhs.array && end == rhs.start;
+    // A parent array must be same.
+    if (array != rhs.array)
+      return false;
+    // Check that `start + size == rhs.start`.
+    return isOffset(start, size, rhs.start);
   }
+
   // Get a struct from the value. Return std::nullopt if the value doesn't
   // represent an array slice.
   static std::optional<ArraySlice> getArraySlice(Value v) {
@@ -1081,21 +1112,18 @@ struct ArraySlice {
               if (!constant)
                 return std::nullopt;
               return ArraySlice{/*array=*/arrayIndex.getInput(),
-                                /*start=*/constant.getValue(),
-                                /*end=*/constant.getValue() + 1};
+                                /*start=*/constant,
+                                /*end=*/1};
             })
-        .Case<hw::ArraySliceOp>(
-            [](hw::ArraySliceOp slice) -> std::optional<ArraySlice> {
-              auto constant =
-                  slice.getLowIndex().getDefiningOp<hw::ConstantOp>();
-              if (!constant)
-                return std::nullopt;
-              return ArraySlice{
-                  /*array=*/slice.getInput(), /*start=*/constant.getValue(),
-                  /*end=*/
-                  constant.getValue() +
-                      hw::type_cast<hw::ArrayType>(slice.getType()).getSize()};
-            })
+        .Case<hw::ArraySliceOp>([](hw::ArraySliceOp slice)
+                                    -> std::optional<ArraySlice> {
+          auto constant = slice.getLowIndex().getDefiningOp<hw::ConstantOp>();
+          if (!constant)
+            return std::nullopt;
+          return ArraySlice{
+              /*array=*/slice.getInput(), /*start=*/constant,
+              /*end=*/hw::type_cast<hw::ArrayType>(slice.getType()).getSize()};
+        })
         .Case<sv::IndexedPartSelectInOutOp>(
             [](sv::IndexedPartSelectInOutOp index)
                 -> std::optional<ArraySlice> {
@@ -1103,8 +1131,8 @@ struct ArraySlice {
               if (!constant || index.getDecrement())
                 return std::nullopt;
               return ArraySlice{/*array=*/index.getInput(),
-                                /*start=*/constant.getValue(),
-                                /*end=*/constant.getValue() + index.getWidth()};
+                                /*start=*/constant,
+                                /*end=*/index.getWidth()};
             })
         .Default([](auto) { return std::nullopt; });
   }
@@ -1150,25 +1178,20 @@ static LogicalResult mergeNeiboringAssignments(AssignTy op,
   if (!dest.isMergableSlice(nextDest) || !src.isMergableSlice(nextSrc))
     return failure();
 
-  if (dest.start.getBitWidth() > 63)
-    return failure();
-  auto width = nextDest.end.getZExtValue() - dest.start.getZExtValue();
+  auto width = dest.size + nextDest.size;
 
   // From here, construct assignments of array slices.
-  auto destStart =
-      rewriter.create<hw::ConstantOp>(op.getSrc().getLoc(), dest.start);
-  auto srcStart =
-      rewriter.create<hw::ConstantOp>(op.getSrc().getLoc(), src.start);
-
   auto resultType = hw::ArrayType::get(
       hw::type_cast<hw::ArrayType>(src.array.getType()).getElementType(),
       width);
   auto newDest = rewriter.create<sv::IndexedPartSelectInOutOp>(
-      op.getLoc(), dest.array, destStart, width);
+      op.getLoc(), dest.array, dest.start, width);
   auto newSrc = rewriter.create<hw::ArraySliceOp>(op.getLoc(), resultType,
-                                                  src.array, srcStart);
+                                                  src.array, src.start);
+  auto newLoc = rewriter.getFusedLoc({op.getLoc(), nextAssign.getLoc()});
   rewriter.eraseOp(nextAssign);
-  rewriter.replaceOpWithNewOp<AssignTy>(op, newDest, newSrc);
+  auto newOp = rewriter.replaceOpWithNewOp<AssignTy>(op, newDest, newSrc);
+  newOp->setLoc(newLoc);
   return success();
 }
 
