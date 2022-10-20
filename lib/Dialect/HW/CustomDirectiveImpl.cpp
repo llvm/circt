@@ -13,8 +13,9 @@ using namespace circt;
 using namespace circt::hw;
 
 ParseResult circt::parseInputPortList(
-    OpAsmParser &parser, SmallVector<OpAsmParser::UnresolvedOperand, 4> &inputs,
-    SmallVector<Type, 1> &inputTypes, ArrayAttr &inputNames) {
+    OpAsmParser &parser,
+    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &inputs,
+    SmallVectorImpl<Type> &inputTypes, ArrayAttr &inputNames) {
 
   SmallVector<Attribute> argNames;
   auto parseInputPort = [&]() -> ParseResult {
@@ -42,17 +43,18 @@ void circt::printInputPortList(OpAsmPrinter &p, Operation *op,
                                OperandRange inputs, TypeRange inputTypes,
                                ArrayAttr inputNames) {
   p << "(";
-  llvm::interleaveComma(llvm::zip(inputs, inputNames), p, [&](auto input) {
-    Value val = std::get<0>(input);
-    p.printKeywordOrString(
-        std::get<1>(input).template cast<StringAttr>().getValue());
-    p << ": " << val << ": " << val.getType();
-  });
+  llvm::interleaveComma(llvm::zip(inputs, inputNames), p,
+                        [&](std::tuple<Value, Attribute> input) {
+                          Value val = std::get<0>(input);
+                          p.printKeywordOrString(
+                              std::get<1>(input).cast<StringAttr>().getValue());
+                          p << ": " << val << ": " << val.getType();
+                        });
   p << ")";
 }
 
 ParseResult circt::parseOutputPortList(OpAsmParser &parser,
-                                       SmallVector<Type, 1> &resultTypes,
+                                       SmallVectorImpl<Type> &resultTypes,
                                        ArrayAttr &resultNames) {
 
   SmallVector<Attribute> names;
@@ -79,9 +81,10 @@ void circt::printOutputPortList(OpAsmPrinter &p, Operation *op,
                                 TypeRange resultTypes, ArrayAttr resultNames) {
   p << "(";
   llvm::interleaveComma(
-      llvm::zip(resultTypes, resultNames), p, [&](auto result) {
+      llvm::zip(resultTypes, resultNames), p,
+      [&](std::tuple<Type, Attribute> result) {
         p.printKeywordOrString(
-            std::get<1>(result).template cast<StringAttr>().getValue());
+            std::get<1>(result).cast<StringAttr>().getValue());
         p << ": " << std::get<0>(result);
       });
   p << ")";
@@ -90,28 +93,29 @@ void circt::printOutputPortList(OpAsmPrinter &p, Operation *op,
 ParseResult circt::parseOptionalParameterList(OpAsmParser &parser,
                                               ArrayAttr &parameters) {
   SmallVector<Attribute> params;
+
+  auto parseParameter = [&]() {
+    std::string name;
+    Type type;
+    Attribute value;
+
+    if (parser.parseKeywordOrString(&name) || parser.parseColonType(type))
+      return failure();
+
+    // Parse the default value if present.
+    if (succeeded(parser.parseOptionalEqual())) {
+      if (parser.parseAttribute(value, type))
+        return failure();
+    }
+
+    auto &builder = parser.getBuilder();
+    params.push_back(ParamDeclAttr::get(
+        builder.getContext(), builder.getStringAttr(name), type, value));
+    return success();
+  };
+
   if (failed(parser.parseCommaSeparatedList(
-          OpAsmParser::Delimiter::OptionalLessGreater, [&]() {
-            std::string name;
-            Type type;
-            Attribute value;
-
-            if (parser.parseKeywordOrString(&name) ||
-                parser.parseColonType(type))
-              return failure();
-
-            // Parse the default value if present.
-            if (succeeded(parser.parseOptionalEqual())) {
-              if (parser.parseAttribute(value, type))
-                return failure();
-            }
-
-            auto &builder = parser.getBuilder();
-            params.push_back(ParamDeclAttr::get(builder.getContext(),
-                                                builder.getStringAttr(name),
-                                                type, value));
-            return success();
-          })))
+          OpAsmParser::Delimiter::OptionalLessGreater, parseParameter)))
     return failure();
 
   parameters = ArrayAttr::get(parser.getContext(), params);

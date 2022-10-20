@@ -28,8 +28,8 @@ namespace circt {
 /// input-element ::= identifier `:` value `:` type
 ParseResult
 parseInputPortList(OpAsmParser &parser,
-                   SmallVector<OpAsmParser::UnresolvedOperand, 4> &inputs,
-                   SmallVector<Type, 1> &inputTypes, ArrayAttr &inputNames);
+                   SmallVectorImpl<OpAsmParser::UnresolvedOperand> &inputs,
+                   SmallVectorImpl<Type> &inputTypes, ArrayAttr &inputNames);
 
 /// Print a list of instance input ports.
 void printInputPortList(OpAsmPrinter &p, Operation *op, OperandRange inputs,
@@ -43,7 +43,7 @@ void printInputPortList(OpAsmPrinter &p, Operation *op, OperandRange inputs,
 /// output-list ::= `(` ( output-element (`,` output-element )* )? `)`
 /// output-element ::= identifier `:` type
 ParseResult parseOutputPortList(OpAsmParser &parser,
-                                SmallVector<Type, 1> &resultTypes,
+                                SmallVectorImpl<Type> &resultTypes,
                                 ArrayAttr &resultNames);
 
 /// Print a list of instance output ports.
