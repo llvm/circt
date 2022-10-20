@@ -712,7 +712,7 @@ void FSMToSVPass::runOnOperation() {
     // If the typescope is empty (no FSMs were converted), erase it.
     typeScope.erase();
   } else {
-    // Else, add an include directory to the top-level (will include typescope
+    // Else, add an include file to the top-level (will include typescope
     // in all files).
     b.setInsertionPointToStart(module.getBody());
     b.create<sv::VerbatimOp>(
