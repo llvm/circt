@@ -1259,6 +1259,9 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 LogicalResult InstanceOp::verify() {
   auto module = (*this)->getParentOfType<HWModuleOp>();
+  if (!module)
+    return success();
+
   auto moduleParameters = module->getAttrOfType<ArrayAttr>("parameters");
   instance_like_impl::EmitErrorFn emitError =
       [&](const std::function<bool(InFlightDiagnostic &)> &fn) {
