@@ -1287,13 +1287,13 @@ ExternalMemoryOp::getStorePorts() {
   //   then all loads (ldaddr1, ldaddr2,...)
   // Outputs: load data (lddata1, lddata2, ...), followed by all none
   // outputs, ordered as operands(stnone1, stnone2, ... ldnone1, ldnone2, ...)
-  unsigned stCount = getStCount();
-  for (unsigned i = 0, e = stCount; i != e; ++i) {
+  unsigned ldCount = getLdCount();
+  for (unsigned i = 0, e = ldCount; i != e; ++i) {
     ExtMemStoreInterface stif;
     stif.index = i;
     stif.dataIn = getInputs()[i * 2];
     stif.addressIn = getInputs()[i * 2 + 1];
-    stif.doneOut = getResult(stCount + i);
+    stif.doneOut = getResult(ldCount + i);
     ports.push_back(stif);
   }
   return ports;
