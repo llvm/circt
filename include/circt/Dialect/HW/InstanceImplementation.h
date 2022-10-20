@@ -16,6 +16,7 @@
 #define CIRCT_DIALECT_HW_INSTANCEIMPLEMENTATION_H
 
 #include "circt/Support/LLVM.h"
+#include <functional>
 
 namespace circt {
 namespace hw {
