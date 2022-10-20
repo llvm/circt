@@ -434,7 +434,8 @@ public:
 // field element and return the total bit width of the aggregate type. This
 // returns None, if any of the bundle fields is a flip type, or ground type with
 // unknown bit width.
-llvm::Optional<int64_t> getBitWidth(FIRRTLBaseType type);
+llvm::Optional<int64_t> getBitWidth(FIRRTLBaseType type,
+                                    bool ignoreFlip = false);
 
 // Parse a FIRRTL type without a leading `!firrtl.` dialect tag.
 ParseResult parseNestedType(FIRRTLType &result, AsmParser &parser);
