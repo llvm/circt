@@ -187,6 +187,18 @@ LogicalResult checkParameterInContext(Attribute value, Operation *module,
                                       Operation *usingOp,
                                       bool disallowParamRefs = false);
 
+/// Check parameter specified by `value` to see if it is valid according to the
+/// module's parameters.  If not, emit an error to the diagnostic provided as an
+/// argument to the lambda 'instanceError' and return failure, otherwise return
+/// success.
+///
+/// If `disallowParamRefs` is true, then parameter references are not allowed.
+LogicalResult checkParameterInContext(
+    Attribute value, ArrayAttr moduleParameters,
+    const std::function<void(std::function<bool(InFlightDiagnostic &)>)>
+        &instanceError,
+    bool disallowParamRefs = false);
+
 /// Return the symbol (if exists, else null) on the corresponding input port
 /// argument.
 StringAttr getArgSym(Operation *op, unsigned i);

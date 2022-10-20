@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/SystemC/SystemCOps.h"
+#include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
@@ -18,19 +19,6 @@
 
 using namespace circt;
 using namespace circt::systemc;
-
-//===----------------------------------------------------------------------===//
-// ImplicitSSAName Custom Directive
-//===----------------------------------------------------------------------===//
-
-static ParseResult parseImplicitSSAName(OpAsmParser &parser,
-                                        StringAttr &nameAttr) {
-  nameAttr = parser.getBuilder().getStringAttr(parser.getResultName(0).first);
-  return success();
-}
-
-static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
-                                 StringAttr nameAttr) {}
 
 //===----------------------------------------------------------------------===//
 // SCModuleOp

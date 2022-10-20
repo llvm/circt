@@ -409,7 +409,7 @@ def InstanceOp : HWOp<"instance", [
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<SymbolNameAttr>:$inner_sym);
-  let results = (outs Variadic<AnyType>);
+  let results = (outs Variadic<AnyType>:$results);
 
   let builders = [
     /// Create a instance that refers to a known module.
