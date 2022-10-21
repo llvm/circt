@@ -1238,6 +1238,9 @@ hw.module @ParamsParensPrecedence<param: i32>() {
 
   // CHECK: = $clog2($unsigned($clog2($unsigned(param + 8))));
   %3 = hw.param.value i32 = #hw.param.expr.clog2<#hw.param.expr.clog2<#hw.param.expr.add<#hw.param.decl.ref<"param">,8>>>
+
+  // CHECK: = $signed(param) >>> $signed(param & 8);
+  %4 = hw.param.value i32 = #hw.param.expr.shrs<#hw.param.decl.ref<"param">,#hw.param.expr.and<8,#hw.param.decl.ref<"param">>>
 }
 
 // CHECK-LABEL: module ArrayGetInline
