@@ -1,6 +1,7 @@
 // RUN: split-file %s %t
 // RUN: cd %t
 // RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-blackbox-reader)' Foo.mlir | FileCheck Foo.mlir
+// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-blackbox-reader)' NoDUT.mlir | FileCheck NoDUT.mlir
 
 //--- Baz.sv
 /* Baz */
@@ -51,4 +52,30 @@ firrtl.circuit "Foo" attributes {annotations = [
   // CHECK-SAME:         cover{{/|\\\\}}hello2.v\0A
   // CHECK-SAME:         qux{{/|\\\\}}NotQux.jpeg"
   // CHECK-SAME: output_file = #hw.output_file<"firrtl_black_box_resource_files.f", excludeFromFileList>
+}
+//--- NoDUT.mlir
+// Check that a TestBenchDirAnnotation has no effect without the presence of a
+// MarkDUTAnnotation.
+//
+// CHECK: firrtl.circuit "NoDUT"
+firrtl.circuit "NoDUT" attributes {annotations = [
+  {
+    class = "sifive.enterprise.firrtl.TestBenchDirAnnotation",
+    dirname = "testbench"
+  }
+]} {
+  firrtl.extmodule @NoDUTBlackBox() attributes {annotations = [
+  {
+    class = "firrtl.transforms.BlackBoxInlineAnno",
+    name = "NoDUTBlackBox.sv",
+    text = "module NoDUTBlackBox();\nendmodule\n",
+    target = "~NoDUT|NoDUTBlackBox"
+  }
+]}
+  firrtl.module @NoDUT() {
+    firrtl.instance noDUTBlackBox @NoDUTBlackBox()
+  }
+  // CHECK:      sv.verbatim "module NoDUTBlackBox()
+  // CHECK-SAME:   #hw.output_file<".{{/|\\\\}}NoDUTBlackBox.sv">
+  // CHECK:      sv.verbatim "NoDUTBlackBox.sv"
 }
