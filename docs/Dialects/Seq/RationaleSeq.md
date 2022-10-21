@@ -13,9 +13,6 @@ intention of the `seq` dialect is to provide a set of stateful constructs
 which can be used to model sequential logic, independent of the output method
 (e.g. SystemVerilog).
 
-We have yet to flesh this dialect out to represent all common stateful
-components. We start with a register and will build from there.
-
 ## Definitions
 
 For the sake of precision, we use the following definitions:
@@ -217,3 +214,99 @@ information.
 - Initial value: this register is uninitialized. Using an uninitialized value
 results in undefined behavior. We will add an `initialValue` attribute if
 this proves insufficient.
+
+## The High-Level Memory Abstraction
+The  `seq.hlmem` (high-level memory operation) intends to capture the semantics
+of a memory which eventually map to some form on-chip resources - whether being
+FPGA or ASIC-based.
+The abstraction aims to abstract away the physical implementation details of the
+memory, and instead focus on the external interface and access semantics of the
+memory. this, in turn, facilitates analysis and transformation (e.g. memory
+merging, read/write conflicts, etc.) and may serve as a target for other
+high-level abstractions.
+
+The high-level memory abstraction is split into two parts:
+* Memory *allocation* is defined by the `seq.hlmem` operation. This operation defines
+the inner workings of the memory. This includes:
+  - number of read/write ports
+  - read/write latency
+  - Memory size and inner data type
+  The `seq.hlmem` will define references to the read- and write ports of the
+  allocated memory.
+- Memory *access* is defined by separate operations which unwraps a memory port reference
+to its structural components. Port access operations are defined at the same
+level of abstraction as the core RTL dialects and  contain no notion of control
+flow.
+
+Example usage:
+```mlir
+  %read0, %write0 = seq.hlmem @myMemory %clk {
+    NReadPorts = 1 : i32,
+    NWritePorts = 1 : i32,
+    readLatency = 0 : i32,
+    writeLatency = 1 : i32} : !hw.array<4xi32>
+  
+  %c0_i2 = hw.constant 0 : i2
+  %c42_i32 = hw.constant 42 : i32
+  %out = seq.read %read0[%c0_i2] : !seq.read_port<<4xi32>>
+  seq.write %write0[%c0_i2] %c42_i32 : !seq.write_port<<4xi32>>
+```
+
+Lowering the op is intended to be performed by matching on the `seq.hlmem`,
+collecting the port ops which access the defined port references, and based on this
+perform a lowering to an appropriate memory structure. This memory
+could either be behavioral (able to support any combination of memory allocation
+and port accesses) or specialized (e.g. specifically target FPGA resources,
+call a memory compiler, ... which may only be possible for a subset of 
+allocation and access combinations).
+
+### Rationale
+
+The high-level memory abstraction, as presented here, represents a useful
+albeit limited abstraction when considering the complexity of instantiating
+memory resources in both FPGAs and ASICs.
+
+Some restrictions that were considered in designing this op were:
+1. The op allocates a single 1D array, specified by a `!hw.array` type. This is
+also reflected in the accompanying read- and write port ops in that they
+only take a single address index. This restriction has been made to reduce
+the complexity of lowering the op, as well as motivated by the expectation that
+most target architectures will not be able to natively support multidimensional
+memories (i.e. multidimensional memories would be flattened to 1D arrays during
+synthesis).
+2. A port reference can only be unwrapped once. This is to maintain the
+notion that port access ops provide structural access to the memory port. Thus,
+if a given port is expected to be used from multiple sites, it is the job of
+the surrounding IR to arbitrate that port.
+
+
+### Future considerations
+
+#### **Port refinements**
+
+The main design decision of `seq.hlmem` is the choice of abstracting away
+the structural details of a port into separate ops of which we currently
+only provide rudimentary read- and write ops.
+Example future ports could be:
+
+* **Assymetric port widths**
+  Specified as a new `seq.asym_read` port which defines a read data width
+  of some fraction of the native data size.
+  ```mlir
+  %rdata = seq.asym_read %rp[%addr] : !seq.read_port<4xi32> -> i16
+  ```
+  which would then put different typing requirements on the `%addr` signal.
+  Given the halfing of the word size, the expected address type would then
+  be `ceil(log2(4)) << 1 = i3`
+* **Byte-enable write ports**
+  Specified as a new `seq.write_be` port with an additional byte enable
+  signal.
+  ```mlir
+  %wdata = seq.write_be %wp[%addr] %wdata, %be : i32, i4 -> !seq.write_port<4xi32>
+  ```
+* **Debug ports**
+Could be specified as either an additional read port, or (if further
+specialization is needed) attached to the memory symbol.
+  ```mlir
+  %mem = seq.debug @myMemory : !hw.array<4xi32>
+  ```
