@@ -67,15 +67,10 @@ struct Node {
     }
     // Assumption is that the op can either be connect, or with only one result.
     // This is ensured in ChildIterator::skipToNextValidChild.
-    TypeSwitch<Operation *>(op)
-        .Case<FConnectLike>([&](FConnectLike connect) {
-          value = connect.getDest();
-          return;
-        })
-        .Default([&](auto) {
-          value = op->getResult(0);
-          return;
-        });
+    value = TypeSwitch<Operation *, Value>(op)
+                .Case<FConnectLike>(
+                    [&](FConnectLike connect) { return connect.getDest(); })
+                .Default([&](auto) { return op->getResult(0); });
   }
 
   bool operator==(const Node &rhs) const { return value == rhs.value; }
@@ -321,9 +316,8 @@ class DummySourceNodeIterator
     : public llvm::iterator_facade_base<DummySourceNodeIterator,
                                         std::forward_iterator_tag, Node> {
 public:
-  explicit DummySourceNodeIterator(Node node, bool end = false)
-      : node(node), connect(end ? node.context->connects.end()
-                                : node.context->connects.begin()) {}
+  explicit DummySourceNodeIterator(Node node)
+      : node(node), connect(node.context->connects.begin()) {}
 
   using llvm::iterator_facade_base<DummySourceNodeIterator,
                                    std::forward_iterator_tag, Node>::operator++;
@@ -373,7 +367,7 @@ public:
     if (end)
       return NodeIterator(Node(nullptr, node.context));
     if (!node.value)
-      return DummySourceNodeIterator(node, end);
+      return DummySourceNodeIterator(node);
 
     auto defOp = node.value.getDefiningOp();
     if (!defOp)
