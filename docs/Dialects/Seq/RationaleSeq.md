@@ -226,9 +226,14 @@ merging, read/write conflicts, etc.) and may serve as a target for other
 high-level abstractions.
 
 The high-level memory abstraction is split into two parts:
-- Memory *allocation* is defined by the `seq.hlmem` operation. This operation defines the internal memory structure. For now, this strictly pertains to the layout of the memory (dimensionality) and element type.
-- Memory *access* is defined by separate port operations which reference the allocated memory. Port access operations are defined at the same level of abstraction as the core RTL dialects and contain no notion of control
-flow. As such, for e.g. a write port with a non-zero latency, the encapsulating IR must already have accounted for this latency.
+- Memory *allocation* is defined by the `seq.hlmem` operation. This operation
+defines the internal memory structure. For now, this strictly pertains to the
+layout of the memory (dimensionality) and element type.
+- Memory *access* is defined by separate port operations which reference the
+allocated memory. Port access operations are defined at the same level of
+abstraction as the core RTL dialects and contain no notion of control
+flow. As such, for e.g. a write port with a non-zero latency, the encapsulating
+IR must already have accounted for this latency.
 
 Example usage:
 ```mlir
@@ -255,7 +260,8 @@ albeit limited abstraction when considering the complexity of instantiating
 memory resources in both FPGAs and ASICs.
 
 The scope of what the `hlmem` operations can represent is large. Examples
-being: multidimensional memories, arbitrary # of read/write ports, and mixed port latencies (all of which could occur together).  
+being: multidimensional memories, arbitrary # of read/write ports, and mixed
+port latencies (all of which could occur together).  
 In reality, it will only be a limited subset of the possible combinations of
 these operations which can be lowered reasonably to an FPGA or ASIC implementation.  
 However, by allowing for such complexity, we ensure that we have a unified IR
