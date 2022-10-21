@@ -1454,7 +1454,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   StringRef operatorStr;
   StringRef openStr, closeStr;
   VerilogPrecedence subprecedence = LowestPrecedence;
-  VerilogPrecedence prec; // outer prec, when has open/close.
+  VerilogPrecedence prec; // precedence of the emitted expression.
   Optional<SubExprSignResult> operandSign;
   bool isUnary = false;
   bool hasOpenClose = false;
@@ -1527,14 +1527,18 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     closeStr = "}";
     hasOpenClose = true;
     operatorStr = ", ";
-    // We don't have Concat precedence, so use Lowest. (SV Table 11-2).
+    // We don't have Concat precedence, but it's lowest anyway. (SV Table 11-2).
     subprecedence = LowestPrecedence;
     prec = Symbol;
     break;
   }
   if (!hasOpenClose)
     prec = subprecedence;
+
+  // unary -> one element.
   assert(!isUnary || llvm::hasSingleElement(expr.getOperands()));
+  // one element -> {unary || open/close}.
+  assert(isUnary || hasOpenClose || !llvm::hasSingleElement(expr.getOperands()));
 
   // Emit the specified operand with a $signed() or $unsigned() wrapper around
   // it if context requires a specific signedness to compute the right value.
