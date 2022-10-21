@@ -147,7 +147,7 @@ module attributes {circt.loweringOptions =
 
 // -----
 module attributes {circt.loweringOptions =
-                  "wireSpillingHeuristic=spillAllMux"} {
+                  "disallowMuxInlining"} {
   // CHECK-LABEL: mux
   hw.module @mux(%c: i1, %b: i8, %a: i8) -> (d: i8) {
     // CHECK: %mux = sv.wire
@@ -158,10 +158,9 @@ module attributes {circt.loweringOptions =
 }
 
 // -----
-// Check that multiple heuristics are applied.
-// CHECK: "wireSpillingHeuristic=spillLargeTermsWithNamehints,wireSpillingHeuristic=spillAllMux"
+// CHECK: "wireSpillingHeuristic=spillLargeTermsWithNamehints,disallowMuxInlining"
 module attributes {circt.loweringOptions =
-                  "wireSpillingHeuristic=spillLargeTermsWithNamehints,wireSpillingHeuristic=spillAllMux"} {
+                  "wireSpillingHeuristic=spillLargeTermsWithNamehints,disallowMuxInlining"} {
   hw.module @combine(%c: i1, %b: i8, %a: i8) -> (d: i8) {
     // Meaningful names should be spilled
     // CHECK: %foo = sv.wire
