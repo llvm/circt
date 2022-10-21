@@ -1231,6 +1231,15 @@ hw.module @ParamConcatInst<name: none = "top">() -> () {
   hw.instance "inst" @NoneTypeParam<p1: none = #hw.param.expr.str.concat<".", #hw.param.decl.ref<"name">, ".", "child">>() -> ()
 }
 
+// CHECK-LABEL: module ParamsParensPrecedence
+hw.module @ParamsParensPrecedence<param: i32>() {
+  // CHECK: = $clog2($unsigned(param));
+  %1 = hw.param.value i32 = #hw.param.expr.clog2<#hw.param.decl.ref<"param">>
+
+  // CHECK: = $clog2($unsigned($clog2($unsigned(param + 8))));
+  %3 = hw.param.value i32 = #hw.param.expr.clog2<#hw.param.expr.clog2<#hw.param.expr.add<#hw.param.decl.ref<"param">,8>>>
+}
+
 // CHECK-LABEL: module ArrayGetInline
 hw.module @ArrayGetInline(%a: !hw.array<4xstruct<a: i32>>) -> (out: i32) {
   %c0_i2 = hw.constant 0 : i2

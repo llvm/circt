@@ -1455,6 +1455,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   VerilogPrecedence subprecedence = ForceEmitMultiUse;
   Optional<SubExprSignResult> operandSign;
   bool isUnary = false;
+  bool isFunction = false;
 
   switch (expr.getOpcode()) {
   case PEO::Add:
@@ -1516,11 +1517,11 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     operatorStr = "$clog2";
     operandSign = IsUnsigned;
     isUnary = true;
+    isFunction = true;
     break;
   case PEO::StrConcat:
     operatorStr = ", ";
     subprecedence = Symbol;
-    isUnary = false;
     break;
   }
 
@@ -1544,7 +1545,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   if (isUnary)
     os << operatorStr;
 
-  if (subprecedence > parenthesizeIfLooserThan)
+  if (subprecedence > parenthesizeIfLooserThan || isFunction)
     os << '(';
   if (expr.getOpcode() == PEO::StrConcat)
     os << '{';
@@ -1569,9 +1570,9 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   }
   if (expr.getOpcode() == PEO::StrConcat)
     os << '}';
-  if (subprecedence > parenthesizeIfLooserThan) {
+  if (subprecedence > parenthesizeIfLooserThan || isFunction) {
     os << ')';
-    subprecedence = Symbol;
+    subprecedence = Selection;
   }
   return {subprecedence, allOperandsSigned ? IsSigned : IsUnsigned};
 }
