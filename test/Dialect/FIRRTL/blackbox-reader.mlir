@@ -37,13 +37,13 @@ firrtl.circuit "Foo" attributes {annotations = [
     firrtl.instance foo3 @ExtFoo3()
     firrtl.instance dut @DUTBlackboxes()
   }
-  // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"..{{/|\\\\}}testbench{{/|\\\\}}hello.v">, symbols = []}
-  // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"cover{{/|\\\\}}hello2.v">, symbols = []}
-  // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"..{{/|\\\\}}testbench{{/|\\\\}}hello3.v">, symbols = []}
-  // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<".{{/|\\\\}}hello_dut.v">, symbols = []}
-  // CHECK: sv.verbatim "/* Bar */\0A" {output_file = #hw.output_file<"bar{{/|\\\\}}Bar.v">, symbols = []}
-  // CHECK: sv.verbatim "/* Baz */{{(\\0D)?}}\0A" {output_file = #hw.output_file<"baz{{/|\\\\}}Baz.sv">, symbols = []}
-  // CHECK: sv.verbatim "/* Qux */\0A" {output_file = #hw.output_file<"qux{{/|\\\\}}NotQux.jpeg">, symbols = []}
+  // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"..{{/|\\\\}}testbench{{/|\\\\}}hello.v">}
+  // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"cover{{/|\\\\}}hello2.v">}
+  // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"..{{/|\\\\}}testbench{{/|\\\\}}hello3.v">}
+  // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<".{{/|\\\\}}hello_dut.v">}
+  // CHECK: sv.verbatim "/* Bar */\0A" {output_file = #hw.output_file<"bar{{/|\\\\}}Bar.v">}
+  // CHECK: sv.verbatim "/* Baz */{{(\\0D)?}}\0A" {output_file = #hw.output_file<"baz{{/|\\\\}}Baz.sv">}
+  // CHECK: sv.verbatim "/* Qux */\0A" {output_file = #hw.output_file<"qux{{/|\\\\}}NotQux.jpeg">}
   // CHECK: sv.verbatim "..{{/|\\\\}}testbench{{/|\\\\}}hello.v\0A
   // CHECK-SAME:         ..{{/|\\\\}}testbench{{/|\\\\}}hello3.v\0A
   // CHECK-SAME:         hello_dut.v\0A

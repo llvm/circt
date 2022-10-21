@@ -63,11 +63,11 @@ hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d:
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
-  // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
+  // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.initial {
   // CHECK-NEXT:       sv.ifdef.procedural "INIT_RANDOM_PROLOG_" {
-  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
+  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_"
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural  "RANDOMIZE_REG_INIT" {
   // CHECK-NEXT:          %_RANDOM_0 = sv.logic  : !hw.inout<i32>
@@ -119,7 +119,7 @@ hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d:
   // CHECK-NEXT:       }
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_AFTER_INITIAL" {
-  // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL" {symbols = []}
+  // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL"
   // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
@@ -155,11 +155,11 @@ hw.module private @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef "FIRRTL_BEFORE_INITIAL" {
-  // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
+  // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.initial {
   // CHECK-NEXT:       sv.ifdef.procedural "INIT_RANDOM_PROLOG_" {
-  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
+  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_"
   // CHECK-NEXT:       }
   // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK-NEXT:        %_RANDOM_0 = sv.logic  : !hw.inout<i32>
@@ -171,7 +171,7 @@ hw.module private @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   // CHECK-NEXT:      }
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef "FIRRTL_AFTER_INITIAL" {
-  // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL" {symbols = []}
+  // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL"
   // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
@@ -259,11 +259,11 @@ hw.module private @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
-  // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
+  // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.initial {
   // CHECK-NEXT:       sv.ifdef.procedural "INIT_RANDOM_PROLOG_" {
-  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
+  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_"
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK-NEXT:         %_RANDOM_0 = sv.logic  : !hw.inout<i32>
@@ -290,7 +290,7 @@ hw.module private @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (
   // CHECK-NEXT:       }
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_AFTER_INITIAL" {
-  // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL" {symbols = []}
+  // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL"
   // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
@@ -310,11 +310,11 @@ hw.module private @UninitReg42(%clock: i1, %reset: i1, %cond: i1, %value: i42) {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
-  // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
+  // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.initial {
   // CHECK-NEXT:       sv.ifdef.procedural "INIT_RANDOM_PROLOG_" {
-  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
+  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_"
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK-NEXT:         %_RANDOM_0 = sv.logic  : !hw.inout<i32>
@@ -331,7 +331,7 @@ hw.module private @UninitReg42(%clock: i1, %reset: i1, %cond: i1, %value: i42) {
   // CHECK-NEXT:       }
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_AFTER_INITIAL" {
-  // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL" {symbols = []}
+  // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL"
   // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
@@ -361,11 +361,11 @@ hw.module private @regInitRandomReuse(%clock: i1, %a: i1) -> (o1: i2, o2: i4, o3
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
-  // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
+  // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.initial {
   // CHECK-NEXT:       sv.ifdef.procedural "INIT_RANDOM_PROLOG_" {
-  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
+  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_"
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK:              %9 = comb.extract %8 from 0 : (i32) -> i2
@@ -379,7 +379,7 @@ hw.module private @regInitRandomReuse(%clock: i1, %a: i1) -> (o1: i2, o2: i4, o3
   // CHECK:           }
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef "FIRRTL_AFTER_INITIAL" {
-  // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL" {symbols = []}
+  // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL"
   // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
@@ -400,11 +400,11 @@ hw.module private @init1DVector(%clock: i1, %a: !hw.array<2xi1>) -> (b: !hw.arra
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
-  // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
+  // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.initial {
   // CHECK-NEXT:       sv.ifdef.procedural "INIT_RANDOM_PROLOG_" {
-  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
+  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_"
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK:              %2 = comb.extract %1 from 0 : (i32) -> i2
@@ -412,7 +412,7 @@ hw.module private @init1DVector(%clock: i1, %a: !hw.array<2xi1>) -> (b: !hw.arra
   // CHECK:            }
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef "FIRRTL_AFTER_INITIAL" {
-  // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL" {symbols = []}
+  // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL"
   // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
@@ -432,11 +432,11 @@ hw.module private @init2DVector(%clock: i1, %a: !hw.array<1xarray<1xi1>>) -> (b:
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
-  // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
+  // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.initial {
   // CHECK-NEXT:       sv.ifdef.procedural "INIT_RANDOM_PROLOG_" {
-  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
+  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_"
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural  "RANDOMIZE_REG_INIT" {
   // CHECK:              %2 = comb.extract %1 from 0 : (i32) -> i1
@@ -444,7 +444,7 @@ hw.module private @init2DVector(%clock: i1, %a: !hw.array<1xarray<1xi1>>) -> (b:
   // CHECK:            }
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef "FIRRTL_AFTER_INITIAL" {
-  // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL" {symbols = []}
+  // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL"
   // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
@@ -462,11 +462,11 @@ hw.module private @initStruct(%clock: i1) {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
-  // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL" {symbols = []}
+  // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.initial {
   // CHECK-NEXT:       sv.ifdef.procedural "INIT_RANDOM_PROLOG_" {
-  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_" {symbols = []}
+  // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_"
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK:              %2 = comb.extract %1 from 0 : (i32) -> i1
@@ -474,7 +474,7 @@ hw.module private @initStruct(%clock: i1) {
   // CHECK:            }
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef "FIRRTL_AFTER_INITIAL" {
-  // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL" {symbols = []}
+  // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL"
   // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
