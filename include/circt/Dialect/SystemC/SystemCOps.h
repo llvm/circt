@@ -26,6 +26,8 @@
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 
+#include "circt/Dialect/Interop/InteropOps.h"
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/SystemC/SystemC.h.inc"
 

@@ -30,6 +30,7 @@ target_link_libraries(circt-reduce
   CIRCTHWArith
   CIRCTSV
   CIRCTSystemC
+  CIRCTSystemCTransforms
 
   MLIRIR
   MLIRParser

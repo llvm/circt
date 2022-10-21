@@ -17,9 +17,28 @@
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
 
-#define GET_OP_CLASSES
+//===----------------------------------------------------------------------===//
+// Interop Mechanism
+//===----------------------------------------------------------------------===//
+
 #include "circt/Dialect/Interop/InteropEnums.h.inc"
-// Clang format shouldn't reorder these headers.
+
+//===----------------------------------------------------------------------===//
+// Interop Traits
+//===----------------------------------------------------------------------===//
+
+namespace circt {
+namespace interop {
+template <typename ConcreteType>
+struct HasInterop : mlir::OpTrait::TraitBase<ConcreteType, HasInterop> {};
+} // namespace interop
+} // namespace circt
+
+//===----------------------------------------------------------------------===//
+// Interop Operations
+//===----------------------------------------------------------------------===//
+
+#define GET_OP_CLASSES
 #include "circt/Dialect/Interop/Interop.h.inc"
 
 #endif // CIRCT_DIALECT_INTEROP_INTEROPOPS_H

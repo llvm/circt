@@ -9,6 +9,7 @@ add_circt_conversion_library(CIRCTHWToSystemC
 
   LINK_LIBS PUBLIC
   CIRCTSystemC
+  CIRCTInteropDialect
   CIRCTHW
   CIRCTComb
   MLIREmitCDialect

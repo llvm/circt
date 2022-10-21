@@ -11,7 +11,16 @@
 //
 //===----------------------------------------------------------------------===//
 
+//===----------------------------------------------------------------------===//
+// Interop Traits
+//===----------------------------------------------------------------------===//
+
+def HasInterop : NativeOpTrait<"HasInterop"> {
+  let cppNamespace = "::circt::interop";
+}
+
 def SCModuleOp : SystemCOp<"module", [
+    HasInterop,
     Symbol,
     HWModuleLike,
     FunctionOpInterface,

@@ -26,4 +26,13 @@ def SystemCLowerInstanceInterop : Pass<"systemc-lower-instance-interop",
   ];
 }
 
+def SystemCContainerInteropLowering : Pass<"systemc-lower-container-interop",
+                                       "mlir::ModuleOp"> {
+  let summary = "Perform SystemC container-side interop lowering.";
+
+  let constructor =  [{
+    circt::systemc::createSystemCContainerInteropLoweringPass()
+  }];
+}
+
 #endif // CIRCT_DIALECT_SYSTEMC_PASSES_TD

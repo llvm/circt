@@ -14,6 +14,7 @@
 #include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Interop/InteropDialect.h"
 #include "circt/Dialect/SystemC/SystemCOps.h"
 #include "mlir/Dialect/EmitC/IR/EmitC.h"
 #include "mlir/IR/BuiltinDialect.h"
@@ -264,7 +265,9 @@ static void populateLegality(ConversionTarget &target) {
   target.addLegalDialect<systemc::SystemCDialect>();
   target.addLegalDialect<comb::CombDialect>();
   target.addLegalDialect<emitc::EmitCDialect>();
+  target.addLegalDialect<interop::InteropDialect>();
   target.addLegalOp<hw::ConstantOp>();
+  target.addLegalOp<hw::HWModuleExternOp>();
 }
 
 static void populateOpConversion(RewritePatternSet &patterns,
@@ -356,6 +359,6 @@ void HWToSystemCPass::runOnOperation() {
   populateTypeConversion(typeConverter);
   populateOpConversion(patterns, typeConverter);
 
-  if (failed(applyFullConversion(module, target, std::move(patterns))))
+  if (failed(applyPartialConversion(module, target, std::move(patterns))))
     signalPassFailure();
 }

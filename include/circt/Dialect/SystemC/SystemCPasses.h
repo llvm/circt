@@ -30,6 +30,7 @@ void populateSystemCLowerInstanceInteropPatterns(
     mlir::RewritePatternSet &patterns, mlir::MLIRContext *ctx);
 
 std::unique_ptr<mlir::Pass> createSystemCLowerInstanceInteropPass();
+std::unique_ptr<mlir::Pass> createSystemCContainerInteropLoweringPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
