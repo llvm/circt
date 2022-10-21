@@ -69,6 +69,12 @@ PrettyPrinter::Listener::~Listener() = default;
 
 /// Add token for printing.  In Oppen, this is "scan".
 void PrettyPrinter::add(Token t) {
+  // Add token to tokens, and add its index to scanStack.
+  auto addScanToken = [&](auto offset) {
+    auto right = tokenOffset + tokens.size();
+    scanStack.push_back(right);
+    tokens.push_back({t, offset});
+  };
   llvm::TypeSwitch<Token *, void>(&t)
       .Case([&](StringToken *s) {
         // If nothing on stack, directly print
@@ -84,21 +90,18 @@ void PrettyPrinter::add(Token t) {
           clear();
         else
           checkStack();
-        tokens.push_back({t, -rightTotal});
-        scanStack.push_back(tokenOffset + tokens.size() - 1);
+        addScanToken(-rightTotal);
         rightTotal += b->spaces();
       })
       .Case([&](BeginToken *b) {
         if (scanStack.empty())
           clear();
-        tokens.push_back({t, -rightTotal});
-        scanStack.push_back(tokenOffset + tokens.size() - 1);
+        addScanToken(-rightTotal);
       })
       .Case([&](EndToken *end) {
         if (scanStack.empty())
           return print({t, 0});
-        tokens.push_back({t, -1});
-        scanStack.push_back(tokenOffset + tokens.size() - 1);
+        addScanToken(-1);
       });
 }
 
