@@ -1516,7 +1516,6 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   case PEO::CLog2:
     operatorStr = "$clog2";
     operandSign = IsUnsigned;
-    isUnary = true;
     isFunction = true;
     break;
   case PEO::StrConcat:
@@ -1544,11 +1543,12 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     return signedness == IsSigned;
   };
 
-  if (isUnary)
+  if (isFunction)
     os << operatorStr;
-
   if (subprecedence > parenthesizeIfLooserThan || isFunction)
     os << '(';
+  if (isUnary)
+    os << operatorStr;
   if (expr.getOpcode() == PEO::StrConcat)
     os << '{';
   bool allOperandsSigned = emitOperand(expr.getOperands()[0]);
