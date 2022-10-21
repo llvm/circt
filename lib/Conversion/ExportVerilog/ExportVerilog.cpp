@@ -1452,7 +1452,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   }
 
   StringRef operatorStr;
-  VerilogPrecedence subprecedence = ForceEmitMultiUse;
+  VerilogPrecedence subprecedence = LowestPrecedence;
   Optional<SubExprSignResult> operandSign;
   bool isUnary = false;
   bool isFunction = false;
