@@ -73,6 +73,11 @@ private:
   /// The target directory for testbench files.
   StringRef testBenchDir;
 
+  /// The design-under-test (DUT) as indicated by the presence of a
+  /// "sifive.enterprise.firrtl.MarkDUTAnnotation".  This will be null if no
+  /// annotation is present.
+  FModuleOp dut;
+
   /// The file list file name (sic) for black boxes. If set, generates a file
   /// that lists all non-header source files for black boxes. Can be changed
   /// through `firrtl.transforms.BlackBoxResourceFileNameAnno` annotations.
@@ -157,6 +162,18 @@ void BlackBoxReaderPass::runOnOperation() {
 
   // Newly generated IR will be placed at the end of the circuit.
   auto builder = OpBuilder::atBlockEnd(circuitOp->getBlock());
+
+  // Do a shallow walk of the circuit to collect information necessary before we
+  // do real work.
+  for (auto &op : *circuitOp.getBodyBlock()) {
+    FModuleOp module = dyn_cast<FModuleOp>(op);
+    if (!module)
+      continue;
+
+    // Find the DUT if it exists or error if there are multiple DUTs.
+    if (failed(extractDUT(module, dut)))
+      return signalPassFailure();
+  }
 
   // Gather the relevant annotations on all modules in the circuit.
   for (auto &op : *circuitOp.getBodyBlock()) {
@@ -335,7 +352,11 @@ void BlackBoxReaderPass::setOutputFile(VerbatimOp op, Operation *origOp,
   auto ext = llvm::sys::path::extension(fileName);
   bool exclude = (ext == ".h" || ext == ".vh" || ext == ".svh");
   auto outDir = targetDir;
-  if (!testBenchDir.empty() && targetDir.equals(".") && !isDut)
+  // In order to output into the testbench directory, we need to have a
+  // testbench dir annotation, not have a blackbox target directory annotation
+  // (or one set to the current directory), have a DUT annotation, and the
+  // module needs to be in or under the DUT.
+  if (!testBenchDir.empty() && targetDir.equals(".") && dut && !isDut)
     outDir = testBenchDir;
   else if (isCover)
     outDir = coverDir;
