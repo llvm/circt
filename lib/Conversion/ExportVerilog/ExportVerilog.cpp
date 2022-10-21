@@ -1538,7 +1538,8 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   // unary -> one element.
   assert(!isUnary || llvm::hasSingleElement(expr.getOperands()));
   // one element -> {unary || open/close}.
-  assert(isUnary || hasOpenClose || !llvm::hasSingleElement(expr.getOperands()));
+  assert(isUnary || hasOpenClose ||
+         !llvm::hasSingleElement(expr.getOperands()));
 
   // Emit the specified operand with a $signed() or $unsigned() wrapper around
   // it if context requires a specific signedness to compute the right value.
