@@ -3316,7 +3316,6 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
 
   indent() << "if (";
 
@@ -3324,6 +3323,9 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
   // it (either "if (" or "else if (") was printed already.
   IfOp ifOp = op;
   for (;;) {
+    ops.clear();
+    ops.insert(ifOp);
+
     // Emit the condition and the then block.
     emitExpression(ifOp.getCond(), ops);
     os << ')';
@@ -3332,19 +3334,20 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
     if (!ifOp.hasElse())
       break;
 
-    // The else block does not contain an if-else that can be flattened.
     Block *elseBlock = ifOp.getElseBlock();
-    ifOp = findNestedElseIf(elseBlock);
-    if (!ifOp) {
+    auto nestedElseIfOp = findNestedElseIf(elseBlock);
+    if (!nestedElseIfOp) {
+      // The else block does not contain an if-else that can be flattened.
+      ops.clear();
+      ops.insert(ifOp);
       indent() << "else";
       emitBlockAsStatement(elseBlock, ops);
       break;
     }
 
-    // Introduce the 'else if', but iteratively continue unfolding any if-else
-    // statements inside of it.  Any wires that would have been generated to
-    // represent the condition will be hoisted to the parent scope of the outer
-    // `if` instead of being placed in a new block scope.
+    // Introduce the 'else if', and iteratively continue unfolding any if-else
+    // statements inside of it.
+    ifOp = nestedElseIfOp;
     indent() << "else if (";
   }
 
