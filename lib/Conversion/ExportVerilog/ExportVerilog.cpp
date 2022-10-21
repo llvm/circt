@@ -1452,10 +1452,12 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   }
 
   StringRef operatorStr;
+  StringRef openStr, closeStr;
   VerilogPrecedence subprecedence = LowestPrecedence;
+  VerilogPrecedence prec; // outer prec, when has open/close.
   Optional<SubExprSignResult> operandSign;
   bool isUnary = false;
-  bool isFunction = false;
+  bool hasOpenClose = false;
 
   switch (expr.getOpcode()) {
   case PEO::Add:
@@ -1514,15 +1516,25 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     operandSign = IsSigned;
     break;
   case PEO::CLog2:
-    operatorStr = "$clog2";
+    openStr = "$clog2(";
+    closeStr = ")";
     operandSign = IsUnsigned;
-    isFunction = true;
+    hasOpenClose = true;
+    prec = Symbol;
     break;
   case PEO::StrConcat:
+    openStr = "{";
+    closeStr = "}";
+    hasOpenClose = true;
     operatorStr = ", ";
-    subprecedence = Symbol;
+    // We don't have Concat precedence, so use Lowest. (SV Table 11-2).
+    subprecedence = LowestPrecedence;
+    prec = Symbol;
     break;
   }
+  if (!hasOpenClose)
+    prec = subprecedence;
+  assert(!isUnary || llvm::hasSingleElement(expr.getOperands()));
 
   // Emit the specified operand with a $signed() or $unsigned() wrapper around
   // it if context requires a specific signedness to compute the right value.
@@ -1543,14 +1555,16 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     return signedness == IsSigned;
   };
 
-  if (isFunction)
-    os << operatorStr;
-  if (subprecedence > parenthesizeIfLooserThan || isFunction)
+  // Check outer precedence, wrap in parentheses if needed.
+  if (prec > parenthesizeIfLooserThan)
     os << '(';
-  if (isUnary)
+
+  // Emit opening portion of the operation.
+  if (hasOpenClose)
+    os << openStr;
+  else if (isUnary)
     os << operatorStr;
-  if (expr.getOpcode() == PEO::StrConcat)
-    os << '{';
+
   bool allOperandsSigned = emitOperand(expr.getOperands()[0]);
   for (auto op : expr.getOperands().drop_front()) {
     // Handle the special case of (a + b + -42) as (a + b - 42).
@@ -1570,13 +1584,13 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     os << operatorStr;
     allOperandsSigned &= emitOperand(op);
   }
-  if (expr.getOpcode() == PEO::StrConcat)
-    os << '}';
-  if (subprecedence > parenthesizeIfLooserThan || isFunction) {
+  if (hasOpenClose)
+    os << closeStr;
+  if (prec > parenthesizeIfLooserThan) {
     os << ')';
-    subprecedence = Selection;
+    prec = Selection;
   }
-  return {subprecedence, allOperandsSigned ? IsSigned : IsUnsigned};
+  return {prec, allOperandsSigned ? IsSigned : IsUnsigned};
 }
 
 //===----------------------------------------------------------------------===//
