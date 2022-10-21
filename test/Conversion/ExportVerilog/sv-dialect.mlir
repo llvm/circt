@@ -1454,6 +1454,41 @@ hw.module @NestedElseIfHoist(%clock: i1, %flag1 : i1, %flag2: i1, %flag3: i1, %f
   hw.output
 }
 
+// CHECK-LABEL: ElseIfLocations
+// CHECK: if (~flag1)
+// CHECK-SAME: // Flag:1:1, If:1:1
+// CHECK: else if (~flag2)
+// CHECK-SAME: // Flag:2:2, If:2:2
+// CHECK: else if (~flag3)
+// CHECK-SAME: // Flag:3:3, If:3:3
+// CHECK: else
+// CHECK-SAME: // Flag:3:3, If:3:3
+hw.module @ElseIfLocations(%clock: i1, %flag1 : i1, %flag2: i1, %flag3: i1) {
+  %fd = hw.constant 0x80000002 : i32
+  %true = hw.constant 1 : i1
+
+  sv.always posedge %clock {
+    %0 = comb.xor %flag1, %true : i1 loc("Flag":1:1)
+    sv.if %0 {
+      sv.fwrite %fd, "A"
+    } else {
+      %1 = comb.xor %flag2, %true : i1 loc("Flag":2:2)
+      sv.if %1 {
+        sv.fwrite %fd, "B"
+      } else {
+        %2 = comb.xor %flag3, %true : i1 loc("Flag":3:3)
+        sv.if %2 {
+          sv.fwrite %fd, "C"
+        } else {
+          sv.fwrite %fd, "D"
+        } loc("If":3:3)
+      } loc("If":2:2)
+    } loc("If":1:1)
+  }
+
+  hw.output
+}
+
 // CHECK-LABEL: ReuseExistingInOut
 // CHECK: input {{.+}},
 // CHECK:        [[INPUT:[:alnum:]+]],
