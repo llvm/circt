@@ -222,8 +222,8 @@ FPGA or ASIC-based.
 The abstraction aims to abstract away the physical implementation details of the
 memory, and instead focus on the external interface and access semantics of the
 memory. this, in turn, facilitates analysis and transformation (e.g. memory
-merging, read/write conflicts, merging, etc.) and may serve as a target for
-other high-level abstractions.
+merging, read/write conflicts, etc.) and may serve as a target for other
+high-level abstractions.
 
 The high-level memory abstraction is split into two parts:
 * Memory *allocation* is defined by the `seq.hlmem` operation. This operation defines
@@ -284,7 +284,7 @@ the surrounding IR to arbitrate that port.
 
 #### **Port refinements**
 
-The main design descision of `seq.hlmem` is the choice of abstracting away
+The main design decision of `seq.hlmem` is the choice of abstracting away
 the structural details of a port into separate ops of which we currently
 only provide rudimentary read- and write ops.
 Example future ports could be:
