@@ -1462,7 +1462,7 @@ hw.module @NestedElseIfHoist(%clock: i1, %flag1 : i1, %flag2: i1, %flag3: i1, %f
 // CHECK: else if (~flag3)
 // CHECK-SAME: // Flag:3:3, If:3:3
 // CHECK: else
-// CHECK-SAME: // Flag:3:3, If:3:3
+// CHECK-SAME: // If:3:3
 hw.module @ElseIfLocations(%clock: i1, %flag1 : i1, %flag2: i1, %flag3: i1) {
   %fd = hw.constant 0x80000002 : i32
   %true = hw.constant 1 : i1
