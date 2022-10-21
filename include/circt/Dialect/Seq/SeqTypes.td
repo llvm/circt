@@ -10,30 +10,56 @@
 //
 //===----------------------------------------------------------------------===//
 
-class SeqType<string name> : TypeDef<SeqDialect, name> { }
+include "mlir/IR/BuiltinTypeInterfaces.td"
 
-class MemoryPortType<string name, string _mnemonic> : TypeDef<SeqDialect, name # "Port"> {
-  let parameters = (ins "hw::ArrayType":$memoryType);
-  let assemblyFormat = [{
-      `<` $memoryType `>`
-  }];
-  let mnemonic = _mnemonic;
-}
+class SeqType<string name, list<Trait> traits = []> : TypeDef<SeqDialect, name, traits> { }
 
-def ReadPortType : MemoryPortType<"Read", "read_port"> {
-  let summary = "Read port type";
+def HLMemType : SeqType<"HLMem",[
+    ShapedTypeInterface
+  ]> {
+  let summary = "Multi-dimensional memory type";
   let description = [{
-      This type represents a reference to a read port of a memory. The type
-      serves as a link between the owner of the port (the instantiated memory)
-      and the user of the port (some `seq` read port operation).
-  }];
-}
+    Syntax:
+    ```
+    hlmem-type ::== `hlmem` `<` dim-list element-type `>`
+    ```
 
-def WritePortType : MemoryPortType<"Write", "write_port"> {
-  let summary = "Write port type";
-  let description = [{
-      This type represents a reference to a write port of a memory. The type
-      serves as a link between the owner of the port (the instantiated memory)
-      and the user of the port (some `seq` write port operation).
+    The HLMemType represents the type of an addressable memory structure. The
+    type is inherently multidimensional. Dimensions must be known integer values.
+
+    Note: unidimensional memories are represented as <1x{element type}> - 
+    <{element type}> is illegal.
   }];
+
+  let parameters = (ins
+    ArrayRefParameter<"int64_t">:$shape,
+    "Type":$elementType
+  );
+
+  let extraClassDeclaration = [{
+    using ShapedType::Trait<HLMemType>::clone;
+    using ShapedType::Trait<HLMemType>::getElementTypeBitWidth;
+    using ShapedType::Trait<HLMemType>::getRank;
+    using ShapedType::Trait<HLMemType>::getNumElements;
+    using ShapedType::Trait<HLMemType>::isDynamicDim;
+    using ShapedType::Trait<HLMemType>::hasStaticShape;
+    using ShapedType::Trait<HLMemType>::getNumDynamicDims;
+    using ShapedType::Trait<HLMemType>::getDimSize;
+    using ShapedType::Trait<HLMemType>::getDynamicDimIndex;
+
+    // Returns the set of types required to access this memory type.
+    llvm::SmallVector<Type> getAddressTypes() const;
+
+    /// Returns if this type is ranked (always true).
+    bool hasRank() const { return true; }
+
+    /// Clone this vector type with the given shape and element type. If the
+    /// provided shape is `None`, the current shape of the type is used.
+    HLMemType cloneWith(Optional<ArrayRef<int64_t>> shape,
+                         Type elementType) const;
+  }];
+
+  let mnemonic = "hlmem";
+  let hasCustomAssemblyFormat = 1;
+  let genVerifyDecl = 1;
 }

@@ -51,43 +51,50 @@ static bool canElideName(OpAsmPrinter &p, Operation *op) {
   return actualName == name;
 }
 
-static IntegerType getAddressTypeFromHWArrayType(Builder &b,
-                                                 hw::ArrayType arrType) {
-  return b.getIntegerType(llvm::Log2_64_Ceil(arrType.getSize()));
-}
-
 //===----------------------------------------------------------------------===//
 // ReadPortOp
 //===----------------------------------------------------------------------===//
 
 ParseResult ReadPortOp::parse(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc loc = parser.getCurrentLocation();
-  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 2> operands(2);
-  seq::ReadPortType portType;
 
-  if (parser.parseOperand(operands[0]) || parser.parseLSquare() ||
-      parser.parseOperand(operands[1]) || parser.parseRSquare() ||
-      parser.parseColon() || parser.parseType(portType))
+  OpAsmParser::UnresolvedOperand memOperand, wrenOperand;
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 2> addressOperands;
+  seq::HLMemType memType;
+
+  if (parser.parseOperand(memOperand) ||
+      parser.parseOperandList(addressOperands,
+                              OpAsmParser::Delimiter::Square) ||
+      parser.parseKeyword("rden") || parser.parseOperand(wrenOperand) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(memType))
     return failure();
 
-  // Infer address type from port type.
-  Type addressType = getAddressTypeFromHWArrayType(parser.getBuilder(),
-                                                   portType.getMemoryType());
+  llvm::SmallVector<Type> operandTypes = memType.getAddressTypes();
+  operandTypes.insert(operandTypes.begin(), memType);
+  operandTypes.push_back(parser.getBuilder().getI1Type());
 
-  if (parser.resolveOperands(operands, {portType, addressType}, loc,
-                             result.operands))
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand> allOperands = {memOperand};
+  llvm::copy(addressOperands, std::back_inserter(allOperands));
+  allOperands.push_back(wrenOperand);
+
+  if (parser.resolveOperands(allOperands, operandTypes, loc, result.operands))
     return failure();
-  result.addTypes(portType.getMemoryType().getElementType());
+
+  result.addTypes(memType.getElementType());
 
   return success();
 }
 
 void ReadPortOp::print(OpAsmPrinter &p) {
-  p << " " << getPort() << "[" << getAddress() << "] : " << getPort().getType();
+  p << " " << getMemory() << "[" << getAddresses() << "] rden " << getRdEn();
+  p.printOptionalAttrDict((*this)->getAttrs());
+  p << " : " << getMemory().getType();
 }
 
 void ReadPortOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getReadData(), "data");
+  auto memName = getMemory().getDefiningOp<seq::HLMemOp>().getName();
+  setNameFn(getReadData(), (memName + "_rdata").str());
 }
 
 //===----------------------------------------------------------------------===//
@@ -96,114 +103,49 @@ void ReadPortOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 ParseResult WritePortOp::parse(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc loc = parser.getCurrentLocation();
-  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 2> operands(3);
-  seq::WritePortType portType;
+  OpAsmParser::UnresolvedOperand memOperand, dataOperand, wrenOperand;
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 2> addressOperands;
+  seq::HLMemType memType;
 
-  if (parser.parseOperand(operands[0]) || parser.parseLSquare() ||
-      parser.parseOperand(operands[1]) || parser.parseRSquare() ||
-      parser.parseOperand(operands[2]) || parser.parseColon() ||
-      parser.parseType(portType))
+  if (parser.parseOperand(memOperand) ||
+      parser.parseOperandList(addressOperands,
+                              OpAsmParser::Delimiter::Square) ||
+      parser.parseOperand(dataOperand) || parser.parseKeyword("wren") ||
+      parser.parseOperand(wrenOperand) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(memType))
     return failure();
 
-  // Infer address type from port type.
-  Type addressType = getAddressTypeFromHWArrayType(parser.getBuilder(),
-                                                   portType.getMemoryType());
-  Type dataType = portType.getMemoryType().getElementType();
+  llvm::SmallVector<Type> operandTypes = memType.getAddressTypes();
+  operandTypes.insert(operandTypes.begin(), memType);
+  operandTypes.push_back(memType.getElementType());
+  operandTypes.push_back(parser.getBuilder().getI1Type());
 
-  if (parser.resolveOperands(operands, {portType, addressType, dataType}, loc,
-                             result.operands))
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 2> allOperands(
+      addressOperands);
+  allOperands.insert(allOperands.begin(), memOperand);
+  allOperands.push_back(dataOperand);
+  allOperands.push_back(wrenOperand);
+
+  if (parser.resolveOperands(allOperands, operandTypes, loc, result.operands))
     return failure();
+
   return success();
 }
 
 void WritePortOp::print(OpAsmPrinter &p) {
-  p << " " << getPort() << "[" << getAddress() << "] " << getInData() << " : "
-    << getPort().getType();
+  p << " " << getMemory() << "[" << getAddresses() << "] " << getInData()
+    << " wren " << getWrEn();
+  p.printOptionalAttrDict((*this)->getAttrs());
+  p << " : " << getMemory().getType();
 }
 
 //===----------------------------------------------------------------------===//
 // HLMemOp
 //===----------------------------------------------------------------------===//
 
-ParseResult HLMemOp::parse(OpAsmParser &parser, OperationState &result) {
-  auto *ctx = parser.getContext();
-  llvm::SMLoc loc = parser.getCurrentLocation();
-  StringAttr memoryName;
-
-  if (parser.parseSymbolName(memoryName, SymbolTable::getSymbolAttrName(),
-                             result.attributes))
-    return parser.emitError(loc) << "expected memory name";
-
-  OpAsmParser::UnresolvedOperand clk;
-  if (parser.parseOperand(clk) ||
-      parser.resolveOperand(clk, parser.getBuilder().getI1Type(),
-                            result.operands))
-    return parser.emitError(loc) << "Expected clock operand";
-
-  hw::ArrayType arrayType;
-  if (parser.parseOptionalAttrDict(result.attributes) ||
-      parser.parseColonType(arrayType))
-    return failure();
-
-  result.addAttribute("memoryType", TypeAttr::get(arrayType));
-
-  // Build result port types based on # of read and write ports requested.
-  IntegerAttr readPorts =
-      result.attributes.get("NReadPorts").dyn_cast_or_null<IntegerAttr>();
-  IntegerAttr writePorts =
-      result.attributes.get("NWritePorts").dyn_cast_or_null<IntegerAttr>();
-
-  if (!readPorts && !writePorts)
-    return parser.emitError(
-        loc, "Missing 'readPorts' and 'writePorts' in attribute dict");
-
-  llvm::SmallVector<Type> ports;
-  for (unsigned i = 0, e = readPorts.getInt(); i != e; ++i)
-    ports.push_back(seq::ReadPortType::get(ctx, arrayType));
-
-  for (unsigned i = 0, e = writePorts.getInt(); i != e; ++i)
-    ports.push_back(seq::WritePortType::get(ctx, arrayType));
-
-  result.addTypes(ports);
-  return success();
-}
-
-void HLMemOp::print(::mlir::OpAsmPrinter &p) {
-  p << " ";
-  p.printSymbolName(getSymName());
-  p << " " << getClk();
-  p.printOptionalAttrDict((*this)->getAttrs(),
-                          /*elidedAttrs=*/{"memoryType", "sym_name"});
-  p << " : " << getMemoryType();
-}
-
 void HLMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  for (unsigned i = 0, e = getNReadPorts(); i != e; ++i)
-    setNameFn(getReadPort(i), "read" + std::to_string(i));
-
-  for (unsigned i = 0, e = getNWritePorts(); i != e; ++i)
-    setNameFn(getWritePort(i), "write" + std::to_string(i));
-}
-
-Value HLMemOp::getReadPort(unsigned idx) {
-  assert(idx < getNReadPorts() && "read port index out of range");
-  return getResult(idx);
-}
-
-Value HLMemOp::getWritePort(unsigned idx) {
-  assert(idx < getNWritePorts() && "write port index out of range");
-  return getResult(getNReadPorts() + idx);
-}
-
-LogicalResult HLMemOp::verify() {
-  // Verify single-use constraint of the memory references.
-  for (auto [i, output] : llvm::enumerate(getResults())) {
-    auto uses = output.getUses();
-    unsigned numUses = std::distance(uses.begin(), uses.end());
-    if (numUses > 1)
-      return emitOpError() << "output port #" << i << " has multiple uses.";
-  }
-  return success();
+  setNameFn(getHandle(), getName());
 }
 
 //===----------------------------------------------------------------------===//

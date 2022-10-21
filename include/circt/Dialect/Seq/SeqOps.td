@@ -120,40 +120,42 @@ def HLMemOp : SeqOp<"hlmem", [
      Symbol,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]> ]> {
 
-  let summary = "Instaniate a high-level memory.";
+  let summary = "Instantiate a high-level memory.";
   let description = "See the Seq dialect rationale for a longer description";
 
-  let arguments = (ins I1:$clk, SymbolNameAttr:$sym_name,
-      TypeAttrOf<ArrayType>:$memoryType,
-      ConfinedAttr<I32Attr, [IntMinValue<0>]>:$NReadPorts,
-      ConfinedAttr<I32Attr, [IntMinValue<0>]>:$NWritePorts,
-      ConfinedAttr<I32Attr, [IntMinValue<0>]>:$readLatency,
-      ConfinedAttr<I32Attr, [IntMinValue<1>]>:$writeLatency);
-  let results = (outs Variadic<AnyType>:$ports);
-  let hasCustomAssemblyFormat = 1;
-  let hasVerifier = 1;
+  let arguments = (ins I1:$clk, SymbolNameAttr:$sym_name);
+  let results = (outs HLMemType:$handle);
 
   let extraClassDeclaration = [{
-    // Return the 'idx'th read port of this memory.
-    Value getReadPort(unsigned idx);
-
-    // Return the 'idx'th write port of this memory.
-    Value getWritePort(unsigned idx);
+    HLMemType getMemType() { return getHandle().getType().cast<HLMemType>(); }
   }];
+
+  let assemblyFormat = "$sym_name $clk attr-dict `:` type($handle)";
 }
 
 def ReadPortOp : SeqOp<"read", 
   [DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
-  let summary = "Structural read access to a `!seq.read` port";
-  let arguments = (ins ReadPortType:$port, AnyType:$address);
+  let summary = "Structural read access to a seq.hlmem";
+  let arguments = (ins 
+    HLMemType:$memory,
+    Variadic<AnyType>:$addresses,
+    I1:$rdEn,
+    I64Attr:$latency
+  );
   let results = (outs AnyType:$readData);
   let hasCustomAssemblyFormat = 1;
 }
 
 
 def WritePortOp : SeqOp<"write", []> {
-  let summary = "Structural write access to a `!seq.write` port";
-  let arguments = (ins WritePortType:$port, AnyType:$address, AnyType:$inData);
+  let summary = "Structural write access to a seq.hlmem";
+  let arguments = (ins
+    HLMemType:$memory,
+    Variadic<AnyType>:$addresses,
+    AnyType:$inData,
+    I1:$wrEn,
+    I64Attr:$latency
+  );
   let results = (outs);
   let hasCustomAssemblyFormat = 1;
 }
