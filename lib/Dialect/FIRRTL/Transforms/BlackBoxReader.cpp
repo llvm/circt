@@ -360,6 +360,7 @@ void BlackBoxReaderPass::setOutputFile(VerbatimOp op, Operation *origOp,
 }
 
 /// Return true if module is in the DUT hierarchy.
+/// NOLINTNEXTLINE(misc-no-recursion)
 bool BlackBoxReaderPass::isDut(Operation *module) {
   // Check if result already cached.
   auto iter = dutModuleMap.find(module);
