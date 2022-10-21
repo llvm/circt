@@ -48,7 +48,7 @@ struct BlackBoxReaderPass : public BlackBoxReaderBase<BlackBoxReaderPass> {
                        bool isCover);
   VerbatimOp loadFile(Operation *op, StringRef inputPath, OpBuilder &builder);
   void setOutputFile(VerbatimOp op, Operation *origOp, StringAttr fileNameAttr,
-                     bool isDut = false, bool isCover = false);
+                     bool isCover = false);
   // Check if module or any of its parents in the InstanceGraph is a DUT.
   bool isDut(Operation *module);
 
@@ -271,7 +271,7 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
     // Create an IR node to hold the contents.  Use "unknown location" so that
     // no file info will unnecessarily print.
     auto verbatim = builder.create<VerbatimOp>(builder.getUnknownLoc(), text);
-    setOutputFile(verbatim, op, name, isDut(op), isCover);
+    setOutputFile(verbatim, op, name, isCover);
     return true;
   }
 
@@ -293,7 +293,7 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
       return false;
     }
     auto name = builder.getStringAttr(llvm::sys::path::filename(path));
-    setOutputFile(verbatim, op, name, isDut(op), isCover);
+    setOutputFile(verbatim, op, name, isCover);
     return true;
   }
 
@@ -332,8 +332,7 @@ VerbatimOp BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
 ///  2. Record that the file has been generated to avoid duplicates.
 ///  3. Add each file name to the generated "file list" file.
 void BlackBoxReaderPass::setOutputFile(VerbatimOp op, Operation *origOp,
-                                       StringAttr fileNameAttr, bool isDut,
-                                       bool isCover) {
+                                       StringAttr fileNameAttr, bool isCover) {
   // If the output file was set on the original operation then either: (1) copy
   // this to the new op if it is a filename or (2) use this directory (since it
   // is a directory) as the lowest priority directory to put this file.
@@ -356,7 +355,7 @@ void BlackBoxReaderPass::setOutputFile(VerbatimOp op, Operation *origOp,
   // testbench dir annotation, not have a blackbox target directory annotation
   // (or one set to the current directory), have a DUT annotation, and the
   // module needs to be in or under the DUT.
-  if (!testBenchDir.empty() && targetDir.equals(".") && dut && !isDut)
+  if (!testBenchDir.empty() && targetDir.equals(".") && dut && !isDut(origOp))
     outDir = testBenchDir;
   else if (isCover)
     outDir = coverDir;
