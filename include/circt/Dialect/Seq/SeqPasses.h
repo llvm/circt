@@ -21,6 +21,7 @@ namespace seq {
 
 std::unique_ptr<mlir::Pass> createSeqLowerToSVPass();
 std::unique_ptr<mlir::Pass> createSeqFIRRTLLowerToSVPass();
+std::unique_ptr<mlir::Pass> createLowerSeqHLMemPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
