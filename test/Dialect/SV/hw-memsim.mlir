@@ -114,7 +114,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:  sv.ifdef "SYNTHESIS" {
 //CHECK-NEXT:  } else {
 //CHECK-NEXT:    sv.ifdef "RANDOMIZE_MEM_INIT" {
-//CHECK-NEXT:      sv.verbatim "integer [[INITVAR:.+]];\0A" {{.+}}
+//CHECK-NEXT:      sv.verbatim "integer [[INITVAR:.+]];\0A"
 //CHECK-NEXT:      %[[RANDOM_MEM:.+]] = sv.reg sym @[[_RANDOM_MEM:.+]] : !hw.inout<i32>
 //CHECK-NEXT:    }
 //CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT" {
