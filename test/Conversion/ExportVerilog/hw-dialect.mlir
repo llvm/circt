@@ -97,95 +97,95 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
    !hw.struct<foo: i2, bar: i4>, !hw.struct<foo: i2, bar: i4>, i1
 }
 // CHECK-LABEL: module TESTSIMPLE(
-// CHECK-NEXT:   input  [3:0]                                              a,
-// CHECK-NEXT:                                                             b,
-// CHECK-NEXT:   input  [1:0]                                              c,
-// CHECK-NEXT:   input                                                     cond,
-// CHECK-NEXT:   input  [11:0][9:0][3:0]                                   array2d,
-// CHECK-NEXT:   input  [7:0]                                              uarray[0:15],
-// CHECK-NEXT:                                                             postUArray,
-// CHECK-NEXT:   input  struct packed {logic [1:0] foo; logic [3:0] bar; } structA,
-// CHECK-NEXT:   input  struct packed {logic [1:0] foo; }[4:0]             arrOfStructA,
-// CHECK-NEXT:   input  [0:0]                                              array1,
-// CHECK-NEXT:   output [3:0]                                              r0,
-// CHECK-NEXT:                                                             r2,
-// CHECK-NEXT:                                                             r4,
-// CHECK-NEXT:                                                             r6,
-// CHECK-NEXT:                                                             r7,
-// CHECK-NEXT:                                                             r8,
-// CHECK-NEXT:                                                             r9,
-// CHECK-NEXT:                                                            r10,
-// CHECK-NEXT:                                                             r11,
-// CHECK-NEXT:                                                             r12,
-// CHECK-NEXT:                                                             r13,
-// CHECK-NEXT:                                                             r14,
-// CHECK-NEXT:                                                             r15,
-// CHECK-NEXT:   output                                                    r16,
-// CHECK-NEXT:                                                             r17,
-// CHECK-NEXT:                                                             r18,
-// CHECK-NEXT:                                                             r19,
-// CHECK-NEXT:                                                             r20,
-// CHECK-NEXT:                                                             r21,
-// CHECK-NEXT:                                                             r22,
-// CHECK-NEXT:                                                             r23,
-// CHECK-NEXT:                                                             r24,
-// CHECK-NEXT:                                                             r25,
-// CHECK-NEXT:                                                             r26,
-// CHECK-NEXT:                                                             r27,
-// CHECK-NEXT:                                                             r28,
-// CHECK-NEXT:   output [11:0]                                             r29,
-// CHECK-NEXT:   output [1:0]                                              r30,
-// CHECK-NEXT:   output [8:0]                                              r31,
-// CHECK-NEXT:   output [3:0]                                              r33,
-// CHECK-NEXT:                                                             r34,
-// CHECK-NEXT:   output [2:0][3:0]                                         r35,
-// CHECK-NEXT:   output [11:0]                                             r36,
-// CHECK-NEXT:   output [3:0]                                              r37,
-// CHECK-NEXT:   output [5:0][3:0]                                         r38,
-// CHECK-NEXT:   output struct packed {logic [1:0] foo; logic [3:0] bar; } r40,
-// CHECK-NEXT:                                                             r41,
-// CHECK-NEXT:   output                                                    r42);
-// CHECK:        wire [8:0][3:0] name_hint = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
-// CHECK-NEXT:   wire [2:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
-// CHECK-NEXT:   wire struct packed {logic [1:0] foo; logic [3:0] bar; } [[WIRE1:.+]] = '{foo: c, bar: a};
-// CHECK-NEXT:   assign r0 = a + b;
-// CHECK-NEXT:   assign r2 = a - b;
-// CHECK-NEXT:   assign r4 = a * b;
-// CHECK-NEXT:   assign r6 = a / b;
-// CHECK-NEXT:   assign r7 = $signed(a) / $signed(b);
-// CHECK-NEXT:   assign r8 = a % b;
-// CHECK-NEXT:   assign r9 = $signed(a) % $signed(b);
-// CHECK-NEXT:   assign r10 = a << b;
-// CHECK-NEXT:   assign r11 = a >> b;
-// CHECK-NEXT:   assign r12 = $signed($signed(a) >>> b);
-// CHECK-NEXT:   assign r13 = a | b;
-// CHECK-NEXT:   assign r14 = a & b;
-// CHECK-NEXT:   assign r15 = a ^ b;
-// CHECK-NEXT:   assign r16 = a == b;
-// CHECK-NEXT:   assign r17 = a != b;
-// CHECK-NEXT:   assign r18 = $signed(a) < $signed(b);
-// CHECK-NEXT:   assign r19 = $signed(a) <= $signed(b);
-// CHECK-NEXT:   assign r20 = $signed(a) > $signed(b);
-// CHECK-NEXT:   assign r21 = $signed(a) >= $signed(b);
-// CHECK-NEXT:   assign r22 = a < b;
-// CHECK-NEXT:   assign r23 = a <= b;
-// CHECK-NEXT:   assign r24 = a > b;
-// CHECK-NEXT:   assign r25 = a >= b;
-// CHECK-NEXT:   assign r26 = &a;
-// CHECK-NEXT:   assign r27 = |a;
-// CHECK-NEXT:   assign r28 = ^a;
-// CHECK-NEXT:   assign r29 = {a, a, b};
-// CHECK-NEXT:   assign r30 = a[2:1];
-// CHECK-NEXT:   assign r31 = {{[{}][{}]}}5{a[3]}}, a};
-// CHECK-NEXT:   assign r33 = cond ? a : b;
-// CHECK-NEXT:   assign r34 = ~a;
-// CHECK-NEXT:   assign r35 = cond ? name_hint[a +: 3] : name_hint[b +: 3];
-// CHECK-NEXT:   assign r36 = {3{a}};
-// CHECK-NEXT:   assign r37 = array2d[a][b] (* svAttr *);
-// CHECK-NEXT:   assign r38 = {[[WIRE0]], [[WIRE0]]};
-// CHECK-NEXT:   assign r40 = '{foo: structA.foo, bar: a};
-// CHECK-NEXT:   assign r41 = '{foo: [[WIRE1]].foo, bar: b};
-// CHECK-NEXT:   assign r42 = array1[/*Zero width: 0'h0*/ 1'b0];
+// CHECK-NEXT:      input  [3:0]                                              a,
+// CHECK-NEXT:                                                                b,
+// CHECK-NEXT:      input  [1:0]                                              c,
+// CHECK-NEXT:      input                                                     cond,
+// CHECK-NEXT:      input  [11:0][9:0][3:0]                                   array2d,
+// CHECK-NEXT:      input  [7:0]                                              uarray[0:15],
+// CHECK-NEXT:                                                                postUArray,
+// CHECK-NEXT:      input  struct packed {logic [1:0] foo; logic [3:0] bar; } structA,
+// CHECK-NEXT:      input  struct packed {logic [1:0] foo; }[4:0]             arrOfStructA,
+// CHECK-NEXT:      input  [0:0]                                              array1,
+// CHECK-NEXT:      output [3:0]                                              r0,
+// CHECK-NEXT:                                                                r2,
+// CHECK-NEXT:                                                                r4,
+// CHECK-NEXT:                                                                r6,
+// CHECK-NEXT:                                                                r7,
+// CHECK-NEXT:                                                                r8,
+// CHECK-NEXT:                                                                r9,
+// CHECK-NEXT:                                                               r10,
+// CHECK-NEXT:                                                                r11,
+// CHECK-NEXT:                                                                r12,
+// CHECK-NEXT:                                                                r13,
+// CHECK-NEXT:                                                                r14,
+// CHECK-NEXT:                                                                r15,
+// CHECK-NEXT:      output                                                    r16,
+// CHECK-NEXT:                                                                r17,
+// CHECK-NEXT:                                                                r18,
+// CHECK-NEXT:                                                                r19,
+// CHECK-NEXT:                                                                r20,
+// CHECK-NEXT:                                                                r21,
+// CHECK-NEXT:                                                                r22,
+// CHECK-NEXT:                                                                r23,
+// CHECK-NEXT:                                                                r24,
+// CHECK-NEXT:                                                                r25,
+// CHECK-NEXT:                                                                r26,
+// CHECK-NEXT:                                                                r27,
+// CHECK-NEXT:                                                                r28,
+// CHECK-NEXT:      output [11:0]                                             r29,
+// CHECK-NEXT:      output [1:0]                                              r30,
+// CHECK-NEXT:      output [8:0]                                              r31,
+// CHECK-NEXT:      output [3:0]                                              r33,
+// CHECK-NEXT:                                                                r34,
+// CHECK-NEXT:      output [2:0][3:0]                                         r35,
+// CHECK-NEXT:      output [11:0]                                             r36,
+// CHECK-NEXT:      output [3:0]                                              r37,
+// CHECK-NEXT:      output [5:0][3:0]                                         r38,
+// CHECK-NEXT:      output struct packed {logic [1:0] foo; logic [3:0] bar; } r40,
+// CHECK-NEXT:                                                                r41,
+// CHECK-NEXT:      output                                                    r42);
+// CHECK{LITERAL}:  wire [8:0][3:0] name_hint = {9{4'hF}};
+// CHECK-NEXT:      wire [2:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
+// CHECK-NEXT:      wire struct packed {logic [1:0] foo; logic [3:0] bar; } [[WIRE1:.+]] = '{foo: c, bar: a};
+// CHECK-NEXT:      assign r0 = a + b;
+// CHECK-NEXT:      assign r2 = a - b;
+// CHECK-NEXT:      assign r4 = a * b;
+// CHECK-NEXT:      assign r6 = a / b;
+// CHECK-NEXT:      assign r7 = $signed(a) / $signed(b);
+// CHECK-NEXT:      assign r8 = a % b;
+// CHECK-NEXT:      assign r9 = $signed(a) % $signed(b);
+// CHECK-NEXT:      assign r10 = a << b;
+// CHECK-NEXT:      assign r11 = a >> b;
+// CHECK-NEXT:      assign r12 = $signed($signed(a) >>> b);
+// CHECK-NEXT:      assign r13 = a | b;
+// CHECK-NEXT:      assign r14 = a & b;
+// CHECK-NEXT:      assign r15 = a ^ b;
+// CHECK-NEXT:      assign r16 = a == b;
+// CHECK-NEXT:      assign r17 = a != b;
+// CHECK-NEXT:      assign r18 = $signed(a) < $signed(b);
+// CHECK-NEXT:      assign r19 = $signed(a) <= $signed(b);
+// CHECK-NEXT:      assign r20 = $signed(a) > $signed(b);
+// CHECK-NEXT:      assign r21 = $signed(a) >= $signed(b);
+// CHECK-NEXT:      assign r22 = a < b;
+// CHECK-NEXT:      assign r23 = a <= b;
+// CHECK-NEXT:      assign r24 = a > b;
+// CHECK-NEXT:      assign r25 = a >= b;
+// CHECK-NEXT:      assign r26 = &a;
+// CHECK-NEXT:      assign r27 = |a;
+// CHECK-NEXT:      assign r28 = ^a;
+// CHECK-NEXT:      assign r29 = {a, a, b};
+// CHECK-NEXT:      assign r30 = a[2:1];
+// CHECK-NEXT:      assign r31 = {{[{}][{}]}}5{a[3]}}, a};
+// CHECK-NEXT:      assign r33 = cond ? a : b;
+// CHECK-NEXT:      assign r34 = ~a;
+// CHECK-NEXT:      assign r35 = cond ? name_hint[a +: 3] : name_hint[b +: 3];
+// CHECK-NEXT:      assign r36 = {3{a}};
+// CHECK-NEXT:      assign r37 = array2d[a][b] (* svAttr *);
+// CHECK-NEXT:      assign r38 = {[[WIRE0]], [[WIRE0]]};
+// CHECK-NEXT:      assign r40 = '{foo: structA.foo, bar: a};
+// CHECK-NEXT:      assign r41 = '{foo: [[WIRE1]].foo, bar: b};
+// CHECK-NEXT:      assign r42 = array1[/*Zero width: 0'h0*/ 1'b0];
 // CHECK-NEXT: endmodule
 
 
@@ -1238,4 +1238,12 @@ hw.module @ArrayGetInline(%a: !hw.array<4xstruct<a: i32>>) -> (out: i32) {
   %y = hw.struct_extract %x["a"] : !hw.struct<a: i32>
   // CHECK: assign out = a[2'h0].a;
   hw.output %y : i32
+}
+
+// CHECK-LABEL: module UniformArrayCreate
+hw.module @UniformArrayCreate() -> (arr: !hw.array<5xi8>) {
+  %c0_i8 = hw.constant 0 : i8
+  %arr = hw.array_create %c0_i8, %c0_i8, %c0_i8, %c0_i8, %c0_i8 : i8
+  // CHECK: assign arr = {5{8'h0}};
+  hw.output %arr : !hw.array<5xi8>
 }
