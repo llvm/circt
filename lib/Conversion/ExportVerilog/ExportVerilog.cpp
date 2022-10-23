@@ -2279,11 +2279,17 @@ SubExprInfo ExprEmitter::visitTypeOp(ArrayCreateOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   os << '{';
-  llvm::interleaveComma(op.getInputs(), os, [&](Value operand) {
-    os << "{";
-    emitSubExpr(operand, LowestPrecedence);
+  if (op.isUniform()) {
+    os << op.getInputs().size() << "{";
+    emitSubExpr(op.getUniformElement(), LowestPrecedence);
     os << "}";
-  });
+  } else {
+    llvm::interleaveComma(op.getInputs(), os, [&](Value operand) {
+      os << "{";
+      emitSubExpr(operand, LowestPrecedence);
+      os << "}";
+    });
+  }
   os << '}';
   return {Unary, IsUnsigned};
 }
