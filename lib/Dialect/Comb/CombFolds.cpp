@@ -114,7 +114,7 @@ struct ComplementMatcher {
 
 template <typename SubType>
 static inline ComplementMatcher<SubType> m_Complement(const SubType &subExpr) {
-  return ComplementMatcher(subExpr);
+  return ComplementMatcher<SubType>(subExpr);
 }
 
 /// Flattens a single input in `op` if `hasOneUse` is true and it can be defined
