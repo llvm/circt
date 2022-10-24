@@ -1499,31 +1499,20 @@ firrtl.circuit "TraceNameAnnotation" attributes {rawAnnotations = [
 // -----
 
 // Test that the valid types are connected, when the source has un-inferred width but sink has width.
-firrtl.circuit "Top"  attributes {rawAnnotations = [
-	{
-		class = "sifive.enterprise.grandcentral.DataTapsAnnotation",
-		keys = [
-						{
-						class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
-						sink = "~Top|Top>tap",
-						source = "~Top|Foo>sum"
-			}]}]} {
-  firrtl.module private @Foo(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
-    %c1_ui = firrtl.constant 1 : !firrtl.uint
-    %0 = firrtl.add %in, %c1_ui : (!firrtl.uint<8>, !firrtl.uint) -> !firrtl.uint
-    %1 = firrtl.tail %0, 1 : (!firrtl.uint) -> !firrtl.uint
-    %sum = firrtl.node interesting_name %1  : !firrtl.uint
-    firrtl.connect %out, %sum : !firrtl.uint<8>, !firrtl.uint
+firrtl.circuit "Top"  attributes {rawAnnotations = [{
+  class = "sifive.enterprise.grandcentral.DataTapsAnnotation",
+  keys = [{
+    class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+    sink = "~Top|Top>tap", source = "~Top|Foo>sum"
+    }]}]} {
+  firrtl.module private @Foo() {
+    %sum = firrtl.wire : !firrtl.uint
   }
   // CHECK-LABEL: firrtl.module @Top
-  firrtl.module @Top(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
-    %foo_in, %foo_out = firrtl.instance foo interesting_name  @Foo(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
-    firrtl.strictconnect %foo_in, %in : !firrtl.uint<8>
+  firrtl.module @Top() {
+    firrtl.instance foo interesting_name  @Foo()
     %tap = firrtl.wire interesting_name  : !firrtl.uint<8>
-    %0 = firrtl.add %foo_out, %tap : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<9>
-    %1 = firrtl.tail %0, 1 : (!firrtl.uint<9>) -> !firrtl.uint<8>
-    firrtl.strictconnect %out, %1 : !firrtl.uint<8>
-    // CHECK:   %0 = firrtl.ref.resolve %foo__gen_tap : !firrtl.ref<uint>
-    // CHECK:   firrtl.connect %tap, %0 : !firrtl.uint<8>, !firrtl.uint
+    // CHECK:   %[[v0:.+]] = firrtl.ref.resolve %foo__gen_tap : !firrtl.ref<uint>
+    // CHECK:   firrtl.connect %tap, %[[v0]] : !firrtl.uint<8>, !firrtl.uint
   }
 }
