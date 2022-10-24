@@ -89,10 +89,10 @@ module  {
       // expected-note @+1 {{this operation is part of the combinational cycle}}
       %z = firrtl.wire  : !firrtl.uint<1>
       firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-note @+1 {{this operation is part of the combinational cycle}}
       %m_r = firrtl.mem Undefined  {depth = 2 : i64, name = "m", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
       %0 = firrtl.subfield %m_r(2) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.clock
       firrtl.connect %0, %clk : !firrtl.clock, !firrtl.clock
+      // expected-note @+1 {{this operation is part of the combinational cycle}}
       %1 = firrtl.subfield %m_r(0) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
       firrtl.connect %1, %y : !firrtl.uint<1>, !firrtl.uint<1>
       %2 = firrtl.subfield %m_r(1) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
@@ -196,4 +196,3 @@ firrtl.circuit "bundleRegInit"   {
     firrtl.connect %0, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
-

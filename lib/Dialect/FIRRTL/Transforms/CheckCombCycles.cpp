@@ -21,6 +21,8 @@
 #include "llvm/ADT/SmallSet.h"
 #include <variant>
 
+#define DEBUG_TYPE "check-comb-cycles"
+
 using namespace circt;
 using namespace firrtl;
 
@@ -28,42 +30,116 @@ using namespace firrtl;
 // Node class
 //===----------------------------------------------------------------------===//
 
-using CombPathsType = SmallVector<SmallVector<size_t, 2>>;
-using CombPathsMap = DenseMap<Operation *, CombPathsType>;
-
 using ConnectIterator =
     mlir::detail::op_iterator<FConnectLike, Region::OpIterator>;
 using ConnectRange = llvm::iterator_range<ConnectIterator>;
+// Pair to represent port number and field index.
+using PortField = std::pair<long, long>;
+// Map to represent the combinational paths from a PortField to any other
+// PortFields.
+using CombPathsType = DenseMap<PortField, SmallVector<PortField>>;
+// Map to represent combinational paths between all the ports of a module.
+using CombPathsMap = DenseMap<Operation *, CombPathsType>;
 
 namespace {
 /// The graph context containing pointers of the combinational paths map and the
 /// instance graph.
 struct NodeContext {
-  CombPathsMap *map;
+  CombPathsMap &map;
   InstanceGraph *graph;
   ConnectRange connects;
+  // Record the last visited port that is source to a connect.
+  PortField srcPort;
+  // Current module being procesed.
+  FModuleOp module;
+  // All the comb paths between the current module's ports.
+  CombPathsType *portPaths;
+  // Set true, when the isCycle() is executing. Required to ensure certain data
+  // structures are not updated during the Graph traversal inside the isCycle
+  // call.
+  bool cycleCheck;
 
-  explicit NodeContext(CombPathsMap *map, InstanceGraph *graph,
-                       ConnectRange connects)
-      : map(map), graph(graph), connects(connects) {}
+  explicit NodeContext(CombPathsMap &map, InstanceGraph *graph,
+                       ConnectRange connects, FModuleOp module)
+      : map(map), graph(graph), connects(connects), module(module) {
+    // Cache the ports path for this module. This ensures, that the current
+    // module's paths are updated in `map`.
+    portPaths = &map[module];
+    // Initialize the last seen input port to invalid.
+    srcPort = {-1, -1};
+    // Normal traversal.
+    cycleCheck = false;
+  }
 };
 } // namespace
 
 namespace {
 /// The node class of combinational graph.
 struct Node {
-  FieldRef valueRef;
+  Value value;
+  long fieldIndex;
   NodeContext *context;
 
   explicit Node(Value value = nullptr, NodeContext *context = nullptr)
-      : valueRef(getFieldRefFromValue(value)), context(context) {}
+      : value(value), fieldIndex(0), context(context) {}
 
-  bool operator==(const Node &rhs) const {
-      //if (auto memOp = dyn_cast_or_null<MemOp>(valueRef.getDefiningOp()))
-      //  return valueRef.getValue() == rhs.valueRef.getValue();
-    return valueRef == rhs.valueRef;
+  explicit Node(Operation *op, NodeContext *nodeCtxt)
+      : fieldIndex(0), context(nodeCtxt) {
+    if (!op) {
+      value = nullptr;
+      return;
+    }
+    // Assumption is that the op can either be connect, or with only one result.
+    // This is ensured in ChildIterator::skipToNextValidChild.
+    value = TypeSwitch<Operation *, Value>(op)
+                .Case<FConnectLike>([&](FConnectLike connect) {
+                  auto dst = connect.getDest();
+                  auto dstRef = getFieldRefFromValue(dst);
+                  if (isa<MemOp>(dstRef.getDefiningOp()))
+                    return dst;
+
+                  // Record the comb paths that exist between the ports of a
+                  // module. If the source or destination is a module port, then
+                  // record it.
+                  auto addPortPaths = [&](FieldRef &ref, bool src) {
+                    auto val = ref.getValue();
+                    auto arg = val.dyn_cast_or_null<BlockArgument>();
+                    if (!arg)
+                      return;
+                    auto argNum = arg.getArgNumber();
+                    auto fieldId = ref.getFieldID();
+                    if (src)
+                      // If source, then a new comb path begins from this
+                      // port,field pair.
+                      context->srcPort = {argNum, fieldId};
+                    else
+                      // If the srcPort is valid, then a comb path established
+                      // between module ports `srcPort` -> <argNum, fieldId>.
+                      if (context->srcPort.first != -1 &&
+                          context->srcPort.second != -1)
+                        (*context->portPaths)[context->srcPort].push_back(
+                            {argNum, fieldId});
+                  };
+                  if (!context->cycleCheck) {
+                    // The nodes will be first traversed during DFS, and then
+                    // also when `hasCycle` is called. The port paths must be
+                    // recorded only during the first DFS, and not when the
+                    // `hasCycle` is executing.
+                    auto srcFieldRef = getFieldRefFromValue(connect.getSrc());
+                    // First record the source port, then dst to ensure the path
+                    // from src to dst is recorded correctly.
+                    addPortPaths(srcFieldRef, true);
+                    addPortPaths(dstRef, false);
+                  }
+                  fieldIndex = dstRef.getFieldID();
+                  return dstRef.getValue();
+                })
+                .Default([&](auto) { return op->getResult(0); });
   }
+
+  bool operator==(const Node &rhs) const { return value == rhs.value; }
   bool operator!=(const Node &rhs) const { return !(*this == rhs); }
+  bool isNull() const { return value == nullptr; }
 };
 } // namespace
 
@@ -82,6 +158,20 @@ class ChildIterator
     auto isChild = [&]() {
       if (auto connect = dyn_cast<FConnectLike>(childIt->getOwner()))
         return childIt->get() == connect.getSrc();
+      // For a SubIndex/Subfield op, next child is valid, only if it includes
+      // the fieldIndex.
+      if (auto sub = dyn_cast<SubfieldOp>(childIt->getOwner())) {
+        auto fRef = sub.getInput().getType().cast<BundleType>().getFieldID(
+            sub.getFieldIndex());
+        return (fieldIndex < fRef + getBitWidth(sub.getType(), true).value() &&
+                fieldIndex >= fRef);
+      }
+      if (auto sub = dyn_cast<SubindexOp>(childIt->getOwner())) {
+        long fRef = sub.getInput().getType().cast<FVectorType>().getFieldID(
+            sub.getIndex());
+        return (fieldIndex < fRef + getBitWidth(sub.getType(), true).value() &&
+                fieldIndex >= fRef);
+      }
       return childIt->getOwner()->getNumResults() > 0;
     };
     while (childIt != childEnd && !isChild())
@@ -90,79 +180,41 @@ class ChildIterator
 
 public:
   ChildIterator() = default;
-  explicit ChildIterator(FieldRef fieldRef) {
-    //if (fieldRef.getValue() == llvm::DenseMapInfo<Value>::getEmptyKey() || fieldRef.getValue() == llvm::DenseMapInfo<Value>::getTombstoneKey())
-    //  return;
-    aggregateChildIt = 0;
-    if (fieldRef.getFieldID() != 0) {
-      SmallVector<Value> worklist;
-      worklist.push_back(fieldRef.getValue());
-      while (!worklist.empty()) {
-        auto val = worklist.pop_back_val();
-        for (auto &use : val.getUses()) {
-          if (isa<SubfieldOp, SubindexOp>(use.getOwner())) {
-            worklist.push_back(use.getOwner()->getResult(0));
-            continue;
-          }
-          if (auto connect = dyn_cast<FConnectLike>(use.getOwner())) {
-            auto srcRef = getFieldRefFromValue(connect.getSrc());
-            if (fieldRef == srcRef || (isa_and_nonnull<MemOp>(srcRef.getValue().getDefiningOp()) && srcRef.getValue() == fieldRef.getValue()))
-              aggregateUsers.push_back(use.getOwner());
-          } else if (use.getOwner()->getNumResults() > 0)
-            aggregateUsers.push_back(use.getOwner());
-        }
-      }
-      childIt = nullptr;
-    } else {
-      childIt = fieldRef.getValue().use_begin();
-      childEnd = fieldRef.getValue().use_end();
-      skipToNextValidChild();
-    }
+  explicit ChildIterator(Value v, long fieldIndex)
+      : childEnd(v.use_end()), childIt(v.use_begin()), fieldIndex(fieldIndex) {
+
+    LLVM_DEBUG(if (childIt != childEnd) llvm::dbgs()
+               << "\n ChildIterator constructor for uses of:" << v);
+    skipToNextValidChild();
   }
 
   /// The iterator is empty or at the end.
-  bool isAtEnd() const {
-    return aggregateUsers.empty() ? (childIt == nullptr || childIt == childEnd)
-                                  : aggregateChildIt == aggregateUsers.size();
-  }
+  bool isAtEnd() const { return childIt == nullptr || childIt == childEnd; }
 
   using llvm::iterator_facade_base<ChildIterator, std::forward_iterator_tag,
                                    Value>::operator++;
   ChildIterator &operator++() {
     assert(!isAtEnd() && "incrementing the end iterator");
-    if (aggregateUsers.empty()) {
-      ++childIt;
-      skipToNextValidChild();
-    } else
-      ++aggregateChildIt;
+    ++childIt;
+    skipToNextValidChild();
     return *this;
   }
 
-  Value operator*() {
+  Operation *operator*() {
     assert(!isAtEnd() && "dereferencing the end iterator");
-    Operation *op;
-    if (aggregateUsers.empty())
-      op = childIt->getOwner();
-    else
-      op = aggregateUsers[aggregateChildIt];
-
-    if (auto connect = dyn_cast<FConnectLike>(op))
-      return connect.getDest();
-    return op->getResult(0);
+    LLVM_DEBUG(llvm::dbgs()
+               << "\n ChildIterator dereference :" << *childIt->getOwner());
+    return childIt->getOwner();
   }
 
   bool operator==(const ChildIterator &rhs) const {
-    return (childIt == rhs.childIt &&
-            ((aggregateChildIt == aggregateUsers.size()) ==
-             (rhs.aggregateChildIt == rhs.aggregateUsers.size())));
+    return childIt == rhs.childIt;
   }
   bool operator!=(const ChildIterator &rhs) const { return !(*this == rhs); }
 
-private:
   Value::use_iterator childEnd;
   Value::use_iterator childIt;
-  SmallVector<Operation *> aggregateUsers;
-  unsigned aggregateChildIt;
+  long fieldIndex;
 };
 } // namespace
 
@@ -176,8 +228,11 @@ class NodeIterator
     : public llvm::iterator_facade_base<NodeIterator, std::forward_iterator_tag,
                                         Node> {
 public:
-  explicit NodeIterator(Node node)
-      : node(node), child(ChildIterator(node.valueRef)) {}
+  explicit NodeIterator(Node node) : node(node) {
+    // If value is non-null then set the childIt.
+    if (node.value)
+      child = ChildIterator(node.value, node.fieldIndex);
+  }
 
   using llvm::iterator_facade_base<NodeIterator, std::forward_iterator_tag,
                                    Node>::operator++;
@@ -187,16 +242,13 @@ public:
   bool operator==(const NodeIterator &rhs) const { return child == rhs.child; }
   bool operator!=(const NodeIterator &rhs) const { return !(*this == rhs); }
 
-  Value getValue() { return node.valueRef.getValue(); }
-  CombPathsMap *getCombPathsMap() {
-    assert(node.context && "invalid node context");
-    return node.context->map;
-  }
+  Value getValue() { return node.value; }
   InstanceGraph *getInstanceGraph() {
     assert(node.context && "invalid node context");
     return node.context->graph;
   }
   bool isAtEnd() const { return child.isAtEnd(); }
+  bool isEndIterator() const { return node.isNull(); }
 
 private:
   Node node;
@@ -215,14 +267,15 @@ class InstanceNodeIterator : public NodeIterator {
   /// Skip instance ports with not child.
   void skipToNextValidPort() {
     ChildIterator newChild;
-    while (portIt != portEnd) {
-      newChild = ChildIterator(getFieldRefFromValue(instance.getResult(*portIt)));
+    while (combPathsIter != combPathsEnd) {
+      newChild = ChildIterator(instance.getResult(combPathsIter->first),
+                               combPathsIter->second);
       if (newChild.isAtEnd())
-        ++portIt;
+        ++combPathsIter;
       else
         break;
     }
-    child = portIt == portEnd ? ChildIterator() : newChild;
+    child = combPathsIter == combPathsEnd ? ChildIterator() : newChild;
   }
 
 public:
@@ -230,29 +283,43 @@ public:
       : NodeIterator(node), instance(instance) {
     assert(instance == getValue().getDefiningOp<InstanceOp>() &&
            "instance must be the defining op of the node value");
+    child = ChildIterator();
+    combPathsIter = combPathsEnd = nullptr;
 
     // Query the combinational paths between IOs of the current instance.
-    auto module = getInstanceGraph()->getReferencedModule(instance);
-    auto &combPaths = getCombPathsMap()->FindAndConstruct(module).second;
-    auto &ports = combPaths[getValue().cast<OpResult>().getResultNumber()];
+    Operation *module = getInstanceGraph()->getReferencedModule(instance);
+    if (!isa<FModuleOp>(module))
+      return;
+    auto mapIter = node.context->map.find(module);
+    if (mapIter == node.context->map.end()) {
+      return;
+    }
+    auto portNum = getValue().cast<OpResult>().getResultNumber();
+    auto portsIter = mapIter->getSecond().find({portNum, 0});
+    if (portsIter == mapIter->getSecond().end())
+      return;
+    auto &paths = portsIter->getSecond();
+    combPathsIter = paths.begin();
+    combPathsEnd = paths.end();
 
-    portEnd = ports.end();
-    portIt = ports.begin();
     skipToNextValidPort();
   }
 
   InstanceNodeIterator &operator++() {
-    ++portIt;
-    skipToNextValidPort();
+    if (!child.isAtEnd())
+      ++child;
+    else {
+      ++combPathsIter;
+      skipToNextValidPort();
+    }
     return *this;
   }
 
-  unsigned getPortNumber() const { return *portIt; }
+  long getPortNumber() const { return combPathsIter->first; }
 
 private:
   InstanceOp instance;
-  SmallVectorImpl<size_t>::iterator portEnd;
-  SmallVectorImpl<size_t>::iterator portIt;
+  SmallVector<PortField>::iterator combPathsIter, combPathsEnd;
 };
 } // namespace
 
@@ -265,7 +332,7 @@ class SubfieldNodeIterator : public NodeIterator {
 public:
   explicit SubfieldNodeIterator(SubfieldOp subfield, Node node)
       : NodeIterator(node) {
-    assert(subfield == node.valueRef.getDefiningOp<SubfieldOp>() &&
+    assert(subfield == node.value.getDefiningOp<SubfieldOp>() &&
            "subfield must be the defining op of the node value");
 
     auto memory = subfield.getInput().getDefiningOp<MemOp>();
@@ -303,7 +370,7 @@ public:
            index == (unsigned)ReadPortSubfield::data) ||
           (portKind == MemOp::PortKind::ReadWrite &&
            index == (unsigned)ReadWritePortSubfield::rdata)) {
-        child = ChildIterator(getFieldRefFromValue(currentSubfield.getResult()));
+        child = ChildIterator(currentSubfield.getResult(), 0);
         dataPort = currentSubfield.getResult();
         return;
       }
@@ -311,7 +378,10 @@ public:
   }
 
   SubfieldNodeIterator &operator++() {
-    child = ChildIterator();
+    if (!child.isAtEnd())
+      ++child;
+    else
+      child = ChildIterator();
     return *this;
   }
 
@@ -334,7 +404,6 @@ class DummySourceNodeIterator
 public:
   explicit DummySourceNodeIterator(Node node)
       : node(node), connect(node.context->connects.begin()) {}
-  bool isAtEnd() const { return connect == node.context->connects.end(); }
 
   using llvm::iterator_facade_base<DummySourceNodeIterator,
                                    std::forward_iterator_tag, Node>::operator++;
@@ -346,7 +415,7 @@ public:
   Node operator*() {
     assert(connect != node.context->connects.end() &&
            "dereferencing the end iterator");
-    return Node((*connect).getDest(), node.context);
+    return Node(*connect, node.context);
   }
 
   bool operator==(const DummySourceNodeIterator &rhs) const {
@@ -355,6 +424,7 @@ public:
   bool operator!=(const DummySourceNodeIterator &rhs) const {
     return !(*this == rhs);
   }
+  bool isAtEnd() const { return connect == node.context->connects.end(); }
 
 private:
   Node node;
@@ -367,27 +437,13 @@ private:
 //===----------------------------------------------------------------------===//
 
 namespace {
-class EndIterator
-    : public llvm::iterator_facade_base<NodeIterator, std::forward_iterator_tag,
-                                        Node> {
-public:
-  explicit EndIterator() = default;
-
-  using llvm::iterator_facade_base<NodeIterator, std::forward_iterator_tag,
-                                   Node>::operator++;
-  EndIterator &operator++() { return *this; }
-  Node operator*() { return Node(); }
-
-  bool operator==(const EndIterator &rhs) const { return true; }
-  bool operator!=(const EndIterator &rhs) const { return false; }
-};
 
 class CombGraphIterator
     : public llvm::iterator_facade_base<CombGraphIterator,
                                         std::forward_iterator_tag, Node> {
   using variant_iterator =
       std::variant<NodeIterator, InstanceNodeIterator, SubfieldNodeIterator,
-                   DummySourceNodeIterator, EndIterator>;
+                   DummySourceNodeIterator>;
 
 public:
   explicit CombGraphIterator(Node node, bool end = false)
@@ -395,11 +451,11 @@ public:
 
   variant_iterator dispatchConstructor(Node node, bool end) {
     if (end)
-      return EndIterator();
-    if (!node.valueRef)
+      return NodeIterator(Node(nullptr, node.context));
+    if (!node.value)
       return DummySourceNodeIterator(node);
 
-    auto defOp = node.valueRef.getDefiningOp();
+    auto defOp = node.value.getDefiningOp();
     if (!defOp)
       return NodeIterator(node);
 
@@ -408,24 +464,28 @@ public:
           return InstanceNodeIterator(instance, node);
         })
         .Case<SubfieldOp>([&](SubfieldOp subfield) {
-         // if (isa_and_nonnull<MemOp>(subfield.getInput().getDefiningOp()))
-         //   return static_cast<variant_iterator>(
-         //       SubfieldNodeIterator(subfield, node));
+          if (isa_and_nonnull<MemOp>(subfield.getInput().getDefiningOp()))
+            return static_cast<variant_iterator>(
+                SubfieldNodeIterator(subfield, node));
           // This is required to explicitly ignore self loops of register.
           if (isa_and_nonnull<RegOp, RegResetOp>(
                   getFieldRefFromValue(subfield).getDefiningOp()))
-            return static_cast<variant_iterator>(EndIterator());
-          return static_cast<variant_iterator>(NodeIterator(node));
+            return static_cast<variant_iterator>(
+                NodeIterator(Node(nullptr, node.context)));
+          return static_cast<variant_iterator>(
+              NodeIterator(Node(node.value, node.context)));
         })
         .Case<SubindexOp>([&](SubindexOp sub) {
           // This is required to explicitly ignore self loops of register.
           if (isa_and_nonnull<RegOp, RegResetOp>(
                   getFieldRefFromValue(sub).getDefiningOp()))
-            return static_cast<variant_iterator>(EndIterator());
+            return static_cast<variant_iterator>(
+                NodeIterator(Node(nullptr, node.context)));
           return static_cast<variant_iterator>(NodeIterator(node));
         })
         // The children of reg or regreset op are not iterated.
-        .Case<RegOp, RegResetOp>([&](auto) { return EndIterator(); })
+        .Case<RegOp, RegResetOp>(
+            [&](auto) { return NodeIterator(Node(nullptr, node.context)); })
         .Default([&](auto) { return NodeIterator(node); });
   }
 
@@ -441,8 +501,6 @@ public:
       return ++std::get<SubfieldNodeIterator>(impl), *this;
     case 3:
       return ++std::get<DummySourceNodeIterator>(impl), *this;
-    case 4:
-      return ++std::get<EndIterator>(impl), *this;
     default:
       return llvm_unreachable("invalid iterator variant"), *this;
     }
@@ -460,8 +518,6 @@ public:
       return *std::get<SubfieldNodeIterator>(impl);
     case 3:
       return *std::get<DummySourceNodeIterator>(impl);
-    case 4:
-      return *std::get<EndIterator>(impl);
     default:
       return llvm_unreachable("invalid iterator variant"), Node();
     }
@@ -469,19 +525,27 @@ public:
 
   bool operator==(const CombGraphIterator &rhs) const {
     // Comparing with EndIterator, implies just check isAtEnd.
-    if (rhs.impl.index() == 4)
-      switch (impl.index()) {
+    auto isAtEnd = [](const CombGraphIterator &a,
+                      const CombGraphIterator &endIt) {
+      switch (a.impl.index()) {
       case 0:
-        return std::get<NodeIterator>(impl).isAtEnd();
+        return std::get<NodeIterator>(a.impl).isAtEnd();
       case 1:
-        return std::get<InstanceNodeIterator>(impl).isAtEnd();
+        return std::get<InstanceNodeIterator>(a.impl).isAtEnd();
       case 2:
-        return std::get<SubfieldNodeIterator>(impl).isAtEnd();
+        return std::get<SubfieldNodeIterator>(a.impl).isAtEnd();
       case 3:
-        return std::get<DummySourceNodeIterator>(impl).isAtEnd();
+        return std::get<DummySourceNodeIterator>(a.impl).isAtEnd();
       default:
-        return true;
+        return llvm_unreachable("invalid iterator variant"), true;
       }
+    };
+
+    if (rhs.impl.index() == 0 &&
+        std::get<NodeIterator>(rhs.impl).isEndIterator())
+      return isAtEnd(*this, rhs);
+    if (impl.index() == 0 && std::get<NodeIterator>(impl).isEndIterator())
+      return isAtEnd(rhs, *this);
     return impl == rhs.impl;
   }
   bool operator!=(const CombGraphIterator &rhs) const {
@@ -501,16 +565,16 @@ namespace llvm {
 template <>
 struct DenseMapInfo<Node> {
   static Node getEmptyKey() {
-    auto pointer = llvm::DenseMapInfo<Value>::getEmptyKey();
-    return Node(pointer);
+    auto pointer = llvm::DenseMapInfo<void *>::getEmptyKey();
+    return Node(Value::getFromOpaquePointer(pointer));
   }
   static Node getTombstoneKey() {
-    Value pointer = llvm::DenseMapInfo<Value>::getTombstoneKey();
-    return Node(pointer);
+    auto pointer = llvm::DenseMapInfo<void *>::getTombstoneKey();
+    return Node(Value::getFromOpaquePointer(pointer));
   }
 
   static unsigned getHashValue(const Node &node) {
-    return circt::hash_value(node.valueRef);
+    return mlir::hash_value(node.value);
   }
   static bool isEqual(const Node &lhs, const Node &rhs) { return lhs == rhs; }
 };
@@ -605,8 +669,7 @@ void dumpPath(SmallVector<Node> &path, SmallString<16> &instancePath,
   unsigned pathSize = isCycle ? path.size() + 1 : path.size();
   for (unsigned i = 0, e = pathSize; i < e; ++i) {
     Node current = path[i % path.size()];
-    Value currentValue = current.valueRef.getValue();
-    auto fieldName = getFieldName(current.valueRef);
+    Value currentValue = current.value;
     bool isCycleEnd = i == path.size();
     auto attachInfo = [&]() -> mlir::Diagnostic & {
       return diag.attachNote(currentValue.getLoc()) << instancePath << ".";
@@ -614,15 +677,15 @@ void dumpPath(SmallVector<Node> &path, SmallString<16> &instancePath,
 
     // If the currentValue is port, emit its name.
     if (auto arg = currentValue.dyn_cast<BlockArgument>()) {
-      attachInfo() << fieldName ;
+      attachInfo() << module.getPortName(arg.getArgNumber());
       continue;
     }
 
     TypeSwitch<Operation *>(currentValue.getDefiningOp())
-        .Case<WireOp, RegOp, RegResetOp, MemOp>(
+        .Case<WireOp, RegOp, RegResetOp>(
             // For operations which declare signals, we simply print signal
             // names.
-            [&](auto op) { attachInfo() << fieldName ; })
+            [&](auto op) { attachInfo() << op.getName(); })
         .Case<InstanceOp, SubfieldOp>([&](auto op) {
           // If the op is InstanceOp or SubfieldOp, it is necessary to
           // investigate the next value since output values do not expilicty
@@ -631,7 +694,7 @@ void dumpPath(SmallVector<Node> &path, SmallString<16> &instancePath,
           for (auto iter = GT::child_begin(current),
                     end = GT::child_end(current);
                iter != end; ++iter) {
-            if ((*iter).valueRef != next.valueRef)
+            if ((*iter).value != next.value)
               continue;
 
             auto iterImpl = iter.getIteratorImpl();
@@ -643,7 +706,7 @@ void dumpPath(SmallVector<Node> &path, SmallString<16> &instancePath,
                   std::get<InstanceNodeIterator>(iterImpl).getPortNumber();
               if (isCycleEnd)
                 attachInfo() << instance.getName() << "."
-                             << fieldName;
+                             << instance.getPortName(inputPort).str();
               else
                 dumpPathBetweenModulePorts(instancePath, instance, inputPort,
                                            outputPort, current.context, diag);
@@ -706,7 +769,7 @@ void dumpPathBetweenModulePorts(SmallString<16> &instancePath,
   SmallVector<Node> path;
   Node current = end;
   // Reconstruct a path backwardly.
-  while (current.valueRef) {
+  while (current.value) {
     path.push_back(current);
     current = previousNode[current];
   }
@@ -743,8 +806,8 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
     // before we handle its parent modules.
     for (auto node : llvm::post_order<InstanceGraph *>(&instanceGraph)) {
       if (auto module = dyn_cast<FModuleOp>(*node->getModule())) {
-        NodeContext context(&map, &instanceGraph,
-                            module.getOps<FConnectLike>());
+        NodeContext context(map, &instanceGraph, module.getOps<FConnectLike>(),
+                            module);
         auto dummyNode = Node(nullptr, &context);
 
         // Traversing SCCs in the combinational graph to detect cycles. As
@@ -753,6 +816,8 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
         // `dest`s of all connect ops in the module.
         for (auto combSCC = SCCIterator::begin(dummyNode); !combSCC.isAtEnd();
              ++combSCC) {
+          context.srcPort = {-1, -1};
+          context.cycleCheck = true;
           if (combSCC.hasCycle()) {
             detectedCycle = true;
             auto errorDiag = mlir::emitError(
@@ -762,45 +827,32 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
               dumpSimpleCycle(combSCC, module, errorDiag);
             else {
               for (auto node : *combSCC) {
-                auto &noteDiag = errorDiag.attachNote(node.valueRef.getLoc());
+                auto &noteDiag = errorDiag.attachNote(node.value.getLoc());
                 noteDiag << "this operation is part of the combinational cycle";
               }
             }
           }
+          context.cycleCheck = false;
         }
 
-        SmallVector<bool, 8> directionVec;
-        for (auto &port : module.getPorts())
-          directionVec.push_back(port.isOutput());
-
-        auto &combPaths = map[module];
-        NodeDenseSet nodeSet;
-        SmallVector<size_t, 2> outputVec;
-        unsigned index = 0;
-
-        // Record all combinational paths.
-        for (auto &port : module.getPorts()) {
-          nodeSet.clear();
-          outputVec.clear();
-          auto arg = module.getArgument(index++);
-          if (port.isOutput()) {
-            combPaths.push_back(outputVec);
-            continue;
+        LLVM_DEBUG({
+          llvm::errs() << "\n printing the port paths :"
+                       << module.moduleNameAttr();
+          for (auto p : map[module]) {
+            llvm::errs() << "\n port pair:"
+                         << module.getPortNameAttr(p.first.first) << ","
+                         << p.first.second;
+            for (auto dst : p.second)
+              llvm::errs() << "\n connected to :"
+                           << module.getPortNameAttr(dst.first) << ","
+                           << dst.second;
           }
-          Node inputNode(arg, &context);
-          for (auto node : llvm::depth_first_ext<Node>(inputNode, nodeSet)) {
-            if (auto output = node.valueRef.getValue().dyn_cast<BlockArgument>())
-              if (directionVec[output.getArgNumber()])
-                outputVec.push_back(output.getArgNumber());
-          }
-          combPaths.push_back(outputVec);
-        }
+        });
+
         continue;
       }
       if (auto extModule = dyn_cast<FExtModuleOp>(*node->getModule())) {
         // TODO: Handle FExtModuleOp with `ExtModulePathAnnotation`s.
-        auto &combPaths = map[extModule];
-        combPaths.resize(extModule.getNumPorts());
         continue;
       }
       llvm_unreachable("invalid instance graph node");
