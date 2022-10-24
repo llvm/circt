@@ -4,7 +4,6 @@ add_circt_translation_library(CIRCTExportVerilog
   ExportVerilog.cpp
   LegalizeNames.cpp
   PrepareForEmission.cpp
-  RearrangableOStream.cpp
   PruneZeroValuedLogic.cpp
 
   ADDITIONAL_HEADER_DIRS

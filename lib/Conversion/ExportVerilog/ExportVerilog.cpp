@@ -18,7 +18,6 @@
 #include "circt/Conversion/ExportVerilog.h"
 #include "../PassDetail.h"
 #include "ExportVerilogInternals.h"
-#include "RearrangableOStream.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -606,6 +605,39 @@ static bool isExpressionUnableToInline(Operation *op) {
     }
   }
   return false;
+}
+
+enum class BlockStatementCount { Zero, One, TwoOrMore };
+
+/// Compute how many statements are within this block, for begin/end markers.
+static BlockStatementCount countStatements(Block &block) {
+  unsigned numStatements = 0;
+  block.walk([&](Operation *op) {
+    if (isVerilogExpression(op))
+      return WalkResult::advance();
+    numStatements +=
+        TypeSwitch<Operation *, unsigned>(op)
+            .Case<VerbatimOp>([&](auto) { return 3; })
+            .Case<IfOp>([&](auto) {
+              return 2; /* overcount for clarity */
+            })
+            .Case<IfDefOp, IfDefProceduralOp>([&](auto) { return 3; })
+            .Case<OutputOp>([&](OutputOp oop) {
+              return llvm::count_if(oop->getOperands(), [&](auto operand) {
+                return !operand.hasOneUse() ||
+                       !dyn_cast_or_null<InstanceOp>(operand.getDefiningOp());
+              });
+            })
+            .Default([](auto) { return 1; });
+    if (numStatements > 1)
+      return WalkResult::interrupt();
+    return WalkResult::advance();
+  });
+  if (numStatements == 0)
+    return BlockStatementCount::Zero;
+  if (numStatements == 1)
+    return BlockStatementCount::One;
+  return BlockStatementCount::TwoOrMore;
 }
 
 /// Return true if this expression should be emitted inline into any statement
@@ -2585,10 +2617,9 @@ class StmtEmitter : public EmitterBase,
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
   /// of any emitted expressions in the specified set.
-  StmtEmitter(ModuleEmitter &emitter, RearrangableOStream &outStream,
+  StmtEmitter(ModuleEmitter &emitter, llvm::raw_ostream &os,
               ModuleNameManager &names)
-      : EmitterBase(emitter.state, outStream), emitter(emitter),
-        rearrangableStream(outStream), names(names) {}
+      : EmitterBase(emitter.state, os), emitter(emitter), names(names) {}
 
   void emitStatement(Operation *op);
   void emitStatementBlock(Block &body);
@@ -2700,10 +2731,6 @@ public:
   ModuleEmitter &emitter;
 
 private:
-  /// This is the current ostream we're emiting to, when we know it is a
-  /// rearrangableStream.
-  RearrangableOStream &rearrangableStream;
-
   /// Track the legalized names.
   ModuleNameManager &names;
 
@@ -3305,31 +3332,22 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
                                        SmallPtrSet<Operation *, 8> &locationOps,
                                        StringRef multiLineComment) {
 
-  // We don't know if we need to emit the begin until after we emit the body of
-  // the block.  We can have multiple ops that fold together into one statement
-  // (common in nested expressions feeding into a connect) or one apparently
-  // simple set of operations that gets broken across multiple lines because
-  // they are too long.
-  //
-  // Solve this by emitting the statements, determining if we need to
-  // emit the begin, and if so, emit the begin retroactively.
-  RearrangableOStream::Cursor beginInsertPoint = rearrangableStream.getCursor();
+  // Determine if we need begin/end by scanning the block.
+  auto count = countStatements(*block);
+  auto needsBeginEnd = count != BlockStatementCount::One;
+  if (needsBeginEnd)
+    os << " begin";
   emitLocationInfoAndNewLine(locationOps);
 
-  auto numEmittedBefore = getNumStatementsEmitted();
-  emitStatementBlock(*block);
+  if (count != BlockStatementCount::Zero)
+    emitStatementBlock(*block);
 
-  // If we emitted exactly one statement, then we are done.
-  if (getNumStatementsEmitted() - numEmittedBefore == 1)
-    return;
-
-  // Otherwise we emit the begin and end logic.
-  rearrangableStream.insertLiteral(beginInsertPoint, " begin");
-
-  indent() << "end";
-  if (!multiLineComment.empty())
-    os << " // " << multiLineComment;
-  os << '\n';
+  if (needsBeginEnd) {
+    indent() << "end";
+    if (count == BlockStatementCount::TwoOrMore && !multiLineComment.empty())
+      os << " // " << multiLineComment;
+    os << '\n';
+  }
 }
 
 LogicalResult StmtEmitter::visitSV(OrderedOutputOp ooop) {
@@ -4082,10 +4100,8 @@ void StmtEmitter::emitStatementBlock(Block &body) {
 }
 
 void ModuleEmitter::emitStatement(Operation *op) {
-  RearrangableOStream outputBuffer;
   ModuleNameManager names;
-  StmtEmitter(*this, outputBuffer, names).emitStatement(op);
-  outputBuffer.print(os);
+  StmtEmitter(*this, os, names).emitStatement(op);
 }
 
 //===----------------------------------------------------------------------===//
@@ -4482,10 +4498,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   reduceIndent();
 
   // Emit the body of the module.
-  RearrangableOStream outputBuffer;
-  StmtEmitter(*this, outputBuffer, names)
-      .emitStatementBlock(*module.getBodyBlock());
-  outputBuffer.print(os);
+  StmtEmitter(*this, os, names).emitStatementBlock(*module.getBodyBlock());
   os << "endmodule\n\n";
 
   currentModuleOp = HWModuleOp();
