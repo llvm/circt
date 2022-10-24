@@ -130,6 +130,13 @@ void ReadPortOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getReadData(), (memName + "_rdata").str());
 }
 
+void ReadPortOp::build(OpBuilder &builder, OperationState &result, Value memory,
+                       ValueRange addresses, Value rdEn, unsigned latency) {
+  auto memType = memory.getType().cast<seq::HLMemType>();
+  ReadPortOp::build(builder, result, memType.getElementType(), memory,
+                    addresses, rdEn, latency);
+}
+
 //===----------------------------------------------------------------------===//
 // WritePortOp
 //===----------------------------------------------------------------------===//
@@ -179,6 +186,13 @@ void WritePortOp::print(OpAsmPrinter &p) {
 
 void HLMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getHandle(), getName());
+}
+
+void HLMemOp::build(OpBuilder &builder, OperationState &result, Value clk,
+                    Value rst, StringRef symName, llvm::ArrayRef<int64_t> shape,
+                    Type elementType) {
+  HLMemType t = HLMemType::get(builder.getContext(), shape, elementType);
+  HLMemOp::build(builder, result, t, clk, rst, symName);
 }
 
 //===----------------------------------------------------------------------===//

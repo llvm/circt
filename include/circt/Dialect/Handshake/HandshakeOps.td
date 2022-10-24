@@ -679,6 +679,12 @@ def MemoryOp : Handshake_Op<"memory", [
       ins "ValueRange":$operands, "int":$outputs, "int":$control_outputs, "bool":$lsq,
       "int":$id, "Value":$memref)>
   ];
+
+  let extraClassDeclaration = [{
+    llvm::SmallVector<handshake::MemLoadInterface> getLoadPorts();
+    llvm::SmallVector<handshake::MemStoreInterface> getStorePorts();
+  }];
+
   let assemblyFormat = "`[` `ld` `=` $ldCount `,` `st` `=`  $stCount `]` `(` $inputs `)` attr-dict `:` $memRefType `,` functional-type($inputs, $outputs)";
   let hasVerifier = 1;
 }
@@ -726,8 +732,8 @@ def ExternalMemoryOp : Handshake_Op<"extmemory", [
       return getMemref().getType().cast<mlir::MemRefType>();
     }
 
-    llvm::SmallVector<handshake::ExtMemLoadInterface> getLoadPorts();
-    llvm::SmallVector<handshake::ExtMemStoreInterface> getStorePorts();
+    llvm::SmallVector<handshake::MemLoadInterface> getLoadPorts();
+    llvm::SmallVector<handshake::MemStoreInterface> getStorePorts();
   }];
 }
 

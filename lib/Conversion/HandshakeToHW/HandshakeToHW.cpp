@@ -528,6 +528,16 @@ struct RTLBuilder {
   // Bitwise 'not'.
   Value bNot(Value value, std::optional<StringRef> name = {}) {
     auto allOnes = constant(value.getType().getIntOrFloatBitWidth(), -1);
+    std::string inferedName;
+    if (!name) {
+      // Try to create a name from the input value.
+      if (auto valueName =
+              value.getDefiningOp()->getAttrOfType<StringAttr>("sv.namehint")) {
+        inferedName = ("not_" + valueName.getValue()).str();
+        name = inferedName;
+      }
+    }
+
     return buildNamedOp(
         [&]() { return b.create<comb::XorOp>(loc, value, allOnes); }, name);
 
@@ -1452,6 +1462,111 @@ public:
   };
 };
 
+class MemoryConversionPattern
+    : public HandshakeConversionPattern<handshake::MemoryOp> {
+public:
+  using HandshakeConversionPattern<
+      handshake::MemoryOp>::HandshakeConversionPattern;
+  void buildModule(handshake::MemoryOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto loc = op.getLoc();
+
+    // Gather up the load and store ports.
+    auto unwrappedIO = this->unwrapIO(s, bb, ports);
+    struct LoadPort {
+      InputHandshake &addr;
+      OutputHandshake &data;
+      OutputHandshake &done;
+    };
+    struct StorePort {
+      InputHandshake &addr;
+      InputHandshake &data;
+      OutputHandshake &done;
+    };
+    SmallVector<LoadPort, 4> loadPorts;
+    SmallVector<StorePort, 4> storePorts;
+
+    unsigned stCount = op.getStCount();
+    unsigned ldCount = op.getLdCount();
+    for (unsigned i = 0, e = ldCount; i != e; ++i) {
+      LoadPort port = {unwrappedIO.inputs[stCount * 2 + i],
+                       unwrappedIO.outputs[i],
+                       unwrappedIO.outputs[ldCount + stCount + i]};
+      loadPorts.push_back(port);
+    }
+
+    for (unsigned i = 0, e = stCount; i != e; ++i) {
+      StorePort port = {unwrappedIO.inputs[i * 2 + 1],
+                        unwrappedIO.inputs[i * 2],
+                        unwrappedIO.outputs[ldCount + i]};
+      storePorts.push_back(port);
+    }
+
+    // used to drive the data wire of the control-only channels.
+    auto c0I0 = s.constant(0, 0);
+
+    auto cl2dim = llvm::Log2_64_Ceil(op.getMemRefType().getShape()[0]);
+    auto hlmem = s.b.create<seq::HLMemOp>(
+        loc, s.clk, s.rst, "_handshake_memory_" + std::to_string(op.getId()),
+        op.getMemRefType().getShape(), op.getMemRefType().getElementType());
+
+    // Create load ports...
+    for (auto &ld : loadPorts) {
+      llvm::SmallVector<Value> addresses = {s.truncate(ld.addr.data, cl2dim)};
+      auto readData = s.b.create<seq::ReadPortOp>(loc, hlmem.getHandle(),
+                                                  addresses, ld.addr.valid,
+                                                  /*latency=*/0);
+      ld.data.data->setValue(readData);
+      ld.done.data->setValue(c0I0);
+      // Create control fork for the load address valid and ready signals.
+      buildForkLogic(s, bb, ld.addr, {ld.data, ld.done});
+    }
+
+    // Create store ports...
+    for (auto &st : storePorts) {
+      // Create a register to buffer the valid path by 1 cycle, to match the
+      // write latency of 1.
+      auto writeValidBufferMuxBE = bb.get(s.b.getI1Type());
+      auto writeValidBuffer =
+          s.reg("writeValidBuffer", writeValidBufferMuxBE, s.constant(1, 0));
+      st.done.valid->setValue(writeValidBuffer);
+      st.done.data->setValue(c0I0);
+
+      // Create the logic for when both the buffered write valid signal and the
+      // store complete ready signal are asserted.
+      auto storeCompleted =
+          s.bAnd({st.done.ready, writeValidBuffer}, "storeCompleted");
+
+      // Create a signal for when the write valid buffer is empty or the output
+      // is ready.
+      auto notWriteValidBuffer = s.bNot(writeValidBuffer);
+      auto emptyOrComplete =
+          s.bOr({notWriteValidBuffer, storeCompleted}, "emptyOrComplete");
+
+      // Connect the gate to both the store address ready and store data ready
+      st.addr.ready->setValue(emptyOrComplete);
+      st.data.ready->setValue(emptyOrComplete);
+
+      // Create a wire for when both the store address and data are valid.
+      auto writeValid = s.bAnd({st.addr.valid, st.data.valid}, "writeValid");
+
+      // Create a mux that drives the buffer input. If the emptyOrComplete
+      // signal is asserted, the mux selects the writeValid signal. Otherwise,
+      // it selects the buffer output, keeping the output registered until the
+      // emptyOrComplete signal is asserted.
+      writeValidBufferMuxBE.setValue(
+          s.mux(emptyOrComplete, {writeValidBuffer, writeValid}));
+
+      // Instantiate the write port operation - truncate address width to memory
+      // width.
+      llvm::SmallVector<Value> addresses = {s.truncate(st.addr.data, cl2dim)};
+      s.b.create<seq::WritePortOp>(loc, hlmem.getHandle(), addresses,
+                                   st.data.data, writeValid,
+                                   /*latency=*/1);
+    }
+  }
+}; // namespace
+
 class SinkConversionPattern : public HandshakeConversionPattern<SinkOp> {
 public:
   using HandshakeConversionPattern<SinkOp>::HandshakeConversionPattern;
@@ -1792,7 +1907,7 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
       ComparisonConversionPattern, BufferConversionPattern,
       SourceConversionPattern, SinkConversionPattern, ConstantConversionPattern,
       MergeConversionPattern, ControlMergeConversionPattern,
-      LoadConversionPattern, StoreConversionPattern,
+      LoadConversionPattern, StoreConversionPattern, MemoryConversionPattern,
       // Arith operations.
       ExtendConversionPattern<arith::ExtUIOp, /*signExtend=*/false>,
       ExtendConversionPattern<arith::ExtSIOp, /*signExtend=*/true>,

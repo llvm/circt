@@ -105,6 +105,49 @@ static void printOp(OpAsmPrinter &p, Operation *op, bool explicitSize) {
 }
 } // namespace sost
 
+template <typename TMemOp>
+llvm::SmallVector<handshake::MemLoadInterface> getLoadPorts(TMemOp op) {
+  llvm::SmallVector<MemLoadInterface> ports;
+  // Memory interface refresher:
+  // Operands:
+  //   all stores (stdata1, staddr1, stdata2, staddr2, ...)
+  //   then all loads (ldaddr1, ldaddr2,...)
+  // Outputs: load addresses (lddata1, lddata2, ...), followed by all none
+  // outputs, ordered as operands(stnone1, stnone2, ... ldnone1, ldnone2, ...)
+  unsigned stCount = op.getStCount();
+  unsigned ldCount = op.getLdCount();
+  for (unsigned i = 0, e = ldCount; i != e; ++i) {
+    MemLoadInterface ldif;
+    ldif.index = i;
+    ldif.addressIn = op.getInputs()[stCount * 2 + i];
+    ldif.dataOut = op.getResult(i);
+    ldif.doneOut = op.getResult(ldCount + stCount + i);
+    ports.push_back(ldif);
+  }
+  return ports;
+}
+
+template <typename TMemOp>
+llvm::SmallVector<handshake::MemStoreInterface> getStorePorts(TMemOp op) {
+  llvm::SmallVector<MemStoreInterface> ports;
+  // Memory interface refresher:
+  // Operands:
+  //   all stores (stdata1, staddr1, stdata2, staddr2, ...)
+  //   then all loads (ldaddr1, ldaddr2,...)
+  // Outputs: load data (lddata1, lddata2, ...), followed by all none
+  // outputs, ordered as operands(stnone1, stnone2, ... ldnone1, ldnone2, ...)
+  unsigned ldCount = op.getLdCount();
+  for (unsigned i = 0, e = op.getStCount(); i != e; ++i) {
+    MemStoreInterface stif;
+    stif.index = i;
+    stif.dataIn = op.getInputs()[i * 2];
+    stif.addressIn = op.getInputs()[i * 2 + 1];
+    stif.doneOut = op.getResult(ldCount + i);
+    ports.push_back(stif);
+  }
+  return ports;
+}
+
 void ForkOp::build(OpBuilder &builder, OperationState &result, Value operand,
                    int outputs) {
   auto type = operand.getType();
@@ -1230,6 +1273,16 @@ void ExternalMemoryOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("stCount", builder.getIntegerAttr(i32Type, stCount));
 }
 
+llvm::SmallVector<handshake::MemLoadInterface>
+ExternalMemoryOp::getLoadPorts() {
+  return ::getLoadPorts(*this);
+}
+
+llvm::SmallVector<handshake::MemStoreInterface>
+ExternalMemoryOp::getStorePorts() {
+  return ::getStorePorts(*this);
+}
+
 void MemoryOp::build(OpBuilder &builder, OperationState &result,
                      ValueRange operands, int outputs, int controlOutputs,
                      bool lsq, int id, Value memref) {
@@ -1256,47 +1309,12 @@ void MemoryOp::build(OpBuilder &builder, OperationState &result,
   }
 }
 
-llvm::SmallVector<handshake::ExtMemLoadInterface>
-ExternalMemoryOp::getLoadPorts() {
-  llvm::SmallVector<ExtMemLoadInterface> ports;
-  // Extmem interface refresher:
-  // Operands:
-  //   all stores (stdata1, staddr1, stdata2, staddr2, ...)
-  //   then all loads (ldaddr1, ldaddr2,...)
-  // Outputs: load addresses (lddata1, lddata2, ...), followed by all none
-  // outputs, ordered as operands(stnone1, stnone2, ... ldnone1, ldnone2, ...)
-  unsigned stCount = getStCount();
-  unsigned ldCount = getLdCount();
-  for (unsigned i = 0, e = ldCount; i != e; ++i) {
-    ExtMemLoadInterface ldif;
-    ldif.index = i;
-    ldif.addressIn = getInputs()[stCount * 2 + i];
-    ldif.dataOut = getResult(i);
-    ldif.doneOut = getResult(ldCount + stCount + i);
-    ports.push_back(ldif);
-  }
-  return ports;
+llvm::SmallVector<handshake::MemLoadInterface> MemoryOp::getLoadPorts() {
+  return ::getLoadPorts(*this);
 }
 
-llvm::SmallVector<handshake::ExtMemStoreInterface>
-ExternalMemoryOp::getStorePorts() {
-  llvm::SmallVector<ExtMemStoreInterface> ports;
-  // Extmem interface refresher:
-  // Operands:
-  //   all stores (stdata1, staddr1, stdata2, staddr2, ...)
-  //   then all loads (ldaddr1, ldaddr2,...)
-  // Outputs: load data (lddata1, lddata2, ...), followed by all none
-  // outputs, ordered as operands(stnone1, stnone2, ... ldnone1, ldnone2, ...)
-  unsigned ldCount = getLdCount();
-  for (unsigned i = 0, e = getStCount(); i != e; ++i) {
-    ExtMemStoreInterface stif;
-    stif.index = i;
-    stif.dataIn = getInputs()[i * 2];
-    stif.addressIn = getInputs()[i * 2 + 1];
-    stif.doneOut = getResult(ldCount + i);
-    ports.push_back(stif);
-  }
-  return ports;
+llvm::SmallVector<handshake::MemStoreInterface> MemoryOp::getStorePorts() {
+  return ::getStorePorts(*this);
 }
 
 bool handshake::MemoryOp::allocateMemory(

@@ -267,7 +267,7 @@ static Value truncateToMemoryWidth(Location loc, OpBuilder &b, Value v,
 }
 
 static Value plumbLoadPort(Location loc, OpBuilder &b,
-                           const handshake::ExtMemLoadInterface &ldif,
+                           const handshake::MemLoadInterface &ldif,
                            Value loadData, MemRefType memrefType) {
   // We need to feed both the load data and the load done outputs.
   // Fork the extracted load data into two, and 'join' the second one to
@@ -287,7 +287,7 @@ static Value plumbLoadPort(Location loc, OpBuilder &b,
 }
 
 static Value plumbStorePort(Location loc, OpBuilder &b,
-                            const handshake::ExtMemStoreInterface &stif,
+                            const handshake::MemStoreInterface &stif,
                             Value done, Type outType, MemRefType memrefType) {
   stif.doneOut.replaceAllUsesWith(done);
   // Return the store address and data to be fed to the top-level output.
