@@ -603,7 +603,7 @@ firrtl.circuit "Verbatim"  {
     firrtl.strictconnect %fizz, %tap : !firrtl.uint<1>
     // CHECK: firrtl.strictconnect %tap, %[[v0]] : !firrtl.uint<1>
     firrtl.strictconnect %tap, %0 : !firrtl.uint<1>
-    // CHECK: firrtl.verbatim.wire "randomBar.b" : () -> !firrtl.uint<1> {symbols = []}
+    // CHECK: firrtl.verbatim.wire "randomBar.b"
     %1 = firrtl.verbatim.wire "randomBar.b" : () -> !firrtl.uint<1> {symbols = []}
     // CHECK: %tap2 = firrtl.wire   : !firrtl.uint<1>
     %tap2 = firrtl.wire   : !firrtl.uint<1>
