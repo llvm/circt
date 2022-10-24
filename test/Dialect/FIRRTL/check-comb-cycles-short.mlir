@@ -240,3 +240,39 @@ firrtl.circuit "hasloops"   {
     firrtl.strictconnect %v1, %v0 : !firrtl.uint<1>
   }
 }
+
+// -----
+
+  // Combinational loop through instance ports
+  // CHECK-NOT: firrtl.circuit "hasloops"
+firrtl.circuit "hasLoops"  {
+  // expected-note @+2 {{hasLoops.b}}
+  // expected-error @+1 {{detected combinational cycle in a FIRRTL module}}
+  firrtl.module @hasLoops(out %b: !firrtl.vector<uint<1>, 2>) {
+    // expected-note @+2 {{hasLoops.bar.a}}
+    // expected-note @+1 {{Instance hasLoops.bar: a ---> b}}
+    %bar_a, %bar_b = firrtl.instance bar  @Bar(in a: !firrtl.vector<uint<1>, 2>, out b: !firrtl.vector<uint<1>, 2>)
+    %0 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
+    %1 = firrtl.subindex %bar_a[0] : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+    %2 = firrtl.subindex %b[1] : !firrtl.vector<uint<1>, 2>
+    %3 = firrtl.subindex %bar_a[1] : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %3, %2 : !firrtl.uint<1>
+    %4 = firrtl.subindex %bar_b[0] : !firrtl.vector<uint<1>, 2>
+    %5 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %5, %4 : !firrtl.uint<1>
+    %6 = firrtl.subindex %bar_b[1] : !firrtl.vector<uint<1>, 2>
+    %7 = firrtl.subindex %b[1] : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %7, %6 : !firrtl.uint<1>
+  }
+   
+  // expected-note @+1 {{hasLoops.bar.b}}
+  firrtl.module private @Bar(in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<1>, 2>) {
+    %0 = firrtl.subindex %a[0] : !firrtl.vector<uint<1>, 2>
+    %1 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+    %2 = firrtl.subindex %a[1] : !firrtl.vector<uint<1>, 2>
+    %3 = firrtl.subindex %b[1] : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %3, %2 : !firrtl.uint<1>
+  }
+}
