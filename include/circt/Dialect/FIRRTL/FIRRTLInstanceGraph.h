@@ -95,6 +95,8 @@ private:
   InstancePath appendInstance(InstancePath path, InstanceOp inst);
 };
 
+bool allUnder(ArrayRef<InstanceRecord *> nodes, InstanceGraphNode *top);
+
 } // namespace firrtl
 } // namespace circt
 
