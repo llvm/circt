@@ -589,3 +589,16 @@ firrtl.circuit "ForwardRef" {
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
   }
 }
+
+firrtl.circuit "Top"  {
+  firrtl.module @Top(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) attributes {annotations = [{class = "firrtl.transforms.NoDedupAnnotation"}]} {
+    // CHECK: %[[v0:.+]] = firrtl.verbatim.expr
+    %0 = firrtl.verbatim.expr "random.something" : () -> !firrtl.uint<1>
+    // CHECK: %tap = firrtl.wire   : !firrtl.uint<1>
+    %tap = firrtl.wire   : !firrtl.uint<1>
+    %fizz = firrtl.wire   {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
+    firrtl.strictconnect %fizz, %tap : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %tap, %[[v0]] : !firrtl.uint<1>
+    firrtl.strictconnect %tap, %0 : !firrtl.uint<1>
+  }
+}
