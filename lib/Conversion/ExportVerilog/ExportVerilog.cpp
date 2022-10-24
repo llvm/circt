@@ -1452,9 +1452,12 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   }
 
   StringRef operatorStr;
-  VerilogPrecedence subprecedence = ForceEmitMultiUse;
+  StringRef openStr, closeStr;
+  VerilogPrecedence subprecedence = LowestPrecedence;
+  VerilogPrecedence prec; // precedence of the emitted expression.
   Optional<SubExprSignResult> operandSign;
   bool isUnary = false;
+  bool hasOpenClose = false;
 
   switch (expr.getOpcode()) {
   case PEO::Add:
@@ -1513,16 +1516,30 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     operandSign = IsSigned;
     break;
   case PEO::CLog2:
-    operatorStr = "$clog2";
+    openStr = "$clog2(";
+    closeStr = ")";
     operandSign = IsUnsigned;
-    isUnary = true;
+    hasOpenClose = true;
+    prec = Symbol;
     break;
   case PEO::StrConcat:
+    openStr = "{";
+    closeStr = "}";
+    hasOpenClose = true;
     operatorStr = ", ";
-    subprecedence = Symbol;
-    isUnary = false;
+    // We don't have Concat precedence, but it's lowest anyway. (SV Table 11-2).
+    subprecedence = LowestPrecedence;
+    prec = Symbol;
     break;
   }
+  if (!hasOpenClose)
+    prec = subprecedence;
+
+  // unary -> one element.
+  assert(!isUnary || llvm::hasSingleElement(expr.getOperands()));
+  // one element -> {unary || open/close}.
+  assert(isUnary || hasOpenClose ||
+         !llvm::hasSingleElement(expr.getOperands()));
 
   // Emit the specified operand with a $signed() or $unsigned() wrapper around
   // it if context requires a specific signedness to compute the right value.
@@ -1530,24 +1547,29 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   // TODO: This could try harder to omit redundant casts like the mainline
   // expression emitter.
   auto emitOperand = [&](Attribute operand) -> bool {
+    // If surrounding with signed/unsigned, inner expr doesn't need parens.
+    auto subprec = operandSign.has_value() ? LowestPrecedence : subprecedence;
     if (operandSign.has_value())
-      os << (operandSign.value() == IsSigned ? "$signed(" : "$unsigned(");
+      os << (*operandSign == IsSigned ? "$signed(" : "$unsigned(");
     auto signedness =
-        printParamValue(operand, os, subprecedence, emitError).signedness;
+        printParamValue(operand, os, subprec, emitError).signedness;
     if (operandSign.has_value()) {
       os << ')';
-      signedness = operandSign.value();
+      signedness = *operandSign;
     }
     return signedness == IsSigned;
   };
 
-  if (isUnary)
+  // Check outer precedence, wrap in parentheses if needed.
+  if (prec > parenthesizeIfLooserThan)
+    os << '(';
+
+  // Emit opening portion of the operation.
+  if (hasOpenClose)
+    os << openStr;
+  else if (isUnary)
     os << operatorStr;
 
-  if (subprecedence > parenthesizeIfLooserThan)
-    os << '(';
-  if (expr.getOpcode() == PEO::StrConcat)
-    os << '{';
   bool allOperandsSigned = emitOperand(expr.getOperands()[0]);
   for (auto op : expr.getOperands().drop_front()) {
     // Handle the special case of (a + b + -42) as (a + b - 42).
@@ -1567,13 +1589,13 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     os << operatorStr;
     allOperandsSigned &= emitOperand(op);
   }
-  if (expr.getOpcode() == PEO::StrConcat)
-    os << '}';
-  if (subprecedence > parenthesizeIfLooserThan) {
+  if (hasOpenClose)
+    os << closeStr;
+  if (prec > parenthesizeIfLooserThan) {
     os << ')';
-    subprecedence = Symbol;
+    prec = Selection;
   }
-  return {subprecedence, allOperandsSigned ? IsSigned : IsUnsigned};
+  return {prec, allOperandsSigned ? IsSigned : IsUnsigned};
 }
 
 //===----------------------------------------------------------------------===//
