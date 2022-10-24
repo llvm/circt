@@ -1816,12 +1816,11 @@ void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
   build(b, state, ArrayType::get(elemTy, resultSize), values);
 }
 
-LogicalResult ArrayConcatOp::canonicalize(ArrayConcatOp op,
-                                          PatternRewriter &rewriter) {
-  // concat(create(a1, ...), create(a3, ...), ...) -> create(a1, ..., a3, ...)
+// Flatten a concatenation of array creates into a single create.
+static bool flattenConcatOp(ArrayConcatOp op, PatternRewriter &rewriter) {
   for (auto input : op.getInputs())
     if (!input.getDefiningOp<ArrayCreateOp>())
-      return failure();
+      return false;
 
   SmallVector<Value> items;
   for (auto input : op.getInputs()) {
@@ -1831,6 +1830,104 @@ LogicalResult ArrayConcatOp::canonicalize(ArrayConcatOp op,
   }
 
   rewriter.replaceOpWithNewOp<ArrayCreateOp>(op, items);
+  return true;
+}
+
+// Merge consecutive slice expressions in a concatenation.
+static bool mergeConcatSlices(ArrayConcatOp op, PatternRewriter &rewriter) {
+  struct Slice {
+    Value input;
+    Value index;
+    size_t size;
+    Value op;
+    SmallVector<Location> locs;
+  };
+
+  SmallVector<Value> items;
+  Optional<Slice> last;
+  bool changed = false;
+
+  auto concatenate = [&] {
+    // If there is only one op in the slice, place it to the items list.
+    if (!last)
+      return;
+    if (last->op) {
+      items.push_back(last->op);
+      last.reset();
+      return;
+    }
+
+    // Otherwise, create a new slice of with the given size and place it.
+    // In this case, the concat op is replaced, using the new argument.
+    changed = true;
+    auto loc = FusedLoc::get(op.getContext(), last->locs);
+    auto origTy = hw::type_cast<ArrayType>(last->input.getType());
+    auto arrayTy = ArrayType::get(origTy.getElementType(), last->size);
+    items.push_back(rewriter.createOrFold<ArraySliceOp>(
+        loc, arrayTy, last->input, last->index));
+
+    last.reset();
+  };
+
+  auto append = [&](Value op, Value input, Value index, size_t size) {
+    // If this slice is an extension of the previous one, extend the size
+    // saved.  In this case, a new slice of is created and the concatenation
+    // operator is rewritten.  Otherwise, flush the last slice.
+    if (last) {
+      if (last->input == input && isOffset(last->index, index, last->size)) {
+        last->size += size;
+        last->op = {};
+        last->locs.push_back(op.getLoc());
+        return;
+      }
+      concatenate();
+    }
+    last.emplace(Slice{input, index, size, op, {op.getLoc()}});
+  };
+
+  for (auto item : llvm::reverse(op.getInputs())) {
+    if (auto slice = item.getDefiningOp<ArraySliceOp>()) {
+      auto size = hw::type_cast<ArrayType>(slice.getType()).getSize();
+      append(item, slice.getInput(), slice.getLowIndex(), size);
+      continue;
+    }
+
+    if (auto create = item.getDefiningOp<ArrayCreateOp>()) {
+      if (create.getInputs().size() == 1) {
+        if (auto get = create.getInputs()[0].getDefiningOp<ArrayGetOp>()) {
+          append(item, get.getInput(), get.getIndex(), 1);
+          continue;
+        }
+      }
+    }
+
+    concatenate();
+    items.push_back(item);
+  }
+  concatenate();
+
+  if (!changed)
+    return false;
+
+  if (items.size() == 1) {
+    rewriter.replaceOp(op, items[0]);
+  } else {
+    std::reverse(items.begin(), items.end());
+    rewriter.replaceOpWithNewOp<ArrayConcatOp>(op, items);
+  }
+  return true;
+}
+
+LogicalResult ArrayConcatOp::canonicalize(ArrayConcatOp op,
+                                          PatternRewriter &rewriter) {
+  // concat(create(a1, ...), create(a3, ...), ...) -> create(a1, ..., a3, ...)
+  if (flattenConcatOp(op, rewriter))
+    return success();
+
+  // concat(slice(a, n, m), slice(a, n + m, p)) -> concat(slice(a, n, m + p))
+  if (mergeConcatSlices(op, rewriter))
+    return success();
+
   return success();
 }
 
