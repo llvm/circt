@@ -53,9 +53,12 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
 }
 
 // Check if the value is deemed worth spilling into a wire.
-static bool shouldSpillWire(Operation &op) {
+static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
   if (!isVerilogExpression(&op))
     return false;
+
+  if (options.disallowMuxInlining && isa<MuxOp>(op))
+    return true;
 
   // Spill temporary wires if it is not possible to inline.
   return !ExportVerilog::isExpressionEmittedInline(&op);
@@ -596,8 +599,7 @@ bool EmittedExpressionStateManager::dispatchHeuristic(Operation &op) {
         return true;
     }
 
-  return options.isWireSpillingHeuristicEnabled(LoweringOptions::SpillAllMux) &&
-         isa<MuxOp>(op);
+  return false;
 }
 
 /// Return true if it is beneficial to spill the operation under the specified
@@ -783,7 +785,7 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
     }
 
     // If this expression is deemed worth spilling into a wire, do it here.
-    if (shouldSpillWire(op)) {
+    if (shouldSpillWire(op, options)) {
       // We first check that it is possible to reuse existing wires as a spilled
       // wire. Otherwise, create a new wire op.
       if (isProceduralRegion || !reuseExistingInOut(&op)) {

@@ -46,7 +46,6 @@ parseWireSpillingHeuristic(StringRef option) {
              llvm::Optional<LoweringOptions::WireSpillingHeuristic>>(option)
       .Case("spillLargeTermsWithNamehints",
             LoweringOptions::SpillLargeTermsWithNamehints)
-      .Case("spillAllMux", LoweringOptions::SpillAllMux)
       .Default(llvm::None);
 }
 
@@ -94,12 +93,13 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       printDebugInfo = true;
     } else if (option == "disallowExpressionInliningInPorts") {
       disallowExpressionInliningInPorts = true;
+    } else if (option == "disallowMuxInlining") {
+      disallowMuxInlining = true;
     } else if (option.consume_front("wireSpillingHeuristic=")) {
       if (auto heuristic = parseWireSpillingHeuristic(option)) {
         wireSpillingHeuristicSet |= *heuristic;
       } else {
-        errorHandler("expected 'spillNone', 'spillLargeTermsWithNamehints' or "
-                     "'spillAllMux'");
+        errorHandler("expected ''spillLargeTermsWithNamehints'");
       }
     } else if (option.consume_front("wireSpillingNamehintTermLimit=")) {
       if (option.getAsInteger(10, wireSpillingNamehintTermLimit)) {
@@ -142,10 +142,10 @@ std::string LoweringOptions::toString() const {
   if (isWireSpillingHeuristicEnabled(
           WireSpillingHeuristic::SpillLargeTermsWithNamehints))
     options += "wireSpillingHeuristic=spillLargeTermsWithNamehints,";
-  if (isWireSpillingHeuristicEnabled(WireSpillingHeuristic::SpillAllMux))
-    options += "wireSpillingHeuristic=spillAllMux,";
   if (disallowExpressionInliningInPorts)
     options += "disallowExpressionInliningInPorts,";
+  if (disallowMuxInlining)
+    options += "disallowMuxInlining,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
