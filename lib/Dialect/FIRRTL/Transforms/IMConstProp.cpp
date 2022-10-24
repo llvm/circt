@@ -401,7 +401,7 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       for (auto result : cast.getResults())
         markOverdefined(result);
     else if (auto verbatim = dyn_cast<VerbatimExprOp>(op))
-      return markOverdefined(verbatim.getResult());
+      markOverdefined(verbatim.getResult());
   }
 }
 
