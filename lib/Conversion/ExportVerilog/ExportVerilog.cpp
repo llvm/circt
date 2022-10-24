@@ -617,12 +617,27 @@ static BlockStatementCount countStatements(Block &block) {
       return WalkResult::advance();
     numStatements +=
         TypeSwitch<Operation *, unsigned>(op)
-            .Case<VerbatimOp>([&](auto) { return 3; })
+            .Case<VerbatimOp>([&](auto) {
+              // We don't know how many statements we emitted, so assume
+              // conservatively that a lot got put out. This will make sure we
+              // get a begin/end block around this.
+              return 3;
+            })
             .Case<IfOp>([&](auto) {
-              return 2; /* overcount for clarity */
+              // We count if as multiple statements to make sure it is always
+              // surrounded by a begin/end so we don't get if/else confusion in
+              // cases like this:
+              // if (cond)
+              //   if (otherCond)    // This should force a begin!
+              //     stmt
+              // else                // Goes with the outer if!
+              //   thing;
+              return 2;
             })
             .Case<IfDefOp, IfDefProceduralOp>([&](auto) { return 3; })
             .Case<OutputOp>([&](OutputOp oop) {
+              // Skip single-use instance outputs, they don't get statements.
+              // Keep this synchronized with visitStmt(InstanceOp,OutputOp).
               return llvm::count_if(oop->getOperands(), [&](auto operand) {
                 return !operand.hasOneUse() ||
                        !dyn_cast_or_null<InstanceOp>(operand.getDefiningOp());
@@ -2623,7 +2638,6 @@ public:
 
   void emitStatement(Operation *op);
   void emitStatementBlock(Block &body);
-  size_t getNumStatementsEmitted() const { return numStatementsEmitted; }
 
   /// Emit a declaration.
   LogicalResult emitDeclaration(Operation *op);
@@ -2646,11 +2660,6 @@ private:
   LogicalResult visitInvalidStmt(Operation *op) { return failure(); }
   LogicalResult visitUnhandledSV(Operation *op) { return failure(); }
   LogicalResult visitInvalidSV(Operation *op) { return failure(); }
-
-  LogicalResult emitNoop() {
-    --numStatementsEmitted;
-    return success();
-  }
 
   LogicalResult visitSV(WireOp op) { return emitDeclaration(op); }
   LogicalResult visitSV(RegOp op) { return emitDeclaration(op); }
@@ -2733,11 +2742,6 @@ public:
 private:
   /// Track the legalized names.
   ModuleNameManager &names;
-
-  /// This keeps track of the number of statements emitted, important for
-  /// determining if we need to put out a begin/end marker in a block
-  /// declaration.
-  size_t numStatementsEmitted = 0;
 
   /// These keep track of the maximum length of name width and type width in the
   /// current statement scope.
@@ -2906,8 +2910,6 @@ LogicalResult StmtEmitter::visitSV(InterfaceInstanceOp op) {
 /// For OutputOp we put "assign" statements at the end of the Verilog module to
 /// assign the module outputs to intermediate wires.
 LogicalResult StmtEmitter::visitStmt(OutputOp op) {
-  --numStatementsEmitted; // Count emitted statements manually.
-
   SmallPtrSet<Operation *, 8> ops;
   HWModuleOp parent = op->getParentOfType<HWModuleOp>();
 
@@ -2916,6 +2918,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
     auto operand = op.getOperand(operandIndex);
     // Outputs that are set by the output port of an instance are handled
     // directly when the instance is emitted.
+    // Keep synced with countStatements() and visitStmt(InstanceOp).
     if (operand.hasOneUse() &&
         dyn_cast_or_null<InstanceOp>(operand.getDefiningOp())) {
       ++operandIndex;
@@ -2932,7 +2935,6 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
     os << ';';
     emitLocationInfoAndNewLine(ops);
     ++operandIndex;
-    ++numStatementsEmitted;
   }
   return success();
 }
@@ -3019,11 +3021,6 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
   }
 
   emitLocationInfoAndNewLine(ops);
-
-  // We don't know how many statements we emitted, so assume conservatively
-  // that a lot got put out. This will make sure we get a begin/end block around
-  // this.
-  numStatementsEmitted += 2;
   return success();
 }
 
@@ -3316,11 +3313,6 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
   }
 
   indent() << "`endif // " << (hasEmptyThen ? "not def " : "") << ident << "\n";
-
-  // We don't know how many statements we emitted, so assume conservatively
-  // that a lot got put out. This will make sure we get a begin/end block around
-  // this.
-  numStatementsEmitted += 2;
   return success();
 }
 
@@ -3397,14 +3389,6 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
     indent() << "else if (";
   }
 
-  // We count if as multiple statements to make sure it is always surrounded by
-  // a begin/end so we don't get if/else confusion in cases like this:
-  // if (cond)
-  //   if (otherCond)    // This should force a begin!
-  //     stmt
-  // else                // Goes with the outer if!
-  //   thing;
-  ++numStatementsEmitted;
   return success();
 }
 
@@ -3732,6 +3716,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
                     portVal.getUses().begin()->getOwner()))) {
       // If this is directly using the output port of the containing module,
       // just specify that directly so we avoid a temporary wire.
+      // Keep this synchronized with countStatements() and visitStmt(OutputOp).
       size_t outputPortNo = portVal.getUses().begin()->getOperandNumber();
       auto containingModule = emitter.currentModuleOp;
       os << getPortVerilogName(containingModule,
@@ -3826,8 +3811,6 @@ void StmtEmitter::emitStatement(Operation *op) {
   // Expressions may either be ignored or emitted as an expression statements.
   if (isVerilogExpression(op))
     return;
-
-  ++numStatementsEmitted;
 
   // Handle HW statements.
   if (succeeded(dispatchStmtVisitor(op)))
@@ -4057,7 +4040,6 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
 
   os << ';';
   emitLocationInfoAndNewLine(opsForLocation);
-  ++numStatementsEmitted;
   return success();
 }
 
