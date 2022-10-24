@@ -426,11 +426,6 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
   // each level. At each stage, it must take the current id, and re-index it as
   // a nested bundle under the parent field.. This is accomplished by using the
   // parent field's ID as a base, and adding the field ID of the child.
-  if (!value ||
-      value == llvm::DenseMapInfo<Value>::getEmptyKey() ||
-      value == llvm::DenseMapInfo<Value>::getTombstoneKey() ||
-      value.isa<BlockArgument>())
-    return {value,0};
   unsigned id = 0;
   while (value) {
     Operation *op = value.getDefiningOp();
