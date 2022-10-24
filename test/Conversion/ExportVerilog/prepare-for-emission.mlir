@@ -150,8 +150,13 @@ module attributes {circt.loweringOptions =
                   "disallowMuxInlining"} {
   // CHECK-LABEL: mux
   hw.module @mux(%c: i1, %b: i8, %a: i8) -> (d: i8) {
-    // CHECK: %mux = sv.wire
-    %0 = comb.mux %c, %a, %b {sv.namehint = "mux"} : i8
+    // CHECK:      %use_for_mux = sv.wire
+    // CHECK-NEXT: sv.assign %use_for_mux, %0 : i8
+    // CHECK-NEXT: %[[read:.+]] = sv.read_inout %use_for_mux : !hw.inout<i8>
+    // CHECK-NEXT: comb.add %[[read]], %a : i8
+    %0 = comb.mux %c, %a, %b : i8
+    %use_for_mux = sv.wire : !hw.inout<i8>
+    sv.assign %use_for_mux, %0 : i8
     %1 = comb.add %0, %a : i8
     hw.output %1 : i8
   }
