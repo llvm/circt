@@ -589,3 +589,24 @@ firrtl.circuit "ForwardRef" {
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
   }
 }
+
+// -----
+
+// Verbatim expressions should not be optimized away.
+firrtl.circuit "Verbatim"  {
+  firrtl.module @Verbatim() {
+    // CHECK: %[[v0:.+]] = firrtl.verbatim.expr
+    %0 = firrtl.verbatim.expr "random.something" : () -> !firrtl.uint<1>
+    // CHECK: %tap = firrtl.wire   : !firrtl.uint<1>
+    %tap = firrtl.wire   : !firrtl.uint<1>
+    %fizz = firrtl.wire   {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
+    firrtl.strictconnect %fizz, %tap : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %tap, %[[v0]] : !firrtl.uint<1>
+    firrtl.strictconnect %tap, %0 : !firrtl.uint<1>
+    // CHECK: firrtl.verbatim.wire "randomBar.b"
+    %1 = firrtl.verbatim.wire "randomBar.b" : () -> !firrtl.uint<1> {symbols = []}
+    // CHECK: %tap2 = firrtl.wire   : !firrtl.uint<1>
+    %tap2 = firrtl.wire   : !firrtl.uint<1>
+    firrtl.strictconnect %tap2, %1 : !firrtl.uint<1>
+  }
+}
