@@ -1400,3 +1400,17 @@ hw.module @Issue2546() -> (b: i1) {
   %0 = comb.xor %0, %true : i1
   hw.output %0 : i1
 }
+
+// CHECK-LABEL: @FoldMuxTree
+hw.module @FoldMuxTree(%c0: i1, %c1: i1, %a: i2, %b: i2, %c: i2, %d: i2) -> (res: i2) {
+  %mt = comb.mux %c1, %d, %c : i2
+  %mf = comb.mux %c1, %b, %a : i2
+  %res = comb.mux %c0, %mt, %mf : i2
+
+  // CHECK:      [[ARRAY:%.+]] = hw.array_create %a, %b, %c, %d : i2
+  // CHECK-NEXT: [[INDEX:%.+]] = comb.concat %c1, %c0 : i1, i1
+  // CHECK-NEXT: [[ELEM:%.+]] = hw.array_get [[ARRAY]][[[INDEX]]] : !hw.array<4xi2>, i2
+  // CHECK-NEXT: hw.output [[ELEM]] : i2
+
+  hw.output %res : i2
+}

@@ -2163,6 +2163,66 @@ static bool foldMuxOfUniformArrays(MuxOp op, PatternRewriter &rewriter) {
   return true;
 }
 
+// Fold trees of muxes selecting an element from 2^N leafs into an array get.
+static bool foldMuxTree(MuxOp op, PatternRewriter &rewriter) {
+  SmallVector<Value> conditions;
+
+  // Walk down a single branch of the tree to find the deepest sequence
+  // of conditions to consider. This will be narrowed down later.
+  for (auto mux = op; mux; mux = mux.getFalseValue().getDefiningOp<MuxOp>())
+    conditions.push_back(mux.getCond());
+  if (conditions.size() == 1)
+    return false;
+
+  // Walk down the entire tree and identify the deepest level with nodes of
+  // identical conditions. Trim down the condition set to this level.
+  std::function<unsigned(unsigned, MuxOp)> explore = [&](unsigned i, MuxOp op) {
+    auto falseMux = op.getFalseValue().getDefiningOp<MuxOp>();
+    auto trueMux = op.getTrueValue().getDefiningOp<MuxOp>();
+    if (!falseMux || !trueMux)
+      return i;
+    if (i >= conditions.size())
+      return i;
+    if (conditions[i] != falseMux.getCond())
+      return i;
+    if (conditions[i] != trueMux.getCond())
+      return i;
+    return std::min(explore(i + 1, falseMux), explore(i + 1, trueMux));
+  };
+  conditions.erase(conditions.begin() + explore(1, op), conditions.end());
+  if (conditions.size() == 1)
+    return false;
+  std::reverse(conditions.begin(), conditions.end());
+
+  // If the tree has n levels, it must have exactly 2^n leaf nodes.
+  // Traverse the tree to build an array with leaf elements to select from.
+  SmallVector<Value> vals(1ull << conditions.size());
+  std::function<void(unsigned, unsigned, MuxOp)> populate =
+      [&](unsigned off, unsigned level, MuxOp mux) {
+        if (level == 0) {
+          vals[off] = mux.getFalseValue();
+          vals[off + 1] = mux.getTrueValue();
+          return;
+        }
+
+        populate(off, level - 1, mux.getFalseValue().getDefiningOp<MuxOp>());
+        populate(off + (1ull << level), level - 1,
+                 mux.getTrueValue().getDefiningOp<MuxOp>());
+      };
+
+  populate(0, conditions.size() - 1, op);
+
+  // Build an array_get op selecting from an array of values.
+  auto loc = op.getLoc();
+  auto arrayTy = hw::ArrayType::get(op.getType(), vals.size());
+  auto indexTy = IntegerType::get(op.getContext(), conditions.size());
+  auto array = rewriter.create<hw::ArrayCreateOp>(loc, arrayTy, vals);
+  auto index = rewriter.create<ConcatOp>(loc, conditions);
+
+  replaceOpWithNewOpAndCopyName<hw::ArrayGetOp>(rewriter, op, array, index);
+  return true;
+}
+
 namespace {
 struct MuxRewriter : public mlir::OpRewritePattern<MuxOp> {
   using OpRewritePattern::OpRewritePattern;
@@ -2358,6 +2418,10 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
 
   // mux(cond, repl(n, a1), repl(n, a2)) -> repl(n, mux(cond, a1, a2))
   if (foldMuxOfUniformArrays(op, rewriter))
+    return success();
+
+  // mux(c0, mux(c1, a, b), mux(c1, c, d)) -> {a, b, c, d}[concat(c0, c1)]
+  if (foldMuxTree(op, rewriter))
     return success();
 
   return failure();
