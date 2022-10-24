@@ -295,7 +295,7 @@ public:
       return;
     }
     auto portNum = getValue().cast<OpResult>().getResultNumber();
-    auto portsIter = mapIter->getSecond().find({portNum, 0});
+    auto portsIter = mapIter->getSecond().find({portNum, node.fieldIndex});
     if (portsIter == mapIter->getSecond().end())
       return;
     auto &paths = portsIter->getSecond();
