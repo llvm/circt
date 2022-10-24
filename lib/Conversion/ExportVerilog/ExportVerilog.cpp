@@ -79,8 +79,7 @@ enum VerilogPrecedence {
   AndShortCircuit, // &&
   Conditional,     // ? :
 
-  LowestPrecedence,  // Sentinel which is always the lowest precedence.
-  ForceEmitMultiUse, // Sentinel saying to recursively emit a multi-used expr.
+  LowestPrecedence, // Sentinel which is always the lowest precedence.
 };
 
 /// This enum keeps track of whether the emitted subexpression is signed or
@@ -4008,8 +4007,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
       if (!source || isa<ConstantOp>(source) ||
           op->getNextNode() == singleAssign) {
         os << " = ";
-        emitExpression(singleAssign.getSrc(), opsForLocation,
-                       ForceEmitMultiUse);
+        emitExpression(singleAssign.getSrc(), opsForLocation);
         emitter.assignsInlined.insert(singleAssign);
       }
     }
@@ -4027,8 +4025,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
         if (!source || isa<ConstantOp>(source) ||
             isExpressionEmittedInlineIntoProceduralDeclaration(source, *this)) {
           os << " = ";
-          emitExpression(singleAssign.getSrc(), opsForLocation,
-                         ForceEmitMultiUse);
+          emitExpression(singleAssign.getSrc(), opsForLocation);
           // Remember that the assignment and logic op are emitted into decl.
           emitter.assignsInlined.insert(singleAssign);
           emitter.expressionsEmittedIntoDecl.insert(op);
