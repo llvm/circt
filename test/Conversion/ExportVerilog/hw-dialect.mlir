@@ -185,7 +185,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:      assign r38 = {[[WIRE0]], [[WIRE0]]};
 // CHECK-NEXT:      assign r40 = '{foo: structA.foo, bar: a};
 // CHECK-NEXT:      assign r41 = '{foo: [[WIRE1]].foo, bar: b};
-// CHECK-NEXT:      assign r42 = array1[/*Zero width: 0'h0*/ 1'b0];
+// CHECK-NEXT:      assign r42 = array1[/*Zero width*/ 1'b0];
 // CHECK-NEXT: endmodule
 
 
@@ -513,8 +513,8 @@ hw.module @TestZeroStructInstance(%structZero: !hw.struct<>, %structZeroNest: !h
 // CHECK-NEXT:                            out1
 // CHECK-NEXT:   // output /*Zero Width*/ out2
 
-// CHECK:   assign out = arg1[/*Zero width: 0'h0*/ 1'b0];	
-// CHECK-NEXT:   assign out1 = arg1[/*Zero width: arg0*/ 1'b0];	
+// CHECK:   assign out = arg1[/*Zero width*/ 1'b0];	
+// CHECK-NEXT:   assign out1 = arg1[/*Zero width*/ 1'b0];	
 // CHECK-NEXT:   // Zero width: assign out2 = arg0;	
 
 hw.module @testZeroArrayGet(%arg0: i0, %arg1 : !hw.array<1xi32>) -> (out: i32, out1: i32, out2: i0) {
