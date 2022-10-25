@@ -473,7 +473,7 @@ public:
             return static_cast<variant_iterator>(
                 NodeIterator(Node(nullptr, node.context)));
           return static_cast<variant_iterator>(
-              NodeIterator(Node((Operation*)subfield, node.context)));
+              NodeIterator(Node((Operation *)subfield, node.context)));
         })
         .Case<SubindexOp>([&](SubindexOp sub) {
           // This is required to explicitly ignore self loops of register.
@@ -481,7 +481,8 @@ public:
                   getFieldRefFromValue(sub).getDefiningOp()))
             return static_cast<variant_iterator>(
                 NodeIterator(Node(nullptr, node.context)));
-          return static_cast<variant_iterator>(NodeIterator(Node((Operation*)sub, node.context)));
+          return static_cast<variant_iterator>(
+              NodeIterator(Node((Operation *)sub, node.context)));
         })
         // The children of reg or regreset op are not iterated.
         .Case<RegOp, RegResetOp>(
@@ -654,7 +655,7 @@ SmallVector<Node> sampleCycle(SCCIterator &scc) {
       break;
     }
     if (last == current)
-        return SmallVector<Node>(path.begin(), path.end());
+      return SmallVector<Node>(path.begin(), path.end());
     else
       last = current;
   }
