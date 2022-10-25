@@ -58,24 +58,24 @@ llvm::SmallVector<Type> HLMemType::getAddressTypes() const {
   return addressTypes;
 }
 
-Type HLMemType::parse(mlir::AsmParser &p) {
+Type HLMemType::parse(mlir::AsmParser &odsParser) {
   llvm::SmallVector<int64_t> shape;
   Type elementType;
-  if (p.parseLess() ||
-      p.parseDimensionList(shape, /*allowDynamic=*/false,
-                           /*withTrailingX=*/true) ||
-      p.parseType(elementType) || p.parseGreater())
+  if (odsParser.parseLess() ||
+      odsParser.parseDimensionList(shape, /*allowDynamic=*/false,
+                                   /*withTrailingX=*/true) ||
+      odsParser.parseType(elementType) || odsParser.parseGreater())
     return {};
 
-  return HLMemType::get(p.getContext(), shape, elementType);
+  return HLMemType::get(odsParser.getContext(), shape, elementType);
 }
 
-void HLMemType::print(AsmPrinter &p) const {
-  p << '<';
+void HLMemType::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << '<';
   for (auto dim : getShape())
-    p << dim << 'x';
-  p << getElementType();
-  p << '>';
+    odsPrinter << dim << 'x';
+  odsPrinter << getElementType();
+  odsPrinter << '>';
 }
 
 LogicalResult
