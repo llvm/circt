@@ -333,6 +333,11 @@ OpFoldResult SpecialConstantOp::fold(ArrayRef<Attribute> operands) {
   return getValueAttr();
 }
 
+OpFoldResult AggregateConstantOp::fold(ArrayRef<Attribute> operands) {
+  assert(operands.empty() && "constant has no operands");
+  return getFieldsAttr();
+}
+
 OpFoldResult InvalidValueOp::fold(ArrayRef<Attribute> operands) {
   return InvalidValueAttr::get(getType());
 }
@@ -1727,6 +1732,167 @@ struct NodeBypass : public mlir::RewritePattern {
 void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
   results.insert<FoldNodeName>(context);
+}
+
+SmallVector<Value> getCompleteWrite(Operation *lhs) {
+  auto lhsTy = lhs->getResult(0).getType();
+  if (!lhsTy.isa<BundleType>() && !lhsTy.isa<FVectorType>())
+    return {};
+
+  DenseMap<uint32_t, Value> fields;
+  for (Operation *user : lhs->getResult(0).getUsers()) {
+    if (user->getParentOp() != lhs->getParentOp())
+      return {};
+    if (auto aConnect = dyn_cast<StrictConnectOp>(user)) {
+      if (aConnect.getDest() == lhs->getResult(0))
+        return {};
+    } else if (auto subField = dyn_cast<SubfieldOp>(user)) {
+      for (Operation *subuser : subField.getResult().getUsers()) {
+        if (auto aConnect = dyn_cast<StrictConnectOp>(subuser)) {
+          if (aConnect.getDest() == subField) {
+            if (fields.count(subField.getFieldIndex())) // duplicate write
+              return {};
+            fields[subField.getFieldIndex()] = aConnect.getSrc();
+            continue;
+          }
+        }
+        return {};
+      }
+    } else if (auto subIndex = dyn_cast<SubindexOp>(user)) {
+      for (Operation *subuser : subIndex.getResult().getUsers()) {
+        if (auto aConnect = dyn_cast<StrictConnectOp>(subuser)) {
+          if (aConnect.getDest() == subIndex) {
+            if (fields.count(subIndex.getIndex())) // duplicate write
+              return {};
+            fields[subIndex.getIndex()] = aConnect.getSrc();
+            continue;
+          }
+        }
+        return {};
+      }
+    } else {
+      return {};
+    }
+  }
+
+  SmallVector<Value> values;
+  uint32_t total = lhsTy.isa<BundleType>()
+                       ? lhsTy.cast<BundleType>().getNumElements()
+                       : lhsTy.cast<FVectorType>().getNumElements();
+  for (uint32_t i = 0; i < total; ++i) {
+    if (!fields.count(i))
+      return {};
+    values.push_back(fields[i]);
+  }
+  return values;
+}
+
+// For a lhs, find all the writers of fields of the aggregate type.  If there
+// is one writer for each field, merge the writes
+struct AggOneShot : public mlir::RewritePattern {
+  AggOneShot(StringRef name, uint32_t weight, MLIRContext *context)
+      : RewritePattern(name, 0, context) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    auto values = getCompleteWrite(op);
+    if (values.empty())
+      return failure();
+    rewriter.setInsertionPointToEnd(op->getBlock());
+    Value newVal = op->getResult(0).getType().isa<BundleType>()
+                       ? rewriter.createOrFold<BundleCreateOp>(
+                             op->getLoc(), op->getResult(0).getType(), values)
+                       : rewriter.createOrFold<VectorCreateOp>(
+                             op->getLoc(), op->getResult(0).getType(), values);
+    rewriter.createOrFold<StrictConnectOp>(op->getLoc(), op->getResult(0),
+                                           newVal);
+    for (Operation *user : op->getResult(0).getUsers()) {
+      if (auto subIndex = dyn_cast<SubindexOp>(user)) {
+        auto aConnect =
+            dyn_cast<StrictConnectOp>(*subIndex.getResult().getUsers().begin());
+        if (aConnect.getDest() == subIndex)
+          rewriter.eraseOp(aConnect);
+      } else if (auto subField = dyn_cast<SubfieldOp>(user)) {
+        auto aConnect =
+            dyn_cast<StrictConnectOp>(*subField.getResult().getUsers().begin());
+        if (aConnect.getDest() == subField)
+          rewriter.eraseOp(aConnect);
+      }
+    }
+    return success();
+  }
+};
+
+struct WireAggOneShot : public AggOneShot {
+  WireAggOneShot(MLIRContext *context)
+      : AggOneShot(WireOp::getOperationName(), 0, context) {}
+};
+struct SubindexAggOneShot : public AggOneShot {
+  SubindexAggOneShot(MLIRContext *context)
+      : AggOneShot(SubindexOp::getOperationName(), 0, context) {}
+};
+struct SubfieldAggOneShot : public AggOneShot {
+  SubfieldAggOneShot(MLIRContext *context)
+      : AggOneShot(SubfieldOp::getOperationName(), 0, context) {}
+};
+
+void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                         MLIRContext *context) {
+  results.insert<WireAggOneShot>(context);
+}
+
+void SubindexOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                             MLIRContext *context) {
+  results.insert<SubindexAggOneShot>(context);
+}
+void SubfieldOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                             MLIRContext *context) {
+  results.insert<SubfieldAggOneShot>(context);
+}
+
+// Convert bundle Wire to be written once
+struct ConstAgg : public mlir::RewritePattern {
+  ConstAgg(StringRef name, int weight, MLIRContext *context)
+      : RewritePattern(name, weight, context) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    SmallVector<Attribute> values;
+    for (auto v : op->getOperands()) {
+      if (!isConstant(v))
+        return failure();
+      TypeSwitch<Operation *>(v.getDefiningOp())
+          .Case<ConstantOp>([&](auto c) { values.push_back(c.getValueAttr()); })
+          .Case<SpecialConstantOp>(
+              [&](auto c) { values.push_back(c.getValueAttr()); })
+          .Case<AggregateConstantOp>([&](auto c) {
+            for (auto attr : c.getFields())
+              values.push_back(attr.template cast<IntegerAttr>());
+          });
+    }
+
+    replaceOpWithNewOpAndCopyName<AggregateConstantOp>(
+        rewriter, op, op->getResult(0).getType(),
+        rewriter.getArrayAttr(values));
+    return success();
+  }
+};
+
+struct ConstBundleAgg : public ConstAgg {
+  ConstBundleAgg(MLIRContext *context)
+      : ConstAgg(BundleCreateOp::getOperationName(), 0, context) {}
+};
+struct ConstVectorAgg : public ConstAgg {
+  ConstVectorAgg(MLIRContext *context)
+      : ConstAgg(VectorCreateOp::getOperationName(), 0, context) {}
+};
+
+void BundleCreateOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                 MLIRContext *context) {
+  results.insert<ConstBundleAgg>(context);
+}
+
+void VectorCreateOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                 MLIRContext *context) {
+  results.insert<ConstVectorAgg>(context);
 }
 
 // A register with constant reset and all connection to either itself or the

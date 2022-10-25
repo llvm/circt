@@ -140,6 +140,11 @@ public:
   /// child.
   std::pair<unsigned, bool> rootChildFieldID(unsigned fieldID, unsigned index);
 
+  /// Get the number of ground (non-aggregate) fields in the type.  A field
+  /// which is a bundle or vector is not counted, but the recursive ground
+  /// fields of are.
+  unsigned getGroundFields() const;
+
 protected:
   using FIRRTLType::FIRRTLType;
 };

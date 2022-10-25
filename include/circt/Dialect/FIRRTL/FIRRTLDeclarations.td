@@ -356,6 +356,8 @@ def WireOp : ReferableDeclOp<"wire"> {
                        OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs AnyType:$result);
 
+  let hasCanonicalizer = true;
+
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
                       CArg<"StringRef", "{}">:$name,

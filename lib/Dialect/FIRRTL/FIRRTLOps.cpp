@@ -2442,6 +2442,35 @@ void SpecialConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), specialName.str());
 }
 
+LogicalResult AggregateConstantOp::verify() {
+  if (getResult().getType().getGroundFields() != getFields().size())
+    return emitOpError("number of fields doesn't match type");
+  // TODO check sizes of integers.  Especially check clock and reset are 0 or 1.
+  return success();
+}
+
+LogicalResult BundleCreateOp::verify() {
+  if (getType().getNumElements() != getFields().size())
+    return emitOpError("number of fields doesn't match type");
+  for (size_t i = 0; i < getType().getNumElements(); ++i)
+    if (getType().getElement(i).type != getOperand(i).getType())
+      return emitOpError("type of element doesn't match bundle for field ")
+             << getType().getElement(i).name;
+  // TODO: check flow
+  return success();
+}
+
+LogicalResult VectorCreateOp::verify() {
+  if (getType().getNumElements() != getFields().size())
+    return emitOpError("number of fields doesn't match type");
+  auto elemTy = getType().getElementType();
+  for (size_t i = 0; i < getType().getNumElements(); ++i)
+    if (elemTy != getOperand(i).getType())
+      return emitOpError("type of element doesn't match vector element");
+  // TODO: check flow
+  return success();
+}
+
 LogicalResult SubfieldOp::verify() {
   if (getFieldIndex() >=
       getInput().getType().cast<BundleType>().getNumElements())
@@ -2477,7 +2506,7 @@ bool firrtl::isConstant(Operation *op) {
           for (auto &use : op.getResult().getUses())
             worklist.push_back(use.getOwner());
         })
-        .Case<ConstantOp, SpecialConstantOp>([](auto) {})
+        .Case<ConstantOp, SpecialConstantOp, AggregateConstantOp>([](auto) {})
         .Default([&](auto) { constant = false; });
 
   return constant;
