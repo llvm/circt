@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s
+// RUN: circt-opt %s --test-apply-lowering-options='options=emittedLineLength=100' -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s
 
 // CHECK-LABEL: // external module E
 hw.module.extern @E(%a: i1, %b: i1, %c: i1)
@@ -412,8 +412,9 @@ hw.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
   %a3 = comb.divu %a1, %a2: i4
   sv.assign %awire, %a3: i4
 
-  // CHECK: assign awire = $unsigned($signed(in1) / $signed(in2) + $signed(in1) / $signed(in2)) /
-  // CHECK-NEXT:           $unsigned($signed(in1) / $signed(in2) * $signed(in1) / $signed(in2));
+  // CHECK:       assign awire =
+  // CHECK-NEXT:    $unsigned($signed(in1) / $signed(in2) + $signed(in1) / $signed(in2))
+  // CHECK-NEXT:    / $unsigned($signed(in1) / $signed(in2) * $signed(in1) / $signed(in2));
   %b1a = comb.divs %in1, %in2: i4
   %b1b = comb.divs %in1, %in2: i4
   %b1c = comb.divs %in1, %in2: i4
@@ -578,11 +579,11 @@ hw.module @cyclic(%a: i1) -> (b: i1) {
 // https://github.com/llvm/circt/issues/668
 // CHECK-LABEL: module longExpressions
 hw.module @longExpressions(%a: i8, %a2: i8) -> (b: i8) {
-  // CHECK:  assign b = (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a)
-  // CHECK-NEXT:        * (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
-  // CHECK-NEXT:        a) | (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
-  // CHECK-NEXT:        + a) * (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
-  // CHECK-NEXT:        a + a);
+  // CHECK:      assign b =
+  // CHECK-NEXT:   (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a)
+  // CHECK-NEXT:   * (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a)
+  // CHECK-NEXT:   | (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a)
+  // CHECK-NEXT:   * (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a);
 
   %1 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
   %2 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
@@ -597,9 +598,10 @@ hw.module @longExpressions(%a: i8, %a2: i8) -> (b: i8) {
 // https://github.com/llvm/circt/issues/668
 // CHECK-LABEL: module longvariadic
 hw.module @longvariadic(%a: i8) -> (b: i8) {
-  // CHECK:  assign b =
-  // CHECK-COUNT-11: a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
-  // CHECK-NEXT:     a + a + a;
+  // CHECK:          assign b =
+  // CHECK-NEXT:       a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
+  // CHECK-COUNT-9:    + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
+  // CHECK-NEXT:       + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
 
   %1 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
@@ -682,14 +684,15 @@ hw.module @noTemporaryIfReadInOutIsAfterUse(%clock: i1, %x: i1) {
 hw.module @largeConstant(%a: i100000, %b: i16) -> (x: i100000, y: i16) {
   // Large constant is inlined on multiple lines.
 
-  // CHECK: assign x = a + 100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
-  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
-  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
-  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
-  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
-  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
-  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
-  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000;
+  // CHECK:      assign x =
+  // CHECK-NEXT:   a + 100000'h2CD76FE086B93CE2F768A00B22A00000000000
+  // CHECK-NEXT:   + 100000'h2CD76FE086B93CE2F768A00B22A00000000000
+  // CHECK-NEXT:   + 100000'h2CD76FE086B93CE2F768A00B22A00000000000
+  // CHECK-NEXT:   + 100000'h2CD76FE086B93CE2F768A00B22A00000000000
+  // CHECK-NEXT:   + 100000'h2CD76FE086B93CE2F768A00B22A00000000000
+  // CHECK-NEXT:   + 100000'h2CD76FE086B93CE2F768A00B22A00000000000
+  // CHECK-NEXT:   + 100000'h2CD76FE086B93CE2F768A00B22A00000000000
+  // CHECK-NEXT:   + 100000'h2CD76FE086B93CE2F768A00B22A00000000000;
   %c = hw.constant 1000000000000000000000000000000000000000000000 : i100000
   %1 = comb.add %a, %c, %c, %c, %c, %c, %c, %c, %c : i100000
 
