@@ -133,12 +133,16 @@ LogicalResult ReturnOp::verify() {
            << " operands, but enclosing interop operation requires "
            << values.size() << " values";
 
-  for (unsigned i = 0, e = values.size(); i != e; ++i)
-    if (getOperand(i).getType() != values[i].getType())
-      return emitError() << "type of return operand " << i << " ("
-                         << getOperand(i).getType()
-                         << ") doesn't match required type ("
-                         << values[i].getType() << ")";
+  for (auto &it :
+       llvm::enumerate(llvm::zip(getOperandTypes(), values.getTypes()))) {
+    auto [returnOperandType, parentType] = it.value();
+    if (returnOperandType != parentType)
+      return emitError() << "type of return operand " << it.index() << " ("
+                         << returnOperandType
+                         << ") doesn't match required type (" << parentType
+                         << ")";
+  }
+
   return success();
 }
 
