@@ -26,17 +26,19 @@ can this also be automatically generated? Can we generate interfaces to the
 outside in multiple standardized formats/languages automatically?
 
 Let's pick simulation as a concrete example. We have Verilator, CIRCT-based
-simulators like the event-driven `llhd-sim`, and at some point maybe another
-non-event-driven simulator to compete with Verilator in terms of performance.
-They all provide their own interface for writing test-benches in a way that
+event-driven (e.g., `llhd-sim`) and potentially non-event-driven simulators
+that could be mixed using interop to use the faster, more constraint
+one for most of the design and switch to the slower, more general one for
+parts of the design that require the generality.
+They all provide their own interface for writing testbenches in a way that
 suits them best. Verilator has its custom C++ interface as well as SystemC
-support, `llhd-sim` expects the test-bench to be written in LLHD (e.g., compiled
+support, `llhd-sim` expects the testbench to be written in LLHD (e.g., compiled
 from SystemVerilog), and nobody knows what the interface of the third would look
 like (maybe a custom C-header?). This means, if we want to simulate a design
-with all three, we have to write the test-bench three times or at least some
+with all three, we have to write the testbench three times or at least some
 layer between the TB and the simulator interfaces. This dialect aims to solve
 this issue by auto-generating an interface from a selection of standarized
-formats (e.g., a SystemC or SystemVerilog module) such that the test-bench has
+formats (e.g., a SystemC or SystemVerilog module) such that the testbench has
 to be written only once and switching to another simulator just means changing
 one CLI argument.
 What if we have to use some blackbox Verilog code in the design? Is it compiled
@@ -56,13 +58,13 @@ as a translation layer.
 
 The `interop` dialect provides a few operations to represent partially lowered
 procedural interop instances presented in the
-[next chapter](#representing-partial-lowerings) as well as an interface to be
+[next section](#representing-partial-lowerings) as well as an interface to be
 implemented by the surrounding module and rewrite patterns to call into those
-interface implementations presented in the chapter about
+interface implementations presented in the section about
 ['Container-side Lowering'](#container-side-lowering).
 It also provides common rewrite patterns to insert translation layers between
 different interop mechanisms like textural C++, C-foreign-functions, Verilog,
-etc. They are discussed in more detail in the chapters
+etc. They are discussed in more detail in the sections
 ['Interop Mechanisms'](#interop-mechanisms) and
 ['Bridging between Interop Mechanisms'](#bridging-between-interop-mechanisms).
 
@@ -82,9 +84,10 @@ that are persistent across multiple calls of a member function, or to global
 simulator state that persists over simulation cycles, etc.
 
 Additionally, it has an attribute that specifies the interop mechanism under
-which the state types are valid. This is necessary to allow bridging patterns
-to map the types to valid types in the other interop mechanism, e.g., to an
-opaque pointer, if it does not support the same types.
+which the state types are valid (the `cpp` in the example below). This is
+necessary to allow bridging patterns to map the types to valid types in the
+other interop mechanism, e.g., to an opaque pointer, if it does not support
+the same types.
 
 ```mlir
 %state = interop.procedural.alloc cpp : !emitc.ptr<!emitc.opaque<"VBar">>
@@ -165,7 +168,8 @@ context of the container operation.
 
 To illustrate how this works, consider a design represented in `hw`, `comb`, and
 `seq`. We want to simulate that design using Verilator and provide a SystemC
-wrapper (basically what Verilator itself can also do). As a first step, the
+wrapper (basically what Verilator itself can also do using the SystemC Output
+Mode `--sc`). As a first step, the
 top-level module has to be cloned without the region and a
 `systemc.interop.verilated` operation has to be inserted in the body to
 instantiate the previously cloned module (here represented as the extern module
@@ -187,8 +191,8 @@ implemented as a pattern on the `systemc.interop.verilated` operation in the
 dialect conversion framework. Note that it is required to provide a rewrite
 pattern for this lowering to enable one-shot lowering of all interop operations
 in a design during a lowering pipeline. The patterns for all instance-side
-interop lowerings of a dialect are provided by a function
-`populate<dialect>InstanceInteropLoweringPatterns(RewritePatternSet&)` exposed
+interop lowerings of a dialect are provided by a population function
+(e.g., `populateInstanceInteropLoweringPatterns(RewritePatternSet&)`) exposed
 in their public API. Each dialect should also provide a pass with all its
 instance-side lowering patterns populated for partial interop lowering.
 
@@ -256,7 +260,7 @@ LogicalResult deallocState(PatternRewriter&, ProceduralDeallocOp, ProceduralDeal
 They are responsible for lowering the respective interop operation in a similar
 fashion as regular rewrite patterns.
 
-Let's take a look at how the example from the previous chapter is further
+Let's take a look at how the example from the previous section is further
 lowered. After the `convert-hw-to-systemc` pass it looks like the following:
 
 ```mlir
@@ -449,7 +453,7 @@ to be used in another dialect or downstream repository:
 
 ### Design considerations
 
-This chapter aims to provide explanations for certain design decisions. It will
+This section aims to provide explanations for certain design decisions. It will
 take the form of a Q&A.
 
 
