@@ -123,35 +123,49 @@ def HLMemOp : SeqOp<"hlmem", [
   let summary = "Instantiate a high-level memory.";
   let description = "See the Seq dialect rationale for a longer description";
 
-  let arguments = (ins I1:$clk, SymbolNameAttr:$sym_name);
+  let arguments = (ins I1:$clk, I1:$rst, SymbolNameAttr:$sym_name);
   let results = (outs HLMemType:$handle);
 
   let extraClassDeclaration = [{
     HLMemType getMemType() { return getHandle().getType().cast<HLMemType>(); }
   }];
 
-  let assemblyFormat = "$sym_name $clk attr-dict `:` type($handle)";
+  let assemblyFormat = "$sym_name $clk `,` $rst attr-dict `:` type($handle)";
 }
 
-def ReadPortOp : SeqOp<"read", 
-  [DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
-  let summary = "Structural read access to a seq.hlmem";
+class HLMemTypeValueConstraint<string hlmemvalue, string value>
+  : TypesMatchWith<"type of 'value' matches element type of 'hlmemvalue'",
+                     hlmemvalue, value,
+                     "$_self.cast<HLMemType>().getElementType()">;
+
+class HLMemTypeIndexingConstraint<string hlmemvalue, string addresses>
+  : PredOpTrait<"address bit widths should be identical to the clog2 of the shape of the HLMemType",
+      CPred<"isValidIndexValues($" # hlmemvalue # ", $" # addresses # ")">>;
+
+def ReadPortOp : SeqOp<"read", [
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+    HLMemTypeIndexingConstraint<"memory", "addresses">,
+    AttrSizedOperandSegments     
+  ]> {
+  let summary = "Structural read access to a seq.hlmem, with an optional read enable signal.";
   let arguments = (ins 
     HLMemType:$memory,
-    Variadic<AnyType>:$addresses,
-    I1:$rdEn,
+    Variadic<HWIntegerType>:$addresses,
+    Optional<I1>:$rdEn,
     I64Attr:$latency
   );
   let results = (outs AnyType:$readData);
   let hasCustomAssemblyFormat = 1;
 }
 
-
-def WritePortOp : SeqOp<"write", []> {
+def WritePortOp : SeqOp<"write", [
+    HLMemTypeValueConstraint<"memory", "inData">,
+    HLMemTypeIndexingConstraint<"memory", "addresses">
+  ]> {
   let summary = "Structural write access to a seq.hlmem";
   let arguments = (ins
     HLMemType:$memory,
-    Variadic<AnyType>:$addresses,
+    Variadic<HWIntegerType>:$addresses,
     AnyType:$inData,
     I1:$wrEn,
     I64Attr:$latency

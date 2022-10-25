@@ -234,6 +234,7 @@ allocated memory. Port access operations are defined at the same level of
 abstraction as the core RTL dialects and contain no notion of control
 flow. As such, for e.g. a write port with a non-zero latency, the encapsulating
 IR must already have accounted for this latency.
+The behavior of conflicting writes is defined by the lowering. Generally speaking, it should be considered as undefined.
 
 Example usage:
 ```mlir

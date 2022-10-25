@@ -23,6 +23,22 @@ using namespace mlir;
 using namespace circt;
 using namespace seq;
 
+bool circt::seq::isValidIndexValues(Value hlmemHandle, ValueRange addresses) {
+  auto memType = hlmemHandle.getType().cast<seq::HLMemType>();
+  auto shape = memType.getShape();
+  if (shape.size() != addresses.size())
+    return false;
+
+  for (auto [dim, addr] : llvm::zip(shape, addresses)) {
+    auto addrType = addr.getType().dyn_cast<IntegerType>();
+    if (!addrType)
+      return false;
+    if (addrType.getIntOrFloatBitWidth() != llvm::Log2_64_Ceil(dim))
+      return false;
+  }
+  return true;
+}
+
 // If there was no name specified, check to see if there was a useful name
 // specified in the asm file.
 static void setNameFromResult(OpAsmParser &parser, OperationState &result) {
@@ -58,37 +74,54 @@ static bool canElideName(OpAsmPrinter &p, Operation *op) {
 ParseResult ReadPortOp::parse(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc loc = parser.getCurrentLocation();
 
-  OpAsmParser::UnresolvedOperand memOperand, wrenOperand;
+  OpAsmParser::UnresolvedOperand memOperand, rdenOperand;
+  bool hasRdEn = false;
   llvm::SmallVector<OpAsmParser::UnresolvedOperand, 2> addressOperands;
   seq::HLMemType memType;
 
   if (parser.parseOperand(memOperand) ||
-      parser.parseOperandList(addressOperands,
-                              OpAsmParser::Delimiter::Square) ||
-      parser.parseKeyword("rden") || parser.parseOperand(wrenOperand) ||
-      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseOperandList(addressOperands, OpAsmParser::Delimiter::Square))
+    return failure();
+
+  if (succeeded(parser.parseOptionalKeyword("rden"))) {
+    if (failed(parser.parseOperand(rdenOperand)))
+      return failure();
+    hasRdEn = true;
+  }
+
+  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
       parser.parseType(memType))
     return failure();
 
   llvm::SmallVector<Type> operandTypes = memType.getAddressTypes();
   operandTypes.insert(operandTypes.begin(), memType);
-  operandTypes.push_back(parser.getBuilder().getI1Type());
 
   llvm::SmallVector<OpAsmParser::UnresolvedOperand> allOperands = {memOperand};
   llvm::copy(addressOperands, std::back_inserter(allOperands));
-  allOperands.push_back(wrenOperand);
+  if (hasRdEn) {
+    operandTypes.push_back(parser.getBuilder().getI1Type());
+    allOperands.push_back(rdenOperand);
+  }
 
   if (parser.resolveOperands(allOperands, operandTypes, loc, result.operands))
     return failure();
 
   result.addTypes(memType.getElementType());
 
+  llvm::SmallVector<int32_t, 2> operandSizes;
+  operandSizes.push_back(1); // memory handle
+  operandSizes.push_back(addressOperands.size());
+  operandSizes.push_back(hasRdEn ? 1 : 0);
+  result.addAttribute("operand_segment_sizes",
+                      parser.getBuilder().getDenseI32ArrayAttr(operandSizes));
   return success();
 }
 
 void ReadPortOp::print(OpAsmPrinter &p) {
-  p << " " << getMemory() << "[" << getAddresses() << "] rden " << getRdEn();
-  p.printOptionalAttrDict((*this)->getAttrs());
+  p << " " << getMemory() << "[" << getAddresses() << "]";
+  if (getRdEn())
+    p << " rden " << getRdEn();
+  p.printOptionalAttrDict((*this)->getAttrs(), {"operand_segment_sizes"});
   p << " : " << getMemory().getType();
 }
 
