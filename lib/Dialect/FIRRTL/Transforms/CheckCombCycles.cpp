@@ -77,14 +77,13 @@ namespace {
 /// The node class of combinational graph.
 struct Node {
   Value value;
-  long fieldIndex;
+  long fieldIndex = 0;
   NodeContext *context;
 
   explicit Node(Value value = nullptr, NodeContext *context = nullptr)
-      : value(value), fieldIndex(0), context(context) {}
+      : value(value), context(context) {}
 
-  explicit Node(Operation *op, NodeContext *nodeCtxt)
-      : fieldIndex(0), context(nodeCtxt) {
+  explicit Node(Operation *op, NodeContext *nodeCtxt) : context(nodeCtxt) {
     if (!op) {
       value = nullptr;
       return;
@@ -656,8 +655,7 @@ SmallVector<Node> sampleCycle(SCCIterator &scc) {
     }
     if (last == current)
       return SmallVector<Node>(path.begin(), path.end());
-    else
-      last = current;
+    last = current;
   }
   llvm_unreachable("a cycle must be found in SCC");
 }
