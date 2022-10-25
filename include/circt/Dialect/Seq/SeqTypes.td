@@ -10,4 +10,56 @@
 //
 //===----------------------------------------------------------------------===//
 
-class SeqType<string name> : TypeDef<SeqDialect, name> { }
+include "mlir/IR/BuiltinTypeInterfaces.td"
+
+class SeqType<string name, list<Trait> traits = []> : TypeDef<SeqDialect, name, traits> { }
+
+def HLMemType : SeqType<"HLMem",[
+    ShapedTypeInterface
+  ]> {
+  let summary = "Multi-dimensional memory type";
+  let description = [{
+    Syntax:
+    ```
+    hlmem-type ::== `hlmem` `<` dim-list element-type `>`
+    ```
+
+    The HLMemType represents the type of an addressable memory structure. The
+    type is inherently multidimensional. Dimensions must be known integer values.
+
+    Note: unidimensional memories are represented as <1x{element type}> - 
+    <{element type}> is illegal.
+  }];
+
+  let parameters = (ins
+    ArrayRefParameter<"int64_t">:$shape,
+    "Type":$elementType
+  );
+
+  let extraClassDeclaration = [{
+    using ShapedType::Trait<HLMemType>::clone;
+    using ShapedType::Trait<HLMemType>::getElementTypeBitWidth;
+    using ShapedType::Trait<HLMemType>::getRank;
+    using ShapedType::Trait<HLMemType>::getNumElements;
+    using ShapedType::Trait<HLMemType>::isDynamicDim;
+    using ShapedType::Trait<HLMemType>::hasStaticShape;
+    using ShapedType::Trait<HLMemType>::getNumDynamicDims;
+    using ShapedType::Trait<HLMemType>::getDimSize;
+    using ShapedType::Trait<HLMemType>::getDynamicDimIndex;
+
+    // Returns the set of types required to access this memory type.
+    llvm::SmallVector<Type> getAddressTypes() const;
+
+    /// Returns if this type is ranked (always true).
+    bool hasRank() const { return true; }
+
+    /// Clone this vector type with the given shape and element type. If the
+    /// provided shape is `None`, the current shape of the type is used.
+    HLMemType cloneWith(Optional<ArrayRef<int64_t>> shape,
+                         Type elementType) const;
+  }];
+
+  let mnemonic = "hlmem";
+  let hasCustomAssemblyFormat = 1;
+  let genVerifyDecl = 1;
+}

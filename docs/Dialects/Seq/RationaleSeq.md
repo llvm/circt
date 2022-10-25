@@ -226,34 +226,28 @@ merging, read/write conflicts, etc.) and may serve as a target for other
 high-level abstractions.
 
 The high-level memory abstraction is split into two parts:
-* Memory *allocation* is defined by the `seq.hlmem` operation. This operation defines
-the inner workings of the memory. This includes:
-  - number of read/write ports
-  - read/write latency
-  - Memory size and inner data type
-  The `seq.hlmem` will define references to the read- and write ports of the
-  allocated memory.
-- Memory *access* is defined by separate operations which unwraps a memory port reference
-to its structural components. Port access operations are defined at the same
-level of abstraction as the core RTL dialects and  contain no notion of control
-flow.
+- Memory *allocation* is defined by the `seq.hlmem` operation. This operation
+defines the internal memory structure. For now, this strictly pertains to the
+layout of the memory (dimensionality) and element type.
+- Memory *access* is defined by separate port operations which reference the
+allocated memory. Port access operations are defined at the same level of
+abstraction as the core RTL dialects and contain no notion of control
+flow. As such, for e.g. a write port with a non-zero latency, the encapsulating
+IR must already have accounted for this latency.
+The behavior of conflicting writes is defined by the lowering. Generally speaking, it should be considered as undefined.
 
 Example usage:
 ```mlir
-  %read0, %write0 = seq.hlmem @myMemory %clk {
-    NReadPorts = 1 : i32,
-    NWritePorts = 1 : i32,
-    readLatency = 0 : i32,
-    writeLatency = 1 : i32} : !hw.array<4xi32>
-  
+  %myMemory = seq.hlmem @myMemory %clk : <4xi32>
   %c0_i2 = hw.constant 0 : i2
+  %c1_i1 = hw.constant 1 : i1
   %c42_i32 = hw.constant 42 : i32
-  %out = seq.read %read0[%c0_i2] : !seq.read_port<<4xi32>>
-  seq.write %write0[%c0_i2] %c42_i32 : !seq.write_port<<4xi32>>
+  %myMemory_rdata = seq.read %myMemory[%c0_i2] rden %c1_i1 { latency = 0} : !seq.hlmem<4xi32>
+  seq.write %myMemory[%c0_i2] %c42_i32 wren %c1_i1 { latency = 1 } : !seq.hlmem<4xi32>
 ```
 
 Lowering the op is intended to be performed by matching on the `seq.hlmem`,
-collecting the port ops which access the defined port references, and based on this
+collecting the port ops which access the memory, and based on this
 perform a lowering to an appropriate memory structure. This memory
 could either be behavioral (able to support any combination of memory allocation
 and port accesses) or specialized (e.g. specifically target FPGA resources,
@@ -266,19 +260,14 @@ The high-level memory abstraction, as presented here, represents a useful
 albeit limited abstraction when considering the complexity of instantiating
 memory resources in both FPGAs and ASICs.
 
-Some restrictions that were considered in designing this op were:
-1. The op allocates a single 1D array, specified by a `!hw.array` type. This is
-also reflected in the accompanying read- and write port ops in that they
-only take a single address index. This restriction has been made to reduce
-the complexity of lowering the op, as well as motivated by the expectation that
-most target architectures will not be able to natively support multidimensional
-memories (i.e. multidimensional memories would be flattened to 1D arrays during
-synthesis).
-2. A port reference can only be unwrapped once. This is to maintain the
-notion that port access ops provide structural access to the memory port. Thus,
-if a given port is expected to be used from multiple sites, it is the job of
-the surrounding IR to arbitrate that port.
-
+The scope of what the `hlmem` operations can represent is large. Examples
+being: multidimensional memories, arbitrary # of read/write ports, and mixed
+port latencies (all of which could occur together).  
+In reality, it will only be a limited subset of the possible combinations of
+these operations which can be lowered reasonably to an FPGA or ASIC implementation.  
+However, by allowing for such complexity, we ensure that we have a unified IR
+which can represent such varying levels of complexity, thus ensuring maximum
+reusability of analysis and transformation passes.
 
 ### Future considerations
 
@@ -293,7 +282,7 @@ Example future ports could be:
   Specified as a new `seq.asym_read` port which defines a read data width
   of some fraction of the native data size.
   ```mlir
-  %rdata = seq.asym_read %rp[%addr] : !seq.read_port<4xi32> -> i16
+  %rdata = seq.asym_read %rp[%addr] : !seq.hlmem<4xi32> -> i16
   ```
   which would then put different typing requirements on the `%addr` signal.
   Given the halfing of the word size, the expected address type would then
@@ -302,11 +291,11 @@ Example future ports could be:
   Specified as a new `seq.write_be` port with an additional byte enable
   signal.
   ```mlir
-  %wdata = seq.write_be %wp[%addr] %wdata, %be : i32, i4 -> !seq.write_port<4xi32>
+  %wdata = seq.write_be %wp[%addr] %wdata, %be : i32, i4 -> !seq.hlmem<4xi32>
   ```
 * **Debug ports**
 Could be specified as either an additional read port, or (if further
 specialization is needed) attached to the memory symbol.
   ```mlir
-  %mem = seq.debug @myMemory : !hw.array<4xi32>
+  %mem = seq.debug @myMemory : !seq.hlmem<4xi32>
   ```

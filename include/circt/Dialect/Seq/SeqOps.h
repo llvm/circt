@@ -24,4 +24,14 @@
 #define GET_OP_CLASSES
 #include "circt/Dialect/Seq/Seq.h.inc"
 
+namespace circt {
+namespace seq {
+
+// Returns true if the given sequence of addresses match the shape of the given
+// HLMemType'd handle.
+bool isValidIndexValues(Value hlmemHandle, ValueRange addresses);
+
+} // namespace seq
+} // namespace circt
+
 #endif // CIRCT_DIALECT_SEQ_SEQOPS_H

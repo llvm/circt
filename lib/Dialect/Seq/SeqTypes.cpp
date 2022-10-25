@@ -26,6 +26,10 @@ using namespace mlir;
 using namespace circt;
 using namespace seq;
 
+//===----------------------------------------------------------------------===//
+/// Tablegen Type Definitions
+//===----------------------------------------------------------------------===//
+
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/Seq/SeqTypes.cpp.inc"
 
@@ -34,4 +38,50 @@ void SeqDialect::registerTypes() {
 #define GET_TYPEDEF_LIST
 #include "circt/Dialect/Seq/SeqTypes.cpp.inc"
       >();
+}
+
+//===----------------------------------------------------------------------===//
+// HLMemType
+//===----------------------------------------------------------------------===//
+
+HLMemType HLMemType::cloneWith(Optional<ArrayRef<int64_t>> shape,
+                               Type elementType) const {
+  return HLMemType::get(elementType.getContext(), shape.value_or(getShape()),
+                        elementType);
+}
+
+llvm::SmallVector<Type> HLMemType::getAddressTypes() const {
+  auto *ctx = getContext();
+  llvm::SmallVector<Type> addressTypes;
+  for (auto dim : getShape())
+    addressTypes.push_back(IntegerType::get(ctx, llvm::Log2_64_Ceil(dim)));
+  return addressTypes;
+}
+
+Type HLMemType::parse(mlir::AsmParser &p) {
+  llvm::SmallVector<int64_t> shape;
+  Type elementType;
+  if (p.parseLess() ||
+      p.parseDimensionList(shape, /*allowDynamic=*/false,
+                           /*withTrailingX=*/true) ||
+      p.parseType(elementType) || p.parseGreater())
+    return {};
+
+  return HLMemType::get(p.getContext(), shape, elementType);
+}
+
+void HLMemType::print(AsmPrinter &p) const {
+  p << '<';
+  for (auto dim : getShape())
+    p << dim << 'x';
+  p << getElementType();
+  p << '>';
+}
+
+LogicalResult
+HLMemType::verify(llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
+                  llvm::ArrayRef<int64_t> shape, Type elementType) {
+  if (shape.empty())
+    return emitError() << "shape must have at least one dimension.";
+  return success();
 }
