@@ -1114,36 +1114,32 @@ void FIRRTLDialect::registerTypes() {
 // unknown bit width.
 llvm::Optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
                                             bool ignoreFlip) {
+  auto props = type.getRecursiveTypeProperties();
+  if ((!ignoreFlip && !props.isPassive) || props.hasUninferredWidth)
+    return llvm::None;
   std::function<llvm::Optional<int64_t>(FIRRTLBaseType)> getWidth =
       [&](FIRRTLBaseType type) -> llvm::Optional<int64_t> {
     return TypeSwitch<FIRRTLBaseType, llvm::Optional<int64_t>>(type)
         .Case<BundleType>([&](BundleType bundle) {
           int64_t width = 0;
           for (auto &elt : bundle) {
-            if (elt.isFlip && !ignoreFlip)
-              return llvm::Optional<int64_t>(None);
-            auto w = getBitWidth(elt.type);
-            if (!w.has_value())
-              return llvm::Optional<int64_t>(None);
+            auto w = getWidth(elt.type);
             width += *w;
           }
           return llvm::Optional<int64_t>(width);
         })
         .Case<FVectorType>([&](auto vector) {
-          auto w = getBitWidth(vector.getElementType());
-          if (!w.has_value())
-            return llvm::Optional<int64_t>(None);
+          auto w = getWidth(vector.getElementType());
           return llvm::Optional<int64_t>(*w * vector.getNumElements());
         })
         .Case<IntType>([&](IntType iType) {
           auto retval = iType.getWidth();
-          if (retval)
-            return llvm::Optional<int64_t>(*retval);
-          else
-            return llvm::Optional<int64_t>(None);
+          return llvm::Optional<int64_t>(*retval);
         })
         .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
-        .Default([&](auto t) { return llvm::Optional<int64_t>(None); });
+        .Default([&](auto t) { 
+        llvm_unreachable("unhandled FIRRTL type");
+        return llvm::None; });
   };
   return getWidth(type);
 }
