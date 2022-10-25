@@ -275,6 +275,14 @@ static LogicalResult drop(const AnnoPathValue &target, DictionaryAttr anno,
   return success();
 }
 
+/// Mark an instance as lower-to-bind
+static LogicalResult applyBind(const AnnoPathValue &target, DictionaryAttr anno,
+                               ApplyState &state) {
+  InstanceOp instance = target.instances.back();
+  instance->setAttr("lowerToBind", UnitAttr::get(instance.getContext()));
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Driving table
 //===----------------------------------------------------------------------===//
@@ -401,6 +409,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {blackBoxTargetDirAnnoClass, NoTargetAnnotation},
     {traceNameAnnoClass, {stdResolve, applyTraceName}},
     {traceAnnoClass, {stdResolve, applyWithoutTarget<true>}},
+    {bindAnnoClass, {stdResolve, applyBind}}
 
 }};
 

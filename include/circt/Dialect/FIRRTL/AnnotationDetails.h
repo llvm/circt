@@ -199,6 +199,8 @@ constexpr const char *addSeqMemPortAnnoClass =
 constexpr const char *addSeqMemPortsFileAnnoClass =
     "sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation";
 
+constexpr const char *bindAnnoClass = "jiuyang.bind";
+
 } // namespace firrtl
 } // namespace circt
 
