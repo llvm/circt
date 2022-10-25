@@ -1087,17 +1087,72 @@ firrtl.circuit "BlackBoxDirectoryBehavior" attributes {
   }
 }
 
-// Check that black boxes that are instantiated under a Grand Central companion
-// have their "output_file" set to the extraction directory.  This information
-// will later be used by BlackBoxReader to control where these black boxes are
-// extracted to.  This test exists to verify SFC-exact behavior around Grand
-// Central.
+// Check that black boxes that are instantiated _exclusively_ under a Grand
+// Central companion have their "output_file" set to the extraction directory.
+// This information will later be used by BlackBoxReader to control where these
+// black boxes are extracted to.
 //
 // CHECK-LABEL: "BlackBoxDirectoryBehavior"
 // CHECK:      firrtl.extmodule private @BlackBox_DUT()
 // CHECK-NOT:    output_file
 // CHECK-NEXT: firrtl.extmodule private @BlackBox_GCT() {{.+}} output_file = #hw.output_file<"gct-dir{{/|\\\\}}">
-// CHECK-NEXT: firrtl.extmodule private @BlackBox_DUTAndGCT() {{.+}} output_file = #hw.output_file<"gct-dir{{/|\\\\}}">
+// CHECK-NEXT: firrtl.extmodule private @BlackBox_DUTAndGCT()
+// CHECK-NOT:    output_file
+// CHECK-NEXT: firrtl.module private @View_companion()
+
+// -----
+
+firrtl.circuit "SubmoduleDirectoryBehavior" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [],
+     id = 0 : i64,
+     name = "View"},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "bindings.sv"}]} {
+  firrtl.module private @Submodule_DUT() {}
+  firrtl.module private @Submodule_GCT() {}
+  firrtl.module private @Submodule_DUTAndGCT() {}
+  firrtl.module private @View_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       defName = "Foo",
+       id = 0 : i64,
+       name = "View",
+       type = "companion"}]} {
+    firrtl.instance bbox1 @Submodule_GCT()
+    firrtl.instance bbox2 @Submodule_DUTAndGCT()
+  }
+  firrtl.module private @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "view",
+       type = "parent"}
+    ]} {
+    firrtl.instance View_companion @View_companion()
+    firrtl.instance bbox1 @Submodule_DUT()
+    firrtl.instance bbox2 @Submodule_DUTAndGCT()
+  }
+  firrtl.module @SubmoduleDirectoryBehavior() {
+    firrtl.instance dut @DUT()
+  }
+}
+
+// Check that a submodule instantiated _exclusively_ inside the companion is
+// moved into the companion's directory.
+//
+// CHECK-LABEL: "SubmoduleDirectoryBehavior"
+// CHECK:      firrtl.module private @Submodule_DUT() {
+// CHECK-NOT:    output_file
+// CHECK:      firrtl.module private @Submodule_GCT()
+// CHECK-SAME:   output_file = #hw.output_file<"gct-dir{{/|\\\\}}"{{.+$}}
+// CHECK-NEXT: }
+// CHECK-NEXT: firrtl.module private @Submodule_DUTAndGCT()
+// CHECK-NOT:   output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
+// CHECK-NEXT: }
 
 // -----
 

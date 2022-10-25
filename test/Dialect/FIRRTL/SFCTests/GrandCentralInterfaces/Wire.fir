@@ -226,12 +226,12 @@ circuit Top :
 
     ; EXTRACT:        FILE ".{{[/\]}}BlackBox_DUT.v"
     ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}BlackBox_GCT.v"
-    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}BlackBox_DUTAndGCT.v"
+    ; EXTRACT:        FILE ".{{[/\]}}BlackBox_DUTAndGCT.v"
 
     ; EXTRACT:        FILE "firrtl_black_box_resource_files.f"
     ; EXTRACT-NOT:    FILE
     ; EXTRACT:          BlackBox_DUT.v
-    ; EXTRACT-NEXT:     Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}BlackBox_DUTAndGCT.v
+    ; EXTRACT-NEXT:     BlackBox_DUTAndGCT.v
     ; EXTRACT-NEXT:     Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}BlackBox_GCT.v
 
     ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}MyView_companion.sv"

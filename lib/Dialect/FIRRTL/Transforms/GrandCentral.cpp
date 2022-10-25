@@ -23,6 +23,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/YAMLTraits.h"
@@ -2082,46 +2083,66 @@ void GrandCentralPass::runOnOperation() {
                   hw::OutputFileAttr::getFromFilename(
                       &getContext(), maybeExtractInfo->bindFilename.getValue(),
                       /*excludeFromFileList=*/true));
-              op->setAttr("output_file",
-                          hw::OutputFileAttr::getAsDirectory(
-                              &getContext(),
-                              maybeExtractInfo->directory.getValue(),
-                              /*excludeFromFileList=*/true,
-                              /*includeReplicatedOps=*/true));
-              op->setAttr("comment",
-                          builder.getStringAttr("VCS coverage exclude_file"));
 
-              // Look for any blackboxes instantiated by the companion and mark
-              // them for inclusion in the Grand Central extraction directory.
-              SmallVector<FModuleOp> modules({op});
-              DenseSet<Operation *> bboxes, visited({op});
-              while (!modules.empty()) {
-                auto mod = modules.pop_back_val();
-                visited.insert(mod);
-                for (auto inst : mod.getOps<InstanceOp>()) {
-                  Operation *sub =
-                      instancePaths->instanceGraph.getReferencedModule(inst);
-                  if (visited.count(sub))
-                    continue;
-                  if (auto subMod = dyn_cast<FModuleOp>(sub)) {
-                    modules.push_back(subMod);
-                    continue;
-                  }
-                  auto subExtMod = cast<FExtModuleOp>(sub);
-                  for (auto anno : AnnotationSet(subExtMod)) {
+              // Look for any modules/extmodules _only_ instantiated by the
+              // companion.  If these have no output file attribute, then mark
+              // them as being extracted into the Grand Central directory.
+              InstanceGraphNode *companionNode =
+                  instancePaths->instanceGraph.lookup(op);
+
+              LLVM_DEBUG({
+                llvm::dbgs() << "Found companion module: "
+                             << companionNode->getModule().moduleName() << "\n"
+                             << "  submodules exclusively instantiated "
+                                "(including companion):\n";
+              });
+
+              for (auto &node : llvm::depth_first(companionNode)) {
+                auto mod = node->getModule();
+
+                // Check to see if we should change the output directory of a
+                // module.  Only update in the following conditions:
+                //   1) The module is the companion.
+                //   2) The module is instantiated by the companion exclusively.
+                auto *modNode = instancePaths->instanceGraph.lookup(mod);
+                SmallVector<InstanceRecord *> instances(modNode->uses());
+                if (modNode != companionNode &&
+                    !allUnder(instances, companionNode))
+                  continue;
+
+                LLVM_DEBUG({
+                  llvm::dbgs() << "    - module: "
+                               << cast<FModuleLike>(*mod).moduleName() << "\n";
+                });
+
+                if (auto extmodule = dyn_cast<FExtModuleOp>(*mod)) {
+                  for (auto anno : AnnotationSet(extmodule)) {
                     if (!anno.isClass(blackBoxInlineAnnoClass) &&
                         !anno.isClass(blackBoxPathAnnoClass))
                       continue;
-                    if (subExtMod->hasAttr("output_file"))
+                    if (extmodule->hasAttr("output_file"))
                       break;
-                    subExtMod->setAttr(
+                    extmodule->setAttr(
                         "output_file",
                         hw::OutputFileAttr::getAsDirectory(
                             &getContext(),
-                            maybeExtractInfo->directory.getValue(),
-                            /*excludeFromFileList=*/false));
+                            maybeExtractInfo->directory.getValue()));
                     break;
                   }
+                  continue;
+                }
+
+                // Move this module under the Grand Central output directory if
+                // no pre-existing output file information is present.
+                if (!mod->hasAttr("output_file")) {
+                  mod->setAttr("output_file",
+                               hw::OutputFileAttr::getAsDirectory(
+                                   &getContext(),
+                                   maybeExtractInfo->directory.getValue(),
+                                   /*excludeFromFileList=*/true,
+                                   /*includeReplicatedOps=*/true));
+                  mod->setAttr("comment", builder.getStringAttr(
+                                              "VCS coverage exclude_file"));
                 }
               }
 
