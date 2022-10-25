@@ -1054,3 +1054,12 @@ firrtl.circuit "Bar" {
   }
 }
 
+// -----
+// Issue 4174-- handle duplicate module names.
+
+firrtl.circuit "hi" {
+    // expected-note @below {{see existing symbol definition here}}
+    firrtl.module @hi() {}
+    // expected-error @below {{redefinition of symbol named 'hi'}}
+    firrtl.module @hi() {}
+}
