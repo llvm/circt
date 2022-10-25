@@ -14,8 +14,8 @@ firrtl.module @CheckInitialization(in %clock : !firrtl.clock, in %en : !firrtl.u
 
 firrtl.circuit "CheckInitialization" {
 firrtl.module @CheckInitialization() {
-  // expected-error @below {{sink "w.a" not fully initialized}}
-  // expected-error @below {{sink "w.b" not fully initialized}}
+  // expected-error @below {{sink "w.a" not fully initialized in module "CheckInitialization"}}
+  // expected-error @below {{sink "w.b" not fully initialized in module "CheckInitialization"}}
   %w = firrtl.wire : !firrtl.bundle<a : uint<1>, b  flip: uint<1>>
 }
 }
