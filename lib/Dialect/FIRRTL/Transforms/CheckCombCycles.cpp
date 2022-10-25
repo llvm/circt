@@ -473,7 +473,7 @@ public:
             return static_cast<variant_iterator>(
                 NodeIterator(Node(nullptr, node.context)));
           return static_cast<variant_iterator>(
-              NodeIterator(Node(node.value, node.context)));
+              NodeIterator(Node((Operation*)subfield, node.context)));
         })
         .Case<SubindexOp>([&](SubindexOp sub) {
           // This is required to explicitly ignore self loops of register.
@@ -481,7 +481,7 @@ public:
                   getFieldRefFromValue(sub).getDefiningOp()))
             return static_cast<variant_iterator>(
                 NodeIterator(Node(nullptr, node.context)));
-          return static_cast<variant_iterator>(NodeIterator(node));
+          return static_cast<variant_iterator>(NodeIterator(Node((Operation*)sub, node.context)));
         })
         // The children of reg or regreset op are not iterated.
         .Case<RegOp, RegResetOp>(
@@ -632,6 +632,7 @@ SmallVector<Node> sampleCycle(SCCIterator &scc) {
     sccNodes.insert(node);
 
   auto current = *(*scc).begin();
+  auto last = current;
   SmallVector<Node> path;
   SmallDenseMap<Node, unsigned> visitOrder;
   while (true) {
@@ -652,6 +653,10 @@ SmallVector<Node> sampleCycle(SCCIterator &scc) {
       current = child;
       break;
     }
+    if (last == current)
+        return SmallVector<Node>(path.begin(), path.end());
+    else
+      last = current;
   }
   llvm_unreachable("a cycle must be found in SCC");
 }
@@ -670,6 +675,7 @@ void dumpPath(SmallVector<Node> &path, SmallString<16> &instancePath,
   for (unsigned i = 0, e = pathSize; i < e; ++i) {
     Node current = path[i % path.size()];
     Value currentValue = current.value;
+    FieldRef fRef(current.value, current.fieldIndex);
     bool isCycleEnd = i == path.size();
     auto attachInfo = [&]() -> mlir::Diagnostic & {
       return diag.attachNote(currentValue.getLoc()) << instancePath << ".";
@@ -677,7 +683,7 @@ void dumpPath(SmallVector<Node> &path, SmallString<16> &instancePath,
 
     // If the currentValue is port, emit its name.
     if (auto arg = currentValue.dyn_cast<BlockArgument>()) {
-      attachInfo() << module.getPortName(arg.getArgNumber());
+      attachInfo() << getFieldName(fRef);
       continue;
     }
 
@@ -685,7 +691,7 @@ void dumpPath(SmallVector<Node> &path, SmallString<16> &instancePath,
         .Case<WireOp, RegOp, RegResetOp>(
             // For operations which declare signals, we simply print signal
             // names.
-            [&](auto op) { attachInfo() << op.getName(); })
+            [&](auto op) { attachInfo() << getFieldName(fRef); })
         .Case<InstanceOp, SubfieldOp>([&](auto op) {
           // If the op is InstanceOp or SubfieldOp, it is necessary to
           // investigate the next value since output values do not expilicty
@@ -836,14 +842,14 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
         }
 
         LLVM_DEBUG({
-          llvm::errs() << "\n printing the port paths :"
+          llvm::dbgs() << "\n printing the port paths :"
                        << module.moduleNameAttr();
           for (auto p : map[module]) {
-            llvm::errs() << "\n port pair:"
+            llvm::dbgs() << "\n port pair:"
                          << module.getPortNameAttr(p.first.first) << ","
                          << p.first.second;
             for (auto dst : p.second)
-              llvm::errs() << "\n connected to :"
+              llvm::dbgs() << "\n connected to :"
                            << module.getPortNameAttr(dst.first) << ","
                            << dst.second;
           }
