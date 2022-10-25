@@ -24,8 +24,7 @@ firrtl.module @X(in %b : !firrtl.uint<32>, in %d : !firrtl.uint<16>, in %out : !
 // expected-error @+1 {{'firrtl.circuit' op must contain one module that matches main name 'MyCircuit'}}
 firrtl.circuit "MyCircuit" {
 
-"firrtl.module"() ( {
-}) { type = () -> ()} : () -> ()
+firrtl.module @X() {}
 
 }
 
