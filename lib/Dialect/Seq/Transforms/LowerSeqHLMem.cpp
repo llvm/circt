@@ -38,7 +38,8 @@ public:
     // Only support unidimensional memories.
     auto memType = mem.getMemType();
     if (memType.getShape().size() != 1)
-      return failure();
+      return rewriter.notifyMatchFailure(
+          mem, "only unidimensional memories are supported");
     auto size = memType.getShape()[0];
 
     // Gather up the referencing ops.
