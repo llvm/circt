@@ -153,7 +153,7 @@ Currently supported interop mechanisms:
   (such as `scf`) could be supported.
 
 Adding a new interop mechanism requires changes to the `interop` dialect. At
-a minimum, the table-gen enum as to be modified and a bridging pattern has to
+a minimum, the table-gen enum has to be modified and a bridging pattern has to
 be added.
 
 ### Instance-side Lowering
@@ -169,7 +169,7 @@ wrapper (basically what Verilator itself can also do). As a first step, the
 top-level module has to be cloned without the region and a
 `systemc.interop.verilated` operation has to be inserted in the body to
 instantiate the previously cloned module (here represented as the extern module
-`@Bar`) as a verilated module. The input and ouput ports get connected 1-1.
+`@Bar`) as a verilated module. The input and output ports get connected 1-1.
 The original design is then exported through `ExportVerilog` and verilated,
 while our wrapper module is lowered by the instance-side lowering.
 
@@ -494,7 +494,7 @@ alternatives considered:
   rewrite patterns could then be provided by the downstream dialect, match on
   the unrealized interop operations, and add as a matching condition that no
   other operation having the interop trait is closer to the unrealized interop
-  operation. This still has the disadvantage that the conversion framework as
+  operation. This still has the disadvantage that the conversion framework has
   to cycle through potentially many patterns matching on the same operations
   and check quite expensive matching conditions.
 * Current implementation: The dialect implements an external model for the
@@ -515,7 +515,7 @@ approach is more straight-forward to implement though.
 **Why are those interfaces implemented as external models?**
 
 Because the interface implementations need to implement a lowering pattern that
-can might have to create operations from a few different dialects, it needs to
+might have to create operations from a few different dialects, it needs to
 include all of them and link against them. This can add a big burden to some
 other user that just wants to use the dialect but is not interested in the
 interop functionality. It also helps to avoid dependency cycles.
