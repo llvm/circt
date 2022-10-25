@@ -24,8 +24,7 @@ firrtl.module @X(in %b : !firrtl.uint<32>, in %d : !firrtl.uint<16>, in %out : !
 // expected-error @+1 {{'firrtl.circuit' op must contain one module that matches main name 'MyCircuit'}}
 firrtl.circuit "MyCircuit" {
 
-"firrtl.module"() ( {
-}) { type = () -> ()} : () -> ()
+firrtl.module @X() {}
 
 }
 
@@ -1055,3 +1054,12 @@ firrtl.circuit "Bar" {
   }
 }
 
+// -----
+// Issue 4174-- handle duplicate module names.
+
+firrtl.circuit "hi" {
+    // expected-note @below {{see existing symbol definition here}}
+    firrtl.module @hi() {}
+    // expected-error @below {{redefinition of symbol named 'hi'}}
+    firrtl.module @hi() {}
+}

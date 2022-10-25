@@ -48,7 +48,7 @@ def CircuitOp : FIRRTLOp<"circuit",
   }];
 
   let assemblyFormat = "$name custom<CircuitOpAttrs>(attr-dict) $body";
-  let hasVerifier = 1;
+  let hasRegionVerifier = 1;
 }
 
 def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
