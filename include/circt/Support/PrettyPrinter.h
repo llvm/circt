@@ -38,7 +38,8 @@ namespace pretty {
 /// Style of breaking within a group:
 /// - Consistent: all fits or all breaks.
 /// - Inconsistent: best fit, break where needed.
-enum class Breaks { Consistent, Inconsistent };
+/// - Never: force no breaking including nested groups.
+enum class Breaks { Consistent, Inconsistent, Never };
 
 /// Style of indent when starting a group:
 /// - Visual: offset is relative to current column.
@@ -199,7 +200,7 @@ private:
     int32_t size; /// calculate size when positive.
   };
 
-  enum class PrintBreaks { Consistent, Inconsistent, Fits };
+  enum class PrintBreaks { Consistent, Inconsistent, Fits, AlwaysFits };
 
   /// Printing information for active scope, stored in printStack.
   struct PrintEntry {
@@ -248,6 +249,9 @@ private:
 
   /// Printing context when stack is empty.
   const PrintEntry defaultFrame;
+
+  /// Number of "AlwaysFits" on print stack.
+  uint32_t alwaysFits = 0;
 
   /// Current indentation level
   uint32_t indent;

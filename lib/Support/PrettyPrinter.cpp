@@ -30,7 +30,12 @@
 //   an expression in, say, 2 columns, as this is unlikely to produce good
 //   output.
 //   (TODO)
-// * Neverbreak. (TODO: explain/motivate).
+// * Break: Add "Neverbreak": acts like a break re:sizing previous range,
+//   but will never be broken.  Useful for adding content to end of line
+//   that may go over margin but should not influence layout.
+// * Begin: Add "Never" breaking style, for forcing no breaks including
+//   within nested groups.  Use sparingly.  It is an error to insert
+//   a newline (Break with spaces==kInfinity) within such a group.
 //
 //
 // There are many pretty-printing implementations based on this paper,
@@ -199,8 +204,11 @@ void PrettyPrinter::print(FormattedToken f) {
       })
       .Case([&](BreakToken *b) {
         auto &frame = getPrintFrame();
+        assert((b->spaces() != kInfinity || alwaysFits == 0) &&
+               "newline inside never group");
         bool fits =
-            b->neverbreak() || frame.breaks == PrintBreaks::Fits ||
+            (alwaysFits > 0) || b->neverbreak() ||
+            frame.breaks == PrintBreaks::Fits ||
             (frame.breaks == PrintBreaks::Inconsistent && f.size <= space);
         if (fits) {
           space -= b->spaces();
@@ -213,7 +221,10 @@ void PrettyPrinter::print(FormattedToken f) {
         }
       })
       .Case([&](BeginToken *b) {
-        if (f.size > space) {
+        if (b->breaks() == Breaks::Never) {
+          printStack.push_back({0, PrintBreaks::AlwaysFits});
+          ++alwaysFits;
+        } else if (f.size > space && alwaysFits == 0) {
           auto breaks = b->breaks() == Breaks::Consistent
                             ? PrintBreaks::Consistent
                             : PrintBreaks::Inconsistent;
@@ -230,9 +241,12 @@ void PrettyPrinter::print(FormattedToken f) {
         // Try to tolerate this when assertions are disabled.
         if (printStack.empty())
           return;
+        if (getPrintFrame().breaks == PrintBreaks::AlwaysFits)
+          --alwaysFits;
         printStack.pop_back();
         auto &frame = getPrintFrame();
-        if (frame.breaks != PrintBreaks::Fits)
+        if (frame.breaks != PrintBreaks::Fits &&
+            frame.breaks != PrintBreaks::AlwaysFits)
           indent = frame.offset;
       });
 }

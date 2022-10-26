@@ -686,4 +686,57 @@ test
 )"""));
 }
 
+TEST(PrettyPrinterTest, NeverBreakGroup) {
+  SmallString<128> out;
+  raw_svector_ostream os(out);
+
+  auto test = [&](Breaks breaks1, Breaks breaks2) {
+    out = "\n";
+    PrettyPrinter pp(os, 8);
+    pp.add(BeginToken(2, breaks1));
+    pp.add(StringToken("test"));
+    pp.add(BreakToken());
+    pp.add(StringToken("test"));
+    {
+      pp.add(BeginToken(2, breaks2));
+      pp.add(BreakToken());
+      pp.add(StringToken("test"));
+      pp.add(BreakToken());
+      pp.add(StringToken("test"));
+      pp.add(EndToken());
+    }
+    pp.add(BreakToken());
+    pp.add(StringToken("test"));
+    pp.add(EndToken());
+    pp.add(BreakToken(PrettyPrinter::kInfinity));
+    pp.eof();
+  };
+
+  test(Breaks::Inconsistent, Breaks::Inconsistent);
+  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+test
+  test
+        test
+        test
+  test
+)"""));
+
+  test(Breaks::Inconsistent, Breaks::Never);
+  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+test
+  test test test
+  test
+)"""));
+
+  test(Breaks::Never, Breaks::Inconsistent);
+  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+test test test test test
+)"""));
+
+  test(Breaks::Never, Breaks::Never);
+  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+test test test test test
+)"""));
+}
+
 } // end anonymous namespace
