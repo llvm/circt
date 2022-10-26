@@ -106,22 +106,40 @@ public:
           }
         });
 
-    // Create read ports.
+    // Create read ports. When latency > 1, we perform the read 1 cycle before
+    // the latency deadline, and register the read output. By doing so, we avoid
+    // start a critical path right after the combinational read.
+    // TODO: When latency > 2, and assuming that the exact read time is flexible
+    // within the latency window, we could decide on whether to buffer the read
+    // data or the read address more, based on which is narrower (saving area).
     for (auto [ri, readOp] : llvm::enumerate(readOps)) {
       rewriter.setInsertionPointAfter(readOp);
       auto loc = readOp.getLoc();
 
-      // Create a combinational read.
-      Value memLoc = rewriter.create<sv::ArrayIndexInOutOp>(
-          loc, svMem, readOp.getAddresses()[0]);
-      Value readData = rewriter.create<sv::ReadInOutOp>(loc, memLoc);
+      auto readAddress = readOp.getAddresses()[0];
+      unsigned latency = readOp.getLatency();
+      unsigned addressDelayCycles = latency - 1;
+      if (latency > 0) {
+        // Materialize any delays on the read address.
+        for (unsigned i = 0; i < addressDelayCycles; ++i) {
+          readAddress = rewriter.create<seq::CompRegOp>(
+              loc, readAddress, clk,
+              rewriter.getStringAttr(memName + "_rdaddr" + std::to_string(ri) +
+                                     "_dly" + std::to_string(i)));
+        }
+      }
 
-      // Materialize any delays on the read port.
-      for (int i = 0, e = readOp.getLatency(); i < e; ++i)
+      // Create a combinational read.
+      Value memLoc =
+          rewriter.create<sv::ArrayIndexInOutOp>(loc, svMem, readAddress);
+      Value readData = rewriter.create<sv::ReadInOutOp>(loc, memLoc);
+      if (latency > 0) {
+        // Register the read data.
         readData = rewriter.create<seq::CompRegOp>(
             loc, readData, clk,
             rewriter.getStringAttr(memName + "_rd" + std::to_string(ri) +
-                                   "_dly" + std::to_string(i)));
+                                   "_reg"));
+      }
       rewriter.replaceOp(readOp, {readData});
     }
 
