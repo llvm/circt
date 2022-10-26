@@ -1632,17 +1632,14 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
       !instancePaths->instanceGraph.isAncestor(companionIDMap[id].companion,
                                                cast<hw::HWModuleLike>(*dut)) &&
       testbenchDir)
-    iface->setAttr("output_file",
-                   hw::OutputFileAttr::getFromDirectoryAndFilename(
-                       &getContext(), testbenchDir.getValue(),
-                       iFaceName + ".sv",
-                       /*excludFromFileList=*/true));
+    iface->setAttr("output_file", hw::OutputFileAttr::getAsDirectory(
+                                      &getContext(), testbenchDir.getValue(),
+                                      /*excludeFromFileList=*/true));
   else if (maybeExtractInfo)
     iface->setAttr("output_file",
-                   hw::OutputFileAttr::getFromDirectoryAndFilename(
+                   hw::OutputFileAttr::getAsDirectory(
                        &getContext(), getOutputDirectory().getValue(),
-                       iFaceName + ".sv",
-                       /*excludFromFileList=*/true));
+                       /*excludeFromFileList=*/true));
   iface.setCommentAttr(builder.getStringAttr("VCS coverage exclude_file"));
 
   builder.setInsertionPointToEnd(cast<sv::InterfaceOp>(iface).getBodyBlock());
@@ -1769,6 +1766,8 @@ void GrandCentralPass::runOnOperation() {
         removalError = true;
         return false;
       }
+      if (directory.getValue().empty())
+        directory = StringAttr::get(circuitOp.getContext(), ".");
 
       maybeExtractInfo = {directory, filename};
       // Do not delete this annotation.  Extraction info may be needed later.
@@ -2084,10 +2083,9 @@ void GrandCentralPass::runOnOperation() {
                       &getContext(), maybeExtractInfo->bindFilename.getValue(),
                       /*excludeFromFileList=*/true));
               op->setAttr("output_file",
-                          hw::OutputFileAttr::getFromDirectoryAndFilename(
+                          hw::OutputFileAttr::getAsDirectory(
                               &getContext(),
                               maybeExtractInfo->directory.getValue(),
-                              op.getName() + ".sv",
                               /*excludeFromFileList=*/true,
                               /*includeReplicatedOps=*/true));
               op->setAttr("comment",
