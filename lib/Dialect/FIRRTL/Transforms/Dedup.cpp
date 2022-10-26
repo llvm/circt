@@ -876,7 +876,7 @@ private:
   /// Take an annotation, and update it to be a non-local annotation.  If the
   /// annotation is already non-local and has enough context, it will be skipped
   /// for now.
-  void makeAnnotationNonLocal(SmallVectorImpl<FlatSymbolRefAttr> &nlaRefs,
+  void makeAnnotationNonLocal(
                               FModuleLike toModule, StringAttr toModuleName,
                               AnnoTarget to, FModuleLike fromModule,
                               AnnoTarget from, Annotation anno,
@@ -924,6 +924,8 @@ private:
       targetMap[nla.getAttr()].push_back(to);
   }
 
+  void copyAnnotations() {}
+
   /// Merge the annotations of a specific target, either a operation or a port
   /// on an operation.
   void mergeAnnotations(FModuleLike toModule,
@@ -932,40 +934,35 @@ private:
                         FModuleLike fromModule,
                         SmallVectorImpl<FlatSymbolRefAttr> &fromNLAs,
                         AnnoTarget from, AnnotationSet fromAnnos) {
-    // We want to make sure all NLAs are put right above the first module.
+
+    // This is a list of all the annotations which will be added to `to`.
     SmallVector<Annotation> newAnnotations;
-    SmallVector<unsigned> alreadyHandled;
-    for (auto anno : fromAnnos) {
-      // If the ops have the same annotation, we don't have to turn it into a
-      // non-local annotation.
-      auto found = llvm::find(toAnnos, anno);
-      if (found != toAnnos.end()) {
-        alreadyHandled.push_back(std::distance(toAnnos.begin(), found));
+    // We have special case handling of DontTouch to prevent it from being
+    // turned into a non-local annotation.
+    bool hasDontTouch = false;
+
+    // Iterate the `to` annotations, transforming non-common annotations into
+    // non-local ones.  We want to make sure that we keep the order of the
+    // annotations, and append any new annotations coming from the other module.
+    for (auto anno : toAnnos) {
+      if (anno.isClass(dontTouchAnnoClass)) {
+        // Skip this if we already have a DontTouch.
+        if (hasDontTouch)
+          continue;
+        // We don't worry if the DontTouch is non-local or not, we just copy it
+        // as is since it doesn't matter.
         newAnnotations.push_back(anno);
-        continue;
+        hasDontTouch = true;
       }
-      makeAnnotationNonLocal(toNLAs, toModule, toModule.moduleNameAttr(), to,
+      // Otherwise make the annotation non-local and add it to the set.
+      makeAnnotationNonLocal(toModule, toModule.moduleNameAttr(), to,
                              fromModule, from, anno, newAnnotations);
     }
 
-    // This is a helper to skip already handled annotations.
-    auto *it = alreadyHandled.begin();
-    auto *end = alreadyHandled.end();
-    auto getNextHandledIndex = [&]() -> unsigned {
-      if (it == end)
-        return -1;
-      return *(it++);
-    };
-    auto index = getNextHandledIndex();
-
-    // Merge annotations from the other op, skipping the ones already handled.
-    for (const auto &pair : llvm::enumerate(toAnnos)) {
-      // If its already handled, skip it.
-      if (pair.index() == index) {
-        index = getNextHandledIndex();
+    // Add the `from` annotations, this time skipping the common annotations.
+    for (auto anno : fromAnnos) {
+      if (localSet.count(anno.getAttr()))
         continue;
-      }
-      auto anno = pair.value();
       makeAnnotationNonLocal(fromNLAs, toModule, toModule.moduleNameAttr(), to,
                              toModule, to, anno, newAnnotations);
     }
