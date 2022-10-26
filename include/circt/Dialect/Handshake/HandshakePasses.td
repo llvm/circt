@@ -107,10 +107,21 @@ def HandshakeLockFunctions : Pass<"handshake-lock-functions", "handshake::FuncOp
   let summary = "Lock each function to only allow single invocations.";
   let description = [{
     This pass adds a locking mechanism to each handshake function. This mechanism
-    ensures that only one control token can be active in a function at each point
+    ensures 
+    that only one control token can be active in a function at each point
     in time.
   }];
   let constructor = "circt::handshake::createHandshakeLockFunctionsPass()";
+}
+
+def HandshakeLegalizeMemrefs : Pass<"handshake-legalize-memrefs", "mlir::func::FuncOp"> {
+  let summary = "Memref legalization and lowering pass.";
+  let description = [{
+    Lowers various memref operations to a state suitable for passing to the
+    StandardToHandshake lowering.
+  }];
+  let constructor = "circt::handshake::createHandshakeLegalizeMemrefsPass()";
+  let dependentDialects = ["mlir::scf::SCFDialect"];
 }
 
 #endif // CIRCT_DIALECT_HANDSHAKE_HANDSHAKEPASSES_TD
