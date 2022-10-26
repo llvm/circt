@@ -54,8 +54,8 @@ using namespace ExportVerilog;
 
 #define DEBUG_TYPE "export-verilog"
 
-constexpr int INDENT_AMOUNT = 2;
-constexpr int SPACE_PER_INDENT_IN_EXPRESSION_FORMATTING = 8;
+constexpr int indentAmount = 2;
+constexpr int spacePerIndentInExpressionFormatting = 8;
 StringRef circtHeader = "circt_header.svh";
 StringRef circtHeaderInclude = "`include \"circt_header.svh\"\n";
 
@@ -880,11 +880,11 @@ public:
 
   raw_ostream &indent() { return os.indent(state.currentIndent); }
 
-  void addIndent() { state.currentIndent += INDENT_AMOUNT; }
+  void addIndent() { state.currentIndent += indentAmount; }
   void reduceIndent() {
-    assert(state.currentIndent >= INDENT_AMOUNT &&
+    assert(state.currentIndent >= indentAmount &&
            "Unintended indent wrap-around.");
-    state.currentIndent -= INDENT_AMOUNT;
+    state.currentIndent -= indentAmount;
   }
 
   /// If we have location information for any of the specified operations,
@@ -1973,8 +1973,7 @@ void ExprEmitter::formatOutBuffer() {
         currentIndex + tokenLength > state.options.emittedLineLength) {
       // It breaks the line constraint, so insert a newline and indent.
       tmpOs << '\n';
-      tmpOs.indent(state.currentIndent *
-                   SPACE_PER_INDENT_IN_EXPRESSION_FORMATTING);
+      tmpOs.indent(state.currentIndent * spacePerIndentInExpressionFormatting);
       currentIndex = tokenLength;
       tmpOutBuffer.insert(tmpOutBuffer.end(), it, next);
     } else {
@@ -3621,7 +3620,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       } else {
         os << ",\n";
       }
-      os.indent(state.currentIndent + INDENT_AMOUNT) << '.';
+      os.indent(state.currentIndent + indentAmount) << '.';
       os << state.globalNames.getParameterVerilogName(moduleOp,
                                                       param.getName());
       os << '(';
