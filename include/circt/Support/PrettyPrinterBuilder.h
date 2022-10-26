@@ -67,6 +67,11 @@ struct BufferingPP {
   }
 };
 
+namespace detail {
+void emitNBSP(unsigned n, llvm::function_ref<void(Token)> add);
+} // end namespace detail
+
+/// Add convenience methods for generating pretty-printing tokens.
 template <typename PPTy = PrettyPrinter>
 class PPBuilder {
   PPTy &pp;
@@ -89,6 +94,11 @@ public:
 
   /// Add a non-breaking space.
   void nbsp() { literal(" "); }
+
+  /// Add multiple non-breaking spaces as a single token.
+  void nbsp(unsigned n) {
+    detail::emitNBSP(n, [&](Token t) { addToken(t); });
+  }
 
   /// Add a newline (break too wide to fit, always breaks).
   void newline() { add<BreakToken>(PrettyPrinter::kInfinity); }
@@ -286,14 +296,12 @@ public:
   }
   PPStream &writeQuotedEscaped(StringRef str, bool useHexEscapes = false,
                                StringRef left = "\"", StringRef right = "\"") {
-    SmallString<64> ss;
-    {
-      llvm::raw_svector_ostream os(ss);
+    invokeWithStringOS([&](auto &os) {
       os << left;
       os.write_escaped(str, useHexEscapes);
       os << right;
-    }
-    return *this << ss;
+    });
+    return *this;
   }
 };
 
