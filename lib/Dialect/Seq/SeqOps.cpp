@@ -220,6 +220,35 @@ void HLMemOp::build(OpBuilder &builder, OperationState &result, Value clk,
 }
 
 //===----------------------------------------------------------------------===//
+// FIFOOp
+//===----------------------------------------------------------------------===//
+
+void FIFOOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  if (getOutputs().size() == 1)
+    setNameFn(getOutputs()[0], "out");
+  else {
+    for (auto [i, output] : llvm::enumerate(getOutputs()))
+      setNameFn(output, "out" + std::to_string(i));
+  }
+  setNameFn(getEmpty(), "empty");
+  setNameFn(getFull(), "full");
+  setNameFn(getAlmostEmpty(), "almostEmpty");
+  setNameFn(getAlmostFull(), "almostFull");
+}
+
+LogicalResult FIFOOp::verify() {
+  unsigned outputWidth = 0;
+  unsigned inputWidth = getInput().getType().getIntOrFloatBitWidth();
+  for (auto output : getOutputs())
+    outputWidth += output.getType().getIntOrFloatBitWidth();
+  if (outputWidth != inputWidth)
+    return emitOpError(
+               "combined output width must match input width (expected ")
+           << inputWidth << " but got " << outputWidth << ")";
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // CompRegOp
 
 template <bool ClockEnabled>

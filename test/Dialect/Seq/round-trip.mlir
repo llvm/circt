@@ -54,3 +54,13 @@ hw.module @ClockGate(%clock: i1, %enable: i1, %test_enable: i1) {
   %cg0 = seq.clock_gate %clock, %enable
   %cg1 = seq.clock_gate %clock, %enable, %test_enable
 }
+
+hw.module @fifo1(%clk : i1, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> () {
+  // CHECK: %out, %empty, %full, %almostEmpty, %almostFull = seq.fifo[3] (%in, %rdEn, %wrEn) %clk, %rst : (i32) -> i32
+  %out, %empty, %full, %almostEmpty, %almostFull = seq.fifo[3] (%in, %rdEn, %wrEn) %clk, %rst : (i32) -> i32
+}
+
+hw.module @fifo2(%clk : i1, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> () {
+  // CHECK: %out0, %out1, %empty, %full, %almostEmpty, %almostFull = seq.fifo[3] (%in, %rdEn, %wrEn) %clk, %rst : (i32) -> (i16, i16)
+  %out0, %out1, %empty, %full, %almostEmpty, %almostFull = seq.fifo[3] (%in, %rdEn, %wrEn) %clk, %rst : (i32) -> (i16, i16)
+}
