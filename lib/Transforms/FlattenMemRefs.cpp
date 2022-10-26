@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetail.h"
+#include "circt/Transforms/Passes.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -28,7 +29,7 @@
 using namespace mlir;
 using namespace circt;
 
-static bool isUniDimensional(MemRefType memref) {
+bool circt::isUniDimensional(MemRefType memref) {
   return memref.getShape().size() == 1;
 }
 
@@ -46,7 +47,7 @@ static Value flattenIndices(ConversionPatternRewriter &rewriter, Operation *op,
   assert(memrefType.hasStaticShape() && "expected statically shaped memref");
   Location loc = op->getLoc();
 
-  if (indices.size() == 0) {
+  if (indices.empty()) {
     // Singleton memref (e.g. memref<i32>) - return 0.
     return rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexAttr(0))
         .getResult();
@@ -153,39 +154,17 @@ struct AllocOpConversion : public OpConversionPattern<memref::AllocOp> {
   }
 };
 
-struct ReturnOpConversion : public OpConversionPattern<func::ReturnOp> {
-  using OpConversionPattern::OpConversionPattern;
-
+// A generic pattern which will replace an op with a new op of the same type
+// but using the adaptor (type converted) operands.
+template <typename TOp>
+struct OperandConversionPattern : public OpConversionPattern<TOp> {
+  using OpConversionPattern<TOp>::OpConversionPattern;
+  using OpAdaptor = typename TOp::Adaptor;
   LogicalResult
-  matchAndRewrite(func::ReturnOp op, OpAdaptor adaptor,
+  matchAndRewrite(TOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<func::ReturnOp>(op, adaptor.operands());
-    return success();
-  }
-};
-
-struct CondBranchOpConversion
-    : public OpConversionPattern<mlir::cf::CondBranchOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(mlir::cf::CondBranchOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<mlir::cf::CondBranchOp>(
-        op, adaptor.getCondition(), adaptor.getTrueDestOperands(),
-        adaptor.getFalseDestOperands(), op.getTrueDest(), op.getFalseDest());
-    return success();
-  }
-};
-
-struct BranchOpConversion : public OpConversionPattern<mlir::cf::BranchOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(mlir::cf::BranchOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<mlir::cf::BranchOp>(op, op.getDest(),
-                                                    adaptor.getDestOperands());
+    rewriter.replaceOpWithNewOp<TOp>(op, op->getResultTypes(),
+                                     adaptor.getOperands(), op->getAttrs());
     return success();
   }
 };
@@ -234,12 +213,13 @@ private:
   bool rewriteFunctions;
 };
 
-template <typename TOp>
+template <typename... TOp>
 void addGenericLegalityConstraint(ConversionTarget &target) {
-  target.addDynamicallyLegalOp<TOp>([](TOp op) {
+  (target.addDynamicallyLegalOp<TOp>([](TOp op) {
     return !hasMultiDimMemRef(op->getOperands()) &&
            !hasMultiDimMemRef(op->getResults());
-  });
+  }),
+   ...);
 }
 
 static void populateFlattenMemRefsLegality(ConversionTarget &target) {
@@ -251,10 +231,9 @@ static void populateFlattenMemRefsLegality(ConversionTarget &target) {
   target.addDynamicallyLegalOp<memref::LoadOp>(
       [](memref::LoadOp op) { return op.getIndices().size() == 1; });
 
-  addGenericLegalityConstraint<mlir::cf::CondBranchOp>(target);
-  addGenericLegalityConstraint<mlir::cf::BranchOp>(target);
-  addGenericLegalityConstraint<func::CallOp>(target);
-  addGenericLegalityConstraint<func::ReturnOp>(target);
+  addGenericLegalityConstraint<mlir::cf::CondBranchOp, mlir::cf::BranchOp,
+                               func::CallOp, func::ReturnOp, memref::DeallocOp,
+                               memref::CopyOp>(target);
 
   target.addDynamicallyLegalOp<func::FuncOp>([](func::FuncOp op) {
     auto argsConverted = llvm::none_of(op.getBlocks(), [](auto &block) {
@@ -317,8 +296,13 @@ public:
     RewritePatternSet patterns(ctx);
     SetVector<StringRef> rewrittenCallees;
     patterns.add<LoadOpConversion, StoreOpConversion, AllocOpConversion,
-                 ReturnOpConversion, CondBranchOpConversion, BranchOpConversion,
-                 CallOpConversion>(typeConverter, ctx);
+                 OperandConversionPattern<func::ReturnOp>,
+                 OperandConversionPattern<memref::DeallocOp>,
+                 OperandConversionPattern<mlir::cf::CondBranchOp>,
+                 OperandConversionPattern<mlir::cf::BranchOp>,
+                 OperandConversionPattern<memref::DeallocOp>,
+                 OperandConversionPattern<memref::CopyOp>, CallOpConversion>(
+        typeConverter, ctx);
     populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(
         patterns, typeConverter);
 
