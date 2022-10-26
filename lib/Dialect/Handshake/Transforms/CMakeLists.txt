@@ -17,6 +17,7 @@ add_circt_dialect_library(CIRCTHandshakeTransforms
   CIRCTSupport
   CIRCTTransforms
   MLIRIR
+  MLIRSCFDialect
   MLIRPass
   MLIRTransformUtils
   MLIRMemRefDialect
