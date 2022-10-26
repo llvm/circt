@@ -45,6 +45,13 @@ static Value flattenIndices(ConversionPatternRewriter &rewriter, Operation *op,
                             ValueRange indices, MemRefType memrefType) {
   assert(memrefType.hasStaticShape() && "expected statically shaped memref");
   Location loc = op->getLoc();
+
+  if (indices.size() == 0) {
+    // Singleton memref (e.g. memref<i32>) - return 0.
+    return rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexAttr(0))
+        .getResult();
+  }
+
   Value finalIdx = indices.front();
   for (auto memIdx : llvm::enumerate(indices.drop_front())) {
     Value partialIdx = memIdx.value();

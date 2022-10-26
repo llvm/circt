@@ -154,3 +154,20 @@ func.func @calls() {
   %1 = call @foo(%0) : (memref<4x4xi32>) -> (memref<4x4xi32>)
   return
 }
+
+// -----
+
+// CHECK-LABEL:   func.func @as_singleton(
+// CHECK-SAME:                            %[[VAL_0:.*]]: memref<1xi32>,
+// CHECK-SAME:                            %[[VAL_1:.*]]: index) -> i32 {
+// CHECK:           %[[VAL_2:.*]] = arith.constant 0 : index
+// CHECK:           %[[VAL_3:.*]] = memref.load %[[VAL_0]]{{\[}}%[[VAL_2]]] : memref<1xi32>
+// CHECK:           %[[VAL_4:.*]] = arith.constant 0 : index
+// CHECK:           memref.store %[[VAL_3]], %[[VAL_0]]{{\[}}%[[VAL_4]]] : memref<1xi32>
+// CHECK:           return %[[VAL_3]] : i32
+// CHECK:         }
+func.func @as_singleton(%a : memref<i32>, %i : index) -> i32 {
+  %0 = memref.load %a[] : memref<i32>
+  memref.store %0, %a[] : memref<i32>
+  return %0 : i32
+}
