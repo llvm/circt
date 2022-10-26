@@ -130,6 +130,11 @@ def HLMemOp : SeqOp<"hlmem", [
     HLMemType getMemType() { return getHandle().getType().cast<HLMemType>(); }
   }];
 
+  let builders = [
+    OpBuilder<(ins "Value":$clk, "Value":$rst, "StringRef":$symName,
+                   "llvm::ArrayRef<int64_t>":$shape, "Type":$elementType)>
+  ];
+
   let assemblyFormat = "$sym_name $clk `,` $rst attr-dict `:` type($handle)";
 }
 
@@ -156,6 +161,9 @@ def ReadPortOp : SeqOp<"read", [
   );
   let results = (outs AnyType:$readData);
   let hasCustomAssemblyFormat = 1;
+  let builders = [OpBuilder<(
+    ins "Value":$memory, "ValueRange":$addresses, "Value":$rdEn, "unsigned":$latency)>
+  ];
 }
 
 def WritePortOp : SeqOp<"write", [

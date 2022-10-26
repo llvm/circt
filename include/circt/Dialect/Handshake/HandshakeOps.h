@@ -35,14 +35,14 @@
 namespace circt {
 namespace handshake {
 
-struct ExtMemLoadInterface {
+struct MemLoadInterface {
   unsigned index;
   mlir::Value addressIn;
   mlir::Value dataOut;
   mlir::Value doneOut;
 };
 
-struct ExtMemStoreInterface {
+struct MemStoreInterface {
   unsigned index;
   mlir::Value addressIn;
   mlir::Value dataIn;

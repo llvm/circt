@@ -255,6 +255,7 @@ static void loadFIRRTLLoweringPipeline(OpPassManager &pm) {
 
 static void loadHWLoweringPipeline(OpPassManager &pm) {
   pm.addPass(createSimpleCanonicalizerPass());
+  pm.nest<hw::HWModuleOp>().addPass(circt::seq::createLowerSeqHLMemPass());
   pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass());
   pm.addPass(sv::createHWMemSimImplPass(false, false));
   pm.addPass(seq::createSeqLowerToSVPass());
