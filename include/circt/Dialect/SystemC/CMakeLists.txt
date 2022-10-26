@@ -18,3 +18,8 @@ mlir_tablegen(SystemCOpInterfaces.h.inc -gen-op-interface-decls)
 mlir_tablegen(SystemCOpInterfaces.cpp.inc -gen-op-interface-defs)
 add_public_tablegen_target(CIRCTSystemCOpInterfacesIncGen)
 add_dependencies(circt-headers CIRCTSystemCOpInterfacesIncGen)
+
+set(LLVM_TARGET_DEFINITIONS Passes.td)
+mlir_tablegen(Passes.h.inc -gen-pass-decls)
+add_public_tablegen_target(CIRCTSystemCTransformsIncGen)
+add_circt_doc(Passes SystemCPasses -gen-pass-doc)

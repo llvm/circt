@@ -24,3 +24,5 @@ add_circt_dialect_library(CIRCTSystemC
 )
 
 add_dependencies(circt-headers MLIRSystemCIncGen)
+
+add_subdirectory(Transforms)
