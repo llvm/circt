@@ -29,6 +29,14 @@ std::unique_ptr<mlir::Pass> createStripDebugInfoWithPredPass(
     const std::function<bool(mlir::Location)> &pred);
 
 //===----------------------------------------------------------------------===//
+// Utility functions.
+//===----------------------------------------------------------------------===//
+
+// Returns true if the provided memref is considered unidimensional (having a
+// shape of size 1).
+bool isUniDimensional(mlir::MemRefType memref);
+
+//===----------------------------------------------------------------------===//
 // Registration
 //===----------------------------------------------------------------------===//
 

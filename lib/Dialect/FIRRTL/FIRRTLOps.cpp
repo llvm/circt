@@ -302,7 +302,7 @@ static void printCircuitOpAttrs(OpAsmPrinter &p, Operation *op,
   p.printOptionalAttrDictWithKeyword(op->getAttrs(), elidedAttrs);
 }
 
-LogicalResult CircuitOp::verify() {
+LogicalResult CircuitOp::verifyRegions() {
   StringRef main = getName();
 
   // Check that the circuit has a non-empty name.

@@ -89,7 +89,7 @@ InlineEmitter EmissionPrinter::getInlinable(Value value) {
       << value << "'\n";
   err.attachNote(requestLoc) << "requested to be inlined here";
   return InlineEmitter(
-      [&]() { os << "<<INVALID VALUE TO INLINE (" << value << ")>>"; },
+      [=]() { os << "<<INVALID VALUE TO INLINE (" << value << ")>>"; },
       Precedence::LIT, *this);
 }
 

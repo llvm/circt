@@ -3452,9 +3452,10 @@ Value FIRRTLLowering::createArrayIndexing(Value array, Value index) {
   }
 
   Value inBoundsRead;
-  // If `stripMuxPragmas` is specified, just lower to a vanilla array
-  // indexing.
-  if (circuitState.stripMuxPragmas) {
+  // If `stripMuxPragmas` is specified, just lower to a vanilla array indexing.
+  // Also remove mux pragmas if the array size is 1 since it causes a
+  // complication failure.
+  if (circuitState.stripMuxPragmas || size <= 1) {
     inBoundsRead = builder.create<hw::ArrayGetOp>(array, index);
   } else {
     auto arrayGet = builder.create<hw::ArrayGetOp>(array, index);

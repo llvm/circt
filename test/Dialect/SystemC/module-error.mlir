@@ -30,7 +30,7 @@
 
 // expected-note @+1 {{in module '@verifierTest'}}
 "systemc.module"() ({
-  // expected-error @+2 {{redefines port name 'port2'}}
+  // expected-error @+2 {{redefines name 'port2'}}
   // expected-note @+1 {{'port2' first defined here}}
   ^bb0(%arg0: !systemc.out<i4>, %arg1: !systemc.in<i32>, %arg2: !systemc.out<i4>, %arg3: !systemc.inout<i8>):
   }) {function_type = (!systemc.out<i4>, !systemc.in<i32>, !systemc.out<i4>, !systemc.inout<i8>) -> (), portNames = ["port0", "port1", "port2", "port2"], sym_name = "verifierTest"} : () -> ()

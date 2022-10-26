@@ -491,7 +491,8 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
                         .cast<FIRRTLBaseType>();
     Value resolveResult = refResolve.getResult();
     if (refResolve.getType().isResetType() &&
-        refResolve.getType() != wireType) {
+        refResolve.getType().getWidthlessType() !=
+            wireType.getWidthlessType()) {
       if (wireType.dyn_cast<IntType>())
         resolveResult =
             refResolveBuilder.create<AsUIntPrimOp>(wireType, refResolve);

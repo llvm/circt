@@ -1495,3 +1495,24 @@ firrtl.circuit "TraceNameAnnotation" attributes {rawAnnotations = [
     %w = firrtl.wire : !firrtl.uint<1>
   }
 }
+
+// -----
+
+// Test that the valid types are connected, when the source has un-inferred width but sink has width.
+firrtl.circuit "Top"  attributes {rawAnnotations = [{
+  class = "sifive.enterprise.grandcentral.DataTapsAnnotation",
+  keys = [{
+    class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+    sink = "~Top|Top>tap", source = "~Top|Foo>sum"
+    }]}]} {
+  firrtl.module private @Foo() {
+    %sum = firrtl.wire : !firrtl.uint
+  }
+  // CHECK-LABEL: firrtl.module @Top
+  firrtl.module @Top() {
+    firrtl.instance foo interesting_name  @Foo()
+    %tap = firrtl.wire interesting_name  : !firrtl.uint<8>
+    // CHECK:   %[[v0:.+]] = firrtl.ref.resolve %foo__gen_tap : !firrtl.ref<uint>
+    // CHECK:   firrtl.connect %tap, %[[v0]] : !firrtl.uint<8>, !firrtl.uint
+  }
+}

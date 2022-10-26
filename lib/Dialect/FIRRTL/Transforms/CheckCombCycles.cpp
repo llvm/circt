@@ -60,6 +60,19 @@ struct Node {
   explicit Node(Value value = nullptr, NodeContext *context = nullptr)
       : value(value), context(context) {}
 
+  explicit Node(Operation *op, NodeContext *nodeCtxt) : context(nodeCtxt) {
+    if (!op) {
+      value = nullptr;
+      return;
+    }
+    // Assumption is that the op can either be connect, or with only one result.
+    // This is ensured in ChildIterator::skipToNextValidChild.
+    value = TypeSwitch<Operation *, Value>(op)
+                .Case<FConnectLike>(
+                    [&](FConnectLike connect) { return connect.getDest(); })
+                .Default([&](auto) { return op->getResult(0); });
+  }
+
   bool operator==(const Node &rhs) const { return value == rhs.value; }
   bool operator!=(const Node &rhs) const { return !(*this == rhs); }
   bool isNull() const { return value == nullptr; }
@@ -109,13 +122,11 @@ public:
     return *this;
   }
 
-  Value operator*() {
+  Operation *operator*() {
     assert(!isAtEnd() && "dereferencing the end iterator");
     LLVM_DEBUG(llvm::dbgs()
                << "\n ChildIterator dereference :" << *childIt->getOwner());
-    if (auto connect = dyn_cast<FConnectLike>(childIt->getOwner()))
-      return connect.getDest();
-    return childIt->getOwner()->getResult(0);
+    return childIt->getOwner();
   }
 
   bool operator==(const ChildIterator &rhs) const {
@@ -208,8 +219,12 @@ public:
   }
 
   InstanceNodeIterator &operator++() {
-    ++portIt;
-    skipToNextValidPort();
+    if (!child.isAtEnd())
+      ++child;
+    else {
+      ++portIt;
+      skipToNextValidPort();
+    }
     return *this;
   }
 
@@ -277,7 +292,10 @@ public:
   }
 
   SubfieldNodeIterator &operator++() {
-    child = ChildIterator();
+    if (!child.isAtEnd())
+      ++child;
+    else
+      child = ChildIterator();
     return *this;
   }
 
@@ -298,9 +316,8 @@ class DummySourceNodeIterator
     : public llvm::iterator_facade_base<DummySourceNodeIterator,
                                         std::forward_iterator_tag, Node> {
 public:
-  explicit DummySourceNodeIterator(Node node, bool end = false)
-      : node(node), connect(end ? node.context->connects.end()
-                                : node.context->connects.begin()) {}
+  explicit DummySourceNodeIterator(Node node)
+      : node(node), connect(node.context->connects.begin()) {}
 
   using llvm::iterator_facade_base<DummySourceNodeIterator,
                                    std::forward_iterator_tag, Node>::operator++;
@@ -312,7 +329,7 @@ public:
   Node operator*() {
     assert(connect != node.context->connects.end() &&
            "dereferencing the end iterator");
-    return Node((*connect).getDest(), node.context);
+    return Node(*connect, node.context);
   }
 
   bool operator==(const DummySourceNodeIterator &rhs) const {
@@ -350,7 +367,7 @@ public:
     if (end)
       return NodeIterator(Node(nullptr, node.context));
     if (!node.value)
-      return DummySourceNodeIterator(node, end);
+      return DummySourceNodeIterator(node);
 
     auto defOp = node.value.getDefiningOp();
     if (!defOp)

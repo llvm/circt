@@ -18,7 +18,6 @@
 #include "circt/Conversion/ExportVerilog.h"
 #include "../PassDetail.h"
 #include "ExportVerilogInternals.h"
-#include "RearrangableOStream.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -79,8 +78,7 @@ enum VerilogPrecedence {
   AndShortCircuit, // &&
   Conditional,     // ? :
 
-  LowestPrecedence,  // Sentinel which is always the lowest precedence.
-  ForceEmitMultiUse, // Sentinel saying to recursively emit a multi-used expr.
+  LowestPrecedence, // Sentinel which is always the lowest precedence.
 };
 
 /// This enum keeps track of whether the emitted subexpression is signed or
@@ -606,6 +604,54 @@ static bool isExpressionUnableToInline(Operation *op) {
     }
   }
   return false;
+}
+
+enum class BlockStatementCount { Zero, One, TwoOrMore };
+
+/// Compute how many statements are within this block, for begin/end markers.
+static BlockStatementCount countStatements(Block &block) {
+  unsigned numStatements = 0;
+  block.walk([&](Operation *op) {
+    if (isVerilogExpression(op))
+      return WalkResult::advance();
+    numStatements +=
+        TypeSwitch<Operation *, unsigned>(op)
+            .Case<VerbatimOp>([&](auto) {
+              // We don't know how many statements we emitted, so assume
+              // conservatively that a lot got put out. This will make sure we
+              // get a begin/end block around this.
+              return 3;
+            })
+            .Case<IfOp>([&](auto) {
+              // We count if as multiple statements to make sure it is always
+              // surrounded by a begin/end so we don't get if/else confusion in
+              // cases like this:
+              // if (cond)
+              //   if (otherCond)    // This should force a begin!
+              //     stmt
+              // else                // Goes with the outer if!
+              //   thing;
+              return 2;
+            })
+            .Case<IfDefOp, IfDefProceduralOp>([&](auto) { return 3; })
+            .Case<OutputOp>([&](OutputOp oop) {
+              // Skip single-use instance outputs, they don't get statements.
+              // Keep this synchronized with visitStmt(InstanceOp,OutputOp).
+              return llvm::count_if(oop->getOperands(), [&](auto operand) {
+                return !operand.hasOneUse() ||
+                       !dyn_cast_or_null<InstanceOp>(operand.getDefiningOp());
+              });
+            })
+            .Default([](auto) { return 1; });
+    if (numStatements > 1)
+      return WalkResult::interrupt();
+    return WalkResult::advance();
+  });
+  if (numStatements == 0)
+    return BlockStatementCount::Zero;
+  if (numStatements == 1)
+    return BlockStatementCount::One;
+  return BlockStatementCount::TwoOrMore;
 }
 
 /// Return true if this expression should be emitted inline into any statement
@@ -1452,9 +1498,12 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   }
 
   StringRef operatorStr;
-  VerilogPrecedence subprecedence = ForceEmitMultiUse;
+  StringRef openStr, closeStr;
+  VerilogPrecedence subprecedence = LowestPrecedence;
+  VerilogPrecedence prec; // precedence of the emitted expression.
   Optional<SubExprSignResult> operandSign;
   bool isUnary = false;
+  bool hasOpenClose = false;
 
   switch (expr.getOpcode()) {
   case PEO::Add:
@@ -1513,16 +1562,30 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     operandSign = IsSigned;
     break;
   case PEO::CLog2:
-    operatorStr = "$clog2";
+    openStr = "$clog2(";
+    closeStr = ")";
     operandSign = IsUnsigned;
-    isUnary = true;
+    hasOpenClose = true;
+    prec = Symbol;
     break;
   case PEO::StrConcat:
+    openStr = "{";
+    closeStr = "}";
+    hasOpenClose = true;
     operatorStr = ", ";
-    subprecedence = Symbol;
-    isUnary = false;
+    // We don't have Concat precedence, but it's lowest anyway. (SV Table 11-2).
+    subprecedence = LowestPrecedence;
+    prec = Symbol;
     break;
   }
+  if (!hasOpenClose)
+    prec = subprecedence;
+
+  // unary -> one element.
+  assert(!isUnary || llvm::hasSingleElement(expr.getOperands()));
+  // one element -> {unary || open/close}.
+  assert(isUnary || hasOpenClose ||
+         !llvm::hasSingleElement(expr.getOperands()));
 
   // Emit the specified operand with a $signed() or $unsigned() wrapper around
   // it if context requires a specific signedness to compute the right value.
@@ -1530,24 +1593,29 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   // TODO: This could try harder to omit redundant casts like the mainline
   // expression emitter.
   auto emitOperand = [&](Attribute operand) -> bool {
+    // If surrounding with signed/unsigned, inner expr doesn't need parens.
+    auto subprec = operandSign.has_value() ? LowestPrecedence : subprecedence;
     if (operandSign.has_value())
-      os << (operandSign.value() == IsSigned ? "$signed(" : "$unsigned(");
+      os << (*operandSign == IsSigned ? "$signed(" : "$unsigned(");
     auto signedness =
-        printParamValue(operand, os, subprecedence, emitError).signedness;
+        printParamValue(operand, os, subprec, emitError).signedness;
     if (operandSign.has_value()) {
       os << ')';
-      signedness = operandSign.value();
+      signedness = *operandSign;
     }
     return signedness == IsSigned;
   };
 
-  if (isUnary)
+  // Check outer precedence, wrap in parentheses if needed.
+  if (prec > parenthesizeIfLooserThan)
+    os << '(';
+
+  // Emit opening portion of the operation.
+  if (hasOpenClose)
+    os << openStr;
+  else if (isUnary)
     os << operatorStr;
 
-  if (subprecedence > parenthesizeIfLooserThan)
-    os << '(';
-  if (expr.getOpcode() == PEO::StrConcat)
-    os << '{';
   bool allOperandsSigned = emitOperand(expr.getOperands()[0]);
   for (auto op : expr.getOperands().drop_front()) {
     // Handle the special case of (a + b + -42) as (a + b - 42).
@@ -1567,13 +1635,13 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     os << operatorStr;
     allOperandsSigned &= emitOperand(op);
   }
-  if (expr.getOpcode() == PEO::StrConcat)
-    os << '}';
-  if (subprecedence > parenthesizeIfLooserThan) {
+  if (hasOpenClose)
+    os << closeStr;
+  if (prec > parenthesizeIfLooserThan) {
     os << ')';
-    subprecedence = Symbol;
+    prec = Selection;
   }
-  return {subprecedence, allOperandsSigned ? IsSigned : IsUnsigned};
+  return {prec, allOperandsSigned ? IsSigned : IsUnsigned};
 }
 
 //===----------------------------------------------------------------------===//
@@ -2279,11 +2347,17 @@ SubExprInfo ExprEmitter::visitTypeOp(ArrayCreateOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   os << '{';
-  llvm::interleaveComma(op.getInputs(), os, [&](Value operand) {
-    os << "{";
-    emitSubExpr(operand, LowestPrecedence);
+  if (op.isUniform()) {
+    os << op.getInputs().size() << "{";
+    emitSubExpr(op.getUniformElement(), LowestPrecedence);
     os << "}";
-  });
+  } else {
+    llvm::interleaveComma(op.getInputs(), os, [&](Value operand) {
+      os << "{";
+      emitSubExpr(operand, LowestPrecedence);
+      os << "}";
+    });
+  }
   os << '}';
   return {Unary, IsUnsigned};
 }
@@ -2557,14 +2631,12 @@ class StmtEmitter : public EmitterBase,
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
   /// of any emitted expressions in the specified set.
-  StmtEmitter(ModuleEmitter &emitter, RearrangableOStream &outStream,
+  StmtEmitter(ModuleEmitter &emitter, llvm::raw_ostream &os,
               ModuleNameManager &names)
-      : EmitterBase(emitter.state, outStream), emitter(emitter),
-        rearrangableStream(outStream), names(names) {}
+      : EmitterBase(emitter.state, os), emitter(emitter), names(names) {}
 
   void emitStatement(Operation *op);
   void emitStatementBlock(Block &body);
-  size_t getNumStatementsEmitted() const { return numStatementsEmitted; }
 
   /// Emit a declaration.
   LogicalResult emitDeclaration(Operation *op);
@@ -2587,11 +2659,6 @@ private:
   LogicalResult visitInvalidStmt(Operation *op) { return failure(); }
   LogicalResult visitUnhandledSV(Operation *op) { return failure(); }
   LogicalResult visitInvalidSV(Operation *op) { return failure(); }
-
-  LogicalResult emitNoop() {
-    --numStatementsEmitted;
-    return success();
-  }
 
   LogicalResult visitSV(WireOp op) { return emitDeclaration(op); }
   LogicalResult visitSV(RegOp op) { return emitDeclaration(op); }
@@ -2672,17 +2739,8 @@ public:
   ModuleEmitter &emitter;
 
 private:
-  /// This is the current ostream we're emiting to, when we know it is a
-  /// rearrangableStream.
-  RearrangableOStream &rearrangableStream;
-
   /// Track the legalized names.
   ModuleNameManager &names;
-
-  /// This keeps track of the number of statements emitted, important for
-  /// determining if we need to put out a begin/end marker in a block
-  /// declaration.
-  size_t numStatementsEmitted = 0;
 
   /// These keep track of the maximum length of name width and type width in the
   /// current statement scope.
@@ -2851,8 +2909,6 @@ LogicalResult StmtEmitter::visitSV(InterfaceInstanceOp op) {
 /// For OutputOp we put "assign" statements at the end of the Verilog module to
 /// assign the module outputs to intermediate wires.
 LogicalResult StmtEmitter::visitStmt(OutputOp op) {
-  --numStatementsEmitted; // Count emitted statements manually.
-
   SmallPtrSet<Operation *, 8> ops;
   HWModuleOp parent = op->getParentOfType<HWModuleOp>();
 
@@ -2861,6 +2917,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
     auto operand = op.getOperand(operandIndex);
     // Outputs that are set by the output port of an instance are handled
     // directly when the instance is emitted.
+    // Keep synced with countStatements() and visitStmt(InstanceOp).
     if (operand.hasOneUse() &&
         dyn_cast_or_null<InstanceOp>(operand.getDefiningOp())) {
       ++operandIndex;
@@ -2877,7 +2934,6 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
     os << ';';
     emitLocationInfoAndNewLine(ops);
     ++operandIndex;
-    ++numStatementsEmitted;
   }
   return success();
 }
@@ -2964,11 +3020,6 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
   }
 
   emitLocationInfoAndNewLine(ops);
-
-  // We don't know how many statements we emitted, so assume conservatively
-  // that a lot got put out. This will make sure we get a begin/end block around
-  // this.
-  numStatementsEmitted += 2;
   return success();
 }
 
@@ -3261,11 +3312,6 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
   }
 
   indent() << "`endif // " << (hasEmptyThen ? "not def " : "") << ident << "\n";
-
-  // We don't know how many statements we emitted, so assume conservatively
-  // that a lot got put out. This will make sure we get a begin/end block around
-  // this.
-  numStatementsEmitted += 2;
   return success();
 }
 
@@ -3277,31 +3323,23 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
                                        SmallPtrSet<Operation *, 8> &locationOps,
                                        StringRef multiLineComment) {
 
-  // We don't know if we need to emit the begin until after we emit the body of
-  // the block.  We can have multiple ops that fold together into one statement
-  // (common in nested expressions feeding into a connect) or one apparently
-  // simple set of operations that gets broken across multiple lines because
-  // they are too long.
-  //
-  // Solve this by emitting the statements, determining if we need to
-  // emit the begin, and if so, emit the begin retroactively.
-  RearrangableOStream::Cursor beginInsertPoint = rearrangableStream.getCursor();
+  // Determine if we need begin/end by scanning the block.
+  auto count = countStatements(*block);
+  auto needsBeginEnd = count != BlockStatementCount::One;
+  if (needsBeginEnd)
+    os << " begin";
   emitLocationInfoAndNewLine(locationOps);
 
-  auto numEmittedBefore = getNumStatementsEmitted();
-  emitStatementBlock(*block);
+  if (count != BlockStatementCount::Zero)
+    emitStatementBlock(*block);
 
-  // If we emitted exactly one statement, then we are done.
-  if (getNumStatementsEmitted() - numEmittedBefore == 1)
-    return;
-
-  // Otherwise we emit the begin and end logic.
-  rearrangableStream.insertLiteral(beginInsertPoint, " begin");
-
-  indent() << "end";
-  if (!multiLineComment.empty())
-    os << " // " << multiLineComment;
-  os << '\n';
+  if (needsBeginEnd) {
+    indent() << "end";
+    // Emit comment if there's an 'end', regardless of line count.
+    if (!multiLineComment.empty())
+      os << " // " << multiLineComment;
+    os << '\n';
+  }
 }
 
 LogicalResult StmtEmitter::visitSV(OrderedOutputOp ooop) {
@@ -3316,7 +3354,6 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
 
   indent() << "if (";
 
@@ -3324,6 +3361,9 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
   // it (either "if (" or "else if (") was printed already.
   IfOp ifOp = op;
   for (;;) {
+    ops.clear();
+    ops.insert(ifOp);
+
     // Emit the condition and the then block.
     emitExpression(ifOp.getCond(), ops);
     os << ')';
@@ -3332,30 +3372,23 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
     if (!ifOp.hasElse())
       break;
 
-    // The else block does not contain an if-else that can be flattened.
     Block *elseBlock = ifOp.getElseBlock();
-    ifOp = findNestedElseIf(elseBlock);
-    if (!ifOp) {
+    auto nestedElseIfOp = findNestedElseIf(elseBlock);
+    if (!nestedElseIfOp) {
+      // The else block does not contain an if-else that can be flattened.
+      ops.clear();
+      ops.insert(ifOp);
       indent() << "else";
       emitBlockAsStatement(elseBlock, ops);
       break;
     }
 
-    // Introduce the 'else if', but iteratively continue unfolding any if-else
-    // statements inside of it.  Any wires that would have been generated to
-    // represent the condition will be hoisted to the parent scope of the outer
-    // `if` instead of being placed in a new block scope.
+    // Introduce the 'else if', and iteratively continue unfolding any if-else
+    // statements inside of it.
+    ifOp = nestedElseIfOp;
     indent() << "else if (";
   }
 
-  // We count if as multiple statements to make sure it is always surrounded by
-  // a begin/end so we don't get if/else confusion in cases like this:
-  // if (cond)
-  //   if (otherCond)    // This should force a begin!
-  //     stmt
-  // else                // Goes with the outer if!
-  //   thing;
-  ++numStatementsEmitted;
   return success();
 }
 
@@ -3683,6 +3716,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
                     portVal.getUses().begin()->getOwner()))) {
       // If this is directly using the output port of the containing module,
       // just specify that directly so we avoid a temporary wire.
+      // Keep this synchronized with countStatements() and visitStmt(OutputOp).
       size_t outputPortNo = portVal.getUses().begin()->getOperandNumber();
       auto containingModule = emitter.currentModuleOp;
       os << getPortVerilogName(containingModule,
@@ -3777,8 +3811,6 @@ void StmtEmitter::emitStatement(Operation *op) {
   // Expressions may either be ignored or emitted as an expression statements.
   if (isVerilogExpression(op))
     return;
-
-  ++numStatementsEmitted;
 
   // Handle HW statements.
   if (succeeded(dispatchStmtVisitor(op)))
@@ -3977,8 +4009,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
       if (!source || isa<ConstantOp>(source) ||
           op->getNextNode() == singleAssign) {
         os << " = ";
-        emitExpression(singleAssign.getSrc(), opsForLocation,
-                       ForceEmitMultiUse);
+        emitExpression(singleAssign.getSrc(), opsForLocation);
         emitter.assignsInlined.insert(singleAssign);
       }
     }
@@ -3996,8 +4027,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
         if (!source || isa<ConstantOp>(source) ||
             isExpressionEmittedInlineIntoProceduralDeclaration(source, *this)) {
           os << " = ";
-          emitExpression(singleAssign.getSrc(), opsForLocation,
-                         ForceEmitMultiUse);
+          emitExpression(singleAssign.getSrc(), opsForLocation);
           // Remember that the assignment and logic op are emitted into decl.
           emitter.assignsInlined.insert(singleAssign);
           emitter.expressionsEmittedIntoDecl.insert(op);
@@ -4008,7 +4038,6 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
 
   os << ';';
   emitLocationInfoAndNewLine(opsForLocation);
-  ++numStatementsEmitted;
   return success();
 }
 
@@ -4051,10 +4080,8 @@ void StmtEmitter::emitStatementBlock(Block &body) {
 }
 
 void ModuleEmitter::emitStatement(Operation *op) {
-  RearrangableOStream outputBuffer;
   ModuleNameManager names;
-  StmtEmitter(*this, outputBuffer, names).emitStatement(op);
-  outputBuffer.print(os);
+  StmtEmitter(*this, os, names).emitStatement(op);
 }
 
 //===----------------------------------------------------------------------===//
@@ -4451,10 +4478,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   reduceIndent();
 
   // Emit the body of the module.
-  RearrangableOStream outputBuffer;
-  StmtEmitter(*this, outputBuffer, names)
-      .emitStatementBlock(*module.getBodyBlock());
-  outputBuffer.print(os);
+  StmtEmitter(*this, os, names).emitStatementBlock(*module.getBodyBlock());
   os << "endmodule\n\n";
 
   currentModuleOp = HWModuleOp();

@@ -114,7 +114,7 @@ struct ComplementMatcher {
 
 template <typename SubType>
 static inline ComplementMatcher<SubType> m_Complement(const SubType &subExpr) {
-  return ComplementMatcher(subExpr);
+  return ComplementMatcher<SubType>(subExpr);
 }
 
 /// Flattens a single input in `op` if `hasOneUse` is true and it can be defined
@@ -2144,7 +2144,35 @@ static bool foldCommonMuxOperation(MuxOp mux, Operation *trueOp,
   return false;
 }
 
-LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
+// If both arguments of the mux are arrays with the same elements, sink the
+// mux and return a uniform array initializing all elements to it.
+static bool foldMuxOfUniformArrays(MuxOp op, PatternRewriter &rewriter) {
+  auto trueVec = op.getTrueValue().getDefiningOp<hw::ArrayCreateOp>();
+  auto falseVec = op.getFalseValue().getDefiningOp<hw::ArrayCreateOp>();
+  if (!trueVec || !falseVec)
+    return false;
+  if (!trueVec.isUniform() || !falseVec.isUniform())
+    return false;
+
+  auto mux = rewriter.create<MuxOp>(
+      op.getLoc(), op.getCond(), trueVec.getUniformElement(),
+      falseVec.getUniformElement(), op.getTwoState());
+
+  SmallVector<Value> values(trueVec.getInputs().size(), mux);
+  rewriter.replaceOpWithNewOp<hw::ArrayCreateOp>(op, values);
+  return true;
+}
+
+namespace {
+struct MuxRewriter : public mlir::OpRewritePattern<MuxOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(MuxOp op,
+                                PatternRewriter &rewriter) const override;
+};
+
+LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
+                                           PatternRewriter &rewriter) const {
   APInt value;
 
   if (matchPattern(op.getTrueValue(), m_RConstant(value))) {
@@ -2328,7 +2356,77 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
   if (narrowOperationWidth(op, true, rewriter))
     return success();
 
+  // mux(cond, repl(n, a1), repl(n, a2)) -> repl(n, mux(cond, a1, a2))
+  if (foldMuxOfUniformArrays(op, rewriter))
+    return success();
+
   return failure();
+}
+
+static bool foldArrayOfMuxes(hw::ArrayCreateOp op, PatternRewriter &rewriter) {
+  // Do not fold uniform or singleton arrays to avoid duplicating muxes.
+  if (op.getInputs().empty() || op.isUniform())
+    return false;
+  auto inputs = op.getInputs();
+  if (inputs.size() <= 1)
+    return false;
+
+  // Check the operands to the array create.  Ensure all of them are the
+  // same op with the same number of operands.
+  auto first = inputs[0].getDefiningOp<comb::MuxOp>();
+  if (!first)
+    return false;
+
+  // Check whether all operands are muxes with the same condition.
+  for (size_t i = 1, n = inputs.size(); i < n; ++i) {
+    auto input = inputs[i].getDefiningOp<comb::MuxOp>();
+    if (!input || first.getCond() != input.getCond())
+      return false;
+  }
+
+  // Collect the true and the false branches into arrays.
+  SmallVector<Value> trues{first.getTrueValue()};
+  SmallVector<Value> falses{first.getFalseValue()};
+  SmallVector<Location> locs{first->getLoc()};
+  bool isTwoState = true;
+  for (size_t i = 1, n = inputs.size(); i < n; ++i) {
+    auto input = inputs[i].getDefiningOp<comb::MuxOp>();
+    trues.push_back(input.getTrueValue());
+    falses.push_back(input.getFalseValue());
+    locs.push_back(input->getLoc());
+    if (!input.getTwoState())
+      isTwoState = false;
+  }
+
+  // Define the location of the array create as the aggregate of all muxes.
+  auto loc = FusedLoc::get(op.getContext(), locs);
+
+  // Replace the create with an aggregate operation.  Push the create op
+  // into the operands of the aggregate operation.
+  auto arrayTy = op.getType();
+  auto trueValues = rewriter.create<hw::ArrayCreateOp>(loc, arrayTy, trues);
+  auto falseValues = rewriter.create<hw::ArrayCreateOp>(loc, arrayTy, falses);
+  rewriter.replaceOpWithNewOp<comb::MuxOp>(op, arrayTy, first.getCond(),
+                                           trueValues, falseValues, isTwoState);
+  return true;
+}
+
+struct ArrayRewriter : public mlir::OpRewritePattern<hw::ArrayCreateOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(hw::ArrayCreateOp op,
+                                PatternRewriter &rewriter) const override {
+    if (foldArrayOfMuxes(op, rewriter))
+      return success();
+    return failure();
+  }
+};
+} // namespace
+
+void MuxOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                        MLIRContext *context) {
+  results.insert<MuxRewriter>(context);
+  results.insert<ArrayRewriter>(context);
 }
 
 //===----------------------------------------------------------------------===//

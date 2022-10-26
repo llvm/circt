@@ -326,6 +326,13 @@ static std::vector<Value> vectorDiff(ArrayRef<Value> v1, ArrayRef<Value> v2) {
   return d;
 }
 
+static LogicalResult isValidMemrefType(Location loc, mlir::MemRefType type) {
+  if (type.getNumDynamicDims() != 0 || type.getShape().size() != 1)
+    return emitError(loc) << "memref's must be both statically sized and "
+                             "unidimensional.";
+  return success();
+}
+
 static HandshakeLowering::BlockValues livenessAnalysis(Region &f) {
   // Liveness analysis algorithm adapted from:
   // https://suif.stanford.edu/~courses/cs243/lectures/l2.pdf
@@ -1333,8 +1340,12 @@ HandshakeLowering::replaceMemoryOps(ConversionPatternRewriter &rewriter,
 
   // Enrich the memRefOps context with BlockArguments, in case they aren't used.
   for (auto arg : r.getArguments()) {
-    if (!arg.getType().isa<MemRefType>())
+    auto memrefType = dyn_cast<mlir::MemRefType>(arg.getType());
+    if (!memrefType)
       continue;
+    // Ensure that this is a valid memref-typed value.
+    if (failed(isValidMemrefType(arg.getLoc(), memrefType)))
+      return failure();
     memRefOps.insert(std::make_pair(arg, std::vector<Operation *>()));
   }
 
@@ -1628,11 +1639,8 @@ HandshakeLowering::connectToMemory(ConversionPatternRewriter &rewriter,
 
     mlir::MemRefType memrefType =
         memrefOperand.getType().cast<mlir::MemRefType>();
-    if (memrefType.getNumDynamicDims() != 0 ||
-        memrefType.getShape().size() != 1)
-      return emitError(memrefOperand.getLoc())
-             << "memref's must be both statically sized and "
-                "unidimensional.";
+    if (failed(isValidMemrefType(memrefOperand.getLoc(), memrefType)))
+      return failure();
 
     std::vector<Value> operands;
 

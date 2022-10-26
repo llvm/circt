@@ -113,13 +113,15 @@ struct LoweringOptions {
   /// Print debug info.
   bool printDebugInfo = false;
 
+  /// If true, every mux expression is spilled to a wire.
+  bool disallowMuxInlining = false;
+
   /// This controls extra wire spilling performed in PrepareForEmission to
   /// improve readablitiy and debuggability.
   enum WireSpillingHeuristic : unsigned {
     SpillLargeTermsWithNamehints = 1, // Spill wires for expressions with
                                       // namehints if the term size is greater
                                       // than `wireSpillingNamehintTermLimit`.
-    SpillAllMux = 1 << 1,             //  Spill wires for all ternary mux.
   };
 
   unsigned wireSpillingHeuristicSet = 0;

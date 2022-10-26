@@ -114,3 +114,9 @@ hw.module @StructDecls() {
   %reg1 = sv.reg : !hw.inout<struct<a: i1, b: i1>>
   %reg2 = sv.reg : !hw.inout<array<8xstruct<a: i1, b: i1>>>
 }
+
+hw.module @UniformArrayCreate() -> (arr: !hw.array<5xi8>) {
+  %c0_i8 = hw.constant 0 : i8
+  %arr = hw.array_create %c0_i8, %c0_i8, %c0_i8, %c0_i8, %c0_i8 : i8
+  hw.output %arr : !hw.array<5xi8>
+}

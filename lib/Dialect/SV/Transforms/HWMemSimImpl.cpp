@@ -127,7 +127,11 @@ static Value getMemoryRead(ImplicitLocOpBuilder &b, Value memory, Value addr,
   auto slot =
       b.create<sv::ReadInOutOp>(b.create<sv::ArrayIndexInOutOp>(memory, addr));
   // If we don't want to add mux pragmas, just return the read value.
-  if (stripMuxPragmas)
+  if (stripMuxPragmas || memory.getType()
+                                 .cast<hw::InOutType>()
+                                 .getElementType()
+                                 .cast<hw::UnpackedArrayType>()
+                                 .getSize() <= 1)
     return slot;
   circt::sv::setSVAttributes(
       slot, sv::SVAttributesAttr::get(b.getContext(), {"cadence map_to_mux"},

@@ -1112,14 +1112,15 @@ void FIRRTLDialect::registerTypes() {
 // field element and return the total bit width of the aggregate type. This
 // returns None, if any of the bundle fields is a flip type, or ground type with
 // unknown bit width.
-llvm::Optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type) {
+llvm::Optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
+                                            bool ignoreFlip) {
   std::function<llvm::Optional<int64_t>(FIRRTLBaseType)> getWidth =
       [&](FIRRTLBaseType type) -> llvm::Optional<int64_t> {
     return TypeSwitch<FIRRTLBaseType, llvm::Optional<int64_t>>(type)
         .Case<BundleType>([&](BundleType bundle) {
           int64_t width = 0;
           for (auto &elt : bundle) {
-            if (elt.isFlip)
+            if (elt.isFlip && !ignoreFlip)
               return llvm::Optional<int64_t>(None);
             auto w = getBitWidth(elt.type);
             if (!w.has_value())

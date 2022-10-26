@@ -48,7 +48,7 @@ struct BlackBoxReaderPass : public BlackBoxReaderBase<BlackBoxReaderPass> {
                        bool isCover);
   VerbatimOp loadFile(Operation *op, StringRef inputPath, OpBuilder &builder);
   void setOutputFile(VerbatimOp op, Operation *origOp, StringAttr fileNameAttr,
-                     bool isDut = false, bool isCover = false);
+                     bool isCover = false);
   // Check if module or any of its parents in the InstanceGraph is a DUT.
   bool isDut(Operation *module);
 
@@ -72,6 +72,11 @@ private:
 
   /// The target directory for testbench files.
   StringRef testBenchDir;
+
+  /// The design-under-test (DUT) as indicated by the presence of a
+  /// "sifive.enterprise.firrtl.MarkDUTAnnotation".  This will be null if no
+  /// annotation is present.
+  FModuleOp dut;
 
   /// The file list file name (sic) for black boxes. If set, generates a file
   /// that lists all non-header source files for black boxes. Can be changed
@@ -157,6 +162,18 @@ void BlackBoxReaderPass::runOnOperation() {
 
   // Newly generated IR will be placed at the end of the circuit.
   auto builder = OpBuilder::atBlockEnd(circuitOp->getBlock());
+
+  // Do a shallow walk of the circuit to collect information necessary before we
+  // do real work.
+  for (auto &op : *circuitOp.getBodyBlock()) {
+    FModuleOp module = dyn_cast<FModuleOp>(op);
+    if (!module)
+      continue;
+
+    // Find the DUT if it exists or error if there are multiple DUTs.
+    if (failed(extractDUT(module, dut)))
+      return signalPassFailure();
+  }
 
   // Gather the relevant annotations on all modules in the circuit.
   for (auto &op : *circuitOp.getBodyBlock()) {
@@ -254,7 +271,7 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
     // Create an IR node to hold the contents.  Use "unknown location" so that
     // no file info will unnecessarily print.
     auto verbatim = builder.create<VerbatimOp>(builder.getUnknownLoc(), text);
-    setOutputFile(verbatim, op, name, isDut(op), isCover);
+    setOutputFile(verbatim, op, name, isCover);
     return true;
   }
 
@@ -276,7 +293,7 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
       return false;
     }
     auto name = builder.getStringAttr(llvm::sys::path::filename(path));
-    setOutputFile(verbatim, op, name, isDut(op), isCover);
+    setOutputFile(verbatim, op, name, isCover);
     return true;
   }
 
@@ -315,8 +332,7 @@ VerbatimOp BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
 ///  2. Record that the file has been generated to avoid duplicates.
 ///  3. Add each file name to the generated "file list" file.
 void BlackBoxReaderPass::setOutputFile(VerbatimOp op, Operation *origOp,
-                                       StringAttr fileNameAttr, bool isDut,
-                                       bool isCover) {
+                                       StringAttr fileNameAttr, bool isCover) {
   // If the output file was set on the original operation then either: (1) copy
   // this to the new op if it is a filename or (2) use this directory (since it
   // is a directory) as the lowest priority directory to put this file.
@@ -335,7 +351,11 @@ void BlackBoxReaderPass::setOutputFile(VerbatimOp op, Operation *origOp,
   auto ext = llvm::sys::path::extension(fileName);
   bool exclude = (ext == ".h" || ext == ".vh" || ext == ".svh");
   auto outDir = targetDir;
-  if (!testBenchDir.empty() && targetDir.equals(".") && !isDut)
+  // In order to output into the testbench directory, we need to have a
+  // testbench dir annotation, not have a blackbox target directory annotation
+  // (or one set to the current directory), have a DUT annotation, and the
+  // module needs to be in or under the DUT.
+  if (!testBenchDir.empty() && targetDir.equals(".") && dut && !isDut(origOp))
     outDir = testBenchDir;
   else if (isCover)
     outDir = coverDir;
@@ -360,6 +380,7 @@ void BlackBoxReaderPass::setOutputFile(VerbatimOp op, Operation *origOp,
 }
 
 /// Return true if module is in the DUT hierarchy.
+/// NOLINTNEXTLINE(misc-no-recursion)
 bool BlackBoxReaderPass::isDut(Operation *module) {
   // Check if result already cached.
   auto iter = dutModuleMap.find(module);

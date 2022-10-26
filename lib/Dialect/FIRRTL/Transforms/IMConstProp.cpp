@@ -400,6 +400,10 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
     else if (auto cast = dyn_cast<mlir::UnrealizedConversionCastOp>(op))
       for (auto result : cast.getResults())
         markOverdefined(result);
+    else if (auto verbatim = dyn_cast<VerbatimExprOp>(op))
+      markOverdefined(verbatim.getResult());
+    else if (auto verbatim = dyn_cast<VerbatimWireOp>(op))
+      markOverdefined(verbatim.getResult());
   }
 }
 

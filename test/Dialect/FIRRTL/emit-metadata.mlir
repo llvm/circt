@@ -48,9 +48,9 @@ firrtl.circuit "DUTBlackboxes" attributes { annotations = [{
   firrtl.module @DUTBlackboxes() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
   }
-// CHECK-NOT: sv.verbatim "[]" {output_file = #hw.output_file<"", excludeFromFileList>, symbols = []}
-// CHECK:     sv.verbatim "[]" {output_file = #hw.output_file<"dut_blackboxes.json", excludeFromFileList>, symbols = []}
-// CHECK-NOT: sv.verbatim "[]" {output_file = #hw.output_file<"", excludeFromFileList>, symbols = []}
+// CHECK-NOT: sv.verbatim "[]" {output_file = #hw.output_file<"", excludeFromFileList>}
+// CHECK:     sv.verbatim "[]" {output_file = #hw.output_file<"dut_blackboxes.json", excludeFromFileList>}
+// CHECK-NOT: sv.verbatim "[]" {output_file = #hw.output_file<"", excludeFromFileList>}
 }
 
 // CHECK-LABEL: firrtl.circuit "TestBlackboxes"  {
@@ -61,9 +61,9 @@ firrtl.circuit "TestBlackboxes" attributes { annotations = [{
   firrtl.module @TestBlackboxes() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
   }
-// CHECK-NOT: sv.verbatim "[]" {output_file = #hw.output_file<"", excludeFromFileList>, symbols = []}
-// CHECK:     sv.verbatim "[]" {output_file = #hw.output_file<"test_blackboxes.json", excludeFromFileList>, symbols = []}
-// CHECK-NOT: sv.verbatim "[]" {output_file = #hw.output_file<"", excludeFromFileList>, symbols = []}
+// CHECK-NOT: sv.verbatim "[]" {output_file = #hw.output_file<"", excludeFromFileList>}
+// CHECK:     sv.verbatim "[]" {output_file = #hw.output_file<"test_blackboxes.json", excludeFromFileList>}
+// CHECK-NOT: sv.verbatim "[]" {output_file = #hw.output_file<"", excludeFromFileList>}
 }
 
 // CHECK-LABEL: firrtl.circuit "BasicBlackboxes"   {
@@ -95,13 +95,13 @@ firrtl.circuit "BasicBlackboxes" attributes { annotations = [{
   firrtl.extmodule @NoDefName()
 
   firrtl.extmodule @TestBlackbox() attributes {defname = "TestBlackbox"}
-  // CHECK: sv.verbatim "[\0A \22TestBlackbox\22\0A]" {output_file = #hw.output_file<"test_blackboxes.json", excludeFromFileList>, symbols = []}
+  // CHECK: sv.verbatim "[\0A \22TestBlackbox\22\0A]" {output_file = #hw.output_file<"test_blackboxes.json", excludeFromFileList>}
 
   // Should be de-duplicated and sorted.
   firrtl.extmodule @DUTBlackbox_0() attributes {defname = "DUTBlackbox2"}
   firrtl.extmodule @DUTBlackbox_1() attributes {defname = "DUTBlackbox1"}
   firrtl.extmodule @DUTBlackbox_2() attributes {defname = "DUTBlackbox1"}
-  // CHECK: sv.verbatim "[\0A \22DUTBlackbox1\22,\0A \22DUTBlackbox2\22\0A]" {output_file = #hw.output_file<"dut_blackboxes.json", excludeFromFileList>, symbols = []}
+  // CHECK: sv.verbatim "[\0A \22DUTBlackbox1\22,\0A \22DUTBlackbox2\22\0A]" {output_file = #hw.output_file<"dut_blackboxes.json", excludeFromFileList>}
 }
 
 //===----------------------------------------------------------------------===//
@@ -113,9 +113,9 @@ firrtl.circuit "top"
 {
   firrtl.module @top() { }
   // When there are no memories, we still need to emit the memory metadata.
-  // CHECK: sv.verbatim "[]" {output_file = #hw.output_file<"metadata{{/|\\\\}}tb_seq_mems.json", excludeFromFileList>, symbols = []}
-  // CHECK: sv.verbatim "[]" {output_file = #hw.output_file<"metadata{{/|\\\\}}seq_mems.json", excludeFromFileList>, symbols = []}
-  // CHECK: sv.verbatim "" {output_file = #hw.output_file<"\22dut.conf\22", excludeFromFileList>, symbols = []}
+  // CHECK: sv.verbatim "[]" {output_file = #hw.output_file<"metadata{{/|\\\\}}tb_seq_mems.json", excludeFromFileList>}
+  // CHECK: sv.verbatim "[]" {output_file = #hw.output_file<"metadata{{/|\\\\}}seq_mems.json", excludeFromFileList>}
+  // CHECK: sv.verbatim "" {output_file = #hw.output_file<"\22dut.conf\22", excludeFromFileList>}
 }
 
 // CHECK-LABEL: firrtl.circuit "OneMemory"
@@ -154,9 +154,9 @@ firrtl.circuit "top" {
     firrtl.memmodule private @memory_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<8>, in RW0_addr: !firrtl.uint<4>, in RW0_en: !firrtl.uint<1>, in RW0_clk: !firrtl.clock, in RW0_wmode: !firrtl.uint<1>, in RW0_wdata: !firrtl.uint<8>, out RW0_rdata: !firrtl.uint<8>) attributes {dataWidth = 8 : ui32, depth = 16 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 0 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
     firrtl.memmodule private @dumm_ext(in R0_addr: !firrtl.uint<5>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<5>, in W0_addr: !firrtl.uint<5>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<5>) attributes {dataWidth = 5 : ui32, depth = 20 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
     // CHECK: sv.verbatim "[\0A  {\0A    \22module_name\22: \22head_ext\22,\0A    \22depth\22: 20,\0A    \22width\22: 5,\0A    \22masked\22: false,\0A    \22read\22: false,\0A    \22write\22: true,\0A    \22readwrite\22: false,\0A    \22extra_ports\22: [],\0A    \22hierarchy\22: [\0A      \22top.mem1.head_ext\22\0A    ]\0A  },\0A  {\0A    \22module_name\22: \22head_0_ext\22,\0A    \22depth\22: 20,\0A    \22width\22: 5,\0A    \22masked\22: false,\0A    \22read\22: false,\0A    \22write\22: true,\0A    \22readwrite\22: false,\0A    \22extra_ports\22: [],\0A    \22hierarchy\22: [\0A      \22top.mem2.head_0_ext\22\0A    ]\0A  }\0A]"
-    // CHECK-SAME:  {output_file = #hw.output_file<"metadata{{/|\\\\}}tb_seq_mems.json", excludeFromFileList>, symbols = []}
+    // CHECK-SAME:  {output_file = #hw.output_file<"metadata{{/|\\\\}}tb_seq_mems.json", excludeFromFileList>}
     // CHECK: sv.verbatim "[\0A  {\0A    \22module_name\22: \22memory_ext\22,\0A    \22depth\22: 16,\0A    \22width\22: 8,\0A    \22masked\22: false,\0A    \22read\22: true,\0A    \22write\22: false,\0A    \22readwrite\22: true,\0A    \22extra_ports\22: [],\0A    \22hierarchy\22: [\0A      \22DUT.mem1.memory_ext\22\0A    ]\0A  },\0A  {\0A    \22module_name\22: \22dumm_ext\22,\0A    \22depth\22: 20,\0A    \22width\22: 5,\0A    \22masked\22: false,\0A    \22read\22: true,\0A    \22write\22: true,\0A    \22readwrite\22: false,\0A    \22extra_ports\22: [],\0A    \22hierarchy\22: [\0A      \22DUT.mem1.dumm_ext\22\0A    ]\0A  }\0A]"
-    // CHECK-SAME: output_file = #hw.output_file<"metadata{{/|\\\\}}seq_mems.json", excludeFromFileList>, symbols = []
+    // CHECK-SAME: output_file = #hw.output_file<"metadata{{/|\\\\}}seq_mems.json", excludeFromFileList>
     // CHECK: sv.verbatim "name memory_ext depth 16 width 8 ports rw\0Aname dumm_ext depth 20 width 5 ports write,read\0Aname head_ext depth 20 width 5 ports write\0Aname head_0_ext depth 20 width 5 ports write\0A"
-    // CHECK-SAME: {output_file = #hw.output_file<"\22dut.conf\22", excludeFromFileList>, symbols = []}
+    // CHECK-SAME: {output_file = #hw.output_file<"\22dut.conf\22", excludeFromFileList>}
 }

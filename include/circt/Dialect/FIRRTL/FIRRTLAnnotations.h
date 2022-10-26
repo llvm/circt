@@ -22,6 +22,7 @@ namespace circt {
 namespace firrtl {
 
 class AnnotationSetIterator;
+class FModuleOp;
 class FModuleLike;
 class MemOp;
 class InstanceOp;
@@ -477,6 +478,20 @@ struct PortAnnoTarget : public AnnoTarget {
     return annoTarget.getImpl().isPort();
   }
 };
+
+//===----------------------------------------------------------------------===//
+// Utilities for Specific Annotations
+//
+// TODO: Remove these in favor of first-class annotations.
+//===----------------------------------------------------------------------===//
+
+/// Utility that searches for a MarkDUTAnnotation on a specific module, `mod`,
+/// and tries to update a design-under-test (DUT), `dut`, with this module if
+/// the module is the DUT.  This function returns success if either no DUT was
+/// found or if the DUT was found and a previous DUT was not set (if `dut` is
+/// null).  This returns failure if a DUT was found and a previous DUT was set.
+/// This function generates an error message in the failure case.
+LogicalResult extractDUT(FModuleOp mod, FModuleOp &dut);
 
 } // namespace firrtl
 } // namespace circt

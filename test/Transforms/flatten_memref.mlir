@@ -154,3 +154,36 @@ func.func @calls() {
   %1 = call @foo(%0) : (memref<4x4xi32>) -> (memref<4x4xi32>)
   return
 }
+
+// -----
+
+// CHECK-LABEL:   func.func @as_singleton(
+// CHECK-SAME:                            %[[VAL_0:.*]]: memref<1xi32>,
+// CHECK-SAME:                            %[[VAL_1:.*]]: index) -> i32 {
+// CHECK:           %[[VAL_2:.*]] = arith.constant 0 : index
+// CHECK:           %[[VAL_3:.*]] = memref.load %[[VAL_0]]{{\[}}%[[VAL_2]]] : memref<1xi32>
+// CHECK:           %[[VAL_4:.*]] = arith.constant 0 : index
+// CHECK:           memref.store %[[VAL_3]], %[[VAL_0]]{{\[}}%[[VAL_4]]] : memref<1xi32>
+// CHECK:           return %[[VAL_3]] : i32
+// CHECK:         }
+func.func @as_singleton(%a : memref<i32>, %i : index) -> i32 {
+  %0 = memref.load %a[] : memref<i32>
+  memref.store %0, %a[] : memref<i32>
+  return %0 : i32
+}
+
+// -----
+
+// CHECK-LABEL:   func.func @dealloc_copy(
+// CHECK-SAME:                            %[[VAL_0:.*]]: memref<16xi32>) -> memref<16xi32> {
+// CHECK:           %[[VAL_1:.*]] = memref.alloc() : memref<16xi32>
+// CHECK:           memref.copy %[[VAL_0]], %[[VAL_1]] : memref<16xi32> to memref<16xi32>
+// CHECK:           memref.dealloc %[[VAL_1]] : memref<16xi32>
+// CHECK:           return %[[VAL_1]] : memref<16xi32>
+// CHECK:         }
+func.func @dealloc_copy(%arg : memref<4x4xi32>) -> memref<4x4xi32> {
+  %0 = memref.alloc() : memref<4x4xi32>
+  memref.copy %arg, %0 : memref<4x4xi32> to memref<4x4xi32>
+  memref.dealloc %0 : memref<4x4xi32>
+  return %0 : memref<4x4xi32>
+}

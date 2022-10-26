@@ -1761,8 +1761,8 @@ LogicalResult InferResetsPass::verifyNoAbstractReset() {
     for (PortInfo port : module.getPorts()) {
       if (auto portType = port.type.dyn_cast<FIRRTLType>()) {
         if (getBaseType(portType).isa<ResetType>()) {
-          module->emitOpError()
-              << "contains an abstract reset type after InferResets";
+          module->emitOpError() << "has an abstract reset type port \""
+                                << port.getName() << "\" after InferResets";
           hasAbstractResetPorts = true;
         }
       }

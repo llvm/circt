@@ -627,8 +627,10 @@ LogicalResult ModuleVisitor::checkInitialization() {
                  "\" not fully initialized in module \""
           << mod.moduleName() << "\"";
     else
-      definingOp->emitError("sink \"" + getFieldName(dest) +
-                            "\" not fully initialized");
+      definingOp->emitError(
+          "sink \"" + getFieldName(dest) +
+          "\" not fully initialized in module \"" +
+          definingOp->getParentOfType<FModuleLike>().moduleName() + "\"");
     failed = true;
   }
   if (failed)

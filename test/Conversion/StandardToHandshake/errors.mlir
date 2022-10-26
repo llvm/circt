@@ -20,6 +20,15 @@ func.func @dynsize(%dyn : index) -> i32{
 
 // -----
 
+func.func @singleton() -> (){
+  // expected-error @+1 {{memref's must be both statically sized and unidimensional.}}
+  %0 = memref.alloc() : memref<i32>
+  %1 = memref.load %0[] : memref<i32>
+  return
+}
+
+// -----
+
 // Test non-canonical loops that have multiple entry points (irreducible cfg).
 
 // expected-error @+1 {{Non-canonical loop structures detected; a potential loop header has backedges not dominated by the loop header. This indicates that the loop has multiple entry points.}}

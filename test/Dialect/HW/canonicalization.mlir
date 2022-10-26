@@ -1560,3 +1560,55 @@ hw.module @CreateOfSlices(%arr0: !hw.array<3xi1>, %arr1: !hw.array<5xi1>) -> (re
   hw.output %6 : !hw.array<6xi1>
 }
 
+// CHECK-LABEL: @MuxOfArrays
+hw.module @MuxOfArrays(%cond: i1, %a0: i1, %a1: i1, %a2: i1, %b0: i1, %b1: i1, %b2: i1) -> (res: !hw.array<3xi1>) {
+  %mux0 = comb.mux %cond, %a0, %b0 : i1
+  %mux1 = comb.mux %cond, %a1, %b1 : i1
+  %mux2 = comb.mux %cond, %a2, %b2 : i1
+  %array = hw.array_create %mux2, %mux1, %mux0 : i1
+
+  // CHECK:      [[TRUE:%.+]] = hw.array_create %a2, %a1, %a0 : i1
+  // CHECK-NEXT: [[FALSE:%.+]] = hw.array_create %b2, %b1, %b0 : i1
+  // CHECK-NEXT: [[RESULT:%.+]] = comb.mux %cond, [[TRUE]], [[FALSE]] : !hw.array<3xi1>
+  // CHECK-NEXT: hw.output [[RESULT]] : !hw.array<3xi1>
+
+  hw.output %array : !hw.array<3xi1>
+}
+
+// CHECK-LABEL: @MuxOfUniformArray
+hw.module @MuxOfUniformArray(%cond: i1, %a: i1, %b: i1) -> (res: !hw.array<3xi1>) {
+  %array_a = hw.array_create %a, %a, %a : i1
+  %array_b = hw.array_create %b, %b, %b : i1
+  %mux = comb.mux %cond, %array_a, %array_b : !hw.array<3xi1>
+
+  // CHECK:      [[MUX:%.+]] = comb.mux %cond, %a, %b : i1
+  // CHECK-NEXT: [[ARRAY:%.+]] = hw.array_create [[MUX]], [[MUX]], [[MUX]] : i1
+  // CHECK-NEXT: hw.output [[ARRAY]] : !hw.array<3xi1>
+
+  hw.output %mux : !hw.array<3xi1>
+}
+
+// CHECK-LABEL: @ConcatOfSlicesAndGets
+hw.module @ConcatOfSlicesAndGets(%a: !hw.array<5xi1>, %b: !hw.array<5xi1>, %c: !hw.array<5xi1>) -> (res: !hw.array<13xi1>) {
+  %c1_i3 = hw.constant 1 : i3
+  %c3_i3 = hw.constant 3 : i3
+  %c4_i3 = hw.constant 4 : i3
+
+  %slice_a0 = hw.array_slice %a[%c1_i3] : (!hw.array<5xi1>) -> !hw.array<2xi1>
+  %slice_a1 = hw.array_slice %a[%c3_i3] : (!hw.array<5xi1>) -> !hw.array<1xi1>
+  %get_a = hw.array_get %a[%c4_i3] : !hw.array<5xi1>, i3
+  %wrap_a = hw.array_create %get_a : i1
+
+  %slice_b = hw.array_slice %b[%c1_i3] : (!hw.array<5xi1>) -> !hw.array<3xi1>
+  %get_b = hw.array_get %b[%c4_i3] : !hw.array<5xi1>, i3
+  %wrap_b = hw.array_create %get_b : i1
+
+  // CHECK-DAG: [[SLICE_A:%.+]] = hw.array_slice %a[%c1_i3] : (!hw.array<5xi1>) -> !hw.array<4xi1>
+  // CHECK-DAG: [[SLICE_B:%.+]] = hw.array_slice %b[%c1_i3] : (!hw.array<5xi1>) -> !hw.array<4xi1>
+  // CHECK-DAG: [[CONCAT:%.+]] = hw.array_concat %c, [[SLICE_B]], [[SLICE_A]] : !hw.array<5xi1>, !hw.array<4xi1>, !hw.array<4xi1>
+  // CHECK-DAG: hw.output [[CONCAT]] : !hw.array<13xi1>
+  %result = hw.array_concat %c, %wrap_b, %slice_b, %wrap_a, %slice_a1, %slice_a0 :
+      !hw.array<5xi1>, !hw.array<1xi1>, !hw.array<3xi1>, !hw.array<1xi1>, !hw.array<1xi1>, !hw.array<2xi1>
+
+  hw.output %result : !hw.array<13xi1>
+}

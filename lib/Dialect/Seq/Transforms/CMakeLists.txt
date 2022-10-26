@@ -1,5 +1,6 @@
 add_circt_dialect_library(CIRCTSeqTransforms
   LowerSeqToSV.cpp
+  LowerSeqHLMem.cpp
 
   DEPENDS
   CIRCTSeqTransformsIncGen
