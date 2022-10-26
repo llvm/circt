@@ -1102,16 +1102,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %r2, %0 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
     firrtl.connect %o1, %r1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %o2, %r2 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
-    // CHECK:      %r1 = seq.firreg %5 clock %clock : i1
-    // CHECK-NEXT: %r2 = seq.firreg %2 clock %clock : !hw.array<1xi1>
-    // CHECK-NEXT: %[[ARRAY_GET1:.+]] = hw.array_get %a[%x] {sv.attributes = #sv.attributes<[#sv.attribute<"cadence map_to_mux">], emitAsComments>}
-    // CHECK-NEXT: %[[WIRE1:.+]] = sv.wire
-    // CHECK-NEXT: sv.assign %[[WIRE1]], %[[ARRAY_GET1]] {sv.attributes = #sv.attributes<[#sv.attribute<"synopsys infer_mux_override">], emitAsComments>}
-    // CHECK-NEXT: %[[VAL1:.+]] = sv.read_inout %[[WIRE1]] : !hw.inout<array<1xi1>>
-    // CHECK-NEXT: %[[ARRAY_GET2:.+]] = hw.array_get %[[VAL1]][%y] {sv.attributes = #sv.attributes<[#sv.attribute<"cadence map_to_mux">], emitAsComments>}
-    // CHECK-NEXT: %[[WIRE2:.+]] = sv.wire : !hw.inout<i1>
-    // CHECK-NEXT: sv.assign %[[WIRE2]], %[[ARRAY_GET2]] {sv.attributes = #sv.attributes<[#sv.attribute<"synopsys infer_mux_override">], emitAsComments>}
-    // CHECK-NEXT: %[[VAL2:.+]] = sv.read_inout %[[WIRE2]] : !hw.inout<i1>
+    // CHECK:      %r1 = seq.firreg %1 clock %clock : i1
+    // CHECK-NEXT: %r2 = seq.firreg %0 clock %clock : !hw.array<1xi1>
+    // CHECK-NEXT: %0 = hw.array_get %a[%x] : !hw.array<1xarray<1xi1>>, i1
+    // CHECK-NEXT: %1 = hw.array_get %0[%y] : !hw.array<1xi1>, i1
     // CHECK-NEXT: hw.output %r1, %r2 : i1, !hw.array<1xi1>
   }
 
