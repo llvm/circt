@@ -169,6 +169,22 @@ struct OperandConversionPattern : public OpConversionPattern<TOp> {
   }
 };
 
+// Cannot use OperandConversionPattern for branch op since the default builder
+// doesn't provide a method for communicating block successors.
+struct CondBranchOpConversion
+    : public OpConversionPattern<mlir::cf::CondBranchOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(mlir::cf::CondBranchOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<mlir::cf::CondBranchOp>(
+        op, adaptor.getCondition(), adaptor.getTrueDestOperands(),
+        adaptor.getFalseDestOperands(), op.getTrueDest(), op.getFalseDest());
+    return success();
+  }
+};
+
 // Rewrites a call op signature to flattened types. If rewriteFunctions is set,
 // will also replace the callee with a private definition of the called
 // function of the updated signature.
@@ -299,7 +315,7 @@ public:
                  OperandConversionPattern<func::ReturnOp>,
                  OperandConversionPattern<memref::DeallocOp>,
                  OperandConversionPattern<mlir::cf::CondBranchOp>,
-                 OperandConversionPattern<mlir::cf::BranchOp>,
+                 CondBranchOpConversion,
                  OperandConversionPattern<memref::DeallocOp>,
                  OperandConversionPattern<memref::CopyOp>, CallOpConversion>(
         typeConverter, ctx);
