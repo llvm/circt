@@ -191,13 +191,13 @@ static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
 static void loadDHLSPipeline(OpPassManager &pm) {
   // Software lowering
   pm.addPass(mlir::createLowerAffinePass());
-  pm.nest<func::FuncOp>().addPass(mlir::createConvertSCFToCFPass());
+  pm.addPass(mlir::createConvertSCFToCFPass());
 
   // Memref legalization.
   pm.addPass(circt::createFlattenMemRefPass());
   pm.nest<func::FuncOp>().addPass(
       circt::handshake::createHandshakeLegalizeMemrefsPass());
-  pm.nest<func::FuncOp>().addPass(mlir::createConvertSCFToCFPass());
+  pm.addPass(mlir::createConvertSCFToCFPass());
   pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
 
   // DHLS conversion
