@@ -5,6 +5,7 @@ add_circt_dialect_library(CIRCTHandshakeTransforms
   Buffers.cpp
   LockFunctions.cpp
   LowerExtmemToHW.cpp
+  LegalizeMemrefs.cpp
 
   DEPENDS
   CIRCTHandshakeTransformsIncGen
@@ -14,7 +15,9 @@ add_circt_dialect_library(CIRCTHandshakeTransforms
   CIRCTESI
   CIRCTHandshake
   CIRCTSupport
+  CIRCTTransforms
   MLIRIR
+  MLIRSCFDialect
   MLIRPass
   MLIRTransformUtils
   MLIRMemRefDialect
