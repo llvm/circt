@@ -4241,13 +4241,13 @@ StringRef ModuleEmitter::getNameRemotely(Value value,
   return {};
 }
 
-void ModuleEmitter::emitBindInterface(BindInterfaceOp bind) {
-  if (hasSVAttributes(bind))
-    emitError(bind, "SV attributes emission is unimplemented for the op");
+void ModuleEmitter::emitBindInterface(BindInterfaceOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
 
-  auto instance = bind.getReferencedInstance(&state.symbolCache);
+  auto instance = op.getReferencedInstance(&state.symbolCache);
   auto instantiator = instance->getParentOfType<HWModuleOp>().getName();
-  auto *interface = bind->getParentOfType<ModuleOp>().lookupSymbol(
+  auto *interface = op->getParentOfType<ModuleOp>().lookupSymbol(
       instance.getInterfaceType().getInterface());
   os << "bind " << instantiator << " "
      << cast<InterfaceOp>(*interface).getSymName() << " "
