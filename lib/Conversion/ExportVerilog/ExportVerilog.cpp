@@ -714,7 +714,7 @@ static void emitSVAttributesImpl(llvm::raw_ostream &os,
 namespace {
 /// This class keeps track of names for values within a module.
 struct ModuleNameManager {
-  ModuleNameManager() {}
+  ModuleNameManager() = default;
 
   StringRef addName(Value value, StringRef name) {
     return addName(ValueOrOp(value), name);
@@ -928,7 +928,7 @@ void EmitterBase::emitTextWithSubstitutions(
     // *within* this module. Instead, you have to rely on those remote
     // operations to have been named inside the global names table. If they
     // haven't, take a look at name legalization first.
-    if (auto itemOp = item.getOp()) {
+    if (auto *itemOp = item.getOp()) {
       if (item.hasPort()) {
         return getPortVerilogName(itemOp, item.getPort());
       }
@@ -948,7 +948,7 @@ void EmitterBase::emitTextWithSubstitutions(
   unsigned numSymOps = symAttrs.size();
   auto emitUntilSubstitution = [&](size_t next = 0) -> bool {
     size_t start = 0;
-    while (1) {
+    while (true) {
       next = string.find("{{", next);
       if (next == StringRef::npos)
         return false;
@@ -1961,12 +1961,12 @@ void ExprEmitter::formatOutBuffer() {
 
   SmallVector<char> tmpOutBuffer;
   llvm::raw_svector_ostream tmpOs(tmpOutBuffer);
-  auto it = outBuffer.begin();
+  auto *it = outBuffer.begin();
   unsigned currentIndex = 0;
 
   while (it != outBuffer.end()) {
     // Split by a white space.
-    auto next = std::find(it, outBuffer.end(), ' ');
+    auto *next = std::find(it, outBuffer.end(), ' ');
     unsigned tokenLength = std::distance(it, next);
 
     if (!tmpOutBuffer.empty() &&
@@ -3789,7 +3789,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceModportOp op) {
   llvm::interleaveComma(op.getPorts(), os, [&](const Attribute &portAttr) {
     auto port = portAttr.cast<ModportStructAttr>();
     os << stringifyEnum(port.getDirection().getValue()) << ' ';
-    auto signalDecl = state.symbolCache.getDefinition(port.getSignal());
+    auto *signalDecl = state.symbolCache.getDefinition(port.getSignal());
     os << getSymOpName(signalDecl);
   });
 
@@ -3861,7 +3861,7 @@ isExpressionEmittedInlineIntoProceduralDeclaration(Operation *op,
     // assignment. A register or logic might be mutated by a blocking assignment
     // so it is not always safe to inline.
     if (auto readInout = dyn_cast<sv::ReadInOutOp>(expr)) {
-      auto defOp = readInout.getOperand().getDefiningOp();
+      auto *defOp = readInout.getOperand().getDefiningOp();
 
       // If it is a read from an inout port, it's unsafe to inline in general.
       if (!defOp)
@@ -4002,7 +4002,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
       !op->getParentOp()->hasTrait<ProceduralRegion>()) {
     // Get a single assignments if any.
     if (auto singleAssign = getSingleAssignAndCheckUsers<AssignOp>(op)) {
-      auto source = singleAssign.getSrc().getDefiningOp();
+      auto *source = singleAssign.getSrc().getDefiningOp();
       // Check that the source value is OK to inline in the current emission
       // point. A port or constant is fine, otherwise check that the assign is
       // next to the operation.
@@ -4021,7 +4021,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     if (auto singleAssign = getSingleAssignAndCheckUsers<BPAssignOp>(op)) {
       // It is necessary for the assignment to dominate users of the op.
       if (checkDominanceOfUsers(singleAssign, op)) {
-        auto source = singleAssign.getSrc().getDefiningOp();
+        auto *source = singleAssign.getSrc().getDefiningOp();
         // A port or constant can be inlined at everywhere. Otherwise, check the
         // validity by `isExpressionEmittedInlineIntoProceduralDeclaration`.
         if (!source || isa<ConstantOp>(source) ||
