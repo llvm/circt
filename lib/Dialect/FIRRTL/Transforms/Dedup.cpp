@@ -12,6 +12,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -641,7 +642,11 @@ struct Deduper {
         symbolTable(symbolTable), nlaTable(nlaTable),
         nlaBlock(circuit.getBodyBlock()),
         nonLocalString(StringAttr::get(context, "circt.nonlocal")),
-        classString(StringAttr::get(context, "class")) {}
+        classString(StringAttr::get(context, "class")) {
+    // Populate the NLA cache.
+    for (auto nla : circuit.getOps<HierPathOp>())
+      nlaCache[nla.getNamepathAttr()] = nla.getSymNameAttr();
+  }
 
   /// Remove the "fromModule", and replace all references to it with the
   /// "toModule".  Modules should be deduplicated in a bottom-up order.  Any
@@ -652,21 +657,22 @@ struct Deduper {
     // used to update NLAs that reference the "fromModule".
     RenameMap renameMap;
 
-    // This is a lazily constructed set of NLAs used to turn a local
-    // annotation into non-local annotations.
-    SmallVector<FlatSymbolRefAttr> toNLAs;
-    SmallVector<FlatSymbolRefAttr> fromNLAs;
+    // Record the target of all annotations in the from module.
+    record(fromModule);
 
     // Merge the two modules.
-    mergeOps(renameMap, toModule, toNLAs, toModule, fromModule, fromNLAs,
-             fromModule);
+    mergeOps(renameMap, toModule, toModule, fromModule, fromModule);
 
-    // Rewrite NLAs pathing through these modules to refer to the to module.
+    // Rewrite NLAs pathing through these modules to refer to the to module. It
+    // is safe to do this at this point because NLAs cannot be one element long.
+    // This means that all NLAs which require more context cannot be targetting
+    // something in the module it self.
     if (auto to = dyn_cast<FModuleOp>(*toModule))
       rewriteModuleNLAs(renameMap, to, cast<FModuleOp>(*fromModule));
     else
       rewriteExtModuleNLAs(renameMap, toModule.moduleNameAttr(),
                            fromModule.moduleNameAttr());
+
     replaceInstances(toModule, fromModule);
   }
 
@@ -676,11 +682,8 @@ struct Deduper {
     // Record any annotations on the module.
     recordAnnotations(module);
     // Record port annotations.
-    for (const auto &pair : llvm::enumerate(module.getPortAnnotations()))
-      for (auto anno : AnnotationSet(pair.value().cast<ArrayAttr>()))
-        if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
-          targetMap[nlaRef.getAttr()].push_back(
-              PortAnnoTarget(module, pair.index()));
+    for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i)
+      recordAnnotations(PortAnnoTarget(module, i));
     // Record any annotations in the module body.
     module->walk([&](Operation *op) { recordAnnotations(op); });
   }
@@ -692,25 +695,37 @@ private:
     return it->second;
   }
 
+  /// For a specific annotation target, record all the unique NLAs which
+  /// target it in the `targetMap`.
+  void recordAnnotations(AnnoTarget target) {
+    // Multiple annotations on this target can share the same NLA.  We use
+    // this set to prevent recording multiple times that the NLA targets
+    // this specific target.
+    llvm::SmallDenseSet<Attribute> seen;
+    for (auto anno : target.getAnnotations()) {
+      if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
+        // If we have already recorded that this NLA is targeting this, then
+        // skip it.
+        if (!seen.insert(nlaRef).second)
+          continue;
+        targetMap[nlaRef.getAttr()].insert(target);
+      }
+    }
+  }
+
   /// Record all targets which use an NLA.
   void recordAnnotations(Operation *op) {
     // Record annotations.
-    for (auto anno : AnnotationSet(op))
-      if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
-        targetMap[nlaRef.getAttr()].push_back(OpAnnoTarget(op));
+    recordAnnotations(OpAnnoTarget(op));
 
     // Record port annotations only if this is a mem operation.
     auto mem = dyn_cast<MemOp>(op);
     if (!mem)
       return;
 
-    // Record port annotations. Breadcrumbs don't appear on port annotations, so
-    // we can skip the class check that we have above.
-    for (const auto &pair : llvm::enumerate(mem.getPortAnnotations()))
-      for (auto anno : AnnotationSet(pair.value().cast<ArrayAttr>()))
-        if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
-          targetMap[nlaRef.getAttr()].push_back(
-              PortAnnoTarget(mem, pair.index()));
+    // Record port annotations.
+    for (unsigned i = 0, e = mem->getNumResults(); i < e; ++i)
+      recordAnnotations(PortAnnoTarget(mem, i));
   }
 
   /// This deletes and replaces all instances of the "fromModule" with instances
@@ -731,12 +746,13 @@ private:
     fromModule->erase();
   }
 
-  /// Look up the instantiations of this module and create an NLA for each
+  /// Look up the instantiations of the `from` module and create an NLA for each
   /// one, appending the baseNamepath to each NLA. This is used to add more
-  /// context to an already existing NLA.
+  /// context to an already existing NLA. The `fromModule` is used to indicate
+  /// which module the annotation is coming from before the merge, and will be
+  /// used to create the namepaths.
   SmallVector<FlatSymbolRefAttr>
-  createNLAs(StringAttr toModuleName, Operation *fromModule,
-             ArrayRef<Attribute> baseNamepath,
+  createNLAs(Operation *fromModule, ArrayRef<Attribute> baseNamepath,
              SymbolTable::Visibility vis = SymbolTable::Visibility::Private) {
     // Create an attribute array with a placeholder in the first element, where
     // the root refence of the NLA will be inserted.
@@ -750,15 +766,20 @@ private:
       auto inst = instanceRecord->getInstance();
       namepath[0] = OpAnnoTarget(inst).getNLAReference(getNamespace(parent));
       auto arrayAttr = ArrayAttr::get(context, namepath);
-      auto nla = OpBuilder::atBlockBegin(nlaBlock).create<HierPathOp>(
-          loc, "nla", arrayAttr);
-      // Insert it into the symbol table to get a unique name.
-      symbolTable.insert(nla);
-      auto nlaName = nla.getNameAttr();
-      auto nlaRef = FlatSymbolRefAttr::get(nlaName);
+      // Check the NLA cache to see if we already have this NLA.
+      auto &cacheEntry = nlaCache[arrayAttr];
+      if (!cacheEntry) {
+        auto nla = OpBuilder::atBlockBegin(nlaBlock).create<HierPathOp>(
+            loc, "nla", arrayAttr);
+        // Insert it into the symbol table to get a unique name.
+        symbolTable.insert(nla);
+        // Store it in the cache.
+        cacheEntry = nla.getNameAttr();
+        nla.setVisibility(vis);
+        nlaTable->addNLA(nla);
+      }
+      auto nlaRef = FlatSymbolRefAttr::get(cacheEntry.cast<StringAttr>());
       nlas.push_back(nlaRef);
-      nla.setVisibility(vis);
-      nlaTable->addNLA(nla);
     }
     return nlas;
   }
@@ -767,11 +788,9 @@ private:
   /// This returns an array of symbol references which can be used to reference
   /// the NLAs.
   SmallVector<FlatSymbolRefAttr>
-  createNLAs(FModuleLike toModule, StringAttr toModuleName,
-             FModuleLike fromModule,
+  createNLAs(StringAttr toModuleName, FModuleLike fromModule,
              SymbolTable::Visibility vis = SymbolTable::Visibility::Private) {
-    return createNLAs(toModuleName, fromModule,
-                      FlatSymbolRefAttr::get(toModule.moduleNameAttr()), vis);
+    return createNLAs(fromModule, FlatSymbolRefAttr::get(toModuleName), vis);
   }
 
   /// Clone the annotation for each NLA in a list. The attribute list should
@@ -793,13 +812,14 @@ private:
     }
   }
 
-  /// This erases the NLA op, all breadcrumb trails, and removes the NLA from
-  /// every module's NLA map, but it does not delete the NLA reference from
-  /// the target operation's annotations.
+  /// This erases the NLA op, and removes the NLA from every module's NLA map,
+  /// but it does not delete the NLA reference from the target operation's
+  /// annotations.
   void eraseNLA(HierPathOp nla) {
     // Erase the NLA from the leaf module's nlaMap.
     targetMap.erase(nla.getNameAttr());
     nlaTable->erase(nla);
+    nlaCache.erase(nla.getNamepathAttr());
     symbolTable.erase(nla);
   }
 
@@ -814,6 +834,8 @@ private:
     auto moduleNLAs = nlaTable->lookup(fromModule.getNameAttr()).vec();
     // Change the NLA to target the toModule.
     nlaTable->renameModuleAndInnerRef(toName, fromName, renameMap);
+    // Now we walk the NLA searching for ones that require more context to be
+    // added.
     for (auto nla : moduleNLAs) {
       auto elements = nla.getNamepath().getValue();
       // If we don't need to add more context, we're done here.
@@ -821,8 +843,7 @@ private:
         continue;
       // Create the replacement NLAs.
       SmallVector<Attribute> namepath(elements.begin(), elements.end());
-      auto nlaRefs =
-          createNLAs(toName, fromModule, namepath, nla.getVisibility());
+      auto newNLAs = createNLAs(fromModule, namepath, nla.getVisibility());
       // Replace the uses of the old NLA with the new NLAs.
       for (auto target : targetMap[nla.getSymNameAttr()]) {
         // We have to clone any annotation which uses the old NLA for each new
@@ -841,15 +862,33 @@ private:
           }
           auto nonLocalIndex = std::distance(anno.begin(), it);
           // Clone the annotation and add it to the list of new annotations.
-          cloneAnnotation(nlaRefs, anno, ArrayRef(anno.begin(), anno.end()),
+          cloneAnnotation(newNLAs, anno, ArrayRef(anno.begin(), anno.end()),
                           nonLocalIndex, newAnnotations);
         }
+
+        // llvm::errs() << "target ";
+        // if (auto opTarget = target.dyn_cast<OpAnnoTarget>())
+        //   llvm::errs() << *target.getOp();
+        // else {
+        //   auto portTarget = target.cast<PortAnnoTarget>();
+        //   auto *theOp = portTarget.getOp();
+        //   llvm::errs() << "port " << portTarget.getPortNo() << " on "
+        //                << theOp->getAttr("sym_name")
+        //                << "\n annotations=" <<
+        //                theOp->getAttr("portAnnotations")
+        //                << "\n";
+        //   llvm::errs() << " did not contain the NLA\n";
+        //   llvm::errs() << "\n";
+        //   llvm::errs() << nla;
+        // }
+        // llvm::errs() << "\n\n";
+
         // Apply the new annotations to the operation.
         AnnotationSet annotations(newAnnotations, context);
         target.setAnnotations(annotations);
         // Record that target uses the NLA.
-        for (auto nla : nlaRefs)
-          targetMap[nla.getAttr()].push_back(target);
+        for (auto newNLA : newNLAs)
+          targetMap[newNLA.getAttr()].insert(target);
       }
 
       // Erase the old NLA and remove it from all breadcrumbs.
@@ -875,11 +914,9 @@ private:
 
   /// Take an annotation, and update it to be a non-local annotation.  If the
   /// annotation is already non-local and has enough context, it will be skipped
-  /// for now.
-  void makeAnnotationNonLocal(
-                              FModuleLike toModule, StringAttr toModuleName,
-                              AnnoTarget to, FModuleLike fromModule,
-                              AnnoTarget from, Annotation anno,
+  /// for now.  Return true if the annotation was made non-local.
+  bool makeAnnotationNonLocal(StringAttr toModuleName, AnnoTarget to,
+                              FModuleLike fromModule, Annotation anno,
                               SmallVector<Annotation> &newAnnotations) {
     // Start constructing a new annotation, pushing a "circt.nonLocal" field
     // into the correct spot if its not already a non-local annotation.
@@ -889,24 +926,20 @@ private:
       auto attr = val.value();
       // Is this field "circt.nonlocal"?
       auto compare = attr.getName().compare(nonLocalString);
-      if (compare == 0) {
-        // This annotation is already a non-local annotation. Record that this
-        // operation uses that NLA and stop processing this annotation.
-        auto nlaName = attr.getValue().cast<FlatSymbolRefAttr>().getAttr();
-        targetMap[nlaName].push_back(from);
-        newAnnotations.push_back(anno);
-        return;
-      }
+      assert(compare != 0 && "should not pass non-local annotations here");
       if (compare == 1) {
-        // Push an empty place holder for the non-local annotation.
+        // This annotation definitely does not have "circt.nonlocal" field. Push
+        // an empty place holder for the non-local annotation.
         nonLocalIndex = val.index();
         attributes.push_back(NamedAttribute(nonLocalString, nonLocalString));
         break;
       }
+      // Otherwise push the current attribute and keep searching for the
+      // "circt.nonlocal" field.
       attributes.push_back(attr);
     }
     if (nonLocalIndex == -1) {
-      // Push the "circt.nonlocal" to the last slot.
+      // Push an empty "circt.nonlocal" field to the last slot.
       nonLocalIndex = attributes.size();
       attributes.push_back(NamedAttribute(nonLocalString, nonLocalString));
     } else {
@@ -915,31 +948,30 @@ private:
     }
 
     // Construct the NLAs if we don't have any yet.
-    if (nlaRefs.empty())
-      nlaRefs = createNLAs(toModule, toModuleName, fromModule);
+    auto nlaRefs = createNLAs(toModuleName, fromModule);
+    for (auto nla : nlaRefs)
+      targetMap[nla.getAttr()].insert(to);
 
     // Clone the annotation for each new NLA.
     cloneAnnotation(nlaRefs, anno, attributes, nonLocalIndex, newAnnotations);
-    for (auto nla : nlaRefs)
-      targetMap[nla.getAttr()].push_back(to);
+    return true;
   }
 
   void copyAnnotations() {}
 
   /// Merge the annotations of a specific target, either a operation or a port
   /// on an operation.
-  void mergeAnnotations(FModuleLike toModule,
-                        SmallVectorImpl<FlatSymbolRefAttr> &toNLAs,
-                        AnnoTarget to, AnnotationSet toAnnos,
-                        FModuleLike fromModule,
-                        SmallVectorImpl<FlatSymbolRefAttr> &fromNLAs,
+  void mergeAnnotations(FModuleLike toModule, AnnoTarget to,
+                        AnnotationSet toAnnos, FModuleLike fromModule,
                         AnnoTarget from, AnnotationSet fromAnnos) {
-
     // This is a list of all the annotations which will be added to `to`.
     SmallVector<Annotation> newAnnotations;
     // We have special case handling of DontTouch to prevent it from being
     // turned into a non-local annotation.
     bool hasDontTouch = false;
+
+    // This records if any annotation was ac
+    bool madeNonlocal = false;
 
     // Iterate the `to` annotations, transforming non-common annotations into
     // non-local ones.  We want to make sure that we keep the order of the
@@ -954,17 +986,35 @@ private:
         newAnnotations.push_back(anno);
         hasDontTouch = true;
       }
-      // Otherwise make the annotation non-local and add it to the set.
-      makeAnnotationNonLocal(toModule, toModule.moduleNameAttr(), to,
-                             fromModule, from, anno, newAnnotations);
-    }
-
-    // Add the `from` annotations, this time skipping the common annotations.
-    for (auto anno : fromAnnos) {
-      if (localSet.count(anno.getAttr()))
+      // If the annotation is already non-local, we add it as is.  It is already
+      // added to the target map.
+      if (anno.getMember("circt.nonlocal")) {
+        newAnnotations.push_back(anno);
         continue;
-      makeAnnotationNonLocal(fromNLAs, toModule, toModule.moduleNameAttr(), to,
-                             toModule, to, anno, newAnnotations);
+      }
+      // Otherwise make the annotation non-local and add it to the set.
+      makeAnnotationNonLocal(toModule.moduleNameAttr(), to, toModule, anno,
+                             newAnnotations);
+    }
+    for (auto anno : fromAnnos) {
+      if (anno.isClass(dontTouchAnnoClass)) {
+        // Skip this if we already have a DontTouch.
+        if (hasDontTouch)
+          continue;
+        // We don't worry if the DontTouch is non-local or not, we just copy it
+        // as is since it doesn't matter.
+        newAnnotations.push_back(anno);
+        hasDontTouch = true;
+      }
+      // If the annotation is already non-local, we add it as is.  It is already
+      // added to the target map.
+      if (anno.getMember("circt.nonlocal")) {
+        newAnnotations.push_back(anno);
+        continue;
+      }
+      // Otherwise make the annotation non-local and add it to the set.
+      makeAnnotationNonLocal(toModule.moduleNameAttr(), to, fromModule, anno,
+                             newAnnotations);
     }
 
     // Copy over all the new annotations.
@@ -973,30 +1023,26 @@ private:
   }
 
   /// Merge all annotations and port annotations on two operations.
-  void mergeAnnotations(FModuleLike toModule,
-                        SmallVectorImpl<FlatSymbolRefAttr> &toNLAs,
-                        Operation *to, FModuleLike fromModule,
-                        SmallVectorImpl<FlatSymbolRefAttr> &fromNLAs,
-                        Operation *from) {
+  void mergeAnnotations(FModuleLike toModule, Operation *to,
+                        FModuleLike fromModule, Operation *from) {
     // Merge op annotations.
-    mergeAnnotations(toModule, toNLAs, OpAnnoTarget(to), AnnotationSet(to),
-                     fromModule, fromNLAs, OpAnnoTarget(to),
-                     AnnotationSet(from));
+    mergeAnnotations(toModule, OpAnnoTarget(to), AnnotationSet(to), fromModule,
+                     OpAnnoTarget(from), AnnotationSet(from));
 
     // Merge port annotations.
     if (toModule == to) {
       // Merge module port annotations.
       for (unsigned i = 0, e = toModule.getNumPorts(); i < e; ++i)
-        mergeAnnotations(toModule, toNLAs, PortAnnoTarget(toModule, i),
+        mergeAnnotations(toModule, PortAnnoTarget(toModule, i),
                          AnnotationSet::forPort(toModule, i), fromModule,
-                         fromNLAs, PortAnnoTarget(fromModule, i),
+                         PortAnnoTarget(fromModule, i),
                          AnnotationSet::forPort(fromModule, i));
     } else if (auto toMem = dyn_cast<MemOp>(to)) {
       // Merge memory port annotations.
       auto fromMem = cast<MemOp>(from);
       for (unsigned i = 0, e = toMem.getNumResults(); i < e; ++i)
-        mergeAnnotations(toModule, toNLAs, PortAnnoTarget(toMem, i),
-                         AnnotationSet::forPort(toMem, i), fromModule, fromNLAs,
+        mergeAnnotations(toModule, PortAnnoTarget(toMem, i),
+                         AnnotationSet::forPort(toMem, i), fromModule,
                          PortAnnoTarget(fromMem, i),
                          AnnotationSet::forPort(fromMem, i));
     }
@@ -1063,47 +1109,39 @@ private:
 
   /// Recursively merge two operations.
   // NOLINTNEXTLINE(misc-no-recursion)
-  void mergeOps(RenameMap &renameMap, FModuleLike toModule,
-                SmallVectorImpl<FlatSymbolRefAttr> &toNLAs, Operation *to,
-                FModuleLike fromModule,
-                SmallVectorImpl<FlatSymbolRefAttr> &fromNLAs, Operation *from) {
+  void mergeOps(RenameMap &renameMap, FModuleLike toModule, Operation *to,
+                FModuleLike fromModule, Operation *from) {
     // Merge the operation locations.
     if (to->getLoc() != from->getLoc())
       to->setLoc(mergeLoc(context, to->getLoc(), from->getLoc()));
 
     // Recurse into any regions.
     for (auto regions : llvm::zip(to->getRegions(), from->getRegions()))
-      mergeRegions(renameMap, toModule, toNLAs, std::get<0>(regions),
-                   fromModule, fromNLAs, std::get<1>(regions));
+      mergeRegions(renameMap, toModule, std::get<0>(regions), fromModule,
+                   std::get<1>(regions));
 
     // Record any inner_sym renamings that happened.
-    if (to != from)
-      recordSymRenames(renameMap, toModule, to, fromModule, from);
+    recordSymRenames(renameMap, toModule, to, fromModule, from);
 
     // Merge the annotations.
-    mergeAnnotations(toModule, toNLAs, to, fromModule, fromNLAs, from);
+    mergeAnnotations(toModule, to, fromModule, from);
   }
 
   /// Recursively merge two blocks.
-  void mergeBlocks(RenameMap &renameMap, FModuleLike toModule,
-                   SmallVectorImpl<FlatSymbolRefAttr> &toNLAs, Block &toBlock,
-                   FModuleLike fromModule,
-                   SmallVectorImpl<FlatSymbolRefAttr> &fromNLAs,
-                   Block &fromBlock) {
+  void mergeBlocks(RenameMap &renameMap, FModuleLike toModule, Block &toBlock,
+                   FModuleLike fromModule, Block &fromBlock) {
     for (auto ops : llvm::zip(toBlock, fromBlock))
-      mergeOps(renameMap, toModule, toNLAs, &std::get<0>(ops), fromModule,
-               fromNLAs, &std::get<1>(ops));
+      mergeOps(renameMap, toModule, &std::get<0>(ops), fromModule,
+               &std::get<1>(ops));
   }
 
   // Recursively merge two regions.
   void mergeRegions(RenameMap &renameMap, FModuleLike toModule,
-                    SmallVectorImpl<FlatSymbolRefAttr> &toNLAs,
                     Region &toRegion, FModuleLike fromModule,
-                    SmallVectorImpl<FlatSymbolRefAttr> &fromNLAs,
                     Region &fromRegion) {
     for (auto blocks : llvm::zip(toRegion, fromRegion))
-      mergeBlocks(renameMap, toModule, toNLAs, std::get<0>(blocks), fromModule,
-                  fromNLAs, std::get<1>(blocks));
+      mergeBlocks(renameMap, toModule, std::get<0>(blocks), fromModule,
+                  std::get<1>(blocks));
   }
 
   MLIRContext *context;
@@ -1116,8 +1154,12 @@ private:
   /// We insert all NLAs to the beginning of this block.
   Block *nlaBlock;
 
-  // This maps an NLA to the operations and ports that uses it.
-  DenseMap<Attribute, std::vector<AnnoTarget>> targetMap;
+  // This maps an NLA  to the operations and ports that uses it.
+  DenseMap<Attribute, llvm::SmallDenseSet<AnnoTarget>> targetMap;
+
+  // This is a cache to avoid creating duplicate NLAs.  This maps the ArrayAtr
+  // of the NLA's path to the name of the NLA which contains it.
+  DenseMap<Attribute, Attribute> nlaCache;
 
   // Cached attributes for faster comparisons and attribute building.
   StringAttr nonLocalString;
