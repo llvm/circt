@@ -301,10 +301,8 @@ static bool haveMatchingDims(Type a, Type b, Location loc) {
   return aDims == bDims;
 }
 
-/// Return true if this is a zero bit type, e.g. a zero bit integer or array
-/// thereof.
 // NOLINTBEGIN(misc-no-recursion)
-static bool isZeroBitType(Type type) {
+bool ExportVerilog::isZeroBitType(Type type) {
   if (auto intType = type.dyn_cast<IntegerType>())
     return intType.getWidth() == 0;
   if (auto inout = type.dyn_cast<hw::InOutType>())
