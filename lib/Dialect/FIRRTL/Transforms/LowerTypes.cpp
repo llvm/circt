@@ -379,6 +379,8 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitDecl(RegResetOp op);
   bool visitExpr(InvalidValueOp op);
   bool visitExpr(SubaccessOp op);
+  bool visitExpr(VectorCreateOp op);
+  bool visitExpr(BundleCreateOp op);
   bool visitExpr(MultibitMuxOp op);
   bool visitExpr(MuxPrimOp op);
   bool visitExpr(mlir::UnrealizedConversionCastOp op);
@@ -398,8 +400,7 @@ private:
   void lowerSAWritePath(Operation *, ArrayRef<Operation *> writePath);
   bool lowerProducer(
       Operation *op,
-      llvm::function_ref<Operation *(const FlatBundleFieldEntry &, ArrayAttr)>
-          clone);
+      llvm::function_ref<Value(const FlatBundleFieldEntry &, ArrayAttr)> clone);
   /// Copy annotations from \p annotations to \p loweredAttrs, except
   /// annotations with "target" key, that do not match the field suffix.
   ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
@@ -555,8 +556,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
 
 bool TypeLoweringVisitor::lowerProducer(
     Operation *op,
-    llvm::function_ref<Operation *(const FlatBundleFieldEntry &, ArrayAttr)>
-        clone) {
+    llvm::function_ref<Value(const FlatBundleFieldEntry &, ArrayAttr)> clone) {
   // If this is not a bundle, there is nothing to do.
   auto srcType = op->getResult(0).getType().dyn_cast<FIRRTLType>();
   if (!srcType)
@@ -595,15 +595,16 @@ bool TypeLoweringVisitor::lowerProducer(
     // attribute.
     ArrayAttr loweredAttrs =
         filterAnnotations(context, oldAnno, srcType, field);
-    auto *newOp = clone(field, loweredAttrs);
+    auto newVal = clone(field, loweredAttrs);
 
     // Carry over the name, if present.
-    if (!loweredName.empty())
-      newOp->setAttr(cache.nameAttr, StringAttr::get(context, loweredName));
-    if (nameKindAttr)
-      newOp->setAttr(cache.nameKindAttr, nameKindAttr);
-
-    lowered.push_back(newOp->getResult(0));
+    if (auto *newOp = newVal.getDefiningOp()) {
+      if (!loweredName.empty())
+        newOp->setAttr(cache.nameAttr, StringAttr::get(context, loweredName));
+      if (nameKindAttr)
+        newOp->setAttr(cache.nameKindAttr, nameKindAttr);
+    }
+    lowered.push_back(newVal);
   }
 
   processUsers(op->getResult(0), lowered);
@@ -1048,7 +1049,7 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
 /// Lower a wire op with a bundle to multiple non-bundled wires.
 bool TypeLoweringVisitor::visitDecl(WireOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Operation * {
+                   ArrayAttr attrs) -> Value {
     return builder->create<WireOp>(field.type, "", NameKindEnum::DroppableName,
                                    attrs, StringAttr{});
   };
@@ -1058,7 +1059,7 @@ bool TypeLoweringVisitor::visitDecl(WireOp op) {
 /// Lower a reg op with a bundle to multiple non-bundled regs.
 bool TypeLoweringVisitor::visitDecl(RegOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Operation * {
+                   ArrayAttr attrs) -> Value {
     return builder->create<RegOp>(field.type, op.getClockVal(), "",
                                   NameKindEnum::DroppableName, attrs,
                                   StringAttr{});
@@ -1069,7 +1070,7 @@ bool TypeLoweringVisitor::visitDecl(RegOp op) {
 /// Lower a reg op with a bundle to multiple non-bundled regs.
 bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Operation * {
+                   ArrayAttr attrs) -> Value {
     auto resetVal = getSubWhatever(op.getResetValue(), field.index);
     return builder->create<RegResetOp>(
         field.type, op.getClockVal(), op.getResetSignal(), resetVal, "",
@@ -1081,7 +1082,7 @@ bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
 /// Lower a wire op with a bundle to multiple non-bundled wires.
 bool TypeLoweringVisitor::visitDecl(NodeOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Operation * {
+                   ArrayAttr attrs) -> Value {
     auto input = getSubWhatever(op.getInput(), field.index);
     return builder->create<NodeOp>(field.type, input, "",
                                    NameKindEnum::DroppableName, attrs,
@@ -1093,7 +1094,7 @@ bool TypeLoweringVisitor::visitDecl(NodeOp op) {
 /// Lower an InvalidValue op with a bundle to multiple non-bundled InvalidOps.
 bool TypeLoweringVisitor::visitExpr(InvalidValueOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Operation * {
+                   ArrayAttr attrs) -> Value {
     return builder->create<InvalidValueOp>(field.type);
   };
   return lowerProducer(op, clone);
@@ -1102,7 +1103,7 @@ bool TypeLoweringVisitor::visitExpr(InvalidValueOp op) {
 // Expand muxes of aggregates
 bool TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Operation * {
+                   ArrayAttr attrs) -> Value {
     auto high = getSubWhatever(op.getHigh(), field.index);
     auto low = getSubWhatever(op.getLow(), field.index);
     return builder->create<MuxPrimOp>(op.getSel(), high, low);
@@ -1113,9 +1114,10 @@ bool TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
 // Expand UnrealizedConversionCastOp of aggregates
 bool TypeLoweringVisitor::visitExpr(mlir::UnrealizedConversionCastOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Operation * {
+                   ArrayAttr attrs) -> Value {
     auto input = getSubWhatever(op.getOperand(0), field.index);
-    return builder->create<mlir::UnrealizedConversionCastOp>(field.type, input);
+    return builder->create<mlir::UnrealizedConversionCastOp>(field.type, input)
+        .getResult(0);
   };
   return lowerProducer(op, clone);
 }
@@ -1157,7 +1159,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
     // uptoBits is used to keep track of the bits that have been extracted.
     size_t uptoBits = 0;
     auto clone = [&](const FlatBundleFieldEntry &field,
-                     ArrayAttr attrs) -> Operation * {
+                     ArrayAttr attrs) -> Value {
       // All the fields must have valid bitwidth, a requirement for BitCastOp.
       auto fieldBits = getBitWidth(field.type).value();
       // If empty field, then it doesnot have any use, so replace it with an
@@ -1184,7 +1186,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
 
 bool TypeLoweringVisitor::visitExpr(RefSendOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Operation * {
+                   ArrayAttr attrs) -> Value {
     return builder->create<RefSendOp>(
         getSubWhatever(op.getBase(), field.index));
   };
@@ -1193,7 +1195,7 @@ bool TypeLoweringVisitor::visitExpr(RefSendOp op) {
 
 bool TypeLoweringVisitor::visitExpr(RefResolveOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Operation * {
+                   ArrayAttr attrs) -> Value {
     Value src = getSubWhatever(op.getRef(), field.index);
     return builder->create<RefResolveOp>(src);
   };
@@ -1304,9 +1306,25 @@ bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   return true;
 }
 
+bool TypeLoweringVisitor::visitExpr(VectorCreateOp op) {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Value {
+    return op.getOperand(field.index);
+  };
+  return lowerProducer(op, clone);
+}
+
+bool TypeLoweringVisitor::visitExpr(BundleCreateOp op) {
+  auto clone = [&](const FlatBundleFieldEntry &field,
+                   ArrayAttr attrs) -> Value {
+    return op.getOperand(field.index);
+  };
+  return lowerProducer(op, clone);
+}
+
 bool TypeLoweringVisitor::visitExpr(MultibitMuxOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
-                   ArrayAttr attrs) -> Operation * {
+                   ArrayAttr attrs) -> Value {
     SmallVector<Value> newInputs;
     newInputs.reserve(op.getInputs().size());
     for (auto input : op.getInputs()) {

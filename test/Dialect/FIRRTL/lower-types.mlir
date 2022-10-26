@@ -1112,6 +1112,38 @@ firrtl.module private @is1436_FOO() {
     %0 = firrtl.wire : index
   }
 
+  // CHECK-LABEL: firrtl.module @MergeBundle
+  firrtl.module @MergeBundle(out %o: !firrtl.bundle<valid: uint<1>, ready: uint<1>>, in %i: !firrtl.uint<1>) 
+  {
+    %a = firrtl.wire   : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
+    firrtl.strictconnect %o, %a : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
+    %0 = firrtl.bundlecreate %i, %i : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.bundle<valid: uint<1>, ready: uint<1>>
+    firrtl.strictconnect %a, %0 : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
+    // CHECK:  %a_valid = firrtl.wire   : !firrtl.uint<1>
+    // CHECK:  %a_ready = firrtl.wire   : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %o_valid, %a_valid : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %o_ready, %a_ready : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %a_valid, %i : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %a_ready, %i : !firrtl.uint<1>
+  }
+ 
+  // CHECK-LABEL: firrtl.module @MergeVector
+  firrtl.module @MergeVector(out %o: !firrtl.vector<uint<1>, 3>, in %i: !firrtl.uint<1>) {
+    %a = firrtl.wire   : !firrtl.vector<uint<1>, 3>
+    firrtl.strictconnect %o, %a : !firrtl.vector<uint<1>, 3>
+    %0 = firrtl.vectorcreate %i, %i, %i : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 3>
+    firrtl.strictconnect %a, %0 : !firrtl.vector<uint<1>, 3>
+    // CHECK:  %a_0 = firrtl.wire   : !firrtl.uint<1>
+    // CHECK:  %a_1 = firrtl.wire   : !firrtl.uint<1>
+    // CHECK:  %a_2 = firrtl.wire   : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %o_0, %a_0 : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %o_1, %a_1 : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %o_2, %a_2 : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %a_0, %i : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %a_1, %i : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %a_2, %i : !firrtl.uint<1>
+  }
+
 } // CIRCUIT
 
 // Check that we don't lose the DontTouchAnnotation when it is not the last
