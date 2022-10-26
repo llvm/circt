@@ -89,6 +89,7 @@ void PrettyPrinter::add(Token t) {
           return print(f);
         tokens.push_back(f);
         rightTotal += f.size;
+        assert(rightTotal > 0);
         checkStream();
       })
       .Case([&](BreakToken *b) {
@@ -98,6 +99,7 @@ void PrettyPrinter::add(Token t) {
           checkStack();
         addScanToken(-rightTotal);
         rightTotal += b->spaces();
+        assert(rightTotal > 0);
       })
       .Case([&](BeginToken *b) {
         if (scanStack.empty())
@@ -109,6 +111,29 @@ void PrettyPrinter::add(Token t) {
           return print({t, 0});
         addScanToken(-1);
       });
+
+  // Check for too-large totals, reset.
+  // This can happen if we have an open group and emit
+  // many tokens, especially newlines which have artificial size.
+  if (tokens.empty())
+    return;
+  assert(leftTotal >= 0);
+  assert(rightTotal >= 0);
+  if (uint32_t(leftTotal) > uint32_t{1} << 29) {
+    // Plan: reset leftTotal to '1', adjust all accordingly.
+    auto adjust = leftTotal - 1;
+    for (auto scanIndex : scanStack) {
+      auto &t = tokens[scanIndex - tokenOffset];
+      if (isa<BreakToken, BeginToken>(&t.token)) {
+        if (t.size < 0) {
+          assert(t.size + adjust < 0);
+          t.size += adjust;
+        }
+      }
+    }
+    leftTotal -= adjust;
+    rightTotal -= adjust;
+  }
 }
 
 void PrettyPrinter::eof() {
