@@ -30,6 +30,7 @@
 //   an expression in, say, 2 columns, as this is unlikely to produce good
 //   output.
 //   (TODO)
+// * Neverbreak. (TODO: explain/motivate).
 //
 //
 // There are many pretty-printing implementations based on this paper,
@@ -199,7 +200,7 @@ void PrettyPrinter::print(FormattedToken f) {
       .Case([&](BreakToken *b) {
         auto &frame = getPrintFrame();
         bool fits =
-            frame.breaks == PrintBreaks::Fits ||
+            b->neverbreak() || frame.breaks == PrintBreaks::Fits ||
             (frame.breaks == PrintBreaks::Inconsistent && f.size <= space);
         if (fits) {
           space -= b->spaces();

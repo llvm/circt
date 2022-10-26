@@ -654,4 +654,36 @@ xxxxxxxxxxxxxxx yyyyyyyyyyyyyyy
 )"""));
 }
 
+TEST(PrettyPrinterTest, NeverBreak) {
+  SmallString<128> out;
+  raw_svector_ostream os(out);
+
+  auto test = [&](auto neverbreak) {
+    out = "\n";
+    PrettyPrinter pp(os, 8);
+    pp.add(BeginToken(2));
+    pp.add(StringToken("test"));
+    pp.add(BreakToken(1, 0, neverbreak));
+    pp.add(StringToken("test"));
+    pp.add(EndToken());
+    pp.add(BreakToken());
+    pp.add(StringToken("test"));
+    pp.add(BreakToken(PrettyPrinter::kInfinity));
+    pp.eof();
+  };
+
+  test(false);
+  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+test
+  test
+test
+)"""));
+
+  test(true);
+  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+test test
+test
+)"""));
+}
+
 } // end anonymous namespace

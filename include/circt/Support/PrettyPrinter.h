@@ -53,8 +53,9 @@ public:
     uint32_t len;
   };
   struct BreakInfo {
-    uint32_t spaces; // how many spaces when not broken
-    int32_t offset;  // amount to adjust indentation level by if breaks here
+    uint32_t spaces; // How many spaces to emit when not broken.
+    int32_t offset;  // Amount to adjust indentation level by if breaks here.
+    bool neverbreak; // If set, behaves like break except this always 'fits'.
   };
   struct BeginInfo {
     int32_t offset;
@@ -116,11 +117,12 @@ struct StringToken : public TokenBase<StringToken, Token::Kind::String> {
 };
 
 struct BreakToken : public TokenBase<BreakToken, Token::Kind::Break> {
-  BreakToken(uint32_t spaces = 1, int32_t offset = 0) {
-    getInfoMut() = {spaces, offset};
+  BreakToken(uint32_t spaces = 1, int32_t offset = 0, bool neverbreak = false) {
+    getInfoMut() = {spaces, offset, neverbreak};
   }
   auto spaces() { return getInfo().spaces; }
   auto offset() { return getInfo().offset; }
+  auto neverbreak() { return getInfo().neverbreak; }
 };
 
 struct BeginToken : public TokenBase<BeginToken, Token::Kind::Begin> {

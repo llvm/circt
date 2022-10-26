@@ -115,6 +115,9 @@ public:
   /// Add a break that is zero-wide if not broken.
   void zerobreak() { add<BreakToken>(0); }
 
+  /// Add a 'neverbreak' break.  Always 'fits'.
+  void neverbreak() { add<BreakToken>(0, 0, true); }
+
   /// Start a consistent group with specified offset.
   void cbox(int32_t offset = 0, IndentStyle style = IndentStyle::Visual) {
     add<BeginToken>(offset, Breaks::Consistent, style);
@@ -173,6 +176,7 @@ enum class PP {
   cbox2,
   end,
   zerobreak,
+  neverbreak,
   eof
 };
 
@@ -256,6 +260,9 @@ public:
       break;
     case PP::zerobreak:
       Base::zerobreak();
+      break;
+    case PP::neverbreak:
+      Base::neverbreak();
       break;
     case PP::eof:
       Base::eof();
