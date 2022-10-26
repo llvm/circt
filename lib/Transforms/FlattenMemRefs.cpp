@@ -314,7 +314,6 @@ public:
     patterns.add<LoadOpConversion, StoreOpConversion, AllocOpConversion,
                  OperandConversionPattern<func::ReturnOp>,
                  OperandConversionPattern<memref::DeallocOp>,
-                 OperandConversionPattern<mlir::cf::CondBranchOp>,
                  CondBranchOpConversion,
                  OperandConversionPattern<memref::DeallocOp>,
                  OperandConversionPattern<memref::CopyOp>, CallOpConversion>(
