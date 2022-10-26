@@ -899,7 +899,7 @@ public:
   }
 
   void emitTextWithSubstitutions(StringRef string, Operation *op,
-                                 std::function<void(Value)> operandEmitter,
+                                 llvm::function_ref<void(Value)> operandEmitter,
                                  ArrayAttr symAttrs, ModuleNameManager &names);
 
   /// Emit the value of a StringAttr as one or more Verilog "one-line" comments
@@ -915,8 +915,9 @@ private:
 } // end anonymous namespace
 
 void EmitterBase::emitTextWithSubstitutions(
-    StringRef string, Operation *op, std::function<void(Value)> operandEmitter,
-    ArrayAttr symAttrs, ModuleNameManager &names) {
+    StringRef string, Operation *op,
+    llvm::function_ref<void(Value)> operandEmitter, ArrayAttr symAttrs,
+    ModuleNameManager &names) {
 
   // Perform operand substitions as we emit the line string.  We turn {{42}}
   // into the value of operand 42.
