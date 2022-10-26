@@ -54,8 +54,8 @@ using namespace ExportVerilog;
 
 #define DEBUG_TYPE "export-verilog"
 
-constexpr int INDENT_AMOUNT = 2;
-constexpr int SPACE_PER_INDENT_IN_EXPRESSION_FORMATTING = 8;
+constexpr int indentAmount = 2;
+constexpr int spacePerIndentInExpressionFormatting = 8;
 StringRef circtHeader = "circt_header.svh";
 StringRef circtHeaderInclude = "`include \"circt_header.svh\"\n";
 
@@ -243,6 +243,7 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
 
 /// Return the width of the specified type in bits or -1 if it isn't
 /// supported.
+// NOLINTBEGIN(misc-no-recursion)
 static int getBitWidthOrSentinel(Type type) {
   return TypeSwitch<Type, int>(type)
       .Case<IntegerType>([](IntegerType integerType) {
@@ -287,6 +288,7 @@ static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
 
   mlir::emitError(loc, "value has an unsupported verilog type ") << type;
 }
+// NOLINTEND(misc-no-recursion)
 
 /// True iff 'a' and 'b' have the same wire dims.
 static bool haveMatchingDims(Type a, Type b, Location loc) {
@@ -301,6 +303,7 @@ static bool haveMatchingDims(Type a, Type b, Location loc) {
 
 /// Return true if this is a zero bit type, e.g. a zero bit integer or array
 /// thereof.
+// NOLINTBEGIN(misc-no-recursion)
 static bool isZeroBitType(Type type) {
   if (auto intType = type.dyn_cast<IntegerType>())
     return intType.getWidth() == 0;
@@ -317,10 +320,12 @@ static bool isZeroBitType(Type type) {
   // We have an open type system, so assume it is ok.
   return false;
 }
+// NOLINTEND(misc-no-recursion)
 
 /// Given a set of known nested types (those supported by this pass), strip off
 /// leading unpacked types.  This strips off portions of the type that are
 /// printed to the right of the name in verilog.
+// NOLINTBEGIN(misc-no-recursion)
 static Type stripUnpackedTypes(Type type) {
   return TypeSwitch<Type, Type>(type)
       .Case<InOutType>([](InOutType inoutType) {
@@ -341,6 +346,7 @@ static bool hasStructType(Type type) {
       .Case<StructType>([](auto) { return true; })
       .Default([](auto) { return false; });
 }
+// NOLINTEND(misc-no-recursion)
 
 /// Return the word (e.g. "reg") in Verilog to declare the specified thing.
 static StringRef getVerilogDeclWord(Operation *op,
@@ -405,6 +411,7 @@ static StringRef getVerilogDeclWord(Operation *op,
 
 /// Pull any FileLineCol locs out of the specified location and add it to the
 /// specified set.
+// NOLINTBEGIN(misc-no-recursion)
 static void collectFileLineColLocs(Location loc,
                                    SmallPtrSet<Attribute, 8> &locationSet) {
   if (auto fileLoc = loc.dyn_cast<FileLineColLoc>())
@@ -414,6 +421,7 @@ static void collectFileLineColLocs(Location loc,
     for (auto loc : fusedLoc.getLocations())
       collectFileLineColLocs(loc, locationSet);
 }
+// NOLINTEND(misc-no-recursion)
 
 /// Return the location information as a (potentially empty) string.
 static std::string
@@ -714,7 +722,7 @@ static void emitSVAttributesImpl(llvm::raw_ostream &os,
 namespace {
 /// This class keeps track of names for values within a module.
 struct ModuleNameManager {
-  ModuleNameManager() {}
+  ModuleNameManager() = default;
 
   StringRef addName(Value value, StringRef name) {
     return addName(ValueOrOp(value), name);
@@ -880,11 +888,11 @@ public:
 
   raw_ostream &indent() { return os.indent(state.currentIndent); }
 
-  void addIndent() { state.currentIndent += INDENT_AMOUNT; }
+  void addIndent() { state.currentIndent += indentAmount; }
   void reduceIndent() {
-    assert(state.currentIndent >= INDENT_AMOUNT &&
+    assert(state.currentIndent >= indentAmount &&
            "Unintended indent wrap-around.");
-    state.currentIndent -= INDENT_AMOUNT;
+    state.currentIndent -= indentAmount;
   }
 
   /// If we have location information for any of the specified operations,
@@ -899,7 +907,7 @@ public:
   }
 
   void emitTextWithSubstitutions(StringRef string, Operation *op,
-                                 std::function<void(Value)> operandEmitter,
+                                 llvm::function_ref<void(Value)> operandEmitter,
                                  ArrayAttr symAttrs, ModuleNameManager &names);
 
   /// Emit the value of a StringAttr as one or more Verilog "one-line" comments
@@ -915,8 +923,9 @@ private:
 } // end anonymous namespace
 
 void EmitterBase::emitTextWithSubstitutions(
-    StringRef string, Operation *op, std::function<void(Value)> operandEmitter,
-    ArrayAttr symAttrs, ModuleNameManager &names) {
+    StringRef string, Operation *op,
+    llvm::function_ref<void(Value)> operandEmitter, ArrayAttr symAttrs,
+    ModuleNameManager &names) {
 
   // Perform operand substitions as we emit the line string.  We turn {{42}}
   // into the value of operand 42.
@@ -927,7 +936,7 @@ void EmitterBase::emitTextWithSubstitutions(
     // *within* this module. Instead, you have to rely on those remote
     // operations to have been named inside the global names table. If they
     // haven't, take a look at name legalization first.
-    if (auto itemOp = item.getOp()) {
+    if (auto *itemOp = item.getOp()) {
       if (item.hasPort()) {
         return getPortVerilogName(itemOp, item.getPort());
       }
@@ -947,7 +956,7 @@ void EmitterBase::emitTextWithSubstitutions(
   unsigned numSymOps = symAttrs.size();
   auto emitUntilSubstitution = [&](size_t next = 0) -> bool {
     size_t start = 0;
-    while (1) {
+    while (true) {
       next = string.find("{{", next);
       if (next == StringRef::npos)
         return false;
@@ -1078,6 +1087,7 @@ void EmitterBase::emitComment(StringAttr comment) {
 
 /// Given an expression that is spilled into a temporary wire, try to synthesize
 /// a better name than "_T_42" based on the structure of the expression.
+// NOLINTBEGIN(misc-no-recursion)
 StringAttr ExportVerilog::inferStructuralNameForTemporary(Value expr) {
   StringAttr result;
   bool addPrefixUnderScore = true;
@@ -1152,6 +1162,7 @@ StringAttr ExportVerilog::inferStructuralNameForTemporary(Value expr) {
 
   return result;
 }
+// NOLINTEND(misc-no-recursion)
 
 //===----------------------------------------------------------------------===//
 // ModuleEmitter
@@ -1292,6 +1303,7 @@ void ModuleEmitter::emitTypeDims(Type type, Location loc, raw_ostream &os) {
 /// printing of 'type'.
 ///
 /// Returns true when anything was printed out.
+// NOLINTBEGIN(misc-no-recursion)
 static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                 SmallVectorImpl<Attribute> &dims,
                                 bool implicitIntType, bool singleBitDefaultType,
@@ -1391,6 +1403,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         return true;
       });
 }
+// NOLINTEND(misc-no-recursion)
 
 /// Print the specified packed portion of the type to the specified stream,
 ///
@@ -1411,6 +1424,7 @@ bool ModuleEmitter::printPackedType(Type type, raw_ostream &os, Location loc,
 
 /// Output the unpacked array dimensions.  This is the part of the type that is
 /// to the right of the name.
+// NOLINTBEGIN(misc-no-recursion)
 void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
   TypeSwitch<Type, void>(type)
       .Case<InOutType>([&](InOutType inoutType) {
@@ -1426,6 +1440,7 @@ void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
         os << "()";
       });
 }
+// NOLINTEND(misc-no-recursion)
 
 //===----------------------------------------------------------------------===//
 // Methods for formatting parameters.
@@ -1441,6 +1456,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
 
 /// Helper that prints a parameter constant value in a Verilog compatible way.
 /// This returns the precedence of the generated string.
+// NOLINTBEGIN(misc-no-recursion)
 SubExprInfo
 ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
                                VerilogPrecedence parenthesizeIfLooserThan,
@@ -1643,6 +1659,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   }
   return {prec, allOperandsSigned ? IsSigned : IsUnsigned};
 }
+// NOLINTEND(misc-no-recursion)
 
 //===----------------------------------------------------------------------===//
 // Expression Emission
@@ -1655,6 +1672,7 @@ namespace {
 /// we emit the characters to a SmallVector which allows us to emit a bunch of
 /// stuff, then pre-insert parentheses and other things if we find out that it
 /// was needed later.
+// NOLINTBEGIN(misc-no-recursion)
 class ExprEmitter : public EmitterBase,
                     public TypeOpVisitor<ExprEmitter, SubExprInfo>,
                     public CombinationalVisitor<ExprEmitter, SubExprInfo>,
@@ -1960,20 +1978,19 @@ void ExprEmitter::formatOutBuffer() {
 
   SmallVector<char> tmpOutBuffer;
   llvm::raw_svector_ostream tmpOs(tmpOutBuffer);
-  auto it = outBuffer.begin();
+  auto *it = outBuffer.begin();
   unsigned currentIndex = 0;
 
   while (it != outBuffer.end()) {
     // Split by a white space.
-    auto next = std::find(it, outBuffer.end(), ' ');
+    auto *next = std::find(it, outBuffer.end(), ' ');
     unsigned tokenLength = std::distance(it, next);
 
     if (!tmpOutBuffer.empty() &&
         currentIndex + tokenLength > state.options.emittedLineLength) {
       // It breaks the line constraint, so insert a newline and indent.
       tmpOs << '\n';
-      tmpOs.indent(state.currentIndent *
-                   SPACE_PER_INDENT_IN_EXPRESSION_FORMATTING);
+      tmpOs.indent(state.currentIndent * spacePerIndentInExpressionFormatting);
       currentIndex = tokenLength;
       tmpOutBuffer.insert(tmpOutBuffer.end(), it, next);
     } else {
@@ -2508,6 +2525,7 @@ SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
   os << "<<unsupported expr: " << op->getName().getStringRef() << ">>";
   return {Symbol, IsUnsigned};
 }
+// NOLINTEND(misc-no-recursion)
 
 //===----------------------------------------------------------------------===//
 // NameCollector
@@ -2533,6 +2551,7 @@ private:
 };
 } // namespace
 
+// NOLINTNEXTLINE(misc-no-recursion)
 void NameCollector::collectNames(Block &block) {
 
   SmallString<32> nameTmp;
@@ -2625,6 +2644,7 @@ void NameCollector::collectNames(Block &block) {
 
 namespace {
 /// This emits statement-related operations.
+// NOLINTBEGIN(misc-no-recursion)
 class StmtEmitter : public EmitterBase,
                     public hw::StmtVisitor<StmtEmitter, LogicalResult>,
                     public sv::Visitor<StmtEmitter, LogicalResult> {
@@ -3620,7 +3640,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       } else {
         os << ",\n";
       }
-      os.indent(state.currentIndent + INDENT_AMOUNT) << '.';
+      os.indent(state.currentIndent + indentAmount) << '.';
       os << state.globalNames.getParameterVerilogName(moduleOp,
                                                       param.getName());
       os << '(';
@@ -3789,7 +3809,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceModportOp op) {
   llvm::interleaveComma(op.getPorts(), os, [&](const Attribute &portAttr) {
     auto port = portAttr.cast<ModportStructAttr>();
     os << stringifyEnum(port.getDirection().getValue()) << ' ';
-    auto signalDecl = state.symbolCache.getDefinition(port.getSignal());
+    auto *signalDecl = state.symbolCache.getDefinition(port.getSignal());
     os << getSymOpName(signalDecl);
   });
 
@@ -3861,7 +3881,7 @@ isExpressionEmittedInlineIntoProceduralDeclaration(Operation *op,
     // assignment. A register or logic might be mutated by a blocking assignment
     // so it is not always safe to inline.
     if (auto readInout = dyn_cast<sv::ReadInOutOp>(expr)) {
-      auto defOp = readInout.getOperand().getDefiningOp();
+      auto *defOp = readInout.getOperand().getDefiningOp();
 
       // If it is a read from an inout port, it's unsafe to inline in general.
       if (!defOp)
@@ -4002,7 +4022,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
       !op->getParentOp()->hasTrait<ProceduralRegion>()) {
     // Get a single assignments if any.
     if (auto singleAssign = getSingleAssignAndCheckUsers<AssignOp>(op)) {
-      auto source = singleAssign.getSrc().getDefiningOp();
+      auto *source = singleAssign.getSrc().getDefiningOp();
       // Check that the source value is OK to inline in the current emission
       // point. A port or constant is fine, otherwise check that the assign is
       // next to the operation.
@@ -4021,7 +4041,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     if (auto singleAssign = getSingleAssignAndCheckUsers<BPAssignOp>(op)) {
       // It is necessary for the assignment to dominate users of the op.
       if (checkDominanceOfUsers(singleAssign, op)) {
-        auto source = singleAssign.getSrc().getDefiningOp();
+        auto *source = singleAssign.getSrc().getDefiningOp();
         // A port or constant can be inlined at everywhere. Otherwise, check the
         // validity by `isExpressionEmittedInlineIntoProceduralDeclaration`.
         if (!source || isa<ConstantOp>(source) ||
@@ -4078,6 +4098,7 @@ void StmtEmitter::emitStatementBlock(Block &body) {
 
   reduceIndent();
 }
+// NOLINTEND(misc-no-recursion)
 
 void ModuleEmitter::emitStatement(Operation *op) {
   ModuleNameManager names;
@@ -4241,13 +4262,13 @@ StringRef ModuleEmitter::getNameRemotely(Value value,
   return {};
 }
 
-void ModuleEmitter::emitBindInterface(BindInterfaceOp bind) {
-  if (hasSVAttributes(bind))
-    emitError(bind, "SV attributes emission is unimplemented for the op");
+void ModuleEmitter::emitBindInterface(BindInterfaceOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
 
-  auto instance = bind.getReferencedInstance(&state.symbolCache);
+  auto instance = op.getReferencedInstance(&state.symbolCache);
   auto instantiator = instance->getParentOfType<HWModuleOp>().getName();
-  auto *interface = bind->getParentOfType<ModuleOp>().lookupSymbol(
+  auto *interface = op->getParentOfType<ModuleOp>().lookupSymbol(
       instance.getInterfaceType().getInterface());
   os << "bind " << instantiator << " "
      << cast<InterfaceOp>(*interface).getSymName() << " "

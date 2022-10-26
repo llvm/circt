@@ -58,6 +58,7 @@ target_link_libraries(circt-opt
   CIRCTSVTransforms
   CIRCTHWArith
   CIRCTSystemC
+  CIRCTSystemCTransforms
   CIRCTTransforms
 
   MLIRIR

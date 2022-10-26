@@ -192,7 +192,13 @@ static void loadDHLSPipeline(OpPassManager &pm) {
   // Software lowering
   pm.addPass(mlir::createLowerAffinePass());
   pm.addPass(mlir::createConvertSCFToCFPass());
+
+  // Memref legalization.
   pm.addPass(circt::createFlattenMemRefPass());
+  pm.nest<func::FuncOp>().addPass(
+      circt::handshake::createHandshakeLegalizeMemrefsPass());
+  pm.addPass(mlir::createConvertSCFToCFPass());
+  pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
 
   // DHLS conversion
   pm.addPass(circt::createStandardToHandshakePass(
