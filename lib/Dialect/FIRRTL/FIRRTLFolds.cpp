@@ -1687,6 +1687,7 @@ LogicalResult AttachOp::canonicalize(AttachOp op, PatternRewriter &rewriter) {
   return failure();
 }
 
+namespace {
 // Remove private nodes.  If they have an interesting names, move the name to
 // the source expression.
 struct FoldNodeName : public mlir::RewritePattern {
@@ -1728,13 +1729,14 @@ struct NodeBypass : public mlir::RewritePattern {
     return success();
   }
 };
+} // namespace
 
 void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
   results.insert<FoldNodeName>(context);
 }
 
-SmallVector<Value> getCompleteWrite(Operation *lhs) {
+static SmallVector<Value> getCompleteWrite(Operation *lhs) {
   auto lhsTy = lhs->getResult(0).getType();
   if (!lhsTy.isa<BundleType>() && !lhsTy.isa<FVectorType>())
     return {};
@@ -1787,6 +1789,7 @@ SmallVector<Value> getCompleteWrite(Operation *lhs) {
   return values;
 }
 
+namespace {
 // For a lhs, find all the writers of fields of the aggregate type.  If there
 // is one writer for each field, merge the writes
 struct AggOneShot : public mlir::RewritePattern {
@@ -1807,15 +1810,15 @@ struct AggOneShot : public mlir::RewritePattern {
                                            newVal);
     for (Operation *user : op->getResult(0).getUsers()) {
       if (auto subIndex = dyn_cast<SubindexOp>(user)) {
-        auto aConnect =
-            dyn_cast<StrictConnectOp>(*subIndex.getResult().getUsers().begin());
-        if (aConnect.getDest() == subIndex)
-          rewriter.eraseOp(aConnect);
+        for (Operation *subuser : subIndex.getResult().getUsers())
+          if (auto aConnect = dyn_cast<StrictConnectOp>(subuser))
+            if (aConnect.getDest() == subIndex)
+              rewriter.eraseOp(aConnect);
       } else if (auto subField = dyn_cast<SubfieldOp>(user)) {
-        auto aConnect =
-            dyn_cast<StrictConnectOp>(*subField.getResult().getUsers().begin());
-        if (aConnect.getDest() == subField)
-          rewriter.eraseOp(aConnect);
+        for (Operation *subuser : subField.getResult().getUsers())
+          if (auto aConnect = dyn_cast<StrictConnectOp>(subuser))
+            if (aConnect.getDest() == subField)
+              rewriter.eraseOp(aConnect);
       }
     }
     return success();
@@ -1834,6 +1837,7 @@ struct SubfieldAggOneShot : public AggOneShot {
   SubfieldAggOneShot(MLIRContext *context)
       : AggOneShot(SubfieldOp::getOperationName(), 0, context) {}
 };
+} // namespace
 
 void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
@@ -1848,6 +1852,8 @@ void SubfieldOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results.insert<SubfieldAggOneShot>(context);
 }
+
+namespace {
 
 // Convert bundle Wire to be written once
 struct ConstAgg : public mlir::RewritePattern {
@@ -1884,6 +1890,7 @@ struct ConstVectorAgg : public ConstAgg {
   ConstVectorAgg(MLIRContext *context)
       : ConstAgg(VectorCreateOp::getOperationName(), 0, context) {}
 };
+} // namespace
 
 void BundleCreateOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                  MLIRContext *context) {
@@ -1895,6 +1902,7 @@ void VectorCreateOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.insert<ConstVectorAgg>(context);
 }
 
+namespace {
 // A register with constant reset and all connection to either itself or the
 // same constant, must be replaced by the constant.
 struct FoldResetMux : public mlir::RewritePattern {
@@ -1949,6 +1957,7 @@ struct FoldResetMux : public mlir::RewritePattern {
     return success();
   }
 };
+} // namespace
 
 void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
