@@ -39,10 +39,10 @@ public:
     // be derived from a configs attribute as this can be specified via the CLI
     // arguments of verilator
     // stateType ::= VModuleName*
-    std::string tn = "V";
-    tn += op.getModuleName();
-    auto stateType =
-        emitc::PointerType::get(emitc::OpaqueType::get(op->getContext(), tn));
+    SmallString<128> verilatedModuleName("V");
+    verilatedModuleName += op.getModuleName();
+    auto stateType = emitc::PointerType::get(
+        emitc::OpaqueType::get(op->getContext(), verilatedModuleName));
     Location loc = op.getLoc();
 
     // Include the C++ header produced by Verilator at the location of the HW
@@ -50,7 +50,8 @@ public:
     auto *hwModule =
         SymbolTable::lookupNearestSymbolFrom(op, op.getModuleNameAttr());
     OpBuilder includeBuilder(hwModule);
-    includeBuilder.create<emitc::IncludeOp>(loc, tn + ".h", false);
+    includeBuilder.create<emitc::IncludeOp>(
+        loc, (verilatedModuleName + ".h").str(), false);
 
     // Request a pointer to the verilated module as persistent state.
     Value state = rewriter
