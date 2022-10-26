@@ -243,6 +243,7 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
 
 /// Return the width of the specified type in bits or -1 if it isn't
 /// supported.
+// NOLINTBEGIN(misc-no-recursion)
 static int getBitWidthOrSentinel(Type type) {
   return TypeSwitch<Type, int>(type)
       .Case<IntegerType>([](IntegerType integerType) {
@@ -287,6 +288,7 @@ static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
 
   mlir::emitError(loc, "value has an unsupported verilog type ") << type;
 }
+// NOLINTEND(misc-no-recursion)
 
 /// True iff 'a' and 'b' have the same wire dims.
 static bool haveMatchingDims(Type a, Type b, Location loc) {
@@ -301,6 +303,7 @@ static bool haveMatchingDims(Type a, Type b, Location loc) {
 
 /// Return true if this is a zero bit type, e.g. a zero bit integer or array
 /// thereof.
+// NOLINTBEGIN(misc-no-recursion)
 static bool isZeroBitType(Type type) {
   if (auto intType = type.dyn_cast<IntegerType>())
     return intType.getWidth() == 0;
@@ -317,10 +320,12 @@ static bool isZeroBitType(Type type) {
   // We have an open type system, so assume it is ok.
   return false;
 }
+// NOLINTEND(misc-no-recursion)
 
 /// Given a set of known nested types (those supported by this pass), strip off
 /// leading unpacked types.  This strips off portions of the type that are
 /// printed to the right of the name in verilog.
+// NOLINTBEGIN(misc-no-recursion)
 static Type stripUnpackedTypes(Type type) {
   return TypeSwitch<Type, Type>(type)
       .Case<InOutType>([](InOutType inoutType) {
@@ -341,6 +346,7 @@ static bool hasStructType(Type type) {
       .Case<StructType>([](auto) { return true; })
       .Default([](auto) { return false; });
 }
+// NOLINTEND(misc-no-recursion)
 
 /// Return the word (e.g. "reg") in Verilog to declare the specified thing.
 static StringRef getVerilogDeclWord(Operation *op,
@@ -405,6 +411,7 @@ static StringRef getVerilogDeclWord(Operation *op,
 
 /// Pull any FileLineCol locs out of the specified location and add it to the
 /// specified set.
+// NOLINTBEGIN(misc-no-recursion)
 static void collectFileLineColLocs(Location loc,
                                    SmallPtrSet<Attribute, 8> &locationSet) {
   if (auto fileLoc = loc.dyn_cast<FileLineColLoc>())
@@ -414,6 +421,7 @@ static void collectFileLineColLocs(Location loc,
     for (auto loc : fusedLoc.getLocations())
       collectFileLineColLocs(loc, locationSet);
 }
+// NOLINTEND(misc-no-recursion)
 
 /// Return the location information as a (potentially empty) string.
 static std::string
@@ -1079,6 +1087,7 @@ void EmitterBase::emitComment(StringAttr comment) {
 
 /// Given an expression that is spilled into a temporary wire, try to synthesize
 /// a better name than "_T_42" based on the structure of the expression.
+// NOLINTBEGIN(misc-no-recursion)
 StringAttr ExportVerilog::inferStructuralNameForTemporary(Value expr) {
   StringAttr result;
   bool addPrefixUnderScore = true;
@@ -1153,6 +1162,7 @@ StringAttr ExportVerilog::inferStructuralNameForTemporary(Value expr) {
 
   return result;
 }
+// NOLINTEND(misc-no-recursion)
 
 //===----------------------------------------------------------------------===//
 // ModuleEmitter
@@ -1293,6 +1303,7 @@ void ModuleEmitter::emitTypeDims(Type type, Location loc, raw_ostream &os) {
 /// printing of 'type'.
 ///
 /// Returns true when anything was printed out.
+// NOLINTBEGIN(misc-no-recursion)
 static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                 SmallVectorImpl<Attribute> &dims,
                                 bool implicitIntType, bool singleBitDefaultType,
@@ -1392,6 +1403,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         return true;
       });
 }
+// NOLINTEND(misc-no-recursion)
 
 /// Print the specified packed portion of the type to the specified stream,
 ///
@@ -1412,6 +1424,7 @@ bool ModuleEmitter::printPackedType(Type type, raw_ostream &os, Location loc,
 
 /// Output the unpacked array dimensions.  This is the part of the type that is
 /// to the right of the name.
+// NOLINTBEGIN(misc-no-recursion)
 void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
   TypeSwitch<Type, void>(type)
       .Case<InOutType>([&](InOutType inoutType) {
@@ -1427,6 +1440,7 @@ void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
         os << "()";
       });
 }
+// NOLINTEND(misc-no-recursion)
 
 //===----------------------------------------------------------------------===//
 // Methods for formatting parameters.
@@ -1442,6 +1456,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
 
 /// Helper that prints a parameter constant value in a Verilog compatible way.
 /// This returns the precedence of the generated string.
+// NOLINTBEGIN(misc-no-recursion)
 SubExprInfo
 ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
                                VerilogPrecedence parenthesizeIfLooserThan,
@@ -1644,6 +1659,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   }
   return {prec, allOperandsSigned ? IsSigned : IsUnsigned};
 }
+// NOLINTEND(misc-no-recursion)
 
 //===----------------------------------------------------------------------===//
 // Expression Emission
@@ -1656,6 +1672,7 @@ namespace {
 /// we emit the characters to a SmallVector which allows us to emit a bunch of
 /// stuff, then pre-insert parentheses and other things if we find out that it
 /// was needed later.
+// NOLINTBEGIN(misc-no-recursion)
 class ExprEmitter : public EmitterBase,
                     public TypeOpVisitor<ExprEmitter, SubExprInfo>,
                     public CombinationalVisitor<ExprEmitter, SubExprInfo>,
@@ -2508,6 +2525,7 @@ SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
   os << "<<unsupported expr: " << op->getName().getStringRef() << ">>";
   return {Symbol, IsUnsigned};
 }
+// NOLINTEND(misc-no-recursion)
 
 //===----------------------------------------------------------------------===//
 // NameCollector
@@ -2533,6 +2551,7 @@ private:
 };
 } // namespace
 
+// NOLINTNEXTLINE(misc-no-recursion)
 void NameCollector::collectNames(Block &block) {
 
   SmallString<32> nameTmp;
@@ -2625,6 +2644,7 @@ void NameCollector::collectNames(Block &block) {
 
 namespace {
 /// This emits statement-related operations.
+// NOLINTBEGIN(misc-no-recursion)
 class StmtEmitter : public EmitterBase,
                     public hw::StmtVisitor<StmtEmitter, LogicalResult>,
                     public sv::Visitor<StmtEmitter, LogicalResult> {
@@ -4078,6 +4098,7 @@ void StmtEmitter::emitStatementBlock(Block &body) {
 
   reduceIndent();
 }
+// NOLINTEND(misc-no-recursion)
 
 void ModuleEmitter::emitStatement(Operation *op) {
   ModuleNameManager names;
