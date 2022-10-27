@@ -17,7 +17,6 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/PointerLikeTypeTraits.h"
-#include <utility>
 
 namespace circt {
 namespace firrtl {

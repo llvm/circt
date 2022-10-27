@@ -12,7 +12,6 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
-#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -657,9 +656,6 @@ struct Deduper {
     // used to update NLAs that reference the "fromModule".
     RenameMap renameMap;
 
-    // Record the target of all annotations in the from module.
-    record(fromModule);
-
     // Merge the two modules.
     mergeOps(renameMap, toModule, toModule, fromModule, fromModule);
 
@@ -698,19 +694,9 @@ private:
   /// For a specific annotation target, record all the unique NLAs which
   /// target it in the `targetMap`.
   void recordAnnotations(AnnoTarget target) {
-    // Multiple annotations on this target can share the same NLA.  We use
-    // this set to prevent recording multiple times that the NLA targets
-    // this specific target.
-    llvm::SmallDenseSet<Attribute> seen;
-    for (auto anno : target.getAnnotations()) {
-      if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-        // If we have already recorded that this NLA is targeting this, then
-        // skip it.
-        if (!seen.insert(nlaRef).second)
-          continue;
+    for (auto anno : target.getAnnotations())
+      if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
         targetMap[nlaRef.getAttr()].insert(target);
-      }
-    }
   }
 
   /// Record all targets which use an NLA.
@@ -843,7 +829,7 @@ private:
         continue;
       // Create the replacement NLAs.
       SmallVector<Attribute> namepath(elements.begin(), elements.end());
-      auto newNLAs = createNLAs(fromModule, namepath, nla.getVisibility());
+      auto nlaRefs = createNLAs(fromModule, namepath, nla.getVisibility());
       // Replace the uses of the old NLA with the new NLAs.
       for (auto target : targetMap[nla.getSymNameAttr()]) {
         // We have to clone any annotation which uses the old NLA for each new
@@ -862,7 +848,7 @@ private:
           }
           auto nonLocalIndex = std::distance(anno.begin(), it);
           // Clone the annotation and add it to the list of new annotations.
-          cloneAnnotation(newNLAs, anno, ArrayRef(anno.begin(), anno.end()),
+          cloneAnnotation(nlaRefs, anno, ArrayRef(anno.begin(), anno.end()),
                           nonLocalIndex, newAnnotations);
         }
 
@@ -870,8 +856,8 @@ private:
         AnnotationSet annotations(newAnnotations, context);
         target.setAnnotations(annotations);
         // Record that target uses the NLA.
-        for (auto newNLA : newNLAs)
-          targetMap[newNLA.getAttr()].insert(target);
+        for (auto nla : nlaRefs)
+          targetMap[nla.getAttr()].insert(target);
       }
 
       // Erase the old NLA and remove it from all breadcrumbs.

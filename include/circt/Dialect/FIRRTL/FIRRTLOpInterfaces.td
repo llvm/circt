@@ -10,6 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_FIRRTL_FIRRTLOPINTERFACES_TD
+#define CIRCT_DIALECT_FIRRTL_FIRRTLOPINTERFACES_TD
+
 include "mlir/IR/OpBase.td"
 
 def FModuleLike : OpInterface<"FModuleLike"> {
@@ -430,3 +433,5 @@ def FNamableOp : OpInterface<"FNamableOp"> {
     }]>
   ];
 }
+
+#endif // CIRCT_DIALECT_FIRRTL_FIRRTLOPINTERFACES_TD
