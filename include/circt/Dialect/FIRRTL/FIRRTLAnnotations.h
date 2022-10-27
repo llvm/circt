@@ -535,6 +535,28 @@ struct DenseMapInfo<circt::firrtl::Annotation> {
   static bool isEqual(Annotation LHS, Annotation RHS) { return LHS == RHS; }
 };
 
+/// Make `AnnoTarget` hash.
+template <>
+struct DenseMapInfo<circt::firrtl::AnnoTarget> {
+  using AnnoTarget = circt::firrtl::AnnoTarget;
+  using AnnoTargetImpl = circt::firrtl::detail::AnnoTargetImpl;
+  static AnnoTarget getEmptyKey() {
+    auto *o = DenseMapInfo<mlir::Operation *>::getEmptyKey();
+    auto i = DenseMapInfo<unsigned>::getEmptyKey();
+    return AnnoTarget(AnnoTargetImpl(o, i));
+  }
+  static AnnoTarget getTombstoneKey() {
+    auto *o = DenseMapInfo<mlir::Operation *>::getTombstoneKey();
+    auto i = DenseMapInfo<unsigned>::getTombstoneKey();
+    return AnnoTarget(AnnoTargetImpl(o, i));
+  }
+  static unsigned getHashValue(AnnoTarget val) {
+    auto impl = val.getImpl();
+    return hash_combine(impl.getOp(), impl.getPortNo());
+  }
+  static bool isEqual(AnnoTarget lhs, AnnoTarget rhs) { return lhs == rhs; }
+};
+
 } // namespace llvm
 
 #endif // CIRCT_DIALECT_FIRRTL_ANNOTATIONS_H
