@@ -737,8 +737,7 @@ def RefSendOp: FIRRTLExprOp<"ref.send", [RefResultTypeConstraint<"base", "result
   let assemblyFormat = "$base attr-dict `:` qualified(type($base))";
 }
 
-def RefSendInternalPathOp: FIRRTLOp<"ref.send.internalPath",
-      [Pure, ConstantLike, HasCustomSSAName]> {
+def RefSendInternalPathOp: FIRRTLOp<"ref.send.internalPath", [Pure, HasCustomSSAName]>{
   let summary = "FIRRTL Send an opaque internal path";
   let description = [{
     Endpoint of a remote reference. Send an opaque internal path

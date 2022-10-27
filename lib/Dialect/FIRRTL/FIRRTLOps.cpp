@@ -627,19 +627,9 @@ void FMemModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   if (ports.empty())
     return;
   unsigned oldNumArgs = getNumPorts();
->>>>>>> e1c1a0b83... Add port attribute
-  unsigned newNumArgs = oldNumArgs + ports.size();
-
-  // Add direction markers and names for new ports.
-  SmallVector<Direction> existingDirections =
-      direction::unpackAttribute(op.getPortDirectionsAttr());
-  ArrayRef<Attribute> existingNames = op.getPortNames();
-  ArrayRef<Attribute> existingTypes = op.getPortTypes();
-=======
       direction::unpackAttribute(this->getPortDirectionsAttr());
   ArrayRef<Attribute> existingNames = this->getPortNames();
   ArrayRef<Attribute> existingTypes = this->getPortTypes();
->>>>>>> e1c1a0b83... Add port attribute
   assert(existingDirections.size() == oldNumArgs);
   assert(existingNames.size() == oldNumArgs);
   assert(existingTypes.size() == oldNumArgs);
@@ -4150,11 +4140,11 @@ void RefResolveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
-void RefSendOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void RefSendInternalPathOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
-void RefSendInternalPathOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void RefSendOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 

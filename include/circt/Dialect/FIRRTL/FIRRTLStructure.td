@@ -131,12 +131,6 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let extraClassDeclaration = [{
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
-
-    /// Inserts the given ports.
-    void insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
-
-    /// Erases the ports that have their corresponding bit set in `portIndices`.
-    void erasePorts(const llvm::BitVector &portIndices);
   }];
 
   let hasCustomAssemblyFormat = 1;

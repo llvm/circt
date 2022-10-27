@@ -123,6 +123,13 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
               }
             return success();
           })
+          .Case<RefSendInternalPathOp>([&](RefSendInternalPathOp op) {
+                auto inRef = getInnerRefTo((Operation*)op);
+                auto ind = addReachingSendsEntry(op.getResult(), inRef);
+                xmrPathSuffix[ind] = ("." + op.getPath()).str();
+                markForRemoval(op);
+                return success();
+              })
           .Case<InstanceOp>([&](auto inst) { return handleInstanceOp(inst); })
           .Case<FConnectLike>([&](FConnectLike connect) {
             // Ignore BaseType.

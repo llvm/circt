@@ -349,17 +349,13 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
           moduleTargetStr, state.circuit, state.symTbl, state.targetCaches);
       if (!moduleTarget)
         return failure();
-      Operation *mod = (moduleTarget->ref.getOp());
-      FExtModuleOp extMod = dyn_cast<FExtModuleOp>(mod);
-      if (!extMod)
-        return mod->emitOpError(
-            "can specify internal_path on external modules only");
+      FModuleLike mod = cast<FModuleLike>(moduleTarget->ref.getOp());
       InstanceOp modInstance;
       if (!moduleTarget->instances.empty()) {
         modInstance = moduleTarget->instances.back();
       } else {
         auto *node = state.instancePathCache.instanceGraph.lookup(
-            cast<hw::HWModuleLike>(mod));
+            cast<hw::HWModuleLike>((Operation*)mod));
         if (!node->hasOneUse())
           return mod->emitOpError(
               "cannot be used for DataTaps, it is instantiated multiple times");
@@ -377,23 +373,29 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
       // This removes and replaces the instance, and returns the updated
       // instance.
       modInstance = addPortsToModule(
-          dyn_cast<FModuleLike>(mod), modInstance, portRefType, Direction::Out,
+          mod, modInstance, portRefType, Direction::Out,
           refName, state.instancePathCache,
           [&](FModuleLike mod) -> ModuleNamespace & {
             return state.getNamespace(mod);
           },
           &state.targetCaches);
-      // The extern module can have other internal paths attached to it, append
-      // this to them.
-      auto internalPaths = extMod.getInternalPaths();
-      SmallVector<Attribute> paths(internalPaths.begin(), internalPaths.end());
-      paths.push_back(internalPathAttr);
-      extMod.setInternalPathsAttr(builder.getArrayAttr(paths));
-      // Now set the instance as the source for the final datatap xmr.
-      srcTarget = AnnoPathValue(modInstance);
-      // Since the intance op genenerates the RefType output, no need of another
-      // RefSendOp.
-      sendVal = modInstance.getResults().back();
+        // Since the intance op genenerates the RefType output, no need of another
+        // RefSendOp.
+        sendVal = modInstance.getResults().back();
+        // Now set the instance as the source for the final datatap xmr.
+        srcTarget = AnnoPathValue(modInstance);
+      if (auto extMod = dyn_cast<FExtModuleOp>((Operation*)mod)) {
+        // The extern module can have other internal paths attached to it, append
+        // this to them.
+        auto internalPaths = extMod.getInternalPaths();
+        SmallVector<Attribute> paths(internalPaths.begin(), internalPaths.end());
+        paths.push_back(internalPathAttr);
+        extMod.setInternalPathsAttr(builder.getArrayAttr(paths));
+      } else if (auto intMod = dyn_cast<FModuleOp>((Operation*)mod)) {
+        auto builder = ImplicitLocOpBuilder::atBlockEnd(intMod.getLoc(), &intMod.getBody().getBlocks().back());
+        auto sendPath = builder.create<RefSendInternalPathOp>(portRefType, internalPathAttr);
+        builder.create<StrictConnectOp>(intMod.getArguments().back(), sendPath.getResult());
+      }      
 
       if (!moduleTarget->instances.empty())
         srcTarget->instances = moduleTarget->instances;
