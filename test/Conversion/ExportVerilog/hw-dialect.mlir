@@ -513,7 +513,7 @@ hw.module @TestZeroStructInstance(%structZero: !hw.struct<>, %structZeroNest: !h
 // CHECK-NEXT:                            out1
 // CHECK-NEXT:   // output /*Zero Width*/ out2
 
-// CHECK:   assign out = arg1[/*Zero width: arg0 + arg0*/ 1'b0];	
+// CHECK:   assign out = arg1[/*Zero width: 0'h0*/ 1'b0];	
 // CHECK-NEXT:   assign out1 = arg1[/*Zero width: arg0*/ 1'b0];	
 // CHECK-NEXT:   // Zero width: assign out2 = arg0;	
 
