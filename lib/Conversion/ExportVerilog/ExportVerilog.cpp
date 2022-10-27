@@ -2611,25 +2611,26 @@ SubExprInfo ExprEmitter::visitTypeOp(StructCreateOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   StructType stype = op.getType();
-  // TODO: emitBracedList or thereabouts-- break inbetween commas at least!
-  ps << "'{";
   // Only emit elements with non-zero bit width.
   // TODO: Ideally we should emit zero bit values as comments, e.g. `{/*a:
   // ZeroBit,*/ b: foo, /* c: ZeroBit*/ d: bar}`. However it's tedious to nicely
   // emit all edge cases hence currently we just elide zero bit values.
-  llvm::interleaveComma(
+  emitBracedList(
       llvm::make_filter_range(llvm::zip(stype.getElements(), op.getOperands()),
                               [](const auto &fieldAndOperand) {
                                 // Elide zero bit elements.
                                 const auto &[field, _] = fieldAndOperand;
                                 return !isZeroBitType(field.type);
                               }),
-      ps, [&](const auto &fieldAndOperand) {
+      [&]() { ps << "'{"; },
+      [&](const auto &fieldAndOperand) {
         const auto &[field, operand] = fieldAndOperand;
-        ps << PPExtString(emitter.getVerilogStructFieldName(field.name)) << ": ";
+        auto ib = ps.scopedIBox(2);
+        ps << PPExtString(emitter.getVerilogStructFieldName(field.name)) << ":"
+           << PP::space;
         emitSubExpr(operand, Selection);
-      });
-  ps << "}";
+      },
+      [&]() { ps << "}"; });
   return {Unary, IsUnsigned};
 }
 
