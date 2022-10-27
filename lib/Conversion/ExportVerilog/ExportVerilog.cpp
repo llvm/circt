@@ -1742,7 +1742,8 @@ public:
   ///
   void emitExpression(Value exp, VerilogPrecedence parenthesizeIfLooserThan) {
     assert(tokens.empty());
-    ps << PP::ibox0; // TODO: revisit
+    // Wrap to this column.
+    ps << PP::ibox0;
     emitSubExpr(exp, parenthesizeIfLooserThan,
                 /*signRequirement*/ NoRequirement,
                 /*isSelfDeterminedUnsignedValue*/ false);
@@ -3184,7 +3185,12 @@ LogicalResult StmtEmitter::visitSV(FWriteOp op) {
   ps << "," << PP::space;
   ps.writeQuotedEscaped(op.getFormatString());
 
-  // TODO: good comma/wrapping behavior as elsewhere.
+  // TODO: if any of these breaks, it'd be "nice" to break
+  // after the comma, instead of:
+  // $fwrite(5, "...", a + b,
+  //         longexpr_goes
+  //         + here, c);
+  // (without forcing breaking between all elements, like braced list)
   for (auto operand : op.getSubstitutions()) {
     ps << "," << PP::space;
     emitExpression(operand, ops);
