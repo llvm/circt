@@ -104,6 +104,28 @@ class System:
         module._pycde_mod.create()
         self.top_modules.append(module)
 
+  _DEFAULT_IMPORT_PASSES = [
+      "one-shot-bufferize{allow-return-allocs bufferize-function-boundaries}",
+      "buffer-results-to-out-params",
+      "func.func(convert-linalg-to-affine-loops)", "lower-affine",
+      "convert-scf-to-cf", "canonicalize", "flatten-memref",
+      "flatten-memref-calls", "func.func(handshake-legalize-memrefs)",
+      "lower-std-to-handshake", "handshake-lower-extmem-to-hw{wrap-esi}"
+  ]
+
+  def import_mlir(self, module, run_passes=_DEFAULT_IMPORT_PASSES):
+    """Import an mlir module created elsewhere into our space."""
+    from .module import import_hw_module
+
+    compat_mod = ir.Module.parse(str(module))
+    pm = mlir.passmanager.PassManager.parse(",".join(run_passes))
+    pm.run(compat_mod)
+    imported_modules = []
+    for op in compat_mod.body:
+      if isinstance(op, hw.HWModuleOp):
+        imported_module = import_hw_module(op)
+        imported_modules.append(imported_module)
+
   def create_physical_region(self, name: str = None):
     with self._get_ip():
       physical_region = PhysicalRegion(name)
