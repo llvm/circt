@@ -19,6 +19,7 @@
 #include "circt-c/ExportVerilog.h"
 #include "mlir-c/Bindings/Python/Interop.h"
 #include "mlir-c/IR.h"
+#include "mlir-c/Transforms.h"
 #include "mlir/Bindings/Python/PybindAdaptors.h"
 
 #include "llvm-c/ErrorHandling.h"
@@ -33,6 +34,7 @@ static void registerPasses() {
   registerSVPasses();
   registerFSMPasses();
   registerHWArithPasses();
+  mlirRegisterTransformsPasses();
 }
 
 PYBIND11_MODULE(_circt, m) {
