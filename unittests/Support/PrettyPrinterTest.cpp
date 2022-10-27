@@ -739,4 +739,27 @@ test test test test test
 )"""));
 }
 
+TEST(PrettyPrinterTest, NBSPs) {
+  SmallString<128> out, compare;
+  raw_svector_ostream ppOS(out);
+  raw_svector_ostream os(compare);
+
+  PPBuilderStringSaver saver;
+  auto test = [&](auto n) {
+    out.clear();
+    compare.clear();
+    {
+      PrettyPrinter pp(ppOS, 8);
+      PPStream<> ps(pp, saver);
+      ps.nbsp(n);
+      os.indent(n);
+    }
+
+    EXPECT_EQ(out.str(), compare.str());
+  };
+
+  for (auto i : {0, 1, 2, 3, 4, 8, 16, 32, 64, 128, 256, 511, 512, 513, 2048})
+    test(i);
+}
+
 } // end anonymous namespace

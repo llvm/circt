@@ -47,7 +47,7 @@ void emitNBSP(unsigned n, llvm::function_ref<void(Token)> add) {
   }
   while (n) {
     auto chunk = std::min<uint32_t>(n, size - 1);
-    add(StringToken({spaces, n}));
+    add(StringToken({spaces, chunk}));
     n -= chunk;
   }
 }
