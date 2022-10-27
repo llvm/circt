@@ -1492,6 +1492,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(SubindexOp op);
   LogicalResult visitExpr(SubaccessOp op);
   LogicalResult visitExpr(SubfieldOp op);
+  LogicalResult visitExpr(VectorCreateOp op);
+  LogicalResult visitExpr(BundleCreateOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
   LogicalResult visitInvalidOp(Operation *op) { return failure(); }
 
@@ -2507,6 +2509,30 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
       op, resultType, value,
       op.getInput().getType().cast<BundleType>().getElementName(
           op.getFieldIndex()));
+}
+
+LogicalResult FIRRTLLowering::visitExpr(VectorCreateOp op) {
+  auto resultType = lowerType(op.getResult().getType());
+  SmallVector<Value> operands;
+  for (auto oper : op.getOperands()) {
+    auto val = getLoweredValue(oper);
+    if (!val)
+      return failure();
+    operands.push_back(val);
+  }
+  return setLoweringTo<hw::ArrayCreateOp>(op, resultType, operands);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(BundleCreateOp op) {
+  auto resultType = lowerType(op.getResult().getType());
+  SmallVector<Value> operands;
+  for (auto oper : op.getOperands()) {
+    auto val = getLoweredValue(oper);
+    if (!val)
+      return failure();
+    operands.push_back(val);
+  }
+  return setLoweringTo<hw::StructCreateOp>(op, resultType, operands);
 }
 
 //===----------------------------------------------------------------------===//
