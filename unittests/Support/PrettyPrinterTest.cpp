@@ -380,6 +380,28 @@ test "quote\"me"
 )"""));
 }
 
+TEST(PrettyPrinterTest, LargeStream) {
+  PrettyPrinter pp(llvm::nulls(), 20);
+  PPBuilderStringSaver saver;
+  PPStream<> ps(pp, saver);
+
+  for (uint32_t i = 1U << 20; i; --i)
+    ps << "testingtesting" << PP::space;
+}
+
+TEST(PrettyPrinterTest, LargeStreamScan) {
+  PrettyPrinter pp(llvm::nulls(), 20);
+  PPBuilderStringSaver saver;
+  PPStream<> ps(pp, saver);
+
+  // This triggers an assert w/o "rebase" support.
+  ps << PP::cbox0;
+  for (uint32_t i = 1U << 20; i; --i)
+    ps << BeginToken(0, Breaks::Never) << "testingtesting" << PP::end
+       << PP::newline;
+  ps << PP::end;
+}
+
 TEST(PrettyPrinterTest, IndentStyle) {
   SmallString<128> out;
   raw_svector_ostream os(out);
