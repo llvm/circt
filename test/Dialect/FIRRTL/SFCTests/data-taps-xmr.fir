@@ -40,8 +40,12 @@ circuit Top : %[[
     "target": "~Top|Bar>inv"
   }
 ]]
-  extmodule InternalPathChild :
+  module InternalPathChild :
     output io : { flip in : UInt<8>, out : UInt<8>}
+
+    node sum = tail(add(io.in, UInt<1>(1)), 1)
+
+    io.out <= sum
 
   extmodule BlackBox :
     input in : UInt<1>

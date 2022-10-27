@@ -40,7 +40,6 @@ struct PortInfo {
   InnerSymAttr sym = {};
   Location loc = UnknownLoc::get(type.getContext());
   AnnotationSet annotations = AnnotationSet(type.getContext());
-  StringAttr internalPath;
 
   StringRef getName() const { return name ? name.getValue() : ""; }
 
@@ -93,9 +92,9 @@ struct PortInfo {
       annotations = *annos;
   };
   PortInfo(StringAttr name, Type type, Direction dir, InnerSymAttr sym,
-           Location loc, AnnotationSet annos, StringAttr internalPath)
+           Location loc, AnnotationSet annos)
       : name(name), type(type), direction(dir), sym(sym), loc(loc),
-        annotations(annos), internalPath(internalPath) {}
+        annotations(annos) {}
 };
 
 /// Verification hook for verifying module like operations.

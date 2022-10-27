@@ -32,10 +32,6 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
 
   auto numPorts = portTypes.size();
 
-  if (auto paths = module.getInternalPathsAttr())
-  if (paths.size() != numPorts)
-    return module.emitOpError() << "attribute InternalPaths must have '"<< numPorts <<"' number entries";
-
   // Verify the port dirctions.
   auto portDirections = module.getPortDirectionsAttr();
   if (!portDirections)

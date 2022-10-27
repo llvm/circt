@@ -332,14 +332,13 @@ struct AttrCache {
     sPortTypes = StringAttr::get(context, "portTypes");
     sPortSyms = StringAttr::get(context, "portSyms");
     sPortAnnotations = StringAttr::get(context, "portAnnotations");
-    sInternalPaths = StringAttr::get(context, "internalPaths");
     sEmpty = StringAttr::get(context, "");
   }
   AttrCache(const AttrCache &) = default;
 
   Type i64ty;
   StringAttr innerSymAttr, nameAttr, nameKindAttr, sPortDirections, sPortNames,
-      sPortTypes, sPortSyms, sPortAnnotations, sInternalPaths, sEmpty;
+      sPortTypes, sPortSyms, sPortAnnotations, sEmpty;
 };
 
 // The visitors all return true if the operation should be deleted, false if
@@ -937,7 +936,7 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     // handled differently below.
     if (attr.getName() != "portDirections" && attr.getName() != "portNames" &&
         attr.getName() != "portTypes" && attr.getName() != "portAnnotations" &&
-        attr.getName() != "portSyms" &&  attr.getName() != "internalPaths")
+        attr.getName() != "portSyms")
       newModuleAttrs.push_back(attr);
 
   SmallVector<Direction> newArgDirections;
@@ -945,7 +944,6 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   SmallVector<Attribute, 8> newPortTypes;
   SmallVector<Attribute, 8> newArgSyms;
   SmallVector<Attribute, 8> newArgAnnotations;
-  SmallVector<Attribute, 8> newArgPaths;
 
   for (auto &port : newArgs) {
     newArgDirections.push_back(port.direction);
@@ -953,7 +951,6 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     newPortTypes.push_back(TypeAttr::get(port.type));
     newArgSyms.push_back(port.sym);
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
-    newArgPaths.push_back(port.internalPath ? port.internalPath : StringAttr::get(builder.getContext()));
   }
 
   newModuleAttrs.push_back(
@@ -966,8 +963,6 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   newModuleAttrs.push_back(
       NamedAttribute(cache.sPortTypes, builder.getArrayAttr(newPortTypes)));
 
-  newModuleAttrs.push_back(
-      NamedAttribute(cache.sInternalPaths, builder.getArrayAttr(newArgPaths)));
   newModuleAttrs.push_back(NamedAttribute(
       cache.sPortAnnotations, builder.getArrayAttr(newArgAnnotations)));
 
@@ -1016,14 +1011,13 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
     // handled differently below.
     if (attr.getName() != "portNames" && attr.getName() != "portDirections" &&
         attr.getName() != "portTypes" && attr.getName() != "portAnnotations" &&
-        attr.getName() != "portSyms" &&  attr.getName() != "internalPaths")
+        attr.getName() != "portSyms")
       newModuleAttrs.push_back(attr);
 
   SmallVector<Direction> newArgDirections;
   SmallVector<Attribute> newArgNames;
   SmallVector<Attribute> newArgTypes;
   SmallVector<Attribute> newArgSyms;
-  SmallVector<Attribute, 8> newArgPaths;
   SmallVector<Attribute, 8> newArgAnnotations;
   for (auto &port : newArgs) {
     newArgDirections.push_back(port.direction);
@@ -1031,7 +1025,6 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
     newArgTypes.push_back(TypeAttr::get(port.type));
     newArgSyms.push_back(port.sym);
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
-    newArgPaths.push_back(port.internalPath ? port.internalPath : StringAttr::get(builder->getContext()));
   }
 
   newModuleAttrs.push_back(
@@ -1045,8 +1038,6 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
       NamedAttribute(cache.sPortTypes, builder->getArrayAttr(newArgTypes)));
   newModuleAttrs.push_back(NamedAttribute(
       cache.sPortAnnotations, builder->getArrayAttr(newArgAnnotations)));
-  newModuleAttrs.push_back(
-      NamedAttribute(cache.sInternalPaths, builder->getArrayAttr(newArgPaths)));
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);

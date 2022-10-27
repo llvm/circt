@@ -737,6 +737,19 @@ def RefSendOp: FIRRTLExprOp<"ref.send", [RefResultTypeConstraint<"base", "result
   let assemblyFormat = "$base attr-dict `:` qualified(type($base))";
 }
 
+def RefSendInternalPathOp: FIRRTLOp<"ref.send.internalPath",
+      [Pure, ConstantLike, HasCustomSSAName]> {
+  let summary = "FIRRTL Send an opaque internal path";
+  let description = [{
+    Endpoint of a remote reference. Send an opaque internal path
+    through a reference to be read from the firrtl.ref.resolve op.
+  }];
+  let arguments = (ins StrAttr:$path);
+  let results = (outs RefType:$result);
+
+  let assemblyFormat = "$path attr-dict `:` qualified(type($result))";
+}
+
 def RefSubOp : FIRRTLExprOp<"ref.sub"> {
   let summary = "Extract an element of an aggregate RefType value";
   let description = [{

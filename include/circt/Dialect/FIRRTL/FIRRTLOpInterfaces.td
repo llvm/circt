@@ -53,39 +53,6 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     }]>,
 
     //===------------------------------------------------------------------===//
-    // Port InternalPaths
-    //===------------------------------------------------------------------===//
-
-    InterfaceMethod<"Get the port InternalPaths attribute",
-    "ArrayAttr", "getInternalPathsAttr", (ins), [{}],
-    /*defaultImplementation=*/[{
-      return $_op->template
-        getAttrOfType<ArrayAttr>(FModuleLike::getInternalPathsAttrName());
-    }]>,
-
-    InterfaceMethod<"Get the port InternalPaths",
-    "ArrayRef<Attribute>", "getInternalPaths", (ins), [{}],
-    /*defaultImplementation=*/[{
-      return $_op.getInternalPathsAttr().getValue();
-    }]>,
-
-    InterfaceMethod<"Get a port InternalPath",
-    "StringAttr", "getInternalPathAttr", (ins "size_t":$portIndex), [{}],
-    /*defaultImplementation=*/[{
-      if (auto attr = $_op.getInternalPathsAttr())
-        if (!attr.empty())
-          if (auto path = attr.getValue()[portIndex])
-          return path.template cast<StringAttr>();
-      return {};
-    }]>,
-
-    InterfaceMethod<"Get a port type",
-    "StringRef", "getInternalPath", (ins "size_t":$portIndex), [{}],
-    /*defaultImplementation=*/[{
-      return $_op.getInternalPathAttr(portIndex).getValue();
-    }]>,
-
-    //===------------------------------------------------------------------===//
     // Port Names
     //===------------------------------------------------------------------===//
 
@@ -273,11 +240,6 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     /// Get the attribute name for port directions.
     static StringRef getPortDirectionsAttrName() {
       return "portDirections";
-    }
-
-    /// Get the attribute name for port directions.
-    static StringRef getInternalPathsAttrName() {
-      return "internalPaths";
     }
 
     /// Get the attribute name for port names",

@@ -293,8 +293,7 @@ InstanceOp addPortsToModule(
     FModuleLike mod, InstanceOp instOnPath, FIRRTLType portType, Direction dir,
     StringRef newName, InstancePathCache &instancePathcache,
     llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
-    CircuitTargetCache *targetCaches = nullptr, 
-    StringAttr internalPaths = {});
+    CircuitTargetCache *targetCaches = nullptr);
 
 /// Add a port to each instance on the path `instancePath` and forward the
 /// `fromVal` through them. It returns the port added to the last module on the

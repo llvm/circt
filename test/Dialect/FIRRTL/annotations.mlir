@@ -1385,7 +1385,8 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [
       }
     ]}]} {
   // CHECK: firrtl.extmodule private @Bar(out [[_gen_ref:.+]]: !firrtl.ref<uint<1>>) attributes {internalPaths = ["random.something"]} 
-  firrtl.extmodule private @Bar()
+  firrtl.module private @Bar() {
+  }
   
   // CHECK-LABEL:  firrtl.module private @Foo(out %_gen_tap: !firrtl.ref<uint<1>>)
   firrtl.module private @Foo() {
