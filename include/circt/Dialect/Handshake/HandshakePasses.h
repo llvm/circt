@@ -16,6 +16,7 @@
 #include "circt/Support/LLVM.h"
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 
 namespace circt {
@@ -30,7 +31,8 @@ std::unique_ptr<mlir::Pass> createHandshakeMaterializeForksSinksPass();
 std::unique_ptr<mlir::Pass> createHandshakeDematerializeForksSinksPass();
 std::unique_ptr<mlir::Pass> createHandshakeRemoveBuffersPass();
 std::unique_ptr<mlir::Pass> createHandshakeAddIDsPass();
-std::unique_ptr<mlir::Pass> createHandshakeLowerExtmemToHWPass();
+std::unique_ptr<mlir::Pass>
+createHandshakeLowerExtmemToHWPass(std::optional<bool> createESIWrapper = {});
 std::unique_ptr<mlir::Pass> createHandshakeLegalizeMemrefsPass();
 std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
 createHandshakeInsertBuffersPass(const std::string &strategy = "all",

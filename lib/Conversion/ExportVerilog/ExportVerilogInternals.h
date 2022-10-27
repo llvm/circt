@@ -315,6 +315,10 @@ static inline bool isConstantExpression(Operation *op) {
 /// MemoryEffects should be checked if a client cares.
 bool isVerilogExpression(Operation *op);
 
+/// Return true if this is a zero bit type, e.g. a zero bit integer or array
+/// thereof.
+bool isZeroBitType(Type type);
+
 /// Return true if this expression should be emitted inline into any statement
 /// that uses it.
 bool isExpressionEmittedInline(Operation *op);

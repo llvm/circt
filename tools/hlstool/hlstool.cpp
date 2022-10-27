@@ -174,6 +174,10 @@ static cl::opt<unsigned> bufferSize("buffer-size",
                                     cl::desc("Number of slots in each buffer"),
                                     cl::init(2), cl::cat(mainCategory));
 
+static cl::opt<bool> withESI("with-esi",
+                             cl::desc("Create ESI compatible modules"),
+                             cl::init(false), cl::cat(mainCategory));
+
 static LoweringOptionsOption loweringOptions(mainCategory);
 
 // --------------------------------------------------------------------------
@@ -357,7 +361,7 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
   } else {
     // HW path.
     addIRLevel(HLSFlowDynamicIRLevel::Firrtl, [&]() {
-      pm.addPass(circt::handshake::createHandshakeLowerExtmemToHWPass());
+      pm.addPass(circt::handshake::createHandshakeLowerExtmemToHWPass(withESI));
       pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
       pm.addPass(circt::createHandshakeToHWPass());
       pm.addPass(createSimpleCanonicalizerPass());

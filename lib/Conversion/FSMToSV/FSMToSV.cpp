@@ -197,7 +197,7 @@ void StateEncoding::setEncoding(StateOp state, Value v, bool wire) {
   if (wire) {
     auto loc = machine.getLoc();
     auto stateType = getStateType();
-    auto stateEncodingWire = b.create<sv::WireOp>(
+    auto stateEncodingWire = b.create<sv::RegOp>(
         loc, stateType, b.getStringAttr("to_" + state.getName()),
         /*inner_sym=*/state.getNameAttr());
     b.create<sv::AssignOp>(loc, stateEncodingWire, v);

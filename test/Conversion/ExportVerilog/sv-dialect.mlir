@@ -1340,6 +1340,17 @@ hw.module.extern @extInst(%_h: i1, %_i: i1, %_j: i1, %_k: i1, %_z :i0) -> ()
 // CHECK-NEXT:                          _k
 hw.module @extInst2(%signed: i1, %_i: i1, %_j: i1, %_k: i1, %_z :i0) -> () {}
 
+// CHECK-LABEL: module zeroWidthArrayIndex
+hw.module @zeroWidthArrayIndex(%clock : i1, %data : i64) -> () {
+  %reg = sv.reg  : !hw.inout<uarray<1xi64>>
+  sv.alwaysff(posedge %clock) {
+    %c0_i0_1 = hw.constant 0 : i0
+    // CHECK: reg_0[/*Zero width*/ 1'b0] <= data;
+    %0 = sv.array_index_inout %reg[%c0_i0_1] : !hw.inout<uarray<1xi64>>, i0
+    sv.passign %0, %data : i64
+  }
+}
+
 // CHECK-LABEL: module remoteInstDut
 hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
   %mywire = sv.wire : !hw.inout<i1>

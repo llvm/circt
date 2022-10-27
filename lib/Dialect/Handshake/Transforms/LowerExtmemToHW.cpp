@@ -22,6 +22,7 @@
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Rewrite/FrozenRewritePatternSet.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/Support/Debug.h"
 
 using namespace circt;
 using namespace handshake;
@@ -107,6 +108,12 @@ static HandshakeMemType getMemTypeForExtmem(Value v) {
 namespace {
 struct HandshakeLowerExtmemToHWPass
     : public HandshakeLowerExtmemToHWBase<HandshakeLowerExtmemToHWPass> {
+
+  HandshakeLowerExtmemToHWPass(std::optional<bool> createESIWrapper) {
+    if (createESIWrapper)
+      this->createESIWrapper = *createESIWrapper;
+  }
+
   void runOnOperation() override {
     auto op = getOperation();
     for (auto func : op.getOps<handshake::FuncOp>()) {
@@ -120,12 +127,12 @@ struct HandshakeLowerExtmemToHWPass
   LogicalResult lowerExtmemToHW(handshake::FuncOp func);
   LogicalResult
   wrapESI(handshake::FuncOp func, hw::ModulePortInfo origPorts,
-          llvm::DenseMap<unsigned, HandshakeMemType> argReplacements);
+          const std::map<unsigned, HandshakeMemType> &argReplacements);
 };
 
 LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
     handshake::FuncOp func, hw::ModulePortInfo origPorts,
-    llvm::DenseMap<unsigned, HandshakeMemType> argReplacements) {
+    const std::map<unsigned, HandshakeMemType> &argReplacements) {
   auto *ctx = func.getContext();
   OpBuilder b(func);
   auto loc = func.getLoc();
@@ -223,17 +230,32 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
   // Stitch together arguments from the top-level ESI wrapper and the instance
   // arguments generated from the service requests.
   llvm::SmallVector<Value> instanceArgs;
-  for (unsigned i = 0, e = wrapperMod.getNumArguments(); i < e; ++i) {
+
+  // Iterate over the arguments of the original handshake.func and determine
+  // whether to grab operands from the arg replacements or the wrapper module.
+  unsigned wrapperArgIdx = 0;
+
+  for (unsigned i = 0, e = func.getNumArguments(); i < e; i++) {
+    // Arg replacement indices refer to the original handshake.func argument
+    // index.
     if (argReplacements.count(i)) {
       // This index was originally a memref - pop the instance arguments for the
       // next-in-line memory and add them.
       auto &memArgs = instanceArgsForMem.front();
       instanceArgs.append(memArgs.begin(), memArgs.end());
       instanceArgsForMem.erase(instanceArgsForMem.begin());
+    } else {
+      // Add the argument from the wrapper mod. This is maintained by its own
+      // counter (memref arguments are removed, so if there was an argument at
+      // this point, it needs to come from the wrapper module).
+      instanceArgs.push_back(wrapperMod.getArgument(wrapperArgIdx++));
     }
-    // Add the argument from the wrapper mod.
-    instanceArgs.push_back(wrapperMod.getArgument(i));
   }
+
+  // Add any missing arguments from the wrapper module (this will be clock and
+  // reset)
+  for (; wrapperArgIdx < wrapperMod.getNumArguments(); ++wrapperArgIdx)
+    instanceArgs.push_back(wrapperMod.getArgument(wrapperArgIdx));
 
   // Instantiate the inner module.
   auto instance =
@@ -339,8 +361,9 @@ struct ArgTypeReplacement {
 
 LogicalResult
 HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
-  // Gather memref ports to be converted.
-  llvm::DenseMap<unsigned, Value> memrefArgs;
+  // Gather memref ports to be converted. This is an ordered map, and will be
+  // iterated from lo to hi indices.
+  std::map<unsigned, Value> memrefArgs;
   for (auto [i, arg] : llvm::enumerate(func.getArguments()))
     if (arg.getType().isa<MemRefType>())
       memrefArgs[i] = arg;
@@ -349,7 +372,8 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
     return success(); // nothing to do.
 
   // Record which arg indices were replaces with handshake memory ports.
-  llvm::DenseMap<unsigned, HandshakeMemType> argReplacements;
+  // This is an ordered map, and will be iterated from lo to hi indices.
+  std::map<unsigned, HandshakeMemType> argReplacements;
 
   // Record the hw.module i/o of the original func (used for ESI wrapper).
   auto origPortInfo = handshake::getPortInfoForOpTypes(
@@ -440,6 +464,7 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
 } // namespace
 
 std::unique_ptr<mlir::Pass>
-circt::handshake::createHandshakeLowerExtmemToHWPass() {
-  return std::make_unique<HandshakeLowerExtmemToHWPass>();
+circt::handshake::createHandshakeLowerExtmemToHWPass(
+    std::optional<bool> createESIWrapper) {
+  return std::make_unique<HandshakeLowerExtmemToHWPass>(createESIWrapper);
 }

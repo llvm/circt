@@ -186,6 +186,11 @@ static StringRef getSymOpName(Operation *symOp) {
       });
 }
 
+/// Emits a known-safe token that is legal when indexing into singleton arrays.
+static void emitZeroWidthIndexingValue(llvm::raw_svector_ostream &os) {
+  os << "/*Zero width*/ 1\'b0";
+}
+
 /// Return the verilog name of the port for the module.
 StringRef getPortVerilogName(Operation *module, ssize_t portArgNum) {
   auto numInputs = hw::getModuleNumInputs(module);
@@ -301,10 +306,8 @@ static bool haveMatchingDims(Type a, Type b, Location loc) {
   return aDims == bDims;
 }
 
-/// Return true if this is a zero bit type, e.g. a zero bit integer or array
-/// thereof.
 // NOLINTBEGIN(misc-no-recursion)
-static bool isZeroBitType(Type type) {
+bool ExportVerilog::isZeroBitType(Type type) {
   if (auto intType = type.dyn_cast<IntegerType>())
     return intType.getWidth() == 0;
   if (auto inout = type.dyn_cast<hw::InOutType>())
@@ -2289,6 +2292,17 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
 
   bool isNegated = false;
   const APInt &value = op.getValue();
+
+  // We currently only allow zero width values to be handled as special cases in
+  // the various operations that may come across them. If we reached this point
+  // in the emitter, the value should be considered illegal to emit.
+  if (value.getBitWidth() == 0) {
+    emitOpError(op, "will not emit zero width constants in the general case");
+    os << "<<unsupported zero width constant: " << op->getName().getStringRef()
+       << ">>";
+    return {Unary, IsUnsigned};
+  }
+
   // If this is a negative signed number and not MININT (e.g. -128), then print
   // it as a negated positive number.
   if (signPreference == RequireSigned && value.isNegative() &&
@@ -2342,16 +2356,9 @@ SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
 SubExprInfo ExprEmitter::visitTypeOp(ArrayGetOp op) {
   emitSubExpr(op.getInput(), Selection);
   os << '[';
-  if (isZeroBitType(op.getIndex().getType())) {
-    // Due to the singleton memory, [1'b0] will always be syntactically valid
-    // as an indexing into the provided array.
-    // Emit the index expression as a comment for tracability (all other i0
-    // values referenced within the index expression will similarly be commented
-    // out).
-    os << "/*Zero width: ";
-    emitSubExpr(op.getIndex(), LowestPrecedence);
-    os << "*/ 1\'b0";
-  } else
+  if (isZeroBitType(op.getIndex().getType()))
+    emitZeroWidthIndexingValue(os);
+  else
     emitSubExpr(op.getIndex(), LowestPrecedence);
   os << ']';
   emitSVAttributes(op);
@@ -2394,9 +2401,13 @@ SubExprInfo ExprEmitter::visitSV(ArrayIndexInOutOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
+  auto index = op.getIndex();
   auto arrayPrec = emitSubExpr(op.getInput(), Selection);
   os << '[';
-  emitSubExpr(op.getIndex(), LowestPrecedence);
+  if (isZeroBitType(index.getType()))
+    emitZeroWidthIndexingValue(os);
+  else
+    emitSubExpr(index, LowestPrecedence);
   os << ']';
   return {Selection, arrayPrec.signedness};
 }
@@ -2947,10 +2958,17 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
     ops.clear();
     ops.insert(op);
     indent();
-    if (isZeroBitType(port.type))
+    bool isZeroBit = isZeroBitType(port.type);
+    if (isZeroBit)
       os << "// Zero width: ";
     os << "assign " << getPortVerilogName(parent, port) << " = ";
-    emitExpression(operand, ops, LowestPrecedence);
+
+    // If this is a zero-width constant then don't emit it (illegal). Else,
+    // emit the expression - even for zero width - for traceability.
+    if (isZeroBit && isa_and_nonnull<hw::ConstantOp>(operand.getDefiningOp()))
+      os << "/*Zero width*/";
+    else
+      emitExpression(operand, ops, LowestPrecedence);
     os << ';';
     emitLocationInfoAndNewLine(ops);
     ++operandIndex;
