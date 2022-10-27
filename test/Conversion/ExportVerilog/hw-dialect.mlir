@@ -818,6 +818,13 @@ hw.module @Chi() -> (Chi_output : i0) {
   // CHECK: endmodule
 }
 
+// CHECK-LABEL: module Choochoo(
+hw.module @Choochoo() -> (out : i0) {
+  %0 = hw.constant 0 : i0
+  // CHECK: // Zero width: assign out = /*Zero width*/;
+  hw.output %0 : i0
+}
+
 // CHECK-LABEL: module Foo1360(
 // Issue #1360: https://github.com/llvm/circt/issues/1360
 

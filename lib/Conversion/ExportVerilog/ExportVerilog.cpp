@@ -2296,13 +2296,12 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
   // We currently only allow zero width values to be handled as special cases in
   // the various operations that may come across them. If we reached this point
   // in the emitter, the value should be considered illegal to emit.
-  // if (value.getBitWidth() == 0) {
-  //   emitOpError(op, "will not emit zero width constants in the general
-  //   case"); os << "<<unsupported zero width constant: " <<
-  //   op->getName().getStringRef()
-  //      << ">>";
-  //   return {Unary, IsUnsigned};
-  // }
+  if (value.getBitWidth() == 0) {
+    emitOpError(op, "will not emit zero width constants in the general case");
+    os << "<<unsupported zero width constant: " << op->getName().getStringRef()
+       << ">>";
+    return {Unary, IsUnsigned};
+  }
 
   // If this is a negative signed number and not MININT (e.g. -128), then print
   // it as a negated positive number.
@@ -2959,10 +2958,17 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
     ops.clear();
     ops.insert(op);
     indent();
-    if (isZeroBitType(port.type))
+    bool isZeroBit = isZeroBitType(port.type);
+    if (isZeroBit)
       os << "// Zero width: ";
     os << "assign " << getPortVerilogName(parent, port) << " = ";
-    emitExpression(operand, ops, LowestPrecedence);
+
+    // If this is a zero-width constant then don't emit it (illegal). Else,
+    // emit the expression - even for zero width - for traceability.
+    if (isZeroBit && isa_and_nonnull<hw::ConstantOp>(operand.getDefiningOp()))
+      os << "/*Zero width*/";
+    else
+      emitExpression(operand, ops, LowestPrecedence);
     os << ';';
     emitLocationInfoAndNewLine(ops);
     ++operandIndex;
