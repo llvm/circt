@@ -17,7 +17,6 @@
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/Allocator.h"
-#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/StringSaver.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -281,7 +280,8 @@ public:
   /// operator<< yet.
   template <typename T>
   PPStream &addAsString(T &&t) {
-    return *this << PPSaveString(llvm::formatv("{0}", t).str());
+    invokeWithStringOS([&](auto &os) { os << t; });
+    return *this;
   }
 
   /// Helper to invoke code with a llvm::raw_ostream argument for compatibility.

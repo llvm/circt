@@ -739,27 +739,93 @@ test test test test test
 )"""));
 }
 
-TEST(PrettyPrinterTest, NBSPs) {
+class PPStreamCompareTest : public testing::Test {
+protected:
   SmallString<128> out, compare;
-  raw_svector_ostream ppOS(out);
-  raw_svector_ostream os(compare);
+  raw_svector_ostream ppOS = raw_svector_ostream(out);
+  raw_svector_ostream os = raw_svector_ostream(compare);
 
   PPBuilderStringSaver saver;
-  auto test = [&](auto n) {
+
+  template <typename Callable>
+  void testStreams(Callable &&test, llvm::Optional<StringRef> data = llvm::None,
+                   unsigned margin = 10) {
     out.clear();
     compare.clear();
-    {
-      PrettyPrinter pp(ppOS, 8);
-      PPStream<> ps(pp, saver);
-      ps.nbsp(n);
-      os.indent(n);
-    }
+    PrettyPrinter pp(ppOS, margin);
+    PPStream<> ps(pp, saver);
 
+    std::invoke(test, ps, os);
+
+    if (data) {
+      EXPECT_EQ(compare.str(), *data);
+      EXPECT_EQ(out.str(), *data);
+    }
     EXPECT_EQ(out.str(), compare.str());
+  }
+
+  template <typename Callable>
+  void testStreamsSame(Callable &&test,
+                       llvm::Optional<StringRef> data = llvm::None,
+                       unsigned margin = 10) {
+    testStreams(
+        [&](auto &ps, auto &os) {
+          test(ps);
+          test(os);
+        },
+        data, margin);
+  }
+};
+
+TEST_F(PPStreamCompareTest, Strings) {
+  testStreamsSame([&](auto &os) { os << "testing"; });
+  testStreamsSame([&](auto &os) { os << StringRef("foo"); });
+  testStreamsSame([&](auto &os) { os << StringRef("foobar", 3); });
+  testStreamsSame([&](auto &os) { os << std::string("test"); });
+  testStreamsSame([&](auto &os) {
+    SmallString<10> ss;
+    ss = "test";
+    os << ss;
+  });
+  // (Twine not directly supported, use Twine::str())
+}
+
+TEST_F(PPStreamCompareTest, NBSPs) {
+  for (auto i : {0, 1, 2, 3, 4, 8, 16, 32, 64, 128, 256, 511, 512, 513, 2048})
+    testStreams([&](auto &ps, auto &os) {
+      ps.nbsp(i);
+      os.indent(i);
+    });
+}
+
+TEST_F(PPStreamCompareTest, Numeric) {
+  auto test = [&](auto x, llvm::Optional<StringRef> data = llvm::None) {
+    testStreams(
+        [&](auto &ps, auto &os) {
+          ps.addAsString(x);
+          os << x;
+        },
+        data);
   };
 
-  for (auto i : {0, 1, 2, 3, 4, 8, 16, 32, 64, 128, 256, 511, 512, 513, 2048})
-    test(i);
+  // The exact output isn't quite as important as ensuring we are a suitable
+  // replacement for llvm::raw_ostream.
+  test(0);
+  test(-123);
+  test(4321);
+  test(int{0});
+  test(char{0}, StringRef("\0", 1));
+  test(0L);
+  test(0U);
+  test(~0U);
+  test(INT32_MIN);
+  test(UINT64_MAX);
+
+  test(0.);
+  test(0.f);
+  test(1.5);
+  test(1.2);
+  test(1. / 3.);
 }
 
 } // end anonymous namespace
