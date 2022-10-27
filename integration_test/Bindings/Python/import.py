@@ -3,3 +3,9 @@
 
 import circt
 from circt.dialects import comb, esi, hw, seq, sv
+
+from mlir.passmanager import PassManager
+from mlir.ir import Context
+
+with Context():
+  pm = PassManager.parse("cse")

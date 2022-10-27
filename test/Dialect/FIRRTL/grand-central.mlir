@@ -61,7 +61,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-SAME: {
 
 // CHECK: firrtl.module private @View_companion
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}View_companion.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
 // CHECK-NEXT: sv.interface.instance sym @__View_Foo__ {name = "View"} : !sv.interface<@Foo>
 // CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.foo = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
 // CHECK-SAME:   #hw.innerNameRef<@View_companion::@__View_Foo__>
@@ -87,7 +87,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
 
 // CHECK: sv.interface @Foo
 // CHECK-SAME: comment = "VCS coverage exclude_file"
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
 // CHECK-NEXT: sv.verbatim "// description of foo"
 // CHECK-NEXT: sv.interface.signal @foo : i2
 // CHECK-NEXT: sv.verbatim "// multi\0A// line\0A// description\0A// of\0A// bar"
@@ -154,7 +154,7 @@ firrtl.circuit "InterfaceVectorType" attributes {
 // CHECK-SAME: {
 
 // CHECK: firrtl.module private @View_companion
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}View_companion.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
 
 // All Grand Central annotations are removed from the registers.
 // CHECK: firrtl.module private @DUT
@@ -165,7 +165,7 @@ firrtl.circuit "InterfaceVectorType" attributes {
 
 // CHECK: sv.interface @Foo
 // CHECK-SAME: comment = "VCS coverage exclude_file"
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
 // CHECK-NEXT: sv.verbatim "// description of foo"
 // CHECK-NEXT: sv.interface.signal @foo : !hw.uarray<2xi1>
 
@@ -238,13 +238,13 @@ firrtl.circuit "InterfaceBundleType" attributes {
 
 // CHECK: sv.interface @Foo
 // CHECK-SAME: comment = "VCS coverage exclude_file"
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
 // CHECK-NEXT: sv.verbatim "// description of Bar"
 // CHECK-NEXT: Bar bar();
 
 // CHECK: sv.interface @Bar
 // CHECK-SAME: comment = "VCS coverage exclude_file"
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}Bar.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
 // CHECK-NEXT: sv.interface.signal @b : i2
 // CHECK-NEXT: sv.interface.signal @a : i1
 
@@ -422,7 +422,7 @@ firrtl.circuit "InterfaceNode" attributes {
 
 // CHECK: sv.interface @Foo
 // CHECK-SAME: comment = "VCS coverage exclude_file"
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
 // CHECK-NEXT: sv.verbatim "// some expression"
 // CHECK-NEXT: sv.interface.signal @foo : i2
 
@@ -479,7 +479,7 @@ firrtl.circuit "InterfacePort" attributes {
 
 // CHECK: sv.interface @Foo
 // CHECK-SAME: comment = "VCS coverage exclude_file"
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
 // CHECK-NEXT: sv.verbatim "// description of foo"
 // CHECK-NEXT: sv.interface.signal @foo : i4
 
@@ -534,7 +534,7 @@ firrtl.circuit "UnsupportedTypes" attributes {
 
 // CHECK: sv.interface @Foo
 // CHECK-SAME: comment = "VCS coverage exclude_file"
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
 // CHECK-NEXT: sv.verbatim "// <unsupported string type> string;"
 // CHECK-NEXT: sv.verbatim "// <unsupported boolean type> boolean;"
 // CHECK-NEXT: sv.verbatim "// <unsupported integer type> integer;"
@@ -609,7 +609,7 @@ firrtl.circuit "BindInterfaceTest"  attributes {
 // The interface is added.
 // CHECK: sv.interface @InterfaceName
 // CHECK-SAME: comment = "VCS coverage exclude_file"
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}InterfaceName.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
 // CHECK-NEXT: sv.interface.signal @_a : i8
 
 // -----
@@ -673,11 +673,11 @@ firrtl.circuit "MultipleGroundTypeInterfaces" attributes {
 
 // CHECK: sv.interface @Foo
 // CHECK-SAME: comment = "VCS coverage exclude_file"
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
 
 // CHECK: sv.interface @Bar
 // CHECK-SAME: comment = "VCS coverage exclude_file"
-// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}Bar.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
 
 // -----
 
@@ -1087,17 +1087,72 @@ firrtl.circuit "BlackBoxDirectoryBehavior" attributes {
   }
 }
 
-// Check that black boxes that are instantiated under a Grand Central companion
-// have their "output_file" set to the extraction directory.  This information
-// will later be used by BlackBoxReader to control where these black boxes are
-// extracted to.  This test exists to verify SFC-exact behavior around Grand
-// Central.
+// Check that black boxes that are instantiated _exclusively_ under a Grand
+// Central companion have their "output_file" set to the extraction directory.
+// This information will later be used by BlackBoxReader to control where these
+// black boxes are extracted to.
 //
 // CHECK-LABEL: "BlackBoxDirectoryBehavior"
 // CHECK:      firrtl.extmodule private @BlackBox_DUT()
 // CHECK-NOT:    output_file
 // CHECK-NEXT: firrtl.extmodule private @BlackBox_GCT() {{.+}} output_file = #hw.output_file<"gct-dir{{/|\\\\}}">
-// CHECK-NEXT: firrtl.extmodule private @BlackBox_DUTAndGCT() {{.+}} output_file = #hw.output_file<"gct-dir{{/|\\\\}}">
+// CHECK-NEXT: firrtl.extmodule private @BlackBox_DUTAndGCT()
+// CHECK-NOT:    output_file
+// CHECK-NEXT: firrtl.module private @View_companion()
+
+// -----
+
+firrtl.circuit "SubmoduleDirectoryBehavior" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [],
+     id = 0 : i64,
+     name = "View"},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "bindings.sv"}]} {
+  firrtl.module private @Submodule_DUT() {}
+  firrtl.module private @Submodule_GCT() {}
+  firrtl.module private @Submodule_DUTAndGCT() {}
+  firrtl.module private @View_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       defName = "Foo",
+       id = 0 : i64,
+       name = "View",
+       type = "companion"}]} {
+    firrtl.instance bbox1 @Submodule_GCT()
+    firrtl.instance bbox2 @Submodule_DUTAndGCT()
+  }
+  firrtl.module private @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "view",
+       type = "parent"}
+    ]} {
+    firrtl.instance View_companion @View_companion()
+    firrtl.instance bbox1 @Submodule_DUT()
+    firrtl.instance bbox2 @Submodule_DUTAndGCT()
+  }
+  firrtl.module @SubmoduleDirectoryBehavior() {
+    firrtl.instance dut @DUT()
+  }
+}
+
+// Check that a submodule instantiated _exclusively_ inside the companion is
+// moved into the companion's directory.
+//
+// CHECK-LABEL: "SubmoduleDirectoryBehavior"
+// CHECK:      firrtl.module private @Submodule_DUT() {
+// CHECK-NOT:    output_file
+// CHECK:      firrtl.module private @Submodule_GCT()
+// CHECK-SAME:   output_file = #hw.output_file<"gct-dir{{/|\\\\}}"{{.+$}}
+// CHECK-NEXT: }
+// CHECK-NEXT: firrtl.module private @Submodule_DUTAndGCT()
+// CHECK-NOT:   output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
+// CHECK-NEXT: }
 
 // -----
 
@@ -1161,7 +1216,7 @@ firrtl.circuit "InterfaceInTestHarness" attributes {
 // CHECK-NOT:       lowerToBind
 // CHECK-NEXT:  }
 // CHECK:       sv.interface
-// CHECK-SAME:    output_file = #hw.output_file<"testbenchDir{{/|\\\\}}Foo.sv", excludeFromFileList>
+// CHECK-SAME:    output_file = #hw.output_file<"testbenchDir{{/|\\\\}}", excludeFromFileList>
 
 // -----
 
