@@ -39,3 +39,35 @@ hw.module @structs(%clk: i1, %rstn: i1) {
   %92 = hw.array_concat %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %16, %16 : !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<64xi1>, !hw.array<64xi1>
   %s = hw.struct_create (%90, %91, %92) : !hw.struct<foo: !hw.array<72xi1>, bar: !hw.array<128xi1>, baz: !hw.array<224xi1>>
 }
+
+// -----
+
+// CHECK-LABEL:module CoverAssert({{.*}}
+hw.module @CoverAssert(
+  %clock: i1, %reset: i1,
+  %eeeeee_fffff_gggggg_hhh_i_jjjjj_kkkkkkkkk_lllllll_mmmmmmmmm_nnnnnnnn_0: i4) {
+    %c0_i4 = hw.constant 0 : i4
+    %true = hw.constant true
+
+    %0 = comb.icmp eq %eeeeee_fffff_gggggg_hhh_i_jjjjj_kkkkkkkkk_lllllll_mmmmmmmmm_nnnnnnnn_0, %c0_i4 : i4
+    %1 = comb.icmp eq %eeeeee_fffff_gggggg_hhh_i_jjjjj_kkkkkkkkk_lllllll_mmmmmmmmm_nnnnnnnn_0, %c0_i4 : i4
+
+    %2 = comb.xor bin %reset, %true : i1
+    %3 = comb.xor bin %reset, %true : i1
+    %4 = comb.and bin %0, %2 : i1
+    %5 = comb.and bin %1, %3 : i1
+
+// CHECK:  cover__information_label:
+// CHECK-NEXT:    cover property (@(posedge clock)
+// CHECK-NEXT:                    eeeeee_fffff_gggggg_hhh_i_jjjjj_kkkkkkkkk_lllllll_mmmmmmmmm_nnnnnnnn_0 == 4'h0
+// CHECK-NEXT:                    & ~reset);{{.*}}
+    sv.cover.concurrent posedge %clock, %4 label "cover__information_label"
+
+// CHECK:  assert__label:
+// CHECK-NEXT:    assert property (@(posedge clock)
+// CHECK-NEXT:                     eeeeee_fffff_gggggg_hhh_i_jjjjj_kkkkkkkkk_lllllll_mmmmmmmmm_nnnnnnnn_0 == 4'h0
+// CHECK-NEXT:                     & ~reset)
+// CHECK-NEXT:    else $error("assert failed");	{{.*}}
+    sv.assert.concurrent posedge %clock, %5 label "assert__label" message "assert failed"
+}
+

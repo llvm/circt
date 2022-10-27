@@ -3460,9 +3460,9 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
 /// picked and uniquified through `addName`.
 void StmtEmitter::emitAssertionLabel(Operation *op, StringRef opName) {
   if (op->getAttrOfType<StringAttr>("label")) {
-    ps << PPExtString(names.getName(op)) << ": ";
+    ps << PPExtString(names.getName(op)) << ":" << PP::space;
   } else if (state.options.enforceVerifLabels) {
-    ps << PPExtString(names.addName(op, opName)) << ": ";
+    ps << PPExtString(names.addName(op, opName)) << ":" << PP::space;
   }
 }
 
@@ -3473,8 +3473,7 @@ void StmtEmitter::emitAssertionMessage(StringAttr message, ValueRange args,
                                        bool isConcurrent = false) {
   if (!message)
     return;
-  // TODO: wrap this 'else' nicely, instead of only moving right.
-  ps << " else $error(";
+  ps << PP::space << "else" << PP::nbsp << "$error(";
   auto ib = ps.scopedIBox(0);
   ps.writeQuotedEscaped(message.getValue());
   // TODO: box, break/wrap behavior!
@@ -3493,7 +3492,9 @@ LogicalResult StmtEmitter::emitImmediateAssertion(Op op, StringRef opName) {
   startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
+  ps << PP::ibox2;
   emitAssertionLabel(op, opName);
+  ps << PP::cbox0;
   ps << opName; // TODO: PPExtString ?
   switch (op.getDefer()) {
   case DeferAssert::Immediate:
@@ -3509,6 +3510,7 @@ LogicalResult StmtEmitter::emitImmediateAssertion(Op op, StringRef opName) {
   emitExpression(op.getExpression(), ops);
   ps << PP::end << ")";
   emitAssertionMessage(op.getMessageAttr(), op.getSubstitutions(), ops);
+  ps << PP::end << PP::end;
   ps << ";";
   emitLocationInfoAndNewLine(ops);
   return success();
@@ -3534,15 +3536,17 @@ LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, StringRef opName) {
   startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  // TODO: revisit for breaking behavior.
+  ps << PP::ibox2;
   emitAssertionLabel(op, opName);
-  ps << opName << " property (@("
+  ps << PP::cbox0;
+  ps << opName << PP::nbsp << "property (" << PP::ibox0 << "@("
      << PPExtString(stringifyEventControl(op.getEvent())) << PP::nbsp;
   emitExpression(op.getClock(), ops);
-  ps << ") ";
+  ps << ")" << PP::space;
   emitExpression(op.getProperty(), ops);
-  ps << ")";
+  ps << ")" << PP::end;
   emitAssertionMessage(op.getMessageAttr(), op.getSubstitutions(), ops, true);
+  ps << PP::end << PP::end;
   ps << ";";
   emitLocationInfoAndNewLine(ops);
   return success();
