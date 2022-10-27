@@ -24,10 +24,10 @@ namespace circt {
 namespace pretty {
 
 //===----------------------------------------------------------------------===//
-// Convenience builders.
+// PrettyPrinter standin that buffers tokens until flushed.
 //===----------------------------------------------------------------------===//
 
-/// Buffer tokens until EOF for clients that need to adjust things.
+/// Buffer tokens for clients that need to adjust things.
 struct BufferingPP {
   using BufferVec = SmallVectorImpl<Token>;
   BufferVec &tokens;
@@ -66,6 +66,10 @@ struct BufferingPP {
   }
 };
 
+//===----------------------------------------------------------------------===//
+// Convenience builders.
+//===----------------------------------------------------------------------===//
+
 namespace detail {
 void emitNBSP(unsigned n, llvm::function_ref<void(Token)> add);
 } // end namespace detail
@@ -78,6 +82,8 @@ class PPBuilder {
 public:
   PPBuilder(PPTy &pp) : pp(pp) {}
 
+  //===- Add tokens -------------------------------------------------------===//
+
   /// Add new token.
   template <typename T, typename... Args>
   typename std::enable_if_t<std::is_base_of_v<Token, T>> add(Args &&...args) {
@@ -87,6 +93,8 @@ public:
 
   /// End of a stream.
   void eof() { pp.eof(); }
+
+  //===- Strings ----------------------------------------------------------===//
 
   /// Add a literal (with external storage).
   void literal(StringRef str) { add<StringToken>(str); }
@@ -98,6 +106,8 @@ public:
   void nbsp(unsigned n) {
     detail::emitNBSP(n, [&](Token t) { addToken(t); });
   }
+
+  //===- Breaks -----------------------------------------------------------===//
 
   /// Add a newline (break too wide to fit, always breaks).
   void newline() { add<BreakToken>(PrettyPrinter::kInfinity); }
@@ -116,6 +126,8 @@ public:
 
   /// Add a 'neverbreak' break.  Always 'fits'.
   void neverbreak() { add<BreakToken>(0, 0, true); }
+
+  //===- Box helpers ------------------------------------------------------===//
 
   /// Start a consistent group with specified offset.
   void cbox(int32_t offset = 0, IndentStyle style = IndentStyle::Visual) {
