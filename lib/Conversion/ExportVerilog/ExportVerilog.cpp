@@ -1822,9 +1822,9 @@ private:
 
   /// Emit a range of values separated by commas and a breakable space.
   /// Each value is emitted by invoking `eachFn`.
-  template <typename EachFn>
-  void interleaveComma(ValueRange ops, EachFn eachFn) {
-    llvm::interleave(ops, eachFn, [&]() { ps << "," << PP::space; });
+  template <typename Container, typename EachFn>
+  void interleaveComma(const Container &c, EachFn eachFn) {
+    llvm::interleave(c, eachFn, [&]() { ps << "," << PP::space; });
   }
 
   /// Emit a range of values separated by commas and a breakable space.
@@ -1849,13 +1849,14 @@ private:
   ///   c,
   /// }
   /// ```
-  template <typename OpenFunc, typename CloseFunc, typename EachFunc>
-  void emitBracedList(ValueRange ops, OpenFunc openFn, EachFunc eachFn,
+  template <typename Container, typename OpenFunc, typename CloseFunc,
+            typename EachFunc>
+  void emitBracedList(const Container &c, OpenFunc openFn, EachFunc eachFn,
                       CloseFunc closeFn) {
     ps << PP::cbox2;
     openFn();
     ps << PP::zerobreak;
-    interleaveComma(ops, eachFn);
+    interleaveComma(c, eachFn);
     ps << BreakToken(0, -2) << PP::end;
     closeFn();
   }
