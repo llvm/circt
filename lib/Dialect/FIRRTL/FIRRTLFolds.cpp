@@ -1736,65 +1736,66 @@ void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.insert<FoldNodeName>(context);
 }
 
-static SmallVector<Value> getCompleteWrite(Operation *lhs) {
-  auto lhsTy = lhs->getResult(0).getType();
-  if (!lhsTy.isa<BundleType>() && !lhsTy.isa<FVectorType>())
-    return {};
-
-  DenseMap<uint32_t, Value> fields;
-  for (Operation *user : lhs->getResult(0).getUsers()) {
-    if (user->getParentOp() != lhs->getParentOp())
-      return {};
-    if (auto aConnect = dyn_cast<StrictConnectOp>(user)) {
-      if (aConnect.getDest() == lhs->getResult(0))
-        return {};
-    } else if (auto subField = dyn_cast<SubfieldOp>(user)) {
-      for (Operation *subuser : subField.getResult().getUsers()) {
-        if (auto aConnect = dyn_cast<StrictConnectOp>(subuser)) {
-          if (aConnect.getDest() == subField) {
-            if (fields.count(subField.getFieldIndex())) // duplicate write
-              return {};
-            fields[subField.getFieldIndex()] = aConnect.getSrc();
-            continue;
-          }
-        }
-        return {};
-      }
-    } else if (auto subIndex = dyn_cast<SubindexOp>(user)) {
-      for (Operation *subuser : subIndex.getResult().getUsers()) {
-        if (auto aConnect = dyn_cast<StrictConnectOp>(subuser)) {
-          if (aConnect.getDest() == subIndex) {
-            if (fields.count(subIndex.getIndex())) // duplicate write
-              return {};
-            fields[subIndex.getIndex()] = aConnect.getSrc();
-            continue;
-          }
-        }
-        return {};
-      }
-    } else {
-      return {};
-    }
-  }
-
-  SmallVector<Value> values;
-  uint32_t total = lhsTy.isa<BundleType>()
-                       ? lhsTy.cast<BundleType>().getNumElements()
-                       : lhsTy.cast<FVectorType>().getNumElements();
-  for (uint32_t i = 0; i < total; ++i) {
-    if (!fields.count(i))
-      return {};
-    values.push_back(fields[i]);
-  }
-  return values;
-}
-
 namespace {
 // For a lhs, find all the writers of fields of the aggregate type.  If there
 // is one writer for each field, merge the writes
 struct AggOneShot : public mlir::RewritePattern {
   AggOneShot(StringRef name, uint32_t weight, MLIRContext *context)
       : RewritePattern(name, 0, context) {}
+
+  SmallVector<Value> getCompleteWrite(Operation *lhs) const {
+    auto lhsTy = lhs->getResult(0).getType();
+    if (!lhsTy.isa<BundleType>() && !lhsTy.isa<FVectorType>())
+      return {};
+
+    DenseMap<uint32_t, Value> fields;
+    for (Operation *user : lhs->getResult(0).getUsers()) {
+      if (user->getParentOp() != lhs->getParentOp())
+        return {};
+      if (auto aConnect = dyn_cast<StrictConnectOp>(user)) {
+        if (aConnect.getDest() == lhs->getResult(0))
+          return {};
+      } else if (auto subField = dyn_cast<SubfieldOp>(user)) {
+        for (Operation *subuser : subField.getResult().getUsers()) {
+          if (auto aConnect = dyn_cast<StrictConnectOp>(subuser)) {
+            if (aConnect.getDest() == subField) {
+              if (fields.count(subField.getFieldIndex())) // duplicate write
+                return {};
+              fields[subField.getFieldIndex()] = aConnect.getSrc();
+            }
+            continue;
+          }
+          return {};
+        }
+      } else if (auto subIndex = dyn_cast<SubindexOp>(user)) {
+        for (Operation *subuser : subIndex.getResult().getUsers()) {
+          if (auto aConnect = dyn_cast<StrictConnectOp>(subuser)) {
+            if (aConnect.getDest() == subIndex) {
+              if (fields.count(subIndex.getIndex())) // duplicate write
+                return {};
+              fields[subIndex.getIndex()] = aConnect.getSrc();
+            }
+            continue;
+          }
+          return {};
+        }
+      } else {
+        return {};
+      }
+    }
+
+    SmallVector<Value> values;
+    uint32_t total = lhsTy.isa<BundleType>()
+                         ? lhsTy.cast<BundleType>().getNumElements()
+                         : lhsTy.cast<FVectorType>().getNumElements();
+    for (uint32_t i = 0; i < total; ++i) {
+      if (!fields.count(i))
+        return {};
+      values.push_back(fields[i]);
+    }
+    return values;
+  }
+
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
     auto values = getCompleteWrite(op);
