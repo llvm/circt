@@ -2564,7 +2564,7 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   // The ?: operator is right associative.
-#if 0
+#if 1
   // Layout:
   // cond ? a : b
   // (long
@@ -2576,12 +2576,12 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
   // + cond
   //   ? a
   //   : b
-  auto box = ps.scopedCBox(2);
+  auto box = ps.scopedCBox(0);
   {
-    auto innerbox = ps.scopedIBox(-2);
+    auto innerbox = ps.scopedIBox(0);
     emitSubExpr(op.getCond(), VerilogPrecedence(Conditional - 1));
   }
-  ps << PP::space;
+  ps << BreakToken(1, 2);
 #else
   // cond ? a : b
   // cond ? a
@@ -2595,7 +2595,7 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
   auto lhsInfo =
       emitSubExpr(op.getTrueValue(), VerilogPrecedence(Conditional - 1));
   ps << PP::end;
-  ps << PP::space << ": " << PP::ibox0;
+  ps << BreakToken(1, 2) << ": " << PP::ibox0;
   auto rhsInfo = emitSubExpr(op.getFalseValue(), Conditional);
   ps << PP::end;
 
