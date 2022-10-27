@@ -799,7 +799,7 @@ private:
   void cloneAnnotation(SmallVectorImpl<FlatSymbolRefAttr> &nlas,
                        Annotation anno, ArrayRef<NamedAttribute> attributes,
                        unsigned nonLocalIndex,
-                       SmallVector<Annotation> &newAnnotations) {
+                       SmallVectorImpl<Annotation> &newAnnotations) {
     SmallVector<NamedAttribute> mutableAttributes(attributes.begin(),
                                                   attributes.end());
     for (auto &nla : nlas) {
@@ -866,23 +866,6 @@ private:
                           nonLocalIndex, newAnnotations);
         }
 
-        // llvm::errs() << "target ";
-        // if (auto opTarget = target.dyn_cast<OpAnnoTarget>())
-        //   llvm::errs() << *target.getOp();
-        // else {
-        //   auto portTarget = target.cast<PortAnnoTarget>();
-        //   auto *theOp = portTarget.getOp();
-        //   llvm::errs() << "port " << portTarget.getPortNo() << " on "
-        //                << theOp->getAttr("sym_name")
-        //                << "\n annotations=" <<
-        //                theOp->getAttr("portAnnotations")
-        //                << "\n";
-        //   llvm::errs() << " did not contain the NLA\n";
-        //   llvm::errs() << "\n";
-        //   llvm::errs() << nla;
-        // }
-        // llvm::errs() << "\n\n";
-
         // Apply the new annotations to the operation.
         AnnotationSet annotations(newAnnotations, context);
         target.setAnnotations(annotations);
@@ -917,7 +900,7 @@ private:
   /// for now.  Return true if the annotation was made non-local.
   bool makeAnnotationNonLocal(StringAttr toModuleName, AnnoTarget to,
                               FModuleLike fromModule, Annotation anno,
-                              SmallVector<Annotation> &newAnnotations) {
+                              SmallVectorImpl<Annotation> &newAnnotations) {
     // Start constructing a new annotation, pushing a "circt.nonLocal" field
     // into the correct spot if its not already a non-local annotation.
     SmallVector<NamedAttribute> attributes;
@@ -957,45 +940,11 @@ private:
     return true;
   }
 
-  void copyAnnotations() {}
-
-  /// Merge the annotations of a specific target, either a operation or a port
-  /// on an operation.
-  void mergeAnnotations(FModuleLike toModule, AnnoTarget to,
-                        AnnotationSet toAnnos, FModuleLike fromModule,
-                        AnnoTarget from, AnnotationSet fromAnnos) {
-    // This is a list of all the annotations which will be added to `to`.
-    SmallVector<Annotation> newAnnotations;
-
-    // We have special case handling of DontTouch to prevent it from being
-    // turned into a non-local annotation.
-    bool hasDontTouch = false;
-
-    // Iterate the `to` annotations, transforming non-common annotations into
-    // non-local ones.  We want to make sure that we keep the order of the
-    // annotations, and append any new annotations coming from the other module.
-    for (auto anno : toAnnos) {
-      if (anno.isClass(dontTouchAnnoClass)) {
-        // Skip this if we already have a DontTouch.
-        if (hasDontTouch)
-          continue;
-        // We don't worry if the DontTouch is non-local or not, we just copy it
-        // as is since it doesn't matter.
-        newAnnotations.push_back(anno);
-        hasDontTouch = true;
-        continue;
-      }
-      // If the annotation is already non-local, we add it as is.  It is already
-      // added to the target map.
-      if (anno.getMember("circt.nonlocal")) {
-        newAnnotations.push_back(anno);
-        continue;
-      }
-      // Otherwise make the annotation non-local and add it to the set.
-      makeAnnotationNonLocal(toModule.moduleNameAttr(), to, toModule, anno,
-                             newAnnotations);
-    }
-    for (auto anno : fromAnnos) {
+  void copyAnnotations(FModuleLike toModule, AnnoTarget to,
+                       FModuleLike fromModule, AnnotationSet annos,
+                       SmallVectorImpl<Annotation> &newAnnotations,
+                       bool &hasDontTouch) {
+    for (auto anno : annos) {
       if (anno.isClass(dontTouchAnnoClass)) {
         // Skip this if we already have a DontTouch.
         if (hasDontTouch)
@@ -1016,6 +965,26 @@ private:
       makeAnnotationNonLocal(toModule.moduleNameAttr(), to, fromModule, anno,
                              newAnnotations);
     }
+  }
+
+  /// Merge the annotations of a specific target, either a operation or a port
+  /// on an operation.
+  void mergeAnnotations(FModuleLike toModule, AnnoTarget to,
+                        AnnotationSet toAnnos, FModuleLike fromModule,
+                        AnnoTarget from, AnnotationSet fromAnnos) {
+    // This is a list of all the annotations which will be added to `to`.
+    SmallVector<Annotation> newAnnotations;
+
+    // We have special case handling of DontTouch to prevent it from being
+    // turned into a non-local annotation.
+    bool hasDontTouch = false;
+
+    // Iterate the annotations, transforming most annotations into non-local
+    // ones.
+    copyAnnotations(toModule, to, toModule, toAnnos, newAnnotations,
+                    hasDontTouch);
+    copyAnnotations(toModule, to, fromModule, fromAnnos, newAnnotations,
+                    hasDontTouch);
 
     // Copy over all the new annotations.
     if (!newAnnotations.empty())
