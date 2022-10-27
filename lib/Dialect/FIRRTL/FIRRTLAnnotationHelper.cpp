@@ -328,7 +328,24 @@ InstanceOp firrtl::addPortsToModule(
   // The port number for the new port.
   unsigned portNo = mod.getNumPorts();
   PortInfo portInfo = {portName(mod), portType, dir, {}, mod.getLoc()};
-  mod.insertPorts({{portNo, portInfo}});
+  InstanceGraphNode *modNode =
+      TypeSwitch<Operation *, InstanceGraphNode *>(mod)
+          .Case<FModuleOp>([&](FModuleOp m) {
+            m.insertPorts({{portNo, portInfo}});
+            return instancePathcache.instanceGraph.lookup(m);
+          })
+          .Case<FExtModuleOp>([&](FExtModuleOp m) {
+            m.insertPorts({{portNo, portInfo}});
+            return instancePathcache.instanceGraph.lookup(m);
+          })
+          .Case<FMemModuleOp>([&](FMemModuleOp m) {
+            m.insertPorts({{portNo, portInfo}});
+            return instancePathcache.instanceGraph.lookup(m);
+          })
+          .Default([&](auto) {
+            llvm_unreachable("unknown FModuleLike op");
+            return nullptr;
+          });
   if (targetCaches)
     targetCaches->insertPort(mod, portNo);
   // Now update all the instances of `mod`.

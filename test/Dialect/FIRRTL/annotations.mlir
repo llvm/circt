@@ -1384,13 +1384,13 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [
         sink = "~Top|Top>tap"
       }
     ]}]} {
-  firrtl.module private @Bar() {
-  }
+  // CHECK: firrtl.extmodule private @Bar(out [[_gen_ref:.+]]: !firrtl.ref<uint<1>>) attributes {internalPaths = ["random.something"]} 
+  firrtl.extmodule private @Bar()
+  
   // CHECK-LABEL:  firrtl.module private @Foo(out %_gen_tap: !firrtl.ref<uint<1>>)
   firrtl.module private @Foo() {
     firrtl.instance b interesting_name  @Bar()
-    // CHECK:  firrtl.instance b sym @extModXMR interesting_name  @Bar()
-    // CHECK{LITERAL}:  %0 = firrtl.verbatim.expr "{{0}}.random.something" : () -> !firrtl.uint<1> {name = "tap_internalPath", symbols = [#hw.innerNameRef<@Foo::@extModXMR>]}
+    // CHECK:  %[[gen_refPort:.+]] = firrtl.instance b sym @extModXMR interesting_name @Bar(out _gen_refPort: !firrtl.ref<uint<1>>)
   }
   // CHECK-LABEL firrtl.module @Top()
   firrtl.module @Top() {

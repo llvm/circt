@@ -49,7 +49,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   void runOnOperation() override {
     dataFlowClasses = llvm::EquivalenceClasses<Value, ValueComparator>();
-    auto &instanceGraph = getAnalysis<InstanceGraph>();
+    instanceGraph = &getAnalysis<InstanceGraph>();
     SmallVector<RefResolveOp> resolveOps;
     // The dataflow function, that propagates the reachable RefSendOp across
     // RefType Ops.
@@ -177,7 +177,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     };
 
     // Traverse the modules in post order.
-    for (auto node : llvm::post_order(&instanceGraph)) {
+    for (auto node : llvm::post_order(instanceGraph)) {
       auto module = dyn_cast<FModuleOp>(*node->getModule());
       if (!module)
         continue;
@@ -296,6 +296,37 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   // Propagate the reachable RefSendOp across modules.
   LogicalResult handleInstanceOp(InstanceOp inst) {
+    auto extRefMod =
+        dyn_cast<FExtModuleOp>(instanceGraph->getReferencedModule(inst));
+    if (extRefMod) {
+      // Extern modules can generate RefType ports, they have an attached
+      // attribute which specifies the internal path into the extern module.
+      // This string attribute will be used to generate the final xmr.
+      auto internalPaths = extRefMod.getInternalPaths();
+      if (internalPaths.empty())
+        return success();
+      size_t pathsIndex = 0;
+      auto numPorts = inst.getNumResults();
+      for (const auto &res : llvm::enumerate(inst.getResults())) {
+        if (!inst.getResult(res.index()).getType().isa<RefType>())
+          continue;
+
+        auto inRef = getInnerRefTo(inst);
+        auto ind = addReachingSendsEntry(res.value(), inRef);
+
+        xmrPathSuffix[ind] =
+            "." + internalPaths[pathsIndex].cast<StringAttr>().str();
+        ++pathsIndex;
+        // The instance result and module port must be marked for removal.
+        if (refPortsToRemoveMap[inst].size() < numPorts)
+          refPortsToRemoveMap[inst].resize(numPorts);
+        refPortsToRemoveMap[inst].set(res.index());
+        if (refPortsToRemoveMap[extRefMod].size() < numPorts)
+          refPortsToRemoveMap[extRefMod].resize(numPorts);
+        refPortsToRemoveMap[extRefMod].set(res.index());
+      }
+      return success();
+    }
     auto refMod = dyn_cast<FModuleOp>(inst.getReferencedModule());
     bool multiplyInstantiated = !visitedModules.insert(refMod).second;
     for (size_t portNum = 0, numPorts = inst.getNumResults();
@@ -420,6 +451,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     for (auto iter : refPortsToRemoveMap)
       if (auto mod = dyn_cast<FModuleOp>(iter.getFirst()))
         mod.erasePorts(iter.getSecond());
+      else if (auto mod = dyn_cast<FExtModuleOp>(iter.getFirst()))
+        mod.erasePorts(iter.getSecond());
       else if (auto inst = dyn_cast<InstanceOp>(iter.getFirst())) {
         ImplicitLocOpBuilder b(inst.getLoc(), inst);
         inst.erasePorts(b, iter.getSecond());
@@ -459,6 +492,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     refSendPathList.clear();
   }
 
+  InstanceGraph *instanceGraph;
   /// Cached module namespaces.
   DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
 
