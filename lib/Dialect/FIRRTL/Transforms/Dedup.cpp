@@ -830,8 +830,11 @@ private:
       // Create the replacement NLAs.
       SmallVector<Attribute> namepath(elements.begin(), elements.end());
       auto nlaRefs = createNLAs(fromModule, namepath, nla.getVisibility());
+      // Copy out the targets, because we will be updating the map.
+      auto &set = targetMap[nla.getSymNameAttr()];
+      SmallVector<AnnoTarget> targets(set.begin(), set.end());
       // Replace the uses of the old NLA with the new NLAs.
-      for (auto target : targetMap[nla.getSymNameAttr()]) {
+      for (auto target : targets) {
         // We have to clone any annotation which uses the old NLA for each new
         // NLA. This array collects the new set of annotations.
         SmallVector<Annotation> newAnnotations;
