@@ -535,10 +535,7 @@ TEST(PrettyPrinterTest, Expr) {
     out = "\n";
     {
       auto ib = ps.scopedIBox(2);
-      {
-        // TODO: let this wrap.
-        ps << "assign" << PP::nbsp << id << PP::nbsp << "=";
-      }
+      ps << "assign" << PP::nbsp << id << PP::nbsp << "=";
       ps << PP::space;
       auto ib3 = ps.scopedIBox(0);
       sumExpr(ps);
