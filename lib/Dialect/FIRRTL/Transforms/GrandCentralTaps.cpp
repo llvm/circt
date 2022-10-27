@@ -382,13 +382,13 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
           [&](FModuleLike mod) -> ModuleNamespace & {
             return state.getNamespace(mod);
           },
-          &state.targetCaches);
+          &state.targetCaches, internalPathAttr);
       // The extern module can have other internal paths attached to it, append
       // this to them.
-      auto internalPaths = extMod.getInternalPaths();
-      SmallVector<Attribute> paths(internalPaths.begin(), internalPaths.end());
-      paths.push_back(internalPathAttr);
-      extMod.setInternalPathsAttr(builder.getArrayAttr(paths));
+      //auto internalPaths = extMod.getInternalPaths();
+      //SmallVector<Attribute> paths(internalPaths.begin(), internalPaths.end());
+      //paths.push_back(internalPathAttr);
+      //extMod.setInternalPathsAttr(builder.getArrayAttr(paths));
       // Now set the instance as the source for the final datatap xmr.
       srcTarget = AnnoPathValue(modInstance);
       // Since the intance op genenerates the RefType output, no need of another

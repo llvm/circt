@@ -63,7 +63,9 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
     the module.
   }];
   let arguments =
-            (ins DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+            (ins DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
+                 DefaultValuedAttr<ArrayAttr, "{}">:$internalPaths
+            );
 
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
@@ -114,7 +116,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
                    OptionalAttr<StrAttr>:$defname,
                    ParamDeclArrayAttr:$parameters,
                    DefaultValuedAttr<AnnotationArrayAttr, "ArrayAttr()">:$annotations,
-                   DefaultValuedAttr<StrArrayAttr, "{}">:$internalPaths
+                   DefaultValuedAttr<ArrayAttr, "{}">:$internalPaths
                   );
   let results = (outs);
   let regions = (region AnyRegion:$body);

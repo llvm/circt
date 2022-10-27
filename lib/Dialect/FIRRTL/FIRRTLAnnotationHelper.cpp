@@ -317,7 +317,7 @@ InstanceOp firrtl::addPortsToModule(
     FModuleLike mod, InstanceOp instOnPath, FIRRTLType portType, Direction dir,
     StringRef newName, InstancePathCache &instancePathcache,
     llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
-    CircuitTargetCache *targetCaches) {
+    CircuitTargetCache *targetCaches, StringAttr internalPath) {
   // To store the cloned version of `instOnPath`.
   InstanceOp clonedInstOnPath;
   // Get a new port name from the Namespace.
@@ -328,6 +328,8 @@ InstanceOp firrtl::addPortsToModule(
   // The port number for the new port.
   unsigned portNo = mod.getNumPorts();
   PortInfo portInfo = {portName(mod), portType, dir, {}, mod.getLoc()};
+  if (internalPath)
+    portInfo.internalPath = internalPath;
   InstanceGraphNode *modNode =
       TypeSwitch<Operation *, InstanceGraphNode *>(mod)
           .Case<FModuleOp>([&](FModuleOp m) {

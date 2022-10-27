@@ -443,10 +443,12 @@ Block *CircuitOp::getBodyBlock() { return &getBody().front(); }
 /// extmodule.
 SmallVector<PortInfo> FModuleOp::getPorts() {
   SmallVector<PortInfo> results;
+
   for (unsigned i = 0, e = getNumPorts(); i < e; ++i) {
     results.push_back({getPortNameAttr(i), getPortType(i), getPortDirection(i),
                        getPortSymbolAttr(i), getArgument(i).getLoc(),
-                       AnnotationSet::forPort(*this, i)});
+                       AnnotationSet::forPort(*this, i), 
+                       getInternalPathAttr(i)});
   }
   return results;
 }
@@ -460,7 +462,8 @@ static SmallVector<PortInfo> getPorts(FModuleLike module) {
   for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i) {
     results.push_back({module.getPortNameAttr(i), module.getPortType(i),
                        module.getPortDirection(i), module.getPortSymbolAttr(i),
-                       loc, AnnotationSet::forPort(module, i)});
+                       loc, AnnotationSet::forPort(module, i), 
+                       module.getInternalPathAttr(i)});
   }
   return results;
 }
@@ -472,33 +475,39 @@ SmallVector<PortInfo> FExtModuleOp::getPorts() {
 /// Inserts the given ports. The insertion indices are expected to be in order.
 /// Insertion occurs in-order, such that ports with the same insertion index
 /// appear in the module in the same order they appeared in the list.
-void FExtModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
+static void insertPorts(FModuleLike op, ArrayRef<std::pair<unsigned, PortInfo>> ports, 
+    Block *body = nullptr){
   if (ports.empty())
     return;
-  unsigned oldNumArgs = getNumPorts();
+  unsigned oldNumArgs = op.getNumPorts();
   unsigned newNumArgs = oldNumArgs + ports.size();
 
   // Add direction markers and names for new ports.
   SmallVector<Direction> existingDirections =
-      direction::unpackAttribute(this->getPortDirectionsAttr());
-  ArrayRef<Attribute> existingNames = this->getPortNames();
-  ArrayRef<Attribute> existingTypes = this->getPortTypes();
+      direction::unpackAttribute(op.getPortDirectionsAttr());
+  ArrayRef<Attribute> existingNames = op.getPortNames();
+  ArrayRef<Attribute> existingTypes = op.getPortTypes();
+  auto existingPaths = op.getInternalPathsAttr();
   assert(existingDirections.size() == oldNumArgs);
   assert(existingNames.size() == oldNumArgs);
   assert(existingTypes.size() == oldNumArgs);
+  assert(existingPaths.size() == oldNumArgs);
 
   SmallVector<Direction> newDirections;
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newTypes;
   SmallVector<Attribute> newAnnos;
   SmallVector<Attribute> newSyms;
+  SmallVector<Attribute> newPaths;
   newDirections.reserve(newNumArgs);
   newNames.reserve(newNumArgs);
   newTypes.reserve(newNumArgs);
   newAnnos.reserve(newNumArgs);
   newSyms.reserve(newNumArgs);
+  newPaths.reserve(newNumArgs);
 
-  auto emptyArray = ArrayAttr::get(getContext(), {});
+
+  auto emptyArray = ArrayAttr::get(op.getContext(), {});
 
   unsigned oldIdx = 0;
   auto migrateOldPorts = [&](unsigned untilOldIdx) {
@@ -506,14 +515,16 @@ void FExtModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
       newDirections.push_back(existingDirections[oldIdx]);
       newNames.push_back(existingNames[oldIdx]);
       newTypes.push_back(existingTypes[oldIdx]);
-      newAnnos.push_back(getAnnotationsAttrForPort(oldIdx));
-      newSyms.push_back(getPortSymbolAttr(oldIdx));
+      newAnnos.push_back(op.getAnnotationsAttrForPort(oldIdx));
+      newSyms.push_back(op.getPortSymbolAttr(oldIdx));
+      newPaths.push_back(existingPaths[oldIdx]);
       ++oldIdx;
     }
   };
   for (auto &pair : llvm::enumerate(ports)) {
     auto idx = pair.value().first;
     auto &port = pair.value().second;
+    auto newIdx = pair.index();
     migrateOldPorts(idx);
     newDirections.push_back(port.direction);
     newNames.push_back(port.name);
@@ -521,8 +532,12 @@ void FExtModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
     auto annos = port.annotations.getArrayAttr();
     newAnnos.push_back(annos ? annos : emptyArray);
     newSyms.push_back(port.sym);
-    // Block arguments are inserted one at a time, so for each argument we
-    // insert we have to increase the index by 1.
+    newPaths.push_back(port.internalPath? port.internalPath : StringAttr::get(op.getContext()));
+    if (body) {
+      // Block arguments are inserted one at a time, so for each argument we
+      // insert we have to increase the index by 1.
+      body->insertArgument(idx + newIdx, port.type, port.loc);
+    }
   }
   migrateOldPorts(oldNumArgs);
 
@@ -534,31 +549,38 @@ void FExtModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
     newAnnos.clear();
 
   // Apply these changed markers.
-  (*this)->setAttr("portDirections",
-                   direction::packAttribute(getContext(), newDirections));
-  (*this)->setAttr("portNames", ArrayAttr::get(getContext(), newNames));
-  (*this)->setAttr("portTypes", ArrayAttr::get(getContext(), newTypes));
-  (*this)->setAttr("portAnnotations", ArrayAttr::get(getContext(), newAnnos));
-  (*this).setPortSymbols(newSyms);
+  (op)->setAttr("portDirections",
+                   direction::packAttribute(op.getContext(), newDirections));
+  (op)->setAttr("portNames", ArrayAttr::get(op.getContext(), newNames));
+  (op)->setAttr("portTypes", ArrayAttr::get(op.getContext(), newTypes));
+  (op)->setAttr("portAnnotations", ArrayAttr::get(op.getContext(), newAnnos));
+  (op).setPortSymbols(newSyms);
+  (op)->setAttr("internalPaths", ArrayAttr::get(op.getContext(), newPaths));
 }
 
+void FExtModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports){
+  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
+} 
+
 /// Erases the ports that have their corresponding bit set in `portIndices`.
-void FExtModuleOp::erasePorts(const llvm::BitVector &portIndices) {
+static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   if (portIndices.none())
     return;
 
   // Drop the direction markers for dead ports.
   SmallVector<Direction> portDirections =
-      direction::unpackAttribute(this->getPortDirectionsAttr());
-  ArrayRef<Attribute> portNames = this->getPortNames();
-  ArrayRef<Attribute> portTypes = this->getPortTypes();
-  ArrayRef<Attribute> portAnnos = this->getPortAnnotations();
-  ArrayRef<Attribute> portSyms = this->getPortSymbols();
-  assert(portDirections.size() == getNumPorts());
-  assert(portNames.size() == getNumPorts());
-  assert(portAnnos.size() == getNumPorts() || portAnnos.empty());
-  assert(portTypes.size() == getNumPorts());
-  assert(portSyms.size() == getNumPorts() || portSyms.empty());
+      direction::unpackAttribute(op.getPortDirectionsAttr());
+  ArrayRef<Attribute> portNames = op.getPortNames();
+  ArrayRef<Attribute> portTypes = op.getPortTypes();
+  ArrayRef<Attribute> portAnnos = op.getPortAnnotations();
+  ArrayRef<Attribute> portSyms = op.getPortSymbols();
+  auto existingPaths = op.getInternalPathsAttr();
+  assert(portDirections.size() == op.getNumPorts());
+  assert(portNames.size() == op.getNumPorts());
+  assert(portAnnos.size() == op.getNumPorts() || portAnnos.empty());
+  assert(portTypes.size() == op.getNumPorts());
+  assert(portSyms.size() == op.getNumPorts() || portSyms.empty());
+  assert(existingPaths.size() == op.getNumPorts());
 
   SmallVector<Direction> newPortDirections =
       removeElementsAtIndices<Direction>(portDirections, portIndices);
@@ -570,13 +592,20 @@ void FExtModuleOp::erasePorts(const llvm::BitVector &portIndices) {
       removeElementsAtIndices(portAnnos, portIndices);
   SmallVector<Attribute> newPortSyms =
       removeElementsAtIndices(portSyms, portIndices);
-  (*this)->setAttr("portDirections",
-                   direction::packAttribute(getContext(), newPortDirections));
-  (*this)->setAttr("portNames", ArrayAttr::get(getContext(), newPortNames));
-  (*this)->setAttr("portAnnotations",
-                   ArrayAttr::get(getContext(), newPortAnnos));
-  (*this)->setAttr("portTypes", ArrayAttr::get(getContext(), newPortTypes));
-  (*this)->setAttr("portSyms", ArrayAttr::get(getContext(), newPortSyms));
+  SmallVector<Attribute> newPaths =
+      removeElementsAtIndices(existingPaths.getValue(), portIndices);
+  op->setAttr("portDirections",
+            direction::packAttribute(op.getContext(), newPortDirections));
+  op->setAttr("portNames", ArrayAttr::get(op.getContext(), newPortNames));
+  op->setAttr("portAnnotations",
+            ArrayAttr::get(op.getContext(), newPortAnnos));
+  op->setAttr("portTypes", ArrayAttr::get(op.getContext(), newPortTypes));
+  op->setAttr("portSyms", ArrayAttr::get(op.getContext(), newPortSyms));
+  op->setAttr("internalPaths", ArrayAttr::get(op.getContext(), newPaths));
+}
+
+void FExtModuleOp::erasePorts(const llvm::BitVector &portIndices) {
+  return ::erasePorts(cast<FModuleLike>((Operation *)*this), portIndices);
 }
 
 SmallVector<PortInfo> FMemModuleOp::getPorts() {
@@ -594,9 +623,19 @@ BlockArgument FModuleOp::getArgument(size_t portNumber) {
 static void insertPorts(FModuleLike op,
                         ArrayRef<std::pair<unsigned, PortInfo>> ports,
                         Block *body = nullptr) {
+void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
+  Block *body = getBodyBlock();
+  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports, body);
+}
+
+/// Inserts the given ports. The insertion indices are expected to be in order.
+/// Insertion occurs in-order, such that ports with the same insertion index
+/// appear in the module in the same order they appeared in the list.
+void FMemModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   if (ports.empty())
     return;
-  unsigned oldNumArgs = op.getNumPorts();
+  unsigned oldNumArgs = getNumPorts();
+>>>>>>> e1c1a0b83... Add port attribute
   unsigned newNumArgs = oldNumArgs + ports.size();
 
   // Add direction markers and names for new ports.
@@ -604,19 +643,35 @@ static void insertPorts(FModuleLike op,
       direction::unpackAttribute(op.getPortDirectionsAttr());
   ArrayRef<Attribute> existingNames = op.getPortNames();
   ArrayRef<Attribute> existingTypes = op.getPortTypes();
+=======
+      direction::unpackAttribute(this->getPortDirectionsAttr());
+  ArrayRef<Attribute> existingNames = this->getPortNames();
+  ArrayRef<Attribute> existingTypes = this->getPortTypes();
+>>>>>>> e1c1a0b83... Add port attribute
   assert(existingDirections.size() == oldNumArgs);
   assert(existingNames.size() == oldNumArgs);
   assert(existingTypes.size() == oldNumArgs);
 
   SmallVector<Direction> newDirections;
+<<<<<<< HEAD
   SmallVector<Attribute> newNames, newTypes, newAnnos, newSyms;
+=======
+  SmallVector<Attribute> newNames;
+  SmallVector<Attribute> newTypes;
+  SmallVector<Attribute> newAnnos;
+  SmallVector<Attribute> newSyms;
+>>>>>>> e1c1a0b83... Add port attribute
   newDirections.reserve(newNumArgs);
   newNames.reserve(newNumArgs);
   newTypes.reserve(newNumArgs);
   newAnnos.reserve(newNumArgs);
   newSyms.reserve(newNumArgs);
 
+<<<<<<< HEAD
   auto emptyArray = ArrayAttr::get(op.getContext(), {});
+=======
+  auto emptyArray = ArrayAttr::get(getContext(), {});
+>>>>>>> e1c1a0b83... Add port attribute
 
   unsigned oldIdx = 0;
   auto migrateOldPorts = [&](unsigned untilOldIdx) {
@@ -624,6 +679,7 @@ static void insertPorts(FModuleLike op,
       newDirections.push_back(existingDirections[oldIdx]);
       newNames.push_back(existingNames[oldIdx]);
       newTypes.push_back(existingTypes[oldIdx]);
+<<<<<<< HEAD
       newAnnos.push_back(op.getAnnotationsAttrForPort(oldIdx));
       newSyms.push_back(op.getPortSymbolAttr(oldIdx));
       ++oldIdx;
@@ -644,6 +700,11 @@ static void insertPorts(FModuleLike op,
       // Block arguments are inserted one at a time, so for each argument we
       // insert we have to increase the index by 1.
       body->insertArgument(idx + newIdx, port.type, port.loc);
+=======
+      newAnnos.push_back(getAnnotationsAttrForPort(oldIdx));
+      newSyms.push_back(getPortSymbolAttr(oldIdx));
+      ++oldIdx;
+>>>>>>> e1c1a0b83... Add port attribute
     }
   }
   migrateOldPorts(oldNumArgs);
@@ -744,12 +805,14 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   SmallVector<Attribute, 4> portTypes;
   SmallVector<Attribute, 4> portAnnotations;
   SmallVector<Attribute, 4> portSyms;
+  SmallVector<Attribute, 4> paths;
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
     portDirections.push_back(ports[i].direction);
     portNames.push_back(ports[i].name);
     portTypes.push_back(TypeAttr::get(ports[i].type));
     portAnnotations.push_back(ports[i].annotations.getArrayAttr());
     portSyms.push_back(ports[i].sym);
+    paths.push_back(ports[i].internalPath ?ports[i].internalPath: StringAttr::get(builder.getContext()) );
   }
 
   // The lack of *any* port annotations is represented by an empty
@@ -768,6 +831,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addAttribute("portTypes", builder.getArrayAttr(portTypes));
   result.addAttribute("portAnnotations", builder.getArrayAttr(portAnnotations));
   result.addAttribute("portSyms", builder.getArrayAttr(portSyms));
+  result.addAttribute("internalPaths", builder.getArrayAttr(paths));
 
   if (!annotations)
     annotations = builder.getArrayAttr({});
@@ -1040,9 +1104,16 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
     omittedAttrs.push_back("annotations");
 
   // If there are no internal paths attributes we can omit the empty array.
-  if (op->hasAttr("internalPaths"))
-    if (op->getAttrOfType<ArrayAttr>("internalPaths").empty())
+  if (op->hasAttr("internalPaths")) {
+    if (auto paths = op->getAttrOfType<ArrayAttr>("internalPaths")) {
+      if (paths.empty())
       omittedAttrs.push_back("internalPaths");
+  if (llvm::all_of(paths , [](Attribute attr) {
+        return !attr || attr.cast<StringAttr>().getValue().empty();
+      }))
+      omittedAttrs.push_back("internalPaths");
+    }
+  }
 
   p.printOptionalAttrDictWithKeyword(op->getAttrs(), omittedAttrs);
 }
@@ -1176,6 +1247,13 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   if (!result.attributes.get("portAnnotations"))
     result.addAttribute("portAnnotations", builder.getArrayAttr({}));
 
+  SmallVector<Attribute, 4> paths;
+  
+  if (!result.attributes.get("internalPaths")) {
+    for (size_t i =0 ; i < portNames.size(); ++i)
+      paths.push_back(StringAttr::get(builder.getContext()));
+    result.addAttribute("internalPaths", builder.getArrayAttr(paths));
+  }
   // Parse the optional function body.
   auto *body = result.addRegion();
 
