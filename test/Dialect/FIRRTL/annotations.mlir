@@ -1390,7 +1390,7 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [
   // CHECK-LABEL:  firrtl.module private @Foo(out %_gen_tap: !firrtl.ref<uint<1>>)
   firrtl.module private @Foo() {
     firrtl.instance b interesting_name  @Bar()
-    // CHECK:  %[[gen_refPort:.+]] = firrtl.instance b sym @extModXMR interesting_name @Bar(out _gen_refPort: !firrtl.ref<uint<1>>)
+    // CHECK:  %[[gen_refPort:.+]] = firrtl.instance b interesting_name @Bar(out [[_gen_ref]]: !firrtl.ref<uint<1>>)
   }
   // CHECK-LABEL firrtl.module @Top()
   firrtl.module @Top() {
