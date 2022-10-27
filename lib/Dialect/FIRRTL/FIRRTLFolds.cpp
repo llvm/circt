@@ -1867,10 +1867,11 @@ struct ConstAgg : public mlir::RewritePattern {
       if (!isConstant(v))
         return failure();
       TypeSwitch<Operation *>(v.getDefiningOp())
-          .Case<ConstantOp>([&](auto c) { values.push_back(c.getValueAttr()); })
+          .Case<ConstantOp>(
+              [&](ConstantOp c) { values.push_back(c.getValueAttr()); })
           .Case<SpecialConstantOp>(
-              [&](auto c) { values.push_back(c.getValueAttr()); })
-          .Case<AggregateConstantOp>([&](auto c) {
+              [&](SpecialConstantOp c) { values.push_back(c.getValueAttr()); })
+          .Case<AggregateConstantOp>([&](AggregateConstantOp c) {
             for (auto attr : c.getFields())
               values.push_back(attr.template cast<IntegerAttr>());
           });
