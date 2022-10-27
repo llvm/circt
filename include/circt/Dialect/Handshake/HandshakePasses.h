@@ -16,6 +16,7 @@
 #include "circt/Support/LLVM.h"
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 
 namespace circt {
