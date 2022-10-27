@@ -966,12 +966,10 @@ private:
                         AnnoTarget from, AnnotationSet fromAnnos) {
     // This is a list of all the annotations which will be added to `to`.
     SmallVector<Annotation> newAnnotations;
+
     // We have special case handling of DontTouch to prevent it from being
     // turned into a non-local annotation.
     bool hasDontTouch = false;
-
-    // This records if any annotation was ac
-    bool madeNonlocal = false;
 
     // Iterate the `to` annotations, transforming non-common annotations into
     // non-local ones.  We want to make sure that we keep the order of the
@@ -985,6 +983,7 @@ private:
         // as is since it doesn't matter.
         newAnnotations.push_back(anno);
         hasDontTouch = true;
+        continue;
       }
       // If the annotation is already non-local, we add it as is.  It is already
       // added to the target map.
@@ -1005,6 +1004,7 @@ private:
         // as is since it doesn't matter.
         newAnnotations.push_back(anno);
         hasDontTouch = true;
+        continue;
       }
       // If the annotation is already non-local, we add it as is.  It is already
       // added to the target map.

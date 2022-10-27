@@ -356,8 +356,8 @@ circuit Top : %[[
     "target":"~Top|A_>b"
   }
 ]]
-  ; CHECK: firrtl.hierpath private @[[nlaSym1:[_a-zA-Z0-9]+]] [@Top::@[[a1Sym:[_a-zA-Z0-9]+]], @A]
   ; CHECK: firrtl.hierpath private @[[nlaSym2:[_a-zA-Z0-9]+]] [@Top::@[[a2Sym:[_a-zA-Z0-9]+]], @A]
+  ; CHECK: firrtl.hierpath private @[[nlaSym1:[_a-zA-Z0-9]+]] [@Top::@[[a1Sym:[_a-zA-Z0-9]+]], @A]
   ; CHECK: firrtl.module @Top
   ; CHECK-NEXT: firrtl.instance a1 sym @[[a1Sym]] @A(
   ; CHECK-NEXT: firrtl.instance a2 sym @[[a2Sym]] @A(
@@ -380,8 +380,7 @@ circuit Top : %[[
 
 ; // -----
 ; "The deduping module A and A_ should rename internal signals that have
-; different names".  This is checking that an NLA is not created even though
-; structural deduplication changes the name of "A_>b" to "A>a".
+; different names".
 ;
 ; CHECK-LABEL: firrtl.circuit "Top"
 circuit Top : %[[
@@ -397,6 +396,8 @@ circuit Top : %[[
   }
 ]]
   ; CHECK-NOT: firrtl.hierpath
+  ; CHECK: firrtl.hierpath private @[[nlaSym2:[_a-zA-Z0-9]+]] [@Top::@[[a1sym:[_a-zA-Z0-9]+]], @A]
+  ; CHECK: firrtl.hierpath private @[[nlaSym1:[_a-zA-Z0-9]+]] [@Top::@[[a1Sym]], @A]
   module Top :
     inst a1 of A
     a1 is invalid
@@ -406,7 +407,7 @@ circuit Top : %[[
   module A :
     input x: UInt<1>
     output y: UInt<1>
-    ; CHECK: firrtl.node {{.+}} {annotations = [{class = "circt.test", data = "hello"}]}
+    ; CHECK: firrtl.node {{.+}} {annotations = [{circt.nonlocal = @[[nlaSym1]], class = "circt.test", data = "hello"}, {circt.nonlocal = @[[nlaSym2]], class = "circt.test", data = "hello"}]}
     node a = add(x, UInt(1))
     y <= add(a, a)
   module A_ :
@@ -475,12 +476,12 @@ circuit Top : %[[
   module A_ :
     inst b_ of B_
   ; CHECK: firrtl.module private @B
-  ; CHECK-SAME: {circt.nonlocal = @[[nla_a_]], class = "circt.test", data = "B_"}
   ; CHECK-SAME: {circt.nonlocal = @[[nla_a]], class = "circt.test", data = "B"}
+  ; CHECK-SAME: {circt.nonlocal = @[[nla_a_]], class = "circt.test", data = "B_"}
   module B :
     ; CHECK: firrtl.node
-    ; CHECK-SAME: {circt.nonlocal = @[[nla_a_]], class = "circt.test", data = "B_.bar"}
     ; CHECK-SAME: {circt.nonlocal = @[[nla_a]], class = "circt.test", data = "B.foo"}
+    ; CHECK-SAME: {circt.nonlocal = @[[nla_a_]], class = "circt.test", data = "B_.bar"}
     node foo = UInt<1>(0)
   ; CHECK-NOT: firrtl.module private @B_
   module B_ :
@@ -717,12 +718,12 @@ circuit Top : %[[
     inst b_ of B_
 
   ; CHECK:        firrtl.module private @B()
-  ; CHECK-SAME:     [{circt.nonlocal = @[[nla_2]], class = "circt.test", data = "nla2"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_3]], class = "circt.test", data = "nla3"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_4]], class = "circt.test", data = "nla4"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_1]], class = "circt.test", data = "nla1"},
+  ; CHECK-SAME:     [{circt.nonlocal = @[[nla_1]], class = "circt.test", data = "nla1"},
   ; CHECK-SAME:      {circt.nonlocal = @[[nla_5]], class = "circt.test", data = "nla5"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_6]], class = "circt.test", data = "nla6"}]
+  ; CHECK-SAME:      {circt.nonlocal = @[[nla_6]], class = "circt.test", data = "nla6"},
+  ; CHECK-SAME:      {circt.nonlocal = @[[nla_2]], class = "circt.test", data = "nla2"},
+  ; CHECK-SAME:      {circt.nonlocal = @[[nla_3]], class = "circt.test", data = "nla3"},
+  ; CHECK-SAME:      {circt.nonlocal = @[[nla_4]], class = "circt.test", data = "nla4"}]
   module B :
     ; CHECK-NEXT:   firrtl.instance c sym @[[BcSym]]
     ; CHECK-SAME:     @C()
@@ -763,10 +764,10 @@ circuit top : %[[
     "target":"~top|b>q.a"
   }
 ]]
-  ; CHECK:      firrtl.hierpath private @[[nla_1:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:   [@top::@[[topaSym:[_a-zA-Z0-9]+]], @a]
   ; CHECK:      firrtl.hierpath private @[[nla_2:[_a-zA-Z0-9]+]]
   ; CHECK-SAME:   [@top::@[[topbSym:[_a-zA-Z0-9]+]], @a]
+  ; CHECK:      firrtl.hierpath private @[[nla_1:[_a-zA-Z0-9]+]]
+  ; CHECK-SAME:   [@top::@[[topaSym:[_a-zA-Z0-9]+]], @a]
   ; CHECK: firrtl.module @top
   module top:
     input ia: {z: {y: {x: UInt<1>}}, a: UInt<1>}
@@ -789,8 +790,8 @@ circuit top : %[[
   ; CHECK:      firrtl.module private @a(
   ; CHECK-SAME:   in %i:
   ; CHECK-NOT:    out
-  ; CHECK-SAME:     [{circt.fieldID = 1 : i32, circt.nonlocal = @[[nla_2]], class = "circt.test", data = "nla2"},
-  ; CHECK-SAME:      {circt.fieldID = 4 : i32, circt.nonlocal = @[[nla_1]], class = "circt.test", data = "nla1"}]
+  ; CHECK-SAME:     [{circt.fieldID = 4 : i32, circt.nonlocal = @[[nla_1]], class = "circt.test", data = "nla1"},
+  ; CHECK-SAME:      {circt.fieldID = 1 : i32, circt.nonlocal = @[[nla_2]], class = "circt.test", data = "nla2"}]
   module a:
     input i: {z: {y: {x: UInt<1>}}, a: UInt<1>}
     output o: {z: {y: {x: UInt<1>}}, a: UInt<1>}
