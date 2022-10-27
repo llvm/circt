@@ -108,6 +108,12 @@ static HandshakeMemType getMemTypeForExtmem(Value v) {
 namespace {
 struct HandshakeLowerExtmemToHWPass
     : public HandshakeLowerExtmemToHWBase<HandshakeLowerExtmemToHWPass> {
+
+  HandshakeLowerExtmemToHWPass(std::optional<bool> createESIWrapper) {
+    if (createESIWrapper)
+      this->createESIWrapper = *createESIWrapper;
+  }
+
   void runOnOperation() override {
     auto op = getOperation();
     for (auto func : op.getOps<handshake::FuncOp>()) {
@@ -458,6 +464,7 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
 } // namespace
 
 std::unique_ptr<mlir::Pass>
-circt::handshake::createHandshakeLowerExtmemToHWPass() {
-  return std::make_unique<HandshakeLowerExtmemToHWPass>();
+circt::handshake::createHandshakeLowerExtmemToHWPass(
+    std::optional<bool> createESIWrapper) {
+  return std::make_unique<HandshakeLowerExtmemToHWPass>(createESIWrapper);
 }
