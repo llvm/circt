@@ -1087,7 +1087,7 @@ struct ArraySlice {
   Value array;
   Value start;
 
-  uint64_t size; // Represent a range array[start, start + size).
+  size_t size; // Represent a range array[start, start + size).
 
   bool isMergableSlice(const ArraySlice &rhs) const {
     // A parent array must be same.
