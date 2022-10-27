@@ -2649,24 +2649,25 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   StructType stype = op.getType().cast<StructType>();
-  // TODO: emitBracedList or thereabouts-- break inbetween commas at least!
-  ps << "'{";
   // Only emit elements with non-zero bit width.
-  llvm::interleaveComma(
+  emitBracedList(
+
       llvm::make_filter_range(
           stype.getElements(),
           [](const auto &field) { return !isZeroBitType(field.type); }),
-      ps, [&](const StructType::FieldInfo &field) {
-        ps << PPExtString(emitter.getVerilogStructFieldName(field.name))
-           << ": ";
+      [&]() { ps << "'{"; },
+      [&](const StructType::FieldInfo &field) {
+        auto cb = ps.scopedIBox(2);
+        ps << PPExtString(emitter.getVerilogStructFieldName(field.name)) << ":"
+           << PP::space;
         if (field.name == op.getField()) {
           emitSubExpr(op.getNewValue(), Selection);
         } else {
           emitSubExpr(op.getInput(), Selection);
           ps << "." << PPExtString(field.name.getValue());
         }
-      });
-  ps << "}";
+      },
+      [&]() { ps << "}"; });
   return {Selection, IsUnsigned};
 }
 
