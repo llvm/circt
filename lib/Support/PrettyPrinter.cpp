@@ -25,18 +25,22 @@
 // * Group indentation styles: Visual and Block, set on 'begin' tokens.
 //   "Visual" is the style in the paper, offset relative to current column.
 //   "Block" is relative to current base indentation.
-// * Optionally, minimum amount of space is granted regardless of indentation.
-//   To avoid forcing expressions against the line limit, never try to print
-//   an expression in, say, 2 columns, as this is unlikely to produce good
-//   output.
-//   (TODO)
 // * Break: Add "Neverbreak": acts like a break re:sizing previous range,
 //   but will never be broken.  Useful for adding content to end of line
 //   that may go over margin but should not influence layout.
 // * Begin: Add "Never" breaking style, for forcing no breaks including
 //   within nested groups.  Use sparingly.  It is an error to insert
 //   a newline (Break with spaces==kInfinity) within such a group.
-//
+// * If leftTotal grows too large, "rebase" our datastructures by
+//   walking the tokens with pending sizes (scanStack) and adjusting
+//   them by `leftTotal - 1`.  Also reset tokenOffset while visiting.
+//   This is mostly needed due to use of tokens/groups that 'never' break
+//   which can greatly increase times between `clear()`.
+// * Optionally, minimum amount of space is granted regardless of indentation.
+//   To avoid forcing expressions against the line limit, never try to print
+//   an expression in, say, 2 columns, as this is unlikely to produce good
+//   output.
+//   (TODO)
 //
 // There are many pretty-printing implementations based on this paper,
 // and research literature is rich with functional formulations based originally
@@ -122,7 +126,8 @@ void PrettyPrinter::add(Token t) {
   if (uint32_t(leftTotal) > uint32_t{1} << 29) {
     // Plan: reset leftTotal to '1', adjust all accordingly.
     auto adjust = leftTotal - 1;
-    for (auto scanIndex : scanStack) {
+    for (auto &scanIndex : scanStack) {
+      assert(scanIndex >= tokenOffset);
       auto &t = tokens[scanIndex - tokenOffset];
       if (isa<BreakToken, BeginToken>(&t.token)) {
         if (t.size < 0) {
@@ -130,9 +135,12 @@ void PrettyPrinter::add(Token t) {
           t.size += adjust;
         }
       }
+      // While walking, reset tokenOffset too.
+      scanIndex -= tokenOffset;
     }
     leftTotal -= adjust;
     rightTotal -= adjust;
+    tokenOffset = 0;
   }
 }
 
