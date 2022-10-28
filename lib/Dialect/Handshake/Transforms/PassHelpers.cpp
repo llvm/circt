@@ -109,19 +109,29 @@ LogicalResult resolveInstanceGraph(ModuleOp moduleOp,
 LogicalResult verifyAllValuesHasOneUse(handshake::FuncOp funcOp) {
   if (funcOp.isExternal())
     return success();
+
+  auto checkUseFunc = [&](Operation *op, Value v, StringRef desc,
+                          unsigned idx) -> LogicalResult {
+    auto numUses = std::distance(v.getUses().begin(), v.getUses().end());
+    if (numUses == 0)
+      return op->emitOpError() << desc << " " << idx << " has no uses.";
+    if (numUses > 1)
+      return op->emitOpError() << desc << " " << idx << " has multiple uses.";
+    return success();
+  };
+
   for (auto &subOp : funcOp.getOps()) {
     for (auto res : llvm::enumerate(subOp.getResults())) {
-      if (!res.value().hasOneUse())
-        return subOp.emitOpError()
-               << "result " << res.index() << " has multiple uses.";
+      if (failed(checkUseFunc(&subOp, res.value(), "result", res.index())))
+        return failure();
     }
   }
 
   Block &entryBlock = funcOp.front();
   for (auto barg : enumerate(entryBlock.getArguments())) {
-    if (!barg.value().hasOneUse())
-      return funcOp.emitOpError()
-             << "argument " << barg.index() << " has multiple uses.";
+    if (failed(checkUseFunc(funcOp.getOperation(), barg.value(), "argument",
+                            barg.index())))
+      return failure();
   }
   return success();
 }

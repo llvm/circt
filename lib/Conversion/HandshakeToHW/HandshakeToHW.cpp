@@ -1929,11 +1929,14 @@ public:
 
     // Lowering to HW requires that every value is used exactly once. Check
     // whether this precondition is met, and if not, exit.
-    if (llvm::any_of(mod.getOps<handshake::FuncOp>(), [](auto f) {
-          return failed(verifyAllValuesHasOneUse(f));
-        })) {
-      signalPassFailure();
-      return;
+    for (auto f : mod.getOps<handshake::FuncOp>()) {
+      if (failed(verifyAllValuesHasOneUse(f))) {
+        f.emitOpError() << "HandshakeToHW: failed to verify that all values "
+                           "are used exactly once. Remember to run the "
+                           "fork/sink materialization pass before HW lowering.";
+        signalPassFailure();
+        return;
+      }
     }
 
     // Resolve the instance graph to get a top-level module.
