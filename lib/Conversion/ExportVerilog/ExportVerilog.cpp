@@ -1356,14 +1356,17 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         return true;
       })
       .Case<StructType>([&](StructType structType) {
-        if (structType.getElements().empty()) {
-          if (!implicitIntType)
-            os << "logic ";
+        if (structType.getElements().empty() || isZeroBitType(structType)) {
           os << "/*Zero Width*/";
           return true;
         }
         os << "struct packed {";
         for (auto &element : structType.getElements()) {
+          if (isZeroBitType(element.type)) {
+            os << "/*" << emitter.getVerilogStructFieldName(element.name)
+               << ": Zero Width;*/ ";
+            continue;
+          }
           SmallVector<Attribute, 8> structDims;
           printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
                               structDims,
@@ -2487,11 +2490,21 @@ SubExprInfo ExprEmitter::visitTypeOp(StructCreateOp op) {
 
   StructType stype = op.getType();
   os << "'{";
-  size_t i = 0;
+  // Only emit elements with non-zero bit width.
+  // TODO: Ideally we should emit zero bit values as comments, e.g. `{/*a:
+  // ZeroBit,*/ b: foo, /* c: ZeroBit*/ d: bar}`. However it's tedious to nicely
+  // emit all edge cases hence currently we just elide zero bit values.
   llvm::interleaveComma(
-      stype.getElements(), os, [&](const StructType::FieldInfo &field) {
+      llvm::make_filter_range(llvm::zip(stype.getElements(), op.getOperands()),
+                              [](const auto &fieldAndOperand) {
+                                // Elide zero bit elements.
+                                const auto &[field, _] = fieldAndOperand;
+                                return !isZeroBitType(field.type);
+                              }),
+      os, [&](const auto &fieldAndOperand) {
+        const auto &[field, operand] = fieldAndOperand;
         os << emitter.getVerilogStructFieldName(field.name) << ": ";
-        emitSubExpr(op.getOperand(i++), Selection);
+        emitSubExpr(operand, Selection);
       });
   os << '}';
   return {Unary, IsUnsigned};
@@ -2512,8 +2525,12 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
 
   StructType stype = op.getType().cast<StructType>();
   os << "'{";
+  // Only emit elements with non-zero bit width.
   llvm::interleaveComma(
-      stype.getElements(), os, [&](const StructType::FieldInfo &field) {
+      llvm::make_filter_range(
+          stype.getElements(),
+          [](const auto &field) { return !isZeroBitType(field.type); }),
+      os, [&](const StructType::FieldInfo &field) {
         os << emitter.getVerilogStructFieldName(field.name) << ": ";
         if (field.name == op.getField()) {
           emitSubExpr(op.getNewValue(), Selection);
