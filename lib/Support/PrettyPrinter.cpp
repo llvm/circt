@@ -115,7 +115,10 @@ void PrettyPrinter::add(Token t) {
           return print({t, 0});
         addScanToken(-1);
       });
+  rebaseIfNeeded();
+}
 
+void PrettyPrinter::rebaseIfNeeded() {
   // Check for too-large totals, reset.
   // This can happen if we have an open group and emit
   // many tokens, especially newlines which have artificial size.
@@ -123,7 +126,7 @@ void PrettyPrinter::add(Token t) {
     return;
   assert(leftTotal >= 0);
   assert(rightTotal >= 0);
-  if (uint32_t(leftTotal) > uint32_t{1} << 29) {
+  if (uint32_t(leftTotal) > ~uint32_t{0} >> 4) {
     // Plan: reset leftTotal to '1', adjust all accordingly.
     auto adjust = leftTotal - 1;
     for (auto &scanIndex : scanStack) {
@@ -156,8 +159,8 @@ void PrettyPrinter::eof() {
 
 void PrettyPrinter::clear() {
   assert(scanStack.empty() && "clearing tokens while still on scan stack");
-  leftTotal = rightTotal = 1;
   assert(tokens.empty());
+  leftTotal = rightTotal = 1;
   tokens.clear();
   tokenOffset = 0;
   if (listener)
@@ -219,6 +222,7 @@ void PrettyPrinter::advanceLeft() {
     ++tokenOffset;
 
     print(f);
+
     leftTotal += llvm::TypeSwitch<Token *, int32_t>(&f.token)
                      .Case([&](BreakToken *b) { return b->spaces(); })
                      .Case([&](StringToken *s) { return s->text().size(); })

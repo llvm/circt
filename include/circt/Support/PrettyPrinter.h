@@ -55,11 +55,11 @@ public:
   };
   struct BreakInfo {
     uint32_t spaces; // How many spaces to emit when not broken.
-    int32_t offset;  // Amount to adjust indentation level by if breaks here.
+    int32_t offset;  // How many spaces to emit when broken.
     bool neverbreak; // If set, behaves like break except this always 'fits'.
   };
   struct BeginInfo {
-    int32_t offset;
+    int32_t offset; // Adjust base indentation by this amount.
     Breaks breaks;
     IndentStyle style;
   };
@@ -198,7 +198,7 @@ public:
   void setListener(Listener *newListener) { listener = newListener; };
   auto *getListener() const { return listener; }
 
-  static constexpr uint32_t kInfinity = 0xFFFFU;
+  static constexpr uint32_t kInfinity = (1U << 15) - 1;
 
 private:
   /// Format token with tracked size.
@@ -207,7 +207,10 @@ private:
     int32_t size; /// calculate size when positive.
   };
 
-  enum class PrintBreaks { Consistent, Inconsistent, Fits, AlwaysFits };
+  /// Breaking style for a printStack entry.
+  /// This is "Breaks" values with extra for "Fits".
+  /// Breaks::Never is "AlwaysFits" here.
+  enum class PrintBreaks { Consistent, Inconsistent, AlwaysFits, Fits };
 
   /// Printing information for active scope, stored in printStack.
   struct PrintEntry {
@@ -230,6 +233,9 @@ private:
 
   /// Clear token buffer, scanStack must be empty.
   void clear();
+
+  /// Reset leftTotal and tokenOffset, rebase size data and scanStack indices.
+  void rebaseIfNeeded();
 
   /// Get current printing frame.
   auto &getPrintFrame() {

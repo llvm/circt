@@ -89,7 +89,7 @@ public:
   typename std::enable_if_t<std::is_base_of_v<Token, T>> add(Args &&...args) {
     pp.add(T(std::forward<Args>(args)...));
   }
-  void addToken(Token &t) { pp.add(t); }
+  void addToken(Token t) { pp.add(t); }
 
   /// End of a stream.
   void eof() { pp.eof(); }
@@ -109,11 +109,11 @@ public:
 
   //===- Breaks -----------------------------------------------------------===//
 
+  /// Add a 'neverbreak' break.  Always 'fits'.
+  void neverbreak() { add<BreakToken>(0, 0, true); }
+
   /// Add a newline (break too wide to fit, always breaks).
   void newline() { add<BreakToken>(PrettyPrinter::kInfinity); }
-
-  /// End a group.
-  void end() { add<EndToken>(); }
 
   /// Add breakable spaces.
   void spaces(uint32_t n) { add<BreakToken>(n); }
@@ -124,10 +124,7 @@ public:
   /// Add a break that is zero-wide if not broken.
   void zerobreak() { add<BreakToken>(0); }
 
-  /// Add a 'neverbreak' break.  Always 'fits'.
-  void neverbreak() { add<BreakToken>(0, 0, true); }
-
-  //===- Box helpers ------------------------------------------------------===//
+  //===- Groups -----------------------------------------------------------===//
 
   /// Start a consistent group with specified offset.
   void cbox(int32_t offset = 0, IndentStyle style = IndentStyle::Visual) {
@@ -152,6 +149,9 @@ public:
     ibox(offset, style);
     return llvm::make_scope_exit([&]() { end(); });
   }
+
+  /// End a group.
+  void end() { add<EndToken>(); }
 };
 
 /// PrettyPrinter::Listener that saves strings while live.
@@ -165,7 +165,7 @@ public:
   PPBuilderStringSaver() : strings(alloc) {}
 
   /// Add string, save in storage.
-  StringRef save(StringRef str) { return strings.save(str); }
+  [[nodiscard]] StringRef save(StringRef str) { return strings.save(str); }
 
   /// PrettyPrinter::Listener::clear -- indicates no external refs.
   void clear() override;
@@ -178,17 +178,17 @@ public:
 /// Send one of these to PPStream to add the corresponding token.
 /// See PPBuilder for details of each.
 enum class PP {
-  space,
-  nbsp,
-  newline,
-  ibox0,
-  ibox2,
   cbox0,
   cbox2,
   end,
-  zerobreak,
+  eof,
+  ibox0,
+  ibox2,
+  nbsp,
   neverbreak,
-  eof
+  newline,
+  space,
+  zerobreak,
 };
 
 /// String wrapper to indicate string has external storage.
@@ -245,23 +245,8 @@ public:
   /// Convenience for inline streaming of builder methods.
   PPStream &operator<<(PP s) {
     switch (s) {
-    case PP::space:
-      Base::space();
-      break;
-    case PP::nbsp:
-      Base::nbsp();
-      break;
-    case PP::newline:
-      Base::newline();
-      break;
-    case PP::ibox0:
-      Base::ibox();
-      break;
-    case PP::ibox2:
-      Base::ibox(2);
-      break;
     case PP::cbox0:
-      Base::cbox();
+      Base::cbox(0);
       break;
     case PP::cbox2:
       Base::cbox(2);
@@ -269,21 +254,36 @@ public:
     case PP::end:
       Base::end();
       break;
-    case PP::zerobreak:
-      Base::zerobreak();
+    case PP::eof:
+      Base::eof();
+      break;
+    case PP::ibox0:
+      Base::ibox(0);
+      break;
+    case PP::ibox2:
+      Base::ibox(2);
+      break;
+    case PP::nbsp:
+      Base::nbsp();
       break;
     case PP::neverbreak:
       Base::neverbreak();
       break;
-    case PP::eof:
-      Base::eof();
+    case PP::newline:
+      Base::newline();
+      break;
+    case PP::space:
+      Base::space();
+      break;
+    case PP::zerobreak:
+      Base::zerobreak();
       break;
     }
     return *this;
   }
 
   /// Stream support for user-created Token's.
-  PPStream &operator<<(Token &&t) {
+  PPStream &operator<<(Token t) {
     Base::addToken(t);
     return *this;
   }
@@ -292,21 +292,21 @@ public:
   /// operator<< yet.
   template <typename T>
   PPStream &addAsString(T &&t) {
-    invokeWithStringOS([&](auto &os) { os << t; });
+    invokeWithStringOS([&](auto &os) { os << std::forward<T>(t); });
     return *this;
   }
 
   /// Helper to invoke code with a llvm::raw_ostream argument for compatibility.
   /// All data is gathered into a single string token.
-  template <typename Callable>
+  template <typename Callable, unsigned BufferLen = 128>
   auto invokeWithStringOS(Callable &&c) {
-    SmallString<128> ss;
+    SmallString<BufferLen> ss;
     llvm::raw_svector_ostream ssos(ss);
     auto flush = llvm::make_scope_exit([&]() {
       if (!ss.empty())
         *this << ss;
     });
-    return std::invoke(c, ssos);
+    return std::invoke(std::forward<Callable>(c), ssos);
   }
 
   /// Write escaped versions of the string, saved in storage.
