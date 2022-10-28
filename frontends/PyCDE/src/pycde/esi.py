@@ -361,14 +361,14 @@ _service_generator_registry = _ServiceGeneratorRegistry()
 
 def DeclareRandomAccessMemory(inner_type: PyCDEType,
                               depth: int,
-                              name: Optional[str] = None):
+                              name: Optional[str] = None,
+                              _imported_sym: Optional[ir.StringAttr] = None):
   """Declare an ESI RAM with elements of type 'inner_type' and has 'depth' of
   them. Memories (as with all ESI services) are not actually instantiated until
   the place where you specify the implementation."""
 
   @ServiceDecl
   class DeclareRandomAccessMemory:
-    __name__ = name
     address_type = types.int((depth - 1).bit_length())
     write_type = types.struct([('address', address_type), ('data', inner_type)])
 
@@ -381,4 +381,18 @@ def DeclareRandomAccessMemory(inner_type: PyCDEType,
           sym_name, ir.TypeAttr.get(inner_type),
           ir.IntegerAttr.get(ir.IntegerType.get_signless(64), depth))
 
+  DeclareRandomAccessMemory.name = name
+  DeclareRandomAccessMemory.__name__ = name
   return DeclareRandomAccessMemory
+
+
+def _import_ram_decl(sys: "System", ram_op: raw_esi.RandomAccessMemoryDeclOp):
+  from .system import _OpCache
+  ram = DeclareRandomAccessMemory(inner_type=PyCDEType(ram_op.innerType.value),
+                                  depth=ram_op.depth.value,
+                                  name=ram_op.sym_name.value)
+  cache: _OpCache = sys._op_cache
+  sym, install = cache.create_symbol(ram)
+  assert sym == ram_op.sym_name.value, "don't support imported module renames"
+  install(ram_op)
+  return ram

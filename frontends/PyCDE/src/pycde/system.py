@@ -3,6 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
+from tkinter import E
 
 from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
                             PhysicalRegion)
@@ -12,7 +13,7 @@ from .module import _SpecializedModule
 from .pycde_types import types
 from .instance import Instance, InstanceHierarchyRoot
 
-from circt.dialects import hw, msft
+from circt.dialects import esi, hw, msft
 from .esi_api import PythonApiBuilder
 
 import mlir
@@ -28,7 +29,7 @@ import gc
 import os
 import pathlib
 import sys
-from typing import Callable, Dict, Set, Tuple
+from typing import Any, Callable, Dict, Set, Tuple
 
 _current_system = ContextVar("current_pycde_system")
 
@@ -54,11 +55,13 @@ class System:
     esi-connect-services,
     esi-emit-collateral{{tops={tops} schema-file=schema.capnp}},
     lower-msft-to-hw{{verilog-file={verilog_file}}},
+    hw.module(lower-seq-hlmem),
     lower-esi-to-physical, lower-esi-ports, lower-esi-to-hw, convert-fsm-to-sv,
     lower-seq-to-sv, hw.module(prettify-verilog), hw.module(hw-cleanup),
     msft-export-tcl{{tops={tops} tcl-file={tcl_file}}}
   """
 
+  # hw.module(prepare-for-emission)
   def __init__(self,
                top_modules: list,
                name: str = "PyCDESystem",
@@ -107,24 +110,46 @@ class System:
   _DEFAULT_IMPORT_PASSES = [
       "one-shot-bufferize{allow-return-allocs bufferize-function-boundaries}",
       "buffer-results-to-out-params",
-      "func.func(convert-linalg-to-affine-loops)", "lower-affine",
-      "convert-scf-to-cf", "canonicalize", "flatten-memref",
-      "flatten-memref-calls", "func.func(handshake-legalize-memrefs)",
-      "lower-std-to-handshake", "handshake-lower-extmem-to-hw{wrap-esi}"
+      "func.func(convert-linalg-to-affine-loops)",
+      "lower-affine",
+      "convert-scf-to-cf",
+      "canonicalize",
+      "flatten-memref",
+      "flatten-memref-calls",
+      "func.func(handshake-legalize-memrefs)",
+      "lower-std-to-handshake",
+      "canonicalize",
+      "handshake-lower-extmem-to-hw{wrap-esi}",
+      "canonicalize",
+      "handshake.func(handshake-remove-block-structure)",
+      "handshake.func(handshake-materialize-forks-sinks)",
+      "lower-handshake-to-hw",
+      "canonicalize",
   ]
 
   def import_mlir(self, module, run_passes=_DEFAULT_IMPORT_PASSES):
     """Import an mlir module created elsewhere into our space."""
-    from .module import import_hw_module
 
     compat_mod = ir.Module.parse(str(module))
     pm = mlir.passmanager.PassManager.parse(",".join(run_passes))
     pm.run(compat_mod)
-    imported_modules = []
+    ret: Dict[str, Any] = {}
     for op in compat_mod.body:
+      # TODO: handle symbolrefs pointing to potentially renamed symbols.
       if isinstance(op, hw.HWModuleOp):
-        imported_module = import_hw_module(op)
-        imported_modules.append(imported_module)
+        from .module import import_hw_module
+        im = import_hw_module(op)
+        self._create_circt_mod(im._pycde_mod)
+        ret[ir.StringAttr(op.name).value] = im
+      elif isinstance(op, esi.RandomAccessMemoryDeclOp):
+        from .esi import _import_ram_decl
+        ram = _import_ram_decl(self, op)
+        ret[ir.StringAttr(op.sym_name).value] = ram
+        self.body.append(op)
+      else:
+        # TODO: do symbol renaming.
+        self.body.append(op)
+    return ret
 
   def create_physical_region(self, name: str = None):
     with self._get_ip():
@@ -136,7 +161,7 @@ class System:
       entity_extern = EntityExtern(tag, metadata)
     return entity_extern
 
-  def _create_circt_mod(self, spec_mod: _SpecializedModule, create_cb):
+  def _create_circt_mod(self, spec_mod: _SpecializedModule):
     """Wrapper for a callback (which actually builds the CIRCT op) which
     controls all the bookkeeping around CIRCT module ops."""
 
@@ -145,7 +170,7 @@ class System:
       return
 
     # Build the correct op.
-    op = create_cb(self, spec_mod, symbol)
+    op = spec_mod.create_cb(self, spec_mod, symbol)
     # Install the op in the cache.
     install_func(op)
     # Add to the generation queue if the module has a generator callback.
@@ -253,6 +278,12 @@ class System:
   def emit_outputs(self):
     self.run_passes()
     circt.export_split_verilog(self.mod, str(self._output_directory))
+    # passes = "export-verilog"
+    # {dir-name=" + str(
+    #     self._output_directory) + "}"
+    # pm = mlir.passmanager.PassManager.parse(passes)
+    # self._op_cache.release_ops()
+    # pm.run(self.mod)
 
   @property
   def placedb(self):
