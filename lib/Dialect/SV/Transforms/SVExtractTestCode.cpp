@@ -200,10 +200,16 @@ static void addInstancesToCloneSet(
     // this case, we have to proactively erase them. The instances must be
     // erased because we can't canonicalize away instances with unused results
     // in general. The forward dataflow must be erased because the instance is
-    // being erased, and we can't leave null operands after this pass.
+    // being erased, and we can't leave null operands after this pass. Also
+    // erase any intermediate parents of the forward slice.
     opsToErase.insert(instance);
     for (auto *forwardOp : forwardSlice)
       opsToErase.insert(forwardOp);
+
+    SetVector<Operation *> forwardSliceParents;
+    blockSlice(forwardSlice, forwardSliceParents);
+    for (auto *forwardOpParent : forwardSliceParents)
+      opsToErase.insert(forwardOpParent);
   }
 
   // Remove any inputs marked for removal.

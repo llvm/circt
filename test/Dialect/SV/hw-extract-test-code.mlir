@@ -291,8 +291,13 @@ module attributes {
 
   hw.module private @ShouldBeInlined2(%clock: i1, %in: i1) {
     %bozo.b = hw.instance "bozo" @Bozo(a: %in: i1) -> (b: i1)
-    sv.always posedge %clock {
-      sv.cover %bozo.b, immediate
+    sv.ifdef "SYNTHESIS" {
+    } else {
+      sv.always posedge %clock {
+        sv.if %bozo.b {
+          sv.cover %bozo.b, immediate
+        }
+      }
     }
   }
 
