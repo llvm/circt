@@ -17,6 +17,12 @@ class Type:
     assert False, "unimplemented"
 
 
+class VoidType(Type):
+
+  def is_valid(self, obj) -> bool:
+    return obj is None
+
+
 class IntType(Type):
 
   def __init__(self,
@@ -28,6 +34,8 @@ class IntType(Type):
     self.signed = signed
 
   def is_valid(self, obj) -> bool:
+    if self.width == 0:
+      return obj is None
     if not isinstance(obj, int):
       return False
     if obj >= 2**self.width:
@@ -83,7 +91,7 @@ class Port:
 
 class WritePort(Port):
 
-  def write(self, msg) -> bool:
+  def write(self, msg=None) -> bool:
     assert self.write_type is not None, "Expected non-None write_type"
     if not self.write_type.is_valid(msg):
       raise ValueError(f"'{msg}' cannot be converted to '{self.write_type}'")
@@ -103,7 +111,7 @@ class ReadPort(Port):
 class ReadWritePort(Port):
 
   def __call__(self,
-               msg,
+               msg=None,
                blocking_timeout: typing.Optional[float] = 1.0) -> typing.Any:
     """Send a message and wait for a response. If 'timeout' is exceeded while
     waiting for a response, there may well be one coming. It is the caller's
@@ -116,7 +124,7 @@ class ReadWritePort(Port):
       raise RuntimeError(f"Could not send message '{msg}'")
     return self.read(blocking_timeout)
 
-  def write(self, msg) -> bool:
+  def write(self, msg=None) -> bool:
     assert self.write_type is not None, "Expected non-None write_type"
     if not self.write_type.is_valid(msg):
       raise ValueError(f"'{msg}' cannot be converted to '{self.write_type}'")
@@ -210,6 +218,15 @@ class _CosimPort:
         raise ValueError("Cosim does not support non-capnp types.")
       self.capnp_type = getattr(schema, esi_type.capnp_name)
 
+  class _VoidConverter(_TypeConverter):
+    """Convert python ints to and from capnp messages."""
+
+    def write(self, py_int: None):
+      return self.capnp_type.new_message()
+
+    def read(self, capnp_resp) -> None:
+      return capnp_resp.as_struct(self.capnp_type)
+
   class _IntConverter(_TypeConverter):
     """Convert python ints to and from capnp messages."""
 
@@ -234,7 +251,11 @@ class _CosimPort:
       return ret
 
   # Lookup table for getting the correct type converter for a given type.
-  ConvertLookup = {IntType: _IntConverter, StructType: _StructConverter}
+  ConvertLookup = {
+      VoidType: _VoidConverter,
+      IntType: _IntConverter,
+      StructType: _StructConverter
+  }
 
   def __init__(self, node: _CosimNode, endpoint,
                read_type: typing.Optional[Type],

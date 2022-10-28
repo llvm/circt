@@ -139,10 +139,13 @@ class PythonApiBuilder(SoftwareApiBuilder):
       if dialect == "builtin":
         if mn.startswith("i") or mn.startswith("ui"):
           width = int(mn.strip("ui"))
-          return f"IntType({width}, False)"
-        if mn.startswith("i") or mn.startswith("si"):
+          signed = False
+        elif mn.startswith("si"):
           width = int(mn.strip("si"))
-          return f"IntType({width}, True)"
+          signed = True
+        if width == 0:
+          return "VoidType()"
+        return f"IntType({width}, {signed})"
       elif dialect == "hw":
         if mn == "struct":
           fields = [
