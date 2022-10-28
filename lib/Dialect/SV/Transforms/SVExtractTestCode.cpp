@@ -637,6 +637,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
     if (auto error = dyn_cast<ErrorOp>(op)) {
       if (auto message = error.getMessage())
         return message->startswith("assert:") ||
+               message->startswith("assert failed (verification library)") ||
                message->startswith("Assertion failed") ||
                message->startswith("assertNotX:") ||
                message->contains("[verif-library-assert]");
