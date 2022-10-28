@@ -1,4 +1,4 @@
-// RUN: circt-opt --lower-handshake-to-hw %s -verify-diagnostics
+// RUN: circt-opt --split-input-file --lower-handshake-to-hw %s -verify-diagnostics
 
 // expected-error @+1 {{'handshake.func' op error during conversion}}
 handshake.func @main(%arg0: index, %arg1: index, %v: i32, %mem : memref<10xi32>, %argCtrl: none) -> none {
@@ -10,4 +10,13 @@ handshake.func @main(%arg0: index, %arg1: index, %v: i32, %mem : memref<10xi32>,
   sink %loadData : i32
   %finCtrl = join %stCtrl, %ldCtrl : none, none
   return %finCtrl : none
+}
+
+// -----
+
+// expected-error @+1 {{HandshakeToHW: failed to verify that all values are used exactly once. Remember to run the fork/sink materialization pass before HW lowering.}}
+handshake.func @main() -> () {
+// expected-error @+1 {{'handshake.source' op result 0 has no uses.}}
+  %0 = source
+  return
 }
