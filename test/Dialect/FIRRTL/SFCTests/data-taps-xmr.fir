@@ -11,6 +11,12 @@ circuit Top : %[[
       },
       {
         "class":"sifive.enterprise.grandcentral.DataTapModuleSignalKey",
+        "module":"~Top|BlackBox",
+        "internalPath":"random.something",
+        "sink": "~Top|Top>tap2"
+      },
+      {
+        "class":"sifive.enterprise.grandcentral.DataTapModuleSignalKey",
         "module":"~Top|InternalPathChild",
         "internalPath":"io_out",
         "sink": "~Top|Top/unsigned:ChildWrapper/signed:Child>tap"

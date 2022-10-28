@@ -1384,14 +1384,17 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [
         sink = "~Top|Top>tap"
       }
     ]}]} {
-  // CHECK: firrtl.extmodule private @Bar(out [[_gen_ref:.+]]: !firrtl.ref<uint<1>>) attributes {internalPaths = ["random.something"]} 
+  // CHECK:  firrtl.module private @Bar(out %[[_gen_ref2:.+]]: !firrtl.ref<uint<1>>)
+  // CHECK:  %0 = firrtl.ref.send.internalPath "random.something" : !firrtl.ref<uint<1>> 
+  // CHECK:  firrtl.strictconnect %[[_gen_ref2]], %0 : !firrtl.ref<uint<1>> 
   firrtl.module private @Bar() {
   }
   
   // CHECK-LABEL:  firrtl.module private @Foo(out %_gen_tap: !firrtl.ref<uint<1>>)
   firrtl.module private @Foo() {
     firrtl.instance b interesting_name  @Bar()
-    // CHECK:  %[[gen_refPort:.+]] = firrtl.instance b interesting_name @Bar(out [[_gen_ref]]: !firrtl.ref<uint<1>>)
+    // CHECK:  %[[gen_refPort:.+]] = firrtl.instance b interesting_name @Bar
+    // CHECK-SAME: (out [[_gen_ref2]]: !firrtl.ref<uint<1>>)
   }
   // CHECK-LABEL firrtl.module @Top()
   firrtl.module @Top() {
