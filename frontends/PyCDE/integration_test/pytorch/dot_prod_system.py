@@ -15,6 +15,8 @@ import torch
 import torch_mlir
 
 import sys
+import time
+from typing import List
 
 
 class DotModule(torch.nn.Module):
@@ -86,6 +88,11 @@ if __name__ == "__main__":
   system.build_api("python")
 
 
+def write_vector(vec: List[int], port):
+  for v, i in enumerate(vec):
+    port.write({"address": i, "data": v})
+
+
 def run_cosim(tmpdir=".", schema_path="schema.capnp", rpchostport=None):
   sys.path.append(tmpdir)
   import esi_rt.PyTorchDotProd as esi_sys
@@ -97,5 +104,11 @@ def run_cosim(tmpdir=".", schema_path="schema.capnp", rpchostport=None):
   cosim = Cosim(schema_path, rpchostport)
   print(cosim.list())
   top = esi_sys.top(cosim)
-  import IPython
-  IPython.embed(colors="neutral")
+  write_vector([1, 1, 1, 1, 1], top.torch_control.a_write[0])
+  write_vector([1, 1, 1, 1, 1], top.torch_control.b_write[0])
+  top.torch_control.go[0].write()
+  time.sleep(1)
+  result = top.torch_control.x_read[0]()
+  print(f"result: {result}")
+  # import IPython
+  # IPython.embed(colors="neutral")
