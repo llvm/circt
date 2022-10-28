@@ -3,7 +3,6 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from tkinter import E
 
 from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
                             PhysicalRegion)
@@ -61,7 +60,6 @@ class System:
     msft-export-tcl{{tops={tops} tcl-file={tcl_file}}}
   """
 
-  # hw.module(prepare-for-emission)
   def __init__(self,
                top_modules: list,
                name: str = "PyCDESystem",
@@ -278,12 +276,6 @@ class System:
   def emit_outputs(self):
     self.run_passes()
     circt.export_split_verilog(self.mod, str(self._output_directory))
-    # passes = "export-verilog"
-    # {dir-name=" + str(
-    #     self._output_directory) + "}"
-    # pm = mlir.passmanager.PassManager.parse(passes)
-    # self._op_cache.release_ops()
-    # pm.run(self.mod)
 
   @property
   def placedb(self):
