@@ -242,6 +242,14 @@ static void addNoI0ResultPruningPattern(ConversionTarget &target,
 } // namespace
 
 void ExportVerilog::pruneZeroValuedLogic(hw::HWModuleOp module) {
+  IntegerType i0Type =
+      IntegerType::get(module.getContext(), 0, IntegerType::Signless);
+  OpBuilder b = OpBuilder::atBlockBegin(module.getBodyBlock());
+  for (auto bbArg : module.getBodyBlock()->getArguments())
+    if (bbArg.getType() == i0Type)
+      bbArg.replaceAllUsesWith(b.create<hw::ConstantOp>(
+          bbArg.getLoc(), IntegerAttr::get(i0Type, 0)));
+
   ConversionTarget target(*module.getContext());
   RewritePatternSet patterns(module.getContext());
   PruneTypeConverter typeConverter;
