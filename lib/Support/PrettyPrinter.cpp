@@ -232,6 +232,12 @@ void PrettyPrinter::advanceLeft() {
 
 /// Print a token, maintaining printStack for context.
 void PrettyPrinter::print(FormattedToken f) {
+  // Ensure indentation computations don't overflow, and clamp to [0,4*margin].
+  // Output looks better if we don't stop indenting entirely at target width,
+  // but don't do this indefinitely.
+  auto computeNewIndent = [&](ssize_t newIndent, auto offset) {
+    return std::clamp<ssize_t>(newIndent + offset, 0, margin << 2);
+  };
   llvm::TypeSwitch<Token *, void>(&f.token)
       .Case([&](StringToken *s) {
         space -= f.size;
@@ -252,9 +258,8 @@ void PrettyPrinter::print(FormattedToken f) {
           pendingIndentation += b->spaces();
         } else {
           os << "\n";
-          pendingIndentation =
-              std::max<ssize_t>(ssize_t{indent} + b->offset(), 0);
-          space = std::max<ssize_t>(ssize_t{margin} - pendingIndentation, 0);
+          pendingIndentation = computeNewIndent(indent, b->offset());
+          space = margin - pendingIndentation;
         }
       })
       .Case([&](BeginToken *b) {
@@ -265,9 +270,10 @@ void PrettyPrinter::print(FormattedToken f) {
           auto breaks = b->breaks() == Breaks::Consistent
                             ? PrintBreaks::Consistent
                             : PrintBreaks::Inconsistent;
+          ssize_t newIndent = indent;
           if (b->style() == IndentStyle::Visual)
-            indent = std::max<ssize_t>(ssize_t{margin} - space, 0);
-          indent += b->offset();
+            newIndent = ssize_t{margin} - space;
+          indent = computeNewIndent(newIndent, b->offset());
           printStack.push_back({indent, breaks});
         } else {
           printStack.push_back({0, PrintBreaks::Fits});
