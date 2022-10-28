@@ -60,6 +60,8 @@ def ConvertOp : SystemCOp<"convert", [Pure]> {
                                  LogicType]>:$result);
 
   let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";
+
+  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//

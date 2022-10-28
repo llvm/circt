@@ -48,6 +48,10 @@ struct PortInfo {
 /// Get the type wrapped by a signal or port (in, inout, out) type.
 Type getSignalBaseType(Type type);
 
+/// Return the bitwidth of a type. SystemC types with a dynamic bit-width and
+/// unsupported types result in a None return value.
+Optional<size_t> getBitWidth(Type type);
+
 //===----------------------------------------------------------------------===//
 // Integer types
 //===----------------------------------------------------------------------===//
@@ -59,11 +63,11 @@ Type getSignalBaseType(Type type);
 class ValueBaseType : public Type {
 public:
   static bool classof(Type type) {
-    return type.isa<SignedType>() || type.isa<UnsignedType>() ||
-           type.isa<IntBaseType>() || type.isa<UIntBaseType>() ||
-           type.isa<BigIntType>() || type.isa<BigUIntType>() ||
-           type.isa<IntType>() || type.isa<UIntType>();
+    return type.isa<SignedType, UnsignedType, IntBaseType, UIntBaseType,
+                    BigIntType, BigUIntType, IntType, UIntType>();
   }
+
+  bool isSigned() { return isa<SignedType, IntBaseType>(); }
 
 protected:
   using Type::Type;
