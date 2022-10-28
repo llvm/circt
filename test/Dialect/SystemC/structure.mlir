@@ -63,6 +63,9 @@ systemc.module @signals () {
   // CHECK-NEXT: %signal1 = systemc.signal : !systemc.signal<i1>
   %signal1 = systemc.signal : !systemc.signal<i1>
 
+  // CHECK-NEXT: %namedSignal = systemc.signal named : !systemc.signal<i1>
+  %namedSignal = systemc.signal named : !systemc.signal<i1>
+
   // CHECK-NEXT: systemc.func
   %funchandle = systemc.func {
     // CHECK-NEXT: [[READ:%.*]] = systemc.signal.read %signal0 : !systemc.signal<!systemc.uint<32>>

@@ -219,7 +219,16 @@ struct SignalEmitter : OpEmissionPattern<SignalOp> {
 
   void emitStatement(SignalOp op, EmissionPrinter &p) override {
     p.emitType(op.getSignal().getType());
-    p << " " << op.getName() << ";\n";
+    p << " ";
+
+    if (op.getNamed()) {
+      // This style of emitting SC_NAMED requires the printed code to be
+      // compiled with at least C++11.
+      p << "SC_NAMED(" << op.getName() << ");\n";
+      return;
+    }
+
+    p << op.getName() << ";\n";
   }
 };
 

@@ -35,13 +35,17 @@ def SignalOp : SystemCOp<"signal", [HasCustomSSAName,
   let summary = "Declares a SystemC `sc_signal<T>`.";
   let description = [{
     Represents the `sc_signal` template as described in IEEE 1666-2011 §6.4.
+    Adding the 'named' attribute will lead to the signal being emitted with the
+    `SC_NAMED` convenience macro. Note that this macro is not part of
+    IEEE 1666-2011, but was added in version 2.3.3.
   }];
 
-  let arguments = (ins StrAttr:$name);
+  let arguments = (ins StrAttr:$name, UnitAttr:$named);
   let results = (outs SignalType:$signal);
 
   let assemblyFormat = [{
-    custom<ImplicitSSAName>($name) attr-dict `:` qualified(type($signal))
+    custom<ImplicitSSAName>($name) ( `named` $named^ )? attr-dict
+    `:` qualified(type($signal))
   }];
 }
 

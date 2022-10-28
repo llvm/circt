@@ -73,6 +73,12 @@ systemc.module @basic (%port0: !systemc.in<i1>, %port1: !systemc.inout<!systemc.
 // CHECK-NEXT: };
 }
 
+// CHECK-LABEL: namedSignal
+systemc.module @namedSignal() {
+  // CHECK-NEXT: sc_signal<bool> SC_NAMED(sigName);
+  %sigName = systemc.signal named : !systemc.signal<i1>
+}
+
 // CHECK-LABEL: SC_MODULE(nativeCTypes)
 // CHECK-NEXT: sc_in<bool> port0;
 // CHECK-NEXT: sc_in<uint8_t> port1;
