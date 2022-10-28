@@ -5,7 +5,7 @@ sv.interface @IValidReady_Struct  {
 }
 
 // CHECK-LABEL:module structs({{.*}}
-// CHECK:  assign _GEN =
+//      CHECK:  assign _GEN =
 // CHECK-NEXT:    '{
 // CHECK-NEXT:      foo: ({_GEN_1, _GEN_0}),
 // CHECK-NEXT:      bar: ({_GEN_0, _GEN_0}),
@@ -57,13 +57,13 @@ hw.module @CoverAssert(
     %4 = comb.and bin %0, %2 : i1
     %5 = comb.and bin %1, %3 : i1
 
-// CHECK:  cover__information_label:
+//      CHECK:  cover__information_label:
 // CHECK-NEXT:    cover property (@(posedge clock)
 // CHECK-NEXT:                    eeeeee_fffff_gggggg_hhh_i_jjjjj_kkkkkkkkk_lllllll_mmmmmmmmm_nnnnnnnn_0 == 4'h0
 // CHECK-NEXT:                    & ~reset);{{.*}}
     sv.cover.concurrent posedge %clock, %4 label "cover__information_label"
 
-// CHECK:  assert__label:
+//      CHECK:  assert__label:
 // CHECK-NEXT:    assert property (@(posedge clock)
 // CHECK-NEXT:                     eeeeee_fffff_gggggg_hhh_i_jjjjj_kkkkkkkkk_lllllll_mmmmmmmmm_nnnnnnnn_0 == 4'h0
 // CHECK-NEXT:                     & ~reset)
