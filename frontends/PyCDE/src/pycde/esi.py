@@ -381,8 +381,9 @@ def DeclareRandomAccessMemory(inner_type: PyCDEType,
           sym_name, ir.TypeAttr.get(inner_type),
           ir.IntegerAttr.get(ir.IntegerType.get_signless(64), depth))
 
-  DeclareRandomAccessMemory.name = name
-  DeclareRandomAccessMemory.__name__ = name
+  if name is not None:
+    DeclareRandomAccessMemory.name = name
+    DeclareRandomAccessMemory.__name__ = name
   return DeclareRandomAccessMemory
 
 

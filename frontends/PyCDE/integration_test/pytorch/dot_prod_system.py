@@ -1,7 +1,7 @@
 # REQUIRES: esi-cosim
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1
-# : esi-cosim-runner.py --tmpdir %t --schema %t/schema.capnp %s %t/*.sv
+# RUN: esi-cosim-runner.py --tmpdir %t --schema %t/schema.capnp %s %t/*.sv
 # PY: from dot_prod_system import run_cosim
 # PY: run_cosim(tmpdir, rpcschemapath, simhostport)
 
@@ -35,13 +35,13 @@ class Gasket:
 
   @generator
   def generate(ports):
-    go = TorchControl.go()
+    go = TorchControl.go("go")
     ForwardEsi(clock=ports.clk, reset=ports.rst, in3=go)
-    dot_a.write(TorchControl.a_write())
-    dot_b.write(TorchControl.b_write())
+    dot_a.write(TorchControl.a_write("a"))
+    dot_b.write(TorchControl.b_write("b"))
     read_address = Wire(dot_x.read.to_server_type)
     read_data = dot_x.read(read_address)
-    read_address.assign(TorchControl.x_read(read_data))
+    read_address.assign(TorchControl.x_read(read_data, "x"))
     dot_a.instantiate_builtin("sv_mem", inputs=[ports.clk, ports.rst])
     dot_b.instantiate_builtin("sv_mem", inputs=[ports.clk, ports.rst])
     dot_x.instantiate_builtin("sv_mem", inputs=[ports.clk, ports.rst])
@@ -49,13 +49,13 @@ class Gasket:
 
 @module
 class top:
-  clock = Clock()
-  reset = Input(types.i1)
+  clk = Clock()
+  rst = Input(types.i1)
 
   @generator
   def generate(ports):
-    Gasket(clk=ports.clock, rst=ports.reset)
-    Cosim(TorchControl, ports.clock, ports.reset)
+    Gasket(clk=ports.clk, rst=ports.rst)
+    Cosim(TorchControl, ports.clk, ports.rst)
 
 
 if __name__ == "__main__":
@@ -82,8 +82,8 @@ if __name__ == "__main__":
   system.run_passes()
   with open("dot_sys.postpasses.mlir", "w") as f:
     f.write(str(system.mod))
-  print("passed")
   system.emit_outputs()
+  system.build_api("python")
 
 
 def run_cosim(tmpdir=".", schema_path="schema.capnp", rpchostport=None):
@@ -97,3 +97,5 @@ def run_cosim(tmpdir=".", schema_path="schema.capnp", rpchostport=None):
   cosim = Cosim(schema_path, rpchostport)
   print(cosim.list())
   top = esi_sys.top(cosim)
+  import IPython
+  IPython.embed(colors="neutral")

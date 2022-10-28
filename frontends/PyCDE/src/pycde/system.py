@@ -119,6 +119,8 @@ class System:
       "canonicalize",
       "handshake-lower-extmem-to-hw{wrap-esi}",
       "canonicalize",
+      "handshake.func(handshake-insert-buffers)",
+      "canonicalize",
       "handshake.func(handshake-remove-block-structure)",
       "handshake.func(handshake-materialize-forks-sinks)",
       "lower-handshake-to-hw",
