@@ -187,9 +187,10 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     // Setters
     InterfaceMethod<"Set the port symbols", "void",
     "setPortSymbols", (ins "ArrayRef<Attribute>":$symbols), [{}], [{
+      assert(symbols.empty() || symbols.size() == $_op.getNumPorts());
       SmallVector<Attribute> newSyms(symbols.begin(), symbols.end());
       FModuleLike::fixupPortSymsArray(newSyms, $_op.getContext());
-      assert(symbols.empty() || symbols.size() == $_op.getNumPorts());
+      assert(newSyms.empty() || newSyms.size() == $_op.getNumPorts());
       $_op->setAttr(FModuleLike::getPortSymbolsAttrName(),
                     ArrayAttr::get($_op.getContext(), newSyms));
     }]>,
@@ -205,7 +206,11 @@ def FModuleLike : OpInterface<"FModuleLike"> {
       }
       assert(symbols.size() == $_op.getNumPorts());
       symbols[portIndex] = InnerSymAttr::get(symbol);
-      $_op.setPortSymbols(symbols);
+
+      FModuleLike::fixupPortSymsArray(symbols, $_op.getContext());
+      assert(symbols.empty() || symbols.size() == $_op.getNumPorts());
+      $_op->setAttr(FModuleLike::getPortSymbolsAttrName(),
+                    ArrayAttr::get($_op.getContext(), symbols));
     }]>,
 
     InterfaceMethod<"Set a port symbol", "void",
@@ -262,20 +267,20 @@ def FModuleLike : OpInterface<"FModuleLike"> {
       return "portSyms";
     }
 
-    /// Replace NUll entries with invalid sym and clear array if all elements
+    /// Replace NULL entries with invalid sym and clear array if all elements
     /// are invalid.
     static void fixupPortSymsArray(SmallVectorImpl<Attribute> &syms,
                                    MLIRContext *context) {
-      bool isValid = false;
-      for (size_t i = 0, e = syms.size(); i < e; ++i)
-        if (!syms[i])
-          syms[i] = InnerSymAttr::get(context);
-        else
-          isValid = true;
       // The lack of *any* port symbol is represented by an empty `portSyms`
       // array as a shorthand.
-      if (!isValid)
+      if (llvm::none_of(syms, [&](auto &sym) { return sym; })) {
         syms.clear();
+        return;
+      }
+      auto empty = InnerSymAttr::get(context);
+      for (auto &sym : syms)
+        if (!sym)
+          sym = empty;
     }
   }];
 
