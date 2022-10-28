@@ -393,3 +393,20 @@ hw.module @verilatedCannotReferenceNonHWModule() {
   // expected-error @+1 {{symbol reference 'submodule' isn't a module}}
   systemc.interop.verilated "verilated" @submodule () -> ()
 }
+
+// -----
+
+systemc.module @sensitivityNotInCtor() {
+  // expected-error @+1 {{expects parent op 'systemc.ctor'}}
+  systemc.sensitive
+}
+
+// -----
+
+systemc.module @sensitivityNoChannelType() {
+  systemc.ctor {
+    %var = systemc.cpp.variable : i1
+    // expected-error @+1 {{operand #0 must be a SystemC sc_in<T> type or a SystemC sc_inout<T> type or a SystemC sc_out<T> type or a SystemC sc_signal<T> type, but got 'i1'}}
+    systemc.sensitive %var : i1
+  }
+}

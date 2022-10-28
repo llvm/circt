@@ -90,6 +90,14 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
         scModule.getOrCreateCtor().getBodyBlock());
     rewriter.create<MethodOp>(scModule.getLoc(), scFunc.getHandle());
 
+    // Register the sensitivities of above SC_METHOD registration.
+    SmallVector<Value> sensitivityValues(
+        llvm::make_filter_range(scModule.getArguments(), [](BlockArgument arg) {
+          return !arg.getType().isa<OutputType>();
+        }));
+    if (!sensitivityValues.empty())
+      rewriter.create<SensitiveOp>(scModule.getLoc(), sensitivityValues);
+
     // Move the block arguments of the systemc.func (that we got from the
     // hw.module) to the systemc.module
     rewriter.setInsertionPointToStart(scFunc.getBodyBlock());
