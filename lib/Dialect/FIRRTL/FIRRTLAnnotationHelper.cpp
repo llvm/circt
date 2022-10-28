@@ -329,7 +329,8 @@ InstanceOp firrtl::addPortsToModule(
   unsigned portNo = mod.getNumPorts();
   PortInfo portInfo = {portName(mod), portType, dir, {}, mod.getLoc()};
   mod.insertPorts({{portNo, portInfo}});
-  InstanceGraphNode *modNode = instancePathcache.instanceGraph.lookup(cast<hw::HWModuleLike>((Operation*)mod));
+  InstanceGraphNode *modNode = instancePathcache.instanceGraph.lookup(
+      cast<hw::HWModuleLike>((Operation *)mod));
   if (targetCaches)
     targetCaches->insertPort(mod, portNo);
   // Now update all the instances of `mod`.

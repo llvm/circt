@@ -480,8 +480,9 @@ BlockArgument FModuleOp::getArgument(size_t portNumber) {
 /// Inserts the given ports. The insertion indices are expected to be in order.
 /// Insertion occurs in-order, such that ports with the same insertion index
 /// appear in the module in the same order they appeared in the list.
-static void insertPorts(FModuleLike op, ArrayRef<std::pair<unsigned, PortInfo>> ports, 
-    Block *body = nullptr){
+static void insertPorts(FModuleLike op,
+                        ArrayRef<std::pair<unsigned, PortInfo>> ports,
+                        Block *body = nullptr) {
   if (ports.empty())
     return;
   unsigned oldNumArgs = op.getNumPorts();
@@ -548,16 +549,16 @@ static void insertPorts(FModuleLike op, ArrayRef<std::pair<unsigned, PortInfo>> 
 
   // Apply these changed markers.
   (op)->setAttr("portDirections",
-                   direction::packAttribute(op.getContext(), newDirections));
+                direction::packAttribute(op.getContext(), newDirections));
   (op)->setAttr("portNames", ArrayAttr::get(op.getContext(), newNames));
   (op)->setAttr("portTypes", ArrayAttr::get(op.getContext(), newTypes));
   (op)->setAttr("portAnnotations", ArrayAttr::get(op.getContext(), newAnnos));
   (op).setPortSymbols(newSyms);
 }
 
-void FExtModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports){
+void FExtModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
-} 
+}
 
 /// Erases the ports that have their corresponding bit set in `portIndices`.
 static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
@@ -588,10 +589,9 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   SmallVector<Attribute> newPortSyms =
       removeElementsAtIndices(portSyms, portIndices);
   op->setAttr("portDirections",
-            direction::packAttribute(op.getContext(), newPortDirections));
+              direction::packAttribute(op.getContext(), newPortDirections));
   op->setAttr("portNames", ArrayAttr::get(op.getContext(), newPortNames));
-  op->setAttr("portAnnotations",
-            ArrayAttr::get(op.getContext(), newPortAnnos));
+  op->setAttr("portAnnotations", ArrayAttr::get(op.getContext(), newPortAnnos));
   op->setAttr("portTypes", ArrayAttr::get(op.getContext(), newPortTypes));
   op->setAttr("portSyms", ArrayAttr::get(op.getContext(), newPortSyms));
 }
@@ -1069,8 +1069,7 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   if (op->hasAttr("internalPaths")) {
     if (auto paths = op->getAttrOfType<ArrayAttr>("internalPaths"))
       if (paths.empty())
-      omittedAttrs.push_back("internalPaths");
-    
+        omittedAttrs.push_back("internalPaths");
   }
 
   p.printOptionalAttrDictWithKeyword(op->getAttrs(), omittedAttrs);
