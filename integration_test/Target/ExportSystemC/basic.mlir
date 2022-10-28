@@ -33,6 +33,10 @@ systemc.module @module (%port0: !systemc.in<i1>, %port1: !systemc.inout<!systemc
   }
 }
 
+systemc.module @namedSignal() {
+  %sigName = systemc.signal named : !systemc.signal<i1>
+}
+
 systemc.module @nativeCTypes (%port0: !systemc.in<i1>,
                               %port1: !systemc.in<i8>,
                               %port2: !systemc.in<i16>,
