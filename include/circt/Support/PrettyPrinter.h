@@ -77,23 +77,23 @@ private:
   Kind kind;
 
 protected:
-  template <Kind k>
-  auto &getInfoImpl() {
+  template <Kind k, typename T>
+  static auto &getInfoImpl(T &t) {
     if constexpr (k == Kind::String)
-      return data.stringInfo;
+      return t.data.stringInfo;
     if constexpr (k == Kind::Break)
-      return data.breakInfo;
+      return t.data.breakInfo;
     if constexpr (k == Kind::Begin)
-      return data.beginInfo;
+      return t.data.beginInfo;
     if constexpr (k == Kind::End)
-      return data.endInfo;
+      return t.data.endInfo;
     llvm_unreachable("unhandled token kind");
   }
 
   Token(Kind k) : kind(k) {}
 
 public:
-  auto getKind() const { return kind; }
+  Kind getKind() const { return kind; }
 };
 
 /// Helper class to CRTP-derive common functions.
@@ -101,29 +101,36 @@ template <class DerivedT, Token::Kind DerivedKind>
 struct TokenBase : public Token {
   static bool classof(const Token *t) { return t->getKind() == DerivedKind; }
 
+  using InfoType = std::remove_reference_t<std::invoke_result_t<
+      decltype(Token::getInfoImpl<DerivedKind, Token &>), Token &>>;
+
+  const InfoType &getInfo() const {
+    return Token::getInfoImpl<DerivedKind>(*this);
+  }
+
 protected:
   TokenBase() : Token(DerivedKind) {}
-  auto &getInfoMut() { return getInfoImpl<DerivedKind>(); }
 
-public:
-  const auto &getInfo() { return getInfoMut(); }
+  InfoType &getInfoMut() { return Token::getInfoImpl<DerivedKind>(*this); }
 };
+
+/// Token types.
 
 struct StringToken : public TokenBase<StringToken, Token::Kind::String> {
   StringToken(llvm::StringRef text) {
     assert(text.size() == (uint32_t)text.size());
     getInfoMut() = {text.data(), (uint32_t)text.size()};
   }
-  StringRef text() { return StringRef(getInfo().str, getInfo().len); }
+  StringRef text() const { return StringRef(getInfo().str, getInfo().len); }
 };
 
 struct BreakToken : public TokenBase<BreakToken, Token::Kind::Break> {
   BreakToken(uint32_t spaces = 1, int32_t offset = 0, bool neverbreak = false) {
     getInfoMut() = {spaces, offset, neverbreak};
   }
-  auto spaces() { return getInfo().spaces; }
-  auto offset() { return getInfo().offset; }
-  auto neverbreak() { return getInfo().neverbreak; }
+  uint32_t spaces() const { return getInfo().spaces; }
+  int32_t offset() const { return getInfo().offset; }
+  bool neverbreak() const { return getInfo().neverbreak; }
 };
 
 struct BeginToken : public TokenBase<BeginToken, Token::Kind::Begin> {
@@ -131,9 +138,9 @@ struct BeginToken : public TokenBase<BeginToken, Token::Kind::Begin> {
              IndentStyle style = IndentStyle::Visual) {
     getInfoMut() = {offset, breaks, style};
   }
-  auto offset() { return getInfo().offset; }
-  auto breaks() { return getInfo().breaks; }
-  auto style() { return getInfo().style; }
+  int32_t offset() const { return getInfo().offset; }
+  Breaks breaks() const { return getInfo().breaks; }
+  IndentStyle style() const { return getInfo().style; }
 };
 
 struct EndToken : public TokenBase<EndToken, Token::Kind::End> {};
