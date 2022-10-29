@@ -273,7 +273,7 @@ class _CosimPort:
 
   def write(self, msg) -> bool:
     """Write a message to this port."""
-    self._endpoint.send(self._write_convert.write(msg))
+    self._endpoint.send(self._write_convert.write(msg)).wait()
     return True
 
   def read(self, blocking_time: typing.Optional[float]):
