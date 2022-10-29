@@ -13,6 +13,7 @@ from pycde.constructs import Wire
 
 import torch
 import torch_mlir
+import numpy as np
 
 import sys
 import time
@@ -89,8 +90,22 @@ if __name__ == "__main__":
 
 
 def write_vector(vec: List[int], port):
-  for v, i in enumerate(vec):
+  for i, v in enumerate(vec):
     port.write({"address": i, "data": v})
+
+
+def hw_dotprod(hw, a: List[int], b: List[int]):
+  write_vector(a, hw.torch_control.a_write[0])
+  write_vector(b, hw.torch_control.b_write[0])
+  hw.torch_control.go[0].write()
+  time.sleep(0.01)
+  x = hw.torch_control.x_read[0]()
+  print(f"{a} x {b} = {x}")
+  return x
+
+
+def rand_vec():
+  return [np.random.randint(0, 100) for _ in range(5)]
 
 
 def run_cosim(tmpdir=".", schema_path="schema.capnp", rpchostport=None):
@@ -101,14 +116,31 @@ def run_cosim(tmpdir=".", schema_path="schema.capnp", rpchostport=None):
     port = open("cosim.cfg").read().split(':')[1].strip()
     rpchostport = f"localhost:{port}"
 
-  cosim = Cosim(schema_path, rpchostport)
-  print(cosim.list())
-  top = esi_sys.top(cosim)
-  write_vector([1, 1, 1, 1, 1], top.torch_control.a_write[0])
-  write_vector([1, 1, 1, 1, 1], top.torch_control.b_write[0])
-  top.torch_control.go[0].write()
-  time.sleep(1)
-  result = top.torch_control.x_read[0]()
-  print(f"result: {result}")
+  # Connect to RTL simulator via cosimulation.
+  acc_conn = Cosim(schema_path, rpchostport)
+
+  # Instantiate the accelerator host API with the backend connection.
+  hw = esi_sys.top(acc_conn)
+
+  # Run a simple dot product check.
+  hw_dotprod(hw, [1, 1, 1, 1, 1], [1, 1, 1, 1, 1])
+
+  # Instantiate PyTorch module for golden model.
+  torch_dot = DotModule()
+  for _ in range(25):
+    a = rand_vec()
+    b = rand_vec()
+
+    # Compute with our accelerator.
+    hdp = hw_dotprod(hw, a, b)
+
+    # Compute known good result.
+    tensor_a = torch.IntTensor(a)
+    tensor_b = torch.IntTensor(b)
+    swdp = torch_dot.forward(tensor_a, tensor_b)
+
+    if hdp != swdp:
+      print(f"  INCORRCT result. Correct is {swdp}")
+
   # import IPython
   # IPython.embed(colors="neutral")
