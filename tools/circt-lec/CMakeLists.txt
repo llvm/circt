@@ -16,6 +16,7 @@ if(CIRCT_LEC_ENABLED)
     CIRCTFSM
     CIRCTHandshake
     CIRCTHWArith
+    CIRCTInteropDialect
     CIRCTLLHD
     CIRCTMoore
     CIRCTPipelineOps
