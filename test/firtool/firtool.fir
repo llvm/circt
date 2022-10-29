@@ -18,18 +18,18 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; ANNOTATIONS-SAME: {class = "circt.test", info = "a CircuitTarget Annotation"}
 ; ANNOTATIONS-SAME: {class = "circt.test", info = "a CircuitName Annotation"}
 
-; OMIR:       #loc0 = loc(fused["Foo.scala":64:64, "Bar.scala":128:128])
-; OMIR-NEXT:  #loc1 = loc("Foo.scala":32:32)
+; OMIR-DAG:   [[loc0:#loc[0-9]*]] = loc(fused["Foo.scala":64:64, "Bar.scala":128:128])
+; OMIR-DAG:   [[loc1:#loc[0-9]*]] = loc("Foo.scala":32:32)
 ; OMIR-LABEL: firrtl.circuit "test_mod"
 ; OMIR-SAME:  {class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
 ; OMIR-SAME:   nodes = [
 ; OMIR-SAME:     {fields = {
 ; OMIR-SAME:        stringVal = {
 ; OMIR-SAME:          index = 0 : i64,
-; OMIR-SAME:          info = #loc0,
+; OMIR-SAME:          info = [[loc0]],
 ; OMIR-SAME:          value = "OMString:hello"}},
 ; OMIR-SAME:      id = "OMID:0",
-; OMIR-SAME:      info = #loc1}]}
+; OMIR-SAME:      info = [[loc1]]}]}
 
 
 ; OMIROUT-LABEL: FILE "meta.omir.json" -----
