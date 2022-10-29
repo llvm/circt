@@ -1,5 +1,6 @@
-#ifndef LEC_UTILITY_H
-#define LEC_UTILITY_H
+// NOLINTNEXTLINE
+#ifndef TOOLS_CIRCT_LEC_UTILITY_H
+#define TOOLS_CIRCT_LEC_UTILITY_H
 
 #include "mlir/IR/Value.h"
 #include "mlir/Support/IndentedOstream.h"
@@ -54,4 +55,4 @@ extern bool statisticsOpt;
     }                                                                          \
   } while (false)
 
-#endif // LEC_UTILITY_H
+#endif // TOOLS_CIRCT_LEC_UTILITY_H

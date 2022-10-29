@@ -45,7 +45,8 @@ llvm::ArrayRef<z3::expr> Solver::Circuit::getOutputs() { return outputs; }
 // `hw` dialect operations
 //===----------------------------------------------------------------------===//
 
-void Solver::Circuit::addConstant(mlir::Value opResult, mlir::APInt opValue) {
+void Solver::Circuit::addConstant(mlir::Value opResult,
+                                  const mlir::APInt &opValue) {
   LLVM_DEBUG(lec::dbgs << name << " addConstant\n");
   INDENT();
   allocateConstant(opResult, opValue);
@@ -312,7 +313,7 @@ z3::expr Solver::Circuit::allocateValue(mlir::Value value) {
   unsigned int width = type.getIntOrFloatBitWidth();
   // Technically allowed for the `hw` dialect but
   // disallowed for `comb` operations; should check separately.
-  assert(width > 0 && "0-width integers are not supported");
+  assert(width > 0 && "0-width integers are not supported"); // NOLINT
   z3::expr expr = solver->context.bv_const(valueName.c_str(), width);
   LLVM_DEBUG(lec::printExpr(expr));
   LLVM_DEBUG(lec::printValue(value));
@@ -369,13 +370,13 @@ void Solver::Circuit::constrainResult(mlir::Value &result, z3::expr &expr) {
 }
 
 /// Convert from bitvector to bool sort.
-z3::expr Solver::Circuit::bvToBool(z3::expr &condition) {
+z3::expr Solver::Circuit::bvToBool(const z3::expr &condition) {
   // bitvector is true if it's different from 0
   return condition != 0;
 }
 
 /// Convert from a boolean sort to the corresponding 1-width bitvector.
-z3::expr Solver::Circuit::boolToBv(z3::expr condition) {
+z3::expr Solver::Circuit::boolToBv(const z3::expr &condition) {
   return z3::ite(condition, solver->context.bv_val(1, 1),
                  solver->context.bv_val(0, 1));
 }

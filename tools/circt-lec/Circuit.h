@@ -11,8 +11,9 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#ifndef LEC_CIRCUIT_H
-#define LEC_CIRCUIT_H
+// NOLINTNEXTLINE
+#ifndef TOOLS_CIRCT_LEC_CIRCUIT_H
+#define TOOLS_CIRCT_LEC_CIRCUIT_H
 
 #include "Solver.h"
 #include "circt/Dialect/Comb/CombDialect.h"
@@ -44,7 +45,7 @@ public:
   llvm::ArrayRef<z3::expr> getOutputs();
 
   // `hw` dialect operations.
-  void addConstant(mlir::Value result, mlir::APInt value);
+  void addConstant(mlir::Value result, const mlir::APInt &value);
   void addInstance(llvm::StringRef instanceName, circt::hw::HWModuleOp op,
                    mlir::OperandRange arguments, mlir::ResultRange results);
 
@@ -91,9 +92,9 @@ private:
   void constrainResult(mlir::Value &result, z3::expr &expr);
 
   /// Convert from bitvector to bool sort.
-  z3::expr bvToBool(z3::expr &condition);
+  z3::expr bvToBool(const z3::expr &condition);
   /// Convert from a boolean sort to the corresponding 1-width bitvector.
-  z3::expr boolToBv(z3::expr condition);
+  z3::expr boolToBv(const z3::expr &condition);
 
   /// The name of the circuit; it corresponds to its scope within the parsed IR.
   std::string name;
@@ -111,4 +112,4 @@ private:
   llvm::DenseMap<mlir::Value, z3::expr> exprTable;
 };
 
-#endif // LEC_CIRCUIT_H
+#endif // TOOLS_CIRCT_LEC_CIRCUIT_H

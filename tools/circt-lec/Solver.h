@@ -10,8 +10,9 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#ifndef LEC_SOLVER_H
-#define LEC_SOLVER_H
+// NOLINTNEXTLINE
+#ifndef TOOLS_CIRCT_LEC_SOLVER_H
+#define TOOLS_CIRCT_LEC_SOLVER_H
 
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/MLIRContext.h"
@@ -70,4 +71,4 @@ private:
   z3::solver solver;
 };
 
-#endif // LEC_SOLVER_H
+#endif // TOOLS_CIRCT_LEC_SOLVER_H
