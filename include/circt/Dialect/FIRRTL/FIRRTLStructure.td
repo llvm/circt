@@ -95,12 +95,6 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
       return OpBuilder::atBlockEnd(&bodyBlock);
     }
 
-    /// Inserts the given ports.
-    void insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
-
-    /// Erases the ports that have their corresponding bit set in `portIndices`.
-    void erasePorts(const llvm::BitVector &portIndices);
-
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
   }];
@@ -176,10 +170,6 @@ def FMemModuleOp : FIRRTLOp<"memmodule",
   let extraClassDeclaration = [{
     /// Return true if this memory has a mask.
     bool isMasked() { return getMaskBits() > 1; }
-
-    /// Inserts the given ports.
-    void insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
-
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
   }];
