@@ -113,7 +113,8 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let arguments = (ins
                    OptionalAttr<StrAttr>:$defname,
                    ParamDeclArrayAttr:$parameters,
-                   DefaultValuedAttr<AnnotationArrayAttr, "ArrayAttr()">:$annotations,
+                   DefaultValuedAttr<AnnotationArrayAttr,
+                   "ArrayAttr()">:$annotations,
                    DefaultValuedAttr<ArrayAttr, "{}">:$internalPaths
                   );
   let results = (outs);
