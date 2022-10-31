@@ -232,6 +232,12 @@ module {
 // CHECK-SAME: (%[[clock:.+]]: i1, %[[in:.+]]: i1)
 // CHECK: hw.instance {{.+}} @MultiResultExtracted_cover([[clock]]: %[[clock]]: i1, [[in]]: %[[in]]: i1)
 
+// In SymNotExtracted, instance foo should not be extracted because it has a sym.
+// CHECK-LABEL: @SymNotExtracted_cover
+// CHECK-NOT: hw.instance "foo"
+// CHECK-LABEL: @SymNotExtracted
+// CHECK: hw.instance "foo"
+
 module attributes {
   firrtl.extract.testbench = #hw.output_file<"testbench/", excludeFromFileList, includeReplicatedOps>
 } {
@@ -314,6 +320,13 @@ module attributes {
     sv.always posedge %clock {
       sv.cover %qux.b, immediate
       sv.cover %qux.c, immediate
+    }
+  }
+
+  hw.module @SymNotExtracted(%clock: i1, %in: i1) {
+    %foo.b = hw.instance "foo" sym @foo @Foo(a: %in: i1) -> (b: i1)
+    sv.always posedge %clock {
+      sv.cover %foo.b, immediate
     }
   }
 }
