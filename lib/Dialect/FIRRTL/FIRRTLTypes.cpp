@@ -1137,9 +1137,10 @@ llvm::Optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
           return llvm::Optional<int64_t>(*retval);
         })
         .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
-        .Default([&](auto t) { 
-        llvm_unreachable("unhandled FIRRTL type");
-        return llvm::None; });
+        .Default([&](auto t) {
+          llvm_unreachable("unhandled FIRRTL type");
+          return llvm::None;
+        });
   };
   return getWidth(type);
 }
