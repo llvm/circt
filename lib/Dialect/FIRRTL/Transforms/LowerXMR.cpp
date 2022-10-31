@@ -64,6 +64,20 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             // NodeOp to add the InnerSym.
             if (!xmrDef.isa<BlockArgument>()) {
               Operation *xmrDefOp = xmrDef.getDefiningOp();
+              if (auto verbExpr = dyn_cast<VerbatimExprOp>(xmrDefOp))
+                if (verbExpr.getSymbolsAttr().empty() &&
+                    xmrDefOp->hasOneUse()) {
+                  // This represents the internal path into a module. For
+                  // generating the correct XMR, no node can be created in this
+                  // module. Create a null InnerRef and ensure the hierarchical
+                  // path ends at the parent that instantiates this module.
+                  auto inRef = InnerRefAttr();
+                  auto ind = addReachingSendsEntry(send.getResult(), inRef);
+                  xmrPathSuffix[ind] = verbExpr.getText();
+                  markForRemoval(verbExpr);
+                  markForRemoval(send);
+                  return success();
+                }
               if (!isa<InnerSymbolOpInterface>(xmrDefOp) ||
                   xmrDefOp->getResults().size() > 1) {
                 // Add a node, for non-innerSym ops. Otherwise the sym will be
@@ -102,7 +116,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
                       .isa<RefType>()) {
                 auto inRef = getInnerRefTo(mem);
                 auto ind = addReachingSendsEntry(res.value(), inRef);
-                xmrPathSuffix[ind] = ".Memory";
+                xmrPathSuffix[ind] = "Memory";
                 // Just node that all the debug ports of memory must be removed.
                 // So this does not record the port index.
                 refPortsToRemoveMap[mem].resize(1);
@@ -139,8 +153,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             }
             auto inRef = getInnerRefTo(defMem);
             auto ind = addReachingSendsEntry(op.getResult(), inRef);
-            xmrPathSuffix[ind] =
-                (".Memory[" + Twine(op.getIndex()) + "]").str();
+            xmrPathSuffix[ind] = ("Memory[" + Twine(op.getIndex()) + "]").str();
 
             return success();
           })
@@ -248,7 +261,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     // If this xmr has a suffix string (internal path into a module, that is not
     // yet generated).
     if (iter != xmrPathSuffix.end())
-      xmrString += iter->getSecond();
+      xmrString += ("." + iter->getSecond()).str();
     if (auto vec = resolve.getResult().getType().dyn_cast<FVectorType>()) {
       // If the RefType is a vector, then replace all its users with [i] suffix,
       // instead of creatign a temp wire to the vector xmr, and then followup
@@ -383,6 +396,17 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     auto leader = dataFlowClasses.getOrInsertLeaderValue(atRefVal);
     auto indx = refSendPathList.size();
     dataflowAt[leader] = indx;
+    if (continueFrom.has_value()) {
+      if (!refSendPathList[continueFrom.value()].first) {
+        // This handles the case when the InnerRef is set to null at the
+        // following path, that implies the path ends at this node, so copy the
+        // xmrPathSuffix and end the path here.
+        auto xmrIter = xmrPathSuffix.find(continueFrom.value());
+        if (xmrIter != xmrPathSuffix.end())
+          xmrPathSuffix[indx] = xmrIter->getSecond();
+        continueFrom = None;
+      }
+    }
     refSendPathList.push_back(std::make_pair(newRef, continueFrom));
     return indx;
   }
