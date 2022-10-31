@@ -335,7 +335,7 @@ hw.module @nested_wire(%a: i1) {
 
 // CHECK-LABEL: hw.module @ordered_region
 hw.module @ordered_region(%a: i1) {
-  // CHECK: sv.ordered 
+  // CHECK: sv.ordered
   sv.ordered {
     // CHECK: sv.ifdef "foo"
     sv.ifdef "foo" {
