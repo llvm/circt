@@ -474,6 +474,22 @@ hw.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
   hw.output
 }
 
+// CHECK-LABEL: module ReadMem()
+hw.module @ReadMem() {
+
+  // CHECK:      initial begin
+  // CHECK-NEXT:   reg [31:0] memForReadMem[0:7];
+  // CHECK-NEXT:   $readmemb("file1.txt", memForReadMem);
+  // CHECK-NEXT:   $readmemh("file2.txt", memForReadMem);
+  // CHECK-NEXT: end
+  sv.initial {
+    %memForReadMem = sv.reg sym @MemForReadMem : !hw.inout<uarray<8xi32>>
+    sv.readmem @MemForReadMem, "file1.txt", MemBaseBin
+    sv.readmem @MemForReadMem, "file2.txt", MemBaseHex
+  }
+
+}
+
 // CHECK-LABEL: module UninitReg1(
 hw.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   %c-1_i2 = hw.constant -1 : i2
