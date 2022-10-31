@@ -217,16 +217,15 @@ void PrettyPrinter::advanceLeft() {
   assert(!tokens.empty());
 
   while (!tokens.empty() && tokens.front().size >= 0) {
-    auto f = tokens.front();
+    const auto &f = tokens.front();
+    print(f);
+    leftTotal +=
+        llvm::TypeSwitch<const Token *, int32_t>(&f.token)
+            .Case([&](const BreakToken *b) { return b->spaces(); })
+            .Case([&](const StringToken *s) { return s->text().size(); })
+            .Default([](const auto *) { return 0; });
     tokens.pop_front();
     ++tokenOffset;
-
-    print(f);
-
-    leftTotal += llvm::TypeSwitch<Token *, int32_t>(&f.token)
-                     .Case([&](BreakToken *b) { return b->spaces(); })
-                     .Case([&](StringToken *s) { return s->text().size(); })
-                     .Default([](auto *) { return 0; });
   }
 }
 
@@ -239,15 +238,15 @@ static uint32_t computeNewIndent(ssize_t newIndent, int32_t offset,
 }
 
 /// Print a token, maintaining printStack for context.
-void PrettyPrinter::print(FormattedToken f) {
-  llvm::TypeSwitch<Token *, void>(&f.token)
-      .Case([&](StringToken *s) {
+void PrettyPrinter::print(const FormattedToken &f) {
+  llvm::TypeSwitch<const Token *, void>(&f.token)
+      .Case([&](const StringToken *s) {
         space -= f.size;
         os.indent(pendingIndentation);
         pendingIndentation = 0;
         os << s->text();
       })
-      .Case([&](BreakToken *b) {
+      .Case([&](const BreakToken *b) {
         auto &frame = getPrintFrame();
         assert((b->spaces() != kInfinity || alwaysFits == 0) &&
                "newline inside never group");
@@ -265,7 +264,7 @@ void PrettyPrinter::print(FormattedToken f) {
           space = margin - pendingIndentation;
         }
       })
-      .Case([&](BeginToken *b) {
+      .Case([&](const BeginToken *b) {
         if (b->breaks() == Breaks::Never) {
           printStack.push_back({0, PrintBreaks::AlwaysFits});
           ++alwaysFits;
@@ -282,7 +281,7 @@ void PrettyPrinter::print(FormattedToken f) {
           printStack.push_back({0, PrintBreaks::Fits});
         }
       })
-      .Case([&](EndToken *) {
+      .Case([&](const EndToken *) {
         assert(!printStack.empty() && "more ends than begins?");
         // Try to tolerate this when assertions are disabled.
         if (printStack.empty())

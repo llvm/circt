@@ -229,7 +229,7 @@ private:
   void checkStream();
 
   /// Print a token, maintaining printStack for context.
-  void print(FormattedToken f);
+  void print(const FormattedToken &f);
 
   /// Clear token buffer, scanStack must be empty.
   void clear();
