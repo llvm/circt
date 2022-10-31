@@ -200,10 +200,16 @@ static void addInstancesToCloneSet(
     // this case, we have to proactively erase them. The instances must be
     // erased because we can't canonicalize away instances with unused results
     // in general. The forward dataflow must be erased because the instance is
-    // being erased, and we can't leave null operands after this pass.
+    // being erased, and we can't leave null operands after this pass. Also
+    // erase any intermediate parents of the forward slice.
     opsToErase.insert(instance);
     for (auto *forwardOp : forwardSlice)
       opsToErase.insert(forwardOp);
+
+    SetVector<Operation *> forwardSliceParents;
+    blockSlice(forwardSlice, forwardSliceParents);
+    for (auto *forwardOpParent : forwardSliceParents)
+      opsToErase.insert(forwardOpParent);
   }
 
   // Remove any inputs marked for removal.
@@ -349,7 +355,9 @@ static void updateOoOArgs(SmallVectorImpl<Operation *> &lateBoundOps,
 // for marked ops.
 static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
                        SetVector<Operation *> &depOps,
-                       BlockAndValueMapping &cutMap) {
+                       BlockAndValueMapping &cutMap,
+                       hw::InstanceGraph &instanceGraph) {
+  hw::InstanceGraphNode *newModNode = instanceGraph.lookup(newMod);
   SmallVector<Operation *, 16> lateBoundOps;
   OpBuilder b = OpBuilder::atBlockBegin(newMod.getBodyBlock());
   oldMod.walk<WalkOrder::PreOrder>([&](Operation *op) {
@@ -359,6 +367,11 @@ static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
       addBlockMapping(cutMap, op, newOp);
       if (hasOoOArgs(newMod, newOp))
         lateBoundOps.push_back(newOp);
+      if (auto instance = dyn_cast<hw::InstanceOp>(op)) {
+        hw::InstanceGraphNode *instMod =
+            instanceGraph.lookup(instance.getModuleNameAttr().getAttr());
+        newModNode->addInstance(instance, instMod);
+      }
     }
   });
   updateOoOArgs(lateBoundOps, cutMap);
@@ -384,8 +397,12 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
   if (oldMod.getNumOutputs() != 0)
     return;
 
-  // Iterate through each instance of the module.
+  // Get the instance graph node for the old module.
   hw::InstanceGraphNode *node = instanceGraph.lookup(oldMod);
+  assert(!node->noUses() &&
+         "expected module for inlining to be instantiated at least once");
+
+  // Iterate through each instance of the module.
   OpBuilder b(oldMod);
   bool allInlined = true;
   for (hw::InstanceRecord *use : llvm::make_early_inc_range(node->uses())) {
@@ -413,9 +430,14 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
     // Inline the body at the instantiation site.
     hw::HWModuleOp instParent =
         cast<hw::HWModuleOp>(use->getParent()->getModule());
+    hw::InstanceGraphNode *instParentNode = instanceGraph.lookup(instParent);
     SmallVector<Operation *, 16> lateBoundOps;
     b.setInsertionPoint(inst);
     for (auto &op : *oldMod.getBodyBlock()) {
+      // If the op was erased by instance extraction, don't copy it over.
+      if (opsToErase.contains(&op))
+        continue;
+
       // For instances in the bind table, update the bind with the new parent.
       if (auto innerInst = dyn_cast<hw::InstanceOp>(op)) {
         if (auto innerInstSym = innerInst.getInnerSymAttr()) {
@@ -437,6 +459,14 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
         // remember to revisit this op.
         if (hasOoOArgs(instParent, clonedOp))
           lateBoundOps.push_back(clonedOp);
+
+        // If the cloned op is an instance, record it within the new parent in
+        // the instance graph.
+        if (auto innerInst = dyn_cast<hw::InstanceOp>(clonedOp)) {
+          hw::InstanceGraphNode *innerInstModule =
+              instanceGraph.lookup(innerInst.getModuleNameAttr().getAttr());
+          instParentNode->addInstance(innerInst, innerInstModule);
+        }
       }
     }
 
@@ -521,8 +551,13 @@ private:
     BlockAndValueMapping cutMap;
     auto bmod = createModuleForCut(module, inputs, cutMap, suffix, path,
                                    bindFile, bindTable);
+
+    // Register the newly created module in the instance graph.
+    instanceGraph->addModule(bmod);
+
     // do the clone
-    migrateOps(module, bmod, opsToClone, cutMap);
+    migrateOps(module, bmod, opsToClone, cutMap, *instanceGraph);
+
     // erase old operations of interest eagerly, removing from erase set.
     for (auto *op : roots) {
       opsToErase.erase(op);
@@ -542,6 +577,8 @@ private:
     // Check each module that had instances extracted.
     for (auto &pair : extractedInstances) {
       hw::InstanceGraphNode *node = instanceGraph.lookup(pair.first);
+      assert(!node->noUses() && "expected module whose instances were "
+                                "extracted to be instantiated at least once");
 
       // See if all instances were extracted.
       bool allInstancesExtracted = true;
@@ -561,11 +598,16 @@ private:
 
   // Map from module name to set of extracted instances for that module.
   DenseMap<StringAttr, SmallPtrSet<Operation *, 32>> extractedInstances;
+
+  // Instance graph we are using and maintaining.
+  hw::InstanceGraph *instanceGraph = nullptr;
 };
 
 } // end anonymous namespace
 
 void SVExtractTestCodeImplPass::runOnOperation() {
+  this->instanceGraph = &getAnalysis<circt::hw::InstanceGraph>();
+
   auto top = getOperation();
   auto *topLevelModule = top.getBody();
   auto assertDir =
@@ -601,6 +643,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
     if (auto error = dyn_cast<ErrorOp>(op)) {
       if (auto message = error.getMessage())
         return message->startswith("assert:") ||
+               message->startswith("assert failed (verification library)") ||
                message->startswith("Assertion failed") ||
                message->startswith("assertNotX:") ||
                message->contains("[verif-library-assert]");
@@ -625,8 +668,6 @@ void SVExtractTestCodeImplPass::runOnOperation() {
     return isa<CoverOp>(op) || isa<CoverConcurrentOp>(op);
   };
 
-  auto &instanceGraph = getAnalysis<circt::hw::InstanceGraph>();
-
   BindTable bindTable;
   for (auto &op : llvm::make_early_inc_range(topLevelModule->getOperations())) {
     if (auto rtlmod = dyn_cast<hw::HWModuleOp>(op)) {
@@ -635,7 +676,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       // module is bound, then extraction is skipped.  This avoids problems
       // where certain simulators dislike having binds that target bound
       // modules.
-      if (isBound(rtlmod, instanceGraph))
+      if (isBound(rtlmod, *instanceGraph))
         continue;
 
       // In the module is in test harness, we don't have to extract from it.
@@ -655,7 +696,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
 
       // Inline any modules that only have inputs for test code.
       if (!disableModuleInlining && anyThingExtracted)
-        inlineInputOnly(rtlmod, instanceGraph, bindTable, opsToErase);
+        inlineInputOnly(rtlmod, *instanceGraph, bindTable, opsToErase);
 
       // Erase any instances that were extracted, and their forward dataflow.
       // Also erase old instances that were inlined and can now be cleaned up.
@@ -673,7 +714,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
 
   // After all instances are processed, move any modules that had all instances
   // extracted to the testbench path.
-  maybeMoveExtractedModules(instanceGraph, testBenchDir);
+  maybeMoveExtractedModules(*instanceGraph, testBenchDir);
 
   // We have to wait until all the instances are processed to clean up the
   // annotations.
@@ -684,6 +725,8 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       op.removeAttr("firrtl.extract.assume.extra");
     }
   top->removeAttr("firrtl.extract.testbench");
+
+  markAnalysesPreserved<circt::hw::InstanceGraph>();
 }
 
 std::unique_ptr<Pass>
