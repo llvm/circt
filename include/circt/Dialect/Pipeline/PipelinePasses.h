@@ -20,6 +20,7 @@ namespace circt {
 namespace pipeline {
 
 std::unique_ptr<mlir::Pass> createExplicitRegsPass();
+std::unique_ptr<mlir::Pass> createScheduleLinearPipelinePass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

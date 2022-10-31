@@ -156,3 +156,26 @@ void scheduling::dumpAsDOT(Problem &prob, StringRef fileName) {
   os << "}\n";
   out.close();
 }
+
+std::optional<DenseMap<StringAttr, OperatorInfo>>
+scheduling::getOperatorInfo(Operation *op) {
+  auto operatorTypesAttr =
+      op->getAttrOfType<ArrayAttr>("scheduling.operator_info");
+
+  if (!operatorTypesAttr)
+    return {};
+
+  DenseMap<StringAttr, OperatorInfo> operatorInfo;
+  for (auto attr : operatorTypesAttr) {
+    auto operatorTypeAttr = attr.cast<DictionaryAttr>();
+    OperatorInfo info;
+    info.name = operatorTypeAttr.get("name").cast<StringAttr>();
+    info.latency = operatorTypeAttr.get("latency").cast<IntegerAttr>();
+    info.incomingDelay =
+        operatorTypeAttr.get("incdelay").dyn_cast_or_null<FloatAttr>();
+    info.outgoingDelay =
+        operatorTypeAttr.get("outdelay").dyn_cast_or_null<FloatAttr>();
+    operatorInfo[info.name] = info;
+  }
+  return operatorInfo;
+}

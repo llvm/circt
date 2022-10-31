@@ -50,6 +50,16 @@ LogicalResult computeStartTimesInCycle(ChainingProblem &prob);
 /// Export \p prob as a DOT graph into \p fileName.
 void dumpAsDOT(Problem &prob, StringRef fileName);
 
+struct OperatorInfo {
+  StringAttr name;
+  IntegerAttr latency;
+  FloatAttr incomingDelay;
+  FloatAttr outgoingDelay;
+};
+/// Parse operator info from a 'scheduling.operator_info' attribute.
+std::optional<DenseMap<StringAttr, OperatorInfo>>
+getOperatorInfo(Operation *op);
+
 } // namespace scheduling
 } // namespace circt
 
