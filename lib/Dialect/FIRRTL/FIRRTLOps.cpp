@@ -584,6 +584,7 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   op->setAttr("portNames", ArrayAttr::get(op.getContext(), newPortNames));
   op->setAttr("portAnnotations", ArrayAttr::get(op.getContext(), newPortAnnos));
   op->setAttr("portTypes", ArrayAttr::get(op.getContext(), newPortTypes));
+  FModuleLike::fixupPortSymsArray(newPortSyms, op.getContext());
   op->setAttr("portSyms", ArrayAttr::get(op.getContext(), newPortSyms));
 }
 
