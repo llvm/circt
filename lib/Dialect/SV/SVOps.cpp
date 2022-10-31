@@ -1057,45 +1057,12 @@ LogicalResult PAssignOp::verify() {
   return success();
 }
 
-// Return true if lhs + offset = rhs.
-static bool isOffset(Value lhs, uint64_t offset, Value rhs) {
-  if (auto constBase = lhs.getDefiningOp<hw::ConstantOp>()) {
-    if (auto constIndex = rhs.getDefiningOp<hw::ConstantOp>()) {
-      // If both values are a constant, check if index == base + offset.
-      // To account for overflow, the addition is performed with an extra bit
-      // and the offset is asserted to fit in the bit width of the base.
-      auto baseValue = constBase.getValue();
-      auto indexValue = constIndex.getValue();
-
-      unsigned bits = baseValue.getBitWidth();
-      assert(bits == indexValue.getBitWidth() && "mismatched widths");
-
-      if (bits < 64 && offset >= (1ull << bits))
-        return false;
-
-      APInt baseExt = baseValue.zextOrTrunc(bits + 1);
-      APInt indexExt = indexValue.zextOrTrunc(bits + 1);
-      return baseExt + offset == indexExt;
-    }
-  }
-  return false;
-}
-
 namespace {
 // This represents a slice of an array.
 struct ArraySlice {
   Value array;
   Value start;
-
   size_t size; // Represent a range array[start, start + size).
-
-  bool isMergableSlice(const ArraySlice &rhs) const {
-    // A parent array must be same.
-    if (array != rhs.array)
-      return false;
-    // Check that `start + size == rhs.start`.
-    return isOffset(start, size, rhs.start);
-  }
 
   // Get a struct from the value. Return std::nullopt if the value doesn't
   // represent an array slice.
@@ -1136,20 +1103,20 @@ struct ArraySlice {
             })
         .Default([](auto) { return std::nullopt; });
   }
+
+  static std::optional<std::pair<ArraySlice, ArraySlice>>
+  getAssignedRange(Operation *op) {
+    auto srcRange = ArraySlice::getArraySlice(op->getOperand(1));
+    if (!srcRange)
+      return std::nullopt;
+    auto destRange = ArraySlice::getArraySlice(op->getOperand(0));
+    if (!destRange)
+      return std::nullopt;
+
+    return std::make_pair(*destRange, *srcRange);
+  }
 };
 } // namespace
-
-static std::optional<std::pair<ArraySlice, ArraySlice>>
-getAssignedRange(Operation *op) {
-  auto srcRange = ArraySlice::getArraySlice(op->getOperand(1));
-  if (!srcRange)
-    return std::nullopt;
-  auto destRange = ArraySlice::getArraySlice(op->getOperand(0));
-  if (!destRange)
-    return std::nullopt;
-
-  return std::make_pair(*destRange, *srcRange);
-}
 
 // This canonicalization merges neiboring assignments of array elements into
 // array slice assignments. e.g.
@@ -1160,36 +1127,47 @@ getAssignedRange(Operation *op) {
 template <typename AssignTy>
 static LogicalResult mergeNeiboringAssignments(AssignTy op,
                                                PatternRewriter &rewriter) {
-  // Check that a next operation is a same kind of the assignment.
-  AssignTy nextAssign = dyn_cast_or_null<AssignTy>(op->getNextNode());
-  if (!nextAssign)
-    return failure();
-
   // Get assigned ranges of each assignment.
-  auto assignedRange = getAssignedRange(op);
-  auto nextAssignedRange = getAssignedRange(nextAssign);
-  if (!assignedRange || !nextAssignedRange)
+  auto assignedRangeOpt = ArraySlice::getAssignedRange(op);
+  if (!assignedRangeOpt)
     return failure();
 
-  auto [dest, src] = *assignedRange;
-  auto [nextDest, nextSrc] = *nextAssignedRange;
+  auto [dest, src] = *assignedRangeOpt;
+  AssignTy nextAssign = dyn_cast_or_null<AssignTy>(op->getNextNode());
+  bool changed = false;
+  SmallVector<Location> loc{op.getLoc()};
+  // Check that a next operation is a same kind of the assignment.
+  while (nextAssign) {
+    auto nextAssignedRange = ArraySlice::getAssignedRange(nextAssign);
+    if (!nextAssignedRange)
+      break;
+    auto [nextDest, nextSrc] = *nextAssignedRange;
+    // Check that these assignments are mergable.
+    if (dest.array != nextDest.array || src.array != nextSrc.array ||
+        !hw::isOffset(dest.start, nextDest.start, dest.size) ||
+        !hw::isOffset(src.start, nextSrc.start, src.size))
+      break;
 
-  // Check that these assignments are mergable.
-  if (!dest.isMergableSlice(nextDest) || !src.isMergableSlice(nextSrc))
+    dest.size += nextDest.size;
+    src.size += nextSrc.size;
+    changed = true;
+    loc.push_back(nextAssign.getLoc());
+    rewriter.eraseOp(nextAssign);
+    nextAssign = dyn_cast_or_null<AssignTy>(op->getNextNode());
+  }
+
+  if (!changed)
     return failure();
-
-  auto width = dest.size + nextDest.size;
 
   // From here, construct assignments of array slices.
   auto resultType = hw::ArrayType::get(
       hw::type_cast<hw::ArrayType>(src.array.getType()).getElementType(),
-      width);
+      src.size);
   auto newDest = rewriter.create<sv::IndexedPartSelectInOutOp>(
-      op.getLoc(), dest.array, dest.start, width);
+      op.getLoc(), dest.array, dest.start, dest.size);
   auto newSrc = rewriter.create<hw::ArraySliceOp>(op.getLoc(), resultType,
                                                   src.array, src.start);
-  auto newLoc = rewriter.getFusedLoc({op.getLoc(), nextAssign.getLoc()});
-  rewriter.eraseOp(nextAssign);
+  auto newLoc = rewriter.getFusedLoc(loc);
   auto newOp = rewriter.replaceOpWithNewOp<AssignTy>(op, newDest, newSrc);
   newOp->setLoc(newLoc);
   return success();
