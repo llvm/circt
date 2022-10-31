@@ -258,4 +258,14 @@ systemc.module @MemberAccess () {
   }
 }
 
+// CHECK-LABEL: sensitivities
+systemc.module @sensitivities(%in: !systemc.in<i1>, %inout: !systemc.inout<i1>) {
+  systemc.ctor {
+    // CHECK: sensitive << in << inout;
+    systemc.sensitive %in, %inout : !systemc.in<i1>, !systemc.inout<i1>
+    // CHECK-NEXT: }
+    systemc.sensitive
+  }
+}
+
 // CHECK: #endif // STDOUT_H

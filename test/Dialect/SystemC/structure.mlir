@@ -164,3 +164,14 @@ systemc.module @verilatorInteropInSystemCModule() {
   // CHECK-NEXT: systemc.interop.verilated "verilated" @inst () -> ()
   systemc.interop.verilated "verilated" @inst () -> ()
 }
+
+// CHECK-LABEL: @sensitivity
+systemc.module @sensitivity (%in: !systemc.in<i1>, %out: !systemc.out<i1>, %inout: !systemc.inout<i1>) {
+  %signal = systemc.signal : !systemc.signal<i1>
+  systemc.ctor {
+    // CHECK: systemc.sensitive %in, %out, %inout, %signal : !systemc.in<i1>, !systemc.out<i1>, !systemc.inout<i1>, !systemc.signal<i1>
+    systemc.sensitive %in, %out, %inout, %signal : !systemc.in<i1>, !systemc.out<i1>, !systemc.inout<i1>, !systemc.signal<i1>
+    // CHECK-NEXT: systemc.sensitive
+    systemc.sensitive
+  }
+}

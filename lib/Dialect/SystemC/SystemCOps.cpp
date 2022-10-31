@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -555,6 +556,20 @@ StringRef BindPortOp::getPortName() {
       .cast<ModuleType>()
       .getPorts()[getPortId().getZExtValue()]
       .name.getValue();
+}
+
+//===----------------------------------------------------------------------===//
+// SensitiveOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SensitiveOp::canonicalize(SensitiveOp op,
+                                        PatternRewriter &rewriter) {
+  if (op.getSensitivities().empty()) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//

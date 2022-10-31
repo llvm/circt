@@ -180,6 +180,26 @@ struct MethodEmitter : OpEmissionPattern<MethodOp> {
   }
 };
 
+/// Emit a systemc.sensitive operation by using the 'sensitive' data member;
+struct SensitiveEmitter : OpEmissionPattern<SensitiveOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  void emitStatement(SensitiveOp op, EmissionPrinter &p) override {
+    if (op.getSensitivities().empty())
+      return;
+
+    p << "sensitive << ";
+    llvm::interleave(
+        op.getSensitivities(), p,
+        [&](Value sensitive) {
+          p.getInlinable(sensitive).emitWithParensOnLowerPrecedence(
+              Precedence::SHL);
+        },
+        " << ");
+    p << ";\n";
+  }
+};
+
 /// Emit a systemc.thread operation by using the SC_THREAD macro.
 struct ThreadEmitter : OpEmissionPattern<ThreadOp> {
   using OpEmissionPattern::OpEmissionPattern;
@@ -555,18 +575,17 @@ struct DynIntegerTypeEmitter : public TypeEmissionPattern<Ty> {
 
 void circt::ExportSystemC::populateSystemCOpEmitters(
     OpEmissionPatternSet &patterns, MLIRContext *context) {
-  patterns.add<SCModuleEmitter, CtorEmitter, SCFuncEmitter, MethodEmitter,
-               ThreadEmitter,
-               // Signal and port related emitters
-               SignalWriteEmitter, SignalReadEmitter, SignalEmitter,
-               // Instance-related emitters
-               InstanceDeclEmitter, BindPortEmitter,
-               // CPP-level operation emitters
-               AssignEmitter, VariableEmitter, NewEmitter, DestructorEmitter,
-               DeleteEmitter, MemberAccessEmitter,
-               // Function related emitters
-               FuncEmitter, ReturnEmitter, CallEmitter, CallIndirectEmitter>(
-      context);
+  patterns.add<
+      SCModuleEmitter, CtorEmitter, SCFuncEmitter, MethodEmitter, ThreadEmitter,
+      // Signal and port related emitters
+      SignalWriteEmitter, SignalReadEmitter, SignalEmitter, SensitiveEmitter,
+      // Instance-related emitters
+      InstanceDeclEmitter, BindPortEmitter,
+      // CPP-level operation emitters
+      AssignEmitter, VariableEmitter, NewEmitter, DestructorEmitter,
+      DeleteEmitter, MemberAccessEmitter,
+      // Function related emitters
+      FuncEmitter, ReturnEmitter, CallEmitter, CallIndirectEmitter>(context);
 }
 
 void circt::ExportSystemC::populateSystemCTypeEmitters(

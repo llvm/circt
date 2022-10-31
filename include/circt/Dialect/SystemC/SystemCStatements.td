@@ -69,6 +69,28 @@ def ThreadOp : SystemCOp<"thread", []> {
   let assemblyFormat = "$funcHandle attr-dict";
 }
 
+def SensitiveOp : SystemCOp<"sensitive", [HasParent<"CtorOp">]> {
+  let summary = "Describes the static sensitivity of an unspawned process.";
+  let description = [{
+    This operation allows to specify the static sensitivity of unspawned
+    processes. An unspawned process is one created by the `SC_METHOD`,
+    `SC_THREAD`, or `SC_CTHREAD` macro. The operands to this operation are
+    registered as sensitivities to the process last created (in control-flow
+    order).
+    Each `SC_MODULE` contains an instance of the `sc_sensitive` class to do the
+    registration. For a description of the `sc_sensitive` class refer to
+    IEEE 1666-2011 §5.4. For a description of the `sensitive` data member of
+    `SC_MODULE` refer to IEEE 1666-2011 §5.2.14.
+  }];
+
+  let arguments = (ins Variadic<ChannelType>:$sensitivities);
+  let assemblyFormat = [{
+    $sensitivities attr-dict ( `:` qualified(type($sensitivities))^ )?
+  }];
+
+  let hasCanonicalizeMethod = 1;
+}
+
 def InstanceDeclOp : SystemCOp<"instance.decl", [
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
   DeclareOpInterfaceMethods<HWInstanceLike>,

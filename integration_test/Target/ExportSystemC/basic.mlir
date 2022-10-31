@@ -115,3 +115,11 @@ systemc.module @MemberAccess () {
     systemc.cpp.assign %result = %2 : !emitc.opaque<"int">
   }
 }
+
+systemc.module @Sensitive (%in: !systemc.in<i1>, %inout: !systemc.inout<i1>) {
+  systemc.ctor {
+    systemc.method %update
+    systemc.sensitive %in, %inout : !systemc.in<i1>, !systemc.inout<i1>
+  }
+  %update = systemc.func {}
+}

@@ -26,6 +26,7 @@ hw.module @onlyOutputs () -> (sum: i32) {
 hw.module @adder (%a: i32, %b: i32) -> (sum: i32) {
   // CHECK-NEXT: systemc.ctor {
   // CHECK-NEXT:   systemc.method %innerLogic
+  // CHECK-NEXT:   systemc.sensitive %a, %b : !systemc.in<!systemc.uint<32>>, !systemc.in<!systemc.uint<32>>
   // CHECK-NEXT: }
   // CHECK-NEXT: %innerLogic = systemc.func  {
   // CHECK-NEXT:   [[A:%.+]] = systemc.signal.read %a : !systemc.in<!systemc.uint<32>>
@@ -76,6 +77,7 @@ hw.module @instanceLowering (%port0: i32) -> (out0: i16, out1: i32, out2: i64) {
 // CHECK-NEXT:    %inst2_out2 = systemc.signal  : !systemc.signal<!systemc.uint<64>>
 // CHECK-NEXT:    systemc.ctor {
 // CHECK-NEXT:      systemc.method [[UPDATEFUNC:%.+]]
+// CHECK-NEXT:      systemc.sensitive %port0 : !systemc.in<!systemc.uint<32>>
 // CHECK-NEXT:      systemc.instance.bind_port %inst1["in0"] to %inst1_in0 : !systemc.module<submodule(in0: !systemc.in<!systemc.uint<16>>, in1: !systemc.in<!systemc.uint<32>>, out0: !systemc.out<!systemc.uint<16>>, out1: !systemc.out<!systemc.uint<32>>, out2: !systemc.out<!systemc.uint<64>>)>, !systemc.signal<!systemc.uint<16>>
 // CHECK-NEXT:      systemc.instance.bind_port %inst1["in1"] to %inst1_in1 : !systemc.module<submodule(in0: !systemc.in<!systemc.uint<16>>, in1: !systemc.in<!systemc.uint<32>>, out0: !systemc.out<!systemc.uint<16>>, out1: !systemc.out<!systemc.uint<32>>, out2: !systemc.out<!systemc.uint<64>>)>, !systemc.signal<!systemc.uint<32>>
 // CHECK-NEXT:      systemc.instance.bind_port %inst1["out0"] to %inst1_out0 : !systemc.module<submodule(in0: !systemc.in<!systemc.uint<16>>, in1: !systemc.in<!systemc.uint<32>>, out0: !systemc.out<!systemc.uint<16>>, out1: !systemc.out<!systemc.uint<32>>, out2: !systemc.out<!systemc.uint<64>>)>, !systemc.signal<!systemc.uint<16>>
