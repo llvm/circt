@@ -300,7 +300,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   // Propagate the reachable RefSendOp across modules.
   LogicalResult handleInstanceOp(InstanceOp inst) {
-    auto mod = inst.getReferencedModule();
+    auto *mod = inst.getReferencedModule();
     if (auto extRefMod = dyn_cast<FExtModuleOp>(mod)) {
       // Extern modules can generate RefType ports, they have an attached
       // attribute which specifies the internal path into the extern module.

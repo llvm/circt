@@ -316,8 +316,7 @@ Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
   if (auto extMod = dyn_cast<FExtModuleOp>((Operation *)mod)) {
     // The extern module can have other internal paths attached to it,
     // append this to them.
-    auto internalPaths = extMod.getInternalPaths();
-    SmallVector<Attribute> paths(internalPaths.begin(), internalPaths.end());
+    SmallVector<Attribute> paths(extMod.getInternalPathsAttr().getValue());
     paths.push_back(internalPathAttr);
     extMod.setInternalPathsAttr(builder.getArrayAttr(paths));
   } else if (auto intMod = dyn_cast<FModuleOp>((Operation *)mod)) {
