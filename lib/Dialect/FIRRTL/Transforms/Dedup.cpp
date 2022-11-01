@@ -53,8 +53,8 @@ llvm::raw_ostream &printHash(llvm::raw_ostream &stream, llvm::SHA256 &data) {
 }
 
 llvm::raw_ostream &printHash(llvm::raw_ostream &stream, std::string data) {
-  ArrayRef bytes(reinterpret_cast<const uint8_t *>(data.c_str()),
-                 data.length());
+  ArrayRef<uint8_t> bytes(reinterpret_cast<const uint8_t *>(data.c_str()),
+                          data.length());
   return printHex(stream, bytes);
 }
 
@@ -86,12 +86,12 @@ private:
 
   void update(const void *pointer) {
     auto *addr = reinterpret_cast<const uint8_t *>(&pointer);
-    sha.update(ArrayRef(addr, sizeof pointer));
+    sha.update(ArrayRef<uint8_t>(addr, sizeof pointer));
   }
 
   void update(size_t value) {
     auto *addr = reinterpret_cast<const uint8_t *>(&value);
-    sha.update(ArrayRef(addr, sizeof value));
+    sha.update(ArrayRef<uint8_t>(addr, sizeof value));
   }
 
   void update(TypeID typeID) { update(typeID.getAsOpaquePointer()); }
@@ -851,7 +851,8 @@ private:
           }
           auto nonLocalIndex = std::distance(anno.begin(), it);
           // Clone the annotation and add it to the list of new annotations.
-          cloneAnnotation(nlaRefs, anno, ArrayRef(anno.begin(), anno.end()),
+          cloneAnnotation(nlaRefs, anno,
+                          ArrayRef<NamedAttribute>(anno.begin(), anno.end()),
                           nonLocalIndex, newAnnotations);
         }
 
