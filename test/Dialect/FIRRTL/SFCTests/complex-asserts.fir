@@ -105,17 +105,17 @@ circuit Foo:
     ; CHECK-NEXT: `ifdef USE_PROPERTY_AS_CONSTRAINT
     ; CHECK-NEXT:   assume__verif_library: assume property (@(posedge clock) [[TMP1]]);
     ; CHECK-NEXT:   assume__verif_library_hello_world: assume property (@(posedge clock) [[TMP2]]);
-    ; CHECK-NEXT:   assume__verif_library_1: assume property (@(posedge clock) [[TMP3]]);
+    ; CHECK-NEXT:   assume__verif_library_0: assume property (@(posedge clock) [[TMP3]]);
     ; CHECK-NEXT: `endif
 
 
     ; assert with toggle option e.g. UNROnly
     ; CHECK-NEXT: `ifdef USE_UNR_ONLY_CONSTRAINTS
     ; CHECK-NEXT:   wire [[TMP4:.+]] = ~enable | predicate8 | reset;
-    ; CHECK-NEXT:   assert__verif_library_2: assert property (@(posedge clock) [[TMP4]])
+    ; CHECK-NEXT:   assert__verif_library_1: assert property (@(posedge clock) [[TMP4]])
     ; CHECK-SAME:     else $error("Assertion failed (verification library): Conditional compilation example for UNR-only assert");
     ; CHECK-NEXT:   `ifdef USE_PROPERTY_AS_CONSTRAINT
-    ; CHECK-NEXT:     assume__verif_library_3: assume property (@(posedge clock) [[TMP4]]);
+    ; CHECK-NEXT:     assume__verif_library_1: assume property (@(posedge clock) [[TMP4]]);
     ; CHECK-NEXT:   `endif
     when not(or(predicate8, asUInt(reset))) :
       printf(clock, enable, "foo [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"}],\"format\":{\"type\":\"sva\"},\"baseMsg\":\"Assertion failed (verification library): Conditional compilation example for UNR-only assert\"}</extraction-summary> bar")
@@ -141,10 +141,10 @@ circuit Foo:
     ; CHECK-NEXT: `ifdef USE_FORMAL_ONLY_CONSTRAINTS
     ; CHECK-NEXT:   `ifdef USE_UNR_ONLY_CONSTRAINTS
     ; CHECK-NEXT:     wire [[TMP5:.+]] = ~enable | predicate10 | reset;
-    ; CHECK-NEXT:     assert__verif_library_4: assert property (@(posedge clock) [[TMP5]])
+    ; CHECK-NEXT:     assert__verif_library_2: assert property (@(posedge clock) [[TMP5]])
     ; CHECK-SAME:       else $error("Assertion failed (verification library): Conditional compilation example for UNR-only and formal-only assert");
     ; CHECK-NEXT:     `ifdef USE_PROPERTY_AS_CONSTRAINT
-    ; CHECK-NEXT:       assume__verif_library_5: assume property (@(posedge clock) [[TMP5]]);
+    ; CHECK-NEXT:       assume__verif_library_2: assume property (@(posedge clock) [[TMP5]]);
     ; CHECK-NEXT:     `endif
     ; CHECK-NEXT:   `endif
     ; CHECK-NEXT: `endif

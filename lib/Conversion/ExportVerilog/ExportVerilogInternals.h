@@ -102,7 +102,7 @@ private:
   llvm::StringSet<> usedNames;
 
   /// Numeric suffix used as uniquification agent when resolving conflicts.
-  size_t nextGeneratedNameID = 0;
+  llvm::StringMap<size_t> nextGeneratedNameID;
 
   NameCollisionResolver(const NameCollisionResolver &) = delete;
   void operator=(const NameCollisionResolver &) = delete;

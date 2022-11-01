@@ -117,8 +117,8 @@ circuit Top : %[[
 
 ; CHECK: module Top(
 ; CHECK-NOT: module
-; CHECK:   wire [[tap_internalPath]] = int_1.io_out;
+; CHECK:   wire [[tap_internalPath]] = int_0.io_out;
 ; CHECK:   tap = Top.foo.b.inv;
 ; CHECK:   assign tap2 = Top.unsigned_0.signed_0.[[tap2_internalPath]];
-; CHECK:   InternalPathChild int_1 (
+; CHECK:   InternalPathChild int_0 (
 ; CHECK: endmodule

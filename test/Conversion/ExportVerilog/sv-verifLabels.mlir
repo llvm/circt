@@ -7,8 +7,8 @@ hw.module @foo(%clock: i1, %cond: i1) {
     // CHECK-OFF: assume(
     // CHECK-OFF: cover(
     // CHECK-ON:  assert_0: assert(
-    // CHECK-ON:  assume_1: assume(
-    // CHECK-ON:  cover_2: cover(
+    // CHECK-ON:  assume_0: assume(
+    // CHECK-ON:  cover_0: cover(
     sv.assert %cond, immediate
     sv.assume %cond, immediate
     sv.cover %cond, immediate
@@ -16,9 +16,9 @@ hw.module @foo(%clock: i1, %cond: i1) {
   // CHECK-OFF: assert property
   // CHECK-OFF: assume property
   // CHECK-OFF: cover property
-  // CHECK-ON:  assert_3: assert property
-  // CHECK-ON:  assume_4: assume property
-  // CHECK-ON:  cover_5: cover property
+  // CHECK-ON:  assert_1: assert property
+  // CHECK-ON:  assume_1: assume property
+  // CHECK-ON:  cover_1: cover property
   sv.assert.concurrent posedge %clock, %cond
   sv.assume.concurrent posedge %clock, %cond
   sv.cover.concurrent posedge %clock, %cond
@@ -49,7 +49,7 @@ hw.module @foo(%clock: i1, %cond: i1) {
   // implicit labels to change, even if they appear earlier in the output.
   sv.initial {
     // CHECK-OFF: assert_0: assert(
-    // CHECK-ON:  assert_0_6: assert(
+    // CHECK-ON:  assert_0_0: assert(
     // CHECK-OFF: assume_2: assume(
     // CHECK-ON:  assume_2: assume(
     // CHECK-OFF: cover_4: cover(

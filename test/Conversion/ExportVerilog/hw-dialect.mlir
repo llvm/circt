@@ -1064,7 +1064,7 @@ hw.module @parameters<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8) {
   %p1 = sv.wire : !hw.inout<i4>
 
   %out = sv.wire : !hw.inout<i4>
-  // CHECK: wire [3:0] out_1;
+  // CHECK: wire [3:0] out_0;
   hw.output %arg0 : i8
 }
 

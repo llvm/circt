@@ -38,7 +38,8 @@ StringAttr ExportVerilog::getDeclarationName(Operation *op) {
 /// Given a name that may have collisions or invalid symbols, return a
 /// replacement name to use, or null if the original name was ok.
 StringRef NameCollisionResolver::getLegalName(StringRef originalName) {
-  return legalizeName(originalName, usedNames, nextGeneratedNameID);
+  return legalizeName(originalName, usedNames,
+                      nextGeneratedNameID[originalName]);
 }
 
 //===----------------------------------------------------------------------===//
