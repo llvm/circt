@@ -207,6 +207,9 @@ StringAttr getArgSym(Operation *op, unsigned i);
 /// argument.
 StringAttr getResultSym(Operation *op, unsigned i);
 
+// Check whether an integer value is an offset from a base.
+bool isOffset(Value base, Value index, uint64_t offset);
+
 // A class for providing access to the in- and output ports of a module through
 // use of the HWModuleBuilder.
 class HWModulePortAccessor {
