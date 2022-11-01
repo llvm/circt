@@ -136,20 +136,6 @@ public:
     add<BeginToken>(offset, Breaks::Inconsistent, style);
   }
 
-  /// Open a cbox that closes when returned object goes out of scope.
-  [[nodiscard]] auto scopedCBox(int32_t offset = 0,
-                                IndentStyle style = IndentStyle::Visual) {
-    cbox(offset, style);
-    return llvm::make_scope_exit([&]() { end(); });
-  }
-
-  /// Open an ibox that closes when returned object goes out of scope.
-  [[nodiscard]] auto scopedIBox(int32_t offset = 0,
-                                IndentStyle style = IndentStyle::Visual) {
-    ibox(offset, style);
-    return llvm::make_scope_exit([&]() { end(); });
-  }
-
   /// End a group.
   void end() { add<EndToken>(); }
 };

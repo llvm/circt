@@ -334,12 +334,13 @@ TEST(PrettyPrinterTest, Builder) {
   PrettyPrinter pp(os, 7);
   PPBuilder<> b(pp);
   {
-    auto ib = b.scopedIBox();
+    b.ibox();
     b.literal("test");
     b.space();
     b.literal("test");
     b.space();
     b.literal("test");
+    b.end();
   }
   EXPECT_EQ(out.str(), StringRef("test\ntest\ntest"));
 }
@@ -352,8 +353,8 @@ TEST(PrettyPrinterTest, Stream) {
   PPBuilderStringSaver saver;
   PPStream<> ps(pp, saver);
   {
-    auto ib = ps.scopedIBox();
-    ps << "test" << PP::space << "test" << PP::space << "test";
+    ps << PP::ibox0 << "test" << PP::space << "test" << PP::space << "test"
+       << PP::end;
   }
   ps << PP::eof;
   EXPECT_EQ(out.str(), StringRef("test test test"));
@@ -368,10 +369,11 @@ TEST(PrettyPrinterTest, StreamQuoted) {
   PPStream<> ps(pp, saver);
   out = "\n";
   {
-    auto ib = ps.scopedIBox(2);
+    ps << PP::ibox2;
     ps << "test" << PP::space;
     ps.writeQuotedEscaped("quote\"me");
     ps << PP::space << "test";
+    ps << PP::end;
   }
   ps << PP::newline << PP::eof;
   EXPECT_EQ(out.str(), StringRef(R"""(
@@ -541,11 +543,12 @@ TEST(PrettyPrinterTest, Expr) {
   auto sumExpr = [](auto &ps) {
     ps << "(";
     {
-      auto ib = ps.scopedIBox(0);
+      ps << PP::ibox0;
       auto vars = {"a", "b", "c", "d", "e", "f"};
       llvm::interleave(
           vars, [&](const char *each) { ps << each; },
           [&]() { ps << PP::space << "+" << PP::space; });
+      ps << PP::end;
     }
     ps << ")";
   };
@@ -556,14 +559,15 @@ TEST(PrettyPrinterTest, Expr) {
     PPStream<> ps(pp, saver);
     out = "\n";
     {
-      auto ib = ps.scopedIBox(2);
+      ps << PP::ibox2;
       ps << "assign" << PP::nbsp << id << PP::nbsp << "=";
       ps << PP::space;
-      auto ib3 = ps.scopedIBox(0);
+      ps << PP::ibox0;
       sumExpr(ps);
       ps << PP::space << "*" << PP::space;
       sumExpr(ps);
       ps << ";";
+      ps << PP::end << PP::end;
     }
     ps << PP::newline << PP::eof;
   };
