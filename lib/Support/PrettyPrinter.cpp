@@ -230,14 +230,16 @@ void PrettyPrinter::advanceLeft() {
   }
 }
 
+/// Compute indentation w/o overflow, clamp to [0,maxStartingIndent].
+/// Output looks better if we don't stop indenting entirely at target width,
+/// but don't do this indefinitely.
+static uint32_t computeNewIndent(ssize_t newIndent, int32_t offset,
+                                 uint32_t maxStartingIndent) {
+  return std::clamp<ssize_t>(newIndent + offset, 0, maxStartingIndent);
+}
+
 /// Print a token, maintaining printStack for context.
 void PrettyPrinter::print(FormattedToken f) {
-  // Ensure indentation computations don't overflow, and clamp to [0,4*margin].
-  // Output looks better if we don't stop indenting entirely at target width,
-  // but don't do this indefinitely.
-  auto computeNewIndent = [&](ssize_t newIndent, auto offset) {
-    return std::clamp<ssize_t>(newIndent + offset, 0, margin << 2);
-  };
   llvm::TypeSwitch<Token *, void>(&f.token)
       .Case([&](StringToken *s) {
         space -= f.size;
@@ -258,7 +260,8 @@ void PrettyPrinter::print(FormattedToken f) {
           pendingIndentation += b->spaces();
         } else {
           os << "\n";
-          pendingIndentation = computeNewIndent(indent, b->offset());
+          pendingIndentation =
+              computeNewIndent(indent, b->offset(), maxStartingIndent);
           space = margin - pendingIndentation;
         }
       })
@@ -273,7 +276,7 @@ void PrettyPrinter::print(FormattedToken f) {
           ssize_t newIndent = indent;
           if (b->style() == IndentStyle::Visual)
             newIndent = ssize_t{margin} - space;
-          indent = computeNewIndent(newIndent, b->offset());
+          indent = computeNewIndent(newIndent, b->offset(), maxStartingIndent);
           printStack.push_back({indent, breaks});
         } else {
           printStack.push_back({0, PrintBreaks::Fits});

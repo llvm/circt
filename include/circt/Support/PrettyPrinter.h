@@ -166,7 +166,7 @@ public:
                 uint32_t currentColumn = 0, Listener *listener = nullptr)
       : space(margin - std::max(currentColumn, baseIndent)),
         defaultFrame{baseIndent, PrintBreaks::Inconsistent}, indent(baseIndent),
-        margin(margin), os(os), listener(listener) {
+        margin(margin), maxStartingIndent(margin), os(os), listener(listener) {
     assert(margin < kInfinity / 2);
     assert(margin > baseIndent);
     assert(margin > currentColumn);
@@ -274,6 +274,11 @@ private:
 
   /// Target line width.
   const uint32_t margin;
+
+  /// Maximum starting indentation level (=margin).
+  /// Currently not configurable, but can be useful to continue indentation past
+  /// margin while still limiting how far is allowed.
+  const uint32_t maxStartingIndent;
 
   /// Output stream.
   llvm::raw_ostream &os;
