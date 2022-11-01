@@ -302,6 +302,7 @@ public:
   TokenStream &writeQuotedEscaped(StringRef str, bool useHexEscapes = false,
                                   StringRef left = "\"",
                                   StringRef right = "\"") {
+    // Add as a single StringToken.
     invokeWithStringOS([&](auto &os) {
       os << left;
       os.write_escaped(str, useHexEscapes);
