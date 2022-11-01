@@ -404,8 +404,6 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markOverdefined(verbatim.getResult());
     else if (auto verbatim = dyn_cast<VerbatimWireOp>(op))
       markOverdefined(verbatim.getResult());
-    else if (auto ref = dyn_cast<RefSendInternalPathOp>(op))
-      markOverdefined(ref);
   }
 }
 

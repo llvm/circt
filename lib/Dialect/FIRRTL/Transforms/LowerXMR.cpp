@@ -302,6 +302,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       // attribute which specifies the internal path into the extern module.
       // This string attribute will be used to generate the final xmr.
       auto internalPaths = extRefMod.getInternalPaths();
+      // No internalPaths implies no RefType ports.
       if (internalPaths.empty())
         return success();
       size_t pathsIndex = 0;
@@ -317,7 +318,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         auto ind = addReachingSendsEntry(res.value(), inRef);
 
         xmrPathSuffix[ind] =
-            "." + internalPaths[pathsIndex].cast<StringAttr>().str();
+            internalPaths[pathsIndex].cast<StringAttr>().str();
         ++pathsIndex;
         // The instance result and module port must be marked for removal.
         if (refPortsToRemoveMap[inst].size() < numPorts)

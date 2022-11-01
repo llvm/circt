@@ -273,6 +273,74 @@ static FailureOr<Literal> parseIntegerLiteral(MLIRContext *context,
   return lit;
 }
 
+Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
+                            const AnnoPathValue &moduleTarget,
+                            const AnnoPathValue &target,
+                            StringAttr internalPathAttr, FIRRTLType targetType,
+                            ApplyState &state) {
+  Value sendVal;
+  FModuleLike mod = cast<FModuleLike>(moduleTarget.ref.getOp());
+  InstanceOp modInstance;
+  if (!moduleTarget.instances.empty()) {
+    modInstance = moduleTarget.instances.back();
+  } else {
+    auto *node = state.instancePathCache.instanceGraph.lookup(
+        cast<hw::HWModuleLike>((Operation *)mod));
+    if (!node->hasOneUse()) {
+      mod->emitOpError(
+          "cannot be used for DataTaps, it is instantiated multiple times");
+      return nullptr;
+    }
+    modInstance = cast<InstanceOp>((*node->uses().begin())->getInstance());
+  }
+  ImplicitLocOpBuilder builder(modInstance.getLoc(), modInstance);
+  builder.setInsertionPointAfter(modInstance);
+  auto portRefType = RefType::get(targetType.cast<FIRRTLBaseType>());
+  StringRef refName("ref");
+  // Add RefType ports corresponding to this "internalPath" to the external
+  // module. This also updates all the instances of the external module.
+  // This removes and replaces the instance, and returns the updated
+  // instance.
+  modInstance = addPortsToModule(
+      mod, modInstance, portRefType, Direction::Out, refName,
+      state.instancePathCache,
+      [&](FModuleLike mod) -> ModuleNamespace & {
+        return state.getNamespace(mod);
+      },
+      &state.targetCaches);
+  // Since the intance op genenerates the RefType output, no need of another
+  // RefSendOp.
+  sendVal = modInstance.getResults().back();
+  // Now set the instance as the source for the final datatap xmr.
+  srcTarget = AnnoPathValue(modInstance);
+  if (auto extMod = dyn_cast<FExtModuleOp>((Operation *)mod)) {
+    // The extern module can have other internal paths attached to it,
+    // append this to them.
+    auto internalPaths = extMod.getInternalPaths();
+    SmallVector<Attribute> paths(internalPaths.begin(), internalPaths.end());
+    paths.push_back(internalPathAttr);
+    extMod.setInternalPathsAttr(builder.getArrayAttr(paths));
+  } else if (auto intMod = dyn_cast<FModuleOp>((Operation *)mod)) {
+    auto builder = ImplicitLocOpBuilder::atBlockEnd(
+        intMod.getLoc(), &intMod.getBody().getBlocks().back());
+    auto pathStr = builder.create<VerbatimExprOp>(
+        portRefType.getType(), internalPathAttr.getValue(), ValueRange{});
+    auto sendPath = builder.create<RefSendOp>(pathStr);
+    builder.create<StrictConnectOp>(intMod.getArguments().back(),
+                                    sendPath.getResult());
+  }
+
+  if (!moduleTarget.instances.empty())
+    srcTarget.instances = moduleTarget.instances;
+  else {
+    auto path = state.instancePathCache
+                    .getAbsolutePaths(modInstance->getParentOfType<FModuleOp>())
+                    .back();
+    srcTarget.instances.append(path.begin(), path.end());
+  }
+  return sendVal;
+}
+
 LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
                                                   DictionaryAttr anno,
                                                   ApplyState &state) {
@@ -349,67 +417,14 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
           moduleTargetStr, state.circuit, state.symTbl, state.targetCaches);
       if (!moduleTarget)
         return failure();
-      FModuleLike mod = cast<FModuleLike>(moduleTarget->ref.getOp());
-      InstanceOp modInstance;
-      if (!moduleTarget->instances.empty()) {
-        modInstance = moduleTarget->instances.back();
-      } else {
-        auto *node = state.instancePathCache.instanceGraph.lookup(
-            cast<hw::HWModuleLike>((Operation *)mod));
-        if (!node->hasOneUse())
-          return mod->emitOpError(
-              "cannot be used for DataTaps, it is instantiated multiple times");
-        modInstance = cast<InstanceOp>((*node->uses().begin())->getInstance());
-      }
-      ImplicitLocOpBuilder builder(modInstance.getLoc(), modInstance);
-      builder.setInsertionPointAfter(modInstance);
-      auto portRefType = RefType::get(wireTarget->ref.getOp()
-                                          ->getResult(0)
-                                          .getType()
-                                          .cast<FIRRTLBaseType>());
-      StringRef refName("ref");
-      // Add RefType ports corresponding to this "internalPath" to the external
-      // module. This also updates all the instances of the external module.
-      // This removes and replaces the instance, and returns the updated
-      // instance.
-      modInstance = addPortsToModule(
-          mod, modInstance, portRefType, Direction::Out, refName,
-          state.instancePathCache,
-          [&](FModuleLike mod) -> ModuleNamespace & {
-            return state.getNamespace(mod);
-          },
-          &state.targetCaches);
-      // Since the intance op genenerates the RefType output, no need of another
-      // RefSendOp.
-      sendVal = modInstance.getResults().back();
-      // Now set the instance as the source for the final datatap xmr.
-      srcTarget = AnnoPathValue(modInstance);
-      if (auto extMod = dyn_cast<FExtModuleOp>((Operation *)mod)) {
-        // The extern module can have other internal paths attached to it,
-        // append this to them.
-        auto internalPaths = extMod.getInternalPaths();
-        SmallVector<Attribute> paths(internalPaths.begin(),
-                                     internalPaths.end());
-        paths.push_back(internalPathAttr);
-        extMod.setInternalPathsAttr(builder.getArrayAttr(paths));
-      } else if (auto intMod = dyn_cast<FModuleOp>((Operation *)mod)) {
-        auto builder = ImplicitLocOpBuilder::atBlockEnd(
-            intMod.getLoc(), &intMod.getBody().getBlocks().back());
-        auto sendPath = builder.create<RefSendInternalPathOp>(portRefType,
-                                                              internalPathAttr);
-        builder.create<StrictConnectOp>(intMod.getArguments().back(),
-                                        sendPath.getResult());
-      }
-
-      if (!moduleTarget->instances.empty())
-        srcTarget->instances = moduleTarget->instances;
-      else {
-        auto path =
-            state.instancePathCache
-                .getAbsolutePaths(modInstance->getParentOfType<FModuleOp>())
-                .back();
-        srcTarget->instances.append(path.begin(), path.end());
-      }
+      AnnoPathValue internalPathSrc;
+      sendVal = lowerInternalPathAnno(
+          internalPathSrc, *moduleTarget, target, internalPathAttr,
+          wireTarget->ref.getOp()->getResult(0).getType().cast<FIRRTLType>(),
+          state);
+      if (!sendVal)
+        return failure();
+      srcTarget = internalPathSrc;
     } else {
       // Now handle ReferenceDataTapKey. Get the source from annotation.
       auto sourceAttr =

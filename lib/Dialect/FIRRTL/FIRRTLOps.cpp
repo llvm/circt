@@ -4003,10 +4003,6 @@ void RefResolveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
-void RefSendInternalPathOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  genericAsmResultNames(*this, setNameFn);
-}
-
 void RefSendOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
