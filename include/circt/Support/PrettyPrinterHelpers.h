@@ -1,4 +1,4 @@
-//===- PrettyPrinterBuilder.h - Pretty printing builder -------------------===//
+//===- PrettyPrinterHelpers.h - Pretty printing helpers -------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_SUPPORT_PRETTYPRINTERBUILDER_H
-#define CIRCT_SUPPORT_PRETTYPRINTERBUILDER_H
+#ifndef CIRCT_SUPPORT_PRETTYPRINTERHELPERS_H
+#define CIRCT_SUPPORT_PRETTYPRINTERHELPERS_H
 
 #include "circt/Support/PrettyPrinter.h"
 #include "llvm/ADT/STLExtras.h"
@@ -67,7 +67,7 @@ struct BufferingPP {
 };
 
 //===----------------------------------------------------------------------===//
-// Convenience builders.
+// Convenience Token builders.
 //===----------------------------------------------------------------------===//
 
 namespace detail {
@@ -76,11 +76,11 @@ void emitNBSP(unsigned n, llvm::function_ref<void(Token)> add);
 
 /// Add convenience methods for generating pretty-printing tokens.
 template <typename PPTy = PrettyPrinter>
-class PPBuilder {
+class TokenBuilder {
   PPTy &pp;
 
 public:
-  PPBuilder(PPTy &pp) : pp(pp) {}
+  TokenBuilder(PPTy &pp) : pp(pp) {}
 
   //===- Add tokens -------------------------------------------------------===//
 
@@ -143,12 +143,12 @@ public:
 /// PrettyPrinter::Listener that saves strings while live.
 /// Once they're no longer referenced, memory is reset.
 /// Allows differentiating between strings to save and external strings.
-class PPBuilderStringSaver : public PrettyPrinter::Listener {
+class TokenStringSaver : public PrettyPrinter::Listener {
   llvm::BumpPtrAllocator alloc;
   llvm::StringSaver strings;
 
 public:
-  PPBuilderStringSaver() : strings(alloc) {}
+  TokenStringSaver() : strings(alloc) {}
 
   /// Add string, save in storage.
   [[nodiscard]] StringRef save(StringRef str) { return strings.save(str); }
@@ -161,7 +161,7 @@ public:
 // Streaming support.
 //===----------------------------------------------------------------------===//
 
-/// Send one of these to PPStream to add the corresponding token.
+/// Send one of these to TokenStream to add the corresponding token.
 /// See PPBuilder for details of each.
 enum class PP {
   cbox0,
@@ -189,47 +189,47 @@ struct PPSaveString {
   explicit PPSaveString(StringRef str) : str(str) {}
 };
 
-/// Wrap a PrettyPrinter with PPBuilder features as well as operator<<'s.
+/// Wrap a PrettyPrinter with TokenBuilder features as well as operator<<'s.
 /// String behavior:
 /// Strings streamed as `const char *` are assumed to have external storage,
 /// and StringRef's are saved until no longer needed.
 /// Use PPExtString() and PPSaveString() wrappers to specify/override behavior.
 template <typename PPTy = PrettyPrinter>
-class PPStream : public PPBuilder<PPTy> {
-  using Base = PPBuilder<PPTy>;
-  PPBuilderStringSaver &saver;
+class TokenStream : public TokenBuilder<PPTy> {
+  using Base = TokenBuilder<PPTy>;
+  TokenStringSaver &saver;
 
 public:
-  /// Create a PPStream using the specified PrettyPrinter and StringSaver
+  /// Create a TokenStream using the specified PrettyPrinter and StringSaver
   /// storage. Strings are saved in `saver`, which is generally the listener in
   /// the PrettyPrinter, but may not be (e.g., using BufferingPP).
-  PPStream(PPTy &pp, PPBuilderStringSaver &saver) : Base(pp), saver(saver) {}
+  TokenStream(PPTy &pp, TokenStringSaver &saver) : Base(pp), saver(saver) {}
 
   /// Add a string literal (external storage).
-  PPStream &operator<<(const char *s) {
+  TokenStream &operator<<(const char *s) {
     Base::literal(s);
     return *this;
   }
   /// Add a string token (saved to storage).
-  PPStream &operator<<(StringRef s) {
+  TokenStream &operator<<(StringRef s) {
     Base::template add<StringToken>(saver.save(s));
     return *this;
   }
 
   /// String has external storage.
-  PPStream &operator<<(const PPExtString &str) {
+  TokenStream &operator<<(const PPExtString &str) {
     Base::literal(str.str);
     return *this;
   }
 
   /// String must be saved.
-  PPStream &operator<<(const PPSaveString &str) {
+  TokenStream &operator<<(const PPSaveString &str) {
     Base::template add<StringToken>(saver.save(str.str));
     return *this;
   }
 
   /// Convenience for inline streaming of builder methods.
-  PPStream &operator<<(PP s) {
+  TokenStream &operator<<(PP s) {
     switch (s) {
     case PP::cbox0:
       Base::cbox(0);
@@ -269,7 +269,7 @@ public:
   }
 
   /// Stream support for user-created Token's.
-  PPStream &operator<<(Token t) {
+  TokenStream &operator<<(Token t) {
     Base::addToken(t);
     return *this;
   }
@@ -277,7 +277,7 @@ public:
   /// General-purpose "format this" helper, for types not supported by
   /// operator<< yet.
   template <typename T>
-  PPStream &addAsString(T &&t) {
+  TokenStream &addAsString(T &&t) {
     invokeWithStringOS([&](auto &os) { os << std::forward<T>(t); });
     return *this;
   }
@@ -296,11 +296,12 @@ public:
   }
 
   /// Write escaped versions of the string, saved in storage.
-  PPStream &writeEscaped(StringRef str, bool useHexEscapes = false) {
+  TokenStream &writeEscaped(StringRef str, bool useHexEscapes = false) {
     return writeQuotedEscaped(str, useHexEscapes, "", "");
   }
-  PPStream &writeQuotedEscaped(StringRef str, bool useHexEscapes = false,
-                               StringRef left = "\"", StringRef right = "\"") {
+  TokenStream &writeQuotedEscaped(StringRef str, bool useHexEscapes = false,
+                                  StringRef left = "\"",
+                                  StringRef right = "\"") {
     invokeWithStringOS([&](auto &os) {
       os << left;
       os.write_escaped(str, useHexEscapes);
@@ -313,4 +314,4 @@ public:
 } // end namespace pretty
 } // end namespace circt
 
-#endif // CIRCT_SUPPORT_PRETTYPRINTERBUILDER_H
+#endif // CIRCT_SUPPORT_PRETTYPRINTERHELPERS_H

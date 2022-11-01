@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Support/PrettyPrinter.h"
-#include "circt/Support/PrettyPrinterBuilder.h"
+#include "circt/Support/PrettyPrinterHelpers.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/raw_ostream.h"
@@ -332,7 +332,7 @@ TEST(PrettyPrinterTest, Builder) {
   raw_svector_ostream os(out);
 
   PrettyPrinter pp(os, 7);
-  PPBuilder<> b(pp);
+  TokenBuilder<> b(pp);
   {
     b.ibox();
     b.literal("test");
@@ -350,8 +350,8 @@ TEST(PrettyPrinterTest, Stream) {
   raw_svector_ostream os(out);
 
   PrettyPrinter pp(os, 20);
-  PPBuilderStringSaver saver;
-  PPStream<> ps(pp, saver);
+  TokenStringSaver saver;
+  TokenStream<> ps(pp, saver);
   {
     ps << PP::ibox0 << "test" << PP::space << "test" << PP::space << "test"
        << PP::end;
@@ -365,8 +365,8 @@ TEST(PrettyPrinterTest, StreamQuoted) {
   raw_svector_ostream os(out);
 
   PrettyPrinter pp(os, 20);
-  PPBuilderStringSaver saver;
-  PPStream<> ps(pp, saver);
+  TokenStringSaver saver;
+  TokenStream<> ps(pp, saver);
   out = "\n";
   {
     ps << PP::ibox2;
@@ -384,8 +384,8 @@ test "quote\"me"
 
 TEST(PrettyPrinterTest, LargeStream) {
   PrettyPrinter pp(llvm::nulls(), 20);
-  PPBuilderStringSaver saver;
-  PPStream<> ps(pp, saver);
+  TokenStringSaver saver;
+  TokenStream<> ps(pp, saver);
 
   for (uint32_t i = 1U << 20; i; --i)
     ps << "testingtesting" << PP::space;
@@ -393,8 +393,8 @@ TEST(PrettyPrinterTest, LargeStream) {
 
 TEST(PrettyPrinterTest, LargeStreamScan) {
   PrettyPrinter pp(llvm::nulls(), 20);
-  PPBuilderStringSaver saver;
-  PPStream<> ps(pp, saver);
+  TokenStringSaver saver;
+  TokenStream<> ps(pp, saver);
 
   // This triggers an assert w/o "rebase" support.
   ps << PP::cbox0;
@@ -410,8 +410,8 @@ TEST(PrettyPrinterTest, IndentStyle) {
 
   auto test = [&](auto margin, auto style) {
     PrettyPrinter pp(os, margin);
-    PPBuilderStringSaver saver;
-    PPStream<> ps(pp, saver);
+    TokenStringSaver saver;
+    TokenStream<> ps(pp, saver);
     out = "\n";
     {
       ps << "start" << PP::nbsp;
@@ -460,8 +460,8 @@ TEST(PrettyPrinterTest, FuncArgsBlock) {
 
   auto test = [&](auto margin) {
     PrettyPrinter pp(os, margin);
-    PPBuilderStringSaver saver;
-    PPStream<> ps(pp, saver);
+    TokenStringSaver saver;
+    TokenStream<> ps(pp, saver);
     out = "\n";
     {
       ps << "foo(";
@@ -504,8 +504,8 @@ TEST(PrettyPrinterTest, FuncArgsVisual) {
 
   auto test = [&](auto margin) {
     PrettyPrinter pp(os, margin);
-    PPBuilderStringSaver saver;
-    PPStream<> ps(pp, saver);
+    TokenStringSaver saver;
+    TokenStream<> ps(pp, saver);
     out = "\n";
     {
       ps << "foo(";
@@ -555,8 +555,8 @@ TEST(PrettyPrinterTest, Expr) {
 
   auto test = [&](const char *id, auto margin) {
     PrettyPrinter pp(os, margin);
-    PPBuilderStringSaver saver;
-    PPStream<> ps(pp, saver);
+    TokenStringSaver saver;
+    TokenStream<> ps(pp, saver);
     out = "\n";
     {
       ps << PP::ibox2;
@@ -768,7 +768,7 @@ protected:
   raw_svector_ostream ppOS = raw_svector_ostream(out);
   raw_svector_ostream os = raw_svector_ostream(compare);
 
-  PPBuilderStringSaver saver;
+  TokenStringSaver saver;
 
   template <typename Callable>
   void testStreams(Callable &&test, llvm::Optional<StringRef> data = llvm::None,
@@ -776,7 +776,7 @@ protected:
     out.clear();
     compare.clear();
     PrettyPrinter pp(ppOS, margin);
-    PPStream<> ps(pp, saver);
+    TokenStream<> ps(pp, saver);
 
     std::invoke(test, ps, os);
 

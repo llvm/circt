@@ -1,4 +1,4 @@
-//===- PrettyPrinterBuilder.cpp - Pretty printing builder -----------------===//
+//===- PrettyPrinterHelpers.cpp - Pretty printing helpers -----------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Support/PrettyPrinterBuilder.h"
+#include "circt/Support/PrettyPrinterHelpers.h"
 
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/raw_ostream.h"
@@ -22,7 +22,7 @@ namespace pretty {
 // Convenience builders.
 //===----------------------------------------------------------------------===//
 
-void PPBuilderStringSaver::clear() { alloc.Reset(); }
+void TokenStringSaver::clear() { alloc.Reset(); }
 
 namespace detail {
 
