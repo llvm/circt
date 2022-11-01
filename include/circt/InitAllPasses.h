@@ -16,6 +16,7 @@
 
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/Passes.h"
+#include "circt/Dialect/CHALK/Passes.h"
 #include "circt/Dialect/Calyx/CalyxPasses.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -41,6 +42,7 @@ inline void registerAllPasses() {
 
   // Standard Passes
   calyx::registerPasses();
+  chalk::registerPasses();
   esi::registerESIPasses();
   firrtl::registerPasses();
   fsm::registerPasses();
