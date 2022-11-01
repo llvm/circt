@@ -1906,6 +1906,30 @@ void GrandCentralPass::runOnOperation() {
   auto instancePathCache = InstancePathCache(getAnalysis<InstanceGraph>());
   instancePaths = &instancePathCache;
 
+  /// Contains the set of modules which are instantiated by the DUT, but not a
+  /// companion or instantiated by a companion.  If no DUT exists, treat the top
+  /// module as if it were the DUT.  This works by doing a depth-first walk of
+  /// the instance graph, starting from the "effective" DUT and stopping the
+  /// search at any modules which are known companions.
+  DenseSet<hw::HWModuleLike> dutModules;
+  FModuleOp effectiveDUT = dut;
+  if (!effectiveDUT)
+    effectiveDUT =
+        cast<FModuleOp>(instancePaths->instanceGraph.getTopLevelModule());
+  auto dfRange =
+      llvm::depth_first(instancePaths->instanceGraph.lookup(effectiveDUT));
+  for (auto i = dfRange.begin(), e = dfRange.end(); i != e;) {
+    auto module = cast<FModuleLike>(*i->getModule());
+    if (AnnotationSet(module).hasAnnotation(companionAnnoClass)) {
+      i.skipChildren();
+      continue;
+    }
+    dutModules.insert(i->getModule());
+    // Manually increment the iterator to avoid walking off the end from
+    // skipChildren.
+    ++i;
+  }
+
   // Maybe return the lone instance of a module.  Generate errors on the op if
   // the module is not instantiated or is multiply instantiated.
   auto exactlyOneInstance = [&](FModuleOp op,
@@ -2090,11 +2114,11 @@ void GrandCentralPass::runOnOperation() {
                 // Check to see if we should change the output directory of a
                 // module.  Only update in the following conditions:
                 //   1) The module is the companion.
-                //   2) The module is instantiated by the companion exclusively.
+                //   2) The module is NOT instantiated by the effective DUT.
                 auto *modNode = instancePaths->instanceGraph.lookup(mod);
                 SmallVector<InstanceRecord *> instances(modNode->uses());
                 if (modNode != companionNode &&
-                    !allUnder(instances, companionNode))
+                    dutModules.count(modNode->getModule()))
                   continue;
 
                 LLVM_DEBUG({
