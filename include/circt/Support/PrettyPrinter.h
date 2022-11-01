@@ -21,12 +21,12 @@
 #define CIRCT_SUPPORT_PRETTYPRINTER_H
 
 #include "circt/Support/LLVM.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/SaveAndRestore.h"
 
 #include <cstdint>
 #include <deque>
-#include <vector>
 
 namespace circt {
 namespace pretty {
@@ -258,7 +258,7 @@ private:
   std::deque<uint32_t> scanStack;
 
   /// Stack of printing contexts (indentation + breaking behavior).
-  std::vector<PrintEntry> printStack;
+  SmallVector<PrintEntry> printStack;
 
   /// Printing context when stack is empty.
   const PrintEntry defaultFrame;
