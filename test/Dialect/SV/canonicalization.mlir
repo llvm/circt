@@ -278,4 +278,70 @@ hw.module @case_stmt(%arg: i3) {
 
   }
 
-  }
+}
+
+// CHECK-LABEL: hw.module @wireBundleAssign
+hw.module @wireBundleAssign(%arr: !hw.array<2xi32>) -> (res: !hw.array<2xi32>) {
+  %idx0 = hw.constant false
+  %idx1 = hw.constant true
+
+  %wire = sv.wire : !hw.inout<array<2xi32>>
+
+  %elem0 = sv.array_index_inout %wire[%idx0] : !hw.inout<array<2xi32>>, i1
+  %elem1 = sv.array_index_inout %wire[%idx1] : !hw.inout<array<2xi32>>, i1
+
+  %arr0 = hw.array_get %arr[%idx0] : !hw.array<2xi32>, i1
+  %arr1 = hw.array_get %arr[%idx1] : !hw.array<2xi32>, i1
+
+  sv.assign %elem0, %arr0 : i32
+  sv.assign %elem1, %arr1 : i32
+
+  // CHECK: hw.output %arr : !hw.array<2xi32>
+  %result = sv.read_inout %wire : !hw.inout<array<2xi32>>
+  hw.output %result : !hw.array<2xi32>
+}
+
+// CHECK-LABEL: hw.module @wireBundleSlice
+hw.module @wireBundleSlice(%arr: !hw.array<4xi32>) -> (res: !hw.array<2xi32>) {
+  %elemIdx0 = hw.constant 0 : i1
+  %elemIdx1 = hw.constant 1 : i1
+
+  %wire = sv.wire : !hw.inout<array<2xi32>>
+
+  %elem0 = sv.array_index_inout %wire[%elemIdx0] : !hw.inout<array<2xi32>>, i1
+  %elem1 = sv.array_index_inout %wire[%elemIdx1] : !hw.inout<array<2xi32>>, i1
+
+  %arrIdx0 = hw.constant 0 : i2
+  %arrIdx1 = hw.constant 1 : i2
+  %arr0 = hw.array_get %arr[%arrIdx0] : !hw.array<4xi32>, i2
+  %arr1 = hw.array_get %arr[%arrIdx1] : !hw.array<4xi32>, i2
+
+  sv.assign %elem0, %arr0 : i32
+  sv.assign %elem1, %arr1 : i32
+
+  // CHECK:      [[SLICE:%.+]] = hw.array_slice %arr[%c0_i2] : (!hw.array<4xi32>) -> !hw.array<2xi32>
+  // CHECK-NEXT: hw.output [[SLICE]] : !hw.array<2xi32>
+  %result = sv.read_inout %wire : !hw.inout<array<2xi32>>
+  hw.output %result : !hw.array<2xi32>
+}
+
+// CHECK-LABEL: hw.module @wireBundleCreate
+hw.module @wireBundleCreate(%a: i32, %b: i32) -> (res: !hw.array<2xi32>) {
+  %elemIdx0 = hw.constant 0 : i1
+  %elemIdx1 = hw.constant 1 : i1
+
+  %wire = sv.wire : !hw.inout<array<2xi32>>
+
+  %elem0 = sv.array_index_inout %wire[%elemIdx0] : !hw.inout<array<2xi32>>, i1
+  %elem1 = sv.array_index_inout %wire[%elemIdx1] : !hw.inout<array<2xi32>>, i1
+
+  sv.assign %elem0, %a : i32
+  sv.assign %elem1, %b : i32
+
+  // CHECK:      [[ARR:%.+]] = hw.array_create %b, %a : i32
+  // CHECK-NEXT: hw.output [[ARR]] : !hw.array<2xi32>
+  %result = sv.read_inout %wire : !hw.inout<array<2xi32>>
+  hw.output %result : !hw.array<2xi32>
+}
+
+
