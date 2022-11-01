@@ -14,6 +14,7 @@
 #define CIRCT_SUPPORT_PRETTYPRINTERBUILDER_H
 
 #include "circt/Support/PrettyPrinter.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/Allocator.h"
@@ -42,10 +43,9 @@ struct BufferingPP {
 
   /// Add a range of tokens.
   template <typename R>
-  void addTokens(R &&tokens) {
+  void addTokens(R &&newTokens) {
     assert(!hasEOF);
-    for (Token &t : tokens)
-      add(t);
+    llvm::append_range(tokens, newTokens);
   }
 
   /// Buffer a final EOF, no tokens allowed after this.
