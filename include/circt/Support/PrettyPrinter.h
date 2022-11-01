@@ -27,6 +27,7 @@
 
 #include <cstdint>
 #include <deque>
+#include <limits>
 
 namespace circt {
 namespace pretty {
@@ -285,6 +286,10 @@ private:
 
   /// Hook for Token storage events.
   Listener *listener = nullptr;
+
+  /// Threshold for walking scan state and "rebasing" totals/offsets.
+  static constexpr decltype(leftTotal) rebaseThreshold =
+      1UL << (std::numeric_limits<decltype(leftTotal)>::digits - 3);
 };
 
 } // end namespace pretty

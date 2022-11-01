@@ -126,7 +126,7 @@ void PrettyPrinter::rebaseIfNeeded() {
     return;
   assert(leftTotal >= 0);
   assert(rightTotal >= 0);
-  if (uint32_t(leftTotal) > ~uint32_t{0} >> 4) {
+  if (uint32_t(leftTotal) > rebaseThreshold) {
     // Plan: reset leftTotal to '1', adjust all accordingly.
     auto adjust = leftTotal - 1;
     for (auto &scanIndex : scanStack) {
