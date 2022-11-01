@@ -35,7 +35,7 @@ using namespace hwarith;
 static void
 improveNamehint(Value oldValue, Operation *newOp,
                 llvm::function_ref<std::string(StringRef)> namehintCallback) {
-  if (auto sourceOp = oldValue.getDefiningOp()) {
+  if (auto *sourceOp = oldValue.getDefiningOp()) {
     if (auto namehint =
             sourceOp->getAttrOfType<mlir::StringAttr>("sv.namehint")) {
       auto newNamehint = namehintCallback(namehint.strref());
@@ -53,7 +53,7 @@ static Value extractBits(OpBuilder &builder, Location loc, Value value,
   Value extractedValue = result[0];
   if (extractedValue != value) {
     // only change namehint if a new operation was created.
-    auto newOp = extractedValue.getDefiningOp();
+    auto *newOp = extractedValue.getDefiningOp();
     improveNamehint(value, newOp, [&](StringRef oldNamehint) {
       return (oldNamehint + "_" + std::to_string(startBit) + "_to_" +
               std::to_string(startBit + bitWidth))
