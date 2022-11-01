@@ -136,6 +136,10 @@ public:
     add<BeginToken>(offset, Breaks::Inconsistent, style);
   }
 
+  /// Start a group that cannot break, including nested groups.
+  /// Use sparingly.
+  void neverbox() { add<BeginToken>(0, Breaks::Never); }
+
   /// End a group.
   void end() { add<EndToken>(); }
 };
@@ -171,6 +175,7 @@ enum class PP {
   ibox0,
   ibox2,
   nbsp,
+  neverbox,
   neverbreak,
   newline,
   space,
@@ -251,6 +256,9 @@ public:
       break;
     case PP::nbsp:
       Base::nbsp();
+      break;
+    case PP::neverbox:
+      Base::neverbox();
       break;
     case PP::neverbreak:
       Base::neverbreak();
