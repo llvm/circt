@@ -762,7 +762,7 @@ test test test test test
 )"""));
 }
 
-class PPStreamCompareTest : public testing::Test {
+class TokenStreamCompareTest : public testing::Test {
 protected:
   SmallString<128> out, compare;
   raw_svector_ostream ppOS = raw_svector_ostream(out);
@@ -800,7 +800,7 @@ protected:
   }
 };
 
-TEST_F(PPStreamCompareTest, Strings) {
+TEST_F(TokenStreamCompareTest, Strings) {
   testStreamsSame([&](auto &os) { os << "testing"; });
   testStreamsSame([&](auto &os) { os << StringRef("foo"); });
   testStreamsSame([&](auto &os) { os << StringRef("foobar", 3); });
@@ -813,7 +813,7 @@ TEST_F(PPStreamCompareTest, Strings) {
   // (Twine not directly supported, use Twine::str())
 }
 
-TEST_F(PPStreamCompareTest, NBSPs) {
+TEST_F(TokenStreamCompareTest, NBSPs) {
   for (auto i : {0, 1, 2, 3, 4, 8, 16, 32, 64, 128, 256, 511, 512, 513, 2048})
     testStreams([&](auto &ps, auto &os) {
       ps.nbsp(i);
@@ -821,7 +821,7 @@ TEST_F(PPStreamCompareTest, NBSPs) {
     });
 }
 
-TEST_F(PPStreamCompareTest, Numeric) {
+TEST_F(TokenStreamCompareTest, Numeric) {
   auto test = [&](auto x, llvm::Optional<StringRef> data = llvm::None) {
     testStreams(
         [&](auto &ps, auto &os) {
