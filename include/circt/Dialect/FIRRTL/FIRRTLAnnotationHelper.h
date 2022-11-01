@@ -290,7 +290,7 @@ A tryGetAs(DictionaryAttr &dict, const Attribute &root, StringRef key,
 /// `instOnPath`. This does not connect the new ports to anything. Replace
 /// the old instances with the new cloned instance in all the caches.
 InstanceOp addPortsToModule(
-    FModuleOp mod, InstanceOp instOnPath, FIRRTLType portType, Direction dir,
+    FModuleLike mod, InstanceOp instOnPath, FIRRTLType portType, Direction dir,
     StringRef newName, InstancePathCache &instancePathcache,
     llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
     CircuitTargetCache *targetCaches = nullptr);
