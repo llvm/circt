@@ -33,17 +33,15 @@ firrtl.circuit "NonGroundType" attributes {
      filename = "gct-dir/bindings.sv"}]} {
   firrtl.module private @View_companion() attributes {
     annotations = [
-      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
        defName = "Foo",
        id = 0 : i64,
-       name = "View",
-       type = "companion"}]} {}
+       name = "View"}]} {}
   firrtl.module private @DUT() attributes {
     annotations = [
-      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
        id = 0 : i64,
-       name = "view",
-       type = "parent"}
+       name = "view"}
     ]} {
     // expected-error @+1 {{'firrtl.wire' op cannot be added to interface with id '0' because it is not a ground type}}
     %a = firrtl.wire {
@@ -85,18 +83,16 @@ firrtl.circuit "Foo" attributes {
      filename = "gct-dir/bindings.sv"}]}  {
   firrtl.module private @View_companion() attributes {
     annotations = [
-      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
        defName = "Foo",
        id = 0 : i64,
-       name = "View",
-       type = "companion"}]} {}
+       name = "View"}]} {}
   firrtl.module private @Bar(in %a: !firrtl.uint<1>) {}
   firrtl.module private @DUT(in %a: !firrtl.uint<1>) attributes {
     annotations = [
-      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
        id = 0 : i64,
-       name = "View",
-       type = "parent"}]} {
+       name = "View"}]} {
     // expected-error @+1 {{'firrtl.instance' op is marked as an interface element, but this should be impossible due to how the Chisel Grand Central API works}}
     %bar_a = firrtl.instance bar @Bar(in a: !firrtl.uint<1> [
         {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
@@ -125,17 +121,15 @@ firrtl.circuit "Foo" attributes {
      filename = "gct-dir/bindings.sv"}]}  {
   firrtl.module private @View_companion() attributes {
     annotations = [
-      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
        defName = "Foo",
        id = 0 : i64,
-       name = "View",
-       type = "companion"}]} {}
+       name = "View"}]} {}
   firrtl.module private @DUT(in %a: !firrtl.uint<1>) attributes {
     annotations = [
-      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
        id = 0 : i64,
-       name = "View",
-       type = "parent"}]} {
+       name = "View"}]} {
     // expected-error @+1 {{'firrtl.mem' op is marked as an interface element, but this does not make sense (is there a scattering bug or do you have a malformed hand-crafted MLIR circuit?)}}
     %memory_b_r = firrtl.mem Undefined {
       annotations = [
@@ -171,17 +165,15 @@ firrtl.circuit "Foo" attributes {
      filename = "gct-dir/bindings.sv"}]}  {
   firrtl.module private @View_companion() attributes {
     annotations = [
-      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
        defName = "Foo",
        id = 0 : i64,
-       name = "View",
-       type = "companion"}]} {}
+       name = "View"}]} {}
   firrtl.module private @DUT() attributes {
     annotations = [
-      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
        id = 0 : i64,
-       name = "View",
-       type = "parent"}]} {
+       name = "View"}]} {
     firrtl.instance View_companion @View_companion()
   }
   firrtl.module @Foo() {
@@ -203,18 +195,16 @@ firrtl.circuit "multiInstance2" attributes {
      filename = "gct-dir/bindings.sv"}]} {
   firrtl.module private @View_companion() attributes {
     annotations = [
-      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
        defName = "Foo",
        id = 0 : i64,
-       name = "View",
-       type = "companion"}]} {}
+       name = "View"}]} {}
   // expected-error @+1 {{'firrtl.module' op is marked as a GrandCentral 'parent', but it is instantiated more than once}}
   firrtl.module private @DUTE() attributes {
     annotations = [
-      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
        id = 0 : i64,
-       name = "view",
-       type = "parent"}
+       name = "view"}
     ]} {
     %a = firrtl.wire : !firrtl.uint<2>
     %b = firrtl.wire : !firrtl.uint<4>
@@ -240,17 +230,15 @@ firrtl.circuit "InvalidFieldID" attributes {
     ]} {
   firrtl.module private @View_companion() attributes {
      annotations = [
-       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
         defName = "Foo",
         id = 0 : i64,
-        name = "View",
-        type = "companion"}]} {}
+        name = "View"}]} {}
   firrtl.module private @DUT() attributes {
     annotations = [
-      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
        id = 0 : i64,
-       name = "view",
-       type = "parent"}
+       name = "view"}
     ]} {
     // expected-error @+1 {{subannotation with fieldID=3 is too large for type '!firrtl.vector<uint<2>, 1>'}}
     %a = firrtl.wire {

@@ -1175,7 +1175,6 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
   NamedAttrList companionAttrs, parentAttrs;
   companionAttrs.append("class", StringAttr::get(context, companionAnnoClass));
   companionAttrs.append("id", id);
-  companionAttrs.append("type", StringAttr::get(context, "companion"));
   auto viewAttr =
       tryGetAs<DictionaryAttr>(anno, anno, "view", loc, viewAnnoClass);
   if (!viewAttr)
@@ -1201,7 +1200,6 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
   parentAttrs.append("id", id);
   parentAttrs.append("name", name);
   parentAttrs.append("target", parentAttr);
-  parentAttrs.append("type", StringAttr::get(context, "parent"));
   state.addToWorklistFn(DictionaryAttr::get(context, parentAttrs));
   auto prunedAttr = parseAugmentedType(
       state, viewAttr, anno, companionAttr.getValue(), name, {}, id, {},
@@ -2013,21 +2011,10 @@ void GrandCentralPass::runOnOperation() {
 
           // Handle annotations on the module.
           AnnotationSet::removeAnnotations(op, [&](Annotation annotation) {
-            // TODO: Change this to remove the "type" field as all these
-            // annotations are specialized in the class with ".parent" or
-            // ".companion" suffixes.
             if (!annotation.getClass().startswith(viewAnnoClass))
               return false;
-            auto tpe = annotation.getMember<StringAttr>("type");
             auto name = annotation.getMember<StringAttr>("name");
             auto id = annotation.getMember<IntegerAttr>("id");
-            if (!tpe) {
-              op.emitOpError()
-                  << "has a malformed "
-                     "'sifive.enterprise.grandcentral.ViewAnnotation' that did "
-                     "not contain a 'type' field with a 'StringAttr' value";
-              goto FModuleOp_error;
-            }
             if (!id) {
               op.emitOpError()
                   << "has a malformed "
@@ -2052,7 +2039,7 @@ void GrandCentralPass::runOnOperation() {
             //      bind if extraction information was provided.  If a DUT is
             //      known, then anything in the test harness will not be
             //      extracted.
-            if (tpe.getValue() == "companion") {
+            if (annotation.getClass() == companionAnnoClass) {
               builder.setInsertionPointToEnd(circuitOp.getBodyBlock());
 
               companionIDMap[id] = {name.getValue(), op};
@@ -2152,7 +2139,7 @@ void GrandCentralPass::runOnOperation() {
 
             // Insert the parent into the parent map, asserting that the parent
             // is instantiated exatly once.
-            if (tpe.getValue() == "parent") {
+            if (annotation.getClass() == parentAnnoClass) {
               // Assert that the parent is instantiated once and only once.
               // Allow for this to be the main module in the circuit.
               Optional<InstanceOp> instance;
@@ -2168,9 +2155,7 @@ void GrandCentralPass::runOnOperation() {
             }
 
             op.emitOpError()
-                << "has a 'sifive.enterprise.grandcentral.ViewAnnotation' with "
-                   "an unknown or malformed 'type' field in annotation: "
-                << annotation.getDict();
+                << "unknown annotation class: " << annotation.getDict();
 
           FModuleOp_error:
             removalError = true;

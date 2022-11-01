@@ -837,7 +837,7 @@ firrtl.circuit "GCTInterface"  attributes {annotations = [{unrelatedAnnotation}]
 // CHECK-SAME: annotations
 // CHECK-SAME: {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
 // CHECK-SAME:  id = [[ID_ViewName]] : i64,
-// CHECK-SAME:  type = "companion"}
+// CHECK-SAME:  name = "view"}
 // CHECK:      %0 = firrtl.ref.resolve %{{.*}} : !firrtl.ref<uint<1>>
 // CHECK:       = firrtl.node %0 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1 : i64}]} : !firrtl.uint<1>
 // CHECK:      %1 = firrtl.ref.resolve %{{.*}}: !firrtl.ref<uint<1>>
@@ -1240,7 +1240,7 @@ firrtl.circuit "Top"  attributes {
     }}]}}]} {
   firrtl.module private @Companion(out %io: !firrtl.bundle<>) {
     // CHECK-LABEL: firrtl.module private @Companion
-    // CHECK-SAME: in %_gen_signed: !firrtl.ref<uint<1>>) attributes {annotations = [{class = "sifive.enterprise.grandcentral.ViewAnnotation.companion", id = 0 : i64, name = "MyView", type = "companion"}]}
+    // CHECK-SAME: in %_gen_signed: !firrtl.ref<uint<1>>) attributes {annotations = [{class = "sifive.enterprise.grandcentral.ViewAnnotation.companion", id = 0 : i64, name = "MyView"}]}
     %_WIRE = firrtl.wire interesting_name  : !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     firrtl.strictconnect %_WIRE, %c0_ui1 : !firrtl.uint<1>
@@ -1307,7 +1307,7 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [{
   firrtl.module private @MyView_companion(out %io: !firrtl.bundle<>) {
   // CHECK: firrtl.module private @MyView_companion(
   // CHECK-SAME: in %_gen_uint: !firrtl.ref<uint<1>>, in %_gen_vec: !firrtl.ref<uint<1>>, in %_gen_vec_0: !firrtl.ref<uint<1>>)
-  // CHECK-SAME: attributes {annotations = [{class = "sifive.enterprise.grandcentral.ViewAnnotation.companion", id = 0 : i64, name = "MyView", type = "companion"}]} {
+  // CHECK-SAME: attributes {annotations = [{class = "sifive.enterprise.grandcentral.ViewAnnotation.companion", id = 0 : i64, name = "MyView"}]} {
     %clock = firrtl.wire interesting_name  : !firrtl.clock
     %r = firrtl.reg interesting_name %clock  : !firrtl.uint<1>
     %tap_clock, %tap_a, %tap_b = firrtl.instance tap interesting_name  @Tap(out clock: !firrtl.clock, out a: !firrtl.uint<1>, in b: !firrtl.uint<1>)
