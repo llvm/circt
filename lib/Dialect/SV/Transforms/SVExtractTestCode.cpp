@@ -179,6 +179,10 @@ static void addInstancesToCloneSet(
     if (opsToClone.contains(instance))
       continue;
 
+    // If the instance had a symbol, we can't extract it without more work.
+    if (instance.getInnerSym().has_value())
+      continue;
+
     // Compute the instance's forward slice. If it wasn't fully contained in
     // the clone set, move along.
     SetVector<Operation *> forwardSlice;
@@ -413,7 +417,7 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
       continue;
     }
 
-    // If the instance had a symbol, we can't inline it.
+    // If the instance had a symbol, we can't inline it without more work.
     hw::InstanceOp inst = cast<hw::InstanceOp>(instLike.getOperation());
     if (inst.getInnerSym().has_value()) {
       allInlined = false;
