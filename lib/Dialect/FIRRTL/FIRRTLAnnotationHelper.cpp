@@ -351,7 +351,8 @@ InstanceOp firrtl::addPortsToModule(
 
 Value firrtl::borePortsOnPath(
     SmallVector<InstanceOp> &instancePath, FModuleOp lcaModule, Value fromVal,
-    StringRef newNameHint, InstancePathCache &instancePathcache,
+    StringRef newNameHint, Optional<Location> loc,
+    InstancePathCache &instancePathcache,
     llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
     CircuitTargetCache *targetCachesInstancePathCache) {
   // Create connections of the `fromVal` by adding ports through all the
@@ -393,6 +394,7 @@ Value firrtl::borePortsOnPath(
     //  should be no more use of `instOnPath`.
     auto clonedInstRes = clonedInst.getResult(portNo);
     auto referencedModNewPort = referencedModule.getArgument(portNo);
+    Operation *con;
     // If out direction, then connect `forwardVal` to the `referencedModNewPort`
     // (the new port of referenced module) else set the new input port of the
     // cloned instance with `forwardVal`. If out direction, then set the
@@ -403,14 +405,16 @@ Value firrtl::borePortsOnPath(
           forwardVal.getLoc(), forwardVal.isa<BlockArgument>()
                                    ? referencedModule.getBodyBlock()
                                    : forwardVal.getDefiningOp()->getBlock());
-      builder.create<ConnectOp>(referencedModNewPort, forwardVal);
+      con = builder.create<ConnectOp>(referencedModNewPort, forwardVal);
       forwardVal = clonedInstRes;
     } else {
       auto builder = ImplicitLocOpBuilder::atBlockEnd(clonedInst.getLoc(),
                                                       clonedInst->getBlock());
-      builder.create<ConnectOp>(clonedInstRes, forwardVal);
+      con = builder.create<ConnectOp>(clonedInstRes, forwardVal);
       forwardVal = referencedModNewPort;
     }
+    if (loc)
+      con->setLoc(loc.value());
 
     // Switch direction of reached the `lcaModule`.
     if (clonedInst->getParentOfType<FModuleOp>() == lcaModule)

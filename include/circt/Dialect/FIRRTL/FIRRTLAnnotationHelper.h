@@ -301,7 +301,8 @@ InstanceOp addPortsToModule(
 /// contain `fromVal`.
 Value borePortsOnPath(
     SmallVector<InstanceOp> &instancePath, FModuleOp lcaModule, Value fromVal,
-    StringRef newNameHint, InstancePathCache &instancePathcache,
+    StringRef newNameHint, Optional<Location> loc,
+    InstancePathCache &instancePathcache,
     llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
     CircuitTargetCache *targetCachesInstancePathCache);
 

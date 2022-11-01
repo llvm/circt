@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-lower-annotations)' --split-input-file %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-lower-annotations)' --mlir-print-debuginfo --split-input-file %s | FileCheck %s
 
 // circt.test copies the annotation to the target
 // circt.testNT puts the targetless annotation on the circuit
@@ -1342,7 +1342,8 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [{
   keys = [
     {
        class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
-       source = "~Top|Top/foo:Foo/b:Bar>inv", sink = "~Top|Top>tap"
+       source = "~Top|Top/foo:Foo/b:Bar>inv", sink = "~Top|Top>tap",
+       info =  "@[File.scala 500:7]"
     }
   ]}]} {
   // CHECK-LABEL: firrtl.circuit "Top"  {
@@ -1350,25 +1351,27 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [{
   // CHECK:  firrtl.module private @Bar(out %_gen_tap: !firrtl.ref<uint<1>>)
   firrtl.module private @Bar() {
     %inv = firrtl.wire interesting_name  : !firrtl.uint<1>
-    // CHECK:  %0 = firrtl.ref.send %inv : !firrtl.uint<1>
-    // CHECK:  firrtl.connect %_gen_tap, %0 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+    // CHECK:  %0 = firrtl.ref.send %inv : !firrtl.uint<1> loc(#loc4)
+    // CHECK:  firrtl.connect %_gen_tap, %0 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>> loc(#loc4)
   }
   // CHECK-LABEL: firrtl.module private @Foo
   firrtl.module private @Foo() {
     firrtl.instance b interesting_name  @Bar()
     // CHECK:  %b__gen_tap = firrtl.instance b interesting_name  @Bar(out _gen_tap: !firrtl.ref<uint<1>>)
-    // CHECK:  firrtl.connect %_gen_tap, %b__gen_tap : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+    // CHECK:  firrtl.connect %_gen_tap, %b__gen_tap : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>> loc(#loc4)
   }
   // CHECK: firrtl.module @Top() attributes {annotations = [{class = "firrtl.transforms.NoDedupAnnotation"}]}
   firrtl.module @Top() {
     firrtl.instance foo interesting_name  @Foo()
     %tap = firrtl.wire interesting_name  : !firrtl.uint<1>
     // CHECK:  %foo__gen_tap = firrtl.instance foo interesting_name  @Foo(out _gen_tap: !firrtl.ref<uint<1>>)
-    // CHECK:  %0 = firrtl.ref.resolve %foo__gen_tap : !firrtl.ref<uint<1>>
+    // CHECK:  %[[v0:.+]] = firrtl.ref.resolve %foo__gen_tap : !firrtl.ref<uint<1>> loc(#loc4)
     // CHECK:  %tap = firrtl.wire interesting_name  : !firrtl.uint<1>
-    // CHECK:  firrtl.connect %tap, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:  firrtl.connect %tap, %[[v0]] : !firrtl.uint<1>, !firrtl.uint<1> loc(#loc4)
   }
 }
+
+// CHECK: #loc4 = loc("File.scala":500:7)
 
 // -----
 
@@ -1381,7 +1384,8 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [
         class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey",
         internalPath = "random.something",
         module = "~Top|Bar",
-        sink = "~Top|Top>tap"
+        sink = "~Top|Top>tap",
+        info =  "@[File.scala 5:27]"
       }
     ]}]} {
   firrtl.module private @Bar() {
@@ -1390,18 +1394,19 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [
   firrtl.module private @Foo() {
     firrtl.instance b interesting_name  @Bar()
     // CHECK:  firrtl.instance b sym @extModXMR interesting_name  @Bar()
-    // CHECK{LITERAL}:  %0 = firrtl.verbatim.expr "{{0}}.random.something" : () -> !firrtl.uint<1> {name = "tap_internalPath", symbols = [#hw.innerNameRef<@Foo::@extModXMR>]}
+    // CHECK{LITERAL}:  = firrtl.verbatim.expr "{{0}}.random.something" : () -> !firrtl.uint<1> {name = "tap_internalPath", symbols = [#hw.innerNameRef<@Foo::@extModXMR>]} loc(#loc5)
   }
   // CHECK-LABEL firrtl.module @Top()
   firrtl.module @Top() {
     firrtl.instance foo interesting_name  @Foo()
     %tap = firrtl.wire interesting_name  : !firrtl.uint<1>
     // CHECK:  %foo__gen_tap = firrtl.instance foo interesting_name  @Foo(out _gen_tap: !firrtl.ref<uint<1>>)
-    // CHECK:  %0 = firrtl.ref.resolve %foo__gen_tap : !firrtl.ref<uint<1>>
+    // CHECK:  %[[v0:.+]] = firrtl.ref.resolve %foo__gen_tap : !firrtl.ref<uint<1>> loc(#loc5)
     // CHECK:  %tap = firrtl.wire interesting_name  : !firrtl.uint<1>
-    // CHECK:  firrtl.connect %tap, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:  firrtl.connect %tap, %[[v0]] : !firrtl.uint<1>, !firrtl.uint<1> loc(#loc5)
   }
 }
+// CHECK: #loc5 = loc("File.scala":5:27)
 
 // -----
 // Test with Parent module not being the LCA.
