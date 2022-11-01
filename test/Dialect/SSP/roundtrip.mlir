@@ -89,9 +89,9 @@ ssp.instance @self_arc of "CyclicProblem" [II<3>] {
 
 // CHECK: ssp.instance @mco_outgoing_delays of "ChainingProblem" {
 // CHECK:   library {
-// CHECK:     operator_type @add [latency<2>, zIn<1.000000e-01 : f32>, zOut<1.000000e-01 : f32>]
-// CHECK:     operator_type @mul [latency<3>, zIn<5.000000e+00 : f32>, zOut<1.000000e-01 : f32>]
-// CHECK:     operator_type @ret [latency<0>, zIn<0.000000e+00 : f32>, zOut<0.000000e+00 : f32>]
+// CHECK:     operator_type @add [latency<2>, incDelay<1.000000e-01 : f32>, outDelay<1.000000e-01 : f32>]
+// CHECK:     operator_type @mul [latency<3>, incDelay<5.000000e+00 : f32>, outDelay<1.000000e-01 : f32>]
+// CHECK:     operator_type @ret [latency<0>, incDelay<0.000000e+00 : f32>, outDelay<0.000000e+00 : f32>]
 // CHECK:   }
 // CHECK:   graph {
 // CHECK:     %[[op_0:.*]] = operation<@add>() [t<0>, z<0.000000e+00 : f32>]
@@ -102,9 +102,9 @@ ssp.instance @self_arc of "CyclicProblem" [II<3>] {
 // CHECK: }
 ssp.instance @mco_outgoing_delays of "ChainingProblem" {
   library {
-    operator_type @add [latency<2>, zIn<1.000000e-01 : f32>, zOut<1.000000e-01 : f32>]
-    operator_type @mul [latency<3>, zIn<5.000000e+00 : f32>, zOut<1.000000e-01 : f32>]
-    operator_type @ret [latency<0>, zIn<0.000000e+00 : f32>, zOut<0.000000e+00 : f32>]
+    operator_type @add [latency<2>, incDelay<1.000000e-01 : f32>, outDelay<1.000000e-01 : f32>]
+    operator_type @mul [latency<3>, incDelay<5.000000e+00 : f32>, outDelay<1.000000e-01 : f32>]
+    operator_type @ret [latency<0>, incDelay<0.000000e+00 : f32>, outDelay<0.000000e+00 : f32>]
   }
   graph {
     %0 = operation<@add>() [t<0>, z<0.000000e+00 : f32>]

@@ -80,11 +80,11 @@ in {
   }
   def IncomingDelayProp : OperatorTypeProperty<SSPDialect,
     "IncomingDelay", "::mlir::FloatAttr", "::circt::scheduling::ChainingProblem"> {
-    let mnemonic = "zIn";
+    let mnemonic = "incDelay";
   }
   def OutgoingDelayProp : OperatorTypeProperty<SSPDialect,
     "OutgoingDelay", "::mlir::FloatAttr", "::circt::scheduling::ChainingProblem"> {
-    let mnemonic = "zOut";
+    let mnemonic = "outDelay";
   }
 }
 
