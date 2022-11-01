@@ -86,11 +86,58 @@ def InstanceOp : SSPOp<"instance",
   ];
 }
 
-class ContainerOp<string mnemonic, list<Trait> traits = []>
-    : SSPOp<mnemonic, traits # [NoRegionArguments, SingleBlock, NoTerminator,
-     SymbolTable, OpAsmOpInterface, HasParent<"InstanceOp">]> {
+def OperatorLibraryOp : SSPOp<"library",
+    [NoRegionArguments, SingleBlock,
+     NoTerminator, OpAsmOpInterface, SymbolTable, Symbol]> {
+  let summary = "Container for operator types.";
+  let description = [{
+    The operator library abstracts the characteristics of the target
+    architecture/IR (onto which the source graph is scheduled), represented by
+    the individual `OperatorTypeOp`s.
+    
+    This operation may be used outside of an `InstanceOp`. An optional name
+    symbol can be set to allow qualified references to the contained
+    `OperatorTypeOp`s.
+  }];
+  
+  let arguments = (ins OptionalAttr<SymbolNameAttr>:$sym_name);
+  let assemblyFormat = "($sym_name^)? $body attr-dict";
   let regions = (region SizedRegion<1>:$body);
+
+  let extraClassDeclaration = [{
+    // OpAsmOpInterface
+    static ::llvm::StringRef getDefaultDialect() { return "ssp"; }
+
+    // SymbolOpInterface
+    static bool isOptionalSymbol() { return true; }
+
+    // Convenience
+    ::mlir::Block *getBodyBlock() {
+      return &getBody().getBlocks().front();
+    }
+  }];
+
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins ), [{
+      ::mlir::Region* region = $_state.addRegion();
+      region->push_back(new ::mlir::Block());
+    }]>
+  ];
+}
+
+def DependenceGraphOp : SSPOp<"graph",
+    [HasOnlyGraphRegion, NoRegionArguments,
+     SingleBlock, NoTerminator, OpAsmOpInterface, SymbolTable,
+     HasParent<"InstanceOp">]> {
+  let summary = "Container for (scheduling) operations.";
+  let description = [{
+    The dependence graph is spanned by `OperationOp`s (vertices) and a
+    combination of MLIR value uses and symbol references (edges).
+  }];
+
   let assemblyFormat = "$body attr-dict";
+  let regions = (region SizedRegion<1>:$body);
 
   let extraClassDeclaration = [{
     // OpAsmOpInterface
@@ -109,24 +156,6 @@ class ContainerOp<string mnemonic, list<Trait> traits = []>
       region->push_back(new ::mlir::Block());
     }]>
   ];
-}
-
-def OperatorLibraryOp : ContainerOp<"library"> {
-  let summary = "Container for operator types.";
-  let description = [{
-    The operator library abstracts the characteristics of the target
-    architecture/IR (onto which the source graph is scheduled), represented by
-    the individual `OperatorTypeOp`s.
-  }];
-}
-
-def DependenceGraphOp : ContainerOp<"graph",
-    [RegionKindInterface, HasOnlyGraphRegion]> {
-  let summary = "Container for (scheduling) operations.";
-  let description = [{
-    The dependence graph is spanned by `OperationOp`s (vertices) and a
-    combination of MLIR value uses and symbol references (edges).
-  }];
 }
 
 def OperatorTypeOp : SSPOp<"operator_type",
