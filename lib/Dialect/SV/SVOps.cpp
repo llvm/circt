@@ -1104,8 +1104,10 @@ struct ArraySlice {
         .Default([](auto) { return std::nullopt; });
   }
 
+  // Create a pair of ArraySlice from source and destination of assignments.
   static std::optional<std::pair<ArraySlice, ArraySlice>>
   getAssignedRange(Operation *op) {
+    assert((isa<PAssignOp, BPAssignOp>(op) && "assignments are expected"));
     auto srcRange = ArraySlice::getArraySlice(op->getOperand(1));
     if (!srcRange)
       return std::nullopt;
@@ -1142,7 +1144,7 @@ static LogicalResult mergeNeiboringAssignments(AssignTy op,
     if (!nextAssignedRange)
       break;
     auto [nextDest, nextSrc] = *nextAssignedRange;
-    // Check that these assignments are mergable.
+    // Check that these assignments are mergaable.
     if (dest.array != nextDest.array || src.array != nextSrc.array ||
         !hw::isOffset(dest.start, nextDest.start, dest.size) ||
         !hw::isOffset(src.start, nextSrc.start, src.size))
