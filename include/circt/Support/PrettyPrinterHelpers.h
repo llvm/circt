@@ -162,7 +162,7 @@ public:
 //===----------------------------------------------------------------------===//
 
 /// Send one of these to TokenStream to add the corresponding token.
-/// See PPBuilder for details of each.
+/// See TokenBuilder for details of each.
 enum class PP {
   cbox0,
   cbox2,
