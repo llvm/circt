@@ -24,10 +24,8 @@ namespace pretty {
 
 void TokenStringSaver::clear() { alloc.Reset(); }
 
-namespace detail {
-
 /// Add multiple non-breaking spaces as a single token.
-void emitNBSP(unsigned n, llvm::function_ref<void(Token)> add) {
+void detail::emitNBSP(unsigned n, llvm::function_ref<void(Token)> add) {
   static const char spaces[] = {
       ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
       ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
@@ -51,7 +49,6 @@ void emitNBSP(unsigned n, llvm::function_ref<void(Token)> add) {
     n -= chunk;
   }
 }
-} // end namespace detail
 
 } // end namespace pretty
 } // end namespace circt
