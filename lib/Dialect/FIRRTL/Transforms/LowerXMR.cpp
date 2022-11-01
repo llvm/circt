@@ -49,7 +49,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   void runOnOperation() override {
     dataFlowClasses = llvm::EquivalenceClasses<Value, ValueComparator>();
-    instanceGraph = &getAnalysis<InstanceGraph>();
+    auto &instanceGraph = getAnalysis<InstanceGraph>();
     SmallVector<RefResolveOp> resolveOps;
     // The dataflow function, that propagates the reachable RefSendOp across
     // RefType Ops.
@@ -177,7 +177,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     };
 
     // Traverse the modules in post order.
-    for (auto node : llvm::post_order(instanceGraph)) {
+    for (auto node : llvm::post_order(&instanceGraph)) {
       auto module = dyn_cast<FModuleOp>(*node->getModule());
       if (!module)
         continue;
@@ -494,7 +494,6 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     refSendPathList.clear();
   }
 
-  InstanceGraph *instanceGraph;
   /// Cached module namespaces.
   DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
 
