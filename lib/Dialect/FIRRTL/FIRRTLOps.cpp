@@ -929,6 +929,13 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   if (op->getAttrOfType<ArrayAttr>("annotations").empty())
     omittedAttrs.push_back("annotations");
 
+  // If there are no internal paths attributes we can omit the empty array.
+  if (op->hasAttr("internalPaths")) {
+    if (auto paths = op->getAttrOfType<ArrayAttr>("internalPaths"))
+      if (paths.empty())
+        omittedAttrs.push_back("internalPaths");
+  }
+
   p.printOptionalAttrDictWithKeyword(op->getAttrs(), omittedAttrs);
 }
 

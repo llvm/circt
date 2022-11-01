@@ -191,9 +191,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       size_t numPorts = module.getNumPorts();
       for (size_t portNum = 0; portNum < numPorts; ++portNum)
         if (module.getPortType(portNum).isa<RefType>()) {
-          if (refPortsToRemoveMap[module].size() < numPorts)
-            refPortsToRemoveMap[module].resize(numPorts);
-          refPortsToRemoveMap[module].set(portNum);
+          setPortToRemove(module, portNum, numPorts);
         }
     }
 
@@ -294,9 +292,44 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     return success();
   }
 
+  void setPortToRemove(Operation *op, size_t index, size_t numPorts) {
+    if (refPortsToRemoveMap[op].size() < numPorts)
+      refPortsToRemoveMap[op].resize(numPorts);
+    refPortsToRemoveMap[op].set(index);
+  }
+
   // Propagate the reachable RefSendOp across modules.
   LogicalResult handleInstanceOp(InstanceOp inst) {
-    auto refMod = dyn_cast<FModuleOp>(inst.getReferencedModule());
+    auto *mod = inst.getReferencedModule();
+    if (auto extRefMod = dyn_cast<FExtModuleOp>(mod)) {
+      // Extern modules can generate RefType ports, they have an attached
+      // attribute which specifies the internal path into the extern module.
+      // This string attribute will be used to generate the final xmr.
+      auto internalPaths = extRefMod.getInternalPaths();
+      // No internalPaths implies no RefType ports.
+      if (internalPaths.empty())
+        return success();
+      size_t pathsIndex = 0;
+      auto numPorts = inst.getNumResults();
+      for (const auto &res : llvm::enumerate(inst.getResults())) {
+        if (!inst.getResult(res.index())
+                 .getType()
+                 .cast<FIRRTLType>()
+                 .isa<RefType>())
+          continue;
+
+        auto inRef = getInnerRefTo(inst);
+        auto ind = addReachingSendsEntry(res.value(), inRef);
+
+        xmrPathSuffix[ind] = internalPaths[pathsIndex].cast<StringAttr>().str();
+        ++pathsIndex;
+        // The instance result and module port must be marked for removal.
+        setPortToRemove(inst, res.index(), numPorts);
+        setPortToRemove(extRefMod, res.index(), numPorts);
+      }
+      return success();
+    }
+    auto refMod = dyn_cast<FModuleOp>(mod);
     bool multiplyInstantiated = !visitedModules.insert(refMod).second;
     for (size_t portNum = 0, numPorts = inst.getNumResults();
          portNum < numPorts; ++portNum) {
@@ -306,9 +339,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       if (!refMod)
         return inst.emitOpError("cannot lower ext modules with RefType ports");
       // Reference ports must be removed.
-      if (refPortsToRemoveMap[inst].size() < numPorts)
-        refPortsToRemoveMap[inst].resize(numPorts);
-      refPortsToRemoveMap[inst].set(portNum);
+      setPortToRemove(inst, portNum, numPorts);
       // Drop the dead-instance-ports.
       if (instanceResult.use_empty())
         continue;
@@ -419,6 +450,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       op->erase();
     for (auto iter : refPortsToRemoveMap)
       if (auto mod = dyn_cast<FModuleOp>(iter.getFirst()))
+        mod.erasePorts(iter.getSecond());
+      else if (auto mod = dyn_cast<FExtModuleOp>(iter.getFirst()))
         mod.erasePorts(iter.getSecond());
       else if (auto inst = dyn_cast<InstanceOp>(iter.getFirst())) {
         ImplicitLocOpBuilder b(inst.getLoc(), inst);

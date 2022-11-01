@@ -111,14 +111,12 @@ circuit Top : %[[
     io2 <= int.io
 
 ; CHECK-LABEL: module Child(
-; CHECK:   wire [[tap2_internalPath:.+]] = localparam_0.random.something;
-; CHECK:   wire tap = Top.[[tap_internalPath:.+]];
+; CHECK:   wire tap = Top.int_1.io_out;
 ; CHECK:   BlackBox localparam_0 (
 
 ; CHECK: module Top(
 ; CHECK-NOT: module
-; CHECK:   wire [[tap_internalPath]] = int_1.io_out;
 ; CHECK:   tap = Top.foo.b.inv;
-; CHECK:   assign tap2 = Top.unsigned_0.signed_0.[[tap2_internalPath]];
+; CHECK:   assign tap2 = Top.unsigned_0.signed_0.localparam_0.random.something;
 ; CHECK:   InternalPathChild int_1 (
 ; CHECK: endmodule
