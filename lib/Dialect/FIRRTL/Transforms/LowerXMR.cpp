@@ -123,13 +123,6 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
               }
             return success();
           })
-          .Case<RefSendInternalPathOp>([&](RefSendInternalPathOp op) {
-                auto inRef = getInnerRefTo((Operation*)op);
-                auto ind = addReachingSendsEntry(op.getResult(), inRef);
-                xmrPathSuffix[ind] = ("." + op.getPath()).str();
-                markForRemoval(op);
-                return success();
-              })
           .Case<InstanceOp>([&](auto inst) { return handleInstanceOp(inst); })
           .Case<FConnectLike>([&](FConnectLike connect) {
             // Ignore BaseType.
@@ -303,9 +296,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   // Propagate the reachable RefSendOp across modules.
   LogicalResult handleInstanceOp(InstanceOp inst) {
-    auto extRefMod =
-        dyn_cast<FExtModuleOp>(instanceGraph->getReferencedModule(inst));
-    if (extRefMod) {
+    auto mod = inst.getReferencedModule();
+    if (auto extRefMod = dyn_cast<FExtModuleOp>(mod)) {
       // Extern modules can generate RefType ports, they have an attached
       // attribute which specifies the internal path into the extern module.
       // This string attribute will be used to generate the final xmr.
@@ -315,7 +307,10 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       size_t pathsIndex = 0;
       auto numPorts = inst.getNumResults();
       for (const auto &res : llvm::enumerate(inst.getResults())) {
-        if (!inst.getResult(res.index()).getType().isa<RefType>())
+        if (!inst.getResult(res.index())
+                 .getType()
+                 .cast<FIRRTLType>()
+                 .isa<RefType>())
           continue;
 
         auto inRef = getInnerRefTo(inst);
@@ -334,7 +329,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       }
       return success();
     }
-    auto refMod = dyn_cast<FModuleOp>(inst.getReferencedModule());
+    auto refMod = dyn_cast<FModuleOp>(mod);
     bool multiplyInstantiated = !visitedModules.insert(refMod).second;
     for (size_t portNum = 0, numPorts = inst.getNumResults();
          portNum < numPorts; ++portNum) {
