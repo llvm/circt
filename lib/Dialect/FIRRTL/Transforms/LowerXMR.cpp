@@ -191,9 +191,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       size_t numPorts = module.getNumPorts();
       for (size_t portNum = 0; portNum < numPorts; ++portNum)
         if (module.getPortType(portNum).isa<RefType>()) {
-          if (refPortsToRemoveMap[module].size() < numPorts)
-            refPortsToRemoveMap[module].resize(numPorts);
-          refPortsToRemoveMap[module].set(portNum);
+          setPortToRemove(module, portNum, numPorts);
         }
     }
 
@@ -294,6 +292,12 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     return success();
   }
 
+  void setPortToRemove(Operation *op, size_t index, size_t numPorts) {
+    if (refPortsToRemoveMap[op].size() < numPorts)
+      refPortsToRemoveMap[op].resize(numPorts);
+    refPortsToRemoveMap[op].set(index);
+  }
+
   // Propagate the reachable RefSendOp across modules.
   LogicalResult handleInstanceOp(InstanceOp inst) {
     auto mod = inst.getReferencedModule();
@@ -317,16 +321,11 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         auto inRef = getInnerRefTo(inst);
         auto ind = addReachingSendsEntry(res.value(), inRef);
 
-        xmrPathSuffix[ind] =
-            internalPaths[pathsIndex].cast<StringAttr>().str();
+        xmrPathSuffix[ind] = internalPaths[pathsIndex].cast<StringAttr>().str();
         ++pathsIndex;
         // The instance result and module port must be marked for removal.
-        if (refPortsToRemoveMap[inst].size() < numPorts)
-          refPortsToRemoveMap[inst].resize(numPorts);
-        refPortsToRemoveMap[inst].set(res.index());
-        if (refPortsToRemoveMap[extRefMod].size() < numPorts)
-          refPortsToRemoveMap[extRefMod].resize(numPorts);
-        refPortsToRemoveMap[extRefMod].set(res.index());
+        setPortToRemove(inst, res.index(), numPorts);
+        setPortToRemove(extRefMod, res.index(), numPorts);
       }
       return success();
     }
@@ -340,9 +339,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       if (!refMod)
         return inst.emitOpError("cannot lower ext modules with RefType ports");
       // Reference ports must be removed.
-      if (refPortsToRemoveMap[inst].size() < numPorts)
-        refPortsToRemoveMap[inst].resize(numPorts);
-      refPortsToRemoveMap[inst].set(portNum);
+      setPortToRemove(inst, portNum, numPorts);
       // Drop the dead-instance-ports.
       if (instanceResult.use_empty())
         continue;
