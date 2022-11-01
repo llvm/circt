@@ -332,7 +332,9 @@ InstanceOp firrtl::addPortsToModule(
   if (targetCaches)
     targetCaches->insertPort(mod, portNo);
   // Now update all the instances of `mod`.
-  for (auto *use : instancePathcache.instanceGraph.lookup(cast<hw::HWModuleLike>((Operation *)mod))->uses()) {
+  for (auto *use : instancePathcache.instanceGraph
+                       .lookup(cast<hw::HWModuleLike>((Operation *)mod))
+                       ->uses()) {
     InstanceOp useInst = cast<InstanceOp>(use->getInstance());
     auto clonedInst = useInst.cloneAndInsertPorts({{portNo, portInfo}});
     if (useInst == instOnPath)
