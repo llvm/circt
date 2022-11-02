@@ -193,7 +193,7 @@ void PrettyPrinter::checkStack() {
   }
 }
 
-/// Check if there's enough tokens to hit width, if so print.
+/// Check if there are enough tokens to hit width, if so print.
 /// If scan size is wider than line, it's infinity.
 void PrettyPrinter::checkStream() {
   // While buffer needs more than 1 line to print, print and consume.
