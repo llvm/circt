@@ -35,6 +35,9 @@ struct SeqToSVPass : public LowerSeqToSVBase<SeqToSVPass> {
   void runOnOperation() override;
 };
 struct SeqFIRRTLToSVPass : public LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass> {
+  void enableKeepRegisterSelfAssignments() {
+    keepRegisterSelfAssignments = true;
+  }
   void runOnOperation() override;
 };
 } // anonymous namespace
@@ -89,7 +92,9 @@ namespace {
 /// Lower FirRegOp to `sv.reg` and `sv.always`.
 class FirRegLower {
 public:
-  FirRegLower(hw::HWModuleOp module) : module(module){};
+  FirRegLower(hw::HWModuleOp module, bool keepRegisterSelfAssingments)
+      : module(module),
+        keepRegisterSelfAssignments(keepRegisterSelfAssingments){};
 
   void lower();
 
@@ -142,6 +147,7 @@ private:
   llvm::SmallDenseMap<std::pair<Value, unsigned>, Value> arrayIndexCache;
 
   hw::HWModuleOp module;
+  bool keepRegisterSelfAssignments;
 };
 } // namespace
 
@@ -301,7 +307,7 @@ void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
                              Value next) {
   // If term and next values are equivalent, we don't have to create an
   // assignment.
-  if (areEquivalentValues(term, next))
+  if (!keepRegisterSelfAssignments && areEquivalentValues(term, next))
     return;
   auto mux = next.getDefiningOp<comb::MuxOp>();
   if (mux && mux.getTwoState()) {
@@ -502,13 +508,17 @@ void SeqToSVPass::runOnOperation() {
 
 void SeqFIRRTLToSVPass::runOnOperation() {
   hw::HWModuleOp module = getOperation();
-  FirRegLower(module).lower();
+  FirRegLower(module, keepRegisterSelfAssignments).lower();
 }
 
 std::unique_ptr<Pass> circt::seq::createSeqLowerToSVPass() {
   return std::make_unique<SeqToSVPass>();
 }
 
-std::unique_ptr<Pass> circt::seq::createSeqFIRRTLLowerToSVPass() {
-  return std::make_unique<SeqFIRRTLToSVPass>();
+std::unique_ptr<Pass>
+circt::seq::createSeqFIRRTLLowerToSVPass(bool keepRegisterSelfAssignments) {
+  auto pass = std::make_unique<SeqFIRRTLToSVPass>();
+  if (keepRegisterSelfAssignments)
+    pass->enableKeepRegisterSelfAssignments();
+  return pass;
 }

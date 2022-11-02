@@ -407,6 +407,11 @@ static cl::opt<bool> stripDebugInfo(
     cl::desc("Disable source locator information in output Verilog"),
     cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool> keepRegisterSelfAssignments(
+    "keep-register-self-assignments",
+    cl::desc("Keep register self assignments to workaround xprop build failures"),
+    cl::init(false), cl::cat(mainCategory));
+
 // Build mode options.
 enum BuildMode { BuildModeDebug, BuildModeRelease };
 static cl::opt<BuildMode> buildMode(
@@ -768,7 +773,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         modulePM.addPass(createCSEPass());
       }
 
-      pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass());
+      pm.nest<hw::HWModuleOp>().addPass(
+          seq::createSeqFIRRTLLowerToSVPass(keepRegisterSelfAssignments));
       pm.addPass(sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem,
                                             stripMuxPragmas));
 

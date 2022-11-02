@@ -1,4 +1,5 @@
 // RUN: circt-opt %s -verify-diagnostics --lower-seq-firrtl-to-sv | FileCheck %s
+// RUN: circt-opt %s -verify-diagnostics -pass-pipeline='hw.module(lower-seq-firrtl-to-sv{keep-register-self-assignments})' | FileCheck %s --check-prefix=KEEP
 
 // CHECK-LABEL: hw.module @lowering
 hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d: i32, e: i32, f: i32) {
@@ -146,6 +147,10 @@ hw.module private @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
+  // KEEP:       %count = sv.reg sym @count : !hw.inout<i2>
+  // KEEP-NEXT:  %0 = sv.read_inout %count : !hw.inout<i2>
+  // KEEP:       sv.always posedge %clock {
+  // KEEP:       sv.passign %count, %0 : i2
 
   %count = seq.firreg %2 clock %clock sym @count : i2
   %1 = comb.mux bin %cond, %value, %count : i2

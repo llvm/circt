@@ -25,6 +25,10 @@ def LowerSeqFIRRTLToSV: Pass<"lower-seq-firrtl-to-sv", "hw::HWModuleOp"> {
   let summary = "Lower sequential firrtl ops to SV.";
   let constructor = "circt::seq::createSeqFIRRTLLowerToSVPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
+   let options = [Option<"keepRegisterSelfAssignments",
+      "keep-register-self-assignments", "bool", "false",
+      "If true, keep register self assignments to workaround xprop build failures">
+  ];
 }
 
 def LowerSeqHLMem: Pass<"lower-seq-hlmem", "hw::HWModuleOp"> {
