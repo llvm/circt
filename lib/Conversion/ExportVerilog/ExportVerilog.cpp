@@ -29,7 +29,7 @@
 #include "circt/Support/LLVM.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/Path.h"
-#include "circt/Support/PrettyPrinterBuilder.h"
+#include "circt/Support/PrettyPrinterHelpers.h"
 #include "circt/Support/Version.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -871,7 +871,7 @@ public:
 
   /// String storage backing Tokens built from temporary strings.
   /// PrettyPrinter will clear this as appropriate.
-  PPBuilderStringSaver saver;
+  TokenStringSaver saver;
 
   /// Pretty printer.
   PrettyPrinter pp;
@@ -894,7 +894,7 @@ public:
   VerilogEmitterState &state;
 
   /// Stream helper (pp, saver).
-  PPStream<> ps;
+  TokenStream<> ps;
 
   explicit EmitterBase(VerilogEmitterState &state)
       : state(state), ps(state.pp, state.saver) {}
@@ -2000,7 +2000,7 @@ private:
   BufferingPP buffer;
 
   /// Stream to emit expressions into, will add to buffer.
-  PPStream<BufferingPP> ps;
+  TokenStream<BufferingPP> ps;
 
   // Track legalized names.
   ModuleNameManager &names;
