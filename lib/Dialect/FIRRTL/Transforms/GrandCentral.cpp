@@ -33,6 +33,7 @@
 
 using namespace circt;
 using namespace firrtl;
+using hw::HWModuleLike;
 using llvm::Optional;
 
 //===----------------------------------------------------------------------===//
@@ -612,7 +613,7 @@ private:
                                            VerbatimBuilder &path);
 
   /// Return the module associated with this value.
-  FModuleLike getEnclosingModule(Value value, FlatSymbolRefAttr sym = {});
+  HWModuleLike getEnclosingModule(Value value, FlatSymbolRefAttr sym = {});
 
   /// Inforamtion about how the circuit should be extracted.  This will be
   /// non-empty if an extraction annotation is found.
@@ -1061,9 +1062,11 @@ static Optional<DictionaryAttr> parseAugmentedType(
               << targetAttr << "'";
           return None;
         }
-        xmrSrcTarget->instances.insert(xmrSrcTarget->instances.begin(),
-                                       paths.back().begin(),
-                                       paths.back().end());
+        auto *it = xmrSrcTarget->instances.begin();
+        for (auto inst : paths.back()) {
+          xmrSrcTarget->instances.insert(it, cast<InstanceOp>(inst));
+          ++it;
+        }
       }
       auto lastInst = xmrSrcTarget->instances.pop_back_val();
       auto builder = ImplicitLocOpBuilder::atBlockEnd(lastInst.getLoc(),
@@ -1305,7 +1308,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         assert(leafValue && "leafValue not found");
 
         auto companionModule = companionIDMap.lookup(id).companion;
-        FModuleLike enclosing = getEnclosingModule(leafValue, sym);
+        HWModuleLike enclosing = getEnclosingModule(leafValue, sym);
         auto builder = OpBuilder::atBlockEnd(companionModule.getBodyBlock());
         auto uloc = builder.getUnknownLoc();
 
@@ -1417,11 +1420,11 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
                  "Unable to handle multiply instantiated companions");
           if (enclosingPaths.size() != 1)
             return false;
-          StringAttr root =
-              instancePaths->instanceGraph.getTopLevelModule().moduleNameAttr();
+          auto *topNode = instancePaths->instanceGraph.getTopLevelNode();
+          StringAttr root = topNode->getModule().moduleNameAttr();
           for (auto segment : enclosingPaths[0]) {
             fullLeafPath.push_back(getInnerRefTo(segment));
-            root = segment.getModuleNameAttr().getAttr();
+            root = segment.referencedModuleNameAttr();
           }
           fullLeafPath.push_back(FlatSymbolRefAttr::get(root));
         }
@@ -1712,17 +1715,17 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
 
 /// Return the module that is associated with this value.  Use the cached/lazily
 /// constructed symbol table to make this fast.
-FModuleLike GrandCentralPass::getEnclosingModule(Value value,
-                                                 FlatSymbolRefAttr sym) {
+HWModuleLike GrandCentralPass::getEnclosingModule(Value value,
+                                                  FlatSymbolRefAttr sym) {
   if (auto blockArg = value.dyn_cast<BlockArgument>())
-    return cast<FModuleOp>(blockArg.getOwner()->getParentOp());
+    return cast<HWModuleLike>(blockArg.getOwner()->getParentOp());
 
   auto *op = value.getDefiningOp();
   if (InstanceOp instance = dyn_cast<InstanceOp>(op))
-    return getSymbolTable().lookup<FModuleOp>(
+    return getSymbolTable().lookup<HWModuleLike>(
         instance.getModuleNameAttr().getValue());
 
-  return op->getParentOfType<FModuleOp>();
+  return op->getParentOfType<HWModuleLike>();
 }
 
 /// This method contains the business logic of this pass.
@@ -1914,8 +1917,8 @@ void GrandCentralPass::runOnOperation() {
   DenseSet<hw::HWModuleLike> dutModules;
   FModuleOp effectiveDUT = dut;
   if (!effectiveDUT)
-    effectiveDUT =
-        cast<FModuleOp>(instancePaths->instanceGraph.getTopLevelModule());
+    effectiveDUT = cast<FModuleOp>(
+        *instancePaths->instanceGraph.getTopLevelNode()->getModule());
   auto dfRange =
       llvm::depth_first(instancePaths->instanceGraph.lookup(effectiveDUT));
   for (auto i = dfRange.begin(), e = dfRange.end(); i != e;) {

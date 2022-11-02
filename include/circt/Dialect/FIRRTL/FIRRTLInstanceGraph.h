@@ -24,6 +24,7 @@ namespace circt {
 namespace firrtl {
 using InstanceRecord = hw::InstanceRecord;
 using InstanceGraphNode = hw::InstanceGraphNode;
+using InstancePathCache = hw::InstancePathCache;
 
 /// This graph tracks modules and where they are instantiated. This is intended
 /// to be used as a cached analysis on FIRRTL circuits.  This class can be used
@@ -47,52 +48,6 @@ public:
 
 private:
   InstanceGraphNode *topLevelNode;
-};
-
-/// An absolute instance path.
-using InstancePath = ArrayRef<InstanceOp>;
-
-template <typename T>
-inline static T &formatInstancePath(T &into, const InstancePath &path) {
-  into << "$root";
-  for (auto inst : path)
-    into << "/" << inst.getName() << ":" << inst.getModuleName();
-  return into;
-}
-
-template <typename T>
-static T &operator<<(T &os, const InstancePath &path) {
-  return formatInstancePath(os, path);
-}
-
-/// A data structure that caches and provides absolute paths to module instances
-/// in the IR.
-struct InstancePathCache {
-  /// The instance graph of the IR.
-  InstanceGraph &instanceGraph;
-
-  explicit InstancePathCache(InstanceGraph &instanceGraph)
-      : instanceGraph(instanceGraph) {}
-  ArrayRef<InstancePath> getAbsolutePaths(Operation *op);
-
-  /// Clear the cache.
-  void invalidate() {
-    allocator.Reset();
-    absolutePathsCache.clear();
-  }
-
-  /// Replace an InstanceOp. This is required to keep the cache updated.
-  void replaceInstance(InstanceOp oldOp, InstanceOp newOp);
-
-private:
-  /// An allocator for individual instance paths and entire path lists.
-  llvm::BumpPtrAllocator allocator;
-
-  /// Cached absolute instance paths.
-  DenseMap<Operation *, ArrayRef<InstancePath>> absolutePathsCache;
-
-  /// Append an instance to a path.
-  InstancePath appendInstance(InstancePath path, InstanceOp inst);
 };
 
 bool allUnder(ArrayRef<InstanceRecord *> nodes, InstanceGraphNode *top);
