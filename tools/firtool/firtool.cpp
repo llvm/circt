@@ -409,7 +409,8 @@ static cl::opt<bool> stripDebugInfo(
 
 static cl::opt<bool> keepRegisterSelfAssignments(
     "keep-register-self-assignments",
-    cl::desc("Keep register self assignments to workaround xprop build failures"),
+    cl::desc(
+        "Keep register self assignments to workaround xprop build failures"),
     cl::init(false), cl::cat(mainCategory));
 
 // Build mode options.
