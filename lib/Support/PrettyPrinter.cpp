@@ -83,7 +83,7 @@ void PrettyPrinter::add(Token t) {
     scanStack.push_back(right);
     tokens.push_back({t, offset});
   };
-  llvm::TypeSwitch<Token *, void>(&t)
+  llvm::TypeSwitch<Token *>(&t)
       .Case([&](StringToken *s) {
         // If nothing on stack, directly print
         FormattedToken f{t, (int32_t)s->text().size()};
@@ -239,7 +239,7 @@ static uint32_t computeNewIndent(ssize_t newIndent, int32_t offset,
 
 /// Print a token, maintaining printStack for context.
 void PrettyPrinter::print(const FormattedToken &f) {
-  llvm::TypeSwitch<const Token *, void>(&f.token)
+  llvm::TypeSwitch<const Token *>(&f.token)
       .Case([&](const StringToken *s) {
         space -= f.size;
         os.indent(pendingIndentation);
