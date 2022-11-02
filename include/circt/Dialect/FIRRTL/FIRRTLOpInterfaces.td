@@ -273,7 +273,9 @@ def FModuleLike : OpInterface<"FModuleLike"> {
                                    MLIRContext *context) {
       // The lack of *any* port symbol is represented by an empty `portSyms`
       // array as a shorthand.
-      if (llvm::none_of(syms, [&](auto &sym) { return sym; })) {
+      if (llvm::none_of(syms, [&](auto &sym) {
+            return sym && !cast<InnerSymAttr>(sym).empty();
+          })) {
         syms.clear();
         return;
       }
