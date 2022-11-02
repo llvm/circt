@@ -26,26 +26,22 @@ void TokenStringSaver::clear() { alloc.Reset(); }
 
 /// Add multiple non-breaking spaces as a single token.
 void detail::emitNBSP(unsigned n, llvm::function_ref<void(Token)> add) {
-  static const char spaces[] = {
-      ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
-      ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
-      ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
-      ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
-      ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
-      ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
-      ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
-      ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
-      ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
-  };
-  auto size = std::size(spaces);
-  if (n < size) {
+  constexpr size_t numSpaces = 128;
+  static const std::array<char, numSpaces> spaces = ([]() constexpr {
+    std::array<char, numSpaces> s = {};
+    for (auto &c : s)
+      c = ' ';
+    return s;
+  })();
+
+  if (n <= numSpaces) {
     if (n != 0)
-      add(StringToken({spaces, n}));
+      add(StringToken({spaces.data(), n}));
     return;
   }
   while (n) {
-    auto chunk = std::min<uint32_t>(n, size - 1);
-    add(StringToken({spaces, chunk}));
+    auto chunk = std::min<uint32_t>(n, numSpaces);
+    add(StringToken({spaces.data(), chunk}));
     n -= chunk;
   }
 }
