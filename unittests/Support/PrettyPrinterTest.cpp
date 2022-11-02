@@ -367,19 +367,8 @@ TEST(PrettyPrinterTest, StreamQuoted) {
   PrettyPrinter pp(os, 20);
   TokenStringSaver saver;
   TokenStream<> ps(pp, saver);
-  out = "\n";
-  {
-    ps << PP::ibox2;
-    ps << "test" << PP::space;
-    ps.writeQuotedEscaped("quote\"me");
-    ps << PP::space << "test";
-    ps << PP::end;
-  }
-  ps << PP::newline << PP::eof;
-  EXPECT_EQ(out.str(), StringRef(R"""(
-test "quote"me"
-  test
-)"""));
+  ps.writeQuotedEscaped("quote\"me", false, "'", "'");
+  EXPECT_EQ(out.str(), "'quote\\\"me'");
 }
 
 TEST(PrettyPrinterTest, LargeStream) {
