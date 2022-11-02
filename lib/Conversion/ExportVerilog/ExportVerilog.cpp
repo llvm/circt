@@ -2300,13 +2300,9 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
   // the various operations that may come across them. If we reached this point
   // in the emitter, the value should be considered illegal to emit.
   if (value.getBitWidth() == 0) {
-    // emitOpError(op, "will not emit zero width constants in the general
-    // case");
-
-    // os << "<<unsupported zero width constant: " <<
-    // op->getName().getStringRef()
-    //    << ">>";
-    os << "1'b0";
+    emitOpError(op, "will not emit zero width constants in the general case");
+    os << "<<unsupported zero width constant: " << op->getName().getStringRef()
+       << ">>";
     return {Unary, IsUnsigned};
   }
 
