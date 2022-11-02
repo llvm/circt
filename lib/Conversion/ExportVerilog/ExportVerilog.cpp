@@ -1816,8 +1816,8 @@ private:
   /// Emit the specified value as a subexpression, wrapping in an ibox2.
   void emitSubExprIBox2(
       Value v, VerilogPrecedence parenthesizeIfLooserThan = LowestPrecedence) {
-    auto ib = ps.scopedIBox(2);
-    emitSubExpr(v, parenthesizeIfLooserThan);
+    ps.scopedBox(PP::ibox2,
+                 [&]() { emitSubExpr(v, parenthesizeIfLooserThan); });
   }
 
   /// Emit a range of values separated by commas and a breakable space.
@@ -2564,7 +2564,7 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   // The ?: operator is right associative.
-#if 1
+
   // Layout:
   // cond ? a : b
   // (long
@@ -2576,34 +2576,27 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
   // + cond
   //   ? a
   //   : b
-  auto box = ps.scopedCBox(0);
-  {
-    auto innerbox = ps.scopedIBox(0);
-    emitSubExpr(op.getCond(), VerilogPrecedence(Conditional - 1));
-  }
-  ps << BreakToken(1, 2);
-#else
-  // cond ? a : b
-  // cond ? a
-  //      : b
-  auto box = ps.scopedIBox(2);
-  emitSubExpr(op.getCond(), VerilogPrecedence(Conditional - 1));
-  ps << PP::nbsp;
-  auto cb = ps.scopedCBox(0);
-#endif
-  ps << "? " << PP::ibox0;
-  auto lhsInfo =
-      emitSubExpr(op.getTrueValue(), VerilogPrecedence(Conditional - 1));
-  ps << PP::end;
-  ps << BreakToken(1, 2) << ": " << PP::ibox0;
-  auto rhsInfo = emitSubExpr(op.getFalseValue(), Conditional);
-  ps << PP::end;
+  return ps.scopedBox(PP::cbox0, [&]() -> SubExprInfo {
+    ps.scopedBox(PP::ibox0, [&]() {
+      emitSubExpr(op.getCond(), VerilogPrecedence(Conditional - 1));
+    });
+    ps << BreakToken(1, 2);
+    ps << "? ";
+    auto lhsInfo = ps.scopedBox(PP::ibox0, [&]() {
+      return emitSubExpr(op.getTrueValue(), VerilogPrecedence(Conditional - 1));
+    });
+    ps << BreakToken(1, 2) << ": ";
 
-  SubExprSignResult signedness = IsUnsigned;
-  if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
-    signedness = IsSigned;
+    auto rhsInfo = ps.scopedBox(PP::ibox0, [&]() {
+      return emitSubExpr(op.getFalseValue(), Conditional);
+    });
 
-  return {Conditional, signedness};
+    SubExprSignResult signedness = IsUnsigned;
+    if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
+      signedness = IsSigned;
+
+    return {Conditional, signedness};
+  });
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(StructCreateOp op) {
@@ -2624,11 +2617,12 @@ SubExprInfo ExprEmitter::visitTypeOp(StructCreateOp op) {
                               }),
       [&]() { ps << "'{"; },
       [&](const auto &fieldAndOperand) {
-        const auto &[field, operand] = fieldAndOperand;
-        auto ib = ps.scopedIBox(2);
-        ps << PPExtString(emitter.getVerilogStructFieldName(field.name)) << ":"
-           << PP::space;
-        emitSubExpr(operand, Selection);
+        ps.scopedBox(PP::ibox2, [&]() {
+          const auto &[field, operand] = fieldAndOperand;
+          ps << PPExtString(emitter.getVerilogStructFieldName(field.name))
+             << ":" << PP::space;
+          emitSubExpr(operand, Selection);
+        });
       },
       [&]() { ps << "}"; });
   return {Unary, IsUnsigned};
@@ -2657,15 +2651,16 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
           [](const auto &field) { return !isZeroBitType(field.type); }),
       [&]() { ps << "'{"; },
       [&](const StructType::FieldInfo &field) {
-        auto cb = ps.scopedIBox(2);
-        ps << PPExtString(emitter.getVerilogStructFieldName(field.name)) << ":"
-           << PP::space;
-        if (field.name == op.getField()) {
-          emitSubExpr(op.getNewValue(), Selection);
-        } else {
-          emitSubExpr(op.getInput(), Selection);
-          ps << "." << PPExtString(field.name.getValue());
-        }
+        ps.scopedBox(PP::ibox2, [&]() {
+          ps << PPExtString(emitter.getVerilogStructFieldName(field.name))
+             << ":" << PP::space;
+          if (field.name == op.getField()) {
+            emitSubExpr(op.getNewValue(), Selection);
+          } else {
+            emitSubExpr(op.getInput(), Selection);
+            ps << "." << PPExtString(field.name.getValue());
+          }
+        });
       },
       [&]() { ps << "}"; });
   return {Selection, IsUnsigned};
@@ -3026,12 +3021,11 @@ LogicalResult StmtEmitter::visitSV(ReleaseOp op) {
   startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  {
-    auto ib = ps.scopedIBox(2);
+  ps.scopedBox(PP::ibox2, [&]() {
     ps << "release" << PP::space;
     emitExpression(op.getDest(), ops);
     ps << ";";
-  }
+  });
   emitLocationInfoAndNewLine(ops);
   return success();
 }
@@ -3043,15 +3037,15 @@ LogicalResult StmtEmitter::visitSV(AliasOp op) {
   startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  {
-    auto ib = ps.scopedIBox(2);
+  ps.scopedBox(PP::ibox2, [&]() {
     ps << "alias" << PP::space;
-    auto cb = ps.scopedCBox(0); // If any breaks, all break.
-    llvm::interleave(
-        op.getOperands(), [&](Value v) { emitExpression(v, ops); },
-        [&]() { ps << PP::nbsp << "=" << PP::space; });
-    ps << ";";
-  }
+    ps.scopedBox(PP::cbox0, [&]() { // If any breaks, all break.
+      llvm::interleave(
+          op.getOperands(), [&](Value v) { emitExpression(v, ops); },
+          [&]() { ps << PP::nbsp << "=" << PP::space; });
+      ps << ";";
+    });
+  });
   emitLocationInfoAndNewLine(ops);
   return success();
 }
@@ -3156,8 +3150,7 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
   startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  {
-    auto ib = ps.scopedIBox(2);
+  ps.scopedBox(PP::ibox2, [&]() {
     ps << "typedef" << PP::space;
     ps.invokeWithStringOS([&](auto &os) {
       emitter.printPackedType(stripUnpackedTypes(op.getType()), os, op.getLoc(),
@@ -3167,7 +3160,7 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
     ps.invokeWithStringOS(
         [&](auto &os) { emitter.printUnpackedTypePostfix(op.getType(), os); });
     ps << ";";
-  }
+  });
   emitLocationInfoAndNewLine(ops);
   return success();
 }
@@ -3474,14 +3467,15 @@ void StmtEmitter::emitAssertionMessage(StringAttr message, ValueRange args,
   if (!message)
     return;
   ps << PP::space << "else" << PP::nbsp << "$error(";
-  auto ib = ps.scopedIBox(0);
-  ps.writeQuotedEscaped(message.getValue());
-  // TODO: box, break/wrap behavior!
-  for (auto arg : args) {
-    ps << "," << PP::space;
-    emitExpression(arg, ops);
-  }
-  ps << ")";
+  ps.scopedBox(PP::ibox0, [&]() {
+    ps.writeQuotedEscaped(message.getValue());
+    // TODO: box, break/wrap behavior!
+    for (auto arg : args) {
+      ps << "," << PP::space;
+      emitExpression(arg, ops);
+    }
+    ps << ")";
+  });
 }
 
 template <typename Op>
@@ -3693,8 +3687,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysOp op) {
 
   auto printEvent = [&](AlwaysOp::Condition cond) {
     ps << PPExtString(stringifyEventControl(cond.event)) << PP::nbsp;
-    auto cb = ps.scopedCBox();
-    emitExpression(cond.value, ops);
+    ps.scopedBox(PP::cbox0, [&]() { emitExpression(cond.value, ops); });
   };
 
   switch (op.getNumConditions()) {
