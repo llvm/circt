@@ -5,6 +5,11 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+//
+// This implements SCCP:
+// https://www.cs.wustl.edu/~cytron/531Pages/f11/Resources/Papers/cprop.pdf
+//
+//===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
