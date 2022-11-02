@@ -34,14 +34,13 @@ void detail::emitNBSP(unsigned n, llvm::function_ref<void(Token)> add) {
     return s;
   })();
 
-  auto size = std::size(spaces);
-  if (n < size) {
+  if (n < numSpaces) {
     if (n != 0)
       add(StringToken({spaces.data(), n}));
     return;
   }
   while (n) {
-    auto chunk = std::min<uint32_t>(n, size - 1);
+    auto chunk = std::min<uint32_t>(n, numSpaces - 1);
     add(StringToken({spaces.data(), chunk}));
     n -= chunk;
   }
