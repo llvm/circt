@@ -377,7 +377,7 @@ TEST(PrettyPrinterTest, StreamQuoted) {
   }
   ps << PP::newline << PP::eof;
   EXPECT_EQ(out.str(), StringRef(R"""(
-test "quote\"me"
+test "quote"me"
   test
 )"""));
 }
