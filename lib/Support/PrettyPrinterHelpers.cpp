@@ -27,7 +27,7 @@ void TokenStringSaver::clear() { alloc.Reset(); }
 /// Add multiple non-breaking spaces as a single token.
 void detail::emitNBSP(unsigned n, llvm::function_ref<void(Token)> add) {
   constexpr size_t numSpaces = 128;
-  static const std::array<char, numSpaces> spaces = ([]() constexpr {
+  static const std::array<char, numSpaces> spaces = ([&]() constexpr {
     std::array<char, numSpaces> s = {};
     for (auto &c : s)
       c = ' ';
