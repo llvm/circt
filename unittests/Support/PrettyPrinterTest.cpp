@@ -550,7 +550,6 @@ TEST(PrettyPrinterTest, Expr) {
       ps << "assign" << PP::nbsp << id << PP::nbsp << "=";
       ps << PP::space;
       ps.scopedBox(PP::ibox0, [&]() {
-        ps << PP::ibox0;
         sumExpr(ps);
         ps << PP::space << "*" << PP::space;
         sumExpr(ps);
