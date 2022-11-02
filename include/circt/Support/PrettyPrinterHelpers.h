@@ -310,6 +310,14 @@ public:
     });
     return *this;
   }
+
+  /// Open a box, invoke the lambda, and close it after.
+  template <typename T, typename Callable>
+  auto scopedBox(T &&t, Callable &&c, Token close = EndToken()) {
+    *this << std::forward<T>(t);
+    auto done = llvm::make_scope_exit([&]() { *this << close; });
+    return std::invoke(std::forward<Callable>(c));
+  }
 };
 
 } // end namespace pretty
