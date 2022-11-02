@@ -3343,27 +3343,30 @@ LogicalResult StmtEmitter::visitSV(InfoOp op) {
 LogicalResult StmtEmitter::visitSV(ReadMemOp op) {
   SmallPtrSet<Operation *, 8> ops({op});
 
-  indent() << "$readmem";
+  startStatement();
+  ps << "$readmem";
   switch (op.getBaseAttr().getValue()) {
   case MemBaseTypeAttr::MemBaseBin:
-    os << "b";
+    ps << "b";
     break;
   case MemBaseTypeAttr::MemBaseHex:
-    os << "h";
+    ps << "h";
     break;
   }
-  os << "(";
-  os << "\"" << op.getFilename() << "\""
-     << ", ";
+  ps << "(";
+  ps.scopedBox(PP::ibox0, [&]() {
+    ps.writeQuotedEscaped(op.getFilename());
+    ps << "," << PP::space;
 
-  auto *reg =
-      state.symbolCache
-          .getInnerDefinition(op->getParentOfType<HWModuleOp>().getNameAttr(),
-                              op.getInnerSymAttr())
-          .getOp();
-  os << names.getName(reg);
+    auto *reg =
+        state.symbolCache
+            .getInnerDefinition(op->getParentOfType<HWModuleOp>().getNameAttr(),
+                                op.getInnerSymAttr())
+            .getOp();
+    ps << PPExtString(names.getName(reg));
+  });
 
-  os << ");";
+  ps << ");";
   emitLocationInfoAndNewLine(ops);
   return success();
 }
