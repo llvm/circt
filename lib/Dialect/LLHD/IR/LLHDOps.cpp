@@ -498,8 +498,8 @@ LogicalResult circt::llhd::EntityOp::verifyType() {
 
 LogicalResult circt::llhd::EntityOp::verifyBody() {
   // check signal names are unique
-  llvm::StringSet sigSet;
-  llvm::StringSet instSet;
+  llvm::StringSet<> sigSet;
+  llvm::StringSet<> instSet;
   auto walkResult = walk([&sigSet, &instSet](Operation *op) -> WalkResult {
     return TypeSwitch<Operation *, WalkResult>(op)
         .Case<SigOp>([&](auto sigOp) -> WalkResult {

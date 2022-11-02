@@ -225,7 +225,15 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     }]>,
 
     InterfaceMethod<"Get information about all ports",
-    "SmallVector<PortInfo>", "getPorts">
+    "SmallVector<PortInfo>", "getPorts">,
+
+    InterfaceMethod<"Inserts the given ports at the corresponding indices",
+    "void", "insertPorts",
+    (ins "ArrayRef<std::pair<unsigned, PortInfo>>":$ports)>,
+
+    InterfaceMethod<"Erases the ports that have their corresponding bit set in `portIndices`",
+    "void", "erasePorts",
+    (ins "const llvm::BitVector&":$portIndices)>
   ];
 
   let extraClassDeclaration = [{

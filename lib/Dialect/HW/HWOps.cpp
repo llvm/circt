@@ -1541,7 +1541,7 @@ LogicalResult ArrayCreateOp::verify() {
 }
 
 // Check whether an integer value is an offset from a base.
-static bool isOffset(Value base, Value index, uint64_t offset) {
+bool hw::isOffset(Value base, Value index, uint64_t offset) {
   if (auto constBase = base.getDefiningOp<hw::ConstantOp>()) {
     if (auto constIndex = index.getDefiningOp<hw::ConstantOp>()) {
       // If both values are a constant, check if index == base + offset.

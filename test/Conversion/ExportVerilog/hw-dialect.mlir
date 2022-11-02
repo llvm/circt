@@ -475,10 +475,10 @@ hw.module @TestZeroInstance(%aa: i4, %azeroBit: i0, %aarrZero: !hw.array<3xi0>)
 }
 
 // CHECK: module TestZeroStruct(
-// CHECK-NEXT:  // input  /*Zero Width*/                           structZero,
-// CHECK-NEXT:  // input  struct packed {logic /*Zero Width*/ a; } structZeroNest,
-// CHECK-NEXT:  // output /*Zero Width*/                           structZero_0,
-// CHECK-NEXT:  // output struct packed {logic /*Zero Width*/ a; } structZeroNest_0
+// CHECK-NEXT:  // input  /*Zero Width*/ structZero,
+// CHECK-NEXT:  // input  /*Zero Width*/ structZeroNest,
+// CHECK-NEXT:  // output /*Zero Width*/ structZero_0,
+// CHECK-NEXT:  // output /*Zero Width*/ structZeroNest_0
 // CHECK-NEXT: );
 hw.module @TestZeroStruct(%structZero: !hw.struct<>, %structZeroNest: !hw.struct<a: !hw.struct<>>)
   -> (structZero_0: !hw.struct<>, structZeroNest_0: !hw.struct<a: !hw.struct<>>) {
@@ -487,6 +487,24 @@ hw.module @TestZeroStruct(%structZero: !hw.struct<>, %structZeroNest: !hw.struct
   // CHECK:      // Zero width: assign structZero_0 = structZero;
   // CHECK-NEXT: // Zero width: assign structZeroNest_0 = structZeroNest;
   // CHECK-NEXT: endmodule
+}
+
+// CHECK-LABEL: module zeroElements
+// CHECK-NEXT:   // input  /*Zero Width*/                                                                                              in0,
+// CHECK-NEXT:      input  [31:0]                                                                                                      in1,
+// CHECK-NEXT:      output struct packed {/*z1: Zero Width;*/ logic [31:0] a; /*z2: Zero Width;*/ logic [31:0] b; /*c: Zero Width;*/ struct packed {logic [31:0] d1; /*z: Zero Width;*/ } d; } out0)
+hw.module @zeroElements(%in0: i0, %in1: i32) -> (out0: !hw.struct<z1: i0, a: i32, z2: i0, b: i32, c: !hw.struct<z: i0>, d: !hw.struct<d1:i32, z:i0>>) {
+  // CHECK:      // Zero width: wire /*Zero Width*/
+  // CHECK-SAME: _GEN = '{};
+  // CHECK-NEXT: wire struct packed {logic [31:0] d1; /*z: Zero Width;*/ }
+  // CHECK-SAME: _GEN_0 = '{d1: in1};
+  // CHECK-NEXT: wire struct packed {/*z1: Zero Width;*/ logic [31:0] a; /*z2: Zero Width;*/ logic [31:0] b; /*c: Zero Width;*/ struct packed {logic [31:0] d1; /*z: Zero Width;*/ } d; } _GEN_1 = '{a: in1, b: in1, d: _GEN_0};
+  // CHECK-NEXT: assign out0 = '{a: in1, b: _GEN_1.b, d: _GEN_1.d};
+  %0 = hw.struct_create (%in0) : !hw.struct<z: i0>
+  %1 = hw.struct_create (%in1, %in0) : !hw.struct<d1:i32, z:i0>
+  %2 = hw.struct_create (%in0, %in1, %in0, %in1, %0, %1) : !hw.struct<z1: i0, a: i32, z2: i0, b: i32, c: !hw.struct<z: i0>, d: !hw.struct<d1:i32, z:i0>>
+  %3 = hw.struct_inject %2["a"], %in1 : !hw.struct<z1: i0, a: i32, z2: i0, b: i32, c: !hw.struct<z: i0>, d: !hw.struct<d1:i32, z:i0>>
+  hw.output %3 : !hw.struct<z1: i0, a: i32, z2: i0, b: i32, c: !hw.struct<z: i0>, d: !hw.struct<d1:i32, z:i0>>
 }
 
 // CHECK-LABEL: TestZeroStructInstance

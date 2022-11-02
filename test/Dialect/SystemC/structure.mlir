@@ -63,6 +63,9 @@ systemc.module @signals () {
   // CHECK-NEXT: %signal1 = systemc.signal : !systemc.signal<i1>
   %signal1 = systemc.signal : !systemc.signal<i1>
 
+  // CHECK-NEXT: %namedSignal = systemc.signal named : !systemc.signal<i1>
+  %namedSignal = systemc.signal named : !systemc.signal<i1>
+
   // CHECK-NEXT: systemc.func
   %funchandle = systemc.func {
     // CHECK-NEXT: [[READ:%.*]] = systemc.signal.read %signal0 : !systemc.signal<!systemc.uint<32>>
@@ -160,4 +163,15 @@ hw.module @verilatorInteropInHwModule(%arg0: i32, %arg1: i8) -> () {
 systemc.module @verilatorInteropInSystemCModule() {
   // CHECK-NEXT: systemc.interop.verilated "verilated" @inst () -> ()
   systemc.interop.verilated "verilated" @inst () -> ()
+}
+
+// CHECK-LABEL: @sensitivity
+systemc.module @sensitivity (%in: !systemc.in<i1>, %out: !systemc.out<i1>, %inout: !systemc.inout<i1>) {
+  %signal = systemc.signal : !systemc.signal<i1>
+  systemc.ctor {
+    // CHECK: systemc.sensitive %in, %out, %inout, %signal : !systemc.in<i1>, !systemc.out<i1>, !systemc.inout<i1>, !systemc.signal<i1>
+    systemc.sensitive %in, %out, %inout, %signal : !systemc.in<i1>, !systemc.out<i1>, !systemc.inout<i1>, !systemc.signal<i1>
+    // CHECK-NEXT: systemc.sensitive
+    systemc.sensitive
+  }
 }

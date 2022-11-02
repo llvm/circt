@@ -33,6 +33,10 @@ systemc.module @module (%port0: !systemc.in<i1>, %port1: !systemc.inout<!systemc
   }
 }
 
+systemc.module @namedSignal() {
+  %sigName = systemc.signal named : !systemc.signal<i1>
+}
+
 systemc.module @nativeCTypes (%port0: !systemc.in<i1>,
                               %port1: !systemc.in<i8>,
                               %port2: !systemc.in<i16>,
@@ -110,4 +114,12 @@ systemc.module @MemberAccess () {
     %2 = systemc.cpp.member_access %1 arrow "second" : (!emitc.ptr<!emitc.opaque<"std::pair<int, int>">>) -> !emitc.opaque<"int">
     systemc.cpp.assign %result = %2 : !emitc.opaque<"int">
   }
+}
+
+systemc.module @Sensitive (%in: !systemc.in<i1>, %inout: !systemc.inout<i1>) {
+  systemc.ctor {
+    systemc.method %update
+    systemc.sensitive %in, %inout : !systemc.in<i1>, !systemc.inout<i1>
+  }
+  %update = systemc.func {}
 }

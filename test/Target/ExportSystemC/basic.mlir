@@ -73,6 +73,12 @@ systemc.module @basic (%port0: !systemc.in<i1>, %port1: !systemc.inout<!systemc.
 // CHECK-NEXT: };
 }
 
+// CHECK-LABEL: namedSignal
+systemc.module @namedSignal() {
+  // CHECK-NEXT: sc_signal<bool> SC_NAMED(sigName);
+  %sigName = systemc.signal named : !systemc.signal<i1>
+}
+
 // CHECK-LABEL: SC_MODULE(nativeCTypes)
 // CHECK-NEXT: sc_in<bool> port0;
 // CHECK-NEXT: sc_in<uint8_t> port1;
@@ -249,6 +255,16 @@ systemc.module @MemberAccess () {
     %1 = systemc.cpp.new (%c5, %c5) : (!emitc.opaque<"int">, !emitc.opaque<"int">) -> !emitc.ptr<!emitc.opaque<"std::pair<int, int>">>
     %2 = systemc.cpp.member_access %1 arrow "second" : (!emitc.ptr<!emitc.opaque<"std::pair<int, int>">>) -> !emitc.opaque<"int">
     systemc.cpp.assign %result = %2 : !emitc.opaque<"int">
+  }
+}
+
+// CHECK-LABEL: sensitivities
+systemc.module @sensitivities(%in: !systemc.in<i1>, %inout: !systemc.inout<i1>) {
+  systemc.ctor {
+    // CHECK: sensitive << in << inout;
+    systemc.sensitive %in, %inout : !systemc.in<i1>, !systemc.inout<i1>
+    // CHECK-NEXT: }
+    systemc.sensitive
   }
 }
 

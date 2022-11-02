@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -338,6 +339,69 @@ void SignalOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 //===----------------------------------------------------------------------===//
+// ConvertOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ConvertOp::fold(ArrayRef<Attribute> operands) {
+  if (getInput().getType() == getResult().getType())
+    return getInput();
+
+  if (auto other = getInput().getDefiningOp<ConvertOp>()) {
+    Type inputType = other.getInput().getType();
+    Type intermediateType = getInput().getType();
+
+    if (inputType != getResult().getType())
+      return {};
+
+    // Either both the input and intermediate types are signed or both are
+    // unsigned.
+    bool inputSigned = inputType.isa<SignedType, IntBaseType>();
+    bool intermediateSigned = intermediateType.isa<SignedType, IntBaseType>();
+    if (inputSigned ^ intermediateSigned)
+      return {};
+
+    // Converting 4-valued to 2-valued and back may lose information.
+    if (inputType.isa<LogicVectorBaseType, LogicType>() &&
+        !intermediateType.isa<LogicVectorBaseType, LogicType>())
+      return {};
+
+    auto inputBw = getBitWidth(inputType);
+    auto intermediateBw = getBitWidth(intermediateType);
+
+    if (!inputBw && intermediateBw) {
+      if (inputType.isa<IntBaseType, UIntBaseType>() &&
+          intermediateBw.value() >= 64)
+        return other.getInput();
+      // We cannot support input types of signed, unsigned, and vector types
+      // since they have no upper bound for the bit-width.
+    }
+
+    if (!intermediateBw) {
+      if (intermediateType.isa<BitVectorBaseType, LogicVectorBaseType>())
+        return other.getInput();
+
+      if (!inputBw && inputType.isa<IntBaseType, UIntBaseType>() &&
+          intermediateType.isa<SignedType, UnsignedType>())
+        return other.getInput();
+
+      if (inputBw && inputBw.value() <= 64 &&
+          intermediateType
+              .isa<IntBaseType, UIntBaseType, SignedType, UnsignedType>())
+        return other.getInput();
+
+      // We have to be careful with the signed and unsigned types as they often
+      // have a max bit-width defined (that can be customized) and thus folding
+      // here could change the behavior.
+    }
+
+    if (inputBw && intermediateBw && inputBw.value() <= intermediateBw.value())
+      return other.getInput();
+  }
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // CtorOp
 //===----------------------------------------------------------------------===//
 
@@ -555,6 +619,20 @@ StringRef BindPortOp::getPortName() {
       .cast<ModuleType>()
       .getPorts()[getPortId().getZExtValue()]
       .name.getValue();
+}
+
+//===----------------------------------------------------------------------===//
+// SensitiveOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SensitiveOp::canonicalize(SensitiveOp op,
+                                        PatternRewriter &rewriter) {
+  if (op.getSensitivities().empty()) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//

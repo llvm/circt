@@ -279,3 +279,35 @@ hw.module @case_stmt(%arg: i3) {
   }
 
   }
+
+// CHECK-LABEL: MergeAssignments
+hw.module @MergeAssignments(%a: !hw.array<4xi1>, %clock: i1) -> (d: !hw.array<4xi1>) {
+  %c-1_i2 = hw.constant -1 : i2
+  %c-2_i2 = hw.constant -2 : i2
+  %c1_i2 = hw.constant 1 : i2
+  %c0_i2 = hw.constant 0 : i2
+  %v0 = hw.array_get %a[%c0_i2] : !hw.array<4xi1>, i2
+  %v1 = hw.array_get %a[%c1_i2] : !hw.array<4xi1>, i2
+  %v2 = hw.array_get %a[%c-2_i2] : !hw.array<4xi1>, i2
+  %r = sv.reg  : !hw.inout<array<4xi1>>
+  %i0 = sv.array_index_inout %r[%c0_i2] : !hw.inout<array<4xi1>>, i2
+  %i1 = sv.array_index_inout %r[%c1_i2] : !hw.inout<array<4xi1>>, i2
+  %i2 = sv.array_index_inout %r[%c-2_i2] : !hw.inout<array<4xi1>>, i2
+  %read = sv.read_inout %r : !hw.inout<array<4xi1>>
+  sv.always posedge %clock {
+    // CHECK: sv.always
+    // CHECK-NEXT:  %[[index:.+]] = sv.indexed_part_select_inout %r[%c0_i2 : 3] : !hw.inout<array<4xi1>>, i2
+    // CHECK-NEXT:  %[[slice:.+]] = hw.array_slice %a[%c0_i2] : (!hw.array<4xi1>) -> !hw.array<3xi1>
+    // CHECK-NEXT:  sv.passign %[[index]], %[[slice]]
+    // CHECK-NEXT:  %[[index:.+]] = sv.indexed_part_select_inout %r[%c0_i2 : 3] : !hw.inout<array<4xi1>>, i2
+    // CHECK-NEXT:  %[[slice:.+]] = hw.array_slice %a[%c0_i2] : (!hw.array<4xi1>) -> !hw.array<3xi1>
+    // CHECK-NEXT:  sv.bpassign %[[index]], %[[slice]]
+    sv.passign %i0, %v0 : i1
+    sv.passign %i1, %v1 : i1
+    sv.passign %i2, %v2 : i1
+    sv.bpassign %i0, %v0 : i1
+    sv.bpassign %i1, %v1 : i1
+    sv.bpassign %i2, %v2 : i1
+  }
+  hw.output %read : !hw.array<4xi1>
+}
