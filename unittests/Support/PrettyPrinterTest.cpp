@@ -585,13 +585,13 @@ assign foo =
    f);
 )"""));
   test("foo", 30);
-  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+  EXPECT_EQ(out.str(), StringRef(R"""(
 assign foo =
   (a + b + c + d + e + f) *
   (a + b + c + d + e + f);
 )"""));
   test("foo", 80);
-  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+  EXPECT_EQ(out.str(), StringRef(R"""(
 assign foo = (a + b + c + d + e + f) * (a + b + c + d + e + f);
 )"""));
 }
@@ -619,47 +619,47 @@ TEST(PrettyPrinterTest, InitWithBaseAndCurrentIndent) {
     pp.eof();
   };
   test(0, 0);
-  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+  EXPECT_EQ(out.str(), StringRef(R"""(
 xxxxxxxxxxxxxxx yyyyyyyyyyyyyyy
   zzzzzzzzzzzzzzz
 )"""));
 
   // Base = current.
   test(2, 2);
-  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+  EXPECT_EQ(out.str(), StringRef(R"""(
 >>xxxxxxxxxxxxxxx yyyyyyyyyyyyyyy
     zzzzzzzzzzzzzzz
 )"""));
   test(2, 2, false); // wrong 'current' column.
-  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+  EXPECT_EQ(out.str(), StringRef(R"""(
 xxxxxxxxxxxxxxx yyyyyyyyyyyyyyy
     zzzzzzzzzzzzzzz
 )"""));
 
   // Base < current.
   test(2, 6);
-  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+  EXPECT_EQ(out.str(), StringRef(R"""(
 >>>>>>xxxxxxxxxxxxxxx
         yyyyyyyyyyyyyyy
         zzzzzzzzzzzzzzz
 )"""));
   // Check behavior w/o grouping, respect 'base'.
   test(2, 6, true, false);
-  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+  EXPECT_EQ(out.str(), StringRef(R"""(
 >>>>>>xxxxxxxxxxxxxxx
   yyyyyyyyyyyyyyy zzzzzzzzzzzzzzz
 )"""));
 
   // Base > current.  PP should add whitespace.
   test(6, 3);
-  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+  EXPECT_EQ(out.str(), StringRef(R"""(
 >>>   xxxxxxxxxxxxxxx
         yyyyyyyyyyyyyyy
         zzzzzzzzzzzzzzz
 )"""));
   // Check behavior w/o any group (default group).
   test(6, 3, true, false);
-  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+  EXPECT_EQ(out.str(), StringRef(R"""(
 >>>   xxxxxxxxxxxxxxx
       yyyyyyyyyyyyyyy
       zzzzzzzzzzzzzzz
@@ -685,14 +685,14 @@ TEST(PrettyPrinterTest, NeverBreak) {
   };
 
   test(false);
-  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+  EXPECT_EQ(out.str(), StringRef(R"""(
 test
   test
 test
 )"""));
 
   test(true);
-  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+  EXPECT_EQ(out.str(), StringRef(R"""(
 test test
 test
 )"""));
@@ -725,7 +725,7 @@ TEST(PrettyPrinterTest, NeverBreakGroup) {
   };
 
   test(Breaks::Inconsistent, Breaks::Inconsistent);
-  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+  EXPECT_EQ(out.str(), StringRef(R"""(
 test
   test
         test
@@ -734,19 +734,19 @@ test
 )"""));
 
   test(Breaks::Inconsistent, Breaks::Never);
-  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+  EXPECT_EQ(out.str(), StringRef(R"""(
 test
   test test test
   test
 )"""));
 
   test(Breaks::Never, Breaks::Inconsistent);
-  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+  EXPECT_EQ(out.str(), StringRef(R"""(
 test test test test test
 )"""));
 
   test(Breaks::Never, Breaks::Never);
-  EXPECT_EQ(StringRef(out.str()), StringRef(R"""(
+  EXPECT_EQ(out.str(), StringRef(R"""(
 test test test test test
 )"""));
 }
