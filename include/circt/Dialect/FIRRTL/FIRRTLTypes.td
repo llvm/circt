@@ -63,6 +63,13 @@ def BundleType : FIRRTLDialectType<CPred<"$_self.isa<BundleType>()">,
 def FVectorType : FIRRTLDialectType<CPred<"$_self.isa<FVectorType>()">,
   "FVectorType", "::circt::firrtl::FVectorType">;
 
+def AggregateType : FIRRTLDialectType<
+  Or<[
+    CPred<"$_self.isa<FVectorType>()">,
+    CPred<"$_self.isa<BundleType>()">
+  ]>,
+  "a aggregate type", "::circt::firrtl::FIRRTLBaseType">;
+
 def ConnectableType : FIRRTLDialectType<
   Or<[
     CPred<"$_self.isa<FIRRTLBaseType>()">,

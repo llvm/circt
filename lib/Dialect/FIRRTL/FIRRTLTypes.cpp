@@ -522,6 +522,20 @@ std::pair<unsigned, bool> FIRRTLBaseType::rootChildFieldID(unsigned fieldID,
       });
 }
 
+unsigned FIRRTLBaseType::getGroundFields() const {
+  return TypeSwitch<FIRRTLBaseType, unsigned>(*this)
+      .Case<BundleType>([](auto type) {
+        unsigned sum = 0;
+        for (auto &field : type.getElements())
+          sum += field.type.getGroundFields();
+        return sum;
+      })
+      .Case<FVectorType>([](auto type) {
+        return type.getNumElements() * type.getElementType().getGroundFields();
+      })
+      .Default([](Type) { return 1; });
+}
+
 /// Helper to implement the equivalence logic for a pair of bundle elements.
 /// Note that the FIRRTL spec requires bundle elements to have the same
 /// orientation, but this only compares their passive types. The FIRRTL dialect

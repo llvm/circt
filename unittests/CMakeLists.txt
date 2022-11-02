@@ -6,3 +6,4 @@ function(add_circt_unittest test_dirname)
 endfunction()
 
 add_subdirectory(Dialect)
+add_subdirectory(Support)

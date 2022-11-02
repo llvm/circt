@@ -1019,7 +1019,7 @@ firrtl.circuit "DedupedPath" attributes {
 
 // -----
 
-firrtl.circuit "BlackBoxDirectoryBehavior" attributes {
+firrtl.circuit "DirectoryBehaviorWithDUT" attributes {
   annotations = [
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
      defName = "Foo",
@@ -1029,49 +1029,127 @@ firrtl.circuit "BlackBoxDirectoryBehavior" attributes {
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "bindings.sv"}]} {
-  firrtl.extmodule private @BlackBox_DUT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "DUTOnly.v", text = ""}]}
-  firrtl.extmodule private @BlackBox_GCT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "GCTOnly.v", text = ""}]}
-  firrtl.extmodule private @BlackBox_DUTAndGCT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "DUTAndGCT.v", text = ""}]}
-  firrtl.module private @View_companion() attributes {
+
+  // Each of these modules is instantiated in a different location.  A leading
+  // "E" indicates that this is an external module.  A leading "M" indicates
+  // that this is a module.  The instantiation location is indicated by three
+  // binary bits with an "_" indicating the absence of instantiation:
+  //   1) "T" indicates this is instantiated in the "Top" (above the DUT)
+  //   2) "D" indicates this is instantiated in the "DUT"
+  //   3) "C" indicates this is instantiated in the "Companion"
+  // E.g., "ET_C" is an external module instantiated above the DUT and in the
+  // Companion.
+  firrtl.module @MT__() {}
+  firrtl.module @M_D_() {}
+  firrtl.module @M__C() {}
+  firrtl.module @MTD_() {}
+  firrtl.module @M_DC() {}
+  firrtl.module @MT_C() {}
+  firrtl.module @MTDC() {}
+  firrtl.extmodule @ET__() attributes {annotations = [
+    {class = "firrtl.transforms.BlackBoxInlineAnno", name = "ET__.v", text = ""}
+  ]}
+  firrtl.extmodule @E_D_() attributes {annotations = [
+    {class = "firrtl.transforms.BlackBoxInlineAnno", name = "E_D_.v", text = ""}
+  ]}
+  firrtl.extmodule @E__C() attributes {annotations = [
+    {class = "firrtl.transforms.BlackBoxInlineAnno", name = "E__C.v", text = ""}
+  ]}
+  firrtl.extmodule @ETD_() attributes {annotations = [
+    {class = "firrtl.transforms.BlackBoxInlineAnno", name = "ETD_.v", text = ""}
+  ]}
+  firrtl.extmodule @E_DC() attributes {annotations = [
+    {class = "firrtl.transforms.BlackBoxInlineAnno", name = "E_DC.v", text = ""}
+  ]}
+  firrtl.extmodule @ET_C() attributes {annotations = [
+    {class = "firrtl.transforms.BlackBoxInlineAnno", name = "ET_C.v", text = ""}
+  ]}
+  firrtl.extmodule @ETDC() attributes {annotations = [
+    {class = "firrtl.transforms.BlackBoxInlineAnno", name = "ETDC.v", text = ""}
+  ]}
+
+  // The Grand Central Companion module.
+  firrtl.module private @Companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
        defName = "Foo",
        id = 0 : i64,
        name = "View"}]} {
-    firrtl.instance bbox1 @BlackBox_GCT()
-    firrtl.instance bbox2 @BlackBox_DUTAndGCT()
+
+    firrtl.instance m__c @M__C()
+    firrtl.instance m_dc @M_DC()
+    firrtl.instance mt_c @MT_C()
+    firrtl.instance mtdc @MTDC()
+
+    firrtl.instance e__c @E__C()
+    firrtl.instance e_dc @E_DC()
+    firrtl.instance et_c @ET_C()
+    firrtl.instance etdc @ETDC()
   }
+
+  // The Design-under-test as indicated by the MarkDUTAnnotation
   firrtl.module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
        id = 0 : i64,
-       name = "view"}
+       name = "view"},
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
     ]} {
-    firrtl.instance View_companion @View_companion()
-    firrtl.instance bbox1 @BlackBox_DUT()
-    firrtl.instance bbox2 @BlackBox_DUTAndGCT()
+    firrtl.instance companion @Companion()
+
+    firrtl.instance m_d_ @M_D_()
+    firrtl.instance mtd_ @MTD_()
+    firrtl.instance m_dc @M_DC()
+    firrtl.instance mtdc @MTDC()
+
+    firrtl.instance e_d_ @E_D_()
+    firrtl.instance etd_ @ETD_()
+    firrtl.instance e_dc @E_DC()
+    firrtl.instance etdc @ETDC()
   }
-  firrtl.module @BlackBoxDirectoryBehavior() {
+
+  // The Top module that instantiates the DUT
+  firrtl.module @DirectoryBehaviorWithDUT() {
     firrtl.instance dut @DUT()
+
+    firrtl.instance mt__ @MT__()
+    firrtl.instance mtd_ @MTD_()
+    firrtl.instance mt_c @MT_C()
+    firrtl.instance mtdc @MTDC()
+
+    firrtl.instance et__ @ET__()
+    firrtl.instance etd_ @ETD_()
+    firrtl.instance et_c @ET_C()
+    firrtl.instance etdc @ETDC()
   }
 }
 
-// Check that black boxes that are instantiated _exclusively_ under a Grand
-// Central companion have their "output_file" set to the extraction directory.
-// This information will later be used by BlackBoxReader to control where these
-// black boxes are extracted to.
+// Any module instantiated by the Companion, but not instantiated by the DUT is
+// moved to the same directory as the Companion.  I.e., only "*__C" and "*T_C"
+// modules should be moved into the "gct-dir".
 //
-// CHECK-LABEL: "BlackBoxDirectoryBehavior"
-// CHECK:      firrtl.extmodule private @BlackBox_DUT()
+// CHECK-LABEL: "DirectoryBehaviorWithDUT"
+//
 // CHECK-NOT:    output_file
-// CHECK-NEXT: firrtl.extmodule private @BlackBox_GCT() {{.+}} output_file = #hw.output_file<"gct-dir{{/|\\\\}}">
-// CHECK-NEXT: firrtl.extmodule private @BlackBox_DUTAndGCT()
+// CHECK:      firrtl.module @M__C
+// CHECK-SAME:   output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
 // CHECK-NOT:    output_file
-// CHECK-NEXT: firrtl.module private @View_companion()
+// CHECK:      firrtl.module @MT_C
+// CHECK-SAME:   output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
+//
+// CHECK-NOT:    output_file
+// CHECK:      firrtl.extmodule @E__C
+// CHECK-SAME:   output_file = #hw.output_file<"gct-dir{{/|\\\\}}">
+// CHECK-NOT:    output_file
+// CHECK:      firrtl.extmodule @ET_C
+// CHECK-SAME:   output_file = #hw.output_file<"gct-dir{{/|\\\\}}">
+// CHECK-NOT:    output_file
+//
+// CHECK:      firrtl.module
 
 // -----
 
-firrtl.circuit "SubmoduleDirectoryBehavior" attributes {
+firrtl.circuit "DirectoryBehaviorWithoutDUT" attributes {
   annotations = [
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
      defName = "Foo",
@@ -1081,45 +1159,77 @@ firrtl.circuit "SubmoduleDirectoryBehavior" attributes {
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "bindings.sv"}]} {
-  firrtl.module private @Submodule_DUT() {}
-  firrtl.module private @Submodule_GCT() {}
-  firrtl.module private @Submodule_DUTAndGCT() {}
-  firrtl.module private @View_companion() attributes {
+
+  // Each of these modules is instantiated in a different location.  A leading
+  // "E" indicates that this is an external module.  A leading "M" indicates
+  // that this is a module.  The instantiation location is indicated by three
+  // binary bits with an "_" indicating the absence of instantiation:
+  //   1) "T" indicates this is instantiated in the "Top"
+  //   2) "C" indicates this is instantiated in the "Companion"
+  // E.g., "E_C" is an external module instantiated only in the Companion.
+  firrtl.module @MT_() {}
+  firrtl.module @M_C() {}
+  firrtl.module @MTC() {}
+  firrtl.extmodule @ET_() attributes {annotations = [
+    {class = "firrtl.transforms.BlackBoxInlineAnno", name = "ET_.v", text = ""}
+  ]}
+  firrtl.extmodule @E_C() attributes {annotations = [
+    {class = "firrtl.transforms.BlackBoxInlineAnno", name = "E_C.v", text = ""}
+  ]}
+  firrtl.extmodule @ETC() attributes {annotations = [
+    {class = "firrtl.transforms.BlackBoxInlineAnno", name = "ETC.v", text = ""}
+  ]}
+
+  // The Grand Central Companion module.
+  firrtl.module private @Companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
        defName = "Foo",
        id = 0 : i64,
        name = "View"}]} {
-    firrtl.instance bbox1 @Submodule_GCT()
-    firrtl.instance bbox2 @Submodule_DUTAndGCT()
+
+    firrtl.instance m__c @M_C()
+    firrtl.instance m_dc @MTC()
+
+    firrtl.instance e__c @E_C()
+    firrtl.instance e_dc @ETC()
   }
-  firrtl.module private @DUT() attributes {
+
+  // This is the DUT in the previous example, but is no longer marked as the
+  // DUT.
+  firrtl.module @DirectoryBehaviorWithoutDUT() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
        id = 0 : i64,
        name = "view"}
     ]} {
-    firrtl.instance View_companion @View_companion()
-    firrtl.instance bbox1 @Submodule_DUT()
-    firrtl.instance bbox2 @Submodule_DUTAndGCT()
+    firrtl.instance companion @Companion()
+
+    firrtl.instance m_d_ @MT_()
+    firrtl.instance m_dc @MTC()
+
+    firrtl.instance e_d_ @ET_()
+    firrtl.instance e_dc @ETC()
   }
-  firrtl.module @SubmoduleDirectoryBehavior() {
-    firrtl.instance dut @DUT()
-  }
+
 }
 
-// Check that a submodule instantiated _exclusively_ inside the companion is
-// moved into the companion's directory.
+// Any module instantiated by the Companion, but not instantiated by the DUT is
+// moved to the same directory as the Companion.  I.e., only "*_C" modules
+// should be moved into the "gct-dir".
 //
-// CHECK-LABEL: "SubmoduleDirectoryBehavior"
-// CHECK:      firrtl.module private @Submodule_DUT() {
+// CHECK-LABEL: "DirectoryBehaviorWithoutDUT"
+//
 // CHECK-NOT:    output_file
-// CHECK:      firrtl.module private @Submodule_GCT()
-// CHECK-SAME:   output_file = #hw.output_file<"gct-dir{{/|\\\\}}"{{.+$}}
-// CHECK-NEXT: }
-// CHECK-NEXT: firrtl.module private @Submodule_DUTAndGCT()
-// CHECK-NOT:   output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
-// CHECK-NEXT: }
+// CHECK:      firrtl.module @M_C
+// CHECK-SAME:   output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
+// CHECK-NOT:    output_file
+//
+// CHECK:      firrtl.extmodule @E_C
+// CHECK-SAME:   output_file = #hw.output_file<"gct-dir{{/|\\\\}}">
+// CHECK-NOT:    output_file
+//
+// CHECK:      firrtl.module
 
 // -----
 

@@ -139,14 +139,14 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
         for (auto p : paths) {
           if (p.empty())
             continue;
-          const InstanceOp &inst = p.front();
+          auto top = p.front();
           std::string hierName =
-              inst->getParentOfType<FModuleOp>().getName().str();
-          for (InstanceOp inst : p) {
+              top->getParentOfType<FModuleOp>().getName().str();
+          for (auto inst : p) {
             auto parentModule = inst->getParentOfType<FModuleOp>();
             if (dutMod == parentModule)
               hierName = parentModule.getName().str();
-            hierName = (Twine(hierName) + "." + inst.getName()).str();
+            hierName = (Twine(hierName) + "." + inst.instanceName()).str();
           }
           hierNames.push_back(hierName);
           jsonStream.value(hierName);
