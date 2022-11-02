@@ -50,32 +50,36 @@ enum class IndentStyle { Visual, Block };
 class Token {
 public:
   enum class Kind { String, Break, Begin, End };
-  struct StringInfo {
-    const char *str;
-    uint32_t len;
+
+  struct TokenInfo {
+    Kind kind; // Common initial sequence.
   };
-  struct BreakInfo {
+  struct StringInfo : public TokenInfo {
+    uint32_t len;
+    const char *str;
+  };
+  struct BreakInfo : public TokenInfo {
     uint32_t spaces; // How many spaces to emit when not broken.
     int32_t offset;  // How many spaces to emit when broken.
     bool neverbreak; // If set, behaves like break except this always 'fits'.
   };
-  struct BeginInfo {
+  struct BeginInfo : public TokenInfo {
     int32_t offset; // Adjust base indentation by this amount.
     Breaks breaks;
     IndentStyle style;
   };
-  struct EndInfo {
+  struct EndInfo : public TokenInfo {
     // Nothing
   };
 
 private:
   union {
+    TokenInfo info;
     StringInfo stringInfo;
     BreakInfo breakInfo;
     BeginInfo beginInfo;
     EndInfo endInfo;
   } data;
-  Kind kind;
 
 protected:
   template <Kind k, typename T>
@@ -91,10 +95,10 @@ protected:
     llvm_unreachable("unhandled token kind");
   }
 
-  Token(Kind k) : kind(k) {}
+  Token(Kind k) { data.info.kind = k; }
 
 public:
-  Kind getKind() const { return kind; }
+  Kind getKind() const { return data.info.kind; }
 };
 
 /// Helper class to CRTP-derive common functions.
@@ -102,17 +106,22 @@ template <class DerivedT, Token::Kind DerivedKind>
 struct TokenBase : public Token {
   static bool classof(const Token *t) { return t->getKind() == DerivedKind; }
 
+protected:
+  TokenBase() : Token(DerivedKind) {}
+
   using InfoType = std::remove_reference_t<std::invoke_result_t<
       decltype(Token::getInfoImpl<DerivedKind, Token &>), Token &>>;
+
+  InfoType &getInfoMut() { return Token::getInfoImpl<DerivedKind>(*this); }
 
   const InfoType &getInfo() const {
     return Token::getInfoImpl<DerivedKind>(*this);
   }
 
-protected:
-  TokenBase() : Token(DerivedKind) {}
-
-  InfoType &getInfoMut() { return Token::getInfoImpl<DerivedKind>(*this); }
+  template <typename... Args>
+  void initialize(Args &&...args) {
+    getInfoMut() = InfoType{{DerivedKind}, args...};
+  }
 };
 
 /// Token types.
@@ -120,14 +129,14 @@ protected:
 struct StringToken : public TokenBase<StringToken, Token::Kind::String> {
   StringToken(llvm::StringRef text) {
     assert(text.size() == (uint32_t)text.size());
-    getInfoMut() = {text.data(), (uint32_t)text.size()};
+    initialize((uint32_t)text.size(), text.data());
   }
   StringRef text() const { return StringRef(getInfo().str, getInfo().len); }
 };
 
 struct BreakToken : public TokenBase<BreakToken, Token::Kind::Break> {
   BreakToken(uint32_t spaces = 1, int32_t offset = 0, bool neverbreak = false) {
-    getInfoMut() = {spaces, offset, neverbreak};
+    initialize(spaces, offset, neverbreak);
   }
   uint32_t spaces() const { return getInfo().spaces; }
   int32_t offset() const { return getInfo().offset; }
@@ -137,7 +146,7 @@ struct BreakToken : public TokenBase<BreakToken, Token::Kind::Break> {
 struct BeginToken : public TokenBase<BeginToken, Token::Kind::Begin> {
   BeginToken(int32_t offset = 2, Breaks breaks = Breaks::Inconsistent,
              IndentStyle style = IndentStyle::Visual) {
-    getInfoMut() = {offset, breaks, style};
+    initialize(offset, breaks, style);
   }
   int32_t offset() const { return getInfo().offset; }
   Breaks breaks() const { return getInfo().breaks; }
