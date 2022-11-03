@@ -3293,26 +3293,27 @@ LogicalResult StmtEmitter::emitSeverityMessageTask(Operation *op,
   // verbosity and that verbosity is present, print the parenthesized parameter
   // list.
   if ((verbosity && *verbosity != 1) || message) {
-    ps << "(" << PP::ibox0;
-
-    // If the operation takes a verbosity, print it if it is set, or print the
-    // default "1".
-    if (verbosity)
-      ps.addAsString(*verbosity);
-
-    // Print the message and interpolation operands if present.
-    if (message) {
+    ps << "(";
+    ps.scopedBox(PP::ibox0, [&]() {
+      // If the operation takes a verbosity, print it if it is set, or print the
+      // default "1".
       if (verbosity)
-        ps << "," << PP::space;
-      ps.writeQuotedEscaped(message.getValue());
-      // TODO: good comma/wrapping behavior as elsewhere.
-      for (auto operand : operands) {
-        ps << "," << PP::space;
-        emitExpression(operand, ops);
-      }
-    }
+        ps.addAsString(*verbosity);
 
-    ps << ")" << PP::end;
+      // Print the message and interpolation operands if present.
+      if (message) {
+        if (verbosity)
+          ps << "," << PP::space;
+        ps.writeQuotedEscaped(message.getValue());
+        // TODO: good comma/wrapping behavior as elsewhere.
+        for (auto operand : operands) {
+          ps << "," << PP::space;
+          emitExpression(operand, ops);
+        }
+      }
+
+      ps << ")";
+    });
   }
 
   ps << ";";
@@ -3489,26 +3490,29 @@ LogicalResult StmtEmitter::emitImmediateAssertion(Op op, StringRef opName) {
   startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  ps << PP::ibox2;
-  emitAssertionLabel(op, opName);
-  ps << PP::cbox0;
-  ps << opName; // TODO: PPExtString ?
-  switch (op.getDefer()) {
-  case DeferAssert::Immediate:
-    break;
-  case DeferAssert::Observed:
-    ps << " #0 ";
-    break;
-  case DeferAssert::Final:
-    ps << " final ";
-    break;
-  }
-  ps << "(" << PP::ibox0;
-  emitExpression(op.getExpression(), ops);
-  ps << PP::end << ")";
-  emitAssertionMessage(op.getMessageAttr(), op.getSubstitutions(), ops);
-  ps << PP::end << PP::end;
-  ps << ";";
+  ps.scopedBox(PP::ibox2, [&]() {
+    emitAssertionLabel(op, opName);
+    ps.scopedBox(PP::cbox0, [&]() {
+      ps << opName; // TODO: PPExtString ?
+      switch (op.getDefer()) {
+      case DeferAssert::Immediate:
+        break;
+      case DeferAssert::Observed:
+        ps << " #0 ";
+        break;
+      case DeferAssert::Final:
+        ps << " final ";
+        break;
+      }
+      ps << "(";
+      ps.scopedBox(PP::ibox0, [&]() {
+        emitExpression(op.getExpression(), ops);
+        ps << ")";
+      });
+      emitAssertionMessage(op.getMessageAttr(), op.getSubstitutions(), ops);
+      ps << ";";
+    });
+  });
   emitLocationInfoAndNewLine(ops);
   return success();
 }
@@ -3533,18 +3537,23 @@ LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, StringRef opName) {
   startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  ps << PP::ibox2;
-  emitAssertionLabel(op, opName);
-  ps << PP::cbox0;
-  ps << opName << PP::nbsp << "property (" << PP::ibox0 << "@("
-     << PPExtString(stringifyEventControl(op.getEvent())) << PP::nbsp;
-  emitExpression(op.getClock(), ops);
-  ps << ")" << PP::space;
-  emitExpression(op.getProperty(), ops);
-  ps << ")" << PP::end;
-  emitAssertionMessage(op.getMessageAttr(), op.getSubstitutions(), ops, true);
-  ps << PP::end << PP::end;
-  ps << ";";
+  ps.scopedBox(PP::ibox2, [&]() {
+    emitAssertionLabel(op, opName);
+    ps.scopedBox(PP::cbox0, [&]() {
+      ps << opName << PP::nbsp << "property (";
+      ps.scopedBox(PP::ibox0, [&]() {
+        ps << "@(" << PPExtString(stringifyEventControl(op.getEvent()))
+           << PP::nbsp;
+        emitExpression(op.getClock(), ops);
+        ps << ")" << PP::space;
+        emitExpression(op.getProperty(), ops);
+        ps << ")";
+      });
+      emitAssertionMessage(op.getMessageAttr(), op.getSubstitutions(), ops,
+                           true);
+      ps << ";";
+    });
+  });
   emitLocationInfoAndNewLine(ops);
   return success();
 }
@@ -3704,13 +3713,14 @@ LogicalResult StmtEmitter::visitSV(AlwaysOp op) {
     break;
   default:
     ps << "always @(";
-    ps << PP::cbox0; // TODO: check vs ibox
-    printEvent(op.getCondition(0));
-    for (size_t i = 1, e = op.getNumConditions(); i != e; ++i) {
-      ps << PP::space << "or" << PP::space;
-      printEvent(op.getCondition(i));
-    }
-    ps << PP::end << ")";
+    ps.scopedBox(PP::cbox0, [&]() {
+      printEvent(op.getCondition(0));
+      for (size_t i = 1, e = op.getNumConditions(); i != e; ++i) {
+        ps << PP::space << "or" << PP::space;
+        printEvent(op.getCondition(i));
+      }
+      ps << ")";
+    });
     break;
   }
 
@@ -3760,15 +3770,17 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   ops.insert(op);
   startStatement();
 
-  ps << "always_ff @(" << PP::cbox0
-     << PPExtString(stringifyEventControl(op.getClockEdge())) << PP::nbsp;
-  emitExpression(op.getClock(), ops);
-  if (op.getResetStyle() == ResetType::AsyncReset) {
-    ps << PP::nbsp << "or" << PP::space
-       << PPExtString(stringifyEventControl(*op.getResetEdge())) << PP::nbsp;
-    emitExpression(op.getReset(), ops);
-  }
-  ps << PP::end << ")";
+  ps << "always_ff @(";
+  ps.scopedBox(PP::cbox0, [&]() {
+    ps << PPExtString(stringifyEventControl(op.getClockEdge())) << PP::nbsp;
+    emitExpression(op.getClock(), ops);
+    if (op.getResetStyle() == ResetType::AsyncReset) {
+      ps << PP::nbsp << "or" << PP::space
+         << PPExtString(stringifyEventControl(*op.getResetEdge())) << PP::nbsp;
+      emitExpression(op.getReset(), ops);
+    }
+    ps << ")";
+  });
 
   // Build the comment string, leave out the signal expressions (since they
   // can be large).
