@@ -3106,25 +3106,25 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
     ops.insert(op);
 
     startStatement();
-    ps << PP::ibox2;
     bool isZeroBit = isZeroBitType(port.type);
-    if (isZeroBit) {
-      ps << PP::neverbox << "// Zero width: ";
-    }
-    // TODO: Close to emitAssignLike...
-    ps << "assign" << PP::space;
-    ps << PPExtString(getPortVerilogName(parent, port));
-    ps << PP::space << "=" << PP::space;
-    ps << PP::ibox0;
-    // If this is a zero-width constant then don't emit it (illegal). Else,
-    // emit the expression - even for zero width - for traceability.
-    if (isZeroBit && isa_and_nonnull<hw::ConstantOp>(operand.getDefiningOp()))
-      ps << "/*Zero width*/";
-    else
-      emitExpression(operand, ops, LowestPrecedence);
-    ps << ";" << PP::end << PP::end;
-    if (isZeroBit)
-      ps << PP::end; // Close never-break group.
+    ps.scopedBox(isZeroBit ? PP::neverbox : PP::ibox2, [&]() {
+      if (isZeroBit)
+        ps << "// Zero width: ";
+
+      ps << "assign" << PP::space;
+      ps << PPExtString(getPortVerilogName(parent, port));
+      ps << PP::space << "=" << PP::space;
+      ps.scopedBox(PP::ibox0, [&]() {
+        // If this is a zero-width constant then don't emit it (illegal). Else,
+        // emit the expression - even for zero width - for traceability.
+        if (isZeroBit &&
+            isa_and_nonnull<hw::ConstantOp>(operand.getDefiningOp()))
+          ps << "/*Zero width*/";
+        else
+          emitExpression(operand, ops, LowestPrecedence);
+        ps << ";";
+      });
+    });
     emitLocationInfoAndNewLine(ops);
 
     ++operandIndex;
@@ -3176,24 +3176,24 @@ LogicalResult StmtEmitter::visitSV(FWriteOp op) {
   ops.insert(op);
 
   ps << "$fwrite(";
-  ps << PP::ibox0;
+  ps.scopedBox(PP::ibox0, [&]() {
+    emitExpression(op.getFd(), ops);
 
-  emitExpression(op.getFd(), ops);
-
-  ps << "," << PP::space;
-  ps.writeQuotedEscaped(op.getFormatString());
-
-  // TODO: if any of these breaks, it'd be "nice" to break
-  // after the comma, instead of:
-  // $fwrite(5, "...", a + b,
-  //         longexpr_goes
-  //         + here, c);
-  // (without forcing breaking between all elements, like braced list)
-  for (auto operand : op.getSubstitutions()) {
     ps << "," << PP::space;
-    emitExpression(operand, ops);
-  }
-  ps << PP::end << ");";
+    ps.writeQuotedEscaped(op.getFormatString());
+
+    // TODO: if any of these breaks, it'd be "nice" to break
+    // after the comma, instead of:
+    // $fwrite(5, "...", a + b,
+    //         longexpr_goes
+    //         + here, c);
+    // (without forcing breaking between all elements, like braced list)
+    for (auto operand : op.getSubstitutions()) {
+      ps << "," << PP::space;
+      emitExpression(operand, ops);
+    }
+    ps << ");";
+  });
   emitLocationInfoAndNewLine(ops);
   return success();
 }
