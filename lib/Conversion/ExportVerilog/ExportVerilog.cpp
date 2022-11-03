@@ -1853,12 +1853,13 @@ private:
             typename EachFunc>
   void emitBracedList(const Container &c, OpenFunc openFn, EachFunc eachFn,
                       CloseFunc closeFn) {
-    ps << PP::cbox2;
-    openFn();
-    ps << PP::zerobreak;
-    interleaveComma(c, eachFn);
-    ps << BreakToken(0, -2) << PP::end;
-    closeFn();
+    ps.scopedBox(PP::cbox2, [&]() {
+      openFn();
+      ps << PP::zerobreak;
+      interleaveComma(c, eachFn);
+      ps << BreakToken(0, -2);
+      closeFn();
+    });
   }
 
   /// Emit braced list of values surrounded by specified open/close.
