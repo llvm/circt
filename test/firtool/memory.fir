@@ -3,6 +3,7 @@
 ; RUN: firtool %s --format=fir --ir-sv -disable-mem-randomization | FileCheck %s --check-prefix=DISABLE_RANDOM --implicit-check-not RANDOMIZE_MEM
 ; RUN: firtool %s --format=fir --ir-sv -disable-reg-randomization | FileCheck %s --check-prefix=DISABLE_RANDOM --implicit-check-not RANDOMIZE_REG
 ; RUN: firtool %s --format=fir --ir-sv -disable-mem-randomization --disable-reg-randomization | FileCheck %s --check-prefix=DISABLE_RANDOM --implicit-check-not RANDOMIZE_MEM --implicit-check-not RANDOMIZE_REG
+; RUN: firtool %s --format=fir --ir-sv -disable-all-randomization | FileCheck %s --check-prefix=DISABLE_RANDOM --implicit-check-not RANDOMIZE_MEM --implicit-check-not RANDOMIZE_REG
 ; STRIP-NOT: sv.attributes
 
 circuit Qux: %[[{
