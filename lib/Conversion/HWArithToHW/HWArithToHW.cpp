@@ -161,7 +161,7 @@ struct DivOpLowering : public OpConversionPattern<DivOp> {
                       ->getOpResult(0);
 
     // Carry over any attributes from the original div op.
-    divResult.getDefiningOp()->setAttrs(op->getAttrs());
+    divResult.getDefiningOp()->setDialectAttrs(op->getDialectAttrs());
 
     // finally truncate back to the expected result size!
     Value truncateResult = extractBits(rewriter, loc, divResult, /*startBit=*/0,
@@ -261,9 +261,7 @@ struct ICmpOpLowering : public OpConversionPattern<ICmpOp> {
 
     auto newOp = rewriter.replaceOpWithNewOp<comb::ICmpOp>(
         op, combPred, lhsValue, rhsValue, false);
-    auto predAttr = newOp.getPredicateAttr();
-    newOp->setAttrs(op->getAttrs());
-    newOp->setAttr(newOp.getPredicateAttrName(), predAttr);
+    newOp->setDialectAttrs(op->getDialectAttrs());
 
     return success();
   }
@@ -295,7 +293,7 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
                                      targetWidth, isRhsTypeSigned);
     auto newOp =
         rewriter.replaceOpWithNewOp<ReplaceOp>(op, lhsValue, rhsValue, false);
-    newOp->setAttrs(op->getAttrs());
+    newOp->setDialectAttrs(op->getDialectAttrs());
     return success();
   }
 };
