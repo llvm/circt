@@ -4327,12 +4327,8 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     // Emit the type.
     if (!typeString.empty())
       ps << typeString;
-    if (typeString.size() < maxTypeWidth) {
-      if (isZeroBitType(type))
-        ps.nbsp(maxTypeWidth - typeString.size());
-      else
-        ps.spaces(maxTypeWidth - typeString.size());
-    }
+    if (typeString.size() < maxTypeWidth)
+      ps.spaces(maxTypeWidth - typeString.size());
 
     // Emit the name.
     ps << PPExtString(names.getName(value));
