@@ -1811,12 +1811,14 @@ struct AggOneShot : public mlir::RewritePattern {
                                            newVal);
     for (Operation *user : op->getResult(0).getUsers()) {
       if (auto subIndex = dyn_cast<SubindexOp>(user)) {
-        for (Operation *subuser : subIndex.getResult().getUsers())
+        for (Operation *subuser :
+             llvm::make_early_inc_range(subIndex.getResult().getUsers()))
           if (auto aConnect = dyn_cast<StrictConnectOp>(subuser))
             if (aConnect.getDest() == subIndex)
               rewriter.eraseOp(aConnect);
       } else if (auto subField = dyn_cast<SubfieldOp>(user)) {
-        for (Operation *subuser : subField.getResult().getUsers())
+        for (Operation *subuser :
+             llvm::make_early_inc_range(subField.getResult().getUsers()))
           if (auto aConnect = dyn_cast<StrictConnectOp>(subuser))
             if (aConnect.getDest() == subField)
               rewriter.eraseOp(aConnect);
