@@ -1743,11 +1743,11 @@ public:
   void emitExpression(Value exp, VerilogPrecedence parenthesizeIfLooserThan) {
     assert(tokens.empty());
     // Wrap to this column.
-    ps << PP::ibox0;
-    emitSubExpr(exp, parenthesizeIfLooserThan,
-                /*signRequirement*/ NoRequirement,
-                /*isSelfDeterminedUnsignedValue*/ false);
-    ps << PP::end;
+    ps.scopedBox(PP::ibox0, [&]() {
+      emitSubExpr(exp, parenthesizeIfLooserThan,
+                  /*signRequirement*/ NoRequirement,
+                  /*isSelfDeterminedUnsignedValue*/ false);
+    });
     buffer.flush(state.pp);
   }
 
@@ -2959,17 +2959,19 @@ LogicalResult StmtEmitter::emitAssignLike(Op op, PPExtString syntax,
 
   startStatement();
   // If wraps, indent.
-  ps << PP::ibox2;
-  if (wordBeforeLHS) {
-    ps << *wordBeforeLHS << PP::space;
-  }
-  emitExpression(op.getDest(), ops);
-  // Allow breaking before 'syntax' (e.g., '=') if long assignment.
-  ps << PP::space << syntax << PP::space;
-  // RHS is boxed to right of the syntax.
-  ps << PP::ibox0;
-  emitExpression(op.getSrc(), ops);
-  ps << ";" << PP::end << PP::end;
+  ps.scopedBox(PP::ibox2, [&]() {
+    if (wordBeforeLHS) {
+      ps << *wordBeforeLHS << PP::space;
+    }
+    emitExpression(op.getDest(), ops);
+    // Allow breaking before 'syntax' (e.g., '=') if long assignment.
+    ps << PP::space << syntax << PP::space;
+    // RHS is boxed to right of the syntax.
+    ps.scopedBox(PP::ibox0, [&]() {
+      emitExpression(op.getSrc(), ops);
+      ps << ";";
+    });
+  });
 
   emitLocationInfoAndNewLine(ops);
   return success();
