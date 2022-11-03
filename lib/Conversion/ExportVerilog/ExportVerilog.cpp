@@ -4492,73 +4492,75 @@ void ModuleEmitter::emitBind(BindOp op) {
   startStatement();
   ps << "bind " << parentVerilogName.getValue() << PP::nbsp
      << childVerilogName.getValue() << PP::nbsp << getSymOpName(inst) << " (";
-  ps << BeginToken(indentAmount, Breaks::Inconsistent, IndentStyle::Block);
-
-  ModulePortInfo parentPortInfo = parentMod.getPorts();
-  SmallVector<PortInfo> childPortInfo = getAllModulePortInfos(inst);
-
-  // Get the max port name length so we can align the '('.
-  size_t maxNameLength = 0;
-  for (auto &elt : childPortInfo) {
-    auto portName = getPortVerilogName(childMod, elt);
-    elt.name = Builder(inst.getContext()).getStringAttr(portName);
-    maxNameLength = std::max(maxNameLength, elt.getName().size());
-  }
-
-  // Emit the argument and result ports.
-  auto opArgs = inst.getInputs();
-  auto opResults = inst.getResults();
   bool isFirst = true; // True until we print a port.
-  for (auto &elt : childPortInfo) {
-    // Figure out which value we are emitting.
-    Value portVal = elt.isOutput() ? opResults[elt.argNum] : opArgs[elt.argNum];
-    bool isZeroWidth = isZeroBitType(elt.type);
+  ps.scopedBox(
+      BeginToken(indentAmount, Breaks::Inconsistent, IndentStyle::Block),
+      [&]() {
+        ModulePortInfo parentPortInfo = parentMod.getPorts();
+        SmallVector<PortInfo> childPortInfo = getAllModulePortInfos(inst);
 
-    // Decide if we should print a comma.  We can't do this if we're the first
-    // port or if all the subsequent ports are zero width.
-    if (!isFirst) {
-      bool shouldPrintComma = true;
-      if (isZeroWidth) {
-        shouldPrintComma = false;
-        for (size_t i = (&elt - childPortInfo.data()) + 1,
-                    e = childPortInfo.size();
-             i != e; ++i)
-          if (!isZeroBitType(childPortInfo[i].type)) {
-            shouldPrintComma = true;
-            break;
+        // Get the max port name length so we can align the '('.
+        size_t maxNameLength = 0;
+        for (auto &elt : childPortInfo) {
+          auto portName = getPortVerilogName(childMod, elt);
+          elt.name = Builder(inst.getContext()).getStringAttr(portName);
+          maxNameLength = std::max(maxNameLength, elt.getName().size());
+        }
+
+        // Emit the argument and result ports.
+        auto opArgs = inst.getInputs();
+        auto opResults = inst.getResults();
+        for (auto &elt : childPortInfo) {
+          // Figure out which value we are emitting.
+          Value portVal =
+              elt.isOutput() ? opResults[elt.argNum] : opArgs[elt.argNum];
+          bool isZeroWidth = isZeroBitType(elt.type);
+
+          // Decide if we should print a comma.  We can't do this if we're the
+          // first port or if all the subsequent ports are zero width.
+          if (!isFirst) {
+            bool shouldPrintComma = true;
+            if (isZeroWidth) {
+              shouldPrintComma = false;
+              for (size_t i = (&elt - childPortInfo.data()) + 1,
+                          e = childPortInfo.size();
+                   i != e; ++i)
+                if (!isZeroBitType(childPortInfo[i].type)) {
+                  shouldPrintComma = true;
+                  break;
+                }
+            }
+
+            if (shouldPrintComma)
+              ps << ",";
           }
-      }
+          ps << PP::newline;
 
-      if (shouldPrintComma)
-        ps << ",";
-    }
-    ps << PP::newline;
+          // Emit the port's name.
+          if (!isZeroWidth) {
+            // If this is a real port we're printing, then it isn't the first
+            // one. Any subsequent ones will need a comma.
+            isFirst = false;
+            // os << "  ";
+          } else {
+            // We comment out zero width ports, so their presence and
+            // initializer expressions are still emitted textually.
+            ps << PP::neverbox << "//";
+          }
 
-    // Emit the port's name.
-    if (!isZeroWidth) {
-      // If this is a real port we're printing, then it isn't the first one. Any
-      // subsequent ones will need a comma.
-      isFirst = false;
-      // os << "  ";
-    } else {
-      // We comment out zero width ports, so their presence and initializer
-      // expressions are still emitted textually.
-      ps << PP::neverbox << "//";
-    }
+          ps << "." << elt.getName();
+          ps.nbsp(maxNameLength - elt.getName().size());
+          ps << " (";
 
-    ps << "." << elt.getName();
-    ps.nbsp(maxNameLength - elt.getName().size());
-    ps << " (";
+          // Emit the value as an expression.
+          auto name = getNameRemotely(portVal, parentPortInfo, parentMod);
+          assert(!name.empty() && "bind port connection must have a name");
+          ps << name << ")";
 
-    // Emit the value as an expression.
-    auto name = getNameRemotely(portVal, parentPortInfo, parentMod);
-    assert(!name.empty() && "bind port connection must have a name");
-    ps << name << ")";
-
-    if (isZeroWidth)
-      ps << PP::end; // Close never-break group.
-  }
-  ps << PP::end;
+          if (isZeroWidth)
+            ps << PP::end; // Close never-break group.
+        }
+      });
   if (!isFirst)
     ps << PP::newline;
   ps << ");";
