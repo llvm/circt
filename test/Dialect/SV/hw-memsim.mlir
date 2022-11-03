@@ -1,10 +1,14 @@
 // RUN: circt-opt -hw-memory-sim %s | FileCheck %s
-// RUN: circt-opt -hw-memory-sim{strip-mux-pragmas} %s | FileCheck %s --check-prefix=STRIP
-// STRIP-NOT: sv.attributes
+// RUN: circt-opt -pass-pipeline="hw-memory-sim{strip-mux-pragmas}" %s | FileCheck %s --check-prefix=STRIP --implicit-check-not sv.attributes
+// RUN: circt-opt -pass-pipeline="hw-memory-sim{disable-mem-randomization}" %s | FileCheck %s --check-prefix=DISABLE_RANDOM --implicit-check-not RANDOMIZE_MEM
+// RUN: circt-opt -pass-pipeline="hw-memory-sim{disable-reg-randomization}" %s | FileCheck %s --check-prefix=DISABLE_RANDOM --implicit-check-not RANDOMIZE_REG
+// RUN: circt-opt -pass-pipeline="hw-memory-sim{disable-mem-randomization disable-reg-randomization}" %s | FileCheck %s --check-prefix=DISABLE_RANDOM --implicit-check-not RANDOMIZE_REG --implicit-check-not RANDOMIZE_MEM
 
 hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "readUnderWrite", "writeUnderWrite", "writeClockIDs"]
 
 //CHECK-LABEL: @complex
+// STRIP-LABEL: @complex
+// DISABLE_RANDOM-LABEL: @complex
 hw.module @complex(%clock: i1, %reset: i1, %r0en: i1, %mode: i1, %data0: i16) -> (data1: i16, data2: i16) {
   %true = hw.constant true
   %c0_i4 = hw.constant 0 : i4
