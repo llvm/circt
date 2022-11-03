@@ -3860,38 +3860,40 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
     opname = "casez";
     break;
   }
-  ps << opname << " (" << PP::ibox0;
-  emitExpression(op.getCond(), ops);
-  ps << PP::end << ")";
+  ps << opname << " (";
+  ps.scopedBox(PP::ibox0, [&]() {
+    emitExpression(op.getCond(), ops);
+    ps << ")";
+  });
   emitLocationInfoAndNewLine(ops);
 
-  ps << BeginToken(2, Breaks::Consistent, IndentStyle::Block);
-  for (auto &caseInfo : op.getCases()) {
-    startStatement();
-    auto &pattern = caseInfo.pattern;
+  ps.scopedBox(BeginToken(2, Breaks::Consistent, IndentStyle::Block), [&]() {
+    for (auto &caseInfo : op.getCases()) {
+      startStatement();
+      auto &pattern = caseInfo.pattern;
 
-    llvm::TypeSwitch<CasePattern *>(pattern.get())
-        .Case<CaseBitPattern>([&](auto bitPattern) {
-          // TODO: We could emit in hex if/when the size is a multiple of 4 and
-          // there are no x's crossing nibble boundaries.
-          ps.invokeWithStringOS([&](auto &os) {
-            os << bitPattern->getWidth() << "'b";
-            for (size_t bit = 0, e = bitPattern->getWidth(); bit != e; ++bit)
-              os << getLetter(bitPattern->getBit(e - bit - 1));
-          });
-        })
-        .Case<CaseEnumPattern>([&](auto enumPattern) {
-          ps << emitter.fieldNameResolver.getEnumFieldName(
-              enumPattern->attr().template cast<hw::EnumFieldAttr>());
-        })
-        .Case<CaseDefaultPattern>([&](auto) { ps << "default"; })
-        .Default([&](auto) { assert(false && "unhandled case pattern"); });
+      llvm::TypeSwitch<CasePattern *>(pattern.get())
+          .Case<CaseBitPattern>([&](auto bitPattern) {
+            // TODO: We could emit in hex if/when the size is a multiple of 4
+            // and there are no x's crossing nibble boundaries.
+            ps.invokeWithStringOS([&](auto &os) {
+              os << bitPattern->getWidth() << "'b";
+              for (size_t bit = 0, e = bitPattern->getWidth(); bit != e; ++bit)
+                os << getLetter(bitPattern->getBit(e - bit - 1));
+            });
+          })
+          .Case<CaseEnumPattern>([&](auto enumPattern) {
+            ps << emitter.fieldNameResolver.getEnumFieldName(
+                enumPattern->attr().template cast<hw::EnumFieldAttr>());
+          })
+          .Case<CaseDefaultPattern>([&](auto) { ps << "default"; })
+          .Default([&](auto) { assert(false && "unhandled case pattern"); });
 
-    ps << ":";
-    emitBlockAsStatement(caseInfo.block, emptyOps);
-  }
+      ps << ":";
+      emitBlockAsStatement(caseInfo.block, emptyOps);
+    }
+  });
 
-  ps << PP::end;
   startStatement();
   ps << "endcase";
   emitLocationInfoAndNewLine(ops);
