@@ -116,25 +116,21 @@ from the design.
 reset is asynchronous.
 - **isAsync**: Optional boolean flag indicating whether the reset is
 asynchronous.
-- **randomized**: Unit attribute indicating whether the register should be
-initialised to a random value.
 
 ```mlir
-%reg = seq.firreg %input, %clk
-    [ sym @sym ]
-    [ reset (sync|async) %reset, %value ]
-    [ randomized ] : $type(input)
+%reg = seq.firreg %input clock %clk [ sym @sym ]
+    [ reset (sync|async) %reset, %value ] : $type(input)
 ```
 
 Examples of registers:
 
 ```mlir
-%reg_no_reset = seq.firreg %input, %clk, @sym : i32
+%reg_no_reset = seq.firreg %input clock %clk sym @sym : i32
 
-%reg_sync_reset_rand  = seq.firreg %input, %clk, @sym
-    reset sync %reset, %value randomized : i64
+%reg_sync_reset_rand  = seq.firreg %input clock %clk sym @sym
+    reset sync %reset, %value : i64
 
-%reg_async_reset = seq.firreg %input, %clk, @sym
+%reg_async_reset = seq.firreg %input clock %clk sym @sym
     reset async %reset, %value : i1
 ```
 
@@ -187,7 +183,7 @@ firrtl.strictconnect %field, %value
 ```
 Is converted into a `hw.struct_inject` operation:
 ```mlir
-%reg = seq.firreg %value, %clk, @sym : i32
+%reg = seq.firreg %value clock %clk sym @sym : i32
 %value = hw.struct_inject %reg["x"], %value
 ```
 
