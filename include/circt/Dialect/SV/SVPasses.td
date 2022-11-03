@@ -94,6 +94,10 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
   let dependentDialects = ["circt::sv::SVDialect"];
 
   let options = [
+    Option<"disableMemRandomization", "disable-mem-randomization", "bool", "false",
+            "Disable emission of memory randomization code">,
+    Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
+            "Disable emission of register randomization code">,
     Option<"replSeqMem", "repl-seq-mem", "bool",
                 "false", "Prepare seq mems for macro replacement">,
     Option<"ignoreReadEnableMem", "ignore-read-enable-mem", "bool",

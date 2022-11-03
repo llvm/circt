@@ -449,6 +449,8 @@ namespace {
 struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
 
   void runOnOperation() override;
+  void setDisableMemRandomization() { disableMemRandomization = true; }
+  void setDisableRegRandomization() { disableRegRandomization = true; }
   void setEnableAnnotationWarning() { enableAnnotationWarning = true; }
   void setEmitChiselAssertAsSVA() { emitChiselAssertsAsSVA = true; }
   void setStripMuxPragmas() { stripMuxPragmas = true; }
@@ -480,10 +482,10 @@ private:
 } // end anonymous namespace
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass>
-circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning,
-                                 bool emitChiselAssertsAsSVA,
-                                 bool stripMuxPragmas) {
+std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToHWPass(
+    bool enableAnnotationWarning, bool emitChiselAssertsAsSVA,
+    bool stripMuxPragmas, bool disableMemRandomization,
+    bool disableRegRandomization) {
   auto pass = std::make_unique<FIRRTLModuleLowering>();
   if (enableAnnotationWarning)
     pass->setEnableAnnotationWarning();
@@ -491,6 +493,10 @@ circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning,
     pass->setEmitChiselAssertAsSVA();
   if (stripMuxPragmas)
     pass->setStripMuxPragmas();
+  if (disableMemRandomization)
+    pass->setDisableMemRandomization();
+  if (disableRegRandomization)
+    pass->setDisableRegRandomization();
   return pass;
 }
 
@@ -827,10 +833,15 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     }
   };
 
+  bool needsRandomizeRegInit =
+      state.used_RANDOMIZE_REG_INIT && !disableRegRandomization;
+  bool needsRandomizeMemInit =
+      state.used_RANDOMIZE_MEM_INIT && !disableMemRandomization;
+
   // If none of the macros are needed, then don't emit any header at all, not
   // even the header comment.
-  if (!state.used_RANDOMIZE_GARBAGE_ASSIGN && !state.used_RANDOMIZE_REG_INIT &&
-      !state.used_RANDOMIZE_MEM_INIT && !state.used_PRINTF_COND &&
+  if (!state.used_RANDOMIZE_GARBAGE_ASSIGN && !needsRandomizeRegInit &&
+      !needsRandomizeMemInit && !state.used_PRINTF_COND &&
       !state.used_ASSERT_VERBOSE_COND && !state.used_STOP_COND)
     return;
 
@@ -841,11 +852,11 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     emitGuardedDefine("RANDOMIZE_GARBAGE_ASSIGN", "RANDOMIZE");
     needRandom = true;
   }
-  if (state.used_RANDOMIZE_REG_INIT) {
+  if (needsRandomizeRegInit) {
     emitGuardedDefine("RANDOMIZE_REG_INIT", "RANDOMIZE");
     needRandom = true;
   }
-  if (state.used_RANDOMIZE_MEM_INIT) {
+  if (needsRandomizeMemInit) {
     emitGuardedDefine("RANDOMIZE_MEM_INIT", "RANDOMIZE");
     needRandom = true;
   }

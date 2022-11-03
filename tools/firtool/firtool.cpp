@@ -322,6 +322,16 @@ static cl::opt<bool> etcDisableModuleInlining(
     cl::desc("Disable inlining modules that only feed test code"),
     cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool>
+    disableMemRandomization("disable-mem-randomization",
+                            cl::desc("Disable memory randomization code"),
+                            cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    disableRegRandomization("disable-reg-randomization",
+                            cl::desc("Disable register randomization code"),
+                            cl::init(false), cl::cat(mainCategory));
+
 enum OutputFormatKind {
   OutputParseOnly,
   OutputIRFir,
@@ -645,8 +655,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   // implementation assumes it can run at a time where every register is
   // currently in the final module it will be emitted in, all registers have
   // been created, and no registers have yet been removed.
-  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-      firrtl::createRandomizeRegisterInitPass());
+  if (!disableRegRandomization)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createRandomizeRegisterInitPass());
 
   if (!disableCheckCombCycles) {
     // TODO: Currently CheckCombCyles pass doesn't support aggregates so skip
@@ -749,9 +760,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     // RefType ports and ops.
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerXMRPass());
 
-    pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue(),
-                                         emitChiselAssertsAsSVA.getValue(),
-                                         stripMuxPragmas.getValue()));
+    pm.addPass(createLowerFIRRTLToHWPass(
+        enableAnnotationWarning.getValue(), emitChiselAssertsAsSVA.getValue(),
+        stripMuxPragmas.getValue(), disableMemRandomization.getValue(),
+        disableRegRandomization.getValue()));
 
     if (outputFormat == OutputIRHW) {
       if (!disableOptimization) {
@@ -768,9 +780,11 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         modulePM.addPass(createCSEPass());
       }
 
-      pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass());
-      pm.addPass(sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem,
-                                            stripMuxPragmas));
+      pm.nest<hw::HWModuleOp>().addPass(
+          seq::createSeqFIRRTLLowerToSVPass(disableRegRandomization));
+      pm.addPass(sv::createHWMemSimImplPass(
+          replSeqMem, ignoreReadEnableMem, stripMuxPragmas,
+          disableMemRandomization, disableRegRandomization));
 
       if (extractTestCode)
         pm.addPass(sv::createSVExtractTestCodePass(etcDisableInstanceExtraction,
