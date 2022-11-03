@@ -3795,7 +3795,10 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     // lowered to wire.
     OutputOp output;
     if (!elt.isOutput()) {
-      emitExpression(portVal, ops, LowestPrecedence);
+      if (isZeroWidth && isa_and_nonnull<ConstantOp>(portVal.getDefiningOp()))
+        os << "/* Zero width */";
+      else
+        emitExpression(portVal, ops, LowestPrecedence);
     } else if (portVal.hasOneUse() &&
                (output = dyn_cast_or_null<OutputOp>(
                     portVal.getUses().begin()->getOwner()))) {
