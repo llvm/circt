@@ -4306,99 +4306,103 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
   // Emit the leading word, like 'wire', 'reg' or 'logic'.
   auto type = value.getType();
   auto word = getVerilogDeclWord(op, state.options);
-  if (!isZeroBitType(type)) {
-    ps << PP::ibox2;
-    if (!word.empty())
-      ps << PPExtString(word); // TODO: maybe have it return this to be clear.
-    auto extraIndent = word.empty() ? 0 : 1;
-    ps.spaces(maxDeclNameWidth - word.size() + extraIndent);
-  } else {
-    ps << PP::neverbox << "// Zero width: " << PPExtString(word) << PP::space;
-  }
-
-  SmallString<8> typeString;
-  // Convert the port's type to a string and measure it.
-  {
-    llvm::raw_svector_ostream stringStream(typeString);
-    emitter.printPackedType(stripUnpackedTypes(type), stringStream,
-                            op->getLoc());
-  }
-  // Emit the type.
-  if (!typeString.empty())
-    ps << typeString;
-  if (typeString.size() < maxTypeWidth) {
-    if (isZeroBitType(type))
-      ps.nbsp(maxTypeWidth - typeString.size());
-    else
-      ps.spaces(maxTypeWidth - typeString.size());
-  }
-
-  // Emit the name.
-  ps << PPExtString(names.getName(value));
-
-  // Print out any array subscripts or other post-name stuff.
-  ps.invokeWithStringOS(
-      [&](auto &os) { emitter.printUnpackedTypePostfix(type, os); });
-
-  // Print debug info.
-  if (state.options.printDebugInfo) {
-    StringAttr sym = op->getAttr("inner_sym").dyn_cast_or_null<StringAttr>();
-    if (sym && !sym.getValue().empty())
-      ps << " /* inner_sym: " << PPExtString(sym.getValue()) << " */";
-  }
-
-  if (auto localparam = dyn_cast<LocalParamOp>(op)) {
-    ps << PP::space << "=" << PP::space;
-    ps.invokeWithStringOS([&](auto &os) {
-      emitter.printParamValue(localparam.getValue(), os, [&]() {
-        return op->emitOpError("invalid localparam value");
-      });
-    });
-  }
-
-  // Try inlining an assignment into declarations.
-  if (isa<WireOp, LogicOp>(op) &&
-      !op->getParentOp()->hasTrait<ProceduralRegion>()) {
-    // Get a single assignments if any.
-    if (auto singleAssign = getSingleAssignAndCheckUsers<AssignOp>(op)) {
-      auto *source = singleAssign.getSrc().getDefiningOp();
-      // Check that the source value is OK to inline in the current emission
-      // point. A port or constant is fine, otherwise check that the assign is
-      // next to the operation.
-      if (!source || isa<ConstantOp>(source) ||
-          op->getNextNode() == singleAssign) {
-        ps << PP::space << "=" << PP::space << PP::ibox0;
-        emitExpression(singleAssign.getSrc(), opsForLocation);
-        ps << PP::end;
-        emitter.assignsInlined.insert(singleAssign);
-      }
+  auto isZeroBit = isZeroBitType(type);
+  ps.scopedBox(isZeroBit ? PP::neverbox : PP::ibox2, [&]() {
+    if (!isZeroBit) {
+      if (!word.empty())
+        ps << PPExtString(word); // TODO: maybe have it return this to be clear.
+      auto extraIndent = word.empty() ? 0 : 1;
+      ps.spaces(maxDeclNameWidth - word.size() + extraIndent);
+    } else {
+      ps << "// Zero width: " << PPExtString(word) << PP::space;
     }
-  }
 
-  // Try inlining a blocking assignment to logic op declaration.
-  if (isa<LogicOp>(op) && op->getParentOp()->hasTrait<ProceduralRegion>()) {
-    // Get a single assignment which might be possible to inline.
-    if (auto singleAssign = getSingleAssignAndCheckUsers<BPAssignOp>(op)) {
-      // It is necessary for the assignment to dominate users of the op.
-      if (checkDominanceOfUsers(singleAssign, op)) {
+    SmallString<8> typeString;
+    // Convert the port's type to a string and measure it.
+    {
+      llvm::raw_svector_ostream stringStream(typeString);
+      emitter.printPackedType(stripUnpackedTypes(type), stringStream,
+                              op->getLoc());
+    }
+    // Emit the type.
+    if (!typeString.empty())
+      ps << typeString;
+    if (typeString.size() < maxTypeWidth) {
+      if (isZeroBitType(type))
+        ps.nbsp(maxTypeWidth - typeString.size());
+      else
+        ps.spaces(maxTypeWidth - typeString.size());
+    }
+
+    // Emit the name.
+    ps << PPExtString(names.getName(value));
+
+    // Print out any array subscripts or other post-name stuff.
+    ps.invokeWithStringOS(
+        [&](auto &os) { emitter.printUnpackedTypePostfix(type, os); });
+
+    // Print debug info.
+    if (state.options.printDebugInfo) {
+      StringAttr sym = op->getAttr("inner_sym").dyn_cast_or_null<StringAttr>();
+      if (sym && !sym.getValue().empty())
+        ps << " /* inner_sym: " << PPExtString(sym.getValue()) << " */";
+    }
+
+    if (auto localparam = dyn_cast<LocalParamOp>(op)) {
+      ps << PP::space << "=" << PP::space;
+      ps.invokeWithStringOS([&](auto &os) {
+        emitter.printParamValue(localparam.getValue(), os, [&]() {
+          return op->emitOpError("invalid localparam value");
+        });
+      });
+    }
+
+    // Try inlining an assignment into declarations.
+    if (isa<WireOp, LogicOp>(op) &&
+        !op->getParentOp()->hasTrait<ProceduralRegion>()) {
+      // Get a single assignments if any.
+      if (auto singleAssign = getSingleAssignAndCheckUsers<AssignOp>(op)) {
         auto *source = singleAssign.getSrc().getDefiningOp();
-        // A port or constant can be inlined at everywhere. Otherwise, check the
-        // validity by `isExpressionEmittedInlineIntoProceduralDeclaration`.
+        // Check that the source value is OK to inline in the current emission
+        // point. A port or constant is fine, otherwise check that the assign is
+        // next to the operation.
         if (!source || isa<ConstantOp>(source) ||
-            isExpressionEmittedInlineIntoProceduralDeclaration(source, *this)) {
-          ps << PP::space << "=" << PP::space << PP::ibox0;
-          emitExpression(singleAssign.getSrc(), opsForLocation);
-          ps << PP::end;
-          // Remember that the assignment and logic op are emitted into decl.
+            op->getNextNode() == singleAssign) {
+          ps << PP::space << "=" << PP::space;
+          ps.scopedBox(PP::ibox0, [&]() {
+            emitExpression(singleAssign.getSrc(), opsForLocation);
+          });
           emitter.assignsInlined.insert(singleAssign);
-          emitter.expressionsEmittedIntoDecl.insert(op);
         }
       }
     }
-  }
-  ps << PP::end; // Close group: ibox2 normally, never-break for zero-width.
 
-  ps << ";";
+    // Try inlining a blocking assignment to logic op declaration.
+    if (isa<LogicOp>(op) && op->getParentOp()->hasTrait<ProceduralRegion>()) {
+      // Get a single assignment which might be possible to inline.
+      if (auto singleAssign = getSingleAssignAndCheckUsers<BPAssignOp>(op)) {
+        // It is necessary for the assignment to dominate users of the op.
+        if (checkDominanceOfUsers(singleAssign, op)) {
+          auto *source = singleAssign.getSrc().getDefiningOp();
+          // A port or constant can be inlined at everywhere. Otherwise, check
+          // the validity by
+          // `isExpressionEmittedInlineIntoProceduralDeclaration`.
+          if (!source || isa<ConstantOp>(source) ||
+              isExpressionEmittedInlineIntoProceduralDeclaration(source,
+                                                                 *this)) {
+            ps << PP::space << "=" << PP::space;
+            ps.scopedBox(PP::ibox0, [&]() {
+              emitExpression(singleAssign.getSrc(), opsForLocation);
+            });
+            // Remember that the assignment and logic op are emitted into decl.
+            emitter.assignsInlined.insert(singleAssign);
+            emitter.expressionsEmittedIntoDecl.insert(op);
+          }
+        }
+      }
+    }
+    ps << ";";
+  });
   emitLocationInfoAndNewLine(opsForLocation);
   return success();
 }
