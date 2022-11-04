@@ -1,6 +1,7 @@
-// RUN: circt-opt %s -verify-diagnostics --lower-seq-firrtl-to-sv | FileCheck %s
+// RUN: circt-opt %s -verify-diagnostics --lower-seq-firrtl-to-sv | FileCheck %s --check-prefixes=CHECK,COMMON
+// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="hw.module(lower-seq-firrtl-to-sv{disable-reg-randomization})" | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
 
-// CHECK-LABEL: hw.module @lowering
+// COMMON-LABEL: hw.module @lowering
 hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d: i32, e: i32, f: i32) {
   %cst0 = hw.constant 0 : i32
 
@@ -128,7 +129,7 @@ hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d:
   hw.output %rA, %rB, %rC, %rD, %rE, %rF : i32, i32, i32, i32, i32, i32
 }
 
-// CHECK-LABEL: hw.module private @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
+// COMMON-LABEL: hw.module private @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
 hw.module private @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   // CHECK: %c0_i2 = hw.constant 0 : i2
   %c0_i2 = hw.constant 0 : i2
@@ -179,7 +180,7 @@ hw.module private @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   // CHECK: hw.output
   hw.output
 }
-// CHECK-LABEL: hw.module private @UninitReg1_nonbin(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
+// COMMON-LABEL: hw.module private @UninitReg1_nonbin(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
 hw.module private @UninitReg1_nonbin(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   // CHECK: %c0_i2 = hw.constant 0 : i2
   %c0_i2 = hw.constant 0 : i2
@@ -212,7 +213,7 @@ hw.module private @UninitReg1_nonbin(%clock: i1, %reset: i1, %cond: i1, %value: 
 //     io_q <= reg
 //     reg <= mux(io_en, io_d, reg)
 
-// CHECK-LABEL: hw.module private @InitReg1(
+// COMMON-LABEL: hw.module private @InitReg1(
 hw.module private @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (io_q: i32) {
   %false = hw.constant false
   %c1_i32 = hw.constant 1 : i32
@@ -298,7 +299,7 @@ hw.module private @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (
   hw.output %reg : i32
 }
 
-// CHECK-LABEL: hw.module private @UninitReg42(%clock: i1, %reset: i1, %cond: i1, %value: i42) {
+// COMMON-LABEL: hw.module private @UninitReg42(%clock: i1, %reset: i1, %cond: i1, %value: i42) {
 hw.module private @UninitReg42(%clock: i1, %reset: i1, %cond: i1, %value: i42) {
   %c0_i42 = hw.constant 0 : i42
   %count = seq.firreg %1 clock %clock sym @count : i42
@@ -339,7 +340,7 @@ hw.module private @UninitReg42(%clock: i1, %reset: i1, %cond: i1, %value: i42) {
   hw.output
 }
 
-// CHECK-LABEL: hw.module private @regInitRandomReuse
+// COMMON-LABEL: hw.module private @regInitRandomReuse
 hw.module private @regInitRandomReuse(%clock: i1, %a: i1) -> (o1: i2, o2: i4, o3: i32, o4: i100) {
   %c0_i99 = hw.constant 0 : i99
   %c0_i31 = hw.constant 0 : i31
@@ -386,7 +387,7 @@ hw.module private @regInitRandomReuse(%clock: i1, %a: i1) -> (o1: i2, o2: i4, o3
   hw.output %r1, %r2, %r3, %r4 : i2, i4, i32, i100
 }
 
-// CHECK-LABEL: hw.module private @init1DVector
+// COMMON-LABEL: hw.module private @init1DVector
 hw.module private @init1DVector(%clock: i1, %a: !hw.array<2xi1>) -> (b: !hw.array<2xi1>) {
   %r = seq.firreg %a clock %clock sym @__r__ : !hw.array<2xi1>
 
@@ -421,7 +422,7 @@ hw.module private @init1DVector(%clock: i1, %a: !hw.array<2xi1>) -> (b: !hw.arra
   hw.output %r : !hw.array<2xi1>
 }
 
-// CHECK-LABEL: hw.module private @init2DVector
+// COMMON-LABEL: hw.module private @init2DVector
 hw.module private @init2DVector(%clock: i1, %a: !hw.array<1xarray<1xi1>>) -> (b: !hw.array<1xarray<1xi1>>) {
   %r = seq.firreg %a clock %clock sym @__r__ : !hw.array<1xarray<1xi1>>
 
@@ -453,7 +454,7 @@ hw.module private @init2DVector(%clock: i1, %a: !hw.array<1xarray<1xi1>>) -> (b:
   // CHECK: hw.output %0 : !hw.array<1xarray<1xi1>>
 }
 
-// CHECK-LABEL: hw.module private @initStruct
+// COMMON-LABEL: hw.module private @initStruct
 hw.module private @initStruct(%clock: i1) {
   %r = seq.firreg %r clock %clock sym @__r__ : !hw.struct<a: i1>
 
@@ -482,7 +483,7 @@ hw.module private @initStruct(%clock: i1) {
   hw.output
 }
 
-// CHECK-LABEL: issue1594
+// COMMON-LABEL: issue1594
 // Make sure LowerToHW's merging of always blocks kicks in for this example.
 hw.module @issue1594(%clock: i1, %reset: i1, %a: i1) -> (b: i1) {
   %true = hw.constant true
@@ -499,7 +500,7 @@ hw.module @issue1594(%clock: i1, %reset: i1, %a: i1) -> (b: i1) {
 }
 
 // Check that deeply nested if statement creation doesn't cause any issue.
-// CHECK-LABEL: @DeeplyNestedIfs
+// COMMON-LABEL: @DeeplyNestedIfs
 // CHECK-COUNT-17: sv.if
 hw.module @DeeplyNestedIfs(%a_0: i1, %a_1: i1, %a_2: i1, %c_0_0: i1, %c_0_1: i1, %c_1_0: i1, %c_1_1: i1, %c_2_0: i1, %c_2_1: i1, %clock: i1) -> (out_0: i1, out_1: i1) {
   %r_0 = seq.firreg %25 clock %clock {firrtl.random_init_start = 0 : ui64} : i1
@@ -559,7 +560,7 @@ hw.module @DeeplyNestedIfs(%a_0: i1, %a_1: i1, %a_2: i1, %c_0_0: i1, %c_0_1: i1,
   hw.output %r_0, %r_1 : i1, i1
 }
 
-// CHECK-LABEL: @ArrayElements
+// COMMON-LABEL: @ArrayElements
 hw.module @ArrayElements(%a: !hw.array<2xi1>, %clock: i1, %cond: i1) -> (b: !hw.array<2xi1>) {
   %false = hw.constant false
   %true = hw.constant true
