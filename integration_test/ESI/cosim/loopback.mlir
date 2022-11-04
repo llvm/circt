@@ -37,6 +37,6 @@ hw.module @top(%clk:i1, %rst:i1) -> () {
   hw.instance "intLoopbackInst" @intLoopback(clk: %clk: i1, rst: %rst: i1) -> ()
   hw.instance "twoListLoopbackInst" @twoListLoopback(clk: %clk: i1, rst: %rst: i1) -> ()
 
-  esi.service.instance @HostComms impl as  "cosim" (%clk, %rst) : (i1, i1) -> ()
+  esi.service.instance svc @HostComms impl as  "cosim" (%clk, %rst) : (i1, i1) -> ()
   hw.instance "TwoChanLoopback" @TwoChanLoopback(clk: %clk: i1) -> ()
 }
