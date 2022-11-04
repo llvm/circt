@@ -433,8 +433,13 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         // following path, that implies the path ends at this node, so copy the
         // xmrPathSuffix and end the path here.
         auto xmrIter = xmrPathSuffix.find(continueFrom.value());
-        if (xmrIter != xmrPathSuffix.end())
-          xmrPathSuffix[indx] = xmrIter->getSecond().str();
+        if (xmrIter != xmrPathSuffix.end()) {
+          SmallString<128> xmrSuffix = xmrIter->getSecond();
+          // The following assignment to the DenseMap can potentially reallocate
+          // the map, that might invalidate the `xmrIter`. So, copy the result
+          // to a temp, and then insert it back to the Map.
+          xmrPathSuffix[indx] = xmrSuffix;
+        }
         continueFrom = None;
       }
     }
