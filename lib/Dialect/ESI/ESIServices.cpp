@@ -331,7 +331,7 @@ LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
   DenseMap<SymbolRefAttr, Block *> localImplReqs;
   Block *anyServiceInst = nullptr;
   for (auto instOp : modBlock.getOps<ServiceInstanceOp>()) {
-    auto b = new Block();
+    auto *b = new Block();
     localImplReqs[instOp.getServiceSymbolAttr()] = b;
     if (!instOp.getServiceSymbol().has_value())
       anyServiceInst = b;
