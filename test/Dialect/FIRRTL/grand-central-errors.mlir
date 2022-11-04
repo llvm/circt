@@ -222,3 +222,115 @@ firrtl.circuit "multiInstance2" attributes {
     firrtl.instance dut1 sym @s2 @DUTE() // expected-note {{parent is instantiated here}}
   }
 }
+
+// -----
+
+firrtl.circuit "FieldNotInCompanion" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "Foo",
+      elements = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          description = "description of foo",
+          name = "foo",
+          id = 1 : i64
+        }
+      ],
+      id = 0 : i64,
+      name = "Foo"
+    }
+  ]
+} {
+  // expected-error @+1 {{Grand Central View "Foo" is invalid because a leaf is not inside the companion module}}
+  firrtl.module @Companion() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+        defName = "Foo",
+        id = 0 : i64,
+        name = "Foo"
+      }
+    ]
+  } {}
+  // expected-note @+1 {{the leaf value is inside this module}}
+  firrtl.module @FieldNotInCompanion() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
+        id = 0 : i64,
+        name = "Foo"
+      }
+    ]
+  } {
+
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c-1_si2 = firrtl.constant -1 : !firrtl.sint<2>
+
+    // expected-note @+1 {{the leaf value is declared here}}
+    %node_c0_ui1 = firrtl.node %c0_ui1 {
+      annotations = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 1 : i64
+        }
+      ]
+    } : !firrtl.uint<1>
+
+    firrtl.instance companion @Companion()
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidField" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "Foo",
+      elements = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          description = "description of foo",
+          name = "foo",
+          id = 1 : i64
+        }
+      ],
+      id = 0 : i64,
+      name = "Foo"
+    }
+  ]
+} {
+  firrtl.module @Companion() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+        defName = "Foo",
+        id = 0 : i64,
+        name = "Foo"
+      }
+    ]
+  } {
+    // expected-error @+1 {{Grand Central View "Foo" has an invalid leaf value}}
+    %node = firrtl.wire {
+      annotations = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 1 : i64
+        }
+      ]
+    } : !firrtl.uint<1>
+  }
+  firrtl.module @InvalidField() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
+        id = 0 : i64,
+        name = "Foo"
+      }
+    ]
+  } {
+    firrtl.instance companion @Companion()
+  }
+}

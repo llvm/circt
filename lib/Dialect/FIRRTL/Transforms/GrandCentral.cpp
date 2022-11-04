@@ -1289,12 +1289,6 @@ Optional<Attribute> GrandCentralPass::fromAttr(Attribute attr) {
   return None;
 }
 
-static StringAttr getModPart(Attribute pathSegment) {
-  return TypeSwitch<Attribute, StringAttr>(pathSegment)
-      .Case<FlatSymbolRefAttr>([](auto a) { return a.getAttr(); })
-      .Case<hw::InnerRefAttr>([](auto a) { return a.getModule(); });
-}
-
 bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
                                      VerbatimBuilder &path) {
   return TypeSwitch<Attribute, bool>(field)
@@ -1304,7 +1298,6 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         if (sym)
           nla = nlaTable->getNLA(sym.getAttr());
         Value leafValue = fieldRef.getValue();
-        unsigned fieldID = fieldRef.getFieldID();
         assert(leafValue && "leafValue not found");
 
         auto companionModule = companionIDMap.lookup(id).companion;
@@ -1318,8 +1311,44 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         if (!tpe.getBitWidthOrSentinel())
           return true;
 
-        // Generate the path from the LCA to the module that contains the leaf.
-        path += " = ";
+        // The leafValue is assumed to conform to a very specific pattern:
+        //
+        //   1) The leaf value is in the companion.
+        //   2) The leaf value is a NodeOp
+        //   3) That NodeOp is either a RefResolveOp or a ConstantOp
+        //
+        // Anything else means that there is an error or the IR is somehow using
+        // "old-style" Annotations to encode a Grand Central View.  This
+        // _really_ should be impossible to hit given that LowerAnnotations must
+        // generate code that conforms to the check here.
+        auto *nodeOp = leafValue.getDefiningOp();
+        if (companionModule != enclosing) {
+          auto diag = companionModule->emitError()
+                      << "Grand Central View \""
+                      << companionIDMap.lookup(id).name
+                      << "\" is invalid because a leaf is not inside the "
+                         "companion module";
+          diag.attachNote(leafValue.getLoc())
+              << "the leaf value is declared here";
+          if (nodeOp) {
+            auto leafModule = nodeOp->getParentOfType<FModuleOp>();
+            diag.attachNote(leafModule.getLoc())
+                << "the leaf value is inside this module";
+          }
+          return false;
+        }
+
+        if (leafValue.isa<BlockArgument>() ||
+            !isa<NodeOp>(leafValue.getDefiningOp()) ||
+            leafValue.getDefiningOp()->getOperand(0).isa<BlockArgument>() ||
+            !isa<RefResolveOp, ConstantOp>(
+                nodeOp->getOperand(0).getDefiningOp())) {
+          emitError(leafValue.getLoc())
+              << "Grand Central View \"" << companionIDMap.lookup(id).name
+              << "\" has an invalid leaf value (this must be a node of "
+                 "a constant or reftype)";
+          return false;
+        }
 
         /// Increment all the indices inside `{{`, `}}` by one. This is to
         /// indicate that a value is added to the `substitutions` of the
@@ -1357,141 +1386,17 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           return StringAttr::get(&getContext(), "assign " + replStr + ";");
         };
 
-        // If the leaf is inside the companionModule and the leaf is a NodeOp
-        // and the NodeOp input is a RefResolveOp, then no path needs to be
-        // generated, only the RefResolveOp result can be used as a value
-        // substitution into the verbatim.
-        if (companionModule == enclosing && !leafValue.isa<BlockArgument>() &&
-            isa<NodeOp>(leafValue.getDefiningOp()) &&
-            !leafValue.getDefiningOp()->getOperand(0).isa<BlockArgument>()) {
-          auto *nodeOp = leafValue.getDefiningOp();
-          auto *nodeDef = nodeOp->getOperand(0).getDefiningOp();
-          if (isa<RefResolveOp>(nodeDef) || isa<ConstantOp>(nodeDef)) {
-            // This is the new style of XMRs using RefTypes.
-            // The value subsitution index is set to -1, as it will be
-            // incremented when generating the string.
-            path += "{{-1}}";
-            AnnotationSet::removeDontTouch(nodeOp);
-            // Assemble the verbatim op.
-            builder.create<sv::VerbatimOp>(
-                uloc, getStrAndIncrementIds(path.getString()),
-                nodeOp->getOperand(0),
-                ArrayAttr::get(&getContext(), path.getSymbols()));
-            ++numXMRs;
-            return true;
-          }
-        }
-
-        // This case can only occur if ref.resolve is not introduced during
-        // LowerAnnotations.
-        //
-        // There are two possibilities for what this is tapping:
-        //   1. This is a constant that will be synced into the mappings file.
-        //   2. This is something else and we need an XMR.
-        // Handle case (1) here and exit.  Handle case (2) following.
-        auto driver = getDriverFromConnect(leafValue);
-        if (driver) {
-          if (auto constant =
-                  dyn_cast_or_null<ConstantOp>(driver.getDefiningOp())) {
-            path.append(Twine(constant.getValue().getBitWidth()));
-            path += "'h";
-            SmallString<32> valueStr;
-            constant.getValue().toStringUnsigned(valueStr, 16);
-            path.append(valueStr);
-            builder.create<sv::VerbatimOp>(
-                constant.getLoc(),
-                StringAttr::get(&getContext(),
-                                "assign " + path.getString() + ";"),
-                ValueRange{}, ArrayAttr::get(&getContext(), path.getSymbols()));
-            return true;
-          }
-        }
-
-        // Populate a hierarchical path to the leaf.  For an NLA this is just
-        // the namepath of the associated hierarchical path.  For a local
-        // annotation, this is computed from the instance path.
-        SmallVector<Attribute> fullLeafPath;
-        if (nla) {
-          fullLeafPath.append(nla.getNamepath().begin(),
-                              nla.getNamepath().end());
-        } else {
-          auto enclosingPaths = instancePaths->getAbsolutePaths(enclosing);
-          assert(enclosingPaths.size() == 1 &&
-                 "Unable to handle multiply instantiated companions");
-          if (enclosingPaths.size() != 1)
-            return false;
-          auto *topNode = instancePaths->instanceGraph.getTopLevelNode();
-          StringAttr root = topNode->getModule().moduleNameAttr();
-          for (auto segment : enclosingPaths[0]) {
-            fullLeafPath.push_back(getInnerRefTo(segment));
-            root = segment.referencedModuleNameAttr();
-          }
-          fullLeafPath.push_back(FlatSymbolRefAttr::get(root));
-        }
-
-        // Compute the lowest common ancestor (LCA) of the leaf path and the
-        // parent module.  This enables the generated XMR to be as short as
-        // possible while not losing specificity.
-        ArrayRef<Attribute> minimalLeafPath(fullLeafPath);
-        StringAttr parentNameAttr =
-            parentIDMap.lookup(id).second.moduleNameAttr();
-        minimalLeafPath = minimalLeafPath.drop_until(
-            [&](Attribute attr) { return getModPart(attr) == parentNameAttr; });
-
-        path += FlatSymbolRefAttr::get(getModPart(minimalLeafPath.front()));
-        if (minimalLeafPath.size() > 0) {
-          for (auto segment : minimalLeafPath.drop_back()) {
-            path += ".";
-            path += segment;
-          }
-        }
-
-        // Add the leaf value to the path.
-        path += '.';
-        if (auto blockArg = leafValue.dyn_cast<BlockArgument>()) {
-          auto module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
-          path += getInnerRefTo(module, blockArg.getArgNumber());
-        } else {
-          path += getInnerRefTo(leafValue.getDefiningOp());
-        }
-
-        if (fieldID > tpe.getMaxFieldID()) {
-          leafValue.getDefiningOp()->emitError()
-              << "subannotation with fieldID=" << fieldID
-              << " is too large for type " << tpe;
-          return false;
-        }
-
-        // Construct a path given by fieldID.
-        while (fieldID) {
-          TypeSwitch<FIRRTLType>(tpe)
-              .template Case<FVectorType>([&](FVectorType vector) {
-                unsigned index = vector.getIndexForFieldID(fieldID);
-                tpe = vector.getElementType();
-                fieldID -= vector.getFieldID(index);
-                path.append("[" + Twine(index) + "]");
-              })
-              .template Case<BundleType>([&](BundleType bundle) {
-                unsigned index = bundle.getIndexForFieldID(fieldID);
-                tpe = bundle.getElementType(index);
-                fieldID -= bundle.getFieldID(index);
-                // FIXME: Invalid verilog names (e.g. "begin", "reg", .. ) will
-                // be renamed at ExportVerilog so the path constructed here
-                // might become invalid. We can use an inner name ref to encode
-                // a reference to a subfield.
-                path.append("." + Twine(bundle.getElement(index).name));
-              })
-              .Default([&](auto op) {
-                llvm_unreachable(
-                    "fieldID > maxFieldID case must be already handled");
-              });
-        }
-
+        // This is the new style of XMRs using RefTypes.  The value subsitution
+        // index is set to -1, as it will be incremented when generating the
+        // string.
+        // Generate the path from the LCA to the module that contains the leaf.
+        path += " = {{-1}}";
+        AnnotationSet::removeDontTouch(nodeOp);
         // Assemble the verbatim op.
         builder.create<sv::VerbatimOp>(
-            uloc,
-            StringAttr::get(&getContext(), "assign " + path.getString() + ";"),
-            ValueRange{}, ArrayAttr::get(&getContext(), path.getSymbols()));
+            uloc, getStrAndIncrementIds(path.getString()),
+            nodeOp->getOperand(0),
+            ArrayAttr::get(&getContext(), path.getSymbols()));
         ++numXMRs;
         return true;
       })
