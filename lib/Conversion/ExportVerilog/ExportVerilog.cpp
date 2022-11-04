@@ -3798,22 +3798,24 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   else {
     ps << " begin";
     emitLocationInfoAndNewLine(ops);
-    ps << BeginToken(indentAmount, Breaks::Consistent, IndentStyle::Block);
-    startStatement();
-    ps << "if (";
-    // TODO: group, like normal 'if'.
-    // Negative edge async resets need to invert the reset condition.  This is
-    // noted in the op description.
-    if (op.getResetStyle() == ResetType::AsyncReset &&
-        *op.getResetEdge() == EventControl::AtNegEdge)
-      ps << "!";
-    emitExpression(op.getReset(), ops);
-    ps << ")";
-    emitBlockAsStatement(op.getResetBlock(), ops);
-    startStatement();
-    ps << "else";
-    emitBlockAsStatement(op.getBodyBlock(), ops);
-    ps << PP::end;
+    ps.scopedBox(
+        BeginToken(indentAmount, Breaks::Consistent, IndentStyle::Block),
+        [&]() {
+          startStatement();
+          ps << "if (";
+          // TODO: group, like normal 'if'.
+          // Negative edge async resets need to invert the reset condition. This
+          // is noted in the op description.
+          if (op.getResetStyle() == ResetType::AsyncReset &&
+              *op.getResetEdge() == EventControl::AtNegEdge)
+            ps << "!";
+          emitExpression(op.getReset(), ops);
+          ps << ")";
+          emitBlockAsStatement(op.getResetBlock(), ops);
+          startStatement();
+          ps << "else";
+          emitBlockAsStatement(op.getBodyBlock(), ops);
+        });
 
     startStatement();
     ps << "end";
