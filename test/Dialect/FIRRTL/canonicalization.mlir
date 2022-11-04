@@ -735,6 +735,42 @@ firrtl.module @subaccess(out %result: !firrtl.uint<8>, in %vec0: !firrtl.vector<
   firrtl.connect %result, %1 :!firrtl.uint<8>, !firrtl.uint<8>
 }
 
+// CHECK-LABEL: firrtl.module @subindex
+firrtl.module @subindex(out %out : !firrtl.uint<8>) {
+  // CHECK: %c8_ui8 = firrtl.constant 8 : !firrtl.uint<8>
+  // CHECK: firrtl.strictconnect %out, %c8_ui8 : !firrtl.uint<8>
+  %0 = firrtl.aggregateconstant [8 : ui8] : !firrtl.vector<uint<8>, 1>
+  %1 = firrtl.subindex %0[0] : !firrtl.vector<uint<8>, 1>
+  firrtl.strictconnect %out, %1 : !firrtl.uint<8>
+}
+
+// CHECK-LABEL: firrtl.module @subindex_agg
+firrtl.module @subindex_agg(out %out : !firrtl.bundle<a: uint<8>>) {
+  // CHECK: %0 = firrtl.aggregateconstant [8 : ui8] : !firrtl.bundle<a: uint<8>>
+  // CHECK: firrtl.strictconnect %out, %0 : !firrtl.bundle<a: uint<8>>
+  %0 = firrtl.aggregateconstant [8 : ui8] : !firrtl.vector<bundle<a: uint<8>>, 1>
+  %1 = firrtl.subindex %0[0] : !firrtl.vector<bundle<a: uint<8>>, 1>
+  firrtl.strictconnect %out, %1 : !firrtl.bundle<a: uint<8>>
+}
+
+// CHECK-LABEL: firrtl.module @subfield
+firrtl.module @subfield(out %out : !firrtl.uint<8>) {
+  // CHECK: %c8_ui8 = firrtl.constant 8 : !firrtl.uint<8>
+  // CHECK: firrtl.strictconnect %out, %c8_ui8 : !firrtl.uint<8>
+  %0 = firrtl.aggregateconstant [8 : ui8] : !firrtl.bundle<a: uint<8>>
+  %1 = firrtl.subfield %0(0) : (!firrtl.bundle<a: uint<8>>) -> !firrtl.uint<8>
+  firrtl.strictconnect %out, %1 : !firrtl.uint<8>
+}
+
+// CHECK-LABEL: firrtl.module @subfield_agg
+firrtl.module @subfield_agg(out %out : !firrtl.vector<uint<8>, 1>) {
+  // CHECK: %0 = firrtl.aggregateconstant [8 : ui8] : !firrtl.vector<uint<8>, 1>
+  // CHECK: firrtl.strictconnect %out, %0 : !firrtl.vector<uint<8>, 1>
+  %0 = firrtl.aggregateconstant [8 : ui8] : !firrtl.bundle<a: vector<uint<8>, 1>>
+  %1 = firrtl.subfield %0(0) : (!firrtl.bundle<a: vector<uint<8>, 1>>) -> !firrtl.vector<uint<8>, 1>
+  firrtl.strictconnect %out, %1 : !firrtl.vector<uint<8>, 1>
+}
+
 // CHECK-LABEL: firrtl.module @issue326
 firrtl.module @issue326(out %tmp57: !firrtl.sint<1>) {
   %c29_si7 = firrtl.constant 29 : !firrtl.sint<7>

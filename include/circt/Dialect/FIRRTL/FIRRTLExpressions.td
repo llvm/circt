@@ -161,7 +161,7 @@ def BundleCreateOp : FIRRTLOp<"bundlecreate"> {
 
   let assemblyFormat = "$fields attr-dict `:` functional-type($fields, $result)";
   let hasVerifier = 1;
-  let hasCanonicalizer = 1;
+  let hasFolder = 1;
 }
 
 def VectorCreateOp : FIRRTLOp<"vectorcreate"> {
@@ -180,7 +180,7 @@ def VectorCreateOp : FIRRTLOp<"vectorcreate"> {
 
   let assemblyFormat = "$fields attr-dict `:` functional-type($fields, $result)";
   let hasVerifier = 1;
-  let hasCanonicalizer = 1;
+  let hasFolder = 1;
 }
 
 
@@ -216,6 +216,7 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
 
   let arguments = (ins BundleType:$input, I32Attr:$fieldIndex);
   let results = (outs FIRRTLBaseType:$result);
+  let hasFolder = 1;
   let hasCanonicalizer = 1;
   let hasVerifier = 1;
   
@@ -260,6 +261,7 @@ def SubindexOp : FIRRTLExprOp<"subindex", [
 
   let arguments = (ins FIRRTLBaseType:$input, I32Attr:$index);
   let results = (outs FIRRTLBaseType:$result);
+  let hasFolder = 1;
   let hasCanonicalizer = 1;
 
   // TODO: Could drop the result type, inferring it from the source.
