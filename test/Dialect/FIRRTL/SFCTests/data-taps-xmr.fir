@@ -118,5 +118,5 @@ circuit Top : %[[
 ; CHECK-NOT: module
 ; CHECK:   tap = Top.foo.b.inv;
 ; CHECK:   assign tap2 = Top.unsigned_0.signed_0.localparam_0.random.something;
-; CHECK:   InternalPathChild int_1 (
+; CHECK:   InternalPathChild int_0 (
 ; CHECK: endmodule

@@ -83,9 +83,9 @@ msft.module @reg {} (%input : i4, %clk : i1) -> () {
   msft.output
 }
 // TCL-LABEL: proc reg_0_foo_config
-// TCL: set_location_assignment FF_X1_Y2_N3 -to $parent|reg_1[1]
-// TCL: set_location_assignment FF_X1_Y2_N4 -to $parent|reg_1[2]
-// TCL: set_location_assignment FF_X1_Y2_N5 -to $parent|reg_1[3]
+// TCL: set_location_assignment FF_X1_Y2_N3 -to $parent|reg_0[1]
+// TCL: set_location_assignment FF_X1_Y2_N4 -to $parent|reg_0[2]
+// TCL: set_location_assignment FF_X1_Y2_N5 -to $parent|reg_0[3]
 
 // TCL-LABEL: proc reg_0_bar_config
-// TCL: set_location_assignment FF_X3_Y4_N5 -to $parent|reg_1[0]
+// TCL: set_location_assignment FF_X3_Y4_N5 -to $parent|reg_0[0]
