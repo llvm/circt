@@ -17,7 +17,7 @@ with Context() as ctx:
 
 
 # CHECK-LABEL: === testGen called with op:
-# CHECK:       %0:2 = esi.service.impl_req @HostComms impl as "test"(%clk) : (i1) -> (i8, !esi.channel<i8>) {
+# CHECK:       %0:2 = esi.service.impl_req svc @HostComms impl as "test"(%clk) : (i1) -> (i8, !esi.channel<i8>) {
 # CHECK:         %2 = esi.service.req.to_client <@HostComms::@Recv>(["m1", "loopback_tohw"]) : !esi.channel<i8>
 # CHECK:         esi.service.req.to_server %m1.loopback_fromhw -> <@HostComms::@Send>(["m1", "loopback_fromhw"]) : !esi.channel<i8>
 def testGen(reqOp: esi.ServiceImplementReqOp) -> bool:
@@ -38,7 +38,7 @@ esi.service.decl @HostComms {
 }
 
 msft.module @MsTop {} (%clk: i1) -> (chksum: i8) {
-  %c = esi.service.instance @HostComms impl as  "test" (%clk) : (i1) -> (i8)
+  %c = esi.service.instance svc @HostComms impl as  "test" (%clk) : (i1) -> (i8)
   msft.instance @m1 @MsLoopback (%clk) : (i1) -> ()
   msft.output %c : i8
 }
