@@ -3208,8 +3208,7 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
   // TODO: We'll probably need to store the legalized names somewhere for
   // `verbose` formatting. Set up the infra for storing names recursively. Just
   // store this locally for now.
-  llvm::StringSet<> usedNames;
-  size_t nextGenID = 0;
+  llvm::StringMap<size_t> nextGenIds;
 
   // Emit each case.
   for (size_t i = 0, e = patterns.size(); i < e; ++i) {
@@ -3226,7 +3225,7 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
           [&]() { return op->emitOpError("invalid case value"); });
 
     StringRef legalName = legalizeName(
-        caseNames[i].cast<StringAttr>().getValue(), usedNames, nextGenID);
+        caseNames[i].cast<StringAttr>().getValue(), nextGenIds);
     os << ": begin: " << legalName << "\n";
     emitStatementBlock(region.getBlocks().front());
     indent() << "end: " << legalName << "\n";

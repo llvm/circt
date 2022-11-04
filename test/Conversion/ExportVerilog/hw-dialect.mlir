@@ -976,19 +976,19 @@ hw.module @structExplodeLowering(%a: !hw.struct<a: i1, b: i1>) -> (outA: i1, out
 
 // Rename field names
 // CHECK-LABEL: renameKeyword(
-// CHECK-NEXT:  input  struct packed {logic repeat_0; logic repeat_0_1; } a,
-// CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_1; } r1);
+// CHECK-NEXT:  input  struct packed {logic repeat_0; logic repeat_0_0; } a,
+// CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_0; } r1);
 hw.module @renameKeyword(%a: !hw.struct<repeat: i1, repeat_0: i1>) -> (r1: !hw.struct<repeat: i1, repeat_0: i1>){
   hw.output %a : !hw.struct<repeat: i1, repeat_0: i1>
 }
 
 // CHECK-LABEL: useRenamedStruct(
-// CHECK-NEXT:  inout  struct packed {logic repeat_0; logic repeat_0_1; } a,
+// CHECK-NEXT:  inout  struct packed {logic repeat_0; logic repeat_0_0; } a,
 // CHECK-NEXT:  output                                                    r1,
 // CHECK-NEXT:                                                            r2,
-// CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_1; } r3);
+// CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_0; } r3);
 hw.module @useRenamedStruct(%a: !hw.inout<struct<repeat: i1, repeat_0: i1>>) -> (r1: i1, r2: i1, r3: !hw.struct<repeat: i1, repeat_0: i1>) {
-  // CHECK: wire struct packed {logic repeat_0; logic repeat_0_1; } _inst1_r1;
+  // CHECK: wire struct packed {logic repeat_0; logic repeat_0_0; } _inst1_r1;
   %read = sv.read_inout %a : !hw.inout<struct<repeat: i1, repeat_0: i1>>
 
   %i0 = hw.instance "inst1" @renameKeyword(a: %read: !hw.struct<repeat: i1, repeat_0: i1>) -> (r1: !hw.struct<repeat: i1, repeat_0: i1>)
@@ -1004,7 +1004,7 @@ hw.module @useRenamedStruct(%a: !hw.inout<struct<repeat: i1, repeat_0: i1>>) -> 
   // assign r2 = a.repeat_0_1;
   %true = hw.constant true
   %3 = hw.struct_inject %read["repeat_0"], %true : !hw.struct<repeat: i1, repeat_0: i1>
-  // assign r3 = '{repeat_0: a.repeat_0, repeat_0_1: (1'h1)};
+  // assign r3 = '{repeat_0: a.repeat_0, repeat_0_0: (1'h1)};
   hw.output %1, %2, %3 : i1, i1, !hw.struct<repeat: i1, repeat_0: i1>
 }
 
