@@ -331,7 +331,7 @@ static cl::opt<RandomKind> disableRandom(
                clEnumValN(RandomKind::Reg, "disable-reg-randomization",
                           "Disable emission of register randomization code"),
                clEnumValN(RandomKind::All, "disable-all-randomization",
-                          "Disable emission of register randomization code")),
+                          "Disable emission of all randomization code")),
     cl::init(RandomKind::None), cl::cat(mainCategory));
 
 static bool isRandomEnabled(RandomKind kind) {
