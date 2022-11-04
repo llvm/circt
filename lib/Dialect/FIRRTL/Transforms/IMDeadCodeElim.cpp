@@ -22,12 +22,12 @@ using namespace circt;
 using namespace firrtl;
 
 /// Return true if this is a wire or a register or a node.
-static bool isWireOrRegOrNode(Operation *op) {
-  return isa<WireOp, RegResetOp, RegOp, NodeOp>(op);
+static bool isDeclaration(Operation *op) {
+  return isa<WireOp, RegResetOp, RegOp, NodeOp, MemOp>(op);
 }
 
 /// Return true if this is a wire or register we're allowed to delete.
-static bool isDeletableWireOrRegOrNode(Operation *op) {
+static bool isDeletableDeclaration(Operation *op) {
   if (auto name = dyn_cast<FNamableOp>(op))
     if (!name.hasDroppableName())
       return false;
@@ -57,6 +57,10 @@ struct IMDeadCodeElimPass : public IMDeadCodeElimBase<IMDeadCodeElimPass> {
 
   /// Return true if the value is assumed dead.
   bool isAssumedDead(Value value) const { return !isKnownAlive(value); }
+  bool isAssumedDead(Operation *op) const {
+    return llvm::none_of(op->getResults(),
+                         [&](Value value) { return isKnownAlive(value); });
+  }
 
   /// Return true if the block is alive.
   bool isBlockExecutable(Block *block) const {
@@ -68,8 +72,7 @@ struct IMDeadCodeElimPass : public IMDeadCodeElimBase<IMDeadCodeElimPass> {
   void visitConnect(FConnectLike connect);
   void visitSubelement(Operation *op);
   void markBlockExecutable(Block *block);
-  void markWireOrRegOrNode(Operation *op);
-  void markMemOp(MemOp op);
+  void markDeclaration(Operation *op);
   void markInstanceOp(InstanceOp instanceOp);
   void markUnknownSideEffectOp(Operation *op);
 
@@ -90,15 +93,11 @@ private:
 };
 } // namespace
 
-void IMDeadCodeElimPass::markWireOrRegOrNode(Operation *op) {
-  assert(isWireOrRegOrNode(op) && "only a wire, a reg or a node is expected");
-  if (!isDeletableWireOrRegOrNode(op))
-    markAlive(op->getResult(0));
-}
-
-void IMDeadCodeElimPass::markMemOp(MemOp mem) {
-  for (auto result : mem.getResults())
-    markAlive(result);
+void IMDeadCodeElimPass::markDeclaration(Operation *op) {
+  assert(isDeclaration(op) && "only a declaration is expected");
+  if (!isDeletableDeclaration(op))
+    for (auto result : op->getResults())
+      markAlive(result);
 }
 
 void IMDeadCodeElimPass::markUnknownSideEffectOp(Operation *op) {
@@ -165,15 +164,13 @@ void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
       markAlive(blockArg);
 
   for (auto &op : *block) {
-    if (isWireOrRegOrNode(&op))
-      markWireOrRegOrNode(&op);
+    if (isDeclaration(&op))
+      markDeclaration(&op);
     else if (auto instance = dyn_cast<InstanceOp>(op))
       markInstanceOp(instance);
     else if (isa<FConnectLike>(op))
       // Skip connect op.
       continue;
-    else if (auto mem = dyn_cast<MemOp>(op))
-      markMemOp(mem);
     else if (!mlir::MemoryEffectOpInterface::hasNoEffect(&op))
       markUnknownSideEffectOp(&op);
 
@@ -304,6 +301,13 @@ void IMDeadCodeElimPass::visitValue(Value value) {
     return markAlive(modulePortVal);
   }
 
+  // If a port of a memory is alive, all other ports are.
+  if (auto mem = value.getDefiningOp<MemOp>()) {
+    for (auto port : mem->getResults())
+      markAlive(port);
+    return;
+  }
+
   // If op is defined by an operation, mark its operands as alive.
   if (auto op = value.getDefiningOp())
     for (auto operand : op->getOperands())
@@ -341,7 +345,7 @@ void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
     }
 
     // Delete dead wires, regs and nodes.
-    if (isWireOrRegOrNode(&op) && isAssumedDead(op.getResult(0))) {
+    if (isDeclaration(&op) && isAssumedDead(&op)) {
       LLVM_DEBUG(llvm::dbgs() << "DEAD: " << op << "\n";);
       assert(op.use_empty() && "users should be already removed");
       op.erase();
@@ -417,7 +421,7 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
     // `rewriteModuleBody`.
     WireOp wire = builder.create<WireOp>(argument.getType());
     argument.replaceAllUsesWith(wire);
-    assert(isAssumedDead(wire) && "dummy wire must be dead");
+    assert(isAssumedDead(wire.getResult()) && "dummy wire must be dead");
     deadPortIndexes.set(index);
   }
 
