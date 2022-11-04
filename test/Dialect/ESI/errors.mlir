@@ -115,5 +115,5 @@ esi.service.decl @HostComms {
 hw.module @Top(%clk: i1, %rst: i1) -> () {
   // expected-error @+2 {{'esi.service.impl_req' op did not recognize option name "badOpt"}}
   // expected-error @+1 {{'esi.service.instance' op failed to generate server}}
-  esi.service.instance @HostComms impl as  "cosim" opts {badOpt = "wrong!"} (%clk, %rst) : (i1, i1) -> ()
+  esi.service.instance svc @HostComms impl as  "cosim" opts {badOpt = "wrong!"} (%clk, %rst) : (i1, i1) -> ()
 }

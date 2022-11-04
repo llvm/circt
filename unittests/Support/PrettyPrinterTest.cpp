@@ -352,10 +352,9 @@ TEST(PrettyPrinterTest, Stream) {
   PrettyPrinter pp(os, 20);
   TokenStringSaver saver;
   TokenStream<> ps(pp, saver);
-  {
-    ps << PP::ibox0 << "test" << PP::space << "test" << PP::space << "test"
-       << PP::end;
-  }
+  ps.scopedBox(PP::ibox0, [&]() {
+    ps << "test" << PP::space << "test" << PP::space << "test";
+  });
   ps << PP::eof;
   EXPECT_EQ(out.str(), StringRef("test test test"));
 }
@@ -547,17 +546,16 @@ TEST(PrettyPrinterTest, Expr) {
     TokenStringSaver saver;
     TokenStream<> ps(pp, saver);
     out = "\n";
-    {
-      ps << PP::ibox2;
+    ps.scopedBox(PP::ibox2, [&]() {
       ps << "assign" << PP::nbsp << id << PP::nbsp << "=";
       ps << PP::space;
-      ps << PP::ibox0;
-      sumExpr(ps);
-      ps << PP::space << "*" << PP::space;
-      sumExpr(ps);
-      ps << ";";
-      ps << PP::end << PP::end;
-    }
+      ps.scopedBox(PP::ibox0, [&]() {
+        sumExpr(ps);
+        ps << PP::space << "*" << PP::space;
+        sumExpr(ps);
+        ps << ";";
+      });
+    });
     ps << PP::newline << PP::eof;
   };
 
