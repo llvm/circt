@@ -3403,7 +3403,6 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
   });
   ps << ")";
   setPendingNewline();
-  ps << BeginToken(indentAmount, Breaks::Consistent, IndentStyle::Block);
 
   // Ensure that all of the per-case arrays are the same length.
   ArrayAttr patterns = op.getCasePatterns();
@@ -3416,34 +3415,35 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
   // `verbose` formatting. Set up the infra for storing names recursively. Just
   // store this locally for now.
   llvm::StringMap<size_t> nextGenIds;
+  ps.scopedBox(
+      BeginToken(indentAmount, Breaks::Consistent, IndentStyle::Block), [&]() {
+        // Emit each case.
+        for (size_t i = 0, e = patterns.size(); i < e; ++i) {
+          auto &region = regions[i];
+          assert(region.hasOneBlock());
+          Attribute patternAttr = patterns[i];
 
-  // Emit each case.
-  for (size_t i = 0, e = patterns.size(); i < e; ++i) {
-    auto &region = regions[i];
-    assert(region.hasOneBlock());
-    Attribute patternAttr = patterns[i];
+          startStatement();
+          if (!patternAttr.isa<mlir::TypedAttr>())
+            ps << "default";
+          else
+            ps.invokeWithStringOS([&](auto &os) {
+              emitter.printParamValue(
+                  patternAttr, os, VerilogPrecedence::LowestPrecedence,
+                  [&]() { return op->emitOpError("invalid case value"); });
+            });
 
-    startStatement();
-    if (!patternAttr.isa<mlir::TypedAttr>())
-      ps << "default";
-    else
-      ps.invokeWithStringOS([&](auto &os) {
-        emitter.printParamValue(
-            patternAttr, os, VerilogPrecedence::LowestPrecedence,
-            [&]() { return op->emitOpError("invalid case value"); });
+          StringRef legalName = legalizeName(
+              caseNames[i].cast<StringAttr>().getValue(), nextGenIds);
+          ps << ": begin: " << PPExtString(legalName);
+          setPendingNewline();
+          emitStatementBlock(region.getBlocks().front());
+          startStatement();
+          ps << "end: " << PPExtString(legalName);
+          setPendingNewline();
+        }
       });
 
-    StringRef legalName =
-        legalizeName(caseNames[i].cast<StringAttr>().getValue(), nextGenIds);
-    ps << ": begin: " << PPExtString(legalName);
-    setPendingNewline();
-    emitStatementBlock(region.getBlocks().front());
-    startStatement();
-    ps << "end: " << PPExtString(legalName);
-    setPendingNewline();
-  }
-
-  ps << PP::end;
   startStatement();
   ps << "endcase";
   setPendingNewline();
