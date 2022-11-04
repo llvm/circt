@@ -47,18 +47,8 @@ include "PropertyBase.td"
 def LinkedOperatorTypeProp : OperationProperty<SSPDialect,
   "LinkedOperatorType", "::mlir::FlatSymbolRefAttr", "::circt::scheduling::Problem"> {
   let mnemonic = "opr";
-  // Need to override the default implementation because to (un)wrap the
-  // StringAttr from/for the symbol reference
-  let extraClassDeclaration = [{
-    void setInProblem(}] # problemClassName # [{ &prob, ::mlir::Operation *op) {
-      prob.set}] # propertyName # [{(op, getValue().getLeafReference());
-    }
-    static ::mlir::Attribute getFromProblem(}] # problemClassName # [{ &prob, ::mlir::Operation *op, ::mlir::MLIRContext *ctx) {
-      if (auto value = prob.get}] # propertyName # [{(op))
-        return }] # cppClassName # [{::get(ctx, ::mlir::FlatSymbolRefAttr::get(ctx, *value));
-      return {};
-    }
-  }];
+  let unwrapValue = [{ getValue().getLeafReference() }];
+  let wrapValue = [{ ::mlir::FlatSymbolRefAttr::get(ctx, value) }];
 }
 def StartTimeProp : OperationProperty<SSPDialect,
   "StartTime", "unsigned", "::circt::scheduling::Problem"> {

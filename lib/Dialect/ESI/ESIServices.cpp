@@ -44,7 +44,7 @@ ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req,
 
 /// The generator for the "cosim" impl_type.
 static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req,
-                                                 ServiceDeclOpInterface decl) {
+                                                 ServiceDeclOpInterface) {
   auto *ctxt = req.getContext();
   OpBuilder b(req);
   Value clk = req.getOperand(0);
@@ -118,6 +118,10 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp req,
 static LogicalResult
 instantiateSystemVerilogMemory(ServiceImplementReqOp req,
                                ServiceDeclOpInterface decl) {
+  if (!decl)
+    return req.emitOpError(
+        "Must specify a service declaration to use 'sv_mem'.");
+
   ImplicitLocOpBuilder b(req.getLoc(), req);
   BackedgeBuilder bb(b, req.getLoc());
 
@@ -325,8 +329,13 @@ LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
 
   // Index the local services and create blocks in which to put the requests.
   DenseMap<SymbolRefAttr, Block *> localImplReqs;
-  for (auto instOp : modBlock.getOps<ServiceInstanceOp>())
-    localImplReqs[instOp.getServiceSymbolAttr()] = new Block();
+  Block *anyServiceInst = nullptr;
+  for (auto instOp : modBlock.getOps<ServiceInstanceOp>()) {
+    auto b = new Block();
+    localImplReqs[instOp.getServiceSymbolAttr()] = b;
+    if (!instOp.getServiceSymbol().has_value())
+      anyServiceInst = b;
+  }
 
   // Decompose the 'inout' requests int to 'in' and 'out' requests.
   mod.walk([&](RequestInOutChannelOp reqInOut) {
@@ -348,11 +357,15 @@ LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
       auto implOpF = localImplReqs.find(service);
       if (implOpF != localImplReqs.end())
         req->moveBefore(implOpF->second, implOpF->second->end());
+      else if (anyServiceInst)
+        req->moveBefore(anyServiceInst, anyServiceInst->end());
     } else if (auto req = dyn_cast<RequestToServerConnectionOp>(op)) {
       auto service = req.getServicePortAttr().getModuleRef();
       auto implOpF = localImplReqs.find(service);
       if (implOpF != localImplReqs.end())
         req->moveBefore(implOpF->second, implOpF->second->end());
+      else if (anyServiceInst)
+        req->moveBefore(anyServiceInst, anyServiceInst->end());
     }
   });
 
@@ -456,12 +469,15 @@ static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
 LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
                                                   Block *portReqs) {
   assert(portReqs);
-
-  auto decl = dyn_cast_or_null<ServiceDeclOpInterface>(
-      topLevelSyms.getDefinition(instOp.getServiceSymbolAttr()));
-  if (!decl)
-    return instOp.emitOpError("Could not find service declaration ")
-           << instOp.getServiceSymbolAttr();
+  auto declSym = instOp.getServiceSymbolAttr();
+  ServiceDeclOpInterface decl;
+  if (declSym) {
+    decl = dyn_cast_or_null<ServiceDeclOpInterface>(
+        topLevelSyms.getDefinition(declSym));
+    if (!decl)
+      return instOp.emitOpError("Could not find service declaration ")
+             << declSym;
+  }
 
   // Compute the result types for the new op -- the instance op's output types
   // + the to_client types.

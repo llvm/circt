@@ -52,6 +52,8 @@ public:
             StopOp, FinishOp, ExitOp,
             // Severity message tasks
             FatalOp, ErrorOp, WarningOp, InfoOp,
+            // Memory loading tasks
+            ReadMemOp,
             // Generate statements
             GenerateOp, GenerateCaseOp,
             // Sampled value functiions
@@ -151,6 +153,9 @@ public:
   HANDLE(ErrorOp, Unhandled);
   HANDLE(WarningOp, Unhandled);
   HANDLE(InfoOp, Unhandled);
+
+  // Memory loading tasks
+  HANDLE(ReadMemOp, Unhandled);
 
   // Generate statements
   HANDLE(GenerateOp, Unhandled);

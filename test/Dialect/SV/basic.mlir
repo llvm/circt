@@ -267,6 +267,18 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
     sv.info "hello %d"(%arg0) : i1
   }
 
+  // Tests for ReadMemOp ($readmemb/$readmemh)
+  // CHECK-NEXT: sv.initial {
+  // CHECK-NEXT:   %memForReadMem = sv.reg
+  // CHECK-NEXT:   sv.readmem @MemForReadMem, "file1.txt", MemBaseBin
+  // CHECK-NEXT:   sv.readmem @MemForReadMem, "file2.txt", MemBaseHex
+  // CHECK-NEXT: }
+  sv.initial {
+    %memForReadMem = sv.reg sym @MemForReadMem : !hw.inout<uarray<8xi32>>
+    sv.readmem @MemForReadMem, "file1.txt", MemBaseBin
+    sv.readmem @MemForReadMem, "file2.txt", MemBaseHex
+  }
+
   // CHECK-NEXT: hw.output
   hw.output
 }

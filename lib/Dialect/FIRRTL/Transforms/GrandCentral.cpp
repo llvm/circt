@@ -33,6 +33,7 @@
 
 using namespace circt;
 using namespace firrtl;
+using hw::HWModuleLike;
 using llvm::Optional;
 
 //===----------------------------------------------------------------------===//
@@ -612,7 +613,7 @@ private:
                                            VerbatimBuilder &path);
 
   /// Return the module associated with this value.
-  FModuleLike getEnclosingModule(Value value, FlatSymbolRefAttr sym = {});
+  HWModuleLike getEnclosingModule(Value value, FlatSymbolRefAttr sym = {});
 
   /// Inforamtion about how the circuit should be extracted.  This will be
   /// non-empty if an extraction annotation is found.
@@ -1061,9 +1062,11 @@ static Optional<DictionaryAttr> parseAugmentedType(
               << targetAttr << "'";
           return None;
         }
-        xmrSrcTarget->instances.insert(xmrSrcTarget->instances.begin(),
-                                       paths.back().begin(),
-                                       paths.back().end());
+        auto *it = xmrSrcTarget->instances.begin();
+        for (auto inst : paths.back()) {
+          xmrSrcTarget->instances.insert(it, cast<InstanceOp>(inst));
+          ++it;
+        }
       }
       auto lastInst = xmrSrcTarget->instances.pop_back_val();
       auto builder = ImplicitLocOpBuilder::atBlockEnd(lastInst.getLoc(),
@@ -1175,7 +1178,6 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
   NamedAttrList companionAttrs, parentAttrs;
   companionAttrs.append("class", StringAttr::get(context, companionAnnoClass));
   companionAttrs.append("id", id);
-  companionAttrs.append("type", StringAttr::get(context, "companion"));
   auto viewAttr =
       tryGetAs<DictionaryAttr>(anno, anno, "view", loc, viewAnnoClass);
   if (!viewAttr)
@@ -1201,7 +1203,6 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
   parentAttrs.append("id", id);
   parentAttrs.append("name", name);
   parentAttrs.append("target", parentAttr);
-  parentAttrs.append("type", StringAttr::get(context, "parent"));
   state.addToWorklistFn(DictionaryAttr::get(context, parentAttrs));
   auto prunedAttr = parseAugmentedType(
       state, viewAttr, anno, companionAttr.getValue(), name, {}, id, {},
@@ -1307,7 +1308,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         assert(leafValue && "leafValue not found");
 
         auto companionModule = companionIDMap.lookup(id).companion;
-        FModuleLike enclosing = getEnclosingModule(leafValue, sym);
+        HWModuleLike enclosing = getEnclosingModule(leafValue, sym);
         auto builder = OpBuilder::atBlockEnd(companionModule.getBodyBlock());
         auto uloc = builder.getUnknownLoc();
 
@@ -1419,11 +1420,11 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
                  "Unable to handle multiply instantiated companions");
           if (enclosingPaths.size() != 1)
             return false;
-          StringAttr root =
-              instancePaths->instanceGraph.getTopLevelModule().moduleNameAttr();
+          auto *topNode = instancePaths->instanceGraph.getTopLevelNode();
+          StringAttr root = topNode->getModule().moduleNameAttr();
           for (auto segment : enclosingPaths[0]) {
             fullLeafPath.push_back(getInnerRefTo(segment));
-            root = segment.getModuleNameAttr().getAttr();
+            root = segment.referencedModuleNameAttr();
           }
           fullLeafPath.push_back(FlatSymbolRefAttr::get(root));
         }
@@ -1591,7 +1592,7 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
             auto iface = traverseBundle(bundle, id, prefix, path);
             assert(iface && *iface);
             (void)iface;
-            return VerbatimType({getInterfaceName(prefix, bundle), true});
+            return VerbatimType({iface->getNameAttr().str(), true});
           })
       .Case<AugmentedStringTypeAttr>([&](auto field) -> TypeSum {
         return unsupported(field.getName().getValue(), "string");
@@ -1714,17 +1715,17 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
 
 /// Return the module that is associated with this value.  Use the cached/lazily
 /// constructed symbol table to make this fast.
-FModuleLike GrandCentralPass::getEnclosingModule(Value value,
-                                                 FlatSymbolRefAttr sym) {
+HWModuleLike GrandCentralPass::getEnclosingModule(Value value,
+                                                  FlatSymbolRefAttr sym) {
   if (auto blockArg = value.dyn_cast<BlockArgument>())
-    return cast<FModuleOp>(blockArg.getOwner()->getParentOp());
+    return cast<HWModuleLike>(blockArg.getOwner()->getParentOp());
 
   auto *op = value.getDefiningOp();
   if (InstanceOp instance = dyn_cast<InstanceOp>(op))
-    return getSymbolTable().lookup<FModuleOp>(
+    return getSymbolTable().lookup<HWModuleLike>(
         instance.getModuleNameAttr().getValue());
 
-  return op->getParentOfType<FModuleOp>();
+  return op->getParentOfType<HWModuleLike>();
 }
 
 /// This method contains the business logic of this pass.
@@ -1908,6 +1909,30 @@ void GrandCentralPass::runOnOperation() {
   auto instancePathCache = InstancePathCache(getAnalysis<InstanceGraph>());
   instancePaths = &instancePathCache;
 
+  /// Contains the set of modules which are instantiated by the DUT, but not a
+  /// companion or instantiated by a companion.  If no DUT exists, treat the top
+  /// module as if it were the DUT.  This works by doing a depth-first walk of
+  /// the instance graph, starting from the "effective" DUT and stopping the
+  /// search at any modules which are known companions.
+  DenseSet<hw::HWModuleLike> dutModules;
+  FModuleOp effectiveDUT = dut;
+  if (!effectiveDUT)
+    effectiveDUT = cast<FModuleOp>(
+        *instancePaths->instanceGraph.getTopLevelNode()->getModule());
+  auto dfRange =
+      llvm::depth_first(instancePaths->instanceGraph.lookup(effectiveDUT));
+  for (auto i = dfRange.begin(), e = dfRange.end(); i != e;) {
+    auto module = cast<FModuleLike>(*i->getModule());
+    if (AnnotationSet(module).hasAnnotation(companionAnnoClass)) {
+      i.skipChildren();
+      continue;
+    }
+    dutModules.insert(i->getModule());
+    // Manually increment the iterator to avoid walking off the end from
+    // skipChildren.
+    ++i;
+  }
+
   // Maybe return the lone instance of a module.  Generate errors on the op if
   // the module is not instantiated or is multiply instantiated.
   auto exactlyOneInstance = [&](FModuleOp op,
@@ -2013,21 +2038,10 @@ void GrandCentralPass::runOnOperation() {
 
           // Handle annotations on the module.
           AnnotationSet::removeAnnotations(op, [&](Annotation annotation) {
-            // TODO: Change this to remove the "type" field as all these
-            // annotations are specialized in the class with ".parent" or
-            // ".companion" suffixes.
             if (!annotation.getClass().startswith(viewAnnoClass))
               return false;
-            auto tpe = annotation.getMember<StringAttr>("type");
             auto name = annotation.getMember<StringAttr>("name");
             auto id = annotation.getMember<IntegerAttr>("id");
-            if (!tpe) {
-              op.emitOpError()
-                  << "has a malformed "
-                     "'sifive.enterprise.grandcentral.ViewAnnotation' that did "
-                     "not contain a 'type' field with a 'StringAttr' value";
-              goto FModuleOp_error;
-            }
             if (!id) {
               op.emitOpError()
                   << "has a malformed "
@@ -2052,7 +2066,7 @@ void GrandCentralPass::runOnOperation() {
             //      bind if extraction information was provided.  If a DUT is
             //      known, then anything in the test harness will not be
             //      extracted.
-            if (tpe.getValue() == "companion") {
+            if (annotation.getClass() == companionAnnoClass) {
               builder.setInsertionPointToEnd(circuitOp.getBodyBlock());
 
               companionIDMap[id] = {name.getValue(), op};
@@ -2103,11 +2117,11 @@ void GrandCentralPass::runOnOperation() {
                 // Check to see if we should change the output directory of a
                 // module.  Only update in the following conditions:
                 //   1) The module is the companion.
-                //   2) The module is instantiated by the companion exclusively.
+                //   2) The module is NOT instantiated by the effective DUT.
                 auto *modNode = instancePaths->instanceGraph.lookup(mod);
                 SmallVector<InstanceRecord *> instances(modNode->uses());
                 if (modNode != companionNode &&
-                    !allUnder(instances, companionNode))
+                    dutModules.count(modNode->getModule()))
                   continue;
 
                 LLVM_DEBUG({
@@ -2152,7 +2166,7 @@ void GrandCentralPass::runOnOperation() {
 
             // Insert the parent into the parent map, asserting that the parent
             // is instantiated exatly once.
-            if (tpe.getValue() == "parent") {
+            if (annotation.getClass() == parentAnnoClass) {
               // Assert that the parent is instantiated once and only once.
               // Allow for this to be the main module in the circuit.
               Optional<InstanceOp> instance;
@@ -2168,9 +2182,7 @@ void GrandCentralPass::runOnOperation() {
             }
 
             op.emitOpError()
-                << "has a 'sifive.enterprise.grandcentral.ViewAnnotation' with "
-                   "an unknown or malformed 'type' field in annotation: "
-                << annotation.getDict();
+                << "unknown annotation class: " << annotation.getDict();
 
           FModuleOp_error:
             removalError = true;

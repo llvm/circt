@@ -148,6 +148,31 @@ firrtl.circuit "Annotations" {
   }
 }
 
+// Special handling of DontTouch.
+// CHECK-LABEL: firrtl.circuit "DontTouch"
+firrtl.circuit "DontTouch" {
+firrtl.hierpath private @nla0 [@DontTouch::@bar, @Bar::@auto]
+firrtl.hierpath private @nla1 [@DontTouch::@baz, @Baz::@auto]
+firrtl.module @DontTouch() {
+  // CHECK: %bar_auto = firrtl.instance bar sym @bar @Bar(out auto: !firrtl.bundle<a: uint<1>, b: uint<1>>)
+  // CHECK: %baz_auto = firrtl.instance baz sym @baz @Bar(out auto: !firrtl.bundle<a: uint<1>, b: uint<1>>)
+  %bar_auto = firrtl.instance bar sym @bar @Bar(out auto: !firrtl.bundle<a: uint<1>, b: uint<1>>)
+  %baz_auto = firrtl.instance baz sym @baz @Baz(out auto: !firrtl.bundle<a: uint<1>, b: uint<1>>)
+}
+// CHECK:      firrtl.module private @Bar(
+// CHECK-SAME:   out %auto: !firrtl.bundle<a: uint<1>, b: uint<1>> sym @auto
+// CHECK-SAME:   [{circt.fieldID = 1 : i32, class = "firrtl.transforms.DontTouchAnnotation"},
+// CHECK-SAME:    {circt.fieldID = 2 : i32, class = "firrtl.transforms.DontTouchAnnotation"}]) {
+firrtl.module private @Bar(out %auto: !firrtl.bundle<a: uint<1>, b: uint<1>> sym @auto
+  [{circt.nonlocal = @nla0, circt.fieldID = 1 : i32, class = "firrtl.transforms.DontTouchAnnotation"},
+  {circt.fieldID = 2 : i32, class = "firrtl.transforms.DontTouchAnnotation"}]) { }
+// CHECK-NOT: firrtl.module private @Baz
+firrtl.module private @Baz(out %auto: !firrtl.bundle<a: uint<1>, b: uint<1>> sym @auto
+  [{circt.fieldID = 1 : i32, class = "firrtl.transforms.DontTouchAnnotation"},
+  {circt.nonlocal = @nla1, circt.fieldID = 2 : i32, class = "firrtl.transforms.DontTouchAnnotation"}]) { }
+}
+
+
 // Check that module and memory port annotations are merged correctly.
 // CHECK-LABEL: firrtl.circuit "PortAnnotations"
 firrtl.circuit "PortAnnotations" {

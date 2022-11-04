@@ -95,12 +95,6 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
       return OpBuilder::atBlockEnd(&bodyBlock);
     }
 
-    /// Inserts the given ports.
-    void insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
-
-    /// Erases the ports that have their corresponding bit set in `portIndices`.
-    void erasePorts(const llvm::BitVector &portIndices);
-
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
   }];
@@ -115,11 +109,18 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let description = [{
     The "firrtl.extmodule" operation represents an external reference to a
     Verilog module, including a given name and a list of ports.
+    LowerAnnotations can add RefType ports to it. Each RefType port
+    must have a corresponding entry in the internalPaths attribute.
+    The internalPaths attribute is used to represent opaque internal paths
+    into the external module, to be used for generating XMRs. Each RefType
+    port must be removed by LowerXMR pass.
   }];
   let arguments = (ins
                    OptionalAttr<StrAttr>:$defname,
                    ParamDeclArrayAttr:$parameters,
-                   DefaultValuedAttr<AnnotationArrayAttr, "ArrayAttr()">:$annotations
+                   DefaultValuedAttr<AnnotationArrayAttr,
+                   "ArrayAttr()">:$annotations,
+                   DefaultValuedAttr<ArrayAttr, "{}">:$internalPaths
                   );
   let results = (outs);
   let regions = (region AnyRegion:$body);
@@ -176,10 +177,6 @@ def FMemModuleOp : FIRRTLOp<"memmodule",
   let extraClassDeclaration = [{
     /// Return true if this memory has a mask.
     bool isMasked() { return getMaskBits() > 1; }
-
-    /// Inserts the given ports.
-    void insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
-
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
   }];

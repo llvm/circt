@@ -2755,6 +2755,8 @@ private:
   LogicalResult visitSV(WarningOp op);
   LogicalResult visitSV(InfoOp op);
 
+  LogicalResult visitSV(ReadMemOp op);
+
   LogicalResult visitSV(GenerateOp op);
   LogicalResult visitSV(GenerateCaseOp op);
 
@@ -3171,6 +3173,34 @@ LogicalResult StmtEmitter::visitSV(WarningOp op) {
 LogicalResult StmtEmitter::visitSV(InfoOp op) {
   return emitSeverityMessageTask(op, "$info", {}, op.getMessageAttr(),
                                  op.getSubstitutions());
+}
+
+LogicalResult StmtEmitter::visitSV(ReadMemOp op) {
+  SmallPtrSet<Operation *, 8> ops({op});
+
+  indent() << "$readmem";
+  switch (op.getBaseAttr().getValue()) {
+  case MemBaseTypeAttr::MemBaseBin:
+    os << "b";
+    break;
+  case MemBaseTypeAttr::MemBaseHex:
+    os << "h";
+    break;
+  }
+  os << "(";
+  os << "\"" << op.getFilename() << "\""
+     << ", ";
+
+  auto *reg =
+      state.symbolCache
+          .getInnerDefinition(op->getParentOfType<HWModuleOp>().getNameAttr(),
+                              op.getInnerSymAttr())
+          .getOp();
+  os << names.getName(reg);
+
+  os << ");";
+  emitLocationInfoAndNewLine(ops);
+  return success();
 }
 
 LogicalResult StmtEmitter::visitSV(GenerateOp op) {
@@ -3764,7 +3794,10 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     // lowered to wire.
     OutputOp output;
     if (!elt.isOutput()) {
-      emitExpression(portVal, ops, LowestPrecedence);
+      if (isZeroWidth && isa_and_nonnull<ConstantOp>(portVal.getDefiningOp()))
+        os << "/* Zero width */";
+      else
+        emitExpression(portVal, ops, LowestPrecedence);
     } else if (portVal.hasOneUse() &&
                (output = dyn_cast_or_null<OutputOp>(
                     portVal.getUses().begin()->getOwner()))) {

@@ -1240,7 +1240,7 @@ void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
     return emitConnect(builder, dst, src);
 
   if (dstType.isa<AnalogType>()) {
-    builder.create<AttachOp>(SmallVector{dst, src});
+    builder.create<AttachOp>(ArrayRef<Value>{dst, src});
   } else if (dstType == srcType && !dstType.containsAnalog()) {
     emitConnect(builder, dst, src);
   } else if (auto dstBundle = dstType.dyn_cast<BundleType>()) {

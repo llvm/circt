@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Support/APInt.h"
 #include "circt/Support/LLVM.h"
@@ -331,6 +332,11 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
 OpFoldResult SpecialConstantOp::fold(ArrayRef<Attribute> operands) {
   assert(operands.empty() && "constant has no operands");
   return getValueAttr();
+}
+
+OpFoldResult AggregateConstantOp::fold(ArrayRef<Attribute> operands) {
+  assert(operands.empty() && "constant has no operands");
+  return getFieldsAttr();
 }
 
 OpFoldResult InvalidValueOp::fold(ArrayRef<Attribute> operands) {
@@ -1682,6 +1688,7 @@ LogicalResult AttachOp::canonicalize(AttachOp op, PatternRewriter &rewriter) {
   return failure();
 }
 
+namespace {
 // Remove private nodes.  If they have an interesting names, move the name to
 // the source expression.
 struct FoldNodeName : public mlir::RewritePattern {
@@ -1723,12 +1730,185 @@ struct NodeBypass : public mlir::RewritePattern {
     return success();
   }
 };
+} // namespace
 
 void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
   results.insert<FoldNodeName>(context);
 }
 
+namespace {
+// For a lhs, find all the writers of fields of the aggregate type.  If there
+// is one writer for each field, merge the writes
+struct AggOneShot : public mlir::RewritePattern {
+  AggOneShot(StringRef name, uint32_t weight, MLIRContext *context)
+      : RewritePattern(name, 0, context) {}
+
+  SmallVector<Value> getCompleteWrite(Operation *lhs) const {
+    auto lhsTy = lhs->getResult(0).getType();
+    if (!lhsTy.isa<BundleType>() && !lhsTy.isa<FVectorType>())
+      return {};
+
+    DenseMap<uint32_t, Value> fields;
+    for (Operation *user : lhs->getResult(0).getUsers()) {
+      if (user->getParentOp() != lhs->getParentOp())
+        return {};
+      if (auto aConnect = dyn_cast<StrictConnectOp>(user)) {
+        if (aConnect.getDest() == lhs->getResult(0))
+          return {};
+      } else if (auto subField = dyn_cast<SubfieldOp>(user)) {
+        for (Operation *subuser : subField.getResult().getUsers()) {
+          if (auto aConnect = dyn_cast<StrictConnectOp>(subuser)) {
+            if (aConnect.getDest() == subField) {
+              if (fields.count(subField.getFieldIndex())) // duplicate write
+                return {};
+              fields[subField.getFieldIndex()] = aConnect.getSrc();
+            }
+            continue;
+          }
+          return {};
+        }
+      } else if (auto subIndex = dyn_cast<SubindexOp>(user)) {
+        for (Operation *subuser : subIndex.getResult().getUsers()) {
+          if (auto aConnect = dyn_cast<StrictConnectOp>(subuser)) {
+            if (aConnect.getDest() == subIndex) {
+              if (fields.count(subIndex.getIndex())) // duplicate write
+                return {};
+              fields[subIndex.getIndex()] = aConnect.getSrc();
+            }
+            continue;
+          }
+          return {};
+        }
+      } else {
+        return {};
+      }
+    }
+
+    SmallVector<Value> values;
+    uint32_t total = lhsTy.isa<BundleType>()
+                         ? lhsTy.cast<BundleType>().getNumElements()
+                         : lhsTy.cast<FVectorType>().getNumElements();
+    for (uint32_t i = 0; i < total; ++i) {
+      if (!fields.count(i))
+        return {};
+      values.push_back(fields[i]);
+    }
+    return values;
+  }
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    auto values = getCompleteWrite(op);
+    if (values.empty())
+      return failure();
+    rewriter.setInsertionPointToEnd(op->getBlock());
+    Value newVal = op->getResult(0).getType().isa<BundleType>()
+                       ? rewriter.createOrFold<BundleCreateOp>(
+                             op->getLoc(), op->getResult(0).getType(), values)
+                       : rewriter.createOrFold<VectorCreateOp>(
+                             op->getLoc(), op->getResult(0).getType(), values);
+    rewriter.createOrFold<StrictConnectOp>(op->getLoc(), op->getResult(0),
+                                           newVal);
+    for (Operation *user : op->getResult(0).getUsers()) {
+      if (auto subIndex = dyn_cast<SubindexOp>(user)) {
+        for (Operation *subuser :
+             llvm::make_early_inc_range(subIndex.getResult().getUsers()))
+          if (auto aConnect = dyn_cast<StrictConnectOp>(subuser))
+            if (aConnect.getDest() == subIndex)
+              rewriter.eraseOp(aConnect);
+      } else if (auto subField = dyn_cast<SubfieldOp>(user)) {
+        for (Operation *subuser :
+             llvm::make_early_inc_range(subField.getResult().getUsers()))
+          if (auto aConnect = dyn_cast<StrictConnectOp>(subuser))
+            if (aConnect.getDest() == subField)
+              rewriter.eraseOp(aConnect);
+      }
+    }
+    return success();
+  }
+};
+
+struct WireAggOneShot : public AggOneShot {
+  WireAggOneShot(MLIRContext *context)
+      : AggOneShot(WireOp::getOperationName(), 0, context) {}
+};
+struct SubindexAggOneShot : public AggOneShot {
+  SubindexAggOneShot(MLIRContext *context)
+      : AggOneShot(SubindexOp::getOperationName(), 0, context) {}
+};
+struct SubfieldAggOneShot : public AggOneShot {
+  SubfieldAggOneShot(MLIRContext *context)
+      : AggOneShot(SubfieldOp::getOperationName(), 0, context) {}
+};
+} // namespace
+
+void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                         MLIRContext *context) {
+  results.insert<WireAggOneShot>(context);
+}
+
+void SubindexOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                             MLIRContext *context) {
+  results.insert<SubindexAggOneShot>(context);
+}
+
+OpFoldResult SubindexOp::fold(ArrayRef<Attribute> operands) {
+  auto attr = operands[0].dyn_cast_or_null<ArrayAttr>();
+  if (!attr)
+    return {};
+  auto groundCountPerElement = getType().getGroundFields();
+  auto array = attr.getValue().slice(getIndex() * groundCountPerElement,
+                                     groundCountPerElement);
+  if (getType().isa<IntType>())
+    return array[0];
+  return ArrayAttr::get(getContext(), array);
+}
+
+OpFoldResult SubfieldOp::fold(ArrayRef<Attribute> operands) {
+  auto attr = operands[0].dyn_cast_or_null<ArrayAttr>();
+  if (!attr)
+    return {};
+  auto index = getFieldIndex();
+  auto bundleType = getInput().getType().cast<BundleType>();
+  unsigned start = 0;
+  for (unsigned i = 0; i < index; ++i)
+    start += bundleType.getElement(i).type.getGroundFields();
+  auto array = attr.getValue().slice(
+      start, bundleType.getElement(index).type.getGroundFields());
+  if (getType().isa<IntType>())
+    return array[0];
+  return ArrayAttr::get(getContext(), array);
+}
+
+void SubfieldOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                             MLIRContext *context) {
+  results.insert<SubfieldAggOneShot>(context);
+}
+
+static Attribute collectFields(MLIRContext *context,
+                               ArrayRef<Attribute> operands) {
+  SmallVector<Attribute> fields;
+  for (auto operand : operands) {
+    if (!operand)
+      return {};
+    if (auto array = operand.dyn_cast<ArrayAttr>())
+      llvm::append_range(fields, array.getValue());
+    else
+      fields.push_back(operand);
+  }
+  return ArrayAttr::get(context, fields);
+}
+
+OpFoldResult BundleCreateOp::fold(ArrayRef<Attribute> operands) {
+  return collectFields(getContext(), operands);
+}
+
+OpFoldResult VectorCreateOp::fold(ArrayRef<Attribute> operands) {
+  return collectFields(getContext(), operands);
+}
+
+namespace {
 // A register with constant reset and all connection to either itself or the
 // same constant, must be replaced by the constant.
 struct FoldResetMux : public mlir::RewritePattern {
@@ -1783,6 +1963,7 @@ struct FoldResetMux : public mlir::RewritePattern {
     return success();
   }
 };
+} // namespace
 
 void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {

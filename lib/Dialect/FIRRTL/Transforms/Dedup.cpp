@@ -30,6 +30,7 @@
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/None.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/SHA256.h"
@@ -53,8 +54,8 @@ llvm::raw_ostream &printHash(llvm::raw_ostream &stream, llvm::SHA256 &data) {
 }
 
 llvm::raw_ostream &printHash(llvm::raw_ostream &stream, std::string data) {
-  ArrayRef bytes(reinterpret_cast<const uint8_t *>(data.c_str()),
-                 data.length());
+  ArrayRef<uint8_t> bytes(reinterpret_cast<const uint8_t *>(data.c_str()),
+                          data.length());
   return printHex(stream, bytes);
 }
 
@@ -86,12 +87,12 @@ private:
 
   void update(const void *pointer) {
     auto *addr = reinterpret_cast<const uint8_t *>(&pointer);
-    sha.update(ArrayRef(addr, sizeof pointer));
+    sha.update(ArrayRef<uint8_t>(addr, sizeof pointer));
   }
 
   void update(size_t value) {
     auto *addr = reinterpret_cast<const uint8_t *>(&value);
-    sha.update(ArrayRef(addr, sizeof value));
+    sha.update(ArrayRef<uint8_t>(addr, sizeof value));
   }
 
   void update(TypeID typeID) { update(typeID.getAsOpaquePointer()); }
@@ -851,7 +852,8 @@ private:
           }
           auto nonLocalIndex = std::distance(anno.begin(), it);
           // Clone the annotation and add it to the list of new annotations.
-          cloneAnnotation(nlaRefs, anno, ArrayRef(anno.begin(), anno.end()),
+          cloneAnnotation(nlaRefs, anno,
+                          ArrayRef<NamedAttribute>(anno.begin(), anno.end()),
                           nonLocalIndex, newAnnotations);
         }
 
@@ -932,16 +934,15 @@ private:
   void copyAnnotations(FModuleLike toModule, AnnoTarget to,
                        FModuleLike fromModule, AnnotationSet annos,
                        SmallVectorImpl<Annotation> &newAnnotations,
-                       bool &hasDontTouch) {
+                       SmallPtrSetImpl<Attribute> &dontTouches) {
     for (auto anno : annos) {
       if (anno.isClass(dontTouchAnnoClass)) {
-        // Skip this if we already have a DontTouch.
-        if (hasDontTouch)
-          continue;
-        // We don't worry if the DontTouch is non-local or not, we just copy it
-        // as is since it doesn't matter.
-        newAnnotations.push_back(anno);
-        hasDontTouch = true;
+        // Remove the nonlocal field of the annotation if it has one, since this
+        // is a sticky annotation.
+        anno.removeMember("circt.nonlocal");
+        auto [it, inserted] = dontTouches.insert(anno.getAttr());
+        if (inserted)
+          newAnnotations.push_back(anno);
         continue;
       }
       // If the annotation is already non-local, we add it as is.  It is already
@@ -965,15 +966,15 @@ private:
     SmallVector<Annotation> newAnnotations;
 
     // We have special case handling of DontTouch to prevent it from being
-    // turned into a non-local annotation.
-    bool hasDontTouch = false;
+    // turned into a non-local annotation, and to remove duplicates.
+    llvm::SmallPtrSet<Attribute, 4> dontTouches;
 
     // Iterate the annotations, transforming most annotations into non-local
     // ones.
     copyAnnotations(toModule, to, toModule, toAnnos, newAnnotations,
-                    hasDontTouch);
+                    dontTouches);
     copyAnnotations(toModule, to, fromModule, fromAnnos, newAnnotations,
-                    hasDontTouch);
+                    dontTouches);
 
     // Copy over all the new annotations.
     if (!newAnnotations.empty())

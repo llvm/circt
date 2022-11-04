@@ -188,6 +188,21 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:      assign r42 = array1[/*Zero width*/ 1'b0];
 // CHECK-NEXT: endmodule
 
+hw.module @i0Inst() {
+  %c0_i0 = hw.constant 0 : i0
+  hw.instance "i0" sym @i0Module @i0Module(arg1: %c0_i0: i0) -> ()
+}
+hw.module @i0Module(%arg1: i0) -> () {}
+// CHECK-LABEL: module i0Inst();
+// CHECK-NEXT:    i0Module i0 (
+// CHECK-NEXT:    //.arg1 (/* Zero width */)
+// CHECK-NEXT:     );
+// CHECK-NEXT:  endmodule
+// CHECK-LABEL: module i0Module(
+// CHECK-NEXT:    // input /*Zero Width*/ arg1
+// CHECK-NEXT:     );
+// CHECK-EMPTY:
+// CHECK-NEXT:  endmodule
 
 hw.module @B(%a: i1) -> (b: i1, c: i1) {
   %0 = comb.or %a, %a : i1

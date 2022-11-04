@@ -17,6 +17,11 @@ def SameOperandsIntTypeKind : NativeOpTrait<"SameOperandsIntTypeKind"> {
   let cppNamespace = "::circt::firrtl";
 }
 
+class IndexConstraint<string value, string resultValue>
+  : TypesMatchWith<"type should be element of vector type",
+                   value, resultValue,
+                   "firrtl::getVectorElementType($_self)">;
+
 // A common base class for operations that implement type inference and parsed
 // argument validation.
 class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
@@ -120,6 +125,65 @@ def SpecialConstantOp : FIRRTLOp<"specialconstant",
   let hasFolder = 1;
 }
 
+def AggregateConstantOp : FIRRTLOp<"aggregateconstant", [Pure, ConstantLike]> {
+  let summary = "Produce a constant of a passive aggregate value";
+  let description = [{
+    The constant operations produces a constant value of an aggregate type.  The
+    type must be passive.  Clock and reset values are supported.
+    For nested aggregates, values are applied in depth-first fassion.
+    ```
+      %result = firrtl.aggregateconstant 1, 2, 3 : !firrtl.bundle<a: uint<8>, b: uint<5>, c: uint<4>>
+      %result = firrtl.aggregateconstant 1, 2, 3 : !firrtl.vector<uint<8>, 3>
+
+    ```
+  }];
+
+  let arguments = (ins TypedArrayAttrBase<APSIntAttr, "field constants">:$fields);
+  let results = (outs AggregateType:$result);
+
+  let assemblyFormat = "$fields attr-dict `:` type($result)";
+  let hasFolder = 1;
+  let hasVerifier = 1;
+}
+
+def BundleCreateOp : FIRRTLOp<"bundlecreate"> {
+  let summary = "Produce a bundle value";
+  let description = [{
+    Create an bundle from component values.  This is equivalent in terms of
+    flow to creating a node.
+    ```
+      %result = firrtl.bundlecreate %1, %2, %3 : !firrtl.bundle<a: uint<8>, b: uint<5>, c: uint<4>>
+    ```
+  }];
+
+  let arguments = (ins Variadic<FIRRTLBaseType>:$fields);
+  let results = (outs BundleType:$result);
+
+  let assemblyFormat = "$fields attr-dict `:` functional-type($fields, $result)";
+  let hasVerifier = 1;
+  let hasFolder = 1;
+}
+
+def VectorCreateOp : FIRRTLOp<"vectorcreate"> {
+  let summary = "Produce a vector value";
+  let description = [{
+    Create a vector from component values.  This is equivalent in terms of
+    flow to creating a node.
+    ```
+      %result = firrtl.vectorcreate %1, %2, %3 : !firrtl.vector<uint<8>, 3>
+
+    ```
+  }];
+
+  let arguments = (ins Variadic<FIRRTLBaseType>:$fields);
+  let results = (outs FVectorType:$result);
+
+  let assemblyFormat = "$fields attr-dict `:` functional-type($fields, $result)";
+  let hasVerifier = 1;
+  let hasFolder = 1;
+}
+
+
 def InvalidValueOp : FIRRTLOp<"invalidvalue",
       [Pure, ConstantLike, HasCustomSSAName]> {
   let summary = "InvalidValue primitive";
@@ -152,7 +216,10 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
 
   let arguments = (ins BundleType:$input, I32Attr:$fieldIndex);
   let results = (outs FIRRTLBaseType:$result);
-
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
+  let hasVerifier = 1;
+  
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat =
     "$input `(` $fieldIndex `)` attr-dict `:` functional-type($input, $result)";
@@ -176,14 +243,7 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
                                             .getFieldID(getFieldIndex()));
     }
   }];
-
-  let hasVerifier = 1;
 }
-
-class IndexConstraint<string value, string resultValue>
-  : TypesMatchWith<"type should be element of vector type",
-                   value, resultValue,
-                   "firrtl::getVectorElementType($_self)">;
 
 def SubindexOp : FIRRTLExprOp<"subindex", [
     IndexConstraint<"input", "result">
@@ -201,6 +261,8 @@ def SubindexOp : FIRRTLExprOp<"subindex", [
 
   let arguments = (ins FIRRTLBaseType:$input, I32Attr:$index);
   let results = (outs FIRRTLBaseType:$result);
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
 
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat =

@@ -413,6 +413,7 @@ def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
     occur in initial, always, task, and function blocks.  The statement is
     executed before any following statements are. See SV Spec 10.4.1.
   }];
+  let hasCanonicalizeMethod = true;
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
   let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
@@ -427,6 +428,7 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
     These occur in initial, always, task, and function blocks.  The statement
     can be scheduled without blocking procedural flow.  See SV Spec 10.4.2.
   }];
+  let hasCanonicalizeMethod = true;
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
   let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
@@ -719,4 +721,29 @@ def DepositOp : SVOp<"nonstandard.deposit",
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
   let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
+}
+
+
+//===----------------------------------------------------------------------===//
+// Memory loading system tasks
+//===----------------------------------------------------------------------===//
+
+def MemBaseBin: I32EnumAttrCase<"MemBaseBin", 0>;
+def MemBaseHex: I32EnumAttrCase<"MemBaseHex", 1>;
+def MemBaseTypeAttr :
+    I32EnumAttr<"MemBaseTypeAttr", "the numeric base of a memory file",
+                [MemBaseBin, MemBaseHex]>;
+
+def ReadMemOp : SVOp<"readmem", [ProceduralOp]> {
+  let summary = "load a memory from a file in either binary or hex format";
+  let description = [{
+    Load a memory from a file using either `$readmemh` or `$readmemb` based on
+    an attribute.
+
+    See Section 21.4 of IEEE 1800-2017 for more information.
+  }];
+  let arguments =
+    (ins SymbolNameAttr:$inner_sym, StrAttr:$filename, MemBaseTypeAttr:$base);
+  let results = (outs);
+  let assemblyFormat = "$inner_sym `,` $filename `,` $base attr-dict";
 }

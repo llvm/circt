@@ -24,6 +24,8 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
+#include <optional>
+
 using namespace circt;
 using namespace sv;
 using mlir::TypedAttr;
@@ -1053,6 +1055,133 @@ LogicalResult PAssignOp::verify() {
         "Verilog disallows procedural assignment to a net type (did you intend "
         "to use a variable type, e.g., sv.reg?)");
   return success();
+}
+
+namespace {
+// This represents a slice of an array.
+struct ArraySlice {
+  Value array;
+  Value start;
+  size_t size; // Represent a range array[start, start + size).
+
+  // Get a struct from the value. Return std::nullopt if the value doesn't
+  // represent an array slice.
+  static std::optional<ArraySlice> getArraySlice(Value v) {
+    auto *op = v.getDefiningOp();
+    if (!op)
+      return std::nullopt;
+    return TypeSwitch<Operation *, std::optional<ArraySlice>>(op)
+        .Case<hw::ArrayGetOp, ArrayIndexInOutOp>(
+            [](auto arrayIndex) -> std::optional<ArraySlice> {
+              hw::ConstantOp constant =
+                  arrayIndex.getIndex()
+                      .template getDefiningOp<hw::ConstantOp>();
+              if (!constant)
+                return std::nullopt;
+              return ArraySlice{/*array=*/arrayIndex.getInput(),
+                                /*start=*/constant,
+                                /*end=*/1};
+            })
+        .Case<hw::ArraySliceOp>([](hw::ArraySliceOp slice)
+                                    -> std::optional<ArraySlice> {
+          auto constant = slice.getLowIndex().getDefiningOp<hw::ConstantOp>();
+          if (!constant)
+            return std::nullopt;
+          return ArraySlice{
+              /*array=*/slice.getInput(), /*start=*/constant,
+              /*end=*/hw::type_cast<hw::ArrayType>(slice.getType()).getSize()};
+        })
+        .Case<sv::IndexedPartSelectInOutOp>(
+            [](sv::IndexedPartSelectInOutOp index)
+                -> std::optional<ArraySlice> {
+              auto constant = index.getBase().getDefiningOp<hw::ConstantOp>();
+              if (!constant || index.getDecrement())
+                return std::nullopt;
+              return ArraySlice{/*array=*/index.getInput(),
+                                /*start=*/constant,
+                                /*end=*/index.getWidth()};
+            })
+        .Default([](auto) { return std::nullopt; });
+  }
+
+  // Create a pair of ArraySlice from source and destination of assignments.
+  static std::optional<std::pair<ArraySlice, ArraySlice>>
+  getAssignedRange(Operation *op) {
+    assert((isa<PAssignOp, BPAssignOp>(op) && "assignments are expected"));
+    auto srcRange = ArraySlice::getArraySlice(op->getOperand(1));
+    if (!srcRange)
+      return std::nullopt;
+    auto destRange = ArraySlice::getArraySlice(op->getOperand(0));
+    if (!destRange)
+      return std::nullopt;
+
+    return std::make_pair(*destRange, *srcRange);
+  }
+};
+} // namespace
+
+// This canonicalization merges neiboring assignments of array elements into
+// array slice assignments. e.g.
+// a[0] <= b[1]
+// a[1] <= b[2]
+// ->
+// a[1:0] <= b[2:1]
+template <typename AssignTy>
+static LogicalResult mergeNeiboringAssignments(AssignTy op,
+                                               PatternRewriter &rewriter) {
+  // Get assigned ranges of each assignment.
+  auto assignedRangeOpt = ArraySlice::getAssignedRange(op);
+  if (!assignedRangeOpt)
+    return failure();
+
+  auto [dest, src] = *assignedRangeOpt;
+  AssignTy nextAssign = dyn_cast_or_null<AssignTy>(op->getNextNode());
+  bool changed = false;
+  SmallVector<Location> loc{op.getLoc()};
+  // Check that a next operation is a same kind of the assignment.
+  while (nextAssign) {
+    auto nextAssignedRange = ArraySlice::getAssignedRange(nextAssign);
+    if (!nextAssignedRange)
+      break;
+    auto [nextDest, nextSrc] = *nextAssignedRange;
+    // Check that these assignments are mergaable.
+    if (dest.array != nextDest.array || src.array != nextSrc.array ||
+        !hw::isOffset(dest.start, nextDest.start, dest.size) ||
+        !hw::isOffset(src.start, nextSrc.start, src.size))
+      break;
+
+    dest.size += nextDest.size;
+    src.size += nextSrc.size;
+    changed = true;
+    loc.push_back(nextAssign.getLoc());
+    rewriter.eraseOp(nextAssign);
+    nextAssign = dyn_cast_or_null<AssignTy>(op->getNextNode());
+  }
+
+  if (!changed)
+    return failure();
+
+  // From here, construct assignments of array slices.
+  auto resultType = hw::ArrayType::get(
+      hw::type_cast<hw::ArrayType>(src.array.getType()).getElementType(),
+      src.size);
+  auto newDest = rewriter.create<sv::IndexedPartSelectInOutOp>(
+      op.getLoc(), dest.array, dest.start, dest.size);
+  auto newSrc = rewriter.create<hw::ArraySliceOp>(op.getLoc(), resultType,
+                                                  src.array, src.start);
+  auto newLoc = rewriter.getFusedLoc(loc);
+  auto newOp = rewriter.replaceOpWithNewOp<AssignTy>(op, newDest, newSrc);
+  newOp->setLoc(newLoc);
+  return success();
+}
+
+LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
+  return mergeNeiboringAssignments(op, rewriter);
+}
+
+LogicalResult BPAssignOp::canonicalize(BPAssignOp op,
+                                       PatternRewriter &rewriter) {
+  return mergeNeiboringAssignments(op, rewriter);
 }
 
 //===----------------------------------------------------------------------===//

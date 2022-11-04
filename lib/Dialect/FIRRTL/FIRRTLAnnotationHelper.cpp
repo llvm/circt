@@ -314,14 +314,14 @@ Optional<AnnoPathValue> firrtl::resolvePath(StringRef rawPath,
 }
 
 InstanceOp firrtl::addPortsToModule(
-    FModuleOp mod, InstanceOp instOnPath, FIRRTLType portType, Direction dir,
+    FModuleLike mod, InstanceOp instOnPath, FIRRTLType portType, Direction dir,
     StringRef newName, InstancePathCache &instancePathcache,
     llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
     CircuitTargetCache *targetCaches) {
   // To store the cloned version of `instOnPath`.
   InstanceOp clonedInstOnPath;
   // Get a new port name from the Namespace.
-  auto portName = [&](FModuleOp nameForMod) {
+  auto portName = [&](FModuleLike nameForMod) {
     return StringAttr::get(nameForMod.getContext(),
                            getNamespace(nameForMod).newName("_gen_" + newName));
   };
@@ -332,7 +332,9 @@ InstanceOp firrtl::addPortsToModule(
   if (targetCaches)
     targetCaches->insertPort(mod, portNo);
   // Now update all the instances of `mod`.
-  for (auto *use : instancePathcache.instanceGraph.lookup(mod)->uses()) {
+  for (auto *use : instancePathcache.instanceGraph
+                       .lookup(cast<hw::HWModuleLike>((Operation *)mod))
+                       ->uses()) {
     InstanceOp useInst = cast<InstanceOp>(use->getInstance());
     auto clonedInst = useInst.cloneAndInsertPorts({{portNo, portInfo}});
     if (useInst == instOnPath)
@@ -451,14 +453,14 @@ firrtl::findLCAandSetPath(AnnoPathValue &srcTarget, AnnoPathValue &dstTarget,
                                  FModuleLike targetModule) -> LogicalResult {
     if (!instances.empty())
       return success();
-    auto instancePathsFromTop =
-        state.instancePathCache.getAbsolutePaths(targetModule);
+    auto instancePathsFromTop = state.instancePathCache.getAbsolutePaths(
+        cast<hw::HWModuleLike>(*targetModule));
     if (instancePathsFromTop.size() > 1)
       return targetModule->emitError("cannot handle multiple paths to target");
 
     // Get the path from top to dst
-    ArrayRef<InstanceOp> p = instancePathsFromTop.back();
-    instances.append(SmallVector<InstanceOp>(p.begin(), p.end()));
+    for (auto inst : instancePathsFromTop.back())
+      instances.push_back(cast<InstanceOp>(inst));
     return success();
   };
   if (initializeInstances(dstTarget.instances, dstModule).failed() ||

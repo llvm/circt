@@ -1718,4 +1718,32 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.strictconnect %0, %a : !firrtl.uint<10>
     firrtl.strictconnect %b, %0 : !firrtl.uint<10>
   }
+
+  // CHECK-LABEL: hw.module @MergeBundle
+  firrtl.module @MergeBundle(out %o: !firrtl.bundle<valid: uint<1>, ready: uint<1>>, in %i: !firrtl.uint<1>) 
+  {
+    %a = firrtl.wire   : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
+    firrtl.strictconnect %o, %a : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
+    %0 = firrtl.bundlecreate %i, %i : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.bundle<valid: uint<1>, ready: uint<1>>
+    firrtl.strictconnect %a, %0 : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
+    // CHECK:  %a = sv.wire : !hw.inout<struct<valid: i1, ready: i1>> 
+    // CHECK:  %0 = sv.read_inout %a : !hw.inout<struct<valid: i1, ready: i1>> 
+    // CHECK:  %1 = hw.struct_create (%i, %i) : !hw.struct<valid: i1, ready: i1> 
+    // CHECK:  sv.assign %a, %1 : !hw.struct<valid: i1, ready: i1> 
+    // CHECK:  hw.output %0 : !hw.struct<valid: i1, ready: i1> 
+  }
+ 
+  // CHECK-LABEL: hw.module @MergeVector
+  firrtl.module @MergeVector(out %o: !firrtl.vector<uint<1>, 3>, in %i: !firrtl.uint<1>) {
+    %a = firrtl.wire   : !firrtl.vector<uint<1>, 3>
+    firrtl.strictconnect %o, %a : !firrtl.vector<uint<1>, 3>
+    %0 = firrtl.vectorcreate %i, %i, %i : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 3>
+    firrtl.strictconnect %a, %0 : !firrtl.vector<uint<1>, 3>
+    // CHECK:  %a = sv.wire : !hw.inout<array<3xi1>> 
+    // CHECK:  %0 = sv.read_inout %a : !hw.inout<array<3xi1>> 
+    // CHECK:  %1 = hw.array_create %i, %i, %i : i1 
+    // CHECK:  sv.assign %a, %1 : !hw.array<3xi1> 
+    // CHECK:  hw.output %0 : !hw.array<3xi1> 
+  }
+
 }

@@ -735,6 +735,42 @@ firrtl.module @subaccess(out %result: !firrtl.uint<8>, in %vec0: !firrtl.vector<
   firrtl.connect %result, %1 :!firrtl.uint<8>, !firrtl.uint<8>
 }
 
+// CHECK-LABEL: firrtl.module @subindex
+firrtl.module @subindex(out %out : !firrtl.uint<8>) {
+  // CHECK: %c8_ui8 = firrtl.constant 8 : !firrtl.uint<8>
+  // CHECK: firrtl.strictconnect %out, %c8_ui8 : !firrtl.uint<8>
+  %0 = firrtl.aggregateconstant [8 : ui8] : !firrtl.vector<uint<8>, 1>
+  %1 = firrtl.subindex %0[0] : !firrtl.vector<uint<8>, 1>
+  firrtl.strictconnect %out, %1 : !firrtl.uint<8>
+}
+
+// CHECK-LABEL: firrtl.module @subindex_agg
+firrtl.module @subindex_agg(out %out : !firrtl.bundle<a: uint<8>>) {
+  // CHECK: %0 = firrtl.aggregateconstant [8 : ui8] : !firrtl.bundle<a: uint<8>>
+  // CHECK: firrtl.strictconnect %out, %0 : !firrtl.bundle<a: uint<8>>
+  %0 = firrtl.aggregateconstant [8 : ui8] : !firrtl.vector<bundle<a: uint<8>>, 1>
+  %1 = firrtl.subindex %0[0] : !firrtl.vector<bundle<a: uint<8>>, 1>
+  firrtl.strictconnect %out, %1 : !firrtl.bundle<a: uint<8>>
+}
+
+// CHECK-LABEL: firrtl.module @subfield
+firrtl.module @subfield(out %out : !firrtl.uint<8>) {
+  // CHECK: %c8_ui8 = firrtl.constant 8 : !firrtl.uint<8>
+  // CHECK: firrtl.strictconnect %out, %c8_ui8 : !firrtl.uint<8>
+  %0 = firrtl.aggregateconstant [8 : ui8] : !firrtl.bundle<a: uint<8>>
+  %1 = firrtl.subfield %0(0) : (!firrtl.bundle<a: uint<8>>) -> !firrtl.uint<8>
+  firrtl.strictconnect %out, %1 : !firrtl.uint<8>
+}
+
+// CHECK-LABEL: firrtl.module @subfield_agg
+firrtl.module @subfield_agg(out %out : !firrtl.vector<uint<8>, 1>) {
+  // CHECK: %0 = firrtl.aggregateconstant [8 : ui8] : !firrtl.vector<uint<8>, 1>
+  // CHECK: firrtl.strictconnect %out, %0 : !firrtl.vector<uint<8>, 1>
+  %0 = firrtl.aggregateconstant [8 : ui8] : !firrtl.bundle<a: vector<uint<8>, 1>>
+  %1 = firrtl.subfield %0(0) : (!firrtl.bundle<a: vector<uint<8>, 1>>) -> !firrtl.vector<uint<8>, 1>
+  firrtl.strictconnect %out, %1 : !firrtl.vector<uint<8>, 1>
+}
+
 // CHECK-LABEL: firrtl.module @issue326
 firrtl.module @issue326(out %tmp57: !firrtl.sint<1>) {
   %c29_si7 = firrtl.constant 29 : !firrtl.sint<7>
@@ -2149,6 +2185,61 @@ firrtl.module @BitCast(out %o:!firrtl.bundle<valid: uint<1>, ready: uint<1>, dat
   %c = firrtl.bitcast %b2 :  (!firrtl.uint<3>)-> (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>)
   firrtl.connect %o, %c : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>, !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>
   // CHECK: firrtl.strictconnect %o, %a : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>
+}
+
+// Check that we can create bundles directly
+// CHECK-LABEL: firrtl.module @MergeBundle
+firrtl.module @MergeBundle(out %o:!firrtl.bundle<valid: uint<1>, ready: uint<1>>, in %i:!firrtl.uint<1> ) {
+  %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
+  %a0 = firrtl.subfield %a(0) : (!firrtl.bundle<valid: uint<1>, ready: uint<1>>) -> !firrtl.uint<1>
+  %a1 = firrtl.subfield %a(1) : (!firrtl.bundle<valid: uint<1>, ready: uint<1>>) -> !firrtl.uint<1>
+  firrtl.strictconnect %a0, %i : !firrtl.uint<1>
+  firrtl.strictconnect %a1, %i : !firrtl.uint<1>
+  firrtl.strictconnect %o, %a : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
+  // CHECK: %0 = firrtl.bundlecreate %i, %i
+  // CHECK-NEXT: firrtl.strictconnect %a, %0
+}
+
+// Check that we can create vectors directly
+// CHECK-LABEL: firrtl.module @MergeVector
+firrtl.module @MergeVector(out %o:!firrtl.vector<uint<1>, 3>, in %i:!firrtl.uint<1> ) {
+  %a = firrtl.wire : !firrtl.vector<uint<1>, 3>
+  %a0 = firrtl.subindex %a[0] : !firrtl.vector<uint<1>, 3>
+  %a1 = firrtl.subindex %a[1] : !firrtl.vector<uint<1>, 3>
+  %a2 = firrtl.subindex %a[2] : !firrtl.vector<uint<1>, 3>
+  firrtl.strictconnect %a0, %i : !firrtl.uint<1>
+  firrtl.strictconnect %a1, %i : !firrtl.uint<1>
+  firrtl.strictconnect %a2, %i : !firrtl.uint<1>
+  firrtl.strictconnect %o, %a : !firrtl.vector<uint<1>, 3>
+  // CHECK: %0 = firrtl.vectorcreate %i, %i, %i
+  // CHECK-NEXT: firrtl.strictconnect %a, %0
+}
+
+// Check that we can create vectors directly
+// CHECK-LABEL: firrtl.module @MergeAgg
+firrtl.module @MergeAgg(out %o: !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3> ) {
+  %c = firrtl.constant 0 : !firrtl.uint<1>
+  %a = firrtl.wire : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
+  %a0 = firrtl.subindex %a[0] : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
+  %a1 = firrtl.subindex %a[1] : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
+  %a2 = firrtl.subindex %a[2] : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
+  %a00 = firrtl.subfield %a0(0) : (!firrtl.bundle<valid: uint<1>, ready: uint<1>>) -> !firrtl.uint<1>
+  %a01 = firrtl.subfield %a0(1) : (!firrtl.bundle<valid: uint<1>, ready: uint<1>>) -> !firrtl.uint<1>
+  %a10 = firrtl.subfield %a1(0) : (!firrtl.bundle<valid: uint<1>, ready: uint<1>>) -> !firrtl.uint<1>
+  %a11 = firrtl.subfield %a1(1) : (!firrtl.bundle<valid: uint<1>, ready: uint<1>>) -> !firrtl.uint<1>
+  %a20 = firrtl.subfield %a2(0) : (!firrtl.bundle<valid: uint<1>, ready: uint<1>>) -> !firrtl.uint<1>
+  %a21 = firrtl.subfield %a2(1) : (!firrtl.bundle<valid: uint<1>, ready: uint<1>>) -> !firrtl.uint<1>
+  firrtl.strictconnect %a00, %c : !firrtl.uint<1>
+  firrtl.strictconnect %a01, %c : !firrtl.uint<1>
+  firrtl.strictconnect %a10, %c : !firrtl.uint<1>
+  firrtl.strictconnect %a11, %c : !firrtl.uint<1>
+  firrtl.strictconnect %a20, %c : !firrtl.uint<1>
+  firrtl.strictconnect %a21, %c : !firrtl.uint<1>
+  firrtl.strictconnect %o, %a :  !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
+// CHECK: %0 = firrtl.aggregateconstant [0 : ui1, 0 : ui1, 0 : ui1, 0 : ui1, 0 : ui1, 0 : ui1] : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
+// CHECK-NEXT: %a = firrtl.wire   : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
+// CHECK-NEXT: firrtl.strictconnect %o, %a : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
+// CHECK-NEXT: firrtl.strictconnect %a, %0 : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
 }
 
 // Issue #2197

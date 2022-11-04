@@ -468,3 +468,58 @@ firrtl.circuit "Top"  {
     firrtl.strictconnect %memTap_1, %1 : !firrtl.uint<8>
   }
 }
+
+// -----
+
+// Test lowering of internal path into a module
+// CHECK-LABEL: firrtl.circuit "Top" {
+firrtl.circuit "Top" {
+  firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
+    // CHECK: firrtl.module @XmrSrcMod() {
+    // CHECK-NEXT: }
+    %z = firrtl.verbatim.expr "internal.path" : () -> !firrtl.uint<1>
+    %1 = firrtl.ref.send %z : !firrtl.uint<1>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
+    %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
+    // CHECK:  firrtl.instance bar sym @barXMR  @XmrSrcMod()
+    firrtl.strictconnect %_a, %xmr   : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Top() {
+    %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.ref<uint<1>>)
+    // CHECK:  firrtl.instance bar sym @bar  @Bar()
+    %a = firrtl.wire : !firrtl.uint<1>
+    %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.internal.path" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@bar>, #hw.innerNameRef<@Bar::@barXMR>]}
+    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Test lowering of internal path into a module
+// CHECK-LABEL: firrtl.circuit "Top" {
+firrtl.circuit "Top" {
+  firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
+    // CHECK: firrtl.module @XmrSrcMod() {
+    // CHECK{LITERAL}:  firrtl.verbatim.expr "internal.path" : () -> !firrtl.uint<1> {symbols = [@XmrSrcMod]}
+    // CHECK:  = firrtl.node sym @xmr_sym  %[[internal:.+]]  : !firrtl.uint<1>
+    %z = firrtl.verbatim.expr "internal.path" : () -> !firrtl.uint<1> {symbols = [@XmrSrcMod]}
+    %1 = firrtl.ref.send %z : !firrtl.uint<1>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
+    %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
+    // CHECK:  firrtl.instance bar sym @barXMR  @XmrSrcMod()
+    firrtl.strictconnect %_a, %xmr   : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Top() {
+    %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.ref<uint<1>>)
+    // CHECK:  firrtl.instance bar sym @bar  @Bar()
+    %a = firrtl.wire : !firrtl.uint<1>
+    %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
+    // CHECK{LITERAL}:   %0 = firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.{{3}}" : () -> !firrtl.uint<1> {symbols = [@Top, #hw.innerNameRef<@Top::@bar>, #hw.innerNameRef<@Bar::@barXMR>, #hw.innerNameRef<@XmrSrcMod::@xmr_sym>]}
+    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+  }
+}

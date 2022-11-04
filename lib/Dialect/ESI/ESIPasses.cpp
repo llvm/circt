@@ -1534,7 +1534,9 @@ void ESIEmitCollateralPass::emitServiceJSON() {
   // still valid.
   DenseSet<StringAttr> stillUsed;
   mod.walk([&](ServiceImplementReqOp req) {
-    stillUsed.insert(StringAttr::get(req.getContext(), req.getServiceSymbol()));
+    auto sym = req.getServiceSymbol();
+    if (sym.has_value())
+      stillUsed.insert(StringAttr::get(req.getContext(), *sym));
   });
   mod.walk([&](ServiceDeclOpInterface decl) {
     if (!stillUsed.contains(SymbolTable::getSymbolName(decl)))
