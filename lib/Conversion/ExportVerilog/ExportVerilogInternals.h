@@ -95,7 +95,9 @@ struct NameCollisionResolver {
   }
 
   /// Insert a string as an already-used name.
-  void insertUsedName(StringRef name) { nextGeneratedNameIDs.insert({name, 0}); }
+  void insertUsedName(StringRef name) {
+    nextGeneratedNameIDs.insert({name, 0});
+  }
 
 private:
   /// A map from used names to numeric suffix used as uniquification agent when

@@ -48,7 +48,7 @@ StringRef NameCollisionResolver::getLegalName(StringRef originalName) {
 void FieldNameResolver::setRenamedFieldName(StringAttr fieldName,
                                             StringAttr newFieldName) {
   renamedFieldNames[fieldName] = newFieldName;
-nextGeneratedNameIDs.insert({newFieldName, 0});
+  nextGeneratedNameIDs.insert({newFieldName, 0});
 }
 
 StringAttr FieldNameResolver::getRenamedFieldName(StringAttr fieldName) {

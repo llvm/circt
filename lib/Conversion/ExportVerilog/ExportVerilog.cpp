@@ -3254,8 +3254,8 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
           patternAttr, os, VerilogPrecedence::LowestPrecedence,
           [&]() { return op->emitOpError("invalid case value"); });
 
-    StringRef legalName = legalizeName(
-        caseNames[i].cast<StringAttr>().getValue(), nextGenIds);
+    StringRef legalName =
+        legalizeName(caseNames[i].cast<StringAttr>().getValue(), nextGenIds);
     os << ": begin: " << legalName << "\n";
     emitStatementBlock(region.getBlocks().front());
     indent() << "end: " << legalName << "\n";
