@@ -3415,34 +3415,33 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
   // `verbose` formatting. Set up the infra for storing names recursively. Just
   // store this locally for now.
   llvm::StringMap<size_t> nextGenIds;
-  ps.scopedBox(
-      BeginToken(indentAmount, Breaks::Consistent, IndentStyle::Block), [&]() {
-        // Emit each case.
-        for (size_t i = 0, e = patterns.size(); i < e; ++i) {
-          auto &region = regions[i];
-          assert(region.hasOneBlock());
-          Attribute patternAttr = patterns[i];
+  ps.scopedBox(PP::bbox2, [&]() {
+    // Emit each case.
+    for (size_t i = 0, e = patterns.size(); i < e; ++i) {
+      auto &region = regions[i];
+      assert(region.hasOneBlock());
+      Attribute patternAttr = patterns[i];
 
-          startStatement();
-          if (!patternAttr.isa<mlir::TypedAttr>())
-            ps << "default";
-          else
-            ps.invokeWithStringOS([&](auto &os) {
-              emitter.printParamValue(
-                  patternAttr, os, VerilogPrecedence::LowestPrecedence,
-                  [&]() { return op->emitOpError("invalid case value"); });
-            });
+      startStatement();
+      if (!patternAttr.isa<mlir::TypedAttr>())
+        ps << "default";
+      else
+        ps.invokeWithStringOS([&](auto &os) {
+          emitter.printParamValue(
+              patternAttr, os, VerilogPrecedence::LowestPrecedence,
+              [&]() { return op->emitOpError("invalid case value"); });
+        });
 
-          StringRef legalName = legalizeName(
-              caseNames[i].cast<StringAttr>().getValue(), nextGenIds);
-          ps << ": begin: " << PPExtString(legalName);
-          setPendingNewline();
-          emitStatementBlock(region.getBlocks().front());
-          startStatement();
-          ps << "end: " << PPExtString(legalName);
-          setPendingNewline();
-        }
-      });
+      StringRef legalName =
+          legalizeName(caseNames[i].cast<StringAttr>().getValue(), nextGenIds);
+      ps << ": begin: " << PPExtString(legalName);
+      setPendingNewline();
+      emitStatementBlock(region.getBlocks().front());
+      startStatement();
+      ps << "end: " << PPExtString(legalName);
+      setPendingNewline();
+    }
+  });
 
   startStatement();
   ps << "endcase";
@@ -3798,24 +3797,22 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   else {
     ps << " begin";
     emitLocationInfoAndNewLine(ops);
-    ps.scopedBox(
-        BeginToken(indentAmount, Breaks::Consistent, IndentStyle::Block),
-        [&]() {
-          startStatement();
-          ps << "if (";
-          // TODO: group, like normal 'if'.
-          // Negative edge async resets need to invert the reset condition. This
-          // is noted in the op description.
-          if (op.getResetStyle() == ResetType::AsyncReset &&
-              *op.getResetEdge() == EventControl::AtNegEdge)
-            ps << "!";
-          emitExpression(op.getReset(), ops);
-          ps << ")";
-          emitBlockAsStatement(op.getResetBlock(), ops);
-          startStatement();
-          ps << "else";
-          emitBlockAsStatement(op.getBodyBlock(), ops);
-        });
+    ps.scopedBox(PP::bbox2, [&]() {
+      startStatement();
+      ps << "if (";
+      // TODO: group, like normal 'if'.
+      // Negative edge async resets need to invert the reset condition. This
+      // is noted in the op description.
+      if (op.getResetStyle() == ResetType::AsyncReset &&
+          *op.getResetEdge() == EventControl::AtNegEdge)
+        ps << "!";
+      emitExpression(op.getReset(), ops);
+      ps << ")";
+      emitBlockAsStatement(op.getResetBlock(), ops);
+      startStatement();
+      ps << "else";
+      emitBlockAsStatement(op.getBodyBlock(), ops);
+    });
 
     startStatement();
     ps << "end";
@@ -3869,35 +3866,32 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
   });
   emitLocationInfoAndNewLine(ops);
 
-  ps.scopedBox(
-      BeginToken(indentAmount, Breaks::Consistent, IndentStyle::Block), [&]() {
-        for (auto &caseInfo : op.getCases()) {
-          startStatement();
-          auto &pattern = caseInfo.pattern;
+  ps.scopedBox(PP::bbox2, [&]() {
+    for (auto &caseInfo : op.getCases()) {
+      startStatement();
+      auto &pattern = caseInfo.pattern;
 
-          llvm::TypeSwitch<CasePattern *>(pattern.get())
-              .Case<CaseBitPattern>([&](auto bitPattern) {
-                // TODO: We could emit in hex if/when the size is a multiple of
-                // 4 and there are no x's crossing nibble boundaries.
-                ps.invokeWithStringOS([&](auto &os) {
-                  os << bitPattern->getWidth() << "'b";
-                  for (size_t bit = 0, e = bitPattern->getWidth(); bit != e;
-                       ++bit)
-                    os << getLetter(bitPattern->getBit(e - bit - 1));
-                });
-              })
-              .Case<CaseEnumPattern>([&](auto enumPattern) {
-                ps << emitter.fieldNameResolver.getEnumFieldName(
-                    enumPattern->attr().template cast<hw::EnumFieldAttr>());
-              })
-              .Case<CaseDefaultPattern>([&](auto) { ps << "default"; })
-              .Default(
-                  [&](auto) { assert(false && "unhandled case pattern"); });
+      llvm::TypeSwitch<CasePattern *>(pattern.get())
+          .Case<CaseBitPattern>([&](auto bitPattern) {
+            // TODO: We could emit in hex if/when the size is a multiple of
+            // 4 and there are no x's crossing nibble boundaries.
+            ps.invokeWithStringOS([&](auto &os) {
+              os << bitPattern->getWidth() << "'b";
+              for (size_t bit = 0, e = bitPattern->getWidth(); bit != e; ++bit)
+                os << getLetter(bitPattern->getBit(e - bit - 1));
+            });
+          })
+          .Case<CaseEnumPattern>([&](auto enumPattern) {
+            ps << emitter.fieldNameResolver.getEnumFieldName(
+                enumPattern->attr().template cast<hw::EnumFieldAttr>());
+          })
+          .Case<CaseDefaultPattern>([&](auto) { ps << "default"; })
+          .Default([&](auto) { assert(false && "unhandled case pattern"); });
 
-          ps << ":";
-          emitBlockAsStatement(caseInfo.block, emptyOps);
-        }
-      });
+      ps << ":";
+      emitBlockAsStatement(caseInfo.block, emptyOps);
+    }
+  });
 
   startStatement();
   ps << "endcase";
@@ -3938,9 +3932,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
       // Handle # if this is the first parameter we're printing.
       if (!printed) {
-        ps << " #("
-           << BeginToken(indentAmount, Breaks::Inconsistent, IndentStyle::Block)
-           << PP::newline;
+        ps << " #(" << PP::bbox2 << PP::newline;
         printed = true;
       } else {
         ps << "," << PP::newline;
@@ -4424,27 +4416,25 @@ void StmtEmitter::collectNamesAndCalculateDeclarationWidths(Block &block) {
 }
 
 void StmtEmitter::emitStatementBlock(Block &body) {
-  ps << BeginToken(indentAmount, Breaks::Consistent, IndentStyle::Block);
+  ps.scopedBox(PP::bbox2, [&]() {
+    // Ensure decl alignment values are preserved after the block is emitted.
+    // These values were computed for and from all declarations in the current
+    // block (before/after this nested block), so be sure they're restored
+    // and not overwritten by the declaration alignment within the block.
+    llvm::SaveAndRestore<size_t> x(maxDeclNameWidth);
+    llvm::SaveAndRestore<size_t> x2(maxTypeWidth);
 
-  // Ensure decl alignment values are preserved after the block is emitted.
-  // These values were computed for and from all declarations in the current
-  // block (before/after this nested block), so be sure they're restored
-  // and not overwritten by the declaration alignment within the block.
-  llvm::SaveAndRestore<size_t> x(maxDeclNameWidth);
-  llvm::SaveAndRestore<size_t> x2(maxTypeWidth);
+    // Build up the symbol table for all of the values that need names in the
+    // module.  #ifdef's in procedural regions are special because local
+    // variables are all emitted at the top of their enclosing blocks.
+    if (!isa<IfDefProceduralOp>(body.getParentOp()))
+      collectNamesAndCalculateDeclarationWidths(body);
 
-  // Build up the symbol table for all of the values that need names in the
-  // module.  #ifdef's in procedural regions are special because local variables
-  // are all emitted at the top of their enclosing blocks.
-  if (!isa<IfDefProceduralOp>(body.getParentOp()))
-    collectNamesAndCalculateDeclarationWidths(body);
-
-  // Emit the body.
-  for (auto &op : body) {
-    emitStatement(&op);
-  }
-
-  ps << PP::end;
+    // Emit the body.
+    for (auto &op : body) {
+      emitStatement(&op);
+    }
+  });
 }
 // NOLINTEND(misc-no-recursion)
 
@@ -4495,74 +4485,72 @@ void ModuleEmitter::emitBind(BindOp op) {
   ps << "bind " << parentVerilogName.getValue() << PP::nbsp
      << childVerilogName.getValue() << PP::nbsp << getSymOpName(inst) << " (";
   bool isFirst = true; // True until we print a port.
-  ps.scopedBox(
-      BeginToken(indentAmount, Breaks::Inconsistent, IndentStyle::Block),
-      [&]() {
-        ModulePortInfo parentPortInfo = parentMod.getPorts();
-        SmallVector<PortInfo> childPortInfo = getAllModulePortInfos(inst);
+  ps.scopedBox(PP::bbox2, [&]() {
+    ModulePortInfo parentPortInfo = parentMod.getPorts();
+    SmallVector<PortInfo> childPortInfo = getAllModulePortInfos(inst);
 
-        // Get the max port name length so we can align the '('.
-        size_t maxNameLength = 0;
-        for (auto &elt : childPortInfo) {
-          auto portName = getPortVerilogName(childMod, elt);
-          elt.name = Builder(inst.getContext()).getStringAttr(portName);
-          maxNameLength = std::max(maxNameLength, elt.getName().size());
-        }
+    // Get the max port name length so we can align the '('.
+    size_t maxNameLength = 0;
+    for (auto &elt : childPortInfo) {
+      auto portName = getPortVerilogName(childMod, elt);
+      elt.name = Builder(inst.getContext()).getStringAttr(portName);
+      maxNameLength = std::max(maxNameLength, elt.getName().size());
+    }
 
-        // Emit the argument and result ports.
-        auto opArgs = inst.getInputs();
-        auto opResults = inst.getResults();
-        for (auto &elt : childPortInfo) {
-          // Figure out which value we are emitting.
-          Value portVal =
-              elt.isOutput() ? opResults[elt.argNum] : opArgs[elt.argNum];
-          bool isZeroWidth = isZeroBitType(elt.type);
+    // Emit the argument and result ports.
+    auto opArgs = inst.getInputs();
+    auto opResults = inst.getResults();
+    for (auto &elt : childPortInfo) {
+      // Figure out which value we are emitting.
+      Value portVal =
+          elt.isOutput() ? opResults[elt.argNum] : opArgs[elt.argNum];
+      bool isZeroWidth = isZeroBitType(elt.type);
 
-          // Decide if we should print a comma.  We can't do this if we're the
-          // first port or if all the subsequent ports are zero width.
-          if (!isFirst) {
-            bool shouldPrintComma = true;
-            if (isZeroWidth) {
-              shouldPrintComma = false;
-              for (size_t i = (&elt - childPortInfo.data()) + 1,
-                          e = childPortInfo.size();
-                   i != e; ++i)
-                if (!isZeroBitType(childPortInfo[i].type)) {
-                  shouldPrintComma = true;
-                  break;
-                }
+      // Decide if we should print a comma.  We can't do this if we're the
+      // first port or if all the subsequent ports are zero width.
+      if (!isFirst) {
+        bool shouldPrintComma = true;
+        if (isZeroWidth) {
+          shouldPrintComma = false;
+          for (size_t i = (&elt - childPortInfo.data()) + 1,
+                      e = childPortInfo.size();
+               i != e; ++i)
+            if (!isZeroBitType(childPortInfo[i].type)) {
+              shouldPrintComma = true;
+              break;
             }
-
-            if (shouldPrintComma)
-              ps << ",";
-          }
-          ps << PP::newline;
-
-          // Emit the port's name.
-          if (!isZeroWidth) {
-            // If this is a real port we're printing, then it isn't the first
-            // one. Any subsequent ones will need a comma.
-            isFirst = false;
-            // os << "  ";
-          } else {
-            // We comment out zero width ports, so their presence and
-            // initializer expressions are still emitted textually.
-            ps << PP::neverbox << "//";
-          }
-
-          ps << "." << elt.getName();
-          ps.nbsp(maxNameLength - elt.getName().size());
-          ps << " (";
-
-          // Emit the value as an expression.
-          auto name = getNameRemotely(portVal, parentPortInfo, parentMod);
-          assert(!name.empty() && "bind port connection must have a name");
-          ps << name << ")";
-
-          if (isZeroWidth)
-            ps << PP::end; // Close never-break group.
         }
-      });
+
+        if (shouldPrintComma)
+          ps << ",";
+      }
+      ps << PP::newline;
+
+      // Emit the port's name.
+      if (!isZeroWidth) {
+        // If this is a real port we're printing, then it isn't the first
+        // one. Any subsequent ones will need a comma.
+        isFirst = false;
+        // os << "  ";
+      } else {
+        // We comment out zero width ports, so their presence and
+        // initializer expressions are still emitted textually.
+        ps << PP::neverbox << "//";
+      }
+
+      ps << "." << elt.getName();
+      ps.nbsp(maxNameLength - elt.getName().size());
+      ps << " (";
+
+      // Emit the value as an expression.
+      auto name = getNameRemotely(portVal, parentPortInfo, parentMod);
+      assert(!name.empty() && "bind port connection must have a name");
+      ps << name << ")";
+
+      if (isZeroWidth)
+        ps << PP::end; // Close never-break group.
+    }
+  });
   if (!isFirst)
     ps << PP::newline;
   ps << ");";
@@ -4723,42 +4711,40 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     if (maxTypeWidth > 0) // add a space if any type exists.
       maxTypeWidth += 1;
 
-    ps.scopedBox(
-        BeginToken(indentAmount, Breaks::Consistent, IndentStyle::Block),
-        [&]() {
-          ps << PP::newline << "#(";
-          ps.scopedBox(PP::cbox0, [&]() {
-            llvm::interleave(
-                module.getParameters(),
-                [&](Attribute param) {
-                  auto paramAttr = param.cast<ParamDeclAttr>();
-                  auto defaultValue =
-                      paramAttr.getValue(); // may be null if absent.
-                  ps << "parameter ";
-                  printParamType(paramAttr.getType(), defaultValue, scratch);
-                  if (!scratch.empty())
-                    ps << scratch;
-                  if (scratch.size() < maxTypeWidth)
-                    ps.nbsp(maxTypeWidth - scratch.size());
+    ps.scopedBox(PP::bbox2, [&]() {
+      ps << PP::newline << "#(";
+      ps.scopedBox(PP::cbox0, [&]() {
+        llvm::interleave(
+            module.getParameters(),
+            [&](Attribute param) {
+              auto paramAttr = param.cast<ParamDeclAttr>();
+              auto defaultValue =
+                  paramAttr.getValue(); // may be null if absent.
+              ps << "parameter ";
+              printParamType(paramAttr.getType(), defaultValue, scratch);
+              if (!scratch.empty())
+                ps << scratch;
+              if (scratch.size() < maxTypeWidth)
+                ps.nbsp(maxTypeWidth - scratch.size());
 
-                  ps << state.globalNames.getParameterVerilogName(
-                      module, paramAttr.getName());
+              ps << state.globalNames.getParameterVerilogName(
+                  module, paramAttr.getName());
 
-                  if (defaultValue) {
-                    ps << " = ";
-                    ps.invokeWithStringOS([&](auto &os) {
-                      printParamValue(defaultValue, os, [&]() {
-                        return module->emitError("parameter '")
-                               << paramAttr.getName().getValue()
-                               << "' has invalid value";
-                      });
-                    });
-                  }
-                },
-                [&]() { ps << "," << PP::newline; });
-            ps << ") ";
-          });
-        });
+              if (defaultValue) {
+                ps << " = ";
+                ps.invokeWithStringOS([&](auto &os) {
+                  printParamValue(defaultValue, os, [&]() {
+                    return module->emitError("parameter '")
+                           << paramAttr.getName().getValue()
+                           << "' has invalid value";
+                  });
+                });
+              }
+            },
+            [&]() { ps << "," << PP::newline; });
+        ps << ") ";
+      });
+    });
   }
 
   ps << "(";
@@ -4792,48 +4778,73 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   if (maxTypeWidth > 0) // add a space if any type exists
     maxTypeWidth += 1;
 
-  ps.scopedBox(
-      BeginToken(indentAmount, Breaks::Inconsistent, IndentStyle::Block),
-      [&]() {
-        for (size_t portIdx = 0, e = portInfo.size(); portIdx != e;) {
-          startStatement();
+  ps.scopedBox(PP::bbox2, [&]() {
+    for (size_t portIdx = 0, e = portInfo.size(); portIdx != e;) {
+      startStatement();
 
-          // Emit the arguments.
-          auto portType = portInfo[portIdx].type;
-          bool isZeroWidth = false;
-          if (hasZeroWidth) {
-            isZeroWidth = isZeroBitType(portType);
-            if (isZeroWidth)
-              ps << PP::neverbox;
-            ps << (isZeroWidth ? "// " : "   ");
-          }
+      // Emit the arguments.
+      auto portType = portInfo[portIdx].type;
+      bool isZeroWidth = false;
+      if (hasZeroWidth) {
+        isZeroWidth = isZeroBitType(portType);
+        if (isZeroWidth)
+          ps << PP::neverbox;
+        ps << (isZeroWidth ? "// " : "   ");
+      }
 
-          PortDirection thisPortDirection = portInfo[portIdx].direction;
-          switch (thisPortDirection) {
-          case PortDirection::OUTPUT:
-            ps << "output ";
-            break;
-          case PortDirection::INPUT:
-            ps << (hasOutputs ? "input  " : "input ");
-            break;
-          case PortDirection::INOUT:
-            ps << (hasOutputs ? "inout  " : "inout ");
-            break;
-          }
+      PortDirection thisPortDirection = portInfo[portIdx].direction;
+      switch (thisPortDirection) {
+      case PortDirection::OUTPUT:
+        ps << "output ";
+        break;
+      case PortDirection::INPUT:
+        ps << (hasOutputs ? "input  " : "input ");
+        break;
+      case PortDirection::INOUT:
+        ps << (hasOutputs ? "inout  " : "inout ");
+        break;
+      }
 
-          // Emit the type.
-          if (!portTypeStrings[portIdx].empty())
-            ps << portTypeStrings[portIdx];
-          if (portTypeStrings[portIdx].size() < maxTypeWidth)
-            ps.nbsp(maxTypeWidth - portTypeStrings[portIdx].size());
+      // Emit the type.
+      if (!portTypeStrings[portIdx].empty())
+        ps << portTypeStrings[portIdx];
+      if (portTypeStrings[portIdx].size() < maxTypeWidth)
+        ps.nbsp(maxTypeWidth - portTypeStrings[portIdx].size());
 
-          size_t startOfNamePos =
-              (hasZeroWidth ? 3 : 0) + (hasOutputs ? 7 : 6) + maxTypeWidth;
+      size_t startOfNamePos =
+          (hasZeroWidth ? 3 : 0) + (hasOutputs ? 7 : 6) + maxTypeWidth;
 
-          // Emit the name.
-          ps << getPortVerilogName(module, portInfo[portIdx]);
-          ps.invokeWithStringOS(
-              [&](auto &os) { printUnpackedTypePostfix(portType, os); });
+      // Emit the name.
+      ps << getPortVerilogName(module, portInfo[portIdx]);
+      ps.invokeWithStringOS(
+          [&](auto &os) { printUnpackedTypePostfix(portType, os); });
+
+      if (state.options.printDebugInfo && portInfo[portIdx].sym &&
+          !portInfo[portIdx].sym.getValue().empty())
+        ps << " /* inner_sym: " << portInfo[portIdx].sym.getValue() << " */";
+
+      ++portIdx;
+
+      if (isZeroWidth)
+        ps << PP::end; // Close never-break group.
+
+      // If we have any more ports with the same types and the same
+      // direction, emit them in a list one per line. Optionally skip this
+      // behavior when requested by user.
+      if (!state.options.disallowPortDeclSharing) {
+        while (portIdx != e &&
+               portInfo[portIdx].direction == thisPortDirection &&
+               stripUnpackedTypes(portType) ==
+                   stripUnpackedTypes(portInfo[portIdx].type)) {
+          StringRef name = getPortVerilogName(module, portInfo[portIdx]);
+          // Append this to the running port decl.
+          ps << ",";
+          ps << PP::newline;
+          ps.nbsp(startOfNamePos);
+          ps << name;
+          ps.invokeWithStringOS([&](auto &os) {
+            printUnpackedTypePostfix(portInfo[portIdx].type, os);
+          });
 
           if (state.options.printDebugInfo && portInfo[portIdx].sym &&
               !portInfo[portIdx].sym.getValue().empty())
@@ -4841,48 +4852,20 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
                << " */";
 
           ++portIdx;
-
-          if (isZeroWidth)
-            ps << PP::end; // Close never-break group.
-
-          // If we have any more ports with the same types and the same
-          // direction, emit them in a list one per line. Optionally skip this
-          // behavior when requested by user.
-          if (!state.options.disallowPortDeclSharing) {
-            while (portIdx != e &&
-                   portInfo[portIdx].direction == thisPortDirection &&
-                   stripUnpackedTypes(portType) ==
-                       stripUnpackedTypes(portInfo[portIdx].type)) {
-              StringRef name = getPortVerilogName(module, portInfo[portIdx]);
-              // Append this to the running port decl.
-              ps << ",";
-              ps << PP::newline;
-              ps.nbsp(startOfNamePos);
-              ps << name;
-              ps.invokeWithStringOS([&](auto &os) {
-                printUnpackedTypePostfix(portInfo[portIdx].type, os);
-              });
-
-              if (state.options.printDebugInfo && portInfo[portIdx].sym &&
-                  !portInfo[portIdx].sym.getValue().empty())
-                ps << " /* inner_sym: " << portInfo[portIdx].sym.getValue()
-                   << " */";
-
-              ++portIdx;
-            }
-          }
-
-          if (portIdx != e) {
-            if (portIdx <= lastNonZeroPort)
-              ps << ",";
-          } else if (isZeroWidth) {
-            ps << PP::newline << ");" << PP::newline;
-          } else {
-            ps << ");" << PP::newline;
-          }
-          setPendingNewline();
         }
-      });
+      }
+
+      if (portIdx != e) {
+        if (portIdx <= lastNonZeroPort)
+          ps << ",";
+      } else if (isZeroWidth) {
+        ps << PP::newline << ");" << PP::newline;
+      } else {
+        ps << ");" << PP::newline;
+      }
+      setPendingNewline();
+    }
+  });
 
   if (portInfo.empty()) {
     ps << ");";
