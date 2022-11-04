@@ -4673,9 +4673,6 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
 
   // If we have any parameters, print them on their own line.
   if (!module.getParameters().empty()) {
-    ps << BeginToken(indentAmount, Breaks::Consistent, IndentStyle::Block);
-    ps << PP::newline << "#(" << PP::cbox0;
-
     auto printParamType = [&](Type type, Attribute defaultValue,
                               SmallString<8> &result) {
       result.clear();
@@ -4724,34 +4721,42 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     if (maxTypeWidth > 0) // add a space if any type exists.
       maxTypeWidth += 1;
 
-    llvm::interleave(
-        module.getParameters(),
-        [&](Attribute param) {
-          auto paramAttr = param.cast<ParamDeclAttr>();
-          auto defaultValue = paramAttr.getValue(); // may be null if absent.
-          ps << "parameter ";
-          printParamType(paramAttr.getType(), defaultValue, scratch);
-          if (!scratch.empty())
-            ps << scratch;
-          if (scratch.size() < maxTypeWidth)
-            ps.nbsp(maxTypeWidth - scratch.size());
+    ps.scopedBox(
+        BeginToken(indentAmount, Breaks::Consistent, IndentStyle::Block),
+        [&]() {
+          ps << PP::newline << "#(";
+          ps.scopedBox(PP::cbox0, [&]() {
+            llvm::interleave(
+                module.getParameters(),
+                [&](Attribute param) {
+                  auto paramAttr = param.cast<ParamDeclAttr>();
+                  auto defaultValue =
+                      paramAttr.getValue(); // may be null if absent.
+                  ps << "parameter ";
+                  printParamType(paramAttr.getType(), defaultValue, scratch);
+                  if (!scratch.empty())
+                    ps << scratch;
+                  if (scratch.size() < maxTypeWidth)
+                    ps.nbsp(maxTypeWidth - scratch.size());
 
-          ps << state.globalNames.getParameterVerilogName(module,
-                                                          paramAttr.getName());
+                  ps << state.globalNames.getParameterVerilogName(
+                      module, paramAttr.getName());
 
-          if (defaultValue) {
-            ps << " = ";
-            ps.invokeWithStringOS([&](auto &os) {
-              printParamValue(defaultValue, os, [&]() {
-                return module->emitError("parameter '")
-                       << paramAttr.getName().getValue()
-                       << "' has invalid value";
-              });
-            });
-          }
-        },
-        [&]() { ps << "," << PP::newline; });
-    ps << PP::end << PP::end << ") ";
+                  if (defaultValue) {
+                    ps << " = ";
+                    ps.invokeWithStringOS([&](auto &os) {
+                      printParamValue(defaultValue, os, [&]() {
+                        return module->emitError("parameter '")
+                               << paramAttr.getName().getValue()
+                               << "' has invalid value";
+                      });
+                    });
+                  }
+                },
+                [&]() { ps << "," << PP::newline; });
+            ps << ") ";
+          });
+        });
   }
 
   ps << "(";
@@ -4785,94 +4790,97 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   if (maxTypeWidth > 0) // add a space if any type exists
     maxTypeWidth += 1;
 
-  ps << BeginToken(indentAmount, Breaks::Inconsistent, IndentStyle::Block);
+  ps.scopedBox(
+      BeginToken(indentAmount, Breaks::Inconsistent, IndentStyle::Block),
+      [&]() {
+        for (size_t portIdx = 0, e = portInfo.size(); portIdx != e;) {
+          startStatement();
 
-  for (size_t portIdx = 0, e = portInfo.size(); portIdx != e;) {
-    startStatement();
+          // Emit the arguments.
+          auto portType = portInfo[portIdx].type;
+          bool isZeroWidth = false;
+          if (hasZeroWidth) {
+            isZeroWidth = isZeroBitType(portType);
+            if (isZeroWidth)
+              ps << PP::neverbox;
+            ps << (isZeroWidth ? "// " : "   ");
+          }
 
-    // Emit the arguments.
-    auto portType = portInfo[portIdx].type;
-    bool isZeroWidth = false;
-    if (hasZeroWidth) {
-      isZeroWidth = isZeroBitType(portType);
-      if (isZeroWidth)
-        ps << PP::neverbox;
-      ps << (isZeroWidth ? "// " : "   ");
-    }
+          PortDirection thisPortDirection = portInfo[portIdx].direction;
+          switch (thisPortDirection) {
+          case PortDirection::OUTPUT:
+            ps << "output ";
+            break;
+          case PortDirection::INPUT:
+            ps << (hasOutputs ? "input  " : "input ");
+            break;
+          case PortDirection::INOUT:
+            ps << (hasOutputs ? "inout  " : "inout ");
+            break;
+          }
 
-    PortDirection thisPortDirection = portInfo[portIdx].direction;
-    switch (thisPortDirection) {
-    case PortDirection::OUTPUT:
-      ps << "output ";
-      break;
-    case PortDirection::INPUT:
-      ps << (hasOutputs ? "input  " : "input ");
-      break;
-    case PortDirection::INOUT:
-      ps << (hasOutputs ? "inout  " : "inout ");
-      break;
-    }
+          // Emit the type.
+          if (!portTypeStrings[portIdx].empty())
+            ps << portTypeStrings[portIdx];
+          if (portTypeStrings[portIdx].size() < maxTypeWidth)
+            ps.nbsp(maxTypeWidth - portTypeStrings[portIdx].size());
 
-    // Emit the type.
-    if (!portTypeStrings[portIdx].empty())
-      ps << portTypeStrings[portIdx];
-    if (portTypeStrings[portIdx].size() < maxTypeWidth)
-      ps.nbsp(maxTypeWidth - portTypeStrings[portIdx].size());
+          size_t startOfNamePos =
+              (hasZeroWidth ? 3 : 0) + (hasOutputs ? 7 : 6) + maxTypeWidth;
 
-    size_t startOfNamePos =
-        (hasZeroWidth ? 3 : 0) + (hasOutputs ? 7 : 6) + maxTypeWidth;
+          // Emit the name.
+          ps << getPortVerilogName(module, portInfo[portIdx]);
+          ps.invokeWithStringOS(
+              [&](auto &os) { printUnpackedTypePostfix(portType, os); });
 
-    // Emit the name.
-    ps << getPortVerilogName(module, portInfo[portIdx]);
-    ps.invokeWithStringOS(
-        [&](auto &os) { printUnpackedTypePostfix(portType, os); });
+          if (state.options.printDebugInfo && portInfo[portIdx].sym &&
+              !portInfo[portIdx].sym.getValue().empty())
+            ps << " /* inner_sym: " << portInfo[portIdx].sym.getValue()
+               << " */";
 
-    if (state.options.printDebugInfo && portInfo[portIdx].sym &&
-        !portInfo[portIdx].sym.getValue().empty())
-      ps << " /* inner_sym: " << portInfo[portIdx].sym.getValue() << " */";
+          ++portIdx;
 
-    ++portIdx;
+          if (isZeroWidth)
+            ps << PP::end; // Close never-break group.
 
-    if (isZeroWidth)
-      ps << PP::end; // Close never-break group.
+          // If we have any more ports with the same types and the same
+          // direction, emit them in a list one per line. Optionally skip this
+          // behavior when requested by user.
+          if (!state.options.disallowPortDeclSharing) {
+            while (portIdx != e &&
+                   portInfo[portIdx].direction == thisPortDirection &&
+                   stripUnpackedTypes(portType) ==
+                       stripUnpackedTypes(portInfo[portIdx].type)) {
+              StringRef name = getPortVerilogName(module, portInfo[portIdx]);
+              // Append this to the running port decl.
+              ps << ",";
+              ps << PP::newline;
+              ps.nbsp(startOfNamePos);
+              ps << name;
+              ps.invokeWithStringOS([&](auto &os) {
+                printUnpackedTypePostfix(portInfo[portIdx].type, os);
+              });
 
-    // If we have any more ports with the same types and the same direction,
-    // emit them in a list one per line.
-    // Optionally skip this behavior when requested by user.
-    if (!state.options.disallowPortDeclSharing) {
-      while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
-             stripUnpackedTypes(portType) ==
-                 stripUnpackedTypes(portInfo[portIdx].type)) {
-        StringRef name = getPortVerilogName(module, portInfo[portIdx]);
-        // Append this to the running port decl.
-        ps << ",";
-        ps << PP::newline;
-        ps.nbsp(startOfNamePos);
-        ps << name;
-        ps.invokeWithStringOS([&](auto &os) {
-          printUnpackedTypePostfix(portInfo[portIdx].type, os);
-        });
+              if (state.options.printDebugInfo && portInfo[portIdx].sym &&
+                  !portInfo[portIdx].sym.getValue().empty())
+                ps << " /* inner_sym: " << portInfo[portIdx].sym.getValue()
+                   << " */";
 
-        if (state.options.printDebugInfo && portInfo[portIdx].sym &&
-            !portInfo[portIdx].sym.getValue().empty())
-          ps << " /* inner_sym: " << portInfo[portIdx].sym.getValue() << " */";
+              ++portIdx;
+            }
+          }
 
-        ++portIdx;
-      }
-    }
-
-    if (portIdx != e) {
-      if (portIdx <= lastNonZeroPort)
-        ps << ",";
-    } else if (isZeroWidth) {
-      ps << PP::newline << ");" << PP::newline;
-    } else {
-      ps << ");" << PP::newline;
-    }
-    setPendingNewline();
-  }
-
-  ps << PP::end;
+          if (portIdx != e) {
+            if (portIdx <= lastNonZeroPort)
+              ps << ",";
+          } else if (isZeroWidth) {
+            ps << PP::newline << ");" << PP::newline;
+          } else {
+            ps << ");" << PP::newline;
+          }
+          setPendingNewline();
+        }
+      });
 
   if (portInfo.empty()) {
     ps << ");";
