@@ -183,13 +183,12 @@ firrtl.circuit "InterfaceGroundType" attributes {
       elements = [
         {
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-          description = "description of foo",
+
           name = "foo",
           id = 22 : i64
         },
         {
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-          description = "multi\nline\ndescription\nof\nbar",
           name = "bar",
           id = 23 : i64
         }
@@ -429,6 +428,27 @@ firrtl.circuit "InterfaceGroundType" attributes {
       ]
     } : !firrtl.uint<0>
 
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c-1_si2 = firrtl.constant -1 : !firrtl.sint<2>
+
+    %node_c0_ui1 = firrtl.node %c0_ui1 {
+      annotations = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 22 : i64
+        }
+      ]
+    } : !firrtl.uint<1>
+
+    %node_c-1_si2 = firrtl.node %c-1_si2 {
+      annotations = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 23 : i64
+        }
+      ]
+    } : !firrtl.sint<2>
+
   }
   firrtl.module @InterfaceGroundType() attributes {
     annotations = [
@@ -461,6 +481,11 @@ firrtl.circuit "InterfaceGroundType" attributes {
         class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
         id = 19 : i64,
         name = "ZeroWidthView"
+      },
+      {
+        class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
+        id = 21 : i64,
+        name = "ConstantView"
       },
       {
         class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
@@ -551,6 +576,15 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-SAME:         dimensions: [ ]
 // CHECK-SAME:         width: 0
 // CHECK-SAME:     instances: []
+// CHECK-SAME:   - name: ConstantView
+// CHECK-SAME:     fields:
+// CHECK-SAME:       - name: foo
+// CHECK-SAME:         dimensions: [ ]
+// CHECK-SAME:         width: 1
+// CHECK-SAME:       - name: bar
+// CHECK-SAME:         dimensions: [ ]
+// CHECK-SAME:         width: 2
+// CHECK-SAME:     instances: []
 // CHECK-SAME:   - name: UnsupportedView
 // CHECK-SAME:     fields: []
 // CHECK-SAME:     instances: []
@@ -570,6 +604,9 @@ firrtl.circuit "InterfaceGroundType" attributes {
 //
 // CHECK-NEXT:       sv.interface.instance sym @[[unsupportedSym:[a-zA-Z0-9_]+]]
 // CHECK-SAME:         {name = "UnsupportedView"} : !sv.interface<@UnsupportedView>
+//
+// CHECK-NEXT:       sv.interface.instance sym @[[constantSym:[a-zA-Z0-9_]+]]
+// CHECK-SAME:         {name = "ConstantView"} : !sv.interface<@ConstantView>
 //
 // CHECK-NEXT:       sv.interface.instance sym @[[zeroWidthSym:[a-zA-Z0-9_]+]]
 // CHECK-SAME:         {name = "ZeroWidthView"} : !sv.interface<@ZeroWidthView>
@@ -595,19 +632,25 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-NOT:        sifive.enterprise.grandcentral.AugmentedGroundType
 //
 // CHECK{LITERAL}:   sv.verbatim "assign {{1}}.foo = {{0}};"
-// CHECK-SAME:         (%[[foo_ref]]) : !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Companion::@[[groundSym]]>]}
+// CHECK-SAME:         (%[[foo_ref]]) : !firrtl.uint<1>
+// CHECK-SAME:         {symbols = [#hw.innerNameRef<@Companion::@[[groundSym]]>]}
 // CHECK{LITERAL}:   sv.verbatim "assign {{1}}.bar = {{0}};"
-// CHECK-SAME:         (%[[bar_ref]]) : !firrtl.uint<2> {symbols = [#hw.innerNameRef<@Companion::@[[groundSym]]>]}
+// CHECK-SAME:         (%[[bar_ref]]) : !firrtl.uint<2>
+// CHECK-SAME:         {symbols = [#hw.innerNameRef<@Companion::@[[groundSym]]>]}
 //
 // CHECK{LITERAL}:   sv.verbatim "assign {{1}}.vector[0] = {{0}};"
-// CHECK-SAME:         (%[[foo_ref]]) : !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Companion::@[[vectorSym]]>]}
+// CHECK-SAME:         (%[[foo_ref]]) : !firrtl.uint<1>
+// CHECK-SAME:         {symbols = [#hw.innerNameRef<@Companion::@[[vectorSym]]>]}
 // CHECK{LITERAL}:   sv.verbatim "assign {{1}}.vector[1] = {{0}};"
-// CHECK-SAME:         (%[[foo_ref]]) : !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Companion::@[[vectorSym]]>]}
+// CHECK-SAME:         (%[[foo_ref]]) : !firrtl.uint<1>
+// CHECK-SAME:         {symbols = [#hw.innerNameRef<@Companion::@[[vectorSym]]>]}
 //
 // CHECK{LITERAL}:   sv.verbatim "assign {{1}}.bundle.foo = {{0}};"
-// CHECK-SAME:         (%[[foo_ref]]) : !firrtl.uint<1> {symbols = [#hw.innerNameRef<@Companion::@[[bundleSym]]>]}
+// CHECK-SAME:         (%[[foo_ref]]) : !firrtl.uint<1>
+// CHECK-SAME:         {symbols = [#hw.innerNameRef<@Companion::@[[bundleSym]]>]}
 // CHECK{LITERAL}:   sv.verbatim "assign {{1}}.bundle.bar = {{0}};"
-// CHECK-SAME:         (%[[bar_ref]]) : !firrtl.uint<2> {symbols = [#hw.innerNameRef<@Companion::@[[bundleSym]]>]}
+// CHECK-SAME:         (%[[bar_ref]]) : !firrtl.uint<2>
+// CHECK-SAME:         {symbols = [#hw.innerNameRef<@Companion::@[[bundleSym]]>]}
 //
 // CHECK{LITERAL}:   sv.verbatim "assign {{1}}.vector[0].foo = {{0}};"
 // CHECK-SAME:         (%[[foo_ref]]) : !firrtl.uint<1>
@@ -634,6 +677,13 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK{LITERAL}:   sv.verbatim "assign {{1}}.vector[1][2] = {{0}};"
 // CHECK-SAME:         (%[[bar_ref]]) : !firrtl.uint<2>
 // CHECK-SAME:         {symbols = [#hw.innerNameRef<@Companion::@[[vectorOfVectorSym]]>]}
+//
+// CHECK{LITERAL}:   sv.verbatim "assign {{1}}.foo = {{0}};"
+// CHECK-SAME:         (%c0_ui1) : !firrtl.uint<1>
+// CHECK-SAME:         {symbols = [#hw.innerNameRef<@Companion::@[[constantSym]]>]}
+// CHECK{LITERAL}:   sv.verbatim "assign {{1}}.bar = {{0}};"
+// CHECK-SAME:         (%c-1_si2) : !firrtl.sint<2>
+// CHECK-SAME:         {symbols = [#hw.innerNameRef<@Companion::@[[constantSym]]>]}
 //
 // There are no more verbatim assigns after this.  The zero-width view and any
 // "unsupported" types, e.g., AugmentedStringType, are not given XMRs.
@@ -681,6 +731,10 @@ firrtl.circuit "InterfaceGroundType" attributes {
 //
 // CHECK:      sv.interface @ZeroWidthView
 // CHECK-NEXT:   sv.interface.signal @zerowidth : i0
+//
+// CHECK:      sv.interface @ConstantView
+// CHECK-NEXT:   sv.interface.signal @foo : i1
+// CHECK-NEXT:   sv.interface.signal @bar : i2
 //
 // CHECK:      sv.interface @UnsupportedView
 // CHECK-NEXT:   sv.verbatim "// <unsupported string type> string;"
