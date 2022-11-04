@@ -5,6 +5,7 @@
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from io import FileIO
+import os
 import json
 import pathlib
 import re
@@ -75,7 +76,7 @@ class SoftwareApiBuilder:
     """Output the API (in a pre-determined order) via callbacks. Encourages some
     level of consistency between language APIs."""
 
-    env = Environment(loader=FileSystemLoader(__dir__),
+    env = Environment(loader=FileSystemLoader(str(__dir__)),
                       undefined=StrictUndefined)
     env.globals.update(camel_to_snake=_camel_to_snake,
                        get_ports_for_clients=_get_ports_for_clients,
@@ -122,7 +123,7 @@ class PythonApiBuilder(SoftwareApiBuilder):
     common_file = libdir / "common.py"
     if common_file.exists():
       common_file.unlink()
-    common_file.hardlink_to(__dir__ / "esi_runtime_common.py")
+    os.link(__dir__ / "esi_runtime_common.py", common_file)
 
     # Emit the system-specific API.
     main = libdir / f"{system_name}.py"
