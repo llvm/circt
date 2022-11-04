@@ -434,7 +434,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         // xmrPathSuffix and end the path here.
         auto xmrIter = xmrPathSuffix.find(continueFrom.value());
         if (xmrIter != xmrPathSuffix.end())
-          xmrPathSuffix[indx] = xmrIter->getSecond();
+          xmrPathSuffix[indx] = xmrIter->getSecond().str();
         continueFrom = None;
       }
     }
