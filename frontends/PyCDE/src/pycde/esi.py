@@ -169,6 +169,28 @@ def Cosim(decl: ServiceDecl, clk, rst):
   decl.instantiate_builtin("cosim", [], [clk, rst])
 
 
+def CosimBSP(user_module):
+  """Wrap and return a cosimulation 'board support package' containing
+  'user_module'"""
+  from .module import module, generator
+  from .common import Clock, Input
+
+  @module
+  class top:
+    clk = Clock()
+    rst = Input(types.int(1))
+
+    @generator
+    def build(ports):
+      user_module(clk=ports.clk, rst=ports.rst)
+      raw_esi.ServiceInstanceOp(result=[],
+                                service_symbol=None,
+                                impl_type=ir.StringAttr.get("cosim"),
+                                inputs=[ports.clk.value, ports.rst.value])
+
+  return top
+
+
 class NamedChannelValue(ChannelValue):
   """A ChannelValue with the name of the client request."""
 
@@ -242,24 +264,26 @@ class _ServiceGeneratorChannels:
         raise ValueError(f"{name_str} has not been connected.")
 
 
-def ServiceImplementation(decl: ServiceDecl):
+def ServiceImplementation(decl: Optional[ServiceDecl]):
   """A generator for a service implementation. Must contain a @generator method
   which will be called whenever required to implement the server. Said generator
   function will be called with the same 'ports' argument as modules and a
   'channels' argument containing lists of the input and output channels which
   need to be connected to the service being implemented."""
 
-  def wrap(service_impl, decl: ServiceDecl = decl):
+  def wrap(service_impl, decl: Optional[ServiceDecl] = decl):
 
     def instantiate_cb(mod: _SpecializedModule, instance_name: str,
                        inputs: dict, appid: AppID, loc):
       # Each instantiation of the ServiceImplementation has its own
       # registration.
       opts = _service_generator_registry.register(mod)
+      decl_sym = None
+      if decl is not None:
+        decl_sym = ir.FlatSymbolRefAttr.get(decl._materialize_service_decl())
       return raw_esi.ServiceInstanceOp(
           result=[t for _, t in mod.output_ports],
-          service_symbol=ir.FlatSymbolRefAttr.get(
-              decl._materialize_service_decl()),
+          service_symbol=decl_sym,
           impl_type=_ServiceGeneratorRegistry._impl_type_name,
           inputs=[inputs[pn].value for pn, _ in mod.input_ports],
           impl_opts=opts,

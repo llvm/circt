@@ -15,6 +15,8 @@ __dir__ = pathlib.Path(__file__).parent
 
 
 def _camel_to_snake(camel: str):
+  if camel.upper() == camel:
+    return camel.lower()
   return re.sub(r'(?<!^)(?=[A-Z])', '_', camel).lower()
 
 
