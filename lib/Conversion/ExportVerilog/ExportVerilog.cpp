@@ -57,7 +57,6 @@ using namespace pretty;
 
 #define DEBUG_TYPE "export-verilog"
 
-constexpr int indentAmount = 2;
 StringRef circtHeader = "circt_header.svh";
 StringRef circtHeaderInclude = "`include \"circt_header.svh\"\n";
 
