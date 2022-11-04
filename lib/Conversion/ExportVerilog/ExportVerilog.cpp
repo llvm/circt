@@ -4018,42 +4018,45 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     } else {
       // We comment out zero width ports, so their presence and initializer
       // expressions are still emitted textually.
-      ps << PP::neverbox << "//";
+      ps << "//";
     }
 
-    auto portName = getPortVerilogName(moduleOp, elt);
-    ps << PP::ibox2 << "." << PPExtString(portName);
-    ps.spaces(maxNameLength - portName.size() + 1);
-    ps << "(" << PP::ibox0;
+    ps.scopedBox(isZeroWidth ? PP::neverbox : PP::ibox2, [&]() {
+      auto portName = getPortVerilogName(moduleOp, elt);
+      ps << "." << PPExtString(portName);
+      ps.spaces(maxNameLength - portName.size() + 1);
+      ps << "(";
+      ps.scopedBox(PP::ibox0, [&]() {
+        // Emit the value as an expression.
+        ops.clear();
 
-    // Emit the value as an expression.
-    ops.clear();
-
-    // Output ports that are not connected to single use output ports were
-    // lowered to wire.
-    OutputOp output;
-    if (!elt.isOutput()) {
-      if (isZeroWidth && isa_and_nonnull<ConstantOp>(portVal.getDefiningOp()))
-        os << "/* Zero width */";
-      else
-        emitExpression(portVal, ops, LowestPrecedence);
-    } else if (portVal.hasOneUse() &&
-               (output = dyn_cast_or_null<OutputOp>(
-                    portVal.getUses().begin()->getOwner()))) {
-      // If this is directly using the output port of the containing module,
-      // just specify that directly so we avoid a temporary wire.
-      // Keep this synchronized with countStatements() and visitStmt(OutputOp).
-      size_t outputPortNo = portVal.getUses().begin()->getOperandNumber();
-      auto containingModule = emitter.currentModuleOp;
-      ps << PPExtString(getPortVerilogName(
-          containingModule, containingModule.getOutputPort(outputPortNo)));
-    } else {
-      portVal = getWireForValue(portVal);
-      emitExpression(portVal, ops);
-    }
-    if (isZeroWidth)
-      ps << PP::end; // Close never-break group.
-    ps << PP::end << PP::end << ")";
+        // Output ports that are not connected to single use output ports were
+        // lowered to wire.
+        OutputOp output;
+        if (!elt.isOutput()) {
+          if (isZeroWidth &&
+              isa_and_nonnull<ConstantOp>(portVal.getDefiningOp()))
+            ps << "/* Zero width */";
+          else
+            emitExpression(portVal, ops, LowestPrecedence);
+        } else if (portVal.hasOneUse() &&
+                   (output = dyn_cast_or_null<OutputOp>(
+                        portVal.getUses().begin()->getOwner()))) {
+          // If this is directly using the output port of the containing module,
+          // just specify that directly so we avoid a temporary wire.
+          // Keep this synchronized with countStatements() and
+          // visitStmt(OutputOp).
+          size_t outputPortNo = portVal.getUses().begin()->getOperandNumber();
+          auto containingModule = emitter.currentModuleOp;
+          ps << PPExtString(getPortVerilogName(
+              containingModule, containingModule.getOutputPort(outputPortNo)));
+        } else {
+          portVal = getWireForValue(portVal);
+          emitExpression(portVal, ops);
+        }
+        ps << ")";
+      });
+    });
   }
   if (!isFirst || isZeroWidth) {
     emitLocationInfoAndNewLine(ops);
