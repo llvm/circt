@@ -422,7 +422,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     }
   }
 
-  auto outputOp = op.getBodyBlock()->getTerminator();
+  auto *outputOp = op.getBodyBlock()->getTerminator();
   outputOp->setOperands(outputs);
 
   // Add logic to initialize the memory and any internal registers to random
