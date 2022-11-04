@@ -28,12 +28,39 @@ using namespace hwarith;
 // Utility functions
 //===----------------------------------------------------------------------===//
 
+// Function for setting the 'sv.namehint' attribute on 'newOp' based on any
+// currently existing 'sv.namehint' attached to the source operation of 'value'.
+// The user provides a callback which returns a new namehint based on the old
+// namehint.
+static void
+improveNamehint(Value oldValue, Operation *newOp,
+                llvm::function_ref<std::string(StringRef)> namehintCallback) {
+  if (auto *sourceOp = oldValue.getDefiningOp()) {
+    if (auto namehint =
+            sourceOp->getAttrOfType<mlir::StringAttr>("sv.namehint")) {
+      auto newNamehint = namehintCallback(namehint.strref());
+      newOp->setAttr("sv.namehint",
+                     StringAttr::get(oldValue.getContext(), newNamehint));
+    }
+  }
+}
+
 // Extract a bit range, specified via start bit and width, from a given value.
 static Value extractBits(OpBuilder &builder, Location loc, Value value,
                          unsigned startBit, unsigned bitWidth) {
   SmallVector<Value, 1> result;
   builder.createOrFold<comb::ExtractOp>(result, loc, value, startBit, bitWidth);
-  return result[0];
+  Value extractedValue = result[0];
+  if (extractedValue != value) {
+    // only change namehint if a new operation was created.
+    auto *newOp = extractedValue.getDefiningOp();
+    improveNamehint(value, newOp, [&](StringRef oldNamehint) {
+      return (oldNamehint + "_" + std::to_string(startBit) + "_to_" +
+              std::to_string(startBit + bitWidth))
+          .str();
+    });
+  }
+  return extractedValue;
 }
 
 // Perform the specified bit-extension (either sign- or zero-extension) for a
@@ -63,8 +90,15 @@ static Value extendTypeWidth(OpBuilder &builder, Location loc, Value value,
                             loc, builder.getIntegerType(extensionLength), 0)
                         ->getOpResult(0);
   }
-  return builder.create<comb::ConcatOp>(loc, extensionBits, value)
-      ->getOpResult(0);
+
+  auto extOp = builder.create<comb::ConcatOp>(loc, extensionBits, value);
+  improveNamehint(value, extOp, [&](StringRef oldNamehint) {
+    return (oldNamehint + "_" + (signExtension ? "sext_" : "zext_") +
+            std::to_string(targetWidth))
+        .str();
+  });
+
+  return extOp->getOpResult(0);
 }
 
 //===----------------------------------------------------------------------===//
@@ -125,6 +159,9 @@ struct DivOpLowering : public OpConversionPattern<DivOp> {
     else
       divResult = rewriter.create<comb::DivUOp>(loc, lhsValue, rhsValue, false)
                       ->getOpResult(0);
+
+    // Carry over any attributes from the original div op.
+    divResult.getDefiningOp()->setDialectAttrs(op->getDialectAttrs());
 
     // finally truncate back to the expected result size!
     Value truncateResult = extractBits(rewriter, loc, divResult, /*startBit=*/0,
@@ -222,8 +259,9 @@ struct ICmpOpLowering : public OpConversionPattern<ICmpOp> {
     Value rhsValue = extendTypeWidth(rewriter, loc, adaptor.getRhs(), cmpWidth,
                                      rhsType.isSigned());
 
-    rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, combPred, lhsValue, rhsValue,
-                                              false);
+    auto newOp = rewriter.replaceOpWithNewOp<comb::ICmpOp>(
+        op, combPred, lhsValue, rhsValue, false);
+    newOp->setDialectAttrs(op->getDialectAttrs());
 
     return success();
   }
@@ -253,7 +291,9 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
                                      targetWidth, isLhsTypeSigned);
     Value rhsValue = extendTypeWidth(rewriter, loc, adaptor.getInputs()[1],
                                      targetWidth, isRhsTypeSigned);
-    rewriter.replaceOpWithNewOp<ReplaceOp>(op, lhsValue, rhsValue, false);
+    auto newOp =
+        rewriter.replaceOpWithNewOp<ReplaceOp>(op, lhsValue, rhsValue, false);
+    newOp->setDialectAttrs(op->getDialectAttrs());
     return success();
   }
 };
