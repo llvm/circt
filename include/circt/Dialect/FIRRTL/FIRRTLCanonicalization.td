@@ -15,16 +15,16 @@
 
 include "circt/Dialect/FIRRTL/FIRRTL.td"
 
-/// Constraint that matches a ConstantOp, SpecialConstantOp, or InvalidValueOp.
+/// Constraint that matches a ConstantOp, SpecialConstantOp, AggregateConstantOp, or InvalidValueOp.
 def AnyConstantOp : Constraint<CPred<[{
-  isa_and_nonnull<ConstantOp, SpecialConstantOp, InvalidValueOp>
+  isa_and_nonnull<ConstantOp, SpecialConstantOp, InvalidValueOp, AggregateConstantOp>
     ($0.getDefiningOp())
   }]>>;
 
 /// Constraint that matches non-constant operations. Used to ensure that the
 /// const-on-LHS rewriting patterns converge in case both operands are constant.
 def NonConstantOp : Constraint<CPred<[{
-  !isa_and_nonnull<ConstantOp, SpecialConstantOp, InvalidValueOp>
+  !isa_and_nonnull<ConstantOp, SpecialConstantOp, InvalidValueOp, AggregateConstantOp>
     ($0.getDefiningOp())
   }]>>;
 
