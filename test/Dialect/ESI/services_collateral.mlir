@@ -73,7 +73,7 @@ msft.module @InOutLoopback {} (%clk: i1) -> () {
 }
 
 msft.module @LoopbackCosimTop {} (%clk: i1, %rst: i1) {
-  esi.service.instance @HostComms impl as "cosim" (%clk, %rst) : (i1, i1) -> ()
+  esi.service.instance svc @HostComms impl as "cosim" (%clk, %rst) : (i1, i1) -> ()
   msft.instance @m1 @InOutLoopback(%clk) : (i1) -> ()
   msft.instance @m2 @SendStruct(%clk) : (i1) -> ()
   msft.output

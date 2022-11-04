@@ -358,11 +358,12 @@ LogicalResult ServiceHierarchyMetadataOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
   ModuleOp top = getOperation()->getParentOfType<mlir::ModuleOp>();
   SymbolTable topSyms = symbolTable.getSymbolTable(top);
-  auto serviceDeclOp =
-      topSyms.lookup<ServiceDeclOpInterface>(getServiceSymbol());
+  auto sym = getServiceSymbol();
+  if (!sym)
+    return success();
+  auto serviceDeclOp = topSyms.lookup<ServiceDeclOpInterface>(*sym);
   if (!serviceDeclOp)
-    return emitOpError("Could not find service declaration ")
-           << getServiceSymbol();
+    return emitOpError("Could not find service declaration ") << *sym;
   return success();
 }
 

@@ -78,6 +78,10 @@ def ServiceInstanceOp : ESI_Op<"service.instance"> {
     creating the necessary ESI channel ports, groups them appropriately, then
     replaces this op with a `service.impl_req`.
 
+    If 'service_symbol' isn't specified, this instance will be used to implement
+    all of the service requests which get surfaced to here. This option is
+    generally used at the top level to specify host connectivity.
+
     Since implementing the server will usually need "normal" I/O, `inputs` and
     `results` act like normal `hw.instance` ports.
 
@@ -85,13 +89,13 @@ def ServiceInstanceOp : ESI_Op<"service.instance"> {
     implementation to use for this service.
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$service_symbol,
+  let arguments = (ins OptionalAttr<FlatSymbolRefAttr>:$service_symbol,
                        StrAttr:$impl_type,
                        OptionalAttr<DictionaryAttr>:$impl_opts,
                        Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>);
   let assemblyFormat = [{
-    $service_symbol `impl` `as` $impl_type (`opts` $impl_opts^)?
+    (`svc` $service_symbol^)? `impl` `as` $impl_type (`opts` $impl_opts^)?
       `(` $inputs `)` attr-dict `:` functional-type($inputs, results)
   }];
 }
@@ -109,7 +113,7 @@ def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
     implementation.
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$service_symbol,
+  let arguments = (ins OptionalAttr<FlatSymbolRefAttr>:$service_symbol,
                        StrAttr:$impl_type,
                        OptionalAttr<DictionaryAttr>:$impl_opts,
                        Variadic<AnyType>:$inputs);
@@ -126,7 +130,7 @@ def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
   }];
 
   let assemblyFormat = [{
-    $service_symbol `impl` `as` $impl_type (`opts` $impl_opts^)?
+    (`svc` $service_symbol^)? `impl` `as` $impl_type (`opts` $impl_opts^)?
      `(` $inputs `)` attr-dict `:` functional-type($inputs, results)
       $portReqs
   }];
@@ -176,13 +180,13 @@ def ServiceHierarchyMetadataOp : ESI_Op<"service.hierarchy.metadata", [
         DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Metadata about a service in the service hierarchy";
 
-  let arguments = (ins FlatSymbolRefAttr:$service_symbol,
+  let arguments = (ins OptionalAttr<FlatSymbolRefAttr>:$service_symbol,
                        ArrayAttr:$serverNamePath,
                        StrAttr:$impl_type,
                        OptionalAttr<DictionaryAttr>:$impl_details,
                        ArrayAttr:$clients);
   let assemblyFormat = [{
-    `path` $serverNamePath `implementing` $service_symbol
+    `path` $serverNamePath (`implementing` $service_symbol^)?
       `impl` `as` $impl_type (`opts` $impl_details^)?
       `clients` $clients attr-dict 
   }];
