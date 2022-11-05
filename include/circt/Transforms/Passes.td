@@ -42,7 +42,7 @@ def StripDebugInfoWithPred : Pass<"strip-debuginfo-with-pred", "::mlir::ModuleOp
   let summary = "Selectively strip debug info from all operations";
 
   let description = [{
-    This pass extends mlir::StrinpDebugInfoPass to selectively strip locations with a
+    This pass extends mlir::StripDebugInfoPass to selectively strip locations with a
     given predicate.
   }];
   let constructor = "circt::createStripDebugInfoWithPredPass({})";
