@@ -469,7 +469,7 @@ def _module_base(cls,
       for (idx, (name, type)) in enumerate(mod._pycde_mod.input_ports):
         if name in inputs:
           input = inputs[name]
-          if input == no_connect:
+          if input is no_connect:
             if extern_name is None:
               raise ConnectionError(
                   "`no_connect` is only valid on extern module ports")

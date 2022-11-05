@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from .support import get_user_loc, _obj_to_value_infer_type
 
-from circt.dialects import sv, esi
+from circt.dialects import sv, esi, hw
 import circt.support as support
 
 import mlir.ir as ir
@@ -161,6 +161,11 @@ class PyCDEValue:
     from .module import AppID
     self.value.owner.attributes[AppID.AttributeName] = appid._appid
 
+  def cast(self, to_type) -> PyCDEValue:
+    assert self.type.bitwidth == to_type.bitwidth
+    op = hw.BitcastOp(to_type, self.value)
+    return Value(op.result)
+
 
 class RegularValue(PyCDEValue):
   pass
@@ -247,17 +252,22 @@ class BitVectorValue(PyCDEValue):
     """Get the single bit at `idx`."""
     return self.slice(idx, 1)
 
-  def slice(self, low_bit: BitVectorValue, num_bits: int):
+  def slice(self, low_bit: Union[int, BitVectorValue], num_bits: int):
     """Get a constant-width slice starting at `low_bit` and ending at `low_bit +
     num_bits`."""
     _validate_idx(self.type.width, low_bit)
+    assert num_bits >= 0
 
     from .dialects import comb
+    from .pycde_types import types
     # comb.extract only supports constant lowBits. Shift the bits right, then
     # extract the correct number from the 0th bit.
     with get_user_loc():
-      # comb.shru's rhs and lhs must be the same width.
-      low_bit = low_bit.pad_or_truncate(self.type.width)
+      if isinstance(low_bit, int):
+        low_bit = types.int(self.type.width)(low_bit)
+      else:
+        # comb.shru's rhs and lhs must be the same width.
+        low_bit = low_bit.pad_or_truncate(self.type.width)
       shifted = comb.ShrUOp(self.value, low_bit)
       ret = comb.ExtractOp(0, ir.IntegerType.get_signless(num_bits), shifted)
       return ret
@@ -331,10 +341,9 @@ class BitVectorValue(PyCDEValue):
 
   def __exec_signless_binop_nocast__(self, other, op, op_symbol: str,
                                      op_name: str):
-    if not isinstance(other, PyCDEValue):
-      # Fall back to the default implementation in cases where we're not dealing
-      # with PyCDE value comparison.
-      return super().__eq__(other)
+    if isinstance(other, int):
+      other = self.type(other)
+    assert isinstance(other, PyCDEValue)
 
     signednessOperand = None
     if type(self) is not BitVectorValue:

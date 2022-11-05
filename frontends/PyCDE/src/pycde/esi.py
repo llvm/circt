@@ -1,3 +1,7 @@
+#  Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+#  See https://llvm.org/LICENSE.txt for license information.
+#  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
 from pycde.system import System
 from .module import (Generator, _module_base, _BlockContext,
                      _GeneratorPortAccess, _SpecializedModule)

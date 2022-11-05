@@ -251,12 +251,16 @@ class System:
          esi-emit-collateral{{tops={tops} schema-file=schema.capnp}},
          lower-msft-to-hw{{verilog-file={verilog_file}}},
          hw.module(lower-seq-hlmem),
-         lower-esi-to-physical, lower-esi-ports, lower-esi-to-hw, convert-fsm-to-sv,
-         lower-seq-to-sv, hw.module(prettify-verilog), hw.module(hw-cleanup),
+         cse,
+         lower-esi-to-physical, lower-esi-ports, lower-esi-to-hw,
+         convert-fsm-to-sv,
+         lower-seq-to-sv,
+         cse,
+         hw.module(prettify-verilog), hw.module(hw-cleanup),
          msft-export-tcl{{tops={tops} tcl-file={tcl_file}}}"""
   ]
 
-  def run_passes(self):
+  def run_passes(self, debug=False):
     if self.passed:
       return
     if len(self._generate_queue) > 0:
@@ -271,7 +275,7 @@ class System:
     self.files.add(self.output_directory / tcl_file)
 
     self._op_cache.release_ops()
-    for phase in self.PASS_PHASES:
+    for idx, phase in enumerate(self.PASS_PHASES):
       try:
         if isinstance(phase, str):
           passes = phase.format(tops=tops,
@@ -285,6 +289,8 @@ class System:
         sys.stderr.write(f"Exception while executing phase {phase}.\n")
         raise err
       self._op_cache.release_ops()
+      if debug:
+        open(f"after_phase_{idx}.mlir", "w").write(str(self.mod))
     self.passed = True
 
   def emit_outputs(self):

@@ -73,6 +73,11 @@ class OpOperandConnect(support.OpOperand):
     val = _obj_to_value(obj, self.type, result_type)
     support.connect(self, val)
 
+  @property
+  def type(self):
+    from .pycde_types import Type
+    return Type(self.value.type)
+
 
 def _obj_to_value(x, type, result_type=None):
   """Convert a python object to a CIRCT value, given the CIRCT type."""
