@@ -297,7 +297,10 @@ class BitVectorValue(PyCDEValue):
     if width is None:
       width = self.type.width
 
-    if type(self) is targetValueType and width == self.type.width:
+    targetType = type_getter(width)
+    if self.type == targetType:
+      if type(self.type) is not targetValueType:
+        return targetValueType(self.value)
       return self
     return hwarith.CastOp(self.value, type_getter(width))
 

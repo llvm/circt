@@ -24,12 +24,13 @@ import circt.dialects.msft
 import circt.support
 
 from contextvars import ContextVar
+from collections.abc import Iterable
 import gc
 import os
 import pathlib
 import shutil
 import sys
-from typing import Any, Callable, Dict, Set, Tuple
+from typing import Any, Callable, Dict, Set, Tuple, Union
 
 _current_system = ContextVar("current_pycde_system")
 
@@ -50,12 +51,15 @@ class System:
   ]
 
   def __init__(self,
-               top_modules: list,
+               top_modules: Union[list, _SpecializedModule],
                name: str = "PyCDESystem",
                output_directory: str = None):
     self.passed = False
     self.mod = ir.Module.create()
-    self.top_modules = list(top_modules)
+    if isinstance(top_modules, Iterable):
+      self.top_modules = list(top_modules)
+    else:
+      self.top_modules = [top_modules]
     self.name = name
     self._op_cache: _OpCache = _OpCache(self.mod)
 
@@ -78,7 +82,7 @@ class System:
     self.output_directory = pathlib.Path(output_directory)
 
     with self:
-      [m._pycde_mod.create() for m in top_modules]
+      [m._pycde_mod.create() for m in self.top_modules]
 
   def add_aux_file(self, filename: os.PathLike):
     self.copy_files.add(filename)
@@ -247,17 +251,17 @@ class System:
       # After all of the pycde code has been executed, we have all the types
       # defined so we can go through and output the typedefs delcarations.
       lambda sys: types.declare_types(sys.mod),
-      """lower-hwarith-to-hw, msft-lower-constructs, msft-lower-instances,
-         esi-emit-collateral{{tops={tops} schema-file=schema.capnp}},
-         lower-msft-to-hw{{verilog-file={verilog_file}}},
-         hw.module(lower-seq-hlmem),
-         cse,
-         lower-esi-to-physical, lower-esi-ports, lower-esi-to-hw,
-         convert-fsm-to-sv,
-         lower-seq-to-sv,
-         cse,
-         hw.module(prettify-verilog), hw.module(hw-cleanup),
-         msft-export-tcl{{tops={tops} tcl-file={tcl_file}}}"""
+      "lower-hwarith-to-hw, msft-lower-constructs, msft-lower-instances",
+      "esi-emit-collateral{{tops={tops} schema-file=schema.capnp}}",
+      "lower-msft-to-hw{{verilog-file={verilog_file}}}",
+      "hw.module(lower-seq-hlmem)",
+      # "cse",
+      "lower-esi-to-physical, lower-esi-ports, lower-esi-to-hw",
+      "convert-fsm-to-sv",
+      "lower-seq-to-sv",
+      "cse",
+      "hw.module(prettify-verilog), hw.module(hw-cleanup)",
+      "msft-export-tcl{{tops={tops} tcl-file={tcl_file}}}"
   ]
 
   def run_passes(self, debug=False):
