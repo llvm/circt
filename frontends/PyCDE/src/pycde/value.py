@@ -259,15 +259,15 @@ class BitVectorValue(PyCDEValue):
     assert num_bits >= 0
 
     from .dialects import comb
-    from .pycde_types import types
     # comb.extract only supports constant lowBits. Shift the bits right, then
     # extract the correct number from the 0th bit.
     with get_user_loc():
       if isinstance(low_bit, int):
-        low_bit = types.int(self.type.width)(low_bit)
-      else:
-        # comb.shru's rhs and lhs must be the same width.
-        low_bit = low_bit.pad_or_truncate(self.type.width)
+        return comb.ExtractOp(low_bit, ir.IntegerType.get_signless(num_bits),
+                              self.value)
+
+      # comb.shru's rhs and lhs must be the same width.
+      low_bit = low_bit.pad_or_truncate(self.type.width)
       shifted = comb.ShrUOp(self.value, low_bit)
       ret = comb.ExtractOp(0, ir.IntegerType.get_signless(num_bits), shifted)
       return ret
@@ -349,7 +349,8 @@ class BitVectorValue(PyCDEValue):
     assert isinstance(other, PyCDEValue)
 
     signednessOperand = None
-    if type(self) is not BitVectorValue:
+    if not (isinstance(self, BitVectorValue) and
+            ir.IntegerType(self.type).is_signless):
       signednessOperand = "LHS"
     elif type(other) is not BitVectorValue:
       signednessOperand = "RHS"
