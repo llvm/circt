@@ -43,7 +43,7 @@ class Consumer:
 # CHECK-LABEL: msft.module @LoopbackTop {} (%clk: i1, %rst: i1)
 # CHECK:         %Producer.int_out = msft.instance @Producer @Producer(%clk)  : (i1) -> !esi.channel<i32>
 # CHECK:         msft.instance @Consumer @Consumer(%clk, %Producer.int_out)  : (i1, !esi.channel<i32>) -> ()
-# CHECK:         esi.service.instance @HostComms impl as "cosim"(%clk, %rst) : (i1, i1) -> ()
+# CHECK:         esi.service.instance svc @HostComms impl as "cosim"(%clk, %rst) : (i1, i1) -> ()
 # CHECK:         msft.output
 # CHECK-LABEL: msft.module @Producer {} (%clk: i1) -> (int_out: !esi.channel<i32>)
 # CHECK:         [[R0:%.+]] = esi.service.req.to_client <@HostComms::@from_host>(["loopback_in"]) : !esi.channel<i32>
@@ -70,7 +70,7 @@ class LoopbackTop:
 
 
 # CHECK-LABEL: msft.module @LoopbackInOutTop {} (%clk: i1, %rst: i1)
-# CHECK:         esi.service.instance @HostComms impl as "cosim"(%clk, %rst) : (i1, i1) -> ()
+# CHECK:         esi.service.instance svc @HostComms impl as "cosim"(%clk, %rst) : (i1, i1) -> ()
 # CHECK:         %0 = esi.service.req.inout %chanOutput -> <@HostComms::@req_resp>(["loopback_inout"]) : !esi.channel<i16> -> !esi.channel<i32>
 # CHECK:         %rawOutput, %valid = esi.unwrap.vr %0, %ready : i32
 # CHECK:         %1 = comb.extract %rawOutput from 0 : (i32) -> i16
