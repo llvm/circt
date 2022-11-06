@@ -5,7 +5,7 @@ module attributes {circt.loweringOptions = "disallowPortDeclSharing"}{
 // CHECK-NEXT:  input        a,
 // CHECK-NEXT:  input        b,
 // CHECK-NEXT:  output [1:0] a_0,
-// CHECK-NEXT:  output [1:0] b_1);
+// CHECK-NEXT:  output [1:0] b_0);
 // CHECK: endmodule
 hw.module @Foo(%a: i1, %b: i1) -> (a: i2, b: i2) {
   %ao = comb.concat %a, %b: i1, i1
@@ -21,7 +21,7 @@ module {
 // CHECK-NEXT:  input        a,
 // CHECK-NEXT:               b,
 // CHECK-NEXT:  output [1:0] a_0,
-// CHECK-NEXT:               b_1);
+// CHECK-NEXT:               b_0);
 // CHECK: endmodule
 hw.module @Foo(%a: i1, %b: i1) -> (a: i2, b: i2) {
   %ao = comb.concat %a, %b: i1, i1

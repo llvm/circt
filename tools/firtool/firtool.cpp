@@ -322,6 +322,22 @@ static cl::opt<bool> etcDisableModuleInlining(
     cl::desc("Disable inlining modules that only feed test code"),
     cl::init(false), cl::cat(mainCategory));
 
+enum class RandomKind { None, Mem, Reg, All };
+
+static cl::opt<RandomKind> disableRandom(
+    cl::desc("Disable random initialization code (may break semantics!)"),
+    cl::values(clEnumValN(RandomKind::Mem, "disable-mem-randomization",
+                          "Disable emission of memory randomization code"),
+               clEnumValN(RandomKind::Reg, "disable-reg-randomization",
+                          "Disable emission of register randomization code"),
+               clEnumValN(RandomKind::All, "disable-all-randomization",
+                          "Disable emission of all randomization code")),
+    cl::init(RandomKind::None), cl::cat(mainCategory));
+
+static bool isRandomEnabled(RandomKind kind) {
+  return disableRandom != RandomKind::All && disableRandom != kind;
+}
+
 enum OutputFormatKind {
   OutputParseOnly,
   OutputIRFir,
@@ -645,8 +661,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   // implementation assumes it can run at a time where every register is
   // currently in the final module it will be emitted in, all registers have
   // been created, and no registers have yet been removed.
-  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-      firrtl::createRandomizeRegisterInitPass());
+  if (isRandomEnabled(RandomKind::Reg))
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createRandomizeRegisterInitPass());
 
   if (!disableCheckCombCycles) {
     // TODO: Currently CheckCombCyles pass doesn't support aggregates so skip
@@ -749,9 +766,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     // RefType ports and ops.
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerXMRPass());
 
-    pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue(),
-                                         emitChiselAssertsAsSVA.getValue(),
-                                         stripMuxPragmas.getValue()));
+    pm.addPass(createLowerFIRRTLToHWPass(
+        enableAnnotationWarning.getValue(), emitChiselAssertsAsSVA.getValue(),
+        stripMuxPragmas.getValue(), !isRandomEnabled(RandomKind::Mem),
+        !isRandomEnabled(RandomKind::Reg)));
 
     if (outputFormat == OutputIRHW) {
       if (!disableOptimization) {
@@ -768,9 +786,12 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         modulePM.addPass(createCSEPass());
       }
 
-      pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass());
+      pm.nest<hw::HWModuleOp>().addPass(
+          seq::createSeqFIRRTLLowerToSVPass(!isRandomEnabled(RandomKind::Reg)));
       pm.addPass(sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem,
-                                            stripMuxPragmas));
+                                            stripMuxPragmas,
+                                            !isRandomEnabled(RandomKind::Mem),
+                                            !isRandomEnabled(RandomKind::Reg)));
 
       if (extractTestCode)
         pm.addPass(sv::createSVExtractTestCodePass(etcDisableInstanceExtraction,

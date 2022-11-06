@@ -35,8 +35,8 @@ firrtl.circuit "top" {
 
   // CHECK-LABEL: firrtl.module private @mem(in %source: !firrtl.uint<1>) {
   firrtl.module private @mem(in %source: !firrtl.uint<1>) {
-    // CHECK-NEXT: %ReadMemory_read0 = firrtl.mem Undefined {depth = 16 : i64, name = "ReadMemory", portNames = ["read0"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>
-    %mem = firrtl.mem Undefined {depth = 16 : i64, name = "ReadMemory", portNames = ["read0"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>
+    // CHECK-NEXT: %ReadMemory_read0 = firrtl.mem Undefined {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}], depth = 16 : i64, name = "ReadMemory", portNames = ["read0"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>
+    %mem = firrtl.mem Undefined {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}], depth = 16 : i64, name = "ReadMemory", portNames = ["read0"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>
     // CHECK-NEXT: %0 = firrtl.subfield %ReadMemory_read0(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>) -> !firrtl.uint<4>
     // CHECK-NEXT: firrtl.connect %0, %source : !firrtl.uint<4>, !firrtl.uint<1>
     // CHECK-NEXT: }
@@ -237,5 +237,56 @@ firrtl.circuit "RefPorts" {
     firrtl.strictconnect %source4, %source : !firrtl.uint<1>
     // CHECK-NOT: firrtl.ref.resolve
     %unused5 = firrtl.ref.resolve %dest4 : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+
+// Test the removal of memories in dead cycles
+
+firrtl.circuit "MemoryInDeadCycle" {
+  // CHECK-LABEL: firrtl.module public @MemoryInDeadCycle
+  firrtl.module public @MemoryInDeadCycle(in %clock: !firrtl.clock, in %addr: !firrtl.uint<4>) {
+
+    // CHECK-NOT: firrtl.mem
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %Memory_r = firrtl.mem Undefined
+      {
+        depth = 12 : i64,
+        name = "Memory",
+        portNames = ["read"],
+        readLatency = 0 : i32,
+        writeLatency = 1 : i32
+      } : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+
+    %r_addr = firrtl.subfield %Memory_r(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>) -> !firrtl.uint<4>
+    firrtl.connect %r_addr, %addr : !firrtl.uint<4>, !firrtl.uint<4>
+    %r_en = firrtl.subfield %Memory_r(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>) -> !firrtl.uint<1>
+    firrtl.connect %r_en, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    %r_clk = firrtl.subfield %Memory_r(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>) -> !firrtl.clock
+    firrtl.connect %r_clk, %clock : !firrtl.clock, !firrtl.clock
+
+    // CHECK-NOT: firrtl.mem
+    %Memory_w = firrtl.mem Undefined
+      {
+        depth = 12 : i64,
+        name = "Memory",
+        portNames = ["w"],
+        readLatency = 0 : i32,
+        writeLatency = 1 : i32
+      } : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+
+    %w_addr = firrtl.subfield %Memory_w(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>) -> !firrtl.uint<4>
+    firrtl.connect %w_addr, %addr : !firrtl.uint<4>, !firrtl.uint<4>
+    %w_en = firrtl.subfield %Memory_w(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>) -> !firrtl.uint<1>
+    firrtl.connect %w_en, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    %w_clk = firrtl.subfield %Memory_w(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>) -> !firrtl.clock
+    firrtl.connect %w_clk, %clock : !firrtl.clock, !firrtl.clock
+    %w_mask = firrtl.subfield %Memory_w(4) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>) -> !firrtl.uint<1>
+    firrtl.connect %w_mask, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+
+    %w_data = firrtl.subfield %Memory_w(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>) -> !firrtl.uint<42>
+    %r_data = firrtl.subfield %Memory_r(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>) -> !firrtl.uint<42>
+    firrtl.connect %w_data, %r_data : !firrtl.uint<42>, !firrtl.uint<42>
   }
 }

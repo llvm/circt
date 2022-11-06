@@ -38,7 +38,7 @@ StringAttr ExportVerilog::getDeclarationName(Operation *op) {
 /// Given a name that may have collisions or invalid symbols, return a
 /// replacement name to use, or null if the original name was ok.
 StringRef NameCollisionResolver::getLegalName(StringRef originalName) {
-  return legalizeName(originalName, usedNames, nextGeneratedNameID);
+  return legalizeName(originalName, nextGeneratedNameIDs);
 }
 
 //===----------------------------------------------------------------------===//
@@ -48,7 +48,7 @@ StringRef NameCollisionResolver::getLegalName(StringRef originalName) {
 void FieldNameResolver::setRenamedFieldName(StringAttr fieldName,
                                             StringAttr newFieldName) {
   renamedFieldNames[fieldName] = newFieldName;
-  usedFieldNames.insert(newFieldName);
+  nextGeneratedNameIDs.insert({newFieldName, 0});
 }
 
 StringAttr FieldNameResolver::getRenamedFieldName(StringAttr fieldName) {
@@ -58,15 +58,15 @@ StringAttr FieldNameResolver::getRenamedFieldName(StringAttr fieldName) {
 
   // If a field name is not verilog name or used already, we have to rename it.
   bool hasToBeRenamed = !sv::isNameValid(fieldName.getValue()) ||
-                        usedFieldNames.count(fieldName.getValue());
+                        nextGeneratedNameIDs.count(fieldName.getValue());
 
   if (!hasToBeRenamed) {
     setRenamedFieldName(fieldName, fieldName);
     return fieldName;
   }
 
-  StringRef newFieldName = sv::legalizeName(
-      fieldName.getValue(), usedFieldNames, nextGeneratedNameID);
+  StringRef newFieldName =
+      sv::legalizeName(fieldName.getValue(), nextGeneratedNameIDs);
 
   auto newFieldNameAttr = StringAttr::get(fieldName.getContext(), newFieldName);
 

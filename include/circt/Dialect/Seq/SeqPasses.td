@@ -25,6 +25,10 @@ def LowerSeqFIRRTLToSV: Pass<"lower-seq-firrtl-to-sv", "hw::HWModuleOp"> {
   let summary = "Lower sequential firrtl ops to SV.";
   let constructor = "circt::seq::createSeqFIRRTLLowerToSVPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
+  let options = [
+    Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
+            "Disable emission of register randomization code">
+  ];
 }
 
 def LowerSeqHLMem: Pass<"lower-seq-hlmem", "hw::HWModuleOp"> {

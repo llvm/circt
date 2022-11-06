@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Support/APInt.h"
 #include "circt/Support/LLVM.h"
@@ -1851,59 +1852,60 @@ void SubindexOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results.insert<SubindexAggOneShot>(context);
 }
+
+OpFoldResult SubindexOp::fold(ArrayRef<Attribute> operands) {
+  auto attr = operands[0].dyn_cast_or_null<ArrayAttr>();
+  if (!attr)
+    return {};
+  auto groundCountPerElement = getType().getGroundFields();
+  auto array = attr.getValue().slice(getIndex() * groundCountPerElement,
+                                     groundCountPerElement);
+  if (getType().isa<IntType>())
+    return array[0];
+  return ArrayAttr::get(getContext(), array);
+}
+
+OpFoldResult SubfieldOp::fold(ArrayRef<Attribute> operands) {
+  auto attr = operands[0].dyn_cast_or_null<ArrayAttr>();
+  if (!attr)
+    return {};
+  auto index = getFieldIndex();
+  auto bundleType = getInput().getType().cast<BundleType>();
+  unsigned start = 0;
+  for (unsigned i = 0; i < index; ++i)
+    start += bundleType.getElement(i).type.getGroundFields();
+  auto array = attr.getValue().slice(
+      start, bundleType.getElement(index).type.getGroundFields());
+  if (getType().isa<IntType>())
+    return array[0];
+  return ArrayAttr::get(getContext(), array);
+}
+
 void SubfieldOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results.insert<SubfieldAggOneShot>(context);
 }
 
-namespace {
-
-// Convert bundle Wire to be written once
-struct ConstAgg : public mlir::RewritePattern {
-  ConstAgg(StringRef name, int weight, MLIRContext *context)
-      : RewritePattern(name, weight, context) {}
-  LogicalResult matchAndRewrite(Operation *op,
-                                PatternRewriter &rewriter) const override {
-    SmallVector<Attribute> values;
-    for (auto v : op->getOperands()) {
-      if (!isConstant(v))
-        return failure();
-      TypeSwitch<Operation *>(v.getDefiningOp())
-          .Case<ConstantOp>(
-              [&](ConstantOp c) { values.push_back(c.getValueAttr()); })
-          .Case<SpecialConstantOp>(
-              [&](SpecialConstantOp c) { values.push_back(c.getValueAttr()); })
-          .Case<AggregateConstantOp>([&](AggregateConstantOp c) {
-            for (auto attr : c.getFields())
-              values.push_back(attr.template cast<IntegerAttr>());
-          });
-    }
-
-    replaceOpWithNewOpAndCopyName<AggregateConstantOp>(
-        rewriter, op, op->getResult(0).getType(),
-        rewriter.getArrayAttr(values));
-    return success();
+static Attribute collectFields(MLIRContext *context,
+                               ArrayRef<Attribute> operands) {
+  SmallVector<Attribute> fields;
+  for (auto operand : operands) {
+    if (!operand)
+      return {};
+    if (auto array = operand.dyn_cast<ArrayAttr>())
+      llvm::append_range(fields, array.getValue());
+    else
+      fields.push_back(operand);
   }
-};
-
-struct ConstBundleAgg : public ConstAgg {
-  ConstBundleAgg(MLIRContext *context)
-      : ConstAgg(BundleCreateOp::getOperationName(), 0, context) {}
-};
-struct ConstVectorAgg : public ConstAgg {
-  ConstVectorAgg(MLIRContext *context)
-      : ConstAgg(VectorCreateOp::getOperationName(), 0, context) {}
-};
-} // namespace
-
-void BundleCreateOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                                 MLIRContext *context) {
-  results.insert<ConstBundleAgg>(context);
+  return ArrayAttr::get(context, fields);
 }
 
-void VectorCreateOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                                 MLIRContext *context) {
-  results.insert<ConstVectorAgg>(context);
+OpFoldResult BundleCreateOp::fold(ArrayRef<Attribute> operands) {
+  return collectFields(getContext(), operands);
+}
+
+OpFoldResult VectorCreateOp::fold(ArrayRef<Attribute> operands) {
+  return collectFields(getContext(), operands);
 }
 
 namespace {

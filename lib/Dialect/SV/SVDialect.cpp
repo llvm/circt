@@ -70,16 +70,15 @@ static llvm::ManagedStatic<StringSet<>, ReservedWordsCreator> reservedWords;
 /// keyword or any other name in the set \p recordNames. Use the int \p
 /// nextGeneratedNameID as a counter for suffix. Update the \p recordNames with
 /// the generated name and return the StringRef.
-StringRef circt::sv::resolveKeywordConflict(StringRef origName,
-                                            llvm::StringSet<> &recordNames,
-                                            size_t &nextGeneratedNameID) {
+StringRef circt::sv::resolveKeywordConflict(
+    StringRef origName, llvm::StringMap<size_t> &nextGeneratedNameIDs) {
   // Get the list of reserved words we need to avoid.  We could prepopulate this
   // into the used words cache, but it is large and immutable, so we just query
   // it when needed.
 
   // Fast path: name is valid
   if (!reservedWords->count(origName)) {
-    auto itAndInserted = recordNames.insert(origName);
+    auto itAndInserted = nextGeneratedNameIDs.insert({origName, 0});
     if (itAndInserted.second)
       return itAndInserted.first->getKey();
   }
@@ -88,6 +87,7 @@ StringRef circt::sv::resolveKeywordConflict(StringRef origName,
   SmallString<16> nameBuffer(origName.begin(), origName.end());
   nameBuffer.push_back('_');
   auto baseSize = nameBuffer.size();
+  auto &nextGeneratedNameID = nextGeneratedNameIDs[origName];
 
   while (1) {
     // We need to auto-unique it.
@@ -96,7 +96,7 @@ StringRef circt::sv::resolveKeywordConflict(StringRef origName,
 
     // The name may be unique.  No keywords have an underscore followed by a
     // number, so don't check that again.
-    auto itAndInserted = recordNames.insert(nameBuffer);
+    auto itAndInserted = nextGeneratedNameIDs.insert({nameBuffer, 0});
     if (itAndInserted.second)
       return itAndInserted.first->getKey();
 
@@ -116,17 +116,17 @@ static bool isValidVerilogCharacter(char ch) {
 /// Legalize the specified name for use in SV output. Auto-uniquifies the name
 /// through \c resolveKeywordConflict if required. If the name is empty, a
 /// unique temp name is created.
-StringRef circt::sv::legalizeName(StringRef name,
-                                  llvm::StringSet<> &recordNames,
-                                  size_t &nextGeneratedNameID) {
+StringRef
+circt::sv::legalizeName(StringRef name,
+                        llvm::StringMap<size_t> &nextGeneratedNameIDs) {
   // Fastest path: empty name.
   if (name.empty())
-    return resolveKeywordConflict("_GEN", recordNames, nextGeneratedNameID);
+    return resolveKeywordConflict("_GEN", nextGeneratedNameIDs);
 
   // Check that the name is valid as the semi-fast path.
   if (llvm::all_of(name, isValidVerilogCharacter) &&
       isValidVerilogCharacterFirst(name.front()))
-    return resolveKeywordConflict(name, recordNames, nextGeneratedNameID);
+    return resolveKeywordConflict(name, nextGeneratedNameIDs);
 
   // The name consists of at least one invalid character.  Escape it.
   SmallString<16> tmpName;
@@ -144,7 +144,7 @@ StringRef circt::sv::legalizeName(StringRef name,
   }
 
   // Make sure the new valid name does not conflict with any existing names.
-  return resolveKeywordConflict(tmpName, recordNames, nextGeneratedNameID);
+  return resolveKeywordConflict(tmpName, nextGeneratedNameIDs);
 }
 
 /// Check if a name is valid for use in SV output by only containing characters

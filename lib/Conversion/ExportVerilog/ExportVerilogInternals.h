@@ -95,14 +95,14 @@ struct NameCollisionResolver {
   }
 
   /// Insert a string as an already-used name.
-  void insertUsedName(StringRef name) { usedNames.insert(name); }
+  void insertUsedName(StringRef name) {
+    nextGeneratedNameIDs.insert({name, 0});
+  }
 
 private:
-  /// Set of used names, to ensure uniqueness.
-  llvm::StringSet<> usedNames;
-
-  /// Numeric suffix used as uniquification agent when resolving conflicts.
-  size_t nextGeneratedNameID = 0;
+  /// A map from used names to numeric suffix used as uniquification agent when
+  /// resolving conflicts.
+  llvm::StringMap<size_t> nextGeneratedNameIDs;
 
   NameCollisionResolver(const NameCollisionResolver &) = delete;
   void operator=(const NameCollisionResolver &) = delete;
@@ -132,12 +132,9 @@ private:
   /// verilog keywords.
   DenseMap<StringAttr, StringAttr> renamedFieldNames;
 
-  /// This contains field names *after* the type legalization to avoid conflicts
-  /// of renamed field names.
-  llvm::StringSet<> usedFieldNames;
-
-  /// Numeric suffix used as uniquification agent when resolving conflicts.
-  size_t nextGeneratedNameID = 0;
+  /// A map from used names to numeric suffix used as uniquification agent when
+  /// resolving conflicts.
+  llvm::StringMap<size_t> nextGeneratedNameIDs;
 
   // Handle to the global name table.
   const GlobalNameTable &globalNames;
