@@ -4307,7 +4307,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
   ps.scopedBox(isZeroBit ? PP::neverbox : PP::ibox2, [&]() {
     if (!isZeroBit) {
       if (!word.empty())
-        ps << PPExtString(word); // TODO: maybe have it return this to be clear.
+        ps << PPExtString(word);
       auto extraIndent = word.empty() ? 0 : 1;
       ps.spaces(maxDeclNameWidth - word.size() + extraIndent);
     } else {
