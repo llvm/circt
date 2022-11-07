@@ -4530,7 +4530,6 @@ void ModuleEmitter::emitBind(BindOp op) {
         // If this is a real port we're printing, then it isn't the first
         // one. Any subsequent ones will need a comma.
         isFirst = false;
-        // os << "  ";
       } else {
         // We comment out zero width ports, so their presence and
         // initializer expressions are still emitted textually.
