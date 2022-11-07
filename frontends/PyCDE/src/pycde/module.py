@@ -438,6 +438,7 @@ def _module_base(cls,
 
     def __init__(self,
                  *args,
+                 instance_name: str = None,
                  appid: AppID = None,
                  partition: DesignPartition = None,
                  **kwargs):
@@ -486,9 +487,10 @@ def _module_base(cls,
           value = Value(backedge.result)
         inputs[name] = value
 
-      instance_name = cls.__name__
-      if "instance_name" in dir(self):
-        instance_name = self.instance_name
+      if instance_name is None:
+        instance_name = cls.__name__
+        if "instance_name" in dir(self):
+          instance_name = self.instance_name
       instance_name = _BlockContext.current().uniquify_symbol(instance_name)
       # TODO: This is a held Operation*. Add a level of indirection.
       self._instantiation = mod._pycde_mod.instantiate(instance_name,

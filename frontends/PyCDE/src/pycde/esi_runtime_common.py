@@ -9,8 +9,9 @@ import typing
 
 class Type:
 
-  def __init__(self, type_id: typing.Optional[int] = None):
+  def __init__(self, width, type_id: typing.Optional[int] = None):
     self.type_id = type_id
+    self.width = width
 
   def is_valid(self, obj) -> bool:
     """Is a Python object compatible with HW type."""
@@ -18,6 +19,9 @@ class Type:
 
 
 class VoidType(Type):
+
+  def __init__(self, type_id: typing.Optional[int] = None):
+    super().__init__(0, type_id)
 
   def is_valid(self, obj) -> bool:
     return obj is None
@@ -29,8 +33,7 @@ class IntType(Type):
                width: int,
                signed: bool,
                type_id: typing.Optional[int] = None):
-    super().__init__(type_id)
-    self.width = width
+    super().__init__(width, type_id)
     self.signed = signed
 
   def is_valid(self, obj) -> bool:
@@ -50,15 +53,16 @@ class IntType(Type):
 class StructType(Type):
 
   def __init__(self,
-               fields: typing.Dict[str, Type],
+               fields: typing.List[typing.Tuple[str, Type]],
                type_id: typing.Optional[int] = None):
-    super().__init__(type_id)
     self.fields = fields
+    width = sum([ftype.width for (_, ftype) in self.fields])
+    super().__init__(width, type_id)
 
   def is_valid(self, obj) -> bool:
     fields_count = 0
     if isinstance(obj, dict):
-      for (fname, ftype) in self.fields.items():
+      for (fname, ftype) in self.fields:
         if fname not in obj:
           return False
         if not ftype.is_valid(obj[fname]):
@@ -245,7 +249,7 @@ class _CosimPort:
     def read(self, capnp_resp) -> int:
       capnp_msg = capnp_resp.as_struct(self.capnp_type)
       ret = {}
-      for (fname, _) in self.esi_type.fields.items():
+      for (fname, _) in self.esi_type.fields:
         if hasattr(capnp_msg, fname):
           ret[fname] = getattr(capnp_msg, fname)
       return ret

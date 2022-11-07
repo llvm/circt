@@ -47,7 +47,7 @@ class System:
   __slots__ = [
       "mod", "top_modules", "name", "passed", "_old_system_token", "_op_cache",
       "_generate_queue", "output_directory", "files", "mod_files", "copy_files",
-      "_instance_roots", "_placedb"
+      "copy_runtime_files", "_instance_roots", "_placedb"
   ]
 
   def __init__(self,
@@ -76,6 +76,7 @@ class System:
     self.mod_files: Set[os.PathLike] = set()
     # Aux files to copy into dst dir.
     self.copy_files: Set[os.PathLike] = set()
+    self.copy_runtime_files: Set[os.PathLike] = set()
 
     if output_directory is None:
       output_directory = os.path.join(os.getcwd(), self.name)
@@ -86,6 +87,9 @@ class System:
 
   def add_aux_file(self, filename: os.PathLike):
     self.copy_files.add(filename)
+
+  def add_runtime_file(self, filename: os.PathLike):
+    self.copy_runtime_files.add(filename)
 
   def _get_ip(self):
     return ir.InsertionPoint(self.mod.body)
@@ -321,13 +325,21 @@ class System:
     """Build an ESI runtime API."""
     if lang != "python":
       raise ValueError(f"Language '{lang}' not supported")
+
     services_file = (self.output_directory / "services.json")
     if not services_file.exists():
       raise FileNotFoundError("Could not locate ESI services description. " +
                               "Have you emitted the outputs?")
 
+    api_output_dir = self.output_directory / "esi_rt"
     b = PythonApiBuilder(services_file.open().read())
-    b.build(self.name, self.output_directory)
+    b.build(self.name, api_output_dir)
+
+    # Copy in the specified files
+    for fname in self.copy_runtime_files:
+      dest = pathlib.Path(api_output_dir) / os.path.basename(fname)
+      shutil.copy(fname, dest)
+      self.files.add(dest)
 
 
 class _OpCache:

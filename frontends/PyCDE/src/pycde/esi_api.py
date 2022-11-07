@@ -113,9 +113,8 @@ class PythonApiBuilder(SoftwareApiBuilder):
   def __init__(self, services_json: str):
     super().__init__(services_json)
 
-  def build(self, system_name: str, output_dir: pathlib.Path):
+  def build(self, system_name: str, libdir: pathlib.Path):
     """Emit a Python ESI runtime library into 'output_dir'."""
-    libdir = output_dir / "esi_rt"
     if not libdir.exists():
       libdir.mkdir()
 
@@ -152,10 +151,10 @@ class PythonApiBuilder(SoftwareApiBuilder):
       elif dialect == "hw":
         if mn == "struct":
           fields = [
-              f"'{x['name']}': {py_type(x['type'])}" for x in type["fields"]
+              f"('{x['name']}', {py_type(x['type'])})" for x in type["fields"]
           ]
           fields_str = ", ".join(fields)
-          return "StructType({" + fields_str + "})"
+          return "StructType([" + fields_str + "])"
 
       assert False, "unimplemented type"
 
