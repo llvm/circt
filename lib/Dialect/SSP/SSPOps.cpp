@@ -289,7 +289,7 @@ OperationOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 LinkedOperatorTypeAttr OperationOp::getLinkedOperatorTypeAttr() {
   if (ArrayAttr properties = getPropertiesAttr()) {
-    auto it = llvm::find_if(properties, [](Attribute a) {
+    const auto *it = llvm::find_if(properties, [](Attribute a) {
       return a.isa<LinkedOperatorTypeAttr>();
     });
     if (it != properties.end())
