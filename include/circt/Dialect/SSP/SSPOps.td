@@ -104,6 +104,8 @@ def OperatorLibraryOp : SSPOp<"library",
   let assemblyFormat = "($sym_name^)? $body attr-dict";
   let regions = (region SizedRegion<1>:$body);
 
+  let hasVerifier = true;
+
   let extraClassDeclaration = [{
     // OpAsmOpInterface
     static ::llvm::StringRef getDefaultDialect() { return "ssp"; }

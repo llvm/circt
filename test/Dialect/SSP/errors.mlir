@@ -1,5 +1,10 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
+// expected-error @+1 {{outside of 'ssp.instance' must be named}}
+ssp.library {}
+
+// -----
+
 // expected-error @+1 {{must contain exactly one 'library' op and one 'graph' op}}
 ssp.instance "containers_empty" of "Problem" {}
 
@@ -9,6 +14,14 @@ ssp.instance "containers_empty" of "Problem" {}
 ssp.instance "containers_wrong_order" of "Problem" {
   graph {}
   library {}
+}
+
+// -----
+
+ssp.instance "named_internal_library" of "Problem" {
+  // expected-error @+1 {{in 'ssp.instance' cannot be named}}
+  library @myLibrary {}
+  graph {}
 }
 
 // -----
@@ -71,5 +84,16 @@ ssp.instance "linked_opr_invalid" of "Problem" {
   graph {
     // expected-error @+1 {{Linked operator type property references invalid operator type: @InvalidOpr}}
     operation<@InvalidOpr>()
+  }
+}
+
+// -----
+
+ssp.library @standalone {}
+ssp.instance "standalone_opr_invalid" of "Problem" {
+  library {}
+  graph {
+    // expected-error @+1 {{Linked operator type property references invalid operator type: @standalone::@InvalidOpr}}
+    operation<@standalone::@InvalidOpr>()
   }
 }

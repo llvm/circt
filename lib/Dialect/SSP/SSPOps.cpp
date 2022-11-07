@@ -49,6 +49,20 @@ DependenceGraphOp InstanceOp::getDependenceGraph() {
 }
 
 //===----------------------------------------------------------------------===//
+// OperatorLibraryOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult OperatorLibraryOp::verify() {
+  bool isInInstance = isa_and_nonnull<InstanceOp>((*this)->getParentOp());
+  bool hasSymbol = static_cast<bool>(getSymNameAttr());
+  if (isInInstance && hasSymbol)
+    return emitOpError() << "in 'ssp.instance' cannot be named";
+  if (!isInInstance && !hasSymbol)
+    return emitOpError() << "outside of 'ssp.instance' must be named";
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // OperationOp
 //===----------------------------------------------------------------------===//
 
