@@ -2891,12 +2891,12 @@ private:
                             SmallPtrSetImpl<Operation *> &ops,
                             bool isConcurrent);
   template <typename Op>
-  LogicalResult emitImmediateAssertion(Op op, StringRef opName);
+  LogicalResult emitImmediateAssertion(Op op, PPExtString opName);
   LogicalResult visitSV(AssertOp op);
   LogicalResult visitSV(AssumeOp op);
   LogicalResult visitSV(CoverOp op);
   template <typename Op>
-  LogicalResult emitConcurrentAssertion(Op op, StringRef opName);
+  LogicalResult emitConcurrentAssertion(Op op, PPExtString opName);
   LogicalResult visitSV(AssertConcurrentOp op);
   LogicalResult visitSV(AssumeConcurrentOp op);
   LogicalResult visitSV(CoverConcurrentOp op);
@@ -3481,7 +3481,7 @@ void StmtEmitter::emitAssertionMessage(StringAttr message, ValueRange args,
 }
 
 template <typename Op>
-LogicalResult StmtEmitter::emitImmediateAssertion(Op op, StringRef opName) {
+LogicalResult StmtEmitter::emitImmediateAssertion(Op op, PPExtString opName) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
@@ -3489,9 +3489,9 @@ LogicalResult StmtEmitter::emitImmediateAssertion(Op op, StringRef opName) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   ps.scopedBox(PP::ibox2, [&]() {
-    emitAssertionLabel(op, opName);
+    emitAssertionLabel(op, opName.str);
     ps.scopedBox(PP::cbox0, [&]() {
-      ps << opName; // TODO: PPExtString ?
+      ps << opName;
       switch (op.getDefer()) {
       case DeferAssert::Immediate:
         break;
@@ -3516,19 +3516,19 @@ LogicalResult StmtEmitter::emitImmediateAssertion(Op op, StringRef opName) {
 }
 
 LogicalResult StmtEmitter::visitSV(AssertOp op) {
-  return emitImmediateAssertion(op, "assert");
+  return emitImmediateAssertion(op, PPExtString("assert"));
 }
 
 LogicalResult StmtEmitter::visitSV(AssumeOp op) {
-  return emitImmediateAssertion(op, "assume");
+  return emitImmediateAssertion(op, PPExtString("assume"));
 }
 
 LogicalResult StmtEmitter::visitSV(CoverOp op) {
-  return emitImmediateAssertion(op, "cover");
+  return emitImmediateAssertion(op, PPExtString("cover"));
 }
 
 template <typename Op>
-LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, StringRef opName) {
+LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, PPExtString opName) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
@@ -3536,7 +3536,7 @@ LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, StringRef opName) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   ps.scopedBox(PP::ibox2, [&]() {
-    emitAssertionLabel(op, opName);
+    emitAssertionLabel(op, opName.str);
     ps.scopedBox(PP::cbox0, [&]() {
       ps << opName << PP::nbsp << "property (";
       ps.scopedBox(PP::ibox0, [&]() {
@@ -3557,15 +3557,15 @@ LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, StringRef opName) {
 }
 
 LogicalResult StmtEmitter::visitSV(AssertConcurrentOp op) {
-  return emitConcurrentAssertion(op, "assert");
+  return emitConcurrentAssertion(op, PPExtString("assert"));
 }
 
 LogicalResult StmtEmitter::visitSV(AssumeConcurrentOp op) {
-  return emitConcurrentAssertion(op, "assume");
+  return emitConcurrentAssertion(op, PPExtString("assume"));
 }
 
 LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
-  return emitConcurrentAssertion(op, "cover");
+  return emitConcurrentAssertion(op, PPExtString("cover"));
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
