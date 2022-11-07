@@ -93,9 +93,10 @@ void loadInstanceProperties(ProblemT &prob, ArrayAttr props) {
   }
 }
 
-/// Load the operator type represented by \p oprOp into \p prob, and attempt to
-/// set its properties from the given attribute classes. The template
-/// instantiation fails if properties are incompatible with \p ProblemT.
+/// Load the operator type represented by \p oprOp into \p prob, attempt to set
+/// its properties from the given attribute classes, and return the unique name
+/// under which it was registered. The template instantiation fails if
+/// properties are incompatible with \p ProblemT.
 ///
 /// Example: Call this as follows to load an operator type for the
 /// `circt::scheduling::SharedOperatorsProblem`:
@@ -105,18 +106,33 @@ void loadInstanceProperties(ProblemT &prob, ArrayAttr props) {
 ///                                                                  oprOp);
 /// ```
 template <typename ProblemT, typename... OperatorTypePropertyTs>
-void loadOperatorType(ProblemT &prob, OperatorTypeOp oprOp) {
+OperatorType loadOperatorType(ProblemT &prob, OperatorTypeOp oprOp) {
   OperatorType opr = oprOp.getNameAttr();
-  prob.insertOperatorType(opr);
-  loadOperatorTypeProperties<ProblemT, OperatorTypePropertyTs...>(
-      prob, opr, oprOp.getPropertiesAttr());
+  StringRef prefix = opr.getValue();
+  MLIRContext *context = opr.getContext();
+
+  // Find a name for the operator type that is unique in the context of the
+  // given problem instance.
+  unsigned i = 0;
+  do {
+    if (!prob.hasOperatorType(opr)) {
+      prob.insertOperatorType(opr);
+      loadOperatorTypeProperties<ProblemT, OperatorTypePropertyTs...>(
+          prob, opr, oprOp.getPropertiesAttr());
+      return opr;
+    }
+    opr = StringAttr::get(context, prefix + Twine('_') + Twine(i));
+    ++i;
+  } while (i < 128);
+  llvm_unreachable("Could not find unique operator type name");
 }
 
-/// Load the operator type represented by \p oprOp into \p prob, and attempt to
-/// set its properties from the given attribute classes. The attribute tuple is
-/// used solely for grouping/inferring the template parameter pack. The tuple
-/// elements may therefore be unitialized objects. The template instantiation
-/// fails if properties are incompatible with \p ProblemT.
+/// Load the operator type represented by \p oprOp into \p prob, attempt to set
+/// its properties from the given attribute classes, and return the unique name
+/// under which it was registered. The attribute tuple is used solely for
+/// grouping/inferring the template parameter pack. The tuple elements may
+/// therefore be unitialized objects. The template instantiation fails if
+/// properties are incompatible with \p ProblemT.
 ///
 /// Example: Call this as follows to load an operator type for the
 /// `circt::scheduling::SharedOperatorsProblem`:
@@ -125,9 +141,9 @@ void loadOperatorType(ProblemT &prob, OperatorTypeOp oprOp) {
 /// loadOperatorType(prob, oprOp, std::make_tuple(LatencyAttr(), LimitAttr()));
 /// ```
 template <typename ProblemT, typename... OperatorTypePropertyTs>
-void loadOperatorType(ProblemT &prob, OperatorTypeOp oprOp,
-                      std::tuple<OperatorTypePropertyTs...> oprProps) {
-  loadOperatorType<ProblemT, OperatorTypePropertyTs...>(prob, oprOp);
+OperatorType loadOperatorType(ProblemT &prob, OperatorTypeOp oprOp,
+                              std::tuple<OperatorTypePropertyTs...> oprProps) {
+  return loadOperatorType<ProblemT, OperatorTypePropertyTs...>(prob, oprOp);
 }
 
 /// Construct an instance of \p ProblemT from \p instOp, and attempt to set
@@ -137,10 +153,8 @@ void loadOperatorType(ProblemT &prob, OperatorTypeOp oprOp,
 /// fails if properties are incompatible with \p ProblemT.
 ///
 /// Operations may link to operator types in standalone libraries outside of the
-/// current instance. Note that the origin of an operator type is not preserved
-/// in the problem instance, hence `@Lib1::@Foo` and `@Lib2::@Foo` will be
-/// merged into the same operator type "Foo", causing undefined behavior.
-/// TODO: Detect and report this situation.
+/// current instance, but the origin of an operator type will not be preserved
+/// in the problem instance.
 ///
 /// Example: To load an instance of the `circt::scheduling::CyclicProblem` with
 /// all its input and solution properties, call this as follows:
@@ -165,10 +179,15 @@ ProblemT loadProblem(InstanceOp instOp,
   loadInstanceProperties<ProblemT, InstancePropertyTs...>(
       prob, instOp.getPropertiesAttr());
 
-  // Register operator types in the instance's library.
+  // Register all operator types in the instance's library.
   instOp.getOperatorLibrary().walk([&](OperatorTypeOp oprOp) {
-    loadOperatorType<ProblemT, OperatorTypePropertyTs...>(prob, oprOp);
+    // The library's symbol table ensures that all names are unique.
+    (void)loadOperatorType<ProblemT, OperatorTypePropertyTs...>(prob, oprOp);
   });
+
+  // Keep track of operator types in standalone libraries, which may have to be
+  // renamed to prevent conflicts.
+  SmallDenseMap<Operation *, OperatorType> externalOperatorTypes;
 
   // Register all operations first, in order to retain their original order.
   auto graphOp = instOp.getDependenceGraph();
@@ -177,7 +196,7 @@ ProblemT loadProblem(InstanceOp instOp,
     loadOperationProperties<ProblemT, OperationPropertyTs...>(
         prob, opOp, opOp.getPropertiesAttr());
 
-    // Resolve and register operator types in standalone libraries.
+    // If set, ensure that the linked operator type is valid.
     if (auto linkedOpr = opOp.getLinkedOperatorTypeAttr()) {
       SymbolRefAttr oprRef = linkedOpr.getValue();
       if (oprRef.isa<FlatSymbolRefAttr>())
@@ -185,10 +204,17 @@ ProblemT loadProblem(InstanceOp instOp,
         // were already registered.
         return;
 
-      // The validity of the reference is checked by the verifier.
+      // Resolve nested reference (was checked by the verifier).
       auto oprOp = cast<OperatorTypeOp>(
           SymbolTable::lookupNearestSymbolFrom(instOp, oprRef));
-      loadOperatorType<ProblemT, OperatorTypePropertyTs...>(prob, oprOp);
+
+      // Lookup/load and link the operator type.
+      auto &extOpr = externalOperatorTypes[oprOp];
+      if (!extOpr) {
+        extOpr =
+            loadOperatorType<ProblemT, OperatorTypePropertyTs...>(prob, oprOp);
+      }
+      prob.setLinkedOperatorType(opOp, extOpr);
     }
   });
 
