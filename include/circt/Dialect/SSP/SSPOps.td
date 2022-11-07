@@ -95,9 +95,9 @@ def OperatorLibraryOp : SSPOp<"library",
     architecture/IR (onto which the source graph is scheduled), represented by
     the individual `OperatorTypeOp`s.
     
-    This operation may be used outside of an `InstanceOp`. An optional name
-    symbol can be set to allow qualified references to the contained
-    `OperatorTypeOp`s.
+    This operation may be used outside of an `InstanceOp`. Then, a name symbol
+    must be set to allow references to the contained `OperatorTypeOp`s. Operator
+    libraries inside an `InstanceOp` must not be named.
   }];
   
   let arguments = (ins OptionalAttr<SymbolNameAttr>:$sym_name);
@@ -196,7 +196,10 @@ def OperationOp : SSPOp<"operation",
     The `linkedOperatorType` property in the root `Problem` class is central to
     the problem models, because it links operations to their properties in the
     target IR. Therefore, the referenced operator type symbol is parsed/printed
-    right after the operation keyword in the custom assembly syntax.
+    right after the operation keyword in the custom assembly syntax. Flat symbol
+    references are resolved by name in the surrounding instance's operator
+    library. Nested references can point to arbitrary operator libraries outside
+    of the current instance.
 
     **Examples**
     ```mlir
@@ -211,6 +214,9 @@ def OperationOp : SSPOp<"operation",
     
     // dependence properties
     operation<@Barrier>(%2 [dist<1>], %5#1, @store_A [dist<3>])
+
+    // operator type in standalone library
+    %7 = operation<@MathLib::@Sqrt>(%6)
     ```
   }];
 

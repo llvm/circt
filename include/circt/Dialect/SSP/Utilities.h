@@ -136,6 +136,12 @@ void loadOperatorType(ProblemT &prob, OperatorTypeOp oprOp,
 /// elements may therefore be unitialized objects. The template instantiation
 /// fails if properties are incompatible with \p ProblemT.
 ///
+/// Operations may link to operator types in standalone libraries outside of the
+/// current instance. Note that the origin of an operator type is not preserved
+/// in the problem instance, hence `@Lib1::@Foo` and `@Lib2::@Foo` will be
+/// merged into the same operator type "Foo", causing undefined behavior.
+/// TODO: Detect and report this situation.
+///
 /// Example: To load an instance of the `circt::scheduling::CyclicProblem` with
 /// all its input and solution properties, call this as follows:
 ///
