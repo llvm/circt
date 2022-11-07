@@ -49,7 +49,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   void runOnOperation() override {
     dataFlowClasses = llvm::EquivalenceClasses<Value, ValueComparator>();
-    hw::InstanceGraphBase &instanceGraph = getAnalysis<InstanceGraph>();
+    InstanceGraph &instanceGraph = getAnalysis<InstanceGraph>();
     SmallVector<RefResolveOp> resolveOps;
     // The dataflow function, that propagates the reachable RefSendOp across
     // RefType Ops.
@@ -301,7 +301,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   // Propagate the reachable RefSendOp across modules.
   LogicalResult handleInstanceOp(InstanceOp inst,
-                                 hw::InstanceGraphBase &instanceGraph) {
+                                 InstanceGraph &instanceGraph) {
     Operation *mod = instanceGraph.getReferencedModule(inst);
     if (auto extRefMod = dyn_cast<FExtModuleOp>(mod)) {
       // Extern modules can generate RefType ports, they have an attached
