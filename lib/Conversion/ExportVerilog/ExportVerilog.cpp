@@ -3727,7 +3727,8 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
   for (auto &elt : portInfo) {
-    maxNameLength = std::max(maxNameLength, elt.getName().size());
+    maxNameLength =
+        std::max(maxNameLength, getPortVerilogName(moduleOp, elt).size());
   }
 
   auto getWireForValue = [&](Value result) {
@@ -3784,8 +3785,9 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       os << "//";
     }
 
-    os << '.' << getPortVerilogName(moduleOp, elt);
-    os.indent(maxNameLength - elt.getName().size()) << " (";
+    auto portName = getPortVerilogName(moduleOp, elt);
+    os << '.' << portName;
+    os.indent(maxNameLength - portName.size()) << " (";
 
     // Emit the value as an expression.
     ops.clear();
