@@ -214,3 +214,38 @@ firrtl.circuit "UnusedPorts" {
     firrtl.connect %pinned_wmask, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+
+firrtl.circuit "UnusedMem" {
+  // CHECK-LABEL: firrtl.module public @UnusedMem(
+  firrtl.module public @UnusedMem(
+      in %clock: !firrtl.clock,
+      in %addr: !firrtl.uint<4>,
+      in %in_data: !firrtl.uint<42>) {
+
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+
+    // CHECK-NOT: firrtl.mem
+    %Memory_write = firrtl.mem Undefined
+      {
+        depth = 12 : i64,
+        name = "Memory",
+        portNames = ["read", "rw", "write", "pinned"],
+        readLatency = 0 : i32,
+        writeLatency = 1 : i32
+      } :
+        !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+
+    %write_addr = firrtl.subfield %Memory_write(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>) -> !firrtl.uint<4>
+    firrtl.connect %write_addr, %addr : !firrtl.uint<4>, !firrtl.uint<4>
+    %write_en = firrtl.subfield %Memory_write(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>) -> !firrtl.uint<1>
+    firrtl.connect %write_en, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    %write_clk = firrtl.subfield %Memory_write(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>) -> !firrtl.clock
+    firrtl.connect %write_clk, %clock : !firrtl.clock, !firrtl.clock
+    %write_data = firrtl.subfield %Memory_write(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>) -> !firrtl.uint<42>
+    firrtl.connect %write_data, %in_data : !firrtl.uint<42>, !firrtl.uint<42>
+    %write_mask = firrtl.subfield %Memory_write(4) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>) -> !firrtl.uint<1>
+    firrtl.connect %write_mask, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
