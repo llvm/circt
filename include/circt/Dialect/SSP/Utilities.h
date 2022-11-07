@@ -20,6 +20,7 @@
 #include "circt/Support/ValueMapper.h"
 
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/SymbolTable.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -92,6 +93,43 @@ void loadInstanceProperties(ProblemT &prob, ArrayAttr props) {
   }
 }
 
+/// Load the operator type represented by \p oprOp into \p prob, and attempt to
+/// set its properties from the given attribute classes. The template
+/// instantiation fails if properties are incompatible with \p ProblemT.
+///
+/// Example: Call this as follows to load an operator type for the
+/// `circt::scheduling::SharedOperatorsProblem`:
+///
+/// ```
+/// loadOperatorType<SharedOperatorsProblem, LatencyAttr, LimitAttr>(prob,
+///                                                                  oprOp);
+/// ```
+template <typename ProblemT, typename... OperatorTypePropertyTs>
+void loadOperatorType(ProblemT &prob, OperatorTypeOp oprOp) {
+  OperatorType opr = oprOp.getNameAttr();
+  prob.insertOperatorType(opr);
+  loadOperatorTypeProperties<ProblemT, OperatorTypePropertyTs...>(
+      prob, opr, oprOp.getPropertiesAttr());
+}
+
+/// Load the operator type represented by \p oprOp into \p prob, and attempt to
+/// set its properties from the given attribute classes. The attribute tuple is
+/// used solely for grouping/inferring the template parameter pack. The tuple
+/// elements may therefore be unitialized objects. The template instantiation
+/// fails if properties are incompatible with \p ProblemT.
+///
+/// Example: Call this as follows to load an operator type for the
+/// `circt::scheduling::SharedOperatorsProblem`:
+///
+/// ```
+/// loadOperatorType(prob, oprOp, std::make_tuple(LatencyAttr(), LimitAttr()));
+/// ```
+template <typename ProblemT, typename... OperatorTypePropertyTs>
+void loadOperatorType(ProblemT &prob, OperatorTypeOp oprOp,
+                      std::tuple<OperatorTypePropertyTs...> oprProps) {
+  loadOperatorType<ProblemT, OperatorTypePropertyTs...>(prob, oprOp);
+}
+
 /// Construct an instance of \p ProblemT from \p instOp, and attempt to set
 /// properties from the given attribute classes. The attribute tuples are used
 /// solely for grouping/inferring the template parameter packs. The tuple
@@ -121,11 +159,9 @@ ProblemT loadProblem(InstanceOp instOp,
   loadInstanceProperties<ProblemT, InstancePropertyTs...>(
       prob, instOp.getPropertiesAttr());
 
+  // Register operator types in the instance's library.
   instOp.getOperatorLibrary().walk([&](OperatorTypeOp oprOp) {
-    OperatorType opr = oprOp.getNameAttr();
-    prob.insertOperatorType(opr);
-    loadOperatorTypeProperties<ProblemT, OperatorTypePropertyTs...>(
-        prob, opr, oprOp.getPropertiesAttr());
+    loadOperatorType<ProblemT, OperatorTypePropertyTs...>(prob, oprOp);
   });
 
   // Register all operations first, in order to retain their original order.
@@ -134,6 +170,20 @@ ProblemT loadProblem(InstanceOp instOp,
     prob.insertOperation(opOp);
     loadOperationProperties<ProblemT, OperationPropertyTs...>(
         prob, opOp, opOp.getPropertiesAttr());
+
+    // Resolve and register operator types in standalone libraries.
+    if (auto linkedOpr = opOp.getLinkedOperatorTypeAttr()) {
+      SymbolRefAttr oprRef = linkedOpr.getValue();
+      if (oprRef.isa<FlatSymbolRefAttr>())
+        // FlatSymbolRefs point to the instance's library; these operator types
+        // were already registered.
+        return;
+
+      // The validity of the reference is checked by the verifier.
+      auto oprOp = cast<OperatorTypeOp>(
+          SymbolTable::lookupNearestSymbolFrom(instOp, oprRef));
+      loadOperatorType<ProblemT, OperatorTypePropertyTs...>(prob, oprOp);
+    }
   });
 
   // Then walk them again, and load auxiliary dependences as well as any
