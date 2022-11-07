@@ -1854,7 +1854,7 @@ struct WireToNode : public mlir::RewritePattern {
       return failure();
 
     // Check that the write dominates all reads
-    for (auto user : wire.getResult().getUsers())
+    for (auto *user : wire.getResult().getUsers())
       if (user != writer)
         if (user->isBeforeInBlock(writer))
           return failure();
