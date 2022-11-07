@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='calyx.component(materialize-calyx-to-fsm)' %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(calyx.component(materialize-calyx-to-fsm))' %s | FileCheck %s
 
 // CHECK: fsm.machine @control(%[[A_DONE:.*]]: i1, %[[B_DONE:.*]]: i1, %[[COND_DONE:.*]]: i1, %[[TOP_LEVEL_GO:.*]]: i1) -> (i1, i1, i1, i1) attributes {compiledGroups = [@A, @B, @cond], initialState = "[[FSM_ENTRY:.*]]"} {
 // CHECK-NEXT:   %[[C1:.*]] = hw.constant true

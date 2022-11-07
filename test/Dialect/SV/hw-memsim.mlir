@@ -1,8 +1,8 @@
 // RUN: circt-opt -hw-memory-sim %s | FileCheck %s --check-prefixes=CHECK,COMMON
-// RUN: circt-opt -pass-pipeline="hw-memory-sim{strip-mux-pragmas}" %s | FileCheck %s --check-prefix COMMON --implicit-check-not sv.attributes
-// RUN: circt-opt -pass-pipeline="hw-memory-sim{disable-mem-randomization}" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_MEM
-// RUN: circt-opt -pass-pipeline="hw-memory-sim{disable-reg-randomization}" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
-// RUN: circt-opt -pass-pipeline="hw-memory-sim{disable-mem-randomization disable-reg-randomization}" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG --implicit-check-not RANDOMIZE_MEM
+// RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{strip-mux-pragmas})" %s | FileCheck %s --check-prefix COMMON --implicit-check-not sv.attributes
+// RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-mem-randomization})" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_MEM
+// RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-reg-randomization})" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
+// RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-mem-randomization disable-reg-randomization})" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG --implicit-check-not RANDOMIZE_MEM
 
 hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "readUnderWrite", "writeUnderWrite", "writeClockIDs"]
 

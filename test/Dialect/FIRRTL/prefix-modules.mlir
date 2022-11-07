@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline="firrtl.circuit(firrtl-prefix-modules)" %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline="builtin.module(firrtl.circuit(firrtl-prefix-modules))" %s | FileCheck %s
 
 // Check that the circuit is updated when the main module is updated.
 // CHECK: firrtl.circuit "T_Top"

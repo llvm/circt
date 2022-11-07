@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-emit-omir{file=omir.json})' %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-emit-omir{file=omir.json}))' %s | FileCheck %s
 
 //===----------------------------------------------------------------------===//
 // Absence of any OMIR

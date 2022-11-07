@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-emit-metadata)' --verify-diagnostics --split-input-file %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-emit-metadata))' --verify-diagnostics --split-input-file %s
 
 //===----------------------------------------------------------------------===//
 // RetimeModules

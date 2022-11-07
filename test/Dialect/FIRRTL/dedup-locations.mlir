@@ -1,4 +1,4 @@
-// RUN: circt-opt -mlir-print-debuginfo -mlir-print-local-scope -pass-pipeline='firrtl.circuit(firrtl-dedup)' %s | FileCheck %s
+// RUN: circt-opt -mlir-print-debuginfo -mlir-print-local-scope -pass-pipeline='builtin.module(firrtl.circuit(firrtl-dedup))' %s | FileCheck %s
 
 firrtl.circuit "Test" {
 // CHECK-LABEL: @Dedup0()

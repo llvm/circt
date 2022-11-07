@@ -1,4 +1,4 @@
-// RUN: circt-opt -verify-diagnostics -pass-pipeline='firrtl.circuit(firrtl-inject-dut-hier)' --split-input-file %s
+// RUN: circt-opt -verify-diagnostics -pass-pipeline='builtin.module(firrtl.circuit(firrtl-inject-dut-hier))' --split-input-file %s
 
 // expected-error @+1 {{contained multiple 'sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation' annotations when at most one is allowed}}
 firrtl.circuit "MultipleHierarchyAnnotations" attributes {

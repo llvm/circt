@@ -1,4 +1,4 @@
-// RUN: circt-opt -allow-unregistered-dialect %s -mlir-print-debuginfo -mlir-print-local-scope -pass-pipeline='strip-debuginfo-with-pred{drop-suffix=txt}' | FileCheck %s
+// RUN: circt-opt -allow-unregistered-dialect %s -mlir-print-debuginfo -mlir-print-local-scope -pass-pipeline='builtin.module(strip-debuginfo-with-pred{drop-suffix=txt})' | FileCheck %s
 // This test verifies that debug locations are stripped.
 
 // CHECK-LABEL: func @inline_notation
