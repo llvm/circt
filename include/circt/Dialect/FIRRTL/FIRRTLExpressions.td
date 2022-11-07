@@ -168,7 +168,8 @@ def VectorCreateOp : FIRRTLOp<"vectorcreate"> {
   let summary = "Produce a vector value";
   let description = [{
     Create a vector from component values.  This is equivalent in terms of
-    flow to creating a node.
+    flow to creating a node. The first operand indicates 0-th element of
+    the result.
     ```
       %result = firrtl.vectorcreate %1, %2, %3 : !firrtl.vector<uint<8>, 3>
 
