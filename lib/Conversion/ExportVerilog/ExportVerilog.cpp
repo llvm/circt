@@ -4479,10 +4479,10 @@ void ModuleEmitter::emitBind(BindOp op) {
   Operation *childMod = inst.getReferencedModule(&state.symbolCache);
   auto childVerilogName = getVerilogModuleNameAttr(childMod);
 
-  // TODO: revisit!
   startStatement();
-  ps << "bind " << parentVerilogName.getValue() << PP::nbsp
-     << childVerilogName.getValue() << PP::nbsp << getSymOpName(inst) << " (";
+  ps << "bind " << PPExtString(parentVerilogName.getValue()) << PP::nbsp
+     << PPExtString(childVerilogName.getValue()) << PP::nbsp
+     << PPExtString(getSymOpName(inst)) << " (";
   bool isFirst = true; // True until we print a port.
   ps.scopedBox(PP::bbox2, [&]() {
     ModulePortInfo parentPortInfo = parentMod.getPorts();
@@ -4536,14 +4536,14 @@ void ModuleEmitter::emitBind(BindOp op) {
         ps << PP::neverbox << "//";
       }
 
-      ps << "." << elt.getName();
+      ps << "." << PPExtString(elt.getName());
       ps.nbsp(maxNameLength - elt.getName().size());
       ps << " (";
 
       // Emit the value as an expression.
       auto name = getNameRemotely(portVal, parentPortInfo, parentMod);
       assert(!name.empty() && "bind port connection must have a name");
-      ps << name << ")";
+      ps << PPExtString(name) << ")";
 
       if (isZeroWidth)
         ps << PP::end; // Close never-break group.
@@ -4617,11 +4617,10 @@ void ModuleEmitter::emitBindInterface(BindInterfaceOp op) {
   auto instantiator = instance->getParentOfType<HWModuleOp>().getName();
   auto *interface = op->getParentOfType<ModuleOp>().lookupSymbol(
       instance.getInterfaceType().getInterface());
-  // TODO:
   startStatement();
-  ps << "bind " << instantiator << " "
-     << cast<InterfaceOp>(*interface).getSymName() << " "
-     << getSymOpName(instance) << " (.*);" << PP::newline;
+  ps << "bind " << PPExtString(instantiator) << PP::nbsp
+     << PPExtString(cast<InterfaceOp>(*interface).getSymName()) << PP::nbsp
+     << PPExtString(getSymOpName(instance)) << " (.*);" << PP::newline;
   setPendingNewline();
 }
 
