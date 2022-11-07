@@ -2111,12 +2111,14 @@ bool foldUnusedPorts(PatternRewriter &rewriter, MemOp op) {
     portAnnotations.push_back(op.getPortAnnotation(i));
   }
 
-  auto newOp = rewriter.create<MemOp>(
-      op.getLoc(), resultTypes, op.getReadLatency(), op.getWriteLatency(),
-      op.getDepth(), op.getRuw(), rewriter.getStrArrayAttr(portNames),
-      op.getName(), op.getNameKind(), op.getAnnotations(),
-      rewriter.getArrayAttr(portAnnotations), op.getInnerSymAttr(),
-      op.getGroupIDAttr());
+  MemOp newOp;
+  if (!resultTypes.empty())
+    newOp = rewriter.create<MemOp>(
+        op.getLoc(), resultTypes, op.getReadLatency(), op.getWriteLatency(),
+        op.getDepth(), op.getRuw(), rewriter.getStrArrayAttr(portNames),
+        op.getName(), op.getNameKind(), op.getAnnotations(),
+        rewriter.getArrayAttr(portAnnotations), op.getInnerSymAttr(),
+        op.getGroupIDAttr());
 
   // Replace the dead ports with dummy wires.
   unsigned nextPort = 0;
