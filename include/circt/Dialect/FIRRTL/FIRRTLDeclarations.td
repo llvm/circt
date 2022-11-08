@@ -148,7 +148,7 @@ def MemOp : ReferableDeclOp<"mem"> {
 
   let hasVerifier = 1;
 
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
 
   let extraClassDeclaration = [{
     enum class PortKind { Read, Write, ReadWrite, Debug };
