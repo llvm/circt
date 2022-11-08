@@ -2138,7 +2138,7 @@ struct FoldUnusedPorts : public mlir::RewritePattern {
     }
 
     MemOp newOp;
-    if (resultTypes.size())
+    if (!resultTypes.empty())
       newOp = rewriter.create<MemOp>(
           mem.getLoc(), resultTypes, mem.getReadLatency(),
           mem.getWriteLatency(), mem.getDepth(), mem.getRuw(),
