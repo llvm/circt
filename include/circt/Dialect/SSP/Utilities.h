@@ -93,57 +93,25 @@ void loadInstanceProperties(ProblemT &prob, ArrayAttr props) {
   }
 }
 
-/// Load the operator type represented by \p oprOp into \p prob, attempt to set
-/// its properties from the given attribute classes, and return the unique name
-/// under which it was registered. The template instantiation fails if
-/// properties are incompatible with \p ProblemT.
-///
-/// Example: Call this as follows to load an operator type for the
-/// `circt::scheduling::SharedOperatorsProblem`:
-///
-/// ```
-/// loadOperatorType<SharedOperatorsProblem, LatencyAttr, LimitAttr>(prob,
-///                                                                  oprOp);
-/// ```
-template <typename ProblemT, typename... OperatorTypePropertyTs>
-OperatorType loadOperatorType(ProblemT &prob, OperatorTypeOp oprOp) {
-  OperatorType opr = oprOp.getNameAttr();
-  StringRef prefix = opr.getValue();
-  MLIRContext *context = opr.getContext();
-
-  // Find a name for the operator type that is unique in the context of the
-  // given problem instance.
-  unsigned i = 0;
-  do {
-    if (!prob.hasOperatorType(opr)) {
-      prob.insertOperatorType(opr);
-      loadOperatorTypeProperties<ProblemT, OperatorTypePropertyTs...>(
-          prob, opr, oprOp.getPropertiesAttr());
-      return opr;
-    }
-    opr = StringAttr::get(context, prefix + Twine('_') + Twine(i));
-    ++i;
-  } while (i < 128);
-  llvm_unreachable("Could not find unique operator type name");
-}
-
-/// Load the operator type represented by \p oprOp into \p prob, attempt to set
-/// its properties from the given attribute classes, and return the unique name
-/// under which it was registered. The attribute tuple is used solely for
-/// grouping/inferring the template parameter pack. The tuple elements may
-/// therefore be unitialized objects. The template instantiation fails if
-/// properties are incompatible with \p ProblemT.
-///
-/// Example: Call this as follows to load an operator type for the
-/// `circt::scheduling::SharedOperatorsProblem`:
-///
-/// ```
-/// loadOperatorType(prob, oprOp, std::make_tuple(LatencyAttr(), LimitAttr()));
+/// Load the operator type represented by \p oprOp into \p prob under a unique
+/// name informed by \p oprIds, and attempt to set its properties from the
+/// given attribute classes. The registered name is returned. The template
+/// instantiation fails if properties are incompatible with \p ProblemT.
 /// ```
 template <typename ProblemT, typename... OperatorTypePropertyTs>
 OperatorType loadOperatorType(ProblemT &prob, OperatorTypeOp oprOp,
-                              std::tuple<OperatorTypePropertyTs...> oprProps) {
-  return loadOperatorType<ProblemT, OperatorTypePropertyTs...>(prob, oprOp);
+                              SmallDenseMap<StringAttr, unsigned> &oprIds) {
+  OperatorType opr = oprOp.getNameAttr();
+  unsigned &id = oprIds[opr];
+  if (id > 0)
+    opr = StringAttr::get(opr.getContext(),
+                          opr.getValue() + Twine('_') + Twine(id));
+  ++id;
+  assert(!prob.hasOperatorType(opr));
+  prob.insertOperatorType(opr);
+  loadOperatorTypeProperties<ProblemT, OperatorTypePropertyTs...>(
+      prob, opr, oprOp.getPropertiesAttr());
+  return opr;
 }
 
 /// Construct an instance of \p ProblemT from \p instOp, and attempt to set
@@ -154,7 +122,8 @@ OperatorType loadOperatorType(ProblemT &prob, OperatorTypeOp oprOp,
 ///
 /// Operations may link to operator types in standalone libraries outside of the
 /// current instance, but the origin of an operator type will not be preserved
-/// in the problem instance.
+/// in the problem instance. Such external operator types will be automatically
+/// renamed in the returned instance to prevent conflicts.
 ///
 /// Example: To load an instance of the `circt::scheduling::CyclicProblem` with
 /// all its input and solution properties, call this as follows:
@@ -179,15 +148,20 @@ ProblemT loadProblem(InstanceOp instOp,
   loadInstanceProperties<ProblemT, InstancePropertyTs...>(
       prob, instOp.getPropertiesAttr());
 
+  // Use IDs to disambiguate operator types with the same name defined in
+  // different libraries.
+  SmallDenseMap<OperatorType, unsigned> operatorTypeIds;
+  // Map `OperatorTypeOp`s in standalone libraries to their (possibly uniqued)
+  // name in the problem instance.
+  SmallDenseMap<Operation *, OperatorType> externalOperatorTypes;
+
   // Register all operator types in the instance's library.
   instOp.getOperatorLibrary().walk([&](OperatorTypeOp oprOp) {
-    // The library's symbol table ensures that all names are unique.
-    (void)loadOperatorType<ProblemT, OperatorTypePropertyTs...>(prob, oprOp);
+    auto opr = loadOperatorType<ProblemT, OperatorTypePropertyTs...>(
+        prob, oprOp, operatorTypeIds);
+    // The library's symbol table ensures that no renaming is required.
+    assert(opr == oprOp.getNameAttr());
   });
-
-  // Keep track of operator types in standalone libraries, which may have to be
-  // renamed to prevent conflicts.
-  SmallDenseMap<Operation *, OperatorType> externalOperatorTypes;
 
   // Register all operations first, in order to retain their original order.
   auto graphOp = instOp.getDependenceGraph();
@@ -196,7 +170,7 @@ ProblemT loadProblem(InstanceOp instOp,
     loadOperationProperties<ProblemT, OperationPropertyTs...>(
         prob, opOp, opOp.getPropertiesAttr());
 
-    // If set, ensure that the linked operator type is valid.
+    // If set, ensure that the linked operator type has been loaded.
     if (auto linkedOpr = opOp.getLinkedOperatorTypeAttr()) {
       SymbolRefAttr oprRef = linkedOpr.getValue();
       if (oprRef.isa<FlatSymbolRefAttr>())
@@ -211,8 +185,8 @@ ProblemT loadProblem(InstanceOp instOp,
       // Lookup/load and link the operator type.
       auto &extOpr = externalOperatorTypes[oprOp];
       if (!extOpr) {
-        extOpr =
-            loadOperatorType<ProblemT, OperatorTypePropertyTs...>(prob, oprOp);
+        extOpr = loadOperatorType<ProblemT, OperatorTypePropertyTs...>(
+            prob, oprOp, operatorTypeIds);
       }
       prob.setLinkedOperatorType(opOp, extOpr);
     }

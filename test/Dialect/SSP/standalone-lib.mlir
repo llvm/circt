@@ -31,13 +31,13 @@
 // INFRA:   library {
 // INFRA:     operator_type @Implicit [latency<0>]
 // INFRA:     operator_type @MemPort [latency<1>, limit<3>]
-// INFRA:     operator_type @MemPort_0 [latency<1>, limit<1>]
-// INFRA:     operator_type @MemPort_1 [latency<1>, limit<2>]
+// INFRA:     operator_type @MemPort_1 [latency<1>, limit<1>]
+// INFRA:     operator_type @MemPort_2 [latency<1>, limit<2>]
 // INFRA:     operator_type @Add [latency<1>]
 // INFRA:   }
 // INFRA:   graph {
-// INFRA:     %[[op_0:.*]] = operation<@MemPort_0> @load_A(@store_A [dist<1>]) [t<2>]
-// INFRA:     %[[op_1:.*]] = operation<@MemPort_1> @load_B() [t<0>]
+// INFRA:     %[[op_0:.*]] = operation<@MemPort_1> @load_A(@store_A [dist<1>]) [t<2>]
+// INFRA:     %[[op_1:.*]] = operation<@MemPort_2> @load_B() [t<0>]
 // INFRA:     %[[op_2:.*]] = operation<@Add> @add(%[[op_0]], %[[op_1]]) [t<3>]
 // INFRA:     operation<@MemPort> @store_A(%[[op_2]]) [t<4>]
 // INFRA:     operation<@Implicit> @last(@store_A) [t<5>]
