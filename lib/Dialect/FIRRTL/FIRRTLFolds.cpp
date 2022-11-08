@@ -1841,11 +1841,41 @@ struct SubfieldAggOneShot : public AggOneShot {
   SubfieldAggOneShot(MLIRContext *context)
       : AggOneShot(SubfieldOp::getOperationName(), 0, context) {}
 };
+
+struct WireToNode : public mlir::RewritePattern {
+  WireToNode(MLIRContext *context)
+      : RewritePattern(WireOp::getOperationName(), 0, context) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    WireOp wire = cast<WireOp>(op);
+    StrictConnectOp writer = getSingleConnectUserOf(wire.getResult());
+    if (!writer)
+      return failure();
+
+    // Check that the write dominates all reads
+    for (auto *user : wire.getResult().getUsers())
+      if (user != writer)
+        if (user->isBeforeInBlock(writer))
+          return failure();
+
+    rewriter.setInsertionPointAfter(writer);
+    auto srcValue = writer.getSrc();
+    rewriter.eraseOp(writer);
+    auto node = rewriter.createOrFold<NodeOp>(
+        wire.getLoc(), srcValue, wire.getName(), wire.getNameKind(),
+        wire.getAnnotations(),
+        wire.getInnerSym() ? *wire.getInnerSym() : InnerSymAttr());
+    rewriter.replaceOp(wire, node);
+    return success();
+  }
+};
+
 } // namespace
 
 void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
-  results.insert<WireAggOneShot>(context);
+  results.insert<WireAggOneShot, WireToNode>(context);
 }
 
 void SubindexOp::getCanonicalizationPatterns(RewritePatternSet &results,
