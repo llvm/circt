@@ -239,14 +239,14 @@ hw.module private @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (
   // CHECK-NEXT: %6 = comb.extract %5 from 1 : (i33) -> i32
   // CHECK-NEXT: %7 = comb.mux bin %io_en, %io_d, %6 : i32
   // CHECK-NEXT: sv.always posedge %clock, posedge %reset  {
-  // CHECK-NEXT:   sv.if %reset { 
-  // CHECK-NEXT:     sv.passign %reg, %c0_i32 : i32 
-  // CHECK-NEXT:     sv.passign %reg3, %c1_i32 : i32 
-  // CHECK-NEXT:   } else { 
-  // CHECK-NEXT:     sv.if %io_en { 
-  // CHECK-NEXT:       sv.passign %reg, %io_d : i32 
-  // CHECK-NEXT:     } else { 
-  // CHECK-NEXT:       sv.passign %reg, %6 : i32 
+  // CHECK-NEXT:   sv.if %reset {
+  // CHECK-NEXT:     sv.passign %reg, %c0_i32 : i32
+  // CHECK-NEXT:     sv.passign %reg3, %c1_i32 : i32
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT:     sv.if %io_en {
+  // CHECK-NEXT:       sv.passign %reg, %io_d : i32
+  // CHECK-NEXT:     } else {
+  // CHECK-NEXT:       sv.passign %reg, %6 : i32
   // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
