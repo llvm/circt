@@ -13,7 +13,11 @@ from pycde.pycde_types import ChannelType, ClockType, PyCDEType, types
 
 import mlir.ir as ir
 
+from pathlib import Path
+import shutil
 from typing import List, Optional, Type
+
+__dir__ = Path(__file__).parent
 
 ToServer = InputChannel
 FromServer = OutputChannel
@@ -191,6 +195,21 @@ def CosimBSP(user_module):
                                 service_symbol=None,
                                 impl_type=ir.StringAttr.get("cosim"),
                                 inputs=[ports.clk.value, ports.rst.value])
+
+      System.current().add_packaging_step(top.package)
+
+    @staticmethod
+    def package(sys: System):
+      """Run the packaging to create a cosim package."""
+      # TODO: this only works in-tree. Make it work in packages as well.
+      build_dir = __dir__.parents[4]
+      bin_dir = build_dir / "bin"
+      lib_dir = build_dir / "lib"
+      hw_src = sys.hw_output_dir
+      shutil.copy(lib_dir / "libEsiCosimDpiServer.so", hw_src)
+      shutil.copy(bin_dir / "driver.cpp", hw_src)
+      shutil.copy(bin_dir / "driver.sv", hw_src)
+      # build_path = __dir__.parents[]
 
   return top
 
