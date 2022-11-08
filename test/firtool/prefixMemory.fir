@@ -13,6 +13,14 @@ circuit Foo : %[[
     "prefix":"prefix2_",
     "inclusive":true,
     "target":"~Foo|Baz"
+  },
+  {
+    "class": "firrtl.transforms.DontTouchAnnotation",
+    "target": "~Foo|Bar>mem"
+  },
+  {
+    "class": "firrtl.transforms.DontTouchAnnotation",
+    "target": "~Foo|Baz>mem"
   }
 ]]
   module Bar :

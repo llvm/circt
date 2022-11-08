@@ -49,7 +49,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   void runOnOperation() override {
     dataFlowClasses = llvm::EquivalenceClasses<Value, ValueComparator>();
-    auto &instanceGraph = getAnalysis<InstanceGraph>();
+    InstanceGraph &instanceGraph = getAnalysis<InstanceGraph>();
     SmallVector<RefResolveOp> resolveOps;
     // The dataflow function, that propagates the reachable RefSendOp across
     // RefType Ops.
@@ -123,7 +123,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
               }
             return success();
           })
-          .Case<InstanceOp>([&](auto inst) { return handleInstanceOp(inst); })
+          .Case<InstanceOp>(
+              [&](auto inst) { return handleInstanceOp(inst, instanceGraph); })
           .Case<FConnectLike>([&](FConnectLike connect) {
             // Ignore BaseType.
             if (!connect.getSrc().getType().isa<RefType>())
@@ -299,8 +300,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   }
 
   // Propagate the reachable RefSendOp across modules.
-  LogicalResult handleInstanceOp(InstanceOp inst) {
-    auto *mod = inst.getReferencedModule();
+  LogicalResult handleInstanceOp(InstanceOp inst,
+                                 InstanceGraph &instanceGraph) {
+    Operation *mod = instanceGraph.getReferencedModule(inst);
     if (auto extRefMod = dyn_cast<FExtModuleOp>(mod)) {
       // Extern modules can generate RefType ports, they have an attached
       // attribute which specifies the internal path into the extern module.
@@ -433,8 +435,13 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         // following path, that implies the path ends at this node, so copy the
         // xmrPathSuffix and end the path here.
         auto xmrIter = xmrPathSuffix.find(continueFrom.value());
-        if (xmrIter != xmrPathSuffix.end())
-          xmrPathSuffix[indx] = xmrIter->getSecond();
+        if (xmrIter != xmrPathSuffix.end()) {
+          SmallString<128> xmrSuffix = xmrIter->getSecond();
+          // The following assignment to the DenseMap can potentially reallocate
+          // the map, that might invalidate the `xmrIter`. So, copy the result
+          // to a temp, and then insert it back to the Map.
+          xmrPathSuffix[indx] = xmrSuffix;
+        }
         continueFrom = None;
       }
     }

@@ -1998,32 +1998,282 @@ struct FoldResetMux : public mlir::RewritePattern {
 void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results.insert<patterns::RegResetWithZeroReset,
-                 patterns::RegResetWithInvalidReset,
-                 patterns::RegResetWithInvalidResetValue, FoldResetMux>(
-      context);
+                 patterns::RegResetWithOneReset, FoldResetMux>(context);
 }
 
-LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
-  // If memory has known, but zero width, eliminate it.
-  if (op.getDataType().getBitWidthOrSentinel() != 0)
-    return failure();
-  // Make sure are users are safe to replace
-  for (auto port : op->getResults())
-    for (auto *user : port.getUsers())
-      if (!isa<SubfieldOp>(user))
-        return failure();
+// Returns true if the enable field of a port is set to false.
+static bool isPortDisabled(Value port) {
+  auto portTy = port.getType().cast<BundleType>();
+  auto enableIndex = portTy.getElementIndex("en");
+  assert(enableIndex && "missing enable flag on memory port");
 
-  // Annoyingly, there isn't a good replacement for the port as a whole, since
-  // they have an outer flip type.
-  for (auto port : op->getResults()) {
-    for (auto *user : llvm::make_early_inc_range(port.getUsers())) {
-      SubfieldOp sfop = cast<SubfieldOp>(user);
-      replaceOpWithNewOpAndCopyName<WireOp>(rewriter, sfop,
-                                            sfop.getResult().getType());
-    }
+  Value en = {};
+  for (auto *op : port.getUsers()) {
+    auto portAccess = cast<SubfieldOp>(op);
+    if (enableIndex != portAccess.getFieldIndex())
+      continue;
+    auto conn = getSingleConnectUserOf(portAccess);
+    if (!conn || en)
+      return false;
+    en = conn.getSrc();
   }
-  rewriter.eraseOp(op);
-  return success();
+  if (!en)
+    return false;
+
+  auto portConst = en.getDefiningOp<ConstantOp>();
+  if (!portConst)
+    return false;
+  return portConst.getValue().isZero();
+}
+
+// Returns true if the data output is unused.
+static bool isPortUnused(Value port, StringRef data) {
+  auto portTy = port.getType().cast<BundleType>();
+  auto fieldIndex = portTy.getElementIndex(data);
+  assert(fieldIndex && "missing enable flag on memory port");
+
+  for (auto *op : port.getUsers()) {
+    auto portAccess = cast<SubfieldOp>(op);
+    if (fieldIndex != portAccess.getFieldIndex())
+      continue;
+    if (!portAccess.use_empty())
+      return false;
+  }
+
+  return true;
+}
+
+namespace {
+// If memory has known, but zero width, eliminate it.
+struct FoldZeroWidthMemory : public mlir::RewritePattern {
+  FoldZeroWidthMemory(MLIRContext *context)
+      : RewritePattern(MemOp::getOperationName(), 0, context) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    MemOp mem = cast<MemOp>(op);
+    if (hasDontTouch(mem))
+      return failure();
+
+    if (mem.getDataType().getBitWidthOrSentinel() != 0)
+      return failure();
+
+    // Make sure are users are safe to replace
+    for (auto port : mem.getResults())
+      for (auto *user : port.getUsers())
+        if (!isa<SubfieldOp>(user))
+          return failure();
+
+    // Annoyingly, there isn't a good replacement for the port as a whole,
+    // since they have an outer flip type.
+    for (auto port : op->getResults()) {
+      for (auto *user : llvm::make_early_inc_range(port.getUsers())) {
+        SubfieldOp sfop = cast<SubfieldOp>(user);
+        replaceOpWithNewOpAndCopyName<WireOp>(rewriter, sfop,
+                                              sfop.getResult().getType());
+      }
+    }
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+// If memory has no write ports, eliminate it.
+struct FoldReadOrWriteOnlyMemory : public mlir::RewritePattern {
+  FoldReadOrWriteOnlyMemory(MLIRContext *context)
+      : RewritePattern(MemOp::getOperationName(), 0, context) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    MemOp mem = cast<MemOp>(op);
+    if (hasDontTouch(mem))
+      return failure();
+    bool isRead = false, isWritten = false;
+    for (unsigned i = 0; i < mem.getNumResults(); ++i) {
+      switch (mem.getPortKind(i)) {
+      case MemOp::PortKind::Read:
+        isRead = true;
+        if (isWritten)
+          return failure();
+        continue;
+      case MemOp::PortKind::Write:
+        isWritten = true;
+        if (isRead)
+          return failure();
+        continue;
+      case MemOp::PortKind::Debug:
+      case MemOp::PortKind::ReadWrite:
+        return failure();
+      }
+      llvm_unreachable("unknown port kind");
+    }
+    assert((!isWritten || !isRead) && "memory is in use");
+
+    for (auto port : mem.getResults()) {
+      auto dummyWire = rewriter.create<WireOp>(port.getLoc(), port.getType());
+      port.replaceAllUsesWith(dummyWire);
+    }
+
+    rewriter.eraseOp(op);
+    return success();
+    ;
+  }
+};
+
+// Eliminate the dead ports of memories.
+struct FoldUnusedPorts : public mlir::RewritePattern {
+  FoldUnusedPorts(MLIRContext *context)
+      : RewritePattern(MemOp::getOperationName(), 0, context) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    MemOp mem = cast<MemOp>(op);
+    if (hasDontTouch(mem))
+      return failure();
+    // Identify the dead and changed ports.
+    llvm::SmallBitVector deadPorts(mem.getNumResults());
+    for (auto [i, port] : llvm::enumerate(mem.getResults())) {
+      // Do not simplify annotated ports.
+      if (!mem.getPortAnnotation(i).empty())
+        continue;
+
+      // Skip debug ports.
+      auto kind = mem.getPortKind(i);
+      if (kind == MemOp::PortKind::Debug)
+        continue;
+
+      // If a port is disabled, always eliminate it.
+      if (isPortDisabled(port)) {
+        deadPorts.set(i);
+        continue;
+      }
+      // Eliminate read ports whose outputs are not used.
+      if (kind == MemOp::PortKind::Read && isPortUnused(port, "data")) {
+        deadPorts.set(i);
+        continue;
+      }
+    }
+    if (deadPorts.none())
+      return failure();
+
+    // Rebuild the new memory with the altered ports.
+    SmallVector<Type> resultTypes;
+    SmallVector<StringRef> portNames;
+    SmallVector<Attribute> portAnnotations;
+    for (auto [i, port] : llvm::enumerate(mem.getResults())) {
+      if (deadPorts[i])
+        continue;
+      resultTypes.push_back(port.getType());
+      portNames.push_back(mem.getPortName(i));
+      portAnnotations.push_back(mem.getPortAnnotation(i));
+    }
+
+    MemOp newOp;
+    if (!resultTypes.empty())
+      newOp = rewriter.create<MemOp>(
+          mem.getLoc(), resultTypes, mem.getReadLatency(),
+          mem.getWriteLatency(), mem.getDepth(), mem.getRuw(),
+          rewriter.getStrArrayAttr(portNames), mem.getName(), mem.getNameKind(),
+          mem.getAnnotations(), rewriter.getArrayAttr(portAnnotations),
+          mem.getInnerSymAttr(), mem.getGroupIDAttr());
+
+    // Replace the dead ports with dummy wires.
+    unsigned nextPort = 0;
+    for (auto [i, port] : llvm::enumerate(mem.getResults())) {
+      if (deadPorts[i]) {
+        auto dummyWire = rewriter.create<WireOp>(port.getLoc(), port.getType());
+        port.replaceAllUsesWith(dummyWire);
+      } else {
+        port.replaceAllUsesWith(newOp.getResult(nextPort++));
+      }
+    }
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+// Rewrite write-only read-write ports to write ports.
+struct FoldReadWritePorts : public mlir::RewritePattern {
+  FoldReadWritePorts(MLIRContext *context)
+      : RewritePattern(MemOp::getOperationName(), 0, context) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    MemOp mem = cast<MemOp>(op);
+    if (hasDontTouch(mem))
+      return failure();
+
+    // Identify read-write ports whose read end is unused.
+    llvm::SmallBitVector deadReads(mem.getNumResults());
+    for (auto [i, port] : llvm::enumerate(mem.getResults())) {
+      if (mem.getPortKind(i) != MemOp::PortKind::ReadWrite)
+        continue;
+      if (!mem.getPortAnnotation(i).empty())
+        continue;
+      if (isPortUnused(port, "rdata")) {
+        deadReads.set(i);
+        continue;
+      }
+    }
+    if (deadReads.none())
+      return failure();
+
+    SmallVector<Type> resultTypes;
+    SmallVector<StringRef> portNames;
+    SmallVector<Attribute> portAnnotations;
+    for (auto [i, port] : llvm::enumerate(mem.getResults())) {
+      if (deadReads[i])
+        resultTypes.push_back(
+            MemOp::getTypeForPort(mem.getDepth(), mem.getDataType(),
+                                  MemOp::PortKind::Write, mem.getMaskBits()));
+      else
+        resultTypes.push_back(port.getType());
+
+      portNames.push_back(mem.getPortName(i));
+      portAnnotations.push_back(mem.getPortAnnotation(i));
+    }
+
+    auto newOp = rewriter.create<MemOp>(
+        mem.getLoc(), resultTypes, mem.getReadLatency(), mem.getWriteLatency(),
+        mem.getDepth(), mem.getRuw(), rewriter.getStrArrayAttr(portNames),
+        mem.getName(), mem.getNameKind(), mem.getAnnotations(),
+        rewriter.getArrayAttr(portAnnotations), mem.getInnerSymAttr(),
+        mem.getGroupIDAttr());
+
+    for (unsigned i = 0, n = mem.getNumResults(); i < n; ++i) {
+      auto result = mem.getResult(i);
+      auto newResult = newOp.getResult(i);
+      if (deadReads[i]) {
+        // Create a wire to replace the old result. Wire the sub-fields of the
+        // old result to the relevant sub-fields of the write port.
+        auto wire = rewriter.create<WireOp>(result.getLoc(), result.getType());
+        result.replaceAllUsesWith(wire);
+
+        auto connect = [&](Value to, StringRef toName, Value from,
+                           StringRef fromName) {
+          auto toField = rewriter.create<SubfieldOp>(to.getLoc(), to, toName);
+          auto fromField =
+              rewriter.create<SubfieldOp>(from.getLoc(), from, fromName);
+          rewriter.create<StrictConnectOp>(result.getLoc(), toField, fromField);
+        };
+
+        connect(newResult, "addr", wire, "addr");
+        connect(newResult, "en", wire, "en");
+        connect(newResult, "clk", wire, "clk");
+        connect(newResult, "data", wire, "wdata");
+        connect(newResult, "mask", wire, "wmask");
+      } else {
+        result.replaceAllUsesWith(newResult);
+      }
+    }
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+} // namespace
+
+void MemOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                        MLIRContext *context) {
+  results.insert<FoldZeroWidthMemory, FoldReadOrWriteOnlyMemory,
+                 FoldReadWritePorts, FoldUnusedPorts>(context);
 }
 
 //===----------------------------------------------------------------------===//

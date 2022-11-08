@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_SSP_SSPOPS_H
 #define CIRCT_DIALECT_SSP_SSPOPS_H
 
+#include "circt/Dialect/SSP/SSPAttributes.h"
 #include "circt/Dialect/SSP/SSPDialect.h"
 
 #include "mlir/IR/OpImplementation.h"

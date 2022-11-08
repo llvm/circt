@@ -62,6 +62,10 @@ circuit Foo : %[[
         ]
       }
     ]
+  },
+  {
+    "class": "firrtl.transforms.DontTouchAnnotation",
+    "target": "~Foo|Bar>shortint"
   }
 ]]
   extmodule MySRAM:
