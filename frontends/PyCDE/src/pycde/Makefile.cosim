@@ -1,0 +1,11 @@
+VSIM_PATH := $(which vsim)
+
+ifneq ($(VSIM_PATH),)
+	QUESTA_PATH := $(basename $(VSIM_PATH))
+endif
+
+ifneq ($(QUESTA_PATH),)
+run_questa:
+	$(QUESTA_PATH)/vlog hw/*.sv
+	$(QUESTA_PATH)/vsim driver -c -sv_lib hw/libEsiCosimDpiServer -do "run -all; quit"
+endif

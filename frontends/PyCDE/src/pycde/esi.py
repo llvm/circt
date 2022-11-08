@@ -215,6 +215,7 @@ def CosimBSP(user_module):
       shutil.copy(esi_inc_dir / "Cosim_DpiPkg.sv", hw_src)
       shutil.copy(esi_inc_dir / "Cosim_Endpoint.sv", hw_src)
       shutil.copy(esi_inc_dir / "CosimDpi.capnp", hw_src)
+      shutil.copy(__dir__ / "Makefile.cosim", sys.output_directory)
 
   return top
 
