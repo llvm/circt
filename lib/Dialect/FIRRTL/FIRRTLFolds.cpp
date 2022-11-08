@@ -1967,7 +1967,8 @@ struct FoldResetMux : public mlir::RewritePattern {
 
 void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results.insert<patterns::RegResetWithZeroReset, patterns::RegResetWithOneReset, FoldResetMux>(context);
+  results.insert<patterns::RegResetWithZeroReset,
+                 patterns::RegResetWithOneReset, FoldResetMux>(context);
 }
 
 // Returns true if the enable field of a port is set to false.
