@@ -370,12 +370,43 @@ struct EliminateUnaryMuxesPattern : OpRewritePattern<MuxOp> {
   }
 };
 
+struct EliminateCBranchIntoMuxPattern : OpRewritePattern<MuxOp> {
+  using mlir::OpRewritePattern<MuxOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(MuxOp op,
+                                PatternRewriter &rewriter) const override {
+
+    if (op.getDataOperands().size() != 2)
+      return failure();
+
+    // Both data operands must originate from the same cbranch
+    ConditionalBranchOp firstParentCBranch =
+        op.getDataOperands()[0].getDefiningOp<ConditionalBranchOp>();
+    if (!firstParentCBranch)
+      return failure();
+    auto secondParentCBranch =
+        op.getDataOperands()[1].getDefiningOp<ConditionalBranchOp>();
+    if (!secondParentCBranch || firstParentCBranch != secondParentCBranch)
+      return failure();
+
+    rewriter.updateRootInPlace(firstParentCBranch, [&] {
+      // Replace uses of the mux's output with cbranch's data input
+      ValueRange dataInput{firstParentCBranch.getDataOperand()};
+      rewriter.replaceOp(op, dataInput);
+
+      // Remove the cbranch
+      rewriter.eraseOp(firstParentCBranch);
+    });
+
+    return success();
+  }
+};
+
 } // namespace
 
 void MuxOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                         MLIRContext *context) {
-  results.insert<EliminateSimpleMuxesPattern, EliminateUnaryMuxesPattern>(
-      context);
+  results.insert<EliminateSimpleMuxesPattern, EliminateUnaryMuxesPattern,
+                 EliminateCBranchIntoMuxPattern>(context);
 }
 
 void MuxOp::build(OpBuilder &builder, OperationState &result, Value anyInput,
