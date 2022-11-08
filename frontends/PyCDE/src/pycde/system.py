@@ -174,8 +174,8 @@ class System:
   def graph(self, short_names=True):
     import mlir.all_passes_registration
     pm = mlir.passmanager.PassManager.parse(
-      "builtin.module(view-op-graph{short-names=" +
-      ("1" if short_names else "0") + "})")
+        "builtin.module(view-op-graph{short-names=" +
+        ("1" if short_names else "0") + "})")
     pm.run(self.mod)
 
   def cleanup(self):
@@ -198,7 +198,7 @@ class System:
     if gen_left == 0:
       self._op_cache.release_ops()
       pm = mlir.passmanager.PassManager.parse(
-        "builtin.module(msft-discover-appids)")
+          "builtin.module(msft-discover-appids)")
       pm.run(self.mod)
     return
 
