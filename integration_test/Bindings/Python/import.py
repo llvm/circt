@@ -8,4 +8,4 @@ from mlir.passmanager import PassManager
 from mlir.ir import Context
 
 with Context():
-  pm = PassManager.parse("cse")
+  pm = PassManager.parse("builtin.module(cse)")
