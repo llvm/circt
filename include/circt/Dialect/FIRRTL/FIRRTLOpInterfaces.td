@@ -432,6 +432,11 @@ def FNamableOp : OpInterface<"FNamableOp"> {
         NameKindEnumAttr::get(this->getOperation()->getContext(),
                               NameKindEnum::DroppableName));
     }]>,
+    InterfaceMethod<"Set a namekind.",
+    "void", "setNameKindAttr", (ins "firrtl::NameKindEnumAttr":$nameKind),
+                                       [{}], /*defaultImplementation=*/[{
+      this->getOperation()->setAttr("nameKind", nameKind);
+    }]>,
     InterfaceMethod<"Return the name.",
     "mlir::StringAttr", "getNameAttr", (ins), [{}],
     /*defaultImplementation=*/[{
