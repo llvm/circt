@@ -2546,4 +2546,13 @@ firrtl.module @NameProp(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out 
   firrtl.strictconnect %out, %_useless_name_2 : !firrtl.uint<1>
 }
 
+    firrtl.module @CrashAllUnusedPorts() {
+      %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+      %foo, %bar = firrtl.mem  Undefined  {depth = 3 : i64, groupID = 4 : ui32, name = "SiFive_CCache_next", portNames = ["MPORT_1", "MPORT_5"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<2>, mask: uint<1>>, !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<2>>
+      %26 = firrtl.subfield %foo(1) : (!firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<2>, mask: uint<1>>) -> !firrtl.uint<1>
+      firrtl.strictconnect %26, %c0_ui1 : !firrtl.uint<1>
+    }
+  }
+}
+
 }
