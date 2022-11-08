@@ -1852,17 +1852,15 @@ firrtl.module @MuxCanon(in %c1: !firrtl.uint<1>, in %c2: !firrtl.uint<1>, in %d1
 }
 
 // CHECK-LABEL: firrtl.module @RegresetToReg
-firrtl.module @RegresetToReg(in %clock: !firrtl.clock, out %foo1: !firrtl.uint<1>, out %foo2: !firrtl.uint<1>) {
-  %c0_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-
-  %c1_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-  %zero_asyncreset = firrtl.asAsyncReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+firrtl.module @RegresetToReg(in %clock: !firrtl.clock, in %dummy : !firrtl.uint<1>, out %foo1: !firrtl.uint<1>, out %foo2: !firrtl.uint<1>) {
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %zero_asyncreset = firrtl.asAsyncReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+  %one_asyncreset = firrtl.asAsyncReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
   // CHECK: %bar1 = firrtl.reg %clock : !firrtl.uint<1>
-  %bar1 = firrtl.regreset %clock, %zero_asyncreset, %c0_ui1 : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
-
-  %invalid_asyncreset = firrtl.invalidvalue : !firrtl.asyncreset
-  // CHECK: %bar2 = firrtl.reg %clock : !firrtl.uint<1>
-  %bar2 = firrtl.regreset %clock, %invalid_asyncreset, %c0_ui1 : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %foo2, %dummy : !firrtl.uint<1>
+  %bar1 = firrtl.regreset %clock, %zero_asyncreset, %dummy : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+  %bar2 = firrtl.regreset %clock, %one_asyncreset, %dummy : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
 
   firrtl.connect %foo1, %bar1 : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %foo2, %bar2 : !firrtl.uint<1>, !firrtl.uint<1>
