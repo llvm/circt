@@ -372,7 +372,14 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
   if (reg.hasReset()) {
     addToAlwaysBlock(
         module.getBodyBlock(), sv::EventControl::AtPosEdge, reg.getClk(),
-        [&](OpBuilder &b) { createTree(b, svReg.reg, reg, reg.getNext()); },
+        [&](OpBuilder &b) {
+          // If this is an AsyncReset, ensure that we emit a self connect to
+          // avoid erroneously creating a latch construct.
+          if (reg.getIsAsync() && areEquivalentValues(reg, reg.getNext()))
+            b.create<sv::PAssignOp>(reg.getLoc(), svReg.reg, reg);
+          else
+            createTree(b, svReg.reg, reg, reg.getNext());
+        },
         reg.getIsAsync() ? ResetType::AsyncReset : ResetType::SyncReset,
         sv::EventControl::AtPosEdge, reg.getReset(),
         [&](OpBuilder &builder) {
