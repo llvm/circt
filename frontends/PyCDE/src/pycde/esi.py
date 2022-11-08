@@ -205,11 +205,16 @@ def CosimBSP(user_module):
       build_dir = __dir__.parents[4]
       bin_dir = build_dir / "bin"
       lib_dir = build_dir / "lib"
+      circt_inc_dir = build_dir / "tools" / "circt" / "include" / "circt"
+      esi_inc_dir = circt_inc_dir / "Dialect" / "ESI"
       hw_src = sys.hw_output_dir
       shutil.copy(lib_dir / "libEsiCosimDpiServer.so", hw_src)
       shutil.copy(bin_dir / "driver.cpp", hw_src)
       shutil.copy(bin_dir / "driver.sv", hw_src)
-      # build_path = __dir__.parents[]
+      shutil.copy(esi_inc_dir / "ESIPrimitives.sv", hw_src)
+      shutil.copy(esi_inc_dir / "Cosim_DpiPkg.sv", hw_src)
+      shutil.copy(esi_inc_dir / "Cosim_Endpoint.sv", hw_src)
+      shutil.copy(esi_inc_dir / "CosimDpi.capnp", hw_src)
 
   return top
 

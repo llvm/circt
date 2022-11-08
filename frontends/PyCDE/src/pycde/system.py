@@ -332,18 +332,20 @@ class System:
       if lang != "python":
         raise ValueError(f"Language '{lang}' not supported")
 
-      services_file = (self.hw_output_directory / "services.json")
+      services_file = (self.hw_output_dir / "services.json")
       if not services_file.exists():
         raise FileNotFoundError("Could not locate ESI services description. " +
                                 "Have you emitted the outputs?")
 
-      api_output_dir = self.output_directory / "python"
+      api_output_dir = self.output_directory / "runtime"
+      if not api_output_dir.exists():
+        api_output_dir.mkdir()
       b = PythonApiBuilder(services_file.open().read())
       b.build(self.name, api_output_dir)
 
   def package(self):
     """Compile and package system."""
-    for func in self.packaging_funcs:
+    for func in list(self.packaging_funcs):
       func(self)
 
 
