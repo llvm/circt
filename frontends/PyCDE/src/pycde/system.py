@@ -28,7 +28,6 @@ from collections.abc import Iterable
 import gc
 import os
 import pathlib
-import shutil
 import sys
 from typing import Any, Callable, Dict, List, Set, Tuple, Union
 
@@ -81,6 +80,9 @@ class System:
     if output_directory is None:
       output_directory = os.path.join(os.getcwd(), self.name)
     self.output_directory = pathlib.Path(output_directory)
+    if not self.output_directory.exists():
+      self.output_directory.mkdir()
+      self.hw_output_dir.mkdir()
 
     with self:
       [m._pycde_mod.create() for m in self.top_modules]
