@@ -2525,7 +2525,8 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
 LogicalResult FIRRTLLowering::visitExpr(VectorCreateOp op) {
   auto resultType = lowerType(op.getResult().getType());
   SmallVector<Value> operands;
-  for (auto oper : op.getOperands()) {
+  // NOTE: The operand order must be inverted.
+  for (auto oper : llvm::reverse(op.getOperands())) {
     auto val = getLoweredValue(oper);
     if (!val)
       return failure();
