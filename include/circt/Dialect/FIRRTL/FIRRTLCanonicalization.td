@@ -54,7 +54,7 @@ def ZeroConstantOp : Constraint<Or<[
         "$0.getDefiningOp<SpecialConstantOp>().getValue() == false">
 ]>>;
 
-/// Constraint that matches a zero ConstantOp or SpecialConstantOp.
+/// Constraint that matches a one ConstantOp or SpecialConstantOp.
 def OneConstantOp : Constraint<Or<[
   CPred<"$0.getDefiningOp<ConstantOp>() &&"
         "$0.getDefiningOp<ConstantOp>().getValue().isOne()">,
