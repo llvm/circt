@@ -391,8 +391,7 @@ struct EliminateCBranchIntoMuxPattern : OpRewritePattern<MuxOp> {
 
     rewriter.updateRootInPlace(firstParentCBranch, [&] {
       // Replace uses of the mux's output with cbranch's data input
-      ValueRange dataInput{firstParentCBranch.getDataOperand()};
-      rewriter.replaceOp(op, dataInput);
+      rewriter.replaceOp(op, firstParentCBranch.getDataOperand());
 
       // Remove the cbranch
       rewriter.eraseOp(firstParentCBranch);
