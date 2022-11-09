@@ -1081,39 +1081,40 @@ static Optional<DictionaryAttr> parseAugmentedType(
     }
     auto companionTarget = resolvePath(companionAttr.getValue(), state.circuit,
                                        state.symTbl, state.targetCaches);
-    if (xmrSrcTarget->ref.getModule() !=
-        cast<FModuleOp>(companionTarget->ref.getOp())) {
-      // Get the name of the node op that reads the remote value from
-      // xmrSrcTarget. This adds the refsend, drills the ports and adds the ref
-      // resolve and then reads the output from resolve into a node. Note: The
-      // remote signal to which the XMR is being generated, does not contain any
-      // DontTouch. Which implies the remote signal can be optimized away, but
-      // the XMR should still point to a legal value or a constant after the
-      // optimization.
-      LLVM_DEBUG(llvm::dbgs() << "\n view from :" << targetAttr.getValue()
-                              << " to \n " << companionAttr.getValue());
-      auto resolveTargetName = borePortsFromViewToCompanion(
-          *xmrSrcTarget, parentModule, state, *companionTarget, name);
-      if (!resolveTargetName) {
-        (mlir::emitError(loc, "Failed to resolve target, cannot find unique "
-                              "path from parent module `")
-         << parentModule.getName() << "` to target `" << targetAttr.getValue()
-         << "`")
-                .attachNote()
-            << "See the full Annotation here: " << root;
-        ;
-        return None;
-      }
-      // Now the view target can be added to the local node created inside the
-      // companion. Add the annotation. This essentially moves the annotation
-      // from the remote XMR signal to a local wire, which in-turn reads the
-      // XMR.
-      elementScattered.append(
-          "target", StringAttr::get(context, companion + ">" +
-                                                 resolveTargetName.getValue()));
-    } else
-      elementScattered.append("target", targetAttr);
-
+    // Get the name of the node op that reads the remote value from
+    // xmrSrcTarget. This adds the refsend, drills the ports and adds the ref
+    // resolve and then reads the output from resolve into a node. Note: The
+    // remote signal to which the XMR is being generated, does not contain any
+    // DontTouch. Which implies the remote signal can be optimized away, but the
+    // XMR should still point to a legal value or a constant after the
+    // optimization.
+    //
+    // TODO: This currently generates RefSendOp and RefResolveOp even when it
+    // does not need to, i.e., when the source is in the companion module.  This
+    // is temporary solution to guarantee the simplicity of sink structure for
+    // the Grand Central pass.  Specifically, this guarantees that a NodeOp is
+    // always the sink.  This will be refactored as part of broader improvements
+    // to improve the performance of LowerAnnotations.
+    LLVM_DEBUG(llvm::dbgs() << "\n view from :" << targetAttr.getValue()
+                            << " to \n " << companionAttr.getValue());
+    auto resolveTargetName = borePortsFromViewToCompanion(
+        *xmrSrcTarget, parentModule, state, *companionTarget, name);
+    if (!resolveTargetName) {
+      (mlir::emitError(loc, "Failed to resolve target, cannot find unique "
+                            "path from parent module `")
+       << parentModule.getName() << "` to target `" << targetAttr.getValue()
+       << "`")
+              .attachNote()
+          << "See the full Annotation here: " << root;
+      ;
+      return None;
+    }
+    // Now the view target can be added to the local node created inside the
+    // companion. Add the annotation. This essentially moves the annotation from
+    // the remote XMR signal to a local wire, which in-turn reads the XMR.
+    elementScattered.append(
+        "target", StringAttr::get(context, companion + ">" +
+                                               resolveTargetName.getValue()));
     state.addToWorklistFn(
         DictionaryAttr::getWithSorted(context, elementScattered));
 
@@ -1315,7 +1316,6 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         //
         //   1) The leaf value is in the companion.
         //   2) The leaf value is a NodeOp
-        //   3) That NodeOp is either a RefResolveOp or a ConstantOp
         //
         // Anything else means that there is an error or the IR is somehow using
         // "old-style" Annotations to encode a Grand Central View.  This
@@ -1338,15 +1338,10 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           return false;
         }
 
-        if (leafValue.isa<BlockArgument>() ||
-            !isa<NodeOp>(leafValue.getDefiningOp()) ||
-            leafValue.getDefiningOp()->getOperand(0).isa<BlockArgument>() ||
-            !isa<RefResolveOp, ConstantOp>(
-                nodeOp->getOperand(0).getDefiningOp())) {
+        if (!isa<NodeOp>(nodeOp)) {
           emitError(leafValue.getLoc())
               << "Grand Central View \"" << companionIDMap.lookup(id).name
-              << "\" has an invalid leaf value (this must be a node of "
-                 "a constant or reftype)";
+              << "\" has an invalid leaf value (this must be a node)";
           return false;
         }
 
