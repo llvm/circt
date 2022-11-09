@@ -119,10 +119,10 @@ OperatorType loadOperatorType(ProblemT &prob, OperatorTypeOp oprOp,
 /// elements may therefore be unitialized objects. The template instantiation
 /// fails if properties are incompatible with \p ProblemT.
 ///
-/// Operations may link to operator types in standalone libraries outside of the
-/// current instance, but the origin of an operator type will not be preserved
-/// in the problem instance. Such external operator types will be automatically
-/// renamed in the returned instance to prevent conflicts.
+/// Operations may link to operator types in other libraries, but the origin of
+/// an operator type will not be preserved in the problem instance. As this
+/// could lead to conflicts, operator types will be automatically renamed in the
+/// returned instance.
 ///
 /// Example: To load an instance of the `circt::scheduling::CyclicProblem` with
 /// all its input and solution properties, call this as follows:
@@ -185,7 +185,7 @@ ProblemT loadProblem(InstanceOp instOp,
     // 2) Try to resolve a nested reference to the instance's library.
     if (!oprOp)
       oprOp = SymbolTable::lookupSymbolIn(instOp, oprRef);
-    // 3) Lastly, look outside of the instance.
+    // 3) Look outside of the instance.
     if (!oprOp)
       oprOp =
           SymbolTable::lookupNearestSymbolFrom(instOp->getParentOp(), oprRef);

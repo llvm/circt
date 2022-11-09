@@ -283,7 +283,7 @@ OperationOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     // 2) Try to resolve a nested reference to the instance's library.
     if (!oprOp)
       oprOp = symbolTable.lookupSymbolIn(instanceOp, oprRef);
-    // 3) Lastly, look outside of the instance.
+    // 3) Look outside of the instance.
     if (!oprOp)
       oprOp = symbolTable.lookupNearestSymbolFrom(instanceOp->getParentOp(),
                                                   oprRef);
