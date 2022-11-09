@@ -138,10 +138,9 @@ static cl::opt<bool> replSeqMem(
         "Replace the seq mem for macro replacement and emit relevant metadata"),
     cl::init(false), cl::cat(mainCategory));
 
-static cl::opt<bool> disableFlattenMemory(
-    "disable-flatten-memory",
-    cl::desc("Disables the memory flatten pass, splitting memories with masks "
-             "to generate memory arrays"),
+static cl::opt<bool> lowerMemories(
+    "lower-memories",
+    cl::desc("Lower memories to have memories with masks as an array with one memory per ground type"),
     cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<circt::firrtl::PreserveAggregate::PreserveMode>
@@ -643,7 +642,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (!disableWireDFT)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createWireDFTPass());
 
-  if (!disableFlattenMemory)
+  if (!lowerMemories)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createFlattenMemoryPass());
 
