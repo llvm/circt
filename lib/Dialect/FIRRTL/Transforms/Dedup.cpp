@@ -947,8 +947,9 @@ private:
       }
       // If the annotation is already non-local, we add it as is.  It is already
       // added to the target map.
-      if (anno.getMember("circt.nonlocal")) {
+      if (auto nla = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
         newAnnotations.push_back(anno);
+        targetMap[nla.getAttr()].insert(to);
         continue;
       }
       // Otherwise make the annotation non-local and add it to the set.
