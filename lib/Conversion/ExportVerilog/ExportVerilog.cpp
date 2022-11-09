@@ -416,7 +416,7 @@ static StringRef getVerilogDeclWord(Operation *op,
 /// specified set.
 // NOLINTBEGIN(misc-no-recursion)
 static void collectFileLineColLocs(Location loc,
-                                   SmallPtrSet<Attribute, 8> &locationSet) {
+                                   SmallPtrSetImpl<Attribute> &locationSet) {
   if (auto fileLoc = loc.dyn_cast<FileLineColLoc>())
     locationSet.insert(fileLoc);
 
@@ -428,7 +428,7 @@ static void collectFileLineColLocs(Location loc,
 
 /// Return the location information as a (potentially empty) string.
 static std::string
-getLocationInfoAsStringImpl(const SmallPtrSet<Operation *, 8> &ops) {
+getLocationInfoAsStringImpl(const SmallPtrSetImpl<Operation *> &ops) {
   std::string resultStr;
   llvm::raw_string_ostream sstr(resultStr);
 
@@ -520,7 +520,7 @@ getLocationInfoAsStringImpl(const SmallPtrSet<Operation *, 8> &ops) {
 
 /// Return the location information in the specified style.
 static std::string
-getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops,
+getLocationInfoAsString(const SmallPtrSetImpl<Operation *> &ops,
                         LoweringOptions::LocationInfoStyle style) {
   if (style == LoweringOptions::LocationInfoStyle::None)
     return "";
@@ -901,7 +901,7 @@ public:
   /// If we have location information for any of the specified operations,
   /// aggregate it together and print a pretty comment specifying where the
   /// operations came from.  In any case, print a newline.
-  void emitLocationInfoAndNewLine(const SmallPtrSet<Operation *, 8> &ops) {
+  void emitLocationInfoAndNewLine(const SmallPtrSetImpl<Operation *> &ops) {
     auto locInfo =
         getLocationInfoAsString(ops, state.options.locationInfoStyle);
     if (!locInfo.empty())
@@ -1687,7 +1687,7 @@ public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
   /// of any emitted expressions in the specified set.
   ExprEmitter(ModuleEmitter &emitter, SmallVectorImpl<char> &outBuffer,
-              SmallPtrSet<Operation *, 8> &emittedExprs,
+              SmallPtrSetImpl<Operation *> &emittedExprs,
               ModuleNameManager &names)
       : EmitterBase(emitter.state, os), emitter(emitter),
         emittedExprs(emittedExprs), outBuffer(outBuffer), os(outBuffer),
@@ -1889,7 +1889,7 @@ private:
 
   /// Keep track of all operations emitted within this subexpression for
   /// location information tracking.
-  SmallPtrSet<Operation *, 8> &emittedExprs;
+  SmallPtrSetImpl<Operation *> &emittedExprs;
 
   /// If any subexpressions would result in too large of a line, report it
   /// back to the caller in this vector.
@@ -2693,7 +2693,7 @@ private:
   void collectNamesAndCalculateDeclarationWidths(Block &block);
 
   void
-  emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
+  emitExpression(Value exp, SmallPtrSetImpl<Operation *> &emittedExprs,
                  VerilogPrecedence parenthesizeIfLooserThan = LowestPrecedence);
   void emitSVAttributes(Operation *op);
 
@@ -2762,7 +2762,7 @@ private:
 
   void emitAssertionLabel(Operation *op, StringRef opName);
   void emitAssertionMessage(StringAttr message, ValueRange args,
-                            SmallPtrSet<Operation *, 8> &ops,
+                            SmallPtrSetImpl<Operation *> &ops,
                             bool isConcurrent);
   template <typename Op>
   LogicalResult emitImmediateAssertion(Op op, StringRef opName);
@@ -2782,7 +2782,7 @@ private:
   LogicalResult visitSV(AssignInterfaceSignalOp op);
 
   void emitBlockAsStatement(Block *block,
-                            SmallPtrSet<Operation *, 8> &locationOps,
+                            const SmallPtrSetImpl<Operation *> &locationOps,
                             StringRef multiLineComment = StringRef());
 
 public:
@@ -2805,7 +2805,7 @@ private:
 /// already computed name.
 ///
 void StmtEmitter::emitExpression(Value exp,
-                                 SmallPtrSet<Operation *, 8> &emittedExprs,
+                                 SmallPtrSetImpl<Operation *> &emittedExprs,
                                  VerilogPrecedence parenthesizeIfLooserThan) {
   SmallVector<char, 128> exprBuffer;
   ExprEmitter(emitter, exprBuffer, emittedExprs, names)
@@ -3282,7 +3282,7 @@ void StmtEmitter::emitAssertionLabel(Operation *op, StringRef opName) {
 /// Emit the optional ` else $error(...)` portion of an immediate or concurrent
 /// verification operation.
 void StmtEmitter::emitAssertionMessage(StringAttr message, ValueRange args,
-                                       SmallPtrSet<Operation *, 8> &ops,
+                                       SmallPtrSetImpl<Operation *> &ops,
                                        bool isConcurrent = false) {
   if (!message)
     return;
@@ -3403,9 +3403,9 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
 /// markers if non-singular.  If the control flow construct is multi-line and
 /// if multiLineComment is non-null, the string is included in a comment after
 /// the 'end' to make it easier to associate.
-void StmtEmitter::emitBlockAsStatement(Block *block,
-                                       SmallPtrSet<Operation *, 8> &locationOps,
-                                       StringRef multiLineComment) {
+void StmtEmitter::emitBlockAsStatement(
+    Block *block, const SmallPtrSetImpl<Operation *> &locationOps,
+    StringRef multiLineComment) {
 
   // Determine if we need begin/end by scanning the block.
   auto count = countStatements(*block);
