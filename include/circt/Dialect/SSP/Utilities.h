@@ -150,16 +150,16 @@ ProblemT loadProblem(InstanceOp instOp,
   // Use IDs to disambiguate operator types with the same name defined in
   // different libraries.
   SmallDenseMap<OperatorType, unsigned> operatorTypeIds;
-  // Map `OperatorTypeOp`s in standalone libraries to their (possibly uniqued)
-  // name in the problem instance.
-  SmallDenseMap<Operation *, OperatorType> externalOperatorTypes;
+  // Map `OperatorTypeOp`s to their (possibly uniqued) name in the problem
+  // instance.
+  SmallDenseMap<Operation *, OperatorType> operatorTypes;
 
   // Register all operator types in the instance's library.
-  instOp.getOperatorLibrary().walk([&](OperatorTypeOp oprOp) {
-    auto opr = loadOperatorType<ProblemT, OperatorTypePropertyTs...>(
-        prob, oprOp, operatorTypeIds);
-    // The library's symbol table ensures that no renaming is required.
-    assert(opr == oprOp.getNameAttr());
+  auto libraryOp = instOp.getOperatorLibrary();
+  libraryOp.walk([&](OperatorTypeOp oprOp) {
+    operatorTypes[oprOp] =
+        loadOperatorType<ProblemT, OperatorTypePropertyTs...>(prob, oprOp,
+                                                              operatorTypeIds);
   });
 
   // Register all operations first, in order to retain their original order.
@@ -179,26 +179,27 @@ ProblemT loadProblem(InstanceOp instOp,
     // type is available.
     SymbolRefAttr oprRef = opOp.getLinkedOperatorTypeAttr().getValue();
 
-    // `FlatSymbolRef`s point to the instance's library; these operator types
-    // were already registered under the name used in the attribute.
-    if (oprRef.isa<FlatSymbolRefAttr>()) {
-      assert(prob.hasOperatorType(*prob.getLinkedOperatorType(opOp)));
-      return;
-    }
+    Operation *oprOp;
+    // 1) Look in the instance's library.
+    oprOp = SymbolTable::lookupSymbolIn(libraryOp, oprRef);
+    // 2) Try to resolve a nested reference to the instance's library.
+    if (!oprOp)
+      oprOp = SymbolTable::lookupSymbolIn(instOp, oprRef);
+    // 3) Lastly, look outside of the instance.
+    if (!oprOp)
+      oprOp =
+          SymbolTable::lookupNearestSymbolFrom(instOp->getParentOp(), oprRef);
 
-    // We have a nested reference into a standalone library. The verifier
-    // checked its validity, so just resolve it.
-    auto oprOp = cast<OperatorTypeOp>(
-        SymbolTable::lookupNearestSymbolFrom(instOp, oprRef));
+    assert(oprOp && isa<OperatorTypeOp>(oprOp)); // checked by verifier
 
     // Load the operator type from `oprOp` if needed.
-    auto &extOpr = externalOperatorTypes[oprOp];
-    if (!extOpr)
-      extOpr = loadOperatorType<ProblemT, OperatorTypePropertyTs...>(
-          prob, oprOp, operatorTypeIds);
+    auto &opr = operatorTypes[oprOp];
+    if (!opr)
+      opr = loadOperatorType<ProblemT, OperatorTypePropertyTs...>(
+          prob, cast<OperatorTypeOp>(oprOp), operatorTypeIds);
 
-    // Update `opOp`'s property (may be a no-op if `extOpr` wasn't renamed).
-    prob.setLinkedOperatorType(opOp, extOpr);
+    // Update `opOp`'s property (may be a no-op if `opr` wasn't renamed).
+    prob.setLinkedOperatorType(opOp, opr);
   });
 
   // Then walk them again, and load auxiliary dependences as well as any
@@ -328,7 +329,7 @@ saveProblem(ProblemT &prob, StringAttr instanceName, StringAttr problemName,
 
   // Emit operator types.
   b.setInsertionPointToEnd(instOp.getBodyBlock());
-  auto libraryOp = b.create<OperatorLibraryOp>();
+  auto libraryOp = b.create<OperatorLibraryOp>(b.getStringAttr("_"));
   b.setInsertionPointToStart(libraryOp.getBodyBlock());
 
   for (auto opr : prob.getOperatorTypes())

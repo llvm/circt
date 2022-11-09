@@ -49,20 +49,6 @@ DependenceGraphOp InstanceOp::getDependenceGraph() {
 }
 
 //===----------------------------------------------------------------------===//
-// OperatorLibraryOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult OperatorLibraryOp::verify() {
-  bool isInInstance = isa_and_nonnull<InstanceOp>((*this)->getParentOp());
-  bool hasSymbol = static_cast<bool>(getSymNameAttr());
-  if (isInInstance && hasSymbol)
-    return emitOpError() << "in 'ssp.instance' cannot be named";
-  if (!isInInstance && !hasSymbol)
-    return emitOpError() << "outside of 'ssp.instance' must be named";
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // OperationOp
 //===----------------------------------------------------------------------===//
 
@@ -292,14 +278,15 @@ OperationOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (auto linkedOpr = getLinkedOperatorTypeAttr()) {
     SymbolRefAttr oprRef = linkedOpr.getValue();
     Operation *oprOp;
-    if (oprRef.isa<FlatSymbolRefAttr>()) {
-      // It's a reference to an operator type in the instance's library.
-      oprOp = symbolTable.lookupSymbolIn(libraryOp, oprRef);
-    } else {
-      // Otherwise it's a reference to a standalone library, outside of the
-      // current instance.
-      oprOp = symbolTable.lookupNearestSymbolFrom(instanceOp, oprRef);
-    }
+    // 1) Look in the instance's library.
+    oprOp = symbolTable.lookupSymbolIn(libraryOp, oprRef);
+    // 2) Try to resolve a nested reference to the instance's library.
+    if (!oprOp)
+      oprOp = symbolTable.lookupSymbolIn(instanceOp, oprRef);
+    // 3) Lastly, look outside of the instance.
+    if (!oprOp)
+      oprOp = symbolTable.lookupNearestSymbolFrom(instanceOp->getParentOp(),
+                                                  oprRef);
 
     if (!oprOp || !isa<OperatorTypeOp>(oprOp))
       return emitError("Linked operator type property references invalid "
