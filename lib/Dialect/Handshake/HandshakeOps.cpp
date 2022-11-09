@@ -375,16 +375,17 @@ struct EliminateCBranchIntoMuxPattern : OpRewritePattern<MuxOp> {
   LogicalResult matchAndRewrite(MuxOp op,
                                 PatternRewriter &rewriter) const override {
 
-    if (op.getDataOperands().size() != 2)
+    auto dataOperands = op.getDataOperands();
+    if (dataOperands.size() != 2)
       return failure();
 
     // Both data operands must originate from the same cbranch
     ConditionalBranchOp firstParentCBranch =
-        op.getDataOperands()[0].getDefiningOp<ConditionalBranchOp>();
+        dataOperands[0].getDefiningOp<ConditionalBranchOp>();
     if (!firstParentCBranch)
       return failure();
     auto secondParentCBranch =
-        op.getDataOperands()[1].getDefiningOp<ConditionalBranchOp>();
+        dataOperands[1].getDefiningOp<ConditionalBranchOp>();
     if (!secondParentCBranch || firstParentCBranch != secondParentCBranch)
       return failure();
 
