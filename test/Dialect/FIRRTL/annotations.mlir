@@ -1466,6 +1466,106 @@ firrtl.circuit "Top"  attributes {
 
 // -----
 
+// Check that Grand Central View Annotations are applied properly when they are
+// targeting things inside the companion.  Specifically, this should work for
+// both ports and components, e.g., registers.
+
+// CHECK-LABEL: "GrandCentralViewInsideCompanion"
+// CHECK-SAME:    id = [[aId:[0-9]+]] : i64, name = "a"
+// CHECK-SAME:    id = [[bId:[0-9]+]] : i64, name = "b"
+firrtl.circuit "GrandCentralViewInsideCompanion" attributes {
+  rawAnnotations = [
+    {
+      class = "sifive.enterprise.grandcentral.ViewAnnotation",
+      name = "View",
+      companion = "~GrandCentralViewInsideCompanion|Companion",
+      parent = "~GrandCentralViewInsideCompanion|GrandCentralViewInsideCompanion",
+      view = {
+        class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+        defName = "MyInterface",
+        elements = [
+          {
+            name = "a",
+            tpe = {
+              class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+              ref = {
+                circuit = "GrandCentralViewInsideCompanion",
+                module = "GrandCentralViewInsideCompanion",
+                path = [
+                  {
+                    _1 = {
+                      class = "firrtl.annotations.TargetToken$Instance",
+                      value = "companion"
+                    },
+                    _2 = {
+                      class = "firrtl.annotations.TargetToken$OfModule",
+                      value = "Companion"
+                    }
+                  }
+                ],
+                ref = "a",
+                component = []
+              },
+              tpe = {
+                class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"
+              }
+            }
+          },
+          {
+            name = "b",
+            tpe = {
+              class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+              ref = {
+                circuit = "GrandCentralViewInsideCompanion",
+                module = "GrandCentralViewInsideCompanion",
+                path = [
+                  {
+                    _1 = {
+                      class = "firrtl.annotations.TargetToken$Instance",
+                      value = "companion"
+                    },
+                    _2 = {
+                      class = "firrtl.annotations.TargetToken$OfModule",
+                      value = "Companion"
+                    }
+                  }
+                ],
+                ref = "b",
+                component = []
+              },
+              tpe = {
+                class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+} {
+  // CHECK:      firrtl.module @Companion
+  firrtl.module @Companion(out %b: !firrtl.uint<2>) {
+    %clock = firrtl.specialconstant 0 : !firrtl.clock
+    %a = firrtl.reg %clock : !firrtl.uint<1>
+    // CHECK:      %[[aRefSend:[a-zA-Z0-9_]+]] = firrtl.ref.send %a
+    // CHECK-NEXT: %[[aRefResolve:[a-zA-Z0-9_]+]] = firrtl.ref.resolve %[[aRefSend]]
+    // CHECK-NEXT: %[[aNode:[a-zA-Z0-9_]+]] = firrtl.node %[[aRefResolve]]
+    // CHECK-SAME:   {class = "firrtl.transforms.DontTouchAnnotation"}
+    // CHECK-SAME:   {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = [[aId]] : i64}
+    //
+    // CHECK-NEXT: %[[bRefSend:[a-zA-Z0-9_]+]] = firrtl.ref.send %b
+    // CHECK-NEXT: %[[bRefResolve:[a-zA-Z0-9_]+]] = firrtl.ref.resolve %[[bRefSend]]
+    // CHECK-NEXT: %[[bNode:[a-zA-Z0-9_]+]] = firrtl.node %[[bRefResolve]]
+    // CHECK-SAME:   {class = "firrtl.transforms.DontTouchAnnotation"}
+    // CHECK-SAME:   {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = [[bId]] : i64}
+  }
+  firrtl.module @GrandCentralViewInsideCompanion() {
+    %companion_b = firrtl.instance companion @Companion(out b: !firrtl.uint<2>)
+  }
+}
+
+// -----
+
 // Check that TraceNameAnnotation (which has don't touch semantics) is expanded
 // into a TraceAnnotation (which does not have don't touch semantics) and a
 // DontTouchAnnotation whenever this targets something that can be a legal
