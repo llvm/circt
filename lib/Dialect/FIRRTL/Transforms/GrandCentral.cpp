@@ -707,14 +707,6 @@ private:
 
   /// Returns a port's `inner_sym`, adding one if necessary.
   StringAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
-
-  /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
-  /// to that operation.
-  hw::InnerRefAttr getInnerRefTo(Operation *op);
-
-  /// Obtain an inner reference to a module port, possibly adding an `inner_sym`
-  /// to that port.
-  hw::InnerRefAttr getInnerRefTo(FModuleLike module, size_t portIdx);
 };
 
 } // namespace
@@ -2281,20 +2273,6 @@ void GrandCentralPass::runOnOperation() {
   if (removalError)
     return signalPassFailure();
   markAnalysesPreserved<NLATable>();
-}
-
-hw::InnerRefAttr GrandCentralPass::getInnerRefTo(Operation *op) {
-  return ::getInnerRefTo(op, "", [&](FModuleOp mod) -> ModuleNamespace & {
-    return getModuleNamespace(mod);
-  });
-}
-
-hw::InnerRefAttr GrandCentralPass::getInnerRefTo(FModuleLike module,
-                                                 size_t portIdx) {
-  return ::getInnerRefTo(module, portIdx, "",
-                         [&](FModuleLike mod) -> ModuleNamespace & {
-                           return getModuleNamespace(mod);
-                         });
 }
 
 //===----------------------------------------------------------------------===//
