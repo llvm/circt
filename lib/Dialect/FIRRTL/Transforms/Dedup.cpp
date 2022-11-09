@@ -843,10 +843,17 @@ private:
           // Find the non-local field of the annotation.
           auto [it, found] = mlir::impl::findAttrSorted(
               anno.begin(), anno.end(), nonLocalString);
-          // If this annotation doesn't use the target NLA, copy it with no
-          // changes.
-          if (!found || it->getValue().cast<FlatSymbolRefAttr>().getAttr() !=
-                            nla.getSymNameAttr()) {
+          // If this annotation is not local, copy it over unchanged.
+          if (!found) {
+            newAnnotations.push_back(anno);
+            continue;
+          }
+          // If the annotation does not use this specific NLA, copy it over,
+          // but record this target as a user its NLA.  This is required in
+          // order to correctly rename NLAs which exist prior to dedup.
+          auto annoNLA = it->getValue().cast<FlatSymbolRefAttr>().getAttr();
+          if (annoNLA != nla.getSymNameAttr()) {
+            targetMap[annoNLA].insert(target);
             newAnnotations.push_back(anno);
             continue;
           }
