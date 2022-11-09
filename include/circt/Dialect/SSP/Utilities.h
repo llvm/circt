@@ -97,7 +97,6 @@ void loadInstanceProperties(ProblemT &prob, ArrayAttr props) {
 /// name informed by \p oprIds, and attempt to set its properties from the
 /// given attribute classes. The registered name is returned. The template
 /// instantiation fails if properties are incompatible with \p ProblemT.
-/// ```
 template <typename ProblemT, typename... OperatorTypePropertyTs>
 OperatorType loadOperatorType(ProblemT &prob, OperatorTypeOp oprOp,
                               SmallDenseMap<StringAttr, unsigned> &oprIds) {
@@ -170,26 +169,36 @@ ProblemT loadProblem(InstanceOp instOp,
     loadOperationProperties<ProblemT, OperationPropertyTs...>(
         prob, opOp, opOp.getPropertiesAttr());
 
-    // If set, ensure that the linked operator type has been loaded.
-    if (auto linkedOpr = opOp.getLinkedOperatorTypeAttr()) {
-      SymbolRefAttr oprRef = linkedOpr.getValue();
-      if (oprRef.isa<FlatSymbolRefAttr>())
-        // FlatSymbolRefs point to the instance's library; these operator types
-        // were already registered.
-        return;
+    // Nothing else to check if no linked operator type is set for `opOp`,
+    // because the operation doesn't carry a `LinkedOperatorTypeAttr`, or that
+    // class is not part of the `OperationPropertyTs` to load.
+    if (!prob.getLinkedOperatorType(opOp).has_value())
+      return;
 
-      // Resolve nested reference (was checked by the verifier).
-      auto oprOp = cast<OperatorTypeOp>(
-          SymbolTable::lookupNearestSymbolFrom(instOp, oprRef));
+    // Otherwise, inspect the corresponding attribute to make sure the operator
+    // type is available.
+    SymbolRefAttr oprRef = opOp.getLinkedOperatorTypeAttr().getValue();
 
-      // Lookup/load and link the operator type.
-      auto &extOpr = externalOperatorTypes[oprOp];
-      if (!extOpr) {
-        extOpr = loadOperatorType<ProblemT, OperatorTypePropertyTs...>(
-            prob, oprOp, operatorTypeIds);
-      }
-      prob.setLinkedOperatorType(opOp, extOpr);
+    // `FlatSymbolRef`s point to the instance's library; these operator types
+    // were already registered under the name used in the attribute.
+    if (oprRef.isa<FlatSymbolRefAttr>()) {
+      assert(prob.hasOperatorType(*prob.getLinkedOperatorType(opOp)));
+      return;
     }
+
+    // We have a nested reference into a standalone library. The verifier
+    // checked its validity, so just resolve it.
+    auto oprOp = cast<OperatorTypeOp>(
+        SymbolTable::lookupNearestSymbolFrom(instOp, oprRef));
+
+    // Load the operator type from `oprOp` if needed.
+    auto &extOpr = externalOperatorTypes[oprOp];
+    if (!extOpr)
+      extOpr = loadOperatorType<ProblemT, OperatorTypePropertyTs...>(
+          prob, oprOp, operatorTypeIds);
+
+    // Update `opOp`'s property (may be a no-op if `extOpr` wasn't renamed).
+    prob.setLinkedOperatorType(opOp, extOpr);
   });
 
   // Then walk them again, and load auxiliary dependences as well as any
