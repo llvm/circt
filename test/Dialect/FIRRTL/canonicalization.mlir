@@ -1862,6 +1862,8 @@ firrtl.module @RegresetToReg(in %clock: !firrtl.clock, in %dummy : !firrtl.uint<
   %bar1 = firrtl.regreset %clock, %zero_asyncreset, %dummy : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
   %bar2 = firrtl.regreset %clock, %one_asyncreset, %dummy : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
 
+  firrtl.strictconnect %bar2, %bar1 : !firrtl.uint<1> // Force a use to trigger a crash on a sink replacement
+
   firrtl.connect %foo1, %bar1 : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %foo2, %bar2 : !firrtl.uint<1>, !firrtl.uint<1>
 }

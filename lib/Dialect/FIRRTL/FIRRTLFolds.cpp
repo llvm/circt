@@ -22,6 +22,22 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
+using namespace circt;
+using namespace firrtl;
+
+// Drop writes to old and pass through passthrough to make patterns easier to
+// write.
+static Value dropWrite(PatternRewriter &rewriter, OpResult old,
+                       Value passthrough) {
+  for (auto user : llvm::make_early_inc_range(old.getUsers())) {
+    if (isa<StrictConnectOp, ConnectOp>(user)) {
+      if (user->getOperand(0) == old)
+        rewriter.eraseOp(user);
+    }
+  }
+  return passthrough;
+}
+
 // Declarative canonicalization patterns
 namespace circt {
 namespace firrtl {
@@ -30,9 +46,6 @@ namespace patterns {
 } // namespace patterns
 } // namespace firrtl
 } // namespace circt
-
-using namespace circt;
-using namespace firrtl;
 
 /// Return true if this operation's operands and results all have a known width.
 /// This only works for integer types.
