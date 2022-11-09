@@ -1,5 +1,5 @@
 // RUN: rm -rf %t
-// RUN: circt-opt -pass-pipeline='hw-export-module-hierarchy{dir-name=%t}' %s
+// RUN: circt-opt -pass-pipeline='builtin.module(hw-export-module-hierarchy{dir-name=%t})' %s
 // RUN: FileCheck %s < %t/testharness_hier.json
 
 // CHECK:      {

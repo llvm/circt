@@ -13,8 +13,7 @@
 #ifndef CIRCT_DIALECT_HW_HWATTRIBUTESNAMING
 #define CIRCT_DIALECT_HW_HWATTRIBUTESNAMING
 
-def InnerRefAttr : AttrDef<HWDialect, "InnerRef", [
-    DeclareAttrInterfaceMethods<SubElementAttrInterface>]> {
+def InnerRefAttr : AttrDef<HWDialect, "InnerRef", [SubElementAttrInterface]> {
   let summary = "Refer to a name inside a module";
   let description = [{
     This works like a symbol reference, but to a name inside a module.

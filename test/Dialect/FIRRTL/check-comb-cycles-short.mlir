@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-check-comb-cycles)' --split-input-file --verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-check-comb-cycles))' --split-input-file --verify-diagnostics %s | FileCheck %s
 
 module  {
   // Simple combinational loop

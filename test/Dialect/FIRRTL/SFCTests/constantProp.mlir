@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-imconstprop)' -canonicalize='top-down=true region-simplify=true' %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-imconstprop), canonicalize{top-down region-simplify})'  %s | FileCheck %s
 // github.com/chipsalliance/firrtl: test/scala/firrtlTests/ConstantPropagationTests.scala
 
 //propagate constant inputs  

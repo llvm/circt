@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-emit-omir{file=omir.json})' --verify-diagnostics --split-input-file %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-emit-omir{file=omir.json}))' --verify-diagnostics --split-input-file %s
 
 #loc = loc(unknown)
 firrtl.circuit "Top" attributes {annotations = [{

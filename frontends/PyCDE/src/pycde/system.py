@@ -49,14 +49,13 @@ class System:
   ]
 
   PASSES = """
-    lower-hwarith-to-hw, msft-lower-constructs, msft-lower-instances,
-    {partition}
-    esi-connect-services,
+    builtin.module(lower-hwarith-to-hw, msft-lower-constructs,
+    msft-lower-instances, {partition} esi-connect-services,
     esi-emit-collateral{{tops={tops} schema-file=schema.capnp}},
     lower-msft-to-hw{{verilog-file={verilog_file}}},
     lower-esi-to-physical, lower-esi-ports, lower-esi-to-hw, convert-fsm-to-sv,
     lower-seq-to-sv, hw.module(prettify-verilog), hw.module(hw-cleanup),
-    msft-export-tcl{{tops={tops} tcl-file={tcl_file}}}
+    msft-export-tcl{{tops={tops} tcl-file={tcl_file}}})
   """
 
   def __init__(self,
@@ -174,12 +173,13 @@ class System:
 
   def graph(self, short_names=True):
     import mlir.all_passes_registration
-    pm = mlir.passmanager.PassManager.parse("view-op-graph{short-names=" +
-                                            ("1" if short_names else "0") + "}")
+    pm = mlir.passmanager.PassManager.parse(
+        "builtin.module(view-op-graph{short-names=" +
+        ("1" if short_names else "0") + "})")
     pm.run(self.mod)
 
   def cleanup(self):
-    pm = mlir.passmanager.PassManager.parse("canonicalize")
+    pm = mlir.passmanager.PassManager.parse("builtin.module(canonicalize)")
     pm.run(self.mod)
 
   def generate(self, generator_names=[], iters=None):
@@ -197,7 +197,8 @@ class System:
     gen_left = len(self._generate_queue)
     if gen_left == 0:
       self._op_cache.release_ops()
-      pm = mlir.passmanager.PassManager.parse("msft-discover-appids")
+      pm = mlir.passmanager.PassManager.parse(
+          "builtin.module(msft-discover-appids)")
       pm.run(self.mod)
     return
 

@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -pass-pipeline='hw.module(pipeline.pipeline(pipeline-explicit-regs))' | FileCheck %s
+// RUN: circt-opt %s -pass-pipeline='builtin.module(hw.module(pipeline.pipeline(pipeline-explicit-regs)))' | FileCheck %s
 
 // CHECK:      %[[PIPELINE_RES:.*]] = pipeline.pipeline(%arg0, %go) clock %clk reset %rst : (i32, i1) -> i32 {
 // CHECK-NEXT:   ^bb0(%[[ARG0:.*]]: i32, %[[ARG1:.*]]: i1):

@@ -1,7 +1,7 @@
-// RUN: circt-opt -lower-firrtl-to-hw -verify-diagnostics %s | FileCheck %s
-// RUN: circt-opt -pass-pipeline="lower-firrtl-to-hw{disable-mem-randomization}" -verify-diagnostics %s | FileCheck %s --check-prefix DISABLE_RANDOM --implicit-check-not RANDOMIZE_MEM
-// RUN: circt-opt -pass-pipeline="lower-firrtl-to-hw{disable-reg-randomization}" -verify-diagnostics %s | FileCheck %s --check-prefix DISABLE_RANDOM --implicit-check-not RANDOMIZE_REG
-// RUN: circt-opt -pass-pipeline="lower-firrtl-to-hw{disable-mem-randomization disable-reg-randomization}" -verify-diagnostics %s | FileCheck %s --check-prefix DISABLE_RANDOM --implicit-check-not RANDOMIZE_MEM --implicit-check-not RANDOMIZE_REG
+// RUN: circt-opt -pass-pipeline="builtin.module(lower-firrtl-to-hw)" -verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline="builtin.module(lower-firrtl-to-hw{disable-mem-randomization})" -verify-diagnostics %s | FileCheck %s --check-prefix DISABLE_RANDOM --implicit-check-not RANDOMIZE_MEM
+// RUN: circt-opt -pass-pipeline="builtin.module(lower-firrtl-to-hw{disable-reg-randomization})" -verify-diagnostics %s | FileCheck %s --check-prefix DISABLE_RANDOM --implicit-check-not RANDOMIZE_REG
+// RUN: circt-opt -pass-pipeline="builtin.module(lower-firrtl-to-hw{disable-mem-randomization disable-reg-randomization})" -verify-diagnostics %s | FileCheck %s --check-prefix DISABLE_RANDOM --implicit-check-not RANDOMIZE_MEM --implicit-check-not RANDOMIZE_REG
 
 // DISABLE_RANDOM-LABEL: module @Simple
 firrtl.circuit "Simple"   attributes {annotations = [{class =
