@@ -2552,4 +2552,14 @@ firrtl.module @CrashAllUnusedPorts() {
   firrtl.strictconnect %26, %c0_ui1 : !firrtl.uint<1>
 }
 
+// CHECK-LABEL: firrtl.module @CrashRegResetWithOneReset
+firrtl.module @CrashRegResetWithOneReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %io_d: !firrtl.uint<1>, out %io_q: !firrtl.uint<1>, in %io_en: !firrtl.uint<1>) {
+  %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.asyncreset
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %reg = firrtl.regreset  %clock, %c1_asyncreset, %c0_ui1  : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+  %0 = firrtl.mux(%io_en, %io_d, %reg) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %reg, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %io_q, %reg : !firrtl.uint<1>, !firrtl.uint<1>
+}
+
 }

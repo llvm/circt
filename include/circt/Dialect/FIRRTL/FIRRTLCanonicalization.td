@@ -62,6 +62,9 @@ def OneConstantOp : Constraint<Or<[
         "$0.getDefiningOp<SpecialConstantOp>().getValue() == true">
 ]>>;
 
+/// Constraint that a component is undriven.
+def Undriven : Constraint<CPred<"!getDriverFromConnect($0)">>;
+
 def GetEmptyString : NativeCodeCall<
   "StringAttr::get($_builder.getContext(), {}) ">;
 
@@ -110,8 +113,9 @@ def RegResetWithZeroReset : Pat<
 
 // regreset(clock, constant_one, resetValue) -> reg(clock)
 def RegResetWithOneReset : Pat<
-  (RegResetOp $clock, $reset, $resetVal, $name, $nameKind, $annotations, $inner_sym),
-  (NodeOp $resetVal, $name, $nameKind, $annotations, $inner_sym), [(OneConstantOp $reset)]>;
+  (RegResetOp:$reg $clock, $reset, $resetVal, $name, $nameKind, $annotations, $inner_sym),
+  (NodeOp $resetVal, $name, $nameKind, $annotations, $inner_sym),
+  [(OneConstantOp $reset), (Undriven $reg)]>;
 
 // Return the width of an operation result as an integer attribute.  This is
 // useful to pad another operation up to the width of the original operation.
