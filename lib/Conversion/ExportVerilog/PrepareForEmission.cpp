@@ -615,8 +615,7 @@ bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
   // If the operation is only used by an assignment, the op is already spilled
   // to a wire.
   if (op.hasOneUse() &&
-      isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp, sv::PAssignOp>(
-          *op.getUsers().begin()))
+      isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp>(*op.getUsers().begin()))
     return false;
 
   // If the term size is greater than `maximumNumberOfTermsPerExpression`,

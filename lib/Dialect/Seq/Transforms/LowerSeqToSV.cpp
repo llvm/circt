@@ -36,6 +36,7 @@ struct SeqToSVPass : public LowerSeqToSVBase<SeqToSVPass> {
 };
 struct SeqFIRRTLToSVPass : public LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass> {
   void runOnOperation() override;
+  using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::disableRegRandomization;
 };
 } // anonymous namespace
 
@@ -89,7 +90,8 @@ namespace {
 /// Lower FirRegOp to `sv.reg` and `sv.always`.
 class FirRegLower {
 public:
-  FirRegLower(hw::HWModuleOp module) : module(module){};
+  FirRegLower(hw::HWModuleOp module, bool disableRegRandomization = false)
+      : module(module), disableRegRandomization(disableRegRandomization){};
 
   void lower();
 
@@ -142,6 +144,8 @@ private:
   llvm::SmallDenseMap<std::pair<Value, unsigned>, Value> arrayIndexCache;
 
   hw::HWModuleOp module;
+
+  bool disableRegRandomization;
 };
 } // namespace
 
@@ -201,7 +205,7 @@ void FirRegLower::lower() {
   //     `INIT_RANDOM_PROLOG_
   //     ... initBuilder ..
   // `endif
-  if (toInit.empty())
+  if (toInit.empty() || disableRegRandomization)
     return;
 
   auto loc = module.getLoc();
@@ -368,7 +372,14 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
   if (reg.hasReset()) {
     addToAlwaysBlock(
         module.getBodyBlock(), sv::EventControl::AtPosEdge, reg.getClk(),
-        [&](OpBuilder &b) { createTree(b, svReg.reg, reg, reg.getNext()); },
+        [&](OpBuilder &b) {
+          // If this is an AsyncReset, ensure that we emit a self connect to
+          // avoid erroneously creating a latch construct.
+          if (reg.getIsAsync() && areEquivalentValues(reg, reg.getNext()))
+            b.create<sv::PAssignOp>(reg.getLoc(), svReg.reg, reg);
+          else
+            createTree(b, svReg.reg, reg, reg.getNext());
+        },
         reg.getIsAsync() ? ResetType::AsyncReset : ResetType::SyncReset,
         sv::EventControl::AtPosEdge, reg.getReset(),
         [&](OpBuilder &builder) {
@@ -502,13 +513,17 @@ void SeqToSVPass::runOnOperation() {
 
 void SeqFIRRTLToSVPass::runOnOperation() {
   hw::HWModuleOp module = getOperation();
-  FirRegLower(module).lower();
+  FirRegLower(module, disableRegRandomization).lower();
 }
 
 std::unique_ptr<Pass> circt::seq::createSeqLowerToSVPass() {
   return std::make_unique<SeqToSVPass>();
 }
 
-std::unique_ptr<Pass> circt::seq::createSeqFIRRTLLowerToSVPass() {
-  return std::make_unique<SeqFIRRTLToSVPass>();
+std::unique_ptr<Pass>
+circt::seq::createSeqFIRRTLLowerToSVPass(bool disableRegRandomization) {
+  auto pass = std::make_unique<SeqFIRRTLToSVPass>();
+  if (disableRegRandomization)
+    pass->disableRegRandomization = disableRegRandomization;
+  return pass;
 }

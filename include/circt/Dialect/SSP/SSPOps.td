@@ -195,6 +195,9 @@ def OperationOp : SSPOp<"operation",
   let extraClassDeclaration = [{
     // SymbolUserOpInterface
     static bool isOptionalSymbol() { return true; }
+
+    // Find the attribute modeling the `linkedOperatorType` property
+    ::circt::ssp::LinkedOperatorTypeAttr getLinkedOperatorTypeAttr();
   }];
 
   let skipDefaultBuilders = true;

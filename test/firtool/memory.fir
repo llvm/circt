@@ -1,6 +1,9 @@
-; RUN: firtool %s --format=fir --ir-sv | FileCheck %s
-; RUN: firtool %s --format=fir --ir-sv -strip-mux-pragmas | FileCheck %s --check-prefix=STRIP
-; STRIP-NOT: sv.attributes
+; RUN: firtool %s --format=fir --ir-sv | FileCheck %s --check-prefixes=CHECK,COMMON
+; RUN: firtool %s --format=fir --ir-sv -strip-mux-pragmas | FileCheck %s --check-prefix COMMON --implicit-check-not sv.attributes
+; RUN: firtool %s --format=fir --ir-sv -disable-mem-randomization | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_MEM
+; RUN: firtool %s --format=fir --ir-sv -disable-reg-randomization | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
+; RUN: firtool %s --format=fir --ir-sv -disable-mem-randomization --disable-reg-randomization | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_MEM --implicit-check-not RANDOMIZE_REG
+; RUN: firtool %s --format=fir --ir-sv -disable-all-randomization | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_MEM --implicit-check-not RANDOMIZE_REG
 
 circuit Qux: %[[{
     "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
@@ -65,7 +68,7 @@ circuit Qux: %[[{
 ; This test is quite fragile, both as written, and in that it depends on
 ; multiple passes.  It should be replaced with a narrower test.
 
-;CHECK-LABEL: hw.module @Qux
+;COMMON-LABEL: hw.module @Qux
 ;CHECK:    %[[memory_0:.+]] = sv.reg
 ;CHECK:    %[[memory_1:.+]] = sv.reg
 ;CHECK:    %[[memory_2:.+]] = sv.reg
@@ -76,10 +79,10 @@ circuit Qux: %[[{
 ;CHECK:    %[[array_get:.+]] = hw.array_get %[[v5]][%[[v4]]]
 ;CHECK:    %[[multbit_mux_wire:.+]] = sv.wire  : !hw.inout<i8>
 ;CHECK:    sv.assign %[[multbit_mux_wire]], %[[array_get]]
-;CHECK:    %[[v6:.+]] = sv.read_inout %[[multbit_mux_wire]] : !hw.inout<i8>
+;CHECK:    %[[v6:.+]] = sv.read_inout %[[multbit_mux_wire]]
 ;CHECK:    %[[array_get:.+]] = hw.array_get %[[v5]][%rwAddr]
 ;CHECK:    %[[multbit_mux_wire:.+]] = sv.wire  : !hw.inout<i8>
-;CHECK:    %[[v7:.+]] = sv.read_inout %[[multbit_mux_wire]] : !hw.inout<i8>
+;CHECK:    %[[v7:.+]] = sv.read_inout %[[multbit_mux_wire]]
 ;CHECK:    %12 = comb.icmp eq %rwAddr, %c0_i2 : i2
 ;CHECK:    %13 = comb.and %rwEn, %rwMode, %rwMask, %12 : i1
 ;CHECK:    %14 = comb.icmp bin eq %rwAddr, %c1_i2 : i2

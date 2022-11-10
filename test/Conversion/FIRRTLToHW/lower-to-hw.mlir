@@ -1,5 +1,9 @@
-// RUN: circt-opt -lower-firrtl-to-hw -verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline="builtin.module(lower-firrtl-to-hw)" -verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline="builtin.module(lower-firrtl-to-hw{disable-mem-randomization})" -verify-diagnostics %s | FileCheck %s --check-prefix DISABLE_RANDOM --implicit-check-not RANDOMIZE_MEM
+// RUN: circt-opt -pass-pipeline="builtin.module(lower-firrtl-to-hw{disable-reg-randomization})" -verify-diagnostics %s | FileCheck %s --check-prefix DISABLE_RANDOM --implicit-check-not RANDOMIZE_REG
+// RUN: circt-opt -pass-pipeline="builtin.module(lower-firrtl-to-hw{disable-mem-randomization disable-reg-randomization})" -verify-diagnostics %s | FileCheck %s --check-prefix DISABLE_RANDOM --implicit-check-not RANDOMIZE_MEM --implicit-check-not RANDOMIZE_REG
 
+// DISABLE_RANDOM-LABEL: module @Simple
 firrtl.circuit "Simple"   attributes {annotations = [{class =
 "sifive.enterprise.firrtl.ExtractAssumptionsAnnotation", directory = "dir1",  filename = "./dir1/filename1" }, {class =
 "sifive.enterprise.firrtl.ExtractCoverageAnnotation", directory = "dir2",  filename = "./dir2/filename2" }, {class =
@@ -1734,16 +1738,23 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
  
   // CHECK-LABEL: hw.module @MergeVector
-  firrtl.module @MergeVector(out %o: !firrtl.vector<uint<1>, 3>, in %i: !firrtl.uint<1>) {
+  firrtl.module @MergeVector(out %o: !firrtl.vector<uint<1>, 3>, in %i: !firrtl.uint<1>, in %j: !firrtl.uint<1>) {
     %a = firrtl.wire   : !firrtl.vector<uint<1>, 3>
     firrtl.strictconnect %o, %a : !firrtl.vector<uint<1>, 3>
-    %0 = firrtl.vectorcreate %i, %i, %i : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 3>
+    %0 = firrtl.vectorcreate %i, %i, %j : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 3>
     firrtl.strictconnect %a, %0 : !firrtl.vector<uint<1>, 3>
     // CHECK:  %a = sv.wire : !hw.inout<array<3xi1>> 
     // CHECK:  %0 = sv.read_inout %a : !hw.inout<array<3xi1>> 
-    // CHECK:  %1 = hw.array_create %i, %i, %i : i1 
+    // CHECK:  %1 = hw.array_create %j, %i, %i : i1
     // CHECK:  sv.assign %a, %1 : !hw.array<3xi1> 
     // CHECK:  hw.output %0 : !hw.array<3xi1> 
   }
 
+  // CHECK-LABEL: hw.module @aggregateconstant
+  firrtl.module @aggregateconstant(out %out : !firrtl.vector<uint<8>, 2>) {
+    %0 = firrtl.aggregateconstant [1 : ui8, 0: ui8] : !firrtl.vector<uint<8>, 2>
+    firrtl.strictconnect %out, %0 : !firrtl.vector<uint<8>, 2>
+    // CHECK:      %0 = hw.array_create %c0_i8, %c1_i8 : i8
+    // CHECK-NEXT: hw.output %0 : !hw.array<2xi8>
+  }
 }

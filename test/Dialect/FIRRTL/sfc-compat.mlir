@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(firrtl-sfc-compat))' --verify-diagnostics --split-input-file %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-sfc-compat)))' --verify-diagnostics --split-input-file %s | FileCheck %s
 
 firrtl.circuit "SFCCompatTests" {
 

@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-emit-metadata{repl-seq-mem=true repl-seq-mem-file="dut.conf"})' %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-emit-metadata{repl-seq-mem=true repl-seq-mem-file="dut.conf"}))' %s | FileCheck %s
 
 firrtl.circuit "empty" {
   firrtl.module @empty() {

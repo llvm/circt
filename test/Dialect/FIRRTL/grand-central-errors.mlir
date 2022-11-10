@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-grand-central)' -split-input-file -verify-diagnostics %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-grand-central))' -split-input-file -verify-diagnostics %s
 
 // expected-error @+1 {{more than one 'ExtractGrandCentralAnnotation' was found, but exactly one must be provided}}
 firrtl.circuit "MoreThanOneExtractGrandCentralAnnotation" attributes {
@@ -36,19 +36,26 @@ firrtl.circuit "NonGroundType" attributes {
       {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
        defName = "Foo",
        id = 0 : i64,
-       name = "View"}]} {}
+       name = "View"}]} {
+    %_vector = firrtl.verbatim.expr "???" : () -> !firrtl.vector<uint<2>, 1>
+    %ref_vector = firrtl.ref.send %_vector : !firrtl.vector<uint<2>, 1>
+    %vector = firrtl.ref.resolve %ref_vector : !firrtl.ref<vector<uint<2>, 1>>
+    // expected-error @+1 {{'firrtl.node' op cannot be added to interface with id '0' because it is not a ground type}}
+    %a = firrtl.node %vector {
+      annotations = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 1 : i64
+        }
+      ]
+    } : !firrtl.vector<uint<2>, 1>
+  }
   firrtl.module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
        id = 0 : i64,
        name = "view"}
     ]} {
-    // expected-error @+1 {{'firrtl.wire' op cannot be added to interface with id '0' because it is not a ground type}}
-    %a = firrtl.wire {
-      annotations = [
-        {a},
-        {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-         id = 1 : i64}]} : !firrtl.vector<uint<2>, 1>
     firrtl.instance View_companion @View_companion()
   }
   firrtl.module @NonGroundType() {
@@ -218,37 +225,112 @@ firrtl.circuit "multiInstance2" attributes {
 
 // -----
 
-firrtl.circuit "InvalidFieldID" attributes {
+firrtl.circuit "FieldNotInCompanion" attributes {
   annotations = [
-    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
-     defName = "Foo",
-     elements = [
-       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-        id = 1 : i64,
-        name = "foo"}],
-     id = 0 : i64}
-    ]} {
-  firrtl.module private @View_companion() attributes {
-     annotations = [
-       {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+    {
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "Foo",
+      elements = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          description = "description of foo",
+          name = "foo",
+          id = 1 : i64
+        }
+      ],
+      id = 0 : i64,
+      name = "Foo"
+    }
+  ]
+} {
+  // expected-error @+1 {{Grand Central View "Foo" is invalid because a leaf is not inside the companion module}}
+  firrtl.module @Companion() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
         defName = "Foo",
         id = 0 : i64,
-        name = "View"}]} {}
-  firrtl.module private @DUT() attributes {
+        name = "Foo"
+      }
+    ]
+  } {}
+  // expected-note @+1 {{the leaf value is inside this module}}
+  firrtl.module @FieldNotInCompanion() attributes {
     annotations = [
-      {class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
-       id = 0 : i64,
-       name = "view"}
-    ]} {
-    // expected-error @+1 {{subannotation with fieldID=3 is too large for type '!firrtl.vector<uint<2>, 1>'}}
-    %a = firrtl.wire {
+      {
+        class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
+        id = 0 : i64,
+        name = "Foo"
+      }
+    ]
+  } {
+
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c-1_si2 = firrtl.constant -1 : !firrtl.sint<2>
+
+    // expected-note @+1 {{the leaf value is declared here}}
+    %node_c0_ui1 = firrtl.node %c0_ui1 {
       annotations = [
-        {a},
-        {circt.fieldID = 3 : i32, class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1 : i64}
-      ]} : !firrtl.vector<uint<2>, 1>
-    firrtl.instance View_companion @View_companion()
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 1 : i64
+        }
+      ]
+    } : !firrtl.uint<1>
+
+    firrtl.instance companion @Companion()
   }
-  firrtl.module @InvalidFieldID() {
-    firrtl.instance dut @DUT()
+}
+
+// -----
+
+firrtl.circuit "InvalidField" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "Foo",
+      elements = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          description = "description of foo",
+          name = "foo",
+          id = 1 : i64
+        }
+      ],
+      id = 0 : i64,
+      name = "Foo"
+    }
+  ]
+} {
+  firrtl.module @Companion() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+        defName = "Foo",
+        id = 0 : i64,
+        name = "Foo"
+      }
+    ]
+  } {
+    // expected-error @+1 {{Grand Central View "Foo" has an invalid leaf value}}
+    %node = firrtl.wire {
+      annotations = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 1 : i64
+        }
+      ]
+    } : !firrtl.uint<1>
+  }
+  firrtl.module @InvalidField() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
+        id = 0 : i64,
+        name = "Foo"
+      }
+    ]
+  } {
+    firrtl.instance companion @Companion()
   }
 }

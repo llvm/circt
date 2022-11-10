@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-inject-dut-hier)' -split-input-file %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-inject-dut-hier))' -split-input-file %s | FileCheck %s
 
 // CHECK-LABEL: firrtl.circuit "Top"
 firrtl.circuit "Top" attributes {

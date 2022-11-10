@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl.module(firrtl-lower-chirrtl))'  %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-lower-chirrtl)))'  %s | FileCheck %s
 
 firrtl.circuit "Empty" {
 

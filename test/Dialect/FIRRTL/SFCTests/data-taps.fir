@@ -31,6 +31,10 @@ circuit Top : %[[
     ]
   },
   {
+    "class": "firrtl.transforms.DontTouchAnnotation",
+    "target": "~Top|Child>always"
+  },
+  {
     "class":"sifive.enterprise.grandcentral.MemTapAnnotation",
     "source": "~Top|Child>always",
     "taps":["~Top|MemTap_2>_0", "~Top|MemTap_2>_1"]

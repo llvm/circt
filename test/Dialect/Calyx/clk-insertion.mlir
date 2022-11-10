@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='calyx.component(calyx-clk-insertion,calyx-reset-insertion)' %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(calyx.component(calyx-clk-insertion,calyx-reset-insertion))' %s | FileCheck %s
 
 module attributes {calyx.entrypoint = "main"} {
   calyx.component @A(%in: i8, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i8, %done: i1 {done}) {

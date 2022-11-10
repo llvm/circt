@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl.module(firrtl-flatten-memory))' %s | FileCheck  %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-flatten-memory)))' %s | FileCheck  %s
 
 
 firrtl.circuit "Mem" {

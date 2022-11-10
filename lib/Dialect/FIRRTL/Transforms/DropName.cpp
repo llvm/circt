@@ -38,10 +38,12 @@ struct DropNamesPass : public DropNameBase<DropNamesPass> {
 private:
   size_t dropNamesIf(llvm::function_ref<bool(FNamableOp)> pred) {
     size_t changedNames = 0;
+    auto droppableNameAttr =
+        NameKindEnumAttr::get(&getContext(), NameKindEnum::DroppableName);
     getOperation()->walk([&](FNamableOp op) {
       if (pred(op) && !op.hasDroppableName()) {
         ++changedNames;
-        op.dropName();
+        op.setNameKindAttr(droppableNameAttr);
       }
     });
     return changedNames;

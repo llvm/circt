@@ -113,7 +113,7 @@ with Context() as ctx, Location.unknown():
   # CHECK-LABEL: === Verilog ===
   print("=== Verilog ===")
 
-  pm = PassManager.parse("hw.module(hw-cleanup)")
+  pm = PassManager.parse("builtin.module(hw.module(hw-cleanup))")
   pm.run(m)
   # CHECK: module MyWidget
   # CHECK: external module FancyThing

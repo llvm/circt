@@ -707,14 +707,6 @@ private:
 
   /// Returns a port's `inner_sym`, adding one if necessary.
   StringAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
-
-  /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
-  /// to that operation.
-  hw::InnerRefAttr getInnerRefTo(Operation *op);
-
-  /// Obtain an inner reference to a module port, possibly adding an `inner_sym`
-  /// to that port.
-  hw::InnerRefAttr getInnerRefTo(FModuleLike module, size_t portIdx);
 };
 
 } // namespace
@@ -1081,39 +1073,40 @@ static Optional<DictionaryAttr> parseAugmentedType(
     }
     auto companionTarget = resolvePath(companionAttr.getValue(), state.circuit,
                                        state.symTbl, state.targetCaches);
-    if (xmrSrcTarget->ref.getModule() !=
-        cast<FModuleOp>(companionTarget->ref.getOp())) {
-      // Get the name of the node op that reads the remote value from
-      // xmrSrcTarget. This adds the refsend, drills the ports and adds the ref
-      // resolve and then reads the output from resolve into a node. Note: The
-      // remote signal to which the XMR is being generated, does not contain any
-      // DontTouch. Which implies the remote signal can be optimized away, but
-      // the XMR should still point to a legal value or a constant after the
-      // optimization.
-      LLVM_DEBUG(llvm::dbgs() << "\n view from :" << targetAttr.getValue()
-                              << " to \n " << companionAttr.getValue());
-      auto resolveTargetName = borePortsFromViewToCompanion(
-          *xmrSrcTarget, parentModule, state, *companionTarget, name);
-      if (!resolveTargetName) {
-        (mlir::emitError(loc, "Failed to resolve target, cannot find unique "
-                              "path from parent module `")
-         << parentModule.getName() << "` to target `" << targetAttr.getValue()
-         << "`")
-                .attachNote()
-            << "See the full Annotation here: " << root;
-        ;
-        return None;
-      }
-      // Now the view target can be added to the local node created inside the
-      // companion. Add the annotation. This essentially moves the annotation
-      // from the remote XMR signal to a local wire, which in-turn reads the
-      // XMR.
-      elementScattered.append(
-          "target", StringAttr::get(context, companion + ">" +
-                                                 resolveTargetName.getValue()));
-    } else
-      elementScattered.append("target", targetAttr);
-
+    // Get the name of the node op that reads the remote value from
+    // xmrSrcTarget. This adds the refsend, drills the ports and adds the ref
+    // resolve and then reads the output from resolve into a node. Note: The
+    // remote signal to which the XMR is being generated, does not contain any
+    // DontTouch. Which implies the remote signal can be optimized away, but the
+    // XMR should still point to a legal value or a constant after the
+    // optimization.
+    //
+    // TODO: This currently generates RefSendOp and RefResolveOp even when it
+    // does not need to, i.e., when the source is in the companion module.  This
+    // is temporary solution to guarantee the simplicity of sink structure for
+    // the Grand Central pass.  Specifically, this guarantees that a NodeOp is
+    // always the sink.  This will be refactored as part of broader improvements
+    // to improve the performance of LowerAnnotations.
+    LLVM_DEBUG(llvm::dbgs() << "\n view from :" << targetAttr.getValue()
+                            << " to \n " << companionAttr.getValue());
+    auto resolveTargetName = borePortsFromViewToCompanion(
+        *xmrSrcTarget, parentModule, state, *companionTarget, name);
+    if (!resolveTargetName) {
+      (mlir::emitError(loc, "Failed to resolve target, cannot find unique "
+                            "path from parent module `")
+       << parentModule.getName() << "` to target `" << targetAttr.getValue()
+       << "`")
+              .attachNote()
+          << "See the full Annotation here: " << root;
+      ;
+      return None;
+    }
+    // Now the view target can be added to the local node created inside the
+    // companion. Add the annotation. This essentially moves the annotation from
+    // the remote XMR signal to a local wire, which in-turn reads the XMR.
+    elementScattered.append(
+        "target", StringAttr::get(context, companion + ">" +
+                                               resolveTargetName.getValue()));
     state.addToWorklistFn(
         DictionaryAttr::getWithSorted(context, elementScattered));
 
@@ -1289,12 +1282,6 @@ Optional<Attribute> GrandCentralPass::fromAttr(Attribute attr) {
   return None;
 }
 
-static StringAttr getModPart(Attribute pathSegment) {
-  return TypeSwitch<Attribute, StringAttr>(pathSegment)
-      .Case<FlatSymbolRefAttr>([](auto a) { return a.getAttr(); })
-      .Case<hw::InnerRefAttr>([](auto a) { return a.getModule(); });
-}
-
 bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
                                      VerbatimBuilder &path) {
   return TypeSwitch<Attribute, bool>(field)
@@ -1304,7 +1291,6 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         if (sym)
           nla = nlaTable->getNLA(sym.getAttr());
         Value leafValue = fieldRef.getValue();
-        unsigned fieldID = fieldRef.getFieldID();
         assert(leafValue && "leafValue not found");
 
         auto companionModule = companionIDMap.lookup(id).companion;
@@ -1318,8 +1304,38 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         if (!tpe.getBitWidthOrSentinel())
           return true;
 
-        // Generate the path from the LCA to the module that contains the leaf.
-        path += " = ";
+        // The leafValue is assumed to conform to a very specific pattern:
+        //
+        //   1) The leaf value is in the companion.
+        //   2) The leaf value is a NodeOp
+        //
+        // Anything else means that there is an error or the IR is somehow using
+        // "old-style" Annotations to encode a Grand Central View.  This
+        // _really_ should be impossible to hit given that LowerAnnotations must
+        // generate code that conforms to the check here.
+        auto *nodeOp = leafValue.getDefiningOp();
+        if (companionModule != enclosing) {
+          auto diag = companionModule->emitError()
+                      << "Grand Central View \""
+                      << companionIDMap.lookup(id).name
+                      << "\" is invalid because a leaf is not inside the "
+                         "companion module";
+          diag.attachNote(leafValue.getLoc())
+              << "the leaf value is declared here";
+          if (nodeOp) {
+            auto leafModule = nodeOp->getParentOfType<FModuleOp>();
+            diag.attachNote(leafModule.getLoc())
+                << "the leaf value is inside this module";
+          }
+          return false;
+        }
+
+        if (!isa<NodeOp>(nodeOp)) {
+          emitError(leafValue.getLoc())
+              << "Grand Central View \"" << companionIDMap.lookup(id).name
+              << "\" has an invalid leaf value (this must be a node)";
+          return false;
+        }
 
         /// Increment all the indices inside `{{`, `}}` by one. This is to
         /// indicate that a value is added to the `substitutions` of the
@@ -1357,141 +1373,17 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           return StringAttr::get(&getContext(), "assign " + replStr + ";");
         };
 
-        // If the leaf is inside the companionModule and the leaf is a NodeOp
-        // and the NodeOp input is a RefResolveOp, then no path needs to be
-        // generated, only the RefResolveOp result can be used as a value
-        // substitution into the verbatim.
-        if (companionModule == enclosing && !leafValue.isa<BlockArgument>() &&
-            isa<NodeOp>(leafValue.getDefiningOp()) &&
-            !leafValue.getDefiningOp()->getOperand(0).isa<BlockArgument>()) {
-          auto *nodeOp = leafValue.getDefiningOp();
-          auto *nodeDef = nodeOp->getOperand(0).getDefiningOp();
-          if (isa<RefResolveOp>(nodeDef) || isa<ConstantOp>(nodeDef)) {
-            // This is the new style of XMRs using RefTypes.
-            // The value subsitution index is set to -1, as it will be
-            // incremented when generating the string.
-            path += "{{-1}}";
-            AnnotationSet::removeDontTouch(nodeOp);
-            // Assemble the verbatim op.
-            builder.create<sv::VerbatimOp>(
-                uloc, getStrAndIncrementIds(path.getString()),
-                nodeOp->getOperand(0),
-                ArrayAttr::get(&getContext(), path.getSymbols()));
-            ++numXMRs;
-            return true;
-          }
-        }
-
-        // This case can only occur if ref.resolve is not introduced during
-        // LowerAnnotations.
-        //
-        // There are two possibilities for what this is tapping:
-        //   1. This is a constant that will be synced into the mappings file.
-        //   2. This is something else and we need an XMR.
-        // Handle case (1) here and exit.  Handle case (2) following.
-        auto driver = getDriverFromConnect(leafValue);
-        if (driver) {
-          if (auto constant =
-                  dyn_cast_or_null<ConstantOp>(driver.getDefiningOp())) {
-            path.append(Twine(constant.getValue().getBitWidth()));
-            path += "'h";
-            SmallString<32> valueStr;
-            constant.getValue().toStringUnsigned(valueStr, 16);
-            path.append(valueStr);
-            builder.create<sv::VerbatimOp>(
-                constant.getLoc(),
-                StringAttr::get(&getContext(),
-                                "assign " + path.getString() + ";"),
-                ValueRange{}, ArrayAttr::get(&getContext(), path.getSymbols()));
-            return true;
-          }
-        }
-
-        // Populate a hierarchical path to the leaf.  For an NLA this is just
-        // the namepath of the associated hierarchical path.  For a local
-        // annotation, this is computed from the instance path.
-        SmallVector<Attribute> fullLeafPath;
-        if (nla) {
-          fullLeafPath.append(nla.getNamepath().begin(),
-                              nla.getNamepath().end());
-        } else {
-          auto enclosingPaths = instancePaths->getAbsolutePaths(enclosing);
-          assert(enclosingPaths.size() == 1 &&
-                 "Unable to handle multiply instantiated companions");
-          if (enclosingPaths.size() != 1)
-            return false;
-          auto *topNode = instancePaths->instanceGraph.getTopLevelNode();
-          StringAttr root = topNode->getModule().moduleNameAttr();
-          for (auto segment : enclosingPaths[0]) {
-            fullLeafPath.push_back(getInnerRefTo(segment));
-            root = segment.referencedModuleNameAttr();
-          }
-          fullLeafPath.push_back(FlatSymbolRefAttr::get(root));
-        }
-
-        // Compute the lowest common ancestor (LCA) of the leaf path and the
-        // parent module.  This enables the generated XMR to be as short as
-        // possible while not losing specificity.
-        ArrayRef<Attribute> minimalLeafPath(fullLeafPath);
-        StringAttr parentNameAttr =
-            parentIDMap.lookup(id).second.moduleNameAttr();
-        minimalLeafPath = minimalLeafPath.drop_until(
-            [&](Attribute attr) { return getModPart(attr) == parentNameAttr; });
-
-        path += FlatSymbolRefAttr::get(getModPart(minimalLeafPath.front()));
-        if (minimalLeafPath.size() > 0) {
-          for (auto segment : minimalLeafPath.drop_back()) {
-            path += ".";
-            path += segment;
-          }
-        }
-
-        // Add the leaf value to the path.
-        path += '.';
-        if (auto blockArg = leafValue.dyn_cast<BlockArgument>()) {
-          auto module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
-          path += getInnerRefTo(module, blockArg.getArgNumber());
-        } else {
-          path += getInnerRefTo(leafValue.getDefiningOp());
-        }
-
-        if (fieldID > tpe.getMaxFieldID()) {
-          leafValue.getDefiningOp()->emitError()
-              << "subannotation with fieldID=" << fieldID
-              << " is too large for type " << tpe;
-          return false;
-        }
-
-        // Construct a path given by fieldID.
-        while (fieldID) {
-          TypeSwitch<FIRRTLType>(tpe)
-              .template Case<FVectorType>([&](FVectorType vector) {
-                unsigned index = vector.getIndexForFieldID(fieldID);
-                tpe = vector.getElementType();
-                fieldID -= vector.getFieldID(index);
-                path.append("[" + Twine(index) + "]");
-              })
-              .template Case<BundleType>([&](BundleType bundle) {
-                unsigned index = bundle.getIndexForFieldID(fieldID);
-                tpe = bundle.getElementType(index);
-                fieldID -= bundle.getFieldID(index);
-                // FIXME: Invalid verilog names (e.g. "begin", "reg", .. ) will
-                // be renamed at ExportVerilog so the path constructed here
-                // might become invalid. We can use an inner name ref to encode
-                // a reference to a subfield.
-                path.append("." + Twine(bundle.getElement(index).name));
-              })
-              .Default([&](auto op) {
-                llvm_unreachable(
-                    "fieldID > maxFieldID case must be already handled");
-              });
-        }
-
+        // This is the new style of XMRs using RefTypes.  The value subsitution
+        // index is set to -1, as it will be incremented when generating the
+        // string.
+        // Generate the path from the LCA to the module that contains the leaf.
+        path += " = {{-1}}";
+        AnnotationSet::removeDontTouch(nodeOp);
         // Assemble the verbatim op.
         builder.create<sv::VerbatimOp>(
-            uloc,
-            StringAttr::get(&getContext(), "assign " + path.getString() + ";"),
-            ValueRange{}, ArrayAttr::get(&getContext(), path.getSymbols()));
+            uloc, getStrAndIncrementIds(path.getString()),
+            nodeOp->getOperand(0),
+            ArrayAttr::get(&getContext(), path.getSymbols()));
         ++numXMRs;
         return true;
       })
@@ -2381,20 +2273,6 @@ void GrandCentralPass::runOnOperation() {
   if (removalError)
     return signalPassFailure();
   markAnalysesPreserved<NLATable>();
-}
-
-hw::InnerRefAttr GrandCentralPass::getInnerRefTo(Operation *op) {
-  return ::getInnerRefTo(op, "", [&](FModuleOp mod) -> ModuleNamespace & {
-    return getModuleNamespace(mod);
-  });
-}
-
-hw::InnerRefAttr GrandCentralPass::getInnerRefTo(FModuleLike module,
-                                                 size_t portIdx) {
-  return ::getInnerRefTo(module, portIdx, "",
-                         [&](FModuleLike mod) -> ModuleNamespace & {
-                           return getModuleNamespace(mod);
-                         });
 }
 
 //===----------------------------------------------------------------------===//

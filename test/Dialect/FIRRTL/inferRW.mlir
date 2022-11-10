@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(firrtl-infer-rw))' %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-infer-rw)))' %s | FileCheck %s
 
 firrtl.circuit "TLRAM" {
 // Test the case when the enable is a simple not of write enable.

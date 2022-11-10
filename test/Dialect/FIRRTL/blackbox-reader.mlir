@@ -1,7 +1,7 @@
 // RUN: split-file %s %t
 // RUN: cd %t
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-blackbox-reader)' Foo.mlir | FileCheck Foo.mlir
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-blackbox-reader)' NoDUT.mlir | FileCheck NoDUT.mlir
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-blackbox-reader))' Foo.mlir | FileCheck Foo.mlir
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-blackbox-reader))' NoDUT.mlir | FileCheck NoDUT.mlir
 
 //--- Baz.sv
 /* Baz */
