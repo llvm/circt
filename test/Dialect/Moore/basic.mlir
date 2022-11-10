@@ -38,28 +38,102 @@ moore.module @Foo {
 moore.module @Bar {
 }
 
-// CHECK-LABEL: llhd.entity @test1
-llhd.entity @test1() -> () {
-  // CHECK-NEXT: [[CONST:%.*]] = moore.mir.constant 5 : !moore.int
-  %0 = moore.mir.constant 5 : !moore.int
-}
+// CHECK-LABEL: moore.module @Expressions
+moore.module @Expressions {
+  %b1 = moore.variable : !moore.bit
+  %l1 = moore.variable : !moore.logic
+  %b5 = moore.variable : !moore.packed<range<bit, 4:0>>
+  %int = moore.variable : !moore.int
+  %int2 = moore.variable : !moore.int
+  %integer = moore.variable : !moore.integer
+  %integer2 = moore.variable : !moore.integer
 
-// CHECK-LABEL: func @Expressions
-func.func @Expressions(%a: !moore.bit, %b: !moore.logic, %c: !moore.packed<range<bit, 4:0>>) {
-  // CHECK: %0 = moore.mir.concat
-  // CHECK: %1 = moore.mir.concat
-  %0 = moore.mir.concat %a, %a : (!moore.bit, !moore.bit) -> !moore.packed<range<bit, 1:0>>
-  %1 = moore.mir.concat %b, %b : (!moore.logic, !moore.logic) -> !moore.packed<range<logic, 1:0>>
+  // CHECK: moore.constant 0 : !moore.int
+  moore.constant 0 : !moore.int
+  // CHECK: moore.constant -2 : !moore.packed<range<bit, 1:0>>
+  moore.constant 2 : !moore.packed<range<bit, 1:0>>
+  // CHECK: moore.constant -2 : !moore.packed<range<bit<signed>, 1:0>>
+  moore.constant -2 : !moore.packed<range<bit<signed>, 1:0>>
 
-  // CHECK: %2 = moore.mir.shl %
-  // CHECK: %3 = moore.mir.shl arithmetic %
-  %2 = moore.mir.shl %b, %a : !moore.logic, !moore.bit
-  %3 = moore.mir.shl arithmetic %c, %a : !moore.packed<range<bit, 4:0>>, !moore.bit
+  // CHECK: moore.conversion %b5 : !moore.packed<range<bit, 4:0>> -> !moore.packed<range<logic, 4:0>>
+  moore.conversion %b5 : !moore.packed<range<bit, 4:0>> -> !moore.packed<range<logic, 4:0>>
 
-  // CHECK: %4 = moore.mir.shr %
-  // CHECK: %5 = moore.mir.shr arithmetic %
-  %4 = moore.mir.shr %b, %a : !moore.logic, !moore.bit
-  %5 = moore.mir.shr arithmetic %c, %a : !moore.packed<range<bit, 4:0>>, !moore.bit
+  // CHECK: moore.neg %int : !moore.int
+  moore.neg %int : !moore.int
+  // CHECK: moore.not %int : !moore.int
+  moore.not %int : !moore.int
 
-  return
+  // CHECK: moore.reduce_and %int : !moore.int -> !moore.bit
+  moore.reduce_and %int : !moore.int -> !moore.bit
+  // CHECK: moore.reduce_or %int : !moore.int -> !moore.bit
+  moore.reduce_or %int : !moore.int -> !moore.bit
+  // CHECK: moore.reduce_xor %int : !moore.int -> !moore.bit
+  moore.reduce_xor %int : !moore.int -> !moore.bit
+  // CHECK: moore.reduce_xor %integer : !moore.integer -> !moore.logic
+  moore.reduce_xor %integer : !moore.integer -> !moore.logic
+
+  // CHECK: moore.bool_cast %int : !moore.int -> !moore.bit
+  moore.bool_cast %int : !moore.int -> !moore.bit
+  // CHECK: moore.bool_cast %integer : !moore.integer -> !moore.logic
+  moore.bool_cast %integer : !moore.integer -> !moore.logic
+
+  // CHECK: moore.add %int, %int2 : !moore.int
+  moore.add %int, %int2 : !moore.int
+  // CHECK: moore.sub %int, %int2 : !moore.int
+  moore.sub %int, %int2 : !moore.int
+  // CHECK: moore.mul %int, %int2 : !moore.int
+  moore.mul %int, %int2 : !moore.int
+  // CHECK: moore.div %int, %int2 : !moore.int
+  moore.div %int, %int2 : !moore.int
+  // CHECK: moore.mod %int, %int2 : !moore.int
+  moore.mod %int, %int2 : !moore.int
+
+  // CHECK: moore.and %int, %int2 : !moore.int
+  moore.and %int, %int2 : !moore.int
+  // CHECK: moore.or %int, %int2 : !moore.int
+  moore.or %int, %int2 : !moore.int
+  // CHECK: moore.xor %int, %int2 : !moore.int
+  moore.xor %int, %int2 : !moore.int
+
+  // CHECK: moore.shl %l1, %b1 : !moore.logic, !moore.bit
+  moore.shl %l1, %b1 : !moore.logic, !moore.bit
+  // CHECK: moore.shr %l1, %b1 : !moore.logic, !moore.bit
+  moore.shr %l1, %b1 : !moore.logic, !moore.bit
+  // CHECK: moore.ashr %b5, %b1 : !moore.packed<range<bit, 4:0>>, !moore.bit
+  moore.ashr %b5, %b1 : !moore.packed<range<bit, 4:0>>, !moore.bit
+
+  // CHECK: moore.eq %int, %int2 : !moore.int -> !moore.bit
+  moore.eq %int, %int2 : !moore.int -> !moore.bit
+  // CHECK: moore.ne %int, %int2 : !moore.int -> !moore.bit
+  moore.ne %int, %int2 : !moore.int -> !moore.bit
+  // CHECK: moore.ne %integer, %integer2 : !moore.integer -> !moore.logic
+  moore.ne %integer, %integer2 : !moore.integer -> !moore.logic
+  // CHECK: moore.case_eq %int, %int2 : !moore.int
+  moore.case_eq %int, %int2 : !moore.int
+  // CHECK: moore.case_ne %int, %int2 : !moore.int
+  moore.case_ne %int, %int2 : !moore.int
+  // CHECK: moore.wildcard_eq %int, %int2 : !moore.int -> !moore.bit
+  moore.wildcard_eq %int, %int2 : !moore.int -> !moore.bit
+  // CHECK: moore.wildcard_ne %int, %int2 : !moore.int -> !moore.bit
+  moore.wildcard_ne %int, %int2 : !moore.int -> !moore.bit
+  // CHECK: moore.wildcard_ne %integer, %integer2 : !moore.integer -> !moore.logic
+  moore.wildcard_ne %integer, %integer2 : !moore.integer -> !moore.logic
+
+  // CHECK: moore.lt %int, %int2 : !moore.int -> !moore.bit
+  moore.lt %int, %int2 : !moore.int -> !moore.bit
+  // CHECK: moore.le %int, %int2 : !moore.int -> !moore.bit
+  moore.le %int, %int2 : !moore.int -> !moore.bit
+  // CHECK: moore.gt %int, %int2 : !moore.int -> !moore.bit
+  moore.gt %int, %int2 : !moore.int -> !moore.bit
+  // CHECK: moore.ge %int, %int2 : !moore.int -> !moore.bit
+  moore.ge %int, %int2 : !moore.int -> !moore.bit
+  // CHECK: moore.ge %integer, %integer2 : !moore.integer -> !moore.logic
+  moore.ge %integer, %integer2 : !moore.integer -> !moore.logic
+
+  // CHECK: moore.concat %b1 : (!moore.bit) -> !moore.packed<range<bit, 0:0>>
+  moore.concat %b1 : (!moore.bit) -> !moore.packed<range<bit, 0:0>>
+  // CHECK: moore.concat %b5, %b1 : (!moore.packed<range<bit, 4:0>>, !moore.bit) -> !moore.packed<range<bit, 5:0>>
+  moore.concat %b5, %b1 : (!moore.packed<range<bit, 4:0>>, !moore.bit) -> !moore.packed<range<bit, 5:0>>
+  // CHECK: moore.concat %l1, %l1, %l1 : (!moore.logic, !moore.logic, !moore.logic) -> !moore.packed<range<logic, 2:0>>
+  moore.concat %l1, %l1, %l1 : (!moore.logic, !moore.logic, !moore.logic) -> !moore.packed<range<logic, 2:0>>
 }

@@ -33,6 +33,23 @@ def SimpleBitVectorType : MooreType<CPred<[{
     $_self.cast<moore::UnpackedType>().isSimpleBitVector()
   }]>, "simple bit vector type", "moore::UnpackedType">;
 
+/// A single bit type (`bit`, `logic`, `reg`).
+def AnySingleBitType : MooreType<CPred<[{
+    $_self.isa<moore::IntType>() &&
+    $_self.cast<moore::IntType>().getBitSize() == 1
+  }]>, "single bit type", "moore::IntType">;
+
+/// A `bit` type.
+def BitType : MooreType<CPred<[{
+    $_self.isa<moore::IntType>() &&
+    $_self.cast<moore::IntType>().getBitSize() == 1 &&
+    $_self.cast<moore::IntType>().getDomain() == moore::Domain::TwoValued
+  }]>, "`bit` type", "moore::IntType"> {
+  let builderCall = [{
+    $_builder.getType<moore::IntType>(IntType::Kind::Bit)
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Integer atom types
 //===----------------------------------------------------------------------===//

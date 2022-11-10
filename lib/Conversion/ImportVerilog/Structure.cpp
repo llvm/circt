@@ -106,6 +106,9 @@ struct MemberVisitor {
     if (!lhs || !rhs)
       return failure();
 
+    if (lhs.getType() != rhs.getType())
+      rhs = builder.create<moore::ConversionOp>(loc, lhs.getType(), rhs);
+
     builder.create<moore::ContinuousAssignOp>(loc, lhs, rhs);
     return success();
   }
