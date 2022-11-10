@@ -11,7 +11,9 @@
 #define CONVERSION_IMPORTVERILOG_IMPORTVERILOGINTERNALS_H
 
 #include "circt/Conversion/ImportVerilog.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "slang/ast/ASTVisitor.h"
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/Support/Debug.h"
