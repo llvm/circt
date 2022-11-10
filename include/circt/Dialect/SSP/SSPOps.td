@@ -34,7 +34,7 @@ def InstanceOp : SSPOp<"instance",
     **Example**
     ```mlir
     ssp.instance @canis14_fig2 of "ModuloProblem" [II<3>] {
-      library @_ {
+      library {
         operator_type @MemPort [latency<1>, limit<1>]
         operator_type @Add [latency<1>]
       }
@@ -100,13 +100,16 @@ def OperatorLibraryOp : SSPOp<"library",
     `InstanceOp`.
   }];
   
-  let arguments = (ins SymbolNameAttr:$sym_name);
-  let assemblyFormat = "$sym_name $body attr-dict";
+  let arguments = (ins OptionalAttr<SymbolNameAttr>:$sym_name);
+  let assemblyFormat = "($sym_name^)? $body attr-dict";
   let regions = (region SizedRegion<1>:$body);
 
   let extraClassDeclaration = [{
     // OpAsmOpInterface
     static ::llvm::StringRef getDefaultDialect() { return "ssp"; }
+
+    // SymbolUserOpInterface
+    static bool isOptionalSymbol() { return true; }
 
     // Convenience
     ::mlir::Block *getBodyBlock() {
@@ -116,8 +119,7 @@ def OperatorLibraryOp : SSPOp<"library",
 
   let skipDefaultBuilders = true;
   let builders = [
-    OpBuilder<(ins "::mlir::StringAttr":$sym_name), [{
-      $_state.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), sym_name);
+    OpBuilder<(ins ), [{
       ::mlir::Region* region = $_state.addRegion();
       region->push_back(new ::mlir::Block());
     }]>

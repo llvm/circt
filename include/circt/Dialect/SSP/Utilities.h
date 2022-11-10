@@ -329,7 +329,7 @@ saveProblem(ProblemT &prob, StringAttr instanceName, StringAttr problemName,
 
   // Emit operator types.
   b.setInsertionPointToEnd(instOp.getBodyBlock());
-  auto libraryOp = b.create<OperatorLibraryOp>(b.getStringAttr("_"));
+  auto libraryOp = b.create<OperatorLibraryOp>();
   b.setInsertionPointToStart(libraryOp.getBodyBlock());
 
   for (auto opr : prob.getOperatorTypes())

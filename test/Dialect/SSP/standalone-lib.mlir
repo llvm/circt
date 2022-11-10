@@ -26,7 +26,7 @@
 // 2) Import/export via the scheduling infra (i.e. populates a `Problem` instance and reconstructs the SSP IR from it.)
 //    Operator types from standalone libraries are appended to the instance's internal library, whose name is not preserved.
 // INFRA: ssp.instance @SomeInstance of "ModuloProblem" {
-// INFRA:   library @_ {
+// INFRA:   library {
 // INFRA:     operator_type @Opr [latency<3>, limit<3>]
 // INFRA:     operator_type @Opr_1 [latency<1>, limit<1>]
 // INFRA:     operator_type @Opr_2 [latency<2>, limit<2>]

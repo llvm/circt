@@ -5,7 +5,7 @@
 // 2) roundtrips via the scheduling infra (i.e. populates a `Problem` instance and reconstructs the SSP IR from it.)
 
 // CHECK: ssp.instance @"no properties" of "Problem" {
-// CHECK:   library @_ {  
+// CHECK:   library {  
 // CHECK:     operator_type @NoProps
 // CHECK:   }
 // CHECK:   graph {
@@ -16,7 +16,7 @@
 // CHECK:   }
 // CHECK: }
 ssp.instance @"no properties" of "Problem" {
-  library @_ {
+  library {
     operator_type @NoProps
   }
   graph {
@@ -28,7 +28,7 @@ ssp.instance @"no properties" of "Problem" {
 }
 
 // CHECK: ssp.instance @arbitrary_latencies of "Problem" {
-// CHECK:   library @_ {
+// CHECK:   library {
 // CHECK:     operator_type @unit [latency<1>]
 // CHECK:     operator_type @extr [latency<0>]
 // CHECK:     operator_type @add [latency<3>]
@@ -46,7 +46,7 @@ ssp.instance @"no properties" of "Problem" {
 // CHECK:   }
 // CHECK: }
 ssp.instance @arbitrary_latencies of "Problem" {
-  library @_ {
+  library {
     operator_type @unit [latency<1>]
     operator_type @extr [latency<0>]
     operator_type @add [latency<3>]
@@ -65,7 +65,7 @@ ssp.instance @arbitrary_latencies of "Problem" {
 }
 
 // CHECK: ssp.instance @self_arc of "CyclicProblem" [II<3>] {
-// CHECK:   library @_ {
+// CHECK:   library {
 // CHECK:     operator_type @unit [latency<1>]
 // CHECK:     operator_type @_3 [latency<3>]
 // CHECK:   }
@@ -76,7 +76,7 @@ ssp.instance @arbitrary_latencies of "Problem" {
 // CHECK:   }
 // CHECK: }
 ssp.instance @self_arc of "CyclicProblem" [II<3>] {
-  library @_ {
+  library {
     operator_type @unit [latency<1>]
     operator_type @_3 [latency<3>]
   }
@@ -88,7 +88,7 @@ ssp.instance @self_arc of "CyclicProblem" [II<3>] {
 }
 
 // CHECK: ssp.instance @multiple_oprs of "SharedOperatorsProblem" {
-// CHECK:   library @_ {
+// CHECK:   library {
 // CHECK:     operator_type @slowAdd [latency<3>, limit<2>]
 // CHECK:     operator_type @fastAdd [latency<1>, limit<1>]
 // CHECK:     operator_type @_0 [latency<0>]
@@ -105,7 +105,7 @@ ssp.instance @self_arc of "CyclicProblem" [II<3>] {
 // CHECK:   }
 // CHECK: }
 ssp.instance @multiple_oprs of "SharedOperatorsProblem" {
-  library @_ {
+  library {
     operator_type @slowAdd [latency<3>, limit<2>]
     operator_type @fastAdd [latency<1>, limit<1>]
     operator_type @_0 [latency<0>]
@@ -123,7 +123,7 @@ ssp.instance @multiple_oprs of "SharedOperatorsProblem" {
 }
 
 // CHECK: ssp.instance @canis14_fig2 of "ModuloProblem" [II<3>] {
-// CHECK:   library @_ {
+// CHECK:   library {
 // CHECK:     operator_type @MemPort [latency<1>, limit<1>]
 // CHECK:     operator_type @Add [latency<1>]
 // CHECK:     operator_type @Implicit [latency<0>]
@@ -137,7 +137,7 @@ ssp.instance @multiple_oprs of "SharedOperatorsProblem" {
 // CHECK:   }
 // CHECK: }
 ssp.instance @canis14_fig2 of "ModuloProblem" [II<3>] {
-  library @_ {
+  library {
     operator_type @MemPort [latency<1>, limit<1>]
     operator_type @Add [latency<1>]
     operator_type @Implicit [latency<0>]
