@@ -7,14 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
-#include "slang/ast/ASTVisitor.h"
-#include "slang/ast/Symbol.h"
-#include "slang/ast/symbols/CompilationUnitSymbols.h"
-#include "slang/ast/symbols/InstanceSymbols.h"
-#include "slang/ast/symbols/VariableSymbols.h"
-#include "slang/ast/types/AllTypes.h"
-#include "slang/ast/types/Type.h"
-#include "slang/syntax/SyntaxVisitor.h"
+#include "slang/syntax/AllSyntax.h"
 
 using namespace circt;
 using namespace ImportVerilog;
