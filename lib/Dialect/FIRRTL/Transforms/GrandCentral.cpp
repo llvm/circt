@@ -715,87 +715,6 @@ private:
 // Code related to handling Grand Central View annotations
 //===----------------------------------------------------------------------===//
 
-/// Add a RefType cross-module connection from the `refSendTarget` to the
-/// `companionTarget`, via the `parentModule`. Add the RefSendOp and the
-/// corresponding RefResolveOps for the RefType connection. Return the name for
-/// the NodeOp, that captures the result of the RefResolveOp. The assumption is
-/// that `parentModule` is the least common ancestor between `refSendTarget` and
-/// `companionModule`.
-static StringAttr borePortsFromViewToCompanion(AnnoPathValue &refSendTarget,
-                                               FModuleOp parentModule,
-                                               ApplyState &state,
-                                               AnnoPathValue &companionTarget,
-                                               StringAttr viewName) {
-  if (isa<FExtModuleOp>(refSendTarget.ref.getOp())) {
-    refSendTarget.ref.getOp()->emitError(
-        "RefType source cannot be an extern module port, it must be moved to "
-        "the instance of the extern module");
-    return {};
-  }
-
-  auto refSendModule = cast<FModuleOp>(refSendTarget.ref.getModule());
-  // The value that must be the argument to the RefSendOp. This can either be a
-  // module port or the result of any namable operation.
-  Value refSendBase;
-  if (refSendTarget.ref.getImpl().isOp())
-    refSendBase = refSendTarget.ref.getImpl().getOp()->getResult(0);
-  // Note: This assumes that only the result 0 of the op must be connected.
-  // There is no mechanism currently to handle multiple result operations.
-  else if (refSendTarget.ref.getImpl().isPort())
-    refSendBase =
-        refSendModule.getArgument(refSendTarget.ref.getImpl().getPortNo());
-  auto refSendBuilder = ImplicitLocOpBuilder::atBlockEnd(
-      refSendModule.getLoc(), refSendModule.getBodyBlock());
-  // If it is an aggregate, and only a subfield is required, then insert the
-  // appropriate number of Subfield and SubIndex to get the subfield value.
-  refSendBase =
-      getValueByFieldID(refSendBuilder, refSendBase, refSendTarget.fieldIdx);
-  // Create the refSend, a remote XMR to read `refSendBase`.
-  // Note: No DontTouch added, so constant-prop and cse are allowed.
-  auto sendVal = refSendBuilder.create<RefSendOp>(refSendBase);
-  FModuleOp lcaModule = parentModule;
-  SmallVector<InstanceOp> pathFromSrcToCompanion;
-  // Compute the path and set `pathFromSrcToCompanion`.
-  if (findLCAandSetPath(refSendTarget, companionTarget, pathFromSrcToCompanion,
-                        lcaModule, state)
-          .failed())
-    return {};
-  LLVM_DEBUG({
-    llvm::dbgs() << "\n Path via LCA :\n";
-    for (auto inst : pathFromSrcToCompanion)
-      llvm::dbgs()
-          << ":" << inst->getParentOfType<FModuleOp>().getNameAttr().getValue()
-          << ">" << inst.getNameAttr().getValue();
-  });
-  // Now drill ports to connect the `sendVal` to the `wireTarget`.
-  auto remoteXMR = borePortsOnPath(
-      pathFromSrcToCompanion, lcaModule, sendVal, viewName.getValue(),
-      state.instancePathCache,
-      [&](FModuleLike mod) -> ModuleNamespace & {
-        return state.getNamespace(mod);
-      },
-      &state.targetCaches);
-  // Create the RefResolveOp in the companion.
-  FModuleOp companionModule = cast<FModuleOp>(companionTarget.ref.getOp());
-  auto compBuilder = ImplicitLocOpBuilder::atBlockEnd(
-      companionModule.getLoc(), companionModule.getBodyBlock());
-  auto refResolve = compBuilder.create<RefResolveOp>(remoteXMR);
-  auto newName = [&](FModuleOp nameForMod) {
-    return StringAttr::get(
-        state.circuit.getContext(),
-        state.getNamespace(nameForMod)
-            .newName("view_" + viewName.getValue() + "refPort"));
-  };
-
-  auto node = compBuilder.create<NodeOp>(refResolve.getResult().getType(),
-                                         refResolve, newName(companionModule));
-  node.dropName();
-  state.targetCaches.insertOp(node);
-  // This node must be preserved till the GrandCentral pass.
-  AnnotationSet::addDontTouch(node);
-  return node.getNameAttr();
-}
-
 /// Recursively walk a sifive.enterprise.grandcentral.AugmentedType to extract
 /// any annotations it may contain.  This is going to generate two types of
 /// annotations:
@@ -1042,73 +961,89 @@ static Optional<DictionaryAttr> parseAugmentedType(
       mlir::emitError(loc, "Failed to resolve target ") << targetAttr;
       return None;
     }
-    if (auto extMod = dyn_cast<FExtModuleOp>(xmrSrcTarget->ref.getOp())) {
-      // Move the target to the InstanceOp for the extern module.
-      auto portNo = xmrSrcTarget->ref.getImpl().getPortNo();
-      if (xmrSrcTarget->instances.empty()) {
-        auto paths =
-            state.instancePathCache.getAbsolutePaths(xmrSrcTarget->ref.getOp());
-        if (paths.size() > 1) {
-          extMod.emitError("cannot resolve a unique instance path from the "
-                           "external module '")
-              << targetAttr << "'";
-          return None;
-        }
-        auto *it = xmrSrcTarget->instances.begin();
-        for (auto inst : paths.back()) {
-          xmrSrcTarget->instances.insert(it, cast<InstanceOp>(inst));
-          ++it;
-        }
-      }
-      auto lastInst = xmrSrcTarget->instances.pop_back_val();
-      auto builder = ImplicitLocOpBuilder::atBlockEnd(lastInst.getLoc(),
-                                                      lastInst->getBlock());
-      builder.setInsertionPointAfter(lastInst);
-      auto node = builder.create<NodeOp>(lastInst.getType(portNo),
-                                         lastInst.getResult(portNo));
-      AnnotationSet::addDontTouch(node);
-      // Move the anno target to a node that captures the corresponding port of
-      // the instance op for the extern module.
-      xmrSrcTarget->ref = OpAnnoTarget(node);
-    }
-    auto companionTarget = resolvePath(companionAttr.getValue(), state.circuit,
-                                       state.symTbl, state.targetCaches);
-    // Get the name of the node op that reads the remote value from
-    // xmrSrcTarget. This adds the refsend, drills the ports and adds the ref
-    // resolve and then reads the output from resolve into a node. Note: The
-    // remote signal to which the XMR is being generated, does not contain any
-    // DontTouch. Which implies the remote signal can be optimized away, but the
-    // XMR should still point to a legal value or a constant after the
-    // optimization.
-    //
-    // TODO: This currently generates RefSendOp and RefResolveOp even when it
-    // does not need to, i.e., when the source is in the companion module.  This
-    // is temporary solution to guarantee the simplicity of sink structure for
-    // the Grand Central pass.  Specifically, this guarantees that a NodeOp is
-    // always the sink.  This will be refactored as part of broader improvements
-    // to improve the performance of LowerAnnotations.
-    LLVM_DEBUG(llvm::dbgs() << "\n view from :" << targetAttr.getValue()
-                            << " to \n " << companionAttr.getValue());
-    auto resolveTargetName = borePortsFromViewToCompanion(
-        *xmrSrcTarget, parentModule, state, *companionTarget, name);
-    if (!resolveTargetName) {
-      (mlir::emitError(loc, "Failed to resolve target, cannot find unique "
-                            "path from parent module `")
-       << parentModule.getName() << "` to target `" << targetAttr.getValue()
-       << "`")
-              .attachNote()
-          << "See the full Annotation here: " << root;
-      ;
+
+    // Determine the source for this Wiring Problem.  The source is the value
+    // that will be eventually by read from, via cross-module reference, to
+    // drive this element of the SystemVerilog Interface.
+    auto sourceRef = xmrSrcTarget->ref;
+    ImplicitLocOpBuilder builder(sourceRef.getOp()->getLoc(), context);
+    Optional<Value> source =
+        TypeSwitch<Operation *, Optional<Value>>(sourceRef.getOp())
+            // The target is an external module port.  The source is the
+            // instance port of this singly-instantiated external module.
+            .Case<FExtModuleOp>([&](FExtModuleOp extMod) -> Optional<Value> {
+              auto portNo = sourceRef.getImpl().getPortNo();
+              if (xmrSrcTarget->instances.empty()) {
+                auto paths = state.instancePathCache.getAbsolutePaths(extMod);
+                if (paths.size() > 1) {
+                  extMod.emitError(
+                      "cannot resolve a unique instance path from the "
+                      "external module '")
+                      << targetAttr << "'";
+                  return None;
+                }
+                auto *it = xmrSrcTarget->instances.begin();
+                for (auto inst : paths.back()) {
+                  xmrSrcTarget->instances.insert(it, cast<InstanceOp>(inst));
+                  ++it;
+                }
+              }
+              auto lastInst = xmrSrcTarget->instances.pop_back_val();
+              builder.setInsertionPoint(lastInst);
+              return getValueByFieldID(builder, lastInst.getResult(portNo),
+                                       xmrSrcTarget->fieldIdx);
+            })
+            // The target is a module port.  The source is the port _inside_
+            // that module.
+            .Case<FModuleOp>([&](FModuleOp module) -> Optional<Value> {
+              builder.setInsertionPointToEnd(module.getBodyBlock());
+              auto portNum = sourceRef.getImpl().getPortNo();
+              return getValueByFieldID(builder, module.getArgument(portNum),
+                                       xmrSrcTarget->fieldIdx);
+            })
+            // The target is something else.
+            .Default([&](Operation *op) -> Optional<Value> {
+              auto module = cast<FModuleOp>(sourceRef.getModule());
+              builder.setInsertionPointToEnd(module.getBodyBlock());
+              if (sourceRef.getOp()->getNumResults() != 1) {
+                op->emitOpError()
+                    << "cannot be used as a target of the Grand Central View \""
+                    << defName.getValue()
+                    << "\" because it does not have exactly one result";
+                return None;
+              }
+              return getValueByFieldID(builder, sourceRef.getOp()->getResult(0),
+                                       xmrSrcTarget->fieldIdx);
+            });
+
+    // Exit if there was an error in the source.
+    if (!source)
       return None;
-    }
-    // Now the view target can be added to the local node created inside the
-    // companion. Add the annotation. This essentially moves the annotation from
-    // the remote XMR signal to a local wire, which in-turn reads the XMR.
-    elementScattered.append(
-        "target", StringAttr::get(context, companion + ">" +
-                                               resolveTargetName.getValue()));
-    state.addToWorklistFn(
-        DictionaryAttr::getWithSorted(context, elementScattered));
+
+    // Compute the sink of this Wiring Problem.  The final sink will eventually
+    // be a SystemVerilog Interface.  However, this cannot exist until the
+    // GrandCentral pass runs.  Create an undriven WireOp and use that as the
+    // sink.  The WireOp will be driven later when the Wiring Problem is
+    // resolved. Apply the scattered element annotation to this directly to save
+    // having to reprocess this in LowerAnnotations.
+    auto companionMod =
+        cast<FModuleOp>(resolvePath(companionAttr.getValue(), state.circuit,
+                                    state.symTbl, state.targetCaches)
+                            ->ref.getOp());
+    auto name = state.getNamespace(companionMod)
+                    .newName(defName.getValue() + "_" +
+                             Twine(id.getValue().getZExtValue()));
+    builder.setInsertionPointToEnd(companionMod.getBodyBlock());
+    auto sink = builder.create<WireOp>(source->getType(), name);
+    state.targetCaches.insertOp(sink);
+    AnnotationSet annotations(context);
+    annotations.addAnnotations(
+        {DictionaryAttr::getWithSorted(context, elementScattered)});
+    annotations.applyToOperation(sink);
+
+    // Append this new Wiring Problem to the ApplyState.  The Wiring Problem
+    // will be resolved to bore RefType ports before LowerAnnotations finishes.
+    state.wiringProblems.push_back({*source, sink, name});
 
     return DictionaryAttr::getWithSorted(context, elementIface);
   }

@@ -517,16 +517,28 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     FModuleLike sourceModule = getModule(source);
     FModuleLike sinkModule = getModule(sink);
 
-    assert(!isa<FExtModuleOp>(sourceModule) && !isa<FExtModuleOp>(sinkModule) &&
-           "wiring problems involving FEXtModuleOps are currently unsupported");
+    if (isa<FExtModuleOp>(sourceModule) || isa<FExtModuleOp>(sinkModule)) {
+      auto diag = mlir::emitError(source.getLoc())
+                  << "This source is involved with a Wiring Problem which "
+                     "includes an External Module port and External Module "
+                     "ports anre not supported.";
+      diag.attachNote(sink.getLoc()) << "The sink is here.";
+      return failure();
+    }
 
     auto sourcePaths = state.instancePathCache.getAbsolutePaths(
         cast<hw::HWModuleLike>(*sourceModule));
     auto sinkPaths = state.instancePathCache.getAbsolutePaths(
         cast<hw::HWModuleLike>(*sinkModule));
 
-    assert(sourcePaths.size() == 1 && sinkPaths.size() == 1 &&
-           "source and sink must be singly instantiated");
+    if (sourcePaths.size() != 1 || sinkPaths.size() != 1) {
+      auto diag =
+          mlir::emitError(source.getLoc())
+          << "This source is involved with a Wiring Problem where the source "
+             "or the sink are multiply instantiated and this is not supported.";
+      diag.attachNote(sink.getLoc()) << "The sink is here.";
+      return failure();
+    }
 
     FModuleOp lca =
         cast<FModuleOp>(instanceGraph.getTopLevelNode()->getModule());
