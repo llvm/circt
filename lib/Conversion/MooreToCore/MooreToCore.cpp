@@ -15,7 +15,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Dialect/Moore/MIROps.h"
+#include "circt/Dialect/Moore/MooreOps.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinDialect.h"

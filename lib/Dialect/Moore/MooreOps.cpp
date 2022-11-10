@@ -1,4 +1,4 @@
-//===- MIROps.cpp - Implement the Moore MIR operations --------------------===//
+//===- MooreOps.cpp - Implement the Moore operations ----------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,15 +6,43 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implement the Moore MIR ops.
+// This file implements the Moore dialect operations.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/Moore/MIROps.h"
+#include "circt/Dialect/Moore/MooreOps.h"
+#include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
 
 using namespace circt;
 using namespace circt::moore;
+
+//===----------------------------------------------------------------------===//
+// InstanceOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *module =
+      symbolTable.lookupNearestSymbolFrom(*this, getModuleNameAttr());
+  if (module == nullptr)
+    return emitError("Cannot find module definition '")
+           << getModuleName() << "'";
+
+  // It must be some sort of module.
+  if (!isa<SVModuleOp>(module))
+    return emitError("symbol reference '")
+           << getModuleName() << "' isn't a module";
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// VariableOp
+//===----------------------------------------------------------------------===//
+
+void VariableOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), getName());
+}
 
 //===----------------------------------------------------------------------===//
 // Type Inference

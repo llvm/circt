@@ -390,7 +390,7 @@ else()
 
     string(REGEX MATCH "Icarus Verilog version (([0-9]+)\.([0-9]+)) \.*"
       MATCH ${IVERILOG_VERSION})
-    
+
     if (${CMAKE_MATCH_1} LESS 11.0)
       message(FATAL_ERROR "CIRCT only supports Icarus Verilog version 11.0 and up. \
                            Found version: ${CMAKE_MATCH_1}. You can disable \
@@ -505,6 +505,43 @@ if(CIRCT_BINDINGS_TCL_ENABLED)
   message(STATUS "Found TCL include path: ${TCL_INCLUDE_PATH}")
   message(STATUS "Found TCL library: ${TCL_LIBRARY}")
   message(STATUS "Found TCL executable: ${TCL_TCLSH}")
+endif()
+
+#-------------------------------------------------------------------------------
+# slang Verilog Frontend
+#-------------------------------------------------------------------------------
+
+option(CIRCT_SLANG_FRONTEND_ENABLED "Enables slang Verilog frontend." ON)
+option(CIRCT_SLANG_BUILD_FROM_SOURCE
+  "Build slang from source instead of finding an installed package" ON)
+
+llvm_canonicalize_cmake_booleans(CIRCT_SLANG_FRONTEND_ENABLED)
+if(CIRCT_SLANG_FRONTEND_ENABLED)
+  message(STATUS "slang Verilog frontend is enabled")
+  if(CIRCT_SLANG_BUILD_FROM_SOURCE)
+    # Build slang as part of CIRCT (see https://sv-lang.com/building.html)
+    message(STATUS "Building slang from source")
+    set(original_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+    set(CMAKE_CXX_FLAGS "")
+    include(FetchContent)
+    FetchContent_Declare(
+      slang
+      GIT_REPOSITORY https://github.com/MikePopoloski/slang.git
+      GIT_TAG v2.0
+      GIT_SHALLOW ON)
+    FetchContent_MakeAvailable(slang)
+    # The following feels *very* hacky, but CMake complains about the
+    # CIRCTImportVerilog target linking against slang_slang (even with PRIVATE
+    # linking) without the latter being in an export set. I think we'd want to
+    # statically link slang into the CIRCTImportVerilog library, but seems to be
+    # harder than it ought to be.
+    set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang
+                                                      unordered_dense)
+    install(TARGETS slang_slang unordered_dense EXPORT CIRCTTargets)
+    set(CMAKE_CXX_FLAGS ${original_CXX_FLAGS})
+  else()
+    find_package(slang 2.0 REQUIRED)
+  endif()
 endif()
 
 #-------------------------------------------------------------------------------
