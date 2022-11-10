@@ -1750,4 +1750,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK:  hw.output %0 : !hw.array<3xi1> 
   }
 
+  // CHECK-LABEL: hw.module @aggregateconstant
+  firrtl.module @aggregateconstant(out %out : !firrtl.vector<uint<8>, 2>) {
+    %0 = firrtl.aggregateconstant [1 : ui8, 0: ui8] : !firrtl.vector<uint<8>, 2>
+    firrtl.strictconnect %out, %0 : !firrtl.vector<uint<8>, 2>
+    // CHECK:      %0 = hw.array_create %c0_i8, %c1_i8 : i8
+    // CHECK-NEXT: hw.output %0 : !hw.array<2xi8>
+  }
 }
