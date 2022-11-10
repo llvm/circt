@@ -220,10 +220,16 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   sv::RegOp reg = b.create<sv::RegOp>(
       UnpackedArrayType::get(dataType, mem.depth), b.getStringAttr("Memory"));
 
-  circt::sv::setSVAttributes(
-      reg,
-      sv::SVAttributesAttr::get(
-          b.getContext(), {std::make_pair("ram_style", R"("distributed")")}));
+  // If the read latency is zero, we regard the memory as read-first.
+  // We add a SV attribute to specify a ram style to use LUTs for Vivado to
+  // avoid a bug that miscompiles the read-first memory. See "RAM address
+  // conflict and Vivado synthesis bug" issue in the vivado forum for the more
+  // detail.
+  if (mem.readLatency == 0)
+    circt::sv::setSVAttributes(
+        reg,
+        sv::SVAttributesAttr::get(
+            b.getContext(), {std::make_pair("ram_style", R"("distributed")")}));
 
   SmallVector<Value, 4> outputs;
 
