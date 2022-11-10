@@ -1,4 +1,4 @@
-// RUN: circt-opt --allow-unregistered-dialect -verify-diagnostics -split-input-file -pass-pipeline='firrtl.circuit(firrtl-dedup)' %s
+// RUN: circt-opt --allow-unregistered-dialect -verify-diagnostics -split-input-file -pass-pipeline='builtin.module(firrtl.circuit(firrtl-dedup))' %s
 
 // expected-error@below {{MustDeduplicateAnnotation missing "modules" member}}
 firrtl.circuit "MustDedup" attributes {annotations = [{

@@ -256,7 +256,8 @@ with ir.Context() as ctx, ir.Location.unknown():
   # CHECK:   set_location_assignment M20K_X2_Y6_N1 -to $parent|inst1|ext1|foo_subpath
   print(mod)
   pm = mlir.passmanager.PassManager.parse(
-      "msft-lower-instances,lower-msft-to-hw,msft-export-tcl{tops=top}")
+      "builtin.module(msft-lower-instances,lower-msft-to-hw,msft-export-tcl{tops=top})"
+  )
   pm.run(mod)
   circt.export_verilog(mod, sys.stdout)
 

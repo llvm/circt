@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/SSP/SSPOps.h"
-#include "circt/Dialect/SSP/SSPAttributes.h"
 #include "circt/Support/LLVM.h"
 
 #include "mlir/IR/Builders.h"
@@ -152,16 +151,9 @@ void OperationOp::print(OpAsmPrinter &p) {
   SmallVector<Attribute> alreadyPrinted;
 
   p << '<';
-  if (ArrayAttr properties = getPropertiesAttr()) {
-    auto it =
-        std::find_if(properties.begin(), properties.end(), [](Attribute a) {
-          return a.isa<LinkedOperatorTypeAttr>();
-        });
-    if (it != properties.end()) {
-      auto opr = (*it).dyn_cast<LinkedOperatorTypeAttr>();
-      p.printAttribute(opr.getValue());
-      alreadyPrinted.push_back(opr);
-    }
+  if (auto linkedOpr = getLinkedOperatorTypeAttr()) {
+    p.printAttribute(linkedOpr.getValue());
+    alreadyPrinted.push_back(linkedOpr);
   }
   p << '>';
 
@@ -283,22 +275,27 @@ OperationOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
   // If a linkedOperatorType property is present, verify that it references a
   // valid operator type.
-  if (ArrayAttr properties = getPropertiesAttr()) {
-    for (auto prop : properties.getAsRange<Attribute>()) {
-      if (auto linkedOpr = prop.dyn_cast<LinkedOperatorTypeAttr>()) {
-        FlatSymbolRefAttr oprRef = linkedOpr.getValue();
-        Operation *oprOp = symbolTable.lookupSymbolIn(libraryOp, oprRef);
-        if (!oprOp || !isa<OperatorTypeOp>(oprOp)) {
-          return emitError("Linked operator type property references invalid "
-                           "operator type: ")
-                 << oprRef;
-        }
-        break;
-      }
-    }
+  if (auto linkedOpr = getLinkedOperatorTypeAttr()) {
+    FlatSymbolRefAttr oprRef = linkedOpr.getValue();
+    Operation *oprOp = symbolTable.lookupSymbolIn(libraryOp, oprRef);
+    if (!oprOp || !isa<OperatorTypeOp>(oprOp))
+      return emitError("Linked operator type property references invalid "
+                       "operator type: ")
+             << oprRef;
   }
 
   return success();
+}
+
+LinkedOperatorTypeAttr OperationOp::getLinkedOperatorTypeAttr() {
+  if (ArrayAttr properties = getPropertiesAttr()) {
+    const auto *it = llvm::find_if(properties, [](Attribute a) {
+      return a.isa<LinkedOperatorTypeAttr>();
+    });
+    if (it != properties.end())
+      return (*it).cast<LinkedOperatorTypeAttr>();
+  }
+  return {};
 }
 
 //===----------------------------------------------------------------------===//

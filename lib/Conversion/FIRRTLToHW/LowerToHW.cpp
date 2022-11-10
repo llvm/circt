@@ -1505,6 +1505,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(SubfieldOp op);
   LogicalResult visitExpr(VectorCreateOp op);
   LogicalResult visitExpr(BundleCreateOp op);
+  LogicalResult visitExpr(AggregateConstantOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
   LogicalResult visitInvalidOp(Operation *op) { return failure(); }
 
@@ -2525,7 +2526,8 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
 LogicalResult FIRRTLLowering::visitExpr(VectorCreateOp op) {
   auto resultType = lowerType(op.getResult().getType());
   SmallVector<Value> operands;
-  for (auto oper : op.getOperands()) {
+  // NOTE: The operand order must be inverted.
+  for (auto oper : llvm::reverse(op.getOperands())) {
     auto val = getLoweredValue(oper);
     if (!val)
       return failure();
@@ -2544,6 +2546,26 @@ LogicalResult FIRRTLLowering::visitExpr(BundleCreateOp op) {
     operands.push_back(val);
   }
   return setLoweringTo<hw::StructCreateOp>(op, resultType, operands);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(AggregateConstantOp op) {
+  auto resultType = lowerType(op.getResult().getType());
+  auto vec = op.getType().dyn_cast<FVectorType>();
+  // Currently we only support 1d vector types.
+  if (!vec || !vec.getElementType().isa<IntType>()) {
+    op.emitError()
+        << "has an unsupported type; currently we only support 1d vectors";
+    return failure();
+  }
+
+  // TODO: Use hw aggregate constant
+  SmallVector<Value> operands;
+  // Make sure to reverse the operands.
+  for (auto elem : llvm::reverse(op.getFields()))
+    operands.push_back(
+        getOrCreateIntConstant(elem.cast<IntegerAttr>().getValue()));
+
+  return setLoweringTo<hw::ArrayCreateOp>(op, resultType, operands);
 }
 
 //===----------------------------------------------------------------------===//

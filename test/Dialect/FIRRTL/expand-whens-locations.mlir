@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(firrtl-expand-whens))' --mlir-print-local-scope  --mlir-print-debuginfo %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-expand-whens)))' --mlir-print-local-scope  --mlir-print-debuginfo %s | FileCheck %s
 
 firrtl.circuit "Basic"  {
 // CHECK-LABEL: @Basic

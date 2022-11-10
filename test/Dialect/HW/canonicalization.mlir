@@ -1094,7 +1094,7 @@ hw.module @enum_constant() -> () {
 // CHECK-NEXT:    %0 = comb.concat %false, %arg0 : i1, i2
 // CHECK-NEXT:    %1 = comb.concat %false, %arg0 : i1, i2
 // CHECK-NEXT:    %2 = comb.add %0, %1 : i3
-// CHECK-NEXT:    %3 = comb.icmp eq %2, %arg2 : i3
+// CHECK-NEXT:    %3 = comb.icmp eq %2, %arg2 {sv.namehint = ".in.wire"} : i3
 // CHECK-NEXT:    hw.output %myext.out : i8
 
 hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (out0: i8) {
@@ -1113,7 +1113,7 @@ hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (out0: i8) {
 // CHECK-LABEL: hw.module @TestInstance(%u2: i2, %s8: i8, %clock: i1, %reset: i1) {
 // CHECK-NEXT:   %c0_i2 = hw.constant 0 : i2
 // CHECK-NEXT:   hw.instance "xyz" @Simple(in1: %0: i4, in2: %u2: i2, in3: %s8: i8)
-// CHECK-NEXT:   %0 = comb.concat %c0_i2, %u2 : i2, i2
+// CHECK-NEXT:   %0 = comb.concat %c0_i2, %u2 {sv.namehint = ".in1.wire"} : i2, i2
 // CHECK-NEXT:   %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %reset: i1) -> (out: i8)  {oldParameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
 // CHECK-NEXT:   hw.output
 hw.module.extern @MyParameterizedExtModule(%in: i1) -> (out: i8) attributes {verilogName = "name_thing"}
@@ -1140,7 +1140,7 @@ hw.module @TestInstance(%u2: i2, %s8: i8, %clock: i1, %reset: i1) {
 
 // CHECK-LABEL:  hw.module @instance_cyclic(%arg0: i2, %arg1: i2) {
 // CHECK-NEXT:    %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %0: i1)
-// CHECK-NEXT:    %0 = comb.extract %myext.out from 2 : (i8) -> i1
+// CHECK-NEXT:    %0 = comb.extract %myext.out from 2
 // CHECK-NEXT:    hw.output
 // CHECK-NEXT:  }
 hw.module @instance_cyclic(%arg0: i2, %arg1: i2) {
@@ -1285,7 +1285,7 @@ hw.module @IncompleteRead(%clock1: i1) {
 // CHECK-LABEL:  hw.module @foo() {
 // CHECK-NEXT:    %io_cpu_flush.wire = sv.wire sym @io_cpu_flush.wire  : !hw.inout<i1>
 // CHECK-NEXT:    hw.instance "fetch" @bar(io_cpu_flush: %0: i1) -> ()
-// CHECK-NEXT:    %0 = sv.read_inout %io_cpu_flush.wire : !hw.inout<i1>
+// CHECK-NEXT:    %0 = sv.read_inout %io_cpu_flush.wire {sv.namehint = ".io_cpu_flush.wire"}
 // CHECK-NEXT:    hw.output
 hw.module.extern @bar(%io_cpu_flush: i1)
 hw.module @foo() {

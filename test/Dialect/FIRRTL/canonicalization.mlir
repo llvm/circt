@@ -1852,17 +1852,17 @@ firrtl.module @MuxCanon(in %c1: !firrtl.uint<1>, in %c2: !firrtl.uint<1>, in %d1
 }
 
 // CHECK-LABEL: firrtl.module @RegresetToReg
-firrtl.module @RegresetToReg(in %clock: !firrtl.clock, out %foo1: !firrtl.uint<1>, out %foo2: !firrtl.uint<1>) {
-  %c0_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-
-  %c1_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-  %zero_asyncreset = firrtl.asAsyncReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+firrtl.module @RegresetToReg(in %clock: !firrtl.clock, in %dummy : !firrtl.uint<1>, out %foo1: !firrtl.uint<1>, out %foo2: !firrtl.uint<1>) {
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %zero_asyncreset = firrtl.asAsyncReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+  %one_asyncreset = firrtl.asAsyncReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
   // CHECK: %bar1 = firrtl.reg %clock : !firrtl.uint<1>
-  %bar1 = firrtl.regreset %clock, %zero_asyncreset, %c0_ui1 : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %foo2, %dummy : !firrtl.uint<1>
+  %bar1 = firrtl.regreset %clock, %zero_asyncreset, %dummy : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+  %bar2 = firrtl.regreset %clock, %one_asyncreset, %dummy : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
 
-  %invalid_asyncreset = firrtl.invalidvalue : !firrtl.asyncreset
-  // CHECK: %bar2 = firrtl.reg %clock : !firrtl.uint<1>
-  %bar2 = firrtl.regreset %clock, %invalid_asyncreset, %c0_ui1 : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %bar2, %bar1 : !firrtl.uint<1> // Force a use to trigger a crash on a sink replacement
 
   firrtl.connect %foo1, %bar1 : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %foo2, %bar2 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -2478,11 +2478,11 @@ firrtl.module @Foo3319(in %i: !firrtl.uint<1>, out %o : !firrtl.uint<1>) {
   firrtl.strictconnect %o, %n : !firrtl.uint<1>
 }
 
-// CHECK-LABEL: @WireByPass
-firrtl.module @WireByPass(in %i: !firrtl.uint<1>, out %o : !firrtl.uint<1>) {
+// CHECK-LABEL: @WireToNode
+firrtl.module @WireToNode(in %i: !firrtl.uint<1>, out %o : !firrtl.uint<1>) {
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   %n = firrtl.wire interesting_name : !firrtl.uint<1>
-  // CHECK: firrtl.strictconnect %n, %c0_ui1
+  // %n = firrtl.node interesting_name %c0_ui1
   firrtl.strictconnect %n, %c0_ui1 : !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %o, %n
   firrtl.strictconnect %o, %n : !firrtl.uint<1>
@@ -2496,7 +2496,7 @@ firrtl.module @AnnotationsBlockRemoval(
   in %a: !firrtl.uint<1>,
   out %b: !firrtl.uint<1>
 ) {
-  // CHECK: %w = firrtl.wire
+  // CHECK: %w = firrtl.node %a {annotations = [{class = "Foo"}]}
   %w = firrtl.wire droppable_name {annotations = [{class = "Foo"}]} : !firrtl.uint<1>
   firrtl.strictconnect %w, %a : !firrtl.uint<1>
   firrtl.strictconnect %b, %w : !firrtl.uint<1>
@@ -2544,6 +2544,24 @@ firrtl.module @NameProp(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out 
   // CHECK-NEXT: %useful_name = firrtl.or %in0, %in1
   // CHECK-NEXT: firrtl.strictconnect %out, %useful_name
   firrtl.strictconnect %out, %_useless_name_2 : !firrtl.uint<1>
+}
+
+// CHECK-LABEL: firrtl.module @CrashAllUnusedPorts
+firrtl.module @CrashAllUnusedPorts() {
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %foo, %bar = firrtl.mem  Undefined  {depth = 3 : i64, groupID = 4 : ui32, name = "whatever", portNames = ["MPORT_1", "MPORT_5"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<2>, mask: uint<1>>, !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<2>>
+  %26 = firrtl.subfield %foo(1) : (!firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<2>, mask: uint<1>>) -> !firrtl.uint<1>
+  firrtl.strictconnect %26, %c0_ui1 : !firrtl.uint<1>
+}
+
+// CHECK-LABEL: firrtl.module @CrashRegResetWithOneReset
+firrtl.module @CrashRegResetWithOneReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %io_d: !firrtl.uint<1>, out %io_q: !firrtl.uint<1>, in %io_en: !firrtl.uint<1>) {
+  %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.asyncreset
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %reg = firrtl.regreset  %clock, %c1_asyncreset, %c0_ui1  : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+  %0 = firrtl.mux(%io_en, %io_d, %reg) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %reg, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %io_q, %reg : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
 }

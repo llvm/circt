@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-remove-unused-ports)' %s -split-input-file | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-remove-unused-ports))' %s -split-input-file | FileCheck %s
 firrtl.circuit "Top"   {
   // CHECK-LABEL: firrtl.module @Top(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>,
   // CHECK-SAME :                    out %d_unused: !firrtl.uint<1>, out %d_invalid: !firrtl.uint<1>, out %d_constant: !firrtl.uint<1>)

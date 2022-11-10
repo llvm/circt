@@ -238,14 +238,6 @@ void InnerRefAttr::print(AsmPrinter &p) const {
   p << ">";
 }
 
-Attribute
-InnerRefAttr::replaceImmediateSubElements(ArrayRef<Attribute> replAttrs,
-                                          ArrayRef<Type> replTypes) const {
-  assert(replAttrs.size() == 2);
-  return get(getContext(), replAttrs[0].cast<FlatSymbolRefAttr>(),
-             replAttrs[1].cast<StringAttr>());
-}
-
 //===----------------------------------------------------------------------===//
 // ParamDeclAttr
 //===----------------------------------------------------------------------===//

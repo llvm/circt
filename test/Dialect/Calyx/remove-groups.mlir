@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='calyx.component(calyx-remove-groups)' %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(calyx.component(calyx-remove-groups))' %s | FileCheck %s
 
 module attributes {calyx.entrypoint = "main"} {
   calyx.component @Z(%go: i1 {go}, %reset: i1 {reset}, %clk: i1 {clk}) -> (%flag: i1, %out :i2, %done: i1 {done}) {

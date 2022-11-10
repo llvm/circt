@@ -174,13 +174,13 @@ void PrettyPrinter::checkStack() {
     auto x = scanStack.back();
     assert(x >= tokenOffset && tokens.size() + tokenOffset > x);
     auto &t = tokens[x - tokenOffset];
-    if (auto *b = llvm::dyn_cast<BeginToken>(&t.token)) {
+    if (llvm::isa<BeginToken>(&t.token)) {
       if (depth == 0)
         break;
       scanStack.pop_back();
       t.size += rightTotal;
       --depth;
-    } else if (auto *e = llvm::dyn_cast<EndToken>(&t.token)) {
+    } else if (llvm::isa<EndToken>(&t.token)) {
       scanStack.pop_back();
       t.size = 1;
       ++depth;

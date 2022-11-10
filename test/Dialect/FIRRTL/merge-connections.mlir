@@ -1,5 +1,5 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(merge-connections))' %s | FileCheck %s --check-prefixes=CHECK,COMMON
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(merge-connections{aggressive-merging=true}))' %s | FileCheck %s --check-prefixes=AGGRESSIVE,COMMON
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(merge-connections)))' %s | FileCheck %s --check-prefixes=CHECK,COMMON
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(merge-connections{aggressive-merging=true})))' %s | FileCheck %s --check-prefixes=AGGRESSIVE,COMMON
 
 firrtl.circuit "Test"   {
   // circuit Test :

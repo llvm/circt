@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-imconstprop)' -verify-diagnostics --split-input-file %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-imconstprop))' -verify-diagnostics --split-input-file %s
 
 
 // https://github.com/llvm/circt/issues/1187

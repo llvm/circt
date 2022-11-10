@@ -49,5 +49,5 @@ msft.module @MsLoopback {} (%clk: i1) -> () {
   msft.output
 }
 """)
-  pm = passmanager.PassManager.parse("esi-connect-services")
+  pm = passmanager.PassManager.parse("builtin.module(esi-connect-services)")
   pm.run(mod)

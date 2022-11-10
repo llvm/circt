@@ -59,7 +59,7 @@ func.func @convert_comb_shift(%arg0: i32, %arg1: i32, %arg2: i1) -> i32 {
   // CHECK: %[[R2:.*]] = llvm.ashr %[[R1]], %arg1 : i32
   %2 = comb.shrs %1, %arg1 : i32
 
-  // CHECK: %[[CNT:.*]] = "llvm.intr.ctpop"(%arg0) : (i32) -> i32
+  // CHECK: %[[CNT:.*]] = llvm.intr.ctpop(%arg0) : (i32) -> i32
   // CHECK: llvm.trunc %[[CNT]] : i32 to i1
   %3 = comb.parity %arg0 : i32
 

@@ -79,10 +79,10 @@ circuit Qux: %[[{
 ;CHECK:    %[[array_get:.+]] = hw.array_get %[[v5]][%[[v4]]]
 ;CHECK:    %[[multbit_mux_wire:.+]] = sv.wire  : !hw.inout<i8>
 ;CHECK:    sv.assign %[[multbit_mux_wire]], %[[array_get]]
-;CHECK:    %[[v6:.+]] = sv.read_inout %[[multbit_mux_wire]] : !hw.inout<i8>
+;CHECK:    %[[v6:.+]] = sv.read_inout %[[multbit_mux_wire]]
 ;CHECK:    %[[array_get:.+]] = hw.array_get %[[v5]][%rwAddr]
 ;CHECK:    %[[multbit_mux_wire:.+]] = sv.wire  : !hw.inout<i8>
-;CHECK:    %[[v7:.+]] = sv.read_inout %[[multbit_mux_wire]] : !hw.inout<i8>
+;CHECK:    %[[v7:.+]] = sv.read_inout %[[multbit_mux_wire]]
 ;CHECK:    %12 = comb.icmp eq %rwAddr, %c0_i2 : i2
 ;CHECK:    %13 = comb.and %rwEn, %rwMode, %rwMask, %12 : i1
 ;CHECK:    %14 = comb.icmp bin eq %rwAddr, %c1_i2 : i2

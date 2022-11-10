@@ -1,5 +1,5 @@
 // RUN: circt-opt %s -verify-diagnostics --lower-seq-firrtl-to-sv | FileCheck %s --check-prefixes=CHECK,COMMON
-// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="hw.module(lower-seq-firrtl-to-sv{disable-reg-randomization})" | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
+// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(hw.module(lower-seq-firrtl-to-sv{disable-reg-randomization}))" | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
 
 // COMMON-LABEL: hw.module @lowering
 hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d: i32, e: i32, f: i32) {
@@ -239,15 +239,16 @@ hw.module private @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (
   // CHECK-NEXT: %6 = comb.extract %5 from 1 : (i33) -> i32
   // CHECK-NEXT: %7 = comb.mux bin %io_en, %io_d, %6 : i32
   // CHECK-NEXT: sv.always posedge %clock, posedge %reset  {
-  // CHECK-NEXT:   sv.if %reset { 
-  // CHECK-NEXT:     sv.passign %reg, %c0_i32 : i32 
-  // CHECK-NEXT:     sv.passign %reg3, %c1_i32 : i32 
-  // CHECK-NEXT:   } else { 
-  // CHECK-NEXT:     sv.if %io_en { 
-  // CHECK-NEXT:       sv.passign %reg, %io_d : i32 
-  // CHECK-NEXT:     } else { 
-  // CHECK-NEXT:       sv.passign %reg, %6 : i32 
+  // CHECK-NEXT:   sv.if %reset {
+  // CHECK-NEXT:     sv.passign %reg, %c0_i32 : i32
+  // CHECK-NEXT:     sv.passign %reg3, %c1_i32 : i32
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT:     sv.if %io_en {
+  // CHECK-NEXT:       sv.passign %reg, %io_d : i32
+  // CHECK-NEXT:     } else {
+  // CHECK-NEXT:       sv.passign %reg, %6 : i32
   // CHECK-NEXT:     }
+  // CHECK-NEXT:     sv.passign %reg3, %2 : i32
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
   // CHECK-NEXT: sv.always posedge %clock  {
@@ -582,4 +583,21 @@ hw.module @ArrayElements(%a: !hw.array<2xi1>, %clock: i1, %cond: i1) -> (b: !hw.
   // CHECK-NEXT:   } else {
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
+}
+
+// Explicitly check that an asynchronous reset register with no driver other
+// than the reset is given a self-reset.  This avoids lint errors around
+// inferred latches that would otherwise happen.
+//
+// COMMON-LABEL: @AsyncResetUndriven
+hw.module @AsyncResetUndriven(%clock: i1, %reset: i1) -> (q: i32) {
+  %c0_i32 = hw.constant 0 : i32
+  %r = seq.firreg %r clock %clock sym @r reset async %reset, %c0_i32 {firrtl.random_init_start = 0 : ui64} : i32
+  hw.output %r : i32
+  // CHECK:      %[[regRead:[a-zA-Z0-9_]+]] = sv.read_inout %r
+  // CHECK-NEXT: sv.always posedge %clock, posedge %reset
+  // CHECK-NEXT:   sv.if %reset {
+  // CHECK-NEXT:     sv.passign %r, %c0_i32
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT:     sv.passign %r, %[[regRead]]
 }

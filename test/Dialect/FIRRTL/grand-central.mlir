@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-grand-central,symbol-dce)' -split-input-file %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-grand-central,symbol-dce))' -split-input-file %s | FileCheck %s
 
 // This is the main test that includes different interfaces of different
 // types. All the interfaces share a common, simple circuit that provides two

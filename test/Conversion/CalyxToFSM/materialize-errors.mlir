@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='calyx.component(materialize-calyx-to-fsm)' -split-input-file -verify-diagnostics %s
+// RUN: circt-opt -pass-pipeline='builtin.module(calyx.component(materialize-calyx-to-fsm))' -split-input-file -verify-diagnostics %s
 
 calyx.component @main(%go: i1 {go}, %reset: i1 {reset}, %clk: i1 {clk}) -> (%done: i1 {done}) {
   calyx.wires {

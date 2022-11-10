@@ -1,4 +1,4 @@
-// RUN: circt-opt -verify-diagnostics -pass-pipeline='firrtl.circuit(firrtl.module(firrtl-lower-chirrtl))'  %s
+// RUN: circt-opt -verify-diagnostics -pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-lower-chirrtl)))'  %s
 
 firrtl.circuit "NoInferredEnables" {
 firrtl.module @NoInferredEnables(in %p: !firrtl.uint<1>, in %addr: !firrtl.uint<4>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %v: !firrtl.uint<32>) {

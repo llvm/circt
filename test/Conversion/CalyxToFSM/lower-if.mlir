@@ -1,4 +1,4 @@
-// RUN: circt-opt --split-input-file -pass-pipeline='calyx.component(lower-calyx-to-fsm)' %s | FileCheck %s
+// RUN: circt-opt --split-input-file -pass-pipeline='builtin.module(calyx.component(lower-calyx-to-fsm))' %s | FileCheck %s
 
 // CHECK:      fsm.machine @control() attributes {compiledGroups = [@true, @false, @cond], initialState = "fsm_entry"} {
 // CHECK-NEXT:   fsm.state @fsm_entry output {
