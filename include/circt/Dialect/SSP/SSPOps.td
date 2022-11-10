@@ -212,7 +212,7 @@ def OperationOp : SSPOp<"operation",
     // dependence properties
     operation<@Barrier>(%2 [dist<1>], %5#1, @store_A [dist<3>])
 
-    // operator type in standalone library
+    // operator type in stand-alone library
     %7 = operation<@MathLib::@Sqrt>(%6)
     ```
   }];
