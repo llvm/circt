@@ -245,9 +245,100 @@ struct StmtVisitor {
     return success();
   }
 
-  // Ignore timing control for now.
-  LogicalResult visit(const slang::ast::TimedStatement &stmt) {
+  // Unroll ForeachLoop into nested for loops, parse the body in the innermost
+  // layer, and break out to the outermost layer.
+  LogicalResult visit(const slang::ast::ForeachLoopStatement &foreachStmt) {
+
+    // Store unrolled loops in Dimension order
+    SmallVector<mlir::scf::WhileOp> loops;
+    auto type = moore::IntType::get(context.getContext(), moore::IntType::Int);
+    auto step = builder.create<moore::ConstantOp>(loc, type, 1);
+    for (auto &dimension : foreachStmt.loopDims) {
+      // Skip null dimension loopVar between i,j in foreach(array[i, ,j,k])
+      if (!dimension.loopVar)
+        continue;
+
+      // lower bound
+      builder.create<moore::ConstantOp>(loc, type, dimension.range->lower());
+      // uppper bound
+
+      auto ub = builder.create<moore::ConstantOp>(loc, type,
+                                                  dimension.range->upper());
+      auto index = builder.create<moore::ConstantOp>(loc, type,
+                                                     dimension.range->lower());
+
+      // insert nested whileOp in after region
+      if (!loops.empty())
+        builder.setInsertionPointToEnd(loops.back().getAfterBody());
+      auto whileOp = builder.create<mlir::scf::WhileOp>(loc, TypeRange{type},
+                                                        ValueRange{index});
+      // OpBuilder::InsertionGuard guard(builder);
+
+      // The before-region of the WhileOp.
+      Block *before = builder.createBlock(&whileOp.getBefore(), {}, type, loc);
+      builder.setInsertionPointToEnd(before);
+
+      // Check if index overflows
+      Value cond;
+      if (dimension.range->lower() <= dimension.range->upper()) {
+        cond = builder.create<moore::LtOp>(loc, index, ub);
+      } else {
+        cond = builder.create<moore::GeOp>(loc, index, ub);
+      }
+
+      cond =
+          builder.create<moore::ConversionOp>(loc, builder.getI1Type(), cond);
+      builder.create<mlir::scf::ConditionOp>(loc, cond, before->getArguments());
+
+      // Remember the iterator variable in each loops
+      context.valueSymbols.insert(dimension.loopVar, before->getArgument(0));
+
+      // The after-region of the WhileOp.
+      Block *after = builder.createBlock(&whileOp.getAfter(), {}, type, loc);
+      builder.setInsertionPointToStart(after);
+      loops.push_back(whileOp);
+    }
+
+    // gen body in innermost block
+    if (failed(context.convertStatement(foreachStmt.body)))
+      return failure();
+
+    // gen index iteration in the end
+    for (auto it = foreachStmt.loopDims.rbegin();
+         it != foreachStmt.loopDims.rend(); ++it) {
+      if (!it->loopVar)
+        continue;
+      auto whileOp = loops.back();
+      if (!whileOp.getAfter().hasOneBlock()) {
+        mlir::emitError(loc, "no block in while after region");
+        return failure();
+      }
+
+      builder.setInsertionPointToEnd(whileOp.getAfterBody());
+      auto index = whileOp.getAfterArguments().back();
+      Value afterIndex;
+      if (it->range->lower() <= it->range->upper()) {
+        // step ++
+        afterIndex = builder.create<moore::AddOp>(loc, index, step);
+      } else {
+        // step --
+        afterIndex = builder.create<moore::SubOp>(loc, index, step);
+      }
+
+      builder.create<mlir::scf::YieldOp>(
+          loc, mlir::SmallVector<Value, 1>{afterIndex});
+      builder.setInsertionPointAfter(whileOp);
+      loops.pop_back();
+    }
+
     return success();
+  }
+
+  // Handle timing control statements.
+  LogicalResult visit(const slang::ast::TimedStatement &stmt) {
+    if (failed(context.visitTimingControl(&stmt.timing)))
+      return failure();
+    return context.convertStatement(stmt.stmt);
   }
 
   /// Emit an error for all other statements.

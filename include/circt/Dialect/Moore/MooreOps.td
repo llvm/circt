@@ -11,6 +11,7 @@
 
 include "circt/Dialect/Moore/MooreDialect.td"
 include "circt/Dialect/Moore/MooreTypes.td"
+include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/RegionKindInterface.td"
@@ -134,7 +135,29 @@ def ProcedureOp : MooreOp<"procedure", [
 // Declarations
 //===----------------------------------------------------------------------===//
 
+def In: I32EnumAttrCase<"In", 0>;
+def Out: I32EnumAttrCase<"Out", 1>;
+def InOut: I32EnumAttrCase<"InOut", 2>;
+def Ref: I32EnumAttrCase<"Ref", 3>;
+
+def DirectionAttr: I32EnumAttr<"Direction", "Port direction",
+                                  [In, Out, InOut, Ref]>{
+  let cppNamespace = "circt::moore";
+}
+
+def PortOp : MooreOp<"port", [
+  RecursiveMemoryEffects
+]> {
+  let summary = "Declare a port";
+  let arguments = (ins StrAttr:$name, DirectionAttr:$direction);
+  let results = (outs);
+  let assemblyFormat = [{
+    $direction $name attr-dict
+  }];
+}
+
 def VariableOp : MooreOp<"variable", [
+  MemoryEffects<[MemAlloc]>,
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
   OptionalTypesMatchWith<"initial value and variable types match",
     "result", "initial", "$_self">,
@@ -147,6 +170,28 @@ def VariableOp : MooreOp<"variable", [
   let results = (outs Res<UnpackedType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
     `` custom<ImplicitSSAName>($name) ($initial^)? attr-dict
+    `:` type($result)
+  }];
+}
+
+def NetOp : MooreOp<"net", [
+  MemoryEffects<[MemAlloc]>,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+  OptionalTypesMatchWith<"assigned value and variable types match",
+    "result", "assignment", "$_self">,
+]> {
+  let summary = "A net declaration";
+  let description = [{
+    See IEEE 1800-2017 § 6.7 "Net declarations".
+  }];
+  let arguments = (ins
+    StrAttr:$name,
+    StrAttr:$kind,
+    Optional<UnpackedType>:$assignment
+  );
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    `` custom<ImplicitSSAName>($name) $kind ($assignment^)? attr-dict
     `:` type($result)
   }];
 }
@@ -188,7 +233,9 @@ def ContinuousAssignOp : AssignOpBase<"assign", [HasParent<"SVModuleOp">]> {
   }];
 }
 
-def BlockingAssignOp : AssignOpBase<"blocking_assign"> {
+def BlockingAssignOp : AssignOpBase<"blocking_assign", [
+  MemoryEffects<[MemWrite]>
+]> {
   let summary = "Blocking procedural assignment";
   let description = [{
     A blocking procedural assignment in a sequential block, such as `x = y`. The
@@ -210,6 +257,32 @@ def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
     in a subsequent time step as dictated by the delay or event control.
 
     See IEEE 1800-2017 § 10.4.2 "Nonblocking procedural assignments".
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Statements
+//===----------------------------------------------------------------------===//
+
+def None: I32EnumAttrCase<"None", 0, "none">;
+def PosEdge: I32EnumAttrCase<"PosEdge", 1, "posedge">;
+def NegEdge: I32EnumAttrCase<"NegEdge", 2, "negedge">;
+def BothEdges: I32EnumAttrCase<"BothEdges", 3, "bothedges">;
+
+def EdgeAtrr: I32EnumAttr<"Edge", "Edge kind",
+                          [None, PosEdge, NegEdge, BothEdges]>{
+  let cppNamespace = "circt::moore";
+}
+
+def EventControlOp : MooreOp<"event", [
+  HasParent<"ProcedureOp">
+]> {
+  let summary = "Detecting posedge and negedge";
+  let description = "See SV Spec 9.4.2.";
+  let arguments = (ins EdgeAtrr:$edge, StrAttr:$name);
+  let results = (outs);
+  let assemblyFormat = [{
+    $edge $name attr-dict
   }];
 }
 

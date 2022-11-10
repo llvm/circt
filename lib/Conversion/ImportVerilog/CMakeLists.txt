@@ -33,6 +33,7 @@ add_circt_translation_library(CIRCTImportVerilog
   ImportVerilog.cpp
   Statements.cpp
   Structure.cpp
+  TimingControl.cpp
   Types.cpp
 
   DEPENDS
