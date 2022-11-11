@@ -75,9 +75,9 @@ add_circt_dialect_library(CIRCTESI
 foreach(CP_FILE ${CP_FILES})
   get_filename_component(DST ${CP_FILE} NAME)
   get_filename_component(SRC ${CP_FILE} REALPATH)
-	add_custom_command(TARGET CIRCTESI PRE_BUILD
-		COMMAND ${CMAKE_COMMAND} -E
-		copy ${SRC} ${CIRCT_BINARY_DIR}/include/circt/Dialect/ESI/${DST})
+  add_custom_command(TARGET CIRCTESI PRE_BUILD
+    COMMAND ${CMAKE_COMMAND} -E
+    copy ${SRC} ${CIRCT_BINARY_DIR}/include/circt/Dialect/ESI/${DST})
 endforeach()
 
 if (ESI_CAPNP)
