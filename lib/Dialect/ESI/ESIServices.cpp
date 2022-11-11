@@ -431,6 +431,8 @@ void ESIConnectServicesPass::copyMetadata(hw::HWMutableModuleLike mod) {
 static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
   ImplicitLocOpBuilder b(implReqOp.getLoc(), implReqOp);
 
+  // Check if there are any "BSP" service providers -- ones which implement any
+  // service -- and create an implicit service declaration for them.
   std::unique_ptr<Block> bspPorts = nullptr;
   if (!implReqOp.getServiceSymbol().has_value()) {
     bspPorts.reset(new Block());
@@ -483,6 +485,7 @@ static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
   if (bspPorts && !bspPorts->empty()) {
     b.setInsertionPointToEnd(
         implReqOp->getParentOfType<mlir::ModuleOp>().getBody());
+    // TODO: we currently only support one BSP. Should we support more?
     auto decl = b.create<CustomServiceDeclOp>("BSP");
     decl.getPorts().push_back(bspPorts.release());
     implReqOp.setServiceSymbol(decl.getSymNameAttr().getValue());

@@ -1430,6 +1430,8 @@ void ESIEmitCollateralPass::emitServiceJSON() {
   auto *ctxt = &getContext();
   SymbolCache topSyms;
   topSyms.addDefinitions(mod);
+
+  // Check for invalid top names.
   for (StringRef topModName : tops)
     if (topSyms.getDefinition(FlatSymbolRefAttr::get(ctxt, topModName)) ==
         nullptr) {

@@ -5,8 +5,6 @@
 
 // CHECK-LABEL: "declarations": [ 
 
-
-
 // CHECK-LABEL:    "name": "HostComms",
 // CHECK-NEXT:     "ports": [
 // CHECK-NEXT:         {
