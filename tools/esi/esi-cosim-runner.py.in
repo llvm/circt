@@ -48,7 +48,7 @@ class CosimTestRunner:
     self.simRunScript = os.path.join("@CIRCT_TOOLS_DIR@", "circt-rtl-sim.py")
 
     if schema == "":
-      schema = os.path.join("@CIRCT_MAIN_INCLUDE_DIR@", "circt", "Dialect",
+      schema = os.path.join("@CIRCT_BINARY_DIR@", "include", "circt", "Dialect",
                             "ESI", "CosimDpi.capnp")
     self.schema = schema
 
