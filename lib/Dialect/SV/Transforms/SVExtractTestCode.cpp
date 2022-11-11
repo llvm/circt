@@ -392,6 +392,25 @@ static bool isBound(hw::HWModuleLike op, hw::InstanceGraph &instanceGraph) {
   });
 }
 
+// Add any existing bindings to the bind table.
+static void addBinds(hw::HWModuleLike op, hw::InstanceGraph &instanceGraph,
+                     SmallVectorImpl<BindOp> &existingBinds,
+                     BindTable &bindTable) {
+  auto *node = instanceGraph.lookup(op);
+  for (hw::InstanceRecord *use : node->uses()) {
+    auto inst = dyn_cast_or_null<hw::InstanceOp>(use->getInstance());
+    if (!inst)
+      continue;
+    if (!inst->hasAttr("doNotPrint") || !inst.getInnerSym().has_value())
+      continue;
+
+    auto parent = inst->getParentOfType<hw::HWModuleOp>();
+    for (auto bind : existingBinds)
+      if (bind.getInstance().getName() == inst.getInnerSymAttr())
+        bindTable[parent.getNameAttr()][inst.getInnerSymAttr()] = bind;
+  }
+}
+
 // Inline any modules that only have inputs for test code.
 static void inlineInputOnly(hw::HWModuleOp oldMod,
                             hw::InstanceGraph &instanceGraph,
@@ -672,7 +691,16 @@ void SVExtractTestCodeImplPass::runOnOperation() {
     return isa<CoverOp>(op) || isa<CoverConcurrentOp>(op);
   };
 
+  // Collect modules that are already bound and add the bound instance(s) to the
+  // bind table, so they can be updated if the instance(s) live inside a module
+  // that gets inlined later.
   BindTable bindTable;
+  SmallVector<BindOp> existingBinds;
+  for (auto bind : topLevelModule->getOps<BindOp>())
+    existingBinds.push_back(bind);
+  for (auto mod : topLevelModule->getOps<hw::HWModuleLike>())
+    addBinds(mod, *instanceGraph, existingBinds, bindTable);
+
   for (auto &op : llvm::make_early_inc_range(topLevelModule->getOperations())) {
     if (auto rtlmod = dyn_cast<hw::HWModuleOp>(op)) {
       // Extract two sets of ops to different modules.  This will add modules,
