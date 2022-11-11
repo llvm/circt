@@ -232,13 +232,13 @@ class NDArray(np.ndarray):
 
   def check_is_fully_assigned(self):
     """ Checks that all sub-matrices have been fully assigned. """
-    unassigned = np.argwhere(self == None)
+    unassigned = [idx for idx, v in np.ndenumerate(self) if v is None]
     if len(unassigned) > 0:
       raise ValueError(f"Unassigned sub-matrices: \n{unassigned}")
 
   def assign_default_driver(self, value):
     """Assigns a default driver to any unassigned value in the matrix"""
-    for arg in np.argwhere(self == None):
+    for arg in [idx for idx, v in np.ndenumerate(self) if v is None]:
       super().__setitem__(tuple(arg), value)
 
   def to_circt(self, create_wire=True, dtype=None, default_driver=None):

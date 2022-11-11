@@ -1,6 +1,6 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
-# RUN: FileCheck %s --input-file %t/Test.tcl --check-prefix=OUTPUT
+# RUN: FileCheck %s --input-file %t/hw/Test.tcl --check-prefix=OUTPUT
 
 import pycde
 import pycde.dialects.hw

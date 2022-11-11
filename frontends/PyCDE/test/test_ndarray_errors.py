@@ -18,7 +18,7 @@ class M1:
     for i in range(9):
       m[i] = ports.in1
     # CHECK: ValueError: Unassigned sub-matrices:
-    # CHECK: {{[[]}}{{[[]}}9{{[]]}}{{[]]}}
+    # CHECK{LITERAL}: [(9,)]
     m.to_circt()
 
 

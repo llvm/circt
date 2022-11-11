@@ -268,22 +268,22 @@ class System:
 
   PASS_PHASES = [
       # First, run all the passes with callbacks into pycde.
-      "esi-connect-services",
+      "builtin.module(esi-connect-services)",
       lambda sys: sys.generate(),
       # After all of the pycde code has been executed, we have all the types
       # defined so we can go through and output the typedefs delcarations.
       lambda sys: types.declare_types(sys.mod),
-      "lower-hwarith-to-hw, msft-lower-constructs, msft-lower-instances",
-      "esi-emit-collateral{{tops={tops} schema-file=schema.capnp}}",
-      "lower-msft-to-hw{{verilog-file={verilog_file}}}",
-      "hw.module(lower-seq-hlmem)",
+      "builtin.module(lower-hwarith-to-hw, msft-lower-constructs, msft-lower-instances)",
+      "builtin.module(esi-emit-collateral{{tops={tops} schema-file=schema.capnp}})",
+      "builtin.module(lower-msft-to-hw{{verilog-file={verilog_file}}})",
+      "builtin.module(hw.module(lower-seq-hlmem))",
       # "cse",
-      "lower-esi-to-physical, lower-esi-ports, lower-esi-to-hw",
-      "convert-fsm-to-sv",
-      "lower-seq-to-sv",
-      "cse",
-      "hw.module(prettify-verilog), hw.module(hw-cleanup)",
-      "msft-export-tcl{{tops={tops} tcl-file={tcl_file}}}"
+      "builtin.module(lower-esi-to-physical, lower-esi-ports, lower-esi-to-hw)",
+      "builtin.module(convert-fsm-to-sv)",
+      "builtin.module(lower-seq-to-sv)",
+      "builtin.module(cse)",
+      "builtin.module(hw.module(prettify-verilog), hw.module(hw-cleanup))",
+      "builtin.module(msft-export-tcl{{tops={tops} tcl-file={tcl_file}}})"
   ]
 
   def run_passes(self, debug=False):
