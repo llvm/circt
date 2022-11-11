@@ -50,6 +50,7 @@ static void log(char *epId, bool toClient, const Endpoint::BlobPtr &msg) {
     fprintf(logFile, " %02x", b);
   }
   fprintf(logFile, "\n");
+  fflush(logFile);
 }
 
 /// Get the TCP port on which to listen. If the port isn't specified via an

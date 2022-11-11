@@ -1171,7 +1171,12 @@ hw::HWModuleOp TypeSchemaImpl::buildDecoder(Value clk, Value valid,
   // TODO: support cases where the pointer offset is non-zero.
   Slice assertPtr(ptr);
   auto typeAndOffset = assertPtr.slice(0, 32).name("typeAndOffset");
-  asserts.assertEqual(typeAndOffset, 0);
+  if (getType().isInteger(0)) {
+    asserts.assertEqual(typeAndOffset.slice(0, 2), 0);
+    asserts.assertEqual(typeAndOffset.slice(2, 30), 0x3FFFFFFF);
+  } else {
+    asserts.assertEqual(typeAndOffset, 0);
+  }
 
   // We expect the data section to be equal to the computed data section size.
   auto dataSectionSize =
