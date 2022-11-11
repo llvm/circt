@@ -193,10 +193,13 @@ class Verilator:
     if DebugBuild:
       debugFlags = ["--trace", "--trace-params", "--trace-structs"]
       cflags.append("-DTRACE")
+    cflagsIfNeeded = []
+    if len(cflags) > 0:
+      cflagsIfNeeded = ["-CFLAGS", " ".join(cflags)]
     return call_logged([
         self.verilator, "--cc", "--top-module", self.top, "-sv", "--build",
-        "--exe", "--assert", "-CFLAGS", " ".join(cflags)
-    ] + debugFlags + args.split() + sources)
+        "--exe", "--assert"
+    ] + cflagsIfNeeded + debugFlags + args.split() + sources)
 
   def run(self, cycles, args):
     exe = os.path.join("obj_dir", "V" + self.top)
