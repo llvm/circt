@@ -2564,4 +2564,16 @@ firrtl.module @CrashRegResetWithOneReset(in %clock: !firrtl.clock, in %reset: !f
   firrtl.connect %io_q, %reg : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
+// CHECK-LABEL: @CrashWireToNode
+firrtl.module @CrashWireToNode(in %i: !firrtl.uint<1>, out %o1 : !firrtl.uint<3>) {
+  %n1 = firrtl.wire interesting_name : !firrtl.uint<3>
+  firrtl.when %i {
+  %c = firrtl.constant 1 : !firrtl.uint<5>
+  %1 = firrtl.shr %c, 2 : (!firrtl.uint<5>) -> !firrtl.uint<3>
+  firrtl.strictconnect %n1, %1 : !firrtl.uint<3>
+  }
+  firrtl.strictconnect %o1, %n1 : !firrtl.uint<3>
+}
+
+
 }

@@ -118,6 +118,16 @@ bool circt::firrtl::hasDroppableName(Operation *op) {
   return false;
 }
 
+static void moveConstantToDominance(Operation *constOp, Operation *op) {
+  if (constOp->getBlock() == op->getBlock()) {
+    if (!constOp->isBeforeInBlock(op))
+      constOp->moveBefore(op);
+  } else { // Move constant to root of module
+    constOp->moveBefore(
+        &constOp->getParentOfType<ModuleOp>()->getBlock()->front());
+  }
+}
+
 /// Implicitly replace the operand to a constant folding operation with a const
 /// 0 in case the operand is non-constant but has a bit width 0, or if the
 /// operand is an invalid value.
@@ -1545,9 +1555,7 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
     }
     // This will be replaced with the constant source.  First, make sure the
     // constant dominates all users.
-    else if (srcValueOp != &declBlock->front()) {
-      srcValueOp->moveBefore(&declBlock->front());
-    }
+    moveConstantToDominance(srcValueOp, connectedDecl);
   }
 
   // Replace all things *using* the decl with the constant/port, and
@@ -1868,9 +1876,12 @@ struct WireToNode : public mlir::RewritePattern {
 
     // Check that the write dominates all reads
     for (auto *user : wire.getResult().getUsers())
-      if (user != writer)
+      if (user != writer) {
+        if (user->getBlock() != writer->getBlock())
+          return failure();
         if (user->isBeforeInBlock(writer))
           return failure();
+      }
 
     rewriter.setInsertionPointAfter(writer);
     auto srcValue = writer.getSrc();
@@ -1996,8 +2007,7 @@ struct FoldResetMux : public mlir::RewritePattern {
     // Ok, we know we are doing the transformation.
 
     // Make sure the constant dominates all users.
-    if (constOp != &con->getBlock()->front())
-      constOp->moveBefore(&con->getBlock()->front());
+    moveConstantToDominance(constOp, con);
 
     // Replace the register with the constant.
     replaceOpAndCopyName(rewriter, reg, constOp.getResult());
@@ -2343,8 +2353,7 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   // Ok, we know we are doing the transformation.
 
   // Make sure the constant dominates all users.
-  if (constOp != &con->getBlock()->front())
-    constOp->moveBefore(&con->getBlock()->front());
+  moveConstantToDominance(constOp, con);
 
   if (!constReg) {
     SmallVector<NamedAttribute, 2> attrs(reg->getDialectAttrs());
