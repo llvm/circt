@@ -48,8 +48,8 @@ class CosimTestRunner:
     self.simRunScript = os.path.join("@CIRCT_TOOLS_DIR@", "circt-rtl-sim.py")
 
     if schema == "":
-      schema = os.path.join("@CIRCT_MAIN_INCLUDE_DIR@", "circt", "Dialect",
-                            "ESI", "cosim", "CosimDpi.capnp")
+      schema = os.path.join("@CIRCT_BINARY_DIR@", "include", "circt", "Dialect",
+                            "ESI", "CosimDpi.capnp")
     self.schema = schema
 
     fileReader = open(self.file, "r")
@@ -77,11 +77,10 @@ class CosimTestRunner:
     ]
 
     # Include the cosim DPI SystemVerilog files.
-    esiInclude = os.path.join("@CIRCT_MAIN_INCLUDE_DIR@", "circt", "Dialect",
-                              "ESI")
-    cosimInclude = os.path.join(esiInclude, "cosim")
-    self.sources.insert(0, os.path.join(cosimInclude, "Cosim_DpiPkg.sv"))
-    self.sources.insert(1, os.path.join(cosimInclude, "Cosim_Endpoint.sv"))
+    esiInclude = os.path.join("@CIRCT_BINARY_DIR@", "include", "circt",
+                              "Dialect", "ESI")
+    self.sources.insert(0, os.path.join(esiInclude, "Cosim_DpiPkg.sv"))
+    self.sources.insert(1, os.path.join(esiInclude, "Cosim_Endpoint.sv"))
     self.sources.insert(2, os.path.join(esiInclude, "ESIPrimitives.sv"))
     self.sources.append("@ESI_COSIM_PATH@")
 

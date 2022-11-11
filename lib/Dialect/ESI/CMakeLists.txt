@@ -37,6 +37,10 @@ set(ESI_Deps
   MLIRESIInterfacesIncGen
 )
 
+set(CP_FILES
+  ESIPrimitives.sv
+)
+
 if(CapnProto_FOUND)
   option(ESI_CAPNP "Enable ESI Capnp features" ON)
 endif()
@@ -44,6 +48,9 @@ endif()
 if (ESI_CAPNP)
   list(APPEND srcs capnp/Schema.cpp)
   list(APPEND ESI_LinkLibs CapnProto::capnp CapnProto::capnpc)
+  list(APPEND CP_FILES ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/ESI/cosim/CosimDpi.capnp)
+  list(APPEND CP_FILES cosim/Cosim_DpiPkg.sv)
+  list(APPEND CP_FILES cosim/Cosim_Endpoint.sv)
   install(FILES ${CapnProto_capnp_IMPORTED_LOCATION} DESTINATION lib)
   install(FILES ${CapnProto_capnpc_IMPORTED_LOCATION} DESTINATION lib)
   install(FILES ${CapnProto_kj_IMPORTED_LOCATION} DESTINATION lib)
@@ -63,6 +70,15 @@ add_circt_dialect_library(CIRCTESI
   LINK_LIBS PUBLIC
   ${ESI_LinkLibs}
   )
+
+
+foreach(CP_FILE ${CP_FILES})
+  get_filename_component(DST ${CP_FILE} NAME)
+  get_filename_component(SRC ${CP_FILE} REALPATH)
+  add_custom_command(TARGET CIRCTESI PRE_BUILD
+    COMMAND ${CMAKE_COMMAND} -E
+    copy ${SRC} ${CIRCT_BINARY_DIR}/include/circt/Dialect/ESI/${DST})
+endforeach()
 
 if (ESI_CAPNP)
   target_compile_definitions(obj.CIRCTESI PRIVATE CAPNP)

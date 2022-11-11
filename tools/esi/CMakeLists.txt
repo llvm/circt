@@ -11,7 +11,7 @@
 # ===-----------------------------------------------------------------------===//
 
 if (TARGET EsiCosimDpiServer)
-  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS EsiCosimDpiServer)
+  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS EsiCosimDpiServer CIRCTESI)
   get_property(ESI_COSIM_LIB_DIR TARGET EsiCosimDpiServer PROPERTY LIBRARY_OUTPUT_DIRECTORY)
   set(ESI_COSIM_PATH ${ESI_COSIM_LIB_DIR}/libEsiCosimDpiServer.so)
 endif()
