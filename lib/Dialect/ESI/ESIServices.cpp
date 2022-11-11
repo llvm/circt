@@ -331,7 +331,7 @@ LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
   DenseMap<SymbolRefAttr, Block *> localImplReqs;
   Block *anyServiceInst = nullptr;
   for (auto instOp : modBlock.getOps<ServiceInstanceOp>()) {
-    auto b = new Block();
+    auto *b = new Block();
     localImplReqs[instOp.getServiceSymbolAttr()] = b;
     if (!instOp.getServiceSymbol().has_value())
       anyServiceInst = b;
@@ -431,6 +431,12 @@ void ESIConnectServicesPass::copyMetadata(hw::HWMutableModuleLike mod) {
 static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
   ImplicitLocOpBuilder b(implReqOp.getLoc(), implReqOp);
 
+  std::unique_ptr<Block> bspPorts = nullptr;
+  if (!implReqOp.getServiceSymbol().has_value()) {
+    bspPorts.reset(new Block());
+    b.setInsertionPointToStart(bspPorts.get());
+  }
+
   llvm::SmallVector<
       std::pair<RequestToServerConnectionOp, RequestToClientConnectionOp>, 8>
       reqPairs;
@@ -457,10 +463,34 @@ static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
     clientAttrs.push_back(b.getNamedAttr("client_name", clientNamePath));
 
     clients.push_back(b.getDictionaryAttr(clientAttrs));
+
+    if (!bspPorts)
+      continue;
+
+    if (toServer && toClient)
+      b.create<ServiceDeclInOutOp>(
+          toServer.getServicePort().getName(),
+          TypeAttr::get(toServer.getToServer().getType()),
+          TypeAttr::get(toClient.getToClient().getType()));
+    else if (toClient)
+      b.create<ToClientOp>(toClient.getServicePort().getName(),
+                           TypeAttr::get(toClient.getToClient().getType()));
+    else
+      b.create<ToServerOp>(toServer.getServicePort().getName(),
+                           TypeAttr::get(toServer.getToServer().getType()));
+  }
+
+  if (bspPorts && !bspPorts->empty()) {
+    b.setInsertionPointToEnd(
+        implReqOp->getParentOfType<mlir::ModuleOp>().getBody());
+    auto decl = b.create<CustomServiceDeclOp>("BSP");
+    decl.getPorts().push_back(bspPorts.release());
+    implReqOp.setServiceSymbol(decl.getSymNameAttr().getValue());
   }
 
   auto clientsAttr = b.getArrayAttr(clients);
   auto nameAttr = b.getArrayAttr(ArrayRef<Attribute>{});
+  b.setInsertionPointAfter(implReqOp);
   b.create<ServiceHierarchyMetadataOp>(
       implReqOp.getServiceSymbolAttr(), nameAttr, implReqOp.getImplTypeAttr(),
       implReqOp.getImplOptsAttr(), clientsAttr);

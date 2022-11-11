@@ -1430,6 +1430,13 @@ void ESIEmitCollateralPass::emitServiceJSON() {
   auto *ctxt = &getContext();
   SymbolCache topSyms;
   topSyms.addDefinitions(mod);
+  for (StringRef topModName : tops)
+    if (topSyms.getDefinition(FlatSymbolRefAttr::get(ctxt, topModName)) ==
+        nullptr) {
+      mod.emitError("Could not find module named '") << topModName << "'\n";
+      signalPassFailure();
+      return;
+    }
 
   std::string jsonStrBuffer;
   llvm::raw_string_ostream os(jsonStrBuffer);
@@ -1483,7 +1490,8 @@ void ESIEmitCollateralPass::emitServiceJSON() {
     });
 
     // Get a list of metadata ops which originated in modules (path is empty).
-    DenseMap<hw::HWModuleLike, SmallVector<ServiceHierarchyMetadataOp, 0>>
+    SmallVector<
+        std::pair<hw::HWModuleLike, SmallVector<ServiceHierarchyMetadataOp, 0>>>
         modsWithLocalServices;
     for (auto hwmod : mod.getOps<hw::HWModuleLike>()) {
       SmallVector<ServiceHierarchyMetadataOp, 0> metadataOps;
@@ -1492,16 +1500,18 @@ void ESIEmitCollateralPass::emitServiceJSON() {
           metadataOps.push_back(md);
       });
       if (!metadataOps.empty())
-        modsWithLocalServices[hwmod] = metadataOps;
+        modsWithLocalServices.push_back(std::make_pair(hwmod, metadataOps));
     }
 
     // Then output metadata for those modules exclusively.
     j.attributeArray("modules", [&] {
-      for (auto &modWithSvc : modsWithLocalServices) {
+      for (auto &nameMdPair : modsWithLocalServices) {
+        hw::HWModuleLike hwmod = nameMdPair.first;
+        auto &mdOps = nameMdPair.second;
         j.object([&] {
-          j.attribute("symbol", modWithSvc.first.moduleName());
+          j.attribute("symbol", hwmod.moduleName());
           j.attributeArray("services", [&] {
-            for (ServiceHierarchyMetadataOp metadata : modWithSvc.getSecond()) {
+            for (ServiceHierarchyMetadataOp metadata : mdOps) {
               j.object([&] {
                 j.attribute("service", metadata.getServiceSymbol());
                 j.attribute("impl_type", metadata.getImplType());
