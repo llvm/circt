@@ -10,6 +10,7 @@ set(LLVM_OPTIONAL_SOURCES
   Seq.cpp
   SV.cpp
   FSM.cpp
+  Handshake.cpp
 )
 
 add_mlir_public_c_api_library(CIRCTCAPIComb
@@ -91,6 +92,17 @@ add_mlir_public_c_api_library(CIRCTCAPIFSM
   CIRCTFSM
   CIRCTFSMTransforms
   CIRCTFSMToSV
+)
+
+add_mlir_public_c_api_library(CIRCTCAPIHandshake
+  Handshake.cpp
+
+  LINK_LIBS PUBLIC
+  MLIRCAPIIR
+  CIRCTHandshake
+  CIRCTHandshakeTransforms
+  CIRCTHandshakeToHW
+  CIRCTStandardToHandshake
 )
 
 add_mlir_public_c_api_library(CIRCTCAPIHWArith
