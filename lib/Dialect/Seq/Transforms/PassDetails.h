@@ -18,11 +18,14 @@
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/Pass/Pass.h"
+#include "circt/Dialect/Seq/SeqPasses.h"
 
 namespace circt {
 namespace seq {
 
-#define GEN_PASS_CLASSES
+#define GEN_PASS_DEF_LOWERSEQFIRRTLTOSV
+#define GEN_PASS_DEF_LOWERSEQHLMEM
+#define GEN_PASS_DEF_LOWERSEQTOSV
 #include "circt/Dialect/Seq/SeqPasses.h.inc"
 
 } // namespace seq

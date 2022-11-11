@@ -328,6 +328,12 @@ static cl::opt<bool> etcDisableModuleInlining(
     cl::desc("Disable inlining modules that only feed test code"),
     cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool> preventVivadoBRAMMapping(
+    "prevent-vivado-bram-mapping",
+    cl::desc(
+        "Add a vivado attribute to specify a ram style of an array register"),
+    cl::init(false), cl::cat(mainCategory));
+
 enum class RandomKind { None, Mem, Reg, All };
 
 static cl::opt<RandomKind> disableRandom(
@@ -792,8 +798,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         modulePM.addPass(createCSEPass());
       }
 
-      pm.nest<hw::HWModuleOp>().addPass(
-          seq::createSeqFIRRTLLowerToSVPass(!isRandomEnabled(RandomKind::Reg)));
+      pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass(
+          {/*disableRandomization=*/!isRandomEnabled(RandomKind::Reg),
+           /*preventVivadoBRAMMapping*/ preventVivadoBRAMMapping.getValue()}));
       pm.addPass(sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem,
                                             stripMuxPragmas,
                                             !isRandomEnabled(RandomKind::Mem),

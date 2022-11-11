@@ -31,12 +31,15 @@ using namespace circt;
 using namespace seq;
 
 namespace {
-struct SeqToSVPass : public LowerSeqToSVBase<SeqToSVPass> {
+struct SeqToSVPass : public circt::seq::impl::LowerSeqToSVBase<SeqToSVPass> {
   void runOnOperation() override;
 };
-struct SeqFIRRTLToSVPass : public LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass> {
+struct SeqFIRRTLToSVPass
+    : public circt::seq::impl::LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass> {
   void runOnOperation() override;
   using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::disableRegRandomization;
+  using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::preventVivadoBRAMMapping;
+  using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::LowerSeqFIRRTLToSVBase;
 };
 } // anonymous namespace
 
@@ -90,8 +93,10 @@ namespace {
 /// Lower FirRegOp to `sv.reg` and `sv.always`.
 class FirRegLower {
 public:
-  FirRegLower(hw::HWModuleOp module, bool disableRegRandomization = false)
-      : module(module), disableRegRandomization(disableRegRandomization){};
+  FirRegLower(hw::HWModuleOp module, bool disableRegRandomization = false,
+              bool preventVivadoBRAMMapping = false)
+      : module(module), disableRegRandomization(disableRegRandomization),
+        preventVivadoBRAMMapping(preventVivadoBRAMMapping){};
 
   void lower();
 
@@ -146,6 +151,7 @@ private:
   hw::HWModuleOp module;
 
   bool disableRegRandomization;
+  bool preventVivadoBRAMMapping;
 };
 } // namespace
 
@@ -355,6 +361,16 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
   RegLowerInfo svReg{nullptr, nullptr, nullptr, -1, 0};
   svReg.reg = builder.create<sv::RegOp>(loc, reg.getType(), reg.getNameAttr());
   svReg.width = hw::getBitWidth(reg.getResult().getType());
+
+  if (preventVivadoBRAMMapping &&
+      !hw::type_cast<hw::ArrayType>(reg.getType().cast<hw::ArrayType>())
+           .getElementType()
+           .isa<IntegerType>())
+    circt::sv::setSVAttributes(
+        svReg.reg, sv::SVAttributesAttr::get(
+                       builder.getContext(),
+                       {std::make_pair("ram_style", R"("distributed")")}));
+
   if (auto attr = reg->getAttrOfType<IntegerAttr>("firrtl.random_init_start"))
     svReg.randStart = attr.getUInt();
 
@@ -520,10 +536,7 @@ std::unique_ptr<Pass> circt::seq::createSeqLowerToSVPass() {
   return std::make_unique<SeqToSVPass>();
 }
 
-std::unique_ptr<Pass>
-circt::seq::createSeqFIRRTLLowerToSVPass(bool disableRegRandomization) {
-  auto pass = std::make_unique<SeqFIRRTLToSVPass>();
-  if (disableRegRandomization)
-    pass->disableRegRandomization = disableRegRandomization;
-  return pass;
+std::unique_ptr<Pass> circt::seq::createSeqFIRRTLLowerToSVPass(
+    const circt::seq::LowerSeqFIRRTLToSVOptions &options) {
+  return std::make_unique<SeqFIRRTLToSVPass>(options);
 }
