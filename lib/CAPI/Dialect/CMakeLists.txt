@@ -102,27 +102,7 @@ add_mlir_public_c_api_library(CIRCTCAPIHandshake
   CIRCTHandshake
   CIRCTHandshakeTransforms
   CIRCTHandshakeToHW
-  CIRCTTransforms
-CIRCTAffineToPipeline
-CIRCTCalyxToFSM
-CIRCTCalyxToHW
-CIRCTExportChiselInterface
-CIRCTExportVerilog
-CIRCTFIRRTLToHW
-CIRCTHWArithToHW
-CIRCTHWToLLHD
-CIRCTHWToSystemC
-CIRCTHandshakeToFIRRTL
-CIRCTHandshakeToHW
-CIRCTLLHDToLLVM
-CIRCTHWToLLVM
-CIRCTCombToLLVM
-CIRCTMooreToCore
-CIRCTSCFToCalyx
-CIRCTPipelineToCalyx
-CIRCTStandardToHandshake
-CIRCTFSMToSV
-CIRCTPipelineToHW
+  CIRCTStandardToHandshake
 )
 
 add_mlir_public_c_api_library(CIRCTCAPIHWArith

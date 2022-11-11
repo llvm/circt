@@ -1394,11 +1394,11 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [
   // CHECK-SAME: internalPaths = ["random.something.external"]
   // CHECK:  firrtl.module private @Bar(out %[[_gen_ref2:.+]]: !firrtl.ref<uint<1>>)
   // CHECK:  %[[random:.+]] = firrtl.verbatim.expr "random.something" : () -> !firrtl.uint<1>
-  // CHECK:  %0 = firrtl.ref.send %[[random]] : !firrtl.uint<1> 
-  // CHECK:  firrtl.strictconnect %[[_gen_ref2]], %0 : !firrtl.ref<uint<1>> 
+  // CHECK:  %0 = firrtl.ref.send %[[random]] : !firrtl.uint<1>
+  // CHECK:  firrtl.strictconnect %[[_gen_ref2]], %0 : !firrtl.ref<uint<1>>
   firrtl.module private @Bar() {
   }
-  
+
   // CHECK-LABEL:  firrtl.module private @Foo(
   // CHECK-SAME: out %_gen_tap: !firrtl.ref<uint<1>>, out %_gen_tap2: !firrtl.ref<uint<1>>
   firrtl.module private @Foo() {
