@@ -435,7 +435,7 @@ static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
   // service -- and create an implicit service declaration for them.
   std::unique_ptr<Block> bspPorts = nullptr;
   if (!implReqOp.getServiceSymbol().has_value()) {
-    bspPorts.reset(new Block());
+    bspPorts = std::make_unique<Block>();
     b.setInsertionPointToStart(bspPorts.get());
   }
 
