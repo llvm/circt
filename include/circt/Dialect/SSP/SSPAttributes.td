@@ -45,7 +45,7 @@ include "PropertyBase.td"
 
 // Problem
 def LinkedOperatorTypeProp : OperationProperty<SSPDialect,
-  "LinkedOperatorType", "::mlir::FlatSymbolRefAttr", "::circt::scheduling::Problem"> {
+  "LinkedOperatorType", "::mlir::SymbolRefAttr", "::circt::scheduling::Problem"> {
   let mnemonic = "opr";
   let unwrapValue = [{ getValue().getLeafReference() }];
   let wrapValue = [{ ::mlir::FlatSymbolRefAttr::get(ctx, value) }];
