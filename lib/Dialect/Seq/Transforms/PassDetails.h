@@ -17,8 +17,8 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Seq/SeqOps.h"
-#include "mlir/Pass/Pass.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
+#include "mlir/Pass/Pass.h"
 
 namespace circt {
 namespace seq {
