@@ -37,6 +37,7 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension.Core
     CIRCTCAPISV
     CIRCTCAPIExportVerilog
     CIRCTCAPIFSM
+    CIRCTCAPIHandshake
     MLIRCAPITransforms
   PRIVATE_LINK_LIBS
     ${_depends}
@@ -150,6 +151,7 @@ add_mlir_python_common_capi_library(CIRCTBindingsPythonCAPI
   RELATIVE_INSTALL_ROOT "../../../.."
   DECLARED_SOURCES
     MLIRPythonSources.Core
+    MLIRPythonExtension.RegisterEverything
     CIRCTBindingsPythonSources
     CIRCTBindingsPythonExtension
 )
@@ -163,11 +165,13 @@ add_mlir_python_modules(CIRCTMLIRPythonModules
   INSTALL_PREFIX "python_packages/circt_core/mlir"
   DECLARED_SOURCES
     MLIRPythonSources.Core
+    MLIRPythonExtension.RegisterEverything
     # We need the circt extensions co-located with the MLIR extensions. When
     # the namespace is unified, this moves to the below.
     CIRCTBindingsPythonExtension
   COMMON_CAPI_LINK_LIBS
     CIRCTBindingsPythonCAPI
+    MLIRCAPIRegisterEverything
 )
 
 # Bundle the CIRCT python sources into our package.
