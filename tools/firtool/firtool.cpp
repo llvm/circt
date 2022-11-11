@@ -801,10 +801,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass(
           {/*disableRandomization=*/!isRandomEnabled(RandomKind::Reg),
            /*preventVivadoBRAMMapping*/ preventVivadoBRAMMapping.getValue()}));
-      pm.addPass(sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem,
-                                            stripMuxPragmas,
-                                            !isRandomEnabled(RandomKind::Mem),
-                                            !isRandomEnabled(RandomKind::Reg)));
+      pm.addPass(sv::createHWMemSimImplPass(
+          replSeqMem, ignoreReadEnableMem, stripMuxPragmas,
+          !isRandomEnabled(RandomKind::Mem), !isRandomEnabled(RandomKind::Reg),
+          preventVivadoBRAMMapping));
 
       if (extractTestCode)
         pm.addPass(sv::createSVExtractTestCodePass(etcDisableInstanceExtraction,

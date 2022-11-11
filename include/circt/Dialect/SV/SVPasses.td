@@ -104,7 +104,10 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
                 "false",
     "ignore the read enable signal, instead of assigning X on read disable">,
     Option<"stripMuxPragmas", "strip-mux-pragmas", "bool", "false",
-            "Do not annotate mux pragmas to memory reads">
+            "Do not annotate mux pragmas to memory reads">,
+    Option<"preventVivadoBRAMMapping", "prevent-vivado-bram-mapping", "bool", "false",
+            "Add a vivado attribute to specify a ram style of an array register">
+
    ];
 }
 

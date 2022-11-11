@@ -3,6 +3,7 @@
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-mem-randomization})" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_MEM
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-reg-randomization})" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-mem-randomization disable-reg-randomization})" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG --implicit-check-not RANDOMIZE_MEM
+// RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{prevent-vivado-bram-mapping})" %s | FileCheck %s --check-prefixes=CHECK,COMMON,VIVADO
 
 hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "readUnderWrite", "writeUnderWrite", "writeClockIDs"]
 
@@ -75,7 +76,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //COMMON-LABEL: @FIRRTLMem_1_1_1_16_10_0_1_0_0
 //CHECK-SAME:  attributes {comment = "VCS coverage exclude_file"}
 //CHECK:       %Memory = sv.reg
-//CHECK-SAME:  #sv.attribute<"ram_style" = "\22distributed\22">
+//VIVADO-SAME:  #sv.attribute<"ram_style" = "\22distributed\22">
 //CHECK-SAME:  !hw.inout<uarray<10xi16>>
 //CHECK-NEXT:  %[[rslot:.+]] = sv.array_index_inout %Memory[%ro_addr_0]
 //CHECK-NEXT:  %[[read:.+]] = sv.read_inout %[[rslot]] {sv.attributes = #sv.attributes<[#sv.attribute<"cadence map_to_mux">], emitAsComments>}

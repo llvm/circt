@@ -50,6 +50,7 @@ class HWMemSimImpl {
   bool stripMuxPragmas;
   bool disableMemRandomization;
   bool disableRegRandomization;
+  bool preventVivadoBRAMMapping;
 
   SmallVector<sv::RegOp> registers;
 
@@ -60,11 +61,13 @@ class HWMemSimImpl {
 
 public:
   HWMemSimImpl(bool ignoreReadEnableMem, bool stripMuxPragmas,
-               bool disableMemRandomization, bool disableRegRandomization)
+               bool disableMemRandomization, bool disableRegRandomization,
+               bool preventVivadoBRAMMapping)
       : ignoreReadEnableMem(ignoreReadEnableMem),
         stripMuxPragmas(stripMuxPragmas),
         disableMemRandomization(disableMemRandomization),
-        disableRegRandomization(disableRegRandomization) {}
+        disableRegRandomization(disableRegRandomization),
+        preventVivadoBRAMMapping(preventVivadoBRAMMapping) {}
 
   void generateMemory(HWModuleOp op, FirMemory mem);
 };
@@ -77,6 +80,7 @@ struct HWMemSimImplPass : public sv::HWMemSimImplBase<HWMemSimImplPass> {
   using sv::HWMemSimImplBase<HWMemSimImplPass>::stripMuxPragmas;
   using sv::HWMemSimImplBase<HWMemSimImplPass>::disableMemRandomization;
   using sv::HWMemSimImplBase<HWMemSimImplPass>::disableRegRandomization;
+  using sv::HWMemSimImplBase<HWMemSimImplPass>::preventVivadoBRAMMapping;
 };
 
 } // end anonymous namespace
@@ -225,7 +229,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   // avoid a bug that miscompiles the read-first memory. See "RAM address
   // conflict and Vivado synthesis bug" issue in the vivado forum for the more
   // detail.
-  if (mem.readLatency == 0)
+  if (preventVivadoBRAMMapping && mem.readLatency == 0)
     circt::sv::setSVAttributes(
         reg,
         sv::SVAttributesAttr::get(
@@ -620,7 +624,8 @@ void HWMemSimImplPass::runOnOperation() {
             builder.getStringAttr("VCS coverage exclude_file"));
 
         HWMemSimImpl(ignoreReadEnableMem, stripMuxPragmas,
-                     disableMemRandomization, disableRegRandomization)
+                     disableMemRandomization, disableRegRandomization,
+                     preventVivadoBRAMMapping)
             .generateMemory(newModule, mem);
       }
 
@@ -635,12 +640,14 @@ void HWMemSimImplPass::runOnOperation() {
 
 std::unique_ptr<Pass> circt::sv::createHWMemSimImplPass(
     bool replSeqMem, bool ignoreReadEnableMem, bool stripMuxPragmas,
-    bool disableMemRandomization, bool disableRegRandomization) {
+    bool disableMemRandomization, bool disableRegRandomization,
+    bool preventVivadoBRAMMapping) {
   auto pass = std::make_unique<HWMemSimImplPass>();
   pass->replSeqMem = replSeqMem;
   pass->ignoreReadEnableMem = ignoreReadEnableMem;
   pass->stripMuxPragmas = stripMuxPragmas;
   pass->disableMemRandomization = disableMemRandomization;
   pass->disableRegRandomization = disableRegRandomization;
+  pass->preventVivadoBRAMMapping = preventVivadoBRAMMapping;
   return pass;
 }
