@@ -69,6 +69,25 @@ def InitiationIntervalProp : InstanceProperty<SSPDialect,
   let mnemonic = "II";
 }
 
+// ChainingProblem
+let
+  unwrapValue = [{ (float) getValue().getValueAsDouble() }],
+  wrapValue = [{ ::mlir::FloatAttr::get(::mlir::Float32Type::get(ctx), value) }]
+in {
+  def StartTimeInCycleProp : OperationProperty<SSPDialect,
+    "StartTimeInCycle", "::mlir::FloatAttr", "::circt::scheduling::ChainingProblem"> {
+    let mnemonic = "z";
+  }
+  def IncomingDelayProp : OperatorTypeProperty<SSPDialect,
+    "IncomingDelay", "::mlir::FloatAttr", "::circt::scheduling::ChainingProblem"> {
+    let mnemonic = "zIn";
+  }
+  def OutgoingDelayProp : OperatorTypeProperty<SSPDialect,
+    "OutgoingDelay", "::mlir::FloatAttr", "::circt::scheduling::ChainingProblem"> {
+    let mnemonic = "zOut";
+  }
+}
+
 // SharedOperatorsProblem
 def LimitProp : OperatorTypeProperty<SSPDialect,
   "Limit", "unsigned", "::circt::scheduling::SharedOperatorsProblem"> {
