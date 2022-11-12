@@ -48,6 +48,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
 
@@ -1029,6 +1030,10 @@ static LogicalResult executeFirtool(MLIRContext &context) {
 /// MLIRContext and modules inside of it (reducing compile time).
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
+
+  // Set the bug report message to indicate users should file issues on
+  // llvm/circt and not llvm/llvm-project.
+  setBugReportMsg(circtBugReportMsg);
 
   // Hide default LLVM options, other than for this tool.
   // MLIR options are added below.

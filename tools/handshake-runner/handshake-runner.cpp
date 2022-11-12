@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Support/Version.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -43,6 +44,11 @@ static cl::opt<std::string>
 
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
+
+  // Set the bug report message to indicate users should file issues on
+  // llvm/circt and not llvm/llvm-project.
+  setBugReportMsg(circtBugReportMsg);
+
   cl::ParseCommandLineOptions(
       argc, argv,
       "MLIR Standard dialect runner\n\n"
