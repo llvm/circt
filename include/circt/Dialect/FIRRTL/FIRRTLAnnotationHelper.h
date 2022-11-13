@@ -211,11 +211,11 @@ struct WiringProblem {
 /// one or more WiringProblems.
 struct ModuleModifications {
   /// A pair of Wiring Problem index and port information.
-  using portInfoPair = std::pair<int, PortInfo>;
+  using portInfoPair = std::pair<size_t, PortInfo>;
 
   /// A pair of Wiring Problem index and a U-turn Value that should be
   /// connected.
-  using uturnPair = std::pair<int, Value>;
+  using uturnPair = std::pair<size_t, Value>;
 
   /// Ports that should be added to a module.
   SmallVector<portInfoPair> portsToAdd;
@@ -223,7 +223,7 @@ struct ModuleModifications {
   /// A mapping of a Value that should be connected to either a new port or a
   /// U-turn, for a specific Wiring Problem.  This is pre-populated with the
   /// source and sink.
-  DenseMap<unsigned, Value> connectionMap;
+  DenseMap<size_t, Value> connectionMap;
 
   /// A secondary value that _may_ need to be hooked up.  This is always set
   /// after the Value in the connectionMap.
