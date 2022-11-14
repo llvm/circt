@@ -38,6 +38,8 @@ static Value dropWrite(PatternRewriter &rewriter, OpResult old,
   return passthrough;
 }
 
+// Move a name hine from a soon to be deleted operation to a new operation.
+// Pass throuhg the new operation to make patterns easier to write.
 static Value moveNameHint(OpResult old, Value passthrough) {
   Operation *op = passthrough.getDefiningOp();
   Operation *oldOp = old.getOwner();
