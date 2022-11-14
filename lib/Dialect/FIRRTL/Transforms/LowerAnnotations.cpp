@@ -319,7 +319,6 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {serializedViewAnnoClass, {noResolve, applyGCTView}},
     {viewAnnoClass, {noResolve, applyGCTView}},
     {companionAnnoClass, {stdResolve, applyWithoutTarget<>}},
-    {parentAnnoClass, {stdResolve, applyWithoutTarget<>}},
     {augmentedGroundTypeClass, {stdResolve, applyWithoutTarget<true>}},
     // Grand Central Data Tap Annotations
     {dataTapsClass, {noResolve, applyGCTDataTaps}},
