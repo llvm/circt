@@ -393,21 +393,10 @@ static bool isBound(hw::HWModuleLike op, hw::InstanceGraph &instanceGraph) {
 }
 
 // Add any existing bindings to the bind table.
-static void addBinds(hw::HWModuleLike op, hw::InstanceGraph &instanceGraph,
-                     SmallVectorImpl<BindOp> &existingBinds,
-                     BindTable &bindTable) {
-  auto *node = instanceGraph.lookup(op);
-  for (hw::InstanceRecord *use : node->uses()) {
-    auto inst = dyn_cast_or_null<hw::InstanceOp>(use->getInstance());
-    if (!inst)
-      continue;
-    if (!inst->hasAttr("doNotPrint") || !inst.getInnerSym().has_value())
-      continue;
-
-    auto parent = inst->getParentOfType<hw::HWModuleOp>();
-    for (auto bind : existingBinds)
-      if (bind.getInstance().getName() == inst.getInnerSymAttr())
-        bindTable[parent.getNameAttr()][inst.getInnerSymAttr()] = bind;
+static void addExistingBinds(Block *topLevelModule, BindTable &bindTable) {
+  for (auto bind : topLevelModule->getOps<BindOp>()) {
+    hw::InnerRefAttr boundRef = bind.getInstance();
+    bindTable[boundRef.getModule()][boundRef.getName()] = bind;
   }
 }
 
@@ -695,11 +684,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
   // bind table, so they can be updated if the instance(s) live inside a module
   // that gets inlined later.
   BindTable bindTable;
-  SmallVector<BindOp> existingBinds;
-  for (auto bind : topLevelModule->getOps<BindOp>())
-    existingBinds.push_back(bind);
-  for (auto mod : topLevelModule->getOps<hw::HWModuleLike>())
-    addBinds(mod, *instanceGraph, existingBinds, bindTable);
+  addExistingBinds(topLevelModule, bindTable);
 
   for (auto &op : llvm::make_early_inc_range(topLevelModule->getOperations())) {
     if (auto rtlmod = dyn_cast<hw::HWModuleOp>(op)) {
