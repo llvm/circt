@@ -37,7 +37,7 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
     "$dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
 
   let hasVerifier = 1;
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
 }
 
 def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]> {

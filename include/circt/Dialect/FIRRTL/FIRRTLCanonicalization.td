@@ -40,10 +40,13 @@ def NullAttr : Constraint<CPred<"!$0">>;
 // Constraint that enforces equal types
 def EqualTypes : Constraint<CPred<"$0.getType() == $1.getType()">>;
 
+// Constraint that enforces int types
+def IntTypes : Constraint<CPred<"$0.isa<IntType>()">>;
+
 // Constraint that enforces types of known width
 def KnownWidth : Constraint<CPred<[{
   $0.getType().isa<FIRRTLBaseType>() &&
-    $0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel() >= 0
+    !$0.getType().cast<FIRRTLBaseType>().getRecursiveTypeProperties().hasUninferredWidth
   }]>>;
 
 /// Constraint that matches a zero ConstantOp or SpecialConstantOp.
@@ -91,6 +94,20 @@ def GTWithConstLHS : Pat<
   (GTPrimOp $lhs, $rhs),
   (LTPrimOp $rhs, $lhs),
   [(AnyConstantOp $lhs), (NonConstantOp $rhs)]>;
+
+// connect(a:t,b:t) -> strictconnect(a,b)
+def ConnectSameType : Pat<
+  (ConnectOp $dst, $src),
+  (StrictConnectOp $dst, $src),
+  [(EqualTypes $dst, $src), (KnownWidth $dst)]>;
+
+// connect(a:t1,b:(t2<t1) -> strictconnect(a,(pad b))
+def ConnectExtension : Pat<
+  (ConnectOp $dst, $src),
+  (StrictConnectOp $dst, (PadPrimOp $src, 
+    (NativeCodeCall<"$0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel()"> $dst))),
+  [(IntType $dst), (IntType $src), (KnownWidth $dst), (KnownWidth $src)]>;
+
 
 // mux(cond, x, mux(cond, y, z)) -> mux(cond, x, z)
 def MuxSameCondLow : Pat<

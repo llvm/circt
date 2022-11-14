@@ -1559,73 +1559,10 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   return success();
 }
 
-static LogicalResult canonicalizeIntTypeConnect(ConnectOp op,
-                                                PatternRewriter &rewriter) {
-  // If a connect exists from a shorter int to a longer int, simplify
-  // to an extend and strict connect.
-
-  // Base types only
-  if (!op.getOperand(0).getType().isa<FIRRTLBaseType>())
-    return failure();
-
-  auto destType =
-      op.getOperand(0).getType().cast<FIRRTLBaseType>().getPassiveType();
-  auto srcType = op.getOperand(1).getType().cast<FIRRTLBaseType>();
-  if (destType == srcType)
-    return failure();
-
-  auto srcWidth = srcType.getBitWidthOrSentinel();
-  auto destWidth = destType.getBitWidthOrSentinel();
-
-  if (destType.isa<IntType>() && srcType.isa<IntType>() && srcWidth >= 0 &&
-      destWidth >= 0 && destWidth > srcWidth) {
-    auto nv =
-        rewriter.createOrFold<PadPrimOp>(op.getLoc(), op.getSrc(), destWidth);
-    rewriter.create<StrictConnectOp>(op.getLoc(), op.getDest(), nv);
-    if (auto *srcOp = op.getSrc().getDefiningOp())
-      rewriter.updateRootInPlace(srcOp, []() {});
-    if (auto *destOp = op.getDest().getDefiningOp())
-      rewriter.updateRootInPlace(destOp, []() {});
-    rewriter.eraseOp(op);
-    return success();
-  }
-  return failure();
-}
-
-/// Determines if the specified type is a sized base type.
-static bool isSizedBaseType(Type type) {
-  auto base = type.dyn_cast<FIRRTLBaseType>();
-  return base && !base.hasUninferredWidth();
-}
-
-// Forward simple values through wire's and reg's.
-static LogicalResult
-canonicalizeMatchingTypeConnect(ConnectOp op, PatternRewriter &rewriter) {
-  // Limit to connects between matching sized base types.
-  if (op.getSrc().getType() != op.getDest().getType())
-    return failure();
-  if (!isSizedBaseType(op.getSrc().getType()))
-    return failure();
-
-  rewriter.create<StrictConnectOp>(op.getLoc(), op.getDest(), op.getSrc());
-  if (auto *srcOp = op.getSrc().getDefiningOp())
-    rewriter.updateRootInPlace(srcOp, []() {});
-  if (auto *destOp = op.getDest().getDefiningOp())
-    rewriter.updateRootInPlace(destOp, []() {});
-  rewriter.eraseOp(op);
-  return success();
-}
-
-LogicalResult ConnectOp::canonicalize(ConnectOp op, PatternRewriter &rewriter) {
-  // TODO: Canonicalize towards explicit extensions and flips here.
-
-  // If there is a simple value connected to a foldable decl like a wire or reg,
-  // see if we can eliminate the decl.
-  if (succeeded(canonicalizeMatchingTypeConnect(op, rewriter)))
-    return success();
-  if (succeeded(canonicalizeIntTypeConnect(op, rewriter)))
-    return success();
-  return failure();
+void ConnectOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.insert<patterns::ConnectExtension, patterns::ConnectSameType>(
+      context);
 }
 
 LogicalResult StrictConnectOp::canonicalize(StrictConnectOp op,
