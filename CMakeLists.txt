@@ -84,9 +84,9 @@ endif ()
   # Handle unittests when building out-of-tree against an installed version of
   # LLVM/MLIR (not a build tree). Adapted from `llvm/flang/CMakeLists.txt`.
   set(CIRCT_GTEST_AVAILABLE 0)
-  set(UNITTEST_DIR ${LLVM_BUILD_MAIN_SRC_DIR}/utils/unittest)
+  set(UNITTEST_DIR ${LLVM_THIRD_PARTY_DIR}/unittest)
   if (NOT EXISTS ${UNITTEST_DIR}/googletest/include/gtest/gtest.h)
-    set(UNITTEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/llvm/llvm/utils/unittest)
+    set(UNITTEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/llvm/third-party/unittest)
   endif()
   if (EXISTS ${UNITTEST_DIR}/googletest/include/gtest/gtest.h)
     if (NOT TARGET llvm_gtest)
