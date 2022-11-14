@@ -31,11 +31,11 @@ using namespace circt;
 using namespace seq;
 
 namespace {
-struct SeqToSVPass : public circt::seq::impl::LowerSeqToSVBase<SeqToSVPass> {
+struct SeqToSVPass : public impl::LowerSeqToSVBase<SeqToSVPass> {
   void runOnOperation() override;
 };
 struct SeqFIRRTLToSVPass
-    : public circt::seq::impl::LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass> {
+    : public impl::LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass> {
   void runOnOperation() override;
   using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::disableRegRandomization;
   using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::LowerSeqFIRRTLToSVBase;
@@ -523,6 +523,6 @@ std::unique_ptr<Pass> circt::seq::createSeqLowerToSVPass() {
 }
 
 std::unique_ptr<Pass> circt::seq::createSeqFIRRTLLowerToSVPass(
-    const circt::seq::LowerSeqFIRRTLToSVOptions &options) {
+    const LowerSeqFIRRTLToSVOptions &options) {
   return std::make_unique<SeqFIRRTLToSVPass>(options);
 }
