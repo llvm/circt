@@ -38,6 +38,15 @@ static Value dropWrite(PatternRewriter &rewriter, OpResult old,
   return passthrough;
 }
 
+static Value moveNameHint(OpResult old, Value passthrough) {
+  Operation *op = passthrough.getDefiningOp();
+  Operation *oldOp = old.getOwner();
+  auto name = oldOp->getAttrOfType<StringAttr>("name");
+  if (name && !name.getValue().empty())
+    op->setAttr("name", name);
+  return passthrough;
+}
+
 // Declarative canonicalization patterns
 namespace circt {
 namespace firrtl {

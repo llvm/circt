@@ -946,10 +946,10 @@ firrtl.module @wire_port_prop1(in %in_a: !firrtl.uint<9>, out %out_b: !firrtl.ui
 
 // CHECK-LABEL: @LEQWithConstLHS
 // CHECK-NEXT: %c42_ui = firrtl.constant
-// CHECK-NEXT: %0 = firrtl.geq %a, %c42_ui
+// CHECK-NEXT: %e = firrtl.geq %a, %c42_ui
 firrtl.module @LEQWithConstLHS(in %a: !firrtl.uint, out %b: !firrtl.uint<1>) {
   %0 = firrtl.constant 42 : !firrtl.uint
-  %1 = firrtl.leq %0, %a : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
+  %1 = firrtl.leq %0, %a {name = "e"} : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
   firrtl.connect %b, %1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
