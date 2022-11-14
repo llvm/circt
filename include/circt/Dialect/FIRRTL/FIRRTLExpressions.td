@@ -416,7 +416,7 @@ let inferType = "impl::inferComparisonResult" in {
 }
 
 def CatPrimOp : IntBinaryPrimOp<"cat", UIntType> {
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
 }
 def DShlPrimOp  : BinaryPrimOp<"dshl", IntType, UIntType, IntType>  {
   let description = [{

@@ -1069,23 +1069,36 @@ LogicalResult DShrPrimOp::canonicalize(DShrPrimOp op,
       });
 }
 
-LogicalResult CatPrimOp::canonicalize(CatPrimOp op, PatternRewriter &rewriter) {
-  // cat(bits(x, ...), bits(x, ...)) -> bits(x ...) when the two ...'s are
-  // consequtive in the input.
-  if (auto lhsBits =
-          dyn_cast_or_null<BitsPrimOp>(op.getLhs().getDefiningOp())) {
-    if (auto rhsBits =
-            dyn_cast_or_null<BitsPrimOp>(op.getRhs().getDefiningOp())) {
-      if (lhsBits.getInput() == rhsBits.getInput() &&
-          lhsBits.getLo() - 1 == rhsBits.getHi()) {
-        replaceOpWithNewOpAndCopyName<BitsPrimOp>(
-            rewriter, op, op.getType(), lhsBits.getInput(), lhsBits.getHi(),
-            rhsBits.getLo());
-        return success();
+namespace {
+// cat(bits(x, ...), bits(x, ...)) -> bits(x ...) when the two ...'s are
+// consequtive in the input.
+struct CatBitsBits : public mlir::RewritePattern {
+  CatBitsBits(MLIRContext *context)
+      : RewritePattern(CatPrimOp::getOperationName(), 0, context) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    auto cat = cast<CatPrimOp>(op);
+    if (auto lhsBits =
+            dyn_cast_or_null<BitsPrimOp>(cat.getLhs().getDefiningOp())) {
+      if (auto rhsBits =
+              dyn_cast_or_null<BitsPrimOp>(cat.getRhs().getDefiningOp())) {
+        if (lhsBits.getInput() == rhsBits.getInput() &&
+            lhsBits.getLo() - 1 == rhsBits.getHi()) {
+          replaceOpWithNewOpAndCopyName<BitsPrimOp>(
+              rewriter, cat, cat.getType(), lhsBits.getInput(), lhsBits.getHi(),
+              rhsBits.getLo());
+          return success();
+        }
       }
     }
+    return failure();
   }
-  return failure();
+};
+} // namespace
+
+void CatPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.insert<CatBitsBits>(context);
 }
 
 OpFoldResult BitCastOp::fold(ArrayRef<Attribute> operands) {
