@@ -112,6 +112,18 @@ def HWModuleOp : HWModuleOpBase<"module",
       return insertInput(getNumInOrInoutPorts(), name.getValue(), ty);
     }
 
+    /// Prepend an input with a given name and type to the port list.
+    /// If the name is not unique, a unique name is created and returned.
+    std::pair<StringAttr, BlockArgument>
+    prependInput(const Twine &name, Type ty) {
+      return insertInput(0, name, ty);
+    }
+
+    std::pair<StringAttr, BlockArgument>
+    prependInput(StringAttr name, Type ty) {
+      return insertInput(0, name.getValue(), ty);
+    }
+
     /// Insert an input with a given name and type into the port list.
     /// The input is added at the specified index.
     std::pair<StringAttr, BlockArgument>
@@ -121,6 +133,28 @@ def HWModuleOp : HWModuleOpBase<"module",
     insertInput(unsigned index, const Twine &name, Type ty) {
       ::mlir::StringAttr nameAttr = ::mlir::StringAttr::get(getContext(), name);
       return insertInput(index, nameAttr, ty);
+    }
+
+    /// Append an output with a given name and type to the port list.
+    /// If the name is not unique, a unique name is created.
+    void appendOutput(StringAttr name, Value value) {
+      return insertOutputs(getResultTypes().size(), {{name, value}});
+    }
+
+    void appendOutput(const Twine &name, Value value) {
+      ::mlir::StringAttr nameAttr = ::mlir::StringAttr::get(getContext(), name);
+      return insertOutputs(getResultTypes().size(), {{nameAttr, value}});
+    }
+
+    /// Prepend an output with a given name and type to the port list.
+    /// If the name is not unique, a unique name is created.
+    void prependOutput(StringAttr name, Value value) {
+      return insertOutputs(0, {{name, value}});
+    }
+
+    void prependOutput(const Twine &name, Value value) {
+      ::mlir::StringAttr nameAttr = ::mlir::StringAttr::get(getContext(), name);
+      return insertOutputs(0, {{nameAttr, value}});
     }
 
     /// Inserts a list of output ports into the port list at a specific
