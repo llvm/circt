@@ -792,8 +792,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         modulePM.addPass(createCSEPass());
       }
 
-      pm.nest<hw::HWModuleOp>().addPass(
-          seq::createSeqFIRRTLLowerToSVPass(!isRandomEnabled(RandomKind::Reg)));
+      pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass(
+          {/*disableRandomization=*/!isRandomEnabled(RandomKind::Reg)}));
       pm.addPass(sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem,
                                             stripMuxPragmas,
                                             !isRandomEnabled(RandomKind::Mem),
