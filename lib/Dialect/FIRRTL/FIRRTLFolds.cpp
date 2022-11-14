@@ -1193,39 +1193,52 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
-static LogicalResult canonicalizeMux(MuxPrimOp op, PatternRewriter &rewriter) {
-  // If the mux has a known output width, pad the operands up to this width.
-  // Most folds on mux require that folded operands are of the same width as
-  // the mux itself.
-  auto width = op.getType().getBitWidthOrSentinel();
-  if (width < 0)
-    return failure();
+namespace {
 
-  auto pad = [&](Value input) -> Value {
-    auto inputWidth =
-        input.getType().template cast<FIRRTLBaseType>().getBitWidthOrSentinel();
-    if (inputWidth < 0 || width == inputWidth)
-      return input;
-    return rewriter.create<PadPrimOp>(op.getLoc(), op.getType(), input, width)
-        .getResult();
-  };
+// If the mux has a known output width, pad the operands up to this width.
+// Most folds on mux require that folded operands are of the same width as
+// the mux itself.
+class MuxPad : public mlir::RewritePattern {
+public:
+  MuxPad(MLIRContext *context)
+      : RewritePattern(MuxPrimOp::getOperationName(), 0, context) {}
 
-  auto newHigh = pad(op.getHigh());
-  auto newLow = pad(op.getLow());
-  if (newHigh == op.getHigh() && newLow == op.getLow())
-    return failure();
+  LogicalResult
+  matchAndRewrite(Operation *op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto mux = cast<MuxPrimOp>(op);
+    auto width = mux.getType().getBitWidthOrSentinel();
+    if (width < 0)
+      return failure();
 
-  replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-      rewriter, op, op.getType(), ValueRange{op.getSel(), newHigh, newLow},
-      op->getAttrs());
-  return success();
-}
+    auto pad = [&](Value input) -> Value {
+      auto inputWidth = input.getType()
+                            .template cast<FIRRTLBaseType>()
+                            .getBitWidthOrSentinel();
+      if (inputWidth < 0 || width == inputWidth)
+        return input;
+      return rewriter
+          .create<PadPrimOp>(mux.getLoc(), mux.getType(), input, width)
+          .getResult();
+    };
+
+    auto newHigh = pad(mux.getHigh());
+    auto newLow = pad(mux.getLow());
+    if (newHigh == mux.getHigh() && newLow == mux.getLow())
+      return failure();
+
+    replaceOpWithNewOpAndCopyName<MuxPrimOp>(
+        rewriter, op, mux.getType(), ValueRange{mux.getSel(), newHigh, newLow},
+        mux->getAttrs());
+    return success();
+  }
+};
+} // namespace
 
 void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.add(canonicalizeMux);
-  results.add<patterns::MuxSameCondLow>(context);
-  results.add<patterns::MuxSameCondHigh>(context);
+  results.add<MuxPad, patterns::MuxSameCondLow, patterns::MuxSameCondHigh>(
+      context);
 }
 
 OpFoldResult PadPrimOp::fold(ArrayRef<Attribute> operands) {
