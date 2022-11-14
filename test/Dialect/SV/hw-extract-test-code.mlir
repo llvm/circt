@@ -150,11 +150,15 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // CHECK: %0 = comb.and %1
 // CHECK: %1 = comb.and %0
 // CHECK: hw.instance "{{[^ ]+}}" {{.+}} @InputOnlyCycle_cover
+// CHECK: hw.instance {{.*}} sym @[[already_bound:[^ ]+]] @AlreadyBound
 // CHECK-NOT: sv.bind <@InputOnly::
 // CHECK-DAG: sv.bind <@Top::@[[input_only_assert]]>
 // CHECK-DAG: sv.bind <@Top::@[[input_only_cover]]>
 // CHECK-DAG: sv.bind <@InputOnlySym::@[[input_only_sym_cover]]>
+// CHECK-DAG: sv.bind <@Top::@[[already_bound]]>
 module {
+  hw.module private @AlreadyBound() -> () {}
+
   hw.module private @InputOnly(%clock: i1, %cond: i1) -> () {
     sv.always posedge %clock  {
       sv.cover %cond, immediate
@@ -178,12 +182,23 @@ module {
     }
   }
 
+  hw.module private @InputOnlyBind(%clock: i1, %cond: i1) -> () {
+    hw.instance "already_bound" sym @already_bound @AlreadyBound() -> () {doNotPrint = true}
+    sv.always posedge %clock  {
+      sv.cover %cond, immediate
+      sv.assert %cond, immediate
+    }
+  }
+
   hw.module @Top(%clock: i1, %cond: i1) -> (foo: i1) {
     hw.instance "input_only" @InputOnly(clock: %clock: i1, cond: %cond: i1) -> ()
     hw.instance "input_only_sym" sym @foo @InputOnlySym(clock: %clock: i1, cond: %cond: i1) -> ()
     hw.instance "input_only_cycle" @InputOnlyCycle(clock: %clock: i1, cond: %cond: i1) -> ()
+    hw.instance "input_only_bind" @InputOnlyBind(clock: %clock: i1, cond: %cond: i1) -> ()
     hw.output %cond : i1
   }
+
+  sv.bind <@InputOnlyBind::@already_bound>
 }
 
 // -----
