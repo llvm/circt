@@ -1085,7 +1085,7 @@ firrtl.circuit "Top"  attributes {
       elements = [
         {
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-          id = 1 : i64,
+          id = 5 : i64,
           name = "signed"
         }
       ],
@@ -1122,7 +1122,7 @@ firrtl.circuit "Top"  attributes {
       {
         circt.nonlocal = @nla_0,
         class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-        id = 1 : i64
+        id = 5 : i64
       }
       ]} : !firrtl.uint<1>
   }
