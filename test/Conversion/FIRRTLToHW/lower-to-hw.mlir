@@ -530,7 +530,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: sv.ifdef "USE_PROPERTY_AS_CONSTRAINT" {
     // CHECK-NEXT:   sv.assume.concurrent posedge %clock, [[TMP2]]
     // CHECK-NEXT: }
-    firrtl.assert %clock, %cond, %enable, "assert1"(%value, %i0) : !firrtl.uint<42>, !firrtl.uint<0> {isConcurrent = true, format = "ifElseFatal"}
+    firrtl.assert %clock, %cond, %enable, "assert1 %d, %d"(%value, %i0) : !firrtl.uint<42>, !firrtl.uint<0> {isConcurrent = true, format = "ifElseFatal"}
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %cond, [[TRUE]]
     // CHECK-NEXT: [[TMP2:%.+]] = comb.and bin %enable, [[TMP1]]
