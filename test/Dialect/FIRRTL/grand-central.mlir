@@ -1060,3 +1060,83 @@ firrtl.circuit "NoInterfaces" attributes {
 // CHECK-LABEL: module {
 // CHECK:         sv.verbatim
 // CHECK-SAME:      []
+
+// -----
+
+// Check that nonlocal duplicate views are dropped.
+firrtl.circuit "Top"  attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "MyInterface",
+      elements = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 1 : i64,
+          name = "signed"
+        }
+      ],
+      id = 2 : i64,
+      name = "MyView"
+    },
+    {
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "MyInterface",
+      elements = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 1 : i64,
+          name = "signed"
+        }
+      ],
+      id = 0 : i64,
+      name = "MyView"
+    }
+  ]
+  } {
+  firrtl.hierpath private @nla_0 [@Top::@t1, @Dut::@s1]
+  firrtl.hierpath private @nla [@Top::@t1, @Dut::@s1]
+  firrtl.module private @NonlocalCompanion(in %MyInterface_1_0: !firrtl.ref<uint<1>>) attributes {
+    annotations = [
+      {
+        circt.nonlocal = @nla,
+        class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+        id = 0 : i64,
+        name = "MyView"
+      },
+      {
+        circt.nonlocal = @nla_0,
+        class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+        id = 2 : i64,
+        name = "MyView"
+      }
+    ]} {
+    %0 = firrtl.ref.resolve %MyInterface_1_0 : !firrtl.ref<uint<1>>
+    %MyInterface_1 = firrtl.node  %0  {
+      annotations = [
+      {
+        circt.nonlocal = @nla,
+        class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        id = 1 : i64
+      },
+      {
+        circt.nonlocal = @nla_0,
+        class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        id = 1 : i64
+      }
+      ]} : !firrtl.uint<1>
+  }
+  firrtl.module public @Dut() {
+    %1 = firrtl.instance s1 sym @s1 @NonlocalCompanion(in MyInterface_1_0: !firrtl.ref<uint<1>>)
+  }
+  firrtl.module public @Top() {
+    firrtl.instance t1 sym @t1 @Dut()
+  }
+  // CHECK:  firrtl.module private @NonlocalCompanion(in %MyInterface_1_0: !firrtl.ref<uint<1>>) {
+  // CHECK:    %0 = sv.interface.instance sym @__MyView_MyInterface__  {name = "MyView"} : !sv.interface<@MyInterface>
+  // CHECK:    %1 = firrtl.ref.resolve %MyInterface_1_0 : !firrtl.ref<uint<1>>
+  // CHECK:    %MyInterface_1 = firrtl.node  %1  : !firrtl.uint<1>
+  // CHECK{LITERAL}:    sv.verbatim "assign {{1}}.signed = {{0}};"(%1) :
+  // CHECK-SAME: !firrtl.uint<1> {symbols = [#hw.innerNameRef<@NonlocalCompanion::@__MyView_MyInterface__>]}
+  // CHECK:  }
+}
