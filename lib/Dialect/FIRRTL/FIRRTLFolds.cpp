@@ -38,10 +38,13 @@ static Value dropWrite(PatternRewriter &rewriter, OpResult old,
   return passthrough;
 }
 
-// Move a name hine from a soon to be deleted operation to a new operation.
-// Pass throuhg the new operation to make patterns easier to write.
+// Move a name hint from a soon to be deleted operation to a new operation.
+// Pass through the new operation to make patterns easier to write.
 static Value moveNameHint(OpResult old, Value passthrough) {
   Operation *op = passthrough.getDefiningOp();
+  // This should handle ports, but it isn't clear we can change those in
+  // canonicalizers.
+  assert(op && "passthrough must be an operation");
   Operation *oldOp = old.getOwner();
   auto name = oldOp->getAttrOfType<StringAttr>("name");
   if (name && !name.getValue().empty())
