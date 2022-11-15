@@ -32,7 +32,7 @@ indicate to the compiler that a wire "foo" should not be optimized away.
 ```
 
 Some annotations have more complex interactions with the IR. For example the
-[BoringUtils](https://www.chisel-lang.org/api/latest/chisel3/util/experimental/BoringUtils$.html)
+[BoringUtils](https://javadoc.io/doc/edu.berkeley.cs/chisel3_2.13/latest/chisel3/util/experimental/BoringUtils$.html)
 provides FIRRTL with annotations which can be used to wire together any two
 things across the module instance hierarchy.
 
@@ -221,7 +221,7 @@ Example:
 }
 ```
 
-### [BlackBoxInlineAnno](https://www.chisel-lang.org/api/firrtl/latest/firrtl/transforms/BlackBoxInlineAnno.html)
+### [BlackBoxInlineAnno](https://javadoc.io/doc/edu.berkeley.cs/firrtl_2.13/latest/firrtl/transforms/BlackBoxInlineAnno.html)
 
 | Property   | Type   | Description                            |
 | ---------- | ------ | -------------                          |
@@ -243,7 +243,7 @@ Example:
 }
 ```
 
-### [BlackBoxPathAnno](https://www.chisel-lang.org/api/firrtl/latest/firrtl/transforms/BlackBoxPathAnno.html)
+### [BlackBoxPathAnno](https://javadoc.io/doc/edu.berkeley.cs/firrtl_2.13/latest/firrtl/transforms/BlackBoxPathAnno.html)
 
 | Property   | Type   | Description                          |
 | ---------- | ------ | -------------                        |
@@ -263,7 +263,7 @@ Example:
 }
 ```
 
-### [BlackBoxResourceFileNameAnno](https://www.chisel-lang.org/api/firrtl/latest/firrtl/transforms/BlackBoxResourceFileNameAnno.html)
+### [BlackBoxResourceFileNameAnno](https://javadoc.io/doc/edu.berkeley.cs/firrtl_2.13/latest/firrtl/transforms/BlackBoxResourceFileNameAnno.html)
 
 | Property         | Type   | Description                              |
 | ----------       | ------ | -------------                            |
@@ -281,7 +281,7 @@ Example:
 }
 ```
 
-### [BlackBoxTargetDirAnno](https://www.chisel-lang.org/api/firrtl/latest/firrtl/transforms/BlackBoxTargetDirAnno.html)
+### [BlackBoxTargetDirAnno](https://javadoc.io/doc/edu.berkeley.cs/firrtl_2.13/latest/firrtl/transforms/BlackBoxTargetDirAnno.html)
 
 | Property   | Type   | Description                               |
 | ---------- | ------ | -------------                             |
@@ -367,7 +367,7 @@ Example:
 }
 ```
 
-### [DontTouchAnnotation](https://www.chisel-lang.org/api/firrtl/latest/firrtl/transforms/DontTouchAnnotation.html)
+### [DontTouchAnnotation](https://javadoc.io/doc/edu.berkeley.cs/firrtl_2.13/latest/firrtl/transforms/DontTouchAnnotation.html)
 
 | Property   | Type   | Description                             |
 | ---------- | ------ | -------------                           |
@@ -388,7 +388,7 @@ Example:
 }
 ```
 
-### [FlattenAnnotation](https://www.chisel-lang.org/api/firrtl/latest/firrtl/transforms/FlattenAnnotation.html)
+### [FlattenAnnotation](https://javadoc.io/doc/edu.berkeley.cs/firrtl_2.13/latest/firrtl/transforms/FlattenAnnotation.html)
 
 | Property   | Type   | Description                           |
 | ---------- | ------ | -------------                         |
@@ -469,7 +469,7 @@ Example:
 }
 ```
 
-### [InlineAnnotation](https://www.chisel-lang.org/api/firrtl/latest/firrtl/passes/InlineAnnotation.html)
+### [InlineAnnotation](https://javadoc.io/doc/edu.berkeley.cs/firrtl_2.13/latest/firrtl/passes/InlineAnnotation.html)
 
 | Property   | Type   | Description                      |
 | ---------- | ------ | -------------                    |
