@@ -1029,44 +1029,14 @@ OpFoldResult CatPrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
-LogicalResult DShlPrimOp::canonicalize(DShlPrimOp op,
-                                       PatternRewriter &rewriter) {
-  if (!hasKnownWidthIntTypes(op))
-    return failure();
-
-  return canonicalizePrimOp(
-      op, rewriter, [&](ArrayRef<Attribute> operands) -> OpFoldResult {
-        // dshl(x, cst) -> shl(x, cst).  The result size is generally much wider
-        // than what is needed for the constant.
-        if (auto rhsCst = getConstant(operands[1])) {
-          // Shift amounts are always unsigned, but shift only takes a 32-bit
-          // amount.
-          uint64_t shiftAmt = rhsCst->getLimitedValue(1ULL << 31);
-          return rewriter.createOrFold<ShlPrimOp>(op.getLoc(), op.getLhs(),
-                                                  shiftAmt);
-        }
-        return {};
-      });
+void DShlPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                             MLIRContext *context) {
+  results.insert<patterns::DShlOfConstant>(context);
 }
 
-LogicalResult DShrPrimOp::canonicalize(DShrPrimOp op,
-                                       PatternRewriter &rewriter) {
-  if (!hasKnownWidthIntTypes(op))
-    return failure();
-
-  return canonicalizePrimOp(
-      op, rewriter, [&](ArrayRef<Attribute> operands) -> OpFoldResult {
-        // dshr(x, cst) -> shr(x, cst).  The result size is generally much wider
-        // than what is needed for the constant.
-        if (auto rhsCst = getConstant(operands[1])) {
-          // Shift amounts are always unsigned, but shift only takes a 32-bit
-          // amount.
-          uint64_t shiftAmt = rhsCst->getLimitedValue(1ULL << 31);
-          return rewriter.createOrFold<ShrPrimOp>(op.getLoc(), op.getLhs(),
-                                                  shiftAmt);
-        }
-        return {};
-      });
+void DShrPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                             MLIRContext *context) {
+  results.insert<patterns::DShrOfConstant>(context);
 }
 
 namespace {
