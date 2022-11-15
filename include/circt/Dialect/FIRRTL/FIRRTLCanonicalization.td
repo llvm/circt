@@ -118,12 +118,12 @@ def TypeWidth32 : NativeCodeCall<
 
 def DShlOfConstant : Pat<
   (DShlPrimOp:$old $x, (ConstantOp $cst)),
-  (PadPrimOp (ShlPrimOp $x, (LimitConstant32 $cst)), (TypeWidth32 $old)),
+  (PadPrimOp (MoveNameHint $old, (ShlPrimOp $x, (LimitConstant32 $cst))), (TypeWidth32 $old)),
   [(KnownWidth $x)]>;
 
 def DShrOfConstant : Pat<
   (DShrPrimOp:$old $x, (ConstantOp $cst)),
-  (PadPrimOp (ShrPrimOp $x, (LimitConstant32 $cst)), (TypeWidth32 $old)),
+  (PadPrimOp (MoveNameHint $old, (ShrPrimOp $x, (LimitConstant32 $cst))), (TypeWidth32 $old)),
   [(KnownWidth $x)]>;
 
 // mux(cond, x, mux(cond, y, z)) -> mux(cond, x, z)
