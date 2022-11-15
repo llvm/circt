@@ -38,6 +38,22 @@ static Value dropWrite(PatternRewriter &rewriter, OpResult old,
   return passthrough;
 }
 
+// Move a name hint from a soon to be deleted operation to a new operation.
+// Pass through the new operation to make patterns easier to write.  This cannot
+// move a name to a port (block argument), doing so would require rewriting all
+// instance sites as well as the module.
+static Value moveNameHint(OpResult old, Value passthrough) {
+  Operation *op = passthrough.getDefiningOp();
+  // This should handle ports, but it isn't clear we can change those in
+  // canonicalizers.
+  assert(op && "passthrough must be an operation");
+  Operation *oldOp = old.getOwner();
+  auto name = oldOp->getAttrOfType<StringAttr>("name");
+  if (name && !name.getValue().empty())
+    op->setAttr("name", name);
+  return passthrough;
+}
+
 // Declarative canonicalization patterns
 namespace circt {
 namespace firrtl {
