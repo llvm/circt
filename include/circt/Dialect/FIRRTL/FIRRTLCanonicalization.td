@@ -92,6 +92,22 @@ def GTWithConstLHS : Pat<
   (LTPrimOp $rhs, $lhs),
   [(AnyConstantOp $lhs), (NonConstantOp $rhs)]>;
 
+def LimitConstant32 : NativeCodeCall<
+  "$_builder.getI32IntegerAttr($0.getValue().getLimitedValue(1ULL << 31))">;
+
+def TypeWidth32 : NativeCodeCall<
+  "$_builder.getI32IntegerAttr($0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel())">;
+
+def DShlOfConstant : Pat<
+  (DShlPrimOp:$old $x, (ConstantOp $cst)),
+  (PadPrimOp (ShlPrimOp $x, (LimitConstant32 $cst)), (TypeWidth32 $old)),
+  [(KnownWidth $x)]>;
+
+def DShrOfConstant : Pat<
+  (DShrPrimOp:$old $x, (ConstantOp $cst)),
+  (PadPrimOp (ShrPrimOp $x, (LimitConstant32 $cst)), (TypeWidth32 $old)),
+  [(KnownWidth $x)]>;
+
 // mux(cond, x, mux(cond, y, z)) -> mux(cond, x, z)
 def MuxSameCondLow : Pat<
   (MuxPrimOp $cond, $x, (MuxPrimOp $cond, $y, $z)),
