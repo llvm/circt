@@ -148,7 +148,8 @@ public:
   }
 };
 
-struct LowerSeqHLMemPass : public LowerSeqHLMemBase<LowerSeqHLMemPass> {
+struct LowerSeqHLMemPass
+    : public circt::seq::impl::LowerSeqHLMemBase<LowerSeqHLMemPass> {
   void runOnOperation() override;
 };
 
