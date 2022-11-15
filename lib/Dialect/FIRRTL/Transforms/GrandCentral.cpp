@@ -564,6 +564,11 @@ private:
   /// Mapping of ID to companion module.
   DenseMap<Attribute, CompanionInfo> companionIDMap;
 
+  // Records the verbatim ops inserted while creating Interface elements for a
+  // view companion. These are recorded such that they can be erased later, if
+  // the interface is found out to be redundant.
+  SmallVector<Operation *> insertedOps;
+
   /// An optional prefix applied to all interfaces in the design.  This is set
   /// based on a PrefixInterfacesAnnotation.
   StringRef interfacePrefix;
@@ -599,14 +604,16 @@ private:
   /// populate a "mappings" file (generate XMRs) using `traverseField`.  Return
   /// the type of the field exmained.
   Optional<TypeSum> computeField(Attribute field, IntegerAttr id,
-                                 StringAttr prefix, VerbatimBuilder &path);
+                                 StringAttr prefix, VerbatimBuilder &path,
+                                 SmallVector<TypeSum> &interfaceElems);
 
   /// Recursively examine an AugmentedBundleType to both build new interfaces
   /// and populate a "mappings" file (generate XMRs).  Return none if the
   /// interface is invalid.
-  Optional<sv::InterfaceOp> traverseBundle(AugmentedBundleTypeAttr bundle,
-                                           IntegerAttr id, StringAttr prefix,
-                                           VerbatimBuilder &path);
+  Optional<sv::InterfaceOp>
+  traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
+                 StringAttr prefix, VerbatimBuilder &path,
+                 SmallVector<TypeSum> &interfaceElems);
 
   /// Return the module associated with this value.
   HWModuleLike getEnclosingModule(Value value, FlatSymbolRefAttr sym = {});
@@ -1299,10 +1306,11 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         path += " = {{-1}}";
         AnnotationSet::removeDontTouch(nodeOp);
         // Assemble the verbatim op.
-        builder.create<sv::VerbatimOp>(
+        auto verbOp = builder.create<sv::VerbatimOp>(
             uloc, getStrAndIncrementIds(path.getString()),
             nodeOp->getOperand(0),
             ArrayAttr::get(&getContext(), path.getSymbols()));
+        insertedOps.push_back(verbOp);
         ++numXMRs;
         return true;
       })
@@ -1342,10 +1350,10 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
       .Default([](auto a) { return true; });
 }
 
-Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
-                                                 IntegerAttr id,
-                                                 StringAttr prefix,
-                                                 VerbatimBuilder &path) {
+Optional<TypeSum>
+GrandCentralPass::computeField(Attribute field, IntegerAttr id,
+                               StringAttr prefix, VerbatimBuilder &path,
+                               SmallVector<TypeSum> &interfaceElems) {
 
   auto unsupported = [&](StringRef name, StringRef kind) {
     return VerbatimType({("// <unsupported " + kind + " type>").str(), false});
@@ -1377,9 +1385,9 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
           [&](AugmentedVectorTypeAttr vector) -> Optional<TypeSum> {
             auto elements = vector.getElements();
             auto firstElement = fromAttr(elements[0]);
-            auto elementType =
-                computeField(firstElement.value(), id, prefix,
-                             path.snapshot().append("[" + Twine(0) + "]"));
+            auto elementType = computeField(
+                firstElement.value(), id, prefix,
+                path.snapshot().append("[" + Twine(0) + "]"), interfaceElems);
             if (!elementType)
               return None;
 
@@ -1400,7 +1408,8 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
           })
       .Case<AugmentedBundleTypeAttr>(
           [&](AugmentedBundleTypeAttr bundle) -> TypeSum {
-            auto iface = traverseBundle(bundle, id, prefix, path);
+            auto iface =
+                traverseBundle(bundle, id, prefix, path, interfaceElems);
             assert(iface && *iface);
             (void)iface;
             return VerbatimType({iface->getNameAttr().str(), true});
@@ -1433,7 +1442,8 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
 /// interface. Returns false on any failure and true on success.
 Optional<sv::InterfaceOp>
 GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
-                                 StringAttr prefix, VerbatimBuilder &path) {
+                                 StringAttr prefix, VerbatimBuilder &path,
+                                 SmallVector<TypeSum> &interfaceElems) {
   auto builder = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
   sv::InterfaceOp iface;
   builder.setInsertionPointToEnd(getOperation().getBodyBlock());
@@ -1472,12 +1482,13 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
     // the moment. Passing a `name` works most of the time, but can be brittle
     // if the interface field requires renaming in the output (e.g. due to
     // naming conflicts).
-    auto elementType =
-        computeField(*field, id, prefix,
-                     path.snapshot().append(".").append(name.getValue()));
+    auto elementType = computeField(
+        *field, id, prefix, path.snapshot().append(".").append(name.getValue()),
+        interfaceElems);
     if (!elementType)
       return None;
 
+    interfaceElems.push_back(elementType.value());
     auto uloc = builder.getUnknownLoc();
     auto description =
         element.cast<DictionaryAttr>().getAs<StringAttr>("description");
@@ -2042,7 +2053,7 @@ void GrandCentralPass::runOnOperation() {
   // then the top-level instantiate interface will be marked for extraction via
   // a SystemVerilog bind.
   SmallVector<sv::InterfaceOp, 2> interfaceVec;
-  SmallDenseMap<ArrayAttr, FModuleLike> interfaceElementsToCompanionMap;
+  SmallDenseMap<FModuleLike, SmallVector<TypeSum>> companionToInterfaceMap;
   for (auto anno : worklist) {
     auto bundle = AugmentedBundleTypeAttr::get(&getContext(), anno.getDict());
 
@@ -2065,17 +2076,6 @@ void GrandCentralPass::runOnOperation() {
     // Decide on a symbol name to use for the interface instance. This is needed
     // in `traverseBundle` as a placeholder for the connect operations.
     auto companionModule = companionIDMap.lookup(bundle.getID()).companion;
-
-    // If the companion module has two exactly same ViewAnnotation.companion
-    // annotations, then add the interface for only one of them. This happens
-    // when the companion is deduped.
-    auto viewMapIter =
-        interfaceElementsToCompanionMap.find(bundle.getElements());
-    if (viewMapIter != interfaceElementsToCompanionMap.end())
-      if (viewMapIter->getSecond() == companionModule)
-        continue;
-
-    interfaceElementsToCompanionMap[bundle.getElements()] = companionModule;
     auto symbolName = getNamespace().newName(
         "__" + companionIDMap.lookup(bundle.getID()).name + "_" +
         getInterfaceName(bundle.getPrefix(), bundle) + "__");
@@ -2090,12 +2090,55 @@ void GrandCentralPass::runOnOperation() {
     VerbatimBuilder::Base verbatimData;
     VerbatimBuilder verbatim(verbatimData);
     verbatim += instanceSymbol;
-    auto iface =
-        traverseBundle(bundle, bundle.getID(), bundle.getPrefix(), verbatim);
+    // List of interface elements.
+    SmallVector<TypeSum> interfaceElems;
+    // insertedOps will record all the verbatim ops inserted in the companion
+    // module, which must be erased, if the interface is redundant. The
+    // traverseBundle is a recursive traversal of the AugmentedBundleType, it
+    // will construct the Interface and populate it with the elements and insert
+    // the corresponding verbatim xmr assignments. The interface might be
+    // redundant if it is a nonlocal view and another exactly same interface is
+    // already generated. To compare the interface elements, with an existing
+    // interface, it is necessary to complete the traverseBundle traversal and
+    // gather all the elements of the interface.
+    insertedOps.clear();
+    auto iface = traverseBundle(bundle, bundle.getID(), bundle.getPrefix(),
+                                verbatim, interfaceElems);
     if (!iface) {
       removalError = true;
       continue;
     }
+
+    // If the companion module has two exactly same ViewAnnotation.companion
+    // annotations, then add the interface for only one of them. This happens
+    // when the companion is deduped.
+    auto viewMapIter = companionToInterfaceMap.find(companionModule);
+    if (viewMapIter != companionToInterfaceMap.end()) {
+      bool sameInterface = true;
+      if (viewMapIter->getSecond().size() != interfaceElems.size())
+        sameInterface = false;
+      else
+        // Now compare  the existing interface with this.
+        for (auto &&[prevElem, thisElem] :
+             llvm::zip(viewMapIter->getSecond(), interfaceElems)) {
+          if ((prevElem.index() == thisElem.index()) &&
+              ((prevElem.index() == 1 && *std::get_if<Type>(&prevElem) ==
+                                             *std::get_if<Type>(&thisElem)) ||
+               (prevElem.index() == 0 &&
+                std::get_if<VerbatimType>(&prevElem) ==
+                    std::get_if<VerbatimType>(&thisElem))))
+            continue;
+          sameInterface = false;
+          break;
+        }
+      if (sameInterface) {
+        iface->erase();
+        for (auto *op : insertedOps)
+          op->erase();
+        continue;
+      }
+    }
+    companionToInterfaceMap[companionModule] = interfaceElems;
     ++numViews;
 
     interfaceVec.push_back(*iface);
