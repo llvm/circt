@@ -2042,6 +2042,7 @@ void GrandCentralPass::runOnOperation() {
   // then the top-level instantiate interface will be marked for extraction via
   // a SystemVerilog bind.
   SmallVector<sv::InterfaceOp, 2> interfaceVec;
+  SmallDenseMap<ArrayAttr, FModuleLike> interfaceElementsToCompanionMap;
   for (auto anno : worklist) {
     auto bundle = AugmentedBundleTypeAttr::get(&getContext(), anno.getDict());
 
@@ -2064,6 +2065,17 @@ void GrandCentralPass::runOnOperation() {
     // Decide on a symbol name to use for the interface instance. This is needed
     // in `traverseBundle` as a placeholder for the connect operations.
     auto companionModule = companionIDMap.lookup(bundle.getID()).companion;
+
+    // If the companion module has two exactly same ViewAnnotation.companion
+    // annotations, then add the interface for only one of them. This happens
+    // when the companion is deduped.
+    auto viewMapIter =
+        interfaceElementsToCompanionMap.find(bundle.getElements());
+    if (viewMapIter != interfaceElementsToCompanionMap.end())
+      if (viewMapIter->getSecond() == companionModule)
+        continue;
+
+    interfaceElementsToCompanionMap[bundle.getElements()] = companionModule;
     auto symbolName = getNamespace().newName(
         "__" + companionIDMap.lookup(bundle.getID()).name + "_" +
         getInterfaceName(bundle.getPrefix(), bundle) + "__");
