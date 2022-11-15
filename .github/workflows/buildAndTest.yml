@@ -155,18 +155,18 @@ jobs:
       matrix:
         compiler:
           # Our PR builds are trying to test the two corners of the build matrix:
-          # clang + release + noassert + shared
-          # gcc   + debug   + assert   + static
+          # clang + release + noassert + static
+          # gcc   + debug   + assert   + shared
           - cc: clang
             cxx: clang++
             mode: release
             assert: OFF
-            shared: ON
+            shared: OFF
           - cc: gcc
             cxx: g++
             mode: debug
             assert: ON
-            shared: OFF
+            shared: ON
 
     steps:
       - name: Configure Environment
