@@ -490,6 +490,29 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     return value.getDefiningOp()->getParentOfType<FModuleLike>();
   };
 
+  // Utility function to connect a destination to a source.  Always use a
+  // ConnectOp as the widths may be uninferred.
+  auto connect = [&](Value src, Value dest, ImplicitLocOpBuilder &builder) {
+    if (foldFlow(dest) == Flow::Source)
+      std::swap(src, dest);
+    // Create RefSend/RefResolve if necessary.
+    if (dest.getType().isa<RefType>() && !src.getType().isa<RefType>()) {
+      src = builder.create<RefSendOp>(src);
+    } else if (!dest.getType().isa<RefType>() && src.getType().isa<RefType>()) {
+      src = builder.create<RefResolveOp>(src);
+    }
+    // If the sink is a wire with no users, then convert this to a node.
+    auto destOp = dyn_cast_or_null<WireOp>(dest.getDefiningOp());
+    if (destOp && dest.getUses().empty()) {
+      builder.create<NodeOp>(src.getType(), src, destOp.getName())
+          .setAnnotationsAttr(destOp.getAnnotations());
+      destOp->erase();
+      return;
+    }
+    // Otherwise, just connect to the source.
+    builder.create<ConnectOp>(dest, src);
+  };
+
   auto &instanceGraph = state.instancePathCache.instanceGraph;
   auto *context = state.circuit.getContext();
 
@@ -508,7 +531,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     if (sink.getParentBlock() == source.getParentBlock()) {
       auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
                                                       sink.getParentBlock());
-      builder.create<ConnectOp>(sink, source);
+      connect(source, sink, builder);
       continue;
     }
 
@@ -634,28 +657,13 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
                                                     fmodule.getBodyBlock());
 
-    // Utility function to connect a destination to a source.  Always use a
-    // ConnectOp as the widths may be uninferred.
-    auto connect = [&](Value src, Value dest) {
-      if (foldFlow(dest) == Flow::Source)
-        std::swap(src, dest);
-      // Create RefSend/RefResolve if necessary.
-      if (dest.getType().isa<RefType>() && !src.getType().isa<RefType>()) {
-        src = builder.create<RefSendOp>(src);
-      } else if (!dest.getType().isa<RefType>() &&
-                 src.getType().isa<RefType>()) {
-        src = builder.create<RefResolveOp>(src);
-      }
-      builder.create<ConnectOp>(dest, src);
-    };
-
     // Connect each port to the value stored in the connectionMap for this
     // wiring problem index.
     for (auto [problemIdx, portPair] : llvm::zip(problemIndices, newPorts)) {
       Value src = moduleModifications[fmodule].connectionMap[problemIdx];
       assert(src && "there did not exist a driver for the port");
       Value dest = fmodule.getArgument(portIdx++);
-      connect(src, dest);
+      connect(src, dest, builder);
     }
 
     // If a U-turn exists, this is an LCA and we need a U-turn connection.  This
@@ -663,7 +671,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     for (auto [problemIdx, dest] : moduleModifications[fmodule].uturns) {
       Value src = moduleModifications[fmodule].connectionMap[problemIdx];
       assert(src && "there did not exist a connection for the u-turn");
-      connect(src, dest);
+      connect(src, dest, builder);
     }
 
     // Update the connectionMap of all modules for which we created a port.
