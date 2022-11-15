@@ -416,14 +416,14 @@ let inferType = "impl::inferComparisonResult" in {
 }
 
 def CatPrimOp : IntBinaryPrimOp<"cat", UIntType> {
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
 }
 def DShlPrimOp  : BinaryPrimOp<"dshl", IntType, UIntType, IntType>  {
   let description = [{
     A dynamic shift left operation. The width of `$result` is expanded to
     `width($lhs) + 1 << width($rhs) - 1`.
   }];
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
 }
 def DShlwPrimOp : BinaryPrimOp<"dshlw", IntType, UIntType, IntType> {
   let description = [{
@@ -432,7 +432,7 @@ def DShlwPrimOp : BinaryPrimOp<"dshlw", IntType, UIntType, IntType> {
   }];
 }
 def DShrPrimOp  : BinaryPrimOp<"dshr", IntType, UIntType, IntType> {
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
 }
 
 //===----------------------------------------------------------------------===//

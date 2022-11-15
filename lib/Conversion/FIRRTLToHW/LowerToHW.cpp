@@ -3902,6 +3902,8 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
     message = opMessageAttr;
     for (auto operand : opOperands) {
       auto loweredValue = getLoweredValue(operand);
+      if (!loweredValue)
+        return failure();
       // Wrap any message ops in $sampled() to guarantee that these will print
       // with the same value as when the assertion triggers.  (See SystemVerilog
       // 2017 spec section 16.9.3 for more information.)  The custom

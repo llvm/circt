@@ -542,8 +542,8 @@ struct FieldAndNLA {
 /// 1. Extraction information is determined.
 ///
 /// 2. The circuit is walked to find all scattered annotations related to Grand
-///    Central interfaces.  These are: (a) the parent module, (b) the companion
-///    module, and (c) all leaves that are to be connected to the interface.
+///    Central interfaces.  These are: (a) the companion module and (b) all
+///    leaves that are to be connected to the interface.
 ///
 /// 3. The circuit-level Grand Central annotation is walked to both generate and
 ///    instantiate interfaces and to generate the "mappings" file that produces
@@ -560,10 +560,6 @@ private:
   /// Mapping of ID to leaf ground type and an optional non-local annotation
   /// associated with that ID.
   DenseMap<Attribute, FieldAndNLA> leafMap;
-
-  /// Mapping of ID to parent instance and module.  If this module is the top
-  /// module, then the first tuple member will be None.
-  DenseMap<Attribute, std::pair<Optional<InstanceOp>, FModuleOp>> parentIDMap;
 
   /// Mapping of ID to companion module.
   DenseMap<Attribute, CompanionInfo> companionIDMap;
@@ -720,11 +716,12 @@ private:
 /// annotations:
 ///   1) Annotations necessary to build interfaces and store them at "~"
 ///   2) Scattered annotations for how components bind to interfaces
-static Optional<DictionaryAttr> parseAugmentedType(
-    ApplyState &state, DictionaryAttr augmentedType, DictionaryAttr root,
-    StringRef companion, StringAttr name, StringAttr defName,
-    Optional<IntegerAttr> id, Optional<StringAttr> description, Twine clazz,
-    FModuleOp parentModule, StringAttr companionAttr, Twine path = {}) {
+static Optional<DictionaryAttr>
+parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
+                   DictionaryAttr root, StringRef companion, StringAttr name,
+                   StringAttr defName, Optional<IntegerAttr> id,
+                   Optional<StringAttr> description, Twine clazz,
+                   StringAttr companionAttr, Twine path = {}) {
 
   auto *context = state.circuit.getContext();
   auto loc = state.circuit.getLoc();
@@ -894,9 +891,9 @@ static Optional<DictionaryAttr> parseAugmentedType(
       Optional<StringAttr> description = None;
       if (auto maybeDescription = field.get("description"))
         description = maybeDescription.cast<StringAttr>();
-      auto eltAttr = parseAugmentedType(state, tpe, root, companion, name,
-                                        defName, None, description, clazz,
-                                        parentModule, companionAttr, path);
+      auto eltAttr =
+          parseAugmentedType(state, tpe, root, companion, name, defName, None,
+                             description, clazz, companionAttr, path);
       if (!name || !tpe || !eltAttr)
         return None;
 
@@ -1057,10 +1054,9 @@ static Optional<DictionaryAttr> parseAugmentedType(
       return None;
     SmallVector<Attribute> elements;
     for (auto elt : elementsAttr) {
-      auto eltAttr =
-          parseAugmentedType(state, elt.cast<DictionaryAttr>(), root, companion,
-                             name, StringAttr::get(context, ""), id, None,
-                             clazz, parentModule, companionAttr, path);
+      auto eltAttr = parseAugmentedType(
+          state, elt.cast<DictionaryAttr>(), root, companion, name,
+          StringAttr::get(context, ""), id, None, clazz, companionAttr, path);
       if (!eltAttr)
         return None;
       elements.push_back(*eltAttr);
@@ -1103,7 +1099,7 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
   auto id = state.newID();
   auto *context = state.circuit.getContext();
   auto loc = state.circuit.getLoc();
-  NamedAttrList companionAttrs, parentAttrs;
+  NamedAttrList companionAttrs;
   companionAttrs.append("class", StringAttr::get(context, companionAnnoClass));
   companionAttrs.append("id", id);
   auto viewAttr =
@@ -1121,21 +1117,9 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
   companionAttrs.append("target", companionAttr);
   state.addToWorklistFn(DictionaryAttr::get(context, companionAttrs));
 
-  auto parentAttr =
-      tryGetAs<StringAttr>(anno, anno, "parent", loc, viewAnnoClass);
-  if (!parentAttr)
-    return failure();
-  auto parentTarget = resolvePath(parentAttr.getValue(), state.circuit,
-                                  state.symTbl, state.targetCaches);
-  parentAttrs.append("class", StringAttr::get(context, parentAnnoClass));
-  parentAttrs.append("id", id);
-  parentAttrs.append("name", name);
-  parentAttrs.append("target", parentAttr);
-  state.addToWorklistFn(DictionaryAttr::get(context, parentAttrs));
-  auto prunedAttr = parseAugmentedType(
-      state, viewAttr, anno, companionAttr.getValue(), name, {}, id, {},
-      viewAnnoClass, cast<FModuleOp>(parentTarget->ref.getOp()), companionAttr,
-      "view");
+  auto prunedAttr =
+      parseAugmentedType(state, viewAttr, anno, companionAttr.getValue(), name,
+                         {}, id, {}, viewAnnoClass, companionAttr, "view");
   if (!prunedAttr)
     return failure();
 
@@ -1441,12 +1425,12 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
       });
 }
 
-/// Traverse an Annotation that is an AugmentedBundleType.  During
-/// traversal, construct any discovered SystemVerilog interfaces.  If this
-/// is the root interface, instantiate that interface in the parent. Recurse
-/// into fields of the AugmentedBundleType to construct nested interfaces
-/// and generate stringy-typed SystemVerilog hierarchical references to
-/// drive the interface. Returns false on any failure and true on success.
+/// Traverse an Annotation that is an AugmentedBundleType.  During traversal,
+/// construct any discovered SystemVerilog interfaces.  If this is the root
+/// interface, instantiate that interface in the companion. Recurse into fields
+/// of the AugmentedBundleType to construct nested interfaces and generate
+/// stringy-typed SystemVerilog hierarchical references to drive the
+/// interface. Returns false on any failure and true on success.
 Optional<sv::InterfaceOp>
 GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
                                  StringAttr prefix, VerbatimBuilder &path) {
@@ -1779,18 +1763,17 @@ void GrandCentralPass::runOnOperation() {
                   << "', but it is instantiated more than once";
       for (auto *instance : node->uses())
         diag.attachNote(instance->getInstance()->getLoc())
-            << "parent is instantiated here";
+            << "it is instantiated here";
       return None;
     }
   };
 
   nlaTable = &getAnalysis<NLATable>();
 
-  /// Walk the circuit and extract all information related to scattered
-  /// Grand Central annotations.  This is used to populate: (1) the
-  /// companionIDMap, (2) the parentIDMap, and (3) the leafMap.
-  /// Annotations are removed as they are discovered and if they are not
-  /// malformed.
+  /// Walk the circuit and extract all information related to scattered Grand
+  /// Central annotations.  This is used to populate: (1) the companionIDMap and
+  /// (2) the leafMap.  Annotations are removed as they are discovered and if
+  /// they are not malformed.
   removalError = false;
   circuitOp.walk([&](Operation *op) {
     TypeSwitch<Operation *>(op)
@@ -1991,23 +1974,6 @@ void GrandCentralPass::runOnOperation() {
               return true;
             }
 
-            // Insert the parent into the parent map, asserting that the parent
-            // is instantiated exatly once.
-            if (annotation.getClass() == parentAnnoClass) {
-              // Assert that the parent is instantiated once and only once.
-              // Allow for this to be the main module in the circuit.
-              Optional<InstanceOp> instance;
-              if (op != circuitOp.getMainModule()) {
-                instance = exactlyOneInstance(op, "parent");
-                if (!instance && circuitOp.getMainModule() != op)
-                  return false;
-              }
-
-              parentIDMap[id] = {instance, cast<FModuleOp>(op)};
-              ++numAnnosRemoved;
-              return true;
-            }
-
             op.emitOpError()
                 << "unknown annotation class: " << annotation.getDict();
 
@@ -2021,33 +1987,9 @@ void GrandCentralPass::runOnOperation() {
   if (removalError)
     return signalPassFailure();
 
-  // Check that a parent exists for every companion.
-  for (auto a : companionIDMap) {
-    if (parentIDMap.count(a.first) == 0) {
-      emitCircuitError()
-          << "contains a 'companion' with id '"
-          << a.first.cast<IntegerAttr>().getValue().getZExtValue()
-          << "', but does not contain a GrandCentral 'parent' with the same id";
-      return signalPassFailure();
-    }
-  }
-
-  // Check that a companion exists for every parent.
-  for (auto a : parentIDMap) {
-    if (companionIDMap.count(a.first) == 0) {
-      emitCircuitError()
-          << "contains a 'parent' with id '"
-          << a.first.cast<IntegerAttr>().getValue().getZExtValue()
-          << "', but does not contain a GrandCentral 'companion' with the same "
-             "id";
-      return signalPassFailure();
-    }
-  }
-
   LLVM_DEBUG({
-    // Print out the companion map, parent map, and all leaf values that
-    // were discovered.  Sort these by their keys before printing to make
-    // this easier to read.
+    // Print out the companion map and all leaf values that were discovered.
+    // Sort these by their keys before printing to make this easier to read.
     SmallVector<IntegerAttr> ids;
     auto sort = [&ids]() {
       llvm::sort(ids, [](IntegerAttr a, IntegerAttr b) {
@@ -2062,17 +2004,6 @@ void GrandCentralPass::runOnOperation() {
       auto value = companionIDMap.lookup(id);
       llvm::dbgs() << "  - " << id.getValue() << ": "
                    << value.companion.getName() << " -> " << value.name << "\n";
-    }
-    llvm::dbgs() << "parentIDMap:\n";
-    for (auto id : ids) {
-      auto value = parentIDMap.lookup(id);
-      StringRef name;
-      if (value.first)
-        name = value.first->getName();
-      else
-        name = value.second.getName();
-      llvm::dbgs() << "  - " << id.getValue() << ": " << name << ":"
-                   << value.second.getName() << "\n";
     }
     ids.clear();
     for (auto tuple : leafMap)
@@ -2115,7 +2046,7 @@ void GrandCentralPass::runOnOperation() {
     auto bundle = AugmentedBundleTypeAttr::get(&getContext(), anno.getDict());
 
     // The top-level AugmentedBundleType must have a global ID field so that
-    // this can be linked to the parent and companion.
+    // this can be linked to the companion.
     if (!bundle.isRoot()) {
       emitCircuitError() << "missing 'id' in root-level BundleType: "
                          << anno.getDict() << "\n";
@@ -2123,13 +2054,6 @@ void GrandCentralPass::runOnOperation() {
       continue;
     }
 
-    // Error if a matching parent or companion do not exist.
-    if (parentIDMap.count(bundle.getID()) == 0) {
-      emitCircuitError() << "no parent found with 'id' value '"
-                         << bundle.getID().getValue().getZExtValue() << "'\n";
-      removalError = true;
-      continue;
-    }
     if (companionIDMap.count(bundle.getID()) == 0) {
       emitCircuitError() << "no companion found with 'id' value '"
                          << bundle.getID().getValue().getZExtValue() << "'\n";
@@ -2164,7 +2088,7 @@ void GrandCentralPass::runOnOperation() {
 
     interfaceVec.push_back(*iface);
 
-    // Instantiate the interface inside the parent.
+    // Instantiate the interface inside the companion.
     builder.setInsertionPointToStart(companionModule.getBodyBlock());
     builder.create<sv::InterfaceInstanceOp>(
         getOperation().getLoc(), iface->getInterfaceType(),
@@ -2172,7 +2096,7 @@ void GrandCentralPass::runOnOperation() {
         builder.getStringAttr(symbolName));
 
     // If no extraction information was present, then just leave the interface
-    // instantiated in the parent.  Otherwise, make it a bind.
+    // instantiated in the companion.  Otherwise, make it a bind.
     if (!maybeExtractInfo)
       continue;
 

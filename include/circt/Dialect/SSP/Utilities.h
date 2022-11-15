@@ -481,6 +481,20 @@ struct Default<scheduling::CyclicProblem> {
 };
 
 template <>
+struct Default<scheduling::ChainingProblem> {
+  static constexpr auto operationProperties =
+      std::tuple_cat(Default<scheduling::Problem>::operationProperties,
+                     std::make_tuple(StartTimeInCycleAttr()));
+  static constexpr auto operatorTypeProperties =
+      std::tuple_cat(Default<scheduling::Problem>::operatorTypeProperties,
+                     std::make_tuple(IncomingDelayAttr(), OutgoingDelayAttr()));
+  static constexpr auto dependenceProperties =
+      Default<scheduling::Problem>::dependenceProperties;
+  static constexpr auto instanceProperties =
+      Default<scheduling::Problem>::instanceProperties;
+};
+
+template <>
 struct Default<scheduling::SharedOperatorsProblem> {
   static constexpr auto operationProperties =
       Default<scheduling::Problem>::operationProperties;

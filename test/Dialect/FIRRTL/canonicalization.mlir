@@ -946,10 +946,10 @@ firrtl.module @wire_port_prop1(in %in_a: !firrtl.uint<9>, out %out_b: !firrtl.ui
 
 // CHECK-LABEL: @LEQWithConstLHS
 // CHECK-NEXT: %c42_ui = firrtl.constant
-// CHECK-NEXT: %0 = firrtl.geq %a, %c42_ui
+// CHECK-NEXT: %e = firrtl.geq %a, %c42_ui
 firrtl.module @LEQWithConstLHS(in %a: !firrtl.uint, out %b: !firrtl.uint<1>) {
   %0 = firrtl.constant 42 : !firrtl.uint
-  %1 = firrtl.leq %0, %a : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
+  %1 = firrtl.leq %0, %a {name = "e"} : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
   firrtl.connect %b, %1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
@@ -2063,17 +2063,6 @@ firrtl.module @dshifts_to_ishifts(in %a_in: !firrtl.sint<58>,
   %c438_ui10 = firrtl.constant 438 : !firrtl.uint<10>
   %2 = firrtl.dshr %c_in, %c438_ui10 : (!firrtl.sint<58>, !firrtl.uint<10>) -> !firrtl.sint<58>
   firrtl.connect %c_out, %2 : !firrtl.sint<58>, !firrtl.sint<58>
-
-  // CHECK: firrtl.strictconnect %a_out, %a_in : !firrtl.sint<58>
-  %invalid_ui10 = firrtl.invalidvalue : !firrtl.uint<10>
-  %3 = firrtl.dshr %a_in, %invalid_ui10 : (!firrtl.sint<58>, !firrtl.uint<10>) -> !firrtl.sint<58>
-  firrtl.connect %a_out, %3 : !firrtl.sint<58>, !firrtl.sint<58>
-
-  // CHECK: [[TMP:%.+]] = firrtl.pad %b_in, 23 : (!firrtl.uint<8>) -> !firrtl.uint<23>
-  // CHECK: firrtl.strictconnect %b_out, [[TMP]] : !firrtl.uint<23>
-  %invalid_ui4 = firrtl.invalidvalue : !firrtl.uint<4>
-  %4 = firrtl.dshl %b_in, %invalid_ui4 : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<23>
-  firrtl.connect %b_out, %4 : !firrtl.uint<23>, !firrtl.uint<23>
 }
 
 // CHECK-LABEL: firrtl.module @constReg
