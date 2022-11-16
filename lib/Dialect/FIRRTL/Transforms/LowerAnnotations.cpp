@@ -614,7 +614,14 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     moduleModifications[sinkModule].connectionMap[index] = sink;
 
     // Record ports that should be added to each module along the LCA path.
-    auto tpe = RefType::get(cast<FIRRTLBaseType>(problem.sink.getType()));
+    // Wire using RefType based on the source-- the RefSend will be of this
+    // type, and we cannot connect RefType's of non-identical types. The final
+    // connect of the resolved ref to the sink will handle any differences.
+    RefType tpe = TypeSwitch<Type, RefType>(problem.source.getType())
+                      .Case<FIRRTLBaseType>([](FIRRTLBaseType base) {
+                        return RefType::get(base);
+                      })
+                      .Case<RefType>([](RefType ref) { return ref; });
     for (auto sourceInst : sources) {
       auto mod = cast<FModuleOp>(instanceGraph.getReferencedModule(sourceInst));
       moduleModifications[mod].portsToAdd.push_back(
