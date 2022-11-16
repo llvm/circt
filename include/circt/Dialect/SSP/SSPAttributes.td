@@ -45,7 +45,7 @@ include "PropertyBase.td"
 
 // Problem
 def LinkedOperatorTypeProp : OperationProperty<SSPDialect,
-  "LinkedOperatorType", "::mlir::FlatSymbolRefAttr", "::circt::scheduling::Problem"> {
+  "LinkedOperatorType", "::mlir::SymbolRefAttr", "::circt::scheduling::Problem"> {
   let mnemonic = "opr";
   let unwrapValue = [{ getValue().getLeafReference() }];
   let wrapValue = [{ ::mlir::FlatSymbolRefAttr::get(ctx, value) }];
@@ -67,6 +67,25 @@ def DistanceProp : DependenceProperty<SSPDialect,
 def InitiationIntervalProp : InstanceProperty<SSPDialect,
   "InitiationInterval", "unsigned", "::circt::scheduling::CyclicProblem"> {
   let mnemonic = "II";
+}
+
+// ChainingProblem
+let
+  unwrapValue = [{ (float) getValue().getValueAsDouble() }],
+  wrapValue = [{ ::mlir::FloatAttr::get(::mlir::Float32Type::get(ctx), value) }]
+in {
+  def StartTimeInCycleProp : OperationProperty<SSPDialect,
+    "StartTimeInCycle", "::mlir::FloatAttr", "::circt::scheduling::ChainingProblem"> {
+    let mnemonic = "z";
+  }
+  def IncomingDelayProp : OperatorTypeProperty<SSPDialect,
+    "IncomingDelay", "::mlir::FloatAttr", "::circt::scheduling::ChainingProblem"> {
+    let mnemonic = "incDelay";
+  }
+  def OutgoingDelayProp : OperatorTypeProperty<SSPDialect,
+    "OutgoingDelay", "::mlir::FloatAttr", "::circt::scheduling::ChainingProblem"> {
+    let mnemonic = "outDelay";
+  }
 }
 
 // SharedOperatorsProblem

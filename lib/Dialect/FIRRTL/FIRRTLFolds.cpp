@@ -38,6 +38,22 @@ static Value dropWrite(PatternRewriter &rewriter, OpResult old,
   return passthrough;
 }
 
+// Move a name hint from a soon to be deleted operation to a new operation.
+// Pass through the new operation to make patterns easier to write.  This cannot
+// move a name to a port (block argument), doing so would require rewriting all
+// instance sites as well as the module.
+static Value moveNameHint(OpResult old, Value passthrough) {
+  Operation *op = passthrough.getDefiningOp();
+  // This should handle ports, but it isn't clear we can change those in
+  // canonicalizers.
+  assert(op && "passthrough must be an operation");
+  Operation *oldOp = old.getOwner();
+  auto name = oldOp->getAttrOfType<StringAttr>("name");
+  if (name && !name.getValue().empty())
+    op->setAttr("name", name);
+  return passthrough;
+}
+
 // Declarative canonicalization patterns
 namespace circt {
 namespace firrtl {
@@ -365,17 +381,9 @@ OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
                                  [=](APSInt a, APSInt b) { return a + b; });
 }
 
-LogicalResult AddPrimOp::canonicalize(AddPrimOp op, PatternRewriter &rewriter) {
-  return canonicalizePrimOp(op, rewriter,
-                            [&](ArrayRef<Attribute> operands) -> OpFoldResult {
-                              // add(x, 0) -> x
-                              if (isConstantZero(operands[1]))
-                                return op.getOperand(0);
-                              // add(0, x) -> x
-                              if (isConstantZero(operands[0]))
-                                return op.getOperand(1);
-                              return {};
-                            });
+void AddPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.insert<patterns::AddOfZero>(context);
 }
 
 OpFoldResult SubPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -383,21 +391,10 @@ OpFoldResult SubPrimOp::fold(ArrayRef<Attribute> operands) {
                                  [=](APSInt a, APSInt b) { return a - b; });
 }
 
-LogicalResult SubPrimOp::canonicalize(SubPrimOp op, PatternRewriter &rewriter) {
-  return canonicalizePrimOp(
-      op, rewriter, [&](ArrayRef<Attribute> operands) -> OpFoldResult {
-        // sub(x, 0) -> x
-        if (isConstantZero(operands[1]))
-          return op.getOperand(0);
-        // sub(0, x) -> neg(x)  if x is signed
-        // sub(0, x) -> asUInt(neg(x))  if x is unsigned
-        if (isConstantZero(operands[0])) {
-          Value value =
-              rewriter.create<NegPrimOp>(op.getLoc(), op.getOperand(1));
-          return value;
-        }
-        return {};
-      });
+void SubPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.insert<patterns::SubOfZero, patterns::SubFromZeroSigned,
+                 patterns::SubFromZeroUnsigned>(context);
 }
 
 OpFoldResult MulPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -1029,63 +1026,46 @@ OpFoldResult CatPrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
-LogicalResult DShlPrimOp::canonicalize(DShlPrimOp op,
-                                       PatternRewriter &rewriter) {
-  if (!hasKnownWidthIntTypes(op))
-    return failure();
-
-  return canonicalizePrimOp(
-      op, rewriter, [&](ArrayRef<Attribute> operands) -> OpFoldResult {
-        // dshl(x, cst) -> shl(x, cst).  The result size is generally much wider
-        // than what is needed for the constant.
-        if (auto rhsCst = getConstant(operands[1])) {
-          // Shift amounts are always unsigned, but shift only takes a 32-bit
-          // amount.
-          uint64_t shiftAmt = rhsCst->getLimitedValue(1ULL << 31);
-          return rewriter.createOrFold<ShlPrimOp>(op.getLoc(), op.getLhs(),
-                                                  shiftAmt);
-        }
-        return {};
-      });
+void DShlPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                             MLIRContext *context) {
+  results.insert<patterns::DShlOfConstant>(context);
 }
 
-LogicalResult DShrPrimOp::canonicalize(DShrPrimOp op,
-                                       PatternRewriter &rewriter) {
-  if (!hasKnownWidthIntTypes(op))
-    return failure();
-
-  return canonicalizePrimOp(
-      op, rewriter, [&](ArrayRef<Attribute> operands) -> OpFoldResult {
-        // dshr(x, cst) -> shr(x, cst).  The result size is generally much wider
-        // than what is needed for the constant.
-        if (auto rhsCst = getConstant(operands[1])) {
-          // Shift amounts are always unsigned, but shift only takes a 32-bit
-          // amount.
-          uint64_t shiftAmt = rhsCst->getLimitedValue(1ULL << 31);
-          return rewriter.createOrFold<ShrPrimOp>(op.getLoc(), op.getLhs(),
-                                                  shiftAmt);
-        }
-        return {};
-      });
+void DShrPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                             MLIRContext *context) {
+  results.insert<patterns::DShrOfConstant>(context);
 }
 
-LogicalResult CatPrimOp::canonicalize(CatPrimOp op, PatternRewriter &rewriter) {
-  // cat(bits(x, ...), bits(x, ...)) -> bits(x ...) when the two ...'s are
-  // consequtive in the input.
-  if (auto lhsBits =
-          dyn_cast_or_null<BitsPrimOp>(op.getLhs().getDefiningOp())) {
-    if (auto rhsBits =
-            dyn_cast_or_null<BitsPrimOp>(op.getRhs().getDefiningOp())) {
-      if (lhsBits.getInput() == rhsBits.getInput() &&
-          lhsBits.getLo() - 1 == rhsBits.getHi()) {
-        replaceOpWithNewOpAndCopyName<BitsPrimOp>(
-            rewriter, op, op.getType(), lhsBits.getInput(), lhsBits.getHi(),
-            rhsBits.getLo());
-        return success();
+namespace {
+// cat(bits(x, ...), bits(x, ...)) -> bits(x ...) when the two ...'s are
+// consequtive in the input.
+struct CatBitsBits : public mlir::RewritePattern {
+  CatBitsBits(MLIRContext *context)
+      : RewritePattern(CatPrimOp::getOperationName(), 0, context) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    auto cat = cast<CatPrimOp>(op);
+    if (auto lhsBits =
+            dyn_cast_or_null<BitsPrimOp>(cat.getLhs().getDefiningOp())) {
+      if (auto rhsBits =
+              dyn_cast_or_null<BitsPrimOp>(cat.getRhs().getDefiningOp())) {
+        if (lhsBits.getInput() == rhsBits.getInput() &&
+            lhsBits.getLo() - 1 == rhsBits.getHi()) {
+          replaceOpWithNewOpAndCopyName<BitsPrimOp>(
+              rewriter, cat, cat.getType(), lhsBits.getInput(), lhsBits.getHi(),
+              rhsBits.getLo());
+          return success();
+        }
       }
     }
+    return failure();
   }
-  return failure();
+};
+} // namespace
+
+void CatPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.insert<CatBitsBits>(context);
 }
 
 OpFoldResult BitCastOp::fold(ArrayRef<Attribute> operands) {
@@ -1193,39 +1173,52 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
-static LogicalResult canonicalizeMux(MuxPrimOp op, PatternRewriter &rewriter) {
-  // If the mux has a known output width, pad the operands up to this width.
-  // Most folds on mux require that folded operands are of the same width as
-  // the mux itself.
-  auto width = op.getType().getBitWidthOrSentinel();
-  if (width < 0)
-    return failure();
+namespace {
 
-  auto pad = [&](Value input) -> Value {
-    auto inputWidth =
-        input.getType().template cast<FIRRTLBaseType>().getBitWidthOrSentinel();
-    if (inputWidth < 0 || width == inputWidth)
-      return input;
-    return rewriter.create<PadPrimOp>(op.getLoc(), op.getType(), input, width)
-        .getResult();
-  };
+// If the mux has a known output width, pad the operands up to this width.
+// Most folds on mux require that folded operands are of the same width as
+// the mux itself.
+class MuxPad : public mlir::RewritePattern {
+public:
+  MuxPad(MLIRContext *context)
+      : RewritePattern(MuxPrimOp::getOperationName(), 0, context) {}
 
-  auto newHigh = pad(op.getHigh());
-  auto newLow = pad(op.getLow());
-  if (newHigh == op.getHigh() && newLow == op.getLow())
-    return failure();
+  LogicalResult
+  matchAndRewrite(Operation *op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto mux = cast<MuxPrimOp>(op);
+    auto width = mux.getType().getBitWidthOrSentinel();
+    if (width < 0)
+      return failure();
 
-  replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-      rewriter, op, op.getType(), ValueRange{op.getSel(), newHigh, newLow},
-      op->getAttrs());
-  return success();
-}
+    auto pad = [&](Value input) -> Value {
+      auto inputWidth = input.getType()
+                            .template cast<FIRRTLBaseType>()
+                            .getBitWidthOrSentinel();
+      if (inputWidth < 0 || width == inputWidth)
+        return input;
+      return rewriter
+          .create<PadPrimOp>(mux.getLoc(), mux.getType(), input, width)
+          .getResult();
+    };
+
+    auto newHigh = pad(mux.getHigh());
+    auto newLow = pad(mux.getLow());
+    if (newHigh == mux.getHigh() && newLow == mux.getLow())
+      return failure();
+
+    replaceOpWithNewOpAndCopyName<MuxPrimOp>(
+        rewriter, op, mux.getType(), ValueRange{mux.getSel(), newHigh, newLow},
+        mux->getAttrs());
+    return success();
+  }
+};
+} // namespace
 
 void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.add(canonicalizeMux);
-  results.add<patterns::MuxSameCondLow>(context);
-  results.add<patterns::MuxSameCondHigh>(context);
+  results.add<MuxPad, patterns::MuxSameCondLow, patterns::MuxSameCondHigh>(
+      context);
 }
 
 OpFoldResult PadPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -1559,73 +1552,10 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   return success();
 }
 
-static LogicalResult canonicalizeIntTypeConnect(ConnectOp op,
-                                                PatternRewriter &rewriter) {
-  // If a connect exists from a shorter int to a longer int, simplify
-  // to an extend and strict connect.
-
-  // Base types only
-  if (!op.getOperand(0).getType().isa<FIRRTLBaseType>())
-    return failure();
-
-  auto destType =
-      op.getOperand(0).getType().cast<FIRRTLBaseType>().getPassiveType();
-  auto srcType = op.getOperand(1).getType().cast<FIRRTLBaseType>();
-  if (destType == srcType)
-    return failure();
-
-  auto srcWidth = srcType.getBitWidthOrSentinel();
-  auto destWidth = destType.getBitWidthOrSentinel();
-
-  if (destType.isa<IntType>() && srcType.isa<IntType>() && srcWidth >= 0 &&
-      destWidth >= 0 && destWidth > srcWidth) {
-    auto nv =
-        rewriter.createOrFold<PadPrimOp>(op.getLoc(), op.getSrc(), destWidth);
-    rewriter.create<StrictConnectOp>(op.getLoc(), op.getDest(), nv);
-    if (auto *srcOp = op.getSrc().getDefiningOp())
-      rewriter.updateRootInPlace(srcOp, []() {});
-    if (auto *destOp = op.getDest().getDefiningOp())
-      rewriter.updateRootInPlace(destOp, []() {});
-    rewriter.eraseOp(op);
-    return success();
-  }
-  return failure();
-}
-
-/// Determines if the specified type is a sized base type.
-static bool isSizedBaseType(Type type) {
-  auto base = type.dyn_cast<FIRRTLBaseType>();
-  return base && !base.hasUninferredWidth();
-}
-
-// Forward simple values through wire's and reg's.
-static LogicalResult
-canonicalizeMatchingTypeConnect(ConnectOp op, PatternRewriter &rewriter) {
-  // Limit to connects between matching sized base types.
-  if (op.getSrc().getType() != op.getDest().getType())
-    return failure();
-  if (!isSizedBaseType(op.getSrc().getType()))
-    return failure();
-
-  rewriter.create<StrictConnectOp>(op.getLoc(), op.getDest(), op.getSrc());
-  if (auto *srcOp = op.getSrc().getDefiningOp())
-    rewriter.updateRootInPlace(srcOp, []() {});
-  if (auto *destOp = op.getDest().getDefiningOp())
-    rewriter.updateRootInPlace(destOp, []() {});
-  rewriter.eraseOp(op);
-  return success();
-}
-
-LogicalResult ConnectOp::canonicalize(ConnectOp op, PatternRewriter &rewriter) {
-  // TODO: Canonicalize towards explicit extensions and flips here.
-
-  // If there is a simple value connected to a foldable decl like a wire or reg,
-  // see if we can eliminate the decl.
-  if (succeeded(canonicalizeMatchingTypeConnect(op, rewriter)))
-    return success();
-  if (succeeded(canonicalizeIntTypeConnect(op, rewriter)))
-    return success();
-  return failure();
+void ConnectOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.insert<patterns::ConnectExtension, patterns::ConnectSameType>(
+      context);
 }
 
 LogicalResult StrictConnectOp::canonicalize(StrictConnectOp op,

@@ -1,7 +1,7 @@
 // REQUIRES: rtl-sim
 // RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw -verify-diagnostics > %t1.mlir
 // RUN: circt-opt %t1.mlir -export-verilog -verify-diagnostics -o t3.mlir > %t2.sv
-// RUN: circt-rtl-sim.py %t2.sv %INC%/circt/Dialect/ESI/ESIPrimitives.sv %S/../supplements/integers.sv --cycles 150 | FileCheck %s
+// RUN: circt-rtl-sim.py %t2.sv %BININC%/circt/Dialect/ESI/ESIPrimitives.sv %S/../supplements/integers.sv --cycles 150 | FileCheck %s
 
 hw.module.extern @IntCountProd(%clk: i1, %rst: i1) -> (ints: !esi.channel<i32>)
 hw.module.extern @IntAcc(%clk: i1, %rst: i1, %ints: !esi.channel<i32>) -> (totalOut: i32)

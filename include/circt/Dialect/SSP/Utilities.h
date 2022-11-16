@@ -20,6 +20,7 @@
 #include "circt/Support/ValueMapper.h"
 
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/SymbolTable.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -92,11 +93,36 @@ void loadInstanceProperties(ProblemT &prob, ArrayAttr props) {
   }
 }
 
+/// Load the operator type represented by \p oprOp into \p prob under a unique
+/// name informed by \p oprIds, and attempt to set its properties from the
+/// given attribute classes. The registered name is returned. The template
+/// instantiation fails if properties are incompatible with \p ProblemT.
+template <typename ProblemT, typename... OperatorTypePropertyTs>
+OperatorType loadOperatorType(ProblemT &prob, OperatorTypeOp oprOp,
+                              SmallDenseMap<StringAttr, unsigned> &oprIds) {
+  OperatorType opr = oprOp.getNameAttr();
+  unsigned &id = oprIds[opr];
+  if (id > 0)
+    opr = StringAttr::get(opr.getContext(),
+                          opr.getValue() + Twine('_') + Twine(id));
+  ++id;
+  assert(!prob.hasOperatorType(opr));
+  prob.insertOperatorType(opr);
+  loadOperatorTypeProperties<ProblemT, OperatorTypePropertyTs...>(
+      prob, opr, oprOp.getPropertiesAttr());
+  return opr;
+}
+
 /// Construct an instance of \p ProblemT from \p instOp, and attempt to set
 /// properties from the given attribute classes. The attribute tuples are used
 /// solely for grouping/inferring the template parameter packs. The tuple
 /// elements may therefore be unitialized objects. The template instantiation
 /// fails if properties are incompatible with \p ProblemT.
+///
+/// Operations may link to operator types in other libraries, but the origin of
+/// an operator type will not be preserved in the problem instance. As this
+/// could lead to conflicts, operator types will be automatically renamed in the
+/// returned instance.
 ///
 /// Example: To load an instance of the `circt::scheduling::CyclicProblem` with
 /// all its input and solution properties, call this as follows:
@@ -121,11 +147,19 @@ ProblemT loadProblem(InstanceOp instOp,
   loadInstanceProperties<ProblemT, InstancePropertyTs...>(
       prob, instOp.getPropertiesAttr());
 
-  instOp.getOperatorLibrary().walk([&](OperatorTypeOp oprOp) {
-    OperatorType opr = oprOp.getNameAttr();
-    prob.insertOperatorType(opr);
-    loadOperatorTypeProperties<ProblemT, OperatorTypePropertyTs...>(
-        prob, opr, oprOp.getPropertiesAttr());
+  // Use IDs to disambiguate operator types with the same name defined in
+  // different libraries.
+  SmallDenseMap<OperatorType, unsigned> operatorTypeIds;
+  // Map `OperatorTypeOp`s to their (possibly uniqued) name in the problem
+  // instance.
+  SmallDenseMap<Operation *, OperatorType> operatorTypes;
+
+  // Register all operator types in the instance's library.
+  auto libraryOp = instOp.getOperatorLibrary();
+  libraryOp.walk([&](OperatorTypeOp oprOp) {
+    operatorTypes[oprOp] =
+        loadOperatorType<ProblemT, OperatorTypePropertyTs...>(prob, oprOp,
+                                                              operatorTypeIds);
   });
 
   // Register all operations first, in order to retain their original order.
@@ -134,6 +168,38 @@ ProblemT loadProblem(InstanceOp instOp,
     prob.insertOperation(opOp);
     loadOperationProperties<ProblemT, OperationPropertyTs...>(
         prob, opOp, opOp.getPropertiesAttr());
+
+    // Nothing else to check if no linked operator type is set for `opOp`,
+    // because the operation doesn't carry a `LinkedOperatorTypeAttr`, or that
+    // class is not part of the `OperationPropertyTs` to load.
+    if (!prob.getLinkedOperatorType(opOp).has_value())
+      return;
+
+    // Otherwise, inspect the corresponding attribute to make sure the operator
+    // type is available.
+    SymbolRefAttr oprRef = opOp.getLinkedOperatorTypeAttr().getValue();
+
+    Operation *oprOp;
+    // 1) Look in the instance's library.
+    oprOp = SymbolTable::lookupSymbolIn(libraryOp, oprRef);
+    // 2) Try to resolve a nested reference to the instance's library.
+    if (!oprOp)
+      oprOp = SymbolTable::lookupSymbolIn(instOp, oprRef);
+    // 3) Look outside of the instance.
+    if (!oprOp)
+      oprOp =
+          SymbolTable::lookupNearestSymbolFrom(instOp->getParentOp(), oprRef);
+
+    assert(oprOp && isa<OperatorTypeOp>(oprOp)); // checked by verifier
+
+    // Load the operator type from `oprOp` if needed.
+    auto &opr = operatorTypes[oprOp];
+    if (!opr)
+      opr = loadOperatorType<ProblemT, OperatorTypePropertyTs...>(
+          prob, cast<OperatorTypeOp>(oprOp), operatorTypeIds);
+
+    // Update `opOp`'s property (may be a no-op if `opr` wasn't renamed).
+    prob.setLinkedOperatorType(opOp, opr);
   });
 
   // Then walk them again, and load auxiliary dependences as well as any
@@ -412,6 +478,20 @@ struct Default<scheduling::CyclicProblem> {
   static constexpr auto instanceProperties =
       std::tuple_cat(Default<scheduling::Problem>::instanceProperties,
                      std::make_tuple(InitiationIntervalAttr()));
+};
+
+template <>
+struct Default<scheduling::ChainingProblem> {
+  static constexpr auto operationProperties =
+      std::tuple_cat(Default<scheduling::Problem>::operationProperties,
+                     std::make_tuple(StartTimeInCycleAttr()));
+  static constexpr auto operatorTypeProperties =
+      std::tuple_cat(Default<scheduling::Problem>::operatorTypeProperties,
+                     std::make_tuple(IncomingDelayAttr(), OutgoingDelayAttr()));
+  static constexpr auto dependenceProperties =
+      Default<scheduling::Problem>::dependenceProperties;
+  static constexpr auto instanceProperties =
+      Default<scheduling::Problem>::instanceProperties;
 };
 
 template <>

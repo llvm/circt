@@ -61,7 +61,7 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.parseLess())
     return failure();
 
-  FlatSymbolRefAttr oprRef;
+  SymbolRefAttr oprRef;
   auto parseSymbolResult = parser.parseOptionalAttribute(oprRef);
   if (parseSymbolResult.has_value()) {
     assert(succeeded(*parseSymbolResult));
@@ -276,8 +276,18 @@ OperationOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // If a linkedOperatorType property is present, verify that it references a
   // valid operator type.
   if (auto linkedOpr = getLinkedOperatorTypeAttr()) {
-    FlatSymbolRefAttr oprRef = linkedOpr.getValue();
-    Operation *oprOp = symbolTable.lookupSymbolIn(libraryOp, oprRef);
+    SymbolRefAttr oprRef = linkedOpr.getValue();
+    Operation *oprOp;
+    // 1) Look in the instance's library.
+    oprOp = symbolTable.lookupSymbolIn(libraryOp, oprRef);
+    // 2) Try to resolve a nested reference to the instance's library.
+    if (!oprOp)
+      oprOp = symbolTable.lookupSymbolIn(instanceOp, oprRef);
+    // 3) Look outside of the instance.
+    if (!oprOp)
+      oprOp = symbolTable.lookupNearestSymbolFrom(instanceOp->getParentOp(),
+                                                  oprRef);
+
     if (!oprOp || !isa<OperatorTypeOp>(oprOp))
       return emitError("Linked operator type property references invalid "
                        "operator type: ")

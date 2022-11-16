@@ -36,6 +36,8 @@ config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
 config.substitutions.append(('%shlibdir', config.circt_shlib_dir))
 config.substitutions.append(('%INC%', config.circt_include_dir))
 config.substitutions.append(
+    ('%BININC%', os.path.join(config.circt_obj_root, "include")))
+config.substitutions.append(
     ('%TCL_PATH%', config.circt_src_root + '/build/lib/Bindings/Tcl/'))
 config.substitutions.append(('%CIRCT_SOURCE%', config.circt_src_root))
 

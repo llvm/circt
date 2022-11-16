@@ -13,13 +13,15 @@
 //===----------------------------------------------------------------------===//
 
 include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/Seq/SeqOpInterfaces.td"
 
 // Base class for the operation in this dialect.
 class SeqOp<string mnemonic, list<Trait> traits = []> :
     Op<SeqDialect, mnemonic, traits>;
 
 def CompRegOp : SeqOp<"compreg",
-    [Pure, AllTypesMatch<["input", "data"/*, "resetValue"*/]>,
+    [Pure, Clocked, Resettable,
+     AllTypesMatch<["input", "data"/*, "resetValue"*/]>,
      SameVariadicOperandSize,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]> ]> {
        // AllTypesMatch doesn't work with Optional types yet.
@@ -40,17 +42,18 @@ def CompRegOp : SeqOp<"compreg",
                    input, clk, sym_name, Value(), Value(),
                    StringAttr::get($_builder.getContext(), sym_name));
     }]>,
-    OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$rst,
+    OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$reset,
                    "Value":$rstValue, "StringRef":$sym_name), [{
       return build($_builder, $_state, input.getType(),
-                   input, clk, sym_name, rst, rstValue,
+                   input, clk, sym_name, reset, rstValue,
                    StringAttr::get($_builder.getContext(), sym_name));
     }]>,
   ];
 }
 
 def FirRegOp : SeqOp<"firreg",
-    [Pure, AllTypesMatch<["next", "data"/*, "resetValue"*/]>,
+    [Pure, Clocked, Resettable,
+     AllTypesMatch<["next", "data"/*, "resetValue"*/]>,
      SameVariadicOperandSize, MemoryEffects<[MemWrite, MemRead, MemAlloc]>,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
       // AllTypesMatch doesn't work with Optional types yet.
@@ -118,6 +121,7 @@ def FirRegOp : SeqOp<"firreg",
 
 def HLMemOp : SeqOp<"hlmem", [
      Symbol,
+     Clocked,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]> ]> {
 
   let summary = "Instantiate a high-level memory.";

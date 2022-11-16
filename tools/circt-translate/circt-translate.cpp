@@ -13,10 +13,16 @@
 
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/InitAllTranslations.h"
+#include "circt/Support/Version.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Tools/mlir-translate/MlirTranslateMain.h"
+#include "llvm/Support/PrettyStackTrace.h"
 
 int main(int argc, char **argv) {
+  // Set the bug report message to indicate users should file issues on
+  // llvm/circt and not llvm/llvm-project.
+  llvm::setBugReportMsg(circt::circtBugReportMsg);
+
   circt::registerAllTranslations();
   return mlir::failed(
       mlir::mlirTranslateMain(argc, argv, "CIRCT Translation Testing Tool"));

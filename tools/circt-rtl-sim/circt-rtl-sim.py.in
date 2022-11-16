@@ -16,6 +16,7 @@ import argparse
 import os
 import subprocess
 import sys
+from typing import List
 
 ThisFileDir = os.path.dirname(__file__)
 DebugBuild = "@CMAKE_BUILD_TYPE@" == "Debug"
@@ -60,7 +61,7 @@ class Questa(IEEEDriver):
     sources = filter(lambda fn: not (fn.endswith(".so") or fn.endswith(".dll")),
                      sources)
     vlog = os.path.join(self.path, "vlog")
-    args = [vlog, "-sv"] + args.split() + list(sources) 
+    args = [vlog, "-sv"] + args.split() + list(sources)
     if self.args.gui:
       args.append('+acc')
     return subprocess.run(args)
@@ -149,7 +150,8 @@ class Iverilog(IEEEDriver):
 
   def compile(self, sources, args):
     return subprocess.run(
-        [self.iverilog, "-s", self.top, "-g2005-sv", "-o", "obj.vvp"] + args.split() + sources)
+        [self.iverilog, "-s", self.top, "-g2005-sv", "-o", "obj.vvp"] +
+        args.split() + sources)
 
   def run(self, cycles, args):
     print(self.top)
@@ -187,12 +189,17 @@ class Verilator:
                      sources)
     self.ldPaths = ":".join([os.path.dirname(x) for x in dpiLibs])
     debugFlags = []
+    cflags = []
     if DebugBuild:
-      debugFlags = ["--trace", "--trace-params", "--trace-structs", "-DTRACE"]
-    return subprocess.run([
+      debugFlags = ["--trace", "--trace-params", "--trace-structs"]
+      cflags.append("-DTRACE")
+    cflagsIfNeeded = []
+    if len(cflags) > 0:
+      cflagsIfNeeded = ["-CFLAGS", " ".join(cflags)]
+    return call_logged([
         self.verilator, "--cc", "--top-module", self.top, "-sv", "--build",
         "--exe", "--assert"
-    ] + debugFlags + args.split() + sources)
+    ] + cflagsIfNeeded + debugFlags + args.split() + sources)
 
   def run(self, cycles, args):
     exe = os.path.join("obj_dir", "V" + self.top)
@@ -205,6 +212,12 @@ class Verilator:
     sys.stdout.flush()
     os.environ["LD_LIBRARY_PATH"] = self.ldPaths
     return subprocess.run(cmd)
+
+
+def call_logged(cmd: List[str]):
+  cmd_str = " ".join(cmd)
+  print(f"Running: {cmd_str}")
+  return subprocess.run(cmd)
 
 
 def __main__(args):

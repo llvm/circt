@@ -126,15 +126,24 @@ problem instances?
 
 ### Use of container-like operations instead of regions in `InstanceOp`
 
-This dialect defines the `OperatorLibraryOp` and `DependenceGraphOp` to
-serve exclusively as the first and second operation in an `InstanceOp`'s region. 
-The alternative of using two regions on the `InstanceOp` is not applicable,
-because the `InstanceOp` then needs to provide a symbol table, but the upstream
+This dialect defines the `OperatorLibraryOp` and `DependenceGraphOp` to serve as
+the first and second operation in an `InstanceOp`'s region. The alternative of
+using two regions on the `InstanceOp` is not applicable, because the
+`InstanceOp` then needs to provide a symbol table, but the upstream
 `SymbolTable` trait enforces single-region ops. Lastly, we also considered using
 a single graph region to hold both `OperatorTypeOp`s and `OperationOp`s, but
 discarded that design because it cannot be safely roundtripped via a
 `circt::scheduling::Problem` (internally, registered operator types and
 operations are separate lists).
+
+### Stand-alone use of the `OperatorLibraryOp`
+
+The `OperatorLibraryOp` can be named and used outside of an `InstanceOp`. This
+is useful to share operator type definitions across multiple instances. In
+addition, until CIRCT gains better infrastructure to manage predefined hardware
+modules and their properties, such a stand-alone `OperatorLibraryOp` can also
+act as an interim solution to represent operator libraries for scheduling
+clients.
 
 ### Use of SSA operands _and_ symbol references to encode dependences
 

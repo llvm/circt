@@ -31,14 +31,13 @@ using namespace circt;
 using namespace seq;
 
 namespace {
-struct SeqToSVPass : public circt::seq::impl::LowerSeqToSVBase<SeqToSVPass> {
+struct SeqToSVPass : public impl::LowerSeqToSVBase<SeqToSVPass> {
   void runOnOperation() override;
 };
 struct SeqFIRRTLToSVPass
-    : public circt::seq::impl::LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass> {
+    : public impl::LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass> {
   void runOnOperation() override;
   using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::disableRegRandomization;
-  using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::preventVivadoBRAMMapping;
   using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::LowerSeqFIRRTLToSVBase;
 };
 } // anonymous namespace
@@ -93,10 +92,10 @@ namespace {
 /// Lower FirRegOp to `sv.reg` and `sv.always`.
 class FirRegLower {
 public:
-  FirRegLower(hw::HWModuleOp module, bool disableRegRandomization = false,
-              bool preventVivadoBRAMMapping = false)
-      : module(module), disableRegRandomization(disableRegRandomization),
-        preventVivadoBRAMMapping(preventVivadoBRAMMapping){};
+  FirRegLower(hw::HWModuleOp module, bool disableRegRandomization = false
+              )
+      : module(module), disableRegRandomization(disableRegRandomization)
+        {};
 
   void lower();
 
@@ -537,6 +536,6 @@ std::unique_ptr<Pass> circt::seq::createSeqLowerToSVPass() {
 }
 
 std::unique_ptr<Pass> circt::seq::createSeqFIRRTLLowerToSVPass(
-    const circt::seq::LowerSeqFIRRTLToSVOptions &options) {
+    const LowerSeqFIRRTLToSVOptions &options) {
   return std::make_unique<SeqFIRRTLToSVPass>(options);
 }

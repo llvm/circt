@@ -392,6 +392,14 @@ static bool isBound(hw::HWModuleLike op, hw::InstanceGraph &instanceGraph) {
   });
 }
 
+// Add any existing bindings to the bind table.
+static void addExistingBinds(Block *topLevelModule, BindTable &bindTable) {
+  for (auto bind : topLevelModule->getOps<BindOp>()) {
+    hw::InnerRefAttr boundRef = bind.getInstance();
+    bindTable[boundRef.getModule()][boundRef.getName()] = bind;
+  }
+}
+
 // Inline any modules that only have inputs for test code.
 static void inlineInputOnly(hw::HWModuleOp oldMod,
                             hw::InstanceGraph &instanceGraph,
@@ -672,7 +680,12 @@ void SVExtractTestCodeImplPass::runOnOperation() {
     return isa<CoverOp>(op) || isa<CoverConcurrentOp>(op);
   };
 
+  // Collect modules that are already bound and add the bound instance(s) to the
+  // bind table, so they can be updated if the instance(s) live inside a module
+  // that gets inlined later.
   BindTable bindTable;
+  addExistingBinds(topLevelModule, bindTable);
+
   for (auto &op : llvm::make_early_inc_range(topLevelModule->getOperations())) {
     if (auto rtlmod = dyn_cast<hw::HWModuleOp>(op)) {
       // Extract two sets of ops to different modules.  This will add modules,

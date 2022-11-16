@@ -304,7 +304,7 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
 
   // If this module contains a Grand Central interface, then also apply renames
   // to that, but only if there are prefixes to apply.
-  if (auto anno = AnnotationSet(module).getAnnotation(parentAnnoClass))
+  if (auto anno = AnnotationSet(module).getAnnotation(companionAnnoClass))
     interfacePrefixMap[anno.getMember<IntegerAttr>("id")] = prefixFull;
 }
 
