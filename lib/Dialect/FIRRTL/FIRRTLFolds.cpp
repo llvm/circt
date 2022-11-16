@@ -1370,23 +1370,6 @@ void SubaccessOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.add<patterns::SubaccessOfConstant>(context);
 }
 
-// LogicalResult SubaccessOp::canonicalize(SubaccessOp op,
-//                                         PatternRewriter &rewriter) {
-//   return canonicalizePrimOp(
-//       op, rewriter, [&](ArrayRef<Attribute> operands) -> OpFoldResult {
-//         if (auto constIndex = getConstant(operands[1])) {
-//           // The SubindexOp require the index value to be unsigned 32-bits
-//           // integer.
-//           auto value = constIndex->getExtValue();
-//           auto valueAttr = rewriter.getI32IntegerAttr(value);
-//           return rewriter.createOrFold<SubindexOp>(
-//               op.getLoc(), op.getResult().getType(), op.getInput(),
-//               valueAttr);
-//         }
-//         return {};
-//       });
-// }
-
 OpFoldResult MultibitMuxOp::fold(ArrayRef<Attribute> operands) {
   // If there is only one input, just return it.
   if (operands.size() == 2)
