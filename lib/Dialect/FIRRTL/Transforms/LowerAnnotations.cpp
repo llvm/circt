@@ -490,28 +490,72 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     return value.getDefiningOp()->getParentOfType<FModuleLike>();
   };
 
+  // Utility function to determine where to insert connection operations.
+  auto findInsertionBlock = [&getModule](Value src, Value dest) -> Block * {
+    // Check for easy case: both are in the same block.
+    if (src.getParentBlock() == dest.getParentBlock())
+      return src.getParentBlock();
+
+    // If connecting across blocks, figure out where to connect.
+    assert(getModule(src) == getModule(dest));
+    // Helper to determine if 'a' is available at 'b's block.
+    auto safelyDoms = [&](Value a, Value b) {
+      if (a.isa<BlockArgument>())
+        return true;
+      if (b.isa<BlockArgument>())
+        return false;
+      // Handle cases where 'b' is in child op after 'a'.
+      auto *ancestor =
+          a.getParentBlock()->findAncestorOpInBlock(*b.getDefiningOp());
+      return ancestor && a.getDefiningOp()->isBeforeInBlock(ancestor);
+    };
+    if (safelyDoms(src, dest))
+      return dest.getParentBlock();
+    if (safelyDoms(dest, src))
+      return src.getParentBlock();
+    return {};
+  };
+
   // Utility function to connect a destination to a source.  Always use a
   // ConnectOp as the widths may be uninferred.
   SmallVector<Operation *> opsToErase;
-  auto connect = [&](Value src, Value dest, ImplicitLocOpBuilder &builder) {
+  auto connect = [&](Value src, Value dest,
+                     ImplicitLocOpBuilder &builder) -> LogicalResult {
     if (foldFlow(dest) == Flow::Source)
       std::swap(src, dest);
+
+    // Figure out where to insert operations.
+    auto *insertBlock = findInsertionBlock(src, dest);
+    if (!insertBlock)
+      return emitError(src.getLoc())
+          .append("This value is involved with a Wiring Problem where the "
+                  "destination is in the same module but neither dominates the "
+                  "other, which is not supported.")
+          .attachNote(dest.getLoc())
+          .append("The destination is here.");
+
+    // Insert at end, past invalidation in same block.
+    builder.setInsertionPointToEnd(insertBlock);
+
     // Create RefSend/RefResolve if necessary.
-    if (dest.getType().isa<RefType>() && !src.getType().isa<RefType>()) {
-      src = builder.create<RefSendOp>(src);
-    } else if (!dest.getType().isa<RefType>() && src.getType().isa<RefType>()) {
-      src = builder.create<RefResolveOp>(src);
+    if (isa<RefType>(dest.getType()) != isa<RefType>(src.getType())) {
+      if (isa<RefType>(dest.getType()))
+        src = builder.create<RefSendOp>(src);
+      else
+        src = builder.create<RefResolveOp>(src);
     }
+
     // If the sink is a wire with no users, then convert this to a node.
     auto destOp = dyn_cast_or_null<WireOp>(dest.getDefiningOp());
     if (destOp && dest.getUses().empty()) {
       builder.create<NodeOp>(src.getType(), src, destOp.getName())
           .setAnnotationsAttr(destOp.getAnnotations());
       opsToErase.push_back(destOp);
-      return;
+      return success();
     }
     // Otherwise, just connect to the source.
     builder.create<ConnectOp>(dest, src);
+    return success();
   };
 
   auto &instanceGraph = state.instancePathCache.instanceGraph;
@@ -561,11 +605,22 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
                    << "    newNameHint: " << problem.newNameHint << "\n";
     });
 
-    // If the source and sink are in the same module, just wire them up.
+    // If the source and sink are in the same block, just wire them up.
     if (sink.getParentBlock() == source.getParentBlock()) {
       auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
                                                       sink.getParentBlock());
-      connect(source, sink, builder);
+      if (failed(connect(source, sink, builder)))
+        return failure();
+      continue;
+    }
+    // If both are in the same module but not same block, U-turn.
+    // We may not be able to handle this, but that is checked below while
+    // connecting.
+    if (sourceModule == sinkModule) {
+      LLVM_DEBUG(llvm::dbgs()
+                 << "    LCA: " << sourceModule.moduleName() << "\n");
+      moduleModifications[sourceModule].connectionMap[index] = source;
+      moduleModifications[sourceModule].uturns.push_back({index, sink});
       continue;
     }
 
@@ -675,8 +730,8 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     auto portIdx = fmodule.getNumPorts();
     fmodule.insertPorts(newPorts);
 
-    auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
-                                                    fmodule.getBodyBlock());
+    auto builder = ImplicitLocOpBuilder::atBlockBegin(UnknownLoc::get(context),
+                                                      fmodule.getBodyBlock());
 
     // Connect each port to the value stored in the connectionMap for this
     // wiring problem index.
@@ -684,15 +739,17 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       Value src = moduleModifications[fmodule].connectionMap[problemIdx];
       assert(src && "there did not exist a driver for the port");
       Value dest = fmodule.getArgument(portIdx++);
-      connect(src, dest, builder);
+      if (failed(connect(src, dest, builder)))
+        return failure();
     }
 
-    // If a U-turn exists, this is an LCA and we need a U-turn connection.  This
-    // is the last connection made for this module.
+    // If a U-turn exists, this is an LCA and we need a U-turn connection. These
+    // are the last connections made for this module.
     for (auto [problemIdx, dest] : moduleModifications[fmodule].uturns) {
       Value src = moduleModifications[fmodule].connectionMap[problemIdx];
       assert(src && "there did not exist a connection for the u-turn");
-      connect(src, dest, builder);
+      if (failed(connect(src, dest, builder)))
+        return failure();
     }
 
     // Update the connectionMap of all modules for which we created a port.
