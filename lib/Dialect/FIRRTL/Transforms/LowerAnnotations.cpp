@@ -492,6 +492,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
 
   // Utility function to connect a destination to a source.  Always use a
   // ConnectOp as the widths may be uninferred.
+  SmallVector<Operation *> opsToErase;
   auto connect = [&](Value src, Value dest, ImplicitLocOpBuilder &builder) {
     if (foldFlow(dest) == Flow::Source)
       std::swap(src, dest);
@@ -506,7 +507,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     if (destOp && dest.getUses().empty()) {
       builder.create<NodeOp>(src.getType(), src, destOp.getName())
           .setAnnotationsAttr(destOp.getAnnotations());
-      destOp->erase();
+      opsToErase.push_back(destOp);
       return;
     }
     // Otherwise, just connect to the source.
@@ -520,7 +521,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
   // to be made per-module.
   LLVM_DEBUG({ llvm::dbgs() << "Analyzing wiring problems:\n"; });
   DenseMap<FModuleLike, ModuleModifications> moduleModifications;
-  DenseSet<Value> sinks(state.wiringProblems.size());
+  DenseSet<Value> sinks;
   for (auto [index, problem] : llvm::enumerate(state.wiringProblems)) {
     // This is a unique index that is assigned to this specific wiring problem
     // and is used as a key during wiring to know which Values (ports, sources,
@@ -530,14 +531,12 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
 
     // Check that no WiringProblems are trying to use the same sink.  This
     // should never happen.
-    auto [oldSink, added] = sinks.insert(sink);
-    if (!added) {
-      auto diag = mlir::emitError(sink.getLoc())
+    if (!sinks.insert(sink).second) {
+      auto diag = mlir::emitError(source.getLoc())
                   << "This sink is involved with a Wiring Problem which is "
-                     "also used by another Wiring Problem (this is both "
-                     "illegal and should be impossible).";
-      diag.attachNote(source.getLoc()) << "The source is here.";
-      diag.attachNote(oldSink->getLoc()) << "The other source is here.";
+                     "targeted by a source used by another Wiring Problem. "
+                     "(This is both illegal and should be impossible.)";
+      diag.attachNote(source.getLoc()) << "The source is here";
       return failure();
     }
 
@@ -632,6 +631,9 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
                      << inst.referencedModuleName() << "\n";
     });
   }
+
+  for (auto *op : opsToErase)
+    op->erase();
 
   // Iterate over modules from leaves to roots, applying ModuleModifications to
   // each module.
