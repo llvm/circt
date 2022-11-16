@@ -540,7 +540,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:     sv.if [[TMP2]] {
     // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.macro.ref< "ASSERT_VERBOSE_COND_"> : i1
     // CHECK-NEXT:       sv.if [[ASSERT_VERBOSE_COND]] {
-    // CHECK-NEXT:         sv.error "assert1"(%value, %false) : i42, i1
+    // CHECK-NEXT:         sv.error "assert1 %d, %d"(%value, %false) : i42, i1
     // CHECK-NEXT:       }
     // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.macro.ref< "STOP_COND_"> : i1
     // CHECK-NEXT:       sv.if [[STOP_COND]] {
