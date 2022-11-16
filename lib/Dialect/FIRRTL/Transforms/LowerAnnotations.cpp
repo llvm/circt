@@ -539,19 +539,8 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       diag.attachNote(source.getLoc()) << "The source is here";
       return failure();
     }
-
-    // If the source and sink are in the same module, just wire them up.
-    if (sink.getParentBlock() == source.getParentBlock()) {
-      auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
-                                                      sink.getParentBlock());
-      connect(source, sink, builder);
-      continue;
-    }
-
-    // Pre-populate source/sink module modifications connection values.
     FModuleLike sourceModule = getModule(source);
     FModuleLike sinkModule = getModule(sink);
-
     if (isa<FExtModuleOp>(sourceModule) || isa<FExtModuleOp>(sinkModule)) {
       auto diag = mlir::emitError(source.getLoc())
                   << "This source is involved with a Wiring Problem which "
@@ -561,6 +550,26 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       return failure();
     }
 
+    LLVM_DEBUG({
+      llvm::dbgs() << "  - index: " << index << "\n"
+                   << "    source:\n"
+                   << "      module: " << sourceModule.moduleName() << "\n"
+                   << "      value: " << source << "\n"
+                   << "    sink:\n"
+                   << "      module: " << sinkModule.moduleName() << "\n"
+                   << "      value: " << sink << "\n"
+                   << "    newNameHint: " << problem.newNameHint << "\n";
+    });
+
+    // If the source and sink are in the same module, just wire them up.
+    if (sink.getParentBlock() == source.getParentBlock()) {
+      auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
+                                                      sink.getParentBlock());
+      connect(source, sink, builder);
+      continue;
+    }
+
+    // Otherwise, get instance paths for source/sink, and compute LCA.
     auto sourcePaths = state.instancePathCache.getAbsolutePaths(
         cast<hw::HWModuleLike>(*sourceModule));
     auto sinkPaths = state.instancePathCache.getAbsolutePaths(
@@ -588,6 +597,18 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       sinks = sinks.drop_front();
     }
 
+    LLVM_DEBUG({
+      llvm::dbgs() << "    LCA: " << lca.moduleName() << "\n"
+                   << "    sourcePaths:\n";
+      for (auto inst : sourcePaths[0])
+        llvm::dbgs() << "      - " << inst.instanceName() << " of "
+                     << inst.referencedModuleName() << "\n";
+      llvm::dbgs() << "    sinkPaths:\n";
+      for (auto inst : sinkPaths[0])
+        llvm::dbgs() << "      - " << inst.instanceName() << " of "
+                     << inst.referencedModuleName() << "\n";
+    });
+
     // Pre-populate the connectionMap of the module with the source and sink.
     moduleModifications[sourceModule].connectionMap[index] = source;
     moduleModifications[sinkModule].connectionMap[index] = sink;
@@ -610,26 +631,6 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
                 context, state.getNamespace(mod).newName(problem.newNameHint)),
             tpe, Direction::In}});
     }
-
-    LLVM_DEBUG({
-      llvm::dbgs() << "  - index: " << index << "\n"
-                   << "    source:\n"
-                   << "      module: " << sourceModule.moduleName() << "\n"
-                   << "      value: " << source << "\n"
-                   << "    sink:\n"
-                   << "      module: " << sinkModule.moduleName() << "\n"
-                   << "      value: " << sink << "\n"
-                   << "    newNameHint: " << problem.newNameHint << "\n"
-                   << "    LCA: " << lca.moduleName() << "\n"
-                   << "    sourcePaths:\n";
-      for (auto inst : sourcePaths[0])
-        llvm::dbgs() << "      - " << inst.instanceName() << " of "
-                     << inst.referencedModuleName() << "\n";
-      llvm::dbgs() << "    sinkPaths:\n";
-      for (auto inst : sinkPaths[0])
-        llvm::dbgs() << "      - " << inst.instanceName() << " of "
-                     << inst.referencedModuleName() << "\n";
-    });
   }
 
   // Iterate over modules from leaves to roots, applying ModuleModifications to
