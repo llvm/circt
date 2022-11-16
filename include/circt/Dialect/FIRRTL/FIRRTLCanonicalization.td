@@ -158,6 +158,20 @@ def SubFromZeroUnsigned : Pat <
   (AsUIntPrimOp (PadPrimOp (MoveNameHint $old, (NegPrimOp $x)), (TypeWidth32 $old))),
   [(ZeroConstantOp $zcst), (UIntType $x)]>;
 
+// bits(bits(x, ...), ...) -> bits(x, ...)
+def BitsOfBits : Pat<
+  (BitsPrimOp:$old (BitsPrimOp $x, I32Attr:$iHigh, I32Attr:$iLow), I32Attr:$oHigh, I32Attr:$oLow),
+  (MoveNameHint $old, (BitsPrimOp $x, 
+    (NativeCodeCall<"$_builder.getI32IntegerAttr($0.getValue().getZExtValue() + $1.getValue().getZExtValue())"> $iLow, $oHigh),
+    (NativeCodeCall<"$_builder.getI32IntegerAttr($0.getValue().getZExtValue() + $1.getValue().getZExtValue())"> $oLow, $iLow))),
+  []>;
+
+// subaccess a, cst -> subindex a, cst 
+// TODO: only enable if cst is inside a.  Subaccess and subindex behave differently for out-of-bounds indexes.
+def SubaccessOfConstant : Pat<
+  (SubaccessOp:$old $array, (ConstantOp $cst)),
+  (MoveNameHint $old, (SubindexOp $array, (NativeCodeCall<"$_builder.getI32IntegerAttr($0.cast<IntegerAttr>().getAPSInt().getExtValue())"> $cst))),
+  []>;
 
 // mux(cond, x, mux(cond, y, z)) -> mux(cond, x, z)
 def MuxSameCondLow : Pat<
