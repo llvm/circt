@@ -297,7 +297,7 @@ def SubaccessOp : FIRRTLExprOp<"subaccess", [
   let assemblyFormat =
      "$input `[` $index `]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))";
 
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
 }
 
 def MultibitMuxOp : FIRRTLExprOp<"multibit_mux"> {
@@ -520,7 +520,7 @@ def BitsPrimOp : PrimOp<"bits"> {
     The result is `hi - lo + 1` bits wide.
   }];
 
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
 }
 
 def HeadPrimOp : PrimOp<"head"> {

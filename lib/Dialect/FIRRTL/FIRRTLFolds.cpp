@@ -1098,18 +1098,9 @@ OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
-LogicalResult BitsPrimOp::canonicalize(BitsPrimOp op,
-                                       PatternRewriter &rewriter) {
-  auto *inputOp = op.getInput().getDefiningOp();
-  // bits(bits(x, ...), ...) -> bits(x, ...).
-  if (auto innerBits = dyn_cast_or_null<BitsPrimOp>(inputOp)) {
-    auto newLo = op.getLo() + innerBits.getLo();
-    auto newHi = newLo + op.getHi() - op.getLo();
-    replaceOpWithNewOpAndCopyName<BitsPrimOp>(
-        rewriter, op, innerBits.getInput(), newHi, newLo);
-    return success();
-  }
-  return failure();
+void BitsPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                             MLIRContext *context) {
+  results.insert<patterns::BitsOfBits>(context);
 }
 
 /// Replace the specified operation with a 'bits' op from the specified hi/lo
@@ -1374,20 +1365,9 @@ LogicalResult TailPrimOp::canonicalize(TailPrimOp op,
   return success();
 }
 
-LogicalResult SubaccessOp::canonicalize(SubaccessOp op,
-                                        PatternRewriter &rewriter) {
-  return canonicalizePrimOp(
-      op, rewriter, [&](ArrayRef<Attribute> operands) -> OpFoldResult {
-        if (auto constIndex = getConstant(operands[1])) {
-          // The SubindexOp require the index value to be unsigned 32-bits
-          // integer.
-          auto value = constIndex->getExtValue();
-          auto valueAttr = rewriter.getI32IntegerAttr(value);
-          return rewriter.createOrFold<SubindexOp>(
-              op.getLoc(), op.getResult().getType(), op.getInput(), valueAttr);
-        }
-        return {};
-      });
+void SubaccessOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                              MLIRContext *context) {
+  results.add<patterns::SubaccessOfConstant>(context);
 }
 
 OpFoldResult MultibitMuxOp::fold(ArrayRef<Attribute> operands) {
