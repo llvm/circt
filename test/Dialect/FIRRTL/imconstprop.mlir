@@ -93,22 +93,17 @@ firrtl.circuit "Test" {
     // CHECK: firrtl.connect %result7, %c0_ui4
     firrtl.connect %result7, %reg: !firrtl.uint<4>, !firrtl.uint<4>
 
-    // Wire without connects to it should turn into 'invalid'.
-    %unconnectedWire = firrtl.wire : !firrtl.uint<2>
-    // CHECK: firrtl.connect %result8, %invalid_ui2
-    firrtl.connect %result8, %unconnectedWire: !firrtl.uint<4>, !firrtl.uint<2>
-
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
 
     // Multiple operations that fold to constants shouldn't leave dead constants
     // around.
-    %a = firrtl.and %extWire, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+    %a = firrtl.and %c2_ui2, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
     %b = firrtl.or %a, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
     // CHECK-NOT: firrtl.constant
     %c = firrtl.xor %b, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 
-    // CHECK-NEXT: firrtl.connect %result9, %c3_ui2
+    // CHECK-NEXT: firrtl.connect %result9, %c1_ui2
     firrtl.connect %result9, %c: !firrtl.uint<4>, !firrtl.uint<2>
 
 
