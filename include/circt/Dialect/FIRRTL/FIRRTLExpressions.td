@@ -376,8 +376,6 @@ class IntBinaryPrimOp<string mnemonic, Type resultType,
 let inferType = "impl::inferAddSubResult" in {
   let hasCanonicalizer = true in {
     def AddPrimOp : IntBinaryPrimOp<"add", IntType, [Commutative]>;
-  }
-  let hasCanonicalizeMethod = true in {
     def SubPrimOp : IntBinaryPrimOp<"sub", IntType>;
   }
 }

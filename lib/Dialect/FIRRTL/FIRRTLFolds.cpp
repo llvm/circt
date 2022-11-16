@@ -391,21 +391,10 @@ OpFoldResult SubPrimOp::fold(ArrayRef<Attribute> operands) {
                                  [=](APSInt a, APSInt b) { return a - b; });
 }
 
-LogicalResult SubPrimOp::canonicalize(SubPrimOp op, PatternRewriter &rewriter) {
-  return canonicalizePrimOp(
-      op, rewriter, [&](ArrayRef<Attribute> operands) -> OpFoldResult {
-        // sub(x, 0) -> x
-        if (isConstantZero(operands[1]))
-          return op.getOperand(0);
-        // sub(0, x) -> neg(x)  if x is signed
-        // sub(0, x) -> asUInt(neg(x))  if x is unsigned
-        if (isConstantZero(operands[0])) {
-          Value value =
-              rewriter.create<NegPrimOp>(op.getLoc(), op.getOperand(1));
-          return value;
-        }
-        return {};
-      });
+void SubPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.insert<patterns::SubOfZero, patterns::SubFromZeroSigned,
+                 patterns::SubFromZeroUnsigned>(context);
 }
 
 OpFoldResult MulPrimOp::fold(ArrayRef<Attribute> operands) {

@@ -1759,21 +1759,6 @@ firrtl.module @sub_cst_prop2(out %out_b: !firrtl.sint<9>) {
   firrtl.connect %out_b, %add : !firrtl.sint<9>, !firrtl.sint<9>
 }
 
-// CHECK-LABEL: @sub_cst_prop3
-// CHECK: %[[pad:.+]] = firrtl.pad %tmp_a, 5
-// CHECK-NEXT: firrtl.strictconnect %out_b, %[[pad]]
-// CHECK: %[[neg:.+]] = firrtl.neg %tmp_a
-// CHECK: %[[cast:.+]] = firrtl.asUInt %[[neg]]
-// CHECK-NEXT: firrtl.strictconnect %out_b, %[[cast]]
-firrtl.module @sub_cst_prop3(out %out_b: !firrtl.uint<5>) {
-  %tmp_a = firrtl.wire : !firrtl.uint<4>
-  %invalid_ui4 = firrtl.invalidvalue : !firrtl.uint<4>
-  %sub = firrtl.sub %tmp_a, %invalid_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
-  firrtl.connect %out_b, %sub : !firrtl.uint<5>, !firrtl.uint<5>
-  %sub2 = firrtl.sub %invalid_ui4, %tmp_a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
-  firrtl.connect %out_b, %sub2 : !firrtl.uint<5>, !firrtl.uint<5>
-}
-
 // CHECK-LABEL: @mul_cst_prop1
 // CHECK-NEXT:      %c30_ui15 = firrtl.constant 30 : !firrtl.uint<15>
 // CHECK-NEXT:      firrtl.strictconnect %out_b, %c30_ui15 : !firrtl.uint<15>
