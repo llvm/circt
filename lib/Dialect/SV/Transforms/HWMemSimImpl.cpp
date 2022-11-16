@@ -14,6 +14,7 @@
 #include "PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/Namespace.h"
 #include "circt/Dialect/SV/SVPasses.h"
@@ -58,13 +59,17 @@ class HWMemSimImpl {
                           Value clock, Value data, Value gate = {});
   sv::AlwaysOp lastPipelineAlwaysOp;
 
+  InstancePathCache *instancePaths;
+
 public:
   HWMemSimImpl(bool ignoreReadEnableMem, bool stripMuxPragmas,
-               bool disableMemRandomization, bool disableRegRandomization)
+               bool disableMemRandomization, bool disableRegRandomization,
+               InstancePathCache *instancePaths)
       : ignoreReadEnableMem(ignoreReadEnableMem),
         stripMuxPragmas(stripMuxPragmas),
         disableMemRandomization(disableMemRandomization),
-        disableRegRandomization(disableRegRandomization) {}
+        disableRegRandomization(disableRegRandomization),
+        instancePaths(instancePaths) {}
 
   void generateMemory(HWModuleOp op, FirMemory mem);
 };
@@ -425,6 +430,46 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   auto *outputOp = op.getBodyBlock()->getTerminator();
   outputOp->setOperands(outputs);
 
+  // Work around Vivado shenanigans.
+  bool xilinx = true;
+  if (xilinx && mem.readLatency == 0) {
+    OpBuilder::InsertionGuard guard(b);
+    b.setInsertionPointAfter(op);
+    auto regOp = cast<sv::RegOp>(reg.getDefiningOp());
+    if (!regOp.getInnerSym())
+      regOp.setInnerSym(moduleNamespace.newName(regOp.getName()));
+    SmallVector<Attribute> symbols;
+    SmallString<128> string;
+    string.append("set_property RAM_STYLE distributed [get_cells ");
+    size_t idx = 0;
+    auto &instanceGraph = instancePaths->instanceGraph;
+    assert(!instancePaths->getAbsolutePaths(op).empty() &&
+           "this shouldn't be empty (the module should be instantiated)");
+    for (auto path : instancePaths->getAbsolutePaths(op)) {
+      llvm::interleave(
+          path,
+          [&](HWInstanceLike inst) {
+            string.append("{{");
+            string.append(Twine(idx++).str());
+            string.append("}}");
+            symbols.push_back(FlatSymbolRefAttr::get(
+                instanceGraph.getReferencedModule(inst).moduleNameAttr()));
+          },
+          [&]() { string.append("/"); });
+    }
+    string.append("{{");
+    string.append(Twine(idx).str());
+    string.append("}}");
+    symbols.push_back(hw::InnerRefAttr::get(
+        op.getNameAttr(), cast<sv::RegOp>(regOp).getInnerSymAttr()));
+    string.append("_reg]");
+    auto xilinx =
+        b.create<sv::VerbatimOp>(string, ValueRange{}, b.getArrayAttr(symbols));
+    xilinx->setAttr("output_file",
+                    hw::OutputFileAttr::getFromFilename(
+                        b.getContext(), "xilinx-shenanigans.xdc"));
+  }
+
   // Add logic to initialize the memory and any internal registers to random
   // values.
   if (disableMemRandomization && disableRegRandomization)
@@ -577,6 +622,9 @@ void HWMemSimImplPass::runOnOperation() {
   SmallVector<HWModuleGeneratedOp> toErase;
   bool anythingChanged = false;
 
+  auto instancePaths =
+      InstancePathCache(getAnalysis<circt::hw::InstanceGraph>());
+
   for (auto op :
        llvm::make_early_inc_range(topModule->getOps<HWModuleGeneratedOp>())) {
     auto oldModule = cast<HWModuleGeneratedOp>(op);
@@ -609,7 +657,8 @@ void HWMemSimImplPass::runOnOperation() {
             builder.getStringAttr("VCS coverage exclude_file"));
 
         HWMemSimImpl(ignoreReadEnableMem, stripMuxPragmas,
-                     disableMemRandomization, disableRegRandomization)
+                     disableMemRandomization, disableRegRandomization,
+                     &instancePaths)
             .generateMemory(newModule, mem);
       }
 
