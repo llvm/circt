@@ -632,9 +632,6 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     });
   }
 
-  for (auto *op : opsToErase)
-    op->erase();
-
   // Iterate over modules from leaves to roots, applying ModuleModifications to
   // each module.
   LLVM_DEBUG({ llvm::dbgs() << "Updating modules:\n"; });
@@ -717,6 +714,10 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       }
     }
   }
+
+  // Delete unused WireOps created by producers of WiringProblems.
+  for (auto *op : opsToErase)
+    op->erase();
 
   return success();
 }
