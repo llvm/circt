@@ -38,6 +38,7 @@ struct SeqFIRRTLToSVPass
     : public impl::LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass> {
   void runOnOperation() override;
   using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::disableRegRandomization;
+  using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::preventVivadoBRAMMapping;
   using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::LowerSeqFIRRTLToSVBase;
 };
 } // anonymous namespace
@@ -92,8 +93,10 @@ namespace {
 /// Lower FirRegOp to `sv.reg` and `sv.always`.
 class FirRegLower {
 public:
-  FirRegLower(hw::HWModuleOp module, bool disableRegRandomization = false)
-      : module(module), disableRegRandomization(disableRegRandomization){};
+  FirRegLower(hw::HWModuleOp module, bool disableRegRandomization = false,
+              bool preventVivadoBRAMMapping = false)
+      : module(module), disableRegRandomization(disableRegRandomization),
+        preventVivadoBRAMMapping(preventVivadoBRAMMapping){};
 
   void lower();
 
@@ -359,15 +362,6 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
   svReg.reg = builder.create<sv::RegOp>(loc, reg.getType(), reg.getNameAttr());
   svReg.width = hw::getBitWidth(reg.getResult().getType());
 
-  if (preventVivadoBRAMMapping &&
-      !hw::type_cast<hw::ArrayType>(reg.getType().cast<hw::ArrayType>())
-           .getElementType()
-           .isa<IntegerType>())
-    circt::sv::setSVAttributes(
-        svReg.reg, sv::SVAttributesAttr::get(
-                       builder.getContext(),
-                       {std::make_pair("ram_style", R"("distributed")")}));
-
   if (auto attr = reg->getAttrOfType<IntegerAttr>("firrtl.random_init_start"))
     svReg.randStart = attr.getUInt();
 
@@ -376,6 +370,17 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
 
   // Move Attributes
   svReg.reg->setDialectAttrs(reg->getDialectAttrs());
+
+  // For array registers, we annotate ram_style attributes if
+  // `preventVivadoBRAMMapping` is enabled so that we can workaround incorrect
+  // optimizations of vivado. See "RAM address conflict and Vivado synthesis
+  // bug" issue in the vivado forum for the more detail.
+  if (preventVivadoBRAMMapping &&
+      hw::type_isa<hw::ArrayType, hw::UnpackedArrayType>(reg.getType()))
+    circt::sv::setSVAttributes(
+        svReg.reg, sv::SVAttributesAttr::get(
+                       builder.getContext(),
+                       {std::make_pair("ram_style", R"("distributed")")}));
 
   if (auto innerSymAttr = reg.getInnerSymAttr())
     svReg.reg.setInnerSymAttr(innerSymAttr);
@@ -526,7 +531,8 @@ void SeqToSVPass::runOnOperation() {
 
 void SeqFIRRTLToSVPass::runOnOperation() {
   hw::HWModuleOp module = getOperation();
-  FirRegLower(module, disableRegRandomization).lower();
+  FirRegLower(module, disableRegRandomization, preventVivadoBRAMMapping)
+      .lower();
 }
 
 std::unique_ptr<Pass> circt::seq::createSeqLowerToSVPass() {
