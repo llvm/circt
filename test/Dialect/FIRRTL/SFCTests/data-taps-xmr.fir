@@ -111,8 +111,9 @@ circuit Top : %[[
     io2 <= int.io
 
 ; CHECK-LABEL: module Child(
-; CHECK:   wire tap = Top.int_0.io_out;
-; CHECK:   BlackBox localparam_0 (
+; CHECK:       wire tap
+; CHECK-NEXT:  assign tap = Top.int_0.io_out;
+; CHECK:       BlackBox localparam_0 (
 
 ; CHECK: module Top(
 ; CHECK-NOT: module
