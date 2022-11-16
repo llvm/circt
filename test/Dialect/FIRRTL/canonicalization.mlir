@@ -1719,20 +1719,6 @@ firrtl.module @add_cst_prop3(out %out_b: !firrtl.sint<4>) {
   firrtl.connect %out_b, %add : !firrtl.sint<4>, !firrtl.sint<4>
 }
 
-// CHECK-LABEL: @add_cst_prop4
-// CHECK: %[[pad:.+]] = firrtl.pad %tmp_a, 5
-// CHECK-NEXT: firrtl.strictconnect %out_b, %[[pad]]
-// CHECK-NEXT: %[[pad:.+]] = firrtl.pad %tmp_a, 5
-// CHECK-NEXT: firrtl.strictconnect %out_b, %[[pad]]
-firrtl.module @add_cst_prop4(out %out_b: !firrtl.uint<5>) {
-  %tmp_a = firrtl.wire : !firrtl.uint<4>
-  %invalid_ui4 = firrtl.invalidvalue : !firrtl.uint<4>
-  %add = firrtl.add %tmp_a, %invalid_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
-  firrtl.connect %out_b, %add : !firrtl.uint<5>, !firrtl.uint<5>
-  %add2 = firrtl.add %invalid_ui4, %tmp_a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
-  firrtl.connect %out_b, %add2 : !firrtl.uint<5>, !firrtl.uint<5>
-}
-
 // CHECK-LABEL: @add_cst_prop5
 // CHECK: %[[pad:.+]] = firrtl.pad %tmp_a, 5
 // CHECK-NEXT: firrtl.strictconnect %out_b, %[[pad]]
@@ -1771,21 +1757,6 @@ firrtl.module @sub_cst_prop2(out %out_b: !firrtl.sint<9>) {
   firrtl.connect %_tmp_a, %c6_ui7 : !firrtl.sint<7>, !firrtl.sint<7>
   %add = firrtl.sub %_tmp_a, %c5_ui8 : (!firrtl.sint<7>, !firrtl.sint<8>) -> !firrtl.sint<9>
   firrtl.connect %out_b, %add : !firrtl.sint<9>, !firrtl.sint<9>
-}
-
-// CHECK-LABEL: @sub_cst_prop3
-// CHECK: %[[pad:.+]] = firrtl.pad %tmp_a, 5
-// CHECK-NEXT: firrtl.strictconnect %out_b, %[[pad]]
-// CHECK: %[[neg:.+]] = firrtl.neg %tmp_a
-// CHECK: %[[cast:.+]] = firrtl.asUInt %[[neg]]
-// CHECK-NEXT: firrtl.strictconnect %out_b, %[[cast]]
-firrtl.module @sub_cst_prop3(out %out_b: !firrtl.uint<5>) {
-  %tmp_a = firrtl.wire : !firrtl.uint<4>
-  %invalid_ui4 = firrtl.invalidvalue : !firrtl.uint<4>
-  %sub = firrtl.sub %tmp_a, %invalid_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
-  firrtl.connect %out_b, %sub : !firrtl.uint<5>, !firrtl.uint<5>
-  %sub2 = firrtl.sub %invalid_ui4, %tmp_a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
-  firrtl.connect %out_b, %sub2 : !firrtl.uint<5>, !firrtl.uint<5>
 }
 
 // CHECK-LABEL: @mul_cst_prop1

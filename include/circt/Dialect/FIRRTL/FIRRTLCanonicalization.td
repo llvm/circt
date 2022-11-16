@@ -43,6 +43,12 @@ def EqualTypes : Constraint<CPred<"$0.getType() == $1.getType()">>;
 // Constraint that enforces int types
 def IntTypes : Constraint<CPred<"$0.isa<IntType>()">>;
 
+// Constraint that enforces sint types
+def SIntTypes : Constraint<CPred<"$0.isa<SIntType>()">>;
+
+// Constraint that enforces uint types
+def UIntTypes : Constraint<CPred<"$0.isa<UIntType>()">>;
+
 // Constraint that enforces types of known width
 def KnownWidth : Constraint<CPred<[{
   $0.getType().isa<FIRRTLBaseType>() &&
@@ -116,15 +122,42 @@ def LimitConstant32 : NativeCodeCall<
 def TypeWidth32 : NativeCodeCall<
   "$_builder.getI32IntegerAttr($0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel())">;
 
+// dshl(a, const) -> shl(a, const)
 def DShlOfConstant : Pat<
   (DShlPrimOp:$old $x, (ConstantOp $cst)),
   (PadPrimOp (MoveNameHint $old, (ShlPrimOp $x, (LimitConstant32 $cst))), (TypeWidth32 $old)),
   [(KnownWidth $x)]>;
 
+// dshr(a, const) -> shl(a, const)
 def DShrOfConstant : Pat<
   (DShrPrimOp:$old $x, (ConstantOp $cst)),
   (PadPrimOp (MoveNameHint $old, (ShrPrimOp $x, (LimitConstant32 $cst))), (TypeWidth32 $old)),
   [(KnownWidth $x)]>;
+
+// add(a, 0) -> a
+def AddOfZero : Pat <
+  (AddPrimOp:$old (either $x, (ConstantOp:$zcst $cst))),
+  (PadPrimOp $x, (TypeWidth32 $old)),
+  [(ZeroConstantOp $zcst)]>;
+
+// sub(a, 0) -> a
+def SubOfZero : Pat <
+  (SubPrimOp:$old $x, (ConstantOp:$zcst $cst)),
+  (PadPrimOp $x, (TypeWidth32 $old)),
+  [(ZeroConstantOp $zcst)]>;
+
+// sub(0, a) -> -a
+def SubFromZeroSigned : Pat <
+  (SubPrimOp:$old (ConstantOp:$zcst $cst), $x),
+  (PadPrimOp (MoveNameHint $old, (NegPrimOp $x)), (TypeWidth32 $old)),
+  [(ZeroConstantOp $zcst), (SIntType $x)]>;
+
+//sub(0, a) -> -a
+def SubFromZeroUnsigned : Pat <
+  (SubPrimOp:$old (ConstantOp:$zcst $cst), $x),
+  (AsUIntPrimOp (PadPrimOp (MoveNameHint $old, (NegPrimOp $x)), (TypeWidth32 $old))),
+  [(ZeroConstantOp $zcst), (UIntType $x)]>;
+
 
 // mux(cond, x, mux(cond, y, z)) -> mux(cond, x, z)
 def MuxSameCondLow : Pat<
