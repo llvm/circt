@@ -381,17 +381,9 @@ OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
                                  [=](APSInt a, APSInt b) { return a + b; });
 }
 
-LogicalResult AddPrimOp::canonicalize(AddPrimOp op, PatternRewriter &rewriter) {
-  return canonicalizePrimOp(op, rewriter,
-                            [&](ArrayRef<Attribute> operands) -> OpFoldResult {
-                              // add(x, 0) -> x
-                              if (isConstantZero(operands[1]))
-                                return op.getOperand(0);
-                              // add(0, x) -> x
-                              if (isConstantZero(operands[0]))
-                                return op.getOperand(1);
-                              return {};
-                            });
+void AddPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.insert<patterns::AddOfZero>(context);
 }
 
 OpFoldResult SubPrimOp::fold(ArrayRef<Attribute> operands) {

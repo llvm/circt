@@ -126,6 +126,11 @@ def DShrOfConstant : Pat<
   (PadPrimOp (MoveNameHint $old, (ShrPrimOp $x, (LimitConstant32 $cst))), (TypeWidth32 $old)),
   [(KnownWidth $x)]>;
 
+def AddOfZero : Pat <
+  (AddPrimOp:$old (either $x, (ConstantOp:$zcst $cst))),
+  (PadPrimOp $x, (TypeWidth32 $old)),
+  [(ZeroConstantOp $zcst)]>;
+
 // mux(cond, x, mux(cond, y, z)) -> mux(cond, x, z)
 def MuxSameCondLow : Pat<
   (MuxPrimOp:$old $cond, $x, (MuxPrimOp $cond, $y, $z)),
