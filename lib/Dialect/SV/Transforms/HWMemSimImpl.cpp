@@ -224,9 +224,9 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   sv::RegOp reg = b.create<sv::RegOp>(
       UnpackedArrayType::get(dataType, mem.depth), b.getStringAttr("Memory"));
 
-  // If the read latency is zero, we regard the memory as read-first.
+  // If the read latency is zero, we regard the memory as write-first.
   // We add a SV attribute to specify a ram style to use LUTs for Vivado to
-  // avoid a bug that miscompiles the read-first memory. See "RAM address
+  // avoid a bug that miscompiles the write-first memory. See "RAM address
   // conflict and Vivado synthesis bug" issue in the vivado forum for the more
   // detail.
   if (preventVivadoBRAMMapping && mem.readLatency == 0)

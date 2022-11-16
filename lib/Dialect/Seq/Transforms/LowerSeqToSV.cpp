@@ -92,10 +92,8 @@ namespace {
 /// Lower FirRegOp to `sv.reg` and `sv.always`.
 class FirRegLower {
 public:
-  FirRegLower(hw::HWModuleOp module, bool disableRegRandomization = false
-              )
-      : module(module), disableRegRandomization(disableRegRandomization)
-        {};
+  FirRegLower(hw::HWModuleOp module, bool disableRegRandomization = false)
+      : module(module), disableRegRandomization(disableRegRandomization){};
 
   void lower();
 
