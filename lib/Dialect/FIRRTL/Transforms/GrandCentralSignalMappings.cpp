@@ -458,10 +458,9 @@ void ModuleSignalMappings::instantiateMappingsModule(FModuleOp mappingsModule) {
   LLVM_DEBUG(llvm::dbgs() << "- Instantiating `" << mappingsModuleName
                           << "`\n");
   // Create the actual module.
-  auto builder = ImplicitLocOpBuilder::atBlockBegin(module.getLoc(),
-                                                    module.getBodyBlock());
+  auto builder =
+      ImplicitLocOpBuilder::atBlockEnd(module.getLoc(), module.getBodyBlock());
   auto inst = builder.create<InstanceOp>(mappingsModule, "signal_mappings");
-  builder.setInsertionPointToEnd(module.getBodyBlock());
 
   // Generate the connections to and from the instance.
   unsigned portIdx = 0;
@@ -472,10 +471,7 @@ void ModuleSignalMappings::instantiateMappingsModule(FModuleOp mappingsModule) {
     Value src = mapping.localValue;
     if (mapping.dir == MappingDirection::ProbeRemote)
       std::swap(src, dst);
-    if (auto node = dst.getDefiningOp<NodeOp>())
-      node.setOperand(src);
-    else
-      builder.create<ConnectOp>(dst, src);
+    builder.create<ConnectOp>(dst, src);
   }
 }
 
