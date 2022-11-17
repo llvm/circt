@@ -23,6 +23,7 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/SourceMgr.h"
 
 namespace cl = llvm::cl;
@@ -137,6 +138,10 @@ int main(int argc, char **argv) {
       "circt-lec - logical equivalence checker\n\n"
       "\tThis tool compares two input circuit descriptions to determine whether"
       " they are logically equivalent.\n");
+
+  // Set the bug report message to indicate users should file issues on
+  // llvm/circt and not llvm/llvm-project.
+  llvm::setBugReportMsg(circt::circtBugReportMsg);
 
   // Register all the CIRCT dialects and create a context to work with.
   mlir::DialectRegistry registry;
