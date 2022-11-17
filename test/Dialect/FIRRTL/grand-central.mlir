@@ -544,39 +544,22 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-SAME:     fields: []
 // CHECK-SAME:     instances: []
 
-// The shared companion contains all instantiated interfaaces.
+// The shared companion contains all instantiated interfaces.
 // AugmentedGroundType annotations are removed.  Interface is driven via XMRs
 // directly from ref resolve ops.
 //
 // CHECK:          firrtl.module @Companion
 // CHECK-SAME:       output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
 //
-// CHECK-NEXT:       sv.interface.instance sym @[[vectorOfVerbatim:[a-zA-Z0-9_]+]]
-// CHECK-SAME:         {name = "VectorOfVerbatimView"} : !sv.interface<@VectorOfVerbatimView>
-//
-// CHECK-NEXT:       sv.interface.instance sym @[[unsupportedSym:[a-zA-Z0-9_]+]]
-// CHECK-SAME:         {name = "UnsupportedView"} : !sv.interface<@UnsupportedView>
-//
-// CHECK-NEXT:       sv.interface.instance sym @[[constantSym:[a-zA-Z0-9_]+]]
-// CHECK-SAME:         {name = "ConstantView"} : !sv.interface<@ConstantView>
-//
-// CHECK-NEXT:       sv.interface.instance sym @[[zeroWidthSym:[a-zA-Z0-9_]+]]
-// CHECK-SAME:         {name = "ZeroWidthView"} : !sv.interface<@ZeroWidthView>
-//
-// CHECK-NEXT:       sv.interface.instance sym @[[vectorOfVectorSym:[a-zA-Z0-9_]+]]
-// CHECK-SAME:         {name = "VectorOfVectorView"} : !sv.interface<@VectorOfVectorView>
-//
-// CHECK-NEXT:       sv.interface.instance sym @[[vectorOfBundleSym:[a-zA-Z0-9_]+]]
-// CHECK-SAME:         {name = "VectorOfBundleView"} : !sv.interface<@VectorOfBundleView>
-//
-// CHECK-NEXT:       sv.interface.instance sym @[[bundleSym:[a-zA-Z0-9_]+]]
-// CHECK-SAME:         {name = "BundleView"} : !sv.interface<@BundleView>
-//
-// CHECK-NEXT:       sv.interface.instance sym @[[vectorSym:[a-zA-Z0-9_]+]]
-// CHECK-SAME:         {name = "VectorView"} : !sv.interface<@VectorView>
-//
-// CHECK-NEXT:       sv.interface.instance sym @[[groundSym:[a-zA-Z0-9_]+]]
-// CHECK-SAME:         {name = "GroundView"} : !sv.interface<@GroundView>
+// CHECK-NEXT:       %VectorOfVerbatimView = sv.interface.instance sym @[[vectorOfVerbatim:[a-zA-Z0-9_]+]] : !sv.interface<@VectorOfVerbatimView>
+// CHECK-NEXT:       %UnsupportedView = sv.interface.instance sym @[[unsupportedSym:[a-zA-Z0-9_]+]] : !sv.interface<@UnsupportedView>
+// CHECK-NEXT:       %ConstantView = sv.interface.instance sym @[[constantSym:[a-zA-Z0-9_]+]] : !sv.interface<@ConstantView>
+// CHECK-NEXT:       %ZeroWidthView = sv.interface.instance sym @[[zeroWidthSym:[a-zA-Z0-9_]+]] : !sv.interface<@ZeroWidthView>
+// CHECK-NEXT:       %VectorOfVectorView = sv.interface.instance sym @[[vectorOfVectorSym:[a-zA-Z0-9_]+]] : !sv.interface<@VectorOfVectorView>
+// CHECK-NEXT:       %VectorOfBundleView = sv.interface.instance sym @[[vectorOfBundleSym:[a-zA-Z0-9_]+]] : !sv.interface<@VectorOfBundleView>
+// CHECK-NEXT:       %BundleView = sv.interface.instance sym @[[bundleSym:[a-zA-Z0-9_]+]] : !sv.interface<@BundleView>
+// CHECK-NEXT:       %VectorView = sv.interface.instance sym @[[vectorSym:[a-zA-Z0-9_]+]] : !sv.interface<@VectorView>
+// CHECK-NEXT:       %GroundView = sv.interface.instance sym @[[groundSym:[a-zA-Z0-9_]+]] : !sv.interface<@GroundView>
 //
 // CHECK:            %[[foo_ref:[a-zA-Z0-9_]+]] = firrtl.ref.resolve {{.+}} : !firrtl.ref<uint<1>>
 // CHECK-NOT:        sifive.enterprise.grandcentral.AugmentedGroundType
