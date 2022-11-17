@@ -778,45 +778,22 @@ LogicalResult applyGCTMemTapsWithWires(const AnnoPathValue &target,
     return failure();
   Optional<AnnoPathValue> wireTarget = resolvePath(
       wireTargetStr, state.circuit, state.symTbl, state.targetCaches);
-  SmallVector<InstanceOp> pathFromSrcToWire;
-  FModuleOp lcaModule;
-  // Find the lca and get the path from source to wire through that lca.
-  if (findLCAandSetPath(*srcTarget, *wireTarget, pathFromSrcToWire, lcaModule,
-                        state)
-          .failed())
-    return mlir::emitError(loc,
-                           "Failed to find a uinque path from source to wire.");
-  LLVM_DEBUG(llvm::dbgs() << "\n lca :" << lcaModule.getNameAttr();
-             for (auto i
-                  : pathFromSrcToWire) llvm::dbgs()
-             << "\n"
-             << i->getParentOfType<FModuleOp>().getNameAttr() << ">"
-             << i.getNameAttr(););
-  auto srcModule =
-      dyn_cast<FModuleOp>(srcTarget->ref.getModule().getOperation());
-  ImplicitLocOpBuilder refSendBuilder(srcModule.getLoc(), srcModule);
+  if (!wireTarget)
+    return mlir::emitError(loc, "Annotation '" + Twine(memTapClass) +
+                                    "' with path '.taps[0]' contains target '" +
+                                    wireTargetStr +
+                                    "' that cannot be resolved.")
+               .attachNote()
+           << "The full Annotation is reproduced here: " << anno << "\n";
+
   auto sendVal = memDbgPort;
-  // Now drill ports to connect the `sendVal` to the `wireTarget`.
-  auto remoteXMR = borePortsOnPath(
-      pathFromSrcToWire, lcaModule, sendVal, "memTap", state.instancePathCache,
-      [&](FModuleLike mod) -> ModuleNamespace & {
-        return state.getNamespace(mod);
-      },
-      &state.targetCaches);
-  auto wireModule = cast<FModuleOp>(wireTarget->ref.getModule());
-  ImplicitLocOpBuilder refResolveBuilder(wireModule.getLoc(), wireModule);
-  if (remoteXMR.isa<BlockArgument>())
-    refResolveBuilder.setInsertionPointToStart(wireModule.getBodyBlock());
-  else
-    refResolveBuilder.setInsertionPointAfter(remoteXMR.getDefiningOp());
-  auto refResolve = refResolveBuilder.create<RefResolveOp>(remoteXMR);
-  refResolveBuilder.setInsertionPointToEnd(wireTarget->ref.getOp()->getBlock());
-  if (wireTarget->ref.getOp()->getResult(0).getType() != refResolve.getType())
+  if (wireTarget->ref.getOp()->getResult(0).getType() !=
+      cast<RefType>(sendVal.getType()).getType())
     return wireTarget->ref.getOp()->emitError(
         "cannot generate the MemTap, wiretap Type does not match the memory "
         "type");
-  refResolveBuilder.create<StrictConnectOp>(
-      wireTarget->ref.getOp()->getResult(0), refResolve.getResult());
+  auto sink = wireTarget->ref.getOp()->getResult(0);
+  state.wiringProblems.push_back({sendVal, sink, "memTap"});
   return success();
 }
 
