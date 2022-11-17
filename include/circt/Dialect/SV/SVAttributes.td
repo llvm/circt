@@ -89,16 +89,6 @@ def SVAttributesAttr : AttrDef<SVDialect, "SVAttributes"> {
     }]>,
     AttrBuilder<(ins
       "llvm::ArrayRef<std::pair<llvm::StringRef, llvm::StringRef>>":$keyValuePairs,
-       CArg<"bool", "false">: $emitAsComments), [{
-      SmallVector<Attribute> attrs;
-      for (auto [key, value] : keyValuePairs)
-        attrs.push_back(sv::SVAttributeAttr::get(
-            $_ctxt, ::mlir::StringAttr::get($_ctxt, key),
-            value.empty() ? ::mlir::StringAttr()
-                          : ::mlir::StringAttr::get($_ctxt, value)));
-      return $_get($_ctxt, ::mlir::ArrayAttr::get($_ctxt, attrs),
-                   ::mlir::BoolAttr::get($_ctxt, emitAsComments));
-    }]>
-  ];
+       CArg<"bool", "false">: $emitAsComments)>];
   let hasCustomAssemblyFormat = true;
 }

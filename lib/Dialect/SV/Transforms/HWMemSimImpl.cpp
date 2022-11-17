@@ -50,7 +50,7 @@ class HWMemSimImpl {
   bool stripMuxPragmas;
   bool disableMemRandomization;
   bool disableRegRandomization;
-  bool preventVivadoBRAMMapping;
+  bool addVivadoRAMAddressConflictSynthesisBugWorkaround;
 
   SmallVector<sv::RegOp> registers;
 
@@ -62,12 +62,13 @@ class HWMemSimImpl {
 public:
   HWMemSimImpl(bool ignoreReadEnableMem, bool stripMuxPragmas,
                bool disableMemRandomization, bool disableRegRandomization,
-               bool preventVivadoBRAMMapping)
+               bool addVivadoRAMAddressConflictSynthesisBugWorkaround)
       : ignoreReadEnableMem(ignoreReadEnableMem),
         stripMuxPragmas(stripMuxPragmas),
         disableMemRandomization(disableMemRandomization),
         disableRegRandomization(disableRegRandomization),
-        preventVivadoBRAMMapping(preventVivadoBRAMMapping) {}
+        addVivadoRAMAddressConflictSynthesisBugWorkaround(
+            addVivadoRAMAddressConflictSynthesisBugWorkaround) {}
 
   void generateMemory(HWModuleOp op, FirMemory mem);
 };
@@ -80,7 +81,8 @@ struct HWMemSimImplPass : public sv::HWMemSimImplBase<HWMemSimImplPass> {
   using sv::HWMemSimImplBase<HWMemSimImplPass>::stripMuxPragmas;
   using sv::HWMemSimImplBase<HWMemSimImplPass>::disableMemRandomization;
   using sv::HWMemSimImplBase<HWMemSimImplPass>::disableRegRandomization;
-  using sv::HWMemSimImplBase<HWMemSimImplPass>::preventVivadoBRAMMapping;
+  using sv::HWMemSimImplBase<
+      HWMemSimImplPass>::addVivadoRAMAddressConflictSynthesisBugWorkaround;
 };
 
 } // end anonymous namespace
@@ -229,7 +231,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   // avoid a bug that miscompiles the write-first memory. See "RAM address
   // conflict and Vivado synthesis bug" issue in the vivado forum for the more
   // detail.
-  if (preventVivadoBRAMMapping && mem.readLatency == 0)
+  if (addVivadoRAMAddressConflictSynthesisBugWorkaround && mem.readLatency == 0)
     circt::sv::setSVAttributes(
         reg,
         sv::SVAttributesAttr::get(
@@ -625,7 +627,7 @@ void HWMemSimImplPass::runOnOperation() {
 
         HWMemSimImpl(ignoreReadEnableMem, stripMuxPragmas,
                      disableMemRandomization, disableRegRandomization,
-                     preventVivadoBRAMMapping)
+                     addVivadoRAMAddressConflictSynthesisBugWorkaround)
             .generateMemory(newModule, mem);
       }
 
@@ -641,13 +643,14 @@ void HWMemSimImplPass::runOnOperation() {
 std::unique_ptr<Pass> circt::sv::createHWMemSimImplPass(
     bool replSeqMem, bool ignoreReadEnableMem, bool stripMuxPragmas,
     bool disableMemRandomization, bool disableRegRandomization,
-    bool preventVivadoBRAMMapping) {
+    bool addVivadoRAMAddressConflictSynthesisBugWorkaround) {
   auto pass = std::make_unique<HWMemSimImplPass>();
   pass->replSeqMem = replSeqMem;
   pass->ignoreReadEnableMem = ignoreReadEnableMem;
   pass->stripMuxPragmas = stripMuxPragmas;
   pass->disableMemRandomization = disableMemRandomization;
   pass->disableRegRandomization = disableRegRandomization;
-  pass->preventVivadoBRAMMapping = preventVivadoBRAMMapping;
+  pass->addVivadoRAMAddressConflictSynthesisBugWorkaround =
+      addVivadoRAMAddressConflictSynthesisBugWorkaround;
   return pass;
 }

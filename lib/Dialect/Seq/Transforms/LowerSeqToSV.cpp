@@ -38,7 +38,8 @@ struct SeqFIRRTLToSVPass
     : public impl::LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass> {
   void runOnOperation() override;
   using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::disableRegRandomization;
-  using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::preventVivadoBRAMMapping;
+  using LowerSeqFIRRTLToSVBase<
+      SeqFIRRTLToSVPass>::addVivadoRAMAddressConflictSynthesisBugWorkaround;
   using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::LowerSeqFIRRTLToSVBase;
 };
 } // anonymous namespace
@@ -94,9 +95,10 @@ namespace {
 class FirRegLower {
 public:
   FirRegLower(hw::HWModuleOp module, bool disableRegRandomization = false,
-              bool preventVivadoBRAMMapping = false)
+              bool addVivadoRAMAddressConflictSynthesisBugWorkaround = false)
       : module(module), disableRegRandomization(disableRegRandomization),
-        preventVivadoBRAMMapping(preventVivadoBRAMMapping){};
+        addVivadoRAMAddressConflictSynthesisBugWorkaround(
+            addVivadoRAMAddressConflictSynthesisBugWorkaround){};
 
   void lower();
 
@@ -151,7 +153,7 @@ private:
   hw::HWModuleOp module;
 
   bool disableRegRandomization;
-  bool preventVivadoBRAMMapping;
+  bool addVivadoRAMAddressConflictSynthesisBugWorkaround;
 };
 } // namespace
 
@@ -372,10 +374,10 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
   svReg.reg->setDialectAttrs(reg->getDialectAttrs());
 
   // For array registers, we annotate ram_style attributes if
-  // `preventVivadoBRAMMapping` is enabled so that we can workaround incorrect
-  // optimizations of vivado. See "RAM address conflict and Vivado synthesis
-  // bug" issue in the vivado forum for the more detail.
-  if (preventVivadoBRAMMapping &&
+  // `addVivadoRAMAddressConflictSynthesisBugWorkaround` is enabled so that we
+  // can workaround incorrect optimizations of vivado. See "RAM address conflict
+  // and Vivado synthesis bug" issue in the vivado forum for the more detail.
+  if (addVivadoRAMAddressConflictSynthesisBugWorkaround &&
       hw::type_isa<hw::ArrayType, hw::UnpackedArrayType>(reg.getType()))
     circt::sv::setSVAttributes(
         svReg.reg, sv::SVAttributesAttr::get(
@@ -531,7 +533,8 @@ void SeqToSVPass::runOnOperation() {
 
 void SeqFIRRTLToSVPass::runOnOperation() {
   hw::HWModuleOp module = getOperation();
-  FirRegLower(module, disableRegRandomization, preventVivadoBRAMMapping)
+  FirRegLower(module, disableRegRandomization,
+              addVivadoRAMAddressConflictSynthesisBugWorkaround)
       .lower();
 }
 

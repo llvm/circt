@@ -329,10 +329,13 @@ static cl::opt<bool> etcDisableModuleInlining(
     cl::desc("Disable inlining modules that only feed test code"),
     cl::init(false), cl::cat(mainCategory));
 
-static cl::opt<bool> preventVivadoBRAMMapping(
-    "prevent-vivado-bram-mapping",
+static cl::opt<bool> addVivadoRAMAddressConflictSynthesisBugWorkaround(
+    "add-vivado-ram-address-conflict-synthesis-bug-workaround",
     cl::desc(
-        "Add a vivado attribute to specify a ram style of an array register"),
+        "Add a vivado specific SV attribute (* ram_style = \"distributed\" *) "
+        "to array registers as a workaronud for a vivado synthesis bug that "
+        "incorrectly modifies address conflict behavivor of combinational "
+        "memories"),
     cl::init(false), cl::cat(mainCategory));
 
 enum class RandomKind { None, Mem, Reg, All };
@@ -801,11 +804,12 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
       pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass(
           {/*disableRandomization=*/!isRandomEnabled(RandomKind::Reg),
-           /*preventVivadoBRAMMapping=*/preventVivadoBRAMMapping}));
+           /*addVivadoRAMAddressConflictSynthesisBugWorkaround=*/
+           addVivadoRAMAddressConflictSynthesisBugWorkaround}));
       pm.addPass(sv::createHWMemSimImplPass(
           replSeqMem, ignoreReadEnableMem, stripMuxPragmas,
           !isRandomEnabled(RandomKind::Mem), !isRandomEnabled(RandomKind::Reg),
-          preventVivadoBRAMMapping));
+          addVivadoRAMAddressConflictSynthesisBugWorkaround));
 
       if (extractTestCode)
         pm.addPass(sv::createSVExtractTestCodePass(etcDisableInstanceExtraction,

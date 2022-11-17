@@ -1,6 +1,6 @@
 // RUN: circt-opt %s -verify-diagnostics --lower-seq-firrtl-to-sv | FileCheck %s --check-prefixes=CHECK,COMMON
 // RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(hw.module(lower-seq-firrtl-to-sv{disable-reg-randomization}))" | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
-// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(hw.module(lower-seq-firrtl-to-sv{prevent-vivado-bram-mapping}))" | FileCheck %s --check-prefixes=CHECK,VIVADO
+// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(hw.module(lower-seq-firrtl-to-sv{add-vivado-ram-address-conflict-synthesis-bug-workaroundg}))" | FileCheck %s --check-prefixes=CHECK,VIVADO
 
 // COMMON-LABEL: hw.module @lowering
 hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d: i32, e: i32, f: i32) {

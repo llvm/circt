@@ -28,7 +28,8 @@ def LowerSeqFIRRTLToSV: Pass<"lower-seq-firrtl-to-sv", "hw::HWModuleOp"> {
   let options = [
     Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
             "Disable emission of register randomization code">,
-    Option<"preventVivadoBRAMMapping", "prevent-vivado-bram-mapping", "bool", "false",
+    Option<"addVivadoRAMAddressConflictSynthesisBugWorkaround",
+           "add-vivado-ram-address-conflict-synthesis-bug-workaroundg", "bool", "false",
             "Add a vivado attribute to specify a ram style of array registers">
   ];
 }
