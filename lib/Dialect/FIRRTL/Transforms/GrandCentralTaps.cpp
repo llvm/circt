@@ -497,7 +497,7 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
     }
 
     ImplicitLocOpBuilder sinkBuilder(wireModule.getLoc(), wireModule);
-    auto targetOp = wireTarget->ref.getOp();
+    auto *targetOp = wireTarget->ref.getOp();
     sinkBuilder.setInsertionPointToEnd(targetOp->getBlock());
     auto wireType = cast<FIRRTLBaseType>(targetOp->getResult(0).getType());
     // Get type of sent value, if already a RefType, the base type.
