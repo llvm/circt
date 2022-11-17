@@ -111,8 +111,8 @@ def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName, FNamableOp]> {
   let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations, OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs CMemoryType:$result);
-  let assemblyFormat = [{(`sym` $inner_sym^)? custom<NameKind>($nameKind)
-                         custom<CombMemOp>(attr-dict) `:` qualified(type($result))}];
+  let assemblyFormat = [{(`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
+                         `` custom<CombMemOp>(attr-dict) `:` qualified(type($result))}];
   let builders = [
     OpBuilder<(ins "firrtl::FIRRTLBaseType":$elementType, "uint64_t":$numElements,
                    "mlir::StringRef":$name, "firrtl::NameKindEnum":$nameKind,
@@ -130,7 +130,7 @@ def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName, FNamableOp]> {
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs CMemoryType:$result);
-  let assemblyFormat = [{(`sym` $inner_sym^)? custom<NameKind>($nameKind) $ruw
+  let assemblyFormat = [{(`sym` $inner_sym^)? `` custom<NameKind>($nameKind) $ruw
                          custom<SeqMemOp>(attr-dict) `:` qualified(type($result))}];
   let builders = [
     OpBuilder<(ins "firrtl::FIRRTLBaseType":$elementType, "uint64_t":$numElements,
@@ -161,7 +161,7 @@ def MemoryPortOp : CHIRRTLOp<"memoryport", [InferTypeOpInterface,
   let results = (outs FIRRTLBaseType:$data, CMemoryPortType:$port);
 
   let assemblyFormat = [{
-    $direction $memory custom<MemoryPortOp>(attr-dict) `:`
+    $direction $memory `` custom<MemoryPortOp>(attr-dict) `:`
        functional-type(operands, results)
   }];
 
