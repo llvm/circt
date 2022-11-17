@@ -313,7 +313,7 @@ def MultibitMuxOp : FIRRTLExprOp<"multibit_mux"> {
     For the example above, if `%index` is 0, then the value is `%v_0`.
     }];
 
-  let arguments = (ins FIRRTLBaseType:$index, Variadic<FIRRTLBaseType>:$inputs);
+  let arguments = (ins UIntType:$index, Variadic<FIRRTLBaseType>:$inputs);
   let results = (outs FIRRTLBaseType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasFolder = true;
