@@ -20,6 +20,9 @@
 
 #define DEBUG_TYPE "solver"
 
+Solver::Solver(mlir::MLIRContext *mlirCtx)
+    : circuits{}, mlirCtx(mlirCtx), context(), solver(context){};
+
 Solver::~Solver() {
   delete circuits[0];
   delete circuits[1];

@@ -28,8 +28,7 @@
 /// acting as a counterexample.
 class Solver {
 public:
-  Solver(mlir::MLIRContext *mlirCtx)
-      : circuits{}, mlirCtx(mlirCtx), context(), solver(context){};
+  Solver(mlir::MLIRContext *mlirCtx);
   ~Solver();
 
   /// Solve the equivalence problem between the two circuits, then present the
