@@ -605,7 +605,7 @@ private:
   /// the type of the field exmained.
   Optional<TypeSum> computeField(Attribute field, IntegerAttr id,
                                  StringAttr prefix, VerbatimBuilder &path,
-                                 SmallVector<TypeSum> &interfaceElems);
+                                 SmallVector<Type> &interfaceElems);
 
   /// Recursively examine an AugmentedBundleType to both build new interfaces
   /// and populate a "mappings" file (generate XMRs).  Return none if the
@@ -613,7 +613,7 @@ private:
   Optional<sv::InterfaceOp>
   traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
                  StringAttr prefix, VerbatimBuilder &path,
-                 SmallVector<TypeSum> &interfaceElems);
+                 SmallVector<Type> &interfaceElems);
 
   /// Return the module associated with this value.
   HWModuleLike getEnclosingModule(Value value, FlatSymbolRefAttr sym = {});
@@ -1353,7 +1353,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
 Optional<TypeSum>
 GrandCentralPass::computeField(Attribute field, IntegerAttr id,
                                StringAttr prefix, VerbatimBuilder &path,
-                               SmallVector<TypeSum> &interfaceElems) {
+                               SmallVector<Type> &interfaceElems) {
 
   auto unsupported = [&](StringRef name, StringRef kind) {
     return VerbatimType({("// <unsupported " + kind + " type>").str(), false});
@@ -1443,7 +1443,7 @@ GrandCentralPass::computeField(Attribute field, IntegerAttr id,
 Optional<sv::InterfaceOp>
 GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
                                  StringAttr prefix, VerbatimBuilder &path,
-                                 SmallVector<TypeSum> &interfaceElems) {
+                                 SmallVector<Type> &interfaceElems) {
   auto builder = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
   sv::InterfaceOp iface;
   builder.setInsertionPointToEnd(getOperation().getBodyBlock());
@@ -1488,7 +1488,6 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
     if (!elementType)
       return None;
 
-    interfaceElems.push_back(elementType.value());
     auto uloc = builder.getUnknownLoc();
     auto description =
         element.cast<DictionaryAttr>().getAs<StringAttr>("description");
@@ -1528,6 +1527,7 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
     }
 
     auto tpe = std::get<Type>(*elementType);
+    interfaceElems.push_back(tpe);
     builder.create<sv::InterfaceSignalOp>(uloc, name.getValue(), tpe);
   }
 
@@ -2053,7 +2053,7 @@ void GrandCentralPass::runOnOperation() {
   // then the top-level instantiate interface will be marked for extraction via
   // a SystemVerilog bind.
   SmallVector<sv::InterfaceOp, 2> interfaceVec;
-  SmallDenseMap<FModuleLike, SmallVector<TypeSum>> companionToInterfaceMap;
+  SmallDenseMap<FModuleLike, SmallVector<Type>> companionToInterfaceMap;
   for (auto anno : worklist) {
     auto bundle = AugmentedBundleTypeAttr::get(&getContext(), anno.getDict());
 
@@ -2091,7 +2091,7 @@ void GrandCentralPass::runOnOperation() {
     VerbatimBuilder verbatim(verbatimData);
     verbatim += instanceSymbol;
     // List of interface elements.
-    SmallVector<TypeSum> interfaceElems;
+    SmallVector<Type> interfaceElems;
     // insertedOps will record all the verbatim ops inserted in the companion
     // module, which must be erased, if the interface is redundant. The
     // traverseBundle is a recursive traversal of the AugmentedBundleType, it
@@ -2114,24 +2114,7 @@ void GrandCentralPass::runOnOperation() {
     // when the companion is deduped.
     auto viewMapIter = companionToInterfaceMap.find(companionModule);
     if (viewMapIter != companionToInterfaceMap.end()) {
-      bool sameInterface = true;
-      if (viewMapIter->getSecond().size() != interfaceElems.size())
-        sameInterface = false;
-      else
-        // Now compare  the existing interface with this.
-        for (auto &&[prevElem, thisElem] :
-             llvm::zip(viewMapIter->getSecond(), interfaceElems)) {
-          if ((prevElem.index() == thisElem.index()) &&
-              ((prevElem.index() == 1 && *std::get_if<Type>(&prevElem) ==
-                                             *std::get_if<Type>(&thisElem)) ||
-               (prevElem.index() == 0 &&
-                std::get_if<VerbatimType>(&prevElem) ==
-                    std::get_if<VerbatimType>(&thisElem))))
-            continue;
-          sameInterface = false;
-          break;
-        }
-      if (sameInterface) {
+      if (viewMapIter->getSecond() == interfaceElems) {
         iface->erase();
         for (auto *op : insertedOps)
           op->erase();
