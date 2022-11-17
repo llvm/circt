@@ -106,7 +106,7 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
     Option<"stripMuxPragmas", "strip-mux-pragmas", "bool", "false",
             "Do not annotate mux pragmas to memory reads">,
     Option<"addVivadoRAMAddressConflictSynthesisBugWorkaround",
-           "add-vivado-ram-address-conflict-synthesis-bug-workaroundg", "bool", "false",
+           "add-vivado-ram-address-conflict-synthesis-bug-workaround", "bool", "false",
             "Add a vivado attribute to specify a ram style of an array register">
 
    ];

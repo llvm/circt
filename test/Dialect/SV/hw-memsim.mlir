@@ -3,7 +3,7 @@
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-mem-randomization})" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_MEM
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-reg-randomization})" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-mem-randomization disable-reg-randomization})" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG --implicit-check-not RANDOMIZE_MEM
-// RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{add-vivado-ram-address-conflict-synthesis-bug-workaroundg})" %s | FileCheck %s --check-prefixes=CHECK,COMMON,VIVADO
+// RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{add-vivado-ram-address-conflict-synthesis-bug-workaround})" %s | FileCheck %s --check-prefixes=CHECK,COMMON,VIVADO
 
 hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "readUnderWrite", "writeUnderWrite", "writeClockIDs"]
 
