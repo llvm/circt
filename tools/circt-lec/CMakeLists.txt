@@ -1,15 +1,13 @@
 # circt-lec builds if a logic backend is found
 if(CIRCT_LEC_ENABLED)
-  add_llvm_tool(circt-lec
+  list(APPEND CIRCT_LEC_SOURCES
     circt-lec.cpp
     Circuit.cpp
     LogicExporter.cpp
     Solver.cpp
   )
 
-  llvm_update_compile_flags(circt-lec)
-  target_link_libraries(circt-lec
-    PRIVATE
+  list(APPEND CIRCT_LEC_LIBS
     CIRCTCalyx
     CIRCTESI
     CIRCTFIRRTL
@@ -22,7 +20,12 @@ if(CIRCT_LEC_ENABLED)
     CIRCTPipelineOps
     CIRCTSSP
     CIRCTSystemC
-
-    ${Z3_LIBRARIES}
   )
+
+  add_llvm_tool(circt-lec ${CIRCT_LEC_SOURCES})
+  target_link_libraries(circt-lec PRIVATE ${CIRCT_LEC_LIBS})
+  target_include_directories(circt-lec PRIVATE ${CIRCT_LEC_INCLUDES})
+
+  llvm_update_compile_flags(circt-lec)
+  mlir_check_all_link_libraries(circt-lec)
 endif()

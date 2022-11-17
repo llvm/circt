@@ -482,13 +482,16 @@ if(CIRCT_LEC_DISABLE)
 else()
   if(Z3_DIR)
     # Search and load the package configuration file in the specified directory.
-    find_package(Z3 CONFIG REQUIRED)
-    # Append the given path to the runpath for linking.
-    list(APPEND CMAKE_INSTALL_RPATH ${Z3_DIR})
-    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+    find_package(Z3 CONFIG REQUIRED PATHS ${Z3_DIR} NO_DEFAULT_PATH)
+    # Link against the reported library and include locations.
+    list(APPEND CIRCT_LEC_LIBS ${Z3_LIBRARIES})
+    list(APPEND CIRCT_LEC_INCLUDES ${Z3_CXX_INCLUDE_DIRS})
   else()
     # Attempt initialising Z3 according to LLVM's `FindZ3.cmake`.
     find_package(Z3)
+    # Link against the reported library and include locations.
+    list(APPEND CIRCT_LEC_LIBS ${Z3_LIBRARIES})
+    list(APPEND CIRCT_LEC_INCLUDES ${Z3_INCLUDE_DIR})
   endif()
   
   if(Z3_FOUND)
