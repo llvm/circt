@@ -57,6 +57,19 @@ mlir::Attribute SVAttributesAttr::parse(mlir::AsmParser &p, mlir::Type type) {
                                BoolAttr::get(p.getContext(), emitAsComments));
 }
 
+SVAttributesAttr
+SVAttributesAttr::get(MLIRContext *context,
+                      ArrayRef<std::pair<StringRef, StringRef>> keyValuePairs,
+                      bool emitAsComments) {
+  SmallVector<Attribute> attrs;
+  for (auto [key, value] : keyValuePairs)
+    attrs.push_back(sv::SVAttributeAttr::get(
+        context, StringAttr::get(context, key),
+        value.empty() ? StringAttr() : StringAttr::get(context, value)));
+  return SVAttributesAttr::get(context, ArrayAttr::get(context, attrs),
+                               BoolAttr::get(context, emitAsComments));
+}
+
 void SVAttributesAttr::print(::mlir::AsmPrinter &p) const {
   p << "<" << getAttributes();
   if (getEmitAsComments().getValue())
