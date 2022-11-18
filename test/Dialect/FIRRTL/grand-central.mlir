@@ -1064,79 +1064,155 @@ firrtl.circuit "NoInterfaces" attributes {
 // -----
 
 // Check that nonlocal duplicate views are dropped.
-firrtl.circuit "Top"  attributes {
+firrtl.circuit "Top" attributes {
   annotations = [
     {
       class = "sifive.enterprise.grandcentral.AugmentedBundleType",
-      defName = "MyInterface",
+      defName = "VectorOfBundleView",
       elements = [
         {
-          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-          id = 1 : i64,
-          name = "signed"
+          class = "sifive.enterprise.grandcentral.AugmentedVectorType",
+          elements = [
+            {
+              class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+              defName = "Bundle2",
+              elements = [
+                {
+                  class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+                  name = "foo",
+                  id = 10 : i64
+                },
+                {
+                  class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+                  name = "bar",
+                  id = 11 : i64
+                }
+              ],
+              name = "bundle2"
+            }
+          ],
+          name = "vector"
         }
       ],
-      id = 2 : i64,
-      name = "MyView"
+      id = 9 : i64,
+      name = "VectorOfBundleView"
     },
     {
       class = "sifive.enterprise.grandcentral.AugmentedBundleType",
-      defName = "MyInterface",
+      defName = "VectorOfBundleView",
       elements = [
         {
-          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-          id = 5 : i64,
-          name = "signed"
+          class = "sifive.enterprise.grandcentral.AugmentedVectorType",
+          elements = [
+            {
+              class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+              defName = "Bundle2",
+              elements = [
+                {
+                  class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+                  name = "foo",
+                  id = 110 : i64
+                },
+                {
+                  class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+                  name = "bar",
+                  id = 111 : i64
+                }
+              ],
+              name = "bundle2"
+            }
+          ],
+          name = "vector"
         }
       ],
-      id = 0 : i64,
-      name = "MyView"
+      id = 19 : i64,
+      name = "VectorOfBundleView"
+    },
+    {
+      class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+      directory = "gct-dir",
+      filename = "bindings.sv"
+    },
+    {
+      class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
+      filename = "gct.yaml"
     }
   ]
-  } {
+} {
   firrtl.hierpath private @nla_0 [@Top::@t1, @Dut::@s1]
   firrtl.hierpath private @nla [@Top::@t1, @Dut::@s1]
-  firrtl.module private @NonlocalCompanion(in %MyInterface_1_0: !firrtl.ref<uint<1>>) attributes {
+  firrtl.module @Companion() attributes {
     annotations = [
       {
         circt.nonlocal = @nla,
         class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
-        id = 0 : i64,
-        name = "MyView"
+        defName = "VectorOfBundleView",
+        id = 9 : i64,
+        name = "VectorOfBundleView"
       },
       {
         circt.nonlocal = @nla_0,
         class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
-        id = 2 : i64,
-        name = "MyView"
+        defName = "VectorOfBundleView",
+        id = 19 : i64,
+        name = "VectorOfBundleView"
       }
-    ]} {
-    %0 = firrtl.ref.resolve %MyInterface_1_0 : !firrtl.ref<uint<1>>
-    %MyInterface_1 = firrtl.node  %0  {
+    ]
+  } {
+
+    // These are dummy references created for the purposes of the test.
+    %_ui1 = firrtl.verbatim.expr "???" : () -> !firrtl.uint<1>
+    %_ui2 = firrtl.verbatim.expr "???" : () -> !firrtl.uint<2>
+    %ref_ui1 = firrtl.ref.send %_ui1 : !firrtl.uint<1>
+    %ref_ui2 = firrtl.ref.send %_ui2 : !firrtl.uint<2>
+
+    %ui1 = firrtl.ref.resolve %ref_ui1 : !firrtl.ref<uint<1>>
+    %foo = firrtl.node %ui1 {
       annotations = [
-      {
-        circt.nonlocal = @nla,
-        class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-        id = 1 : i64
-      },
-      {
-        circt.nonlocal = @nla_0,
-        class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-        id = 5 : i64
-      }
-      ]} : !firrtl.uint<1>
+        {
+          circt.nonlocal = @nla,
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 10 : i64
+        },{
+          circt.nonlocal = @nla_0,
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 110 : i64
+        }
+      ]
+    } : !firrtl.uint<1>
+
+    %ui2 = firrtl.ref.resolve %ref_ui2 : !firrtl.ref<uint<2>>
+    %bar = firrtl.node %ui2 {
+      annotations = [
+        {
+          circt.nonlocal = @nla,
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 11 : i64
+        },
+        {
+          circt.nonlocal = @nla_0,
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 111 : i64
+        }
+
+      ]
+    } : !firrtl.uint<2>
+    // CHECK: sv.interface.instance sym @__VectorOfBundleView_VectorOfBundleView
+    // CHECK-SAME: {name = "VectorOfBundleView"} : !sv.interface<@VectorOfBundleView>
+    // CHECK-NOT: sv.interface.instance
   }
   firrtl.module public @Dut() {
-    %1 = firrtl.instance s1 sym @s1 @NonlocalCompanion(in MyInterface_1_0: !firrtl.ref<uint<1>>)
+    firrtl.instance s1 sym @s1 @Companion()
   }
   firrtl.module public @Top() {
     firrtl.instance t1 sym @t1 @Dut()
   }
-  // CHECK:  firrtl.module private @NonlocalCompanion(in %MyInterface_1_0: !firrtl.ref<uint<1>>) {
-  // CHECK:    %0 = sv.interface.instance sym @__MyView_MyInterface__  {name = "MyView"} : !sv.interface<@MyInterface>
-  // CHECK:    %1 = firrtl.ref.resolve %MyInterface_1_0 : !firrtl.ref<uint<1>>
-  // CHECK:    %MyInterface_1 = firrtl.node  %1  : !firrtl.uint<1>
-  // CHECK{LITERAL}:    sv.verbatim "assign {{1}}.signed = {{0}};"(%1) :
-  // CHECK-SAME: !firrtl.uint<1> {symbols = [#hw.innerNameRef<@NonlocalCompanion::@__MyView_MyInterface__>]}
-  // CHECK:  }
+
+  // CHECK-LABEL:  sv.interface @VectorOfBundleView
+  // CHECK-NOT:    sv.interface @VectorOfBundleView_0 
+  // CHECK-LABEL:  sv.interface @Bundle2
+  // CHECK-NEXT:   sv.interface.signal @foo : i1
+  // CHECK-NEXT:   sv.interface.signal @bar : i2
+
+  // CHECK-NOT:    sv.interface @Bundle2_0 
 }
