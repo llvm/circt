@@ -1507,6 +1507,7 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
     if (auto *str = std::get_if<VerbatimType>(&*elementType)) {
       auto instanceOp =
           builder.create<sv::VerbatimOp>(uloc, str->toStr(name.getValue()));
+      interfaceElems.push_back(instanceOp);
 
       // If we need to generate a YAML representation of the interface, then add
       // attirbutes that describe what this `sv::VerbatimOp` is.
@@ -2059,6 +2060,19 @@ void GrandCentralPass::runOnOperation() {
   // a SystemVerilog bind.
   SmallVector<sv::InterfaceOp, 2> interfaceVec;
   SmallDenseMap<FModuleLike, SmallVector<Operation *>> companionToInterfaceMap;
+  auto compareInterfaceSignal = [&](Operation *lhs, Operation *rhs) {
+    // If its a verbatim op, no need to check the string, because the interface
+    // names might not match. As long as the signal ops match that is
+    // sufficient.
+    if (isa<sv::VerbatimOp>(lhs) && isa<sv::VerbatimOp>(rhs))
+      return true;
+    auto lhsInterface = dyn_cast<sv::InterfaceSignalOp>(lhs);
+    auto rhsInterface = dyn_cast<sv::InterfaceSignalOp>(rhs);
+    if (lhsInterface && rhsInterface)
+      return (lhsInterface.getSymName() == rhsInterface.getSymName() &&
+              lhsInterface.getType() == rhsInterface.getType());
+    return false;
+  };
   for (auto anno : worklist) {
     auto bundle = AugmentedBundleTypeAttr::get(&getContext(), anno.getDict());
 
@@ -2116,12 +2130,6 @@ void GrandCentralPass::runOnOperation() {
       removalError = true;
       continue;
     }
-    auto compareInterfaceSignal = [&](Operation *lhs, Operation *rhs) {
-      return (cast<sv::InterfaceSignalOp>(lhs).getSymName() ==
-                  cast<sv::InterfaceSignalOp>(rhs).getSymName() &&
-              cast<sv::InterfaceSignalOp>(lhs).getType() ==
-                  cast<sv::InterfaceSignalOp>(rhs).getType());
-    };
 
     if (companionIter.isNonlocal) {
       // If the companion module has two exactly same ViewAnnotation.companion
