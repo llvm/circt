@@ -1376,8 +1376,8 @@ OpFoldResult MultibitMuxOp::fold(ArrayRef<Attribute> operands) {
     return getOperand(1);
 
   if (auto constIndex = getConstant(operands[0])) {
-    auto index = constIndex->getExtValue();
-    if (index >= 0 && index < static_cast<int>(getInputs().size()))
+    auto index = constIndex->getZExtValue();
+    if (index >= 0 && index < getInputs().size())
       return getInputs()[getInputs().size() - 1 - index];
   }
 
