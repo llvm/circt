@@ -751,7 +751,7 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
       // if we aren't allowing local variable declarations.  The Verilog emitter
       // doesn't want to have to have to know how to synthesize a reg in the
       // case they have to be spilled for whatever reason.
-      if (!mlir::MemoryEffectOpInterface::hasNoEffect(&op)) {
+      if (!mlir::isMemoryEffectFree(&op)) {
         if (rewriteSideEffectingExpr(&op))
           continue;
       }
@@ -821,8 +821,8 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
     // right in general.  MLIR doesn't have a "fully associative" property.
     if (op.getNumOperands() > 2 && op.getNumResults() == 1 &&
         op.hasTrait<mlir::OpTrait::IsCommutative>() &&
-        mlir::MemoryEffectOpInterface::hasNoEffect(&op) &&
-        op.getNumRegions() == 0 && op.getNumSuccessors() == 0 &&
+        mlir::isMemoryEffectFree(&op) && op.getNumRegions() == 0 &&
+        op.getNumSuccessors() == 0 &&
         (op.getAttrs().empty() ||
          (op.getAttrs().size() == 1 && op.hasAttr("sv.namehint")))) {
       // Lower this operation to a balanced binary tree of the same operation.
