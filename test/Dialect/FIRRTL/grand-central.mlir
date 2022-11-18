@@ -1205,9 +1205,9 @@ firrtl.circuit "Top" attributes {
     firrtl.instance t1 sym @t1 @Dut()
   }
 
-  // CHECK:  sv.interface @[[VectorOfBundleView]] attributes
+  // CHECK:      sv.interface @[[VectorOfBundleView]] attributes
   // CHECK-NOT:    sv.interface @VectorOfBundleView_0 
-  // CHECK:  sv.interface @Bundle2
+  // CHECK:      sv.interface @Bundle2
   // CHECK-NEXT:   sv.interface.signal @foo : i1
   // CHECK-NEXT:   sv.interface.signal @bar : i2
   // CHECK-NOT:    sv.interface @Bundle2_0 

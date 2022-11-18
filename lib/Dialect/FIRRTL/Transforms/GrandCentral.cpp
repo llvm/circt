@@ -2061,7 +2061,7 @@ void GrandCentralPass::runOnOperation() {
   SmallVector<sv::InterfaceOp, 2> interfaceVec;
   SmallDenseMap<FModuleLike, SmallVector<Operation *>> companionToInterfaceMap;
   auto compareInterfaceSignal = [&](Operation *lhs, Operation *rhs) {
-    // If its a verbatim op, no need to check the string, because the interface
+    // If it's a verbatim op, no need to check the string, because the interface
     // names might not match. As long as the signal ops match that is
     // sufficient.
     if (isa<sv::VerbatimOp>(lhs) && isa<sv::VerbatimOp>(rhs))
