@@ -4,6 +4,7 @@ llvm_canonicalize_cmake_booleans(
 
 set(CIRCT_INTEGRATION_TEST_DEPENDS
   FileCheck count not split-file
+  circt-lec
   circt-opt
   circt-translate
   circt-rtl-sim
