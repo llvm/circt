@@ -155,19 +155,6 @@ class System:
   def body(self):
     return self.mod.body
 
-  def _passes(self, partition):
-    tops = ",".join(
-        [self._op_cache.get_pyproxy_symbol(m) for m in self.top_modules])
-    verilog_file = self.name + ".sv"
-    tcl_file = self.name + ".tcl"
-    self.files.add(self._output_directory / verilog_file)
-    self.files.add(self._output_directory / tcl_file)
-    partition_str = "msft-partition," if partition else ""
-    return self.PASSES.format(tops=tops,
-                              partition=partition_str,
-                              verilog_file=verilog_file,
-                              tcl_file=tcl_file).strip()
-
   def print(self, *argv, **kwargs):
     self.mod.operation.print(*argv, **kwargs)
 
@@ -213,20 +200,57 @@ class System:
                                                         self)
     return self._instance_roots[key]
 
-  def run_passes(self, partition=False):
+  PASS_PHASES = [
+      # First, run all the passes with callbacks into pycde.
+      "builtin.module(esi-connect-services)",
+      lambda sys: sys.generate(),
+      # After all of the pycde code has been executed, we have all the types
+      # defined so we can go through and output the typedefs delcarations.
+      lambda sys: types.declare_types(sys.mod),
+      "builtin.module(lower-hwarith-to-hw, msft-lower-constructs, msft-lower-instances)",
+      "builtin.module(esi-emit-collateral{{tops={tops} schema-file=schema.capnp}})",
+      "builtin.module(lower-msft-to-hw{{verilog-file={verilog_file}}})",
+      "builtin.module(hw.module(lower-seq-hlmem))",
+      # "cse",
+      "builtin.module(lower-esi-to-physical, lower-esi-ports, lower-esi-to-hw)",
+      "builtin.module(convert-fsm-to-sv)",
+      "builtin.module(lower-seq-to-sv)",
+      "builtin.module(cse)",
+      "builtin.module(hw.module(prettify-verilog), hw.module(hw-cleanup))",
+      "builtin.module(msft-export-tcl{{tops={tops} tcl-file={tcl_file}}})"
+  ]
+
+  def run_passes(self, debug=False):
     if self.passed:
       return
     if len(self._generate_queue) > 0:
       print("WARNING: running lowering passes on partially generated design!",
             file=sys.stderr)
 
-    # By now, we have all the types defined so we can go through and output the
-    # typedefs delcarations.
-    types.declare_types(self.mod)
+    tops = ",".join(
+        [self._op_cache.get_pyproxy_symbol(m) for m in self.top_modules])
+    verilog_file = self.name + ".sv"
+    tcl_file = self.name + ".tcl"
+    self.files.add(self._output_directory / verilog_file)
+    self.files.add(self._output_directory / tcl_file)
 
-    pm = mlir.passmanager.PassManager.parse(self._passes(partition))
     self._op_cache.release_ops()
-    pm.run(self.mod)
+    for idx, phase in enumerate(self.PASS_PHASES):
+      try:
+        if isinstance(phase, str):
+          passes = phase.format(tops=tops,
+                                verilog_file=verilog_file,
+                                tcl_file=tcl_file).strip()
+          pm = mlir.passmanager.PassManager.parse(passes)
+          pm.run(self.mod)
+        else:
+          phase(self)
+      except RuntimeError as err:
+        sys.stderr.write(f"Exception while executing phase {phase}.\n")
+        raise err
+      self._op_cache.release_ops()
+      if debug:
+        open(f"after_phase_{idx}.mlir", "w").write(str(self.mod))
     self.passed = True
 
   def emit_outputs(self):
