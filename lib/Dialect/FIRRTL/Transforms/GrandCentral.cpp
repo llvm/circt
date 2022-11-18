@@ -565,7 +565,7 @@ private:
   /// Mapping of ID to companion module.
   DenseMap<Attribute, CompanionInfo> companionIDMap;
 
-  // Records the verbatim ops inserted while creating Interface elements for a
+  // Records the ops inserted while creating Interface elements for a
   // view companion. These are recorded such that they can be erased later, if
   // the interface is found out to be redundant.
   SmallVector<Operation *> insertedOps;
@@ -2098,17 +2098,17 @@ void GrandCentralPass::runOnOperation() {
     verbatim += instanceSymbol;
     // List of interface elements.
     SmallVector<Operation *> interfaceElems;
-    // insertedOps will record all the verbatim ops inserted in the companion
-    // module, which must be erased, if the interface is redundant. The
-    // traverseBundle is a recursive traversal of the AugmentedBundleType, it
-    // will construct the Interface and populate it with the elements and insert
-    // the corresponding verbatim xmr assignments. The interface might be
-    // redundant if it is a nonlocal view and another exactly same interface is
-    // already generated. To compare the interface elements, with an existing
-    // interface, it is necessary to complete the traverseBundle traversal and
-    // gather all the elements of the interface.
+    // insertedOps will record all the interface ops and the verbatim ops
+    // inserted in the companion module, which must be erased, if the interface
+    // is redundant. The traverseBundle is a recursive traversal of the
+    // AugmentedBundleType, it will construct the Interface and populate it with
+    // the elements and insert the corresponding verbatim xmr assignments. The
+    // interface might be redundant if it is a nonlocal view and another exactly
+    // same interface is already generated. To compare the interface elements,
+    // with an existing interface, it is necessary to complete the
+    // traverseBundle traversal and gather all the elements of the interface.
     // TODO: Update the algorithm to build the interface after traversal and not
-    // during the recurdive traversal.
+    // during the recursive traversal.
     insertedOps.clear();
     auto iface = traverseBundle(bundle, bundle.getID(), bundle.getPrefix(),
                                 verbatim, interfaceElems);
@@ -2116,7 +2116,7 @@ void GrandCentralPass::runOnOperation() {
       removalError = true;
       continue;
     }
-    auto compareInterfaceSignal = [&](Operation *&lhs, Operation *&rhs) {
+    auto compareInterfaceSignal = [&](Operation *lhs, Operation *rhs) {
       return (cast<sv::InterfaceSignalOp>(lhs).getSymName() ==
                   cast<sv::InterfaceSignalOp>(rhs).getSymName() &&
               cast<sv::InterfaceSignalOp>(lhs).getType() ==
@@ -2128,7 +2128,7 @@ void GrandCentralPass::runOnOperation() {
       // annotations, then add the interface for only one of them. This happens
       // when the companion is deduped.
       auto viewMapIter = companionToInterfaceMap.find(companionModule);
-      if (viewMapIter != companionToInterfaceMap.end()) {
+      if (viewMapIter != companionToInterfaceMap.end())
         if (std::equal(interfaceElems.begin(), interfaceElems.end(),
                        viewMapIter->getSecond().begin(),
                        compareInterfaceSignal)) {
@@ -2141,7 +2141,7 @@ void GrandCentralPass::runOnOperation() {
           }
           continue;
         }
-      }
+
       companionToInterfaceMap[companionModule] = interfaceElems;
     }
     ++numViews;
