@@ -108,7 +108,7 @@ def OperatorLibraryOp : SSPOp<"library",
     // OpAsmOpInterface
     static ::llvm::StringRef getDefaultDialect() { return "ssp"; }
 
-    // SymbolUserOpInterface
+    // SymbolOpInterface
     static bool isOptionalSymbol() { return true; }
 
     // Convenience
@@ -227,7 +227,7 @@ def OperationOp : SSPOp<"operation",
   let hasVerifier = true;
 
   let extraClassDeclaration = [{
-    // SymbolUserOpInterface
+    // SymbolOpInterface
     static bool isOptionalSymbol() { return true; }
 
     // Find the attribute modeling the `linkedOperatorType` property
