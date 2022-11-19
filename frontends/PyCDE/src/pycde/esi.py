@@ -1,3 +1,7 @@
+#  Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+#  See https://llvm.org/LICENSE.txt for license information.
+#  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
 from pycde.system import System
 from .module import (Generator, _module_base, _BlockContext,
                      _GeneratorPortAccess, _SpecializedModule)
@@ -9,7 +13,11 @@ from pycde.pycde_types import ChannelType, ClockType, PyCDEType, types
 
 import mlir.ir as ir
 
+from pathlib import Path
+import shutil
 from typing import List, Optional, Type
+
+__dir__ = Path(__file__).parent
 
 ToServer = InputChannel
 FromServer = OutputChannel
@@ -167,6 +175,49 @@ class _RequestToFromServerConn(_RequestConnection):
 def Cosim(decl: ServiceDecl, clk, rst):
   """Implement a service via cosimulation."""
   decl.instantiate_builtin("cosim", [], [clk, rst])
+
+
+def CosimBSP(user_module):
+  """Wrap and return a cosimulation 'board support package' containing
+  'user_module'"""
+  from .module import module, generator
+  from .common import Clock, Input
+
+  @module
+  class top:
+    clk = Clock()
+    rst = Input(types.int(1))
+
+    @generator
+    def build(ports):
+      user_module(clk=ports.clk, rst=ports.rst)
+      raw_esi.ServiceInstanceOp(result=[],
+                                service_symbol=None,
+                                impl_type=ir.StringAttr.get("cosim"),
+                                inputs=[ports.clk.value, ports.rst.value])
+
+      System.current().add_packaging_step(top.package)
+
+    @staticmethod
+    def package(sys: System):
+      """Run the packaging to create a cosim package."""
+      # TODO: this only works in-tree. Make it work in packages as well.
+      build_dir = __dir__.parents[4]
+      bin_dir = build_dir / "bin"
+      lib_dir = build_dir / "lib"
+      circt_inc_dir = build_dir / "tools" / "circt" / "include" / "circt"
+      esi_inc_dir = circt_inc_dir / "Dialect" / "ESI"
+      hw_src = sys.hw_output_dir
+      shutil.copy(lib_dir / "libEsiCosimDpiServer.so", hw_src)
+      shutil.copy(bin_dir / "driver.cpp", hw_src)
+      shutil.copy(bin_dir / "driver.sv", hw_src)
+      shutil.copy(esi_inc_dir / "ESIPrimitives.sv", hw_src)
+      shutil.copy(esi_inc_dir / "Cosim_DpiPkg.sv", hw_src)
+      shutil.copy(esi_inc_dir / "Cosim_Endpoint.sv", hw_src)
+      shutil.copy(__dir__ / "Makefile.cosim", sys.output_directory)
+      shutil.copy(sys.hw_output_dir / "schema.capnp", sys.runtime_output_dir)
+
+  return top
 
 
 class NamedChannelValue(ChannelValue):
