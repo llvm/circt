@@ -605,6 +605,8 @@ void TestSSPRoundtripPass::runOnOperation() {
       roundtrip<Problem>(op);
     else if (probName.equals("CyclicProblem"))
       roundtrip<CyclicProblem>(op);
+    else if (probName.equals("ChainingProblem"))
+      roundtrip<ChainingProblem>(op);
     else if (probName.equals("SharedOperatorsProblem"))
       roundtrip<SharedOperatorsProblem>(op);
     else if (probName.equals("ModuloProblem"))

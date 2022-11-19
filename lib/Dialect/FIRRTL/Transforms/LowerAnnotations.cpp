@@ -27,6 +27,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Debug.h"
 
@@ -318,7 +319,6 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {serializedViewAnnoClass, {noResolve, applyGCTView}},
     {viewAnnoClass, {noResolve, applyGCTView}},
     {companionAnnoClass, {stdResolve, applyWithoutTarget<>}},
-    {parentAnnoClass, {stdResolve, applyWithoutTarget<>}},
     {augmentedGroundTypeClass, {stdResolve, applyWithoutTarget<true>}},
     // Grand Central Data Tap Annotations
     {dataTapsClass, {noResolve, applyGCTDataTaps}},
@@ -429,6 +429,7 @@ struct LowerAnnotationsPass
     : public LowerFIRRTLAnnotationsBase<LowerAnnotationsPass> {
   void runOnOperation() override;
   LogicalResult applyAnnotation(DictionaryAttr anno, ApplyState &state);
+  LogicalResult solveWiringProblems(ApplyState &state);
 
   bool ignoreUnhandledAnno = false;
   bool ignoreClasslessAnno = false;
@@ -474,6 +475,254 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
   return success();
 }
 
+/// Modify the circuit to solve and apply all Wiring Problems in the circuit.  A
+/// Wiring Problem is a mapping from a source to a sink that should be connected
+/// via a RefType.  This uses a two-step approach.  First, all Wiring Problems
+/// are analyzed to compute pending modifications to modules.  Second, modules
+/// are visited from leaves to roots to apply module modifications.  Module
+/// modifications include addings ports and connecting things up.
+LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
+  // Utility function to extract the defining module from a value which may be
+  // either a BlockArgument or an Operation result.
+  auto getModule = [](Value value) {
+    if (BlockArgument blockArg = value.dyn_cast<BlockArgument>())
+      return cast<FModuleLike>(blockArg.getParentBlock()->getParentOp());
+    return value.getDefiningOp()->getParentOfType<FModuleLike>();
+  };
+
+  // Utility function to connect a destination to a source.  Always use a
+  // ConnectOp as the widths may be uninferred.
+  SmallVector<Operation *> opsToErase;
+  auto connect = [&](Value src, Value dest, ImplicitLocOpBuilder &builder) {
+    if (foldFlow(dest) == Flow::Source)
+      std::swap(src, dest);
+    // Create RefSend/RefResolve if necessary.
+    if (dest.getType().isa<RefType>() && !src.getType().isa<RefType>()) {
+      src = builder.create<RefSendOp>(src);
+    } else if (!dest.getType().isa<RefType>() && src.getType().isa<RefType>()) {
+      src = builder.create<RefResolveOp>(src);
+    }
+    // If the sink is a wire with no users, then convert this to a node.
+    auto destOp = dyn_cast_or_null<WireOp>(dest.getDefiningOp());
+    if (destOp && dest.getUses().empty()) {
+      builder.create<NodeOp>(src.getType(), src, destOp.getName())
+          .setAnnotationsAttr(destOp.getAnnotations());
+      opsToErase.push_back(destOp);
+      return;
+    }
+    // Otherwise, just connect to the source.
+    builder.create<ConnectOp>(dest, src);
+  };
+
+  auto &instanceGraph = state.instancePathCache.instanceGraph;
+  auto *context = state.circuit.getContext();
+
+  // Examine all discovered Wiring Problems to determine modifications that need
+  // to be made per-module.
+  LLVM_DEBUG({ llvm::dbgs() << "Analyzing wiring problems:\n"; });
+  DenseMap<FModuleLike, ModuleModifications> moduleModifications;
+  DenseSet<Value> sinks;
+  for (auto [index, problem] : llvm::enumerate(state.wiringProblems)) {
+    // This is a unique index that is assigned to this specific wiring problem
+    // and is used as a key during wiring to know which Values (ports, sources,
+    // or sinks) should be connected.
+    auto source = problem.source;
+    auto sink = problem.sink;
+
+    // Check that no WiringProblems are trying to use the same sink.  This
+    // should never happen.
+    if (!sinks.insert(sink).second) {
+      auto diag = mlir::emitError(source.getLoc())
+                  << "This sink is involved with a Wiring Problem which is "
+                     "targeted by a source used by another Wiring Problem. "
+                     "(This is both illegal and should be impossible.)";
+      diag.attachNote(source.getLoc()) << "The source is here";
+      return failure();
+    }
+    FModuleLike sourceModule = getModule(source);
+    FModuleLike sinkModule = getModule(sink);
+    if (isa<FExtModuleOp>(sourceModule) || isa<FExtModuleOp>(sinkModule)) {
+      auto diag = mlir::emitError(source.getLoc())
+                  << "This source is involved with a Wiring Problem which "
+                     "includes an External Module port and External Module "
+                     "ports anre not supported.";
+      diag.attachNote(sink.getLoc()) << "The sink is here.";
+      return failure();
+    }
+
+    LLVM_DEBUG({
+      llvm::dbgs() << "  - index: " << index << "\n"
+                   << "    source:\n"
+                   << "      module: " << sourceModule.moduleName() << "\n"
+                   << "      value: " << source << "\n"
+                   << "    sink:\n"
+                   << "      module: " << sinkModule.moduleName() << "\n"
+                   << "      value: " << sink << "\n"
+                   << "    newNameHint: " << problem.newNameHint << "\n";
+    });
+
+    // If the source and sink are in the same module, just wire them up.
+    if (sink.getParentBlock() == source.getParentBlock()) {
+      auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
+                                                      sink.getParentBlock());
+      connect(source, sink, builder);
+      continue;
+    }
+
+    // Otherwise, get instance paths for source/sink, and compute LCA.
+    auto sourcePaths = state.instancePathCache.getAbsolutePaths(
+        cast<hw::HWModuleLike>(*sourceModule));
+    auto sinkPaths = state.instancePathCache.getAbsolutePaths(
+        cast<hw::HWModuleLike>(*sinkModule));
+
+    if (sourcePaths.size() != 1 || sinkPaths.size() != 1) {
+      auto diag =
+          mlir::emitError(source.getLoc())
+          << "This source is involved with a Wiring Problem where the source "
+             "or the sink are multiply instantiated and this is not supported.";
+      diag.attachNote(sink.getLoc()) << "The sink is here.";
+      return failure();
+    }
+
+    FModuleOp lca =
+        cast<FModuleOp>(instanceGraph.getTopLevelNode()->getModule());
+    auto sources = sourcePaths[0];
+    auto sinks = sinkPaths[0];
+    while (!sources.empty() && !sinks.empty()) {
+      if (sources[0] != sinks[0])
+        break;
+      auto newLCA = sources[0];
+      lca = cast<FModuleOp>(instanceGraph.getReferencedModule(newLCA));
+      sources = sources.drop_front();
+      sinks = sinks.drop_front();
+    }
+
+    LLVM_DEBUG({
+      llvm::dbgs() << "    LCA: " << lca.moduleName() << "\n"
+                   << "    sourcePaths:\n";
+      for (auto inst : sourcePaths[0])
+        llvm::dbgs() << "      - " << inst.instanceName() << " of "
+                     << inst.referencedModuleName() << "\n";
+      llvm::dbgs() << "    sinkPaths:\n";
+      for (auto inst : sinkPaths[0])
+        llvm::dbgs() << "      - " << inst.instanceName() << " of "
+                     << inst.referencedModuleName() << "\n";
+    });
+
+    // Pre-populate the connectionMap of the module with the source and sink.
+    moduleModifications[sourceModule].connectionMap[index] = source;
+    moduleModifications[sinkModule].connectionMap[index] = sink;
+
+    // Record ports that should be added to each module along the LCA path.
+    auto tpe = RefType::get(cast<FIRRTLBaseType>(problem.sink.getType()));
+    for (auto sourceInst : sources) {
+      auto mod = cast<FModuleOp>(instanceGraph.getReferencedModule(sourceInst));
+      moduleModifications[mod].portsToAdd.push_back(
+          {index,
+           {StringAttr::get(
+                context, state.getNamespace(mod).newName(problem.newNameHint)),
+            tpe, Direction::Out}});
+    }
+    for (auto sinkInst : sinks) {
+      auto mod = cast<FModuleOp>(instanceGraph.getReferencedModule(sinkInst));
+      moduleModifications[mod].portsToAdd.push_back(
+          {index,
+           {StringAttr::get(
+                context, state.getNamespace(mod).newName(problem.newNameHint)),
+            tpe, Direction::In}});
+    }
+  }
+
+  // Iterate over modules from leaves to roots, applying ModuleModifications to
+  // each module.
+  LLVM_DEBUG({ llvm::dbgs() << "Updating modules:\n"; });
+  for (auto *op : llvm::post_order(instanceGraph.getTopLevelNode())) {
+    auto fmodule = dyn_cast<FModuleOp>(*op->getModule());
+    // Skip external modules and modules that have no modifications.
+    if (!fmodule || !moduleModifications.count(fmodule))
+      continue;
+
+    auto modifications = moduleModifications[fmodule];
+    LLVM_DEBUG({
+      llvm::dbgs() << "  - module: " << fmodule.moduleName() << "\n";
+      llvm::dbgs() << "    ports:\n";
+      for (auto [index, port] : modifications.portsToAdd) {
+        llvm::dbgs() << "      - name: " << port.getName() << "\n"
+                     << "        id: " << index << "\n"
+                     << "        type: " << port.type << "\n"
+                     << "        direction: "
+                     << (port.direction == Direction::In ? "in" : "out")
+                     << "\n";
+      }
+    });
+
+    // Add ports to the module after all other existing ports.
+    SmallVector<std::pair<unsigned, PortInfo>> newPorts;
+    SmallVector<unsigned> problemIndices;
+    for (auto [problemIdx, portInfo] : modifications.portsToAdd) {
+      // Create the port.
+      newPorts.push_back({fmodule.getNumPorts(), portInfo});
+      problemIndices.push_back(problemIdx);
+    }
+    auto originalNumPorts = fmodule.getNumPorts();
+    auto portIdx = fmodule.getNumPorts();
+    fmodule.insertPorts(newPorts);
+
+    auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
+                                                    fmodule.getBodyBlock());
+
+    // Connect each port to the value stored in the connectionMap for this
+    // wiring problem index.
+    for (auto [problemIdx, portPair] : llvm::zip(problemIndices, newPorts)) {
+      Value src = moduleModifications[fmodule].connectionMap[problemIdx];
+      assert(src && "there did not exist a driver for the port");
+      Value dest = fmodule.getArgument(portIdx++);
+      connect(src, dest, builder);
+    }
+
+    // If a U-turn exists, this is an LCA and we need a U-turn connection.  This
+    // is the last connection made for this module.
+    for (auto [problemIdx, dest] : moduleModifications[fmodule].uturns) {
+      Value src = moduleModifications[fmodule].connectionMap[problemIdx];
+      assert(src && "there did not exist a connection for the u-turn");
+      connect(src, dest, builder);
+    }
+
+    // Update the connectionMap of all modules for which we created a port.
+    for (auto *inst : instanceGraph.lookup(fmodule)->uses()) {
+      InstanceOp useInst = cast<InstanceOp>(inst->getInstance());
+      auto enclosingModule = useInst->getParentOfType<FModuleOp>();
+      auto clonedInst = useInst.cloneAndInsertPorts(newPorts);
+      state.instancePathCache.replaceInstance(useInst, clonedInst);
+      // When RAUW-ing, ignore the new ports that we added when replacing (they
+      // cannot have uses).
+      useInst->replaceAllUsesWith(
+          clonedInst.getResults().drop_back(newPorts.size()));
+      useInst->erase();
+      // Record information in the moduleModifications strucutre for the module
+      // _where this is instantiated_.  This is done so that when that module is
+      // visited later, there will be information available for it to find ports
+      // it needs to wire up.  If there is already an existing connection, then
+      // this is a U-turn.
+      for (auto [newPortIdx, problemIdx] : llvm::enumerate(problemIndices)) {
+        auto &modifications = moduleModifications[enclosingModule];
+        auto newPort = clonedInst.getResult(newPortIdx + originalNumPorts);
+        if (modifications.connectionMap.count(problemIdx)) {
+          modifications.uturns.push_back({problemIdx, newPort});
+          continue;
+        }
+        modifications.connectionMap[problemIdx] = newPort;
+      }
+    }
+  }
+
+  // Delete unused WireOps created by producers of WiringProblems.
+  for (auto *op : opsToErase)
+    op->erase();
+
+  return success();
+}
+
 // This is the main entrypoint for the lowering pass.
 void LowerAnnotationsPass::runOnOperation() {
   CircuitOp circuit = getOperation();
@@ -513,6 +762,9 @@ void LowerAnnotationsPass::runOnOperation() {
     if (applyAnnotation(attr, state).failed())
       ++numFailures;
   }
+
+  if (failed(solveWiringProblems(state)))
+    ++numFailures;
 
   // Update statistics
   numRawAnnotations += annotations.size();

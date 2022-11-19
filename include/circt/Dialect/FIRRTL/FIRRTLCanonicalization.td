@@ -40,10 +40,19 @@ def NullAttr : Constraint<CPred<"!$0">>;
 // Constraint that enforces equal types
 def EqualTypes : Constraint<CPred<"$0.getType() == $1.getType()">>;
 
+// Constraint that enforces int types
+def IntTypes : Constraint<CPred<"$0.isa<IntType>()">>;
+
+// Constraint that enforces sint types
+def SIntTypes : Constraint<CPred<"$0.isa<SIntType>()">>;
+
+// Constraint that enforces uint types
+def UIntTypes : Constraint<CPred<"$0.isa<UIntType>()">>;
+
 // Constraint that enforces types of known width
 def KnownWidth : Constraint<CPred<[{
   $0.getType().isa<FIRRTLBaseType>() &&
-    $0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel() >= 0
+    !$0.getType().cast<FIRRTLBaseType>().getRecursiveTypeProperties().hasUninferredWidth
   }]>>;
 
 /// Constraint that matches a zero ConstantOp or SpecialConstantOp.
@@ -65,44 +74,116 @@ def OneConstantOp : Constraint<Or<[
 /// Drop the writer to the first argument and passthrough the second
 def DropWrite : NativeCodeCall<"dropWrite($_builder, $0, $1)">;
 
+def MoveNameHint : NativeCodeCall<"moveNameHint($0, $1)">;
+
 def GetEmptyString : NativeCodeCall<
   "StringAttr::get($_builder.getContext(), {}) ">;
 
 // leq(const, x) -> geq(x, const)
 def LEQWithConstLHS : Pat<
-  (LEQPrimOp $lhs, $rhs),
-  (GEQPrimOp $rhs, $lhs),
+  (LEQPrimOp:$old $lhs, $rhs),
+  (MoveNameHint $old, (GEQPrimOp $rhs, $lhs)),
   [(AnyConstantOp $lhs), (NonConstantOp $rhs)]>;
 
 // lt(const, x) -> gt(x, const)
 def LTWithConstLHS : Pat<
-  (LTPrimOp $lhs, $rhs),
-  (GTPrimOp $rhs, $lhs),
+  (LTPrimOp:$old $lhs, $rhs),
+  (MoveNameHint $old, (GTPrimOp $rhs, $lhs)),
   [(AnyConstantOp $lhs), (NonConstantOp $rhs)]>;
 
 // geq(const, x) -> leq(x, const)
 def GEQWithConstLHS : Pat<
-  (GEQPrimOp $lhs, $rhs),
-  (LEQPrimOp $rhs, $lhs),
+  (GEQPrimOp:$old $lhs, $rhs),
+  (MoveNameHint $old, (LEQPrimOp $rhs, $lhs)),
   [(AnyConstantOp $lhs), (NonConstantOp $rhs)]>;
 
 // gt(const, x) -> lt(x, const)
 def GTWithConstLHS : Pat<
-  (GTPrimOp $lhs, $rhs),
-  (LTPrimOp $rhs, $lhs),
+  (GTPrimOp:$old $lhs, $rhs),
+  (MoveNameHint $old, (LTPrimOp $rhs, $lhs)),
   [(AnyConstantOp $lhs), (NonConstantOp $rhs)]>;
+
+// connect(a:t,b:t) -> strictconnect(a,b)
+def ConnectSameType : Pat<
+  (ConnectOp $dst, $src),
+  (StrictConnectOp $dst, $src),
+  [(EqualTypes $dst, $src), (KnownWidth $dst)]>;
+
+// connect(a:t1,b:(t2<t1) -> strictconnect(a,(pad b))
+def ConnectExtension : Pat<
+  (ConnectOp $dst, $src),
+  (StrictConnectOp $dst, (PadPrimOp $src, 
+    (NativeCodeCall<"$0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel()"> $dst))),
+  [(IntType $dst), (IntType $src), (KnownWidth $dst), (KnownWidth $src)]>;
+
+def LimitConstant32 : NativeCodeCall<
+  "$_builder.getI32IntegerAttr($0.getValue().getLimitedValue(1ULL << 31))">;
+
+def TypeWidth32 : NativeCodeCall<
+  "$_builder.getI32IntegerAttr($0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel())">;
+
+// dshl(a, const) -> shl(a, const)
+def DShlOfConstant : Pat<
+  (DShlPrimOp:$old $x, (ConstantOp $cst)),
+  (PadPrimOp (MoveNameHint $old, (ShlPrimOp $x, (LimitConstant32 $cst))), (TypeWidth32 $old)),
+  [(KnownWidth $x)]>;
+
+// dshr(a, const) -> shl(a, const)
+def DShrOfConstant : Pat<
+  (DShrPrimOp:$old $x, (ConstantOp $cst)),
+  (PadPrimOp (MoveNameHint $old, (ShrPrimOp $x, (LimitConstant32 $cst))), (TypeWidth32 $old)),
+  [(KnownWidth $x)]>;
+
+// add(a, 0) -> a
+def AddOfZero : Pat <
+  (AddPrimOp:$old (either $x, (ConstantOp:$zcst $cst))),
+  (PadPrimOp $x, (TypeWidth32 $old)),
+  [(ZeroConstantOp $zcst)]>;
+
+// sub(a, 0) -> a
+def SubOfZero : Pat <
+  (SubPrimOp:$old $x, (ConstantOp:$zcst $cst)),
+  (PadPrimOp $x, (TypeWidth32 $old)),
+  [(ZeroConstantOp $zcst)]>;
+
+// sub(0, a) -> -a
+def SubFromZeroSigned : Pat <
+  (SubPrimOp:$old (ConstantOp:$zcst $cst), $x),
+  (PadPrimOp (MoveNameHint $old, (NegPrimOp $x)), (TypeWidth32 $old)),
+  [(ZeroConstantOp $zcst), (SIntType $x)]>;
+
+//sub(0, a) -> -a
+def SubFromZeroUnsigned : Pat <
+  (SubPrimOp:$old (ConstantOp:$zcst $cst), $x),
+  (AsUIntPrimOp (PadPrimOp (MoveNameHint $old, (NegPrimOp $x)), (TypeWidth32 $old))),
+  [(ZeroConstantOp $zcst), (UIntType $x)]>;
+
+// bits(bits(x, ...), ...) -> bits(x, ...)
+def BitsOfBits : Pat<
+  (BitsPrimOp:$old (BitsPrimOp $x, I32Attr:$iHigh, I32Attr:$iLow), I32Attr:$oHigh, I32Attr:$oLow),
+  (MoveNameHint $old, (BitsPrimOp $x, 
+    (NativeCodeCall<"$_builder.getI32IntegerAttr($0.getValue().getZExtValue() + $1.getValue().getZExtValue())"> $iLow, $oHigh),
+    (NativeCodeCall<"$_builder.getI32IntegerAttr($0.getValue().getZExtValue() + $1.getValue().getZExtValue())"> $oLow, $iLow))),
+  []>;
+
+// subaccess a, cst -> subindex a, cst 
+// TODO: only enable if cst is inside a.  Subaccess and subindex behave differently for out-of-bounds indexes.
+def SubaccessOfConstant : Pat<
+  (SubaccessOp:$old $array, (ConstantOp $cst)),
+  (MoveNameHint $old, (SubindexOp $array, (NativeCodeCall<"$_builder.getI32IntegerAttr($0.cast<IntegerAttr>().getAPSInt().getExtValue())"> $cst))),
+  []>;
 
 // mux(cond, x, mux(cond, y, z)) -> mux(cond, x, z)
 def MuxSameCondLow : Pat<
-  (MuxPrimOp $cond, $x, (MuxPrimOp $cond, $y, $z)),
-  (MuxPrimOp $cond, $x, $z), [
+  (MuxPrimOp:$old $cond, $x, (MuxPrimOp $cond, $y, $z)),
+  (MoveNameHint $old, (MuxPrimOp $cond, $x, $z)), [
     (EqualTypes $x, $y), (EqualTypes $x, $z), (KnownWidth $x)
   ]>;
 
 // mux(cond, mux(cond, y, z), x) -> mux(cond, y, x)
 def MuxSameCondHigh : Pat<
-  (MuxPrimOp $cond, (MuxPrimOp $cond, $y, $z), $x),
-  (MuxPrimOp $cond, $y, $x), [
+  (MuxPrimOp:$old $cond, (MuxPrimOp $cond, $y, $z), $x),
+  (MoveNameHint $old, (MuxPrimOp $cond, $y, $x)), [
     (EqualTypes $x, $y), (EqualTypes $x, $z), (KnownWidth $x)
   ]>;
 
@@ -116,11 +197,5 @@ def RegResetWithOneReset : Pat<
   (RegResetOp:$reg $clock, $reset, $resetVal, $name, $nameKind, $annotations, $inner_sym),
   (DropWrite $reg, (NodeOp $resetVal, $name, $nameKind, $annotations, $inner_sym)),
   [(OneConstantOp $reset)]>;
-
-// Return the width of an operation result as an integer attribute.  This is
-// useful to pad another operation up to the width of the original operation.
-def GetWidthAsIntAttr : NativeCodeCall<
-  "IntegerAttr::get(IntegerType::get($_builder.getContext(), 32, IntegerType::Signless), "
-                    "$0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel())">;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD

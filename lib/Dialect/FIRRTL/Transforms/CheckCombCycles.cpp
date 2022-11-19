@@ -764,6 +764,8 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
             continue;
           }
           Node inputNode(arg, &context);
+          // There exists a path to self.
+          outputVec.push_back(arg.getArgNumber());
           for (auto node : llvm::depth_first_ext<Node>(inputNode, nodeSet)) {
             if (auto output = node.value.dyn_cast<BlockArgument>())
               if (directionVec[output.getArgNumber()])
@@ -776,7 +778,19 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
       if (auto extModule = dyn_cast<FExtModuleOp>(*node->getModule())) {
         // TODO: Handle FExtModuleOp with `ExtModulePathAnnotation`s.
         auto &combPaths = map[extModule];
-        combPaths.resize(extModule.getNumPorts());
+        SmallVector<size_t, 2> outputVec;
+
+        // Record all trivial combinational paths.
+        for (size_t index = 0; index < extModule.getNumPorts(); ++index) {
+          outputVec.clear();
+          if (extModule.getPortDirection(index) == Direction::Out) {
+            combPaths.push_back(outputVec);
+            continue;
+          }
+          // Record the trivial path to self.
+          outputVec.push_back(index);
+          combPaths.push_back(outputVec);
+        }
         continue;
       }
       llvm_unreachable("invalid instance graph node");

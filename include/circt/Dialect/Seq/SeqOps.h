@@ -19,6 +19,7 @@
 
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Seq/SeqOpInterfaces.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
 
 #define GET_OP_CLASSES

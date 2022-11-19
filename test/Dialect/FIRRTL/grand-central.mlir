@@ -450,55 +450,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
     } : !firrtl.sint<2>
 
   }
-  firrtl.module @InterfaceGroundType() attributes {
-    annotations = [
-      {
-        class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
-        id = 0 : i64,
-        name = "GroundView"
-      },
-      {
-        class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
-        id = 3 : i64,
-        name = "VectorView"
-      },
-      {
-        class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
-        id = 6 : i64,
-        name = "BundleView"
-      },
-      {
-        class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
-        id = 9 : i64,
-        name = "VectorOfBundle"
-      },
-      {
-        class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
-        id = 12 : i64,
-        name = "VectorOfVector"
-      },
-      {
-        class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
-        id = 19 : i64,
-        name = "ZeroWidthView"
-      },
-      {
-        class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
-        id = 21 : i64,
-        name = "ConstantView"
-      },
-      {
-        class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
-        id = 24 : i64,
-        name = "UnsupportedView"
-      },
-      {
-        class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
-        id = 25 : i64,
-        name = "VectorOfVerbatimView"
-      }
-    ]
-  } {
+  firrtl.module @InterfaceGroundType() {
     firrtl.instance companion @Companion()
   }
 }
@@ -592,39 +544,22 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-SAME:     fields: []
 // CHECK-SAME:     instances: []
 
-// The shared companion contains all instantiated interfaaces.
+// The shared companion contains all instantiated interfaces.
 // AugmentedGroundType annotations are removed.  Interface is driven via XMRs
 // directly from ref resolve ops.
 //
 // CHECK:          firrtl.module @Companion
 // CHECK-SAME:       output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
 //
-// CHECK-NEXT:       sv.interface.instance sym @[[vectorOfVerbatim:[a-zA-Z0-9_]+]]
-// CHECK-SAME:         {name = "VectorOfVerbatimView"} : !sv.interface<@VectorOfVerbatimView>
-//
-// CHECK-NEXT:       sv.interface.instance sym @[[unsupportedSym:[a-zA-Z0-9_]+]]
-// CHECK-SAME:         {name = "UnsupportedView"} : !sv.interface<@UnsupportedView>
-//
-// CHECK-NEXT:       sv.interface.instance sym @[[constantSym:[a-zA-Z0-9_]+]]
-// CHECK-SAME:         {name = "ConstantView"} : !sv.interface<@ConstantView>
-//
-// CHECK-NEXT:       sv.interface.instance sym @[[zeroWidthSym:[a-zA-Z0-9_]+]]
-// CHECK-SAME:         {name = "ZeroWidthView"} : !sv.interface<@ZeroWidthView>
-//
-// CHECK-NEXT:       sv.interface.instance sym @[[vectorOfVectorSym:[a-zA-Z0-9_]+]]
-// CHECK-SAME:         {name = "VectorOfVectorView"} : !sv.interface<@VectorOfVectorView>
-//
-// CHECK-NEXT:       sv.interface.instance sym @[[vectorOfBundleSym:[a-zA-Z0-9_]+]]
-// CHECK-SAME:         {name = "VectorOfBundleView"} : !sv.interface<@VectorOfBundleView>
-//
-// CHECK-NEXT:       sv.interface.instance sym @[[bundleSym:[a-zA-Z0-9_]+]]
-// CHECK-SAME:         {name = "BundleView"} : !sv.interface<@BundleView>
-//
-// CHECK-NEXT:       sv.interface.instance sym @[[vectorSym:[a-zA-Z0-9_]+]]
-// CHECK-SAME:         {name = "VectorView"} : !sv.interface<@VectorView>
-//
-// CHECK-NEXT:       sv.interface.instance sym @[[groundSym:[a-zA-Z0-9_]+]]
-// CHECK-SAME:         {name = "GroundView"} : !sv.interface<@GroundView>
+// CHECK-NEXT:       %VectorOfVerbatimView = sv.interface.instance sym @[[vectorOfVerbatim:[a-zA-Z0-9_]+]] : !sv.interface<@VectorOfVerbatimView>
+// CHECK-NEXT:       %UnsupportedView = sv.interface.instance sym @[[unsupportedSym:[a-zA-Z0-9_]+]] : !sv.interface<@UnsupportedView>
+// CHECK-NEXT:       %ConstantView = sv.interface.instance sym @[[constantSym:[a-zA-Z0-9_]+]] : !sv.interface<@ConstantView>
+// CHECK-NEXT:       %ZeroWidthView = sv.interface.instance sym @[[zeroWidthSym:[a-zA-Z0-9_]+]] : !sv.interface<@ZeroWidthView>
+// CHECK-NEXT:       %VectorOfVectorView = sv.interface.instance sym @[[vectorOfVectorSym:[a-zA-Z0-9_]+]] : !sv.interface<@VectorOfVectorView>
+// CHECK-NEXT:       %VectorOfBundleView = sv.interface.instance sym @[[vectorOfBundleSym:[a-zA-Z0-9_]+]] : !sv.interface<@VectorOfBundleView>
+// CHECK-NEXT:       %BundleView = sv.interface.instance sym @[[bundleSym:[a-zA-Z0-9_]+]] : !sv.interface<@BundleView>
+// CHECK-NEXT:       %VectorView = sv.interface.instance sym @[[vectorSym:[a-zA-Z0-9_]+]] : !sv.interface<@VectorView>
+// CHECK-NEXT:       %GroundView = sv.interface.instance sym @[[groundSym:[a-zA-Z0-9_]+]] : !sv.interface<@GroundView>
 //
 // CHECK:            %[[foo_ref:[a-zA-Z0-9_]+]] = firrtl.ref.resolve {{.+}} : !firrtl.ref<uint<1>>
 // CHECK-NOT:        sifive.enterprise.grandcentral.AugmentedGroundType
@@ -765,11 +700,7 @@ firrtl.circuit "PrefixInterfacesAnnotation"
       class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
       id = 0 : i64,
       name = "MyView"}]} {}
-  firrtl.module private @DUT()
-    attributes {annotations = [
-      {class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
-       id = 0 : i64,
-       name = "MyView"}]} {
+  firrtl.module private @DUT() {
     firrtl.instance MyView_companion  @MyView_companion()
   }
   firrtl.module @PrefixInterfacesAnnotation() {
@@ -862,11 +793,9 @@ firrtl.circuit "DirectoryBehaviorWithDUT" attributes {
   // The Design-under-test as indicated by the MarkDUTAnnotation
   firrtl.module private @DUT() attributes {
     annotations = [
-      {class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
-       id = 0 : i64,
-       name = "view"},
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
-    ]} {
+    ]
+  } {
     firrtl.instance companion @Companion()
 
     firrtl.instance m_d_ @M_D_()
@@ -969,12 +898,7 @@ firrtl.circuit "DirectoryBehaviorWithoutDUT" attributes {
 
   // This is the DUT in the previous example, but is no longer marked as the
   // DUT.
-  firrtl.module @DirectoryBehaviorWithoutDUT() attributes {
-    annotations = [
-      {class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
-       id = 0 : i64,
-       name = "view"}
-    ]} {
+  firrtl.module @DirectoryBehaviorWithoutDUT() {
     firrtl.instance companion @Companion()
 
     firrtl.instance m_d_ @MT_()
@@ -1092,20 +1016,7 @@ firrtl.circuit "Top" attributes {
       ]
     } : !firrtl.uint<2>
   }
-  firrtl.module private @DUT() attributes {
-    annotations = [
-      {
-        class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
-        id = 0 : i64,
-        name = "View_w1"
-      },
-      {
-        class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
-        id = 2 : i64,
-        name = "View_w2"
-      }
-    ]
-  } {
+  firrtl.module private @DUT() {
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %a_w1 = firrtl.wire   {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>

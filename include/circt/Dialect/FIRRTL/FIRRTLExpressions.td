@@ -220,7 +220,7 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
   let hasFolder = 1;
   let hasCanonicalizer = 1;
   let hasVerifier = 1;
-  
+
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat =
     "$input `(` $fieldIndex `)` attr-dict `:` functional-type($input, $result)";
@@ -297,7 +297,7 @@ def SubaccessOp : FIRRTLExprOp<"subaccess", [
   let assemblyFormat =
      "$input `[` $index `]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))";
 
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
 }
 
 def MultibitMuxOp : FIRRTLExprOp<"multibit_mux"> {
@@ -313,7 +313,7 @@ def MultibitMuxOp : FIRRTLExprOp<"multibit_mux"> {
     For the example above, if `%index` is 0, then the value is `%v_0`.
     }];
 
-  let arguments = (ins FIRRTLBaseType:$index, Variadic<FIRRTLBaseType>:$inputs);
+  let arguments = (ins UIntType:$index, Variadic<FIRRTLBaseType>:$inputs);
   let results = (outs FIRRTLBaseType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasFolder = true;
@@ -374,7 +374,7 @@ class IntBinaryPrimOp<string mnemonic, Type resultType,
                 traits # [SameOperandsIntTypeKind]>;
 
 let inferType = "impl::inferAddSubResult" in {
-  let hasCanonicalizeMethod = true in {
+  let hasCanonicalizer = true in {
     def AddPrimOp : IntBinaryPrimOp<"add", IntType, [Commutative]>;
     def SubPrimOp : IntBinaryPrimOp<"sub", IntType>;
   }
@@ -416,14 +416,14 @@ let inferType = "impl::inferComparisonResult" in {
 }
 
 def CatPrimOp : IntBinaryPrimOp<"cat", UIntType> {
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
 }
 def DShlPrimOp  : BinaryPrimOp<"dshl", IntType, UIntType, IntType>  {
   let description = [{
     A dynamic shift left operation. The width of `$result` is expanded to
     `width($lhs) + 1 << width($rhs) - 1`.
   }];
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
 }
 def DShlwPrimOp : BinaryPrimOp<"dshlw", IntType, UIntType, IntType> {
   let description = [{
@@ -432,7 +432,7 @@ def DShlwPrimOp : BinaryPrimOp<"dshlw", IntType, UIntType, IntType> {
   }];
 }
 def DShrPrimOp  : BinaryPrimOp<"dshr", IntType, UIntType, IntType> {
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
 }
 
 //===----------------------------------------------------------------------===//
@@ -520,7 +520,7 @@ def BitsPrimOp : PrimOp<"bits"> {
     The result is `hi - lo + 1` bits wide.
   }];
 
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
 }
 
 def HeadPrimOp : PrimOp<"head"> {
@@ -612,9 +612,9 @@ def TailPrimOp : PrimOp<"tail"> {
 def IsXVerifOp : FIRRTLExprOp<"verif_isX"> {
   let summary = "Test for 'x";
   let description = [{
-    The verif.isX expression checks that the operand is not a verilog literal 
-    'x.  Firrtl doesn't have a notion of 'x per-se, but x can come in to the 
-    system from external modules and from SV constructs.  Verification 
+    The verif.isX expression checks that the operand is not a verilog literal
+    'x.  Firrtl doesn't have a notion of 'x per-se, but x can come in to the
+    system from external modules and from SV constructs.  Verification
     constructs need to explicitly test for 'x.
     }];
 

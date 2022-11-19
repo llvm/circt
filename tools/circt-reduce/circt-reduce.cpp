@@ -14,6 +14,7 @@
 #include "Reduction.h"
 #include "Tester.h"
 #include "circt/InitAllDialects.h"
+#include "circt/Support/Version.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Support/FileUtilities.h"
@@ -387,6 +388,10 @@ static LogicalResult execute(MLIRContext &context) {
 /// `execute` function to do the actual work.
 int main(int argc, char **argv) {
   llvm::InitLLVM y(argc, argv);
+
+  // Set the bug report message to indicate users should file issues on
+  // llvm/circt and not llvm/llvm-project.
+  setBugReportMsg(circtBugReportMsg);
 
   // Register and hide default LLVM options, other than for this tool.
   registerMLIRContextCLOptions();

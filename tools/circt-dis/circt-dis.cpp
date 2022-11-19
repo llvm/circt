@@ -98,6 +98,11 @@ static LogicalResult execute(MLIRContext &context) {
 
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
+
+  // Set the bug report message to indicate users should file issues on
+  // llvm/circt and not llvm/llvm-project.
+  setBugReportMsg(circtBugReportMsg);
+
   mlir::DialectRegistry registry;
 
   circt::registerAllDialects(registry);

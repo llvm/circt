@@ -44,6 +44,7 @@ digraph G {
     Calyx [URL="https://circt.llvm.org/docs/Dialects/Calyx/"]
     FIRRTL [URL="https://circt.llvm.org/docs/Dialects/FIRRTL/"]
     Pipeline [URL="https://circt.llvm.org/docs/Dialects/Pipeline/"]
+    SSP [URL="https://circt.llvm.org/docs/Dialects/SSP/"]
     MSFT [URL="https://circt.llvm.org/docs/Dialects/MSFT/"]
     ESI [URL="https://circt.llvm.org/docs/Dialects/ESI/"]
     FSM [URL="https://circt.llvm.org/docs/Dialects/FSM/"]
@@ -145,6 +146,7 @@ digraph G {
   PyCDE -> MSFT
   PyCDE -> HWArith
   PyCDE -> FSM
+  Scheduling -> SSP [dir=both]
   Scheduling -> MSFT [dir=both, style=dashed]
   ServiceDesc -> SoftwareAPI [style=dashed]
 

@@ -283,7 +283,7 @@ bool PrettifyVerilogPass::splitAssignment(OpBuilder &builder, Value dst,
 /// operation so it can be sunk into multiple blocks. If there are no more uses
 /// in the current block, the op will be removed.
 void PrettifyVerilogPass::sinkOrCloneOpToUses(Operation *op) {
-  assert(mlir::MemoryEffectOpInterface::hasNoEffect(op) &&
+  assert(mlir::isMemoryEffectFree(op) &&
          "Op with side effects cannot be sunk to its uses.");
   auto block = op->getBlock();
   // This maps a block to the block local instance of the op.
@@ -403,7 +403,7 @@ void PrettifyVerilogPass::sinkExpression(Operation *op) {
     if (curOpBlock != op->user_begin()->getBlock()) {
       // Ok, we're about to make a change, ensure that there are no side
       // effects.
-      if (!mlir::MemoryEffectOpInterface::hasNoEffect(op))
+      if (!mlir::isMemoryEffectFree(op))
         return;
 
       op->moveBefore(*op->user_begin());
@@ -451,7 +451,7 @@ void PrettifyVerilogPass::sinkExpression(Operation *op) {
 
   // Ok, we're about to make a change, ensure that there are no side
   // effects.
-  if (!mlir::MemoryEffectOpInterface::hasNoEffect(op))
+  if (!mlir::isMemoryEffectFree(op))
     return;
 
   // Ok, we found a common ancestor between all the users that is deeper than

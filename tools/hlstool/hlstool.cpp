@@ -51,6 +51,7 @@
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/LoweringOptionsParser.h"
+#include "circt/Support/Version.h"
 #include "circt/Transforms/Passes.h"
 
 #include "circt/InitAllDialects.h"
@@ -513,6 +514,10 @@ static LogicalResult executeHlstool(MLIRContext &context) {
 /// MLIRContext and modules inside of it (reducing compile time).
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
+
+  // Set the bug report message to indicate users should file issues on
+  // llvm/circt and not llvm/llvm-project.
+  setBugReportMsg(circtBugReportMsg);
 
   // Hide default LLVM options, other than for this tool.
   // MLIR options are added below.

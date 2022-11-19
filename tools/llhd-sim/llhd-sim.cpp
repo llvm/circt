@@ -16,6 +16,7 @@
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/Simulator/Engine.h"
 #include "circt/Dialect/LLHD/Simulator/Trace.h"
+#include "circt/Support/Version.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -159,6 +160,10 @@ static LogicalResult applyMLIRPasses(ModuleOp module) {
 
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
+
+  // Set the bug report message to indicate users should file issues on
+  // llvm/circt and not llvm/llvm-project.
+  setBugReportMsg(circtBugReportMsg);
 
   // Hide default LLVM options, other than for this tool.
   cl::HideUnrelatedOptions(mainCategory);

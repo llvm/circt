@@ -11,6 +11,7 @@
 
 add_circt_dialect_library(CIRCTSeq
   SeqDialect.cpp
+  SeqOpInterfaces.cpp
   SeqOps.cpp
   SeqTypes.cpp
 
