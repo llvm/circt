@@ -235,18 +235,6 @@ firrtl.circuit "removePad"   {
   }
 }
 
-// Registers with no reset or connections" should "be replaced with constant zero
-firrtl.circuit "uninitSelfReg"   {
-  // CHECK-LABEL: firrtl.module @uninitSelfReg
-  firrtl.module @uninitSelfReg(in %clock: !firrtl.clock, out %z: !firrtl.uint<8>) {
-    %r = firrtl.reg %clock  :  !firrtl.uint<8>
-    firrtl.connect %r, %r : !firrtl.uint<8>, !firrtl.uint<8>
-    firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
-    // CHECK: %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8>
-    // CHECK: firrtl.strictconnect %z, %invalid_ui8 : !firrtl.uint<8>
-  }
-}
-
 //"Registers with ONLY constant reset" should "be replaced with that constant" in {
 firrtl.circuit "constResetReg"   {
   // CHECK-LABEL: firrtl.module @constResetReg(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
