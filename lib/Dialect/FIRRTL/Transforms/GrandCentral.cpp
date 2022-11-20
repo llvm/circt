@@ -557,7 +557,7 @@ struct InterfaceElemsBuilder {
     StringAttr description;
     StringAttr elemName;
     TypeSum elemType;
-    Properties(StringAttr des, StringAttr name, TypeSum elemType)
+    Properties(StringAttr des, StringAttr name, TypeSum &elemType)
         : description(des), elemName(name), elemType(elemType) {}
   };
   SmallVector<Properties> elementsList;
@@ -2116,7 +2116,7 @@ void GrandCentralPass::runOnOperation() {
                                      xmrElem.syms);
     }
     sv::InterfaceOp topIface;
-    for (auto ifaceBuilder : interfaceBuilder) {
+    for (const auto &ifaceBuilder : interfaceBuilder) {
       auto builder = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
       auto loc = getOperation().getLoc();
       sv::InterfaceOp iface =
