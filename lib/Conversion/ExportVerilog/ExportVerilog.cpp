@@ -4189,11 +4189,12 @@ void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
 }
 
 // This may be called in the top-level, not just in an hw.module.  Thus we can't
-// use the name map to find expression names for arguments to the instance, nor
-// do we need to emit subexpressions.  Prepare pass, which has run for all
-// modules prior to this, has ensured that all arguments are bound to wires,
-// regs, or ports, with legalized names, so we can lookup up the names through
-// the IR.
+// use the name map to find expression names for arguments to the instance.
+// Verbatim expressions _are_ emitted in-line.  If we see one of these, then an
+// ExprEmitter will be spun-up.  The PrepareForEmission pass, which has run for
+// all modules prior to this, has ensured that all arguments are verbatim
+// expressions or bound to wires, regs, or ports (with already legalized names)
+// so we can lookup up the names through the IR.
 void ModuleEmitter::emitBind(BindOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
@@ -4219,6 +4220,16 @@ void ModuleEmitter::emitBind(BindOp op) {
     elt.name = Builder(inst.getContext()).getStringAttr(portName);
     maxNameLength = std::max(maxNameLength, elt.getName().size());
   }
+
+  // Utility to emit an one-off Verbatim expression.
+  auto handleVerbatimExpr = [&](Value value) -> void {
+    ModuleNameManager names;
+    SmallVector<char> outBuffer;
+    SmallPtrSet<Operation *, 1> emittedExprs;
+    ExprEmitter(*this, outBuffer, emittedExprs, names)
+        .emitExpression(value, LowestPrecedence);
+    os << outBuffer;
+  };
 
   // Emit the argument and result ports.
   auto opArgs = inst.getInputs();
@@ -4265,10 +4276,18 @@ void ModuleEmitter::emitBind(BindOp op) {
     os << '.' << elt.getName();
     os.indent(maxNameLength - elt.getName().size()) << " (";
 
-    // Emit the value as an expression.
-    auto name = getNameRemotely(portVal, parentPortInfo, parentMod);
-    assert(!name.empty() && "bind port connection must have a name");
-    os << name << ')';
+    // If this is a verbatim expression, then emit this inline.  Otherwise, just
+    // grab the name of it.
+    auto *portValOp = portVal.getDefiningOp();
+    if (isa_and_nonnull<VerbatimExprOp>(portValOp)) {
+      handleVerbatimExpr(portVal);
+    } else {
+      // Emit the value as an expression.
+      auto name = getNameRemotely(portVal, parentPortInfo, parentMod);
+      assert(!name.empty() && "bind port connection must have a name");
+      os << name;
+    }
+    os << ")";
   }
   if (!isFirst) {
     os << '\n';

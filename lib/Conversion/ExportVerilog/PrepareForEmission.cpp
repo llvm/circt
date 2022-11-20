@@ -77,6 +77,10 @@ static void spillWiresForInstanceInputs(InstanceOp op) {
     auto src = op.getOperand(nextOpNo);
     ++nextOpNo;
 
+    auto *srcOp = src.getDefiningOp();
+    if (isa_and_nonnull<VerbatimExprOp>(srcOp))
+      continue;
+
     if (isSimpleReadOrPort(src))
       continue;
 

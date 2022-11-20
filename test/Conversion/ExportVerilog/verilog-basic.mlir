@@ -616,6 +616,25 @@ hw.module @SiFive_MulDiv(%clock: i1, %reset: i1) -> (io_req_ready: i1) {
   // CHECK-NEXT: );
 }
 
+// Test that verbatim expressions are inlined into instance binds.
+hw.module.extern @VerbatimInlineXMRExtModule(%a: i1)
+// CHECK-LABEL: module VerbatimInlineXMR();
+// CHECK-NOT:   endmodule
+hw.module @VerbatimInlineXMR() {
+  %a = sv.wire sym @a : !hw.inout<i1>
+  %verb = sv.verbatim.expr "{{0}}.{{1}}" : () -> i1 {
+    symbols = [@VerbatimInlineXMR, #hw.innerNameRef<@VerbatimInlineXMR::@a>]
+  }
+  // CHECK:      /* This instance is elsewhere emitted as a bind statement
+  // CHECK-NEXT:    VerbatimInlineXMRExtModule inst (
+  // CHECK-NEXT:      .a (VerbatimInlineXMR.a)
+  // CHECK-NEXT:    );
+  // CHECK-NEXT: */
+  hw.instance "inst" sym @inst @VerbatimInlineXMRExtModule(a: %verb: i1) -> () {
+    doNotPrint = true
+  }
+}
+
 sv.bind.interface <@BindInterface::@__Interface__> {output_file = #hw.output_file<"BindTest/BindInterface.sv", excludeFromFileList>}
 sv.interface @Interface {
   sv.interface.signal @a : i1
@@ -657,3 +676,7 @@ sv.bind #hw.innerNameRef<@SiFive_MulDiv::@__ETC_SiFive_MulDiv_assert>
 // CHECK-NEXT:  ._io_req_ready_output (_InvisibleBind_assert__io_req_ready_output)
 // CHECK-NEXT:  .resetSignalName      (reset),
 // CHECK-NEXT:  .clock                (clock)
+
+sv.bind #hw.innerNameRef<@VerbatimInlineXMR::@inst>
+// CHECK-LABEL: bind VerbatimInlineXMR VerbatimInlineXMRExtModule inst (
+// CHECK-NEXT:    .a (VerbatimInlineXMR.a)
