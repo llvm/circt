@@ -133,6 +133,7 @@ void ScheduleLinearPipelinePass::runOnOperation() {
     pipeline.emitError("Failed to schedule pipeline.");
     return signalPassFailure();
   }
+  assert(succeeded(problem.verify()));
 
   // Gather stage results.
   using StageIdx = unsigned;
