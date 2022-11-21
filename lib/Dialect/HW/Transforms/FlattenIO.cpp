@@ -19,6 +19,10 @@ static bool isStructType(Type type) {
   return hw::getCanonicalType(type).isa<hw::StructType>();
 }
 
+static hw::StructType getStructType(Type type) {
+  return hw::getCanonicalType(type).dyn_cast<hw::StructType>();
+}
+
 // Legal if no in- or output type is a struct.
 static bool isLegalFuncLikeOp(FunctionOpInterface moduleLikeOp) {
   bool legalResults =
@@ -31,6 +35,8 @@ static bool isLegalFuncLikeOp(FunctionOpInterface moduleLikeOp) {
 static llvm::SmallVector<Type> getInnerTypes(hw::StructType t) {
   llvm::SmallVector<Type> inner;
   t.getInnerTypes(inner);
+  for (auto [index, innerType] : llvm::enumerate(inner))
+    inner[index] = hw::getCanonicalType(innerType);
   return inner;
 }
 
@@ -39,9 +45,8 @@ namespace {
 // Replaces an output op with a new output with flattened (exploded) structs.
 struct OutputOpConversion : public OpConversionPattern<hw::OutputOp> {
   OutputOpConversion(TypeConverter &typeConverter, MLIRContext *context,
-                     DenseSet<Operation *> *outputOpVisited)
-      : OpConversionPattern(typeConverter, context),
-        outputOpVisited(outputOpVisited) {}
+                     DenseSet<Operation *> *opVisited)
+      : OpConversionPattern(typeConverter, context), opVisited(opVisited) {}
 
   LogicalResult
   matchAndRewrite(hw::OutputOp op, OpAdaptor adaptor,
@@ -50,22 +55,34 @@ struct OutputOpConversion : public OpConversionPattern<hw::OutputOp> {
 
     // Flatten the operands.
     for (auto operand : adaptor.getOperands()) {
-      if (auto structType = operand.getType().dyn_cast<hw::StructType>()) {
+      if (auto structType = getStructType(operand.getType())) {
         auto explodedStruct = rewriter.create<hw::StructExplodeOp>(
             op.getLoc(), getInnerTypes(structType), operand);
         llvm::copy(explodedStruct.getResults(),
                    std::back_inserter(convOperands));
-      } else {
+      } else
         convOperands.push_back(operand);
-      }
     }
 
     // And replace.
     rewriter.replaceOpWithNewOp<hw::OutputOp>(op, convOperands);
-    outputOpVisited->insert(op->getParentOp());
+    opVisited->insert(op->getParentOp());
     return success();
   }
-  mutable DenseSet<Operation *> *outputOpVisited;
+  mutable DenseSet<Operation *> *opVisited;
+};
+
+struct StructExplodeOpConversion
+    : public OpConversionPattern<hw::StructExplodeOp> {
+  StructExplodeOpConversion(TypeConverter &typeConverter, MLIRContext *context)
+      : OpConversionPattern(typeConverter, context) {}
+
+  LogicalResult
+  matchAndRewrite(hw::StructExplodeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOp(op, adaptor.getOperands());
+    return success();
+  }
 };
 
 using IOTypes = std::pair<TypeRange, TypeRange>;
@@ -82,7 +99,7 @@ class FlattenIOTypeConverter : public TypeConverter {
 public:
   FlattenIOTypeConverter() {
     addConversion([](Type type, SmallVectorImpl<Type> &results) {
-      auto structType = hw::getCanonicalType(type).dyn_cast<hw::StructType>();
+      auto structType = getStructType(type);
       if (!structType)
         results.push_back(type);
       else {
@@ -95,6 +112,14 @@ public:
     addTargetMaterialization([](OpBuilder &builder, hw::StructType type,
                                 ValueRange inputs, Location loc) {
       auto result = builder.create<hw::StructCreateOp>(loc, type, inputs);
+      return result.getResult();
+    });
+
+    addTargetMaterialization([](OpBuilder &builder, hw::TypeAliasType type,
+                                ValueRange inputs, Location loc) {
+      auto structType = getStructType(type);
+      assert(structType && "expected struct type");
+      auto result = builder.create<hw::StructCreateOp>(loc, structType, inputs);
       return result.getResult();
     });
   }
@@ -199,15 +224,11 @@ static DenseMap<Operation *, IOInfo> populateIOInfoMap(mlir::ModuleOp module) {
     ioInfo.argTypes = op.getArgumentTypes();
     ioInfo.resTypes = op.getResultTypes();
     for (auto [i, arg] : llvm::enumerate(ioInfo.argTypes)) {
-      auto structType =
-          hw::getCanonicalType(arg).template dyn_cast<hw::StructType>();
-      if (structType)
+      if (auto structType = getStructType(arg))
         ioInfo.argStructs[i] = structType;
     }
     for (auto [i, res] : llvm::enumerate(ioInfo.resTypes)) {
-      auto structType =
-          hw::getCanonicalType(res).template dyn_cast<hw::StructType>();
-      if (structType)
+      if (auto structType = getStructType(res))
         ioInfo.resStructs[i] = structType;
     }
     ioInfoMap[op] = ioInfo;
@@ -238,10 +259,11 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
     // Argument conversion for output ops. Similarly to the signature
     // conversion, legality is based on the op having been visited once, due to
     // the possibility of nested structs.
-    DenseSet<Operation *> outputOpVisited;
-    patterns.add<OutputOpConversion>(typeConverter, ctx, &outputOpVisited);
+    DenseSet<Operation *> opVisited;
+    patterns.add<OutputOpConversion>(typeConverter, ctx, &opVisited);
+    // patterns.add<StructExplodeOpConversion>(typeConverter, ctx);
     target.addDynamicallyLegalOp<hw::OutputOp>(
-        [&](auto op) { return outputOpVisited.contains(op->getParentOp()); });
+        [&](auto op) { return opVisited.contains(op->getParentOp()); });
 
     if (failed(applyPartialConversion(module, target, std::move(patterns))))
       return failure();
