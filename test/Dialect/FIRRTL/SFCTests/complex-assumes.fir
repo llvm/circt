@@ -1,4 +1,4 @@
-; RUN: firtool --verify-diagnostics --verilog %s | FileCheck %s
+; RUN: firtool --verify-diagnostics --verilog %s --lowering-options=emittedLineLength=500 | FileCheck %s
 ; Tests extracted from:
 ; - test/scala/firrtl/extractverif/ExtractAssumesSpec.scala
 
