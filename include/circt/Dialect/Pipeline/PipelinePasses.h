@@ -14,6 +14,8 @@
 #define CIRCT_DIALECT_PIPELINE_PIPELINEPASSES_H
 
 #include "circt/Support/LLVM.h"
+#include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassRegistry.h"
 #include <memory>
 
 namespace circt {

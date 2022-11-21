@@ -28,7 +28,7 @@ def ExplicitRegs : Pass<"pipeline-explicit-regs", "pipeline::PipelineOp"> {
 def ScheduleLinearPipeline : Pass<"pipeline-schedule-linear", "pipeline::PipelineOp"> {
   let summary = "Schedules a linear pipeline.";
   let description = [{
-    Schedules a linear pipeline based on operator latencies and resource constriants.
+    Schedules a linear pipeline based on operator latencies.
   }];
   let dependentDialects = ["hw::HWDialect"];
   let constructor = "circt::pipeline::createScheduleLinearPipelinePass()";

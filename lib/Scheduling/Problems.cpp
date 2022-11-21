@@ -142,6 +142,14 @@ LogicalResult Problem::verify() {
   return success();
 }
 
+Optional<unsigned> Problem::getEndTime(Operation *op) {
+  if (auto startTime = getStartTime(op))
+    if (auto opType = getLinkedOperatorType(op))
+      if (auto latency = getLatency(*opType))
+        return startTime.value() + latency.value();
+  return llvm::None;
+}
+
 //===----------------------------------------------------------------------===//
 // CyclicProblem
 //===----------------------------------------------------------------------===//
