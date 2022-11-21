@@ -146,6 +146,8 @@ ProblemT loadProblem(InstanceOp instOp,
 
   loadInstanceProperties<ProblemT, InstancePropertyTs...>(
       prob, instOp.getPropertiesAttr());
+  if (auto instName = instOp.getSymNameAttr())
+    prob.setInstanceName(instName);
 
   // Use IDs to disambiguate operator types with the same name defined in
   // different libraries.
@@ -161,6 +163,8 @@ ProblemT loadProblem(InstanceOp instOp,
         loadOperatorType<ProblemT, OperatorTypePropertyTs...>(prob, oprOp,
                                                               operatorTypeIds);
   });
+  if (auto libName = libraryOp.getSymNameAttr())
+    prob.setLibraryName(libName);
 
   // Register all operations first, in order to retain their original order.
   auto graphOp = instOp.getDependenceGraph();
@@ -168,6 +172,8 @@ ProblemT loadProblem(InstanceOp instOp,
     prob.insertOperation(opOp);
     loadOperationProperties<ProblemT, OperationPropertyTs...>(
         prob, opOp, opOp.getPropertiesAttr());
+    if (auto opName = opOp.getSymNameAttr())
+      prob.setOperationName(opOp, opName);
 
     // Nothing else to check if no linked operator type is set for `opOp`,
     // because the operation doesn't carry a `LinkedOperatorTypeAttr`, or that
@@ -301,9 +307,6 @@ ArrayAttr saveInstanceProperties(ProblemT &prob, ImplicitLocOpBuilder &b) {
 ///
 /// ```
 /// saveProblem<CyclicProblem>(prob,
-///   builder.getStringAttr("my_instance"),
-///   builder.getStringAttr("CyclicProblem"),
-///   [](Operation *) { return StringAttr(); },
 ///   std::make_tuple(LinkedOperatorTypeAttr(), StartTimeAttr()),
 ///   std::make_tuple(LatencyAttr()),
 ///   std::make_tuple(DistanceAttr()),
@@ -314,9 +317,7 @@ template <typename ProblemT, typename... OperationPropertyTs,
           typename... OperatorTypePropertyTs, typename... DependencePropertyTs,
           typename... InstancePropertyTs>
 InstanceOp
-saveProblem(ProblemT &prob, StringAttr instanceName, StringAttr problemName,
-            std::function<StringAttr(Operation *)> operationNameFn,
-            std::tuple<OperationPropertyTs...> opProps,
+saveProblem(ProblemT &prob, std::tuple<OperationPropertyTs...> opProps,
             std::tuple<OperatorTypePropertyTs...> oprProps,
             std::tuple<DependencePropertyTs...> depProps,
             std::tuple<InstancePropertyTs...> instProps, OpBuilder &builder) {
@@ -324,12 +325,16 @@ saveProblem(ProblemT &prob, StringAttr instanceName, StringAttr problemName,
 
   // Set up instance.
   auto instOp = b.create<InstanceOp>(
-      instanceName, problemName,
+      builder.getStringAttr(ProblemT::PROBLEM_NAME),
       saveInstanceProperties<ProblemT, InstancePropertyTs...>(prob, b));
+  if (auto instName = prob.getInstanceName())
+    instOp.setSymNameAttr(instName);
 
   // Emit operator types.
   b.setInsertionPointToEnd(instOp.getBodyBlock());
   auto libraryOp = b.create<OperatorLibraryOp>();
+  if (auto libName = prob.getLibraryName())
+    libraryOp.setSymNameAttr(libName);
   b.setInsertionPointToStart(libraryOp.getBodyBlock());
 
   for (auto opr : prob.getOperatorTypes())
@@ -341,15 +346,15 @@ saveProblem(ProblemT &prob, StringAttr instanceName, StringAttr problemName,
   // therefore need a name. Also, honor names provided by the client.
   DenseMap<Operation *, StringAttr> opNames;
   for (auto *op : prob.getOperations()) {
-    if (StringAttr providedName = operationNameFn(op))
-      opNames[op] = providedName;
+    if (auto opName = prob.getOperationName(op))
+      opNames[op] = opName;
 
     for (auto &dep : prob.getDependences(op)) {
       Operation *src = dep.getSource();
       if (!dep.isAuxiliary() || opNames.count(src))
         continue;
-      if (StringAttr providedName = operationNameFn(src)) {
-        opNames[src] = providedName;
+      if (auto srcOpName = prob.getOperationName(src)) {
+        opNames[src] = srcOpName;
         continue;
       }
       opNames[src] = b.getStringAttr(Twine("Op") + Twine(opNames.size()));
@@ -442,12 +447,8 @@ ProblemT loadProblem(InstanceOp instOp) {
 /// Relies on the specialization of template `circt::ssp::Default` for \p
 /// ProblemT.
 template <typename ProblemT>
-InstanceOp saveProblem(ProblemT &prob, StringAttr instanceName,
-                       StringAttr problemName,
-                       std::function<StringAttr(Operation *)> operationNameFn,
-                       OpBuilder &builder) {
-  return saveProblem<ProblemT>(prob, instanceName, problemName, operationNameFn,
-                               Default<ProblemT>::operationProperties,
+InstanceOp saveProblem(ProblemT &prob, OpBuilder &builder) {
+  return saveProblem<ProblemT>(prob, Default<ProblemT>::operationProperties,
                                Default<ProblemT>::operatorTypeProperties,
                                Default<ProblemT>::dependenceProperties,
                                Default<ProblemT>::instanceProperties, builder);

@@ -29,7 +29,7 @@ import gc
 import os
 import pathlib
 import sys
-from typing import Any, Callable, Dict, List, Set, Tuple, Union
+from typing import Callable, Dict, List, Set, Tuple, Union
 
 _current_system = ContextVar("current_pycde_system")
 
@@ -100,12 +100,13 @@ class System:
   def add_packaging_step(self, func: Callable):
     self.packaging_funcs.append(func)
 
-  def add_runtime_file(self, filename: os.PathLike):
-    self.copy_runtime_files.add(filename)
-
   @property
   def hw_output_dir(self):
     return self.output_directory / "hw"
+
+  @property
+  def runtime_output_dir(self):
+    return self.output_directory / "runtime"
 
   def _get_ip(self):
     return ir.InsertionPoint(self.mod.body)

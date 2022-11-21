@@ -206,6 +206,7 @@ def CosimBSP(user_module):
       bin_dir = build_dir / "bin"
       lib_dir = build_dir / "lib"
       circt_inc_dir = build_dir / "tools" / "circt" / "include" / "circt"
+      assert circt_inc_dir.exists(), "Only works in the CIRCT build directory"
       esi_inc_dir = circt_inc_dir / "Dialect" / "ESI"
       hw_src = sys.hw_output_dir
       shutil.copy(lib_dir / "libEsiCosimDpiServer.so", hw_src)
@@ -214,8 +215,8 @@ def CosimBSP(user_module):
       shutil.copy(esi_inc_dir / "ESIPrimitives.sv", hw_src)
       shutil.copy(esi_inc_dir / "Cosim_DpiPkg.sv", hw_src)
       shutil.copy(esi_inc_dir / "Cosim_Endpoint.sv", hw_src)
-      shutil.copy(esi_inc_dir / "CosimDpi.capnp", hw_src)
       shutil.copy(__dir__ / "Makefile.cosim", sys.output_directory)
+      shutil.copy(sys.hw_output_dir / "schema.capnp", sys.runtime_output_dir)
 
   return top
 

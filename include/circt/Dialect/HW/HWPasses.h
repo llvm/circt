@@ -24,6 +24,7 @@ namespace hw {
 std::unique_ptr<mlir::Pass> createPrintInstanceGraphPass();
 std::unique_ptr<mlir::Pass> createHWSpecializePass();
 std::unique_ptr<mlir::Pass> createPrintHWModuleGraphPass();
+std::unique_ptr<mlir::Pass> createFlattenIOPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

@@ -15,7 +15,9 @@ from typing import Union
 
 
 def NamedWire(type_or_value: Union[PyCDEType, PyCDEValue], name: str):
-  """Create a named wire which is guaranteed to appear in the Verilog output."""
+  """Create a named wire which is guaranteed to appear in the Verilog output.
+  This construct precludes many optimizations (since it introduces an
+  optimization barrier) so it should be used sparingly."""
 
   assert name is not None
   value = None

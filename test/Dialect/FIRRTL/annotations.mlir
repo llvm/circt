@@ -1401,8 +1401,7 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [{
     %tap = firrtl.wire interesting_name  : !firrtl.uint<1>
     // CHECK:  %foo__gen_tap = firrtl.instance foo interesting_name  @Foo(out _gen_tap: !firrtl.ref<uint<1>>)
     // CHECK:  %0 = firrtl.ref.resolve %foo__gen_tap : !firrtl.ref<uint<1>>
-    // CHECK:  %tap = firrtl.wire interesting_name  : !firrtl.uint<1>
-    // CHECK:  firrtl.connect %tap, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:  %tap = firrtl.node %0 : !firrtl.uint<1>
   }
 }
 
@@ -1452,8 +1451,7 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [
     // CHECK:  %[[foo__gen_tap:.+]], %[[foo__gen_tap2:.+]] = firrtl.instance foo interesting_name  @Foo
     // CHECK-SAME: (out _gen_tap: !firrtl.ref<uint<1>>, out _gen_tap2: !firrtl.ref<uint<1>>)
     // CHECK:  %[[v0:.+]] = firrtl.ref.resolve %[[foo__gen_tap]] : !firrtl.ref<uint<1>>
-    // CHECK:  %tap = firrtl.wire interesting_name  : !firrtl.uint<1>
-    // CHECK:  firrtl.connect %tap, %[[v0]] : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:  %tap = firrtl.node %[[v0]] : !firrtl.uint<1>
   }
 }
 
@@ -1702,6 +1700,6 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [{
     firrtl.instance foo interesting_name  @Foo()
     %tap = firrtl.wire interesting_name  : !firrtl.uint<8>
     // CHECK:   %[[v0:.+]] = firrtl.ref.resolve %foo__gen_tap : !firrtl.ref<uint>
-    // CHECK:   firrtl.connect %tap, %[[v0]] : !firrtl.uint<8>, !firrtl.uint
+    // CHECK:   %tap = firrtl.node %[[v0]] : !firrtl.uint
   }
 }

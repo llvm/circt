@@ -1,7 +1,7 @@
 # REQUIRES: esi-cosim, rtl-sim
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1
-# RUN: esi-cosim-runner.py --tmpdir %t --schema %t/schema.capnp %s %t/*.sv
+# RUN: esi-cosim-runner.py --no-aux-files --tmpdir %t --schema %t/runtime/schema.capnp %s `ls %t/hw/*.sv | grep -v driver.sv`
 # PY: from esi_test import run_cosim
 # PY: run_cosim(tmpdir, rpcschemapath, simhostport)
 
@@ -86,19 +86,20 @@ class Top:
 
 
 if __name__ == "__main__":
-  s = pycde.System([esi.CosimBSP(Top)],
+  s = pycde.System(esi.CosimBSP(Top),
                    name="ESILoopback",
-                   output_directory=sys.argv[1])
+                   output_directory=sys.argv[1],
+                   sw_api_langs=["python"])
   s.generate()
-  s.emit_outputs()
-  s.build_api("python")
+  s.package()
 
 
 def run_cosim(tmpdir, schema_path, rpchostport):
-  sys.path.append(tmpdir)
+  import os
   import time
-  import esi_rt.ESILoopback as esi_sys
-  from esi_rt.common import Cosim
+  sys.path.append(os.path.join(tmpdir, "runtime"))
+  import ESILoopback as esi_sys
+  from ESILoopback.common import Cosim
 
   top = esi_sys.top(Cosim(schema_path, rpchostport))
 

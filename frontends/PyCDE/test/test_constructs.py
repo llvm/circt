@@ -2,13 +2,19 @@
 
 from pycde import generator, types, dim
 from pycde.common import Clock, Input, Output
-from pycde.constructs import Reg, Wire, SystolicArray
+from pycde.constructs import NamedWire, Reg, Wire, SystolicArray
 from pycde.dialects import comb
 from pycde.testing import unittestmodule
 
 # CHECK-LABEL: msft.module @WireAndRegTest {} (%In: i8, %clk: i1) -> (Out: i8, OutReg: i8)
-# CHECK:         %0 = seq.compreg %In, %clk : i8
-# CHECK:         msft.output %In, %0 : i8, i8
+# CHECK:         %w1 = sv.wire  : !hw.inout<i8>
+# CHECK:         [[r0:%.+]] = sv.read_inout %w1 : !hw.inout<i8>
+# CHECK:         sv.assign %w1, %In : i8
+# CHECK:         %in = sv.wire  : !hw.inout<i8>
+# CHECK:         {{%.+}} = sv.read_inout %in : !hw.inout<i8>
+# CHECK:         sv.assign %in, %In : i8
+# CHECK:         [[r1:%.+]] = seq.compreg %In, %clk : i8
+# CHECK:         msft.output [[r0]], [[r1]] : i8, i8
 
 
 @unittestmodule()
@@ -20,9 +26,11 @@ class WireAndRegTest:
 
   @generator
   def create(ports):
-    w1 = Wire(types.i8)
+    w1 = Wire(types.i8, "w1")
     ports.Out = w1
     w1.assign(ports.In)
+
+    NamedWire(ports.In, "in")
 
     r1 = Reg(types.i8)
     ports.OutReg = r1

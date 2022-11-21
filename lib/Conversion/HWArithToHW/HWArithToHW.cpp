@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HWArith/HWArithOps.h"
 #include "circt/Dialect/MSFT/MSFTOps.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -305,33 +306,61 @@ struct ArgResOpConversion : public OpConversionPattern<TOp> {
   using OpConversionPattern<TOp>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<TOp>::OpAdaptor;
 
+  // Function that will replace the op with a type-converted new op.
+  using ReplacementFunc = std::function<void(
+      ConversionPatternRewriter &, TOp, llvm::SmallVector<Type>, OpAdaptor &)>;
+
+  ArgResOpConversion(TypeConverter &tc, MLIRContext *ctx, ReplacementFunc f)
+      : OpConversionPattern<TOp>(tc, ctx), replacementFunc(f) {}
+
   LogicalResult
   matchAndRewrite(TOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    llvm::SmallVector<Type, 4> convResTypes;
+    llvm::SmallVector<Type> convResTypes;
     if (failed(this->getTypeConverter()->convertTypes(op->getResultTypes(),
                                                       convResTypes)))
       return failure();
-    // Use the generic builder to allow this pattern to apply to all ops.
-    rewriter.replaceOpWithNewOp<TOp>(op, convResTypes, adaptor.getOperands(),
-                                     op->getAttrs());
+    replacementFunc(rewriter, op, convResTypes, adaptor);
     return success();
   }
+
+  ReplacementFunc replacementFunc;
 };
 
-// Adds the ArgResOpConversion for 'TOp' to the set of conversion patterns, as
-// well as a legality check on the conversion status of the op's operands and
-// results.
+// Adds the ArgResOpConversion for 'TOp' to the set of conversion patterns,
+// using TReplFunc as the replacement function inside the pattern, as well as a
+// legality check on the conversion status of the op's operands and results.
+template <typename TOp, typename TReplFunc>
+static void addOperandConversion(ConversionTarget &target,
+                                 RewritePatternSet &patterns,
+                                 HWArithToHWTypeConverter &typeConverter,
+                                 TReplFunc replFunc) {
+  patterns.add<ArgResOpConversion<TOp>>(typeConverter, patterns.getContext(),
+                                        replFunc);
+
+  target.addDynamicallyLegalOp<TOp>([&](auto op) {
+    return !typeConverter.hasSignednessSemantics(op->getOperandTypes()) &&
+           !typeConverter.hasSignednessSemantics(op->getResultTypes());
+  });
+}
+
+// Generic version of addOperandConversion (above) which uses the generic
+// operation builder signature.
 template <typename... TOp>
 static void addOperandConversion(ConversionTarget &target,
                                  RewritePatternSet &patterns,
                                  HWArithToHWTypeConverter &typeConverter) {
-  (patterns.add<ArgResOpConversion<TOp>>(typeConverter, patterns.getContext()),
+  (addOperandConversion<TOp>(
+       target, patterns, typeConverter,
+       [](ConversionPatternRewriter &rewriter, TOp op,
+          llvm::ArrayRef<Type> convResTypes,
+          typename ArgResOpConversion<TOp>::OpAdaptor &adaptor) {
+         // Use the generic builder to allow this pattern to apply to all ops
+         // with default builders.
+         rewriter.replaceOpWithNewOp<TOp>(
+             op, convResTypes, adaptor.getOperands(), op->getAttrs());
+       }),
    ...);
-  target.addDynamicallyLegalOp<TOp...>([&](auto op) {
-    return !typeConverter.hasSignednessSemantics(op->getOperandTypes()) &&
-           !typeConverter.hasSignednessSemantics(op->getResultTypes());
-  });
 }
 
 template <typename... TOp>
@@ -379,6 +408,9 @@ Type HWArithToHWTypeConverter::removeSignedness(Type type) {
             }
             return hw::StructType::get(type.getContext(), convertedElements);
           })
+          .Case<hw::InOutType>([this](auto type) {
+            return hw::InOutType::get(removeSignedness(type.getElementType()));
+          })
           .Default([](auto type) { return type; });
 
   return convertedType;
@@ -399,6 +431,9 @@ bool HWArithToHWTypeConverter::hasSignednessSemantics(Type type) {
             return llvm::any_of(type.getElements(), [this](auto element) {
               return this->hasSignednessSemantics(element.type);
             });
+          })
+          .Case<hw::InOutType>([this](auto type) {
+            return hasSignednessSemantics(type.getElementType());
           })
           .Default([](auto type) { return false; });
 
@@ -443,6 +478,16 @@ HWArithToHWTypeConverter::HWArithToHWTypeConverter() {
       });
 }
 
+template <class TOp>
+void wireRegReplacementFunction(
+    ConversionPatternRewriter &rewriter, TOp op,
+    llvm::ArrayRef<Type> convResTypes,
+    typename ArgResOpConversion<TOp>::OpAdaptor &adaptor) {
+  hw::InOutType convIOType = convResTypes.front().cast<hw::InOutType>();
+  rewriter.replaceOpWithNewOp<TOp>(op, convIOType.getElementType(),
+                                   op.getNameAttr());
+}
+
 //===----------------------------------------------------------------------===//
 // Pass driver
 //===----------------------------------------------------------------------===//
@@ -476,11 +521,19 @@ public:
 
     // Generic conversion and legalization patterns for operations that we
     // expect to be using in conjunction with the signedness values of hwarith.
-    addOperandConversion<
-        hw::OutputOp, comb::MuxOp, seq::CompRegOp, hw::ArrayCreateOp,
-        hw::ArrayGetOp, hw::ArrayConcatOp, hw::ArraySliceOp, hw::StructCreateOp,
-        hw::StructExplodeOp, hw::StructExtractOp, hw::StructInjectOp,
-        hw::UnionCreateOp, hw::UnionExtractOp>(target, patterns, typeConverter);
+    addOperandConversion<sv::ReadInOutOp, sv::AssignOp, hw::OutputOp,
+                         comb::MuxOp, seq::CompRegOp, hw::ArrayCreateOp,
+                         hw::ArrayGetOp, hw::ArrayConcatOp, hw::ArraySliceOp,
+                         hw::StructCreateOp, hw::StructExplodeOp,
+                         hw::StructExtractOp, hw::StructInjectOp,
+                         hw::UnionCreateOp, hw::UnionExtractOp>(
+        target, patterns, typeConverter);
+
+    addOperandConversion<sv::WireOp>(target, patterns, typeConverter,
+                                     wireRegReplacementFunction<sv::WireOp>);
+
+    addOperandConversion<sv::RegOp>(target, patterns, typeConverter,
+                                    wireRegReplacementFunction<sv::RegOp>);
 
     populateHWArithToHWConversionPatterns(typeConverter, patterns);
 
