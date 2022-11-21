@@ -13,10 +13,14 @@
 #include "PassDetails.h"
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Analysis/SchedulingAnalysis.h"
+#include "circt/Dialect/SSP/SSPOps.h"
+#include "circt/Dialect/SSP/Utilities.h"
 #include "circt/Scheduling/Algorithms.h"
 #include "circt/Scheduling/Utilities.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "llvm/Support/Debug.h"
+
+#include <iostream>
 
 #define DEBUG_TYPE "pipeline-schedule-linear"
 
@@ -42,6 +46,19 @@ static bool ignoreOp(Operation *op) {
 void ScheduleLinearPipelinePass::runOnOperation() {
   auto pipeline = getOperation();
 
+  // Get operator library for the pipeline.
+  auto opLibAttr = pipeline->getAttrOfType<FlatSymbolRefAttr>("operator_lib");
+  if (!opLibAttr) {
+    pipeline.emitError("missing 'operator_lib' attribute");
+    return signalPassFailure();
+  }
+  auto opLib = dyn_cast_or_null<ssp::OperatorLibraryOp>(
+      SymbolTable::lookupNearestSymbolFrom(pipeline->getParentOp(), opLibAttr));
+  if (!opLib) {
+    pipeline.emitError("operator library '") << opLibAttr << "' not found";
+    return signalPassFailure();
+  }
+
   auto stageOpIt = pipeline.getOps<PipelineStageOp>();
   auto stageRegOpIt = pipeline.getOps<PipelineStageRegisterOp>();
 
@@ -52,20 +69,10 @@ void ScheduleLinearPipelinePass::runOnOperation() {
   }
 
   // Load operator info from attribute.
-  auto problem = SharedOperatorsProblem::get(pipeline);
-  auto operatorInfo = getOperatorInfo(pipeline);
-  if (!operatorInfo) {
-    pipeline.emitError() << "Expected 'scheduling.operator_info' attribute on "
-                            "pipeline.";
-    return signalPassFailure();
-  }
-  DenseMap<StringAttr, Problem::OperatorType> operatorTypes;
-  for (auto opInfo : *operatorInfo) {
-    auto opName = opInfo.first;
-    auto opType = problem.getOrInsertOperatorType(opName.strref());
-    problem.setLatency(opType, opInfo.second.latency.getValue().getZExtValue());
-    operatorTypes[opName] = opType;
-  }
+  auto problem = Problem::get(pipeline);
+
+  DenseMap<SymbolRefAttr, Problem::OperatorType> operatorTypes;
+  SmallDenseMap<StringAttr, unsigned> oprIds;
 
   // Set operation operator types.
   Operation *lastOp = nullptr;
@@ -75,16 +82,30 @@ void ScheduleLinearPipelinePass::runOnOperation() {
       continue;
 
     // Lookup operator info.
-    auto opName = op.getName().getIdentifier();
-    auto info = operatorTypes.find(opName);
-    if (info == operatorTypes.end()) {
-      op.emitError() << "Operator info for operation '" << opName
-                     << " not found in 'scheduling.operator_info' "
-                        "attribute.";
+    auto operatorTypeAttr = op.getAttrOfType<SymbolRefAttr>("operator_type");
+    if (!operatorTypeAttr) {
+      op.emitError() << "Expected 'operator_type' attribute on operation.";
       return signalPassFailure();
     }
+
+    auto operatorTypeIt = operatorTypes.find(operatorTypeAttr);
+    if (operatorTypeIt == operatorTypes.end()) {
+      // First time seeing operator type - load it into the problem.
+      auto opTypeOp = opLib.lookupSymbol<ssp::OperatorTypeOp>(operatorTypeAttr);
+      if (!opTypeOp) {
+        op.emitError() << "Operator type '" << operatorTypeAttr
+                       << "' not found in operator library.";
+        return signalPassFailure();
+      }
+
+      auto insertRes = operatorTypes.try_emplace(
+          operatorTypeAttr, ssp::loadOperatorType<Problem, ssp::LatencyAttr>(
+                                problem, opTypeOp, oprIds));
+      operatorTypeIt = insertRes.first;
+    }
+
     problem.insertOperation(&op);
-    problem.setLinkedOperatorType(&op, info->second);
+    problem.setLinkedOperatorType(&op, operatorTypeIt->second);
     lastOp = &op;
   }
 
@@ -97,10 +118,20 @@ void ScheduleLinearPipelinePass::runOnOperation() {
 
   // Gather stage results.
   using StageIdx = unsigned;
-  // Maintain stage map as an ordered map.
+
+  // Maintain a mapping of {start time : [operations]}, that contains the
+  // operations scheduled to a given start time. This is an ordered map, so that
+  // we can iterate over the stages in order.
   std::map<StageIdx, llvm::SmallVector<Operation *>> stageMap;
   DenseMap<StageIdx, PipelineStageOp> stages;
   llvm::SmallVector<Operation *, 4> otherOps;
+
+  // Iterate over the ops in the pipeline, and add them to the stage map.
+  // While doing so, we also build the pipeline stage operations.
+  OpBuilder b(pipeline.getBody());
+  auto loc = pipeline.getLoc();
+  unsigned currentEndTime = 0;
+  Value stageValid = b.create<hw::ConstantOp>(loc, APInt(1, 1));
   for (auto &op : pipeline.getOps()) {
     if (ignoreOp(&op)) {
       if (!isa<pipeline::ReturnOp>(&op))
@@ -109,17 +140,14 @@ void ScheduleLinearPipelinePass::runOnOperation() {
     }
     unsigned startTime = *problem.getStartTime(&op);
     stageMap[startTime].push_back(&op);
-  }
 
-  // Build pipeline stages.
-  OpBuilder b(pipeline.getBody());
-  auto loc = pipeline.getLoc();
-  Value stageValid = b.create<hw::ConstantOp>(loc, APInt(1, 1));
-  StageIdx numStages = stageMap.rbegin()->first;
-  for (unsigned i = 0; i <= numStages; ++i) {
-    auto nextStage = b.create<PipelineStageOp>(loc, stageValid);
-    stageValid = nextStage.getValid();
-    stages[i] = nextStage;
+    auto oldEndTime = currentEndTime;
+    currentEndTime = std::max(currentEndTime, *problem.getEndTime(&op));
+    for (unsigned i = oldEndTime; i < currentEndTime; ++i) {
+      auto nextStage = b.create<PipelineStageOp>(loc, stageValid);
+      stageValid = nextStage.getValid();
+      stages[i] = nextStage;
+    }
   }
 
   // Reorder pipeline. Initially place unscheduled ops at the start, and then
@@ -132,6 +160,15 @@ void ScheduleLinearPipelinePass::runOnOperation() {
     for (auto op : ops)
       op->moveBefore(stageOp->second);
   }
+
+  // Replace the pipeline return value with one that uses the last stage valid
+  // signal.
+  auto returnOp =
+      cast<pipeline::ReturnOp>(pipeline.getBodyBlock()->getTerminator());
+  b.setInsertionPoint(returnOp);
+  b.create<pipeline::ReturnOp>(returnOp.getLoc(), returnOp.getOutputs(),
+                               stageValid);
+  returnOp.erase();
 }
 
 std::unique_ptr<mlir::Pass>

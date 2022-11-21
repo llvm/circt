@@ -218,6 +218,17 @@ public:
   }
   void setStartTime(Operation *op, unsigned val) { startTime[op] = val; }
 
+  /// Returns the end time for \p op, as computed by the scheduler.
+  /// This end time is derived from the start time and the operator type's
+  /// latency.
+  Optional<unsigned> getEndTime(Operation *op) {
+    if (auto startTime = getStartTime(op))
+      if (auto opType = getLinkedOperatorType(op))
+        if (auto latency = getLatency(*opType))
+          return startTime.value() + latency.value();
+    return llvm::None;
+  }
+
   //===--------------------------------------------------------------------===//
   // Properties as string key-value pairs (e.g. for DOT graphs)
   //===--------------------------------------------------------------------===//
