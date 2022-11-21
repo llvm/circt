@@ -42,32 +42,32 @@ circuit Top : %[[
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top/dut:DUT/submodule:Submodule>wire_Submodule",
-        "sink":"~Top|DUT>tap_0"
+        "sink":"~Top|DUT>tap_6"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top/dut:DUT>wire_DUT",
-        "sink":"~Top|DUT>tap_1"
+        "sink":"~Top|DUT>tap_7"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top>wire_Top",
-        "sink":"~Top|DUT>tap_2"
+        "sink":"~Top|DUT>tap_8"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top/dut:DUT/submodule:Submodule>port_Submodule",
-        "sink":"~Top|DUT>tap_3"
+        "sink":"~Top|DUT>tap_9"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top/dut:DUT>port_DUT",
-        "sink":"~Top|DUT>tap_4"
+        "sink":"~Top|DUT>tap_10"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top>port_Top",
-        "sink":"~Top|DUT>tap_5"
+        "sink":"~Top|DUT>tap_11"
       }
     ]
   },
@@ -77,32 +77,32 @@ circuit Top : %[[
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top/dut:DUT/submodule:Submodule>wire_Submodule",
-        "sink":"~Top|Top>tap[0]"
+        "sink":"~Top|Top>tap_12[0]"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top/dut:DUT>wire_DUT",
-        "sink":"~Top|Top>tap[1]"
+        "sink":"~Top|Top>tap_12[1]"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top>wire_Top",
-        "sink":"~Top|Top>tap[2]"
+        "sink":"~Top|Top>tap_12[2]"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top/dut:DUT/submodule:Submodule>port_Submodule",
-        "sink":"~Top|Top>tap[3]"
+        "sink":"~Top|Top>tap_12[3]"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top/dut:DUT>port_DUT",
-        "sink":"~Top|Top>tap[4]"
+        "sink":"~Top|Top>tap_12[4]"
       },
       {
         "class":"sifive.enterprise.grandcentral.ReferenceDataTapKey",
         "source":"~Top|Top>port_Top",
-        "sink":"~Top|Top>tap[5]"
+        "sink":"~Top|Top>tap_12[5]"
       }
     ]
   },
@@ -144,31 +144,31 @@ circuit Top : %[[
   },
   {
     "class": "firrtl.transforms.DontTouchAnnotation",
-    "target": "~Top|DUT>tap_0"
+    "target": "~Top|DUT>tap_6"
   },
   {
     "class": "firrtl.transforms.DontTouchAnnotation",
-    "target": "~Top|DUT>tap_1"
+    "target": "~Top|DUT>tap_7"
   },
   {
     "class": "firrtl.transforms.DontTouchAnnotation",
-    "target": "~Top|DUT>tap_2"
+    "target": "~Top|DUT>tap_8"
   },
   {
     "class": "firrtl.transforms.DontTouchAnnotation",
-    "target": "~Top|DUT>tap_3"
+    "target": "~Top|DUT>tap_9"
   },
   {
     "class": "firrtl.transforms.DontTouchAnnotation",
-    "target": "~Top|DUT>tap_4"
+    "target": "~Top|DUT>tap_10"
   },
   {
     "class": "firrtl.transforms.DontTouchAnnotation",
-    "target": "~Top|DUT>tap_5"
+    "target": "~Top|DUT>tap_11"
   },
   {
     "class": "firrtl.transforms.DontTouchAnnotation",
-    "target": "~Top|Top>tap"
+    "target": "~Top|Top>tap_12"
   }
 ]]
   module Submodule :
@@ -206,18 +206,18 @@ circuit Top : %[[
 
     inst submodule of Submodule
 
-    wire tap_0 : UInt<1>
-    wire tap_1 : UInt<1>
-    wire tap_2 : UInt<1>
-    wire tap_3 : UInt<1>
-    wire tap_4 : UInt<1>
-    wire tap_5 : UInt<1>
-    tap_0 is invalid
-    tap_1 is invalid
-    tap_2 is invalid
-    tap_3 is invalid
-    tap_4 is invalid
-    tap_5 is invalid
+    wire tap_6 : UInt<1>
+    wire tap_7 : UInt<1>
+    wire tap_8 : UInt<1>
+    wire tap_9 : UInt<1>
+    wire tap_10 : UInt<1>
+    wire tap_11 : UInt<1>
+    tap_6 is invalid
+    tap_7 is invalid
+    tap_8 is invalid
+    tap_9 is invalid
+    tap_10 is invalid
+    tap_11 is invalid
 
   module Top :
     output port_Top : UInt<1>
@@ -230,29 +230,50 @@ circuit Top : %[[
     wire_Top <= inv
 
     inst dut of DUT
-    wire tap : UInt<1>[6]
-    tap is invalid
+    wire tap_12 : UInt<1>[6]
+    tap_12 is invalid
 
     ; CHECK-LABEL: module Submodule
-    ; CHECK:         wire tap_3 = 1'h0
-    ; CHECK-NEXT:    wire tap_4 = 1'h0
-    ; CHECK-DAG:     assign tap_0 = wire_Submodule
-    ; CHECK-DAG:     assign tap_1 = DUT.wire_DUT
-    ; CHECK-DAG:     assign tap_2 = Top.wire_Top
-    ; CHECK-DAG:     assign tap_5 = Top.port_Top
+    ; CHECK-NEXT:    input [[Submodule_tap_1_port:[a-zA-Z0-9_]+]]
+    ; CHECK-NEXT:          [[Submodule_tap_2_port:[a-zA-Z0-9_]+]]
+    ; CHECK-NEXT:          [[Submodule_tap_5_port:[a-zA-Z0-9_]+]]
+    ;
+    ; CHECK-DAG:     tap_0 = wire_Submodule;
+    ; CHECK-DAG:     tap_1 = [[Submodule_tap_1_port]];
+    ; CHECK-DAG:     tap_2 = [[Submodule_tap_2_port]];
+    ; CHECK-DAG:     tap_3 = 1'h0;
+    ; CHECK-DAG:     tap_4 = 1'h0;
+    ; CHECK-DAG:     tap_5 = [[Submodule_tap_5_port]];
 
     ; CHECK-LABEL: module DUT
-    ; CHECK:         wire tap_3 = 1'h0
-    ; CHECK-NEXT:    wire tap_4 = 1'h0
-    ; CHECK-DAG:     assign tap_0 = DUT.submodule.wire_Submodule
-    ; CHECK-DAG:     assign tap_1 = wire_DUT
-    ; CHECK-DAG:     assign tap_2 = Top.wire_Top
-    ; CHECK-DAG:     assign tap_5 = Top.port_Top
+    ; CHECK-NEXT:    input [[DUT_tap_2_port:[a-zA-Z0-9_]+]]
+    ; CHECK-NEXT:          [[DUT_tap_5_port:[a-zA-Z0-9_]+]]
+    ; CHECK-NEXT:          [[DUT_tap_8_port:[a-zA-Z0-9_]+]]
+    ; CHECK-NEXT:          [[DUT_tap_11_port:[a-zA-Z0-9_]+]]
+    ;
+    ; CHECK-DAG:     tap_6 = DUT.submodule.wire_Submodule;
+    ; CHECK-DAG:     tap_7 = wire_DUT;
+    ; CHECK-DAG:     tap_8 = [[DUT_tap_8_port]];
+    ; CHECK-DAG:     tap_9 = 1'h0;
+    ; CHECK-DAG:     tap_10 = 1'h0;
+    ; CHECK-DAG:     tap_11 = [[DUT_tap_11_port]];
+    ;
+    ; CHECK:         Submodule submodule (
+    ; CHECK-DAG:       .[[Submodule_tap_1_port]] (wire_DUT)
+    ; CHECK-DAG:       .[[Submodule_tap_2_port]] ([[DUT_tap_2_port]])
+    ; CHECK-DAG:       .[[Submodule_tap_5_port]] ([[DUT_tap_5_port]])
 
     ; CHECK-LABEL: module Top
-    ; CHECK:         wire tap_3 = 1'h0
-    ; CHECK-NEXT:    wire tap_4 = 1'h0
-    ; CHECK-NEXT:    wire tap_5 = 1'h0
-    ; CHECK-DAG:     assign tap_0 = Top.dut.submodule.wire_Submodule
-    ; CHECK-DAG:     assign tap_1 = Top.dut.wire_DUT
-    ; CHECK-DAG:     assign tap_2 = wire_Top
+    ;
+    ; CHECK-DAG:     tap_12_0 = Top.dut.submodule.wire_Submodule
+    ; CHECK-DAG:     tap_12_1 = Top.dut.wire_DUT
+    ; CHECK-DAG:     tap_12_2 = inv;
+    ; CHECK-DAG:     tap_12_3 = 1'h0
+    ; CHECK-DAG:     tap_12_4 = 1'h0
+    ; CHECK-DAG:     tap_12_5 = 1'h0
+    ;
+    ; CHECK:         DUT dut (
+    ; CHECK-DAG:       .[[DUT_tap_2_port]] (inv)
+    ; CHECK-DAG:       .[[DUT_tap_5_port]] (1'h0)
+    ; CHECK-DAG:       .[[DUT_tap_8_port]] (inv)
+    ; CHECK-DAG:       .[[DUT_tap_11_port]] (1'h0)

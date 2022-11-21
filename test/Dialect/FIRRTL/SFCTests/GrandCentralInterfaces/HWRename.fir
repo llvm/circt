@@ -26,15 +26,18 @@ circuit Top:
     signed.a <= a
     b <= signed.b
 
-    ; CHECK:      module Companion();
-    ; CHECK-NEXT:   MyInterface MyView();
-    ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = DUT.a;
+    ; CHECK:      module Companion(
+    ; CHECK:        input [[port:[a-zA-Z0-9_]+]]);
+    ; CHECK:        MyInterface MyView();
+    ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = [[port]];
     ; CHECK-NEXT: endmodule
 
     ; CHECK:      module DUT
     ; CHECK:        input a
     ; CHECK:        output b
-    ; CHECK:          Companion companion ();
+    ; CHECK:          Companion companion (
+    ; CHECK-NEXT:       .[[port]] (a)
+    ; CHECK-NEXT:     );
     ; Wire got optimized away!!
     ; CHECK:          assign b = a;
     ; CHECK:      endmodule

@@ -1006,33 +1006,34 @@ firrtl.circuit "GCTInterface"  attributes {
 // CHECK-SAME:  name = "view"}
 
 // The companion should be marked.
-// CHECK: firrtl.module private @view_companion
+// CHECK:      firrtl.module private @view_companion(
+// CHECK-SAME:   in %[[port_0:[a-zA-Z0-9_]+]]: !firrtl.uint<1>,
+// CHECK-SAME:   in %[[port_1:[a-zA-Z0-9_]+]]: !firrtl.uint<1>,
+// CHECK-SAME:   in %[[port_2:[a-zA-Z0-9_]+]]: !firrtl.uint<1>,
+// CHECK-SAME:   in %[[port_3:[a-zA-Z0-9_]+]]: !firrtl.uint<1>,
+// CHECK-SAME:   in %[[port_4:[a-zA-Z0-9_]+]]: !firrtl.uint<1>
+// CHECK-SAME: )
 // CHECK-SAME: annotations
 // CHECK-SAME: {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
 // CHECK-SAME:  id = [[ID_ViewName]] : i64,
 // CHECK-SAME:  name = "view"}
 //
-// CHECK:      %[[wire_1_ref:[a-zA-Z0-9_]+]] = firrtl.ref.resolve {{.+}}
-// CHECK:      firrtl.node %[[wire_1_ref]]
+// CHECK:      firrtl.node %[[port_0]]
 // CHECK-SAME:   {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1 : i64}
-// CHECK:      %[[wire_2_ref:[a-zA-Z0-9_]+]] = firrtl.ref.resolve {{.+}}
-// CHECK:      firrtl.node %[[wire_2_ref]]
+// CHECK:      firrtl.node %[[port_1]]
 // CHECK-SAME:   {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 2 : i64}
-// CHECK:      %[[wire_3_ref:[a-zA-Z0-9_]+]] = firrtl.ref.resolve {{.+}}
-// CHECK:      firrtl.node %[[wire_3_ref]]
+// CHECK:      firrtl.node %[[port_2]]
 // CHECK-SAME:   {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 3 : i64}
-// CHECK:      %[[wire_4_ref:[a-zA-Z0-9_]+]] = firrtl.ref.resolve {{.+}}
-// CHECK:      firrtl.node %[[wire_4_ref]]
+// CHECK:      firrtl.node %[[port_3]]
 // CHECK-SAME:   {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 4 : i64}
-// CHECK:      %[[wire_5_ref:[a-zA-Z0-9_]+]] = firrtl.ref.resolve {{.+}}
-// CHECK:      firrtl.node %[[wire_5_ref]]
+// CHECK:      firrtl.node %[[port_4]]
 // CHECK-SAME:   {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 5 : i64}
 
 // The RefSend must be generated.
 // CHECK: firrtl.module @GCTInterface
 // CHECK-SAME: %a: !firrtl.uint<1>
 // CHECK:      %r = firrtl.reg  %clock  : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
-// CHECK:      %[[view_companion_view__2refPort:.+]], %[[view_companion_view__2refPort_1:.+]], %[[view_companion_view__1refPort:.+]], %[[view_companion_view__0refPort:.+]], %[[view_companion_view_portrefPort:.+]] = firrtl.instance view_companion  @view_companion(in {{.*}}: !firrtl.ref<uint<1>>, in {{.*}}: !firrtl.ref<uint<1>>, in {{.*}}: !firrtl.ref<uint<1>>, in {{.*}}: !firrtl.ref<uint<1>>, in {{.*}}: !firrtl.ref<uint<1>>)
+// CHECK:      %[[view_companion_view__2refPort:.+]], %[[view_companion_view__2refPort_1:.+]], %[[view_companion_view__1refPort:.+]], %[[view_companion_view__0refPort:.+]], %[[view_companion_view_portrefPort:.+]] = firrtl.instance view_companion  @view_companion(in {{.*}}: !firrtl.uint<1>, in {{.*}}: !firrtl.uint<1>, in {{.*}}: !firrtl.uint<1>, in {{.*}}: !firrtl.uint<1>, in {{.*}}: !firrtl.uint<1>)
 // CHECK:      %0 = firrtl.subfield %r[_2] : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
 // CHECK:      %1 = firrtl.subindex %0[0] : !firrtl.vector<uint<1>, 2>
 // CHECK:      %2 = firrtl.subfield %r[_2] : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
@@ -1041,16 +1042,11 @@ firrtl.circuit "GCTInterface"  attributes {
 // CHECK:      %5 = firrtl.subfield %4[_1] : !firrtl.bundle<_0: uint<1>, _1: uint<1>>
 // CHECK:      %6 = firrtl.subfield %r[_0] : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
 // CHECK:      %7 = firrtl.subfield %6[_0] : !firrtl.bundle<_0: uint<1>, _1: uint<1>>
-// CHECK:      %8 = firrtl.ref.send %1 : !firrtl.uint<1>
-// CHECK:      firrtl.connect %view_companion__1_0, %8 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
-// CHECK:      %9 = firrtl.ref.send %3 : !firrtl.uint<1>
-// CHECK:      firrtl.connect %view_companion__2_0, %9 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
-// CHECK:      %10 = firrtl.ref.send %5 : !firrtl.uint<1>
-// CHECK:      firrtl.connect %view_companion__0_def_3_0, %10 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
-// CHECK:      %11 = firrtl.ref.send %7 : !firrtl.uint<1>
-// CHECK:      firrtl.connect %view_companion__0_def_4_0, %11 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
-// CHECK:      %12 = firrtl.ref.send %a : !firrtl.uint<1>
-// CHECK:      firrtl.connect %view_companion_ViewName_5_0, %12 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+// CHECK:      firrtl.connect %view_companion__1_0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      firrtl.connect %view_companion__2_0, %3 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      firrtl.connect %view_companion__0_def_3_0, %5 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      firrtl.connect %view_companion__0_def_4_0, %7 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      firrtl.connect %view_companion_ViewName_5_0, %a : !firrtl.uint<1>, !firrtl.uint<1>
 
 // -----
 
@@ -1557,16 +1553,14 @@ firrtl.circuit "GrandCentralViewsBundle"  attributes {
   ]
 } {
   // CHECK:      firrtl.module @Companion
-  // CHECK-SAME:   in %[[refPort_0:[a-zA-Z0-9_]+]]: !firrtl.ref<uint<1>>
-  // CHECK-SAME:   in %[[refPort_1:[a-zA-Z0-9_]+]]: !firrtl.ref<uint<2>>
+  // CHECK-SAME:   in %[[port_0:[a-zA-Z0-9_]+]]: !firrtl.uint<1>
+  // CHECK-SAME:   in %[[port_1:[a-zA-Z0-9_]+]]: !firrtl.uint<2>
   // CHECK-SAME:   {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion", id = 0 : i64, name = "View"}
   firrtl.module @Companion() {
-    // CHECK-NEXT: %[[refPort_0_resolve:[a-zA-Z0-9_]+]] = firrtl.ref.resolve %[[refPort_0]]
-    // CHECK-NEXT: firrtl.node %[[refPort_0_resolve]]
+    // CHECK-NEXT: firrtl.node %[[port_0]]
     // CHECK-SAME:   {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1 : i64}]}
     // CHECK-SAME:   !firrtl.uint<1>
-    // CHECK-NEXT: %[[refPort_1_resolve:[a-zA-Z0-9_]+]] = firrtl.ref.resolve %[[refPort_1]]
-    // CHECK-NEXT: firrtl.node %[[refPort_1_resolve]]
+    // CHECK-NEXT: firrtl.node %[[port_1]]
     // CHECK-SAME:   {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 2 : i64}]}
     // CHECK-SAME:   !firrtl.uint<2>
   }
@@ -1586,10 +1580,12 @@ firrtl.circuit "GrandCentralViewsBundle"  attributes {
   firrtl.module @GrandCentralViewsBundle() {
     // CHECK-NEXT: %[[bar_refPort_0:[a-zA-Z0-9_]+]], %[[bar_refPort_1:[a-zA-Z0-9_]+]] = firrtl.instance bar
     firrtl.instance bar @Bar()
-    // CHECK-NEXT: %[[companion_refPort_0:[a-zA-Z0-9_]+]], %[[companion_refPort_1:[a-zA-Z0-9_]+]] = firrtl.instance companion
+    // CHECK-NEXT: %[[companion_port_0:[a-zA-Z0-9_]+]], %[[companion_port_1:[a-zA-Z0-9_]+]] = firrtl.instance companion
     firrtl.instance companion @Companion()
-    // CHECK-NEXT: firrtl.connect %[[companion_refPort_0]], %[[bar_refPort_0]]
-    // CHECK-NEXT: firrtl.connect %[[companion_refPort_1]], %[[bar_refPort_1]]
+    // CHECK-NEXT: %[[bar_refPort_0_resolve:[a-zA-Z0-9_]+]] = firrtl.ref.resolve %[[bar_refPort_0]]
+    // CHECK-NEXT: firrtl.connect %[[companion_port_0]], %[[bar_refPort_0_resolve]]
+    // CHECK-NEXT: %[[bar_refPort_1_resolve:[a-zA-Z0-9_]+]] = firrtl.ref.resolve %[[bar_refPort_1]]
+    // CHECK-NEXT: firrtl.connect %[[companion_port_1]], %[[bar_refPort_1_resolve]]
   }
 }
 
