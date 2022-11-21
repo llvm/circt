@@ -1,6 +1,6 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
-# RUN: FileCheck %s --input-file %t/PolynomialCompute.sv --check-prefix=OUTPUT
+# RUN: FileCheck %s --input-file %t/hw/PolynomialCompute.sv --check-prefix=OUTPUT
 
 from __future__ import annotations
 
