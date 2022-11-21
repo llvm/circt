@@ -5,16 +5,57 @@
 from __future__ import annotations
 
 from .pycde_types import PyCDEType, dim
-from .value import BitVectorValue, ListValue, Value
+from .value import BitVectorValue, ListValue, Value, PyCDEValue
 from circt.support import get_value, BackedgeBuilder
-from circt.dialects import msft, hw
+from circt.dialects import msft, hw, sv
 import mlir.ir as ir
 
 import typing
+from typing import Union
 
 
-def Wire(type: PyCDEType):
-  """Declare a wire. Used to create backedges. Must assign exactly once."""
+def NamedWire(type_or_value: Union[PyCDEType, PyCDEValue], name: str):
+  """Create a named wire which is guaranteed to appear in the Verilog output.
+  This construct precludes many optimizations (since it introduces an
+  optimization barrier) so it should be used sparingly."""
+
+  assert name is not None
+  value = None
+  type = type_or_value
+  if isinstance(type_or_value, PyCDEValue):
+    type = type_or_value.type
+    value = type_or_value
+
+  class NamedWire(type._get_value_class()):
+
+    def __init__(self):
+      self.assigned_value = None
+      self.wire_op = sv.WireOp(hw.InOutType.get(type), name)
+      read_val = sv.ReadInOutOp(type, self.wire_op)
+      super().__init__(Value(read_val), type)
+
+    def assign(self, new_value: Value):
+      if self.assigned_value is not None:
+        raise ValueError("Cannot assign value to Wire twice.")
+      if new_value.type != self.type:
+        raise TypeError(
+            f"Cannot assign {new_value.value.type} to {self.value.type}")
+      sv.AssignOp(self.wire_op, new_value.value)
+      self.assigned_value = new_value
+      return self
+
+  w = NamedWire()
+  if value is not None:
+    w.assign(value)
+  return w
+
+
+def Wire(type: PyCDEType, name: str = None):
+  """Declare a wire. Used to create backedges. Must assign exactly once. If
+  'name' is specified, use 'NamedWire' instead."""
+
+  if name is not None:
+    return NamedWire(type, name)
 
   class WireValue(type._get_value_class()):
 
@@ -33,6 +74,7 @@ def Wire(type: PyCDEType):
       self._backedge.erase()
       self._backedge = None
       self.value = new_value.value
+      return new_value
 
   return WireValue()
 
