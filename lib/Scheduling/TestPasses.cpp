@@ -584,14 +584,7 @@ void roundtrip(InstanceOp instOp) {
   auto prob = loadProblem<ProblemT>(instOp);
 
   OpBuilder builder(instOp);
-  saveProblem<ProblemT>(
-      prob, instOp.getInstanceNameAttr(), instOp.getProblemNameAttr(),
-      [&](Operation *op) {
-        if (auto opOp = dyn_cast<OperationOp>(op))
-          return opOp.getSymNameAttr();
-        return StringAttr();
-      },
-      builder);
+  saveProblem<ProblemT>(prob, builder);
 }
 
 void TestSSPRoundtripPass::runOnOperation() {

@@ -397,7 +397,7 @@ def HWArithToHW : Pass<"lower-hwarith-to-hw", "mlir::ModuleOp"> {
     This pass lowers HWArith to HW/Comb.
   }];
   let constructor = "circt::createHWArithToHWPass()";
-  let dependentDialects = ["hw::HWDialect", "comb::CombDialect"];
+  let dependentDialects = ["hw::HWDialect", "comb::CombDialect", "sv::SVDialect"];
 }
 
 //===----------------------------------------------------------------------===//
