@@ -206,6 +206,7 @@ def CosimBSP(user_module):
       bin_dir = build_dir / "bin"
       lib_dir = build_dir / "lib"
       circt_inc_dir = build_dir / "tools" / "circt" / "include" / "circt"
+      assert circt_inc_dir.exists(), "Only works in the CIRCT build directory"
       esi_inc_dir = circt_inc_dir / "Dialect" / "ESI"
       hw_src = sys.hw_output_dir
       shutil.copy(lib_dir / "libEsiCosimDpiServer.so", hw_src)
