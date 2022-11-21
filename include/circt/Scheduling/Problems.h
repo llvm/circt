@@ -25,11 +25,12 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SetVector.h"
 
-#define DEFINE_FACTORY_METHOD(ProblemClass)                                    \
+#define DEFINE_COMMON_MEMBERS(ProblemClass)                                    \
 protected:                                                                     \
   ProblemClass() {}                                                            \
                                                                                \
 public:                                                                        \
+  static constexpr auto PROBLEM_NAME = #ProblemClass;                          \
   static ProblemClass get(Operation *containingOp) {                           \
     ProblemClass prob;                                                         \
     prob.setContainingOp(containingOp);                                        \
@@ -83,7 +84,7 @@ namespace scheduling {
 /// for each registered operation, and the precedence constraints as modeled by
 /// the dependences are satisfied.
 class Problem {
-  DEFINE_FACTORY_METHOD(Problem)
+  DEFINE_COMMON_MEMBERS(Problem)
 
 public:
   virtual ~Problem() = default;
@@ -219,6 +220,27 @@ public:
   void setStartTime(Operation *op, unsigned val) { startTime[op] = val; }
 
   //===--------------------------------------------------------------------===//
+  // Optional names (for exporting and debugging instances)
+  //===--------------------------------------------------------------------===//
+private:
+  StringAttr instanceName, libraryName;
+  SmallDenseMap<Operation *, StringAttr> operationNames;
+
+public:
+  StringAttr getInstanceName() { return instanceName; }
+  void setInstanceName(StringAttr name) { instanceName = name; }
+
+  StringAttr getLibraryName() { return libraryName; }
+  void setLibraryName(StringAttr name) { libraryName = name; }
+
+  StringAttr getOperationName(Operation *op) {
+    return operationNames.lookup(op);
+  }
+  void setOperationName(Operation *op, StringAttr name) {
+    operationNames[op] = name;
+  }
+
+  //===--------------------------------------------------------------------===//
   // Properties as string key-value pairs (e.g. for DOT graphs)
   //===--------------------------------------------------------------------===//
 public:
@@ -258,7 +280,7 @@ public:
 /// construct a pipelined datapath with a fixed, integer initiation interval,
 /// in which the execution of multiple iterations/samples/etc. may overlap.
 class CyclicProblem : public virtual Problem {
-  DEFINE_FACTORY_METHOD(CyclicProblem)
+  DEFINE_COMMON_MEMBERS(CyclicProblem)
 
 private:
   DependenceProperty<unsigned> distance;
@@ -306,7 +328,7 @@ public:
 /// continuous unit, e.g. in nanoseconds, inside the discrete time steps/cycles
 /// determined by the underlying scheduling problem.
 class ChainingProblem : public virtual Problem {
-  DEFINE_FACTORY_METHOD(ChainingProblem)
+  DEFINE_COMMON_MEMBERS(ChainingProblem)
 
 private:
   OperatorTypeProperty<float> incomingDelay, outgoingDelay;
@@ -374,7 +396,7 @@ public:
 /// exceed the operator type's limit. These constraints do not apply to operator
 /// types without a limit (not set, or 0).
 class SharedOperatorsProblem : public virtual Problem {
-  DEFINE_FACTORY_METHOD(SharedOperatorsProblem)
+  DEFINE_COMMON_MEMBERS(SharedOperatorsProblem)
 
 private:
   OperatorTypeProperty<unsigned> limit;
@@ -410,7 +432,7 @@ public:
 ///      not exceed the operator type's limit.
 class ModuloProblem : public virtual CyclicProblem,
                       public virtual SharedOperatorsProblem {
-  DEFINE_FACTORY_METHOD(ModuloProblem)
+  DEFINE_COMMON_MEMBERS(ModuloProblem)
 
 protected:
   /// \p opr is not oversubscribed in any congruence class modulo II.
@@ -423,6 +445,6 @@ public:
 } // namespace scheduling
 } // namespace circt
 
-#undef DEFINE_FACTORY_METHOD
+#undef DEFINE_COMMON_MEMBERS
 
 #endif // CIRCT_SCHEDULING_PROBLEMS_H
