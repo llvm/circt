@@ -114,12 +114,10 @@ void ScheduleLinearPipelinePass::runOnOperation() {
     problem.insertOperation(&op);
     problem.setLinkedOperatorType(&op, operatorType);
 
-    // We want the return op to be a sink node for all operations in the
-    // scheduling graph.
-    // To do this, we must ensure a def-use constrain exists (transitively)
-    // between every operation and the return op. This is done by adding
-    // auxilary dependencies for every op that doesn't have any users (the
-    // return op already implicitly depends on all of its operands).
+    // We want the return op to be a sink node for the dependence graph, i.e. it
+    // should (transitively) depend on every other op. This is done by inserting
+    // auxiliary dependences from ops without users, complementing the implicit
+    // dependences from the return op's operands.
     if (!isReturnOp && op.use_empty()) {
       if (failed(problem.insertDependence({&op, returnOp.getOperation()}))) {
         op.emitError()
