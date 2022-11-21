@@ -1295,6 +1295,13 @@ class DedupPass : public DedupBase<DedupPass> {
         dedupMap[moduleName] = moduleName;
         continue;
       }
+      // If the module has input RefType ports, also skip it.
+      if (llvm::any_of(module.getPorts(), [&](PortInfo port) {
+            return isa<RefType>(port.type) && port.isInput();
+          })) {
+        dedupMap[moduleName] = moduleName;
+        continue;
+      }
       // Calculate the hash of the module.
       auto h = hasher.hash(module);
       // Check if there a module with the same hash.
