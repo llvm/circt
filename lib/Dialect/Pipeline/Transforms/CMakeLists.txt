@@ -8,6 +8,7 @@ add_circt_dialect_library(CIRCTPipelineTransforms
   LINK_LIBS PUBLIC
   CIRCTScheduling
   CIRCTComb
+  CIRCTSSP
   CIRCTHW
   CIRCTPipelineOps
   CIRCTSupport
