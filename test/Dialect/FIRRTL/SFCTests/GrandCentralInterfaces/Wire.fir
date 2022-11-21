@@ -3,6 +3,7 @@
 ; RUN: firtool --annotation-file %s.anno.json --annotation-file %s.Extract.anno.json %s --annotation-file %s.YAML.anno.json | FileCheck %s --check-prefixes YAML
 ; RUN: firtool --split-verilog --annotation-file %s.anno.json %s -o %t.folder > %t  && cat %t.folder/MyView_companion.sv | FileCheck %s --check-prefixes MYVIEW_COMPANION
 ; RUN: firtool --annotation-file %s.anno.json --annotation-file %s.Prefix.anno.json %s | FileCheck %s --check-prefixes PREFIX
+; RUN: firtool --annotation-file %s.anno.json %s --disable-opt
 
 circuit Top :
   extmodule BlackBox_DUT :

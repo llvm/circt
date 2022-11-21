@@ -27,7 +27,10 @@ def LowerSeqFIRRTLToSV: Pass<"lower-seq-firrtl-to-sv", "hw::HWModuleOp"> {
   let dependentDialects = ["circt::sv::SVDialect"];
   let options = [
     Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
-            "Disable emission of register randomization code">
+            "Disable emission of register randomization code">,
+    Option<"addVivadoRAMAddressConflictSynthesisBugWorkaround",
+           "add-vivado-ram-address-conflict-synthesis-bug-workaround", "bool", "false",
+            "Add a vivado attribute to specify a ram style of array registers">
   ];
 }
 

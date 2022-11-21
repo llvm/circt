@@ -490,6 +490,74 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     return value.getDefiningOp()->getParentOfType<FModuleLike>();
   };
 
+  // Utility function to determine where to insert connection operations.
+  auto findInsertionBlock = [&getModule](Value src, Value dest) -> Block * {
+    // Check for easy case: both are in the same block.
+    if (src.getParentBlock() == dest.getParentBlock())
+      return src.getParentBlock();
+
+    // If connecting across blocks, figure out where to connect.
+    assert(getModule(src) == getModule(dest));
+    // Helper to determine if 'a' is available at 'b's block.
+    auto safelyDoms = [&](Value a, Value b) {
+      if (a.isa<BlockArgument>())
+        return true;
+      if (b.isa<BlockArgument>())
+        return false;
+      // Handle cases where 'b' is in child op after 'a'.
+      auto *ancestor =
+          a.getParentBlock()->findAncestorOpInBlock(*b.getDefiningOp());
+      return ancestor && a.getDefiningOp()->isBeforeInBlock(ancestor);
+    };
+    if (safelyDoms(src, dest))
+      return dest.getParentBlock();
+    if (safelyDoms(dest, src))
+      return src.getParentBlock();
+    return {};
+  };
+
+  // Utility function to connect a destination to a source.  Always use a
+  // ConnectOp as the widths may be uninferred.
+  SmallVector<Operation *> opsToErase;
+  auto connect = [&](Value src, Value dest,
+                     ImplicitLocOpBuilder &builder) -> LogicalResult {
+    if (foldFlow(dest) == Flow::Source)
+      std::swap(src, dest);
+
+    // Figure out where to insert operations.
+    auto *insertBlock = findInsertionBlock(src, dest);
+    if (!insertBlock)
+      return emitError(src.getLoc())
+          .append("This value is involved with a Wiring Problem where the "
+                  "destination is in the same module but neither dominates the "
+                  "other, which is not supported.")
+          .attachNote(dest.getLoc())
+          .append("The destination is here.");
+
+    // Insert at end, past invalidation in same block.
+    builder.setInsertionPointToEnd(insertBlock);
+
+    // Create RefSend/RefResolve if necessary.
+    if (isa<RefType>(dest.getType()) != isa<RefType>(src.getType())) {
+      if (isa<RefType>(dest.getType()))
+        src = builder.create<RefSendOp>(src);
+      else
+        src = builder.create<RefResolveOp>(src);
+    }
+
+    // If the sink is a wire with no users, then convert this to a node.
+    auto destOp = dyn_cast_or_null<WireOp>(dest.getDefiningOp());
+    if (destOp && dest.getUses().empty()) {
+      builder.create<NodeOp>(src.getType(), src, destOp.getName())
+          .setAnnotationsAttr(destOp.getAnnotations());
+      opsToErase.push_back(destOp);
+      return success();
+    }
+    // Otherwise, just connect to the source.
+    builder.create<ConnectOp>(dest, src);
+    return success();
+  };
+
   auto &instanceGraph = state.instancePathCache.instanceGraph;
   auto *context = state.circuit.getContext();
 
@@ -497,6 +565,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
   // to be made per-module.
   LLVM_DEBUG({ llvm::dbgs() << "Analyzing wiring problems:\n"; });
   DenseMap<FModuleLike, ModuleModifications> moduleModifications;
+  DenseSet<Value> sinks;
   for (auto [index, problem] : llvm::enumerate(state.wiringProblems)) {
     // This is a unique index that is assigned to this specific wiring problem
     // and is used as a key during wiring to know which Values (ports, sources,
@@ -504,18 +573,18 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     auto source = problem.source;
     auto sink = problem.sink;
 
-    // If the source and sink are in the same module, just wire them up.
-    if (sink.getParentBlock() == source.getParentBlock()) {
-      auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
-                                                      sink.getParentBlock());
-      builder.create<ConnectOp>(sink, source);
-      continue;
+    // Check that no WiringProblems are trying to use the same sink.  This
+    // should never happen.
+    if (!sinks.insert(sink).second) {
+      auto diag = mlir::emitError(source.getLoc())
+                  << "This sink is involved with a Wiring Problem which is "
+                     "targeted by a source used by another Wiring Problem. "
+                     "(This is both illegal and should be impossible.)";
+      diag.attachNote(source.getLoc()) << "The source is here";
+      return failure();
     }
-
-    // Pre-populate source/sink module modifications connection values.
     FModuleLike sourceModule = getModule(source);
     FModuleLike sinkModule = getModule(sink);
-
     if (isa<FExtModuleOp>(sourceModule) || isa<FExtModuleOp>(sinkModule)) {
       auto diag = mlir::emitError(source.getLoc())
                   << "This source is involved with a Wiring Problem which "
@@ -525,6 +594,37 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       return failure();
     }
 
+    LLVM_DEBUG({
+      llvm::dbgs() << "  - index: " << index << "\n"
+                   << "    source:\n"
+                   << "      module: " << sourceModule.moduleName() << "\n"
+                   << "      value: " << source << "\n"
+                   << "    sink:\n"
+                   << "      module: " << sinkModule.moduleName() << "\n"
+                   << "      value: " << sink << "\n"
+                   << "    newNameHint: " << problem.newNameHint << "\n";
+    });
+
+    // If the source and sink are in the same block, just wire them up.
+    if (sink.getParentBlock() == source.getParentBlock()) {
+      auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
+                                                      sink.getParentBlock());
+      if (failed(connect(source, sink, builder)))
+        return failure();
+      continue;
+    }
+    // If both are in the same module but not same block, U-turn.
+    // We may not be able to handle this, but that is checked below while
+    // connecting.
+    if (sourceModule == sinkModule) {
+      LLVM_DEBUG(llvm::dbgs()
+                 << "    LCA: " << sourceModule.moduleName() << "\n");
+      moduleModifications[sourceModule].connectionMap[index] = source;
+      moduleModifications[sourceModule].uturns.push_back({index, sink});
+      continue;
+    }
+
+    // Otherwise, get instance paths for source/sink, and compute LCA.
     auto sourcePaths = state.instancePathCache.getAbsolutePaths(
         cast<hw::HWModuleLike>(*sourceModule));
     auto sinkPaths = state.instancePathCache.getAbsolutePaths(
@@ -552,12 +652,31 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       sinks = sinks.drop_front();
     }
 
+    LLVM_DEBUG({
+      llvm::dbgs() << "    LCA: " << lca.moduleName() << "\n"
+                   << "    sourcePaths:\n";
+      for (auto inst : sourcePaths[0])
+        llvm::dbgs() << "      - " << inst.instanceName() << " of "
+                     << inst.referencedModuleName() << "\n";
+      llvm::dbgs() << "    sinkPaths:\n";
+      for (auto inst : sinkPaths[0])
+        llvm::dbgs() << "      - " << inst.instanceName() << " of "
+                     << inst.referencedModuleName() << "\n";
+    });
+
     // Pre-populate the connectionMap of the module with the source and sink.
     moduleModifications[sourceModule].connectionMap[index] = source;
     moduleModifications[sinkModule].connectionMap[index] = sink;
 
     // Record ports that should be added to each module along the LCA path.
-    auto tpe = RefType::get(cast<FIRRTLBaseType>(problem.sink.getType()));
+    // Wire using RefType based on the source-- the RefSend will be of this
+    // type, and we cannot connect RefType's of non-identical types. The final
+    // connect of the resolved ref to the sink will handle any differences.
+    RefType tpe = TypeSwitch<Type, RefType>(problem.source.getType())
+                      .Case<FIRRTLBaseType>([](FIRRTLBaseType base) {
+                        return RefType::get(base);
+                      })
+                      .Case<RefType>([](RefType ref) { return ref; });
     for (auto sourceInst : sources) {
       auto mod = cast<FModuleOp>(instanceGraph.getReferencedModule(sourceInst));
       moduleModifications[mod].portsToAdd.push_back(
@@ -574,26 +693,6 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
                 context, state.getNamespace(mod).newName(problem.newNameHint)),
             tpe, Direction::In}});
     }
-
-    LLVM_DEBUG({
-      llvm::dbgs() << "  - index: " << index << "\n"
-                   << "    source:\n"
-                   << "      module: " << sourceModule.moduleName() << "\n"
-                   << "      value: " << source << "\n"
-                   << "    sink:\n"
-                   << "      module: " << sinkModule.moduleName() << "\n"
-                   << "      value: " << sink << "\n"
-                   << "    newNameHint: " << problem.newNameHint << "\n"
-                   << "    LCA: " << lca.moduleName() << "\n"
-                   << "    sourcePaths:\n";
-      for (auto inst : sourcePaths[0])
-        llvm::dbgs() << "      - " << inst.instanceName() << " of "
-                     << inst.referencedModuleName() << "\n";
-      llvm::dbgs() << "    sinkPaths:\n";
-      for (auto inst : sinkPaths[0])
-        llvm::dbgs() << "      - " << inst.instanceName() << " of "
-                     << inst.referencedModuleName() << "\n";
-    });
   }
 
   // Iterate over modules from leaves to roots, applying ModuleModifications to
@@ -631,23 +730,8 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     auto portIdx = fmodule.getNumPorts();
     fmodule.insertPorts(newPorts);
 
-    auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
-                                                    fmodule.getBodyBlock());
-
-    // Utility function to connect a destination to a source.  Always use a
-    // ConnectOp as the widths may be uninferred.
-    auto connect = [&](Value src, Value dest) {
-      if (foldFlow(dest) == Flow::Source)
-        std::swap(src, dest);
-      // Create RefSend/RefResolve if necessary.
-      if (dest.getType().isa<RefType>() && !src.getType().isa<RefType>()) {
-        src = builder.create<RefSendOp>(src);
-      } else if (!dest.getType().isa<RefType>() &&
-                 src.getType().isa<RefType>()) {
-        src = builder.create<RefResolveOp>(src);
-      }
-      builder.create<ConnectOp>(dest, src);
-    };
+    auto builder = ImplicitLocOpBuilder::atBlockBegin(UnknownLoc::get(context),
+                                                      fmodule.getBodyBlock());
 
     // Connect each port to the value stored in the connectionMap for this
     // wiring problem index.
@@ -655,15 +739,17 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       Value src = moduleModifications[fmodule].connectionMap[problemIdx];
       assert(src && "there did not exist a driver for the port");
       Value dest = fmodule.getArgument(portIdx++);
-      connect(src, dest);
+      if (failed(connect(src, dest, builder)))
+        return failure();
     }
 
-    // If a U-turn exists, this is an LCA and we need a U-turn connection.  This
-    // is the last connection made for this module.
+    // If a U-turn exists, this is an LCA and we need a U-turn connection. These
+    // are the last connections made for this module.
     for (auto [problemIdx, dest] : moduleModifications[fmodule].uturns) {
       Value src = moduleModifications[fmodule].connectionMap[problemIdx];
       assert(src && "there did not exist a connection for the u-turn");
-      connect(src, dest);
+      if (failed(connect(src, dest, builder)))
+        return failure();
     }
 
     // Update the connectionMap of all modules for which we created a port.
@@ -693,6 +779,10 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       }
     }
   }
+
+  // Delete unused WireOps created by producers of WiringProblems.
+  for (auto *op : opsToErase)
+    op->erase();
 
   return success();
 }

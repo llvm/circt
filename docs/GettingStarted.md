@@ -22,6 +22,10 @@ These commands can be used to setup CIRCT project:
   instructions](https://mlir.llvm.org/getting_started/), including cmake and 
 ninja.
 
+*Note:* CIRCT is known to build with at least GCC 9.4 and Clang 13.0.1, but
+older versions may not be supported. It is recommended to use the same C++
+toolchain to compile both LLVM and CIRCT to avoid potential issues.
+
 If you plan to use the Python bindings, you should start by reading [the
  instructions](https://mlir.llvm.org/docs/Bindings/Python/#building) for building
 the MLIR Python bindings, which describe extra dependencies, CMake variables,

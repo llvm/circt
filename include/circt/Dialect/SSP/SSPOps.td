@@ -48,11 +48,11 @@ def InstanceOp : SSPOp<"instance",
     ```
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name, StrAttr:$problemName,
+  let arguments = (ins OptionalAttr<SymbolNameAttr>:$sym_name, StrAttr:$problemName,
                        OptionalAttr<ArrayAttr>:$properties);
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
-    $sym_name `of` $problemName custom<Properties>($properties) $body attr-dict
+    ($sym_name^)? `of` $problemName custom<Properties>($properties) $body attr-dict
   }];
   
   let hasVerifier = true;
@@ -61,13 +61,13 @@ def InstanceOp : SSPOp<"instance",
     // OpAsmOpInterface
     static ::llvm::StringRef getDefaultDialect() { return "ssp"; }
 
+    // SymbolOpInterface
+    static bool isOptionalSymbol() { return true; }
+
     // Convenience
     ::mlir::Block *getBodyBlock() {
       return &getBody().getBlocks().front();
     }
-
-    // The symbol is actually the "instance name"
-    ::mlir::StringAttr getInstanceNameAttr() { return getSymNameAttr(); }
 
     // Access to container ops
     ::circt::ssp::OperatorLibraryOp getOperatorLibrary();
@@ -76,10 +76,8 @@ def InstanceOp : SSPOp<"instance",
 
   let skipDefaultBuilders = true;
   let builders = [
-    OpBuilder<(ins "::mlir::StringAttr":$instanceName,
-                   "::mlir::StringAttr":$problemName,
+    OpBuilder<(ins "::mlir::StringAttr":$problemName,
                    CArg<"::mlir::ArrayAttr", "::mlir::ArrayAttr()">:$properties), [{
-      $_state.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), instanceName);
       $_state.addAttribute($_builder.getStringAttr("problemName"), problemName);
       if (properties)
         $_state.addAttribute($_builder.getStringAttr("properties"), properties);
@@ -108,7 +106,7 @@ def OperatorLibraryOp : SSPOp<"library",
     // OpAsmOpInterface
     static ::llvm::StringRef getDefaultDialect() { return "ssp"; }
 
-    // SymbolUserOpInterface
+    // SymbolOpInterface
     static bool isOptionalSymbol() { return true; }
 
     // Convenience
@@ -227,7 +225,7 @@ def OperationOp : SSPOp<"operation",
   let hasVerifier = true;
 
   let extraClassDeclaration = [{
-    // SymbolUserOpInterface
+    // SymbolOpInterface
     static bool isOptionalSymbol() { return true; }
 
     // Find the attribute modeling the `linkedOperatorType` property

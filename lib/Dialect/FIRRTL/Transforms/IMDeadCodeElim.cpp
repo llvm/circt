@@ -171,7 +171,7 @@ void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
     else if (isa<FConnectLike>(op))
       // Skip connect op.
       continue;
-    else if (!mlir::MemoryEffectOpInterface::hasNoEffect(&op))
+    else if (!mlir::isMemoryEffectFree(&op))
       markUnknownSideEffectOp(&op);
 
     // TODO: Handle attach etc.

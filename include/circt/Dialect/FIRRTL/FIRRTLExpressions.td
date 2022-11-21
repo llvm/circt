@@ -220,7 +220,7 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
   let hasFolder = 1;
   let hasCanonicalizer = 1;
   let hasVerifier = 1;
-  
+
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat =
     "$input `(` $fieldIndex `)` attr-dict `:` functional-type($input, $result)";
@@ -313,7 +313,7 @@ def MultibitMuxOp : FIRRTLExprOp<"multibit_mux"> {
     For the example above, if `%index` is 0, then the value is `%v_0`.
     }];
 
-  let arguments = (ins FIRRTLBaseType:$index, Variadic<FIRRTLBaseType>:$inputs);
+  let arguments = (ins UIntType:$index, Variadic<FIRRTLBaseType>:$inputs);
   let results = (outs FIRRTLBaseType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasFolder = true;
@@ -612,9 +612,9 @@ def TailPrimOp : PrimOp<"tail"> {
 def IsXVerifOp : FIRRTLExprOp<"verif_isX"> {
   let summary = "Test for 'x";
   let description = [{
-    The verif.isX expression checks that the operand is not a verilog literal 
-    'x.  Firrtl doesn't have a notion of 'x per-se, but x can come in to the 
-    system from external modules and from SV constructs.  Verification 
+    The verif.isX expression checks that the operand is not a verilog literal
+    'x.  Firrtl doesn't have a notion of 'x per-se, but x can come in to the
+    system from external modules and from SV constructs.  Verification
     constructs need to explicitly test for 'x.
     }];
 

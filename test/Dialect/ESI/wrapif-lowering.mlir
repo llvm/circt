@@ -10,22 +10,22 @@ sv.interface @IValidReady_i4 {
 
 hw.module @test(%clk:i1, %rst:i1) {
 
-  %0 = sv.interface.instance : !sv.interface<@IValidReady_i4>
-  %1 = sv.modport.get %0 @source : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@source>
-  %2 = esi.wrap.iface %1 : !sv.modport<@IValidReady_i4::@source> -> !esi.channel<i4>
+  %validReady1 = sv.interface.instance : !sv.interface<@IValidReady_i4>
+  %0 = sv.modport.get %validReady1 @source : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@source>
+  %1 = esi.wrap.iface %0 : !sv.modport<@IValidReady_i4::@source> -> !esi.channel<i4>
 
-  %5 = sv.interface.instance : !sv.interface<@IValidReady_i4>
-  %6 = sv.modport.get %5 @sink : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@sink>
-  esi.unwrap.iface %2 into %6 : (!esi.channel<i4>, !sv.modport<@IValidReady_i4::@sink>)
+  %validReady2 = sv.interface.instance : !sv.interface<@IValidReady_i4>
+  %2 = sv.modport.get %validReady2 @sink : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@sink>
+  esi.unwrap.iface %1 into %2 : (!esi.channel<i4>, !sv.modport<@IValidReady_i4::@sink>)
 
-  // CHECK:         %0 = sv.interface.instance : !sv.interface<@IValidReady_i4>
-  // CHECK-NEXT:    %1 = sv.modport.get %0 @source : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@source>
-  // CHECK-NEXT:    %2 = sv.interface.signal.read %0(@IValidReady_i4::@valid) : i1
-  // CHECK-NEXT:    %3 = sv.interface.signal.read %0(@IValidReady_i4::@data) : i4
-  // CHECK-NEXT:    sv.interface.signal.assign %0(@IValidReady_i4::@ready) = %6 : i1
-  // CHECK-NEXT:    %4 = sv.interface.instance : !sv.interface<@IValidReady_i4>
-  // CHECK-NEXT:    %5 = sv.modport.get %4 @sink : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@sink>
-  // CHECK-NEXT:    %6 = sv.interface.signal.read %4(@IValidReady_i4::@ready) : i1
-  // CHECK-NEXT:    sv.interface.signal.assign %4(@IValidReady_i4::@valid) = %2 : i1
-  // CHECK-NEXT:    sv.interface.signal.assign %4(@IValidReady_i4::@data) = %3 : i4
+  // CHECK:      %validReady1 = sv.interface.instance  : !sv.interface<@IValidReady_i4>
+  // CHECK-NEXT: %[[#modport1:]] = sv.modport.get %validReady1 @source : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@source>
+  // CHECK-NEXT: %[[#signal1:]] = sv.interface.signal.read %validReady1(@IValidReady_i4::@valid) : i1
+  // CHECK-NEXT: %[[#signal2:]] = sv.interface.signal.read %validReady1(@IValidReady_i4::@data) : i4
+  // CHECK-NEXT: sv.interface.signal.assign %validReady1(@IValidReady_i4::@ready) = %[[#signal3:]] : i1
+  // CHECK-NEXT: %validReady2 = sv.interface.instance  : !sv.interface<@IValidReady_i4>
+  // CHECK-NEXT: %[[#modport2:]] = sv.modport.get %validReady2 @sink : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@sink>
+  // CHECK-NEXT: %[[#signal3:]] = sv.interface.signal.read %validReady2(@IValidReady_i4::@ready) : i1
+  // CHECK-NEXT: sv.interface.signal.assign %validReady2(@IValidReady_i4::@valid) = %[[#signal1:]] : i1
+  // CHECK-NEXT: sv.interface.signal.assign %validReady2(@IValidReady_i4::@data) = %[[#signal2:]] : i4
 }

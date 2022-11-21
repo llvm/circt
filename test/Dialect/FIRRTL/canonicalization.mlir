@@ -382,6 +382,11 @@ firrtl.module @Mux(in %in: !firrtl.uint<4>,
   %11 = firrtl.multibit_mux %cond, %val1, %val1, %val1 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK-NEXT: firrtl.strictconnect %out1, %val1
   firrtl.connect %out1, %11 : !firrtl.uint<1>, !firrtl.uint<1>
+
+  %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
+  %12 = firrtl.multibit_mux %c0_ui0, %val1, %val1 :!firrtl.uint<0>, !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.strictconnect %out1, %val1
+  firrtl.connect %out1, %12 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @Pad
@@ -2287,11 +2292,11 @@ firrtl.module @Foo3319(in %i: !firrtl.uint<1>, out %o : !firrtl.uint<1>) {
   firrtl.strictconnect %o, %n : !firrtl.uint<1>
 }
 
-// CHECK-LABEL: @WireToNode
-firrtl.module @WireToNode(in %i: !firrtl.uint<1>, out %o : !firrtl.uint<1>) {
+// CHECK-LABEL: @WireByPass
+firrtl.module @WireByPass(in %i: !firrtl.uint<1>, out %o : !firrtl.uint<1>) {
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   %n = firrtl.wire interesting_name : !firrtl.uint<1>
-  // %n = firrtl.node interesting_name %c0_ui1
+  // CHECK: firrtl.strictconnect %n, %c0_ui1
   firrtl.strictconnect %n, %c0_ui1 : !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %o, %n
   firrtl.strictconnect %o, %n : !firrtl.uint<1>
@@ -2305,7 +2310,7 @@ firrtl.module @AnnotationsBlockRemoval(
   in %a: !firrtl.uint<1>,
   out %b: !firrtl.uint<1>
 ) {
-  // CHECK: %w = firrtl.node %a {annotations = [{class = "Foo"}]}
+  // CHECK: %w = firrtl.wire
   %w = firrtl.wire droppable_name {annotations = [{class = "Foo"}]} : !firrtl.uint<1>
   firrtl.strictconnect %w, %a : !firrtl.uint<1>
   firrtl.strictconnect %b, %w : !firrtl.uint<1>

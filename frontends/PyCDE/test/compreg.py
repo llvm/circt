@@ -1,7 +1,7 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t
-# RUN: FileCheck %s --input-file %t/CompReg.sv
-# RUN: FileCheck %s --input-file %t/CompReg.tcl --check-prefix TCL
+# RUN: FileCheck %s --input-file %t/hw/CompReg.sv
+# RUN: FileCheck %s --input-file %t/hw/CompReg.tcl --check-prefix TCL
 
 import pycde
 from pycde import types, module, AppID, Clock, Input, Output

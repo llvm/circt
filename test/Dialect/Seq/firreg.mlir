@@ -1,5 +1,6 @@
 // RUN: circt-opt %s -verify-diagnostics --lower-seq-firrtl-to-sv | FileCheck %s --check-prefixes=CHECK,COMMON
 // RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(hw.module(lower-seq-firrtl-to-sv{disable-reg-randomization}))" | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
+// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(hw.module(lower-seq-firrtl-to-sv{add-vivado-ram-address-conflict-synthesis-bug-workaround}))" | FileCheck %s --check-prefixes=CHECK,VIVADO
 
 // COMMON-LABEL: hw.module @lowering
 hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d: i32, e: i32, f: i32) {
@@ -393,6 +394,7 @@ hw.module private @init1DVector(%clock: i1, %a: !hw.array<2xi1>) -> (b: !hw.arra
   %r = seq.firreg %a clock %clock sym @__r__ : !hw.array<2xi1>
 
   // CHECK:      %r = sv.reg sym @[[r_sym:[_A-Za-z0-9]+]]
+  // VIVADO:     "ram_style" = "\22distributed\22"
 
   // CHECK:      sv.always posedge %clock  {
   // CHECK-NEXT:   sv.passign %r, %a : !hw.array<2xi1>

@@ -196,3 +196,31 @@ firrtl.circuit "bundleRegInit"   {
     firrtl.connect %0, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+// -----
+
+firrtl.circuit "Foo"  {
+  firrtl.extmodule private @Bar(in a: !firrtl.uint<1>)
+  // expected-error @+2 {{detected combinational cycle in a FIRRTL module}}
+  // expected-note @+1 {{this operation is part of the combinational cycle}}
+  firrtl.module @Foo(out %a: !firrtl.uint<1>) {
+    // expected-note @+1 {{this operation is part of the combinational cycle}}
+    %bar_a = firrtl.instance bar interesting_name  @Bar(in a: !firrtl.uint<1>)
+    firrtl.strictconnect %bar_a, %a : !firrtl.uint<1>
+    firrtl.strictconnect %a, %bar_a : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "Foo"  {
+  firrtl.module private @Bar(in %a: !firrtl.uint<1>) {}
+  // expected-error @+2 {{detected combinational cycle in a FIRRTL module}}
+  // expected-note @+1 {{this operation is part of the combinational cycle}}
+  firrtl.module @Foo(out %a: !firrtl.uint<1>) {
+    // expected-note @+1 {{this operation is part of the combinational cycle}}
+    %bar_a = firrtl.instance bar interesting_name  @Bar(in a: !firrtl.uint<1>)
+    firrtl.strictconnect %bar_a, %a : !firrtl.uint<1>
+    firrtl.strictconnect %a, %bar_a : !firrtl.uint<1>
+  }
+}
