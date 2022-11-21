@@ -64,9 +64,9 @@ FailureOr<InnerSymbolTable> InnerSymbolTable::get(Operation *op) {
 LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
                                             InnerSymCallbackFn callback) {
   using llvm::dbgs;
-  //  LLVM_DEBUG(dbgs() << "===----- InnerSymbolTable -----===\n";
-  //             dbgs() << "Walking inner symbols for @"
-  //                    << SymbolTable::getSymbolName(op) << "\n");
+  LLVM_DEBUG(dbgs() << "===----- InnerSymbolTable -----===\n";
+             dbgs() << "Walking inner symbols for @"
+                    << SymbolTable::getSymbolName(op) << "\n");
   auto walkSym = [&](StringAttr name, const InnerSymTarget &target) {
     LLVM_DEBUG(dbgs() << " - @" << name << " -> " << target << "\n");
     assert(name && !name.getValue().empty());
