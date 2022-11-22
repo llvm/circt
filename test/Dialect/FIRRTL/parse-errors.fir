@@ -298,3 +298,19 @@ circuit Issue2971: ; expected-error {{no main module}}
 
 circuit NoModules: ; expected-error {{no modules found}}
    ; nothing
+
+;// -----
+
+circuit NonAscii:
+  module NonAscii:
+    input clk: Clock
+    input enable: UInt<1>
+    printf(clk, enable, "’") ; expected-error {{string characters must be 7-bit ASCII}}
+
+;// -----
+
+circuit UnicodeEscape:
+  module UnicodeEscape:
+    input clk: Clock
+    input enable: UInt<1>
+    printf(clk, enable, "\u0065") ; expected-error {{unicode escape not supported in string}}
