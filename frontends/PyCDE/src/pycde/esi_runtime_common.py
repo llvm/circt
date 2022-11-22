@@ -187,6 +187,23 @@ class Cosim(_CosimNode):
     prefix = [] if len(ifaces) == 0 else ifaces[0].endpointID.split(".")[:1]
     super().__init__(self, prefix)
 
+  def load_package(path: os.PathLike):
+    """Load a cosim connection from something running out of 'path' package dir.
+    Reads and parses 'cosim.cfg' from that directory to get the connection
+    information. Loads the capnp schema from the 'runtime' directory in that
+    package path."""
+    path = Path(path)
+    simcfg = path / "cosim.cfg"
+    if not simcfg.exists():
+      simcfg = Path.cwd() / "cosim.cfg"
+      if not simcfg.exists():
+        raise RuntimeError("Could not find simulation connection file")
+    port_lines = filter(lambda x: x.startswith("port:"),
+                        simcfg.open().readlines())
+    port = int(list(port_lines)[0].split(":")[1])
+    return Cosim(os.path.join(path, "hw", "schema.capnp"),
+                 f"{os.uname()[1]}:{port}")
+
   def list(self):
     """List the available interfaces"""
     return self._cosim.list().wait().ifaces
