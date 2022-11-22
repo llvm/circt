@@ -1798,13 +1798,10 @@ void SubfieldOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 static Attribute collectFields(MLIRContext *context,
                                ArrayRef<Attribute> operands) {
-  SmallVector<Attribute> fields;
-  for (auto operand : operands) {
+  for (auto operand : operands)
     if (!operand)
       return {};
-    fields.push_back(operand);
-  }
-  return ArrayAttr::get(context, fields);
+  return ArrayAttr::get(context, operands);
 }
 
 OpFoldResult BundleCreateOp::fold(ArrayRef<Attribute> operands) {
