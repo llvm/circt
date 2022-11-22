@@ -49,7 +49,7 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
   auto readSrc = read.getInput().getDefiningOp();
   if (!readSrc)
     return false;
-  return isa<WireOp, RegOp, LogicOp, XMROp>(readSrc);
+  return isa<WireOp, RegOp, LogicOp, XMROp, XMRRefOp>(readSrc);
 }
 
 // Check if the value is deemed worth spilling into a wire.
