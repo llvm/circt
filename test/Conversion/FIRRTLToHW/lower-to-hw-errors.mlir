@@ -116,3 +116,11 @@ firrtl.circuit "Foo" attributes {annotations = [
       firrtl.instance foo sym @s1 {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @Foo()
     }
 }
+
+// -----
+
+firrtl.circuit "SymArgZero" {
+  // expected-error @+1 {{zero width port "foo" is referenced by name ["symfoo"] (e.g. in an XMR).}}
+  firrtl.module @SymArgZero(in %foo :!firrtl.uint<0> sym @symfoo) {
+  }
+}
