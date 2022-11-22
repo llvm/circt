@@ -414,10 +414,8 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
   createOutput(dutModules, dutFilename);
 
   // Clean up all ScalaClassAnnotations, which are no longer needed.
-  for (auto op : circuitOp.getOps<FModuleLike>()) {
-    AnnotationSet annos(op);
-    annos.removeAnnotations(op, scalaClassAnnoClass);
-  }
+  for (auto op : circuitOp.getOps<FModuleLike>())
+    AnnotationSet::removeAnnotations(op, scalaClassAnnoClass);
 
   return success();
 }

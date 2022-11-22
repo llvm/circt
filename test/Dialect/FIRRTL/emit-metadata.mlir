@@ -92,7 +92,8 @@ firrtl.circuit "BasicBlackboxes" attributes { annotations = [{
   firrtl.extmodule @ignored6() attributes {annotations = [{class = "firrtl.transforms.BlackBox"}], defname = "ignored6"}
 
   // ScalaClassAnnotation should be discarded after this pass.
-  // CHECK: firrtl.extmodule @ignored2() attributes {defname = "ignored2"}
+  // CHECK: firrtl.extmodule @ignored2()
+  // CHECK-NOT: sifive.enterprise.firrtl.ScalaClassAnnotation
 
   // Gracefully handle missing defnames.
   firrtl.extmodule @NoDefName()
