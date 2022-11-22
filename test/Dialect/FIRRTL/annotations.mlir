@@ -1395,7 +1395,7 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [{
     // CHECK:  %b__gen_tap = firrtl.instance b interesting_name  @Bar(out _gen_tap: !firrtl.ref<uint<1>>)
     // CHECK:  firrtl.connect %_gen_tap, %b__gen_tap : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
   }
-  // CHECK: firrtl.module @Top() attributes {annotations = [{class = "firrtl.transforms.NoDedupAnnotation"}]}
+  // CHECK: firrtl.module @Top()
   firrtl.module @Top() {
     firrtl.instance foo interesting_name  @Foo()
     %tap = firrtl.wire interesting_name  : !firrtl.uint<1>
