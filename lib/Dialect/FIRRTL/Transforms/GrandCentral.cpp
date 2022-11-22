@@ -1332,9 +1332,9 @@ bool GrandCentralPass::traverseField(
         path += " = {{-1}}";
         AnnotationSet::removeDontTouch(nodeOp);
         // Assemble the verbatim op.
-        xmrElems.emplace_back(VerbatimXMRbuilder(
+        xmrElems.emplace_back(
             nodeOp->getOperand(0), getStrAndIncrementIds(path.getString()),
-            ArrayAttr::get(&getContext(), path.getSymbols()), companionModule));
+            ArrayAttr::get(&getContext(), path.getSymbols()), companionModule);
         return true;
       })
       .Case<AugmentedVectorTypeAttr>([&](auto vector) {
@@ -1472,8 +1472,7 @@ Optional<StringAttr> GrandCentralPass::traverseBundle(
     SmallVector<InterfaceElemsBuilder> &interfaceBuilder) {
 
   unsigned lastIndex = interfaceBuilder.size();
-  InterfaceElemsBuilder *ifaceBuilder =
-      &interfaceBuilder.emplace_back(InterfaceElemsBuilder());
+  InterfaceElemsBuilder *ifaceBuilder = &interfaceBuilder.emplace_back();
   ifaceBuilder->iFaceName = StringAttr::get(
       &getContext(), getNamespace().newName(getInterfaceName(prefix, bundle)));
   ifaceBuilder->id = id;
@@ -1500,9 +1499,8 @@ Optional<StringAttr> GrandCentralPass::traverseBundle(
       return None;
     StringAttr description =
         element.cast<DictionaryAttr>().getAs<StringAttr>("description");
-    interfaceBuilder[lastIndex].elementsList.emplace_back(
-        InterfaceElemsBuilder::Properties(description, name,
-                                          elementType.value()));
+    interfaceBuilder[lastIndex].elementsList.emplace_back(description, name,
+                                                          elementType.value());
   }
   return ifaceBuilder->iFaceName;
 }
@@ -2109,11 +2107,14 @@ void GrandCentralPass::runOnOperation() {
       companionToInterfaceMap[companionModule] = interfaceBuilder;
     }
 
+    if (interfaceBuilder.empty())
+      continue;
+    auto companionBuilder =
+        OpBuilder::atBlockEnd(companionModule.getBodyBlock());
     for (auto xmrElem : xmrElems) {
-      auto builder = OpBuilder::atBlockEnd(xmrElem.companionMod.getBodyBlock());
-      auto uloc = builder.getUnknownLoc();
-      builder.create<sv::VerbatimOp>(uloc, xmrElem.str, xmrElem.val,
-                                     xmrElem.syms);
+      auto uloc = companionBuilder.getUnknownLoc();
+      companionBuilder.create<sv::VerbatimOp>(uloc, xmrElem.str, xmrElem.val,
+                                              xmrElem.syms);
     }
     sv::InterfaceOp topIface;
     for (const auto &ifaceBuilder : interfaceBuilder) {
