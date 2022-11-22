@@ -17,7 +17,6 @@ firrtl.circuit "ReadOnlyMemory" {
 
 
     // CHECK-NOT: firrtl.mem
-    // CHECK: firrtl.wire : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     %2 = firrtl.subfield %Memory_r(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>) -> !firrtl.uint<4>
     firrtl.connect %2, %addr : !firrtl.uint<4>, !firrtl.uint<4>
     %3 = firrtl.subfield %Memory_r(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>) -> !firrtl.uint<1>
@@ -42,7 +41,6 @@ firrtl.circuit "WriteOnlyMemory" {
       } : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
 
     // CHECK-NOT: firrtl.mem
-    // CHECK: firrtl.wire : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
     %10 = firrtl.subfield %Memory_write(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>) -> !firrtl.uint<4>
     firrtl.connect %10, %addr : !firrtl.uint<4>, !firrtl.uint<4>
     %11 = firrtl.subfield %Memory_write(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>) -> !firrtl.uint<1>
@@ -145,9 +143,6 @@ firrtl.circuit "UnusedPorts" {
 
     // CHECK: %Memory_pinned = firrtl.mem  Undefined
     // CHECK-SAME: !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
-    // CHECK: firrtl.wire   : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
-    // CHECK: firrtl.wire   : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
-    // CHECK: firrtl.wire   : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
 
     %Memory_read, %Memory_rw, %Memory_write, %Memory_pinned = firrtl.mem Undefined
       {
@@ -162,7 +157,9 @@ firrtl.circuit "UnusedPorts" {
         !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>,
         !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
 
-
+    // CHECK: [[REG1:%.+]] = firrtl.reg %c0_clock : !firrtl.uint<42>
+    // CHECK: [[REG2:%.+]] = firrtl.reg %c0_clock : !firrtl.uint<42>
+    // CHECK: firrtl.strictconnect %result_read, [[REG1]] : !firrtl.uint<42>
     %read_addr = firrtl.subfield %Memory_read(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>) -> !firrtl.uint<4>
     firrtl.connect %read_addr, %addr : !firrtl.uint<4>, !firrtl.uint<4>
     %read_en = firrtl.subfield %Memory_read(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>) -> !firrtl.uint<1>
@@ -172,6 +169,7 @@ firrtl.circuit "UnusedPorts" {
     %read_data = firrtl.subfield %Memory_read(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>) -> !firrtl.uint<42>
     firrtl.connect %result_read, %read_data : !firrtl.uint<42>, !firrtl.uint<42>
 
+    // CHECK: firrtl.strictconnect %result_rw, [[REG2]] : !firrtl.uint<42>
     %rw_addr = firrtl.subfield %Memory_rw(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>) -> !firrtl.uint<4>
     firrtl.connect %rw_addr, %addr : !firrtl.uint<4>, !firrtl.uint<4>
     %rw_en = firrtl.subfield %Memory_rw(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>) -> !firrtl.uint<1>
