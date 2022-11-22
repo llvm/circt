@@ -201,7 +201,7 @@ class Cosim(_CosimNode):
     port_lines = filter(lambda x: x.startswith("port:"),
                         simcfg.open().readlines())
     port = int(list(port_lines)[0].split(":")[1])
-    return Cosim(os.path.join(path, "hw", "schema.capnp"),
+    return Cosim(os.path.join(path, "runtime", "schema.capnp"),
                  f"{os.uname()[1]}:{port}")
 
   def list(self):
