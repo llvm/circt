@@ -93,6 +93,5 @@ def run_cosim(tmpdir=".", schema_path="schema.capnp", rpchostport=None):
 
 if __name__ == "__main__":
   s = pycde.System([top], name="ESIMem", output_directory=sys.argv[1])
-  s.generate()
-  s.emit_outputs()
-  s.build_api("python")
+  s.compile()
+  s.package()

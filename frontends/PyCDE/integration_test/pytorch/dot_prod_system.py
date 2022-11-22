@@ -1,51 +1,42 @@
 # REQUIRES: esi-cosim
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1
-# RUN: esi-cosim-runner.py --tmpdir %t --schema %t/schema.capnp %s %t/*.sv
+# RUN: esi-cosim-runner.py --no-aux-files --tmpdir %t --schema %t/runtime/schema.capnp %s `ls %t/hw/*.sv | grep -v driver.sv`
 # PY: from dot_prod_system import run_cosim
 # PY: run_cosim(tmpdir, rpcschemapath, simhostport)
 
 from pycde import Input, module, generator, types
 from pycde.common import Clock
 from pycde.system import System
-from pycde.esi import FromServer, ToFromServer, ServiceDecl, Cosim
+from pycde.esi import FromServer, ToFromServer, ServiceDecl, CosimBSP
 from pycde.constructs import Wire
 
-import torch
-import torch_mlir
+# import torch
+# import torch_mlir
 import numpy as np
 
+import pathlib
 import sys
 import time
 from typing import List
+
+__dir__ = pathlib.Path(__file__).parent
 
 ################################################################################
 # Harware design
 ################################################################################
 
+# Run this offline, lower it to CF/Arit/Memref, commit output. Avoids needing
+# 'torch_mlir' and provides a bit more stability.
 
-class DotModule(torch.nn.Module):
+# class DotModule(torch.nn.Module):
 
-  def forward(self, a, b):
-    return torch.matmul(a, b)
+#   def forward(self, a, b):
+#     return torch.matmul(a, b)
 
-
-shape = torch_mlir.TensorPlaceholder([5], torch.int32)
-torch_module = torch_mlir.compile(DotModule(), [shape, shape],
-                                  output_type="linalg-on-tensors")
-
-
-@module
-class top:
-  clk = Clock()
-  rst = Input(types.i1)
-
-  @generator
-  def generate(ports):
-    Gasket(clk=ports.clk, rst=ports.rst)
-
-    # Use cosim to communicate with the accelerator running in an RTL simulator.
-    Cosim(TorchControl, ports.clk, ports.rst)
+# shape = torch_mlir.TensorPlaceholder([5], torch.int32)
+# torch_module = torch_mlir.compile(DotModule(), [shape, shape],
+#                                   output_type="linalg-on-tensors")
 
 
 @module
@@ -81,10 +72,12 @@ class Gasket:
 
 
 if __name__ == "__main__":
-  system = System([top], name="PyTorchDotProd", output_directory=sys.argv[1])
+  system = System(CosimBSP(Gasket),
+                  name="PyTorchDotProd",
+                  output_directory=sys.argv[1])
 
   # Import the torch_mlir module.
-  syms = system.import_mlir(torch_module)
+  syms = system.import_mlir(open(__dir__ / "dot.hw.mlir").read())
 
   # Grab references to the imported IP and requested memories which must
   # implemented in a gasket/wrapper.
@@ -101,12 +94,9 @@ if __name__ == "__main__":
     b_write = FromServer(dot_b.write.to_server_type)
     x_read = ToFromServer(dot_x.read.to_client_type, dot_x.read.to_server_type)
 
-  # Generate the hardware design.
-  system.generate()
-  # Emit SystemVerilog and other collateral.
-  system.emit_outputs()
-  # Build a Python API into the accelerator.
-  system.build_api("python")
+  # Compile and package up.
+  system.compile()
+  system.package()
 
 ################################################################################
 # Software runtime
@@ -120,18 +110,18 @@ def write_vector(vec: List[int], port):
 
 def hw_dotprod(hw, a: List[int], b: List[int]):
   # Write the two vectors to device memories.
-  write_vector(a, hw.torch_control.a_write[0])
-  write_vector(b, hw.torch_control.b_write[0])
+  write_vector(a, hw.bsp.a_write[0])
+  write_vector(b, hw.bsp.b_write[0])
 
   # Tell the dot module to go!
-  hw.torch_control.go[0].write()
+  hw.bsp.go[0].write()
 
   # Wait for unit to compute.
   #       (Hack around missing functionality in XRT bridge.)
   time.sleep(0.01)
 
   # Read the result.
-  x = hw.torch_control.x_read[0]()
+  x = hw.bsp.x_read[0]()
   print(f"{a} x {b} = {x}")
   return x
 
@@ -141,9 +131,10 @@ def rand_vec():
 
 
 def run_cosim(tmpdir=".", schema_path="schema.capnp", rpchostport=None):
-  sys.path.append(tmpdir)
-  import esi_rt.PyTorchDotProd as esi_sys
-  from esi_rt.common import Cosim
+  import os
+  sys.path.append(os.path.join(tmpdir, "runtime"))
+  import PyTorchDotProd as esi_sys
+  from PyTorchDotProd.common import Cosim
   if rpchostport is None:
     port = open("cosim.cfg").read().split(':')[1].strip()
     rpchostport = f"localhost:{port}"
@@ -158,7 +149,6 @@ def run_cosim(tmpdir=".", schema_path="schema.capnp", rpchostport=None):
   hw_dotprod(hw, [1, 1, 1, 1, 1], [1, 1, 1, 1, 1])
 
   # Instantiate PyTorch module for golden model.
-  torch_dot = DotModule()
   for _ in range(25):
     a = rand_vec()
     b = rand_vec()
@@ -167,12 +157,6 @@ def run_cosim(tmpdir=".", schema_path="schema.capnp", rpchostport=None):
     hdp = hw_dotprod(hw, a, b)
 
     # Compute known good result.
-    tensor_a = torch.IntTensor(a)
-    tensor_b = torch.IntTensor(b)
-    swdp = torch_dot.forward(tensor_a, tensor_b)
+    swdp = np.dot(a, b)
 
-    if hdp != swdp:
-      print(f"  INCORRCT result. Correct is {swdp}")
-
-  # import IPython
-  # IPython.embed(colors="neutral")
+    assert hdp == swdp, f"  INCORRCT result. Correct is {swdp}"
