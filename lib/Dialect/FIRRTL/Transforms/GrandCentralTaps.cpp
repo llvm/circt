@@ -353,9 +353,6 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
   auto keyAttr = tryGetAs<ArrayAttr>(anno, anno, "keys", loc, dataTapsClass);
   if (!keyAttr)
     return failure();
-  auto noDedupAnnoClassName = StringAttr::get(context, noDedupAnnoClass);
-  auto noDedupAnno = DictionaryAttr::get(
-      context, {{StringAttr::get(context, "class"), noDedupAnnoClassName}});
   for (size_t i = 0, e = keyAttr.size(); i != e; ++i) {
     auto b = keyAttr[i];
     auto path = ("keys[" + Twine(i) + "]").str();
@@ -486,14 +483,6 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
       sendVal = getValueByFieldID(sendBuilder, sendVal, srcTarget->fieldIdx);
       // Note: No DontTouch added to sendVal, it can be constantprop'ed or
       // CSE'ed.
-    }
-
-    // Mark sink module "NoDedup".
-    // Unique paths are needed for RefType, deduplication may break that.
-    AnnotationSet annos(wireModule);
-    if (!annos.hasAnnotation(noDedupAnnoClassName)) {
-      annos.addAnnotations(noDedupAnno);
-      annos.applyToOperation(wireModule);
     }
 
     auto *targetOp = wireTarget->ref.getOp();
