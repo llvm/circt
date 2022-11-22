@@ -124,6 +124,54 @@ class System:
         module._pycde_mod.create()
         self.top_modules.append(module)
 
+  # TODO: Ideally, we'd be able to run the std-to-handshake lowering passes in
+  # pycde.  As of now, however, the cf/memref/arith dialects are not registered
+  # so the assembly can't be loaded. The right way to do this is to have pycde
+  # load those dialects, though there isn't a python hook to selectively load
+  # them.  Really, it's time for pycde to have a pybind11 module so we have more
+  # flexibility to do this sort of thing. Until we get around to that, this'll
+  # be commented out.
+  # HANDSHAKE = [
+  #     "flatten-memref",
+  #     "flatten-memref-calls",
+  #     "func.func(handshake-legalize-memrefs)",
+  #     "lower-std-to-handshake",
+  #     "canonicalize",
+  #     "handshake-lower-extmem-to-hw{wrap-esi}",
+  #     "canonicalize",
+  #     "handshake.func(handshake-insert-buffers)",
+  #     "canonicalize",
+  #     "handshake.func(handshake-remove-block-structure)",
+  #     "handshake.func(handshake-materialize-forks-sinks)",
+  #     "lower-handshake-to-hw",
+  #     "canonicalize",
+  # ]
+
+  def import_mlir(self, module, lowering=None):
+    """Import mlir asm created elsewhere into our space."""
+
+    compat_mod = ir.Module.parse(str(module))
+    if lowering is not None:
+      pm = mlir.passmanager.PassManager.parse(",".join(lowering))
+      pm.run(compat_mod)
+    ret: Dict[str, Any] = {}
+    for op in compat_mod.body:
+      # TODO: handle symbolrefs pointing to potentially renamed symbols.
+      if isinstance(op, hw.HWModuleOp):
+        from .module import import_hw_module
+        im = import_hw_module(op)
+        self._create_circt_mod(im._pycde_mod)
+        ret[ir.StringAttr(op.name).value] = im
+      elif isinstance(op, esi.RandomAccessMemoryDeclOp):
+        from .esi import _import_ram_decl
+        ram = _import_ram_decl(self, op)
+        ret[ir.StringAttr(op.sym_name).value] = ram
+        self.body.append(op)
+      else:
+        # TODO: do symbol renaming.
+        self.body.append(op)
+    return ret
+
   def create_physical_region(self, name: str = None):
     with self._get_ip():
       physical_region = PhysicalRegion(name)
@@ -134,7 +182,7 @@ class System:
       entity_extern = EntityExtern(tag, metadata)
     return entity_extern
 
-  def _create_circt_mod(self, spec_mod: _SpecializedModule, create_cb):
+  def _create_circt_mod(self, spec_mod: _SpecializedModule):
     """Wrapper for a callback (which actually builds the CIRCT op) which
     controls all the bookkeeping around CIRCT module ops."""
 
@@ -143,7 +191,7 @@ class System:
       return
 
     # Build the correct op.
-    op = create_cb(self, spec_mod, symbol)
+    op = spec_mod.create_cb(self, spec_mod, symbol)
     # Install the op in the cache.
     install_func(op)
     # Add to the generation queue if the module has a generator callback.
