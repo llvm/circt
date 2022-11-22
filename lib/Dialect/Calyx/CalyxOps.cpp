@@ -1869,7 +1869,7 @@ SmallVector<StringRef> SeqMemoryOp::portNames() {
         StringAttr::get(this->getContext(), "addr" + std::to_string(i));
     portNames.push_back(nameAttr.getValue());
   }
-  portNames.append({"write_data", "write_en", "clk", "read_data", "done"});
+  portNames.append({"write_data", "write_en", "write_done", "clk", "read_data", "read_en", "read_done"});
   return portNames;
 }
 
@@ -1877,7 +1877,7 @@ SmallVector<Direction> SeqMemoryOp::portDirections() {
   SmallVector<Direction> portDirections;
   for (size_t i = 0, e = getAddrSizes().size(); i != e; ++i)
     portDirections.push_back(Input);
-  portDirections.append({Input, Input, Input, Output, Output});
+  portDirections.append({Input, Input, Output, Input, Output, Input, Output});
   return portDirections;
 }
 
