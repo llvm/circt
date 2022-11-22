@@ -561,6 +561,8 @@ struct InterfaceElemsBuilder {
         : description(des), elemName(name), elemType(elemType) {}
   };
   SmallVector<Properties> elementsList;
+  InterfaceElemsBuilder(StringAttr iFaceName, IntegerAttr id)
+      : iFaceName(iFaceName), id(id) {}
 };
 
 /// Generate SystemVerilog interfaces from Grand Central annotations.  This pass
@@ -1472,10 +1474,9 @@ Optional<StringAttr> GrandCentralPass::traverseBundle(
     SmallVector<InterfaceElemsBuilder> &interfaceBuilder) {
 
   unsigned lastIndex = interfaceBuilder.size();
-  InterfaceElemsBuilder *ifaceBuilder = &interfaceBuilder.emplace_back();
-  ifaceBuilder->iFaceName = StringAttr::get(
+  auto iFaceName = StringAttr::get(
       &getContext(), getNamespace().newName(getInterfaceName(prefix, bundle)));
-  ifaceBuilder->id = id;
+  interfaceBuilder.emplace_back(iFaceName, id);
 
   for (auto element : bundle.getElements()) {
     auto field = fromAttr(element);
@@ -1502,7 +1503,7 @@ Optional<StringAttr> GrandCentralPass::traverseBundle(
     interfaceBuilder[lastIndex].elementsList.emplace_back(description, name,
                                                           elementType.value());
   }
-  return ifaceBuilder->iFaceName;
+  return iFaceName;
 }
 
 /// Return the module that is associated with this value.  Use the cached/lazily
