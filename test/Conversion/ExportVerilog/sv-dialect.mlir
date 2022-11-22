@@ -301,7 +301,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
       sv.fwrite %fd, "%d" (%c1) : i1
       // CHECK-NEXT: fwrite(32'h80000002, "%d", "THING");
       %c2 = sv.verbatim.expr "\"VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE\"" : () -> i1
-      // CHECK-NEXT: _GEN = 
+      // CHECK-NEXT: _GEN =
       // CHECK-NEXT:   "VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE";
       // CHECK-NEXT: fwrite(32'h80000002, "%d", _GEN);
       sv.fwrite %fd, "%d" (%c2) : i1
@@ -457,7 +457,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
 }
 
 // CHECK-LABEL: module Aliasing(
-// CHECK-NEXT:             inout [41:0] a, 
+// CHECK-NEXT:             inout [41:0] a,
 // CHECK-NEXT:                          b,
 // CHECK-NEXT:                          c)
 hw.module @Aliasing(%a : !hw.inout<i42>, %b : !hw.inout<i42>,
@@ -473,7 +473,7 @@ hw.module @reg_0(%in4: i4, %in8: i8) -> (a: i8, b: i8) {
   // CHECK-LABEL: module reg_0(
   // CHECK-NEXT:   input  [3:0] in4,
   // CHECK-NEXT:   input  [7:0] in8,
-  // CHECK-NEXT:   output [7:0] a, 
+  // CHECK-NEXT:   output [7:0] a,
   // CHECK-NEXT:                b);
 
   // CHECK-EMPTY:
@@ -1031,7 +1031,7 @@ hw.module @AnFSM(%clock : i1) {
   // typedecl'd # 1
   %reg_state1 = sv.reg : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>>
   %reg_read_state1 = sv.read_inout %reg_state1 : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>>
-  
+
   %A_state1 = hw.enum.constant A : !hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>
   %B_state1 = hw.enum.constant B : !hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>
   sv.always posedge %clock {
@@ -1043,7 +1043,7 @@ hw.module @AnFSM(%clock : i1) {
   // typedecl'd # 2
   %reg_state2 = sv.reg : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>>
   %reg_read_state2 = sv.read_inout %reg_state2 : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>>
-  
+
   %A_state2 = hw.enum.constant A : !hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>
   %B_state2 = hw.enum.constant B : !hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>
   sv.always posedge %clock {
