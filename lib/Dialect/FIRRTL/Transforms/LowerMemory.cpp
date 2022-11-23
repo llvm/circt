@@ -134,7 +134,7 @@ LowerMemoryPass::getMemoryModulePorts(const FirMemory &mem) {
   auto addPort = [&](const Twine &name, FIRRTLType type, Direction direction) {
     auto nameAttr = StringAttr::get(context, name);
     ports.push_back(
-        {nameAttr, type, direction, InnerSymAttr{}, loc, annotations});
+        {nameAttr, type, direction, hw::InnerSymAttr{}, loc, annotations});
   };
 
   auto makePortCommon = [&](StringRef prefix, size_t idx, FIRRTLType addrType) {
@@ -296,7 +296,7 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
     return true;
   });
   if (nlaUpdated) {
-    memInst.setInnerSymAttr(InnerSymAttr::get(leafSym));
+    memInst.setInnerSymAttr(hw::InnerSymAttr::get(leafSym));
     AnnotationSet newAnnos(memInst);
     newAnnos.addAnnotations(newMemModAnnos);
     newAnnos.applyToOperation(memInst);

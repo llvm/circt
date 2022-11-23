@@ -556,7 +556,7 @@ StringAttr circt::firrtl::getOrAddInnerSym(
   }
   auto name = getNamespace(mod).newName(nameHint);
   attr = StringAttr::get(op->getContext(), name);
-  op->setAttr("inner_sym", InnerSymAttr::get(attr));
+  op->setAttr("inner_sym", hw::InnerSymAttr::get(attr));
   return attr;
 }
 
