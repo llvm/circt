@@ -1024,7 +1024,7 @@ static ArrayAttr getHWParameters(FExtModuleOp module, bool ignoreValues) {
 bool FIRRTLModuleLowering::handleForceNameAnnos(
     FModuleLike oldModule, AnnotationSet &annos,
     CircuitLoweringState &loweringState) {
-  bool failed;
+  bool failed = false;
   // Remove ForceNameAnnotations by generating verilogNames on instances.
   annos.removeAnnotations([&](Annotation anno) {
     if (!anno.isClass(forceNameAnnoClass))
