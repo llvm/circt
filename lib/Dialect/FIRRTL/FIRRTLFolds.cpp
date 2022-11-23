@@ -986,6 +986,9 @@ OpFoldResult OrRPrimOp::fold(ArrayRef<Attribute> operands) {
   if (!hasKnownWidthIntTypes(*this))
     return {};
 
+  if (getInput().getType().getBitWidthOrSentinel() == 0)
+    return getIntAttr(getType(), APInt(1, 0));
+
   // x != 0
   if (auto cst = getConstant(operands[0]))
     return getIntAttr(getType(), APInt(1, !cst->isZero()));
@@ -1001,6 +1004,9 @@ OpFoldResult OrRPrimOp::fold(ArrayRef<Attribute> operands) {
 OpFoldResult XorRPrimOp::fold(ArrayRef<Attribute> operands) {
   if (!hasKnownWidthIntTypes(*this))
     return {};
+
+  if (getInput().getType().getBitWidthOrSentinel() == 0)
+    return getIntAttr(getType(), APInt(1, 0));
 
   // popcount(x) & 1
   if (auto cst = getConstant(operands[0]))
