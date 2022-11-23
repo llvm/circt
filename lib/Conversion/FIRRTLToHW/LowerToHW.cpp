@@ -1120,8 +1120,11 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
       loweringState.isInDUT(oldModule))
     newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
 
-  loweringState.processRemainingAnnotations(oldModule,
-                                            AnnotationSet(oldModule));
+  AnnotationSet annos(oldModule);
+  if (handleForceNameAnnos(oldModule, annos, loweringState))
+    return {};
+
+  loweringState.processRemainingAnnotations(oldModule, annos);
   return newModule;
 }
 

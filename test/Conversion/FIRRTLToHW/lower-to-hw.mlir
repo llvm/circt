@@ -1241,11 +1241,15 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: hw.module private @ForceNameSubmodule
   firrtl.hierpath private @nla_1 [@ForceNameTop::@sym_foo, @ForceNameSubmodule]
   firrtl.hierpath private @nla_2 [@ForceNameTop::@sym_bar, @ForceNameSubmodule]
+  firrtl.hierpath private @nla_3 [@ForceNameTop::@sym_baz, @ForceNameSubextmodule]
   firrtl.module private @ForceNameSubmodule() attributes {annotations = [
     {circt.nonlocal = @nla_2,
      class = "chisel3.util.experimental.ForceNameAnnotation", name = "Bar"},
     {circt.nonlocal = @nla_1,
      class = "chisel3.util.experimental.ForceNameAnnotation", name = "Foo"}]} {}
+  firrtl.extmodule private @ForceNameSubextmodule() attributes {annotations = [
+    {circt.nonlocal = @nla_3,
+     class = "chisel3.util.experimental.ForceNameAnnotation", name = "Baz"}]}
   // CHECK: hw.module private @ForceNameTop
   firrtl.module private @ForceNameTop() {
     firrtl.instance foo sym @sym_foo
@@ -1254,8 +1258,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.instance bar sym @sym_bar
       {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}]}
       @ForceNameSubmodule()
+    firrtl.instance baz sym @sym_baz
+      {annotations = [{circt.nonlocal = @nla_3, class = "circt.nonlocal"}]}
+      @ForceNameSubextmodule()
     // CHECK:      hw.instance "foo" sym @sym_foo {{.+}} {hw.verilogName = "Foo"}
     // CHECK-NEXT: hw.instance "bar" sym @sym_bar {{.+}} {hw.verilogName = "Bar"}
+    // CHECK-NEXT: hw.instance "baz" sym @sym_baz {{.+}} {hw.verilogName = "Baz"}
   }
 
   // CHECK-LABEL: hw.module private @PreserveName
