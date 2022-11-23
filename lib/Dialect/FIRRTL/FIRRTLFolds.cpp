@@ -1138,6 +1138,10 @@ static void replaceWithBits(Operation *op, Value value, unsigned hiBit,
 
 OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
 
+  // mux : UInt<0> -> 0
+  if (getType().getBitWidthOrSentinel() == 0)
+    return getIntAttr(getType(), APInt(0, 0, getType().isSignedInteger()));
+
   // mux(cond, x, x) -> x
   if (getHigh() == getLow())
     return getHigh();

@@ -460,8 +460,10 @@ firrtl.module @Mux(in %in: !firrtl.uint<4>,
                    in %cond: !firrtl.uint<1>,
                    in %val1: !firrtl.uint<1>,
                    in %val2: !firrtl.uint<1>,
+                   in %val0: !firrtl.uint<0>,
                    out %out: !firrtl.uint<4>,
-                   out %out1: !firrtl.uint<1>) {
+                   out %out1: !firrtl.uint<1>,
+                   out %out2: !firrtl.uint<0>) {
   // CHECK: firrtl.strictconnect %out, %in
   %0 = firrtl.mux (%cond, %in, %in) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %0 : !firrtl.uint<4>, !firrtl.uint<4>
@@ -504,6 +506,10 @@ firrtl.module @Mux(in %in: !firrtl.uint<4>,
   %12 = firrtl.multibit_mux %c0_ui0, %val1, %val1 :!firrtl.uint<0>, !firrtl.uint<1>
   // CHECK-NEXT: firrtl.strictconnect %out1, %val1
   firrtl.connect %out1, %12 : !firrtl.uint<1>, !firrtl.uint<1>
+
+  %13 = firrtl.mux (%cond, %val0, %val0) : (!firrtl.uint<1>, !firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<0>
+  // CHECK-NEXT: firrtl.strictconnect %out2, %c0_ui0
+  firrtl.strictconnect %out2, %13 : !firrtl.uint<0>
 }
 
 // CHECK-LABEL: firrtl.module @Pad
