@@ -38,8 +38,10 @@ private:
 /// Find all InnerRefAttrs inside a given Attribute.
 void InnerSymbolDCEPass::findInnerRefs(Attribute attr) {
   // Check if this Attribute is an InnerRefAttr.
-  if (auto innerRef = dyn_cast<InnerRefAttr>(attr))
+  if (auto innerRef = dyn_cast<InnerRefAttr>(attr)) {
     insertInnerRef(innerRef);
+    return;
+  }
 
   // Check if any sub-Attributes are InnerRefAttrs.
   if (auto subElementAttr = dyn_cast<SubElementAttrInterface>(attr))

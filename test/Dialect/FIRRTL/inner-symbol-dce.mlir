@@ -23,7 +23,7 @@ firrtl.circuit "Simple" attributes {
     // CHECK-NEXT: @w3
     %w3 = firrtl.wire sym @w3 : !firrtl.uint<1>
     // CHECK-NEXT: %w4
-    // CHECK-NOT: @w4
+    // CHECK-NOT:  @w4
     %w4 = firrtl.wire sym @w4 : !firrtl.uint<1>
 
     firrtl.instance child sym @child @Child()
