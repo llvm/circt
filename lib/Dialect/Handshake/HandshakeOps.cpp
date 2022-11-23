@@ -240,13 +240,13 @@ struct EliminateForkToForkPattern : mlir::OpRewritePattern<ForkOp> {
       for (auto it :
            llvm::zip(parentForkOp->getResults(), newParentForkOp.getResults()))
         std::get<0>(it).replaceAllUsesWith(std::get<1>(it));
-      rewriter.eraseOp(parentForkOp);
 
       /// Replace the results of the matches fork op with the corresponding
       /// results of the new parent fork op.
       rewriter.replaceOp(op,
                          newParentForkOp.getResults().take_back(op.getSize()));
     });
+    rewriter.eraseOp(parentForkOp);
     return success();
   }
 };
@@ -392,10 +392,10 @@ struct EliminateCBranchIntoMuxPattern : OpRewritePattern<MuxOp> {
     rewriter.updateRootInPlace(firstParentCBranch, [&] {
       // Replace uses of the mux's output with cbranch's data input
       rewriter.replaceOp(op, firstParentCBranch.getDataOperand());
-
-      // Remove the cbranch
-      rewriter.eraseOp(firstParentCBranch);
     });
+
+    // Remove the cbranch
+    rewriter.eraseOp(firstParentCBranch);
 
     return success();
   }
