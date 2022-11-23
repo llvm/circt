@@ -240,7 +240,7 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
   if (isa<ReadInOutOp, ArrayIndexInOutOp, IndexedPartSelectInOutOp,
           StructFieldInOutOp, IndexedPartSelectOp, ParamValueOp, XMROp,
-          SampledOp, EnumConstantOp>(op))
+          XMRRefOp, SampledOp, EnumConstantOp>(op))
     return true;
 
   // All HW combinational logic ops and SV expression ops are Verilog
@@ -1877,6 +1877,7 @@ private:
   SubExprInfo visitSV(GetModportOp op);
   SubExprInfo visitSV(ReadInterfaceSignalOp op);
   SubExprInfo visitSV(XMROp op);
+  SubExprInfo visitSV(XMRRefOp op);
   SubExprInfo visitVerbatimExprOp(Operation *op, ArrayAttr symbols);
   SubExprInfo visitSV(VerbatimExprOp op) {
     return visitVerbatimExprOp(op, op.getSymbols());
@@ -2326,6 +2327,35 @@ SubExprInfo ExprEmitter::visitSV(XMROp op) {
   for (auto s : op.getPath())
     ps << PPExtString(s.cast<StringAttr>().getValue()) << ".";
   ps << PPExtString(op.getTerminal());
+  return {Selection, IsUnsigned};
+}
+
+// TODO: This shares a lot of code with the getNameRemotely mtehod. Combine
+// these to share logic.
+SubExprInfo ExprEmitter::visitSV(XMRRefOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  auto globalRef =
+      cast<hw::GlobalRefOp>(state.symbolCache.getDefinition(op.getRefAttr()));
+  auto namepath = globalRef.getNamepathAttr().getValue();
+  auto *module = state.symbolCache.getDefinition(
+      cast<InnerRefAttr>(namepath.front()).getModule());
+  ps << getSymOpName(module);
+  for (auto sym : namepath) {
+    ps << ".";
+    auto innerRef = cast<InnerRefAttr>(sym);
+    auto ref = state.symbolCache.getInnerDefinition(innerRef.getModule(),
+                                                    innerRef.getName());
+    if (ref.hasPort()) {
+      ps << getPortVerilogName(ref.getOp(), ref.getPort());
+      continue;
+    }
+    ps << getSymOpName(ref.getOp());
+  }
+  auto leaf = op.getStringLeafAttr();
+  if (leaf && leaf.size())
+    ps << PPExtString(leaf);
   return {Selection, IsUnsigned};
 }
 
@@ -4589,6 +4619,33 @@ StringRef ModuleEmitter::getNameRemotely(Value value,
       xmrString.append(xmr.getTerminal());
       return StringAttr::get(value.getContext(), xmrString);
     }
+
+    // TODO: This shares a lot of code with the XMRRefOp visitor. Combine these
+    // to share logic.
+    if (auto xmrRef = dyn_cast<XMRRefOp>(wireInput)) {
+      SmallString<32> xmrString;
+      auto globalRef = cast<hw::GlobalRefOp>(
+          state.symbolCache.getDefinition(xmrRef.getRefAttr()));
+      auto namepath = globalRef.getNamepathAttr().getValue();
+      auto *module = state.symbolCache.getDefinition(
+          cast<InnerRefAttr>(namepath.front()).getModule());
+      xmrString.append(getSymOpName(module));
+      for (auto sym : namepath) {
+        xmrString.append(".");
+        auto innerRef = cast<InnerRefAttr>(sym);
+        auto ref = state.symbolCache.getInnerDefinition(innerRef.getModule(),
+                                                        innerRef.getName());
+        if (ref.hasPort()) {
+          xmrString.append(getPortVerilogName(ref.getOp(), ref.getPort()));
+          continue;
+        }
+        xmrString.append(getSymOpName(ref.getOp()));
+      }
+      auto leaf = xmrRef.getStringLeafAttr();
+      if (leaf && leaf.size())
+        xmrString.append(leaf);
+      return StringAttr::get(xmrRef.getContext(), xmrString);
+    }
   }
 
   // Handle values being driven onto wires, likely as instance outputs.
@@ -5027,6 +5084,9 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         .Case<HWGeneratorSchemaOp>([&](HWGeneratorSchemaOp schemaOp) {
           symbolCache.addDefinition(schemaOp.getNameAttr(), schemaOp);
         })
+        .Case<GlobalRefOp>([&](GlobalRefOp globalRefOp) {
+          symbolCache.addDefinition(globalRefOp.getSymNameAttr(), globalRefOp);
+        })
         .Case<TypeScopeOp>([&](TypeScopeOp op) {
           symbolCache.addDefinition(op.getNameAttr(), op);
           // TODO: How do we want to handle typedefs in a split output?
@@ -5103,7 +5163,7 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
           [&](auto op) { ModuleEmitter(state).emitHWExternModule(op); })
       .Case<HWModuleGeneratedOp>(
           [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
-      .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })
+      .Case<HWGeneratorSchemaOp, hw::GlobalRefOp>([&](auto op) { /* Empty */ })
       .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
       .Case<BindInterfaceOp>(
           [&](auto op) { ModuleEmitter(state).emitBindInterface(op); })

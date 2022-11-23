@@ -7,10 +7,10 @@ from pycde.dialects import comb
 from pycde.testing import unittestmodule
 
 # CHECK-LABEL: msft.module @WireAndRegTest {} (%In: i8, %clk: i1) -> (Out: i8, OutReg: i8)
-# CHECK:         %w1 = sv.wire  : !hw.inout<i8>
+# CHECK:         %w1 = sv.wire sym @w1 : !hw.inout<i8>
 # CHECK:         [[r0:%.+]] = sv.read_inout %w1 : !hw.inout<i8>
 # CHECK:         sv.assign %w1, %In : i8
-# CHECK:         %in = sv.wire  : !hw.inout<i8>
+# CHECK:         %in = sv.wire sym @in : !hw.inout<i8>
 # CHECK:         {{%.+}} = sv.read_inout %in : !hw.inout<i8>
 # CHECK:         sv.assign %in, %In : i8
 # CHECK:         [[r1:%.+]] = seq.compreg %In, %clk : i8

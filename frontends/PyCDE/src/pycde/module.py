@@ -235,7 +235,7 @@ class _SpecializedModule(_PyProxy):
 
     from .system import System
     sys = System.current()
-    sys._create_circt_mod(self, self.create_cb)
+    sys._create_circt_mod(self)
 
   @property
   def is_created(self):
@@ -412,8 +412,14 @@ def import_hw_module(hw_module: hw.HWModuleOp):
 
   # Creation callback that just moves the already build module into the System's
   # ModuleOp and returns it.
-  def create_cb(sys: System, mod: _SpecializedModule, symbol: str):
+  def create_cb(sys: "System", mod: _SpecializedModule, symbol: str):
+    # TODO: deal with symbolrefs to this (potentially renamed) module symbol.
     sys.mod.body.append(hw_module)
+
+    # Need to clear out the reference to ourselves so that we can release the
+    # raw reference to `hw_module`. It's safe to do so since unlike true PyCDE
+    # modules, this can only be run once during the import_mlir.
+    mod.create_cb = None
     return hw_module
 
   # Hand off the class, external name, and create callback to _module_base.

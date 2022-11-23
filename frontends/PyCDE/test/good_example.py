@@ -25,5 +25,4 @@ class Mux:
 
 
 t = pycde.System([Mux], name="MuxDemo", output_directory=sys.argv[1])
-t.generate()
-t.emit_outputs()
+t.compile()

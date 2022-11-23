@@ -90,7 +90,7 @@ if __name__ == "__main__":
                    name="ESILoopback",
                    output_directory=sys.argv[1],
                    sw_api_langs=["python"])
-  s.generate()
+  s.compile()
   s.package()
 
 

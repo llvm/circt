@@ -3,18 +3,30 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 import capnp
+import os
+from pathlib import Path
 import time
 import typing
 
 
 class Type:
 
-  def __init__(self, type_id: typing.Optional[int] = None):
+  def __init__(self, width, type_id: typing.Optional[int] = None):
     self.type_id = type_id
+    self.width = width
 
   def is_valid(self, obj) -> bool:
     """Is a Python object compatible with HW type."""
     assert False, "unimplemented"
+
+
+class VoidType(Type):
+
+  def __init__(self, type_id: typing.Optional[int] = None):
+    super().__init__(0, type_id)
+
+  def is_valid(self, obj) -> bool:
+    return obj is None
 
 
 class IntType(Type):
@@ -23,11 +35,12 @@ class IntType(Type):
                width: int,
                signed: bool,
                type_id: typing.Optional[int] = None):
-    super().__init__(type_id)
-    self.width = width
+    super().__init__(width, type_id)
     self.signed = signed
 
   def is_valid(self, obj) -> bool:
+    if self.width == 0:
+      return obj is None
     if not isinstance(obj, int):
       return False
     if obj >= 2**self.width:
@@ -42,15 +55,16 @@ class IntType(Type):
 class StructType(Type):
 
   def __init__(self,
-               fields: typing.Dict[str, Type],
+               fields: typing.List[typing.Tuple[str, Type]],
                type_id: typing.Optional[int] = None):
-    super().__init__(type_id)
     self.fields = fields
+    width = sum([ftype.width for (_, ftype) in self.fields])
+    super().__init__(width, type_id)
 
   def is_valid(self, obj) -> bool:
     fields_count = 0
     if isinstance(obj, dict):
-      for (fname, ftype) in self.fields.items():
+      for (fname, ftype) in self.fields:
         if fname not in obj:
           return False
         if not ftype.is_valid(obj[fname]):
@@ -83,7 +97,7 @@ class Port:
 
 class WritePort(Port):
 
-  def write(self, msg) -> bool:
+  def write(self, msg=None) -> bool:
     assert self.write_type is not None, "Expected non-None write_type"
     if not self.write_type.is_valid(msg):
       raise ValueError(f"'{msg}' cannot be converted to '{self.write_type}'")
@@ -103,7 +117,7 @@ class ReadPort(Port):
 class ReadWritePort(Port):
 
   def __call__(self,
-               msg,
+               msg=None,
                blocking_timeout: typing.Optional[float] = 1.0) -> typing.Any:
     """Send a message and wait for a response. If 'timeout' is exceeded while
     waiting for a response, there may well be one coming. It is the caller's
@@ -116,7 +130,7 @@ class ReadWritePort(Port):
       raise RuntimeError(f"Could not send message '{msg}'")
     return self.read(blocking_timeout)
 
-  def write(self, msg) -> bool:
+  def write(self, msg=None) -> bool:
     assert self.write_type is not None, "Expected non-None write_type"
     if not self.write_type.is_valid(msg):
       raise ValueError(f"'{msg}' cannot be converted to '{self.write_type}'")
@@ -173,6 +187,23 @@ class Cosim(_CosimNode):
     prefix = [] if len(ifaces) == 0 else ifaces[0].endpointID.split(".")[:1]
     super().__init__(self, prefix)
 
+  def load_package(path: os.PathLike):
+    """Load a cosim connection from something running out of 'path' package dir.
+    Reads and parses 'cosim.cfg' from that directory to get the connection
+    information. Loads the capnp schema from the 'runtime' directory in that
+    package path."""
+    path = Path(path)
+    simcfg = path / "cosim.cfg"
+    if not simcfg.exists():
+      simcfg = Path.cwd() / "cosim.cfg"
+      if not simcfg.exists():
+        raise RuntimeError("Could not find simulation connection file")
+    port_lines = filter(lambda x: x.startswith("port:"),
+                        simcfg.open().readlines())
+    port = int(list(port_lines)[0].split(":")[1])
+    return Cosim(os.path.join(path, "runtime", "schema.capnp"),
+                 f"{os.uname()[1]}:{port}")
+
   def list(self):
     """List the available interfaces"""
     return self._cosim.list().wait().ifaces
@@ -210,6 +241,15 @@ class _CosimPort:
         raise ValueError("Cosim does not support non-capnp types.")
       self.capnp_type = getattr(schema, esi_type.capnp_name)
 
+  class _VoidConverter(_TypeConverter):
+    """Convert python ints to and from capnp messages."""
+
+    def write(self, py_int: None):
+      return self.capnp_type.new_message()
+
+    def read(self, capnp_resp) -> None:
+      return capnp_resp.as_struct(self.capnp_type)
+
   class _IntConverter(_TypeConverter):
     """Convert python ints to and from capnp messages."""
 
@@ -228,13 +268,17 @@ class _CosimPort:
     def read(self, capnp_resp) -> int:
       capnp_msg = capnp_resp.as_struct(self.capnp_type)
       ret = {}
-      for (fname, _) in self.esi_type.fields.items():
+      for (fname, _) in self.esi_type.fields:
         if hasattr(capnp_msg, fname):
           ret[fname] = getattr(capnp_msg, fname)
       return ret
 
   # Lookup table for getting the correct type converter for a given type.
-  ConvertLookup = {IntType: _IntConverter, StructType: _StructConverter}
+  ConvertLookup = {
+      VoidType: _VoidConverter,
+      IntType: _IntConverter,
+      StructType: _StructConverter
+  }
 
   def __init__(self, node: _CosimNode, endpoint,
                read_type: typing.Optional[Type],
@@ -252,7 +296,7 @@ class _CosimPort:
 
   def write(self, msg) -> bool:
     """Write a message to this port."""
-    self._endpoint.send(self._write_convert.write(msg))
+    self._endpoint.send(self._write_convert.write(msg)).wait()
     return True
 
   def read(self, blocking_time: typing.Optional[float]):

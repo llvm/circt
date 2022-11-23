@@ -38,7 +38,7 @@ class WireOp:
                ip=None):
     attributes = {"name": StringAttr.get(name)}
     if inner_sym is not None:
-      attributes["inner_sym"] = FlatSymbolRefAttr.get(inner_sym)
+      attributes["inner_sym"] = StringAttr.get(inner_sym)
     if svAttributes is not None:
       attributes["svAttributes"] = ArrayAttr.get(svAttributes)
     OpView.__init__(

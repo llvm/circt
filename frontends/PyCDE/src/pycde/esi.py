@@ -294,24 +294,26 @@ class _ServiceGeneratorChannels:
         raise ValueError(f"{name_str} has not been connected.")
 
 
-def ServiceImplementation(decl: ServiceDecl):
+def ServiceImplementation(decl: Optional[ServiceDecl]):
   """A generator for a service implementation. Must contain a @generator method
   which will be called whenever required to implement the server. Said generator
   function will be called with the same 'ports' argument as modules and a
   'channels' argument containing lists of the input and output channels which
   need to be connected to the service being implemented."""
 
-  def wrap(service_impl, decl: ServiceDecl = decl):
+  def wrap(service_impl, decl: Optional[ServiceDecl] = decl):
 
     def instantiate_cb(mod: _SpecializedModule, instance_name: str,
                        inputs: dict, appid: AppID, loc):
       # Each instantiation of the ServiceImplementation has its own
       # registration.
       opts = _service_generator_registry.register(mod)
+      decl_sym = None
+      if decl is not None:
+        decl_sym = ir.FlatSymbolRefAttr.get(decl._materialize_service_decl())
       return raw_esi.ServiceInstanceOp(
           result=[t for _, t in mod.output_ports],
-          service_symbol=ir.FlatSymbolRefAttr.get(
-              decl._materialize_service_decl()),
+          service_symbol=decl_sym,
           impl_type=_ServiceGeneratorRegistry._impl_type_name,
           inputs=[inputs[pn].value for pn, _ in mod.input_ports],
           impl_opts=opts,
@@ -433,4 +435,22 @@ def DeclareRandomAccessMemory(inner_type: PyCDEType,
           sym_name, ir.TypeAttr.get(inner_type),
           ir.IntegerAttr.get(ir.IntegerType.get_signless(64), depth))
 
+  if name is not None:
+    DeclareRandomAccessMemory.name = name
+    DeclareRandomAccessMemory.__name__ = name
   return DeclareRandomAccessMemory
+
+
+def _import_ram_decl(sys: "System", ram_op: raw_esi.RandomAccessMemoryDeclOp):
+  """Create a DeclareRandomAccessMemory object from an existing CIRCT op and
+  install it in the sym cache."""
+  from .system import _OpCache
+  ram = DeclareRandomAccessMemory(inner_type=PyCDEType(ram_op.innerType.value),
+                                  depth=ram_op.depth.value,
+                                  name=ram_op.sym_name.value)
+  cache: _OpCache = sys._op_cache
+  sym, install = cache.create_symbol(ram)
+  assert sym == ram_op.sym_name.value, "don't support imported module renames"
+  ram.symbol = ir.StringAttr.get(sym)
+  install(ram_op)
+  return ram

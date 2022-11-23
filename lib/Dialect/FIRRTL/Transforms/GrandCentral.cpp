@@ -527,6 +527,7 @@ struct CompanionInfo {
   StringRef name;
 
   FModuleOp companion;
+  bool isNonlocal;
 };
 
 /// Stores a reference to a ground type and an optional NLA associated with
@@ -534,6 +535,34 @@ struct CompanionInfo {
 struct FieldAndNLA {
   FieldRef field;
   FlatSymbolRefAttr nlaSym;
+};
+
+/// Stores the arguments required to construct the verbatim xmr assignment.
+struct VerbatimXMRbuilder {
+  Value val;
+  StringAttr str;
+  ArrayAttr syms;
+  FModuleOp companionMod;
+  VerbatimXMRbuilder(Value val, StringAttr str, ArrayAttr syms,
+                     FModuleOp companionMod)
+      : val(val), str(str), syms(syms), companionMod(companionMod) {}
+};
+
+/// Stores the arguments required to construct the InterfaceOps and
+/// InterfaceSignalOps.
+struct InterfaceElemsBuilder {
+  StringAttr iFaceName;
+  IntegerAttr id;
+  struct Properties {
+    StringAttr description;
+    StringAttr elemName;
+    TypeSum elemType;
+    Properties(StringAttr des, StringAttr name, TypeSum &elemType)
+        : description(des), elemName(name), elemType(elemType) {}
+  };
+  SmallVector<Properties> elementsList;
+  InterfaceElemsBuilder(StringAttr iFaceName, IntegerAttr id)
+      : iFaceName(iFaceName), id(id) {}
 };
 
 /// Generate SystemVerilog interfaces from Grand Central annotations.  This pass
@@ -593,20 +622,26 @@ private:
 
   /// Recursively examine an AugmentedType to populate the "mappings" file
   /// (generate XMRs) for this interface.  This does not build new interfaces.
-  bool traverseField(Attribute field, IntegerAttr id, VerbatimBuilder &path);
+  bool traverseField(Attribute field, IntegerAttr id, VerbatimBuilder &path,
+                     SmallVector<VerbatimXMRbuilder> &xmrElems,
+                     SmallVector<InterfaceElemsBuilder> &interfaceBuilder);
 
   /// Recursively examine an AugmentedType to both build new interfaces and
   /// populate a "mappings" file (generate XMRs) using `traverseField`.  Return
   /// the type of the field exmained.
-  Optional<TypeSum> computeField(Attribute field, IntegerAttr id,
-                                 StringAttr prefix, VerbatimBuilder &path);
+  Optional<TypeSum>
+  computeField(Attribute field, IntegerAttr id, StringAttr prefix,
+               VerbatimBuilder &path, SmallVector<VerbatimXMRbuilder> &xmrElems,
+               SmallVector<InterfaceElemsBuilder> &interfaceBuilder);
 
   /// Recursively examine an AugmentedBundleType to both build new interfaces
   /// and populate a "mappings" file (generate XMRs).  Return none if the
   /// interface is invalid.
-  Optional<sv::InterfaceOp> traverseBundle(AugmentedBundleTypeAttr bundle,
-                                           IntegerAttr id, StringAttr prefix,
-                                           VerbatimBuilder &path);
+  Optional<StringAttr>
+  traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
+                 StringAttr prefix, VerbatimBuilder &path,
+                 SmallVector<VerbatimXMRbuilder> &xmrElems,
+                 SmallVector<InterfaceElemsBuilder> &interfaceBuilder);
 
   /// Return the module associated with this value.
   HWModuleLike getEnclosingModule(Value value, FlatSymbolRefAttr sym = {});
@@ -1201,8 +1236,10 @@ Optional<Attribute> GrandCentralPass::fromAttr(Attribute attr) {
   return None;
 }
 
-bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
-                                     VerbatimBuilder &path) {
+bool GrandCentralPass::traverseField(
+    Attribute field, IntegerAttr id, VerbatimBuilder &path,
+    SmallVector<VerbatimXMRbuilder> &xmrElems,
+    SmallVector<InterfaceElemsBuilder> &interfaceBuilder) {
   return TypeSwitch<Attribute, bool>(field)
       .Case<AugmentedGroundTypeAttr>([&](AugmentedGroundTypeAttr ground) {
         auto [fieldRef, sym] = leafMap.lookup(ground.getID());
@@ -1214,8 +1251,6 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
 
         auto companionModule = companionIDMap.lookup(id).companion;
         HWModuleLike enclosing = getEnclosingModule(leafValue, sym);
-        auto builder = OpBuilder::atBlockEnd(companionModule.getBodyBlock());
-        auto uloc = builder.getUnknownLoc();
 
         auto tpe = leafValue.getType().cast<FIRRTLBaseType>();
 
@@ -1299,11 +1334,9 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         path += " = {{-1}}";
         AnnotationSet::removeDontTouch(nodeOp);
         // Assemble the verbatim op.
-        builder.create<sv::VerbatimOp>(
-            uloc, getStrAndIncrementIds(path.getString()),
-            nodeOp->getOperand(0),
-            ArrayAttr::get(&getContext(), path.getSymbols()));
-        ++numXMRs;
+        xmrElems.emplace_back(
+            nodeOp->getOperand(0), getStrAndIncrementIds(path.getString()),
+            ArrayAttr::get(&getContext(), path.getSymbols()), companionModule);
         return true;
       })
       .Case<AugmentedVectorTypeAttr>([&](auto vector) {
@@ -1314,7 +1347,8 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           if (!field)
             return false;
           notFailed &= traverseField(
-              *field, id, path.snapshot().append("[" + Twine(i) + "]"));
+              *field, id, path.snapshot().append("[" + Twine(i) + "]"),
+              xmrElems, interfaceBuilder);
         }
         return notFailed;
       })
@@ -1328,7 +1362,8 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           if (!name)
             name = element.cast<DictionaryAttr>().getAs<StringAttr>("defName");
           anyFailed &= traverseField(
-              *field, id, path.snapshot().append("." + name.getValue()));
+              *field, id, path.snapshot().append("." + name.getValue()),
+              xmrElems, interfaceBuilder);
         }
 
         return anyFailed;
@@ -1342,10 +1377,10 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
       .Default([](auto a) { return true; });
 }
 
-Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
-                                                 IntegerAttr id,
-                                                 StringAttr prefix,
-                                                 VerbatimBuilder &path) {
+Optional<TypeSum> GrandCentralPass::computeField(
+    Attribute field, IntegerAttr id, StringAttr prefix, VerbatimBuilder &path,
+    SmallVector<VerbatimXMRbuilder> &xmrElems,
+    SmallVector<InterfaceElemsBuilder> &interfaceBuilder) {
 
   auto unsupported = [&](StringRef name, StringRef kind) {
     return VerbatimType({("// <unsupported " + kind + " type>").str(), false});
@@ -1355,7 +1390,7 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
       .Case<AugmentedGroundTypeAttr>(
           [&](AugmentedGroundTypeAttr ground) -> Optional<TypeSum> {
             // Traverse to generate mappings.
-            if (!traverseField(field, id, path))
+            if (!traverseField(field, id, path, xmrElems, interfaceBuilder))
               return None;
             FieldRef fieldRef = leafMap.lookup(ground.getID()).field;
             auto value = fieldRef.getValue();
@@ -1379,7 +1414,8 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
             auto firstElement = fromAttr(elements[0]);
             auto elementType =
                 computeField(firstElement.value(), id, prefix,
-                             path.snapshot().append("[" + Twine(0) + "]"));
+                             path.snapshot().append("[" + Twine(0) + "]"),
+                             xmrElems, interfaceBuilder);
             if (!elementType)
               return None;
 
@@ -1388,7 +1424,8 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
               if (!subField)
                 return None;
               (void)traverseField(*subField, id,
-                                  path.snapshot().append("[" + Twine(i) + "]"));
+                                  path.snapshot().append("[" + Twine(i) + "]"),
+                                  xmrElems, interfaceBuilder);
             }
 
             if (auto *tpe = std::get_if<Type>(&*elementType))
@@ -1400,10 +1437,10 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
           })
       .Case<AugmentedBundleTypeAttr>(
           [&](AugmentedBundleTypeAttr bundle) -> TypeSum {
-            auto iface = traverseBundle(bundle, id, prefix, path);
-            assert(iface && *iface);
-            (void)iface;
-            return VerbatimType({iface->getNameAttr().str(), true});
+            auto ifaceName = traverseBundle(bundle, id, prefix, path, xmrElems,
+                                            interfaceBuilder);
+            assert(ifaceName && *ifaceName);
+            return VerbatimType({ifaceName->str(), true});
           })
       .Case<AugmentedStringTypeAttr>([&](auto field) -> TypeSum {
         return unsupported(field.getName().getValue(), "string");
@@ -1431,31 +1468,15 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
 /// of the AugmentedBundleType to construct nested interfaces and generate
 /// stringy-typed SystemVerilog hierarchical references to drive the
 /// interface. Returns false on any failure and true on success.
-Optional<sv::InterfaceOp>
-GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
-                                 StringAttr prefix, VerbatimBuilder &path) {
-  auto builder = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
-  sv::InterfaceOp iface;
-  builder.setInsertionPointToEnd(getOperation().getBodyBlock());
-  auto loc = getOperation().getLoc();
-  auto iFaceName = getNamespace().newName(getInterfaceName(prefix, bundle));
-  iface = builder.create<sv::InterfaceOp>(loc, iFaceName);
-  ++numInterfaces;
-  if (dut &&
-      !instancePaths->instanceGraph.isAncestor(companionIDMap[id].companion,
-                                               cast<hw::HWModuleLike>(*dut)) &&
-      testbenchDir)
-    iface->setAttr("output_file", hw::OutputFileAttr::getAsDirectory(
-                                      &getContext(), testbenchDir.getValue(),
-                                      /*excludeFromFileList=*/true));
-  else if (maybeExtractInfo)
-    iface->setAttr("output_file",
-                   hw::OutputFileAttr::getAsDirectory(
-                       &getContext(), getOutputDirectory().getValue(),
-                       /*excludeFromFileList=*/true));
-  iface.setCommentAttr(builder.getStringAttr("VCS coverage exclude_file"));
+Optional<StringAttr> GrandCentralPass::traverseBundle(
+    AugmentedBundleTypeAttr bundle, IntegerAttr id, StringAttr prefix,
+    VerbatimBuilder &path, SmallVector<VerbatimXMRbuilder> &xmrElems,
+    SmallVector<InterfaceElemsBuilder> &interfaceBuilder) {
 
-  builder.setInsertionPointToEnd(cast<sv::InterfaceOp>(iface).getBodyBlock());
+  unsigned lastIndex = interfaceBuilder.size();
+  auto iFaceName = StringAttr::get(
+      &getContext(), getNamespace().newName(getInterfaceName(prefix, bundle)));
+  interfaceBuilder.emplace_back(iFaceName, id);
 
   for (auto element : bundle.getElements()) {
     auto field = fromAttr(element);
@@ -1472,56 +1493,17 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
     // the moment. Passing a `name` works most of the time, but can be brittle
     // if the interface field requires renaming in the output (e.g. due to
     // naming conflicts).
-    auto elementType =
-        computeField(*field, id, prefix,
-                     path.snapshot().append(".").append(name.getValue()));
+    auto elementType = computeField(
+        *field, id, prefix, path.snapshot().append(".").append(name.getValue()),
+        xmrElems, interfaceBuilder);
     if (!elementType)
       return None;
-
-    auto uloc = builder.getUnknownLoc();
-    auto description =
+    StringAttr description =
         element.cast<DictionaryAttr>().getAs<StringAttr>("description");
-    if (description) {
-      auto descriptionOp = builder.create<sv::VerbatimOp>(
-          uloc, ("// " + cleanupDescription(description.getValue())));
-
-      // If we need to generate a YAML representation of this interface, then
-      // add an attribute indicating that this `sv::VerbatimOp` is actually a
-      // description.
-      if (maybeHierarchyFileYAML)
-        descriptionOp->setAttr("firrtl.grandcentral.yaml.type",
-                               builder.getStringAttr("description"));
-    }
-
-    if (auto *str = std::get_if<VerbatimType>(&*elementType)) {
-      auto instanceOp =
-          builder.create<sv::VerbatimOp>(uloc, str->toStr(name.getValue()));
-
-      // If we need to generate a YAML representation of the interface, then add
-      // attirbutes that describe what this `sv::VerbatimOp` is.
-      if (maybeHierarchyFileYAML) {
-        if (str->instantiation)
-          instanceOp->setAttr("firrtl.grandcentral.yaml.type",
-                              builder.getStringAttr("instance"));
-        else
-          instanceOp->setAttr("firrtl.grandcentral.yaml.type",
-                              builder.getStringAttr("unsupported"));
-        instanceOp->setAttr("firrtl.grandcentral.yaml.name", name);
-        instanceOp->setAttr("firrtl.grandcentral.yaml.dimensions",
-                            builder.getI32ArrayAttr(str->dimensions));
-        instanceOp->setAttr(
-            "firrtl.grandcentral.yaml.symbol",
-            FlatSymbolRefAttr::get(builder.getContext(), str->str));
-      }
-      continue;
-    }
-
-    auto tpe = std::get<Type>(*elementType);
-    builder.create<sv::InterfaceSignalOp>(uloc, name.getValue(), tpe);
+    interfaceBuilder[lastIndex].elementsList.emplace_back(description, name,
+                                                          elementType.value());
   }
-
-  interfaceMap[FlatSymbolRefAttr::get(builder.getContext(), iFaceName)] = iface;
-  return iface;
+  return iFaceName;
 }
 
 /// Return the module that is associated with this value.  Use the cached/lazily
@@ -1850,6 +1832,8 @@ void GrandCentralPass::runOnOperation() {
           AnnotationSet::removeAnnotations(op, [&](Annotation annotation) {
             if (!annotation.getClass().startswith(viewAnnoClass))
               return false;
+            auto isNonlocal = annotation.getMember<FlatSymbolRefAttr>(
+                                  "circt.nonlocal") != nullptr;
             auto name = annotation.getMember<StringAttr>("name");
             auto id = annotation.getMember<IntegerAttr>("id");
             if (!id) {
@@ -1879,7 +1863,7 @@ void GrandCentralPass::runOnOperation() {
             if (annotation.getClass() == companionAnnoClass) {
               builder.setInsertionPointToEnd(circuitOp.getBodyBlock());
 
-              companionIDMap[id] = {name.getValue(), op};
+              companionIDMap[id] = {name.getValue(), op, isNonlocal};
 
               // Assert that the companion is instantiated once and only once.
               auto instance = exactlyOneInstance(op, "companion");
@@ -2042,6 +2026,24 @@ void GrandCentralPass::runOnOperation() {
   // then the top-level instantiate interface will be marked for extraction via
   // a SystemVerilog bind.
   SmallVector<sv::InterfaceOp, 2> interfaceVec;
+  SmallDenseMap<FModuleLike, SmallVector<InterfaceElemsBuilder>>
+      companionToInterfaceMap;
+  auto compareInterfaceSignal = [&](InterfaceElemsBuilder &lhs,
+                                    InterfaceElemsBuilder &rhs) {
+    auto compareProps = [&](InterfaceElemsBuilder::Properties &lhs,
+                            InterfaceElemsBuilder::Properties &rhs) {
+      // If it's a verbatim op, no need to check the string, because the
+      // interface names might not match. As long as the signal types match that
+      // is sufficient.
+      if (lhs.elemType.index() == 0 && rhs.elemType.index() == 0)
+        return true;
+      if (std::get<Type>(lhs.elemType) == std::get<Type>(rhs.elemType))
+        return true;
+      return false;
+    };
+    return std::equal(lhs.elementsList.begin(), lhs.elementsList.end(),
+                      rhs.elementsList.begin(), compareProps);
+  };
   for (auto anno : worklist) {
     auto bundle = AugmentedBundleTypeAttr::get(&getContext(), anno.getDict());
 
@@ -2063,7 +2065,8 @@ void GrandCentralPass::runOnOperation() {
 
     // Decide on a symbol name to use for the interface instance. This is needed
     // in `traverseBundle` as a placeholder for the connect operations.
-    auto companionModule = companionIDMap.lookup(bundle.getID()).companion;
+    auto companionIter = companionIDMap.lookup(bundle.getID());
+    auto companionModule = companionIter.companion;
     auto symbolName = getNamespace().newName(
         "__" + companionIDMap.lookup(bundle.getID()).name + "_" +
         getInterfaceName(bundle.getPrefix(), bundle) + "__");
@@ -2078,20 +2081,124 @@ void GrandCentralPass::runOnOperation() {
     VerbatimBuilder::Base verbatimData;
     VerbatimBuilder verbatim(verbatimData);
     verbatim += instanceSymbol;
-    auto iface =
-        traverseBundle(bundle, bundle.getID(), bundle.getPrefix(), verbatim);
-    if (!iface) {
+    // List of interface elements.
+
+    SmallVector<VerbatimXMRbuilder> xmrElems;
+    SmallVector<InterfaceElemsBuilder> interfaceBuilder;
+
+    auto ifaceName = traverseBundle(bundle, bundle.getID(), bundle.getPrefix(),
+                                    verbatim, xmrElems, interfaceBuilder);
+    if (!ifaceName) {
       removalError = true;
       continue;
     }
+
+    if (companionIter.isNonlocal) {
+      // If the companion module has two exactly same ViewAnnotation.companion
+      // annotations, then add the interface for only one of them. This happens
+      // when the companion is deduped.
+      auto viewMapIter = companionToInterfaceMap.find(companionModule);
+      if (viewMapIter != companionToInterfaceMap.end())
+        if (std::equal(interfaceBuilder.begin(), interfaceBuilder.end(),
+                       viewMapIter->getSecond().begin(),
+                       compareInterfaceSignal)) {
+          continue;
+        }
+
+      companionToInterfaceMap[companionModule] = interfaceBuilder;
+    }
+
+    if (interfaceBuilder.empty())
+      continue;
+    auto companionBuilder =
+        OpBuilder::atBlockEnd(companionModule.getBodyBlock());
+    for (auto xmrElem : xmrElems) {
+      auto uloc = companionBuilder.getUnknownLoc();
+      companionBuilder.create<sv::VerbatimOp>(uloc, xmrElem.str, xmrElem.val,
+                                              xmrElem.syms);
+    }
+    sv::InterfaceOp topIface;
+    for (const auto &ifaceBuilder : interfaceBuilder) {
+      auto builder = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
+      auto loc = getOperation().getLoc();
+      sv::InterfaceOp iface =
+          builder.create<sv::InterfaceOp>(loc, ifaceBuilder.iFaceName);
+      if (!topIface)
+        topIface = iface;
+      ++numInterfaces;
+      if (dut &&
+          !instancePaths->instanceGraph.isAncestor(
+              companionIDMap[ifaceBuilder.id].companion,
+              cast<hw::HWModuleLike>(*dut)) &&
+          testbenchDir)
+        iface->setAttr("output_file",
+                       hw::OutputFileAttr::getAsDirectory(
+                           &getContext(), testbenchDir.getValue(),
+                           /*excludeFromFileList=*/true));
+      else if (maybeExtractInfo)
+        iface->setAttr("output_file",
+                       hw::OutputFileAttr::getAsDirectory(
+                           &getContext(), getOutputDirectory().getValue(),
+                           /*excludeFromFileList=*/true));
+      iface.setCommentAttr(builder.getStringAttr("VCS coverage exclude_file"));
+      builder.setInsertionPointToEnd(
+          cast<sv::InterfaceOp>(iface).getBodyBlock());
+      interfaceMap[FlatSymbolRefAttr::get(builder.getContext(),
+                                          ifaceBuilder.iFaceName)] = iface;
+      for (auto elem : ifaceBuilder.elementsList) {
+
+        auto uloc = builder.getUnknownLoc();
+
+        auto description = elem.description;
+
+        if (description) {
+          auto descriptionOp = builder.create<sv::VerbatimOp>(
+              uloc, ("// " + cleanupDescription(description.getValue())));
+
+          // If we need to generate a YAML representation of this interface,
+          // then add an attribute indicating that this `sv::VerbatimOp` is
+          // actually a description.
+          if (maybeHierarchyFileYAML)
+            descriptionOp->setAttr("firrtl.grandcentral.yaml.type",
+                                   builder.getStringAttr("description"));
+        }
+        if (auto *str = std::get_if<VerbatimType>(&elem.elemType)) {
+          auto instanceOp = builder.create<sv::VerbatimOp>(
+              uloc, str->toStr(elem.elemName.getValue()));
+
+          // If we need to generate a YAML representation of the interface, then
+          // add attirbutes that describe what this `sv::VerbatimOp` is.
+          if (maybeHierarchyFileYAML) {
+            if (str->instantiation)
+              instanceOp->setAttr("firrtl.grandcentral.yaml.type",
+                                  builder.getStringAttr("instance"));
+            else
+              instanceOp->setAttr("firrtl.grandcentral.yaml.type",
+                                  builder.getStringAttr("unsupported"));
+            instanceOp->setAttr("firrtl.grandcentral.yaml.name", elem.elemName);
+            instanceOp->setAttr("firrtl.grandcentral.yaml.dimensions",
+                                builder.getI32ArrayAttr(str->dimensions));
+            instanceOp->setAttr(
+                "firrtl.grandcentral.yaml.symbol",
+                FlatSymbolRefAttr::get(builder.getContext(), str->str));
+          }
+          continue;
+        }
+
+        auto tpe = std::get<Type>(elem.elemType);
+        builder.create<sv::InterfaceSignalOp>(uloc, elem.elemName.getValue(),
+                                              tpe);
+      }
+    }
+
     ++numViews;
 
-    interfaceVec.push_back(*iface);
+    interfaceVec.push_back(topIface);
 
     // Instantiate the interface inside the companion.
     builder.setInsertionPointToStart(companionModule.getBodyBlock());
     builder.create<sv::InterfaceInstanceOp>(
-        getOperation().getLoc(), iface->getInterfaceType(),
+        getOperation().getLoc(), topIface.getInterfaceType(),
         companionIDMap.lookup(bundle.getID()).name,
         builder.getStringAttr(symbolName));
 

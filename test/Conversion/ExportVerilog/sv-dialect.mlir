@@ -301,7 +301,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
       sv.fwrite %fd, "%d" (%c1) : i1
       // CHECK-NEXT: fwrite(32'h80000002, "%d", "THING");
       %c2 = sv.verbatim.expr "\"VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE\"" : () -> i1
-      // CHECK-NEXT: _GEN = 
+      // CHECK-NEXT: _GEN =
       // CHECK-NEXT:   "VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE";
       // CHECK-NEXT: fwrite(32'h80000002, "%d", _GEN);
       sv.fwrite %fd, "%d" (%c2) : i1
@@ -457,7 +457,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
 }
 
 // CHECK-LABEL: module Aliasing(
-// CHECK-NEXT:             inout [41:0] a, 
+// CHECK-NEXT:             inout [41:0] a,
 // CHECK-NEXT:                          b,
 // CHECK-NEXT:                          c)
 hw.module @Aliasing(%a : !hw.inout<i42>, %b : !hw.inout<i42>,
@@ -473,7 +473,7 @@ hw.module @reg_0(%in4: i4, %in8: i8) -> (a: i8, b: i8) {
   // CHECK-LABEL: module reg_0(
   // CHECK-NEXT:   input  [3:0] in4,
   // CHECK-NEXT:   input  [7:0] in8,
-  // CHECK-NEXT:   output [7:0] a, 
+  // CHECK-NEXT:   output [7:0] a,
   // CHECK-NEXT:                b);
 
   // CHECK-EMPTY:
@@ -1031,7 +1031,7 @@ hw.module @AnFSM(%clock : i1) {
   // typedecl'd # 1
   %reg_state1 = sv.reg : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>>
   %reg_read_state1 = sv.read_inout %reg_state1 : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>>
-  
+
   %A_state1 = hw.enum.constant A : !hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>
   %B_state1 = hw.enum.constant B : !hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>
   sv.always posedge %clock {
@@ -1043,7 +1043,7 @@ hw.module @AnFSM(%clock : i1) {
   // typedecl'd # 2
   %reg_state2 = sv.reg : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>>
   %reg_read_state2 = sv.read_inout %reg_state2 : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>>
-  
+
   %A_state2 = hw.enum.constant A : !hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>
   %B_state2 = hw.enum.constant B : !hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>
   sv.always posedge %clock {
@@ -1316,6 +1316,50 @@ hw.module @XMR_src(%a : i23) -> (aa: i3) {
   hw.output %r : i3
 }
 
+// Test that XMRRefOps are emitted correctly in instances and in binds.  XMRs
+// that include verbatim paths and those that do not are both tested.
+// Additionally, test that XMRs use properly legalized Verilog names.  The XMR
+// target is "new" and the root of the reference is "wait_order".
+
+hw.globalRef @ref [
+  #hw.innerNameRef<@wait_order::@bar>,
+  #hw.innerNameRef<@XMRRef_Bar::@new>
+]
+hw.globalRef @ref2 [
+  #hw.innerNameRef<@wait_order::@baz>
+]
+hw.module @XMRRef_Bar() {
+  %new = sv.wire sym @new {
+    circt.globalRef = [#hw.globalNameRef<@ref>]
+  } : !hw.inout<i2>
+}
+hw.module.extern @XMRRef_Baz(%a: i2, %b: i1)
+hw.module.extern @XMRRef_Qux(%a: i2, %b: i1)
+// CHECK-LABEL: module wait_order
+hw.module @wait_order() {
+  hw.instance "bar" sym @bar @XMRRef_Bar() -> () {
+    circt.globalRef = [#hw.globalNameRef<@ref>]
+  }
+  %xmr = sv.xmr.ref @ref : !hw.inout<i2>
+  %xmrRead = sv.read_inout %xmr : !hw.inout<i2>
+  %xmr2 = sv.xmr.ref @ref2 ".x.y.z[42]" : !hw.inout<i1>
+  %xmr2Read = sv.read_inout %xmr2 : !hw.inout<i1>
+  // CHECK:      /* This instance is elsewhere emitted as a bind statement.
+  // CHECK-NEXT: XMRRef_Baz baz (
+  // CHECK-NEXT:   .a (wait_order_0.bar.new_0),
+  // CHECK-NEXT:   .b (wait_order_0.baz.x.y.z[42])
+  // CHECK-NEXT: );
+  // CHECK-NEXT: */
+  hw.instance "baz" sym @baz @XMRRef_Baz(a: %xmrRead: i2, b: %xmr2Read: i1) -> () {
+    doNotPrint = true,
+    circt.globalRef = [#hw.globalNameRef<@ref2>]
+  }
+  // CHECK-NEXT: XMRRef_Qux qux (
+  // CHECK-NEXT:   .a (wait_order_0.bar.new_0),
+  // CHECK-NEXT:   .b (wait_order_0.baz.x.y.z[42])
+  // CHECK-NEXT: );
+  hw.instance "qux" sym @qux @XMRRef_Qux(a: %xmrRead: i2, b: %xmr2Read: i1) -> ()
+}
 
 hw.module.extern @MyExtModule(%in: i8)
 
@@ -1664,6 +1708,13 @@ hw.module @bindInMod() {
 // CHECK-NEXT:    ._j       (j),
 // CHECK-NEXT:    ._k       (_signed__k)
 // CHECK: endmodule
+
+sv.bind <@wait_order::@baz>
+
+// CHECK-LABEL: bind wait_order_0 XMRRef_Baz baz (
+// CHECK-NEXT:    .a (wait_order_0.bar.new_0)
+// CHECK-NEXT:    .b (wait_order_0.baz.x.y.z[42])
+// CHECK-NEXT:  );
 
 sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst2>
 
