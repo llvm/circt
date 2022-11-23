@@ -364,7 +364,10 @@ firrtl.module @NEQ(in %in1: !firrtl.uint<1>,
 firrtl.module @Cat(in %in4: !firrtl.uint<4>,
                    out %out4: !firrtl.uint<4>,
                    out %outcst: !firrtl.uint<8>,
-                   out %outcst2: !firrtl.uint<8>) {
+                   out %outcst2: !firrtl.uint<8>,
+                   in %in0 : !firrtl.uint<0>,
+                   out %outpt1: !firrtl.uint<4>,
+                   out %outpt2 : !firrtl.uint<4>) {
 
   // CHECK: firrtl.strictconnect %out4, %in4
   %0 = firrtl.bits %in4 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
@@ -382,6 +385,13 @@ firrtl.module @Cat(in %in4: !firrtl.uint<4>,
   %invalid_ui4 = firrtl.invalidvalue : !firrtl.uint<4>
   %4 = firrtl.cat %invalid_ui4, %invalid_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<8>
   firrtl.connect %outcst2, %4 : !firrtl.uint<8>, !firrtl.uint<8>
+
+  // CHECK: firrtl.strictconnect %outpt1, %in4
+  %5 = firrtl.cat %in0, %in4 : (!firrtl.uint<0>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.connect %outpt1, %5 : !firrtl.uint<4>, !firrtl.uint<4>
+  // CHECK: firrtl.strictconnect %outpt2, %in4
+  %6 = firrtl.cat %in4, %in0 : (!firrtl.uint<4>, !firrtl.uint<0>) -> !firrtl.uint<4>
+  firrtl.connect %outpt2, %6 : !firrtl.uint<4>, !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @Bits

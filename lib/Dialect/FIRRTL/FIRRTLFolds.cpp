@@ -1015,6 +1015,12 @@ OpFoldResult XorRPrimOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult CatPrimOp::fold(ArrayRef<Attribute> operands) {
+
+  if (getLhs().getType().getBitWidthOrSentinel() == 0)
+    return getRhs();
+  if (getRhs().getType().getBitWidthOrSentinel() == 0)
+    return getLhs();
+
   if (!hasKnownWidthIntTypes(*this))
     return {};
 
