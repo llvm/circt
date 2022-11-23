@@ -171,7 +171,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: sv.assign %n1, %in2
     // CHECK-NEXT: sv.read_inout %n1
     %n1 = firrtl.node interesting_name %in2 {name = "n1"} : !firrtl.uint<2>
-    
+
     // CHECK-NEXT: [[WIRE:%n2]] = sv.wire sym @__Simple__n2 : !hw.inout<i2>
     // CHECK-NEXT: sv.assign [[WIRE]], %in2 : i2
     // CHECK-NEXT: sv.read_inout %n2
@@ -1134,20 +1134,20 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %0 = firrtl.subaccess %b[%x] : !firrtl.vector<uint<1>, 5>, !firrtl.uint<2>
     %1 = firrtl.subaccess %a[%y] : !firrtl.vector<uint<1>, 5>, !firrtl.uint<2>
     firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK:      %[[EXTIndex:.+]] = hw.constant 0 : i3 
+    // CHECK:      %[[EXTIndex:.+]] = hw.constant 0 : i3
     // CHECK:      %.b.output = sv.wire  : !hw.inout<array<5xi1>>
     // CHECK-NEXT: %0 = sv.read_inout %.b.output
     // CHECK-NEXT: %[[indexExt:.+]] = comb.concat %false, %x : i1, i2
     // CHECK-NEXT: %2 = sv.array_index_inout %.b.output[%[[indexExt]]]
     // CHECK-NEXT: %3 = comb.concat %false, %y : i1, i2
-    // CHECK-NEXT: %[[EXTValue:.+]] = hw.array_get %a[%[[EXTIndex]]] 
-    // CHECK-NEXT: %[[EXTArray:.+]] = hw.array_create %[[EXTValue]], %[[EXTValue]], %[[EXTValue]] 
-    // CHECK-NEXT: %[[Array:.+]] = hw.array_concat %[[EXTArray]], %a 
+    // CHECK-NEXT: %[[EXTValue:.+]] = hw.array_get %a[%[[EXTIndex]]]
+    // CHECK-NEXT: %[[EXTArray:.+]] = hw.array_create %[[EXTValue]], %[[EXTValue]], %[[EXTValue]]
+    // CHECK-NEXT: %[[Array:.+]] = hw.array_concat %[[EXTArray]], %a
     // CHECK-NEXT: %[[READ:.+]] = hw.array_get %[[Array]][%3]
     // CHECK-NEXT: %[[valWire:.+]] = sv.wire  : !hw.inout<i1>
     // CHECK-NEXT: sv.assign %[[valWire]], %[[READ]]
-    // CHECK-NEXT: %[[RD:.+]] = sv.read_inout %[[valWire]] : !hw.inout<i1> 
-    // CHECK-NEXT: sv.assign %2, %[[RD]] : i1 
+    // CHECK-NEXT: %[[RD:.+]] = sv.read_inout %[[valWire]] : !hw.inout<i1>
+    // CHECK-NEXT: sv.assign %2, %[[RD]] : i1
     // CHECK-NEXT: hw.output %0 : !hw.array<5xi1>
   }
 
@@ -1726,30 +1726,30 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module @MergeBundle
-  firrtl.module @MergeBundle(out %o: !firrtl.bundle<valid: uint<1>, ready: uint<1>>, in %i: !firrtl.uint<1>) 
+  firrtl.module @MergeBundle(out %o: !firrtl.bundle<valid: uint<1>, ready: uint<1>>, in %i: !firrtl.uint<1>)
   {
     %a = firrtl.wire   : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
     firrtl.strictconnect %o, %a : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
     %0 = firrtl.bundlecreate %i, %i : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.bundle<valid: uint<1>, ready: uint<1>>
     firrtl.strictconnect %a, %0 : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
-    // CHECK:  %a = sv.wire : !hw.inout<struct<valid: i1, ready: i1>> 
-    // CHECK:  %0 = sv.read_inout %a : !hw.inout<struct<valid: i1, ready: i1>> 
-    // CHECK:  %1 = hw.struct_create (%i, %i) : !hw.struct<valid: i1, ready: i1> 
-    // CHECK:  sv.assign %a, %1 : !hw.struct<valid: i1, ready: i1> 
-    // CHECK:  hw.output %0 : !hw.struct<valid: i1, ready: i1> 
+    // CHECK:  %a = sv.wire : !hw.inout<struct<valid: i1, ready: i1>>
+    // CHECK:  %0 = sv.read_inout %a : !hw.inout<struct<valid: i1, ready: i1>>
+    // CHECK:  %1 = hw.struct_create (%i, %i) : !hw.struct<valid: i1, ready: i1>
+    // CHECK:  sv.assign %a, %1 : !hw.struct<valid: i1, ready: i1>
+    // CHECK:  hw.output %0 : !hw.struct<valid: i1, ready: i1>
   }
- 
+
   // CHECK-LABEL: hw.module @MergeVector
   firrtl.module @MergeVector(out %o: !firrtl.vector<uint<1>, 3>, in %i: !firrtl.uint<1>, in %j: !firrtl.uint<1>) {
     %a = firrtl.wire   : !firrtl.vector<uint<1>, 3>
     firrtl.strictconnect %o, %a : !firrtl.vector<uint<1>, 3>
     %0 = firrtl.vectorcreate %i, %i, %j : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 3>
     firrtl.strictconnect %a, %0 : !firrtl.vector<uint<1>, 3>
-    // CHECK:  %a = sv.wire : !hw.inout<array<3xi1>> 
-    // CHECK:  %0 = sv.read_inout %a : !hw.inout<array<3xi1>> 
+    // CHECK:  %a = sv.wire : !hw.inout<array<3xi1>>
+    // CHECK:  %0 = sv.read_inout %a : !hw.inout<array<3xi1>>
     // CHECK:  %1 = hw.array_create %j, %i, %i : i1
-    // CHECK:  sv.assign %a, %1 : !hw.array<3xi1> 
-    // CHECK:  hw.output %0 : !hw.array<3xi1> 
+    // CHECK:  sv.assign %a, %1 : !hw.array<3xi1>
+    // CHECK:  hw.output %0 : !hw.array<3xi1>
   }
 
   // CHECK-LABEL: hw.module @aggregateconstant
