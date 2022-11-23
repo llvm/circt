@@ -10,95 +10,109 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
-#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
-#include "circt/Dialect/FIRRTL/Passes.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "llvm/ADT/APSInt.h"
-#include "llvm/ADT/TypeSwitch.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/HW/HWAttributes.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/SubElementInterfaces.h"
+#include "mlir/IR/Threading.h"
+#include "llvm/Support/Debug.h"
 
+#define DEBUG_TYPE "firrtl-inner-symbol-dce"
+
+using namespace mlir;
 using namespace circt;
 using namespace firrtl;
-
-namespace {
-struct InnerRefInfo {
-  unsigned refcount = 0;
-  Operation *op;
-};
-} // namespace
+using namespace hw;
 
 struct InnerSymbolDCEPass : public InnerSymbolDCEBase<InnerSymbolDCEPass> {
   void runOnOperation() override;
+
+private:
+  void findInnerRefs(Attribute attr);
+  void insertInnerRef(InnerRefAttr innerRef);
+  void removeInnerSyms(FModuleOp op);
+
+  DenseSet<std::pair<StringAttr, StringAttr>> innerRefs;
 };
 
-void InnerSymbolDCEPass::runOnOperation() {
-  DenseMap<hw::InnerRefAttr, InnerRefInfo> innerRefMap;
+/// Find all InnerRefAttrs inside a given Attribute.
+void InnerSymbolDCEPass::findInnerRefs(Attribute attr) {
+  // Check if this Attribute is an InnerRefAttr.
+  if (auto innerRef = dyn_cast<InnerRefAttr>(attr))
+    insertInnerRef(innerRef);
 
-  CircuitOp circuit = getOperation();
-
-  auto examineAnnotation = [&](Annotation anno) -> void {
-    anno.getDict().walkSubAttrs([&](Attribute attr) {
-      auto innerRef = attr.dyn_cast<hw::InnerRefAttr>();
-      if (!innerRef)
-        return;
-      innerRefMap[innerRef].refcount++;
+  // Check if any sub-Attributes are InnerRefAttrs.
+  if (auto subElementAttr = dyn_cast<SubElementAttrInterface>(attr))
+    subElementAttr.walkSubAttrs([&](Attribute subAttr) {
+      if (auto innerRef = dyn_cast<InnerRefAttr>(subAttr))
+        insertInnerRef(innerRef);
     });
-  };
+}
 
-  auto examineAnnotations = [&](Operation *op) -> void {
-    for (auto anno : AnnotationSet(op))
-      examineAnnotation(anno);
-  };
+/// Add an InnerRefAttr to the set of all InnerRefAttrs.
+void InnerSymbolDCEPass::insertInnerRef(InnerRefAttr innerRef) {
+  StringAttr moduleName = innerRef.getModule();
+  StringAttr symName = innerRef.getName();
 
-  examineAnnotations(circuit);
-  for (Operation &op : circuit.getBody()->getOperations()) {
-    examineAnnotations(&op);
+  auto [iter, inserted] = innerRefs.insert({moduleName, symName});
+  if (!inserted)
+    return;
 
-    // Extract any hw::InnerRefAttrs from NLAs.
-    if (auto nla = dyn_cast<NonLocalAnchor>(op)) {
-      for (auto path : nla.namepath()) {
-        auto innerref = path.dyn_cast<hw::InnerRefAttr>();
-        if (!innerref || !innerRefMap.count(innerref))
-          continue;
-        innerRefMap[innerref].refcount++;
-      }
-      continue;
-    }
+  ++numSymbolsFound;
 
-    // Only walk inside modules.
-    auto mod = dyn_cast<FModuleOp>(op);
-    if (!mod)
-      continue;
+  LLVM_DEBUG(llvm::dbgs() << DEBUG_TYPE << ": found " << moduleName
+                          << "::" << symName << '\n';);
+}
 
-    auto modNameAttr = mod.moduleNameAttr();
-    mod.walk([&](Operation *op) {
-      examineAnnotations(op);
-      // If there is no symbol, then just continue.
-      auto symbol = op->getAttrOfType<StringAttr>("inner_sym");
-      if (!symbol)
-        return WalkResult::advance();
+/// Remove all InnerSymAttrs within the FModuleOp that are dead code.
+void InnerSymbolDCEPass::removeInnerSyms(FModuleOp moduleOp) {
+  // Walk all ops in the FModuleOp.
+  moduleOp.walk([&](Operation *op) {
+    // Check if the op has an InnerSymAttr.
+    auto innerSym = op->getAttrOfType<InnerSymAttr>("inner_sym");
+    if (!innerSym)
+      return;
 
-      auto &info = innerRefMap[hw::InnerRefAttr::get(modNameAttr, symbol)];
-      assert(!info.op && "inner ref map should not have an op at this point");
-      info.op = op;
+    assert(moduleOp == op->getParentOfType<FModuleOp>() &&
+           "ops with inner_sym must be inside an FModuleOp");
 
-      // If the visibility is public, blindly increment the reference count.
-      auto visibility = op->getAttrOfType<StringAttr>("inner_sym_visibility");
-      if (!visibility)
-        info.refcount++;
-      return WalkResult::advance();
-    });
-  }
+    // Check if the InnerSymAttr was found as part of any InnerRefAttr.
+    auto moduleName = moduleOp.moduleNameAttr();
+    auto symName = innerSym.getSymName();
+    if (innerRefs.contains({moduleName, symName}))
+      return;
 
-  for (auto keyValue : innerRefMap) {
-    auto info = keyValue.second;
-    // If the reference count is non-zero, then do nothing.  Otherwise, remove
-    // the inner symbol from the operation.
-    if (info.refcount)
-      continue;
-    info.op->removeAttr("inner_sym");
-    info.op->removeAttr("inner_sym_visibility");
+    // If not, it's dead code.
+    op->removeAttr("inner_sym");
+
     ++numSymbolsRemoved;
-  }
+
+    LLVM_DEBUG(llvm::dbgs() << DEBUG_TYPE << ": removed " << moduleName
+                            << "::" << symName << '\n';);
+  });
+}
+
+void InnerSymbolDCEPass::runOnOperation() {
+  // Run on the top-level ModuleOp to include any VerbatimOps that aren't
+  // wrapped in a CircuitOp.
+  ModuleOp topModule = getOperation();
+
+  // Traverse the entire IR once.
+  SmallVector<FModuleOp> modules;
+  topModule.walk([&](Operation *op) {
+    // Find all InnerRefAttrs.
+    for (NamedAttribute namedAttr : op->getAttrs())
+      findInnerRefs(namedAttr.getValue());
+
+    // Collect all FModuleOps.
+    if (auto moduleOp = dyn_cast<FModuleOp>(op))
+      modules.push_back(moduleOp);
+  });
+
+  // Traverse all FModuleOps in parallel, removing any InnerSymAttrs that are
+  // dead code.
+  parallelForEach(&getContext(), modules,
+                  [&](FModuleOp moduleOp) { removeInnerSyms(moduleOp); });
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createInnerSymbolDCEPass() {
