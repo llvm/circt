@@ -422,7 +422,7 @@ public:
 //===----------------------------------------------------------------------===//
 
 /// This extends the LastConnectVisitor to handle all Simulation related
-/// constructs which do not neet any processing at the module scope, but need to
+/// constructs which do not need any processing at the module scope, but need to
 /// be processed inside of a WhenOp.
 namespace {
 class WhenOpVisitor : public LastConnectResolver<WhenOpVisitor> {
@@ -526,7 +526,7 @@ void LastConnectResolver<ConcreteT>::processWhenOp(WhenOp whenOp,
   // Process the `else` block.
   DriverMap elseScope;
   if (whenOp.hasElseRegion()) {
-    // Else condition is the compliment of the then condition.
+    // Else condition is the complement of the then condition.
     auto elseCondition =
         b.createOrFold<NotPrimOp>(loc, condition.getType(), condition);
     // Conjoin the when condition with the outer condition.
