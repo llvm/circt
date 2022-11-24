@@ -139,7 +139,7 @@ firrtl.circuit "PreserveOutputFile" {
   // CHECK-NEXT: firrtl.module {{.+}}@Sub
   // CHECK-NOT:    %a
   // CHECK-SAME:   output_file
-  // expected-warning @+1{{module `Sub` is empty but cannot be removed because the module has ports (probably with symbols)}}
+  // expected-warning @+1{{module `Sub` is empty but cannot be removed because the module has ports "b" are referenced by name}}
   firrtl.module private @Sub(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1> sym @sym) attributes {output_file = #hw.output_file<"hello">} {}
   // CHECK: firrtl.module @PreserveOutputFile
   firrtl.module @PreserveOutputFile() {
@@ -158,7 +158,7 @@ firrtl.circuit "DeleteEmptyModule" {
   firrtl.module private @empty() attributes {annotations = [{class = "foo"}]}  {}
   // Don't delete @Sub because instance `sub1` has a symbol.
   // CHECK: firrtl.module private @Sub
-  // expected-warning @+1{{module  `Sub` is empty but cannot be removed because there is an instance with a symbol}}
+  // expected-warning @+1{{module  `Sub` is empty but cannot be removed because an instance is referenced by name}}
   firrtl.module private @Sub(in %a: !firrtl.uint<1>)  {}
   // CHECK: firrtl.module @DeleteEmptyModule
   firrtl.module @DeleteEmptyModule() {

@@ -496,10 +496,12 @@ void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
   }
 
   if (!module.getBodyBlock()->args_empty()) {
-    module.emitWarning()
-        << "module `" << module.getName()
-        << "` is empty but cannot be removed because the module has ports "
-           "(probably with symbols)";
+    auto diag = module.emitWarning()
+                << "module `" << module.getName()
+                << "` is empty but cannot be removed because the "
+                   "module has ports ";
+    llvm::interleaveComma(module.getPortNames(), diag);
+    diag << " are referenced by name";
     return;
   }
 
@@ -522,11 +524,10 @@ void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
 
   // If there is an instance with a symbol, we don't delete the module itself.
   if (!instancesWithSymbols.empty()) {
-    auto diag =
-        module.emitWarning()
-        << "module  `" << module.getName()
-        << "` is empty but cannot be removed because there is an instance with "
-           "a symbol";
+    auto diag = module.emitWarning()
+                << "module  `" << module.getName()
+                << "` is empty but cannot be removed because an instance is "
+                   "referenced by name";
     diag.attachNote(FusedLoc::get(&getContext(), instancesWithSymbols))
         << "these are instances with symbols";
     return;
