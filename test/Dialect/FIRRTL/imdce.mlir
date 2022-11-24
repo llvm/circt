@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-imdeadcodeelim))' --split-input-file  %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-imdeadcodeelim))' --split-input-file -verify-diagnostics %s | FileCheck %s
 firrtl.circuit "top" {
   // In `dead_module`, %source is connected to %dest through several dead operations such as
   // node, wire, reg or rgereset. %dest is also dead at any instantiation, so check that
@@ -93,6 +93,7 @@ firrtl.circuit "top"  {
 
   // CHECK-LABEL: firrtl.module @top(in %clock: !firrtl.clock, in %input: !firrtl.uint<1>) {
   // CHECK-NEXT:  }
+  // expected-warning @+1 {{module `top` is empty but cannot be removed because the module is public}}
   firrtl.module @top(in %clock: !firrtl.clock, in %input: !firrtl.uint<1>) {
     %tile_input, %tile_output = firrtl.instance tile  @Child1(in input: !firrtl.uint<1>, out output: !firrtl.uint<1>)
     firrtl.strictconnect %tile_input, %input : !firrtl.uint<1>
@@ -138,6 +139,7 @@ firrtl.circuit "PreserveOutputFile" {
   // CHECK-NEXT: firrtl.module {{.+}}@Sub
   // CHECK-NOT:    %a
   // CHECK-SAME:   output_file
+  // expected-warning @+1{{module `Sub` is empty but cannot be removed because the module has ports "b" are referenced by name or dontTouched}}
   firrtl.module private @Sub(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1> sym @sym) attributes {output_file = #hw.output_file<"hello">} {}
   // CHECK: firrtl.module @PreserveOutputFile
   firrtl.module @PreserveOutputFile() {
@@ -151,15 +153,22 @@ firrtl.circuit "PreserveOutputFile" {
 
 // CHECK-LABEL: "DeleteEmptyModule"
 firrtl.circuit "DeleteEmptyModule" {
+  // CHECK: firrtl.module private @empty
+  // expected-warning @+1{{module `empty` is empty but cannot be removed because the module has annotations [{class = "foo"}]}}
+  firrtl.module private @empty() attributes {annotations = [{class = "foo"}]}  {}
   // Don't delete @Sub because instance `sub1` has a symbol.
   // CHECK: firrtl.module private @Sub
+  // expected-warning @+1{{module  `Sub` is empty but cannot be removed because an instance is referenced by name}}
   firrtl.module private @Sub(in %a: !firrtl.uint<1>)  {}
   // CHECK: firrtl.module @DeleteEmptyModule
   firrtl.module @DeleteEmptyModule() {
     // CHECK-NEXT: firrtl.instance sub1 sym @Foo @Sub()
+    // expected-note @+1{{these are instances with symbols}}
     firrtl.instance sub1 sym @Foo @Sub(in a: !firrtl.uint<1>)
     // CHECK-NOT: sub2
     firrtl.instance sub2 @Sub(in a: !firrtl.uint<1>)
+    // CHECK: empty
+    firrtl.instance empty @empty()
   }
 }
 
@@ -246,6 +255,7 @@ firrtl.circuit "RefPorts" {
 
 firrtl.circuit "MemoryInDeadCycle" {
   // CHECK-LABEL: firrtl.module public @MemoryInDeadCycle
+  // expected-warning @+1{{module `MemoryInDeadCycle` is empty but cannot be removed because the module is public}}
   firrtl.module public @MemoryInDeadCycle(in %clock: !firrtl.clock, in %addr: !firrtl.uint<4>) {
 
     // CHECK-NOT: firrtl.mem
