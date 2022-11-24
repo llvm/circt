@@ -139,7 +139,7 @@ firrtl.circuit "PreserveOutputFile" {
   // CHECK-NEXT: firrtl.module {{.+}}@Sub
   // CHECK-NOT:    %a
   // CHECK-SAME:   output_file
-  // expected-warning @+1{{module `Sub` is empty but cannot be removed because the module has ports "b" are referenced by name}}
+  // expected-warning @+1{{module `Sub` is empty but cannot be removed because the module has ports "b" are referenced by name or dontTouched}}
   firrtl.module private @Sub(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1> sym @sym) attributes {output_file = #hw.output_file<"hello">} {}
   // CHECK: firrtl.module @PreserveOutputFile
   firrtl.module @PreserveOutputFile() {

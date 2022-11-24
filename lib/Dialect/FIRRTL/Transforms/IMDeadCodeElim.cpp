@@ -501,7 +501,7 @@ void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
                 << "` is empty but cannot be removed because the "
                    "module has ports ";
     llvm::interleaveComma(module.getPortNames(), diag);
-    diag << " are referenced by name";
+    diag << " are referenced by name or dontTouched";
     return;
   }
 
