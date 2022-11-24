@@ -310,7 +310,7 @@ Attribute InnerSymAttr::parse(AsmParser &parser, Type type) {
   return InnerSymAttr::get(parser.getContext(), names);
 }
 
-void InnerSymAttr::print(AsmPrinter &p) const {
+void InnerSymAttr::print(AsmPrinter &odsPrinter) const {
 
   auto props = getProps();
   if (props.size() == 1 &&
