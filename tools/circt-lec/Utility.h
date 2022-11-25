@@ -1,3 +1,16 @@
+//===-- Utility.h - collection of utility functions and macros --*- C++ -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+///
+/// This header provides a variety of utility functions and macros for use
+/// throughout the tool.
+///
+//===----------------------------------------------------------------------===//
+
 // NOLINTNEXTLINE
 #ifndef TOOLS_CIRCT_LEC_UTILITY_H
 #define TOOLS_CIRCT_LEC_UTILITY_H
