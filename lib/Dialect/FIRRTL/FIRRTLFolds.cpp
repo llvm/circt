@@ -1790,12 +1790,7 @@ OpFoldResult SubindexOp::fold(ArrayRef<Attribute> operands) {
   auto attr = operands[0].dyn_cast_or_null<ArrayAttr>();
   if (!attr)
     return {};
-  auto groundCountPerElement = getType().getGroundFields();
-  auto array = attr.getValue().slice(getIndex() * groundCountPerElement,
-                                     groundCountPerElement);
-  if (getType().isa<IntType>())
-    return array[0];
-  return ArrayAttr::get(getContext(), array);
+  return attr[getIndex()];
 }
 
 OpFoldResult SubfieldOp::fold(ArrayRef<Attribute> operands) {
@@ -1803,15 +1798,7 @@ OpFoldResult SubfieldOp::fold(ArrayRef<Attribute> operands) {
   if (!attr)
     return {};
   auto index = getFieldIndex();
-  auto bundleType = getInput().getType().cast<BundleType>();
-  unsigned start = 0;
-  for (unsigned i = 0; i < index; ++i)
-    start += bundleType.getElement(i).type.getGroundFields();
-  auto array = attr.getValue().slice(
-      start, bundleType.getElement(index).type.getGroundFields());
-  if (getType().isa<IntType>())
-    return array[0];
-  return ArrayAttr::get(getContext(), array);
+  return attr[index];
 }
 
 void SubfieldOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -1821,16 +1808,10 @@ void SubfieldOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 static Attribute collectFields(MLIRContext *context,
                                ArrayRef<Attribute> operands) {
-  SmallVector<Attribute> fields;
-  for (auto operand : operands) {
+  for (auto operand : operands)
     if (!operand)
       return {};
-    if (auto array = operand.dyn_cast<ArrayAttr>())
-      llvm::append_range(fields, array.getValue());
-    else
-      fields.push_back(operand);
-  }
-  return ArrayAttr::get(context, fields);
+  return ArrayAttr::get(context, operands);
 }
 
 OpFoldResult BundleCreateOp::fold(ArrayRef<Attribute> operands) {

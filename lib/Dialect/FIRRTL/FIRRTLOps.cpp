@@ -2409,11 +2409,58 @@ void SpecialConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), specialName.str());
 }
 
+// Checks that an array attr representing an aggregate constant has the correct
+// shape.  This recurses on the type.
+static bool checkAggConstant(Operation *op, Attribute attr,
+                             FIRRTLBaseType type) {
+  if (type.isGround()) {
+    if (!attr.isa<IntegerAttr>()) {
+      op->emitOpError("Ground type is not an integer attribute");
+      return false;
+    }
+    return true;
+  }
+  auto attrlist = attr.dyn_cast<ArrayAttr>();
+  if (!attrlist) {
+    op->emitOpError("expected array attribute for aggregate constant");
+    return false;
+  }
+  if (auto array = type.dyn_cast<FVectorType>()) {
+    if (array.getNumElements() != attrlist.size()) {
+      op->emitOpError("array attribute (")
+          << attrlist.size() << ") has wrong size for vector constant ("
+          << array.getNumElements() << ")";
+      return false;
+    }
+    return llvm::all_of(attrlist, [&array, op](Attribute attr) {
+      return checkAggConstant(op, attr, array.getElementType());
+    });
+  }
+  if (auto bundle = type.dyn_cast<BundleType>()) {
+    if (bundle.getNumElements() != attrlist.size()) {
+      op->emitOpError("array attribute (")
+          << attrlist.size() << ") has wrong size for bundle constant ("
+          << bundle.getNumElements() << ")";
+      return false;
+    }
+    for (size_t i = 0; i < bundle.getNumElements(); ++i) {
+      if (bundle.getElement(i).isFlip) {
+        op->emitOpError("Cannot have constant bundle type with flip");
+        return false;
+      }
+      if (!checkAggConstant(op, attrlist[i], bundle.getElement(i).type))
+        return false;
+    }
+    return true;
+  }
+  op->emitOpError("Unknown aggregate type");
+  return false;
+}
+
 LogicalResult AggregateConstantOp::verify() {
-  if (getResult().getType().getGroundFields() != getFields().size())
-    return emitOpError("number of fields doesn't match type");
-  // TODO check sizes of integers.  Especially check clock and reset are 0 or 1.
-  return success();
+  if (checkAggConstant(getOperation(), getFields(), getType()))
+    return success();
+  return failure();
 }
 
 LogicalResult BundleCreateOp::verify() {

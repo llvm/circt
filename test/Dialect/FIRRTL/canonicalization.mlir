@@ -644,7 +644,7 @@ firrtl.module @subindex(out %out : !firrtl.uint<8>) {
 firrtl.module @subindex_agg(out %out : !firrtl.bundle<a: uint<8>>) {
   // CHECK: %0 = firrtl.aggregateconstant [8 : ui8] : !firrtl.bundle<a: uint<8>>
   // CHECK: firrtl.strictconnect %out, %0 : !firrtl.bundle<a: uint<8>>
-  %0 = firrtl.aggregateconstant [8 : ui8] : !firrtl.vector<bundle<a: uint<8>>, 1>
+  %0 = firrtl.aggregateconstant [[8 : ui8]] : !firrtl.vector<bundle<a: uint<8>>, 1>
   %1 = firrtl.subindex %0[0] : !firrtl.vector<bundle<a: uint<8>>, 1>
   firrtl.strictconnect %out, %1 : !firrtl.bundle<a: uint<8>>
 }
@@ -662,7 +662,7 @@ firrtl.module @subfield(out %out : !firrtl.uint<8>) {
 firrtl.module @subfield_agg(out %out : !firrtl.vector<uint<8>, 1>) {
   // CHECK: %0 = firrtl.aggregateconstant [8 : ui8] : !firrtl.vector<uint<8>, 1>
   // CHECK: firrtl.strictconnect %out, %0 : !firrtl.vector<uint<8>, 1>
-  %0 = firrtl.aggregateconstant [8 : ui8] : !firrtl.bundle<a: vector<uint<8>, 1>>
+  %0 = firrtl.aggregateconstant [[8 : ui8]] : !firrtl.bundle<a: vector<uint<8>, 1>>
   %1 = firrtl.subfield %0(0) : (!firrtl.bundle<a: vector<uint<8>, 1>>) -> !firrtl.vector<uint<8>, 1>
   firrtl.strictconnect %out, %1 : !firrtl.vector<uint<8>, 1>
 }
@@ -2108,7 +2108,7 @@ firrtl.module @MergeAgg(out %o: !firrtl.vector<bundle<valid: uint<1>, ready: uin
   firrtl.strictconnect %a20, %c : !firrtl.uint<1>
   firrtl.strictconnect %a21, %c : !firrtl.uint<1>
   firrtl.strictconnect %o, %a :  !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
-// CHECK: %0 = firrtl.aggregateconstant [0 : ui1, 0 : ui1, 0 : ui1, 0 : ui1, 0 : ui1, 0 : ui1] : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
+// CHECK: [0 : ui1, 0 : ui1], [0 : ui1, 0 : ui1], [0 : ui1, 0 : ui1]] : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
 // CHECK-NEXT: %a = firrtl.wire   : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
 // CHECK-NEXT: firrtl.strictconnect %o, %a : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
 // CHECK-NEXT: firrtl.strictconnect %a, %0 : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
