@@ -4,7 +4,6 @@ llvm_canonicalize_cmake_booleans(
 
 set(CIRCT_INTEGRATION_TEST_DEPENDS
   FileCheck count not split-file
-  circt-lec
   circt-opt
   circt-translate
   circt-rtl-sim
@@ -28,7 +27,7 @@ endif()
 
 # Enable circt-lec tests if it is built.
 if(CIRCT_LEC_ENABLED)
-  list(APPEND CIRCT_TEST_DEPENDS circt-lec)
+  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS circt-lec)
 endif()
 
 set(CIRCT_INTEGRATION_TIMEOUT 60) # Set a 60s timeout on individual tests.
