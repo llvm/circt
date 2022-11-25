@@ -150,10 +150,6 @@ static Optional<APSInt> getExtendedConstant(Value operand, Attribute constant,
   if (destWidth < 0)
     return {};
 
-  // InvalidValue inputs simply read as zero.
-  if (auto result = constant.dyn_cast_or_null<InvalidValueAttr>())
-    return APSInt(destWidth, operand.getType().cast<IntType>().isUnsigned());
-
   // Extension signedness follows the operand sign.
   if (IntegerAttr result = constant.dyn_cast_or_null<IntegerAttr>())
     return extOrTruncZeroWidth(result.getAPSInt(), destWidth);
@@ -166,18 +162,9 @@ static Optional<APSInt> getExtendedConstant(Value operand, Attribute constant,
 }
 
 /// Determine the value of a constant operand for the sake of constant folding.
-/// This will map `invalidvalue` to a zero value of the corresopnding type,
-/// which aligns with how the Scala FIRRTL compiler handles invalids in most
-/// cases. For a full discussion of this see the FIRRTL Rationale document.
 static Optional<APSInt> getConstant(Attribute operand) {
   if (!operand)
     return {};
-  if (auto attr = operand.dyn_cast<InvalidValueAttr>()) {
-    if (auto type = attr.getType().dyn_cast<IntType>())
-      return APSInt(type.getWidth().value_or(1), type.isUnsigned());
-    if (attr.getType().isa<ClockType, ResetType, AsyncResetType>())
-      return APSInt(1);
-  }
   if (auto attr = operand.dyn_cast<BoolAttr>())
     return APSInt(APInt(1, attr.getValue()));
   if (auto attr = operand.dyn_cast<IntegerAttr>())
