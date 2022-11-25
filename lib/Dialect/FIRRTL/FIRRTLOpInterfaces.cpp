@@ -79,7 +79,7 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   if (!portSymbols.empty() && portSymbols.size() != numPorts)
     return module.emitOpError("requires ") << numPorts << " port symbols";
   if (llvm::any_of(portSymbols.getValue(), [](Attribute attr) {
-        return !attr || !attr.isa<InnerSymAttr>();
+        return !attr || !attr.isa<hw::InnerSymAttr>();
       }))
     return module.emitOpError("port symbols should all be InnerSym attributes");
 
@@ -131,7 +131,7 @@ LogicalResult circt::firrtl::verifyInnerSymAttr(InnerSymbolOpInterface op) {
   SmallBitVector indices(maxFields + 1);
   SmallPtrSet<Attribute, 8> symNames;
   // Ensure fieldID and symbol names are unique.
-  auto uniqSyms = [&](InnerSymPropertiesAttr p) {
+  auto uniqSyms = [&](hw::InnerSymPropertiesAttr p) {
     if (maxFields < p.getFieldID()) {
       op->emitOpError("field id:'" + Twine(p.getFieldID()) +
                       "' is greater than the maximum field id:'" +

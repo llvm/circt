@@ -64,7 +64,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                    "ArrayRef<Attribute>":$annotations,
                    "ArrayRef<Attribute>":$portAnnotations,
                    "bool":$lowerToBind,
-                   "InnerSymAttr":$inner_sym)>,
+                   "hw::InnerSymAttr":$inner_sym)>,
 
     /// Constructor when you have the target module in hand.
     OpBuilder<(ins "FModuleLike":$module,
@@ -143,7 +143,7 @@ def MemOp : ReferableDeclOp<"mem"> {
                    "ArrayRef<Attribute>":$portNames, "StringRef":$name,
                    "NameKindEnum":$nameKind, "ArrayRef<Attribute>":$annotations,
                    "ArrayRef<Attribute>":$portAnnotations,
-                   "InnerSymAttr":$inner_sym)>
+                   "hw::InnerSymAttr":$inner_sym)>
   ];
 
   let hasVerifier = 1;
@@ -231,7 +231,7 @@ def NodeOp : ReferableDeclOp<"node",
                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
       return build($_builder, $_state, elementType, input, name, nameKind,
                    $_builder.getArrayAttr(annotations),
-                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr());
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$input,
                   "StringRef":$name, "NameKindEnum":$nameKind,
@@ -239,7 +239,7 @@ def NodeOp : ReferableDeclOp<"node",
                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
       return build($_builder, $_state, elementType, input, name, nameKind,
                    annotations,
-                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr());
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
     }]>
   ];
 
@@ -275,14 +275,14 @@ def RegOp : ReferableDeclOp<"reg"> {
                    CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
       return build($_builder, $_state, elementType, clockVal, name,
                    nameKind, $_builder.getArrayAttr(annotations),
-                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr());
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    "StringRef":$name, "NameKindEnum":$nameKind,
                    "::mlir::ArrayAttr":$annotation, "StringAttr":$inner_sym), [{
       return build($_builder, $_state, elementType, clockVal, name,
                    nameKind, annotation,
-                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr());
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
     }]>
   ];
 
@@ -320,7 +320,7 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
       return build($_builder, $_state, elementType, clockVal, resetSignal,
                    resetValue, name, nameKind,
                    $_builder.getArrayAttr(annotations),
-                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr());
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    "::mlir::Value":$resetSignal, "::mlir::Value":$resetValue,
@@ -328,7 +328,7 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
                     "::mlir::ArrayAttr":$annotation, "StringAttr":$inner_sym), [{
       return build($_builder, $_state, elementType, clockVal, resetSignal,
                    resetValue, name, nameKind, annotation,
-                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr());
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
     }]>
   ];
 
@@ -366,13 +366,13 @@ def WireOp : ReferableDeclOp<"wire"> {
                       CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
       return build($_builder, $_state, elementType, name, nameKind,
                    $_builder.getArrayAttr(annotations),
-                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr());
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "StringRef":$name,
                    "NameKindEnum":$nameKind, "::mlir::ArrayAttr":$annotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
       return build($_builder, $_state, elementType, name, nameKind, annotations,
-                   inner_sym ? InnerSymAttr::get(inner_sym): InnerSymAttr());
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
     }]>
   ];
 

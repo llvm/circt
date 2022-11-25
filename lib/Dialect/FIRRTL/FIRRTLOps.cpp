@@ -773,9 +773,9 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
 
     // Print the optional port symbol.
     if (!portSyms.empty()) {
-      if (!portSyms[i].cast<InnerSymAttr>().empty()) {
+      if (!portSyms[i].cast<hw::InnerSymAttr>().empty()) {
         p << " sym ";
-        portSyms[i].cast<InnerSymAttr>().print(p);
+        portSyms[i].cast<hw::InnerSymAttr>().print(p);
       }
     }
 
@@ -845,7 +845,7 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
       entryArgs.back().type = portType;
 
     // Parse the optional port symbol.
-    InnerSymAttr innerSymAttr;
+    hw::InnerSymAttr innerSymAttr;
     if (succeeded(parser.parseOptionalKeyword("sym"))) {
       NamedAttrList dummyAttrs;
       if (parser.parseCustomAttributeWithFallback(
@@ -1158,7 +1158,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr innerSym) {
   build(builder, result, resultTypes, moduleName, name, nameKind,
         portDirections, portNames, annotations, portAnnotations, lowerToBind,
-        innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
+        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
@@ -1168,7 +1168,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        ArrayRef<Attribute> portNames,
                        ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind,
-                       InnerSymAttr innerSym) {
+                       hw::InnerSymAttr innerSym) {
   result.addTypes(resultTypes);
   result.addAttribute("moduleName",
                       SymbolRefAttr::get(builder.getContext(), moduleName));
@@ -1227,7 +1227,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       module.getPortDirectionsAttr(), module.getPortNamesAttr(),
       builder.getArrayAttr(annotations), portAnnotationsAttr,
       lowerToBind ? builder.getUnitAttr() : UnitAttr(),
-      innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
+      innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
 }
 
 /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
@@ -1480,7 +1480,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   auto &resultAttrs = result.attributes;
 
   std::string name;
-  InnerSymAttr innerSymAttr;
+  hw::InnerSymAttr innerSymAttr;
   FlatSymbolRefAttr moduleName;
   SmallVector<OpAsmParser::Argument> entryArgs;
   SmallVector<Direction, 4> portDirections;
@@ -1552,7 +1552,8 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
                   uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
                   ArrayRef<Attribute> portNames, StringRef name,
                   NameKindEnum nameKind, ArrayRef<Attribute> annotations,
-                  ArrayRef<Attribute> portAnnotations, InnerSymAttr innerSym) {
+                  ArrayRef<Attribute> portAnnotations,
+                  hw::InnerSymAttr innerSym) {
   result.addAttribute(
       "readLatency",
       builder.getIntegerAttr(builder.getIntegerType(32), readLatency));
@@ -1591,7 +1592,7 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
                   ArrayRef<Attribute> portAnnotations, StringAttr innerSym) {
   build(builder, result, resultTypes, readLatency, writeLatency, depth, ruw,
         portNames, name, nameKind, annotations, portAnnotations,
-        innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
+        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
 }
 
 ArrayAttr MemOp::getPortAnnotation(unsigned portIdx) {

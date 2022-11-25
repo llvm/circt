@@ -1035,7 +1035,7 @@ private:
     // old symbols if it has any, create an empty symbol array if it doesn't.
     SmallVector<Attribute> newPortSyms;
     if (toPortSyms.empty())
-      newPortSyms.assign(portCount, InnerSymAttr());
+      newPortSyms.assign(portCount, hw::InnerSymAttr());
     else
       newPortSyms.assign(toPortSyms.begin(), toPortSyms.end());
 
@@ -1043,21 +1043,21 @@ private:
       // If this fromPort doesn't have a symbol, move on to the next one.
       if (!fromPortSyms[portNo])
         continue;
-      auto fromSym = fromPortSyms[portNo].cast<InnerSymAttr>();
+      auto fromSym = fromPortSyms[portNo].cast<hw::InnerSymAttr>();
 
       // If this toPort doesn't have a symbol, assign one.
-      InnerSymAttr toSym;
+      hw::InnerSymAttr toSym;
       if (!newPortSyms[portNo]) {
         // Get a reasonable base name for the port.
         StringRef symName = "inner_sym";
         if (portNames)
           symName = portNames[portNo].cast<StringAttr>().getValue();
         // Create the symbol and store it into the array.
-        toSym = InnerSymAttr::get(
+        toSym = hw::InnerSymAttr::get(
             StringAttr::get(context, moduleNamespace.newName(symName)));
         newPortSyms[portNo] = toSym;
       } else
-        toSym = newPortSyms[portNo].cast<InnerSymAttr>();
+        toSym = newPortSyms[portNo].cast<hw::InnerSymAttr>();
 
       // Record the renaming.
       renameMap[fromSym.getSymName()] = toSym.getSymName();

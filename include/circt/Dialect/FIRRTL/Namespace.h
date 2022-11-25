@@ -53,8 +53,8 @@ struct ModuleNamespace : public Namespace {
   void addPorts(FModuleLike module) {
     for (auto portSymbol : module.getPortSymbolsAttr())
       if (portSymbol)
-        static_cast<void>(
-            portSymbol.cast<InnerSymAttr>().walkSymbols([&](StringAttr sName) {
+        static_cast<void>(portSymbol.cast<hw::InnerSymAttr>().walkSymbols(
+            [&](StringAttr sName) {
               nextIndex.insert({sName.getValue(), 0});
               return success();
             }));
@@ -63,8 +63,8 @@ struct ModuleNamespace : public Namespace {
   void addPorts(ArrayRef<PortInfo> ports) {
     for (auto port : ports)
       if (port.sym)
-        static_cast<void>(
-            port.sym.cast<InnerSymAttr>().walkSymbols([&](StringAttr symName) {
+        static_cast<void>(port.sym.cast<hw::InnerSymAttr>().walkSymbols(
+            [&](StringAttr symName) {
               nextIndex.insert({symName.getValue(), 0});
               return success();
             }));
