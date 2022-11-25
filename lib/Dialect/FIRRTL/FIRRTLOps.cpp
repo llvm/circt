@@ -2408,6 +2408,8 @@ void SpecialConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), specialName.str());
 }
 
+// Checks that an array attr representing an aggregate constant has the correct
+// shape.  This recurses on the type.
 static bool checkAggConstant(Operation *op, Attribute attr,
                              FIRRTLBaseType type) {
   if (type.isGround()) {
@@ -2432,7 +2434,8 @@ static bool checkAggConstant(Operation *op, Attribute attr,
     return llvm::all_of(attrlist, [&array, op](Attribute attr) {
       return checkAggConstant(op, attr, array.getElementType());
     });
-  } else if (auto bundle = type.dyn_cast<BundleType>()) {
+  }
+  if (auto bundle = type.dyn_cast<BundleType>()) {
     if (bundle.getNumElements() != attrlist.size()) {
       op->emitOpError("array attribute (")
           << attrlist.size() << ") has wrong size for bundle constant ("
@@ -2448,12 +2451,9 @@ static bool checkAggConstant(Operation *op, Attribute attr,
         return false;
     }
     return true;
-
-  } else {
-    op->emitOpError("Unknown aggregate type");
-    return false;
   }
-  return true;
+  op->emitOpError("Unknown aggregate type");
+  return false;
 }
 
 LogicalResult AggregateConstantOp::verify() {
