@@ -316,7 +316,7 @@ void InnerSymAttr::print(AsmPrinter &odsPrinter) const {
   if (props.size() == 1 &&
       props[0].getSymVisibility().getValue().equals("public") &&
       props[0].getFieldID() == 0) {
-    p << "@" << props[0].getName().getValue();
+    odsPrinter << "@" << props[0].getName().getValue();
     return;
   }
   auto names = props.vec();
@@ -325,13 +325,11 @@ void InnerSymAttr::print(AsmPrinter &odsPrinter) const {
             [&](InnerSymPropertiesAttr a, InnerSymPropertiesAttr b) {
               return a.getFieldID() < b.getFieldID();
             });
-  p << "[";
-  llvm::interleaveComma(names, p, [&](InnerSymPropertiesAttr attr) {
-    attr.print(p);
-    // p << "<@" << attr.getName().getValue() << "," << attr.getFieldID() << ","
-    //   << attr.getSymVisibility().getValue() << ">";
+  odsPrinter << "[";
+  llvm::interleaveComma(names, odsPrinter, [&](InnerSymPropertiesAttr attr) {
+    attr.print(odsPrinter);
   });
-  p << "]";
+  odsPrinter << "]";
 }
 
 //===----------------------------------------------------------------------===//
