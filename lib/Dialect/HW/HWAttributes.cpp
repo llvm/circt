@@ -260,13 +260,13 @@ Attribute InnerSymPropertiesAttr::parse(AsmParser &parser, Type type) {
                                      visibilityAttr);
 }
 
-void InnerSymPropertiesAttr::print(AsmPrinter &p) const {
-  p << "<@" << getName().getValue() << "," << getFieldID() << ","
-    << getSymVisibility().getValue() << ">";
+void InnerSymPropertiesAttr::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << "<@" << getName().getValue() << "," << getFieldID() << ","
+             << getSymVisibility().getValue() << ">";
 }
 
 StringAttr InnerSymAttr::getSymIfExists(unsigned fieldId) const {
-  auto it =
+  const auto *it =
       llvm::find_if(getImpl()->props, [&](const InnerSymPropertiesAttr &p) {
         return p.getFieldID() == fieldId;
       });
