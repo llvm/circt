@@ -106,6 +106,8 @@ std::unique_ptr<mlir::Pass> createGrandCentralPass();
 
 std::unique_ptr<mlir::Pass> createCheckCombCyclesPass();
 
+std::unique_ptr<mlir::Pass> createCheckCombLoopsPass();
+
 std::unique_ptr<mlir::Pass> createSFCCompatPass();
 
 std::unique_ptr<mlir::Pass>
