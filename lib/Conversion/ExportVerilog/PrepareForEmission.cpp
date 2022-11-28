@@ -615,7 +615,7 @@ bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
   // If the operation is only used by an assignment, the op is already spilled
   // to a wire.
   if (op.hasOneUse()) {
-    auto singleUser = *op.getUsers().begin();
+    auto *singleUser = *op.getUsers().begin();
     if (isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp>(singleUser))
       return false;
 
