@@ -29,6 +29,8 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
 
+#include <mlir/IR/PatternMatch.h>
+#include <mlir/Rewrite/FrozenRewritePatternSet.h>
 #include <variant>
 
 using namespace llvm;
@@ -1258,16 +1260,21 @@ public:
     // component body for further processing. However, proper control flow
     // will only be established later in the conversion process, so ensure
     // that rewriter optimizations (especially DCE) are disabled.
-    GreedyRewriteConfig config;
-    config.enableRegionSimplification = false;
-    if (runOnce)
-      config.maxIterations = 0;
+    if (runOnce) {
+      FrozenRewritePatternSet frozenPatterns = std::move(pattern);
+      for (auto &op : getOperation().getOps()) {
+        (void)applyOpPatternsAndFold(&op, frozenPatterns);
+      }
+    } else {
+      GreedyRewriteConfig config;
+      config.enableRegionSimplification = false;
 
-    /// Can't return applyPatternsAndFoldGreedily. Root isn't
-    /// necessarily erased so it will always return failed(). Instead,
-    /// forward the 'succeeded' value from PartialLoweringPatternBase.
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(pattern),
-                                       config);
+      /// Can't return applyPatternsAndFoldGreedily. Root isn't
+      /// necessarily erased so it will always return failed(). Instead,
+      /// forward the 'succeeded' value from PartialLoweringPatternBase.
+      (void)applyPatternsAndFoldGreedily(getOperation(), std::move(pattern),
+                                         config);
+    }
     return partialPatternRes;
   }
 
