@@ -177,3 +177,13 @@ module attributes {circt.loweringOptions =
     hw.output %2 : i8
   }
 }
+
+// -----
+module attributes {circt.loweringOptions = "maximumNumberOfTermsPerExpression=2"} {
+  // CHECK-NOT: sv.wire
+  hw.module @Foo(%in_0: i4, %in_1: i4, %in_2: i4, %in_3: i4) -> (out: !hw.array<4xi4>) {
+    %0 = comb.concat %in_0, %in_1, %in_2, %in_3 : i4, i4, i4, i4
+    %1 = hw.bitcast %0 : (i16) -> !hw.array<4xi4>
+    hw.output %1 : !hw.array<4xi4>
+  }
+}
