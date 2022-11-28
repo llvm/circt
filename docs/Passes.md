@@ -48,6 +48,10 @@ This document describes the available CIRCT passes and their contracts.
 
 [include "SeqPasses.md"]
 
+## SSP Dialect Passes
+
+[include "SSPPasses.md"]
+
 ## SV Dialect Passes
 
 [include "SVPasses.md"]
