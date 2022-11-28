@@ -53,12 +53,13 @@ LogicalResult resolveInstanceGraph(ModuleOp moduleOp,
 // values have exactly one use.
 LogicalResult verifyAllValuesHasOneUse(handshake::FuncOp op);
 
-// Adds sink operations to any unused value in f.
+// Adds sink operations to any unused value in r.
 LogicalResult addSinkOps(Region &r, OpBuilder &rewriter);
 
-// Adds fork operations to any value with multiple uses in f.
+// Adds fork operations to any value with multiple uses in r.
 LogicalResult addForkOps(Region &r, OpBuilder &rewriter);
-void insertFork(Value result, bool isLazy, OpBuilder &rewriter);
+void insertFork(Value result, OpBuilder &rewriter);
+void insertLazyFork(Value result, bool isControl, OpBuilder &rewriter);
 
 // Adds a locking mechanism around the region.
 LogicalResult lockRegion(Region &r, OpBuilder &rewriter);

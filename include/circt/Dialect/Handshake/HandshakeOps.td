@@ -315,7 +315,7 @@ def LazyForkOp : Handshake_Op<"lazy_fork", [Pure]> {
   let results = (outs Variadic<AnyType> : $result);
   let hasCustomAssemblyFormat = 1;
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "Value":$operand, "int":$outputs)>];
+  let builders = [OpBuilder<(ins "Value":$operand, "int":$outputs, "bool":$isControl)>];
 }
 
 def MergeOp : Handshake_Op<"merge", [
@@ -447,7 +447,7 @@ def BranchOp : Handshake_Op<"br", [
   let results = (outs AnyType : $dataResult);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "Value":$dataOperand)>];
+  let builders = [OpBuilder<(ins "Value":$dataOperand, "bool":$isControl)>];
 
   let hasCanonicalizer = 1;
   let hasCustomAssemblyFormat = 1;
@@ -479,7 +479,7 @@ def ConditionalBranchOp : Handshake_Op<"cond_br", [
   let results = (outs AnyType : $trueResult,
                       AnyType : $falseResult);
 
-  let builders = [OpBuilder<(ins "Value":$condOperand, "Value":$dataOperand)>];
+  let builders = [OpBuilder<(ins "Value":$condOperand, "Value":$dataOperand, "bool":$isControl)>];
   let skipDefaultBuilders = 1;
   let hasCustomAssemblyFormat = 1;
   let extraClassDeclaration = [{

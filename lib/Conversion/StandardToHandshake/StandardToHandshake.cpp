@@ -208,6 +208,19 @@ handshake::partiallyLowerRegion(const RegionLoweringFunc &loweringFunc,
 // Start of lowering passes
 // ============================================================================
 
+static bool isOperandOfControlOp(Value operand, bool checkBlockArg) {
+  auto *defOp = operand.getDefiningOp();
+
+  // Operation is control if it is the no-data output of a ControlMerge or a
+  // StartOp.
+  bool isControl = isa_and_nonnull<ControlMergeOp, StartOp>(defOp) &&
+                   operand == defOp->getResult(0);
+
+  // Alternatively, the opeand could be a none type
+  return isControl || (operand.getType().isa<NoneType>() &&
+                       (checkBlockArg ? operand.isa<BlockArgument>() : true));
+}
+
 Value HandshakeLowering::getBlockEntryControl(Block *block) const {
   auto it = blockEntryControlMap.find(block);
   assert(it != blockEntryControlMap.end() &&
@@ -1222,10 +1235,13 @@ HandshakeLowering::addBranchOps(ConversionPatternRewriter &rewriter) {
         Operation *newOp = nullptr;
 
         if (auto condBranchOp = dyn_cast<mlir::cf::CondBranchOp>(termOp))
+
           newOp = rewriter.create<handshake::ConditionalBranchOp>(
-              termOp->getLoc(), condBranchOp.getCondition(), val);
+              termOp->getLoc(), condBranchOp.getCondition(), val,
+              isOperandOfControlOp(val, false));
         else if (isa<mlir::cf::BranchOp>(termOp))
-          newOp = rewriter.create<handshake::BranchOp>(termOp->getLoc(), val);
+          newOp = rewriter.create<handshake::BranchOp>(
+              termOp->getLoc(), val, isOperandOfControlOp(val, true));
 
         if (newOp == nullptr)
           continue;
@@ -1458,9 +1474,10 @@ static SmallVector<Value, 8> getResultsToMemory(Operation *op) {
 static void addLazyForks(Region &f, ConversionPatternRewriter &rewriter) {
 
   for (Block &block : f) {
-    Value res = getBlockControlValue(&block);
-    if (!res.hasOneUse())
-      insertFork(res, true, rewriter);
+    Value ctrl = getBlockControlValue(&block);
+    if (!ctrl.hasOneUse()) {
+      insertLazyFork(ctrl, isOperandOfControlOp(ctrl, true), rewriter);
+    }
   }
 }
 
@@ -1472,7 +1489,7 @@ static void addMemOpForks(Region &f, ConversionPatternRewriter &rewriter) {
         for (auto result : op.getResults()) {
           // If there is a result and it is used more than once
           if (!result.use_empty() && !result.hasOneUse())
-            insertFork(result, false, rewriter);
+            insertFork(result, rewriter);
         }
       }
     }
@@ -1784,7 +1801,7 @@ struct HandshakeCanonicalizePattern : public ConversionPattern {
     for (auto result : op->getResults()) {
       // If there is a result and it is used more than once
       if (!result.use_empty() && !result.hasOneUse())
-        insertFork(result, false, rewriter);
+        insertFork(result, rewriter);
     }
   }
 };

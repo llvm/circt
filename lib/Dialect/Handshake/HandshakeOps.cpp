@@ -261,7 +261,7 @@ void handshake::ForkOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 void LazyForkOp::build(OpBuilder &builder, OperationState &result,
-                       Value operand, int outputs) {
+                       Value operand, int outputs, bool isControl) {
   auto type = operand.getType();
 
   // Fork has results as many as there are successor ops
@@ -270,15 +270,6 @@ void LazyForkOp::build(OpBuilder &builder, OperationState &result,
   // Single operand
   result.addOperands(operand);
 
-  // Fork is control-only if it is the no-data output of a ControlMerge or a
-  // StartOp
-  auto *op = operand.getDefiningOp();
-  bool isControl = isa_and_nonnull<ControlMergeOp, StartOp>(op) &&
-                   operand == op->getResult(0);
-
-  // Alternatively, the control signal could originate from a BlockArgument
-  isControl = isControl || (operand.isa<BlockArgument>() &&
-                            operand.getType().isa<NoneType>());
   sost::addAttributes(result, outputs, type, isControl);
 }
 
@@ -822,20 +813,10 @@ void ControlMergeOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 void handshake::BranchOp::build(OpBuilder &builder, OperationState &result,
-                                Value dataOperand) {
+                                Value dataOperand, bool isControl) {
   auto type = dataOperand.getType();
   result.types.push_back(type);
   result.addOperands(dataOperand);
-
-  // Branch is control-only if it is the no-data output of a ControlMerge or a
-  // StartOp. This holds because Branches are inserted before Forks
-  auto *op = dataOperand.getDefiningOp();
-  bool isControl = isa_and_nonnull<ControlMergeOp, StartOp>(op) &&
-                   dataOperand == op->getResult(0);
-
-  // Alternatively, the control signal could originate from a BlockArgument
-  isControl = isControl || (dataOperand.isa<BlockArgument>() &&
-                            dataOperand.getType().isa<NoneType>());
   sost::addAttributes(result, 1, type, isControl);
 }
 
@@ -912,20 +893,13 @@ std::string handshake::ConditionalBranchOp::getResultName(unsigned int idx) {
 
 void handshake::ConditionalBranchOp::build(OpBuilder &builder,
                                            OperationState &result,
-                                           Value condOperand,
-                                           Value dataOperand) {
+                                           Value condOperand, Value dataOperand,
+                                           bool isControl) {
   auto type = dataOperand.getType();
   result.types.append(2, type);
   result.addOperands(condOperand);
   result.addOperands(dataOperand);
-
-  // Branch is control-only if it is the no-data output of a ControlMerge or a
-  // StartOp This holds because Branches are inserted before Forks
-  auto *op = dataOperand.getDefiningOp();
-  bool isControl = isa_and_nonnull<ControlMergeOp, StartOp>(op) &&
-                   dataOperand == op->getResult(0);
-
-  if (isControl || type.isa<NoneType>())
+  if (isControl)
     result.addAttribute("control", builder.getBoolAttr(true));
 }
 

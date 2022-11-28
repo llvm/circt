@@ -50,7 +50,8 @@ static void insertSink(Value val, OpBuilder &rewriter) {
 namespace circt {
 namespace handshake {
 
-void insertFork(Value result, bool isLazy, OpBuilder &rewriter) {
+static void insertForkGeneric(Value result, bool isLazy, bool isControl,
+                              OpBuilder &rewriter) {
   // Get successor operations
   std::vector<Operation *> opsToProcess;
   for (auto &u : result.getUses())
@@ -61,7 +62,7 @@ void insertFork(Value result, bool isLazy, OpBuilder &rewriter) {
   Operation *newOp;
   if (isLazy)
     newOp = rewriter.create<LazyForkOp>(result.getLoc(), result,
-                                        opsToProcess.size());
+                                        opsToProcess.size(), isControl);
   else
     newOp =
         rewriter.create<ForkOp>(result.getLoc(), result, opsToProcess.size());
@@ -73,6 +74,14 @@ void insertFork(Value result, bool isLazy, OpBuilder &rewriter) {
     replaceFirstUse(opsToProcess[i], result, newOp->getResult(i));
 }
 
+void insertFork(Value result, OpBuilder &rewriter) {
+  insertForkGeneric(result, false, false, rewriter);
+}
+
+void insertLazyFork(Value result, bool isControl, OpBuilder &rewriter) {
+  insertForkGeneric(result, true, isControl, rewriter);
+}
+
 // Insert Fork Operation for every operation and function argument with more
 // than one successor.
 LogicalResult addForkOps(Region &r, OpBuilder &rewriter) {
@@ -82,14 +91,14 @@ LogicalResult addForkOps(Region &r, OpBuilder &rewriter) {
       for (auto result : op.getResults()) {
         // If there is a result and it is used more than once
         if (!result.use_empty() && !result.hasOneUse())
-          insertFork(result, false, rewriter);
+          insertFork(result, rewriter);
       }
     }
   }
 
   for (auto barg : r.front().getArguments())
     if (!barg.use_empty() && !barg.hasOneUse())
-      insertFork(barg, false, rewriter);
+      insertFork(barg, rewriter);
 
   return success();
 }
