@@ -565,7 +565,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
   // to be made per-module.
   LLVM_DEBUG({ llvm::dbgs() << "Analyzing wiring problems:\n"; });
   DenseMap<FModuleLike, ModuleModifications> moduleModifications;
-  DenseSet<Value> sinks;
+  DenseSet<Value> visitedSinks;
   for (auto [index, problem] : llvm::enumerate(state.wiringProblems)) {
     // This is a unique index that is assigned to this specific wiring problem
     // and is used as a key during wiring to know which Values (ports, sources,
@@ -575,7 +575,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
 
     // Check that no WiringProblems are trying to use the same sink.  This
     // should never happen.
-    if (!sinks.insert(sink).second) {
+    if (!visitedSinks.insert(sink).second) {
       auto diag = mlir::emitError(source.getLoc())
                   << "This sink is involved with a Wiring Problem which is "
                      "targeted by a source used by another Wiring Problem. "
