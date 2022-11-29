@@ -1,5 +1,7 @@
 # REQUIRES: esi-cosim
 # RUN: rm -rf %t
+# RUN: mlir-opt  %S/dot.linalg.mlir --one-shot-bufferize="allow-return-allocs bufferize-function-boundaries" --buffer-results-to-out-params --convert-linalg-to-affine-loops --lower-affine --convert-scf-to-cf --canonicalize > dot.cf.mlir
+# RUN: circt-opt dot.cf.mlir --flatten-memref --flatten-memref-calls --handshake-legalize-memrefs --lower-std-to-handshake --canonicalize --handshake-lower-extmem-to-hw=wrap-esi --handshake-insert-buffers --canonicalize --handshake-remove-block-structure --handshake-materialize-forks-sinks --lower-handshake-to-hw --canonicalize > dot.hw.mlir
 # RUN: %PYTHON% %s %t 2>&1
 # RUN: esi-cosim-runner.py --no-aux-files --tmpdir %t --schema %t/runtime/schema.capnp %s `ls %t/hw/*.sv | grep -v driver.sv`
 # PY: from dot_prod_system import run_cosim
@@ -77,7 +79,7 @@ if __name__ == "__main__":
                   output_directory=sys.argv[1])
 
   # Import the torch_mlir module.
-  syms = system.import_mlir(open(__dir__ / "dot.hw.mlir").read())
+  syms = system.import_mlir(open("dot.hw.mlir").read())
 
   # Grab references to the imported IP and requested memories which must
   # implemented in a gasket/wrapper.
