@@ -150,6 +150,12 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
   // CHECK-NEXT: firrtl.strictconnect %out, [[AND]]
   %6 = firrtl.and %sin, %sin : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %6 : !firrtl.uint<4>, !firrtl.uint<4>
+
+  // CHECK: firrtl.strictconnect %out, %c0_ui4
+  %c0_si2 = firrtl.constant 0 : !firrtl.sint<2>
+  %7 = firrtl.and %sin, %c0_si2 : (!firrtl.sint<4>, !firrtl.sint<2>) -> !firrtl.uint<4>
+  firrtl.connect %out, %7 : !firrtl.uint<4>, !firrtl.uint<4>
+
 }
 
 // CHECK-LABEL: firrtl.module @Or

@@ -496,8 +496,8 @@ OpFoldResult DShrPrimOp::fold(ArrayRef<Attribute> operands) {
 // TODO: Move to DRR.
 OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
   if (auto rhsCst = getConstant(operands[1])) {
-    /// and(x, 0) -> 0
-    if (rhsCst->isZero() && getRhs().getType() == getType())
+    /// and(x, 0) -> 0, 0 is largest or is implicit zero extended
+    if (rhsCst->isZero())
       return getIntZerosAttr(getType());
 
     /// and(x, -1) -> x
@@ -507,8 +507,8 @@ OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
   }
 
   if (auto lhsCst = getConstant(operands[0])) {
-    /// and(0, x) -> 0
-    if (lhsCst->isZero() && getLhs().getType() == getType())
+    /// and(0, x) -> 0, 0 is largest or is implicit zero extended
+    if (lhsCst->isZero())
       return getIntZerosAttr(getType());
 
     /// and(-1, x) -> x
