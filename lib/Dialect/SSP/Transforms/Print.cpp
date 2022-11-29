@@ -1,4 +1,4 @@
-//===- PrintInstance.cpp - Print instance pass ------------------*- C++ -*-===//
+//===- Print.cpp - Print pass -----------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Implements the PrintInstance (as a DOT graph) pass.
+// Implements the Print (as a DOT graph) pass.
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,8 +19,8 @@ using namespace scheduling;
 using namespace ssp;
 
 namespace {
-struct PrintInstancePass : public PrintInstanceBase<PrintInstancePass> {
-  explicit PrintInstancePass(raw_ostream &os) : os(os) {}
+struct PrintPass : public PrintBase<PrintPass> {
+  explicit PrintPass(raw_ostream &os) : os(os) {}
   void runOnOperation() override;
   raw_ostream &os;
 };
@@ -32,7 +32,7 @@ static void printInstance(InstanceOp instOp, raw_ostream &os) {
   dumpAsDOT(prob, os);
 }
 
-void PrintInstancePass::runOnOperation() {
+void PrintPass::runOnOperation() {
   auto moduleOp = getOperation();
   for (auto instOp : moduleOp.getOps<InstanceOp>()) {
     StringRef probName = instOp.getProblemName();
@@ -55,6 +55,6 @@ void PrintInstancePass::runOnOperation() {
   }
 }
 
-std::unique_ptr<mlir::Pass> circt::ssp::createPrintInstancePass() {
-  return std::make_unique<PrintInstancePass>(llvm::errs());
+std::unique_ptr<mlir::Pass> circt::ssp::createPrintPass() {
+  return std::make_unique<PrintPass>(llvm::errs());
 }
