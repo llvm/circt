@@ -28,10 +28,8 @@ using namespace firrtl;
 struct Node {
   Value val = nullptr;
   size_t fieldId = 0;
-  Value leafVal = nullptr;
   Node() = default;
-  Node(Value val, size_t fieldId, Value leafVal = nullptr)
-      : val(val), fieldId(fieldId), leafVal(leafVal) {}
+  Node(Value val, size_t fieldId) : val(val), fieldId(fieldId) {}
   Node(const Node &rhs) = default;
   Node &operator=(const Node &rhs) = default;
   bool operator==(const Node &rhs) const {
@@ -241,8 +239,7 @@ public:
                       portPaths[Node(inputArg.val, inputArg.fieldId)].push_back(
                           Node(sinkOut, fRef.getFieldID()));
                   }
-                  return Node(fRef.getValue(), fRef.getFieldID(),
-                              connect.getDest());
+                  return Node(fRef.getValue(), fRef.getFieldID());
                 }
                 return Node();
               })
@@ -250,7 +247,7 @@ public:
                 if (op->getNumResults() == 1) {
                   auto res = op->getResult(0);
                   auto fRef = getFieldRefFromValue(res);
-                  return Node(fRef.getValue(), fRef.getFieldID(), res);
+                  return Node(fRef.getValue(), fRef.getFieldID());
                 }
                 return Node();
               });
@@ -329,8 +326,7 @@ public:
         gatherAggregateLeafs(val);
         for (auto leafIter : valLeafOps[val])
           if (!leafIter.getSecond().empty())
-            rootNodes.emplace_back(
-                Node(val, leafIter.getFirst(), leafIter.getSecond().front()));
+            rootNodes.emplace_back(Node(val, leafIter.getFirst()));
       }
       while (!rootNodes.empty()) {
         auto node = rootNodes.pop_back_val();
@@ -365,8 +361,7 @@ public:
       for (const auto &i1 : portPaths)
         for (const auto &i2 : i1.second)
           llvm::dbgs() << "\n node :" << i1.first.val << "," << i1.first.fieldId
-                       << "," << i1.first.leafVal << " is connected to ,"
-                       << i2.val << "," << i2.fieldId;
+                       << " is connected to ," << i2.val << "," << i2.fieldId;
     });
     return success();
   }
