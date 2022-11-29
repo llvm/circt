@@ -420,6 +420,8 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
     // Handle each of the special operations in the firrtl dialect.
     if (isWireOrReg(&op))
       markWireOrRegOp(&op);
+    else if (isAggregate(&op))
+      markOverdefined(op.getResult(0));
     else if (auto constant = dyn_cast<ConstantOp>(op))
       markConstantOp(constant);
     else if (auto specialConstant = dyn_cast<SpecialConstantOp>(op))
