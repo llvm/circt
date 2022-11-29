@@ -135,7 +135,13 @@ public:
     return success();
   }
 
-  /// Traverse all the reachable paths from InstanceOp and MemOps.
+  /// Traverse all the reachable paths from InstanceOp, MemOp, RegOp,
+  /// RegResetOps. Return true only if the DFS can be terminated at the `node`.
+  /// Traversal can be terminated after all the valid children of the `node` are
+  /// visited. Ignore register ops, for InstanceOps get the cominational paths
+  /// between the module ports, for MemOps check for any combinational paths
+  /// between the input addres or enable fields and the output data field for
+  /// latency 0 read ports.
   bool handleDefOps(Node &node, Node &inputArg) {
     if (node.val.isa<BlockArgument>())
       return false;
@@ -191,9 +197,10 @@ public:
         .Case<RegOp, RegResetOp>([&](auto) { return true; })
         .Case<MemOp>([&](MemOp mem) {
           auto type = node.val.getType().cast<BundleType>();
-          auto enableFieldId = type.getFieldID(1);
-          auto dataFieldId = type.getFieldID(3);
-          size_t addressFieldId = 1;
+          auto enableFieldId = type.getFieldID((unsigned)ReadPortSubfield::en);
+          auto dataFieldId = type.getFieldID((unsigned)ReadPortSubfield::data);
+          size_t addressFieldId =
+              type.getFieldID((unsigned)ReadPortSubfield::addr);
           // If this is the enable or addr field of the memory read port.
           if (mem.getReadLatency() == 0 &&
               (node.fieldId == addressFieldId ||
@@ -209,7 +216,8 @@ public:
                 return false;
               // Check for possible combinational paths from 0-latency
               // memory reads to the input address and enable.
-              auto dataNode = Node(node.val, type.getFieldID(3));
+              auto dataNode = Node(
+                  node.val, type.getFieldID((unsigned)ReadPortSubfield::data));
 
               if (dfsFromNode(dataNode, inputArg).failed()) {
                 mem.emitRemark("memory is part of a combinational cycle "
