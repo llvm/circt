@@ -761,12 +761,6 @@ class RefResultTypeConstraint<string base, string ref>
                    base, ref,
                    "RefType::get($_self.cast<FIRRTLBaseType>())">;
 
-def RefInstancePortConstraint
-  : PredOpTrait<"it cannot have module port as an operand because it implies"
-  " upward reference XMR, which are not supported."
-  " The reference operand must be a port from firrtl.instance",
-                CPred<"!($ref.isa<BlockArgument>())">>;
-
 //===----------------------------------------------------------------------===//
 // RefOps
 //===----------------------------------------------------------------------===//
