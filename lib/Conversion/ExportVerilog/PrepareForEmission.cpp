@@ -614,9 +614,18 @@ bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
 
   // If the operation is only used by an assignment, the op is already spilled
   // to a wire.
-  if (op.hasOneUse() &&
-      isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp>(*op.getUsers().begin()))
-    return false;
+  if (op.hasOneUse()) {
+    auto *singleUser = *op.getUsers().begin();
+    if (isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp>(singleUser))
+      return false;
+
+    // If the single user is bitcast, we check the same property for the bitcast
+    // op since bitcast op is no-op in system verilog.
+    if (singleUser->hasOneUse() && isa<hw::BitcastOp>(singleUser) &&
+        isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp>(
+            *singleUser->getUsers().begin()))
+      return false;
+  }
 
   // If the term size is greater than `maximumNumberOfTermsPerExpression`,
   // we have to spill the wire.
