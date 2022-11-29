@@ -87,7 +87,7 @@ tools = [
 if config.python_executable != "":
   tool_dirs.append(os.path.dirname(config.python_executable))
   config.available_features.add('python')
-  config.substitutions.append(('%PYTHON%', config.python_executable))
+  config.substitutions.append(('%PYTHON%', f'"{config.python_executable}"'))
 
 # Enable yosys if it has been detected.
 if config.yosys_path != "":
