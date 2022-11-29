@@ -261,6 +261,7 @@ protected:
   enum { OBJ_LATENCY = 0, OBJ_AXAP /* i.e. either ASAP or ALAP */ };
   bool fillObjectiveRow(SmallVector<int> &row, unsigned obj) override;
   void updateMargins();
+  unsigned int resII();
   void incrementII();
   void scheduleOperation(Operation *n);
 
@@ -1115,12 +1116,27 @@ void ModuloSimplexScheduler::scheduleOperation(Operation *n) {
   (void)fixedN, (void)enteredN;
 }
 
+unsigned int ModuloSimplexScheduler::resII() {
+  unsigned int resII = 1;
+  DenseMap<Problem::OperatorType, unsigned int> uses;
+  for (auto *op : prob.getOperations())
+    if (isLimited(op, prob))
+      uses[*prob.getLinkedOperatorType(op)]++;
+
+  for (auto pair : uses)
+    resII = std::max(resII,
+                     (unsigned)ceil(pair.second / *prob.getLimit(pair.first)));
+
+  return resII;
+}
+
 LogicalResult ModuloSimplexScheduler::schedule() {
   if (failed(checkLastOp()))
     return failure();
 
   parameterS = 0;
-  parameterT = 1;
+  parameterT = resII();
+  LLVM_DEBUG(dbgs() << "ResII = " << std::to_string(parameterT) << "\n");
   buildTableau();
   asapTimes.resize(startTimeLocations.size());
   alapTimes.resize(startTimeLocations.size());
