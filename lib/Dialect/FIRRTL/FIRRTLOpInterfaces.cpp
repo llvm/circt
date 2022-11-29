@@ -83,6 +83,27 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
       }))
     return module.emitOpError("port symbols should all be InnerSym attributes");
 
+  // TODO: Consolidate commonalities between field and port checking
+
+  // Verify the field types
+  auto fieldTypes = module.getFieldTypesAttr();
+  if (!fieldTypes || llvm::any_of(fieldTypes.getValue(), [](Attribute attr) {
+        return !attr.isa<TypeAttr>();
+      }))
+    return module.emitOpError("requires valid field types");
+
+  size_t numFields = fieldTypes.size();
+
+  // Verify the field names.
+  auto fieldNames = module.getFieldNamesAttr();
+  if (!fieldNames)
+    return module.emitOpError("requires valid field names");
+  if (fieldNames.size() != numFields)
+    return module.emitOpError("requires ") << numFields << " field names";
+  if (llvm::any_of(fieldNames.getValue(),
+                   [](Attribute attr) { return !attr.isa<StringAttr>(); }))
+    return module.emitOpError("field names should all be string attributes");
+
   // Verify the body.
   if (module->getNumRegions() != 1)
     return module.emitOpError("requires one region");
@@ -90,18 +111,22 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   // Verify the block arguments.
   auto &body = module->getRegion(0);
   if (!body.empty()) {
+    size_t numFields = module.getNumFields();
+    size_t expectedNumArguments = numPorts + numFields;
     auto &block = body.front();
-    if (block.getNumArguments() != numPorts)
+    if (block.getNumArguments() != expectedNumArguments)
       return module.emitOpError("entry block must have ")
-             << numPorts << " arguments to match module signature";
+             << expectedNumArguments << " arguments to match module signature";
 
     if (llvm::any_of(
-            llvm::zip(block.getArguments(), portTypes.getValue()),
+            llvm::zip(block.getArguments(),
+                      llvm::concat<const Attribute>(portTypes.getValue(),
+                                                    fieldTypes.getValue())),
             [](auto pair) {
               auto blockType = std::get<0>(pair).getType();
-              auto portType =
+              auto expectedType =
                   std::get<1>(pair).template cast<TypeAttr>().getValue();
-              return blockType != portType;
+              return blockType != expectedType;
             }))
       return module.emitOpError(
           "block argument types should match signature types");

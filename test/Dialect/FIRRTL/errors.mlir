@@ -101,7 +101,8 @@ firrtl.circuit "foo" {
 "firrtl.module"() ( {
   ^entry:
 }) {sym_name = "foo", portTypes = [!firrtl.uint], portDirections = 1 : i1,
-    portNames = ["in0"], portAnnotations = [], portSyms = []} : () -> ()
+    portNames = ["in0"], portAnnotations = [], portSyms = [],
+    fieldNames = [], fieldTypes = []} : () -> ()
 }
 
 // -----
@@ -111,7 +112,8 @@ firrtl.circuit "foo" {
 "firrtl.module"() ( {
   ^entry(%a: i1):
 }) {sym_name = "foo", portTypes = [!firrtl.uint], portDirections = 1 : i1,
-    portNames = ["in0"], portAnnotations = [], portSyms = []} : () -> ()
+    portNames = ["in0"], portAnnotations = [], portSyms = [],
+    fieldNames = [], fieldTypes = []} : () -> ()
 }
 
 // -----

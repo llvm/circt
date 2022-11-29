@@ -20,8 +20,9 @@ class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
 }
 
 def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firrtl::WhenOp">,
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>, 
-    DeclareOpInterfaceMethods<HWInstanceLike, ["instanceName", "instanceNameAttr"]>]> {
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<HWInstanceLike, ["instanceName", "instanceNameAttr"]>,
+    AttrSizedResultSegments]> {
   let summary = "Instantiate an instance of a module";
   let description = [{
     This represents an instance of a module.  The results are the modules inputs
@@ -38,9 +39,13 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
                        UnitAttr:$lowerToBind,
-                       OptionalAttr<InnerSymAttr>:$inner_sym);
+                       OptionalAttr<InnerSymAttr>:$inner_sym,
+                       StrArrayAttr:$fieldNames,
+                       DenseI32ArrayAttr:$result_segment_sizes,
+                       Variadic<AnyType>:$initInputs
+                       );
 
-  let results = (outs Variadic<AnyType>:$results);
+  let results = (outs Variadic<AnyType>:$ports, Variadic<AnyType>:$fields);
 
   let hasCustomAssemblyFormat = 1;
 
@@ -54,7 +59,9 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
                    CArg<"bool","false">:$lowerToBind,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym)>,
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym,
+                   CArg<"::mlir::ArrayRef<Attribute>", "{}">:$fieldNames,
+                   CArg<"ArrayRef<Value>", "{}">:$initInputs)>,
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
                    "::mlir::StringRef":$moduleName,
                    "::mlir::StringRef":$name,
@@ -64,7 +71,9 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                    "ArrayRef<Attribute>":$annotations,
                    "ArrayRef<Attribute>":$portAnnotations,
                    "bool":$lowerToBind,
-                   "hw::InnerSymAttr":$inner_sym)>,
+                   "hw::InnerSymAttr":$inner_sym,
+                   "::mlir::ArrayRef<Attribute>":$fieldNames,
+                   "ArrayRef<Value>":$initInputs)>,
 
     /// Constructor when you have the target module in hand.
     OpBuilder<(ins "FModuleLike":$module,
@@ -73,7 +82,8 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
                    CArg<"bool","false">:$lowerToBind,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym)>
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym,
+                   CArg<"ArrayRef<Value>", "{}">:$initInputs)>
   ];
 
   let extraClassDeclaration = [{
@@ -107,6 +117,14 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
     /// conjuction with adding ports to the referenced module. This will emit
     /// the new InstanceOp to the same location.
     InstanceOp cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
+
+    size_t getNumPorts() {
+      return getPortNames().size();
+    }
+
+    size_t getNumFields() {
+      return getFieldNames().size();
+    }
   }];
 }
 

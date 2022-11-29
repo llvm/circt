@@ -238,7 +238,76 @@ def FModuleLike : OpInterface<"FModuleLike"> {
 
     InterfaceMethod<"Erases the ports that have their corresponding bit set in `portIndices`",
     "void", "erasePorts",
-    (ins "const llvm::BitVector&":$portIndices)>
+    (ins "const llvm::BitVector&":$portIndices)>,
+
+    //===------------------------------------------------------------------===//
+    // Field Names
+    //===------------------------------------------------------------------===//
+
+    InterfaceMethod<"Get the field names attribute",
+    "ArrayAttr", "getFieldNamesAttr", (ins), [{}],
+    /*defaultImplementation=*/[{
+      return $_op->template
+        getAttrOfType<ArrayAttr>(FModuleLike::getFieldNamesAttrName());
+    }]>,
+
+    InterfaceMethod<"Get the field names",
+    "ArrayRef<Attribute>", "getFieldNames", (ins), [{}],
+    /*defaultImplementation=*/[{
+      return $_op.getFieldNamesAttr().getValue();
+    }]>,
+
+    InterfaceMethod<"Get a field name",
+    "StringAttr", "getFieldNameAttr", (ins "size_t":$fieldIndex), [{}],
+    /*defaultImplementation=*/[{
+      return $_op.getFieldNames()[fieldIndex].template cast<StringAttr>();
+    }]>,
+
+    InterfaceMethod<"Get a field name",
+    "StringRef", "getFieldName", (ins "size_t":$fieldIndex), [{}],
+    /*defaultImplementation=*/[{
+      return $_op.getFieldNameAttr(fieldIndex).getValue();
+    }]>,
+
+    //===------------------------------------------------------------------===//
+    // Field Types
+    //===------------------------------------------------------------------===//
+
+    InterfaceMethod<"Get the field types attribute",
+    "ArrayAttr", "getFieldTypesAttr", (ins), [{}],
+    /*defaultImplementation=*/[{
+      return $_op->template
+        getAttrOfType<ArrayAttr>(FModuleLike::getFieldTypesAttrName());
+    }]>,
+
+    InterfaceMethod<"Get the field types",
+    "ArrayRef<Attribute>", "getFieldTypes", (ins), [{}],
+    /*defaultImplementation=*/[{
+      return $_op.getFieldTypesAttr().getValue();
+    }]>,
+
+    InterfaceMethod<"Get a field type",
+    "TypeAttr", "getFieldTypeAttr", (ins "size_t":$fieldIndex), [{}],
+    /*defaultImplementation=*/[{
+      return $_op.getFieldTypes()[fieldIndex].template cast<TypeAttr>();
+    }]>,
+
+    InterfaceMethod<"Get a field type",
+    "Type", "getFieldType", (ins "size_t":$fieldIndex), [{}],
+    /*defaultImplementation=*/[{
+      auto typeAttr = $_op.getFieldTypeAttr(fieldIndex);
+      return typeAttr.getValue();
+    }]>,
+
+    //===------------------------------------------------------------------===//
+    // All Field Information
+    //===------------------------------------------------------------------===//
+
+    InterfaceMethod<"Get the number of fields",
+    "size_t", "getNumFields", (ins), [{}],
+    /*defaultImplementation=*/[{
+      return $_op.getFieldTypesAttr().size();
+    }]>
   ];
 
   let extraClassDeclaration = [{
@@ -284,6 +353,16 @@ def FModuleLike : OpInterface<"FModuleLike"> {
         if (!sym)
           sym = empty;
     }
+
+    /// Get the attribute name for field names,
+    static StringRef getFieldNamesAttrName() {
+      return "fieldNames";
+    }
+
+    /// Get the attribute name for field types.
+    static StringRef getFieldTypesAttrName() {
+      return "fieldTypes";
+    }
   }];
 
   let verify = [{
@@ -317,23 +396,23 @@ def InnerRefNamespace : NativeOpTrait<"InnerRefNamespace">;
 def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
   let description = [{
     This interface describes an operation that may define an
-    `inner_sym`.  An `inner_sym` operation resides 
+    `inner_sym`.  An `inner_sym` operation resides
     in arbitrarily-nested regions of a region that defines a
     `InnerSymbolTable`.
-    Inner Symbols are different from normal symbols due to 
+    Inner Symbols are different from normal symbols due to
     MLIR symbol table resolution rules.  Specifically normal
     symbols are resolved by first going up to the closest
     parent symbol table and resolving from there (recursing
     down for complex symbol paths).  In FIRRTL and SV, modules
     define a symbol in a circuit or std.module symbol table.
     For instances to be able to resolve the modules they
-    instantiate, the symbol use in an instance must resolve 
+    instantiate, the symbol use in an instance must resolve
     in the top-level symbol table.  If a module were a
-    symbol table, instances resolving a symbol would start from 
-    their own module, never seeing other modules (since 
-    resolution would start in the parent module of the 
+    symbol table, instances resolving a symbol would start from
+    their own module, never seeing other modules (since
+    resolution would start in the parent module of the
     instance and be unable to go to the global scope).
-    The second problem arises from nesting.  Symbols defining 
+    The second problem arises from nesting.  Symbols defining
     ops must be immediate children of a symbol table.  FIRRTL
     and SV operations which define a inner_sym are grandchildren,
     at least, of a symbol table and may be much further nested.

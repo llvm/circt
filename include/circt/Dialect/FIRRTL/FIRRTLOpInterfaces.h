@@ -97,6 +97,15 @@ struct PortInfo {
         annotations(annos) {}
 };
 
+/// This holds the name and type that describes the module's fields
+struct FieldInfo {
+  StringAttr name;
+  Type type;
+  Location loc;
+
+  StringRef getName() const { return name ? name.getValue() : ""; }
+};
+
 /// Verification hook for verifying module like operations.
 LogicalResult verifyModuleLikeOpInterface(FModuleLike module);
 

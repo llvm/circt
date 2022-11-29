@@ -1147,6 +1147,7 @@ private:
   ParseResult parsePostFixDynamicSubscript(Value &result);
   ParseResult parsePrimExp(Value &result);
   ParseResult parseIntegerLiteralExp(Value &result);
+  ParseResult parseOptionalInstanceInit(SmallVectorImpl<Value> &operands);
 
   Optional<ParseResult> parseExpWithLeadingKeyword(FIRToken keyword);
 
@@ -1785,6 +1786,22 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
   return success();
 }
 
+ParseResult
+FIRStmtParser::parseOptionalInstanceInit(SmallVectorImpl<Value> &operands) {
+  // Only proceed if there is an open parenthesis
+  if (!consumeIf(FIRToken::l_paren))
+    return success();
+
+  return parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
+    Value operand;
+    if (parseExp(operand, "expected expression in init operand"))
+      return failure();
+
+    operands.push_back(operand);
+    return success();
+  });
+}
+
 /// The .fir grammar has the annoying property where:
 /// 1) some statements start with keywords
 /// 2) some start with an expression
@@ -2330,9 +2347,11 @@ ParseResult FIRStmtParser::parseInstance() {
 
   StringRef id;
   StringRef moduleName;
+  SmallVector<Value> initInputs;
   if (parseId(id, "expected instance name") ||
       parseToken(FIRToken::kw_of, "expected 'of' in instance") ||
-      parseId(moduleName, "expected module name") || parseOptionalInfo())
+      parseId(moduleName, "expected module name") ||
+      parseOptionalInstanceInit(initInputs) || parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
@@ -2349,24 +2368,13 @@ ParseResult FIRStmtParser::parseInstance() {
   }
 
   SmallVector<PortInfo> modulePorts = referencedModule.getPorts();
-
-  // Make a bundle of the inputs and outputs of the specified module.
-  SmallVector<Type, 4> resultTypes;
-  resultTypes.reserve(modulePorts.size());
-  SmallVector<std::pair<StringAttr, Type>, 4> resultNamesAndTypes;
-
-  for (auto port : modulePorts) {
-    resultTypes.push_back(port.type);
-    resultNamesAndTypes.push_back({port.name, port.type});
-  }
-
   auto annotations = getConstants().emptyArrayAttr;
   SmallVector<Attribute, 4> portAnnotations(modulePorts.size(), annotations);
 
   StringAttr sym = {};
   auto result = builder.create<InstanceOp>(
       referencedModule, id, NameKindEnum::InterestingName,
-      annotations.getValue(), portAnnotations, false, sym);
+      annotations.getValue(), portAnnotations, false, sym, initInputs);
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues
@@ -2375,6 +2383,9 @@ ParseResult FIRStmtParser::parseInstance() {
   unbundledValueEntry.reserve(modulePorts.size());
   for (size_t i = 0, e = modulePorts.size(); i != e; ++i)
     unbundledValueEntry.push_back({modulePorts[i].name, result.getResult(i)});
+  for (size_t i = 0, e = referencedModule.getNumFields(); i < e; ++i)
+    unbundledValueEntry.push_back({result.getFieldNames()[i].cast<StringAttr>(),
+                                   result.getResult(i + modulePorts.size())});
 
   // Add it to unbundledValues and add an entry to the symbol table to remember
   // it.
@@ -2792,13 +2803,16 @@ private:
   ParseResult parseModule(CircuitOp circuit, StringRef circuitTarget,
                           unsigned indent);
 
-  ParseResult parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
-                            SmallVectorImpl<SMLoc> &resultPortLocs,
-                            Location defaultLoc, unsigned indent);
+  ParseResult parsePortAndFieldLists(SmallVectorImpl<PortInfo> &resultPorts,
+                                     SmallVectorImpl<SMLoc> &resultPortLocs,
+                                     SmallVectorImpl<FieldInfo> &resultFields,
+                                     SmallVectorImpl<SMLoc> &resultFieldLocs,
+                                     Location defaultLoc, unsigned indent);
 
   struct DeferredModuleToParse {
     FModuleOp moduleOp;
     SmallVector<SMLoc> portLocs;
+    SmallVector<SMLoc> fieldLocs;
     FIRLexerCursor lexerCursor;
     std::string moduleTarget;
     unsigned indent;
@@ -2874,15 +2888,21 @@ ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
 /// port     ::= dir id ':' type info? NEWLINE
 /// dir      ::= 'input' | 'output'
 ///
-/// defaultLoc specifies a location to use if there is no info locator for the
-/// port.
+/// fieldList ::= field*
+/// field     ::= 'field' id ':' type NEWLINE
 ///
-ParseResult
-FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
-                                SmallVectorImpl<SMLoc> &resultPortLocs,
-                                Location defaultLoc, unsigned indent) {
-  // Parse any ports.
-  while (getToken().isAny(FIRToken::kw_input, FIRToken::kw_output) &&
+/// defaultLoc specifies a location to use if there is no info locator for the
+/// field.
+///
+ParseResult FIRCircuitParser::parsePortAndFieldLists(
+    SmallVectorImpl<PortInfo> &resultPorts,
+    SmallVectorImpl<SMLoc> &resultPortLocs,
+    SmallVectorImpl<FieldInfo> &resultFields,
+    SmallVectorImpl<SMLoc> &resultFieldLocs, Location defaultLoc,
+    unsigned indent) {
+  // Parse any ports or fields.
+  while (getToken().isAny(FIRToken::kw_input, FIRToken::kw_output,
+                          FIRToken::kw_field) &&
          // Must be nested under the module.
          getIndentation() > indent) {
 
@@ -2892,22 +2912,27 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
     // output.thing <= input  ; identifier expression
     auto backtrackState = getLexer().getCursor();
 
-    bool isOutput = getToken().is(FIRToken::kw_output);
+    auto kind = getToken().getKind();
     consumeToken();
 
     // If we have something that isn't a keyword then this must be an
-    // identifier, not an input/output marker.
+    // identifier, not an input/output/property marker.
     if (!getToken().is(FIRToken::identifier) && !getToken().isKeyword()) {
       backtrackState.restore(getLexer());
       break;
     }
 
+    bool isField = kind == FIRToken::kw_field;
+    const char *kindLabel = isField ? "field" : "port";
+
     StringAttr name;
     FIRRTLType type;
     LocWithInfo info(getToken().getLoc(), this);
-    if (parseId(name, "expected port name") ||
-        parseToken(FIRToken::colon, "expected ':' in port definition") ||
-        parseType(type, "expected a type in port declaration") ||
+    if (parseId(name, "expected " + Twine(kindLabel) + " name") ||
+        parseToken(FIRToken::colon,
+                   "expected ':' in " + Twine(kindLabel) + " definition") ||
+        parseType(type,
+                  "expected a type in " + Twine(kindLabel) + " declaration") ||
         info.parseOptionalInfo())
       return failure();
 
@@ -2917,10 +2942,16 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
     // compile time creating too many unique locations.
     info.setDefaultLoc(defaultLoc);
 
-    StringAttr innerSym = {};
-    resultPorts.push_back(
-        {name, type, direction::get(isOutput), innerSym, info.getLoc()});
-    resultPortLocs.push_back(info.getFIRLoc());
+    if (isField) {
+      resultFields.push_back({name, type, info.getLoc()});
+      resultFieldLocs.push_back(info.getFIRLoc());
+    } else {
+      StringAttr innerSym = {};
+      bool isOutput = kind == FIRToken::kw_output;
+      resultPorts.push_back(
+          {name, type, direction::get(isOutput), innerSym, info.getLoc()});
+      resultPortLocs.push_back(info.getFIRLoc());
+    }
   }
 
   return success();
@@ -2945,6 +2976,8 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   StringAttr name;
   SmallVector<PortInfo, 8> portList;
   SmallVector<SMLoc> portLocs;
+  SmallVector<FieldInfo, 8> fieldList;
+  SmallVector<SMLoc> fieldLocs;
 
   LocWithInfo info(getToken().getLoc(), this);
   if (parseId(name, "expected module name"))
@@ -2955,38 +2988,50 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
 
   if (parseToken(FIRToken::colon, "expected ':' in module definition") ||
       info.parseOptionalInfo() ||
-      parsePortList(portList, portLocs, info.getLoc(), indent))
+      parsePortAndFieldLists(portList, portLocs, fieldList, fieldLocs,
+                             info.getLoc(), indent))
     return failure();
 
   auto builder = circuit.getBodyBuilder();
 
-  // Check for port name collisions.
-  SmallDenseMap<Attribute, SMLoc> portIds;
-  for (auto portAndLoc : llvm::zip(portList, portLocs)) {
-    PortInfo &port = std::get<0>(portAndLoc);
-    auto &entry = portIds[port.name];
-    if (!entry.isValid()) {
-      entry = std::get<1>(portAndLoc);
-      continue;
-    }
+  // Check for field name collisions.
+  SmallDenseMap<Attribute, SMLoc> fieldIds;
+  auto checkForNameCollisions = [&](const auto &fieldList,
+                                    ArrayRef<SMLoc> fieldLocs) -> ParseResult {
+    for (auto fieldAndLoc : llvm::zip(fieldList, fieldLocs)) {
+      auto &field = std::get<0>(fieldAndLoc);
+      auto loc = std::get<1>(fieldAndLoc);
+      auto &entry = fieldIds[field.name];
+      if (!entry.isValid()) {
+        entry = std::get<1>(fieldAndLoc);
+        continue;
+      }
 
-    emitError(std::get<1>(portAndLoc),
-              "redefinition of name '" + port.getName() + "'")
-            .attachNote(translateLocation(entry))
-        << "previous definition here";
+      auto firstLoc = entry.getPointer() < loc.getPointer() ? entry : loc;
+      auto secondLoc = firstLoc == entry ? loc : entry;
+
+      emitError(secondLoc, "redefinition of name '" + field.getName() + "'")
+              .attachNote(translateLocation(firstLoc))
+          << "previous definition here";
+      return failure();
+    }
+    return success();
+  };
+
+  if (checkForNameCollisions(portList, portLocs) ||
+      checkForNameCollisions(fieldList, fieldLocs))
     return failure();
-  }
 
   // If this is a normal module, parse the body into an FModuleOp.
   if (!isExtModule) {
-    auto moduleOp =
-        builder.create<FModuleOp>(info.getLoc(), name, portList, annotations);
+    auto moduleOp = builder.create<FModuleOp>(info.getLoc(), name, portList,
+                                              annotations, fieldList);
 
     // Parse the body of this module after all prototypes have been parsed. This
     // allows us to handle forward references correctly.
-    deferredModules.emplace_back(
-        DeferredModuleToParse{moduleOp, portLocs, getLexer().getCursor(),
-                              std::move(moduleTarget), indent});
+    deferredModules.emplace_back(DeferredModuleToParse{
+        moduleOp, portLocs, fieldLocs, getLexer().getCursor(),
+        std::move(moduleTarget), indent});
 
     // We're going to defer parsing this module, so just skip tokens until we
     // get to the next module or the end of the file.
@@ -3083,8 +3128,9 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     parameters.push_back(ParamDeclAttr::get(nameId, value));
   }
 
-  auto fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList,
-                                              defName, annotations);
+  auto fmodule =
+      builder.create<FExtModuleOp>(info.getLoc(), name, portList, defName,
+                                   annotations, ArrayAttr(), fieldList);
 
   fmodule->setAttr("parameters", builder.getArrayAttr(parameters));
 
@@ -3096,6 +3142,7 @@ ParseResult
 FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
   FModuleOp moduleOp = deferredModule.moduleOp;
   auto &portLocs = deferredModule.portLocs;
+  auto &fieldLocs = deferredModule.fieldLocs;
   auto &moduleTarget = deferredModule.moduleTarget;
 
   // We parse the body of this module with its own lexer, enabling parallel
@@ -3112,7 +3159,7 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
   // block arguments.
   Namespace modNameSpace;
   auto portList = moduleOp.getPorts();
-  auto portArgs = moduleOp.getArguments();
+  auto portArgs = moduleOp.getArguments().slice(0, portList.size());
   for (auto tuple : llvm::zip(portList, portLocs, portArgs)) {
     PortInfo &port = std::get<0>(tuple);
     llvm::SMLoc loc = std::get<1>(tuple);
@@ -3120,6 +3167,18 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
     if (port.sym)
       modNameSpace.newName(port.sym.getSymName().getValue());
     if (moduleContext.addSymbolEntry(port.getName(), portArg, loc))
+      return failure();
+  }
+
+  // Install all of the fields into the symbol table, associated with their
+  // block arguments.
+  auto fieldNames = moduleOp.getFieldNames();
+  auto fieldArgs = moduleOp.getArguments().slice(portList.size());
+  for (auto tuple : llvm::zip(fieldNames, fieldLocs, fieldArgs)) {
+    auto fieldName = std::get<0>(tuple).cast<StringAttr>().getValue();
+    llvm::SMLoc loc = std::get<1>(tuple);
+    BlockArgument fieldArg = std::get<2>(tuple);
+    if (moduleContext.addSymbolEntry(fieldName, fieldArg, loc))
       return failure();
   }
 

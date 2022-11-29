@@ -72,7 +72,8 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
   let hasCustomAssemblyFormat = 1;
   let builders = [
     OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
-               CArg<"ArrayAttr","ArrayAttr()">:$annotations)>
+               CArg<"ArrayAttr","ArrayAttr()">:$annotations,
+               CArg<"ArrayRef<FieldInfo>", "{}">:$fields)>
   ];
 
   let extraClassDeclaration = [{
@@ -131,7 +132,8 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
                       "ArrayRef<PortInfo>":$ports,
                       CArg<"StringRef", "StringRef()">:$defnamAttr,
                       CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
-                      CArg<"ArrayAttr", "ArrayAttr()">:$parameters)>
+                      CArg<"ArrayAttr", "ArrayAttr()">:$parameters,
+                      CArg<"ArrayRef<FieldInfo>", "{}">:$fields)>
   ];
 
   let extraClassDeclaration = [{

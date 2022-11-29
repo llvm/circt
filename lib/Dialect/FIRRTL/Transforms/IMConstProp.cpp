@@ -287,7 +287,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
                                        bool allowTruncation = false);
 
   /// Mark the given block as executable.
-  void markBlockExecutable(Block *block);
+  void markBlockExecutable(Block *block, size_t numPorts);
   void markWireOrRegOp(Operation *wireOrReg);
   void markMemOp(MemOp mem);
 
@@ -339,7 +339,7 @@ void IMConstPropPass::runOnOperation() {
   // Mark the input ports of public modules as being overdefined.
   for (auto module : circuit.getBodyBlock()->getOps<FModuleOp>()) {
     if (module.isPublic()) {
-      markBlockExecutable(module.getBodyBlock());
+      markBlockExecutable(module.getBodyBlock(), module.getNumPorts());
       for (auto port : module.getBodyBlock()->getArguments())
         markOverdefined(port);
     }
@@ -406,13 +406,13 @@ LatticeValue IMConstPropPass::getExtendedLatticeValue(Value value,
 /// Mark a block executable if it isn't already.  This does an initial scan of
 /// the block, processing nullary operations like wires, instances, and
 /// constants that only get processed once.
-void IMConstPropPass::markBlockExecutable(Block *block) {
+void IMConstPropPass::markBlockExecutable(Block *block, size_t numPorts) {
   if (!executableBlocks.insert(block).second)
     return; // Already executable.
 
   // Mark block arguments, which are module ports, with don't touch as
   // overdefined.
-  for (auto ba : block->getArguments())
+  for (auto ba : block->getArguments().slice(0, numPorts))
     if (hasDontTouch(ba))
       markOverdefined(ba);
 
@@ -498,11 +498,11 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
 
   // Otherwise this is a defined module.
   auto fModule = cast<FModuleOp>(op);
-  markBlockExecutable(fModule.getBodyBlock());
+  markBlockExecutable(fModule.getBodyBlock(), fModule.getNumPorts());
 
   // Ok, it is a normal internal module reference.  Populate
   // resultPortToInstanceResultMapping, and forward any already-computed values.
-  for (size_t resultNo = 0, e = instance.getNumResults(); resultNo != e;
+  for (size_t resultNo = 0, e = instance.getNumPorts(); resultNo != e;
        ++resultNo) {
     auto instancePortVal = instance.getResult(resultNo);
     // If this is an input to the instance, it will

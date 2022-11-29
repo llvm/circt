@@ -998,6 +998,10 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
     // lowerArg might have invalidated any reference to newArgs, be careful
   }
 
+  // Keep fields
+  for (size_t i = 0; i < module.getNumFields(); ++i)
+    argsToRemove.push_back(false);
+
   // Remove block args that have been lowered.
   body->eraseArguments(argsToRemove);
   for (auto deadArg = argsToRemove.find_last(); deadArg != -1;
@@ -1214,7 +1218,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       getPreservatinoModeForModule(op.getReferencedModule(symTbl));
 
   endFields.push_back(0);
-  for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
+  for (size_t i = 0, e = op.getNumPorts(); i != e; ++i) {
     auto srcType = op.getType(i).cast<FIRRTLType>();
 
     // Flatten any nested bundle types the usual way.
@@ -1244,6 +1248,9 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
     endFields.push_back(resultTypes.size());
   }
 
+  for (size_t i = op.getNumPorts(), e = op.getNumResults(); i < e; ++i)
+    resultTypes.push_back(op.getType(i));
+
   auto sym = getInnerSymName(op);
 
   if (skip) {
@@ -1256,10 +1263,14 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       op.getNameKindAttr(), direction::packAttribute(context, newDirs),
       builder->getArrayAttr(newNames), op.getAnnotations(),
       builder->getArrayAttr(newPortAnno), op.getLowerToBindAttr(),
-      sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
+      sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr(),
+      op.getFieldNamesAttr(),
+      builder->getDenseI32ArrayAttr({static_cast<int32_t>(newNames.size()),
+                                     static_cast<int32_t>(op.getNumFields())}),
+      SmallVector<Value>(op.getInitInputs()));
 
   SmallVector<Value> lowered;
-  for (size_t aggIndex = 0, eAgg = op.getNumResults(); aggIndex != eAgg;
+  for (size_t aggIndex = 0, eAgg = op.getNumPorts(); aggIndex != eAgg;
        ++aggIndex) {
     lowered.clear();
     for (size_t fieldIndex = endFields[aggIndex],

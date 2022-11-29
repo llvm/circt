@@ -1356,7 +1356,7 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
 
   // Insert argument casts, and re-vector users in the old body to use them.
   SmallVector<PortInfo> ports = oldModule.getPorts();
-  assert(oldModule.getBody().getNumArguments() == ports.size() &&
+  assert(oldModule.getBody().getNumArguments() >= ports.size() &&
          "port count mismatch");
 
   size_t nextNewArg = 0;

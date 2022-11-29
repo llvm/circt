@@ -71,7 +71,7 @@ struct IMDeadCodeElimPass : public IMDeadCodeElimBase<IMDeadCodeElimPass> {
   void visitValue(Value value);
   void visitConnect(FConnectLike connect);
   void visitSubelement(Operation *op);
-  void markBlockExecutable(Block *block);
+  void markBlockExecutable(Block *block, size_t numPorts);
   void markDeclaration(Operation *op);
   void markInstanceOp(InstanceOp instanceOp);
   void markUnknownSideEffectOp(Operation *op);
@@ -139,7 +139,7 @@ void IMDeadCodeElimPass::markInstanceOp(InstanceOp instance) {
 
   // Otherwise this is a defined module.
   auto fModule = cast<FModuleOp>(op);
-  markBlockExecutable(fModule.getBodyBlock());
+  markBlockExecutable(fModule.getBodyBlock(), fModule.getNumPorts());
 
   // Ok, it is a normal internal module reference so populate
   // resultPortToInstanceResultMapping.
@@ -154,12 +154,12 @@ void IMDeadCodeElimPass::markInstanceOp(InstanceOp instance) {
   }
 }
 
-void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
+void IMDeadCodeElimPass::markBlockExecutable(Block *block, size_t numPorts) {
   if (!executableBlocks.insert(block).second)
     return; // Already executable.
 
   // Mark ports with don't touch as alive.
-  for (auto blockArg : block->getArguments())
+  for (auto blockArg : block->getArguments().slice(0, numPorts))
     if (hasDontTouch(blockArg))
       markAlive(blockArg);
 
@@ -232,7 +232,7 @@ void IMDeadCodeElimPass::runOnOperation() {
   for (auto module : circuit.getBodyBlock()->getOps<FModuleOp>()) {
     // Mark the ports of public modules as alive.
     if (module.isPublic()) {
-      markBlockExecutable(module.getBodyBlock());
+      markBlockExecutable(module.getBodyBlock(), module.getNumPorts());
       for (auto port : module.getBodyBlock()->getArguments())
         markAlive(port);
     }
