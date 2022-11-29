@@ -213,6 +213,18 @@ def MuxSameFalse : Pat <
   (MoveNameHint $old, (MuxPrimOp (AndPrimOp $cond1, $cond2), $t, $f)),
   [(EqualTypes $t, $f), (KnownWidth $f)]>;
 
+// mux(cond, (Concat a, b), (Concat a, c)) -> Concat(a, mux(cond, b, c))
+def NarrowMuxLHS : Pat <
+  (MuxPrimOp:$old $cond, (CatPrimOp:$lhs $a, $b), (CatPrimOp:$rhs $a, $c)),
+  (MoveNameHint $old, (CatPrimOp $a, (MuxPrimOp $cond, $b, $c))),
+  [(EqualTypes $lhs, $rhs), (KnownWidth $lhs)]>;
+
+// mux(cond, (Concat a, b), (Concat c, b)) -> Concat(mux(cond, a, c), b)
+def NarrowMuxRHS : Pat <
+  (MuxPrimOp:$old $cond, (CatPrimOp:$lhs $a, $b), (CatPrimOp:$rhs $c, $b)),
+  (MoveNameHint $old, (CatPrimOp (MuxPrimOp $cond, $a, $c), $b)),
+  [(EqualTypes $lhs, $rhs), (KnownWidth $lhs)]>;
+
 // regreset(clock, constant_zero, resetValue) -> reg(clock)
 def RegResetWithZeroReset : Pat<
   (RegResetOp $clock, $reset, $_, $name, $nameKind, $annotations, $inner_sym),

@@ -1740,23 +1740,35 @@ firrtl.module @mul_cst_prop3(out %out_b: !firrtl.sint<15>) {
 }
 
 // CHECK-LABEL: firrtl.module @MuxCanon
-firrtl.module @MuxCanon(in %c1: !firrtl.uint<1>, in %c2: !firrtl.uint<1>, in %d1: !firrtl.uint<5>, in %d2: !firrtl.uint<5>, in %d3: !firrtl.uint<5>, out %foo: !firrtl.uint<5>, out %foo2: !firrtl.uint<5>, out %foo3: !firrtl.uint<5>, out %foo4: !firrtl.uint<5>) {
+firrtl.module @MuxCanon(in %c1: !firrtl.uint<1>, in %c2: !firrtl.uint<1>, in %d1: !firrtl.uint<5>, in %d2: !firrtl.uint<5>, in %d3: !firrtl.uint<5>, out %foo: !firrtl.uint<5>, out %foo2: !firrtl.uint<5>, out %foo3: !firrtl.uint<5>, out %foo4: !firrtl.uint<5>, out %foo5: !firrtl.uint<10>, out %foo6: !firrtl.uint<10>) {
   %0 = firrtl.mux(%c1, %d2, %d3) : (!firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5>
   %1 = firrtl.mux(%c1, %d1, %0) : (!firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5>
   %2 = firrtl.mux(%c1, %0, %d1) : (!firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5>
   %3 = firrtl.mux(%c1, %d1, %d2) : (!firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5>
   %4 = firrtl.mux(%c2, %3, %d2) : (!firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5>
   %5 = firrtl.mux(%c2, %d1, %3) : (!firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5>
+  %6 = firrtl.cat %d1, %d2 : (!firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<10>
+  %7 = firrtl.cat %d1, %d3 : (!firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<10>
+  %8 = firrtl.cat %d1, %d2 : (!firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<10>
+  %9 = firrtl.cat %d3, %d2 : (!firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<10>
+  %10 = firrtl.mux(%c1, %6, %7) : (!firrtl.uint<1>, !firrtl.uint<10>, !firrtl.uint<10>) -> !firrtl.uint<10>
+  %11 = firrtl.mux(%c2, %8, %9) : (!firrtl.uint<1>, !firrtl.uint<10>, !firrtl.uint<10>) -> !firrtl.uint<10>
   firrtl.connect %foo, %1 : !firrtl.uint<5>, !firrtl.uint<5>
   firrtl.connect %foo2, %2 : !firrtl.uint<5>, !firrtl.uint<5>
   firrtl.connect %foo3, %4 : !firrtl.uint<5>, !firrtl.uint<5>
   firrtl.connect %foo4, %5 : !firrtl.uint<5>, !firrtl.uint<5>
+  firrtl.connect %foo5, %10 : !firrtl.uint<10>, !firrtl.uint<10>
+  firrtl.connect %foo6, %11 : !firrtl.uint<10>, !firrtl.uint<10>
   // CHECK: firrtl.mux(%c1, %d1, %d3) : (!firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5>
   // CHECK: firrtl.mux(%c1, %d2, %d1) : (!firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5>
   // CHECK: %[[and:.*]] = firrtl.and %c2, %c1
   // CHECK: %[[andmux:.*]] = firrtl.mux(%[[and]], %d1, %d2)
   // CHECK: %[[or:.*]] = firrtl.or %c2, %c1
   // CHECK: %[[ormux:.*]] = firrtl.mux(%[[or]], %d1, %d2)
+  // CHECK: %[[mux1:.*]] = firrtl.mux(%c1, %d2, %d3)
+  // CHECK: firrtl.cat %d1, %[[mux1]]
+  // CHECK: %[[mux2:.*]] = firrtl.mux(%c2, %d1, %d3)
+  // CHECK: firrtl.cat %[[mux2]], %d2
 }
 
 // CHECK-LABEL: firrtl.module @RegresetToReg
