@@ -20,6 +20,17 @@ def Print : Pass<"ssp-print", "mlir::ModuleOp"> {
   let constructor = "circt::ssp::createPrintPass()";
 }
 
+def Roundtrip : Pass<"ssp-roundtrip", "mlir::ModuleOp"> {
+  let summary = "Roundtrips all SSP instances via the scheduling infrastructure";
+  let constructor = "circt::ssp::createRoundtripPass()";
+  let options = [
+    Option<"checkInputConstraints", "check", "bool", "false",
+           "Check the problem's input constraints.">,
+    Option<"verifySolutionConstraints", "verify", "bool", "false",
+           "Verify the problem's solution constraints.">,
+  ];
+}
+
 def Schedule : Pass<"ssp-schedule", "mlir::ModuleOp"> {
   let summary = "Schedules all SSP instances.";
   let constructor = "circt::ssp::createSchedulePass()";

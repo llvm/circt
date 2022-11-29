@@ -21,6 +21,7 @@ namespace circt {
 namespace ssp {
 
 std::unique_ptr<mlir::Pass> createPrintPass();
+std::unique_ptr<mlir::Pass> createRoundtripPass();
 std::unique_ptr<mlir::Pass> createSchedulePass();
 
 #define GEN_PASS_REGISTRATION
