@@ -201,6 +201,18 @@ def MuxSameCondHigh : Pat<
     (EqualTypes $x, $y), (EqualTypes $x, $z), (KnownWidth $x)
   ]>;
 
+// mux(cond1, t, mux(cond2, t ,f)) -> mux(or(cond1, cond2), t, f)
+def MuxSameTrue : Pat <
+  (MuxPrimOp:$old $cond1, $t, (MuxPrimOp $cond2, $t, $f)),
+  (MoveNameHint $old, (MuxPrimOp (OrPrimOp $cond1, $cond2), $t, $f)),
+  [(EqualTypes $t, $f), (KnownWidth $t)]>;
+
+// mux(cond1, mux(cond2, t, f), f) -> mux(and(cond1, cond2), t, f)
+def MuxSameFalse : Pat <
+  (MuxPrimOp:$old $cond1, (MuxPrimOp $cond2, $t, $f), $f),
+  (MoveNameHint $old, (MuxPrimOp (AndPrimOp $cond1, $cond2), $t, $f)),
+  [(EqualTypes $t, $f), (KnownWidth $f)]>;
+
 // regreset(clock, constant_zero, resetValue) -> reg(clock)
 def RegResetWithZeroReset : Pat<
   (RegResetOp $clock, $reset, $_, $name, $nameKind, $annotations, $inner_sym),
