@@ -34,9 +34,9 @@ struct Node {
       : val(val), fieldId(fieldId), leafVal(leafVal) {}
   Node(const Node &rhs) = default;
   Node &operator=(const Node &rhs) = default;
-
   bool operator==(const Node &rhs) const {
-    return val == rhs.val && fieldId == rhs.fieldId;
+    return val == rhs.val &&
+           (fieldId == rhs.fieldId || fieldId == 0 || rhs.fieldId == 0);
   }
   bool operator!=(const Node &rhs) const { return !(*this == rhs); }
   bool isValid() { return val != nullptr; }
@@ -63,9 +63,9 @@ struct DenseMapInfo<Node> {
     auto *pointer = llvm::DenseMapInfo<void *>::getTombstoneKey();
     return Node(Value::getFromOpaquePointer(pointer), 0);
   }
-
   static unsigned getHashValue(const Node &node) {
-    return mlir::hash_value(node.val);
+    return detail::combineHashValue(mlir::hash_value(node.val),
+                                    llvm::hash_value(node.fieldId));
   }
   static bool isEqual(const Node &lhs, const Node &rhs) { return lhs == rhs; }
 };
