@@ -564,12 +564,15 @@ OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
     if (rhsCst->isZero() && getLhs().getType() == getType())
       return getLhs();
 
+  /// xor(x, 0) -> x
+  if (auto lhsCst = getConstant(operands[0]))
+    if (lhsCst->isZero() && getRhs().getType() == getType())
+      return getRhs();
+
   /// xor(x, x) -> 0
-  if (getLhs() == getRhs()) {
-    auto width = abs(getType().getWidthOrSentinel());
-    if (width != 0) // We cannot create a zero bit APInt.
-      return getIntAttr(getType(), APInt(width, 0));
-  }
+  if (getLhs() == getRhs())
+    return getIntAttr(getType(),
+                      APInt(std::max(getType().getWidthOrSentinel(), 0), 0));
 
   return constFoldFIRRTLBinaryOp(
       *this, operands, BinOpKind::Normal,
