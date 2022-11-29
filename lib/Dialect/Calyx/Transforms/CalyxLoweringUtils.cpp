@@ -369,10 +369,11 @@ ModuleOpConversion::matchAndRewrite(mlir::ModuleOp moduleOp,
 
 FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern(
     MLIRContext *context, LogicalResult &resRef,
+    PatternApplicationState &patternState,
     DenseMap<mlir::func::FuncOp, calyx::ComponentOp> &map,
     calyx::CalyxLoweringState &state)
-    : PartialLoweringPattern(context, resRef), functionMapping(map),
-      calyxLoweringState(state) {}
+    : PartialLoweringPattern(context, resRef, patternState),
+      functionMapping(map), calyxLoweringState(state) {}
 
 LogicalResult
 FuncOpPartialLoweringPattern::partiallyLower(mlir::func::FuncOp funcOp,
@@ -500,8 +501,9 @@ EliminateUnusedCombGroups::matchAndRewrite(calyx::CombGroupOp combGroupOp,
 //===----------------------------------------------------------------------===//
 
 InlineCombGroups::InlineCombGroups(MLIRContext *context, LogicalResult &resRef,
+                                   PatternApplicationState &patternState,
                                    calyx::CalyxLoweringState &cls)
-    : PartialLoweringPattern(context, resRef), cls(cls) {}
+    : PartialLoweringPattern(context, resRef, patternState), cls(cls) {}
 
 LogicalResult
 InlineCombGroups::partiallyLower(calyx::GroupInterface originGroup,

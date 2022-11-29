@@ -1305,29 +1305,32 @@ void SCFToCalyxPass::runOnOperation() {
   /// Calyx component.
   DenseMap<FuncOp, calyx::ComponentOp> funcMap;
   SmallVector<LoweringPattern, 8> loweringPatterns;
+  calyx::PatternApplicationState patternState;
 
   /// Creates a new Calyx component for each FuncOp in the inpurt module.
-  addOncePattern<FuncOpConversion>(loweringPatterns, funcMap, *loweringState);
+  addOncePattern<FuncOpConversion>(loweringPatterns, patternState, funcMap,
+                                   *loweringState);
 
   /// This pass inlines scf.ExecuteRegionOp's by adding control-flow.
   addGreedyPattern<InlineExecuteRegionOpPattern>(loweringPatterns);
 
   /// This pattern converts all index typed values to an i32 integer.
-  addOncePattern<calyx::ConvertIndexTypes>(loweringPatterns, funcMap,
-                                           *loweringState);
+  addOncePattern<calyx::ConvertIndexTypes>(loweringPatterns, patternState,
+                                           funcMap, *loweringState);
 
   /// This pattern creates registers for all basic-block arguments.
-  addOncePattern<calyx::BuildBasicBlockRegs>(loweringPatterns, funcMap,
-                                             *loweringState);
+  addOncePattern<calyx::BuildBasicBlockRegs>(loweringPatterns, patternState,
+                                             funcMap, *loweringState);
 
   /// This pattern creates registers for the function return values.
-  addOncePattern<calyx::BuildReturnRegs>(loweringPatterns, funcMap,
-                                         *loweringState);
+  addOncePattern<calyx::BuildReturnRegs>(loweringPatterns, patternState,
+                                         funcMap, *loweringState);
 
   /// This pattern creates registers for iteration arguments of scf.while
   /// operations. Additionally, creates a group for assigning the initial
   /// value of the iteration argument registers.
-  addOncePattern<BuildWhileGroups>(loweringPatterns, funcMap, *loweringState);
+  addOncePattern<BuildWhileGroups>(loweringPatterns, patternState, funcMap,
+                                   *loweringState);
 
   /// This pattern converts operations within basic blocks to Calyx library
   /// operators. Combinational operations are assigned inside a
@@ -1336,20 +1339,24 @@ void SCFToCalyxPass::runOnOperation() {
   /// originated from. This is used during control schedule generation. By
   /// having a distinct group for each operation, groups are analogous to SSA
   /// values in the source program.
-  addOncePattern<BuildOpGroups>(loweringPatterns, funcMap, *loweringState);
+  addOncePattern<BuildOpGroups>(loweringPatterns, patternState, funcMap,
+                                *loweringState);
 
   /// This pattern traverses the CFG of the program and generates a control
   /// schedule based on the calyx::GroupOp's which were registered for each
   /// basic block in the source function.
-  addOncePattern<BuildControl>(loweringPatterns, funcMap, *loweringState);
+  addOncePattern<BuildControl>(loweringPatterns, patternState, funcMap,
+                               *loweringState);
 
   /// This pass recursively inlines use-def chains of combinational logic (from
   /// non-stateful groups) into groups referenced in the control schedule.
-  addOncePattern<calyx::InlineCombGroups>(loweringPatterns, *loweringState);
+  addOncePattern<calyx::InlineCombGroups>(loweringPatterns, patternState,
+                                          *loweringState);
 
   /// This pattern performs various SSA replacements that must be done
   /// after control generation.
-  addOncePattern<LateSSAReplacement>(loweringPatterns, funcMap, *loweringState);
+  addOncePattern<LateSSAReplacement>(loweringPatterns, patternState, funcMap,
+                                     *loweringState);
 
   /// Eliminate any unused combinational groups. This is done before
   /// calyx::RewriteMemoryAccesses to avoid inferring slice components for
@@ -1358,12 +1365,13 @@ void SCFToCalyxPass::runOnOperation() {
 
   /// This pattern rewrites accesses to memories which are too wide due to
   /// index types being converted to a fixed-width integer type.
-  addOncePattern<calyx::RewriteMemoryAccesses>(loweringPatterns,
+  addOncePattern<calyx::RewriteMemoryAccesses>(loweringPatterns, patternState,
                                                *loweringState);
 
   /// This pattern removes the source FuncOp which has now been converted into
   /// a Calyx component.
-  addOncePattern<CleanupFuncOps>(loweringPatterns, funcMap, *loweringState);
+  addOncePattern<CleanupFuncOps>(loweringPatterns, patternState, funcMap,
+                                 *loweringState);
 
   /// Sequentially apply each lowering pattern.
   for (auto &pat : loweringPatterns) {
