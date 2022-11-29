@@ -49,8 +49,6 @@ def SIntTypes : Constraint<CPred<"$0.isa<SIntType>()">>;
 // Constraint that enforces uint types
 def UIntTypes : Constraint<CPred<"$0.isa<UIntType>()">>;
 
-def SameVal : Constraint<CPred<"$0 == $1">>;
-
 // Constraint that enforces types of known width
 def KnownWidth : Constraint<CPred<[{
   $0.getType().isa<FIRRTLBaseType>() &&
@@ -144,9 +142,9 @@ def AddOfZero : Pat <
 
 // add(a, a) -> a << 2
 def AddOfSelf : Pat <
-  (AddPrimOp:$old $x, $y),
+  (AddPrimOp:$old $x, $x),
   (MoveNameHint $old, (ShlPrimOp $x, (NativeCodeCall<"1">))),
-  [(KnownWidth $x), (SameVal $x, $y)]>;
+  [(KnownWidth $x)]>;
 
 // sub(a, 0) -> a
 def SubOfZero : Pat <
@@ -168,9 +166,9 @@ def SubFromZeroUnsigned : Pat <
 
 //sub(a,a) -> 0
 def SubOfSelf : Pat <
-  (SubPrimOp:$old $x, $y),
+  (SubPrimOp:$old $x, $x),
   (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), $0.getType().cast<IntType>(), getIntZerosAttr($0.getType()))"> $old),
-  [(KnownWidth $x), (SameVal $x, $y)]>;
+  [(KnownWidth $x)]>;
 
 // bits(bits(x, ...), ...) -> bits(x, ...)
 def BitsOfBits : Pat<
