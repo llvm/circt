@@ -21,6 +21,7 @@ namespace circt {
 namespace ssp {
 
 std::unique_ptr<mlir::Pass> createPrintInstancePass();
+std::unique_ptr<mlir::Pass> createSchedulePass();
 
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/SSP/SSPPasses.h.inc"

@@ -20,4 +20,15 @@ def PrintInstance : Pass<"ssp-print-instance", "mlir::ModuleOp"> {
   let constructor = "circt::ssp::createPrintInstancePass()";
 }
 
+def Schedule : Pass<"ssp-schedule", "mlir::ModuleOp"> {
+  let summary = "Schedules all SSP instances.";
+  let constructor = "circt::ssp::createSchedulePass()";
+  let options = [
+    Option<"scheduler", "scheduler", "std::string", "",
+           "Scheduling algorithm to use.">,
+    Option<"schedulerOptions", "options", "std::string", "",
+           "Scheduler-specific options.">
+  ];
+}
+
 #endif // CIRCT_DIALECT_SSP_SSPPASSES_TD
