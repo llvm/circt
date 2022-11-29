@@ -1658,6 +1658,14 @@ firrtl.module @add_cst_prop5(out %out_b: !firrtl.uint<5>) {
   firrtl.connect %out_b, %add2 : !firrtl.uint<5>, !firrtl.uint<5>
 }
 
+// CHECK-LABEL: @add_double
+// CHECK: %[[shl:.+]] = firrtl.shl %in, 1
+// CHECK-NEXT: firrtl.strictconnect %out, %[[shl]]
+firrtl.module @add_double(out %out: !firrtl.uint<5>, in %in: !firrtl.uint<4>) {
+  %add = firrtl.add %in, %in : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
+  firrtl.connect %out, %add : !firrtl.uint<5>, !firrtl.uint<5>
+}
+
 // CHECK-LABEL: @sub_cst_prop1
 // CHECK-NEXT:      %c1_ui9 = firrtl.constant 1 : !firrtl.uint<9>
 // CHECK-NEXT:      firrtl.strictconnect %out_b, %c1_ui9 : !firrtl.uint<9>
@@ -1682,6 +1690,14 @@ firrtl.module @sub_cst_prop2(out %out_b: !firrtl.sint<9>) {
   firrtl.connect %_tmp_a, %c6_ui7 : !firrtl.sint<7>, !firrtl.sint<7>
   %add = firrtl.sub %_tmp_a, %c5_ui8 : (!firrtl.sint<7>, !firrtl.sint<8>) -> !firrtl.sint<9>
   firrtl.connect %out_b, %add : !firrtl.sint<9>, !firrtl.sint<9>
+}
+
+// CHECK-LABEL: @sub_double
+// CHECK: %[[cst:.+]] = firrtl.constant 0 : !firrtl.uint<5>
+// CHECK-NEXT: firrtl.strictconnect %out, %[[cst]]
+firrtl.module @sub_double(out %out: !firrtl.uint<5>, in %in: !firrtl.uint<4>) {
+  %add = firrtl.sub %in, %in : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
+  firrtl.connect %out, %add : !firrtl.uint<5>, !firrtl.uint<5>
 }
 
 // CHECK-LABEL: @mul_cst_prop1

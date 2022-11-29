@@ -374,7 +374,7 @@ OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
 
 void AddPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.insert<patterns::AddOfZero>(context);
+  results.insert<patterns::AddOfZero, patterns::AddOfSelf>(context);
 }
 
 OpFoldResult SubPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -385,7 +385,7 @@ OpFoldResult SubPrimOp::fold(ArrayRef<Attribute> operands) {
 void SubPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results.insert<patterns::SubOfZero, patterns::SubFromZeroSigned,
-                 patterns::SubFromZeroUnsigned>(context);
+                 patterns::SubFromZeroUnsigned, patterns::SubOfSelf>(context);
 }
 
 OpFoldResult MulPrimOp::fold(ArrayRef<Attribute> operands) {
