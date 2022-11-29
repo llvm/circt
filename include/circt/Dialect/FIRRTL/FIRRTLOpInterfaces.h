@@ -37,7 +37,7 @@ struct PortInfo {
   StringAttr name;
   Type type;
   Direction direction;
-  InnerSymAttr sym = {};
+  hw::InnerSymAttr sym = {};
   Location loc = UnknownLoc::get(type.getContext());
   AnnotationSet annotations = AnnotationSet(type.getContext());
 
@@ -85,13 +85,13 @@ struct PortInfo {
            Optional<Location> location = {}, Optional<AnnotationSet> annos = {})
       : name(name), type(type), direction(dir) {
     if (symName)
-      sym = InnerSymAttr::get(symName);
+      sym = hw::InnerSymAttr::get(symName);
     if (location)
       loc = *location;
     if (annos)
       annotations = *annos;
   };
-  PortInfo(StringAttr name, Type type, Direction dir, InnerSymAttr sym,
+  PortInfo(StringAttr name, Type type, Direction dir, hw::InnerSymAttr sym,
            Location loc, AnnotationSet annos)
       : name(name), type(type), direction(dir), sym(sym), loc(loc),
         annotations(annos) {}

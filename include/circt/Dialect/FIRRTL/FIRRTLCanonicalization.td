@@ -140,6 +140,12 @@ def AddOfZero : Pat <
   (PadPrimOp $x, (TypeWidth32 $old)),
   [(ZeroConstantOp $zcst)]>;
 
+// add(a, a) -> a << 2
+def AddOfSelf : Pat <
+  (AddPrimOp:$old $x, $x),
+  (MoveNameHint $old, (ShlPrimOp $x, (NativeCodeCall<"1">))),
+  [(KnownWidth $x)]>;
+
 // sub(a, 0) -> a
 def SubOfZero : Pat <
   (SubPrimOp:$old $x, (ConstantOp:$zcst $cst)),
@@ -157,6 +163,12 @@ def SubFromZeroUnsigned : Pat <
   (SubPrimOp:$old (ConstantOp:$zcst $cst), $x),
   (AsUIntPrimOp (PadPrimOp (MoveNameHint $old, (NegPrimOp $x)), (TypeWidth32 $old))),
   [(ZeroConstantOp $zcst), (UIntType $x)]>;
+
+//sub(a,a) -> 0
+def SubOfSelf : Pat <
+  (SubPrimOp:$old $x, $x),
+  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), $0.getType().cast<IntType>(), getIntZerosAttr($0.getType()))"> $old),
+  [(KnownWidth $x)]>;
 
 // bits(bits(x, ...), ...) -> bits(x, ...)
 def BitsOfBits : Pat<
@@ -186,6 +198,30 @@ def MuxSameCondHigh : Pat<
   (MoveNameHint $old, (MuxPrimOp $cond, $y, $x)), [
     (EqualTypes $x, $y), (EqualTypes $x, $z), (KnownWidth $x)
   ]>;
+
+// mux(cond1, t, mux(cond2, t ,f)) -> mux(or(cond1, cond2), t, f)
+def MuxSameTrue : Pat <
+  (MuxPrimOp:$old $cond1, $t, (MuxPrimOp $cond2, $t, $f)),
+  (MoveNameHint $old, (MuxPrimOp (OrPrimOp $cond1, $cond2), $t, $f)),
+  [(EqualTypes $t, $f), (KnownWidth $t)]>;
+
+// mux(cond1, mux(cond2, t, f), f) -> mux(and(cond1, cond2), t, f)
+def MuxSameFalse : Pat <
+  (MuxPrimOp:$old $cond1, (MuxPrimOp $cond2, $t, $f), $f),
+  (MoveNameHint $old, (MuxPrimOp (AndPrimOp $cond1, $cond2), $t, $f)),
+  [(EqualTypes $t, $f), (KnownWidth $f)]>;
+
+// mux(cond, (Concat a, b), (Concat a, c)) -> Concat(a, mux(cond, b, c))
+def NarrowMuxLHS : Pat <
+  (MuxPrimOp:$old $cond, (CatPrimOp:$lhs $a, $b), (CatPrimOp:$rhs $a, $c)),
+  (MoveNameHint $old, (CatPrimOp $a, (MuxPrimOp $cond, $b, $c))),
+  [(EqualTypes $lhs, $rhs), (KnownWidth $lhs)]>;
+
+// mux(cond, (Concat a, b), (Concat c, b)) -> Concat(mux(cond, a, c), b)
+def NarrowMuxRHS : Pat <
+  (MuxPrimOp:$old $cond, (CatPrimOp:$lhs $a, $b), (CatPrimOp:$rhs $c, $b)),
+  (MoveNameHint $old, (CatPrimOp (MuxPrimOp $cond, $a, $c), $b)),
+  [(EqualTypes $lhs, $rhs), (KnownWidth $lhs)]>;
 
 // regreset(clock, constant_zero, resetValue) -> reg(clock)
 def RegResetWithZeroReset : Pat<

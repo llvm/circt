@@ -150,10 +150,6 @@ static Optional<APSInt> getExtendedConstant(Value operand, Attribute constant,
   if (destWidth < 0)
     return {};
 
-  // InvalidValue inputs simply read as zero.
-  if (auto result = constant.dyn_cast_or_null<InvalidValueAttr>())
-    return APSInt(destWidth, operand.getType().cast<IntType>().isUnsigned());
-
   // Extension signedness follows the operand sign.
   if (IntegerAttr result = constant.dyn_cast_or_null<IntegerAttr>())
     return extOrTruncZeroWidth(result.getAPSInt(), destWidth);
@@ -166,18 +162,9 @@ static Optional<APSInt> getExtendedConstant(Value operand, Attribute constant,
 }
 
 /// Determine the value of a constant operand for the sake of constant folding.
-/// This will map `invalidvalue` to a zero value of the corresopnding type,
-/// which aligns with how the Scala FIRRTL compiler handles invalids in most
-/// cases. For a full discussion of this see the FIRRTL Rationale document.
 static Optional<APSInt> getConstant(Attribute operand) {
   if (!operand)
     return {};
-  if (auto attr = operand.dyn_cast<InvalidValueAttr>()) {
-    if (auto type = attr.getType().dyn_cast<IntType>())
-      return APSInt(type.getWidth().value_or(1), type.isUnsigned());
-    if (attr.getType().isa<ClockType, ResetType, AsyncResetType>())
-      return APSInt(1);
-  }
   if (auto attr = operand.dyn_cast<BoolAttr>())
     return APSInt(APInt(1, attr.getValue()));
   if (auto attr = operand.dyn_cast<IntegerAttr>())
@@ -217,6 +204,10 @@ constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
   auto resultType = op->getResult(0).getType().cast<IntType>();
   if (resultType.getWidthOrSentinel() < 0)
     return {};
+
+  // Any binary non-cmp op on I<0> is 0.
+  if (resultType.getWidthOrSentinel() == 0 && opKind == BinOpKind::Compare)
+    return getIntAttr(resultType, APInt(0, 0, resultType.isSigned()));
 
   // Determine the operand widths. This is either dictated by the operand type,
   // or if that type is an unsized integer, by the actual bits necessary to
@@ -383,7 +374,7 @@ OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
 
 void AddPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.insert<patterns::AddOfZero>(context);
+  results.insert<patterns::AddOfZero, patterns::AddOfSelf>(context);
 }
 
 OpFoldResult SubPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -394,7 +385,7 @@ OpFoldResult SubPrimOp::fold(ArrayRef<Attribute> operands) {
 void SubPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results.insert<patterns::SubOfZero, patterns::SubFromZeroSigned,
-                 patterns::SubFromZeroUnsigned>(context);
+                 patterns::SubFromZeroUnsigned, patterns::SubOfSelf>(context);
 }
 
 OpFoldResult MulPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -967,6 +958,9 @@ OpFoldResult AndRPrimOp::fold(ArrayRef<Attribute> operands) {
   if (!hasKnownWidthIntTypes(*this))
     return {};
 
+  if (getInput().getType().getBitWidthOrSentinel() == 0)
+    return getIntAttr(getType(), APInt(1, 1));
+
   // x == -1
   if (auto cst = getConstant(operands[0]))
     return getIntAttr(getType(), APInt(1, cst->isAllOnes()));
@@ -982,6 +976,9 @@ OpFoldResult AndRPrimOp::fold(ArrayRef<Attribute> operands) {
 OpFoldResult OrRPrimOp::fold(ArrayRef<Attribute> operands) {
   if (!hasKnownWidthIntTypes(*this))
     return {};
+
+  if (getInput().getType().getBitWidthOrSentinel() == 0)
+    return getIntAttr(getType(), APInt(1, 0));
 
   // x != 0
   if (auto cst = getConstant(operands[0]))
@@ -999,6 +996,9 @@ OpFoldResult XorRPrimOp::fold(ArrayRef<Attribute> operands) {
   if (!hasKnownWidthIntTypes(*this))
     return {};
 
+  if (getInput().getType().getBitWidthOrSentinel() == 0)
+    return getIntAttr(getType(), APInt(1, 0));
+
   // popcount(x) & 1
   if (auto cst = getConstant(operands[0]))
     return getIntAttr(getType(), APInt(1, cst->countPopulation() & 1));
@@ -1015,6 +1015,12 @@ OpFoldResult XorRPrimOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult CatPrimOp::fold(ArrayRef<Attribute> operands) {
+
+  if (getLhs().getType().getBitWidthOrSentinel() == 0)
+    return getRhs();
+  if (getRhs().getType().getBitWidthOrSentinel() == 0)
+    return getLhs();
+
   if (!hasKnownWidthIntTypes(*this))
     return {};
 
@@ -1123,6 +1129,10 @@ static void replaceWithBits(Operation *op, Value value, unsigned hiBit,
 
 OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
 
+  // mux : UInt<0> -> 0
+  if (getType().getBitWidthOrSentinel() == 0)
+    return getIntAttr(getType(), APInt(0, 0, getType().isSignedInteger()));
+
   // mux(cond, x, x) -> x
   if (getHigh() == getLow())
     return getHigh();
@@ -1208,8 +1218,9 @@ public:
 
 void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.add<MuxPad, patterns::MuxSameCondLow, patterns::MuxSameCondHigh>(
-      context);
+  results.add<MuxPad, patterns::MuxSameCondLow, patterns::MuxSameCondHigh,
+              patterns::MuxSameTrue, patterns::MuxSameFalse,
+              patterns::NarrowMuxLHS, patterns::NarrowMuxRHS>(context);
 }
 
 OpFoldResult PadPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -1780,12 +1791,7 @@ OpFoldResult SubindexOp::fold(ArrayRef<Attribute> operands) {
   auto attr = operands[0].dyn_cast_or_null<ArrayAttr>();
   if (!attr)
     return {};
-  auto groundCountPerElement = getType().getGroundFields();
-  auto array = attr.getValue().slice(getIndex() * groundCountPerElement,
-                                     groundCountPerElement);
-  if (getType().isa<IntType>())
-    return array[0];
-  return ArrayAttr::get(getContext(), array);
+  return attr[getIndex()];
 }
 
 OpFoldResult SubfieldOp::fold(ArrayRef<Attribute> operands) {
@@ -1793,15 +1799,7 @@ OpFoldResult SubfieldOp::fold(ArrayRef<Attribute> operands) {
   if (!attr)
     return {};
   auto index = getFieldIndex();
-  auto bundleType = getInput().getType().cast<BundleType>();
-  unsigned start = 0;
-  for (unsigned i = 0; i < index; ++i)
-    start += bundleType.getElement(i).type.getGroundFields();
-  auto array = attr.getValue().slice(
-      start, bundleType.getElement(index).type.getGroundFields());
-  if (getType().isa<IntType>())
-    return array[0];
-  return ArrayAttr::get(getContext(), array);
+  return attr[index];
 }
 
 void SubfieldOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -1811,16 +1809,10 @@ void SubfieldOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 static Attribute collectFields(MLIRContext *context,
                                ArrayRef<Attribute> operands) {
-  SmallVector<Attribute> fields;
-  for (auto operand : operands) {
+  for (auto operand : operands)
     if (!operand)
       return {};
-    if (auto array = operand.dyn_cast<ArrayAttr>())
-      llvm::append_range(fields, array.getValue());
-    else
-      fields.push_back(operand);
-  }
-  return ArrayAttr::get(context, fields);
+  return ArrayAttr::get(context, operands);
 }
 
 OpFoldResult BundleCreateOp::fold(ArrayRef<Attribute> operands) {

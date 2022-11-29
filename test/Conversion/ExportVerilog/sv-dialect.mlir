@@ -1316,6 +1316,50 @@ hw.module @XMR_src(%a : i23) -> (aa: i3) {
   hw.output %r : i3
 }
 
+// Test that XMRRefOps are emitted correctly in instances and in binds.  XMRs
+// that include verbatim paths and those that do not are both tested.
+// Additionally, test that XMRs use properly legalized Verilog names.  The XMR
+// target is "new" and the root of the reference is "wait_order".
+
+hw.globalRef @ref [
+  #hw.innerNameRef<@wait_order::@bar>,
+  #hw.innerNameRef<@XMRRef_Bar::@new>
+]
+hw.globalRef @ref2 [
+  #hw.innerNameRef<@wait_order::@baz>
+]
+hw.module @XMRRef_Bar() {
+  %new = sv.wire sym @new {
+    circt.globalRef = [#hw.globalNameRef<@ref>]
+  } : !hw.inout<i2>
+}
+hw.module.extern @XMRRef_Baz(%a: i2, %b: i1)
+hw.module.extern @XMRRef_Qux(%a: i2, %b: i1)
+// CHECK-LABEL: module wait_order
+hw.module @wait_order() {
+  hw.instance "bar" sym @bar @XMRRef_Bar() -> () {
+    circt.globalRef = [#hw.globalNameRef<@ref>]
+  }
+  %xmr = sv.xmr.ref @ref : !hw.inout<i2>
+  %xmrRead = sv.read_inout %xmr : !hw.inout<i2>
+  %xmr2 = sv.xmr.ref @ref2 ".x.y.z[42]" : !hw.inout<i1>
+  %xmr2Read = sv.read_inout %xmr2 : !hw.inout<i1>
+  // CHECK:      /* This instance is elsewhere emitted as a bind statement.
+  // CHECK-NEXT: XMRRef_Baz baz (
+  // CHECK-NEXT:   .a (wait_order_0.bar.new_0),
+  // CHECK-NEXT:   .b (wait_order_0.baz.x.y.z[42])
+  // CHECK-NEXT: );
+  // CHECK-NEXT: */
+  hw.instance "baz" sym @baz @XMRRef_Baz(a: %xmrRead: i2, b: %xmr2Read: i1) -> () {
+    doNotPrint = true,
+    circt.globalRef = [#hw.globalNameRef<@ref2>]
+  }
+  // CHECK-NEXT: XMRRef_Qux qux (
+  // CHECK-NEXT:   .a (wait_order_0.bar.new_0),
+  // CHECK-NEXT:   .b (wait_order_0.baz.x.y.z[42])
+  // CHECK-NEXT: );
+  hw.instance "qux" sym @qux @XMRRef_Qux(a: %xmrRead: i2, b: %xmr2Read: i1) -> ()
+}
 
 hw.module.extern @MyExtModule(%in: i8)
 
@@ -1664,6 +1708,13 @@ hw.module @bindInMod() {
 // CHECK-NEXT:    ._j       (j),
 // CHECK-NEXT:    ._k       (_signed__k)
 // CHECK: endmodule
+
+sv.bind <@wait_order::@baz>
+
+// CHECK-LABEL: bind wait_order_0 XMRRef_Baz baz (
+// CHECK-NEXT:    .a (wait_order_0.bar.new_0)
+// CHECK-NEXT:    .b (wait_order_0.baz.x.y.z[42])
+// CHECK-NEXT:  );
 
 sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst2>
 

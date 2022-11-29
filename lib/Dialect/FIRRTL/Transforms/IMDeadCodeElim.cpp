@@ -475,15 +475,35 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
 }
 
 void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
-  // Public modules cannot be erased.
-  if (module.isPublic())
+  // If the module is not empty, just skip.
+  if (!module.getBodyBlock()->empty())
     return;
 
-  // If the module doesn't have arguments, operations or annotations, we
-  // consider it to be dead.
-  if (!module.getBodyBlock()->args_empty() || !module.getBodyBlock()->empty() ||
-      !module.getAnnotations().empty())
+  // We cannot delete public modules so generate a warning.
+  if (module.isPublic()) {
+    mlir::emitWarning(module.getLoc())
+        << "module `" << module.getName()
+        << "` is empty but cannot be removed because the module is public";
     return;
+  }
+
+  if (!module.getAnnotations().empty()) {
+    module.emitWarning() << "module `" << module.getName()
+                         << "` is empty but cannot be removed "
+                            "because the module has annotations "
+                         << module.getAnnotations();
+    return;
+  }
+
+  if (!module.getBodyBlock()->args_empty()) {
+    auto diag = module.emitWarning()
+                << "module `" << module.getName()
+                << "` is empty but cannot be removed because the "
+                   "module has ports ";
+    llvm::interleaveComma(module.getPortNames(), diag);
+    diag << " are referenced by name or dontTouched";
+    return;
+  }
 
   // Ok, the module is empty. Delete instances unless they have symbols.
   LLVM_DEBUG(llvm::dbgs() << "Erase " << module.getName() << "\n");
@@ -491,11 +511,11 @@ void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
   InstanceGraphNode *instanceGraphNode =
       instanceGraph->lookup(module.moduleNameAttr());
 
-  bool existsInstanceWithSymbol = false;
+  SmallVector<Location> instancesWithSymbols;
   for (auto *use : llvm::make_early_inc_range(instanceGraphNode->uses())) {
     auto instance = cast<InstanceOp>(use->getInstance());
     if (instance.getInnerSym()) {
-      existsInstanceWithSymbol = true;
+      instancesWithSymbols.push_back(instance.getLoc());
       continue;
     }
     use->erase();
@@ -503,8 +523,15 @@ void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
   }
 
   // If there is an instance with a symbol, we don't delete the module itself.
-  if (existsInstanceWithSymbol)
+  if (!instancesWithSymbols.empty()) {
+    auto diag = module.emitWarning()
+                << "module  `" << module.getName()
+                << "` is empty but cannot be removed because an instance is "
+                   "referenced by name";
+    diag.attachNote(FusedLoc::get(&getContext(), instancesWithSymbols))
+        << "these are instances with symbols";
     return;
+  }
 
   instanceGraph->erase(instanceGraphNode);
   module.erase();

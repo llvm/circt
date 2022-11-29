@@ -2578,7 +2578,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   auto result = builder.create<MemOp>(
       resultTypes, readLatency, writeLatency, depth, ruw,
       builder.getArrayAttr(resultNames), id, NameKindEnum::InterestingName,
-      annotations, builder.getArrayAttr(resultAnnotations), InnerSymAttr(),
+      annotations, builder.getArrayAttr(resultAnnotations), hw::InnerSymAttr(),
       IntegerAttr());
 
   UnbundledValueEntry unbundledValueEntry;
@@ -2661,7 +2661,7 @@ ParseResult FIRStmtParser::parseWire() {
 
   auto result = builder.create<WireOp>(
       type, id, NameKindEnum::InterestingName, annotations,
-      sym ? InnerSymAttr::get(sym) : InnerSymAttr());
+      sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 

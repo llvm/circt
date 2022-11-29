@@ -516,8 +516,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   /// nextNodeOnPath. Only the node representing the final XMR defining op has
   /// no nextNodeOnPath, which denotes a leaf node on the path.
   using nextNodeOnPath = Optional<size_t>;
-  using innerRefToVal = Attribute;
-  using node = std::pair<innerRefToVal, nextNodeOnPath>;
+  using node = std::pair<Attribute, nextNodeOnPath>;
   SmallVector<node> refSendPathList;
 
   /// llvm::EquivalenceClasses wants comparable elements. This comparator uses

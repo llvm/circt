@@ -30,7 +30,11 @@ def NamedWire(type_or_value: Union[PyCDEType, PyCDEValue], name: str):
 
     def __init__(self):
       self.assigned_value = None
-      self.wire_op = sv.WireOp(hw.InOutType.get(type), name)
+      # TODO: We assume here that names are unique within a module, which isn't
+      # necessarily the case. We may have to introduce a module-scope list of
+      # inner_symbols purely for the purpose of disallowing the SV
+      # canonicalizers to eliminate wires!
+      self.wire_op = sv.WireOp(hw.InOutType.get(type), name, inner_sym=name)
       read_val = sv.ReadInOutOp(type, self.wire_op)
       super().__init__(Value(read_val), type)
 

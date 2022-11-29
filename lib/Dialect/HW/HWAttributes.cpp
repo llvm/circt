@@ -239,6 +239,100 @@ void InnerRefAttr::print(AsmPrinter &p) const {
 }
 
 //===----------------------------------------------------------------------===//
+// InnerSymAttr
+//===----------------------------------------------------------------------===//
+
+Attribute InnerSymPropertiesAttr::parse(AsmParser &parser, Type type) {
+  StringAttr name;
+  NamedAttrList dummyList;
+  int64_t fieldId = 0;
+  StringRef visibility;
+  if (parser.parseLess() || parser.parseSymbolName(name, "name", dummyList) ||
+      parser.parseComma() || parser.parseInteger(fieldId) ||
+      parser.parseComma() ||
+      parser.parseOptionalKeyword(&visibility,
+                                  {"public", "private", "nested"}) ||
+      parser.parseGreater())
+    return Attribute();
+  StringAttr visibilityAttr = parser.getBuilder().getStringAttr(visibility);
+
+  return InnerSymPropertiesAttr::get(parser.getContext(), name, fieldId,
+                                     visibilityAttr);
+}
+
+void InnerSymPropertiesAttr::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << "<@" << getName().getValue() << "," << getFieldID() << ","
+             << getSymVisibility().getValue() << ">";
+}
+
+StringAttr InnerSymAttr::getSymIfExists(unsigned fieldId) const {
+  const auto *it =
+      llvm::find_if(getImpl()->props, [&](const InnerSymPropertiesAttr &p) {
+        return p.getFieldID() == fieldId;
+      });
+  if (it != getProps().end())
+    return it->getName();
+  return {};
+}
+
+LogicalResult InnerSymAttr::walkSymbols(
+    llvm::function_ref<LogicalResult(StringAttr)> callback) const {
+  for (auto p : getImpl()->props)
+    if (callback(p.getName()).failed())
+      return failure();
+  return success();
+}
+
+Attribute InnerSymAttr::parse(AsmParser &parser, Type type) {
+  StringAttr sym;
+  NamedAttrList dummyList;
+  SmallVector<InnerSymPropertiesAttr, 4> names;
+  if (!parser.parseOptionalSymbolName(sym, "dummy", dummyList))
+    names.push_back(InnerSymPropertiesAttr::get(sym));
+  else if (parser.parseCommaSeparatedList(
+               OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
+                 InnerSymPropertiesAttr prop;
+                 if (parser.parseCustomAttributeWithFallback(
+                         prop, mlir::Type{}, "dummy", dummyList))
+                   return failure();
+
+                 names.push_back(prop);
+
+                 return success();
+               }))
+    return Attribute();
+
+  std::sort(names.begin(), names.end(),
+            [&](InnerSymPropertiesAttr a, InnerSymPropertiesAttr b) {
+              return a.getFieldID() < b.getFieldID();
+            });
+
+  return InnerSymAttr::get(parser.getContext(), names);
+}
+
+void InnerSymAttr::print(AsmPrinter &odsPrinter) const {
+
+  auto props = getProps();
+  if (props.size() == 1 &&
+      props[0].getSymVisibility().getValue().equals("public") &&
+      props[0].getFieldID() == 0) {
+    odsPrinter << "@" << props[0].getName().getValue();
+    return;
+  }
+  auto names = props.vec();
+
+  std::sort(names.begin(), names.end(),
+            [&](InnerSymPropertiesAttr a, InnerSymPropertiesAttr b) {
+              return a.getFieldID() < b.getFieldID();
+            });
+  odsPrinter << "[";
+  llvm::interleaveComma(names, odsPrinter, [&](InnerSymPropertiesAttr attr) {
+    attr.print(odsPrinter);
+  });
+  odsPrinter << "]";
+}
+
+//===----------------------------------------------------------------------===//
 // ParamDeclAttr
 //===----------------------------------------------------------------------===//
 

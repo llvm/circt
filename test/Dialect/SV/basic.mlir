@@ -364,3 +364,30 @@ hw.module @ordered_region(%a: i1) {
     }
   }
 }
+
+// CHECK-LABEL: hw.module @XMRRefOp
+hw.globalRef @ref [
+  #hw.innerNameRef<@XMRRefOp::@foo>,
+  #hw.innerNameRef<@XMRRefFoo::@a>
+]
+hw.globalRef @ref2 [
+  #hw.innerNameRef<@XMRRefOp::@bar>
+]
+hw.module.extern @XMRRefBar()
+hw.module @XMRRefFoo() {
+  %a = sv.wire sym @a {
+    circt.globalRef = [#hw.globalNameRef<@ref>]
+  } : !hw.inout<i2>
+}
+hw.module @XMRRefOp() {
+  hw.instance "foo" sym @foo @XMRRefFoo() -> () {
+    circt.globalRef = [#hw.globalNameRef<@ref>]
+  }
+  hw.instance "bar" sym @bar @XMRRefBar() -> () {
+    circt.globalRef = [#hw.globalNameRef<@ref2>]
+  }
+  // CHECK: %0 = sv.xmr.ref @ref : !hw.inout<i2>
+  %0 = sv.xmr.ref @ref : !hw.inout<i2>
+  // CHECK: %1 = sv.xmr.ref @ref2 ".x.y.z[42]" : !hw.inout<i8>
+  %1 = sv.xmr.ref @ref2 ".x.y.z[42]" : !hw.inout<i8>
+}

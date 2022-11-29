@@ -773,9 +773,9 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
 
     // Print the optional port symbol.
     if (!portSyms.empty()) {
-      if (!portSyms[i].cast<InnerSymAttr>().empty()) {
+      if (!portSyms[i].cast<hw::InnerSymAttr>().empty()) {
         p << " sym ";
-        portSyms[i].cast<InnerSymAttr>().print(p);
+        portSyms[i].cast<hw::InnerSymAttr>().print(p);
       }
     }
 
@@ -845,7 +845,7 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
       entryArgs.back().type = portType;
 
     // Parse the optional port symbol.
-    InnerSymAttr innerSymAttr;
+    hw::InnerSymAttr innerSymAttr;
     if (succeeded(parser.parseOptionalKeyword("sym"))) {
       NamedAttrList dummyAttrs;
       if (parser.parseCustomAttributeWithFallback(
@@ -1158,7 +1158,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr innerSym) {
   build(builder, result, resultTypes, moduleName, name, nameKind,
         portDirections, portNames, annotations, portAnnotations, lowerToBind,
-        innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
+        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
@@ -1168,7 +1168,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        ArrayRef<Attribute> portNames,
                        ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind,
-                       InnerSymAttr innerSym) {
+                       hw::InnerSymAttr innerSym) {
   result.addTypes(resultTypes);
   result.addAttribute("moduleName",
                       SymbolRefAttr::get(builder.getContext(), moduleName));
@@ -1227,7 +1227,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       module.getPortDirectionsAttr(), module.getPortNamesAttr(),
       builder.getArrayAttr(annotations), portAnnotationsAttr,
       lowerToBind ? builder.getUnitAttr() : UnitAttr(),
-      innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
+      innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
 }
 
 /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
@@ -1480,7 +1480,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   auto &resultAttrs = result.attributes;
 
   std::string name;
-  InnerSymAttr innerSymAttr;
+  hw::InnerSymAttr innerSymAttr;
   FlatSymbolRefAttr moduleName;
   SmallVector<OpAsmParser::Argument> entryArgs;
   SmallVector<Direction, 4> portDirections;
@@ -1552,7 +1552,8 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
                   uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
                   ArrayRef<Attribute> portNames, StringRef name,
                   NameKindEnum nameKind, ArrayRef<Attribute> annotations,
-                  ArrayRef<Attribute> portAnnotations, InnerSymAttr innerSym) {
+                  ArrayRef<Attribute> portAnnotations,
+                  hw::InnerSymAttr innerSym) {
   result.addAttribute(
       "readLatency",
       builder.getIntegerAttr(builder.getIntegerType(32), readLatency));
@@ -1591,7 +1592,7 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
                   ArrayRef<Attribute> portAnnotations, StringAttr innerSym) {
   build(builder, result, resultTypes, readLatency, writeLatency, depth, ruw,
         portNames, name, nameKind, annotations, portAnnotations,
-        innerSym ? InnerSymAttr::get(innerSym) : InnerSymAttr());
+        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
 }
 
 ArrayAttr MemOp::getPortAnnotation(unsigned portIdx) {
@@ -2408,11 +2409,58 @@ void SpecialConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), specialName.str());
 }
 
+// Checks that an array attr representing an aggregate constant has the correct
+// shape.  This recurses on the type.
+static bool checkAggConstant(Operation *op, Attribute attr,
+                             FIRRTLBaseType type) {
+  if (type.isGround()) {
+    if (!attr.isa<IntegerAttr>()) {
+      op->emitOpError("Ground type is not an integer attribute");
+      return false;
+    }
+    return true;
+  }
+  auto attrlist = attr.dyn_cast<ArrayAttr>();
+  if (!attrlist) {
+    op->emitOpError("expected array attribute for aggregate constant");
+    return false;
+  }
+  if (auto array = type.dyn_cast<FVectorType>()) {
+    if (array.getNumElements() != attrlist.size()) {
+      op->emitOpError("array attribute (")
+          << attrlist.size() << ") has wrong size for vector constant ("
+          << array.getNumElements() << ")";
+      return false;
+    }
+    return llvm::all_of(attrlist, [&array, op](Attribute attr) {
+      return checkAggConstant(op, attr, array.getElementType());
+    });
+  }
+  if (auto bundle = type.dyn_cast<BundleType>()) {
+    if (bundle.getNumElements() != attrlist.size()) {
+      op->emitOpError("array attribute (")
+          << attrlist.size() << ") has wrong size for bundle constant ("
+          << bundle.getNumElements() << ")";
+      return false;
+    }
+    for (size_t i = 0; i < bundle.getNumElements(); ++i) {
+      if (bundle.getElement(i).isFlip) {
+        op->emitOpError("Cannot have constant bundle type with flip");
+        return false;
+      }
+      if (!checkAggConstant(op, attrlist[i], bundle.getElement(i).type))
+        return false;
+    }
+    return true;
+  }
+  op->emitOpError("Unknown aggregate type");
+  return false;
+}
+
 LogicalResult AggregateConstantOp::verify() {
-  if (getResult().getType().getGroundFields() != getFields().size())
-    return emitOpError("number of fields doesn't match type");
-  // TODO check sizes of integers.  Especially check clock and reset are 0 or 1.
-  return success();
+  if (checkAggConstant(getOperation(), getFields(), getType()))
+    return success();
+  return failure();
 }
 
 LogicalResult BundleCreateOp::verify() {

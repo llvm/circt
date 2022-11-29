@@ -627,4 +627,18 @@ def ResolveTraces : Pass<"firrtl-resolve-traces", "firrtl::CircuitOp"> {
   let dependentDialects = ["sv::SVDialect"];
 }
 
+def InnerSymbolDCE : Pass<"firrtl-inner-symbol-dce", "mlir::ModuleOp"> {
+  let summary = "Eliminate dead inner symbols";
+  let description = [{
+    This pass deletes all inner symbols which have no uses. This is necessary to
+    unblock optimizations and removal of the operations which have these unused
+    inner symbols.
+  }];
+  let constructor = "circt::firrtl::createInnerSymbolDCEPass()";
+  let statistics = [
+    Statistic<"numSymbolsFound", "num-sym-found", "Number of symbols found">,
+    Statistic<"numSymbolsRemoved", "num-sym-removed", "Number of symbols removed">
+  ];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

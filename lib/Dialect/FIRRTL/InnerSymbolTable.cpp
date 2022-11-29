@@ -73,7 +73,7 @@ LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
     return callback(name, target);
   };
 
-  auto walkSyms = [&](InnerSymAttr symAttr,
+  auto walkSyms = [&](hw::InnerSymAttr symAttr,
                       const InnerSymTarget &baseTarget) -> LogicalResult {
     assert(baseTarget.getField() == 0);
     for (auto symProp : symAttr) {
@@ -97,7 +97,7 @@ LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
            // TODO: Add fields per port, once they work that way (use addSyms)
            if (auto mod = dyn_cast<FModuleLike>(curOp)) {
              for (size_t i = 0, e = mod.getNumPorts(); i < e; ++i)
-               if (InnerSymAttr symAttr = mod.getPortSymbolAttr(i))
+               if (auto symAttr = mod.getPortSymbolAttr(i))
                  if (failed(walkSyms(symAttr, InnerSymTarget(i, curOp))))
                    return WalkResult::interrupt();
            }
@@ -140,7 +140,7 @@ StringAttr InnerSymbolTable::getInnerSymbol(const InnerSymTarget &target) {
   assert(target);
 
   // Obtain the base InnerSymAttr for the specified target.
-  auto getBase = [](auto &target) -> InnerSymAttr {
+  auto getBase = [](auto &target) -> hw::InnerSymAttr {
     if (target.isPort()) {
       if (auto mod = dyn_cast<FModuleLike>(target.getOp())) {
         assert(target.getPort() < mod.getNumPorts());

@@ -292,7 +292,7 @@ static inline bool isExpressionAlwaysInline(Operation *op) {
 
   // XMRs can't be spilled if they are on the lhs.  Conservatively never spill
   // them.
-  if (isa<sv::XMROp>(op))
+  if (isa<sv::XMROp, sv::XMRRefOp>(op))
     return true;
 
   if (isa<sv::SampledOp>(op))

@@ -169,19 +169,19 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     }]>,
 
     InterfaceMethod<"Get a port symbol attribute",
-    "InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
+    "circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
       auto syms = $_op.getPortSymbols();
       if (syms.empty() ||
-          syms[portIndex].template cast<InnerSymAttr>().empty())
-        return InnerSymAttr();
-      return syms[portIndex].template cast<InnerSymAttr>();
+          syms[portIndex].template cast<hw::InnerSymAttr>().empty())
+        return hw::InnerSymAttr();
+      return syms[portIndex].template cast<hw::InnerSymAttr>();
     }]>,
 
     InterfaceMethod<"Check if port has symbol attribute",
     "bool", "hasPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
       auto syms = $_op.getPortSymbols();
         return  (!syms.empty() &&
-        !syms[portIndex].template cast<InnerSymAttr>().empty());
+        !syms[portIndex].template cast<hw::InnerSymAttr>().empty());
     }]>,
 
     // Setters
@@ -202,10 +202,10 @@ def FModuleLike : OpInterface<"FModuleLike"> {
                                      $_op.getPortSymbols().end());
       if (symbols.empty()) {
         symbols.resize($_op.getNumPorts(),
-                      InnerSymAttr::get($_op.getContext()));
+                      hw::InnerSymAttr::get($_op.getContext()));
       }
       assert(symbols.size() == $_op.getNumPorts());
-      symbols[portIndex] = InnerSymAttr::get(symbol);
+      symbols[portIndex] = hw::InnerSymAttr::get(symbol);
 
       FModuleLike::fixupPortSymsArray(symbols, $_op.getContext());
       assert(symbols.empty() || symbols.size() == $_op.getNumPorts());
@@ -274,12 +274,12 @@ def FModuleLike : OpInterface<"FModuleLike"> {
       // The lack of *any* port symbol is represented by an empty `portSyms`
       // array as a shorthand.
       if (llvm::none_of(syms, [&](auto &sym) {
-            return sym && !cast<InnerSymAttr>(sym).empty();
+            return sym && !cast<hw::InnerSymAttr>(sym).empty();
           })) {
         syms.clear();
         return;
       }
-      auto empty = InnerSymAttr::get(context);
+      auto empty = hw::InnerSymAttr::get(context);
       for (auto &sym : syms)
         if (!sym)
           sym = empty;
@@ -351,7 +351,7 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
       "::mlir::StringAttr", "getInnerNameAttr", (ins), [{}],
       /*defaultImplementation=*/[{
         if (auto attr =
-              this->getOperation()->template getAttrOfType<InnerSymAttr>(
+              this->getOperation()->template getAttrOfType<hw::InnerSymAttr>(
               circt::firrtl::InnerSymbolTable::getInnerSymbolAttrName()))
           return attr.getSymName();
         return {};
@@ -368,7 +368,7 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
       "void", "setInnerSymbol", (ins "::mlir::StringAttr":$name), [{}],
       /*defaultImplementation=*/[{
         this->getOperation()->setAttr(
-            InnerSymbolTable::getInnerSymbolAttrName(), InnerSymAttr::get(name));
+            InnerSymbolTable::getInnerSymbolAttrName(), hw::InnerSymAttr::get(name));
       }]
     >,
     InterfaceMethod<"Returns an InnerRef to this operation.  Must have inner symbol.",
@@ -382,9 +382,9 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
       }]
     >,
     InterfaceMethod<"Returns the InnerSymAttr.",
-      "::circt::firrtl::InnerSymAttr", "getInnerSymAttr", (ins), [{}],
+      "::circt::hw::InnerSymAttr", "getInnerSymAttr", (ins), [{}],
       /*defaultImplementation=*/[{
-        return this->getOperation()->template getAttrOfType<InnerSymAttr>(
+        return this->getOperation()->template getAttrOfType<hw::InnerSymAttr>(
               circt::firrtl::InnerSymbolTable::getInnerSymbolAttrName());
       }]
     >,
