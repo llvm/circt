@@ -15,9 +15,9 @@
 
 include "mlir/Pass/PassBase.td"
 
-def PrintInstance : Pass<"ssp-print-instance", "mlir::ModuleOp"> {
+def Print : Pass<"ssp-print", "mlir::ModuleOp"> {
   let summary = "Prints all SSP instances as DOT graphs.";
-  let constructor = "circt::ssp::createPrintInstancePass()";
+  let constructor = "circt::ssp::createPrintPass()";
 }
 
 def Schedule : Pass<"ssp-schedule", "mlir::ModuleOp"> {

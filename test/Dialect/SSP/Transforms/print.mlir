@@ -1,4 +1,4 @@
-// RUN: circt-opt -ssp-print-instance %s 2>&1 | FileCheck %s
+// RUN: circt-opt -ssp-print %s 2>&1 | FileCheck %s
 
 // CHECK: digraph G {
 ssp.instance @Foo of "Problem" {

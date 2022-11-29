@@ -1,5 +1,5 @@
 add_circt_dialect_library(CIRCTSSPTransforms
-  PrintInstance.cpp
+  Print.cpp
   Schedule.cpp
 
   DEPENDS
