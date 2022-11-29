@@ -35,7 +35,7 @@ config.substitutions.append(('%PATH%', config.environment['PATH']))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
 config.substitutions.append(('%shlibdir', config.circt_shlib_dir))
 config.substitutions.append(('%INC%', config.circt_include_dir))
-config.substitutions.append(('%PYTHON%', config.python_executable))
+config.substitutions.append(('%PYTHON%', f'"{config.python_executable}"'))
 config.substitutions.append(('%CIRCT_SOURCE%', config.circt_src_root))
 
 llvm_config.with_system_environment(['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
