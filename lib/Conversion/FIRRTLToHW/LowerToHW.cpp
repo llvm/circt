@@ -2949,7 +2949,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
       circuitState.getInstanceGraph()->getReferencedModule(oldInstance);
   auto newModule = circuitState.getNewModule(oldModule);
   if (!newModule) {
-    oldInstance->emitOpError("could not find module referenced by instance");
+    oldInstance->emitOpError("could not find module [") << oldInstance.getModuleName() << "]referenced by instance";
     return failure();
   }
 
