@@ -411,3 +411,23 @@ firrtl.circuit "Foo"  {
     // CHECK: firrtl.strictconnect %out, %bar_b
   }
 }
+
+// -----
+
+firrtl.circuit "Issue4369"  {
+  // CHECK-LABEL: firrtl.module private @Bar
+  firrtl.module private @Bar(in %in: !firrtl.vector<uint<1>, 1>, out %out: !firrtl.uint<1>) {
+    %0 = firrtl.subindex %in[0] : !firrtl.vector<uint<1>, 1>
+    %a = firrtl.wire   : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %a, %0
+    // CHECK-NEXT: firrtl.strictconnect %out, %a
+    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+    firrtl.strictconnect %out, %a : !firrtl.uint<1>
+  }
+  firrtl.module @Issue4369(in %a_0: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    %bar_in, %bar_out = firrtl.instance bar  @Bar(in in: !firrtl.vector<uint<1>, 1>, out out: !firrtl.uint<1>)
+    %0 = firrtl.subindex %bar_in[0] : !firrtl.vector<uint<1>, 1>
+    firrtl.strictconnect %0, %a_0 : !firrtl.uint<1>
+    firrtl.strictconnect %b, %bar_out : !firrtl.uint<1>
+  }
+}
