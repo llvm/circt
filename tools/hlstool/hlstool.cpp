@@ -210,6 +210,8 @@ static void loadDHLSPipeline(OpPassManager &pm) {
       /*sourceConstants=*/false,
       /*disableTaskPipelining=*/dynParallelism !=
           DynamicParallelismPipelining));
+  pm.addPass(circt::handshake::createHandshakeLowerExtmemToHWPass(withESI));
+
   if (dynParallelism == DynamicParallelismLocking) {
     pm.nest<handshake::FuncOp>().addPass(
         circt::handshake::createHandshakeLockFunctionsPass());
@@ -362,7 +364,6 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
   } else {
     // HW path.
     addIRLevel(HLSFlowDynamicIRLevel::Firrtl, [&]() {
-      pm.addPass(circt::handshake::createHandshakeLowerExtmemToHWPass(withESI));
       pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
       pm.addPass(circt::createHandshakeToHWPass());
       pm.addPass(createSimpleCanonicalizerPass());
