@@ -1021,7 +1021,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
                 }
               }
               auto lastInst = xmrSrcTarget->instances.pop_back_val();
-              builder.setInsertionPoint(lastInst);
+              builder.setInsertionPointAfter(lastInst);
               return getValueByFieldID(builder, lastInst.getResult(portNo),
                                        xmrSrcTarget->fieldIdx);
             })
