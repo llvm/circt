@@ -523,3 +523,26 @@ firrtl.circuit "Top" {
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
   }
 }
+
+// -----
+
+// Test correct lowering of 0-width ports
+firrtl.circuit "Top"  {
+  firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<0>, out %_a: !firrtl.ref<uint<0>>) {
+  // CHECK-LABEL: firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<0>)
+    %0 = firrtl.ref.send %pa : !firrtl.uint<0>
+    firrtl.strictconnect %_a, %0 : !firrtl.ref<uint<0>>
+  }
+  firrtl.module @Bar(out %_a: !firrtl.ref<uint<0>>) {
+    %bar_pa, %bar__a = firrtl.instance bar sym @barXMR  @XmrSrcMod(in pa: !firrtl.uint<0>, out _a: !firrtl.ref<uint<0>>)
+    firrtl.strictconnect %_a, %bar__a : !firrtl.ref<uint<0>>
+  }
+  firrtl.module @Top() {
+    %bar__a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.ref<uint<0>>)
+    %a = firrtl.wire   : !firrtl.uint<0>
+    %0 = firrtl.ref.resolve %bar__a : !firrtl.ref<uint<0>>
+    firrtl.strictconnect %a, %0 : !firrtl.uint<0>
+    // CHECK: %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
+    // CHECK: firrtl.strictconnect %a, %c0_ui0 : !firrtl.uint<0>
+  }
+}
