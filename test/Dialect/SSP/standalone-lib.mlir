@@ -1,5 +1,5 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
-// RUN: circt-opt %s -test-ssp-roundtrip | circt-opt | FileCheck %s --check-prefix=INFRA
+// RUN: circt-opt %s -ssp-roundtrip | circt-opt | FileCheck %s --check-prefix=INFRA
 
 // 1) tests the plain parser/printer roundtrip.
 // CHECK: ssp.library @Lib {

@@ -1,5 +1,5 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
-// RUN: circt-opt %s -test-ssp-roundtrip | circt-opt | FileCheck %s
+// RUN: circt-opt %s -ssp-roundtrip | circt-opt | FileCheck %s
 
 // 1) tests the plain parser/printer roundtrip.
 // 2) roundtrips via the scheduling infra (i.e. populates a `Problem` instance and reconstructs the SSP IR from it.)

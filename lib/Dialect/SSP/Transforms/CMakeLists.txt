@@ -1,5 +1,6 @@
 add_circt_dialect_library(CIRCTSSPTransforms
   Print.cpp
+  Roundtrip.cpp
   Schedule.cpp
 
   DEPENDS

@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/SSP/Utilities.h"
 #include "circt/Scheduling/Algorithms.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -21,7 +20,6 @@
 using namespace mlir;
 using namespace circt;
 using namespace circt::scheduling;
-using namespace circt::ssp;
 
 //===----------------------------------------------------------------------===//
 // Construction helper methods
@@ -561,59 +559,6 @@ void TestSimplexSchedulerPass::runOnOperation() {
 }
 
 //===----------------------------------------------------------------------===//
-// Import/export via SSP dialect
-//===----------------------------------------------------------------------===//
-
-namespace {
-struct TestSSPRoundtripPass
-    : public PassWrapper<TestSSPRoundtripPass, OperationPass<ModuleOp>> {
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestSSPRoundtripPass)
-
-  TestSSPRoundtripPass() = default;
-  TestSSPRoundtripPass(const TestSSPRoundtripPass &) {}
-  void runOnOperation() override;
-  StringRef getArgument() const override { return "test-ssp-roundtrip"; }
-  StringRef getDescription() const override {
-    return "Roundtrip SSP -> circt::scheduling -> SSP";
-  }
-};
-} // anonymous namespace
-
-template <typename ProblemT>
-void roundtrip(InstanceOp instOp) {
-  auto prob = loadProblem<ProblemT>(instOp);
-
-  OpBuilder builder(instOp);
-  saveProblem<ProblemT>(prob, builder);
-}
-
-void TestSSPRoundtripPass::runOnOperation() {
-  ModuleOp module = getOperation();
-  SmallVector<InstanceOp> instanceOps;
-  module.walk([&](ssp::InstanceOp op) { instanceOps.push_back(op); });
-
-  for (auto op : instanceOps) {
-    StringRef probName = op.getProblemName();
-    if (probName.equals("Problem"))
-      roundtrip<Problem>(op);
-    else if (probName.equals("CyclicProblem"))
-      roundtrip<CyclicProblem>(op);
-    else if (probName.equals("ChainingProblem"))
-      roundtrip<ChainingProblem>(op);
-    else if (probName.equals("SharedOperatorsProblem"))
-      roundtrip<SharedOperatorsProblem>(op);
-    else if (probName.equals("ModuloProblem"))
-      roundtrip<ModuloProblem>(op);
-    else {
-      op->emitError("Unhandled problem class: ") << probName;
-      return signalPassFailure();
-    }
-  }
-
-  llvm::for_each(instanceOps, [](InstanceOp op) { op.erase(); });
-}
-
-//===----------------------------------------------------------------------===//
 // LPScheduler
 //===----------------------------------------------------------------------===//
 
@@ -757,9 +702,6 @@ void registerSchedulingTestPasses() {
   });
   mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
     return std::make_unique<TestSimplexSchedulerPass>();
-  });
-  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-    return std::make_unique<TestSSPRoundtripPass>();
   });
 #ifdef SCHEDULING_OR_TOOLS
   mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
