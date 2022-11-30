@@ -137,12 +137,7 @@ private:
   /// location of the port in the circuit.
   bool updatePortTarget(FModuleLike &module, Annotation &anno,
                         unsigned portIdx) {
-
-    FIRRTLBaseType type =
-        TypeSwitch<Type, FIRRTLBaseType>(module.getPortType(portIdx))
-            .Case<FIRRTLBaseType>([](FIRRTLBaseType t) { return t; })
-            .Case<RefType>([](RefType t) { return t.getType(); });
-
+    auto type = getBaseType(cast<FIRRTLType>(module.getPortType(portIdx)));
     return updateTargetImpl(anno, module, type, module.getPortName(portIdx));
   }
 
@@ -158,11 +153,7 @@ private:
     if (!name)
       return false;
 
-    FIRRTLBaseType type =
-        TypeSwitch<Type, FIRRTLBaseType>(op->getResultTypes()[0])
-            .Case<FIRRTLBaseType>([](FIRRTLBaseType t) { return t; })
-            .Case<RefType>([](RefType t) { return t.getType(); });
-
+    auto type = getBaseType(cast<FIRRTLType>(op->getResultTypes()[0]));
     return updateTargetImpl(anno, module, type, name);
   }
 

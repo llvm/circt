@@ -492,10 +492,7 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
                                                         targetOp->getBlock());
     auto wireType = cast<FIRRTLBaseType>(targetOp->getResult(0).getType());
     // Get type of sent value, if already a RefType, the base type.
-    FIRRTLBaseType valType =
-        TypeSwitch<Type, FIRRTLBaseType>(sendVal.getType())
-            .Case<FIRRTLBaseType>([](FIRRTLBaseType base) { return base; })
-            .Case<RefType>([](RefType ref) { return ref.getType(); });
+    auto valType = getBaseType(cast<FIRRTLType>(sendVal.getType()));
     Value sink = getValueByFieldID(sinkBuilder, targetOp->getResult(0),
                                    wireTarget->fieldIdx);
 
