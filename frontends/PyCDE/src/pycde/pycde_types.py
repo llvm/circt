@@ -29,6 +29,9 @@ class _Types:
   def int(self, width: int, name: str = None):
     return self.wrap(mlir.ir.IntegerType.get_signless(width), name)
 
+  def uint(self, width: int, name: str = None):
+    return self.wrap(mlir.ir.IntegerType.get_unsigned(width), name)
+
   def array(self,
             inner: mlir.ir.Type,
             size: int,

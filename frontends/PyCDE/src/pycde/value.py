@@ -422,7 +422,10 @@ class WidthExtendingBitVectorValue(BitVectorValue):
   pass
 
   def __lt__(self, other):
-    assert False, "Unimplemented"
+    from circt.dialects import hwarith
+    return Value(
+        hwarith.ICmpOp(ir.IntegerAttr.get(ir.IntegerType.get_signless(64), 2),
+                       self.value, other.value))
 
   def __le__(self, other):
     assert False, "Unimplemented"
