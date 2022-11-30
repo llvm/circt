@@ -1,7 +1,7 @@
 # REQUIRES: esi-cosim
 # RUN: rm -rf %t
 # RUN: mlir-opt  %S/dot.linalg.mlir --one-shot-bufferize="allow-return-allocs bufferize-function-boundaries" --buffer-results-to-out-params --convert-linalg-to-affine-loops --lower-affine --convert-scf-to-cf --canonicalize > dot.cf.mlir
-# RUN: circt-opt dot.cf.mlir --flatten-memref --flatten-memref-calls --handshake-legalize-memrefs --lower-std-to-handshake --canonicalize --handshake-lower-extmem-to-hw=wrap-esi --handshake-insert-buffers --canonicalize --handshake-remove-block-structure --handshake-materialize-forks-sinks --lower-handshake-to-hw --canonicalize > dot.hw.mlir
+# RUN: hlstool dot.cf.mlir --with-esi --dynamic-hw -ir -ir-output-level 2 > dot.hw.mlir
 # RUN: %PYTHON% %s %t 2>&1
 # RUN: esi-cosim-runner.py --no-aux-files --tmpdir %t --schema %t/runtime/schema.capnp %s `ls %t/hw/*.sv | grep -v driver.sv`
 # PY: from dot_prod_system import run_cosim
