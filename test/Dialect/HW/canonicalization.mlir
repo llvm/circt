@@ -1249,9 +1249,9 @@ hw.module @uninitializedWireAggregate() -> (result1: !hw.struct<a: i1, b: i1>,
   %3 = sv.read_inout %2 :  !hw.inout<!hw.struct<a: i1, b: !hw.array<10x!hw.struct<a: i1, b: i1>>>>
 
   hw.output %1, %3 : !hw.struct<a: i1, b: i1>, !hw.struct<a: i1, b: !hw.array<10x!hw.struct<a: i1, b: i1>>>
-  // CHECK-NEXT: %x_i2 = sv.constantX : !hw.struct<a: i1, b: i1>
-  // CHECK-NEXT: %x_i21 = sv.constantX : !hw.struct<a: i1, b: !hw.array<10xstruct<a: i1, b: i1>>>
-  // CHECK-NEXT: hw.output %x_i2, %x_i21
+  // CHECK-NEXT: %[[Z1:.*]] = sv.constantZ : !hw.struct<a: i1, b: i1>
+  // CHECK-NEXT: %[[Z2:.*]] = sv.constantZ : !hw.struct<a: i1, b: !hw.array<10xstruct<a: i1, b: i1>>>
+  // CHECK-NEXT: hw.output %[[Z1]], %[[Z2]]
 }
 
 // CHECK-LABEL:  hw.module @IncompleteRead(%clock1: i1) {

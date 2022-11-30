@@ -1481,8 +1481,10 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
   Value connected;
   if (!write) {
-    // If no write and only reads, then replace with XOp.
-    connected = rewriter.create<ConstantXOp>(
+    // If no write and only reads, then replace with ZOp.
+    // SV 6.6: "If no driver is connected to a net, its
+    // value shall be high-impedance (z) unless the net is a trireg"
+    connected = rewriter.create<ConstantZOp>(
         wire.getLoc(),
         wire.getResult().getType().cast<InOutType>().getElementType());
   } else if (isa<hw::HWModuleOp>(write->getParentOp()))
