@@ -398,45 +398,67 @@ static unsigned getBlockPredecessorCount(Block *block) {
 
 // Insert appropriate type of Merge CMerge for control-only path,
 // Merge for single-successor blocks, Mux otherwise
-Operation *HandshakeLowering::insertMerge(Block *block, Value val,
-                                          ConversionPatternRewriter &rewriter) {
+HandshakeLowering::MergeOpInfo
+HandshakeLowering::insertMerge(Block *block, Value val,
+                               BackedgeBuilder &edgeBuilder,
+                               ConversionPatternRewriter &rewriter) {
   unsigned numPredecessors = getBlockPredecessorCount(block);
+  auto insertLoc = block->front().getLoc();
+  SmallVector<Backedge> edges;
+  SmallVector<Value> operands;
 
   // Control-only path originates from StartOp
-  if (!val.isa<BlockArgument>()) {
-    if (isa<StartOp>(val.getDefiningOp())) {
-      auto cmerge = rewriter.create<handshake::ControlMergeOp>(
-          block->front().getLoc(), val, numPredecessors);
-      setBlockEntryControl(block, cmerge.getResult());
-      return cmerge;
+  if (!val.isa<BlockArgument>() && isa<StartOp>(val.getDefiningOp())) {
+    for (unsigned i = 0; i < numPredecessors; i++) {
+      auto edge = edgeBuilder.get(rewriter.getNoneType());
+      edges.push_back(edge);
+      operands.push_back(Value(edge));
     }
+    auto cmerge =
+        rewriter.create<handshake::ControlMergeOp>(insertLoc, operands);
+    setBlockEntryControl(block, cmerge.getResult());
+    return MergeOpInfo{cmerge, val, edges};
   }
 
-  // If there are no block predecessors (i.e., entry block)
+  // If there is at most one block predecessor
   if (numPredecessors <= 1) {
-    SmallVector<Value> mergeOperands;
-    mergeOperands.append(2, val); // 2 dummy values used here due to
-                                  // hard-coded logic of reconnectMergeOps.
-    return rewriter.create<handshake::MergeOp>(block->front().getLoc(),
-                                               mergeOperands);
+    // Dummy merge used here due to hard-coded logic of reconnectMergeOps
+    if (numPredecessors == 0) {
+      operands.push_back(val);
+    } else {
+      auto edge = edgeBuilder.get(val.getType());
+      edges.push_back(edge);
+      operands.push_back(Value(edge));
+    }
+    auto merge = rewriter.create<handshake::MergeOp>(insertLoc, operands);
+    return MergeOpInfo{merge, val, edges};
   }
 
-  return rewriter.create<handshake::MuxOp>(block->front().getLoc(), val,
-                                           numPredecessors);
+  // Add sel operand, then all data operands
+  edges.push_back(edgeBuilder.get(rewriter.getIndexType()));
+  for (unsigned i = 0; i < numPredecessors; i++) {
+    auto edge = edgeBuilder.get(val.getType());
+    edges.push_back(edge);
+    operands.push_back(Value(edge));
+  }
+  auto mux =
+      rewriter.create<handshake::MuxOp>(insertLoc, Value(edges[0]), operands);
+  return MergeOpInfo{mux, val, edges};
 }
 
 HandshakeLowering::BlockOps
 HandshakeLowering::insertMergeOps(HandshakeLowering::BlockValues blockLiveIns,
                                   HandshakeLowering::blockArgPairs &mergePairs,
+                                  BackedgeBuilder &edgeBuilder,
                                   ConversionPatternRewriter &rewriter) {
   HandshakeLowering::BlockOps blockMerges;
   for (Block &block : r) {
     // Live-ins identified by liveness analysis
     rewriter.setInsertionPointToStart(&block);
     for (auto &val : blockLiveIns[&block]) {
-      Operation *newOp = insertMerge(&block, val, rewriter);
-      blockMerges[&block].push_back(newOp);
-      mergePairs[val] = newOp;
+      auto mergeInfo = insertMerge(&block, val, edgeBuilder, rewriter);
+      blockMerges[&block].push_back(mergeInfo);
+      mergePairs[val] = mergeInfo.op;
     }
     // Block arguments are not in livein list as they are defined inside the
     // block
@@ -445,9 +467,9 @@ HandshakeLowering::insertMergeOps(HandshakeLowering::BlockValues blockLiveIns,
       if (arg.getType().isa<mlir::MemRefType>())
         continue;
 
-      Operation *newOp = insertMerge(&block, arg, rewriter);
-      blockMerges[&block].push_back(newOp);
-      mergePairs[arg] = newOp;
+      auto mergeInfo = insertMerge(&block, arg, edgeBuilder, rewriter);
+      blockMerges[&block].push_back(mergeInfo);
+      mergePairs[arg] = mergeInfo.op;
     }
   }
   return blockMerges;
@@ -460,17 +482,18 @@ static bool blockHasSrcOp(Value val, Block *block) {
     return false;
 
   auto *op = val.getDefiningOp();
-  assert(op != NULL);
+  assert(op != nullptr);
   return (op->getBlock() == block);
 }
 
 // Get value from predBlock which will be set as operand of op (merge)
-static Value getMergeOperand(Operation *op, Block *predBlock,
+static Value getMergeOperand(HandshakeLowering::MergeOpInfo mergeInfo,
+                             Block *predBlock,
                              HandshakeLowering::BlockOps blockMerges) {
   // Helper value (defining value of merge) to identify Merges which propagate
   // the same defining value
-  Value srcVal = op->getOperand(0);
-  Block *block = op->getBlock();
+  Value srcVal = mergeInfo.val;
+  Block *block = mergeInfo.op->getBlock();
 
   // Value comes from predecessor block (i.e., not an argument of this block)
   if (std::find(block->getArguments().begin(), block->getArguments().end(),
@@ -478,9 +501,9 @@ static Value getMergeOperand(Operation *op, Block *predBlock,
     // Value is not defined by operation in predBlock
     if (!blockHasSrcOp(srcVal, predBlock)) {
       // Find the corresponding Merge
-      for (Operation *predOp : blockMerges[predBlock])
-        if (predOp->getOperand(0) == srcVal)
-          return predOp->getResult(0);
+      for (auto &predMergeInfo : blockMerges[predBlock])
+        if (predMergeInfo.val == srcVal)
+          return predMergeInfo.op->getResult(0);
     } else
       return srcVal;
   }
@@ -493,11 +516,10 @@ static Value getMergeOperand(Operation *op, Block *predBlock,
     if (mlir::cf::CondBranchOp br = dyn_cast<mlir::cf::CondBranchOp>(termOp)) {
       if (block == br.getTrueDest())
         return br.getTrueOperand(index);
-      else {
-        assert(block == br.getFalseDest());
-        return br.getFalseOperand(index);
-      }
-    } else if (isa<mlir::cf::BranchOp>(termOp))
+      assert(block == br.getFalseDest());
+      return br.getFalseOperand(index);
+    }
+    if (isa<mlir::cf::BranchOp>(termOp))
       return termOp->getOperand(index);
   }
   return nullptr;
@@ -537,59 +559,54 @@ static ConditionalBranchOp getControlCondBranch(Block *block) {
   return nullptr;
 }
 
-static void reconnectMergeOps(Region &f,
+static void reconnectMergeOps(Region &r,
                               HandshakeLowering::BlockOps blockMerges,
                               HandshakeLowering::blockArgPairs &mergePairs) {
-  // All merge operands are initially set to original (defining) value.
-  // We here replace defining value with appropriate value from predecessor
-  // block. The predecessor can either be a merge, the original defining value,
-  // or a branch Operand. Operand(0) is helper defining value for identifying
-  // matching merges, it does not correspond to any predecessor block.
 
-  for (Block &block : f) {
-    for (Operation *op : blockMerges[&block]) {
-      int count = 1;
+  for (Block &block : r) {
+    for (auto &mergeInfo : blockMerges[&block]) {
+      int operandIdx;
+      // Data operands for muxes start at index 1 (select operand at index 0)
+      if (isa<handshake::MuxOp>(mergeInfo.op)) {
+        operandIdx = 1;
+      } else {
+        operandIdx = 0;
+      }
+
       // Set appropriate operand from predecessor block
       for (auto *predBlock : block.getPredecessors()) {
-        Value mgOperand = getMergeOperand(op, predBlock, blockMerges);
+        Value mgOperand = getMergeOperand(mergeInfo, predBlock, blockMerges);
         assert(mgOperand != nullptr);
         if (!mgOperand.getDefiningOp()) {
           assert(mergePairs.count(mgOperand));
           mgOperand = mergePairs[mgOperand]->getResult(0);
         }
-        op->setOperand(count, mgOperand);
-        count++;
+        mergeInfo.edges[operandIdx].setValue(mgOperand);
+        operandIdx++;
       }
       // Reconnect all operands originating from livein defining value through
       // corresponding merge of that block
       for (Operation &opp : block)
         if (!isa<MergeLikeOpInterface>(opp))
-          opp.replaceUsesOfWith(op->getOperand(0), op->getResult(0));
+          opp.replaceUsesOfWith(mergeInfo.val, mergeInfo.op->getResult(0));
     }
   }
 
-  // Disconnect original value (Operand(0), used as helper) from all merges
-  // If the original value must be a merge operand, it is still set as some
-  // subsequent operand
-  // If block has multiple predecessors, connect Muxes to ControlMerge
-  for (Block &block : f) {
-    unsigned numPredecessors = getBlockPredecessorCount(&block);
-
-    if (numPredecessors <= 1) {
-      for (Operation *op : blockMerges[&block])
-        op->eraseOperand(0);
-    } else {
+  // Connect Muxes to ControlMerge in all blocks with more than one predecessor
+  for (Block &block : r) {
+    if (getBlockPredecessorCount(&block) > 1) {
       Operation *cntrlMg = getControlMerge(&block);
       assert(cntrlMg != nullptr);
-      cntrlMg->eraseOperand(0);
 
-      for (Operation *op : blockMerges[&block])
-        if (op != cntrlMg)
-          op->setOperand(0, cntrlMg->getResult(1));
+      for (auto &mergeInfo : blockMerges[&block]) {
+        if (mergeInfo.op != cntrlMg)
+          // First operand of muxes is always select
+          mergeInfo.edges[0].setValue(cntrlMg->getResult(1));
+      }
     }
   }
 
-  removeBlockOperands(f);
+  removeBlockOperands(r);
 }
 
 LogicalResult
@@ -600,8 +617,13 @@ HandshakeLowering::addMergeOps(ConversionPatternRewriter &rewriter) {
   // blockLiveIns: live in variables of block
   BlockValues liveIns = livenessAnalysis(r);
 
+  // Create backedge builder to manage operands of merge operations between
+  // insertion and reconnection
+  BackedgeBuilder edgeBuilder{rewriter, r.front().front().getLoc()};
+
   // Insert merge operations
-  BlockOps mergeOps = insertMergeOps(liveIns, mergePairs, rewriter);
+  BlockOps mergeOps =
+      insertMergeOps(liveIns, mergePairs, edgeBuilder, rewriter);
 
   // Set merge operands and uses
   reconnectMergeOps(r, mergeOps, mergePairs);

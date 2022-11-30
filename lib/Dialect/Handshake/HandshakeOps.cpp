@@ -281,7 +281,7 @@ void LazyForkOp::print(OpAsmPrinter &p) { sost::printOp(p, *this, true); }
 
 void MergeOp::build(OpBuilder &builder, OperationState &result,
                     ValueRange operands) {
-  assert(operands.size() != 0 &&
+  assert(!operands.empty() &&
          "Expected at least one operand to this merge op.");
   auto type = operands.front().getType();
   result.types.push_back(type);
@@ -400,29 +400,14 @@ void MuxOp::getCanonicalizationPatterns(RewritePatternSet &results,
                  EliminateCBranchIntoMuxPattern>(context);
 }
 
-void MuxOp::build(OpBuilder &builder, OperationState &result, Value anyInput,
-                  int inputs) {
-  // Output type
-  auto type = anyInput.getType();
-  result.types.push_back(type);
-
-  // Select operand
-  result.addOperands(anyInput);
-
-  // Data operands
-  for (int i = 0, e = inputs; i < e; ++i)
-    result.addOperands(anyInput);
-  sost::addAttributes(result, inputs, type);
-}
-
 void MuxOp::build(OpBuilder &builder, OperationState &result, Value selOperand,
-                  ValueRange _dataOperands) {
-  assert(_dataOperands.size() != 0 && "Building mux with no inputs?");
-  Type dataType = _dataOperands[0].getType();
+                  ValueRange dataOperands) {
+  assert(!dataOperands.empty() && "Building mux with no inputs?");
+  Type dataType = dataOperands[0].getType();
   result.addTypes({dataType});
   result.addOperands({selOperand});
-  result.addOperands(_dataOperands);
-  sost::addAttributes(result, _dataOperands.size(), dataType);
+  result.addOperands(dataOperands);
+  sost::addAttributes(result, dataOperands.size(), dataType);
 }
 
 std::string handshake::MuxOp::getOperandName(unsigned int idx) {
@@ -492,25 +477,6 @@ LogicalResult MuxOp::verify() {
 std::string handshake::ControlMergeOp::getResultName(unsigned int idx) {
   assert(idx == 0 || idx == 1);
   return idx == 0 ? "dataOut" : "index";
-}
-
-void ControlMergeOp::build(OpBuilder &builder, OperationState &result,
-                           Value operand, int inputs) {
-  auto type = operand.getType();
-  result.types.push_back(type);
-  // Second result gives the input index to the muxes
-  // Number of bits depends on encoding (log2/1-hot)
-  result.types.push_back(builder.getIndexType());
-
-  // Operand to keep defining value (used when connecting merges)
-  // Removed afterwards
-  result.addOperands(operand);
-
-  // Operands from predecessor blocks
-  for (int i = 0, e = inputs; i < e; ++i)
-    result.addOperands(operand);
-
-  sost::addAttributes(result, inputs, type);
 }
 
 void ControlMergeOp::build(OpBuilder &builder, OperationState &result,

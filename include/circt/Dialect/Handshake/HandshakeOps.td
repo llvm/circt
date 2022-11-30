@@ -376,13 +376,7 @@ def MuxOp : Handshake_Op<"mux", [
     Variadic<AnyType> : $dataOperands);
   let results = (outs AnyType : $result);
   let skipDefaultBuilders = 1;
-  let builders = [
-    // Note/warning: This builder should only be used by StandardToHandshake
-    // since it contains some hardcoded assumptions that the conversion pass
-    // will manually adjust its operand later.
-    OpBuilder<(ins "Value":$anyInput, "int":$inputs)>,
-    // Use this builder for any other use case.
-    OpBuilder<(ins "Value":$selectOperand, "ValueRange":$inputs)>];
+  let builders = [OpBuilder<(ins "Value":$selectOperand, "ValueRange":$inputs)>];
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
   let hasCanonicalizer = 1;
@@ -416,11 +410,7 @@ def ControlMergeOp : Handshake_Op<"control_merge", [
 
   let hasCanonicalizer = 1;
   let skipDefaultBuilders = 1;
-  let builders = [
-    // @note: Legacy builder used by the std-to-handshake pass. Should be removed once the pass is rewritten.
-    OpBuilder<(ins "Value":$operand, "int":$inputs)>,
-    OpBuilder<(ins "ValueRange":$inputs)>
-  ];
+  let builders = [OpBuilder<(ins "ValueRange":$inputs)>];
   let hasCustomAssemblyFormat = 1;
 }
 
