@@ -261,9 +261,9 @@ protected:
   enum { OBJ_LATENCY = 0, OBJ_AXAP /* i.e. either ASAP or ALAP */ };
   bool fillObjectiveRow(SmallVector<int> &row, unsigned obj) override;
   void updateMargins();
-  unsigned int resII();
   void incrementII();
   void scheduleOperation(Operation *n);
+  unsigned computeResMinII();
 
 public:
   ModuloSimplexScheduler(ModuloProblem &prob, Operation *lastOp)
@@ -1116,18 +1116,18 @@ void ModuloSimplexScheduler::scheduleOperation(Operation *n) {
   (void)fixedN, (void)enteredN;
 }
 
-unsigned int ModuloSimplexScheduler::resII() {
-  unsigned int resII = 1;
-  DenseMap<Problem::OperatorType, unsigned int> uses;
+unsigned ModuloSimplexScheduler::computeResMinII() {
+  unsigned resMinII = 1;
+  SmallDenseMap<Problem::OperatorType, unsigned> uses;
   for (auto *op : prob.getOperations())
     if (isLimited(op, prob))
-      uses[*prob.getLinkedOperatorType(op)]++;
+      ++uses[*prob.getLinkedOperatorType(op)];
 
   for (auto pair : uses)
-    resII = std::max(resII,
-                     (unsigned)ceil(pair.second / *prob.getLimit(pair.first)));
+    resMinII = std::max(
+        resMinII, (unsigned)ceil(pair.second / *prob.getLimit(pair.first)));
 
-  return resII;
+  return resMinII;
 }
 
 LogicalResult ModuloSimplexScheduler::schedule() {
@@ -1135,8 +1135,8 @@ LogicalResult ModuloSimplexScheduler::schedule() {
     return failure();
 
   parameterS = 0;
-  parameterT = resII();
-  LLVM_DEBUG(dbgs() << "ResII = " << std::to_string(parameterT) << "\n");
+  parameterT = computeResMinII();
+  LLVM_DEBUG(dbgs() << "ResMinII = " << parameterT << "\n");
   buildTableau();
   asapTimes.resize(startTimeLocations.size());
   alapTimes.resize(startTimeLocations.size());
