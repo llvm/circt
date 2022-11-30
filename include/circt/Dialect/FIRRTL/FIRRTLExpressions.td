@@ -395,9 +395,11 @@ def DivPrimOp : IntBinaryPrimOp<"div", IntType> {
 }
 def RemPrimOp : IntBinaryPrimOp<"rem", IntType>;
 let inferType = "impl::inferBitwiseResult" in {
-  def AndPrimOp : IntBinaryPrimOp<"and", UIntType, [Commutative]>;
-  def OrPrimOp  : IntBinaryPrimOp<"or",  UIntType, [Commutative]>;
-  def XorPrimOp : IntBinaryPrimOp<"xor", UIntType, [Commutative]>;
+  let hasCanonicalizer = true in {
+    def AndPrimOp : IntBinaryPrimOp<"and", UIntType, [Commutative]>;
+    def OrPrimOp  : IntBinaryPrimOp<"or",  UIntType, [Commutative]>;
+    def XorPrimOp : IntBinaryPrimOp<"xor", UIntType, [Commutative]>;
+  }
 }
 
 // Comparison Operations

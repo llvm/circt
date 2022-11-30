@@ -139,6 +139,13 @@ IntegerAttr circt::firrtl::getIntZerosAttr(Type type) {
   return getIntAttr(type, APInt(width, 0));
 }
 
+/// Return an IntegerAttr filled with ones for the specified FIRRTL integer
+/// type. This handles both the known width and unknown width case.
+IntegerAttr circt::firrtl::getIntOnesAttr(Type type) {
+  int32_t width = abs(type.cast<IntType>().getWidthOrSentinel());
+  return getIntAttr(type, APInt(width, -1));
+}
+
 /// Return the value that drives another FIRRTL value within module scope.  Only
 /// look backwards through one connection.  This is intended to be used in
 /// situations where you only need to look at the most recent connect, e.g., to

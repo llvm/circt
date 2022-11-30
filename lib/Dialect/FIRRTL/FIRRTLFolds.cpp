@@ -374,7 +374,9 @@ OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
 
 void AddPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.insert<patterns::AddOfZero, patterns::AddOfSelf>(context);
+  results
+      .insert<patterns::moveConstAdd, patterns::AddOfZero, patterns::AddOfSelf>(
+          context);
 }
 
 OpFoldResult SubPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -526,6 +528,13 @@ OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
       [](APSInt a, APSInt b) -> APInt { return a & b; });
 }
 
+void AndPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results
+      .insert<patterns::extendAnd, patterns::moveConstAnd, patterns::AndOfZero,
+              patterns::AndOfAllOne, patterns::AndOfSelf>(context);
+}
+
 OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
   if (auto rhsCst = getConstant(operands[1])) {
     /// or(x, 0) -> x
@@ -558,6 +567,12 @@ OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
       [](APSInt a, APSInt b) -> APInt { return a | b; });
 }
 
+void OrPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
+  results.insert<patterns::extendOr, patterns::moveConstOr, patterns::OrOfZero,
+                 patterns::OrOfAllOne, patterns::OrOfSelf>(context);
+}
+
 OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
   /// xor(x, 0) -> x
   if (auto rhsCst = getConstant(operands[1]))
@@ -577,6 +592,12 @@ OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
   return constFoldFIRRTLBinaryOp(
       *this, operands, BinOpKind::Normal,
       [](APSInt a, APSInt b) -> APInt { return a ^ b; });
+}
+
+void XorPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.insert<patterns::extendXor, patterns::moveConstXor,
+                 patterns::XorOfZero, patterns::XorOfSelf>(context);
 }
 
 void LEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,

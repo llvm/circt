@@ -133,7 +133,7 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
   // Mixed type inputs - the constant is zero extended, not sign extended, so it
   // cannot be folded!
 
-  // CHECK: firrtl.and %in, %c3_ui2
+  // CHECK: firrtl.and %in, %c3_ui4
   // CHECK-NEXT: firrtl.strictconnect %out,
   %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
   %4 = firrtl.and %in, %c3_ui2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<4>
@@ -146,8 +146,8 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
   %5 = firrtl.and %c1_si4, %c1_si4 : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %5 : !firrtl.uint<4>, !firrtl.uint<4>
 
-  // CHECK: [[AND:%.+]] = firrtl.and %sin, %sin
-  // CHECK-NEXT: firrtl.strictconnect %out, [[AND]]
+  // CHECK: %[[AND:.+]] = firrtl.asUInt %sin
+  // CHECK-NEXT: firrtl.strictconnect %out, %[[AND]]
   %6 = firrtl.and %sin, %sin : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %6 : !firrtl.uint<4>, !firrtl.uint<4>
 
@@ -202,10 +202,15 @@ firrtl.module @Or(in %in: !firrtl.uint<4>,
   %5 = firrtl.or %c1_si4, %c1_si4 : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %5 : !firrtl.uint<4>, !firrtl.uint<4>
 
-  // CHECK: [[OR:%.+]] = firrtl.or %sin, %sin
+  // CHECK: [[OR:%.+]] = firrtl.asUInt %sin
   // CHECK-NEXT: firrtl.strictconnect %out, [[OR]]
   %6 = firrtl.or %sin, %sin : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %6 : !firrtl.uint<4>, !firrtl.uint<4>
+
+  // CHECK: firrtl.strictconnect %out, %c15_ui4
+  %c0_si2 = firrtl.constant -1 : !firrtl.sint<2>
+  %7 = firrtl.or %sin, %c0_si2 : (!firrtl.sint<4>, !firrtl.sint<2>) -> !firrtl.uint<4>
+  firrtl.connect %out, %7 : !firrtl.uint<4>, !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @Xor
@@ -241,6 +246,12 @@ firrtl.module @Xor(in %in: !firrtl.uint<4>,
   // CHECK: firrtl.strictconnect %out, %c0_ui4
   %6 = firrtl.xor %sin, %sin : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %6 : !firrtl.uint<4>, !firrtl.uint<4>
+
+  // CHECK: %[[aui:.*]] = firrtl.asUInt %sin
+  // CHECK: firrtl.strictconnect %out, %[[aui]]
+  %c0_si2 = firrtl.constant 0 : !firrtl.sint<2>
+  %7 = firrtl.xor %sin, %c0_si2 : (!firrtl.sint<4>, !firrtl.sint<2>) -> !firrtl.uint<4>
+  firrtl.connect %out, %7 : !firrtl.uint<4>, !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @EQ
