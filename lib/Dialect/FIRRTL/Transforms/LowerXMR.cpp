@@ -59,7 +59,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             // Get a reference to the actual signal to which the XMR will be
             // generated.
             Value xmrDef = send.getBase();
-            if (send.getType().getType().getBitWidthOrSentinel() == 0) {
+            if (isZeroWidth(send.getType().getType())) {
               markForRemoval(send);
               return success();
             }
@@ -134,11 +134,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             if (!connect.getSrc().getType().isa<RefType>())
               return success();
             markForRemoval(connect);
-            if (connect.getSrc()
-                    .getType()
-                    .cast<RefType>()
-                    .getType()
-                    .getBitWidthOrSentinel() == 0)
+            if (isZeroWidth(
+                    connect.getSrc().getType().cast<RefType>().getType()))
               return success();
             // Merge the dataflow classes of destination into the source of the
             // Connect. This handles two cases:
@@ -157,7 +154,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
           })
           .Case<RefSubOp>([&](RefSubOp op) {
             markForRemoval(op);
-            if (op.getType().getType().getBitWidthOrSentinel() == 0)
+            if (isZeroWidth(op.getType().getType()))
               return success();
             auto defMem = dyn_cast<MemOp>(op.getInput().getDefiningOp());
             if (!defMem) {
@@ -182,7 +179,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             // corresponding RefSendOp is recorded.
 
             markForRemoval(resolve);
-            if (resolve.getType().getBitWidthOrSentinel() != 0)
+            if (!isZeroWidth(resolve.getType()))
               dataFlowClasses.unionSets(resolve.getRef(), resolve.getResult());
             resolveOps.push_back(resolve);
             return success();
@@ -356,10 +353,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       // Reference ports must be removed.
       setPortToRemove(inst, portNum, numPorts);
       // Drop the dead-instance-ports.
-      if (instanceResult.use_empty() || instanceResult.getType()
-                                                .cast<RefType>()
-                                                .getType()
-                                                .getBitWidthOrSentinel() == 0)
+      if (instanceResult.use_empty() ||
+          isZeroWidth(instanceResult.getType().cast<RefType>().getType()))
         continue;
       auto refModuleArg = refMod.getArgument(portNum);
       if (inst.getPortDirection(portNum) == Direction::Out) {
@@ -514,6 +509,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     dataflowAt.clear();
     refSendPathList.clear();
   }
+
+  bool isZeroWidth(FIRRTLBaseType t) { return t.getBitWidthOrSentinel() == 0; }
 
   /// Cached module namespaces.
   DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
