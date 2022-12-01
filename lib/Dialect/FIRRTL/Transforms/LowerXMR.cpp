@@ -82,7 +82,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
                   markForRemoval(send);
                   return success();
                 }
-              if (!isa<InnerSymbolOpInterface>(xmrDefOp) ||
+              if (!isa<hw::InnerSymbolOpInterface>(xmrDefOp) ||
                   xmrDefOp->getResults().size() > 1) {
                 // Add a node, for non-innerSym ops. Otherwise the sym will be
                 // dropped after LowerToHW.

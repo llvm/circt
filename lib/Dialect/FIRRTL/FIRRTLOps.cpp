@@ -851,7 +851,7 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
       NamedAttrList dummyAttrs;
       if (parser.parseCustomAttributeWithFallback(
               innerSymAttr, ::mlir::Type{},
-              InnerSymbolTable::getInnerSymbolAttrName(), dummyAttrs)) {
+              hw::InnerSymbolTable::getInnerSymbolAttrName(), dummyAttrs)) {
         return ::mlir::failure();
       }
     }
@@ -1496,7 +1496,8 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   if (succeeded(parser.parseOptionalKeyword("sym"))) {
     if (parser.parseCustomAttributeWithFallback(
             innerSymAttr, ::mlir::Type{},
-            InnerSymbolTable::getInnerSymbolAttrName(), result.attributes)) {
+            hw::InnerSymbolTable::getInnerSymbolAttrName(),
+            result.attributes)) {
       return ::mlir::failure();
     }
   }
@@ -3849,7 +3850,7 @@ bool HierPathOp::isComponent() { return (bool)ref(); }
 // 6. The last element of the namepath, can be an InnerRefAttr on either a
 // module port or a declaration inside the module.
 // 7. The last element of the namepath can also be a module symbol.
-LogicalResult HierPathOp::verifyInnerRefs(InnerRefNamespace &ns) {
+LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   if (getNamepath().size() <= 1)
     return emitOpError()
            << "the instance path cannot be empty/single element, it "

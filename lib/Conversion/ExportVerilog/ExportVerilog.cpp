@@ -3838,7 +3838,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysOp op) {
     llvm::interleave(
         op.getEvents(),
         [&](Attribute eventAttr) {
-          auto event = EventControl(eventAttr.cast<IntegerAttr>().getInt());
+          auto event = sv::EventControl(eventAttr.cast<IntegerAttr>().getInt());
           comment += stringifyEventControl(event);
         },
         [&]() { comment += ", "; });
@@ -3909,7 +3909,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
       // Negative edge async resets need to invert the reset condition. This
       // is noted in the op description.
       if (op.getResetStyle() == ResetType::AsyncReset &&
-          *op.getResetEdge() == EventControl::AtNegEdge)
+          *op.getResetEdge() == sv::EventControl::AtNegEdge)
         ps << "!";
       emitExpression(op.getReset(), ops);
       ps << ")";

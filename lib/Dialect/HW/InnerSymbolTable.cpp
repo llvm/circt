@@ -10,19 +10,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/FIRRTL/InnerSymbolTable.h"
-#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
-#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/HW/InnerSymbolTable.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "ist"
 
 using namespace circt;
-using namespace firrtl;
+using namespace hw;
 
 namespace circt {
-namespace firrtl {
+namespace hw {
 
 //===----------------------------------------------------------------------===//
 // InnerSymbolTable
@@ -96,11 +95,14 @@ LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
 
            // Check for ports
            // TODO: Add fields per port, once they work that way (use addSyms)
-           if (auto mod = dyn_cast<FModuleLike>(curOp)) {
-             for (size_t i = 0, e = getNumPorts(mod); i < e; ++i)
-               if (auto symAttr = mod.getPortSymbolAttr(i))
-                 if (failed(walkSyms(symAttr, InnerSymTarget(i, curOp))))
-                   return WalkResult::interrupt();
+           if (auto mod = dyn_cast<HWModuleLike>(curOp)) {
+             for (size_t i = 0, e = mod.getNumPorts(); i < e; ++i) {
+               // ----------------------------------------
+               // if (auto symAttr = mod.getPortSymbolAttr(i))
+               //   if (failed(walkSyms(symAttr, InnerSymTarget(i, curOp))))
+               //     return WalkResult::interrupt();
+               // ----------------------------------------
+             }
            }
            return WalkResult::advance();
          }).wasInterrupted());
@@ -143,9 +145,13 @@ StringAttr InnerSymbolTable::getInnerSymbol(const InnerSymTarget &target) {
   // Obtain the base InnerSymAttr for the specified target.
   auto getBase = [](auto &target) -> hw::InnerSymAttr {
     if (target.isPort()) {
-      if (auto mod = dyn_cast<FModuleLike>(target.getOp())) {
-        assert(target.getPort() < getNumPorts(mod));
-        return mod.getPortSymbolAttr(target.getPort());
+      // TODO: This needs to be made to work with HWModuleLike
+      if (auto mod = dyn_cast<HWModuleLike>(target.getOp())) {
+        assert(target.getPort() < mod.getNumPorts());
+        // ----------------------------------------
+        // return mod.getPortSymbolAttr(target.getPort());
+        // ----------------------------------------
+        return {};
       }
     } else {
       // InnerSymbols only supported if op implements the interface.
@@ -250,5 +256,5 @@ LogicalResult verifyInnerRefNamespace(Operation *op) {
 }
 
 } // namespace detail
-} // namespace firrtl
+} // namespace hw
 } // namespace circt
