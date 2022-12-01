@@ -318,7 +318,7 @@ bool isZeroBitType(Type type);
 
 /// Return true if this expression should be emitted inline into any statement
 /// that uses it.
-bool isExpressionEmittedInline(Operation *op);
+bool isExpressionEmittedInline(Operation *op, const LoweringOptions &options);
 
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
