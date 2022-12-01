@@ -19,7 +19,7 @@ def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResul
 def MachineOp : FSMOp<"machine", [
       FunctionOpInterface,
       Symbol, SymbolTable, NoTerminator,
-      HWModuleLike]> {
+      DeclareOpInterfaceMethods<HWModuleLike>]> {
   let summary = "Define a finite-state machine";
   let description = [{
     `fsm.machine` represents a finite-state machine, including a machine name,
@@ -76,6 +76,13 @@ def MachineOp : FSMOp<"machine", [
 
     /// Return the name of the i'th result of this machine.
     StringAttr getResName(size_t i);
+  }];
+
+  let extraClassDefinition = [{
+    size_t $cppClass::getNumPorts() {
+      auto machineType = getFunctionType();
+      return machineType.getNumInputs() + machineType.getNumResults();
+    }
   }];
 
   let skipDefaultBuilders = 1;

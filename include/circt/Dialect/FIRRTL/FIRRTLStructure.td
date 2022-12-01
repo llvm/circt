@@ -51,11 +51,26 @@ def CircuitOp : FIRRTLOp<"circuit",
   let hasRegionVerifier = 1;
 }
 
-def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
-                                    NoTerminator, HasParent<"CircuitOp">,
-                                    DeclareOpInterfaceMethods<FModuleLike>,
-                                    DeclareOpInterfaceMethods<HWModuleLike>,
-                                    OpAsmOpInterface, InnerSymbolTable]> {
+class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
+  FIRRTLOp<mnemonic, traits # [
+    IsolatedFromAbove, Symbol, HasParent<"CircuitOp">,
+    DeclareOpInterfaceMethods<FModuleLike>,
+    DeclareOpInterfaceMethods<HWModuleLike>,
+    OpAsmOpInterface, InnerSymbolTable]> {
+
+  /// Additional class definitions inside the module op.
+  code extraModuleClassDefinition = [{}];
+
+  let extraClassDefinition = extraModuleClassDefinition # [{
+    size_t $cppClass::getNumPorts() {
+      return getPortTypesAttr().size();
+    }
+  }];
+
+}
+
+
+def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
   let summary = "FIRRTL Module";
   let description = [{
     The "firrtl.module" operation represents a Verilog module, including a given
@@ -101,10 +116,7 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
 
 }
 
-def FExtModuleOp : FIRRTLOp<"extmodule",
-      [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">, OpAsmOpInterface,
-       DeclareOpInterfaceMethods<FModuleLike>, InnerSymbolTable,
-       DeclareOpInterfaceMethods<HWModuleLike>]> {
+def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
   let summary = "FIRRTL external module";
   let description = [{
     The "firrtl.extmodule" operation represents an external reference to a
@@ -143,10 +155,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let hasVerifier = 1;
 }
 
-def FMemModuleOp : FIRRTLOp<"memmodule",
-      [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">, OpAsmOpInterface,
-       DeclareOpInterfaceMethods<FModuleLike>, InnerSymbolTable,
-       DeclareOpInterfaceMethods<HWModuleLike>]> {
+def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
   let summary = "FIRRTL Generated Memory Module";
   let description = [{
     The "firrtl.memmodule" operation represents an external reference to a

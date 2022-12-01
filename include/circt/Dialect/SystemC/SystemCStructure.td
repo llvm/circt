@@ -13,7 +13,7 @@
 
 def SCModuleOp : SystemCOp<"module", [
     Symbol,
-    HWModuleLike,
+    DeclareOpInterfaceMethods<HWModuleLike>,
     FunctionOpInterface,
     IsolatedFromAbove,
     SingleBlock,
@@ -102,6 +102,12 @@ def SCModuleOp : SystemCOp<"module", [
     // Return the Destructor operation in this module's body or create one if
     // none exists yet.
     systemc::DestructorOp getOrCreateDestructor();
+  }];
+
+  let extraClassDefinition = [{
+    size_t $cppClass::getNumPorts() {
+      return getPortNames().size();
+    }
   }];
 }
 

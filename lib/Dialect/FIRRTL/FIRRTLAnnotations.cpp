@@ -109,7 +109,7 @@ static bool applyToPort(AnnotationSet annos, Operation *op, size_t portCount,
 }
 
 bool AnnotationSet::applyToPort(FModuleLike op, size_t portNo) const {
-  return ::applyToPort(*this, op.getOperation(), op.getNumPorts(), portNo);
+  return ::applyToPort(*this, op.getOperation(), getNumPorts(op), portNo);
 }
 
 bool AnnotationSet::applyToPort(MemOp op, size_t portNo) const {

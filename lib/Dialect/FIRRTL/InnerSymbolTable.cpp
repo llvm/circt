@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/FIRRTL/InnerSymbolTable.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/Support/Debug.h"
 
@@ -96,7 +97,7 @@ LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
            // Check for ports
            // TODO: Add fields per port, once they work that way (use addSyms)
            if (auto mod = dyn_cast<FModuleLike>(curOp)) {
-             for (size_t i = 0, e = mod.getNumPorts(); i < e; ++i)
+             for (size_t i = 0, e = getNumPorts(mod); i < e; ++i)
                if (auto symAttr = mod.getPortSymbolAttr(i))
                  if (failed(walkSyms(symAttr, InnerSymTarget(i, curOp))))
                    return WalkResult::interrupt();
@@ -143,7 +144,7 @@ StringAttr InnerSymbolTable::getInnerSymbol(const InnerSymTarget &target) {
   auto getBase = [](auto &target) -> hw::InnerSymAttr {
     if (target.isPort()) {
       if (auto mod = dyn_cast<FModuleLike>(target.getOp())) {
-        assert(target.getPort() < mod.getNumPorts());
+        assert(target.getPort() < getNumPorts(mod));
         return mod.getPortSymbolAttr(target.getPort());
       }
     } else {

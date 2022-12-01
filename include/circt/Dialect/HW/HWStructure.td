@@ -35,6 +35,15 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       ArrayRef<unsigned> eraseOutputs
     );
   }];
+
+  /// Additional class definitions inside the module op.
+  code extraModuleClassDefinition = [{}];
+
+  let extraClassDefinition = extraModuleClassDefinition # [{
+    size_t $cppClass::getNumPorts() {
+      return getAllPorts().size();
+    }
+  }];
 }
 
 def HWModuleOp : HWModuleOpBase<"module",

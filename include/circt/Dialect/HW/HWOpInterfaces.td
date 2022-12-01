@@ -36,6 +36,9 @@ def HWModuleLike : OpInterface<"HWModuleLike"> {
     "::mlir::StringAttr", "moduleNameAttr", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{ return $_op.getNameAttr(); }]>,
+
+    InterfaceMethod<"Get the number of ports",
+    "size_t", "getNumPorts">,
   ];
 
   let verify = [{

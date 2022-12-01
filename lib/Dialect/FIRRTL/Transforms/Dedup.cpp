@@ -679,7 +679,7 @@ struct Deduper {
     // Record any annotations on the module.
     recordAnnotations(module);
     // Record port annotations.
-    for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i)
+    for (unsigned i = 0, e = getNumPorts(module); i < e; ++i)
       recordAnnotations(PortAnnoTarget(module, i));
     // Record any annotations in the module body.
     module->walk([&](Operation *op) { recordAnnotations(op); });
@@ -992,7 +992,7 @@ private:
     // Merge port annotations.
     if (toModule == to) {
       // Merge module port annotations.
-      for (unsigned i = 0, e = toModule.getNumPorts(); i < e; ++i)
+      for (unsigned i = 0, e = getNumPorts(toModule); i < e; ++i)
         mergeAnnotations(toModule, PortAnnoTarget(toModule, i),
                          AnnotationSet::forPort(toModule, i), fromModule,
                          PortAnnoTarget(fromModule, i),
@@ -1211,7 +1211,7 @@ void fixupAllModules(InstanceGraph &instanceGraph) {
     auto module = cast<FModuleLike>(*node->getModule());
     for (auto *instRec : node->uses()) {
       auto inst = instRec->getInstance();
-      for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i)
+      for (unsigned i = 0, e = getNumPorts(module); i < e; ++i)
         fixupReferences(inst->getResult(i), module.getPortType(i));
     }
   }

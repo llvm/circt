@@ -205,7 +205,7 @@ DeclKind firrtl::getDeclarationKind(Value val) {
 }
 
 size_t firrtl::getNumPorts(Operation *op) {
-  if (auto module = dyn_cast<FModuleLike>(op))
+  if (auto module = dyn_cast<hw::HWModuleLike>(*op))
     return module.getNumPorts();
   return op->getNumResults();
 }
@@ -457,7 +457,7 @@ static SmallVector<PortInfo> getPorts(FModuleLike module) {
   // FExtModuleOp's don't have block arguments or locations for their ports.
   auto loc = module->getLoc();
   SmallVector<PortInfo> results;
-  for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i) {
+  for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
     results.push_back({module.getPortNameAttr(i), module.getPortType(i),
                        module.getPortDirection(i), module.getPortSymbolAttr(i),
                        loc, AnnotationSet::forPort(module, i)});
@@ -486,7 +486,7 @@ static void insertPorts(FModuleLike op,
                         Block *body = nullptr) {
   if (ports.empty())
     return;
-  unsigned oldNumArgs = op.getNumPorts();
+  unsigned oldNumArgs = getNumPorts(op);
   unsigned newNumArgs = oldNumArgs + ports.size();
 
   // Add direction markers and names for new ports.
@@ -566,11 +566,12 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   ArrayRef<Attribute> portTypes = op.getPortTypes();
   ArrayRef<Attribute> portAnnos = op.getPortAnnotations();
   ArrayRef<Attribute> portSyms = op.getPortSymbols();
-  assert(portDirections.size() == op.getNumPorts());
-  assert(portNames.size() == op.getNumPorts());
-  assert(portAnnos.size() == op.getNumPorts() || portAnnos.empty());
-  assert(portTypes.size() == op.getNumPorts());
-  assert(portSyms.size() == op.getNumPorts() || portSyms.empty());
+  auto numPorts = getNumPorts(op);
+  assert(portDirections.size() == numPorts);
+  assert(portNames.size() == numPorts);
+  assert(portAnnos.size() == numPorts || portAnnos.empty());
+  assert(portTypes.size() == numPorts);
+  assert(portSyms.size() == numPorts || portSyms.empty());
 
   SmallVector<Direction> newPortDirections =
       removeElementsAtIndices<Direction>(portDirections, portIndices);
@@ -1205,7 +1206,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 
   // Gather the result types.
   SmallVector<Type> resultTypes;
-  resultTypes.reserve(module.getNumPorts());
+  resultTypes.reserve(getNumPorts(module));
   llvm::transform(
       module.getPortTypes(), std::back_inserter(resultTypes),
       [](Attribute typeAttr) { return typeAttr.cast<TypeAttr>().getValue(); });
@@ -1355,7 +1356,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // Check that all the attribute arrays are the right length up front.  This
   // lets us safely use the port name in error messages below.
   size_t numResults = getNumResults();
-  size_t numExpected = referencedModule.getNumPorts();
+  size_t numExpected = getNumPorts(referencedModule);
   if (numResults != numExpected) {
     return emitNote(emitOpError() << "has a wrong number of results; expected "
                                   << numExpected << " but got " << numResults);

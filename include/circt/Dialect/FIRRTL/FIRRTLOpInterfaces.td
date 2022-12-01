@@ -223,12 +223,6 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     // All Port Information
     //===------------------------------------------------------------------===//
 
-    InterfaceMethod<"Get the number of ports",
-    "size_t", "getNumPorts", (ins), [{}],
-    /*defaultImplementation=*/[{
-      return $_op.getPortTypesAttr().size();
-    }]>,
-
     InterfaceMethod<"Get information about all ports",
     "SmallVector<PortInfo>", "getPorts">,
 

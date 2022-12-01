@@ -175,6 +175,13 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
     Block *getBodyBlock() { return &getFunctionBody().front(); }
   }];
 
+  let extraClassDefinition = [{
+    size_t $cppClass::getNumPorts() {
+      auto ports = getPorts();
+      return ports.inputs.size() + ports.outputs.size();
+    }
+  }];
+
   let hasCustomAssemblyFormat = 1;
 }
 

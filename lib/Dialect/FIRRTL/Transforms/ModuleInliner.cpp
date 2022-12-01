@@ -713,7 +713,7 @@ void Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b,
                               SmallVectorImpl<Value> &wires,
                               SmallVectorImpl<Backedge> &edges) {
   auto portInfo = target.getPorts();
-  for (unsigned i = 0, e = target.getNumPorts(); i < e; ++i) {
+  for (unsigned i = 0, e = getNumPorts(target); i < e; ++i) {
     auto arg = target.getArgument(i);
     // Get the type of the wire.
     auto type = arg.getType().cast<FIRRTLType>();
@@ -1208,7 +1208,7 @@ void Inliner::identifyNLAsTargetingOnlyModules() {
           referencedNLASyms.insert(sym.getAttr());
     };
     // Scan ports
-    for (unsigned i = 0, e = mod.getNumPorts(); i != e; ++i)
+    for (unsigned i = 0, e = getNumPorts(mod); i != e; ++i)
       scanAnnos(AnnotationSet::forPort(mod, i));
 
     // Scan operations (and not the module itself):

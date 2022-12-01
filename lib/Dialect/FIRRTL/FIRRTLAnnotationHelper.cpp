@@ -229,7 +229,7 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
     } else {
       auto field = component.front().name;
       ref = AnnoTarget();
-      for (size_t p = 0, pe = target.getNumPorts(); p < pe; ++p)
+      for (size_t p = 0, pe = getNumPorts(target); p < pe; ++p)
         if (target.getPortName(p) == field) {
           ref = PortAnnoTarget(target, p);
           break;
@@ -326,7 +326,7 @@ InstanceOp firrtl::addPortsToModule(
                            getNamespace(nameForMod).newName("_gen_" + newName));
   };
   // The port number for the new port.
-  unsigned portNo = mod.getNumPorts();
+  unsigned portNo = getNumPorts(mod);
   PortInfo portInfo = {portName(mod), portType, dir, {}, mod.getLoc()};
   mod.insertPorts({{portNo, portInfo}});
   if (targetCaches)
