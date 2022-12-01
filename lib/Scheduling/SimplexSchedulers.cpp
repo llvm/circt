@@ -263,6 +263,7 @@ protected:
   void updateMargins();
   void incrementII();
   void scheduleOperation(Operation *n);
+  unsigned computeResMinII();
 
 public:
   ModuloSimplexScheduler(ModuloProblem &prob, Operation *lastOp)
@@ -1115,12 +1116,27 @@ void ModuloSimplexScheduler::scheduleOperation(Operation *n) {
   (void)fixedN, (void)enteredN;
 }
 
+unsigned ModuloSimplexScheduler::computeResMinII() {
+  unsigned resMinII = 1;
+  SmallDenseMap<Problem::OperatorType, unsigned> uses;
+  for (auto *op : prob.getOperations())
+    if (isLimited(op, prob))
+      ++uses[*prob.getLinkedOperatorType(op)];
+
+  for (auto pair : uses)
+    resMinII = std::max(
+        resMinII, (unsigned)ceil(pair.second / *prob.getLimit(pair.first)));
+
+  return resMinII;
+}
+
 LogicalResult ModuloSimplexScheduler::schedule() {
   if (failed(checkLastOp()))
     return failure();
 
   parameterS = 0;
-  parameterT = 1;
+  parameterT = computeResMinII();
+  LLVM_DEBUG(dbgs() << "ResMinII = " << parameterT << "\n");
   buildTableau();
   asapTimes.resize(startTimeLocations.size());
   alapTimes.resize(startTimeLocations.size());
