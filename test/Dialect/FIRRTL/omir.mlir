@@ -96,7 +96,9 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
 
 // CHECK-DAG:   [[locA:#loc[0-9]*]] = loc("A":0:1)
 // CHECK-DAG:   [[locB:#loc[0-9]*]] = loc("B":2:3)
-// CHECK-DAG:   [[locCD:#loc[0-9]*]] = loc(fused["C":4:5, "D":6:7])
+// CHECK-DAG:   [[locC:#loc[0-9]*]] = loc("C":4:5)
+// CHECK-DAG:   [[locD:#loc[0-9]*]] = loc("D":6:7)
+// CHECK-DAG:   [[locCD:#loc[0-9]*]] = loc(fused[[[locC]], [[locD]]])
 // CHECK-LABEL: firrtl.circuit "Foo"
 // CHECK-SAME:    x = {{{[^{}]+}} info = [[locB]]
 // CHECK-SAME:    y = {{{[^{}]+}} info = [[locCD]]
