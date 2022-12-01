@@ -311,9 +311,15 @@ Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
         return state.getNamespace(mod);
       },
       &state.targetCaches);
-  // Since the intance op genenerates the RefType output, no need of another
-  // RefSendOp.
+  // Since the instance op generates the RefType output, no need of another
+  // RefSendOp.  Store into an op to ensure we have stable reference,
+  // so future tapping won't invalidate this Value.
   sendVal = modInstance.getResults().back();
+  sendVal =
+      builder
+          .create<mlir::UnrealizedConversionCastOp>(sendVal.getType(), sendVal)
+          ->getResult(0);
+
   // Now set the instance as the source for the final datatap xmr.
   srcTarget = AnnoPathValue(modInstance);
   if (auto extMod = dyn_cast<FExtModuleOp>((Operation *)mod)) {

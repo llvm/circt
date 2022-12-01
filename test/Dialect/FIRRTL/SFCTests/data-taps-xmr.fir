@@ -17,6 +17,12 @@ circuit Top : %[[
       },
       {
         "class":"sifive.enterprise.grandcentral.DataTapModuleSignalKey",
+        "module":"~Top|BlackBox",
+        "internalPath":"random.something_else",
+        "sink": "~Top|Top>tap3"
+      },
+      {
+        "class":"sifive.enterprise.grandcentral.DataTapModuleSignalKey",
         "module":"~Top|InternalPathChild",
         "internalPath":"io_out",
         "sink": "~Top|Top/unsigned:ChildWrapper/signed:Child>tap"
@@ -30,6 +36,10 @@ circuit Top : %[[
   {
     "class": "firrtl.transforms.DontTouchAnnotation",
     "target": "~Top|Top>tap2"
+  },
+  {
+    "class": "firrtl.transforms.DontTouchAnnotation",
+    "target": "~Top|Top>tap3"
   },
   {
     "class": "firrtl.transforms.DontTouchAnnotation",
@@ -101,6 +111,9 @@ circuit Top : %[[
     wire tap2 : UInt<1>
     tap2 is invalid
 
+    wire tap3 : UInt<1>
+    tap3 is invalid
+
     inst unsigned of ChildWrapper
     node _child_io_in_T = and(io.in, in)
     unsigned.io.in <= _child_io_in_T
@@ -119,5 +132,6 @@ circuit Top : %[[
 ; CHECK-NOT: module
 ; CHECK:   tap = Top.foo.b.inv;
 ; CHECK:   assign tap2 = Top.unsigned_0.signed_0.localparam_0.random.something;
+; CHECK:   assign tap3 = Top.unsigned_0.signed_0.localparam_0.random.something_else;
 ; CHECK:   InternalPathChild int_0 (
 ; CHECK: endmodule

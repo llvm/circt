@@ -516,11 +516,31 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     return {};
   };
 
+  auto getNoopCast = [](Value v) -> mlir::UnrealizedConversionCastOp {
+    auto op =
+        dyn_cast_or_null<mlir::UnrealizedConversionCastOp>(v.getDefiningOp());
+    if (op && op.getNumResults() == 1 && op.getNumOperands() == 1 &&
+        op.getResultTypes()[0] == op.getOperandTypes()[0])
+      return op;
+    return {};
+  };
+
   // Utility function to connect a destination to a source.  Always use a
   // ConnectOp as the widths may be uninferred.
   SmallVector<Operation *> opsToErase;
   auto connect = [&](Value src, Value dest,
                      ImplicitLocOpBuilder &builder) -> LogicalResult {
+    // Strip away noop unrealized_conversion_cast's, used as placeholders.
+    // In the future, these should be created/managed as part of creating WP's.
+    if (auto op = getNoopCast(dest)) {
+      dest = op.getOperand(0);
+      opsToErase.push_back(op);
+      std::swap(src, dest);
+    } else if (auto op = getNoopCast(src)) {
+      src = op.getOperand(0);
+      opsToErase.push_back(op);
+    }
+
     if (foldFlow(dest) == Flow::Source)
       std::swap(src, dest);
 
