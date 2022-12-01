@@ -600,8 +600,8 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
                                     printOp.getSubstitutions(), label, true);
     else // VerifFlavor::VerifLibCover
       op = builder.create<CoverOp>(printOp.getClock(), predicate,
-                                    printOp.getCond(), message,
-                                    printOp.getSubstitutions(), label, true);
+                                   printOp.getCond(), message,
+                                   printOp.getSubstitutions(), label, true);
     printOp.erase();
 
     // Attach additional attributes extracted from the JSON object.
