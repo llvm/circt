@@ -584,7 +584,7 @@ StringAttr circt::firrtl::getOrAddInnerSym(
     FModuleLike mod, size_t portIdx, StringRef nameHint,
     std::function<ModuleNamespace &(FModuleLike)> getNamespace) {
 
-  auto attr = mod.getPortSymbolAttr(portIdx);
+  auto attr = cast<hw::HWModuleLike>(*mod).getPortSymbolAttr(portIdx);
   if (attr)
     return attr.getSymName();
   if (nameHint.empty()) {

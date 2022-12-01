@@ -459,7 +459,8 @@ static SmallVector<PortInfo> getPorts(FModuleLike module) {
   SmallVector<PortInfo> results;
   for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
     results.push_back({module.getPortNameAttr(i), module.getPortType(i),
-                       module.getPortDirection(i), module.getPortSymbolAttr(i),
+                       module.getPortDirection(i),
+                       cast<hw::HWModuleLike>(*module).getPortSymbolAttr(i),
                        loc, AnnotationSet::forPort(module, i)});
   }
   return results;
@@ -515,7 +516,7 @@ static void insertPorts(FModuleLike op,
       newNames.push_back(existingNames[oldIdx]);
       newTypes.push_back(existingTypes[oldIdx]);
       newAnnos.push_back(op.getAnnotationsAttrForPort(oldIdx));
-      newSyms.push_back(op.getPortSymbolAttr(oldIdx));
+      newSyms.push_back(cast<hw::HWModuleLike>(*op).getPortSymbolAttr(oldIdx));
       ++oldIdx;
     }
   };
@@ -851,7 +852,7 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
       NamedAttrList dummyAttrs;
       if (parser.parseCustomAttributeWithFallback(
               innerSymAttr, ::mlir::Type{},
-              InnerSymbolTable::getInnerSymbolAttrName(), dummyAttrs)) {
+              hw::InnerSymbolTable::getInnerSymbolAttrName(), dummyAttrs)) {
         return ::mlir::failure();
       }
     }
@@ -1496,7 +1497,8 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   if (succeeded(parser.parseOptionalKeyword("sym"))) {
     if (parser.parseCustomAttributeWithFallback(
             innerSymAttr, ::mlir::Type{},
-            InnerSymbolTable::getInnerSymbolAttrName(), result.attributes)) {
+            hw::InnerSymbolTable::getInnerSymbolAttrName(),
+            result.attributes)) {
       return ::mlir::failure();
     }
   }
@@ -3849,7 +3851,7 @@ bool HierPathOp::isComponent() { return (bool)ref(); }
 // 6. The last element of the namepath, can be an InnerRefAttr on either a
 // module port or a declaration inside the module.
 // 7. The last element of the namepath can also be a module symbol.
-LogicalResult HierPathOp::verifyInnerRefs(InnerRefNamespace &ns) {
+LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   if (getNamepath().size() <= 1)
     return emitOpError()
            << "the instance path cannot be empty/single element, it "

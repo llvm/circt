@@ -120,7 +120,7 @@ firrtl.circuit "Foo" attributes {annotations = [
 // -----
 
 firrtl.circuit "SymArgZero" {
-  // expected-error @+1 {{zero width port "foo" is referenced by name ["symfoo"] (e.g. in an XMR).}}
+  // expected-error @+1 {{zero width port "foo" is referenced by name [#hw<innerSym@symfoo>] (e.g. in an XMR).}}
   firrtl.module @SymArgZero(in %foo :!firrtl.uint<0> sym @symfoo) {
   }
 }

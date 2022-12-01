@@ -228,31 +228,31 @@ StringAttr getResAttrsName(MLIRContext *context) {
 
 /// Return the symbol (if any, else null) on the corresponding input port
 /// argument.
-StringAttr hw::getArgSym(Operation *op, unsigned i) {
+InnerSymAttr hw::getArgSym(Operation *op, unsigned i) {
   assert(isAnyModuleOrInstance(op) &&
          "Can only get module ports from an instance or module");
-  StringAttr sym = {};
+  InnerSymAttr sym = {};
   auto argAttrs =
       op->getAttrOfType<ArrayAttr>(getArgAttrsName(op->getContext()));
   if (argAttrs && (i < argAttrs.size()))
     if (auto s = argAttrs[i].cast<DictionaryAttr>())
       if (auto symRef = s.get("hw.exportPort"))
-        sym = symRef.cast<FlatSymbolRefAttr>().getAttr();
+        sym = symRef.cast<InnerSymAttr>();
   return sym;
 }
 
 /// Return the symbol (if any, else null) on the corresponding output port
 /// argument.
-StringAttr hw::getResultSym(Operation *op, unsigned i) {
+InnerSymAttr hw::getResultSym(Operation *op, unsigned i) {
   assert(isAnyModuleOrInstance(op) &&
          "Can only get module ports from an instance or module");
-  StringAttr sym = {};
+  InnerSymAttr sym = {};
   auto resAttrs =
       op->getAttrOfType<ArrayAttr>(getResAttrsName(op->getContext()));
   if (resAttrs && (i < resAttrs.size()))
     if (auto s = resAttrs[i].cast<DictionaryAttr>())
       if (auto symRef = s.get("hw.exportPort"))
-        sym = symRef.cast<FlatSymbolRefAttr>().getAttr();
+        sym = symRef.cast<InnerSymAttr>();
   return sym;
 }
 
@@ -561,9 +561,8 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
     argTypes.push_back(elt.type);
     argNames.push_back(elt.name);
     Attribute attr;
-    if (elt.sym && !elt.sym.getValue().empty())
-      attr = builder.getDictionaryAttr(
-          {{exportPortIdent, FlatSymbolRefAttr::get(elt.sym)}});
+    if (elt.sym && !elt.sym.empty())
+      attr = builder.getDictionaryAttr({{exportPortIdent, elt.sym}});
     else
       attr = builder.getDictionaryAttr({});
     argAttrs.push_back(attr);
@@ -573,9 +572,8 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
     resultTypes.push_back(elt.type);
     resultNames.push_back(elt.name);
     Attribute attr;
-    if (elt.sym && !elt.sym.getValue().empty())
-      attr = builder.getDictionaryAttr(
-          {{exportPortIdent, FlatSymbolRefAttr::get(elt.sym)}});
+    if (elt.sym && !elt.sym.empty())
+      attr = builder.getDictionaryAttr({{exportPortIdent, elt.sym}});
     else
       attr = builder.getDictionaryAttr({});
     resultAttrs.push_back(attr);
@@ -643,10 +641,8 @@ static void modifyModuleArgs(
       if (port.direction == PortDirection::INOUT && !port.type.isa<InOutType>())
         port.type = InOutType::get(port.type);
       Attribute attr =
-          (port.sym && !port.sym.getValue().empty())
-              ? DictionaryAttr::get(
-                    context,
-                    {{exportPortAttrName, FlatSymbolRefAttr::get(port.sym)}})
+          (port.sym && !port.sym.empty())
+              ? DictionaryAttr::get(context, {{exportPortAttrName, port.sym}})
               : emptyDictAttr;
       newArgNames.push_back(port.name);
       newArgTypes.push_back(port.type);
@@ -1541,8 +1537,8 @@ GlobalRefOp::verifySymbolUses(mlir::SymbolTableCollection &symTables) {
                 cast<mlir::FunctionOpInterface>(mod).getArgAttrsAttr())
           for (auto attr :
                argAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
-            if (auto symRef = attr.get("hw.exportPort"))
-              if (symRef.cast<FlatSymbolRefAttr>().getValue() == innerSym)
+            if (auto symRef = attr.getAs<hw::InnerSymAttr>("hw.exportPort"))
+              if (symRef.getSymName() == innerSym)
                 if (hasGlobalRef(attr.get(GlobalRefAttr::DialectAttrName)))
                   return success();
 
@@ -1550,8 +1546,8 @@ GlobalRefOp::verifySymbolUses(mlir::SymbolTableCollection &symTables) {
                 cast<mlir::FunctionOpInterface>(mod).getResAttrsAttr())
           for (auto attr :
                resAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
-            if (auto symRef = attr.get("hw.exportPort"))
-              if (symRef.cast<FlatSymbolRefAttr>().getValue() == innerSym)
+            if (auto symRef = attr.getAs<hw::InnerSymAttr>("hw.exportPort"))
+              if (symRef.getSymName() == innerSym)
                 if (hasGlobalRef(attr.get(GlobalRefAttr::DialectAttrName)))
                   return success();
       }

@@ -607,7 +607,7 @@ void EmitOMIRPass::runOnOperation() {
     if (auto instOp = dyn_cast<InstanceOp>(op)) {
       // This instance does not have a symbol, but we are adding one. Remove it
       // after the pass.
-      if (!op->getAttr(InnerSymbolTable::getInnerSymbolAttrName()))
+      if (!op->getAttr(hw::InnerSymbolTable::getInnerSymbolAttrName()))
         tempSymInstances.insert(instOp);
 
       instancesByName.insert({getInnerRefTo(op), instOp});

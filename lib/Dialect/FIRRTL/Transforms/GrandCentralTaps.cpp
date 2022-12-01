@@ -926,8 +926,8 @@ void GrandCentralTapsPass::runOnOperation() {
   LLVM_DEBUG(llvm::dbgs() << "Running the GCT Data Taps pass\n");
   SymbolTable symtbl(circuitOp);
   circuitSymbols = &symtbl;
-  InnerSymbolTableCollection innerSymTblCol(circuitOp);
-  InnerRefNamespace innerRefNS{symtbl, innerSymTblCol};
+  hw::InnerSymbolTableCollection innerSymTblCol(circuitOp);
+  hw::InnerRefNamespace innerRefNS{symtbl, innerSymTblCol};
 
   // Here's a rough idea of what the Scala code is doing:
   // - Gather the `source` of all `keys` of all `DataTapsAnnotation`s throughout
