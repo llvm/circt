@@ -84,11 +84,27 @@ public:
     if (visited.contains(node))
       return success();
     // visiting: Set of nodes that have a path to this current node.
-    if (visiting.contains(node))
-      return node.getParentModule().emitError(
-          "detected combinational cycle in a FIRRTL module '");
-
+    if (visiting.contains(node)) {
+      FieldRef f(node.val, node.fieldId);
+      auto signalName = getFieldName(f);
+      auto errorDiag = mlir::emitError(
+          module.getLoc(),
+          "detected combinational cycle in a FIRRTL module, sample path: ");
+      errorDiag.attachNote(node.val.getLoc());
+      if (!signalName.empty())
+        errorDiag << module.getName() << "." << signalName;
+      for (auto n : llvm::reverse(currentPath)) {
+        FieldRef f(n.val, n.fieldId);
+        auto signalName = getFieldName(f);
+        if (!signalName.empty())
+          errorDiag << " -> " << module.getName() << "." << signalName;
+        if (n == node)
+          break;
+      }
+      return failure();
+    }
     visiting.insert(node);
+    currentPath.push_back(node);
     // Case 1: Instance and Mem ops.
     if (!handleDefOps(node, inputArg)) {
       // Case 2: Handle aggregate values.
@@ -108,28 +124,15 @@ public:
         // to the same field.
         for (auto &leaf : valLeafOps[baseVal][fieldId]) {
           auto leafNode = Node(leaf, 0);
-          if (dfsFromNode(leafNode, inputArg).failed()) {
-            if (auto nodeType = baseVal.getType().dyn_cast<BundleType>()) {
-              Operation *errOp;
-              if (baseVal.isa<BlockArgument>())
-                errOp = module;
-              else
-                errOp = baseVal.getDefiningOp();
-              if (!isa<MemOp>(errOp))
-                errOp->emitRemark()
-                    << "this operation's field '"
-                    << nodeType.getElementName(
-                           nodeType.getIndexForFieldID(node.fieldId))
-                    << "' is part of the combinational cycle";
-            }
+          if (dfsFromNode(leafNode, inputArg).failed())
             return failure();
-          }
         }
       } // Case 3: Handle ground type values and iterate over all the users.
       else if (visitChildren(node, inputArg).failed())
         return failure();
     }
     visiting.erase(node);
+    currentPath.pop_back();
     // Finished discovering all the reachable nodes from node.
     visited.insert(node);
     return success();
@@ -222,7 +225,8 @@ public:
               if (dfsFromNode(dataNode, inputArg).failed()) {
                 mem.emitRemark("memory is part of a combinational cycle "
                                "between the data and ")
-                    << (node.fieldId == 1 ? "address" : "enable") << " port";
+                    << (node.fieldId == addressFieldId ? "address" : "enable")
+                    << " port";
                 return true;
               }
             }
@@ -382,6 +386,7 @@ public:
   llvm::SmallDenseMap<Node, SmallVector<Node>> &portPaths;
   // Map of all the leaf ground type values for a corresponding aggregate value.
   DenseMap<Value, DenseMap<size_t, SmallVector<Value>>> valLeafOps;
+  SmallVector<Node> currentPath;
 };
 
 /// This pass constructs a local graph for each module to detect combinational
