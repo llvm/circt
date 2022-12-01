@@ -1724,7 +1724,9 @@ struct AggOneShot : public mlir::RewritePattern {
             }
             continue;
           }
-          return {};
+          // Bail out if the user is attach or normal connect op.
+          if (isa<AttachOp, ConnectOp>(user))
+            return {};
         }
       } else if (auto subIndex = dyn_cast<SubindexOp>(user)) {
         for (Operation *subuser : subIndex.getResult().getUsers()) {
@@ -1736,7 +1738,9 @@ struct AggOneShot : public mlir::RewritePattern {
             }
             continue;
           }
-          return {};
+          // Bail out if the user is attach or normal connect op.
+          if (isa<AttachOp, ConnectOp>(user))
+            return {};
         }
       } else {
         return {};

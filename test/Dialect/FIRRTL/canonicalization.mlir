@@ -2519,4 +2519,17 @@ firrtl.module @CrashRegResetWithOneReset(in %clock: !firrtl.clock, in %reset: !f
   firrtl.connect %io_q, %reg : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
+// CHECK-LABEL: firrtl.module @Issue4386
+firrtl.module @Issue4386(in %b: !firrtl.uint<1>, out %a: !firrtl.uint<2>) {
+  %foo = firrtl.wire   : !firrtl.vector<uint<1>, 2>
+  %0 = firrtl.subindex %foo[1] : !firrtl.vector<uint<1>, 2>
+  %1 = firrtl.subindex %foo[0] : !firrtl.vector<uint<1>, 2>
+  firrtl.strictconnect %1, %b : !firrtl.uint<1>
+  firrtl.strictconnect %0, %b : !firrtl.uint<1>
+  %2 = firrtl.add %1, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+  // CHECK:      %[[create:.+]] = firrtl.vectorcreate %b, %b
+  // CHECK-NUXT: firrtl.strictconnect %foo, %[[create]]
+  firrtl.strictconnect %a, %2 : !firrtl.uint<2>
+}
+
 }
