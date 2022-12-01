@@ -32,10 +32,13 @@ void circt::python::populateDialectSVSubmodule(py::module &m) {
           "get",
           [](py::object cls, std::string name, py::object expressionObj,
              MlirContext ctxt) {
+            // Need temporary storage for casted string.
+            std::string expr;
             MlirStringRef expression = {nullptr, 0};
-            if (!expressionObj.is_none())
-              expression = mlirStringRefCreateFromCString(
-                  expressionObj.cast<std::string>().c_str());
+            if (!expressionObj.is_none()) {
+              expr = expressionObj.cast<std::string>();
+              expression = mlirStringRefCreateFromCString(expr.c_str());
+            }
             return cls(svSVAttributeAttrGet(
                 ctxt, mlirStringRefCreateFromCString(name.c_str()),
                 expression));
