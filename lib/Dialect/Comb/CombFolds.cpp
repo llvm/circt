@@ -1706,6 +1706,49 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
           }
         }
       }
+      // Merge neighboring array extracts of neighboring inputs, e.g.
+      // {Array[4], bitcast(Array[3:2])} -> bitcast(A[4:2])
+
+      // This represents a slice of an array.
+      struct ArraySlice {
+        Value input;
+        Value index;
+        unsigned long width;
+        static std::optional<ArraySlice> get(Value value) {
+          assert(value.getType().isa<IntegerType>() && "expected integer type");
+          if (auto arrayGet = value.getDefiningOp<hw::ArrayGetOp>())
+            return ArraySlice{arrayGet.getInput(), arrayGet.getIndex(), 1};
+          // array slice op is wrapped with bitcast.
+          if (auto bitcast = value.getDefiningOp<hw::BitcastOp>())
+            if (auto arraySlice =
+                    bitcast.getInput().getDefiningOp<hw::ArraySliceOp>())
+              return ArraySlice{
+                  arraySlice.getInput(), arraySlice.getLowIndex(),
+                  hw::type_cast<hw::ArrayType>(arraySlice.getType()).getSize()};
+          return std::nullopt;
+        }
+      };
+      if (auto extractOpt = ArraySlice::get(inputs[i])) {
+        if (auto prevExtractOpt = ArraySlice::get(inputs[i - 1])) {
+          // Check that two array slices are mergable.
+          if (prevExtractOpt->index.getType() == extractOpt->index.getType() &&
+              prevExtractOpt->input == extractOpt->input &&
+              hw::isOffset(extractOpt->index, prevExtractOpt->index,
+                           extractOpt->width)) {
+            auto resType = hw::ArrayType::get(
+                hw::type_cast<hw::ArrayType>(prevExtractOpt->input.getType())
+                    .getElementType(),
+                extractOpt->width + prevExtractOpt->width);
+            auto resIntType = rewriter.getIntegerType(hw::getBitWidth(resType));
+            Value replacement = rewriter.create<hw::BitcastOp>(
+                op.getLoc(), resIntType,
+                rewriter.create<hw::ArraySliceOp>(op.getLoc(), resType,
+                                                  prevExtractOpt->input,
+                                                  extractOpt->index));
+            return flattenConcat(i - 1, i, replacement);
+          }
+        }
+      }
     }
   }
 

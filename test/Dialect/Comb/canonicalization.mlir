@@ -1400,3 +1400,18 @@ hw.module @Issue2546() -> (b: i1) {
   %0 = comb.xor %0, %true : i1
   hw.output %0 : i1
 }
+
+// CHECK-LABEL: hw.module @ArrayConcatFlatten
+hw.module @ArrayConcatFlatten(%a: !hw.array<3xi1>) -> (b: i3) {
+  // CHECK-NEXT:  %0 = hw.bitcast %a : (!hw.array<3xi1>) -> i3
+  // CHECK-NEXT: hw.output %0 : i3
+  %c-2_i2 = hw.constant -2 : i2
+  %c1_i2 = hw.constant 1 : i2
+  %c0_i2 = hw.constant 0 : i2
+  %0 = hw.array_get %a[%c0_i2] : !hw.array<3xi1>, i2
+  %1 = hw.array_get %a[%c1_i2] : !hw.array<3xi1>, i2
+  %2 = hw.array_get %a[%c-2_i2] : !hw.array<3xi1>, i2
+  %3 = comb.concat %1, %0 : i1, i1
+  %4 = comb.concat %2, %3 : i1, i2
+  hw.output %4 : i3
+}
