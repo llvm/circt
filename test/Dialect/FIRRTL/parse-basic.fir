@@ -1111,6 +1111,17 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: [[NOT_COND:%.+]] = firrtl.not %cond
     ; CHECK-NEXT: firrtl.assert %clock, [[NOT_COND]], [[NOT_ENABLE]]
 
+    ; Verification Library Covers
+
+    ; Predicate modifier `noMod`
+    when cond:
+      printf(clock, enable, "Assertion failed: [verif-library-cover]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"},{\"type\":\"formalOnly\"}],\"labelExts\":[\"cover\",\"label\"],\"format\":{\"type\":\"sva\"},\"baseMsg\":\"cover hello world\"}", value)
+      stop(clock, enable, 1)
+    ; CHECK: [[TMP:%.+]] = firrtl.not %cond
+    ; CHECK-NEXT: firrtl.cover %clock, [[TMP]], %enable, "cover hello world"(%value) : !firrtl.uint<42>
+    ; CHECK-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
+    ; CHECK-SAME: name = "verif_library_cover_label"
+
   module LargeMem :
     input clock : Clock
     input reset : Reset
