@@ -191,7 +191,7 @@ def HierPathOp : FIRRTLOp<"hierpath",
   let summary = "Hierarchical path specification";
   let description = [{
     The "firrtl.hierpath" operation represents a path through the hierarchy.
-    This is used to specify namable things for use in other operations, for 
+    This is used to specify namable things for use in other operations, for
     example in verbatim substitution. Non-local annotations also use these.
   }];
   let arguments = (ins SymbolNameAttr:$sym_name, NameRefArrayAttr:$namepath);
