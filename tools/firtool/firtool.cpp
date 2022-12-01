@@ -307,10 +307,11 @@ static cl::opt<bool>
                             cl::desc("Disable the MergeConnections pass"),
                             cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
-static cl::opt<bool>
-    mergeConnectionsAgggresively("merge-connections-aggressive-merging",
-                                 cl::desc("Merge connections aggressively"),
-                                 cl::init(false), cl::cat(mainCategory));
+static cl::opt<bool> disableAggressiveMergeConnections(
+    "disable-aggressive-merge-connections",
+    cl::desc("Disable aggressive merge connections (i.e. merge all field-level "
+             "connections into bulk connections)"),
+    cl::init(false), cl::cat(mainCategory));
 
 /// Enable the pass to merge the read and write ports of a memory, if their
 /// enable conditions are mutually exclusive.
@@ -767,7 +768,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       preserveAggregate != firrtl::PreserveAggregate::None &&
       !disableMergeConnections)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        firrtl::createMergeConnectionsPass(mergeConnectionsAgggresively));
+        firrtl::createMergeConnectionsPass(
+            !disableAggressiveMergeConnections.getValue()));
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {

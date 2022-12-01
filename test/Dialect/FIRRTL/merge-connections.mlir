@@ -35,8 +35,7 @@ firrtl.circuit "Test"   {
   //     a.b <= UInt<1>(0)
   //     a.c <= UInt<1>(1)
   // COMMON-LABEL: firrtl.module @Constant(
-  // COMMON-NEXT:    %c1_ui2 = firrtl.constant 1
-  // COMMON-NEXT:    %0 = firrtl.bitcast %c1_ui2
+  // COMMON-NEXT:    %0 = firrtl.aggregateconstant [0 : ui1, 1 : ui1]
   // COMMON-NEXT:    firrtl.strictconnect %a, %0
   // COMMON-NEXT:  }
   firrtl.module @Constant(out %a: !firrtl.bundle<b: uint<1>, c: uint<1>>) {
@@ -49,9 +48,8 @@ firrtl.circuit "Test"   {
   }
 
   // AGGRESSIVE-LABEL:  firrtl.module @ConcatToVector(
-  // AGGRESSIVE-NEXT:     %0 = firrtl.cat %s2, %s1
-  // AGGRESSIVE-NEXT:     %1 = firrtl.bitcast %0
-  // AGGRESSIVE-NEXT:     firrtl.strictconnect %sink, %1
+  // AGGRESSIVE-NEXT:     %0 = firrtl.vectorcreate %s1, %s2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 2>
+  // AGGRESSIVE-NEXT:     firrtl.strictconnect %sink, %0
   // AGGRESSIVE-NEXT:   }
   // CHECK-LABEL:       firrtl.module @ConcatToVector(
   // CHECK-NEXT:          %0 = firrtl.subindex %sink[1]
@@ -70,9 +68,8 @@ firrtl.circuit "Test"   {
   // Check that we don't use %s1 as a source value.
   // AGGRESSIVE-LABEL:   firrtl.module @FailedToUseAggregate(
   // AGGRESSIVE-NEXT:    %0 = firrtl.subindex %s1[0]
-  // AGGRESSIVE-NEXT:    %1 = firrtl.cat %s2, %0
-  // AGGRESSIVE-NEXT:    %2 = firrtl.bitcast %1
-  // AGGRESSIVE-NEXT:    firrtl.strictconnect %sink, %2
+  // AGGRESSIVE-NEXT:    %1 = firrtl.vectorcreate %0, %s2
+  // AGGRESSIVE-NEXT:    firrtl.strictconnect %sink, %1
   // AGGRESSIVE-NEXT:   }
   // CHECK-LABEL:       firrtl.module @FailedToUseAggregate(
   // CHECK-NEXT:         %0 = firrtl.subindex %sink[1]
