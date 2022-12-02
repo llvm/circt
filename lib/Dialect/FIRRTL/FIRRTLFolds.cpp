@@ -205,8 +205,8 @@ constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
   if (resultType.getWidthOrSentinel() < 0)
     return {};
 
-  // Any binary non-cmp op on I<0> is 0.
-  if (resultType.getWidthOrSentinel() == 0 && opKind == BinOpKind::Compare)
+  // Any binary op returning i0 is 0.
+  if (resultType.getWidthOrSentinel() == 0)
     return getIntAttr(resultType, APInt(0, 0, resultType.isSigned()));
 
   // Determine the operand widths. This is either dictated by the operand type,
