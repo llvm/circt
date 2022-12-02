@@ -1713,7 +1713,7 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
       struct ArraySlice {
         Value input;
         Value index;
-        unsigned long width;
+        size_t width;
         static std::optional<ArraySlice> get(Value value) {
           assert(value.getType().isa<IntegerType>() && "expected integer type");
           if (auto arrayGet = value.getDefiningOp<hw::ArrayGetOp>())
