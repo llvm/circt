@@ -953,8 +953,7 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
                             "not support per field symbols yet.");
         return failure();
       }
-    hwPort.sym = firrtlPort.sym ? firrtlPort.sym.getSymName()
-                                : StringAttr::get(moduleOp->getContext(), "");
+    hwPort.sym = firrtlPort.sym;
 
     // We can't lower all types, so make sure to cleanly reject them.
     if (!hwPort.type) {
@@ -965,7 +964,7 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
     // If this is a zero bit port, just drop it.  It doesn't matter if it is
     // input, output, or inout.  We don't want these at the HW level.
     if (hwPort.type.isInteger(0)) {
-      if (hwPort.sym && hwPort.sym.size()) {
+      if (hwPort.sym && !hwPort.sym.empty()) {
         moduleOp->emitError("zero width port ")
             << hwPort.name << " is referenced by name [" << hwPort.sym
             << "] (e.g. in an XMR).";

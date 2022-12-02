@@ -459,7 +459,8 @@ static SmallVector<PortInfo> getPorts(FModuleLike module) {
   SmallVector<PortInfo> results;
   for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
     results.push_back({module.getPortNameAttr(i), module.getPortType(i),
-                       module.getPortDirection(i), module.getPortSymbolAttr(i),
+                       module.getPortDirection(i),
+                       cast<hw::HWModuleLike>(*module).getPortSymbolAttr(i),
                        loc, AnnotationSet::forPort(module, i)});
   }
   return results;
@@ -515,7 +516,7 @@ static void insertPorts(FModuleLike op,
       newNames.push_back(existingNames[oldIdx]);
       newTypes.push_back(existingTypes[oldIdx]);
       newAnnos.push_back(op.getAnnotationsAttrForPort(oldIdx));
-      newSyms.push_back(op.getPortSymbolAttr(oldIdx));
+      newSyms.push_back(cast<hw::HWModuleLike>(*op).getPortSymbolAttr(oldIdx));
       ++oldIdx;
     }
   };

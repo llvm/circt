@@ -181,9 +181,9 @@ module {
   // CHECK:  hw.globalRef @glbl_D_M2 [#hw.innerNameRef<@A::@inst_0>, #hw.innerNameRef<@C::@inst>, #hw.innerNameRef<@D::@SF>, #hw.innerNameRef<@F::@symA>]
   // CHECK:  hw.globalRef @glbl_D_M3 [#hw.innerNameRef<@A::@inst_0>, #hw.innerNameRef<@C::@inst>, #hw.innerNameRef<@D::@SF>, #hw.innerNameRef<@F::@symB>]
 
-  // hw.module.extern @F(%in: i1 {hw.exportPort = @symA}) -> (out: i1 {hw.exportPort = @symB}) attributes {circt.globalRef = [[#hw.globalNameRef<@glbl_D_M2>], [#hw.globalNameRef<@glbl_D_M3>]]}
-  hw.module.extern  @F(%in: i1 {hw.exportPort = @symA, circt.globalRef = [#hw.globalNameRef<@glbl_D_M2>]}) -> (out: i1 {hw.exportPort = @symB, circt.globalRef = [#hw.globalNameRef<@glbl_D_M3>]}) attributes {}
-  hw.module @F1(%in: i1 {hw.exportPort = @symA, circt.globalRef = [#hw.globalNameRef<@glbl_D_M2>]}) -> (out: i1 {hw.exportPort = @symB, circt.globalRef = [#hw.globalNameRef<@glbl_D_M3>]}) attributes {} {
+  // hw.module.extern @F(%in: i1 {hw.exportPort = #hw<innerSym@symA>}) -> (out: i1 {hw.exportPort = #hw<innerSym@symB>}) attributes {circt.globalRef = [[#hw.globalNameRef<@glbl_D_M2>], [#hw.globalNameRef<@glbl_D_M3>]]}
+  hw.module.extern  @F(%in: i1 {hw.exportPort = #hw<innerSym@symA>, circt.globalRef = [#hw.globalNameRef<@glbl_D_M2>]}) -> (out: i1 {hw.exportPort = #hw<innerSym@symB>, circt.globalRef = [#hw.globalNameRef<@glbl_D_M3>]}) attributes {}
+  hw.module @F1(%in: i1 {hw.exportPort = #hw<innerSym@symA>, circt.globalRef = [#hw.globalNameRef<@glbl_D_M2>]}) -> (out: i1 {hw.exportPort = #hw<innerSym@symB>, circt.globalRef = [#hw.globalNameRef<@glbl_D_M3>]}) attributes {} {
    hw.output %in : i1
   }
   hw.module @FIRRTLMem() -> () {

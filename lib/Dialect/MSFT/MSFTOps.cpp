@@ -60,9 +60,8 @@ static void buildModule(OpBuilder &builder, OperationState &result,
     argTypes.push_back(elt.type);
     argNames.push_back(elt.name);
     Attribute attr;
-    if (elt.sym && !elt.sym.getValue().empty())
-      attr = builder.getDictionaryAttr(
-          {{exportPortIdent, FlatSymbolRefAttr::get(elt.sym)}});
+    if (elt.sym && !elt.sym.empty())
+      attr = builder.getDictionaryAttr({{exportPortIdent, elt.sym}});
     else
       attr = builder.getDictionaryAttr({});
     argAttrs.push_back(attr);
@@ -72,9 +71,8 @@ static void buildModule(OpBuilder &builder, OperationState &result,
     resultTypes.push_back(elt.type);
     resultNames.push_back(elt.name);
     Attribute attr;
-    if (elt.sym && !elt.sym.getValue().empty())
-      attr = builder.getDictionaryAttr(
-          {{exportPortIdent, FlatSymbolRefAttr::get(elt.sym)}});
+    if (elt.sym && !elt.sym.empty())
+      attr = builder.getDictionaryAttr({{exportPortIdent, elt.sym}});
     else
       attr = builder.getDictionaryAttr({});
     resultAttrs.push_back(attr);

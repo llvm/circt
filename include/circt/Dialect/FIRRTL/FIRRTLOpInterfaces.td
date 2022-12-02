@@ -168,15 +168,6 @@ def FModuleLike : OpInterface<"FModuleLike"> {
       return $_op.getPortSymbolsAttr().getValue();
     }]>,
 
-    InterfaceMethod<"Get a port symbol attribute",
-    "circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
-      auto syms = $_op.getPortSymbols();
-      if (syms.empty() ||
-          syms[portIndex].template cast<hw::InnerSymAttr>().empty())
-        return hw::InnerSymAttr();
-      return syms[portIndex].template cast<hw::InnerSymAttr>();
-    }]>,
-
     InterfaceMethod<"Check if port has symbol attribute",
     "bool", "hasPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
       auto syms = $_op.getPortSymbols();

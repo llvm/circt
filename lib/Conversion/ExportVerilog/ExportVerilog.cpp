@@ -4951,8 +4951,9 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
           [&](auto &os) { printUnpackedTypePostfix(portType, os); });
 
       if (state.options.printDebugInfo && portInfo[portIdx].sym &&
-          !portInfo[portIdx].sym.getValue().empty())
-        ps << " /* inner_sym: " << PPExtString(portInfo[portIdx].sym.getValue())
+          !portInfo[portIdx].sym.empty())
+        ps << " /* inner_sym: "
+           << PPExtString(portInfo[portIdx].sym.getSymName().getValue())
            << " */";
 
       ++portIdx;
@@ -4979,9 +4980,10 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
           });
 
           if (state.options.printDebugInfo && portInfo[portIdx].sym &&
-              !portInfo[portIdx].sym.getValue().empty())
+              !portInfo[portIdx].sym.empty())
             ps << " /* inner_sym: "
-               << PPExtString(portInfo[portIdx].sym.getValue()) << " */";
+               << PPExtString(portInfo[portIdx].sym.getSymName().getValue())
+               << " */";
 
           ++portIdx;
         }
@@ -5044,15 +5046,17 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
     auto numArgs = moduleOp.getNumArguments();
     for (size_t p = 0; p != numArgs; ++p)
       for (NamedAttribute argAttr :
-           mlir::function_interface_impl::getArgAttrs(moduleOp, p))
-        if (auto sym = argAttr.getValue().dyn_cast<FlatSymbolRefAttr>())
-          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getAttr(),
+           mlir::function_interface_impl::getArgAttrs(moduleOp, p)) {
+        if (auto sym = argAttr.getValue().dyn_cast<InnerSymAttr>()) {
+          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getSymName(),
                                     moduleOp, p);
+        }
+      }
     for (size_t p = 0, e = moduleOp.getNumResults(); p != e; ++p)
       for (NamedAttribute resultAttr :
            mlir::function_interface_impl::getResultAttrs(moduleOp, p))
-        if (auto sym = resultAttr.getValue().dyn_cast<FlatSymbolRefAttr>())
-          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getAttr(),
+        if (auto sym = resultAttr.getValue().dyn_cast<InnerSymAttr>())
+          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getSymName(),
                                     moduleOp, p + numArgs);
   };
 

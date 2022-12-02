@@ -97,11 +97,9 @@ LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
            // TODO: Add fields per port, once they work that way (use addSyms)
            if (auto mod = dyn_cast<HWModuleLike>(curOp)) {
              for (size_t i = 0, e = mod.getNumPorts(); i < e; ++i) {
-               // ----------------------------------------
-               // if (auto symAttr = mod.getPortSymbolAttr(i))
-               //   if (failed(walkSyms(symAttr, InnerSymTarget(i, curOp))))
-               //     return WalkResult::interrupt();
-               // ----------------------------------------
+               if (auto symAttr = mod.getPortSymbolAttr(i))
+                 if (failed(walkSyms(symAttr, InnerSymTarget(i, curOp))))
+                   return WalkResult::interrupt();
              }
            }
            return WalkResult::advance();
@@ -148,10 +146,7 @@ StringAttr InnerSymbolTable::getInnerSymbol(const InnerSymTarget &target) {
       // TODO: This needs to be made to work with HWModuleLike
       if (auto mod = dyn_cast<HWModuleLike>(target.getOp())) {
         assert(target.getPort() < mod.getNumPorts());
-        // ----------------------------------------
-        // return mod.getPortSymbolAttr(target.getPort());
-        // ----------------------------------------
-        return {};
+        return mod.getPortSymbolAttr(target.getPort());
       }
     } else {
       // InnerSymbols only supported if op implements the interface.

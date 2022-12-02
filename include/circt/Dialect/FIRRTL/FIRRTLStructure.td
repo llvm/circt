@@ -65,6 +65,14 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
     size_t $cppClass::getNumPorts() {
       return getPortTypesAttr().size();
     }
+
+    circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
+      auto syms = getPortSymbols();
+      if (syms.empty() ||
+          syms[portIndex].template cast<hw::InnerSymAttr>().empty())
+        return hw::InnerSymAttr();
+      return syms[portIndex].template cast<hw::InnerSymAttr>();
+    }
   }];
 
 }

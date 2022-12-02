@@ -267,7 +267,7 @@ hw::ModulePortInfo getPortInfoForOpTypes(Operation *op, TypeRange inputs,
   for (auto &arg : llvm::enumerate(inputs)) {
     ports.inputs.push_back({portNames.inputName(arg.index()),
                             hw::PortDirection::INPUT, esiWrapper(arg.value()),
-                            arg.index(), StringAttr{}});
+                            arg.index(), hw::InnerSymAttr{}});
     inIdx++;
   }
 
@@ -275,17 +275,17 @@ hw::ModulePortInfo getPortInfoForOpTypes(Operation *op, TypeRange inputs,
   for (auto &res : llvm::enumerate(outputs)) {
     ports.outputs.push_back({portNames.outputName(res.index()),
                              hw::PortDirection::OUTPUT, esiWrapper(res.value()),
-                             res.index(), StringAttr{}});
+                             res.index(), hw::InnerSymAttr{}});
   }
 
   // Add clock and reset signals.
   if (op->hasTrait<mlir::OpTrait::HasClock>()) {
     ports.inputs.push_back({StringAttr::get(ctx, "clock"),
                             hw::PortDirection::INPUT, i1Type, inIdx++,
-                            StringAttr{}});
+                            hw::InnerSymAttr{}});
     ports.inputs.push_back({StringAttr::get(ctx, "reset"),
                             hw::PortDirection::INPUT, i1Type, inIdx,
-                            StringAttr{}});
+                            hw::InnerSymAttr{}});
   }
 
   return ports;

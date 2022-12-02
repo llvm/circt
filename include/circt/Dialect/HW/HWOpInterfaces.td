@@ -39,6 +39,9 @@ def HWModuleLike : OpInterface<"HWModuleLike"> {
 
     InterfaceMethod<"Get the number of ports",
     "size_t", "getNumPorts">,
+
+    InterfaceMethod<"Get a port symbol attribute",
+    "::circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex)>
   ];
 
   let verify = [{
