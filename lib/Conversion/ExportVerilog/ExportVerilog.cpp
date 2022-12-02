@@ -669,13 +669,18 @@ static BlockStatementCount countStatements(Block &block) {
 
 /// Return true if this expression should be emitted inline into any statement
 /// that uses it.
-bool ExportVerilog::isExpressionEmittedInline(Operation *op) {
+bool ExportVerilog::isExpressionEmittedInline(Operation *op,
+                                              const LoweringOptions &options) {
   // Never create a temporary which is only going to be assigned to an output
-  // port.
+  // port, wire, or reg.
   if (op->hasOneUse() &&
       isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp, sv::PAssignOp>(
           *op->getUsers().begin()))
     return true;
+
+  // If mux inlining is dissallowed, we cannot inline muxes.
+  if (options.disallowMuxInlining && isa<MuxOp>(op))
+    return false;
 
   // If this operation has multiple uses, we can't generally inline it unless
   // the op is duplicatable.
@@ -2770,7 +2775,8 @@ void NameCollector::collectNames(Block &block) {
       continue;
 
     bool isExpr = isVerilogExpression(&op);
-    assert((!isExpr || isExpressionEmittedInline(&op)) &&
+    assert((!isExpr ||
+            isExpressionEmittedInline(&op, moduleEmitter.state.options)) &&
            "If 'op' is a verilog expression, the expression must be inlinable. "
            "Otherwise, it is a bug of PrepareForEmission");
 
@@ -4267,7 +4273,7 @@ isExpressionEmittedInlineIntoProceduralDeclaration(Operation *op,
     }
 
     // If this is an internal node in the expression tree, process its operands.
-    if (isExpressionEmittedInline(expr)) {
+    if (isExpressionEmittedInline(expr, stmtEmitter.state.options)) {
       exprsToScan.append(expr->getOperands().begin(),
                          expr->getOperands().end());
       continue;
