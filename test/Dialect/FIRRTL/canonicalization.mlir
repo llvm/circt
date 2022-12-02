@@ -1620,7 +1620,7 @@ firrtl.module @ComparisonOfConsts(
   // CHECK-NEXT: firrtl.strictconnect %y19, %c1_ui1
 }
 
-// CHECK-LABEL: @zeroWidth
+// CHECK-LABEL: @zeroWidth(
 // CHECK-NEXT:   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
 // CHECK-NEXT:   firrtl.strictconnect %out, %c0_ui2 : !firrtl.uint<2>
 // CHECK-NEXT:  }
@@ -1647,6 +1647,36 @@ firrtl.module @zeroWidth(out %out: !firrtl.uint<2>, in %in1 : !firrtl.uint<0>, i
   %ret9 = firrtl.cat %ret8, %or : (!firrtl.uint<2>, !firrtl.uint<0>) -> !firrtl.uint<2>
   %ret10 = firrtl.cat %ret9, %xor : (!firrtl.uint<2>, !firrtl.uint<0>) -> !firrtl.uint<2>
   firrtl.strictconnect %out, %ret10 : !firrtl.uint<2>
+}
+
+// CHECK-LABEL: @zeroWidthOperand(
+// CHECK-NEXT:   %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
+// CHECK-NEXT:   firrtl.strictconnect %y6, %c0_ui0 : !firrtl.uint<0>
+// CHECK-NEXT:   firrtl.strictconnect %y8, %c0_ui0 : !firrtl.uint<0>
+// CHECK-NEXT:   firrtl.strictconnect %y9, %c0_ui0 : !firrtl.uint<0>
+// CHECK-NEXT:   firrtl.strictconnect %y12, %c0_ui0 : !firrtl.uint<0>
+// CHECK-NEXT:   firrtl.strictconnect %y14, %c0_ui0 : !firrtl.uint<0>
+// CHECK-NEXT:  }
+firrtl.module @zeroWidthOperand(
+  in %in0 : !firrtl.uint<0>,
+  in %in1 : !firrtl.uint<1>,
+  out %y6: !firrtl.uint<0>,
+  out %y8: !firrtl.uint<0>,
+  out %y9: !firrtl.uint<0>,
+  out %y12: !firrtl.uint<0>,
+  out %y14: !firrtl.uint<0>
+) {
+  %div1 = firrtl.div %in0, %in1 : (!firrtl.uint<0>, !firrtl.uint<1>) -> !firrtl.uint<0>
+  %rem1 = firrtl.rem %in0, %in1 : (!firrtl.uint<0>, !firrtl.uint<1>) -> !firrtl.uint<0>
+  %rem2 = firrtl.rem %in1, %in0 : (!firrtl.uint<1>, !firrtl.uint<0>) -> !firrtl.uint<0>
+  %dshlw1 = firrtl.dshlw %in0, %in1 : (!firrtl.uint<0>, !firrtl.uint<1>) -> !firrtl.uint<0>
+  %dshr1 = firrtl.dshr %in0, %in1 : (!firrtl.uint<0>, !firrtl.uint<1>) -> !firrtl.uint<0>
+
+  firrtl.strictconnect %y6, %div1 : !firrtl.uint<0>
+  firrtl.strictconnect %y8, %rem1 : !firrtl.uint<0>
+  firrtl.strictconnect %y9, %rem2 : !firrtl.uint<0>
+  firrtl.strictconnect %y12, %dshlw1 : !firrtl.uint<0>
+  firrtl.strictconnect %y14, %dshr1 : !firrtl.uint<0>
 }
 
 // CHECK-LABEL: @add_cst_prop1
