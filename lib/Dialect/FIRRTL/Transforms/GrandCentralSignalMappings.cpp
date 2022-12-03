@@ -757,6 +757,8 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
           NameKindEnum::DroppableName, builder.getArrayAttr({}),
           replacementWireName);
       port.replaceAllUsesWith(replacementWire);
+      AnnotationSet::addDontTouch(replacementWire);
+      AnnotationSet::addDontTouch(bufferWire);
       builder.create<StrictConnectOp>(builder.getUnknownLoc(), port,
                                       bufferWire);
       builder.create<StrictConnectOp>(builder.getUnknownLoc(), bufferWire,
