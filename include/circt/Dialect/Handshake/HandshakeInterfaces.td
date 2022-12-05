@@ -15,6 +15,73 @@
 
 include "mlir/IR/OpBase.td"
 
+def SOSTInterface : OpInterface<"SOSTInterface"> {
+  let description = [{
+      Sized Operation with Single Type (SOST).
+      
+      These are operations of the format: 
+      opname operands optAttrDict : dataType
+      that have a 'size' and 'dataType' properties.
+      
+      If 'explicitSize' is set, the operation is parsed as follows:
+      opname [$size] operands opAttrDict : dataType
+  }];
+
+  let methods = [
+    InterfaceMethod<[{
+        Get the data type associated to the operation.
+      }],
+      "Type", "getDataType", (ins), "",
+      [{
+        auto concreteOp = cast<ConcreteOp>($_op);
+        return concreteOp->getOperands().front().getType();
+      }]
+    >,
+    InterfaceMethod<[{
+        Get the size associated to the operation.
+      }],
+      "unsigned", "getSize", (ins), "",
+      [{
+        auto concreteOp = cast<ConcreteOp>($_op);
+        return concreteOp->getOperands().size();
+      }]
+    >,
+    InterfaceMethod<[{
+        Determine whether the operation is a control operation.
+        The default implementation of this method assumes that the operation
+        is a control operation if its data type is a NoneType.
+      }],
+      "bool", "sostIsControl", (ins), "",
+      [{
+        auto concreteOp = cast<ConcreteOp>($_op);
+        // The operation is a control operation if its single data type is a 
+        // NoneType.
+        return concreteOp.getDataType().template isa<NoneType>();
+      }]
+    >,
+    InterfaceMethod<[{
+        Default printing format for SOST operations.
+      }],
+      "void", "sostPrint", (ins 
+        "mlir::OpAsmPrinter &": $printer,
+        "bool": $explicitSize
+      ), "", 
+      [{
+        auto concreteOp = cast<ConcreteOp>($_op);
+
+        if (explicitSize) {
+          int size = concreteOp.getSize();
+          printer << " [" << size << "]";
+        }
+        printer << " " << concreteOp->getOperands();
+        printer.printOptionalAttrDict(concreteOp->getAttrs());
+        Type type = concreteOp.getDataType();
+        printer << " : " << type;
+      }]
+    >
+  ];
+}
+
 def MergeLikeOpInterface : OpInterface<"MergeLikeOpInterface"> {
   let description = [{
      Some handshake operations can have predecessors in other
@@ -141,10 +208,10 @@ def ControlInterface : OpInterface<"ControlInterface"> {
         (ins),
         "",
         [{
-          auto ctrlAttr = $_op->template getAttrOfType<BoolAttr>("control");
-          if(!ctrlAttr)
-            return false;
-          return ctrlAttr.getValue();
+          // Implemented outside of interface due to dependence on
+          // SOSTInterface being declared at the time where this method is
+          // defined.
+          return isControlOpImpl($_op);
         }]>];
 }
 

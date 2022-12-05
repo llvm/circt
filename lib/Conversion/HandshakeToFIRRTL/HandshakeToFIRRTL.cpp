@@ -1114,9 +1114,9 @@ bool HandshakeBuilder::visitHandshake(SinkOp op) {
 
   rewriter.eraseOp(argValid.getDefiningOp());
 
-  if (auto ctrlAttr = op->getAttrOfType<BoolAttr>("control");
-      ctrlAttr && ctrlAttr.getValue())
+  if (op.sostIsControl()) {
     return true;
+  }
 
   // Non-control sink; must also have a data operand.
   assert(argSubfields.size() >= 3 &&

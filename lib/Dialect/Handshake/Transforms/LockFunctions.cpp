@@ -37,9 +37,8 @@ LogicalResult handshake::lockRegion(Region &r, OpBuilder &rewriter) {
   BackedgeBuilder bebuilder(rewriter, loc);
   auto backEdge = bebuilder.get(rewriter.getNoneType());
 
-  auto buff = rewriter.create<handshake::BufferOp>(
-      loc, rewriter.getNoneType(), 1, backEdge,
-      /*bufferType=*/BufferTypeEnum::seq);
+  auto buff = rewriter.create<handshake::BufferOp>(loc, backEdge, 1,
+                                                   BufferTypeEnum::seq);
 
   // Dummy value that causes a buffer initialization, but itself does not have a
   // semantic meaning.
@@ -60,7 +59,8 @@ LogicalResult handshake::lockRegion(Region &r, OpBuilder &rewriter) {
   SmallVector<Value> endJoinOperands = llvm::to_vector(ret->getOperands());
   // Add the axilirary control signal output to the end-join
   endJoinOperands.push_back(sync.getResults().back());
-  auto endJoin = rewriter.create<JoinOp>(loc, endJoinOperands);
+  auto endJoin =
+      rewriter.create<JoinOp>(loc, SmallVector<Type>{}, endJoinOperands);
 
   backEdge.setValue(endJoin);
   return success();

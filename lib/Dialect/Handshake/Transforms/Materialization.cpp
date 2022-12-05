@@ -59,13 +59,12 @@ static void insertForkGeneric(Value result, bool isLazy, bool isControl,
 
   // Insert fork after op
   rewriter.setInsertionPointAfterValue(result);
+  SmallVector<Type> forkResults{opsToProcess.size(), result.getType()};
   Operation *newOp;
   if (isLazy)
-    newOp = rewriter.create<LazyForkOp>(result.getLoc(), result,
-                                        opsToProcess.size(), isControl);
+    newOp = rewriter.create<LazyForkOp>(result.getLoc(), forkResults, result);
   else
-    newOp =
-        rewriter.create<ForkOp>(result.getLoc(), result, opsToProcess.size());
+    newOp = rewriter.create<ForkOp>(result.getLoc(), forkResults, result);
 
   // Modify operands of successor
   // opsToProcess may have multiple instances of same operand

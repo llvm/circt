@@ -211,8 +211,7 @@ handshake::partiallyLowerRegion(const RegionLoweringFunc &loweringFunc,
 static bool isOperandOfControlOp(Value operand, bool checkBlockArg) {
   auto *defOp = operand.getDefiningOp();
 
-  // Operation is control if it is the no-data output of a ControlMerge or a
-  // StartOp.
+  // Operation is control if it is the output of a ControlMerge or a StartOp.
   bool isControl = isa_and_nonnull<ControlMergeOp, StartOp>(defOp) &&
                    operand == defOp->getResult(0);
 
@@ -414,8 +413,10 @@ HandshakeLowering::insertMerge(Block *block, Value val,
       edges.push_back(edge);
       operands.push_back(Value(edge));
     }
-    auto cmerge =
-        rewriter.create<handshake::ControlMergeOp>(insertLoc, operands);
+    auto cmerge = rewriter.create<handshake::ControlMergeOp>(
+        insertLoc,
+        SmallVector<Type, 2>{rewriter.getNoneType(), rewriter.getIndexType()},
+        operands);
     setBlockEntryControl(block, cmerge.getResult());
     return MergeOpInfo{cmerge, val, edges};
   }
@@ -430,7 +431,8 @@ HandshakeLowering::insertMerge(Block *block, Value val,
       edges.push_back(edge);
       operands.push_back(Value(edge));
     }
-    auto merge = rewriter.create<handshake::MergeOp>(insertLoc, operands);
+    auto merge =
+        rewriter.create<handshake::MergeOp>(insertLoc, val.getType(), operands);
     return MergeOpInfo{merge, val, edges};
   }
 
@@ -441,8 +443,8 @@ HandshakeLowering::insertMerge(Block *block, Value val,
     edges.push_back(edge);
     operands.push_back(Value(edge));
   }
-  auto mux =
-      rewriter.create<handshake::MuxOp>(insertLoc, Value(edges[0]), operands);
+  auto mux = rewriter.create<handshake::MuxOp>(
+      insertLoc, operands.front().getType(), Value(edges[0]), operands);
   return MergeOpInfo{mux, val, edges};
 }
 
@@ -838,9 +840,8 @@ BufferOp FeedForwardNetworkRewriter::buildSplitNetwork(
   // TODO how to size these?
   // Longest path in a CFG-DAG would be O(#blocks)
 
-  return rewriter.create<handshake::BufferOp>(
-      loc, rewriter.getI1Type(), bufferSize, cond,
-      /*bufferType=*/BufferTypeEnum::fifo);
+  return rewriter.create<handshake::BufferOp>(loc, cond, bufferSize,
+                                              BufferTypeEnum::fifo);
 }
 
 void FeedForwardNetworkRewriter::buildMergeNetwork(
@@ -863,7 +864,8 @@ void FeedForwardNetworkRewriter::buildMergeNetwork(
   else
     muxOperands = llvm::to_vector(ctrlMerge.getOperands());
 
-  Value newCtrl = rewriter.create<handshake::MuxOp>(loc, buf, muxOperands);
+  Value newCtrl = rewriter.create<handshake::MuxOp>(
+      loc, muxOperands.front().getType(), buf, muxOperands);
 
   Value cond = buf.getResult();
   if (requiresFlip) {
@@ -1055,21 +1057,24 @@ BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
 
   // Merge all of the controls in each partition
   rewriter->setInsertionPointToStart(loopHeader);
-  auto externalCtrlMerge = rewriter->create<ControlMergeOp>(loc, externalCtrls);
+  auto externalCtrlMerge = rewriter->create<ControlMergeOp>(
+      loc,
+      SmallVector<Type, 2>{externalCtrls.front().getType(),
+                           rewriter->getIndexType()},
+      externalCtrls);
 
   // Create loop mux and the loop priming register. The loop mux will on select
   // "0" select external control, and internal control at "1". This convention
   // must be followed by the loop exit network.
-  auto primingRegister = rewriter->create<BufferOp>(
-      loc, rewriter->getI1Type(), /*size=*/1, loopPrimingInput,
-      /*bufferType=*/BufferTypeEnum::seq);
+  auto primingRegister =
+      rewriter->create<BufferOp>(loc, loopPrimingInput, 1, BufferTypeEnum::seq);
   // Initialize the priming register to path 0.
   primingRegister->setAttr("initValues", rewriter->getI64ArrayAttr({0}));
 
   // The loop control mux will deterministically select between control entering
   // the loop from any external block or the single loop backedge.
   auto loopCtrlMux = rewriter->create<MuxOp>(
-      loc, primingRegister.getResult(),
+      loc, loopCtrl.getType(), primingRegister.getResult(),
       llvm::SmallVector<Value>{externalCtrlMerge.getResult(), loopCtrl});
 
   // Replace the existing control merge 'result' output with the loop control
@@ -1109,14 +1114,17 @@ BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
   // priming register.
   for (MuxOp mux : muxesToReplace) {
     auto externalDataMux = rewriter->create<MuxOp>(
-        loc, externalCtrlMerge.getIndex(), externalDataInputs[mux]);
+        loc, externalDataInputs[mux].front().getType(),
+        externalCtrlMerge.getIndex(), externalDataInputs[mux]);
 
     rewriter->replaceOp(
-        mux, rewriter
-                 ->create<MuxOp>(loc, primingRegister,
-                                 llvm::SmallVector<Value>{externalDataMux,
-                                                          loopDataInputs[mux]})
-                 .getResult());
+        mux,
+        rewriter
+            ->create<MuxOp>(
+                loc, externalDataMux->getResults().front().getType(),
+                primingRegister,
+                llvm::SmallVector<Value>{externalDataMux, loopDataInputs[mux]})
+            .getResult());
   }
 
   // Now all values defined by the original cmerge should have been replaced,
@@ -1168,7 +1176,8 @@ void LoopNetworkRewriter::buildExitNetwork(
 
   // Merge all of the parity-corrected exit conditions and assign them
   // to the loop priming input.
-  auto exitMerge = rewriter->create<MergeOp>(loc, parityCorrectedConds);
+  auto exitMerge = rewriter->create<MergeOp>(
+      loc, parityCorrectedConds.front().getType(), parityCorrectedConds);
   loopPrimingInput.setValue(exitMerge);
 }
 
@@ -1259,11 +1268,11 @@ HandshakeLowering::addBranchOps(ConversionPatternRewriter &rewriter) {
         if (auto condBranchOp = dyn_cast<mlir::cf::CondBranchOp>(termOp))
 
           newOp = rewriter.create<handshake::ConditionalBranchOp>(
-              termOp->getLoc(), condBranchOp.getCondition(), val,
-              isOperandOfControlOp(val, false));
+              termOp->getLoc(), SmallVector<Type>{val.getType(), val.getType()},
+              condBranchOp.getCondition(), val);
         else if (isa<mlir::cf::BranchOp>(termOp))
-          newOp = rewriter.create<handshake::BranchOp>(
-              termOp->getLoc(), val, isOperandOfControlOp(val, true));
+          newOp = rewriter.create<handshake::BranchOp>(termOp->getLoc(),
+                                                       val.getType(), val);
 
         if (newOp == nullptr)
           continue;
@@ -1316,9 +1325,11 @@ LogicalResult HandshakeLowering::connectConstantsToControl(
     for (auto constantOp : llvm::make_early_inc_range(
              r.template getOps<mlir::arith::ConstantOp>())) {
       rewriter.setInsertionPointAfter(constantOp);
+      auto value = constantOp.getValue();
       rewriter.replaceOpWithNewOp<handshake::ConstantOp>(
-          constantOp, constantOp.getValue(),
-          rewriter.create<handshake::SourceOp>(constantOp.getLoc()));
+          constantOp, value.getType(), value,
+          rewriter.create<handshake::SourceOp>(constantOp.getLoc(),
+                                               rewriter.getNoneType()));
     }
   } else {
     for (Block &block : r) {
@@ -1326,8 +1337,9 @@ LogicalResult HandshakeLowering::connectConstantsToControl(
       for (auto constantOp : llvm::make_early_inc_range(
                block.template getOps<mlir::arith::ConstantOp>())) {
         rewriter.setInsertionPointAfter(constantOp);
+        auto value = constantOp.getValue();
         rewriter.replaceOpWithNewOp<handshake::ConstantOp>(
-            constantOp, constantOp.getValue(), blockEntryCtrl);
+            constantOp, value.getType(), value, blockEntryCtrl);
       }
     }
   }
@@ -1568,7 +1580,8 @@ static void addJoinOps(ConversionPatternRewriter &rewriter,
     // Insert only single join per block
     if (!isa<JoinOp>(srcOp)) {
       rewriter.setInsertionPointAfter(srcOp);
-      Operation *newOp = rewriter.create<JoinOp>(srcOp->getLoc(), val);
+      Operation *newOp =
+          rewriter.create<JoinOp>(srcOp->getLoc(), SmallVector<Type>{}, val);
       for (auto &u : val.getUses())
         if (u.getOwner() != newOp)
           u.getOwner()->replaceUsesOfWith(val, newOp->getResult(0));
@@ -1655,8 +1668,8 @@ void HandshakeLowering::setMemOpControlInputs(
     // If multiple, join them and connect join output to memory op
     else {
       rewriter.setInsertionPoint(currOp);
-      Operation *joinOp =
-          rewriter.create<JoinOp>(currOp->getLoc(), controlOperands);
+      Operation *joinOp = rewriter.create<JoinOp>(
+          currOp->getLoc(), SmallVector<Type>{}, controlOperands);
       addValueToOperands(currOp, joinOp->getResult(0));
     }
   }
@@ -1922,9 +1935,9 @@ struct ConvertSelectOps : public OpConversionPattern<mlir::arith::SelectOp> {
   LogicalResult
   matchAndRewrite(mlir::arith::SelectOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<handshake::SelectOp>(op, adaptor.getCondition(),
-                                                     adaptor.getFalseValue(),
-                                                     adaptor.getTrueValue());
+    rewriter.replaceOpWithNewOp<handshake::SelectOp>(
+        op, adaptor.getFalseValue().getType(), adaptor.getCondition(),
+        adaptor.getFalseValue(), adaptor.getTrueValue());
     return success();
   };
 };

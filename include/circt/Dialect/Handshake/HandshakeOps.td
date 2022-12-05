@@ -215,7 +215,8 @@ def BufferTypeEnum: I32EnumAttr<
 }
 def BufferTypeEnumAttr: EnumAttr<Handshake_Dialect, BufferTypeEnum, "buffer_type_enum">;
 
-def BufferOp : Handshake_Op<"buffer", [Pure, HasClock,
+def BufferOp : Handshake_Op<"buffer", [Pure, HasClock, 
+  SOSTInterface,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<GeneralOpInterface>]> {
   let summary = "buffer operation";
@@ -235,15 +236,19 @@ def BufferOp : Handshake_Op<"buffer", [Pure, HasClock,
   }];
 
   let arguments = (ins
-    TypeAttr:$dataType,
-    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     AnyType:$operand,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
     BufferTypeEnumAttr:$bufferType,
     OptionalAttr<I64ArrayAttr>:$initValues);
   let results = (outs AnyType:$result);
-  let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "Type":$dataType, "int":$size,
-    "Value":$operand, "BufferTypeEnum":$bufferType)>];
+
+  let builders = [OpBuilder<
+      (ins "Value":$operand, "int":$size, "BufferTypeEnum":$bufferType), [{
+        $_state.addOperands(operand);
+        $_state.addTypes(operand.getType());
+        $_state.addAttribute("size", IntegerAttr::get(IntegerType::get($_state.getContext(), 32), size));
+        $_state.addAttribute("bufferType", BufferTypeEnumAttr::get($_state.getContext(), bufferType));
+    }]>];
 
   let extraClassDeclaration = [{
     bool isSequential() {
@@ -267,8 +272,10 @@ def BufferOp : Handshake_Op<"buffer", [Pure, HasClock,
 }
 
 def ForkOp : Handshake_Op<"fork", [
-  Pure, DeclareOpInterfaceMethods<ExecutableOpInterface>,
-  HasClock, DeclareOpInterfaceMethods<GeneralOpInterface>
+  Pure, HasClock,
+  DeclareOpInterfaceMethods<SOSTInterface, ["getSize"]>, 
+  DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<GeneralOpInterface>
 ]> {
   let summary = "fork operation";
 
@@ -283,19 +290,16 @@ def ForkOp : Handshake_Op<"fork", [
     ```
   }];
 
-  let arguments = (ins
-    TypeAttr:$dataType,
-    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
-    AnyType : $operand);
+  let arguments = (ins AnyType : $operand);
   let results = (outs Variadic<AnyType> : $result);
-
   let hasCanonicalizer = 1;
-  let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "Value":$operand, "int":$outputs)>];
   let hasCustomAssemblyFormat = 1;
 }
 
-def LazyForkOp : Handshake_Op<"lazy_fork", [Pure]> {
+def LazyForkOp : Handshake_Op<"lazy_fork", [
+  Pure, 
+  DeclareOpInterfaceMethods<SOSTInterface, ["getSize", "sostIsControl"]>
+]> {
   let summary = "lazy fork operation";
   let description = [{
     The lazy_fork operation represents a lazy fork operation.
@@ -308,18 +312,13 @@ def LazyForkOp : Handshake_Op<"lazy_fork", [Pure]> {
     ```
   }];
 
-  let arguments = (ins
-    TypeAttr:$dataType,
-    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
-    AnyType : $operand);
+  let arguments = (ins AnyType : $operand);
   let results = (outs Variadic<AnyType> : $result);
   let hasCustomAssemblyFormat = 1;
-  let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "Value":$operand, "int":$outputs, "bool":$isControl)>];
 }
 
 def MergeOp : Handshake_Op<"merge", [
-  Pure, MergeLikeOpInterface,
+  Pure, MergeLikeOpInterface, SOSTInterface,
   DeclareOpInterfaceMethods<ExecutableOpInterface>
 ]> {
   let summary = "merge operation";
@@ -335,19 +334,15 @@ def MergeOp : Handshake_Op<"merge", [
     ```
   }];
 
-  let arguments = (ins
-    TypeAttr:$dataType,
-    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
-    Variadic<AnyType>:$dataOperands);
+  let arguments = (ins Variadic<AnyType>:$dataOperands);
   let results = (outs AnyType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasCanonicalizer = 1;
-  let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "ValueRange":$operands)>];
 }
 
 def MuxOp : Handshake_Op<"mux", [
   Pure, MergeLikeOpInterface,
+  DeclareOpInterfaceMethods<ControlInterface, ["isControl"]>,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>
 ]> {
@@ -369,21 +364,15 @@ def MuxOp : Handshake_Op<"mux", [
     %0 = mux %select [%data0, %data1, %data2] {attributes}: index, i32
     ```
   }];
-  let arguments = (ins
-    TypeAttr:$dataType,
-    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
-    AnyType : $selectOperand,
-    Variadic<AnyType> : $dataOperands);
+  let arguments = (ins AnyType : $selectOperand, Variadic<AnyType> : $dataOperands);
   let results = (outs AnyType : $result);
-  let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "Value":$selectOperand, "ValueRange":$inputs)>];
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
   let hasCanonicalizer = 1;
 }
 
 def ControlMergeOp : Handshake_Op<"control_merge", [
-  Pure, MergeLikeOpInterface, HasClock,
+  Pure, MergeLikeOpInterface, HasClock, SOSTInterface,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getResultName"]>
 ]> {
@@ -402,20 +391,15 @@ def ControlMergeOp : Handshake_Op<"control_merge", [
     ```
   }];
 
-  let arguments = (ins
-    TypeAttr:$dataType,
-    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
-    Variadic<AnyType> : $dataOperands);
+  let arguments = (ins Variadic<AnyType> : $dataOperands);
   let results = (outs AnyType : $result, Index : $index);
-
   let hasCanonicalizer = 1;
-  let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "ValueRange":$inputs)>];
   let hasCustomAssemblyFormat = 1;
 }
 
 def BranchOp : Handshake_Op<"br", [
-  Pure, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  Pure, DeclareOpInterfaceMethods<SOSTInterface, ["sostIsControl"]>, 
+  DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<GeneralOpInterface>,
   AllTypesMatch<["dataOperand", "dataResult"]>
   ]> {
@@ -431,20 +415,15 @@ def BranchOp : Handshake_Op<"br", [
       %1 = br %0 : i32
       ```
   }];
-  let arguments = (ins
-    TypeAttr:$dataType,
-    AnyType : $dataOperand);
+  let arguments = (ins AnyType : $dataOperand);
   let results = (outs AnyType : $dataResult);
-
-  let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "Value":$dataOperand, "bool":$isControl)>];
-
   let hasCanonicalizer = 1;
   let hasCustomAssemblyFormat = 1;
 }
 
 def ConditionalBranchOp : Handshake_Op<"cond_br", [
   Pure, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<ControlInterface, ["isControl"]>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getResultName"]>,
   TypesMatchWith<"data operand type matches true branch result type",
@@ -464,13 +443,8 @@ def ConditionalBranchOp : Handshake_Op<"cond_br", [
      ```
   }];
 
-  let arguments = (ins I1 : $conditionOperand,
-                       AnyType : $dataOperand);
-  let results = (outs AnyType : $trueResult,
-                      AnyType : $falseResult);
-
-  let builders = [OpBuilder<(ins "Value":$condOperand, "Value":$dataOperand, "bool":$isControl)>];
-  let skipDefaultBuilders = 1;
+  let arguments = (ins I1 : $conditionOperand, AnyType : $dataOperand);
+  let results = (outs AnyType : $trueResult, AnyType : $falseResult);
   let hasCustomAssemblyFormat = 1;
   let extraClassDeclaration = [{
     // These are the indices into the dests list.
@@ -480,6 +454,7 @@ def ConditionalBranchOp : Handshake_Op<"cond_br", [
 
 def SelectOp : Handshake_Op<"select", [
   Pure,
+  DeclareOpInterfaceMethods<ControlInterface, ["isControl"]>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>,
   TypesMatchWith<"data operand type matches true branch result type",
                     "trueOperand", "falseOperand", "$_self">,
@@ -506,15 +481,12 @@ def SelectOp : Handshake_Op<"select", [
   let arguments = (ins I1 : $condOperand,
                        AnyType : $trueOperand, AnyType : $falseOperand);
   let results = (outs AnyType : $result);
-
-  let builders = [OpBuilder<(ins
-    "Value":$condOperand, "Value":$trueOperand, "Value":$falseOperand)>];
-  let skipDefaultBuilders = 1;
   let hasCustomAssemblyFormat = 1;
 }
 
-def SinkOp
-    : Handshake_Op<"sink", [DeclareOpInterfaceMethods<ExecutableOpInterface>]> {
+def SinkOp : Handshake_Op<"sink", [
+  SOSTInterface, DeclareOpInterfaceMethods<ExecutableOpInterface>
+]> {
   let summary = "sink operation";
   let description = [{
     The sink operation discards any data that arrives at its
@@ -525,19 +497,14 @@ def SinkOp
     sink %data : i32
     ```
   }];
+  
   let arguments = (ins AnyType:$operand);
-
-  let skipDefaultBuilders = 1;
-  let builders = [
-    OpBuilder<(ins "Value":$operand)>,
-    // Like ODS-generated builder, needed for instantiation through declarative rewrite patterns.
-    OpBuilder<(ins
-      "TypeRange":$resultTypes, "ValueRange":$operands, "ArrayRef<::mlir::NamedAttribute>":$attributes)>
-  ];
   let hasCustomAssemblyFormat = 1;
 }
 
-def SourceOp : Handshake_Op<"source", [Pure]> {
+def SourceOp : Handshake_Op<"source", [
+  Pure, DeclareOpInterfaceMethods<SOSTInterface, ["getDataType", "getSize"]> 
+]> {
   let summary = "source operation";
   let description = [{
     The source operation represents continuous token
@@ -545,10 +512,8 @@ def SourceOp : Handshake_Op<"source", [Pure]> {
     successor can consume at any point in time.
   }];
 
-  let skipDefaultBuilders = 1;
   let results = (outs AnyType:$result);
   let hasCustomAssemblyFormat = 1;
-  let builders = [OpBuilder<(ins)>];
 }
 
 def NeverOp : Handshake_Op<"never", [Pure]> {
@@ -582,10 +547,6 @@ def ConstantOp : Handshake_Op<"constant", [
 
   let arguments = (ins TypedAttrInterface:$value, NoneType:$ctrl);
   let results = (outs AnyType : $result);
-
-  let builders = [OpBuilder<(ins "mlir::TypedAttr":$value, "Value":$ctrl)>];
-  let skipDefaultBuilders = 1;
-
   let hasCanonicalizer = 1;
   let assemblyFormat = [{ $ctrl attr-dict `:` qualified(type($result))}];
   let hasVerifier = 1;
@@ -608,7 +569,8 @@ def EndOp
 }
 
 def StartOp : Handshake_Op<"start", [
-  Pure, DeclareOpInterfaceMethods<ExecutableOpInterface>
+  Pure, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<ControlInterface, ["isControl"]>
 ]> {
   let summary = "start operation";
   let description = [{
@@ -793,6 +755,7 @@ def StoreOp : Handshake_Op<"store", [
 
 def JoinOp : Handshake_Op<"join", [
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<ControlInterface, ["isControl"]>,
   DeclareOpInterfaceMethods<GeneralOpInterface>
 ]> {
   let summary = "join operation";
@@ -807,9 +770,6 @@ def JoinOp : Handshake_Op<"join", [
   }];
   let arguments = (ins Variadic<AnyType> : $data);
   let results = (outs NoneType : $result);
-
-  let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "ValueRange":$operands)>];
   let hasCustomAssemblyFormat = 1;
 }
 
@@ -880,7 +840,7 @@ def UnpackOp : Handshake_Op<"unpack", [
 
 def PackOp : Handshake_Op<"pack", [
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
-  DeclareOpInterfaceMethods<GeneralOpInterface>,
+  DeclareOpInterfaceMethods<GeneralOpInterface>,  
   TypesMatchWith<"input types match element types of 'tuple'",
                    "result", "inputs",
                    "$_self.cast<TupleType>().getTypes()">

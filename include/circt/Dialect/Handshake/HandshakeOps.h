@@ -51,6 +51,14 @@ struct MemStoreInterface {
 
 class TerminatorOp;
 
+/// Default implementation for checking whether an operation is a control
+/// operation. This function cannot be implemented within ControlInterface
+/// because its implementation attempts to cast the operation to an
+/// SOSTInterface, which may not be declared at the point where the default
+/// trait's method is defined. Therefore, the default implementation of
+/// ControlInterface's isControl method simply calls this function.
+bool isControlOpImpl(Operation *op);
+
 #include "circt/Dialect/Handshake/HandshakeInterfaces.h.inc"
 
 } // end namespace handshake
