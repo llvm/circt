@@ -90,17 +90,18 @@ public:
       auto errorDiag = mlir::emitError(
           module.getLoc(),
           "detected combinational cycle in a FIRRTL module, sample path: ");
-      errorDiag.attachNote(node.val.getLoc());
-      if (!signalName.empty())
-        errorDiag << module.getName() << "." << signalName;
+      if (!signalName.empty()) {
+        errorDiag << module.getName() << "." << signalName << " <- ";
+      }
       for (auto n : llvm::reverse(currentPath)) {
         FieldRef f(n.val, n.fieldId);
         auto signalName = getFieldName(f);
         if (!signalName.empty())
-          errorDiag << " -> " << module.getName() << "." << signalName;
+          errorDiag << module.getName() << "." << signalName << " <- ";
         if (n == node)
           break;
       }
+      currentPath.push_back(node);
       return failure();
     }
     visiting.insert(node);
@@ -131,6 +132,8 @@ public:
       else if (visitChildren(node, inputArg).failed())
         return failure();
     }
+    if (detectedCycle)
+      return failure();
     visiting.erase(node);
     currentPath.pop_back();
     // Finished discovering all the reachable nodes from node.
@@ -172,25 +175,14 @@ public:
                     ins.emitRemark("instance is part of a combinational "
                                    "cycle, instance port number '")
                     << portNode.val.cast<BlockArgument>().getArgNumber()
-                    << "' has a path to port number '" << portNum << "'"
-                    << " " << ins.getName() << "."
-                    << ins.getPortName(
-                              portNode.val.cast<BlockArgument>().getArgNumber())
-                           .getValue();
-                if (auto nodeType =
-                        portNode.val.getType().dyn_cast<BundleType>()) {
+                    << "' has a path from port number '" << portNum << "'";
+                FieldRef fIn(instResult, portNode.fieldId);
+                FieldRef fOut(node.val, node.fieldId);
+                auto inName = getFieldName(fIn);
+                auto outName = getFieldName(fOut);
+                remark << ", " << inName << " <- " << outName;
 
-                  remark << "."
-                         << nodeType.getElementName(
-                                nodeType.getIndexForFieldID(portNode.fieldId));
-                }
-                remark << " --> " << ins.getName() << "."
-                       << ins.getPortName(portNum).getValue();
-                if (auto nodeType = node.val.getType().dyn_cast<BundleType>()) {
-                  remark << "."
-                         << nodeType.getElementName(
-                                nodeType.getIndexForFieldID(node.fieldId));
-                }
+                detectedCycle = true;
                 return true;
               }
             }
@@ -227,6 +219,7 @@ public:
                                "between the data and ")
                     << (node.fieldId == addressFieldId ? "address" : "enable")
                     << " port";
+                detectedCycle = true;
                 return true;
               }
             }
@@ -265,6 +258,10 @@ public:
               });
       if (childNode.isValid())
         if (dfsFromNode(childNode, inputArg).failed()) {
+          if (printCycle == false || currentPath.back() == node) {
+            printCycle = false;
+            return failure();
+          }
           owner->emitRemark(
               "this operation is part of the combinational cycle");
           return failure();
@@ -346,11 +343,14 @@ public:
         if (visited.contains(node))
           continue;
         if (dfsFromNode(node, isArg ? node : Node()).failed()) {
-          if (isArg)
+          if (isArg) {
+            FieldRef f(node.val, node.fieldId);
+            auto argName = getFieldName(f);
             return node.getParentModule().emitRemark(
                        "this operation is part of the combinational cycle, "
-                       "module argument ")
-                   << node.val.cast<BlockArgument>().getArgNumber();
+                       "module argument '")
+                   << argName << "'";
+          }
           return node.val.getDefiningOp()->emitRemark(
               "this operation is part of the combinational cycle");
         }
@@ -387,6 +387,8 @@ public:
   // Map of all the leaf ground type values for a corresponding aggregate value.
   DenseMap<Value, DenseMap<size_t, SmallVector<Value>>> valLeafOps;
   SmallVector<Node> currentPath;
+  bool printCycle = true;
+  bool detectedCycle = false;
 };
 
 /// This pass constructs a local graph for each module to detect combinational
