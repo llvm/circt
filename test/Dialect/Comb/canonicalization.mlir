@@ -1402,7 +1402,7 @@ hw.module @Issue2546() -> (b: i1) {
 }
 
 // CHECK-LABEL: hw.module @MuxSimplify
-hw.module @MuxSimplify(%index: i1, %a: i1, %foo_0: i2, %foo_1: i2) -> (r_0: i2, r_1: i2) {
+hw.module @MuxSimplify(%index: i1, %a: i1, %foo_0: i2, %foo_1: i2) -> (r_0: i2, r_1: i2, r_2 : i2) {
   %true = hw.constant true
   %c-2_i2 = hw.constant -2 : i2
   %c1_i2 = hw.constant 1 : i2
@@ -1413,10 +1413,19 @@ hw.module @MuxSimplify(%index: i1, %a: i1, %foo_0: i2, %foo_1: i2) -> (r_0: i2, 
   %4 = comb.mux bin %a, %1, %3 : i2
   %5 = comb.mux bin %index, %c-2_i2, %foo_1 : i2
   %6 = comb.mux bin %a, %2, %5 : i2
-  hw.output %4, %6 : i2, i2
+  
+  %7 = comb.mux bin %a, %foo_0, %foo_1 : i2
+  %8 = comb.mux bin %index, %foo_0, %foo_1 : i2
+  %9 = comb.xor %a, %index : i1
+  %10 = comb.mux bin %9, %7, %8 : i2
+  
+  hw.output %4, %6, %10 : i2, i2, i2
 }
 // CHECK:  %0 = comb.mux %a, %c1_i2, %c-2_i2 : i2
 // CHECK-NEXT:  %1 = comb.mux %index, %foo_0, %0 : i2
 // CHECK-NEXT:  %2 = comb.mux %a, %c1_i2, %c-2_i2 : i2
 // CHECK-NEXT:  %3 = comb.mux %index, %2, %foo_1 : i2
-// CHECK-NEXT:  hw.output %1, %3 : i2, i2
+// CHECK-NEXT:  %4 = comb.xor %a, %index : i1 
+// CHECK-NEXT:  %5 = comb.mux %4, %a, %index : i1 
+// CHECK-NEXT:  %6 = comb.mux %5, %foo_0, %foo_1 : i2 
+// CHECK-NEXT:  hw.output %1, %3, %6
