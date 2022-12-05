@@ -2338,6 +2338,32 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
       return success();
   }
 
+  // mux(c1, mux(c2, a, b), mux(c2, a, c)) -> mux(c2, a, mux(c1, b, c))
+  if (auto trueMux = dyn_cast_or_null<MuxOp>(op.getTrueValue().getDefiningOp()),
+      falseMux = dyn_cast_or_null<MuxOp>(op.getFalseValue().getDefiningOp());
+      trueMux && falseMux && trueMux.getCond() == falseMux.getCond() &&
+      trueMux.getTrueValue() == falseMux.getTrueValue()) {
+    auto subMux = rewriter.create<MuxOp>(
+        rewriter.getFusedLoc(trueMux.getLoc(), falseMux.getLoc()), op.getCond(),
+        trueMux.getFalseValue(), falseMux.getFalseValue());
+    replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, trueMux.getCond(),
+                                         trueMux.getTrueValue(), subMux);
+    return success();
+  }
+
+  // mux(c1, mux(c2, a, b), mux(c2, c, b)) -> mux(c2, mux(c1, a, c), b)
+  if (auto trueMux = dyn_cast_or_null<MuxOp>(op.getTrueValue().getDefiningOp()),
+      falseMux = dyn_cast_or_null<MuxOp>(op.getFalseValue().getDefiningOp());
+      trueMux && falseMux && trueMux.getCond() == falseMux.getCond() &&
+      trueMux.getFalseValue() == falseMux.getFalseValue()) {
+    auto subMux = rewriter.create<MuxOp>(
+        rewriter.getFusedLoc(trueMux.getLoc(), falseMux.getLoc()), op.getCond(),
+        trueMux.getTrueValue(), falseMux.getTrueValue());
+    replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, trueMux.getCond(),
+                                         subMux, trueMux.getFalseValue());
+    return success();
+  }
+
   // mux(cond, x|y|z|a, a) -> (x|y|z)&replicate(cond) | a
   if (foldCommonMuxValue(op, false, rewriter))
     return success();
