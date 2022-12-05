@@ -105,7 +105,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
       [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">, OpAsmOpInterface,
        DeclareOpInterfaceMethods<FModuleLike>, InnerSymbolTable,
        DeclareOpInterfaceMethods<HWModuleLike>]> {
-  let summary = "FIRRTL extmodule";
+  let summary = "FIRRTL external module";
   let description = [{
     The "firrtl.extmodule" operation represents an external reference to a
     Verilog module, including a given name and a list of ports.
@@ -147,7 +147,7 @@ def FMemModuleOp : FIRRTLOp<"memmodule",
       [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">, OpAsmOpInterface,
        DeclareOpInterfaceMethods<FModuleLike>, InnerSymbolTable,
        DeclareOpInterfaceMethods<HWModuleLike>]> {
-  let summary = "FIRRTL Generated Module";
+  let summary = "FIRRTL Generated Memory Module";
   let description = [{
     The "firrtl.memmodule" operation represents an external reference to a
     memory module. See the "firrtl.mem" op for a deeper explantation of the
@@ -182,6 +182,42 @@ def FMemModuleOp : FIRRTLOp<"memmodule",
   }];
 
   let hasCustomAssemblyFormat = 1;
+}
+
+def FIntModuleOp : FIRRTLOp<"intmodule",
+      [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">, OpAsmOpInterface,
+       DeclareOpInterfaceMethods<FModuleLike>, InnerSymbolTable,
+       DeclareOpInterfaceMethods<HWModuleLike>]> {
+  let summary = "FIRRTL initrisic module";
+  let description = [{
+    The "firrtl.ingmodule" operation represents an intrinsic module, including a 
+    given name and a list of ports.  An intrinsic module is a module whose
+    implementation is provided by the compiler.  Intrinsics provide a means for
+    compiler-specific extensions to FIRRTL.  The name of  the module indicates
+    the desired intrinisic.  It is intrinsic specific whether the module is a
+    module or is a holder for inlined code.  The ports declared on the module
+    will be checked by a compiler, ensuring the input module port list matches
+    the expected port list for a given intrinisc.
+
+    Intrinsic modules may not be the target of annotations.
+  }];
+  let arguments = (ins ParamDeclArrayAttr:$parameters );
+  let results = (outs);
+  let regions = (region AnyRegion:$body);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports, 
+                    CArg<"ArrayAttr", "ArrayAttr()">:$parameters)>
+  ];
+
+  let extraClassDeclaration = [{
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
+  }];
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
 def HierPathOp : FIRRTLOp<"hierpath",
