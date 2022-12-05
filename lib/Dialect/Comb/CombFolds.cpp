@@ -2407,6 +2407,21 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
     return success();
   }
 
+  // mux(c1, mux(c2, a, b), mux(c3, a, b)) -> mux(mux(c1, c2, c3), a, b)
+  if (auto trueMux = dyn_cast_or_null<MuxOp>(op.getTrueValue().getDefiningOp()),
+      falseMux = dyn_cast_or_null<MuxOp>(op.getFalseValue().getDefiningOp());
+      trueMux && falseMux &&
+      trueMux.getTrueValue() == falseMux.getTrueValue() &&
+      trueMux.getFalseValue() == falseMux.getFalseValue()) {
+    auto subMux = rewriter.create<MuxOp>(
+        rewriter.getFusedLoc(
+            {op.getLoc(), trueMux.getLoc(), falseMux.getLoc()}),
+        op.getCond(), trueMux.getCond(), falseMux.getCond());
+    replaceOpWithNewOpAndCopyName<MuxOp>(
+        rewriter, op, subMux, trueMux.getTrueValue(), trueMux.getFalseValue());
+    return success();
+  }
+
   // mux(cond, x|y|z|a, a) -> (x|y|z)&replicate(cond) | a
   if (foldCommonMuxValue(op, false, rewriter))
     return success();
