@@ -1119,7 +1119,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       stop(clock, enable, 1)
     ; CHECK: [[TMP_INV:%.+]] = firrtl.not %cond
     ; CHECK: [[TMP:%.+]] = firrtl.not [[TMP_INV]]
-    ; CHECK-NEXT: firrtl.cover %clock, [[TMP]], %enable, "cover hello world"(%value) : !firrtl.uint<42>
+    ; CHECK-NOT: firrtl.assert %clock, [[TMP]], %enable, "cover hello world"(%value) : !firrtl.uint<42>
+    ; CHECK: firrtl.cover %clock, [[TMP]], %enable, "cover hello world"(%value) : !firrtl.uint<42>
     ; CHECK-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
     ; CHECK-SAME: name = "verif_library_cover_label"
 
