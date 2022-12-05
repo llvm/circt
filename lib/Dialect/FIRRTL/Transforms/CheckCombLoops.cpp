@@ -258,7 +258,7 @@ public:
               });
       if (childNode.isValid())
         if (dfsFromNode(childNode, inputArg).failed()) {
-          if (printCycle == false || currentPath.back() == node) {
+          if (!printCycle || currentPath.back() == node) {
             printCycle = false;
             return failure();
           }
