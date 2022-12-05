@@ -1415,3 +1415,23 @@ hw.module @ArrayConcatFlatten(%a: !hw.array<3xi1>) -> (b: i3) {
   %4 = comb.concat %2, %3 : i1, i2
   hw.output %4 : i3
 }
+
+// CHECK-LABEL: hw.module @MuxSimplify
+hw.module @MuxSimplify(%index: i1, %a: i1, %foo_0: i2, %foo_1: i2) -> (r_0: i2, r_1: i2) {
+  %true = hw.constant true
+  %c-2_i2 = hw.constant -2 : i2
+  %c1_i2 = hw.constant 1 : i2
+  %0 = comb.xor bin %index, %true : i1
+  %1 = comb.mux bin %0, %c1_i2, %foo_0 : i2
+  %2 = comb.mux bin %index, %c1_i2, %foo_1 : i2
+  %3 = comb.mux bin %0, %c-2_i2, %foo_0 : i2
+  %4 = comb.mux bin %a, %1, %3 : i2
+  %5 = comb.mux bin %index, %c-2_i2, %foo_1 : i2
+  %6 = comb.mux bin %a, %2, %5 : i2
+  hw.output %4, %6 : i2, i2
+}
+// CHECK:  %0 = comb.mux %a, %c1_i2, %c-2_i2 : i2
+// CHECK-NEXT:  %1 = comb.mux %index, %foo_0, %0 : i2
+// CHECK-NEXT:  %2 = comb.mux %a, %c1_i2, %c-2_i2 : i2
+// CHECK-NEXT:  %3 = comb.mux %index, %2, %foo_1 : i2
+// CHECK-NEXT:  hw.output %1, %3 : i2, i2
