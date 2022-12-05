@@ -19,17 +19,16 @@ def SOSTInterface : OpInterface<"SOSTInterface"> {
   let description = [{
       Sized Operation with Single Type (SOST).
       
-      These are operations of the format: 
-      opname operands optAttrDict : dataType
-      that have a 'size' and 'dataType' properties.
-      
-      If 'explicitSize' is set, the operation is parsed as follows:
-      opname [$size] operands opAttrDict : dataType
+      These are operations whose operands all have the same type and which have
+      an integer size property, be it the number of operation operands (e.g.,
+      for a merge) or the number of operation results (e.g., for a fork).
   }];
 
   let methods = [
     InterfaceMethod<[{
         Get the data type associated to the operation.
+        The default implementation of this method simply returns the type of
+        the first operation operand.
       }],
       "Type", "getDataType", (ins), "",
       [{
@@ -39,6 +38,8 @@ def SOSTInterface : OpInterface<"SOSTInterface"> {
     >,
     InterfaceMethod<[{
         Get the size associated to the operation.
+        The default implementation of this method simply returns the number of
+        operation operands.
       }],
       "unsigned", "getSize", (ins), "",
       [{
@@ -60,7 +61,7 @@ def SOSTInterface : OpInterface<"SOSTInterface"> {
       }]
     >,
     InterfaceMethod<[{
-        Default printing format for SOST operations.
+        Print the "SOST characteristics" of an operation. 
       }],
       "void", "sostPrint", (ins 
         "mlir::OpAsmPrinter &": $printer,
@@ -75,8 +76,7 @@ def SOSTInterface : OpInterface<"SOSTInterface"> {
         }
         printer << " " << concreteOp->getOperands();
         printer.printOptionalAttrDict(concreteOp->getAttrs());
-        Type type = concreteOp.getDataType();
-        printer << " : " << type;
+        printer << " : " << concreteOp.getDataType();
       }]
     >
   ];

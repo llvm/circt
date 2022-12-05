@@ -216,7 +216,7 @@ def BufferTypeEnum: I32EnumAttr<
 def BufferTypeEnumAttr: EnumAttr<Handshake_Dialect, BufferTypeEnum, "buffer_type_enum">;
 
 def BufferOp : Handshake_Op<"buffer", [Pure, HasClock, 
-  SOSTInterface,
+  DeclareOpInterfaceMethods<SOSTInterface, ["getSize"]>,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<GeneralOpInterface>]> {
   let summary = "buffer operation";
@@ -237,16 +237,16 @@ def BufferOp : Handshake_Op<"buffer", [Pure, HasClock,
 
   let arguments = (ins
     AnyType:$operand,
-    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$size,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$slots,
     BufferTypeEnumAttr:$bufferType,
     OptionalAttr<I64ArrayAttr>:$initValues);
   let results = (outs AnyType:$result);
 
   let builders = [OpBuilder<
-      (ins "Value":$operand, "int":$size, "BufferTypeEnum":$bufferType), [{
+      (ins "Value":$operand, "int":$slots, "BufferTypeEnum":$bufferType), [{
         $_state.addOperands(operand);
         $_state.addTypes(operand.getType());
-        $_state.addAttribute("size", IntegerAttr::get(IntegerType::get($_state.getContext(), 32), size));
+        $_state.addAttribute("slots", IntegerAttr::get(IntegerType::get($_state.getContext(), 32), slots));
         $_state.addAttribute("bufferType", BufferTypeEnumAttr::get($_state.getContext(), bufferType));
     }]>];
 
@@ -255,7 +255,7 @@ def BufferOp : Handshake_Op<"buffer", [Pure, HasClock,
       return this->getBufferType() == BufferTypeEnum::seq;
     }
     int getNumSlots() {
-      return (*this)->getAttrOfType<IntegerAttr>("size").getValue().getZExtValue();
+      return (*this)->getAttrOfType<IntegerAttr>("slots").getValue().getZExtValue();
     }
     SmallVector<int64_t> getInitValueArray() {
       assert(getInitValues() && "initValues attribute not set");

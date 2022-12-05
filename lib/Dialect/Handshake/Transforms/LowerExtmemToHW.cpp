@@ -299,7 +299,8 @@ static Value plumbLoadPort(Location loc, OpBuilder &b,
 
   auto dataOut = dataFork.getResult()[0];
   llvm::SmallVector<Value> joinArgs = {dataFork.getResult()[1]};
-  auto dataDone = b.create<JoinOp>(loc, SmallVector<Type>{}, joinArgs);
+  auto dataDone =
+      b.create<JoinOp>(loc, SmallVector<Type>{b.getNoneType()}, joinArgs);
 
   ldif.dataOut.replaceAllUsesWith(dataOut);
   ldif.doneOut.replaceAllUsesWith(dataDone);

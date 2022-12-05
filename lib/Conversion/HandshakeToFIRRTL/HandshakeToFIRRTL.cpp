@@ -24,6 +24,7 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include <set>
 
@@ -131,6 +132,11 @@ static FIRRTLBaseType getBundleType(Type type) {
 
   auto bundleType = BundleType::get(elements, context);
   return bundleType;
+}
+
+static bool isControlOp(Operation *op) {
+  auto control = op->getAttr("control");
+  return control && control.dyn_cast_or_null<BoolAttr>().getValue();
 }
 
 /// A class to be used with getPortInfoForOp. Provides an opaque interface for
@@ -458,7 +464,7 @@ static std::string getSubModuleName(Operation *oldOp) {
 
   // Add control information.
   if (auto ctrlInterface = dyn_cast<handshake::ControlInterface>(oldOp);
-      ctrlInterface && ctrlInterface.isControl()) {
+      ctrlInterface && isControlOp(ctrlInterface)) {
     // Add some additional discriminating info for non-typed operations.
     subModuleName += "_" + std::to_string(oldOp->getNumOperands()) + "ins_" +
                      std::to_string(oldOp->getNumResults()) + "outs";
@@ -1114,7 +1120,7 @@ bool HandshakeBuilder::visitHandshake(SinkOp op) {
 
   rewriter.eraseOp(argValid.getDefiningOp());
 
-  if (op.sostIsControl()) {
+  if (isControlOp(op)) {
     return true;
   }
 
@@ -1139,7 +1145,7 @@ bool HandshakeBuilder::visitHandshake(SourceOp op) {
 
   rewriter.eraseOp(argReady.getDefiningOp());
 
-  assert(op.isControl() && "source op provide control-only tokens");
+  assert(isControlOp(op) && "source op provide control-only tokens");
   return true;
 }
 
@@ -1275,7 +1281,7 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
   Value resultValid = resultSubfields[0];
   Value resultReady = resultSubfields[1];
   Value resultData;
-  if (!op.isControl())
+  if (!isControlOp(op))
     resultData = resultSubfields[2];
 
   // Walk through each arg data to collect the subfields.
@@ -1286,11 +1292,11 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
     ValueVector argSubfields = portList[i];
     argValid.push_back(argSubfields[0]);
     argReady.push_back(argSubfields[1]);
-    if (!op.isControl())
+    if (!isControlOp(op))
       argData.push_back(argSubfields[2]);
   }
 
-  if (!op.isControl()) {
+  if (!isControlOp(op)) {
     // Mux the arg data.
     auto muxedData = createMuxTree(argData, selectData, insertLoc, rewriter);
 
@@ -1417,7 +1423,7 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
   Value resultReady = resultSubfields[1];
   Value resultData;
 
-  if (!op.isControl())
+  if (!isControlOp(op))
     resultData = resultSubfields[2];
 
   // Walk through each arg data to collect the subfields.
@@ -1428,7 +1434,7 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
     ValueVector argSubfields = portList[i];
     argValid.push_back(argSubfields[0]);
     argReady.push_back(argSubfields[1]);
-    if (!op.isControl())
+    if (!isControlOp(op))
       argData.push_back(argSubfields[2]);
   }
 
@@ -1463,7 +1469,7 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
   // result outputs are gated on the win wire being non-zero.
   rewriter.create<ConnectOp>(insertLoc, resultValid, hasWinnerCondition);
 
-  if (!op.isControl()) {
+  if (!isControlOp(op)) {
     auto resultDataMux = createOneHotMuxTree(argData, win, insertLoc, rewriter);
     rewriter.create<ConnectOp>(insertLoc, resultData, resultDataMux);
   }
@@ -1492,7 +1498,7 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
 bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   auto *context = rewriter.getContext();
 
-  bool isControl = op.isControl();
+  bool isControl = isControlOp(op);
   unsigned numPorts = portList.size();
   unsigned numInputs = numPorts - 4;
 
@@ -1676,7 +1682,7 @@ bool HandshakeBuilder::visitHandshake(handshake::BranchOp op) {
   rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
   rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
 
-  if (!op.isControl()) {
+  if (!isControlOp(op)) {
     Value argData = argSubfields[2];
     Value resultData = resultSubfields[2];
     rewriter.create<ConnectOp>(insertLoc, resultData, argData);
@@ -1720,7 +1726,7 @@ bool HandshakeBuilder::visitHandshake(ConditionalBranchOp op) {
                                  conditionNot, conditionArgValid));
 
   // Connect data signal of both results if applied.
-  if (!op.isControl()) {
+  if (!isControlOp(op)) {
     Value argData = argSubfields[2];
     Value trueResultData = trueResultSubfields[2];
     Value falseResultData = falseResultSubfields[2];
@@ -1766,7 +1772,7 @@ bool HandshakeBuilder::visitHandshake(LazyForkOp op) {
     Value resultValid = resultfield[0];
     rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidOp);
 
-    if (!op.isControl()) {
+    if (!isControlOp(op)) {
       Value argData = argSubfields[2];
       Value resultData = resultfield[2];
       rewriter.create<ConnectOp>(insertLoc, resultData, argData);
@@ -1897,7 +1903,7 @@ bool HandshakeBuilder::visitHandshake(ForkOp op) {
   auto clock = portList[portNum - 2][0];
   auto reset = portList[portNum - 1][0];
 
-  return buildForkLogic(input, outputs, clock, reset, op.isControl());
+  return buildForkLogic(input, outputs, clock, reset, isControlOp(op));
 }
 
 /// Please refer to test_constant.mlir test case.
@@ -2495,11 +2501,11 @@ bool HandshakeBuilder::visitHandshake(BufferOp op) {
     if (op.getInitValues())
       initValues = op.getInitValueArray();
     return buildSeqBufferLogic(op.getNumSlots(), &input, &output, clock, reset,
-                               op.isControl(), initValues);
+                               isControlOp(op), initValues);
   }
 
   return buildFIFOBufferLogic(op.getNumSlots(), &input, &output, clock, reset,
-                              op.isControl());
+                              isControlOp(op));
 }
 
 bool HandshakeBuilder::visitHandshake(ExternalMemoryOp op) {
@@ -3075,6 +3081,19 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
         return failure();
       rewriter.eraseOp(funcOp);
       return success();
+    }
+
+    // Adds a boolean "control" attribute for all Handshake operations
+    // As handshake operations get lowered to FIRRTL (in particular, as
+    // NonType's get lowered), the logic that determines whether an operation
+    // is a control operation may no longer give the right answer. We therefore
+    // cache the isControl property of each operation before any modification
+    // to the operation and then refer to that attribute during lowering.
+    for (auto &op : funcOp.getOps()) {
+      auto ctrl = dyn_cast<handshake::ControlInterface>(op);
+      if (ctrl)
+        op.setAttr("control",
+                   BoolAttr::get(rewriter.getContext(), ctrl.isControl()));
     }
 
     auto maybeTopModuleOp = createTopModuleOp<FModuleOp>(

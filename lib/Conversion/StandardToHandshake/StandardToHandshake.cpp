@@ -1580,8 +1580,8 @@ static void addJoinOps(ConversionPatternRewriter &rewriter,
     // Insert only single join per block
     if (!isa<JoinOp>(srcOp)) {
       rewriter.setInsertionPointAfter(srcOp);
-      Operation *newOp =
-          rewriter.create<JoinOp>(srcOp->getLoc(), SmallVector<Type>{}, val);
+      Operation *newOp = rewriter.create<JoinOp>(
+          srcOp->getLoc(), SmallVector<Type>{rewriter.getNoneType()}, val);
       for (auto &u : val.getUses())
         if (u.getOwner() != newOp)
           u.getOwner()->replaceUsesOfWith(val, newOp->getResult(0));
@@ -1669,7 +1669,8 @@ void HandshakeLowering::setMemOpControlInputs(
     else {
       rewriter.setInsertionPoint(currOp);
       Operation *joinOp = rewriter.create<JoinOp>(
-          currOp->getLoc(), SmallVector<Type>{}, controlOperands);
+          currOp->getLoc(), SmallVector<Type>{rewriter.getNoneType()},
+          controlOperands);
       addValueToOperands(currOp, joinOp->getResult(0));
     }
   }

@@ -401,7 +401,7 @@ void MuxOp::print(OpAsmPrinter &p) {
   p << " [";
   p.printOperands(ops.drop_front());
   p << "]";
-  p.printOptionalAttrDict((*this)->getAttrs(), {"dataType", "size", "control"});
+  p.printOptionalAttrDict((*this)->getAttrs());
   p << " : " << selectType << ", " << getResult().getType();
 }
 
@@ -778,7 +778,7 @@ ParseResult ConditionalBranchOp::parse(OpAsmParser &parser,
 void ConditionalBranchOp::print(OpAsmPrinter &p) {
   Type type = getDataOperand().getType();
   p << " " << getOperands();
-  p.printOptionalAttrDict((*this)->getAttrs(), {"size", "dataType", "control"});
+  p.printOptionalAttrDict((*this)->getAttrs());
   p << " : " << type;
 }
 
@@ -824,7 +824,7 @@ ParseResult SelectOp::parse(OpAsmParser &parser, OperationState &result) {
 void SelectOp::print(OpAsmPrinter &p) {
   Type type = getTrueOperand().getType();
   p << " " << getOperands();
-  p.printOptionalAttrDict((*this)->getAttrs(), {"size", "dataType", "control"});
+  p.printOptionalAttrDict((*this)->getAttrs());
   p << " : " << type;
 }
 
@@ -890,7 +890,7 @@ ParseResult SourceOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void SourceOp::print(OpAsmPrinter &p) {
-  p.printOptionalAttrDict((*this)->getAttrs(), {"size", "dataType", "control"});
+  p.printOptionalAttrDict((*this)->getAttrs());
 }
 
 LogicalResult ConstantOp::verify() {
@@ -940,19 +940,26 @@ void handshake::BufferOp::getCanonicalizationPatterns(
   results.insert<circt::handshake::EliminateSunkBuffersPattern>(context);
 }
 
+unsigned BufferOp::getSize() {
+  return (*this)->getAttrOfType<IntegerAttr>("slots").getValue().getZExtValue();
+}
+
 ParseResult BufferOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
   Type type;
   ArrayRef<Type> operandTypes(type);
   llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
-  int size;
-  if (parseIntInSquareBrackets(parser, size))
+  int slots;
+  if (parseIntInSquareBrackets(parser, slots))
     return failure();
 
   auto bufferTypeAttr = BufferTypeEnumAttr::parse(parser, {});
   if (!bufferTypeAttr)
     return failure();
 
+  result.addAttribute(
+      "slots",
+      IntegerAttr::get(IntegerType::get(result.getContext(), 32), slots));
   result.addAttribute("bufferType", bufferTypeAttr);
 
   if (parser.parseOperandList(allOperands) ||
@@ -969,14 +976,12 @@ ParseResult BufferOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void BufferOp::print(OpAsmPrinter &p) {
   int size =
-      (*this)->getAttrOfType<IntegerAttr>("size").getValue().getZExtValue();
+      (*this)->getAttrOfType<IntegerAttr>("slots").getValue().getZExtValue();
   p << " [" << size << "]";
   p << " " << stringifyEnum(getBufferType());
-  Type type = (*this)->getAttrOfType<TypeAttr>("dataType").getValue();
   p << " " << (*this)->getOperands();
-  p.printOptionalAttrDict((*this)->getAttrs(),
-                          {"size", "dataType", "control", "bufferType"});
-  p << " : " << type;
+  p.printOptionalAttrDict((*this)->getAttrs(), {"slots", "bufferType"});
+  p << " : " << (*this).getDataType();
 }
 
 static std::string getMemoryOperandName(unsigned nStores, unsigned idx) {

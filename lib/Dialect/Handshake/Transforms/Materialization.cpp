@@ -42,9 +42,7 @@ static void replaceFirstUse(Operation *op, Value oldVal, Value newVal) {
 
 static void insertSink(Value val, OpBuilder &rewriter) {
   rewriter.setInsertionPointAfterValue(val);
-  auto sinkOp = rewriter.create<SinkOp>(val.getLoc(), val);
-  if (val.getType().isa<NoneType>())
-    sinkOp->setAttr("control", rewriter.getBoolAttr(true));
+  rewriter.create<SinkOp>(val.getLoc(), val);
 }
 
 namespace circt {
