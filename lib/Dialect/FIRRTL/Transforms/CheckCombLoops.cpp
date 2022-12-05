@@ -385,7 +385,7 @@ public:
   // Combinational paths between the ports of a module.
   llvm::SmallDenseMap<Node, SmallVector<Node>> &portPaths;
   // Map of all the leaf ground type values for a corresponding aggregate value.
-  DenseMap<Value, DenseMap<size_t, SmallVector<Value>>> valLeafOps;
+  llvm::MapVector<Value, DenseMap<size_t, SmallVector<Value>>> valLeafOps;
   SmallVector<Node> currentPath;
   bool printCycle = true;
   bool detectedCycle = false;
