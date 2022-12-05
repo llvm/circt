@@ -17,6 +17,10 @@
       {
         "_1": "~Top|Bar>b",
         "_2": "~Sub|Sub>data_sink.w"
+      },
+      {
+        "_1": "~Top|Foo>dataOut.u",
+        "_2": "~Sub|Sub>data_sink.x"
       }
     ],
     "sourceTargets": [

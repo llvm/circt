@@ -41,6 +41,24 @@
 ; JSONINLINE:           "annotations": []
 ; JSONINLINE:           "circuitPackage": "flowtest"
 
+; Check buffer wires are inserted and preserved
+; RUN: FileCheck %s --input-file=%t/default/Top.sv --check-prefix=TOPDEFAULT
+; RUN: FileCheck %s --input-file=%t/default/Foo.sv --check-prefix=FOODEFAULT
+
+; Forced input ports bound to 'buffer' wire that separates the port from its uses.
+; TOPDEFAULT: Foo_clock_buffer = Foo_clock;
+; TOPDEFAULT: Foo_dataIn_a_b_c_buffer = Foo_dataIn_a_b_c;
+; TOPDEFAULT: Foo_dataIn_d_buffer = Foo_dataIn_d;
+; TOPDEFAULT:  .clock         (Foo_clock_buffer)
+; TOPDEFAULT:  .dataIn_a_b_c  (Foo_dataIn_a_b_c_buffer)
+; TOPDEFAULT:  .dataIn_d      (Foo_dataIn_d_buffer)
+; Forced Bar port has buffer wire in Foo.
+; FOODEFAULT-DAG: Bar_b_buffer = Bar_b;
+; FOODEFAULT-DAG:   .b (Bar_b_buffer)
+
+; Forced output ports bound to 'buffer' wire inside module.
+; FOODEFAULT-DAG: Foo_dataOut_u_buffer = Foo_dataOut_u;
+; FOODEFAULT-DAG: dataOut_u = Foo_dataOut_u_buffer
 
 ; 2) Run on sub circuit, with updated annotation file (sigdrive.json) from (1):
 ; RUN: firtool %S/subcircuit.fir --annotation-file %t/default/sigdrive.json | FileCheck %s --check-prefix=MAPPINGDEFAULT
@@ -52,6 +70,7 @@
 ; MAPPINGDEFAULT-NEXT:   input  [9000:0] data_sink_v,
 ; MAPPINGDEFAULT-NEXT:   input           data_sink_w_0,
 ; MAPPINGDEFAULT-NEXT:                   data_sink_w_1,
+; MAPPINGDEFAULT-NEXT:   input  [41:0]   data_sink_x,
 ; MAPPINGDEFAULT-NEXT:   output          clock_source,
 ; MAPPINGDEFAULT-NEXT:   output [41:0]   data_source_u,
 ; MAPPINGDEFAULT-NEXT:   output [9000:0] data_source_v);
@@ -65,6 +84,7 @@
 ; MAPPINGDEFAULT-NEXT:     force Bar.b = data_sink_w_0;
 ; MAPPINGDEFAULT-NEXT:     force Bar.b = data_sink_w_1;
 ; (cont)
+; MAPPINGDEFAULT-NEXT:     force Foo.dataOut_u = data_sink_x;
 ; MAPPINGDEFAULT-NEXT:   end
 ; MAPPINGDEFAULT-NEXT:   `endif
 ; MAPPINGDEFAULT-NEXT:   assign clock_source = Top.clock;
@@ -78,6 +98,7 @@
 ; MAPPINGINLINE-NEXT:   input  [9000:0] data_sink_v,
 ; MAPPINGINLINE-NEXT:   input           data_sink_w_0,
 ; MAPPINGINLINE-NEXT:                   data_sink_w_1,
+; MAPPINGINLINE-NEXT:   input  [41:0]   data_sink_x,
 ; MAPPINGINLINE-NEXT:   output          clock_source,
 ; MAPPINGINLINE-NEXT:   output [41:0]   data_source_u,
 ; MAPPINGINLINE-NEXT:   output [9000:0] data_source_v);
@@ -90,6 +111,7 @@
 ; MAPPINGINLINE-NEXT:     force Bar.b = data_sink_w_0;
 ; MAPPINGINLINE-NEXT:     force Bar.b = data_sink_w_1;
 ; (cont)
+; MAPPINGINLINE-NEXT:     force Top.foo_dataOut_u = data_sink_x;
 ; MAPPINGINLINE-NEXT:   end
 ; MAPPINGINLINE-NEXT:   `endif
 ; MAPPINGINLINE-NEXT:   assign clock_source = Top.clock;
