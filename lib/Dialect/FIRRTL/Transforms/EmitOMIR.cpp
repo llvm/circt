@@ -50,6 +50,8 @@ struct Tracker {
   HierPathOp nla;
   /// If this is a port, then set the portIdx, else initialized to -1.
   int portNo = -1;
+  /// If this is a field, the ID will be greater than 0, else it will be 0.
+  unsigned fieldID;
 };
 
 class EmitOMIRPass : public EmitOMIRBase<EmitOMIRPass> {
@@ -104,6 +106,17 @@ private:
   /// Obtain an inner reference to a module port, possibly adding an `inner_sym`
   /// to that port.
   hw::InnerRefAttr getInnerRefTo(FModuleLike module, size_t portIdx);
+
+  // Obtain the result type of an Operation.
+  FIRRTLType getTypeOf(Operation *op);
+  // Obtain the type of a module port.
+  FIRRTLType getTypeOf(FModuleLike mod, size_t portIdx);
+
+  // Returns true if the tracker has a non-zero field ID.
+  bool hasFieldID(Tracker tracker);
+
+  // Constructs a reference to a field from a FIRRTLType with a fieldID.
+  SmallString<8> addFieldID(FIRRTLType type, unsigned fieldID);
 
   /// Get the cached namespace for a module.
   ModuleNamespace &getModuleNamespace(FModuleLike module) {
@@ -605,6 +618,7 @@ void EmitOMIRPass::runOnOperation() {
       tracker.op = op;
       tracker.id = anno.getMember<IntegerAttr>("id");
       tracker.portNo = portNo;
+      tracker.fieldID = anno.getFieldID();
       if (!tracker.id) {
         op->emitError(omirTrackerAnnoClass)
             << " annotation missing `id` integer attribute";
@@ -1150,14 +1164,32 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
   // Serialize any potential component *inside* the module that this target may
   // specifically refer to.
   hw::InnerRefAttr componentName;
+  FIRRTLType componentType;
   if (isa<WireOp, RegOp, RegResetOp, InstanceOp, NodeOp, MemOp>(tracker.op)) {
     tempSymInstances.erase(tracker.op);
     componentName = getInnerRefTo(tracker.op);
     LLVM_DEBUG(llvm::dbgs() << "Marking OMIR-targeted " << componentName
                             << " as dont-touch\n");
+
+    // If the target refers to a field, get the type of the component so we can
+    // extract the field, or fail if we don't know how to get the type.
+    if (hasFieldID(tracker)) {
+      if (isa<WireOp, RegOp, RegResetOp, NodeOp>(tracker.op)) {
+        componentType = getTypeOf(tracker.op);
+      } else {
+        tracker.op->emitError("does not support OMIR targeting fields");
+        anyFailures = true;
+        return jsonStream.value("<error>");
+      }
+    }
   } else if (auto mod = dyn_cast<FModuleLike>(tracker.op)) {
-    if (tracker.portNo >= 0)
+    if (tracker.portNo >= 0) {
       componentName = getInnerRefTo(mod, tracker.portNo);
+
+      // If the target refers to a field, get the type of the port.
+      if (hasFieldID(tracker))
+        componentType = getTypeOf(mod, tracker.portNo);
+    }
   } else if (!isa<FModuleLike>(tracker.op)) {
     tracker.op->emitError("invalid target for `") << type << "` OMIR";
     anyFailures = true;
@@ -1187,6 +1219,10 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
       }
       target.push_back('>');
       target.append(addSymbol(componentName));
+
+      // If the target refers to a field, append the field.
+      if (hasFieldID(tracker))
+        target.append(addFieldID(componentType, tracker.fieldID));
     }();
   }
 
@@ -1206,6 +1242,45 @@ hw::InnerRefAttr EmitOMIRPass::getInnerRefTo(FModuleLike module,
                          [&](FModuleLike mod) -> ModuleNamespace & {
                            return getModuleNamespace(mod);
                          });
+}
+
+FIRRTLType EmitOMIRPass::getTypeOf(Operation *op) {
+  assert(op->getNumResults() == 1 &&
+         op->getResult(0).getType().isa<FIRRTLType>() &&
+         "op must have a single FIRRTLType result");
+  return op->getResult(0).getType().cast<FIRRTLType>();
+}
+
+FIRRTLType EmitOMIRPass::getTypeOf(FModuleLike mod, size_t portIdx) {
+  Type portType = mod.getPortType(portIdx);
+  assert(portType.isa<FIRRTLType>() && "port must have a FIRRTLType");
+  return portType.cast<FIRRTLType>();
+}
+
+// Returns true if the tracker has a non-zero field ID.
+bool EmitOMIRPass::hasFieldID(Tracker tracker) { return tracker.fieldID > 0; }
+
+// Constructs a reference to a field from a FIRRTLType with a fieldID.
+SmallString<8> EmitOMIRPass::addFieldID(FIRRTLType type, unsigned fieldID) {
+  assert((type.isa_and_nonnull<FVectorType>() ||
+          type.isa_and_nonnull<BundleType>()) &&
+         "non-zero fieldID must be part of a vector or bundle type");
+
+  SmallString<8> str;
+
+  if (auto vector = type.dyn_cast<FVectorType>()) {
+    str.append("[");
+    size_t index = vector.getIndexForFieldID(fieldID);
+    Twine(index).toVector(str);
+    str.append("]");
+  } else if (auto bundle = type.dyn_cast<BundleType>()) {
+    str.append(".");
+    size_t index = bundle.getIndexForFieldID(fieldID);
+    StringAttr name = bundle.getElement(index).name;
+    str.append(name);
+  }
+
+  return str;
 }
 
 //===----------------------------------------------------------------------===//

@@ -235,6 +235,161 @@ firrtl.circuit "NonLocalTrackers" attributes {annotations = [{
 // CHECK-SAME:    #hw.innerNameRef<@A::@[[a_sym]]>
 // CHECK-SAME:  ]
 
+
+//===----------------------------------------------------------------------===//
+// Trackers support fieldID
+//===----------------------------------------------------------------------===//
+
+#loc3 = loc("OM.scala":1:1)
+#loc4 = loc("Foo.scala":1:1)
+firrtl.circuit "Top"  attributes {annotations = [{
+  class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
+  nodes = [{
+    fields = {
+      paths = {
+        index = 0 : i64,
+        info = #loc3,
+        value = [{
+          id = 0 : i64,
+          omir.tracker,
+          path = "~Top|Top/a:A>in0[0]",
+          type = "OMReferenceTarget"
+        }, {
+          id = 1 : i64,
+          omir.tracker,
+          path = "~Top|Top/a:A>in0[1]",
+          type = "OMReferenceTarget"
+        }]
+      }
+    },
+    id = "OMID:1",
+    info = #loc4
+  }, {
+    fields = {
+      paths = {
+        index = 0 : i64,
+        info = #loc4,
+        value = [{
+          id = 2 : i64,
+          omir.tracker,
+          path = "~Top|Top/a:A>w0[0]",
+          type = "OMReferenceTarget"
+        }, {
+          id = 3 : i64,
+          omir.tracker,
+          path = "~Top|Top/a:A>w0[1]",
+          type = "OMReferenceTarget"
+        }]
+      }
+    },
+    id = "OMID:2",
+    info = #loc4
+  }, {
+    fields = {
+      paths = {
+        index = 0 : i64,
+        info = #loc3,
+        value = [{
+          id = 4 : i64,
+          omir.tracker,
+          path = "~Top|Top/a:A>in1.f0",
+          type = "OMReferenceTarget"
+        }, {
+          id = 5 : i64,
+          omir.tracker,
+          path = "~Top|Top/a:A>in1.f1",
+          type = "OMReferenceTarget"
+        }]
+      }
+    },
+    id = "OMID:3",
+    info = #loc4
+  }, {
+    fields = {
+      paths = {
+        index = 0 : i64,
+        info = #loc4,
+        value = [{
+          id = 6 : i64,
+          omir.tracker,
+          path = "~Top|Top/a:A>w1.f0",
+          type = "OMReferenceTarget"
+        }, {
+          id = 7 : i64,
+          omir.tracker,
+          path = "~Top|Top/a:A>w1.f1",
+          type = "OMReferenceTarget"
+        }]
+      }
+    },
+    id = "OMID:4",
+    info = #loc4
+  }]
+}]} {
+  firrtl.hierpath private @nla [@Top::@a, @A]
+  firrtl.module @Top(in %in0_0: !firrtl.uint<4>, in %in0_1: !firrtl.uint<4>, in %in1_f0: !firrtl.uint<4>, in %in1_f1: !firrtl.uint<4>, out %out0_0: !firrtl.uint<4>, out %out0_1: !firrtl.uint<4>, out %out1_f0: !firrtl.uint<4>, out %out1_f1: !firrtl.uint<4>) {
+    %a_in0, %a_in1_f0, %a_in1_f1, %a_out0, %a_out1_f0, %a_out1_f1 = firrtl.instance a sym @a  @A(in in0: !firrtl.vector<uint<4>, 2>, in in1_f0: !firrtl.uint<4>, in in1_f1: !firrtl.uint<4>, out out0: !firrtl.vector<uint<4>, 2>, out out1_f0: !firrtl.uint<4>, out out1_f1: !firrtl.uint<4>)
+    %0 = firrtl.subindex %a_in0[0] : !firrtl.vector<uint<4>, 2>
+    firrtl.strictconnect %0, %in0_0 : !firrtl.uint<4>
+    %1 = firrtl.subindex %a_in0[1] : !firrtl.vector<uint<4>, 2>
+    firrtl.strictconnect %1, %in0_1 : !firrtl.uint<4>
+    firrtl.strictconnect %a_in1_f0, %in1_f0 : !firrtl.uint<4>
+    firrtl.strictconnect %a_in1_f1, %in1_f1 : !firrtl.uint<4>
+    %2 = firrtl.subindex %a_out0[0] : !firrtl.vector<uint<4>, 2>
+    firrtl.strictconnect %out0_0, %2 : !firrtl.uint<4>
+    %3 = firrtl.subindex %a_out0[1] : !firrtl.vector<uint<4>, 2>
+    firrtl.strictconnect %out0_1, %3 : !firrtl.uint<4>
+    firrtl.strictconnect %out1_f0, %a_out1_f0 : !firrtl.uint<4>
+    firrtl.strictconnect %out1_f1, %a_out1_f1 : !firrtl.uint<4>
+  }
+  // CHECK-LABEL: firrtl.module private @A
+  // CHECK-SAME:    %in0: !firrtl.vector<uint<4>, 2> sym @[[in0_sym:[^ ]+]],
+  // CHECK-SAME:    %in1_f0: !firrtl.uint<4> sym @[[in1_f0_sym:[^ ]+]],
+  // CHECK-SAME:    %in1_f1: !firrtl.uint<4> sym @[[in1_f1_sym:[^ ]+]],
+  firrtl.module private @A(in %in0: !firrtl.vector<uint<4>, 2> [{circt.fieldID = 2 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64}, {circt.fieldID = 1 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64}], in %in1_f0: !firrtl.uint<4> [{circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 4 : i64}], in %in1_f1: !firrtl.uint<4> [{circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 5 : i64}], out %out0: !firrtl.vector<uint<4>, 2>, out %out1_f0: !firrtl.uint<4>, out %out1_f1: !firrtl.uint<4>) {
+    // CHECK: %w0 = firrtl.wire sym @[[w0_sym:[^ ]+]]
+    %w0 = firrtl.wire   {annotations = [{circt.fieldID = 2 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 3 : i64}, {circt.fieldID = 1 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 2 : i64}]} : !firrtl.vector<uint<4>, 2>
+    %0 = firrtl.subindex %in0[0] : !firrtl.vector<uint<4>, 2>
+    %1 = firrtl.subindex %in0[1] : !firrtl.vector<uint<4>, 2>
+    // CHECK: %w1_f0 = firrtl.wire sym @[[w1_f0_sym:[^ ]+]]
+    %w1_f0 = firrtl.wire   {annotations = [{circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 6 : i64}]} : !firrtl.uint<4>
+    // CHECK: %w1_f1 = firrtl.wire sym @[[w1_f1_sym:[^ ]+]]
+    %w1_f1 = firrtl.wire   {annotations = [{circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 7 : i64}]} : !firrtl.uint<4>
+    firrtl.strictconnect %w1_f0, %in1_f0 : !firrtl.uint<4>
+    firrtl.strictconnect %w1_f1, %in1_f1 : !firrtl.uint<4>
+    %2 = firrtl.subindex %w0[0] : !firrtl.vector<uint<4>, 2>
+    %3 = firrtl.subindex %out0[0] : !firrtl.vector<uint<4>, 2>
+    firrtl.strictconnect %3, %2 : !firrtl.uint<4>
+    %4 = firrtl.subindex %w0[1] : !firrtl.vector<uint<4>, 2>
+    %5 = firrtl.subindex %out0[1] : !firrtl.vector<uint<4>, 2>
+    firrtl.strictconnect %5, %4 : !firrtl.uint<4>
+    firrtl.strictconnect %out1_f0, %w1_f0 : !firrtl.uint<4>
+    firrtl.strictconnect %out1_f1, %w1_f1 : !firrtl.uint<4>
+    %6 = firrtl.vectorcreate %0, %1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.vector<uint<4>, 2>
+    firrtl.strictconnect %w0, %6 : !firrtl.vector<uint<4>, 2>
+  }
+}
+
+// CHECK:      sv.verbatim
+// CHECK-SAME{LITERAL}: OMReferenceTarget:~Top|{{0}}/{{1}}:{{2}}>{{3}}[0]
+// CHECK-SAME{LITERAL}: OMReferenceTarget:~Top|{{0}}/{{1}}:{{2}}>{{3}}[1]
+// CHECK-SAME{LITERAL}: OMReferenceTarget:~Top|{{0}}/{{1}}:{{2}}>{{4}}[0]
+// CHECK-SAME{LITERAL}: OMReferenceTarget:~Top|{{0}}/{{1}}:{{2}}>{{4}}[1]
+// CHECK-SAME{LITERAL}: OMReferenceTarget:~Top|{{0}}/{{1}}:{{2}}>{{5}}
+// CHECK-SAME{LITERAL}: OMReferenceTarget:~Top|{{0}}/{{1}}:{{2}}>{{6}}
+// CHECK-SAME{LITERAL}: OMReferenceTarget:~Top|{{0}}/{{1}}:{{2}}>{{7}}
+// CHECK-SAME{LITERAL}: OMReferenceTarget:~Top|{{0}}/{{1}}:{{2}}>{{8}}
+// CHECK-SAME: symbols = [
+// CHECK-SAME:  @Top,
+// CHECK-SAME:  #hw.innerNameRef<@Top::@a>
+// CHECK-SAME:  @A
+// CHECK-SAME:  #hw.innerNameRef<@A::@[[in0_sym]]>
+// CHECK-SAME:  #hw.innerNameRef<@A::@[[w0_sym]]>
+// CHECK-SAME:  #hw.innerNameRef<@A::@[[in1_f0_sym]]>
+// CHECK-SAME:  #hw.innerNameRef<@A::@[[in1_f1_sym]]>
+// CHECK-SAME:  #hw.innerNameRef<@A::@[[w1_f0_sym]]>
+// CHECK-SAME:  #hw.innerNameRef<@A::@[[w1_f1_sym]]>
+
 //===----------------------------------------------------------------------===//
 // Targets that are allowed to lose their tracker
 //===----------------------------------------------------------------------===//
