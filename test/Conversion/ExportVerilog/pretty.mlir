@@ -67,3 +67,94 @@ hw.module @CoverAssert(
     sv.assert.concurrent posedge %clock, %5 label "assert__label" message "assert failed"
 }
 
+hw.module @MuxChain(%a_0: i1, %a_1: i1, %a_2: i1, %c_0: i1, %c_1: i1, %c_2: i1) -> (out: i1) {
+  %0 = comb.mux bin %a_1, %c_1, %c_0 : i1
+  %1 = comb.mux bin %a_0, %0, %c_2 : i1
+  %2 = comb.mux bin %a_2, %1, %c_1 : i1
+  %3 = comb.mux bin %a_1, %c_0, %2 : i1
+  %4 = comb.mux bin %a_0, %c_2, %3 : i1
+  %5 = comb.mux bin %a_2, %c_1, %4 : i1
+  %6 = comb.mux bin %a_1, %c_0, %5 : i1
+  %7 = comb.mux bin %a_0, %c_2, %6 : i1
+  %8 = comb.mux bin %a_2, %c_1, %7 : i1
+  %9 = comb.mux bin %a_1, %c_0, %8 : i1
+  %10 = comb.mux bin %a_0, %c_2, %9 : i1
+  %11 = comb.mux bin %a_2, %c_1, %10 : i1
+  %12 = comb.mux bin %a_1, %c_0, %11 : i1
+  %13 = comb.mux bin %a_0, %c_2, %12 : i1
+  %14 = comb.mux bin %a_2, %c_1, %13 : i1
+  %15 = comb.mux bin %a_1, %c_0, %14 : i1
+  %16 = comb.mux bin %a_0, %c_2, %15 : i1
+  %17 = comb.mux bin %a_2, %c_1, %16 : i1
+  %18 = comb.mux bin %a_1, %c_0, %17 : i1
+  %19 = comb.mux bin %a_0, %c_2, %18 : i1
+  %20 = comb.mux bin %a_2, %c_1, %19 : i1
+  %21 = comb.mux bin %a_1, %c_0, %20 : i1
+  %22 = comb.mux bin %a_0, %c_2, %21 : i1
+  %23 = comb.mux bin %a_2, %c_1, %22 : i1
+  %24 = comb.mux bin %a_1, %c_0, %23 : i1
+  %25 = comb.mux bin %a_0, %c_2, %24 : i1
+  %26 = comb.mux bin %a_0, %c_1, %25 : i1
+  %27 = comb.mux bin %a_0, %c_0, %26 : i1
+  hw.output %27 : i1
+
+//      CHECK:  assign out =
+// CHECK-NEXT:    a_0
+// CHECK-NEXT:      ? c_0
+// CHECK-NEXT:      : a_0
+// CHECK-NEXT:          ? c_1
+// CHECK-NEXT:          : a_0
+// CHECK-NEXT:              ? c_2
+// CHECK-NEXT:              : a_1
+// CHECK-NEXT:                  ? c_0
+// CHECK-NEXT:                  : a_2
+// CHECK-NEXT:                      ? c_1
+// CHECK-NEXT:                      : a_0
+// CHECK-NEXT:                          ? c_2
+// CHECK-NEXT:                          : a_1
+// CHECK-NEXT:                              ? c_0
+// CHECK-NEXT:                              : a_2
+// CHECK-NEXT:                                  ? c_1
+// CHECK-NEXT:                                  : a_0
+// CHECK-NEXT:                                      ? c_2
+// CHECK-NEXT:                                      : a_1
+// CHECK-NEXT:                                          ? c_0
+// CHECK-NEXT:                                          : a_2
+// CHECK-NEXT:                                              ? c_1
+// CHECK-NEXT:                                              : a_0
+// CHECK-NEXT:                                                  ? c_2
+// CHECK-NEXT:                                                  : a_1
+// CHECK-NEXT:                                                      ? c_0
+// CHECK-NEXT:                                                      : a_2
+// CHECK-NEXT:                                                          ? c_1
+// CHECK-NEXT:                                                          : a_0
+// CHECK-NEXT:                                                              ? c_2
+// CHECK-NEXT:                                                              : a_1
+// CHECK-NEXT:                                                                  ? c_0
+// CHECK-NEXT:                                                                  : a_2
+// CHECK-NEXT:                                                                      ? c_1
+// CHECK-NEXT:                                                                      : a_0
+// CHECK-NEXT:                                                                          ? c_2
+// CHECK-NEXT:                                                                          : a_1
+// CHECK-NEXT:                                                                              ? c_0
+// CHECK-NEXT:                                                                              : a_2
+// CHECK-NEXT:                                                                                  ? c_1
+// CHECK-NEXT:                                                                                  : a_0
+// CHECK-NEXT:                                                                                      ? c_2
+// CHECK-NEXT:                                                                                      : a_1
+//            ------------------------------------------------------------------------------------------v (margin=90)
+// CHECK-NEXT:                                                                                          ? c_0
+// CHECK-NEXT:                                                                                          : a_2
+// CHECK-NEXT:                                                                                              ? c_1
+// CHECK-NEXT:                                                                                              : a_0
+// CHECK-NEXT:                                                                                                  ? c_2
+// CHECK-NEXT:                                                                                                  : a_1
+// CHECK-NEXT:                                                                                                      ? c_0
+// CHECK-NEXT:                                                                                                      : a_2
+// CHECK-NEXT:                                                                                                          ? (a_0
+// CHECK-NEXT:                                                                                                               ? (a_1
+// CHECK-NEXT:                                                                                                                    ? c_1
+// CHECK-NEXT:                                                                                                                    : c_0)
+// CHECK-NEXT:                                                                                                               : c_2)
+// CHECK-NEXT:                                                                                                          : c_1;{{.*}}
+}
