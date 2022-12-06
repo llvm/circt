@@ -87,7 +87,7 @@ module  {
       %y = firrtl.wire  : !firrtl.uint<1>
       %z = firrtl.wire  : !firrtl.uint<1>
       firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-remark @+1 {{memory is part of a combinational cycle between the data and address port}}
+      // expected-remark @+1 {{memory is part of a combinational cycle}}
       %m_r = firrtl.mem Undefined  {depth = 2 : i64, name = "m", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
       %0 = firrtl.subfield %m_r[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
       firrtl.connect %0, %clk : !firrtl.clock, !firrtl.clock
@@ -326,7 +326,6 @@ firrtl.circuit "bundleWire"   {
     %1 = firrtl.subfield %0(0) : (!firrtl.bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>) -> !firrtl.bundle<baz: uint<1>>
     %2 = firrtl.subfield %1(0) : (!firrtl.bundle<baz: uint<1>>) -> !firrtl.uint<1>
     %3 = firrtl.subfield %0(1) : (!firrtl.bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>) -> !firrtl.sint<64>
-		// expected-remark @+1 {{this operation is part of the combinational cycle}}
     firrtl.connect %w0_0_0, %3 : !firrtl.sint<64>, !firrtl.sint<64>
 		// expected-remark @+1 {{this operation is part of the combinational cycle}}
     firrtl.connect %x, %w0_0_0 : !firrtl.sint<64>, !firrtl.sint<64>
@@ -381,19 +380,19 @@ module  {
   // Combinational loop through a combinational memory read port
   // CHECK-NOT: firrtl.circuit "hasloops"
   firrtl.circuit "hasloops"   {
-    // expected-error @+1 {{hasloops.y <- hasloops.z <- hasloops.m.r.data <- hasloops.m.r.addr <- hasloops.y <-}}
+    // expected-error @+1 {{hasloops.y <- hasloops.z <- hasloops.m.r.data <- hasloops.m.r.en <- hasloops.y <-}}
     firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
       // expected-remark @+1 {{this operation is part of the combinational cycle}}
       %y = firrtl.wire  : !firrtl.uint<1>
       %z = firrtl.wire  : !firrtl.uint<1>
       firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-remark @+1 {{memory is part of a combinational cycle between the data and address port}}
+      // expected-remark @+1 {{memory is part of a combinational cycle}}
       %m_r = firrtl.mem Undefined  {depth = 2 : i64, name = "m", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
       %0 = firrtl.subfield %m_r(2) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.clock
       firrtl.connect %0, %clk : !firrtl.clock, !firrtl.clock
       %1 = firrtl.subfield %m_r(0) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
-      firrtl.connect %1, %y : !firrtl.uint<1>, !firrtl.uint<1>
       %2 = firrtl.subfield %m_r(1) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
+      firrtl.connect %2, %y : !firrtl.uint<1>, !firrtl.uint<1>
       %c1_ui = firrtl.constant 1 : !firrtl.uint
       firrtl.connect %2, %c1_ui : !firrtl.uint<1>, !firrtl.uint
       %3 = firrtl.subfield %m_r(3) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
