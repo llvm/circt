@@ -450,10 +450,8 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
   SmallVector<DenseSet<Value>> registerValues;
   SmallVector<SmallVector<mlir::Type>> registerTypes;
   SmallVector<BlockAndValueMapping> valueMaps;
-  unsigned pipelineDepth = 0;
   for (auto startTime : startTimes) {
     auto group = startGroups[startTime];
-    // OpBuilder::InsertionGuard g(builder);
 
     // Collect the return types for this stage. Operations whose results are not
     // used within this stage are returned.
@@ -472,7 +470,6 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
           finTime = std::max(finTime, *problem.getStartTime(user));
       }
 
-      pipelineDepth = std::max(finTime, pipelineDepth);
       unsigned opLatency =
           *problem.getLatency(*problem.getLinkedOperatorType(op));
       for (unsigned i = opLatency > 0 ? startTime + opLatency - 1 : startTime;
