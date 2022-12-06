@@ -1268,17 +1268,23 @@ SmallString<8> EmitOMIRPass::addFieldID(FIRRTLType type, unsigned fieldID) {
 
   SmallString<8> str;
 
-  if (auto vector = type.dyn_cast<FVectorType>()) {
-    str.append("[");
-    size_t index = vector.getIndexForFieldID(fieldID);
-    Twine(index).toVector(str);
-    str.append("]");
-  } else if (auto bundle = type.dyn_cast<BundleType>()) {
-    str.append(".");
-    size_t index = bundle.getIndexForFieldID(fieldID);
-    StringAttr name = bundle.getElement(index).name;
-    str.append(name);
-  }
+  while (fieldID)
+    TypeSwitch<FIRRTLType>(type)
+        .Case<FVectorType>([&](FVectorType vector) {
+          size_t index = vector.getIndexForFieldID(fieldID);
+          type = vector.getElementType();
+          fieldID -= vector.getFieldID(index);
+          str.append("[");
+          Twine(index).toVector(str);
+          str.append("]");
+        })
+        .Case<BundleType>([&](BundleType bundle) {
+          size_t index = bundle.getIndexForFieldID(fieldID);
+          type = bundle.getElementType(index);
+          fieldID -= bundle.getFieldID(index);
+          str.append(".");
+          str.append(bundle.getElement(index).name);
+        });
 
   return str;
 }
