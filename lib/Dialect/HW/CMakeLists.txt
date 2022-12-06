@@ -6,6 +6,7 @@ add_circt_dialect_library(
   HWInstanceGraph.cpp
   HWOpInterfaces.cpp
   HWOps.cpp
+  HWTypeInterfaces.cpp
   HWTypes.cpp
   InstanceGraphBase.cpp
   InstanceImplementation.cpp
