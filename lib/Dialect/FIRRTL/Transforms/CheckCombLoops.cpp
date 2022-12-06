@@ -70,6 +70,8 @@ struct DenseMapInfo<Node> {
 } // namespace llvm
 
 class ModuleDFS {
+  using NodeOpPair = std::pair<Node, Operation *>;
+
 public:
   ModuleDFS(FModuleOp module, InstanceGraph &instanceGraph,
             llvm::SmallDenseMap<Node, SmallVector<Node>> &portPaths)
@@ -106,34 +108,14 @@ public:
     }
     visiting.insert(node);
     currentPath.push_back(node);
-    // Case 1: Instance and Mem ops.
-    if (!handleDefOps(node, inputArg)) {
-      // Case 2: Handle aggregate values.
-      if (!node.val.getType().cast<FIRRTLBaseType>().isGround()) {
-        auto baseVal = node.val;
-        size_t fieldId = node.fieldId;
-        if (node.fieldId == 0) {
-          // Get the base aggregate value from the leaf.
-          auto fRef = getFieldRefFromValue(node.val);
-          baseVal = fRef.getValue();
-          fieldId = fRef.getFieldID();
-        }
-        if (!valLeafOps.count(baseVal))
-          gatherAggregateLeafs(baseVal);
-        // Get all the leaf values, that correspond to the `fieldId` leaf of the
-        // `baseVal`. This is required, because, mulitple subfield ops can refer
-        // to the same field.
-        for (auto &leaf : valLeafOps[baseVal][fieldId]) {
-          auto leafNode = Node(leaf, 0);
-          if (dfsFromNode(leafNode, inputArg).failed())
-            return failure();
-        }
-      } // Case 3: Handle ground type values and iterate over all the users.
-      else if (visitChildren(node, inputArg).failed())
+    SmallVector<NodeOpPair> children;
+    getChildren(node, inputArg, children);
+    for (auto childNode : children)
+      if (dfsFromNode(childNode.first, inputArg).failed()) {
+        printError(node, childNode);
         return failure();
-    }
-    if (detectedCycle)
-      return failure();
+      }
+
     visiting.erase(node);
     currentPath.pop_back();
     // Finished discovering all the reachable nodes from node.
@@ -148,11 +130,59 @@ public:
   /// between the module ports, for MemOps check for any combinational paths
   /// between the input addres or enable fields and the output data field for
   /// latency 0 read ports.
-  bool handleDefOps(Node &node, Node &inputArg) {
+  void getChildren(Node &node, Node &inputArg,
+                   SmallVector<NodeOpPair> &children) {
+    if (!node.val.getType().cast<FIRRTLBaseType>().isGround()) {
+      auto baseVal = node.val;
+      size_t fieldId = node.fieldId;
+      if (node.fieldId == 0) {
+        // Get the base aggregate value from the leaf.
+        auto fRef = getFieldRefFromValue(node.val);
+        baseVal = fRef.getValue();
+        fieldId = fRef.getFieldID();
+      }
+      if (!valLeafOps.count(baseVal))
+        gatherAggregateLeafs(baseVal);
+      // Get all the leaf values, that correspond to the `fieldId` leaf of the
+      // `baseVal`. This is required, because, mulitple subfield ops can refer
+      // to the same field.
+      for (auto &leaf : valLeafOps[baseVal][fieldId])
+        children.emplace_back(
+            std::make_pair<Node, Operation *>(Node(leaf, 0), nullptr));
+    } else
+      for (auto &child : node.val.getUses()) {
+        Operation *owner = child.getOwner();
+        LLVM_DEBUG(llvm::dbgs() << "\n owner: " << *owner);
+        auto childNode =
+            TypeSwitch<Operation *, Node>(owner)
+                .Case<FConnectLike>([&](FConnectLike connect) {
+                  if (child.getOperandNumber() == 1) {
+                    auto fRef = getFieldRefFromValue(connect.getDest());
+                    if (inputArg.isValid()) {
+                      if (auto sinkOut =
+                              fRef.getValue().dyn_cast<BlockArgument>())
+                        portPaths[Node(inputArg.val, inputArg.fieldId)]
+                            .push_back(Node(sinkOut, fRef.getFieldID()));
+                    }
+                    return Node(fRef.getValue(), fRef.getFieldID());
+                  }
+                  return Node();
+                })
+                .Default([&](Operation *op) {
+                  if (op->getNumResults() == 1) {
+                    auto res = op->getResult(0);
+                    auto fRef = getFieldRefFromValue(res);
+                    return Node(fRef.getValue(), fRef.getFieldID());
+                  }
+                  return Node();
+                });
+        if (childNode.isValid())
+          children.push_back({childNode, owner});
+      }
     if (node.val.isa<BlockArgument>())
-      return false;
+      return;
 
-    return TypeSwitch<Operation *, bool>(node.val.getDefiningOp())
+    return TypeSwitch<Operation *>(node.val.getDefiningOp())
         .Case<InstanceOp>([&](InstanceOp ins) {
           size_t portNum = 0;
           // Get the port index for `node.val`.
@@ -165,31 +195,17 @@ public:
               dyn_cast<FModuleOp>(*instanceGraph.getReferencedModule(ins));
           if (referencedModule) {
             auto port = referencedModule.getBodyBlock()->getArgument(portNum);
-            // Get all the ports that have a combination path from `port`.
+            // Get all the ports that have a comb path from `port`.
             for (const auto &portNode : portPaths[Node(port, node.fieldId)]) {
               auto instResult = ins.getResult(
                   portNode.val.cast<BlockArgument>().getArgNumber());
               Node instNode(instResult, portNode.fieldId);
-              if (dfsFromNode(instNode, inputArg).failed()) {
-                auto remark =
-                    ins.emitRemark("instance is part of a combinational "
-                                   "cycle, instance port number '")
-                    << portNode.val.cast<BlockArgument>().getArgNumber()
-                    << "' has a path from port number '" << portNum << "'";
-                FieldRef fIn(instResult, portNode.fieldId);
-                FieldRef fOut(node.val, node.fieldId);
-                auto inName = getFieldName(fIn);
-                auto outName = getFieldName(fOut);
-                remark << ", " << inName << " <- " << outName;
-
-                detectedCycle = true;
-                return true;
-              }
+              children.push_back({instNode, ins});
             }
           }
-          return false;
+          return;
         })
-        .Case<RegOp, RegResetOp>([&](auto) { return true; })
+        .Case<RegOp, RegResetOp>([&](auto) { children.clear(); })
         .Case<MemOp>([&](MemOp mem) {
           auto type = node.val.getType().cast<BundleType>();
           auto enableFieldId = type.getFieldID((unsigned)ReadPortSubfield::en);
@@ -197,77 +213,30 @@ public:
           size_t addressFieldId =
               type.getFieldID((unsigned)ReadPortSubfield::addr);
           // If this is the enable or addr field of the memory read port.
-          if (mem.getReadLatency() == 0 &&
-              (node.fieldId == addressFieldId ||
-               node.fieldId == enableFieldId || node.fieldId == dataFieldId))
-            for (const auto &memPort : llvm::enumerate(mem.getResults())) {
-              // If this is a read port.
-              if (memPort.value() != node.val ||
-                  mem.getPortKind(memPort.index()) != MemOp::PortKind::Read)
-                continue;
-              // If its a data field, then continue DFS from the data
-              // fields.
-              if (node.fieldId == dataFieldId)
-                return false;
-              // Check for possible combinational paths from 0-latency
-              // memory reads to the input address and enable.
-              auto dataNode = Node(
-                  node.val, type.getFieldID((unsigned)ReadPortSubfield::data));
-
-              if (dfsFromNode(dataNode, inputArg).failed()) {
-                mem.emitRemark("memory is part of a combinational cycle "
-                               "between the data and ")
-                    << (node.fieldId == addressFieldId ? "address" : "enable")
-                    << " port";
-                detectedCycle = true;
-                return true;
-              }
-            }
-          // For any other kind of memory, terminate the DFS.
-          return true;
-        })
-        .Default([&](auto) { return false; });
-  }
-
-  LogicalResult visitChildren(Node &node, Node &inputArg) {
-    for (auto &child : node.val.getUses()) {
-      Operation *owner = child.getOwner();
-      LLVM_DEBUG(llvm::dbgs() << "\n owner: " << *owner);
-      Node childNode =
-          TypeSwitch<Operation *, Node>(owner)
-              .Case<FConnectLike>([&](FConnectLike connect) {
-                if (child.getOperandNumber() == 1) {
-                  auto fRef = getFieldRefFromValue(connect.getDest());
-                  if (inputArg.isValid()) {
-                    if (auto sinkOut =
-                            fRef.getValue().dyn_cast<BlockArgument>())
-                      portPaths[Node(inputArg.val, inputArg.fieldId)].push_back(
-                          Node(sinkOut, fRef.getFieldID()));
-                  }
-                  return Node(fRef.getValue(), fRef.getFieldID());
-                }
-                return Node();
-              })
-              .Default([&](Operation *op) {
-                if (op->getNumResults() == 1) {
-                  auto res = op->getResult(0);
-                  auto fRef = getFieldRefFromValue(res);
-                  return Node(fRef.getValue(), fRef.getFieldID());
-                }
-                return Node();
-              });
-      if (childNode.isValid())
-        if (dfsFromNode(childNode, inputArg).failed()) {
-          if (!printCycle || currentPath.back() == node) {
-            printCycle = false;
-            return failure();
+          if (!(mem.getReadLatency() == 0 && (node.fieldId == addressFieldId ||
+                                              node.fieldId == enableFieldId ||
+                                              node.fieldId == dataFieldId))) {
+            // For any other kind of memory, terminate the DFS.
+            children.clear();
+            return;
           }
-          owner->emitRemark(
-              "this operation is part of the combinational cycle");
-          return failure();
-        }
-    }
-    return success();
+          for (const auto &memPort : llvm::enumerate(mem.getResults())) {
+            // If this is a read port.
+            if (memPort.value() != node.val ||
+                mem.getPortKind(memPort.index()) != MemOp::PortKind::Read)
+              continue;
+            // If its a data field, then continue DFS from the data
+            // fields.
+            if (node.fieldId == dataFieldId)
+              return;
+            // Check for possible combinational paths from 0-latency
+            // memory reads to the input address and enable.
+            auto dataNode = Node(
+                node.val, type.getFieldID((unsigned)ReadPortSubfield::data));
+            children.push_back({dataNode, mem});
+          }
+        })
+        .Default([&](auto) { return; });
   }
 
   /// Record all the leaf ground type values for an aggregate type value.
@@ -376,6 +345,41 @@ public:
                        << " is connected to ," << i2.val << "," << i2.fieldId;
     });
     return success();
+  }
+
+  void printError(Node &node, NodeOpPair &childNode) {
+    if (!printCycle || currentPath.back() == node) {
+      printCycle = false;
+      return;
+    }
+    if (childNode.second)
+      TypeSwitch<Operation *>(childNode.second)
+          .Case<InstanceOp>([&](InstanceOp ins) {
+            size_t portNum = 0, childPortNum = 0;
+            // Get the port index for `node.val`.
+            for (const auto &p : llvm::enumerate(ins->getOpResults())) {
+              if (p.value() == childNode.first.val)
+                childPortNum = p.index();
+              if (p.value() == node.val)
+                portNum = p.index();
+            }
+            auto remark = ins.emitRemark("instance is part of a combinational "
+                                         "cycle, instance port number '")
+                          << childPortNum << "' has a path from port number '"
+                          << portNum << "'";
+            FieldRef fOut(node.val, node.fieldId);
+            FieldRef fIn(childNode.first.val, childNode.first.fieldId);
+            auto inName = getFieldName(fIn);
+            auto outName = getFieldName(fOut);
+            remark << ", " << inName << " <- " << outName;
+          })
+          .Case<MemOp>([&](MemOp mem) {
+            mem.emitRemark("memory is part of a combinational cycle ");
+          })
+          .Default([&](auto owner) {
+            owner->emitRemark(
+                "this operation is part of the combinational cycle");
+          });
   }
 
   FModuleOp module;
