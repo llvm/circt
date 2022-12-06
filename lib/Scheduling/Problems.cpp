@@ -14,6 +14,7 @@
 #include "circt/Scheduling/DependenceIterator.h"
 
 #include "mlir/IR/Operation.h"
+#include <cassert>
 
 using namespace circt;
 using namespace circt::scheduling;
@@ -397,6 +398,32 @@ LogicalResult ModuloProblem::verify() {
       return failure();
 
   return success();
+}
+
+ModuloProblem ModuloProblem::get(CyclicProblem &prob) {
+  auto modProb = ModuloProblem::get(prob.getContainingOp());
+  for (auto *op : prob.getOperations()) {
+    auto opr = prob.getLinkedOperatorType(op);
+    if (opr.has_value()) {
+      modProb.setLinkedOperatorType(op, opr.value());
+      auto latency = prob.getLatency(opr.value());
+      if (latency.has_value())
+        modProb.setLatency(opr.value(), latency.value());
+    }
+    modProb.insertOperation(op);
+  }
+
+  for (auto *op : prob.getOperations()) {
+    for (auto dep : prob.getDependences(op)) {
+      if (dep.isAuxiliary())
+        assert(modProb.insertDependence(dep).succeeded());
+      auto distance = prob.getDistance(dep);
+      if (distance.has_value())
+        modProb.setDistance(dep, distance.value());
+    }
+  }
+
+  return modProb;
 }
 
 //===----------------------------------------------------------------------===//

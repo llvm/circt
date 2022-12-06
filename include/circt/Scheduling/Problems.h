@@ -440,6 +440,7 @@ protected:
 
 public:
   virtual LogicalResult verify() override;
+  static ModuloProblem get(CyclicProblem &prob);
 };
 
 } // namespace scheduling
