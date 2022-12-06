@@ -300,3 +300,21 @@ firrtl.circuit "MemoryInDeadCycle" {
     firrtl.connect %w_data, %r_data : !firrtl.uint<42>, !firrtl.uint<42>
   }
 }
+
+// -----
+// CHECK-LABEL: firrtl.circuit "DeadInputPort"
+firrtl.circuit "DeadInputPort"  {
+  // CHECK-NOT: firrtl.module private @Bar
+  firrtl.module private @Bar(in %a: !firrtl.uint<1>) {
+  }
+
+  // CHECK-LABEL: firrtl.module @DeadInputPort
+  firrtl.module @DeadInputPort(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    // CHECK-NEXT: %0 = firrtl.wire
+    // CHECK-NEXT: firrtl.strictconnect %0, %a
+    // CHECK-NEXT: firrtl.strictconnect %b, %0
+    %bar_a = firrtl.instance bar  @Bar(in a: !firrtl.uint<1>)
+    firrtl.strictconnect %bar_a, %a : !firrtl.uint<1>
+    firrtl.strictconnect %b, %bar_a : !firrtl.uint<1>
+  }
+}
