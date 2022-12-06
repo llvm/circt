@@ -50,7 +50,8 @@ def SOSTInterface : OpInterface<"SOSTInterface"> {
     InterfaceMethod<[{
         Determine whether the operation is a control operation.
         The default implementation of this method assumes that the operation
-        is a control operation if its data type is a NoneType.
+        is a control operation if and only if its associated data type is a
+        NoneType.
       }],
       "bool", "sostIsControl", (ins), "",
       [{
@@ -80,6 +81,26 @@ def SOSTInterface : OpInterface<"SOSTInterface"> {
       }]
     >
   ];
+
+  let verify = [{
+    auto concreteOp = cast<ConcreteOp>($_op);
+
+    // SOST operation's size must be at least one
+    if (concreteOp.getSize() < 1) {
+      return concreteOp.emitOpError(
+        "SOST operation's size must be at least 1, but has size ") 
+        << concreteOp.getSize();
+    }
+
+    // SOST operation's operands must all have the same type
+    auto dataType = concreteOp.getDataType();
+    for (auto operand : concreteOp->getOperands())
+      if (operand.getType() != dataType) 
+        return concreteOp.emitOpError("SOST operation reports having data type ")
+          << dataType << ", but one operand has type " << operand.getType();
+    
+    return success();
+  }];
 }
 
 def MergeLikeOpInterface : OpInterface<"MergeLikeOpInterface"> {

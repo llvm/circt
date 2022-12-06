@@ -48,8 +48,7 @@ static void insertSink(Value val, OpBuilder &rewriter) {
 namespace circt {
 namespace handshake {
 
-static void insertForkGeneric(Value result, bool isLazy, bool isControl,
-                              OpBuilder &rewriter) {
+void insertFork(Value result, bool isLazy, OpBuilder &rewriter) {
   // Get successor operations
   std::vector<Operation *> opsToProcess;
   for (auto &u : result.getUses())
@@ -57,26 +56,18 @@ static void insertForkGeneric(Value result, bool isLazy, bool isControl,
 
   // Insert fork after op
   rewriter.setInsertionPointAfterValue(result);
-  SmallVector<Type> forkResults{opsToProcess.size(), result.getType()};
+  auto forkSize = opsToProcess.size();
   Operation *newOp;
   if (isLazy)
-    newOp = rewriter.create<LazyForkOp>(result.getLoc(), forkResults, result);
+    newOp = rewriter.create<LazyForkOp>(result.getLoc(), result, forkSize);
   else
-    newOp = rewriter.create<ForkOp>(result.getLoc(), forkResults, result);
+    newOp = rewriter.create<ForkOp>(result.getLoc(), result, forkSize);
 
   // Modify operands of successor
   // opsToProcess may have multiple instances of same operand
   // Replace uses one by one to assign different fork outputs to them
-  for (int i = 0, e = opsToProcess.size(); i < e; ++i)
+  for (int i = 0, e = forkSize; i < e; ++i)
     replaceFirstUse(opsToProcess[i], result, newOp->getResult(i));
-}
-
-void insertFork(Value result, OpBuilder &rewriter) {
-  insertForkGeneric(result, false, false, rewriter);
-}
-
-void insertLazyFork(Value result, bool isControl, OpBuilder &rewriter) {
-  insertForkGeneric(result, true, isControl, rewriter);
 }
 
 // Insert Fork Operation for every operation and function argument with more
@@ -88,14 +79,14 @@ LogicalResult addForkOps(Region &r, OpBuilder &rewriter) {
       for (auto result : op.getResults()) {
         // If there is a result and it is used more than once
         if (!result.use_empty() && !result.hasOneUse())
-          insertFork(result, rewriter);
+          insertFork(result, false, rewriter);
       }
     }
   }
 
   for (auto barg : r.front().getArguments())
     if (!barg.use_empty() && !barg.hasOneUse())
-      insertFork(barg, rewriter);
+      insertFork(barg, false, rewriter);
 
   return success();
 }

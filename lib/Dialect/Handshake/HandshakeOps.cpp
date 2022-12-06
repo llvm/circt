@@ -180,9 +180,8 @@ struct EliminateUnusedForkResultsPattern : mlir::OpRewritePattern<ForkOp> {
     // Create a new fork op, dropping the unused results.
     rewriter.setInsertionPoint(op);
     auto operand = op.getOperand();
-    SmallVector<Type> forkResults{op.getNumResults() - unusedIndexes.size(),
-                                  operand.getType()};
-    auto newFork = rewriter.create<ForkOp>(op.getLoc(), forkResults, operand);
+    auto newFork = rewriter.create<ForkOp>(
+        op.getLoc(), operand, op.getNumResults() - unusedIndexes.size());
     rewriter.updateRootInPlace(op, [&] {
       unsigned i = 0;
       for (auto &oldRes : llvm::enumerate(op.getResults()))
@@ -212,9 +211,8 @@ struct EliminateForkToForkPattern : mlir::OpRewritePattern<ForkOp> {
       /// Create a new parent fork op which produces all of the fork outputs and
       /// replace all of the uses of the old results.
       auto operand = parentForkOp.getOperand();
-      SmallVector<Type> parentForkResults{totalNumOuts, operand.getType()};
-      auto newParentForkOp = rewriter.create<ForkOp>(
-          parentForkOp.getLoc(), parentForkResults, operand);
+      auto newParentForkOp =
+          rewriter.create<ForkOp>(parentForkOp.getLoc(), operand, totalNumOuts);
 
       for (auto it :
            llvm::zip(parentForkOp->getResults(), newParentForkOp.getResults()))
@@ -362,6 +360,20 @@ void MuxOp::getCanonicalizationPatterns(RewritePatternSet &results,
                  EliminateCBranchIntoMuxPattern>(context);
 }
 
+LogicalResult
+MuxOp::inferReturnTypes(MLIRContext *context, Optional<Location> location,
+                        ValueRange operands, DictionaryAttr attributes,
+                        mlir::RegionRange regions,
+                        SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
+  // MuxOp must have at least one data operand (in addition to the select
+  // operand)
+  if (operands.size() < 2)
+    return failure();
+  // Result type is type of any data operand
+  inferredReturnTypes.push_back(operands[1].getType());
+  return success();
+}
+
 bool MuxOp::isControl() { return getResult().getType().isa<NoneType>(); }
 
 std::string handshake::MuxOp::getOperandName(unsigned int idx) {
@@ -430,6 +442,19 @@ LogicalResult MuxOp::verify() {
 std::string handshake::ControlMergeOp::getResultName(unsigned int idx) {
   assert(idx == 0 || idx == 1);
   return idx == 0 ? "dataOut" : "index";
+}
+
+LogicalResult ControlMergeOp::inferReturnTypes(
+    MLIRContext *context, Optional<Location> location, ValueRange operands,
+    DictionaryAttr attributes, mlir::RegionRange regions,
+    SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
+  // ControlMerge must have at least one data operand
+  if (operands.empty())
+    return failure();
+  // Result type is type of any data operand and index type
+  inferredReturnTypes.push_back(operands[0].getType());
+  inferredReturnTypes.push_back(IndexType::get(context));
+  return success();
 }
 
 ParseResult ControlMergeOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -697,8 +722,7 @@ LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
       return failure();
   }
 
-  auto merge = rewriter.create<MergeOp>(op.getLoc(), op.getDataType(),
-                                        op.getDataOperands());
+  auto merge = rewriter.create<MergeOp>(op.getLoc(), op.getDataOperands());
 
   for (auto &use : dataResult.getUses()) {
     auto *user = use.getOwner();
@@ -750,6 +774,17 @@ ParseResult BranchOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void BranchOp::print(OpAsmPrinter &p) { sostPrint(p, false); }
 
+LogicalResult ConditionalBranchOp::inferReturnTypes(
+    MLIRContext *context, Optional<Location> location, ValueRange operands,
+    DictionaryAttr attributes, mlir::RegionRange regions,
+    SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
+  // Return type is type of data operand (second argument), twice
+  auto resType = operands[1].getType();
+  inferredReturnTypes.push_back(resType);
+  inferredReturnTypes.push_back(resType);
+  return success();
+}
+
 ParseResult ConditionalBranchOp::parse(OpAsmParser &parser,
                                        OperationState &result) {
   SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
@@ -795,6 +830,16 @@ std::string handshake::ConditionalBranchOp::getResultName(unsigned int idx) {
 bool ConditionalBranchOp::isControl() {
   return isControlCheckTypeAndOperand(getDataOperand().getType(),
                                       getDataOperand());
+}
+
+LogicalResult
+SelectOp::inferReturnTypes(MLIRContext *context, Optional<Location> location,
+                           ValueRange operands, DictionaryAttr attributes,
+                           mlir::RegionRange regions,
+                           SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
+  // Return type is type of true operand (equivalently, of false operand)
+  inferredReturnTypes.push_back(operands[1].getType());
+  return success();
 }
 
 ParseResult SelectOp::parse(OpAsmParser &parser, OperationState &result) {

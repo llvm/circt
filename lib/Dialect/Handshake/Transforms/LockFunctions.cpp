@@ -59,8 +59,7 @@ LogicalResult handshake::lockRegion(Region &r, OpBuilder &rewriter) {
   SmallVector<Value> endJoinOperands = llvm::to_vector(ret->getOperands());
   // Add the axilirary control signal output to the end-join
   endJoinOperands.push_back(sync.getResults().back());
-  auto endJoin = rewriter.create<JoinOp>(
-      loc, SmallVector<Type>{rewriter.getNoneType()}, endJoinOperands);
+  auto endJoin = rewriter.create<JoinOp>(loc, endJoinOperands);
 
   backEdge.setValue(endJoin);
   return success();

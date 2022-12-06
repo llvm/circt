@@ -294,13 +294,11 @@ static Value plumbLoadPort(Location loc, OpBuilder &b,
   // We need to feed both the load data and the load done outputs.
   // Fork the extracted load data into two, and 'join' the second one to
   // generate a none-typed output to drive the load done.
-  SmallVector<Type, 2> forkResults{2, loadData.getType()};
-  auto dataFork = b.create<ForkOp>(loc, forkResults, loadData);
+  auto dataFork = b.create<ForkOp>(loc, loadData, 2);
 
   auto dataOut = dataFork.getResult()[0];
   llvm::SmallVector<Value> joinArgs = {dataFork.getResult()[1]};
-  auto dataDone =
-      b.create<JoinOp>(loc, SmallVector<Type>{b.getNoneType()}, joinArgs);
+  auto dataDone = b.create<JoinOp>(loc, joinArgs);
 
   ldif.dataOut.replaceAllUsesWith(dataOut);
   ldif.doneOut.replaceAllUsesWith(dataDone);

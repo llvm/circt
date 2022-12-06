@@ -14,6 +14,7 @@ include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/BuiltinTypes.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 
 // This is almost exactly like a standard FuncOp, except that it has some
 // extra verification conditions.  In particular, each Value must
@@ -215,7 +216,7 @@ def BufferTypeEnum: I32EnumAttr<
 }
 def BufferTypeEnumAttr: EnumAttr<Handshake_Dialect, BufferTypeEnum, "buffer_type_enum">;
 
-def BufferOp : Handshake_Op<"buffer", [Pure, HasClock, 
+def BufferOp : Handshake_Op<"buffer", [Pure, HasClock, SameOperandsAndResultType,
   DeclareOpInterfaceMethods<SOSTInterface, ["getSize"]>,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<GeneralOpInterface>]> {
@@ -272,7 +273,7 @@ def BufferOp : Handshake_Op<"buffer", [Pure, HasClock,
 }
 
 def ForkOp : Handshake_Op<"fork", [
-  Pure, HasClock,
+  Pure, HasClock, SameOperandsAndResultType,
   DeclareOpInterfaceMethods<SOSTInterface, ["getSize"]>, 
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<GeneralOpInterface>
@@ -292,12 +293,20 @@ def ForkOp : Handshake_Op<"fork", [
 
   let arguments = (ins AnyType : $operand);
   let results = (outs Variadic<AnyType> : $result);
+  
+  let builders = [OpBuilder<
+    (ins "Value":$operand, "unsigned":$size), [{
+      $_state.addOperands(operand);
+      SmallVector<Type> resultTypes {size, operand.getType()};
+      $_state.addTypes(resultTypes);
+  }]>];
+
   let hasCanonicalizer = 1;
   let hasCustomAssemblyFormat = 1;
 }
 
 def LazyForkOp : Handshake_Op<"lazy_fork", [
-  Pure, 
+  Pure, SameOperandsAndResultType,
   DeclareOpInterfaceMethods<SOSTInterface, ["getSize", "sostIsControl"]>
 ]> {
   let summary = "lazy fork operation";
@@ -314,11 +323,19 @@ def LazyForkOp : Handshake_Op<"lazy_fork", [
 
   let arguments = (ins AnyType : $operand);
   let results = (outs Variadic<AnyType> : $result);
+
+  let builders = [OpBuilder<
+    (ins "Value":$operand, "unsigned":$size), [{
+      $_state.addOperands(operand);
+      SmallVector<Type> resultTypes {size, operand.getType()};
+      $_state.addTypes(resultTypes);
+  }]>];
+
   let hasCustomAssemblyFormat = 1;
 }
 
 def MergeOp : Handshake_Op<"merge", [
-  Pure, MergeLikeOpInterface, SOSTInterface,
+  Pure, MergeLikeOpInterface, SOSTInterface, SameOperandsAndResultType,
   DeclareOpInterfaceMethods<ExecutableOpInterface>
 ]> {
   let summary = "merge operation";
@@ -342,6 +359,7 @@ def MergeOp : Handshake_Op<"merge", [
 
 def MuxOp : Handshake_Op<"mux", [
   Pure, MergeLikeOpInterface,
+  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>,
   DeclareOpInterfaceMethods<ControlInterface, ["isControl"]>,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>
@@ -373,6 +391,7 @@ def MuxOp : Handshake_Op<"mux", [
 
 def ControlMergeOp : Handshake_Op<"control_merge", [
   Pure, MergeLikeOpInterface, HasClock, SOSTInterface,
+  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getResultName"]>
 ]> {
@@ -398,7 +417,8 @@ def ControlMergeOp : Handshake_Op<"control_merge", [
 }
 
 def BranchOp : Handshake_Op<"br", [
-  Pure, DeclareOpInterfaceMethods<SOSTInterface, ["sostIsControl"]>, 
+  Pure, SameOperandsAndResultType,
+  DeclareOpInterfaceMethods<SOSTInterface, ["sostIsControl"]>, 
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<GeneralOpInterface>,
   AllTypesMatch<["dataOperand", "dataResult"]>
@@ -423,6 +443,7 @@ def BranchOp : Handshake_Op<"br", [
 
 def ConditionalBranchOp : Handshake_Op<"cond_br", [
   Pure, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>,
   DeclareOpInterfaceMethods<ControlInterface, ["isControl"]>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getResultName"]>,
@@ -454,6 +475,7 @@ def ConditionalBranchOp : Handshake_Op<"cond_br", [
 
 def SelectOp : Handshake_Op<"select", [
   Pure,
+  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>,
   DeclareOpInterfaceMethods<ControlInterface, ["isControl"]>,
   DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>,
   TypesMatchWith<"data operand type matches true branch result type",
@@ -754,6 +776,7 @@ def StoreOp : Handshake_Op<"store", [
 }
 
 def JoinOp : Handshake_Op<"join", [
+  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<ControlInterface, ["isControl"]>,
   DeclareOpInterfaceMethods<GeneralOpInterface>
