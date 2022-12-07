@@ -71,6 +71,7 @@ jobs:
         shell: pwsh
         run: |
           ./utils/find-vs.ps1
+          ./utils/get-capnp.ps1 Release
           mkdir build_release
           cd build_release
           cmake ../ -GNinja `

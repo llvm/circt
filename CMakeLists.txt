@@ -413,20 +413,40 @@ option(CAPNP_DISABLE "Disable Cap'nProto (needed for cosimulation).")
 if (CAPNP_DISABLE)
   message (STATUS "Disabling Cap'nProto.")
 else()
-  if(DEFINED CAPNP_PATH)
-    set(ENV{PKG_CONFIG_PATH}
-      "${CAPNP_PATH}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-    find_package(CapnProto CONFIG PATHS ${CAPNP_PATH})
+  if(WIN32)
+    if(DEFINED CAPNP_PATH)
+      find_package(CapnProto CONFIG PATHS ${CAPNP_PATH})
+    else()
+      # Todo: would be nice if we could just wildcard whatever was downloaded by get-capnp.ps1
+      set(CAPNP_KNOWN_VERSIONS "0.10.2")
+      set(CAPNP_PATHS)
+      foreach(ver ${CAPNP_KNOWN_VERSIONS})
+        list(APPEND CAPNP_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ext/capnproto-c++-win32-${ver}/capnproto-c++-${ver}/cmake")
+      endforeach()
+      find_package(CapnProto CONFIG PATHS ${CAPNP_PATHS})
+    endif()
   else()
-    set(ENV{PKG_CONFIG_PATH}
-      "${CMAKE_CURRENT_SOURCE_DIR}/ext/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-    find_package(CapnProto CONFIG PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ext")
+    if(DEFINED CAPNP_PATH)
+      set(ENV{PKG_CONFIG_PATH}
+        "${CAPNP_PATH}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+      find_package(CapnProto CONFIG PATHS ${CAPNP_PATH})
+    else()
+      set(ENV{PKG_CONFIG_PATH}
+        "${CMAKE_CURRENT_SOURCE_DIR}/ext/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+      find_package(CapnProto CONFIG PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ext")
+    endif()
   endif()
 
   if(CapnProto_FOUND)
     message(STATUS "Found Cap'nProto at ${CapnProto_DIR}.")
     set(CMAKE_INSTALL_RPATH ${capnp_LIBDIR})
     set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
+    if(WIN32)
+        # LLVM has exceptions disabled, which requires KJ_USE_FIBERS in CapnProto to be
+        # manually disabled.
+        add_definitions("-DKJ_USE_FIBERS=0")
+    endif()
   endif()
 endif()
 
