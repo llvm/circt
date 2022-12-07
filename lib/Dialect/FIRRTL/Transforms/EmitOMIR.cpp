@@ -47,7 +47,7 @@ struct Tracker {
   /// The operation onto which this tracker was annotated.
   Operation *op;
   /// If this tracker is non-local, this is the corresponding anchor.
-  HierPathOp nla;
+  hw::HierPathOp nla;
   /// If this is a port, then set the portIdx, else initialized to -1.
   int portNo = -1;
   /// If this is a field, the ID will be greater than 0, else it will be 0.
@@ -142,7 +142,7 @@ private:
   SmallDenseMap<Attribute, unsigned> symbolIndices;
   /// Temporary `firrtl.hierpath` operations to be deleted at the end of the
   /// pass. Vector elements are unique.
-  SmallVector<HierPathOp> removeTempNLAs;
+  SmallVector<hw::HierPathOp> removeTempNLAs;
   DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
   /// Lookup table of instances by name and parent module.
   DenseMap<hw::InnerRefAttr, InstanceOp> instancesByName;
@@ -633,7 +633,7 @@ void EmitOMIRPass::runOnOperation() {
           anyFailures = true;
           return true;
         }
-        tracker.nla = cast<HierPathOp>(tmp);
+        tracker.nla = cast<hw::HierPathOp>(tmp);
       }
       if (sramIDs.erase(tracker.id))
         makeTrackerAbsolute(tracker);
@@ -771,9 +771,9 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
     namepath.push_back(getInnerRefTo(tracker.op));
 
   // Add the NLA to the tracker and mark it to be deleted later.
-  tracker.nla = builder.create<HierPathOp>(builder.getUnknownLoc(),
-                                           builder.getStringAttr(nlaName),
-                                           builder.getArrayAttr(namepath));
+  tracker.nla = builder.create<hw::HierPathOp>(builder.getUnknownLoc(),
+                                               builder.getStringAttr(nlaName),
+                                               builder.getArrayAttr(namepath));
   nlaTable->addNLA(tracker.nla);
 
   removeTempNLAs.push_back(tracker.nla);

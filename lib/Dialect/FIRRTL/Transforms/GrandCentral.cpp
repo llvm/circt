@@ -1244,7 +1244,7 @@ bool GrandCentralPass::traverseField(
   return TypeSwitch<Attribute, bool>(field)
       .Case<AugmentedGroundTypeAttr>([&](AugmentedGroundTypeAttr ground) {
         auto [fieldRef, sym] = leafMap.lookup(ground.getID());
-        HierPathOp nla;
+        hw::HierPathOp nla;
         if (sym)
           nla = nlaTable->getNLA(sym.getAttr());
         Value leafValue = fieldRef.getValue();

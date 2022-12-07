@@ -243,10 +243,10 @@ firrtl.circuit "NLA" attributes {annotations = [
   {class = "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"}
 ]} {
   // The hierachical paths are unchanged.
-  // CHECK:      firrtl.hierpath private @path_old [@NLA::@foo, @Foo::@old]
-  // CHECK-NEXT: firrtl.hierpath private @path_new [@NLA::@foo, @Foo]
-  firrtl.hierpath private @path_old [@NLA::@foo, @Foo::@old]
-  firrtl.hierpath private @path_new [@NLA::@foo, @Foo]
+  // CHECK:      hw.hierpath private @path_old [@NLA::@foo, @Foo::@old]
+  // CHECK-NEXT: hw.hierpath private @path_new [@NLA::@foo, @Foo]
+  hw.hierpath private @path_old [@NLA::@foo, @Foo::@old]
+  hw.hierpath private @path_new [@NLA::@foo, @Foo]
   firrtl.module private @Foo() {
     // CHECK:      %old = firrtl.reg sym @old
     // CHECK-SAME:   {circt.nonlocal = @path, class = "oldNLA"}

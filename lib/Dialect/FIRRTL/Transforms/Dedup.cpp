@@ -644,7 +644,7 @@ struct Deduper {
         nonLocalString(StringAttr::get(context, "circt.nonlocal")),
         classString(StringAttr::get(context, "class")) {
     // Populate the NLA cache.
-    for (auto nla : circuit.getOps<HierPathOp>())
+    for (auto nla : circuit.getOps<hw::HierPathOp>())
       nlaCache[nla.getNamepathAttr()] = nla.getSymNameAttr();
   }
 
@@ -756,7 +756,7 @@ private:
       // Check the NLA cache to see if we already have this NLA.
       auto &cacheEntry = nlaCache[arrayAttr];
       if (!cacheEntry) {
-        auto nla = OpBuilder::atBlockBegin(nlaBlock).create<HierPathOp>(
+        auto nla = OpBuilder::atBlockBegin(nlaBlock).create<hw::HierPathOp>(
             loc, "nla", arrayAttr);
         // Insert it into the symbol table to get a unique name.
         symbolTable.insert(nla);
@@ -802,7 +802,7 @@ private:
   /// This erases the NLA op, and removes the NLA from every module's NLA map,
   /// but it does not delete the NLA reference from the target operation's
   /// annotations.
-  void eraseNLA(HierPathOp nla) {
+  void eraseNLA(hw::HierPathOp nla) {
     // Erase the NLA from the leaf module's nlaMap.
     targetMap.erase(nla.getNameAttr());
     nlaTable->erase(nla);

@@ -240,10 +240,10 @@ firrtl.module @Annotations() attributes {annotations = [{class = "sifive.enterpr
 // CHECK-LABEL: firrtl.circuit "NonLocalAnnotation"
 firrtl.circuit "NonLocalAnnotation" {
 
-// CHECK:  firrtl.hierpath private @[[nla_0:.+]] [@NonLocalAnnotation::@dut, @DUT::@mem0, @mem0]
-firrtl.hierpath private @nla0 [@NonLocalAnnotation::@dut, @DUT::@mem0]
-// CHECK:  firrtl.hierpath private @[[nla_1:.+]] [@NonLocalAnnotation::@dut, @DUT::@mem1, @mem1]
-firrtl.hierpath private @nla1 [@NonLocalAnnotation::@dut, @DUT]
+// CHECK:  hw.hierpath private @[[nla_0:.+]] [@NonLocalAnnotation::@dut, @DUT::@mem0, @mem0]
+hw.hierpath private @nla0 [@NonLocalAnnotation::@dut, @DUT::@mem0]
+// CHECK:  hw.hierpath private @[[nla_1:.+]] [@NonLocalAnnotation::@dut, @DUT::@mem1, @mem1]
+hw.hierpath private @nla1 [@NonLocalAnnotation::@dut, @DUT]
 
 // CHECK: firrtl.module @NonLocalAnnotation()
 firrtl.module @NonLocalAnnotation()  {
@@ -261,7 +261,7 @@ firrtl.module @DUT() {
 
 // LowerMemory should ignore MemOps that are not seqmems. The following memory is a combmem with readLatency=0.
   %MRead_read = firrtl.mem Undefined {depth = 12 : i64, name = "MRead", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
-// CHECK:   %MRead_read = firrtl.mem Undefined 
+// CHECK:   %MRead_read = firrtl.mem Undefined
 }
 
 // CHECK: firrtl.module private @mem0
@@ -271,7 +271,7 @@ firrtl.module @DUT() {
 // CHECK: }
 
 // CHECK: firrtl.module private @mem1
-// CHECK:   firrtl.instance mem0_ext sym @mem0_ext 
+// CHECK:   firrtl.instance mem0_ext sym @mem0_ext
 // CHECK-SAME:  {annotations = [{circt.nonlocal = @[[nla_1]], class = "test1"}]}
 // CHECK-SAME:  @mem0_ext(
 }

@@ -112,7 +112,7 @@ struct PortWiring {
   /// If set, the port should output a constant literal.
   Literal literal;
   /// The non-local anchor further specifying where to connect.
-  HierPathOp nla;
+  hw::HierPathOp nla;
   /// True if the tapped target is known to be zero-width.  This indicates that
   /// the port should not be wired.  The port will be removed by LowerToHW.
   bool zeroWidth = false;
@@ -1369,9 +1369,9 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   // path. During wiring of the ports, we generate hierarchical names of the
   // form `<prefix>.<nla-path>.<suffix>`. If we don't have an NLA, we leave it
   // to the key-class-specific code below to come up with the possible prefices.
-  HierPathOp nla;
+  hw::HierPathOp nla;
   if (auto nlaSym = targetAnno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-    nla = dyn_cast<HierPathOp>(circuitSymbols->lookup(nlaSym.getAttr()));
+    nla = dyn_cast<hw::HierPathOp>(circuitSymbols->lookup(nlaSym.getAttr()));
     assert(nla);
     // Find all paths to the root of the NLA.
     Operation *root = circuitSymbols->lookup(nla.root());

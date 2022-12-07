@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/APSInt.h"
@@ -90,7 +91,7 @@ private:
     newTarget.append("|");
 
     if (auto nla = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-      HierPathOp path = nlaTable->getNLA(nla.getAttr());
+      hw::HierPathOp path = nlaTable->getNLA(nla.getAttr());
       for (auto part : path.getNamepath().getValue().drop_back()) {
         auto inst = cast<hw::InnerRefAttr>(part);
         newTarget.append(inst.getModule());
@@ -172,7 +173,7 @@ private:
     newTarget.append("|");
 
     if (auto nla = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-      HierPathOp path = nlaTable->getNLA(nla.getAttr());
+      hw::HierPathOp path = nlaTable->getNLA(nla.getAttr());
       for (auto part : path.getNamepath().getValue().drop_back()) {
         auto inst = cast<hw::InnerRefAttr>(part);
         newTarget.append(inst.getModule());

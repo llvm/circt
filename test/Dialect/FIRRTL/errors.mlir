@@ -686,7 +686,7 @@ firrtl.circuit "BitCast4" {
 firrtl.circuit "NLAWithNestedReference" {
 firrtl.module @NLAWithNestedReference() { }
 // expected-error @below {{only one nested reference is allowed}}
-firrtl.hierpath private @nla [@A::@B::@C]
+hw.hierpath private @nla [@A::@B::@C]
 }
 
 // -----
@@ -694,8 +694,8 @@ firrtl.hierpath private @nla [@A::@B::@C]
 
 firrtl.circuit "LowerToBind" {
  // expected-error @+1 {{the instance path cannot be empty/single element}}
-firrtl.hierpath private @NLA1 []
-firrtl.hierpath private @NLA2 [@LowerToBind::@s1]
+hw.hierpath private @NLA1 []
+hw.hierpath private @NLA2 [@LowerToBind::@s1]
 firrtl.module @InstanceLowerToBind() {}
 firrtl.module @LowerToBind() {
   firrtl.instance foo sym @s1 {lowerToBind} @InstanceLowerToBind()
@@ -707,8 +707,8 @@ firrtl.module @LowerToBind() {
 firrtl.circuit "NLATop" {
 
  // expected-error @+1 {{the instance path can only contain inner sym reference, only the leaf can refer to a module symbol}}
-  firrtl.hierpath private @nla [@NLATop::@test, @Aardvark, @Zebra]
-  firrtl.hierpath private @nla_1 [@NLATop::@test,@Aardvark::@test_1, @Zebra]
+  hw.hierpath private @nla [@NLATop::@test, @Aardvark, @Zebra]
+  hw.hierpath private @nla_1 [@NLATop::@test,@Aardvark::@test_1, @Zebra]
   firrtl.module @NLATop() {
     firrtl.instance test  sym @test @Aardvark()
     firrtl.instance test2 @Zebra()
@@ -727,8 +727,8 @@ firrtl.circuit "NLATop" {
 
 firrtl.circuit "NLATop1" {
   // expected-error @+1 {{instance path is incorrect. Expected module: "Aardvark" instead found: "Zebra"}}
-  firrtl.hierpath private @nla [@NLATop1::@test, @Zebra::@test,@Aardvark::@test]
-  firrtl.hierpath private @nla_1 [@NLATop1::@test,@Aardvark::@test_1, @Zebra]
+  hw.hierpath private @nla [@NLATop1::@test, @Zebra::@test,@Aardvark::@test]
+  hw.hierpath private @nla_1 [@NLATop1::@test,@Aardvark::@test_1, @Zebra]
   firrtl.module @NLATop1() {
     firrtl.instance test  sym @test @Aardvark()
     firrtl.instance test2 @Zebra()
@@ -753,8 +753,8 @@ firrtl.circuit "NLATop1" {
 // This should not error out. Note that there is no symbol on the %bundle. This handles a special case, when the nonlocal is applied to a subfield.
 firrtl.circuit "fallBackName" {
 
-  firrtl.hierpath private @nla [@fallBackName::@test, @Aardvark::@test, @Zebra::@bundle]
-  firrtl.hierpath private @nla_1 [@fallBackName::@test,@Aardvark::@test_1, @Zebra]
+  hw.hierpath private @nla [@fallBackName::@test, @Aardvark::@test, @Zebra::@bundle]
+  hw.hierpath private @nla_1 [@fallBackName::@test,@Aardvark::@test_1, @Zebra]
   firrtl.module @fallBackName() {
     firrtl.instance test  sym @test @Aardvark()
     firrtl.instance test2 @Zebra()
@@ -774,7 +774,7 @@ firrtl.circuit "fallBackName" {
 
 firrtl.circuit "Foo"   {
   // expected-error @+1 {{operation with symbol: #hw.innerNameRef<@Bar::@b> was not found}}
-  firrtl.hierpath private @nla_1 [@Foo::@bar, @Bar::@b]
+  hw.hierpath private @nla_1 [@Foo::@bar, @Bar::@b]
   firrtl.module @Bar(in %a: !firrtl.uint<1>, out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>> [{circt.fieldID = 2 : i32, circt.nonlocal = @nla_1, three}], out %c: !firrtl.uint<1>) {
   }
   firrtl.module @Foo() {
@@ -786,9 +786,9 @@ firrtl.circuit "Foo"   {
 
 firrtl.circuit "Top"   {
  // Legal nla would be:
-//firrtl.hierpath private @nla [@Top::@mid, @Mid::@leaf, @Leaf::@w]
+//hw.hierpath private @nla [@Top::@mid, @Mid::@leaf, @Leaf::@w]
   // expected-error @+1 {{instance path is incorrect. Expected module: "Middle" instead found: "Leaf"}}
-  firrtl.hierpath private @nla [@Top::@mid, @Leaf::@w]
+  hw.hierpath private @nla [@Top::@mid, @Leaf::@w]
   firrtl.module @Leaf() {
     %w = firrtl.wire sym @w  {annotations = [{circt.nonlocal = @nla, class = "fake1"}]} : !firrtl.uint<3>
   }

@@ -21,6 +21,7 @@
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BlockAndValueMapping.h"
@@ -52,7 +53,7 @@ namespace {
 /// written back to the IR to replace the original NLA.
 class MutableNLA {
   // Storage of the NLA this represents.
-  HierPathOp nla;
+  hw::HierPathOp nla;
 
   // A namespace that can be used to generate new symbol names if needed.
   CircuitNamespace *circuitNamespace;
@@ -108,7 +109,7 @@ class MutableNLA {
   }
 
 public:
-  MutableNLA(HierPathOp nla, CircuitNamespace *circuitNamespace)
+  MutableNLA(hw::HierPathOp nla, CircuitNamespace *circuitNamespace)
       : nla(nla), circuitNamespace(circuitNamespace),
         inlinedSymbols(BitVector(nla.getNamepath().size(), true)),
         size(nla.getNamepath().size()) {
@@ -137,7 +138,7 @@ public:
   void markModuleOnly() { moduleOnly = true; }
 
   /// Return the original NLA that this was pointing at.
-  HierPathOp getNLA() { return nla; }
+  hw::HierPathOp getNLA() { return nla; }
 
   /// Writeback updates accumulated in this MutableNLA to the IR.  This method
   /// should only ever be called once and, if a writeback occurrs, the
@@ -145,7 +146,7 @@ public:
   /// MutableNLA in any way after calling this method may result in crashes.
   /// (This is done to save unnecessary state cleanup of a pass-private
   /// utility.)
-  HierPathOp applyUpdates() {
+  hw::HierPathOp applyUpdates() {
     // Delete an NLA which is either dead or has been made local.
     if (isLocal() || isDead()) {
       nla.erase();
@@ -161,7 +162,7 @@ public:
     // The NLA has updates.  Generate a new NLA with the same symbol and delete
     // the original NLA.
     OpBuilder b(nla);
-    auto writeBack = [&](StringAttr root, StringAttr sym) -> HierPathOp {
+    auto writeBack = [&](StringAttr root, StringAttr sym) -> hw::HierPathOp {
       SmallVector<Attribute> namepath;
       StringAttr lastMod;
 
@@ -200,13 +201,13 @@ public:
       else
         namepath.push_back(FlatSymbolRefAttr::get(modPart));
 
-      auto hp = b.create<HierPathOp>(b.getUnknownLoc(), sym,
-                                     b.getArrayAttr(namepath));
+      auto hp = b.create<hw::HierPathOp>(b.getUnknownLoc(), sym,
+                                         b.getArrayAttr(namepath));
       hp.setVisibility(nla.getVisibility());
       return hp;
     };
 
-    HierPathOp last;
+    hw::HierPathOp last;
     assert(!dead || !newTops.empty());
     if (!dead)
       last = writeBack(nla.root(), nla.getNameAttr());
@@ -507,7 +508,7 @@ private:
   /// Returns true if the NLA matches the current path.  This will only return
   /// false if there is a mismatch indicating that the NLA definitely is
   /// referring to some other path.
-  bool doesNLAMatchCurrentPath(HierPathOp nla);
+  bool doesNLAMatchCurrentPath(hw::HierPathOp nla);
 
   /// Rename an operation and unique any symbols it has. If the op is an
   /// InstanceOp, then `validHierPaths` is the set of HierPaths that the
@@ -624,7 +625,7 @@ private:
 /// Check if the NLA applies to our instance path. This works by verifying the
 /// instance paths backwards starting from the current module. We drop the back
 /// element from the NLA because it obviously matches the current operation.
-bool Inliner::doesNLAMatchCurrentPath(HierPathOp nla) {
+bool Inliner::doesNLAMatchCurrentPath(hw::HierPathOp nla) {
   return (activeHierpaths.find(nla.getSymNameAttr()) != activeHierpaths.end());
 }
 
@@ -1257,7 +1258,7 @@ void Inliner::run() {
   CircuitNamespace circuitNamespace(circuit);
 
   // Gather all NLA's, build information about the instance ops used:
-  for (auto nla : circuit.getBodyBlock()->getOps<HierPathOp>()) {
+  for (auto nla : circuit.getBodyBlock()->getOps<hw::HierPathOp>()) {
     auto mnla = MutableNLA(nla, &circuitNamespace);
     nlaMap.insert({nla.getSymNameAttr(), mnla});
     rootMap[mnla.getNLA().root()].push_back(nla.getSymNameAttr());
@@ -1317,7 +1318,7 @@ void Inliner::run() {
 
   LLVM_DEBUG({
     llvm::dbgs() << "NLA modifications:\n";
-    for (auto nla : circuit.getBodyBlock()->getOps<HierPathOp>()) {
+    for (auto nla : circuit.getBodyBlock()->getOps<hw::HierPathOp>()) {
       auto &mnla = nlaMap[nla.getNameAttr()];
       mnla.dump();
     }

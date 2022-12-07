@@ -124,7 +124,7 @@ static FlatSymbolRefAttr buildNLA(const AnnoPathValue &target,
   }
 
   // Create the NLA
-  auto nla = b.create<HierPathOp>(state.circuit.getLoc(), "nla", instAttr);
+  auto nla = b.create<hw::HierPathOp>(state.circuit.getLoc(), "nla", instAttr);
   state.symTbl.insert(nla);
   nla.setVisibility(SymbolTable::Visibility::Private);
   auto sym = FlatSymbolRefAttr::get(nla);

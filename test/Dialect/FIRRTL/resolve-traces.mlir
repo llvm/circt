@@ -22,7 +22,7 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-  firrtl.hierpath @path [@Foo::@bar, @Bar]
+  hw.hierpath @path [@Foo::@bar, @Bar]
   firrtl.module @Bar() attributes {annotations = [
     {
       class = "chisel3.experimental.Trace$TraceAnnotation",
