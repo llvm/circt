@@ -161,23 +161,6 @@ StringAttr InnerSymbolTable::getInnerSymbol(const InnerSymTarget &target) {
   return {};
 }
 
-void InnerSymbolTable::erase(const InnerSymTarget &target) {
-  assert(target);
-  assert(getInnerSymbol(target));
-
-  if (target.isPort()) {
-    auto mod = cast<FModuleLike>(target.getOp());
-    assert(target.getPort() < mod.getNumPorts());
-    auto base = mod.getPortSymbolAttr(target.getPort());
-    mod.setPortSymbolsAttr(target.getPort(), base.erase(target.getField()));
-    return;
-  }
-
-  auto symOp = cast<InnerSymbolOpInterface>(target.getOp());
-  auto base = symOp.getInnerSymAttr();
-  symOp.setInnerSymbolAttr(base.erase(target.getField()));
-}
-
 //===----------------------------------------------------------------------===//
 // InnerSymbolTableCollection
 //===----------------------------------------------------------------------===//
