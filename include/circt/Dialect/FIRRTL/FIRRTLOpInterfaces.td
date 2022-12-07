@@ -187,7 +187,7 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     }]>,
 
     // Setters
-    InterfaceMethod<"Set the port symbols", "void",
+    InterfaceMethod<"Set the symbols of all ports and their fields", "void",
     "setPortSymbols", (ins "ArrayRef<Attribute>":$symbols), [{}], [{
       assert(symbols.empty() || symbols.size() == $_op.getNumPorts());
       SmallVector<Attribute> newSyms(symbols.begin(), symbols.end());
@@ -197,7 +197,7 @@ def FModuleLike : OpInterface<"FModuleLike"> {
                     ArrayAttr::get($_op.getContext(), newSyms));
     }]>,
 
-    InterfaceMethod<"Set a port symbol attribute", "void",
+    InterfaceMethod<"Set a port's top-level symbol to the specified string, dropping any symbols on its fields", "void",
     "setPortSymbolAttr", (ins "size_t":$portIndex, "StringAttr":$symbol), [{}],
     [{
       SmallVector<Attribute> symbols($_op.getPortSymbols().begin(),
@@ -235,7 +235,7 @@ def FModuleLike : OpInterface<"FModuleLike"> {
                     ArrayAttr::get($_op.getContext(), symbols));
     }]>,
 
-    InterfaceMethod<"Set a port symbol", "void",
+    InterfaceMethod<"Set a port's top-level symbol to the specified string, dropping any symbols on its fields", "void",
     "setPortSymbol", (ins "size_t":$portIndex, "StringRef":$symbol), [{}], [{
       $_op.setPortSymbolAttr(portIndex, StringAttr::get($_op.getContext(),
         symbol));
