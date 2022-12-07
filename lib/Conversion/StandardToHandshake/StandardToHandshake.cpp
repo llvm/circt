@@ -391,20 +391,20 @@ HandshakeLowering::insertMerge(Block *block, Value val,
                                ConversionPatternRewriter &rewriter) {
   unsigned numPredecessors = getBlockPredecessorCount(block);
   auto insertLoc = block->front().getLoc();
-  SmallVector<Backedge> edges;
+  SmallVector<Backedge> dataEdges;
   SmallVector<Value> operands;
 
   // Control-only path originates from StartOp
   if (!val.isa<BlockArgument>() && isa<StartOp>(val.getDefiningOp())) {
     for (unsigned i = 0; i < numPredecessors; i++) {
       auto edge = edgeBuilder.get(rewriter.getNoneType());
-      edges.push_back(edge);
+      dataEdges.push_back(edge);
       operands.push_back(Value(edge));
     }
     auto cmerge =
         rewriter.create<handshake::ControlMergeOp>(insertLoc, operands);
     setBlockEntryControl(block, cmerge.getResult());
-    return MergeOpInfo{cmerge, val, edges};
+    return MergeOpInfo{cmerge, val, dataEdges};
   }
 
   // If there is at most one block predecessor
@@ -414,23 +414,24 @@ HandshakeLowering::insertMerge(Block *block, Value val,
       operands.push_back(val);
     } else {
       auto edge = edgeBuilder.get(val.getType());
-      edges.push_back(edge);
+      dataEdges.push_back(edge);
       operands.push_back(Value(edge));
     }
     auto merge = rewriter.create<handshake::MergeOp>(insertLoc, operands);
-    return MergeOpInfo{merge, val, edges};
+    return MergeOpInfo{merge, val, dataEdges};
   }
 
-  // Add sel operand, then all data operands
-  edges.push_back(edgeBuilder.get(rewriter.getIndexType()));
+  // Create a backedge for the index operand, and another one for each data
+  // operand
+  Backedge indexEdge = edgeBuilder.get(rewriter.getIndexType());
   for (unsigned i = 0; i < numPredecessors; i++) {
     auto edge = edgeBuilder.get(val.getType());
-    edges.push_back(edge);
+    dataEdges.push_back(edge);
     operands.push_back(Value(edge));
   }
   auto mux =
-      rewriter.create<handshake::MuxOp>(insertLoc, Value(edges[0]), operands);
-  return MergeOpInfo{mux, val, edges};
+      rewriter.create<handshake::MuxOp>(insertLoc, Value(indexEdge), operands);
+  return MergeOpInfo{mux, val, dataEdges, indexEdge};
 }
 
 HandshakeLowering::BlockOps
@@ -559,15 +560,8 @@ static void reconnectMergeOps(Region &r,
 
   for (Block &block : r) {
     for (auto &mergeInfo : blockMerges[&block]) {
-      int operandIdx;
-      // Data operands for MuxOp start at index 1 (select operand at index 0)
-      // Data operands for MergeOp and ControlMergeOp start at index 0
-      if (isa<handshake::MuxOp>(mergeInfo.op))
-        operandIdx = 1;
-      else
-        operandIdx = 0;
-
-      // Set appropriate operand from predecessor block
+      int operandIdx = 0;
+      // Set appropriate operand from each predecessor block
       for (auto *predBlock : block.getPredecessors()) {
         Value mgOperand = getMergeOperand(mergeInfo, predBlock, blockMerges);
         assert(mgOperand != nullptr);
@@ -575,7 +569,7 @@ static void reconnectMergeOps(Region &r,
           assert(mergePairs.count(mgOperand));
           mgOperand = mergePairs[mgOperand]->getResult(0);
         }
-        mergeInfo.edges[operandIdx].setValue(mgOperand);
+        mergeInfo.dataEdges[operandIdx].setValue(mgOperand);
         operandIdx++;
       }
 
@@ -595,10 +589,13 @@ static void reconnectMergeOps(Region &r,
       assert(cntrlMg != nullptr);
 
       for (auto &mergeInfo : blockMerges[&block]) {
-        if (mergeInfo.op != cntrlMg)
-          // First operand of muxes is select operand, second result of control
-          // merges is index result
-          mergeInfo.edges[0].setValue(cntrlMg->getResult(1));
+        if (mergeInfo.op != cntrlMg) {
+          // If the block has multiple predecessors, merge-like operation that
+          // are not the block's control merge must have an index operand (at
+          // this point, an index backedge)
+          assert(mergeInfo.indexEdge.has_value());
+          mergeInfo.indexEdge.value().setValue(cntrlMg->getResult(1));
+        }
       }
     }
   }

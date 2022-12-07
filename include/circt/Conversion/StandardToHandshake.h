@@ -53,7 +53,8 @@ public:
   struct MergeOpInfo {
     Operation *op;
     Value val;
-    SmallVector<Backedge> edges;
+    SmallVector<Backedge> dataEdges;
+    Optional<Backedge> indexEdge{};
   };
 
   using BlockValues = DenseMap<Block *, std::vector<Value>>;
