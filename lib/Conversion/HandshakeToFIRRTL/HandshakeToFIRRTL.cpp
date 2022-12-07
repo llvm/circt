@@ -134,8 +134,8 @@ static FIRRTLBaseType getBundleType(Type type) {
 }
 
 static bool isControlOp(Operation *op) {
-  auto control = op->getAttr("control");
-  return control && control.dyn_cast_or_null<BoolAttr>().getValue();
+  auto control = op->getAttrOfType<BoolAttr>("control");
+  return control && control.getValue();
 }
 
 /// A class to be used with getPortInfoForOp. Provides an opaque interface for
@@ -1119,9 +1119,8 @@ bool HandshakeBuilder::visitHandshake(SinkOp op) {
 
   rewriter.eraseOp(argValid.getDefiningOp());
 
-  if (isControlOp(op)) {
+  if (isControlOp(op))
     return true;
-  }
 
   // Non-control sink; must also have a data operand.
   assert(argSubfields.size() >= 3 &&

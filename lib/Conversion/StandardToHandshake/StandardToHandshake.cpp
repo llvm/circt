@@ -468,6 +468,8 @@ static bool blockHasSrcOp(Value val, Block *block) {
   if (val.isa<BlockArgument>())
     return false;
 
+  // If the value isn't a block argument, it should be one of the results of
+  // another operation
   auto *op = val.getDefiningOp();
   assert(op != nullptr);
   return (op->getBlock() == block);
@@ -501,6 +503,7 @@ static Value getMergeOperand(HandshakeLowering::MergeOpInfo mergeInfo,
     unsigned index = srcVal.cast<BlockArgument>().getArgNumber();
     Operation *termOp = predBlock->getTerminator();
     if (mlir::cf::CondBranchOp br = dyn_cast<mlir::cf::CondBranchOp>(termOp)) {
+      // Block should be one of the two destinations of the conditional branch
       if (block == br.getTrueDest())
         return br.getTrueOperand(index);
       assert(block == br.getFalseDest());
@@ -559,11 +562,10 @@ static void reconnectMergeOps(Region &r,
       int operandIdx;
       // Data operands for MuxOp start at index 1 (select operand at index 0)
       // Data operands for MergeOp and ControlMergeOp start at index 0
-      if (isa<handshake::MuxOp>(mergeInfo.op)) {
+      if (isa<handshake::MuxOp>(mergeInfo.op))
         operandIdx = 1;
-      } else {
+      else
         operandIdx = 0;
-      }
 
       // Set appropriate operand from predecessor block
       for (auto *predBlock : block.getPredecessors()) {
@@ -1491,9 +1493,8 @@ static void addLazyForks(Region &f, ConversionPatternRewriter &rewriter) {
 
   for (Block &block : f) {
     Value ctrl = getBlockControlValue(&block);
-    if (!ctrl.hasOneUse()) {
+    if (!ctrl.hasOneUse())
       insertFork(ctrl, true, rewriter);
-    }
   }
 }
 

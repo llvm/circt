@@ -51,8 +51,8 @@ LogicalResult partiallyLowerRegion(const RegionLoweringFunc &loweringFunc,
 class HandshakeLowering {
 public:
   struct MergeOpInfo {
-    Operation *const op;
-    const Value val;
+    Operation *op;
+    Value val;
     SmallVector<Backedge> edges;
   };
 

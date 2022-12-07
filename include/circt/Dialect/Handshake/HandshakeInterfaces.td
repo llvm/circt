@@ -44,7 +44,7 @@ def SOSTInterface : OpInterface<"SOSTInterface"> {
       "unsigned", "getSize", (ins), "",
       [{
         auto concreteOp = cast<ConcreteOp>($_op);
-        return concreteOp->getOperands().size();
+        return concreteOp->getNumOperands();
       }]
     >,
     InterfaceMethod<[{
@@ -62,18 +62,19 @@ def SOSTInterface : OpInterface<"SOSTInterface"> {
       }]
     >,
     InterfaceMethod<[{
-        Print the "SOST characteristics" of an operation. 
+        Print the "SOST characteristics" of an operation.
+        If the `explicitSize` parameter is set to true, then the method prints
+        the operation's size (in the SOST sense) between square brackets before
+        printing the operation's operands, attributes, and data type.
       }],
       "void", "sostPrint", (ins 
-        "mlir::OpAsmPrinter &": $printer,
-        "bool": $explicitSize
+        "mlir::OpAsmPrinter &": $printer, "bool": $explicitSize
       ), "", 
       [{
         auto concreteOp = cast<ConcreteOp>($_op);
 
         if (explicitSize) {
-          int size = concreteOp.getSize();
-          printer << " [" << size << "]";
+          printer << " [" << concreteOp.getSize() << "]";
         }
         printer << " " << concreteOp->getOperands();
         printer.printOptionalAttrDict(concreteOp->getAttrs());

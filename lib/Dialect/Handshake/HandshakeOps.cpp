@@ -40,9 +40,9 @@ namespace handshake {
 #include "circt/Dialect/Handshake/HandshakeCanonicalization.h.inc"
 
 bool isControlOpImpl(Operation *op) {
-  if (auto sostInterface = dyn_cast<SOSTInterface>(op); sostInterface) {
+  if (auto sostInterface = dyn_cast<SOSTInterface>(op); sostInterface)
     return sostInterface.sostIsControl();
-  }
+
   return false;
 }
 
@@ -81,9 +81,8 @@ parseSostOperation(OpAsmParser &parser,
 static bool isControlCheckTypeAndOperand(Type dataType, Value operand) {
   // The operation is a control operation if its operand data type is a
   // NoneType.
-  if (dataType.isa<NoneType>()) {
+  if (dataType.isa<NoneType>())
     return true;
-  }
 
   // Otherwise, the operation is a control operation if the operation's
   // operand originates from the control network

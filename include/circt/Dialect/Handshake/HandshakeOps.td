@@ -247,7 +247,7 @@ def BufferOp : Handshake_Op<"buffer", [Pure, HasClock, SameOperandsAndResultType
       (ins "Value":$operand, "int":$slots, "BufferTypeEnum":$bufferType), [{
         $_state.addOperands(operand);
         $_state.addTypes(operand.getType());
-        $_state.addAttribute("slots", IntegerAttr::get(IntegerType::get($_state.getContext(), 32), slots));
+        $_state.addAttribute("slots", $_builder.getI32IntegerAttr(slots));
         $_state.addAttribute("bufferType", BufferTypeEnumAttr::get($_state.getContext(), bufferType));
     }]>];
 
