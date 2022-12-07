@@ -90,9 +90,8 @@ class System:
     if output_directory is None:
       output_directory = os.path.join(os.getcwd(), self.name)
     self.output_directory = pathlib.Path(output_directory)
-    if not self.output_directory.exists():
-      self.output_directory.mkdir()
-      self.hw_output_dir.mkdir()
+    self.output_directory.mkdir(exist_ok=True)
+    self.hw_output_dir.mkdir(exist_ok=True)
 
     with self:
       [m._pycde_mod.create() for m in self.top_modules]
