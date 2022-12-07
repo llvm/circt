@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_TYPES_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/Types.h"
@@ -203,10 +204,12 @@ public:
 template <typename ConcreteType, typename ParentType>
 class WidthQualifiedType
     : public FIRRTLType::TypeBase<ConcreteType, ParentType,
-                                  detail::WidthTypeStorage> {
+                                  detail::WidthTypeStorage,
+                                  circt::hw::FieldIDTypeInterface::Trait> {
 public:
-  using FIRRTLType::TypeBase<ConcreteType, ParentType,
-                             detail::WidthTypeStorage>::Base::Base;
+  using FIRRTLType::TypeBase<
+      ConcreteType, ParentType, detail::WidthTypeStorage,
+      circt::hw::FieldIDTypeInterface::Trait>::Base::Base;
 
   /// Return the bitwidth of this type or None if unknown.
   Optional<int32_t> getWidth() {
@@ -284,8 +287,10 @@ public:
 
 /// BundleType is an aggregate of named elements.  This is effectively a struct
 /// for FIRRTL.
-class BundleType : public FIRRTLType::TypeBase<BundleType, FIRRTLBaseType,
-                                               detail::BundleTypeStorage> {
+class BundleType
+    : public FIRRTLType::TypeBase<BundleType, FIRRTLBaseType,
+                                  detail::BundleTypeStorage,
+                                  circt::hw::FieldIDTypeInterface::Trait> {
 public:
   using Base::Base;
 
@@ -372,8 +377,10 @@ public:
 //===----------------------------------------------------------------------===//
 
 /// VectorType is a fixed size collection of elements, like an array.
-class FVectorType : public FIRRTLType::TypeBase<FVectorType, FIRRTLBaseType,
-                                                detail::VectorTypeStorage> {
+class FVectorType
+    : public FIRRTLType::TypeBase<FVectorType, FIRRTLBaseType,
+                                  detail::VectorTypeStorage,
+                                  circt::hw::FieldIDTypeInterface::Trait> {
 public:
   using Base::Base;
 
