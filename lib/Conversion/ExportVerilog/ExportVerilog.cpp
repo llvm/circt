@@ -1841,27 +1841,23 @@ private:
   /// Use callbacks to emit open tokens, closing tokens, and handle each value.
   /// If it fits, will be emitted on a single line with no space between
   /// list and surrounding open and close.
-  /// Otherwise, list is indented and each item is placed on its own line.
+  /// Otherwise, each item is placed on its own line.
   /// This has property that if any element requires breaking, all elements
-  /// are emitted on separate lines.
+  /// are emitted on separate lines (with open/close attached to first/last).
   /// `{a + b, x + y, c}`
   /// OR
   /// ```
-  /// {
-  ///   a + b,
-  ///   x + y,
-  ///   c
-  /// }
+  /// {a + b,
+  ///  x + y,
+  ///  c}
   /// ```
   template <typename Container, typename OpenFunc, typename CloseFunc,
             typename EachFunc>
   void emitBracedList(const Container &c, OpenFunc openFn, EachFunc eachFn,
                       CloseFunc closeFn) {
-    ps.scopedBox(PP::cbox2, [&]() {
-      openFn();
-      ps << PP::zerobreak;
+    openFn();
+    ps.scopedBox(PP::cbox0, [&]() {
       interleaveComma(c, eachFn);
-      ps << BreakToken(0, -2);
       closeFn();
     });
   }

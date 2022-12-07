@@ -6,27 +6,23 @@ sv.interface @IValidReady_Struct  {
 
 // CHECK-LABEL:module structs({{.*}}
 //      CHECK:  assign _GEN =
-// CHECK-NEXT:    '{
-// CHECK-NEXT:      foo: ({_GEN_1, _GEN_0}),
+// CHECK-NEXT:    '{foo: ({_GEN_1, _GEN_0}),
 // CHECK-NEXT:      bar: ({_GEN_0, _GEN_0}),
 // CHECK-NEXT:      baz:
-// CHECK-NEXT:        ({
-// CHECK-NEXT:           _GEN_1,
-// CHECK-NEXT:           _GEN_1,
-// CHECK-NEXT:           _GEN_1,
-// CHECK-NEXT:           _GEN_1,
-// CHECK-NEXT:           _GEN_1,
-// CHECK-NEXT:           _GEN_1,
-// CHECK-NEXT:           _GEN_1,
-// CHECK-NEXT:           _GEN_1,
-// CHECK-NEXT:           _GEN_1,
-// CHECK-NEXT:           _GEN_1,
-// CHECK-NEXT:           _GEN_1,
-// CHECK-NEXT:           _GEN_1,
-// CHECK-NEXT:           _GEN_0,
-// CHECK-NEXT:           _GEN_0
-// CHECK-NEXT:         })
-// CHECK-NEXT:    };{{.*}}
+// CHECK-NEXT:        ({_GEN_1,
+// CHECK-NEXT:          _GEN_1,
+// CHECK-NEXT:          _GEN_1,
+// CHECK-NEXT:          _GEN_1,
+// CHECK-NEXT:          _GEN_1,
+// CHECK-NEXT:          _GEN_1,
+// CHECK-NEXT:          _GEN_1,
+// CHECK-NEXT:          _GEN_1,
+// CHECK-NEXT:          _GEN_1,
+// CHECK-NEXT:          _GEN_1,
+// CHECK-NEXT:          _GEN_1,
+// CHECK-NEXT:          _GEN_1,
+// CHECK-NEXT:          _GEN_0,
+// CHECK-NEXT:          _GEN_0})};{{.*}}
 hw.module @structs(%clk: i1, %rstn: i1) {
   %0 = sv.interface.instance {name = "iface"} : !sv.interface<@IValidReady_Struct>
   sv.interface.signal.assign %0(@IValidReady_Struct::@data) = %s : !hw.struct<foo: !hw.array<72xi1>, bar: !hw.array<128xi1>, baz: !hw.array<224xi1>>
