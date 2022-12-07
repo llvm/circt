@@ -511,6 +511,8 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
     registerTypes.push_back(types);
     valueMaps.push_back(BlockAndValueMapping(iterValueMap));
   }
+  // One extra value map for the affine.for terminator
+  valueMaps.push_back(BlockAndValueMapping(iterValueMap));
 
   // Create stages along with maps
   for (auto startTime : startTimes) {
@@ -571,8 +573,10 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
   termIterArgs.push_back(
       stagesBlock.front().getResult(stagesBlock.front().getNumResults() - 1));
   for (auto value : forOp.getBody()->getTerminator()->getOperands()) {
-    termIterArgs.push_back(iterValueMap.lookup(value));
-    termResults.push_back(iterValueMap.lookup(value));
+    termIterArgs.push_back(
+        valueMaps.data()[startTimes.back() + 1].lookup(value));
+    termResults.push_back(
+        valueMaps.data()[startTimes.back() + 1].lookup(value));
   }
 
   stagesTerminator.getIterArgsMutable().append(termIterArgs);
