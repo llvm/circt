@@ -1116,7 +1116,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; Predicate modifier `noMod`
     when not(cond):
       printf(clock, enable, "Assertion failed: [verif-library-cover]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"},{\"type\":\"formalOnly\"}],\"labelExts\":[\"cover\",\"label\"],\"format\":{\"type\":\"sva\"},\"baseMsg\":\"cover hello world\"}", value)
-      stop(clock, enable, 1)
+    assert(clock, cond, enable, "")
     ; CHECK: [[TMP_INV:%.+]] = firrtl.not %cond
     ; CHECK: [[TMP:%.+]] = firrtl.not [[TMP_INV]]
     ; CHECK-NOT: firrtl.assert %clock, [[TMP]], %enable, "cover hello world"(%value) : !firrtl.uint<42>
