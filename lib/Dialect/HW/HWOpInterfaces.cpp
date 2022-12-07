@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -36,41 +37,40 @@ LogicalResult hw::verifyInnerSymAttr(InnerSymbolOpInterface op) {
     return success();
   }
 
-  // ----------------------------------------
-  // auto resultType =
-  // op->getResultTypes()[0].dyn_cast<firrtl::FIRRTLBaseType>(); if
-  // (!resultType)
-  //   return op->emitOpError("cannot attach symbols to non-base types");
-  // auto maxFields = resultType.getMaxFieldID();
-  // llvm::SmallBitVector indices(maxFields + 1);
-  // llvm::SmallPtrSet<Attribute, 8> symNames;
-  // // Ensure fieldID and symbol names are unique.
-  // auto uniqSyms = [&](hw::InnerSymPropertiesAttr p) {
-  //   if (maxFields < p.getFieldID()) {
-  //     op->emitOpError("field id:'" + Twine(p.getFieldID()) +
-  //                     "' is greater than the maximum field id:'" +
-  //                     Twine(maxFields) + "'");
-  //     return false;
-  //   }
-  //   if (indices.test(p.getFieldID())) {
-  //     op->emitOpError("cannot assign multiple symbol names to the field id:'"
-  //     +
-  //                     Twine(p.getFieldID()) + "'");
-  //     return false;
-  //   }
-  //   indices.set(p.getFieldID());
-  //   auto it = symNames.insert(p.getName());
-  //   if (!it.second) {
-  //     op->emitOpError("cannot reuse symbol name:'" + p.getName().getValue() +
-  //                     "'");
-  //     return false;
-  //   }
-  //   return true;
-  // };
+  auto resultType =
+      op->getResultTypes()[0].dyn_cast<hw::FieldIDTypeInterface>();
+  // If this type doesn't implement the FieldIDTypeInterface, then there is
+  // nothing additional to check.
+  if (!resultType)
+    return success();
+  auto maxFields = resultType.getMaxFieldID();
+  llvm::SmallBitVector indices(maxFields + 1);
+  llvm::SmallPtrSet<Attribute, 8> symNames;
+  // Ensure fieldID and symbol names are unique.
+  auto uniqSyms = [&](hw::InnerSymPropertiesAttr p) {
+    if (maxFields < p.getFieldID()) {
+      op->emitOpError("field id:'" + Twine(p.getFieldID()) +
+                      "' is greater than the maximum field id:'" +
+                      Twine(maxFields) + "'");
+      return false;
+    }
+    if (indices.test(p.getFieldID())) {
+      op->emitOpError("cannot assign multiple symbol names to the field id:'" +
+                      Twine(p.getFieldID()) + "'");
+      return false;
+    }
+    indices.set(p.getFieldID());
+    auto it = symNames.insert(p.getName());
+    if (!it.second) {
+      op->emitOpError("cannot reuse symbol name:'" + p.getName().getValue() +
+                      "'");
+      return false;
+    }
+    return true;
+  };
 
-  // if (!llvm::all_of(innerSym.getProps(), uniqSyms))
-  //   return failure();
-  // ----------------------------------------
+  if (!llvm::all_of(innerSym.getProps(), uniqSyms))
+    return failure();
 
   return success();
 }
