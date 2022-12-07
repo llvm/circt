@@ -1417,7 +1417,7 @@ hw.module @ArrayConcatFlatten(%a: !hw.array<3xi1>) -> (b: i3) {
 }
 
 // CHECK-LABEL: hw.module @MuxSimplify
-hw.module @MuxSimplify(%index: i1, %a: i1, %foo_0: i2, %foo_1: i2) -> (r_0: i2, r_1: i2, r_2 : i2) {
+hw.module @MuxSimplify(%index: i1, %a: i1, %foo_0: i2, %foo_1: i2) -> (r_0: i2, r_1: i2, r_2 : i2, r_3: i2, r_4 : i2, r_5: i2, r_6 : i2) {
   %true = hw.constant true
   %c-2_i2 = hw.constant -2 : i2
   %c1_i2 = hw.constant 1 : i2
@@ -1434,13 +1434,35 @@ hw.module @MuxSimplify(%index: i1, %a: i1, %foo_0: i2, %foo_1: i2) -> (r_0: i2, 
   %9 = comb.xor %a, %index : i1
   %10 = comb.mux bin %9, %7, %8 : i2
   
-  hw.output %4, %6, %10 : i2, i2, i2
+  %11 = comb.mux bin %index, %foo_0, %foo_1 : i2
+  %12 = comb.mux bin %a, %foo_0, %11 : i2
+
+  %13 = comb.mux bin %index, %foo_1, %foo_0 : i2
+  %14 = comb.mux bin %a, %foo_0, %11 : i2
+
+  %15 = comb.mux bin %index, %foo_1, %foo_0 : i2
+  %16 = comb.mux bin %a, %11, %foo_0 : i2
+
+  %17 = comb.mux bin %index, %foo_0, %foo_1 : i2
+  %18 = comb.mux bin %a, %11, %foo_0 : i2
+
+  hw.output %4, %6, %10, %12, %14, %16, %18 : i2, i2, i2, i2, i2, i2, i2
 }
 // CHECK:  %0 = comb.mux %a, %c1_i2, %c-2_i2 : i2
-// CHECK-NEXT:  %1 = comb.mux %index, %foo_0, %0 : i2
+// CHECK-NEXT:  %1 = comb.mux bin %index, %foo_0, %0 : i2
 // CHECK-NEXT:  %2 = comb.mux %a, %c1_i2, %c-2_i2 : i2
-// CHECK-NEXT:  %3 = comb.mux %index, %2, %foo_1 : i2
+// CHECK-NEXT:  %3 = comb.mux bin %index, %2, %foo_1 : i2
 // CHECK-NEXT:  %4 = comb.xor %a, %index : i1 
 // CHECK-NEXT:  %5 = comb.mux %4, %a, %index : i1 
-// CHECK-NEXT:  %6 = comb.mux %5, %foo_0, %foo_1 : i2 
-// CHECK-NEXT:  hw.output %1, %3, %6
+// CHECK-NEXT:  %6 = comb.mux bin %5, %foo_0, %foo_1 : i2 
+// CHECK-NEXT:  %7 = comb.or %a, %index : i1
+// CHECK-NEXT:  %8 = comb.mux bin %7, %foo_0, %foo_1 : i2
+// CHECK-NEXT:  %9 = comb.or %a, %index : i1
+// CHECK-NEXT:  %10 = comb.mux bin %9, %foo_0, %foo_1 : i2
+// CHECK-NEXT:  %11 = comb.xor %a, %true : i1
+// CHECK-NEXT:  %12 = comb.or %11, %index : i1
+// CHECK-NEXT:  %13 = comb.mux bin %12, %foo_0, %foo_1 : i2
+// CHECK-NEXT:  %14 = comb.xor %a, %true : i1
+// CHECK-NEXT:  %15 = comb.or %14, %index : i1
+// CHECK-NEXT:  %16 = comb.mux bin %15, %foo_0, %foo_1 : i2
+// CHECK-NEXT:  hw.output %1, %3, %6, %8, %10, %13, %16

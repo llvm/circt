@@ -2357,7 +2357,7 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
     if (op.getCond() == falseMux.getCond()) {
       replaceOpWithNewOpAndCopyName<MuxOp>(
           rewriter, op, op.getCond(), op.getTrueValue(),
-          falseMux.getFalseValue(), op.getTwoState());
+          falseMux.getFalseValue(), op.getTwoStateAttr());
       return success();
     }
 
@@ -2372,7 +2372,7 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
     if (op.getCond() == trueMux.getCond()) {
       replaceOpWithNewOpAndCopyName<MuxOp>(
           rewriter, op, op.getCond(), trueMux.getTrueValue(),
-          op.getFalseValue(), op.getTwoState());
+          op.getFalseValue(), op.getTwoStateAttr());
       return success();
     }
 
@@ -2390,7 +2390,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
         rewriter.getFusedLoc(trueMux.getLoc(), falseMux.getLoc()), op.getCond(),
         trueMux.getFalseValue(), falseMux.getFalseValue());
     replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, trueMux.getCond(),
-                                         trueMux.getTrueValue(), subMux);
+                                         trueMux.getTrueValue(), subMux,
+                                         op.getTwoStateAttr());
     return success();
   }
 
@@ -2403,7 +2404,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
         rewriter.getFusedLoc(trueMux.getLoc(), falseMux.getLoc()), op.getCond(),
         trueMux.getTrueValue(), falseMux.getTrueValue());
     replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, trueMux.getCond(),
-                                         subMux, trueMux.getFalseValue());
+                                         subMux, trueMux.getFalseValue(),
+                                         op.getTwoStateAttr());
     return success();
   }
 
@@ -2418,7 +2420,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
             {op.getLoc(), trueMux.getLoc(), falseMux.getLoc()}),
         op.getCond(), trueMux.getCond(), falseMux.getCond());
     replaceOpWithNewOpAndCopyName<MuxOp>(
-        rewriter, op, subMux, trueMux.getTrueValue(), trueMux.getFalseValue());
+        rewriter, op, subMux, trueMux.getTrueValue(), trueMux.getFalseValue(),
+        op.getTwoStateAttr());
     return success();
   }
 
