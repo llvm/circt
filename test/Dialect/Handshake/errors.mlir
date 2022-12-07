@@ -226,3 +226,20 @@ handshake.func @invalid_memref_block_arg(%arg0 : memref<2xi64>, %ctrl : none) ->
   // expected-error @-1 {{'handshake.func' op expected that block argument #0 is used by an 'extmemory' operation}}
   return %ctrl : none
 }
+
+// -----
+
+handshake.func @invalid_sost_op_zero_size(%ctrl : none) -> (none, none) {
+  // expected-error @+1 {{'handshake.merge' op must have at least one data operand}}
+  %0 = merge : none
+  return %0, %ctrl : none, none
+}
+
+// -----
+
+handshake.func @invalid_sost_op_wrong_operands(%arg0 : i64, %arg1 : i32, %ctrl : none) -> (i64, none) { // expected-note {{prior use here}}
+  // expected-error @+1 {{use of value '%arg1' expects different type than prior uses: 'i64' vs 'i32'}}
+  %0, %1 = control_merge %arg0, %arg1 : i64
+  return %0, %ctrl : i64, none
+}
+
