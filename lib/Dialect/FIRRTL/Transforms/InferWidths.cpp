@@ -37,6 +37,28 @@ using namespace circt;
 using namespace firrtl;
 
 //===----------------------------------------------------------------------===//
+// Helpers
+//===----------------------------------------------------------------------===//
+
+static void diagnoseUninferredType(InFlightDiagnostic &diag, Type t,
+                                   Twine str) {
+  auto basetype = dyn_cast<FIRRTLBaseType>(t);
+  if (!basetype)
+    return;
+  if (!basetype.hasUninferredWidth())
+    return;
+
+  if (basetype.isGround())
+    diag.attachNote() << "Field: \"" << str << "\"";
+  else if (auto vecType = dyn_cast<FVectorType>(basetype))
+    diagnoseUninferredType(diag, vecType.getElementType(), str + "[]");
+  else if (auto bundleType = dyn_cast<BundleType>(basetype))
+    for (auto &elem : bundleType.getElements())
+      diagnoseUninferredType(diag, elem.type, str + "." + elem.name.getValue());
+  return;
+}
+
+//===----------------------------------------------------------------------===//
 // Constraint Expressions
 //===----------------------------------------------------------------------===//
 
@@ -1456,8 +1478,11 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
           auto fml = cast<FModuleLike>(&*refdModule);
           auto ports = fml.getPorts();
           for (auto &port : ports)
-            if (cast<FIRRTLBaseType>(port.type).hasUninferredWidth())
+            if (cast<FIRRTLBaseType>(port.type).hasUninferredWidth()) {
               diag.attachNote(op.getLoc()) << "Port: " << port.name;
+              if (!cast<FIRRTLBaseType>(port.type).isGround())
+                diagnoseUninferredType(diag, port.type, port.name.getValue());
+            }
 
           diag.attachNote(op.getLoc())
               << "Only non-extern FIRRTL modules may contain unspecified "
