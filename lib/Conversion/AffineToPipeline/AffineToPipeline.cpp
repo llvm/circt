@@ -450,6 +450,7 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
   SmallVector<DenseSet<Value>> registerValues;
   SmallVector<SmallVector<mlir::Type>> registerTypes;
   SmallVector<BlockAndValueMapping> valueMaps;
+  DenseMap<Operation *, std::pair<unsigned, unsigned>> pipeTimes;
   for (auto startTime : startTimes) {
     auto group = startGroups[startTime];
 
@@ -458,25 +459,34 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
     auto isLoopTerminator = [forOp](Operation *op) {
       return isa<AffineYieldOp>(op) && op->getParentOp() == forOp;
     };
-    registerValues.push_back(DenseSet<Value>());
 
     for (auto *op : group) {
       if (op->getUsers().empty())
         continue;
-      unsigned finTime =
-          startTime + *problem.getLatency(*problem.getLinkedOperatorType(op));
+      unsigned pipeStartTime = -1;
+      unsigned pipeEndTime = 0;
       for (auto *user : op->getUsers()) {
-        if (*problem.getStartTime(user) > startTime || isLoopTerminator(user))
-          finTime = std::max(finTime, *problem.getStartTime(user));
+        if (*problem.getStartTime(user) > startTime || isLoopTerminator(user)) {
+          pipeEndTime = std::max(pipeEndTime, *problem.getStartTime(user));
+          pipeStartTime = std::min(pipeStartTime, *problem.getStartTime(user));
+        }
       }
+      // Skip iter if the users are in the same stage
+      if (pipeStartTime > pipeEndTime)
+        continue;
 
-      unsigned opLatency =
-          *problem.getLatency(*problem.getLinkedOperatorType(op));
-      for (unsigned i = opLatency > 0 ? startTime + opLatency - 1 : startTime;
-           i < finTime; i++) {
-        if (registerValues.size() <= i)
-          registerValues.push_back(DenseSet<Value>());
+      pipeTimes[op] = std::pair(pipeStartTime, pipeEndTime);
 
+      // Add register stages for each time slice
+      for (unsigned i = registerValues.size(); i <= pipeEndTime; ++i)
+        registerValues.push_back(DenseSet<Value>());
+
+      for (auto result : op->getResults())
+        registerValues.data()[startTime].insert(result);
+
+      // Handling multi-cycle ops here
+      for (unsigned i = std::max(startTime + 1, pipeStartTime); i < pipeEndTime;
+           i++) {
         for (auto result : op->getResults())
           registerValues.data()[i].insert(result);
       }
@@ -531,19 +541,15 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
     }
 
     SmallVector<Value> stageOperands;
+    unsigned resIndex = 0;
     for (auto res : registerValues.data()[startTime]) {
       stageOperands.push_back(valueMaps.data()[startTime].lookup(res));
+      unsigned destTime =
+          std::max(startTime + 1, pipeTimes[res.getDefiningOp()].first);
+      valueMaps.data()[destTime].map(res, stage.getResult(resIndex++));
     }
     stageTerminator->insertOperands(stageTerminator->getNumOperands(),
                                     stageOperands);
-
-    // Give the next stage the mappings it needs
-    unsigned destTime = startTime + 1;
-    unsigned resIndex = 0;
-    if (destTime < registerValues.size())
-      for (auto res : registerValues.data()[startTime]) {
-        valueMaps.data()[destTime].map(res, stage.getResult(resIndex++));
-      }
 
     // Add the induction variable increment to the first stage.
     if (startTime == 0) {
