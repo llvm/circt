@@ -229,7 +229,7 @@ def ControlInterface : OpInterface<"ControlInterface"> {
         (ins),
         "",
         [{
-          // Implemented outside of interface due to dependence on
+          // Implemented outside of interface due to dependency on
           // SOSTInterface being declared at the time where this method is
           // defined.
           return isControlOpImpl($_op);

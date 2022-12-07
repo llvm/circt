@@ -210,9 +210,8 @@ struct EliminateForkToForkPattern : mlir::OpRewritePattern<ForkOp> {
     rewriter.updateRootInPlace(parentForkOp, [&] {
       /// Create a new parent fork op which produces all of the fork outputs and
       /// replace all of the uses of the old results.
-      auto operand = parentForkOp.getOperand();
-      auto newParentForkOp =
-          rewriter.create<ForkOp>(parentForkOp.getLoc(), operand, totalNumOuts);
+      auto newParentForkOp = rewriter.create<ForkOp>(
+          parentForkOp.getLoc(), parentForkOp.getOperand(), totalNumOuts);
 
       for (auto it :
            llvm::zip(parentForkOp->getResults(), newParentForkOp.getResults()))
@@ -890,17 +889,7 @@ bool SelectOp::isControl() {
   return getTrueOperand().getType().isa<NoneType>();
 }
 
-void StartOp::build(OpBuilder &builder, OperationState &result) {
-  // Control-only output, has no type
-  auto type = builder.getNoneType();
-  result.types.push_back(type);
-}
-
 bool StartOp::isControl() { return true; }
-
-void EndOp::build(OpBuilder &builder, OperationState &result, Value operand) {
-  result.addOperands(operand);
-}
 
 ParseResult SinkOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
@@ -955,12 +944,6 @@ LogicalResult ConstantOp::verify() {
 void handshake::ConstantOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
   results.insert<circt::handshake::EliminateSunkConstantsPattern>(context);
-}
-
-void handshake::TerminatorOp::build(OpBuilder &builder, OperationState &result,
-                                    ArrayRef<Block *> successors) {
-  // Add all the successor blocks of the block which contains this terminator
-  result.addSuccessors(successors);
 }
 
 LogicalResult BufferOp::verify() {

@@ -549,11 +549,16 @@ static ConditionalBranchOp getControlCondBranch(Block *block) {
 static void reconnectMergeOps(Region &r,
                               HandshakeLowering::BlockOps blockMerges,
                               HandshakeLowering::blockArgPairs &mergePairs) {
+  // At this point all merge-like operations have backedges as operands.
+  // We here replace all backedge values with appropriate value from
+  // predecessor block. The predecessor can either be a merge, the original
+  // defining value, or a branch operand.
 
   for (Block &block : r) {
     for (auto &mergeInfo : blockMerges[&block]) {
       int operandIdx;
-      // Data operands for muxes start at index 1 (select operand at index 0)
+      // Data operands for MuxOp start at index 1 (select operand at index 0)
+      // Data operands for MergeOp and ControlMergeOp start at index 0
       if (isa<handshake::MuxOp>(mergeInfo.op)) {
         operandIdx = 1;
       } else {
@@ -571,6 +576,7 @@ static void reconnectMergeOps(Region &r,
         mergeInfo.edges[operandIdx].setValue(mgOperand);
         operandIdx++;
       }
+
       // Reconnect all operands originating from livein defining value through
       // corresponding merge of that block
       for (Operation &opp : block)
@@ -579,7 +585,8 @@ static void reconnectMergeOps(Region &r,
     }
   }
 
-  // Connect Muxes to ControlMerge in all blocks with more than one predecessor
+  // Connect select operand of muxes to control merge's index result in all
+  // blocks with more than one predecessor
   for (Block &block : r) {
     if (getBlockPredecessorCount(&block) > 1) {
       Operation *cntrlMg = getControlMerge(&block);
@@ -587,7 +594,8 @@ static void reconnectMergeOps(Region &r,
 
       for (auto &mergeInfo : blockMerges[&block]) {
         if (mergeInfo.op != cntrlMg)
-          // First operand of muxes is always select
+          // First operand of muxes is select operand, second result of control
+          // merges is index result
           mergeInfo.edges[0].setValue(cntrlMg->getResult(1));
       }
     }
@@ -1242,7 +1250,6 @@ HandshakeLowering::addBranchOps(ConversionPatternRewriter &rewriter) {
         Operation *newOp = nullptr;
 
         if (auto condBranchOp = dyn_cast<mlir::cf::CondBranchOp>(termOp))
-
           newOp = rewriter.create<handshake::ConditionalBranchOp>(
               termOp->getLoc(), condBranchOp.getCondition(), val);
         else if (isa<mlir::cf::BranchOp>(termOp))
@@ -1277,7 +1284,8 @@ HandshakeLowering::addBranchOps(ConversionPatternRewriter &rewriter) {
 
     SmallVector<mlir::Block *, 8> results(block.getSuccessors());
     rewriter.setInsertionPointToEnd(&block);
-    rewriter.create<handshake::TerminatorOp>(termOp->getLoc(), results);
+    rewriter.create<handshake::TerminatorOp>(termOp->getLoc(),
+                                             ArrayRef<mlir::Block *>{results});
 
     // Remove the Operands to keep the single-use rule.
     for (int i = 0, e = termOp->getNumOperands(); i < e; ++i)

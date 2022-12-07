@@ -583,15 +583,15 @@ def EndOp
     all memory accesses have completed.  Currently not used(data
     returned through ReturnOp).
   }];
-  let arguments = (ins AnyType : $control, Variadic<AnyType> : $opOperands);
 
-  let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "Value":$operand)>];
+  let arguments = (ins AnyType : $control, Variadic<AnyType> : $opOperands);
   let assemblyFormat = [{ operands attr-dict `:` qualified(type($control)) `,` qualified(type($opOperands))}];
 }
 
 def StartOp : Handshake_Op<"start", [
-  Pure, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  Pure, 
+  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>,
+  DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<ControlInterface, ["isControl"]>
 ]> {
   let summary = "start operation";
@@ -600,11 +600,7 @@ def StartOp : Handshake_Op<"start", [
     block.  Currently not used( trigger given as function argument)
   }];
 
-  let arguments = (ins BoolAttr : $control);
   let results = (outs NoneType : $result);
-
-  let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins)>];
   let assemblyFormat = [{ attr-dict `:` qualified(type($result))}];
 }
 
@@ -618,9 +614,11 @@ def TerminatorOp : Handshake_Op<"terminator", [Terminator]> {
   }];
 
   let successors = (successor VariadicSuccessor<AnySuccessor>:$dests);
-  let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "ArrayRef<Block *>":$successors)>];
+  let builders = [OpBuilder<(ins "ArrayRef<Block *>":$successors), [{
+      $_state.addSuccessors(successors);
+  }]>];
 }
+
 
 def MemRefTypeAttr : TypeAttrBase<"MemRefType", "memref type attribute">;
 def MemoryOp : Handshake_Op<"memory", [
@@ -863,7 +861,7 @@ def UnpackOp : Handshake_Op<"unpack", [
 
 def PackOp : Handshake_Op<"pack", [
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
-  DeclareOpInterfaceMethods<GeneralOpInterface>,  
+  DeclareOpInterfaceMethods<GeneralOpInterface>,
   TypesMatchWith<"input types match element types of 'tuple'",
                    "result", "inputs",
                    "$_self.cast<TupleType>().getTypes()">

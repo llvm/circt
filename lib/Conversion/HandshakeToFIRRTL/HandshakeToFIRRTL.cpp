@@ -24,7 +24,6 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/MathExtras.h"
-#include "llvm/Support/raw_ostream.h"
 
 #include <set>
 
@@ -3087,13 +3086,12 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     // As handshake operations get lowered to FIRRTL (in particular, as
     // NonType's get lowered), the logic that determines whether an operation
     // is a control operation may no longer give the right answer. We therefore
-    // cache the isControl property of each operation before any modification
-    // to the operation and then refer to that attribute during lowering.
+    // cache the "control-ness" of each operation before any modification to the
+    // operation and then refer to that attribute instead during lowering.
     for (auto &op : funcOp.getOps()) {
       auto ctrl = dyn_cast<handshake::ControlInterface>(op);
-      if (ctrl)
-        op.setAttr("control",
-                   BoolAttr::get(rewriter.getContext(), ctrl.isControl()));
+      op.setAttr("control", BoolAttr::get(rewriter.getContext(),
+                                          ctrl && ctrl.isControl()));
     }
 
     auto maybeTopModuleOp = createTopModuleOp<FModuleOp>(

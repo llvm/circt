@@ -22,7 +22,7 @@ def HasOneResult : Constraint<CPred<"$_self.size() == 1">, "has one result">;
 def EliminateSimpleMergesPattern : Pat<(MergeOp $arg), (replaceWithValue $arg),
                                        [(HasOneOperand:$arg)]>;
 
-def EliminateSimpleBranchesPattern: Pat<(BranchOp  $a), (replaceWithValue $a)>;
+def EliminateSimpleBranchesPattern: Pat<(BranchOp $a), (replaceWithValue $a)>;
 
 def EliminateSimpleForksPattern : Pat<(ForkOp:$op $arg),
                                       (replaceWithValue $arg), [(HasOneResult
