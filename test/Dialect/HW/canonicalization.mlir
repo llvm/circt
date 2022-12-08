@@ -1054,6 +1054,15 @@ hw.module @bitcast_canonicalization(%arg0: i4) -> (r1: i4, r2: !hw.array<2xi2>) 
   hw.output %id, %b : i4, !hw.array<2xi2>
 }
 
+// CHECK-LABEL: hw.module @array_get0(%index: i2) -> (r0: i2)
+// CHECK-NEXT:    %c-1_i2 = hw.constant -1 : i2
+// CHECK-NEXT:    hw.output %c-1_i2 : i2
+hw.module @array_get0(%index : i2) -> (r0: i2) {
+  %array = hw.aggregate_constant [3 : i2, 3 : i2, 3 : i2, 3 : i2] : !hw.array<4xi2>
+  %result = hw.array_get %array[%index] : !hw.array<4xi2>, i2
+  hw.output %result : i2
+}
+
 // CHECK-LABEL: hw.module @array_get1(%a0: i3, %a1: i3, %a2: i3) -> (r0: i3)
 // CHECK-NEXT:    hw.output %a0 : i3
 hw.module @array_get1(%a0: i3, %a1: i3, %a2: i3) -> (r0: i3) {
