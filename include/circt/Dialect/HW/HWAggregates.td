@@ -102,7 +102,7 @@ def ArrayConcatOp : HWOp<"array_concat", [Pure]> {
     // ValueRange needs to contain at least one element.
     OpBuilder<(ins "ValueRange":$inputs)>
   ];
-
+  let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
 }
 

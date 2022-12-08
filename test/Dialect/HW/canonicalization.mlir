@@ -1423,6 +1423,16 @@ hw.module @GetOfSliceStatic(%a: !hw.array<5xi1>) -> (out0: i1) {
   hw.output %get : i1
 }
 
+// CHECK-LABEL: hw.module @ConcatOfConstants(%index: i2) -> (r0: !hw.array<2xi2>)
+hw.module @ConcatOfConstants(%index: i2) -> (r0: !hw.array<2xi2>) {
+  %lhs = hw.aggregate_constant [3 : i2] : !hw.array<1xi2>
+  %rhs = hw.aggregate_constant [3 : i2] : !hw.array<1xi2>
+  %concat = hw.array_concat %lhs, %rhs : !hw.array<1xi2>, !hw.array<1xi2>
+  // CHECK: [[OUT:%.+]] = hw.aggregate_constant [-1 : i2, -1 : i2] : !hw.array<2xi2>
+  // CHECK: hw.output [[OUT]] : !hw.array<2xi2>
+  hw.output %concat : !hw.array<2xi2>
+}
+
 // CHECK-LABEL: hw.module @ConcatOfCreate
 hw.module @ConcatOfCreate(%a: i1, %b: i1) -> (out0: !hw.array<5xi1>) {
   %lhs = hw.array_create %a, %b : i1

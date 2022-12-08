@@ -1890,6 +1890,16 @@ void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
   build(b, state, ArrayType::get(elemTy, resultSize), values);
 }
 
+OpFoldResult ArrayConcatOp::fold(ArrayRef<Attribute> constants) {
+  SmallVector<Attribute> array;
+  for (size_t i = 0, e = getNumOperands(); i < e; ++i) {
+    if (!constants[i])
+      return {};
+    llvm::copy(constants[i].cast<ArrayAttr>(), std::back_inserter(array));
+  }
+  return ArrayAttr::get(getContext(), array);
+}
+
 // Flatten a concatenation of array creates into a single create.
 static bool flattenConcatOp(ArrayConcatOp op, PatternRewriter &rewriter) {
   for (auto input : op.getInputs())
