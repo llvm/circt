@@ -1369,6 +1369,16 @@ hw.module @ExtractOfUnrelatedInject(%a: !hw.struct<a: i1, b: i1>, %v: i1) -> (re
   hw.output %c : i1
 }
 
+// CHECK-LABEL: hw.module @InjectOnConstant
+hw.module @InjectOnConstant() -> (result: !hw.struct<a: i2>) {
+  %struct = hw.aggregate_constant [0 : i2] : !hw.struct<a: i2>
+  %c1_i2 = hw.constant 1 : i2
+  %result = hw.struct_inject %struct["a"], %c1_i2 : !hw.struct<a: i2>
+  // CHECK: [[STRUCT:%.+]] = hw.aggregate_constant [1 : i2] : !hw.struct<a: i2>
+  // CHECK-NEXT: hw.output [[STRUCT]]
+  hw.output %result : !hw.struct<a: i2>
+}
+
 // CHECK-LABEL: hw.module @InjectOnInject
 hw.module @InjectOnInject(%a: !hw.struct<a: i1>, %p: i1, %q: i1) -> (result: !hw.struct<a: i1>) {
   %b = hw.struct_inject %a["a"], %p : !hw.struct<a: i1>

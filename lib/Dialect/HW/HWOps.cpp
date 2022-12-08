@@ -2304,6 +2304,17 @@ void StructInjectOp::print(OpAsmPrinter &printer) {
   printer << " : " << getInput().getType();
 }
 
+OpFoldResult StructInjectOp::fold(ArrayRef<Attribute> operands) {
+  if (!operands[0] || !operands[1])
+    return {};
+  SmallVector<Attribute> array;
+  llvm::copy(operands[0].cast<ArrayAttr>(), std::back_inserter(array));
+  StructType structType = getInput().getType();
+  auto index = *structType.getFieldIndex(getField());
+  array[index] = operands[1];
+  return ArrayAttr::get(getContext(), array);
+}
+
 LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
                                            PatternRewriter &rewriter) {
   // Canonicalize multiple injects into a create op and eliminate overwrites.

@@ -226,7 +226,7 @@ def StructInjectOp : HWOp<"struct_inject", [Pure,
                    HWNonInOutType:$newValue);
   let results = (outs StructType:$result);
   let hasCustomAssemblyFormat = 1;
-
+  let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
 }
 
