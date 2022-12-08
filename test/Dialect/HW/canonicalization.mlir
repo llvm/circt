@@ -1082,6 +1082,16 @@ hw.module @array_get1(%a0: i3, %a1: i3, %a2: i3) -> (r0: i3) {
   hw.output %r0 : i3
 }
 
+// CHECK-LABEL: hw.module @struct_create() -> (r0: !hw.struct<a: i2, b: i2, c: i2>)
+// CHECK-NEXT:    %0 = hw.aggregate_constant [0 : i2, 1 : i2, 0 : i2] : !hw.struct<a: i2, b: i2, c: i2>
+// CHECK-NEXT:    hw.output %0 : !hw.struct<a: i2, b: i2, c: i2>
+hw.module @struct_create() -> (r0: !hw.struct<a: i2, b: i2, c : i2>) {
+  %false = hw.constant 0 : i2
+  %true = hw.constant 1 : i2
+  %arr = hw.struct_create (%false, %true, %false) : !hw.struct<a: i2, b: i2, c : i2>
+  hw.output %arr : !hw.struct<a: i2, b: i2, c : i2>
+}
+
 // CHECK-LABEL: hw.module @struct_extract1(%a0: i3, %a1: i5) -> (r0: i3)
 // CHECK-NEXT:    hw.output %a0 : i3
 hw.module @struct_extract1(%a0: i3, %a1: i5) -> (r0: i3) {

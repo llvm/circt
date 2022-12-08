@@ -183,6 +183,7 @@ def StructCreateOp : HWOp<"struct_create", [Pure]> {
   let arguments = (ins Variadic<HWNonInOutType>:$input);
   let results = (outs StructType:$result);
   let hasCustomAssemblyFormat = 1;
+  let hasFolder = 1;
   let hasVerifier = 1;
 }
 

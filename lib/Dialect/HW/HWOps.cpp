@@ -2108,6 +2108,12 @@ LogicalResult StructCreateOp::verify() {
   return success();
 }
 
+OpFoldResult StructCreateOp::fold(ArrayRef<Attribute> constants) {
+  if (llvm::any_of(constants, [](Attribute attr) { return !attr; }))
+    return {};
+  return ArrayAttr::get(getContext(), constants);
+}
+
 //===----------------------------------------------------------------------===//
 // StructExplodeOp
 //===----------------------------------------------------------------------===//
