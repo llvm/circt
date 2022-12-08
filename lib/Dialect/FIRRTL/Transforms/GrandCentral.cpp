@@ -238,7 +238,7 @@ struct MappingContextTraits<DescribedInstance, Context> {
     StringRef name;
 
     /// An optional textual description of the interface.
-    std::optional<std::string> description = None;
+    std::optional<std::string> description = std::nullopt;
 
     /// An array describing the dimnensionality of the interface.
     SmallVector<int64_t, 2> dimensions;
