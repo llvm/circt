@@ -299,9 +299,9 @@ def PipelineWhileStageOp : Op<Pipeline_Dialect, "while.stage",
     this value until the last stage that needs it.
 
     Other than `iter_args`, stages may only access SSA values dominating the
-    pipeline or SSA values computed by a previous stage. This ensures the stages
-    capture the coarse-grained schedule of the pipeline and how values feed
-    forward and backward.
+    pipeline or SSA values computed by any previous stage. This ensures the
+    stages capture the coarse-grained schedule of the pipeline and how values
+    feed forward and backward.
   }];
 
   let arguments = (ins
