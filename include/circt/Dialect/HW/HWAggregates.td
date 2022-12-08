@@ -58,6 +58,7 @@ def ArrayCreateOp : HWOp<"array_create", [Pure, SameTypeOperands]> {
   let results = (outs ArrayType:$result);
 
   let hasVerifier = 1;
+  let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
 
   let hasCustomAssemblyFormat = 1;
