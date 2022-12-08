@@ -157,7 +157,7 @@ struct MappingContextTraits<DescribedSignal, Context> {
     StringRef name;
 
     /// An optional, textual description of what the field is.
-    Optional<std::string> description;
+    std::optional<std::string> description;
 
     /// The dimensions of the field.
     SmallVector<unsigned, 2> dimensions;
@@ -171,7 +171,7 @@ struct MappingContextTraits<DescribedSignal, Context> {
         : name(op.signal.getSymNameAttr().getValue()) {
 
       // Convert the description from a `StringAttr` (which may be null) to an
-      // `Optional<StringRef>`.  This aligns exactly with the YAML
+      // `optional<StringRef>`.  This aligns exactly with the YAML
       // representation.
       if (op.description)
         description = stripComment(op.description.getValue());
@@ -238,7 +238,7 @@ struct MappingContextTraits<DescribedInstance, Context> {
     StringRef name;
 
     /// An optional textual description of the interface.
-    Optional<std::string> description = None;
+    std::optional<std::string> description = None;
 
     /// An array describing the dimnensionality of the interface.
     SmallVector<int64_t, 2> dimensions;
@@ -250,7 +250,7 @@ struct MappingContextTraits<DescribedInstance, Context> {
         : name(op.name.getValue()), interface(op.interface) {
 
       // Convert the description from a `StringAttr` (which may be null) to an
-      // `Optional<StringRef>`.  This aligns exactly with the YAML
+      // `optional<StringRef>`.  This aligns exactly with the YAML
       // representation.
       if (op.description)
         description = stripComment(op.description.getValue());

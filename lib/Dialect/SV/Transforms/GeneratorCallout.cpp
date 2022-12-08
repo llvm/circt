@@ -127,7 +127,8 @@ void HWGeneratorCalloutPass::processGenerator(
     generatedModuleOp.emitError("cannot generate a unique temporary file name");
     return;
   }
-  Optional<StringRef> redirects[] = {None, StringRef(genExecOutFileName), None};
+  std::optional<StringRef> redirects[] = {None, StringRef(genExecOutFileName),
+                                          None};
   int result = llvm::sys::ExecuteAndWait(
       generatorExe, generatorArgStrRef, /*Env=*/None,
       /*Redirects=*/redirects,
