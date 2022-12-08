@@ -168,7 +168,8 @@ static ParseResult parseHWElementType(Type &result, AsmParser &p) {
 
   if (typeString.startswith("array<") || typeString.startswith("inout<") ||
       typeString.startswith("uarray<") || typeString.startswith("struct<") ||
-      typeString.startswith("typealias<") || typeString.startswith("int<")) {
+      typeString.startswith("typealias<") || typeString.startswith("int<") ||
+      typeString.startswith("enum<")) {
     llvm::StringRef mnemonic;
     auto parseResult = generatedTypeParser(p, &mnemonic, result);
     return parseResult.has_value() ? success() : failure();
