@@ -293,7 +293,10 @@ void IMDeadCodeElimPass::visitValue(Value value) {
     // Update the src, when it's an instance op.
     auto module =
         dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(instance));
-    if (!module)
+
+    // Propagate liveness only when a port is output.
+    if (!module || module.getPortDirection(instanceResult.getResultNumber()) ==
+                       Direction::In)
       return;
 
     BlockArgument modulePortVal =
@@ -380,6 +383,7 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
 
   ImplicitLocOpBuilder builder(module.getLoc(), module.getContext());
   builder.setInsertionPointToStart(module.getBodyBlock());
+  auto oldPorts = module.getPorts();
 
   for (auto index : llvm::seq(0u, numOldPorts)) {
     auto argument = module.getArgument(index);
@@ -445,19 +449,26 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
   for (auto *use : instanceGraphNode->uses()) {
     auto instance = cast<InstanceOp>(*use->getInstance());
     ImplicitLocOpBuilder builder(instance.getLoc(), instance);
-    // Since we will rewrite instance op, it is necessary to remove old instance
-    // results from liveSet.
-    for (auto oldResult : instance.getResults())
-      liveSet.erase(oldResult);
-
     // Replace old instance results with dummy wires.
     for (auto index : deadPortIndexes.set_bits()) {
       auto result = instance.getResult(index);
-      assert(isAssumedDead(result) &&
-             "instance results of dead ports must be dead");
       WireOp wire = builder.create<WireOp>(result.getType());
       result.replaceAllUsesWith(wire);
+      // If a module port is dead but its instance result is alive, the port is
+      // used as a temporary wire so make sure that a replaced wire is putted
+      // into `liveSet`.
+      if (isKnownAlive(result)) {
+        assert(oldPorts[index].direction == Direction::In &&
+               "If a dead module port is alive in instance results, the "
+               "corresponding port must be input");
+        liveSet.insert(wire);
+      }
     }
+
+    // Since we will rewrite instance op, it is necessary to remove old
+    // instance results from liveSet.
+    for (auto oldResult : instance.getResults())
+      liveSet.erase(oldResult);
 
     // Create a new instance op without dead ports.
     auto newInstance = instance.erasePorts(builder, deadPortIndexes);
