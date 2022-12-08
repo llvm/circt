@@ -33,6 +33,7 @@ def AggregateConstantOp : HWOp<"aggregate_constant", [Pure, ConstantLike]> {
   let results = (outs HWAggregateType:$result);
   let assemblyFormat = "$fields attr-dict `:` type($result)";
   let hasVerifier = 1;
+  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//

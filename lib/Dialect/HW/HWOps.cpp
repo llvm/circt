@@ -413,6 +413,10 @@ LogicalResult AggregateConstantOp::verify() {
   return checkAttributes(*this, getFieldsAttr(), getType());
 }
 
+OpFoldResult AggregateConstantOp::fold(ArrayRef<Attribute> operands) {
+  return getFieldsAttr();
+}
+
 //===----------------------------------------------------------------------===//
 // ParamValueOp
 //===----------------------------------------------------------------------===//
