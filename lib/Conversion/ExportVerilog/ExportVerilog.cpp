@@ -2347,7 +2347,7 @@ SubExprInfo ExprEmitter::visitSV(XMRRefOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   auto globalRef =
-      cast<hw::GlobalRefOp>(state.symbolCache.getDefinition(op.getRefAttr()));
+      cast<hw::HierPathOp>(state.symbolCache.getDefinition(op.getRefAttr()));
   auto namepath = globalRef.getNamepathAttr().getValue();
   auto *module = state.symbolCache.getDefinition(
       cast<InnerRefAttr>(namepath.front()).getModule());
@@ -4700,7 +4700,7 @@ StringRef ModuleEmitter::getNameRemotely(Value value,
     // to share logic.
     if (auto xmrRef = dyn_cast<XMRRefOp>(wireInput)) {
       SmallString<32> xmrString;
-      auto globalRef = cast<hw::GlobalRefOp>(
+      auto globalRef = cast<hw::HierPathOp>(
           state.symbolCache.getDefinition(xmrRef.getRefAttr()));
       auto namepath = globalRef.getNamepathAttr().getValue();
       auto *module = state.symbolCache.getDefinition(
@@ -5168,6 +5168,9 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         })
         .Case<GlobalRefOp>([&](GlobalRefOp globalRefOp) {
           symbolCache.addDefinition(globalRefOp.getSymNameAttr(), globalRefOp);
+        })
+        .Case<HierPathOp>([&](HierPathOp hierPathOp) {
+          symbolCache.addDefinition(hierPathOp.getSymNameAttr(), hierPathOp);
         })
         .Case<TypeScopeOp>([&](TypeScopeOp op) {
           symbolCache.addDefinition(op.getNameAttr(), op);

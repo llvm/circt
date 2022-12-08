@@ -1321,25 +1321,16 @@ hw.module @XMR_src(%a : i23) -> (aa: i3) {
 // Additionally, test that XMRs use properly legalized Verilog names.  The XMR
 // target is "new" and the root of the reference is "wait_order".
 
-hw.globalRef @ref [
-  #hw.innerNameRef<@wait_order::@bar>,
-  #hw.innerNameRef<@XMRRef_Bar::@new>
-]
-hw.globalRef @ref2 [
-  #hw.innerNameRef<@wait_order::@baz>
-]
+hw.hierpath private @ref [@wait_order::@bar, @XMRRef_Bar::@new]
+hw.hierpath private @ref2 [@wait_order::@baz]
 hw.module @XMRRef_Bar() {
-  %new = sv.wire sym @new {
-    circt.globalRef = [#hw.globalNameRef<@ref>]
-  } : !hw.inout<i2>
+  %new = sv.wire sym @new : !hw.inout<i2>
 }
 hw.module.extern @XMRRef_Baz(%a: i2, %b: i1)
 hw.module.extern @XMRRef_Qux(%a: i2, %b: i1)
 // CHECK-LABEL: module wait_order
 hw.module @wait_order() {
-  hw.instance "bar" sym @bar @XMRRef_Bar() -> () {
-    circt.globalRef = [#hw.globalNameRef<@ref>]
-  }
+  hw.instance "bar" sym @bar @XMRRef_Bar() -> ()
   %xmr = sv.xmr.ref @ref : !hw.inout<i2>
   %xmrRead = sv.read_inout %xmr : !hw.inout<i2>
   %xmr2 = sv.xmr.ref @ref2 ".x.y.z[42]" : !hw.inout<i1>
@@ -1351,8 +1342,7 @@ hw.module @wait_order() {
   // CHECK-NEXT: );
   // CHECK-NEXT: */
   hw.instance "baz" sym @baz @XMRRef_Baz(a: %xmrRead: i2, b: %xmr2Read: i1) -> () {
-    doNotPrint = true,
-    circt.globalRef = [#hw.globalNameRef<@ref2>]
+    doNotPrint = true
   }
   // CHECK-NEXT: XMRRef_Qux qux (
   // CHECK-NEXT:   .a (wait_order_0.bar.new_0),
