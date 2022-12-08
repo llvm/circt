@@ -52,6 +52,9 @@ struct Tracker {
   int portNo = -1;
   /// If this is a field, the ID will be greater than 0, else it will be 0.
   unsigned fieldID;
+
+  // Returns true if the tracker has a non-zero field ID.
+  bool hasFieldID() { return fieldID > 0; }
 };
 
 class EmitOMIRPass : public EmitOMIRBase<EmitOMIRPass> {
@@ -112,11 +115,9 @@ private:
   // Obtain the type of a module port.
   FIRRTLType getTypeOf(FModuleLike mod, size_t portIdx);
 
-  // Returns true if the tracker has a non-zero field ID.
-  bool hasFieldID(Tracker tracker);
-
   // Constructs a reference to a field from a FIRRTLType with a fieldID.
-  SmallString<8> addFieldID(FIRRTLType type, unsigned fieldID);
+  void addFieldID(FIRRTLType type, unsigned fieldID,
+                  SmallVectorImpl<char> &result);
 
   /// Get the cached namespace for a module.
   ModuleNamespace &getModuleNamespace(FModuleLike module) {
@@ -1173,7 +1174,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
 
     // If the target refers to a field, get the type of the component so we can
     // extract the field, or fail if we don't know how to get the type.
-    if (hasFieldID(tracker)) {
+    if (tracker.hasFieldID()) {
       if (isa<WireOp, RegOp, RegResetOp, NodeOp>(tracker.op)) {
         componentType = getTypeOf(tracker.op);
       } else {
@@ -1187,7 +1188,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
       componentName = getInnerRefTo(mod, tracker.portNo);
 
       // If the target refers to a field, get the type of the port.
-      if (hasFieldID(tracker))
+      if (tracker.hasFieldID())
         componentType = getTypeOf(mod, tracker.portNo);
     }
   } else if (!isa<FModuleLike>(tracker.op)) {
@@ -1219,10 +1220,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
       }
       target.push_back('>');
       target.append(addSymbol(componentName));
-
-      // If the target refers to a field, append the field.
-      if (hasFieldID(tracker))
-        target.append(addFieldID(componentType, tracker.fieldID));
+      addFieldID(componentType, tracker.fieldID, target);
     }();
   }
 
@@ -1257,36 +1255,29 @@ FIRRTLType EmitOMIRPass::getTypeOf(FModuleLike mod, size_t portIdx) {
   return portType.cast<FIRRTLType>();
 }
 
-// Returns true if the tracker has a non-zero field ID.
-bool EmitOMIRPass::hasFieldID(Tracker tracker) { return tracker.fieldID > 0; }
-
-// Constructs a reference to a field from a FIRRTLType with a fieldID.
-SmallString<8> EmitOMIRPass::addFieldID(FIRRTLType type, unsigned fieldID) {
-  assert((type.isa_and_nonnull<FVectorType>() ||
-          type.isa_and_nonnull<BundleType>()) &&
-         "non-zero fieldID must be part of a vector or bundle type");
-
-  SmallString<8> str;
-
+// Constructs a reference to a field of an aggregate FIRRTLType with a fieldID,
+// and appends it to result. If fieldID is 0, meaning it does not reference a
+// field of an aggregate FIRRTLType, this is a no-op.
+void EmitOMIRPass::addFieldID(FIRRTLType type, unsigned fieldID,
+                              SmallVectorImpl<char> &result) {
   while (fieldID)
     TypeSwitch<FIRRTLType>(type)
         .Case<FVectorType>([&](FVectorType vector) {
           size_t index = vector.getIndexForFieldID(fieldID);
           type = vector.getElementType();
           fieldID -= vector.getFieldID(index);
-          str.append("[");
-          Twine(index).toVector(str);
-          str.append("]");
+          result.push_back('[');
+          Twine(index).toVector(result);
+          result.push_back(']');
         })
         .Case<BundleType>([&](BundleType bundle) {
           size_t index = bundle.getIndexForFieldID(fieldID);
+          StringRef name = bundle.getElement(index).name;
           type = bundle.getElementType(index);
           fieldID -= bundle.getFieldID(index);
-          str.append(".");
-          str.append(bundle.getElement(index).name);
+          result.push_back('.');
+          result.append(name.begin(), name.end());
         });
-
-  return str;
 }
 
 //===----------------------------------------------------------------------===//
