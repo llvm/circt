@@ -12,6 +12,30 @@
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
+// Constants
+//===----------------------------------------------------------------------===//
+
+def AggregateConstantOp : HWOp<"aggregate_constant", [Pure, ConstantLike]> {
+  let summary = "Produce a constant aggregate value";
+  let description = [{
+    This operation produces a constant value of an aggregate type. Clock and
+    reset values are supported. For nested aggregates, embedded arrays are
+    used.
+
+    Examples:
+    ```mlir
+      %result = hw.aggregate.constant [1 : i1, 2 : i2, 3 : i2] : !hw.struct<a: i8, b: i8, c: i8>
+      %result = hw.aggregate.constant [1 : i1, [2 : i2, 3 : i2]] : !hw.struct<a: i8, b: vector<i8, 2>>
+    ```
+  }];
+
+  let arguments = (ins ArrayAttr:$fields);
+  let results = (outs HWAggregateType:$result);
+  let assemblyFormat = "$fields attr-dict `:` type($result)";
+  let hasVerifier = 1;
+}
+
+//===----------------------------------------------------------------------===//
 // Packed Array Processing Operations
 //===----------------------------------------------------------------------===//
 

@@ -60,6 +60,17 @@ def EnumType : DialectType<HWDialect,
     CPred<"::circt::hw::type_isa<circt::hw::EnumType>($_self)">,
           "a EnumType", "::circt::hw::TypeAliasOr<circt::hw::EnumType>">;
 
+def HWAggregateType : DialectType<HWDialect, 
+    CPred<[{::circt::hw::type_isa<
+      circt::hw::ArrayType,
+      circt::hw::UnpackedArrayType,
+      circt::hw::StructType>($_self)}]>,
+    "an ArrayType or StructType",
+    [{::circt::hw::TypeVariant<
+      ::circt::hw::ArrayType,
+      ::circt::hw::UnpackedArrayType,
+      ::circt::hw::StructType>}]>;
+
 //===----------------------------------------------------------------------===//
 // Type Definitions
 //===----------------------------------------------------------------------===//

@@ -350,6 +350,70 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
 }
 
 //===----------------------------------------------------------------------===//
+// AggregateConstantOp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult checkAttributes(Operation *op, Attribute attr, Type type) {
+  // If this is a type alias, get the underlying type.
+  if (auto typeAlias = type.dyn_cast<TypeAliasType>())
+    type = typeAlias.getCanonicalType();
+
+  if (auto structType = type.dyn_cast<StructType>()) {
+    auto arrayAttr = attr.dyn_cast<ArrayAttr>();
+    if (!arrayAttr)
+      return op->emitOpError("expected array attribute for constant of type ")
+             << type;
+    for (auto [attr, fieldInfo] :
+         llvm::zip(arrayAttr.getValue(), structType.getElements())) {
+      if (failed(checkAttributes(op, attr, fieldInfo.type)))
+        return failure();
+    }
+  } else if (auto arrayType = type.dyn_cast<ArrayType>()) {
+    auto arrayAttr = attr.dyn_cast<ArrayAttr>();
+    if (!arrayAttr)
+      return op->emitOpError("expected array attribute for constant of type ")
+             << type;
+    auto elementType = arrayType.getElementType();
+    for (auto attr : arrayAttr.getValue()) {
+      if (failed(checkAttributes(op, attr, elementType)))
+        return failure();
+    }
+  } else if (auto arrayType = type.dyn_cast<UnpackedArrayType>()) {
+    auto arrayAttr = attr.dyn_cast<ArrayAttr>();
+    if (!arrayAttr)
+      return op->emitOpError("expected array attribute for constant of type ")
+             << type;
+    auto elementType = arrayType.getElementType();
+    for (auto attr : arrayAttr.getValue()) {
+      if (failed(checkAttributes(op, attr, elementType)))
+        return failure();
+    }
+  } else if (auto enumType = type.dyn_cast<EnumType>()) {
+    auto stringAttr = attr.dyn_cast<StringAttr>();
+    if (!stringAttr)
+      return op->emitOpError("expected string attribute for constant of type ")
+             << type;
+  } else if (auto intType = type.dyn_cast<IntegerType>()) {
+    // Check the attribute kind is correct.
+    auto intAttr = attr.dyn_cast<IntegerAttr>();
+    if (!intAttr)
+      return op->emitOpError("expected integer attribute for constant of type ")
+             << type;
+    // Check the bitwidth is correct.
+    if (intAttr.getValue().getBitWidth() != intType.getWidth())
+      return op->emitOpError("hw.constant attribute bitwidth "
+                             "doesn't match return type");
+  } else {
+    return op->emitOpError("unknown element type") << type;
+  }
+  return success();
+}
+
+LogicalResult AggregateConstantOp::verify() {
+  return checkAttributes(*this, getFieldsAttr(), getType());
+}
+
+//===----------------------------------------------------------------------===//
 // ParamValueOp
 //===----------------------------------------------------------------------===//
 

@@ -108,6 +108,20 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i5
   // CHECK-NEXT: %A = hw.enum.constant A : !hw.enum<A, B, C>
   %A_enum = hw.enum.constant A : !hw.enum<A, B, C>
 
+  // CHECK-NEXT: hw.aggregate_constant [false, true] : !hw.struct<a: i1, b: i1>
+  hw.aggregate_constant [false, true] : !hw.struct<a: i1, b: i1>
+  //hw.enum.constant A : !hw.enum<A, B>
+  // CHECK-NEXT: hw.aggregate_constant [0 : i2, 1 : i2, -2 : i2, -1 : i2] : !hw.array<4xi2>
+  hw.aggregate_constant [0 : i2, 1 : i2, -2 : i2, -1 : i2] : !hw.array<4xi2>
+  // CHECK-NEXT: hw.aggregate_constant [false] : !hw.uarray<1xi1>
+  hw.aggregate_constant [false] : !hw.uarray<1xi1>
+  // CHECK-NEXT{LITERAL}: hw.aggregate_constant [[false]] : !hw.struct<a: !hw.array<1xi1>>
+  hw.aggregate_constant [[false]] : !hw.struct<a: !hw.array<1xi1>>
+  // CHECK-NEXT: hw.aggregate_constant ["A"] : !hw.struct<a: !hw.enum<A, B, C>>
+  hw.aggregate_constant ["A"] : !hw.struct<a: !hw.enum<A, B, C>>
+  // CHECK-NEXT: hw.aggregate_constant ["A"] : !hw.array<1xenum<A, B, C>>
+  hw.aggregate_constant ["A"] : !hw.array<1 x!hw.enum<A, B, C>>
+
   // CHECK-NEXT:    hw.output [[RES8]] : i50
   hw.output %result : i50
 }
