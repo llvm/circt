@@ -1100,9 +1100,18 @@ hw.module @struct_extract1(%a0: i3, %a1: i5) -> (r0: i3) {
   hw.output %r0 : i3
 }
 
-// CHECK-LABEL: hw.module @struct_explode(%a0: i3, %a1: i5) -> (r0: i3)
+// CHECK-LABEL: hw.module @struct_explode0(%a0: i3, %a1: i5) -> (r0: i2)
+// CHECK-NEXT:    %c0_i2 = hw.constant 0 : i2
+// CHECK-NEXT:    hw.output %c0_i2 : i2
+hw.module @struct_explode0(%a0: i3, %a1: i5) -> (r0: i2) {
+  %struct = hw.aggregate_constant [0 : i2, 1 : i2] : !hw.struct<a: i2, b: i2>
+  %r0:2 = hw.struct_explode %struct : !hw.struct<a: i2, b: i2>
+  hw.output %r0#0 : i2
+}
+
+// CHECK-LABEL: hw.module @struct_explode1(%a0: i3, %a1: i5) -> (r0: i3)
 // CHECK-NEXT:    hw.output %a0 : i3
-hw.module @struct_explode(%a0: i3, %a1: i5) -> (r0: i3) {
+hw.module @struct_explode1(%a0: i3, %a1: i5) -> (r0: i3) {
   %s = hw.struct_create (%a0, %a1) : !hw.struct<foo: i3, bar: i5>
   %r0:2 = hw.struct_explode %s : !hw.struct<foo: i3, bar: i5>
   hw.output %r0#0 : i3
