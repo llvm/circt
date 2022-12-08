@@ -1608,6 +1608,12 @@ LogicalResult ArrayCreateOp::verify() {
   return success();
 }
 
+OpFoldResult ArrayCreateOp::fold(ArrayRef<Attribute> constants) {
+  if (llvm::any_of(constants, [](Attribute attr) { return !attr; }))
+    return {};
+  return ArrayAttr::get(getContext(), constants);
+}
+
 // Check whether an integer value is an offset from a base.
 bool hw::isOffset(Value base, Value index, uint64_t offset) {
   if (auto constBase = base.getDefiningOp<hw::ConstantOp>()) {
