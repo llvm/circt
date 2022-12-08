@@ -2408,6 +2408,19 @@ void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
 // the index. If the array is constructed from a constant by a bitcast
 // operation, we can fold into a constant.
 OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
+  if (operands[0]) {
+    auto arrayAttr = operands[0].cast<ArrayAttr>();
+    // Constant array index.
+    if (operands[1]) {
+      auto index = operands[1].cast<IntegerAttr>().getValue();
+      return arrayAttr[arrayAttr.size() - 1 - index.getZExtValue()];
+    }
+    // If all elements of the array are the same, we can return any element of
+    // array.
+    if (!arrayAttr.empty() && llvm::all_equal(arrayAttr))
+      return arrayAttr[0];
+  }
+
   // array_get(bitcast(c), i) -> c[i*w+w-1:i*w]
   if (auto bitcast = getInput().getDefiningOp<hw::BitcastOp>()) {
     auto intTy = getType().dyn_cast<IntegerType>();
