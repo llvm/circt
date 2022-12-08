@@ -300,6 +300,29 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     }]>,
 
     //===------------------------------------------------------------------===//
+    // Field Fixed Values
+    //===------------------------------------------------------------------===//
+
+    InterfaceMethod<"Get the field fixed values attribute",
+    "ArrayAttr", "getFieldFixedValuesAttr", (ins), [{}],
+    /*defaultImplementation=*/[{
+      return $_op->template
+        getAttrOfType<ArrayAttr>(FModuleLike::getFieldFixedValuesAttrName());
+    }]>,
+
+    InterfaceMethod<"Get the field fixed values",
+    "ArrayRef<Attribute>", "getFieldFixedValues", (ins), [{}],
+    /*defaultImplementation=*/[{
+      return $_op.getFieldFixedValuesAttr().getValue();
+    }]>,
+
+    InterfaceMethod<"Get a field fixed value",
+    "Attribute", "getFieldFixedValue", (ins "size_t":$fieldIndex), [{}],
+    /*defaultImplementation=*/[{
+      return $_op.getFieldFixedValues()[fieldIndex];
+    }]>,
+
+    //===------------------------------------------------------------------===//
     // All Field Information
     //===------------------------------------------------------------------===//
 
@@ -362,6 +385,11 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     /// Get the attribute name for field types.
     static StringRef getFieldTypesAttrName() {
       return "fieldTypes";
+    }
+
+    /// Get the attribute name for field fixed values.
+    static StringRef getFieldFixedValuesAttrName() {
+      return "fieldFixedValues";
     }
   }];
 

@@ -2943,7 +2943,18 @@ ParseResult FIRCircuitParser::parsePortAndFieldLists(
     info.setDefaultLoc(defaultLoc);
 
     if (isField) {
-      resultFields.push_back({name, type, info.getLoc()});
+      Attribute fixedValue;
+
+      if (consumeIf(FIRToken::less_equal)) {
+        int64_t intLit;
+        if (parseIntLit(intLit, "expected integer literal"))
+          return failure();
+
+        fixedValue =
+            IntegerAttr::get(IntegerType::get(getContext(), 64), intLit);
+      }
+
+      resultFields.push_back({name, type, fixedValue, info.getLoc()});
       resultFieldLocs.push_back(info.getFIRLoc());
     } else {
       StringAttr innerSym = {};

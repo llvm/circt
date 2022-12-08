@@ -1264,7 +1264,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       builder->getArrayAttr(newNames), op.getAnnotations(),
       builder->getArrayAttr(newPortAnno), op.getLowerToBindAttr(),
       sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr(),
-      op.getFieldNamesAttr(),
+      op.getFieldNamesAttr(), op.getFieldFixedValuesAttr(),
       builder->getDenseI32ArrayAttr({static_cast<int32_t>(newNames.size()),
                                      static_cast<int32_t>(op.getNumFields())}),
       SmallVector<Value>(op.getInitInputs()));

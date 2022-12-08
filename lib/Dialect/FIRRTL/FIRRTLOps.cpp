@@ -666,15 +666,22 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 
   SmallVector<Attribute, 4> fieldNames;
   SmallVector<Attribute, 4> fieldTypes;
+  SmallVector<Attribute, 4> fieldFixedValues;
   for (const auto &field : fields) {
     fieldNames.push_back(field.name);
     fieldTypes.push_back(TypeAttr::get(field.type));
+    if (field.fixedValue)
+      fieldFixedValues.push_back(field.fixedValue);
+    else
+      fieldFixedValues.push_back(builder.getUnitAttr());
   }
 
   result.addAttribute(FModuleLike::getFieldNamesAttrName(),
                       builder.getArrayAttr(fieldNames));
   result.addAttribute(FModuleLike::getFieldTypesAttrName(),
                       builder.getArrayAttr(fieldTypes));
+  result.addAttribute(FModuleLike::getFieldFixedValuesAttrName(),
+                      builder.getArrayAttr(fieldFixedValues));
 
   if (!annotations)
     annotations = builder.getArrayAttr({});
@@ -751,7 +758,8 @@ static std::pair<bool, bool> printModulePortsAndFields(
     OpAsmPrinter &p, Block *block, ArrayRef<Direction> portDirections,
     ArrayRef<Attribute> portNames, ArrayRef<Attribute> portTypes,
     ArrayRef<Attribute> portAnnotations, ArrayRef<Attribute> portSyms,
-    ArrayRef<Attribute> fieldNames, ArrayRef<Attribute> fieldTypes) {
+    ArrayRef<Attribute> fieldNames, ArrayRef<Attribute> fieldTypes,
+    ArrayRef<Attribute> fieldFixedValues) {
   // When printing names as SSA values, we can fail to print them
   // identically.
   bool printedPortNamesDontMatch = false;
@@ -826,6 +834,11 @@ static std::pair<bool, bool> printModulePortsAndFields(
     // Print the field name and type
     printNameAndType(fieldNames[i], fieldTypes[i], argumentIndex,
                      printedFieldNamesDontMatch);
+
+    // Print fixed value if present
+    auto fixedValue = fieldFixedValues[i];
+    if (!fixedValue.isa<UnitAttr>())
+      p << " = " << fixedValue;
   }
 
   p << ')';
@@ -843,7 +856,8 @@ parseModulePortsAndFields(OpAsmParser &parser, bool hasSSAIdentifiers,
                           SmallVectorImpl<Attribute> &portAnnotations,
                           SmallVectorImpl<Attribute> &portSyms,
                           SmallVectorImpl<Attribute> &fieldNames,
-                          SmallVectorImpl<Attribute> &fieldTypes) {
+                          SmallVectorImpl<Attribute> &fieldTypes,
+                          SmallVectorImpl<Attribute> &fieldFixedValues) {
   auto *context = parser.getContext();
 
   auto parseArgument = [&]() -> ParseResult {
@@ -893,8 +907,18 @@ parseModulePortsAndFields(OpAsmParser &parser, bool hasSSAIdentifiers,
     if (hasSSAIdentifiers)
       entryArgs.back().type = type;
 
-    if (isField)
+    if (isField) {
+      Attribute fixedValue;
+      if (succeeded(parser.parseOptionalEqual())) {
+        if (parser.parseAttribute(fixedValue))
+          return failure();
+      } else {
+        fixedValue = parser.getBuilder().getUnitAttr();
+      }
+      fieldFixedValues.push_back(fixedValue);
+
       return success();
+    }
 
     // Parse the optional port symbol.
     hw::InnerSymAttr innerSymAttr;
@@ -967,13 +991,18 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   auto [needPortNamesAttr, needFieldNamesAttr] = printModulePortsAndFields(
       p, body, portDirections, op.getPortNames(), op.getPortTypes(),
       op.getPortAnnotations(), op.getPortSymbols(), op.getFieldNames(),
-      op.getFieldTypes());
+      op.getFieldTypes(), op.getFieldFixedValues());
 
   SmallVector<StringRef, 4> omittedAttrs = {
-      "sym_name",         "portDirections",
-      "portTypes",        "portAnnotations",
-      "portSyms",         "parameters",
-      visibilityAttrName, FModuleLike::getFieldTypesAttrName()};
+      "sym_name",
+      "portDirections",
+      "portTypes",
+      "portAnnotations",
+      "portSyms",
+      "parameters",
+      visibilityAttrName,
+      FModuleLike::getFieldTypesAttrName(),
+      FModuleLike::getFieldFixedValuesAttrName()};
 
   // We can omit the portNames and fieldNames if they were able to be printed as
   // properly as block arguments.
@@ -1075,9 +1104,11 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   SmallVector<Attribute, 4> portSyms;
   SmallVector<Attribute, 4> fieldNames;
   SmallVector<Attribute, 4> fieldTypes;
-  if (parseModulePortsAndFields(
-          parser, hasSSAIdentifiers, entryArgs, portDirections, portNames,
-          portTypes, portAnnotations, portSyms, fieldNames, fieldTypes))
+  SmallVector<Attribute, 4> fieldFixedValues;
+  if (parseModulePortsAndFields(parser, hasSSAIdentifiers, entryArgs,
+                                portDirections, portNames, portTypes,
+                                portAnnotations, portSyms, fieldNames,
+                                fieldTypes, fieldFixedValues))
     return failure();
 
   // If module attributes are present, parse them.
@@ -1138,6 +1169,11 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   if (!result.attributes.get(FModuleLike::getFieldTypesAttrName()))
     result.addAttribute(FModuleLike::getFieldTypesAttrName(),
                         builder.getArrayAttr(fieldTypes));
+
+  // Add the field fixed values
+  if (!result.attributes.get(FModuleLike::getFieldFixedValuesAttrName()))
+    result.addAttribute(FModuleLike::getFieldFixedValuesAttrName(),
+                        builder.getArrayAttr(fieldFixedValues));
 
   // Parse the optional function body.
   auto *body = result.addRegion();
@@ -1219,19 +1255,17 @@ FModuleLike InstanceOp::getReferencedModule(SymbolTable &symbolTable) {
       getModuleNameAttr().getLeafReference());
 }
 
-void InstanceOp::build(OpBuilder &builder, OperationState &result,
-                       TypeRange resultTypes, StringRef moduleName,
-                       StringRef name, NameKindEnum nameKind,
-                       ArrayRef<Direction> portDirections,
-                       ArrayRef<Attribute> portNames,
-                       ArrayRef<Attribute> annotations,
-                       ArrayRef<Attribute> portAnnotations, bool lowerToBind,
-                       StringAttr innerSym, ArrayRef<Attribute> fieldNames,
-                       ArrayRef<Value> initInputs) {
+void InstanceOp::build(
+    OpBuilder &builder, OperationState &result, TypeRange resultTypes,
+    StringRef moduleName, StringRef name, NameKindEnum nameKind,
+    ArrayRef<Direction> portDirections, ArrayRef<Attribute> portNames,
+    ArrayRef<Attribute> annotations, ArrayRef<Attribute> portAnnotations,
+    bool lowerToBind, StringAttr innerSym, ArrayRef<Attribute> fieldNames,
+    ArrayRef<Attribute> fieldFixedValues, ArrayRef<Value> initInputs) {
   build(builder, result, resultTypes, moduleName, name, nameKind,
         portDirections, portNames, annotations, portAnnotations, lowerToBind,
         innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(),
-        fieldNames, initInputs);
+        fieldNames, fieldFixedValues, initInputs);
 }
 
 void InstanceOp::build(
@@ -1240,7 +1274,7 @@ void InstanceOp::build(
     ArrayRef<Direction> portDirections, ArrayRef<Attribute> portNames,
     ArrayRef<Attribute> annotations, ArrayRef<Attribute> portAnnotations,
     bool lowerToBind, hw::InnerSymAttr innerSym, ArrayRef<Attribute> fieldNames,
-    ArrayRef<Value> initInputs) {
+    ArrayRef<Attribute> fieldFixedValues, ArrayRef<Value> initInputs) {
   result.addOperands(initInputs);
 
   size_t numPorts = portNames.size();
@@ -1260,7 +1294,10 @@ void InstanceOp::build(
     result.addAttribute("inner_sym", innerSym);
   result.addAttribute("nameKind",
                       NameKindEnumAttr::get(builder.getContext(), nameKind));
-  result.addAttribute("fieldNames", builder.getArrayAttr(fieldNames));
+  result.addAttribute(FModuleLike::getFieldNamesAttrName(),
+                      builder.getArrayAttr(fieldNames));
+  result.addAttribute(FModuleLike::getFieldFixedValuesAttrName(),
+                      builder.getArrayAttr(fieldFixedValues));
 
   if (portAnnotations.empty()) {
     SmallVector<Attribute, 16> portAnnotationsVec(numPorts,
@@ -1317,8 +1354,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
         builder.getArrayAttr(annotations), portAnnotationsAttr,
         lowerToBind ? builder.getUnitAttr() : UnitAttr(),
         innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(),
-        module.getFieldNamesAttr(), builder.getDenseI32ArrayAttr(resultSizes),
-        initInputs);
+        module.getFieldNamesAttr(), module.getFieldFixedValuesAttr(),
+        builder.getDenseI32ArrayAttr(resultSizes), initInputs);
 }
 
 /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
@@ -1344,7 +1381,8 @@ InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
       getLoc(), newResultTypes, getModuleName(), getName(), getNameKind(),
       newPortDirections, newPortNames, getAnnotations().getValue(),
       newPortAnnotations, getLowerToBind(), getInnerSymAttr(),
-      getFieldNames().getValue(), SmallVector<Value>(getInitInputs()));
+      getFieldNames().getValue(), getFieldFixedValues().getValue(),
+      SmallVector<Value>(getInitInputs()));
 
   for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumPorts();
        oldIdx != numOldPorts; ++oldIdx) {
@@ -1420,7 +1458,8 @@ InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
       getLoc(), newResultTypes, getModuleName(), getName(), getNameKind(),
       newPortDirections, newPortNames, getAnnotations().getValue(),
       newPortAnnos, getLowerToBind(), getInnerSymAttr(),
-      getFieldNames().getValue(), SmallVector<Value>(getInitInputs()));
+      getFieldNames().getValue(), getFieldFixedValues().getValue(),
+      SmallVector<Value>(getInitInputs()));
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
@@ -1555,9 +1594,16 @@ void InstanceOp::print(OpAsmPrinter &p) {
 
   // Print the attr-dict.
   SmallVector<StringRef, 4> omittedAttrs = {
-      "moduleName",          "name",      "portDirections",
-      "portNames",           "portTypes", "portAnnotations",
-      "inner_sym",           "nameKind",  InstanceOp::getFieldNamesAttrName(),
+      "moduleName",
+      "name",
+      "portDirections",
+      "portNames",
+      "portTypes",
+      "portAnnotations",
+      "inner_sym",
+      "nameKind",
+      InstanceOp::getFieldNamesAttrName(),
+      InstanceOp::getFieldFixedValuesAttrName(),
       "result_segment_sizes"};
   if (getAnnotations().empty())
     omittedAttrs.push_back("annotations");
@@ -1589,10 +1635,10 @@ void InstanceOp::print(OpAsmPrinter &p) {
                  getResultTypes().end(), std::back_inserter(fieldTypes),
                  &TypeAttr::get);
 
-  printModulePortsAndFields(p, /*block=*/nullptr, portDirections,
-                            getPortNames().getValue(), portTypes,
-                            getPortAnnotations().getValue(), {},
-                            getFieldNames().getValue(), fieldTypes);
+  printModulePortsAndFields(
+      p, /*block=*/nullptr, portDirections, getPortNames().getValue(),
+      portTypes, getPortAnnotations().getValue(), {},
+      getFieldNames().getValue(), fieldTypes, getFieldFixedValues().getValue());
 }
 
 ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -1610,6 +1656,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<Attribute, 4> portSyms;
   SmallVector<Attribute, 4> fieldNames;
   SmallVector<Attribute, 4> fieldTypes;
+  SmallVector<Attribute, 4> fieldFixedValues;
   NameKindEnumAttr nameKind;
 
   auto parseOptionalInit = [&]() -> ParseResult {
@@ -1646,7 +1693,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
       parseModulePortsAndFields(parser, /*hasSSAIdentifiers=*/false, entryArgs,
                                 portDirections, portNames, portTypes,
                                 portAnnotations, portSyms, fieldNames,
-                                fieldTypes))
+                                fieldTypes, fieldFixedValues))
     return failure();
 
   // Add the attributes. We let attributes defined in the attr-dict override
@@ -1667,6 +1714,9 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   if (!resultAttrs.get(FModuleLike::getFieldNamesAttrName()))
     resultAttrs.append(FModuleLike::getFieldNamesAttrName(),
                        parser.getBuilder().getArrayAttr(fieldNames));
+  if (!resultAttrs.get(FModuleLike::getFieldFixedValuesAttrName()))
+    resultAttrs.append(FModuleLike::getFieldFixedValuesAttrName(),
+                       parser.getBuilder().getArrayAttr(fieldFixedValues));
 
   // Annotations and LowerToBind are omitted in the printed format if they
   // are empty and false, respectively.

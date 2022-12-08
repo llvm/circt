@@ -41,6 +41,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                        UnitAttr:$lowerToBind,
                        OptionalAttr<InnerSymAttr>:$inner_sym,
                        StrArrayAttr:$fieldNames,
+                       ArrayAttr:$fieldFixedValues,
                        DenseI32ArrayAttr:$result_segment_sizes,
                        Variadic<AnyType>:$initInputs
                        );
@@ -61,6 +62,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                    CArg<"bool","false">:$lowerToBind,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym,
                    CArg<"::mlir::ArrayRef<Attribute>", "{}">:$fieldNames,
+                   CArg<"::mlir::ArrayRef<Attribute>", "{}">:$fieldFixedValues,
                    CArg<"ArrayRef<Value>", "{}">:$initInputs)>,
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
                    "::mlir::StringRef":$moduleName,
@@ -73,6 +75,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                    "bool":$lowerToBind,
                    "hw::InnerSymAttr":$inner_sym,
                    "::mlir::ArrayRef<Attribute>":$fieldNames,
+                   "::mlir::ArrayRef<Attribute>":$fieldFixedValues,
                    "ArrayRef<Value>":$initInputs)>,
 
     /// Constructor when you have the target module in hand.

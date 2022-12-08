@@ -101,6 +101,7 @@ struct PortInfo {
 struct FieldInfo {
   StringAttr name;
   Type type;
+  Attribute fixedValue; // Optional
   Location loc;
 
   StringRef getName() const { return name ? name.getValue() : ""; }

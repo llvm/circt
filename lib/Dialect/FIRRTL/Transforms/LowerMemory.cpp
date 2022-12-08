@@ -469,6 +469,7 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
       /*annotations=*/ArrayRef<Attribute>(),
       /*portAnnotations=*/ArrayRef<Attribute>(), /*lowerToBind=*/false,
       op.getInnerSymAttr(), /*fieldNames=*/ArrayRef<Attribute>(),
+      /*fieldFixedValues=*/ArrayRef<Attribute>(),
       /*initInputs=*/ArrayRef<Value>());
 
   // Update all users of the result of read ports
