@@ -128,7 +128,7 @@ def SpecialConstantOp : FIRRTLOp<"specialconstant",
 def AggregateConstantOp : FIRRTLOp<"aggregateconstant", [Pure, ConstantLike]> {
   let summary = "Produce a constant of a passive aggregate value";
   let description = [{
-    The constant operations produces a constant value of an aggregate type.  The
+    The constant operation produces a constant value of an aggregate type.  The
     type must be passive.  Clock and reset values are supported.
     For nested aggregates, embedded arrays are used.
     ```
