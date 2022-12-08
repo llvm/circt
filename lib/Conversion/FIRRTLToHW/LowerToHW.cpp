@@ -539,9 +539,6 @@ void FIRRTLModuleLowering::runOnOperation() {
             return signalPassFailure();
           state.oldToNewModuleMap[&op] = loweredMod;
         })
-        .Case<hw::HierPathOp>([&](auto nla) {
-          // Just drop it.
-        })
         .Default([&](Operation *op) {
           // We don't know what this op is.  If it has no illegal FIRRTL types,
           // we can forward the operation.  Otherwise, we emit an error and drop

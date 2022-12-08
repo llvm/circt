@@ -14,6 +14,8 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/SV/SVOps.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
@@ -48,6 +50,11 @@ using hw::InnerRefAttr;
 class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   void runOnOperation() override {
+    // Populate a CircuitNamespace that can be used to generate unique
+    // circuit-level symbols.
+    auto ns = CircuitNamespace(getOperation());
+    circuitNamespace = &ns;
+
     dataFlowClasses = llvm::EquivalenceClasses<Value, ValueComparator>();
     InstanceGraph &instanceGraph = getAnalysis<InstanceGraph>();
     SmallVector<RefResolveOp> resolveOps;
@@ -248,58 +255,41 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     if (!remoteOpPath)
       return failure();
     SmallVector<Attribute> refSendPath;
-    // Verbatim XMR begins with the Top level module.
-    refSendPath.push_back(refSendPathList[remoteOpPath.value()]
-                              .first.cast<InnerRefAttr>()
-                              .getModuleRef());
     SmallString<128> xmrString;
-    Attribute lastInnerRef;
     size_t lastIndex;
     unsigned index = 0;
     for (; remoteOpPath; ++index) {
       lastIndex = remoteOpPath.value();
       auto entr = refSendPathList[remoteOpPath.value()];
       refSendPath.push_back(entr.first);
-      lastInnerRef = entr.first;
       remoteOpPath = entr.second;
-      ("{{" + Twine(index) + "}}").toVector(xmrString);
-      xmrString += '.';
     }
-    ("{{" + Twine(index) + "}}").toVector(xmrString);
     auto iter = xmrPathSuffix.find(lastIndex);
+
     // If this xmr has a suffix string (internal path into a module, that is not
     // yet generated).
     if (iter != xmrPathSuffix.end())
       xmrString += ("." + iter->getSecond()).str();
-    if (auto vec = resolve.getResult().getType().dyn_cast<FVectorType>()) {
-      // If the RefType is a vector, then replace all its users with [i] suffix,
-      // instead of creatign a temp wire to the vector xmr, and then followup
-      // index into it.
-      bool hasOtherUses = false;
-      for (Operation *user : resolve.getResult().getUsers()) {
-        if (auto sub = dyn_cast<SubindexOp>(user)) {
-          auto index = sub.getIndex();
-          ImplicitLocOpBuilder builder(sub.getLoc(), sub);
-          auto xmrVerbatim = builder.create<VerbatimExprOp>(
-              vec.getElementType(), xmrString + "[" + Twine(index) + "]",
-              ValueRange{}, refSendPath);
-          sub.getResult().replaceAllUsesWith(xmrVerbatim);
-          opsToRemove.push_back(sub);
-        } else
-          hasOtherUses = true;
-      }
-      if (!hasOtherUses)
-        return success();
-    }
 
-    // The source of the dataflow for this RefResolveOp is established. So
-    // replace the RefResolveOp with the coresponding VerbatimExpr to
-    // generate the XMR.
+    // Compute the reference given to the SVXMRRefOp.  If the path is size 1,
+    // then this is just an InnerRefAttr (module--component pair).  Otehrwise,
+    // we need to use the symbol of a HierPathOp that stores the path.
     ImplicitLocOpBuilder builder(resolve.getLoc(), resolve);
-    auto xmrVerbatim =
-        builder.create<VerbatimExprOp>(resolve.getType().cast<FIRRTLType>(),
-                                       xmrString, ValueRange{}, refSendPath);
-    resolve.getResult().replaceAllUsesWith(xmrVerbatim);
+    Attribute ref;
+    if (refSendPath.size() == 1)
+      ref = refSendPath.front();
+    else
+      ref = FlatSymbolRefAttr::get(
+          getOrCreatePath(builder.getArrayAttr(refSendPath), builder)
+              .getSymNameAttr());
+
+    // Create the XMR op and replace users of the result of the resolve with the
+    // result of the XMR.
+    auto xmr = builder.create<sv::XMRRefOp>(
+        sv::InOutType::get(lowerType(resolve.getType())), ref, xmrString);
+    auto conversion = builder.create<mlir::UnrealizedConversionCastOp>(
+        resolve.getType(), xmr.getResult());
+    resolve.getResult().replaceAllUsesWith(conversion.getResult(0));
     return success();
   }
 
@@ -549,6 +539,50 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   /// Record the internal path to an external module or a memory.
   DenseMap<size_t, SmallString<128>> xmrPathSuffix;
+
+  CircuitNamespace *circuitNamespace;
+
+  /// A cache of already created HierPathOps.  This is used to avoid repeatedly
+  /// creating the same HierPathOp.
+  DenseMap<Attribute, hw::HierPathOp> pathCache;
+
+  /// The insertion point where the pass inserts HierPathOps.
+  OpBuilder::InsertPoint pathInsertPoint = {};
+
+  /// Return a HierPathOp for the provided pathArray.  This will either return
+  /// an existing HierPathOp or it will create and return a new one.
+  hw::HierPathOp getOrCreatePath(ArrayAttr pathArray,
+                                 ImplicitLocOpBuilder &builder) {
+    // Return an existing HierPathOp if one exists with the same path.
+    auto pathIter = pathCache.find(pathArray);
+    if (pathIter != pathCache.end())
+      return pathIter->second;
+
+    // Reset the insertion point after this function returns.
+    OpBuilder::InsertionGuard guard(builder);
+
+    // Set the insertion point to either the known location where the pass
+    // inserts HierPathOps or to the start of the circuit.
+    if (pathInsertPoint.isSet())
+      builder.restoreInsertionPoint(pathInsertPoint);
+    else
+      builder.setInsertionPointToStart(getOperation().getBodyBlock());
+
+    // Create the new HierPathOp and insert it into the pathCache.
+    hw::HierPathOp path =
+        pathCache
+            .insert({pathArray,
+                     builder.create<hw::HierPathOp>(
+                         circuitNamespace->newName("xmrPath"), pathArray)})
+            .first->second;
+
+    // Save the insertion point so other unique HierPathOps will be created
+    // after this one.
+    pathInsertPoint = builder.saveInsertionPoint();
+
+    // Return the new path.
+    return path;
+  }
 };
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createLowerXMRPass() {

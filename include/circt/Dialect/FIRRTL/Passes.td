@@ -607,6 +607,7 @@ def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
     This pass lowers RefType ops and ports to verbatim encoded XMRs.
   }];
   let constructor = "circt::firrtl::createLowerXMRPass()";
+  let dependentDialects = ["sv::SVDialect"];
 }
 
 def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::CircuitOp"> {
