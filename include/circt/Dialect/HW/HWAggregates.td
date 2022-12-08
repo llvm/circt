@@ -243,6 +243,7 @@ def StructExplodeOp : HWOp<"struct_explode", [Pure,
   let arguments = (ins StructType:$input);
   let results = (outs Variadic<HWNonInOutType>:$result);
   let hasCustomAssemblyFormat = 1;
+  let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
  }
 

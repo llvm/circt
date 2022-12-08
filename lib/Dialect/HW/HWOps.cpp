@@ -2148,15 +2148,26 @@ void StructExplodeOp::print(OpAsmPrinter &printer) {
   printer << " : " << getInput().getType();
 }
 
+LogicalResult StructExplodeOp::fold(ArrayRef<Attribute> operands,
+                                    SmallVectorImpl<OpFoldResult> &results) {
+  if (!operands[0])
+    return failure();
+  llvm::copy(operands[0].cast<ArrayAttr>(), std::back_inserter(results));
+  return success();
+}
+
 LogicalResult StructExplodeOp::canonicalize(StructExplodeOp op,
                                             PatternRewriter &rewriter) {
   auto *inputOp = op.getInput().getDefiningOp();
   auto elements = type_cast<StructType>(op.getInput().getType()).getElements();
+  auto result = failure();
   for (auto [element, res] : llvm::zip(elements, op.getResults())) {
-    if (auto foldResult = foldStructExtract(inputOp, element.name.str()))
-      res.replaceAllUsesWith(foldResult);
+    if (auto foldResult = foldStructExtract(inputOp, element.name.str())) {
+      rewriter.replaceAllUsesWith(res, foldResult);
+      result = success();
+    }
   }
-  return failure();
+  return result;
 }
 
 void StructExplodeOp::getAsmResultNames(
