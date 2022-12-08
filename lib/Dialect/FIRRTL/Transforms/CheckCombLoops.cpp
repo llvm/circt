@@ -33,8 +33,8 @@ struct Node {
   Node(const Node &rhs) = default;
   Node &operator=(const Node &rhs) = default;
   bool operator==(const Node &rhs) const {
-    return val == rhs.val &&
-           (fieldId == rhs.fieldId || fieldId == 0 || rhs.fieldId == 0);
+    return (val == rhs.val &&
+           fieldId == rhs.fieldId);
   }
   bool operator!=(const Node &rhs) const { return !(*this == rhs); }
   bool isValid() { return val != nullptr; }
@@ -74,7 +74,7 @@ class ModuleDFS {
 
 public:
   ModuleDFS(FModuleOp module, InstanceGraph &instanceGraph,
-            llvm::SmallDenseMap<Node, SmallVector<Node>> &portPaths)
+            llvm::MapVector<Node, SmallVector<Node>> &portPaths)
       : module(module), instanceGraph(instanceGraph), portPaths(portPaths) {}
 
   LogicalResult dfsFromNode(Node &node, Node inputArg) {
@@ -146,9 +146,10 @@ public:
       // Get all the leaf values, that correspond to the `fieldId` leaf of the
       // `baseVal`. This is required, because, mulitple subfield ops can refer
       // to the same field.
-      for (auto &leaf : valLeafOps[baseVal][fieldId])
-        children.emplace_back(
-            std::make_pair<Node, Operation *>(Node(leaf, 0), nullptr));
+      for (auto &leaf : valLeafOps[baseVal][fieldId]) {
+        children.push_back(
+            std::make_pair<Node, Operation *>(Node(leaf, 0), leaf.getDefiningOp()));
+      }
     } else
       for (auto &child : node.val.getUses()) {
         Operation *owner = child.getOwner();
@@ -268,6 +269,12 @@ public:
               auto fId = vecType.getFieldID(sub.getIndex());
               handleSub(res, node.fieldId + fId, res.getType().isGround());
             })
+            .Case<SubaccessOp>([&](SubaccessOp sub) {
+              auto vecType = sub.getInput().getType().cast<FVectorType>();
+              auto res = sub.getResult();
+              for (size_t index = 0 ; index < vecType.getNumElements() ; ++index)
+                handleSub(res, node.fieldId  + 1 + index *(vecType.getElementType().getMaxFieldID()+1), vecType.getElementType().isGround());
+                })
             .Default([&](auto op) {});
       }
     }
@@ -276,8 +283,8 @@ public:
         if (leafs.first != val)
           continue;
         for (auto sec : leafs.second) {
-          llvm::dbgs() << "\n node :" << leafs.first << "," << sec.getFirst();
-          for (auto leaf : sec.getSecond()) {
+          llvm::dbgs() << "\n node :" << leafs.first << "," << sec.first;
+          for (auto leaf : sec.second) {
             llvm::dbgs() << "\n leaf:" << leaf;
             auto fRef = getFieldRefFromValue(leaf);
             llvm::dbgs() << "\n getFieldRefFromValue:" << fRef.getValue()
@@ -297,14 +304,15 @@ public:
       SmallVector<Node> rootNodes;
 
       if (valType.isGround())
-        rootNodes.emplace_back(Node(val, 0));
+        rootNodes.push_back(Node(val, 0));
       else {
         // If aggregate type value, then each ground type leaf value is a root
         // for traversal.
         gatherAggregateLeafs(val);
-        for (auto leafIter : valLeafOps[val])
-          if (!leafIter.getSecond().empty())
-            rootNodes.emplace_back(Node(val, leafIter.getFirst()));
+        for (auto &leafIter : valLeafOps[val])
+          if (!leafIter.second.empty()) {
+            rootNodes.push_back(Node(val, leafIter.first));
+          }
       }
       while (!rootNodes.empty()) {
         auto node = rootNodes.pop_back_val();
@@ -348,10 +356,6 @@ public:
   }
 
   void printError(Node &node, NodeOpPair &childNode) {
-    if (!printCycle || currentPath.back() == node) {
-      printCycle = false;
-      return;
-    }
     if (childNode.second)
       TypeSwitch<Operation *>(childNode.second)
           .Case<InstanceOp>([&](InstanceOp ins) {
@@ -380,6 +384,10 @@ public:
             owner->emitRemark(
                 "this operation is part of the combinational cycle");
           });
+    if (!printCycle || currentPath.back() == node) {
+      printCycle = false;
+      return;
+    }
   }
 
   FModuleOp module;
@@ -387,9 +395,9 @@ public:
   // Set of visiting and visited nodes.
   llvm::SmallDenseSet<Node> visiting, visited;
   // Combinational paths between the ports of a module.
-  llvm::SmallDenseMap<Node, SmallVector<Node>> &portPaths;
+  llvm::MapVector<Node, SmallVector<Node>> &portPaths;
   // Map of all the leaf ground type values for a corresponding aggregate value.
-  llvm::MapVector<Value, DenseMap<size_t, SmallVector<Value>>> valLeafOps;
+  llvm::MapVector<Value, llvm::MapVector<size_t, SmallVector<Value>>> valLeafOps;
   SmallVector<Node> currentPath;
   bool printCycle = true;
   bool detectedCycle = false;
@@ -403,7 +411,7 @@ class CheckCombLoopsPass : public CheckCombLoopsBase<CheckCombLoopsPass> {
 public:
   void runOnOperation() override {
     auto &instanceGraph = getAnalysis<InstanceGraph>();
-    llvm::SmallDenseMap<Node, SmallVector<Node>> portPaths;
+    llvm::MapVector<Node, SmallVector<Node>> portPaths;
     // Traverse modules in a post order to make sure the combinational paths
     // between IOs of a module have been detected and recorded in `combPathsMap`
     // before we handle its parent modules.
