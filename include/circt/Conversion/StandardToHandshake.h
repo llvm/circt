@@ -185,18 +185,8 @@ LogicalResult lowerRegion(HandshakeLowering &hl, bool sourceConstants,
       return failure();
   }
 
-  // Fork/sink materialization. @todo: this should be removed and
-  // materialization should be run as a separate pass afterward initial dataflow
-  // conversion! However, connectToMemory has some hard-coded assumptions on the
-  // existence of fork/sink operations...
-  if (failed(partiallyLowerRegion(addSinkOps, hl.getContext(), hl.getRegion())))
-    return failure();
-
   if (failed(runPartialLowering(
           hl, &HandshakeLowering::connectConstantsToControl, sourceConstants)))
-    return failure();
-
-  if (failed(partiallyLowerRegion(addForkOps, hl.getContext(), hl.getRegion())))
     return failure();
 
   bool lsq = false;

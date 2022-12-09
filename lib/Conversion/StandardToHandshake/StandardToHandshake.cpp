@@ -1327,20 +1327,31 @@ LogicalResult HandshakeLowering::connectConstantsToControl(
   return success();
 }
 
-// Checks if merge predecessors are in appropriate block
-static Value getBlockControlValue(Block *block) {
-  // Get control-only value sent to the block terminator
-  for (Operation &op : *block) {
-    if (auto BranchOp = dyn_cast<handshake::BranchOp>(op))
-      if (BranchOp.isControl())
-        return BranchOp.getDataOperand();
-    if (auto BranchOp = dyn_cast<handshake::ConditionalBranchOp>(op))
-      if (BranchOp.isControl())
-        return BranchOp.getDataOperand();
-    if (auto endOp = dyn_cast<handshake::ReturnOp>(op))
-      return endOp.getOperands().back();
+struct BlockControlTerm {
+  Operation *op;
+  Value ctrlOperand;
+
+  friend bool operator==(const BlockControlTerm &lhs,
+                         const BlockControlTerm &rhs) {
+    // Check for membe-wise equality
+    return lhs.op == rhs.op && lhs.ctrlOperand == rhs.ctrlOperand;
   }
-  return nullptr;
+};
+
+static BlockControlTerm getBlockControlTerminator(Block *block) {
+  // Identify the control terminator operation and its control operand in the
+  // given block
+  for (Operation &op : *block) {
+    if (auto branchOp = dyn_cast<handshake::BranchOp>(op))
+      if (branchOp.isControl())
+        return {branchOp, branchOp.getDataOperand()};
+    if (auto branchOp = dyn_cast<handshake::ConditionalBranchOp>(op))
+      if (branchOp.isControl())
+        return {branchOp, branchOp.getDataOperand()};
+    if (auto endOp = dyn_cast<handshake::ReturnOp>(op))
+      return {endOp, endOp.getOperands().back()};
+  }
+  return {nullptr, nullptr};
 }
 
 static LogicalResult getOpMemRef(Operation *op, Value &out) {
@@ -1489,40 +1500,22 @@ static SmallVector<Value, 8> getResultsToMemory(Operation *op) {
 static void addLazyForks(Region &f, ConversionPatternRewriter &rewriter) {
 
   for (Block &block : f) {
-    Value ctrl = getBlockControlValue(&block);
+    Value ctrl = getBlockControlTerminator(&block).ctrlOperand;
     if (!ctrl.hasOneUse())
       insertFork(ctrl, true, rewriter);
   }
 }
 
-static void addMemOpForks(Region &f, ConversionPatternRewriter &rewriter) {
-
-  for (Block &block : f) {
-    for (Operation &op : block) {
-      if (isa<MemoryOp, ExternalMemoryOp, StartOp, ControlMergeOp>(op)) {
-        for (auto result : op.getResults()) {
-          // If there is a result and it is used more than once
-          if (!result.use_empty() && !result.hasOneUse())
-            insertFork(result, false, rewriter);
-        }
-      }
-    }
-  }
-}
-
-static void removeAllocOps(Region &f, ConversionPatternRewriter &rewriter) {
+static void removeUnusedAllocOps(Region &f,
+                                 ConversionPatternRewriter &rewriter) {
   std::vector<Operation *> opsToDelete;
 
   /// TODO(mortbopet): use explicit template parameter when moving to C++20
   auto remover = [&](auto allocType) {
-    for (auto allocOp : f.getOps<decltype(allocType)>()) {
-      assert(allocOp.getResult().hasOneUse());
-      for (auto &u : allocOp.getResult().getUses()) {
-        Operation *useOp = u.getOwner();
-        if (isa<SinkOp>(useOp))
-          opsToDelete.push_back(allocOp);
-      }
-    }
+    for (auto allocOp : f.getOps<decltype(allocType)>())
+      // Remove alloc operations whose result has no use
+      if (allocOp.getResult().use_empty())
+        opsToDelete.push_back(allocOp);
   };
 
   remover(memref::AllocOp());
@@ -1530,58 +1523,36 @@ static void removeAllocOps(Region &f, ConversionPatternRewriter &rewriter) {
   llvm::for_each(opsToDelete, [&](auto allocOp) { rewriter.eraseOp(allocOp); });
 }
 
-static void removeRedundantSinks(Region &f,
-                                 ConversionPatternRewriter &rewriter) {
-  std::vector<Operation *> redundantSinks;
-
-  for (Block &block : f)
-    for (Operation &op : block) {
-      if (!isa<SinkOp>(op))
-        continue;
-
-      if (!op.getOperand(0).hasOneUse() ||
-          isa<memref::AllocOp, memref::AllocaOp>(
-              op.getOperand(0).getDefiningOp()))
-        redundantSinks.push_back(&op);
-    }
-  for (unsigned i = 0, e = redundantSinks.size(); i != e; ++i) {
-    auto *op = redundantSinks[i];
-    rewriter.eraseOp(op);
-    // op->erase();
-  }
-}
-
 static void addJoinOps(ConversionPatternRewriter &rewriter,
-                       ArrayRef<Value> controlVals) {
-  for (auto val : controlVals) {
-    assert(val.hasOneUse());
-    auto srcOp = val.getDefiningOp();
+                       ArrayRef<BlockControlTerm> controlTerms) {
+  for (auto term : controlTerms) {
+    auto &[op, ctrl] = term;
+    auto *srcOp = ctrl.getDefiningOp();
 
     // Insert only single join per block
     if (!isa<JoinOp>(srcOp)) {
       rewriter.setInsertionPointAfter(srcOp);
-      Operation *newOp = rewriter.create<JoinOp>(srcOp->getLoc(), val);
-      for (auto &u : val.getUses())
-        if (u.getOwner() != newOp)
-          u.getOwner()->replaceUsesOfWith(val, newOp->getResult(0));
+      Operation *newJoin = rewriter.create<JoinOp>(srcOp->getLoc(), ctrl);
+      op->replaceUsesOfWith(ctrl, newJoin->getResult(0));
     }
   }
 }
 
-static std::vector<Value> getControlValues(ArrayRef<Operation *> memOps) {
-  std::vector<Value> vals;
+static std::vector<BlockControlTerm>
+getControlTerminators(ArrayRef<Operation *> memOps) {
+  std::vector<BlockControlTerm> terminators;
 
   for (Operation *op : memOps) {
     // Get block from which the mem op originates
     Block *block = op->getBlock();
-    // Add control signal from each block
-    // Use result which goes to the branch
-    Value res = getBlockControlValue(block);
-    assert(res != nullptr);
-    if (std::find(vals.begin(), vals.end(), res) == vals.end())
-      vals.push_back(res);
+    // Identify the control terminator in the block (must exist)
+    auto term = getBlockControlTerminator(block);
+    assert(term.op != nullptr && term.ctrlOperand != nullptr);
+    if (std::find(terminators.begin(), terminators.end(), term) ==
+        terminators.end())
+      terminators.push_back(term);
   }
-  return vals;
+  return terminators;
 }
 
 static void addValueToOperands(Operation *op, Value val) {
@@ -1607,8 +1578,8 @@ static LogicalResult setJoinControlInputs(ArrayRef<Operation *> memOps,
   // ops terminate before a new block starts)
   for (int i = 0, e = memOps.size(); i < e; ++i) {
     auto *op = memOps[i];
-    Value val = getBlockControlValue(op->getBlock());
-    auto srcOp = val.getDefiningOp();
+    Value ctrl = getBlockControlTerminator(op->getBlock()).ctrlOperand;
+    auto *srcOp = ctrl.getDefiningOp();
     if (!isa<JoinOp, StartOp>(srcOp)) {
       return srcOp->emitOpError("Op expected to be a JoinOp or StartOp");
     }
@@ -1675,13 +1646,15 @@ HandshakeLowering::connectToMemory(ConversionPatternRewriter &rewriter,
 
     std::vector<Value> operands;
 
-    // Get control values which need to connect to memory
-    std::vector<Value> controlVals = getControlValues(memory.second);
+    // Get control terminators whose control operand need to connect to memory
+    std::vector<BlockControlTerm> controlTerms =
+        getControlTerminators(memory.second);
 
     // In case of LSQ interface, set control values as inputs (used to
     // trigger allocation to LSQ)
     if (lsq)
-      operands.insert(operands.end(), controlVals.begin(), controlVals.end());
+      for (auto valOp : controlTerms)
+        operands.push_back(valOp.ctrlOperand);
 
     // Add load indices and store data+indices to memory operands
     // Count number of loads so that we can generate appropriate number of
@@ -1739,7 +1712,7 @@ HandshakeLowering::connectToMemory(ConversionPatternRewriter &rewriter,
     if (!lsq) {
       // Create Joins which join done signals from memory with the
       // control-only network
-      addJoinOps(rewriter, controlVals);
+      addJoinOps(rewriter, controlTerms);
 
       // Connect all load/store done signals to the join of their block
       // Ensure that the block terminates only after all its accesses have
@@ -1748,18 +1721,9 @@ HandshakeLowering::connectToMemory(ConversionPatternRewriter &rewriter,
       // user-determined)
       bool control = true;
 
-      if (control) {
-        if (setJoinControlInputs(memory.second, newOp, ld_count, newInd)
-                .failed())
-          return failure();
-
-      } else {
-        for (int i = 0, e = cntrl_count; i < e; ++i) {
-          rewriter.setInsertionPointAfter(newOp);
-          rewriter.create<SinkOp>(newOp->getLoc(),
-                                  newOp->getResult(ld_count + i));
-        }
-      }
+      if (control)
+        returnOnError(
+            setJoinControlInputs(memory.second, newOp, ld_count, newInd));
 
       // Set control-only inputs to each memory op
       // Ensure that op starts only after prior blocks have completed
@@ -1771,14 +1735,8 @@ HandshakeLowering::connectToMemory(ConversionPatternRewriter &rewriter,
 
   if (lsq)
     addLazyForks(r, rewriter);
-  else
-    addMemOpForks(r, rewriter);
 
-  removeAllocOps(r, rewriter);
-
-  // Loads and stores have some sinks which are no longer needed now that
-  // they connect to MemoryOp
-  removeRedundantSinks(r, rewriter);
+  removeUnusedAllocOps(r, rewriter);
   return success();
 }
 
@@ -1791,34 +1749,6 @@ static Operation *findStartOp(Region &region) {
 
   llvm::report_fatal_error("No handshake::StartOp in first block");
 }
-
-struct HandshakeCanonicalizePattern : public ConversionPattern {
-  using ConversionPattern::ConversionPattern;
-  LogicalResult match(Operation *op) const override {
-    // Ignore forks, ops without results, and branches (ops with succ blocks)
-    op->emitWarning("checking...");
-    return success();
-    if (op->getNumSuccessors() == 0 && op->getNumResults() > 0 &&
-        !isa<ForkOp>(op))
-      return success();
-    else
-      return failure();
-  }
-
-  void rewrite(Operation *op, ArrayRef<Value> /*operands*/,
-               ConversionPatternRewriter &rewriter) const override {
-    op->emitWarning("skipping...");
-    if (op->getNumSuccessors() == 0 && op->getNumResults() > 0 &&
-        !isa<ForkOp>(op)) {
-      op->emitWarning("skipping...");
-    }
-    for (auto result : op->getResults()) {
-      // If there is a result and it is used more than once
-      if (!result.use_empty() && !result.hasOneUse())
-        insertFork(result, false, rewriter);
-    }
-  }
-};
 
 LogicalResult
 HandshakeLowering::replaceCallOps(ConversionPatternRewriter &rewriter) {

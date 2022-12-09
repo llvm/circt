@@ -1,5 +1,5 @@
 // RUN: handshake-runner %s 2,3,4,5 | FileCheck %s
-// RUN: circt-opt -lower-std-to-handshake %s | handshake-runner - 2,3,4,5 | FileCheck %s
+// RUN: circt-opt -lower-std-to-handshake -handshake-materialize-forks-sinks %s | handshake-runner - 2,3,4,5 | FileCheck %s
 // CHECK: 2 2,3,4,5
 
 module {
