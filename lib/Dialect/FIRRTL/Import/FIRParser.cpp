@@ -2932,8 +2932,6 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
 /// module ::=
 ///        'extmodule' id ':' info? INDENT pohwist defname? parameter* DEDENT
 /// defname   ::= 'defname' '=' id NEWLINE
-/// module ::=
-///        'intmodule' id ':' info? INDENT pohwist parameter* DEDENT
 ///
 /// parameter ::= 'parameter' id '=' intLit NEWLINE
 /// parameter ::= 'parameter' id '=' StringLit NEWLINE
@@ -2943,7 +2941,6 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
                                           StringRef circuitTarget,
                                           unsigned indent) {
   bool isExtModule = getToken().is(FIRToken::kw_extmodule);
-  bool isIntModule = getToken().is(FIRToken::kw_intmodule);
   consumeToken();
   StringAttr name;
   SmallVector<PortInfo, 8> portList;
@@ -2981,7 +2978,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   }
 
   // If this is a normal module, parse the body into an FModuleOp.
-  if (!isExtModule && !isIntModule) {
+  if (!isExtModule) {
     auto moduleOp =
         builder.create<FModuleOp>(info.getLoc(), name, portList, annotations);
 
@@ -3004,7 +3001,6 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
         // If we got to the next module, then we're done.
       case FIRToken::kw_module:
       case FIRToken::kw_extmodule:
-      case FIRToken::kw_intmodule:
         return success();
 
       default:
@@ -3014,11 +3010,11 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     }
   }
 
-  // Otherwise, handle extmodule or intmodule specific features like parameters.
+  // Otherwise, handle extmodule specific features like parameters.
 
   // Parse a defname if present and is an extmodule.
   // TODO(firrtl spec): defname isn't documented at all, what is it?
-    StringRef defName;
+  StringRef defName;
   if (isExtModule) {
     if (consumeIf(FIRToken::kw_defname)) {
       if (parseToken(FIRToken::equal, "expected '=' in defname") ||
@@ -3091,10 +3087,8 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
 
   FModuleLike fmodule;
   if (isExtModule)
-  fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList,
-                                              defName, annotations);
-  else // isIntModule
-  fmodule = builder.create<FIntModuleOp>(info.getLoc(), name, portList);
+    fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList,
+                                           defName, annotations);
 
   fmodule->setAttr("parameters", builder.getArrayAttr(parameters));
 
@@ -3268,8 +3262,7 @@ ParseResult FIRCircuitParser::parseCircuit(
       return failure();
 
     case FIRToken::kw_module:
-    case FIRToken::kw_extmodule:
-    case FIRToken::kw_intmodule: {
+    case FIRToken::kw_extmodule: {
       auto indent = getIndentation();
       if (!indent.has_value())
         return emitError("'module' must be first token on its line"), failure();

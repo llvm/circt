@@ -53,29 +53,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-SAME: b: ui40 = 4294967296
     parameter b = 4294967296
 
-  ; CHECK-LABEL: firrtl.intmodule private @CIRCT_COVERLIB(in in: !firrtl.uint, out out: !firrtl.uint<8>)
-  ; CHECK-NOT: {
-  intmodule CIRCT_COVERLIB :
-    input in: UInt
-    output ,,, out ,,: ,, UInt,<,8,>  ; Commas are whitespace
-
-  ; CHECK-LABEL: firrtl.intmodule private @CIRCT_ASSERTLIB
-  ; CHECK-SAME:    <FORMAT: none = "xyz_timeout=%d\0A",
-  ; CHECK-SAME:     DEFAULT: ui32 = 0,
-  ; CHECK-SAME:     WIDTH: ui32 = 32,
-  ; CHECK-SAME:     DEPTH: f64 = 3.242000e+01>
-  ; CHECK-SAME:    (in in: !firrtl.uint,
-  ; CHECK-SAME:     out out: !firrtl.uint<8>)
-  ; CHECK-NOT: {
-  intmodule CIRCT_ASSERTLIB :
-    input in: UInt
-    output out: UInt<8>
-    parameter FORMAT = "xyz_timeout=%d\n"
-    parameter DEFAULT = 0
-    parameter WIDTH = 32
-    parameter DEPTH = 32.42
-
-
   ; Module to test type parsing.
 
   ; CHECK-LABEL: firrtl.module private @types(
