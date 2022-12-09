@@ -133,6 +133,10 @@ static bool isDuplicatableNullaryExpression(Operation *op) {
       return true;
   }
 
+  // Always duplicate XMRs into their use site.
+  if (isa<XMRRefOp>(op))
+    return true;
+
   // If this is a macro reference without side effects, allow duplication.
   if (isa<MacroRefExprOp>(op))
     return true;
