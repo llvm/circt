@@ -777,6 +777,7 @@ Example:
 | ---------- | ------ | -------------     |
 | class      | string | `circt.intrinsic` |
 | target     | string | Reference target  |
+| intrinsic  | string | Name of Intrinsic |
 
 Used to indicate an external module is really an intrinsic module.  This exists
 to allow a frontend to generate intrinsics without firrtl language support for

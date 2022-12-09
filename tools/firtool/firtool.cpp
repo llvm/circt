@@ -612,6 +612,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     return success();
   }
 
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerIntrinsicsPass());
+
   // TODO: Move this to the O1 pipeline.
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createDropNamesPass(preserveMode));

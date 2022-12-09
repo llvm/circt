@@ -888,6 +888,14 @@ LogicalResult NEQPrimOp::canonicalize(NEQPrimOp op, PatternRewriter &rewriter) {
 // Unary Operators
 //===----------------------------------------------------------------------===//
 
+OpFoldResult SizeOfIntrinsicOp::fold(llvm::ArrayRef<mlir::Attribute>) {
+  auto base = getInput().getType().dyn_cast<FIRRTLBaseType>();
+  auto w = base.getBitWidthOrSentinel();
+  if (w >= 0)
+    return getIntAttr(getType(), APInt(32, w));
+  return {};
+}
+
 OpFoldResult AsSIntPrimOp::fold(ArrayRef<Attribute> operands) {
   // No effect.
   if (getInput().getType() == getType())

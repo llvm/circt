@@ -102,6 +102,12 @@ def UInt1Type : FIRRTLDialectType<
     "UInt<1> or UInt", "::circt::firrtl::UIntType">,
   BuildableType<"UIntType::get($_builder.getContext(), 1)">;
 
+def UInt32Type : FIRRTLDialectType<
+    CPred<"$_self.isa<UIntType>() && "
+          "$_self.cast<UIntType>().getWidth() == 32">,
+    "UInt<32>", "::circt::firrtl::UIntType">,
+  BuildableType<"UIntType::get($_builder.getContext(), 32)">;
+
 def AsyncResetType : FIRRTLDialectType<
     CPred<"$_self.isa<AsyncResetType>()">,
     "AsyncReset", "::circt::firrtl::AsyncResetType">,

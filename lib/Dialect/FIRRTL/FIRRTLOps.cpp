@@ -2905,6 +2905,11 @@ LogicalResult impl::validateUnaryOpArguments(ValueRange operands,
   return success();
 }
 
+FIRRTLType SizeOfIntrinsicOp::inferUnaryReturnType(FIRRTLType input,
+                                                   Optional<Location> loc) {
+  return UIntType::get(input.getContext(), 32);
+}
+
 FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
                                               Optional<Location> loc) {
   auto base = input.dyn_cast<FIRRTLBaseType>();
@@ -3977,6 +3982,9 @@ void AndRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
+void SizeOfIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
 void AsAsyncResetPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }

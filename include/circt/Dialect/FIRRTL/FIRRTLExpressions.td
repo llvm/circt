@@ -470,6 +470,8 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
   let parseValidator = "impl::validateUnaryOpArguments";
 }
 
+def SizeOfIntrinsicOp : UnaryPrimOp<"sizeof", FIRRTLBaseType, UInt32Type>;
+
 def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLBaseType, SIntType>;
 def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLBaseType, UIntType>;
 def AsAsyncResetPrimOp
