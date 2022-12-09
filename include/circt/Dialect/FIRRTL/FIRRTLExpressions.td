@@ -623,6 +623,7 @@ def IsXIntrinsicOp : FIRRTLExprOp<"int.isX"> {
 
   let arguments = (ins FIRRTLBaseType:$arg);
   let results = (outs UInt1Type:$result);
+  let hasFolder = 1;
   let assemblyFormat = "$arg attr-dict `:` type($arg)";
 }
 

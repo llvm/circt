@@ -889,10 +889,17 @@ LogicalResult NEQPrimOp::canonicalize(NEQPrimOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult SizeOfIntrinsicOp::fold(llvm::ArrayRef<mlir::Attribute>) {
-  auto base = getInput().getType().dyn_cast<FIRRTLBaseType>();
+  auto base = getInput().getType().cast<FIRRTLBaseType>();
   auto w = base.getBitWidthOrSentinel();
   if (w >= 0)
     return getIntAttr(getType(), APInt(32, w));
+  return {};
+}
+
+OpFoldResult IsXIntrinsicOp::fold(llvm::ArrayRef<mlir::Attribute> operands) {
+  // No constant can be 'x' by definition.
+  if (auto cst = getConstant(operands[0]))
+    return getIntAttr(getType(), APInt(1, 0));
   return {};
 }
 

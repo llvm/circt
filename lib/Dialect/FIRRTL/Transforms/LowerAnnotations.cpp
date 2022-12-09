@@ -296,7 +296,7 @@ struct AnnoRecord {
 /// its passes, e.g., to set the output directory or to turn on a pass.
 /// Examples of these in the SFC are "firrtl.options.TargetDirAnnotation" to set
 /// the output directory or "firrtl.stage.RunFIRRTLTransformAnnotation" to
-/// caause the SFC to schedule a specified pass.  Instead of leaving these
+/// cause the SFC to schedule a specified pass.  Instead of leaving these
 /// floating or attaching them to the top-level MLIR module (which is a purer
 /// interpretation of "no target"), we choose to attach them to the Circuit even
 /// they do not "apply" to the Circuit.  This gives later passes a common place,
