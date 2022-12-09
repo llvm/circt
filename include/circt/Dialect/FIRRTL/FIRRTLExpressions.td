@@ -211,7 +211,7 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
     The subfield expression refers to a subelement of an expression with a
     bundle type.
     ```
-      %result = firrtl.subfield %input "fieldIndex" : t1, t2
+      %result = firrtl.subfield %input[field-name] : !input-type
     ```
     }];
 
@@ -220,10 +220,7 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
   let hasFolder = 1;
   let hasCanonicalizer = 1;
   let hasVerifier = 1;
-
-  // TODO: Could drop the result type, inferring it from the source.
-  let assemblyFormat =
-    "$input `(` $fieldIndex `)` attr-dict `:` functional-type($input, $result)";
+  let hasCustomAssemblyFormat = 1;
 
   let builders = [
     OpBuilder<(ins "Value":$input, "StringRef":$fieldName), [{
@@ -242,6 +239,12 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
     FieldRef getAccessedField() {
       return FieldRef(getInput(), getInput().getType().cast<BundleType>()
                                             .getFieldID(getFieldIndex()));
+    }
+
+    /// Return the name of the accessed field.
+    StringRef getFieldName() {
+      return getInput().getType().cast<BundleType>()
+        .getElementName(getFieldIndex());
     }
   }];
 }
