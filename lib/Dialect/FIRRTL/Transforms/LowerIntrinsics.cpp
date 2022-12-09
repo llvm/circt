@@ -83,7 +83,7 @@ void LowerIntrinsicsPass::runOnOperation() {
         continue;
       }
 
-      for (auto use : instancePathCache.instanceGraph[op]->uses()) {
+      for (auto *use : instancePathCache.instanceGraph[op]->uses()) {
         auto inst = cast<InstanceOp>(use->getInstance().getOperation());
         ImplicitLocOpBuilder builder(inst.getLoc(), inst);
         auto inputWire = builder.create<WireOp>(ports[0].type);
