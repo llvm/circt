@@ -385,45 +385,68 @@ static unsigned getBlockPredecessorCount(Block *block) {
 
 // Insert appropriate type of Merge CMerge for control-only path,
 // Merge for single-successor blocks, Mux otherwise
-Operation *HandshakeLowering::insertMerge(Block *block, Value val,
-                                          ConversionPatternRewriter &rewriter) {
+HandshakeLowering::MergeOpInfo
+HandshakeLowering::insertMerge(Block *block, Value val,
+                               BackedgeBuilder &edgeBuilder,
+                               ConversionPatternRewriter &rewriter) {
   unsigned numPredecessors = getBlockPredecessorCount(block);
+  auto insertLoc = block->front().getLoc();
+  SmallVector<Backedge> dataEdges;
+  SmallVector<Value> operands;
 
   // Control-only path originates from StartOp
-  if (!val.isa<BlockArgument>()) {
-    if (isa<StartOp>(val.getDefiningOp())) {
-      auto cmerge = rewriter.create<handshake::ControlMergeOp>(
-          block->front().getLoc(), val, numPredecessors);
-      setBlockEntryControl(block, cmerge.getResult());
-      return cmerge;
+  if (!val.isa<BlockArgument>() && isa<StartOp>(val.getDefiningOp())) {
+    for (unsigned i = 0; i < numPredecessors; i++) {
+      auto edge = edgeBuilder.get(rewriter.getNoneType());
+      dataEdges.push_back(edge);
+      operands.push_back(Value(edge));
     }
+    auto cmerge =
+        rewriter.create<handshake::ControlMergeOp>(insertLoc, operands);
+    setBlockEntryControl(block, cmerge.getResult());
+    return MergeOpInfo{cmerge, val, dataEdges};
   }
 
-  // If there are no block predecessors (i.e., entry block)
+  // If there is at most one block predecessor
   if (numPredecessors <= 1) {
-    SmallVector<Value> mergeOperands;
-    mergeOperands.append(2, val); // 2 dummy values used here due to
-                                  // hard-coded logic of reconnectMergeOps.
-    return rewriter.create<handshake::MergeOp>(block->front().getLoc(),
-                                               mergeOperands);
+    // Dummy merge used here due to hard-coded logic of reconnectMergeOps
+    if (numPredecessors == 0) {
+      operands.push_back(val);
+    } else {
+      auto edge = edgeBuilder.get(val.getType());
+      dataEdges.push_back(edge);
+      operands.push_back(Value(edge));
+    }
+    auto merge = rewriter.create<handshake::MergeOp>(insertLoc, operands);
+    return MergeOpInfo{merge, val, dataEdges};
   }
 
-  return rewriter.create<handshake::MuxOp>(block->front().getLoc(), val,
-                                           numPredecessors);
+  // Create a backedge for the index operand, and another one for each data
+  // operand
+  Backedge indexEdge = edgeBuilder.get(rewriter.getIndexType());
+  for (unsigned i = 0; i < numPredecessors; i++) {
+    auto edge = edgeBuilder.get(val.getType());
+    dataEdges.push_back(edge);
+    operands.push_back(Value(edge));
+  }
+  auto mux =
+      rewriter.create<handshake::MuxOp>(insertLoc, Value(indexEdge), operands);
+  return MergeOpInfo{mux, val, dataEdges, indexEdge};
 }
 
 HandshakeLowering::BlockOps
 HandshakeLowering::insertMergeOps(HandshakeLowering::BlockValues blockLiveIns,
                                   HandshakeLowering::blockArgPairs &mergePairs,
+                                  BackedgeBuilder &edgeBuilder,
                                   ConversionPatternRewriter &rewriter) {
   HandshakeLowering::BlockOps blockMerges;
   for (Block &block : r) {
     // Live-ins identified by liveness analysis
     rewriter.setInsertionPointToStart(&block);
     for (auto &val : blockLiveIns[&block]) {
-      Operation *newOp = insertMerge(&block, val, rewriter);
-      blockMerges[&block].push_back(newOp);
-      mergePairs[val] = newOp;
+      auto mergeInfo = insertMerge(&block, val, edgeBuilder, rewriter);
+      blockMerges[&block].push_back(mergeInfo);
+      mergePairs[val] = mergeInfo.op;
     }
     // Block arguments are not in livein list as they are defined inside the
     // block
@@ -432,9 +455,9 @@ HandshakeLowering::insertMergeOps(HandshakeLowering::BlockValues blockLiveIns,
       if (arg.getType().isa<mlir::MemRefType>())
         continue;
 
-      Operation *newOp = insertMerge(&block, arg, rewriter);
-      blockMerges[&block].push_back(newOp);
-      mergePairs[arg] = newOp;
+      auto mergeInfo = insertMerge(&block, arg, edgeBuilder, rewriter);
+      blockMerges[&block].push_back(mergeInfo);
+      mergePairs[arg] = mergeInfo.op;
     }
   }
   return blockMerges;
@@ -446,18 +469,21 @@ static bool blockHasSrcOp(Value val, Block *block) {
   if (val.isa<BlockArgument>())
     return false;
 
+  // If the value isn't a block argument, it should be one of the results of
+  // another operation
   auto *op = val.getDefiningOp();
-  assert(op != NULL);
+  assert(op != nullptr);
   return (op->getBlock() == block);
 }
 
 // Get value from predBlock which will be set as operand of op (merge)
-static Value getMergeOperand(Operation *op, Block *predBlock,
+static Value getMergeOperand(HandshakeLowering::MergeOpInfo mergeInfo,
+                             Block *predBlock,
                              HandshakeLowering::BlockOps blockMerges) {
   // Helper value (defining value of merge) to identify Merges which propagate
   // the same defining value
-  Value srcVal = op->getOperand(0);
-  Block *block = op->getBlock();
+  Value srcVal = mergeInfo.val;
+  Block *block = mergeInfo.op->getBlock();
 
   // Value comes from predecessor block (i.e., not an argument of this block)
   if (std::find(block->getArguments().begin(), block->getArguments().end(),
@@ -465,9 +491,9 @@ static Value getMergeOperand(Operation *op, Block *predBlock,
     // Value is not defined by operation in predBlock
     if (!blockHasSrcOp(srcVal, predBlock)) {
       // Find the corresponding Merge
-      for (Operation *predOp : blockMerges[predBlock])
-        if (predOp->getOperand(0) == srcVal)
-          return predOp->getResult(0);
+      for (auto &predMergeInfo : blockMerges[predBlock])
+        if (predMergeInfo.val == srcVal)
+          return predMergeInfo.op->getResult(0);
     } else
       return srcVal;
   }
@@ -478,13 +504,13 @@ static Value getMergeOperand(Operation *op, Block *predBlock,
     unsigned index = srcVal.cast<BlockArgument>().getArgNumber();
     Operation *termOp = predBlock->getTerminator();
     if (mlir::cf::CondBranchOp br = dyn_cast<mlir::cf::CondBranchOp>(termOp)) {
+      // Block should be one of the two destinations of the conditional branch
       if (block == br.getTrueDest())
         return br.getTrueOperand(index);
-      else {
-        assert(block == br.getFalseDest());
-        return br.getFalseOperand(index);
-      }
-    } else if (isa<mlir::cf::BranchOp>(termOp))
+      assert(block == br.getFalseDest());
+      return br.getFalseOperand(index);
+    }
+    if (isa<mlir::cf::BranchOp>(termOp))
       return termOp->getOperand(index);
   }
   return nullptr;
@@ -524,59 +550,57 @@ static ConditionalBranchOp getControlCondBranch(Block *block) {
   return nullptr;
 }
 
-static void reconnectMergeOps(Region &f,
+static void reconnectMergeOps(Region &r,
                               HandshakeLowering::BlockOps blockMerges,
                               HandshakeLowering::blockArgPairs &mergePairs) {
-  // All merge operands are initially set to original (defining) value.
-  // We here replace defining value with appropriate value from predecessor
-  // block. The predecessor can either be a merge, the original defining value,
-  // or a branch Operand. Operand(0) is helper defining value for identifying
-  // matching merges, it does not correspond to any predecessor block.
+  // At this point all merge-like operations have backedges as operands.
+  // We here replace all backedge values with appropriate value from
+  // predecessor block. The predecessor can either be a merge, the original
+  // defining value, or a branch operand.
 
-  for (Block &block : f) {
-    for (Operation *op : blockMerges[&block]) {
-      int count = 1;
-      // Set appropriate operand from predecessor block
+  for (Block &block : r) {
+    for (auto &mergeInfo : blockMerges[&block]) {
+      int operandIdx = 0;
+      // Set appropriate operand from each predecessor block
       for (auto *predBlock : block.getPredecessors()) {
-        Value mgOperand = getMergeOperand(op, predBlock, blockMerges);
+        Value mgOperand = getMergeOperand(mergeInfo, predBlock, blockMerges);
         assert(mgOperand != nullptr);
         if (!mgOperand.getDefiningOp()) {
           assert(mergePairs.count(mgOperand));
           mgOperand = mergePairs[mgOperand]->getResult(0);
         }
-        op->setOperand(count, mgOperand);
-        count++;
+        mergeInfo.dataEdges[operandIdx].setValue(mgOperand);
+        operandIdx++;
       }
+
       // Reconnect all operands originating from livein defining value through
       // corresponding merge of that block
       for (Operation &opp : block)
         if (!isa<MergeLikeOpInterface>(opp))
-          opp.replaceUsesOfWith(op->getOperand(0), op->getResult(0));
+          opp.replaceUsesOfWith(mergeInfo.val, mergeInfo.op->getResult(0));
     }
   }
 
-  // Disconnect original value (Operand(0), used as helper) from all merges
-  // If the original value must be a merge operand, it is still set as some
-  // subsequent operand
-  // If block has multiple predecessors, connect Muxes to ControlMerge
-  for (Block &block : f) {
-    unsigned numPredecessors = getBlockPredecessorCount(&block);
-
-    if (numPredecessors <= 1) {
-      for (Operation *op : blockMerges[&block])
-        op->eraseOperand(0);
-    } else {
+  // Connect select operand of muxes to control merge's index result in all
+  // blocks with more than one predecessor
+  for (Block &block : r) {
+    if (getBlockPredecessorCount(&block) > 1) {
       Operation *cntrlMg = getControlMerge(&block);
       assert(cntrlMg != nullptr);
-      cntrlMg->eraseOperand(0);
 
-      for (Operation *op : blockMerges[&block])
-        if (op != cntrlMg)
-          op->setOperand(0, cntrlMg->getResult(1));
+      for (auto &mergeInfo : blockMerges[&block]) {
+        if (mergeInfo.op != cntrlMg) {
+          // If the block has multiple predecessors, merge-like operation that
+          // are not the block's control merge must have an index operand (at
+          // this point, an index backedge)
+          assert(mergeInfo.indexEdge.has_value());
+          mergeInfo.indexEdge.value().setValue(cntrlMg->getResult(1));
+        }
+      }
     }
   }
 
-  removeBlockOperands(f);
+  removeBlockOperands(r);
 }
 
 LogicalResult
@@ -587,8 +611,13 @@ HandshakeLowering::addMergeOps(ConversionPatternRewriter &rewriter) {
   // blockLiveIns: live in variables of block
   BlockValues liveIns = livenessAnalysis(r);
 
+  // Create backedge builder to manage operands of merge operations between
+  // insertion and reconnection
+  BackedgeBuilder edgeBuilder{rewriter, r.front().front().getLoc()};
+
   // Insert merge operations
-  BlockOps mergeOps = insertMergeOps(liveIns, mergePairs, rewriter);
+  BlockOps mergeOps =
+      insertMergeOps(liveIns, mergePairs, edgeBuilder, rewriter);
 
   // Set merge operands and uses
   reconnectMergeOps(r, mergeOps, mergePairs);
@@ -803,9 +832,8 @@ BufferOp FeedForwardNetworkRewriter::buildSplitNetwork(
   // TODO how to size these?
   // Longest path in a CFG-DAG would be O(#blocks)
 
-  return rewriter.create<handshake::BufferOp>(
-      loc, rewriter.getI1Type(), bufferSize, cond,
-      /*bufferType=*/BufferTypeEnum::fifo);
+  return rewriter.create<handshake::BufferOp>(loc, cond, bufferSize,
+                                              BufferTypeEnum::fifo);
 }
 
 void FeedForwardNetworkRewriter::buildMergeNetwork(
@@ -1025,9 +1053,8 @@ BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
   // Create loop mux and the loop priming register. The loop mux will on select
   // "0" select external control, and internal control at "1". This convention
   // must be followed by the loop exit network.
-  auto primingRegister = rewriter->create<BufferOp>(
-      loc, rewriter->getI1Type(), /*size=*/1, loopPrimingInput,
-      /*bufferType=*/BufferTypeEnum::seq);
+  auto primingRegister =
+      rewriter->create<BufferOp>(loc, loopPrimingInput, 1, BufferTypeEnum::seq);
   // Initialize the priming register to path 0.
   primingRegister->setAttr("initValues", rewriter->getI64ArrayAttr({0}));
 
@@ -1256,7 +1283,8 @@ HandshakeLowering::addBranchOps(ConversionPatternRewriter &rewriter) {
 
     SmallVector<mlir::Block *, 8> results(block.getSuccessors());
     rewriter.setInsertionPointToEnd(&block);
-    rewriter.create<handshake::TerminatorOp>(termOp->getLoc(), results);
+    rewriter.create<handshake::TerminatorOp>(termOp->getLoc(),
+                                             ArrayRef<mlir::Block *>{results});
 
     // Remove the Operands to keep the single-use rule.
     for (int i = 0, e = termOp->getNumOperands(); i < e; ++i)
@@ -1278,9 +1306,11 @@ LogicalResult HandshakeLowering::connectConstantsToControl(
     for (auto constantOp : llvm::make_early_inc_range(
              r.template getOps<mlir::arith::ConstantOp>())) {
       rewriter.setInsertionPointAfter(constantOp);
+      auto value = constantOp.getValue();
       rewriter.replaceOpWithNewOp<handshake::ConstantOp>(
-          constantOp, constantOp.getValue(),
-          rewriter.create<handshake::SourceOp>(constantOp.getLoc()));
+          constantOp, value.getType(), value,
+          rewriter.create<handshake::SourceOp>(constantOp.getLoc(),
+                                               rewriter.getNoneType()));
     }
   } else {
     for (Block &block : r) {
@@ -1288,8 +1318,9 @@ LogicalResult HandshakeLowering::connectConstantsToControl(
       for (auto constantOp : llvm::make_early_inc_range(
                block.template getOps<mlir::arith::ConstantOp>())) {
         rewriter.setInsertionPointAfter(constantOp);
+        auto value = constantOp.getValue();
         rewriter.replaceOpWithNewOp<handshake::ConstantOp>(
-            constantOp, constantOp.getValue(), blockEntryCtrl);
+            constantOp, value.getType(), value, blockEntryCtrl);
       }
     }
   }
@@ -1458,9 +1489,9 @@ static SmallVector<Value, 8> getResultsToMemory(Operation *op) {
 static void addLazyForks(Region &f, ConversionPatternRewriter &rewriter) {
 
   for (Block &block : f) {
-    Value res = getBlockControlValue(&block);
-    if (!res.hasOneUse())
-      insertFork(res, true, rewriter);
+    Value ctrl = getBlockControlValue(&block);
+    if (!ctrl.hasOneUse())
+      insertFork(ctrl, true, rewriter);
   }
 }
 
