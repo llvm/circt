@@ -1042,10 +1042,10 @@ void ModuloSimplexScheduler::scheduleOperation(Operation *n) {
 
   for (unsigned ct : candTimes)
     if (succeeded(mrt.enter(n, ct))) {
-      auto fixedN = scheduleAt(stvN, stN);
+      auto fixedN = scheduleAt(stvN, ct);
       assert(succeeded(fixedN));
       (void)fixedN;
-      LLVM_DEBUG(dbgs() << "Success at t=" << stN << " " << *n << '\n');
+      LLVM_DEBUG(dbgs() << "Success at t=" << ct << " " << *n << '\n');
       return;
     }
 
