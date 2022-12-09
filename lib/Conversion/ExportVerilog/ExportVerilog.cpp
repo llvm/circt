@@ -2346,22 +2346,38 @@ SubExprInfo ExprEmitter::visitSV(XMRRefOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  auto globalRef =
-      cast<hw::HierPathOp>(state.symbolCache.getDefinition(op.getRefAttr()));
-  auto namepath = globalRef.getNamepathAttr().getValue();
-  auto *module = state.symbolCache.getDefinition(
-      cast<InnerRefAttr>(namepath.front()).getModule());
-  ps << getSymOpName(module);
-  for (auto sym : namepath) {
-    ps << ".";
-    auto innerRef = cast<InnerRefAttr>(sym);
+  auto refAttr = op.getRefAttr();
+
+  // The XMR is pointing at an InnerRefAttr.
+  if (auto innerRef = dyn_cast<InnerRefAttr>(refAttr)) {
     auto ref = state.symbolCache.getInnerDefinition(innerRef.getModule(),
                                                     innerRef.getName());
-    if (ref.hasPort()) {
-      ps << getPortVerilogName(ref.getOp(), ref.getPort());
-      continue;
+    ps << PPExtString(getSymOpName(
+              state.symbolCache.getDefinition(innerRef.getModule())))
+       << ".";
+    if (ref.hasPort())
+      ps << PPExtString(getPortVerilogName(ref.getOp(), ref.getPort()));
+    else
+      ps << PPExtString(getSymOpName(ref.getOp()));
+  } else {
+    // The XMR is pointing at a GlobalRef.
+    auto globalRef = cast<hw::HierPathOp>(state.symbolCache.getDefinition(
+        cast<FlatSymbolRefAttr>(refAttr).getAttr()));
+    auto namepath = globalRef.getNamepathAttr().getValue();
+    auto *module = state.symbolCache.getDefinition(
+        cast<InnerRefAttr>(namepath.front()).getModule());
+    ps << PPExtString(getSymOpName(module));
+    for (auto sym : namepath) {
+      ps << ".";
+      auto innerRef = cast<InnerRefAttr>(sym);
+      auto ref = state.symbolCache.getInnerDefinition(innerRef.getModule(),
+                                                      innerRef.getName());
+      if (ref.hasPort()) {
+        ps << PPExtString(getPortVerilogName(ref.getOp(), ref.getPort()));
+        continue;
+      }
+      ps << PPExtString(getSymOpName(ref.getOp()));
     }
-    ps << getSymOpName(ref.getOp());
   }
   auto leaf = op.getStringLeafAttr();
   if (leaf && leaf.size())
@@ -4700,22 +4716,37 @@ StringRef ModuleEmitter::getNameRemotely(Value value,
     // to share logic.
     if (auto xmrRef = dyn_cast<XMRRefOp>(wireInput)) {
       SmallString<32> xmrString;
-      auto globalRef = cast<hw::HierPathOp>(
-          state.symbolCache.getDefinition(xmrRef.getRefAttr()));
-      auto namepath = globalRef.getNamepathAttr().getValue();
-      auto *module = state.symbolCache.getDefinition(
-          cast<InnerRefAttr>(namepath.front()).getModule());
-      xmrString.append(getSymOpName(module));
-      for (auto sym : namepath) {
-        xmrString.append(".");
-        auto innerRef = cast<InnerRefAttr>(sym);
+      auto refAttr = xmrRef.getRefAttr();
+
+      if (auto innerRef = dyn_cast<InnerRefAttr>(refAttr)) {
         auto ref = state.symbolCache.getInnerDefinition(innerRef.getModule(),
                                                         innerRef.getName());
-        if (ref.hasPort()) {
+        auto *module = state.symbolCache.getDefinition(innerRef.getModule());
+        xmrString.append(getSymOpName(module));
+        xmrString.append(".");
+        if (ref.hasPort())
           xmrString.append(getPortVerilogName(ref.getOp(), ref.getPort()));
-          continue;
+        else
+          xmrString.append(getSymOpName(ref.getOp()));
+      } else {
+
+        auto globalRef = cast<hw::HierPathOp>(state.symbolCache.getDefinition(
+            cast<FlatSymbolRefAttr>(xmrRef.getRefAttr()).getAttr()));
+        auto namepath = globalRef.getNamepathAttr().getValue();
+        auto *module = state.symbolCache.getDefinition(
+            cast<InnerRefAttr>(namepath.front()).getModule());
+        xmrString.append(getSymOpName(module));
+        for (auto sym : namepath) {
+          xmrString.append(".");
+          auto innerRef = cast<InnerRefAttr>(sym);
+          auto ref = state.symbolCache.getInnerDefinition(innerRef.getModule(),
+                                                          innerRef.getName());
+          if (ref.hasPort()) {
+            xmrString.append(getPortVerilogName(ref.getOp(), ref.getPort()));
+            continue;
+          }
+          xmrString.append(getSymOpName(ref.getOp()));
         }
-        xmrString.append(getSymOpName(ref.getOp()));
       }
       auto leaf = xmrRef.getStringLeafAttr();
       if (leaf && leaf.size())

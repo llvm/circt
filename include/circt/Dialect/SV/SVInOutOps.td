@@ -114,7 +114,7 @@ def XMRRefOp : SVOp<"xmr.ref", []> {
     hierarchical paths cannot be known statically and may change.
   }];
   let arguments = (
-    ins SymbolNameAttr:$ref,
+    ins NameRefAttr:$ref,
         DefaultValuedAttr<StrAttr, "{}">:$stringLeaf
   );
   let results = (outs InOutType:$result);
