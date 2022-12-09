@@ -213,6 +213,14 @@ static bool lowerCirctPlusArgValue(InstancePathCache &instancePathCache,
   return true;
 }
 
+std::pair<const char *, std::function<bool(InstancePathCache &, FExtModuleOp)>>
+    intrinsics[] = {
+        {"circt.sizeof", lowerCirctSizeof},
+        {"circt.isX", lowerCirctIsX},
+        {"circt.plusargs.test", lowerCirctPlusArgTest},
+        {"circt.plusargs.value", lowerCirctPlusArgValue},
+};
+
 // This is the main entrypoint for the lowering pass.
 void LowerIntrinsicsPass::runOnOperation() {
   size_t numFailures = 0;
@@ -229,44 +237,24 @@ void LowerIntrinsicsPass::runOnOperation() {
       ++numFailures;
       continue;
     }
-    if (intname.getValue().equals("circt.sizeof")) {
-      if (lowerCirctSizeof(instancePathCache, op)) {
-        ++numConverted;
-        op.erase();
-      } else {
-        ++numFailures;
+    bool found = false;
+    for (auto intrinsic : intrinsics) {
+      if (intname.getValue().equals(intrinsic.first)) {
+        found = true;
+        if (intrinsic.second(instancePathCache, op)) {
+          ++numConverted;
+          op.erase();
+        } else {
+          ++numFailures;
+        }
+        break;
       }
-      continue;
     }
-    if (intname.getValue().equals("circt.isX")) {
-      if (lowerCirctIsX(instancePathCache, op)) {
-        ++numConverted;
-        op.erase();
-      } else {
-        ++numFailures;
-      }
-      continue;
-    }
-    if (intname.getValue().equals("circt.plusargs.test")) {
-      if (lowerCirctPlusArgTest(instancePathCache, op)) {
-        ++numConverted;
-        op.erase();
-      } else {
-        ++numFailures;
-      }
-      continue;
-    }
-    if (intname.getValue().equals("circt.plusargs.value")) {
-      if (lowerCirctPlusArgValue(instancePathCache, op)) {
-        ++numConverted;
-        op.erase();
-      } else {
-        ++numFailures;
-      }
-      continue;
+    if (!found) {
+      op.emitError("Unknown intrinsic '") << intname << "'";
+      ++numFailures;
     }
   }
-
   if (numFailures)
     signalPassFailure();
   if (!numConverted)
