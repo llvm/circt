@@ -62,7 +62,7 @@ static bool lowerCirctSizeof(InstancePathCache &instancePathCache,
     mod.emitError("circt.sizeof second port not a UInt<32>");
     return false;
   }
-  if (mod.getParameters() && mod.getParameters().size()) {
+  if (mod.getParameters() && !mod.getParameters().empty()) {
     mod.emitError("circt.sizeof has parameters");
     return false;
   }
@@ -100,7 +100,7 @@ static bool lowerCirctIsX(InstancePathCache &instancePathCache,
     mod.emitError("circt.isX second port not a UInt<1>");
     return false;
   }
-  if (mod.getParameters() && mod.getParameters().size()) {
+  if (mod.getParameters() && !mod.getParameters().empty()) {
     mod.emitError("circt.isX has parameters");
     return false;
   }
@@ -238,7 +238,7 @@ void LowerIntrinsicsPass::runOnOperation() {
       continue;
     }
     bool found = false;
-    for (auto intrinsic : intrinsics) {
+    for (const auto &intrinsic : intrinsics) {
       if (intname.getValue().equals(intrinsic.first)) {
         found = true;
         if (intrinsic.second(instancePathCache, op)) {
