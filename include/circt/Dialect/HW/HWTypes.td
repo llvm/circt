@@ -87,7 +87,11 @@ def HWInnerRefAttr : Attr<
 /// A flat symbol reference or a reference to a name within a module.
 def NameRefAttr : Attr<
   CPred<"$_self.isa<::mlir::FlatSymbolRefAttr, ::circt::hw::InnerRefAttr>()">,
-  "name reference attribute">;
+  "name reference attribute">{
+  let returnType = "::mlir::Attribute";
+  let convertFromStorage = "$_self";
+  let valueType = NoneType;
+}
 
 // Like a FlatSymbolRefArrayAttr, but can also refer to names inside modules.
 def NameRefArrayAttr : TypedArrayAttrBase<NameRefAttr,
