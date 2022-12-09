@@ -141,7 +141,7 @@ firrtl.circuit "Foo" {
     // CHECK: node subaccess = vector[ui1]
     %bundle = firrtl.wire : !firrtl.bundle<a: uint, b flip: uint>
     %vector = firrtl.wire : !firrtl.vector<uint, 42>
-    %subfield_tmp = firrtl.subfield %bundle(0) : (!firrtl.bundle<a: uint, b flip: uint>) -> !firrtl.uint
+    %subfield_tmp = firrtl.subfield %bundle[a] : !firrtl.bundle<a: uint, b flip: uint>
     %subindex_tmp = firrtl.subindex %vector[19] : !firrtl.vector<uint, 42>
     %subaccess_tmp = firrtl.subaccess %vector[%ui1] : !firrtl.vector<uint, 42>, !firrtl.uint<1>
     %subfield = firrtl.node %subfield_tmp : !firrtl.uint
@@ -260,9 +260,9 @@ firrtl.circuit "Foo" {
     %shrPrimOp = firrtl.node %shrPrimOp_tmp : !firrtl.uint
 
     %MyMem_a, %MyMem_b, %MyMem_c = firrtl.mem Undefined {depth = 8, name = "MyMem", portNames = ["a", "b", "c"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<4>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<4>, mask: uint<1>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, rdata flip: uint<4>, wmode: uint<1>, wdata: uint<4>, wmask: uint<1>>
-    %MyMem_a_clk = firrtl.subfield %MyMem_a(2) : (!firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<4>>) -> !firrtl.clock
-    %MyMem_b_clk = firrtl.subfield %MyMem_b(2) : (!firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<4>, mask: uint<1>>) -> !firrtl.clock
-    %MyMem_c_clk = firrtl.subfield %MyMem_c(2) : (!firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, rdata flip: uint<4>, wmode: uint<1>, wdata: uint<4>, wmask: uint<1>>) -> !firrtl.clock
+    %MyMem_a_clk = firrtl.subfield %MyMem_a[clk] : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<4>>
+    %MyMem_b_clk = firrtl.subfield %MyMem_b[clk] : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<4>, mask: uint<1>>
+    %MyMem_c_clk = firrtl.subfield %MyMem_c[clk] : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, rdata flip: uint<4>, wmode: uint<1>, wdata: uint<4>, wmask: uint<1>>
     firrtl.connect %MyMem_a_clk, %someClock : !firrtl.clock, !firrtl.clock
     firrtl.connect %MyMem_b_clk, %someClock : !firrtl.clock, !firrtl.clock
     firrtl.connect %MyMem_c_clk, %someClock : !firrtl.clock, !firrtl.clock
