@@ -34,14 +34,14 @@ circuit MyModule :  @[CIRCUIT.scala 127]
   module Subexpressions :
     input in: UInt
     output auto : { out_0 : UInt<1> }
-    ; CHECK: %0 = firrtl.subfield %auto(0) {{.*}} loc("Field":173:49)
+    ; CHECK: %0 = firrtl.subfield %auto[out_0] {{.*}} loc("Field":173:49)
 
     ; CHECK: %out_0 = firrtl.wire
     wire out_0 : { member : { 0 : { reset : UInt<1>}}}
 
-    ; CHECK: %1 = firrtl.subfield %out_0(0) {{.*}} loc("Field":173:49)
-    ; CHECK: %2 = firrtl.subfield %1(0) {{.*}} loc("Field":173:49)
-    ; CHECK: %3 = firrtl.subfield %2(0) : {{.*}} loc("Field":173:49)
+    ; CHECK: %1 = firrtl.subfield %out_0[member] {{.*}} loc("Field":173:49)
+    ; CHECK: %2 = firrtl.subfield %1["0"] {{.*}} loc("Field":173:49)
+    ; CHECK: %3 = firrtl.subfield %2[reset] : {{.*}} loc("Field":173:49)
     ; CHECK: firrtl.strictconnect %0, %3 : {{.*}} loc("Field":173:49)
     auto.out_0 <- out_0.member.0.reset @[Field 173:49]
 

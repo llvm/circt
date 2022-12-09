@@ -1,7 +1,7 @@
 // RUN: circt-opt -lower-handshake-to-firrtl %s | FileCheck %s
 
 // CHECK:           firrtl.module @handshake_source_0ins_1outs_ctrl(out %[[VAL_0:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) {
-// CHECK:             %[[VAL_1:.*]] = firrtl.subfield %[[VAL_0]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
+// CHECK:             %[[VAL_1:.*]] = firrtl.subfield %[[VAL_0]][valid] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
 // CHECK:             %[[VAL_2:.*]] = firrtl.constant 1 : !firrtl.uint<1>
 // CHECK:             firrtl.connect %[[VAL_1]], %[[VAL_2]] : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:           }

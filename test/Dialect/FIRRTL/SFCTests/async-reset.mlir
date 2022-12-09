@@ -25,7 +25,7 @@ firrtl.circuit "AsyncResetConst" {
 
     // Constant check should see through subfield connects.
     %bundle0 = firrtl.wire : !firrtl.bundle<a: uint<8>>
-    %bundle0.a = firrtl.subfield %bundle0(0) : (!firrtl.bundle<a: uint<8>>) -> !firrtl.uint<8>
+    %bundle0.a = firrtl.subfield %bundle0[a] : !firrtl.bundle<a: uint<8>>
     firrtl.connect %bundle0.a, %c0_ui : !firrtl.uint<8>, !firrtl.uint<8>
     %2 = firrtl.regreset %clock, %reset, %bundle0 : !firrtl.asyncreset, !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint<8>>
 
