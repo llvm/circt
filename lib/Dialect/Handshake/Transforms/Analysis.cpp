@@ -28,8 +28,8 @@ using namespace handshake;
 using namespace mlir;
 
 static bool isControlOp(Operation *op) {
-  return op->hasAttr("control") &&
-         op->getAttrOfType<BoolAttr>("control").getValue();
+  auto controlInterface = dyn_cast<handshake::ControlInterface>(op);
+  return controlInterface && controlInterface.isControl();
 }
 
 namespace {

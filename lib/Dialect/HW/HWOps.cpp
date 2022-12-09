@@ -350,6 +350,74 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
 }
 
 //===----------------------------------------------------------------------===//
+// AggregateConstantOp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult checkAttributes(Operation *op, Attribute attr, Type type) {
+  // If this is a type alias, get the underlying type.
+  if (auto typeAlias = type.dyn_cast<TypeAliasType>())
+    type = typeAlias.getCanonicalType();
+
+  if (auto structType = type.dyn_cast<StructType>()) {
+    auto arrayAttr = attr.dyn_cast<ArrayAttr>();
+    if (!arrayAttr)
+      return op->emitOpError("expected array attribute for constant of type ")
+             << type;
+    for (auto [attr, fieldInfo] :
+         llvm::zip(arrayAttr.getValue(), structType.getElements())) {
+      if (failed(checkAttributes(op, attr, fieldInfo.type)))
+        return failure();
+    }
+  } else if (auto arrayType = type.dyn_cast<ArrayType>()) {
+    auto arrayAttr = attr.dyn_cast<ArrayAttr>();
+    if (!arrayAttr)
+      return op->emitOpError("expected array attribute for constant of type ")
+             << type;
+    auto elementType = arrayType.getElementType();
+    for (auto attr : arrayAttr.getValue()) {
+      if (failed(checkAttributes(op, attr, elementType)))
+        return failure();
+    }
+  } else if (auto arrayType = type.dyn_cast<UnpackedArrayType>()) {
+    auto arrayAttr = attr.dyn_cast<ArrayAttr>();
+    if (!arrayAttr)
+      return op->emitOpError("expected array attribute for constant of type ")
+             << type;
+    auto elementType = arrayType.getElementType();
+    for (auto attr : arrayAttr.getValue()) {
+      if (failed(checkAttributes(op, attr, elementType)))
+        return failure();
+    }
+  } else if (auto enumType = type.dyn_cast<EnumType>()) {
+    auto stringAttr = attr.dyn_cast<StringAttr>();
+    if (!stringAttr)
+      return op->emitOpError("expected string attribute for constant of type ")
+             << type;
+  } else if (auto intType = type.dyn_cast<IntegerType>()) {
+    // Check the attribute kind is correct.
+    auto intAttr = attr.dyn_cast<IntegerAttr>();
+    if (!intAttr)
+      return op->emitOpError("expected integer attribute for constant of type ")
+             << type;
+    // Check the bitwidth is correct.
+    if (intAttr.getValue().getBitWidth() != intType.getWidth())
+      return op->emitOpError("hw.constant attribute bitwidth "
+                             "doesn't match return type");
+  } else {
+    return op->emitOpError("unknown element type") << type;
+  }
+  return success();
+}
+
+LogicalResult AggregateConstantOp::verify() {
+  return checkAttributes(*this, getFieldsAttr(), getType());
+}
+
+OpFoldResult AggregateConstantOp::fold(ArrayRef<Attribute> operands) {
+  return getFieldsAttr();
+}
+
+//===----------------------------------------------------------------------===//
 // ParamValueOp
 //===----------------------------------------------------------------------===//
 
@@ -1540,6 +1608,12 @@ LogicalResult ArrayCreateOp::verify() {
   return success();
 }
 
+OpFoldResult ArrayCreateOp::fold(ArrayRef<Attribute> constants) {
+  if (llvm::any_of(constants, [](Attribute attr) { return !attr; }))
+    return {};
+  return ArrayAttr::get(getContext(), constants);
+}
+
 // Check whether an integer value is an offset from a base.
 bool hw::isOffset(Value base, Value index, uint64_t offset) {
   if (auto constBase = base.getDefiningOp<hw::ConstantOp>()) {
@@ -1816,6 +1890,16 @@ void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
   build(b, state, ArrayType::get(elemTy, resultSize), values);
 }
 
+OpFoldResult ArrayConcatOp::fold(ArrayRef<Attribute> constants) {
+  SmallVector<Attribute> array;
+  for (size_t i = 0, e = getNumOperands(); i < e; ++i) {
+    if (!constants[i])
+      return {};
+    llvm::copy(constants[i].cast<ArrayAttr>(), std::back_inserter(array));
+  }
+  return ArrayAttr::get(getContext(), array);
+}
+
 // Flatten a concatenation of array creates into a single create.
 static bool flattenConcatOp(ArrayConcatOp op, PatternRewriter &rewriter) {
   for (auto input : op.getInputs())
@@ -2024,6 +2108,12 @@ LogicalResult StructCreateOp::verify() {
   return success();
 }
 
+OpFoldResult StructCreateOp::fold(ArrayRef<Attribute> constants) {
+  if (llvm::any_of(constants, [](Attribute attr) { return !attr; }))
+    return {};
+  return ArrayAttr::get(getContext(), constants);
+}
+
 //===----------------------------------------------------------------------===//
 // StructExplodeOp
 //===----------------------------------------------------------------------===//
@@ -2058,15 +2148,26 @@ void StructExplodeOp::print(OpAsmPrinter &printer) {
   printer << " : " << getInput().getType();
 }
 
+LogicalResult StructExplodeOp::fold(ArrayRef<Attribute> operands,
+                                    SmallVectorImpl<OpFoldResult> &results) {
+  if (!operands[0])
+    return failure();
+  llvm::copy(operands[0].cast<ArrayAttr>(), std::back_inserter(results));
+  return success();
+}
+
 LogicalResult StructExplodeOp::canonicalize(StructExplodeOp op,
                                             PatternRewriter &rewriter) {
   auto *inputOp = op.getInput().getDefiningOp();
   auto elements = type_cast<StructType>(op.getInput().getType()).getElements();
+  auto result = failure();
   for (auto [element, res] : llvm::zip(elements, op.getResults())) {
-    if (auto foldResult = foldStructExtract(inputOp, element.name.str()))
-      res.replaceAllUsesWith(foldResult);
+    if (auto foldResult = foldStructExtract(inputOp, element.name.str())) {
+      rewriter.replaceAllUsesWith(res, foldResult);
+      result = success();
+    }
   }
-  return failure();
+  return result;
 }
 
 void StructExplodeOp::getAsmResultNames(
@@ -2220,6 +2321,17 @@ void StructInjectOp::print(OpAsmPrinter &printer) {
   printer << " : " << getInput().getType();
 }
 
+OpFoldResult StructInjectOp::fold(ArrayRef<Attribute> operands) {
+  if (!operands[0] || !operands[1])
+    return {};
+  SmallVector<Attribute> array;
+  llvm::copy(operands[0].cast<ArrayAttr>(), std::back_inserter(array));
+  StructType structType = getInput().getType();
+  auto index = *structType.getFieldIndex(getField());
+  array[index] = operands[1];
+  return ArrayAttr::get(getContext(), array);
+}
+
 LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
                                            PatternRewriter &rewriter) {
   // Canonicalize multiple injects into a create op and eliminate overwrites.
@@ -2340,6 +2452,19 @@ void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
 // the index. If the array is constructed from a constant by a bitcast
 // operation, we can fold into a constant.
 OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
+  if (operands[0]) {
+    auto arrayAttr = operands[0].cast<ArrayAttr>();
+    // Constant array index.
+    if (operands[1]) {
+      auto index = operands[1].cast<IntegerAttr>().getValue();
+      return arrayAttr[arrayAttr.size() - 1 - index.getZExtValue()];
+    }
+    // If all elements of the array are the same, we can return any element of
+    // array.
+    if (!arrayAttr.empty() && llvm::all_equal(arrayAttr))
+      return arrayAttr[0];
+  }
+
   // array_get(bitcast(c), i) -> c[i*w+w-1:i*w]
   if (auto bitcast = getInput().getDefiningOp<hw::BitcastOp>()) {
     auto intTy = getType().dyn_cast<IntegerType>();

@@ -238,9 +238,9 @@ StringRef getPortVerilogName(Operation *module, PortInfo port) {
 /// MemoryEffects should be checked if a client cares.
 bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
-  if (isa<ReadInOutOp, ArrayIndexInOutOp, IndexedPartSelectInOutOp,
-          StructFieldInOutOp, IndexedPartSelectOp, ParamValueOp, XMROp,
-          XMRRefOp, SampledOp, EnumConstantOp>(op))
+  if (isa<ReadInOutOp, AggregateConstantOp, ArrayIndexInOutOp,
+          IndexedPartSelectInOutOp, StructFieldInOutOp, IndexedPartSelectOp,
+          ParamValueOp, XMROp, XMRRefOp, SampledOp, EnumConstantOp>(op))
     return true;
 
   // All HW combinational logic ops and SV expression ops are Verilog
@@ -380,7 +380,7 @@ static StringRef getVerilogDeclWord(Operation *op,
   }
   if (isa<WireOp>(op))
     return "wire";
-  if (isa<ConstantOp, LocalParamOp, ParamValueOp>(op))
+  if (isa<ConstantOp, AggregateConstantOp, LocalParamOp, ParamValueOp>(op))
     return "localparam";
 
   // Interfaces instances use the name of the declared interface.
@@ -584,6 +584,11 @@ static bool isExpressionUnableToInline(Operation *op) {
   // StructCreateOp needs to be assigning to a named temporary so that types
   // are inferred properly by verilog
   if (isa<StructCreateOp>(op))
+    return true;
+
+  // Aggregate literal syntax only works in an assignment expression, where
+  // the Verilog expression's type is determined by the LHS.
+  if (auto aggConstantOp = dyn_cast<AggregateConstantOp>(op))
     return true;
 
   // Verbatim with a long string should be emitted as an out-of-line declration.
@@ -1875,6 +1880,9 @@ private:
         ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
   }
 
+  /// Print an APInt constant.
+  SubExprInfo printConstantScalar(APInt &value, IntegerType type);
+
   SubExprInfo visitSV(GetModportOp op);
   SubExprInfo visitSV(ReadInterfaceSignalOp op);
   SubExprInfo visitSV(XMROp op);
@@ -1908,6 +1916,7 @@ private:
   // Other
   using TypeOpVisitor::visitTypeOp;
   SubExprInfo visitTypeOp(ConstantOp op);
+  SubExprInfo visitTypeOp(AggregateConstantOp op);
   SubExprInfo visitTypeOp(BitcastOp op);
   SubExprInfo visitTypeOp(ParamValueOp op);
   SubExprInfo visitTypeOp(ArraySliceOp op);
@@ -2406,23 +2415,8 @@ SubExprInfo ExprEmitter::visitSV(ConstantZOp op) {
   return {Unary, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
-  if (hasSVAttributes(op))
-    emitError(op, "SV attributes emission is unimplemented for the op");
-
+SubExprInfo ExprEmitter::printConstantScalar(APInt &value, IntegerType type) {
   bool isNegated = false;
-  const APInt &value = op.getValue();
-
-  // We currently only allow zero width values to be handled as special cases in
-  // the various operations that may come across them. If we reached this point
-  // in the emitter, the value should be considered illegal to emit.
-  if (value.getBitWidth() == 0) {
-    emitOpError(op, "will not emit zero width constants in the general case");
-    ps << "<<unsupported zero width constant: "
-       << PPExtString(op->getName().getStringRef()) << ">>";
-    return {Unary, IsUnsigned};
-  }
-
   // If this is a negative signed number and not MININT (e.g. -128), then print
   // it as a negated positive number.
   if (signPreference == RequireSigned && value.isNegative() &&
@@ -2431,7 +2425,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
     isNegated = true;
   }
 
-  ps.addAsString(op.getType().cast<IntegerType>().getWidth());
+  ps.addAsString(type.getWidth());
   ps << "'";
 
   // Emit this as a signed constant if the caller would prefer that.
@@ -2449,6 +2443,85 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
   }
   ps << valueStr;
   return {Unary, signPreference == RequireSigned ? IsSigned : IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  auto value = op.getValue();
+  // We currently only allow zero width values to be handled as special cases in
+  // the various operations that may come across them. If we reached this point
+  // in the emitter, the value should be considered illegal to emit.
+  if (value.getBitWidth() == 0) {
+    emitOpError(op, "will not emit zero width constants in the general case");
+    ps << "<<unsupported zero width constant: "
+       << PPExtString(op->getName().getStringRef()) << ">>";
+    return {Unary, IsUnsigned};
+  }
+
+  return printConstantScalar(value, op.getType().cast<IntegerType>());
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(AggregateConstantOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  // If the constant op as a whole is zero-width, it is an error.
+  auto type = op.getType();
+  assert(!isZeroBitType(type) && "zero-bit types not allowed at this point");
+
+  std::function<void(Attribute, Type)> printAggregate = [&](Attribute attr,
+                                                            Type type) {
+    if (auto arrayType = hw::type_dyn_cast<ArrayType>(type)) {
+      auto elementType = arrayType.getElementType();
+      emitBracedList(
+          attr.cast<ArrayAttr>(), [&]() { ps << "'{"; },
+          [&](Attribute attr) { printAggregate(attr, elementType); },
+          [&]() { ps << "}"; });
+    } else if (auto arrayType = hw::type_dyn_cast<UnpackedArrayType>(type)) {
+      auto elementType = arrayType.getElementType();
+      emitBracedList(
+          attr.cast<ArrayAttr>(), [&]() { ps << "'{"; },
+          [&](Attribute attr) { printAggregate(attr, elementType); },
+          [&]() { ps << "}"; });
+    } else if (auto structType = hw::type_dyn_cast<StructType>(type)) {
+      // Only emit elements with non-zero bit width.
+      // TODO: Ideally we should emit zero bit values as comments, e.g. `{/*a:
+      // ZeroBit,*/ b: foo, /* c: ZeroBit*/ d: bar}`. However it's tedious to
+      // nicely emit all edge cases hence currently we just elide zero bit
+      // values.
+      emitBracedList(
+          llvm::make_filter_range(
+              llvm::zip(structType.getElements(), attr.cast<ArrayAttr>()),
+              [](const auto &fieldAndAttr) {
+                // Elide zero bit elements.
+                return !isZeroBitType(std::get<0>(fieldAndAttr).type);
+              }),
+          [&]() { ps << "'{"; },
+          [&](const auto &fieldAndAttr) {
+            ps.scopedBox(PP::ibox2, [&]() {
+              const auto &[field, attr] = fieldAndAttr;
+              ps << PPExtString(emitter.getVerilogStructFieldName(field.name))
+                 << ":" << PP::space;
+              printAggregate(attr, field.type);
+            });
+          },
+          [&]() { ps << "}"; });
+    } else if (auto enumType = hw::type_dyn_cast<EnumType>(type)) {
+      assert(false && "unsupported");
+      auto value = attr.cast<StringAttr>();
+      ps << value.getValue();
+    } else if (auto intType = hw::type_dyn_cast<IntegerType>(type)) {
+      auto value = attr.cast<IntegerAttr>().getValue();
+      printConstantScalar(value, intType);
+    } else {
+      assert(false && "unknown constant kind");
+    }
+  };
+
+  printAggregate(op.getFields(), op.getType());
+  return {Symbol, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(ParamValueOp op) {
