@@ -3015,12 +3015,10 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   // Parse a defname if present and is an extmodule.
   // TODO(firrtl spec): defname isn't documented at all, what is it?
   StringRef defName;
-  if (isExtModule) {
-    if (consumeIf(FIRToken::kw_defname)) {
-      if (parseToken(FIRToken::equal, "expected '=' in defname") ||
-          parseId(defName, "expected defname name"))
-        return failure();
-    }
+  if (consumeIf(FIRToken::kw_defname)) {
+    if (parseToken(FIRToken::equal, "expected '=' in defname") ||
+        parseId(defName, "expected defname name"))
+      return failure();
   }
 
   SmallVector<Attribute> parameters;
@@ -3085,10 +3083,8 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     parameters.push_back(ParamDeclAttr::get(nameId, value));
   }
 
-  FModuleLike fmodule;
-  if (isExtModule)
-    fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList,
-                                           defName, annotations);
+  auto fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList,
+                                              defName, annotations);
 
   fmodule->setAttr("parameters", builder.getArrayAttr(parameters));
 
