@@ -3270,7 +3270,13 @@ FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
 // Verif Expressions
 //===----------------------------------------------------------------------===//
 
-FIRRTLType IsXVerifOp::inferReturnType(ValueRange operands,
+FIRRTLType IsXIntrinsicOp::inferReturnType(ValueRange operands,
+                                       ArrayRef<NamedAttribute> attrs,
+                                       Optional<Location> loc) {
+  return UIntType::get(operands[0].getContext(), 1);
+}
+
+FIRRTLType PlusArgsTestIntrinsicOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
                                        Optional<Location> loc) {
   return UIntType::get(operands[0].getContext(), 1);
@@ -3977,13 +3983,18 @@ void GTPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void HeadPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-void IsXVerifOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void IsXIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void PlusArgsValueIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void PlusArgsTestIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void LEQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-
 void LTPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }

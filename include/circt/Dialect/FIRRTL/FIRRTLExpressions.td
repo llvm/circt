@@ -470,7 +470,7 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
   let parseValidator = "impl::validateUnaryOpArguments";
 }
 
-def SizeOfIntrinsicOp : UnaryPrimOp<"sizeof", FIRRTLBaseType, UInt32Type>;
+def SizeOfIntrinsicOp : UnaryPrimOp<"int.sizeof", FIRRTLBaseType, UInt32Type>;
 
 def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLBaseType, SIntType>;
 def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLBaseType, UIntType>;
@@ -612,10 +612,10 @@ def TailPrimOp : PrimOp<"tail"> {
 // Verif and SV specific
 //===----------------------------------------------------------------------===//
 
-def IsXVerifOp : FIRRTLExprOp<"verif_isX"> {
+def IsXIntrinsicOp : FIRRTLExprOp<"int.isX"> {
   let summary = "Test for 'x";
   let description = [{
-    The verif.isX expression checks that the operand is not a verilog literal
+    The int.isX expression checks that the operand is not a verilog literal
     'x.  Firrtl doesn't have a notion of 'x per-se, but x can come in to the
     system from external modules and from SV constructs.  Verification
     constructs need to explicitly test for 'x.
@@ -623,9 +623,24 @@ def IsXVerifOp : FIRRTLExprOp<"verif_isX"> {
 
   let arguments = (ins FIRRTLBaseType:$arg);
   let results = (outs UInt1Type:$result);
-  let assemblyFormat =
-    "$arg attr-dict `:` qualified(type($arg))";
+  let assemblyFormat = "$arg attr-dict `:` type($arg)";
+}
 
+def PlusArgsTestIntrinsicOp : FIRRTLExprOp<"int.plusargs.test"> {
+  let summary = "Verilog $test$plusargs call";
+
+  let arguments = (ins StrAttr:$formatString);
+  let results = (outs UInt1Type:$found);
+  let assemblyFormat = "$formatString attr-dict";
+}
+
+def PlusArgsValueIntrinsicOp 
+: FIRRTLOp<"int.plusargs.value", [HasCustomSSAName, Pure]> {
+  let summary = "Verilog $value$plusargs call";
+
+  let arguments = (ins StrAttr:$formatString);
+  let results = (outs UInt1Type:$found, AnyType:$result);
+  let assemblyFormat = "$formatString attr-dict `:` type($result)";
 }
 
 //===----------------------------------------------------------------------===//

@@ -999,7 +999,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       printf(clock, enable, "assertNotX:%d:value must not be X!", value)
     ; CHECK: [[TMP1:%.+]] = firrtl.not %cond
     ; CHECK: [[TMP2:%.+]] = firrtl.xorr %value
-    ; CHECK: [[TMP3:%.+]] = firrtl.verif_isX
+    ; CHECK: [[TMP3:%.+]] = firrtl.int.isX
     ; CHECK: [[TMP4:%.+]] = firrtl.not
     ; CHECK: [[TMP5:%.+]] = firrtl.or [[TMP1]], [[TMP4]]
     ; CHECK: firrtl.assert %clock, [[TMP5]], %enable, "value must not be X!"

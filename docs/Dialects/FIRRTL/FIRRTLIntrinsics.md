@@ -32,3 +32,47 @@ type, including uninfered types.
 | i          | input     | Any      | value whose type is to be returned  |
 | size       | output    | UInt<32> | Size of type of i                   |
 
+### circt.isX
+
+Tests if the value is a literal `x`.  Firrtl doesn't have a notion of 'x per-se, 
+but x can come in to the system from external modules and from SV constructs.  
+Verification constructs need to explicitly test for 'x.
+
+| Parameter  | Type   | Description                                       |
+| ---------- | ------ | -------------                                     |
+
+| Port       | Direction | Type     | Description                         |
+| ---------- | --------- | -------- | ----------------------------------- |
+| i          | input     | Any      | value test                          |
+| found      | output    | UInt<1>  | i is `x`                            |
+
+### circt.plusargs.value
+
+Tests and extracts a value from simulator command line options with system 
+verilog $value$plusargs.  This is described in SystemVerilog 2012 section 21.6.
+
+We do not currently check that the format string substitution flag matches the
+type of the result.
+
+| Parameter  | Type   | Description                                       |
+| ---------- | ------ | -------------                                     |
+| FORMAT     | string | Format string per SV 21.6                         |
+
+| Port       | Direction | Type     | Description                         |
+| ---------- | --------- | -------- | ----------------------------------- |
+| found      | output    | UInt<1>  | found in args                       |
+| result     | output    | AnyType  | found in args                       |
+
+
+### circt.plusargs.test
+
+Tests simulator command line options with system verilog $test$plusargs.  This
+is described in SystemVerilog 2012 section 21.6.
+
+| Parameter  | Type   | Description                                       |
+| ---------- | ------ | -------------                                     |
+| FORMAT     | string | Format string per SV 21.6                         |
+
+| Port       | Direction | Type     | Description                         |
+| ---------- | --------- | -------- | ----------------------------------- |
+| found      | output    | UInt<1>  | found in args                       |

@@ -37,6 +37,91 @@ struct LowerIntrinsicsPass : public LowerIntrinsicsBase<LowerIntrinsicsPass> {
 };
 } // end anonymous namespace
 
+static bool lowerCirctSizeof(InstancePathCache& instancePathCache, FExtModuleOp mod) {
+      auto ports = mod.getPorts();
+      if (ports.size() != 2) {
+        mod.emitError("circt.sizeof does not have 2 ports");
+        return false;
+      }
+      if (!ports[0].getName().equals("i")) {
+        mod.emitError("circt.sizeof first port named '")
+            << ports[0].getName() << "' instead of 'i'";
+        return false;
+      }
+      if (!ports[1].getName().equals("size")) {
+        mod.emitError("circt.sizeof second port named '")
+            << ports[0].getName() << "' instead of 'size'";
+return false;
+      }
+      if (!ports[1].type.isa<UIntType>()) {
+        mod.emitError("circt.sizeof second port not a UInt<32>");
+return false;
+      }
+      if (ports[1].type.cast<UIntType>().getWidth() != 32) {
+        mod.emitError("circt.sizeof second port not a UInt<32>");
+return false;
+      }
+      if (mod.getParameters() && mod.getParameters().size()) {
+        mod.emitError("circt.sizeof has parameters");
+        return false;
+      }
+
+      for (auto *use : instancePathCache.instanceGraph[mod]->uses()) {
+        auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+        ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+        auto inputWire = builder.create<WireOp>(ports[0].type);
+        inst.getResult(0).replaceAllUsesWith(inputWire);
+        auto size = builder.create<SizeOfIntrinsicOp>(inputWire);
+        inst.getResult(1).replaceAllUsesWith(size);
+        inst.erase();
+      }
+  return true;
+
+}
+
+static bool lowerCirctIsX(InstancePathCache& instancePathCache, FExtModuleOp mod) {
+      auto ports = mod.getPorts();
+      if (ports.size() != 2) {
+        mod.emitError("circt.sizeof does not have 2 ports");
+        return false;
+      }
+      if (!ports[0].getName().equals("i")) {
+        mod.emitError("circt.isX first port named '")
+            << ports[0].getName() << "' instead of 'i'";
+        return false;
+      }
+      if (!ports[1].getName().equals("found")) {
+        mod.emitError("circt.isX second port named '")
+            << ports[0].getName() << "' instead of 'found'";
+return false;
+      }
+      if (!ports[1].type.isa<UIntType>()) {
+        mod.emitError("circt.isX second port not a UInt<1>");
+return false;
+      }
+      if (mod.getParameters() && mod.getParameters().size()) {
+        mod.emitError("circt.isX has parameters");
+        return false;
+      }
+
+      for (auto *use : instancePathCache.instanceGraph[mod]->uses()) {
+        auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+        ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+        auto inputWire = builder.create<WireOp>(ports[0].type);
+        inst.getResult(0).replaceAllUsesWith(inputWire);
+        auto size = builder.create<IsXIntrinsicOp>(inputWire);
+        inst.getResult(1).replaceAllUsesWith(size);
+        inst.erase();
+      }
+  return true;
+
+}
+//      if (!mod.getParameters() || mod.getParameters().size() != 1) {
+//        mod.emitError("circt.isX doesn't have a single parameter named FORMAT");
+//        return false;
+//      }
+
+
 // This is the main entrypoint for the lowering pass.
 void LowerIntrinsicsPass::runOnOperation() {
   size_t numFailures = 0;
@@ -54,47 +139,24 @@ void LowerIntrinsicsPass::runOnOperation() {
       continue;
     }
     if (intname.getValue().equals("circt.sizeof")) {
-      auto ports = op.getPorts();
-      if (ports.size() != 2) {
-        op.emitError("circt.sizeof does not have 2 ports");
-        ++numFailures;
-        continue;
+      if (lowerCirctSizeof(instancePathCache, op)) {
+        ++numConverted;      
+        op.erase();
+      } else {
+      ++numFailures;
       }
-      if (!ports[0].getName().equals("i")) {
-        op.emitError("circt.sizeof first port named '")
-            << ports[0].getName() << "' instead of 'i'";
-        ++numFailures;
-        continue;
-      }
-      if (!ports[1].getName().equals("size")) {
-        op.emitError("circt.sizeof second port named '")
-            << ports[0].getName() << "' instead of 'size'";
-        ++numFailures;
-        continue;
-      }
-      if (!ports[1].type.isa<UIntType>()) {
-        op.emitError("circt.sizeof second port not a UInt<32>");
-        ++numFailures;
-        continue;
-      }
-      if (ports[1].type.cast<UIntType>().getWidth() != 32) {
-        op.emitError("circt.sizeof second port not a UInt<32>");
-        ++numFailures;
-        continue;
-      }
-
-      for (auto *use : instancePathCache.instanceGraph[op]->uses()) {
-        auto inst = cast<InstanceOp>(use->getInstance().getOperation());
-        ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-        auto inputWire = builder.create<WireOp>(ports[0].type);
-        inst.getResult(0).replaceAllUsesWith(inputWire);
-        auto size = builder.create<SizeOfIntrinsicOp>(inputWire);
-        inst.getResult(1).replaceAllUsesWith(size);
-        inst.erase();
-      }
-      op.erase();
-      ++numConverted;
+      continue;
     }
+        if (intname.getValue().equals("circt.isX")) {
+      if (lowerCirctIsX(instancePathCache, op)) {
+        ++numConverted;      
+        op.erase();
+      } else {
+      ++numFailures;
+      }
+      continue;
+    }
+
   }
 
   if (numFailures)
