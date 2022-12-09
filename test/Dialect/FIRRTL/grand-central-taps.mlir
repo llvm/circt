@@ -93,9 +93,9 @@ firrtl.circuit "TestHarness" attributes {
       writeLatency = 1 : i32
     } : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
     // CHECK: firrtl.mem sym @[[gct_sym_7:.+]] Undefined
-    %mem_addr = firrtl.subfield %mem[0] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-    %mem_en = firrtl.subfield %mem[1] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-    %mem_clk = firrtl.subfield %mem[2] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    %mem_addr = firrtl.subfield %mem[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    %mem_en = firrtl.subfield %mem[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    %mem_clk = firrtl.subfield %mem[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
     firrtl.connect %mem_addr, %in : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %mem_en, %in : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %mem_clk, %clock : !firrtl.clock, !firrtl.clock
@@ -501,10 +501,10 @@ firrtl.circuit "Top" {
     %bar_0 = firrtl.reg sym @bar_0 %clock  {annotations = [{circt.nonlocal = @nla, class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 1 : i64, portID = 0 : i64}, {circt.nonlocal = @nla_0, class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 0 : i64, portID = 0 : i64}]} : !firrtl.uint<1>
     // CHECK:  %bar_0 = firrtl.reg sym @[[bar_0:.+]] %clock  : !firrtl.uint<1>
     %bar_out_MPORT = firrtl.mem sym @bar Undefined  {depth = 1 : i64, modName = "bar_ext", name = "bar", portNames = ["out_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-    %0 = firrtl.subfield %bar_out_MPORT[0] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-    %1 = firrtl.subfield %bar_out_MPORT[1] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-    %2 = firrtl.subfield %bar_out_MPORT[2] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-    %3 = firrtl.subfield %bar_out_MPORT[3] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    %0 = firrtl.subfield %bar_out_MPORT[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    %1 = firrtl.subfield %bar_out_MPORT[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    %2 = firrtl.subfield %bar_out_MPORT[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    %3 = firrtl.subfield %bar_out_MPORT[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
     firrtl.strictconnect %0, %c0_ui1 : !firrtl.uint<1>
     firrtl.strictconnect %1, %c1_ui1 : !firrtl.uint<1>
     firrtl.strictconnect %2, %clock : !firrtl.clock

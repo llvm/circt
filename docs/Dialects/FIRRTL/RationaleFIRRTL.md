@@ -880,7 +880,7 @@ This is parsed into the following MLIR.  Here, only `a.a` is invalidated:
 
 ``` mlir
 firrtl.module @Foo(out %a: !firrtl.bundle<a: uint<1>, b: flip<uint<1>>>) {
-  %0 = firrtl.subfield %a["a"] : !firrtl.bundle<a: uint<1>, b: flip<uint<1>>>
+  %0 = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<1>, b: flip<uint<1>>>
   %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
   firrtl.connect %0, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
