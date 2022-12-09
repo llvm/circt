@@ -127,7 +127,7 @@ firrtl.module @WriteToSubfield(in %clock: !firrtl.clock, in %addr: !firrtl.uint<
   %ramport_data, %ramport_port = chirrtl.memoryport Infer %ram {name = "ramport"} : (!chirrtl.cmemory<bundle<a: uint<1>, b: uint<1>>, 256>) -> (!firrtl.bundle<a: uint<1>, b: uint<1>>, !chirrtl.cmemoryport)
   chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
 
-  %ramport_b = firrtl.subfield %ramport_data(1) : (!firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.uint<1>
+  %ramport_b = firrtl.subfield %ramport_data[1] : !firrtl.bundle<a: uint<1>, b: uint<1>>
   // Check that only the subfield of the mask is written to.
   // CHECK: [[DATA:%.*]] = firrtl.subfield %ram_ramport(3)
   // CHECK: [[MASK:%.*]] = firrtl.subfield %ram_ramport(4)
@@ -154,12 +154,12 @@ firrtl.module @ReadAndWriteToSubfield(in %clock: !firrtl.clock, in %addr: !firrt
   // CHECK: firrtl.strictconnect [[WMASK_A]], %c1_ui1
   // CHECK: firrtl.strictconnect [[WMODE]], %c1_ui1
   // CHECK: firrtl.connect [[WDATA_A]], %in
-  %port_a = firrtl.subfield %ramport_data(0) : (!firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.uint<1>
+  %port_a = firrtl.subfield %ramport_data[0] : !firrtl.bundle<a: uint<1>, b: uint<1>>
   firrtl.connect %port_a, %in : !firrtl.uint<1>, !firrtl.uint<1>
 
   // CHECK: [[RDATA_B:%.*]] = firrtl.subfield [[RDATA]](1) : (!firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.uint<1>
   // CHECK: firrtl.connect %out, [[RDATA_B]] : !firrtl.uint<1>, !firrtl.uint<1>
-  %port_b = firrtl.subfield %ramport_data(1) : (!firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.uint<1>
+  %port_b = firrtl.subfield %ramport_data[1] : !firrtl.bundle<a: uint<1>, b: uint<1>>
   firrtl.connect %out, %port_b : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
@@ -266,7 +266,7 @@ firrtl.module @EnableInference1(in %p: !firrtl.uint<1>, in %addr: !firrtl.uint<4
 // aggregate, we do not perform regular enable inference.
 // CHECK-LABEL: firrtl.module @EnableInference2
 firrtl.module @EnableInference2(in %clock: !firrtl.clock, in %io: !firrtl.bundle<addr: uint<3>>, out %out: !firrtl.uint<8>) {
-  %0 = firrtl.subfield %io(0) : (!firrtl.bundle<addr: uint<3>>) -> !firrtl.uint<3>
+  %0 = firrtl.subfield %io[0] : !firrtl.bundle<addr: uint<3>>
   %mem = chirrtl.seqmem Undefined  : !chirrtl.cmemory<uint<8>, 8>
   %read_data, %read_port = chirrtl.memoryport Infer %mem  {name = "read"} : (!chirrtl.cmemory<uint<8>, 8>) -> (!firrtl.uint<8>, !chirrtl.cmemoryport)
   chirrtl.memoryport.access %read_port[%0], %clock : !chirrtl.cmemoryport, !firrtl.uint<3>, !firrtl.clock

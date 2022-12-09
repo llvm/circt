@@ -129,7 +129,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %out_0 = firrtl.wire interesting_name : !firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>
     wire out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
 
-    ; CHECK: [[A:%.+]] = firrtl.subfield %out_0(0) : (!firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>) -> !firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>
+    ; CHECK: [[A:%.+]] = firrtl.subfield %out_0[0] : !firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>
     ; CHECK: [[B:%.+]] = firrtl.subfield [[A]](0) : (!firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>) -> !firrtl.bundle<clock: clock, reset: uint<1>>
     ; CHECK: [[C:%.+]] = firrtl.subfield [[B]](1) : (!firrtl.bundle<clock: clock, reset: uint<1>>) -> !firrtl.uint<1>
     ; CHECK: firrtl.strictconnect %auto, [[C]] : !firrtl.uint<1>
@@ -924,10 +924,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output b: {a: Reset, b: Reset}
 
     b <= a
-    ; CHECK: %1 = firrtl.subfield %a(0) : (!firrtl.bundle<a: uint<1>, b: asyncreset>) -> !firrtl.uint<1>
+    ; CHECK: %1 = firrtl.subfield %a[0] : !firrtl.bundle<a: uint<1>, b: asyncreset>
     ; CHECK: firrtl.connect %0, %1 : !firrtl.reset, !firrtl.uint<1>
-    ; CHECK: %2 = firrtl.subfield %b(1) : (!firrtl.bundle<a: reset, b: reset>) -> !firrtl.reset
-    ; CHECK: %3 = firrtl.subfield %a(1) : (!firrtl.bundle<a: uint<1>, b: asyncreset>) -> !firrtl.asyncreset
+    ; CHECK: %2 = firrtl.subfield %b[1] : !firrtl.bundle<a: reset, b: reset>
+    ; CHECK: %3 = firrtl.subfield %a[1] : !firrtl.bundle<a: uint<1>, b: asyncreset>
     ; CHECK: firrtl.connect %2, %3 : !firrtl.reset, !firrtl.asyncreset
 
   ; CHECK-LABEL: @WhenEncodedVerification

@@ -616,7 +616,7 @@ firrtl.circuit "SubfieldOpFieldError" {
   firrtl.module @SubfieldOpFieldError() {
     %w = firrtl.wire  : !firrtl.bundle<a: uint<2>, b: uint<2>>
     // expected-error @+1 {{}}
-    %w_a = firrtl.subfield %w(2) : (!firrtl.bundle<a : uint<2>, b : uint<2>>) -> !firrtl.uint<2>
+    %w_a = firrtl.subfield %w[2] : !firrtl.bundle<a : uint<2>, b : uint<2>>
   }
 }
 

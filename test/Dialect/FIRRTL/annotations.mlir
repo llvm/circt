@@ -860,14 +860,14 @@ firrtl.circuit "GCTInterface"  attributes {annotations = [{unrelatedAnnotation}]
 // CHECK-SAME: %a: !firrtl.uint<1>
 // CHECK:      %r = firrtl.reg  %clock  : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
 // CHECK:      %[[view_companion_view__2refPort:.+]], %[[view_companion_view__2refPort_1:.+]], %[[view_companion_view__1refPort:.+]], %[[view_companion_view__0refPort:.+]], %[[view_companion_view_portrefPort:.+]] = firrtl.instance view_companion  @view_companion(in {{.*}}: !firrtl.ref<uint<1>>, in {{.*}}: !firrtl.ref<uint<1>>, in {{.*}}: !firrtl.ref<uint<1>>, in {{.*}}: !firrtl.ref<uint<1>>, in {{.*}}: !firrtl.ref<uint<1>>)
-// CHECK:      %0 = firrtl.subfield %r(1) : (!firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>) -> !firrtl.vector<uint<1>, 2>
+// CHECK:      %0 = firrtl.subfield %r[1] : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
 // CHECK:      %1 = firrtl.subindex %0[0] : !firrtl.vector<uint<1>, 2>
-// CHECK:      %2 = firrtl.subfield %r(1) : (!firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>) -> !firrtl.vector<uint<1>, 2>
+// CHECK:      %2 = firrtl.subfield %r[1] : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
 // CHECK:      %3 = firrtl.subindex %2[1] : !firrtl.vector<uint<1>, 2>
-// CHECK:      %4 = firrtl.subfield %r(0) : (!firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>) -> !firrtl.bundle<_0: uint<1>, _1: uint<1>>
-// CHECK:      %5 = firrtl.subfield %4(1) : (!firrtl.bundle<_0: uint<1>, _1: uint<1>>) -> !firrtl.uint<1>
-// CHECK:      %6 = firrtl.subfield %r(0) : (!firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>) -> !firrtl.bundle<_0: uint<1>, _1: uint<1>>
-// CHECK:      %7 = firrtl.subfield %6(0) : (!firrtl.bundle<_0: uint<1>, _1: uint<1>>) -> !firrtl.uint<1>
+// CHECK:      %4 = firrtl.subfield %r[0] : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
+// CHECK:      %5 = firrtl.subfield %4[1] : !firrtl.bundle<_0: uint<1>, _1: uint<1>>
+// CHECK:      %6 = firrtl.subfield %r[0] : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
+// CHECK:      %7 = firrtl.subfield %6[0] : !firrtl.bundle<_0: uint<1>, _1: uint<1>>
 // CHECK:      %8 = firrtl.ref.send %1 : !firrtl.uint<1>
 // CHECK:      firrtl.connect %view_companion__1_0, %8 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
 // CHECK:      %9 = firrtl.ref.send %3 : !firrtl.uint<1>

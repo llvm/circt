@@ -41,17 +41,17 @@ firrtl.circuit "Simple" {
 firrtl.circuit "PrimOps" {
   // CHECK: firrtl.module @PrimOps0
   firrtl.module @PrimOps0(in %a: !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>) {
-    %a_a = firrtl.subfield %a(0): (!firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>) -> !firrtl.uint<2>
-    %a_b = firrtl.subfield %a(1): (!firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>) -> !firrtl.uint<2>
-    %a_c = firrtl.subfield %a(2): (!firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>) -> !firrtl.uint<2>
+    %a_a = firrtl.subfield %a[0] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
+    %a_b = firrtl.subfield %a[1] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
+    %a_c = firrtl.subfield %a[2] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
     %0 = firrtl.xor %a_a, %a_b: (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
     firrtl.connect %a_c, %a_b: !firrtl.uint<2>, !firrtl.uint<2>
   }
   // CHECK-NOT: firrtl.module @PrimOps1
   firrtl.module @PrimOps1(in %b: !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>) {
-    %b_a = firrtl.subfield %b(0): (!firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>) -> !firrtl.uint<2>
-    %b_b = firrtl.subfield %b(1): (!firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>) -> !firrtl.uint<2>
-    %b_c = firrtl.subfield %b(2): (!firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>) -> !firrtl.uint<2>
+    %b_a = firrtl.subfield %b[0] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
+    %b_b = firrtl.subfield %b[1] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
+    %b_c = firrtl.subfield %b[2] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
     %0 = firrtl.xor %b_a, %b_b: (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
     firrtl.connect %b_c, %b_b: !firrtl.uint<2>, !firrtl.uint<2>
   }
@@ -486,9 +486,9 @@ firrtl.circuit "Bundle" {
     %e = firrtl.instance bundle1 @Bundle1(out e: !firrtl.bundle<f: bundle<g flip: uint<1>, h: uint<1>>>)
 
     // CHECK: [[B:%.+]] = firrtl.subfield %bundle0_a(0)
-    %b = firrtl.subfield %a(0) : (!firrtl.bundle<b: bundle<c flip: uint<1>, d: uint<1>>>) -> !firrtl.bundle<c flip: uint<1>, d: uint<1>>
+    %b = firrtl.subfield %a[0] : !firrtl.bundle<b: bundle<c flip: uint<1>, d: uint<1>>>
     // CHECK: [[F:%.+]] = firrtl.subfield %bundle1_a(0)
-    %f = firrtl.subfield %e(0) : (!firrtl.bundle<f: bundle<g flip: uint<1>, h: uint<1>>>) -> !firrtl.bundle<g flip: uint<1>, h: uint<1>>
+    %f = firrtl.subfield %e[0] : !firrtl.bundle<f: bundle<g flip: uint<1>, h: uint<1>>>
 
     // Check that we properly fixup connects when the field names change.
     %w0 = firrtl.wire : !firrtl.bundle<g flip: uint<1>, h: uint<1>>
@@ -504,18 +504,18 @@ firrtl.circuit "Bundle" {
 // CHECK-LABEL: firrtl.circuit "Flip"
 firrtl.circuit "Flip" {
   firrtl.module @Flip0(out %io: !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>) {
-    %0 = firrtl.subfield %io(0) : (!firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>) -> !firrtl.uint<1>
-    %1 = firrtl.subfield %io(1) : (!firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>) -> !firrtl.uint<1>
+    %0 = firrtl.subfield %io[0] : !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>
+    %1 = firrtl.subfield %io[1] : !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>
     firrtl.connect %1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   }
   firrtl.module @Flip1(out %io: !firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>) {
-    %0 = firrtl.subfield %io(0) : (!firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>) -> !firrtl.uint<1>
-    %1 = firrtl.subfield %io(1) : (!firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>) -> !firrtl.uint<1>
+    %0 = firrtl.subfield %io[0] : !firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>
+    %1 = firrtl.subfield %io[1] : !firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>
     firrtl.connect %1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   }
   firrtl.module @Flip(out %io: !firrtl.bundle<foo: bundle<foo flip: uint<1>, fuzz: uint<1>>, bar: bundle<bar flip: uint<1>, buzz: uint<1>>>) {
-    %0 = firrtl.subfield %io(1) : (!firrtl.bundle<foo: bundle<foo flip: uint<1>, fuzz: uint<1>>, bar: bundle<bar flip: uint<1>, buzz: uint<1>>>) -> !firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>
-    %1 = firrtl.subfield %io(0) : (!firrtl.bundle<foo: bundle<foo flip: uint<1>, fuzz: uint<1>>, bar: bundle<bar flip: uint<1>, buzz: uint<1>>>) -> !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>
+    %0 = firrtl.subfield %io[1] : !firrtl.bundle<foo: bundle<foo flip: uint<1>, fuzz: uint<1>>, bar: bundle<bar flip: uint<1>, buzz: uint<1>>>
+    %1 = firrtl.subfield %io[0] : !firrtl.bundle<foo: bundle<foo flip: uint<1>, fuzz: uint<1>>, bar: bundle<bar flip: uint<1>, buzz: uint<1>>>
     %foo_io = firrtl.instance foo  @Flip0(out io: !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>)
     %bar_io = firrtl.instance bar  @Flip1(out io: !firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>)
     firrtl.connect %1, %foo_io : !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>, !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>
@@ -559,13 +559,13 @@ firrtl.circuit "NoEmptyAnnos" {
   // CHECK-LABEL: @NoEmptyAnnos0()
   firrtl.module @NoEmptyAnnos0() {
     // CHECK: %w = firrtl.wire  : !firrtl.bundle<a: uint<1>>
-    // CHECK: %0 = firrtl.subfield %w(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
+    // CHECK: %0 = firrtl.subfield %w[0] : !firrtl.bundle<a: uint<1>>
     %w = firrtl.wire : !firrtl.bundle<a: uint<1>>
-    %0 = firrtl.subfield %w(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
+    %0 = firrtl.subfield %w[0] : !firrtl.bundle<a: uint<1>>
   }
   firrtl.module @NoEmptyAnnos1() {
     %w = firrtl.wire : !firrtl.bundle<a: uint<1>>
-    %0 = firrtl.subfield %w(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
+    %0 = firrtl.subfield %w[0] : !firrtl.bundle<a: uint<1>>
   }
   firrtl.module @NoEmptyAnnos() {
     firrtl.instance empty0 @NoEmptyAnnos0()
