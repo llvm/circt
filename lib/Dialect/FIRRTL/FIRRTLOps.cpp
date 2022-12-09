@@ -2852,9 +2852,9 @@ LogicalResult impl::validateUnaryOpArguments(ValueRange operands,
   return success();
 }
 
-FIRRTLType SizeOfIntrinsicOp::inferUnaryReturnType(FIRRTLType input,
+FIRRTLType SizeOfIntrinsicOp::inferUnaryReturnType(FIRRTLType arg,
                                                    Optional<Location> loc) {
-  return UIntType::get(input.getContext(), 32);
+  return UIntType::get(arg.getContext(), 32);
 }
 
 FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
