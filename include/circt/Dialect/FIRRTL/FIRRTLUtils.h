@@ -115,7 +115,7 @@ getInnerRefTo(FModuleLike mod, size_t portIdx, StringRef nameHint,
               std::function<ModuleNamespace &(FModuleLike)> getNamespace);
 
 //===----------------------------------------------------------------------===//
-// RefType and BaseType utilities.
+// Type utilities
 //===----------------------------------------------------------------------===//
 
 /// If reftype, return wrapped base type.  Otherwise (if base), return as-is.
@@ -133,6 +133,11 @@ inline FIRRTLType mapBaseType(FIRRTLType type,
       .Case<FIRRTLBaseType>([&](auto base) { return fn(base); })
       .Case<RefType>([&](auto ref) { return RefType::get(fn(ref.getType())); });
 }
+
+/// Given a type, return the corresponding lowered type for the HW dialect.
+/// Non-FIRRTL types are simply passed through. This returns a null type if it
+/// cannot be lowered.
+Type lowerType(Type type);
 
 //===----------------------------------------------------------------------===//
 // Parser-related utilities

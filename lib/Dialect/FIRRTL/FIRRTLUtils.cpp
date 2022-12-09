@@ -730,3 +730,38 @@ circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
   }
   return {true, result};
 }
+
+/// Given a type, return the corresponding lowered type for the HW dialect.
+/// Non-FIRRTL types are simply passed through. This returns a null type if it
+/// cannot be lowered.
+Type circt::firrtl::lowerType(Type type) {
+  auto firType = type.dyn_cast<FIRRTLBaseType>();
+  if (!firType)
+    return type;
+
+  // Ignore flip types.
+  firType = firType.getPassiveType();
+
+  if (BundleType bundle = firType.dyn_cast<BundleType>()) {
+    mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
+    for (auto element : bundle) {
+      Type etype = lowerType(element.type);
+      if (!etype)
+        return {};
+      hwfields.push_back(hw::StructType::FieldInfo{element.name, etype});
+    }
+    return hw::StructType::get(type.getContext(), hwfields);
+  }
+  if (FVectorType vec = firType.dyn_cast<FVectorType>()) {
+    auto elemTy = lowerType(vec.getElementType());
+    if (!elemTy)
+      return {};
+    return hw::ArrayType::get(elemTy, vec.getNumElements());
+  }
+
+  auto width = firType.getBitWidthOrSentinel();
+  if (width >= 0) // IntType, analog with known width, clock, etc.
+    return IntegerType::get(type.getContext(), width);
+
+  return {};
+}
