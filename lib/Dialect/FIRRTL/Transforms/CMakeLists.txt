@@ -21,6 +21,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   InnerSymbolDCE.cpp
   LowerAnnotations.cpp
   LowerCHIRRTL.cpp
+  LowerIntrinsics.cpp
   LowerMemory.cpp
   LowerTypes.cpp
   LowerXMR.cpp

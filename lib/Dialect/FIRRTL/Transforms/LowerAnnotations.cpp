@@ -236,7 +236,7 @@ static LogicalResult applyWithoutTargetImpl(const AnnoPathValue &target,
 }
 
 /// An applier which puts the annotation on the target and drops the 'target'
-/// field from the annotaiton.  Optionally handles non-local annotations.
+/// field from the annotation.  Optionally handles non-local annotations.
 /// Ensures the target resolves to an expected type of operation.
 template <bool allowNonLocal, bool allowPortAnnoTarget, typename T,
           typename... Tr>
@@ -294,9 +294,9 @@ struct AnnoRecord {
 /// the FIRRTL Circuit, i.e., an Annotation which has no target.  Historically,
 /// NoTargetAnnotations were used to control the Scala FIRRTL Compiler (SFC) or
 /// its passes, e.g., to set the output directory or to turn on a pass.
-/// Examplesof these in the SFC are "firrtl.options.TargetDirAnnotation" to set
+/// Examples of these in the SFC are "firrtl.options.TargetDirAnnotation" to set
 /// the output directory or "firrtl.stage.RunFIRRTLTransformAnnotation" to
-/// casuse the SFC to schedule a specified pass.  Instead of leaving these
+/// caause the SFC to schedule a specified pass.  Instead of leaving these
 /// floating or attaching them to the top-level MLIR module (which is a purer
 /// interpretation of "no target"), we choose to attach them to the Circuit even
 /// they do not "apply" to the Circuit.  This gives later passes a common place,
@@ -313,6 +313,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {"circt.testLocalOnly", {stdResolve, applyWithoutTarget<>}},
     {"circt.testNT", {noResolve, applyWithoutTarget<>}},
     {"circt.missing", {tryResolve, applyWithoutTarget<true>}},
+    {"circt.intrinsic", {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
     // Grand Central Views/Interfaces Annotations
     {extractGrandCentralClass, NoTargetAnnotation},
     {grandCentralHierarchyFileAnnoClass, NoTargetAnnotation},
