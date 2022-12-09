@@ -3271,15 +3271,16 @@ FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
 //===----------------------------------------------------------------------===//
 
 FIRRTLType IsXIntrinsicOp::inferReturnType(ValueRange operands,
-                                       ArrayRef<NamedAttribute> attrs,
-                                       Optional<Location> loc) {
+                                           ArrayRef<NamedAttribute> attrs,
+                                           Optional<Location> loc) {
   return UIntType::get(operands[0].getContext(), 1);
 }
 
-FIRRTLType PlusArgsTestIntrinsicOp::inferReturnType(ValueRange operands,
-                                       ArrayRef<NamedAttribute> attrs,
-                                       Optional<Location> loc) {
-  return UIntType::get(operands[0].getContext(), 1);
+FIRRTLType
+PlusArgsTestIntrinsicOp::inferReturnType(ValueRange operands,
+                                         ArrayRef<NamedAttribute> attrs,
+                                         Optional<Location> loc) {
+  return UIntType::get(attrs[0].getName().getContext(), 1);
 }
 
 //===----------------------------------------------------------------------===//
@@ -3986,7 +3987,8 @@ void HeadPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void IsXIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-void PlusArgsValueIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void PlusArgsValueIntrinsicOp::getAsmResultNames(
+    OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void PlusArgsTestIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
