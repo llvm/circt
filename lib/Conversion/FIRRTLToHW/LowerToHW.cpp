@@ -1609,7 +1609,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   }
 
   // Verif Operations
-  LogicalResult visitExpr(IsXVerifOp op);
+  LogicalResult visitExpr(IsXIntrinsicOp op);
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
@@ -3370,7 +3370,7 @@ LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
 // Verif Operations
 //===----------------------------------------------------------------------===//
 
-LogicalResult FIRRTLLowering::visitExpr(IsXVerifOp op) {
+LogicalResult FIRRTLLowering::visitExpr(IsXIntrinsicOp op) {
   auto input = getLoweredValue(op.getArg());
   if (!input)
     return failure();

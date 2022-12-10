@@ -2488,7 +2488,7 @@ firrtl.module @AnnotationsBlockRemoval(
 }
 
 // CHECK-LABEL: firrtl.module @Verification
-firrtl.module @Verification(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>) {
+firrtl.module @Verification(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>, out %o : !firrtl.uint<1>) {
   %c0 = firrtl.constant 0 : !firrtl.uint<1>
   %c1 = firrtl.constant 1 : !firrtl.uint<1>
 
@@ -2507,6 +2507,10 @@ firrtl.module @Verification(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>) {
   firrtl.assume %clock, %c1, %p, "assume1"
   // CHECK-NOT: firrtl.cover
   firrtl.cover %clock, %c0, %p, "cover0"
+
+  // CHECK-NOT: firrtl.int.isX
+  %x = firrtl.int.isX %c0 : !firrtl.uint<1>
+  firrtl.strictconnect %o, %x : !firrtl.uint<1>
 }
 
 // COMMON-LABEL:  firrtl.module @MultibitMux

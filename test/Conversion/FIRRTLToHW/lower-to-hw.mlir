@@ -208,7 +208,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %28 = firrtl.andr %18 : (!firrtl.uint<14>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: = comb.icmp bin ceq {{.*}}, %x_i1
-    %x28 = firrtl.verif_isX %28 : !firrtl.uint<1>
+    %x28 = firrtl.int.isX %28 : !firrtl.uint<1>
 
     // CHECK-NEXT: [[XOREXT:%.+]] = comb.concat %c0_i11, [[XOR]]
     // CHECK-NEXT: [[SHIFT:%.+]] = comb.shru bin [[XOREXT]], [[VAL18]] : i14

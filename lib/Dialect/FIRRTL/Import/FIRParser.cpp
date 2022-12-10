@@ -3012,7 +3012,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
 
   // Otherwise, handle extmodule specific features like parameters.
 
-  // Parse a defname if present.
+  // Parse a defname if present and is an extmodule.
   // TODO(firrtl spec): defname isn't documented at all, what is it?
   StringRef defName;
   if (consumeIf(FIRToken::kw_defname)) {

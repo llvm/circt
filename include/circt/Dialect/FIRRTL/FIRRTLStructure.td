@@ -105,7 +105,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
       [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">, OpAsmOpInterface,
        DeclareOpInterfaceMethods<FModuleLike>, InnerSymbolTable,
        DeclareOpInterfaceMethods<HWModuleLike>]> {
-  let summary = "FIRRTL extmodule";
+  let summary = "FIRRTL external module";
   let description = [{
     The "firrtl.extmodule" operation represents an external reference to a
     Verilog module, including a given name and a list of ports.
@@ -147,7 +147,7 @@ def FMemModuleOp : FIRRTLOp<"memmodule",
       [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">, OpAsmOpInterface,
        DeclareOpInterfaceMethods<FModuleLike>, InnerSymbolTable,
        DeclareOpInterfaceMethods<HWModuleLike>]> {
-  let summary = "FIRRTL Generated Module";
+  let summary = "FIRRTL Generated Memory Module";
   let description = [{
     The "firrtl.memmodule" operation represents an external reference to a
     memory module. See the "firrtl.mem" op for a deeper explantation of the
