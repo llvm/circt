@@ -261,7 +261,6 @@ protected:
   enum { OBJ_LATENCY = 0, OBJ_AXAP /* i.e. either ASAP or ALAP */ };
   bool fillObjectiveRow(SmallVector<int> &row, unsigned obj) override;
   void updateMargins();
-  void incrementII();
   void scheduleOperation(Operation *n);
   unsigned computeResMinII();
 
@@ -685,9 +684,8 @@ LogicalResult SimplexSchedulerBase::scheduleAt(unsigned startTimeVariable,
     return failure();
   }
 
-  // Translate S by the other parameter(s). For acyclic problems, this means
-  // setting `factor1` to `timeStep`. For cyclic problems, we perform a modulo
-  // decomposition: S = `factor1` + `factorT` * T, with `factor1` < T.
+  // Translate S by the other parameter(s). This means setting `factor1` to
+  // `timeStep`.
   //
   // This translation does not change the values of the parametric constants,
   // hence we do not need to solve the tableau again.
@@ -695,13 +693,17 @@ LogicalResult SimplexSchedulerBase::scheduleAt(unsigned startTimeVariable,
   // Note: I added a negation of the factors here, which is not mentioned in the
   // paper's text, but apparently used in the example. Without it, the intended
   // effect, i.e. making the S-column all-zero again, is not achieved.
-  if (parameterT == 0)
-    translate(parameterSColumn, /* factor1= */ -timeStep, /* factorS= */ 1,
-              /* factorT= */ 0);
-  else
-    translate(parameterSColumn, /* factor1= */ -(timeStep % parameterT),
-              /* factorS= */ 1,
-              /* factorT= */ -(timeStep / parameterT));
+  //
+  // Note 2: For cyclic problems, the paper suggested to perform a modulo
+  // decomposition: S = `factor1` + `factorT` * T, with `factor1` < T.
+  // However, this makes the value baked into the tableau dependent on
+  // `parameterT`, and it is unclear to me how to update it correctly when
+  // changing the II. I found it much more robust to fix the operations to
+  // absolute time steps, and manually shift them by the appropriate amount
+  // whenever the II is incremented (cf. adding `phiJ`, `phiN` in the modulo
+  // scheduler's `scheduleOperation` method).
+  translate(parameterSColumn, /* factor1= */ -timeStep, /* factorS= */ 1,
+            /* factorT= */ 0);
 
   return success();
 }
@@ -1007,21 +1009,6 @@ void ModuloSimplexScheduler::updateMargins() {
   }
 }
 
-void ModuloSimplexScheduler::incrementII() {
-  // Account for the shift in the frozen start times that will be caused by
-  // increasing `parameterT`: Assuming decompositions of
-  //   t = phi * II + tau  and  t' = phi * (II + 1) + tau,
-  // so the required shift is
-  //   t' - t = phi = floordiv(t / II)
-  for (auto &kv : frozenVariables) {
-    unsigned &frozenTime = kv.getSecond();
-    frozenTime += frozenTime / parameterT;
-  }
-
-  // Increment the parameter.
-  ++parameterT;
-}
-
 void ModuloSimplexScheduler::scheduleOperation(Operation *n) {
   unsigned stvN = startTimeVariables[n];
 
@@ -1077,8 +1064,8 @@ void ModuloSimplexScheduler::scheduleOperation(Operation *n) {
     unsigned tauJ = stJ % parameterT;
     unsigned deltaJ = 0;
 
-    // To actually resolve the resource conflicts, we move operations that are
-    // "preceded" (cf. de Dinechin's ≺ relation) one slot to the right.
+    // To actually resolve the resource conflicts, we will move operations that
+    // are "preceded" (cf. de Dinechin's ≺ relation) one slot to the right.
     if (tauN < tauJ || (tauN == tauJ && phiN > phiJ) ||
         (tauN == tauJ && phiN == phiJ && stvN < stvJ)) {
       // TODO: Replace the last condition with a proper graph analysis.
@@ -1089,12 +1076,21 @@ void ModuloSimplexScheduler::scheduleOperation(Operation *n) {
         deltaN = 0;
     }
 
-    // Apply the move to the tableau.
-    moveBy(stvJ, deltaJ);
+    // Move operation.
+    //
+    // In order to keep the op in its current MRT slot `tauJ` after incrementing
+    // the II, we add `phiJ`:
+    //   stJ + phiJ = (phiJ * parameterT + tauJ) + phiJ
+    //              = phiJ * (parameterT + 1) + tauJ
+    //
+    // Shifting an additional `deltaJ` time steps then moves the op to a
+    // different MRT slot, in order to make room for the operation that caused
+    // the resource conflict.
+    moveBy(stvJ, phiJ + deltaJ);
   }
 
-  // Finally, increment the II.
-  incrementII();
+  // Finally, increment the II and solve to apply the moves.
+  ++parameterT;
   auto solved = solveTableau();
   assert(succeeded(solved));
   (void)solved;
@@ -1108,8 +1104,8 @@ void ModuloSimplexScheduler::scheduleOperation(Operation *n) {
     (void)enteredM;
   }
 
-  // Finally, schedule the operation. Adding `phiN` accounts for the implicit
-  // shift caused by incrementing the II; cf. `incrementII()`.
+  // Finally, schedule the operation. Again, adding `phiN` accounts for the
+  // implicit shift caused by incrementing the II.
   auto fixedN = scheduleAt(stvN, stN + phiN + deltaN);
   auto enteredN = mrt.enter(n, tauN + deltaN);
   assert(succeeded(fixedN) && succeeded(enteredN));
