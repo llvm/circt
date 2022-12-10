@@ -25,13 +25,13 @@ firrtl.module @UnusedMemPort(in %clock: !firrtl.clock, in %addr : !firrtl.uint<1
 
 firrtl.module @InferRead(in %cond: !firrtl.uint<1>, in %clock: !firrtl.clock, in %addr: !firrtl.uint<8>, out %out : !firrtl.uint<1>, in %vec : !firrtl.vector<uint<1>, 2>) {
   // CHECK: %ram_ramport = firrtl.mem sym @s1 Undefined {depth = 256 : i64, name = "ram", portNames = ["ramport"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<8>, en: uint<1>, clk: clock, data flip: uint<1>>
-  // CHECK: [[ADDR:%.*]] = firrtl.subfield %ram_ramport(0)
+  // CHECK: [[ADDR:%.*]] = firrtl.subfield %ram_ramport[addr]
   // CHECK: firrtl.strictconnect [[ADDR]], %invalid_ui8
-  // CHECK: [[EN:%.*]] = firrtl.subfield %ram_ramport(1)
+  // CHECK: [[EN:%.*]] = firrtl.subfield %ram_ramport[en]
   // CHECK: firrtl.strictconnect [[EN]], %c0_ui1
-  // CHECK: [[CLOCK:%.*]] = firrtl.subfield %ram_ramport(2)
+  // CHECK: [[CLOCK:%.*]] = firrtl.subfield %ram_ramport[clk]
   // CHECK: firrtl.strictconnect [[CLOCK]], %invalid_clock
-  // CHECK: [[DATA:%.*]] = firrtl.subfield %ram_ramport(3)
+  // CHECK: [[DATA:%.*]] = firrtl.subfield %ram_ramport[data]
   %ram = chirrtl.combmem  sym @s1 : !chirrtl.cmemory<uint<1>, 256>
   %ramport_data, %ramport_port = chirrtl.memoryport Infer %ram {name = "ramport"} : (!chirrtl.cmemory<uint<1>, 256>) -> (!firrtl.uint<1>, !chirrtl.cmemoryport)
 
@@ -57,15 +57,15 @@ firrtl.module @InferRead(in %cond: !firrtl.uint<1>, in %clock: !firrtl.clock, in
 
 firrtl.module @InferWrite(in %cond: !firrtl.uint<1>, in %clock: !firrtl.clock, in %addr: !firrtl.uint<8>, in %in : !firrtl.uint<1>) {
   // CHECK: %ram_ramport = firrtl.mem Undefined {depth = 256 : i64, name = "ram", portNames = ["ramport"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<8>, en: uint<1>, clk: clock, data: uint<1>, mask: uint<1>>
-  // CHECK: [[ADDR:%.*]] = firrtl.subfield %ram_ramport(0)
+  // CHECK: [[ADDR:%.*]] = firrtl.subfield %ram_ramport[addr]
   // CHECK: firrtl.strictconnect [[ADDR]], %invalid_ui8
-  // CHECK: [[EN:%.*]] = firrtl.subfield %ram_ramport(1)
+  // CHECK: [[EN:%.*]] = firrtl.subfield %ram_ramport[en]
   // CHECK: firrtl.strictconnect [[EN]], %c0_ui1
-  // CHECK: [[CLOCK:%.*]] = firrtl.subfield %ram_ramport(2)
+  // CHECK: [[CLOCK:%.*]] = firrtl.subfield %ram_ramport[clk]
   // CHECK: firrtl.strictconnect [[CLOCK]], %invalid_clock
-  // CHECK: [[DATA:%.*]] = firrtl.subfield %ram_ramport(3)
+  // CHECK: [[DATA:%.*]] = firrtl.subfield %ram_ramport[data]
   // CHECK: firrtl.strictconnect [[DATA]], %invalid_ui1
-  // CHECK: [[MASK:%.*]] = firrtl.subfield %ram_ramport(4)
+  // CHECK: [[MASK:%.*]] = firrtl.subfield %ram_ramport[mask]
   // CHECK: firrtl.strictconnect [[MASK]], %invalid_ui1
   %ram = chirrtl.combmem : !chirrtl.cmemory<uint<1>, 256>
   %ramport_data, %ramport_port = chirrtl.memoryport Infer %ram {name = "ramport"} : (!chirrtl.cmemory<uint<1>, 256>) -> (!firrtl.uint<1>, !chirrtl.cmemoryport)
@@ -91,18 +91,18 @@ firrtl.module @InferWrite(in %cond: !firrtl.uint<1>, in %clock: !firrtl.clock, i
 
 firrtl.module @InferReadWrite(in %clock: !firrtl.clock, in %addr: !firrtl.uint<8>, in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>) {
   // CHECK: %ram_ramport = firrtl.mem Undefined {depth = 256 : i64, name = "ram", portNames = ["ramport"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<8>, en: uint<1>, clk: clock, rdata flip: uint<1>, wmode: uint<1>, wdata: uint<1>, wmask: uint<1>>
-  // CHECK: [[ADDR:%.*]] = firrtl.subfield %ram_ramport(0)
+  // CHECK: [[ADDR:%.*]] = firrtl.subfield %ram_ramport[addr]
   // CHECK: firrtl.strictconnect [[ADDR]], %invalid
-  // CHECK: [[EN:%.*]] = firrtl.subfield %ram_ramport(1)
+  // CHECK: [[EN:%.*]] = firrtl.subfield %ram_ramport[en]
   // CHECK: firrtl.strictconnect [[EN]], %c0_ui1
-  // CHECK: [[CLOCK:%.*]] = firrtl.subfield %ram_ramport(2)
+  // CHECK: [[CLOCK:%.*]] = firrtl.subfield %ram_ramport[clk]
   // CHECK: firrtl.strictconnect [[CLOCK]], %invalid_clock
-  // CHECK: [[RDATA:%.*]] = firrtl.subfield %ram_ramport(3)
-  // CHECK: [[WMODE:%.*]] = firrtl.subfield %ram_ramport(4)
+  // CHECK: [[RDATA:%.*]] = firrtl.subfield %ram_ramport[rdata]
+  // CHECK: [[WMODE:%.*]] = firrtl.subfield %ram_ramport[wmode]
   // CHECK: firrtl.strictconnect [[WMODE]], %c0_ui1
-  // CHECK: [[WDATA:%.*]] = firrtl.subfield %ram_ramport(5)
+  // CHECK: [[WDATA:%.*]] = firrtl.subfield %ram_ramport[wdata]
   // CHECK: firrtl.strictconnect [[WDATA]], %invalid_ui1
-  // CHECK: [[WMASK:%.*]] = firrtl.subfield %ram_ramport(6)
+  // CHECK: [[WMASK:%.*]] = firrtl.subfield %ram_ramport[wmask]
   // CHECK: firrtl.strictconnect [[WMASK]], %invalid
   %ram = chirrtl.combmem : !chirrtl.cmemory<uint<1>, 256>
 
@@ -127,12 +127,12 @@ firrtl.module @WriteToSubfield(in %clock: !firrtl.clock, in %addr: !firrtl.uint<
   %ramport_data, %ramport_port = chirrtl.memoryport Infer %ram {name = "ramport"} : (!chirrtl.cmemory<bundle<a: uint<1>, b: uint<1>>, 256>) -> (!firrtl.bundle<a: uint<1>, b: uint<1>>, !chirrtl.cmemoryport)
   chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
 
-  %ramport_b = firrtl.subfield %ramport_data(1) : (!firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.uint<1>
+  %ramport_b = firrtl.subfield %ramport_data[b] : !firrtl.bundle<a: uint<1>, b: uint<1>>
   // Check that only the subfield of the mask is written to.
-  // CHECK: [[DATA:%.*]] = firrtl.subfield %ram_ramport(3)
-  // CHECK: [[MASK:%.*]] = firrtl.subfield %ram_ramport(4)
-  // CHECK: [[DATA_B:%.*]] = firrtl.subfield [[DATA]](1)
-  // CHECK: [[MASK_B:%.*]] = firrtl.subfield [[MASK]](1)
+  // CHECK: [[DATA:%.*]] = firrtl.subfield %ram_ramport[data]
+  // CHECK: [[MASK:%.*]] = firrtl.subfield %ram_ramport[mask]
+  // CHECK: [[DATA_B:%.*]] = firrtl.subfield [[DATA]][b]
+  // CHECK: [[MASK_B:%.*]] = firrtl.subfield [[MASK]][b]
   // CHECK: firrtl.strictconnect [[MASK_B]], %c1_ui1
   // CHECK: firrtl.connect [[DATA_B]], %value
   firrtl.connect %ramport_b, %value : !firrtl.uint<1>, !firrtl.uint<1>
@@ -145,21 +145,21 @@ firrtl.module @ReadAndWriteToSubfield(in %clock: !firrtl.clock, in %addr: !firrt
   %ramport_data, %ramport_port = chirrtl.memoryport Infer %ram {name = "ramport"} : (!chirrtl.cmemory<bundle<a: uint<1>, b:uint<1>>, 256>) -> (!firrtl.bundle<a: uint<1>, b: uint<1>>, !chirrtl.cmemoryport)
   chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
 
-  // CHECK: [[RDATA:%.*]] = firrtl.subfield %ram_ramport(3)
-  // CHECK: [[WMODE:%.*]] = firrtl.subfield %ram_ramport(4)
-  // CHECK: [[WDATA:%.*]] = firrtl.subfield %ram_ramport(5)
-  // CHECK: [[WMASK:%.*]] = firrtl.subfield %ram_ramport(6)
-  // CHECK: [[WDATA_A:%.*]] = firrtl.subfield [[WDATA]](0)
-  // CHECK: [[WMASK_A:%.*]] = firrtl.subfield [[WMASK]](0)
+  // CHECK: [[RDATA:%.*]] = firrtl.subfield %ram_ramport[rdata]
+  // CHECK: [[WMODE:%.*]] = firrtl.subfield %ram_ramport[wmode]
+  // CHECK: [[WDATA:%.*]] = firrtl.subfield %ram_ramport[wdata]
+  // CHECK: [[WMASK:%.*]] = firrtl.subfield %ram_ramport[wmask]
+  // CHECK: [[WDATA_A:%.*]] = firrtl.subfield [[WDATA]][a]
+  // CHECK: [[WMASK_A:%.*]] = firrtl.subfield [[WMASK]][a]
   // CHECK: firrtl.strictconnect [[WMASK_A]], %c1_ui1
   // CHECK: firrtl.strictconnect [[WMODE]], %c1_ui1
   // CHECK: firrtl.connect [[WDATA_A]], %in
-  %port_a = firrtl.subfield %ramport_data(0) : (!firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.uint<1>
+  %port_a = firrtl.subfield %ramport_data[a] : !firrtl.bundle<a: uint<1>, b: uint<1>>
   firrtl.connect %port_a, %in : !firrtl.uint<1>, !firrtl.uint<1>
 
-  // CHECK: [[RDATA_B:%.*]] = firrtl.subfield [[RDATA]](1) : (!firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.uint<1>
+  // CHECK: [[RDATA_B:%.*]] = firrtl.subfield [[RDATA]][b] : !firrtl.bundle<a: uint<1>, b: uint<1>>
   // CHECK: firrtl.connect %out, [[RDATA_B]] : !firrtl.uint<1>, !firrtl.uint<1>
-  %port_b = firrtl.subfield %ramport_data(1) : (!firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.uint<1>
+  %port_b = firrtl.subfield %ramport_data[b] : !firrtl.bundle<a: uint<1>, b: uint<1>>
   firrtl.connect %out, %port_b : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
@@ -170,10 +170,10 @@ firrtl.module @ReadAndWriteToSubindex(in %clock: !firrtl.clock, in %addr: !firrt
   %ramport_data, %ramport_port = chirrtl.memoryport Infer %ram {name = "ramport"} : (!chirrtl.cmemory<vector<uint<1>, 10>, 256>) -> (!firrtl.vector<uint<1>, 10>, !chirrtl.cmemoryport)
   chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
 
-  // CHECK: [[RDATA:%.*]] = firrtl.subfield %ram_ramport(3)
-  // CHECK: [[WMODE:%.*]] = firrtl.subfield %ram_ramport(4)
-  // CHECK: [[WDATA:%.*]] = firrtl.subfield %ram_ramport(5)
-  // CHECK: [[WMASK:%.*]] = firrtl.subfield %ram_ramport(6)
+  // CHECK: [[RDATA:%.*]] = firrtl.subfield %ram_ramport[rdata]
+  // CHECK: [[WMODE:%.*]] = firrtl.subfield %ram_ramport[wmode]
+  // CHECK: [[WDATA:%.*]] = firrtl.subfield %ram_ramport[wdata]
+  // CHECK: [[WMASK:%.*]] = firrtl.subfield %ram_ramport[wmask]
   // CHECK: [[WDATA_0:%.*]] = firrtl.subindex [[WDATA]][0]
   // CHECK: [[WMASK_0:%.*]] = firrtl.subindex [[WMASK]][0]
   // CHECK: firrtl.strictconnect [[WMASK_0]], %c1_ui1 : !firrtl.uint<1>
@@ -226,8 +226,8 @@ firrtl.module @EnableInference0(in %p: !firrtl.uint<1>, in %addr: !firrtl.uint<4
   %invalid_ui4 = firrtl.invalidvalue : !firrtl.uint<4>
   firrtl.connect %w, %invalid_ui4 : !firrtl.uint<4>, !firrtl.uint<4>
 
-  // CHECK: [[ADDR:%.*]] = firrtl.subfield %ram_ramport(0)
-  // CHECK: [[EN:%.*]] = firrtl.subfield %ram_ramport(1)
+  // CHECK: [[ADDR:%.*]] = firrtl.subfield %ram_ramport[addr]
+  // CHECK: [[EN:%.*]] = firrtl.subfield %ram_ramport[en]
   %ram = chirrtl.seqmem Undefined  : !chirrtl.cmemory<uint<32>, 16>
   %ramport_data, %ramport_port = chirrtl.memoryport Read %ram  {name = "ramport"}: (!chirrtl.cmemory<uint<32>, 16>) -> (!firrtl.uint<32>, !chirrtl.cmemoryport)
   chirrtl.memoryport.access %ramport_port[%w], %clock : !chirrtl.cmemoryport, !firrtl.uint<4>, !firrtl.clock
@@ -246,8 +246,8 @@ firrtl.module @EnableInference1(in %p: !firrtl.uint<1>, in %addr: !firrtl.uint<4
   %ram = chirrtl.seqmem Undefined  : !chirrtl.cmemory<uint<32>, 16>
   %invalid_ui32 = firrtl.invalidvalue : !firrtl.uint<32>
   firrtl.connect %v, %invalid_ui32 : !firrtl.uint<32>, !firrtl.uint<32>
-  // CHECK: [[ADDR:%.*]] = firrtl.subfield %ram_ramport(0)
-  // CHECK: [[EN:%.*]] = firrtl.subfield %ram_ramport(1)
+  // CHECK: [[ADDR:%.*]] = firrtl.subfield %ram_ramport[addr]
+  // CHECK: [[EN:%.*]] = firrtl.subfield %ram_ramport[en]
   // CHECK: firrtl.when %p
   firrtl.when %p  {
    // CHECK-NEXT: firrtl.strictconnect [[EN]], %c1_ui1
@@ -266,12 +266,12 @@ firrtl.module @EnableInference1(in %p: !firrtl.uint<1>, in %addr: !firrtl.uint<4
 // aggregate, we do not perform regular enable inference.
 // CHECK-LABEL: firrtl.module @EnableInference2
 firrtl.module @EnableInference2(in %clock: !firrtl.clock, in %io: !firrtl.bundle<addr: uint<3>>, out %out: !firrtl.uint<8>) {
-  %0 = firrtl.subfield %io(0) : (!firrtl.bundle<addr: uint<3>>) -> !firrtl.uint<3>
+  %0 = firrtl.subfield %io[addr] : !firrtl.bundle<addr: uint<3>>
   %mem = chirrtl.seqmem Undefined  : !chirrtl.cmemory<uint<8>, 8>
   %read_data, %read_port = chirrtl.memoryport Infer %mem  {name = "read"} : (!chirrtl.cmemory<uint<8>, 8>) -> (!firrtl.uint<8>, !chirrtl.cmemoryport)
   chirrtl.memoryport.access %read_port[%0], %clock : !chirrtl.cmemoryport, !firrtl.uint<3>, !firrtl.clock
   firrtl.connect %out, %read_data : !firrtl.uint<8>, !firrtl.uint<8>
-  // CHECK: [[EN:%.*]] = firrtl.subfield %mem_read(1)
+  // CHECK: [[EN:%.*]] = firrtl.subfield %mem_read[en]
   // CHECK: firrtl.strictconnect [[EN]], %c0_ui1
   // CHECK: firrtl.strictconnect [[EN]], %c1_ui1
 }
@@ -282,7 +282,7 @@ firrtl.module @AddressLargerThanPort(in %clock: !firrtl.clock, in %addr: !firrtl
   // CHECK-LABEL: @AddressLargerThanPort
   %mem = chirrtl.seqmem Undefined  : !chirrtl.cmemory<uint<1>, 4>
   %r_data, %r_port = chirrtl.memoryport Infer %mem  {name = "r"} : (!chirrtl.cmemory<uint<1>, 4>) -> (!firrtl.uint<1>, !chirrtl.cmemoryport)
-  // CHECK: [[ADDR:%.+]] = firrtl.subfield %mem_r(0)
+  // CHECK: [[ADDR:%.+]] = firrtl.subfield %mem_r[addr]
   %addr_node = firrtl.node %addr  : !firrtl.uint<3>
   // CHECK: [[TRUNC:%.+]] = firrtl.tail %addr_node, 1
   // CHECK: firrtl.strictconnect [[ADDR]], [[TRUNC]]

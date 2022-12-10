@@ -3,15 +3,15 @@
 // Test a control merge that is control only.
 
 // CHECK:           firrtl.module @handshake_control_merge_out_ui64_2ins_2outs_ctrl(in %[[VAL_0:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_1:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_2:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_3:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %[[CLOCK:.*]]: !firrtl.clock, in %[[RESET:.*]]: !firrtl.uint<1>) {
-// CHECK:   %[[ARG0_VALID:.+]] = firrtl.subfield %[[VAL_0]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[ARG0_READY:.+]] = firrtl.subfield %[[VAL_0]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[ARG1_VALID:.+]] = firrtl.subfield %[[VAL_1]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[ARG1_READY:.+]] = firrtl.subfield %[[VAL_1]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[ARG2_VALID:.+]] = firrtl.subfield %[[VAL_2]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[ARG2_READY:.+]] = firrtl.subfield %[[VAL_2]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[ARG3_VALID:.+]] = firrtl.subfield %[[VAL_3]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
-// CHECK:   %[[ARG3_READY:.+]] = firrtl.subfield %[[VAL_3]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
-// CHECK:   %[[ARG3_DATA:.+]] = firrtl.subfield %[[VAL_3]](2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
+// CHECK:   %[[ARG0_VALID:.+]] = firrtl.subfield %[[VAL_0]][valid] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
+// CHECK:   %[[ARG0_READY:.+]] = firrtl.subfield %[[VAL_0]][ready] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
+// CHECK:   %[[ARG1_VALID:.+]] = firrtl.subfield %[[VAL_1]][valid] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
+// CHECK:   %[[ARG1_READY:.+]] = firrtl.subfield %[[VAL_1]][ready] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
+// CHECK:   %[[ARG2_VALID:.+]] = firrtl.subfield %[[VAL_2]][valid] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
+// CHECK:   %[[ARG2_READY:.+]] = firrtl.subfield %[[VAL_2]][ready] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
+// CHECK:   %[[ARG3_VALID:.+]] = firrtl.subfield %[[VAL_3]][valid] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+// CHECK:   %[[ARG3_READY:.+]] = firrtl.subfield %[[VAL_3]][ready] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+// CHECK:   %[[ARG3_DATA:.+]] = firrtl.subfield %[[VAL_3]][data] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
 
 // Common definitions.
 // CHECK:   %[[NO_WINNER:.+]] = firrtl.constant 0 : !firrtl.uint<2>
@@ -98,9 +98,9 @@ handshake.func @test_cmerge(%arg0: none, %arg1: none, %arg2: none, ...) -> (none
 // Test a control merge that also outputs the selected input's data.
 
 // CHECK:           firrtl.module @handshake_control_merge_in_ui64_ui64_out_ui64_ui64(in %[[VAL_0:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %[[VAL_1:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_2:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_3:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %[[VAL_4:.*]]: !firrtl.clock, in %[[VAL_5:.*]]: !firrtl.uint<1>) {
-// CHECK: %[[ARG0_DATA:.+]] = firrtl.subfield %[[VAL_0]](2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
-// CHECK: %[[ARG1_DATA:.+]] = firrtl.subfield %[[VAL_1]](2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
-// CHECK: %[[ARG2_DATA:.+]] = firrtl.subfield %[[VAL_2]](2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
+// CHECK: %[[ARG0_DATA:.+]] = firrtl.subfield %[[VAL_0]][data] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+// CHECK: %[[ARG1_DATA:.+]] = firrtl.subfield %[[VAL_1]][data] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+// CHECK: %[[ARG2_DATA:.+]] = firrtl.subfield %[[VAL_2]][data] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
 // ...
 // CHECK:   %win = firrtl.wire : !firrtl.uint<2>
 // ...

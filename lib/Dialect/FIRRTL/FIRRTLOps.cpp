@@ -2485,6 +2485,57 @@ LogicalResult VectorCreateOp::verify() {
   return success();
 }
 
+ParseResult SubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto *context = parser.getContext();
+
+  OpAsmParser::UnresolvedOperand input;
+  std::string fieldName;
+  Type inputType;
+  if (parser.parseOperand(input) || parser.parseLSquare() ||
+      parser.parseKeywordOrString(&fieldName) || parser.parseRSquare() ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(inputType))
+    return failure();
+
+  if (parser.resolveOperand(input, inputType, result.operands))
+    return failure();
+
+  auto bundleType = inputType.dyn_cast<BundleType>();
+  if (!bundleType)
+    return parser.emitError(parser.getNameLoc(),
+                            "input must be bundle type, got ")
+           << inputType;
+  auto fieldIndex = bundleType.getElementIndex(fieldName);
+  if (!fieldIndex)
+    return parser.emitError(parser.getNameLoc(),
+                            "unknown field " + fieldName + " in bundle type ")
+           << bundleType;
+
+  result.addAttribute(
+      "fieldIndex",
+      IntegerAttr::get(IntegerType::get(context, 32), *fieldIndex));
+
+  SmallVector<Type> inferredReturnTypes;
+  if (failed(SubfieldOp::inferReturnTypes(
+          context, result.location, result.operands,
+          result.attributes.getDictionary(context), result.regions,
+          inferredReturnTypes)))
+    return failure();
+  result.addTypes(inferredReturnTypes);
+
+  return success();
+}
+
+void SubfieldOp::print(::mlir::OpAsmPrinter &printer) {
+  printer << ' ' << getInput() << '[';
+  printer.printKeywordOrString(getFieldName());
+  printer << ']';
+  ::llvm::SmallVector<::llvm::StringRef, 2> elidedAttrs;
+  elidedAttrs.push_back("fieldIndex");
+  printer.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
+  printer << " : " << getInput().getType();
+}
+
 LogicalResult SubfieldOp::verify() {
   if (getFieldIndex() >=
       getInput().getType().cast<BundleType>().getNumElements())

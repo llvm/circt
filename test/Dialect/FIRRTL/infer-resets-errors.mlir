@@ -98,7 +98,7 @@ firrtl.circuit "top"   {
 firrtl.circuit "top" {
   // expected-error @+1 {{reset network never driven with concrete type}}
   firrtl.module @top(in %in: !firrtl.bundle<foo: reset>, out %out: !firrtl.reset) {
-    %0 = firrtl.subfield %in(0) : (!firrtl.bundle<foo: reset>) -> !firrtl.reset
+    %0 = firrtl.subfield %in[foo] : !firrtl.bundle<foo: reset>
     firrtl.connect %out, %0 : !firrtl.reset, !firrtl.reset
   }
 }
@@ -110,7 +110,7 @@ firrtl.circuit "top" {
   firrtl.module @top(out %out: !firrtl.reset) {
     // expected-error @+1 {{reset network never driven with concrete type}}
     %e_out = firrtl.instance e @ext(out out: !firrtl.bundle<foo: reset>)
-    %0 = firrtl.subfield %e_out(0) : (!firrtl.bundle<foo: reset>) -> !firrtl.reset
+    %0 = firrtl.subfield %e_out[foo] : !firrtl.bundle<foo: reset>
     firrtl.connect %out, %0 : !firrtl.reset, !firrtl.reset
   }
 }

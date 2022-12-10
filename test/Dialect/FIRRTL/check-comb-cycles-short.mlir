@@ -32,16 +32,16 @@ module  {
       %z = firrtl.wire  : !firrtl.uint<1>
       firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
       %m_r = firrtl.mem Undefined  {depth = 2 : i64, name = "m", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-      %0 = firrtl.subfield %m_r(2) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.clock
+      %0 = firrtl.subfield %m_r[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
       firrtl.connect %0, %clk : !firrtl.clock, !firrtl.clock
       // expected-note @+1 {{hasloops.m.r.addr}}
-      %1 = firrtl.subfield %m_r(0) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
+      %1 = firrtl.subfield %m_r[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
       firrtl.connect %1, %y : !firrtl.uint<1>, !firrtl.uint<1>
-      %2 = firrtl.subfield %m_r(1) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
+      %2 = firrtl.subfield %m_r[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
       %c1_ui = firrtl.constant 1 : !firrtl.uint
       firrtl.connect %2, %c1_ui : !firrtl.uint<1>, !firrtl.uint
       // expected-note @+1 {{hasloops.m.r.data}}
-      %3 = firrtl.subfield %m_r(3) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
+      %3 = firrtl.subfield %m_r[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
       firrtl.connect %z, %3 : !firrtl.uint<1>, !firrtl.uint<1>
       firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
       firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>

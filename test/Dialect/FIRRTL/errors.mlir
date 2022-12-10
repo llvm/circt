@@ -612,11 +612,42 @@ firrtl.circuit "MemoryPortsWithDifferentTypes" {
 
 // -----
 
-firrtl.circuit "SubfieldOpFieldError" {
+firrtl.circuit "SubfieldOpWithIntegerFieldIndex" {
   firrtl.module @SubfieldOpFieldError() {
     %w = firrtl.wire  : !firrtl.bundle<a: uint<2>, b: uint<2>>
-    // expected-error @+1 {{}}
-    %w_a = firrtl.subfield %w(2) : (!firrtl.bundle<a : uint<2>, b : uint<2>>) -> !firrtl.uint<2>
+    // expected-error @+1 {{'firrtl.subfield' expected valid keyword or string}}
+    %w_a = firrtl.subfield %w[2] : !firrtl.bundle<a : uint<2>, b : uint<2>>
+  }
+}
+
+// -----
+
+firrtl.circuit "SubfieldOpFieldUnknown" {
+  firrtl.module @SubfieldOpFieldError() {
+    %w = firrtl.wire  : !firrtl.bundle<a: uint<2>, b: uint<2>>
+    // expected-error @+1 {{'firrtl.subfield' unknown field c in bundle type '!firrtl.bundle<a: uint<2>, b: uint<2>>'}}
+    %w_a = firrtl.subfield %w[c] : !firrtl.bundle<a : uint<2>, b : uint<2>>
+  }
+}
+
+// -----
+
+firrtl.circuit "SubfieldOpInputTypeMismatch" {
+  firrtl.module @SubfieldOpFieldError() {
+    %w = firrtl.wire : !firrtl.bundle<a: uint<2>, b: uint<2>>
+    // expected-error @+2 {{use of value '%w' expects different type than prior uses}}
+    // expected-note  @-2 {{prior use here}}
+    %w_a = firrtl.subfield %w[a] : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "SubfieldOpNonBundleInputType" {
+  firrtl.module @SubfieldOpFieldError() {
+    %w = firrtl.wire : !firrtl.uint<1>
+    // expected-error @+1 {{'firrtl.subfield' input must be bundle type, got '!firrtl.uint<1>'}}
+    %w_a = firrtl.subfield %w[a] : !firrtl.uint<1>
   }
 }
 
