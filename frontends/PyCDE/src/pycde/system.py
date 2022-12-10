@@ -279,11 +279,10 @@ class System:
       "builtin.module(esi-emit-collateral{{tops={tops} schema-file=schema.capnp}})",
       "builtin.module(lower-msft-to-hw{{verilog-file={verilog_file}}})",
       "builtin.module(hw.module(lower-seq-hlmem))",
-      # "cse",
       "builtin.module(lower-esi-to-physical, lower-esi-ports, lower-esi-to-hw)",
       "builtin.module(convert-fsm-to-sv)",
       "builtin.module(lower-seq-to-sv)",
-      "builtin.module(cse)",
+      "builtin.module(cse, canonicalize, cse)",
       "builtin.module(hw.module(prettify-verilog), hw.module(hw-cleanup))",
       "builtin.module(msft-export-tcl{{tops={tops} tcl-file={tcl_file}}})"
   ]
