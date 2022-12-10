@@ -37,35 +37,85 @@ struct LowerIntrinsicsPass : public LowerIntrinsicsBase<LowerIntrinsicsPass> {
 };
 } // end anonymous namespace
 
+static ParseResult hasNPorts(StringRef name, FExtModuleOp mod, unsigned n) {
+  if (mod.getPorts().size() != n) {
+    mod.emitError(name) << " has " << mod.getPorts().size()
+                        << " ports instead of " << n;
+    return failure();
+  }
+  return success();
+}
+
+static ParseResult namedPort(StringRef name, FExtModuleOp mod, unsigned n,
+                             StringRef portName) {
+  auto ports = mod.getPorts();
+  if (n >= ports.size()) {
+    mod.emitError(name) << " missing port " << n;
+    return failure();
+  }
+  if (!ports[n].getName().equals(portName)) {
+    mod.emitError(name) << " port " << n << " named '" << ports[n].getName()
+                        << "' instead of '" << portName << "'";
+    return failure();
+  }
+  return success();
+}
+
+template <typename T>
+static ParseResult sizedPort(StringRef name, FExtModuleOp mod, unsigned n,
+                             int32_t size) {
+  auto ports = mod.getPorts();
+  if (n >= ports.size()) {
+    mod.emitError(name) << " missing port " << n;
+    return failure();
+  }
+  if (!ports[n].type.isa<T>()) {
+    mod.emitError(name) << " port " << n << " not a correct type";
+    return failure();
+  }
+  if (ports[n].type.cast<T>().getWidth() != size) {
+    mod.emitError(name) << " port " << n << " not size " << size;
+    return failure();
+  }
+  return success();
+}
+
+static ParseResult hasNParam(StringRef name, FExtModuleOp mod, unsigned n) {
+  unsigned num = 0;
+  if (mod.getParameters())
+    num = mod.getParameters().size();
+  if (n != num) {
+    mod.emitError(name) << " has " << num << " parameters instead of " << n;
+    return failure();
+  }
+  return success();
+}
+static ParseResult namedParam(StringRef name, FExtModuleOp mod,
+                              StringRef paramName) {
+  for (auto a : mod.getParameters()) {
+    auto param = a.cast<ParamDeclAttr>();
+    if (param.getName().getValue().equals(paramName)) {
+      if (param.getValue().isa<StringAttr>())
+        return success();
+
+      mod.emitError(name) << " test has parameter '" << param.getName()
+                          << "' which should be a string but is not";
+      return failure();
+    }
+  }
+  mod.emitError(name) << " is missing parameter " << paramName;
+  return failure();
+}
+
 static bool lowerCirctSizeof(InstancePathCache &instancePathCache,
                              FExtModuleOp mod) {
   auto ports = mod.getPorts();
-  if (ports.size() != 2) {
-    mod.emitError("circt.sizeof does not have 2 ports");
+  if (hasNPorts("circt.sizeof", mod, 2) ||
+      namedPort("circt.sizeof", mod, 0, "i") ||
+      namedPort("circt.sizeof", mod, 1, "size") ||
+      sizedPort<UIntType>("circt.sizeof", mod, 1, 32) ||
+      hasNParam("circt.sizeof", mod, 0))
     return false;
-  }
-  if (!ports[0].getName().equals("i")) {
-    mod.emitError("circt.sizeof first port named '")
-        << ports[0].getName() << "' instead of 'i'";
-    return false;
-  }
-  if (!ports[1].getName().equals("size")) {
-    mod.emitError("circt.sizeof second port named '")
-        << ports[0].getName() << "' instead of 'size'";
-    return false;
-  }
-  if (!ports[1].type.isa<UIntType>()) {
-    mod.emitError("circt.sizeof second port not a UInt<32>");
-    return false;
-  }
-  if (ports[1].type.cast<UIntType>().getWidth() != 32) {
-    mod.emitError("circt.sizeof second port not a UInt<32>");
-    return false;
-  }
-  if (mod.getParameters() && !mod.getParameters().empty()) {
-    mod.emitError("circt.sizeof has parameters");
-    return false;
-  }
 
   for (auto *use : instancePathCache.instanceGraph[mod]->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
@@ -82,28 +132,11 @@ static bool lowerCirctSizeof(InstancePathCache &instancePathCache,
 static bool lowerCirctIsX(InstancePathCache &instancePathCache,
                           FExtModuleOp mod) {
   auto ports = mod.getPorts();
-  if (ports.size() != 2) {
-    mod.emitError("circt.sizeof does not have 2 ports");
+  if (hasNPorts("circt.isaX", mod, 2) || namedPort("circt.isX", mod, 0, "i") ||
+      namedPort("circt.isX", mod, 1, "found") ||
+      sizedPort<UIntType>("circt.isX", mod, 1, 1) ||
+      hasNParam("circt.isX", mod, 0))
     return false;
-  }
-  if (!ports[0].getName().equals("i")) {
-    mod.emitError("circt.isX first port named '")
-        << ports[0].getName() << "' instead of 'i'";
-    return false;
-  }
-  if (!ports[1].getName().equals("found")) {
-    mod.emitError("circt.isX second port named '")
-        << ports[0].getName() << "' instead of 'found'";
-    return false;
-  }
-  if (!ports[1].type.isa<UIntType>()) {
-    mod.emitError("circt.isX second port not a UInt<1>");
-    return false;
-  }
-  if (mod.getParameters() && !mod.getParameters().empty()) {
-    mod.emitError("circt.isX has parameters");
-    return false;
-  }
 
   for (auto *use : instancePathCache.instanceGraph[mod]->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
@@ -119,38 +152,14 @@ static bool lowerCirctIsX(InstancePathCache &instancePathCache,
 
 static bool lowerCirctPlusArgTest(InstancePathCache &instancePathCache,
                                   FExtModuleOp mod) {
-  auto ports = mod.getPorts();
-  if (ports.size() != 1) {
-    mod.emitError("circt.plusargs.test does not have 1 port");
+  if (hasNPorts("circt.plusargs.test", mod, 1) ||
+      namedPort("circt.plusargs.test", mod, 0, "found") ||
+      sizedPort<UIntType>("circt.plusargs.test", mod, 0, 1) ||
+      hasNParam("circt.plusargs.test", mod, 1) ||
+      namedParam("circt.plusargs.test", mod, "FORMAT"))
     return false;
-  }
-  if (!ports[0].getName().equals("found")) {
-    mod.emitError("circt.plusargs.test first port named '")
-        << ports[0].getName() << "' instead of 'i'";
-    return false;
-  }
-  if (!ports[0].type.isa<UIntType>()) {
-    mod.emitError("circt.plusargs.test port not a UInt<1>");
-    return false;
-  }
-  if (!mod.getParameters() || mod.getParameters().size() != 1) {
-    mod.emitError(
-        "circt.plusargs.test doesn't have a single parameter named FORMAT");
-    return false;
-  }
-  auto param = mod.getParameters()[0].dyn_cast<ParamDeclAttr>();
-  assert(param && "param array is the wrong type");
-  if (!param.getName().getValue().equals("FORMAT")) {
-    mod.emitError("circt.plusargs.test has parameter '")
-        << param.getName() << "' instead of FORMAT";
-    return false;
-  }
-  if (!param.getValue().isa<StringAttr>()) {
-    mod.emitError(
-        "circt.plusargs.test has parameter FORMAT which is not a string");
-    return false;
-  }
 
+  auto param = mod.getParameters()[0].cast<ParamDeclAttr>();
   for (auto *use : instancePathCache.instanceGraph[mod]->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
@@ -164,42 +173,15 @@ static bool lowerCirctPlusArgTest(InstancePathCache &instancePathCache,
 
 static bool lowerCirctPlusArgValue(InstancePathCache &instancePathCache,
                                    FExtModuleOp mod) {
-  auto ports = mod.getPorts();
-  if (ports.size() != 2) {
-    mod.emitError("circt.plusargs.value does not have 2 port");
+  if (hasNPorts("circt.plusargs.value", mod, 2) ||
+      namedPort("circt.plusargs.value", mod, 0, "found") ||
+      namedPort("circt.plusargs.value", mod, 1, "result") ||
+      sizedPort<UIntType>("circt.plusargs.value", mod, 0, 1) ||
+      hasNParam("circt.plusargs.value", mod, 1) ||
+      namedParam("circt.plusargs.value", mod, "FORMAT"))
     return false;
-  }
-  if (!ports[0].getName().equals("found")) {
-    mod.emitError("circt.plusargs.value first port named '")
-        << ports[0].getName() << "' instead of 'i'";
-    return false;
-  }
-  if (!ports[0].type.isa<UIntType>()) {
-    mod.emitError("circt.plusargs.value port not a UInt<1>");
-    return false;
-  }
-  if (!ports[1].getName().equals("result")) {
-    mod.emitError("circt.plusargs.value second port named '")
-        << ports[0].getName() << "' instead of 'result'";
-    return false;
-  }
-  if (!mod.getParameters() || mod.getParameters().size() != 1) {
-    mod.emitError(
-        "circt.plusargs.value doesn't have a single parameter named FORMAT");
-    return false;
-  }
-  auto param = mod.getParameters()[0].dyn_cast<ParamDeclAttr>();
-  assert(param && "param array is the wrong type");
-  if (!param.getName().getValue().equals("FORMAT")) {
-    mod.emitError("circt.plusargs.value has parameter '")
-        << param.getName() << "' instead of FORMAT";
-    return false;
-  }
-  if (!param.getValue().isa<StringAttr>()) {
-    mod.emitError(
-        "circt.plusargs.value has parameter FORMAT which is not a string");
-    return false;
-  }
+
+  auto param = mod.getParameters()[0].cast<ParamDeclAttr>();
 
   for (auto *use : instancePathCache.instanceGraph[mod]->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
