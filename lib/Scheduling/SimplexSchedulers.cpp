@@ -563,8 +563,8 @@ LogicalResult SimplexSchedulerBase::solveTableau() {
 
     // If we did not find a pivot column, then the entire row contained only
     // positive entries, and the problem is in principle infeasible. However, if
-    // the entry in the `parameterTColumn` is positive, we can make the LP
-    // feasible again by increasing the II.
+    // the entry in the `parameterTColumn` is positive, we can try to make the
+    // LP feasible again by increasing the II.
     int entry1Col = tableau[*pivotRow][parameter1Column];
     int entryTCol = tableau[*pivotRow][parameterTColumn];
     if (entryTCol > 0) {
@@ -573,11 +573,12 @@ LogicalResult SimplexSchedulerBase::solveTableau() {
       // would not have been a valid pivot row), and without the negation, the
       // new II would be negative.
       assert(entry1Col < 0);
-      parameterT = (-entry1Col - 1) / entryTCol + 1;
-
-      LLVM_DEBUG(dbgs() << "Increased II to " << parameterT << '\n');
-
-      continue;
+      int newParameterT = (-entry1Col - 1) / entryTCol + 1;
+      if (newParameterT > parameterT) {
+        parameterT = newParameterT;
+        LLVM_DEBUG(dbgs() << "Increased II to " << parameterT << '\n');
+        continue;
+      }
     }
 
     // Otherwise, the linear program is infeasible.
@@ -1012,28 +1013,29 @@ void ModuloSimplexScheduler::updateMargins() {
 void ModuloSimplexScheduler::scheduleOperation(Operation *n) {
   unsigned stvN = startTimeVariables[n];
 
-  // Get current state of the LP, and determine range of alternative times
-  // guaranteed to be feasible.
+  // Get current state of the LP. We'll try to schedule at its current time step
+  // in the partial solution, and the II-1 following time steps. Scheduling the
+  // op to a later time step may increase the overall latency, however, as long
+  // as the solution is still feasible, we prefer that over incrementing the II
+  // to resolve resource conflicts.
   unsigned stN = getStartTime(stvN);
-  unsigned lbN = (unsigned)std::max<int>(asapTimes[stvN], stN - parameterT + 1);
-  unsigned ubN = (unsigned)std::min<int>(alapTimes[stvN], lbN + parameterT - 1);
+  unsigned ubN = stN + parameterT - 1;
 
-  LLVM_DEBUG(dbgs() << "Attempting to schedule at t=" << stN << ", or in ["
-                    << lbN << ", " << ubN << "]: " << *n << '\n');
+  LLVM_DEBUG(dbgs() << "Attempting to schedule in [" << stN << ", " << ubN
+                    << "]: " << *n << '\n');
 
-  SmallVector<unsigned> candTimes;
-  candTimes.push_back(stN);
-  for (unsigned ct = lbN; ct <= ubN; ++ct)
-    if (ct != stN)
-      candTimes.push_back(ct);
-
-  for (unsigned ct : candTimes)
+  for (unsigned ct = stN; ct <= ubN; ++ct)
     if (succeeded(mrt.enter(n, ct))) {
       auto fixedN = scheduleAt(stvN, ct);
-      assert(succeeded(fixedN));
-      (void)fixedN;
-      LLVM_DEBUG(dbgs() << "Success at t=" << ct << " " << *n << '\n');
-      return;
+      if (succeeded(fixedN)) {
+        LLVM_DEBUG(dbgs() << "Success at t=" << ct << " " << *n << '\n');
+        return;
+      }
+      // Problem became infeasible with `n` at `ct`, roll back the MRT
+      // assignment. Also, no later time can be feasible, so stop the search
+      // here.
+      mrt.release(n);
+      break;
     }
 
   // As a last resort, increase II to make room for the op. De Dinechin's
