@@ -1011,6 +1011,7 @@ void ModuloSimplexScheduler::updateMargins() {
 }
 
 void ModuloSimplexScheduler::scheduleOperation(Operation *n) {
+  auto oprN = *prob.getLinkedOperatorType(n);
   unsigned stvN = startTimeVariables[n];
 
   // Get current state of the LP. We'll try to schedule at its current time step
@@ -1060,22 +1061,26 @@ void ModuloSimplexScheduler::scheduleOperation(Operation *n) {
   // We're going to revisit the current partial schedule.
   SmallVector<Operation *> moved;
   for (Operation *j : scheduled) {
+    auto oprJ = *prob.getLinkedOperatorType(j);
     unsigned stvJ = startTimeVariables[j];
     unsigned stJ = getStartTime(stvJ);
     unsigned phiJ = stJ / parameterT;
     unsigned tauJ = stJ % parameterT;
     unsigned deltaJ = 0;
 
-    // To actually resolve the resource conflicts, we will move operations that
-    // are "preceded" (cf. de Dinechin's ≺ relation) one slot to the right.
-    if (tauN < tauJ || (tauN == tauJ && phiN > phiJ) ||
-        (tauN == tauJ && phiN == phiJ && stvN < stvJ)) {
-      // TODO: Replace the last condition with a proper graph analysis.
+    if (oprN == oprJ) {
+      // To actually resolve the resource conflicts, we will move operations
+      // that are "preceded" (cf. de Dinechin's ≺ relation) one slot to the
+      // right.
+      if (tauN < tauJ || (tauN == tauJ && phiN > phiJ) ||
+          (tauN == tauJ && phiN == phiJ && stvN < stvJ)) {
+        // TODO: Replace the last condition with a proper graph analysis.
 
-      deltaJ = 1;
-      moved.push_back(j);
-      if (tauN == tauJ)
-        deltaN = 0;
+        deltaJ = 1;
+        moved.push_back(j);
+        if (tauN == tauJ)
+          deltaN = 0;
+      }
     }
 
     // Move operation.
