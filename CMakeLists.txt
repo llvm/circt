@@ -478,7 +478,7 @@ llvm_canonicalize_cmake_booleans(CIRCT_LLHD_SIM_ENABLED)
 # If circt-lec hasn't been explicitly disabled, find it.
 option(CIRCT_LEC_DISABLE "Disable the Logical Equivalence Checker" OFF)
 if(CIRCT_LEC_DISABLE)
-  message (STATUS "Disabling circt-lec")
+  message(STATUS "Disabling circt-lec")
 else()
   if(Z3_DIR)
     # Search and load the package configuration file in the specified directory.
@@ -487,7 +487,7 @@ else()
       # Report the found library location and version
       # similarly to LLVM's `FindZ3` CMake module.
       get_target_property(Z3_LIB_LOCATION z3::libz3 IMPORTED_LOCATION_DEBUG)
-      message (STATUS "Found Z3: ${Z3_LIB_LOCATION} (found version \"${Z3_VERSION_STRING}\")")
+      message(STATUS "Found Z3: ${Z3_LIB_LOCATION} (found version \"${Z3_VERSION_STRING}\")")
     endif()
     # Link against the reported library and include locations.
     list(APPEND CIRCT_LEC_LIBS ${Z3_LIBRARIES})
@@ -501,9 +501,14 @@ else()
   endif()
   
   if(Z3_FOUND)
-    message(STATUS "Z3 identified as a logical backend.")
-    # Signal to proceed building circt-lec.
-    set(CIRCT_LEC_ENABLED ON)
+    SET(CIRCT_LEC_Z3_VER 4.8.11)
+    if(Z3_VERSION VERSION_LESS ${CIRCT_LEC_Z3_VER})
+      message(WARNING "Cannot build circt-lec with outdated Z3 version ${Z3_VERSION}, requires ${CIRCT_LEC_Z3_VER}.")
+    else()
+      message(STATUS "Z3 identified as a logical backend.")
+      # Signal to proceed building circt-lec.
+      set(CIRCT_LEC_ENABLED ON)
+    endif()
   endif()
 endif()
 
