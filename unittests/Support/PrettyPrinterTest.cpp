@@ -834,7 +834,8 @@ protected:
   TokenStringSaver saver;
 
   template <typename Callable>
-  void testStreams(Callable &&test, llvm::Optional<StringRef> data = std::nullopt,
+  void testStreams(Callable &&test,
+                   llvm::Optional<StringRef> data = std::nullopt,
                    unsigned margin = 10) {
     out.clear();
     compare.clear();
