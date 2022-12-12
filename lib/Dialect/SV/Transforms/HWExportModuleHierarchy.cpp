@@ -81,7 +81,7 @@ static void extractHierarchyFromTop(hw::HWModuleOp op, SymbolTable &symbolTable,
 /// and if they exist, emit a verbatim op with the module hierarchy for each.
 void HWExportModuleHierarchyPass::runOnOperation() {
   mlir::ModuleOp mlirModule = getOperation();
-  Optional<SymbolTable> symbolTable = None;
+  Optional<SymbolTable> symbolTable = std::nullopt;
   bool directoryCreated = false;
 
   for (auto op : mlirModule.getOps<hw::HWModuleOp>()) {

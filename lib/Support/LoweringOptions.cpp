@@ -37,7 +37,7 @@ parseLocationInfoStyle(StringRef option) {
       .Case("plain", LoweringOptions::Plain)
       .Case("wrapInAtSquareBracket", LoweringOptions::WrapInAtSquareBracket)
       .Case("none", LoweringOptions::None)
-      .Default(llvm::None);
+      .Default(std::nullopt);
 }
 
 static Optional<LoweringOptions::WireSpillingHeuristic>
@@ -46,7 +46,7 @@ parseWireSpillingHeuristic(StringRef option) {
              llvm::Optional<LoweringOptions::WireSpillingHeuristic>>(option)
       .Case("spillLargeTermsWithNamehints",
             LoweringOptions::SpillLargeTermsWithNamehints)
-      .Default(llvm::None);
+      .Default(std::nullopt);
 }
 
 void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {

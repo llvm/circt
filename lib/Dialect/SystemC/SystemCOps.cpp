@@ -835,7 +835,7 @@ void FuncOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   assert(type.getNumInputs() == argAttrs.size());
   mlir::function_interface_impl::addArgAndResultAttrs(
       odsBuilder, odsState, argAttrs,
-      /*resultAttrs=*/llvm::None);
+      /*resultAttrs=*/std::nullopt);
 }
 
 ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {

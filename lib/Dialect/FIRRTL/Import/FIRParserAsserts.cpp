@@ -184,7 +184,7 @@ parseConditionalCompileToggle(const ExtractionSummaryCursor<StringRef> &ex) {
   else if (ex.value == "unrOnly")
     return {"USE_UNR_ONLY_CONSTRAINTS"};
   ex.emitError() << "must be `formalOnly` or `unrOnly`";
-  return llvm::None;
+  return std::nullopt;
 }
 
 /// Parse a string into a `PredicateModifier`.
@@ -195,7 +195,7 @@ parsePredicateModifier(const ExtractionSummaryCursor<StringRef> &ex) {
   else if (ex.value == "trueOrIsX")
     return PredicateModifier::TrueOrIsX;
   ex.emitError() << "must be `noMod` or `trueOrIsX`";
-  return llvm::None;
+  return std::nullopt;
 }
 
 /// Check that an assertion "format" is one of the admissible values, or report
@@ -205,7 +205,7 @@ parseAssertionFormat(const ExtractionSummaryCursor<StringRef> &ex) {
   if (ex.value == "sva" || ex.value == "ifElseFatal")
     return ex.value;
   ex.emitError() << "must be `sva` or `ifElseFatal`";
-  return llvm::None;
+  return std::nullopt;
 }
 
 /// Chisel has a tendency to emit complex assert/assume/cover statements encoded

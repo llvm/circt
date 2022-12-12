@@ -1713,10 +1713,10 @@ Value ArrayCreateOp::getUniformElement() {
 static Optional<uint64_t> getUIntFromValue(Value value) {
   auto idxOp = dyn_cast_or_null<ConstantOp>(value.getDefiningOp());
   if (!idxOp)
-    return llvm::None;
+    return std::nullopt;
   APInt idxAttr = idxOp.getValue();
   if (idxAttr.getBitWidth() > 64)
-    return llvm::None;
+    return std::nullopt;
   return idxAttr.getLimitedValue();
 }
 

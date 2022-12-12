@@ -215,7 +215,7 @@ void ResolveTracesPass::runOnOperation() {
     SmallVector<Annotation> outputAnnotations;
 
     // A lazily constructed module namespace.
-    Optional<ModuleNamespace> moduleNamespace = None;
+    Optional<ModuleNamespace> moduleNamespace = std::nullopt;
 
     // Return a cached module namespace, lazily constructing it if needed.
     auto getNamespace = [&](FModuleLike module) -> ModuleNamespace & {

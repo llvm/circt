@@ -408,7 +408,7 @@ ParseResult llhd::EntityOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
 
-  auto type = parser.getBuilder().getFunctionType(argTypes, llvm::None);
+  auto type = parser.getBuilder().getFunctionType(argTypes, std::nullopt);
   result.addAttribute(circt::llhd::EntityOp::getTypeAttrName(),
                       TypeAttr::get(type));
 
@@ -654,7 +654,7 @@ ParseResult llhd::ProcOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parseProcArgumentList(parser, argTypes, argNames))
     return failure();
 
-  auto type = builder.getFunctionType(argTypes, llvm::None);
+  auto type = builder.getFunctionType(argTypes, std::nullopt);
   result.addAttribute(circt::llhd::ProcOp::getTypeAttrName(),
                       TypeAttr::get(type));
 

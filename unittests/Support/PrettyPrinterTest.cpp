@@ -834,7 +834,7 @@ protected:
   TokenStringSaver saver;
 
   template <typename Callable>
-  void testStreams(Callable &&test, llvm::Optional<StringRef> data = llvm::None,
+  void testStreams(Callable &&test, llvm::Optional<StringRef> data = std::nullopt,
                    unsigned margin = 10) {
     out.clear();
     compare.clear();
@@ -852,7 +852,7 @@ protected:
 
   template <typename Callable>
   void testStreamsSame(Callable &&test,
-                       llvm::Optional<StringRef> data = llvm::None,
+                       llvm::Optional<StringRef> data = std::nullopt,
                        unsigned margin = 10) {
     testStreams(
         [&](auto &ps, auto &os) {
@@ -885,7 +885,7 @@ TEST_F(TokenStreamCompareTest, NBSPs) {
 }
 
 TEST_F(TokenStreamCompareTest, Numeric) {
-  auto test = [&](auto x, llvm::Optional<StringRef> data = llvm::None) {
+  auto test = [&](auto x, llvm::Optional<StringRef> data = std::nullopt) {
     testStreams(
         [&](auto &ps, auto &os) {
           ps.addAsString(x);

@@ -400,7 +400,7 @@ Optional<unsigned> SimplexSchedulerBase::findDualPivotRow() {
     if (getParametricConstant(row) < 0)
       return row;
 
-  return None;
+  return std::nullopt;
 }
 
 Optional<unsigned>
@@ -455,7 +455,7 @@ Optional<unsigned> SimplexSchedulerBase::findPrimalPivotColumn() {
       return col;
   }
 
-  return None;
+  return std::nullopt;
 }
 
 Optional<unsigned>

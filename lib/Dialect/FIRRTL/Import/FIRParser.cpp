@@ -1807,7 +1807,7 @@ FIRStmtParser::parseExpWithLeadingKeyword(FIRToken keyword) {
   switch (getToken().getKind()) {
   default:
     // This isn't part of an expression, and isn't part of a statement.
-    return None;
+    return std::nullopt;
 
   case FIRToken::period:     // exp `.` identifier
   case FIRToken::l_square:   // exp `[` index `]`

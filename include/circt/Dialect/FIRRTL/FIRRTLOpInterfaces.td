@@ -361,7 +361,7 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
       "Optional<::mlir::StringRef>", "getInnerName", (ins), [{}],
       /*defaultImplementation=*/[{
         auto attr = this->getInnerNameAttr();
-        return attr ? Optional<StringRef>(attr.getValue()) : None;
+        return attr ? Optional<StringRef>(attr.getValue()) : std::nullopt;
       }]
     >,
     InterfaceMethod<"Sets the name of this inner symbol.",

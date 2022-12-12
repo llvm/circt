@@ -44,7 +44,7 @@ void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
     return;
   assert(type.getNumInputs() == argAttrs.size());
   function_interface_impl::addArgAndResultAttrs(builder, state, argAttrs,
-                                                /*resultAttrs=*/llvm::None);
+                                                /*resultAttrs=*/std::nullopt);
 }
 
 /// Get the initial state of the machine.
