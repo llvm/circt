@@ -99,7 +99,7 @@ def InnerSymProperties : AttrDef<HWDialect, "InnerSymProperties"> {
   let mnemonic = "innerSymProps";
   let parameters = (ins
          "mlir::StringAttr":$name,
-         DefaultValuedParameter<"int64_t", "0">:$fieldID,
+         DefaultValuedParameter<"uint64_t", "0">:$fieldID,
          DefaultValuedParameter<"::mlir::StringAttr", "public">:$sym_visibility
                      );
   let builders = [
