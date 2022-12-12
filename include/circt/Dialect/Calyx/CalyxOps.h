@@ -97,7 +97,7 @@ struct PortInfo {
       return identifier == idToAttribute.getName();
     });
     if (it == attributes.end())
-      return None;
+      return std::nullopt;
     return it->getValue();
   }
 

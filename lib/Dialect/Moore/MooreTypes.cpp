@@ -146,7 +146,7 @@ Optional<unsigned> UnpackedType::getBitSize() const {
           [](auto type) { return type.getInner().getBitSize(); })
       .Case<UnpackedStructType>(
           [](auto type) { return type.getStruct().bitSize; })
-      .Default([](auto) { return llvm::None; });
+      .Default([](auto) { return std::nullopt; });
 }
 
 /// Map an `IntType` to the corresponding SBVT. Never returns a null type.
@@ -1045,7 +1045,7 @@ Struct::Struct(StructKind kind, ArrayRef<StructMember> members, StringAttr name,
     if (auto memberSize = member.type.getBitSize()) {
       *bitSize += *memberSize;
     } else {
-      bitSize = llvm::None;
+      bitSize = std::nullopt;
       break;
     }
   }

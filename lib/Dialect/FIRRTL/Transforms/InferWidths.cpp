@@ -522,7 +522,7 @@ struct LinIneq {
 
     // Among those terms that have a maximum scaling factor, determine the
     // largest bias value.
-    Optional<int32_t> maxBias = llvm::None;
+    Optional<int32_t> maxBias = std::nullopt;
     if (enable1 && scale1 == maxScale)
       maxBias = bias1;
     if (enable2 && scale2 == maxScale && (!maxBias || bias2 > *maxBias))
@@ -817,7 +817,7 @@ computeUnary(ExprSolution arg, llvm::function_ref<int32_t(int32_t)> operation) {
 static ExprSolution
 computeBinary(ExprSolution lhs, ExprSolution rhs,
               llvm::function_ref<int32_t(int32_t, int32_t)> operation) {
-  auto result = ExprSolution{llvm::None, lhs.second || rhs.second};
+  auto result = ExprSolution{std::nullopt, lhs.second || rhs.second};
   if (lhs.first && rhs.first)
     result.first = operation(*lhs.first, *rhs.first);
   else if (lhs.first)
@@ -858,12 +858,12 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
           .Case<VarExpr>([&](auto *expr) {
             // Unconstrained variables produce no solution.
             if (!expr->constraint)
-              return ExprSolution{llvm::None, false};
+              return ExprSolution{std::nullopt, false};
             // Return no solution for recursions in the variables. This is sane
             // and will cause the expression to be ignored when computing the
             // parent, e.g. `a >= max(a, 1)` will become just `a >= 1`.
             if (!seenVars.insert(expr).second)
-              return ExprSolution{llvm::None, true};
+              return ExprSolution{std::nullopt, true};
             auto solution = solveExpr(expr->constraint, seenVars, indent + 1);
             seenVars.erase(expr);
             // Constrain variables >= 0.
@@ -899,7 +899,7 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
             });
           })
           .Default([](auto) {
-            return ExprSolution{llvm::None, false};
+            return ExprSolution{std::nullopt, false};
           });
 
   // Memoize the result.

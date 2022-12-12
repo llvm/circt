@@ -130,7 +130,7 @@ void HWGeneratorCalloutPass::processGenerator(
   std::optional<StringRef> redirects[] = {
       std::nullopt, StringRef(genExecOutFileName), std::nullopt};
   int result = llvm::sys::ExecuteAndWait(
-      generatorExe, generatorArgStrRef, /*Env=*/None,
+      generatorExe, generatorArgStrRef, /*Env=*/std::nullopt,
       /*Redirects=*/redirects,
       /*SecondsToWait=*/0, /*MemoryLimit=*/0, &errMsg);
 

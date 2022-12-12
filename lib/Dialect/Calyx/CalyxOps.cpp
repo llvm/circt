@@ -1918,7 +1918,7 @@ static Optional<EnableOp> getLastEnableOp(SeqOp parent) {
   else if (auto seqOp = dyn_cast<SeqOp>(lastOp))
     return getLastEnableOp(seqOp);
 
-  return None;
+  return std::nullopt;
 }
 
 /// Returns a mapping of {enabled Group name, EnableOp} for all EnableOps within

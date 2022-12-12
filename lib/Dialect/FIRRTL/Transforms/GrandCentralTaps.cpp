@@ -387,7 +387,7 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
     if (!wirePathStr.empty())
       if (!tokenizePath(wirePathStr))
         wirePathStr.clear();
-    Optional<AnnoPathValue> wireTarget = None;
+    Optional<AnnoPathValue> wireTarget = std::nullopt;
     if (!wirePathStr.empty())
       wireTarget = resolvePath(wirePathStr, state.circuit, state.symTbl,
                                state.targetCaches);
@@ -403,7 +403,7 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
     // Extract the name of the wire, used for datatap.
     auto tapName = StringAttr::get(
         context, wirePathStr.substr(wirePathStr.find_last_of('>') + 1));
-    Optional<AnnoPathValue> srcTarget = None;
+    Optional<AnnoPathValue> srcTarget = std::nullopt;
     Value sendVal;
     if (classAttr.getValue() == internalKeyClass) {
       // For DataTapModuleSignalKey, the source is encoded as a string, that

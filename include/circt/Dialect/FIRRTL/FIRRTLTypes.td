@@ -98,7 +98,7 @@ def SizedBaseOrRefTypeOrForeignType : AnyTypeOf<[SizedBaseOrRefType, ForeignType
 def UInt1Type : FIRRTLDialectType<
     CPred<"$_self.isa<UIntType>() && "
           "($_self.cast<UIntType>().getWidth() == 1 ||"
-          " $_self.cast<UIntType>().getWidth() == None)">,
+          " $_self.cast<UIntType>().getWidth() == std::nullopt)">,
     "UInt<1> or UInt", "::circt::firrtl::UIntType">,
   BuildableType<"UIntType::get($_builder.getContext(), 1)">;
 

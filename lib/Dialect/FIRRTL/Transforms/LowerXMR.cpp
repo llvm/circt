@@ -432,11 +432,11 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       val.getDefiningOp()->emitOpError(
           "reference dataflow cannot be traced back to the remote read op");
     signalPassFailure();
-    return None;
+    return std::nullopt;
   }
 
   size_t addReachingSendsEntry(Value atRefVal, Attribute newRef,
-                               Optional<size_t> continueFrom = None) {
+                               Optional<size_t> continueFrom = std::nullopt) {
     auto leader = dataFlowClasses.getOrInsertLeaderValue(atRefVal);
     auto indx = refSendPathList.size();
     dataflowAt[leader] = indx;
@@ -453,7 +453,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
           // to a temp, and then insert it back to the Map.
           xmrPathSuffix[indx] = xmrSuffix;
         }
-        continueFrom = None;
+        continueFrom = std::nullopt;
       }
     }
     refSendPathList.push_back(std::make_pair(newRef, continueFrom));

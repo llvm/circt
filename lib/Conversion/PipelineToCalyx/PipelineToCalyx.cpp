@@ -98,7 +98,7 @@ public:
   Optional<TGroupOp> getNonPipelinedGroupFrom(Operation *op) {
     auto it = operationToGroup.find(op);
     if (it == operationToGroup.end())
-      return None;
+      return std::nullopt;
 
     if constexpr (std::is_same<TGroupOp, calyx::GroupInterface>::value)
       return it->second;

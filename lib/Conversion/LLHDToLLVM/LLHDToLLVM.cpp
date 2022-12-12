@@ -974,7 +974,7 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
           op->getLoc(), transformed.getTime(), 2);
 
       std::array<Value, 5> args({statePtr, procStateBC, realTime, delta, eps});
-      rewriter.create<LLVM::CallOp>(op->getLoc(), llvm::None,
+      rewriter.create<LLVM::CallOp>(op->getLoc(), std::nullopt,
                                     SymbolRefAttr::get(llhdSuspendFunc), args);
     }
 
@@ -1127,7 +1127,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
       // Add reg state pointer to global state.
       initBuilder.create<LLVM::CallOp>(
-          op->getLoc(), llvm::None, SymbolRefAttr::get(allocEntityFunc),
+          op->getLoc(), std::nullopt, SymbolRefAttr::get(allocEntityFunc),
           ArrayRef<Value>({initStatePtr, owner, regMall}));
 
       // Index of the signal in the entity's signal table.
@@ -1221,7 +1221,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
           // Add information to the state.
           initBuilder.create<LLVM::CallOp>(
-              op.getLoc(), llvm::None, SymbolRefAttr::get(addSigElemFunc),
+              op.getLoc(), std::nullopt, SymbolRefAttr::get(addSigElemFunc),
               ArrayRef<Value>({initStatePtr, sigIndex, toInt, numElements}));
         } else if (auto structTy =
                        underlyingTy.dyn_cast<LLVM::LLVMStructType>()) {
@@ -1254,7 +1254,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
             // Add information to the state.
             initBuilder.create<LLVM::CallOp>(
-                op.getLoc(), llvm::None, SymbolRefAttr::get(addSigStructFunc),
+                op.getLoc(), std::nullopt, SymbolRefAttr::get(addSigStructFunc),
                 ArrayRef<Value>(
                     {initStatePtr, sigIndex, elemToInt, elemSizeToInt}));
           }
@@ -1347,7 +1347,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
                                         procStateSensesPtr);
 
       std::array<Value, 3> allocProcArgs({initStatePtr, owner, procStateMall});
-      initBuilder.create<LLVM::CallOp>(op->getLoc(), llvm::None,
+      initBuilder.create<LLVM::CallOp>(op->getLoc(), std::nullopt,
                                        SymbolRefAttr::get(allocProcFunc),
                                        allocProcArgs);
     }
@@ -1572,7 +1572,7 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
     std::array<Value, 7> args({statePtr, transformed.getSignal(), bc, sigWidth,
                                realTime, delta, eps});
     // Create the library call.
-    rewriter.create<LLVM::CallOp>(op->getLoc(), llvm::None,
+    rewriter.create<LLVM::CallOp>(op->getLoc(), std::nullopt,
                                   SymbolRefAttr::get(drvFunc), args);
 
     rewriter.eraseOp(op);

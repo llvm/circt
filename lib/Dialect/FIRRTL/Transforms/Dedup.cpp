@@ -46,7 +46,7 @@ using hw::InnerRefAttr;
 llvm::raw_ostream &printHex(llvm::raw_ostream &stream,
                             ArrayRef<uint8_t> bytes) {
   // Print the hash on a single line.
-  return stream << format_bytes(bytes, llvm::None, 32) << "\n";
+  return stream << format_bytes(bytes, std::nullopt, 32) << "\n";
 }
 
 llvm::raw_ostream &printHash(llvm::raw_ostream &stream, llvm::SHA256 &data) {
@@ -461,7 +461,7 @@ struct Equivalence {
       auto aModule = instanceGraph.getReferencedModule(a);
       auto bModule = instanceGraph.getReferencedModule(b);
       // Create a new error for the submodule.
-      diag.attachNote(llvm::None)
+      diag.attachNote(std::nullopt)
           << "in instance " << a.getNameAttr() << " of " << aName
           << ", and instance " << b.getNameAttr() << " of " << bName;
       check(diag, aModule, bModule);

@@ -413,7 +413,7 @@ Operation *Dependence::getDestination() const {
 
 Optional<unsigned> Dependence::getSourceIndex() const {
   if (!isDefUse())
-    return None;
+    return std::nullopt;
 
   assert(defUse->get().isa<OpResult>() && "source is not an operation");
   return defUse->get().dyn_cast<OpResult>().getResultNumber();
@@ -421,7 +421,7 @@ Optional<unsigned> Dependence::getSourceIndex() const {
 
 Optional<unsigned> Dependence::getDestinationIndex() const {
   if (!isDefUse())
-    return None;
+    return std::nullopt;
   return defUse->getOperandNumber();
 }
 

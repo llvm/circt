@@ -2941,8 +2941,9 @@ private:
   LogicalResult visitSV(LogicOp op) { return emitDeclaration(op); }
   LogicalResult visitSV(LocalParamOp op) { return emitDeclaration(op); }
   template <typename Op>
-  LogicalResult emitAssignLike(Op op, PPExtString syntax,
-                               Optional<PPExtString> wordBeforeLHS = None);
+  LogicalResult
+  emitAssignLike(Op op, PPExtString syntax,
+                 Optional<PPExtString> wordBeforeLHS = std::nullopt);
   LogicalResult visitSV(AssignOp op);
   LogicalResult visitSV(BPAssignOp op);
   LogicalResult visitSV(PAssignOp op);

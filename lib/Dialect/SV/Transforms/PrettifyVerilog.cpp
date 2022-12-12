@@ -75,7 +75,7 @@ static bool isVerilogUnaryOperator(Operation *op) {
 static llvm::Optional<APInt> getInt(Value value) {
   if (auto cst = dyn_cast_or_null<hw::ConstantOp>(value.getDefiningOp()))
     return cst.getValue();
-  return llvm::None;
+  return std::nullopt;
 }
 
 // Checks whether the destination and the source of an assignment are the same.

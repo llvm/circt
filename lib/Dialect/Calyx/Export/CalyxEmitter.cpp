@@ -71,7 +71,7 @@ static Optional<StringRef> getCalyxAttrIdentifier(NamedAttribute attr) {
     if (dialect != nullptr && isa<CalyxDialect>(*dialect)) {
       return std::get<1>(identifier.split("."));
     }
-    return None;
+    return std::nullopt;
   }
 
   return identifier;

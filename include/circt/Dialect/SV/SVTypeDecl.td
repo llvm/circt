@@ -229,7 +229,7 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [HasCustomSSAName]> {
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$result), [{
-      return build($_builder, $_state, result, None);
+      return build($_builder, $_state, result, std::nullopt);
     }]>
   ];
 
