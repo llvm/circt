@@ -28,13 +28,23 @@ This will create a `pycde-<version>-<python version>-<platform>.whl` file in the
 
 ## Manual Compilation
 
-If you are interested in developing PyCDE, or simply want to install it yourself with CMake, you can configure CMake similarly to the [Python bindings](/PythonBindings/#manual-compilation):
+Follow these steps to setup your repository for installing PyCDE via CMake. Make sure that your repo has the proper LLVM/MLIR Python requirements by running the following from your CIRCT repo root:
 
 ```
-$ cd circt
+$ python -m pip install -r llvm/mlir/python/requirements.txt
+```
+Install Cap'n Proto, Verilator, OR-Tools using the provided scripts:
+$ utils/get-capnp.sh
+$ utils/get-verilator.sh
+$ utils/get-or-tools
+```
+
+After tool installation completes, install PyCDE with CMake:
+
+```
 $ mkdir build
 $ cd build
-$ cmake -G Ninja ../llvm/llvm \
+$ cmake \
     -DCMAKE_BUILD_TYPE=Debug \
     -DLLVM_ENABLE_PROJECTS=mlir \
     -DLLVM_ENABLE_ASSERTIONS=ON \
@@ -43,9 +53,33 @@ $ cmake -G Ninja ../llvm/llvm \
     -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
     -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
     -DCIRCT_ENABLE_FRONTENDS=PyCDE
+    -DPython3_EXECUTABLE=<path_to_python3.6+> \
+    -G Ninja ../llvm/llvm
+```
+Alternatively, you can pass the source and build paths to the CMake command and build in the specified folder:
+
+```
+$ cmake \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DLLVM_ENABLE_PROJECTS=mlir \
+    -DLLVM_ENABLE_ASSERTIONS=ON \
+    -DLLVM_EXTERNAL_PROJECTS=circt \
+    -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
+    -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
+    -DCIRCT_ENABLE_FRONTENDS=PyCDE \
+    -DPython3_EXECUTABLE=<path_to_python3.6+> \
+    -G Ninja \
+    -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=<your_circt_repo_root_path> \
+    -B<path_to_desired_build_dir> \
+    <your_circt_repo_root_path>/llvm/llvm
 ```
 
-Afterwards, use `ninja check-pycde` to ensure that PyCDE is built and the tests pass.
+Afterwards, use the following commands to ensure that CIRCT and PyCDE are built and the tests pass:
+```
+$ ninja -C <path_to_your_circt_build> check-circt
+$ ninja -C <path_to_your_circt_build> check-pycde
+$ ninja -C <path_to_your_circt_build> check-pycde-integration
+```
 
 If you want to use PyCDE after compiling it, you must add the core CIRCT bindings and PyCDE to your PYTHONPATH:
 
