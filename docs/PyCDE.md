@@ -34,6 +34,8 @@ Follow these steps to setup your repository for installing PyCDE via CMake. Make
 $ python -m pip install -r llvm/mlir/python/requirements.txt
 ```
 Install Cap'n Proto, Verilator, OR-Tools using the provided scripts:
+
+```
 $ utils/get-capnp.sh
 $ utils/get-verilator.sh
 $ utils/get-or-tools
