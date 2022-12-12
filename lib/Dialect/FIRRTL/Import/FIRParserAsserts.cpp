@@ -164,6 +164,7 @@ ParseResult parseJson(Location loc, const JsonType &jsonValue, FnType fn) {
 enum class VerifFlavor {
   VerifLibAssert, // contains "[verif-library-assert]"
   VerifLibAssume, // contains "[verif-library-assume]"
+  VerifLibCover,  // contains "[verif-library-cover]"
   Assert,         // begins with "assert:"
   Assume,         // begins with "assume:"
   Cover,          // begins with "cover:"
@@ -263,6 +264,8 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     flavor = VerifFlavor::VerifLibAssert;
   else if (fmt.contains("[verif-library-assume]"))
     flavor = VerifFlavor::VerifLibAssume;
+  else if (fmt.contains("[verif-library-cover]"))
+    flavor = VerifFlavor::VerifLibCover;
   else if (fmt.consume_front("assert:"))
     flavor = VerifFlavor::Assert;
   else if (fmt.consume_front("assume:"))
@@ -454,7 +457,8 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     // to JSON and embedded in the print message within `<extraction-summary>`
     // XML tags.
   case VerifFlavor::VerifLibAssert:
-  case VerifFlavor::VerifLibAssume: {
+  case VerifFlavor::VerifLibAssume:
+  case VerifFlavor::VerifLibCover: {
     // Isolate the JSON text in the `<extraction-summary>` XML tag.
     StringRef prefix, exStr, suffix;
     std::tie(prefix, exStr) = fmt.split("<extraction-summary>");
@@ -467,7 +471,7 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
           "printf-encoded assert/assume requires extraction summary");
       diag.attachNote(printOp.getLoc())
           << "because printf message contains "
-             "`[verif-library-{assert,assume}]` tag";
+             "`[verif-library-{assert,assume,cover}]` tag";
       diag.attachNote(printOp.getLoc())
           << "expected JSON-encoded extraction summary in "
              "`<extraction-summary>` XML tag";
@@ -590,10 +594,14 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
       op = builder.create<AssertOp>(printOp.getClock(), predicate,
                                     printOp.getCond(), message,
                                     printOp.getSubstitutions(), label, true);
-    else // VerifFlavor::VerifLibAssume
+    else if (flavor == VerifFlavor::VerifLibAssume)
       op = builder.create<AssumeOp>(printOp.getClock(), predicate,
                                     printOp.getCond(), message,
                                     printOp.getSubstitutions(), label, true);
+    else // VerifFlavor::VerifLibCover
+      op = builder.create<CoverOp>(printOp.getClock(), predicate,
+                                   printOp.getCond(), message,
+                                   printOp.getSubstitutions(), label, true);
     printOp.erase();
 
     // Attach additional attributes extracted from the JSON object.
