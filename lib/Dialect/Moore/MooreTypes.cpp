@@ -1150,7 +1150,7 @@ const Struct &UnpackedStructType::getStruct() const {
 //===----------------------------------------------------------------------===//
 
 struct Subset {
-  enum { None, Unpacked, Packed } implied = std::nullopt;
+  enum { None, Unpacked, Packed } implied = None;
   bool allowUnpacked = true;
 };
 
