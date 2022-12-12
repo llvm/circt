@@ -1327,20 +1327,31 @@ LogicalResult HandshakeLowering::connectConstantsToControl(
   return success();
 }
 
+/// Holds information about an handshake "basic block terminator" control
+/// operation
 struct BlockControlTerm {
+  /// The operation
   Operation *op;
+  /// The operation's control operand (must have type NoneType)
   Value ctrlOperand;
 
+  BlockControlTerm(Operation *op, Value ctrlOperand)
+      : op(op), ctrlOperand(ctrlOperand) {
+    assert(op && ctrlOperand);
+    assert(ctrlOperand.getType().isa<NoneType>() &&
+           "Control operand must be a NoneType");
+  }
+
+  /// Checks for member-wise equality
   friend bool operator==(const BlockControlTerm &lhs,
                          const BlockControlTerm &rhs) {
-    // Check for membe-wise equality
     return lhs.op == rhs.op && lhs.ctrlOperand == rhs.ctrlOperand;
   }
 };
 
 static BlockControlTerm getBlockControlTerminator(Block *block) {
   // Identify the control terminator operation and its control operand in the
-  // given block
+  // given block. One such operation must exist in the block
   for (Operation &op : *block) {
     if (auto branchOp = dyn_cast<handshake::BranchOp>(op))
       if (branchOp.isControl())
@@ -1351,7 +1362,7 @@ static BlockControlTerm getBlockControlTerminator(Block *block) {
     if (auto endOp = dyn_cast<handshake::ReturnOp>(op))
       return {endOp, endOp.getOperands().back()};
   }
-  return {nullptr, nullptr};
+  assert(false && "Block terminator must exist");
 }
 
 static LogicalResult getOpMemRef(Operation *op, Value &out) {
@@ -1545,9 +1556,8 @@ getControlTerminators(ArrayRef<Operation *> memOps) {
   for (Operation *op : memOps) {
     // Get block from which the mem op originates
     Block *block = op->getBlock();
-    // Identify the control terminator in the block (must exist)
+    // Identify the control terminator in the block
     auto term = getBlockControlTerminator(block);
-    assert(term.op != nullptr && term.ctrlOperand != nullptr);
     if (std::find(terminators.begin(), terminators.end(), term) ==
         terminators.end())
       terminators.push_back(term);
