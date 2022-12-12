@@ -1022,7 +1022,7 @@ struct NodeSymbolRemover : public Reduction {
 
   LogicalResult rewrite(Operation *op) override {
     auto nodeOp = cast<firrtl::NodeOp>(op);
-    nodeOp.removeInner_symAttr();
+    nodeOp.removeInnerSymAttr();
     return success();
   }
 
