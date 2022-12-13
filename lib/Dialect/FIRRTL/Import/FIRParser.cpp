@@ -1721,36 +1721,22 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
   // Construct an integer attribute of the right width.
   auto type = IntType::get(builder.getContext(), isSigned, width);
 
-  IntegerType::SignednessSemantics signedness;
-  if (isSigned) {
-    signedness = IntegerType::Signed;
-    if (width != -1) {
-      // Check for overflow if we are truncating bits.
-      if (width == 0) {
-        if (!value.isZero())
-          return emitError(loc, "zero bit constant must be zero");
-      } else if (unsigned(width) < value.getBitWidth() &&
-                 value.getNumSignBits() <= value.getBitWidth() - width) {
-        return emitError(loc, "initializer too wide for declared width"),
-               failure();
-      }
-
+  IntegerType::SignednessSemantics signedness =
+      isSigned ? IntegerType::Signed : IntegerType::Unsigned;
+  if (width == 0) {
+    if (!value.isZero())
+      return emitError(loc, "zero bit constant must be zero");
+    value = value.trunc(0);
+  } else if (width != -1) {
+    // Convert to the type's width, checking value is preserved if truncating.
+    auto willTrunc = unsigned(width) < value.getBitWidth();
+    if (isSigned) {
+      if (willTrunc && value.getNumSignBits() <= value.getBitWidth() - width)
+        return emitError(loc, "initializer too wide for declared width");
       value = value.sextOrTrunc(width);
-    }
-  } else {
-    signedness = IntegerType::Unsigned;
-    if (width != -1) {
-      // Check for overflow if we are truncating bits.
-      if (width == 0) {
-        // The check below already would error on this appropriately,
-        // but check explicitly for symmetry in errors produced.
-        if (!value.isZero())
-          return emitError(loc, "zero bit constant must be zero");
-      } else if (unsigned(width) < value.getBitWidth() &&
-                 value.countLeadingZeros() < value.getBitWidth() - width) {
-        return emitError(loc, "initializer too wide for declared width"),
-               failure();
-      }
+    } else {
+      if (willTrunc && value.countLeadingZeros() < value.getBitWidth() - width)
+        return emitError(loc, "initializer too wide for declared width");
       value = value.zextOrTrunc(width);
     }
   }
