@@ -208,14 +208,32 @@ bool hw::isValidParameterExpression(Attribute attr, Operation *module) {
   return succeeded(checkParameterInContext(attr, module, nullptr, false));
 }
 
+/// Return the name of the arg attributes list used for both modules and
+/// instances. Normally we'd use the FunctionOpInterface for this, but both
+/// modules and instances use the same attribute name, and instances don't
+/// implement that interface.
+StringAttr getArgAttrsName(MLIRContext *context) {
+  return HWModuleOp::getArgAttrsAttrName(
+      mlir::OperationName(HWModuleOp::getOperationName(), context));
+}
+
+/// Return the name of the result attributes list used for both modules and
+/// instances. Normally we'd use the FunctionOpInterface for this, but both
+/// modules and instances use the same attribute name, and instances don't
+/// implement that interface.
+StringAttr getResAttrsName(MLIRContext *context) {
+  return HWModuleOp::getResAttrsAttrName(
+      mlir::OperationName(HWModuleOp::getOperationName(), context));
+}
+
 /// Return the symbol (if any, else null) on the corresponding input port
 /// argument.
 StringAttr hw::getArgSym(Operation *op, unsigned i) {
   assert(isAnyModuleOrInstance(op) &&
          "Can only get module ports from an instance or module");
   StringAttr sym = {};
-  auto argAttrs = op->getAttrOfType<ArrayAttr>(
-      mlir::function_interface_impl::getArgDictAttrName());
+  auto argAttrs =
+      op->getAttrOfType<ArrayAttr>(getArgAttrsName(op->getContext()));
   if (argAttrs && (i < argAttrs.size()))
     if (auto s = argAttrs[i].cast<DictionaryAttr>())
       if (auto symRef = s.get("hw.exportPort"))
@@ -229,8 +247,8 @@ StringAttr hw::getResultSym(Operation *op, unsigned i) {
   assert(isAnyModuleOrInstance(op) &&
          "Can only get module ports from an instance or module");
   StringAttr sym = {};
-  auto resAttrs = op->getAttrOfType<ArrayAttr>(
-      mlir::function_interface_impl::getResultDictAttrName());
+  auto resAttrs =
+      op->getAttrOfType<ArrayAttr>(getResAttrsName(op->getContext()));
   if (resAttrs && (i < resAttrs.size()))
     if (auto s = resAttrs[i].cast<DictionaryAttr>())
       if (auto symRef = s.get("hw.exportPort"))
@@ -472,9 +490,9 @@ FunctionType hw::getModuleType(Operation *moduleOrInstance) {
 
   assert(isAnyModule(moduleOrInstance) &&
          "must be called on instance or module");
-  auto typeAttr =
-      moduleOrInstance->getAttrOfType<TypeAttr>(HWModuleOp::getTypeAttrName());
-  return typeAttr.getValue().cast<FunctionType>();
+  return cast<mlir::FunctionOpInterface>(moduleOrInstance)
+      .getFunctionType()
+      .cast<FunctionType>();
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -522,11 +540,11 @@ void hw::setModuleResultNames(Operation *module, ArrayRef<Attribute> names) {
 // Flag for parsing different module types
 enum ExternModKind { PlainMod, ExternMod, GenMod };
 
-static void buildModule(OpBuilder &builder, OperationState &result,
-                        StringAttr name, const ModulePortInfo &ports,
-                        ArrayAttr parameters,
-                        ArrayRef<NamedAttribute> attributes,
-                        StringAttr comment) {
+template <typename ModuleTy>
+static void
+buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
+            const ModulePortInfo &ports, ArrayAttr parameters,
+            ArrayRef<NamedAttribute> attributes, StringAttr comment) {
   using namespace mlir::function_interface_impl;
 
   // Add an attribute for the name.
@@ -569,12 +587,13 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 
   // Record the argument and result types as an attribute.
   auto type = builder.getFunctionType(argTypes, resultTypes);
-  result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+  result.addAttribute(ModuleTy::getFunctionTypeAttrName(result.name),
+                      TypeAttr::get(type));
   result.addAttribute("argNames", builder.getArrayAttr(argNames));
   result.addAttribute("resultNames", builder.getArrayAttr(resultNames));
-  result.addAttribute(mlir::function_interface_impl::getArgDictAttrName(),
+  result.addAttribute(ModuleTy::getArgAttrsAttrName(result.name),
                       builder.getArrayAttr(argAttrs));
-  result.addAttribute(mlir::function_interface_impl::getResultDictAttrName(),
+  result.addAttribute(ModuleTy::getResAttrsAttrName(result.name),
                       builder.getArrayAttr(resultAttrs));
   result.addAttribute("parameters", parameters);
   if (!comment)
@@ -686,16 +705,12 @@ void hw::modifyModulePorts(
   ArrayRef<Attribute> oldArgNames =
       moduleOp->getAttrOfType<ArrayAttr>("argNames").getValue();
   ArrayRef<Type> oldArgTypes = moduleOp.getArgumentTypes();
-  ArrayRef<Attribute> oldArgAttrs =
-      arrayOrEmpty(moduleOp->getAttrOfType<ArrayAttr>(
-          mlir::function_interface_impl::getArgDictAttrName()));
+  ArrayRef<Attribute> oldArgAttrs = arrayOrEmpty(moduleOp.getArgAttrsAttr());
 
   ArrayRef<Attribute> oldResultNames =
       moduleOp->getAttrOfType<ArrayAttr>("resultNames").getValue();
   ArrayRef<Type> oldResultTypes = moduleOp.getResultTypes();
-  ArrayRef<Attribute> oldResultAttrs =
-      arrayOrEmpty(moduleOp->getAttrOfType<ArrayAttr>(
-          mlir::function_interface_impl::getResultDictAttrName()));
+  ArrayRef<Attribute> oldResultAttrs = arrayOrEmpty(moduleOp.getResAttrsAttr());
 
   // Modify the ports.
   SmallVector<Attribute> newArgNames, newResultNames;
@@ -717,10 +732,9 @@ void hw::modifyModulePorts(
                     ArrayAttr::get(moduleOp.getContext(), newArgNames));
   moduleOp->setAttr("resultNames",
                     ArrayAttr::get(moduleOp.getContext(), newResultNames));
-  moduleOp->setAttr(mlir::function_interface_impl::getArgDictAttrName(),
-                    ArrayAttr::get(moduleOp.getContext(), newArgAttrs));
-  moduleOp->setAttr(mlir::function_interface_impl::getResultDictAttrName(),
-                    ArrayAttr::get(moduleOp.getContext(), newResultAttrs));
+  moduleOp.setArgAttrsAttr(ArrayAttr::get(moduleOp.getContext(), newArgAttrs));
+  moduleOp.setResAttrsAttr(
+      ArrayAttr::get(moduleOp.getContext(), newResultAttrs));
 }
 
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -728,7 +742,8 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        ArrayAttr parameters,
                        ArrayRef<NamedAttribute> attributes, StringAttr comment,
                        bool shouldEnsureTerminator) {
-  buildModule(builder, result, name, ports, parameters, attributes, comment);
+  buildModule<HWModuleOp>(builder, result, name, ports, parameters, attributes,
+                          comment);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -799,7 +814,8 @@ void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
                              StringAttr name, const ModulePortInfo &ports,
                              StringRef verilogName, ArrayAttr parameters,
                              ArrayRef<NamedAttribute> attributes) {
-  buildModule(builder, result, name, ports, parameters, attributes, {});
+  buildModule<HWModuleExternOp>(builder, result, name, ports, parameters,
+                                attributes, {});
 
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
@@ -829,7 +845,8 @@ void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
                                 const ModulePortInfo &ports,
                                 StringRef verilogName, ArrayAttr parameters,
                                 ArrayRef<NamedAttribute> attributes) {
-  buildModule(builder, result, name, ports, parameters, attributes, {});
+  buildModule<HWModuleGeneratedOp>(builder, result, name, ports, parameters,
+                                   attributes, {});
   result.addAttribute("generatorKind", genKind);
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
@@ -955,6 +972,7 @@ static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   return false;
 }
 
+template <typename ModuleTy>
 static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
                                    ExternModKind modKind = PlainMod) {
 
@@ -1003,7 +1021,8 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
     argTypes.push_back(arg.type);
 
   auto type = builder.getFunctionType(argTypes, resultTypes);
-  result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+  result.addAttribute(ModuleTy::getFunctionTypeAttrName(result.name),
+                      TypeAttr::get(type));
 
   auto *context = result.getContext();
 
@@ -1039,7 +1058,9 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   assert(resultAttrs.size() == resultTypes.size());
 
   // Add the attributes to the function arguments.
-  addArgAndResultAttrs(builder, result, entryArgs, resultAttrs);
+  addArgAndResultAttrs(builder, result, entryArgs, resultAttrs,
+                       ModuleTy::getArgAttrsAttrName(result.name),
+                       ModuleTy::getResAttrsAttrName(result.name));
 
   // Parse the optional function body.
   auto *body = result.addRegion();
@@ -1053,24 +1074,26 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
 }
 
 ParseResult HWModuleOp::parse(OpAsmParser &parser, OperationState &result) {
-  return parseHWModuleOp(parser, result);
+  return parseHWModuleOp<HWModuleOp>(parser, result);
 }
 
 ParseResult HWModuleExternOp::parse(OpAsmParser &parser,
                                     OperationState &result) {
-  return parseHWModuleOp(parser, result, ExternMod);
+  return parseHWModuleOp<HWModuleExternOp>(parser, result, ExternMod);
 }
 
 ParseResult HWModuleGeneratedOp::parse(OpAsmParser &parser,
                                        OperationState &result) {
-  return parseHWModuleOp(parser, result, GenMod);
+  return parseHWModuleOp<HWModuleGeneratedOp>(parser, result, GenMod);
 }
 
 FunctionType getHWModuleOpType(Operation *op) {
-  auto typeAttr = op->getAttrOfType<TypeAttr>(HWModuleOp::getTypeAttrName());
-  return typeAttr.getValue().cast<FunctionType>();
+  return cast<mlir::FunctionOpInterface>(op)
+      .getFunctionType()
+      .cast<FunctionType>();
 }
 
+template <typename ModuleTy>
 static void printModuleOp(OpAsmPrinter &p, Operation *op,
                           ExternModKind modKind) {
   using namespace mlir::function_interface_impl;
@@ -1105,25 +1128,27 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
     omittedAttrs.push_back("generatorKind");
   if (!needArgNamesAttr)
     omittedAttrs.push_back("argNames");
+  omittedAttrs.push_back(ModuleTy::getFunctionTypeAttrName(op->getName()));
+  omittedAttrs.push_back(ModuleTy::getArgAttrsAttrName(op->getName()));
+  omittedAttrs.push_back(ModuleTy::getResAttrsAttrName(op->getName()));
   omittedAttrs.push_back("resultNames");
   omittedAttrs.push_back("parameters");
   omittedAttrs.push_back(visibilityAttrName);
   if (op->getAttrOfType<StringAttr>("comment").getValue().empty())
     omittedAttrs.push_back("comment");
 
-  printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
-                          omittedAttrs);
+  printFunctionAttributes(p, op, omittedAttrs);
 }
 
 void HWModuleExternOp::print(OpAsmPrinter &p) {
-  printModuleOp(p, *this, ExternMod);
+  printModuleOp<HWModuleExternOp>(p, *this, ExternMod);
 }
 void HWModuleGeneratedOp::print(OpAsmPrinter &p) {
-  printModuleOp(p, *this, GenMod);
+  printModuleOp<HWModuleGeneratedOp>(p, *this, GenMod);
 }
 
 void HWModuleOp::print(OpAsmPrinter &p) {
-  printModuleOp(p, *this, PlainMod);
+  printModuleOp<HWModuleOp>(p, *this, PlainMod);
 
   // Print the body if this is not an external function.
   Region &body = getBody();
@@ -1512,8 +1537,8 @@ GlobalRefOp::verifySymbolUses(mlir::SymbolTableCollection &symTables) {
       // TODO: Doesn't yet work for symbls on FIRRTL module ports. Need to
       // implement an interface.
       if (isa<HWModuleOp, HWModuleExternOp>(mod)) {
-        if (auto argAttrs = mod->getAttr(
-                mlir::function_interface_impl::getArgDictAttrName()))
+        if (auto argAttrs =
+                cast<mlir::FunctionOpInterface>(mod).getArgAttrsAttr())
           for (auto attr :
                argAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
             if (auto symRef = attr.get("hw.exportPort"))
@@ -1521,8 +1546,8 @@ GlobalRefOp::verifySymbolUses(mlir::SymbolTableCollection &symTables) {
                 if (hasGlobalRef(attr.get(GlobalRefAttr::DialectAttrName)))
                   return success();
 
-        if (auto resAttrs = mod->getAttr(
-                mlir::function_interface_impl::getResultDictAttrName()))
+        if (auto resAttrs =
+                cast<mlir::FunctionOpInterface>(mod).getResAttrsAttr())
           for (auto attr :
                resAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
             if (auto symRef = attr.get("hw.exportPort"))

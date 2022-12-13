@@ -29,6 +29,8 @@ def MachineOp : FSMOp<"machine", [
 
   let arguments = (ins StrAttr:$sym_name, StrAttr:$initialState,
                        TypeAttrOf<FunctionType>:$function_type,
+                       OptionalAttr<DictArrayAttr>:$arg_attrs,
+                       OptionalAttr<DictArrayAttr>:$res_attrs,
                        OptionalAttr<StrArrayAttr>:$argNames,
                        OptionalAttr<StrArrayAttr>:$resNames);
   let regions = (region SizedRegion<1>:$body);
@@ -64,7 +66,7 @@ def MachineOp : FSMOp<"machine", [
     LogicalResult verifyType() {
       auto type = getFunctionTypeAttr().getValue();
       if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getTypeAttrName() +
+        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
                            "' attribute of function type");
       return success();
     }

@@ -568,7 +568,8 @@ void handshake::FuncOp::build(OpBuilder &builder, OperationState &state,
                               ArrayRef<NamedAttribute> attrs) {
   state.addAttribute(SymbolTable::getSymbolAttrName(),
                      builder.getStringAttr(name));
-  state.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+  state.addAttribute(FuncOp::getFunctionTypeAttrName(state.name),
+                     TypeAttr::get(type));
   state.attributes.append(attrs.begin(), attrs.end());
 
   if (const auto *argNamesAttrIt = llvm::find_if(
@@ -635,8 +636,10 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
                              result.attributes) ||
       parseFuncOpArgs(parser, args, resTypes, resAttributes))
     return failure();
-  mlir::function_interface_impl::addArgAndResultAttrs(builder, result, args,
-                                                      resAttributes);
+  mlir::function_interface_impl::addArgAndResultAttrs(
+      builder, result, args, resAttributes,
+      handshake::FuncOp::getArgAttrsAttrName(result.name),
+      handshake::FuncOp::getResAttrsAttrName(result.name));
 
   // Set function type
   SmallVector<Type> argTypes;
@@ -644,7 +647,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
     argTypes.push_back(arg.type);
 
   result.addAttribute(
-      handshake::FuncOp::getTypeAttrName(),
+      handshake::FuncOp::getFunctionTypeAttrName(result.name),
       TypeAttr::get(builder.getFunctionType(argTypes, resTypes)));
 
   // Determine the names of the arguments. If no SSA values are present, use
@@ -692,7 +695,9 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void FuncOp::print(OpAsmPrinter &p) {
-  mlir::function_interface_impl::printFunctionOp(p, *this, /*isVariadic=*/true);
+  mlir::function_interface_impl::printFunctionOp(
+      p, *this, /*isVariadic=*/true, getFunctionTypeAttrName(),
+      getArgAttrsAttrName(), getResAttrsAttrName());
 }
 
 namespace {

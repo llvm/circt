@@ -1863,7 +1863,7 @@ static LogicalResult lowerFuncOp(func::FuncOp funcOp, MLIRContext *ctx,
   SmallVector<NamedAttribute, 4> attributes;
   for (const auto &attr : funcOp->getAttrs()) {
     if (attr.getName() == SymbolTable::getSymbolAttrName() ||
-        attr.getName() == function_interface_impl::getTypeAttrName())
+        attr.getName() == funcOp.getFunctionTypeAttrName())
       continue;
     attributes.push_back(attr);
   }
