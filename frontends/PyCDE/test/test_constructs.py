@@ -38,7 +38,7 @@ class WireAndRegTest:
 
 
 # CHECK-LABEL: %{{.+}} = msft.systolic.array [%{{.+}} : 3 x i8] [%{{.+}} : 2 x i8] pe (%arg0, %arg1) -> (i8) {
-# CHECK:         [[SUM:%.+]] = comb.add %arg0, %arg1 {sv.namehint = "sum"} : i8
+# CHECK:         [[SUM:%.+]] = comb.add bin %arg0, %arg1 {sv.namehint = "sum"} : i8
 # CHECK:         [[SUMR:%.+]] = seq.compreg sym @sum__reg1 [[SUM]], %clk : i8
 # CHECK:         msft.pe.output [[SUMR]] : i8
 

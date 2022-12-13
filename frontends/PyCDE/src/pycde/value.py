@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from .support import get_user_loc, _obj_to_value_infer_type
 
-from circt.dialects import sv, esi
+from circt.dialects import esi, sv
 import circt.support as support
 
 import mlir.ir as ir
@@ -594,9 +594,12 @@ def wrap_opviews_with_values(dialect, module_name, excluded=[]):
               for k, v in kwargs.items()
           }
           # Create the OpView.
-          created = cls.create(*args, **kwargs)
-          if isinstance(created, support.NamedValueOpView):
-            created = created.opview
+          with get_user_loc():
+            created = cls.create(*args, **kwargs)
+            if isinstance(created, support.NamedValueOpView):
+              created = created.opview
+            if hasattr(created, "twoState"):
+              created.twoState = True
 
           # Return the wrapped values, if any.
           converted_results = tuple(Value(res) for res in created.results)

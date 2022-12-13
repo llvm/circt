@@ -15,7 +15,7 @@ def MyModule(SIZE: int):
     @generator
     def construct(mod):
       c1 = hw.ConstantOp(dim(SIZE), 1)
-      # CHECK: %[[EQ:.+]] = comb.icmp eq
+      # CHECK: %[[EQ:.+]] = comb.icmp bin eq
       eq = comb.EqOp(c1, mod.inp)
       # CHECK: %[[A1:.+]] = hw.array_create %[[EQ]], %[[EQ]]
       a1 = hw.ArrayCreateOp([eq, eq])
