@@ -13,7 +13,7 @@ import mlir.ir as ir
 
 from contextvars import ContextVar
 from functools import singledispatchmethod
-from typing import Optional, Union
+from typing import List, Optional, Union
 import re
 import numpy as np
 
@@ -246,6 +246,12 @@ class BitVectorValue(PyCDEValue):
   def __get_item__value(self, idx: BitVectorValue) -> BitVectorValue:
     """Get the single bit at `idx`."""
     return self.slice(idx, 1)
+
+  @staticmethod
+  def concat(items: List[BitVectorValue]):
+    """Concatenate a list of bitvectors into one larger bitvector."""
+    from .dialects import comb
+    return comb.ConcatOp(*items)
 
   def slice(self, low_bit: BitVectorValue, num_bits: int):
     """Get a constant-width slice starting at `low_bit` and ending at `low_bit +

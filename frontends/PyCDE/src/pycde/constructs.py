@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from .pycde_types import PyCDEType, dim
 from .value import BitVectorValue, ListValue, Value, PyCDEValue
+from .value import get_slice_bounds
 from circt.support import get_value, BackedgeBuilder
 from circt.dialects import msft, hw, sv
 import mlir.ir as ir
@@ -37,6 +38,7 @@ def NamedWire(type_or_value: Union[PyCDEType, PyCDEValue], name: str):
       self.wire_op = sv.WireOp(hw.InOutType.get(type), name, inner_sym=name)
       read_val = sv.ReadInOutOp(type, self.wire_op)
       super().__init__(Value(read_val), type)
+      self.name = name
 
     def assign(self, new_value: Value):
       if self.assigned_value is not None:
@@ -58,14 +60,17 @@ def Wire(type: PyCDEType, name: str = None):
   """Declare a wire. Used to create backedges. Must assign exactly once. If
   'name' is specified, use 'NamedWire' instead."""
 
-  if name is not None:
-    return NamedWire(type, name)
-
   class WireValue(type._get_value_class()):
 
     def __init__(self):
-      self._backedge = BackedgeBuilder.create(type, "wire", None)
+      self._backedge = BackedgeBuilder.create(type,
+                                              "wire" if name is None else name,
+                                              None)
       super().__init__(self._backedge.result, type)
+      if name is not None:
+        self.name = name
+      self._orig_name = name
+      self.assign_parts = None
 
     def assign(self, new_value: Value):
       if self._backedge is None:
@@ -78,7 +83,30 @@ def Wire(type: PyCDEType, name: str = None):
       self._backedge.erase()
       self._backedge = None
       self.value = new_value.value
+      if self._orig_name is not None:
+        self.name = self._orig_name
       return new_value
+
+    def __setitem__(self, idxOrSlice: Union[int, slice], value):
+      if self.assign_parts is None:
+        self.assign_parts = [None] * self.type.width
+      lo, hi = get_slice_bounds(self.type.width, idxOrSlice)
+      assert hi <= self.type.width
+      width = hi - lo
+      assert width == value.type.width
+      for i in range(lo, hi):
+        assert self.assign_parts[i] is None
+        self.assign_parts[i] = value
+      if all([p is not None for p in self.assign_parts]):
+        concat_operands = [self.assign_parts[0]]
+        last = self.assign_parts[0]
+        for p in self.assign_parts:
+          if p is last:
+            continue
+          last = p
+          concat_operands.append(p)
+        concat_operands.reverse()
+        self.assign(BitVectorValue.concat(concat_operands))
 
   return WireValue()
 
