@@ -32,6 +32,7 @@
 #include "circt/Support/PrettyPrinterHelpers.h"
 #include "circt/Support/Version.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/PassManager.h"
@@ -202,8 +203,8 @@ StringRef getPortVerilogName(Operation *module, ssize_t portArgNum) {
   char verilogNameAttr[] = "hw.verilogName";
   // Check for input ports.
   if (portArgNum < numInputs) {
-    if (auto argAttr = module->getAttrOfType<ArrayAttr>(
-            mlir::function_interface_impl::getArgDictAttrName()))
+    if (auto argAttr =
+            cast<mlir::FunctionOpInterface>(module).getArgAttrsAttr())
       if (auto argDict = argAttr[portArgNum].cast<DictionaryAttr>())
         if (auto updatedName = argDict.get(verilogNameAttr))
           return updatedName.cast<StringAttr>().getValue();
@@ -215,8 +216,7 @@ StringRef getPortVerilogName(Operation *module, ssize_t portArgNum) {
 
   // If its an output port, get the index into the output port array.
   portId = portArgNum - numInputs;
-  if (auto argAttr = module->getAttrOfType<ArrayAttr>(
-          mlir::function_interface_impl::getResultDictAttrName()))
+  if (auto argAttr = cast<mlir::FunctionOpInterface>(module).getResAttrsAttr())
     if (auto argDict = argAttr[portId].cast<DictionaryAttr>())
       if (auto updatedName = argDict.get(verilogNameAttr))
         return updatedName.cast<StringAttr>().getValue();
@@ -5043,12 +5043,14 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   auto collectPorts = [&](auto moduleOp) {
     auto numArgs = moduleOp.getNumArguments();
     for (size_t p = 0; p != numArgs; ++p)
-      for (NamedAttribute argAttr : moduleOp.getArgAttrs(p))
+      for (NamedAttribute argAttr :
+           mlir::function_interface_impl::getArgAttrs(moduleOp, p))
         if (auto sym = argAttr.getValue().dyn_cast<FlatSymbolRefAttr>())
           symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getAttr(),
                                     moduleOp, p);
     for (size_t p = 0, e = moduleOp.getNumResults(); p != e; ++p)
-      for (NamedAttribute resultAttr : moduleOp.getResultAttrs(p))
+      for (NamedAttribute resultAttr :
+           mlir::function_interface_impl::getResultAttrs(moduleOp, p))
         if (auto sym = resultAttr.getValue().dyn_cast<FlatSymbolRefAttr>())
           symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getAttr(),
                                     moduleOp, p + numArgs);

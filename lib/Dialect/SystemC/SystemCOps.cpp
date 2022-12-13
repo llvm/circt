@@ -169,10 +169,13 @@ ParseResult SCModuleOp::parse(OpAsmParser &parser, OperationState &result) {
                       ArrayAttr::get(parser.getContext(), argNames));
 
   auto type = parser.getBuilder().getFunctionType(argTypes, resultTypes);
-  result.addAttribute(SCModuleOp::getTypeAttrName(), TypeAttr::get(type));
+  result.addAttribute(SCModuleOp::getFunctionTypeAttrName(result.name),
+                      TypeAttr::get(type));
 
   mlir::function_interface_impl::addArgAndResultAttrs(
-      parser.getBuilder(), result, args, resultAttrs);
+      parser.getBuilder(), result, args, resultAttrs,
+      SCModuleOp::getArgAttrsAttrName(result.name),
+      SCModuleOp::getResAttrsAttrName(result.name));
 
   auto &body = *result.addRegion();
   if (parser.parseRegion(body, args))
@@ -199,7 +202,9 @@ void SCModuleOp::print(OpAsmPrinter &p) {
   hw::module_like_impl::printModuleSignature(
       p, *this, getFunctionType().getInputs(), false, {}, needArgNamesAttr);
   mlir::function_interface_impl::printFunctionAttributes(
-      p, *this, getFunctionType().getInputs().size(), 0, {"portNames"});
+      p, *this,
+      {"portNames", getFunctionTypeAttrName(), getArgAttrsAttrName(),
+       getResAttrsAttrName()});
 
   p << ' ';
   p.printRegion(getBody(), false, false);
@@ -228,7 +233,8 @@ void SCModuleOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   Region *region = odsState.addRegion();
 
   auto moduleType = odsBuilder.getFunctionType(portTypes, {});
-  odsState.addAttribute(getTypeAttrName(), TypeAttr::get(moduleType));
+  odsState.addAttribute(getFunctionTypeAttrName(odsState.name),
+                        TypeAttr::get(moduleType));
 
   odsState.addAttribute(SymbolTable::getSymbolAttrName(), name);
   region->push_back(new Block);
@@ -825,7 +831,7 @@ void FuncOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   odsState.addAttribute(getArgNamesAttrName(odsState.name), argNames);
   odsState.addAttribute(SymbolTable::getSymbolAttrName(),
                         odsBuilder.getStringAttr(name));
-  odsState.addAttribute(mlir::FunctionOpInterface::getTypeAttrName(),
+  odsState.addAttribute(FuncOp::getFunctionTypeAttrName(odsState.name),
                         TypeAttr::get(type));
   odsState.attributes.append(attrs.begin(), attrs.end());
   odsState.addRegion();
@@ -835,7 +841,8 @@ void FuncOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   assert(type.getNumInputs() == argAttrs.size());
   mlir::function_interface_impl::addArgAndResultAttrs(
       odsBuilder, odsState, argAttrs,
-      /*resultAttrs=*/std::nullopt);
+      /*resultAttrs=*/std::nullopt, FuncOp::getArgAttrsAttrName(odsState.name),
+      FuncOp::getResAttrsAttrName(odsState.name));
 }
 
 ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -888,7 +895,8 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
            << "failed to construct function type"
            << (errorMessage.empty() ? "" : ": ") << errorMessage;
   }
-  result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+  result.addAttribute(FuncOp::getFunctionTypeAttrName(result.name),
+                      TypeAttr::get(type));
 
   // If function attributes are present, parse them.
   NamedAttrList parsedAttributes;
@@ -900,7 +908,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   // dictionary.
   for (StringRef disallowed :
        {SymbolTable::getVisibilityAttrName(), SymbolTable::getSymbolAttrName(),
-        getTypeAttrName()}) {
+        FuncOp::getFunctionTypeAttrName(result.name).getValue()}) {
     if (parsedAttributes.get(disallowed))
       return parser.emitError(attributeDictLocation, "'")
              << disallowed
@@ -911,8 +919,10 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // Add the attributes to the function arguments.
   assert(resultAttrs.size() == resultTypes.size());
-  mlir::function_interface_impl::addArgAndResultAttrs(builder, result,
-                                                      entryArgs, resultAttrs);
+  mlir::function_interface_impl::addArgAndResultAttrs(
+      builder, result, entryArgs, resultAttrs,
+      FuncOp::getArgAttrsAttrName(result.name),
+      FuncOp::getResAttrsAttrName(result.name));
 
   // Parse the optional function body. The printer will not print the body if
   // its empty, so disallow parsing of empty body in the parser.
@@ -969,8 +979,9 @@ void FuncOp::print(OpAsmPrinter &p) {
   mlir::function_interface_impl::printFunctionSignature(p, op, argTypes, false,
                                                         resultTypes);
   mlir::function_interface_impl::printFunctionAttributes(
-      p, op, argTypes.size(), resultTypes.size(),
-      {visibilityAttrName, "externC", "argNames"});
+      p, op,
+      {visibilityAttrName, "externC", "argNames", getFunctionTypeAttrName(),
+       getArgAttrsAttrName(), getResAttrsAttrName()});
   // Print the body if this is not an external function.
   Region &body = op->getRegion(0);
   if (!body.empty()) {

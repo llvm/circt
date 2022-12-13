@@ -31,7 +31,12 @@ def SCModuleOp : SystemCOp<"module", [
     but are nonetheless emitted as regular struct fields.
   }];
 
-  let arguments = (ins StrArrayAttr:$portNames);
+  let arguments = (ins
+    TypeAttrOf<FunctionType>:$function_type,
+    OptionalAttr<DictArrayAttr>:$arg_attrs,
+    OptionalAttr<DictArrayAttr>:$res_attrs,
+    StrArrayAttr:$portNames
+  );
   let regions = (region SizedRegion<1>: $body);
 
   let hasCustomAssemblyFormat = 1;
@@ -53,11 +58,6 @@ def SCModuleOp : SystemCOp<"module", [
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) {
       return RegionKind::Graph;
-    }
-
-    /// Returns the type of this function.
-    mlir::FunctionType getFunctionType() {
-      return getFunctionTypeAttr().getValue().cast<mlir::FunctionType>();
     }
 
     /// Returns the argument types of this function.
@@ -351,6 +351,8 @@ def FuncOp : SystemCOp<"cpp.func", [
 
   let arguments = (ins SymbolNameAttr:$sym_name,
                        TypeAttrOf<FunctionType>:$function_type,
+                       OptionalAttr<DictArrayAttr>:$arg_attrs,
+                       OptionalAttr<DictArrayAttr>:$res_attrs,
                        StrArrayAttr:$argNames,
                        UnitAttr:$externC,
                        OptionalAttr<StrAttr>:$sym_visibility);

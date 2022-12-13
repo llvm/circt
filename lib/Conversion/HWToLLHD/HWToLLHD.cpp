@@ -60,18 +60,19 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
 
     // Create the entity. Note that LLHD does not support parameterized
     // entities, so this conversion does not support parameterized modules.
-    auto entity = rewriter.create<EntityOp>(module.getLoc(), numInputs);
+    auto entityType = rewriter.getFunctionType(entityTypes, {});
+    auto entity = rewriter.create<EntityOp>(module.getLoc(), entityType,
+                                            numInputs, /*argAttrs=*/ArrayAttr(),
+                                            /*resAttrs=*/ArrayAttr());
 
     // Inline the HW module body into the entity body.
     Region &entityBodyRegion = entity.getBodyRegion();
     rewriter.inlineRegionBefore(module.getBodyRegion(), entityBodyRegion,
                                 entityBodyRegion.end());
 
-    // Set the entity type and name attributes. Add block arguments for each
-    // output, since LLHD entity outputs are still block arguments to the op.
-    auto entityType = rewriter.getFunctionType(entityTypes, {});
+    // Set the entity name attributes. Add block arguments for each output,
+    // since LLHD entity outputs are still block arguments to the op.
     rewriter.updateRootInPlace(entity, [&] {
-      entity->setAttr(entity.getTypeAttrName(), TypeAttr::get(entityType));
       entity.setName(module.getName());
       entityBodyRegion.addArguments(
           moduleOutputs, SmallVector<Location, 4>(moduleOutputs.size(),
