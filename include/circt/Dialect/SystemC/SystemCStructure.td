@@ -351,7 +351,7 @@ def FuncOp : SystemCOp<"cpp.func", [
 
   let arguments = (ins SymbolNameAttr:$sym_name,
                        TypeAttrOf<FunctionType>:$function_type,
-		       OptionalAttr<DictArrayAttr>:$arg_attrs,
+                       OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
                        StrArrayAttr:$argNames,
                        UnitAttr:$externC,

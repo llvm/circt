@@ -47,7 +47,7 @@ def HWModuleOp : HWModuleOpBase<"module",
     connections within the module.
   }];
   let arguments = (ins TypeAttrOf<FunctionType>:$function_type,
-		       OptionalAttr<DictArrayAttr>:$arg_attrs,
+                       OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
