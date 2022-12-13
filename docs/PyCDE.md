@@ -2,7 +2,29 @@
 
 PyCDE stands for Python circuit design entry. It is an experimental, opinionated, Python-based fronted for CIRCT's Python bindings. The goal is to make the definition of hardware modules using the bindings simple.
 
-# Installation
+# Cloning the repo
+
+If you havent already, you need to clone the CIRCT repo. Unless you already
+have contributor permissions to the LLVM project, the easiest way to develop
+(with the ability to create and push branches) is to fork the repo in your
+GitHub account. You can then clone your fork. The clone command should look
+like this:
+
+```
+$ git clone git@github.com:<your_github_username>/circt.git <optional_repo_name>
+```
+
+After cloning, navigate to your repo root (circt is the default) and use the
+following to pull down LLVM:
+
+```
+$ git submodule update --init
+```
+
+If you don't envision needing that ability, you can clone the main repo
+following the directions in step 2 of the [GettingStarted](GettingStarted.md) page.
+
+# PyCDE Installation
 
 ## via Pip
 
@@ -28,13 +50,15 @@ This will create a `pycde-<version>-<python version>-<platform>.whl` file in the
 
 ## Manual Compilation
 
-Follow these steps to setup your repository for installing PyCDE via CMake. Ensure that your repo has the proper Python requirements by running the following from your CIRCT repo root:
+Follow these steps to setup your repository for installing PyCDE via CMake.
+Ensure that your repo has the proper Python requirements by running the
+following from your CIRCT repo root:
 
 ```
-$ python -m pip install -r llvm/mlir/python/requirements.txt
 $ python -m pip install -r PyCDE/python/requirements.txt
 ```
-Although not scrictly needed for PyCDE develoment, scripts for some tools you might want to install are located in utils/
+Although not scrictly needed for PyCDE develoment, scripts for some tools you
+might want to install are located in utils/
 (Cap'n Proto, Verilator, OR-Tools):
 
 ```
@@ -59,7 +83,8 @@ $ cmake \
     -DCIRCT_ENABLE_FRONTENDS=PyCDE
     -G Ninja ../llvm/llvm
 ```
-Alternatively, you can pass the source and build paths to the CMake command and build in the specified folder:
+Alternatively, you can pass the source and build paths to the CMake command and
+build in the specified folder:
 
 ```
 $ cmake \
@@ -76,14 +101,16 @@ $ cmake \
     <your_circt_repo_root_path>/llvm/llvm
 ```
 
-Afterwards, use the following commands to ensure that CIRCT and PyCDE are built and the tests pass:
+Afterwards, use the following commands to ensure that CIRCT and PyCDE are built
+and the tests pass:
 ```
 $ ninja -C <path_to_your_circt_build> check-circt
 $ ninja -C <path_to_your_circt_build> check-pycde
 $ ninja -C <path_to_your_circt_build> check-pycde-integration
 ```
 
-If you want to use PyCDE after compiling it, you must add the core CIRCT bindings and PyCDE to your PYTHONPATH:
+If you want to use PyCDE after compiling it, you must add the core CIRCT
+bindings and PyCDE to your PYTHONPATH:
 
 ```
 export PYTHONPATH="<full_path_to_your_circt_build>/tools/circt/python_packages/circt_core:<full_path_to_your_circt_build>/tools/circt/python_packages/pycde"
