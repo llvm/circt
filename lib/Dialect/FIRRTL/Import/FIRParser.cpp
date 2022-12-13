@@ -1718,9 +1718,6 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
       parseToken(FIRToken::r_paren, "expected ')' in integer expression"))
     return failure();
 
-  if (width == 0)
-    return emitError(loc, "zero bit constants are not allowed"), failure();
-
   // Construct an integer attribute of the right width.
   auto type = IntType::get(builder.getContext(), isSigned, width);
 
@@ -1728,9 +1725,12 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
   if (isSigned) {
     signedness = IntegerType::Signed;
     if (width != -1) {
-      // Check for overlow if we are truncating bits.
-      if (unsigned(width) < value.getBitWidth() &&
-          value.getNumSignBits() <= value.getBitWidth() - width) {
+      // Check for overflow if we are truncating bits.
+      if (width == 0) {
+        if (!value.isZero())
+          return emitError(loc, "zero bit constant must be zero");
+      } else if (unsigned(width) < value.getBitWidth() &&
+                 value.getNumSignBits() <= value.getBitWidth() - width) {
         return emitError(loc, "initializer too wide for declared width"),
                failure();
       }
@@ -1740,9 +1740,14 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
   } else {
     signedness = IntegerType::Unsigned;
     if (width != -1) {
-      // Check for overlow if we are truncating bits.
-      if (unsigned(width) < value.getBitWidth() &&
-          value.countLeadingZeros() < value.getBitWidth() - width) {
+      // Check for overflow if we are truncating bits.
+      if (width == 0) {
+        // The check below already would error on this appropriately,
+        // but check explicitly for symmetry in errors produced.
+        if (!value.isZero())
+          return emitError(loc, "zero bit constant must be zero");
+      } else if (unsigned(width) < value.getBitWidth() &&
+                 value.countLeadingZeros() < value.getBitWidth() - width) {
         return emitError(loc, "initializer too wide for declared width"),
                failure();
       }
