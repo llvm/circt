@@ -28,12 +28,14 @@ This will create a `pycde-<version>-<python version>-<platform>.whl` file in the
 
 ## Manual Compilation
 
-Follow these steps to setup your repository for installing PyCDE via CMake. Make sure that your repo has the proper LLVM/MLIR Python requirements by running the following from your CIRCT repo root:
+Follow these steps to setup your repository for installing PyCDE via CMake. Ensure that your repo has the proper Python requirements by running the following from your CIRCT repo root:
 
 ```
 $ python -m pip install -r llvm/mlir/python/requirements.txt
+$ python -m pip install -r PyCDE/python/requirements.txt
 ```
-Install Cap'n Proto, Verilator, OR-Tools using the provided scripts:
+Although not scrictly needed for PyCDE develoment, scripts for some tools you might want to install are located in utils/
+(Cap'n Proto, Verilator, OR-Tools):
 
 ```
 $ utils/get-capnp.sh
@@ -41,7 +43,7 @@ $ utils/get-verilator.sh
 $ utils/get-or-tools
 ```
 
-After tool installation completes, install PyCDE with CMake:
+Install PyCDE with CMake:
 
 ```
 $ mkdir build
@@ -55,7 +57,6 @@ $ cmake \
     -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
     -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
     -DCIRCT_ENABLE_FRONTENDS=PyCDE
-    -DPython3_EXECUTABLE=<path_to_python3.6+> \
     -G Ninja ../llvm/llvm
 ```
 Alternatively, you can pass the source and build paths to the CMake command and build in the specified folder:
@@ -69,7 +70,6 @@ $ cmake \
     -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
     -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
     -DCIRCT_ENABLE_FRONTENDS=PyCDE \
-    -DPython3_EXECUTABLE=<path_to_python3.6+> \
     -G Ninja \
     -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=<your_circt_repo_root_path> \
     -B<path_to_desired_build_dir> \
@@ -86,7 +86,7 @@ $ ninja -C <path_to_your_circt_build> check-pycde-integration
 If you want to use PyCDE after compiling it, you must add the core CIRCT bindings and PyCDE to your PYTHONPATH:
 
 ```
-export PYTHONPATH="$PWD/build/tools/circt/python_packages/circt_core:$PWD/build/tools/circt/python_packages/pycde"
+export PYTHONPATH="<full_path_to_your_circt_build>/tools/circt/python_packages/circt_core:<full_path_to_your_circt_build>/tools/circt/python_packages/pycde"
 ```
 
 If you are installing PyCDE through `ninja install`, the libraries and Python modules will be installed into the correct location automatically.
