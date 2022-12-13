@@ -186,7 +186,7 @@ def VectorCreateOp : FIRRTLOp<"vectorcreate"> {
 
 
 def InvalidValueOp : FIRRTLOp<"invalidvalue",
-      [Pure, ConstantLike, HasCustomSSAName]> {
+      [MemoryEffects<[MemAlloc]>, ConstantLike, HasCustomSSAName]> {
   let summary = "InvalidValue primitive";
   let description = [{
     The InvalidValue operation returns an invalid value of a specified type:
@@ -195,7 +195,8 @@ def InvalidValueOp : FIRRTLOp<"invalidvalue",
     ```
 
     This corresponds to the FIRRTL invalidate operation without the implicit
-    connect semantics.
+    connect semantics.  Each invalid op produces a unique invalid value.  
+    InvalidOp is not constant-like
   }];
 
   let arguments = (ins);
