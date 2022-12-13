@@ -33,8 +33,7 @@ struct Node {
   Node(const Node &rhs) = default;
   Node &operator=(const Node &rhs) = default;
   bool operator==(const Node &rhs) const {
-    return (val == rhs.val &&
-           fieldId == rhs.fieldId);
+    return (val == rhs.val && fieldId == rhs.fieldId);
   }
   bool operator!=(const Node &rhs) const { return !(*this == rhs); }
   bool isValid() { return val != nullptr; }
@@ -73,8 +72,10 @@ class ModuleDFS {
   using NodeOpPair = std::pair<Node, Operation *>;
 
 public:
-  ModuleDFS(FModuleOp module, InstanceGraph &instanceGraph,
-            llvm::MapVector<Node, SmallVector<Node>> &portPaths)
+  ModuleDFS(
+      FModuleOp module, InstanceGraph &instanceGraph,
+      llvm::SmallDenseMap<Value, llvm::SmallDenseMap<size_t, SmallVector<Node>>>
+          &portPaths)
       : module(module), instanceGraph(instanceGraph), portPaths(portPaths) {}
 
   LogicalResult dfsFromNode(Node &node, Node inputArg) {
@@ -88,27 +89,41 @@ public:
     // visiting: Set of nodes that have a path to this current node.
     if (visiting.contains(node)) {
       FieldRef f = getFieldRefFromValue(node.val);
-      auto signalName = getFieldName(f);
+      auto lastSignalName = getFieldName(f);
       auto errorDiag = mlir::emitError(
           module.getLoc(),
           "detected combinational cycle in a FIRRTL module, sample path: ");
-      if (!signalName.empty()) {
-        errorDiag << module.getName() << "." << signalName << " <- ";
+      if (!lastSignalName.empty()) {
+        errorDiag << module.getName() << "." << lastSignalName << " <- ";
       }
       for (auto n : llvm::reverse(currentPath)) {
-        FieldRef f(n.val, n.fieldId);
+        FieldRef f = getFieldRefFromValue(n.val);
         auto signalName = getFieldName(f);
-        if (!signalName.empty())
+        if (!signalName.empty() && lastSignalName != signalName)
           errorDiag << module.getName() << "." << signalName << " <- ";
+        lastSignalName = signalName;
         if (n == node)
           break;
       }
       currentPath.push_back(node);
       return failure();
     }
+    llvm::SmallDenseSet<Node> tmpCopy = visiting;
     visiting.insert(node);
     currentPath.push_back(node);
     SmallVector<NodeOpPair> children;
+    auto groupIter = valToGroupIdMap.find(node.val);
+    if (groupIter != valToGroupIdMap.end())
+      for (auto groupId : groupIter->getSecond()) {
+        for (auto childVal : groupIdToValuesMap[groupId]) {
+          if (childVal != node.val) {
+            LLVM_DEBUG(llvm::dbgs() << "\n adding child :" << childVal);
+            auto childNode = Node(childVal, 0);
+            if (!visiting.contains(childNode))
+              children.push_back({childNode, childVal.getDefiningOp()});
+          }
+        }
+      }
     getChildren(node, inputArg, children);
     for (auto childNode : children)
       if (dfsFromNode(childNode.first, inputArg).failed()) {
@@ -116,77 +131,46 @@ public:
         return failure();
       }
 
-    visiting.erase(node);
+    visiting = std::move(tmpCopy);
     currentPath.pop_back();
     // Finished discovering all the reachable nodes from node.
     visited.insert(node);
     return success();
   }
 
-  /// Traverse all the reachable paths from InstanceOp, MemOp, RegOp,
-  /// RegResetOps. Return true only if the DFS can be terminated at the `node`.
-  /// Traversal can be terminated after all the valid children of the `node` are
-  /// visited. Ignore register ops, for InstanceOps get the cominational paths
-  /// between the module ports, for MemOps check for any combinational paths
-  /// between the input addres or enable fields and the output data field for
-  /// latency 0 read ports.
   void getChildren(Node &node, Node &inputArg,
                    SmallVector<NodeOpPair> &children) {
-    if (!node.val.getType().cast<FIRRTLBaseType>().isGround()) {
-      auto baseVal = node.val;
-      size_t fieldId = node.fieldId;
-      if (node.fieldId == 0) {
-        // Get the base aggregate value from the leaf.
-        auto fRef = getFieldRefFromValue(node.val);
-        baseVal = fRef.getValue();
-        fieldId = fRef.getFieldID();
-      }
-      //if (!valueToNodes.count(node.val))
-        //gatherAggregateLeafs(baseVal);
-      
-      // Get all the leaf values, that correspond to the `fieldId` leaf of the
-      // `baseVal`. This is required, because, mulitple subfield ops can refer
-      // to the same field.
-      for (auto &leaf : nodeToAliasGroupMap[Node(baseVal,fieldId)]) {
-        children.push_back(
-            std::make_pair<Node, Operation *>(Node(leaf, 0), leaf.getDefiningOp()));
-      }
-    } else
-      for (auto &child : node.val.getUses()) {
-        Operation *owner = child.getOwner();
-        LLVM_DEBUG(llvm::dbgs() << "\n owner: " << *owner);
-        auto childVal  =
-            TypeSwitch<Operation *, Value>(owner)
-                .Case<FConnectLike>([&](FConnectLike connect) {
-                  if (child.getOperandNumber() == 1) {
-                    auto fRef = getFieldRefFromValue(connect.getDest());
-                    if (inputArg.isValid()) {
-                      if (auto sinkOut =
-                              fRef.getValue().dyn_cast<BlockArgument>())
-                        portPaths[Node(inputArg.val, inputArg.fieldId)]
-                            .push_back(Node(sinkOut, fRef.getFieldID()));
-                    }
-                    return connect.getDest();
-                  }
-                  return (Value)nullptr;
-                })
-                .Default([&](Operation *op) {
-                  if (op->getNumResults() == 1) {
-                    return (Value)op->getResult(0);
-                  }
-                  return (Value)nullptr;
-                });
-        if (childVal != nullptr) {
 
-          auto fRef = getFieldRefFromValue(childVal);
-          children.push_back({Node(fRef.getValue(), fRef.getFieldID()), owner});
-          for (auto childNode : valueToNodes[childVal])
-          children.push_back({childNode, owner});
-        }
+    for (auto &child : node.val.getUses()) {
+      Operation *owner = child.getOwner();
+      LLVM_DEBUG(llvm::dbgs() << "\n owner: " << *owner);
+      auto childVal =
+          TypeSwitch<Operation *, Value>(owner)
+              .Case<FConnectLike>([&](FConnectLike connect) {
+                if (child.getOperandNumber() == 1) {
+                  auto fRef = getFieldRefFromValue(connect.getDest());
+                  if (inputArg.isValid()) {
+                    if (auto sinkOut =
+                            fRef.getValue().dyn_cast<BlockArgument>())
+                      portPaths[inputArg.val][inputArg.fieldId].push_back(
+                          Node(sinkOut, fRef.getFieldID()));
+                  }
+                  return connect.getDest();
+                }
+                return (Value) nullptr;
+              })
+              .Default([&](Operation *op) {
+                if (op->getNumResults() == 1) {
+                  return (Value)op->getResult(0);
+                }
+                return (Value) nullptr;
+              });
+      if (childVal != nullptr) {
+        children.push_back({Node(childVal, 0), owner});
       }
+    }
     if (node.val.isa<BlockArgument>())
       return;
-
     return TypeSwitch<Operation *>(node.val.getDefiningOp())
         .Case<InstanceOp>([&](InstanceOp ins) {
           size_t portNum = 0;
@@ -201,16 +185,20 @@ public:
           if (referencedModule) {
             auto port = referencedModule.getBodyBlock()->getArgument(portNum);
             // Get all the ports that have a comb path from `port`.
-            for (const auto &portNode : portPaths[Node(port, node.fieldId)]) {
-              auto instResult = ins.getResult(
-                  portNode.val.cast<BlockArgument>().getArgNumber());
-              Node instNode(instResult, portNode.fieldId);
-              children.push_back({instNode, ins});
-            }
+            for (const auto &portNode : portPaths[port])
+              for (auto outputPort : portNode.getSecond()) {
+                auto instResult = ins.getResult(
+                    outputPort.val.cast<BlockArgument>().getArgNumber());
+                children.push_back({Node(instResult, 0), ins});
+              }
           }
           return;
         })
         .Case<RegOp, RegResetOp>([&](auto) { children.clear(); })
+        .Case<SubfieldOp, SubindexOp, SubaccessOp>([&](auto sub) {
+          if (valToGroupIdMap.find(node.val) == valToGroupIdMap.end())
+            children.clear();
+        })
         .Case<MemOp>([&](MemOp mem) {
           auto type = node.val.getType().cast<BundleType>();
           auto enableFieldId = type.getFieldID((unsigned)ReadPortSubfield::en);
@@ -245,20 +233,27 @@ public:
   }
 
   /// Record all the leaf ground type values for an aggregate type value.
-  void gatherAggregateLeafs(Value val, SmallVector<std::pair<Value, Value> > &leafVals, Value inArg) {
-    if (val.getType().dyn_cast<FIRRTLBaseType>().isGround())
+  void gatherAggregateLeafs(Value val,
+                            llvm::SmallDenseSet<size_t> fieldIdsToAdd = {}) {
+    auto valType = val.getType().dyn_cast<FIRRTLBaseType>();
+    if (!valType || valType.isGround())
       return;
     SmallVector<Node> worklist;
     worklist.push_back(Node(val, 0));
+    auto baseGroupId = aliasGroupNum;
+    aliasGroupNum += valType.getMaxFieldID() + 1;
+    valToGroupIdMap[val] = {baseGroupId};
+    groupIdToValuesMap[baseGroupId] = {val};
     auto handleSub = [&](Value res, size_t index, bool isGround) {
       if (isGround) {
-        valLeafOps[val][index].push_back(res);
-        auto node = Node(val, index);
-        valueToNodes[res].push_back(node);
-        nodeToAliasGroupMap[node].push_back(res);
-        leafVals.push_back({res, inArg});
-      }
-      else
+        if (!fieldIdsToAdd.empty())
+          if (!fieldIdsToAdd.contains(index))
+            return;
+        auto groupId = baseGroupId + index;
+        valToGroupIdMap[res].push_back(groupId);
+        groupIdToValuesMap[groupId].push_back(res);
+        leafToBaseValMap[res] = val;
+      } else
         worklist.push_back(Node(res, index));
     };
     while (!worklist.empty()) {
@@ -281,115 +276,135 @@ public:
             .Case<SubaccessOp>([&](SubaccessOp sub) {
               auto vecType = sub.getInput().getType().cast<FVectorType>();
               auto res = sub.getResult();
-              for (size_t index = 0 ; index < vecType.getNumElements() ; ++index)
-                handleSub(res, node.fieldId  + 1 + index *(vecType.getElementType().getMaxFieldID()+1), vecType.getElementType().isGround());
-                })
+              for (size_t index = 0; index < vecType.getNumElements(); ++index)
+                handleSub(
+                    res,
+                    node.fieldId + 1 +
+                        index * (vecType.getElementType().getMaxFieldID() + 1),
+                    vecType.getElementType().isGround());
+            })
             .Default([&](auto op) {});
       }
     }
-    LLVM_DEBUG({
-      for (auto leafs : valLeafOps) {
-        if (leafs.first != val)
-          continue;
-        for (auto sec : leafs.second) {
-          llvm::dbgs() << "\n node :" << leafs.first << "," << sec.first;
-          for (auto leaf : sec.second) {
-            llvm::dbgs() << "\n leaf:" << leaf;
-            auto fRef = getFieldRefFromValue(leaf);
-            llvm::dbgs() << "\n getFieldRefFromValue:" << fRef.getValue()
-                         << "::" << fRef.getFieldID();
-          }
-        }
-      }
-    });
   }
 
   LogicalResult processModule() {
-    auto visitVal = [&](Value val, bool isArg = true) -> LogicalResult {
-      auto valType = val.getType().dyn_cast<FIRRTLBaseType>();
-      if (!valType)
-        return success();
-      // List of root nodes to begin the DFS from.
-      SmallVector<Node> rootNodes;
-
-      if (valType.isGround())
-        rootNodes.push_back(Node(val, 0));
-      else {
-        // If aggregate type value, then each ground type leaf value is a root
-        // for traversal.
-        //auto indicesSet = gatherAggregateLeafs(val);
-        //for (auto leafInd : indicesSet)
-        //  rootNodes.push_back(Node(val, leafInd));
-      }
-      while (!rootNodes.empty()) {
-        auto node = rootNodes.pop_back_val();
-
-        if (visited.contains(node))
-          continue;
-        if (dfsFromNode(node, isArg ? node : Node()).failed()) {
-          if (isArg) {
-            FieldRef f(node.val, node.fieldId);
-            auto argName = getFieldName(f);
-            return node.getParentModule().emitRemark(
-                       "this operation is part of the combinational cycle, "
-                       "module argument '")
-                   << argName << "'";
-          }
-          return node.val.getDefiningOp()->emitRemark(
-              "this operation is part of the combinational cycle");
-        }
-      }
-      return success();
-    };
-    SmallVector<std::pair<Value, Value> > rootValues;
+    SmallVector<Value> rootValues;
     LLVM_DEBUG(llvm::dbgs() << "\n processing module :" << module);
-    auto addRoots = [&](Value val, Value inArg) {
+    auto addRoots = [&](Value val, Value inArg = nullptr) {
       auto type = val.getType().dyn_cast<FIRRTLBaseType>();
       if (!type)
         return;
       if (type.isGround()) {
-        rootValues.push_back({val, inArg});
+        rootValues.push_back(val);
         return;
       }
-      gatherAggregateLeafs(val, rootValues, inArg);
+      gatherAggregateLeafs(val);
     };
     // First discover all the combinational paths originating from the ports.
     for (auto arg : module.getArguments()) {
       addRoots(arg, arg);
     }
-    for (auto &op : module.getOps())
+    for (auto &op : module.getOps()) {
       // Discover combinational paths originating at a wire.
       if (isa<WireOp>(op))
-        addRoots(op.getResult(0), nullptr);
-
-    for (auto root : rootValues){
-      auto node = Node(root.first, 0);
-      if (visited.contains(node))
-        continue;
-      if (dfsFromNode(node, root.second != nullptr ? Node(root.second,0) : Node()).failed()) {
-        if (root.second != nullptr) {
-          FieldRef f(node.val, node.fieldId);
-          auto argName = getFieldName(f);
-          return node.getParentModule().emitRemark(
-              "this operation is part of the combinational cycle, "
-              "module argument '")
-            << argName << "'";
+        addRoots(op.getResult(0));
+      else if (auto ins = dyn_cast<InstanceOp>(op)) {
+        FModuleOp referencedModule =
+            dyn_cast<FModuleOp>(*instanceGraph.getReferencedModule(ins));
+        for (auto instPort : op.getResults())
+          addRoots(instPort);
+        for (auto instPort : llvm::enumerate(op.getResults())) {
+          auto portType = instPort.value().getType().dyn_cast<FIRRTLBaseType>();
+          if (!portType || portType.isGround())
+            continue;
+          auto inPortBaseId = valToGroupIdMap[instPort.value()].front();
+          if (referencedModule) {
+            auto port =
+                referencedModule.getBodyBlock()->getArgument(instPort.index());
+            // Get all the ports that have a comb path from `port`.
+            for (const auto &portNode : portPaths[port]) {
+              for (auto outputPort : portNode.getSecond()) {
+                auto instResult = ins.getResult(
+                    outputPort.val.cast<BlockArgument>().getArgNumber());
+                auto outPortId = valToGroupIdMap[instResult].front();
+                groupIdToValuesMap[inPortBaseId + portNode.first].push_back(
+                    groupIdToValuesMap[outPortId + outputPort.fieldId].front());
+              }
+            }
+          }
         }
-        return node.val.getDefiningOp()->emitRemark(
-            "this operation is part of the combinational cycle");
+      } else if (auto mem = dyn_cast<MemOp>(op)) {
+        if (!(mem.getReadLatency() == 0)) {
+          continue;
+        }
+        for (auto memPort : mem.getResults()) {
+          auto type = memPort.getType().cast<BundleType>();
+          auto enableFieldId = type.getFieldID((unsigned)ReadPortSubfield::en);
+          auto dataFieldId = type.getFieldID((unsigned)ReadPortSubfield::data);
+          auto addressFieldId =
+              type.getFieldID((unsigned)ReadPortSubfield::addr);
+          llvm::SmallDenseSet<size_t> fieldIdsToAdd = {
+              enableFieldId, dataFieldId, addressFieldId};
+          gatherAggregateLeafs(memPort, fieldIdsToAdd);
+          auto baseId = valToGroupIdMap[memPort].front();
+          auto dataField = groupIdToValuesMap[baseId + dataFieldId].front();
+          groupIdToValuesMap[baseId + enableFieldId].push_back(dataField);
+          groupIdToValuesMap[baseId + addressFieldId].push_back(dataField);
+        }
       }
+    }
+    LLVM_DEBUG({
+      for (auto leaf : groupIdToValuesMap) {
+        llvm::dbgs() << "\n Valueindex :" << leaf.first;
+        for (auto val : leaf.second)
+          llvm::dbgs() << "\n leaf:" << val;
+      }
+    });
+
+    auto traverseDFSFrom = [&](Value root, Node inputArg) -> LogicalResult {
+      auto node = Node(root, 0);
+      if (visited.contains(node))
+        return success();
+      return dfsFromNode(node, inputArg);
+    };
+    for (auto root : rootValues) {
+      Node inputArg = Node();
+      if (root.isa<BlockArgument>())
+        inputArg = Node(root, 0);
+      if (traverseDFSFrom(root, inputArg).failed())
+        return failure();
+    }
+    for (auto groupIter : groupIdToValuesMap) {
+      auto id = groupIter.first;
+      auto leaf = groupIter.getSecond().front();
+      if (!leaf.getType().cast<FIRRTLBaseType>().isGround())
+        continue;
+      auto baseVal = leafToBaseValMap[leaf];
+      auto baseId = valToGroupIdMap[baseVal].front();
+      auto fieldId = id - baseId;
+      Node inputArg = Node();
+      if (baseVal.isa<BlockArgument>())
+        inputArg = Node(baseVal, fieldId);
+      if (traverseDFSFrom(leaf, inputArg).failed())
+        return failure();
     }
 
     LLVM_DEBUG({
       for (const auto &i1 : portPaths)
         for (const auto &i2 : i1.second)
-          llvm::dbgs() << "\n node :" << i1.first.val << "," << i1.first.fieldId
-                       << " is connected to ," << i2.val << "," << i2.fieldId;
+          for (const auto &i3 : i2.second)
+            llvm::dbgs() << "\n node :" << i1.first << "," << i2.first
+                         << " is connected to ," << i3.val << "," << i3.fieldId;
     });
     return success();
   }
 
   void printError(Node &node, NodeOpPair &childNode) {
+    if (!printCycle || currentPath.back() == node) {
+      printCycle = false;
+      return;
+    }
     if (childNode.second)
       TypeSwitch<Operation *>(childNode.second)
           .Case<InstanceOp>([&](InstanceOp ins) {
@@ -414,14 +429,11 @@ public:
           .Case<MemOp>([&](MemOp mem) {
             mem.emitRemark("memory is part of a combinational cycle ");
           })
+          .Case<SubfieldOp, SubindexOp, SubaccessOp>([&](auto op) {})
           .Default([&](auto owner) {
             owner->emitRemark(
                 "this operation is part of the combinational cycle");
           });
-    if (!printCycle || currentPath.back() == node) {
-      printCycle = false;
-      return;
-    }
   }
 
   using ValueField = std::pair<Value, size_t>;
@@ -431,13 +443,16 @@ public:
   // Set of visiting and visited nodes.
   llvm::SmallDenseSet<Node> visiting, visited;
   // Combinational paths between the ports of a module.
-  llvm::MapVector<Node, SmallVector<Node>> &portPaths;
+  llvm::SmallDenseMap<Value, llvm::SmallDenseMap<size_t, SmallVector<Node>>>
+      &portPaths;
   // Map of all the leaf ground type values for a corresponding aggregate value.
-  llvm::MapVector<Value, llvm::MapVector<size_t, SmallVector<Value>>> valLeafOps;
+  llvm::DenseMap<size_t, SmallVector<Value>> groupIdToValuesMap;
+  llvm::DenseMap<Value, SmallVector<size_t>> valToGroupIdMap;
+  llvm::DenseMap<Value, Value> leafToBaseValMap;
   llvm::DenseMap<Node, SmallVector<Value>> nodeToAliasGroupMap;
   llvm::DenseMap<Value, SmallVector<Node>> valueToNodes;
   llvm::DenseMap<Value, llvm::SmallDenseSet<size_t>> aggregateToLeafIds;
-  size_t aliasGroupNum=0;
+  size_t aliasGroupNum = 0;
   SmallVector<Node> currentPath;
   bool printCycle = true;
   bool detectedCycle = false;
@@ -451,7 +466,8 @@ class CheckCombLoopsPass : public CheckCombLoopsBase<CheckCombLoopsPass> {
 public:
   void runOnOperation() override {
     auto &instanceGraph = getAnalysis<InstanceGraph>();
-    llvm::MapVector<Node, SmallVector<Node>> portPaths;
+    llvm::SmallDenseMap<Value, llvm::SmallDenseMap<size_t, SmallVector<Node>>>
+        portPaths;
     // Traverse modules in a post order to make sure the combinational paths
     // between IOs of a module have been detected and recorded in `combPathsMap`
     // before we handle its parent modules.
