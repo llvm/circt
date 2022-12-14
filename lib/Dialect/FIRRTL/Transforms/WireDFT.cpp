@@ -215,8 +215,47 @@ void WireDFTPass::runOnOperation() {
       });
 
   // If there are no clock gates under the DUT, we can stop now.
-  if (!clockGates.size())
+  if (clockGates.empty())
     return;
+
+  // Stash UInt<1> type for use throughout.
+  auto uint1Type = enableSignal.getType().cast<FIRRTLType>();
+
+  // Hard coded port result number; the clock gate test_en port is 1.
+  // Language below reflects this as well.
+  const unsigned testEnPortNo = 1;
+
+  // Scan gathered clock gates and check for basic compatibility.
+  for (auto *cgnode : clockGates) {
+    auto module = cgnode->getTarget()->getModule();
+    auto genErr = [&]() { return module.emitError("clock gate module "); };
+    FExtModuleOp ext = dyn_cast<FExtModuleOp>(module.getOperation());
+    if (!ext) {
+      genErr() << "must be an extmodule";
+      return signalPassFailure();
+    }
+    static_assert(testEnPortNo == 1, "update this code");
+    if (ext.getNumPorts() <= testEnPortNo) {
+      genErr() << "must have at least two ports";
+      return signalPassFailure();
+    }
+    if (ext.getPortType(testEnPortNo) != uint1Type) {
+      genErr()
+          .append("must have second port with type UInt<1>")
+          .attachNote() // Use port location once available.
+          .append("Second port (\"")
+          .append(ext.getPortName(testEnPortNo))
+          .append("\") has type ")
+          .append(ext.getPortType(testEnPortNo))
+          .append(", expected ")
+          .append(uint1Type);
+      return signalPassFailure();
+    }
+    if (ext.getPortDirection(testEnPortNo) != Direction::In) {
+      genErr() << "must have second port with input direction";
+      return signalPassFailure();
+    }
+  }
 
   // Handle enable signal (only) outside DUT.
   if (!instanceGraph.isAncestor(enableModule, lca->getModule())) {
@@ -249,10 +288,8 @@ void WireDFTPass::runOnOperation() {
   }
 
   // Stash some useful things.
-  auto *context = &getContext();
-  auto uint1Type = enableSignal.getType().cast<FIRRTLType>();
   auto loc = lca->getModule().getLoc();
-  auto portName = StringAttr::get(context, "test_en");
+  auto portName = StringAttr::get(&getContext(), "test_en");
 
   // This maps an enable signal to each module.
   DenseMap<InstanceGraphNode *, Value> signals;
@@ -360,8 +397,6 @@ void WireDFTPass::runOnOperation() {
     auto module = cast<FModuleOp>(*parent->getModule());
     auto builder = ImplicitLocOpBuilder::atBlockEnd(module->getLoc(),
                                                     module.getBodyBlock());
-    // Hard coded port result number; the clock gate test_en port is 1.
-    auto testEnPortNo = 1;
     builder.create<ConnectOp>(
         cast<InstanceOp>(*instance->getInstance()).getResult(testEnPortNo),
         getSignal(parent));
