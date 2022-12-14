@@ -28,7 +28,7 @@ def array_from_tuple(*input):
 # CHECK:         [[R8:%.+]] = hw.array_get %In[%c0_i3_2] {sv.namehint = "In__0"} : !hw.array<5xarray<4xi3>>, i3
 # CHECK:         [[R9:%.+]] = hw.array_get [[R8]][%c0_i2] {sv.namehint = "In__0__0"} : !hw.array<4xi3>
 # CHECK:         %c0_i2_3 = hw.constant 0 : i2
-# CHECK:         [[R10:%.+]] = comb.concat %c0_i2_3, %Sel : i2, i1
+# CHECK:         [[R10:%.+]] = comb.concat %c0_i2_3, %Sel {sv.namehint = "Sel_padto_3"} : i2, i1
 # CHECK:         [[R11:%.+]] = comb.shru bin [[R9]], [[R10]] : i3
 # CHECK:         [[R12:%.+]] = comb.extract [[R11]] from 0 : (i3) -> i1
 # CHECK:         msft.output [[R3]], [[R6]], [[R12]], [[R7]] : !hw.array<4xi3>, !hw.array<2xarray<4xi3>>, i1, !hw.array<3xarray<4xi3>>
@@ -60,10 +60,10 @@ class ComplexMux:
 # CHECK-LABEL:  msft.module @Slicing {} (%In: !hw.array<5xarray<4xi8>>, %Sel8: i8, %Sel2: i2) -> (OutIntSlice: i2, OutArrSlice8: !hw.array<2xarray<4xi8>>, OutArrSlice2: !hw.array<2xarray<4xi8>>)
 # CHECK:          [[R0:%.+]] = hw.array_get %In[%c0_i3] {sv.namehint = "In__0"} : !hw.array<5xarray<4xi8>>
 # CHECK:          [[R1:%.+]] = hw.array_get %0[%c0_i2] {sv.namehint = "In__0__0"} : !hw.array<4xi8>
-# CHECK:          [[R2:%.+]] = comb.concat %c0_i6, %Sel2 : i6, i2
+# CHECK:          [[R2:%.+]] = comb.concat %c0_i6, %Sel2 {sv.namehint = "Sel2_padto_8"} : i6, i2
 # CHECK:          [[R3:%.+]] = comb.shru bin [[R1]], [[R2]] : i8
 # CHECK:          [[R4:%.+]] = comb.extract [[R3]] from 0 : (i8) -> i2
-# CHECK:          [[R5:%.+]] = comb.concat %false, %Sel2 : i1, i2
+# CHECK:          [[R5:%.+]] = comb.concat %false, %Sel2 {sv.namehint = "Sel2_padto_3"} : i1, i2
 # CHECK:          [[R6:%.+]] = hw.array_slice %In[[[R5]]] : (!hw.array<5xarray<4xi8>>) -> !hw.array<2xarray<4xi8>>
 # CHECK:          [[R7:%.+]] = comb.extract %Sel8 from 0 : (i8) -> i3
 # CHECK:          [[R8:%.+]] = hw.array_slice %In[[[R7]]] : (!hw.array<5xarray<4xi8>>) -> !hw.array<2xarray<4xi8>>
