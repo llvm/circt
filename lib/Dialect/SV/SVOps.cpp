@@ -515,7 +515,7 @@ AlwaysOp::Condition AlwaysOp::getCondition(size_t idx) {
 }
 
 void AlwaysOp::build(OpBuilder &builder, OperationState &result,
-                     ArrayRef<EventControl> events, ArrayRef<Value> clocks,
+                     ArrayRef<sv::EventControl> events, ArrayRef<Value> clocks,
                      std::function<void()> bodyCtor) {
   assert(events.size() == clocks.size() &&
          "mismatch between event and clock list");
@@ -554,7 +554,7 @@ static ParseResult parseEventList(
   StringRef keyword;
   if (!p.parseOptionalKeyword(&keyword)) {
     while (1) {
-      auto kind = symbolizeEventControl(keyword);
+      auto kind = sv::symbolizeEventControl(keyword);
       if (!kind.has_value())
         return p.emitError(loc, "expected 'posedge', 'negedge', or 'edge'");
       auto eventEnum = static_cast<int32_t>(*kind);
@@ -1481,8 +1481,10 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
   Value connected;
   if (!write) {
-    // If no write and only reads, then replace with XOp.
-    connected = rewriter.create<ConstantXOp>(
+    // If no write and only reads, then replace with ZOp.
+    // SV 6.6: "If no driver is connected to a net, its
+    // value shall be high-impedance (z) unless the net is a trireg"
+    connected = rewriter.create<ConstantZOp>(
         wire.getLoc(),
         wire.getResult().getType().cast<InOutType>().getElementType());
   } else if (isa<hw::HWModuleOp>(write->getParentOp()))

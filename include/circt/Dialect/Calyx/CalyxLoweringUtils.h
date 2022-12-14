@@ -26,6 +26,7 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 #include <variant>
@@ -453,6 +454,11 @@ private:
       componentStates;
 };
 
+/// Extra state that is passed to all PartialLoweringPatterns so they can record
+/// when they have run on an Operation, and only run once.
+using PatternApplicationState =
+    DenseMap<const mlir::RewritePattern *, SmallPtrSet<Operation *, 16>>;
+
 /// Base class for partial lowering passes. A partial lowering pass
 /// modifies the root operation in place, but does not replace the root
 /// operation.
@@ -463,13 +469,25 @@ template <class OpType,
 class PartialLoweringPattern : public RewritePatternType<OpType> {
 public:
   using RewritePatternType<OpType>::RewritePatternType;
-  PartialLoweringPattern(MLIRContext *ctx, LogicalResult &resRef)
-      : RewritePatternType<OpType>(ctx), partialPatternRes(resRef) {}
+  PartialLoweringPattern(MLIRContext *ctx, LogicalResult &resRef,
+                         PatternApplicationState &patternState)
+      : RewritePatternType<OpType>(ctx), partialPatternRes(resRef),
+        patternState(patternState) {}
 
   LogicalResult matchAndRewrite(OpType op,
                                 PatternRewriter &rewriter) const override {
+    // If this pattern has been applied to this op, it should now fail to match.
+    if (patternState[this].contains(op))
+      return failure();
+
+    // Do the actual rewrite, marking this op as updated. Because the op is
+    // marked as updated, the pattern driver will re-enqueue the op again.
     rewriter.updateRootInPlace(
         op, [&] { partialPatternRes = partiallyLower(op, rewriter); });
+
+    // Mark that this pattern has been applied to this op.
+    patternState[this].insert(op);
+
     return partialPatternRes;
   }
 
@@ -478,6 +496,7 @@ public:
 
 private:
   LogicalResult &partialPatternRes;
+  PatternApplicationState &patternState;
 };
 
 struct ModuleOpConversion : public OpRewritePattern<mlir::ModuleOp> {
@@ -498,6 +517,7 @@ class FuncOpPartialLoweringPattern
 public:
   FuncOpPartialLoweringPattern(
       MLIRContext *context, LogicalResult &resRef,
+      PatternApplicationState &patternState,
       DenseMap<mlir::func::FuncOp, calyx::ComponentOp> &map,
       calyx::CalyxLoweringState &state);
 
@@ -592,6 +612,7 @@ class InlineCombGroups
                                            mlir::OpInterfaceRewritePattern> {
 public:
   InlineCombGroups(MLIRContext *context, LogicalResult &resRef,
+                   PatternApplicationState &patternState,
                    calyx::CalyxLoweringState &pls);
 
   LogicalResult partiallyLower(calyx::GroupInterface originGroup,
@@ -615,8 +636,9 @@ class RewriteMemoryAccesses
     : public calyx::PartialLoweringPattern<calyx::AssignOp> {
 public:
   RewriteMemoryAccesses(MLIRContext *context, LogicalResult &resRef,
+                        PatternApplicationState &patternState,
                         calyx::CalyxLoweringState &cls)
-      : PartialLoweringPattern(context, resRef), cls(cls) {}
+      : PartialLoweringPattern(context, resRef, patternState), cls(cls) {}
 
   LogicalResult partiallyLower(calyx::AssignOp assignOp,
                                PatternRewriter &rewriter) const override;

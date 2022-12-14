@@ -1,7 +1,7 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t
-# RUN: FileCheck %s --input-file %t/CompReg.sv
-# RUN: FileCheck %s --input-file %t/CompReg.tcl --check-prefix TCL
+# RUN: FileCheck %s --input-file %t/hw/CompReg.sv
+# RUN: FileCheck %s --input-file %t/hw/CompReg.tcl --check-prefix TCL
 
 import pycde
 from pycde import types, module, AppID, Clock, Input, Output
@@ -54,7 +54,7 @@ print(locs)
 top_inst["reg"].place([(0, 0, 0), None, (0, 0, 2), (0, 0, 3), (0, 0, 4),
                        (0, 0, 5), (0, 0, 6), (0, 0, 7)])
 mod.print()
-mod.emit_outputs()
+mod.compile()
 
 # TCL-DAG: set_location_assignment FF_X0_Y0_N7 -to $parent|reg_{{[0-9]+}}[7]
 # TCL-DAG: set_location_assignment FF_X0_Y0_N6 -to $parent|reg_{{[0-9]+}}[6]

@@ -389,25 +389,25 @@ firrtl.module @bundle_types(in %p : !firrtl.uint<1>, in %clock: !firrtl.clock) {
   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
   %w = firrtl.wire  : !firrtl.bundle<a: uint<2>, b flip: uint<2>>
 
-  // CHECK: [[W_A:%.*]] = firrtl.subfield %w(0)
+  // CHECK: [[W_A:%.*]] = firrtl.subfield %w[a]
   // CHECK: [[MUX:%.*]] = firrtl.mux(%p, %c1_ui2, %c0_ui2)
   // CHECK: firrtl.connect [[W_A]], [[MUX]]
   firrtl.when %p {
-    %w_a = firrtl.subfield %w(0) : (!firrtl.bundle<a : uint<2>, b flip: uint<2>>) -> !firrtl.uint<2>
+    %w_a = firrtl.subfield %w[a] : !firrtl.bundle<a : uint<2>, b flip: uint<2>>
     firrtl.connect %w_a, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   } else {
-    %w_a = firrtl.subfield %w(0) : (!firrtl.bundle<a : uint<2>, b flip: uint<2>>) -> !firrtl.uint<2>
+    %w_a = firrtl.subfield %w[a] : !firrtl.bundle<a : uint<2>, b flip: uint<2>>
     firrtl.connect %w_a, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   }
 
-  // CHECK: [[W_B:%.*]] = firrtl.subfield %w(1)
+  // CHECK: [[W_B:%.*]] = firrtl.subfield %w[b]
   // CHECK: [[MUX:%.*]] = firrtl.mux(%p, %c1_ui2, %c0_ui2)
   // CHECK: firrtl.connect [[W_B]], [[MUX]]
-  %w_b0 = firrtl.subfield %w(1) : (!firrtl.bundle<a : uint<2>, b flip: uint<2>>) -> !firrtl.uint<2>
+  %w_b0 = firrtl.subfield %w[b] : !firrtl.bundle<a : uint<2>, b flip: uint<2>>
   firrtl.connect %w_b0, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   firrtl.when %p {
   } else {
-    %w_b1 = firrtl.subfield %w(1) : (!firrtl.bundle<a : uint<2>, b flip: uint<2>>) -> !firrtl.uint<2>
+    %w_b1 = firrtl.subfield %w[b] : !firrtl.bundle<a : uint<2>, b flip: uint<2>>
     firrtl.connect %w_b1, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   }
 }
@@ -419,7 +419,7 @@ firrtl.module @simple(in %in : !firrtl.bundle<a: uint<1>>) { }
 firrtl.module @bundle_ports() {
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %simple_in = firrtl.instance test0 @simple(in in : !firrtl.bundle<a: uint<1>>)
-  %0 = firrtl.subfield %simple_in(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
+  %0 = firrtl.subfield %simple_in[a] : !firrtl.bundle<a: uint<1>>
   firrtl.connect %0, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
@@ -450,7 +450,7 @@ firrtl.module @analog(out %analog : !firrtl.analog<1>) {
   // Should not complain about the embeded analog.
   %c1 = firrtl.constant 0 : !firrtl.uint<1>
   %w = firrtl.wire : !firrtl.bundle<a: uint<1>, b: analog<1>>
-  %w_a = firrtl.subfield %w(0) : (!firrtl.bundle<a : uint<1>, b : analog<1>>) -> !firrtl.uint<1>
+  %w_a = firrtl.subfield %w[a] : !firrtl.bundle<a : uint<1>, b : analog<1>>
   firrtl.connect %w_a, %c1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
@@ -504,7 +504,7 @@ firrtl.module @multi_dim_vector(in %p : !firrtl.uint<1>) {
 // CHECK-LABEL: @vector_of_bundle
 firrtl.module @vector_of_bundle(in %p : !firrtl.uint<1>, out %ret: !firrtl.vector<bundle<a:uint<1>>, 1>) {
   %0 = firrtl.subindex %ret[0] : !firrtl.vector<bundle<a:uint<1>>, 1>
-  %1 = firrtl.subfield %0(0) : (!firrtl.bundle<a:uint<1>>) -> !firrtl.uint<1>
+  %1 = firrtl.subfield %0[a] : !firrtl.bundle<a:uint<1>>
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -516,9 +516,9 @@ firrtl.module @vector_of_bundle(in %p : !firrtl.uint<1>, out %ret: !firrtl.vecto
 // CHECK-LABEL: @aggregate_register
 firrtl.module @aggregate_register(in %clock: !firrtl.clock) {
   %0 = firrtl.reg %clock : !firrtl.bundle<a : uint<1>, b : uint<1>>
-  // CHECK:      %1 = firrtl.subfield %0(0)
+  // CHECK:      %1 = firrtl.subfield %0[a]
   // CHECK-NEXT: firrtl.connect %1, %1
-  // CHECK-NEXT: %2 = firrtl.subfield %0(1)
+  // CHECK-NEXT: %2 = firrtl.subfield %0[b]
   // CHECK-NEXT: firrtl.connect %2, %2
 }
 

@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/BuiltinOps.h"
 
 using namespace circt;
@@ -25,28 +26,28 @@ NLATable::NLATable(Operation *operation) {
   for (auto &op : *circuit.getBodyBlock()) {
     if (auto module = dyn_cast<FModuleLike>(op))
       symToOp[module.moduleNameAttr()] = module;
-    if (auto nla = dyn_cast<HierPathOp>(op))
+    if (auto nla = dyn_cast<hw::HierPathOp>(op))
       addNLA(nla);
   }
 }
 
-ArrayRef<HierPathOp> NLATable::lookup(StringAttr name) {
+ArrayRef<hw::HierPathOp> NLATable::lookup(StringAttr name) {
   auto iter = nodeMap.find(name);
   if (iter == nodeMap.end())
     return {};
   return iter->second;
 }
 
-ArrayRef<HierPathOp> NLATable::lookup(Operation *op) {
+ArrayRef<hw::HierPathOp> NLATable::lookup(Operation *op) {
   auto name = op->getAttrOfType<StringAttr>("sym_name");
   if (!name)
     return {};
   return lookup(name);
 }
 
-HierPathOp NLATable::getNLA(StringAttr name) {
+hw::HierPathOp NLATable::getNLA(StringAttr name) {
   auto *n = symToOp.lookup(name);
-  return dyn_cast_or_null<HierPathOp>(n);
+  return dyn_cast_or_null<hw::HierPathOp>(n);
 }
 
 FModuleLike NLATable::getModule(StringAttr name) {
@@ -54,7 +55,7 @@ FModuleLike NLATable::getModule(StringAttr name) {
   return dyn_cast_or_null<FModuleLike>(n);
 }
 
-void NLATable::addNLA(HierPathOp nla) {
+void NLATable::addNLA(hw::HierPathOp nla) {
   symToOp[nla.getSymNameAttr()] = nla;
   for (auto ent : nla.getNamepath()) {
     if (auto mod = ent.dyn_cast<FlatSymbolRefAttr>())
@@ -64,7 +65,7 @@ void NLATable::addNLA(HierPathOp nla) {
   }
 }
 
-void NLATable::erase(HierPathOp nla, SymbolTable *symbolTable) {
+void NLATable::erase(hw::HierPathOp nla, SymbolTable *symbolTable) {
   symToOp.erase(nla.getSymNameAttr());
   for (auto ent : nla.getNamepath())
     if (auto mod = ent.dyn_cast<FlatSymbolRefAttr>())
@@ -75,7 +76,7 @@ void NLATable::erase(HierPathOp nla, SymbolTable *symbolTable) {
     symbolTable->erase(nla);
 }
 
-void NLATable::updateModuleInNLA(HierPathOp nlaOp, StringAttr oldModule,
+void NLATable::updateModuleInNLA(hw::HierPathOp nlaOp, StringAttr oldModule,
                                  StringAttr newModule) {
   nlaOp.updateModule(oldModule, newModule);
   auto &nlas = nodeMap[oldModule];

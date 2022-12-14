@@ -53,7 +53,7 @@ struct PortInfo {
   size_t argNum = ~0U;
 
   /// The optional symbol for this port.
-  StringAttr sym = {};
+  InnerSymAttr sym = {};
 
   StringRef getName() const { return name.getValue(); }
   bool isInput() const { return direction == PortDirection::INPUT; }
@@ -201,11 +201,11 @@ LogicalResult checkParameterInContext(
 
 /// Return the symbol (if exists, else null) on the corresponding input port
 /// argument.
-StringAttr getArgSym(Operation *op, unsigned i);
+InnerSymAttr getArgSym(Operation *op, unsigned i);
 
 /// Return the symbol (if any, else null) on the corresponding output port
 /// argument.
-StringAttr getResultSym(Operation *op, unsigned i);
+InnerSymAttr getResultSym(Operation *op, unsigned i);
 
 // Check whether an integer value is an offset from a base.
 bool isOffset(Value base, Value index, uint64_t offset);

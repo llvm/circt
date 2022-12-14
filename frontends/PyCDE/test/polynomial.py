@@ -1,6 +1,6 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
-# RUN: FileCheck %s --input-file %t/PolynomialCompute.sv --check-prefix=OUTPUT
+# RUN: FileCheck %s --input-file %t/hw/PolynomialCompute.sv --check-prefix=OUTPUT
 
 from __future__ import annotations
 
@@ -143,15 +143,7 @@ poly.print()
 # CHECK: hw.instance "example2_1" sym @example2_1 @PolyComputeForCoeff__1__2__3__4__5_<__INST_HIER: none = #hw.param.expr.str.concat<#hw.param.decl.ref<"__INST_HIER">, ".example2_1">>(x: %[[EXAMPLE_Y]]: i32)
 # CHECK: %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" sym @CoolPolynomialCompute @supercooldevice(x: %c23_i32{{.*}}: i32) -> (y: i32)
 # CHECK-LABEL: hw.module @PolyComputeForCoeff__62__42__6_<__INST_HIER: none = "INSTANTIATE_WITH_INSTANCE_PATH">(%x: i32) -> (y: i32)
-# CHECK: hw.constant 62
-# CHECK: hw.constant 42
-# CHECK: hw.constant 6
 # CHECK-LABEL: hw.module @PolyComputeForCoeff__1__2__3__4__5_<__INST_HIER: none = "INSTANTIATE_WITH_INSTANCE_PATH">(%x: i32)
-# CHECK: hw.constant 1
-# CHECK: hw.constant 2
-# CHECK: hw.constant 3
-# CHECK: hw.constant 4
-# CHECK: hw.constant 5
 # CHECK-NOT: hw.module @pycde.PolynomialCompute
 
 poly.emit_outputs()

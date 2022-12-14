@@ -268,7 +268,7 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
       op.getNameKind(), op.getAnnotations().getValue(),
       op.getPortAnnotations().getValue(), op.getInnerSymAttr());
   if (auto oldName = getInnerSymName(op))
-    newMem.setInnerSymAttr(InnerSymAttr::get(StringAttr::get(
+    newMem.setInnerSymAttr(hw::InnerSymAttr::get(StringAttr::get(
         b->getContext(), oldName.getValue() + (op.getName() + field.suffix))));
 
   SmallVector<Attribute> newAnnotations;
@@ -510,7 +510,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
   if (!annotations || annotations.empty())
     return ArrayAttr::get(ctxt, retval);
   for (auto opAttr : annotations) {
-    Optional<int64_t> maybeFieldID = None;
+    Optional<int64_t> maybeFieldID = std::nullopt;
     DictionaryAttr annotation;
     annotation = opAttr.dyn_cast<DictionaryAttr>();
     if (annotations)
@@ -1256,7 +1256,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       op.getNameKindAttr(), direction::packAttribute(context, newDirs),
       builder->getArrayAttr(newNames), op.getAnnotations(),
       builder->getArrayAttr(newPortAnno), op.getLowerToBindAttr(),
-      sym ? InnerSymAttr::get(sym) : InnerSymAttr());
+      sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
 
   SmallVector<Value> lowered;
   for (size_t aggIndex = 0, eAgg = op.getNumResults(); aggIndex != eAgg;

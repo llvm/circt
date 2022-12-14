@@ -5,22 +5,73 @@
 from __future__ import annotations
 
 from .pycde_types import PyCDEType, dim
-from .value import BitVectorValue, ListValue, Value
+from .value import BitVectorValue, ListValue, Value, PyCDEValue
+from .value import get_slice_bounds
 from circt.support import get_value, BackedgeBuilder
-from circt.dialects import msft, hw
+from circt.dialects import msft, hw, sv
+from pycde.dialects import comb
 import mlir.ir as ir
 
 import typing
+from typing import Union
 
 
-def Wire(type: PyCDEType):
-  """Declare a wire. Used to create backedges. Must assign exactly once."""
+def NamedWire(type_or_value: Union[PyCDEType, PyCDEValue], name: str):
+  """Create a named wire which is guaranteed to appear in the Verilog output.
+  This construct precludes many optimizations (since it introduces an
+  optimization barrier) so it should be used sparingly."""
+
+  assert name is not None
+  value = None
+  type = type_or_value
+  if isinstance(type_or_value, PyCDEValue):
+    type = type_or_value.type
+    value = type_or_value
+
+  class NamedWire(type._get_value_class()):
+
+    def __init__(self):
+      self.assigned_value = None
+      # TODO: We assume here that names are unique within a module, which isn't
+      # necessarily the case. We may have to introduce a module-scope list of
+      # inner_symbols purely for the purpose of disallowing the SV
+      # canonicalizers to eliminate wires!
+      self.wire_op = sv.WireOp(hw.InOutType.get(type), name, inner_sym=name)
+      read_val = sv.ReadInOutOp(type, self.wire_op)
+      super().__init__(Value(read_val), type)
+      self.name = name
+
+    def assign(self, new_value: Value):
+      if self.assigned_value is not None:
+        raise ValueError("Cannot assign value to Wire twice.")
+      if new_value.type != self.type:
+        raise TypeError(
+            f"Cannot assign {new_value.value.type} to {self.value.type}")
+      sv.AssignOp(self.wire_op, new_value.value)
+      self.assigned_value = new_value
+      return self
+
+  w = NamedWire()
+  if value is not None:
+    w.assign(value)
+  return w
+
+
+def Wire(type: PyCDEType, name: str = None):
+  """Declare a wire. Used to create backedges. Must assign exactly once. If
+  'name' is specified, use 'NamedWire' instead."""
 
   class WireValue(type._get_value_class()):
 
     def __init__(self):
-      self._backedge = BackedgeBuilder.create(type, "wire", None)
+      self._backedge = BackedgeBuilder.create(type,
+                                              "wire" if name is None else name,
+                                              None)
       super().__init__(self._backedge.result, type)
+      if name is not None:
+        self.name = name
+      self._orig_name = name
+      self.assign_parts = None
 
     def assign(self, new_value: Value):
       if self._backedge is None:
@@ -33,6 +84,30 @@ def Wire(type: PyCDEType):
       self._backedge.erase()
       self._backedge = None
       self.value = new_value.value
+      if self._orig_name is not None:
+        self.name = self._orig_name
+      return new_value
+
+    def __setitem__(self, idxOrSlice: Union[int, slice], value):
+      if self.assign_parts is None:
+        self.assign_parts = [None] * self.type.width
+      lo, hi = get_slice_bounds(self.type.width, idxOrSlice)
+      assert hi <= self.type.width
+      width = hi - lo
+      assert width == value.type.width
+      for i in range(lo, hi):
+        assert self.assign_parts[i] is None
+        self.assign_parts[i] = value
+      if all([p is not None for p in self.assign_parts]):
+        concat_operands = [self.assign_parts[0]]
+        last = self.assign_parts[0]
+        for p in self.assign_parts:
+          if p is last:
+            continue
+          last = p
+          concat_operands.append(p)
+        concat_operands.reverse()
+        self.assign(BitVectorValue.concat(concat_operands))
 
   return WireValue()
 
@@ -67,7 +142,20 @@ def Mux(sel: BitVectorValue, *data_inputs: typing.List[Value]):
     return data_inputs[0]
   if sel.type.width != (num_inputs - 1).bit_length():
     raise TypeError("'Sel' bit width must be clog2 of number of inputs")
-  return ListValue(data_inputs)[sel]
+
+  if num_inputs == 2:
+    m = comb.MuxOp(sel, data_inputs[1], data_inputs[0])
+  else:
+    a = ListValue(data_inputs)
+    a.name = "arr_" + "_".join([i.name for i in data_inputs])
+    m = a[sel]
+
+  input_names = [
+      i.name if i.name is not None else f"in{idx}"
+      for idx, i in enumerate(data_inputs)
+  ]
+  m.name = f"mux_{sel.name}_" + "_".join(input_names)
+  return m
 
 
 def SystolicArray(row_inputs, col_inputs, pe_builder):

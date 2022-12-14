@@ -1,7 +1,7 @@
 # REQUIRES: esi-cosim
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1
-# RUN: esi-cosim-runner.py --tmpdir %t --schema %t/schema.capnp %s %t/*.sv
+# RUN: esi-cosim-runner.py --tmpdir %t --schema %t/hw/schema.capnp %s %t/hw/*.sv
 # PY: from esi_ram import run_cosim
 # PY: run_cosim(tmpdir, rpcschemapath, simhostport)
 
@@ -63,9 +63,10 @@ class top:
 
 
 def run_cosim(tmpdir=".", schema_path="schema.capnp", rpchostport=None):
-  sys.path.append(tmpdir)
-  import esi_rt.ESIMem as esi_sys
-  from esi_rt.common import Cosim
+  import os
+  sys.path.append(os.path.join(tmpdir, "runtime"))
+  import ESIMem as esi_sys
+  from ESIMem.common import Cosim
   if rpchostport is None:
     port = open("cosim.cfg").read().split(':')[1].strip()
     rpchostport = f"localhost:{port}"
@@ -92,6 +93,5 @@ def run_cosim(tmpdir=".", schema_path="schema.capnp", rpchostport=None):
 
 if __name__ == "__main__":
   s = pycde.System([top], name="ESIMem", output_directory=sys.argv[1])
-  s.generate()
-  s.emit_outputs()
-  s.build_api("python")
+  s.compile()
+  s.package()

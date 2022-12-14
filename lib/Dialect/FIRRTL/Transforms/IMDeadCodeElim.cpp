@@ -293,7 +293,10 @@ void IMDeadCodeElimPass::visitValue(Value value) {
     // Update the src, when it's an instance op.
     auto module =
         dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(instance));
-    if (!module)
+
+    // Propagate liveness only when a port is output.
+    if (!module || module.getPortDirection(instanceResult.getResultNumber()) ==
+                       Direction::In)
       return;
 
     BlockArgument modulePortVal =
@@ -380,6 +383,7 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
 
   ImplicitLocOpBuilder builder(module.getLoc(), module.getContext());
   builder.setInsertionPointToStart(module.getBodyBlock());
+  auto oldPorts = module.getPorts();
 
   for (auto index : llvm::seq(0u, numOldPorts)) {
     auto argument = module.getArgument(index);
@@ -445,19 +449,26 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
   for (auto *use : instanceGraphNode->uses()) {
     auto instance = cast<InstanceOp>(*use->getInstance());
     ImplicitLocOpBuilder builder(instance.getLoc(), instance);
-    // Since we will rewrite instance op, it is necessary to remove old instance
-    // results from liveSet.
-    for (auto oldResult : instance.getResults())
-      liveSet.erase(oldResult);
-
     // Replace old instance results with dummy wires.
     for (auto index : deadPortIndexes.set_bits()) {
       auto result = instance.getResult(index);
-      assert(isAssumedDead(result) &&
-             "instance results of dead ports must be dead");
       WireOp wire = builder.create<WireOp>(result.getType());
       result.replaceAllUsesWith(wire);
+      // If a module port is dead but its instance result is alive, the port is
+      // used as a temporary wire so make sure that a replaced wire is putted
+      // into `liveSet`.
+      if (isKnownAlive(result)) {
+        assert(oldPorts[index].direction == Direction::In &&
+               "If a dead module port is alive in instance results, the "
+               "corresponding port must be input");
+        liveSet.insert(wire);
+      }
     }
+
+    // Since we will rewrite instance op, it is necessary to remove old
+    // instance results from liveSet.
+    for (auto oldResult : instance.getResults())
+      liveSet.erase(oldResult);
 
     // Create a new instance op without dead ports.
     auto newInstance = instance.erasePorts(builder, deadPortIndexes);
@@ -475,15 +486,35 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
 }
 
 void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
-  // Public modules cannot be erased.
-  if (module.isPublic())
+  // If the module is not empty, just skip.
+  if (!module.getBodyBlock()->empty())
     return;
 
-  // If the module doesn't have arguments, operations or annotations, we
-  // consider it to be dead.
-  if (!module.getBodyBlock()->args_empty() || !module.getBodyBlock()->empty() ||
-      !module.getAnnotations().empty())
+  // We cannot delete public modules so generate a warning.
+  if (module.isPublic()) {
+    mlir::emitWarning(module.getLoc())
+        << "module `" << module.getName()
+        << "` is empty but cannot be removed because the module is public";
     return;
+  }
+
+  if (!module.getAnnotations().empty()) {
+    module.emitWarning() << "module `" << module.getName()
+                         << "` is empty but cannot be removed "
+                            "because the module has annotations "
+                         << module.getAnnotations();
+    return;
+  }
+
+  if (!module.getBodyBlock()->args_empty()) {
+    auto diag = module.emitWarning()
+                << "module `" << module.getName()
+                << "` is empty but cannot be removed because the "
+                   "module has ports ";
+    llvm::interleaveComma(module.getPortNames(), diag);
+    diag << " are referenced by name or dontTouched";
+    return;
+  }
 
   // Ok, the module is empty. Delete instances unless they have symbols.
   LLVM_DEBUG(llvm::dbgs() << "Erase " << module.getName() << "\n");
@@ -491,11 +522,11 @@ void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
   InstanceGraphNode *instanceGraphNode =
       instanceGraph->lookup(module.moduleNameAttr());
 
-  bool existsInstanceWithSymbol = false;
+  SmallVector<Location> instancesWithSymbols;
   for (auto *use : llvm::make_early_inc_range(instanceGraphNode->uses())) {
     auto instance = cast<InstanceOp>(use->getInstance());
     if (instance.getInnerSym()) {
-      existsInstanceWithSymbol = true;
+      instancesWithSymbols.push_back(instance.getLoc());
       continue;
     }
     use->erase();
@@ -503,8 +534,15 @@ void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
   }
 
   // If there is an instance with a symbol, we don't delete the module itself.
-  if (existsInstanceWithSymbol)
+  if (!instancesWithSymbols.empty()) {
+    auto diag = module.emitWarning()
+                << "module  `" << module.getName()
+                << "` is empty but cannot be removed because an instance is "
+                   "referenced by name";
+    diag.attachNote(FusedLoc::get(&getContext(), instancesWithSymbols))
+        << "these are instances with symbols";
     return;
+  }
 
   instanceGraph->erase(instanceGraphNode);
   module.erase();

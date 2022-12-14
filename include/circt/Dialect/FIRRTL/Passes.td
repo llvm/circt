@@ -609,6 +609,15 @@ def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createLowerXMRPass()";
 }
 
+def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::CircuitOp"> {
+  let summary = "Lower intrinsics";
+  let description = [{
+    This pass lowers intrinsics encoded as extmodule with annotation and 
+    intmodule to their implementation or op.
+  }];
+  let constructor = "circt::firrtl::createLowerIntrinsicsPass()";
+}
+
 def ResolveTraces : Pass<"firrtl-resolve-traces", "firrtl::CircuitOp"> {
   let summary = "Write out TraceAnnotations to an output annotation file";
   let description = [{
@@ -625,6 +634,20 @@ def ResolveTraces : Pass<"firrtl-resolve-traces", "firrtl::CircuitOp"> {
   let options = [Option<"outputAnnotationFilename", "file", "std::string", "",
       "Output file for the JSON-serialized Trace Annotations">];
   let dependentDialects = ["sv::SVDialect"];
+}
+
+def InnerSymbolDCE : Pass<"firrtl-inner-symbol-dce", "mlir::ModuleOp"> {
+  let summary = "Eliminate dead inner symbols";
+  let description = [{
+    This pass deletes all inner symbols which have no uses. This is necessary to
+    unblock optimizations and removal of the operations which have these unused
+    inner symbols.
+  }];
+  let constructor = "circt::firrtl::createInnerSymbolDCEPass()";
+  let statistics = [
+    Statistic<"numSymbolsFound", "num-sym-found", "Number of symbols found">,
+    Statistic<"numSymbolsRemoved", "num-sym-removed", "Number of symbols removed">
+  ];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

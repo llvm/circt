@@ -27,7 +27,7 @@ public:
   ResultType dispatchTypeOpVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<ConstantOp,
+        .template Case<ConstantOp, AggregateConstantOp,
                        // Array operations
                        ArraySliceOp, ArrayCreateOp, ArrayConcatOp, ArrayGetOp,
                        // Struct operations
@@ -62,6 +62,7 @@ public:
   }
 
   HANDLE(ConstantOp, Unhandled);
+  HANDLE(AggregateConstantOp, Unhandled);
   HANDLE(BitcastOp, Unhandled);
   HANDLE(ParamValueOp, Unhandled);
   HANDLE(StructCreateOp, Unhandled);

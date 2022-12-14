@@ -133,7 +133,8 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
       %sub_inner = comb.sub %val, %c42 : i8
       %sub = comb.sub %sub_inner, %c42 : i8
 
-      // CHECK-NEXT: $fwrite(32'h80000002, "Inlined! %x %x\n", 8'(val + 8'h2A), 8'(8'(val - 8'h2A) - 8'h2A));
+      // CHECK-NEXT: $fwrite(32'h80000002, "Inlined! %x %x\n", 8'(val + 8'h2A),
+      // CHECK-NEXT:         8'(8'(val - 8'h2A) - 8'h2A));
       sv.fwrite %fd, "Inlined! %x %x\n"(%add, %sub) : i8, i8
     }
 
@@ -300,7 +301,8 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
       sv.fwrite %fd, "%d" (%c1) : i1
       // CHECK-NEXT: fwrite(32'h80000002, "%d", "THING");
       %c2 = sv.verbatim.expr "\"VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE\"" : () -> i1
-      // CHECK-NEXT: _GEN = "VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE";
+      // CHECK-NEXT: _GEN =
+      // CHECK-NEXT:   "VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE";
       // CHECK-NEXT: fwrite(32'h80000002, "%d", _GEN);
       sv.fwrite %fd, "%d" (%c2) : i1
       // CHECK-NEXT: `endif
@@ -455,7 +457,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
 }
 
 // CHECK-LABEL: module Aliasing(
-// CHECK-NEXT:             inout [41:0] a, 
+// CHECK-NEXT:             inout [41:0] a,
 // CHECK-NEXT:                          b,
 // CHECK-NEXT:                          c)
 hw.module @Aliasing(%a : !hw.inout<i42>, %b : !hw.inout<i42>,
@@ -471,7 +473,7 @@ hw.module @reg_0(%in4: i4, %in8: i8) -> (a: i8, b: i8) {
   // CHECK-LABEL: module reg_0(
   // CHECK-NEXT:   input  [3:0] in4,
   // CHECK-NEXT:   input  [7:0] in8,
-  // CHECK-NEXT:   output [7:0] a, 
+  // CHECK-NEXT:   output [7:0] a,
   // CHECK-NEXT:                b);
 
   // CHECK-EMPTY:
@@ -819,12 +821,12 @@ hw.module @issue720ifdef(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
 hw.module @issue728(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija: i1) {
   %fd = hw.constant 0x80000002 : i32
 
-  // CHECK:  always @(posedge clock) begin
-  // CHECK:    $fwrite(32'h80000002, "force output");
-  // CHECK:    if (asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija &
-  // CHECK:        asdfasdfasdfasdfafa & gasfdasafwjhijjafija)
-  // CHECK:      $fwrite(32'h80000002, "this cond is split");
-  // CHECK:  end // always @(posedge)
+  // CHECK:       always @(posedge clock) begin
+  // CHECK-NEXT:    $fwrite(32'h80000002, "force output");
+  // CHECK-NEXT:    if (asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa
+  // CHECK-NEXT:        & gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija)
+  // CHECK-NEXT:      $fwrite(32'h80000002, "this cond is split");
+  // CHECK-NEXT:  end // always @(posedge)
   sv.always posedge %clock  {
      sv.fwrite %fd, "force output"
      %cond = comb.and %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija, %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija, %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija : i1
@@ -839,14 +841,14 @@ hw.module @issue728(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija:
 hw.module @issue728ifdef(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija: i1) {
   %fd = hw.constant 0x80000002 : i32
 
-  // CHECK: always @(posedge clock) begin
-  // CHECK:    $fwrite(32'h80000002, "force output");
-  // CHECK:    `ifdef FUN_AND_GAMES
-  // CHECK:    if (asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija &
-  // CHECK:        asdfasdfasdfasdfafa & gasfdasafwjhijjafija)
-  // CHECK:        $fwrite(32'h80000002, "this cond is split");
-  // CHECK:    `endif
-  // CHECK: end // always @(posedge)
+  // CHECK:      always @(posedge clock) begin
+  // CHECK-NEXT:    $fwrite(32'h80000002, "force output");
+  // CHECK-NEXT:    `ifdef FUN_AND_GAMES
+  // CHECK-NEXT:    if (asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa
+  // CHECK-NEXT:         & gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija)
+  // CHECK-NEXT:        $fwrite(32'h80000002, "this cond is split");
+  // CHECK-NEXT:    `endif
+  // CHECK-NEXT: end // always @(posedge)
   sv.always posedge %clock  {
      sv.fwrite %fd, "force output"
      sv.ifdef.procedural "FUN_AND_GAMES" {
@@ -948,8 +950,9 @@ hw.module @TooLongConstExpr() {
   %myreg = sv.reg : !hw.inout<i4200>
   // CHECK: always @*
   sv.always {
-    // CHECK-NEXT: myreg <= 4200'(4200'h2323CB3A9903AD1D87D91023532E89D313E12BFCFCA2492A8561CADD94652CC4 +
-    // CHECK-NEXT:                             4200'h2323CB3A9903AD1D87D91023532E89D313E12BFCFCA2492A8561CADD94652CC4);
+    // CHECK-NEXT: myreg <=
+    // CHECK-NEXT:   4200'(4200'h2323CB3A9903AD1D87D91023532E89D313E12BFCFCA2492A8561CADD94652CC4
+    // CHECK-NEXT:         + 4200'h2323CB3A9903AD1D87D91023532E89D313E12BFCFCA2492A8561CADD94652CC4);
     %0 = hw.constant 15894191981981165163143546843135416146464164161464654561818646486465164684484 : i4200
     %1 = comb.add %0, %0 : i4200
     sv.passign %myreg, %1 : i4200
@@ -1028,7 +1031,7 @@ hw.module @AnFSM(%clock : i1) {
   // typedecl'd # 1
   %reg_state1 = sv.reg : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>>
   %reg_read_state1 = sv.read_inout %reg_state1 : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>>
-  
+
   %A_state1 = hw.enum.constant A : !hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>
   %B_state1 = hw.enum.constant B : !hw.typealias<@__AnFSMTypedecl::@_state1,!hw.enum<A, B>>
   sv.always posedge %clock {
@@ -1040,7 +1043,7 @@ hw.module @AnFSM(%clock : i1) {
   // typedecl'd # 2
   %reg_state2 = sv.reg : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>>
   %reg_read_state2 = sv.read_inout %reg_state2 : !hw.inout<!hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>>
-  
+
   %A_state2 = hw.enum.constant A : !hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>
   %B_state2 = hw.enum.constant B : !hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>>
   sv.always posedge %clock {
@@ -1241,7 +1244,8 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
     // CHECK: [[THING]] = `THING;
     // CHECK: [[THING3]] = 42'([[THING]] + {{..}}31{really_really_long_port[10]}}
     // CHECK-SAME: really_really_long_port})
-    // CHECK: [[MANYTHING]] = [[THING]] | [[THING]] |
+    // CHECK: [[MANYTHING]] =
+    // CHECK-NEXT: [[THING]] | [[THING]] |
 
     // Check the indentation level of temporaries.  Issue #1625
     %thing = sv.verbatim.expr.se "`THING" : () -> i42
@@ -1312,6 +1316,50 @@ hw.module @XMR_src(%a : i23) -> (aa: i3) {
   hw.output %r : i3
 }
 
+// Test that XMRRefOps are emitted correctly in instances and in binds.  XMRs
+// that include verbatim paths and those that do not are both tested.
+// Additionally, test that XMRs use properly legalized Verilog names.  The XMR
+// target is "new" and the root of the reference is "wait_order".
+
+hw.globalRef @ref [
+  #hw.innerNameRef<@wait_order::@bar>,
+  #hw.innerNameRef<@XMRRef_Bar::@new>
+]
+hw.globalRef @ref2 [
+  #hw.innerNameRef<@wait_order::@baz>
+]
+hw.module @XMRRef_Bar() {
+  %new = sv.wire sym @new {
+    circt.globalRef = [#hw.globalNameRef<@ref>]
+  } : !hw.inout<i2>
+}
+hw.module.extern @XMRRef_Baz(%a: i2, %b: i1)
+hw.module.extern @XMRRef_Qux(%a: i2, %b: i1)
+// CHECK-LABEL: module wait_order
+hw.module @wait_order() {
+  hw.instance "bar" sym @bar @XMRRef_Bar() -> () {
+    circt.globalRef = [#hw.globalNameRef<@ref>]
+  }
+  %xmr = sv.xmr.ref @ref : !hw.inout<i2>
+  %xmrRead = sv.read_inout %xmr : !hw.inout<i2>
+  %xmr2 = sv.xmr.ref @ref2 ".x.y.z[42]" : !hw.inout<i1>
+  %xmr2Read = sv.read_inout %xmr2 : !hw.inout<i1>
+  // CHECK:      /* This instance is elsewhere emitted as a bind statement.
+  // CHECK-NEXT: XMRRef_Baz baz (
+  // CHECK-NEXT:   .a (wait_order_0.bar.new_0),
+  // CHECK-NEXT:   .b (wait_order_0.baz.x.y.z[42])
+  // CHECK-NEXT: );
+  // CHECK-NEXT: */
+  hw.instance "baz" sym @baz @XMRRef_Baz(a: %xmrRead: i2, b: %xmr2Read: i1) -> () {
+    doNotPrint = true,
+    circt.globalRef = [#hw.globalNameRef<@ref2>]
+  }
+  // CHECK-NEXT: XMRRef_Qux qux (
+  // CHECK-NEXT:   .a (wait_order_0.bar.new_0),
+  // CHECK-NEXT:   .b (wait_order_0.baz.x.y.z[42])
+  // CHECK-NEXT: );
+  hw.instance "qux" sym @qux @XMRRef_Qux(a: %xmrRead: i2, b: %xmr2Read: i1) -> ()
+}
 
 hw.module.extern @MyExtModule(%in: i8)
 
@@ -1550,8 +1598,10 @@ hw.module @ProhibitReuseOfExistingInOut(%a: i1) -> (out1: i1) {
 
 // See https://github.com/verilator/verilator/issues/3405.
 // CHECK-LABEL: Verilator3405
-// CHECK-DAG: wire [[GEN0:.+]] = {{.+}} | {{.+}} | {{.+}}
-// CHECK-DAG: wire [[GEN1:.+]] = {{.+}} | {{.+}} | {{.+}}
+// CHECK-DAG: wire [[GEN0:.+]] =
+// CHECK-DAG-NEXT: {{.+}} | {{.+}} | {{.+}}
+// CHECK-DAG: wire [[GEN1:.+]] =
+// CHECK-DAG-NEXT: {{.+}} | {{.+}} | {{.+}}
 
 // CHECK: assign out = {[[GEN0]], [[GEN1]]}
 hw.module @Verilator3405(
@@ -1658,6 +1708,13 @@ hw.module @bindInMod() {
 // CHECK-NEXT:    ._j       (j),
 // CHECK-NEXT:    ._k       (_signed__k)
 // CHECK: endmodule
+
+sv.bind <@wait_order::@baz>
+
+// CHECK-LABEL: bind wait_order_0 XMRRef_Baz baz (
+// CHECK-NEXT:    .a (wait_order_0.bar.new_0)
+// CHECK-NEXT:    .b (wait_order_0.baz.x.y.z[42])
+// CHECK-NEXT:  );
 
 sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst2>
 

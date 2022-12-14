@@ -13,6 +13,7 @@
 #define CIRCT_DIALECT_FIRRTL_NLATABLE_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SetOperations.h"
@@ -37,15 +38,15 @@ public:
   /// Lookup all NLAs an operation participates in. This returns a reference to
   /// the internal record, so make a copy before making any update to the
   /// NLATable.
-  ArrayRef<HierPathOp> lookup(Operation *op);
+  ArrayRef<hw::HierPathOp> lookup(Operation *op);
 
   /// Lookup all NLAs an operation participates in. This returns a reference to
   /// the internal record, so make a copy before making any update to the
   /// NLATable.
-  ArrayRef<HierPathOp> lookup(StringAttr name);
+  ArrayRef<hw::HierPathOp> lookup(StringAttr name);
 
   /// Resolve a symbol to an NLA.
-  HierPathOp getNLA(StringAttr name);
+  hw::HierPathOp getNLA(StringAttr name);
 
   /// Resolve a symbol to a Module.
   FModuleLike getModule(StringAttr name);
@@ -57,17 +58,17 @@ public:
   ///  to get the set of NLAs that an InstanceOp participates in, instead of
   ///  recording them on the op in the IR.
   void commonNLAs(StringAttr mod1, StringAttr mod2,
-                  DenseSet<HierPathOp> &common) {
+                  DenseSet<hw::HierPathOp> &common) {
     auto mod1NLAs = lookup(mod1);
     auto mod2NLAs = lookup(mod2);
     common.insert(mod1NLAs.begin(), mod1NLAs.end());
-    DenseSet<HierPathOp> set2(mod2NLAs.begin(), mod2NLAs.end());
+    DenseSet<hw::HierPathOp> set2(mod2NLAs.begin(), mod2NLAs.end());
     llvm::set_intersect(common, set2);
   }
 
   /// Get the NLAs that the InstanceOp participates in, insert it to the
   /// DenseSet `nlas`.
-  void getInstanceNLAs(InstanceOp inst, DenseSet<HierPathOp> &nlas) {
+  void getInstanceNLAs(InstanceOp inst, DenseSet<hw::HierPathOp> &nlas) {
     auto instSym = getInnerSymName(inst);
     // If there is no inner sym on the InstanceOp, then it does not participate
     // in any NLA.
@@ -90,7 +91,7 @@ public:
 
   /// Get the NLAs that the module `modName` particiaptes in, and insert them
   /// into the DenseSet `nlas`.
-  void getNLAsInModule(StringAttr modName, DenseSet<HierPathOp> &nlas) {
+  void getNLAsInModule(StringAttr modName, DenseSet<hw::HierPathOp> &nlas) {
     for (auto nla : lookup(modName))
       nlas.insert(nla);
   }
@@ -106,10 +107,10 @@ public:
   /// Insert a new NLA. This updates two internal records,
   /// 1. Update the map for the `nlaOp` name to the Operation.
   /// 2. For each module in the NLA namepath, insert the NLA into the list of
-  /// HierPathOps that participate in the corresponding module. This does
+  /// hwHierPathOps that participate in the corresponding module. This does
   /// not update the module name to module op map, if any potentially new module
   /// in the namepath does not already exist in the record.
-  void addNLA(HierPathOp nla);
+  void addNLA(hw::HierPathOp nla);
 
   /// Remove the NLA from the analysis. This updates two internal records,
   /// 1. Remove the NLA name to the operation map entry.
@@ -117,7 +118,7 @@ public:
   ///    list of NLAs that the module participates in.
   /// Note that this invalidates any reference to the NLA list returned by
   /// 'lookup'.
-  void erase(HierPathOp nlaOp, SymbolTable *symbolTable = nullptr);
+  void erase(hw::HierPathOp nlaOp, SymbolTable *symbolTable = nullptr);
 
   /// Record a new FModuleLike operation. This updates the Module name to Module
   /// operation map.
@@ -144,7 +145,7 @@ public:
   /// Move `nlaOp` from the list of NLAs that `oldModule` participates in to
   /// `newModule`. This can delete and invalidate any reference returned by
   /// `lookup`.
-  void updateModuleInNLA(HierPathOp nlaOp, StringAttr oldModule,
+  void updateModuleInNLA(hw::HierPathOp nlaOp, StringAttr oldModule,
                          StringAttr newModule);
 
   /// Rename a module, this updates the name to module tracking and the name to
@@ -163,13 +164,14 @@ public:
 
   /// Remove the NLA from the Module. This updates the module name to NLA
   /// tracking.
-  void removeNLAfromModule(HierPathOp nla, StringAttr mod) {
+  void removeNLAfromModule(hw::HierPathOp nla, StringAttr mod) {
     llvm::erase_value(nodeMap[mod], nla);
   }
 
   /// Remove all the nlas in the set `nlas` from the module. This updates the
   /// module name to NLA tracking.
-  void removeNLAsfromModule(const DenseSet<HierPathOp> &nlas, StringAttr mod) {
+  void removeNLAsfromModule(const DenseSet<hw::HierPathOp> &nlas,
+                            StringAttr mod) {
     llvm::erase_if(nodeMap[mod],
                    [&nlas](const auto &nla) { return nlas.count(nla); });
   }
@@ -177,7 +179,7 @@ public:
   /// Add the nla to the module. This ensures that the list of NLAs that the
   /// module participates in is updated. This will be required if `mod` is added
   /// to the namepath of `nla`.
-  void addNLAtoModule(HierPathOp nla, StringAttr mod) {
+  void addNLAtoModule(hw::HierPathOp nla, StringAttr mod) {
     nodeMap[mod].push_back(nla);
   }
 
@@ -185,7 +187,7 @@ private:
   NLATable(const NLATable &) = delete;
 
   /// Map modules to the NLA's that target them.
-  llvm::DenseMap<StringAttr, SmallVector<HierPathOp, 4>> nodeMap;
+  llvm::DenseMap<StringAttr, SmallVector<hw::HierPathOp, 4>> nodeMap;
 
   /// Map symbol names to module and NLA operations.
   llvm::DenseMap<StringAttr, Operation *> symToOp;

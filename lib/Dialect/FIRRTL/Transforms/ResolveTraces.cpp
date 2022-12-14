@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/APSInt.h"
@@ -90,7 +91,7 @@ private:
     newTarget.append("|");
 
     if (auto nla = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-      HierPathOp path = nlaTable->getNLA(nla.getAttr());
+      hw::HierPathOp path = nlaTable->getNLA(nla.getAttr());
       for (auto part : path.getNamepath().getValue().drop_back()) {
         auto inst = cast<hw::InnerRefAttr>(part);
         newTarget.append(inst.getModule());
@@ -137,12 +138,7 @@ private:
   /// location of the port in the circuit.
   bool updatePortTarget(FModuleLike &module, Annotation &anno,
                         unsigned portIdx) {
-
-    FIRRTLBaseType type =
-        TypeSwitch<Type, FIRRTLBaseType>(module.getPortType(portIdx))
-            .Case<FIRRTLBaseType>([](FIRRTLBaseType t) { return t; })
-            .Case<RefType>([](RefType t) { return t.getType(); });
-
+    auto type = getBaseType(cast<FIRRTLType>(module.getPortType(portIdx)));
     return updateTargetImpl(anno, module, type, module.getPortName(portIdx));
   }
 
@@ -158,11 +154,7 @@ private:
     if (!name)
       return false;
 
-    FIRRTLBaseType type =
-        TypeSwitch<Type, FIRRTLBaseType>(op->getResultTypes()[0])
-            .Case<FIRRTLBaseType>([](FIRRTLBaseType t) { return t; })
-            .Case<RefType>([](RefType t) { return t.getType(); });
-
+    auto type = getBaseType(cast<FIRRTLType>(op->getResultTypes()[0]));
     return updateTargetImpl(anno, module, type, name);
   }
 
@@ -181,7 +173,7 @@ private:
     newTarget.append("|");
 
     if (auto nla = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-      HierPathOp path = nlaTable->getNLA(nla.getAttr());
+      hw::HierPathOp path = nlaTable->getNLA(nla.getAttr());
       for (auto part : path.getNamepath().getValue().drop_back()) {
         auto inst = cast<hw::InnerRefAttr>(part);
         newTarget.append(inst.getModule());
@@ -224,7 +216,7 @@ void ResolveTracesPass::runOnOperation() {
     SmallVector<Annotation> outputAnnotations;
 
     // A lazily constructed module namespace.
-    Optional<ModuleNamespace> moduleNamespace = None;
+    Optional<ModuleNamespace> moduleNamespace = std::nullopt;
 
     // Return a cached module namespace, lazily constructing it if needed.
     auto getNamespace = [&](FModuleLike module) -> ModuleNamespace & {

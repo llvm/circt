@@ -49,7 +49,7 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
   auto readSrc = read.getInput().getDefiningOp();
   if (!readSrc)
     return false;
-  return isa<WireOp, RegOp, LogicOp, XMROp>(readSrc);
+  return isa<WireOp, RegOp, LogicOp, XMROp, XMRRefOp>(readSrc);
 }
 
 // Check if the value is deemed worth spilling into a wire.
@@ -57,11 +57,8 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
   if (!isVerilogExpression(&op))
     return false;
 
-  if (options.disallowMuxInlining && isa<MuxOp>(op))
-    return true;
-
   // Spill temporary wires if it is not possible to inline.
-  return !ExportVerilog::isExpressionEmittedInline(&op);
+  return !ExportVerilog::isExpressionEmittedInline(&op, options);
 }
 
 // Given an instance, make sure all inputs are driven from wires or ports.
@@ -614,9 +611,18 @@ bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
 
   // If the operation is only used by an assignment, the op is already spilled
   // to a wire.
-  if (op.hasOneUse() &&
-      isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp>(*op.getUsers().begin()))
-    return false;
+  if (op.hasOneUse()) {
+    auto *singleUser = *op.getUsers().begin();
+    if (isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp>(singleUser))
+      return false;
+
+    // If the single user is bitcast, we check the same property for the bitcast
+    // op since bitcast op is no-op in system verilog.
+    if (singleUser->hasOneUse() && isa<hw::BitcastOp>(singleUser) &&
+        isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp>(
+            *singleUser->getUsers().begin()))
+      return false;
+  }
 
   // If the term size is greater than `maximumNumberOfTermsPerExpression`,
   // we have to spill the wire.

@@ -1,6 +1,6 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
-# RUN: FileCheck %s --input-file %t/Test.tcl --check-prefix=OUTPUT
+# RUN: FileCheck %s --input-file %t/hw/Test.tcl --check-prefix=OUTPUT
 
 import pycde
 import pycde.dialects.hw
@@ -215,4 +215,4 @@ t.print()
 # OUTPUT-LABEL: proc Test_foo_inst_config { parent } {
 # OUTPUT:         set_location_assignment MPDSP_X39_Y90_N0 -to $parent|UnParameterized|Nothing
 # OUTPUT:       }
-t.emit_outputs()
+t.compile()

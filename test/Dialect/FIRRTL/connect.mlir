@@ -119,7 +119,7 @@ firrtl.module @wires3(out %out : !firrtl.uint<1>) {
 
 firrtl.module @wires4(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>) {
   %w = firrtl.wire : !firrtl.bundle<a: uint<1>>
-  %0 = firrtl.subfield %w(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
+  %0 = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<1>>
   // CHECK: firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK: firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>

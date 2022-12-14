@@ -54,6 +54,8 @@ std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
 
 std::unique_ptr<mlir::Pass> createLowerCHIRRTLPass();
 
+std::unique_ptr<mlir::Pass> createLowerIntrinsicsPass();
+
 std::unique_ptr<mlir::Pass> createIMConstPropPass();
 
 std::unique_ptr<mlir::Pass>
@@ -143,6 +145,9 @@ std::unique_ptr<mlir::Pass> createLowerXMRPass();
 
 std::unique_ptr<mlir::Pass>
 createResolveTracesPass(StringRef outputAnnotationFilename = "");
+
+std::unique_ptr<mlir::Pass> createInnerSymbolDCEPass();
+
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/FIRRTL/Passes.h.inc"

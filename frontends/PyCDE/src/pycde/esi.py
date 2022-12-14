@@ -1,3 +1,7 @@
+#  Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+#  See https://llvm.org/LICENSE.txt for license information.
+#  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
 from pycde.system import System
 from .module import (Generator, _module_base, _BlockContext,
                      _GeneratorPortAccess, _SpecializedModule)
@@ -9,7 +13,11 @@ from pycde.pycde_types import ChannelType, ClockType, PyCDEType, types
 
 import mlir.ir as ir
 
+from pathlib import Path
+import shutil
 from typing import List, Optional, Type
+
+__dir__ = Path(__file__).parent
 
 ToServer = InputChannel
 FromServer = OutputChannel
@@ -169,6 +177,50 @@ def Cosim(decl: ServiceDecl, clk, rst):
   decl.instantiate_builtin("cosim", [], [clk, rst])
 
 
+def CosimBSP(user_module):
+  """Wrap and return a cosimulation 'board support package' containing
+  'user_module'"""
+  from .module import module, generator
+  from .common import Clock, Input
+
+  @module
+  class top:
+    clk = Clock()
+    rst = Input(types.int(1))
+
+    @generator
+    def build(ports):
+      user_module(clk=ports.clk, rst=ports.rst)
+      raw_esi.ServiceInstanceOp(result=[],
+                                service_symbol=None,
+                                impl_type=ir.StringAttr.get("cosim"),
+                                inputs=[ports.clk.value, ports.rst.value])
+
+      System.current().add_packaging_step(top.package)
+
+    @staticmethod
+    def package(sys: System):
+      """Run the packaging to create a cosim package."""
+      # TODO: this only works in-tree. Make it work in packages as well.
+      build_dir = __dir__.parents[4]
+      bin_dir = build_dir / "bin"
+      lib_dir = build_dir / "lib"
+      circt_inc_dir = build_dir / "tools" / "circt" / "include" / "circt"
+      assert circt_inc_dir.exists(), "Only works in the CIRCT build directory"
+      esi_inc_dir = circt_inc_dir / "Dialect" / "ESI"
+      hw_src = sys.hw_output_dir
+      shutil.copy(lib_dir / "libEsiCosimDpiServer.so", hw_src)
+      shutil.copy(bin_dir / "driver.cpp", hw_src)
+      shutil.copy(bin_dir / "driver.sv", hw_src)
+      shutil.copy(esi_inc_dir / "ESIPrimitives.sv", hw_src)
+      shutil.copy(esi_inc_dir / "Cosim_DpiPkg.sv", hw_src)
+      shutil.copy(esi_inc_dir / "Cosim_Endpoint.sv", hw_src)
+      shutil.copy(__dir__ / "Makefile.cosim", sys.output_directory)
+      shutil.copy(sys.hw_output_dir / "schema.capnp", sys.runtime_output_dir)
+
+  return top
+
+
 class NamedChannelValue(ChannelValue):
   """A ChannelValue with the name of the client request."""
 
@@ -242,24 +294,26 @@ class _ServiceGeneratorChannels:
         raise ValueError(f"{name_str} has not been connected.")
 
 
-def ServiceImplementation(decl: ServiceDecl):
+def ServiceImplementation(decl: Optional[ServiceDecl]):
   """A generator for a service implementation. Must contain a @generator method
   which will be called whenever required to implement the server. Said generator
   function will be called with the same 'ports' argument as modules and a
   'channels' argument containing lists of the input and output channels which
   need to be connected to the service being implemented."""
 
-  def wrap(service_impl, decl: ServiceDecl = decl):
+  def wrap(service_impl, decl: Optional[ServiceDecl] = decl):
 
     def instantiate_cb(mod: _SpecializedModule, instance_name: str,
                        inputs: dict, appid: AppID, loc):
       # Each instantiation of the ServiceImplementation has its own
       # registration.
       opts = _service_generator_registry.register(mod)
+      decl_sym = None
+      if decl is not None:
+        decl_sym = ir.FlatSymbolRefAttr.get(decl._materialize_service_decl())
       return raw_esi.ServiceInstanceOp(
           result=[t for _, t in mod.output_ports],
-          service_symbol=ir.FlatSymbolRefAttr.get(
-              decl._materialize_service_decl()),
+          service_symbol=decl_sym,
           impl_type=_ServiceGeneratorRegistry._impl_type_name,
           inputs=[inputs[pn].value for pn, _ in mod.input_ports],
           impl_opts=opts,
@@ -381,4 +435,22 @@ def DeclareRandomAccessMemory(inner_type: PyCDEType,
           sym_name, ir.TypeAttr.get(inner_type),
           ir.IntegerAttr.get(ir.IntegerType.get_signless(64), depth))
 
+  if name is not None:
+    DeclareRandomAccessMemory.name = name
+    DeclareRandomAccessMemory.__name__ = name
   return DeclareRandomAccessMemory
+
+
+def _import_ram_decl(sys: "System", ram_op: raw_esi.RandomAccessMemoryDeclOp):
+  """Create a DeclareRandomAccessMemory object from an existing CIRCT op and
+  install it in the sym cache."""
+  from .system import _OpCache
+  ram = DeclareRandomAccessMemory(inner_type=PyCDEType(ram_op.innerType.value),
+                                  depth=ram_op.depth.value,
+                                  name=ram_op.sym_name.value)
+  cache: _OpCache = sys._op_cache
+  sym, install = cache.create_symbol(ram)
+  assert sym == ram_op.sym_name.value, "don't support imported module renames"
+  ram.symbol = ir.StringAttr.get(sym)
+  install(ram_op)
+  return ram

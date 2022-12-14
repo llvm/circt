@@ -6,14 +6,14 @@ from __future__ import annotations
 
 from .support import get_user_loc, _obj_to_value_infer_type
 
-from circt.dialects import sv, esi
+from circt.dialects import esi, sv
 import circt.support as support
 
 import mlir.ir as ir
 
 from contextvars import ContextVar
 from functools import singledispatchmethod
-from typing import Optional, Union
+from typing import List, Optional, Union
 import re
 import numpy as np
 
@@ -247,6 +247,12 @@ class BitVectorValue(PyCDEValue):
     """Get the single bit at `idx`."""
     return self.slice(idx, 1)
 
+  @staticmethod
+  def concat(items: List[BitVectorValue]):
+    """Concatenate a list of bitvectors into one larger bitvector."""
+    from .dialects import comb
+    return comb.ConcatOp(*items)
+
   def slice(self, low_bit: BitVectorValue, num_bits: int):
     """Get a constant-width slice starting at `low_bit` and ending at `low_bit +
     num_bits`."""
@@ -274,7 +280,10 @@ class BitVectorValue(PyCDEValue):
     if pad_width == 0:
       return self
     pad = hw.ConstantOp(ir.IntegerType.get_signless(pad_width), 0)
-    return comb.ConcatOp(pad.value, self.value)
+    v: PyCDEValue = comb.ConcatOp(pad.value, self.value)
+    if self.name is not None:
+      v.name = f"{self.name}_padto_{num_bits}"
+    return v
 
   def __len__(self):
     return self.type.width
@@ -594,9 +603,12 @@ def wrap_opviews_with_values(dialect, module_name, excluded=[]):
               for k, v in kwargs.items()
           }
           # Create the OpView.
-          created = cls.create(*args, **kwargs)
-          if isinstance(created, support.NamedValueOpView):
-            created = created.opview
+          with get_user_loc():
+            created = cls.create(*args, **kwargs)
+            if isinstance(created, support.NamedValueOpView):
+              created = created.opview
+            if hasattr(created, "twoState"):
+              created.twoState = True
 
           # Return the wrapped values, if any.
           converted_results = tuple(Value(res) for res in created.results)

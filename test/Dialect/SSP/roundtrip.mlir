@@ -1,8 +1,34 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
-// RUN: circt-opt %s -test-ssp-roundtrip | circt-opt | FileCheck %s
+// RUN: circt-opt %s -ssp-roundtrip | circt-opt | FileCheck %s
 
 // 1) tests the plain parser/printer roundtrip.
 // 2) roundtrips via the scheduling infra (i.e. populates a `Problem` instance and reconstructs the SSP IR from it.)
+
+// CHECK: ssp.instance of "Problem" {
+// CHECK:   library {
+// CHECK:   }
+// CHECK:   graph {
+// CHECK:   }
+// CHECK: }
+ssp.instance of "Problem" {
+  library {
+  }
+  graph {
+  }
+}
+
+// CHECK: ssp.instance @named_library of "Problem" {
+// CHECK:   library @myLib {
+// CHECK:   }
+// CHECK:   graph {
+// CHECK:   }
+// CHECK: }
+ssp.instance @named_library of "Problem" {
+  library @myLib {
+  }
+  graph {
+  }
+}
 
 // CHECK: ssp.instance @"no properties" of "Problem" {
 // CHECK:   library {  

@@ -75,7 +75,7 @@ firrtl.circuit "TestHarness" {
     // A bundle type should be work for the enable signal using annotations with fieldIDs.
     %test_en = firrtl.wire {annotations = [{circt.fieldID = 3 : i32, class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
     // CHECK: %0 = firrtl.subindex %test_en_0[0] : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
-    // CHECK: %1 = firrtl.subfield %0(1) : (!firrtl.bundle<baz: uint<1>, qux: uint<1>>) -> !firrtl.uint<1>
+    // CHECK: %1 = firrtl.subfield %0[qux] : !firrtl.bundle<baz: uint<1>, qux: uint<1>>
     // CHECK: firrtl.connect %test_en, %1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.instance b @B()
 

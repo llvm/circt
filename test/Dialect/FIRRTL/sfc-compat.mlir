@@ -36,7 +36,7 @@ firrtl.circuit "SFCCompatTests" {
   // CHECK-LABEL: firrtl.module @AggregateInvalidThroughWire
   firrtl.module @AggregateInvalidThroughWire(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %d: !firrtl.vector<bundle<a: uint<1>>, 2>, out %q: !firrtl.vector<bundle<a: uint<1>>, 2>) {
     %inv = firrtl.wire : !firrtl.bundle<a: uint<1>>
-    %inv_a = firrtl.subfield %inv(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
+    %inv_a = firrtl.subfield %inv[a] : !firrtl.bundle<a: uint<1>>
     %invalid = firrtl.invalidvalue : !firrtl.uint<1>
     firrtl.strictconnect %inv_a, %invalid : !firrtl.uint<1>
 
@@ -206,7 +206,7 @@ firrtl.circuit "NonConstantAsyncReset_Aggregate1" {
     // Connect a complex chain of operations leading to the port to value[1].
     %subindex = firrtl.subindex %x[0] : !firrtl.vector<bundle<y : uint<1>>, 1>
     %node = firrtl.node %subindex : !firrtl.bundle<y : uint<1>>
-    %subfield = firrtl.subfield %node(0) : (!firrtl.bundle<y : uint<1>>) -> !firrtl.uint<1>
+    %subfield = firrtl.subfield %node[y] : !firrtl.bundle<y : uint<1>>
     %value_1 = firrtl.subindex %value[1] : !firrtl.vector<uint<1>, 2>
     firrtl.strictconnect %value_1, %subfield : !firrtl.uint<1>
 

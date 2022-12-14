@@ -64,7 +64,7 @@ public:
             mlir::ValueRange inputs,
             mlir::Location loc) -> llvm::Optional<mlir::Value> {
           if (inputs.size() != 1)
-            return llvm::None;
+            return std::nullopt;
           return inputs[0];
         });
 
@@ -73,7 +73,7 @@ public:
             mlir::ValueRange inputs,
             mlir::Location loc) -> llvm::Optional<mlir::Value> {
           if (inputs.size() != 1)
-            return llvm::None;
+            return std::nullopt;
           return inputs[0];
         });
   }

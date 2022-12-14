@@ -6,14 +6,14 @@ from pycde.testing import unittestmodule
 
 # CHECK-LABEL: msft.module @IfNestedTest {} (%a: ui8, %b: ui8, %cond: i1, %cond2: i1) -> (out: ui17, out2: ui24)
 # CHECK:         %0 = hwarith.mul %a, %b {sv.namehint = "a_mul_b"} : (ui8, ui8) -> ui16
-# CHECK:         %1 = comb.mux %cond2, %a, %b {sv.namehint = "x"} : ui8
+# CHECK:         %1 = comb.mux bin %cond2, %a, %b {sv.namehint = "x"} : ui8
 # CHECK:         %2 = hwarith.mul %a, %1 {sv.namehint = "v_thenvalue"} : (ui8, ui8) -> ui16
 # CHECK:         %3 = hwarith.mul %2, %b {sv.namehint = "u_thenvalue"} : (ui16, ui8) -> ui24
-# CHECK:         %4 = comb.mux %cond2, %a, %b {sv.namehint = "p"} : ui8
+# CHECK:         %4 = comb.mux bin %cond2, %a, %b {sv.namehint = "p"} : ui8
 # CHECK:         %5 = hwarith.mul %b, %4 {sv.namehint = "v_elsevalue"} : (ui8, ui8) -> ui16
 # CHECK:         %6 = hwarith.mul %5, %a {sv.namehint = "u_elsevalue"} : (ui16, ui8) -> ui24
-# CHECK:         %7 = comb.mux %cond, %2, %5 {sv.namehint = "v"} : ui16
-# CHECK:         %8 = comb.mux %cond, %3, %6 {sv.namehint = "u"} : ui24
+# CHECK:         %7 = comb.mux bin %cond, %2, %5 {sv.namehint = "v"} : ui16
+# CHECK:         %8 = comb.mux bin %cond, %3, %6 {sv.namehint = "u"} : ui24
 # CHECK:         %9 = hwarith.add %7, %0 {sv.namehint = "v_plus_a_mul_b"} : (ui16, ui16) -> ui17
 # CHECK:         msft.output %9, %8 : ui17, ui24
 
@@ -54,8 +54,8 @@ class IfNestedTest:
 
 
 # CHECK-LABEL: msft.module @IfDefaultTest {} (%a: ui8, %b: ui8, %cond: i1, %cond2: i1) -> (out: ui8)
-# CHECK:         [[r1:%.+]] = comb.mux %cond2, %b, %a {sv.namehint = "v_thenvalue"} : ui8
-# CHECK:         [[r0:%.+]] = comb.mux %cond, [[r1]], %a {sv.namehint = "v"} : ui8
+# CHECK:         [[r1:%.+]] = comb.mux bin %cond2, %b, %a {sv.namehint = "v_thenvalue"} : ui8
+# CHECK:         [[r0:%.+]] = comb.mux bin %cond, [[r1]], %a {sv.namehint = "v"} : ui8
 # CHECK:         msft.output [[r0]] : ui8
 
 

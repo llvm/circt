@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s
+// RUN: circt-opt %s --test-apply-lowering-options='options=emittedLineLength=100' -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s
 
 // CHECK-LABEL: // external module E
 hw.module.extern @E(%a: i1, %b: i1, %c: i1)
@@ -11,18 +11,15 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
                         %arrOfStructA: !hw.array<5 x struct<foo: i2>>,
                         %array1: !hw.array<1xi1>
                         ) -> (
-  r0: i4, r2: i4, r4: i4, r6: i4,
-  r7: i4, r8: i4, r9: i4, r10: i4,
-  r11: i4, r12: i4, r13: i4, r14: i4,
-  r15: i4, r16: i1,
-  r17: i1, r18: i1, r19: i1, r20: i1,
-  r21: i1, r22: i1, r23: i1, r24: i1,
-  r25: i1, r26: i1, r27: i1, r28: i1,
-  r29: i12, r30: i2, r31: i9, r33: i4, r34: i4,
-  r35: !hw.array<3xi4>, r36: i12, r37: i4,
-  r38: !hw.array<6xi4>,
-  r40: !hw.struct<foo: i2, bar:i4>, r41: !hw.struct<foo: i2, bar: i4>,
-  r42: i1
+  r0: i4, r2: i4, r4: i4, r6: i4, r7: i4, r8: i4, r9: i4, r10: i4, r11: i4,
+  r12: i4, r13: i4, r14: i4, r15: i4, r16: i1, r17: i1, r18: i1, r19: i1,
+  r20: i1, r21: i1, r22: i1, r23: i1, r24: i1, r25: i1, r26: i1, r27: i1,
+  r28: i1, r29: i12, r30: i2, r31: i9, r33: i4, r34: i4, r35: !hw.array<3xi4>,
+  r36: !hw.array<6xi4>, r37: i4, r38: i12, r39: !hw.struct<a: i1, b: i1>,
+  r40: !hw.array<4xi2>, r41: !hw.uarray<1xi1>,
+  r42: !hw.struct<a: !hw.array<1xi1>>, r43: i4,
+  r44: !hw.struct<foo: i2, bar: i4>, r45: !hw.struct<foo: i2, bar: i4>,
+  r46: !hw.struct<foo: i2, bar: i4>, r47: i1
   ) {
 
   %0 = comb.add %a, %b : i4
@@ -75,26 +72,34 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %ab = comb.add %a, %b : i4
   %subArr = hw.array_create %allone, %ab, %allone : i4
 
-  %38 = hw.array_concat %subArr, %subArr : !hw.array<3 x i4>, !hw.array<3 x i4>
+  %36 = hw.array_concat %subArr, %subArr : !hw.array<3 x i4>, !hw.array<3 x i4>
   %elem2d = hw.array_get %array2d[%a] : !hw.array<12 x array<10xi4>>, i4
   %37 = hw.array_get %elem2d[%b] {sv.attributes=#sv.attributes<[#sv.attribute<"svAttr">]>}: !hw.array<10xi4>, i4
 
-  %36 = comb.replicate %a : (i4) -> i12
+  %38 = comb.replicate %a : (i4) -> i12
 
-  %39 = hw.struct_extract %structA["bar"] : !hw.struct<foo: i2, bar: i4>
-  %40 = hw.struct_inject %structA["bar"], %a : !hw.struct<foo: i2, bar: i4>
-  %41 = hw.struct_create (%c, %a) : !hw.struct<foo: i2, bar: i4>
-  %42 = hw.struct_inject %41["bar"], %b : !hw.struct<foo: i2, bar: i4>
+  %39 = hw.aggregate_constant [false, true] : !hw.struct<a: i1, b: i1>
+  %40 = hw.aggregate_constant [0 : i2, 1 : i2, -2 : i2, -1 : i2] : !hw.array<4xi2>
+  %41 = hw.aggregate_constant [false] : !hw.uarray<1xi1>
+  %42 = hw.aggregate_constant [[false]] : !hw.struct<a: !hw.array<1xi1>>
+
+  %43 = hw.struct_extract %structA["bar"] : !hw.struct<foo: i2, bar: i4>
+  %44 = hw.struct_inject %structA["bar"], %a : !hw.struct<foo: i2, bar: i4>
+  %45 = hw.struct_create (%c, %a) : !hw.struct<foo: i2, bar: i4>
+  %46 = hw.struct_inject %45["bar"], %b : !hw.struct<foo: i2, bar: i4>
   %none = hw.constant 0 : i0
-  %43 = hw.array_get %array1[%none] : !hw.array<1xi1>, i0
+  %47 = hw.array_get %array1[%none] : !hw.array<1xi1>, i0
 
-  hw.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14,
-              %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27,
-              %28, %29, %30, %31, %33, %34, %35, %36, %37, %38, %40, %42, %43:
-    i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
-    i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,i1,i1,
-   i12, i2, i9, i4, i4, !hw.array<3xi4>, i12, i4, !hw.array<6xi4>,
-   !hw.struct<foo: i2, bar: i4>, !hw.struct<foo: i2, bar: i4>, i1
+  hw.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, 
+            %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30,
+            %31, %33, %34, %35, %36, %37, %38, %39, %40, %41, %42, %43, %44,
+            %45, %46, %47:
+    i4, i4, i4, i4, i4, i4, i4, i4, i4, i4, i4, i4, i4, i1, i1, i1, i1, i1, i1,
+    i1, i1, i1, i1, i1, i1, i1, i12, i2, i9, i4, i4, !hw.array<3xi4>,
+    !hw.array<6xi4>, i4, i12, !hw.struct<a: i1, b: i1>, !hw.array<4xi2>,
+    !hw.uarray<1xi1>, !hw.struct<a: !hw.array<1xi1>>, i4, 
+    !hw.struct<foo: i2, bar: i4>, !hw.struct<foo: i2, bar: i4>, 
+    !hw.struct<foo: i2, bar: i4>, i1
 }
 // CHECK-LABEL: module TESTSIMPLE(
 // CHECK-NEXT:      input  [3:0]                                              a,
@@ -114,7 +119,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:                                                                r7,
 // CHECK-NEXT:                                                                r8,
 // CHECK-NEXT:                                                                r9,
-// CHECK-NEXT:                                                               r10,
+// CHECK-NEXT:                                                                r10,
 // CHECK-NEXT:                                                                r11,
 // CHECK-NEXT:                                                                r12,
 // CHECK-NEXT:                                                                r13,
@@ -139,12 +144,18 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:      output [3:0]                                              r33,
 // CHECK-NEXT:                                                                r34,
 // CHECK-NEXT:      output [2:0][3:0]                                         r35,
-// CHECK-NEXT:      output [11:0]                                             r36,
+// CHECK-NEXT:      output [5:0][3:0]                                         r36,
 // CHECK-NEXT:      output [3:0]                                              r37,
-// CHECK-NEXT:      output [5:0][3:0]                                         r38,
-// CHECK-NEXT:      output struct packed {logic [1:0] foo; logic [3:0] bar; } r40,
-// CHECK-NEXT:                                                                r41,
-// CHECK-NEXT:      output                                                    r42);
+// CHECK-NEXT:      output [11:0]                                             r38,
+// CHECK-NEXT:      output struct packed {logic a; logic b; }                 r39,
+// CHECK-NEXT:      output [3:0][1:0]                                         r40,
+// CHECK-NEXT:      output                                                    r41[0:0],
+// CHECK-NEXT:      output struct packed {logic [0:0] a; }                    r42,
+// CHECK-NEXT:      output [3:0]                                              r43,
+// CHECK-NEXT:      output struct packed {logic [1:0] foo; logic [3:0] bar; } r44,
+// CHECK-NEXT:                                                                r45,
+// CHECK-NEXT:                                                                r46,
+// CHECK-NEXT:      output                                                    r47);
 // CHECK{LITERAL}:  wire [8:0][3:0] name_hint = {9{4'hF}};
 // CHECK-NEXT:      wire [2:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
 // CHECK-NEXT:      wire struct packed {logic [1:0] foo; logic [3:0] bar; } [[WIRE1:.+]] = '{foo: c, bar: a};
@@ -180,12 +191,18 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:      assign r33 = cond ? a : b;
 // CHECK-NEXT:      assign r34 = ~a;
 // CHECK-NEXT:      assign r35 = cond ? name_hint[a +: 3] : name_hint[b +: 3];
-// CHECK-NEXT:      assign r36 = {3{a}};
+// CHECK-NEXT:      assign r36 = {[[WIRE0]], [[WIRE0]]};
 // CHECK-NEXT:      assign r37 = array2d[a][b] (* svAttr *);
-// CHECK-NEXT:      assign r38 = {[[WIRE0]], [[WIRE0]]};
-// CHECK-NEXT:      assign r40 = '{foo: structA.foo, bar: a};
-// CHECK-NEXT:      assign r41 = '{foo: [[WIRE1]].foo, bar: b};
-// CHECK-NEXT:      assign r42 = array1[/*Zero width*/ 1'b0];
+// CHECK-NEXT:      assign r38 = {3{a}};
+// CHECK-NEXT:      assign r39 = '{a: 1'h0, b: 1'h1};
+// CHECK-NEXT:      assign r40 = '{2'h0, 2'h1, 2'h2, 2'h3};
+// CHECK-NEXT:      assign r41 = '{1'h0};
+// CHECK-NEXT:      assign r42 = '{a: '{1'h0}};
+// CHECK-NEXT:      assign r43 = structA.bar;
+// CHECK-NEXT:      assign r44 = '{foo: structA.foo, bar: a};
+// CHECK-NEXT:      assign r45 = _GEN_0;
+// CHECK-NEXT:      assign r46 = '{foo: [[WIRE1]].foo, bar: b};
+// CHECK-NEXT:      assign r47 = array1[/*Zero width*/ 1'b0];
 // CHECK-NEXT: endmodule
 
 hw.module @i0Inst() {
@@ -412,8 +429,9 @@ hw.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
   %a3 = comb.divu %a1, %a2: i4
   sv.assign %awire, %a3: i4
 
-  // CHECK: assign awire = $unsigned($signed(in1) / $signed(in2) + $signed(in1) / $signed(in2)) /
-  // CHECK-NEXT:           $unsigned($signed(in1) / $signed(in2) * $signed(in1) / $signed(in2));
+  // CHECK:       assign awire =
+  // CHECK-NEXT:    $unsigned($signed(in1) / $signed(in2) + $signed(in1) / $signed(in2))
+  // CHECK-NEXT:    / $unsigned($signed(in1) / $signed(in2) * $signed(in1) / $signed(in2));
   %b1a = comb.divs %in1, %in2: i4
   %b1b = comb.divs %in1, %in2: i4
   %b1c = comb.divs %in1, %in2: i4
@@ -512,8 +530,10 @@ hw.module @zeroElements(%in0: i0, %in1: i32) -> (out0: !hw.struct<z1: i0, a: i32
   // CHECK:      // Zero width: wire /*Zero Width*/
   // CHECK-SAME: _GEN = '{};
   // CHECK-NEXT: wire struct packed {logic [31:0] d1; /*z: Zero Width;*/ }
-  // CHECK-SAME: _GEN_0 = '{d1: in1};
-  // CHECK-NEXT: wire struct packed {/*z1: Zero Width;*/ logic [31:0] a; /*z2: Zero Width;*/ logic [31:0] b; /*c: Zero Width;*/ struct packed {logic [31:0] d1; /*z: Zero Width;*/ } d; } _GEN_1 = '{a: in1, b: in1, d: _GEN_0};
+  // CHECK-NEXT:   _GEN_0 = '{d1: in1};
+  //      CHECK: wire
+  // CHECK-NEXT:   struct packed {/*z1: Zero Width;*/ logic [31:0] a; /*z2: Zero Width;*/ logic [31:0] b; /*c: Zero Width;*/ struct packed {logic [31:0] d1; /*z: Zero Width;*/ } d; } 
+  // CHECK-NEXT:   _GEN_1 = '{a: in1, b: in1, d: _GEN_0};
   // CHECK-NEXT: assign out0 = '{a: in1, b: _GEN_1.b, d: _GEN_1.d};
   %0 = hw.struct_create (%in0) : !hw.struct<z: i0>
   %1 = hw.struct_create (%in1, %in0) : !hw.struct<d1:i32, z:i0>
@@ -578,11 +598,11 @@ hw.module @cyclic(%a: i1) -> (b: i1) {
 // https://github.com/llvm/circt/issues/668
 // CHECK-LABEL: module longExpressions
 hw.module @longExpressions(%a: i8, %a2: i8) -> (b: i8) {
-  // CHECK:  assign b = (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a)
-  // CHECK-NEXT:        * (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
-  // CHECK-NEXT:        a) | (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
-  // CHECK-NEXT:        + a) * (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
-  // CHECK-NEXT:        a + a);
+  // CHECK:      assign b =
+  // CHECK-NEXT:   (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a)
+  // CHECK-NEXT:   * (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a)
+  // CHECK-NEXT:   | (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a)
+  // CHECK-NEXT:   * (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a);
 
   %1 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
   %2 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
@@ -597,9 +617,10 @@ hw.module @longExpressions(%a: i8, %a2: i8) -> (b: i8) {
 // https://github.com/llvm/circt/issues/668
 // CHECK-LABEL: module longvariadic
 hw.module @longvariadic(%a: i8) -> (b: i8) {
-  // CHECK:  assign b =
-  // CHECK-COUNT-11: a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
-  // CHECK-NEXT:     a + a + a;
+  // CHECK:          assign b =
+  // CHECK-NEXT:       a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
+  // CHECK-COUNT-9:    + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
+  // CHECK-NEXT:       + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
 
   %1 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
@@ -682,14 +703,15 @@ hw.module @noTemporaryIfReadInOutIsAfterUse(%clock: i1, %x: i1) {
 hw.module @largeConstant(%a: i100000, %b: i16) -> (x: i100000, y: i16) {
   // Large constant is inlined on multiple lines.
 
-  // CHECK: assign x = a + 100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
-  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
-  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
-  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
-  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
-  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
-  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
-  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000;
+  // CHECK:      assign x =
+  // CHECK-NEXT:   a + 100000'h2CD76FE086B93CE2F768A00B22A00000000000
+  // CHECK-NEXT:   + 100000'h2CD76FE086B93CE2F768A00B22A00000000000
+  // CHECK-NEXT:   + 100000'h2CD76FE086B93CE2F768A00B22A00000000000
+  // CHECK-NEXT:   + 100000'h2CD76FE086B93CE2F768A00B22A00000000000
+  // CHECK-NEXT:   + 100000'h2CD76FE086B93CE2F768A00B22A00000000000
+  // CHECK-NEXT:   + 100000'h2CD76FE086B93CE2F768A00B22A00000000000
+  // CHECK-NEXT:   + 100000'h2CD76FE086B93CE2F768A00B22A00000000000
+  // CHECK-NEXT:   + 100000'h2CD76FE086B93CE2F768A00B22A00000000000;
   %c = hw.constant 1000000000000000000000000000000000000000000000 : i100000
   %1 = comb.add %a, %c, %c, %c, %c, %c, %c, %c, %c : i100000
 

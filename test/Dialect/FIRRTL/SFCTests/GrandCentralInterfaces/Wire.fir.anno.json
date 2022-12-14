@@ -683,6 +683,28 @@
               }
             ]
           }
+        },
+        {
+          "name": "ext_port_1",
+          "description": "The second element of an external port",
+          "tpe": {
+            "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
+            "ref": {
+              "circuit": "Top",
+              "module": "ExtModuleWithPort",
+              "path": [],
+              "ref": "source",
+              "component": [
+                {
+                  "class": "firrtl.annotations.TargetToken$Index",
+                  "value": 1
+                }
+              ]
+            },
+            "tpe": {
+              "class": "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"
+            }
+          }
         }
       ]
     }

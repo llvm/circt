@@ -168,20 +168,11 @@ def FModuleLike : OpInterface<"FModuleLike"> {
       return $_op.getPortSymbolsAttr().getValue();
     }]>,
 
-    InterfaceMethod<"Get a port symbol attribute",
-    "InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
-      auto syms = $_op.getPortSymbols();
-      if (syms.empty() ||
-          syms[portIndex].template cast<InnerSymAttr>().empty())
-        return InnerSymAttr();
-      return syms[portIndex].template cast<InnerSymAttr>();
-    }]>,
-
     InterfaceMethod<"Check if port has symbol attribute",
     "bool", "hasPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
       auto syms = $_op.getPortSymbols();
         return  (!syms.empty() &&
-        !syms[portIndex].template cast<InnerSymAttr>().empty());
+        !syms[portIndex].template cast<hw::InnerSymAttr>().empty());
     }]>,
 
     // Setters
@@ -202,10 +193,10 @@ def FModuleLike : OpInterface<"FModuleLike"> {
                                      $_op.getPortSymbols().end());
       if (symbols.empty()) {
         symbols.resize($_op.getNumPorts(),
-                      InnerSymAttr::get($_op.getContext()));
+                      hw::InnerSymAttr::get($_op.getContext()));
       }
       assert(symbols.size() == $_op.getNumPorts());
-      symbols[portIndex] = InnerSymAttr::get(symbol);
+      symbols[portIndex] = hw::InnerSymAttr::get(symbol);
 
       FModuleLike::fixupPortSymsArray(symbols, $_op.getContext());
       assert(symbols.empty() || symbols.size() == $_op.getNumPorts());
@@ -222,12 +213,6 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     //===------------------------------------------------------------------===//
     // All Port Information
     //===------------------------------------------------------------------===//
-
-    InterfaceMethod<"Get the number of ports",
-    "size_t", "getNumPorts", (ins), [{}],
-    /*defaultImplementation=*/[{
-      return $_op.getPortTypesAttr().size();
-    }]>,
 
     InterfaceMethod<"Get information about all ports",
     "SmallVector<PortInfo>", "getPorts">,
@@ -274,12 +259,12 @@ def FModuleLike : OpInterface<"FModuleLike"> {
       // The lack of *any* port symbol is represented by an empty `portSyms`
       // array as a shorthand.
       if (llvm::none_of(syms, [&](auto &sym) {
-            return sym && !cast<InnerSymAttr>(sym).empty();
+            return sym && !cast<hw::InnerSymAttr>(sym).empty();
           })) {
         syms.clear();
         return;
       }
-      auto empty = InnerSymAttr::get(context);
+      auto empty = hw::InnerSymAttr::get(context);
       for (auto &sym : syms)
         if (!sym)
           sym = empty;
@@ -309,108 +294,6 @@ def FConnectLike : OpInterface<"FConnectLike"> {
     "Value", "getDest", (ins)>,
     InterfaceMethod<"Return a source of connection.",
     "Value", "getSrc", (ins)>,
-  ];
-}
-
-def InnerRefNamespace : NativeOpTrait<"InnerRefNamespace">;
-
-def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
-  let description = [{
-    This interface describes an operation that may define an
-    `inner_sym`.  An `inner_sym` operation resides 
-    in arbitrarily-nested regions of a region that defines a
-    `InnerSymbolTable`.
-    Inner Symbols are different from normal symbols due to 
-    MLIR symbol table resolution rules.  Specifically normal
-    symbols are resolved by first going up to the closest
-    parent symbol table and resolving from there (recursing
-    down for complex symbol paths).  In FIRRTL and SV, modules
-    define a symbol in a circuit or std.module symbol table.
-    For instances to be able to resolve the modules they
-    instantiate, the symbol use in an instance must resolve 
-    in the top-level symbol table.  If a module were a
-    symbol table, instances resolving a symbol would start from 
-    their own module, never seeing other modules (since 
-    resolution would start in the parent module of the 
-    instance and be unable to go to the global scope).
-    The second problem arises from nesting.  Symbols defining 
-    ops must be immediate children of a symbol table.  FIRRTL
-    and SV operations which define a inner_sym are grandchildren,
-    at least, of a symbol table and may be much further nested.
-    Lastly, ports need to define inner_sym, something not allowed
-    by normal symbols.
-
-    Any operation implementing an InnerSymbol may have the inner symbol be
-    optional and all methods should be robuse to the attribute not being
-    defined.
-  }];
-
-  let cppNamespace = "::circt::firrtl";
-  let methods = [
-    InterfaceMethod<"Returns the name of this inner symbol.",
-      "::mlir::StringAttr", "getInnerNameAttr", (ins), [{}],
-      /*defaultImplementation=*/[{
-        if (auto attr =
-              this->getOperation()->template getAttrOfType<InnerSymAttr>(
-              circt::firrtl::InnerSymbolTable::getInnerSymbolAttrName()))
-          return attr.getSymName();
-        return {};
-      }]
-    >,
-    InterfaceMethod<"Returns the name of this inner symbol.",
-      "Optional<::mlir::StringRef>", "getInnerName", (ins), [{}],
-      /*defaultImplementation=*/[{
-        auto attr = this->getInnerNameAttr();
-        return attr ? Optional<StringRef>(attr.getValue()) : None;
-      }]
-    >,
-    InterfaceMethod<"Sets the name of this inner symbol.",
-      "void", "setInnerSymbol", (ins "::mlir::StringAttr":$name), [{}],
-      /*defaultImplementation=*/[{
-        this->getOperation()->setAttr(
-            InnerSymbolTable::getInnerSymbolAttrName(), InnerSymAttr::get(name));
-      }]
-    >,
-    InterfaceMethod<"Returns an InnerRef to this operation.  Must have inner symbol.",
-      "::circt::hw::InnerRefAttr", "getInnerRef", (ins), [{}],
-      /*defaultImplementation=*/[{
-        auto *op = this->getOperation();
-        return hw::InnerRefAttr::get(
-            SymbolTable::getSymbolName(
-                op->template getParentWithTrait<OpTrait::InnerSymbolTable>()),
-            InnerSymbolTable::getInnerSymbol(op));
-      }]
-    >,
-    InterfaceMethod<"Returns the InnerSymAttr.",
-      "::circt::firrtl::InnerSymAttr", "getInnerSymAttr", (ins), [{}],
-      /*defaultImplementation=*/[{
-        return this->getOperation()->template getAttrOfType<InnerSymAttr>(
-              circt::firrtl::InnerSymbolTable::getInnerSymbolAttrName());
-      }]
-    >,
-  ];
-
-  let verify = [{
-    return verifyInnerSymAttr(op);
-  }];
-}
-
-def InnerSymbolTable : NativeOpTrait<"InnerSymbolTable">;
-
-def InnerRefUserOpInterface : OpInterface<"InnerRefUserOpInterface"> {
-  let description = [{
-    This interface describes an operation that may use a `InnerRef`. This
-    interface allows for users of inner symbols to hook into verification and
-    other inner symbol related utilities that are either costly or otherwise
-    disallowed within a traditional operation.
-  }];
-  let cppNamespace = "::circt::firrtl";
-
-  let methods = [
-    InterfaceMethod<"Verify the inner ref uses held by this operation.",
-      "::mlir::LogicalResult", "verifyInnerRefs",
-      (ins "::circt::firrtl::InnerRefNamespace&":$ns)
-    >,
   ];
 }
 

@@ -139,6 +139,13 @@ IntegerAttr circt::firrtl::getIntZerosAttr(Type type) {
   return getIntAttr(type, APInt(width, 0));
 }
 
+/// Return an IntegerAttr filled with ones for the specified FIRRTL integer
+/// type. This handles both the known width and unknown width case.
+IntegerAttr circt::firrtl::getIntOnesAttr(Type type) {
+  int32_t width = abs(type.cast<IntType>().getWidthOrSentinel());
+  return getIntAttr(type, APInt(width, -1));
+}
+
 /// Return the value that drives another FIRRTL value within module scope.  Only
 /// look backwards through one connection.  This is intended to be used in
 /// situations where you only need to look at the most recent connect, e.g., to
@@ -556,7 +563,7 @@ StringAttr circt::firrtl::getOrAddInnerSym(
   }
   auto name = getNamespace(mod).newName(nameHint);
   attr = StringAttr::get(op->getContext(), name);
-  op->setAttr("inner_sym", InnerSymAttr::get(attr));
+  op->setAttr("inner_sym", hw::InnerSymAttr::get(attr));
   return attr;
 }
 
@@ -577,7 +584,7 @@ StringAttr circt::firrtl::getOrAddInnerSym(
     FModuleLike mod, size_t portIdx, StringRef nameHint,
     std::function<ModuleNamespace &(FModuleLike)> getNamespace) {
 
-  auto attr = mod.getPortSymbolAttr(portIdx);
+  auto attr = cast<hw::HWModuleLike>(*mod).getPortSymbolAttr(portIdx);
   if (attr)
     return attr.getSymName();
   if (nameHint.empty()) {
@@ -610,7 +617,7 @@ circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
                                      MLIRContext *context) {
   // The spelling of the token looks something like "@[Decoupled.scala 221:8]".
   if (!spelling.startswith("@[") || !spelling.endswith("]"))
-    return {false, None};
+    return {false, std::nullopt};
 
   spelling = spelling.drop_front(2).drop_back(1);
 
@@ -651,12 +658,12 @@ circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
   unsigned lineNo = 0, columnNo = 0;
   StringRef filename = decodeLocator(spelling, lineNo, columnNo);
   if (filename.empty())
-    return {false, None};
+    return {false, llvm::None};
 
   // If info locators are ignored, don't actually apply them.  We still do all
   // the verification above though.
   if (skipParsing)
-    return {true, None};
+    return {true, llvm::None};
 
   /// Return an FileLineColLoc for the specified location, but use a bit of
   /// caching to reduce thrasing the MLIRContext.

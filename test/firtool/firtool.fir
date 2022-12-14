@@ -18,7 +18,9 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; ANNOTATIONS-SAME: {class = "circt.test", info = "a CircuitTarget Annotation"}
 ; ANNOTATIONS-SAME: {class = "circt.test", info = "a CircuitName Annotation"}
 
-; OMIR-DAG:   [[loc0:#loc[0-9]*]] = loc(fused["Foo.scala":64:64, "Bar.scala":128:128])
+; OMIR-DAG:   [[loc2:#loc[0-9]*]] = loc("Foo.scala":64:64) 
+; OMIR-DAG:   [[loc3:#loc[0-9]*]] = loc("Bar.scala":128:128) 
+; OMIR-DAG:   [[loc0:#loc[0-9]*]] = loc(fused[[[loc2]], [[loc3]]])
 ; OMIR-DAG:   [[loc1:#loc[0-9]*]] = loc("Foo.scala":32:32)
 ; OMIR-LABEL: firrtl.circuit "test_mod"
 ; OMIR-SAME:  {class = "freechips.rocketchip.objectmodel.OMIRAnnotation",

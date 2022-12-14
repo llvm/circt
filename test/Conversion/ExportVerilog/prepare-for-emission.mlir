@@ -149,16 +149,19 @@ module attributes {circt.loweringOptions =
 module attributes {circt.loweringOptions =
                   "disallowMuxInlining"} {
   // CHECK-LABEL: mux
-  hw.module @mux(%c: i1, %b: i8, %a: i8) -> (d: i8) {
+  hw.module @mux(%c: i1, %b: i8, %a: i8) -> (d: i8, e: i8) {
     // CHECK:      %use_for_mux = sv.wire
     // CHECK-NEXT: sv.assign %use_for_mux, %0 : i8
     // CHECK-NEXT: %[[read:.+]] = sv.read_inout %use_for_mux : !hw.inout<i8>
-    // CHECK-NEXT: comb.add %[[read]], %a : i8
+    // CHECK-NEXT: %[[add:.+]] = comb.add %[[read]], %a : i8
     %0 = comb.mux %c, %a, %b : i8
     %use_for_mux = sv.wire : !hw.inout<i8>
     sv.assign %use_for_mux, %0 : i8
     %1 = comb.add %0, %a : i8
-    hw.output %1 : i8
+    // CHECK: %[[mux2:.+]] = comb.mux
+    %2 = comb.mux %c, %a, %b : i8
+    // CHECK: hw.output %[[add]], %[[mux2]]
+    hw.output %1, %2 : i8, i8
   }
 }
 
@@ -175,5 +178,15 @@ module attributes {circt.loweringOptions =
     %1 = comb.mux %c, %0, %b : i8
     %2 = comb.add %1, %a : i8
     hw.output %2 : i8
+  }
+}
+
+// -----
+module attributes {circt.loweringOptions = "maximumNumberOfTermsPerExpression=2"} {
+  // CHECK-NOT: sv.wire
+  hw.module @Foo(%in_0: i4, %in_1: i4, %in_2: i4, %in_3: i4) -> (out: !hw.array<4xi4>) {
+    %0 = comb.concat %in_0, %in_1, %in_2, %in_3 : i4, i4, i4, i4
+    %1 = hw.bitcast %0 : (i16) -> !hw.array<4xi4>
+    hw.output %1 : !hw.array<4xi4>
   }
 }

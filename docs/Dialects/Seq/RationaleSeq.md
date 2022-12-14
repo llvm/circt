@@ -178,7 +178,7 @@ Registers expect the logic assignment to them to be in SSA form.
 For example, a strict connect to a field of a structure:
 
 ```firrtl
-%field = firrtl.subfield %a(0)
+%field = firrtl.subfield %a[field]
 firrtl.strictconnect %field, %value
 ```
 Is converted into a `hw.struct_inject` operation:

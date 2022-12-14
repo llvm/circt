@@ -61,3 +61,24 @@ func.func @minII_infeasible() -> i32 attributes {
   // SIMPLEX-SAME: simplexStartTime = 5
   return { opr = "unlimited", problemStartTime = 5 } %5 : i32
 }
+
+func.func @four_read_pipeline() -> i32 attributes {
+  problemInitiationInterval = 4,
+  auxdeps = [ [0,1] ],
+  operatortypes = [
+    { name = "unlimited", latency = 1 },
+    { name = "limited", latency = 1, limit = 1 }
+  ] } {
+  %0 = arith.constant { opr = "unlimited", problemStartTime = 0 } 42 : i32
+  %1 = "dummy.phi"() { opr = "unlimited", problemStartTime = 1 } : () -> i32
+  %2 = "dummy.op"(%1) { opr = "limited", problemStartTime = 2 } : (i32) -> i32
+  %3 = "dummy.op"(%1) { opr = "limited", problemStartTime = 3 } : (i32) -> i32
+  %4 = "dummy.op"(%1) { opr = "limited", problemStartTime = 4 } : (i32) -> i32
+  %5 = "dummy.op"(%1) { opr = "limited", problemStartTime = 5 } : (i32) -> i32
+  %6 = "dummy.mux"(%2, %3) { opr = "unlimited", problemStartTime = 4 } : (i32, i32) -> i32
+  %7 = "dummy.mux"(%4, %5) { opr = "unlimited", problemStartTime = 6 } : (i32, i32) -> i32
+  %8 = "dummy.mux"(%6, %7) { opr = "unlimited", problemStartTime = 7 } : (i32, i32) -> i32
+  // SIMPLEX: return
+  // SIMPLEX-SAME: simplexStartTime = 8
+  return { opr = "unlimited", problemStartTime = 8 } %8 : i32
+}

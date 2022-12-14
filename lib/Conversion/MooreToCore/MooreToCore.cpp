@@ -121,7 +121,7 @@ struct ReturnOpConversion : public OpConversionPattern<func::ReturnOp> {
   LogicalResult
   matchAndRewrite(func::ReturnOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<func::ReturnOp>(op, adaptor.operands());
+    rewriter.replaceOpWithNewOp<func::ReturnOp>(op, adaptor.getOperands());
     return success();
   }
 };
@@ -301,7 +301,7 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([&](UnpackedType type) -> Optional<Type> {
     if (auto sbv = type.getSimpleBitVectorOrNull())
       return mlir::IntegerType::get(type.getContext(), sbv.size);
-    return llvm::None;
+    return std::nullopt;
   });
 
   // Valid target types.

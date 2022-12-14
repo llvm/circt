@@ -47,9 +47,14 @@ struct Tracker {
   /// The operation onto which this tracker was annotated.
   Operation *op;
   /// If this tracker is non-local, this is the corresponding anchor.
-  HierPathOp nla;
+  hw::HierPathOp nla;
   /// If this is a port, then set the portIdx, else initialized to -1.
   int portNo = -1;
+  /// If this is a field, the ID will be greater than 0, else it will be 0.
+  unsigned fieldID;
+
+  // Returns true if the tracker has a non-zero field ID.
+  bool hasFieldID() { return fieldID > 0; }
 };
 
 class EmitOMIRPass : public EmitOMIRBase<EmitOMIRPass> {
@@ -105,6 +110,15 @@ private:
   /// to that port.
   hw::InnerRefAttr getInnerRefTo(FModuleLike module, size_t portIdx);
 
+  // Obtain the result type of an Operation.
+  FIRRTLType getTypeOf(Operation *op);
+  // Obtain the type of a module port.
+  FIRRTLType getTypeOf(FModuleLike mod, size_t portIdx);
+
+  // Constructs a reference to a field from a FIRRTLType with a fieldID.
+  void addFieldID(FIRRTLType type, unsigned fieldID,
+                  SmallVectorImpl<char> &result);
+
   /// Get the cached namespace for a module.
   ModuleNamespace &getModuleNamespace(FModuleLike module) {
     auto it = moduleNamespaces.find(module);
@@ -128,7 +142,7 @@ private:
   SmallDenseMap<Attribute, unsigned> symbolIndices;
   /// Temporary `firrtl.hierpath` operations to be deleted at the end of the
   /// pass. Vector elements are unique.
-  SmallVector<HierPathOp> removeTempNLAs;
+  SmallVector<hw::HierPathOp> removeTempNLAs;
   DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
   /// Lookup table of instances by name and parent module.
   DenseMap<hw::InnerRefAttr, InstanceOp> instancesByName;
@@ -265,7 +279,7 @@ static Optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
                  "serialization format that does NOT use a string-encoded type";
           diag.attachNote()
               << "the problematic OMIR is reproduced here: " << original;
-          return None;
+          return std::nullopt;
         }
 
         // This is a catch-all for any unknown types.
@@ -275,7 +289,7 @@ static Optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
                        "Model OMIR type?)";
         diag.attachNote() << "the problematic OMIR is reproduced here: "
                           << original;
-        return None;
+        return std::nullopt;
       })
       // For an array, just recurse into each element and rewrite the array with
       // the results.
@@ -284,7 +298,7 @@ static Optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
         for (auto element : arr) {
           auto newElement = scatterOMIR(element, state);
           if (!newElement)
-            return None;
+            return std::nullopt;
           newArr.push_back(*newElement);
         }
         return ArrayAttr::get(ctx, newArr);
@@ -296,7 +310,7 @@ static Optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
         for (auto pairs : dict) {
           auto maybeValue = scatterOMIR(pairs.getValue(), state);
           if (!maybeValue)
-            return None;
+            return std::nullopt;
           newAttrs.append(pairs.getName(), *maybeValue);
         }
         return DictionaryAttr::get(ctx, newAttrs);
@@ -312,7 +326,7 @@ static Optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
         auto diag = mlir::emitError(state.circuit.getLoc())
                     << "found unexpected MLIR attribute \"" << original
                     << "\" while trying to scatter OMIR";
-        return None;
+        return std::nullopt;
       });
 }
 
@@ -343,7 +357,7 @@ scatterOMField(Attribute original, const Attribute root, unsigned index,
   if (!dict) {
     llvm::errs() << "OMField is not a dictionary, but should be: " << original
                  << "\n";
-    return None;
+    return std::nullopt;
   }
 
   auto loc = state.circuit.getLoc();
@@ -357,7 +371,7 @@ scatterOMField(Attribute original, const Attribute root, unsigned index,
   // Convert location from a string to a location attribute.
   auto infoAttr = tryGetAs<StringAttr>(dict, root, "info", loc, omirAnnoClass);
   if (!infoAttr)
-    return None;
+    return std::nullopt;
   auto maybeLoc =
       maybeStringToLocation(infoAttr.getValue(), false, locatorFilenameCache,
                             fileLineColLocCache, ctx);
@@ -370,15 +384,15 @@ scatterOMField(Attribute original, const Attribute root, unsigned index,
   // Extract the name attribute.
   auto nameAttr = tryGetAs<StringAttr>(dict, root, "name", loc, omirAnnoClass);
   if (!nameAttr)
-    return None;
+    return std::nullopt;
 
   // The value attribute is unstructured and just copied over.
   auto valueAttr = tryGetAs<Attribute>(dict, root, "value", loc, omirAnnoClass);
   if (!valueAttr)
-    return None;
+    return std::nullopt;
   auto newValue = scatterOMIR(valueAttr, state);
   if (!newValue)
-    return None;
+    return std::nullopt;
 
   NamedAttrList values;
   // We add the index if one was provided.  This can be used later to
@@ -411,7 +425,7 @@ scatterOMNode(Attribute original, const Attribute root, ApplyState &state) {
   if (!dict) {
     llvm::errs() << "OMNode is not a dictionary, but should be: " << original
                  << "\n";
-    return None;
+    return std::nullopt;
   }
 
   NamedAttrList omnode;
@@ -425,7 +439,7 @@ scatterOMNode(Attribute original, const Attribute root, ApplyState &state) {
   // Convert the location from a string to a location attribute.
   auto infoAttr = tryGetAs<StringAttr>(dict, root, "info", loc, omirAnnoClass);
   if (!infoAttr)
-    return None;
+    return std::nullopt;
   auto maybeLoc =
       maybeStringToLocation(infoAttr.getValue(), false, locatorFilenameCache,
                             fileLineColLocCache, ctx);
@@ -438,7 +452,7 @@ scatterOMNode(Attribute original, const Attribute root, ApplyState &state) {
   // Extract the OMID.  Don't parse this, just leave it as a string.
   auto idAttr = tryGetAs<StringAttr>(dict, root, "id", loc, omirAnnoClass);
   if (!idAttr)
-    return None;
+    return std::nullopt;
 
   // Convert the fields from an ArrayAttr to a DictionaryAttr keyed by their
   // "name".  If no fields member exists, then just create an empty dictionary.
@@ -457,7 +471,7 @@ scatterOMNode(Attribute original, const Attribute root, ApplyState &state) {
         fieldAttrs.append(newField->first, newField->second);
         continue;
       }
-      return None;
+      return std::nullopt;
     }
     fields = DictionaryAttr::get(ctx, fieldAttrs);
   }
@@ -593,7 +607,7 @@ void EmitOMIRPass::runOnOperation() {
     if (auto instOp = dyn_cast<InstanceOp>(op)) {
       // This instance does not have a symbol, but we are adding one. Remove it
       // after the pass.
-      if (!op->getAttr(InnerSymbolTable::getInnerSymbolAttrName()))
+      if (!op->getAttr(hw::InnerSymbolTable::getInnerSymbolAttrName()))
         tempSymInstances.insert(instOp);
 
       instancesByName.insert({getInnerRefTo(op), instOp});
@@ -605,6 +619,7 @@ void EmitOMIRPass::runOnOperation() {
       tracker.op = op;
       tracker.id = anno.getMember<IntegerAttr>("id");
       tracker.portNo = portNo;
+      tracker.fieldID = anno.getFieldID();
       if (!tracker.id) {
         op->emitError(omirTrackerAnnoClass)
             << " annotation missing `id` integer attribute";
@@ -618,7 +633,7 @@ void EmitOMIRPass::runOnOperation() {
           anyFailures = true;
           return true;
         }
-        tracker.nla = cast<HierPathOp>(tmp);
+        tracker.nla = cast<hw::HierPathOp>(tmp);
       }
       if (sramIDs.erase(tracker.id))
         makeTrackerAbsolute(tracker);
@@ -756,9 +771,9 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
     namepath.push_back(getInnerRefTo(tracker.op));
 
   // Add the NLA to the tracker and mark it to be deleted later.
-  tracker.nla = builder.create<HierPathOp>(builder.getUnknownLoc(),
-                                           builder.getStringAttr(nlaName),
-                                           builder.getArrayAttr(namepath));
+  tracker.nla = builder.create<hw::HierPathOp>(builder.getUnknownLoc(),
+                                               builder.getStringAttr(nlaName),
+                                               builder.getArrayAttr(namepath));
   nlaTable->addNLA(tracker.nla);
 
   removeTempNLAs.push_back(tracker.nla);
@@ -1150,14 +1165,32 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
   // Serialize any potential component *inside* the module that this target may
   // specifically refer to.
   hw::InnerRefAttr componentName;
+  FIRRTLType componentType;
   if (isa<WireOp, RegOp, RegResetOp, InstanceOp, NodeOp, MemOp>(tracker.op)) {
     tempSymInstances.erase(tracker.op);
     componentName = getInnerRefTo(tracker.op);
     LLVM_DEBUG(llvm::dbgs() << "Marking OMIR-targeted " << componentName
                             << " as dont-touch\n");
+
+    // If the target refers to a field, get the type of the component so we can
+    // extract the field, or fail if we don't know how to get the type.
+    if (tracker.hasFieldID()) {
+      if (isa<WireOp, RegOp, RegResetOp, NodeOp>(tracker.op)) {
+        componentType = getTypeOf(tracker.op);
+      } else {
+        tracker.op->emitError("does not support OMIR targeting fields");
+        anyFailures = true;
+        return jsonStream.value("<error>");
+      }
+    }
   } else if (auto mod = dyn_cast<FModuleLike>(tracker.op)) {
-    if (tracker.portNo >= 0)
+    if (tracker.portNo >= 0) {
       componentName = getInnerRefTo(mod, tracker.portNo);
+
+      // If the target refers to a field, get the type of the port.
+      if (tracker.hasFieldID())
+        componentType = getTypeOf(mod, tracker.portNo);
+    }
   } else if (!isa<FModuleLike>(tracker.op)) {
     tracker.op->emitError("invalid target for `") << type << "` OMIR";
     anyFailures = true;
@@ -1187,6 +1220,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
       }
       target.push_back('>');
       target.append(addSymbol(componentName));
+      addFieldID(componentType, tracker.fieldID, target);
     }();
   }
 
@@ -1206,6 +1240,44 @@ hw::InnerRefAttr EmitOMIRPass::getInnerRefTo(FModuleLike module,
                          [&](FModuleLike mod) -> ModuleNamespace & {
                            return getModuleNamespace(mod);
                          });
+}
+
+FIRRTLType EmitOMIRPass::getTypeOf(Operation *op) {
+  assert(op->getNumResults() == 1 &&
+         op->getResult(0).getType().isa<FIRRTLType>() &&
+         "op must have a single FIRRTLType result");
+  return op->getResult(0).getType().cast<FIRRTLType>();
+}
+
+FIRRTLType EmitOMIRPass::getTypeOf(FModuleLike mod, size_t portIdx) {
+  Type portType = mod.getPortType(portIdx);
+  assert(portType.isa<FIRRTLType>() && "port must have a FIRRTLType");
+  return portType.cast<FIRRTLType>();
+}
+
+// Constructs a reference to a field of an aggregate FIRRTLType with a fieldID,
+// and appends it to result. If fieldID is 0, meaning it does not reference a
+// field of an aggregate FIRRTLType, this is a no-op.
+void EmitOMIRPass::addFieldID(FIRRTLType type, unsigned fieldID,
+                              SmallVectorImpl<char> &result) {
+  while (fieldID)
+    TypeSwitch<FIRRTLType>(type)
+        .Case<FVectorType>([&](FVectorType vector) {
+          size_t index = vector.getIndexForFieldID(fieldID);
+          type = vector.getElementType();
+          fieldID -= vector.getFieldID(index);
+          result.push_back('[');
+          Twine(index).toVector(result);
+          result.push_back(']');
+        })
+        .Case<BundleType>([&](BundleType bundle) {
+          size_t index = bundle.getIndexForFieldID(fieldID);
+          StringRef name = bundle.getElement(index).name;
+          type = bundle.getElementType(index);
+          fieldID -= bundle.getFieldID(index);
+          result.push_back('.');
+          result.append(name.begin(), name.end());
+        });
 }
 
 //===----------------------------------------------------------------------===//

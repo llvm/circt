@@ -1706,6 +1706,49 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
           }
         }
       }
+      // Merge neighboring array extracts of neighboring inputs, e.g.
+      // {Array[4], bitcast(Array[3:2])} -> bitcast(A[4:2])
+
+      // This represents a slice of an array.
+      struct ArraySlice {
+        Value input;
+        Value index;
+        size_t width;
+        static std::optional<ArraySlice> get(Value value) {
+          assert(value.getType().isa<IntegerType>() && "expected integer type");
+          if (auto arrayGet = value.getDefiningOp<hw::ArrayGetOp>())
+            return ArraySlice{arrayGet.getInput(), arrayGet.getIndex(), 1};
+          // array slice op is wrapped with bitcast.
+          if (auto bitcast = value.getDefiningOp<hw::BitcastOp>())
+            if (auto arraySlice =
+                    bitcast.getInput().getDefiningOp<hw::ArraySliceOp>())
+              return ArraySlice{
+                  arraySlice.getInput(), arraySlice.getLowIndex(),
+                  hw::type_cast<hw::ArrayType>(arraySlice.getType()).getSize()};
+          return std::nullopt;
+        }
+      };
+      if (auto extractOpt = ArraySlice::get(inputs[i])) {
+        if (auto prevExtractOpt = ArraySlice::get(inputs[i - 1])) {
+          // Check that two array slices are mergable.
+          if (prevExtractOpt->index.getType() == extractOpt->index.getType() &&
+              prevExtractOpt->input == extractOpt->input &&
+              hw::isOffset(extractOpt->index, prevExtractOpt->index,
+                           extractOpt->width)) {
+            auto resType = hw::ArrayType::get(
+                hw::type_cast<hw::ArrayType>(prevExtractOpt->input.getType())
+                    .getElementType(),
+                extractOpt->width + prevExtractOpt->width);
+            auto resIntType = rewriter.getIntegerType(hw::getBitWidth(resType));
+            Value replacement = rewriter.create<hw::BitcastOp>(
+                op.getLoc(), resIntType,
+                rewriter.create<hw::ArraySliceOp>(op.getLoc(), resType,
+                                                  prevExtractOpt->input,
+                                                  extractOpt->index));
+            return flattenConcat(i - 1, i, replacement);
+          }
+        }
+      }
     }
   }
 
@@ -2314,7 +2357,7 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
     if (op.getCond() == falseMux.getCond()) {
       replaceOpWithNewOpAndCopyName<MuxOp>(
           rewriter, op, op.getCond(), op.getTrueValue(),
-          falseMux.getFalseValue(), op.getTwoState());
+          falseMux.getFalseValue(), op.getTwoStateAttr());
       return success();
     }
 
@@ -2329,13 +2372,57 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
     if (op.getCond() == trueMux.getCond()) {
       replaceOpWithNewOpAndCopyName<MuxOp>(
           rewriter, op, op.getCond(), trueMux.getTrueValue(),
-          op.getFalseValue(), op.getTwoState());
+          op.getFalseValue(), op.getTwoStateAttr());
       return success();
     }
 
     // Check to see if we can fold a mux tree into an array_create/get pair.
     if (foldMuxChain(op, /*isFalseSide*/ false, rewriter))
       return success();
+  }
+
+  // mux(c1, mux(c2, a, b), mux(c2, a, c)) -> mux(c2, a, mux(c1, b, c))
+  if (auto trueMux = dyn_cast_or_null<MuxOp>(op.getTrueValue().getDefiningOp()),
+      falseMux = dyn_cast_or_null<MuxOp>(op.getFalseValue().getDefiningOp());
+      trueMux && falseMux && trueMux.getCond() == falseMux.getCond() &&
+      trueMux.getTrueValue() == falseMux.getTrueValue()) {
+    auto subMux = rewriter.create<MuxOp>(
+        rewriter.getFusedLoc(trueMux.getLoc(), falseMux.getLoc()), op.getCond(),
+        trueMux.getFalseValue(), falseMux.getFalseValue());
+    replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, trueMux.getCond(),
+                                         trueMux.getTrueValue(), subMux,
+                                         op.getTwoStateAttr());
+    return success();
+  }
+
+  // mux(c1, mux(c2, a, b), mux(c2, c, b)) -> mux(c2, mux(c1, a, c), b)
+  if (auto trueMux = dyn_cast_or_null<MuxOp>(op.getTrueValue().getDefiningOp()),
+      falseMux = dyn_cast_or_null<MuxOp>(op.getFalseValue().getDefiningOp());
+      trueMux && falseMux && trueMux.getCond() == falseMux.getCond() &&
+      trueMux.getFalseValue() == falseMux.getFalseValue()) {
+    auto subMux = rewriter.create<MuxOp>(
+        rewriter.getFusedLoc(trueMux.getLoc(), falseMux.getLoc()), op.getCond(),
+        trueMux.getTrueValue(), falseMux.getTrueValue());
+    replaceOpWithNewOpAndCopyName<MuxOp>(rewriter, op, trueMux.getCond(),
+                                         subMux, trueMux.getFalseValue(),
+                                         op.getTwoStateAttr());
+    return success();
+  }
+
+  // mux(c1, mux(c2, a, b), mux(c3, a, b)) -> mux(mux(c1, c2, c3), a, b)
+  if (auto trueMux = dyn_cast_or_null<MuxOp>(op.getTrueValue().getDefiningOp()),
+      falseMux = dyn_cast_or_null<MuxOp>(op.getFalseValue().getDefiningOp());
+      trueMux && falseMux &&
+      trueMux.getTrueValue() == falseMux.getTrueValue() &&
+      trueMux.getFalseValue() == falseMux.getFalseValue()) {
+    auto subMux = rewriter.create<MuxOp>(
+        rewriter.getFusedLoc(
+            {op.getLoc(), trueMux.getLoc(), falseMux.getLoc()}),
+        op.getCond(), trueMux.getCond(), falseMux.getCond());
+    replaceOpWithNewOpAndCopyName<MuxOp>(
+        rewriter, op, subMux, trueMux.getTrueValue(), trueMux.getFalseValue(),
+        op.getTwoStateAttr());
+    return success();
   }
 
   // mux(cond, x|y|z|a, a) -> (x|y|z)&replicate(cond) | a

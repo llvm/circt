@@ -18,6 +18,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "circt/Support/FieldRef.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionInterfaces.h"
@@ -97,8 +98,8 @@ inline MemDirAttr &operator|=(MemDirAttr &lhs, MemDirAttr rhs) {
 
 /// Return the StringAttr for the inner_sym name, if it exists.
 inline StringAttr getInnerSymName(Operation *op) {
-  InnerSymAttr s = op->getAttrOfType<InnerSymAttr>(
-      InnerSymbolTable::getInnerSymbolAttrName());
+  auto s = op->getAttrOfType<hw::InnerSymAttr>(
+      hw::InnerSymbolTable::getInnerSymbolAttrName());
   if (s)
     return s.getSymName();
   return StringAttr();

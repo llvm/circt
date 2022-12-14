@@ -26,3 +26,10 @@ class RequestToClientConnectionOp:
         ir.StringAttr(x).value
         for x in ir.ArrayAttr(self.attributes["clientNamePath"])
     ]
+
+
+class RandomAccessMemoryDeclOp:
+
+  @property
+  def innerType(self):
+    return ir.TypeAttr(self.attributes["innerType"])

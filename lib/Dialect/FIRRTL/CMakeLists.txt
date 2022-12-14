@@ -11,7 +11,6 @@ add_circt_dialect_library(CIRCTFIRRTL
   FIRRTLOps.cpp
   FIRRTLTypes.cpp
   FIRRTLUtils.cpp
-  InnerSymbolTable.cpp
   NLATable.cpp
 
   ADDITIONAL_HEADER_DIRS

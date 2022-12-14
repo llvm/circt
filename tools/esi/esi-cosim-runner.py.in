@@ -28,7 +28,8 @@ class CosimTestRunner:
   """The main class responsible for running a cosim test. We use a separate
     class to allow for per-test mutable state variables."""
 
-  def __init__(self, testFile, schema, tmpdir, addlArgs, interactive: bool):
+  def __init__(self, testFile, schema, tmpdir, addlArgs, interactive: bool,
+               include_aux_files: bool):
     """Parse a test file. Look for comments we recognize anywhere in the
         file. Assemble a list of sources."""
 
@@ -77,11 +78,12 @@ class CosimTestRunner:
     ]
 
     # Include the cosim DPI SystemVerilog files.
-    esiInclude = os.path.join("@CIRCT_BINARY_DIR@", "include", "circt",
-                              "Dialect", "ESI")
-    self.sources.insert(0, os.path.join(esiInclude, "Cosim_DpiPkg.sv"))
-    self.sources.insert(1, os.path.join(esiInclude, "Cosim_Endpoint.sv"))
-    self.sources.insert(2, os.path.join(esiInclude, "ESIPrimitives.sv"))
+    if include_aux_files:
+      esiInclude = os.path.join("@CIRCT_BINARY_DIR@", "include", "circt",
+                                "Dialect", "ESI")
+      self.sources.insert(0, os.path.join(esiInclude, "Cosim_DpiPkg.sv"))
+      self.sources.insert(1, os.path.join(esiInclude, "Cosim_Endpoint.sv"))
+      self.sources.insert(2, os.path.join(esiInclude, "ESIPrimitives.sv"))
     self.sources.append("@ESI_COSIM_PATH@")
 
   def compile(self):
@@ -295,6 +297,9 @@ def __main__(args):
       "--tmpdir",
       default="",
       help="A temp dir to which files may have been generated.")
+  argparser.add_argument("--no-aux-files",
+                         action="store_true",
+                         help="Don't include the ESI cosim auxiliary files.")
   argparser.add_argument("source", help="The source run spec file")
   argparser.add_argument("addlArgs",
                          nargs=argparse.REMAINDER,
@@ -314,7 +319,7 @@ def __main__(args):
   os.chdir(testDir)
 
   runner = CosimTestRunner(args.source, args.schema, args.tmpdir, args.addlArgs,
-                           args.interactive)
+                           args.interactive, not args.no_aux_files)
   rc = runner.compile()
   if rc != 0:
     return rc

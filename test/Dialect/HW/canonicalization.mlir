@@ -1054,6 +1054,25 @@ hw.module @bitcast_canonicalization(%arg0: i4) -> (r1: i4, r2: !hw.array<2xi2>) 
   hw.output %id, %b : i4, !hw.array<2xi2>
 }
 
+// CHECK-LABEL: hw.module @array_create() -> (r0: !hw.array<3xi2>)
+// CHECK-NEXT:    %0 = hw.aggregate_constant [0 : i2, 1 : i2, 0 : i2] : !hw.array<3xi2>
+// CHECK-NEXT:    hw.output %0 : !hw.array<3xi2
+hw.module @array_create() -> (r0: !hw.array<3xi2>) {
+  %false = hw.constant 0 : i2
+  %true = hw.constant 1 : i2
+  %arr = hw.array_create %false, %true, %false : i2
+  hw.output %arr : !hw.array<3xi2>
+}
+
+// CHECK-LABEL: hw.module @array_get0(%index: i2) -> (r0: i2)
+// CHECK-NEXT:    %c-1_i2 = hw.constant -1 : i2
+// CHECK-NEXT:    hw.output %c-1_i2 : i2
+hw.module @array_get0(%index : i2) -> (r0: i2) {
+  %array = hw.aggregate_constant [3 : i2, 3 : i2, 3 : i2, 3 : i2] : !hw.array<4xi2>
+  %result = hw.array_get %array[%index] : !hw.array<4xi2>, i2
+  hw.output %result : i2
+}
+
 // CHECK-LABEL: hw.module @array_get1(%a0: i3, %a1: i3, %a2: i3) -> (r0: i3)
 // CHECK-NEXT:    hw.output %a0 : i3
 hw.module @array_get1(%a0: i3, %a1: i3, %a2: i3) -> (r0: i3) {
@@ -1061,6 +1080,16 @@ hw.module @array_get1(%a0: i3, %a1: i3, %a2: i3) -> (r0: i3) {
   %arr = hw.array_create %a2, %a1, %a0 : i3
   %r0 = hw.array_get %arr[%c0] : !hw.array<3xi3>, i2
   hw.output %r0 : i3
+}
+
+// CHECK-LABEL: hw.module @struct_create() -> (r0: !hw.struct<a: i2, b: i2, c: i2>)
+// CHECK-NEXT:    %0 = hw.aggregate_constant [0 : i2, 1 : i2, 0 : i2] : !hw.struct<a: i2, b: i2, c: i2>
+// CHECK-NEXT:    hw.output %0 : !hw.struct<a: i2, b: i2, c: i2>
+hw.module @struct_create() -> (r0: !hw.struct<a: i2, b: i2, c : i2>) {
+  %false = hw.constant 0 : i2
+  %true = hw.constant 1 : i2
+  %arr = hw.struct_create (%false, %true, %false) : !hw.struct<a: i2, b: i2, c : i2>
+  hw.output %arr : !hw.struct<a: i2, b: i2, c : i2>
 }
 
 // CHECK-LABEL: hw.module @struct_extract1(%a0: i3, %a1: i5) -> (r0: i3)
@@ -1071,9 +1100,18 @@ hw.module @struct_extract1(%a0: i3, %a1: i5) -> (r0: i3) {
   hw.output %r0 : i3
 }
 
-// CHECK-LABEL: hw.module @struct_explode(%a0: i3, %a1: i5) -> (r0: i3)
+// CHECK-LABEL: hw.module @struct_explode0(%a0: i3, %a1: i5) -> (r0: i2)
+// CHECK-NEXT:    %c0_i2 = hw.constant 0 : i2
+// CHECK-NEXT:    hw.output %c0_i2 : i2
+hw.module @struct_explode0(%a0: i3, %a1: i5) -> (r0: i2) {
+  %struct = hw.aggregate_constant [0 : i2, 1 : i2] : !hw.struct<a: i2, b: i2>
+  %r0:2 = hw.struct_explode %struct : !hw.struct<a: i2, b: i2>
+  hw.output %r0#0 : i2
+}
+
+// CHECK-LABEL: hw.module @struct_explode1(%a0: i3, %a1: i5) -> (r0: i3)
 // CHECK-NEXT:    hw.output %a0 : i3
-hw.module @struct_explode(%a0: i3, %a1: i5) -> (r0: i3) {
+hw.module @struct_explode1(%a0: i3, %a1: i5) -> (r0: i3) {
   %s = hw.struct_create (%a0, %a1) : !hw.struct<foo: i3, bar: i5>
   %r0:2 = hw.struct_explode %s : !hw.struct<foo: i3, bar: i5>
   hw.output %r0#0 : i3
@@ -1249,9 +1287,9 @@ hw.module @uninitializedWireAggregate() -> (result1: !hw.struct<a: i1, b: i1>,
   %3 = sv.read_inout %2 :  !hw.inout<!hw.struct<a: i1, b: !hw.array<10x!hw.struct<a: i1, b: i1>>>>
 
   hw.output %1, %3 : !hw.struct<a: i1, b: i1>, !hw.struct<a: i1, b: !hw.array<10x!hw.struct<a: i1, b: i1>>>
-  // CHECK-NEXT: %x_i2 = sv.constantX : !hw.struct<a: i1, b: i1>
-  // CHECK-NEXT: %x_i21 = sv.constantX : !hw.struct<a: i1, b: !hw.array<10xstruct<a: i1, b: i1>>>
-  // CHECK-NEXT: hw.output %x_i2, %x_i21
+  // CHECK-NEXT: %[[Z1:.*]] = sv.constantZ : !hw.struct<a: i1, b: i1>
+  // CHECK-NEXT: %[[Z2:.*]] = sv.constantZ : !hw.struct<a: i1, b: !hw.array<10xstruct<a: i1, b: i1>>>
+  // CHECK-NEXT: hw.output %[[Z1]], %[[Z2]]
 }
 
 // CHECK-LABEL:  hw.module @IncompleteRead(%clock1: i1) {
@@ -1350,6 +1388,16 @@ hw.module @ExtractOfUnrelatedInject(%a: !hw.struct<a: i1, b: i1>, %v: i1) -> (re
   hw.output %c : i1
 }
 
+// CHECK-LABEL: hw.module @InjectOnConstant
+hw.module @InjectOnConstant() -> (result: !hw.struct<a: i2>) {
+  %struct = hw.aggregate_constant [0 : i2] : !hw.struct<a: i2>
+  %c1_i2 = hw.constant 1 : i2
+  %result = hw.struct_inject %struct["a"], %c1_i2 : !hw.struct<a: i2>
+  // CHECK: [[STRUCT:%.+]] = hw.aggregate_constant [1 : i2] : !hw.struct<a: i2>
+  // CHECK-NEXT: hw.output [[STRUCT]]
+  hw.output %result : !hw.struct<a: i2>
+}
+
 // CHECK-LABEL: hw.module @InjectOnInject
 hw.module @InjectOnInject(%a: !hw.struct<a: i1>, %p: i1, %q: i1) -> (result: !hw.struct<a: i1>) {
   %b = hw.struct_inject %a["a"], %p : !hw.struct<a: i1>
@@ -1402,6 +1450,16 @@ hw.module @GetOfSliceStatic(%a: !hw.array<5xi1>) -> (out0: i1) {
   // CHECK: [[OUT:%.+]] = hw.array_get %a[%c2_i3] : !hw.array<5xi1>
   // CHECK: hw.output [[OUT]] : i1
   hw.output %get : i1
+}
+
+// CHECK-LABEL: hw.module @ConcatOfConstants(%index: i2) -> (r0: !hw.array<2xi2>)
+hw.module @ConcatOfConstants(%index: i2) -> (r0: !hw.array<2xi2>) {
+  %lhs = hw.aggregate_constant [3 : i2] : !hw.array<1xi2>
+  %rhs = hw.aggregate_constant [3 : i2] : !hw.array<1xi2>
+  %concat = hw.array_concat %lhs, %rhs : !hw.array<1xi2>, !hw.array<1xi2>
+  // CHECK: [[OUT:%.+]] = hw.aggregate_constant [-1 : i2, -1 : i2] : !hw.array<2xi2>
+  // CHECK: hw.output [[OUT]] : !hw.array<2xi2>
+  hw.output %concat : !hw.array<2xi2>
 }
 
 // CHECK-LABEL: hw.module @ConcatOfCreate

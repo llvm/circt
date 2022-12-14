@@ -533,11 +533,11 @@ hw.module @UnaryParensIssue755(%a: i8) -> (b: i1) {
 
 // Inner name references to ports which are renamed to avoid collisions with
 // reserved Verilog keywords.
-hw.module.extern @VerbatimModuleExtern(%foo: i1 {hw.exportPort = @symA}) -> (bar: i1 {hw.exportPort = @symB})
+hw.module.extern @VerbatimModuleExtern(%foo: i1 {hw.exportPort = #hw<innerSym@symA>}) -> (bar: i1 {hw.exportPort = #hw<innerSym@symB>})
 // CHECK-LABEL: module VerbatimModule(
 // CHECK-NEXT:    input  signed_0
 // CHECK-NEXT:    output unsigned_0
-hw.module @VerbatimModule(%signed: i1 {hw.exportPort = @symA}) -> (unsigned: i1 {hw.exportPort = @symB}) {
+hw.module @VerbatimModule(%signed: i1 {hw.exportPort = #hw<innerSym@symA>}) -> (unsigned: i1 {hw.exportPort = #hw<innerSym@symB>}) {
   %parameter = sv.wire sym @symC : !hw.inout<i4>
   %localparam = sv.reg sym @symD : !hw.inout<i4>
   %shortint = sv.interface.instance sym @symE : !sv.interface<@Interface>

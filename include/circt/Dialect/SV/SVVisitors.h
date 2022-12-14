@@ -32,7 +32,7 @@ public:
             IndexedPartSelectInOutOp, IndexedPartSelectOp, StructFieldInOutOp,
             ConstantXOp, ConstantZOp, MacroRefExprOp, MacroRefExprSEOp,
             // Declarations.
-            RegOp, WireOp, LogicOp, LocalParamOp, XMROp,
+            RegOp, WireOp, LogicOp, LocalParamOp, XMROp, XMRRefOp,
             // Control flow.
             OrderedOutputOp, IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp,
             AlwaysCombOp, AlwaysFFOp, InitialOp, CaseOp,
@@ -88,6 +88,7 @@ public:
   HANDLE(LogicOp, Unhandled);
   HANDLE(LocalParamOp, Unhandled);
   HANDLE(XMROp, Unhandled);
+  HANDLE(XMRRefOp, Unhandled);
 
   // Expressions
   HANDLE(ReadInOutOp, Unhandled);

@@ -199,7 +199,7 @@ Optional<unsigned> FIRLexer::getIndentation(const FIRToken &tok) const {
 
   // If the character we stopped at isn't the start of line, then return none.
   if (ptr != bufStart && !isVerticalWS(ptr[-1]))
-    return None;
+    return std::nullopt;
 
   return indent;
 }
@@ -452,6 +452,8 @@ FIRToken FIRLexer::lexString(const char *tokStart, bool isRaw) {
       // Ignore escaped '\'' or '"'
       if (*curPtr == '\'' || *curPtr == '"')
         ++curPtr;
+      else if (*curPtr == 'u' || *curPtr == 'U')
+        return emitError(tokStart, "unicode escape not supported in string");
       break;
     case 0:
       // This could be the end of file in the middle of the string.  If so
@@ -465,6 +467,8 @@ FIRToken FIRLexer::lexString(const char *tokStart, bool isRaw) {
     case '\f':
       return emitError(tokStart, "unterminated string");
     default:
+      if (curPtr[-1] & ~0x7F)
+        return emitError(tokStart, "string characters must be 7-bit ASCII");
       // Skip over other characters.
       break;
     }

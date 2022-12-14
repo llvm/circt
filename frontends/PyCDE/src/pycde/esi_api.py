@@ -9,12 +9,15 @@ import os
 import json
 import pathlib
 import re
+import shutil
 from typing import Dict, List
 
 __dir__ = pathlib.Path(__file__).parent
 
 
 def _camel_to_snake(camel: str):
+  if camel.upper() == camel:
+    return camel.lower()
   return re.sub(r'(?<!^)(?=[A-Z])', '_', camel).lower()
 
 
@@ -111,22 +114,17 @@ class PythonApiBuilder(SoftwareApiBuilder):
   def __init__(self, services_json: str):
     super().__init__(services_json)
 
-  def build(self, system_name: str, output_dir: pathlib.Path):
+  def build(self, system_name: str, sw_dir: pathlib.Path):
     """Emit a Python ESI runtime library into 'output_dir'."""
-    libdir = output_dir / "esi_rt"
+    libdir = sw_dir / system_name
     if not libdir.exists():
       libdir.mkdir()
 
-    # Create __init__.py and copy in the standard files.
-    init_file = libdir / "__init__.py"
-    init_file.touch()
     common_file = libdir / "common.py"
-    if common_file.exists():
-      common_file.unlink()
-    os.link(__dir__ / "esi_runtime_common.py", common_file)
+    shutil.copy(__dir__ / "esi_runtime_common.py", common_file)
 
     # Emit the system-specific API.
-    main = libdir / f"{system_name}.py"
+    main = libdir / "__init__.py"
     super().build(main.open("w"), "esi_api.py.j2")
 
   def get_str_type(self, type_dict: Dict):
@@ -140,17 +138,20 @@ class PythonApiBuilder(SoftwareApiBuilder):
       if dialect == "builtin":
         if mn.startswith("i") or mn.startswith("ui"):
           width = int(mn.strip("ui"))
-          return f"IntType({width}, False)"
-        if mn.startswith("i") or mn.startswith("si"):
+          signed = False
+        elif mn.startswith("si"):
           width = int(mn.strip("si"))
-          return f"IntType({width}, True)"
+          signed = True
+        if width == 0:
+          return "VoidType()"
+        return f"IntType({width}, {signed})"
       elif dialect == "hw":
         if mn == "struct":
           fields = [
-              f"'{x['name']}': {py_type(x['type'])}" for x in type["fields"]
+              f"('{x['name']}', {py_type(x['type'])})" for x in type["fields"]
           ]
           fields_str = ", ".join(fields)
-          return "StructType({" + fields_str + "})"
+          return "StructType([" + fields_str + "])"
 
       assert False, "unimplemented type"
 

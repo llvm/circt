@@ -1060,3 +1060,155 @@ firrtl.circuit "NoInterfaces" attributes {
 // CHECK-LABEL: module {
 // CHECK:         sv.verbatim
 // CHECK-SAME:      []
+
+// -----
+
+// Check that nonlocal duplicate views are dropped.
+firrtl.circuit "Top" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "VectorOfBundleView",
+      elements = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedVectorType",
+          elements = [
+            {
+              class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+              defName = "Bundle2",
+              elements = [
+                {
+                  class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+                  name = "foo",
+                  id = 10 : i64
+                },
+                {
+                  class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+                  name = "bar",
+                  id = 11 : i64
+                }
+              ],
+              name = "bundle2"
+            }
+          ],
+          name = "vector"
+        }
+      ],
+      id = 9 : i64,
+      name = "VectorOfBundleView"
+    },
+    {
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "VectorOfBundleView",
+      elements = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedVectorType",
+          elements = [
+            {
+              class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+              defName = "Bundle2",
+              elements = [
+                {
+                  class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+                  name = "foo",
+                  id = 110 : i64
+                },
+                {
+                  class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+                  name = "bar",
+                  id = 111 : i64
+                }
+              ],
+              name = "bundle2"
+            }
+          ],
+          name = "vector"
+        }
+      ],
+      id = 19 : i64,
+      name = "VectorOfBundleView"
+    },
+    {
+      class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+      directory = "gct-dir",
+      filename = "bindings.sv"
+    },
+    {
+      class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
+      filename = "gct.yaml"
+    }
+  ]
+} {
+  hw.hierpath private @nla_0 [@Top::@t1, @Dut::@s1]
+  hw.hierpath private @nla [@Top::@t1, @Dut::@s1]
+  firrtl.module @Companion() attributes {
+    annotations = [
+      {
+        circt.nonlocal = @nla,
+        class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+        defName = "VectorOfBundleView",
+        id = 9 : i64,
+        name = "VectorOfBundleView"
+      },
+      {
+        circt.nonlocal = @nla_0,
+        class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+        defName = "VectorOfBundleView",
+        id = 19 : i64,
+        name = "VectorOfBundleView"
+      }
+    ]
+  } {
+      // These are dummy references created for the purposes of the test.
+      %_ui1 = firrtl.verbatim.expr "???" : () -> !firrtl.uint<1>
+      %_ui2 = firrtl.verbatim.expr "???" : () -> !firrtl.uint<2>
+      %ref_ui1 = firrtl.ref.send %_ui1 : !firrtl.uint<1>
+      %ref_ui2 = firrtl.ref.send %_ui2 : !firrtl.uint<2>
+
+      %ui1 = firrtl.ref.resolve %ref_ui1 : !firrtl.ref<uint<1>>
+      %foo = firrtl.node %ui1 {
+        annotations = [
+          {
+            circt.nonlocal = @nla,
+            class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+            id = 10 : i64
+          },{
+            circt.nonlocal = @nla_0,
+            class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+            id = 110 : i64
+          }
+        ]
+      } : !firrtl.uint<1>
+      %ui2 = firrtl.ref.resolve %ref_ui2 : !firrtl.ref<uint<2>>
+      %bar = firrtl.node %ui2 {
+        annotations = [
+          {
+            circt.nonlocal = @nla,
+            class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+            id = 11 : i64
+          },
+          {
+            circt.nonlocal = @nla_0,
+            class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+            id = 111 : i64
+          }
+        ]
+      } : !firrtl.uint<2>
+      // CHECK: sv.interface.instance sym
+      // CHECK-SAME: !sv.interface<@[[VectorOfBundleView:[a-zA-Z0-9_]+]]>
+      // CHECK-NOT: sv.interface.instance
+    }
+  firrtl.module public @Dut() {
+    firrtl.instance s1 sym @s1 @Companion()
+  }
+  firrtl.module public @Top() {
+    firrtl.instance t1 sym @t1 @Dut()
+  }
+
+  // CHECK:      sv.interface @[[VectorOfBundleView]] attributes
+  // CHECK-NOT:    sv.interface @VectorOfBundleView_0
+  // CHECK:      sv.interface @Bundle2
+  // CHECK-NEXT:   sv.interface.signal @foo : i1
+  // CHECK-NEXT:   sv.interface.signal @bar : i2
+  // CHECK-NOT:    sv.interface @Bundle2_0
+}

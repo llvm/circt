@@ -70,7 +70,7 @@ firrtl.circuit "Foo" attributes {rawAnnotations = [
 //
 // CHECK-LABEL: firrtl.circuit "Foo"
 // CHECK-NOT:     rawAnnotations
-// CHECK-NEXT:    firrtl.hierpath private @[[nla:[^ ]+]] [@Foo::@[[bar_sym:[^ ]+]], @Bar]
+// CHECK-NEXT:    hw.hierpath private @[[nla:[^ ]+]] [@Foo::@[[bar_sym:[^ ]+]], @Bar]
 firrtl.circuit "Foo" attributes {rawAnnotations = [
   {
     class = "circt.test",
@@ -111,7 +111,7 @@ firrtl.circuit "Foo" attributes {rawAnnotations = [
 //
 // CHECK-LABEL: firrtl.circuit "Foo"
 // CHECK-NOT:     rawAnnotations
-// CHECK-NEXT:    firrtl.hierpath private @[[nla:[^ ]+]] [@Foo::@[[bar_sym:[^ ]+]], @Bar]
+// CHECK-NEXT:    hw.hierpath private @[[nla:[^ ]+]] [@Foo::@[[bar_sym:[^ ]+]], @Bar]
 firrtl.circuit "Foo" attributes {rawAnnotations = [
   {
     class = "circt.test",
@@ -515,7 +515,7 @@ firrtl.circuit "Foo" attributes {rawAnnotations = [
 }
 
 // CHECK-LABEL:  firrtl.circuit "Foo"
-// CHECK:          firrtl.hierpath private @[[nla:[^ ]+]] [@Foo::@Foo, @Example]
+// CHECK:          hw.hierpath private @[[nla:[^ ]+]] [@Foo::@Foo, @Example]
 // CHECK:          firrtl.module @Example() attributes {
 // CHECK-SAME:       annotations = [{circt.nonlocal = @[[nla]], class = "circt.test"}]
 // CHECK:          firrtl.module @Foo()
@@ -537,7 +537,7 @@ firrtl.circuit "Foo" attributes {rawAnnotations = [
   }
 }
 // CHECK-LABEL: firrtl.circuit "Foo"
-// CHECK:         firrtl.hierpath private @[[nla:[^ ]+]] [@Foo::@bar, @Bar::@baz, @Baz]
+// CHECK:         hw.hierpath private @[[nla:[^ ]+]] [@Foo::@bar, @Bar::@baz, @Baz]
 // CHECK:         firrtl.module @Baz
 // CHECK-SAME:      annotations = [{circt.nonlocal = @[[nla]], class = "circt.test", data = "a"}, {circt.nonlocal = @[[nla]], class = "circt.test", data = "b"}]
 // CHECK:         firrtl.module @Bar()
@@ -568,7 +568,7 @@ firrtl.circuit "memportAnno"  attributes {rawAnnotations = [
 }
 
 // CHECK-LABEL: firrtl.circuit "memportAnno"  {
-// CHECK:        firrtl.hierpath private @nla [@memportAnno::@foo, @Foo]
+// CHECK:        hw.hierpath private @nla [@memportAnno::@foo, @Foo]
 // CHECK:        %memory_w = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portAnnotations
 // CHECK-SAME:   [{circt.nonlocal = @nla, class = "circt.test"}]
 
@@ -595,7 +595,7 @@ firrtl.circuit "instportAnno" attributes {rawAnnotations = [
 }
 
 // CHECK-LABEL: firrtl.circuit "instportAnno"
-// CHECK:        firrtl.hierpath private @[[HIER:[^ ]+]] [@instportAnno::@bar, @Bar::@baz, @Baz]
+// CHECK:        hw.hierpath private @[[HIER:[^ ]+]] [@instportAnno::@bar, @Bar::@baz, @Baz]
 // CHECK:        firrtl.module @Baz
 // CHECK-SAME:     {circt.nonlocal = @[[HIER]], class = "circt.test"}
 
@@ -619,7 +619,7 @@ firrtl.circuit "Aggregates" attributes {rawAnnotations = [
 // A non-local annotation should work.
 
 // CHECK-LABEL: firrtl.circuit "FooNL"
-// CHECK: firrtl.hierpath private @nla [@FooNL::@baz, @BazNL::@bar, @BarNL]
+// CHECK: hw.hierpath private @nla [@FooNL::@baz, @BazNL::@bar, @BarNL]
 // CHECK: firrtl.module @BarNL
 // CHECK: %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla, class = "circt.test", nl = "nl"}]}
 // CHECK: %w2 = firrtl.wire sym @w2 {annotations = [{circt.fieldID = 5 : i32, circt.nonlocal = @nla, class = "circt.test", nl = "nl2"}]} : !firrtl.bundle<a: uint, b: vector<uint, 4>>
@@ -654,7 +654,7 @@ firrtl.circuit "FooNL"  attributes {rawAnnotations = [
 // Non-local annotations on memory ports should work.
 
 // CHECK-LABEL: firrtl.circuit "MemPortsNL"
-// CHECK: firrtl.hierpath private @nla [@MemPortsNL::@child, @Child]
+// CHECK: hw.hierpath private @nla [@MemPortsNL::@child, @Child]
 // CHECK: firrtl.module @Child()
 // CHECK:   %bar_r = firrtl.mem
 // CHECK-NOT: sym
@@ -702,7 +702,7 @@ firrtl.circuit "Test" attributes {rawAnnotations = [
 firrtl.circuit "Test" attributes {rawAnnotations = [
   {class = "circt.test", target = "~Test|Test>exttest"}
   ]} {
-  // CHECK: firrtl.hierpath private @nla [@Test::@exttest, @ExtTest]
+  // CHECK: hw.hierpath private @nla [@Test::@exttest, @ExtTest]
   // CHECK: firrtl.extmodule @ExtTest() attributes {annotations = [{circt.nonlocal = @nla, class = "circt.test"}]}
   firrtl.extmodule @ExtTest()
 
@@ -718,7 +718,7 @@ firrtl.circuit "Test" attributes {rawAnnotations = [
 firrtl.circuit "Test" attributes {rawAnnotations = [
   {class = "circt.test", target = "~Test|Test>exttest.in"}
   ]} {
-  // CHECK: firrtl.hierpath private @nla [@Test::@exttest, @ExtTest]
+  // CHECK: hw.hierpath private @nla [@Test::@exttest, @ExtTest]
   // CHECK: firrtl.extmodule @ExtTest(in in: !firrtl.uint<1> [{circt.nonlocal = @nla, class = "circt.test"}])
   firrtl.extmodule @ExtTest(in in: !firrtl.uint<1>)
 
@@ -744,7 +744,7 @@ firrtl.circuit "Foo"  attributes {
     {class = "firrtl.transforms.DontTouchAnnotation", target = "~Foo|Foo>_T_8"},
     {class = "firrtl.transforms.DontTouchAnnotation", target = "~Foo|Foo>_T_9.a"},
     {class = "firrtl.transforms.DontTouchAnnotation", target = "~Foo|Foo/bar:Bar>_T.a"}]} {
-  // CHECK:      firrtl.hierpath private @nla [@Foo::@bar, @Bar]
+  // CHECK:      hw.hierpath private @nla [@Foo::@bar, @Bar]
   // CHECK-NEXT: firrtl.module @Foo
   firrtl.module @Foo(in %reset: !firrtl.uint<1>, in %clock: !firrtl.clock) {
     // CHECK-NEXT: %_T_0 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
@@ -860,14 +860,14 @@ firrtl.circuit "GCTInterface"  attributes {annotations = [{unrelatedAnnotation}]
 // CHECK-SAME: %a: !firrtl.uint<1>
 // CHECK:      %r = firrtl.reg  %clock  : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
 // CHECK:      %[[view_companion_view__2refPort:.+]], %[[view_companion_view__2refPort_1:.+]], %[[view_companion_view__1refPort:.+]], %[[view_companion_view__0refPort:.+]], %[[view_companion_view_portrefPort:.+]] = firrtl.instance view_companion  @view_companion(in {{.*}}: !firrtl.ref<uint<1>>, in {{.*}}: !firrtl.ref<uint<1>>, in {{.*}}: !firrtl.ref<uint<1>>, in {{.*}}: !firrtl.ref<uint<1>>, in {{.*}}: !firrtl.ref<uint<1>>)
-// CHECK:      %0 = firrtl.subfield %r(1) : (!firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>) -> !firrtl.vector<uint<1>, 2>
+// CHECK:      %0 = firrtl.subfield %r[_2] : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
 // CHECK:      %1 = firrtl.subindex %0[0] : !firrtl.vector<uint<1>, 2>
-// CHECK:      %2 = firrtl.subfield %r(1) : (!firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>) -> !firrtl.vector<uint<1>, 2>
+// CHECK:      %2 = firrtl.subfield %r[_2] : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
 // CHECK:      %3 = firrtl.subindex %2[1] : !firrtl.vector<uint<1>, 2>
-// CHECK:      %4 = firrtl.subfield %r(0) : (!firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>) -> !firrtl.bundle<_0: uint<1>, _1: uint<1>>
-// CHECK:      %5 = firrtl.subfield %4(1) : (!firrtl.bundle<_0: uint<1>, _1: uint<1>>) -> !firrtl.uint<1>
-// CHECK:      %6 = firrtl.subfield %r(0) : (!firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>) -> !firrtl.bundle<_0: uint<1>, _1: uint<1>>
-// CHECK:      %7 = firrtl.subfield %6(0) : (!firrtl.bundle<_0: uint<1>, _1: uint<1>>) -> !firrtl.uint<1>
+// CHECK:      %4 = firrtl.subfield %r[_0] : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
+// CHECK:      %5 = firrtl.subfield %4[_1] : !firrtl.bundle<_0: uint<1>, _1: uint<1>>
+// CHECK:      %6 = firrtl.subfield %r[_0] : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
+// CHECK:      %7 = firrtl.subfield %6[_0] : !firrtl.bundle<_0: uint<1>, _1: uint<1>>
 // CHECK:      %8 = firrtl.ref.send %1 : !firrtl.uint<1>
 // CHECK:      firrtl.connect %view_companion__1_0, %8 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
 // CHECK:      %9 = firrtl.ref.send %3 : !firrtl.uint<1>
@@ -994,7 +994,7 @@ firrtl.circuit "GCTDataTap" attributes {rawAnnotations = [{
 }
 
 // CHECK-LABEL: firrtl.circuit "GCTDataTap"
-// CHECK:      firrtl.hierpath private [[NLA:@.+]] [@GCTDataTap::@im, @InnerMod]
+// CHECK:      hw.hierpath private [[NLA:@.+]] [@GCTDataTap::@im, @InnerMod]
 
 // CHECK-LABEL: firrtl.extmodule private @DataTap
 
@@ -1352,8 +1352,8 @@ firrtl.circuit "GrandCentralViewsBundle"  attributes {
   // CHECK-SAME:   out %[[refPort_1:[a-zA-Z0-9_]+]]: !firrtl.ref<uint<2>>
   firrtl.module @Bar() {
     %a = firrtl.wire interesting_name  : !firrtl.bundle<a: uint<1>, b: uint<2>>
-    // CHECK:      %[[a_0:[a-zA-Z0-9_]+]] = firrtl.subfield %a(0)
-    // CHECK-NEXT: %[[a_1:[a-zA-Z0-9_]+]] = firrtl.subfield %a(1)
+    // CHECK:      %[[a_0:[a-zA-Z0-9_]+]] = firrtl.subfield %a[a]
+    // CHECK-NEXT: %[[a_1:[a-zA-Z0-9_]+]] = firrtl.subfield %a[b]
     // CHECK-NEXT: %[[a_0_ref:[a-zA-Z0-9_]+]] = firrtl.ref.send %[[a_0]]
     // CHECK-NEXT: firrtl.connect %[[refPort_0]], %[[a_0_ref]]
     // CHECK-NEXT: %[[a_1_ref:[a-zA-Z0-9_]+]] = firrtl.ref.send %[[a_1]]
@@ -1395,14 +1395,13 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [{
     // CHECK:  %b__gen_tap = firrtl.instance b interesting_name  @Bar(out _gen_tap: !firrtl.ref<uint<1>>)
     // CHECK:  firrtl.connect %_gen_tap, %b__gen_tap : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
   }
-  // CHECK: firrtl.module @Top() attributes {annotations = [{class = "firrtl.transforms.NoDedupAnnotation"}]}
+  // CHECK: firrtl.module @Top()
   firrtl.module @Top() {
     firrtl.instance foo interesting_name  @Foo()
     %tap = firrtl.wire interesting_name  : !firrtl.uint<1>
     // CHECK:  %foo__gen_tap = firrtl.instance foo interesting_name  @Foo(out _gen_tap: !firrtl.ref<uint<1>>)
     // CHECK:  %0 = firrtl.ref.resolve %foo__gen_tap : !firrtl.ref<uint<1>>
-    // CHECK:  %tap = firrtl.wire interesting_name  : !firrtl.uint<1>
-    // CHECK:  firrtl.connect %tap, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:  %tap = firrtl.node %0 : !firrtl.uint<1>
   }
 }
 
@@ -1452,8 +1451,7 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [
     // CHECK:  %[[foo__gen_tap:.+]], %[[foo__gen_tap2:.+]] = firrtl.instance foo interesting_name  @Foo
     // CHECK-SAME: (out _gen_tap: !firrtl.ref<uint<1>>, out _gen_tap2: !firrtl.ref<uint<1>>)
     // CHECK:  %[[v0:.+]] = firrtl.ref.resolve %[[foo__gen_tap]] : !firrtl.ref<uint<1>>
-    // CHECK:  %tap = firrtl.wire interesting_name  : !firrtl.uint<1>
-    // CHECK:  firrtl.connect %tap, %[[v0]] : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:  %tap = firrtl.node %[[v0]] : !firrtl.uint<1>
   }
 }
 
@@ -1702,6 +1700,6 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [{
     firrtl.instance foo interesting_name  @Foo()
     %tap = firrtl.wire interesting_name  : !firrtl.uint<8>
     // CHECK:   %[[v0:.+]] = firrtl.ref.resolve %foo__gen_tap : !firrtl.ref<uint>
-    // CHECK:   firrtl.connect %tap, %[[v0]] : !firrtl.uint<8>, !firrtl.uint
+    // CHECK:   %tap = firrtl.node %[[v0]] : !firrtl.uint
   }
 }

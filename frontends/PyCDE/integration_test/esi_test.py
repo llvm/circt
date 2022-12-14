@@ -1,7 +1,7 @@
 # REQUIRES: esi-cosim, rtl-sim
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1
-# RUN: esi-cosim-runner.py --tmpdir %t --schema %t/schema.capnp %s %t/*.sv
+# RUN: esi-cosim-runner.py --no-aux-files --tmpdir %t --schema %t/runtime/schema.capnp %s `ls %t/hw/*.sv | grep -v driver.sv`
 # PY: from esi_test import run_cosim
 # PY: run_cosim(tmpdir, rpcschemapath, simhostport)
 
@@ -74,12 +74,9 @@ class Mid:
 
     LoopbackInOutAdd7()
 
-    # Use Cosim to implement the standard 'HostComms' service.
-    esi.Cosim(HostComms, ports.clk, ports.rst)
-
 
 @module
-class top:
+class Top:
   clk = Clock(types.i1)
   rst = Input(types.i1)
 
@@ -89,52 +86,55 @@ class top:
 
 
 if __name__ == "__main__":
-  s = pycde.System([top], name="ESILoopback", output_directory=sys.argv[1])
-  s.generate()
-  s.emit_outputs()
-  s.build_api("python")
+  s = pycde.System(esi.CosimBSP(Top),
+                   name="ESILoopback",
+                   output_directory=sys.argv[1],
+                   sw_api_langs=["python"])
+  s.compile()
+  s.package()
 
 
 def run_cosim(tmpdir, schema_path, rpchostport):
-  sys.path.append(tmpdir)
+  import os
   import time
-  import esi_rt.ESILoopback as esi_sys
-  from esi_rt.common import Cosim
+  sys.path.append(os.path.join(tmpdir, "runtime"))
+  import ESILoopback as esi_sys
+  from ESILoopback.common import Cosim
 
   top = esi_sys.top(Cosim(schema_path, rpchostport))
 
-  assert top.mid.host_comms.req_resp_read_any() is None
-  assert top.mid.host_comms.req_resp[0].read(blocking_timeout=None) is None
-  assert top.mid.host_comms.to_host_read_any() is None
-  assert top.mid.host_comms.to_host[0].read(blocking_timeout=None) is None
+  assert top.bsp.req_resp_read_any() is None
+  assert top.bsp.req_resp[0].read(blocking_timeout=None) is None
+  assert top.bsp.to_host_read_any() is None
+  assert top.bsp.to_host[0].read(blocking_timeout=None) is None
 
-  assert top.mid.host_comms.req_resp[0].write(5) is True
+  assert top.bsp.req_resp[0].write(5) is True
   time.sleep(0.05)
-  assert top.mid.host_comms.to_host_read_any() is None
-  assert top.mid.host_comms.to_host[0].read(blocking_timeout=None) is None
-  assert top.mid.host_comms.req_resp[0].read() == 12
-  assert top.mid.host_comms.req_resp[0].read(blocking_timeout=None) is None
+  assert top.bsp.to_host_read_any() is None
+  assert top.bsp.to_host[0].read(blocking_timeout=None) is None
+  assert top.bsp.req_resp[0].read() == 12
+  assert top.bsp.req_resp[0].read(blocking_timeout=None) is None
 
-  assert top.mid.host_comms.req_resp[0].write(9) is True
+  assert top.bsp.req_resp[0].write(9) is True
   time.sleep(0.05)
-  assert top.mid.host_comms.to_host_read_any() is None
-  assert top.mid.host_comms.to_host[0].read(blocking_timeout=None) is None
-  assert top.mid.host_comms.req_resp_read_any() == 16
-  assert top.mid.host_comms.req_resp_read_any() is None
-  assert top.mid.host_comms.req_resp[0].read(blocking_timeout=None) is None
+  assert top.bsp.to_host_read_any() is None
+  assert top.bsp.to_host[0].read(blocking_timeout=None) is None
+  assert top.bsp.req_resp_read_any() == 16
+  assert top.bsp.req_resp_read_any() is None
+  assert top.bsp.req_resp[0].read(blocking_timeout=None) is None
 
-  assert top.mid.host_comms.from_host[0].write(9) is True
+  assert top.bsp.from_host[0].write(9) is True
   time.sleep(0.05)
-  assert top.mid.host_comms.req_resp_read_any() is None
-  assert top.mid.host_comms.req_resp[0].read(blocking_timeout=None) is None
-  assert top.mid.host_comms.to_host_read_any() == 9
-  assert top.mid.host_comms.to_host[0].read(blocking_timeout=None) is None
+  assert top.bsp.req_resp_read_any() is None
+  assert top.bsp.req_resp[0].read(blocking_timeout=None) is None
+  assert top.bsp.to_host_read_any() == 9
+  assert top.bsp.to_host[0].read(blocking_timeout=None) is None
 
-  assert top.mid.host_comms.from_host[0].write(9) is True
+  assert top.bsp.from_host[0].write(9) is True
   time.sleep(0.05)
-  assert top.mid.host_comms.req_resp_read_any() is None
-  assert top.mid.host_comms.req_resp[0].read(blocking_timeout=None) is None
-  assert top.mid.host_comms.to_host[0].read() == 9
-  assert top.mid.host_comms.to_host_read_any() is None
+  assert top.bsp.req_resp_read_any() is None
+  assert top.bsp.req_resp[0].read(blocking_timeout=None) is None
+  assert top.bsp.to_host[0].read() == 9
+  assert top.bsp.to_host_read_any() is None
 
   print("Success: all tests pass!")

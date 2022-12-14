@@ -37,7 +37,7 @@ Engine::Engine(
   OpBuilder insertInst =
       OpBuilder::atBlockEnd(&rootEntity.getBody().getBlocks().front());
   insertInst.create<InstOp>(rootEntity.getBlocks().front().back().getLoc(),
-                            llvm::None, root, root, ArrayRef<Value>(),
+                            std::nullopt, root, root, ArrayRef<Value>(),
                             ArrayRef<Value>());
 
   if (failed(mlirTransformer(module))) {

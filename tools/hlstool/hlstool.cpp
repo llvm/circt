@@ -48,14 +48,12 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/LoweringOptionsParser.h"
 #include "circt/Support/Version.h"
 #include "circt/Transforms/Passes.h"
-
-#include "circt/InitAllDialects.h"
-#include "circt/InitAllPasses.h"
 
 #include <iostream>
 
@@ -210,6 +208,8 @@ static void loadDHLSPipeline(OpPassManager &pm) {
       /*sourceConstants=*/false,
       /*disableTaskPipelining=*/dynParallelism !=
           DynamicParallelismPipelining));
+  pm.addPass(circt::handshake::createHandshakeLowerExtmemToHWPass(withESI));
+
   if (dynParallelism == DynamicParallelismLocking) {
     pm.nest<handshake::FuncOp>().addPass(
         circt::handshake::createHandshakeLockFunctionsPass());
@@ -362,7 +362,6 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
   } else {
     // HW path.
     addIRLevel(HLSFlowDynamicIRLevel::Firrtl, [&]() {
-      pm.addPass(circt::handshake::createHandshakeLowerExtmemToHWPass(withESI));
       pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
       pm.addPass(circt::createHandshakeToHWPass());
       pm.addPass(createSimpleCanonicalizerPass());
