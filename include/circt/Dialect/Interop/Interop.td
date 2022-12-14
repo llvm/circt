@@ -204,7 +204,7 @@ def ReturnOp : InteropOp<"return", [
   let arguments = (ins Variadic<AnyType>:$returnValues);
 
   let builders = [OpBuilder<(ins), [{
-    build($_builder, $_state, llvm::None);
+    build($_builder, $_state, std::nullopt);
   }]>];
 
   let assemblyFormat = "attr-dict ($returnValues^ `:` type($returnValues))?";

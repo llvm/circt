@@ -231,7 +231,7 @@ def OutputOp : FSMOp<"output", [HasParent<"StateOp">, ReturnLike, Terminator]> {
 
   let arguments = (ins Variadic<AnyType>:$operands);
 
-  let builders = [ OpBuilder<(ins), "build($_builder, $_state, llvm::None);"> ];
+  let builders = [ OpBuilder<(ins), "build($_builder, $_state, std::nullopt);"> ];
 
   let assemblyFormat = [{ attr-dict ($operands^ `:` qualified(type($operands)))? }];
 

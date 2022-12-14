@@ -46,7 +46,7 @@ bool Tester::isInteresting(StringRef testCase) const {
   // Run the tester.
   std::string errMsg;
   int result = llvm::sys::ExecuteAndWait(
-      testScript, testerArgs, /*Env=*/None, /*Redirects=*/None,
+      testScript, testerArgs, /*Env=*/std::nullopt, /*Redirects=*/std::nullopt,
       /*SecondsToWait=*/0, /*MemoryLimit=*/0, &errMsg);
   if (result < 0)
     llvm::report_fatal_error(
