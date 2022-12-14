@@ -93,9 +93,9 @@ firrtl.circuit "TestHarness" attributes {
       writeLatency = 1 : i32
     } : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
     // CHECK: firrtl.mem sym @[[gct_sym_7:.+]] Undefined
-    %mem_addr = firrtl.subfield %mem(0) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
-    %mem_en = firrtl.subfield %mem(1) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
-    %mem_clk = firrtl.subfield %mem(2) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.clock
+    %mem_addr = firrtl.subfield %mem[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    %mem_en = firrtl.subfield %mem[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    %mem_clk = firrtl.subfield %mem[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
     firrtl.connect %mem_addr, %in : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %mem_en, %in : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %mem_clk, %clock : !firrtl.clock, !firrtl.clock
@@ -349,9 +349,9 @@ firrtl.circuit "NLAGarbageCollection" {
   // CHECK-NOT: @nla_1
   // CHECK-NOT: @nla_2
   // CHECK-NOT: @nla_3
-  firrtl.hierpath private @nla_1 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@foo]
-  firrtl.hierpath private @nla_2 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@port]
-  firrtl.hierpath private @nla_3 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@bar_0]
+  hw.hierpath private @nla_1 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@foo]
+  hw.hierpath private @nla_2 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@port]
+  hw.hierpath private @nla_3 [@NLAGarbageCollection::@dut, @DUT::@submodule, @Submodule::@bar_0]
   firrtl.module private @Submodule(
     in %port: !firrtl.uint<1> sym @port [
       {circt.nonlocal = @nla_2,
@@ -425,8 +425,8 @@ firrtl.circuit "NLAGarbageCollection" {
 firrtl.circuit "NLAUsedInWiring"  {
   // CHECK-NOT: @nla_1
   // CHECK-NOT: @nla_2
-  firrtl.hierpath private @nla_1 [@NLAUsedInWiring::@foo, @Foo::@f]
-  firrtl.hierpath private @nla_2 [@NLAUsedInWiring::@foo, @Foo::@g]
+  hw.hierpath private @nla_1 [@NLAUsedInWiring::@foo, @Foo::@f]
+  hw.hierpath private @nla_2 [@NLAUsedInWiring::@foo, @Foo::@g]
 
   // CHECK-LABEL: firrtl.module private @DataTap
   // CHECK-NEXT: [[TMP:%.+]] = firrtl.verbatim.expr
@@ -493,18 +493,18 @@ firrtl.circuit "NLAUsedInWiring"  {
 // See https://github.com/llvm/circt/issues/2767.
 
 firrtl.circuit "Top" {
-  firrtl.hierpath private @nla_0 [@DUT::@submodule_1, @Submodule::@bar_0]
-  firrtl.hierpath private @nla [@DUT::@submodule_2, @Submodule::@bar_0]
+  hw.hierpath private @nla_0 [@DUT::@submodule_1, @Submodule::@bar_0]
+  hw.hierpath private @nla [@DUT::@submodule_2, @Submodule::@bar_0]
   firrtl.module private @Submodule(in %clock: !firrtl.clock, out %out: !firrtl.uint<1>) {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %bar_0 = firrtl.reg sym @bar_0 %clock  {annotations = [{circt.nonlocal = @nla, class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 1 : i64, portID = 0 : i64}, {circt.nonlocal = @nla_0, class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 0 : i64, portID = 0 : i64}]} : !firrtl.uint<1>
     // CHECK:  %bar_0 = firrtl.reg sym @[[bar_0:.+]] %clock  : !firrtl.uint<1>
     %bar_out_MPORT = firrtl.mem sym @bar Undefined  {depth = 1 : i64, modName = "bar_ext", name = "bar", portNames = ["out_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-    %0 = firrtl.subfield %bar_out_MPORT(0) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
-    %1 = firrtl.subfield %bar_out_MPORT(1) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
-    %2 = firrtl.subfield %bar_out_MPORT(2) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.clock
-    %3 = firrtl.subfield %bar_out_MPORT(3) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
+    %0 = firrtl.subfield %bar_out_MPORT[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    %1 = firrtl.subfield %bar_out_MPORT[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    %2 = firrtl.subfield %bar_out_MPORT[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    %3 = firrtl.subfield %bar_out_MPORT[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
     firrtl.strictconnect %0, %c0_ui1 : !firrtl.uint<1>
     firrtl.strictconnect %1, %c1_ui1 : !firrtl.uint<1>
     firrtl.strictconnect %2, %clock : !firrtl.clock

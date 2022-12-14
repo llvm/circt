@@ -84,8 +84,8 @@ struct ExtractInstancesPass
   }
 
   /// Create a clone of a `HierPathOp` with a new uniquified name.
-  HierPathOp cloneWithNewNameAndPath(HierPathOp pathOp,
-                                     ArrayRef<Attribute> newPath) {
+  hw::HierPathOp cloneWithNewNameAndPath(hw::HierPathOp pathOp,
+                                         ArrayRef<Attribute> newPath) {
     OpBuilder builder(pathOp);
     auto newPathOp = builder.cloneWithoutRegions(pathOp);
     newPathOp.setSymNameAttr(builder.getStringAttr(
@@ -436,7 +436,7 @@ void ExtractInstancesPass::collectAnno(InstanceOp inst, Annotation anno) {
 /// mentioning exactly the instance, or the instance's parent module). Returns a
 /// position within the NLA's path, or the length of the path if the instances
 /// was not found.
-static unsigned findInstanceInNLA(InstanceOp inst, HierPathOp nla) {
+static unsigned findInstanceInNLA(InstanceOp inst, hw::HierPathOp nla) {
   unsigned nlaLen = nla.getNamepath().size();
   auto instName = getInnerSymName(inst);
   auto parentName = cast<FModuleOp>(inst->getParentOp()).moduleNameAttr();
@@ -539,20 +539,20 @@ void ExtractInstancesPass::extractInstances() {
           parent.getArgument(numParentPorts + portIdx));
     }
     assert(inst.use_empty() && "instance ports should have been detached");
-    DenseSet<HierPathOp> instanceNLAs;
+    DenseSet<hw::HierPathOp> instanceNLAs;
     // Get the NLAs that pass through the InstanceOp `inst`.
     // This does not returns NLAs that have the `inst` as the leaf.
     nlaTable.getInstanceNLAs(inst, instanceNLAs);
     // Map of the NLAs, that are applied to the InstanceOp. That is the NLA
     // terminates on the InstanceOp.
-    DenseMap<HierPathOp, SmallVector<Annotation>> instNonlocalAnnos;
+    DenseMap<hw::HierPathOp, SmallVector<Annotation>> instNonlocalAnnos;
     AnnotationSet::removeAnnotations(inst, [&](Annotation anno) {
       // Only consider annotations with a `circt.nonlocal` field.
       auto nlaName = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
       if (!nlaName)
         return false;
       // Track the NLA.
-      if (HierPathOp nla = nlaTable.getNLA(nlaName.getAttr())) {
+      if (hw::HierPathOp nla = nlaTable.getNLA(nlaName.getAttr())) {
         instNonlocalAnnos[nla].push_back(anno);
         instanceNLAs.insert(nla);
       }
@@ -561,8 +561,8 @@ void ExtractInstancesPass::extractInstances() {
 
     // Sort the instance NLAs we've collected by the NLA name to have a
     // deterministic output.
-    SmallVector<HierPathOp> sortedInstanceNLAs(instanceNLAs.begin(),
-                                               instanceNLAs.end());
+    SmallVector<hw::HierPathOp> sortedInstanceNLAs(instanceNLAs.begin(),
+                                                   instanceNLAs.end());
     llvm::sort(sortedInstanceNLAs,
                [](auto a, auto b) { return a.getSymName() < b.getSymName(); });
 
@@ -877,7 +877,7 @@ void ExtractInstancesPass::groupInstances() {
       }
 
       // Set of NLAs that have a reference to this InstanceOp `inst`.
-      DenseSet<HierPathOp> instNlas;
+      DenseSet<hw::HierPathOp> instNlas;
       // Get the NLAs that pass through the `inst`, and not end at it.
       nlaTable.getInstanceNLAs(inst, instNlas);
       AnnotationSet instAnnos(inst);
@@ -887,7 +887,7 @@ void ExtractInstancesPass::groupInstances() {
         auto nlaName = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
         if (!nlaName)
           continue;
-        HierPathOp nla = nlaTable.getNLA(nlaName.getAttr());
+        hw::HierPathOp nla = nlaTable.getNLA(nlaName.getAttr());
         if (nla)
           instNlas.insert(nla);
       }

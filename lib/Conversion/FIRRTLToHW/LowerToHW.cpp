@@ -574,7 +574,7 @@ void FIRRTLModuleLowering::runOnOperation() {
             return signalPassFailure();
           state.oldToNewModuleMap[&op] = loweredMod;
         })
-        .Case<HierPathOp>([&](auto nla) {
+        .Case<hw::HierPathOp>([&](auto nla) {
           // Just drop it.
         })
         .Default([&](Operation *op) {
@@ -953,8 +953,7 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
                             "not support per field symbols yet.");
         return failure();
       }
-    hwPort.sym = firrtlPort.sym ? firrtlPort.sym.getSymName()
-                                : StringAttr::get(moduleOp->getContext(), "");
+    hwPort.sym = firrtlPort.sym;
 
     // We can't lower all types, so make sure to cleanly reject them.
     if (!hwPort.type) {
@@ -965,7 +964,7 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
     // If this is a zero bit port, just drop it.  It doesn't matter if it is
     // input, output, or inout.  We don't want these at the HW level.
     if (hwPort.type.isInteger(0)) {
-      if (hwPort.sym && hwPort.sym.size()) {
+      if (hwPort.sym && !hwPort.sym.empty()) {
         moduleOp->emitError("zero width port ")
             << hwPort.name << " is referenced by name [" << hwPort.sym
             << "] (e.g. in an XMR).";
@@ -1609,7 +1608,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   }
 
   // Verif Operations
-  LogicalResult visitExpr(IsXVerifOp op);
+  LogicalResult visitExpr(IsXIntrinsicOp op);
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
@@ -3370,7 +3369,7 @@ LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
 // Verif Operations
 //===----------------------------------------------------------------------===//
 
-LogicalResult FIRRTLLowering::visitExpr(IsXVerifOp op) {
+LogicalResult FIRRTLLowering::visitExpr(IsXIntrinsicOp op) {
   auto input = getLoweredValue(op.getArg());
   if (!input)
     return failure();

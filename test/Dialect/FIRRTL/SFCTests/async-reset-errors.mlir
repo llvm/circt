@@ -9,7 +9,7 @@ firrtl.circuit "Foo" {
   firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %v: !firrtl.uint<8>) {
     // Constant check should see through subfield connects.
     %bundle0 = firrtl.wire : !firrtl.bundle<a: uint<8>>
-    %bundle0.a = firrtl.subfield %bundle0(0) : (!firrtl.bundle<a: uint<8>>) -> !firrtl.uint<8>
+    %bundle0.a = firrtl.subfield %bundle0[0] : !firrtl.bundle<a: uint<8>>
     firrtl.connect %bundle0.a, %v : !firrtl.uint<8>, !firrtl.uint<8>
     // expected-error @+2 {{register with async reset requires constant reset value}}
     // expected-error @+1 {{'firrtl.regreset' op LowerToHW couldn't handle this operation}}
@@ -24,7 +24,7 @@ firrtl.circuit "Foo" {
   firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %v: !firrtl.uint<8>) {
     // Constant check should see through multiple connect hops.
     %bundle0 = firrtl.wire : !firrtl.bundle<a: uint<8>>
-    %bundle0.a = firrtl.subfield %bundle0(0) : (!firrtl.bundle<a: uint<8>>) -> !firrtl.uint<8>
+    %bundle0.a = firrtl.subfield %bundle0[0] : !firrtl.bundle<a: uint<8>>
     firrtl.connect %bundle0.a, %v : !firrtl.uint<8>, !firrtl.uint<8>
     %bundle1 = firrtl.wire : !firrtl.bundle<a: uint<8>>
     firrtl.connect %bundle1, %bundle0 : !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint<8>>

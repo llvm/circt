@@ -35,7 +35,11 @@ def FuncOp : Op<Handshake_Dialect, "func", [
     only have a single use.
   }];
 
-  let arguments = (ins);
+  let arguments = (ins
+    TypeAttrOf<FunctionType>:$function_type,
+    OptionalAttr<DictArrayAttr>:$arg_attrs,
+    OptionalAttr<DictArrayAttr>:$res_attrs
+  );
   let results = (outs);
   let regions = (region AnyRegion : $body);
 
@@ -49,11 +53,6 @@ def FuncOp : Op<Handshake_Dialect, "func", [
     // Add an entry block to an empty function, and set up the block arguments
     // to match the signature of the function.
     Block *addEntryBlock();
-
-    /// Returns the type of this function.
-    FunctionType getFunctionType() {
-      return getFunctionTypeAttr().getValue().cast<FunctionType>();
-    }
 
     /// Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
@@ -97,7 +96,7 @@ def FuncOp : Op<Handshake_Dialect, "func", [
       auto type = getFunctionTypeAttr().getValue();
       if (!type.isa<FunctionType>())
         return emitOpError(
-            "requires '" + mlir::function_interface_impl::getTypeAttrName() +
+            "requires '" + getFunctionTypeAttrName().getValue() +
             "' attribute of function type");
       return success();
     }

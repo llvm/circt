@@ -35,6 +35,24 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       ArrayRef<unsigned> eraseOutputs
     );
   }];
+
+  /// Additional class definitions inside the module op.
+  code extraModuleClassDefinition = [{}];
+
+  let extraClassDefinition = extraModuleClassDefinition # [{
+    size_t $cppClass::getNumPorts() {
+      return getAllPorts().size();
+    }
+
+    ::circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
+      for (::mlir::NamedAttribute argAttr :
+           ::mlir::function_interface_impl::getArgAttrs(*this, portIndex))
+        if (auto sym = argAttr.getValue().dyn_cast<::circt::hw::InnerSymAttr>())
+          return sym;
+      return ::circt::hw::InnerSymAttr();
+    }
+  }];
+
 }
 
 def HWModuleOp : HWModuleOpBase<"module",
@@ -46,7 +64,10 @@ def HWModuleOp : HWModuleOpBase<"module",
     name, a list of ports, a list of parameters, and a body that represents the
     connections within the module.
   }];
-  let arguments = (ins StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+  let arguments = (ins TypeAttrOf<FunctionType>:$function_type,
+                       OptionalAttr<DictArrayAttr>:$arg_attrs,
+                       OptionalAttr<DictArrayAttr>:$res_attrs,
+                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
                        StrAttr:$comment);
   let results = (outs);
@@ -178,11 +199,6 @@ def HWModuleOp : HWModuleOpBase<"module",
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-    /// Returns the type of this function.
-    FunctionType getFunctionType() {
-      return getFunctionTypeAttr().getValue().cast<FunctionType>();
-    }
-
     /// Returns the argument types of this function.
     ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
@@ -194,7 +210,7 @@ def HWModuleOp : HWModuleOpBase<"module",
     LogicalResult verifyType() {
       auto type = getFunctionTypeAttr().getValue();
       if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getTypeAttrName() +
+        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
                            "' attribute of function type");
       return success();
     }
@@ -218,7 +234,10 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
     have proper parameterization in the hw.dialect.  We need a way to represent
     parameterized types instead of just concrete types.
   }];
-  let arguments = (ins StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+  let arguments = (ins TypeAttrOf<FunctionType>:$function_type,
+		       OptionalAttr<DictArrayAttr>:$arg_attrs,
+                       OptionalAttr<DictArrayAttr>:$res_attrs,
+                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
@@ -283,11 +302,6 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-    /// Returns the type of this function.
-    FunctionType getFunctionType() {
-      return getFunctionTypeAttr().getValue().cast<FunctionType>();
-    }
-
     /// Returns the argument types of this function.
     ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
@@ -299,7 +313,7 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
     LogicalResult verifyType() {
       auto type = getFunctionTypeAttr().getValue();
       if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getTypeAttrName() +
+        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
                            "' attribute of function type");
       return success();
     }
@@ -345,6 +359,9 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
     module name in Verilog we can use.  See hw.module for an explanation.
   }];
   let arguments = (ins FlatSymbolRefAttr:$generatorKind,
+                       TypeAttrOf<FunctionType>:$function_type,
+		       OptionalAttr<DictArrayAttr>:$arg_attrs,
+                       OptionalAttr<DictArrayAttr>:$res_attrs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
@@ -395,11 +412,6 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-    /// Returns the type of this function.
-    FunctionType getFunctionType() {
-      return getFunctionTypeAttr().getValue().cast<FunctionType>();
-    }
-
     /// Returns the argument types of this function.
     ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
@@ -411,7 +423,7 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
     LogicalResult verifyType() {
       auto type = getFunctionTypeAttr().getValue();
       if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getTypeAttrName() +
+        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
                            "' attribute of function type");
       return success();
     }
@@ -564,4 +576,79 @@ def ProbeOp : HWOp<"probe", []> {
     $inner_sym attr-dict (`,` $captured^ `:` qualified(type($captured)))?
   }];
 
+}
+
+def HierPathOp : HWOp<"hierpath",
+      [IsolatedFromAbove, Symbol,
+       DeclareOpInterfaceMethods<InnerRefUserOpInterface>]> {
+  let summary = "Hierarchical path specification";
+  let description = [{
+    The "hw.hierpath" operation represents a path through the hierarchy.
+    This is used to specify namable things for use in other operations, for
+    example in verbatim substitution. Non-local annotations also use these.
+  }];
+  let arguments = (ins SymbolNameAttr:$sym_name, NameRefArrayAttr:$namepath);
+  let results = (outs);
+  let hasCustomAssemblyFormat = 1;
+  let extraClassDeclaration = [{
+    /// Drop the module from the namepath. If its a InnerNameRef, then drop
+    /// the Module-Instance pair, else drop the final module from the namepath.
+    /// Return true if any update is made.
+    bool dropModule(StringAttr moduleToDrop);
+
+    /// Inline the module in the namepath.
+    /// Update the symbol name for the inlined module instance, by prepending
+    /// the symbol name of the instance at which the inling was done.
+    /// Return true if any update is made.
+    bool inlineModule(StringAttr moduleToDrop);
+
+    /// Replace the oldMod module with newMod module in the namepath of the NLA.
+    /// Return true if any update is made.
+    bool updateModule(StringAttr oldMod, StringAttr newMod);
+
+    /// Replace the oldMod module with newMod module in the namepath of the NLA.
+    /// Since the module is being updated, the symbols inside the module should
+    /// also be renamed. Use the rename Map to update the corresponding
+    /// inner_sym names in the namepath. Return true if any update is made.
+    bool updateModuleAndInnerRef(StringAttr oldMod, StringAttr newMod,
+         const llvm::DenseMap<StringAttr, StringAttr> &innerSymRenameMap);
+
+    /// Truncate the namepath for this NLA, at atMod module.
+    /// If includeMod is false, drop atMod and beyond, else include it and drop
+    /// everything after it.
+    /// Return true if any update is made.
+    bool truncateAtModule(StringAttr atMod, bool includeMod = true);
+
+    /// Return just the module part of the namepath at a specific index.
+    StringAttr modPart(unsigned i);
+
+    /// Return the root module.
+    StringAttr root();
+
+    /// Return just the reference part of the namepath at a specific index.
+    /// This will return an empty attribute if this is the leaf and the leaf is
+    /// a module.
+    StringAttr refPart(unsigned i);
+
+    /// Return the leaf reference.  This returns an empty attribute if the leaf
+    /// reference is a module.
+    StringAttr ref();
+
+    /// Return the leaf Module.
+    StringAttr leafMod();
+
+    /// Returns true, if the NLA path contains the module.
+    bool hasModule(StringAttr modName);
+
+    /// Returns true, if the NLA path contains the InnerSym {modName, symName}.
+    bool hasInnerSym(StringAttr modName, StringAttr symName) const;
+
+    /// Returns true if this NLA targets a module or instance of a module (as
+    /// opposed to an instance's port or something inside an instance).
+    bool isModule();
+
+    /// Returns true if this NLA targets something inside a module (as opposed
+    /// to a module or an instance of a module);
+    bool isComponent();
+    }];
 }

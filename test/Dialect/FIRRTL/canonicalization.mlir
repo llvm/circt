@@ -698,7 +698,7 @@ firrtl.module @subfield(out %out : !firrtl.uint<8>) {
   // CHECK: %c8_ui8 = firrtl.constant 8 : !firrtl.uint<8>
   // CHECK: firrtl.strictconnect %out, %c8_ui8 : !firrtl.uint<8>
   %0 = firrtl.aggregateconstant [8 : ui8] : !firrtl.bundle<a: uint<8>>
-  %1 = firrtl.subfield %0(0) : (!firrtl.bundle<a: uint<8>>) -> !firrtl.uint<8>
+  %1 = firrtl.subfield %0[a] : !firrtl.bundle<a: uint<8>>
   firrtl.strictconnect %out, %1 : !firrtl.uint<8>
 }
 
@@ -707,7 +707,7 @@ firrtl.module @subfield_agg(out %out : !firrtl.vector<uint<8>, 1>) {
   // CHECK: %0 = firrtl.aggregateconstant [8 : ui8] : !firrtl.vector<uint<8>, 1>
   // CHECK: firrtl.strictconnect %out, %0 : !firrtl.vector<uint<8>, 1>
   %0 = firrtl.aggregateconstant [[8 : ui8]] : !firrtl.bundle<a: vector<uint<8>, 1>>
-  %1 = firrtl.subfield %0(0) : (!firrtl.bundle<a: vector<uint<8>, 1>>) -> !firrtl.vector<uint<8>, 1>
+  %1 = firrtl.subfield %0[a] : !firrtl.bundle<a: vector<uint<8>, 1>>
   firrtl.strictconnect %out, %1 : !firrtl.vector<uint<8>, 1>
 }
 
@@ -2174,8 +2174,8 @@ firrtl.module @BitCast(out %o:!firrtl.bundle<valid: uint<1>, ready: uint<1>, dat
 // CHECK-LABEL: firrtl.module @MergeBundle
 firrtl.module @MergeBundle(out %o:!firrtl.bundle<valid: uint<1>, ready: uint<1>>, in %i:!firrtl.uint<1> ) {
   %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
-  %a0 = firrtl.subfield %a(0) : (!firrtl.bundle<valid: uint<1>, ready: uint<1>>) -> !firrtl.uint<1>
-  %a1 = firrtl.subfield %a(1) : (!firrtl.bundle<valid: uint<1>, ready: uint<1>>) -> !firrtl.uint<1>
+  %a0 = firrtl.subfield %a[valid] : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
+  %a1 = firrtl.subfield %a[ready] : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
   firrtl.strictconnect %a0, %i : !firrtl.uint<1>
   firrtl.strictconnect %a1, %i : !firrtl.uint<1>
   firrtl.strictconnect %o, %a : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
@@ -2206,12 +2206,12 @@ firrtl.module @MergeAgg(out %o: !firrtl.vector<bundle<valid: uint<1>, ready: uin
   %a0 = firrtl.subindex %a[0] : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
   %a1 = firrtl.subindex %a[1] : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
   %a2 = firrtl.subindex %a[2] : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
-  %a00 = firrtl.subfield %a0(0) : (!firrtl.bundle<valid: uint<1>, ready: uint<1>>) -> !firrtl.uint<1>
-  %a01 = firrtl.subfield %a0(1) : (!firrtl.bundle<valid: uint<1>, ready: uint<1>>) -> !firrtl.uint<1>
-  %a10 = firrtl.subfield %a1(0) : (!firrtl.bundle<valid: uint<1>, ready: uint<1>>) -> !firrtl.uint<1>
-  %a11 = firrtl.subfield %a1(1) : (!firrtl.bundle<valid: uint<1>, ready: uint<1>>) -> !firrtl.uint<1>
-  %a20 = firrtl.subfield %a2(0) : (!firrtl.bundle<valid: uint<1>, ready: uint<1>>) -> !firrtl.uint<1>
-  %a21 = firrtl.subfield %a2(1) : (!firrtl.bundle<valid: uint<1>, ready: uint<1>>) -> !firrtl.uint<1>
+  %a00 = firrtl.subfield %a0[valid] : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
+  %a01 = firrtl.subfield %a0[ready] : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
+  %a10 = firrtl.subfield %a1[valid] : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
+  %a11 = firrtl.subfield %a1[ready] : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
+  %a20 = firrtl.subfield %a2[valid] : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
+  %a21 = firrtl.subfield %a2[ready] : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
   firrtl.strictconnect %a00, %c : !firrtl.uint<1>
   firrtl.strictconnect %a01, %c : !firrtl.uint<1>
   firrtl.strictconnect %a10, %c : !firrtl.uint<1>
@@ -2488,7 +2488,7 @@ firrtl.module @AnnotationsBlockRemoval(
 }
 
 // CHECK-LABEL: firrtl.module @Verification
-firrtl.module @Verification(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>) {
+firrtl.module @Verification(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>, out %o : !firrtl.uint<1>) {
   %c0 = firrtl.constant 0 : !firrtl.uint<1>
   %c1 = firrtl.constant 1 : !firrtl.uint<1>
 
@@ -2507,6 +2507,10 @@ firrtl.module @Verification(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>) {
   firrtl.assume %clock, %c1, %p, "assume1"
   // CHECK-NOT: firrtl.cover
   firrtl.cover %clock, %c0, %p, "cover0"
+
+  // CHECK-NOT: firrtl.int.isX
+  %x = firrtl.int.isX %c0 : !firrtl.uint<1>
+  firrtl.strictconnect %o, %x : !firrtl.uint<1>
 }
 
 // COMMON-LABEL:  firrtl.module @MultibitMux
@@ -2535,7 +2539,7 @@ firrtl.module @NameProp(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out 
 firrtl.module @CrashAllUnusedPorts() {
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   %foo, %bar = firrtl.mem  Undefined  {depth = 3 : i64, groupID = 4 : ui32, name = "whatever", portNames = ["MPORT_1", "MPORT_5"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<2>, mask: uint<1>>, !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<2>>
-  %26 = firrtl.subfield %foo(1) : (!firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<2>, mask: uint<1>>) -> !firrtl.uint<1>
+  %26 = firrtl.subfield %foo[en] : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<2>, mask: uint<1>>
   firrtl.strictconnect %26, %c0_ui1 : !firrtl.uint<1>
 }
 

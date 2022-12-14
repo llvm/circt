@@ -230,7 +230,7 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
         }
       }
       // Now get the NLAs that pass through the InstanceOp and update them also.
-      DenseSet<HierPathOp> instNLAs;
+      DenseSet<hw::HierPathOp> instNLAs;
       nlaTable->getInstanceNLAs(instanceOp, instNLAs);
       for (auto nla : instNLAs)
         nlaTable->updateModuleInNLA(nla, oldModName, newTarget);
@@ -268,7 +268,7 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
   auto &firstPrefix = prefixes.front();
 
   auto fixNLAsRootedAt = [&](StringAttr oldModName, StringAttr newModuleName) {
-    DenseSet<HierPathOp> nlas;
+    DenseSet<hw::HierPathOp> nlas;
     nlaTable->getNLAsInModule(oldModName, nlas);
     for (auto n : nlas)
       if (n.root() == oldModName)

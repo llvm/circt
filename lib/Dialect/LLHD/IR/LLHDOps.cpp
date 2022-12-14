@@ -408,9 +408,10 @@ ParseResult llhd::EntityOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
 
-  auto type = parser.getBuilder().getFunctionType(argTypes, llvm::None);
-  result.addAttribute(circt::llhd::EntityOp::getTypeAttrName(),
-                      TypeAttr::get(type));
+  auto type = parser.getBuilder().getFunctionType(argTypes, std::nullopt);
+  result.addAttribute(
+      circt::llhd::EntityOp::getFunctionTypeAttrName(result.name),
+      TypeAttr::get(type));
 
   auto &body = *result.addRegion();
   if (parser.parseRegion(body, args))
@@ -455,7 +456,7 @@ void llhd::EntityOp::print(OpAsmPrinter &printer) {
   printer.printOptionalAttrDictWithKeyword(
       (*this)->getAttrs(),
       /*elidedAttrs =*/{SymbolTable::getSymbolAttrName(),
-                        llhd::EntityOp::getTypeAttrName(), "ins"});
+                        getFunctionTypeAttrName(), "ins"});
   printer << " ";
   printer.printRegion(getBody(), false, false);
 }
@@ -654,8 +655,8 @@ ParseResult llhd::ProcOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parseProcArgumentList(parser, argTypes, argNames))
     return failure();
 
-  auto type = builder.getFunctionType(argTypes, llvm::None);
-  result.addAttribute(circt::llhd::ProcOp::getTypeAttrName(),
+  auto type = builder.getFunctionType(argTypes, std::nullopt);
+  result.addAttribute(circt::llhd::ProcOp::getFunctionTypeAttrName(result.name),
                       TypeAttr::get(type));
 
   auto *body = result.addRegion();

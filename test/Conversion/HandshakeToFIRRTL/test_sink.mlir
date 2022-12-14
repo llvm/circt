@@ -3,7 +3,7 @@
 
 // CHECK-LABEL:   firrtl.circuit "test_sink"   {
 // CHECK:           firrtl.module @handshake_sink_in_ui64(in %[[VAL_0:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) {
-// CHECK:             %[[VAL_1:.*]] = firrtl.subfield %[[VAL_0]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
+// CHECK:             %[[VAL_1:.*]] = firrtl.subfield %[[VAL_0]][ready] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
 // CHECK:             %[[VAL_2:.*]] = firrtl.constant 1 : !firrtl.uint<1>
 // CHECK:             firrtl.connect %[[VAL_1]], %[[VAL_2]] : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:           }

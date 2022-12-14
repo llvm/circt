@@ -30,4 +30,18 @@ firrtl.module @Wire() {
   firrtl.connect %w1, %w2 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
+// Invalids do not CSE
+// CHECK-LABEL: firrtl.module @Invalid
+firrtl.module @Invalid(in %cond: !firrtl.uint<1>,
+                   out %out: !firrtl.uint<4>) {
+  // CHECK: invalid_ui4
+  %invalid1_ui4 = firrtl.invalidvalue : !firrtl.uint<4>
+  // CHECK-NEXT: invalid_ui4_0
+  %invalid2_ui4 = firrtl.invalidvalue : !firrtl.uint<4>
+  %7 = firrtl.mux (%cond, %invalid1_ui4, %invalid2_ui4) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.connect %out, %7 : !firrtl.uint<4>, !firrtl.uint<4>
+
+}
+
+
 }

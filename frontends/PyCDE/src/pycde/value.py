@@ -249,6 +249,7 @@ class BitVectorValue(PyCDEValue):
 
   @staticmethod
   def concat(items: List[BitVectorValue]):
+    """Concatenate a list of bitvectors into one larger bitvector."""
     from .dialects import comb
     return comb.ConcatOp(*items)
 

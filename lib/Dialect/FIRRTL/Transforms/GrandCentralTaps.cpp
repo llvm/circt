@@ -112,7 +112,7 @@ struct PortWiring {
   /// If set, the port should output a constant literal.
   Literal literal;
   /// The non-local anchor further specifying where to connect.
-  HierPathOp nla;
+  hw::HierPathOp nla;
   /// True if the tapped target is known to be zero-width.  This indicates that
   /// the port should not be wired.  The port will be removed by LowerToHW.
   bool zeroWidth = false;
@@ -387,7 +387,7 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
     if (!wirePathStr.empty())
       if (!tokenizePath(wirePathStr))
         wirePathStr.clear();
-    Optional<AnnoPathValue> wireTarget = None;
+    Optional<AnnoPathValue> wireTarget = std::nullopt;
     if (!wirePathStr.empty())
       wireTarget = resolvePath(wirePathStr, state.circuit, state.symTbl,
                                state.targetCaches);
@@ -403,7 +403,7 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
     // Extract the name of the wire, used for datatap.
     auto tapName = StringAttr::get(
         context, wirePathStr.substr(wirePathStr.find_last_of('>') + 1));
-    Optional<AnnoPathValue> srcTarget = None;
+    Optional<AnnoPathValue> srcTarget = std::nullopt;
     Value sendVal;
     if (classAttr.getValue() == internalKeyClass) {
       // For DataTapModuleSignalKey, the source is encoded as a string, that
@@ -926,8 +926,8 @@ void GrandCentralTapsPass::runOnOperation() {
   LLVM_DEBUG(llvm::dbgs() << "Running the GCT Data Taps pass\n");
   SymbolTable symtbl(circuitOp);
   circuitSymbols = &symtbl;
-  InnerSymbolTableCollection innerSymTblCol(circuitOp);
-  InnerRefNamespace innerRefNS{symtbl, innerSymTblCol};
+  hw::InnerSymbolTableCollection innerSymTblCol(circuitOp);
+  hw::InnerRefNamespace innerRefNS{symtbl, innerSymTblCol};
 
   // Here's a rough idea of what the Scala code is doing:
   // - Gather the `source` of all `keys` of all `DataTapsAnnotation`s throughout
@@ -1369,9 +1369,9 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   // path. During wiring of the ports, we generate hierarchical names of the
   // form `<prefix>.<nla-path>.<suffix>`. If we don't have an NLA, we leave it
   // to the key-class-specific code below to come up with the possible prefices.
-  HierPathOp nla;
+  hw::HierPathOp nla;
   if (auto nlaSym = targetAnno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-    nla = dyn_cast<HierPathOp>(circuitSymbols->lookup(nlaSym.getAttr()));
+    nla = dyn_cast<hw::HierPathOp>(circuitSymbols->lookup(nlaSym.getAttr()));
     assert(nla);
     // Find all paths to the root of the NLA.
     Operation *root = circuitSymbols->lookup(nla.root());

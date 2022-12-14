@@ -880,7 +880,7 @@ This is parsed into the following MLIR.  Here, only `a.a` is invalidated:
 
 ``` mlir
 firrtl.module @Foo(out %a: !firrtl.bundle<a: uint<1>, b: flip<uint<1>>>) {
-  %0 = firrtl.subfield %a("a") : (!firrtl.bundle<a: uint<1>, b: flip<uint<1>>>) -> !firrtl.uint<1>
+  %0 = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<1>, b: flip<uint<1>>>
   %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
   firrtl.connect %0, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
@@ -1064,3 +1064,17 @@ b <= mux(cond, a, inv)
 
 It follows that interpretation (4) will then convert the false leg of the `mux`
 to a constant zero.
+
+## Intrinsics
+
+Intrinsics are implementation-defined constructs.  Intrinsics provide a way to 
+extend the system with funcitonality without changing the langauge.  They form
+an implementation-specific built-in library.  Unlike traditional libraries,
+implementations of intrinsics have access to internals of the compiler, allowing
+them to implement features not possible in the language.
+
+In FIRRTL, we support intrinsic modules.   The internal op is `firrtl.intmodule` 
+which has all the properties of an external module.  Until the firrtl spec
+supports intrinsics, intrinsic modules are expressed in firrtl as external 
+modules with the `circt.intrinsic` annotation on the module.
+

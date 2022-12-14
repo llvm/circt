@@ -13,19 +13,19 @@ firrtl.circuit "Test"   {
   firrtl.module @Test(in %a: !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>, out %b: !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>) {
      %0 = firrtl.subindex %a[0] : !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>
      %1 = firrtl.subindex %b[0] : !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>
-     %2 = firrtl.subfield %0(0) : (!firrtl.bundle<clock: clock, valid: uint<1>>) -> !firrtl.clock
-     %3 = firrtl.subfield %1(0) : (!firrtl.bundle<clock: clock, valid: uint<1>>) -> !firrtl.clock
+     %2 = firrtl.subfield %0[clock] : !firrtl.bundle<clock: clock, valid: uint<1>>
+     %3 = firrtl.subfield %1[clock] : !firrtl.bundle<clock: clock, valid: uint<1>>
      firrtl.strictconnect %3, %2 : !firrtl.clock
-     %4 = firrtl.subfield %0(1) : (!firrtl.bundle<clock: clock, valid: uint<1>>) -> !firrtl.uint<1>
-     %5 = firrtl.subfield %1(1) : (!firrtl.bundle<clock: clock, valid: uint<1>>) -> !firrtl.uint<1>
+     %4 = firrtl.subfield %0[valid] : !firrtl.bundle<clock: clock, valid: uint<1>>
+     %5 = firrtl.subfield %1[valid] : !firrtl.bundle<clock: clock, valid: uint<1>>
      firrtl.strictconnect %5, %4 : !firrtl.uint<1>
      %6 = firrtl.subindex %a[1] : !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>
      %7 = firrtl.subindex %b[1] : !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>
-     %8 = firrtl.subfield %6(0) : (!firrtl.bundle<clock: clock, valid: uint<1>>) -> !firrtl.clock
-     %9 = firrtl.subfield %7(0) : (!firrtl.bundle<clock: clock, valid: uint<1>>) -> !firrtl.clock
+     %8 = firrtl.subfield %6[clock] : !firrtl.bundle<clock: clock, valid: uint<1>>
+     %9 = firrtl.subfield %7[clock] : !firrtl.bundle<clock: clock, valid: uint<1>>
      firrtl.strictconnect %9, %8 : !firrtl.clock
-     %10 = firrtl.subfield %6(1) : (!firrtl.bundle<clock: clock, valid: uint<1>>) -> !firrtl.uint<1>
-     %11 = firrtl.subfield %7(1) : (!firrtl.bundle<clock: clock, valid: uint<1>>) -> !firrtl.uint<1>
+     %10 = firrtl.subfield %6[valid] : !firrtl.bundle<clock: clock, valid: uint<1>>
+     %11 = firrtl.subfield %7[valid] : !firrtl.bundle<clock: clock, valid: uint<1>>
      firrtl.strictconnect %11, %10 : !firrtl.uint<1>
   }
 
@@ -41,8 +41,8 @@ firrtl.circuit "Test"   {
   firrtl.module @Constant(out %a: !firrtl.bundle<b: uint<1>, c: uint<1>>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    %0 = firrtl.subfield %a(0) : (!firrtl.bundle<b: uint<1>, c: uint<1>>) -> !firrtl.uint<1>
-    %1 = firrtl.subfield %a(1) : (!firrtl.bundle<b: uint<1>, c: uint<1>>) -> !firrtl.uint<1>
+    %0 = firrtl.subfield %a[b] : !firrtl.bundle<b: uint<1>, c: uint<1>>
+    %1 = firrtl.subfield %a[c] : !firrtl.bundle<b: uint<1>, c: uint<1>>
     firrtl.strictconnect %0, %c0_ui1 : !firrtl.uint<1>
     firrtl.strictconnect %1, %c1_ui1 : !firrtl.uint<1>
   }

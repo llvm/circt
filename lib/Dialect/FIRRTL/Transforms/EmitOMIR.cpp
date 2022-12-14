@@ -47,7 +47,7 @@ struct Tracker {
   /// The operation onto which this tracker was annotated.
   Operation *op;
   /// If this tracker is non-local, this is the corresponding anchor.
-  HierPathOp nla;
+  hw::HierPathOp nla;
   /// If this is a port, then set the portIdx, else initialized to -1.
   int portNo = -1;
   /// If this is a field, the ID will be greater than 0, else it will be 0.
@@ -142,7 +142,7 @@ private:
   SmallDenseMap<Attribute, unsigned> symbolIndices;
   /// Temporary `firrtl.hierpath` operations to be deleted at the end of the
   /// pass. Vector elements are unique.
-  SmallVector<HierPathOp> removeTempNLAs;
+  SmallVector<hw::HierPathOp> removeTempNLAs;
   DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
   /// Lookup table of instances by name and parent module.
   DenseMap<hw::InnerRefAttr, InstanceOp> instancesByName;
@@ -279,7 +279,7 @@ static Optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
                  "serialization format that does NOT use a string-encoded type";
           diag.attachNote()
               << "the problematic OMIR is reproduced here: " << original;
-          return None;
+          return std::nullopt;
         }
 
         // This is a catch-all for any unknown types.
@@ -289,7 +289,7 @@ static Optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
                        "Model OMIR type?)";
         diag.attachNote() << "the problematic OMIR is reproduced here: "
                           << original;
-        return None;
+        return std::nullopt;
       })
       // For an array, just recurse into each element and rewrite the array with
       // the results.
@@ -298,7 +298,7 @@ static Optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
         for (auto element : arr) {
           auto newElement = scatterOMIR(element, state);
           if (!newElement)
-            return None;
+            return std::nullopt;
           newArr.push_back(*newElement);
         }
         return ArrayAttr::get(ctx, newArr);
@@ -310,7 +310,7 @@ static Optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
         for (auto pairs : dict) {
           auto maybeValue = scatterOMIR(pairs.getValue(), state);
           if (!maybeValue)
-            return None;
+            return std::nullopt;
           newAttrs.append(pairs.getName(), *maybeValue);
         }
         return DictionaryAttr::get(ctx, newAttrs);
@@ -326,7 +326,7 @@ static Optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
         auto diag = mlir::emitError(state.circuit.getLoc())
                     << "found unexpected MLIR attribute \"" << original
                     << "\" while trying to scatter OMIR";
-        return None;
+        return std::nullopt;
       });
 }
 
@@ -357,7 +357,7 @@ scatterOMField(Attribute original, const Attribute root, unsigned index,
   if (!dict) {
     llvm::errs() << "OMField is not a dictionary, but should be: " << original
                  << "\n";
-    return None;
+    return std::nullopt;
   }
 
   auto loc = state.circuit.getLoc();
@@ -371,7 +371,7 @@ scatterOMField(Attribute original, const Attribute root, unsigned index,
   // Convert location from a string to a location attribute.
   auto infoAttr = tryGetAs<StringAttr>(dict, root, "info", loc, omirAnnoClass);
   if (!infoAttr)
-    return None;
+    return std::nullopt;
   auto maybeLoc =
       maybeStringToLocation(infoAttr.getValue(), false, locatorFilenameCache,
                             fileLineColLocCache, ctx);
@@ -384,15 +384,15 @@ scatterOMField(Attribute original, const Attribute root, unsigned index,
   // Extract the name attribute.
   auto nameAttr = tryGetAs<StringAttr>(dict, root, "name", loc, omirAnnoClass);
   if (!nameAttr)
-    return None;
+    return std::nullopt;
 
   // The value attribute is unstructured and just copied over.
   auto valueAttr = tryGetAs<Attribute>(dict, root, "value", loc, omirAnnoClass);
   if (!valueAttr)
-    return None;
+    return std::nullopt;
   auto newValue = scatterOMIR(valueAttr, state);
   if (!newValue)
-    return None;
+    return std::nullopt;
 
   NamedAttrList values;
   // We add the index if one was provided.  This can be used later to
@@ -425,7 +425,7 @@ scatterOMNode(Attribute original, const Attribute root, ApplyState &state) {
   if (!dict) {
     llvm::errs() << "OMNode is not a dictionary, but should be: " << original
                  << "\n";
-    return None;
+    return std::nullopt;
   }
 
   NamedAttrList omnode;
@@ -439,7 +439,7 @@ scatterOMNode(Attribute original, const Attribute root, ApplyState &state) {
   // Convert the location from a string to a location attribute.
   auto infoAttr = tryGetAs<StringAttr>(dict, root, "info", loc, omirAnnoClass);
   if (!infoAttr)
-    return None;
+    return std::nullopt;
   auto maybeLoc =
       maybeStringToLocation(infoAttr.getValue(), false, locatorFilenameCache,
                             fileLineColLocCache, ctx);
@@ -452,7 +452,7 @@ scatterOMNode(Attribute original, const Attribute root, ApplyState &state) {
   // Extract the OMID.  Don't parse this, just leave it as a string.
   auto idAttr = tryGetAs<StringAttr>(dict, root, "id", loc, omirAnnoClass);
   if (!idAttr)
-    return None;
+    return std::nullopt;
 
   // Convert the fields from an ArrayAttr to a DictionaryAttr keyed by their
   // "name".  If no fields member exists, then just create an empty dictionary.
@@ -471,7 +471,7 @@ scatterOMNode(Attribute original, const Attribute root, ApplyState &state) {
         fieldAttrs.append(newField->first, newField->second);
         continue;
       }
-      return None;
+      return std::nullopt;
     }
     fields = DictionaryAttr::get(ctx, fieldAttrs);
   }
@@ -607,7 +607,7 @@ void EmitOMIRPass::runOnOperation() {
     if (auto instOp = dyn_cast<InstanceOp>(op)) {
       // This instance does not have a symbol, but we are adding one. Remove it
       // after the pass.
-      if (!op->getAttr(InnerSymbolTable::getInnerSymbolAttrName()))
+      if (!op->getAttr(hw::InnerSymbolTable::getInnerSymbolAttrName()))
         tempSymInstances.insert(instOp);
 
       instancesByName.insert({getInnerRefTo(op), instOp});
@@ -633,7 +633,7 @@ void EmitOMIRPass::runOnOperation() {
           anyFailures = true;
           return true;
         }
-        tracker.nla = cast<HierPathOp>(tmp);
+        tracker.nla = cast<hw::HierPathOp>(tmp);
       }
       if (sramIDs.erase(tracker.id))
         makeTrackerAbsolute(tracker);
@@ -771,9 +771,9 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
     namepath.push_back(getInnerRefTo(tracker.op));
 
   // Add the NLA to the tracker and mark it to be deleted later.
-  tracker.nla = builder.create<HierPathOp>(builder.getUnknownLoc(),
-                                           builder.getStringAttr(nlaName),
-                                           builder.getArrayAttr(namepath));
+  tracker.nla = builder.create<hw::HierPathOp>(builder.getUnknownLoc(),
+                                               builder.getStringAttr(nlaName),
+                                               builder.getArrayAttr(namepath));
   nlaTable->addNLA(tracker.nla);
 
   removeTempNLAs.push_back(tracker.nla);

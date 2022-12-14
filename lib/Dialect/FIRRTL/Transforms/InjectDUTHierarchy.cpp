@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-inject-dut-hier"
@@ -39,7 +40,7 @@ struct InjectDUTHierarchy : public InjectDUTHierarchyBase<InjectDUTHierarchy> {
 /// Int:
 ///
 ///   firrtl.hierpath [@Top::@dut, @DUT::@wrapper, @Wrapper]
-static void addHierarchy(HierPathOp path, FModuleOp dut,
+static void addHierarchy(hw::HierPathOp path, FModuleOp dut,
                          InstanceOp wrapperInst) {
   auto namepath = path.getNamepath().getValue();
 
@@ -238,7 +239,7 @@ void InjectDUTHierarchy::runOnOperation() {
   //      replace it with two InnerRefs: (1) on the DUT and (2) one the wrapper.
   LLVM_DEBUG(llvm::dbgs() << "Processing hierarchical paths:\n");
   auto &nlaTable = getAnalysis<NLATable>();
-  DenseMap<StringAttr, HierPathOp> dutRenames;
+  DenseMap<StringAttr, hw::HierPathOp> dutRenames;
   for (auto nla : llvm::make_early_inc_range(nlaTable.lookup(dut))) {
     LLVM_DEBUG(llvm::dbgs() << "  - " << nla << "\n");
     auto namepath = nla.getNamepath().getValue();
@@ -279,7 +280,7 @@ void InjectDUTHierarchy::runOnOperation() {
       if (nla.isModule() && dutPaths.contains(nla.getSymNameAttr())) {
         OpBuilder::InsertionGuard guard(b);
         b.setInsertionPoint(nla);
-        auto clone = cast<HierPathOp>(b.clone(*nla));
+        auto clone = cast<hw::HierPathOp>(b.clone(*nla));
         clone.setSymNameAttr(b.getStringAttr(
             circuitNS.newName(clone.getSymNameAttr().getValue())));
         dutRenames.insert({nla.getSymNameAttr(), clone});

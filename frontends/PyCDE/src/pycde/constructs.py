@@ -68,7 +68,8 @@ def Wire(type: PyCDEType, name: str = None):
                                               "wire" if name is None else name,
                                               None)
       super().__init__(self._backedge.result, type)
-      self.name = name
+      if name is not None:
+        self.name = name
       self._orig_name = name
       self.assign_parts = None
 

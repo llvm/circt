@@ -112,6 +112,9 @@ endif ()
         LINK_COMPONENTS Support # llvm::cl
         BUILDTREE_ONLY
       )
+      if (CXX_SUPPORTS_SUGGEST_OVERRIDE_FLAG)
+        target_compile_options(llvm_gtest_main INTERFACE "-Wno-suggest-override")
+      endif()
     endif()
     set(CIRCT_GTEST_AVAILABLE 1)
   else()

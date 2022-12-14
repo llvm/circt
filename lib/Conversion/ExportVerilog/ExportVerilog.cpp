@@ -32,6 +32,7 @@
 #include "circt/Support/PrettyPrinterHelpers.h"
 #include "circt/Support/Version.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/PassManager.h"
@@ -202,8 +203,8 @@ StringRef getPortVerilogName(Operation *module, ssize_t portArgNum) {
   char verilogNameAttr[] = "hw.verilogName";
   // Check for input ports.
   if (portArgNum < numInputs) {
-    if (auto argAttr = module->getAttrOfType<ArrayAttr>(
-            mlir::function_interface_impl::getArgDictAttrName()))
+    if (auto argAttr =
+            cast<mlir::FunctionOpInterface>(module).getArgAttrsAttr())
       if (auto argDict = argAttr[portArgNum].cast<DictionaryAttr>())
         if (auto updatedName = argDict.get(verilogNameAttr))
           return updatedName.cast<StringAttr>().getValue();
@@ -215,8 +216,7 @@ StringRef getPortVerilogName(Operation *module, ssize_t portArgNum) {
 
   // If its an output port, get the index into the output port array.
   portId = portArgNum - numInputs;
-  if (auto argAttr = module->getAttrOfType<ArrayAttr>(
-          mlir::function_interface_impl::getResultDictAttrName()))
+  if (auto argAttr = cast<mlir::FunctionOpInterface>(module).getResAttrsAttr())
     if (auto argDict = argAttr[portId].cast<DictionaryAttr>())
       if (auto updatedName = argDict.get(verilogNameAttr))
         return updatedName.cast<StringAttr>().getValue();
@@ -2941,8 +2941,9 @@ private:
   LogicalResult visitSV(LogicOp op) { return emitDeclaration(op); }
   LogicalResult visitSV(LocalParamOp op) { return emitDeclaration(op); }
   template <typename Op>
-  LogicalResult emitAssignLike(Op op, PPExtString syntax,
-                               Optional<PPExtString> wordBeforeLHS = None);
+  LogicalResult
+  emitAssignLike(Op op, PPExtString syntax,
+                 Optional<PPExtString> wordBeforeLHS = std::nullopt);
   LogicalResult visitSV(AssignOp op);
   LogicalResult visitSV(BPAssignOp op);
   LogicalResult visitSV(PAssignOp op);
@@ -3837,7 +3838,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysOp op) {
     llvm::interleave(
         op.getEvents(),
         [&](Attribute eventAttr) {
-          auto event = EventControl(eventAttr.cast<IntegerAttr>().getInt());
+          auto event = sv::EventControl(eventAttr.cast<IntegerAttr>().getInt());
           comment += stringifyEventControl(event);
         },
         [&]() { comment += ", "; });
@@ -3908,7 +3909,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
       // Negative edge async resets need to invert the reset condition. This
       // is noted in the op description.
       if (op.getResetStyle() == ResetType::AsyncReset &&
-          *op.getResetEdge() == EventControl::AtNegEdge)
+          *op.getResetEdge() == sv::EventControl::AtNegEdge)
         ps << "!";
       emitExpression(op.getReset(), ops);
       ps << ")";
@@ -4950,8 +4951,9 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
           [&](auto &os) { printUnpackedTypePostfix(portType, os); });
 
       if (state.options.printDebugInfo && portInfo[portIdx].sym &&
-          !portInfo[portIdx].sym.getValue().empty())
-        ps << " /* inner_sym: " << PPExtString(portInfo[portIdx].sym.getValue())
+          !portInfo[portIdx].sym.empty())
+        ps << " /* inner_sym: "
+           << PPExtString(portInfo[portIdx].sym.getSymName().getValue())
            << " */";
 
       ++portIdx;
@@ -4978,9 +4980,10 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
           });
 
           if (state.options.printDebugInfo && portInfo[portIdx].sym &&
-              !portInfo[portIdx].sym.getValue().empty())
+              !portInfo[portIdx].sym.empty())
             ps << " /* inner_sym: "
-               << PPExtString(portInfo[portIdx].sym.getValue()) << " */";
+               << PPExtString(portInfo[portIdx].sym.getSymName().getValue())
+               << " */";
 
           ++portIdx;
         }
@@ -5042,14 +5045,18 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   auto collectPorts = [&](auto moduleOp) {
     auto numArgs = moduleOp.getNumArguments();
     for (size_t p = 0; p != numArgs; ++p)
-      for (NamedAttribute argAttr : moduleOp.getArgAttrs(p))
-        if (auto sym = argAttr.getValue().dyn_cast<FlatSymbolRefAttr>())
-          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getAttr(),
+      for (NamedAttribute argAttr :
+           mlir::function_interface_impl::getArgAttrs(moduleOp, p)) {
+        if (auto sym = argAttr.getValue().dyn_cast<InnerSymAttr>()) {
+          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getSymName(),
                                     moduleOp, p);
+        }
+      }
     for (size_t p = 0, e = moduleOp.getNumResults(); p != e; ++p)
-      for (NamedAttribute resultAttr : moduleOp.getResultAttrs(p))
-        if (auto sym = resultAttr.getValue().dyn_cast<FlatSymbolRefAttr>())
-          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getAttr(),
+      for (NamedAttribute resultAttr :
+           mlir::function_interface_impl::getResultAttrs(moduleOp, p))
+        if (auto sym = resultAttr.getValue().dyn_cast<InnerSymAttr>())
+          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getSymName(),
                                     moduleOp, p + numArgs);
   };
 

@@ -206,7 +206,7 @@ firrtl.circuit "NonLocalTrackers" attributes {annotations = [{
 }]} {
   // Both OMReferenceTarget1 and OMReferenceTarget2 share the same NLA.  This
   // NLA should not be deleted.
-  firrtl.hierpath private @nla_0 [@NonLocalTrackers::@b, @B::@a, @A]
+  hw.hierpath private @nla_0 [@NonLocalTrackers::@b, @B::@a, @A]
   // CHECK: firrtl.module @A
   firrtl.module @A() attributes {annotations = [{circt.nonlocal = @nla_0, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} {
     // CHECK-NEXT: %a = firrtl.wire sym @[[a_sym:[^ ]+]]
@@ -326,18 +326,18 @@ firrtl.circuit "Top"  attributes {annotations = [{
     info = #loc4
   }]
 }]} {
-  firrtl.hierpath private @nla [@Top::@a, @A]
+  hw.hierpath private @nla [@Top::@a, @A]
   firrtl.module @Top(in %in0_0: !firrtl.uint<4>, in %in0_1: !firrtl.uint<4>, in %in1_f0: !firrtl.uint<4>, in %in1_f1: !firrtl.uint<4>, out %out0_0: !firrtl.uint<4>, out %out0_1: !firrtl.uint<4>, out %out1_f0: !firrtl.uint<4>, out %out1_f1: !firrtl.uint<4>) {
     %a_in0, %a_in1, %a_out0, %a_out1 = firrtl.instance a sym @a  @A(in in0: !firrtl.bundle<io: vector<uint<4>, 2>>, in in1: !firrtl.bundle<io: bundle<f0: uint<4>, f1: uint<4>>>, out out0: !firrtl.vector<uint<4>, 2>, out out1: !firrtl.bundle<f0: uint<4>, f1: uint<4>>)
-    %0 = firrtl.subfield %a_in1(0) : (!firrtl.bundle<io: bundle<f0: uint<4>, f1: uint<4>>>) -> !firrtl.bundle<f0: uint<4>, f1: uint<4>>
-    %1 = firrtl.subfield %a_in0(0) : (!firrtl.bundle<io: vector<uint<4>, 2>>) -> !firrtl.vector<uint<4>, 2>
+    %0 = firrtl.subfield %a_in1[io] : !firrtl.bundle<io: bundle<f0: uint<4>, f1: uint<4>>>
+    %1 = firrtl.subfield %a_in0[io]: !firrtl.bundle<io: vector<uint<4>, 2>>
     %2 = firrtl.subindex %a_out0[0] : !firrtl.vector<uint<4>, 2>
     firrtl.strictconnect %out0_0, %2 : !firrtl.uint<4>
     %3 = firrtl.subindex %a_out0[1] : !firrtl.vector<uint<4>, 2>
     firrtl.strictconnect %out0_1, %3 : !firrtl.uint<4>
-    %4 = firrtl.subfield %a_out1(0) : (!firrtl.bundle<f0: uint<4>, f1: uint<4>>) -> !firrtl.uint<4>
+    %4 = firrtl.subfield %a_out1[f0] : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
     firrtl.strictconnect %out1_f0, %4 : !firrtl.uint<4>
-    %5 = firrtl.subfield %a_out1(1) : (!firrtl.bundle<f0: uint<4>, f1: uint<4>>) -> !firrtl.uint<4>
+    %5 = firrtl.subfield %a_out1[f1] : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
     firrtl.strictconnect %out1_f1, %5 : !firrtl.uint<4>
     %6 = firrtl.bundlecreate %in1_f0, %in1_f1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.bundle<f0: uint<4>, f1: uint<4>>
     firrtl.strictconnect %0, %6 : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
@@ -348,27 +348,27 @@ firrtl.circuit "Top"  attributes {annotations = [{
   // CHECK-SAME:    %in0: !firrtl.bundle<io: vector<uint<4>, 2>> sym @[[in0_sym:[^ ]+]],
   // CHECK-SAME:    %in1: !firrtl.bundle<io: bundle<f0: uint<4>, f1: uint<4>>> sym @[[in1_sym:[^ ]+]],
   firrtl.module private @A(in %in0: !firrtl.bundle<io: vector<uint<4>, 2>> [{circt.fieldID = 3 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64}, {circt.fieldID = 2 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64}], in %in1: !firrtl.bundle<io: bundle<f0: uint<4>, f1: uint<4>>> [{circt.fieldID = 3 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 5 : i64}, {circt.fieldID = 2 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 4 : i64}], out %out0: !firrtl.vector<uint<4>, 2>, out %out1: !firrtl.bundle<f0: uint<4>, f1: uint<4>>) {
-    %0 = firrtl.subfield %in1(0) : (!firrtl.bundle<io: bundle<f0: uint<4>, f1: uint<4>>>) -> !firrtl.bundle<f0: uint<4>, f1: uint<4>>
-    %1 = firrtl.subfield %in0(0) : (!firrtl.bundle<io: vector<uint<4>, 2>>) -> !firrtl.vector<uint<4>, 2>
+    %0 = firrtl.subfield %in1[io] : !firrtl.bundle<io: bundle<f0: uint<4>, f1: uint<4>>>
+    %1 = firrtl.subfield %in0[io] : !firrtl.bundle<io: vector<uint<4>, 2>>
     // CHECK: %w0 = firrtl.wire sym @[[w0_sym:[^ ]+]]
     %w0 = firrtl.wire   {annotations = [{circt.fieldID = 2 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 3 : i64}, {circt.fieldID = 1 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 2 : i64}]} : !firrtl.vector<uint<4>, 2>
     %2 = firrtl.subindex %1[0] : !firrtl.vector<uint<4>, 2>
     %3 = firrtl.subindex %1[1] : !firrtl.vector<uint<4>, 2>
     // CHECK: %w1 = firrtl.wire sym @[[w1_sym:[^ ]+]]
     %w1 = firrtl.wire   {annotations = [{circt.fieldID = 2 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 7 : i64}, {circt.fieldID = 1 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 6 : i64}]} : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
-    %4 = firrtl.subfield %0(0) : (!firrtl.bundle<f0: uint<4>, f1: uint<4>>) -> !firrtl.uint<4>
-    %5 = firrtl.subfield %0(1) : (!firrtl.bundle<f0: uint<4>, f1: uint<4>>) -> !firrtl.uint<4>
+    %4 = firrtl.subfield %0[f0] : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
+    %5 = firrtl.subfield %0[f1] : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
     %6 = firrtl.subindex %w0[0] : !firrtl.vector<uint<4>, 2>
     %7 = firrtl.subindex %out0[0] : !firrtl.vector<uint<4>, 2>
     firrtl.strictconnect %7, %6 : !firrtl.uint<4>
     %8 = firrtl.subindex %w0[1] : !firrtl.vector<uint<4>, 2>
     %9 = firrtl.subindex %out0[1] : !firrtl.vector<uint<4>, 2>
     firrtl.strictconnect %9, %8 : !firrtl.uint<4>
-    %10 = firrtl.subfield %w1(0) : (!firrtl.bundle<f0: uint<4>, f1: uint<4>>) -> !firrtl.uint<4>
-    %11 = firrtl.subfield %out1(0) : (!firrtl.bundle<f0: uint<4>, f1: uint<4>>) -> !firrtl.uint<4>
+    %10 = firrtl.subfield %w1[f0] : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
+    %11 = firrtl.subfield %out1[f0] : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
     firrtl.strictconnect %11, %10 : !firrtl.uint<4>
-    %12 = firrtl.subfield %w1(1) : (!firrtl.bundle<f0: uint<4>, f1: uint<4>>) -> !firrtl.uint<4>
-    %13 = firrtl.subfield %out1(1) : (!firrtl.bundle<f0: uint<4>, f1: uint<4>>) -> !firrtl.uint<4>
+    %12 = firrtl.subfield %w1[f1] : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
+    %13 = firrtl.subfield %out1[f1] : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
     firrtl.strictconnect %13, %12 : !firrtl.uint<4>
     %14 = firrtl.vectorcreate %2, %3 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.vector<uint<4>, 2>
     firrtl.strictconnect %w0, %14 : !firrtl.vector<uint<4>, 2>
@@ -528,8 +528,8 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
     }
   ]
 }]} {
-  firrtl.hierpath private @nla_old [@SRAMPathsWithNLA::@s1, @Submodule::@mem]
-  firrtl.hierpath private @nla_new [@SRAMPathsWithNLA::@s1, @Submodule]
+  hw.hierpath private @nla_old [@SRAMPathsWithNLA::@s1, @Submodule::@mem]
+  hw.hierpath private @nla_new [@SRAMPathsWithNLA::@s1, @Submodule]
   firrtl.module @Submodule() {
     %mem_port = firrtl.mem sym @mem Undefined {
       annotations = [
@@ -607,7 +607,7 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
     }
   ]
 }]} {
-  firrtl.hierpath private @nla [@SRAMPaths::@sub, @Submodule]
+  hw.hierpath private @nla [@SRAMPaths::@sub, @Submodule]
   firrtl.extmodule private @MySRAM()
   firrtl.module private @Submodule() {
     firrtl.instance mem1 {annotations = [{circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} @MySRAM()
@@ -935,9 +935,9 @@ firrtl.circuit "FixPath"  attributes {annotations = [
       id = "OMID:0",
       info = loc(unknown)}
     ]}]} {
-  firrtl.hierpath private @nla_3 [@FixPath::@c, @C::@cd, @D]
-  firrtl.hierpath private @nla_2 [@FixPath::@c, @C::@in]
-  firrtl.hierpath private @nla_1 [@FixPath::@c, @C]
+  hw.hierpath private @nla_3 [@FixPath::@c, @C::@cd, @D]
+  hw.hierpath private @nla_2 [@FixPath::@c, @C::@in]
+  hw.hierpath private @nla_1 [@FixPath::@c, @C]
   firrtl.module @C(
     in %in: !firrtl.uint<1> sym @in [
       {circt.nonlocal = @nla_2, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64}

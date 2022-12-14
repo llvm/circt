@@ -106,7 +106,7 @@ void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
 /// This only accepts a subset of all types in the dialect. Use `parseType`
 /// instead, which will call this function in turn, as appropriate.
 ///
-/// Returns `llvm::None` if the type `name` is not covered by the custom
+/// Returns `std::nullopt` if the type `name` is not covered by the custom
 /// parsers. Otherwise returns success or failure as appropriate. On success,
 /// `result` is set to the resulting type.
 ///
@@ -742,7 +742,7 @@ static Optional<int32_t>
 getWidthQualifiedTypeWidth(firrtl::detail::WidthTypeStorage *impl) {
   int width = impl->width;
   if (width < 0)
-    return None;
+    return std::nullopt;
   return width;
 }
 
@@ -876,7 +876,7 @@ llvm::Optional<unsigned> BundleType::getElementIndex(StringAttr name) {
       return unsigned(it.index());
     }
   }
-  return None;
+  return std::nullopt;
 }
 
 llvm::Optional<unsigned> BundleType::getElementIndex(StringRef name) {
@@ -886,7 +886,7 @@ llvm::Optional<unsigned> BundleType::getElementIndex(StringRef name) {
       return unsigned(it.index());
     }
   }
-  return None;
+  return std::nullopt;
 }
 
 StringRef BundleType::getElementName(size_t index) {
@@ -898,13 +898,13 @@ StringRef BundleType::getElementName(size_t index) {
 Optional<BundleType::BundleElement> BundleType::getElement(StringAttr name) {
   if (auto maybeIndex = getElementIndex(name))
     return getElements()[*maybeIndex];
-  return None;
+  return std::nullopt;
 }
 
 Optional<BundleType::BundleElement> BundleType::getElement(StringRef name) {
   if (auto maybeIndex = getElementIndex(name))
     return getElements()[*maybeIndex];
-  return None;
+  return std::nullopt;
 }
 
 /// Look up an element by index.
@@ -1135,10 +1135,10 @@ llvm::Optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
           int64_t width = 0;
           for (auto &elt : bundle) {
             if (elt.isFlip && !ignoreFlip)
-              return llvm::Optional<int64_t>(None);
+              return llvm::Optional<int64_t>(std::nullopt);
             auto w = getBitWidth(elt.type);
             if (!w.has_value())
-              return llvm::Optional<int64_t>(None);
+              return llvm::Optional<int64_t>(std::nullopt);
             width += *w;
           }
           return llvm::Optional<int64_t>(width);
@@ -1146,7 +1146,7 @@ llvm::Optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
         .Case<FVectorType>([&](auto vector) {
           auto w = getBitWidth(vector.getElementType());
           if (!w.has_value())
-            return llvm::Optional<int64_t>(None);
+            return llvm::Optional<int64_t>(std::nullopt);
           return llvm::Optional<int64_t>(*w * vector.getNumElements());
         })
         .Case<IntType>([&](IntType iType) {
@@ -1154,10 +1154,10 @@ llvm::Optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
           if (retval)
             return llvm::Optional<int64_t>(*retval);
           else
-            return llvm::Optional<int64_t>(None);
+            return llvm::Optional<int64_t>(std::nullopt);
         })
         .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
-        .Default([&](auto t) { return llvm::Optional<int64_t>(None); });
+        .Default([&](auto t) { return llvm::Optional<int64_t>(std::nullopt); });
   };
   return getWidth(type);
 }

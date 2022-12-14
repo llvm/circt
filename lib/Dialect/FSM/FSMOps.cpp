@@ -29,7 +29,8 @@ void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
                       ArrayRef<DictionaryAttr> argAttrs) {
   state.addAttribute(mlir::SymbolTable::getSymbolAttrName(),
                      builder.getStringAttr(name));
-  state.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+  state.addAttribute(MachineOp::getFunctionTypeAttrName(state.name),
+                     TypeAttr::get(type));
   state.addAttribute("initialState",
                      StringAttr::get(state.getContext(), initialStateName));
   state.attributes.append(attrs.begin(), attrs.end());
@@ -43,8 +44,10 @@ void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
   if (argAttrs.empty())
     return;
   assert(type.getNumInputs() == argAttrs.size());
-  function_interface_impl::addArgAndResultAttrs(builder, state, argAttrs,
-                                                /*resultAttrs=*/llvm::None);
+  function_interface_impl::addArgAndResultAttrs(
+      builder, state, argAttrs,
+      /*resultAttrs=*/std::nullopt, MachineOp::getArgAttrsAttrName(state.name),
+      MachineOp::getResAttrsAttrName(state.name));
 }
 
 /// Get the initial state of the machine.
@@ -96,11 +99,16 @@ ParseResult MachineOp::parse(OpAsmParser &parser, OperationState &result) {
          std::string &) { return builder.getFunctionType(argTypes, results); };
 
   return function_interface_impl::parseFunctionOp(
-      parser, result, /*allowVariadic=*/false, buildFuncType);
+      parser, result, /*allowVariadic=*/false,
+      MachineOp::getFunctionTypeAttrName(result.name), buildFuncType,
+      MachineOp::getArgAttrsAttrName(result.name),
+      MachineOp::getResAttrsAttrName(result.name));
 }
 
 void MachineOp::print(OpAsmPrinter &p) {
-  function_interface_impl::printFunctionOp(p, *this, /*isVariadic=*/false);
+  function_interface_impl::printFunctionOp(
+      p, *this, /*isVariadic=*/false, getFunctionTypeAttrName(),
+      getArgAttrsAttrName(), getResAttrsAttrName());
 }
 
 static LogicalResult compareTypes(TypeRange rangeA, TypeRange rangeB) {

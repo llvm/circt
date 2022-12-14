@@ -584,7 +584,7 @@ StringAttr circt::firrtl::getOrAddInnerSym(
     FModuleLike mod, size_t portIdx, StringRef nameHint,
     std::function<ModuleNamespace &(FModuleLike)> getNamespace) {
 
-  auto attr = mod.getPortSymbolAttr(portIdx);
+  auto attr = cast<hw::HWModuleLike>(*mod).getPortSymbolAttr(portIdx);
   if (attr)
     return attr.getSymName();
   if (nameHint.empty()) {
@@ -617,7 +617,7 @@ circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
                                      MLIRContext *context) {
   // The spelling of the token looks something like "@[Decoupled.scala 221:8]".
   if (!spelling.startswith("@[") || !spelling.endswith("]"))
-    return {false, None};
+    return {false, std::nullopt};
 
   spelling = spelling.drop_front(2).drop_back(1);
 
@@ -658,12 +658,12 @@ circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
   unsigned lineNo = 0, columnNo = 0;
   StringRef filename = decodeLocator(spelling, lineNo, columnNo);
   if (filename.empty())
-    return {false, None};
+    return {false, llvm::None};
 
   // If info locators are ignored, don't actually apply them.  We still do all
   // the verification above though.
   if (skipParsing)
-    return {true, None};
+    return {true, llvm::None};
 
   /// Return an FileLineColLoc for the specified location, but use a bit of
   /// caching to reduce thrasing the MLIRContext.

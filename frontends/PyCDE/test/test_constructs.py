@@ -7,14 +7,14 @@ from pycde.dialects import comb
 from pycde.testing import unittestmodule
 
 # CHECK-LABEL: msft.module @WireAndRegTest {} (%In: i8, %clk: i1) -> (Out: i8, OutReg: i8)
-# CHECK:         %w1 = sv.wire sym @w1 : !hw.inout<i8>
-# CHECK:         [[r0:%.+]] = sv.read_inout %w1 : !hw.inout<i8>
-# CHECK:         sv.assign %w1, %In : i8
+# CHECK:         [[r0:%.+]] = comb.extract %In from 0 {sv.namehint = "In_0upto7"} : (i8) -> i7
+# CHECK:         [[r1:%.+]] = comb.extract %In from 7 {sv.namehint = "In_7upto8"} : (i8) -> i1
+# CHECK:         [[r2:%.+]] = comb.concat [[r1]], [[r0]] {sv.namehint = "w1"} : i1, i7
 # CHECK:         %in = sv.wire sym @in : !hw.inout<i8>
-# CHECK:         {{%.+}} = sv.read_inout %in : !hw.inout<i8>
+# CHECK:         {{%.+}} = sv.read_inout %in {sv.namehint = "in"} : !hw.inout<i8>
 # CHECK:         sv.assign %in, %In : i8
 # CHECK:         [[r1:%.+]] = seq.compreg %In, %clk : i8
-# CHECK:         msft.output [[r0]], [[r1]] : i8, i8
+# CHECK:         msft.output [[r2]], [[r1]] : i8, i8
 
 
 @unittestmodule()
@@ -28,7 +28,8 @@ class WireAndRegTest:
   def create(ports):
     w1 = Wire(types.i8, "w1")
     ports.Out = w1
-    w1.assign(ports.In)
+    w1[0:7] = ports.In[0:7]
+    w1[7] = ports.In[7]
 
     NamedWire(ports.In, "in")
 
@@ -38,7 +39,7 @@ class WireAndRegTest:
 
 
 # CHECK-LABEL: %{{.+}} = msft.systolic.array [%{{.+}} : 3 x i8] [%{{.+}} : 2 x i8] pe (%arg0, %arg1) -> (i8) {
-# CHECK:         [[SUM:%.+]] = comb.add %arg0, %arg1 {sv.namehint = "sum"} : i8
+# CHECK:         [[SUM:%.+]] = comb.add bin %arg0, %arg1 {sv.namehint = "sum"} : i8
 # CHECK:         [[SUMR:%.+]] = seq.compreg sym @sum__reg1 [[SUM]], %clk : i8
 # CHECK:         msft.pe.output [[SUMR]] : i8
 
