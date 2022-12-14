@@ -186,7 +186,7 @@ def VectorCreateOp : FIRRTLOp<"vectorcreate"> {
 
 
 def InvalidValueOp : FIRRTLOp<"invalidvalue",
-      [MemoryEffects<[MemAlloc]>, ConstantLike, HasCustomSSAName]> {
+      [MemoryEffects<[MemAlloc]>, HasCustomSSAName]> {
   let summary = "InvalidValue primitive";
   let description = [{
     The InvalidValue operation returns an invalid value of a specified type:
@@ -202,7 +202,6 @@ def InvalidValueOp : FIRRTLOp<"invalidvalue",
   let arguments = (ins);
   let results = (outs FIRRTLBaseType:$result);
 
-  let hasFolder = 1;
   let assemblyFormat = "attr-dict `:` qualified(type($result))";
 }
 

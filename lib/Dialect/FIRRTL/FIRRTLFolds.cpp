@@ -287,9 +287,8 @@ static LogicalResult canonicalizePrimOp(
   for (auto operand : op->getOperands()) {
     Attribute attr;
     if (auto *defOp = operand.getDefiningOp())
-      TypeSwitch<Operation *>(defOp)
-          .Case<ConstantOp, SpecialConstantOp, InvalidValueOp>(
-              [&](auto op) { attr = op.fold({}).template get<Attribute>(); });
+      TypeSwitch<Operation *>(defOp).Case<ConstantOp, SpecialConstantOp>(
+          [&](auto op) { attr = op.fold({}).template get<Attribute>(); });
     constOperands.push_back(attr);
   }
 
@@ -357,10 +356,6 @@ OpFoldResult SpecialConstantOp::fold(ArrayRef<Attribute> operands) {
 OpFoldResult AggregateConstantOp::fold(ArrayRef<Attribute> operands) {
   assert(operands.empty() && "constant has no operands");
   return getFieldsAttr();
-}
-
-OpFoldResult InvalidValueOp::fold(ArrayRef<Attribute> operands) {
-  return InvalidValueAttr::get(getType());
 }
 
 //===----------------------------------------------------------------------===//
