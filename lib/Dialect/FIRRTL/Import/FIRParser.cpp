@@ -1728,17 +1728,11 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
       return emitError(loc, "zero bit constant must be zero");
     value = value.trunc(0);
   } else if (width != -1) {
-    // Convert to the type's width, checking value is preserved if truncating.
-    auto willTrunc = unsigned(width) < value.getBitWidth();
-    if (isSigned) {
-      if (willTrunc && value.getNumSignBits() <= value.getBitWidth() - width)
-        return emitError(loc, "initializer too wide for declared width");
-      value = value.sextOrTrunc(width);
-    } else {
-      if (willTrunc && value.countLeadingZeros() < value.getBitWidth() - width)
-        return emitError(loc, "initializer too wide for declared width");
-      value = value.zextOrTrunc(width);
-    }
+    // Convert to the type's width, checking value fits in destination width.
+    bool valueFits = isSigned ? value.isSignedIntN(width) : value.isIntN(width);
+    if (!valueFits)
+      return emitError(loc, "initializer too wide for declared width");
+    value = isSigned ? value.sextOrTrunc(width) : value.zextOrTrunc(width);
   }
 
   Type attrType =
