@@ -451,9 +451,6 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
       auto vecType = value.getType().cast<FVectorType>();
       // Rebase the current index on the parent field's index.
       id += vecType.getFieldID(subindexOp.getIndex());
-    } else if (auto subaccess = dyn_cast<SubaccessOp>(op)) {
-      value = subaccess.getInput();
-      id = 0;
     } else {
       break;
     }
