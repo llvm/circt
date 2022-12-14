@@ -378,7 +378,7 @@ public:
                 dyn_cast<FModuleOp>(*instanceGraph.getReferencedModule(ins));
             for (auto instPort : op.getResults())
               addRoots(instPort);
-            for (auto instPort : llvm::enumerate(op.getResults())) {
+            for (const auto &instPort : llvm::enumerate(op.getResults())) {
               auto portType =
                   instPort.value().getType().dyn_cast<FIRRTLBaseType>();
               if (!portType || portType.isGround())
