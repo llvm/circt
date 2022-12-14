@@ -86,12 +86,12 @@ module  {
       %m_r = firrtl.mem Undefined  {depth = 2 : i64, name = "m", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
       %0 = firrtl.subfield %m_r[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
       firrtl.connect %0, %clk : !firrtl.clock, !firrtl.clock
-      %1 = firrtl.subfield %m_r(0) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
+      %1 = firrtl.subfield %m_r[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
       firrtl.connect %1, %y : !firrtl.uint<1>, !firrtl.uint<1>
       %2 = firrtl.subfield %m_r[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
       %c1_ui = firrtl.constant 1 : !firrtl.uint
       firrtl.connect %2, %c1_ui : !firrtl.uint<1>, !firrtl.uint
-      %3 = firrtl.subfield %m_r(3) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
+      %3 = firrtl.subfield %m_r[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
       // expected-remark @+1 {{this operation is part of the combinational cycle}}
       firrtl.connect %z, %3 : !firrtl.uint<1>, !firrtl.uint<1>
       // expected-remark @+1 {{this operation is part of the combinational cycle}}
@@ -264,23 +264,17 @@ firrtl.circuit "hasloops"   {
 // Combinational loop through instance ports
 // CHECK-NOT: firrtl.circuit "hasloops"
 firrtl.circuit "hasLoops"  {
-  // expected-error @+1 {{detected combinational cycle in a FIRRTL module, sample path: hasLoops.b[1] <- hasLoops.bar.b[1] <- hasLoops.bar.a[1] <- hasLoops.b[1]}}
+  // expected-error @+1 {{detected combinational cycle in a FIRRTL module, sample path: hasLoops.b[0] <- hasLoops.bar.b[0] <- hasLoops.bar.a[0] <- hasLoops.b[0]}}
   firrtl.module @hasLoops(out %b: !firrtl.vector<uint<1>, 2>) {
     %bar_a, %bar_b = firrtl.instance bar  @Bar(in a: !firrtl.vector<uint<1>, 2>, out b: !firrtl.vector<uint<1>, 2>)
     %0 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
     %1 = firrtl.subindex %bar_a[0] : !firrtl.vector<uint<1>, 2>
-    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
-    %2 = firrtl.subindex %b[1] : !firrtl.vector<uint<1>, 2>
-    %3 = firrtl.subindex %bar_a[1] : !firrtl.vector<uint<1>, 2>
 		// expected-remark @+1 {{this operation is part of the combinational cycle}}
-    firrtl.strictconnect %3, %2 : !firrtl.uint<1>
+    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
     %4 = firrtl.subindex %bar_b[0] : !firrtl.vector<uint<1>, 2>
     %5 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
-    firrtl.strictconnect %5, %4 : !firrtl.uint<1>
-    %6 = firrtl.subindex %bar_b[1] : !firrtl.vector<uint<1>, 2>
-    %7 = firrtl.subindex %b[1] : !firrtl.vector<uint<1>, 2>
 		// expected-remark @+1 {{this operation is part of the combinational cycle}}
-    firrtl.strictconnect %7, %6 : !firrtl.uint<1>
+    firrtl.strictconnect %5, %4 : !firrtl.uint<1>
   }
    
   firrtl.module private @Bar(in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<1>, 2>) {
@@ -302,15 +296,15 @@ firrtl.circuit "bundleWire"   {
                            out %out1: !firrtl.uint<1>, out %out2: !firrtl.sint<64>) {
 
     %w = firrtl.wire : !firrtl.bundle<foo: bundle<bar: bundle<baz: sint<64>>, qux: uint<1>>>
-    %w0 = firrtl.subfield %w(0) : (!firrtl.bundle<foo: bundle<bar: bundle<baz: sint<64>>, qux: uint<1>>>) -> !firrtl.bundle<bar: bundle<baz: sint<64>>, qux: uint<1>>
-    %w0_0 = firrtl.subfield %w0(0) : (!firrtl.bundle<bar: bundle<baz: sint<64>>, qux: uint<1>>) -> !firrtl.bundle<baz: sint<64>>
-    %w0_0_0 = firrtl.subfield %w0_0(0) : (!firrtl.bundle<baz: sint<64>>) -> !firrtl.sint<64>
+    %w0 = firrtl.subfield %w[foo] : !firrtl.bundle<foo: bundle<bar: bundle<baz: sint<64>>, qux: uint<1>>>
+    %w0_0 = firrtl.subfield %w0[bar] : !firrtl.bundle<bar: bundle<baz: sint<64>>, qux: uint<1>>
+    %w0_0_0 = firrtl.subfield %w0_0[baz] : !firrtl.bundle<baz: sint<64>>
     %x = firrtl.wire  : !firrtl.sint<64>
 
-    %0 = firrtl.subfield %arg(0) : (!firrtl.bundle<foo: bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>>) -> !firrtl.bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>
-    %1 = firrtl.subfield %0(0) : (!firrtl.bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>) -> !firrtl.bundle<baz: uint<1>>
-    %2 = firrtl.subfield %1(0) : (!firrtl.bundle<baz: uint<1>>) -> !firrtl.uint<1>
-    %3 = firrtl.subfield %0(1) : (!firrtl.bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>) -> !firrtl.sint<64>
+    %0 = firrtl.subfield %arg[foo] : !firrtl.bundle<foo: bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>>
+    %1 = firrtl.subfield %0[bar] : !firrtl.bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>
+    %2 = firrtl.subfield %1[baz] : !firrtl.bundle<baz: uint<1>>
+    %3 = firrtl.subfield %0[qux] : !firrtl.bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>
     firrtl.connect %w0_0_0, %3 : !firrtl.sint<64>, !firrtl.sint<64>
 		// expected-remark @+1 {{this operation is part of the combinational cycle}}
     firrtl.connect %x, %w0_0_0 : !firrtl.sint<64>, !firrtl.sint<64>
@@ -329,10 +323,10 @@ firrtl.circuit "registerLoop"   {
   firrtl.module @registerLoop(in %clk: !firrtl.clock) {
     %w = firrtl.wire : !firrtl.bundle<a: uint<1>>
     %r = firrtl.reg %clk : !firrtl.bundle<a: uint<1>>
-    %0 = firrtl.subfield %w(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
-    %1 = firrtl.subfield %w(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
-    %2 = firrtl.subfield %r(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
-    %3 = firrtl.subfield %r(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
+    %0 = firrtl.subfield %w[a]: !firrtl.bundle<a: uint<1>>
+    %1 = firrtl.subfield %w[a]: !firrtl.bundle<a: uint<1>>
+    %2 = firrtl.subfield %r[a]: !firrtl.bundle<a: uint<1>>
+    %3 = firrtl.subfield %r[a]: !firrtl.bundle<a: uint<1>>
     firrtl.connect %2, %0 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %1, %2 : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -369,14 +363,14 @@ module  {
       %z = firrtl.wire  : !firrtl.uint<1>
       firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
       %m_r = firrtl.mem Undefined  {depth = 2 : i64, name = "m", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-      %0 = firrtl.subfield %m_r(2) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.clock
+      %0 = firrtl.subfield %m_r[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
       firrtl.connect %0, %clk : !firrtl.clock, !firrtl.clock
-      %1 = firrtl.subfield %m_r(0) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
-      %2 = firrtl.subfield %m_r(1) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
+      %1 = firrtl.subfield %m_r[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+      %2 = firrtl.subfield %m_r[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
       firrtl.connect %2, %y : !firrtl.uint<1>, !firrtl.uint<1>
       %c1_ui = firrtl.constant 1 : !firrtl.uint
       firrtl.connect %2, %c1_ui : !firrtl.uint<1>, !firrtl.uint
-      %3 = firrtl.subfield %m_r(3) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
+      %3 = firrtl.subfield %m_r[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
       // expected-remark @+1 {{this operation is part of the combinational cycle}}
       firrtl.connect %z, %3 : !firrtl.uint<1>, !firrtl.uint<1>
       // expected-remark @+1 {{this operation is part of the combinational cycle}}
@@ -415,5 +409,100 @@ module  {
       firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
       firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
     }
+  }
+}
+
+// -----
+
+// CHECK: firrtl.circuit "hasloops"
+firrtl.circuit "hasloops"  {
+  firrtl.module @thru1(in %clk: !firrtl.clock, in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+    %reg = firrtl.reg  %clk  : !firrtl.uint<1>
+    firrtl.connect %reg, %in : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %out, %reg : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  firrtl.module @thru2(in %clk: !firrtl.clock, in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+    %inner1_clk, %inner1_in, %inner1_out = firrtl.instance inner1  @thru1(in clk: !firrtl.clock, in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    firrtl.connect %inner1_clk, %clk : !firrtl.clock, !firrtl.clock
+    firrtl.connect %inner1_in, %in : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %out, %inner1_out : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
+    %y = firrtl.wire   : !firrtl.uint<1>
+    %z = firrtl.wire   : !firrtl.uint<1>
+    firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    %inner2_clk, %inner2_in, %inner2_out = firrtl.instance inner2  @thru2(in clk: !firrtl.clock, in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    firrtl.connect %inner2_clk, %clk : !firrtl.clock, !firrtl.clock
+    firrtl.connect %inner2_in, %y : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %z, %inner2_out : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "subaccess"   {
+  // expected-error @+1 {{subaccess.b[0].wo <- subaccess.wo <-}}
+  firrtl.module @subaccess(in %sel1: !firrtl.uint<2>, out %b: !firrtl.vector<bundle<wo: uint<1>, wi: uint<1>>, 4>) {
+    %0 = firrtl.subaccess %b[%sel1] : !firrtl.vector<bundle<wo: uint<1>, wi: uint<1>>, 4>, !firrtl.uint<2>
+    %1 = firrtl.subfield %0[wo] : !firrtl.bundle<wo: uint<1>, wi: uint<1>>
+    %2 = firrtl.subindex %b[0] : !firrtl.vector<bundle<wo: uint<1>, wi: uint<1>>, 4>
+    %3 = firrtl.subfield %2[wo]: !firrtl.bundle<wo: uint<1>, wi: uint<1>>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.strictconnect %3, %1 : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "subaccess"   {
+  // expected-error @+1 {{subaccess.b}}
+  firrtl.module @subaccess(in %sel1: !firrtl.uint<2>, in %sel2: !firrtl.uint<2>, out %b: !firrtl.vector<bundle<wo: uint<1>, wi: uint<1>>, 4>) {
+    %0 = firrtl.subaccess %b[%sel1] : !firrtl.vector<bundle<wo: uint<1>, wi: uint<1>>, 4>, !firrtl.uint<2>
+    %1 = firrtl.subfield %0[wo] : !firrtl.bundle<wo: uint<1>, wi: uint<1>>
+    %2 = firrtl.subaccess %b[%sel2] : !firrtl.vector<bundle<wo: uint<1>, wi: uint<1>>, 4>, !firrtl.uint<2>
+    %3 = firrtl.subfield %2[wo]: !firrtl.bundle<wo: uint<1>, wi: uint<1>>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.strictconnect %3, %1 : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// CHECK: firrtl.circuit "subaccess"   {
+firrtl.circuit "subaccess"   {
+  firrtl.module @subaccess(in %sel1: !firrtl.uint<2>, out %b: !firrtl.vector<bundle<wo: uint<1>, wi: uint<1>>, 4>) {
+    %0 = firrtl.subaccess %b[%sel1] : !firrtl.vector<bundle<wo: uint<1>, wi: uint<1>>, 4>, !firrtl.uint<2>
+    %1 = firrtl.subfield %0[wo] : !firrtl.bundle<wo: uint<1>, wi: uint<1>>
+    %2 = firrtl.subindex %b[0] : !firrtl.vector<bundle<wo: uint<1>, wi: uint<1>>, 4>
+    %3 = firrtl.subfield %2[wi]: !firrtl.bundle<wo: uint<1>, wi: uint<1>>
+    firrtl.strictconnect %3, %1 : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// CHECK: firrtl.circuit "subaccess"   {
+firrtl.circuit "subaccess"   {
+  firrtl.module @subaccess(in %sel1: !firrtl.uint<2>, in %sel2: !firrtl.uint<2>, out %b: !firrtl.vector<bundle<wo: uint<1>, wi: uint<1>>, 4>) {
+    %0 = firrtl.subaccess %b[%sel1] : !firrtl.vector<bundle<wo: uint<1>, wi: uint<1>>, 4>, !firrtl.uint<2>
+    %1 = firrtl.subfield %0[wo] : !firrtl.bundle<wo: uint<1>, wi: uint<1>>
+    %2 = firrtl.subaccess %b[%sel2] : !firrtl.vector<bundle<wo: uint<1>, wi: uint<1>>, 4>, !firrtl.uint<2>
+    %3 = firrtl.subfield %2[wi]: !firrtl.bundle<wo: uint<1>, wi: uint<1>>
+    firrtl.strictconnect %3, %1 : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// CHECK: firrtl.circuit "subaccess"   {
+firrtl.circuit "subaccess"   {
+  firrtl.module @subaccess(in %sel1: !firrtl.uint<2>, in %sel2: !firrtl.uint<2>, out %b: !firrtl.vector<bundle<wo: uint<1>, wi: uint<1>>, 4>) {
+    %0 = firrtl.subaccess %b[%sel1] : !firrtl.vector<bundle<wo: uint<1>, wi: uint<1>>, 4>, !firrtl.uint<2>
+    %1 = firrtl.subfield %0[wo] : !firrtl.bundle<wo: uint<1>, wi: uint<1>>
+    %2 = firrtl.subaccess %b[%sel1] : !firrtl.vector<bundle<wo: uint<1>, wi: uint<1>>, 4>, !firrtl.uint<2>
+    %3 = firrtl.subfield %2[wi]: !firrtl.bundle<wo: uint<1>, wi: uint<1>>
+    firrtl.strictconnect %3, %1 : !firrtl.uint<1>
   }
 }
