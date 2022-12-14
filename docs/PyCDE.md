@@ -2,13 +2,37 @@
 
 PyCDE stands for Python circuit design entry. It is an experimental, opinionated, Python-based fronted for CIRCT's Python bindings. The goal is to make the definition of hardware modules using the bindings simple.
 
-# Installation
+## To Install PyCDE only via pip
 
-## via Pip
+PyCDE is now being released on PyPI: <https://pypi.org/project/pycde/>
 
-PyCDE is now being released on PyPI: https://pypi.org/project/pycde/
+## For CIRCT-based Developers
 
-## Installing and Building with Wheels
+### Cloning the repo
+
+If you havent already, you need to clone the CIRCT repo. Unless you already
+have contributor permissions to the LLVM project, the easiest way to develop
+(with the ability to create and push branches) is to fork the repo in your
+GitHub account. You can then clone your fork. The clone command should look
+like this:
+
+```bash
+git clone git@github.com:<your_github_username>/circt.git <optional_repo_name>
+```
+
+If you don't envision needing that ability, you can clone the main repo
+following the directions in step 2 of the [GettingStarted](GettingStarted.md) page.
+
+After cloning, navigate to your repo root (circt is the default) and use the
+following to pull down LLVM:
+
+```bash
+git submodule update --init
+```
+
+## PyCDE Installation
+
+### Installing and Building with Wheels
 
 The simplest way to get started using PyCDE is to install it with the `pip install` command:
 
@@ -26,15 +50,32 @@ $ pip wheel frontends/PyCDE --use-feature=in-tree-build
 
 This will create a `pycde-<version>-<python version>-<platform>.whl` file in the root of the repo.
 
-## Manual Compilation
+### Manual Compilation
 
-If you are interested in developing PyCDE, or simply want to install it yourself with CMake, you can configure CMake similarly to the [Python bindings](/PythonBindings/#manual-compilation):
+Follow these steps to setup your repository for installing PyCDE via CMake.
+Ensure that your repo has the proper Python requirements by running the
+following from your CIRCT repo root:
 
+```bash
+python -m pip install -r PyCDE/python/requirements.txt
 ```
-$ cd circt
-$ mkdir build
-$ cd build
-$ cmake -G Ninja ../llvm/llvm \
+
+Although not scrictly needed for PyCDE develoment, scripts for some tools you
+might want to install are located in utils/
+(Cap'n Proto, Verilator, OR-Tools):
+
+```bash
+utils/get-capnp.sh
+utils/get-verilator.sh
+utils/get-or-tools
+```
+
+Install PyCDE with CMake:
+
+```bash
+mkdir build
+cd build
+cmake \
     -DCMAKE_BUILD_TYPE=Debug \
     -DLLVM_ENABLE_PROJECTS=mlir \
     -DLLVM_ENABLE_ASSERTIONS=ON \
@@ -43,14 +84,41 @@ $ cmake -G Ninja ../llvm/llvm \
     -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
     -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
     -DCIRCT_ENABLE_FRONTENDS=PyCDE
+    -G Ninja ../llvm/llvm
 ```
 
-Afterwards, use `ninja check-pycde` to ensure that PyCDE is built and the tests pass.
+Alternatively, you can pass the source and build paths to the CMake command and
+build in the specified folder:
 
-If you want to use PyCDE after compiling it, you must add the core CIRCT bindings and PyCDE to your PYTHONPATH:
-
+```bash
+cmake \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DLLVM_ENABLE_PROJECTS=mlir \
+    -DLLVM_ENABLE_ASSERTIONS=ON \
+    -DLLVM_EXTERNAL_PROJECTS=circt \
+    -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
+    -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
+    -DCIRCT_ENABLE_FRONTENDS=PyCDE \
+    -G Ninja \
+    -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=<your_circt_repo_root_path> \
+    -B<path_to_desired_build_dir> \
+    <your_circt_repo_root_path>/llvm/llvm
 ```
-export PYTHONPATH="$PWD/build/tools/circt/python_packages/circt_core:$PWD/build/tools/circt/python_packages/pycde"
+
+Afterwards, use the following commands to ensure that CIRCT and PyCDE are built
+and the tests pass:
+
+```bash
+ninja -C <path_to_your_circt_build> check-circt
+ninja -C <path_to_your_circt_build> check-pycde
+ninja -C <path_to_your_circt_build> check-pycde-integration
+```
+
+If you want to use PyCDE after compiling it, you must add the core CIRCT
+bindings and PyCDE to your PYTHONPATH:
+
+```bash
+export PYTHONPATH="<full_path_to_your_circt_build>/tools/circt/python_packages/circt_core:<full_path_to_your_circt_build>/tools/circt/python_packages/pycde"
 ```
 
 If you are installing PyCDE through `ninja install`, the libraries and Python modules will be installed into the correct location automatically.
