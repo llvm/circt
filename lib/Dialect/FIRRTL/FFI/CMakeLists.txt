@@ -1,0 +1,9 @@
+add_circt_translation_library(CIRCTFIRRTLFFI
+  FIRRTLFFIContext.cpp
+
+  ADDITIONAL_HEADER_DIRS
+
+  LINK_LIBS PUBLIC
+  CIRCTFIRRTL
+  CIRCTExportFIRRTL
+  )

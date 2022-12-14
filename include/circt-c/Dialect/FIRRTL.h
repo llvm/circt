@@ -19,6 +19,33 @@ extern "C" {
 
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(FIRRTL, firrtl);
 
+struct FirrtlContext {
+  void *ptr;
+};
+// NOLINTNEXTLINE(modernize-use-using)
+typedef struct FirrtlContext FirrtlContext;
+
+MLIR_CAPI_EXPORTED FirrtlContext firrtlCreateContext(void);
+
+MLIR_CAPI_EXPORTED void firrtlDestroyContext(FirrtlContext ctx);
+
+// NOLINTNEXTLINE(modernize-use-using)
+typedef void (*FirrtlErrorHandler)(MlirStringRef message, void *userData);
+MLIR_CAPI_EXPORTED void firrtlSetErrorHandler(FirrtlContext ctx,
+                                              FirrtlErrorHandler handler,
+                                              void *userData);
+
+MLIR_CAPI_EXPORTED void firrtlVisitCircuit(FirrtlContext ctx,
+                                           MlirStringRef name);
+
+MLIR_CAPI_EXPORTED void firrtlVisitModule(FirrtlContext ctx,
+                                          MlirStringRef name);
+
+MLIR_CAPI_EXPORTED MlirStringRef firrtlExportFirrtl(FirrtlContext ctx);
+
+MLIR_CAPI_EXPORTED void firrtlDestroyString(FirrtlContext ctx,
+                                            MlirStringRef string);
+
 #ifdef __cplusplus
 }
 #endif
