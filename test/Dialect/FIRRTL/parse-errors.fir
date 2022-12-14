@@ -215,10 +215,24 @@ circuit Issue418:
 
 ;// -----
 
-circuit Issue426:
-  module Issue426:
-    ; expected-error @+1 {{zero bit constants are not allowed}}
-    node x = UInt<0>("h0")
+circuit Issue3799:
+  module Issue3799:
+    output a: UInt<0>
+    a <= UInt<0>(0) ; ok
+    a <= UInt<0>(-0) ; ok
+    ; expected-error @below {{zero bit constant must be zero}}
+    a <= UInt<0>(1)
+
+;// -----
+
+circuit Issue3799:
+  module Issue3799:
+    output a: SInt<0>
+    a <= SInt<0>(0) ; ok
+    a <= SInt<0>(-0) ; ok
+    ; expected-error @below {{zero bit constant must be zero}}
+    a <= SInt<0>(1)
+
 
 ;// -----
 
