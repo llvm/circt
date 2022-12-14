@@ -1713,7 +1713,6 @@ OpFoldResult NodeOp::fold(ArrayRef<Attribute> operands) {
     return {};
   if (getAnnotationsAttr() && !getAnnotationsAttr().empty())
     return {};
-  operands[0].dump();
   return operands[0];
 }
 
