@@ -244,7 +244,8 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
   if (isa<ReadInOutOp, AggregateConstantOp, ArrayIndexInOutOp,
           IndexedPartSelectInOutOp, StructFieldInOutOp, IndexedPartSelectOp,
-          ParamValueOp, XMROp, XMRRefOp, SampledOp, EnumConstantOp>(op))
+          ParamValueOp, XMROp, XMRRefOp, SampledOp, EnumConstantOp,
+          SystemFunctionOp>(op))
     return true;
 
   // All HW combinational logic ops and SV expression ops are Verilog
@@ -1888,6 +1889,7 @@ private:
   SubExprInfo printConstantScalar(APInt &value, IntegerType type);
 
   SubExprInfo visitSV(GetModportOp op);
+  SubExprInfo visitSV(SystemFunctionOp op);
   SubExprInfo visitSV(ReadInterfaceSignalOp op);
   SubExprInfo visitSV(XMROp op);
   SubExprInfo visitSV(XMRRefOp op);
@@ -1902,6 +1904,7 @@ private:
   SubExprInfo visitSV(MacroRefExprSEOp op);
   SubExprInfo visitSV(ConstantXOp op);
   SubExprInfo visitSV(ConstantZOp op);
+  SubExprInfo visitSV(ConstantStrOp op);
 
   // Noop cast operators.
   SubExprInfo visitSV(ReadInOutOp op) {
@@ -2321,6 +2324,18 @@ SubExprInfo ExprEmitter::visitSV(GetModportOp op) {
   return {Selection, IsUnsigned};
 }
 
+SubExprInfo ExprEmitter::visitSV(SystemFunctionOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  ps << "$" << op.getFnName() << "(";
+  llvm::interleave(
+      op.getOperands(), [&](Value v) { emitSubExpr(v, LowestPrecedence); },
+      [&]() { ps << PP::nbsp << "," << PP::space; });
+  ps << ")";
+  return {Symbol, IsUnsigned};
+}
+
 SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
@@ -2424,6 +2439,14 @@ SubExprInfo ExprEmitter::visitSV(ConstantXOp op) {
   ps.addAsString(op.getWidth());
   ps << "'bx";
   return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitSV(ConstantStrOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  ps << "\"" << op.getStr() << "\"";
+  return {Symbol, IsUnsigned}; // is a string unsigned?  Yes! SV 5.9
 }
 
 SubExprInfo ExprEmitter::visitSV(ConstantZOp op) {

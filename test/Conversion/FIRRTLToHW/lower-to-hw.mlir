@@ -1766,4 +1766,25 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK:      %0 = hw.aggregate_constant [0 : i8, 1 : i8] : !hw.array<2xi8>
     // CHECK-NEXT: hw.output %0 : !hw.array<2xi8>
   }
+
+  // CHECK-LABEL: hw.module @intrinsic
+  firrtl.module @intrinsic(in %clk: !firrtl.clock, out %io1: !firrtl.uint<1>, out %io2: !firrtl.uint<1>, out %io3: !firrtl.uint<1>, out %io4 : !firrtl.uint<5>) {
+    %1 = firrtl.int.isX %clk : !firrtl.clock
+    firrtl.strictconnect %io1, %1 : !firrtl.uint<1>
+    // CHECK: %[[x:.*]] = sv.constantX
+    // CHECK: comb.icmp bin ceq %clk, %[[x]]
+
+    %2 = firrtl.int.plusargs.test "foo"
+    firrtl.strictconnect %io2, %2 : !firrtl.uint<1>
+    // CHECK: %[[foo:.*]] = sv.constantStr "foo"
+    // CHECK: sv.system "test$plusargs"(%[[foo]])
+
+    %3, %4 = firrtl.int.plusargs.value "foo" : !firrtl.uint<5>
+    firrtl.strictconnect %io3, %3 : !firrtl.uint<1>
+    firrtl.strictconnect %io4, %4 : !firrtl.uint<5>
+    // CHECK: %[[foo:.*]] = sv.constantStr "foo"
+    // CHECK: %[[tmp:.*]] = sv.wire : !hw.inout<i5>
+    // CHECK: sv.system "value$plusargs"(%[[foo]], %[[tmp]])
+    
+  }
 }

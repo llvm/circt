@@ -1497,6 +1497,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitDecl(VerbatimWireOp op);
 
   // Unary Ops.
+  LogicalResult visitSizeOfIntrinsiicOp(SizeOfIntrinsicOp op);
   LogicalResult lowerNoopCast(Operation *op);
   LogicalResult visitExpr(AsSIntPrimOp op) { return lowerNoopCast(op); }
   LogicalResult visitExpr(AsUIntPrimOp op) { return lowerNoopCast(op); }
@@ -1571,6 +1572,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   // Verif Operations
   LogicalResult visitExpr(IsXIntrinsicOp op);
+  LogicalResult visitExpr(PlusArgsTestIntrinsicOp op);
+  LogicalResult visitExpr(PlusArgsValueIntrinsicOp op);
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
@@ -3339,6 +3342,28 @@ LogicalResult FIRRTLLowering::visitExpr(IsXIntrinsicOp op) {
   return setLoweringTo<comb::ICmpOp>(
       op, ICmpPredicate::ceq, input,
       getOrCreateXConstant(input.getType().getIntOrFloatBitWidth()), true);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(PlusArgsTestIntrinsicOp op) {
+  auto resultType = builder.getIntegerType(1);
+  auto str = builder.create<sv::ConstantStrOp>(op.getFormatString());
+  return setLoweringTo<sv::SystemFunctionOp>(op, resultType, "test$plusargs",
+                                             ArrayRef<Value>{str});
+}
+
+LogicalResult FIRRTLLowering::visitExpr(PlusArgsValueIntrinsicOp op) {
+  auto resultType = builder.getIntegerType(1);
+  auto type = lowerType(op.getResult().getType());
+  if (!type)
+    return failure();
+
+  auto str = builder.create<sv::ConstantStrOp>(op.getFormatString());
+  auto wire = createTmpWireOp(type, "_pargs");
+  auto wireRead = builder.create<sv::ReadInOutOp>(wire);
+  (void)setLowering(op.getResult(), wireRead);
+  auto svfun = builder.create<sv::SystemFunctionOp>(
+      resultType, "value$plusargs", ArrayRef<Value>{str, wire});
+  return setLowering(op.getFound(), svfun);
 }
 
 //===----------------------------------------------------------------------===//
