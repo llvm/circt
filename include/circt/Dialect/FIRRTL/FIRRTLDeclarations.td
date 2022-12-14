@@ -249,6 +249,7 @@ def NodeOp : ReferableDeclOp<"node",
   }];
 
   let hasCanonicalizer = true;
+  let hasFolder = 1;
 }
 
 def RegOp : ReferableDeclOp<"reg"> {

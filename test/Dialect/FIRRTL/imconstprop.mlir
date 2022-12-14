@@ -210,11 +210,21 @@ firrtl.circuit "testDontTouch"  {
     // CHECK: firrtl.connect %a2, %blockProp3_b
     firrtl.connect %a2, %blockProp3_b : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  // CHECK-LABEL: firrtl.module private @CheckNode
-  firrtl.module private @CheckNode(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
-    %z = firrtl.node   sym @s2 %x: !firrtl.uint<1>
-    // CHECK: firrtl.connect %y, %z
-    firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-LABEL: firrtl.module @CheckNode
+  firrtl.module @CheckNode(out %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>, out %z: !firrtl.uint<1>) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    // CHECK-NOT: %d1 = firrtl.node 
+    %d1 = firrtl.node droppable_name %c1_ui1 : !firrtl.uint<1>
+    // CHECK: %d2 = firrtl.node 
+    %d2 = firrtl.node interesting_name %c1_ui1 : !firrtl.uint<1>
+    // CHECK: %d3 = firrtl.node 
+    %d3 = firrtl.node   sym @s2 %c1_ui1: !firrtl.uint<1>
+    // CHECK: firrtl.connect %x, %c1_ui1
+    firrtl.connect %x, %d1 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %y, %c1_ui1
+    firrtl.connect %y, %d2 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %z, %d3
+    firrtl.connect %z, %d3 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
 }
@@ -333,7 +343,8 @@ firrtl.circuit "invalidReg2"   {
     %foobar = firrtl.reg %clock  : !firrtl.uint<1>
     firrtl.connect %foobar, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
     //CHECK-NOT: firrtl.connect %foobar, %foobar
-    //CHECK: firrtl.connect %a, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
+    //CHECK: %[[inv:.*]] = firrtl.invalidvalue
+    //CHECK: firrtl.connect %a, %[[inv]]
     firrtl.connect %a, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
