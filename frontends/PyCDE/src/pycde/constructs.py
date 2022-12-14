@@ -9,6 +9,7 @@ from .value import BitVectorValue, ListValue, Value, PyCDEValue
 from .value import get_slice_bounds
 from circt.support import get_value, BackedgeBuilder
 from circt.dialects import msft, hw, sv
+from pycde.dialects import comb
 import mlir.ir as ir
 
 import typing
@@ -141,7 +142,20 @@ def Mux(sel: BitVectorValue, *data_inputs: typing.List[Value]):
     return data_inputs[0]
   if sel.type.width != (num_inputs - 1).bit_length():
     raise TypeError("'Sel' bit width must be clog2 of number of inputs")
-  return ListValue(data_inputs)[sel]
+
+  if num_inputs == 2:
+    m = comb.MuxOp(sel, data_inputs[1], data_inputs[0])
+  else:
+    a = ListValue(data_inputs)
+    a.name = "arr_" + "_".join([i.name for i in data_inputs])
+    m = a[sel]
+
+  input_names = [
+      i.name if i.name is not None else f"in{idx}"
+      for idx, i in enumerate(data_inputs)
+  ]
+  m.name = f"mux_{sel.name}_" + "_".join(input_names)
+  return m
 
 
 def SystolicArray(row_inputs, col_inputs, pe_builder):
