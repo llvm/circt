@@ -280,7 +280,10 @@ class BitVectorValue(PyCDEValue):
     if pad_width == 0:
       return self
     pad = hw.ConstantOp(ir.IntegerType.get_signless(pad_width), 0)
-    return comb.ConcatOp(pad.value, self.value)
+    v: PyCDEValue = comb.ConcatOp(pad.value, self.value)
+    if self.name is not None:
+      v.name = f"{self.name}_padto_{num_bits}"
+    return v
 
   def __len__(self):
     return self.type.width
