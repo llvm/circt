@@ -1705,6 +1705,18 @@ struct NodeBypass : public mlir::RewritePattern {
 };
 } // namespace
 
+// Interesting names and symbols and don't touch force nodes to stick around.
+OpFoldResult NodeOp::fold(ArrayRef<Attribute> operands) {
+  if (!hasDroppableName())
+    return {};
+  if (hasDontTouch(getResult())) // handles inner symbols
+    return {};
+  if (getAnnotationsAttr() && !getAnnotationsAttr().empty())
+    return {};
+  operands[0].dump();
+  return operands[0];
+}
+
 void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
   results.insert<FoldNodeName>(context);

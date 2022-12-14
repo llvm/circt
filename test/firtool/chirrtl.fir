@@ -32,8 +32,6 @@ circuit test: %[[{
       read mport testport1 = testmem[_T_1], clock
     out1 <= testport1
   ; No write to the memory, initialized with invalid, hence optimized away.
-  ; CHECK: assign [[G1:.*]] = 8'h0;
-  ; CHECK: assign [[G2:.*]] = 8'h0;
-  ; CHECK: assign out0 = [[G1]];
-  ; CHECK: assign out1 = [[G2]];
+  ; CHECK: assign out0 = 8'h0;
+  ; CHECK: assign out1 = 8'h0;
 
