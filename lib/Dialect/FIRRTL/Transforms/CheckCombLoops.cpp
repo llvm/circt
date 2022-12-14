@@ -385,7 +385,7 @@ public:
                 continue;
               size_t inPortBaseId;
               if (!getStorageLocIdFromVal(instPort.value(), inPortBaseId))
-              continue;
+                continue;
               if (referencedModule) {
                 auto port = referencedModule.getBodyBlock()->getArgument(
                     instPort.index());
