@@ -425,10 +425,11 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
       if (!moduleTarget)
         return failure();
       AnnoPathValue internalPathSrc;
-      sendVal = lowerInternalPathAnno(
-          internalPathSrc, *moduleTarget, target, internalPathAttr,
-          wireTarget->ref.getOp()->getResult(0).getType().cast<FIRRTLType>(),
-          state);
+      auto targetType = wireTarget->ref.getType().cast<FIRRTLBaseType>();
+      if (wireTarget->fieldIdx)
+        targetType = targetType.getFinalTypeByFieldID(wireTarget->fieldIdx);
+      sendVal = lowerInternalPathAnno(internalPathSrc, *moduleTarget, target,
+                                      internalPathAttr, targetType, state);
       if (!sendVal)
         return failure();
       srcTarget = internalPathSrc;
