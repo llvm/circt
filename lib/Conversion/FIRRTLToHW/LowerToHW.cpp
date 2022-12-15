@@ -1497,7 +1497,6 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitDecl(VerbatimWireOp op);
 
   // Unary Ops.
-  LogicalResult visitSizeOfIntrinsiicOp(SizeOfIntrinsicOp op);
   LogicalResult lowerNoopCast(Operation *op);
   LogicalResult visitExpr(AsSIntPrimOp op) { return lowerNoopCast(op); }
   LogicalResult visitExpr(AsUIntPrimOp op) { return lowerNoopCast(op); }
@@ -1574,6 +1573,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(IsXIntrinsicOp op);
   LogicalResult visitExpr(PlusArgsTestIntrinsicOp op);
   LogicalResult visitExpr(PlusArgsValueIntrinsicOp op);
+  LogicalResult visitExpr(SizeOfIntrinsicOp op);
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
@@ -3364,6 +3364,11 @@ LogicalResult FIRRTLLowering::visitExpr(PlusArgsValueIntrinsicOp op) {
   auto svfun = builder.create<sv::SystemFunctionOp>(
       resultType, "value$plusargs", ArrayRef<Value>{str, wire});
   return setLowering(op.getFound(), svfun);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(SizeOfIntrinsicOp op) {
+  op.emitError("SizeOf should have been resolved.");
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//

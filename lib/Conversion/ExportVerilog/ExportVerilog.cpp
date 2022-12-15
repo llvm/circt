@@ -2328,7 +2328,7 @@ SubExprInfo ExprEmitter::visitSV(SystemFunctionOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  ps << "$" << op.getFnName() << "(";
+  ps << "$" << PPExtString(op.getFnName()) << "(";
   llvm::interleave(
       op.getOperands(), [&](Value v) { emitSubExpr(v, LowestPrecedence); },
       [&]() { ps << PP::nbsp << "," << PP::space; });
@@ -2445,7 +2445,7 @@ SubExprInfo ExprEmitter::visitSV(ConstantStrOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  ps << "\"" << op.getStr() << "\"";
+  ps.writeQuotedEscaped(op.getStr());
   return {Symbol, IsUnsigned}; // is a string unsigned?  Yes! SV 5.9
 }
 
