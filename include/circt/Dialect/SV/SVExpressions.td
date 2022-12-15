@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 include "mlir/Interfaces/InferTypeOpInterface.td"
-include "SVTypes.td"
+include "circt/Dialect/SV/SVTypes.td"
 
 def HWValueOrInOutType : AnyTypeOf<[HWValueType, InOutType]>;
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
