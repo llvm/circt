@@ -1760,10 +1760,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module @aggregateconstant
-  firrtl.module @aggregateconstant(out %out : !firrtl.vector<uint<8>, 2>) {
-    %0 = firrtl.aggregateconstant [1 : ui8, 0: ui8] : !firrtl.vector<uint<8>, 2>
-    firrtl.strictconnect %out, %0 : !firrtl.vector<uint<8>, 2>
-    // CHECK:      %0 = hw.aggregate_constant [0 : i8, 1 : i8] : !hw.array<2xi8>
-    // CHECK-NEXT: hw.output %0 : !hw.array<2xi8>
+  firrtl.module @aggregateconstant(out %out : !firrtl.bundle<a: vector<vector<uint<8>, 2>, 2>, b: vector<vector<uint<8>, 2>, 2>>) {
+    %0 = firrtl.aggregateconstant [[[0 : ui8, 1: ui8], [2 : ui8, 3: ui8]], [[4: ui8, 5: ui8], [6: ui8, 7:ui8]]] :
+      !firrtl.bundle<a: vector<vector<uint<8>, 2>, 2>, b: vector<vector<uint<8>, 2>, 2>>
+    firrtl.strictconnect %out, %0 : !firrtl.bundle<a: vector<vector<uint<8>, 2>, 2>, b: vector<vector<uint<8>, 2>, 2>>
+    // CHECK-LITERAL:   %0 = hw.aggregate_constant [[[3 : ui8, 2 : ui8], [1 : ui8, 0 : ui8]], [[7 : ui8, 6 : ui8], [5 : ui8, 4 : ui8]]]
+    // CHECK-SAME: !hw.struct<a: !hw.array<2xarray<2xi8>>, b: !hw.array<2xarray<2xi8>>>
+    // CHECK: hw.output %0
   }
 }
