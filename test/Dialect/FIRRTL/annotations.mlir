@@ -1926,3 +1926,26 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [{
     // CHECK:   %tap = firrtl.node %[[v0]] : !firrtl.uint
   }
 }
+
+// -----
+
+// Test that sub-field of a DataTap sink with internal path is handled correctly.
+firrtl.circuit "Top"  attributes {rawAnnotations = [{
+  class = "sifive.enterprise.grandcentral.DataTapsAnnotation",
+  keys = [{
+    class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey",
+    internalPath = "random.something",
+    module = "~Top|BlackBox",
+    sink = "~Top|Top>tap2.wid"
+    }]}]} {
+  firrtl.extmodule private @BlackBox() attributes {defname = "BlackBox"}
+  // CHECK:  firrtl.extmodule private @BlackBox
+  // CHECK-SAME:  out [[gen_ref:.+]]: !firrtl.ref<uint<1>>)
+  // CHECK-SAME: attributes {defname = "BlackBox", internalPaths = ["random.something"]}
+  firrtl.module @Top(in %in: !firrtl.uint<1>) {
+    %tap2 = firrtl.wire : !firrtl.bundle<wid: uint<1>>
+    firrtl.instance localparam @BlackBox()
+    // CHECK:  %[[localparam__gen_ref:.+]] = firrtl.instance localparam @BlackBox(out [[gen_ref]]: !firrtl.ref<uint<1>>)
+    // CHECK:  firrtl.ref.resolve %[[localparam__gen_ref]] : !firrtl.ref<uint<1>>
+  }
+}
