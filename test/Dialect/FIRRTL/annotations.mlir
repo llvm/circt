@@ -1595,7 +1595,6 @@ firrtl.circuit "GrandCentralViewsBundle"  attributes {
 
 // -----
 
-
 firrtl.circuit "Top"  attributes {rawAnnotations = [{
   class = "sifive.enterprise.grandcentral.DataTapsAnnotation",
   keys = [
