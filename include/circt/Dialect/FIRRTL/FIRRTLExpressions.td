@@ -618,8 +618,8 @@ def TailPrimOp : PrimOp<"tail"> {
 def IsXIntrinsicOp : FIRRTLExprOp<"int.isX"> {
   let summary = "Test for 'x";
   let description = [{
-    The int.isX expression checks that the operand is not a verilog literal
-    'x.  Firrtl doesn't have a notion of 'x per-se, but x can come in to the
+    The `int.isX` expression checks that the operand is not a verilog literal
+    'x.  FIRRTL doesn't have a notion of 'x per-se, but x can come in to the
     system from external modules and from SV constructs.  Verification
     constructs need to explicitly test for 'x.
     }];
@@ -631,7 +631,7 @@ def IsXIntrinsicOp : FIRRTLExprOp<"int.isX"> {
 }
 
 def PlusArgsTestIntrinsicOp : FIRRTLExprOp<"int.plusargs.test"> {
-  let summary = "Verilog $test$plusargs call";
+  let summary = "SystemVerilog `$test$plusargs` call";
 
   let arguments = (ins StrAttr:$formatString);
   let results = (outs UInt1Type:$found);
@@ -640,7 +640,7 @@ def PlusArgsTestIntrinsicOp : FIRRTLExprOp<"int.plusargs.test"> {
 
 def PlusArgsValueIntrinsicOp 
 : FIRRTLOp<"int.plusargs.value", [HasCustomSSAName, Pure]> {
-  let summary = "Verilog $value$plusargs call";
+  let summary = "SystemVerilog `$value$plusargs` call";
 
   let arguments = (ins StrAttr:$formatString);
   let results = (outs UInt1Type:$found, AnyType:$result);
