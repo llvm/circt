@@ -2513,8 +2513,8 @@ SubExprInfo ExprEmitter::visitTypeOp(AggregateConstantOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   // If the constant op as a whole is zero-width, it is an error.
-  auto type = op.getType();
-  assert(!isZeroBitType(type) && "zero-bit types not allowed at this point");
+  assert(!isZeroBitType(op.getType()) &&
+         "zero-bit types not allowed at this point");
 
   std::function<void(Attribute, Type)> printAggregate = [&](Attribute attr,
                                                             Type type) {
