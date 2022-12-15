@@ -82,8 +82,18 @@ bool walkDrivers(Value value, bool lookThroughWires,
 FieldRef getFieldRefFromValue(Value value);
 
 /// Get a string identifier representing the FieldRef.  Return this string and a
-/// boolean indicating if a valid "root" for the identifier was found.
-std::pair<std::string, bool> getFieldName(const FieldRef &fieldRef);
+/// boolean indicating if a valid "root" for the identifier was found.  If
+/// nameSafe is true, this will generate a string that is better suited for
+/// naming something in the IR.  E.g., if the fieldRef is a subfield of a
+/// subindex, without name safe the output would be:
+///
+///   foo[42].bar
+///
+/// With nameSafe, this would be:
+///
+///   foo_42_bar
+std::pair<std::string, bool> getFieldName(const FieldRef &fieldRef,
+                                          bool nameSafe = false);
 
 Value getValueByFieldID(ImplicitLocOpBuilder builder, Value value,
                         unsigned fieldID);

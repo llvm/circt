@@ -459,7 +459,7 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
 }
 
 /// Get the string name of a value which is a direct child of a declaration op.
-static void getDeclName(Value value, SmallString<64> &string) {
+static void getDeclName(Value value, SmallString<64> &string, bool nameSafe) {
   // Treat the value as a worklist to allow for recursion.
   while (value) {
     if (auto arg = value.dyn_cast<BlockArgument>()) {
@@ -474,7 +474,7 @@ static void getDeclName(Value value, SmallString<64> &string) {
     TypeSwitch<Operation *>(op)
         .Case<InstanceOp, MemOp>([&](auto op) {
           string += op.getName();
-          string += ".";
+          string += nameSafe ? "_" : ".";
           string += op.getPortName(value.cast<OpResult>().getResultNumber())
                         .getValue();
           value = nullptr;
@@ -490,10 +490,10 @@ static void getDeclName(Value value, SmallString<64> &string) {
 }
 
 std::pair<std::string, bool>
-circt::firrtl::getFieldName(const FieldRef &fieldRef) {
+circt::firrtl::getFieldName(const FieldRef &fieldRef, bool nameSafe) {
   SmallString<64> name;
   auto value = fieldRef.getValue();
-  getDeclName(value, name);
+  getDeclName(value, name, nameSafe);
   bool rootKnown = !name.empty();
 
   auto type = value.getType();
@@ -504,16 +504,17 @@ circt::firrtl::getFieldName(const FieldRef &fieldRef) {
       // Add the current field string, and recurse into a subfield.
       auto &element = bundleType.getElements()[index];
       if (!name.empty())
-        name += ".";
+        name += nameSafe ? "_" : ".";
       name += element.name.getValue();
       // Recurse in to the element type.
       type = element.type;
       localID = localID - bundleType.getFieldID(index);
     } else if (auto vecType = type.dyn_cast<FVectorType>()) {
       auto index = vecType.getIndexForFieldID(localID);
-      name += "[";
+      name += nameSafe ? "_" : "[";
       name += std::to_string(index);
-      name += "]";
+      if (!nameSafe)
+        name += "]";
       // Recurse in to the element type.
       type = vecType.getElementType();
       localID = localID - vecType.getFieldID(index);
