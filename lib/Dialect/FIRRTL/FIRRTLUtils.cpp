@@ -460,24 +460,33 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
 
 /// Get the string name of a value which is a direct child of a declaration op.
 static void getDeclName(Value value, SmallString<64> &string) {
-  if (auto arg = value.dyn_cast<BlockArgument>()) {
-    // Get the module ports and get the name.
-    auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
-    SmallVector<PortInfo> ports = module.getPorts();
-    string += ports[arg.getArgNumber()].name.getValue();
-    return;
-  }
+  // Treat the value as a worklist to allow for recursion.
+  while (value) {
+    if (auto arg = value.dyn_cast<BlockArgument>()) {
+      // Get the module ports and get the name.
+      auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
+      SmallVector<PortInfo> ports = module.getPorts();
+      string += ports[arg.getArgNumber()].name.getValue();
+      return;
+    }
 
-  auto *op = value.getDefiningOp();
-  TypeSwitch<Operation *>(op)
-      .Case<InstanceOp, MemOp>([&](auto op) {
-        string += op.getName();
-        string += ".";
-        string +=
-            op.getPortName(value.cast<OpResult>().getResultNumber()).getValue();
-      })
-      .Case<WireOp, RegOp, RegResetOp>(
-          [&](auto op) { string += op.getName(); });
+    auto *op = value.getDefiningOp();
+    TypeSwitch<Operation *>(op)
+        .Case<InstanceOp, MemOp>([&](auto op) {
+          string += op.getName();
+          string += ".";
+          string += op.getPortName(value.cast<OpResult>().getResultNumber())
+                        .getValue();
+          value = nullptr;
+        })
+        .Case<WireOp, RegOp, RegResetOp>([&](auto op) {
+          string += op.getName();
+          value = nullptr;
+        })
+        .Case<mlir::UnrealizedConversionCastOp>(
+            [&](auto cast) { value = cast.getInputs()[0]; })
+        .Default([&](auto) { value = nullptr; });
+  }
 }
 
 std::string circt::firrtl::getFieldName(const FieldRef &fieldRef) {
