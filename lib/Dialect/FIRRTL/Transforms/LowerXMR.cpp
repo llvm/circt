@@ -257,8 +257,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     SmallVector<Attribute> refSendPath;
     SmallString<128> xmrString;
     size_t lastIndex;
-    unsigned index = 0;
-    for (; remoteOpPath; ++index) {
+    while (remoteOpPath) {
       lastIndex = remoteOpPath.value();
       auto entr = refSendPathList[remoteOpPath.value()];
       refSendPath.push_back(entr.first);

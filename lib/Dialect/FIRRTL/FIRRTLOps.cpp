@@ -568,6 +568,7 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   ArrayRef<Attribute> portAnnos = op.getPortAnnotations();
   ArrayRef<Attribute> portSyms = op.getPortSymbols();
   auto numPorts = getNumPorts(op);
+  (void)numPorts;
   assert(portDirections.size() == numPorts);
   assert(portNames.size() == numPorts);
   assert(portAnnos.size() == numPorts || portAnnos.empty());

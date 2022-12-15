@@ -11,10 +11,27 @@
 //===----------------------------------------------------------------------===//
 
 include "mlir/Interfaces/InferTypeOpInterface.td"
+include "circt/Dialect/SV/SVTypes.td"
 
 def HWValueOrInOutType : AnyTypeOf<[HWValueType, InOutType]>;
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
                          ["getAsmResultNames"]>;
+
+
+def SystemFunctionOp : SVOp<"system"> {
+  let summary = "Simple SV System Function calls";
+  let description = [{
+    This operation calls the indicated system verilog system function.  This
+    supports functions which take normal expression arguments.
+
+    See section 20 of the 2012 SV spec.
+  }];
+  let arguments = (ins StrAttr:$fnName, Variadic<AnyType>:$args);
+  let results = (outs AnyType:$out);
+
+  let assemblyFormat = "$fnName `(` $args `)` attr-dict `:` functional-type($args, $out)";
+}
+
 
 def VerbatimExprOp : SVOp<"verbatim.expr", [Pure, HasCustomSSAName]> {
   let summary = "Expression that expands to a value given SystemVerilog text";
@@ -162,6 +179,17 @@ def ConstantZOp : SVOp<"constantZ", [Pure, HasCustomSSAName]> {
       return hw::getBitWidth(getType());
     }
   }];
+}
+
+def ConstantStrOp : SVOp<"constantStr", [Pure]> {
+  let summary = "A constant of string value";
+  let description = [{
+    This operation produces a constant string literal.
+    }];
+
+  let arguments = (ins StrAttr:$str);
+  let results = (outs StringType:$result);
+  let assemblyFormat = " $str attr-dict";
 }
 
 def LocalParamOp : SVOp<"localparam",

@@ -1679,6 +1679,28 @@ hw.module @ConditionalComments() {
   }                             // CHECK-NEXT: `endif // not def BAR
 }
 
+
+// CHECK-LABEL: module intrinsic
+hw.module @intrinsic(%clk: i1) -> (io1: i1, io2: i1, io3: i1, io4: i5) {
+  // CHECK: wire [4:0] [[tmp:.*]];
+
+  %x_i1 = sv.constantX : i1
+  %0 = comb.icmp bin ceq %clk, %x_i1 : i1
+  // CHECK: assign io1 = clk === 1'bx
+
+  %1 = sv.constantStr "foo"
+  %2 = sv.system "test$plusargs"(%1) : (!sv.string) -> i1
+  // CHECK: assign io2 = $test$plusargs("foo")
+
+  %_pargs = sv.wire  : !hw.inout<i5>
+  %3 = sv.read_inout %_pargs : !hw.inout<i5>
+  %4 = sv.system "value$plusargs"(%1, %_pargs) : (!sv.string, !hw.inout<i5>) -> i1
+  // CHECK: assign io3 = $value$plusargs("foo", [[tmp]])
+  // CHECK: assign io4 = [[tmp]]
+
+  hw.output %0, %2, %4, %3 : i1, i1, i1, i5
+}
+
 hw.module @bindInMod() {
   sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst>
   sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst3>
@@ -1740,3 +1762,4 @@ sv.bind #hw.innerNameRef<@NastyPortParent::@foo>
 // CHECK-LABEL:  hw.module @remoteInstDut
 // CHECK:    %signed = sv.wire  {hw.verilogName = "signed_0"} : !hw.inout<i1>
 // CHECK:    %output = sv.reg  {hw.verilogName = "output_0"} : !hw.inout<i1>
+
