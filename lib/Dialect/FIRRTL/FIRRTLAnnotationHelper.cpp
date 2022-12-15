@@ -323,7 +323,7 @@ InstanceOp firrtl::addPortsToModule(
   // Get a new port name from the Namespace.
   auto portName = [&](FModuleLike nameForMod) {
     return StringAttr::get(nameForMod.getContext(),
-                           getNamespace(nameForMod).newName("_gen_" + newName));
+                           getNamespace(nameForMod).newName(newName));
   };
   // The port number for the new port.
   unsigned portNo = getNumPorts(mod);

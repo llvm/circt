@@ -21,6 +21,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -587,7 +588,9 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
   LLVM_DEBUG({ llvm::dbgs() << "Analyzing wiring problems:\n"; });
   DenseMap<FModuleLike, ModuleModifications> moduleModifications;
   DenseSet<Value> visitedSinks;
-  for (auto [index, problem] : llvm::enumerate(state.wiringProblems)) {
+  for (auto &e : llvm::enumerate(state.wiringProblems)) {
+    auto index = e.index();
+    auto problem = e.value();
     // This is a unique index that is assigned to this specific wiring problem
     // and is used as a key during wiring to know which Values (ports, sources,
     // or sinks) should be connected.
@@ -695,22 +698,34 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
                             return RefType::get(base);
                           })
                           .Case<RefType>([](RefType ref) { return ref; });
-    for (auto sourceInst : sources) {
-      auto mod = cast<FModuleOp>(instanceGraph.getReferencedModule(sourceInst));
-      moduleModifications[mod].portsToAdd.push_back(
-          {index,
-           {StringAttr::get(
-                context, state.getNamespace(mod).newName(problem.newNameHint)),
-            refType, Direction::Out}});
-    }
-    for (auto sinkInst : sinks) {
-      auto mod = cast<FModuleOp>(instanceGraph.getReferencedModule(sinkInst));
-      moduleModifications[mod].portsToAdd.push_back(
-          {index,
-           {StringAttr::get(
-                context, state.getNamespace(mod).newName(problem.newNameHint)),
-            refType.getType(), Direction::In}});
-    }
+
+    // Record module modifications related to adding ports to modules.
+    auto addPorts = [&](ArrayRef<hw::HWInstanceLike> insts, Value val, Type tpe,
+                        Direction dir) {
+      StringRef name, instName;
+      for (auto inst : llvm::reverse(insts)) {
+        auto mod = cast<FModuleOp>(instanceGraph.getReferencedModule(inst));
+        if (name.empty()) {
+          if (problem.newNameHint.empty())
+            name = state.getNamespace(mod).newName(
+                getFieldName(getFieldRefFromValue(val), /*nameSafe=*/true)
+                    .first +
+                "__bore");
+          else
+            name = state.getNamespace(mod).newName(problem.newNameHint);
+        } else {
+          assert(!instName.empty());
+          name = state.getNamespace(mod).newName(instName + "_" + name);
+        }
+        moduleModifications[mod].portsToAdd.push_back(
+            {index, {StringAttr::get(context, name), tpe, dir}});
+        instName = inst.instanceName();
+      }
+    };
+
+    // Record the addition of ports.
+    addPorts(sources, source, refType, Direction::Out);
+    addPorts(sinks, sink, refType.getType(), Direction::In);
   }
 
   // Iterate over modules from leaves to roots, applying ModuleModifications to

@@ -299,7 +299,21 @@ Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
   ImplicitLocOpBuilder builder(modInstance.getLoc(), modInstance);
   builder.setInsertionPointAfter(modInstance);
   auto portRefType = RefType::get(targetType.cast<FIRRTLBaseType>());
-  StringRef refName("ref");
+  SmallString<32> refName;
+  for (auto c : internalPathAttr.getValue()) {
+    switch (c) {
+    case '.':
+    case '[':
+      refName.push_back('_');
+      break;
+    case ']':
+      break;
+    default:
+      refName.push_back(c);
+      break;
+    }
+  }
+
   // Add RefType ports corresponding to this "internalPath" to the external
   // module. This also updates all the instances of the external module.
   // This removes and replaces the instance, and returns the updated
@@ -503,11 +517,6 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
     Value sink = getValueByFieldID(sinkBuilder, targetOp->getResult(0),
                                    wireTarget->fieldIdx);
 
-    // Match previous behavior, don't use "good" names for dataflow wires.
-    // (Store as a StringAttr so the wiringProblem StringRef is backed.)
-    auto nameHint =
-        StringAttr::get(context, Twine("_gen_") + tapName.getValue());
-
     // For resets, sometimes inject a cast between sink and target 'sink'.
     // Introduced a dummy wire and cast that, dummy wire will be 'sink'.
     if (valType.isResetType() &&
@@ -516,7 +525,7 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
       auto addWireWithCast = [&](auto createCast) {
         auto wire = sinkBuilder.create<WireOp>(
             valType,
-            state.getNamespace(wireModule).newName(nameHint.getValue()));
+            state.getNamespace(wireModule).newName(tapName.getValue()));
         sinkBuilder.create<ConnectOp>(sink, createCast(wire));
         sink = wire;
       };
@@ -529,7 +538,7 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
             [&](auto v) { return sinkBuilder.create<AsAsyncResetPrimOp>(v); });
     }
 
-    state.wiringProblems.push_back({sendVal, sink, nameHint});
+    state.wiringProblems.push_back({sendVal, sink, ""});
   }
 
   return success();

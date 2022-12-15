@@ -204,7 +204,7 @@ struct WiringProblem {
 
   /// A base name to use when generating new signals associated with this wiring
   /// problem.
-  StringRef newNameHint;
+  std::string newNameHint;
 };
 
 /// A store of pending modifications to a FIRRTL module associated with solving

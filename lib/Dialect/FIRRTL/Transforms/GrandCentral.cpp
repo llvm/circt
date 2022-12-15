@@ -926,9 +926,9 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
       Optional<StringAttr> description = std::nullopt;
       if (auto maybeDescription = field.get("description"))
         description = maybeDescription.cast<StringAttr>();
-      auto eltAttr = parseAugmentedType(state, tpe, root, companion, name,
-                                        defName, std::nullopt, description,
-                                        clazz, companionAttr, path);
+      auto eltAttr = parseAugmentedType(
+          state, tpe, root, companion, name, defName, std::nullopt, description,
+          clazz, companionAttr, path + "_" + name.getValue());
       if (!name || !tpe || !eltAttr)
         return std::nullopt;
 
@@ -1062,9 +1062,6 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
         cast<FModuleOp>(resolvePath(companionAttr.getValue(), state.circuit,
                                     state.symTbl, state.targetCaches)
                             ->ref.getOp());
-    auto name = state.getNamespace(companionMod)
-                    .newName(defName.getValue() + "_" +
-                             Twine(id.getValue().getZExtValue()));
     builder.setInsertionPointToEnd(companionMod.getBodyBlock());
     auto sink = builder.create<WireOp>(source->getType(), name);
     state.targetCaches.insertOp(sink);
@@ -1075,7 +1072,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
 
     // Append this new Wiring Problem to the ApplyState.  The Wiring Problem
     // will be resolved to bore RefType ports before LowerAnnotations finishes.
-    state.wiringProblems.push_back({*source, sink, name});
+    state.wiringProblems.push_back({*source, sink, (path + "__bore").str()});
 
     return DictionaryAttr::getWithSorted(context, elementIface);
   }
@@ -1088,11 +1085,11 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     if (!elementsAttr)
       return std::nullopt;
     SmallVector<Attribute> elements;
-    for (auto elt : elementsAttr) {
-      auto eltAttr =
-          parseAugmentedType(state, elt.cast<DictionaryAttr>(), root, companion,
-                             name, StringAttr::get(context, ""), id,
-                             std::nullopt, clazz, companionAttr, path);
+    for (auto &[i, elt] : llvm::enumerate(elementsAttr)) {
+      auto eltAttr = parseAugmentedType(
+          state, elt.cast<DictionaryAttr>(), root, companion, name,
+          StringAttr::get(context, ""), id, std::nullopt, clazz, companionAttr,
+          path + "_" + Twine(i));
       if (!eltAttr)
         return std::nullopt;
       elements.push_back(*eltAttr);
@@ -1155,7 +1152,7 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
 
   auto prunedAttr =
       parseAugmentedType(state, viewAttr, anno, companionAttr.getValue(), name,
-                         {}, id, {}, viewAnnoClass, companionAttr, "view");
+                         {}, id, {}, viewAnnoClass, companionAttr, Twine(name));
   if (!prunedAttr)
     return failure();
 
