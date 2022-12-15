@@ -1,16 +1,16 @@
 # Intrinsics
 
-Intrinsics provide an implementation-specific way to extend the firrtl language
+Intrinsics provide an implementation-specific way to extend the FIRRTL language
 with new operations.
 
 Intrinsics are currently implemented as annotated external modules.  We expect
-that native firrtl support for intrinsics will be added to the language.
+that native FIRRTL support for intrinsics will be added to the language.
 
 ## Motivation
 
-Intrinsics provide a way to add functionality to firrtl without having to extend
-the firrtl language. This allows a fast path for prototyping new operations to 
-rapidly repsond to output requirements.  Intrinsics maintain strict definitions
+Intrinsics provide a way to add functionality to FIRRTL without having to extend
+the FIRRTL language. This allows a fast path for prototyping new operations to 
+rapidly respond to output requirements.  Intrinsics maintain strict definitions
 and type checking.
 
 ## Supported Intrinsics
@@ -22,7 +22,7 @@ although there may be further restrictions in the annotation.
 ### circt.sizeof
 
 Returns the size of a type.  The input port is not read from and may be any 
-type, including uninfered types.
+type, including uninferred types.
 
 | Parameter  | Type   | Description                                       |
 | ---------- | ------ | -------------                                     |
@@ -34,7 +34,7 @@ type, including uninfered types.
 
 ### circt.isX
 
-Tests if the value is a literal `x`.  Firrtl doesn't have a notion of 'x per-se, 
+Tests if the value is a literal `x`.  FIRRTL doesn't have a notion of 'x per-se, 
 but x can come in to the system from external modules and from SV constructs.  
 Verification constructs need to explicitly test for 'x.
 
@@ -48,8 +48,8 @@ Verification constructs need to explicitly test for 'x.
 
 ### circt.plusargs.value
 
-Tests and extracts a value from simulator command line options with system 
-verilog $value$plusargs.  This is described in SystemVerilog 2012 section 21.6.
+Tests and extracts a value from simulator command line options with SystemVerilog
+`$value$plusargs`.  This is described in SystemVerilog 2012 section 21.6.
 
 We do not currently check that the format string substitution flag matches the
 type of the result.
@@ -66,7 +66,7 @@ type of the result.
 
 ### circt.plusargs.test
 
-Tests simulator command line options with system verilog $test$plusargs.  This
+Tests simulator command line options with SystemVerilog `$test$plusargs`.  This
 is described in SystemVerilog 2012 section 21.6.
 
 | Parameter  | Type   | Description                                       |
