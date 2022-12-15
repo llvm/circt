@@ -1057,8 +1057,7 @@ bool ConstraintSolver::emitUninferredWidthError(VarExpr *var) {
   }
 
   // Actually print what the user can refer to.
-  bool rootKnown;
-  auto fieldName = getFieldName(fieldRef, rootKnown);
+  auto [fieldName, rootKnown] = getFieldName(fieldRef);
   if (!fieldName.empty()) {
     if (!rootKnown)
       diag << " field";
@@ -1731,8 +1730,9 @@ void InferenceMapping::unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type) {
       // Leaf element, unify the fields!
       FieldRef lhsFieldRef(lhs.getValue(), lhs.getFieldID() + fieldID);
       FieldRef rhsFieldRef(rhs.getValue(), rhs.getFieldID() + fieldID);
-      LLVM_DEBUG(llvm::dbgs() << "Unify " << getFieldName(lhsFieldRef) << " = "
-                              << getFieldName(rhsFieldRef) << "\n");
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Unify " << getFieldName(lhsFieldRef).first << " = "
+                 << getFieldName(rhsFieldRef).first << "\n");
       // Abandon variables becoming unconstrainable by the unification.
       if (auto *var = dyn_cast_or_null<VarExpr>(getExprOrNull(lhsFieldRef)))
         solver.addGeqConstraint(var, solver.known(0));
@@ -1789,7 +1789,7 @@ void InferenceMapping::setExpr(FieldRef fieldRef, Expr *expr) {
   LLVM_DEBUG({
     llvm::dbgs() << "Expr " << *expr << " for " << fieldRef.getValue();
     if (fieldRef.getFieldID())
-      llvm::dbgs() << " '" << getFieldName(fieldRef) << "'";
+      llvm::dbgs() << " '" << getFieldName(fieldRef).first << "'";
     llvm::dbgs() << "\n";
   });
   opExprs[fieldRef] = expr;

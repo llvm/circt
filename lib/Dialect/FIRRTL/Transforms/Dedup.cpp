@@ -517,12 +517,13 @@ struct Equivalence {
       if (bValue != map.lookup(aValue)) {
         diag.attachNote(a->getLoc())
             << "operations use different operands, first operand is '"
-            << getFieldName(getFieldRefFromValue(aValue)) << "'";
+            << getFieldName(getFieldRefFromValue(aValue)).first << "'";
         diag.attachNote(b->getLoc())
             << "second operand is '"
-            << getFieldName(getFieldRefFromValue(bValue))
+            << getFieldName(getFieldRefFromValue(bValue)).first
             << "', but should have been '"
-            << getFieldName(getFieldRefFromValue(map.lookup(aValue))) << "'";
+            << getFieldName(getFieldRefFromValue(map.lookup(aValue))).first
+            << "'";
         return failure();
       }
     }

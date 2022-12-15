@@ -631,11 +631,12 @@ void dumpPath(SmallVector<Node> &path, SmallString<16> &instancePath,
               auto subfieldData =
                   std::get<SubfieldNodeIterator>(iterImpl).getDataPort();
 
-              attachInfo() << getFieldName(getFieldRefFromValue(subfieldAddr));
+              attachInfo()
+                  << getFieldName(getFieldRefFromValue(subfieldAddr)).first;
               if (!isCycleEnd)
                 diag.attachNote(subfieldData.getLoc())
                     << module.getName().str() << "."
-                    << getFieldName(getFieldRefFromValue(subfieldData));
+                    << getFieldName(getFieldRefFromValue(subfieldData)).first;
             }
             break;
           }

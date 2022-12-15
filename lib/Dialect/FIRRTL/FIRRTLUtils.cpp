@@ -489,17 +489,12 @@ static void getDeclName(Value value, SmallString<64> &string) {
   }
 }
 
-std::string circt::firrtl::getFieldName(const FieldRef &fieldRef) {
-  bool rootKnown;
-  return getFieldName(fieldRef, rootKnown);
-}
-
-std::string circt::firrtl::getFieldName(const FieldRef &fieldRef,
-                                        bool &rootKnown) {
+std::pair<std::string, bool>
+circt::firrtl::getFieldName(const FieldRef &fieldRef) {
   SmallString<64> name;
   auto value = fieldRef.getValue();
   getDeclName(value, name);
-  rootKnown = !name.empty();
+  bool rootKnown = !name.empty();
 
   auto type = value.getType();
   auto localID = fieldRef.getFieldID();
@@ -531,7 +526,7 @@ std::string circt::firrtl::getFieldName(const FieldRef &fieldRef,
     }
   }
 
-  return name.str().str();
+  return {name.str().str(), rootKnown};
 }
 
 /// This gets the value targeted by a field id.  If the field id is targeting

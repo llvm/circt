@@ -2067,8 +2067,7 @@ static LogicalResult checkConnectFlow(Operation *connect) {
     auto kind = getDeclarationKind(src);
     if (kind != DeclKind::Port && kind != DeclKind::Instance) {
       auto srcRef = getFieldRefFromValue(src);
-      bool rootKnown;
-      auto srcName = getFieldName(srcRef, rootKnown);
+      auto [srcName, rootKnown] = getFieldName(srcRef);
       auto diag = emitError(connect->getLoc());
       diag << "connect has invalid flow: the source expression ";
       if (rootKnown)
@@ -2079,8 +2078,7 @@ static LogicalResult checkConnectFlow(Operation *connect) {
   }
   if (foldFlow(dst) == Flow::Source) {
     auto dstRef = getFieldRefFromValue(dst);
-    bool rootKnown;
-    auto dstName = getFieldName(dstRef, rootKnown);
+    auto [dstName, rootKnown] = getFieldName(dstRef);
     auto diag = emitError(connect->getLoc());
     diag << "connect has invalid flow: the destination expression ";
     if (rootKnown)

@@ -81,9 +81,9 @@ bool walkDrivers(Value value, bool lookThroughWires,
 /// location.
 FieldRef getFieldRefFromValue(Value value);
 
-/// Get a string identifier representing the FieldRef.
-std::string getFieldName(const FieldRef &fieldRef);
-std::string getFieldName(const FieldRef &fieldRef, bool &rootKnown);
+/// Get a string identifier representing the FieldRef.  Return this string and a
+/// boolean indicating if a valid "root" for the identifier was found.
+std::pair<std::string, bool> getFieldName(const FieldRef &fieldRef);
 
 Value getValueByFieldID(ImplicitLocOpBuilder builder, Value value,
                         unsigned fieldID);
