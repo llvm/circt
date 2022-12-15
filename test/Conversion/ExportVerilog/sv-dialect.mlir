@@ -1695,7 +1695,7 @@ hw.module @intrinsic(%clk: i1) -> (io1: i1, io2: i1, io3: i1, io4: i5) {
   %_pargs = sv.wire  : !hw.inout<i5>
   %3 = sv.read_inout %_pargs : !hw.inout<i5>
   %4 = sv.system "value$plusargs"(%1, %_pargs) : (!sv.string, !hw.inout<i5>) -> i1
-  // CHECK: assign io3 = $value$plusargs("foo" , [[tmp]])
+  // CHECK: assign io3 = $value$plusargs("foo", [[tmp]])
   // CHECK: assign io4 = [[tmp]]
 
   hw.output %0, %2, %4, %3 : i1, i1, i1, i5

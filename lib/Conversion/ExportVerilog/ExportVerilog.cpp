@@ -2329,10 +2329,12 @@ SubExprInfo ExprEmitter::visitSV(SystemFunctionOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   ps << "$" << PPExtString(op.getFnName()) << "(";
-  llvm::interleave(
-      op.getOperands(), [&](Value v) { emitSubExpr(v, LowestPrecedence); },
-      [&]() { ps << PP::nbsp << "," << PP::space; });
-  ps << ")";
+  ps.scopedBox(PP::ibox0, [&]() {
+    llvm::interleave(
+        op.getOperands(), [&](Value v) { emitSubExpr(v, LowestPrecedence); },
+        [&]() { ps << "," << PP::space; });
+    ps << ")";
+  });
   return {Symbol, IsUnsigned};
 }
 
