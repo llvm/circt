@@ -1926,3 +1926,31 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [{
     // CHECK:   %tap = firrtl.node %[[v0]] : !firrtl.uint
   }
 }
+
+// -----
+
+// Test that sub-field of a DataTap sink with internal path is handled correctly.
+firrtl.circuit "Top"  attributes {rawAnnotations = [{
+  class = "sifive.enterprise.grandcentral.DataTapsAnnotation",
+  keys = [{
+    class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey",
+    internalPath = "random.something",
+    module = "~Top|BlackBox",
+    sink = "~Top|Top>tap2.wid"
+    }]}]} {
+  firrtl.extmodule private @BlackBox(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {defname = "BlackBox"}
+  // CHECK:  firrtl.extmodule private @BlackBox
+  // CHECK-SAME: (in in: !firrtl.uint<1>, out out: !firrtl.uint<1>,
+  // CHECK-SAME:  out [[gen_ref:.+]]: !firrtl.ref<uint<1>>)
+  // CHECK-SAME: attributes {defname = "BlackBox", internalPaths = ["random.something"]}
+  firrtl.module @Top(in %in: !firrtl.uint<1>) {
+    %tap2 = firrtl.wire interesting_name  : !firrtl.bundle<wid: uint<1>>
+    %invalid = firrtl.invalidvalue : !firrtl.bundle<wid: uint<1>>
+    firrtl.strictconnect %tap2, %invalid : !firrtl.bundle<wid: uint<1>>
+    %localparam_in, %localparam_out = firrtl.instance localparam interesting_name  @BlackBox(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    // CHECK:  %localparam_in, %localparam_out, %[[localparam__gen_ref:.+]] = firrtl.instance localparam interesting_name  @BlackBox(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>, out [[gen_ref]]: !firrtl.ref<uint<1>>)
+    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+    firrtl.strictconnect %localparam_in, %invalid_ui1 : !firrtl.uint<1>
+    // CHECK:  firrtl.ref.resolve %[[localparam__gen_ref]] : !firrtl.ref<uint<1>>
+  }
+}
