@@ -1049,10 +1049,14 @@ OpFoldResult XorRPrimOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult CatPrimOp::fold(ArrayRef<Attribute> operands) {
-
-  if (getLhs().getType().getBitWidthOrSentinel() == 0)
+  // cat(x, 0-width) -> x
+  // cat(0-width, x) -> x
+  // Limit to unsigned (result type), as cannot insert cast here.
+  if (getLhs().getType().getBitWidthOrSentinel() == 0 &&
+      getRhs().getType().isUnsigned())
     return getRhs();
-  if (getRhs().getType().getBitWidthOrSentinel() == 0)
+  if (getRhs().getType().getBitWidthOrSentinel() == 0 &&
+      getLhs().getType().isUnsigned())
     return getLhs();
 
   if (!hasKnownWidthIntTypes(*this))
