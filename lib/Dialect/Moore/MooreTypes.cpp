@@ -770,7 +770,7 @@ Optional<Range> PackedDim::getRange() const {
 }
 
 Optional<unsigned> PackedDim::getSize() const {
-  return getRange().transform([](auto r) { return r.size; });
+  return llvm::transformOptional(getRange(), [](auto r) { return r.size; });
 }
 
 const detail::DimStorage *PackedDim::getImpl() const {
