@@ -663,12 +663,12 @@ circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
   unsigned lineNo = 0, columnNo = 0;
   StringRef filename = decodeLocator(spelling, lineNo, columnNo);
   if (filename.empty())
-    return {false, llvm::None};
+    return {false, std::nullopt};
 
   // If info locators are ignored, don't actually apply them.  We still do all
   // the verification above though.
   if (skipParsing)
-    return {true, llvm::None};
+    return {true, std::nullopt};
 
   /// Return an FileLineColLoc for the specified location, but use a bit of
   /// caching to reduce thrasing the MLIRContext.

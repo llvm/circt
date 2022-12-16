@@ -379,7 +379,8 @@ void PlacementDB::walkPlacements(
   // X loop.
   SmallVector<std::pair<size_t, DimYMap>> cols(placements.begin(),
                                                placements.end());
-  maybeSort(cols, walkOrder.transform([](auto wo) { return wo.columns; }));
+  maybeSort(cols, llvm::transformOptional(walkOrder,
+                                          [](auto wo) { return wo.columns; }));
   for (auto colF : cols) {
     size_t x = colF.first;
     if (x < xmin || x > xmax)
@@ -388,7 +389,8 @@ void PlacementDB::walkPlacements(
 
     // Y loop.
     SmallVector<std::pair<size_t, DimNumMap>> rows(yMap.begin(), yMap.end());
-    maybeSort(rows, walkOrder.transform([](auto wo) { return wo.rows; }));
+    maybeSort(rows, llvm::transformOptional(walkOrder,
+                                            [](auto wo) { return wo.rows; }));
     for (auto rowF : rows) {
       size_t y = rowF.first;
       if (y < ymin || y > ymax)
