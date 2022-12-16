@@ -120,7 +120,7 @@ def ConnectExtension : Pat<
   (ConnectOp $dst, $src),
   (StrictConnectOp $dst, (PadPrimOp $src, 
     (NativeCodeCall<"$0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel()"> $dst))),
-  [(IntType $dst), (IntType $src), (KnownWidth $dst), (KnownWidth $src)]>;
+  [(IntType $dst), (IntType $src), (KnownWidth $dst), (KnownWidth $src), (mismatchTypes $src, $dst)]>;
 
 def LimitConstant32 : NativeCodeCall<
   "$_builder.getI32IntegerAttr($0.getValue().getLimitedValue(1ULL << 31))">;
