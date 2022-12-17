@@ -23,7 +23,7 @@ firrtl.circuit "xmr" {
 // Test the correct xmr path is generated
 // CHECK-LABEL: firrtl.circuit "Top" {
 firrtl.circuit "Top" {
-  // CHECK:      hw.hierpath @[[path:[a-zA-Z0-9_]+]]
+  // CHECK:      hw.hierpath private @[[path:[a-zA-Z0-9_]+]]
   // CHECK-SAME:   [@Top::@bar, @Bar::@barXMR, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
   firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
     // CHECK: firrtl.module @XmrSrcMod() {
@@ -75,7 +75,7 @@ firrtl.circuit "Top" {
 // Test the correct xmr path to port is generated
 // CHECK-LABEL: firrtl.circuit "Top" {
 firrtl.circuit "Top" {
-  // CHECK: hw.hierpath @[[path:[a-zA-Z0-9_]+]] [@Top::@bar, @Bar::@barXMR, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
+  // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@bar, @Bar::@barXMR, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
   firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1>, out %_a: !firrtl.ref<uint<1>>) {
     // CHECK: firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1> sym @[[xmrSym]]) {
     %1 = firrtl.ref.send %pa : !firrtl.uint<1>
@@ -103,11 +103,11 @@ firrtl.circuit "Top" {
 // Test for multiple readers and multiple instances
 // CHECK-LABEL: firrtl.circuit "Top" {
 firrtl.circuit "Top" {
-  // CHECK-DAG: hw.hierpath @[[path_0:[a-zA-Z0-9_]+]] [@Foo::@fooXMR, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
-  // CHECK-DAG: hw.hierpath @[[path_1:[a-zA-Z0-9_]+]] [@Bar::@barXMR, @XmrSrcMod::@[[xmrSym]]]
-  // CHECK-DAG: hw.hierpath @[[path_2:[a-zA-Z0-9_]+]] [@Top::@bar, @Bar::@barXMR, @XmrSrcMod::@[[xmrSym]]]
-  // CHECK-DAG: hw.hierpath @[[path_3:[a-zA-Z0-9_]+]] [@Top::@foo, @Foo::@fooXMR, @XmrSrcMod::@[[xmrSym]]]
-  // CHECK-DAG: hw.hierpath @[[path_4:[a-zA-Z0-9_]+]] [@Top::@xmr, @XmrSrcMod::@[[xmrSym]]]
+  // CHECK-DAG: hw.hierpath private @[[path_0:[a-zA-Z0-9_]+]] [@Foo::@fooXMR, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
+  // CHECK-DAG: hw.hierpath private @[[path_1:[a-zA-Z0-9_]+]] [@Bar::@barXMR, @XmrSrcMod::@[[xmrSym]]]
+  // CHECK-DAG: hw.hierpath private @[[path_2:[a-zA-Z0-9_]+]] [@Top::@bar, @Bar::@barXMR, @XmrSrcMod::@[[xmrSym]]]
+  // CHECK-DAG: hw.hierpath private @[[path_3:[a-zA-Z0-9_]+]] [@Top::@foo, @Foo::@fooXMR, @XmrSrcMod::@[[xmrSym]]]
+  // CHECK-DAG: hw.hierpath private @[[path_4:[a-zA-Z0-9_]+]] [@Top::@xmr, @XmrSrcMod::@[[xmrSym]]]
   firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
     // CHECK: firrtl.module @XmrSrcMod() {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
@@ -171,7 +171,7 @@ firrtl.circuit "Top" {
 // Check for downward reference
 // CHECK-LABEL: firrtl.circuit "Top" {
 firrtl.circuit "Top" {
-  // CHECK: hw.hierpath @[[path:[a-zA-Z0-9_]+]] [@Top::@bar, @Bar::@barXMR, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
+  // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@bar, @Bar::@barXMR, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
   firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
     // CHECK: firrtl.module @XmrSrcMod() {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
@@ -210,7 +210,7 @@ firrtl.circuit "Top" {
 // Check for downward reference to port
 // CHECK-LABEL: firrtl.circuit "Top" {
 firrtl.circuit "Top" {
-  // CHECK: hw.hierpath @[[path:[a-zA-Z0-9_]+]] [@Top::@bar, @Bar::@barXMR, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
+  // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@bar, @Bar::@barXMR, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
   firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1>, out %_a: !firrtl.ref<uint<1>>) {
     // CHECK: firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1> sym @xmr_sym) {
     %1 = firrtl.ref.send %pa : !firrtl.uint<1>
@@ -245,8 +245,8 @@ firrtl.circuit "Top" {
 // Test for multiple paths and downward reference.
 // CHECK-LABEL: firrtl.circuit "Top" {
 firrtl.circuit "Top" {
-  // CHECK: hw.hierpath @[[path_0:[a-zA-Z0-9_]+]] [@Top::@foo, @Foo::@fooXMR, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
-  // CHECK: hw.hierpath @[[path_1:[a-zA-Z0-9_]+]] [@Top::@xmr, @XmrSrcMod::@[[xmrSym]]]
+  // CHECK: hw.hierpath private @[[path_0:[a-zA-Z0-9_]+]] [@Top::@foo, @Foo::@fooXMR, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
+  // CHECK: hw.hierpath private @[[path_1:[a-zA-Z0-9_]+]] [@Top::@xmr, @XmrSrcMod::@[[xmrSym]]]
   firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
@@ -280,7 +280,7 @@ firrtl.circuit "Top" {
 // Test for multiple children paths
 // CHECK-LABEL: firrtl.circuit "Top" {
 firrtl.circuit "Top" {
-  // CHECK: hw.hierpath @[[path:[a-zA-Z0-9_]+]] [@Top::@xmr, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
+  // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@xmr, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
   firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
@@ -326,7 +326,7 @@ firrtl.circuit "Top" {
 // Test for multiple children paths
 // CHECK-LABEL: firrtl.circuit "Top" {
 firrtl.circuit "Top" {
-  // CHECK: hw.hierpath @[[path:[a-zA-Z0-9_]+]] [@Top::@xmr, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
+  // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@xmr, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
   firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
@@ -371,7 +371,7 @@ firrtl.circuit "Top" {
 
 // Multiply instantiated Top works, because the reference port does not flow through it.
 firrtl.circuit "Top" {
-  // CHECK: hw.hierpath @[[path:[a-zA-Z0-9_]+]] [@Dut::@xmr, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
+  // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Dut::@xmr, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
   firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
@@ -421,7 +421,7 @@ firrtl.circuit "Top" {
 // -----
 
 firrtl.circuit "Top"  {
-  // CHECK: hw.hierpath @[[path:[a-zA-Z0-9_]+]] [@Top::@xmr_sym, @DUTModule::@[[xmrSym:[a-zA-Z0-9_]+]]]
+  // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@xmr_sym, @DUTModule::@[[xmrSym:[a-zA-Z0-9_]+]]]
   // CHECK-LABEL: firrtl.module private @DUTModule
   // CHECK-SAME: (in %clock: !firrtl.clock, in %io_addr: !firrtl.uint<3>, in %io_dataIn: !firrtl.uint<8>, in %io_wen: !firrtl.uint<1>, out %io_dataOut: !firrtl.uint<8>)
   firrtl.module private @DUTModule(in %clock: !firrtl.clock, in %io_addr: !firrtl.uint<3>, in %io_dataIn: !firrtl.uint<8>, in %io_wen: !firrtl.uint<1>, out %io_dataOut: !firrtl.uint<8>, out %_gen_memTap: !firrtl.ref<vector<uint<8>, 8>>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
@@ -505,7 +505,7 @@ firrtl.circuit "Top"  {
 // -----
 
 firrtl.circuit "Top"  {
-  // CHECK: hw.hierpath @[[path:[a-zA-Z0-9_]+]] [@Top::@xmr_sym, @DUTModule::@[[xmrSym:[a-zA-Z0-9_]+]]]
+  // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@xmr_sym, @DUTModule::@[[xmrSym:[a-zA-Z0-9_]+]]]
   // CHECK-LABEL:  firrtl.module private @DUTModule
   // CHECK-SAME: in %io_wen: !firrtl.uint<1>, out %io_dataOut: !firrtl.uint<8>)
   firrtl.module private @DUTModule(in %clock: !firrtl.clock, in %io_addr: !firrtl.uint<3>, in %io_dataIn: !firrtl.uint<8>, in %io_wen: !firrtl.uint<1>, out %io_dataOut: !firrtl.uint<8>, out %_gen_memTap_0: !firrtl.ref<uint<8>>, out %_gen_memTap_1: !firrtl.ref<uint<8>>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
@@ -540,7 +540,7 @@ firrtl.circuit "Top"  {
 // Test lowering of internal path into a module
 // CHECK-LABEL: firrtl.circuit "Top" {
 firrtl.circuit "Top" {
-  // CHECK: hw.hierpath @[[path:[a-zA-Z0-9_]+]] [@Top::@bar, @Bar::@[[xmrSym:[a-zA-Z0-9_]+]]]
+  // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@bar, @Bar::@[[xmrSym:[a-zA-Z0-9_]+]]]
   firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
     // CHECK: firrtl.module @XmrSrcMod() {
     // CHECK-NEXT: }
@@ -570,7 +570,7 @@ firrtl.circuit "Top" {
 // Test lowering of internal path into a module
 // CHECK-LABEL: firrtl.circuit "Top" {
 firrtl.circuit "Top" {
-  // CHECK: hw.hierpath @[[path:[a-zA-Z0-9_]+]] [@Top::@bar, @Bar::@barXMR, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
+  // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@bar, @Bar::@barXMR, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
   firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
     // CHECK: firrtl.module @XmrSrcMod() {
     // CHECK{LITERAL}:  firrtl.verbatim.expr "internal.path" : () -> !firrtl.uint<1> {symbols = [@XmrSrcMod]}

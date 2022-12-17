@@ -574,6 +574,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
                      builder.create<hw::HierPathOp>(
                          circuitNamespace->newName("xmrPath"), pathArray)})
             .first->second;
+    path.setVisibility(SymbolTable::Visibility::Private);
 
     // Save the insertion point so other unique HierPathOps will be created
     // after this one.
