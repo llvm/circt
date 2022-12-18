@@ -35,19 +35,19 @@ void firrtlSetErrorHandler(FirrtlContext ctx, FirrtlErrorHandler handler,
       });
 }
 
-void firrtlVisitCircuit(FirrtlContext ctx, MlirStringRef name) {
+void firrtlVisitCircuit(FirrtlContext ctx, FirrtlStringRef name) {
   auto *ffiCtx = unwrap(ctx);
 
   ffiCtx->visitCircuit(unwrap(name));
 }
 
-void firrtlVisitModule(FirrtlContext ctx, MlirStringRef name) {
+void firrtlVisitModule(FirrtlContext ctx, FirrtlStringRef name) {
   auto *ffiCtx = unwrap(ctx);
 
   ffiCtx->visitModule(unwrap(name));
 }
 
-void firrtlVisitPort(FirrtlContext ctx, MlirStringRef name,
+void firrtlVisitPort(FirrtlContext ctx, FirrtlStringRef name,
                      FirrtlPortDirection direction, const FirrtlType *type) {
   auto *ffiCtx = unwrap(ctx);
 
@@ -64,7 +64,7 @@ void firrtlVisitPort(FirrtlContext ctx, MlirStringRef name,
   ffiCtx->visitPort(unwrap(name), dir, *type);
 }
 
-MlirStringRef firrtlExportFirrtl(FirrtlContext ctx) {
+FirrtlStringRef firrtlExportFirrtl(FirrtlContext ctx) {
   auto *ffiCtx = unwrap(ctx);
 
   std::string output;
@@ -79,7 +79,7 @@ MlirStringRef firrtlExportFirrtl(FirrtlContext ctx) {
   return mlirStringRefCreate(rawCStr, len);
 }
 
-void firrtlDestroyString(FirrtlContext ctx, MlirStringRef string) {
+void firrtlDestroyString(FirrtlContext ctx, FirrtlStringRef string) {
   (void)ctx;
   delete[] string.data;
 }

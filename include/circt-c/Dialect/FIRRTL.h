@@ -32,9 +32,6 @@ extern "C" {
 // ownership semantics is defined by how an instance of the type was obtained.
 //===----------------------------------------------------------------------===//
 
-// TODO:
-// - Define our own `FirrtlStringRef` for consistency
-
 #define DEFINE_C_API_STRUCT(name, storage)                                     \
   struct name {                                                                \
     storage *ptr;                                                              \
@@ -45,23 +42,25 @@ DEFINE_C_API_STRUCT(FirrtlContext, void);
 
 #undef DEFINE_C_API_STRUCT
 
+typedef MlirStringRef FirrtlStringRef;
+
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(FIRRTL, firrtl);
 
 MLIR_CAPI_EXPORTED FirrtlContext firrtlCreateContext(void);
 
 MLIR_CAPI_EXPORTED void firrtlDestroyContext(FirrtlContext ctx);
 
-typedef void (*FirrtlErrorHandler)(MlirStringRef message, void *userData);
+typedef void (*FirrtlErrorHandler)(FirrtlStringRef message, void *userData);
 
 MLIR_CAPI_EXPORTED void firrtlSetErrorHandler(FirrtlContext ctx,
                                               FirrtlErrorHandler handler,
                                               void *userData);
 
 MLIR_CAPI_EXPORTED void firrtlVisitCircuit(FirrtlContext ctx,
-                                           MlirStringRef name);
+                                           FirrtlStringRef name);
 
 MLIR_CAPI_EXPORTED void firrtlVisitModule(FirrtlContext ctx,
-                                          MlirStringRef name);
+                                          FirrtlStringRef name);
 
 typedef enum FirrtlPortDirection {
   FIRRTL_PORT_DIRECTION_INPUT,
@@ -114,7 +113,7 @@ typedef struct FirrtlTypeVector {
 
 typedef struct FirrtlTypeBundleField {
   bool flip;
-  MlirStringRef name;
+  FirrtlStringRef name;
   FirrtlType *type;
 } FirrtlTypeBundleField;
 
@@ -139,14 +138,14 @@ typedef struct FirrtlType {
   FirrtlTypeUnion u;
 } FirrtlType;
 
-MLIR_CAPI_EXPORTED void firrtlVisitPort(FirrtlContext ctx, MlirStringRef name,
+MLIR_CAPI_EXPORTED void firrtlVisitPort(FirrtlContext ctx, FirrtlStringRef name,
                                         FirrtlPortDirection direction,
                                         const FirrtlType *type);
 
-MLIR_CAPI_EXPORTED MlirStringRef firrtlExportFirrtl(FirrtlContext ctx);
+MLIR_CAPI_EXPORTED FirrtlStringRef firrtlExportFirrtl(FirrtlContext ctx);
 
 MLIR_CAPI_EXPORTED void firrtlDestroyString(FirrtlContext ctx,
-                                            MlirStringRef string);
+                                            FirrtlStringRef string);
 
 // NOLINTEND(modernize-use-using)
 
