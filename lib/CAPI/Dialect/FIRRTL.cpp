@@ -25,6 +25,16 @@ FirrtlContext firrtlCreateContext(void) {
 
 void firrtlDestroyContext(FirrtlContext ctx) { delete unwrap(ctx); }
 
+void firrtlSetErrorHandler(FirrtlContext ctx, FirrtlErrorHandler handler,
+                           void *userData) {
+  auto *ffiCtx = unwrap(ctx);
+
+  ffiCtx->setErrorHandler(
+      [callback = handler, userData](std::string_view message) {
+        callback(mlirStringRefCreate(message.data(), message.size()), userData);
+      });
+}
+
 void firrtlVisitCircuit(FirrtlContext ctx, MlirStringRef name) {
   auto *ffiCtx = unwrap(ctx);
 
@@ -37,14 +47,21 @@ void firrtlVisitModule(FirrtlContext ctx, MlirStringRef name) {
   ffiCtx->visitModule(unwrap(name));
 }
 
-void firrtlSetErrorHandler(FirrtlContext ctx, FirrtlErrorHandler handler,
-                           void *userData) {
+void firrtlVisitPort(FirrtlContext ctx, MlirStringRef name,
+                     FirrtlPortDirection direction, const FirrtlType *type) {
   auto *ffiCtx = unwrap(ctx);
 
-  ffiCtx->setErrorHandler(
-      [callback = handler, userData](std::string_view message) {
-        callback(mlirStringRefCreate(message.data(), message.size()), userData);
-      });
+  firrtl::Direction dir;
+  if (direction == FIRRTL_PORT_DIRECTION_INPUT) {
+    dir = firrtl::Direction::In;
+  } else if (direction == FIRRTL_PORT_DIRECTION_OUTPUT) {
+    dir = firrtl::Direction::Out;
+  } else {
+    ffiCtx->emitError("invalid port direction");
+    return;
+  }
+
+  ffiCtx->visitPort(unwrap(name), dir, *type);
 }
 
 MlirStringRef firrtlExportFirrtl(FirrtlContext ctx) {

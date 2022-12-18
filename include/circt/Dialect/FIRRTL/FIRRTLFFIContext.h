@@ -20,6 +20,8 @@
 #include <memory>
 #include <optional>
 
+struct FirrtlType;
+
 namespace circt {
 namespace chirrtl {
 
@@ -43,12 +45,16 @@ struct RequireAssigned {
 
 class FFIContext {
 public:
+  using Direction = firrtl::Direction;
+
   FFIContext();
 
   void setErrorHandler(std::function<void(std::string_view message)> handler);
+  void emitError(std::string_view message, bool recoverable = false) const;
 
   void visitCircuit(StringRef name);
   void visitModule(StringRef name);
+  void visitPort(StringRef name, Direction direction, const FirrtlType &type);
 
   void exportFIRRTL(llvm::raw_ostream &os) const;
 
@@ -64,7 +70,7 @@ private:
 
   Location mockLoc() const;
   StringAttr stringRefToAttr(StringRef stringRef);
-  void emitError(std::string_view message) const;
+  std::optional<firrtl::FIRRTLType> ffiTypeToFirType(const FirrtlType &type);
 };
 
 } // namespace chirrtl
