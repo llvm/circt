@@ -594,7 +594,7 @@ static void reconnectMergeOps(Region &r,
           // are not the block's control merge must have an index operand (at
           // this point, an index backedge)
           assert(mergeInfo.indexEdge.has_value());
-          mergeInfo.indexEdge.value().setValue(cntrlMg->getResult(1));
+          (*mergeInfo.indexEdge).setValue(cntrlMg->getResult(1));
         }
       }
     }

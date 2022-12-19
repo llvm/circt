@@ -1411,7 +1411,7 @@ Optional<TypeSum> GrandCentralPass::computeField(
             auto elements = vector.getElements();
             auto firstElement = fromAttr(elements[0]);
             auto elementType =
-                computeField(firstElement.value(), id, prefix,
+                computeField(*firstElement, id, prefix,
                              path.snapshot().append("[" + Twine(0) + "]"),
                              xmrElems, interfaceBuilder);
             if (!elementType)
@@ -1499,7 +1499,7 @@ Optional<StringAttr> GrandCentralPass::traverseBundle(
     StringAttr description =
         element.cast<DictionaryAttr>().getAs<StringAttr>("description");
     interfaceBuilder[lastIndex].elementsList.emplace_back(description, name,
-                                                          elementType.value());
+                                                          *elementType);
   }
   return iFaceName;
 }

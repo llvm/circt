@@ -361,7 +361,7 @@ LogicalResult AffineToPipeline::createPipelinePipeline(
   // iter arg is created for the induction variable.
   TypeRange resultTypes = innerLoop.getResultTypes();
 
-  auto ii = builder.getI64IntegerAttr(problem.getInitiationInterval().value());
+  auto ii = builder.getI64IntegerAttr(*problem.getInitiationInterval());
 
   SmallVector<Value> iterArgs;
   iterArgs.push_back(lowerBound);

@@ -377,7 +377,7 @@ scatterOMField(Attribute original, const Attribute root, unsigned index,
                             fileLineColLocCache, ctx);
   mlir::LocationAttr infoLoc;
   if (maybeLoc.first)
-    infoLoc = maybeLoc.second.value();
+    infoLoc = *maybeLoc.second;
   else
     infoLoc = UnknownLoc::get(ctx);
 
@@ -445,7 +445,7 @@ scatterOMNode(Attribute original, const Attribute root, ApplyState &state) {
                             fileLineColLocCache, ctx);
   mlir::LocationAttr infoLoc;
   if (maybeLoc.first)
-    infoLoc = maybeLoc.second.value();
+    infoLoc = *maybeLoc.second;
   else
     infoLoc = UnknownLoc::get(ctx);
 

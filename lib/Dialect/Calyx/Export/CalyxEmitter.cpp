@@ -301,7 +301,7 @@ private:
     if (!identifierOpt.has_value())
       return "";
 
-    StringRef identifier = identifierOpt.value();
+    StringRef identifier = *identifierOpt;
     // Verify this attribute is supported for emission.
     if (!isValidCalyxAttribute(identifier))
       return "";

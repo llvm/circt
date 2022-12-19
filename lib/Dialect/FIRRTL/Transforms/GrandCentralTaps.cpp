@@ -832,7 +832,7 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
     port.append("target", StringAttr::get(context, canonTarget));
     state.addToWorklistFn(DictionaryAttr::get(context, port));
 
-    auto blackboxTarget = tokenizePath(canonTarget).value();
+    auto blackboxTarget = *tokenizePath(canonTarget);
     blackboxTarget.name = {};
     blackboxTarget.component.clear();
     auto blackboxTargetStr = blackboxTarget.str();

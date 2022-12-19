@@ -196,10 +196,10 @@ static void populateTypeConversion(Location loc, TypeConverter &typeConverter,
                                    ArrayAttr parameters) {
   // Possibly parametric types
   typeConverter.addConversion([=](hw::IntType type) {
-    return evaluateParametricType(loc, parameters, type).value();
+    return evaluateParametricType(loc, parameters, type);
   });
   typeConverter.addConversion([=](hw::ArrayType type) {
-    return evaluateParametricType(loc, parameters, type).value();
+    return evaluateParametricType(loc, parameters, type);
   });
 
   // Valid target types.

@@ -179,12 +179,12 @@ struct IdExpr : public ExprBase<IdExpr, Expr::Kind::Id> {
 /// A known constant value.
 struct KnownExpr : public ExprBase<KnownExpr, Expr::Kind::Known> {
   KnownExpr(int32_t value) : ExprBase() { solution = value; }
-  void print(llvm::raw_ostream &os) const { os << solution.value(); }
+  void print(llvm::raw_ostream &os) const { os << *solution; }
   bool operator==(const KnownExpr &other) const {
-    return solution.value() == other.solution.value();
+    return *solution == *other.solution;
   }
   llvm::hash_code hash_value() const {
-    return llvm::hash_combine(Expr::hash_value(), solution.value());
+    return llvm::hash_combine(Expr::hash_value(), *solution);
   }
 };
 
