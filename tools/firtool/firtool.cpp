@@ -727,11 +727,11 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   // Run passes to resolve Grand Central features.  This should run before
   // BlackBoxReader because Grand Central needs to inform BlackBoxReader where
-  // certain black boxes should be placed.
+  // certain black boxes should be placed.  Note: all Grand Central Taps related
+  // collateral is resolved entirely by LowerAnnotations.
   if (!disableGrandCentral) {
     auto &circuitPM = pm.nest<firrtl::CircuitOp>();
     circuitPM.addPass(firrtl::createGrandCentralPass());
-    circuitPM.addPass(firrtl::createGrandCentralTapsPass());
     circuitPM.addPass(
         firrtl::createGrandCentralSignalMappingsPass(outputFilename));
   }
