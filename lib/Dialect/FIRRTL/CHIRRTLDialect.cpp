@@ -119,7 +119,7 @@ void MemoryPortOp::build(OpBuilder &builder, OperationState &result,
 }
 
 LogicalResult MemoryPortOp::inferReturnTypes(MLIRContext *context,
-                                             Optional<Location> loc,
+                                             std::optional<Location> loc,
                                              ValueRange operands,
                                              DictionaryAttr attrs,
                                              mlir::RegionRange regions,
@@ -193,7 +193,7 @@ void MemoryDebugPortOp::build(OpBuilder &builder, OperationState &result,
 }
 
 LogicalResult MemoryDebugPortOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::RegionRange regions,
     SmallVectorImpl<Type> &results) {
   auto inType = operands[0].getType();

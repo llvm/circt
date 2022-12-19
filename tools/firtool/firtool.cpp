@@ -608,7 +608,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     if (failed(pm.run(module.get())))
       return failure();
     auto outputTimer = ts.nest("Print .mlir output");
-    printOp(*module, outputFile.value()->os());
+    printOp(*module, (*outputFile)->os());
     return success();
   }
 
@@ -875,7 +875,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     default:
       llvm_unreachable("can't reach this");
     case OutputVerilog:
-      exportPm.addPass(createExportVerilogPass(outputFile.value()->os()));
+      exportPm.addPass(createExportVerilogPass((*outputFile)->os()));
       break;
     case OutputSplitVerilog:
       exportPm.addPass(createExportSplitVerilogPass(outputFilename));
@@ -898,7 +898,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (outputFormat == OutputIRFir || outputFormat == OutputIRHW ||
       outputFormat == OutputIRSV || outputFormat == OutputIRVerilog) {
     auto outputTimer = ts.nest("Print .mlir output");
-    printOp(*module, outputFile.value()->os());
+    printOp(*module, (*outputFile)->os());
   }
 
   // If requested, print the final MLIR into mlirOutFile.
@@ -1008,7 +1008,7 @@ static LogicalResult executeFirtool(MLIRContext &context) {
   if (outputFormat != OutputSplitVerilog) {
     // Create an output file.
     outputFile.emplace(openOutputFile(outputFilename, &errorMessage));
-    if (!outputFile.value()) {
+    if (!(*outputFile)) {
       llvm::errs() << errorMessage << "\n";
       return failure();
     }
@@ -1037,7 +1037,7 @@ static LogicalResult executeFirtool(MLIRContext &context) {
 
   // If the result succeeded and we're emitting a file, close it.
   if (outputFile.has_value())
-    outputFile.value()->keep();
+    (*outputFile)->keep();
 
   return success();
 }

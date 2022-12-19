@@ -370,7 +370,7 @@ ParseResult FIRParser::parseOptionalInfoLocator(LocationAttr &result) {
     return success();
 
   // Otherwise, set the location attribute and return.
-  result = locationPair.second.value();
+  result = *locationPair.second;
   return success();
 }
 
@@ -3163,7 +3163,7 @@ ParseResult FIRCircuitParser::parseCircuit(
 
   if (!indent.has_value())
     return emitError("'circuit' must be first token on its line"), failure();
-  unsigned circuitIndent = indent.value();
+  unsigned circuitIndent = *indent;
 
   LocWithInfo info(getToken().getLoc(), this);
   StringAttr name;
@@ -3247,7 +3247,7 @@ ParseResult FIRCircuitParser::parseCircuit(
       auto indent = getIndentation();
       if (!indent.has_value())
         return emitError("'module' must be first token on its line"), failure();
-      unsigned moduleIndent = indent.value();
+      unsigned moduleIndent = *indent;
 
       if (moduleIndent <= circuitIndent)
         return emitError("module should be indented more"), failure();

@@ -181,7 +181,7 @@ def MemoryPortOp : CHIRRTLOp<"memoryport", [InferTypeOpInterface,
 
     /// Infer the return types of this operation.
     static LogicalResult inferReturnTypes(MLIRContext *context,
-                                          Optional<Location> loc,
+                                          std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
                                           mlir::RegionRange regions,
@@ -237,7 +237,7 @@ def MemoryDebugPortOp : CHIRRTLOp<"debugport", [InferTypeOpInterface,
   let extraClassDeclaration = [{
     /// Infer the return types of this operation.
     static LogicalResult inferReturnTypes(MLIRContext *context,
-                                          Optional<Location> loc,
+                                          std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
                                           mlir::RegionRange regions,

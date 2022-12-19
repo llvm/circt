@@ -2181,10 +2181,10 @@ void WhenOp::build(OpBuilder &builder, OperationState &result, Value condition,
 /// result value, so the FIRRTL-specific type inference ops directly return the
 /// inferred type rather than pushing into the `results` vector.
 LogicalResult impl::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, RegionRange regions, SmallVectorImpl<Type> &results,
     llvm::function_ref<FIRRTLType(ValueRange, ArrayRef<NamedAttribute>,
-                                  Optional<Location>)>
+                                  std::optional<Location>)>
         callback) {
   auto type = callback(
       operands, attrs ? attrs.getValue() : ArrayRef<NamedAttribute>{}, loc);
@@ -2590,7 +2590,7 @@ bool firrtl::isConstant(Value value) {
 
 FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
-                                       Optional<Location> loc) {
+                                       std::optional<Location> loc) {
   auto inType = operands[0].getType().cast<BundleType>();
   auto fieldIndex =
       getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
@@ -2614,7 +2614,7 @@ bool SubfieldOp::isFieldFlipped() {
 
 FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
-                                       Optional<Location> loc) {
+                                       std::optional<Location> loc) {
   auto inType = operands[0].getType();
   auto fieldIdx =
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
@@ -2635,7 +2635,7 @@ FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
 
 FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
                                         ArrayRef<NamedAttribute> attrs,
-                                        Optional<Location> loc) {
+                                        std::optional<Location> loc) {
   auto inType = operands[0].getType();
   auto indexType = operands[1].getType();
 
@@ -2683,7 +2683,7 @@ void MultibitMuxOp::print(OpAsmPrinter &p) {
 
 FIRRTLType MultibitMuxOp::inferReturnType(ValueRange operands,
                                           ArrayRef<NamedAttribute> attrs,
-                                          Optional<Location> loc) {
+                                          std::optional<Location> loc) {
   if (operands.size() < 2) {
     if (loc)
       mlir::emitError(*loc, "at least one input is required");
@@ -2712,7 +2712,7 @@ FIRRTLType MultibitMuxOp::inferReturnType(ValueRange operands,
 /// On failure, this reports and error and returns false.  This function should
 /// not be used if you don't want an error reported.
 static bool isSameIntTypeKind(Type lhs, Type rhs, int32_t &lhsWidth,
-                              int32_t &rhsWidth, Optional<Location> loc) {
+                              int32_t &rhsWidth, std::optional<Location> loc) {
   // Must have two integer types with the same signedness.
   auto lhsi = lhs.dyn_cast<IntType>();
   auto rhsi = rhs.dyn_cast<IntType>();
@@ -2758,7 +2758,7 @@ LogicalResult impl::validateBinaryOpArguments(ValueRange operands,
 }
 
 FIRRTLType impl::inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
-                                   Optional<Location> loc) {
+                                   std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, loc))
     return {};
@@ -2769,7 +2769,7 @@ FIRRTLType impl::inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
 }
 
 FIRRTLType MulPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                            Optional<Location> loc) {
+                                            std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, loc))
     return {};
@@ -2781,7 +2781,7 @@ FIRRTLType MulPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 }
 
 FIRRTLType DivPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                            Optional<Location> loc) {
+                                            std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth;
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, loc))
     return {};
@@ -2796,7 +2796,7 @@ FIRRTLType DivPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 }
 
 FIRRTLType RemPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                            Optional<Location> loc) {
+                                            std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, loc))
     return {};
@@ -2807,7 +2807,7 @@ FIRRTLType RemPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 }
 
 FIRRTLType impl::inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
-                                    Optional<Location> loc) {
+                                    std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, loc))
     return {};
@@ -2818,12 +2818,12 @@ FIRRTLType impl::inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
 }
 
 FIRRTLType impl::inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
-                                       Optional<Location> loc) {
+                                       std::optional<Location> loc) {
   return UIntType::get(lhs.getContext(), 1);
 }
 
 FIRRTLType CatPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                            Optional<Location> loc) {
+                                            std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, loc))
     return {};
@@ -2834,7 +2834,7 @@ FIRRTLType CatPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 }
 
 FIRRTLType DShlPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                             Optional<Location> loc) {
+                                             std::optional<Location> loc) {
   auto lhsi = lhs.dyn_cast<IntType>();
   auto rhsui = rhs.dyn_cast<UIntType>();
   if (!rhsui || !lhsi) {
@@ -2870,7 +2870,7 @@ FIRRTLType DShlPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 }
 
 FIRRTLType DShlwPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                              Optional<Location> loc) {
+                                              std::optional<Location> loc) {
   if (!lhs.isa<IntType>() || !rhs.isa<UIntType>()) {
     if (loc)
       mlir::emitError(*loc,
@@ -2881,7 +2881,7 @@ FIRRTLType DShlwPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 }
 
 FIRRTLType DShrPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                             Optional<Location> loc) {
+                                             std::optional<Location> loc) {
   if (!lhs.isa<IntType>() || !rhs.isa<UIntType>()) {
     if (loc)
       mlir::emitError(*loc,
@@ -2905,13 +2905,14 @@ LogicalResult impl::validateUnaryOpArguments(ValueRange operands,
   return success();
 }
 
-FIRRTLType SizeOfIntrinsicOp::inferUnaryReturnType(FIRRTLType arg,
-                                                   Optional<Location> loc) {
+FIRRTLType
+SizeOfIntrinsicOp::inferUnaryReturnType(FIRRTLType arg,
+                                        std::optional<Location> loc) {
   return UIntType::get(arg.getContext(), 32);
 }
 
 FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                              Optional<Location> loc) {
+                                              std::optional<Location> loc) {
   auto base = input.dyn_cast<FIRRTLBaseType>();
   if (!base) {
     if (loc)
@@ -2928,7 +2929,7 @@ FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
 }
 
 FIRRTLType AsUIntPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                              Optional<Location> loc) {
+                                              std::optional<Location> loc) {
   auto base = input.dyn_cast<FIRRTLBaseType>();
   if (!base) {
     if (loc)
@@ -2944,8 +2945,9 @@ FIRRTLType AsUIntPrimOp::inferUnaryReturnType(FIRRTLType input,
   return UIntType::get(input.getContext(), width);
 }
 
-FIRRTLType AsAsyncResetPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                                    Optional<Location> loc) {
+FIRRTLType
+AsAsyncResetPrimOp::inferUnaryReturnType(FIRRTLType input,
+                                         std::optional<Location> loc) {
   auto base = input.dyn_cast<FIRRTLBaseType>();
   if (!base) {
     if (loc)
@@ -2962,12 +2964,12 @@ FIRRTLType AsAsyncResetPrimOp::inferUnaryReturnType(FIRRTLType input,
 }
 
 FIRRTLType AsClockPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                               Optional<Location> loc) {
+                                               std::optional<Location> loc) {
   return ClockType::get(input.getContext());
 }
 
 FIRRTLType CvtPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                           Optional<Location> loc) {
+                                           std::optional<Location> loc) {
   if (auto uiType = input.dyn_cast<UIntType>()) {
     auto width = uiType.getWidthOrSentinel();
     if (width != -1)
@@ -2984,7 +2986,7 @@ FIRRTLType CvtPrimOp::inferUnaryReturnType(FIRRTLType input,
 }
 
 FIRRTLType NegPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                           Optional<Location> loc) {
+                                           std::optional<Location> loc) {
   auto inputi = input.dyn_cast<IntType>();
   if (!inputi) {
     if (loc)
@@ -2999,7 +3001,7 @@ FIRRTLType NegPrimOp::inferUnaryReturnType(FIRRTLType input,
 }
 
 FIRRTLType NotPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                           Optional<Location> loc) {
+                                           std::optional<Location> loc) {
   auto inputi = input.dyn_cast<IntType>();
   if (!inputi) {
     if (loc)
@@ -3011,7 +3013,7 @@ FIRRTLType NotPrimOp::inferUnaryReturnType(FIRRTLType input,
 }
 
 FIRRTLType impl::inferReductionResult(FIRRTLType input,
-                                      Optional<Location> loc) {
+                                      std::optional<Location> loc) {
   return UIntType::get(input.getContext(), 1);
 }
 
@@ -3031,7 +3033,7 @@ LogicalResult BitsPrimOp::validateArguments(ValueRange operands,
 
 FIRRTLType BitsPrimOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
-                                       Optional<Location> loc) {
+                                       std::optional<Location> loc) {
   auto input = operands[0].getType();
   auto high = getAttr<IntegerAttr>(attrs, "hi").getValue().getSExtValue();
   auto low = getAttr<IntegerAttr>(attrs, "lo").getValue().getSExtValue();
@@ -3085,7 +3087,7 @@ LogicalResult impl::validateOneOperandOneConst(ValueRange operands,
 
 FIRRTLType HeadPrimOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
-                                       Optional<Location> loc) {
+                                       std::optional<Location> loc) {
   auto input = operands[0].getType();
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
@@ -3129,7 +3131,7 @@ LogicalResult MuxPrimOp::validateArguments(ValueRange operands,
 /// - Bundles inferred in a pairwise fashion based on the field types.
 static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
                                          FIRRTLBaseType low,
-                                         Optional<Location> loc) {
+                                         std::optional<Location> loc) {
   // If the types are identical we're done.
   if (high == low)
     return low;
@@ -3216,7 +3218,7 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
 
 FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
-                                      Optional<Location> loc) {
+                                      std::optional<Location> loc) {
   auto highType = operands[1].getType().dyn_cast<FIRRTLBaseType>();
   auto lowType = operands[2].getType().dyn_cast<FIRRTLBaseType>();
   if (!highType || !lowType) {
@@ -3229,7 +3231,7 @@ FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
 
 FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
-                                      Optional<Location> loc) {
+                                      std::optional<Location> loc) {
   auto input = operands[0].getType();
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
@@ -3251,7 +3253,7 @@ FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,
 
 FIRRTLType ShlPrimOp::inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
-                                      Optional<Location> loc) {
+                                      std::optional<Location> loc) {
   auto input = operands[0].getType();
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
@@ -3272,7 +3274,7 @@ FIRRTLType ShlPrimOp::inferReturnType(ValueRange operands,
 
 FIRRTLType ShrPrimOp::inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
-                                      Optional<Location> loc) {
+                                      std::optional<Location> loc) {
   auto input = operands[0].getType();
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
@@ -3293,7 +3295,7 @@ FIRRTLType ShrPrimOp::inferReturnType(ValueRange operands,
 
 FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
-                                       Optional<Location> loc) {
+                                       std::optional<Location> loc) {
   auto input = operands[0].getType();
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
@@ -3325,14 +3327,14 @@ FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
 
 FIRRTLType IsXIntrinsicOp::inferReturnType(ValueRange operands,
                                            ArrayRef<NamedAttribute> attrs,
-                                           Optional<Location> loc) {
+                                           std::optional<Location> loc) {
   return UIntType::get(operands[0].getContext(), 1);
 }
 
 FIRRTLType
 PlusArgsTestIntrinsicOp::inferReturnType(ValueRange operands,
                                          ArrayRef<NamedAttribute> attrs,
-                                         Optional<Location> loc) {
+                                         std::optional<Location> loc) {
   return UIntType::get(attrs[0].getName().getContext(), 1);
 }
 
@@ -3788,7 +3790,7 @@ void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
                                          ArrayRef<NamedAttribute> attrs,
-                                         Optional<Location> loc) {
+                                         std::optional<Location> loc) {
   auto inType = operands[0].getType();
   auto inRefType = inType.dyn_cast<RefType>();
   if (!inRefType) {
@@ -3802,7 +3804,7 @@ FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
 
 FIRRTLType RefSendOp::inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
-                                      Optional<Location> loc) {
+                                      std::optional<Location> loc) {
   auto inType = operands[0].getType();
   auto inBaseType = inType.dyn_cast<FIRRTLBaseType>();
   if (!inBaseType) {
@@ -3828,7 +3830,7 @@ void RefSubOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
                                      ArrayRef<NamedAttribute> attrs,
-                                     Optional<Location> loc) {
+                                     std::optional<Location> loc) {
   auto inType = operands[0].getType().cast<RefType>().getType();
   auto fieldIdx =
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();

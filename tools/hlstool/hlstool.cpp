@@ -378,7 +378,7 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
   if (outputFormat == OutputVerilog) {
     if (loweringOptions.getNumOccurrences())
       loweringOptions.setAsAttribute(module);
-    pm.addPass(createExportVerilogPass(outputFile.value()->os()));
+    pm.addPass(createExportVerilogPass((*outputFile)->os()));
   }
 
   // Go execute!
@@ -386,7 +386,7 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
     return failure();
 
   if (outputFormat == OutputIR)
-    module->print(outputFile.value()->os());
+    module->print((*outputFile)->os());
 
   return success();
 }
@@ -491,7 +491,7 @@ static LogicalResult executeHlstool(MLIRContext &context) {
 
   Optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
   outputFile.emplace(openOutputFile(outputFilename, &errorMessage));
-  if (!outputFile.value()) {
+  if (!*outputFile) {
     llvm::errs() << errorMessage << "\n";
     return failure();
   }
@@ -502,7 +502,7 @@ static LogicalResult executeHlstool(MLIRContext &context) {
 
   // If the result succeeded and we're emitting a file, close it.
   if (outputFile.has_value())
-    outputFile.value()->keep();
+    (*outputFile)->keep();
 
   return success();
 }

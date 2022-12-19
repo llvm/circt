@@ -309,7 +309,7 @@ static void eraseControlWithGroupAndConditional(OpTy op,
 
   // Save information about the operation, and erase it.
   Value cond = op.getCond();
-  Optional<StringRef> groupName = op.getGroupName();
+  std::optional<StringRef> groupName = op.getGroupName();
   auto component = op->template getParentOfType<ComponentOp>();
   rewriter.eraseOp(op);
 
@@ -1895,7 +1895,7 @@ LogicalResult IfOp::verify() {
   if (elseBodyExists() && getElseBody()->empty())
     return emitError() << "empty 'else' region.";
 
-  Optional<StringRef> optGroupName = getGroupName();
+  std::optional<StringRef> optGroupName = getGroupName();
   if (!optGroupName) {
     // No combinational group was provided.
     return success();
@@ -2097,7 +2097,7 @@ LogicalResult WhileOp::verify() {
   auto component = (*this)->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
 
-  Optional<StringRef> optGroupName = getGroupName();
+  std::optional<StringRef> optGroupName = getGroupName();
   if (!optGroupName) {
     /// No combinational group was provided
     return success();

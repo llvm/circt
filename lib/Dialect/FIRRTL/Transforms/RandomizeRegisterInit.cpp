@@ -61,7 +61,7 @@ static void createRandomizationAttributes(FModuleOp mod) {
     auto start = builder.getIntegerAttr(ui64Type, currentWidth);
     op->setAttr("firrtl.random_init_start", start);
 
-    currentWidth += regWidth.value();
+    currentWidth += *regWidth;
   });
 }
 

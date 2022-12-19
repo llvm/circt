@@ -375,8 +375,7 @@ OpFoldResult ConvertOp::fold(ArrayRef<Attribute> operands) {
     auto intermediateBw = getBitWidth(intermediateType);
 
     if (!inputBw && intermediateBw) {
-      if (inputType.isa<IntBaseType, UIntBaseType>() &&
-          intermediateBw.value() >= 64)
+      if (inputType.isa<IntBaseType, UIntBaseType>() && *intermediateBw >= 64)
         return other.getInput();
       // We cannot support input types of signed, unsigned, and vector types
       // since they have no upper bound for the bit-width.
@@ -390,7 +389,7 @@ OpFoldResult ConvertOp::fold(ArrayRef<Attribute> operands) {
           intermediateType.isa<SignedType, UnsignedType>())
         return other.getInput();
 
-      if (inputBw && inputBw.value() <= 64 &&
+      if (inputBw && *inputBw <= 64 &&
           intermediateType
               .isa<IntBaseType, UIntBaseType, SignedType, UnsignedType>())
         return other.getInput();
@@ -400,7 +399,7 @@ OpFoldResult ConvertOp::fold(ArrayRef<Attribute> operands) {
       // here could change the behavior.
     }
 
-    if (inputBw && intermediateBw && inputBw.value() <= intermediateBw.value())
+    if (inputBw && intermediateBw && *inputBw <= *intermediateBw)
       return other.getInput();
   }
 
