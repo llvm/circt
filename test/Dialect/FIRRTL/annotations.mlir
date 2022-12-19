@@ -1125,80 +1125,55 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
 // Test sifive.enterprise.grandcentral.DataTapsAnnotation with all possible
 // variants of DataTapKeys.
 
+// SiFive-custom annotations related to the GrandCentral utility.  These
+// annotations do not conform to standard SingleTarget or NoTarget format and
+// need to be manually split up.
+
+// Test sifive.enterprise.grandcentral.DataTapsAnnotation with all possible
+// variants of DataTapKeys.
+
 firrtl.circuit "GCTDataTap" attributes {rawAnnotations = [{
-  blackBox = "~GCTDataTap|DataTap",
   class = "sifive.enterprise.grandcentral.DataTapsAnnotation",
   keys = [
     {
       class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
-      portName = "~GCTDataTap|DataTap>_0",
+      sink = "~GCTDataTap|GCTDataTap>tap_0",
       source = "~GCTDataTap|GCTDataTap>r"
     },
     {
       class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
-      portName = "~GCTDataTap|DataTap>_1[0]",
+      sink = "~GCTDataTap|GCTDataTap>tap_1[0]",
       source = "~GCTDataTap|GCTDataTap>r"
     },
     {
       class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
-      portName = "~GCTDataTap|DataTap>_2",
+      sink = "~GCTDataTap|GCTDataTap>tap_2",
       source = "~GCTDataTap|GCTDataTap>w.a"
     },
     {
       class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
-      portName = "~GCTDataTap|DataTap>_3[0]",
+      sink = "~GCTDataTap|GCTDataTap>tap_3[0]",
       source = "~GCTDataTap|GCTDataTap>w.a"
     },
     {
       class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey",
       internalPath = "baz.qux",
       module = "~GCTDataTap|BlackBox",
-      portName = "~GCTDataTap|DataTap>_4"
+      sink = "~GCTDataTap|GCTDataTap>tap_4"
     },
     {
       class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey",
       internalPath = "baz.quz",
       module = "~GCTDataTap|BlackBox",
-      portName = "~GCTDataTap|DataTap>_5[0]"
-    },
-    {
-      class = "sifive.enterprise.grandcentral.DeletedDataTapKey",
-      portName = "~GCTDataTap|DataTap>_6"
-    },
-    {
-      class = "sifive.enterprise.grandcentral.DeletedDataTapKey",
-      portName = "~GCTDataTap|DataTap>_7[0]"
-    },
-    {
-      class = "sifive.enterprise.grandcentral.LiteralDataTapKey",
-      literal = "UInt<16>(\22h2a\22)",
-      portName = "~GCTDataTap|DataTap>_8"
-    },
-    {
-      class = "sifive.enterprise.grandcentral.LiteralDataTapKey",
-      literal = "UInt<16>(\22h2a\22)",
-      portName = "~GCTDataTap|DataTap>_9[0]"
+      sink = "~GCTDataTap|GCTDataTap>tap_5[0]"
     },
     {
       class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
-      portName = "~GCTDataTap|DataTap>_10",
+      sink = "~GCTDataTap|GCTDataTap>tap_6",
       source = "~GCTDataTap|GCTDataTap/im:InnerMod>w"
     }
   ]
 }]} {
-  firrtl.extmodule private @DataTap(
-    out _0: !firrtl.uint<1>,
-    out _1: !firrtl.vector<uint<1>, 1>,
-    out _2: !firrtl.uint<1>,
-    out _3: !firrtl.vector<uint<1>, 1>,
-    out _4: !firrtl.uint<1>,
-    out _5: !firrtl.vector<uint<1>, 1>,
-    out _6: !firrtl.uint<1>,
-    out _7: !firrtl.vector<uint<1>, 1>,
-    out _8: !firrtl.uint<1>,
-    out _9: !firrtl.vector<uint<1>, 1>,
-    out _10: !firrtl.uint<1>
-  ) attributes {defname = "DataTap"}
   firrtl.extmodule private @BlackBox() attributes {defname = "BlackBox"}
   firrtl.module private @InnerMod() {
     %w = firrtl.wire : !firrtl.uint<1>
@@ -1206,131 +1181,54 @@ firrtl.circuit "GCTDataTap" attributes {rawAnnotations = [{
   firrtl.module @GCTDataTap(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
     %r = firrtl.reg %clock  : !firrtl.uint<1>
     %w = firrtl.wire : !firrtl.bundle<a: uint<1>>
-    %DataTap__0, %DataTap__1, %DataTap__2, %DataTap__3, %DataTap__4, %DataTap__5, %DataTap__6, %DataTap__7, %DataTap__8, %DataTap__9, %DataTap__10 = firrtl.instance DataTap  @DataTap(out _0: !firrtl.uint<1>, out _1: !firrtl.vector<uint<1>, 1>, out _2: !firrtl.uint<1>, out _3: !firrtl.vector<uint<1>, 1>, out _4: !firrtl.uint<1>, out _5: !firrtl.vector<uint<1>, 1>, out _6: !firrtl.uint<1>, out _7: !firrtl.vector<uint<1>, 1>, out _8: !firrtl.uint<1>, out _9: !firrtl.vector<uint<1>, 1>, out _10: !firrtl.uint<1>)
+    %tap_0 = firrtl.wire : !firrtl.uint<1>
+    %tap_1 = firrtl.wire : !firrtl.vector<uint<1>, 1>
+    %tap_2 = firrtl.wire : !firrtl.uint<1>
+    %tap_3 = firrtl.wire : !firrtl.vector<uint<1>, 1>
+    %tap_4 = firrtl.wire : !firrtl.uint<1>
+    %tap_5 = firrtl.wire : !firrtl.vector<uint<1>, 1>
+    %tap_6 = firrtl.wire : !firrtl.uint<1>
+
     firrtl.instance BlackBox @BlackBox()
     firrtl.instance im @InnerMod()
   }
 }
 
-// CHECK-LABEL: firrtl.circuit "GCTDataTap"
-// CHECK:      hw.hierpath private [[NLA:@.+]] [@GCTDataTap::@im, @InnerMod]
-
-// CHECK-LABEL: firrtl.extmodule private @DataTap
-
-// CHECK-SAME: _0: !firrtl.uint<1>
-// CHECK-SAME:   class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port"
-// CHECK-SAME:   id = [[ID:[0-9]+]] : i64
-// CHECK-SAME:   portID = [[PORT_ID_0:[0-9]+]] : i64
-
-// CHECK-SAME: _1: !firrtl.vector<uint<1>, 1>
-// CHECK-SAME:   circt.fieldID = 1
-// CHECK-SAME:   class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port"
-// CHECK-SAME:   id = [[ID]] : i64
-// CHECK-SAME:   portID = [[PORT_ID_1:[0-9]+]] : i64
-
-// CHECK-SAME: _2: !firrtl.uint<1>
-// CHECK-SAME:   class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port"
-// CHECK-SAME:   id = [[ID]] : i64
-// CHECK-SAME:   portID = [[PORT_ID_2:[0-9]+]] : i64
-
-// CHECK-SAME: _3: !firrtl.vector<uint<1>, 1> [
-// CHECK-SAME:   circt.fieldID = 1
-// CHECK-SAME:   class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port"
-// CHECK-SAME:   id = [[ID]] : i64
-// CHECK-SAME:   portID = [[PORT_ID_3:[0-9]+]] : i64
-
-// CHECK-SAME: _4: !firrtl.uint<1>
-// CHECK-SAME:   class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey.port"
-// CHECK-SAME:   id = [[ID]] : i64
-// CHECK-SAME:   portID = [[PORT_ID_4:[0-9]+]] : i64
-
-// CHECK-SAME: _5: !firrtl.vector<uint<1>, 1>
-// CHECK-SAME:   circt.fieldID = 1
-// CHECK-SAME:   class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey.port"
-// CHECK-SAME:   id = [[ID]] : i64
-// CHECK-SAME:   portID = [[PORT_ID_5:[0-9]+]] : i64
-
-// CHECK-SAME: _6: !firrtl.uint<1>
-// CHECK-SAME:   class = "sifive.enterprise.grandcentral.DeletedDataTapKey"
-// CHECK-SAME:   id = [[ID]] : i64
-
-// CHECK-SAME: _7: !firrtl.vector<uint<1>, 1>
-// CHECK-SAME:   circt.fieldID = 1
-// CHECK-SAME:   class = "sifive.enterprise.grandcentral.DeletedDataTapKey"
-// CHECK-SAME:   id = [[ID]] : i64
-
-// CHECK-SAME: _8: !firrtl.uint<1>
-// CHECK-SAME:   class = "sifive.enterprise.grandcentral.LiteralDataTapKey"
-// CHECK-SAME:   literal = "UInt<16>(\22h2a\22)"
-
-// CHECK-SAME: _9: !firrtl.vector<uint<1>, 1>
-// CHECK-SAME:   circt.fieldID = 1
-// CHECK-SAME:   class = "sifive.enterprise.grandcentral.LiteralDataTapKey"
-// CHECK-SAME:   literal = "UInt<16>(\22h2a\22)"
-
-// CHECK-SAME: _10: !firrtl.uint<1>
-// CHECK-SAME:   class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.port"
-// CHECK-SAME:   id = [[ID]] : i64
-// CHECK-SAME:   portID = [[PORT_ID_6:[0-9]+]] : i64
-
-// CHECK-SAME: annotations = [
-// CHECK-SAME:   {class = "sifive.enterprise.grandcentral.DataTapsAnnotation.blackbox"}
-// CHECK-SAME: ]
-
 // CHECK-LABEL: firrtl.extmodule private @BlackBox
-// CHECK-SAME: annotations = [
-// CHECK-SAME:   {
-// CHECK-SAME:     class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey.source",
-// CHECK-SAME:     id = [[ID]]
-// CHECK-SAME:     internalPath = "baz.quz",
-// CHECK-SAME:     portID = [[PORT_ID_5]] : i64
-// CHECK-SAME:   }
-// CHECK-SAME:   {
-// CHECK-SAME:     class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey.source",
-// CHECK-SAME:     id = [[ID]]
-// CHECK-SAME:     internalPath = "baz.qux",
-// CHECK-SAME:     portID = [[PORT_ID_4]] : i64
-// CHECK-SAME:   }
-// CHECK-SAME: ]
+// CHECK-SAME:    out [[tap_4:[a-zA-Z0-9_]+]]: !firrtl.ref<uint<1>>
+// CHECk-SAME:    out [[tap_5_0:[[a-zA-Z09-_]+]]]: !firrtl.ref<uint<1>>
+// CHECK-SAME:    internalPaths = ["baz.qux", "baz.quz"]
 
 // CHECK-LABEL: firrtl.module private @InnerMod
-// CHECK-NEXT: %w = firrtl.wire
-// CHECK-NOT:  sym
-// CHECK-SAME: annotations = [
-// CHECK-SAME:   {
-// CHECK-SAME:     circt.nonlocal = [[NLA]]
-// CHECK-SAME:     class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source"
-// CHECK-SAME:     id = [[ID]]
-// CHECK-SAME:     portID = [[PORT_ID_6]]
-// CHECK-SAME:   }
-// CHECK-SAME: ]
+// CHECK-SAME:    out %[[tap_6:[a-zA-Z0-9_]+]]: !firrtl.ref<uint<1>>
+// CHECK:         %[[w_ref:[a-zA-Z09_]+]] = firrtl.ref.send %w
+// CHECK:         firrtl.connect %[[tap_6]], %[[w_ref]]
 
-// CHECK: firrtl.module @GCTDataTap
-// CHECK-LABEL: firrtl.reg
-// CHECK-NOT:  sym
-// CHECk-SAME: annotations = [
-// CHECK-SAME:   {
-// CHECK-SAME:     class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source"
-// CHECK-SAME:     id = [[ID]]
-// CHECK-SAME:     portID = [[PORT_ID_0]]
-// CHECK-SAME:   }
-// CHECK-SAME: ]
-
-// CHECK-LABEL: firrtl.wire
-// CHECK-NOT:  sym
-// CHECK-SAME: annotations = [
-// CHECK-SAME:   {
-// CHECK-SAME:     circt.fieldID = 1
-// CHECK-SAME:     class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source"
-// CHECK-SAME:     id = [[ID]]
-// CHECK-SAME:     portID = [[PORT_ID_3]]
-// CHECK-SAME:   }
-// CHECK-SAME:   {
-// CHECK-SAME:     class = "sifive.enterprise.grandcentral.ReferenceDataTapKey.source",
-// CHECK-SAME:      id = [[ID]]
-// CHECK-SAME:      portID = [[PORT_ID_2]]
-// CHECK-SAME:   }
-// CHECK-SAME: ]
+// CHECK-LABEL: firrtl.module @GCTDataTap
+// CHECK:         %[[w_a0:[a-zA-Z0-9_]+]] = firrtl.subfield %w[a]
+// CHECK-NEXT:    %[[w_a1:[a-zA-Z0-9_]+]] = firrtl.subfield %w[a]
+//
+// CHECK-DAG:    %tap_0 = firrtl.node %r
+//
+// CHECK-DAG:    %[[tap_1_0:[a-zA-Z0-9_]+]] = firrtl.subindex %tap_1[0]
+// CHECK-DAG:    firrtl.connect %[[tap_1_0]], %r
+//
+// CHECK-DAG:    %tap_2 = firrtl.node %[[w_a1]]
+//
+// CHECK-DAG:    %[[tap_3_0:[a-zA-Z0-9_]+]] = firrtl.subindex %tap_3[0]
+// CHECK-DAG:    firrtl.connect %[[tap_3_0]], %[[w_a0]]
+//
+// CHECK-DAG:    %[[tap_4_port:[a-zA-Z0-9_]+]], %[[tap_5_port:[a-zA-Z0-9_]+]] = firrtl.instance BlackBox
+// CHECK-DAG:    %[[tap_4_resolve:[a-zA-Z0-9_]+]] = firrtl.ref.resolve %[[tap_4_port]]
+// CHECK-DAG:    %tap_4 = firrtl.node %[[tap_4_resolve]]
+//
+// CHECK-DAG:    %[[tap_5_resolve:[a-zA-Z0-9_]+]] = firrtl.ref.resolve %[[tap_5_port]]
+// CHECK-DAG:    %[[tap_5_0:[a-zA-Z0-9_]+]] = firrtl.subindex %tap_5[0]
+// CHECK-DAG:    firrtl.connect %[[tap_5_0]], %[[tap_5_resolve]]
+//
+// CHECK-DAG:    %[[tap_6_port:[a-zA-Z0-9_]+]] = firrtl.instance im @InnerMod
+// CHECK-DAG:    %[[tap_6_resolve:[a-zA-Z0-9_]+]] = firrtl.ref.resolve %[[tap_6_port]]
+// CHECK-DAG:    %tap_6 = firrtl.node %[[tap_6_resolve]]
 
 // -----
 
@@ -1338,48 +1236,23 @@ firrtl.circuit "GCTDataTap" attributes {rawAnnotations = [{
 firrtl.circuit "GCTMemTap" attributes {rawAnnotations = [{
   class = "sifive.enterprise.grandcentral.MemTapAnnotation",
   source = "~GCTMemTap|GCTMemTap>mem",
-  taps = ["GCTMemTap.MemTap.mem[0]", "GCTMemTap.MemTap.mem[1]"]
+  sink = ["GCTMemTap.GCTMemTap.memTap[0]", "~GCTMemTap|GCTMemTap>mem[1]"]
 }]} {
-  firrtl.extmodule private @MemTap(out mem: !firrtl.vector<uint<1>, 2>) attributes {defname = "MemTap"}
-  firrtl.module @GCTMemTap(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+  firrtl.module @GCTMemTap() {
     %mem = chirrtl.combmem  : !chirrtl.cmemory<uint<1>, 2>
-    %MemTap_mem = firrtl.instance MemTap  @MemTap(out mem: !firrtl.vector<uint<1>, 2>)
-    %0 = firrtl.subindex %MemTap_mem[1] : !firrtl.vector<uint<1>, 2>
-    %1 = firrtl.subindex %MemTap_mem[0] : !firrtl.vector<uint<1>, 2>
-    %memTap = firrtl.wire  : !firrtl.vector<uint<1>, 2>
-    %2 = firrtl.subindex %memTap[1] : !firrtl.vector<uint<1>, 2>
-    %3 = firrtl.subindex %memTap[0] : !firrtl.vector<uint<1>, 2>
-    firrtl.strictconnect %3, %1 : !firrtl.uint<1>
-    firrtl.strictconnect %2, %0 : !firrtl.uint<1>
+    %memTap = firrtl.wire : !firrtl.vector<uint<1>, 2>
   }
 }
 
 
 // CHECK-LABEL: firrtl.circuit "GCTMemTap"
 
-// CHECK-LABEL: firrtl.extmodule private @MemTap
-// CHECK-SAME: mem: !firrtl.vector<uint<1>, 2> [
-// CHECK-SAME:   {
-// CHECK-SAME:     circt.fieldID = 2
-// CHECK-SAME:     class = "sifive.enterprise.grandcentral.MemTapAnnotation.port"
-// CHECK-SAME:     id = [[ID]]
-// CHECK-SAME:     portID = 1
-// CHECK-SAME:   }
-// CHECK-SAME:   {
-// CHECK-SAME:     circt.fieldID = 1
-// CHECK-SAME:     class = "sifive.enterprise.grandcentral.MemTapAnnotation.port"
-// CHECK-SAME:     id = [[ID:[0-9]+]] : i64
-// CHECK-SAME:     portID = 0
-// CHECK-SAME:   }
-
-// CHECK-LABEL: firrtl.module @GCTMemTap
-// CHECK: %mem = chirrtl.combmem
-// CHECK-SAME: annotations = [
-// CHECK-SAME:   {
-// CHECK-SAME:     class = "sifive.enterprise.grandcentral.MemTapAnnotation.source"
-// CHECK-SAME:     id = [[ID]]
-// CHECK-SAME:   }
-// CHECK-SAME: ]
+// CHECK:      firrtl.module @GCTMemTap
+// CHECK:        %[[debug_port:[a-zA-Z0-9_]+]] = chirrtl.debugport %mem
+// CHECK-SAME:     {name = "memTap"}
+// CHECK-SAME:     (!chirrtl.cmemory<uint<1>, 2>) -> !firrtl.ref<vector<uint<1>, 2>>
+// CHECK-NEXT:   %[[debug_port_resolve:[a-zA-Z0-9_]+]] = firrtl.ref.resolve %[[debug_port]]
+// CHECK-NEXT:   %memTap = firrtl.node %[[debug_port_resolve]]
 
 // -----
 
