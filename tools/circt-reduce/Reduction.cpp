@@ -106,7 +106,7 @@ static uint64_t computeTransitiveModuleSize(
 
     auto allInstancesCovered = [&]() {
       return llvm::all_of(
-          moduleOp.getSymbolUses(moduleOp->getParentOfType<ModuleOp>()).value(),
+          *moduleOp.getSymbolUses(moduleOp->getParentOfType<ModuleOp>()),
           [&](auto symbolUse) {
             return std::binary_search(instances.begin(), instances.end(),
                                       symbolUse.getUser());
@@ -128,12 +128,12 @@ static LogicalResult collectInstantiatedModules(
     return failure();
 
   uint64_t opCount = 0;
-  WalkResult result = fmoduleOp.value().walk([&](Operation *op) {
+  WalkResult result = fmoduleOp->walk([&](Operation *op) {
     if (auto instOp = dyn_cast<firrtl::InstanceOp>(op)) {
       auto moduleOp = findInstantiatedModule(instOp, symbols);
       if (!moduleOp) {
         LLVM_DEBUG(llvm::dbgs()
-                   << "- `" << fmoduleOp.value().moduleName()
+                   << "- `" << fmoduleOp->moduleName()
                    << "` recursively instantiated non-FIRRTL module.\n");
         return WalkResult::interrupt();
       }
@@ -150,7 +150,7 @@ static LogicalResult collectInstantiatedModules(
   if (result.wasInterrupted())
     return failure();
 
-  modules.push_back(std::make_pair(fmoduleOp.value(), opCount));
+  modules.push_back(std::make_pair(*fmoduleOp, opCount));
 
   return success();
 }

@@ -222,7 +222,7 @@ void ResolveTracesPass::runOnOperation() {
     auto getNamespace = [&](FModuleLike module) -> ModuleNamespace & {
       if (!moduleNamespace)
         moduleNamespace = ModuleNamespace(module);
-      return moduleNamespace.value();
+      return *moduleNamespace;
     };
 
     // Visit the module.

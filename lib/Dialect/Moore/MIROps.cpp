@@ -21,7 +21,7 @@ using namespace circt::moore;
 //===----------------------------------------------------------------------===//
 
 LogicalResult ConcatOp::inferReturnTypes(MLIRContext *context,
-                                         Optional<Location> loc,
+                                         std::optional<Location> loc,
                                          ValueRange operands,
                                          DictionaryAttr attrs,
                                          mlir::RegionRange regions,

@@ -129,7 +129,7 @@ public:
   virtual Value getConditionValue() = 0;
 
   // Returns the number of iterations the loop will conduct if known.
-  virtual Optional<uint64_t> getBound() = 0;
+  virtual std::optional<uint64_t> getBound() = 0;
 
   // Returns the location of the loop interface.
   virtual Location getLoc() = 0;

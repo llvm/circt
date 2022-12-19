@@ -64,7 +64,7 @@ public:
     return getOperation().getConditionOp().getOperand(0);
   }
 
-  Optional<uint64_t> getBound() override { return std::nullopt; }
+  std::optional<uint64_t> getBound() override { return std::nullopt; }
 };
 
 //===----------------------------------------------------------------------===//

@@ -62,7 +62,7 @@ public:
     return getOperation().getCondBlock().getTerminator()->getOperand(0);
   }
 
-  Optional<uint64_t> getBound() override {
+  std::optional<uint64_t> getBound() override {
     return getOperation().getTripCount();
   }
 };

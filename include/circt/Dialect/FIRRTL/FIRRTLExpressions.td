@@ -34,7 +34,7 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
     /// Infer the return type of this operation.
     static FIRRTLType inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
-                                      Optional<Location> loc);
+                                      std::optional<Location> loc);
   }];
 
   // The operation-specific validator for a parsed list of operands and
@@ -61,7 +61,7 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
     /// `InferTypeOpInterface`. We simply forward to a narrower
     /// operation-specific implementation which is sufficient for FIRRTL ops.
     static LogicalResult inferReturnTypes(MLIRContext *context,
-                                          Optional<Location> loc,
+                                          std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
                                           mlir::RegionRange regions,
@@ -354,13 +354,13 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
   let inferTypeDecl = !if(!empty(inferType), [{
     /// Infer the return type of this binary operation.
     static FIRRTLType inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                            Optional<Location> loc);
+                                            std::optional<Location> loc);
     }], "") # !subst("$_infer", !if(!empty(inferType), "inferBinaryReturnType",
       inferType), [{
     /// Infer the return type of this operation.
     static FIRRTLType inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
-                                      Optional<Location> loc) {
+                                      std::optional<Location> loc) {
       return $_infer(operands[0].getType().cast<FIRRTLType>(),
                      operands[1].getType().cast<FIRRTLType>(),
                      loc);
@@ -459,13 +459,13 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
   let inferTypeDecl = !if(!empty(inferType), [{
     /// Infer the return type of this unary operation.
     static FIRRTLType inferUnaryReturnType(FIRRTLType arg,
-                                           Optional<Location> loc);
+                                           std::optional<Location> loc);
     }], "") # !subst("$_infer", !if(!empty(inferType), "inferUnaryReturnType",
       inferType), [{
     /// Infer the return type of this operation.
     static FIRRTLType inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
-                                      Optional<Location> loc) {
+                                      std::optional<Location> loc) {
       return $_infer(operands[0].getType().cast<FIRRTLType>(), loc);
     }
   }]);

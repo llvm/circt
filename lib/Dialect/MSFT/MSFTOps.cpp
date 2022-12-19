@@ -107,7 +107,7 @@ static ParseResult parsePhysLoc(OpAsmParser &p, PhysLocationAttr &attr) {
       p.parseInteger(num))
     return failure();
 
-  Optional<PrimitiveType> devType = symbolizePrimitiveType(devTypeStr);
+  std::optional<PrimitiveType> devType = symbolizePrimitiveType(devTypeStr);
   if (!devType) {
     p.emitError(loc, "Unknown device type '" + devTypeStr + "'");
     return failure();

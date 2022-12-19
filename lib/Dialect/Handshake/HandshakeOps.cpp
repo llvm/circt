@@ -359,7 +359,7 @@ void MuxOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 LogicalResult
-MuxOp::inferReturnTypes(MLIRContext *context, Optional<Location> location,
+MuxOp::inferReturnTypes(MLIRContext *context, std::optional<Location> location,
                         ValueRange operands, DictionaryAttr attributes,
                         mlir::RegionRange regions,
                         SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
@@ -443,7 +443,7 @@ std::string handshake::ControlMergeOp::getResultName(unsigned int idx) {
 }
 
 LogicalResult ControlMergeOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> location, ValueRange operands,
+    MLIRContext *context, std::optional<Location> location, ValueRange operands,
     DictionaryAttr attributes, mlir::RegionRange regions,
     SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
   // ControlMerge must have at least one data operand
@@ -778,7 +778,7 @@ ParseResult BranchOp::parse(OpAsmParser &parser, OperationState &result) {
 void BranchOp::print(OpAsmPrinter &p) { sostPrint(p, false); }
 
 LogicalResult ConditionalBranchOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> location, ValueRange operands,
+    MLIRContext *context, std::optional<Location> location, ValueRange operands,
     DictionaryAttr attributes, mlir::RegionRange regions,
     SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
   // Return type is type of data operand (second argument), twice
@@ -835,11 +835,10 @@ bool ConditionalBranchOp::isControl() {
                                       getDataOperand());
 }
 
-LogicalResult
-SelectOp::inferReturnTypes(MLIRContext *context, Optional<Location> location,
-                           ValueRange operands, DictionaryAttr attributes,
-                           mlir::RegionRange regions,
-                           SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
+LogicalResult SelectOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> location, ValueRange operands,
+    DictionaryAttr attributes, mlir::RegionRange regions,
+    SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
   // Return type is type of true operand (equivalently, of false operand)
   inferredReturnTypes.push_back(operands[1].getType());
   return success();

@@ -3406,10 +3406,10 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValueOp op) {
   // do.
   if (auto bitwidth =
           firrtl::getBitWidth(op.getType().cast<FIRRTLBaseType>())) {
-    if (bitwidth.value() == 0) // Let the caller handle zero width values.
+    if (*bitwidth == 0) // Let the caller handle zero width values.
       return failure();
 
-    auto constant = getOrCreateIntConstant(bitwidth.value(), 0);
+    auto constant = getOrCreateIntConstant(*bitwidth, 0);
     // If the result is an aggregate value, we have to bitcast the constant.
     if (!resultTy.isa<IntegerType>())
       constant = builder.create<hw::BitcastOp>(resultTy, constant);

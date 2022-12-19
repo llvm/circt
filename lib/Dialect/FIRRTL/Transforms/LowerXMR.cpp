@@ -226,7 +226,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         auto iter = dataflowAt.find(I->getData());
         if (iter != dataflowAt.end()) {
           for (auto init = refSendPathList[iter->getSecond()]; init.second;
-               init = refSendPathList[init.second.value()])
+               init = refSendPathList[*init.second])
             llvm::dbgs() << "\n path ::" << init.first << "::" << init.second;
         }
         llvm::dbgs() << "\n Done\n"; // Finish set.
@@ -241,7 +241,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   // Replace the RefResolveOp with verbatim op representing the XMR.
   LogicalResult handleRefResolve(RefResolveOp resolve) {
     auto resWidth = getBitWidth(resolve.getType());
-    if (resWidth.has_value() && resWidth.value() == 0) {
+    if (resWidth.has_value() && *resWidth == 0) {
       // Donot emit 0 width XMRs, replace it with constant 0.
       ImplicitLocOpBuilder builder(resolve.getLoc(), resolve);
       auto zeroUintType = UIntType::get(builder.getContext(), 0);
@@ -258,8 +258,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     SmallString<128> xmrString;
     size_t lastIndex;
     while (remoteOpPath) {
-      lastIndex = remoteOpPath.value();
-      auto entr = refSendPathList[remoteOpPath.value()];
+      lastIndex = *remoteOpPath;
+      auto entr = refSendPathList[*remoteOpPath];
       refSendPath.push_back(entr.first);
       remoteOpPath = entr.second;
     }
@@ -430,11 +430,11 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     auto indx = refSendPathList.size();
     dataflowAt[leader] = indx;
     if (continueFrom.has_value()) {
-      if (!refSendPathList[continueFrom.value()].first) {
+      if (!refSendPathList[*continueFrom].first) {
         // This handles the case when the InnerRef is set to null at the
         // following path, that implies the path ends at this node, so copy the
         // xmrPathSuffix and end the path here.
-        auto xmrIter = xmrPathSuffix.find(continueFrom.value());
+        auto xmrIter = xmrPathSuffix.find(*continueFrom);
         if (xmrIter != xmrPathSuffix.end()) {
           SmallString<128> xmrSuffix = xmrIter->getSecond();
           // The following assignment to the DenseMap can potentially reallocate

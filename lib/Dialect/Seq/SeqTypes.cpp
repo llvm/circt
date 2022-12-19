@@ -44,7 +44,7 @@ void SeqDialect::registerTypes() {
 // HLMemType
 //===----------------------------------------------------------------------===//
 
-HLMemType HLMemType::cloneWith(Optional<ArrayRef<int64_t>> shape,
+HLMemType HLMemType::cloneWith(std::optional<ArrayRef<int64_t>> shape,
                                Type elementType) const {
   return HLMemType::get(elementType.getContext(), shape.value_or(getShape()),
                         elementType);
