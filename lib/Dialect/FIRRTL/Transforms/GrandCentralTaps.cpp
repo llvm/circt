@@ -363,9 +363,31 @@ Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
   return sendVal;
 }
 
-LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
-                                                  DictionaryAttr anno,
-                                                  ApplyState &state) {
+//===----------------------------------------------------------------------===//
+// Code related to handling Grand Central Data/Mem Taps annotations
+//===----------------------------------------------------------------------===//
+
+// Describes tap points into the design.  This has the following structure:
+//   keys: Seq[DataTapKey]
+// DataTapKey has multiple implementations:
+//   - ReferenceDataTapKey: (tapping a point which exists in the FIRRTL)
+//       sink: ReferenceTarget
+//       source: ReferenceTarget
+//   - DataTapModuleSignalKey: (tapping a point, by name, in a blackbox)
+//       module: IsModule
+//       internalPath: String
+//       sink: ReferenceTarget
+//   - DeletedDataTapKey: (not implemented here)
+//       sink: ReferenceTarget
+//   - LiteralDataTapKey: (not implemented here)
+//       literal: Literal
+//       sink: ReferenceTarget
+// A Literal is a FIRRTL IR literal serialized to a string.  For now, just
+// store the string.
+// TODO: Parse the literal string into a UInt or SInt literal.
+LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
+                                              DictionaryAttr anno,
+                                              ApplyState &state) {
   auto *context = state.circuit.getContext();
   auto loc = state.circuit.getLoc();
 
@@ -544,173 +566,17 @@ LogicalResult static applyNoBlackBoxStyleDataTaps(const AnnoPathValue &target,
   return success();
 }
 
-//===----------------------------------------------------------------------===//
-// Code related to handling Grand Central Data/Mem Taps annotations
-//===----------------------------------------------------------------------===//
-
-// Describes tap points into the design.  This has the following structure:
-//   blackBox: ModuleTarget
-//   keys: Seq[DataTapKey]
-// DataTapKey has multiple implementations:
-//   - ReferenceDataTapKey: (tapping a point which exists in the FIRRTL)
-//       portName: ReferenceTarget
-//       source: ReferenceTarget
-//   - DataTapModuleSignalKey: (tapping a point, by name, in a blackbox)
-//       portName: ReferenceTarget
-//       module: IsModule
-//       internalPath: String
-//   - DeletedDataTapKey: (not implemented here)
-//       portName: ReferenceTarget
-//   - LiteralDataTapKey: (not implemented here)
-//       portName: ReferenceTarget
-//       literal: Literal
-// A Literal is a FIRRTL IR literal serialized to a string.  For now, just
-// store the string.
-// TODO: Parse the literal string into a UInt or SInt literal.
-LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
-                                              DictionaryAttr anno,
-                                              ApplyState &state) {
-
-  auto *context = state.circuit.getContext();
-  auto loc = state.circuit.getLoc();
-
-  auto id = state.newID();
-  NamedAttrList attrs;
-  attrs.append("class", StringAttr::get(context, dataTapsBlackboxClass));
-  // The new DataTaps donot have blackbox field. Lower them directly to RefType.
-  if (!anno.contains("blackBox"))
-    return applyNoBlackBoxStyleDataTaps(target, anno, state);
-  auto blackBoxAttr =
-      tryGetAs<StringAttr>(anno, anno, "blackBox", loc, dataTapsClass);
-  if (!blackBoxAttr)
-    return failure();
-  auto canonicalTarget = canonicalizeTarget(blackBoxAttr.getValue());
-  if (!tokenizePath(canonicalTarget))
-    return failure();
-  attrs.append("target", StringAttr::get(context, canonicalTarget));
-  state.addToWorklistFn(DictionaryAttr::getWithSorted(context, attrs));
-
-  // Process all the taps.
-  auto keyAttr = tryGetAs<ArrayAttr>(anno, anno, "keys", loc, dataTapsClass);
-  if (!keyAttr)
-    return failure();
-  for (size_t i = 0, e = keyAttr.size(); i != e; ++i) {
-    auto b = keyAttr[i];
-    auto path = ("keys[" + Twine(i) + "]").str();
-    auto bDict = b.cast<DictionaryAttr>();
-    auto classAttr =
-        tryGetAs<StringAttr>(bDict, anno, "class", loc, dataTapsClass, path);
-    if (!classAttr)
-      return failure();
-
-    // The "portName" field is common across all sub-types of DataTapKey.
-    NamedAttrList port;
-    auto portNameAttr =
-        tryGetAs<StringAttr>(bDict, anno, "portName", loc, dataTapsClass, path);
-    if (!portNameAttr)
-      return failure();
-    auto portTarget = canonicalizeTarget(portNameAttr.getValue());
-    if (!tokenizePath(portTarget))
-      return failure();
-
-    if (classAttr.getValue() == referenceKeyClass) {
-      NamedAttrList source;
-      auto portID = state.newID();
-      source.append("class", StringAttr::get(context, referenceKeySourceClass));
-      source.append("id", id);
-      source.append("portID", portID);
-      auto sourceAttr =
-          tryGetAs<StringAttr>(bDict, anno, "source", loc, dataTapsClass, path);
-      if (!sourceAttr)
-        return failure();
-      auto sourceTarget = canonicalizeTarget(sourceAttr.getValue());
-      if (!tokenizePath(sourceTarget))
-        return failure();
-
-      source.append("target", StringAttr::get(context, sourceTarget));
-
-      state.addToWorklistFn(DictionaryAttr::get(context, source));
-
-      // Annotate the data tap module port.
-      port.append("class", StringAttr::get(context, referenceKeyPortClass));
-      port.append("id", id);
-      port.append("portID", portID);
-      port.append("target", StringAttr::get(context, portTarget));
-      state.addToWorklistFn(DictionaryAttr::getWithSorted(context, port));
-      continue;
-    }
-
-    if (classAttr.getValue() == internalKeyClass) {
-      NamedAttrList module;
-      auto portID = state.newID();
-      module.append("class", StringAttr::get(context, internalKeySourceClass));
-      module.append("id", id);
-      auto internalPathAttr = tryGetAs<StringAttr>(bDict, anno, "internalPath",
-                                                   loc, dataTapsClass, path);
-      auto moduleAttr =
-          tryGetAs<StringAttr>(bDict, anno, "module", loc, dataTapsClass, path);
-      if (!internalPathAttr || !moduleAttr)
-        return failure();
-      module.append("internalPath", internalPathAttr);
-      module.append("portID", portID);
-      auto moduleTarget = canonicalizeTarget(moduleAttr.getValue());
-      if (!tokenizePath(moduleTarget))
-        return failure();
-
-      module.append("target", StringAttr::get(context, moduleTarget));
-      state.addToWorklistFn(DictionaryAttr::getWithSorted(context, module));
-
-      // Annotate the data tap module port.
-      port.append("class", StringAttr::get(context, internalKeyPortClass));
-      port.append("id", id);
-      port.append("portID", portID);
-      port.append("target", StringAttr::get(context, portTarget));
-      state.addToWorklistFn(DictionaryAttr::get(context, port));
-      continue;
-    }
-
-    if (classAttr.getValue() == deletedKeyClass) {
-      // Annotate the data tap module port.
-      port.append("class", classAttr);
-      port.append("id", id);
-      port.append("target", StringAttr::get(context, portTarget));
-      state.addToWorklistFn(DictionaryAttr::get(context, port));
-      continue;
-    }
-
-    if (classAttr.getValue() == literalKeyClass) {
-      auto literalAttr = tryGetAs<StringAttr>(bDict, anno, "literal", loc,
-                                              dataTapsClass, path);
-      if (!literalAttr)
-        return failure();
-
-      // Annotate the data tap module port.
-      port.append("class", classAttr);
-      port.append("id", id);
-      port.append("literal", literalAttr);
-      port.append("target", StringAttr::get(context, portTarget));
-      state.addToWorklistFn(DictionaryAttr::get(context, port));
-      continue;
-    }
-
-    mlir::emitError(
-        loc, "Annotation '" + Twine(dataTapsClass) + "' with path '" +
-                 (Twine(path) + ".class") +
-                 "' contained an unknown/unimplemented DataTapKey class '" +
-                 classAttr.getValue() + "'.")
-            .attachNote()
-        << "The full Annotation is reproduced here: " << anno << "\n";
-    return failure();
-  }
-
-  return success();
-}
-
-LogicalResult applyGCTMemTapsWithWires(const AnnoPathValue &target,
+LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
                                        DictionaryAttr anno,
-                                       std::string &sourceTargetStr,
                                        ApplyState &state) {
   auto loc = state.circuit.getLoc();
+
+  auto sourceAttr =
+      tryGetAs<StringAttr>(anno, anno, "source", loc, memTapClass);
+  if (!sourceAttr)
+    return failure();
+  auto sourceTargetStr = canonicalizeTarget(sourceAttr.getValue());
+
   Value memDbgPort;
   Optional<AnnoPathValue> srcTarget = resolvePath(
       sourceTargetStr, state.circuit, state.symTbl, state.targetCaches);
@@ -783,68 +649,6 @@ LogicalResult applyGCTMemTapsWithWires(const AnnoPathValue &target,
         "type");
   auto sink = wireTarget->ref.getOp()->getResult(0);
   state.wiringProblems.push_back({sendVal, sink, "memTap"});
-  return success();
-}
-
-LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
-                                             DictionaryAttr anno,
-                                             ApplyState &state) {
-
-  auto *context = state.circuit.getContext();
-  auto loc = state.circuit.getLoc();
-
-  auto id = state.newID();
-  NamedAttrList attrs;
-  auto sourceAttr =
-      tryGetAs<StringAttr>(anno, anno, "source", loc, memTapClass);
-  if (!sourceAttr)
-    return failure();
-  auto sourceTarget = canonicalizeTarget(sourceAttr.getValue());
-  if (!tokenizePath(sourceTarget))
-    return failure();
-  attrs.append("class", StringAttr::get(context, memTapSourceClass));
-  attrs.append("id", id);
-  attrs.append("target", StringAttr::get(context, sourceTarget));
-
-  if (!anno.contains("taps"))
-    return applyGCTMemTapsWithWires(target, anno, sourceTarget, state);
-  auto tapsAttr = tryGetAs<ArrayAttr>(anno, anno, "taps", loc, memTapClass);
-  state.addToWorklistFn(DictionaryAttr::get(context, attrs));
-  StringSet<> memTapBlackboxes;
-  for (size_t i = 0, e = tapsAttr.size(); i != e; ++i) {
-    auto tap = tapsAttr[i].dyn_cast_or_null<StringAttr>();
-    if (!tap) {
-      mlir::emitError(
-          loc, "Annotation '" + Twine(memTapClass) + "' with path '.taps[" +
-                   Twine(i) +
-                   "]' contained an unexpected type (expected a string).")
-              .attachNote()
-          << "The full Annotation is reprodcued here: " << anno << "\n";
-      return failure();
-    }
-    NamedAttrList port;
-    port.append("class", StringAttr::get(context, memTapPortClass));
-    port.append("id", id);
-    port.append("portID", IntegerAttr::get(IntegerType::get(context, 64), i));
-    auto canonTarget = canonicalizeTarget(tap.getValue());
-    if (!tokenizePath(canonTarget))
-      return failure();
-    port.append("target", StringAttr::get(context, canonTarget));
-    state.addToWorklistFn(DictionaryAttr::get(context, port));
-
-    auto blackboxTarget = *tokenizePath(canonTarget);
-    blackboxTarget.name = {};
-    blackboxTarget.component.clear();
-    auto blackboxTargetStr = blackboxTarget.str();
-    if (!memTapBlackboxes.insert(blackboxTargetStr).second)
-      continue;
-
-    NamedAttrList blackbox;
-    blackbox.append("class", StringAttr::get(context, memTapBlackboxClass));
-    blackbox.append("target", StringAttr::get(context, blackboxTargetStr));
-    state.addToWorklistFn(DictionaryAttr::getWithSorted(context, blackbox));
-  }
-
   return success();
 }
 
