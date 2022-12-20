@@ -4096,6 +4096,24 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
   if (getSingleNonInstanceOperand(op))
     return success();
 
+  // If all operands of the attach are internal to this module (none of them
+  // are ports), then they can all be replaced with a single wire, and we can
+  // delete the attach op.
+  bool isAttachInternalOnly =
+      llvm::none_of(inoutValues, [](auto v) { return isa<BlockArgument>(v); });
+
+  if (isAttachInternalOnly) {
+    auto v0 = inoutValues.front();
+    for (auto v : inoutValues) {
+      if (v == v0)
+        continue;
+      v.replaceAllUsesWith(v0);
+    }
+    return success();
+  }
+
+  // If the attach operands contain a port, then we can't do anything to
+  // simplify the attach operation.
   addToIfDefBlock(
       "SYNTHESIS",
       // If we're doing synthesis, we emit an all-pairs assign complex.
