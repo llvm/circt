@@ -10,7 +10,6 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   ExtractInstances.cpp
   FlattenMemory.cpp
   GrandCentral.cpp
-  GrandCentralTaps.cpp
   GrandCentralSignalMappings.cpp
   IMConstProp.cpp
   IMDeadCodeElim.cpp

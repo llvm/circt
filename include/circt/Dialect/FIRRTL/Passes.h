@@ -103,8 +103,6 @@ createBlackBoxReaderPass(llvm::Optional<mlir::StringRef> inputPrefix = {});
 
 std::unique_ptr<mlir::Pass> createGrandCentralPass();
 
-std::unique_ptr<mlir::Pass> createGrandCentralTapsPass();
-
 std::unique_ptr<mlir::Pass>
 createGrandCentralSignalMappingsPass(mlir::StringRef outputFilename = "");
 
