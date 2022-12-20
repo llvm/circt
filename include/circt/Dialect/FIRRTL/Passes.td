@@ -607,7 +607,7 @@ def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
 def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::CircuitOp"> {
   let summary = "Lower intrinsics";
   let description = [{
-    This pass lowers intrinsics encoded as extmodule with annotation and 
+    This pass lowers intrinsics encoded as extmodule with annotation and
     intmodule to their implementation or op.
   }];
   let constructor = "circt::firrtl::createLowerIntrinsicsPass()";
