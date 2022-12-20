@@ -1787,4 +1787,47 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: sv.system "value$plusargs"(%[[foo]], %[[tmp]])
     
   }
+
+  // An internal-only analog connection between two instances should be implemented with a wire
+  firrtl.extmodule @AnalogInModA(in a: !firrtl.analog<8>)
+  firrtl.extmodule @AnalogInModB(in a: !firrtl.analog<8>)
+  firrtl.extmodule @AnalogOutModA(out a: !firrtl.analog<8>)
+  firrtl.module @AnalogMergeTwo() {
+    %result_iIn = firrtl.instance iIn @AnalogInModA(in a: !firrtl.analog<8>)
+    %result_iOut = firrtl.instance iOut @AnalogOutModA(out a: !firrtl.analog<8>)
+    firrtl.attach %result_iIn, %result_iOut : !firrtl.analog<8>, !firrtl.analog<8>
+  }
+  // CHECK-LABEL: hw.module @AnalogMergeTwo() {
+  // CHECK:         %.a.wire = sv.wire : !hw.inout<i8>
+  // CHECK:         hw.instance "iIn" @AnalogInModA(a: %.a.wire: !hw.inout<i8>) -> ()
+  // CHECK:         hw.instance "iOut" @AnalogOutModA(a: %.a.wire: !hw.inout<i8>) -> ()
+  // CHECK-NEXT:    hw.output
+  // CHECK-NEXT:  }
+
+  // An internal-only analog connection between three instances should be implemented with a wire
+  firrtl.module @AnalogMergeThree() {
+    %result_iInA = firrtl.instance iInA @AnalogInModA(in a: !firrtl.analog<8>)
+    %result_iInB = firrtl.instance iInB @AnalogInModB(in a: !firrtl.analog<8>)
+    %result_iOut = firrtl.instance iOut @AnalogOutModA(out a: !firrtl.analog<8>)
+    firrtl.attach %result_iInA, %result_iInB, %result_iOut : !firrtl.analog<8>, !firrtl.analog<8>, !firrtl.analog<8>
+  }
+  // CHECK-LABEL: hw.module @AnalogMergeThree() {
+  // CHECK:         %.a.wire = sv.wire : !hw.inout<i8>
+  // CHECK:         hw.instance "iInA" @AnalogInModA(a: %.a.wire: !hw.inout<i8>) -> ()
+  // CHECK:         hw.instance "iInB" @AnalogInModB(a: %.a.wire: !hw.inout<i8>) -> ()
+  // CHECK:         hw.instance "iOut" @AnalogOutModA(a: %.a.wire: !hw.inout<i8>) -> ()
+  // CHECK-NEXT:    hw.output
+  // CHECK-NEXT:  }
+
+  // An analog connection between two instances and a module port should be implemented with a wire
+  firrtl.module @AnalogMergeTwoWithPort(out %a: !firrtl.analog<8>) {
+    %result_iIn = firrtl.instance iIn @AnalogInModA(in a: !firrtl.analog<8>)
+    %result_iOut = firrtl.instance iOut @AnalogOutModA(out a: !firrtl.analog<8>)
+    firrtl.attach %a, %result_iIn, %result_iOut : !firrtl.analog<8>, !firrtl.analog<8>, !firrtl.analog<8>
+  }
+  // CHECK-LABEL: hw.module @AnalogMergeTwoWithPort(%a: !hw.inout<i8>) {
+  // CHECK-NEXT:    hw.instance "iIn" @AnalogInModA(a: %a: !hw.inout<i8>) -> ()
+  // CHECK-NEXT:    hw.instance "iOut" @AnalogOutModA(a: %a: !hw.inout<i8>) -> ()
+  // CHECK-NEXT:    hw.output
+  // CHECK-NEXT:  }
 }
