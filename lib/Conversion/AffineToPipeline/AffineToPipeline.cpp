@@ -34,6 +34,7 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 #include <cassert>
+#include <limits>
 
 #define DEBUG_TYPE "affine-to-pipeline"
 
@@ -431,10 +432,12 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
 
   // Maintain mappings of values in the loop body and results of stages,
   // initially populated with the iter args.
-  BlockAndValueMapping iterValueMap;
-  for (size_t i = 0; i < forOp.getBody()->getNumArguments(); ++i)
-    iterValueMap.map(forOp.getBody()->getArgument(i),
-                     pipeline.getStagesBlock().getArgument(i));
+  BlockAndValueMapping valueMap;
+  // Nested loops are not supported yet.
+  assert(iterArgs.size() == forOp.getBody()->getNumArguments());
+  for (size_t i = 0; i < iterArgs.size(); ++i)
+    valueMap.map(forOp.getBody()->getArgument(i),
+                 pipeline.getStagesBlock().getArgument(i));
 
   // Create the stages.
   Block &stagesBlock = pipeline.getStagesBlock();
@@ -447,10 +450,17 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
   llvm::sort(startTimes);
 
   DominanceInfo dom(getOperation());
+
+  // Keys for translating values in each stage
   SmallVector<DenseSet<Value>> registerValues;
   SmallVector<SmallVector<mlir::Type>> registerTypes;
-  SmallVector<BlockAndValueMapping> valueMaps;
+
+  // The maps that ensure a stage uses the correct version of a value
+  SmallVector<BlockAndValueMapping> stageValueMaps;
+
+  // For storing the range of stages an operation's results need to be valid for
   DenseMap<Operation *, std::pair<unsigned, unsigned>> pipeTimes;
+
   for (auto startTime : startTimes) {
     auto group = startGroups[startTime];
 
@@ -460,10 +470,12 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
       return isa<AffineYieldOp>(op) && op->getParentOp() == forOp;
     };
 
+    // Check each operation to see if its results need plumbing
     for (auto *op : group) {
       if (op->getUsers().empty())
         continue;
-      unsigned pipeStartTime = -1;
+
+      unsigned pipeStartTime = std::numeric_limits<unsigned>::max();
       unsigned pipeEndTime = 0;
       for (auto *user : op->getUsers()) {
         if (*problem.getStartTime(user) > startTime || isLoopTerminator(user)) {
@@ -471,55 +483,58 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
           pipeStartTime = std::min(pipeStartTime, *problem.getStartTime(user));
         }
       }
-      // Skip iter if the users are in the same stage
+      // Skip iter if the user is in the same stage
       if (pipeStartTime > pipeEndTime)
         continue;
 
+      // Insert the range of pipeline stages the value needs to be valid for
       pipeTimes[op] = std::pair(pipeStartTime, pipeEndTime);
 
       // Add register stages for each time slice
       for (unsigned i = registerValues.size(); i <= pipeEndTime; ++i)
         registerValues.push_back(DenseSet<Value>());
 
+      // Keep a collection of this stages results as keys to our valueMaps
       for (auto result : op->getResults())
-        registerValues.data()[startTime].insert(result);
+        registerValues[startTime].insert(result);
 
-      // Handling multi-cycle ops here
+      // Other stages that use the value will need these values as keys too
       for (unsigned i = std::max(startTime + 1, pipeStartTime); i < pipeEndTime;
            i++) {
         for (auto result : op->getResults())
-          registerValues.data()[i].insert(result);
+          registerValues[i].insert(result);
       }
     }
   }
 
+  // Get the stages that will utilize the iteration arguments
   for (auto iterArg : innerLoop.getLoopBody().getArguments()) {
     unsigned iterArgPipeLen = 0;
     for (auto *user : iterArg.getUsers())
       iterArgPipeLen = std::max(iterArgPipeLen, *problem.getStartTime(user));
 
     for (unsigned i = 0; i < iterArgPipeLen; i++)
-      registerValues.data()[i].insert(iterArg);
+      registerValues[i].insert(iterArg);
   }
 
-  // Now make register Types and valueMaps
+  // Now make register Types and stageValueMaps
   for (unsigned i = 0; i < registerValues.size(); i++) {
     SmallVector<mlir::Type> types;
-    for (auto val : registerValues.data()[i]) {
+    for (auto val : registerValues[i]) {
       types.push_back(val.getType());
     }
     registerTypes.push_back(types);
-    valueMaps.push_back(BlockAndValueMapping(iterValueMap));
+    stageValueMaps.push_back(valueMap);
   }
   // One extra value map for the affine.for terminator
-  valueMaps.push_back(BlockAndValueMapping(iterValueMap));
+  stageValueMaps.push_back(valueMap);
 
   // Create stages along with maps
   for (auto startTime : startTimes) {
     auto group = startGroups[startTime];
     llvm::sort(group,
                [&](Operation *a, Operation *b) { return dom.dominates(a, b); });
-    auto stageTypes = registerTypes.data()[startTime];
+    auto stageTypes = registerTypes[startTime];
     // Add the induction variable increment in the first stage.
     if (startTime == 0)
       stageTypes.push_back(lowerBound.getType());
@@ -535,21 +550,27 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
     builder.setInsertionPointToStart(&stageBlock);
 
     for (auto *op : group) {
-      auto *newOp = builder.clone(*op, valueMaps.data()[startTime]);
+      auto *newOp = builder.clone(*op, stageValueMaps[startTime]);
 
+      // All further uses in this stage should used the cloned-version of values
+      // So we update the mapping in this stage
       for (auto result : op->getResults())
-        valueMaps.data()[startTime].map(
+        stageValueMaps[startTime].map(
             result, newOp->getResult(result.getResultNumber()));
     }
 
+    // Register all values in the terminator, using their mapped value
     SmallVector<Value> stageOperands;
     unsigned resIndex = 0;
-    for (auto res : registerValues.data()[startTime]) {
-      stageOperands.push_back(valueMaps.data()[startTime].lookup(res));
+    for (auto res : registerValues[startTime]) {
+      stageOperands.push_back(stageValueMaps[startTime].lookup(res));
+      // Additionally, update the map of the stage that will consume the
+      // registered value
       unsigned destTime =
           std::max(startTime + 1, pipeTimes[res.getDefiningOp()].first);
-      valueMaps.data()[destTime].map(res, stage.getResult(resIndex++));
+      stageValueMaps[destTime].map(res, stage.getResult(resIndex++));
     }
+    // Add these mapped values to pipeline.register
     stageTerminator->insertOperands(stageTerminator->getNumOperands(),
                                     stageOperands);
 
@@ -573,10 +594,8 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
   termIterArgs.push_back(
       stagesBlock.front().getResult(stagesBlock.front().getNumResults() - 1));
   for (auto value : forOp.getBody()->getTerminator()->getOperands()) {
-    termIterArgs.push_back(
-        valueMaps.data()[startTimes.back() + 1].lookup(value));
-    termResults.push_back(
-        valueMaps.data()[startTimes.back() + 1].lookup(value));
+    termIterArgs.push_back(stageValueMaps[startTimes.back() + 1].lookup(value));
+    termResults.push_back(stageValueMaps[startTimes.back() + 1].lookup(value));
   }
 
   stagesTerminator.getIterArgsMutable().append(termIterArgs);
