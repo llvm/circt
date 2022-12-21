@@ -75,7 +75,7 @@ struct ResetDomain {
 
   // Implementation details for this domain.
   Value existingValue;
-  Optional<unsigned> existingPort;
+  std::optional<unsigned> existingPort;
   StringAttr newPortName;
 
   ResetDomain(Value reset) : reset(reset) {}

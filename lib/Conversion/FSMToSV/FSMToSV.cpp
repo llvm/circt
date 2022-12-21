@@ -282,7 +282,7 @@ private:
 
     // An optional default value to be assigned before the case statement, if
     // the case is not fully specified for all states.
-    Optional<Value> defaultValue = {};
+    std::optional<Value> defaultValue = {};
   };
 
   // Build an SV-based case mux for the given assignments. Assignments are

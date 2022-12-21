@@ -175,16 +175,16 @@ private:
 std::string canonicalizeTarget(StringRef target);
 
 /// Parse a FIRRTL annotation path into its constituent parts.
-Optional<TokenAnnoTarget> tokenizePath(StringRef origTarget);
+std::optional<TokenAnnoTarget> tokenizePath(StringRef origTarget);
 
 /// Convert a parsed target string to a resolved target structure.  This
 /// resolves all names and aggregates from a parsed target.
-Optional<AnnoPathValue> resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
+std::optional<AnnoPathValue> resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
                                         SymbolTable &symTbl,
                                         CircuitTargetCache &cache);
 
 /// Resolve a string path to a named item inside a circuit.
-Optional<AnnoPathValue> resolvePath(StringRef rawPath, CircuitOp circuit,
+std::optional<AnnoPathValue> resolvePath(StringRef rawPath, CircuitOp circuit,
                                     SymbolTable &symTbl,
                                     CircuitTargetCache &cache);
 

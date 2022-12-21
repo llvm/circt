@@ -112,7 +112,7 @@ public:
 
   /// Return the indentation level of the specified token or None if this token
   /// is preceded by another token on the same line.
-  Optional<unsigned> getIndentation(const FIRToken &tok) const;
+  std::optional<unsigned> getIndentation(const FIRToken &tok) const;
 
   /// Get an opaque pointer into the lexer state that can be restored later.
   FIRLexerCursor getCursor() const;

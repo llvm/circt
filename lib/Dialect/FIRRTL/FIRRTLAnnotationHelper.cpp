@@ -159,7 +159,7 @@ std::string firrtl::canonicalizeTarget(StringRef target) {
   return newTarget;
 }
 
-Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
+std::optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
                                                 CircuitOp circuit,
                                                 SymbolTable &symTbl,
                                                 CircuitTargetCache &cache) {
@@ -261,7 +261,7 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
 
 /// split a target string into it constituent parts.  This is the primary parser
 /// for targets.
-Optional<TokenAnnoTarget> firrtl::tokenizePath(StringRef origTarget) {
+std::optional<TokenAnnoTarget> firrtl::tokenizePath(StringRef origTarget) {
   // An empty string is not a legal target.
   if (origTarget.empty())
     return {};
@@ -301,7 +301,7 @@ Optional<TokenAnnoTarget> firrtl::tokenizePath(StringRef origTarget) {
   return retval;
 }
 
-Optional<AnnoPathValue> firrtl::resolvePath(StringRef rawPath,
+std::optional<AnnoPathValue> firrtl::resolvePath(StringRef rawPath,
                                             CircuitOp circuit,
                                             SymbolTable &symTbl,
                                             CircuitTargetCache &cache) {
@@ -650,7 +650,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
     if (!wirePathStr.empty())
       if (!tokenizePath(wirePathStr))
         wirePathStr.clear();
-    Optional<AnnoPathValue> wireTarget = std::nullopt;
+    std::optional<AnnoPathValue> wireTarget;
     if (!wirePathStr.empty())
       wireTarget = resolvePath(wirePathStr, state.circuit, state.symTbl,
                                state.targetCaches);
@@ -666,7 +666,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
     // Extract the name of the wire, used for datatap.
     auto tapName = StringAttr::get(
         context, wirePathStr.substr(wirePathStr.find_last_of('>') + 1));
-    Optional<AnnoPathValue> srcTarget = std::nullopt;
+    std::optional<AnnoPathValue> srcTarget;
     Value sendVal;
     if (classAttr.getValue() == internalKeyClass) {
       // For DataTapModuleSignalKey, the source is encoded as a string, that
@@ -683,7 +683,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
       auto moduleTargetStr = canonicalizeTarget(moduleAttr.getValue());
       if (!tokenizePath(moduleTargetStr))
         return failure();
-      Optional<AnnoPathValue> moduleTarget = resolvePath(
+      std::optional<AnnoPathValue> moduleTarget = resolvePath(
           moduleTargetStr, state.circuit, state.symTbl, state.targetCaches);
       if (!moduleTarget)
         return failure();
@@ -805,7 +805,7 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
   auto sourceTargetStr = canonicalizeTarget(sourceAttr.getValue());
 
   Value memDbgPort;
-  Optional<AnnoPathValue> srcTarget = resolvePath(
+  std::optional<AnnoPathValue> srcTarget = resolvePath(
       sourceTargetStr, state.circuit, state.symTbl, state.targetCaches);
   if (!srcTarget)
     return mlir::emitError(loc, "cannot resolve source target path '")
@@ -858,7 +858,7 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
   auto wireTargetStr = canonicalizeTarget(tap.getValue());
   if (!tokenizePath(wireTargetStr))
     return failure();
-  Optional<AnnoPathValue> wireTarget = resolvePath(
+  std::optional<AnnoPathValue> wireTarget = resolvePath(
       wireTargetStr, state.circuit, state.symTbl, state.targetCaches);
   if (!wireTarget)
     return mlir::emitError(loc, "Annotation '" + Twine(memTapClass) +

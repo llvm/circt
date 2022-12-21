@@ -127,12 +127,12 @@ private:
   std::unique_ptr<llvm::ToolOutputFile> file;
 
   /// Whether the MLIR module validation has run, and its result.
-  llvm::Optional<bool> valid;
+  std::optional<bool> valid;
   /// Whether the size of the test case on disk has already been determined, and
   /// if yes, that size.
-  llvm::Optional<size_t> size;
+  std::optional<size_t> size;
   /// Whether the tester has run on this test case, and its result.
-  llvm::Optional<bool> interesting;
+  std::optional<bool> interesting;
 };
 
 } // namespace circt

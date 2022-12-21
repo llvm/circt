@@ -404,7 +404,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   void markForRemoval(Operation *op) { opsToRemove.push_back(op); }
 
-  Optional<size_t> getRemoteRefSend(Value val) {
+  std::optional<size_t> getRemoteRefSend(Value val) {
     auto iter = dataflowAt.find(dataFlowClasses.getOrInsertLeaderValue(val));
     if (iter != dataflowAt.end())
       return iter->getSecond();
@@ -425,7 +425,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   }
 
   size_t addReachingSendsEntry(Value atRefVal, Attribute newRef,
-                               Optional<size_t> continueFrom = std::nullopt) {
+                               std::optional<size_t> continueFrom = std::nullopt) {
     auto leader = dataFlowClasses.getOrInsertLeaderValue(atRefVal);
     auto indx = refSendPathList.size();
     dataflowAt[leader] = indx;
@@ -517,7 +517,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   /// op. All the nodes representing an InstanceOp must have a valid
   /// nextNodeOnPath. Only the node representing the final XMR defining op has
   /// no nextNodeOnPath, which denotes a leaf node on the path.
-  using nextNodeOnPath = Optional<size_t>;
+  using nextNodeOnPath = std::optional<size_t>;
   using node = std::pair<Attribute, nextNodeOnPath>;
   SmallVector<node> refSendPathList;
 

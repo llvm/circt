@@ -1922,7 +1922,7 @@ LogicalResult IfOp::verify() {
 /// Returns the last EnableOp within the child tree of 'parentSeqOp'. If no
 /// EnableOp was found (e.g. a "calyx.par" operation is present), returns
 /// None.
-static Optional<EnableOp> getLastEnableOp(SeqOp parent) {
+static std::optional<EnableOp> getLastEnableOp(SeqOp parent) {
   auto &lastOp = parent.getBodyBlock()->back();
   if (auto enableOp = dyn_cast<EnableOp>(lastOp))
     return enableOp;
@@ -1982,7 +1982,7 @@ struct CommonTailPatternWithSeq : mlir::OpRewritePattern<IfOp> {
 
     auto thenControl = cast<SeqOp>(ifOp.getThenBody()->front()),
          elseControl = cast<SeqOp>(ifOp.getElseBody()->front());
-    Optional<EnableOp> lastThenEnableOp = getLastEnableOp(thenControl),
+    std::optional<EnableOp> lastThenEnableOp = getLastEnableOp(thenControl),
                        lastElseEnableOp = getLastEnableOp(elseControl);
 
     if (!lastThenEnableOp || !lastElseEnableOp)

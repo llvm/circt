@@ -183,7 +183,7 @@ template <typename ConcreteType>
 class WidthQualifiedTrait
     : public mlir::OpTrait::TraitBase<ConcreteType, WidthQualifiedTrait> {
 public:
-  Optional<int32_t> getWidth() {
+  std::optional<int32_t> getWidth() {
     auto v = static_cast<ConcreteType *>(this)->getBaseWidth();
     if (v >= 0)
       return v;
@@ -212,7 +212,7 @@ public:
       circt::hw::FieldIDTypeInterface::Trait>::Base::Base;
 
   /// Return the bitwidth of this type or None if unknown.
-  Optional<int32_t> getWidth() {
+  std::optional<int32_t> getWidth() {
     return static_cast<ConcreteType *>(this)->getWidth();
   }
 
@@ -247,7 +247,7 @@ public:
   bool hasWidth() { return getWidth().has_value(); }
 
   /// Return the bitwidth of this type or None if unknown.
-  Optional<int32_t> getWidth();
+  std::optional<int32_t> getWidth();
 
   /// Return the width of this type, or -1 if it has none specified.
   int32_t getWidthOrSentinel() { return getWidth().value_or(-1); }
@@ -266,7 +266,7 @@ public:
   static SIntType get(MLIRContext *context, int32_t width = -1);
 
   /// Return the bitwidth of this type or None if unknown.
-  Optional<int32_t> getWidth();
+  std::optional<int32_t> getWidth();
 };
 
 /// An unsigned integer type, whose width may not be known.
@@ -278,7 +278,7 @@ public:
   static UIntType get(MLIRContext *context, int32_t width = -1);
 
   /// Return the bitwidth of this type or None if unknown.
-  Optional<int32_t> getWidth();
+  std::optional<int32_t> getWidth();
 };
 
 //===----------------------------------------------------------------------===//
@@ -316,15 +316,15 @@ public:
   size_t getNumElements() { return getElements().size(); }
 
   /// Look up an element's index by name.  This returns None on failure.
-  llvm::Optional<unsigned> getElementIndex(StringAttr name);
-  llvm::Optional<unsigned> getElementIndex(StringRef name);
+  std::optional<unsigned> getElementIndex(StringAttr name);
+  std::optional<unsigned> getElementIndex(StringRef name);
 
   /// Look up an element's name by index. This asserts if index is invalid.
   StringRef getElementName(size_t index);
 
   /// Look up an element by name.  This returns None on failure.
-  llvm::Optional<BundleElement> getElement(StringAttr name);
-  llvm::Optional<BundleElement> getElement(StringRef name);
+  std::optional<BundleElement> getElement(StringAttr name);
+  std::optional<BundleElement> getElement(StringRef name);
 
   /// Look up an element by index.  This asserts if index is invalid.
   BundleElement getElement(size_t index);
@@ -446,7 +446,7 @@ public:
 // field element and return the total bit width of the aggregate type. This
 // returns None, if any of the bundle fields is a flip type, or ground type with
 // unknown bit width.
-llvm::Optional<int64_t> getBitWidth(FIRRTLBaseType type,
+std::optional<int64_t> getBitWidth(FIRRTLBaseType type,
                                     bool ignoreFlip = false);
 
 // Parse a FIRRTL type without a leading `!firrtl.` dialect tag.

@@ -80,7 +80,7 @@ struct PortInfo {
 
   /// Default constructors
   PortInfo(StringAttr name, Type type, Direction dir, StringAttr symName = {},
-           Optional<Location> location = {}, Optional<AnnotationSet> annos = {})
+           std::optional<Location> location = {}, std::optional<AnnotationSet> annos = {})
       : name(name), type(type), direction(dir) {
     if (symName)
       sym = hw::InnerSymAttr::get(symName);

@@ -411,7 +411,7 @@ bool BlackBoxReaderPass::isDut(Operation *module) {
 //===----------------------------------------------------------------------===//
 
 std::unique_ptr<mlir::Pass>
-circt::firrtl::createBlackBoxReaderPass(llvm::Optional<StringRef> inputPrefix) {
+circt::firrtl::createBlackBoxReaderPass(std::optional<StringRef> inputPrefix) {
   auto pass = std::make_unique<BlackBoxReaderPass>();
   if (inputPrefix)
     pass->inputPrefix = inputPrefix->str();
