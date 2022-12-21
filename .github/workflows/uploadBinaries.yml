@@ -9,28 +9,26 @@ jobs:
   publish:
     strategy:
       matrix:
-        compiler:
+        build_config:
           - mode: release
             assert: OFF
             shared: OFF
+            cmake-args: ''
         runner: [ubuntu-20.04, ubuntu-18.04, macos-11]
         include:
           - runner: ubuntu-20.04
             os: linux
-            cmake-args: ''
             tar: tar
             # Default clang (11) is broken, see LLVM issue 59622.
-            cc: clang++-12
+            cc: clang-12
             cxx: clang++-12
           - runner: ubuntu-18.04
             os: linux
-            cmake-args: ''
             tar: tar
             cc: clang
             cxx: clang++
           - runner: macos-11
             os: macos
-            cmake-args: ''
             tar: gtar
             cc: clang
             cxx: clang++
@@ -57,13 +55,13 @@ jobs:
           mkdir -p llvm/build
           cd llvm/build
           cmake -G Ninja ../llvm \
-              ${{ matrix.cmake-args }} \
-              -DCMAKE_BUILD_TYPE=${{ matrix.compiler.mode }} \
-              -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }} \
-              -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} \
-              -DBUILD_SHARED_LIBS=${{ matrix.compiler.shared }} \
+              ${{ matrix.build_config.cmake-args }} \
+              -DCMAKE_BUILD_TYPE=${{ matrix.build_config.mode }} \
+              -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+              -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+              -DBUILD_SHARED_LIBS=${{ matrix.build_config.shared }} \
               -DLLVM_BUILD_EXAMPLES=OFF \
-              -DLLVM_ENABLE_ASSERTIONS=${{ matrix.compiler.assert }} \
+              -DLLVM_ENABLE_ASSERTIONS=${{ matrix.build_config.assert }} \
               -DLLVM_ENABLE_BINDINGS=OFF \
               -DLLVM_ENABLE_OCAMLDOC=OFF \
               -DLLVM_ENABLE_PROJECTS='mlir' \
@@ -84,14 +82,14 @@ jobs:
           mkdir build
           cd build
           cmake -G Ninja .. \
-            ${{ matrix.cmake-args }} \
-            -DBUILD_SHARED_LIBS=${{ matrix.compiler.shared }} \
-            -DCMAKE_BUILD_TYPE=${{ matrix.compiler.mode }} \
-            -DLLVM_ENABLE_ASSERTIONS=${{ matrix.compiler.assert }} \
+            ${{ matrix.build_config.cmake-args }} \
+            -DBUILD_SHARED_LIBS=${{ matrix.build_config.shared }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_config.mode }} \
+            -DLLVM_ENABLE_ASSERTIONS=${{ matrix.build_config.assert }} \
             -DMLIR_DIR=`pwd`/../llvm/build/lib/cmake/mlir \
             -DLLVM_DIR=`pwd`/../llvm/build/lib/cmake/llvm \
-            -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }} \
-            -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} \
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
             -DVERILATOR_DISABLE=ON \
             -DLLVM_ENABLE_TERMINFO=OFF \
             -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
