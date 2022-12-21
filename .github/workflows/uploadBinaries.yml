@@ -44,6 +44,14 @@ jobs:
           fetch-depth: 2
           submodules: "true"
 
+      - name: Setup Ninja Linux
+        if: matrix.os == 'linux'
+        run: sudo apt-get install ninja-build
+
+      - name: Setup Ninja and GNU Tar Mac
+        if: matrix.os == 'macos'
+        run: brew install ninja gnu-tar
+
       - name: Build LLVM
         run: |
           mkdir -p llvm/build
