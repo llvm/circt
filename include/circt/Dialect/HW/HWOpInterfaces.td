@@ -244,6 +244,16 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
             InnerSymbolTable::getInnerSymbolAttrName(), hw::InnerSymAttr::get(name));
       }]
     >,
+    InterfaceMethod<"Sets the inner symbols defined by this operation.",
+      "void", "setInnerSymbolAttr", (ins "::circt::hw::InnerSymAttr":$sym), [{}],
+      /*defaultImplementation=*/[{
+        if (sym && !sym.empty())
+          this->getOperation()->setAttr(
+              InnerSymbolTable::getInnerSymbolAttrName(), sym);
+        else
+          this->getOperation()->removeAttr(InnerSymbolTable::getInnerSymbolAttrName());
+      }]
+    >,
     InterfaceMethod<"Returns an InnerRef to this operation.  Must have inner symbol.",
       "::circt::hw::InnerRefAttr", "getInnerRef", (ins), [{}],
       /*defaultImplementation=*/[{
