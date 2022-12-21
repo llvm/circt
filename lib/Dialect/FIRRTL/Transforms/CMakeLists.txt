@@ -8,6 +8,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   EmitOMIR.cpp
   ExpandWhens.cpp
   ExtractInstances.cpp
+  FIRRTLUndef.cpp
   FlattenMemory.cpp
   GrandCentral.cpp
   GrandCentralSignalMappings.cpp

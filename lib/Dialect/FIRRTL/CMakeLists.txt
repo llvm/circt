@@ -42,4 +42,3 @@ add_dependencies(circt-headers
 add_subdirectory(Export)
 add_subdirectory(Import)
 add_subdirectory(Transforms)
-add_subdirectory(Analysis)
