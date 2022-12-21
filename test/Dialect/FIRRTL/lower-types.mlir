@@ -1144,6 +1144,22 @@ firrtl.module private @is1436_FOO() {
     // CHECK:  firrtl.strictconnect %a_2, %i : !firrtl.uint<1>
   }
 
+  // Check that an instance with attributes known and unknown to FIRRTL Dialect
+  // are copied to the lowered instance.
+  firrtl.module @SubmoduleWithAggregate(out %a: !firrtl.vector<uint<1>, 1>) {}
+  // CHECK-LABEL: firrtl.module @ModuleWithInstanceAttributes
+  firrtl.module @ModuleWithInstanceAttributes() {
+    // CHECK-NEXT: firrtl.instance
+    // CHECK-SAME:   hello = "world"
+    // CHECK-SAME:   lowerToBind
+    // CHECK-SAME:   output_file = #hw.output_file<"Foo.sv">
+    %sub_a = firrtl.instance sub {
+      hello = "world",
+      lowerToBind,
+      output_file = #hw.output_file<"Foo.sv">
+    } @SubmoduleWithAggregate(out a: !firrtl.vector<uint<1>, 1>)
+  }
+
 } // CIRCUIT
 
 // Check that we don't lose the DontTouchAnnotation when it is not the last
