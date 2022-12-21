@@ -3102,8 +3102,9 @@ void StmtEmitter::emitSVAttributes(Operation *op) {
 }
 
 template <typename Op>
-LogicalResult StmtEmitter::emitAssignLike(Op op, PPExtString syntax,
-                                          std::optional<PPExtString> wordBeforeLHS) {
+LogicalResult
+StmtEmitter::emitAssignLike(Op op, PPExtString syntax,
+                            std::optional<PPExtString> wordBeforeLHS) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -3426,11 +3427,10 @@ LogicalResult StmtEmitter::visitSV(ExitOp op) {
 
 /// Emit one of the severity message tasks `$fatal`, `$error`, `$warning`, or
 /// `$info`.
-LogicalResult StmtEmitter::emitSeverityMessageTask(Operation *op,
-                                                   PPExtString taskName,
-                                                   std::optional<unsigned> verbosity,
-                                                   StringAttr message,
-                                                   ValueRange operands) {
+LogicalResult
+StmtEmitter::emitSeverityMessageTask(Operation *op, PPExtString taskName,
+                                     std::optional<unsigned> verbosity,
+                                     StringAttr message, ValueRange operands) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 

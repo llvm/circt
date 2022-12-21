@@ -445,7 +445,7 @@ unsigned IntType::getBitSize(Kind kind) {
 }
 
 std::optional<IntType::Kind> IntType::getKindFromDomainAndSize(Domain domain,
-                                                          unsigned size) {
+                                                               unsigned size) {
   switch (domain) {
   case Domain::TwoValued:
     switch (size) {
@@ -475,7 +475,8 @@ std::optional<IntType::Kind> IntType::getKindFromDomainAndSize(Domain domain,
   llvm_unreachable("all domains should be handled");
 }
 
-IntType IntType::get(MLIRContext *context, Kind kind, std::optional<Sign> sign) {
+IntType IntType::get(MLIRContext *context, Kind kind,
+                     std::optional<Sign> sign) {
   return Base::get(context, detail::IntTypeStorage::pack(
                                 kind, sign.value_or(getDefaultSign(kind)),
                                 sign.has_value()));

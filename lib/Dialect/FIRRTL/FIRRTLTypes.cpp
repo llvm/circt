@@ -895,13 +895,15 @@ StringRef BundleType::getElementName(size_t index) {
   return getElements()[index].name.getValue();
 }
 
-std::optional<BundleType::BundleElement> BundleType::getElement(StringAttr name) {
+std::optional<BundleType::BundleElement>
+BundleType::getElement(StringAttr name) {
   if (auto maybeIndex = getElementIndex(name))
     return getElements()[*maybeIndex];
   return std::nullopt;
 }
 
-std::optional<BundleType::BundleElement> BundleType::getElement(StringRef name) {
+std::optional<BundleType::BundleElement>
+BundleType::getElement(StringRef name) {
   if (auto maybeIndex = getElementIndex(name))
     return getElements()[*maybeIndex];
   return std::nullopt;
@@ -1127,7 +1129,7 @@ void FIRRTLDialect::registerTypes() {
 // returns None, if any of the bundle fields is a flip type, or ground type with
 // unknown bit width.
 std::optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
-                                            bool ignoreFlip) {
+                                           bool ignoreFlip) {
   std::function<std::optional<int64_t>(FIRRTLBaseType)> getWidth =
       [&](FIRRTLBaseType type) -> std::optional<int64_t> {
     return TypeSwitch<FIRRTLBaseType, std::optional<int64_t>>(type)
@@ -1149,9 +1151,7 @@ std::optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
             return std::nullopt;
           return *w * vector.getNumElements();
         })
-        .Case<IntType>([&](IntType iType) {
-          return iType.getWidth();
-        })
+        .Case<IntType>([&](IntType iType) { return iType.getWidth(); })
         .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
         .Default([&](auto t) { return std::nullopt; });
   };

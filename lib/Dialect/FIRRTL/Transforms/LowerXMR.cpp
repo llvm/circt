@@ -424,8 +424,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     return std::nullopt;
   }
 
-  size_t addReachingSendsEntry(Value atRefVal, Attribute newRef,
-                               std::optional<size_t> continueFrom = std::nullopt) {
+  size_t
+  addReachingSendsEntry(Value atRefVal, Attribute newRef,
+                        std::optional<size_t> continueFrom = std::nullopt) {
     auto leader = dataFlowClasses.getOrInsertLeaderValue(atRefVal);
     auto indx = refSendPathList.size();
     dataflowAt[leader] = indx;

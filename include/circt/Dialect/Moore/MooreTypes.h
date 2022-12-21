@@ -538,9 +538,11 @@ public:
   static unsigned getBitSize(Kind kind);
   /// Get the integer type that corresponds to a domain and bit size. For
   /// example, returns `int` for `(TwoValued, 32)`.
-  static std::optional<Kind> getKindFromDomainAndSize(Domain domain, unsigned size);
+  static std::optional<Kind> getKindFromDomainAndSize(Domain domain,
+                                                      unsigned size);
 
-  static IntType get(MLIRContext *context, Kind kind, std::optional<Sign> sign = {});
+  static IntType get(MLIRContext *context, Kind kind,
+                     std::optional<Sign> sign = {});
 
   /// Create a `logic` type.
   static IntType getLogic(MLIRContext *context) { return get(context, Logic); }
@@ -1118,7 +1120,8 @@ public:
   static PackedStructType get(StructKind kind, ArrayRef<StructMember> members,
                               StringAttr name, Location loc,
                               std::optional<Sign> sign = {});
-  static PackedStructType get(const Struct &strukt, std::optional<Sign> sign = {}) {
+  static PackedStructType get(const Struct &strukt,
+                              std::optional<Sign> sign = {}) {
     return get(strukt.kind, strukt.members, strukt.name, strukt.loc, sign);
   }
 

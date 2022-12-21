@@ -75,8 +75,7 @@ findInstantiatedModule(firrtl::InstanceOp instOp, SymbolCache &symbols) {
   auto moduleOp = dyn_cast<firrtl::FModuleOp>(
       instOp.getReferencedModule(symbols.getSymbolTable(tableOp))
           .getOperation());
-  return moduleOp ? std::optional(moduleOp)
-                  : std::nullopt;
+  return moduleOp ? std::optional(moduleOp) : std::nullopt;
 }
 
 /// Compute the number of operations in a module. Recursively add the number of

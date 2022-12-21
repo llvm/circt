@@ -35,8 +35,9 @@ class Dependence {
 public:
   /// The "expanded" representation of a dependence, intended as the key for
   /// comparisons and hashing.
-  using TupleRepr = std::tuple<Operation *, Operation *, std::optional<unsigned>,
-                               std::optional<unsigned>>;
+  using TupleRepr =
+      std::tuple<Operation *, Operation *, std::optional<unsigned>,
+                 std::optional<unsigned>>;
 
   /// Wrap a def-use dependence, which is uniquely identified in the SSA graph
   /// by an `OpOperand`.

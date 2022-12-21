@@ -210,7 +210,8 @@ static IntegerAttr isOMSRAM(Attribute &node) {
 /// become its own Dialect.  At this time, this function is trying to do as
 /// minimal work as possible to just validate that the OMIR looks okay without
 /// doing lots of unnecessary unpacking/repacking of string-encoded types.
-static std::optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
+static std::optional<Attribute> scatterOMIR(Attribute original,
+                                            ApplyState &state) {
   auto *ctx = original.getContext();
 
   // Convert a string-encoded type to a dictionary that includes the type
@@ -305,16 +306,17 @@ static std::optional<Attribute> scatterOMIR(Attribute original, ApplyState &stat
       })
       // For a dictionary, recurse into each value and rewrite the key/value
       // pairs.
-      .Case<DictionaryAttr>([&](DictionaryAttr dict) -> std::optional<Attribute> {
-        NamedAttrList newAttrs;
-        for (auto pairs : dict) {
-          auto maybeValue = scatterOMIR(pairs.getValue(), state);
-          if (!maybeValue)
-            return std::nullopt;
-          newAttrs.append(pairs.getName(), *maybeValue);
-        }
-        return DictionaryAttr::get(ctx, newAttrs);
-      })
+      .Case<DictionaryAttr>(
+          [&](DictionaryAttr dict) -> std::optional<Attribute> {
+            NamedAttrList newAttrs;
+            for (auto pairs : dict) {
+              auto maybeValue = scatterOMIR(pairs.getValue(), state);
+              if (!maybeValue)
+                return std::nullopt;
+              newAttrs.append(pairs.getName(), *maybeValue);
+            }
+            return DictionaryAttr::get(ctx, newAttrs);
+          })
       // These attributes are all expected.  They are OMIR types, but do not
       // have string-encodings (hence why these should error if we see them as
       // strings).

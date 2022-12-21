@@ -866,11 +866,10 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     auto refAttr =
         tryGetAs<StringAttr>(refTarget, refTarget, "ref", loc, clazz, path);
 
-    return
-        (Twine("~" + circuitAttr.getValue() + "|" + moduleAttr.getValue() +
-                strpath + ">" + refAttr.getValue()) +
-          componentStr)
-             .str();
+    return (Twine("~" + circuitAttr.getValue() + "|" + moduleAttr.getValue() +
+                  strpath + ">" + refAttr.getValue()) +
+            componentStr)
+        .str();
   };
 
   auto classAttr =
@@ -1002,7 +1001,8 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
         TypeSwitch<Operation *, std::optional<Value>>(sourceRef.getOp())
             // The target is an external module port.  The source is the
             // instance port of this singly-instantiated external module.
-            .Case<FExtModuleOp>([&](FExtModuleOp extMod) -> std::optional<Value> {
+            .Case<FExtModuleOp>([&](FExtModuleOp extMod)
+                                    -> std::optional<Value> {
               auto portNo = sourceRef.getImpl().getPortNo();
               if (xmrSrcTarget->instances.empty()) {
                 auto paths = state.instancePathCache.getAbsolutePaths(extMod);

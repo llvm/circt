@@ -159,7 +159,7 @@ protected:
   SmallVector<int> getObjectiveVector(unsigned column);
   std::optional<unsigned> findDualPivotRow();
   std::optional<unsigned> findDualPivotColumn(unsigned pivotRow,
-                                         bool allowPositive = false);
+                                              bool allowPositive = false);
   std::optional<unsigned> findPrimalPivotColumn();
   std::optional<unsigned> findPrimalPivotRow(unsigned pivotColumn);
   void multiplyRow(unsigned row, int factor);

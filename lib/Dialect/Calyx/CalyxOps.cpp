@@ -1983,7 +1983,7 @@ struct CommonTailPatternWithSeq : mlir::OpRewritePattern<IfOp> {
     auto thenControl = cast<SeqOp>(ifOp.getThenBody()->front()),
          elseControl = cast<SeqOp>(ifOp.getElseBody()->front());
     std::optional<EnableOp> lastThenEnableOp = getLastEnableOp(thenControl),
-                       lastElseEnableOp = getLastEnableOp(elseControl);
+                            lastElseEnableOp = getLastEnableOp(elseControl);
 
     if (!lastThenEnableOp || !lastElseEnableOp)
       return failure();

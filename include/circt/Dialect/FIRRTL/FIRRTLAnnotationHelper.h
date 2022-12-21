@@ -179,14 +179,15 @@ std::optional<TokenAnnoTarget> tokenizePath(StringRef origTarget);
 
 /// Convert a parsed target string to a resolved target structure.  This
 /// resolves all names and aggregates from a parsed target.
-std::optional<AnnoPathValue> resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
-                                        SymbolTable &symTbl,
-                                        CircuitTargetCache &cache);
+std::optional<AnnoPathValue> resolveEntities(TokenAnnoTarget path,
+                                             CircuitOp circuit,
+                                             SymbolTable &symTbl,
+                                             CircuitTargetCache &cache);
 
 /// Resolve a string path to a named item inside a circuit.
 std::optional<AnnoPathValue> resolvePath(StringRef rawPath, CircuitOp circuit,
-                                    SymbolTable &symTbl,
-                                    CircuitTargetCache &cache);
+                                         SymbolTable &symTbl,
+                                         CircuitTargetCache &cache);
 
 /// Return true if an Annotation's class name is handled by the LowerAnnotations
 /// pass.

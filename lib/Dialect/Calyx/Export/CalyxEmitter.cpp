@@ -267,9 +267,8 @@ struct Emitter {
   //   $f.in0, $f.in1, $f.out : calyx.std_foo "f" : i32, i32, i1
   // emits:
   //   f = std_foo(1);
-  void
-  emitLibraryPrimTypedByFirstOutputPort(Operation *op,
-                                        std::optional<StringRef> calyxLibName = {});
+  void emitLibraryPrimTypedByFirstOutputPort(
+      Operation *op, std::optional<StringRef> calyxLibName = {});
 
 private:
   /// Used to track which imports are required for this program.

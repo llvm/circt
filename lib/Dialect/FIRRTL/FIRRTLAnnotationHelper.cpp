@@ -159,10 +159,9 @@ std::string firrtl::canonicalizeTarget(StringRef target) {
   return newTarget;
 }
 
-std::optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
-                                                CircuitOp circuit,
-                                                SymbolTable &symTbl,
-                                                CircuitTargetCache &cache) {
+std::optional<AnnoPathValue>
+firrtl::resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
+                        SymbolTable &symTbl, CircuitTargetCache &cache) {
   // Validate circuit name.
   if (!path.circuit.empty() && circuit.getName() != path.circuit) {
     mlir::emitError(circuit.getLoc())
@@ -302,9 +301,9 @@ std::optional<TokenAnnoTarget> firrtl::tokenizePath(StringRef origTarget) {
 }
 
 std::optional<AnnoPathValue> firrtl::resolvePath(StringRef rawPath,
-                                            CircuitOp circuit,
-                                            SymbolTable &symTbl,
-                                            CircuitTargetCache &cache) {
+                                                 CircuitOp circuit,
+                                                 SymbolTable &symTbl,
+                                                 CircuitTargetCache &cache) {
   auto pathStr = canonicalizeTarget(rawPath);
   StringRef path{pathStr};
 

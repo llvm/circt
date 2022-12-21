@@ -150,14 +150,14 @@ static FlatSymbolRefAttr scatterNonLocalPath(const AnnoPathValue &target,
 
 /// Always resolve to the circuit, ignoring the annotation.
 static std::optional<AnnoPathValue> noResolve(DictionaryAttr anno,
-                                         ApplyState &state) {
+                                              ApplyState &state) {
   return AnnoPathValue(state.circuit);
 }
 
 /// Implementation of standard resolution.  First parses the target path, then
 /// resolves it.
 static std::optional<AnnoPathValue> stdResolveImpl(StringRef rawPath,
-                                              ApplyState &state) {
+                                                   ApplyState &state) {
   auto pathStr = canonicalizeTarget(rawPath);
   StringRef path{pathStr};
 
@@ -176,7 +176,7 @@ static std::optional<AnnoPathValue> stdResolveImpl(StringRef rawPath,
 /// the annotation with standard parsing to resolve the path.  This requires
 /// 'target' to exist and be normalized (per docs/FIRRTLAnnotations.md).
 static std::optional<AnnoPathValue> stdResolve(DictionaryAttr anno,
-                                          ApplyState &state) {
+                                               ApplyState &state) {
   auto target = anno.getNamed("target");
   if (!target) {
     mlir::emitError(state.circuit.getLoc())
@@ -194,7 +194,7 @@ static std::optional<AnnoPathValue> stdResolve(DictionaryAttr anno,
 
 /// Resolves with target, if it exists.  If not, resolves to the circuit.
 static std::optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
-                                          ApplyState &state) {
+                                               ApplyState &state) {
   auto target = anno.getNamed("target");
   if (target)
     return stdResolveImpl(target->getValue().cast<StringAttr>().getValue(),

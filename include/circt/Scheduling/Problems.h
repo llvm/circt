@@ -405,7 +405,9 @@ private:
 public:
   /// The limit is the maximum number of operations using \p opr that are
   /// allowed to start in the same time step.
-  std::optional<unsigned> getLimit(OperatorType opr) { return limit.lookup(opr); }
+  std::optional<unsigned> getLimit(OperatorType opr) {
+    return limit.lookup(opr);
+  }
   void setLimit(OperatorType opr, unsigned val) { limit[opr] = val; }
 
   virtual PropertyStringVector getProperties(OperatorType opr) override;
