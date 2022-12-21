@@ -16,6 +16,7 @@
 #include <memory>
 #include <vector>
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/Error.h"
