@@ -280,7 +280,7 @@ def LLHD_RegOp : LLHD_Op<"reg", [
     static RegMode getRegModeByName(StringRef name) {
       std::optional<RegMode> optional =  symbolizeRegMode(name);
       assert(optional && "Invalid RegMode string.");
-      return optional.value();
+      return *optional;
     }
 
     bool hasGate(unsigned index) {
