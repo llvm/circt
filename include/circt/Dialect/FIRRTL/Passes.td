@@ -645,4 +645,13 @@ def InnerSymbolDCE : Pass<"firrtl-inner-symbol-dce", "mlir::ModuleOp"> {
   ];
 }
 
+def UndefAnalysis : Pass<"firrtl-undef", "firrtl::CircuitOp"> {
+  let summary = "Find uninitialized influence post-reset";
+  let description = [{
+    This pass finds places in a circuit where uninitialized state influences the
+    post-reset behavior of the circuit.
+  }];
+  let constructor = "circt::firrtl::createUndefAnalysisPass()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
