@@ -166,10 +166,10 @@ void InnerSymbolTable::erase(const InnerSymTarget &target) {
   assert(getInnerSymbol(target));
 
   if (target.isPort()) {
-    auto mod = cast<FModuleLike>(target.getOp());
+    auto mod = cast<HWModuleLike>(target.getOp());
     assert(target.getPort() < mod.getNumPorts());
     auto base = mod.getPortSymbolAttr(target.getPort());
-    mod.setPortSymbolsAttr(target.getPort(), base.erase(target.getField()));
+    mod.setPortSymbolAttr(target.getPort(), base.erase(target.getField()));
     return;
   }
 

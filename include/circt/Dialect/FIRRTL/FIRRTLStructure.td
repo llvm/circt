@@ -70,18 +70,40 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
   /// Additional class definitions inside the module op.
   code extraModuleClassDefinition = [{}];
 
+  /// Implement HWModuleLike methods for ports and their symbols.
   let extraClassDefinition = extraModuleClassDefinition # [{
     size_t $cppClass::getNumPorts() {
       return getPortTypesAttr().size();
     }
 
     circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
+      assert(portIndex < getNumPorts());
       auto syms = getPortSymbols();
       if (syms.empty() ||
-          syms[portIndex].template cast<hw::InnerSymAttr>().empty())
+          cast<hw::InnerSymAttr>(syms[portIndex]).empty())
         return hw::InnerSymAttr();
-      return syms[portIndex].template cast<hw::InnerSymAttr>();
+      assert(syms.size() == getNumPorts());
+      return cast<hw::InnerSymAttr>(syms[portIndex]);
     }
+
+    void $cppClass::setPortSymbolAttr(size_t portIndex, ::circt::hw::InnerSymAttr symbol) {
+      assert(portIndex < getNumPorts());
+      SmallVector<Attribute> symbols(getPortSymbols().begin(),
+                                     getPortSymbols().end());
+      if (symbols.empty()) {
+        if (symbol.empty())
+          return;
+        symbols.resize(getNumPorts(),
+                      hw::InnerSymAttr::get(getContext()));
+      }
+      assert(symbols.size() == getNumPorts());
+      symbols[portIndex] = symbol;
+
+      FModuleLike::fixupPortSymsArray(symbols, getContext());
+      assert(symbols.empty() || symbols.size() == getNumPorts());
+      getOperation()->setAttr(FModuleLike::getPortSymbolsAttrName(),
+                    ArrayAttr::get(getContext(), symbols));
+  }
   }];
 
 }

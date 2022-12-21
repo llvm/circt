@@ -179,13 +179,6 @@ def FModuleLike : OpInterface<"FModuleLike"> {
       return $_op.getPortSymbolsAttr().getValue();
     }]>,
 
-    InterfaceMethod<"Check if port has symbol attribute",
-    "bool", "hasPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
-      auto syms = $_op.getPortSymbols();
-        return  (!syms.empty() &&
-        !syms[portIndex].template cast<hw::InnerSymAttr>().empty());
-    }]>,
-
     // Setters
     InterfaceMethod<"Set the symbols of all ports and their fields", "void",
     "setPortSymbols", (ins "ArrayRef<Attribute>":$symbols), [{}], [{
@@ -195,50 +188,6 @@ def FModuleLike : OpInterface<"FModuleLike"> {
       assert(newSyms.empty() || newSyms.size() == $_op.getNumPorts());
       $_op->setAttr(FModuleLike::getPortSymbolsAttrName(),
                     ArrayAttr::get($_op.getContext(), newSyms));
-    }]>,
-
-    InterfaceMethod<"Set a port's top-level symbol to the specified string, dropping any symbols on its fields", "void",
-    "setPortSymbolAttr", (ins "size_t":$portIndex, "StringAttr":$symbol), [{}],
-    [{
-      SmallVector<Attribute> symbols($_op.getPortSymbols().begin(),
-                                     $_op.getPortSymbols().end());
-      if (symbols.empty()) {
-        symbols.resize($_op.getNumPorts(),
-                      hw::InnerSymAttr::get($_op.getContext()));
-      }
-      assert(symbols.size() == $_op.getNumPorts());
-      symbols[portIndex] = hw::InnerSymAttr::get(symbol);
-
-      FModuleLike::fixupPortSymsArray(symbols, $_op.getContext());
-      assert(symbols.empty() || symbols.size() == $_op.getNumPorts());
-      $_op->setAttr(FModuleLike::getPortSymbolsAttrName(),
-                    ArrayAttr::get($_op.getContext(), symbols));
-    }]>,
-
-    InterfaceMethod<"Set the symbols for a port including its fields", "void",
-    "setPortSymbolsAttr", (ins "size_t":$portIndex, "circt::hw::InnerSymAttr":$symbol), [{}],
-    [{
-      SmallVector<Attribute> symbols($_op.getPortSymbols().begin(),
-                                     $_op.getPortSymbols().end());
-      if (symbols.empty()) {
-        if (symbol.empty())
-          return;
-        symbols.resize($_op.getNumPorts(),
-                      hw::InnerSymAttr::get($_op.getContext()));
-      }
-      assert(symbols.size() == $_op.getNumPorts());
-      symbols[portIndex] = symbol;
-
-      FModuleLike::fixupPortSymsArray(symbols, $_op.getContext());
-      assert(symbols.empty() || symbols.size() == $_op.getNumPorts());
-      $_op->setAttr(FModuleLike::getPortSymbolsAttrName(),
-                    ArrayAttr::get($_op.getContext(), symbols));
-    }]>,
-
-    InterfaceMethod<"Set a port's top-level symbol to the specified string, dropping any symbols on its fields", "void",
-    "setPortSymbol", (ins "size_t":$portIndex, "StringRef":$symbol), [{}], [{
-      $_op.setPortSymbolAttr(portIndex, StringAttr::get($_op.getContext(),
-        symbol));
     }]>,
 
     //===------------------------------------------------------------------===//
