@@ -14,6 +14,8 @@
 
 #include "mlir/IR/BuiltinOps.h"
 
+#include <set>
+
 using namespace mlir;
 using namespace circt::firrtl;
 
@@ -63,6 +65,14 @@ public:
 private:
   Kind tag;
 };
+
+struct InstPath {
+    SmallVector<InstanceOp> path;
+};
+
+using ValueKey = std::tuple<Value, const InstPath*>;
+using BlockKey = std::tuple<Block*, const InstPath*>;
+
 } // namespace
 /*
 undef = undef op *
@@ -91,15 +101,15 @@ namespace {
 struct UndefAnalysisPass : public UndefAnalysisBase<UndefAnalysisPass> {
   void runOnOperation() override;
 
-  void markBlockExecutable(Block *block);
+  void markBlockExecutable(BlockKey block);
   void visitOperation(Operation *op);
 
   /// Returns true if the given block is executable.
-  bool isBlockExecutable(Block *block) const {
+  bool isBlockExecutable(BlockKey block) const {
     return executableBlocks.count(block);
   }
 
-  void markUndefined(Value value) {
+  void markUndefined(ValueKey value) {
     auto &entry = latticeValues[value];
     if (!entry.isUndefined()) {
       entry.markUndefined();
@@ -107,7 +117,7 @@ struct UndefAnalysisPass : public UndefAnalysisBase<UndefAnalysisPass> {
     }
   }
 
-  void markExternal(Value value) {
+  void markExternal(ValueKey value) {
     auto &entry = latticeValues[value];
     if (!entry.isExternal()) {
       entry.markExternal();
@@ -115,7 +125,7 @@ struct UndefAnalysisPass : public UndefAnalysisBase<UndefAnalysisPass> {
     }
   }
 
-  void markValid(Value value) {
+  void markValid(ValueKey value) {
     auto &entry = latticeValues[value];
     if (!entry.isValid()) {
       entry.markValid();
@@ -123,16 +133,21 @@ struct UndefAnalysisPass : public UndefAnalysisBase<UndefAnalysisPass> {
     }
   }
 
+  InstPath* ExtendPath(InstPath*, InstanceOp);
+
 private:
+
   /// This keeps track of the current state of each tracked value.
-  DenseMap<Value, LatticeValue> latticeValues;
+  DenseMap<ValueKey, LatticeValue> latticeValues;
 
   /// A worklist of values whose LatticeValue recently changed, indicating the
   /// users need to be reprocessed.
-  SmallVector<Value, 64> changedLatticeValueWorklist;
+  SmallVector<ValueKey, 64> changedLatticeValueWorklist;
 
   /// The set of blocks that are known to execute, or are intrinsically live.
-  SmallPtrSet<Block *, 16> executableBlocks;
+  std::set<BlockKey> executableBlocks;
+
+  std::set<InstPath> uniqPaths;
 };
 } // namespace
 
@@ -142,25 +157,26 @@ void UndefAnalysisPass::runOnOperation() {
   // Mark the input ports of the top-level modules as being external.  We ignore
   // all other public modules.
   auto top = cast<FModuleOp>(circuit.getMainModule());
+  auto* topPath = &*uniqPaths.emplace().first;
   for (auto port : top.getBodyBlock()->getArguments())
-    markExternal(port);
-  markBlockExecutable(top.getBodyBlock());
+    markExternal({(Value)port, topPath});
+  markBlockExecutable({top.getBodyBlock(), topPath});
 
   // If a value changed lattice state then reprocess any of its users.
   while (!changedLatticeValueWorklist.empty()) {
-    Value changedVal = changedLatticeValueWorklist.pop_back_val();
+    auto [changedVal,path] = changedLatticeValueWorklist.pop_back_val();
     for (Operation *user : changedVal.getUsers()) {
-      if (isBlockExecutable(user->getBlock()))
-        visitOperation(user);
+      if (isBlockExecutable({user->getBlock(), path}))
+        visitOperation({user, path});
     }
   }
 }
 
-void UndefAnalysisPass::markBlockExecutable(Block *block) {
+void UndefAnalysisPass::markBlockExecutable(BlockKey block) {
   if (!executableBlocks.insert(block).second)
     return;
 
-  for (auto &op : *block) {
+  for (auto &op : *get<0>(block)) {
     visitOperation(op);
   }
 }
@@ -174,6 +190,13 @@ void UndefAnalysisPass::visitOperation(Operation *op) {
         for (auto operand : op->getOperands()) for (auto result :
                                                     op->getResults())
             mergeValues(result, operand);
+}
+
+InstPath* ExtendPath(InstPath* path, InstanceOp inst) {
+    auto newPath = *path.path;
+    newPath.push_back(inst);
+    auto ins = uniqPaths.insert(newPath);
+    return &*inst.first;
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createUndefAnalysisPass() {
