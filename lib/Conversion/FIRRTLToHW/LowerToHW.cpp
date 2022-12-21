@@ -798,7 +798,8 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   };
 
   // Helper function to emit #ifndef guard.
-  auto emitGuard = [&](const char *guard, std::function<void(void)> body) {
+  auto emitGuard = [&](const char *guard,
+                       const std::function<void(void)> &body) {
     b.create<sv::IfDefOp>(
         guard, []() {}, body);
   };
