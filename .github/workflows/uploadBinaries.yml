@@ -39,41 +39,7 @@ jobs:
           fetch-depth: 2
           submodules: "true"
 
-      # --------
-      # Restore LLVM from cache and build if it's not in there.
-      # --------
-
-      # Extract the LLVM submodule hash for use in the cache key.
-      - name: Get LLVM Hash
-        id: get-llvm-hash
-        run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
-
-      - name: Get workflow spec hash
-        id: get-workflow-hash
-        run: echo "::set-output name=hash::$(shasum $GITHUB_WORKSPACE/.github/workflows/uploadBinaries.yml | awk '{print $1}')"
-
-      # Try to fetch LLVM from the cache.
-      - name: Cache LLVM
-        id: cache-llvm
-        uses: actions/cache@v2
-        with:
-          path: |
-            llvm/build
-          key: ${{ matrix.runner }}-llvm-${{ steps.get-llvm-hash.outputs.hash }}-${{ steps.get-workflow-hash.outputs.hash }}-${{ matrix.compiler.cc }}
-
-      - name: Setup Ninja Linux
-        if: matrix.os == 'linux'
-        run: sudo apt-get install ninja-build
-
-      - name: Setup Ninja and GNU Tar Mac
-        if: matrix.os == 'macos'
-        run: brew install ninja gnu-tar
-
-      # Build LLVM if we didn't hit in the cache. Even though we build it in
-      # the previous job, there is a low chance that it'll have been evicted by
-      # the time we get here.
-      - name: Rebuild LLVM
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
+      - name: Build LLVM
         run: |
           mkdir -p llvm/build
           cd llvm/build
