@@ -470,6 +470,10 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
       return isa<AffineYieldOp>(op) && op->getParentOp() == forOp;
     };
 
+    // Initialize set of registers up until this point in time
+    for (unsigned i = registerValues.size(); i <= startTime; ++i)
+      registerValues.push_back(DenseSet<Value>());
+
     // Check each operation to see if its results need plumbing
     for (auto *op : group) {
       if (op->getUsers().empty())
@@ -490,7 +494,7 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
       // Insert the range of pipeline stages the value needs to be valid for
       pipeTimes[op] = std::pair(pipeStartTime, pipeEndTime);
 
-      // Add register stages for each time slice
+      // Add register stages for each time slice we need to pipe to
       for (unsigned i = registerValues.size(); i <= pipeEndTime; ++i)
         registerValues.push_back(DenseSet<Value>());
 
@@ -500,7 +504,7 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
 
       // Other stages that use the value will need these values as keys too
       for (unsigned i = std::max(startTime + 1, pipeStartTime); i < pipeEndTime;
-           i++) {
+           ++i) {
         for (auto result : op->getResults())
           registerValues[i].insert(result);
       }
@@ -513,12 +517,12 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
     for (auto *user : iterArg.getUsers())
       iterArgPipeLen = std::max(iterArgPipeLen, *problem.getStartTime(user));
 
-    for (unsigned i = 0; i < iterArgPipeLen; i++)
+    for (unsigned i = 0; i < iterArgPipeLen; ++i)
       registerValues[i].insert(iterArg);
   }
 
   // Now make register Types and stageValueMaps
-  for (unsigned i = 0; i < registerValues.size(); i++) {
+  for (unsigned i = 0; i < registerValues.size(); ++i) {
     SmallVector<mlir::Type> types;
     for (auto val : registerValues[i]) {
       types.push_back(val.getType());
