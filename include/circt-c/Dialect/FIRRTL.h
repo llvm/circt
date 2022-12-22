@@ -44,6 +44,17 @@ DEFINE_C_API_STRUCT(FirrtlContext, void);
 
 typedef MlirStringRef FirrtlStringRef;
 
+/// Constructs a string reference from the pointer and length. The pointer need
+/// not reference to a null-terminated string.
+#define firrtlCreateStringRef mlirStringRefCreate
+
+/// Constructs a string reference from a null-terminated C string. Prefer
+/// `firrtlCreateStringRef` if the length of the string is known.
+#define firrtlCreateStringRefFromCString mlirStringRefCreateFromCString
+
+/// Returns true if two string references are equal, false otherwise.
+#define firrtlStringRefEqual mlirStringRefEqual
+
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(FIRRTL, firrtl);
 
 MLIR_CAPI_EXPORTED FirrtlContext firrtlCreateContext(void);

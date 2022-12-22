@@ -29,10 +29,10 @@ void firrtlSetErrorHandler(FirrtlContext ctx, FirrtlErrorHandler handler,
                            void *userData) {
   auto *ffiCtx = unwrap(ctx);
 
-  ffiCtx->setErrorHandler(
-      [callback = handler, userData](std::string_view message) {
-        callback(mlirStringRefCreate(message.data(), message.size()), userData);
-      });
+  ffiCtx->setErrorHandler([callback = handler,
+                           userData](std::string_view message) {
+    callback(firrtlCreateStringRef(message.data(), message.size()), userData);
+  });
 }
 
 void firrtlVisitCircuit(FirrtlContext ctx, FirrtlStringRef name) {
@@ -76,7 +76,7 @@ FirrtlStringRef firrtlExportFirrtl(FirrtlContext ctx) {
   std::memcpy(rawCStr, output.c_str(), len);
   rawCStr[len] = '\0';
 
-  return mlirStringRefCreate(rawCStr, len);
+  return firrtlCreateStringRef(rawCStr, len);
 }
 
 void firrtlDestroyString(FirrtlContext ctx, FirrtlStringRef string) {
