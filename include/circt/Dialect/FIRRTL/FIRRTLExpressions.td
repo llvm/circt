@@ -10,8 +10,15 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_FIRRTL_FIRRTLEXPRESSIONS_TD
+#define CIRCT_DIALECT_FIRRTL_FIRRTLEXPRESSIONS_TD
+
+include "FIRRTLDialect.td"
+include "FIRRTLTypes.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Types.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def SameOperandsIntTypeKind : NativeOpTrait<"SameOperandsIntTypeKind"> {
   let cppNamespace = "::circt::firrtl";
@@ -834,3 +841,5 @@ def RefSubOp : FIRRTLExprOp<"ref.sub"> {
   let assemblyFormat =
      "$input `[` $index `]` attr-dict `:` qualified(type($input))";
 }
+
+#endif // CIRCT_DIALECT_FIRRTL_FIRRTLEXPRESSIONS_TD

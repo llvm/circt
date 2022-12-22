@@ -13,7 +13,11 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD
 #define CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD
 
-include "circt/Dialect/FIRRTL/FIRRTL.td"
+include "FIRRTLDeclarations.td"
+include "FIRRTLExpressions.td"
+include "FIRRTLStatements.td"
+include "mlir/IR/OpBase.td"
+include "mlir/IR/PatternBase.td"
 
 /// Constraint that matches a ConstantOp, SpecialConstantOp, AggregateConstantOp, or InvalidValueOp.
 def AnyConstantOp : Constraint<CPred<[{

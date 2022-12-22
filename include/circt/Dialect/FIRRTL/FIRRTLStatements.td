@@ -10,6 +10,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_FIRRTL_FIRRTLSTATEMENTS_TD
+#define CIRCT_DIALECT_FIRRTL_FIRRTLSTATEMENTS_TD
+
+include "FIRRTLDialect.td"
+include "FIRRTLOpInterfaces.td"
+include "FIRRTLTypes.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+
 def AttachOp : FIRRTLOp<"attach"> {
   let summary = "Analog Attach Statement";
 
@@ -216,3 +224,5 @@ def ProbeOp : FIRRTLOp<"probe"> {
 
   let assemblyFormat = "$inner_sym attr-dict ( `,` $captured^  `:` qualified(type($captured)))?";
 }
+
+#endif // CIRCT_DIALECT_FIRRTL_FIRRTLSTATEMENTS_TD

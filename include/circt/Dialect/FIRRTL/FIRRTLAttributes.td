@@ -13,8 +13,9 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD
 #define CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD
 
-include "mlir/IR/EnumAttr.td"
+include "FIRRTLDialect.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
+include "mlir/IR/EnumAttr.td"
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Annotations Definition
