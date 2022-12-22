@@ -195,7 +195,7 @@ def InvalidValueOp : FIRRTLOp<"invalidvalue",
     ```
 
     This corresponds to the FIRRTL invalidate operation without the implicit
-    connect semantics.  Each invalid op produces a unique invalid value.  
+    connect semantics.  Each invalid op produces a unique invalid value.
     InvalidOp is not constant-like
   }];
 
@@ -638,7 +638,7 @@ def PlusArgsTestIntrinsicOp : FIRRTLExprOp<"int.plusargs.test"> {
   let assemblyFormat = "$formatString attr-dict";
 }
 
-def PlusArgsValueIntrinsicOp 
+def PlusArgsValueIntrinsicOp
 : FIRRTLOp<"int.plusargs.value", [HasCustomSSAName, Pure]> {
   let summary = "SystemVerilog `$value$plusargs` call";
 

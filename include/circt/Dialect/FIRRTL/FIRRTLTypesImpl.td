@@ -13,7 +13,7 @@
 include "circt/Dialect/HW/HWTypeInterfaces.td"
 
 // Base class for other typedefs. Provides dialact-specific defaults.
-class FIRRTLImplType<string name, list<Trait> traits = []> 
+class FIRRTLImplType<string name, list<Trait> traits = []>
   : TypeDef<FIRRTLDialect, name, traits, "::circt::firrtl::FIRRTLBaseType"> {}
 
 def WidthQualifiedTrait : NativeTypeTrait<"WidthQualifiedTrait"> {

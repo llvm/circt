@@ -118,7 +118,7 @@ def ConnectSameType : Pat<
 // connect(a:t1,b:(t2<t1) -> strictconnect(a,(pad b))
 def ConnectExtension : Pat<
   (ConnectOp $dst, $src),
-  (StrictConnectOp $dst, (PadPrimOp $src, 
+  (StrictConnectOp $dst, (PadPrimOp $src,
     (NativeCodeCall<"$0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel()"> $dst))),
   [(IntType $dst), (IntType $src), (KnownWidth $dst), (KnownWidth $src), (mismatchTypes $src, $dst)]>;
 
@@ -193,7 +193,7 @@ def moveConstXor : Pat <
 // add(a, 0) -> a
 def AddOfZero : Pat <
   (AddPrimOp:$old $x, (ConstantOp:$zcst $_)),
-  (PadPrimOp $x, (TypeWidth32 $old)), 
+  (PadPrimOp $x, (TypeWidth32 $old)),
   [(KnownWidth $x), (ZeroConstantOp $zcst)]>;
 
 // add(a, a) -> a << 2
@@ -277,12 +277,12 @@ def XorOfSelf : Pat <
 // bits(bits(x, ...), ...) -> bits(x, ...)
 def BitsOfBits : Pat<
   (BitsPrimOp:$old (BitsPrimOp $x, I32Attr:$iHigh, I32Attr:$iLow), I32Attr:$oHigh, I32Attr:$oLow),
-  (MoveNameHint $old, (BitsPrimOp $x, 
+  (MoveNameHint $old, (BitsPrimOp $x,
     (NativeCodeCall<"$_builder.getI32IntegerAttr($0.getValue().getZExtValue() + $1.getValue().getZExtValue())"> $iLow, $oHigh),
     (NativeCodeCall<"$_builder.getI32IntegerAttr($0.getValue().getZExtValue() + $1.getValue().getZExtValue())"> $oLow, $iLow))),
   []>;
 
-// subaccess a, cst -> subindex a, cst 
+// subaccess a, cst -> subindex a, cst
 // TODO: only enable if cst is inside a.  Subaccess and subindex behave differently for out-of-bounds indexes.
 def SubaccessOfConstant : Pat<
   (SubaccessOp:$old $array, (ConstantOp $cst)),
