@@ -25,9 +25,9 @@ def FIRRTLDialect : Dialect {
 
   let summary = "Types and operations for firrtl dialect";
   let description = [{
-    This dialect defines the `firrtl` dialect, which is used to lower from
-    Chisel code to Verilog.  For more information, see the
-    [FIRRTL GitHub page](https://github.com/freechipsproject/firrtl).
+    This dialect defines the `firrtl` dialect, which is used to lower from Chisel
+    code to Verilog.  For more information, see the [FIRRTL GitHub
+    page](https://github.com/freechipsproject/firrtl).
   }];
 
   let hasConstantMaterializer = 1;
