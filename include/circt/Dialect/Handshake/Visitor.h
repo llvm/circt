@@ -32,12 +32,12 @@ public:
         .template Case<
             // Handshake nodes.
             BranchOp, BufferOp, ConditionalBranchOp, ConstantOp, ControlMergeOp,
-            EndOp, ForkOp, FuncOp, InstanceOp, JoinOp, LazyForkOp, LoadOp,
-            MemoryOp, ExternalMemoryOp, MergeOp, MuxOp, ReturnOp, SinkOp,
-            handshake::SelectOp, SourceOp, StartOp, StoreOp, SyncOp,
-            TerminatorOp, PackOp, UnpackOp>([&](auto opNode) -> ResultType {
-          return thisCast->visitHandshake(opNode, args...);
-        })
+            ForkOp, FuncOp, InstanceOp, JoinOp, LazyForkOp, LoadOp, MemoryOp,
+            ExternalMemoryOp, MergeOp, MuxOp, ReturnOp, SinkOp,
+            handshake::SelectOp, SourceOp, StoreOp, SyncOp, PackOp, UnpackOp>(
+            [&](auto opNode) -> ResultType {
+              return thisCast->visitHandshake(opNode, args...);
+            })
         .Default([&](auto opNode) -> ResultType {
           return thisCast->visitInvalidOp(op, args...);
         });
@@ -66,7 +66,6 @@ public:
   HANDLE(ConditionalBranchOp);
   HANDLE(ConstantOp);
   HANDLE(ControlMergeOp);
-  HANDLE(EndOp);
   HANDLE(ForkOp);
   HANDLE(FuncOp);
   HANDLE(InstanceOp);
@@ -81,10 +80,8 @@ public:
   HANDLE(ReturnOp);
   HANDLE(SinkOp);
   HANDLE(SourceOp);
-  HANDLE(StartOp);
   HANDLE(StoreOp);
   HANDLE(SyncOp);
-  HANDLE(TerminatorOp);
   HANDLE(PackOp);
   HANDLE(UnpackOp);
 #undef HANDLE
