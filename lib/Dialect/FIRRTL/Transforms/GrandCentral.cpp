@@ -1406,9 +1406,10 @@ std::optional<TypeSum> GrandCentralPass::computeField(
             FieldRef fieldRef = leafMap.lookup(ground.getID()).field;
             auto value = fieldRef.getValue();
             auto fieldID = fieldRef.getFieldID();
-            auto tpe =
-                value.getType().cast<FIRRTLBaseType>().getFinalTypeByFieldID(
-                    fieldID);
+            auto tpe = cast<FIRRTLBaseType>(
+                value.getType()
+                    .cast<circt::hw::FieldIDTypeInterface>()
+                    .getFinalTypeByFieldID(fieldID));
             if (!tpe.isGround()) {
               value.getDefiningOp()->emitOpError()
                   << "cannot be added to interface with id '"

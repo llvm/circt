@@ -126,7 +126,8 @@ def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
 
     /// Strip off a single layer of this type and return the sub-type and a
     /// field ID targeting the same field, but rebased on the sub-type.
-    std::pair<FIRRTLBaseType, uint64_t> getSubTypeByFieldID(uint64_t fieldID);
+    std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
+    getSubTypeByFieldID(uint64_t fieldID);
 
     /// Get the maximum field ID in this vector.  This is helpful for
     /// constructing field IDs when this VectorType is nested in another
@@ -213,7 +214,8 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
 
     /// Strip off a single layer of this type and return the sub-type and a
     /// field ID targeting the same field, but rebased on the sub-type.
-    std::pair<FIRRTLBaseType, uint64_t> getSubTypeByFieldID(uint64_t fieldID);
+    std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
+    getSubTypeByFieldID(uint64_t fieldID);
 
     /// Get the maximum field ID in this bundle.  This is helpful for
     /// constructing field IDs when this BundleType is nested in another

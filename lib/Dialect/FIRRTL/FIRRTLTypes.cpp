@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -486,9 +487,10 @@ uint64_t FIRRTLBaseType::getMaxFieldID() {
       });
 }
 
-std::pair<FIRRTLBaseType, uint64_t>
+std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
 FIRRTLBaseType::getSubTypeByFieldID(uint64_t fieldID) {
-  return TypeSwitch<FIRRTLBaseType, std::pair<FIRRTLBaseType, uint64_t>>(*this)
+  return TypeSwitch<FIRRTLBaseType,
+                    std::pair<circt::hw::FieldIDTypeInterface, unsigned>>(*this)
       .Case<AnalogType, ClockType, ResetType, AsyncResetType, SIntType,
             UIntType>([&](FIRRTLBaseType t) {
         assert(!fieldID && "non-aggregate types must have a field id of 0");
@@ -502,8 +504,9 @@ FIRRTLBaseType::getSubTypeByFieldID(uint64_t fieldID) {
       });
 }
 
-FIRRTLBaseType FIRRTLBaseType::getFinalTypeByFieldID(uint64_t fieldID) {
-  std::pair<FIRRTLBaseType, uint64_t> pair(*this, fieldID);
+circt::hw::FieldIDTypeInterface
+FIRRTLBaseType::getFinalTypeByFieldID(uint64_t fieldID) {
+  std::pair<circt::hw::FieldIDTypeInterface, uint64_t> pair(*this, fieldID);
   while (pair.second)
     pair = pair.first.getSubTypeByFieldID(pair.second);
   return pair.first;
@@ -920,7 +923,7 @@ BundleType::getIndexAndSubfieldID(uint64_t fieldID) {
   return {index, fieldID - elementFieldID};
 }
 
-std::pair<FIRRTLBaseType, uint64_t>
+std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
 BundleType::getSubTypeByFieldID(uint64_t fieldID) {
   if (fieldID == 0)
     return {*this, 0};
@@ -1025,7 +1028,7 @@ FVectorType::getIndexAndSubfieldID(uint64_t fieldID) {
   return {index, fieldID - elementFieldID};
 }
 
-std::pair<FIRRTLBaseType, uint64_t>
+std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
 FVectorType::getSubTypeByFieldID(uint64_t fieldID) {
   if (fieldID == 0)
     return {*this, 0};
