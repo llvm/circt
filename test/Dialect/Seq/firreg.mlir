@@ -411,8 +411,14 @@ hw.module private @init1DVector(%clock: i1, %a: !hw.array<2xi1>) -> (b: !hw.arra
   // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_"
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-  // CHECK:              %2 = comb.extract %1 from 0 : (i32) -> i2
-  // CHECK:              %3 = hw.bitcast %2 : (i2) -> !hw.array<2xi1>
+  // CHECK:              %1 = sv.read_inout %_RANDOM_0 : !hw.inout<i32>
+  // CHECK-NEXT:         %2 = comb.extract %1 from 0 : (i32) -> i2
+  // CHECK-NEXT:         %3 = sv.array_index_inout %r[%false] : !hw.inout<array<2xi1>>, i1
+  // CHECK-NEXT:         %4 = comb.extract %2 from 1 : (i2) -> i1
+  // CHECK-NEXT:         sv.bpassign %3, %4 : i1
+  // CHECK-NEXT:         %5 = sv.array_index_inout %r[%true] : !hw.inout<array<2xi1>>, i1
+  // CHECK-NEXT:         %6 = comb.extract %2 from 0 : (i2) -> i1
+  // CHECK-NEXT:         sv.bpassign %5, %6 : i1
   // CHECK:            }
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef "FIRRTL_AFTER_INITIAL" {
@@ -444,7 +450,9 @@ hw.module private @init2DVector(%clock: i1, %a: !hw.array<1xarray<1xi1>>) -> (b:
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural  "RANDOMIZE_REG_INIT" {
   // CHECK:              %2 = comb.extract %1 from 0 : (i32) -> i1
-  // CHECK:              %3 = hw.bitcast %2 : (i1) -> !hw.array<1xarray<1xi1>>
+  // CHECK-NEXT:         %3 = sv.array_index_inout %r[%c0_i0] : !hw.inout<array<1xarray<1xi1>>>, i0
+  // CHECK-NEXT:         %4 = sv.array_index_inout %3[%c0_i0] : !hw.inout<array<1xi1>>, i0
+  // CHECK-NEXT:         sv.bpassign %4, %2 : i1
   // CHECK:            }
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef "FIRRTL_AFTER_INITIAL" {
@@ -474,7 +482,8 @@ hw.module private @initStruct(%clock: i1) {
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
   // CHECK:              %2 = comb.extract %1 from 0 : (i32) -> i1
-  // CHECK:              %3 = hw.bitcast %2 : (i1) -> !hw.struct<a: i1>
+  // CHECK-NEXT:         %3 = sv.struct_field_inout %r["a"] : !hw.inout<struct<a: i1>>
+  // CHECK-NEXT:         sv.bpassign %3, %2 : i1
   // CHECK:            }
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef "FIRRTL_AFTER_INITIAL" {

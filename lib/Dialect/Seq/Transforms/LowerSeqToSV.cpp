@@ -114,6 +114,8 @@ private:
   RegLowerInfo lower(FirRegOp reg);
 
   void initialize(OpBuilder &builder, RegLowerInfo reg, ArrayRef<Value> rands);
+  void initializeRegisterElements(Location loc, OpBuilder &builder, Value reg,
+                                  Value rand, unsigned &pos);
 
   void createTree(OpBuilder &builder, Value reg, Value term, Value next);
 
@@ -421,6 +423,37 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
   return svReg;
 }
 
+// Initialize registers by assingning each element recursively instead of
+// intializing entire registers. This is necessary as a workaound for verilator
+// which allocates many local variables for concat.
+void FirRegLower::initializeRegisterElements(Location loc, OpBuilder &builder,
+                                             Value reg, Value randomSource,
+                                             unsigned &pos) {
+  auto type = reg.getType().cast<sv::InOutType>().getElementType();
+  if (auto intTy = hw::type_dyn_cast<IntegerType>(type)) {
+    // Use randomSource[pos-1:pos-width] as a random value.
+    pos -= intTy.getWidth();
+    auto elem = builder.createOrFold<comb::ExtractOp>(loc, randomSource, pos,
+                                                      intTy.getWidth());
+    builder.create<sv::BPAssignOp>(loc, reg, elem);
+  } else if (auto array = hw::type_dyn_cast<hw::ArrayType>(type)) {
+    for (unsigned i = 0, e = array.getSize(); i < e; ++i) {
+      auto index = getOrCreateConstant(loc, APInt(llvm::Log2_64_Ceil(e), i));
+      initializeRegisterElements(
+          loc, builder, builder.create<sv::ArrayIndexInOutOp>(loc, reg, index),
+          randomSource, pos);
+    }
+  } else if (auto structType = hw::type_dyn_cast<hw::StructType>(type)) {
+    for (auto e : structType.getElements())
+      initializeRegisterElements(
+          loc, builder,
+          builder.create<sv::StructFieldInOutOp>(loc, reg, e.name),
+          randomSource, pos);
+  } else {
+    assert(false && "unsupported type");
+  }
+}
+
 void FirRegLower::initialize(OpBuilder &builder, RegLowerInfo reg,
                              ArrayRef<Value> rands) {
   auto loc = reg.reg.getLoc();
@@ -442,9 +475,9 @@ void FirRegLower::initialize(OpBuilder &builder, RegLowerInfo reg,
     width -= nwidth;
   }
   auto concat = builder.createOrFold<comb::ConcatOp>(loc, nibbles);
-  auto bitcast = builder.createOrFold<hw::BitcastOp>(
-      loc, reg.reg.getElementType(), concat);
-  builder.create<sv::BPAssignOp>(loc, reg.reg, bitcast);
+  unsigned pos = reg.width;
+  // Initialize register elements.
+  initializeRegisterElements(loc, builder, reg.reg, concat, pos);
 }
 
 void FirRegLower::addToAlwaysBlock(Block *block, sv::EventControl clockEdge,
