@@ -87,7 +87,7 @@ static bool isControlCheckTypeAndOperand(Type dataType, Value operand) {
   // Otherwise, the operation is a control operation if the operation's
   // operand originates from the control network
   auto *defOp = operand.getDefiningOp();
-  return isa_and_nonnull<ControlMergeOp, StartOp>(defOp) &&
+  return isa_and_nonnull<ControlMergeOp>(defOp) &&
          operand == defOp->getResult(0);
 }
 
@@ -891,8 +891,6 @@ std::string handshake::SelectOp::getOperandName(unsigned int idx) {
 bool SelectOp::isControl() {
   return getTrueOperand().getType().isa<NoneType>();
 }
-
-bool StartOp::isControl() { return true; }
 
 ParseResult SinkOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;

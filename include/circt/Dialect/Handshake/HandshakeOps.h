@@ -50,8 +50,6 @@ struct MemStoreInterface {
   mlir::Value doneOut;
 };
 
-class TerminatorOp;
-
 /// Default implementation for checking whether an operation is a control
 /// operation. This function cannot be defined within ControlInterface
 /// because its implementation attempts to cast the operation to an
