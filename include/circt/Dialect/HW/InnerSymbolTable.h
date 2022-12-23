@@ -181,7 +181,10 @@ public:
 
   /// Remove the specified inner symbol.
   /// Invalidates existing InnerSymbolTable's including the target.
-  static void erase(const InnerSymTarget &target);
+  static void dropSymbol(const InnerSymTarget &target);
+
+  /// Remove the specified inner symbol, and update this table.
+  void erase(const InnerSymTarget &target);
 
 private:
   using TableTy = DenseMap<StringAttr, InnerSymTarget>;

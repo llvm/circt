@@ -161,7 +161,7 @@ StringAttr InnerSymbolTable::getInnerSymbol(const InnerSymTarget &target) {
   return {};
 }
 
-void InnerSymbolTable::erase(const InnerSymTarget &target) {
+void InnerSymbolTable::dropSymbol(const InnerSymTarget &target) {
   assert(target);
   assert(getInnerSymbol(target));
 
@@ -176,6 +176,11 @@ void InnerSymbolTable::erase(const InnerSymTarget &target) {
   auto symOp = cast<InnerSymbolOpInterface>(target.getOp());
   auto base = symOp.getInnerSymAttr();
   symOp.setInnerSymbolAttr(base.erase(target.getField()));
+}
+
+void InnerSymbolTable::erase(const InnerSymTarget &target) {
+  symbolTable.erase(getInnerSymbol(target));
+  InnerSymbolTable::dropSymbol(target);
 }
 
 //===----------------------------------------------------------------------===//

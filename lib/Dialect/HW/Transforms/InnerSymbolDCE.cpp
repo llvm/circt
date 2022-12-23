@@ -72,7 +72,7 @@ void InnerSymbolDCEPass::removeInnerSyms(HWModuleLike mod) {
         if (innerRefs.contains({moduleName, name}))
           return;
 
-        InnerSymbolTable::erase(target);
+        InnerSymbolTable::dropSymbol(target);
         ++numInnerSymbolsRemoved;
 
         LLVM_DEBUG(llvm::dbgs() << DEBUG_TYPE << ": removed " << moduleName
