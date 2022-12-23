@@ -1579,7 +1579,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   StringRef openStr, closeStr;
   VerilogPrecedence subprecedence = LowestPrecedence;
   VerilogPrecedence prec; // precedence of the emitted expression.
-  Optional<SubExprSignResult> operandSign;
+  std::optional<SubExprSignResult> operandSign;
   bool isUnary = false;
   bool hasOpenClose = false;
 
@@ -2988,7 +2988,7 @@ private:
   template <typename Op>
   LogicalResult
   emitAssignLike(Op op, PPExtString syntax,
-                 Optional<PPExtString> wordBeforeLHS = std::nullopt);
+                 std::optional<PPExtString> wordBeforeLHS = std::nullopt);
   LogicalResult visitSV(AssignOp op);
   LogicalResult visitSV(BPAssignOp op);
   LogicalResult visitSV(PAssignOp op);
@@ -3018,13 +3018,13 @@ private:
   LogicalResult visitSV(VerbatimOp op);
 
   LogicalResult emitSimulationControlTask(Operation *op, PPExtString taskName,
-                                          Optional<unsigned> verbosity);
+                                          std::optional<unsigned> verbosity);
   LogicalResult visitSV(StopOp op);
   LogicalResult visitSV(FinishOp op);
   LogicalResult visitSV(ExitOp op);
 
   LogicalResult emitSeverityMessageTask(Operation *op, PPExtString taskName,
-                                        Optional<unsigned> verbosity,
+                                        std::optional<unsigned> verbosity,
                                         StringAttr message,
                                         ValueRange operands);
   LogicalResult visitSV(FatalOp op);
@@ -3102,8 +3102,9 @@ void StmtEmitter::emitSVAttributes(Operation *op) {
 }
 
 template <typename Op>
-LogicalResult StmtEmitter::emitAssignLike(Op op, PPExtString syntax,
-                                          Optional<PPExtString> wordBeforeLHS) {
+LogicalResult
+StmtEmitter::emitAssignLike(Op op, PPExtString syntax,
+                            std::optional<PPExtString> wordBeforeLHS) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -3393,7 +3394,7 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
 /// Emit one of the simulation control tasks `$stop`, `$finish`, or `$exit`.
 LogicalResult
 StmtEmitter::emitSimulationControlTask(Operation *op, PPExtString taskName,
-                                       Optional<unsigned> verbosity) {
+                                       std::optional<unsigned> verbosity) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
@@ -3426,11 +3427,10 @@ LogicalResult StmtEmitter::visitSV(ExitOp op) {
 
 /// Emit one of the severity message tasks `$fatal`, `$error`, `$warning`, or
 /// `$info`.
-LogicalResult StmtEmitter::emitSeverityMessageTask(Operation *op,
-                                                   PPExtString taskName,
-                                                   Optional<unsigned> verbosity,
-                                                   StringAttr message,
-                                                   ValueRange operands) {
+LogicalResult
+StmtEmitter::emitSeverityMessageTask(Operation *op, PPExtString taskName,
+                                     std::optional<unsigned> verbosity,
+                                     StringAttr message, ValueRange operands) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 

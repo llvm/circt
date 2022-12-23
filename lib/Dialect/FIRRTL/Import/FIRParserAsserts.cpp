@@ -179,7 +179,7 @@ enum class PredicateModifier { NoMod, TrueOrIsX };
 /// Parse a conditional compile toggle (e.g. "unrOnly") into the corresponding
 /// preprocessor guard macro name (e.g. "USE_UNR_ONLY_CONSTRAINTS"), or report
 /// an error.
-static Optional<StringRef>
+static std::optional<StringRef>
 parseConditionalCompileToggle(const ExtractionSummaryCursor<StringRef> &ex) {
   if (ex.value == "formalOnly")
     return {"USE_FORMAL_ONLY_CONSTRAINTS"};
@@ -190,7 +190,7 @@ parseConditionalCompileToggle(const ExtractionSummaryCursor<StringRef> &ex) {
 }
 
 /// Parse a string into a `PredicateModifier`.
-static Optional<PredicateModifier>
+static std::optional<PredicateModifier>
 parsePredicateModifier(const ExtractionSummaryCursor<StringRef> &ex) {
   if (ex.value == "noMod")
     return PredicateModifier::NoMod;
@@ -202,7 +202,7 @@ parsePredicateModifier(const ExtractionSummaryCursor<StringRef> &ex) {
 
 /// Check that an assertion "format" is one of the admissible values, or report
 /// an error.
-static Optional<StringRef>
+static std::optional<StringRef>
 parseAssertionFormat(const ExtractionSummaryCursor<StringRef> &ex) {
   if (ex.value == "sva" || ex.value == "ifElseFatal")
     return ex.value;
@@ -571,7 +571,7 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
       return failure();
 
     // Assertions carry an additional `format` field.
-    Optional<StringRef> format;
+    std::optional<StringRef> format;
     if (flavor == VerifFlavor::VerifLibAssert) {
       if (parseJson(printOp.getLoc(), exObj, [&](const auto &ex) {
             return ex.withObjectField("format", [&](const auto &ex) {

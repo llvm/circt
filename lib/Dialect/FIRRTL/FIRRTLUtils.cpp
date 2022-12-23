@@ -615,7 +615,7 @@ hw::InnerRefAttr circt::firrtl::getInnerRefTo(
 }
 
 /// Parse a string that may encode a FIRRTL location into a LocationAttr.
-std::pair<bool, Optional<mlir::LocationAttr>>
+std::pair<bool, std::optional<mlir::LocationAttr>>
 circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
                                      StringAttr &locatorFilenameCache,
                                      FileLineColLoc &fileLineColLocCache,

@@ -158,7 +158,7 @@ Type lowerType(Type type);
 //===----------------------------------------------------------------------===//
 
 /// Parse a string that may encode a FIRRTL location into a LocationAttr.
-std::pair<bool, Optional<mlir::LocationAttr>> maybeStringToLocation(
+std::pair<bool, std::optional<mlir::LocationAttr>> maybeStringToLocation(
     StringRef spelling, bool skipParsing, StringAttr &locatorFilenameCache,
     FileLineColLoc &fileLineColLocCache, MLIRContext *context);
 

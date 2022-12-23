@@ -149,15 +149,15 @@ static FlatSymbolRefAttr scatterNonLocalPath(const AnnoPathValue &target,
 //===----------------------------------------------------------------------===//
 
 /// Always resolve to the circuit, ignoring the annotation.
-static Optional<AnnoPathValue> noResolve(DictionaryAttr anno,
-                                         ApplyState &state) {
+static std::optional<AnnoPathValue> noResolve(DictionaryAttr anno,
+                                              ApplyState &state) {
   return AnnoPathValue(state.circuit);
 }
 
 /// Implementation of standard resolution.  First parses the target path, then
 /// resolves it.
-static Optional<AnnoPathValue> stdResolveImpl(StringRef rawPath,
-                                              ApplyState &state) {
+static std::optional<AnnoPathValue> stdResolveImpl(StringRef rawPath,
+                                                   ApplyState &state) {
   auto pathStr = canonicalizeTarget(rawPath);
   StringRef path{pathStr};
 
@@ -175,8 +175,8 @@ static Optional<AnnoPathValue> stdResolveImpl(StringRef rawPath,
 /// (SFC) FIRRTL SingleTargetAnnotation resolver.  Uses the 'target' field of
 /// the annotation with standard parsing to resolve the path.  This requires
 /// 'target' to exist and be normalized (per docs/FIRRTLAnnotations.md).
-static Optional<AnnoPathValue> stdResolve(DictionaryAttr anno,
-                                          ApplyState &state) {
+static std::optional<AnnoPathValue> stdResolve(DictionaryAttr anno,
+                                               ApplyState &state) {
   auto target = anno.getNamed("target");
   if (!target) {
     mlir::emitError(state.circuit.getLoc())
@@ -193,8 +193,8 @@ static Optional<AnnoPathValue> stdResolve(DictionaryAttr anno,
 }
 
 /// Resolves with target, if it exists.  If not, resolves to the circuit.
-static Optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
-                                          ApplyState &state) {
+static std::optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
+                                               ApplyState &state) {
   auto target = anno.getNamed("target");
   if (target)
     return stdResolveImpl(target->getValue().cast<StringAttr>().getValue(),
@@ -283,7 +283,7 @@ static LogicalResult drop(const AnnoPathValue &target, DictionaryAttr anno,
 
 namespace {
 struct AnnoRecord {
-  llvm::function_ref<Optional<AnnoPathValue>(DictionaryAttr, ApplyState &)>
+  llvm::function_ref<std::optional<AnnoPathValue>(DictionaryAttr, ApplyState &)>
       resolver;
   llvm::function_ref<LogicalResult(const AnnoPathValue &, DictionaryAttr,
                                    ApplyState &)>

@@ -113,7 +113,7 @@ struct FIRParser {
   FIRLexer &getLexer() { return lexer; }
 
   /// Return the indentation level of the specified token.
-  Optional<unsigned> getIndentation() const {
+  std::optional<unsigned> getIndentation() const {
     return lexer.getIndentation(getToken());
   }
 
@@ -339,7 +339,7 @@ private:
   SMLoc firLoc;
 
   /// This is the location specified by the @ marker if present.
-  Optional<Location> infoLoc;
+  std::optional<Location> infoLoc;
 };
 
 /// Parse an @info marker if present.  If so, fill in the specified Location,
@@ -1148,7 +1148,7 @@ private:
   ParseResult parsePrimExp(Value &result);
   ParseResult parseIntegerLiteralExp(Value &result);
 
-  Optional<ParseResult> parseExpWithLeadingKeyword(FIRToken keyword);
+  std::optional<ParseResult> parseExpWithLeadingKeyword(FIRToken keyword);
 
   // Stmt Parsing
   ParseResult parseAttach();
@@ -1787,7 +1787,7 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
 /// expression.  If so, they parse the expression-based statement and return the
 /// parser result.  If not, they return None and the statement is parsed like
 /// normal.
-Optional<ParseResult>
+std::optional<ParseResult>
 FIRStmtParser::parseExpWithLeadingKeyword(FIRToken keyword) {
   switch (getToken().getKind()) {
   default:

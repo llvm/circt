@@ -15,8 +15,8 @@
 
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
-#include "llvm/ADT/Optional.h"
 #include <memory>
+#include <optional>
 
 namespace mlir {
 class Pass;
@@ -100,7 +100,7 @@ std::unique_ptr<mlir::Pass> createPrintInstanceGraphPass();
 std::unique_ptr<mlir::Pass> createPrintNLATablePass();
 
 std::unique_ptr<mlir::Pass>
-createBlackBoxReaderPass(llvm::Optional<mlir::StringRef> inputPrefix = {});
+createBlackBoxReaderPass(std::optional<mlir::StringRef> inputPrefix = {});
 
 std::unique_ptr<mlir::Pass> createGrandCentralPass();
 

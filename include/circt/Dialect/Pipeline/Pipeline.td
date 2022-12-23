@@ -266,7 +266,7 @@ def PipelineWhileOp : Op<Pipeline_Dialect, "while", []> {
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "mlir::TypeRange":$resultTypes, "mlir::IntegerAttr":$II,
-                   "llvm::Optional<IntegerAttr>": $tripCount,
+                   "std::optional<IntegerAttr>": $tripCount,
                    "mlir::ValueRange":$iterArgs)>
   ];
 

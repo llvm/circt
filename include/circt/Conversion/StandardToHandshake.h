@@ -54,7 +54,7 @@ public:
     Operation *op;
     Value val;
     SmallVector<Backedge> dataEdges;
-    Optional<Backedge> indexEdge{};
+    std::optional<Backedge> indexEdge{};
   };
 
   using BlockValues = DenseMap<Block *, std::vector<Value>>;

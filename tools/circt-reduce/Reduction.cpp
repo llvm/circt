@@ -69,14 +69,13 @@ private:
 
 /// Utility to easily get the instantiated firrtl::FModuleOp or an empty
 /// optional in case another type of module is instantiated.
-static llvm::Optional<firrtl::FModuleOp>
+static std::optional<firrtl::FModuleOp>
 findInstantiatedModule(firrtl::InstanceOp instOp, SymbolCache &symbols) {
   auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
   auto moduleOp = dyn_cast<firrtl::FModuleOp>(
       instOp.getReferencedModule(symbols.getSymbolTable(tableOp))
           .getOperation());
-  return moduleOp ? llvm::Optional(moduleOp)
-                  : llvm::Optional<firrtl::FModuleOp>();
+  return moduleOp ? std::optional(moduleOp) : std::nullopt;
 }
 
 /// Compute the number of operations in a module. Recursively add the number of
@@ -121,7 +120,7 @@ static uint64_t computeTransitiveModuleSize(
 }
 
 static LogicalResult collectInstantiatedModules(
-    llvm::Optional<firrtl::FModuleOp> fmoduleOp, SymbolCache &symbols,
+    std::optional<firrtl::FModuleOp> fmoduleOp, SymbolCache &symbols,
     SmallVector<std::pair<firrtl::FModuleOp, uint64_t>> &modules,
     SmallVector<Operation *> &instances) {
   if (!fmoduleOp)

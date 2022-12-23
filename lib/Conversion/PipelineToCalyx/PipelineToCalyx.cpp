@@ -95,7 +95,7 @@ public:
   /// Returns the group registered for this non-pipelined value, and None
   /// otherwise.
   template <typename TGroupOp = calyx::GroupInterface>
-  Optional<TGroupOp> getNonPipelinedGroupFrom(Operation *op) {
+  std::optional<TGroupOp> getNonPipelinedGroupFrom(Operation *op) {
     auto it = operationToGroup.find(op);
     if (it == operationToGroup.end())
       return std::nullopt;

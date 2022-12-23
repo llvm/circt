@@ -336,7 +336,7 @@ ParseResult FirRegOp::parse(OpAsmParser &parser, OperationState &result) {
   }
 
   // Parse reset [sync|async] %reset, %value
-  Optional<std::pair<Op, Op>> resetAndValue;
+  std::optional<std::pair<Op, Op>> resetAndValue;
   if (succeeded(parser.parseOptionalKeyword("reset"))) {
     bool isAsync;
     if (succeeded(parser.parseOptionalKeyword("async")))

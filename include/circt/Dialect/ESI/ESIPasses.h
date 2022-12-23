@@ -16,8 +16,8 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
-#include "llvm/ADT/Optional.h"
 #include <memory>
+#include <optional>
 
 namespace circt {
 namespace esi {

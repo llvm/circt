@@ -113,8 +113,8 @@ public:
   walkPlacements(function_ref<void(PhysLocationAttr, DynInstDataOpInterface)>,
                  std::tuple<int64_t, int64_t, int64_t, int64_t> bounds =
                      std::make_tuple(-1, -1, -1, -1),
-                 Optional<PrimitiveType> primType = {},
-                 Optional<WalkOrder> = {});
+                 std::optional<PrimitiveType> primType = {},
+                 std::optional<WalkOrder> = {});
 
   /// Walk the region placement information.
   void walkRegionPlacements(function_ref<void(PDPhysRegionOp)>);

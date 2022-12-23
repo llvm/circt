@@ -133,8 +133,8 @@ def StructTypeImpl : HWType<"Struct"> {
     using FieldInfo = ::circt::hw::detail::FieldInfo;
     mlir::Type getFieldType(mlir::StringRef fieldName);
     void getInnerTypes(mlir::SmallVectorImpl<mlir::Type>&);
-    llvm::Optional<unsigned> getFieldIndex(mlir::StringRef fieldName);
-    llvm::Optional<unsigned> getFieldIndex(mlir::StringAttr fieldName);
+    std::optional<unsigned> getFieldIndex(mlir::StringRef fieldName);
+    std::optional<unsigned> getFieldIndex(mlir::StringAttr fieldName);
   }];
 }
 
@@ -157,7 +157,7 @@ def EnumTypeImpl : HWType<"Enum"> {
 
     /// Returns the index of the requested field, or a nullopt if the field is
     // not part of this enum.
-    llvm::Optional<size_t> indexOf(mlir::StringRef field);
+    std::optional<size_t> indexOf(mlir::StringRef field);
   }];
   
   let hasCustomAssemblyFormat = 1;
