@@ -1515,6 +1515,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // and "wdata" fields in the bundle corresponding to a memory port.
         auto dataFieldIndices = [](MemOp::PortKind kind) -> ArrayRef<unsigned> {
           static const unsigned indices[] = {3, 5};
+          static const unsigned debug[] = {0};
           switch (kind) {
           case MemOp::PortKind::Read:
           case MemOp::PortKind::Write:
@@ -1522,7 +1523,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
           case MemOp::PortKind::ReadWrite:
             return ArrayRef<unsigned>(indices); // {3, 5}
           case MemOp::PortKind::Debug:
-            return ArrayRef<unsigned>({0});
+            return ArrayRef<unsigned>(debug);
           }
           llvm_unreachable("Imposible PortKind");
         };
