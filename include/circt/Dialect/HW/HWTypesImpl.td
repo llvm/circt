@@ -165,7 +165,7 @@ def EnumTypeImpl : HWType<"Enum"> {
     // not part of this enum.
     std::optional<size_t> indexOf(mlir::StringRef field);
   }];
-  
+
   let hasCustomAssemblyFormat = 1;
 }
 

@@ -57,11 +57,11 @@ def UnionType : DialectType<HWDialect,
           "a UnionType", "::circt::hw::TypeAliasOr<hw::UnionType>">;
 
 // A handle to refer to circt::hw::EnumType in ODS.
-def EnumType : DialectType<HWDialect, 
+def EnumType : DialectType<HWDialect,
     CPred<"::circt::hw::type_isa<circt::hw::EnumType>($_self)">,
           "a EnumType", "::circt::hw::TypeAliasOr<circt::hw::EnumType>">;
 
-def HWAggregateType : DialectType<HWDialect, 
+def HWAggregateType : DialectType<HWDialect,
     CPred<[{::circt::hw::type_isa<
       circt::hw::ArrayType,
       circt::hw::UnpackedArrayType,
@@ -125,7 +125,7 @@ def InnerSymAttr : AttrDef<HWDialect, "InnerSym"> {
     Defines the properties of an inner_sym attribute. It specifies the symbol
     name and symbol visibility for each field ID. For any ground types,
     there are no subfields and the field ID is 0. For aggregate types, a
-    unique field ID is assigned to each field by visiting them in a 
+    unique field ID is assigned to each field by visiting them in a
     depth-first pre-order. The custom assembly format ensures that for ground
     types, only `@<sym_name>` is printed.
   }];

@@ -91,19 +91,19 @@ def OutputFileAttr : AttrDef<HWDialect, "OutputFile"> {
 }
 
 // An attribute to indicate which filelist an operation's file should be
-// included in. 
+// included in.
 def FileListAttr : AttrDef<HWDialect, "FileList"> {
   let summary = "Ouput filelist attribute";
   let description = [{
     This attribute represents an output filelist for something which will be
-    printed. The `filename` string is the file which the filename of the 
-    operation to be output to. 
+    printed. The `filename` string is the file which the filename of the
+    operation to be output to.
 
     When ExportVerilog runs, some of the files produced are lists of other files
     which are produced.  Each filelist exported contains entities' output file
     with `FileListAttr` marked.
 
-    
+
     Examples:
     ```mlir
       #hw.ouput_filelist<"/home/tester/t.F">
@@ -255,7 +255,7 @@ def ParamExprAttr : AttrDef<HWDialect, "ParamExpr", [TypedAttrInterface]> {
   // Force all clients to go through our building logic so we can canonicalize
   // during building.
   let skipDefaultBuilders = 1;
- 
+
   let extraClassDeclaration = [{
     /// Build a parameter expression.  This automatically canonicalizes and
     /// folds, so it may not necessarily return a ParamExprAttr.
@@ -278,7 +278,7 @@ def EnumFieldAttr : AttrDef<HWDialect, "EnumField"> {
   let summary = "Enumeration field attribute";
   let description = [{
     This attribute represents a field of an enumeration.
-    
+
     Examples:
     ```mlir
       #hw.enum.value<A, !hw.enum<A, B, C>>
