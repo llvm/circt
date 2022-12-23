@@ -203,52 +203,89 @@ int testGenerated() {
 }
 
 void errorHandler(FirrtlStringRef message, void *userData) {
-  *(bool *)userData = true;
+  ++(*(uint32_t *)userData);
 }
 
-int testErrNoCircuit(FirrtlContext ctx) {
-  bool triggered = false;
-  firrtlSetErrorHandler(ctx, errorHandler, &triggered);
+#define SET_ERR_HANDLER()                                                      \
+  uint32_t errCount = 0;                                                       \
+  firrtlSetErrorHandler(ctx, errorHandler, &errCount)
 
-  EXPECT(triggered == false);
+int testErrNoCircuit(FirrtlContext ctx) {
+  SET_ERR_HANDLER();
+
+  EXPECT(errCount == 0);
   firrtlVisitModule(ctx, MK_STR("NoCircuit"));
-  EXPECT(triggered == true);
+  EXPECT(errCount == 1);
   EXPECT_EXPORT("");
 
   return 0;
 }
 
 int testErrNoModule(FirrtlContext ctx) {
-  bool triggered = false;
-  firrtlSetErrorHandler(ctx, errorHandler, &triggered);
+  SET_ERR_HANDLER();
 
   firrtlVisitCircuit(ctx, MK_STR("NoModule"));
-  EXPECT(triggered == false);
+  EXPECT(errCount == 0);
 
   FirrtlType tyUInt8 = {
       .kind = FIRRTL_TYPE_KIND_UINT,
       .u = {.uint = {.width = 8}},
   };
   firrtlVisitPort(ctx, MK_STR("port"), FIRRTL_PORT_DIRECTION_INPUT, &tyUInt8);
-  EXPECT(triggered == true);
+  EXPECT(errCount == 1);
   EXPECT_EXPORT("circuit NoModule :\n");
 
   return 0;
 }
 
 int testErrNoHeader(FirrtlContext ctx) {
-  bool triggered = false;
-  firrtlSetErrorHandler(ctx, errorHandler, &triggered);
+  SET_ERR_HANDLER();
 
-  EXPECT(triggered == false);
+  EXPECT(errCount == 0);
 
   FirrtlType tyUInt8 = {
       .kind = FIRRTL_TYPE_KIND_UINT,
       .u = {.uint = {.width = 8}},
   };
   firrtlVisitPort(ctx, MK_STR("port"), FIRRTL_PORT_DIRECTION_INPUT, &tyUInt8);
-  EXPECT(triggered == true);
+  EXPECT(errCount == 1);
   EXPECT_EXPORT("");
+
+  return 0;
+}
+
+int testErrDuplicatePortName(FirrtlContext ctx) {
+  SET_ERR_HANDLER();
+
+  firrtlVisitCircuit(ctx, MK_STR("DupPortName"));
+  firrtlVisitModule(ctx, MK_STR("DupPortName"));
+
+  FirrtlType tyUInt8 = {
+      .kind = FIRRTL_TYPE_KIND_UINT,
+      .u = {.uint = {.width = 8}},
+  };
+  firrtlVisitPort(ctx, MK_STR("port"), FIRRTL_PORT_DIRECTION_INPUT, &tyUInt8);
+  EXPECT(errCount == 0);
+
+  firrtlVisitPort(ctx, MK_STR("port"), FIRRTL_PORT_DIRECTION_INPUT, &tyUInt8);
+  EXPECT(errCount == 1);
+  EXPECT_EXPORT("circuit DupPortName :\n\
+  module DupPortName :\n\
+    input port : UInt<8>\n\n");
+
+  // same port name in a new module
+  firrtlVisitModule(ctx, MK_STR("AnotherMod"));
+  EXPECT(errCount == 1);
+  firrtlVisitPort(ctx, MK_STR("port"), FIRRTL_PORT_DIRECTION_INPUT, &tyUInt8);
+  EXPECT(errCount == 1);
+  firrtlVisitPort(ctx, MK_STR("port"), FIRRTL_PORT_DIRECTION_INPUT, &tyUInt8);
+  EXPECT(errCount == 2);
+  EXPECT_EXPORT("circuit DupPortName :\n\
+  module DupPortName :\n\
+    input port : UInt<8>\n\
+\n\
+  module AnotherMod :\n\
+    input port : UInt<8>\n\n");
 
   return 0;
 }
@@ -257,6 +294,7 @@ int testExpectedError() {
   IF_ERR_RET(runOnce(&testErrNoCircuit));
   IF_ERR_RET(runOnce(&testErrNoModule));
   IF_ERR_RET(runOnce(&testErrNoHeader));
+  IF_ERR_RET(runOnce(&testErrDuplicatePortName));
 
   return 0;
 }

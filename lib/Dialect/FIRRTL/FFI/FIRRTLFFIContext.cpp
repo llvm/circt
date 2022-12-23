@@ -23,6 +23,12 @@ using namespace circt;
 using namespace firrtl;
 using namespace chirrtl;
 
+namespace {
+StringRef attrToStringRef(const Attribute &attr) {
+  return llvm::dyn_cast<StringAttr>(attr);
+}
+} // namespace
+
 // This macro returns the underlying value of a `RequireAssigned`, which
 // requires that the value has been set previously, otherwise it will emit an
 // error and return in the current function.
@@ -68,6 +74,14 @@ void FFIContext::visitModule(StringRef name) {
 void FFIContext::visitPort(StringRef name, Direction direction,
                            const FirrtlType &type) {
   RA_EXPECT(auto lastModuleOp, this->moduleOp);
+
+  auto existedNames = lastModuleOp.getPortNames();
+  for (const auto &existedName : existedNames) {
+    if (attrToStringRef(existedName) == name) {
+      emitError(("redefinition of port name '" + name + "'").str());
+      return;
+    }
+  }
 
   auto firType = ffiTypeToFirType(type);
   if (!firType.has_value()) {
