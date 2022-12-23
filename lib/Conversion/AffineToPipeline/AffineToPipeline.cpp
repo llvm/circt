@@ -261,7 +261,6 @@ AffineToPipeline::populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest,
   Problem::OperatorType mcOpr = problem.getOrInsertOperatorType("multicycle");
   problem.setLatency(mcOpr, 3);
 
-  SmallDenseMap<TypedValue<MemRefType> *, std::pair<unsigned, unsigned>> memOps;
   Operation *unsupported;
   WalkResult result = forOp.getBody()->walk([&](Operation *op) {
     return TypeSwitch<Operation *, WalkResult>(op)
@@ -285,8 +284,6 @@ AffineToPipeline::populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest,
               isa<AffineStoreOp>(*memOp)
                   ? cast<AffineStoreOp>(*memOp).getMemRef()
                   : cast<memref::StoreOp>(*memOp).getMemRef();
-          memOps[&memRef] =
-              std::pair(memOps[&memRef].first, memOps[&memRef].second + 1);
           Problem::OperatorType memOpr = problem.getOrInsertOperatorType(
               "mem_" + std::to_string(hash_value(memRef)));
           problem.setLatency(memOpr, 1);
@@ -302,8 +299,6 @@ AffineToPipeline::populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest,
               isa<AffineLoadOp>(*memOp)
                   ? cast<AffineLoadOp>(*memOp).getMemRef()
                   : cast<memref::LoadOp>(*memOp).getMemRef();
-          memOps[&memRef] =
-              std::pair(memOps[&memRef].first + 1, memOps[&memRef].second);
           Problem::OperatorType memOpr = problem.getOrInsertOperatorType(
               "mem_" + std::to_string(hash_value(memRef)));
           problem.setLatency(memOpr, 1);
@@ -374,6 +369,20 @@ AffineToPipeline::solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest,
   return success();
 }
 
+// Function for calcuating II limitations caused by an iteration variable
+unsigned computeRecurrenceII(Value iterArg, Operation *iterArgProducer,
+                             ModuloProblem &problem) {
+  unsigned producedTime =
+      *problem.getStartTime(iterArgProducer) +
+      *problem.getLatency(*problem.getLinkedOperatorType(iterArgProducer));
+  unsigned useTime = std::numeric_limits<unsigned>::max();
+
+  for (auto *use : iterArg.getUsers())
+    useTime = std::min(useTime, *problem.getStartTime(use));
+
+  return producedTime <= useTime ? 1 : producedTime - useTime;
+}
+
 /// Create the pipeline op for a loop nest.
 LogicalResult
 AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
@@ -396,7 +405,19 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
   // iter arg is created for the induction variable.
   TypeRange resultTypes = innerLoop.getResultTypes();
 
-  auto ii = builder.getI64IntegerAttr(problem.getInitiationInterval().value());
+  // Calculate recurrence II on iteration args (recurrence relationships besides
+  // memory ones)
+  unsigned recurrenceII = 1;
+  for (const auto &iterArg :
+       llvm::enumerate(forOp.getBody()->getTerminator()->getOperands())) {
+    recurrenceII = std::max(
+        recurrenceII,
+        computeRecurrenceII(innerLoop.getRegionIterArgs()[iterArg.index()],
+                            iterArg.value().getDefiningOp(), problem));
+  }
+
+  auto ii = builder.getI64IntegerAttr(
+      std::max(problem.getInitiationInterval().value(), recurrenceII));
 
   SmallVector<Value> iterArgs;
   iterArgs.push_back(lowerBound);
@@ -509,16 +530,6 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
           registerValues[i].insert(result);
       }
     }
-  }
-
-  // Get the stages that will utilize the iteration arguments
-  for (auto iterArg : innerLoop.getLoopBody().getArguments()) {
-    unsigned iterArgPipeLen = 0;
-    for (auto *user : iterArg.getUsers())
-      iterArgPipeLen = std::max(iterArgPipeLen, *problem.getStartTime(user));
-
-    for (unsigned i = 0; i < iterArgPipeLen; ++i)
-      registerValues[i].insert(iterArg);
   }
 
   // Now make register Types and stageValueMaps
