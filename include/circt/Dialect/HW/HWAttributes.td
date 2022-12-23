@@ -13,7 +13,7 @@
 #ifndef CIRCT_DIALECT_HW_HWATTRIBUTES_TD
 #define CIRCT_DIALECT_HW_HWATTRIBUTES_TD
 
-include "HWDialect.td"
+include "circt/Dialect/HW/HWDialect.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
 
