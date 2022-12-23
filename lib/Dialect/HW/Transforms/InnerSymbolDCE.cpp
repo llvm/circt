@@ -10,17 +10,17 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
-#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
+#include "circt/Dialect/HW/HWPasses.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/Support/Debug.h"
 
-#define DEBUG_TYPE "firrtl-inner-symbol-dce"
+#define DEBUG_TYPE "hw-inner-symbol-dce"
 
 using namespace mlir;
 using namespace circt;
-using namespace firrtl;
 using namespace hw;
 
 struct InnerSymbolDCEPass : public InnerSymbolDCEBase<InnerSymbolDCEPass> {
@@ -103,6 +103,6 @@ void InnerSymbolDCEPass::runOnOperation() {
                   [&](HWModuleLike mod) { removeInnerSyms(mod); });
 }
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createInnerSymbolDCEPass() {
+std::unique_ptr<mlir::Pass> circt::hw::createInnerSymbolDCEPass() {
   return std::make_unique<InnerSymbolDCEPass>();
 }

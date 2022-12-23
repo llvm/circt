@@ -13,11 +13,10 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   GrandCentral.cpp
   IMConstProp.cpp
   IMDeadCodeElim.cpp
-  InferResets.cpp
   InferReadWrite.cpp
+  InferResets.cpp
   InferWidths.cpp
   InjectDUTHierarchy.cpp
-  InnerSymbolDCE.cpp
   LegacyWiring.cpp
   LowerAnnotations.cpp
   LowerCHIRRTL.cpp

@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl-inner-symbol-dce)' %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(hw-inner-symbol-dce)' %s | FileCheck %s
 
 // CHECK-LABEL: firrtl.circuit "Simple"
 firrtl.circuit "Simple" attributes {
