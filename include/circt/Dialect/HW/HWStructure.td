@@ -13,10 +13,10 @@
 #ifndef CIRCT_DIALECT_HW_HWSTRUCTURE_TD
 #define CIRCT_DIALECT_HW_HWSTRUCTURE_TD
 
-include "HWAttributes.td"
-include "HWDialect.td"
-include "HWOpInterfaces.td"
-include "HWTypes.td"
+include "circt/Dialect/HW/HWAttributes.td"
+include "circt/Dialect/HW/HWDialect.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Dialect/HW/HWTypes.td"
 include "mlir/IR/FunctionInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/OpBase.td"

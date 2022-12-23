@@ -13,7 +13,7 @@
 #ifndef CIRCT_DIALECT_HW_HWTYPEDECLS_TD
 #define CIRCT_DIALECT_HW_HWTYPEDECLS_TD
 
-include "HWDialect.td"
+include "circt/Dialect/HW/HWDialect.td"
 include "mlir/IR/SymbolInterfaces.td"
 
 //===----------------------------------------------------------------------===//

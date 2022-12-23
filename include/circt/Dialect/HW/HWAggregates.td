@@ -14,8 +14,8 @@
 #ifndef CIRCT_DIALECT_HW_HWAGGREGATES_TD
 #define CIRCT_DIALECT_HW_HWAGGREGATES_TD
 
-include "HWDialect.td"
-include "HWTypes.td"
+include "circt/Dialect/HW/HWDialect.td"
+include "circt/Dialect/HW/HWTypes.td"
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"

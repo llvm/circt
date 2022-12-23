@@ -13,7 +13,7 @@
 #ifndef CIRCT_DIALECT_HW_HWTYPESIMPL_TD
 #define CIRCT_DIALECT_HW_HWTYPESIMPL_TD
 
-include "HWDialect.td"
+include "circt/Dialect/HW/HWDialect.td"
 include "mlir/IR/AttrTypeBase.td"
 
 // Base class for other typedefs. Provides dialact-specific defaults.

@@ -13,9 +13,9 @@
 #ifndef CIRCT_DIALECT_HW_HWMISCOPS_TD
 #define CIRCT_DIALECT_HW_HWMISCOPS_TD
 
-include "HWAttributes.td"
-include "HWDialect.td"
-include "HWTypes.td"
+include "circt/Dialect/HW/HWAttributes.td"
+include "circt/Dialect/HW/HWDialect.td"
+include "circt/Dialect/HW/HWTypes.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
