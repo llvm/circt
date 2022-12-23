@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_HW_HWTYPEINTERFACES
-#define CIRCT_DIALECT_HW_HWTYPEINTERFACES
+#ifndef CIRCT_DIALECT_HW_HWTYPEINTERFACES_TD
+#define CIRCT_DIALECT_HW_HWTYPEINTERFACES_TD
 
 include "mlir/IR/OpBase.td"
 
@@ -27,4 +27,4 @@ def FieldIDTypeInterface : TypeInterface<"FieldIDTypeInterface"> {
   ];
 }
 
-#endif // CIRCT_DIALECT_HW_HWTYPEINTERFACES
+#endif // CIRCT_DIALECT_HW_HWTYPEINTERFACES_TD

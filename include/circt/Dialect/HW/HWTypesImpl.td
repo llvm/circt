@@ -10,6 +10,12 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_HW_HWTYPESIMPL_TD
+#define CIRCT_DIALECT_HW_HWTYPESIMPL_TD
+
+include "HWDialect.td"
+include "mlir/IR/AttrTypeBase.td"
+
 // Base class for other typedefs. Provides dialact-specific defaults.
 class HWType<string name> : TypeDef<HWDialect, name> { }
 
@@ -215,3 +221,5 @@ def TypeAliasType : HWType<"TypeAlias"> {
     TypedeclOp getTypeDecl(const HWSymbolCache &cache);
   }];
 }
+
+#endif // CIRCT_DIALECT_HW_HWTYPESIMPL_TD

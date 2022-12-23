@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_HW_HWTYPES
 
 include "circt/Dialect/HW/HWDialect.td"
+include "mlir/IR/AttrTypeBase.td"
 
 //===----------------------------------------------------------------------===//
 // Type predicates

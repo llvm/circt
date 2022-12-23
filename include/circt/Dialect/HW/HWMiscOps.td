@@ -10,6 +10,15 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_HW_HWMISCOPS_TD
+#define CIRCT_DIALECT_HW_HWMISCOPS_TD
+
+include "HWAttributes.td"
+include "HWDialect.td"
+include "HWTypes.td"
+include "mlir/IR/OpAsmInterface.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+
 def ConstantOp
  : HWOp<"constant", [Pure, ConstantLike, FirstAttrDerivedResultType,
          DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
@@ -98,3 +107,5 @@ def EnumConstantOp : HWOp<"enum.constant", [Pure, ConstantLike,
     OpBuilder<(ins "hw::EnumFieldAttr":$field)>,
   ];
 }
+
+#endif // CIRCT_DIALECT_HW_HWMISCOPS_TD

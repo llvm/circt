@@ -10,6 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_HW_HWATTRIBUTES_TD
+#define CIRCT_DIALECT_HW_HWATTRIBUTES_TD
+
+include "HWDialect.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
 
@@ -302,3 +306,5 @@ def WUW_PortOrder : I32EnumAttrCase<"PortOrder", 1>;
 def WUWAttr : I32EnumAttr<"WUW", "Write Under Write Behavior",
                           [WUW_Undefined, WUW_PortOrder]>;
 }
+
+#endif // CIRCT_DIALECT_HW_HWATTRIBUTES_TD
