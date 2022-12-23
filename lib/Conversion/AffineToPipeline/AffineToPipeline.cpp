@@ -419,6 +419,7 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
   auto ii = builder.getI64IntegerAttr(
       std::max(problem.getInitiationInterval().value(), recurrenceII));
 
+
   SmallVector<Value> iterArgs;
   iterArgs.push_back(lowerBound);
   iterArgs.append(innerLoop.getIterOperands().begin(),
@@ -426,7 +427,7 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
 
   // If possible, attach a constant trip count attribute. This could be
   // generalized to support non-constant trip counts by supporting an AffineMap.
-  Optional<IntegerAttr> tripCountAttr;
+  std::optional<IntegerAttr> tripCountAttr;
   if (auto tripCount = getConstantTripCount(forOp))
     tripCountAttr = builder.getI64IntegerAttr(*tripCount);
 

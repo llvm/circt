@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_HW_HWTYPES
 
 include "circt/Dialect/HW/HWDialect.td"
+include "mlir/IR/AttrTypeBase.td"
 
 //===----------------------------------------------------------------------===//
 // Type predicates
@@ -56,9 +57,20 @@ def UnionType : DialectType<HWDialect,
           "a UnionType", "::circt::hw::TypeAliasOr<hw::UnionType>">;
 
 // A handle to refer to circt::hw::EnumType in ODS.
-def EnumType : DialectType<HWDialect, 
+def EnumType : DialectType<HWDialect,
     CPred<"::circt::hw::type_isa<circt::hw::EnumType>($_self)">,
           "a EnumType", "::circt::hw::TypeAliasOr<circt::hw::EnumType>">;
+
+def HWAggregateType : DialectType<HWDialect,
+    CPred<[{::circt::hw::type_isa<
+      circt::hw::ArrayType,
+      circt::hw::UnpackedArrayType,
+      circt::hw::StructType>($_self)}]>,
+    "an ArrayType or StructType",
+    [{::circt::hw::TypeVariant<
+      ::circt::hw::ArrayType,
+      ::circt::hw::UnpackedArrayType,
+      ::circt::hw::StructType>}]>;
 
 //===----------------------------------------------------------------------===//
 // Type Definitions
@@ -76,7 +88,11 @@ def HWInnerRefAttr : Attr<
 /// A flat symbol reference or a reference to a name within a module.
 def NameRefAttr : Attr<
   CPred<"$_self.isa<::mlir::FlatSymbolRefAttr, ::circt::hw::InnerRefAttr>()">,
-  "name reference attribute">;
+  "name reference attribute">{
+  let returnType = "::mlir::Attribute";
+  let convertFromStorage = "$_self";
+  let valueType = NoneType;
+}
 
 // Like a FlatSymbolRefArrayAttr, but can also refer to names inside modules.
 def NameRefArrayAttr : TypedArrayAttrBase<NameRefAttr,
@@ -88,7 +104,7 @@ def InnerSymProperties : AttrDef<HWDialect, "InnerSymProperties"> {
   let mnemonic = "innerSymProps";
   let parameters = (ins
          "mlir::StringAttr":$name,
-         DefaultValuedParameter<"int64_t", "0">:$fieldID,
+         DefaultValuedParameter<"uint64_t", "0">:$fieldID,
          DefaultValuedParameter<"::mlir::StringAttr", "public">:$sym_visibility
                      );
   let builders = [
@@ -109,7 +125,7 @@ def InnerSymAttr : AttrDef<HWDialect, "InnerSym"> {
     Defines the properties of an inner_sym attribute. It specifies the symbol
     name and symbol visibility for each field ID. For any ground types,
     there are no subfields and the field ID is 0. For aggregate types, a
-    unique field ID is assigned to each field by visiting them in a 
+    unique field ID is assigned to each field by visiting them in a
     depth-first pre-order. The custom assembly format ensures that for ground
     types, only `@<sym_name>` is printed.
   }];

@@ -35,7 +35,7 @@ firrtl.circuit "Simple" attributes {
     %w5 = firrtl.wire sym @w5 : !firrtl.uint<1>
   }
 
-  firrtl.hierpath private @nla [@Simple::@child, @Child::@w5]
+  hw.hierpath private @nla [@Simple::@child, @Child::@w5]
 }
 
 sv.verbatim "{{0}}" {symbols = [#hw.innerNameRef<@Simple::@w3>]}

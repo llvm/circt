@@ -309,7 +309,7 @@ static void eraseControlWithGroupAndConditional(OpTy op,
 
   // Save information about the operation, and erase it.
   Value cond = op.getCond();
-  Optional<StringRef> groupName = op.getGroupName();
+  std::optional<StringRef> groupName = op.getGroupName();
   auto component = op->template getParentOfType<ComponentOp>();
   rewriter.eraseOp(op);
 
@@ -329,6 +329,7 @@ static void eraseControlWithGroupAndConditional(OpTy op,
 // ComponentInterface
 //===----------------------------------------------------------------------===//
 
+template <typename ComponentTy>
 static void printComponentInterface(OpAsmPrinter &p, ComponentInterface comp) {
   auto componentName = comp->template getAttrOfType<StringAttr>(
                                ::mlir::SymbolTable::getSymbolAttrName())
@@ -357,9 +358,14 @@ static void printComponentInterface(OpAsmPrinter &p, ComponentInterface comp) {
                 /*printBlockTerminators=*/false,
                 /*printEmptyBlock=*/false);
 
-  SmallVector<StringRef> elidedAttrs = {"portAttributes", "portNames",
-                                        "portDirections", "sym_name",
-                                        ComponentOp::getTypeAttrName()};
+  SmallVector<StringRef> elidedAttrs = {
+      "portAttributes",
+      "portNames",
+      "portDirections",
+      "sym_name",
+      ComponentTy::getFunctionTypeAttrName(comp->getName()),
+      ComponentTy::getArgAttrsAttrName(comp->getName()),
+      ComponentTy::getResAttrsAttrName(comp->getName())};
   p.printOptionalAttrDict(comp->getAttrs(), elidedAttrs);
 }
 
@@ -439,6 +445,7 @@ parseComponentSignature(OpAsmParser &parser, OperationState &result,
   return success();
 }
 
+template <typename ComponentTy>
 static ParseResult parseComponentInterface(OpAsmParser &parser,
                                            OperationState &result) {
   using namespace mlir::function_interface_impl;
@@ -458,7 +465,8 @@ static ParseResult parseComponentInterface(OpAsmParser &parser,
   // Build the component's type for FunctionLike trait. All ports are listed
   // as arguments so they may be accessed within the component.
   auto type = parser.getBuilder().getFunctionType(portTypes, /*results=*/{});
-  result.addAttribute(ComponentOp::getTypeAttrName(), TypeAttr::get(type));
+  result.addAttribute(ComponentTy::getFunctionTypeAttrName(result.name),
+                      TypeAttr::get(type));
 
   auto *body = result.addRegion();
   if (parser.parseRegion(*body, ports))
@@ -510,7 +518,8 @@ static void buildComponentLike(OpBuilder &builder, OperationState &result,
 
   // Build the function type of the component.
   auto functionType = builder.getFunctionType(portTypes, {});
-  result.addAttribute(getTypeAttrName(), TypeAttr::get(functionType));
+  result.addAttribute(ComponentOp::getFunctionTypeAttrName(result.name),
+                      TypeAttr::get(functionType));
 
   // Record the port names and number of input ports of the component.
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
@@ -625,10 +634,12 @@ SmallVector<PortInfo> ComponentOp::getOutputPortInfo() {
       *this, [](const PortInfo &port) { return port.direction == Input; });
 }
 
-void ComponentOp::print(OpAsmPrinter &p) { printComponentInterface(p, *this); }
+void ComponentOp::print(OpAsmPrinter &p) {
+  printComponentInterface<ComponentOp>(p, *this);
+}
 
 ParseResult ComponentOp::parse(OpAsmParser &parser, OperationState &result) {
-  return parseComponentInterface(parser, result);
+  return parseComponentInterface<ComponentOp>(parser, result);
 }
 
 /// Determines whether the given ComponentOp has all the required ports.
@@ -749,12 +760,12 @@ SmallVector<PortInfo> CombComponentOp::getOutputPortInfo() {
 }
 
 void CombComponentOp::print(OpAsmPrinter &p) {
-  printComponentInterface(p, *this);
+  printComponentInterface<CombComponentOp>(p, *this);
 }
 
 ParseResult CombComponentOp::parse(OpAsmParser &parser,
                                    OperationState &result) {
-  return parseComponentInterface(parser, result);
+  return parseComponentInterface<CombComponentOp>(parser, result);
 }
 
 LogicalResult CombComponentOp::verify() {
@@ -1884,7 +1895,7 @@ LogicalResult IfOp::verify() {
   if (elseBodyExists() && getElseBody()->empty())
     return emitError() << "empty 'else' region.";
 
-  Optional<StringRef> optGroupName = getGroupName();
+  std::optional<StringRef> optGroupName = getGroupName();
   if (!optGroupName) {
     // No combinational group was provided.
     return success();
@@ -1911,14 +1922,14 @@ LogicalResult IfOp::verify() {
 /// Returns the last EnableOp within the child tree of 'parentSeqOp'. If no
 /// EnableOp was found (e.g. a "calyx.par" operation is present), returns
 /// None.
-static Optional<EnableOp> getLastEnableOp(SeqOp parent) {
+static std::optional<EnableOp> getLastEnableOp(SeqOp parent) {
   auto &lastOp = parent.getBodyBlock()->back();
   if (auto enableOp = dyn_cast<EnableOp>(lastOp))
     return enableOp;
   else if (auto seqOp = dyn_cast<SeqOp>(lastOp))
     return getLastEnableOp(seqOp);
 
-  return None;
+  return std::nullopt;
 }
 
 /// Returns a mapping of {enabled Group name, EnableOp} for all EnableOps within
@@ -1971,8 +1982,8 @@ struct CommonTailPatternWithSeq : mlir::OpRewritePattern<IfOp> {
 
     auto thenControl = cast<SeqOp>(ifOp.getThenBody()->front()),
          elseControl = cast<SeqOp>(ifOp.getElseBody()->front());
-    Optional<EnableOp> lastThenEnableOp = getLastEnableOp(thenControl),
-                       lastElseEnableOp = getLastEnableOp(elseControl);
+    std::optional<EnableOp> lastThenEnableOp = getLastEnableOp(thenControl),
+                            lastElseEnableOp = getLastEnableOp(elseControl);
 
     if (!lastThenEnableOp || !lastElseEnableOp)
       return failure();
@@ -2086,7 +2097,7 @@ LogicalResult WhileOp::verify() {
   auto component = (*this)->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
 
-  Optional<StringRef> optGroupName = getGroupName();
+  std::optional<StringRef> optGroupName = getGroupName();
   if (!optGroupName) {
     /// No combinational group was provided
     return success();

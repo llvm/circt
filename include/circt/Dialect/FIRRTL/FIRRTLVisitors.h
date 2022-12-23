@@ -43,8 +43,9 @@ public:
             // Unary operators.
             AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsClockPrimOp,
             CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
-            // Verif Expressions.
-            IsXVerifOp,
+            // Intrinsic Expressions.
+            IsXIntrinsicOp, PlusArgsValueIntrinsicOp, PlusArgsTestIntrinsicOp,
+            SizeOfIntrinsicOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
@@ -134,8 +135,11 @@ public:
   HANDLE(OrRPrimOp, Unary);
   HANDLE(XorRPrimOp, Unary);
 
-  // Verif Expr.
-  HANDLE(IsXVerifOp, Unhandled);
+  // Intrinsic Expr.
+  HANDLE(IsXIntrinsicOp, Unhandled);
+  HANDLE(PlusArgsValueIntrinsicOp, Unhandled);
+  HANDLE(PlusArgsTestIntrinsicOp, Unhandled);
+  HANDLE(SizeOfIntrinsicOp, Unhandled);
 
   // Miscellaneous.
   HANDLE(BitsPrimOp, Unhandled);

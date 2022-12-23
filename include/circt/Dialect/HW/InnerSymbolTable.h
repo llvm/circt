@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_FIRRTL_INNERSYMBOLTABLE_H
-#define CIRCT_DIALECT_FIRRTL_INNERSYMBOLTABLE_H
+#ifndef CIRCT_DIALECT_HW_INNERSYMBOLTABLE_H
+#define CIRCT_DIALECT_HW_INNERSYMBOLTABLE_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
@@ -21,7 +21,7 @@
 #include "llvm/ADT/StringRef.h"
 
 namespace circt {
-namespace firrtl {
+namespace hw {
 
 /// The target of an inner symbol, the entity the symbol is a handle for.
 class InnerSymTarget {
@@ -258,7 +258,7 @@ OS &operator<<(OS &os, const InnerSymTarget &target) {
   return os;
 }
 
-} // namespace firrtl
+} // namespace hw
 } // namespace circt
 
 #endif // CIRCT_DIALECT_FIRRTL_INNERSYMBOLTABLE_H

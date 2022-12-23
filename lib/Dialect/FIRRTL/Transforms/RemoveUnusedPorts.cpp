@@ -56,7 +56,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
                           << "\n");
   // This tracks constant values of output ports. None indicates an invalid
   // value.
-  SmallVector<llvm::Optional<APSInt>> outputPortConstants;
+  SmallVector<std::optional<APSInt>> outputPortConstants;
   auto ports = module.getPorts();
   // This tracks port indexes that can be erased.
   llvm::BitVector removalPortIndexes(ports.size());
@@ -90,14 +90,14 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
       if (arg.use_empty()) {
         // Sometimes the connection is already removed possibly by IMCP.
         // In that case, regard the port value as an invalid value.
-        outputPortConstants.push_back(None);
+        outputPortConstants.push_back(std::nullopt);
       } else if (llvm::all_of(instanceGraphNode->uses(), portIsUnused)) {
         // Replace the port with a wire if it is unused.
         auto builder = ImplicitLocOpBuilder::atBlockBegin(
             arg.getLoc(), module.getBodyBlock());
         auto wire = builder.create<WireOp>(arg.getType());
         arg.replaceAllUsesWith(wire);
-        outputPortConstants.push_back(None);
+        outputPortConstants.push_back(std::nullopt);
       } else if (arg.hasOneUse()) {
         // If the port has a single use, check the port is only connected to
         // invalid or constant
@@ -113,7 +113,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
           outputPortConstants.push_back(constant.getValue());
         else {
           assert(isa<InvalidValueOp>(srcOp) && "only expect invalid");
-          outputPortConstants.push_back(None);
+          outputPortConstants.push_back(std::nullopt);
         }
 
         // Erase connect op because we are going to remove this output ports.

@@ -18,15 +18,18 @@ firrtl.circuit "Foo" {
 // -----
 firrtl.circuit "Foo" {
   // expected-note @+1 {{Module `Bar` defined here:}}
-  firrtl.extmodule @Bar(in in: !firrtl.uint, out out: !firrtl.uint)
-  firrtl.module @Foo(in %in: !firrtl.uint<42>, out %out: !firrtl.uint) {
-    // expected-error @+4 {{extern module `Bar` has ports of uninferred width}}
-    // expected-note @+3 {{Port: "in"}}
-    // expected-note @+2 {{Port: "out"}}
+  firrtl.extmodule @Bar(in in: !firrtl.uint, 
+    out out: !firrtl.bundle<a : uint, b: uint<4>, c: vector<bundle<c: uint>,4>>)
+  firrtl.module @Foo(in %in: !firrtl.uint<42>, out %out: !firrtl.bundle<a : uint, b: uint<4>, c: vector<bundle<c: uint>,4>>) {
+    // expected-error @+6 {{extern module `Bar` has ports of uninferred width}}
+    // expected-note @+5 {{Port: "in"}}
+    // expected-note @+4 {{Port: "out"}}
+    // expected-note @+3 {{Field: "out.a"}}
+    // expected-note @+2 {{Field: "out.c[].c"}}
     // expected-note @+1 {{Only non-extern FIRRTL modules may contain unspecified widths to be inferred automatically.}}
-    %inst_in, %inst_out = firrtl.instance inst @Bar(in in: !firrtl.uint, out out: !firrtl.uint)
+    %inst_in, %inst_out = firrtl.instance inst @Bar(in in: !firrtl.uint, out out: !firrtl.bundle<a : uint, b: uint<4>, c: vector<bundle<c: uint>,4>>)
     firrtl.connect %inst_in, %in : !firrtl.uint, !firrtl.uint<42>
-    firrtl.connect %out, %inst_out : !firrtl.uint, !firrtl.uint
+    firrtl.connect %out, %inst_out : !firrtl.bundle<a : uint, b: uint<4>, c: vector<bundle<c: uint>,4>>, !firrtl.bundle<a : uint, b: uint<4>, c: vector<bundle<c: uint>,4>>
   }
 }
 

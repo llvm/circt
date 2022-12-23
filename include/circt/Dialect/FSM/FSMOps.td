@@ -19,7 +19,7 @@ def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResul
 def MachineOp : FSMOp<"machine", [
       FunctionOpInterface,
       Symbol, SymbolTable, NoTerminator,
-      HWModuleLike]> {
+      DeclareOpInterfaceMethods<HWModuleLike>]> {
   let summary = "Define a finite-state machine";
   let description = [{
     `fsm.machine` represents a finite-state machine, including a machine name,
@@ -29,6 +29,8 @@ def MachineOp : FSMOp<"machine", [
 
   let arguments = (ins StrAttr:$sym_name, StrAttr:$initialState,
                        TypeAttrOf<FunctionType>:$function_type,
+                       OptionalAttr<DictArrayAttr>:$arg_attrs,
+                       OptionalAttr<DictArrayAttr>:$res_attrs,
                        OptionalAttr<StrArrayAttr>:$argNames,
                        OptionalAttr<StrArrayAttr>:$resNames);
   let regions = (region SizedRegion<1>:$body);
@@ -64,7 +66,7 @@ def MachineOp : FSMOp<"machine", [
     LogicalResult verifyType() {
       auto type = getFunctionTypeAttr().getValue();
       if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getTypeAttrName() +
+        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
                            "' attribute of function type");
       return success();
     }
@@ -74,6 +76,21 @@ def MachineOp : FSMOp<"machine", [
 
     /// Return the name of the i'th result of this machine.
     StringAttr getResName(size_t i);
+  }];
+
+  let extraClassDefinition = [{
+    size_t $cppClass::getNumPorts() {
+      auto machineType = getFunctionType();
+      return machineType.getNumInputs() + machineType.getNumResults();
+    }
+
+    circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
+      for (NamedAttribute argAttr :
+           mlir::function_interface_impl::getArgAttrs(*this, portIndex))
+        if (auto sym = argAttr.getValue().dyn_cast<circt::hw::InnerSymAttr>())
+          return sym;
+      return circt::hw::InnerSymAttr();
+    }
   }];
 
   let skipDefaultBuilders = 1;
@@ -222,7 +239,7 @@ def OutputOp : FSMOp<"output", [HasParent<"StateOp">, ReturnLike, Terminator]> {
 
   let arguments = (ins Variadic<AnyType>:$operands);
 
-  let builders = [ OpBuilder<(ins), "build($_builder, $_state, llvm::None);"> ];
+  let builders = [ OpBuilder<(ins), "build($_builder, $_state, std::nullopt);"> ];
 
   let assemblyFormat = [{ attr-dict ($operands^ `:` qualified(type($operands)))? }];
 

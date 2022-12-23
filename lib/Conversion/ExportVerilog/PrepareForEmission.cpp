@@ -57,11 +57,8 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
   if (!isVerilogExpression(&op))
     return false;
 
-  if (options.disallowMuxInlining && isa<MuxOp>(op))
-    return true;
-
   // Spill temporary wires if it is not possible to inline.
-  return !ExportVerilog::isExpressionEmittedInline(&op);
+  return !ExportVerilog::isExpressionEmittedInline(&op, options);
 }
 
 // Given an instance, make sure all inputs are driven from wires or ports.

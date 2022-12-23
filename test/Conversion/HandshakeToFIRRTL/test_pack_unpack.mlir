@@ -4,17 +4,17 @@
 // CHECK-SAME:    in %[[IN0:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>,
 // CHECK-SAME:    in %[[IN1:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>,
 // CHECK-SAME:    out %[[OUT:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: bundle<field0: uint<64>, field1: uint<32>>>) {
-// CHECK:    %[[IN0_VALID:.*]] = firrtl.subfield %[[IN0]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
-// CHECK:    %[[IN0_READY:.*]] = firrtl.subfield %[[IN0]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
-// CHECK:    %[[IN0_DATA:.*]] = firrtl.subfield %[[IN0]](2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
-// CHECK:    %[[IN1_VALID:.*]] = firrtl.subfield %[[IN1]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>) -> !firrtl.uint<1>
-// CHECK:    %[[IN1_READY:.*]] = firrtl.subfield %[[IN1]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>) -> !firrtl.uint<1>
-// CHECK:    %[[IN1_DATA:.*]] = firrtl.subfield %[[IN1]](2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>) -> !firrtl.uint<32>
-// CHECK:    %[[OUT_VALID:.*]] = firrtl.subfield %[[OUT]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: bundle<field0: uint<64>, field1: uint<32>>>) -> !firrtl.uint<1>
-// CHECK:    %[[OUT_READY:.*]] = firrtl.subfield %[[OUT]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: bundle<field0: uint<64>, field1: uint<32>>>) -> !firrtl.uint<1>
-// CHECK:    %[[OUT_DATA:.*]] = firrtl.subfield %[[OUT]](2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: bundle<field0: uint<64>, field1: uint<32>>>) -> !firrtl.bundle<field0: uint<64>, field1: uint<32>>
-// CHECK:    %[[VAL_9:.*]] = firrtl.subfield %[[OUT_DATA]](0) : (!firrtl.bundle<field0: uint<64>, field1: uint<32>>) -> !firrtl.uint<64>
-// CHECK:    %[[VAL_10:.*]] = firrtl.subfield %[[OUT_DATA]](1) : (!firrtl.bundle<field0: uint<64>, field1: uint<32>>) -> !firrtl.uint<32>
+// CHECK:    %[[IN0_VALID:.*]] = firrtl.subfield %[[IN0]][valid] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+// CHECK:    %[[IN0_READY:.*]] = firrtl.subfield %[[IN0]][ready] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+// CHECK:    %[[IN0_DATA:.*]] = firrtl.subfield %[[IN0]][data] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+// CHECK:    %[[IN1_VALID:.*]] = firrtl.subfield %[[IN1]][valid] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>
+// CHECK:    %[[IN1_READY:.*]] = firrtl.subfield %[[IN1]][ready] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>
+// CHECK:    %[[IN1_DATA:.*]] = firrtl.subfield %[[IN1]][data] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>
+// CHECK:    %[[OUT_VALID:.*]] = firrtl.subfield %[[OUT]][valid] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: bundle<field0: uint<64>, field1: uint<32>>>
+// CHECK:    %[[OUT_READY:.*]] = firrtl.subfield %[[OUT]][ready] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: bundle<field0: uint<64>, field1: uint<32>>>
+// CHECK:    %[[OUT_DATA:.*]] = firrtl.subfield %[[OUT]][data] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: bundle<field0: uint<64>, field1: uint<32>>>
+// CHECK:    %[[VAL_9:.*]] = firrtl.subfield %[[OUT_DATA]][field0] : !firrtl.bundle<field0: uint<64>, field1: uint<32>>
+// CHECK:    %[[VAL_10:.*]] = firrtl.subfield %[[OUT_DATA]][field1] : !firrtl.bundle<field0: uint<64>, field1: uint<32>>
 // CHECK:    firrtl.connect %[[VAL_9]], %[[IN0_DATA]] : !firrtl.uint<64>, !firrtl.uint<64>
 // CHECK:    firrtl.connect %[[VAL_10]], %[[IN1_DATA]] : !firrtl.uint<32>, !firrtl.uint<32>
 // CHECK:    %[[VAL_11:.*]] = firrtl.and %[[IN1_VALID]], %[[IN0_VALID]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
@@ -39,17 +39,17 @@ handshake.func @test_pack(%arg0: i64, %arg1: i32, %ctrl: none, ...) -> (tuple<i6
 // CHECK-SAME:    out %[[OUT1:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>,
 // CHECK-SAME:    in %[[CLOCK:.*]]: !firrtl.clock,
 // CHECK-SAME:    in %[[RESET:.*]]: !firrtl.uint<1>) {
-// CHECK:  %[[IN_VALID:.*]] = firrtl.subfield %[[IN]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: bundle<field0: uint<64>, field1: uint<32>>>) -> !firrtl.uint<1>
-// CHECK:  %[[IN_READY:.*]] = firrtl.subfield %[[IN]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: bundle<field0: uint<64>, field1: uint<32>>>) -> !firrtl.uint<1>
-// CHECK:  %[[IN_DATA:.*]] = firrtl.subfield %[[IN]](2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: bundle<field0: uint<64>, field1: uint<32>>>) -> !firrtl.bundle<field0: uint<64>, field1: uint<32>>
-// CHECK:  %[[OUT0_VALID:.*]] = firrtl.subfield %[[OUT0]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
-// CHECK:  %[[OUT0_READY:.*]] = firrtl.subfield %[[OUT0]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
-// CHECK:  %[[OUT0_DATA:.*]] = firrtl.subfield %[[OUT0]](2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
-// CHECK:  %[[OUT1_VALID:.*]] = firrtl.subfield %[[OUT1]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>) -> !firrtl.uint<1>
-// CHECK:  %[[OUT1_READY:.*]] = firrtl.subfield %[[OUT1]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>) -> !firrtl.uint<1>
-// CHECK:  %[[OUT1_DATA:.*]] = firrtl.subfield %[[OUT1]](2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>) -> !firrtl.uint<32>
-// CHECK:  %[[VAL_9:.*]] = firrtl.subfield %[[IN_DATA]](0) : (!firrtl.bundle<field0: uint<64>, field1: uint<32>>) -> !firrtl.uint<64>
-// CHECK:  %[[VAL_10:.*]] = firrtl.subfield %[[IN_DATA]](1) : (!firrtl.bundle<field0: uint<64>, field1: uint<32>>) -> !firrtl.uint<32>
+// CHECK:  %[[IN_VALID:.*]] = firrtl.subfield %[[IN]][valid] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: bundle<field0: uint<64>, field1: uint<32>>>
+// CHECK:  %[[IN_READY:.*]] = firrtl.subfield %[[IN]][ready] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: bundle<field0: uint<64>, field1: uint<32>>>
+// CHECK:  %[[IN_DATA:.*]] = firrtl.subfield %[[IN]][data] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: bundle<field0: uint<64>, field1: uint<32>>>
+// CHECK:  %[[OUT0_VALID:.*]] = firrtl.subfield %[[OUT0]][valid] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+// CHECK:  %[[OUT0_READY:.*]] = firrtl.subfield %[[OUT0]][ready] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+// CHECK:  %[[OUT0_DATA:.*]] = firrtl.subfield %[[OUT0]][data] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+// CHECK:  %[[OUT1_VALID:.*]] = firrtl.subfield %[[OUT1]][valid] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>
+// CHECK:  %[[OUT1_READY:.*]] = firrtl.subfield %[[OUT1]][ready] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>
+// CHECK:  %[[OUT1_DATA:.*]] = firrtl.subfield %[[OUT1]][data] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>
+// CHECK:  %[[VAL_9:.*]] = firrtl.subfield %[[IN_DATA]][field0] : !firrtl.bundle<field0: uint<64>, field1: uint<32>>
+// CHECK:  %[[VAL_10:.*]] = firrtl.subfield %[[IN_DATA]][field1] : !firrtl.bundle<field0: uint<64>, field1: uint<32>>
 // CHECK:  firrtl.connect %[[OUT0_DATA]], %[[VAL_9]] : !firrtl.uint<64>, !firrtl.uint<64>
 // CHECK:  firrtl.connect %[[OUT1_DATA]], %[[VAL_10]] : !firrtl.uint<32>, !firrtl.uint<32>
 

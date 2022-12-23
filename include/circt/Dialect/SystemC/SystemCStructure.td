@@ -13,7 +13,7 @@
 
 def SCModuleOp : SystemCOp<"module", [
     Symbol,
-    HWModuleLike,
+    DeclareOpInterfaceMethods<HWModuleLike>,
     FunctionOpInterface,
     IsolatedFromAbove,
     SingleBlock,
@@ -31,7 +31,12 @@ def SCModuleOp : SystemCOp<"module", [
     but are nonetheless emitted as regular struct fields.
   }];
 
-  let arguments = (ins StrArrayAttr:$portNames);
+  let arguments = (ins
+    TypeAttrOf<FunctionType>:$function_type,
+    OptionalAttr<DictArrayAttr>:$arg_attrs,
+    OptionalAttr<DictArrayAttr>:$res_attrs,
+    StrArrayAttr:$portNames
+  );
   let regions = (region SizedRegion<1>: $body);
 
   let hasCustomAssemblyFormat = 1;
@@ -51,13 +56,8 @@ def SCModuleOp : SystemCOp<"module", [
 
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
-    static RegionKind getRegionKind(unsigned index) { 
+    static RegionKind getRegionKind(unsigned index) {
       return RegionKind::Graph;
-    }
-
-    /// Returns the type of this function.
-    mlir::FunctionType getFunctionType() {
-      return getFunctionTypeAttr().getValue().cast<mlir::FunctionType>();
     }
 
     /// Returns the argument types of this function.
@@ -102,6 +102,20 @@ def SCModuleOp : SystemCOp<"module", [
     // Return the Destructor operation in this module's body or create one if
     // none exists yet.
     systemc::DestructorOp getOrCreateDestructor();
+  }];
+
+  let extraClassDefinition = [{
+    size_t $cppClass::getNumPorts() {
+      return getPortNames().size();
+    }
+
+    circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
+      for (NamedAttribute argAttr :
+           mlir::function_interface_impl::getArgAttrs(*this, portIndex))
+        if (auto sym = argAttr.getValue().dyn_cast<circt::hw::InnerSymAttr>())
+          return sym;
+      return circt::hw::InnerSymAttr();
+    }
   }];
 }
 
@@ -351,6 +365,8 @@ def FuncOp : SystemCOp<"cpp.func", [
 
   let arguments = (ins SymbolNameAttr:$sym_name,
                        TypeAttrOf<FunctionType>:$function_type,
+                       OptionalAttr<DictArrayAttr>:$arg_attrs,
+                       OptionalAttr<DictArrayAttr>:$res_attrs,
                        StrArrayAttr:$argNames,
                        UnitAttr:$externC,
                        OptionalAttr<StrAttr>:$sym_visibility);
@@ -461,7 +477,7 @@ def ReturnOp : SystemCOp<"cpp.return", [
   let arguments = (ins Variadic<AnyType>:$returnValues);
 
   let builders = [OpBuilder<(ins), [{
-    build($_builder, $_state, llvm::None);
+    build($_builder, $_state, std::nullopt);
   }]>];
 
   let assemblyFormat = "attr-dict ($returnValues^ `:` type($returnValues))?";

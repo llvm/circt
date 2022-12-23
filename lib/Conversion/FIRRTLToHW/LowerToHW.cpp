@@ -48,41 +48,6 @@ using hw::PortDirection;
 /// annotated module should be dumped to a file.
 static const char moduleHierarchyFileAttrName[] = "firrtl.moduleHierarchyFile";
 
-/// Given a type, return the corresponding lowered type for the HW dialect.
-/// Non-FIRRTL types are simply passed through. This returns a null type if it
-/// cannot be lowered.
-static Type lowerType(Type type) {
-  auto firType = type.dyn_cast<FIRRTLBaseType>();
-  if (!firType)
-    return type;
-
-  // Ignore flip types.
-  firType = firType.getPassiveType();
-
-  if (BundleType bundle = firType.dyn_cast<BundleType>()) {
-    mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
-    for (auto element : bundle) {
-      Type etype = lowerType(element.type);
-      if (!etype)
-        return {};
-      hwfields.push_back(hw::StructType::FieldInfo{element.name, etype});
-    }
-    return hw::StructType::get(type.getContext(), hwfields);
-  }
-  if (FVectorType vec = firType.dyn_cast<FVectorType>()) {
-    auto elemTy = lowerType(vec.getElementType());
-    if (!elemTy)
-      return {};
-    return hw::ArrayType::get(elemTy, vec.getNumElements());
-  }
-
-  auto width = firType.getBitWidthOrSentinel();
-  if (width >= 0) // IntType, analog with known width, clock, etc.
-    return IntegerType::get(type.getContext(), width);
-
-  return {};
-}
-
 /// Return true if the specified type is a sized FIRRTL type (Int or Analog)
 /// with zero bits.
 static bool isZeroBitFIRRTLType(Type type) {
@@ -574,9 +539,6 @@ void FIRRTLModuleLowering::runOnOperation() {
             return signalPassFailure();
           state.oldToNewModuleMap[&op] = loweredMod;
         })
-        .Case<HierPathOp>([&](auto nla) {
-          // Just drop it.
-        })
         .Default([&](Operation *op) {
           // We don't know what this op is.  If it has no illegal FIRRTL types,
           // we can forward the operation.  Otherwise, we emit an error and drop
@@ -835,6 +797,12 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     }
   };
 
+  // Helper function to emit #ifndef guard.
+  auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
+    b.create<sv::IfDefOp>(
+        guard, []() {}, body);
+  };
+
   bool needsRandomizeRegInit =
       state.used_RANDOMIZE_REG_INIT && !disableRegRandomization;
   bool needsRandomizeMemInit =
@@ -851,15 +819,19 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 
   bool needRandom = false;
   if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
-    emitGuardedDefine("RANDOMIZE_GARBAGE_ASSIGN", "RANDOMIZE");
+    emitGuard("RANDOMIZE", [&]() {
+      emitGuardedDefine("RANDOMIZE_GARBAGE_ASSIGN", "RANDOMIZE");
+    });
     needRandom = true;
   }
   if (needsRandomizeRegInit) {
-    emitGuardedDefine("RANDOMIZE_REG_INIT", "RANDOMIZE");
+    emitGuard("RANDOMIZE",
+              [&]() { emitGuardedDefine("RANDOMIZE_REG_INIT", "RANDOMIZE"); });
     needRandom = true;
   }
   if (needsRandomizeMemInit) {
-    emitGuardedDefine("RANDOMIZE_MEM_INIT", "RANDOMIZE");
+    emitGuard("RANDOMIZE",
+              [&]() { emitGuardedDefine("RANDOMIZE_MEM_INIT", "RANDOMIZE"); });
     needRandom = true;
   }
 
@@ -872,22 +844,28 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   if (state.used_PRINTF_COND) {
     emitString("\n// Users can define 'PRINTF_COND' to add an extra gate to "
                "prints.");
-    emitGuardedDefine("PRINTF_COND", "PRINTF_COND_ (`PRINTF_COND)",
-                      "PRINTF_COND_ 1");
+    emitGuard("PRINTF_COND_", [&]() {
+      emitGuardedDefine("PRINTF_COND", "PRINTF_COND_ (`PRINTF_COND)",
+                        "PRINTF_COND_ 1");
+    });
   }
 
   if (state.used_ASSERT_VERBOSE_COND) {
     emitString("\n// Users can define 'ASSERT_VERBOSE_COND' to add an extra "
                "gate to assert error printing.");
-    emitGuardedDefine("ASSERT_VERBOSE_COND",
-                      "ASSERT_VERBOSE_COND_ (`ASSERT_VERBOSE_COND)",
-                      "ASSERT_VERBOSE_COND_ 1");
+    emitGuard("ASSERT_VERBOSE_COND_", [&]() {
+      emitGuardedDefine("ASSERT_VERBOSE_COND",
+                        "ASSERT_VERBOSE_COND_ (`ASSERT_VERBOSE_COND)",
+                        "ASSERT_VERBOSE_COND_ 1");
+    });
   }
 
   if (state.used_STOP_COND) {
     emitString("\n// Users can define 'STOP_COND' to add an extra gate "
                "to stop conditions.");
-    emitGuardedDefine("STOP_COND", "STOP_COND_ (`STOP_COND)", "STOP_COND_ 1");
+    emitGuard("STOP_COND_", [&]() {
+      emitGuardedDefine("STOP_COND", "STOP_COND_ (`STOP_COND)", "STOP_COND_ 1");
+    });
   }
 
   if (needRandom) {
@@ -903,31 +881,35 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     emitGuardedDefine("RANDOMIZE_DELAY", nullptr, "RANDOMIZE_DELAY 0.002");
 
     emitString("\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
-    b.create<sv::IfDefOp>(
-        "RANDOMIZE",
-        [&]() {
-          emitGuardedDefine(
-              "VERILATOR", "INIT_RANDOM_PROLOG_ `INIT_RANDOM",
-              "INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end");
-        },
-        [&]() { emitString("`define INIT_RANDOM_PROLOG_"); });
+    emitGuard("INIT_RANDOM_PROLOG_", [&]() {
+      b.create<sv::IfDefOp>(
+          "RANDOMIZE",
+          [&]() {
+            emitGuardedDefine(
+                "VERILATOR", "INIT_RANDOM_PROLOG_ `INIT_RANDOM",
+                "INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end");
+          },
+          [&]() { emitString("`define INIT_RANDOM_PROLOG_"); });
+    });
   }
 
   if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
     emitString("\n// RANDOMIZE_GARBAGE_ASSIGN enable range checks for mem "
                "assignments.");
-    b.create<sv::IfDefOp>(
-        "RANDOMIZE_GARBAGE_ASSIGN",
-        [&]() {
-          emitString(
-              "`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, VALUE, "
-              "SIZE) \\");
-          emitString("  ((INDEX) < (SIZE) ? (VALUE) : {`RANDOM})");
-        },
-        [&]() {
-          emitString("`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, "
-                     "VALUE, SIZE) (VALUE)");
-        });
+    emitGuard("RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK", [&]() {
+      b.create<sv::IfDefOp>(
+          "RANDOMIZE_GARBAGE_ASSIGN",
+          [&]() {
+            emitString(
+                "`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, VALUE, "
+                "SIZE) \\");
+            emitString("  ((INDEX) < (SIZE) ? (VALUE) : {`RANDOM})");
+          },
+          [&]() {
+            emitString("`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, "
+                       "VALUE, SIZE) (VALUE)");
+          });
+    });
   }
 
   // Blank line to separate the header from the modules.
@@ -953,8 +935,7 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
                             "not support per field symbols yet.");
         return failure();
       }
-    hwPort.sym = firrtlPort.sym ? firrtlPort.sym.getSymName()
-                                : StringAttr::get(moduleOp->getContext(), "");
+    hwPort.sym = firrtlPort.sym;
 
     // We can't lower all types, so make sure to cleanly reject them.
     if (!hwPort.type) {
@@ -965,7 +946,7 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
     // If this is a zero bit port, just drop it.  It doesn't matter if it is
     // input, output, or inout.  We don't want these at the HW level.
     if (hwPort.type.isInteger(0)) {
-      if (hwPort.sym && hwPort.sym.size()) {
+      if (hwPort.sym && !hwPort.sym.empty()) {
         moduleOp->emitError("zero width port ")
             << hwPort.name << " is referenced by name [" << hwPort.sym
             << "] (e.g. in an XMR).";
@@ -1609,7 +1590,10 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   }
 
   // Verif Operations
-  LogicalResult visitExpr(IsXVerifOp op);
+  LogicalResult visitExpr(IsXIntrinsicOp op);
+  LogicalResult visitExpr(PlusArgsTestIntrinsicOp op);
+  LogicalResult visitExpr(PlusArgsValueIntrinsicOp op);
+  LogicalResult visitExpr(SizeOfIntrinsicOp op);
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
@@ -3370,7 +3354,7 @@ LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
 // Verif Operations
 //===----------------------------------------------------------------------===//
 
-LogicalResult FIRRTLLowering::visitExpr(IsXVerifOp op) {
+LogicalResult FIRRTLLowering::visitExpr(IsXIntrinsicOp op) {
   auto input = getLoweredValue(op.getArg());
   if (!input)
     return failure();
@@ -3378,6 +3362,33 @@ LogicalResult FIRRTLLowering::visitExpr(IsXVerifOp op) {
   return setLoweringTo<comb::ICmpOp>(
       op, ICmpPredicate::ceq, input,
       getOrCreateXConstant(input.getType().getIntOrFloatBitWidth()), true);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(PlusArgsTestIntrinsicOp op) {
+  auto resultType = builder.getIntegerType(1);
+  auto str = builder.create<sv::ConstantStrOp>(op.getFormatString());
+  return setLoweringTo<sv::SystemFunctionOp>(op, resultType, "test$plusargs",
+                                             ArrayRef<Value>{str});
+}
+
+LogicalResult FIRRTLLowering::visitExpr(PlusArgsValueIntrinsicOp op) {
+  auto resultType = builder.getIntegerType(1);
+  auto type = lowerType(op.getResult().getType());
+  if (!type)
+    return failure();
+
+  auto str = builder.create<sv::ConstantStrOp>(op.getFormatString());
+  auto wire = createTmpWireOp(type, "_pargs");
+  auto wireRead = builder.create<sv::ReadInOutOp>(wire);
+  (void)setLowering(op.getResult(), wireRead);
+  auto svfun = builder.create<sv::SystemFunctionOp>(
+      resultType, "value$plusargs", ArrayRef<Value>{str, wire});
+  return setLowering(op.getFound(), svfun);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(SizeOfIntrinsicOp op) {
+  op.emitError("SizeOf should have been resolved.");
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
@@ -3415,10 +3426,10 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValueOp op) {
   // do.
   if (auto bitwidth =
           firrtl::getBitWidth(op.getType().cast<FIRRTLBaseType>())) {
-    if (bitwidth.value() == 0) // Let the caller handle zero width values.
+    if (*bitwidth == 0) // Let the caller handle zero width values.
       return failure();
 
-    auto constant = getOrCreateIntConstant(bitwidth.value(), 0);
+    auto constant = getOrCreateIntConstant(*bitwidth, 0);
     // If the result is an aggregate value, we have to bitcast the constant.
     if (!resultTy.isa<IntegerType>())
       constant = builder.create<hw::BitcastOp>(resultTy, constant);
@@ -4105,6 +4116,24 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
   if (getSingleNonInstanceOperand(op))
     return success();
 
+  // If all operands of the attach are internal to this module (none of them
+  // are ports), then they can all be replaced with a single wire, and we can
+  // delete the attach op.
+  bool isAttachInternalOnly =
+      llvm::none_of(inoutValues, [](auto v) { return isa<BlockArgument>(v); });
+
+  if (isAttachInternalOnly) {
+    auto v0 = inoutValues.front();
+    for (auto v : inoutValues) {
+      if (v == v0)
+        continue;
+      v.replaceAllUsesWith(v0);
+    }
+    return success();
+  }
+
+  // If the attach operands contain a port, then we can't do anything to
+  // simplify the attach operation.
   addToIfDefBlock(
       "SYNTHESIS",
       // If we're doing synthesis, we emit an all-pairs assign complex.

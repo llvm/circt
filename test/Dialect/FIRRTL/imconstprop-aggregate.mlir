@@ -74,9 +74,9 @@ firrtl.circuit "BundlePropagation1"   {
     %c1_ui3 = firrtl.constant 1 : !firrtl.uint<3>
     %c2_ui3 = firrtl.constant 2 : !firrtl.uint<3>
     %c4_ui3 = firrtl.constant 4 : !firrtl.uint<3>
-    %0 = firrtl.subfield %tmp(0) : (!firrtl.bundle<a: uint<3>, b: uint<3>, c: uint<3>>) -> !firrtl.uint<3>
-    %1 = firrtl.subfield %tmp(1) : (!firrtl.bundle<a: uint<3>, b: uint<3>, c: uint<3>>) -> !firrtl.uint<3>
-    %2 = firrtl.subfield %tmp(2) : (!firrtl.bundle<a: uint<3>, b: uint<3>, c: uint<3>>) -> !firrtl.uint<3>
+    %0 = firrtl.subfield %tmp[a] : !firrtl.bundle<a: uint<3>, b: uint<3>, c: uint<3>>
+    %1 = firrtl.subfield %tmp[b] : !firrtl.bundle<a: uint<3>, b: uint<3>, c: uint<3>>
+    %2 = firrtl.subfield %tmp[c] : !firrtl.bundle<a: uint<3>, b: uint<3>, c: uint<3>>
     firrtl.strictconnect %0, %c1_ui3 : !firrtl.uint<3>
     firrtl.strictconnect %1, %c2_ui3 : !firrtl.uint<3>
     firrtl.strictconnect %2, %c4_ui3 : !firrtl.uint<3>
@@ -186,9 +186,9 @@ firrtl.circuit "OutPortTop" {
 firrtl.circuit "InputPortTop"  {
   // CHECK-LABEL: firrtl.module @InputPortChild2
   firrtl.module @InputPortChild2(in %in0: !firrtl.bundle<v: uint<1>>, in %in1: !firrtl.bundle<v: uint<1>>, out %out: !firrtl.bundle<v: uint<1>>) {
-    %0 = firrtl.subfield %in1(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
-    %1 = firrtl.subfield %in0(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
-    %2 = firrtl.subfield %out(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    %0 = firrtl.subfield %in1[v] : !firrtl.bundle<v: uint<1>>
+    %1 = firrtl.subfield %in0[v] : !firrtl.bundle<v: uint<1>>
+    %2 = firrtl.subfield %out[v] : !firrtl.bundle<v: uint<1>>
     %3 = firrtl.and %1, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.strictconnect %2, %3 : !firrtl.uint<1>
   }
@@ -197,9 +197,9 @@ firrtl.circuit "InputPortTop"  {
     in %in1: !firrtl.bundle<v: uint<1>> sym @dntSym,
     out %out: !firrtl.bundle<v: uint<1>>)
   {
-    %0 = firrtl.subfield %in1(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
-    %1 = firrtl.subfield %in0(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
-    %2 = firrtl.subfield %out(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    %0 = firrtl.subfield %in1[v] : !firrtl.bundle<v: uint<1>>
+    %1 = firrtl.subfield %in0[v] : !firrtl.bundle<v: uint<1>>
+    %2 = firrtl.subfield %out[v] : !firrtl.bundle<v: uint<1>>
     %3 = firrtl.and %1, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.strictconnect %2, %3 : !firrtl.uint<1>
   }
@@ -207,17 +207,17 @@ firrtl.circuit "InputPortTop"  {
   // CHECK-LABEL: firrtl.module @InputPortTop
   firrtl.module @InputPortTop(in %x: !firrtl.bundle<v: uint<1>>, out %z: !firrtl.bundle<v: uint<1>>, out %z2: !firrtl.bundle<v: uint<1>>) {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    %0 = firrtl.subfield %z2(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
-    %1 = firrtl.subfield %x(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
-    %2 = firrtl.subfield %z(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    %0 = firrtl.subfield %z2[v] : !firrtl.bundle<v: uint<1>>
+    %1 = firrtl.subfield %x[v] : !firrtl.bundle<v: uint<1>>
+    %2 = firrtl.subfield %z[v] : !firrtl.bundle<v: uint<1>>
     %c_in0, %c_in1, %c_out = firrtl.instance c  @InputPortChild(in in0: !firrtl.bundle<v: uint<1>>, in in1: !firrtl.bundle<v: uint<1>>, out out: !firrtl.bundle<v: uint<1>>)
-    %3 = firrtl.subfield %c_in1(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
-    %4 = firrtl.subfield %c_in0(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
-    %5 = firrtl.subfield %c_out(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    %3 = firrtl.subfield %c_in1[v] : !firrtl.bundle<v: uint<1>>
+    %4 = firrtl.subfield %c_in0[v] : !firrtl.bundle<v: uint<1>>
+    %5 = firrtl.subfield %c_out[v] : !firrtl.bundle<v: uint<1>>
     %c2_in0, %c2_in1, %c2_out = firrtl.instance c2  @InputPortChild2(in in0: !firrtl.bundle<v: uint<1>>, in in1: !firrtl.bundle<v: uint<1>>, out out: !firrtl.bundle<v: uint<1>>)
-    %6 = firrtl.subfield %c2_in1(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
-    %7 = firrtl.subfield %c2_in0(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
-    %8 = firrtl.subfield %c2_out(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    %6 = firrtl.subfield %c2_in1[v] : !firrtl.bundle<v: uint<1>>
+    %7 = firrtl.subfield %c2_in0[v] : !firrtl.bundle<v: uint<1>>
+    %8 = firrtl.subfield %c2_out[v] : !firrtl.bundle<v: uint<1>>
     firrtl.strictconnect %2, %5 : !firrtl.uint<1>
     firrtl.strictconnect %4, %1 : !firrtl.uint<1>
     firrtl.strictconnect %3, %c1_ui1 : !firrtl.uint<1>
@@ -233,30 +233,30 @@ firrtl.circuit "InputPortTop"  {
 firrtl.circuit "rhs_sink_output_used_as_wire" {
   // CHECK: firrtl.module @Bar
   firrtl.module @Bar(in %a: !firrtl.bundle<v: uint<1>>, in %b: !firrtl.bundle<v: uint<1>>, out %c: !firrtl.bundle<v: uint<1>>, out %d: !firrtl.bundle<v: uint<1>>) {
-    %0 = firrtl.subfield %d(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
-    %1 = firrtl.subfield %a(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
-    %2 = firrtl.subfield %b(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
-    %3 = firrtl.subfield %c(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    %0 = firrtl.subfield %d[v] : !firrtl.bundle<v: uint<1>>
+    %1 = firrtl.subfield %a[v] : !firrtl.bundle<v: uint<1>>
+    %2 = firrtl.subfield %b[v] : !firrtl.bundle<v: uint<1>>
+    %3 = firrtl.subfield %c[v] : !firrtl.bundle<v: uint<1>>
     firrtl.strictconnect %3, %2 : !firrtl.uint<1>
     %_c = firrtl.wire  : !firrtl.bundle<v: uint<1>>
-    %4 = firrtl.subfield %_c(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    %4 = firrtl.subfield %_c[v] : !firrtl.bundle<v: uint<1>>
     %5 = firrtl.xor %1, %3 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.strictconnect %4, %5 : !firrtl.uint<1>
     firrtl.strictconnect %0, %4 : !firrtl.uint<1>
   }
   firrtl.module @rhs_sink_output_used_as_wire(in %a: !firrtl.bundle<v: uint<1>>, in %b: !firrtl.bundle<v: uint<1>>, out %c: !firrtl.bundle<v: uint<1>>, out %d: !firrtl.bundle<v: uint<1>>) {
     %bar_a, %bar_b, %bar_c, %bar_d = firrtl.instance bar  @Bar(in a: !firrtl.bundle<v: uint<1>>, in b: !firrtl.bundle<v: uint<1>>, out c: !firrtl.bundle<v: uint<1>>, out d: !firrtl.bundle<v: uint<1>>)
-    %0 = firrtl.subfield %a(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
-    %1 = firrtl.subfield %bar_a(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    %0 = firrtl.subfield %a[v] : !firrtl.bundle<v: uint<1>>
+    %1 = firrtl.subfield %bar_a[v] : !firrtl.bundle<v: uint<1>>
     firrtl.strictconnect %1, %0 : !firrtl.uint<1>
-    %2 = firrtl.subfield %b(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
-    %3 = firrtl.subfield %bar_b(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    %2 = firrtl.subfield %b[v] : !firrtl.bundle<v: uint<1>>
+    %3 = firrtl.subfield %bar_b[v] : !firrtl.bundle<v: uint<1>>
     firrtl.strictconnect %3, %2 : !firrtl.uint<1>
-    %4 = firrtl.subfield %bar_c(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
-    %5 = firrtl.subfield %c(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    %4 = firrtl.subfield %bar_c[v] : !firrtl.bundle<v: uint<1>>
+    %5 = firrtl.subfield %c[v] : !firrtl.bundle<v: uint<1>>
     firrtl.strictconnect %5, %4 : !firrtl.uint<1>
-    %6 = firrtl.subfield %bar_d(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
-    %7 = firrtl.subfield %d(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    %6 = firrtl.subfield %bar_d[v] : !firrtl.bundle<v: uint<1>>
+    %7 = firrtl.subfield %d[v] : !firrtl.bundle<v: uint<1>>
     firrtl.strictconnect %7, %6 : !firrtl.uint<1>
   }
 }
@@ -267,8 +267,8 @@ firrtl.circuit "Oscillators"  {
   // CHECK: firrtl.module @Foo
   firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %0 = firrtl.subfield %a(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
-    %1 = firrtl.subfield %a(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %0 = firrtl.subfield %a[v2] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
+    %1 = firrtl.subfield %a[v1] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
     %r = firrtl.reg %clock  : !firrtl.uint<1>
     %s = firrtl.regreset %clock, %reset, %c0_ui1  : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
     %2 = firrtl.not %r : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -284,8 +284,8 @@ firrtl.circuit "Oscillators"  {
   firrtl.module @Bar(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    %0 = firrtl.subfield %a(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
-    %1 = firrtl.subfield %a(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %0 = firrtl.subfield %a[v1] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
+    %1 = firrtl.subfield %a[v2] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
     %r = firrtl.reg %clock  : !firrtl.uint<1>
     %s = firrtl.regreset %clock, %reset, %c0_ui1  : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
     %2 = firrtl.xor %1, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
@@ -299,8 +299,8 @@ firrtl.circuit "Oscillators"  {
   // CHECK: firrtl.module @Baz
   firrtl.module @Baz(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %0 = firrtl.subfield %a(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
-    %1 = firrtl.subfield %a(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %0 = firrtl.subfield %a[v1] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
+    %1 = firrtl.subfield %a[v2] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
     %r = firrtl.reg %clock  : !firrtl.uint<1>
     %s = firrtl.regreset %clock, %reset, %c0_ui1  : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
     %2 = firrtl.not %1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -315,11 +315,11 @@ firrtl.circuit "Oscillators"  {
   // CHECK: firrtl.module @Qux
   firrtl.module @Qux(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %0 = firrtl.subfield %a(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
-    %1 = firrtl.subfield %a(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %0 = firrtl.subfield %a[v2] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
+    %1 = firrtl.subfield %a[v1] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
     %ext_a = firrtl.instance ext  @Ext(in a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>)
-    %2 = firrtl.subfield %ext_a(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
-    %3 = firrtl.subfield %ext_a(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %2 = firrtl.subfield %ext_a[v1] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
+    %3 = firrtl.subfield %ext_a[v2] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
     %r = firrtl.reg %clock  : !firrtl.uint<1>
     %s = firrtl.regreset %clock, %reset, %c0_ui1  : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
     %4 = firrtl.not %3 : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -333,38 +333,38 @@ firrtl.circuit "Oscillators"  {
   }
   // CHECK: firrtl.module @Oscillators
   firrtl.module @Oscillators(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %foo_a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>, out %bar_a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>, out %baz_a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>, out %qux_a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>) {
-    %0 = firrtl.subfield %qux_a(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
-    %1 = firrtl.subfield %qux_a(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
-    %2 = firrtl.subfield %baz_a(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
-    %3 = firrtl.subfield %baz_a(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
-    %4 = firrtl.subfield %bar_a(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
-    %5 = firrtl.subfield %bar_a(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
-    %6 = firrtl.subfield %foo_a(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
-    %7 = firrtl.subfield %foo_a(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %0 = firrtl.subfield %qux_a[v2] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
+    %1 = firrtl.subfield %qux_a[v1] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
+    %2 = firrtl.subfield %baz_a[v2] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
+    %3 = firrtl.subfield %baz_a[v1] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
+    %4 = firrtl.subfield %bar_a[v2] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
+    %5 = firrtl.subfield %bar_a[v1] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
+    %6 = firrtl.subfield %foo_a[v2] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
+    %7 = firrtl.subfield %foo_a[v1] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
     %foo_clock, %foo_reset, %foo_a_0 = firrtl.instance foo  @Foo(in clock: !firrtl.clock, in reset: !firrtl.asyncreset, out a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>)
-    %8 = firrtl.subfield %foo_a_0(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
-    %9 = firrtl.subfield %foo_a_0(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %8 = firrtl.subfield %foo_a_0[v2] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
+    %9 = firrtl.subfield %foo_a_0[v1] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
     firrtl.strictconnect %foo_clock, %clock : !firrtl.clock
     firrtl.strictconnect %foo_reset, %reset : !firrtl.asyncreset
     firrtl.strictconnect %7, %9 : !firrtl.uint<1>
     firrtl.strictconnect %6, %8 : !firrtl.uint<1>
     %bar_clock, %bar_reset, %bar_a_1 = firrtl.instance bar  @Bar(in clock: !firrtl.clock, in reset: !firrtl.asyncreset, out a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>)
-    %10 = firrtl.subfield %bar_a_1(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
-    %11 = firrtl.subfield %bar_a_1(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %10 = firrtl.subfield %bar_a_1[v2] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
+    %11 = firrtl.subfield %bar_a_1[v1] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
     firrtl.strictconnect %bar_clock, %clock : !firrtl.clock
     firrtl.strictconnect %bar_reset, %reset : !firrtl.asyncreset
     firrtl.strictconnect %5, %11 : !firrtl.uint<1>
     firrtl.strictconnect %4, %10 : !firrtl.uint<1>
     %baz_clock, %baz_reset, %baz_a_2 = firrtl.instance baz  @Baz(in clock: !firrtl.clock, in reset: !firrtl.asyncreset, out a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>)
-    %12 = firrtl.subfield %baz_a_2(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
-    %13 = firrtl.subfield %baz_a_2(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %12 = firrtl.subfield %baz_a_2[v2] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
+    %13 = firrtl.subfield %baz_a_2[v1] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
     firrtl.strictconnect %baz_clock, %clock : !firrtl.clock
     firrtl.strictconnect %baz_reset, %reset : !firrtl.asyncreset
     firrtl.strictconnect %3, %13 : !firrtl.uint<1>
     firrtl.strictconnect %2, %12 : !firrtl.uint<1>
     %qux_clock, %qux_reset, %qux_a_3 = firrtl.instance qux  @Qux(in clock: !firrtl.clock, in reset: !firrtl.asyncreset, out a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>)
-    %14 = firrtl.subfield %qux_a_3(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
-    %15 = firrtl.subfield %qux_a_3(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %14 = firrtl.subfield %qux_a_3[v2] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
+    %15 = firrtl.subfield %qux_a_3[v1] : !firrtl.bundle<v1: uint<1>, v2: uint<1>>
     firrtl.strictconnect %qux_clock, %clock : !firrtl.clock
     firrtl.strictconnect %qux_reset, %reset : !firrtl.asyncreset
     firrtl.strictconnect %1, %15 : !firrtl.uint<1>
@@ -376,15 +376,15 @@ firrtl.circuit "Oscillators"  {
 firrtl.circuit "dntOutput"  {
   firrtl.module @dntOutput(out %b: !firrtl.bundle<v: uint<3>>, in %c: !firrtl.uint<1>) {
     %c2_ui3 = firrtl.constant 2 : !firrtl.uint<3>
-    %0 = firrtl.subfield %b(0) : (!firrtl.bundle<v: uint<3>>) -> !firrtl.uint<3>
+    %0 = firrtl.subfield %b[v] : !firrtl.bundle<v: uint<3>>
     %int_b = firrtl.instance int  @foo(out b: !firrtl.bundle<v: uint<3>>)
-    %1 = firrtl.subfield %int_b(0) : (!firrtl.bundle<v: uint<3>>) -> !firrtl.uint<3>
+    %1 = firrtl.subfield %int_b[v] : !firrtl.bundle<v: uint<3>>
     %2 = firrtl.mux(%c, %1, %c2_ui3) : (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
     firrtl.strictconnect %0, %2 : !firrtl.uint<3>
   }
   firrtl.module @foo(out %b: !firrtl.bundle<v: uint<3>> sym @dntSym1){
     %c1_ui3 = firrtl.constant 1 : !firrtl.uint<3>
-    %0 = firrtl.subfield %b(0) : (!firrtl.bundle<v: uint<3>>) -> !firrtl.uint<3>
+    %0 = firrtl.subfield %b[v] : !firrtl.bundle<v: uint<3>>
     firrtl.strictconnect %0, %c1_ui3 : !firrtl.uint<3>
   }
 }

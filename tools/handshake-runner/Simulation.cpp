@@ -71,14 +71,14 @@ void debugArg(const std::string &head, mlir::Value op, const APFloat &value,
 
 void debugArg(const std::string &head, mlir::Value op, const Any &value,
               double time) {
-  if (any_isa<APInt>(value)) {
-    debugArg(head, op, any_cast<APInt>(value), time);
-  } else if (any_isa<APFloat>(value)) {
-    debugArg(head, op, any_cast<APFloat>(value), time);
-  } else if (any_isa<unsigned>(value)) {
+  if (auto *val = any_cast<APInt>(&value)) {
+    debugArg(head, op, *val, time);
+  } else if (auto *val = any_cast<APFloat>(&value)) {
+    debugArg(head, op, val, time);
+  } else if (auto *val = any_cast<unsigned>(&value)) {
     // Represents an allocated buffer.
-    LLVM_DEBUG(dbgs() << "  " << head << ":  " << op << " = Buffer "
-                      << any_cast<unsigned>(value) << "\n");
+    LLVM_DEBUG(dbgs() << "  " << head << ":  " << op << " = Buffer " << *val
+                      << "\n");
   } else {
     llvm_unreachable("unknown type");
   }

@@ -121,7 +121,7 @@ struct ReturnOpConversion : public OpConversionPattern<func::ReturnOp> {
   LogicalResult
   matchAndRewrite(func::ReturnOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<func::ReturnOp>(op, adaptor.operands());
+    rewriter.replaceOpWithNewOp<func::ReturnOp>(op, adaptor.getOperands());
     return success();
   }
 };
@@ -298,10 +298,10 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   // Directly map simple bit vector types to a compact integer type. This needs
   // to be added after all of the other conversions above, such that SBVs
   // conversion gets tried first before any of the others.
-  typeConverter.addConversion([&](UnpackedType type) -> Optional<Type> {
+  typeConverter.addConversion([&](UnpackedType type) -> std::optional<Type> {
     if (auto sbv = type.getSimpleBitVectorOrNull())
       return mlir::IntegerType::get(type.getContext(), sbv.size);
-    return llvm::None;
+    return std::nullopt;
   });
 
   // Valid target types.

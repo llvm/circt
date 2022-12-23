@@ -303,7 +303,8 @@ static inline bool isExpressionAlwaysInline(Operation *op) {
 
 /// Return whether an operation is a constant.
 static inline bool isConstantExpression(Operation *op) {
-  return isa<hw::ConstantOp, sv::ConstantXOp, sv::ConstantZOp>(op);
+  return isa<hw::ConstantOp, sv::ConstantXOp, sv::ConstantZOp,
+             sv::ConstantStrOp>(op);
 }
 
 /// This predicate returns true if the specified operation is considered a
@@ -318,7 +319,7 @@ bool isZeroBitType(Type type);
 
 /// Return true if this expression should be emitted inline into any statement
 /// that uses it.
-bool isExpressionEmittedInline(Operation *op);
+bool isExpressionEmittedInline(Operation *op, const LoweringOptions &options);
 
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.

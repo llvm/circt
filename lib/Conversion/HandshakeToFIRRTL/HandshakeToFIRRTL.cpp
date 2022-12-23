@@ -133,6 +133,11 @@ static FIRRTLBaseType getBundleType(Type type) {
   return bundleType;
 }
 
+static bool isControlOp(Operation *op) {
+  auto control = op->getAttrOfType<BoolAttr>("control");
+  return control && control.getValue();
+}
+
 /// A class to be used with getPortInfoForOp. Provides an opaque interface for
 /// generating the port names of an operation; handshake operations generate
 /// names by the Handshake NamedIOInterface;  and other operations, such as
@@ -458,7 +463,7 @@ static std::string getSubModuleName(Operation *oldOp) {
 
   // Add control information.
   if (auto ctrlInterface = dyn_cast<handshake::ControlInterface>(oldOp);
-      ctrlInterface && ctrlInterface.isControl()) {
+      ctrlInterface && isControlOp(ctrlInterface)) {
     // Add some additional discriminating info for non-typed operations.
     subModuleName += "_" + std::to_string(oldOp->getNumOperands()) + "ins_" +
                      std::to_string(oldOp->getNumResults()) + "outs";
@@ -1114,8 +1119,7 @@ bool HandshakeBuilder::visitHandshake(SinkOp op) {
 
   rewriter.eraseOp(argValid.getDefiningOp());
 
-  if (auto ctrlAttr = op->getAttrOfType<BoolAttr>("control");
-      ctrlAttr && ctrlAttr.getValue())
+  if (isControlOp(op))
     return true;
 
   // Non-control sink; must also have a data operand.
@@ -1139,7 +1143,7 @@ bool HandshakeBuilder::visitHandshake(SourceOp op) {
 
   rewriter.eraseOp(argReady.getDefiningOp());
 
-  assert(op.isControl() && "source op provide control-only tokens");
+  assert(isControlOp(op) && "source op provide control-only tokens");
   return true;
 }
 
@@ -1275,7 +1279,7 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
   Value resultValid = resultSubfields[0];
   Value resultReady = resultSubfields[1];
   Value resultData;
-  if (!op.isControl())
+  if (!isControlOp(op))
     resultData = resultSubfields[2];
 
   // Walk through each arg data to collect the subfields.
@@ -1286,11 +1290,11 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
     ValueVector argSubfields = portList[i];
     argValid.push_back(argSubfields[0]);
     argReady.push_back(argSubfields[1]);
-    if (!op.isControl())
+    if (!isControlOp(op))
       argData.push_back(argSubfields[2]);
   }
 
-  if (!op.isControl()) {
+  if (!isControlOp(op)) {
     // Mux the arg data.
     auto muxedData = createMuxTree(argData, selectData, insertLoc, rewriter);
 
@@ -1417,7 +1421,7 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
   Value resultReady = resultSubfields[1];
   Value resultData;
 
-  if (!op.isControl())
+  if (!isControlOp(op))
     resultData = resultSubfields[2];
 
   // Walk through each arg data to collect the subfields.
@@ -1428,7 +1432,7 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
     ValueVector argSubfields = portList[i];
     argValid.push_back(argSubfields[0]);
     argReady.push_back(argSubfields[1]);
-    if (!op.isControl())
+    if (!isControlOp(op))
       argData.push_back(argSubfields[2]);
   }
 
@@ -1463,7 +1467,7 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
   // result outputs are gated on the win wire being non-zero.
   rewriter.create<ConnectOp>(insertLoc, resultValid, hasWinnerCondition);
 
-  if (!op.isControl()) {
+  if (!isControlOp(op)) {
     auto resultDataMux = createOneHotMuxTree(argData, win, insertLoc, rewriter);
     rewriter.create<ConnectOp>(insertLoc, resultData, resultDataMux);
   }
@@ -1492,7 +1496,7 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
 bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   auto *context = rewriter.getContext();
 
-  bool isControl = op.isControl();
+  bool isControl = isControlOp(op);
   unsigned numPorts = portList.size();
   unsigned numInputs = numPorts - 4;
 
@@ -1676,7 +1680,7 @@ bool HandshakeBuilder::visitHandshake(handshake::BranchOp op) {
   rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
   rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
 
-  if (!op.isControl()) {
+  if (!isControlOp(op)) {
     Value argData = argSubfields[2];
     Value resultData = resultSubfields[2];
     rewriter.create<ConnectOp>(insertLoc, resultData, argData);
@@ -1720,7 +1724,7 @@ bool HandshakeBuilder::visitHandshake(ConditionalBranchOp op) {
                                  conditionNot, conditionArgValid));
 
   // Connect data signal of both results if applied.
-  if (!op.isControl()) {
+  if (!isControlOp(op)) {
     Value argData = argSubfields[2];
     Value trueResultData = trueResultSubfields[2];
     Value falseResultData = falseResultSubfields[2];
@@ -1766,7 +1770,7 @@ bool HandshakeBuilder::visitHandshake(LazyForkOp op) {
     Value resultValid = resultfield[0];
     rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidOp);
 
-    if (!op.isControl()) {
+    if (!isControlOp(op)) {
       Value argData = argSubfields[2];
       Value resultData = resultfield[2];
       rewriter.create<ConnectOp>(insertLoc, resultData, argData);
@@ -1897,7 +1901,7 @@ bool HandshakeBuilder::visitHandshake(ForkOp op) {
   auto clock = portList[portNum - 2][0];
   auto reset = portList[portNum - 1][0];
 
-  return buildForkLogic(input, outputs, clock, reset, op.isControl());
+  return buildForkLogic(input, outputs, clock, reset, isControlOp(op));
 }
 
 /// Please refer to test_constant.mlir test case.
@@ -2191,27 +2195,27 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
 
     // Get the clock out of the bundle and connect them.
     auto readClock = builder.create<SubfieldOp>(
-        readBundle, readType.getElementIndex("clk").value());
+        readBundle, *readType.getElementIndex("clk"));
     builder.create<ConnectOp>(readClock, clk);
     auto writeClock = builder.create<SubfieldOp>(
-        writeBundle, writeType.getElementIndex("clk").value());
+        writeBundle, *writeType.getElementIndex("clk"));
     builder.create<ConnectOp>(writeClock, clk);
 
     // Get the addresses out of the bundle
     auto readAddr = builder.create<SubfieldOp>(
-        readBundle, readType.getElementIndex("addr").value());
+        readBundle, *readType.getElementIndex("addr"));
     auto writeAddr = builder.create<SubfieldOp>(
-        writeBundle, readType.getElementIndex("addr").value());
+        writeBundle, *readType.getElementIndex("addr"));
 
     // Connect read and write to head and tail registers.
     builder.create<ConnectOp>(readAddr, head);
     builder.create<ConnectOp>(writeAddr, tail);
 
     // Get the memory enable out of the bundles.
-    auto memReadEn = builder.create<SubfieldOp>(
-        readBundle, readType.getElementIndex("en").value());
+    auto memReadEn =
+        builder.create<SubfieldOp>(readBundle, *readType.getElementIndex("en"));
     auto memWriteEn = builder.create<SubfieldOp>(
-        writeBundle, writeType.getElementIndex("en").value());
+        writeBundle, *writeType.getElementIndex("en"));
     // Always read
     builder.create<ConnectOp>(memReadEn, oneConst);
     // Write on writeEn
@@ -2219,15 +2223,15 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
 
     // Connect read and write data.
     auto readData = builder.create<SubfieldOp>(
-        readBundle, readType.getElementIndex("data").value());
+        readBundle, *readType.getElementIndex("data"));
     auto writeData = builder.create<SubfieldOp>(
-        writeBundle, writeType.getElementIndex("data").value());
+        writeBundle, *writeType.getElementIndex("data"));
     builder.create<ConnectOp>(dataOut, readData);
     builder.create<ConnectOp>(writeData, dataIn);
 
     // Get the store mask out of the bundle.
     auto writeMask = builder.create<SubfieldOp>(
-        writeBundle, writeType.getElementIndex("mask").value());
+        writeBundle, *writeType.getElementIndex("mask"));
 
     // We might be storing bundles. Therefore, we have to ensure that writeEn is
     // connected to all elements of the mask.
@@ -2495,11 +2499,11 @@ bool HandshakeBuilder::visitHandshake(BufferOp op) {
     if (op.getInitValues())
       initValues = op.getInitValueArray();
     return buildSeqBufferLogic(op.getNumSlots(), &input, &output, clock, reset,
-                               op.isControl(), initValues);
+                               isControlOp(op), initValues);
   }
 
   return buildFIFOBufferLogic(op.getNumSlots(), &input, &output, clock, reset,
-                              op.isControl());
+                              isControlOp(op));
 }
 
 bool HandshakeBuilder::visitHandshake(ExternalMemoryOp op) {
@@ -2635,12 +2639,12 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     // Get the clock out of the bundle and connect it.
     auto memClock = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("clk").value());
+        insertLoc, memBundle, *memType.getElementIndex("clk"));
     rewriter.create<ConnectOp>(insertLoc, memClock, clock);
 
     // Get the load address out of the bundle.
     auto memAddr = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("addr").value());
+        insertLoc, memBundle, *memType.getElementIndex("addr"));
 
     // Since addresses coming from Handshake are IndexType and have a hardcoded
     // 64-bit width in this pass, we may need to truncate down to the actual
@@ -2660,14 +2664,14 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     // Get the load data out of the bundle.
     auto memData = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("data").value());
+        insertLoc, memBundle, *memType.getElementIndex("data"));
 
     // Connect the memory to the load data.
     rewriter.create<ConnectOp>(insertLoc, loadDataData, memData);
 
     // Get the load enable out of the bundle.
     auto memEnable = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("en").value());
+        insertLoc, memBundle, *memType.getElementIndex("en"));
 
     // Connect the address valid signal to the memory enable.
     rewriter.create<ConnectOp>(insertLoc, memEnable, loadAddrValid);
@@ -2703,12 +2707,12 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     // Get the clock out of the bundle and connect it.
     auto memClock = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("clk").value());
+        insertLoc, memBundle, *memType.getElementIndex("clk"));
     rewriter.create<ConnectOp>(insertLoc, memClock, clock);
 
     // Get the store address out of the bundle.
     auto memAddr = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("addr").value());
+        insertLoc, memBundle, *memType.getElementIndex("addr"));
 
     // Since addresses coming from Handshake are IndexType and have a hardcoded
     // 64-bit width in this pass, we may need to truncate down to the actual
@@ -2728,7 +2732,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     // Get the store data out of the bundle.
     auto memData = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("data").value());
+        insertLoc, memBundle, *memType.getElementIndex("data"));
 
     // Connect the store data to the memory.
     rewriter.create<ConnectOp>(insertLoc, memData, storeDataData);
@@ -2782,14 +2786,14 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     // Get the store enable out of the bundle.
     auto memEnable = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("en").value());
+        insertLoc, memBundle, *memType.getElementIndex("en"));
 
     // Connect the write valid signal to the memory enable.
     rewriter.create<ConnectOp>(insertLoc, memEnable, writeValid);
 
     // Get the store mask out of the bundle.
     auto memMask = rewriter.create<SubfieldOp>(
-        insertLoc, memBundle, memType.getElementIndex("mask").value());
+        insertLoc, memBundle, *memType.getElementIndex("mask"));
 
     // Since we are not storing bundles in the memory, we can assume the mask is
     // a single bit.
@@ -3077,11 +3081,23 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       return success();
     }
 
+    // Adds a boolean "control" attribute for all Handshake operations
+    // As handshake operations get lowered to FIRRTL (in particular, as
+    // NonType's get lowered), the logic that determines whether an operation
+    // is a control operation may no longer give the right answer. We therefore
+    // cache the "control-ness" of each operation before any modification to the
+    // operation and then refer to that attribute instead during lowering.
+    for (auto &op : funcOp.getOps()) {
+      auto ctrl = dyn_cast<handshake::ControlInterface>(op);
+      op.setAttr("control", BoolAttr::get(rewriter.getContext(),
+                                          ctrl && ctrl.isControl()));
+    }
+
     auto maybeTopModuleOp = createTopModuleOp<FModuleOp>(
         funcOp, /*numClocks=*/1, rewriter, setFlattenAttr);
     if (failed(maybeTopModuleOp))
       return failure();
-    auto topModuleOp = maybeTopModuleOp.value();
+    auto topModuleOp = *maybeTopModuleOp;
     inlineFuncRegion(funcOp, topModuleOp, rewriter);
 
     NameUniquer instanceUniquer = [&](Operation *op) {

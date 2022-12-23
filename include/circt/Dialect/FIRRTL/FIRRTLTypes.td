@@ -10,6 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD
+#define CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD
+
+include "FIRRTLDialect.td"
 include "mlir/IR/EnumAttr.td"
 
 //===----------------------------------------------------------------------===//
@@ -98,9 +102,15 @@ def SizedBaseOrRefTypeOrForeignType : AnyTypeOf<[SizedBaseOrRefType, ForeignType
 def UInt1Type : FIRRTLDialectType<
     CPred<"$_self.isa<UIntType>() && "
           "($_self.cast<UIntType>().getWidth() == 1 ||"
-          " $_self.cast<UIntType>().getWidth() == None)">,
+          " $_self.cast<UIntType>().getWidth() == std::nullopt)">,
     "UInt<1> or UInt", "::circt::firrtl::UIntType">,
   BuildableType<"UIntType::get($_builder.getContext(), 1)">;
+
+def UInt32Type : FIRRTLDialectType<
+    CPred<"$_self.isa<UIntType>() && "
+          "$_self.cast<UIntType>().getWidth() == 32">,
+    "UInt<32>", "::circt::firrtl::UIntType">,
+  BuildableType<"UIntType::get($_builder.getContext(), 32)">;
 
 def AsyncResetType : FIRRTLDialectType<
     CPred<"$_self.isa<AsyncResetType>()">,
@@ -181,3 +191,5 @@ def MemDir_ReadWrite: I32EnumAttrCase<"ReadWrite", 3>;
 def MemDirAttr: I32EnumAttr<"MemDirAttr", "Memory Direction Enum",
                             [MemDir_Infer, MemDir_Read, MemDir_Write,
                               MemDir_ReadWrite]>;
+
+#endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD

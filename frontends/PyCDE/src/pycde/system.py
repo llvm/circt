@@ -90,9 +90,8 @@ class System:
     if output_directory is None:
       output_directory = os.path.join(os.getcwd(), self.name)
     self.output_directory = pathlib.Path(output_directory)
-    if not self.output_directory.exists():
-      self.output_directory.mkdir()
-      self.hw_output_dir.mkdir()
+    self.output_directory.mkdir(exist_ok=True)
+    self.hw_output_dir.mkdir(exist_ok=True)
 
     with self:
       [m._pycde_mod.create() for m in self.top_modules]
@@ -280,11 +279,10 @@ class System:
       "builtin.module(esi-emit-collateral{{tops={tops} schema-file=schema.capnp}})",
       "builtin.module(lower-msft-to-hw{{verilog-file={verilog_file}}})",
       "builtin.module(hw.module(lower-seq-hlmem))",
-      # "cse",
       "builtin.module(lower-esi-to-physical, lower-esi-ports, lower-esi-to-hw)",
       "builtin.module(convert-fsm-to-sv)",
       "builtin.module(lower-seq-to-sv)",
-      "builtin.module(cse)",
+      "builtin.module(cse, canonicalize, cse)",
       "builtin.module(hw.module(prettify-verilog), hw.module(hw-cleanup))",
       "builtin.module(msft-export-tcl{{tops={tops} tcl-file={tcl_file}}})"
   ]

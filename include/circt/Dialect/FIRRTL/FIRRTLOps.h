@@ -18,6 +18,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "circt/Support/FieldRef.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionInterfaces.h"
@@ -98,7 +99,7 @@ inline MemDirAttr &operator|=(MemDirAttr &lhs, MemDirAttr rhs) {
 /// Return the StringAttr for the inner_sym name, if it exists.
 inline StringAttr getInnerSymName(Operation *op) {
   auto s = op->getAttrOfType<hw::InnerSymAttr>(
-      InnerSymbolTable::getInnerSymbolAttrName());
+      hw::InnerSymbolTable::getInnerSymbolAttrName());
   if (s)
     return s.getSymName();
   return StringAttr();
@@ -132,21 +133,21 @@ LogicalResult verifySameOperandsIntTypeKind(Operation *op);
 
 // Type inference adaptor for FIRRTL operations.
 LogicalResult inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::RegionRange regions,
     SmallVectorImpl<Type> &results,
     llvm::function_ref<FIRRTLType(ValueRange, ArrayRef<NamedAttribute>,
-                                  Optional<Location>)>
+                                  std::optional<Location>)>
         callback);
 
 // Common type inference functions.
 FIRRTLType inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
-                             Optional<Location> loc);
+                             std::optional<Location> loc);
 FIRRTLType inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
-                              Optional<Location> loc);
+                              std::optional<Location> loc);
 FIRRTLType inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
-                                 Optional<Location> loc);
-FIRRTLType inferReductionResult(FIRRTLType arg, Optional<Location> loc);
+                                 std::optional<Location> loc);
+FIRRTLType inferReductionResult(FIRRTLType arg, std::optional<Location> loc);
 
 // Common parsed argument validation functions.
 LogicalResult validateBinaryOpArguments(ValueRange operands,

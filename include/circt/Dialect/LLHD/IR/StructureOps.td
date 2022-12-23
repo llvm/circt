@@ -49,17 +49,17 @@ def LLHD_EntityOp : LLHD_Op<"entity", [
     ```
   }];
 
-  let arguments = (ins I64Attr: $ins);
+  let arguments = (ins
+    TypeAttrOf<FunctionType>:$function_type,
+    I64Attr: $ins,
+    OptionalAttr<DictArrayAttr>:$arg_attrs,
+    OptionalAttr<DictArrayAttr>:$res_attrs
+  );
   let regions = (region SizedRegion<1>: $body);
 
   let hasVerifier = 1;
 
   let extraClassDeclaration = [{
-    /// Returns the type of this function.
-    FunctionType getFunctionType() {
-      return getFunctionTypeAttr().getValue().cast<FunctionType>();
-    }
-
     /// Returns the argument types of this function.
     ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
@@ -125,15 +125,15 @@ def LLHD_ProcOp : LLHD_Op<"proc", [
     ```
   }];
 
-  let arguments = (ins I64Attr: $ins);
+  let arguments = (ins
+    TypeAttrOf<FunctionType>:$function_type,
+    I64Attr:$ins,
+    OptionalAttr<DictArrayAttr>:$arg_attrs,
+    OptionalAttr<DictArrayAttr>:$res_attrs
+  );
   let regions = (region AnyRegion: $body);
 
   let extraClassDeclaration = [{
-    /// Returns the type of this function.
-    FunctionType getFunctionType() {
-      return getFunctionTypeAttr().getValue().cast<FunctionType>();
-    }
-
     /// Returns the argument types of this function.
     ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 

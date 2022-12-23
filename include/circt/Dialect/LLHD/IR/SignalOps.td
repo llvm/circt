@@ -278,9 +278,9 @@ def LLHD_RegOp : LLHD_Op<"reg", [
   let extraClassDeclaration = [{
     static StringRef getModeAttrName() { return "modes"; }
     static RegMode getRegModeByName(StringRef name) {
-      llvm::Optional<RegMode> optional =  symbolizeRegMode(name);
+      std::optional<RegMode> optional =  symbolizeRegMode(name);
       assert(optional && "Invalid RegMode string.");
-      return optional.value();
+      return *optional;
     }
 
     bool hasGate(unsigned index) {

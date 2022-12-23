@@ -168,7 +168,8 @@ static ParseResult parseHWElementType(Type &result, AsmParser &p) {
 
   if (typeString.startswith("array<") || typeString.startswith("inout<") ||
       typeString.startswith("uarray<") || typeString.startswith("struct<") ||
-      typeString.startswith("typealias<") || typeString.startswith("int<")) {
+      typeString.startswith("typealias<") || typeString.startswith("int<") ||
+      typeString.startswith("enum<")) {
     llvm::StringRef mnemonic;
     auto parseResult = generatedTypeParser(p, &mnemonic, result);
     return parseResult.has_value() ? success() : failure();
@@ -275,7 +276,7 @@ Type StructType::getFieldType(mlir::StringRef fieldName) {
   return Type();
 }
 
-Optional<unsigned> StructType::getFieldIndex(mlir::StringRef fieldName) {
+std::optional<unsigned> StructType::getFieldIndex(mlir::StringRef fieldName) {
   ArrayRef<hw::StructType::FieldInfo> elems = getElements();
   for (size_t idx = 0, numElems = elems.size(); idx < numElems; ++idx)
     if (elems[idx].name == fieldName)
@@ -283,7 +284,7 @@ Optional<unsigned> StructType::getFieldIndex(mlir::StringRef fieldName) {
   return {};
 }
 
-Optional<unsigned> StructType::getFieldIndex(mlir::StringAttr fieldName) {
+std::optional<unsigned> StructType::getFieldIndex(mlir::StringAttr fieldName) {
   ArrayRef<hw::StructType::FieldInfo> elems = getElements();
   for (size_t idx = 0, numElems = elems.size(); idx < numElems; ++idx)
     if (elems[idx].name == fieldName)
@@ -348,7 +349,7 @@ bool EnumType::contains(mlir::StringRef field) {
   return indexOf(field).has_value();
 }
 
-Optional<size_t> EnumType::indexOf(mlir::StringRef field) {
+std::optional<size_t> EnumType::indexOf(mlir::StringRef field) {
   for (auto it : llvm::enumerate(getFields()))
     if (it.value().cast<StringAttr>().getValue() == field)
       return it.index();

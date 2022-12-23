@@ -86,3 +86,56 @@ firrtl.circuit "InAndOutOfDUT" {
     firrtl.instance d @DUT()
   }
 }
+
+// -----
+// Not an extmodule.
+
+firrtl.circuit "NotExtModule" {
+  // expected-error @below {{clock gate module must be an extmodule}}
+  firrtl.module @EICG_wrapper_mod(in %in: !firrtl.clock, in %test_en: !firrtl.clock, in %en: !firrtl.uint<1>, out %out: !firrtl.clock) attributes {defname = "EICG_wrapper"} {}
+
+  firrtl.module @NotExtModule() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    %eicg_in, %eicg_test_en, %eicg_en, %eicg_out = firrtl.instance eicg @EICG_wrapper_mod(in in: !firrtl.clock, in test_en: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    %test_en = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]} : !firrtl.uint<1>
+  }
+}
+
+// -----
+// Type mismatch between port and signal, must be UInt<1>.
+
+firrtl.circuit "WrongType" {
+  // expected-error @below {{clock gate module must have second port with type UInt<1>}}
+  // expected-note @below {{Second port ("foo") has type '!firrtl.clock', expected '!firrtl.uint<1>'}}
+  firrtl.extmodule @EICG_wrapper_type(in in: !firrtl.clock, in foo: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+  
+  firrtl.module @WrongType() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    %eicg_in, %eicg_test_en, %eicg_en, %eicg_out = firrtl.instance eicg @EICG_wrapper_type(in in: !firrtl.clock, in foo: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    %test_en = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]} : !firrtl.uint<1>
+  }
+}
+
+// -----
+// Port is missing.
+
+firrtl.circuit "MissingPort" {
+  // expected-error @below {{clock gate module must have at least two ports}}
+  firrtl.extmodule @EICG_wrapper_noports() attributes {defname = "EICG_wrapper"}
+
+  firrtl.module @MissingPort() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    firrtl.instance eicg @EICG_wrapper_noports()
+    %test_en = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]} : !firrtl.uint<1>
+  }
+}
+
+// -----
+// Port direction is wrong.
+
+firrtl.circuit "WrongDirection" {
+  // expected-error @below {{clock gate module must have second port with input direction}}
+  firrtl.extmodule @EICG_wrapper_direction(in in: !firrtl.clock, out bar: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+  
+  firrtl.module @WrongDirection() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    %eicg_in, %eicg_test_en, %eicg_en, %eicg_out = firrtl.instance eicg @EICG_wrapper_direction(in in: !firrtl.clock, out bar: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    %test_en = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]} : !firrtl.uint<1>
+  }
+}

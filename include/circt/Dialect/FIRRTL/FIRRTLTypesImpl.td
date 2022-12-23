@@ -10,8 +10,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD
+#define CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD
+
+include "FIRRTLDialect.td"
+include "circt/Dialect/HW/HWTypeInterfaces.td"
+
 // Base class for other typedefs. Provides dialact-specific defaults.
-class FIRRTLImplType<string name, list<Trait> traits = []> 
+class FIRRTLImplType<string name, list<Trait> traits = []>
   : TypeDef<FIRRTLDialect, name, traits, "::circt::firrtl::FIRRTLBaseType"> {}
 
 def WidthQualifiedTrait : NativeTypeTrait<"WidthQualifiedTrait"> {
@@ -21,19 +27,20 @@ def WidthQualifiedTrait : NativeTypeTrait<"WidthQualifiedTrait"> {
 //===----------------------------------------------------------------------===//
 // Type declarations
 //===----------------------------------------------------------------------===//
-def ClockTypeImpl : FIRRTLImplType<"Clock"> {
+def ClockTypeImpl : FIRRTLImplType<"Clock", [FieldIDTypeInterface]> {
   let summary = "Clock signal";
 }
 
-def ResetTypeImpl : FIRRTLImplType<"Reset"> {
+def ResetTypeImpl : FIRRTLImplType<"Reset", [FieldIDTypeInterface]> {
   let summary = "Reset Signal";
 }
 
-def AsyncResetTypeImpl : FIRRTLImplType<"AsyncReset"> {
+def AsyncResetTypeImpl : FIRRTLImplType<"AsyncReset", [FieldIDTypeInterface]> {
   let summary = "AsyncReset signal";
 }
 
-def AnalogTypeImpl : FIRRTLImplType<"Analog", [WidthQualifiedTrait]> {
+def AnalogTypeImpl : FIRRTLImplType<"Analog",
+  [WidthQualifiedTrait, FieldIDTypeInterface]> {
   let summary = "Analog signal";
   let parameters = (ins "int32_t":$baseWidth);
   let builders = [
@@ -42,3 +49,5 @@ def AnalogTypeImpl : FIRRTLImplType<"Analog", [WidthQualifiedTrait]> {
   ];
 
 }
+
+#endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD

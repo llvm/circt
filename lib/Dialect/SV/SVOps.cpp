@@ -45,8 +45,8 @@ bool sv::is2StateExpression(Value v) {
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
   return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
-             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, MacroRefExprOp,
-             MacroRefExprSEOp>(op);
+             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, ConstantStrOp,
+             MacroRefExprOp, MacroRefExprSEOp>(op);
 }
 
 LogicalResult sv::verifyInProceduralRegion(Operation *op) {
@@ -515,7 +515,7 @@ AlwaysOp::Condition AlwaysOp::getCondition(size_t idx) {
 }
 
 void AlwaysOp::build(OpBuilder &builder, OperationState &result,
-                     ArrayRef<EventControl> events, ArrayRef<Value> clocks,
+                     ArrayRef<sv::EventControl> events, ArrayRef<Value> clocks,
                      std::function<void()> bodyCtor) {
   assert(events.size() == clocks.size() &&
          "mismatch between event and clock list");
@@ -554,7 +554,7 @@ static ParseResult parseEventList(
   StringRef keyword;
   if (!p.parseOptionalKeyword(&keyword)) {
     while (1) {
-      auto kind = symbolizeEventControl(keyword);
+      auto kind = sv::symbolizeEventControl(keyword);
       if (!kind.has_value())
         return p.emitError(loc, "expected 'posedge', 'negedge', or 'edge'");
       auto eventEnum = static_cast<int32_t>(*kind);
@@ -1550,7 +1550,7 @@ static Type getElementTypeOfWidth(Type type, int32_t width) {
 }
 
 LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::RegionRange regions,
     SmallVectorImpl<Type> &results) {
   auto width = attrs.get("width");
@@ -1603,7 +1603,7 @@ OpFoldResult IndexedPartSelectInOutOp::fold(ArrayRef<Attribute> constants) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult IndexedPartSelectOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::RegionRange regions,
     SmallVectorImpl<Type> &results) {
   auto width = attrs.get("width");
@@ -1633,7 +1633,7 @@ LogicalResult IndexedPartSelectOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult StructFieldInOutOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::RegionRange regions,
     SmallVectorImpl<Type> &results) {
   auto field = attrs.get("field");

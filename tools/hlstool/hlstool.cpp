@@ -48,14 +48,12 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/LoweringOptionsParser.h"
 #include "circt/Support/Version.h"
 #include "circt/Transforms/Passes.h"
-
-#include "circt/InitAllDialects.h"
-#include "circt/InitAllPasses.h"
 
 #include <iostream>
 
@@ -304,9 +302,9 @@ static void printHLSFlowDynamic() {
   llvm::errs() << HLSFlowDynamicIRLevel::Sv << ": 'hw/comb/sv' IR\n";
 }
 
-static LogicalResult
-doHLSFlowDynamic(PassManager &pm, ModuleOp module,
-                 Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+static LogicalResult doHLSFlowDynamic(
+    PassManager &pm, ModuleOp module,
+    std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
 
   if (irInputLevel < 0)
     irInputLevel = HLSFlowDynamicIRLevel::High; // Default to highest level
@@ -380,7 +378,7 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
   if (outputFormat == OutputVerilog) {
     if (loweringOptions.getNumOccurrences())
       loweringOptions.setAsAttribute(module);
-    pm.addPass(createExportVerilogPass(outputFile.value()->os()));
+    pm.addPass(createExportVerilogPass((*outputFile)->os()));
   }
 
   // Go execute!
@@ -388,15 +386,15 @@ doHLSFlowDynamic(PassManager &pm, ModuleOp module,
     return failure();
 
   if (outputFormat == OutputIR)
-    module->print(outputFile.value()->os());
+    module->print((*outputFile)->os());
 
   return success();
 }
 
 /// Process a single buffer of the input.
-static LogicalResult
-processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
-              Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+static LogicalResult processBuffer(
+    MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
+    std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   // Parse the input.
   mlir::OwningOpRef<mlir::ModuleOp> module;
   llvm::sys::TimePoint<> parseStartTime;
@@ -440,10 +438,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 /// Process a single split of the input. This allocates a source manager and
 /// creates a regular or verifying diagnostic handler, depending on whether
 /// the user set the verifyDiagnostics option.
-static LogicalResult
-processInputSplit(MLIRContext &context, TimingScope &ts,
-                  std::unique_ptr<llvm::MemoryBuffer> buffer,
-                  Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+static LogicalResult processInputSplit(
+    MLIRContext &context, TimingScope &ts,
+    std::unique_ptr<llvm::MemoryBuffer> buffer,
+    std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(buffer), llvm::SMLoc());
   if (!verifyDiagnostics) {
@@ -462,7 +460,7 @@ processInputSplit(MLIRContext &context, TimingScope &ts,
 static LogicalResult
 processInput(MLIRContext &context, TimingScope &ts,
              std::unique_ptr<llvm::MemoryBuffer> input,
-             Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+             std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   if (!splitInputFile)
     return processInputSplit(context, ts, std::move(input), outputFile);
 
@@ -491,9 +489,9 @@ static LogicalResult executeHlstool(MLIRContext &context) {
     return failure();
   }
 
-  Optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
+  std::optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
   outputFile.emplace(openOutputFile(outputFilename, &errorMessage));
-  if (!outputFile.value()) {
+  if (!*outputFile) {
     llvm::errs() << errorMessage << "\n";
     return failure();
   }
@@ -504,7 +502,7 @@ static LogicalResult executeHlstool(MLIRContext &context) {
 
   // If the result succeeded and we're emitting a file, close it.
   if (outputFile.has_value())
-    outputFile.value()->keep();
+    (*outputFile)->keep();
 
   return success();
 }

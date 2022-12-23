@@ -263,11 +263,10 @@ LogicalResult llhd::PtrArraySliceOp::canonicalize(llhd::PtrArraySliceOp op,
 //===----------------------------------------------------------------------===//
 
 template <class SigPtrType>
-static LogicalResult
-inferReturnTypesOfStructExtractOp(MLIRContext *context, Optional<Location> loc,
-                                  ValueRange operands, DictionaryAttr attrs,
-                                  mlir::RegionRange regions,
-                                  SmallVectorImpl<Type> &results) {
+static LogicalResult inferReturnTypesOfStructExtractOp(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::RegionRange regions,
+    SmallVectorImpl<Type> &results) {
   Type type = operands[0]
                   .getType()
                   .cast<SigPtrType>()
@@ -288,7 +287,7 @@ inferReturnTypesOfStructExtractOp(MLIRContext *context, Optional<Location> loc,
 }
 
 LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::RegionRange regions,
     SmallVectorImpl<Type> &results) {
   return inferReturnTypesOfStructExtractOp<llhd::SigType>(
@@ -296,7 +295,7 @@ LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
 }
 
 LogicalResult llhd::PtrStructExtractOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::RegionRange regions,
     SmallVectorImpl<Type> &results) {
   return inferReturnTypesOfStructExtractOp<llhd::PtrType>(
@@ -408,9 +407,10 @@ ParseResult llhd::EntityOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
 
-  auto type = parser.getBuilder().getFunctionType(argTypes, llvm::None);
-  result.addAttribute(circt::llhd::EntityOp::getTypeAttrName(),
-                      TypeAttr::get(type));
+  auto type = parser.getBuilder().getFunctionType(argTypes, std::nullopt);
+  result.addAttribute(
+      circt::llhd::EntityOp::getFunctionTypeAttrName(result.name),
+      TypeAttr::get(type));
 
   auto &body = *result.addRegion();
   if (parser.parseRegion(body, args))
@@ -455,7 +455,7 @@ void llhd::EntityOp::print(OpAsmPrinter &printer) {
   printer.printOptionalAttrDictWithKeyword(
       (*this)->getAttrs(),
       /*elidedAttrs =*/{SymbolTable::getSymbolAttrName(),
-                        llhd::EntityOp::getTypeAttrName(), "ins"});
+                        getFunctionTypeAttrName(), "ins"});
   printer << " ";
   printer.printRegion(getBody(), false, false);
 }
@@ -654,8 +654,8 @@ ParseResult llhd::ProcOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parseProcArgumentList(parser, argTypes, argNames))
     return failure();
 
-  auto type = builder.getFunctionType(argTypes, llvm::None);
-  result.addAttribute(circt::llhd::ProcOp::getTypeAttrName(),
+  auto type = builder.getFunctionType(argTypes, std::nullopt);
+  result.addAttribute(circt::llhd::ProcOp::getFunctionTypeAttrName(result.name),
                       TypeAttr::get(type));
 
   auto *body = result.addRegion();
@@ -908,7 +908,7 @@ ParseResult llhd::RegOp::parse(OpAsmParser &parser, OperationState &result) {
 void llhd::RegOp::print(OpAsmPrinter &printer) {
   printer << " " << getSignal();
   for (size_t i = 0, e = getValues().size(); i < e; ++i) {
-    Optional<llhd::RegMode> mode = llhd::symbolizeRegMode(
+    std::optional<llhd::RegMode> mode = llhd::symbolizeRegMode(
         getModes().getValue()[i].cast<IntegerAttr>().getInt());
     if (!mode) {
       emitError("invalid RegMode");

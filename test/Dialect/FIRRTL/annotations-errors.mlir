@@ -198,3 +198,44 @@ firrtl.circuit "DontTouchOnNonReferenceTarget" attributes {
     firrtl.instance submodule @Submodule()
   }
 }
+
+// -----
+
+// expected-error @+3 {{unknown/unimplemented DataTapKey class 'sifive.enterprise.grandcentral.DeletedDataTapKey'}}
+// expected-note  @+2 {{full Annotation is reproduced here}}
+// expected-error @+1 {{Unable to apply annotation}}
+firrtl.circuit "GCTDataTapUnsupportedDeleted" attributes {rawAnnotations = [{
+  blackBox = "~GCTDataTap|DataTap",
+  class = "sifive.enterprise.grandcentral.DataTapsAnnotation",
+  keys = [
+    {
+      class = "sifive.enterprise.grandcentral.DeletedDataTapKey",
+      sink = "~GCTDataTap|GCTDataTap>tap_1"
+    }
+  ]
+}]} {
+  firrtl.module @GCTDataTapUnsupportedDeleted() {
+    %tap = firrtl.wire : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// expected-error @+3 {{unknown/unimplemented DataTapKey class 'sifive.enterprise.grandcentral.LiteralDataTapKey'}}
+// expected-note  @+2 {{full Annotation is reproduced here}}
+// expected-error @+1 {{Unable to apply annotation}}
+firrtl.circuit "GCTDataTapUnsupportedLiteral" attributes {rawAnnotations = [{
+  blackBox = "~GCTDataTap|DataTap",
+  class = "sifive.enterprise.grandcentral.DataTapsAnnotation",
+  keys = [
+    {
+      class = "sifive.enterprise.grandcentral.LiteralDataTapKey",
+      literal = "UInt<16>(\22h2a\22)",
+      sink = "~GCTDataTap|GCTDataTap>tap"
+    }
+  ]
+}]} {
+  firrtl.module @GCTDataTapUnsupportedLiteral() {
+    %tap = firrtl.wire : !firrtl.uint<1>
+  }
+}

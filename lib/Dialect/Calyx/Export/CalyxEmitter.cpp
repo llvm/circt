@@ -64,14 +64,14 @@ constexpr std::array<StringRef, 7> booleanAttributes{
     "clk", "done", "go", "reset", "generated", "precious", "toplevel",
 };
 
-static Optional<StringRef> getCalyxAttrIdentifier(NamedAttribute attr) {
+static std::optional<StringRef> getCalyxAttrIdentifier(NamedAttribute attr) {
   StringRef identifier = attr.getName().strref();
   if (identifier.contains(".")) {
     Dialect *dialect = attr.getNameDialect();
     if (dialect != nullptr && isa<CalyxDialect>(*dialect)) {
       return std::get<1>(identifier.split("."));
     }
-    return None;
+    return std::nullopt;
   }
 
   return identifier;
@@ -85,15 +85,15 @@ static bool isValidCalyxAttribute(StringRef identifier) {
 }
 
 /// Additional information about an unsupported operation.
-static Optional<StringRef> unsupportedOpInfo(Operation *op) {
-  return llvm::TypeSwitch<Operation *, Optional<StringRef>>(op)
-      .Case<ExtSILibOp>([](auto) -> Optional<StringRef> {
+static std::optional<StringRef> unsupportedOpInfo(Operation *op) {
+  return llvm::TypeSwitch<Operation *, std::optional<StringRef>>(op)
+      .Case<ExtSILibOp>([](auto) -> std::optional<StringRef> {
         static constexpr std::string_view info =
             "calyx.std_extsi is currently not available in the native Rust "
             "compiler (see github.com/cucapra/calyx/issues/1009)";
         return {info};
       })
-      .Default([](auto) { return Optional<StringRef>(); });
+      .Default([](auto) { return std::nullopt; });
 }
 
 /// A tracker to determine which libraries should be imported for a given
@@ -267,9 +267,8 @@ struct Emitter {
   //   $f.in0, $f.in1, $f.out : calyx.std_foo "f" : i32, i32, i1
   // emits:
   //   f = std_foo(1);
-  void
-  emitLibraryPrimTypedByFirstOutputPort(Operation *op,
-                                        Optional<StringRef> calyxLibName = {});
+  void emitLibraryPrimTypedByFirstOutputPort(
+      Operation *op, std::optional<StringRef> calyxLibName = {});
 
 private:
   /// Used to track which imports are required for this program.
@@ -296,12 +295,12 @@ private:
   /// given operation.
   std::string getAttribute(Operation *op, NamedAttribute attr, bool isPort) {
 
-    Optional<StringRef> identifierOpt = getCalyxAttrIdentifier(attr);
+    std::optional<StringRef> identifierOpt = getCalyxAttrIdentifier(attr);
     // Verify this is a Calyx attribute
     if (!identifierOpt.has_value())
       return "";
 
-    StringRef identifier = identifierOpt.value();
+    StringRef identifier = *identifierOpt;
     // Verify this attribute is supported for emission.
     if (!isValidCalyxAttribute(identifier))
       return "";
@@ -760,7 +759,7 @@ void Emitter::emitLibraryPrimTypedByFirstInputPort(Operation *op) {
 }
 
 void Emitter::emitLibraryPrimTypedByFirstOutputPort(
-    Operation *op, Optional<StringRef> calyxLibName) {
+    Operation *op, std::optional<StringRef> calyxLibName) {
   auto cell = cast<CellInterface>(op);
   unsigned bitWidth =
       cell.getOutputPorts()[0].getType().getIntOrFloatBitWidth();

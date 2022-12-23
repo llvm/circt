@@ -28,26 +28,26 @@ firrtl.circuit "NLARenaming" attributes {
   } {
   // An NLA that is rooted at the DUT moves to the wrapper.
   //
-  // CHECK:      firrtl.hierpath private @nla_DUTRoot [@Foo::@sub, @Sub::@a]
-  firrtl.hierpath private @nla_DUTRoot [@DUT::@sub, @Sub::@a]
+  // CHECK:      hw.hierpath private @nla_DUTRoot [@Foo::@sub, @Sub::@a]
+  hw.hierpath private @nla_DUTRoot [@DUT::@sub, @Sub::@a]
 
   // NLAs that end at the DUT or a DUT port are unmodified.
   //
-  // CHECK-NEXT: firrtl.hierpath private @[[nla_DUTLeafModule_clone:.+]] [@NLARenaming::@dut, @DUT]
-  // CHECK-NEXT: firrtl.hierpath private @nla_DUTLeafModule [@NLARenaming::@dut, @DUT::@Foo, @Foo]
-  // CHECK-NEXT: firrtl.hierpath private @nla_DUTLeafPort [@NLARenaming::@dut, @DUT::@in]
-  firrtl.hierpath private @nla_DUTLeafModule [@NLARenaming::@dut, @DUT]
-  firrtl.hierpath private @nla_DUTLeafPort [@NLARenaming::@dut, @DUT::@in]
+  // CHECK-NEXT: hw.hierpath private @[[nla_DUTLeafModule_clone:.+]] [@NLARenaming::@dut, @DUT]
+  // CHECK-NEXT: hw.hierpath private @nla_DUTLeafModule [@NLARenaming::@dut, @DUT::@Foo, @Foo]
+  // CHECK-NEXT: hw.hierpath private @nla_DUTLeafPort [@NLARenaming::@dut, @DUT::@in]
+  hw.hierpath private @nla_DUTLeafModule [@NLARenaming::@dut, @DUT]
+  hw.hierpath private @nla_DUTLeafPort [@NLARenaming::@dut, @DUT::@in]
 
   // NLAs that end inside the DUT get an extra level of hierarchy.
   //
-  // CHECK-NEXT: firrtl.hierpath private @nla_DUTLeafWire [@NLARenaming::@dut, @DUT::@[[inst_sym:.+]], @Foo::@w]
-  firrtl.hierpath private @nla_DUTLeafWire [@NLARenaming::@dut, @DUT::@w]
+  // CHECK-NEXT: hw.hierpath private @nla_DUTLeafWire [@NLARenaming::@dut, @DUT::@[[inst_sym:.+]], @Foo::@w]
+  hw.hierpath private @nla_DUTLeafWire [@NLARenaming::@dut, @DUT::@w]
 
   // An NLA that passes through the DUT gets an extra level of hierarchy.
   //
-  // CHECK-NEXT: firrtl.hierpath private @nla_DUTPassthrough [@NLARenaming::@dut, @DUT::@[[inst_sym:.+]], @Foo::@sub, @Sub]
-  firrtl.hierpath private @nla_DUTPassthrough [@NLARenaming::@dut, @DUT::@sub, @Sub]
+  // CHECK-NEXT: hw.hierpath private @nla_DUTPassthrough [@NLARenaming::@dut, @DUT::@[[inst_sym:.+]], @Foo::@sub, @Sub]
+  hw.hierpath private @nla_DUTPassthrough [@NLARenaming::@dut, @DUT::@sub, @Sub]
   firrtl.module private @Sub() attributes {annotations = [{circt.nonlocal = @nla_DUTPassthrough, class = "nla_DUTPassthrough"}]} {
     %a = firrtl.wire sym @a : !firrtl.uint<1>
   }
@@ -82,31 +82,31 @@ firrtl.circuit "NLARenamingNewNLAs" attributes {
   } {
   // An NLA that is rooted at the DUT moves to the wrapper.
   //
-  // CHECK:      firrtl.hierpath private @nla_DUTRoot [@Foo::@sub, @Sub]
-  // CHECK:      firrtl.hierpath private @nla_DUTRootRef [@Foo::@sub, @Sub::@a]
-  firrtl.hierpath private @nla_DUTRoot [@DUT::@sub, @Sub]
-  firrtl.hierpath private @nla_DUTRootRef [@DUT::@sub, @Sub::@a]
+  // CHECK:      hw.hierpath private @nla_DUTRoot [@Foo::@sub, @Sub]
+  // CHECK:      hw.hierpath private @nla_DUTRootRef [@Foo::@sub, @Sub::@a]
+  hw.hierpath private @nla_DUTRoot [@DUT::@sub, @Sub]
+  hw.hierpath private @nla_DUTRootRef [@DUT::@sub, @Sub::@a]
 
   // NLAs that end at the DUT or a DUT port are unmodified.  These should not be
   // cloned unless they have users.
   //
-  // CHECK-NEXT: firrtl.hierpath private @nla_DUTLeafModule[[_:.+]] [@NLARenamingNewNLAs::@dut, @DUT]
-  // CHECK-NEXT: firrtl.hierpath private @nla_DUTLeafModule [@NLARenamingNewNLAs::@dut, @DUT::@Foo, @Foo]
-  // CHECK-NEXT: firrtl.hierpath private @[[nla_DUTLeafPort_clone:.+]] [@NLARenamingNewNLAs::@dut, @DUT]
-  // CHECK-NEXT: firrtl.hierpath private @nla_DUTLeafPort [@NLARenamingNewNLAs::@dut, @DUT::@Foo, @Foo]
-  firrtl.hierpath private @nla_DUTLeafModule [@NLARenamingNewNLAs::@dut, @DUT]
-  firrtl.hierpath private @nla_DUTLeafPort [@NLARenamingNewNLAs::@dut, @DUT]
+  // CHECK-NEXT: hw.hierpath private @nla_DUTLeafModule[[_:.+]] [@NLARenamingNewNLAs::@dut, @DUT]
+  // CHECK-NEXT: hw.hierpath private @nla_DUTLeafModule [@NLARenamingNewNLAs::@dut, @DUT::@Foo, @Foo]
+  // CHECK-NEXT: hw.hierpath private @[[nla_DUTLeafPort_clone:.+]] [@NLARenamingNewNLAs::@dut, @DUT]
+  // CHECK-NEXT: hw.hierpath private @nla_DUTLeafPort [@NLARenamingNewNLAs::@dut, @DUT::@Foo, @Foo]
+  hw.hierpath private @nla_DUTLeafModule [@NLARenamingNewNLAs::@dut, @DUT]
+  hw.hierpath private @nla_DUTLeafPort [@NLARenamingNewNLAs::@dut, @DUT]
 
   // NLAs that end at the DUT are moved to a cloned path.  NLAs that end inside
   // the DUT keep the old path symbol which gets the added hierarchy.
   //
-  // CHECK-NEXT: firrtl.hierpath private @nla_DUTLeafWire [@NLARenamingNewNLAs::@dut, @DUT::@[[inst_sym:.+]], @Foo]
-  firrtl.hierpath private @nla_DUTLeafWire [@NLARenamingNewNLAs::@dut, @DUT]
+  // CHECK-NEXT: hw.hierpath private @nla_DUTLeafWire [@NLARenamingNewNLAs::@dut, @DUT::@[[inst_sym:.+]], @Foo]
+  hw.hierpath private @nla_DUTLeafWire [@NLARenamingNewNLAs::@dut, @DUT]
 
   // An NLA that passes through the DUT gets an extra level of hierarchy.
   //
-  // CHECK-NEXT: firrtl.hierpath private @nla_DUTPassthrough [@NLARenamingNewNLAs::@dut, @DUT::@[[inst_sym]], @Foo::@sub, @Sub]
-  firrtl.hierpath private @nla_DUTPassthrough [@NLARenamingNewNLAs::@dut, @DUT::@sub, @Sub]
+  // CHECK-NEXT: hw.hierpath private @nla_DUTPassthrough [@NLARenamingNewNLAs::@dut, @DUT::@[[inst_sym]], @Foo::@sub, @Sub]
+  hw.hierpath private @nla_DUTPassthrough [@NLARenamingNewNLAs::@dut, @DUT::@sub, @Sub]
   firrtl.module private @Sub() attributes {annotations = [{circt.nonlocal = @nla_DUTPassthrough, class = "nla_DUTPassthrough"}]} {
     %a = firrtl.wire sym @a : !firrtl.uint<1>
   }

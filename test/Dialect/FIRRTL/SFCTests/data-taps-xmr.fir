@@ -51,59 +51,37 @@ circuit Top : %[[
   }
 ]]
   module InternalPathChild :
-    output io : { flip in : UInt<8>, out : UInt<8>}
 
-    node sum = tail(add(io.in, UInt<1>(1)), 1)
-
-    io.out <= sum
+    skip
 
   extmodule BlackBox :
-    input in : UInt<1>
-    output out : UInt<1>
+
     defname = BlackBox
 
   module Child :
-    output io : { flip in : UInt<1>, out : UInt<1>}
 
     inst localparam of BlackBox
-    localparam.out is invalid
-    localparam.in is invalid
-    localparam.in <= io.in
-    io.out <= localparam.out
+    localparam is invalid
+
     wire tap : UInt<1>
     tap is invalid
 
   module ChildWrapper :
-    output io : { flip in : UInt<1>, out : UInt<1>}
 
     inst signed of Child
-    signed.io.in <= io.in
-    io.out <= signed.io.out
 
   module Bar :
-    input in : UInt<1>
-    output out : UInt<1>
+
     wire inv : UInt<1>
-    inv <= not(in)
-    out <= inv
+    inv is invalid
 
   module Foo :
-    input in : UInt<1>
-    output out : UInt<1>
 
     inst b of Bar
-    b.in <= in
-    out <= b.out
 
   module Top:
-    input in : UInt<1>
-    output out : UInt<1>
-    output io : { flip in : UInt<1>, out : UInt<1>}
-    output io2 : { flip in : UInt<8>, out : UInt<8>}
 
     inst foo of Foo
-    foo.in <= in
-    out <= foo.out
 
     wire tap : UInt<1>
     tap is invalid
@@ -115,23 +93,27 @@ circuit Top : %[[
     tap3 is invalid
 
     inst unsigned of ChildWrapper
-    node _child_io_in_T = and(io.in, in)
-    unsigned.io.in <= _child_io_in_T
-    node _io_out_T = and(unsigned.io.out, out)
-    io.out <= _io_out_T
 
     inst int of InternalPathChild
-    io2 <= int.io
 
 ; CHECK-LABEL: module Child(
-; CHECK:       wire tap
-; CHECK-NEXT:  assign tap = Top.int_0.io_out;
-; CHECK:       BlackBox localparam_0 (
+; CHECK-NOT:   endmodule
+; CHECK:         input [[Child_boredPort:[a-zA-Z0-9_]+]]
+; CHECK:         wire tap = [[Child_boredPort]];
+; CHECK;       endmodule
 
-; CHECK: module Top(
-; CHECK-NOT: module
-; CHECK:   tap = Top.foo.b.inv;
-; CHECK:   assign tap2 = Top.unsigned_0.signed_0.localparam_0.random.something;
-; CHECK:   assign tap3 = Top.unsigned_0.signed_0.localparam_0.random.something_else;
-; CHECK:   InternalPathChild int_0 (
-; CHECK: endmodule
+; CHECK-LABEL: module ChildWrapper(
+; CHECK-NOT:   endmodule
+; CHECK:         input [[ChildWrapper_boredPort:[a-zA-Z0-9_]+]]
+; CHECK:         Child signed_0 (
+; CHECK-NEXT:      .[[Child_boredPort]] ([[ChildWrapper_boredPort]])
+; CHECK:       endmodule
+
+; CHECK-LABEL: module Top(
+; CHECK-NOT:   endmodule
+; CHECK:         assign tap = Top.foo.b.inv;
+; CHECK-NEXT:    assign tap2 = Top.unsigned_0.signed_0.localparam_0.random.something;
+; CHECK-NEXT:    assign tap3 = Top.unsigned_0.signed_0.localparam_0.random.something_else;
+; CHECK:         ChildWrapper unsigned_0 (
+; CHECK-NEXT:      .[[ChildWrapper_boredPort]] (Top.int_0.io_out)
+; CHECK:       endmodule

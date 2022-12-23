@@ -37,6 +37,28 @@ using namespace circt;
 using namespace firrtl;
 
 //===----------------------------------------------------------------------===//
+// Helpers
+//===----------------------------------------------------------------------===//
+
+static void diagnoseUninferredType(InFlightDiagnostic &diag, Type t,
+                                   Twine str) {
+  auto basetype = dyn_cast<FIRRTLBaseType>(t);
+  if (!basetype)
+    return;
+  if (!basetype.hasUninferredWidth())
+    return;
+
+  if (basetype.isGround())
+    diag.attachNote() << "Field: \"" << str << "\"";
+  else if (auto vecType = dyn_cast<FVectorType>(basetype))
+    diagnoseUninferredType(diag, vecType.getElementType(), str + "[]");
+  else if (auto bundleType = dyn_cast<BundleType>(basetype))
+    for (auto &elem : bundleType.getElements())
+      diagnoseUninferredType(diag, elem.type, str + "." + elem.name.getValue());
+  return;
+}
+
+//===----------------------------------------------------------------------===//
 // Constraint Expressions
 //===----------------------------------------------------------------------===//
 
@@ -70,7 +92,7 @@ namespace {
 /// An expression on the right-hand side of a constraint.
 struct Expr {
   enum class Kind { EXPR_KINDS };
-  llvm::Optional<int32_t> solution = {};
+  std::optional<int32_t> solution;
   Kind kind;
 
   /// Print a human-readable representation of this expr.
@@ -157,12 +179,12 @@ struct IdExpr : public ExprBase<IdExpr, Expr::Kind::Id> {
 /// A known constant value.
 struct KnownExpr : public ExprBase<KnownExpr, Expr::Kind::Known> {
   KnownExpr(int32_t value) : ExprBase() { solution = value; }
-  void print(llvm::raw_ostream &os) const { os << solution.value(); }
+  void print(llvm::raw_ostream &os) const { os << *solution; }
   bool operator==(const KnownExpr &other) const {
-    return solution.value() == other.solution.value();
+    return *solution == *other.solution;
   }
   llvm::hash_code hash_value() const {
-    return llvm::hash_combine(Expr::hash_value(), solution.value());
+    return llvm::hash_combine(Expr::hash_value(), *solution);
   }
 };
 
@@ -500,7 +522,7 @@ struct LinIneq {
 
     // Among those terms that have a maximum scaling factor, determine the
     // largest bias value.
-    Optional<int32_t> maxBias = llvm::None;
+    std::optional<int32_t> maxBias;
     if (enable1 && scale1 == maxScale)
       maxBias = bias1;
     if (enable2 && scale2 == maxScale && (!maxBias || bias2 > *maxBias))
@@ -615,7 +637,7 @@ public:
   using ContextInfo = DenseMap<Expr *, llvm::SmallSetVector<FieldRef, 1>>;
   const ContextInfo &getContextInfo() const { return info; }
   void setCurrentContextInfo(FieldRef fieldRef) { currentInfo = fieldRef; }
-  void setCurrentLocation(Optional<Location> loc) { currentLoc = loc; }
+  void setCurrentLocation(std::optional<Location> loc) { currentLoc = loc; }
 
 private:
   // Allocator for constraint expressions.
@@ -648,7 +670,7 @@ private:
   ContextInfo info;
   FieldRef currentInfo = {};
   DenseMap<Expr *, llvm::SmallSetVector<Location, 1>> locs;
-  Optional<Location> currentLoc = {};
+  std::optional<Location> currentLoc;
 
   // Forbid copyign or moving the solver, which would invalidate the refs to
   // allocator held by the allocators.
@@ -783,7 +805,7 @@ LinIneq ConstraintSolver::checkCycles(VarExpr *var, Expr *expr,
   return ineq;
 }
 
-using ExprSolution = std::pair<Optional<int32_t>, bool>;
+using ExprSolution = std::pair<std::optional<int32_t>, bool>;
 
 static ExprSolution
 computeUnary(ExprSolution arg, llvm::function_ref<int32_t(int32_t)> operation) {
@@ -795,7 +817,7 @@ computeUnary(ExprSolution arg, llvm::function_ref<int32_t(int32_t)> operation) {
 static ExprSolution
 computeBinary(ExprSolution lhs, ExprSolution rhs,
               llvm::function_ref<int32_t(int32_t, int32_t)> operation) {
-  auto result = ExprSolution{llvm::None, lhs.second || rhs.second};
+  auto result = ExprSolution{std::nullopt, lhs.second || rhs.second};
   if (lhs.first && rhs.first)
     result.first = operation(*lhs.first, *rhs.first);
   else if (lhs.first)
@@ -836,12 +858,12 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
           .Case<VarExpr>([&](auto *expr) {
             // Unconstrained variables produce no solution.
             if (!expr->constraint)
-              return ExprSolution{llvm::None, false};
+              return ExprSolution{std::nullopt, false};
             // Return no solution for recursions in the variables. This is sane
             // and will cause the expression to be ignored when computing the
             // parent, e.g. `a >= max(a, 1)` will become just `a >= 1`.
             if (!seenVars.insert(expr).second)
-              return ExprSolution{llvm::None, true};
+              return ExprSolution{std::nullopt, true};
             auto solution = solveExpr(expr->constraint, seenVars, indent + 1);
             seenVars.erase(expr);
             // Constrain variables >= 0.
@@ -877,7 +899,7 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
             });
           })
           .Default([](auto) {
-            return ExprSolution{llvm::None, false};
+            return ExprSolution{std::nullopt, false};
           });
 
   // Memoize the result.
@@ -1035,8 +1057,7 @@ bool ConstraintSolver::emitUninferredWidthError(VarExpr *var) {
   }
 
   // Actually print what the user can refer to.
-  bool rootKnown;
-  auto fieldName = getFieldName(fieldRef, rootKnown);
+  auto [fieldName, rootKnown] = getFieldName(fieldRef);
   if (!fieldName.empty()) {
     if (!rootKnown)
       diag << " field";
@@ -1456,8 +1477,11 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
           auto fml = cast<FModuleLike>(&*refdModule);
           auto ports = fml.getPorts();
           for (auto &port : ports)
-            if (cast<FIRRTLBaseType>(port.type).hasUninferredWidth())
+            if (cast<FIRRTLBaseType>(port.type).hasUninferredWidth()) {
               diag.attachNote(op.getLoc()) << "Port: " << port.name;
+              if (!cast<FIRRTLBaseType>(port.type).isGround())
+                diagnoseUninferredType(diag, port.type, port.name.getValue());
+            }
 
           diag.attachNote(op.getLoc())
               << "Only non-extern FIRRTL modules may contain unspecified "
@@ -1491,6 +1515,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // and "wdata" fields in the bundle corresponding to a memory port.
         auto dataFieldIndices = [](MemOp::PortKind kind) -> ArrayRef<unsigned> {
           static const unsigned indices[] = {3, 5};
+          static const unsigned debug[] = {0};
           switch (kind) {
           case MemOp::PortKind::Read:
           case MemOp::PortKind::Write:
@@ -1498,7 +1523,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
           case MemOp::PortKind::ReadWrite:
             return ArrayRef<unsigned>(indices); // {3, 5}
           case MemOp::PortKind::Debug:
-            return ArrayRef<unsigned>({0});
+            return ArrayRef<unsigned>(debug);
           }
           llvm_unreachable("Imposible PortKind");
         };
@@ -1706,8 +1731,9 @@ void InferenceMapping::unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type) {
       // Leaf element, unify the fields!
       FieldRef lhsFieldRef(lhs.getValue(), lhs.getFieldID() + fieldID);
       FieldRef rhsFieldRef(rhs.getValue(), rhs.getFieldID() + fieldID);
-      LLVM_DEBUG(llvm::dbgs() << "Unify " << getFieldName(lhsFieldRef) << " = "
-                              << getFieldName(rhsFieldRef) << "\n");
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Unify " << getFieldName(lhsFieldRef).first << " = "
+                 << getFieldName(rhsFieldRef).first << "\n");
       // Abandon variables becoming unconstrainable by the unification.
       if (auto *var = dyn_cast_or_null<VarExpr>(getExprOrNull(lhsFieldRef)))
         solver.addGeqConstraint(var, solver.known(0));
@@ -1764,7 +1790,7 @@ void InferenceMapping::setExpr(FieldRef fieldRef, Expr *expr) {
   LLVM_DEBUG({
     llvm::dbgs() << "Expr " << *expr << " for " << fieldRef.getValue();
     if (fieldRef.getFieldID())
-      llvm::dbgs() << " '" << getFieldName(fieldRef) << "'";
+      llvm::dbgs() << " '" << getFieldName(fieldRef).first << "'";
     llvm::dbgs() << "\n";
   });
   opExprs[fieldRef] = expr;

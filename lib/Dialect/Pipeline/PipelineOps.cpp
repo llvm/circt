@@ -268,7 +268,7 @@ LogicalResult PipelineWhileOp::verify() {
 
 void PipelineWhileOp::build(OpBuilder &builder, OperationState &state,
                             TypeRange resultTypes, IntegerAttr ii,
-                            Optional<IntegerAttr> tripCount,
+                            std::optional<IntegerAttr> tripCount,
                             ValueRange iterArgs) {
   OpBuilder::InsertionGuard g(builder);
 

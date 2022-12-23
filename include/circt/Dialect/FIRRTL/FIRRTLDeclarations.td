@@ -10,9 +10,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
-                         ["getAsmResultNames"]>;
+#ifndef CIRCT_DIALECT_FIRRTL_FIRRTLDECLARATIONS_TD
+#define CIRCT_DIALECT_FIRRTL_FIRRTLDECLARATIONS_TD
 
+include "FIRRTLAttributes.td"
+include "FIRRTLDialect.td"
+include "FIRRTLOpInterfaces.td"
+include "FIRRTLTypes.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Dialect/HW/HWTypes.td"
+include "mlir/IR/OpBase.td"
+include "mlir/IR/SymbolInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 
 class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
   FIRRTLOp<mnemonic, traits # [HasCustomSSAName, InnerSymbol, FNamableOp]> {
@@ -20,7 +29,7 @@ class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
 }
 
 def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firrtl::WhenOp">,
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>, 
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
     DeclareOpInterfaceMethods<HWInstanceLike, ["instanceName", "instanceNameAttr"]>]> {
   let summary = "Instantiate an instance of a module";
   let description = [{
@@ -249,6 +258,7 @@ def NodeOp : ReferableDeclOp<"node",
   }];
 
   let hasCanonicalizer = true;
+  let hasFolder = 1;
 }
 
 def RegOp : ReferableDeclOp<"reg"> {
@@ -381,3 +391,5 @@ def WireOp : ReferableDeclOp<"wire"> {
     custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
   }];
 }
+
+#endif // CIRCT_DIALECT_FIRRTL_FIRRTLDECLARATIONS_TD

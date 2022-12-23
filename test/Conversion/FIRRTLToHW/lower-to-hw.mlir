@@ -9,6 +9,43 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 "sifive.enterprise.firrtl.ExtractCoverageAnnotation", directory = "dir2",  filename = "./dir2/filename2" }, {class =
 "sifive.enterprise.firrtl.ExtractAssertionsAnnotation", directory = "dir3",  filename = "./dir3/filename3" }]}
 {
+  // Headers
+  // CHECK:      sv.ifdef  "PRINTF_COND_" {
+  // CHECK-NEXT: } else {
+  // CHECK-NEXT:   sv.ifdef  "PRINTF_COND" {
+  // CHECK-NEXT:     sv.verbatim "`define PRINTF_COND_ (`PRINTF_COND)"
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT:     sv.verbatim "`define PRINTF_COND_ 1"
+  // CHECK-NEXT:   }
+  // CHECK-NEXT: }
+  // CHECK:      sv.ifdef  "ASSERT_VERBOSE_COND_" {
+  // CHECK-NEXT: } else {
+  // CHECK-NEXT:   sv.ifdef  "ASSERT_VERBOSE_COND" {
+  // CHECK-NEXT:     sv.verbatim "`define ASSERT_VERBOSE_COND_ (`ASSERT_VERBOSE_COND)"
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT:     sv.verbatim "`define ASSERT_VERBOSE_COND_ 1"
+  // CHECK-NEXT:   }
+  // CHECK-NEXT: }
+  // CHECK:      sv.ifdef  "STOP_COND_" {
+  // CHECK-NEXT: } else {
+  // CHECK-NEXT:   sv.ifdef  "STOP_COND" {
+  // CHECK-NEXT:     sv.verbatim "`define STOP_COND_ (`STOP_COND)"
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT:     sv.verbatim "`define STOP_COND_ 1"
+  // CHECK-NEXT:   }
+  // CHECK-NEXT: }
+  // CHECK:      sv.ifdef  "INIT_RANDOM_PROLOG_" {
+  // CHECK-NEXT: } else {
+  // CHECK-NEXT:   sv.ifdef  "RANDOMIZE" {
+  // CHECK-NEXT:     sv.ifdef  "VERILATOR" {
+  // CHECK-NEXT:       sv.verbatim "`define INIT_RANDOM_PROLOG_ `INIT_RANDOM"
+  // CHECK-NEXT:     } else {
+  // CHECK-NEXT:       sv.verbatim "`define INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end"
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT:     sv.verbatim "`define INIT_RANDOM_PROLOG_"
+  // CHECK-NEXT:   }
+  // CHECK-NEXT: }
 
   //These come from MemSimple, IncompleteRead, and MemDepth1
   // CHECK-LABEL: hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "maskGran", "readUnderWrite", "writeUnderWrite", "writeClockIDs"]
@@ -208,7 +245,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %28 = firrtl.andr %18 : (!firrtl.uint<14>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: = comb.icmp bin ceq {{.*}}, %x_i1
-    %x28 = firrtl.verif_isX %28 : !firrtl.uint<1>
+    %x28 = firrtl.int.isX %28 : !firrtl.uint<1>
 
     // CHECK-NEXT: [[XOREXT:%.+]] = comb.concat %c0_i11, [[XOR]]
     // CHECK-NEXT: [[SHIFT:%.+]] = comb.shru bin [[XOREXT]], [[VAL18]] : i14
@@ -692,37 +729,37 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK: %_M_ext.R0_data, %_M_ext.RW0_rdata = hw.instance "_M_ext" @_M_combMem_0(R0_addr: %c0_i4: i4, R0_en: %true: i1, R0_clk: %clock1: i1, RW0_addr: %c0_i4_0: i4, RW0_en: %true: i1, RW0_clk: %clock1: i1, RW0_wmode: %[[v1]]: i1, RW0_wdata: %1: i42, W0_addr: %c0_i4_1: i4, W0_en: %[[v2]]: i1, W0_clk: %clock2: i1, W0_data: %indata: i42) -> (R0_data: i42, RW0_rdata: i42)
   // CHECK: hw.output %_M_ext.R0_data, %_M_ext.RW0_rdata : i42, i42
 
-      %0 = firrtl.subfield %_M_read(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>) -> !firrtl.sint<42>
+      %0 = firrtl.subfield %_M_read[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
       firrtl.connect %result, %0 : !firrtl.sint<42>, !firrtl.sint<42>
-      %1 = firrtl.subfield %_M_rw(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>) -> !firrtl.sint<42>
+      %1 = firrtl.subfield %_M_rw[rdata] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>
       firrtl.connect %result2, %1 : !firrtl.sint<42>, !firrtl.sint<42>
-      %2 = firrtl.subfield %_M_read(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>) -> !firrtl.uint<4>
+      %2 = firrtl.subfield %_M_read[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
       firrtl.connect %2, %c0_ui1 : !firrtl.uint<4>, !firrtl.uint<1>
-      %3 = firrtl.subfield %_M_read(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>) -> !firrtl.uint<1>
+      %3 = firrtl.subfield %_M_read[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
       firrtl.connect %3, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-      %4 = firrtl.subfield %_M_read(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>) -> !firrtl.clock
+      %4 = firrtl.subfield %_M_read[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
       firrtl.connect %4, %clock1 : !firrtl.clock, !firrtl.clock
 
-      %5 = firrtl.subfield %_M_rw(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>) -> !firrtl.uint<4>
+      %5 = firrtl.subfield %_M_rw[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>
       firrtl.connect %5, %c0_ui1 : !firrtl.uint<4>, !firrtl.uint<1>
-      %6 = firrtl.subfield %_M_rw(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>) -> !firrtl.uint<1>
+      %6 = firrtl.subfield %_M_rw[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>
       firrtl.connect %6, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-      %7 = firrtl.subfield %_M_rw(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>) -> !firrtl.clock
+      %7 = firrtl.subfield %_M_rw[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>
       firrtl.connect %7, %clock1 : !firrtl.clock, !firrtl.clock
-      %8 = firrtl.subfield %_M_rw(6) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>) -> !firrtl.uint<1>
+      %8 = firrtl.subfield %_M_rw[wmask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>
       firrtl.connect %8, %inpred : !firrtl.uint<1>, !firrtl.uint<1>
-      %9 = firrtl.subfield %_M_rw(4) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>) -> !firrtl.uint<1>
+      %9 = firrtl.subfield %_M_rw[wmode] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>
       firrtl.connect %9, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 
-      %10 = firrtl.subfield %_M_write(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>) -> !firrtl.uint<4>
+      %10 = firrtl.subfield %_M_write[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
       firrtl.connect %10, %c0_ui3 : !firrtl.uint<4>, !firrtl.uint<3>
-      %11 = firrtl.subfield %_M_write(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>) -> !firrtl.uint<1>
+      %11 = firrtl.subfield %_M_write[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
       firrtl.connect %11, %inpred : !firrtl.uint<1>, !firrtl.uint<1>
-      %12 = firrtl.subfield %_M_write(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>) -> !firrtl.clock
+      %12 = firrtl.subfield %_M_write[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
       firrtl.connect %12, %clock2 : !firrtl.clock, !firrtl.clock
-      %13 = firrtl.subfield %_M_write(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>) -> !firrtl.sint<42>
+      %13 = firrtl.subfield %_M_write[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
       firrtl.connect %13, %indata : !firrtl.sint<42>, !firrtl.sint<42>
-      %14 = firrtl.subfield %_M_write(4) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>) -> !firrtl.uint<1>
+      %14 = firrtl.subfield %_M_write[mask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
       firrtl.connect %14, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
@@ -741,38 +778,37 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: %_M_mask_ext.R0_data, %_M_mask_ext.RW0_rdata = hw.instance "_M_mask_ext" @_M_mask_combMem(R0_addr: %c0_i10: i10, R0_en: %true: i1, R0_clk: %clock1: i1, RW0_addr: %c0_i10: i10, RW0_en: %true: i1, RW0_clk: %clock1: i1, RW0_wmode: %true: i1, RW0_wdata: %0: i40, RW0_wmask: %c0_i4: i4, W0_addr: %c0_i10: i10, W0_en: %inpred: i1, W0_clk: %clock2: i1, W0_data: %indata: i40, W0_mask: %c0_i4: i4) -> (R0_data: i40, RW0_rdata: i40)
     // CHECK: hw.output %_M_mask_ext.R0_data, %_M_mask_ext.RW0_rdata : i40, i40
 
-      %0 = firrtl.subfield %_M_read(3) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>) -> !firrtl.sint<40>
+      %0 = firrtl.subfield %_M_read[data] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>
       firrtl.connect %result, %0 : !firrtl.sint<40>, !firrtl.sint<40>
-      %1 = firrtl.subfield %_M_rw(3) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>) -> !firrtl.sint<40>
+      %1 = firrtl.subfield %_M_rw[rdata] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>
       firrtl.connect %result2, %1 : !firrtl.sint<40>, !firrtl.sint<40>
-      %2 = firrtl.subfield %_M_read(0) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>)      -> !firrtl.uint<10>
+      %2 = firrtl.subfield %_M_read[addr] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>
       firrtl.connect %2, %c0_ui10 : !firrtl.uint<10>, !firrtl.uint<10>
-      %3 = firrtl.subfield %_M_read(1) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>) -> !firrtl.uint<1>
+      %3 = firrtl.subfield %_M_read[en] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>
       firrtl.connect %3, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-      %4 = firrtl.subfield %_M_read(2) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>) -> !firrtl.clock
+      %4 = firrtl.subfield %_M_read[clk] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>
       firrtl.connect %4, %clock1 : !firrtl.clock, !firrtl.clock
 
-      %5 = firrtl.subfield %_M_rw(0) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>,  wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>) -> !firrtl.uint<10>
+      %5 = firrtl.subfield %_M_rw[addr] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>,  wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>
       firrtl.connect %5, %c0_ui10 : !firrtl.uint<10>, !firrtl.uint<10>
-      %6 = firrtl.subfield %_M_rw(1) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>) -> !firrtl.uint<1>
+      %6 = firrtl.subfield %_M_rw[en] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>
       firrtl.connect %6, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-      %7 = firrtl.subfield %_M_rw(2) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>) -> !firrtl.clock
+      %7 = firrtl.subfield %_M_rw[clk] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>
       firrtl.connect %7, %clock1 : !firrtl.clock, !firrtl.clock
-      %8 = firrtl.subfield %_M_rw(6) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>) -> !firrtl.uint<4>
+      %8 = firrtl.subfield %_M_rw[wmask] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>
       firrtl.connect %8, %c0_ui4 : !firrtl.uint<4>, !firrtl.uint<4>
-      %9 = firrtl.subfield %_M_rw(4) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>) -> !firrtl.uint<1>
+      %9 = firrtl.subfield %_M_rw[wmode] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>
       firrtl.connect %9, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 
-      %10 = firrtl.subfield %_M_write(0) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>,
-      mask: uint<4>>) -> !firrtl.uint<10>
+      %10 = firrtl.subfield %_M_write[addr] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>
       firrtl.connect %10, %c0_ui10 : !firrtl.uint<10>, !firrtl.uint<10>
-      %11 = firrtl.subfield %_M_write(1) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>) -> !firrtl.uint<1>
+      %11 = firrtl.subfield %_M_write[en] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>
       firrtl.connect %11, %inpred : !firrtl.uint<1>, !firrtl.uint<1>
-      %12 = firrtl.subfield %_M_write(2) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>) -> !firrtl.clock
+      %12 = firrtl.subfield %_M_write[clk] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>
       firrtl.connect %12, %clock2 : !firrtl.clock, !firrtl.clock
-      %13 = firrtl.subfield %_M_write(3) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>) -> !firrtl.sint<40>
+      %13 = firrtl.subfield %_M_write[data] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>
       firrtl.connect %13, %indata : !firrtl.sint<40>, !firrtl.sint<40>
-      %14 = firrtl.subfield %_M_write(4) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>) -> !firrtl.uint<4>
+      %14 = firrtl.subfield %_M_write[mask] : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>
       firrtl.connect %14, %c0_ui4 : !firrtl.uint<4>, !firrtl.uint<4>
   }
   // CHECK-LABEL: hw.module private @IncompleteRead(
@@ -784,11 +820,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK:  %_M_ext.R0_data = hw.instance "_M_ext" @_M_combMem(R0_addr: %c0_i4: i4, R0_en: %true: i1, R0_clk: %clock1: i1) -> (R0_data: i42)
     %_M_read = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
     // Read port.
-    %6 = firrtl.subfield %_M_read(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>) -> !firrtl.uint<4>
+    %6 = firrtl.subfield %_M_read[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
     firrtl.connect %6, %c0_ui1 : !firrtl.uint<4>, !firrtl.uint<1>
-    %7 = firrtl.subfield %_M_read(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>) -> !firrtl.uint<1>
+    %7 = firrtl.subfield %_M_read[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
     firrtl.connect %7, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    %8 = firrtl.subfield %_M_read(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>) -> !firrtl.clock
+    %8 = firrtl.subfield %_M_read[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
     firrtl.connect %8, %clock1 : !firrtl.clock, !firrtl.clock
   }
 
@@ -813,7 +849,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:  }
   firrtl.module private @SimpleStruct(in %source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>,
                               out %fldout: !firrtl.uint<64>) {
-    %2 = firrtl.subfield %source (2) : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
+    %2 = firrtl.subfield %source[data] : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
     firrtl.connect %fldout, %2 : !firrtl.uint<64>, !firrtl.uint<64>
   }
 
@@ -858,7 +894,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:    hw.output
   // CHECK-NEXT:  }
   firrtl.module private @Struct0bits(in %source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<0>>) {
-    %2 = firrtl.subfield %source (2) : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<0>>) -> !firrtl.uint<0>
+    %2 = firrtl.subfield %source[data] : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<0>>
   }
 
   // CHECK-LABEL: hw.module private @MemDepth1
@@ -867,13 +903,13 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: %mem0_ext.R0_data = hw.instance "mem0_ext" @mem0_combMem(R0_addr: %addr: i1, R0_en: %en: i1, R0_clk: %clock: i1) -> (R0_data: i32)
     // CHECK: hw.output %mem0_ext.R0_data : i32
     %mem0_load0 = firrtl.mem Old {depth = 1 : i64, name = "mem0", portNames = ["load0"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
-    %0 = firrtl.subfield %mem0_load0(2) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>) -> !firrtl.clock
+    %0 = firrtl.subfield %mem0_load0[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
     firrtl.connect %0, %clock : !firrtl.clock, !firrtl.clock
-    %1 = firrtl.subfield %mem0_load0(0) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>) -> !firrtl.uint<1>
+    %1 = firrtl.subfield %mem0_load0[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
     firrtl.connect %1, %addr : !firrtl.uint<1>, !firrtl.uint<1>
-    %2 = firrtl.subfield %mem0_load0(3) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>) -> !firrtl.uint<32>
+    %2 = firrtl.subfield %mem0_load0[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
     firrtl.connect %data, %2 : !firrtl.uint<32>, !firrtl.uint<32>
-    %3 = firrtl.subfield %mem0_load0(1) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>) -> !firrtl.uint<1>
+    %3 = firrtl.subfield %mem0_load0[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
     firrtl.connect %3, %en : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
@@ -915,9 +951,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module.extern @InnerNamesExt
   // CHECK-SAME:  (
-  // CHECK-SAME:    clockIn: i1 {hw.exportPort = @extClockInSym}
+  // CHECK-SAME:    clockIn: i1 {hw.exportPort = #hw<innerSym@extClockInSym>}
   // CHECK-SAME:  ) -> (
-  // CHECK-SAME:    clockOut: i1 {hw.exportPort = @extClockOutSym}
+  // CHECK-SAME:    clockOut: i1 {hw.exportPort = #hw<innerSym@extClockOutSym>}
   // CHECK-SAME:  )
   firrtl.extmodule @InnerNamesExt(
     in clockIn: !firrtl.clock sym @extClockInSym,
@@ -939,8 +975,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     //
     // CHECK: hw.instance "aa_ext" @aa_combMem
     %memory_aa_w0, %memory_aa_w1 = firrtl.mem Undefined {depth = 16 : i64, name = "aa", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    %clk_aa_w0 = firrtl.subfield %memory_aa_w0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
-    %clk_aa_w1 = firrtl.subfield %memory_aa_w1(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
+    %clk_aa_w0 = firrtl.subfield %memory_aa_w0[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    %clk_aa_w1 = firrtl.subfield %memory_aa_w1[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
     %cwire1 = firrtl.wire : !firrtl.clock
     %cwire2 = firrtl.wire : !firrtl.clock
     firrtl.connect %cwire1, %clock1 : !firrtl.clock, !firrtl.clock
@@ -953,8 +989,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     //
     // CHECK: hw.instance "ab_ext" @ab_combMem
     %memory_ab_w0, %memory_ab_w1 = firrtl.mem Undefined {depth = 16 : i64, name = "ab", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    %clk_ab_w0 = firrtl.subfield %memory_ab_w0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
-    %clk_ab_w1 = firrtl.subfield %memory_ab_w1(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
+    %clk_ab_w0 = firrtl.subfield %memory_ab_w0[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    %clk_ab_w1 = firrtl.subfield %memory_ab_w1[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
     firrtl.connect %clk_ab_w0, %clock1 : !firrtl.clock, !firrtl.clock
     firrtl.connect %clk_ab_w1, %clock2 : !firrtl.clock, !firrtl.clock
 
@@ -965,8 +1001,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     //
     // CHECK: hw.instance "ab_node_ext" @aa_combMem
     %memory_ab_node_w0, %memory_ab_node_w1 = firrtl.mem Undefined {depth = 16 : i64, name = "ab_node", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    %clk_ab_node_w0 = firrtl.subfield %memory_ab_node_w0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
-    %clk_ab_node_w1 = firrtl.subfield %memory_ab_node_w1(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
+    %clk_ab_node_w0 = firrtl.subfield %memory_ab_node_w0[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    %clk_ab_node_w1 = firrtl.subfield %memory_ab_node_w1[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
     firrtl.connect %clk_ab_node_w0, %clock1 : !firrtl.clock, !firrtl.clock
     %tmp = firrtl.node %clock1 : !firrtl.clock
     firrtl.connect %clk_ab_node_w1, %tmp : !firrtl.clock, !firrtl.clock
@@ -1020,11 +1056,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @InnerNames
   // CHECK-SAME:  (
-  // CHECK-SAME:    %value: i42 {hw.exportPort = @portValueSym}
-  // CHECK-SAME:    %clock: i1 {hw.exportPort = @portClockSym}
-  // CHECK-SAME:    %reset: i1 {hw.exportPort = @portResetSym}
+  // CHECK-SAME:    %value: i42 {hw.exportPort = #hw<innerSym@portValueSym>}
+  // CHECK-SAME:    %clock: i1 {hw.exportPort = #hw<innerSym@portClockSym>}
+  // CHECK-SAME:    %reset: i1 {hw.exportPort = #hw<innerSym@portResetSym>}
   // CHECK-SAME:  ) -> (
-  // CHECK-SAME:    out: i1 {hw.exportPort = @portOutSym}
+  // CHECK-SAME:    out: i1 {hw.exportPort = #hw<innerSym@portOutSym>}
   // CHECK-SAME:  )
   firrtl.module private @InnerNames(
     in %value: !firrtl.uint<42> sym @portValueSym,
@@ -1161,7 +1197,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: @subfield_write1(
   firrtl.module private @subfield_write1(out %a: !firrtl.bundle<a: uint<1>>) {
-    %0 = firrtl.subfield %a(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
+    %0 = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<1>>
     %c0_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK:      %true = hw.constant true
@@ -1174,9 +1210,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: @subfield_write2(
   firrtl.module private @subfield_write2(in %in: !firrtl.uint<1>, out %sink: !firrtl.bundle<a: bundle<b: bundle<c: uint<1>>>>) {
-    %0 = firrtl.subfield %sink(0) : (!firrtl.bundle<a: bundle<b: bundle<c: uint<1>>>>) -> !firrtl.bundle<b: bundle<c: uint<1>>>
-    %1 = firrtl.subfield %0(0) : (!firrtl.bundle<b: bundle<c: uint<1>>>) -> !firrtl.bundle<c: uint<1>>
-    %2 = firrtl.subfield %1(0) : (!firrtl.bundle<c: uint<1>>) -> !firrtl.uint<1>
+    %0 = firrtl.subfield %sink[a] : !firrtl.bundle<a: bundle<b: bundle<c: uint<1>>>>
+    %1 = firrtl.subfield %0[b] : !firrtl.bundle<b: bundle<c: uint<1>>>
+    %2 = firrtl.subfield %1[c] : !firrtl.bundle<c: uint<1>>
     firrtl.connect %2, %in : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK:      %.sink.output = sv.wire
     // CHECK-NEXT: %0 = sv.read_inout %.sink.output : !hw.inout<struct<a: !hw.struct<b: !hw.struct<c: i1>>>>
@@ -1199,8 +1235,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @BundleConnection
   firrtl.module private @BundleConnection(in %source: !firrtl.bundle<a: bundle<b: uint<1>>>, out %sink: !firrtl.bundle<a: bundle<b: uint<1>>>) {
-    %0 = firrtl.subfield %sink(0) : (!firrtl.bundle<a: bundle<b: uint<1>>>) -> !firrtl.bundle<b: uint<1>>
-    %1 = firrtl.subfield %source(0) : (!firrtl.bundle<a: bundle<b: uint<1>>>) -> !firrtl.bundle<b: uint<1>>
+    %0 = firrtl.subfield %sink[a] : !firrtl.bundle<a: bundle<b: uint<1>>>
+    %1 = firrtl.subfield %source[a] : !firrtl.bundle<a: bundle<b: uint<1>>>
     firrtl.connect %0, %1 : !firrtl.bundle<b: uint<1>>, !firrtl.bundle<b: uint<1>>
     // CHECK:      %.sink.output = sv.wire
     // CHECK-NEXT: %0 = sv.read_inout %.sink.output : !hw.inout<struct<a: !hw.struct<b: i1>>>
@@ -1239,9 +1275,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module private @ForceNameSubmodule
-  firrtl.hierpath private @nla_1 [@ForceNameTop::@sym_foo, @ForceNameSubmodule]
-  firrtl.hierpath private @nla_2 [@ForceNameTop::@sym_bar, @ForceNameSubmodule]
-  firrtl.hierpath private @nla_3 [@ForceNameTop::@sym_baz, @ForceNameSubextmodule]
+  hw.hierpath private @nla_1 [@ForceNameTop::@sym_foo, @ForceNameSubmodule]
+  hw.hierpath private @nla_2 [@ForceNameTop::@sym_bar, @ForceNameSubmodule]
+  hw.hierpath private @nla_3 [@ForceNameTop::@sym_baz, @ForceNameSubextmodule]
   firrtl.module private @ForceNameSubmodule() attributes {annotations = [
     {circt.nonlocal = @nla_2,
      class = "chisel3.util.experimental.ForceNameAnnotation", name = "Bar"},
@@ -1294,15 +1330,15 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   firrtl.module private @inferUnmaskedMemory(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out %rData: !firrtl.uint<8>, in %wMask: !firrtl.uint<1>, in %wData: !firrtl.uint<8>) {
     %tbMemoryKind1_r, %tbMemoryKind1_w = firrtl.mem Undefined  {depth = 16 : i64, modName = "tbMemoryKind1_ext", name = "tbMemoryKind1", portNames = ["r", "w"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    %0 = firrtl.subfield %tbMemoryKind1_w(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.uint<8>
-    %1 = firrtl.subfield %tbMemoryKind1_w(4) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.uint<1>
-    %2 = firrtl.subfield %tbMemoryKind1_w(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.uint<4>
-    %3 = firrtl.subfield %tbMemoryKind1_w(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.uint<1>
-    %4 = firrtl.subfield %tbMemoryKind1_w(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
-    %5 = firrtl.subfield %tbMemoryKind1_r(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>) -> !firrtl.uint<8>
-    %6 = firrtl.subfield %tbMemoryKind1_r(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>) -> !firrtl.uint<4>
-    %7 = firrtl.subfield %tbMemoryKind1_r(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>) -> !firrtl.uint<1>
-    %8 = firrtl.subfield %tbMemoryKind1_r(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>) -> !firrtl.clock
+    %0 = firrtl.subfield %tbMemoryKind1_w[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    %1 = firrtl.subfield %tbMemoryKind1_w[mask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    %2 = firrtl.subfield %tbMemoryKind1_w[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    %3 = firrtl.subfield %tbMemoryKind1_w[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    %4 = firrtl.subfield %tbMemoryKind1_w[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    %5 = firrtl.subfield %tbMemoryKind1_r[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
+    %6 = firrtl.subfield %tbMemoryKind1_r[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
+    %7 = firrtl.subfield %tbMemoryKind1_r[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
+    %8 = firrtl.subfield %tbMemoryKind1_r[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
     firrtl.connect %8, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %7, %rEn : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %6, %rAddr : !firrtl.uint<4>, !firrtl.uint<4>
@@ -1414,7 +1450,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: %count = seq.firreg %0 clock %clock : !hw.struct<a: i2>
 
     firrtl.strictconnect %result, %count : !firrtl.bundle<a: uint<2>>
-    %field = firrtl.subfield %count(0) : (!firrtl.bundle<a: uint<2>>) -> !firrtl.uint<2>
+    %field = firrtl.subfield %count[a] : !firrtl.bundle<a: uint<2>>
     firrtl.strictconnect %field, %value : !firrtl.uint<2>
 
     // CHECK: %a = hw.struct_extract %count["a"] : !hw.struct<a: i2>
@@ -1434,9 +1470,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     firrtl.strictconnect %result, %count : !firrtl.bundle<a: uint<2>, b: uint<3>>
 
-    %fieldA = firrtl.subfield %count(0) : (!firrtl.bundle<a: uint<2>, b: uint<3>>) -> !firrtl.uint<2>
+    %fieldA = firrtl.subfield %count[a] : !firrtl.bundle<a: uint<2>, b: uint<3>>
     firrtl.strictconnect %fieldA, %value2 : !firrtl.uint<2>
-    %fieldB = firrtl.subfield %count(1) : (!firrtl.bundle<a: uint<2>, b: uint<3>>) -> !firrtl.uint<3>
+    %fieldB = firrtl.subfield %count[b] : !firrtl.bundle<a: uint<2>, b: uint<3>>
     firrtl.strictconnect %fieldB, %value3 : !firrtl.uint<3>
 
     // CHECK: [[AFTER_A:%.+]] = hw.struct_inject %count["a"], %value2 : !hw.struct<a: i2, b: i3>
@@ -1454,8 +1490,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: %count = seq.firreg %1 clock %clock : !hw.struct<a: !hw.struct<b: i2>>
 
     firrtl.strictconnect %result, %count : !firrtl.bundle<a: bundle<b: uint<2>>>
-    %field0 = firrtl.subfield %count(0) : (!firrtl.bundle<a: bundle<b: uint<2>>>) -> !firrtl.bundle<b: uint<2>>
-    %field1 = firrtl.subfield %field0(0) : (!firrtl.bundle<b: uint<2>>) -> !firrtl.uint<2>
+    %field0 = firrtl.subfield %count[a] : !firrtl.bundle<a: bundle<b: uint<2>>>
+    %field1 = firrtl.subfield %field0[b] : !firrtl.bundle<b: uint<2>>
     firrtl.strictconnect %field1, %value : !firrtl.uint<2>
 
     // CHECK: %a = hw.struct_extract %count["a"] : !hw.struct<a: !hw.struct<b: i2>>
@@ -1474,9 +1510,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                                  out %result: !firrtl.vector<bundle<a: vector<bundle<b: uint<2>>, 3>>, 5>) {
     %count = firrtl.reg %clock: !firrtl.vector<bundle<a: vector<bundle<b: uint<2>>, 3>>, 5>
     %field1 = firrtl.subindex %count[1] : !firrtl.vector<bundle<a: vector<bundle<b: uint<2>>, 3>>, 5>
-    %field2 = firrtl.subfield %field1(0) : (!firrtl.bundle<a: vector<bundle<b: uint<2>>, 3>>) -> !firrtl.vector<bundle<b: uint<2>>, 3>
+    %field2 = firrtl.subfield %field1[a] : !firrtl.bundle<a: vector<bundle<b: uint<2>>, 3>>
     %field3 = firrtl.subindex %field2[1] : !firrtl.vector<bundle<b: uint<2>>, 3>
-    %field4 = firrtl.subfield %field3(0) : (!firrtl.bundle<b: uint<2>>) -> !firrtl.uint<2>
+    %field4 = firrtl.subfield %field3[b] : !firrtl.bundle<b: uint<2>>
     firrtl.strictconnect %field4, %value : !firrtl.uint<2>
 
     // CHECK:           %[[VAL_10:.*]] = seq.firreg %[[VAL_11:.*]] clock %clock : !hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>
@@ -1764,7 +1800,71 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module @aggregateconstant(out %out : !firrtl.vector<uint<8>, 2>) {
     %0 = firrtl.aggregateconstant [1 : ui8, 0: ui8] : !firrtl.vector<uint<8>, 2>
     firrtl.strictconnect %out, %0 : !firrtl.vector<uint<8>, 2>
-    // CHECK:      %0 = hw.array_create %c0_i8, %c1_i8 : i8
+    // CHECK:      %0 = hw.aggregate_constant [0 : i8, 1 : i8] : !hw.array<2xi8>
     // CHECK-NEXT: hw.output %0 : !hw.array<2xi8>
   }
+
+  // CHECK-LABEL: hw.module @intrinsic
+  firrtl.module @intrinsic(in %clk: !firrtl.clock, out %io1: !firrtl.uint<1>, out %io2: !firrtl.uint<1>, out %io3: !firrtl.uint<1>, out %io4 : !firrtl.uint<5>) {
+    %1 = firrtl.int.isX %clk : !firrtl.clock
+    firrtl.strictconnect %io1, %1 : !firrtl.uint<1>
+    // CHECK: %[[x:.*]] = sv.constantX
+    // CHECK: comb.icmp bin ceq %clk, %[[x]]
+
+    %2 = firrtl.int.plusargs.test "foo"
+    firrtl.strictconnect %io2, %2 : !firrtl.uint<1>
+    // CHECK: %[[foo:.*]] = sv.constantStr "foo"
+    // CHECK: sv.system "test$plusargs"(%[[foo]])
+
+    %3, %4 = firrtl.int.plusargs.value "foo" : !firrtl.uint<5>
+    firrtl.strictconnect %io3, %3 : !firrtl.uint<1>
+    firrtl.strictconnect %io4, %4 : !firrtl.uint<5>
+    // CHECK: %[[foo:.*]] = sv.constantStr "foo"
+    // CHECK: %[[tmp:.*]] = sv.wire : !hw.inout<i5>
+    // CHECK: sv.system "value$plusargs"(%[[foo]], %[[tmp]])
+    
+  }
+
+  // An internal-only analog connection between two instances should be implemented with a wire
+  firrtl.extmodule @AnalogInModA(in a: !firrtl.analog<8>)
+  firrtl.extmodule @AnalogInModB(in a: !firrtl.analog<8>)
+  firrtl.extmodule @AnalogOutModA(out a: !firrtl.analog<8>)
+  firrtl.module @AnalogMergeTwo() {
+    %result_iIn = firrtl.instance iIn @AnalogInModA(in a: !firrtl.analog<8>)
+    %result_iOut = firrtl.instance iOut @AnalogOutModA(out a: !firrtl.analog<8>)
+    firrtl.attach %result_iIn, %result_iOut : !firrtl.analog<8>, !firrtl.analog<8>
+  }
+  // CHECK-LABEL: hw.module @AnalogMergeTwo() {
+  // CHECK:         %.a.wire = sv.wire : !hw.inout<i8>
+  // CHECK:         hw.instance "iIn" @AnalogInModA(a: %.a.wire: !hw.inout<i8>) -> ()
+  // CHECK:         hw.instance "iOut" @AnalogOutModA(a: %.a.wire: !hw.inout<i8>) -> ()
+  // CHECK-NEXT:    hw.output
+  // CHECK-NEXT:  }
+
+  // An internal-only analog connection between three instances should be implemented with a wire
+  firrtl.module @AnalogMergeThree() {
+    %result_iInA = firrtl.instance iInA @AnalogInModA(in a: !firrtl.analog<8>)
+    %result_iInB = firrtl.instance iInB @AnalogInModB(in a: !firrtl.analog<8>)
+    %result_iOut = firrtl.instance iOut @AnalogOutModA(out a: !firrtl.analog<8>)
+    firrtl.attach %result_iInA, %result_iInB, %result_iOut : !firrtl.analog<8>, !firrtl.analog<8>, !firrtl.analog<8>
+  }
+  // CHECK-LABEL: hw.module @AnalogMergeThree() {
+  // CHECK:         %.a.wire = sv.wire : !hw.inout<i8>
+  // CHECK:         hw.instance "iInA" @AnalogInModA(a: %.a.wire: !hw.inout<i8>) -> ()
+  // CHECK:         hw.instance "iInB" @AnalogInModB(a: %.a.wire: !hw.inout<i8>) -> ()
+  // CHECK:         hw.instance "iOut" @AnalogOutModA(a: %.a.wire: !hw.inout<i8>) -> ()
+  // CHECK-NEXT:    hw.output
+  // CHECK-NEXT:  }
+
+  // An analog connection between two instances and a module port should be implemented with a wire
+  firrtl.module @AnalogMergeTwoWithPort(out %a: !firrtl.analog<8>) {
+    %result_iIn = firrtl.instance iIn @AnalogInModA(in a: !firrtl.analog<8>)
+    %result_iOut = firrtl.instance iOut @AnalogOutModA(out a: !firrtl.analog<8>)
+    firrtl.attach %a, %result_iIn, %result_iOut : !firrtl.analog<8>, !firrtl.analog<8>, !firrtl.analog<8>
+  }
+  // CHECK-LABEL: hw.module @AnalogMergeTwoWithPort(%a: !hw.inout<i8>) {
+  // CHECK-NEXT:    hw.instance "iIn" @AnalogInModA(a: %a: !hw.inout<i8>) -> ()
+  // CHECK-NEXT:    hw.instance "iOut" @AnalogOutModA(a: %a: !hw.inout<i8>) -> ()
+  // CHECK-NEXT:    hw.output
+  // CHECK-NEXT:  }
 }

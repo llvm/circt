@@ -21,6 +21,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -124,7 +125,7 @@ static FlatSymbolRefAttr buildNLA(const AnnoPathValue &target,
   }
 
   // Create the NLA
-  auto nla = b.create<HierPathOp>(state.circuit.getLoc(), "nla", instAttr);
+  auto nla = b.create<hw::HierPathOp>(state.circuit.getLoc(), "nla", instAttr);
   state.symTbl.insert(nla);
   nla.setVisibility(SymbolTable::Visibility::Private);
   auto sym = FlatSymbolRefAttr::get(nla);
@@ -148,15 +149,15 @@ static FlatSymbolRefAttr scatterNonLocalPath(const AnnoPathValue &target,
 //===----------------------------------------------------------------------===//
 
 /// Always resolve to the circuit, ignoring the annotation.
-static Optional<AnnoPathValue> noResolve(DictionaryAttr anno,
-                                         ApplyState &state) {
+static std::optional<AnnoPathValue> noResolve(DictionaryAttr anno,
+                                              ApplyState &state) {
   return AnnoPathValue(state.circuit);
 }
 
 /// Implementation of standard resolution.  First parses the target path, then
 /// resolves it.
-static Optional<AnnoPathValue> stdResolveImpl(StringRef rawPath,
-                                              ApplyState &state) {
+static std::optional<AnnoPathValue> stdResolveImpl(StringRef rawPath,
+                                                   ApplyState &state) {
   auto pathStr = canonicalizeTarget(rawPath);
   StringRef path{pathStr};
 
@@ -174,8 +175,8 @@ static Optional<AnnoPathValue> stdResolveImpl(StringRef rawPath,
 /// (SFC) FIRRTL SingleTargetAnnotation resolver.  Uses the 'target' field of
 /// the annotation with standard parsing to resolve the path.  This requires
 /// 'target' to exist and be normalized (per docs/FIRRTLAnnotations.md).
-static Optional<AnnoPathValue> stdResolve(DictionaryAttr anno,
-                                          ApplyState &state) {
+static std::optional<AnnoPathValue> stdResolve(DictionaryAttr anno,
+                                               ApplyState &state) {
   auto target = anno.getNamed("target");
   if (!target) {
     mlir::emitError(state.circuit.getLoc())
@@ -192,8 +193,8 @@ static Optional<AnnoPathValue> stdResolve(DictionaryAttr anno,
 }
 
 /// Resolves with target, if it exists.  If not, resolves to the circuit.
-static Optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
-                                          ApplyState &state) {
+static std::optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
+                                               ApplyState &state) {
   auto target = anno.getNamed("target");
   if (target)
     return stdResolveImpl(target->getValue().cast<StringAttr>().getValue(),
@@ -236,7 +237,7 @@ static LogicalResult applyWithoutTargetImpl(const AnnoPathValue &target,
 }
 
 /// An applier which puts the annotation on the target and drops the 'target'
-/// field from the annotaiton.  Optionally handles non-local annotations.
+/// field from the annotation.  Optionally handles non-local annotations.
 /// Ensures the target resolves to an expected type of operation.
 template <bool allowNonLocal, bool allowPortAnnoTarget, typename T,
           typename... Tr>
@@ -282,7 +283,7 @@ static LogicalResult drop(const AnnoPathValue &target, DictionaryAttr anno,
 
 namespace {
 struct AnnoRecord {
-  llvm::function_ref<Optional<AnnoPathValue>(DictionaryAttr, ApplyState &)>
+  llvm::function_ref<std::optional<AnnoPathValue>(DictionaryAttr, ApplyState &)>
       resolver;
   llvm::function_ref<LogicalResult(const AnnoPathValue &, DictionaryAttr,
                                    ApplyState &)>
@@ -294,9 +295,9 @@ struct AnnoRecord {
 /// the FIRRTL Circuit, i.e., an Annotation which has no target.  Historically,
 /// NoTargetAnnotations were used to control the Scala FIRRTL Compiler (SFC) or
 /// its passes, e.g., to set the output directory or to turn on a pass.
-/// Examplesof these in the SFC are "firrtl.options.TargetDirAnnotation" to set
+/// Examples of these in the SFC are "firrtl.options.TargetDirAnnotation" to set
 /// the output directory or "firrtl.stage.RunFIRRTLTransformAnnotation" to
-/// casuse the SFC to schedule a specified pass.  Instead of leaving these
+/// cause the SFC to schedule a specified pass.  Instead of leaving these
 /// floating or attaching them to the top-level MLIR module (which is a purer
 /// interpretation of "no target"), we choose to attach them to the Circuit even
 /// they do not "apply" to the Circuit.  This gives later passes a common place,
@@ -313,6 +314,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {"circt.testLocalOnly", {stdResolve, applyWithoutTarget<>}},
     {"circt.testNT", {noResolve, applyWithoutTarget<>}},
     {"circt.missing", {tryResolve, applyWithoutTarget<true>}},
+    {"circt.intrinsic", {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
     // Grand Central Views/Interfaces Annotations
     {extractGrandCentralClass, NoTargetAnnotation},
     {grandCentralHierarchyFileAnnoClass, NoTargetAnnotation},
@@ -586,7 +588,9 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
   LLVM_DEBUG({ llvm::dbgs() << "Analyzing wiring problems:\n"; });
   DenseMap<FModuleLike, ModuleModifications> moduleModifications;
   DenseSet<Value> visitedSinks;
-  for (auto [index, problem] : llvm::enumerate(state.wiringProblems)) {
+  for (auto &e : llvm::enumerate(state.wiringProblems)) {
+    auto index = e.index();
+    auto problem = e.value();
     // This is a unique index that is assigned to this specific wiring problem
     // and is used as a key during wiring to know which Values (ports, sources,
     // or sinks) should be connected.
@@ -689,30 +693,39 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     moduleModifications[sinkModule].connectionMap[index] = sink;
 
     // Record ports that should be added to each module along the LCA path.
-    // Wire using RefType based on the source-- the RefSend will be of this
-    // type, and we cannot connect RefType's of non-identical types. The final
-    // connect of the resolved ref to the sink will handle any differences.
-    RefType tpe = TypeSwitch<Type, RefType>(problem.source.getType())
-                      .Case<FIRRTLBaseType>([](FIRRTLBaseType base) {
-                        return RefType::get(base);
-                      })
-                      .Case<RefType>([](RefType ref) { return ref; });
-    for (auto sourceInst : sources) {
-      auto mod = cast<FModuleOp>(instanceGraph.getReferencedModule(sourceInst));
-      moduleModifications[mod].portsToAdd.push_back(
-          {index,
-           {StringAttr::get(
-                context, state.getNamespace(mod).newName(problem.newNameHint)),
-            tpe, Direction::Out}});
-    }
-    for (auto sinkInst : sinks) {
-      auto mod = cast<FModuleOp>(instanceGraph.getReferencedModule(sinkInst));
-      moduleModifications[mod].portsToAdd.push_back(
-          {index,
-           {StringAttr::get(
-                context, state.getNamespace(mod).newName(problem.newNameHint)),
-            tpe, Direction::In}});
-    }
+    RefType refType = TypeSwitch<Type, RefType>(problem.source.getType())
+                          .Case<FIRRTLBaseType>([](FIRRTLBaseType base) {
+                            return RefType::get(base);
+                          })
+                          .Case<RefType>([](RefType ref) { return ref; });
+
+    // Record module modifications related to adding ports to modules.
+    auto addPorts = [&](ArrayRef<hw::HWInstanceLike> insts, Value val, Type tpe,
+                        Direction dir) {
+      StringRef name, instName;
+      for (auto inst : llvm::reverse(insts)) {
+        auto mod = cast<FModuleOp>(instanceGraph.getReferencedModule(inst));
+        if (name.empty()) {
+          if (problem.newNameHint.empty())
+            name = state.getNamespace(mod).newName(
+                getFieldName(getFieldRefFromValue(val), /*nameSafe=*/true)
+                    .first +
+                "__bore");
+          else
+            name = state.getNamespace(mod).newName(problem.newNameHint);
+        } else {
+          assert(!instName.empty());
+          name = state.getNamespace(mod).newName(instName + "_" + name);
+        }
+        moduleModifications[mod].portsToAdd.push_back(
+            {index, {StringAttr::get(context, name), tpe, dir}});
+        instName = inst.instanceName();
+      }
+    };
+
+    // Record the addition of ports.
+    addPorts(sources, source, refType, Direction::Out);
+    addPorts(sinks, sink, refType.getType(), Direction::In);
   }
 
   // Iterate over modules from leaves to roots, applying ModuleModifications to

@@ -60,9 +60,8 @@ static void buildModule(OpBuilder &builder, OperationState &result,
     argTypes.push_back(elt.type);
     argNames.push_back(elt.name);
     Attribute attr;
-    if (elt.sym && !elt.sym.getValue().empty())
-      attr = builder.getDictionaryAttr(
-          {{exportPortIdent, FlatSymbolRefAttr::get(elt.sym)}});
+    if (elt.sym && !elt.sym.empty())
+      attr = builder.getDictionaryAttr({{exportPortIdent, elt.sym}});
     else
       attr = builder.getDictionaryAttr({});
     argAttrs.push_back(attr);
@@ -72,9 +71,8 @@ static void buildModule(OpBuilder &builder, OperationState &result,
     resultTypes.push_back(elt.type);
     resultNames.push_back(elt.name);
     Attribute attr;
-    if (elt.sym && !elt.sym.getValue().empty())
-      attr = builder.getDictionaryAttr(
-          {{exportPortIdent, FlatSymbolRefAttr::get(elt.sym)}});
+    if (elt.sym && !elt.sym.empty())
+      attr = builder.getDictionaryAttr({{exportPortIdent, elt.sym}});
     else
       attr = builder.getDictionaryAttr({});
     resultAttrs.push_back(attr);
@@ -82,13 +80,14 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 
   // Record the argument and result types as an attribute.
   auto type = builder.getFunctionType(argTypes, resultTypes);
-  result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+  result.addAttribute(MSFTModuleOp::getFunctionTypeAttrName(result.name),
+                      TypeAttr::get(type));
   result.addAttribute("argNames", builder.getArrayAttr(argNames));
   result.addAttribute("resultNames", builder.getArrayAttr(resultNames));
   result.addAttribute("parameters", builder.getDictionaryAttr({}));
-  result.addAttribute(mlir::function_interface_impl::getArgDictAttrName(),
+  result.addAttribute(MSFTModuleOp::getArgAttrsAttrName(result.name),
                       builder.getArrayAttr(argAttrs));
-  result.addAttribute(mlir::function_interface_impl::getResultDictAttrName(),
+  result.addAttribute(MSFTModuleOp::getResAttrsAttrName(result.name),
                       builder.getArrayAttr(resultAttrs));
   result.addRegion();
 }
@@ -108,7 +107,7 @@ static ParseResult parsePhysLoc(OpAsmParser &p, PhysLocationAttr &attr) {
       p.parseInteger(num))
     return failure();
 
-  Optional<PrimitiveType> devType = symbolizePrimitiveType(devTypeStr);
+  std::optional<PrimitiveType> devType = symbolizePrimitiveType(devTypeStr);
   if (!devType) {
     p.emitError(loc, "Unknown device type '" + devTypeStr + "'");
     return failure();
@@ -268,7 +267,8 @@ static ParseResult parseModuleLikeOp(OpAsmParser &parser,
   for (auto arg : entryArgs)
     argTypes.push_back(arg.type);
   auto type = builder.getFunctionType(argTypes, resultTypes);
-  result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+  result.addAttribute(MSFTModuleOp::getFunctionTypeAttrName(result.name),
+                      TypeAttr::get(type));
 
   // If function attributes are present, parse them.
   if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
@@ -297,7 +297,9 @@ static ParseResult parseModuleLikeOp(OpAsmParser &parser,
   assert(resultAttrs.size() == resultTypes.size());
 
   // Add the attributes to the module arguments.
-  addArgAndResultAttrs(builder, result, entryArgs, resultAttrs);
+  addArgAndResultAttrs(builder, result, entryArgs, resultAttrs,
+                       MSFTModuleOp::getArgAttrsAttrName(result.name),
+                       MSFTModuleOp::getResAttrsAttrName(result.name));
 
   // Parse the optional module body.
   auto regionSuccess =
@@ -308,6 +310,7 @@ static ParseResult parseModuleLikeOp(OpAsmParser &parser,
   return success();
 }
 
+template <typename ModuleTy>
 static void printModuleLikeOp(mlir::FunctionOpInterface moduleLike,
                               OpAsmPrinter &p, Attribute parameters = nullptr) {
   using namespace mlir::function_interface_impl;
@@ -336,9 +339,12 @@ static void printModuleLikeOp(mlir::FunctionOpInterface moduleLike,
     omittedAttrs.push_back("argNames");
   omittedAttrs.push_back("resultNames");
   omittedAttrs.push_back("parameters");
+  omittedAttrs.push_back(
+      ModuleTy::getFunctionTypeAttrName(moduleLike->getName()));
+  omittedAttrs.push_back(ModuleTy::getArgAttrsAttrName(moduleLike->getName()));
+  omittedAttrs.push_back(ModuleTy::getResAttrsAttrName(moduleLike->getName()));
 
-  printFunctionAttributes(p, moduleLike, argTypes.size(), resultTypes.size(),
-                          omittedAttrs);
+  printFunctionAttributes(p, moduleLike, omittedAttrs);
 
   // Print the body if this is not an external function.
   Region &mbody = moduleLike.getFunctionBody();
@@ -619,7 +625,7 @@ ParseResult MSFTModuleOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void MSFTModuleOp::print(OpAsmPrinter &p) {
-  printModuleLikeOp(*this, p, getParametersAttr());
+  printModuleLikeOp<MSFTModuleOp>(*this, p, getParametersAttr());
 }
 
 //===----------------------------------------------------------------------===//
@@ -731,7 +737,8 @@ ParseResult MSFTModuleExternOp::parse(OpAsmParser &parser,
     argTypes.push_back(arg.type);
 
   auto type = builder.getFunctionType(argTypes, resultTypes);
-  result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+  result.addAttribute(MSFTModuleExternOp::getFunctionTypeAttrName(result.name),
+                      TypeAttr::get(type));
 
   auto *context = result.getContext();
 
@@ -762,7 +769,9 @@ ParseResult MSFTModuleExternOp::parse(OpAsmParser &parser,
   assert(resultAttrs.size() == resultTypes.size());
 
   // Add the attributes to the function arguments.
-  addArgAndResultAttrs(builder, result, entryArgs, resultAttrs);
+  addArgAndResultAttrs(builder, result, entryArgs, resultAttrs,
+                       MSFTModuleExternOp::getArgAttrsAttrName(result.name),
+                       MSFTModuleExternOp::getResAttrsAttrName(result.name));
 
   // Extern modules carry an empty region to work with HWModuleImplementation.h.
   result.addRegion();
@@ -773,7 +782,7 @@ ParseResult MSFTModuleExternOp::parse(OpAsmParser &parser,
 void MSFTModuleExternOp::print(OpAsmPrinter &p) {
   using namespace mlir::function_interface_impl;
 
-  auto typeAttr = (*this)->getAttrOfType<TypeAttr>(getTypeAttrName());
+  auto typeAttr = (*this)->getAttrOfType<TypeAttr>(getFunctionTypeAttrName());
   FunctionType fnType = typeAttr.getValue().cast<FunctionType>();
   auto argTypes = fnType.getInputs();
   auto resultTypes = fnType.getResults();
@@ -794,14 +803,16 @@ void MSFTModuleExternOp::print(OpAsmPrinter &p) {
     omittedAttrs.push_back("argNames");
   omittedAttrs.push_back("resultNames");
   omittedAttrs.push_back("parameters");
+  omittedAttrs.push_back(getFunctionTypeAttrName());
+  omittedAttrs.push_back(getArgAttrsAttrName());
+  omittedAttrs.push_back(getResAttrsAttrName());
 
-  printFunctionAttributes(p, *this, argTypes.size(), resultTypes.size(),
-                          omittedAttrs);
+  printFunctionAttributes(p, *this, omittedAttrs);
 }
 
 LogicalResult MSFTModuleExternOp::verify() {
   using namespace mlir::function_interface_impl;
-  auto typeAttr = (*this)->getAttrOfType<TypeAttr>(getTypeAttrName());
+  auto typeAttr = (*this)->getAttrOfType<TypeAttr>(getFunctionTypeAttrName());
   auto moduleType = typeAttr.getValue().cast<FunctionType>();
   auto argNames = (*this)->getAttrOfType<ArrayAttr>("argNames");
   auto resultNames = (*this)->getAttrOfType<ArrayAttr>("resultNames");
@@ -852,7 +863,8 @@ hw::ModulePortInfo MSFTModuleExternOp::getPorts() {
 
   SmallVector<hw::PortInfo> inputs, outputs;
 
-  auto typeAttr = getOperation()->getAttrOfType<TypeAttr>(getTypeAttrName());
+  auto typeAttr =
+      getOperation()->getAttrOfType<TypeAttr>(getFunctionTypeAttrName());
   auto moduleType = typeAttr.getValue().cast<FunctionType>();
   auto argTypes = moduleType.getInputs();
   auto resultTypes = moduleType.getResults();

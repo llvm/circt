@@ -32,7 +32,7 @@ using namespace circt;
 
 struct HWExportModuleHierarchyPass
     : public sv::HWExportModuleHierarchyBase<HWExportModuleHierarchyPass> {
-  HWExportModuleHierarchyPass(Optional<std::string> directory) {
+  HWExportModuleHierarchyPass(std::optional<std::string> directory) {
     if (directory)
       directoryName = *directory;
   }
@@ -81,7 +81,7 @@ static void extractHierarchyFromTop(hw::HWModuleOp op, SymbolTable &symbolTable,
 /// and if they exist, emit a verbatim op with the module hierarchy for each.
 void HWExportModuleHierarchyPass::runOnOperation() {
   mlir::ModuleOp mlirModule = getOperation();
-  Optional<SymbolTable> symbolTable = None;
+  std::optional<SymbolTable> symbolTable;
   bool directoryCreated = false;
 
   for (auto op : mlirModule.getOps<hw::HWModuleOp>()) {
@@ -128,6 +128,6 @@ void HWExportModuleHierarchyPass::runOnOperation() {
 //===----------------------------------------------------------------------===//
 
 std::unique_ptr<mlir::Pass>
-sv::createHWExportModuleHierarchyPass(Optional<std::string> directory) {
+sv::createHWExportModuleHierarchyPass(std::optional<std::string> directory) {
   return std::make_unique<HWExportModuleHierarchyPass>(directory);
 }

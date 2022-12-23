@@ -205,7 +205,7 @@ DeclKind firrtl::getDeclarationKind(Value val) {
 }
 
 size_t firrtl::getNumPorts(Operation *op) {
-  if (auto module = dyn_cast<FModuleLike>(op))
+  if (auto module = dyn_cast<hw::HWModuleLike>(*op))
     return module.getNumPorts();
   return op->getNumResults();
 }
@@ -457,9 +457,10 @@ static SmallVector<PortInfo> getPorts(FModuleLike module) {
   // FExtModuleOp's don't have block arguments or locations for their ports.
   auto loc = module->getLoc();
   SmallVector<PortInfo> results;
-  for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i) {
+  for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
     results.push_back({module.getPortNameAttr(i), module.getPortType(i),
-                       module.getPortDirection(i), module.getPortSymbolAttr(i),
+                       module.getPortDirection(i),
+                       cast<hw::HWModuleLike>(*module).getPortSymbolAttr(i),
                        loc, AnnotationSet::forPort(module, i)});
   }
   return results;
@@ -486,7 +487,7 @@ static void insertPorts(FModuleLike op,
                         Block *body = nullptr) {
   if (ports.empty())
     return;
-  unsigned oldNumArgs = op.getNumPorts();
+  unsigned oldNumArgs = getNumPorts(op);
   unsigned newNumArgs = oldNumArgs + ports.size();
 
   // Add direction markers and names for new ports.
@@ -515,7 +516,7 @@ static void insertPorts(FModuleLike op,
       newNames.push_back(existingNames[oldIdx]);
       newTypes.push_back(existingTypes[oldIdx]);
       newAnnos.push_back(op.getAnnotationsAttrForPort(oldIdx));
-      newSyms.push_back(op.getPortSymbolAttr(oldIdx));
+      newSyms.push_back(cast<hw::HWModuleLike>(*op).getPortSymbolAttr(oldIdx));
       ++oldIdx;
     }
   };
@@ -566,11 +567,13 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   ArrayRef<Attribute> portTypes = op.getPortTypes();
   ArrayRef<Attribute> portAnnos = op.getPortAnnotations();
   ArrayRef<Attribute> portSyms = op.getPortSymbols();
-  assert(portDirections.size() == op.getNumPorts());
-  assert(portNames.size() == op.getNumPorts());
-  assert(portAnnos.size() == op.getNumPorts() || portAnnos.empty());
-  assert(portTypes.size() == op.getNumPorts());
-  assert(portSyms.size() == op.getNumPorts() || portSyms.empty());
+  auto numPorts = getNumPorts(op);
+  (void)numPorts;
+  assert(portDirections.size() == numPorts);
+  assert(portNames.size() == numPorts);
+  assert(portAnnos.size() == numPorts || portAnnos.empty());
+  assert(portTypes.size() == numPorts);
+  assert(portSyms.size() == numPorts || portSyms.empty());
 
   SmallVector<Direction> newPortDirections =
       removeElementsAtIndices<Direction>(portDirections, portIndices);
@@ -850,7 +853,7 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
       NamedAttrList dummyAttrs;
       if (parser.parseCustomAttributeWithFallback(
               innerSymAttr, ::mlir::Type{},
-              InnerSymbolTable::getInnerSymbolAttrName(), dummyAttrs)) {
+              hw::InnerSymbolTable::getInnerSymbolAttrName(), dummyAttrs)) {
         return ::mlir::failure();
       }
     }
@@ -1205,7 +1208,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 
   // Gather the result types.
   SmallVector<Type> resultTypes;
-  resultTypes.reserve(module.getNumPorts());
+  resultTypes.reserve(getNumPorts(module));
   llvm::transform(
       module.getPortTypes(), std::back_inserter(resultTypes),
       [](Attribute typeAttr) { return typeAttr.cast<TypeAttr>().getValue(); });
@@ -1355,7 +1358,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // Check that all the attribute arrays are the right length up front.  This
   // lets us safely use the port name in error messages below.
   size_t numResults = getNumResults();
-  size_t numExpected = referencedModule.getNumPorts();
+  size_t numExpected = getNumPorts(referencedModule);
   if (numResults != numExpected) {
     return emitNote(emitOpError() << "has a wrong number of results; expected "
                                   << numExpected << " but got " << numResults);
@@ -1495,7 +1498,8 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   if (succeeded(parser.parseOptionalKeyword("sym"))) {
     if (parser.parseCustomAttributeWithFallback(
             innerSymAttr, ::mlir::Type{},
-            InnerSymbolTable::getInnerSymbolAttrName(), result.attributes)) {
+            hw::InnerSymbolTable::getInnerSymbolAttrName(),
+            result.attributes)) {
       return ::mlir::failure();
     }
   }
@@ -2063,8 +2067,7 @@ static LogicalResult checkConnectFlow(Operation *connect) {
     auto kind = getDeclarationKind(src);
     if (kind != DeclKind::Port && kind != DeclKind::Instance) {
       auto srcRef = getFieldRefFromValue(src);
-      bool rootKnown;
-      auto srcName = getFieldName(srcRef, rootKnown);
+      auto [srcName, rootKnown] = getFieldName(srcRef);
       auto diag = emitError(connect->getLoc());
       diag << "connect has invalid flow: the source expression ";
       if (rootKnown)
@@ -2075,8 +2078,7 @@ static LogicalResult checkConnectFlow(Operation *connect) {
   }
   if (foldFlow(dst) == Flow::Source) {
     auto dstRef = getFieldRefFromValue(dst);
-    bool rootKnown;
-    auto dstName = getFieldName(dstRef, rootKnown);
+    auto [dstName, rootKnown] = getFieldName(dstRef);
     auto diag = emitError(connect->getLoc());
     diag << "connect has invalid flow: the destination expression ";
     if (rootKnown)
@@ -2179,10 +2181,10 @@ void WhenOp::build(OpBuilder &builder, OperationState &result, Value condition,
 /// result value, so the FIRRTL-specific type inference ops directly return the
 /// inferred type rather than pushing into the `results` vector.
 LogicalResult impl::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, RegionRange regions, SmallVectorImpl<Type> &results,
     llvm::function_ref<FIRRTLType(ValueRange, ArrayRef<NamedAttribute>,
-                                  Optional<Location>)>
+                                  std::optional<Location>)>
         callback) {
   auto type = callback(
       operands, attrs ? attrs.getValue() : ArrayRef<NamedAttribute>{}, loc);
@@ -2485,6 +2487,57 @@ LogicalResult VectorCreateOp::verify() {
   return success();
 }
 
+ParseResult SubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto *context = parser.getContext();
+
+  OpAsmParser::UnresolvedOperand input;
+  std::string fieldName;
+  Type inputType;
+  if (parser.parseOperand(input) || parser.parseLSquare() ||
+      parser.parseKeywordOrString(&fieldName) || parser.parseRSquare() ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(inputType))
+    return failure();
+
+  if (parser.resolveOperand(input, inputType, result.operands))
+    return failure();
+
+  auto bundleType = inputType.dyn_cast<BundleType>();
+  if (!bundleType)
+    return parser.emitError(parser.getNameLoc(),
+                            "input must be bundle type, got ")
+           << inputType;
+  auto fieldIndex = bundleType.getElementIndex(fieldName);
+  if (!fieldIndex)
+    return parser.emitError(parser.getNameLoc(),
+                            "unknown field " + fieldName + " in bundle type ")
+           << bundleType;
+
+  result.addAttribute(
+      "fieldIndex",
+      IntegerAttr::get(IntegerType::get(context, 32), *fieldIndex));
+
+  SmallVector<Type> inferredReturnTypes;
+  if (failed(SubfieldOp::inferReturnTypes(
+          context, result.location, result.operands,
+          result.attributes.getDictionary(context), result.regions,
+          inferredReturnTypes)))
+    return failure();
+  result.addTypes(inferredReturnTypes);
+
+  return success();
+}
+
+void SubfieldOp::print(::mlir::OpAsmPrinter &printer) {
+  printer << ' ' << getInput() << '[';
+  printer.printKeywordOrString(getFieldName());
+  printer << ']';
+  ::llvm::SmallVector<::llvm::StringRef, 2> elidedAttrs;
+  elidedAttrs.push_back("fieldIndex");
+  printer.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
+  printer << " : " << getInput().getType();
+}
+
 LogicalResult SubfieldOp::verify() {
   if (getFieldIndex() >=
       getInput().getType().cast<BundleType>().getNumElements())
@@ -2537,7 +2590,7 @@ bool firrtl::isConstant(Value value) {
 
 FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
-                                       Optional<Location> loc) {
+                                       std::optional<Location> loc) {
   auto inType = operands[0].getType().cast<BundleType>();
   auto fieldIndex =
       getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
@@ -2561,7 +2614,7 @@ bool SubfieldOp::isFieldFlipped() {
 
 FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
-                                       Optional<Location> loc) {
+                                       std::optional<Location> loc) {
   auto inType = operands[0].getType();
   auto fieldIdx =
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
@@ -2582,7 +2635,7 @@ FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
 
 FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
                                         ArrayRef<NamedAttribute> attrs,
-                                        Optional<Location> loc) {
+                                        std::optional<Location> loc) {
   auto inType = operands[0].getType();
   auto indexType = operands[1].getType();
 
@@ -2630,7 +2683,7 @@ void MultibitMuxOp::print(OpAsmPrinter &p) {
 
 FIRRTLType MultibitMuxOp::inferReturnType(ValueRange operands,
                                           ArrayRef<NamedAttribute> attrs,
-                                          Optional<Location> loc) {
+                                          std::optional<Location> loc) {
   if (operands.size() < 2) {
     if (loc)
       mlir::emitError(*loc, "at least one input is required");
@@ -2659,7 +2712,7 @@ FIRRTLType MultibitMuxOp::inferReturnType(ValueRange operands,
 /// On failure, this reports and error and returns false.  This function should
 /// not be used if you don't want an error reported.
 static bool isSameIntTypeKind(Type lhs, Type rhs, int32_t &lhsWidth,
-                              int32_t &rhsWidth, Optional<Location> loc) {
+                              int32_t &rhsWidth, std::optional<Location> loc) {
   // Must have two integer types with the same signedness.
   auto lhsi = lhs.dyn_cast<IntType>();
   auto rhsi = rhs.dyn_cast<IntType>();
@@ -2705,7 +2758,7 @@ LogicalResult impl::validateBinaryOpArguments(ValueRange operands,
 }
 
 FIRRTLType impl::inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
-                                   Optional<Location> loc) {
+                                   std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, loc))
     return {};
@@ -2716,7 +2769,7 @@ FIRRTLType impl::inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
 }
 
 FIRRTLType MulPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                            Optional<Location> loc) {
+                                            std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, loc))
     return {};
@@ -2728,7 +2781,7 @@ FIRRTLType MulPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 }
 
 FIRRTLType DivPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                            Optional<Location> loc) {
+                                            std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth;
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, loc))
     return {};
@@ -2743,7 +2796,7 @@ FIRRTLType DivPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 }
 
 FIRRTLType RemPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                            Optional<Location> loc) {
+                                            std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, loc))
     return {};
@@ -2754,7 +2807,7 @@ FIRRTLType RemPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 }
 
 FIRRTLType impl::inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
-                                    Optional<Location> loc) {
+                                    std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, loc))
     return {};
@@ -2765,12 +2818,12 @@ FIRRTLType impl::inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
 }
 
 FIRRTLType impl::inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
-                                       Optional<Location> loc) {
+                                       std::optional<Location> loc) {
   return UIntType::get(lhs.getContext(), 1);
 }
 
 FIRRTLType CatPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                            Optional<Location> loc) {
+                                            std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, loc))
     return {};
@@ -2781,7 +2834,7 @@ FIRRTLType CatPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 }
 
 FIRRTLType DShlPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                             Optional<Location> loc) {
+                                             std::optional<Location> loc) {
   auto lhsi = lhs.dyn_cast<IntType>();
   auto rhsui = rhs.dyn_cast<UIntType>();
   if (!rhsui || !lhsi) {
@@ -2817,7 +2870,7 @@ FIRRTLType DShlPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 }
 
 FIRRTLType DShlwPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                              Optional<Location> loc) {
+                                              std::optional<Location> loc) {
   if (!lhs.isa<IntType>() || !rhs.isa<UIntType>()) {
     if (loc)
       mlir::emitError(*loc,
@@ -2828,7 +2881,7 @@ FIRRTLType DShlwPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 }
 
 FIRRTLType DShrPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                             Optional<Location> loc) {
+                                             std::optional<Location> loc) {
   if (!lhs.isa<IntType>() || !rhs.isa<UIntType>()) {
     if (loc)
       mlir::emitError(*loc,
@@ -2852,8 +2905,14 @@ LogicalResult impl::validateUnaryOpArguments(ValueRange operands,
   return success();
 }
 
+FIRRTLType
+SizeOfIntrinsicOp::inferUnaryReturnType(FIRRTLType arg,
+                                        std::optional<Location> loc) {
+  return UIntType::get(arg.getContext(), 32);
+}
+
 FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                              Optional<Location> loc) {
+                                              std::optional<Location> loc) {
   auto base = input.dyn_cast<FIRRTLBaseType>();
   if (!base) {
     if (loc)
@@ -2870,7 +2929,7 @@ FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
 }
 
 FIRRTLType AsUIntPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                              Optional<Location> loc) {
+                                              std::optional<Location> loc) {
   auto base = input.dyn_cast<FIRRTLBaseType>();
   if (!base) {
     if (loc)
@@ -2886,8 +2945,9 @@ FIRRTLType AsUIntPrimOp::inferUnaryReturnType(FIRRTLType input,
   return UIntType::get(input.getContext(), width);
 }
 
-FIRRTLType AsAsyncResetPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                                    Optional<Location> loc) {
+FIRRTLType
+AsAsyncResetPrimOp::inferUnaryReturnType(FIRRTLType input,
+                                         std::optional<Location> loc) {
   auto base = input.dyn_cast<FIRRTLBaseType>();
   if (!base) {
     if (loc)
@@ -2904,12 +2964,12 @@ FIRRTLType AsAsyncResetPrimOp::inferUnaryReturnType(FIRRTLType input,
 }
 
 FIRRTLType AsClockPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                               Optional<Location> loc) {
+                                               std::optional<Location> loc) {
   return ClockType::get(input.getContext());
 }
 
 FIRRTLType CvtPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                           Optional<Location> loc) {
+                                           std::optional<Location> loc) {
   if (auto uiType = input.dyn_cast<UIntType>()) {
     auto width = uiType.getWidthOrSentinel();
     if (width != -1)
@@ -2926,7 +2986,7 @@ FIRRTLType CvtPrimOp::inferUnaryReturnType(FIRRTLType input,
 }
 
 FIRRTLType NegPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                           Optional<Location> loc) {
+                                           std::optional<Location> loc) {
   auto inputi = input.dyn_cast<IntType>();
   if (!inputi) {
     if (loc)
@@ -2941,7 +3001,7 @@ FIRRTLType NegPrimOp::inferUnaryReturnType(FIRRTLType input,
 }
 
 FIRRTLType NotPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                           Optional<Location> loc) {
+                                           std::optional<Location> loc) {
   auto inputi = input.dyn_cast<IntType>();
   if (!inputi) {
     if (loc)
@@ -2953,7 +3013,7 @@ FIRRTLType NotPrimOp::inferUnaryReturnType(FIRRTLType input,
 }
 
 FIRRTLType impl::inferReductionResult(FIRRTLType input,
-                                      Optional<Location> loc) {
+                                      std::optional<Location> loc) {
   return UIntType::get(input.getContext(), 1);
 }
 
@@ -2973,7 +3033,7 @@ LogicalResult BitsPrimOp::validateArguments(ValueRange operands,
 
 FIRRTLType BitsPrimOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
-                                       Optional<Location> loc) {
+                                       std::optional<Location> loc) {
   auto input = operands[0].getType();
   auto high = getAttr<IntegerAttr>(attrs, "hi").getValue().getSExtValue();
   auto low = getAttr<IntegerAttr>(attrs, "lo").getValue().getSExtValue();
@@ -3027,7 +3087,7 @@ LogicalResult impl::validateOneOperandOneConst(ValueRange operands,
 
 FIRRTLType HeadPrimOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
-                                       Optional<Location> loc) {
+                                       std::optional<Location> loc) {
   auto input = operands[0].getType();
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
@@ -3071,7 +3131,7 @@ LogicalResult MuxPrimOp::validateArguments(ValueRange operands,
 /// - Bundles inferred in a pairwise fashion based on the field types.
 static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
                                          FIRRTLBaseType low,
-                                         Optional<Location> loc) {
+                                         std::optional<Location> loc) {
   // If the types are identical we're done.
   if (high == low)
     return low;
@@ -3158,7 +3218,7 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
 
 FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
-                                      Optional<Location> loc) {
+                                      std::optional<Location> loc) {
   auto highType = operands[1].getType().dyn_cast<FIRRTLBaseType>();
   auto lowType = operands[2].getType().dyn_cast<FIRRTLBaseType>();
   if (!highType || !lowType) {
@@ -3171,7 +3231,7 @@ FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
 
 FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
-                                      Optional<Location> loc) {
+                                      std::optional<Location> loc) {
   auto input = operands[0].getType();
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
@@ -3193,7 +3253,7 @@ FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,
 
 FIRRTLType ShlPrimOp::inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
-                                      Optional<Location> loc) {
+                                      std::optional<Location> loc) {
   auto input = operands[0].getType();
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
@@ -3214,7 +3274,7 @@ FIRRTLType ShlPrimOp::inferReturnType(ValueRange operands,
 
 FIRRTLType ShrPrimOp::inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
-                                      Optional<Location> loc) {
+                                      std::optional<Location> loc) {
   auto input = operands[0].getType();
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
@@ -3235,7 +3295,7 @@ FIRRTLType ShrPrimOp::inferReturnType(ValueRange operands,
 
 FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
-                                       Optional<Location> loc) {
+                                       std::optional<Location> loc) {
   auto input = operands[0].getType();
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
@@ -3265,10 +3325,17 @@ FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
 // Verif Expressions
 //===----------------------------------------------------------------------===//
 
-FIRRTLType IsXVerifOp::inferReturnType(ValueRange operands,
-                                       ArrayRef<NamedAttribute> attrs,
-                                       Optional<Location> loc) {
+FIRRTLType IsXIntrinsicOp::inferReturnType(ValueRange operands,
+                                           ArrayRef<NamedAttribute> attrs,
+                                           std::optional<Location> loc) {
   return UIntType::get(operands[0].getContext(), 1);
+}
+
+FIRRTLType
+PlusArgsTestIntrinsicOp::inferReturnType(ValueRange operands,
+                                         ArrayRef<NamedAttribute> attrs,
+                                         std::optional<Location> loc) {
+  return UIntType::get(attrs[0].getName().getContext(), 1);
 }
 
 //===----------------------------------------------------------------------===//
@@ -3564,342 +3631,6 @@ static void printVerifAttrs(OpAsmPrinter &p, Operation *op,
 }
 
 //===----------------------------------------------------------------------===//
-// HierPathOp helpers.
-//===----------------------------------------------------------------------===//
-
-bool HierPathOp::dropModule(StringAttr moduleToDrop) {
-  SmallVector<Attribute, 4> newPath;
-  bool updateMade = false;
-  for (auto nameRef : getNamepath()) {
-    // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
-    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
-      if (ref.getModule() == moduleToDrop)
-        updateMade = true;
-      else
-        newPath.push_back(ref);
-    } else {
-      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == moduleToDrop)
-        updateMade = true;
-      else
-        newPath.push_back(nameRef);
-    }
-  }
-  if (updateMade)
-    setNamepathAttr(ArrayAttr::get(getContext(), newPath));
-  return updateMade;
-}
-
-bool HierPathOp::inlineModule(StringAttr moduleToDrop) {
-  SmallVector<Attribute, 4> newPath;
-  bool updateMade = false;
-  StringRef inlinedInstanceName = "";
-  for (auto nameRef : getNamepath()) {
-    // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
-    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
-      if (ref.getModule() == moduleToDrop) {
-        inlinedInstanceName = ref.getName().getValue();
-        updateMade = true;
-      } else if (!inlinedInstanceName.empty()) {
-        newPath.push_back(hw::InnerRefAttr::get(
-            ref.getModule(),
-            StringAttr::get(getContext(), inlinedInstanceName + "_" +
-                                              ref.getName().getValue())));
-        inlinedInstanceName = "";
-      } else
-        newPath.push_back(ref);
-    } else {
-      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == moduleToDrop)
-        updateMade = true;
-      else
-        newPath.push_back(nameRef);
-    }
-  }
-  if (updateMade)
-    setNamepathAttr(ArrayAttr::get(getContext(), newPath));
-  return updateMade;
-}
-
-bool HierPathOp::updateModule(StringAttr oldMod, StringAttr newMod) {
-  SmallVector<Attribute, 4> newPath;
-  bool updateMade = false;
-  for (auto nameRef : getNamepath()) {
-    // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
-    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
-      if (ref.getModule() == oldMod) {
-        newPath.push_back(hw::InnerRefAttr::get(newMod, ref.getName()));
-        updateMade = true;
-      } else
-        newPath.push_back(ref);
-    } else {
-      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == oldMod) {
-        newPath.push_back(FlatSymbolRefAttr::get(newMod));
-        updateMade = true;
-      } else
-        newPath.push_back(nameRef);
-    }
-  }
-  if (updateMade)
-    setNamepathAttr(ArrayAttr::get(getContext(), newPath));
-  return updateMade;
-}
-
-bool HierPathOp::updateModuleAndInnerRef(
-    StringAttr oldMod, StringAttr newMod,
-    const llvm::DenseMap<StringAttr, StringAttr> &innerSymRenameMap) {
-  auto fromRef = FlatSymbolRefAttr::get(oldMod);
-  if (oldMod == newMod)
-    return false;
-
-  auto namepathNew = getNamepath().getValue().vec();
-  bool updateMade = false;
-  // Break from the loop if the module is found, since it can occur only once.
-  for (auto &element : namepathNew) {
-    if (auto innerRef = element.dyn_cast<hw::InnerRefAttr>()) {
-      if (innerRef.getModule() != oldMod)
-        continue;
-      auto symName = innerRef.getName();
-      // Since the module got updated, the old innerRef symbol inside oldMod
-      // should also be updated to the new symbol inside the newMod.
-      auto to = innerSymRenameMap.find(symName);
-      if (to != innerSymRenameMap.end())
-        symName = to->second;
-      updateMade = true;
-      element = hw::InnerRefAttr::get(newMod, symName);
-      break;
-    }
-    if (element != fromRef)
-      continue;
-
-    updateMade = true;
-    element = FlatSymbolRefAttr::get(newMod);
-    break;
-  }
-  if (updateMade)
-    setNamepathAttr(ArrayAttr::get(getContext(), namepathNew));
-  return updateMade;
-}
-
-bool HierPathOp::truncateAtModule(StringAttr atMod, bool includeMod) {
-  SmallVector<Attribute, 4> newPath;
-  bool updateMade = false;
-  for (auto nameRef : getNamepath()) {
-    // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
-    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
-      if (ref.getModule() == atMod) {
-        updateMade = true;
-        if (includeMod)
-          newPath.push_back(ref);
-      } else
-        newPath.push_back(ref);
-    } else {
-      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == atMod && !includeMod)
-        updateMade = true;
-      else
-        newPath.push_back(nameRef);
-    }
-    if (updateMade)
-      break;
-  }
-  if (updateMade)
-    setNamepathAttr(ArrayAttr::get(getContext(), newPath));
-  return updateMade;
-}
-
-/// Return just the module part of the namepath at a specific index.
-StringAttr HierPathOp::modPart(unsigned i) {
-  return TypeSwitch<Attribute, StringAttr>(getNamepath()[i])
-      .Case<FlatSymbolRefAttr>([](auto a) { return a.getAttr(); })
-      .Case<hw::InnerRefAttr>([](auto a) { return a.getModule(); });
-}
-
-/// Return the root module.
-StringAttr HierPathOp::root() {
-  assert(!getNamepath().empty());
-  return modPart(0);
-}
-
-/// Return true if the NLA has the module in its path.
-bool HierPathOp::hasModule(StringAttr modName) {
-  for (auto nameRef : getNamepath()) {
-    // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
-    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
-      if (ref.getModule() == modName)
-        return true;
-    } else {
-      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == modName)
-        return true;
-    }
-  }
-  return false;
-}
-
-/// Return true if the NLA has the InnerSym .
-bool HierPathOp::hasInnerSym(StringAttr modName, StringAttr symName) const {
-  for (auto nameRef : const_cast<HierPathOp *>(this)->getNamepath())
-    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>())
-      if (ref.getName() == symName && ref.getModule() == modName)
-        return true;
-
-  return false;
-}
-
-/// Return just the reference part of the namepath at a specific index.  This
-/// will return an empty attribute if this is the leaf and the leaf is a module.
-StringAttr HierPathOp::refPart(unsigned i) {
-  return TypeSwitch<Attribute, StringAttr>(getNamepath()[i])
-      .Case<FlatSymbolRefAttr>([](auto a) { return StringAttr({}); })
-      .Case<hw::InnerRefAttr>([](auto a) { return a.getName(); });
-}
-
-/// Return the leaf reference.  This returns an empty attribute if the leaf
-/// reference is a module.
-StringAttr HierPathOp::ref() {
-  assert(!getNamepath().empty());
-  return refPart(getNamepath().size() - 1);
-}
-
-/// Return the leaf module.
-StringAttr HierPathOp::leafMod() {
-  assert(!getNamepath().empty());
-  return modPart(getNamepath().size() - 1);
-}
-
-/// Returns true if this NLA targets an instance of a module (as opposed to
-/// an instance's port or something inside an instance).
-bool HierPathOp::isModule() { return !ref(); }
-
-/// Returns true if this NLA targets something inside a module (as opposed
-/// to a module or an instance of a module);
-bool HierPathOp::isComponent() { return (bool)ref(); }
-
-// Verify the HierPathOp.
-// 1. Iterate over the namepath.
-// 2. The namepath should be a valid instance path, specified either on a
-// module or a declaration inside a module.
-// 3. Each element in the namepath is an InnerRefAttr except possibly the
-// last element.
-// 4. Make sure that the InnerRefAttr is legal, by verifying the module name
-// and the corresponding inner_sym on the instance.
-// 5. Make sure that the instance path is legal, by verifying the sequence of
-// instance and the expected module occurs as the next element in the path.
-// 6. The last element of the namepath, can be an InnerRefAttr on either a
-// module port or a declaration inside the module.
-// 7. The last element of the namepath can also be a module symbol.
-LogicalResult HierPathOp::verifyInnerRefs(InnerRefNamespace &ns) {
-  if (getNamepath().size() <= 1)
-    return emitOpError()
-           << "the instance path cannot be empty/single element, it "
-              "must specify an instance path.";
-
-  StringAttr expectedModuleName = {};
-  for (unsigned i = 0, s = getNamepath().size() - 1; i < s; ++i) {
-    hw::InnerRefAttr innerRef = getNamepath()[i].dyn_cast<hw::InnerRefAttr>();
-    if (!innerRef)
-      return emitOpError()
-             << "the instance path can only contain inner sym reference"
-             << ", only the leaf can refer to a module symbol";
-
-    if (expectedModuleName && expectedModuleName != innerRef.getModule())
-      return emitOpError() << "instance path is incorrect. Expected module: "
-                           << expectedModuleName
-                           << " instead found: " << innerRef.getModule();
-    InstanceOp instOp = ns.lookupOp<InstanceOp>(innerRef);
-    if (!instOp)
-      return emitOpError() << " module: " << innerRef.getModule()
-                           << " does not contain any instance with symbol: "
-                           << innerRef.getName();
-    expectedModuleName = instOp.getModuleNameAttr().getAttr();
-  }
-  // The instance path has been verified. Now verify the last element.
-  auto leafRef = getNamepath()[getNamepath().size() - 1];
-  if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>()) {
-    if (!ns.lookup(innerRef)) {
-      return emitOpError() << " operation with symbol: " << innerRef
-                           << " was not found ";
-    }
-    if (expectedModuleName && expectedModuleName != innerRef.getModule())
-      return emitOpError() << "instance path is incorrect. Expected module: "
-                           << expectedModuleName
-                           << " instead found: " << innerRef.getModule();
-  } else if (expectedModuleName !=
-             leafRef.cast<FlatSymbolRefAttr>().getAttr()) {
-    // This is the case when the nla is applied to a module.
-    return emitOpError() << "instance path is incorrect. Expected module: "
-                         << expectedModuleName << " instead found: "
-                         << leafRef.cast<FlatSymbolRefAttr>().getAttr();
-  }
-  return success();
-}
-
-void HierPathOp::print(OpAsmPrinter &p) {
-  p << " ";
-
-  // Print visibility if present.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
-  if (auto visibility =
-          getOperation()->getAttrOfType<StringAttr>(visibilityAttrName))
-    p << visibility.getValue() << ' ';
-
-  p.printSymbolName(getSymName());
-  p << " [";
-  llvm::interleaveComma(getNamepath().getValue(), p, [&](Attribute attr) {
-    if (auto ref = attr.dyn_cast<hw::InnerRefAttr>()) {
-      p.printSymbolName(ref.getModule().getValue());
-      p << "::";
-      p.printSymbolName(ref.getName().getValue());
-    } else {
-      p.printSymbolName(attr.cast<FlatSymbolRefAttr>().getValue());
-    }
-  });
-  p << "]";
-  p.printOptionalAttrDict(
-      (*this)->getAttrs(),
-      {SymbolTable::getSymbolAttrName(), "namepath", visibilityAttrName});
-}
-
-ParseResult HierPathOp::parse(OpAsmParser &parser, OperationState &result) {
-  // Parse the visibility attribute.
-  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
-
-  // Parse the symbol name.
-  StringAttr symName;
-  if (parser.parseSymbolName(symName, SymbolTable::getSymbolAttrName(),
-                             result.attributes))
-    return failure();
-
-  // Parse the namepath.
-  SmallVector<Attribute> namepath;
-  if (parser.parseCommaSeparatedList(
-          OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
-            auto loc = parser.getCurrentLocation();
-            SymbolRefAttr ref;
-            if (parser.parseAttribute(ref))
-              return failure();
-
-            // "A" is a Ref, "A::b" is a InnerRef, "A::B::c" is an error.
-            auto pathLength = ref.getNestedReferences().size();
-            if (pathLength == 0)
-              namepath.push_back(
-                  FlatSymbolRefAttr::get(ref.getRootReference()));
-            else if (pathLength == 1)
-              namepath.push_back(hw::InnerRefAttr::get(ref.getRootReference(),
-                                                       ref.getLeafReference()));
-            else
-              return parser.emitError(loc,
-                                      "only one nested reference is allowed");
-            return success();
-          }))
-    return failure();
-  result.addAttribute("namepath",
-                      ArrayAttr::get(parser.getContext(), namepath));
-
-  if (parser.parseOptionalAttrDict(result.attributes))
-    return failure();
-
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // Various namers.
 //===----------------------------------------------------------------------===//
 
@@ -3924,6 +3655,9 @@ void AndRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
+void SizeOfIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
 void AsAsyncResetPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
@@ -3969,13 +3703,19 @@ void GTPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void HeadPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-void IsXVerifOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void IsXIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void PlusArgsValueIntrinsicOp::getAsmResultNames(
+    OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void PlusArgsTestIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void LEQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-
 void LTPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
@@ -4050,7 +3790,7 @@ void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
                                          ArrayRef<NamedAttribute> attrs,
-                                         Optional<Location> loc) {
+                                         std::optional<Location> loc) {
   auto inType = operands[0].getType();
   auto inRefType = inType.dyn_cast<RefType>();
   if (!inRefType) {
@@ -4064,7 +3804,7 @@ FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
 
 FIRRTLType RefSendOp::inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
-                                      Optional<Location> loc) {
+                                      std::optional<Location> loc) {
   auto inType = operands[0].getType();
   auto inBaseType = inType.dyn_cast<FIRRTLBaseType>();
   if (!inBaseType) {
@@ -4090,7 +3830,7 @@ void RefSubOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
                                      ArrayRef<NamedAttribute> attrs,
-                                     Optional<Location> loc) {
+                                     std::optional<Location> loc) {
   auto inType = operands[0].getType().cast<RefType>().getType();
   auto fieldIdx =
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();

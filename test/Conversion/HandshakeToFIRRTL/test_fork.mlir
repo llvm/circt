@@ -2,12 +2,12 @@
 
 // CHECK-LABEL: firrtl.module @handshake_fork_1ins_2outs_ctrl(
 // CHECK-SAME:  in %[[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[ARG2:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>
-// CHECK:   %[[ARG_VALID:.+]] = firrtl.subfield %[[ARG0]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[ARG_READY:.+]] = firrtl.subfield %[[ARG0]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[RES0_VALID:.+]] = firrtl.subfield %[[ARG1]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[RES0_READY:.+]] = firrtl.subfield %[[ARG1]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[RES1_VALID:.+]] = firrtl.subfield %[[ARG2]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[RES1_READY:.+]] = firrtl.subfield %[[ARG2]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
+// CHECK:   %[[ARG_VALID:.+]] = firrtl.subfield %[[ARG0]][valid] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
+// CHECK:   %[[ARG_READY:.+]] = firrtl.subfield %[[ARG0]][ready] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
+// CHECK:   %[[RES0_VALID:.+]] = firrtl.subfield %[[ARG1]][valid] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
+// CHECK:   %[[RES0_READY:.+]] = firrtl.subfield %[[ARG1]][ready] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
+// CHECK:   %[[RES1_VALID:.+]] = firrtl.subfield %[[ARG2]][valid] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
+// CHECK:   %[[RES1_READY:.+]] = firrtl.subfield %[[ARG2]][ready] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
 
 // Done logic.
 // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -71,9 +71,9 @@ handshake.func @test_fork(%arg0: none, %arg1: none, ...) -> (none, none, none) {
 
 // CHECK-LABEL: firrtl.module @handshake_fork_in_ui64_out_ui64_ui64(
 // CHECK-SAME: in %[[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[ARG2:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
-// CHECK:   %[[ARG_DATA:.+]] = firrtl.subfield %[[ARG0]](2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
-// CHECK:   %[[RES0_DATA:.+]] = firrtl.subfield %[[ARG1]](2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
-// CHECK:   %[[RES1_DATA:.+]] = firrtl.subfield %[[ARG2]](2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
+// CHECK:   %[[ARG_DATA:.+]] = firrtl.subfield %[[ARG0]][data] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+// CHECK:   %[[RES0_DATA:.+]] = firrtl.subfield %[[ARG1]][data] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+// CHECK:   %[[RES1_DATA:.+]] = firrtl.subfield %[[ARG2]][data] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
 
 // CHECK:   firrtl.connect %[[RES0_DATA:.+]], %[[ARG_DATA:.+]] : !firrtl.uint<64>, !firrtl.uint<64>
 // CHECK:   firrtl.connect %[[RES1_DATA:.+]], %[[ARG_DATA:.+]] : !firrtl.uint<64>, !firrtl.uint<64>

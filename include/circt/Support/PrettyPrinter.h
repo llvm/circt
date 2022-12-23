@@ -23,6 +23,7 @@
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/SaveAndRestore.h"
 
 #include <cstdint>
@@ -172,13 +173,17 @@ public:
   /// - margin: line width.
   /// - baseIndent: always indent at least this much (starting 'indent' value).
   /// - currentColumn: current column, used to calculate space remaining.
+  /// - maxStartingIndent: max column indentation starts at, must be >= margin.
   PrettyPrinter(llvm::raw_ostream &os, uint32_t margin, uint32_t baseIndent = 0,
-                uint32_t currentColumn = 0, Listener *listener = nullptr)
+                uint32_t currentColumn = 0,
+                uint32_t maxStartingIndent = kInfinity / 4,
+                Listener *listener = nullptr)
       : space(margin - std::max(currentColumn, baseIndent)),
         defaultFrame{baseIndent, PrintBreaks::Inconsistent}, indent(baseIndent),
-        margin(margin), maxStartingIndent(margin), os(os), listener(listener) {
-    assert(margin < kInfinity / 2);
-    assert(margin > baseIndent);
+        margin(margin), maxStartingIndent(std::max(maxStartingIndent, margin)),
+        os(os), listener(listener) {
+    assert(maxStartingIndent < kInfinity / 2);
+    assert(maxStartingIndent > baseIndent);
     assert(margin > currentColumn);
     // Ensure first print advances to at least baseIndent.
     pendingIndentation =
@@ -285,9 +290,9 @@ private:
   /// Target line width.
   const uint32_t margin;
 
-  /// Maximum starting indentation level (=margin).
-  /// Currently not configurable, but can be useful to continue indentation past
-  /// margin while still limiting how far is allowed.
+  /// Maximum starting indentation level (default=kInfinity/4).
+  /// Useful to continue indentation past margin while still providing a limit
+  /// to avoid pathological output and for consumption by tools with limits.
   const uint32_t maxStartingIndent;
 
   /// Output stream.

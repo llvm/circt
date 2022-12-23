@@ -19,6 +19,7 @@ add_circt_translation_library(CIRCTExportVerilog
   CIRCTHW
   CIRCTSupport
   CIRCTSV
+  MLIRIR
   MLIRPass
   MLIRSideEffectInterfaces
   MLIRTransforms

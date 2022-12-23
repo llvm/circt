@@ -10,7 +10,6 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   ExtractInstances.cpp
   FlattenMemory.cpp
   GrandCentral.cpp
-  GrandCentralTaps.cpp
   GrandCentralSignalMappings.cpp
   IMConstProp.cpp
   IMDeadCodeElim.cpp
@@ -21,6 +20,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   InnerSymbolDCE.cpp
   LowerAnnotations.cpp
   LowerCHIRRTL.cpp
+  LowerIntrinsics.cpp
   LowerMemory.cpp
   LowerTypes.cpp
   LowerXMR.cpp

@@ -72,10 +72,10 @@ static bool isVerilogUnaryOperator(Operation *op) {
 }
 
 /// Helper to convert a value to a constant integer if it is one.
-static llvm::Optional<APInt> getInt(Value value) {
+static std::optional<APInt> getInt(Value value) {
   if (auto cst = dyn_cast_or_null<hw::ConstantOp>(value.getDefiningOp()))
     return cst.getValue();
-  return llvm::None;
+  return std::nullopt;
 }
 
 // Checks whether the destination and the source of an assignment are the same.
@@ -248,7 +248,7 @@ bool PrettifyVerilogPass::splitArrayAssignment(OpBuilder &builder,
     return std::get<0>(l).ult(std::get<0>(r));
   });
 
-  llvm::Optional<APInt> last;
+  std::optional<APInt> last;
   for (auto &[i, loc, value] : fields) {
     if (i == last)
       continue;

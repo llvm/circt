@@ -72,7 +72,7 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
       // assumes outer loops execute sequentially, i.e. one iteration of the
       // inner loop completes before the next iteration is initiated. With
       // proper analysis and lowerings, this can be relaxed.
-      unsigned distance = memoryDep.dependenceComponents.back().lb.value();
+      unsigned distance = *memoryDep.dependenceComponents.back().lb;
       if (distance > 0)
         problem.setDistance(dep, distance);
     }
