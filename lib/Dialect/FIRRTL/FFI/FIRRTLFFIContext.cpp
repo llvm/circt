@@ -64,7 +64,7 @@ void FFIContext::visitCircuit(StringRef name) {
 }
 
 void FFIContext::visitModule(StringRef name) {
-  RA_EXPECT(auto circuitOp, this->circuitOp);
+  RA_EXPECT(auto &circuitOp, this->circuitOp);
 
   auto builder = circuitOp.getBodyBuilder();
   moduleOp =
@@ -73,7 +73,7 @@ void FFIContext::visitModule(StringRef name) {
 }
 
 void FFIContext::visitExtModule(StringRef name, StringRef defName) {
-  RA_EXPECT(auto circuitOp, this->circuitOp);
+  RA_EXPECT(auto &circuitOp, this->circuitOp);
 
   auto builder = circuitOp.getBodyBuilder();
   moduleOp = builder.create<FExtModuleOp>(mockLoc(), stringRefToAttr(name),
@@ -85,7 +85,7 @@ void FFIContext::visitPort(StringRef name, Direction direction,
                            const FirrtlType &type) {
   std::visit(
       [&](auto &&moduleOp) {
-        RA_EXPECT(auto lastModuleOp, moduleOp);
+        RA_EXPECT(auto &lastModuleOp, moduleOp);
 
         auto existedNames = lastModuleOp.getPortNames();
         for (const auto &existedName : existedNames) {
