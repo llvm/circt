@@ -195,9 +195,38 @@ int testGenPorts(FirrtlContext ctx) {
   return 0;
 }
 
+int testGenExtModule(FirrtlContext ctx) {
+  FirrtlType tyUInt8 = {
+      .kind = FIRRTL_TYPE_KIND_UINT,
+      .u = {.uint = {.width = 8}},
+  };
+  FirrtlType tySInt8 = {
+      .kind = FIRRTL_TYPE_KIND_SINT,
+      .u = {.sint = {.width = 8}},
+  };
+
+  firrtlVisitCircuit(ctx, MK_STR("Meow"));
+  firrtlVisitModule(ctx, MK_STR("Meow"));
+  firrtlVisitExtModule(ctx, MK_STR("ExtMeow"), MK_STR(""));
+  firrtlVisitExtModule(ctx, MK_STR("ExtMeow2"), MK_STR("ExtMeow2"));
+  firrtlVisitPort(ctx, MK_STR("inPort"), FIRRTL_PORT_DIRECTION_INPUT, &tyUInt8);
+  firrtlVisitPort(ctx, MK_STR("outPort"), FIRRTL_PORT_DIRECTION_OUTPUT,
+                  &tySInt8);
+
+  EXPECT_EXPORT("circuit Meow :\n\
+  module Meow :\n\n\
+  extmodule ExtMeow :\n\n\
+  extmodule ExtMeow2 :\n\
+    input inPort : UInt<8>\n\
+    output outPort : SInt<8>\n\
+    defname = ExtMeow2\n\n");
+  return 0;
+}
+
 int testGenerated() {
   IF_ERR_RET(runOnce(&testGenHeader));
   IF_ERR_RET(runOnce(&testGenPorts));
+  IF_ERR_RET(runOnce(&testGenExtModule));
 
   return 0;
 }
@@ -302,17 +331,17 @@ int testExpectedError() {
 int main() {
   fprintf(stderr, "@generated\n");
   int errCode = testGenerated();
-  fprintf(stderr, "%d\n", errCode);
+  fprintf(stderr, "generated{%d}\n", errCode);
 
   fprintf(stderr, "@expectedError\n");
   errCode = testExpectedError();
-  fprintf(stderr, "%d\n", errCode);
+  fprintf(stderr, "expectedError{%d}\n", errCode);
 
   // clang-format off
   // CHECK-LABEL: @generated
-  // CHECK: 0
+  // CHECK: generated{0}
   // CHECK-LABEL: @expectedError
-  // CHECK: 0
+  // CHECK: expectedError{0}
   // clang-format on
 
   return 0;

@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <optional>
+#include <variant>
 
 struct FirrtlType;
 
@@ -32,6 +33,9 @@ namespace details {
 template <class T>
 struct RequireAssigned {
   using Type = T;
+
+  inline RequireAssigned() = default;
+  inline RequireAssigned(T right) : underlying{std::move(right)} {}
 
   inline RequireAssigned &operator=(const T &right) {
     underlying = right;
@@ -54,6 +58,7 @@ public:
 
   void visitCircuit(StringRef name);
   void visitModule(StringRef name);
+  void visitExtModule(StringRef name, StringRef defName);
   void visitPort(StringRef name, Direction direction, const FirrtlType &type);
 
   void exportFIRRTL(llvm::raw_ostream &os) const;
@@ -66,7 +71,9 @@ private:
   std::unique_ptr<mlir::OpBuilder> opBuilder;
 
   details::RequireAssigned<firrtl::CircuitOp> circuitOp;
-  details::RequireAssigned<firrtl::FModuleOp> moduleOp;
+  std::variant<details::RequireAssigned<firrtl::FModuleOp>,
+               details::RequireAssigned<firrtl::FExtModuleOp>>
+      moduleOp;
 
   Location mockLoc() const;
   StringAttr stringRefToAttr(StringRef stringRef);

@@ -73,6 +73,10 @@ MLIR_CAPI_EXPORTED void firrtlVisitCircuit(FirrtlContext ctx,
 MLIR_CAPI_EXPORTED void firrtlVisitModule(FirrtlContext ctx,
                                           FirrtlStringRef name);
 
+MLIR_CAPI_EXPORTED void firrtlVisitExtModule(FirrtlContext ctx,
+                                             FirrtlStringRef name,
+                                             FirrtlStringRef defName);
+
 typedef enum FirrtlPortDirection {
   FIRRTL_PORT_DIRECTION_INPUT,
   FIRRTL_PORT_DIRECTION_OUTPUT,

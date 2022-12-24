@@ -67,32 +67,46 @@ void FFIContext::visitModule(StringRef name) {
   RA_EXPECT(auto circuitOp, this->circuitOp);
 
   auto builder = circuitOp.getBodyBuilder();
-  moduleOp = builder.create<FModuleOp>(mockLoc(), stringRefToAttr(name),
-                                       ArrayRef<PortInfo>{});
+  moduleOp =
+      builder.create<FModuleOp>(mockLoc(), stringRefToAttr(name),
+                                ArrayRef<PortInfo>{} /* TODO: annotations */);
+}
+
+void FFIContext::visitExtModule(StringRef name, StringRef defName) {
+  RA_EXPECT(auto circuitOp, this->circuitOp);
+
+  auto builder = circuitOp.getBodyBuilder();
+  moduleOp = builder.create<FExtModuleOp>(mockLoc(), stringRefToAttr(name),
+                                          ArrayRef<PortInfo>{}, defName
+                                          /* TODO: annotations */);
 }
 
 void FFIContext::visitPort(StringRef name, Direction direction,
                            const FirrtlType &type) {
-  RA_EXPECT(auto lastModuleOp, this->moduleOp);
+  std::visit(
+      [&](auto &&moduleOp) {
+        RA_EXPECT(auto lastModuleOp, moduleOp);
 
-  auto existedNames = lastModuleOp.getPortNames();
-  for (const auto &existedName : existedNames) {
-    if (attrToStringRef(existedName) == name) {
-      emitError(("redefinition of port name '" + name + "'").str());
-      return;
-    }
-  }
+        auto existedNames = lastModuleOp.getPortNames();
+        for (const auto &existedName : existedNames) {
+          if (attrToStringRef(existedName) == name) {
+            emitError(("redefinition of port name '" + name + "'").str());
+            return;
+          }
+        }
 
-  auto firType = ffiTypeToFirType(type);
-  if (!firType.has_value()) {
-    return;
-  }
-  auto info = PortInfo{stringRefToAttr(name), *firType, direction};
+        auto firType = ffiTypeToFirType(type);
+        if (!firType.has_value()) {
+          return;
+        }
+        auto info = PortInfo{stringRefToAttr(name), *firType, direction};
 
-  // If the performance of this function is very poor, we can try to cache all
-  // ports and finally create `FModuleOp` at once.
-  lastModuleOp.insertPorts(
-      {std::make_pair(lastModuleOp.getBodyBlock()->getNumArguments(), info)});
+        // If the performance of this function is very poor, we can try to cache
+        // all ports and finally create `FModuleOp` at once.
+        lastModuleOp.insertPorts(
+            {std::make_pair(lastModuleOp.getNumPorts(), info)});
+      },
+      moduleOp);
 }
 
 void FFIContext::exportFIRRTL(llvm::raw_ostream &os) const {

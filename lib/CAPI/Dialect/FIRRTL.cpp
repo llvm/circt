@@ -47,6 +47,13 @@ void firrtlVisitModule(FirrtlContext ctx, FirrtlStringRef name) {
   ffiCtx->visitModule(unwrap(name));
 }
 
+void firrtlVisitExtModule(FirrtlContext ctx, FirrtlStringRef name,
+                          FirrtlStringRef defName) {
+  auto *ffiCtx = unwrap(ctx);
+
+  ffiCtx->visitExtModule(unwrap(name), unwrap(defName));
+}
+
 void firrtlVisitPort(FirrtlContext ctx, FirrtlStringRef name,
                      FirrtlPortDirection direction, const FirrtlType *type) {
   auto *ffiCtx = unwrap(ctx);
