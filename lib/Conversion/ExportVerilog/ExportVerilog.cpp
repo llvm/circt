@@ -681,6 +681,10 @@ static BlockStatementCount countStatements(Block &block) {
 /// that uses it.
 bool ExportVerilog::isExpressionEmittedInline(Operation *op,
                                               const LoweringOptions &options) {
+  // Never create a temporary for a dead expression.
+  if (op->getResult(0).use_empty())
+    return true;
+
   // Never create a temporary which is only going to be assigned to an output
   // port, wire, or reg.
   if (op->hasOneUse() &&
