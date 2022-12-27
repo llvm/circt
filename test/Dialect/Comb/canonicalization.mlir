@@ -1466,3 +1466,11 @@ hw.module @MuxSimplify(%index: i1, %a: i1, %foo_0: i2, %foo_1: i2) -> (r_0: i2, 
 // CHECK-NEXT:  %15 = comb.or %14, %index : i1
 // CHECK-NEXT:  %16 = comb.mux bin %15, %foo_0, %foo_1 : i2
 // CHECK-NEXT:  hw.output %1, %3, %6, %8, %10, %13, %16
+
+// CHECK-LABEL: @twoStateICmp
+hw.module @twoStateICmp(%arg: i4) -> (cond: i1) {
+  // CHECK: %0 = comb.icmp bin eq %arg, %c-1_i4
+  %c-1_i4 = hw.constant -1 : i4
+  %0 = comb.icmp bin eq %c-1_i4, %arg : i4
+  hw.output %0 : i1
+}

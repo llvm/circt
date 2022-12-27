@@ -2860,7 +2860,7 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
     assert(!matchPattern(op.getRhs(), m_RConstant(rhs)) && "Should be folded");
     replaceOpWithNewOpAndCopyName<ICmpOp>(
         rewriter, op, ICmpOp::getFlippedPredicate(op.getPredicate()),
-        op.getRhs(), op.getLhs(), false);
+        op.getRhs(), op.getLhs(), op.getTwoState());
     return success();
   }
 
@@ -2873,7 +2873,7 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
     auto replaceWith = [&](ICmpPredicate predicate, Value lhs,
                            Value rhs) -> LogicalResult {
       replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, op, predicate, lhs, rhs,
-                                            false);
+                                            op.getTwoState());
       return success();
     };
 
@@ -2983,7 +2983,8 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
         if (rhs.isZero()) {
           // x == 0 -> x ^ 1
           replaceOpWithNewOpAndCopyName<XorOp>(rewriter, op, op.getLhs(),
-                                               getConstant(APInt(1, 1)), false);
+                                               getConstant(APInt(1, 1)),
+                                               op.getTwoState());
           return success();
         }
         if (rhs.isAllOnes()) {
@@ -3003,7 +3004,8 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
         if (rhs.isAllOnes()) {
           // x != 1 -> x ^ 1
           replaceOpWithNewOpAndCopyName<XorOp>(rewriter, op, op.getLhs(),
-                                               getConstant(APInt(1, 1)), false);
+                                               getConstant(APInt(1, 1)),
+                                               op.getTwoState());
           return success();
         }
       }
@@ -3045,7 +3047,7 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
                                            : APInt::getZero(width));
           replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, op, op.getPredicate(),
                                                 replicateOp.getInput(), cst,
-                                                false);
+                                                op.getTwoState());
           return success();
         }
     }
