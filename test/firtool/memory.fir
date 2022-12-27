@@ -84,21 +84,21 @@ circuit Qux: %[[{
 ;CHECK:    %[[multbit_mux_wire:.+]] = sv.wire  : !hw.inout<i8>
 ;CHECK:    %[[v7:.+]] = sv.read_inout %[[multbit_mux_wire]]
 ;CHECK:    %12 = comb.icmp eq %rwAddr, %c0_i2 : i2
-;CHECK:    %13 = comb.and %rwEn, %rwMode, %rwMask, %12 : i1
+;CHECK:    %13 = comb.and bin %rwEn, %rwMode, %rwMask, %12 : i1
 ;CHECK:    %14 = comb.icmp bin eq %rwAddr, %c1_i2 : i2
-;CHECK:    %15 = comb.and %rwEn, %rwMode, %rwMask, %14 : i1
+;CHECK:    %15 = comb.and bin %rwEn, %rwMode, %rwMask, %14 : i1
 ;CHECK:    %16 = comb.icmp bin eq %rwAddr, %c-2_i2 : i2
-;CHECK:    %17 = comb.and %rwEn, %rwMode, %rwMask, %16 : i1
+;CHECK:    %17 = comb.and bin %rwEn, %rwMode, %rwMask, %16 : i1
 ;CHECK:    %18 = comb.icmp bin eq %rwAddr, %c-1_i2 : i2
-;CHECK:    %19 = comb.and %rwEn, %rwMode, %rwMask, %18 : i1
+;CHECK:    %19 = comb.and bin %rwEn, %rwMode, %rwMask, %18 : i1
 ;CHECK:    %20 = comb.icmp eq %wAddr, %c0_i2 : i2
-;CHECK:    %21 = comb.and %wEn, %wMask, %20 : i1
+;CHECK:    %21 = comb.and bin %wEn, %wMask, %20 : i1
 ;CHECK:    %22 = comb.icmp bin eq %wAddr, %c1_i2 : i2
-;CHECK:    %23 = comb.and %wEn, %wMask, %22 : i1
+;CHECK:    %23 = comb.and bin %wEn, %wMask, %22 : i1
 ;CHECK:    %24 = comb.icmp bin eq %wAddr, %c-2_i2 : i2
-;CHECK:    %25 = comb.and %wEn, %wMask, %24 : i1
+;CHECK:    %25 = comb.and bin %wEn, %wMask, %24 : i1
 ;CHECK:    %26 = comb.icmp bin eq %wAddr, %c-1_i2 : i2
-;CHECK:    %27 = comb.and %wEn, %wMask, %26 : i1
+;CHECK:    %27 = comb.and bin %wEn, %wMask, %26 : i1
 ;CHECK:    sv.always posedge %clock {
 ;CHECK:      sv.if %21 {
 ;CHECK:        sv.passign %memory_0, %wData : i8
