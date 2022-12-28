@@ -53,4 +53,15 @@ def StripDebugInfoWithPred : Pass<"strip-debuginfo-with-pred", "::mlir::ModuleOp
            "intended to be used for testing."> ];
 }
 
+def MaximizeSSA : Pass<"maximize-ssa", "::mlir::ModuleOp"> {
+  let summary = "Convert every function into maximal SSA form";
+  let description = [{
+    Convert the region within every function into maximal SSA form. This
+    ensures that every value used within a block is also defined within the
+    block, making dataflow explicit and removing block dominance-based dataflow
+    semantics. 
+  }];
+  let constructor = "circt::createMaximizeSSAPass()";
+}
+
 #endif // CIRCT_TRANSFORMS_PASSES
