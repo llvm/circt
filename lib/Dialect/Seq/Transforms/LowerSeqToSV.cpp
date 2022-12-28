@@ -44,15 +44,31 @@ struct SeqFIRRTLToSVPass
 };
 } // anonymous namespace
 
+/// Create the assign.
+static void createAssign(ConversionPatternRewriter &rewriter, sv::RegOp svReg,
+                         CompRegOp reg) {
+  rewriter.create<sv::PAssignOp>(reg.getLoc(), svReg, reg.getInput());
+}
+/// Create the assign inside of an if block.
+static void createAssign(ConversionPatternRewriter &rewriter, sv::RegOp svReg,
+                         CompRegClockEnabledOp reg) {
+  Location loc = reg.getLoc();
+  rewriter.create<sv::IfOp>(loc, reg.getClockEnable(), [&]() {
+    rewriter.create<sv::PAssignOp>(reg.getLoc(), svReg, reg.getInput());
+  });
+}
+
 namespace {
 /// Lower CompRegOp to `sv.reg` and `sv.alwaysff`. Use a posedge clock and
 /// synchronous reset.
-struct CompRegLower : public OpConversionPattern<CompRegOp> {
+template <typename OpTy>
+struct CompRegLower : public OpConversionPattern<OpTy> {
 public:
-  using OpConversionPattern::OpConversionPattern;
+  using OpConversionPattern<OpTy>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<OpTy>::OpAdaptor;
 
   LogicalResult
-  matchAndRewrite(CompRegOp reg, OpAdaptor adaptor,
+  matchAndRewrite(OpTy reg, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     Location loc = reg.getLoc();
 
@@ -73,15 +89,14 @@ public:
       rewriter.create<sv::AlwaysFFOp>(
           loc, sv::EventControl::AtPosEdge, reg.getClk(), ResetType::SyncReset,
           sv::EventControl::AtPosEdge, reg.getReset(),
-          [&]() { rewriter.create<sv::PAssignOp>(loc, svReg, reg.getInput()); },
+          [&]() { createAssign(rewriter, svReg, reg); },
           [&]() {
             rewriter.create<sv::PAssignOp>(loc, svReg, reg.getResetValue());
           });
     } else {
       rewriter.create<sv::AlwaysFFOp>(
-          loc, sv::EventControl::AtPosEdge, reg.getClk(), [&]() {
-            rewriter.create<sv::PAssignOp>(loc, svReg, reg.getInput());
-          });
+          loc, sv::EventControl::AtPosEdge, reg.getClk(),
+          [&]() { createAssign(rewriter, svReg, reg); });
     }
 
     rewriter.replaceOp(reg, {regVal});
@@ -558,7 +573,8 @@ void SeqToSVPass::runOnOperation() {
   target.addIllegalDialect<SeqDialect>();
   target.addLegalDialect<sv::SVDialect>();
   RewritePatternSet patterns(&ctxt);
-  patterns.add<CompRegLower>(&ctxt);
+  patterns.add<CompRegLower<CompRegOp>>(&ctxt);
+  patterns.add<CompRegLower<CompRegClockEnabledOp>>(&ctxt);
 
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();
