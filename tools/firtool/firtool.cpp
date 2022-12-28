@@ -110,9 +110,15 @@ static cl::opt<bool>
                            cl::desc("Convert all chisel asserts into SVA"),
                            cl::init(false), cl::cat(mainCategory));
 
-static cl::opt<bool> stripMuxPragmas("strip-mux-pragmas",
-                                     cl::desc("Don't emit mux pragmas"),
-                                     cl::init(false), cl::cat(mainCategory));
+static cl::opt<bool> addMuxPragmas("add-mux-pragmas",
+                                   cl::desc("Annotate mux pragmas"),
+                                   cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool> stripMuxPragmas(
+    "strip-mux-pragmas",
+    cl::desc("Strip mux pragmas. This options was deprecated since annotate "
+             "mux pragmas are not emitted by default"),
+    cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool> disableAnnotationsClassless(
     "disable-annotation-classless",
@@ -773,6 +779,15 @@ static LogicalResult processBuffer(
         firrtl::createMergeConnectionsPass(
             !disableAggressiveMergeConnections.getValue()));
 
+  if (stripMuxPragmas) {
+    if (addMuxPragmas) {
+      emitError(module->getLoc())
+          << "--strip-mux-pragmas and --add-mux-pragmas are conflicting.";
+      return failure();
+    }
+    addMuxPragmas = false;
+  }
+
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {
 
@@ -791,7 +806,7 @@ static LogicalResult processBuffer(
 
     pm.addPass(createLowerFIRRTLToHWPass(
         enableAnnotationWarning.getValue(), emitChiselAssertsAsSVA.getValue(),
-        stripMuxPragmas.getValue(), !isRandomEnabled(RandomKind::Mem),
+        addMuxPragmas.getValue(), !isRandomEnabled(RandomKind::Mem),
         !isRandomEnabled(RandomKind::Reg)));
 
     if (outputFormat == OutputIRHW) {
@@ -814,7 +829,7 @@ static LogicalResult processBuffer(
            /*addVivadoRAMAddressConflictSynthesisBugWorkaround=*/
            addVivadoRAMAddressConflictSynthesisBugWorkaround}));
       pm.addPass(sv::createHWMemSimImplPass(
-          replSeqMem, ignoreReadEnableMem, stripMuxPragmas,
+          replSeqMem, ignoreReadEnableMem, addMuxPragmas,
           !isRandomEnabled(RandomKind::Mem), !isRandomEnabled(RandomKind::Reg),
           addVivadoRAMAddressConflictSynthesisBugWorkaround));
 

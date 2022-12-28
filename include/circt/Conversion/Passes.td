@@ -297,8 +297,8 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
     "Emit warnings on unprocessed annotations during lower-to-hw pass">,
     Option<"emitChiselAssertsAsSVA", "emit-chisel-asserts-as-sva",
            "bool", "false","Convert all Chisel asserts to SVA">,
-    Option<"stripMuxPragmas", "strip-mux-pragmas", "bool", "false",
-            "Do not annotate mux pragmas to multibit mux and subacess results">
+    Option<"addMuxPragmas", "add-mux-pragmas", "bool", "false",
+            "Annotate mux pragmas to multibit mux and subacess results">
   ];
 }
 

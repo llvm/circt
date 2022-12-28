@@ -335,10 +335,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %[[FILLER:.+]] = hw.array_create %[[GET0]] : i1
     // CHECK-NEXT: %[[EXT:.+]] = hw.array_concat %[[FILLER]], %[[ARRAY]]
     // CHECK-NEXT: %[[ARRAY_GET:.+]] = hw.array_get %[[EXT]][%[[ZEXT_INDEX]]]
-    // CHECK-NEXT: %[[WIRE:.+]] = sv.wire
-    // CHECK-NEXT: sv.assign %[[WIRE]], %[[ARRAY_GET]]
-    // CHECK-NEXT: %[[READ_WIRE:.+]] = sv.read_inout %[[WIRE]] : !hw.inout<i1>
-    // CHECK: hw.output %false, %[[READ_WIRE]] : i1, i1
+    // CHECK: hw.output %false, %[[ARRAY_GET]] : i1, i1
     firrtl.connect %out2, %61 : !firrtl.sint<1>, !firrtl.sint<1>
   }
 
@@ -1180,10 +1177,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %[[EXTArray:.+]] = hw.array_create %[[EXTValue]], %[[EXTValue]], %[[EXTValue]]
     // CHECK-NEXT: %[[Array:.+]] = hw.array_concat %[[EXTArray]], %a
     // CHECK-NEXT: %[[READ:.+]] = hw.array_get %[[Array]][%3]
-    // CHECK-NEXT: %[[valWire:.+]] = sv.wire  : !hw.inout<i1>
-    // CHECK-NEXT: sv.assign %[[valWire]], %[[READ]]
-    // CHECK-NEXT: %[[RD:.+]] = sv.read_inout %[[valWire]] : !hw.inout<i1>
-    // CHECK-NEXT: sv.assign %2, %[[RD]] : i1
+    // CHECK-NEXT: sv.assign %2, %[[READ]] : i1
     // CHECK-NEXT: hw.output %0 : !hw.array<5xi1>
   }
 
@@ -1321,11 +1315,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %1 = hw.array_get %0[%c0_i2]
     // CHECK-NEXT: %2 = hw.array_create %1 : i1
     // CHECK-NEXT: %3 = hw.array_concat %2, %0
-    // CHECK-NEXT: %4 = hw.array_get %3[%index] {sv.attributes = #sv.attributes<[#sv.attribute<"cadence map_to_mux">], emitAsComments>}
-    // CHECK-NEXT: %5 = sv.wire : !hw.inout<i1>
-    // CHECK-NEXT: sv.assign %5, %4 {sv.attributes = #sv.attributes<[#sv.attribute<"synopsys infer_mux_override">], emitAsComments>}
-    // CHECK-NEXT: %6 = sv.read_inout %5 : !hw.inout<i1>
-    // CHECK-NEXT: hw.output %6 : i1
+    // CHECK-NEXT: %4 = hw.array_get %3[%index]
+    // CHECK-NEXT: hw.output %4 : i1
   }
 
   firrtl.module private @inferUnmaskedMemory(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out %rData: !firrtl.uint<8>, in %wMask: !firrtl.uint<1>, in %wData: !firrtl.uint<8>) {
