@@ -419,7 +419,6 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
   auto ii = builder.getI64IntegerAttr(
       std::max(problem.getInitiationInterval().value(), recurrenceII));
 
-
   SmallVector<Value> iterArgs;
   iterArgs.push_back(lowerBound);
   iterArgs.append(innerLoop.getIterOperands().begin(),
@@ -474,7 +473,7 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
   DominanceInfo dom(getOperation());
 
   // Keys for translating values in each stage
-  SmallVector<DenseSet<Value>> registerValues;
+  SmallVector<SmallVector<Value>> registerValues;
   SmallVector<SmallVector<mlir::Type>> registerTypes;
 
   // The maps that ensure a stage uses the correct version of a value
@@ -494,7 +493,7 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
 
     // Initialize set of registers up until this point in time
     for (unsigned i = registerValues.size(); i <= startTime; ++i)
-      registerValues.push_back(DenseSet<Value>());
+      registerValues.push_back(SmallVector<Value>());
 
     // Check each operation to see if its results need plumbing
     for (auto *op : group) {
@@ -518,17 +517,17 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
 
       // Add register stages for each time slice we need to pipe to
       for (unsigned i = registerValues.size(); i <= pipeEndTime; ++i)
-        registerValues.push_back(DenseSet<Value>());
+        registerValues.push_back(SmallVector<Value>());
 
       // Keep a collection of this stages results as keys to our valueMaps
       for (auto result : op->getResults())
-        registerValues[startTime].insert(result);
+        registerValues[startTime].push_back(result);
 
       // Other stages that use the value will need these values as keys too
       for (unsigned i = std::max(startTime + 1, pipeStartTime); i < pipeEndTime;
            ++i) {
         for (auto result : op->getResults())
-          registerValues[i].insert(result);
+          registerValues[i].push_back(result);
       }
     }
   }
