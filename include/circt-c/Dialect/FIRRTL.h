@@ -77,6 +77,45 @@ MLIR_CAPI_EXPORTED void firrtlVisitExtModule(FirrtlContext ctx,
                                              FirrtlStringRef name,
                                              FirrtlStringRef defName);
 
+typedef enum FirrtlParameterKind {
+  FIRRTL_PARAMETER_KIND_INT,
+  FIRRTL_PARAMETER_KIND_DOUBLE,
+  FIRRTL_PARAMETER_KIND_STRING,
+  FIRRTL_PARAMETER_KIND_RAW
+} FirrtlParameterKind;
+
+typedef struct FirrtlParameterInt {
+  int64_t value;
+} FirrtlParameterInt;
+
+typedef struct FirrtlParameterDouble {
+  double value;
+} FirrtlParameterDouble;
+
+typedef struct FirrtlParameterString {
+  FirrtlStringRef value;
+} FirrtlParameterString;
+
+typedef struct FirrtlParameterRaw {
+  FirrtlStringRef value;
+} FirrtlParameterRaw;
+
+typedef union FirrtlParameterUnion {
+  FirrtlParameterInt int_;
+  FirrtlParameterDouble double_;
+  FirrtlParameterString string;
+  FirrtlParameterRaw raw;
+} FirrtlParameterUnion;
+
+typedef struct FirrtlParameter {
+  FirrtlParameterKind kind;
+  FirrtlParameterUnion u;
+} FirrtlParameter;
+
+MLIR_CAPI_EXPORTED void firrtlVisitParameter(FirrtlContext ctx,
+                                             FirrtlStringRef name,
+                                             const FirrtlParameter *param);
+
 typedef enum FirrtlPortDirection {
   FIRRTL_PORT_DIRECTION_INPUT,
   FIRRTL_PORT_DIRECTION_OUTPUT,

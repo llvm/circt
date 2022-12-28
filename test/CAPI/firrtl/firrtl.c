@@ -221,15 +221,74 @@ int testGenExtModule(FirrtlContext ctx, size_t *errCount) {
   firrtlVisitPort(ctx, MK_STR("outPort"), FIRRTL_PORT_DIRECTION_OUTPUT,
                   &tySInt8);
 
+  FirrtlParameter parameters[] = {
+      {.kind = FIRRTL_PARAMETER_KIND_INT,
+       .u =
+           {
+               .int_ = {.value = 12},
+           }},
+      {.kind = FIRRTL_PARAMETER_KIND_DOUBLE,
+       .u =
+           {
+               .double_ = {.value = 34.56},
+           }},
+      {.kind = FIRRTL_PARAMETER_KIND_STRING,
+       .u =
+           {
+               .string = {.value = MK_STR("string")},
+           }},
+      {.kind = FIRRTL_PARAMETER_KIND_RAW,
+       .u =
+           {
+               .string = {.value = MK_STR("raw")},
+           }},
+  };
+
+  for (unsigned int i = 0; i < ARRAY_SIZE(parameters); i++) {
+    char paramName[64] = {};
+    sprintf(paramName, "param%d", i);
+    firrtlVisitParameter(ctx, MK_STR(paramName), &parameters[i]);
+  }
+
   EXPECT_EXPORT("circuit Meow :\n\
   module Meow :\n\n\
   extmodule ExtMeow :\n\n\
   extmodule ExtMeow2 :\n\
     input inPort : UInt<8>\n\
     output outPort : SInt<8>\n\
-    defname = ExtMeow2\n\n");
+    defname = ExtMeow2\n\
+    parameter param0 = 0\n\
+    parameter param1 = 34.560000000000002\n\
+    parameter param2 = \"string\"\n\
+    parameter param3 = \"raw\"\n\n");
 
   EXPECT(*errCount == 0);
+
+  // duplicate test
+  firrtlVisitParameter(ctx, MK_STR("param0"), &parameters[0]);
+
+  EXPECT(*errCount == 1);
+
+  firrtlVisitExtModule(ctx, MK_STR("ExtMeow3"), MK_STR("ExtMeow3"));
+  firrtlVisitParameter(ctx, MK_STR("param0"), &parameters[0]);
+
+  EXPECT(*errCount == 1);
+
+  EXPECT_EXPORT("circuit Meow :\n\
+  module Meow :\n\n\
+  extmodule ExtMeow :\n\n\
+  extmodule ExtMeow2 :\n\
+    input inPort : UInt<8>\n\
+    output outPort : SInt<8>\n\
+    defname = ExtMeow2\n\
+    parameter param0 = 0\n\
+    parameter param1 = 34.560000000000002\n\
+    parameter param2 = \"string\"\n\
+    parameter param3 = \"raw\"\n\n\
+  extmodule ExtMeow3 :\n\
+    defname = ExtMeow3\n\
+    parameter param0 = 0\n\n");
+
   return 0;
 }
 

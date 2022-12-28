@@ -32,10 +32,10 @@ StringRef attrToStringRef(const Attribute &attr) {
 // This macro returns the underlying value of a `RequireAssigned`, which
 // requires that the value has been set previously, otherwise it will emit an
 // error and return in the current function.
-#define RA_EXPECT(var, ra)                                                     \
+#define RA_EXPECT(var, ra, ...)                                                \
   if (!(ra).underlying.has_value()) {                                          \
     this->emitError("expected `" #ra "` to be set");                           \
-    return;                                                                    \
+    return __VA_ARGS__;                                                        \
   }                                                                            \
   var = (ra).underlying.value(); // NOLINT(bugprone-macro-parentheses)
 
@@ -75,16 +75,62 @@ void FFIContext::visitModule(StringRef name) {
 void FFIContext::visitExtModule(StringRef name, StringRef defName) {
   RA_EXPECT(auto &circuitOp, this->circuitOp);
 
+  seenParamNames.clear();
+
   auto builder = circuitOp.getBodyBuilder();
   moduleOp = builder.create<FExtModuleOp>(mockLoc(), stringRefToAttr(name),
                                           ArrayRef<PortInfo>{}, defName
                                           /* TODO: annotations */);
 }
 
+void FFIContext::visitParameter(StringRef name, const FirrtlParameter &param) {
+  RA_EXPECT(auto &circuitOp, this->circuitOp);
+
+  auto *moduleOpPtr =
+      std::get_if<details::RequireAssigned<firrtl::FExtModuleOp>>(
+          &this->moduleOp);
+
+  if (moduleOpPtr == nullptr) {
+    emitError("parameter can only be declare under an `extmodule`");
+    return;
+  }
+
+  auto &moduleOp = *moduleOpPtr;
+  RA_EXPECT(auto &lastModuleOp, moduleOp);
+
+  auto firParam = ffiParamToFirParam(param);
+  if (!firParam.has_value()) {
+    return;
+  }
+
+  auto nameId = stringRefToAttr(name);
+  if (!seenParamNames.insert(nameId).second) {
+    emitError(("redefinition of parameter '" + name + "'").str());
+    return;
+  }
+
+  auto newParam = ParamDeclAttr::get(nameId, firParam.value());
+  auto builder = circuitOp.getBodyBuilder();
+
+  auto previous = lastModuleOp->getAttr("parameters");
+  if (previous) {
+    auto preArr = llvm::cast<ArrayAttr>(previous);
+
+    SmallVector<Attribute> params;
+    params.reserve(preArr.size() + 1);
+    params.append(preArr.begin(), preArr.end());
+    params.push_back(newParam);
+    lastModuleOp->setAttr("parameters", builder.getArrayAttr(params));
+  } else {
+    lastModuleOp->setAttr(
+        "parameters", builder.getArrayAttr(SmallVector<Attribute>{newParam}));
+  }
+}
+
 void FFIContext::visitPort(StringRef name, Direction direction,
                            const FirrtlType &type) {
   std::visit(
-      [&](auto &&moduleOp) {
+      [&](auto &moduleOp) {
         RA_EXPECT(auto &lastModuleOp, moduleOp);
 
         auto existedNames = lastModuleOp.getPortNames();
@@ -127,6 +173,41 @@ StringAttr FFIContext::stringRefToAttr(StringRef stringRef) {
   return StringAttr::get(mlirCtx.get(), stringRef);
 }
 
+std::optional<Attribute>
+FFIContext::ffiParamToFirParam(const FirrtlParameter &param) {
+  RA_EXPECT(auto &circuitOp, this->circuitOp, std::nullopt);
+
+  auto builder = circuitOp.getBodyBuilder();
+
+  switch (param.kind) {
+  case FIRRTL_PARAMETER_KIND_INT: {
+    APInt result;
+    result = param.u.int_.value;
+
+    // If the integer parameter is less than 32-bits, sign extend this to a
+    // 32-bit value.  This needs to eventually emit as a 32-bit value in
+    // Verilog and we want to get the size correct immediately.
+    if (result.getBitWidth() < 32) {
+      result = result.sext(32);
+    }
+
+    return builder.getIntegerAttr(
+        builder.getIntegerType(result.getBitWidth(), result.isSignBitSet()),
+        result);
+  }
+  case FIRRTL_PARAMETER_KIND_DOUBLE:
+    return builder.getF64FloatAttr(param.u.double_.value);
+  case FIRRTL_PARAMETER_KIND_STRING:
+    return builder.getStringAttr(unwrap(param.u.string.value));
+  case FIRRTL_PARAMETER_KIND_RAW:
+    return builder.getStringAttr(unwrap(param.u.raw.value));
+  }
+
+  emitError("unknown parameter kind");
+  return std::nullopt;
+}
+
+// NOLINTNEXTLINE(misc-no-recursion)
 std::optional<FIRRTLType> FFIContext::ffiTypeToFirType(const FirrtlType &type) {
   auto *mlirCtx = this->mlirCtx.get();
 
@@ -188,7 +269,7 @@ std::optional<FIRRTLType> FFIContext::ffiTypeToFirType(const FirrtlType &type) {
     firType = BundleType::get(mlirCtx, fields);
     break;
   }
-  default:
+  default: // NOLINT(clang-diagnostic-covered-switch-default)
     emitError("unknown type kind");
     return std::nullopt;
   }

@@ -16,20 +16,22 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
+#include "llvm/ADT/SmallPtrSet.h"
 
 #include <memory>
 #include <optional>
 #include <variant>
 
 struct FirrtlType;
+struct FirrtlParameter;
 
 namespace circt {
 namespace chirrtl {
 
 namespace details {
 
-// This class hides all the member functions of `std::optional`, so that we have
-// to access the underlying data by macro `RA_EXPECT`.
+// This class hides all the member functions of `std::optional`, so that we
+// have to access the underlying data by macro `RA_EXPECT`.
 template <class T>
 struct RequireAssigned {
   using Type = T;
@@ -59,6 +61,7 @@ public:
   void visitCircuit(StringRef name);
   void visitModule(StringRef name);
   void visitExtModule(StringRef name, StringRef defName);
+  void visitParameter(StringRef name, const FirrtlParameter &param);
   void visitPort(StringRef name, Direction direction, const FirrtlType &type);
 
   void exportFIRRTL(llvm::raw_ostream &os) const;
@@ -75,8 +78,12 @@ private:
                details::RequireAssigned<firrtl::FExtModuleOp>>
       moduleOp;
 
+  SmallPtrSet<StringAttr, 8> seenParamNames;
+
   Location mockLoc() const;
   StringAttr stringRefToAttr(StringRef stringRef);
+  std::optional<mlir::Attribute>
+  ffiParamToFirParam(const FirrtlParameter &param);
   std::optional<firrtl::FIRRTLType> ffiTypeToFirType(const FirrtlType &type);
 };
 
