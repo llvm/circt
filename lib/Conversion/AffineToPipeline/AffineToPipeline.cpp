@@ -416,6 +416,8 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
                             iterArg.value().getDefiningOp(), problem));
   }
 
+  // TODO(matth2k): Set up explicit value plumbing on iterArgs in cases where
+  // value-forwarding/bypassing would require registers
   auto ii = builder.getI64IntegerAttr(
       std::max(problem.getInitiationInterval().value(), recurrenceII));
 
@@ -608,6 +610,9 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
   SmallVector<Value> termResults;
   termIterArgs.push_back(
       stagesBlock.front().getResult(stagesBlock.front().getNumResults() - 1));
+  // TODO(matth2k): This 'back() + 1' is hardcoded, and must change to the
+  // actual cycle the yielded value is produced on. This is tricky if the
+  // defining Op takes multiple cycles
   for (auto value : forOp.getBody()->getTerminator()->getOperands()) {
     termIterArgs.push_back(stageValueMaps[startTimes.back() + 1].lookup(value));
     termResults.push_back(stageValueMaps[startTimes.back() + 1].lookup(value));
