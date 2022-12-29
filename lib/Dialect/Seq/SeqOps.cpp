@@ -208,7 +208,7 @@ static ParseResult parseCompReg(OpAsmParser &parser, OperationState &result) {
       return failure();
   }
 
-  constexpr size_t clockEnabledOffset = (size_t)ClockEnabled;
+  constexpr size_t ceOperandOffset = (size_t)ClockEnabled;
   SmallVector<OpAsmParser::UnresolvedOperand, 5> operands;
   if (parser.parseOperandList(operands))
     return failure();
@@ -217,12 +217,12 @@ static ParseResult parseCompReg(OpAsmParser &parser, OperationState &result) {
     return parser.emitError(loc, "expected operands");
   case 1:
     return parser.emitError(loc, "expected clock operand");
-  case 2 + clockEnabledOffset:
+  case 2 + ceOperandOffset:
     // No reset.
     break;
-  case 3 + clockEnabledOffset:
+  case 3 + ceOperandOffset:
     return parser.emitError(loc, "expected resetValue operand");
-  case 4 + clockEnabledOffset:
+  case 4 + ceOperandOffset:
     // reset and reset value included.
     break;
   default:
@@ -243,9 +243,9 @@ static ParseResult parseCompReg(OpAsmParser &parser, OperationState &result) {
   Type i1 = IntegerType::get(result.getContext(), 1);
   SmallVector<Type, 5> operandTypes;
   operandTypes.append({ty, i1});
-  if (ClockEnabled)
+  if constexpr (ClockEnabled)
     operandTypes.push_back(i1);
-  if (operands.size() > 2 + clockEnabledOffset)
+  if (operands.size() > 2 + ceOperandOffset)
     operandTypes.append({i1, ty});
   return parser.resolveOperands(operands, operandTypes, loc, result.operands);
 }
@@ -288,7 +288,7 @@ void CompRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 LogicalResult CompRegOp::verify() {
-  if ((getReset() && !getResetValue()) || (!getReset() && getResetValue()))
+  if (getReset() == nullptr ^ getResetValue() == nullptr)
     return emitOpError(
         "either reset and resetValue or neither must be specified");
   return success();
@@ -309,7 +309,7 @@ void CompRegClockEnabledOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 LogicalResult CompRegClockEnabledOp::verify() {
-  if ((getReset() && !getResetValue()) || (!getReset() && getResetValue()))
+  if (getReset() == nullptr ^ getResetValue() == nullptr)
     return emitOpError(
         "either reset and resetValue or neither must be specified");
   return success();

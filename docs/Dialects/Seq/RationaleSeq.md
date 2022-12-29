@@ -68,6 +68,13 @@ passed to the `sv.reg` during lowering if present.
 
 Upon initialization, the state is defined to be uninitialized.
 
+### Variant: `seq.compreg.ce`
+
+This op is a version of compreg with the addition of a clock enable signal.
+Having the clock enable explicit (instead of a mux feeding it) is convenient for
+mapping to SV behavioral and will be (in the future) easier to map to device
+primitives or standard cells.
+
 ### Rationale
 
 Several design decisions were made in defining this op. Mostly, they were
@@ -82,10 +89,6 @@ optimization) another op could be added.
   (potentially complex) analysis to find the reset mux if required
   - Inclusion of 'resetValue': if we have a 'reset' signal, we need to
   include a value.
-  - Omission of 'enable': enables are easily modeled via a multiplexer on the
-  input with one of the mux inputs as the output of the register. This -- we
-  assume -- property makes 'enables' easier to detect than reset in the
-  common case.
 
 - Timing / clocking:
   - Omission of 'negedge' event on 'clock': this is easily modeled by
