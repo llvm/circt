@@ -1334,7 +1334,6 @@ hw.module @Issue4485(%in: i4) {
   hw.output
 }
 
-
 // CHECK-LABEL: module inline_bitcast_in_concat(
 // CHECK-NEXT:    input  [6:0]      in1,
 // CHECK-NEXT:    input  [7:0][3:0] in2,
