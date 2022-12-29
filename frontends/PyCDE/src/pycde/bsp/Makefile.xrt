@@ -1,0 +1,83 @@
+# Please source Vitis and XRT before running this makefile
+# $ source /opt/xilinx/Vitis/2022.1/settings64.sh
+# $ source /opt/xilinx/xrt/setup.sh
+
+PYTHON ?= python3.8
+CXX ?= g++
+VIVADO := $(XILINX_VIVADO)/bin/vivado
+VPP := $(XILINX_VITIS)/bin/v++
+
+# Specify 'hw_emu' for hardware emulation support instead of a bitfile
+# Note, the Azure shell verison is not officially supported in hw_emu mode
+TARGET := hw_emu
+
+NAME := @@SYSTEM_NAME@@
+SRC := hw
+BUILD := build_$(TARGET)
+TEMP := $(BUILD)/temp
+
+# Toggle to automatically set custom options for running in Azure NP-series VMs
+AZURE := true
+
+XO_OUT := $(TEMP)/kernel.xo
+LINK_OUT := $(BUILD)/pycde.link.xclbin
+XCL_OUT := $(NAME).$(TARGET).xclbin
+HOST_APP := $(BUILD)/host_app
+
+VPPFLAGS = --save-temps
+
+# Used for compiling C++ apps for XRT
+CXXFLAGS = -I$(XILINX_XRT)/include -I$(XILINX_VIVADO)/include -Wall -g -O0 -std=c++2a -fmessage-length=0
+LDFLAGS = -L$(XILINX_XRT)/lib -pthread -lxrt_coreutil
+
+# Platform must match the device + shell you're using
+# For Azure NP-series, use the official Azure Shell
+# For a local card or hw_emu mode, use the latest U250 XDMA Shell
+
+ifeq ($(AZURE), true)
+PLATFORM := xilinx_u250_gen3x16_xdma_2_1_202010_1
+# For Azure NP-series, output the routed netlist as a DCP instead of a bitsream!
+VPPFLAGS += --advanced.param compiler.acceleratorBinaryContent=dcp
+else
+PLATFORM := xilinx_u250_gen3x16_xdma_4_1_202210_1
+endif
+
+VPPFLAGS += -t $(TARGET) --platform $(PLATFORM)
+PACKAGE := $(BUILD)/package
+
+ifneq ($(TARGET), hw)
+VPPFLAGS += -g
+endif
+
+device2xsa = $(strip $(patsubst %.xpfm, % , $(shell basename $(PLATFORM))))
+XSA := $(call device2xsa, $(PLATFORM))
+
+.PHONY: clean emconfig exec
+
+all: $(XCL_OUT) emconfig
+
+$(BUILD):
+	mkdir -p $(BUILD)
+
+$(TEMP):
+	mkdir -p $(TEMP)
+
+# Package everything into a Vitis compatible kernel (.xo format)
+$(XO_OUT): $(TEMP)
+	$(VIVADO) -mode batch -source $(SRC)/xrt_package.tcl -tclargs $(SRC) $(XO_OUT) $(TARGET) $(PLATFORM) $(XSA)
+
+# Link Vitis system using the generated kernel for the chosen platform
+$(LINK_OUT): $(XO_OUT) | $(BUILD)
+	$(VPP) $(VPPFLAGS) -l --temp_dir $(TEMP) -o'$(LINK_OUT)' $(+)
+
+# Build the xclbin
+$(XCL_OUT): $(LINK_OUT)
+	$(VPP) -p $(LINK_OUT) $(VPPFLAGS) --package.out_dir $(PACKAGE) -o $(XCL_OUT)
+
+# Generate configuration for use with hw_emu mode
+emconfig: $(BUILD)/emconfig.json
+$(BUILD)/emconfig.json:
+	emconfigutil --platform $(PLATFORM) --od $(BUILD)
+
+clean:
+	rm -rf $(BUILD) .Xil vivado* kernel *.jou *.log *.wdb *.wcfg *.protoinst *.csv

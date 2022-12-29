@@ -10,7 +10,6 @@ declare_mlir_python_sources(PyCDESources
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   SOURCES
   pycde/__init__.py
-  pycde/pycde_types.py
   pycde/dialects/__init__.py
   pycde/dialects/msft.py
   pycde/dialects/seq.py
@@ -27,6 +26,7 @@ declare_mlir_python_sources(PyCDESources
   pycde/system.py
   pycde/devicedb.py
   pycde/instance.py
+  pycde/pycde_types.py
   pycde/value.py
   pycde/ndarray.py
   pycde/esi.py
@@ -37,6 +37,12 @@ declare_mlir_python_sources(PyCDESources
 
   pycde/esi_api.py.j2
   pycde/Makefile.cosim
+
+  pycde/bsp/__init__.py
+  pycde/bsp/xrt.py
+  pycde/bsp/Makefile.xrt
+  pycde/bsp/xrt_package.tcl.j2
+  pycde/bsp/xrt_api.py
 )
 
 add_mlir_python_modules(PyCDE
