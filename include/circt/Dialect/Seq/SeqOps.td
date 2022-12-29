@@ -51,6 +51,40 @@ def CompRegOp : SeqOp<"compreg",
   ];
 }
 
+def CompRegClockEnabledOp : SeqOp<"compreg.ce",
+    [Pure, Clocked, Resettable,
+     AllTypesMatch<["input", "data"/*, "resetValue"*/]>,
+     SameVariadicOperandSize,
+     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]> ]> {
+       // AllTypesMatch doesn't work with Optional types yet.
+
+  let summary = "When enabled, register a value";
+  let description = "See the Seq dialect rationale for a longer description";
+
+  let arguments = (ins AnyType:$input, I1:$clk, I1:$clockEnable, StrAttr:$name,
+    Optional<I1>:$reset, Optional<AnyType>:$resetValue,
+    OptionalAttr<SymbolNameAttr>:$sym_name);
+  let results = (outs AnyType:$data);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$ce,
+                   "StringRef":$sym_name), [{
+      return build($_builder, $_state, input.getType(),
+                   input, clk, ce, sym_name, Value(), Value(),
+                   StringAttr::get($_builder.getContext(), sym_name));
+    }]>,
+    OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$ce,
+                   "Value":$reset, "Value":$rstValue, "StringRef":$sym_name),
+    [{
+      return build($_builder, $_state, input.getType(),
+                   input, clk, ce, sym_name, reset, rstValue,
+                   StringAttr::get($_builder.getContext(), sym_name));
+    }]>,
+  ];
+}
+
 def FirRegOp : SeqOp<"firreg",
     [Pure, Clocked, Resettable,
      AllTypesMatch<["next", "data"/*, "resetValue"*/]>,
