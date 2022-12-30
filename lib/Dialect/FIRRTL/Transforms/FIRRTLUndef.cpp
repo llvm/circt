@@ -1,4 +1,4 @@
-//===- InferReadWrite.cpp - Infer Read Write Memory -----------------------===//
+//===- FIRRTLUndef.cpp - Infer Read Write Memory --------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the InferReadWrite pass.
+// This file defines the undef analysis pass.  This analyzes the source to 
+// discover when uninitialized power-on state can impact post-reset state.
 //
 //===----------------------------------------------------------------------===//
 
@@ -102,7 +103,7 @@ struct UndefAnalysisPass : public UndefAnalysisBase<UndefAnalysisPass> {
   void runOnOperation() override;
 
   void markBlockExecutable(BlockKey block);
-  void visitOperation(Operation *op);
+  void visitOperation(Operation *op, const InstPath* path);
 
   /// Returns true if the given block is executable.
   bool isBlockExecutable(BlockKey block) const {
@@ -167,7 +168,7 @@ void UndefAnalysisPass::runOnOperation() {
     auto [changedVal,path] = changedLatticeValueWorklist.pop_back_val();
     for (Operation *user : changedVal.getUsers()) {
       if (isBlockExecutable({user->getBlock(), path}))
-        visitOperation({user, path});
+        visitOperation(user, path);
     }
   }
 }
@@ -176,20 +177,42 @@ void UndefAnalysisPass::markBlockExecutable(BlockKey block) {
   if (!executableBlocks.insert(block).second)
     return;
 
+  auto path = get<1>(block);
   for (auto &op : *get<0>(block)) {
-    visitOperation(op);
+    visitOperation(op, path);
   }
 }
 
-void UndefAnalysisPass::visitOperation(Operation *op) {
+void UndefAnalysisPass::visitOperation(Operation *op, const InstPath* path) {
   if (auto reg = dyn_cast<RegOp>(op))
-    return markUndefined(reg);
+    return mergeUndefined({reg, path});
   if (isa<ConstantOp>(op))
-    return markValid(op)
+    return markValid({op, path})
+  if (isa<InvalidOp>(op))
+    return markUndefined({op, path});
+  if (auto con = dyn_cast<ConnectOp>(op))
+    return visitConnect(con, path);
+  if (auto con = dyn_cast<StrinctConnectOp>(op))
+    return visitConnect(con, path);
+  if (auto inst = dyn_cast<Instanceop>(op))
+    return visitInstance(inst, path);
 
+  // Everything else just uses simple transfer functions
         for (auto operand : op->getOperands()) for (auto result :
                                                     op->getResults())
-            mergeValues(result, operand);
+            mergeValues({result, path}, {operand, path});
+}
+
+void visitConnect(ConnectOp con, const InstPath* path) {  
+  mergeValues(con.getDst(), con.getSrc());
+}
+
+void visitConnect(StrictConnectOp con, const InstPath* path) {  
+  mergeValues(con.getDst(), con.getSrc());
+}
+
+void visitInstance(InstanceOp inst, const InstPath* path) {
+
 }
 
 InstPath* ExtendPath(InstPath* path, InstanceOp inst) {
