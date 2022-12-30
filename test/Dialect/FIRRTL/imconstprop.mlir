@@ -586,3 +586,19 @@ firrtl.circuit "Verbatim"  {
     firrtl.strictconnect %tap2, %1 : !firrtl.uint<1>
   }
 }
+
+// -----
+
+// This test is only checking that IMCP doesn't generate invalid IR.  IMCP needs
+// to delete the strictconnect instead of replacing its destination with an
+// invalid value that will replace the register.  For more information, see:
+//   - https://github.com/llvm/circt/issues/4498
+//
+// CHECK-LABEL: "Issue4498"
+firrtl.circuit "Issue4498"  {
+  firrtl.module @Issue4498(in %clock: !firrtl.clock) {
+    %a = firrtl.wire : !firrtl.uint<1>
+    %r = firrtl.reg interesting_name %clock : !firrtl.uint<1>
+    firrtl.strictconnect %r, %a : !firrtl.uint<1>
+  }
+}
