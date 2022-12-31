@@ -39,8 +39,10 @@ declare_mlir_python_sources(PyCDESources
   pycde/Makefile.cosim
 
   pycde/bsp/__init__.py
+  pycde/bsp/fifo.py
   pycde/bsp/xrt.py
-  pycde/bsp/Makefile.xrt
+  pycde/bsp/EsiXrtPython.cpp
+  pycde/bsp/Makefile.xrt.j2
   pycde/bsp/xrt_package.tcl.j2
   pycde/bsp/xrt_api.py
 )

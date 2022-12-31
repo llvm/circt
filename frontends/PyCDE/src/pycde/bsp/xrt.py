@@ -4,6 +4,10 @@
 
 from pycde import Clock, Input, Output, System
 from pycde import module, generator, esi, types
+from ..value import BitVectorValue
+from ..constructs import Reg, Wire
+from ..module import _GeneratorPortAccess
+from .fifo import SimpleXilinxFifo
 
 import glob
 from io import FileIO
@@ -45,7 +49,7 @@ def axil_out_type(data_width):
   })
 
 
-def generate_mmio_map(channels, base_offset=0x1000) -> Tuple[List, List]:
+def generate_mmio_map(channels, base_offset=0x0) -> Tuple[List, List]:
   curr_offset = base_offset
 
   def get_reg(req, write):
@@ -55,9 +59,11 @@ def generate_mmio_map(channels, base_offset=0x1000) -> Tuple[List, List]:
     reg = {
         "size": width,
         "offset": curr_offset,
-        "name": "_".join(req.client_name)
+        "name": "_".join(req.client_name),
+        "client_path": req.client_name,
+        "type": "direct_mmio"
     }
-    curr_offset += math.ceil(width / 8)
+    curr_offset += 32 * math.ceil(width / 32)
     # A write reg requires an extra byte for control.
     if write:
       curr_offset += 8
@@ -80,7 +86,7 @@ def output_tcl(from_host_regs, to_host_regs, os: FileIO):
 
 def XrtBSP(user_module):
   # Parameters for AXI4-Lite interface
-  axil_addr_width = 6
+  axil_addr_width = 24
   axil_data_width = 32
 
   @esi.ServiceImplementation(None)
@@ -92,38 +98,63 @@ def XrtBSP(user_module):
     axil_out = Output(axil_out_type(axil_data_width))
 
     @generator
-    def generate(ports, channels):
+    def generate(ports: _GeneratorPortAccess, channels):
+      clk = ports.clk
+      rst = ports.rst
+
       from_host_regs, to_host_regs = generate_mmio_map(channels)
-      sys = System.current()
+      sys: System = System.current()
       output_tcl(from_host_regs, to_host_regs,
-                 open(sys.hw_output_dir / "esi_bsp.tcl", "w"))
+                 (sys.hw_output_dir / "esi_bsp.tcl").open("w"))
+      chan_md_file = (sys.sys_runtime_output_dir /
+                      "xrt_mmio_descriptor.json").open("w")
+      chan_md_file.write(
+          json.dumps(
+              {
+                  "from_host_regs": from_host_regs,
+                  "to_host_regs": to_host_regs
+              },
+              indent=2))
+
+      write_ready = Wire(types.i1)
+      address_reg = ports.axil_in.awaddr.reg(clk=clk,
+                                             rst=rst,
+                                             ce=(write_ready &
+                                                 ports.axil_in.awvalid))
+
+      from_host_fifos_full = []
+      for req, mmio_spec in zip(channels.to_client_reqs, from_host_regs):
+        outch_ready_wire = Wire(types.i1)
+        fifo = SimpleXilinxFifo(req.type.inner, depth=32,
+                                almost_full=4)(clk=clk,
+                                               rst=rst,
+                                               rd_en=outch_ready_wire,
+                                               wr_en=0,
+                                               wr_data=0)
+        outch, outch_ready = req.type.wrap(fifo.rd_data, ~fifo.empty)
+        outch_ready_wire.assign(outch_ready)
+        req.assign(outch)
+
+        from_host_fifos_full.append(fifo.almost_full.reg(cycles=2))
+
+      from_host_full = BitVectorValue.or_reduce(from_host_fifos_full)
+      write_ready.assign(~from_host_full)
 
       ports.axil_out = axil_out_type(axil_data_width)({
-          "awready": 0,
-          "wready": 0,
-          "arready": 0,
-          "rvalid": 0,
+          "awready": write_ready,
+          "wready": write_ready,
+          "arready": 1,
+          "rvalid": 1,
           "rdata": 0,
           "rresp": 0,
-          "bvalid": 0,
+          "bvalid": ports.axil_in.wvalid,
           "bresp": 0
       })
-
-      # ports.axil_out = axil_out_type(axil_data_width)({
-      #     "awready": csr.awready,
-      #     "wready": csr.wready,
-      #     "arready": csr.arready,
-      #     "rvalid": csr.rvalid,
-      #     "rdata": csr.rdata,
-      #     "rresp": csr.rresp,
-      #     "bvalid": csr.bvalid,
-      #     "bresp": csr.bresp
-      # })
 
   @module
   class top:
     ap_clk = Clock()
-    ap_rst_n = Input(types.i1)
+    ap_resetn = Input(types.i1)
 
     # AXI4-Lite slave interface
     s_axi_control_AWVALID = Input(types.i1)
@@ -159,7 +190,7 @@ def XrtBSP(user_module):
           "bready": ports.s_axi_control_BREADY,
       })
 
-      rst = ~ports.ap_rst_n
+      rst = ~ports.ap_resetn
 
       xrt = XrtService(clk=ports.ap_clk, rst=rst, axil_in=axil_in_sig)
 
@@ -177,8 +208,7 @@ def XrtBSP(user_module):
 
       # Splice in the user's code
       # NOTE: the clock is `ports.ap_clk`
-      #       and reset is `ports.ap_rst_n` which is active low
-      rst = ~ports.ap_rst_n
+      #       and reset is `ports.ap_resetn` which is active low
       user_module(clk=ports.ap_clk, rst=rst)
 
       # Copy additional sources
@@ -187,23 +217,25 @@ def XrtBSP(user_module):
 
     @staticmethod
     def package(sys: System):
+      from jinja2 import Environment, FileSystemLoader, StrictUndefined
+
       sv_sources = glob.glob(str(__dir__ / '*.sv'))
       tcl_sources = glob.glob(str(__dir__ / '*.tcl'))
       for source in sv_sources + tcl_sources:
         shutil.copy(source, sys.hw_output_dir)
 
-      makefile_text = (__dir__ / "Makefile.xrt").open().read()
-      dst_makefile_text = makefile_text.replace("@@SYSTEM_NAME@@", sys.name)
-
+      env = Environment(loader=FileSystemLoader(str(__dir__)),
+                        undefined=StrictUndefined)
+      template = env.get_template("Makefile.xrt.j2")
       dst_makefile = sys.output_directory / "Makefile.xrt"
-      dst_makefile.open("w").write(dst_makefile_text)
+      dst_makefile.open("w").write(template.render(system_name=sys.name))
 
       runtime_dir = sys.output_directory / "runtime" / sys.name
       so_sources = glob.glob(str(__dir__ / '*.so'))
       for so in so_sources:
         shutil.copy(so, runtime_dir)
       shutil.copy(__dir__ / "xrt_api.py", runtime_dir / "xrt.py")
-      chan_md_file = (runtime_dir / "xrt_chan_descriptor.json").open("w")
-      chan_md_file.write(json.dumps(top.demux_metadata, indent=2))
+      shutil.copy(__dir__ / "EsiXrtPython.cpp",
+                  sys.sys_runtime_output_dir / "EsiXrtPython.cpp")
 
   return top

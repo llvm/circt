@@ -1,9 +1,9 @@
 # Built from Xilinx provided files
 
-if { $::argc != 6 } {
+if { $::argc != 5 } {
     puts "ERROR: Program \"$::argv0\" requires 5 arguments!\n"
     puts "Usage: $::argv0 <src_dir> <xoname> <target> <xpfm_path> <device>\n"
-    exit
+    exit 1
 }
 
 set srcs      [lindex $::argv 0]
@@ -39,8 +39,7 @@ ipx::edit_ip_in_project -upgrade true -name tmp_prj -directory $package_path $pa
 
 set core [ipx::current_core]
 
-# Associate AXI data & AXI-Lite control interfaces
-ipx::associate_bus_interfaces -busif m_axi_gmem -clock ap_clk $core
+# Associate AXI-Lite control interfaces
 ipx::associate_bus_interfaces -busif s_axi_control -clock ap_clk $core
 
 # Create the address space for CSRs
@@ -63,7 +62,7 @@ set reg      [::ipx::add_register "{{reg.name}}_CTRL" $addr_block]
   set_property size           8 $reg
 set reg      [::ipx::add_register "{{reg.name}}" $addr_block]
   set_property description    "{{reg.name}} channel" $reg
-  set_property address_offset {{reg.offset + 1}} $reg
+  set_property address_offset {{reg.offset + 8}} $reg
   set_property size           {{reg.size}} $reg
 {% endfor %}
 

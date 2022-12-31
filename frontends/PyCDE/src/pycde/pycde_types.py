@@ -5,7 +5,7 @@
 from collections import OrderedDict
 
 from .value import (BitVectorValue, ChannelValue, ClockValue, ListValue,
-                    SignedBitVectorValue, UnsignedBitVectorValue, StructValue,
+                    SignlessBitVectorValue, UnsignedBitVectorValue, StructValue,
                     RegularValue, InOutValue, Value)
 
 import mlir.ir
@@ -164,7 +164,7 @@ def Type(type: Union[mlir.ir.Type, PyCDEType]):
     elif type.is_unsigned:
       return UnsignedBitVectorType(type)
     else:
-      return BitVectorType(type)
+      return SignlessBitVectorType(type)
   if isinstance(type, esi.ChannelType):
     return ChannelType(type)
   return PyCDEType(type)
@@ -273,6 +273,12 @@ class BitVectorType(PyCDEType):
 
   def _get_value_class(self):
     return BitVectorValue
+
+
+class SignlessBitVectorType(BitVectorType):
+
+  def _get_value_class(self):
+    return SignlessBitVectorValue
 
 
 class SignedBitVectorType(BitVectorType):

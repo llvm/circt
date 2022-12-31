@@ -101,11 +101,24 @@ class System:
 
   @property
   def hw_output_dir(self):
-    return self.output_directory / "hw"
+    ret = self.output_directory / "hw"
+    if not ret.exists():
+      ret.mkdir()
+    return ret
 
   @property
   def runtime_output_dir(self):
-    return self.output_directory / "runtime"
+    ret = self.output_directory / "runtime"
+    if not ret.exists():
+      ret.mkdir()
+    return ret
+
+  @property
+  def sys_runtime_output_dir(self):
+    ret = self.runtime_output_dir / self.name
+    if not ret.exists():
+      ret.mkdir()
+    return ret
 
   def _get_ip(self):
     return ir.InsertionPoint(self.mod.body)
@@ -300,6 +313,8 @@ class System:
     self.files.add(self.output_directory / tcl_file)
 
     self._op_cache.release_ops()
+    if debug:
+      open("after_generate.mlir", "w").write(str(self.mod))
     for idx, phase in enumerate(self.PASS_PHASES):
       try:
         if isinstance(phase, str):
@@ -313,9 +328,10 @@ class System:
       except RuntimeError as err:
         sys.stderr.write(f"Exception while executing phase {phase}.\n")
         raise err
+      finally:
+        if debug:
+          open(f"after_phase_{idx}.mlir", "w").write(str(self.mod))
       self._op_cache.release_ops()
-      if debug:
-        open(f"after_phase_{idx}.mlir", "w").write(str(self.mod))
     self.passed = True
 
   def emit_outputs(self):

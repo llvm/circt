@@ -265,6 +265,12 @@ class BitVectorValue(PyCDEValue):
     from .dialects import comb
     return comb.ConcatOp(*items)
 
+  @staticmethod
+  def or_reduce(items: List[BitVectorValue]):
+    """Or-reduce a list of bits."""
+    from .dialects import comb
+    return comb.OrOp(*items)
+
   def slice(self, low_bit: BitVectorValue, num_bits: int):
     """Get a constant-width slice starting at `low_bit` and ending at `low_bit +
     num_bits`."""
@@ -308,7 +314,7 @@ class BitVectorValue(PyCDEValue):
     if width is None:
       width = self.type.width
 
-    if type(self) is targetValueType and width == self.type.width:
+    if isinstance(self, targetValueType) and width == self.type.width:
       return self
     return hwarith.CastOp(self.value, type_getter(width))
 
@@ -317,7 +323,8 @@ class BitVectorValue(PyCDEValue):
     Returns this value as a signless integer. If 'width' is provided, this value
     will be truncated to that width.
     """
-    return self._exec_cast(BitVectorValue, ir.IntegerType.get_signless, width)
+    return self._exec_cast(SignlessBitVectorValue, ir.IntegerType.get_signless,
+                           width)
 
   def as_sint(self, width: int = None):
     """
@@ -452,6 +459,10 @@ class WidthExtendingBitVectorValue(BitVectorValue):
     assert False, "Unimplemented"
 
 
+class SignlessBitVectorValue(WidthExtendingBitVectorValue):
+  pass
+
+
 class UnsignedBitVectorValue(WidthExtendingBitVectorValue):
   pass
 
@@ -459,7 +470,6 @@ class UnsignedBitVectorValue(WidthExtendingBitVectorValue):
 class SignedBitVectorValue(WidthExtendingBitVectorValue):
 
   def __neg__(self):
-    from .dialects import comb
     from .pycde_types import types
     return self * types.int(self.type.width)(-1).as_sint()
 

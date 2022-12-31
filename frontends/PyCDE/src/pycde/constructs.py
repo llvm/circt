@@ -115,7 +115,7 @@ def Wire(type: PyCDEType, name: str = None):
 def Reg(type: PyCDEType,
         clk: PyCDEValue = None,
         rst: PyCDEValue = None,
-        rst_value=None,
+        rst_value=0,
         ce: PyCDEValue = None):
   """Declare a register. Must assign exactly once."""
 
