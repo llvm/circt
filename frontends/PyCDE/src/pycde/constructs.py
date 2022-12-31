@@ -4,7 +4,9 @@
 
 from __future__ import annotations
 
-from .pycde_types import PyCDEType, dim
+from .common import Clock, Input, Output
+from .module import module, generator
+from .pycde_types import PyCDEType, dim, types
 from .value import BitVectorValue, ListValue, Value, PyCDEValue
 from .value import get_slice_bounds
 from circt.support import get_value, BackedgeBuilder
@@ -13,7 +15,7 @@ from pycde.dialects import comb
 import mlir.ir as ir
 
 import typing
-from typing import Union
+from typing import List, Union
 
 
 def NamedWire(type_or_value: Union[PyCDEType, PyCDEValue], name: str):
@@ -135,6 +137,37 @@ def Reg(type: PyCDEType,
                         type)
   value._wire = wire
   return value
+
+
+def ControlReg(clk: PyCDEValue, rst: PyCDEValue, asserts: List[PyCDEValue],
+               resets: List[PyCDEValue]) -> BitVectorValue:
+  """Constructs a 'control register' and returns the output."""
+
+  @module
+  def ControlReg(num_asserts: int, num_resets: int):
+
+    class ControlReg:
+      clk = Clock()
+      rst = Input(types.i1)
+      out = Output(types.i1)
+      asserts = Input(dim(1, num_asserts))
+      resets = Input(dim(1, num_resets))
+
+      @generator
+      def generate(ports):
+        a = ports.asserts.or_reduce()
+        r = ports.resets.or_reduce()
+        reg = Reg(types.i1, ports.clk, ports.rst)
+        next_value = Mux(a, types.i1(1), Mux(r, types.i1(0), reg))
+        reg.assign(next_value)
+        ports.out = reg
+
+    return ControlReg
+
+  return ControlReg(len(asserts), len(resets))(clk=clk,
+                                               rst=rst,
+                                               asserts=asserts,
+                                               resets=resets).out
 
 
 def Mux(sel: BitVectorValue, *data_inputs: typing.List[Value]):

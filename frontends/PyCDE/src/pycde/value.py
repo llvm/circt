@@ -265,12 +265,6 @@ class BitVectorValue(PyCDEValue):
     from .dialects import comb
     return comb.ConcatOp(*items)
 
-  @staticmethod
-  def or_reduce(items: List[BitVectorValue]):
-    """Or-reduce a list of bits."""
-    from .dialects import comb
-    return comb.OrOp(*items)
-
   def slice(self, low_bit: BitVectorValue, num_bits: int):
     """Get a constant-width slice starting at `low_bit` and ending at `low_bit +
     num_bits`."""
@@ -474,6 +468,12 @@ class SignedBitVectorValue(WidthExtendingBitVectorValue):
     return self * types.int(self.type.width)(-1).as_sint()
 
 
+def Or(*items: List[BitVectorValue]):
+  """Compute a bitwise 'or' of the arguments."""
+  from .dialects import comb
+  return comb.OrOp(*items)
+
+
 class ListValue(PyCDEValue):
 
   @singledispatchmethod
@@ -520,6 +520,12 @@ class ListValue(PyCDEValue):
       if self.name and isinstance(low_idx, int):
         v.name = self.name + f"__{low_idx}upto{low_idx+num_elems}"
       return v
+
+  def or_reduce(self):
+    from .pycde_types import types
+    bits = [self[i] for i in range(len(self))]
+    assert bits[0].type == types.i1
+    return Or(*bits)
 
   def __len__(self):
     return self.type.strip.size

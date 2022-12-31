@@ -9,6 +9,7 @@ from pycde import esi
 from pycde.constructs import Wire
 from pycde.dialects import comb
 from pycde.bsp import XrtBSP
+# from msft.xrt import XrtBSP
 
 import os
 import sys
@@ -86,13 +87,13 @@ class Top:
 
 
 gendir = sys.argv[1]
-command = sys.argv[2]
+command = sys.argv[2] if len(sys.argv) == 3 else "genhw"
 if command == "genhw":
   s = pycde.System(XrtBSP(Top),
                    name="ESILoopback",
                    output_directory=gendir,
                    sw_api_langs=["python"])
-  # s.run_passes(debug=True)
+  s.run_passes(debug=True)
   s.compile()
   s.package()
 
@@ -109,7 +110,7 @@ elif command == "test":
   # assert top.bsp.to_host_read_any() is None
   # assert top.bsp.to_host[0].read(blocking_timeout=None) is None
 
-  assert top.bsp.req_resp[0].write(5) is True
+  # assert top.bsp.req_resp[0].write(5) is True
   # time.sleep(0.05)
   # assert top.bsp.to_host_read_any() is None
   # assert top.bsp.to_host[0].read(blocking_timeout=None) is None

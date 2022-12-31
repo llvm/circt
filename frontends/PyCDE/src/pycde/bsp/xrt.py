@@ -4,8 +4,8 @@
 
 from pycde import Clock, Input, Output, System
 from pycde import module, generator, esi, types
-from ..value import BitVectorValue
-from ..constructs import Reg, Wire
+from ..value import Or
+from ..constructs import ControlReg, Reg, Wire
 from ..module import _GeneratorPortAccess
 from .fifo import SimpleXilinxFifo
 
@@ -81,7 +81,9 @@ def output_tcl(from_host_regs, to_host_regs, os: FileIO):
                     undefined=StrictUndefined)
   template = env.get_template("xrt_package.tcl.j2")
   os.write(
-      template.render(from_host_regs=from_host_regs, to_host_regs=to_host_regs))
+      template.render(system_name=System.current().name,
+                      from_host_regs=from_host_regs,
+                      to_host_regs=to_host_regs))
 
 
 def XrtBSP(user_module):
@@ -105,7 +107,7 @@ def XrtBSP(user_module):
       from_host_regs, to_host_regs = generate_mmio_map(channels)
       sys: System = System.current()
       output_tcl(from_host_regs, to_host_regs,
-                 (sys.hw_output_dir / "esi_bsp.tcl").open("w"))
+                 (sys.hw_output_dir / "xrt_package.tcl").open("w"))
       chan_md_file = (sys.sys_runtime_output_dir /
                       "xrt_mmio_descriptor.json").open("w")
       chan_md_file.write(
@@ -116,11 +118,22 @@ def XrtBSP(user_module):
               },
               indent=2))
 
-      write_ready = Wire(types.i1)
+      write_fifos_full = Wire(types.i1)
+      write_happened = Wire(types.i1)
+      address_valid = ControlReg(clk, rst, [ports.axil_in.awvalid],
+                                 [write_happened])
+      awready = ~address_valid
+      data_valid = ControlReg(clk, rst, [ports.axil_in.awvalid],
+                              [write_happened])
+      wready = ~data_valid & ~write_fifos_full
+      write_happened.assign(address_valid & data_valid & ~write_fifos_full)
+
       address_reg = ports.axil_in.awaddr.reg(clk=clk,
                                              rst=rst,
-                                             ce=(write_ready &
-                                                 ports.axil_in.awvalid))
+                                             ce=ports.axil_in.awvalid)
+      data_reg = ports.axil_in.awaddr.reg(clk=clk,
+                                          rst=rst,
+                                          ce=ports.axil_in.wvalid)
 
       from_host_fifos_full = []
       for req, mmio_spec in zip(channels.to_client_reqs, from_host_regs):
@@ -137,17 +150,16 @@ def XrtBSP(user_module):
 
         from_host_fifos_full.append(fifo.almost_full.reg(cycles=2))
 
-      from_host_full = BitVectorValue.or_reduce(from_host_fifos_full)
-      write_ready.assign(~from_host_full)
+      write_fifos_full.assign(Or(*from_host_fifos_full))
 
       ports.axil_out = axil_out_type(axil_data_width)({
-          "awready": write_ready,
-          "wready": write_ready,
-          "arready": 1,
-          "rvalid": 1,
+          "awready": 0,
+          "wready": 0,
+          "arready": 0,
+          "rvalid": 0,
           "rdata": 0,
           "rresp": 0,
-          "bvalid": ports.axil_in.wvalid,
+          "bvalid": 0,
           "bresp": 0
       })
 

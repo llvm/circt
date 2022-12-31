@@ -64,7 +64,7 @@ $(TEMP):
 
 # Package everything into a Vitis compatible kernel (.xo format)
 $(XO_OUT): $(TEMP)
-	$(VIVADO) -mode batch -source $(SRC)/esi_bsp.tcl -tclargs $(SRC) $(XO_OUT) $(TARGET) $(PLATFORM) $(XSA)
+	$(VIVADO) -mode batch -source $(SRC)/xrt_package.tcl -tclargs $(SRC) $(XO_OUT) $(TARGET) $(PLATFORM) $(XSA)
 
 # Link Vitis system using the generated kernel for the chosen platform
 $(LINK_OUT): $(XO_OUT) | $(BUILD)
