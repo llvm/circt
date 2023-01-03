@@ -837,7 +837,8 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
             "exist and unique instance cannot be resolved");
       srcTarget->instances.append(path.back().begin(), path.back().end());
     }
-    if (tapsAttr.size() != combMem.getType().getNumElements())
+    if (tapsAttr.size() != 1 &&
+        tapsAttr.size() != combMem.getType().getNumElements())
       return mlir::emitError(
           loc, "sink cannot specify more taps than the depth of the memory");
   } else

@@ -72,7 +72,7 @@ circuit Top : %[[
 
   module Bar :
 
-    wire inv : UInt<1>
+    wire inv : {a : UInt<1>, b : UInt<2>}
     inv is invalid
 
   module Foo :
@@ -83,7 +83,7 @@ circuit Top : %[[
 
     inst foo of Foo
 
-    wire tap : UInt<1>
+    wire tap : {a : UInt<1>, b : UInt<2>}
     tap is invalid
 
     wire tap2 : UInt<1>
@@ -109,9 +109,14 @@ circuit Top : %[[
 ; CHECK-NEXT:      .[[Child_boredPort]] ([[ChildWrapper_boredPort]])
 ; CHECK:       endmodule
 
+; CHECK: module Bar();
+; CHECK:   wire       [[inv_a:[a-zA-Z0-9_]+]]
+; CHECK:   wire [1:0] [[inv_b:[a-zA-Z0-9_]+]]
+
 ; CHECK-LABEL: module Top(
 ; CHECK-NOT:   endmodule
-; CHECK:         assign tap = Top.foo.b.inv;
+; CHECK:         assign tap_a = Top.foo.b.[[inv_a]];
+; CHECK:         assign tap_b = Top.foo.b.[[inv_b]];
 ; CHECK-NEXT:    assign tap2 = Top.unsigned_0.signed_0.localparam_0.random.something;
 ; CHECK-NEXT:    assign tap3 = Top.unsigned_0.signed_0.localparam_0.random.something_else;
 ; CHECK:         ChildWrapper unsigned_0 (

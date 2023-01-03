@@ -1106,6 +1106,12 @@ firrtl.module private @is1436_FOO() {
     // CHECK:  firrtl.strictconnect %c_1, %3 : !firrtl.uint<1>
   }
 
+  firrtl.module private @RecursiveRef(in %arg: !firrtl.ref<bundle<foo: bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>>>) {
+    %0 = firrtl.ref.resolve %arg : !firrtl.ref<bundle<foo: bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>>>
+    // CHECK:  firrtl.ref.resolve %arg_foo_bar_baz : !firrtl.ref<uint<1>>
+    // CHECK:  firrtl.ref.resolve %arg_foo_qux : !firrtl.ref<sint<64>>
+  }
+
   // CHECK-LABEL: firrtl.module private @ForeignTypes
   firrtl.module private @ForeignTypes() {
     // CHECK-NEXT: firrtl.wire : index
