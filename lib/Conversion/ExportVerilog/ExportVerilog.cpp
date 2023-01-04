@@ -3041,7 +3041,7 @@ private:
   LogicalResult visitSV(GenerateOp op);
   LogicalResult visitSV(GenerateCaseOp op);
 
-  void emitAssertionLabel(Operation *op, StringRef opName);
+  std::optional<PPExtString> getAssertionLabel(Operation *op, StringRef opName);
   void emitAssertionMessage(StringAttr message, ValueRange args,
                             SmallPtrSetImpl<Operation *> &ops,
                             bool isConcurrent);
@@ -3603,17 +3603,17 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
   return success();
 }
 
-/// Emit the `<label>:` portion of an immediate or concurrent verification
+/// Get the `<label>` (no colon) portion of an immediate or concurrent verification
 /// operation. If a label has been stored for the operation through
 /// `addLegalName` in the pre-pass, that label is used. Otherwise, if the
 /// `enforceVerifLabels` option is set, a temporary name for the operation is
 /// picked and uniquified through `addName`.
-void StmtEmitter::emitAssertionLabel(Operation *op, StringRef opName) {
-  if (op->getAttrOfType<StringAttr>("label")) {
-    ps << PPExtString(names.getName(op)) << ":" << PP::space;
-  } else if (state.options.enforceVerifLabels) {
-    ps << PPExtString(names.addName(op, opName)) << ":" << PP::space;
-  }
+std::optional<PPExtString> StmtEmitter::getAssertionLabel(Operation *op, StringRef opName) {
+  if (op->getAttrOfType<StringAttr>("label"))
+    return PPExtString(names.getName(op));
+   if (state.options.enforceVerifLabels)
+    return PPExtString(names.addName(op, opName));
+  return std::nullopt;
 }
 
 /// Emit the optional ` else $error(...)` portion of an immediate or concurrent
@@ -3640,14 +3640,15 @@ LogicalResult StmtEmitter::emitImmediateAssertion(Op op, PPExtString opName, boo
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  if (messageAsComment && op.getMessage() && !op.getMessage()->empty())
-    emitComment(op.getMessageAttr());
-
-  startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  ps.scopedBox(PP::ibox2, [&]() {
-    emitAssertionLabel(op, opName.str);
+
+  // Helper to emit the verification op and its message.
+  auto emitOpAndMessage = [&]() {
+    if (messageAsComment && op.getMessage() && !op.getMessage()->empty()) {
+      emitComment(op.getMessageAttr());
+      startStatement();
+    }
     ps.scopedBox(PP::cbox0, [&]() {
       ps << opName;
       switch (op.getDefer()) {
@@ -3669,7 +3670,17 @@ LogicalResult StmtEmitter::emitImmediateAssertion(Op op, PPExtString opName, boo
         emitAssertionMessage(op.getMessageAttr(), op.getSubstitutions(), ops);
       ps << ";";
     });
-  });
+  };
+
+  // Emit label if specified, indent if break after label.
+  startStatement();
+  if (auto label = getAssertionLabel(op, opName.str))
+    ps.scopedBox(PP::ibox2, [&]() {
+      ps << *label << ":" << PP::space;
+      emitOpAndMessage();
+    });
+  else // otherwise, break to same level.
+    ps.scopedBox(PP::ibox0, emitOpAndMessage);
   emitLocationInfoAndNewLine(ops);
   return success();
 }
@@ -3692,14 +3703,15 @@ LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, PPExtString opName, bo
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  if (messageAsComment && op.getMessage() && !op.getMessage()->empty())
-    emitComment(op.getMessageAttr());
-
-  startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  ps.scopedBox(PP::ibox2, [&]() {
-    emitAssertionLabel(op, opName.str);
+
+  // Helper to emit the verification op and its message.
+  auto emitOpAndMessage = [&]() {
+    if (messageAsComment && op.getMessage() && !op.getMessage()->empty()) {
+      emitComment(op.getMessageAttr());
+      startStatement();
+    }
     ps.scopedBox(PP::cbox0, [&]() {
       ps << opName << PP::nbsp << "property (";
       ps.scopedBox(PP::ibox0, [&]() {
@@ -3715,7 +3727,17 @@ LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, PPExtString opName, bo
                              true);
       ps << ";";
     });
-  });
+  };
+
+  // Emit label if specified, indent if break after label.
+  startStatement();
+  if (auto label = getAssertionLabel(op, opName.str))
+    ps.scopedBox(PP::ibox2, [&]() {
+      ps << *label << ":" << PP::space;
+      emitOpAndMessage();
+    });
+  else // otherwise, break to same level.
+    ps.scopedBox(PP::ibox0, emitOpAndMessage);
   emitLocationInfoAndNewLine(ops);
   return success();
 }

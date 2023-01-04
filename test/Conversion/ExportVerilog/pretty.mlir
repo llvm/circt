@@ -47,24 +47,45 @@ hw.module @CoverAssert(
 
     %0 = comb.icmp eq %eeeeee_fffff_gggggg_hhh_i_jjjjj_kkkkkkkkk_lllllll_mmmmmmmmm_nnnnnnnn_0, %c0_i4 : i4
     %1 = comb.icmp eq %eeeeee_fffff_gggggg_hhh_i_jjjjj_kkkkkkkkk_lllllll_mmmmmmmmm_nnnnnnnn_0, %c0_i4 : i4
+    %2 = comb.icmp eq %eeeeee_fffff_gggggg_hhh_i_jjjjj_kkkkkkkkk_lllllll_mmmmmmmmm_nnnnnnnn_0, %c0_i4 : i4
+    %3 = comb.icmp eq %eeeeee_fffff_gggggg_hhh_i_jjjjj_kkkkkkkkk_lllllll_mmmmmmmmm_nnnnnnnn_0, %c0_i4 : i4
 
-    %2 = comb.xor bin %reset, %true : i1
-    %3 = comb.xor bin %reset, %true : i1
-    %4 = comb.and bin %0, %2 : i1
-    %5 = comb.and bin %1, %3 : i1
+    %4 = comb.xor bin %reset, %true : i1
+    %5 = comb.xor bin %reset, %true : i1
+    %6 = comb.xor bin %reset, %true : i1
+    %7 = comb.xor bin %reset, %true : i1
 
-//      CHECK:  cover__information_label:
+    %8 = comb.and bin %0, %4 : i1
+    %9 = comb.and bin %1, %5 : i1
+    %10 = comb.and bin %2, %6 : i1
+    %11 = comb.and bin %3, %7 : i1
+
+//      CHECK:  cover__information_label: // test message
 // CHECK-NEXT:    cover property (@(posedge clock)
 // CHECK-NEXT:                    eeeeee_fffff_gggggg_hhh_i_jjjjj_kkkkkkkkk_lllllll_mmmmmmmmm_nnnnnnnn_0 == 4'h0
 // CHECK-NEXT:                    & ~reset);{{.*}}
-    sv.cover.concurrent posedge %clock, %4 label "cover__information_label"
+    sv.cover.concurrent posedge %clock, %8 label "cover__information_label" message "test message"
+
+//      CHECK:  cover__information_label_2:
+// CHECK-NEXT:    // cover message very long text goes here it never ends it goes on and on and hits the
+// CHECK-NEXT:    // wrapping limit
+// CHECK-NEXT:    cover property (@(posedge clock)
+// CHECK-NEXT:                    eeeeee_fffff_gggggg_hhh_i_jjjjj_kkkkkkkkk_lllllll_mmmmmmmmm_nnnnnnnn_0 == 4'h0
+// CHECK-NEXT:                    & ~reset);{{.*}}
+    sv.cover.concurrent posedge %clock, %9 label "cover__information_label_2" message "cover message very long text goes here it never ends it goes on and on and hits the wrapping limit"
 
 //      CHECK:  assert__label:
 // CHECK-NEXT:    assert property (@(posedge clock)
 // CHECK-NEXT:                     eeeeee_fffff_gggggg_hhh_i_jjjjj_kkkkkkkkk_lllllll_mmmmmmmmm_nnnnnnnn_0 == 4'h0
 // CHECK-NEXT:                     & ~reset)
 // CHECK-NEXT:    else $error("assert failed");	{{.*}}
-    sv.assert.concurrent posedge %clock, %5 label "assert__label" message "assert failed"
+    sv.assert.concurrent posedge %clock, %10 label "assert__label" message "assert failed"
+
+     // CHECK:  assert property (@(posedge clock)
+// CHECK-NEXT:                   eeeeee_fffff_gggggg_hhh_i_jjjjj_kkkkkkkkk_lllllll_mmmmmmmmm_nnnnnnnn_0 == 4'h0
+// CHECK-NEXT:                   & ~reset)
+// CHECK-NEXT:  else $error("assert failed");	{{.*}}
+    sv.assert.concurrent posedge %clock, %11 message "assert failed"
 }
 
 hw.module @MuxChain(%a_0: i1, %a_1: i1, %a_2: i1, %c_0: i1, %c_1: i1, %c_2: i1) -> (out: i1) {

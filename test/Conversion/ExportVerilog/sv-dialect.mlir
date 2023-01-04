@@ -193,10 +193,14 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
       sv.cover %cond, final
       // CHECK-NEXT:     cover_0: cover(cond);
       sv.cover %cond, immediate label "cover_0"
-      // CHECK-NEXT:     // cover message
+      // CHECK-NEXT:     // cover cond message text
       // CHECK-NEXT:     cover(cond);
       // CHECK-NOT: else
-      sv.cover %cond, immediate message "cover message"
+      sv.cover %cond, immediate message "cover cond message text"
+      // CHECK-NEXT:     cover_message: // cover cond message text
+      // CHECK-NEXT:     cover(cond);
+      // CHECK-NOT: else
+      sv.cover %cond, immediate label "cover_message" message "cover cond message text"
 
       // Simulator Control Tasks
       // CHECK-NEXT: $stop;
@@ -280,8 +284,8 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   sv.cover.concurrent posedge %clock, %cond
   // CHECK-NEXT: cover_1: cover property (@(posedge clock) cond);
   sv.cover.concurrent posedge %clock, %cond label "cover_1"
-  // CHECK-NEXT: // cover_2 message
-  // CHECK-NEXT: cover_2: cover property (@(posedge clock) cond);
+  // CHECK-NEXT: cover_2: // cover_2 message
+  // CHECK-NEXT:   cover property (@(posedge clock) cond);
   // CHECK-NOT: else
   sv.cover.concurrent posedge %clock, %cond label "cover_2" message "cover_2 message"
 
