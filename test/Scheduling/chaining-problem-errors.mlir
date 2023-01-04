@@ -1,67 +1,67 @@
-// RUN: circt-opt %s -test-chaining-problem -verify-diagnostics -split-input-file
+// RUN: circt-opt %s -ssp-roundtrip=verify -verify-diagnostics -split-input-file
 
-// expected-error@+2 {{Missing delays}}
-// expected-error@+1 {{problem check failed}}
-func.func @missing_delay() attributes {
-  operatortypes = [
-    { name = "foo", latency = 0}
-  ]} {
-  return
+// expected-error@+1 {{Missing delays}}
+ssp.instance @missing_delay of "ChainingProblem" {
+  library {
+    operator_type @_0 [latency<0>]
+  }
+  graph {}
 }
 
 // -----
 
-// expected-error@+2 {{Negative delays}}
-// expected-error@+1 {{problem check failed}}
-func.func @negative_delay() attributes {
-  operatortypes = [
-    { name = "foo", latency = 0, incdelay = -1.0, outdelay = -1.0}
-  ]} {
-  return
+// expected-error@+1 {{Negative delays}}
+ssp.instance @negative_delay of "ChainingProblem" {
+  library {
+    operator_type @_0 [latency<0>, incDelay<-1.0>, outDelay<-1.0>]
+  }
+  graph {}
 }
 
 // -----
 
-// expected-error@+2 {{Incoming & outgoing delay must be equal for zero-latency operator type}}
-// expected-error@+1 {{problem check failed}}
-func.func @inc_out_mismatch() attributes {
-  cycletime = 10.0, operatortypes = [
-    { name = "foo", latency = 0, incdelay = 1.0, outdelay = 2.0}
-  ]} {
-  return
+// expected-error@+1 {{Incoming & outgoing delay must be equal for zero-latency operator type}}
+ssp.instance @inc_out_mismatch of "ChainingProblem" {
+  library {
+    operator_type @_0 [latency<0>, incDelay<1.0>, outDelay<2.0>]
+  }
+  graph {}
 }
 
 // -----
 
-// expected-error@+1 {{problem verification failed}}
-func.func @no_stic() {
-  // expected-error@+1 {{Operation has no non-negative start time in cycle}}
-  return { problemStartTime = 0 }
+ssp.instance @no_stic of "ChainingProblem" {
+  library {
+    operator_type @_0 [latency<0>, incDelay<1.0>, outDelay<1.0>]
+  }
+  graph {
+    operation<@_0>() [t<0>] // expected-error {{Operation has no non-negative start time in cycle}}
+  }
 }
 
 // -----
 
-// expected-error@+2 {{Precedence violated in cycle 0}}
-// expected-error@+1 {{problem verification failed}}
-func.func @precedence1(%arg0 : i32, %arg1 : i32) attributes {
-  operatortypes = [
-    { name = "add", latency = 0, incdelay = 1.0, outdelay = 1.0}
-  ] } {
-  %0 = arith.addi %arg0, %arg1 { opr = "add", problemStartTime = 0, problemStartTimeInCycle = 1.1 } : i32
-  %1 = arith.addi %0, %arg1 { opr = "add", problemStartTime = 0, problemStartTimeInCycle = 2.0 } : i32
-  return { problemStartTime = 0, problemStartTimeInCycle = 0.0 }
+// expected-error@+1 {{Precedence violated in cycle 0}}
+ssp.instance @precedence1 of "ChainingProblem" {
+  library {
+    operator_type @_0 [latency<0>, incDelay<1.0>, outDelay<1.0>]
+  }
+  graph {
+    %0 = operation<@_0>() [t<0>, z<1.1>]
+    operation<@_0>(%0) [t<0>, z<2.0>]
+  }
 }
 
 // -----
 
-// expected-error@+2 {{Precedence violated in cycle 3}}
-// expected-error@+1 {{problem verification failed}}
-func.func @precedence2(%arg0 : i32, %arg1 : i32) attributes {
-  operatortypes = [
-   { name = "add", latency = 0, incdelay = 1.0, outdelay = 1.0},
-   { name = "mul", latency = 3, incdelay = 2.5, outdelay = 3.75}
-  ] } {
-  %0 = arith.muli %arg0, %arg1 { opr = "mul", problemStartTime = 0, problemStartTimeInCycle = 0.0 } : i32
-  %1 = arith.addi %0, %arg1 { opr = "add", problemStartTime = 3, problemStartTimeInCycle = 3.0 } : i32
-  return { problemStartTime = 4, problemStartTimeInCycle = 0.0 }
+// expected-error@+1 {{Precedence violated in cycle 3}}
+ssp.instance @precedence2 of "ChainingProblem" {
+  library {
+    operator_type @_0 [latency<0>, incDelay<1.0>, outDelay<1.0>]
+    operator_type @_3 [latency<3>, incDelay<2.5>, outDelay<3.75>]
+  }
+  graph {
+    %0 = operation<@_3>() [t<0>, z<0.0>]
+    operation<@_0>(%0) [t<3>, z<3.0>]
+  }
 }

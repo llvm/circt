@@ -1,21 +1,21 @@
-// RUN: circt-opt %s -test-cyclic-problem -verify-diagnostics -split-input-file
+// RUN: circt-opt %s -ssp-roundtrip=verify -verify-diagnostics -split-input-file
 
-// expected-error@+2 {{Invalid initiation interval}}
-// expected-error@+1 {{problem verification failed}}
-func.func @no_II() {
-  return { problemStartTime = 0 }
+// expected-error@+1 {{Invalid initiation interval}}
+ssp.instance @no_II of "CyclicProblem" {
+  library {}
+  graph {}
 }
 
 // -----
 
-// expected-error@+2 {{Precedence violated for dependence}}
-// expected-error@+1 {{problem verification failed}}
-func.func @backedge_violated(%a1 : i32, %a2 : i32) -> i32 attributes {
-  problemInitiationInterval = 2,
-  auxdeps = [ [2,0,1] ]
-  } {
-  %0 = arith.addi %a1, %a2 { problemStartTime = 0 } : i32
-  %1 = arith.addi %0, %0 { problemStartTime = 1 } : i32
-  %2 = arith.addi %1, %1 { problemStartTime = 2 } : i32
-  return { problemStartTime = 3 } %2 : i32
+// expected-error@+1 {{Precedence violated for dependence}}
+ssp.instance @backedge_violated of "CyclicProblem" [II<2>] {
+  library {
+    operator_type @_1 [latency<1>]
+  }
+  graph {
+    %0 = operation<@_1>(@op2 [dist<1>]) [t<0>]
+    %1 = operation<@_1>(%0) [t<1>]
+    operation<@_1> @op2(%1) [t<2>]
+  }
 }
