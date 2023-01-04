@@ -506,3 +506,23 @@ firrtl.circuit "subaccess"   {
     firrtl.strictconnect %3, %1 : !firrtl.uint<1>
   }
 }
+
+// -----
+
+// Two input ports share part of the path to an output port.
+// CHECK-NOT: firrtl.circuit "hasloops"
+firrtl.circuit "revisitOps"   {
+  firrtl.module @thru(in %in1: !firrtl.uint<1>,in %in2: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+    %1 = firrtl.mux(%in1, %in1, %in2)  : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %out, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  // expected-error @+1 {{revisitOps.inner2.out <- revisitOps.inner2.in2 <- revisitOps.x <- revisitOps.inner2.out <-}}
+  firrtl.module @revisitOps() {
+    // expected-remark @+1 {{instance is part of a combinational cycle, instance port number '2' has a path from port number '1', inner2.out <- inner2.in2}}
+    %in1, %in2, %out = firrtl.instance inner2 @thru(in in1: !firrtl.uint<1>,in in2: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    %x = firrtl.wire  : !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %in2, %x : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %x, %out : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}

@@ -456,8 +456,14 @@ public:
     };
     for (auto root : rootValues) {
       Node inputArg = Node();
-      if (root.isa<BlockArgument>())
+      if (root.isa<BlockArgument>()) {
         inputArg = Node(root, 0);
+        // Clear the visited set, such that all possible paths between the ports
+        // can be traversed. Otherwise, if two input ports share a path to an
+        // output port, the second traversal would ignore the visited ops, and
+        // the comb path wouldnot be recorded. See lit test `revisitOps`
+        visited.clear();
+      }
       if (traverseDFSFrom(root, inputArg).failed())
         return failure();
     }
