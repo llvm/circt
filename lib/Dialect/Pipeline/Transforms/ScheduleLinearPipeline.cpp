@@ -13,6 +13,7 @@
 #include "PassDetails.h"
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Analysis/SchedulingAnalysis.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/SSP/SSPOps.h"
 #include "circt/Dialect/SSP/Utilities.h"
 #include "circt/Scheduling/Algorithms.h"
@@ -36,7 +37,9 @@ public:
 } // end anonymous namespace
 
 // Returns true if 'op' should be ignored in the scheduling problem.
-static bool ignoreOp(Operation *op) { return isa<hw::ConstantOp>(op); }
+static bool ignoreOp(Operation *op) {
+  return op->hasTrait<OpTrait::ConstantLike>();
+}
 
 void ScheduleLinearPipelinePass::runOnOperation() {
   auto pipeline = getOperation();
@@ -86,9 +89,11 @@ void ScheduleLinearPipelinePass::runOnOperation() {
       problem.setLatency(operatorType, 0);
     } else {
       // Lookup operator info.
-      auto operatorTypeAttr = op.getAttrOfType<SymbolRefAttr>("operator_type");
+      auto operatorTypeAttr =
+          op.getAttrOfType<SymbolRefAttr>("ssp.operator_type");
       if (!operatorTypeAttr) {
-        op.emitError() << "Expected 'operator_type' attribute on operation.";
+        op.emitError()
+            << "Expected 'ssp.operator_type' attribute on operation.";
         return signalPassFailure();
       }
 
