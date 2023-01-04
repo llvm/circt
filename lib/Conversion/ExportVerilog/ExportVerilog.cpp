@@ -3042,17 +3042,20 @@ private:
   LogicalResult visitSV(GenerateCaseOp op);
 
   std::optional<PPExtString> getAssertionLabel(Operation *op, StringRef opName);
-  void emitWithOptionalLabel(std::optional<PPExtString> label, llvm::function_ref<void(void)> emitFn);
+  void emitWithOptionalLabel(std::optional<PPExtString> label,
+                             llvm::function_ref<void(void)> emitFn);
   void emitAssertionMessage(StringAttr message, ValueRange args,
                             SmallPtrSetImpl<Operation *> &ops,
                             bool isConcurrent);
   template <typename Op>
-  LogicalResult emitImmediateAssertion(Op op, PPExtString opName, bool messageAsComment = false);
+  LogicalResult emitImmediateAssertion(Op op, PPExtString opName,
+                                       bool messageAsComment = false);
   LogicalResult visitSV(AssertOp op);
   LogicalResult visitSV(AssumeOp op);
   LogicalResult visitSV(CoverOp op);
   template <typename Op>
-  LogicalResult emitConcurrentAssertion(Op op, PPExtString opName, bool messageAsComment = false);
+  LogicalResult emitConcurrentAssertion(Op op, PPExtString opName,
+                                        bool messageAsComment = false);
   LogicalResult visitSV(AssertConcurrentOp op);
   LogicalResult visitSV(AssumeConcurrentOp op);
   LogicalResult visitSV(CoverConcurrentOp op);
@@ -3604,15 +3607,16 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
   return success();
 }
 
-/// Get the `<label>` (no colon) portion of an immediate or concurrent verification
-/// operation. If a label has been stored for the operation through
+/// Get the `<label>` (no colon) portion of an immediate or concurrent
+/// verification operation. If a label has been stored for the operation through
 /// `addLegalName` in the pre-pass, that label is used. Otherwise, if the
 /// `enforceVerifLabels` option is set, a temporary name for the operation is
 /// picked and uniquified through `addName`.
-std::optional<PPExtString> StmtEmitter::getAssertionLabel(Operation *op, StringRef opName) {
+std::optional<PPExtString> StmtEmitter::getAssertionLabel(Operation *op,
+                                                          StringRef opName) {
   if (op->getAttrOfType<StringAttr>("label"))
     return PPExtString(names.getName(op));
-   if (state.options.enforceVerifLabels)
+  if (state.options.enforceVerifLabels)
     return PPExtString(names.addName(op, opName));
   return std::nullopt;
 }
@@ -3636,8 +3640,10 @@ void StmtEmitter::emitAssertionMessage(StringAttr message, ValueRange args,
   });
 }
 
-/// Print a label if specified, then invoke emitFn in an appropriate printing box.
-void StmtEmitter::emitWithOptionalLabel(std::optional<PPExtString> label, llvm::function_ref<void(void)> emitFn) {
+/// Print a label if specified, then invoke emitFn in an appropriate printing
+/// box.
+void StmtEmitter::emitWithOptionalLabel(std::optional<PPExtString> label,
+                                        llvm::function_ref<void(void)> emitFn) {
   // Emit label if specified, indent if break after label.
   startStatement();
   if (label)
@@ -3650,7 +3656,8 @@ void StmtEmitter::emitWithOptionalLabel(std::optional<PPExtString> label, llvm::
 }
 
 template <typename Op>
-LogicalResult StmtEmitter::emitImmediateAssertion(Op op, PPExtString opName, bool messageAsComment) {
+LogicalResult StmtEmitter::emitImmediateAssertion(Op op, PPExtString opName,
+                                                  bool messageAsComment) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
@@ -3702,7 +3709,8 @@ LogicalResult StmtEmitter::visitSV(CoverOp op) {
 }
 
 template <typename Op>
-LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, PPExtString opName, bool messageAsComment) {
+LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, PPExtString opName,
+                                                   bool messageAsComment) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
