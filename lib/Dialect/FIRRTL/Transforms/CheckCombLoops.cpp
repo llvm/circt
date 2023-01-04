@@ -66,7 +66,7 @@ public:
     if (visiting.contains(node)) {
       // A comb cycle exists, print an error.
       FieldRef f = getFieldRef(node);
-      auto lastSignalName = getFieldName(f);
+      auto lastSignalName = getFieldName(f).first;
       auto errorDiag = mlir::emitError(
           module.getLoc(),
           "detected combinational cycle in a FIRRTL module, sample path: ");
@@ -75,7 +75,7 @@ public:
       }
       for (auto n : llvm::reverse(currentPath)) {
         FieldRef f = getFieldRefFromValue(n);
-        auto signalName = getFieldName(f);
+        auto signalName = getFieldName(f).first;
         if (!signalName.empty() && lastSignalName != signalName)
           errorDiag << module.getName() << "." << signalName << " <- ";
         lastSignalName = signalName;
@@ -510,8 +510,8 @@ public:
                           << portNum << "'";
             FieldRef fOut = getFieldRef(node);
             FieldRef fIn = getFieldRef(childNode.first);
-            auto inName = getFieldName(fIn);
-            auto outName = getFieldName(fOut);
+            auto inName = getFieldName(fIn).first;
+            auto outName = getFieldName(fOut).first;
             remark << ", " << inName << " <- " << outName;
           })
           .Case<MemOp>([&](MemOp mem) {

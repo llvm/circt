@@ -479,7 +479,7 @@ static void getDeclName(Value value, SmallString<64> &string, bool nameSafe) {
                         .getValue();
           value = nullptr;
         })
-        .Case<WireOp, RegOp, RegResetOp>([&](auto op) {
+        .Case<WireOp, RegOp, RegResetOp, NodeOp>([&](auto op) {
           string += op.getName();
           value = nullptr;
         })
