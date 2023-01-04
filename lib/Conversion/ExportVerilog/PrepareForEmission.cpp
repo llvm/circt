@@ -831,8 +831,8 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
         op.hasTrait<mlir::OpTrait::IsCommutative>() &&
         mlir::isMemoryEffectFree(&op) && op.getNumRegions() == 0 &&
         op.getNumSuccessors() == 0 &&
-        llvm::all_of(op.getAttrs(), [](auto attr) {
-          return attr.getName() == "sv.namehint" ||
+        llvm::all_of(op.getAttrs(), [](NamedAttribute attr) {
+          return attr.getNameDialect() != nullptr ||
                  attr.getName() == "twoState";
         })) {
       // Lower this operation to a balanced binary tree of the same operation.
