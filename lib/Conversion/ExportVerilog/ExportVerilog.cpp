@@ -3046,12 +3046,12 @@ private:
                             SmallPtrSetImpl<Operation *> &ops,
                             bool isConcurrent);
   template <typename Op>
-  LogicalResult emitImmediateAssertion(Op op, PPExtString opName);
+  LogicalResult emitImmediateAssertion(Op op, PPExtString opName, bool messageAsComment = false);
   LogicalResult visitSV(AssertOp op);
   LogicalResult visitSV(AssumeOp op);
   LogicalResult visitSV(CoverOp op);
   template <typename Op>
-  LogicalResult emitConcurrentAssertion(Op op, PPExtString opName);
+  LogicalResult emitConcurrentAssertion(Op op, PPExtString opName, bool messageAsComment = false);
   LogicalResult visitSV(AssertConcurrentOp op);
   LogicalResult visitSV(AssumeConcurrentOp op);
   LogicalResult visitSV(CoverConcurrentOp op);
@@ -3636,9 +3636,12 @@ void StmtEmitter::emitAssertionMessage(StringAttr message, ValueRange args,
 }
 
 template <typename Op>
-LogicalResult StmtEmitter::emitImmediateAssertion(Op op, PPExtString opName) {
+LogicalResult StmtEmitter::emitImmediateAssertion(Op op, PPExtString opName, bool messageAsComment) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
+
+  if (messageAsComment && op.getMessage() && !op.getMessage()->empty())
+    emitComment(op.getMessageAttr());
 
   startStatement();
   SmallPtrSet<Operation *, 8> ops;
@@ -3662,7 +3665,8 @@ LogicalResult StmtEmitter::emitImmediateAssertion(Op op, PPExtString opName) {
         emitExpression(op.getExpression(), ops);
         ps << ")";
       });
-      emitAssertionMessage(op.getMessageAttr(), op.getSubstitutions(), ops);
+      if (!messageAsComment)
+        emitAssertionMessage(op.getMessageAttr(), op.getSubstitutions(), ops);
       ps << ";";
     });
   });
@@ -3679,13 +3683,17 @@ LogicalResult StmtEmitter::visitSV(AssumeOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(CoverOp op) {
-  return emitImmediateAssertion(op, PPExtString("cover"));
+  return emitImmediateAssertion(op, PPExtString("cover"),
+                                /*messageAsComment=*/true);
 }
 
 template <typename Op>
-LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, PPExtString opName) {
+LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, PPExtString opName, bool messageAsComment) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
+
+  if (messageAsComment && op.getMessage() && !op.getMessage()->empty())
+    emitComment(op.getMessageAttr());
 
   startStatement();
   SmallPtrSet<Operation *, 8> ops;
@@ -3702,8 +3710,9 @@ LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, PPExtString opName) {
         emitExpression(op.getProperty(), ops);
         ps << ")";
       });
-      emitAssertionMessage(op.getMessageAttr(), op.getSubstitutions(), ops,
-                           true);
+      if (!messageAsComment)
+        emitAssertionMessage(op.getMessageAttr(), op.getSubstitutions(), ops,
+                             true);
       ps << ";";
     });
   });
@@ -3720,7 +3729,7 @@ LogicalResult StmtEmitter::visitSV(AssumeConcurrentOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
-  return emitConcurrentAssertion(op, PPExtString("cover"));
+  return emitConcurrentAssertion(op, PPExtString("cover"), true);
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
