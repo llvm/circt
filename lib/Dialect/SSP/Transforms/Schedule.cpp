@@ -21,6 +21,25 @@ using namespace scheduling;
 using namespace ssp;
 
 //===----------------------------------------------------------------------===//
+// ASAP scheduler
+//===----------------------------------------------------------------------===//
+
+static InstanceOp scheduleWithASAP(InstanceOp instOp, OpBuilder &builder) {
+  auto problemName = instOp.getProblemName();
+  if (!problemName.equals("Problem")) {
+    llvm::errs() << "ssp-schedule: Unsupported problem '" << problemName
+                 << "' for ASAP scheduler\n";
+    return {};
+  }
+
+  auto prob = loadProblem<Problem>(instOp);
+  if (failed(prob.check()) || failed(scheduling::scheduleASAP(prob)) ||
+      failed(prob.verify()))
+    return {};
+  return saveProblem(prob, builder);
+}
+
+//===----------------------------------------------------------------------===//
 // Simplex schedulers
 //===----------------------------------------------------------------------===//
 
@@ -105,10 +124,16 @@ static InstanceOp scheduleWithSimplex(InstanceOp instOp, StringRef options,
   return {};
 }
 
+//===----------------------------------------------------------------------===//
+// Algorithm dispatcher
+//===----------------------------------------------------------------------===//
+
 static InstanceOp scheduleWith(InstanceOp instOp, StringRef scheduler,
                                StringRef options, OpBuilder &builder) {
   if (scheduler.empty() || scheduler.equals("simplex"))
     return scheduleWithSimplex(instOp, options, builder);
+  if (scheduler.equals("asap"))
+    return scheduleWithASAP(instOp, builder);
 
   llvm::errs() << "ssp-schedule: Unsupported scheduler '" << scheduler
                << "' requested\n";
