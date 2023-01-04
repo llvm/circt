@@ -263,11 +263,10 @@ LogicalResult llhd::PtrArraySliceOp::canonicalize(llhd::PtrArraySliceOp op,
 //===----------------------------------------------------------------------===//
 
 template <class SigPtrType>
-static LogicalResult
-inferReturnTypesOfStructExtractOp(MLIRContext *context, Optional<Location> loc,
-                                  ValueRange operands, DictionaryAttr attrs,
-                                  mlir::RegionRange regions,
-                                  SmallVectorImpl<Type> &results) {
+static LogicalResult inferReturnTypesOfStructExtractOp(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::RegionRange regions,
+    SmallVectorImpl<Type> &results) {
   Type type = operands[0]
                   .getType()
                   .cast<SigPtrType>()
@@ -288,7 +287,7 @@ inferReturnTypesOfStructExtractOp(MLIRContext *context, Optional<Location> loc,
 }
 
 LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::RegionRange regions,
     SmallVectorImpl<Type> &results) {
   return inferReturnTypesOfStructExtractOp<llhd::SigType>(
@@ -296,7 +295,7 @@ LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
 }
 
 LogicalResult llhd::PtrStructExtractOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::RegionRange regions,
     SmallVectorImpl<Type> &results) {
   return inferReturnTypesOfStructExtractOp<llhd::PtrType>(
@@ -909,7 +908,7 @@ ParseResult llhd::RegOp::parse(OpAsmParser &parser, OperationState &result) {
 void llhd::RegOp::print(OpAsmPrinter &printer) {
   printer << " " << getSignal();
   for (size_t i = 0, e = getValues().size(); i < e; ++i) {
-    Optional<llhd::RegMode> mode = llhd::symbolizeRegMode(
+    std::optional<llhd::RegMode> mode = llhd::symbolizeRegMode(
         getModes().getValue()[i].cast<IntegerAttr>().getInt());
     if (!mode) {
       emitError("invalid RegMode");

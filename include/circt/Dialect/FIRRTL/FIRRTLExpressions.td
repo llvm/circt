@@ -10,8 +10,15 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_FIRRTL_FIRRTLEXPRESSIONS_TD
+#define CIRCT_DIALECT_FIRRTL_FIRRTLEXPRESSIONS_TD
+
+include "FIRRTLDialect.td"
+include "FIRRTLTypes.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Types.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def SameOperandsIntTypeKind : NativeOpTrait<"SameOperandsIntTypeKind"> {
   let cppNamespace = "::circt::firrtl";
@@ -34,7 +41,7 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
     /// Infer the return type of this operation.
     static FIRRTLType inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
-                                      Optional<Location> loc);
+                                      std::optional<Location> loc);
   }];
 
   // The operation-specific validator for a parsed list of operands and
@@ -61,7 +68,7 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
     /// `InferTypeOpInterface`. We simply forward to a narrower
     /// operation-specific implementation which is sufficient for FIRRTL ops.
     static LogicalResult inferReturnTypes(MLIRContext *context,
-                                          Optional<Location> loc,
+                                          std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
                                           mlir::RegionRange regions,
@@ -186,7 +193,7 @@ def VectorCreateOp : FIRRTLOp<"vectorcreate"> {
 
 
 def InvalidValueOp : FIRRTLOp<"invalidvalue",
-      [MemoryEffects<[MemAlloc]>, ConstantLike, HasCustomSSAName]> {
+      [MemoryEffects<[MemAlloc]>, HasCustomSSAName]> {
   let summary = "InvalidValue primitive";
   let description = [{
     The InvalidValue operation returns an invalid value of a specified type:
@@ -195,14 +202,13 @@ def InvalidValueOp : FIRRTLOp<"invalidvalue",
     ```
 
     This corresponds to the FIRRTL invalidate operation without the implicit
-    connect semantics.  Each invalid op produces a unique invalid value.  
+    connect semantics.  Each invalid op produces a unique invalid value.
     InvalidOp is not constant-like
   }];
 
   let arguments = (ins);
   let results = (outs FIRRTLBaseType:$result);
 
-  let hasFolder = 1;
   let assemblyFormat = "attr-dict `:` qualified(type($result))";
 }
 
@@ -355,13 +361,13 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
   let inferTypeDecl = !if(!empty(inferType), [{
     /// Infer the return type of this binary operation.
     static FIRRTLType inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                            Optional<Location> loc);
+                                            std::optional<Location> loc);
     }], "") # !subst("$_infer", !if(!empty(inferType), "inferBinaryReturnType",
       inferType), [{
     /// Infer the return type of this operation.
     static FIRRTLType inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
-                                      Optional<Location> loc) {
+                                      std::optional<Location> loc) {
       return $_infer(operands[0].getType().cast<FIRRTLType>(),
                      operands[1].getType().cast<FIRRTLType>(),
                      loc);
@@ -460,13 +466,13 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
   let inferTypeDecl = !if(!empty(inferType), [{
     /// Infer the return type of this unary operation.
     static FIRRTLType inferUnaryReturnType(FIRRTLType arg,
-                                           Optional<Location> loc);
+                                           std::optional<Location> loc);
     }], "") # !subst("$_infer", !if(!empty(inferType), "inferUnaryReturnType",
       inferType), [{
     /// Infer the return type of this operation.
     static FIRRTLType inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
-                                      Optional<Location> loc) {
+                                      std::optional<Location> loc) {
       return $_infer(operands[0].getType().cast<FIRRTLType>(), loc);
     }
   }]);
@@ -619,8 +625,8 @@ def TailPrimOp : PrimOp<"tail"> {
 def IsXIntrinsicOp : FIRRTLExprOp<"int.isX"> {
   let summary = "Test for 'x";
   let description = [{
-    The int.isX expression checks that the operand is not a verilog literal
-    'x.  Firrtl doesn't have a notion of 'x per-se, but x can come in to the
+    The `int.isX` expression checks that the operand is not a verilog literal
+    'x.  FIRRTL doesn't have a notion of 'x per-se, but x can come in to the
     system from external modules and from SV constructs.  Verification
     constructs need to explicitly test for 'x.
     }];
@@ -632,16 +638,16 @@ def IsXIntrinsicOp : FIRRTLExprOp<"int.isX"> {
 }
 
 def PlusArgsTestIntrinsicOp : FIRRTLExprOp<"int.plusargs.test"> {
-  let summary = "Verilog $test$plusargs call";
+  let summary = "SystemVerilog `$test$plusargs` call";
 
   let arguments = (ins StrAttr:$formatString);
   let results = (outs UInt1Type:$found);
   let assemblyFormat = "$formatString attr-dict";
 }
 
-def PlusArgsValueIntrinsicOp 
+def PlusArgsValueIntrinsicOp
 : FIRRTLOp<"int.plusargs.value", [HasCustomSSAName, Pure]> {
-  let summary = "Verilog $value$plusargs call";
+  let summary = "SystemVerilog `$value$plusargs` call";
 
   let arguments = (ins StrAttr:$formatString);
   let results = (outs UInt1Type:$found, AnyType:$result);
@@ -835,3 +841,5 @@ def RefSubOp : FIRRTLExprOp<"ref.sub"> {
   let assemblyFormat =
      "$input `[` $index `]` attr-dict `:` qualified(type($input))";
 }
+
+#endif // CIRCT_DIALECT_FIRRTL_FIRRTLEXPRESSIONS_TD

@@ -573,52 +573,6 @@ def ConstantOp : Handshake_Op<"constant", [
   let hasVerifier = 1;
 }
 
-def EndOp
-    : Handshake_Op<"end", [DeclareOpInterfaceMethods<ExecutableOpInterface>]> {
-  let summary = "end operation";
-  let description = [{
-    The end propagates the result of the appropriate
-    return operation from one of its inputs to its single output after
-    all memory accesses have completed.  Currently not used(data
-    returned through ReturnOp).
-  }];
-
-  let arguments = (ins AnyType : $control, Variadic<AnyType> : $opOperands);
-  let assemblyFormat = [{ operands attr-dict `:` qualified(type($control)) `,` qualified(type($opOperands))}];
-}
-
-def StartOp : Handshake_Op<"start", [
-  Pure, 
-  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>,
-  DeclareOpInterfaceMethods<ExecutableOpInterface>,
-  DeclareOpInterfaceMethods<ControlInterface, ["isControl"]>
-]> {
-  let summary = "start operation";
-  let description = [{
-       Triggers execution of the control - only network.  Placed in entry
-    block.  Currently not used( trigger given as function argument)
-  }];
-
-  let results = (outs NoneType : $result);
-  let assemblyFormat = [{ attr-dict `:` qualified(type($result))}];
-}
-
-def TerminatorOp : Handshake_Op<"terminator", [Terminator]> {
-  let summary = "handshake terminator operation";
-  let description = [{
-    This op is used as a terminator in every block of the dataflow
-    netlist (as a replacement for StandardOp branches). It has no
-    functionality and can be removed in some subsequent pass, when the
-    block structure is removed.
-  }];
-
-  let successors = (successor VariadicSuccessor<AnySuccessor>:$dests);
-  let builders = [OpBuilder<(ins "ArrayRef<Block *>":$successors), [{
-      $_state.addSuccessors(successors);
-  }]>];
-}
-
-
 def MemRefTypeAttr : TypeAttrBase<"MemRefType", "memref type attribute">;
 def MemoryOp : Handshake_Op<"memory", [
   DeclareOpInterfaceMethods<ExecutableOpInterface>,

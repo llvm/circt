@@ -47,7 +47,7 @@ void SVTraceIVerilogPass::runOnOperation() {
       return signalPassFailure();
     }
     hw::HWModuleOp top =
-        dyn_cast_or_null<hw::HWModuleOp>(topLevelNodes->front()->getModule());
+        dyn_cast_or_null<hw::HWModuleOp>(*topLevelNodes->front()->getModule());
     if (!top) {
       mod.emitError("top module is not a HWModuleOp");
       return signalPassFailure();

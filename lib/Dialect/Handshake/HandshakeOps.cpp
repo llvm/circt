@@ -87,7 +87,7 @@ static bool isControlCheckTypeAndOperand(Type dataType, Value operand) {
   // Otherwise, the operation is a control operation if the operation's
   // operand originates from the control network
   auto *defOp = operand.getDefiningOp();
-  return isa_and_nonnull<ControlMergeOp, StartOp>(defOp) &&
+  return isa_and_nonnull<ControlMergeOp>(defOp) &&
          operand == defOp->getResult(0);
 }
 
@@ -359,7 +359,7 @@ void MuxOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 LogicalResult
-MuxOp::inferReturnTypes(MLIRContext *context, Optional<Location> location,
+MuxOp::inferReturnTypes(MLIRContext *context, std::optional<Location> location,
                         ValueRange operands, DictionaryAttr attributes,
                         mlir::RegionRange regions,
                         SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
@@ -443,7 +443,7 @@ std::string handshake::ControlMergeOp::getResultName(unsigned int idx) {
 }
 
 LogicalResult ControlMergeOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> location, ValueRange operands,
+    MLIRContext *context, std::optional<Location> location, ValueRange operands,
     DictionaryAttr attributes, mlir::RegionRange regions,
     SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
   // ControlMerge must have at least one data operand
@@ -778,7 +778,7 @@ ParseResult BranchOp::parse(OpAsmParser &parser, OperationState &result) {
 void BranchOp::print(OpAsmPrinter &p) { sostPrint(p, false); }
 
 LogicalResult ConditionalBranchOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> location, ValueRange operands,
+    MLIRContext *context, std::optional<Location> location, ValueRange operands,
     DictionaryAttr attributes, mlir::RegionRange regions,
     SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
   // Return type is type of data operand (second argument), twice
@@ -835,11 +835,10 @@ bool ConditionalBranchOp::isControl() {
                                       getDataOperand());
 }
 
-LogicalResult
-SelectOp::inferReturnTypes(MLIRContext *context, Optional<Location> location,
-                           ValueRange operands, DictionaryAttr attributes,
-                           mlir::RegionRange regions,
-                           SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
+LogicalResult SelectOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> location, ValueRange operands,
+    DictionaryAttr attributes, mlir::RegionRange regions,
+    SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
   // Return type is type of true operand (equivalently, of false operand)
   inferredReturnTypes.push_back(operands[1].getType());
   return success();
@@ -892,8 +891,6 @@ std::string handshake::SelectOp::getOperandName(unsigned int idx) {
 bool SelectOp::isControl() {
   return getTrueOperand().getType().isa<NoneType>();
 }
-
-bool StartOp::isControl() { return true; }
 
 ParseResult SinkOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;

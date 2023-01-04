@@ -309,7 +309,7 @@ static void eraseControlWithGroupAndConditional(OpTy op,
 
   // Save information about the operation, and erase it.
   Value cond = op.getCond();
-  Optional<StringRef> groupName = op.getGroupName();
+  std::optional<StringRef> groupName = op.getGroupName();
   auto component = op->template getParentOfType<ComponentOp>();
   rewriter.eraseOp(op);
 
@@ -1895,7 +1895,7 @@ LogicalResult IfOp::verify() {
   if (elseBodyExists() && getElseBody()->empty())
     return emitError() << "empty 'else' region.";
 
-  Optional<StringRef> optGroupName = getGroupName();
+  std::optional<StringRef> optGroupName = getGroupName();
   if (!optGroupName) {
     // No combinational group was provided.
     return success();
@@ -1922,7 +1922,7 @@ LogicalResult IfOp::verify() {
 /// Returns the last EnableOp within the child tree of 'parentSeqOp'. If no
 /// EnableOp was found (e.g. a "calyx.par" operation is present), returns
 /// None.
-static Optional<EnableOp> getLastEnableOp(SeqOp parent) {
+static std::optional<EnableOp> getLastEnableOp(SeqOp parent) {
   auto &lastOp = parent.getBodyBlock()->back();
   if (auto enableOp = dyn_cast<EnableOp>(lastOp))
     return enableOp;
@@ -1982,8 +1982,8 @@ struct CommonTailPatternWithSeq : mlir::OpRewritePattern<IfOp> {
 
     auto thenControl = cast<SeqOp>(ifOp.getThenBody()->front()),
          elseControl = cast<SeqOp>(ifOp.getElseBody()->front());
-    Optional<EnableOp> lastThenEnableOp = getLastEnableOp(thenControl),
-                       lastElseEnableOp = getLastEnableOp(elseControl);
+    std::optional<EnableOp> lastThenEnableOp = getLastEnableOp(thenControl),
+                            lastElseEnableOp = getLastEnableOp(elseControl);
 
     if (!lastThenEnableOp || !lastElseEnableOp)
       return failure();
@@ -2097,7 +2097,7 @@ LogicalResult WhileOp::verify() {
   auto component = (*this)->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
 
-  Optional<StringRef> optGroupName = getGroupName();
+  std::optional<StringRef> optGroupName = getGroupName();
   if (!optGroupName) {
     /// No combinational group was provided
     return success();

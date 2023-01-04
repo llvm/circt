@@ -887,7 +887,7 @@ static Attribute parseParamExprWithOpcode(StringRef opcodeStr,
           }))
     return {};
 
-  Optional<PEO> opcode = symbolizePEO(opcodeStr);
+  std::optional<PEO> opcode = symbolizePEO(opcodeStr);
   if (!opcode.has_value()) {
     p.emitError(p.getNameLoc(), "unknown parameter expr operator name");
     return {};

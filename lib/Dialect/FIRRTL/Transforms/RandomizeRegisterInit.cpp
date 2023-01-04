@@ -55,13 +55,13 @@ static void createRandomizationAttributes(FModuleOp mod) {
     // Compute the width of all registers, and remember which bits are assigned
     // to each register.
     auto regType = op->getResult(0).getType().cast<FIRRTLBaseType>();
-    Optional<int64_t> regWidth = getBitWidth(regType);
+    std::optional<int64_t> regWidth = getBitWidth(regType);
     assert(regWidth.has_value() && "register must have a valid FIRRTL width");
 
     auto start = builder.getIntegerAttr(ui64Type, currentWidth);
     op->setAttr("firrtl.random_init_start", start);
 
-    currentWidth += regWidth.value();
+    currentWidth += *regWidth;
   });
 }
 

@@ -533,9 +533,9 @@ static void printOp(Operation *op, raw_ostream &os) {
 }
 
 /// Process a single buffer of the input.
-static LogicalResult
-processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
-              Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+static LogicalResult processBuffer(
+    MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
+    std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   // Add the annotation file if one was explicitly specified.
   unsigned numAnnotationFiles = 0;
   for (const auto &inputAnnotationFilename : inputAnnotationFilenames) {
@@ -608,7 +608,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     if (failed(pm.run(module.get())))
       return failure();
     auto outputTimer = ts.nest("Print .mlir output");
-    printOp(*module, outputFile.value()->os());
+    printOp(*module, (*outputFile)->os());
     return success();
   }
 
@@ -727,11 +727,11 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   // Run passes to resolve Grand Central features.  This should run before
   // BlackBoxReader because Grand Central needs to inform BlackBoxReader where
-  // certain black boxes should be placed.
+  // certain black boxes should be placed.  Note: all Grand Central Taps related
+  // collateral is resolved entirely by LowerAnnotations.
   if (!disableGrandCentral) {
     auto &circuitPM = pm.nest<firrtl::CircuitOp>();
     circuitPM.addPass(firrtl::createGrandCentralPass());
-    circuitPM.addPass(firrtl::createGrandCentralTapsPass());
     circuitPM.addPass(
         firrtl::createGrandCentralSignalMappingsPass(outputFilename));
   }
@@ -875,7 +875,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     default:
       llvm_unreachable("can't reach this");
     case OutputVerilog:
-      exportPm.addPass(createExportVerilogPass(outputFile.value()->os()));
+      exportPm.addPass(createExportVerilogPass((*outputFile)->os()));
       break;
     case OutputSplitVerilog:
       exportPm.addPass(createExportSplitVerilogPass(outputFilename));
@@ -898,7 +898,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (outputFormat == OutputIRFir || outputFormat == OutputIRHW ||
       outputFormat == OutputIRSV || outputFormat == OutputIRVerilog) {
     auto outputTimer = ts.nest("Print .mlir output");
-    printOp(*module, outputFile.value()->os());
+    printOp(*module, (*outputFile)->os());
   }
 
   // If requested, print the final MLIR into mlirOutFile.
@@ -924,10 +924,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 /// Process a single split of the input. This allocates a source manager and
 /// creates a regular or verifying diagnostic handler, depending on whether the
 /// user set the verifyDiagnostics option.
-static LogicalResult
-processInputSplit(MLIRContext &context, TimingScope &ts,
-                  std::unique_ptr<llvm::MemoryBuffer> buffer,
-                  Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+static LogicalResult processInputSplit(
+    MLIRContext &context, TimingScope &ts,
+    std::unique_ptr<llvm::MemoryBuffer> buffer,
+    std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(buffer), llvm::SMLoc());
   if (!verifyDiagnostics) {
@@ -946,7 +946,7 @@ processInputSplit(MLIRContext &context, TimingScope &ts,
 static LogicalResult
 processInput(MLIRContext &context, TimingScope &ts,
              std::unique_ptr<llvm::MemoryBuffer> input,
-             Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+             std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   if (!splitInputFile)
     return processInputSplit(context, ts, std::move(input), outputFile);
 
@@ -1004,11 +1004,11 @@ static LogicalResult executeFirtool(MLIRContext &context) {
   }
 
   // Create the output directory or output file depending on our mode.
-  Optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
+  std::optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
   if (outputFormat != OutputSplitVerilog) {
     // Create an output file.
     outputFile.emplace(openOutputFile(outputFilename, &errorMessage));
-    if (!outputFile.value()) {
+    if (!(*outputFile)) {
       llvm::errs() << errorMessage << "\n";
       return failure();
     }
@@ -1037,7 +1037,7 @@ static LogicalResult executeFirtool(MLIRContext &context) {
 
   // If the result succeeded and we're emitting a file, close it.
   if (outputFile.has_value())
-    outputFile.value()->keep();
+    (*outputFile)->keep();
 
   return success();
 }

@@ -40,7 +40,7 @@ using mlir::TypeStorageAllocator;
 /// This only prints a subset of all types in the dialect. Use `printNestedType`
 /// instead, which will call this function in turn, as appropriate.
 static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
-  auto printWidthQualifier = [&](Optional<int32_t> width) {
+  auto printWidthQualifier = [&](std::optional<int32_t> width) {
     if (width)
       os << '<' << *width << '>';
   };
@@ -702,7 +702,7 @@ Type firrtl::getPassiveType(Type anyBaseFIRRTLType) {
 //===----------------------------------------------------------------------===//
 
 /// Return the bitwidth of this type or None if unknown.
-Optional<int32_t> IntType::getWidth() {
+std::optional<int32_t> IntType::getWidth() {
   return isSigned() ? this->cast<SIntType>().getWidth()
                     : this->cast<UIntType>().getWidth();
 }
@@ -738,7 +738,7 @@ struct WidthTypeStorage : mlir::TypeStorage {
 } // namespace firrtl
 } // namespace circt
 
-static Optional<int32_t>
+static std::optional<int32_t>
 getWidthQualifiedTypeWidth(firrtl::detail::WidthTypeStorage *impl) {
   int width = impl->width;
   if (width < 0)
@@ -752,7 +752,7 @@ SIntType SIntType::get(MLIRContext *context, int32_t width) {
   return Base::get(context, width);
 }
 
-Optional<int32_t> SIntType::getWidth() {
+std::optional<int32_t> SIntType::getWidth() {
   return getWidthQualifiedTypeWidth(this->getImpl());
 }
 
@@ -761,7 +761,7 @@ UIntType UIntType::get(MLIRContext *context, int32_t width) {
   return Base::get(context, width);
 }
 
-Optional<int32_t> UIntType::getWidth() {
+std::optional<int32_t> UIntType::getWidth() {
   return getWidthQualifiedTypeWidth(this->getImpl());
 }
 
@@ -869,7 +869,7 @@ FIRRTLBaseType BundleType::getPassiveType() {
   return passiveType;
 }
 
-llvm::Optional<unsigned> BundleType::getElementIndex(StringAttr name) {
+std::optional<unsigned> BundleType::getElementIndex(StringAttr name) {
   for (const auto &it : llvm::enumerate(getElements())) {
     auto element = it.value();
     if (element.name == name) {
@@ -879,7 +879,7 @@ llvm::Optional<unsigned> BundleType::getElementIndex(StringAttr name) {
   return std::nullopt;
 }
 
-llvm::Optional<unsigned> BundleType::getElementIndex(StringRef name) {
+std::optional<unsigned> BundleType::getElementIndex(StringRef name) {
   for (const auto &it : llvm::enumerate(getElements())) {
     auto element = it.value();
     if (element.name.getValue() == name) {
@@ -895,13 +895,15 @@ StringRef BundleType::getElementName(size_t index) {
   return getElements()[index].name.getValue();
 }
 
-Optional<BundleType::BundleElement> BundleType::getElement(StringAttr name) {
+std::optional<BundleType::BundleElement>
+BundleType::getElement(StringAttr name) {
   if (auto maybeIndex = getElementIndex(name))
     return getElements()[*maybeIndex];
   return std::nullopt;
 }
 
-Optional<BundleType::BundleElement> BundleType::getElement(StringRef name) {
+std::optional<BundleType::BundleElement>
+BundleType::getElement(StringRef name) {
   if (auto maybeIndex = getElementIndex(name))
     return getElements()[*maybeIndex];
   return std::nullopt;
@@ -1126,38 +1128,32 @@ void FIRRTLDialect::registerTypes() {
 // field element and return the total bit width of the aggregate type. This
 // returns None, if any of the bundle fields is a flip type, or ground type with
 // unknown bit width.
-llvm::Optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
-                                            bool ignoreFlip) {
-  std::function<llvm::Optional<int64_t>(FIRRTLBaseType)> getWidth =
-      [&](FIRRTLBaseType type) -> llvm::Optional<int64_t> {
-    return TypeSwitch<FIRRTLBaseType, llvm::Optional<int64_t>>(type)
-        .Case<BundleType>([&](BundleType bundle) {
+std::optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
+                                           bool ignoreFlip) {
+  std::function<std::optional<int64_t>(FIRRTLBaseType)> getWidth =
+      [&](FIRRTLBaseType type) -> std::optional<int64_t> {
+    return TypeSwitch<FIRRTLBaseType, std::optional<int64_t>>(type)
+        .Case<BundleType>([&](BundleType bundle) -> std::optional<int64_t> {
           int64_t width = 0;
           for (auto &elt : bundle) {
             if (elt.isFlip && !ignoreFlip)
-              return llvm::Optional<int64_t>(std::nullopt);
+              return std::nullopt;
             auto w = getBitWidth(elt.type);
             if (!w.has_value())
-              return llvm::Optional<int64_t>(std::nullopt);
+              return std::nullopt;
             width += *w;
           }
-          return llvm::Optional<int64_t>(width);
+          return width;
         })
-        .Case<FVectorType>([&](auto vector) {
+        .Case<FVectorType>([&](auto vector) -> std::optional<int64_t> {
           auto w = getBitWidth(vector.getElementType());
           if (!w.has_value())
-            return llvm::Optional<int64_t>(std::nullopt);
-          return llvm::Optional<int64_t>(*w * vector.getNumElements());
+            return std::nullopt;
+          return *w * vector.getNumElements();
         })
-        .Case<IntType>([&](IntType iType) {
-          auto retval = iType.getWidth();
-          if (retval)
-            return llvm::Optional<int64_t>(*retval);
-          else
-            return llvm::Optional<int64_t>(std::nullopt);
-        })
+        .Case<IntType>([&](IntType iType) { return iType.getWidth(); })
         .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
-        .Default([&](auto t) { return llvm::Optional<int64_t>(std::nullopt); });
+        .Default([&](auto t) { return std::nullopt; });
   };
   return getWidth(type);
 }

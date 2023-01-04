@@ -61,9 +61,9 @@ void TestDependenceAnalysisPass::runOnOperation() {
       for (auto comp : dep.dependenceComponents) {
         SmallVector<Attribute> vector;
         vector.push_back(
-            IntegerAttr::get(IntegerType::get(context, 64), comp.lb.value()));
+            IntegerAttr::get(IntegerType::get(context, 64), *comp.lb));
         vector.push_back(
-            IntegerAttr::get(IntegerType::get(context, 64), comp.ub.value()));
+            IntegerAttr::get(IntegerType::get(context, 64), *comp.ub));
         comps.push_back(ArrayAttr::get(context, vector));
       }
 

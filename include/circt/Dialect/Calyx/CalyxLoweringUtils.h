@@ -129,7 +129,7 @@ public:
   virtual Value getConditionValue() = 0;
 
   // Returns the number of iterations the loop will conduct if known.
-  virtual Optional<uint64_t> getBound() = 0;
+  virtual std::optional<uint64_t> getBound() = 0;
 
   // Returns the location of the loop interface.
   virtual Location getLoc() = 0;
@@ -329,7 +329,7 @@ public:
 
   /// If v is an input to any memory registered within this component, returns
   /// the memory. If not, returns null.
-  Optional<calyx::MemoryInterface> isInputPortOfMemory(Value v);
+  std::optional<calyx::MemoryInterface> isInputPortOfMemory(Value v);
 
   /// Assign a mapping between the source funcOp result indices and the
   /// corresponding output port indices of this componentOp.

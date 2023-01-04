@@ -20,7 +20,7 @@ func.func @canis14_fig2() attributes {
 }
 
 // SIMPLEX-LABEL: minII_feasible
-// SIMPLEX-SAME: simplexInitiationInterval = 4
+// SIMPLEX-SAME: simplexInitiationInterval = 3
 func.func @minII_feasible() attributes {
   problemInitiationInterval = 3,
   auxdeps = [ [6,1,5], [5,2,3], [6,7] ],

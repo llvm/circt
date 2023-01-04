@@ -62,7 +62,7 @@ public:
     return getOperation().getCondBlock().getTerminator()->getOperand(0);
   }
 
-  Optional<uint64_t> getBound() override {
+  std::optional<uint64_t> getBound() override {
     return getOperation().getTripCount();
   }
 };
@@ -95,7 +95,7 @@ public:
   /// Returns the group registered for this non-pipelined value, and None
   /// otherwise.
   template <typename TGroupOp = calyx::GroupInterface>
-  Optional<TGroupOp> getNonPipelinedGroupFrom(Operation *op) {
+  std::optional<TGroupOp> getNonPipelinedGroupFrom(Operation *op) {
     auto it = operationToGroup.find(op);
     if (it == operationToGroup.end())
       return std::nullopt;

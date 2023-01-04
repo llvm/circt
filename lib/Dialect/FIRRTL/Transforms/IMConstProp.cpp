@@ -40,9 +40,9 @@ static bool isAggregate(Operation *op) {
 }
 
 /// Return true if this is a wire or register we're allowed to delete.
-static bool isDeletableWireOrReg(Operation *op) {
-  return isWireOrReg(op) && AnnotationSet(op).empty() && !hasDontTouch(op) &&
-         hasDroppableName(op);
+static bool isDeletableWireOrRegOrNode(Operation *op) {
+  return (isWireOrReg(op) || isa<NodeOp>(op)) && AnnotationSet(op).empty() &&
+         !hasDontTouch(op) && hasDroppableName(op);
 }
 
 //===----------------------------------------------------------------------===//
@@ -231,10 +231,6 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// revisitation.
   void mergeLatticeValue(Value value, LatticeValue &valueEntry,
                          LatticeValue source) {
-    if (!source.isOverdefined() &&
-        (!isa_and_nonnull<InstanceOp>(value.getDefiningOp()) &&
-         hasDontTouch(value)))
-      source = LatticeValue::getOverdefined();
     if (valueEntry.mergeIn(source)) {
       LLVM_DEBUG({
         logger.getOStream()
@@ -268,10 +264,6 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     if (source.isUnknown())
       return;
 
-    if (!source.isOverdefined() &&
-        (!isa_and_nonnull<InstanceOp>(value.getDefiningOp()) &&
-         hasDontTouch(value)))
-      source = LatticeValue::getOverdefined();
     // If we've changed this value then revisit all the users.
     auto &valueEntry = latticeValues[value];
     if (valueEntry != source) {
@@ -300,6 +292,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void visitRegResetOp(RegResetOp regReset);
   void visitRefSend(RefSendOp send);
   void visitRefResolve(RefResolveOp resolve);
+  void visitNode(NodeOp node);
   void visitOperation(Operation *op);
 
 private:
@@ -443,12 +436,15 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
 }
 
 void IMConstPropPass::markWireOrRegOp(Operation *wireOrReg) {
-  // If the wire/reg has a non-ground type, then it is too complex for us to
-  // handle, mark it as overdefined.
+  // If the wire/reg/node has a non-ground type, then it is too complex for us
+  // to handle, mark it as overdefined.
   // TODO: Eventually add a field-sensitive model.
   auto resultValue = wireOrReg->getResult(0);
   auto type = resultValue.getType().dyn_cast<FIRRTLType>();
   if (!type || !type.cast<FIRRTLBaseType>().getPassiveType().isGround())
+    return markOverdefined(resultValue);
+
+  if (hasDontTouch(wireOrReg))
     return markOverdefined(resultValue);
 
   // Otherwise, this starts out as UnWritten and is upgraded by connects.
@@ -622,6 +618,16 @@ void IMConstPropPass::visitRefResolve(RefResolveOp resolve) {
   return mergeLatticeValue(resolve.getResult(), resolve.getRef());
 }
 
+void IMConstPropPass::visitNode(NodeOp node) {
+  // Nodes don't fold if they have interesting names, but they should still
+  // propagate values.
+  if (hasDontTouch(node.getResult()) ||
+      (node.getAnnotationsAttr() && !node.getAnnotationsAttr().empty()))
+    return markOverdefined(node);
+
+  return mergeLatticeValue(node.getResult(), node.getInput());
+}
+
 /// This method is invoked when an operand of the specified op changes its
 /// lattice value state and when the block containing the operation is first
 /// noticed as being alive.
@@ -638,17 +644,13 @@ void IMConstPropPass::visitOperation(Operation *op) {
     return visitRefSend(sendOp);
   if (auto resolveOp = dyn_cast<RefResolveOp>(op))
     return visitRefResolve(resolveOp);
+  if (auto nodeOp = dyn_cast<NodeOp>(op))
+    return visitNode(nodeOp);
 
   // The clock operand of regop changing doesn't change its result value.
   if (isa<RegOp>(op))
     return;
   // TODO: Handle 'when' operations.
-
-  // Nodes might not fold since they might have a name, but should prop
-  if (isa<NodeOp>(op)) {
-    mergeLatticeValue(op->getResult(0), op->getOperand(0));
-    return;
-  }
 
   // If all of the results of this operation are already overdefined (or if
   // there are no results) then bail out early: we've converged.
@@ -682,6 +684,11 @@ void IMConstPropPass::visitOperation(Operation *op) {
   SmallVector<OpFoldResult, 8> foldResults;
   foldResults.reserve(op->getNumResults());
   if (failed(op->fold(operandConstants, foldResults))) {
+    LLVM_DEBUG({
+      logger.startLine() << "Folding Failed operation : '" << op->getName()
+                         << "\n";
+      op->dump();
+    });
     for (auto value : op->getResults())
       markOverdefined(value);
     return;
@@ -691,18 +698,17 @@ void IMConstPropPass::visitOperation(Operation *op) {
     logger.getOStream() << "\n";
     logger.startLine() << "Folding operation : '" << op->getName() << "\n";
     op->dump();
-    logger.getOStream() << "(\n";
-    logger.indent();
+    logger.getOStream() << "( ";
     for (auto cst : operandConstants)
       if (!cst)
-        logger.getOStream() << "{}\n";
+        logger.getOStream() << "{} ";
       else
-        logger.getOStream() << cst << "\n";
+        logger.getOStream() << cst << " ";
     logger.unindent();
-    logger.getOStream() << ")\n{\n";
+    logger.getOStream() << ") -> { ";
     logger.indent();
     for (auto &r : foldResults) {
-      logger.getOStream() << r << "\n";
+      logger.getOStream() << r << " ";
     }
     logger.unindent();
     logger.getOStream() << "}\n";
@@ -766,10 +772,30 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
   // If the lattice value for the specified value is a constant update it and
   // return true.  Otherwise return false.
   auto replaceValueIfPossible = [&](Value value) -> bool {
+    // Lambda to replace all uses of this value a replacement, unless this is
+    // the destination of a connect.  We leave connects alone to avoid upsetting
+    // flow, i.e., to avoid trying to connect to a constant.
+    auto replaceIfNotConnect = [&value](Value replacement) {
+      value.replaceUsesWithIf(replacement, [](OpOperand &operand) {
+        return !isa<FConnectLike>(operand.getOwner()) ||
+               operand.getOperandNumber() != 0;
+      });
+    };
+
     auto it = latticeValues.find(value);
     if (it == latticeValues.end() || it->second.isOverdefined() ||
-        it->second.isUnknown() || it->second.isUnwritten())
+        it->second.isUnknown())
       return false;
+    if (it->second.isUnwritten()) {
+      if (auto reg = value.getDefiningOp<RegOp>()) {
+        // Registers can get replaced with a unique (new) invalid value
+        auto invalid =
+            builder.create<InvalidValueOp>(reg.getLoc(), reg.getType());
+        replaceIfNotConnect(invalid);
+        return true;
+      }
+      return false;
+    }
 
     // Cannot materialize constants for non-base types.
     if (!value.getType().isa<FIRRTLBaseType>())
@@ -778,12 +804,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     auto cstValue =
         getConst(it->second.getValue(), value.getType(), value.getLoc());
 
-    // Replace all uses of this value with the constant, unless this is the
-    // destination of a connect.  We leave those alone to avoid upsetting flow.
-    value.replaceUsesWithIf(cstValue, [](OpOperand &operand) {
-      return !isa<FConnectLike>(operand.getOwner()) ||
-             operand.getOperandNumber() != 0;
-    });
+    replaceIfNotConnect(cstValue);
     return true;
   };
 
@@ -801,7 +822,8 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     // Connects to values that we found to be constant can be dropped.
     if (auto connect = dyn_cast<FConnectLike>(op)) {
       if (auto *destOp = connect.getDest().getDefiningOp()) {
-        if (isDeletableWireOrReg(destOp) && !isOverdefined(connect.getDest())) {
+        if (isDeletableWireOrRegOrNode(destOp) &&
+            !isOverdefined(connect.getDest())) {
           connect.erase();
           ++numErasedOp;
         }
@@ -816,7 +838,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
 
     // If this operation is already dead, then go ahead and remove it.
     if (op.use_empty() &&
-        (wouldOpBeTriviallyDead(&op) || isDeletableWireOrReg(&op))) {
+        (wouldOpBeTriviallyDead(&op) || isDeletableWireOrRegOrNode(&op))) {
       LLVM_DEBUG({ logger.getOStream() << "Trivially dead : " << op << "\n"; });
       op.erase();
       continue;
@@ -837,7 +859,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
 
     // If the operation folded to a constant then we can probably nuke it.
     if (foldedAny && op.use_empty() &&
-        (wouldOpBeTriviallyDead(&op) || isDeletableWireOrReg(&op))) {
+        (wouldOpBeTriviallyDead(&op) || isDeletableWireOrRegOrNode(&op))) {
       LLVM_DEBUG({ logger.getOStream() << "Made dead : " << op << "\n"; });
       op.erase();
       ++numErasedOp;

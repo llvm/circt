@@ -1731,7 +1731,7 @@ Value ArrayCreateOp::getUniformElement() {
   return {};
 }
 
-static Optional<uint64_t> getUIntFromValue(Value value) {
+static std::optional<uint64_t> getUIntFromValue(Value value) {
   auto idxOp = dyn_cast_or_null<ConstantOp>(value.getDefiningOp());
   if (!idxOp)
     return std::nullopt;
@@ -1949,7 +1949,7 @@ static bool mergeConcatSlices(ArrayConcatOp op, PatternRewriter &rewriter) {
   };
 
   SmallVector<Value> items;
-  Optional<Slice> last;
+  std::optional<Slice> last;
   bool changed = false;
 
   auto concatenate = [&] {

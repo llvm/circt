@@ -38,7 +38,7 @@ void appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
   // a "mem : {...}" dictionary. These attributes allows for deducing which
   // top-level I/O signals constitutes a unique memory interface.
   auto getMemoryInterfaceAttr = [&](StringRef tag,
-                                    Optional<unsigned> addrIdx = {}) {
+                                    std::optional<unsigned> addrIdx = {}) {
     auto attrs = SmallVector<NamedAttribute>{
         // "id" denotes a unique memory interface.
         rewriter.getNamedAttr("id", rewriter.getI32IntegerAttr(memoryID)),
@@ -294,7 +294,7 @@ ComponentLoweringStateInterface::getMemoryInterface(Value memref) {
   return it->second;
 }
 
-Optional<calyx::MemoryInterface>
+std::optional<calyx::MemoryInterface>
 ComponentLoweringStateInterface::isInputPortOfMemory(Value v) {
   for (auto &memIf : memories) {
     auto &mem = memIf.getSecond();

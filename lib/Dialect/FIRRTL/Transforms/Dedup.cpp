@@ -517,12 +517,13 @@ struct Equivalence {
       if (bValue != map.lookup(aValue)) {
         diag.attachNote(a->getLoc())
             << "operations use different operands, first operand is '"
-            << getFieldName(getFieldRefFromValue(aValue)) << "'";
+            << getFieldName(getFieldRefFromValue(aValue)).first << "'";
         diag.attachNote(b->getLoc())
             << "second operand is '"
-            << getFieldName(getFieldRefFromValue(bValue))
+            << getFieldName(getFieldRefFromValue(bValue)).first
             << "', but should have been '"
-            << getFieldName(getFieldRefFromValue(map.lookup(aValue))) << "'";
+            << getFieldName(getFieldRefFromValue(map.lookup(aValue))).first
+            << "'";
         return failure();
       }
     }
@@ -1291,6 +1292,13 @@ class DedupPass : public DedupBase<DedupPass> {
         // marks the module as both NoDedup and MustDedup. We do not record this
         // module in the hasher to make sure no other module dedups "into" this
         // one.
+        dedupMap[moduleName] = moduleName;
+        continue;
+      }
+      // If the module has input RefType ports, also skip it.
+      if (llvm::any_of(module.getPorts(), [&](PortInfo port) {
+            return isa<RefType>(port.type) && port.isInput();
+          })) {
         dedupMap[moduleName] = moduleName;
         continue;
       }

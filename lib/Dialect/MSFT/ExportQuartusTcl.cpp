@@ -96,14 +96,14 @@ struct TclOutputState {
   void emit(PhysLocationAttr);
   LogicalResult emitLocationAssignment(DynInstDataOpInterface refOp,
                                        PhysLocationAttr,
-                                       Optional<StringRef> subpath);
+                                       std::optional<StringRef> subpath);
 
   LogicalResult emit(PDPhysRegionOp region);
   LogicalResult emit(PDPhysLocationOp loc);
   LogicalResult emit(PDRegPhysLocationOp);
   LogicalResult emit(DynamicInstanceVerbatimAttrOp attr);
 
-  void emitPath(hw::GlobalRefOp ref, Optional<StringRef> subpath);
+  void emitPath(hw::GlobalRefOp ref, std::optional<StringRef> subpath);
   void emitInnerRefPart(hw::InnerRefAttr innerRef);
 
   /// Get the GlobalRefOp to which the given operation is pointing. Add it to
@@ -131,7 +131,7 @@ void TclOutputState::emitInnerRefPart(hw::InnerRefAttr innerRef) {
 }
 
 void TclOutputState::emitPath(hw::GlobalRefOp ref,
-                              Optional<StringRef> subpath) {
+                              std::optional<StringRef> subpath) {
   // Traverse each part of the path.
   auto parts = ref.getNamepathAttr().getAsRange<hw::InnerRefAttr>();
   auto lastPart = std::prev(parts.end());
@@ -177,7 +177,7 @@ void TclOutputState::emit(PhysLocationAttr pla) {
 LogicalResult
 TclOutputState::emitLocationAssignment(DynInstDataOpInterface refOp,
                                        PhysLocationAttr loc,
-                                       Optional<StringRef> subpath) {
+                                       std::optional<StringRef> subpath) {
   indent() << "set_location_assignment ";
   emit(loc);
 

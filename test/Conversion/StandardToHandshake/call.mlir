@@ -4,7 +4,8 @@
 // CHECK-SAME:                        %[[VAL_0:.*]]: i32,
 // CHECK-SAME:                        %[[VAL_1:.*]]: none, ...) -> (i32, none)
 // CHECK:           %[[VAL_2:.*]] = merge %[[VAL_0]] : i32
-// CHECK:           return %[[VAL_2]], %[[VAL_1]] : i32, none
+// CHECK:           %[[VAL_1x:.*]] = merge %[[VAL_1]] : none
+// CHECK:           return %[[VAL_2]], %[[VAL_1x]] : i32, none
 // CHECK:         }
 func.func @bar(%0 : i32) -> i32 {
   return %0 : i32
@@ -14,8 +15,9 @@ func.func @bar(%0 : i32) -> i32 {
 // CHECK-SAME:                        %[[VAL_0:.*]]: i32,
 // CHECK-SAME:                        %[[VAL_1:.*]]: none, ...) -> (i32, none)
 // CHECK:           %[[VAL_2:.*]] = merge %[[VAL_0]] : i32
-// CHECK:           %[[VAL_3:.*]]:2 = instance @bar(%[[VAL_2]], %[[VAL_1]]) : (i32, none) -> (i32, none)
-// CHECK:           return %[[VAL_3]]#0, %[[VAL_1]] : i32, none
+// CHECK:           %[[VAL_1x:.*]] = merge %[[VAL_1]] : none
+// CHECK:           %[[VAL_3:.*]]:2 = instance @bar(%[[VAL_2]], %[[VAL_1x]]) : (i32, none) -> (i32, none)
+// CHECK:           return %[[VAL_3]]#0, %[[VAL_1x]] : i32, none
 // CHECK:         }
 func.func @foo(%0 : i32) -> i32 {
   %a1 = call @bar(%0) : (i32) -> i32
@@ -43,9 +45,10 @@ func.func @sub(%arg0 : i32, %arg1: i32) -> i32 {
 // CHECK:           %[[VAL_5:.*]] = merge %[[VAL_1]] : i32
 // CHECK:           %[[VAL_6:.*]] = merge %[[VAL_2]] : i1
 // CHECK:           %[[VAL_7:.*]] = buffer [2] fifo %[[VAL_6]] : i1
+// CHECK:           %[[VAL_3x:.*]] = merge %[[VAL_3]] : none
 // CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = cond_br %[[VAL_6]], %[[VAL_4]] : i32
 // CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = cond_br %[[VAL_6]], %[[VAL_5]] : i32
-// CHECK:           %[[VAL_12:.*]], %[[VAL_13:.*]] = cond_br %[[VAL_6]], %[[VAL_3]] : none
+// CHECK:           %[[VAL_12:.*]], %[[VAL_13:.*]] = cond_br %[[VAL_6]], %[[VAL_3x]] : none
 // CHECK:           %[[VAL_14:.*]] = merge %[[VAL_8]] : i32
 // CHECK:           %[[VAL_15:.*]] = merge %[[VAL_10]] : i32
 // CHECK:           %[[VAL_16:.*]], %[[VAL_17:.*]] = control_merge %[[VAL_12]] : none

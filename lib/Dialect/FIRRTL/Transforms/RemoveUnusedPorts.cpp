@@ -56,7 +56,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
                           << "\n");
   // This tracks constant values of output ports. None indicates an invalid
   // value.
-  SmallVector<llvm::Optional<APSInt>> outputPortConstants;
+  SmallVector<std::optional<APSInt>> outputPortConstants;
   auto ports = module.getPorts();
   // This tracks port indexes that can be erased.
   llvm::BitVector removalPortIndexes(ports.size());

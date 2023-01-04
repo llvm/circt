@@ -45,6 +45,7 @@ public:
             CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
             // Intrinsic Expressions.
             IsXIntrinsicOp, PlusArgsValueIntrinsicOp, PlusArgsTestIntrinsicOp,
+            SizeOfIntrinsicOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
@@ -138,6 +139,7 @@ public:
   HANDLE(IsXIntrinsicOp, Unhandled);
   HANDLE(PlusArgsValueIntrinsicOp, Unhandled);
   HANDLE(PlusArgsTestIntrinsicOp, Unhandled);
+  HANDLE(SizeOfIntrinsicOp, Unhandled);
 
   // Miscellaneous.
   HANDLE(BitsPrimOp, Unhandled);

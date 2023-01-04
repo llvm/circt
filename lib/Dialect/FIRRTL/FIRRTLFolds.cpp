@@ -141,8 +141,8 @@ bool circt::firrtl::hasDroppableName(Operation *op) {
 /// This makes constant folding significantly easier, as we can simply pass the
 /// operands to an operation through this function to appropriately replace any
 /// zero-width dynamic values or invalid values with a constant of value 0.
-static Optional<APSInt> getExtendedConstant(Value operand, Attribute constant,
-                                            int32_t destWidth) {
+static std::optional<APSInt>
+getExtendedConstant(Value operand, Attribute constant, int32_t destWidth) {
   assert(operand.getType().isa<IntType>() &&
          "getExtendedConstant is limited to integer types");
 
@@ -162,7 +162,7 @@ static Optional<APSInt> getExtendedConstant(Value operand, Attribute constant,
 }
 
 /// Determine the value of a constant operand for the sake of constant folding.
-static Optional<APSInt> getConstant(Attribute operand) {
+static std::optional<APSInt> getConstant(Attribute operand) {
   if (!operand)
     return {};
   if (auto attr = operand.dyn_cast<BoolAttr>())
@@ -287,9 +287,8 @@ static LogicalResult canonicalizePrimOp(
   for (auto operand : op->getOperands()) {
     Attribute attr;
     if (auto *defOp = operand.getDefiningOp())
-      TypeSwitch<Operation *>(defOp)
-          .Case<ConstantOp, SpecialConstantOp, InvalidValueOp>(
-              [&](auto op) { attr = op.fold({}).template get<Attribute>(); });
+      TypeSwitch<Operation *>(defOp).Case<ConstantOp, SpecialConstantOp>(
+          [&](auto op) { attr = op.fold({}).template get<Attribute>(); });
     constOperands.push_back(attr);
   }
 
@@ -357,10 +356,6 @@ OpFoldResult SpecialConstantOp::fold(ArrayRef<Attribute> operands) {
 OpFoldResult AggregateConstantOp::fold(ArrayRef<Attribute> operands) {
   assert(operands.empty() && "constant has no operands");
   return getFieldsAttr();
-}
-
-OpFoldResult InvalidValueOp::fold(ArrayRef<Attribute> operands) {
-  return InvalidValueAttr::get(getType());
 }
 
 //===----------------------------------------------------------------------===//
@@ -1054,10 +1049,14 @@ OpFoldResult XorRPrimOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult CatPrimOp::fold(ArrayRef<Attribute> operands) {
-
-  if (getLhs().getType().getBitWidthOrSentinel() == 0)
+  // cat(x, 0-width) -> x
+  // cat(0-width, x) -> x
+  // Limit to unsigned (result type), as cannot insert cast here.
+  if (getLhs().getType().getBitWidthOrSentinel() == 0 &&
+      getRhs().getType().isUnsigned())
     return getRhs();
-  if (getRhs().getType().getBitWidthOrSentinel() == 0)
+  if (getRhs().getType().getBitWidthOrSentinel() == 0 &&
+      getLhs().getType().isUnsigned())
     return getLhs();
 
   if (!hasKnownWidthIntTypes(*this))
@@ -1704,6 +1703,17 @@ struct NodeBypass : public mlir::RewritePattern {
   }
 };
 } // namespace
+
+// Interesting names and symbols and don't touch force nodes to stick around.
+OpFoldResult NodeOp::fold(ArrayRef<Attribute> operands) {
+  if (!hasDroppableName())
+    return {};
+  if (hasDontTouch(getResult())) // handles inner symbols
+    return {};
+  if (getAnnotationsAttr() && !getAnnotationsAttr().empty())
+    return {};
+  return operands[0];
+}
 
 void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {

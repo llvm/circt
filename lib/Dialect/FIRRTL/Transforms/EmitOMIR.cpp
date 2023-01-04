@@ -210,7 +210,8 @@ static IntegerAttr isOMSRAM(Attribute &node) {
 /// become its own Dialect.  At this time, this function is trying to do as
 /// minimal work as possible to just validate that the OMIR looks okay without
 /// doing lots of unnecessary unpacking/repacking of string-encoded types.
-static Optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
+static std::optional<Attribute> scatterOMIR(Attribute original,
+                                            ApplyState &state) {
   auto *ctx = original.getContext();
 
   // Convert a string-encoded type to a dictionary that includes the type
@@ -226,7 +227,7 @@ static Optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
     return DictionaryAttr::getWithSorted(ctx, fields);
   };
 
-  return TypeSwitch<Attribute, Optional<Attribute>>(original)
+  return TypeSwitch<Attribute, std::optional<Attribute>>(original)
       // Most strings in the Object Model are actually string-encoded types.
       // These are types which look like: "<type>:<value>".  This code will
       // examine all strings, parse them into type and value, and then either
@@ -235,7 +236,7 @@ static Optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
       // expected to care about them right now), or error if we see them
       // (because they should not exist and are expected to serialize to a
       // different format).
-      .Case<StringAttr>([&](StringAttr str) -> Optional<Attribute> {
+      .Case<StringAttr>([&](StringAttr str) -> std::optional<Attribute> {
         // Unpack the string into type and value.
         StringRef tpe, value;
         std::tie(tpe, value) = str.getValue().split(":");
@@ -293,7 +294,7 @@ static Optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
       })
       // For an array, just recurse into each element and rewrite the array with
       // the results.
-      .Case<ArrayAttr>([&](ArrayAttr arr) -> Optional<Attribute> {
+      .Case<ArrayAttr>([&](ArrayAttr arr) -> std::optional<Attribute> {
         SmallVector<Attribute> newArr;
         for (auto element : arr) {
           auto newElement = scatterOMIR(element, state);
@@ -305,16 +306,17 @@ static Optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
       })
       // For a dictionary, recurse into each value and rewrite the key/value
       // pairs.
-      .Case<DictionaryAttr>([&](DictionaryAttr dict) -> Optional<Attribute> {
-        NamedAttrList newAttrs;
-        for (auto pairs : dict) {
-          auto maybeValue = scatterOMIR(pairs.getValue(), state);
-          if (!maybeValue)
-            return std::nullopt;
-          newAttrs.append(pairs.getName(), *maybeValue);
-        }
-        return DictionaryAttr::get(ctx, newAttrs);
-      })
+      .Case<DictionaryAttr>(
+          [&](DictionaryAttr dict) -> std::optional<Attribute> {
+            NamedAttrList newAttrs;
+            for (auto pairs : dict) {
+              auto maybeValue = scatterOMIR(pairs.getValue(), state);
+              if (!maybeValue)
+                return std::nullopt;
+              newAttrs.append(pairs.getName(), *maybeValue);
+            }
+            return DictionaryAttr::get(ctx, newAttrs);
+          })
       // These attributes are all expected.  They are OMIR types, but do not
       // have string-encodings (hence why these should error if we see them as
       // strings).
@@ -322,7 +324,7 @@ static Optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
             /* OMInt */ IntegerAttr>(
           [](auto passThrough) { return passThrough; })
       // Error if we see anything else.
-      .Default([&](auto) -> Optional<Attribute> {
+      .Default([&](auto) -> std::optional<Attribute> {
         auto diag = mlir::emitError(state.circuit.getLoc())
                     << "found unexpected MLIR attribute \"" << original
                     << "\" while trying to scatter OMIR";
@@ -349,7 +351,7 @@ static Optional<Attribute> scatterOMIR(Attribute original, ApplyState &state) {
 /// This conversion from an object (dictionary) to key--value pair is safe
 /// because each Object Model Field in an Object Model Node must have a unique
 /// "name".  Anything else is illegal Object Model.
-static Optional<std::pair<StringRef, DictionaryAttr>>
+static std::optional<std::pair<StringRef, DictionaryAttr>>
 scatterOMField(Attribute original, const Attribute root, unsigned index,
                ApplyState &state) {
   // The input attribute must be a dictionary.
@@ -377,7 +379,7 @@ scatterOMField(Attribute original, const Attribute root, unsigned index,
                             fileLineColLocCache, ctx);
   mlir::LocationAttr infoLoc;
   if (maybeLoc.first)
-    infoLoc = maybeLoc.second.value();
+    infoLoc = *maybeLoc.second;
   else
     infoLoc = UnknownLoc::get(ctx);
 
@@ -415,7 +417,7 @@ scatterOMField(Attribute original, const Attribute root, unsigned index,
 ///   - "fields": Array<Object>
 ///
 /// The "fields" member may be absent.  If so, then construct an empty array.
-static Optional<DictionaryAttr>
+static std::optional<DictionaryAttr>
 scatterOMNode(Attribute original, const Attribute root, ApplyState &state) {
 
   auto loc = state.circuit.getLoc();
@@ -445,7 +447,7 @@ scatterOMNode(Attribute original, const Attribute root, ApplyState &state) {
                             fileLineColLocCache, ctx);
   mlir::LocationAttr infoLoc;
   if (maybeLoc.first)
-    infoLoc = maybeLoc.second.value();
+    infoLoc = *maybeLoc.second;
   else
     infoLoc = UnknownLoc::get(ctx);
 
@@ -542,7 +544,7 @@ void EmitOMIRPass::runOnOperation() {
   // the root of the hierarchy.
   SmallVector<ArrayRef<Attribute>> annoNodes;
   DenseSet<Attribute> sramIDs;
-  Optional<StringRef> outputFilename = {};
+  std::optional<StringRef> outputFilename;
 
   AnnotationSet::removeAnnotations(circuitOp, [&](Annotation anno) {
     if (anno.isClass(omirFileAnnoClass)) {

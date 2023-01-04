@@ -361,7 +361,7 @@ LogicalResult AffineToPipeline::createPipelinePipeline(
   // iter arg is created for the induction variable.
   TypeRange resultTypes = innerLoop.getResultTypes();
 
-  auto ii = builder.getI64IntegerAttr(problem.getInitiationInterval().value());
+  auto ii = builder.getI64IntegerAttr(*problem.getInitiationInterval());
 
   SmallVector<Value> iterArgs;
   iterArgs.push_back(lowerBound);
@@ -370,7 +370,7 @@ LogicalResult AffineToPipeline::createPipelinePipeline(
 
   // If possible, attach a constant trip count attribute. This could be
   // generalized to support non-constant trip counts by supporting an AffineMap.
-  Optional<IntegerAttr> tripCountAttr;
+  std::optional<IntegerAttr> tripCountAttr;
   if (auto tripCount = getConstantTripCount(forOp))
     tripCountAttr = builder.getI64IntegerAttr(*tripCount);
 

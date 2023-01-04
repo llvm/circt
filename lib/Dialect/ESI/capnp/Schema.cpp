@@ -122,7 +122,7 @@ private:
   SmallVector<FieldInfo> fieldTypes;
 
   ::capnp::SchemaParser parser;
-  mutable llvm::Optional<uint64_t> cachedID;
+  mutable std::optional<uint64_t> cachedID;
   mutable std::string cachedName;
   mutable ::capnp::ParsedSchema rootSchema;
   mutable ::capnp::StructSchema typeSchema;
@@ -483,7 +483,7 @@ public:
 
 protected:
   OpBuilder *builder;
-  Optional<Location> location;
+  std::optional<Location> location;
 };
 } // anonymous namespace
 
@@ -591,7 +591,7 @@ namespace {
 /// children slices.
 struct Slice : public GasketComponent {
 private:
-  Slice(const Slice *parent, llvm::Optional<int64_t> offset, Value val)
+  Slice(const Slice *parent, std::optional<int64_t> offset, Value val)
       : GasketComponent(*parent->builder, val), parent(parent),
         offsetIntoParent(offset) {
     type = val.getType().dyn_cast<hw::ArrayType>();
@@ -637,7 +637,7 @@ public:
       assert(false && "LSB Value must not be smaller than expected.");
     auto dstTy = hw::ArrayType::get(type.getElementType(), size);
     Value newSlice = builder->create<hw::ArraySliceOp>(loc(), dstTy, s, lsb);
-    return Slice(this, llvm::Optional<int64_t>(), newSlice);
+    return Slice(this, std::nullopt, newSlice);
   }
   Slice &name(const Twine &name) { return GasketComponent::name<Slice>(name); }
   Slice &name(capnp::Text::Reader fieldName, const Twine &nameSuffix) {
@@ -671,12 +671,12 @@ public:
     return parent->getRootSlice();
   }
 
-  llvm::Optional<int64_t> getOffsetFromRoot() const {
+  std::optional<int64_t> getOffsetFromRoot() const {
     if (parent == nullptr)
       return 0;
     auto parentOffset = parent->getOffsetFromRoot();
     if (!offsetIntoParent || !parentOffset)
-      return llvm::Optional<int64_t>();
+      return std::nullopt;
     return *offsetIntoParent + *parentOffset;
   }
 
@@ -685,7 +685,7 @@ public:
 private:
   hw::ArrayType type;
   const Slice *parent;
-  llvm::Optional<int64_t> offsetIntoParent;
+  std::optional<int64_t> offsetIntoParent;
 };
 } // anonymous namespace
 

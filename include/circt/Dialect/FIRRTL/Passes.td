@@ -432,12 +432,6 @@ def GrandCentral : Pass<"firrtl-grand-central", "CircuitOp"> {
   ];
 }
 
-def GrandCentralTaps : Pass<"firrtl-grand-central-taps", "firrtl::CircuitOp"> {
-  let summary = "Generate code for grand central data and memory taps";
-  let constructor = "circt::firrtl::createGrandCentralTapsPass()";
-  let dependentDialects = ["sv::SVDialect", "circt::hw::HWDialect"];
-}
-
 def GrandCentralSignalMappings : Pass<"firrtl-grand-central-signal-mappings",
                                       "firrtl::CircuitOp"> {
   let summary = "Generate signal mappings that force/probe remote signals";
@@ -607,12 +601,13 @@ def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
     This pass lowers RefType ops and ports to verbatim encoded XMRs.
   }];
   let constructor = "circt::firrtl::createLowerXMRPass()";
+  let dependentDialects = ["sv::SVDialect"];
 }
 
 def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::CircuitOp"> {
   let summary = "Lower intrinsics";
   let description = [{
-    This pass lowers intrinsics encoded as extmodule with annotation and 
+    This pass lowers intrinsics encoded as extmodule with annotation and
     intmodule to their implementation or op.
   }];
   let constructor = "circt::firrtl::createLowerIntrinsicsPass()";

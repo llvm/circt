@@ -10,6 +10,21 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_HW_HWSTRUCTURE_TD
+#define CIRCT_DIALECT_HW_HWSTRUCTURE_TD
+
+include "circt/Dialect/HW/HWAttributes.td"
+include "circt/Dialect/HW/HWDialect.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Dialect/HW/HWTypes.td"
+include "mlir/IR/FunctionInterfaces.td"
+include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/OpBase.td"
+include "mlir/IR/RegionKindInterface.td"
+include "mlir/IR/SymbolInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+
 /// Base class factoring out some of the additional class declarations common to
 /// the module-like operations.
 class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
@@ -535,7 +550,7 @@ def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
   let arguments = (ins Variadic<AnyType>:$outputs);
 
   let builders = [
-    OpBuilder<(ins), "build($_builder, $_state, llvm::None);">
+    OpBuilder<(ins), "build($_builder, $_state, std::nullopt);">
   ];
 
   let assemblyFormat = "attr-dict ($outputs^ `:` qualified(type($outputs)))?";
@@ -652,3 +667,5 @@ def HierPathOp : HWOp<"hierpath",
     bool isComponent();
     }];
 }
+
+#endif // CIRCT_DIALECT_HW_HWSTRUCTURE_TD

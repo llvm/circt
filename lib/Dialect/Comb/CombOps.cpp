@@ -261,7 +261,7 @@ void ConcatOp::build(OpBuilder &builder, OperationState &result, Value hd,
 }
 
 LogicalResult ConcatOp::inferReturnTypes(MLIRContext *context,
-                                         Optional<Location> loc,
+                                         std::optional<Location> loc,
                                          ValueRange operands,
                                          DictionaryAttr attrs,
                                          mlir::RegionRange regions,

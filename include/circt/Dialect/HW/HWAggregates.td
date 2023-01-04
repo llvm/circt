@@ -11,6 +11,15 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_HW_HWAGGREGATES_TD
+#define CIRCT_DIALECT_HW_HWAGGREGATES_TD
+
+include "circt/Dialect/HW/HWDialect.td"
+include "circt/Dialect/HW/HWTypes.td"
+include "mlir/IR/OpBase.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/OpAsmInterface.td"
+
 //===----------------------------------------------------------------------===//
 // Constants
 //===----------------------------------------------------------------------===//
@@ -286,3 +295,5 @@ def UnionExtractOp : HWOp<"union_extract", [Pure]> {
   let results = (outs HWNonInOutType:$result);
   let hasCustomAssemblyFormat = 1;
 }
+
+#endif // CIRCT_DIALECT_HW_HWAGGREGATES_TD

@@ -459,38 +459,42 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
 }
 
 /// Get the string name of a value which is a direct child of a declaration op.
-static void getDeclName(Value value, SmallString<64> &string) {
-  if (auto arg = value.dyn_cast<BlockArgument>()) {
-    // Get the module ports and get the name.
-    auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
-    SmallVector<PortInfo> ports = module.getPorts();
-    string += ports[arg.getArgNumber()].name.getValue();
-    return;
+static void getDeclName(Value value, SmallString<64> &string, bool nameSafe) {
+  // Treat the value as a worklist to allow for recursion.
+  while (value) {
+    if (auto arg = value.dyn_cast<BlockArgument>()) {
+      // Get the module ports and get the name.
+      auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
+      SmallVector<PortInfo> ports = module.getPorts();
+      string += ports[arg.getArgNumber()].name.getValue();
+      return;
+    }
+
+    auto *op = value.getDefiningOp();
+    TypeSwitch<Operation *>(op)
+        .Case<InstanceOp, MemOp>([&](auto op) {
+          string += op.getName();
+          string += nameSafe ? "_" : ".";
+          string += op.getPortName(value.cast<OpResult>().getResultNumber())
+                        .getValue();
+          value = nullptr;
+        })
+        .Case<WireOp, RegOp, RegResetOp>([&](auto op) {
+          string += op.getName();
+          value = nullptr;
+        })
+        .Case<mlir::UnrealizedConversionCastOp>(
+            [&](auto cast) { value = cast.getInputs()[0]; })
+        .Default([&](auto) { value = nullptr; });
   }
-
-  auto *op = value.getDefiningOp();
-  TypeSwitch<Operation *>(op)
-      .Case<InstanceOp, MemOp>([&](auto op) {
-        string += op.getName();
-        string += ".";
-        string +=
-            op.getPortName(value.cast<OpResult>().getResultNumber()).getValue();
-      })
-      .Case<WireOp, RegOp, RegResetOp>(
-          [&](auto op) { string += op.getName(); });
 }
 
-std::string circt::firrtl::getFieldName(const FieldRef &fieldRef) {
-  bool rootKnown;
-  return getFieldName(fieldRef, rootKnown);
-}
-
-std::string circt::firrtl::getFieldName(const FieldRef &fieldRef,
-                                        bool &rootKnown) {
+std::pair<std::string, bool>
+circt::firrtl::getFieldName(const FieldRef &fieldRef, bool nameSafe) {
   SmallString<64> name;
   auto value = fieldRef.getValue();
-  getDeclName(value, name);
-  rootKnown = !name.empty();
+  getDeclName(value, name, nameSafe);
+  bool rootKnown = !name.empty();
 
   auto type = value.getType();
   auto localID = fieldRef.getFieldID();
@@ -500,16 +504,17 @@ std::string circt::firrtl::getFieldName(const FieldRef &fieldRef,
       // Add the current field string, and recurse into a subfield.
       auto &element = bundleType.getElements()[index];
       if (!name.empty())
-        name += ".";
+        name += nameSafe ? "_" : ".";
       name += element.name.getValue();
       // Recurse in to the element type.
       type = element.type;
       localID = localID - bundleType.getFieldID(index);
     } else if (auto vecType = type.dyn_cast<FVectorType>()) {
       auto index = vecType.getIndexForFieldID(localID);
-      name += "[";
+      name += nameSafe ? "_" : "[";
       name += std::to_string(index);
-      name += "]";
+      if (!nameSafe)
+        name += "]";
       // Recurse in to the element type.
       type = vecType.getElementType();
       localID = localID - vecType.getFieldID(index);
@@ -522,7 +527,7 @@ std::string circt::firrtl::getFieldName(const FieldRef &fieldRef,
     }
   }
 
-  return name.str().str();
+  return {name.str().str(), rootKnown};
 }
 
 /// This gets the value targeted by a field id.  If the field id is targeting
@@ -610,7 +615,7 @@ hw::InnerRefAttr circt::firrtl::getInnerRefTo(
 }
 
 /// Parse a string that may encode a FIRRTL location into a LocationAttr.
-std::pair<bool, Optional<mlir::LocationAttr>>
+std::pair<bool, std::optional<mlir::LocationAttr>>
 circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
                                      StringAttr &locatorFilenameCache,
                                      FileLineColLoc &fileLineColLocCache,
@@ -658,12 +663,12 @@ circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
   unsigned lineNo = 0, columnNo = 0;
   StringRef filename = decodeLocator(spelling, lineNo, columnNo);
   if (filename.empty())
-    return {false, llvm::None};
+    return {false, std::nullopt};
 
   // If info locators are ignored, don't actually apply them.  We still do all
   // the verification above though.
   if (skipParsing)
-    return {true, llvm::None};
+    return {true, std::nullopt};
 
   /// Return an FileLineColLoc for the specified location, but use a bit of
   /// caching to reduce thrasing the MLIRContext.
@@ -729,4 +734,39 @@ circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
     result = FusedLoc::get(context, extraLocs);
   }
   return {true, result};
+}
+
+/// Given a type, return the corresponding lowered type for the HW dialect.
+/// Non-FIRRTL types are simply passed through. This returns a null type if it
+/// cannot be lowered.
+Type circt::firrtl::lowerType(Type type) {
+  auto firType = type.dyn_cast<FIRRTLBaseType>();
+  if (!firType)
+    return type;
+
+  // Ignore flip types.
+  firType = firType.getPassiveType();
+
+  if (BundleType bundle = firType.dyn_cast<BundleType>()) {
+    mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
+    for (auto element : bundle) {
+      Type etype = lowerType(element.type);
+      if (!etype)
+        return {};
+      hwfields.push_back(hw::StructType::FieldInfo{element.name, etype});
+    }
+    return hw::StructType::get(type.getContext(), hwfields);
+  }
+  if (FVectorType vec = firType.dyn_cast<FVectorType>()) {
+    auto elemTy = lowerType(vec.getElementType());
+    if (!elemTy)
+      return {};
+    return hw::ArrayType::get(elemTy, vec.getNumElements());
+  }
+
+  auto width = firType.getBitWidthOrSentinel();
+  if (width >= 0) // IntType, analog with known width, clock, etc.
+    return IntegerType::get(type.getContext(), width);
+
+  return {};
 }

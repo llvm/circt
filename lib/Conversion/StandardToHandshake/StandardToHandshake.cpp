@@ -222,10 +222,11 @@ void HandshakeLowering::setBlockEntryControl(Block *block, Value v) {
 void handshake::removeBasicBlocks(Region &r) {
   auto &entryBlock = r.front().getOperations();
 
-  // Erase all TerminatorOp, and move ReturnOp to the end of entry block.
+  // Now that basic blocks are going to be removed, we can erase all cf-dialect
+  // branches, and move ReturnOp to the entry block's end
   for (auto &block : r) {
     Operation &termOp = block.back();
-    if (isa<handshake::TerminatorOp>(termOp))
+    if (isa<mlir::cf::CondBranchOp, mlir::cf::BranchOp>(termOp))
       termOp.erase();
     else if (isa<handshake::ReturnOp>(termOp))
       entryBlock.splice(entryBlock.end(), block.getOperations(), termOp);
@@ -394,8 +395,9 @@ HandshakeLowering::insertMerge(Block *block, Value val,
   SmallVector<Backedge> dataEdges;
   SmallVector<Value> operands;
 
-  // Control-only path originates from StartOp
-  if (!val.isa<BlockArgument>() && isa<StartOp>(val.getDefiningOp())) {
+  // Every block (except the entry block) needs a control merge for the
+  // control-only network, which originates from startCtrl
+  if (val == startCtrl && block != &r.front()) {
     for (unsigned i = 0; i < numPredecessors; i++) {
       auto edge = edgeBuilder.get(rewriter.getNoneType());
       dataEdges.push_back(edge);
@@ -407,12 +409,20 @@ HandshakeLowering::insertMerge(Block *block, Value val,
     return MergeOpInfo{cmerge, val, dataEdges};
   }
 
-  // If there is at most one block predecessor
+  // Every live-in value to a block is passed through a merge-like operation,
+  // even when it's not required for circuit correctness (useless merge-like
+  // operations are removed down the line during handshake canonicalization)
+
+  // Insert "dummy" MergeOp's for blocks with less than two predecessors
   if (numPredecessors <= 1) {
-    // Dummy merge used here due to hard-coded logic of reconnectMergeOps
     if (numPredecessors == 0) {
+      // All of the entry block's block arguments get passed through a dummy
+      // MergeOp. There is no need for a backedge here as the unique operand can
+      // be resolved immediately
       operands.push_back(val);
     } else {
+      // The value incoming from the single block predecessor will be resolved
+      // later during merge reconnection
       auto edge = edgeBuilder.get(val.getType());
       dataEdges.push_back(edge);
       operands.push_back(Value(edge));
@@ -422,7 +432,9 @@ HandshakeLowering::insertMerge(Block *block, Value val,
   }
 
   // Create a backedge for the index operand, and another one for each data
-  // operand
+  // operand. The index operand will eventually resolve to the current block's
+  // control merge index output, while data operands will resolve to their
+  // respective values from each block predecessor
   Backedge indexEdge = edgeBuilder.get(rewriter.getIndexType());
   for (unsigned i = 0; i < numPredecessors; i++) {
     auto edge = edgeBuilder.get(val.getType());
@@ -436,7 +448,7 @@ HandshakeLowering::insertMerge(Block *block, Value val,
 
 HandshakeLowering::BlockOps
 HandshakeLowering::insertMergeOps(HandshakeLowering::BlockValues blockLiveIns,
-                                  HandshakeLowering::blockArgPairs &mergePairs,
+                                  HandshakeLowering::ValueMap &mergePairs,
                                   BackedgeBuilder &edgeBuilder,
                                   ConversionPatternRewriter &rewriter) {
   HandshakeLowering::BlockOps blockMerges;
@@ -446,7 +458,7 @@ HandshakeLowering::insertMergeOps(HandshakeLowering::BlockValues blockLiveIns,
     for (auto &val : blockLiveIns[&block]) {
       auto mergeInfo = insertMerge(&block, val, edgeBuilder, rewriter);
       blockMerges[&block].push_back(mergeInfo);
-      mergePairs[val] = mergeInfo.op;
+      mergePairs[val] = mergeInfo.op->getResult(0);
     }
     // Block arguments are not in livein list as they are defined inside the
     // block
@@ -457,7 +469,7 @@ HandshakeLowering::insertMergeOps(HandshakeLowering::BlockValues blockLiveIns,
 
       auto mergeInfo = insertMerge(&block, arg, edgeBuilder, rewriter);
       blockMerges[&block].push_back(mergeInfo);
-      mergePairs[arg] = mergeInfo.op;
+      mergePairs[arg] = mergeInfo.op->getResult(0);
     }
   }
   return blockMerges;
@@ -552,7 +564,7 @@ static ConditionalBranchOp getControlCondBranch(Block *block) {
 
 static void reconnectMergeOps(Region &r,
                               HandshakeLowering::BlockOps blockMerges,
-                              HandshakeLowering::blockArgPairs &mergePairs) {
+                              HandshakeLowering::ValueMap &mergePairs) {
   // At this point all merge-like operations have backedges as operands.
   // We here replace all backedge values with appropriate value from
   // predecessor block. The predecessor can either be a merge, the original
@@ -567,7 +579,7 @@ static void reconnectMergeOps(Region &r,
         assert(mgOperand != nullptr);
         if (!mgOperand.getDefiningOp()) {
           assert(mergePairs.count(mgOperand));
-          mgOperand = mergePairs[mgOperand]->getResult(0);
+          mgOperand = mergePairs[mgOperand];
         }
         mergeInfo.dataEdges[operandIdx].setValue(mgOperand);
         operandIdx++;
@@ -594,7 +606,7 @@ static void reconnectMergeOps(Region &r,
           // are not the block's control merge must have an index operand (at
           // this point, an index backedge)
           assert(mergeInfo.indexEdge.has_value());
-          mergeInfo.indexEdge.value().setValue(cntrlMg->getResult(1));
+          (*mergeInfo.indexEdge).setValue(cntrlMg->getResult(1));
         }
       }
     }
@@ -606,7 +618,7 @@ static void reconnectMergeOps(Region &r,
 LogicalResult
 HandshakeLowering::addMergeOps(ConversionPatternRewriter &rewriter) {
 
-  blockArgPairs mergePairs;
+  ValueMap mergePairs;
 
   // blockLiveIns: live in variables of block
   BlockValues liveIns = livenessAnalysis(r);
@@ -618,6 +630,21 @@ HandshakeLowering::addMergeOps(ConversionPatternRewriter &rewriter) {
   // Insert merge operations
   BlockOps mergeOps =
       insertMergeOps(liveIns, mergePairs, edgeBuilder, rewriter);
+
+  // For consistency within the entry block, replace the latter's entry control
+  // with the output of the MergeOp that takes the control-only network's start
+  // point as input. This makes it so that only the MergeOp's output is used as
+  // a control within the entry block, instead of a combination of the MergeOp's
+  // output and the function/block control argument. Taking this step out should
+  // have no impact on functionality but would make the resulting IR less
+  // "regular"
+  auto startCtrlMerge = llvm::find_if(startCtrl.getUses(), [this](auto &use) {
+    auto *owner = use.getOwner();
+    return owner->getBlock() == &r.front() && isa<MergeOp>(owner);
+  });
+  assert(startCtrlMerge != startCtrl.getUses().end() &&
+         "Expected startCtrl to go through MergeOp in entry block");
+  setBlockEntryControl(&r.front(), startCtrlMerge->getOwner()->getResult(0));
 
   // Set merge operands and uses
   reconnectMergeOps(r, mergeOps, mergePairs);
@@ -1272,26 +1299,6 @@ HandshakeLowering::addBranchOps(ConversionPatternRewriter &rewriter) {
     }
   }
 
-  // Remove StandardOp branch terminators and place new terminator
-  // Should be removed in some subsequent pass (we only need it to pass
-  // checks in Verifier.cpp)
-  for (Block &block : r) {
-    Operation *termOp = block.getTerminator();
-    if (!(isa<mlir::cf::CondBranchOp>(termOp) ||
-          isa<mlir::cf::BranchOp>(termOp)))
-      continue;
-
-    SmallVector<mlir::Block *, 8> results(block.getSuccessors());
-    rewriter.setInsertionPointToEnd(&block);
-    rewriter.create<handshake::TerminatorOp>(termOp->getLoc(),
-                                             ArrayRef<mlir::Block *>{results});
-
-    // Remove the Operands to keep the single-use rule.
-    for (int i = 0, e = termOp->getNumOperands(); i < e; ++i)
-      termOp->eraseOperand(0);
-    assert(termOp->getNumOperands() == 0);
-    rewriter.eraseOp(termOp);
-  }
   return success();
 }
 
@@ -1590,8 +1597,8 @@ static LogicalResult setJoinControlInputs(ArrayRef<Operation *> memOps,
     auto *op = memOps[i];
     Value ctrl = getBlockControlTerminator(op->getBlock()).ctrlOperand;
     auto *srcOp = ctrl.getDefiningOp();
-    if (!isa<JoinOp, StartOp>(srcOp)) {
-      return srcOp->emitOpError("Op expected to be a JoinOp or StartOp");
+    if (!isa<JoinOp>(srcOp)) {
+      return srcOp->emitOpError("Op expected to be a JoinOp");
     }
     addValueToOperands(srcOp, memOp->getResult(offset + cntrlInd[i]));
   }
@@ -1750,16 +1757,6 @@ HandshakeLowering::connectToMemory(ConversionPatternRewriter &rewriter,
   return success();
 }
 
-// A handshake::StartOp should have been created in the first block of the
-// enclosing function region
-static Operation *findStartOp(Region &region) {
-  for (Operation &op : region.front())
-    if (isa<handshake::StartOp>(op))
-      return &op;
-
-  llvm::report_fatal_error("No handshake::StartOp in first block");
-}
-
 LogicalResult
 HandshakeLowering::replaceCallOps(ConversionPatternRewriter &rewriter) {
   for (Block &block : r) {
@@ -1782,17 +1779,6 @@ HandshakeLowering::replaceCallOps(ConversionPatternRewriter &rewriter) {
       }
     }
   }
-  return success();
-}
-
-LogicalResult HandshakeLowering::finalize(ConversionPatternRewriter &rewriter) {
-  auto ctrlArg =
-      r.front().addArgument(rewriter.getNoneType(), rewriter.getUnknownLoc());
-
-  Operation *startOp = findStartOp(r);
-  startOp->getResult(0).replaceAllUsesWith(ctrlArg);
-  rewriter.eraseOp(startOp);
-
   return success();
 }
 

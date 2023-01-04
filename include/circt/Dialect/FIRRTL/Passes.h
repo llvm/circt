@@ -13,9 +13,10 @@
 #ifndef CIRCT_DIALECT_FIRRTL_PASSES_H
 #define CIRCT_DIALECT_FIRRTL_PASSES_H
 
+#include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
-#include "llvm/ADT/Optional.h"
 #include <memory>
+#include <optional>
 
 namespace mlir {
 class Pass;
@@ -99,11 +100,9 @@ std::unique_ptr<mlir::Pass> createPrintInstanceGraphPass();
 std::unique_ptr<mlir::Pass> createPrintNLATablePass();
 
 std::unique_ptr<mlir::Pass>
-createBlackBoxReaderPass(llvm::Optional<mlir::StringRef> inputPrefix = {});
+createBlackBoxReaderPass(std::optional<mlir::StringRef> inputPrefix = {});
 
 std::unique_ptr<mlir::Pass> createGrandCentralPass();
-
-std::unique_ptr<mlir::Pass> createGrandCentralTapsPass();
 
 std::unique_ptr<mlir::Pass>
 createGrandCentralSignalMappingsPass(mlir::StringRef outputFilename = "");
@@ -144,7 +143,7 @@ std::unique_ptr<mlir::Pass> createRandomizeRegisterInitPass();
 std::unique_ptr<mlir::Pass> createLowerXMRPass();
 
 std::unique_ptr<mlir::Pass>
-createResolveTracesPass(StringRef outputAnnotationFilename = "");
+createResolveTracesPass(mlir::StringRef outputAnnotationFilename = "");
 
 std::unique_ptr<mlir::Pass> createInnerSymbolDCEPass();
 

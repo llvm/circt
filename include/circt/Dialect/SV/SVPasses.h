@@ -34,7 +34,7 @@ std::unique_ptr<mlir::Pass>
 createSVExtractTestCodePass(bool disableInstanceExtraction = false,
                             bool disableModuleInlining = false);
 std::unique_ptr<mlir::Pass>
-createHWExportModuleHierarchyPass(llvm::Optional<std::string> directory = {});
+createHWExportModuleHierarchyPass(std::optional<std::string> directory = {});
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/SV/SVPasses.h.inc"

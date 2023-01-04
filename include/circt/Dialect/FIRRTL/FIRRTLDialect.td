@@ -10,15 +10,24 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_FIRRTL_FIRRTLDIALECT_TD
+#define CIRCT_DIALECT_FIRRTL_FIRRTLDIALECT_TD
+
+include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/OpBase.td"
+
+def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
+                         ["getAsmResultNames"]>;
+
 def FIRRTLDialect : Dialect {
   let name = "firrtl";
   let cppNamespace = "::circt::firrtl";
 
   let summary = "Types and operations for firrtl dialect";
   let description = [{
-    This dialect defines the `firrtl` dialect, which is used to lower from
-    Chisel code to Verilog.  For more information, see the
-    [FIRRTL GitHub page](https://github.com/freechipsproject/firrtl).
+    This dialect defines the `firrtl` dialect, which is used to lower from Chisel
+    code to Verilog.  For more information, see the [FIRRTL GitHub
+    page](https://github.com/freechipsproject/firrtl).
   }];
 
   let hasConstantMaterializer = 1;
@@ -43,3 +52,5 @@ def FIRRTLDialect : Dialect {
 // Base class for the operation in this dialect.
 class FIRRTLOp<string mnemonic, list<Trait> traits = []> :
     Op<FIRRTLDialect, mnemonic, traits>;
+
+#endif // CIRCT_DIALECT_FIRRTL_FIRRTLDIALECT_TD

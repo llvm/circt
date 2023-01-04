@@ -210,11 +210,21 @@ firrtl.circuit "testDontTouch"  {
     // CHECK: firrtl.connect %a2, %blockProp3_b
     firrtl.connect %a2, %blockProp3_b : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  // CHECK-LABEL: firrtl.module private @CheckNode
-  firrtl.module private @CheckNode(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
-    %z = firrtl.node   sym @s2 %x: !firrtl.uint<1>
-    // CHECK: firrtl.connect %y, %z
-    firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-LABEL: firrtl.module @CheckNode
+  firrtl.module @CheckNode(out %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>, out %z: !firrtl.uint<1>) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    // CHECK-NOT: %d1 = firrtl.node
+    %d1 = firrtl.node droppable_name %c1_ui1 : !firrtl.uint<1>
+    // CHECK: %d2 = firrtl.node
+    %d2 = firrtl.node interesting_name %c1_ui1 : !firrtl.uint<1>
+    // CHECK: %d3 = firrtl.node
+    %d3 = firrtl.node   sym @s2 %c1_ui1: !firrtl.uint<1>
+    // CHECK: firrtl.connect %x, %c1_ui1
+    firrtl.connect %x, %d1 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %y, %c1_ui1
+    firrtl.connect %y, %d2 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %z, %d3
+    firrtl.connect %z, %d3 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
 }
@@ -225,7 +235,7 @@ firrtl.circuit "OutPortTop" {
     firrtl.module private @OutPortChild1(out %out: !firrtl.uint<1> sym @dntSym1) {
       %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
       firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    } 
+    }
     firrtl.module private @OutPortChild2(out %out: !firrtl.uint<1>) {
       %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
       firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -333,7 +343,8 @@ firrtl.circuit "invalidReg2"   {
     %foobar = firrtl.reg %clock  : !firrtl.uint<1>
     firrtl.connect %foobar, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
     //CHECK-NOT: firrtl.connect %foobar, %foobar
-    //CHECK: firrtl.connect %a, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
+    //CHECK: %[[inv:.*]] = firrtl.invalidvalue
+    //CHECK: firrtl.connect %a, %[[inv]]
     firrtl.connect %a, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
@@ -507,9 +518,9 @@ firrtl.circuit "Issue3372"  {
     firrtl.strictconnect %test, %shared : !firrtl.uint<1>
     firrtl.strictconnect %value, %test : !firrtl.uint<1>
   }
-// CHECK:  %other_zero = firrtl.instance other interesting_name @Other(out zero: !firrtl.uint<1>) 
-// CHECK:  %test = firrtl.wire interesting_name : !firrtl.uint<1> 
-// CHECK:  firrtl.strictconnect %value, %test : !firrtl.uint<1> 
+// CHECK:  %other_zero = firrtl.instance other interesting_name @Other(out zero: !firrtl.uint<1>)
+// CHECK:  %test = firrtl.wire interesting_name : !firrtl.uint<1>
+// CHECK:  firrtl.strictconnect %value, %test : !firrtl.uint<1>
 
   firrtl.module private @Other(out %zero: !firrtl.uint<1>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -573,5 +584,21 @@ firrtl.circuit "Verbatim"  {
     // CHECK: %tap2 = firrtl.wire   : !firrtl.uint<1>
     %tap2 = firrtl.wire   : !firrtl.uint<1>
     firrtl.strictconnect %tap2, %1 : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// This test is only checking that IMCP doesn't generate invalid IR.  IMCP needs
+// to delete the strictconnect instead of replacing its destination with an
+// invalid value that will replace the register.  For more information, see:
+//   - https://github.com/llvm/circt/issues/4498
+//
+// CHECK-LABEL: "Issue4498"
+firrtl.circuit "Issue4498"  {
+  firrtl.module @Issue4498(in %clock: !firrtl.clock) {
+    %a = firrtl.wire : !firrtl.uint<1>
+    %r = firrtl.reg interesting_name %clock : !firrtl.uint<1>
+    firrtl.strictconnect %r, %a : !firrtl.uint<1>
   }
 }

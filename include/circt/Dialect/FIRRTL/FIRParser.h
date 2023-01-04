@@ -56,7 +56,7 @@ mlir::OwningOpRef<mlir::ModuleOp> importFIRFile(llvm::SourceMgr &sourceMgr,
 //
 // TODO: This API is super wacky and should be streamlined to hide the
 // caching.
-std::pair<bool, llvm::Optional<mlir::LocationAttr>>
+std::pair<bool, std::optional<mlir::LocationAttr>>
 maybeStringToLocation(llvm::StringRef spelling, bool skipParsing,
                       mlir::StringAttr &locatorFilenameCache,
                       FileLineColLoc &fileLineColLocCache,

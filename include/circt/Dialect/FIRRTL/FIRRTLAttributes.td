@@ -13,8 +13,9 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD
 #define CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD
 
-include "mlir/IR/EnumAttr.td"
+include "FIRRTLDialect.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
+include "mlir/IR/EnumAttr.td"
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Annotations Definition
@@ -34,24 +35,6 @@ def PortAnnotationsAttr : ArrayAttrBase<
             "::mlir::DictionaryAttr>();})">]>,
     "Port annotations attribute"> {
   let constBuilderCall = "$_builder.getArrayAttr($0)";
-}
-
-def InvalidValueAttr : AttrDef<FIRRTLDialect, "InvalidValue",
-                               [TypedAttrInterface]> {
-  let summary = "A constant value of firrtl.invalid type";
-  let description = [{
-    Represents an firrtl.invalidvalue value, whose type is specified by the
-    type of the attribute.
-  }];
-  let mnemonic = "invalidvalue";
-  let parameters = (ins  AttributeSelfTypeParameter<"">:$type);
-
-  let assemblyFormat = "";
-
-  let builders = [
-    AttrBuilderWithInferredContext<(ins "Type":$type),
-                                   "return $_get(type.getContext(), type);">
-  ];
 }
 
 //===----------------------------------------------------------------------===//

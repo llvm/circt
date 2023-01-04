@@ -30,9 +30,9 @@ LoweringOptions::LoweringOptions(mlir::ModuleOp module) : LoweringOptions() {
   parseFromAttribute(module);
 }
 
-static Optional<LoweringOptions::LocationInfoStyle>
+static std::optional<LoweringOptions::LocationInfoStyle>
 parseLocationInfoStyle(StringRef option) {
-  return llvm::StringSwitch<llvm::Optional<LoweringOptions::LocationInfoStyle>>(
+  return llvm::StringSwitch<std::optional<LoweringOptions::LocationInfoStyle>>(
              option)
       .Case("plain", LoweringOptions::Plain)
       .Case("wrapInAtSquareBracket", LoweringOptions::WrapInAtSquareBracket)
@@ -40,10 +40,10 @@ parseLocationInfoStyle(StringRef option) {
       .Default(std::nullopt);
 }
 
-static Optional<LoweringOptions::WireSpillingHeuristic>
+static std::optional<LoweringOptions::WireSpillingHeuristic>
 parseWireSpillingHeuristic(StringRef option) {
   return llvm::StringSwitch<
-             llvm::Optional<LoweringOptions::WireSpillingHeuristic>>(option)
+             std::optional<LoweringOptions::WireSpillingHeuristic>>(option)
       .Case("spillLargeTermsWithNamehints",
             LoweringOptions::SpillLargeTermsWithNamehints)
       .Default(std::nullopt);

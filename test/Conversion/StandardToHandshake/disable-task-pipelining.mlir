@@ -3,7 +3,8 @@
 
 // CHECK-LABEL:   handshake.func @simple_loop(
 // CHECK-SAME:                                %[[VAL_0:.*]]: none, ...) -> none
-// CHECK:           %[[VAL_1:.*]] = br %[[VAL_0]] : none
+// CHECK:           %[[VAL_0x:.*]] = merge %[[VAL_0]] : none
+// CHECK:           %[[VAL_1:.*]] = br %[[VAL_0x]] : none
 // CHECK:           %[[VAL_2:.*]], %[[VAL_3:.*]] = control_merge %[[VAL_1]] : none
 // CHECK:           %[[VAL_4:.*]] = constant %[[VAL_2]] {value = 1 : index} : index
 // CHECK:           %[[VAL_5:.*]] = constant %[[VAL_2]] {value = 42 : index} : index
@@ -54,8 +55,9 @@ func.func @simple_loop() {
 // CHECK-SAME:                                  %[[VAL_2:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_3:.*]] = merge %[[VAL_0]] : i1
 // CHECK:           %[[VAL_4:.*]] = merge %[[VAL_1]] : i64
+// CHECK:           %[[VAL_2x:.*]] = merge %[[VAL_2]] : none
 // CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = cond_br %[[VAL_3]], %[[VAL_4]] : i64
-// CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = cond_br %[[VAL_3]], %[[VAL_2]] : none
+// CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = cond_br %[[VAL_3]], %[[VAL_2x]] : none
 // CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = control_merge %[[VAL_7]] : none
 // CHECK:           %[[VAL_11:.*]] = merge %[[VAL_5]] : i64
 // CHECK:           %[[VAL_12:.*]] = br %[[VAL_9]] : none

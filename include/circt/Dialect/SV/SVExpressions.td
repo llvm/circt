@@ -11,10 +11,27 @@
 //===----------------------------------------------------------------------===//
 
 include "mlir/Interfaces/InferTypeOpInterface.td"
+include "circt/Dialect/SV/SVTypes.td"
 
 def HWValueOrInOutType : AnyTypeOf<[HWValueType, InOutType]>;
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
                          ["getAsmResultNames"]>;
+
+
+def SystemFunctionOp : SVOp<"system"> {
+  let summary = "Simple SV System Function calls";
+  let description = [{
+    This operation calls the indicated system verilog system function.  This
+    supports functions which take normal expression arguments.
+
+    See section 20 of the 2012 SV spec.
+  }];
+  let arguments = (ins StrAttr:$fnName, Variadic<AnyType>:$args);
+  let results = (outs AnyType:$out);
+
+  let assemblyFormat = "$fnName `(` $args `)` attr-dict `:` functional-type($args, $out)";
+}
+
 
 def VerbatimExprOp : SVOp<"verbatim.expr", [Pure, HasCustomSSAName]> {
   let summary = "Expression that expands to a value given SystemVerilog text";
@@ -164,6 +181,17 @@ def ConstantZOp : SVOp<"constantZ", [Pure, HasCustomSSAName]> {
   }];
 }
 
+def ConstantStrOp : SVOp<"constantStr", [Pure]> {
+  let summary = "A constant of string value";
+  let description = [{
+    This operation produces a constant string literal.
+    }];
+
+  let arguments = (ins StrAttr:$str);
+  let results = (outs StringType:$result);
+  let assemblyFormat = " $str attr-dict";
+}
+
 def LocalParamOp : SVOp<"localparam",
       [FirstAttrDerivedResultType, Pure, HasCustomSSAName]> {
   let summary = "Declare a localparam";
@@ -201,7 +229,7 @@ def IndexedPartSelectOp
   let extraClassDeclaration = [{
     /// Infer the return types of this operation.
     static LogicalResult inferReturnTypes(MLIRContext *context,
-                                          Optional<Location> loc,
+                                          std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
                                           mlir::RegionRange regions,
@@ -212,7 +240,7 @@ def IndexedPartSelectOp
                         " attr-dict `:` qualified(type($input)) `,` qualified(type($base))";
 }
 
-def SampledOp : SVOp<"system.sampled", [SameOperandsAndResultType]> {
+def SampledOp : SVOp<"system.sampled", [Pure, SameOperandsAndResultType]> {
   let summary = "`$sampled` system function to sample a value";
   let description = [{
     Sample a value using System Verilog sampling semantics (see Section 16.5.1

@@ -69,14 +69,13 @@ private:
 
 /// Utility to easily get the instantiated firrtl::FModuleOp or an empty
 /// optional in case another type of module is instantiated.
-static llvm::Optional<firrtl::FModuleOp>
+static std::optional<firrtl::FModuleOp>
 findInstantiatedModule(firrtl::InstanceOp instOp, SymbolCache &symbols) {
   auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
   auto moduleOp = dyn_cast<firrtl::FModuleOp>(
       instOp.getReferencedModule(symbols.getSymbolTable(tableOp))
           .getOperation());
-  return moduleOp ? llvm::Optional(moduleOp)
-                  : llvm::Optional<firrtl::FModuleOp>();
+  return moduleOp ? std::optional(moduleOp) : std::nullopt;
 }
 
 /// Compute the number of operations in a module. Recursively add the number of
@@ -106,7 +105,7 @@ static uint64_t computeTransitiveModuleSize(
 
     auto allInstancesCovered = [&]() {
       return llvm::all_of(
-          moduleOp.getSymbolUses(moduleOp->getParentOfType<ModuleOp>()).value(),
+          *moduleOp.getSymbolUses(moduleOp->getParentOfType<ModuleOp>()),
           [&](auto symbolUse) {
             return std::binary_search(instances.begin(), instances.end(),
                                       symbolUse.getUser());
@@ -121,19 +120,19 @@ static uint64_t computeTransitiveModuleSize(
 }
 
 static LogicalResult collectInstantiatedModules(
-    llvm::Optional<firrtl::FModuleOp> fmoduleOp, SymbolCache &symbols,
+    std::optional<firrtl::FModuleOp> fmoduleOp, SymbolCache &symbols,
     SmallVector<std::pair<firrtl::FModuleOp, uint64_t>> &modules,
     SmallVector<Operation *> &instances) {
   if (!fmoduleOp)
     return failure();
 
   uint64_t opCount = 0;
-  WalkResult result = fmoduleOp.value().walk([&](Operation *op) {
+  WalkResult result = fmoduleOp->walk([&](Operation *op) {
     if (auto instOp = dyn_cast<firrtl::InstanceOp>(op)) {
       auto moduleOp = findInstantiatedModule(instOp, symbols);
       if (!moduleOp) {
         LLVM_DEBUG(llvm::dbgs()
-                   << "- `" << fmoduleOp.value().moduleName()
+                   << "- `" << fmoduleOp->moduleName()
                    << "` recursively instantiated non-FIRRTL module.\n");
         return WalkResult::interrupt();
       }
@@ -150,7 +149,7 @@ static LogicalResult collectInstantiatedModules(
   if (result.wasInterrupted())
     return failure();
 
-  modules.push_back(std::make_pair(fmoduleOp.value(), opCount));
+  modules.push_back(std::make_pair(*fmoduleOp, opCount));
 
   return success();
 }

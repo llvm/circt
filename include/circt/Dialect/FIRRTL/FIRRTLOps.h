@@ -133,21 +133,21 @@ LogicalResult verifySameOperandsIntTypeKind(Operation *op);
 
 // Type inference adaptor for FIRRTL operations.
 LogicalResult inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::RegionRange regions,
     SmallVectorImpl<Type> &results,
     llvm::function_ref<FIRRTLType(ValueRange, ArrayRef<NamedAttribute>,
-                                  Optional<Location>)>
+                                  std::optional<Location>)>
         callback);
 
 // Common type inference functions.
 FIRRTLType inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
-                             Optional<Location> loc);
+                             std::optional<Location> loc);
 FIRRTLType inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
-                              Optional<Location> loc);
+                              std::optional<Location> loc);
 FIRRTLType inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
-                                 Optional<Location> loc);
-FIRRTLType inferReductionResult(FIRRTLType arg, Optional<Location> loc);
+                                 std::optional<Location> loc);
+FIRRTLType inferReductionResult(FIRRTLType arg, std::optional<Location> loc);
 
 // Common parsed argument validation functions.
 LogicalResult validateBinaryOpArguments(ValueRange operands,
