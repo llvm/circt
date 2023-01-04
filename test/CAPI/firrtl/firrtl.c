@@ -292,10 +292,80 @@ int testGenExtModule(FirrtlContext ctx, size_t *errCount) {
   return 0;
 }
 
+int testGenStatement(FirrtlContext ctx, size_t *errCount) {
+  firrtlVisitCircuit(ctx, MK_STR("StatementTest"));
+  firrtlVisitModule(ctx, MK_STR("StatementTest"));
+
+  FirrtlType analogs[3];
+  for (unsigned int i = 0; i < ARRAY_SIZE(analogs); i++) {
+    FirrtlType analog = {.kind = FIRRTL_TYPE_KIND_ANALOG,
+                         .u = {.analog = {.width = 8}}};
+    char analogName[64] = {};
+    sprintf(analogName, "analog%d", i + 1);
+    firrtlVisitPort(ctx, MK_STR(analogName), FIRRTL_PORT_DIRECTION_INPUT,
+                    &analog);
+    analogs[i] = analog;
+  }
+
+  FirrtlTypeBundleField analogFields[] = {
+      {.name = MK_STR("field1"), .flip = false, .type = &analogs[0]},
+      {.name = MK_STR("field2"), .flip = true, .type = &analogs[1]},
+      {.name = MK_STR("field3"), .flip = false, .type = &analogs[2]},
+  };
+  FirrtlType analogBundle = {
+      .kind = FIRRTL_TYPE_KIND_BUNDLE,
+      .u = {.bundle = {.fields = analogFields,
+                       .count = ARRAY_SIZE(analogFields)}}};
+  firrtlVisitPort(ctx, MK_STR("analogBundle"), FIRRTL_PORT_DIRECTION_INPUT,
+                  &analogBundle);
+
+  FirrtlStatementAttachOperand attachOperands[] = {
+      {.expr = MK_STR("analog1")},
+      {.expr = MK_STR("analog2")},
+      {.expr = MK_STR("analog3")},
+  };
+  FirrtlStatementAttachOperand attachBundleOperand = {
+      .expr = MK_STR("analogBundle")};
+  FirrtlStatementAttachOperand attachBundleOperands[] = {
+      {.expr = MK_STR("analogBundle.field1")},
+      {.expr = MK_STR("analogBundle.field2")},
+      {.expr = MK_STR("analogBundle.field3")},
+  };
+
+  FirrtlStatement statements[] = {
+      {.kind = FIRRTL_STATEMENT_KIND_ATTACH,
+       .u = {.attach = {.operands = attachOperands,
+                        .count = ARRAY_SIZE(attachOperands)}}},
+      {.kind = FIRRTL_STATEMENT_KIND_ATTACH,
+       .u = {.attach = {.operands = &attachBundleOperand, .count = 1}}},
+      {.kind = FIRRTL_STATEMENT_KIND_ATTACH,
+       .u = {.attach = {.operands = attachBundleOperands,
+                        .count = ARRAY_SIZE(attachBundleOperands)}}},
+  };
+
+  for (unsigned int i = 0; i < ARRAY_SIZE(statements); i++) {
+    firrtlVisitStatement(ctx, &statements[i]);
+  }
+
+  EXPECT(*errCount == 0);
+  EXPECT_EXPORT("circuit StatementTest :\n\
+  module StatementTest :\n\
+    input analog1 : Analog<8>\n\
+    input analog2 : Analog<8>\n\
+    input analog3 : Analog<8>\n\
+    input analogBundle : { field1 : Analog<8>, flip field2 : Analog<8>, field3 : Analog<8> }\n\n\
+    attach(analog1, analog2, analog3)\n\
+    attach(analogBundle)\n\
+    attach(analogBundle.field1, analogBundle.field2, analogBundle.field3)\n\n");
+
+  return 0;
+}
+
 int testGenerated() {
   IF_ERR_RET(runOnce(&testGenHeader));
   IF_ERR_RET(runOnce(&testGenPorts));
   IF_ERR_RET(runOnce(&testGenExtModule));
+  IF_ERR_RET(runOnce(&testGenStatement));
 
   return 0;
 }
@@ -372,11 +442,62 @@ int testErrDuplicatePortName(FirrtlContext ctx, size_t *errCount) {
   return 0;
 }
 
+int testErrStmtAttach(FirrtlContext ctx, size_t *errCount) {
+  firrtlVisitCircuit(ctx, MK_STR("StmtAttach"));
+  firrtlVisitModule(ctx, MK_STR("StmtAttach"));
+
+  FirrtlType analog = {.kind = FIRRTL_TYPE_KIND_ANALOG,
+                       .u = {.analog = {.width = 8}}};
+  FirrtlTypeBundleField analogFields[] = {
+      {.name = MK_STR("field"), .flip = false, .type = &analog},
+  };
+  FirrtlType analogBundle = {
+      .kind = FIRRTL_TYPE_KIND_BUNDLE,
+      .u = {.bundle = {.fields = analogFields,
+                       .count = ARRAY_SIZE(analogFields)}}};
+  firrtlVisitPort(ctx, MK_STR("analogPort"), FIRRTL_PORT_DIRECTION_INPUT,
+                  &analog);
+  firrtlVisitPort(ctx, MK_STR("analogBundle"), FIRRTL_PORT_DIRECTION_INPUT,
+                  &analogBundle);
+
+  size_t expectedErrCount = 0;
+
+  {
+    FirrtlStatementAttachOperand attachOperand = {.expr =
+                                                      MK_STR("nonExistPort")};
+    FirrtlStatement statement = {
+        .kind = FIRRTL_STATEMENT_KIND_ATTACH,
+        .u = {.attach = {.operands = &attachOperand, .count = 1}}};
+    firrtlVisitStatement(ctx, &statement);
+
+    EXPECT(*errCount == ++expectedErrCount);
+  }
+
+  {
+    FirrtlStatementAttachOperand attachOperand = {
+        .expr = MK_STR("analogBundle.nonExistField")};
+    FirrtlStatement statement = {
+        .kind = FIRRTL_STATEMENT_KIND_ATTACH,
+        .u = {.attach = {.operands = &attachOperand, .count = 1}}};
+    firrtlVisitStatement(ctx, &statement);
+
+    EXPECT(*errCount == ++expectedErrCount);
+  }
+
+  EXPECT_EXPORT("circuit StmtAttach :\n\
+  module StmtAttach :\n\
+    input analogPort : Analog<8>\n\
+    input analogBundle : { field : Analog<8> }\n\n");
+
+  return 0;
+}
+
 int testExpectedError() {
   IF_ERR_RET(runOnce(&testErrNoCircuit));
   IF_ERR_RET(runOnce(&testErrNoModule));
   IF_ERR_RET(runOnce(&testErrNoHeader));
   IF_ERR_RET(runOnce(&testErrDuplicatePortName));
+  IF_ERR_RET(runOnce(&testErrStmtAttach));
 
   return 0;
 }

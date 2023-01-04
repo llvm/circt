@@ -196,6 +196,31 @@ MLIR_CAPI_EXPORTED void firrtlVisitPort(FirrtlContext ctx, FirrtlStringRef name,
                                         FirrtlPortDirection direction,
                                         const FirrtlType *type);
 
+typedef enum FirrtlStatementKind {
+  FIRRTL_STATEMENT_KIND_ATTACH,
+} FirrtlStatementKind;
+
+typedef struct FirrtlStatementAttachOperand {
+  FirrtlStringRef expr;
+} FirrtlStatementAttachOperand;
+
+typedef struct FirrtlStatementAttach {
+  FirrtlStatementAttachOperand *operands;
+  size_t count;
+} FirrtlStatementAttach;
+
+typedef union FirrtlStatementUnion {
+  FirrtlStatementAttach attach;
+} FirrtlStatementUnion;
+
+typedef struct FirrtlStatement {
+  FirrtlStatementKind kind;
+  FirrtlStatementUnion u;
+} FirrtlStatement;
+
+MLIR_CAPI_EXPORTED void firrtlVisitStatement(FirrtlContext ctx,
+                                             const FirrtlStatement *stmt);
+
 MLIR_CAPI_EXPORTED FirrtlStringRef firrtlExportFirrtl(FirrtlContext ctx);
 
 MLIR_CAPI_EXPORTED void firrtlDestroyString(FirrtlContext ctx,

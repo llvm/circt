@@ -78,6 +78,12 @@ void firrtlVisitPort(FirrtlContext ctx, FirrtlStringRef name,
   ffiCtx->visitPort(unwrap(name), dir, *type);
 }
 
+void firrtlVisitStatement(FirrtlContext ctx, const FirrtlStatement *stmt) {
+  auto *ffiCtx = unwrap(ctx);
+
+  ffiCtx->visitStatement(*stmt);
+}
+
 FirrtlStringRef firrtlExportFirrtl(FirrtlContext ctx) {
   auto *ffiCtx = unwrap(ctx);
 
