@@ -60,8 +60,8 @@ void ScheduleLinearPipelinePass::runOnOperation() {
   auto stageOpIt = pipeline.getOps<PipelineStageOp>();
   auto stageRegOpIt = pipeline.getOps<PipelineStageRegisterOp>();
 
-  if ((std::distance(stageOpIt.begin(), stageOpIt.end()) != 0) ||
-      (std::distance(stageRegOpIt.begin(), stageRegOpIt.end()) != 0)) {
+  if (stageOpIt.begin() != stageOpIt.end() ||
+      stageRegOpIt.begin() != stageRegOpIt.end()) {
     pipeline.emitError("Pipeline cannot have any stages or stage registers.");
     return signalPassFailure();
   }
