@@ -11,7 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
+#include "../PassDetail.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/MLIRContext.h"
@@ -59,22 +59,7 @@ static LogicalResult addArgToTerminator(Block *block, Block *predBlock,
   return success();
 }
 
-namespace circt {
-
-bool isRegionSSAMaximized(Region &region) {
-
-  // Check whether all operands used within each block are also defined within
-  // the same block
-  for (auto &block : region.getBlocks())
-    for (auto &op : block.getOperations())
-      for (auto operand : op.getOperands())
-        if (getDefiningBlock(operand) != &block)
-          return false;
-
-  return true;
-}
-
-LogicalResult maximizeSSA(Value value, PatternRewriter &rewriter) {
+static LogicalResult maximizeValueSSA(Value value, PatternRewriter &rewriter) {
 
   // Identify the basic block in which the value is defined
   Block *defBlock = getDefiningBlock(value);
@@ -143,34 +128,49 @@ LogicalResult maximizeSSA(Value value, PatternRewriter &rewriter) {
   return success();
 }
 
-LogicalResult maximizeSSA(Operation *op, PatternRewriter &rewriter) {
+static LogicalResult maximizeOpSSA(Operation *op, PatternRewriter &rewriter) {
   // Apply SSA maximization on each of the operation's result
   for (auto res : op->getResults())
-    if (failed(maximizeSSA(res, rewriter)))
+    if (failed(maximizeValueSSA(res, rewriter)))
       return failure();
 
   return success();
 }
 
-LogicalResult maximizeSSA(Block *block, PatternRewriter &rewriter) {
+static LogicalResult maximizeBlockSSA(Block *block, PatternRewriter &rewriter) {
   // Apply SSA maximization on each of the block's arguments
   for (auto arg : block->getArguments())
-    if (failed(maximizeSSA(arg, rewriter)))
+    if (failed(maximizeValueSSA(arg, rewriter)))
       return failure();
 
   // Apply SSA maximization on each of the block's operations
   for (auto &op : block->getOperations())
-    if (failed(maximizeSSA(&op, rewriter)))
+    if (failed(maximizeOpSSA(&op, rewriter)))
       return failure();
+
+  return success();
+}
+
+namespace circt {
+
+bool isRegionSSAMaximized(Region &region) {
+
+  // Check whether all operands used within each block are also defined within
+  // the same block
+  for (auto &block : region.getBlocks())
+    for (auto &op : block.getOperations())
+      for (auto operand : op.getOperands())
+        if (getDefiningBlock(operand) != &block)
+          return false;
+
+  return true;
 }
 
 LogicalResult maximizeSSA(Region &region, PatternRewriter &rewriter) {
   // Apply SSA maximization on each of the region's block
   for (auto &block : region.getBlocks())
-    if (failed(maximizeSSA(&block, rewriter)))
+    if (failed(maximizeBlockSSA(&block, rewriter)))
       return failure();
-
-  assert(isRegionSSAMaximized(region) && "Region isn't SSA maximized");
 
   return success();
 }
@@ -198,17 +198,23 @@ struct FuncOpMaxSSAConversion : public OpConversionPattern<func::FuncOp> {
 struct MaximizeSSAPass : public MaximizeSSABase<MaximizeSSAPass> {
 public:
   void runOnOperation() override {
-    ModuleOp m = getOperation();
     auto *ctx = &getContext();
 
     RewritePatternSet patterns{ctx};
     patterns.add<FuncOpMaxSSAConversion>(ctx);
     ConversionTarget target{*ctx};
 
+    // Check that the function is correctly SSA-maximized after the pattern has
+    // been applied
+    target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp func) {
+      return isRegionSSAMaximized(func.getRegion());
+    });
+
     // Each function in the module is turned into maximal SSA form
     // independently of the others. Function signatures are never modified
     // by SSA maximization
-    if (failed(applyPartialConversion(m, target, std::move(patterns)))) {
+    if (failed(applyPartialConversion(getOperation(), target,
+                                      std::move(patterns)))) {
       signalPassFailure();
       return;
     }
