@@ -1094,3 +1094,13 @@ firrtl.circuit "hi" {
     // expected-error @below {{redefinition of symbol named 'hi'}}
     firrtl.module @hi() {}
 }
+
+// -----
+
+// No substitutions allowed for cover.
+firrtl.circuit "coverSubst" {
+  firrtl.module @coverSubst(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %cond : !firrtl.uint<1>, in %value : !firrtl.uint<4>) {
+    // expected-error @below {{failed to verify that has no substitutions}}
+    firrtl.cover %clock, %cond, %enable, "message"(%value) : !firrtl.uint<4>
+ }
+}

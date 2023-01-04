@@ -118,8 +118,16 @@ def AtEdge   : I32EnumAttrCase<"AtEdge", 2, "edge">;
 def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
                                    [AtPosEdge, AtNegEdge, AtEdge]>  {}
 
+/// A constraint checking no substitutions if no message.
+def NoSubstitutionsIfNoMessage : PredOpTrait<"has message if has substitutions",
+  CPred<"!$message.empty() || $substitutions.empty()">>;
+
+/// A constraint forcing `cover` ops to have no substitutions.
+def NoSubstitutionsVerif : PredOpTrait<"has no substitutions",
+  CPred<"$substitutions.empty()">>;
+
 class VerifOp<string mnemonic, list<Trait> traits = []> :
-    FIRRTLOp<mnemonic, traits> {
+    FIRRTLOp<mnemonic, [ NoSubstitutionsIfNoMessage ] # traits> {
   let arguments = (ins
     ClockType:$clock,
     UInt1Type:$predicate,
@@ -148,7 +156,7 @@ def AssumeOp : VerifOp<"assume"> {
   let summary = "Assume Verification Statement";
 }
 
-def CoverOp : VerifOp<"cover"> {
+def CoverOp : VerifOp<"cover", [NoSubstitutionsVerif]> {
   let summary = "Cover Verification Statement";
 }
 

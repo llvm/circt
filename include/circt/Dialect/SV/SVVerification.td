@@ -26,9 +26,9 @@ def DeferAssertAttr : I32EnumAttr<
   let cppNamespace = "circt::sv";
 }
 
-/// A constraint forcing `cover` ops to have no message.
-def NoMessageVerif : PredOpTrait<"has no message",
-  CPred<"!$message && $substitutions.empty()">>;
+/// A constraint forcing `cover` ops to have no substitutions.
+def NoSubstitutionsVerif : PredOpTrait<"has no substitutions",
+  CPred<"$substitutions.empty()">>;
 
 /// Immediate verification operations defined by the SV standard.
 class ImmediateVerifOp<string mnemonic, list<Trait> traits = []> :
@@ -81,7 +81,7 @@ def AssumeOp : ImmediateVerifOp<"assume"> {
   }];
 }
 
-def CoverOp : ImmediateVerifOp<"cover", [NoMessageVerif]> {
+def CoverOp : ImmediateVerifOp<"cover", [NoSubstitutionsVerif]> {
   let summary = "immediate cover statement";
   let description = [{
     Specify that a Boolean expression should be monitored for coverage, i.e., a
@@ -147,7 +147,7 @@ def AssumeConcurrentOp : ConcurrentVerifOp<"assume.concurrent"> {
 }
 
 def CoverConcurrentOp : ConcurrentVerifOp<"cover.concurrent",
-                                          [NoMessageVerif]> {
+                                          [NoSubstitutionsVerif]> {
   let summary = "concurrent cover statement, i.e., cover property";
   let description = [{
     Specify that a specific property should be monitored for coverage, i.e., a

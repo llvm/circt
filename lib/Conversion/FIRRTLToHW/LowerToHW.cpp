@@ -3927,8 +3927,9 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
 
   StringAttr message;
   SmallVector<Value> messageOps;
-  if (!isCover && opMessageAttr && !opMessageAttr.getValue().empty()) {
+  if (opMessageAttr && !opMessageAttr.getValue().empty()) {
     message = opMessageAttr;
+    assert(!isCover || opOperands.empty());
     for (auto operand : opOperands) {
       auto loweredValue = getLoweredValue(operand);
       if (!loweredValue) {

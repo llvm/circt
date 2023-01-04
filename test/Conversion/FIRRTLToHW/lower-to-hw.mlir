@@ -477,13 +477,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: sv.assume.concurrent posedge %clock, [[TMP2]] message "assume0"([[SAMPLED]]) : i42
     firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true}
     firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true, name = "cover_0"}
-    firrtl.cover %clock, %cCond, %cEn, "cover0"(%value) : !firrtl.uint<42> {isConcurrent = true}
     // CHECK-NEXT: [[TMP:%.+]] = comb.and bin %cEn, %cCond
     // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP]]
     // CHECK-NEXT: [[TMP:%.+]] = comb.and bin %cEn, %cCond
     // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP]] label "cover__cover_0"
-    // CHECK-NEXT: [[TMP:%.+]] = comb.and bin %cEn, %cCond
-    // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP]]
     firrtl.cover %clock, %cCond, %cEn, "cover1" {eventControl = 1 : i32, isConcurrent = true, name = "cover_1"}
     firrtl.cover %clock, %cCond, %cEn, "cover2" {eventControl = 2 : i32, isConcurrent = true, name = "cover_2"}
     // CHECK: sv.cover.concurrent negedge %clock, {{%.+}} label "cover__cover_1"
@@ -504,8 +501,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:     sv.cover %cCond, immediate
     // CHECK-NOT:        label
     // CHECK-NEXT:     sv.cover %cCond, immediate label "cover__cover_0"
-    // CHECK-NEXT:     sv.cover %cCond, immediate
-    // CHECK-NOT:        label
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.assert %clock, %aCond, %aEn, "assert0"
@@ -516,7 +511,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.assume %clock, %bCond, %bEn, "assume0"(%value) : !firrtl.uint<42>
     firrtl.cover %clock, %cCond, %cEn, "cover0"
     firrtl.cover %clock, %cCond, %cEn, "cover0" {name = "cover_0"}
-    firrtl.cover %clock, %cCond, %cEn, "cover0"(%value) : !firrtl.uint<42>
     // CHECK-NEXT: hw.output
   }
 
