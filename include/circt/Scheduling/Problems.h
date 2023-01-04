@@ -227,7 +227,7 @@ public:
   /// Returns the end time for \p op, as computed by the scheduler.
   /// This end time is derived from the start time and the operator type's
   /// latency.
-  Optional<unsigned> getEndTime(Operation *op);
+  std::optional<unsigned> getEndTime(Operation *op);
 
   //===--------------------------------------------------------------------===//
   // Optional names (for exporting and debugging instances)
