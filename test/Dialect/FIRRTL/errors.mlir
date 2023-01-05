@@ -1104,3 +1104,13 @@ firrtl.circuit "coverSubst" {
     firrtl.cover %clock, %cond, %enable, "message"(%value) : !firrtl.uint<4>
  }
 }
+
+// -----
+
+// No substitutions allowed without message.
+firrtl.circuit "noSubstWithoutMessage" {
+  firrtl.module @noSubstWithoutMessage(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %cond : !firrtl.uint<1>, in %value : !firrtl.uint<4>) {
+    // expected-error @below {{failed to verify that has message if has substitutions}}
+    firrtl.assert %clock, %cond, %enable, ""(%value) : !firrtl.uint<4>
+ }
+}
