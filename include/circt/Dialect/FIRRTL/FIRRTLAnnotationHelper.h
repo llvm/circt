@@ -275,9 +275,6 @@ LogicalResult applyGCTDataTaps(const AnnoPathValue &target, DictionaryAttr anno,
 LogicalResult applyGCTMemTaps(const AnnoPathValue &target, DictionaryAttr anno,
                               ApplyState &state);
 
-LogicalResult applyGCTSignalMappings(const AnnoPathValue &target,
-                                     DictionaryAttr anno, ApplyState &state);
-
 LogicalResult applyOMIR(const AnnoPathValue &target, DictionaryAttr anno,
                         ApplyState &state);
 
