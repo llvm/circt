@@ -80,6 +80,19 @@ LogicalResult scheduleLP(CyclicProblem &prob, Operation *lastOp);
 /// prob does not include \p lastOp.
 LogicalResult scheduleCPSAT(SharedOperatorsProblem &prob, Operation *lastOp);
 
+/// Solve the basic problem using linear programming and the Presburger solver.
+/// The objective is to minimize the start time of the given \p lastOp. Fails
+/// if the dependence graph contains cycles, or \p prob does not include \p
+/// lastOp.
+LogicalResult schedulePresburger(Problem &prob, Operation *lastOp);
+
+/// Solve the resource-free cyclic problem using linear programming and the
+/// Presburger solver. The objectives are to determine the smallest feasible
+/// initiation interval, and to minimize the start time of the given \p lastOp.
+/// Fails if the dependence graph contains cycles that do not include at least
+/// one edge with a non-zero distance, or \p prob does not include \p lastOp.
+LogicalResult schedulePresburger(CyclicProblem &prob, Operation *lastOp);
+
 } // namespace scheduling
 } // namespace circt
 

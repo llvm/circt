@@ -3,6 +3,7 @@ set(LLVM_OPTIONAL_SOURCES
   ChainingSupport.cpp
   CPSATSchedulers.cpp
   LPSchedulers.cpp
+  PresburgerSchedulers.cpp
   Problems.cpp
   SimplexSchedulers.cpp
   TestPasses.cpp
@@ -12,6 +13,7 @@ set(LLVM_OPTIONAL_SOURCES
 set(SCHEDULING_SOURCES
   ASAPScheduler.cpp
   ChainingSupport.cpp
+  PresburgerSchedulers.cpp
   Problems.cpp
   SimplexSchedulers.cpp
   Utilities.cpp
