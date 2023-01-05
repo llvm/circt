@@ -116,7 +116,7 @@ static cl::opt<bool> addMuxPragmas("add-mux-pragmas",
 
 static cl::opt<bool> stripMuxPragmas(
     "strip-mux-pragmas",
-    cl::desc("Strip mux pragmas. This options was deprecated since annotate "
+    cl::desc("Strip mux pragmas. This option was deprecated since mux pragma annotatations are not...");
              "mux pragmas are not emitted by default"),
     cl::init(false), cl::cat(mainCategory));
 
