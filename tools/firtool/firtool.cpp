@@ -114,11 +114,12 @@ static cl::opt<bool> addMuxPragmas("add-mux-pragmas",
                                    cl::desc("Annotate mux pragmas"),
                                    cl::init(false), cl::cat(mainCategory));
 
-static cl::opt<bool> stripMuxPragmas(
-    "strip-mux-pragmas",
-    cl::desc("Strip mux pragmas. This option was deprecated since mux pragma annotatations are not...");
-             "mux pragmas are not emitted by default"),
-    cl::init(false), cl::cat(mainCategory));
+static cl::opt<bool>
+    stripMuxPragmas("strip-mux-pragmas",
+                    cl::desc("Strip mux pragmas. This option was deprecated "
+                             "since mux pragma annotatations are "
+                             "not emitted by default"),
+                    cl::init(true), cl::Hidden, cl::cat(mainCategory));
 
 static cl::opt<bool> disableAnnotationsClassless(
     "disable-annotation-classless",
@@ -779,15 +780,6 @@ static LogicalResult processBuffer(
         firrtl::createMergeConnectionsPass(
             !disableAggressiveMergeConnections.getValue()));
 
-  if (stripMuxPragmas) {
-    if (addMuxPragmas) {
-      emitError(module->getLoc())
-          << "--strip-mux-pragmas and --add-mux-pragmas are conflicting.";
-      return failure();
-    }
-    addMuxPragmas = false;
-  }
-
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {
 
@@ -990,6 +982,12 @@ processInput(MLIRContext &context, TimingScope &ts,
 /// command line options are parsed and LLVM/MLIR are all set up and ready to
 /// go.
 static LogicalResult executeFirtool(MLIRContext &context) {
+  if (stripMuxPragmas == addMuxPragmas) {
+    llvm::errs()
+        << "--strip-mux-pragmas and --add-mux-pragmas are conflicting.";
+    return failure();
+  }
+
   // Create the timing manager we use to sample execution times.
   DefaultTimingManager tm;
   applyDefaultTimingManagerCLOptions(tm);
