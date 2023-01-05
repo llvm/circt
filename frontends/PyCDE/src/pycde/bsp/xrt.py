@@ -134,7 +134,7 @@ def RegToMsg(type, offset):
         reg_valids.append(reg_valid)
         data_reg = ports.data.reg(clk=clk,
                                   rst=rst,
-                                  ce=write_reg.reg(clk),
+                                  ce=write_reg,
                                   name=f"reg{reg_num}")
         data_regs.append(data_reg)
       fifo_wr.assign(And(*reg_valids))
@@ -150,8 +150,8 @@ def RegToMsg(type, offset):
           wr_en=fifo_wr,
           wr_data=msg)
       fifo_has_item.assign(~fifo.empty)
-      outch, outch_ready = types.channel(msg_type).wrap(fifo.rd_data,
-                                                        fifo_has_item)
+      outch, outch_ready = types.channel(msg_type).wrap(
+          fifo.rd_data, fifo_has_item.reg(clk, rst))
       outch_ready_wire.assign(outch_ready)
       ports.msgs = outch
       ports.fifo_almost_full = fifo.almost_full
@@ -193,7 +193,7 @@ def XrtBSP(user_module):
       address_valid = ControlReg(clk, rst, [ports.axil_in.awvalid],
                                  [reg_write_happened])
       awready = ~address_valid
-      data_valid = ControlReg(clk, rst, [ports.axil_in.awvalid],
+      data_valid = ControlReg(clk, rst, [ports.axil_in.wvalid],
                               [reg_write_happened])
       wready = ~data_valid & ~write_fifos_full
       reg_write_happened.assign(address_valid & data_valid & ~write_fifos_full)
