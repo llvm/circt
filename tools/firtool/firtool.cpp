@@ -736,12 +736,8 @@ static LogicalResult processBuffer(
   // BlackBoxReader because Grand Central needs to inform BlackBoxReader where
   // certain black boxes should be placed.  Note: all Grand Central Taps related
   // collateral is resolved entirely by LowerAnnotations.
-  if (!disableGrandCentral) {
-    auto &circuitPM = pm.nest<firrtl::CircuitOp>();
-    circuitPM.addPass(firrtl::createGrandCentralPass());
-    circuitPM.addPass(
-        firrtl::createGrandCentralSignalMappingsPass(outputFilename));
-  }
+  if (!disableGrandCentral)
+    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createGrandCentralPass());
 
   // Run SymbolDCE after GC for hierpathop's and just for general cleanup.
   pm.addNestedPass<firrtl::CircuitOp>(mlir::createSymbolDCEPass());

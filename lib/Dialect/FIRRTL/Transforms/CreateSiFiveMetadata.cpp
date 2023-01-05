@@ -325,12 +325,8 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
       "freechips.rocketchip.util.BlackBoxedROM",
       "sifive.enterprise.grandcentral.MemTap"};
   std::array<StringRef, 6> blackListedAnnos = {
-      blackBoxAnnoClass,
-      blackBoxInlineAnnoClass,
-      blackBoxPathAnnoClass,
-      dataTapsBlackboxClass,
-      memTapBlackboxClass,
-      "sifive.enterprise.grandcentral.transforms.SignalMappingAnnotation"};
+      blackBoxAnnoClass, blackBoxInlineAnnoClass, blackBoxPathAnnoClass,
+      dataTapsBlackboxClass, memTapBlackboxClass};
 
   auto *context = &getContext();
   auto circuitOp = getOperation();
