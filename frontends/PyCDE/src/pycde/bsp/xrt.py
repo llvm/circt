@@ -2,13 +2,14 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from pycde import Clock, Input, Output, System
+from pycde import Clock, Input, Output, OutputChannel, System
 from pycde import module, generator, esi, types
-from ..value import Or
+from ..value import And, Or, BitVectorValue
 from ..constructs import ControlReg, Reg, Wire
 from ..module import _GeneratorPortAccess
 from .fifo import SimpleXilinxFifo
 
+from dataclasses import asdict, dataclass
 import glob
 from io import FileIO
 import json
@@ -18,6 +19,11 @@ import shutil
 from typing import List, Tuple
 
 __dir__ = pathlib.Path(__file__).parent
+
+# Parameters for AXI4-Lite interface
+axil_addr_width = 24
+axil_data_width = 32
+axil_addr_incr = int(math.log2(axil_data_width))
 
 
 # Signals from master
@@ -49,24 +55,34 @@ def axil_out_type(data_width):
   })
 
 
+@dataclass
+class RegSpec:
+  size: int
+  offset: int
+  name: str
+  client_path: list
+  type: str
+
+
 def generate_mmio_map(channels, base_offset=0x0) -> Tuple[List, List]:
+  # curr_offset is in bytes.
   curr_offset = base_offset
 
   def get_reg(req, write):
     nonlocal curr_offset
     width = req.type.inner_type.bitwidth
 
-    reg = {
-        "size": width,
-        "offset": curr_offset,
-        "name": "_".join(req.client_name),
-        "client_path": req.client_name,
-        "type": "direct_mmio"
-    }
-    curr_offset += 32 * math.ceil(width / 32)
+    reg = RegSpec(size=width,
+                  offset=curr_offset,
+                  name="_".join(req.client_name),
+                  client_path=req.client_name,
+                  type="direct_mmio")
+
     # A write reg requires an extra byte for control.
     if write:
-      curr_offset += 8
+      width += 8
+    curr_offset += int(
+        (axil_data_width / 8) * math.ceil(width / axil_data_width))
     return reg
 
   from_host_regs = [get_reg(req, False) for req in channels.to_client_reqs]
@@ -86,10 +102,64 @@ def output_tcl(from_host_regs, to_host_regs, os: FileIO):
                       to_host_regs=to_host_regs))
 
 
+@module
+def RegToMsg(type, offset):
+
+  class RegToMsg:
+    clk = Clock()
+    rst = Input(types.i1)
+    valid = Input(types.i1)
+    address = Input(types.int(axil_addr_width))
+    data = Input(types.int(axil_data_width))
+    msgs = OutputChannel(type)
+    fifo_almost_full = Output(types.i1)
+
+    _offset = offset
+    _type = type
+
+    @generator
+    def build(ports):
+      clk = ports.clk
+      rst = ports.rst
+      msg_type = RegToMsg._type
+
+      fifo_wr = Wire(types.i1)
+      reg_valids = []
+      data_regs = []
+      for reg_offset in range(math.ceil(msg_type.bitwidth / axil_data_width)):
+        reg_num = RegToMsg._offset + (reg_offset * axil_addr_incr)
+        addr_match = ports.address == types.int(axil_addr_width)(reg_num)
+        write_reg = addr_match & ports.valid
+        reg_valid = ControlReg(clk, rst, [write_reg], [fifo_wr])
+        reg_valids.append(reg_valid)
+        data_reg = ports.data.reg(clk=clk,
+                                  rst=rst,
+                                  ce=write_reg.reg(clk),
+                                  name=f"reg{reg_num}")
+        data_regs.append(data_reg)
+      fifo_wr.assign(And(*reg_valids))
+      data_regs.reverse()
+      msg = BitVectorValue.concat(data_regs)[0:msg_type.bitwidth]
+
+      outch_ready_wire = Wire(types.i1)
+      fifo_has_item = Wire(types.i1)
+      fifo = SimpleXilinxFifo(msg_type, depth=32, almost_full=4)(
+          clk=clk,
+          rst=rst,
+          rd_en=outch_ready_wire & fifo_has_item,
+          wr_en=fifo_wr,
+          wr_data=msg)
+      fifo_has_item.assign(~fifo.empty)
+      outch, outch_ready = types.channel(msg_type).wrap(fifo.rd_data,
+                                                        fifo_has_item)
+      outch_ready_wire.assign(outch_ready)
+      ports.msgs = outch
+      ports.fifo_almost_full = fifo.almost_full
+
+  return RegToMsg
+
+
 def XrtBSP(user_module):
-  # Parameters for AXI4-Lite interface
-  axil_addr_width = 24
-  axil_data_width = 32
 
   @esi.ServiceImplementation(None)
   class XrtService:
@@ -113,53 +183,53 @@ def XrtBSP(user_module):
       chan_md_file.write(
           json.dumps(
               {
-                  "from_host_regs": from_host_regs,
-                  "to_host_regs": to_host_regs
+                  "from_host_regs": [asdict(r) for r in from_host_regs],
+                  "to_host_regs": [asdict(r) for r in to_host_regs]
               },
               indent=2))
 
       write_fifos_full = Wire(types.i1)
-      write_happened = Wire(types.i1)
+      reg_write_happened = Wire(types.i1)
       address_valid = ControlReg(clk, rst, [ports.axil_in.awvalid],
-                                 [write_happened])
+                                 [reg_write_happened])
       awready = ~address_valid
       data_valid = ControlReg(clk, rst, [ports.axil_in.awvalid],
-                              [write_happened])
+                              [reg_write_happened])
       wready = ~data_valid & ~write_fifos_full
-      write_happened.assign(address_valid & data_valid & ~write_fifos_full)
+      reg_write_happened.assign(address_valid & data_valid & ~write_fifos_full)
+      reg_write_happened.name = "reg_write_happened"
 
       address_reg = ports.axil_in.awaddr.reg(clk=clk,
                                              rst=rst,
                                              ce=ports.axil_in.awvalid)
-      data_reg = ports.axil_in.awaddr.reg(clk=clk,
-                                          rst=rst,
-                                          ce=ports.axil_in.wvalid)
+      data_reg = ports.axil_in.wdata.reg(clk=clk,
+                                         rst=rst,
+                                         ce=ports.axil_in.wvalid)
 
-      from_host_fifos_full = []
-      for req, mmio_spec in zip(channels.to_client_reqs, from_host_regs):
-        outch_ready_wire = Wire(types.i1)
-        fifo = SimpleXilinxFifo(req.type.inner, depth=32,
-                                almost_full=4)(clk=clk,
-                                               rst=rst,
-                                               rd_en=outch_ready_wire,
-                                               wr_en=0,
-                                               wr_data=0)
-        outch, outch_ready = req.type.wrap(fifo.rd_data, ~fifo.empty)
-        outch_ready_wire.assign(outch_ready)
-        req.assign(outch)
-
-        from_host_fifos_full.append(fifo.almost_full.reg(cycles=2))
+      from_host_fifos_full = [types.i1(0)]
+      for req, reg_spec in zip(channels.to_client_reqs, from_host_regs):
+        if reg_spec.type != "direct_mmio":
+          continue
+        adapter = RegToMsg(req.type.inner,
+                           reg_spec.offset)(clk=clk,
+                                            rst=rst,
+                                            valid=reg_write_happened,
+                                            address=address_reg,
+                                            data=data_reg)
+        req.assign(adapter.msgs)
+        from_host_fifos_full.append(adapter.fifo_almost_full)
 
       write_fifos_full.assign(Or(*from_host_fifos_full))
+      write_fifos_full.name = "write_fifos_full"
 
       ports.axil_out = axil_out_type(axil_data_width)({
-          "awready": 0,
-          "wready": 0,
+          "awready": awready,
+          "wready": wready,
           "arready": 0,
           "rvalid": 0,
           "rdata": 0,
           "rresp": 0,
-          "bvalid": 0,
+          "bvalid": reg_write_happened,
           "bresp": 0
       })
 
@@ -171,7 +241,7 @@ def XrtBSP(user_module):
     # AXI4-Lite slave interface
     s_axi_control_AWVALID = Input(types.i1)
     s_axi_control_AWREADY = Output(types.i1)
-    s_axi_control_AWADDR = Input(types.int(axil_addr_width))
+    s_axi_control_AWADDR = Input(types.int(32))
     s_axi_control_WVALID = Input(types.i1)
     s_axi_control_WREADY = Output(types.i1)
     s_axi_control_WDATA = Input(types.int(axil_data_width))
@@ -192,7 +262,7 @@ def XrtBSP(user_module):
 
       axil_in_sig = axil_in_type(axil_addr_width, axil_data_width)({
           "awvalid": ports.s_axi_control_AWVALID,
-          "awaddr": ports.s_axi_control_AWADDR,
+          "awaddr": ports.s_axi_control_AWADDR[0:24],
           "wvalid": ports.s_axi_control_WVALID,
           "wdata": ports.s_axi_control_WDATA,
           "wstrb": ports.s_axi_control_WSTRB,

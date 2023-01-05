@@ -359,9 +359,9 @@ class BitVectorValue(PyCDEValue):
       return super().__eq__(other)
 
     signednessOperand = None
-    if type(self) is not BitVectorValue:
+    if not isinstance(self, SignlessBitVectorValue):
       signednessOperand = "LHS"
-    elif type(other) is not BitVectorValue:
+    elif not isinstance(other, SignlessBitVectorValue):
       signednessOperand = "RHS"
 
     if signednessOperand is not None:
@@ -472,6 +472,12 @@ def Or(*items: List[BitVectorValue]):
   """Compute a bitwise 'or' of the arguments."""
   from .dialects import comb
   return comb.OrOp(*items)
+
+
+def And(*items: List[BitVectorValue]):
+  """Compute a bitwise 'and' of the arguments."""
+  from .dialects import comb
+  return comb.AndOp(*items)
 
 
 class ListValue(PyCDEValue):

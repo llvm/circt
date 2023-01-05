@@ -29,19 +29,22 @@ class Accelerator {
   xrt::ip m_ip;
 
 public:
-  Accelerator(const std::string &xclbin_path) {
-    const std::string kernel_name = "esi_bsp";
+  Accelerator(const std::string &xclbin_path, const std::string kernel_name) {
     m_device = xrt::device(0);
     auto uuid = m_device.load_xclbin(xclbin_path);
     m_ip = xrt::ip(m_device, uuid, kernel_name);
   }
 
   void sendMsg(uint32_t offset, uint32_t bitCount, py::int_ rawData) {
+    printf("offset %12x length %4d rawData %s\n", offset, bitCount,
+           std::string(py::str(rawData)).c_str());
     uint32_t regCount = (bitCount + 31) / 32;
     for (uint32_t regNum = 0; regNum < regCount; ++regNum) {
       uint32_t data = (rawData >> (regNum * 32));
       m_ip.write_register(offset + regNum, data);
+      printf("   num %12x data %8x\n", offset + regNum, data);
     }
+    fflush(stdout);
   }
 
   py::object recvMsg(uint32_t offset, uint32_t bitCount) { return py::none(); }
@@ -51,7 +54,7 @@ public:
 
 PYBIND11_MODULE(esiXrtPython, m) {
   py::class_<Accelerator>(m, "Accelerator")
-      .def(py::init<const std::string &>())
+      .def(py::init<const std::string &, const std::string &>())
       .def("send_msg", &Accelerator::sendMsg)
       .def("recv_msg", &Accelerator::recvMsg);
 }

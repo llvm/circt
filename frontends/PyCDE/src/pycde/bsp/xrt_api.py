@@ -41,6 +41,7 @@ class Xrt(_XrtNode):
 
   def __init__(self,
                xclbin: os.PathLike,
+               kernel: str,
                chan_desc_path: os.PathLike = None,
                hw_emu: bool = False) -> None:
     if chan_desc_path is None:
@@ -52,7 +53,7 @@ class Xrt(_XrtNode):
       os.environ["XCL_EMULATION_MODE"] = "hw_emu"
 
     from .esiXrtPython import Accelerator
-    self._acc = Accelerator(os.path.abspath(str(xclbin)))
+    self._acc = Accelerator(os.path.abspath(str(xclbin)), kernel)
 
   def _get_chan_offset_bitcount(
       self, client_path: typing.List[str]) -> typing.Tuple[int, int]:

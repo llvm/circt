@@ -40,14 +40,11 @@ ipx::edit_ip_in_project -upgrade true -name tmp_prj -directory $package_path $pa
 set core [ipx::current_core]
 
 # Associate AXI-Lite control interfaces
-ipx::associate_bus_interfaces -busif m_axi_gmem -clock ap_clk $core
 ipx::associate_bus_interfaces -busif s_axi_control -clock ap_clk $core
 
 # Create the address space for CSRs
 set mem_map     [::ipx::add_memory_map -quiet "s_axi_control" $core]
 set addr_block  [::ipx::add_address_block -quiet "reg0" $mem_map]
-  # set_property range 0x100000 $addr_block
-  # set_property width 24 $addr_block
 
 # Tell Vitis about our MMIO channel regs for writing to the device.
 {% for reg in from_host_regs %}
@@ -65,13 +62,13 @@ set reg      [::ipx::add_register "{{reg.name}}_CTRL" $addr_block]
   set_property size           8 $reg
 set reg      [::ipx::add_register "{{reg.name}}" $addr_block]
   set_property description    "{{reg.name}} channel" $reg
-  set_property address_offset {{reg.offset + 8}} $reg
+  set_property address_offset {{reg.offset + 1}} $reg
   set_property size           {{reg.size}} $reg
 {% endfor %}
 
 set_property slave_memory_map_ref "s_axi_control" [::ipx::get_bus_interfaces -of $core "s_axi_control"]
 
-set_property xpm_libraries {XPM_CDC XPM_MEMORY XPM_FIFO} $core
+set_property xpm_libraries {XPM_CDC XPM_FIFO} $core
 set_property sdx_kernel true $core
 set_property sdx_kernel_type rtl $core
 set_property supported_families { } $core

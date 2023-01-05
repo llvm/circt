@@ -158,7 +158,8 @@ def ControlReg(clk: PyCDEValue, rst: PyCDEValue, asserts: List[PyCDEValue],
         a = ports.asserts.or_reduce()
         r = ports.resets.or_reduce()
         reg = Reg(types.i1, ports.clk, ports.rst)
-        next_value = Mux(a, types.i1(1), Mux(r, types.i1(0), reg))
+        reg.name = "state"
+        next_value = Mux(a, Mux(r, reg, types.i1(0)), types.i1(1))
         reg.assign(next_value)
         ports.out = reg
 

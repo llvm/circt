@@ -102,7 +102,9 @@ elif command == "test":
   import ESILoopback as esi_sys
   from ESILoopback.xrt import Xrt
 
-  acc_conn = Xrt(os.path.join(gendir, "ESILoopback.hw_emu.xclbin"), hw_emu=True)
+  acc_conn = Xrt(os.path.join(gendir, "ESILoopback.hw_emu.xclbin"),
+                 kernel="ESILoopback",
+                 hw_emu=True)
   top = esi_sys.top(acc_conn)
 
   # assert top.bsp.req_resp_read_any() is None
@@ -110,7 +112,7 @@ elif command == "test":
   # assert top.bsp.to_host_read_any() is None
   # assert top.bsp.to_host[0].read(blocking_timeout=None) is None
 
-  # assert top.bsp.req_resp[0].write(5) is True
+  assert top.bsp.req_resp[0].write(5) is True
   # time.sleep(0.05)
   # assert top.bsp.to_host_read_any() is None
   # assert top.bsp.to_host[0].read(blocking_timeout=None) is None
