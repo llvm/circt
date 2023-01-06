@@ -563,7 +563,14 @@ bool TypeLoweringVisitor::lowerProducer(
     return false;
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
 
-  if (!peelType(srcType, fieldTypes, aggregatePreservationMode))
+  circt::firrtl::PreserveAggregate::PreserveMode mode =
+      aggregatePreservationMode;
+  if (op->hasAttrOfType<UnitAttr>("firrtl.must_lower_types")) {
+    op->removeAttr("firrtl.must_lower_types");
+    mode = PreserveAggregate::None;
+  }
+
+  if (!peelType(srcType, fieldTypes, mode))
     return false;
 
   // If an aggregate value has a symbol, emit errors.
