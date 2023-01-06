@@ -36,7 +36,5 @@ circuit test: %[[{
   ; CHEC-OLD: assign out0 = 8'h0;
   ; CHEC-OLD: assign out1 = 8'h0;
 
-  ; CHECK: assign [[g1:.*]] = 8'h0;
-  ; CHECK: assign [[g2:.*]] = 8'h0;
-  ; CHECK: assign out0 = [[g1]];
-  ; CHECK: assign out1 = [[g2]];
+  ; CHECK: assign out0 = 8'h0;
+  ; CHECK: assign out1 = 8'h0;

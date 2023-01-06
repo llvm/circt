@@ -110,9 +110,16 @@ static cl::opt<bool>
                            cl::desc("Convert all chisel asserts into SVA"),
                            cl::init(false), cl::cat(mainCategory));
 
-static cl::opt<bool> stripMuxPragmas("strip-mux-pragmas",
-                                     cl::desc("Don't emit mux pragmas"),
-                                     cl::init(false), cl::cat(mainCategory));
+static cl::opt<bool> addMuxPragmas("add-mux-pragmas",
+                                   cl::desc("Annotate mux pragmas"),
+                                   cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    stripMuxPragmas("strip-mux-pragmas",
+                    cl::desc("Strip mux pragmas. This option was deprecated "
+                             "since mux pragma annotatations are "
+                             "not emitted by default"),
+                    cl::init(true), cl::Hidden, cl::cat(mainCategory));
 
 static cl::opt<bool> disableAnnotationsClassless(
     "disable-annotation-classless",
@@ -729,15 +736,8 @@ static LogicalResult processBuffer(
   // BlackBoxReader because Grand Central needs to inform BlackBoxReader where
   // certain black boxes should be placed.  Note: all Grand Central Taps related
   // collateral is resolved entirely by LowerAnnotations.
-  if (!disableGrandCentral) {
-    auto &circuitPM = pm.nest<firrtl::CircuitOp>();
-    circuitPM.addPass(firrtl::createGrandCentralPass());
-    circuitPM.addPass(
-        firrtl::createGrandCentralSignalMappingsPass(outputFilename));
-  }
-
-  // Run SymbolDCE after GC for hierpathop's and just for general cleanup.
-  pm.addNestedPass<firrtl::CircuitOp>(mlir::createSymbolDCEPass());
+  if (!disableGrandCentral)
+    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createGrandCentralPass());
 
   // Read black box source files into the IR.
   StringRef blackBoxRoot = blackBoxRootPath.empty()
@@ -748,6 +748,10 @@ static LogicalResult processBuffer(
 
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createDropNamesPass(preserveMode));
+
+  // Run SymbolDCE as late as possible, but before InnerSymbolDCE. This is for
+  // hierpathop's and just for general cleanup.
+  pm.addNestedPass<firrtl::CircuitOp>(mlir::createSymbolDCEPass());
 
   // Run InnerSymbolDCE as late as possible, but before IMDCE.
   pm.addPass(firrtl::createInnerSymbolDCEPass());
@@ -791,7 +795,7 @@ static LogicalResult processBuffer(
 
     pm.addPass(createLowerFIRRTLToHWPass(
         enableAnnotationWarning.getValue(), emitChiselAssertsAsSVA.getValue(),
-        stripMuxPragmas.getValue(), !isRandomEnabled(RandomKind::Mem),
+        addMuxPragmas.getValue(), !isRandomEnabled(RandomKind::Mem),
         !isRandomEnabled(RandomKind::Reg)));
 
     if (outputFormat == OutputIRHW) {
@@ -814,7 +818,7 @@ static LogicalResult processBuffer(
            /*addVivadoRAMAddressConflictSynthesisBugWorkaround=*/
            addVivadoRAMAddressConflictSynthesisBugWorkaround}));
       pm.addPass(sv::createHWMemSimImplPass(
-          replSeqMem, ignoreReadEnableMem, stripMuxPragmas,
+          replSeqMem, ignoreReadEnableMem, addMuxPragmas,
           !isRandomEnabled(RandomKind::Mem), !isRandomEnabled(RandomKind::Reg),
           addVivadoRAMAddressConflictSynthesisBugWorkaround));
 
@@ -975,6 +979,12 @@ processInput(MLIRContext &context, TimingScope &ts,
 /// command line options are parsed and LLVM/MLIR are all set up and ready to
 /// go.
 static LogicalResult executeFirtool(MLIRContext &context) {
+  if (stripMuxPragmas == addMuxPragmas) {
+    llvm::errs()
+        << "--strip-mux-pragmas and --add-mux-pragmas are conflicting.";
+    return failure();
+  }
+
   // Create the timing manager we use to sample execution times.
   DefaultTimingManager tm;
   applyDefaultTimingManagerCLOptions(tm);

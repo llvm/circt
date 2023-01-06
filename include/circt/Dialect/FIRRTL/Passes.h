@@ -104,9 +104,6 @@ createBlackBoxReaderPass(std::optional<mlir::StringRef> inputPrefix = {});
 
 std::unique_ptr<mlir::Pass> createGrandCentralPass();
 
-std::unique_ptr<mlir::Pass>
-createGrandCentralSignalMappingsPass(mlir::StringRef outputFilename = "");
-
 std::unique_ptr<mlir::Pass> createCheckCombCyclesPass();
 
 std::unique_ptr<mlir::Pass> createSFCCompatPass();
