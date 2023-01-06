@@ -179,106 +179,56 @@ mlir::Type getPassiveType(mlir::Type anyBaseFIRRTLType);
 // Width Qualified Ground Types
 //===----------------------------------------------------------------------===//
 
+/// Trait for types which have a width.
+/// Users must implement:
+/// ```c++
+/// /// Return the width if known, or -1 if unknown.
+/// int32_t getWidthOrSentinel();
+/// ```
 template <typename ConcreteType>
-class WidthQualifiedTrait
-    : public mlir::OpTrait::TraitBase<ConcreteType, WidthQualifiedTrait> {
+class WidthQualifiedTypeTrait
+    : public mlir::TypeTrait::TraitBase<ConcreteType, WidthQualifiedTypeTrait> {
 public:
+  /// Return an optional containing the width, if the width is known (or empty
+  /// if width is unknown).
   std::optional<int32_t> getWidth() {
-    auto v = static_cast<ConcreteType *>(this)->getBaseWidth();
-    if (v >= 0)
-      return v;
-    return {};
+    auto width = static_cast<ConcreteType *>(this)->getWidthOrSentinel();
+    if (width < 0)
+      return std::nullopt;
+    return width;
   }
-  int32_t getWidthOrSentinel() {
-    return static_cast<ConcreteType *>(this)->getBaseWidth();
-  }
+
+  /// Return true if this integer type has a known width.
   bool hasWidth() {
-    return static_cast<ConcreteType *>(this)->getBaseWidth() >= 0;
-  }
-  ConcreteType changeWidth(int32_t width) {
-    return ConcreteType::get(static_cast<ConcreteType *>(this)->getContext(),
-                             width);
+    return 0 <= static_cast<ConcreteType *>(this)->getWidthOrSentinel();
   }
 };
 
-template <typename ConcreteType, typename ParentType>
-class WidthQualifiedType
-    : public FIRRTLType::TypeBase<ConcreteType, ParentType,
-                                  detail::WidthTypeStorage,
-                                  circt::hw::FieldIDTypeInterface::Trait> {
-public:
-  using FIRRTLType::TypeBase<
-      ConcreteType, ParentType, detail::WidthTypeStorage,
-      circt::hw::FieldIDTypeInterface::Trait>::Base::Base;
-
-  /// Return the bitwidth of this type or None if unknown.
-  std::optional<int32_t> getWidth() {
-    return static_cast<ConcreteType *>(this)->getWidth();
-  }
-
-  /// Return the width of this type, or -1 if it has none specified.
-  int32_t getWidthOrSentinel() { return getWidth().value_or(-1); }
-
-  /// Return true if this type has a known width.
-  bool hasWidth() { return getWidth().has_value(); }
-
-  /// Return a new type with the width changed to a different value.
-  ConcreteType changeWidth(int32_t width) {
-    return ConcreteType::get(static_cast<ConcreteType *>(this)->getContext(),
-                             width);
-  }
-};
+//===----------------------------------------------------------------------===//
+// IntType
+//===----------------------------------------------------------------------===//
 
 class SIntType;
 class UIntType;
 
 /// This is the common base class between SIntType and UIntType.
-class IntType : public FIRRTLBaseType {
+class IntType : public FIRRTLBaseType, public WidthQualifiedTypeTrait<IntType> {
 public:
   using FIRRTLBaseType::FIRRTLBaseType;
 
-  /// Return a SIntType or UInt type with the specified signedness and width.
-  static IntType get(MLIRContext *context, bool isSigned, int32_t width = -1);
+  /// Return an SIntType or UIntType with the specified signedness and width.
+  static IntType get(MLIRContext *context, bool isSigned,
+                     int32_t widthOrSentinel = -1);
 
   bool isSigned() { return isa<SIntType>(); }
   bool isUnsigned() { return isa<UIntType>(); }
 
-  /// Return true if this integer type has a known width.
-  bool hasWidth() { return getWidth().has_value(); }
-
-  /// Return the bitwidth of this type or None if unknown.
-  std::optional<int32_t> getWidth();
-
   /// Return the width of this type, or -1 if it has none specified.
-  int32_t getWidthOrSentinel() { return getWidth().value_or(-1); }
+  int32_t getWidthOrSentinel();
 
   static bool classof(Type type) {
     return type.isa<SIntType>() || type.isa<UIntType>();
   }
-};
-
-/// A signed integer type, whose width may not be known.
-class SIntType : public WidthQualifiedType<SIntType, IntType> {
-public:
-  using WidthQualifiedType::WidthQualifiedType;
-
-  /// Get an with a known width, or -1 for unknown.
-  static SIntType get(MLIRContext *context, int32_t width = -1);
-
-  /// Return the bitwidth of this type or None if unknown.
-  std::optional<int32_t> getWidth();
-};
-
-/// An unsigned integer type, whose width may not be known.
-class UIntType : public WidthQualifiedType<UIntType, IntType> {
-public:
-  using WidthQualifiedType::WidthQualifiedType;
-
-  /// Get an with a known width, or -1 for unknown.
-  static UIntType get(MLIRContext *context, int32_t width = -1);
-
-  /// Return the bitwidth of this type or None if unknown.
-  std::optional<int32_t> getWidth();
 };
 
 //===----------------------------------------------------------------------===//
