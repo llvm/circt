@@ -667,8 +667,6 @@ static LogicalResult processBuffer(
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createFlattenMemoryPass());
 
-  if (!disableCheckCombCycles)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombLoopsPass());
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
   if (!disableLowerTypes) {
@@ -681,6 +679,9 @@ static LogicalResult processBuffer(
       modulePM.addPass(firrtl::createSFCCompatPass());
     }
   }
+
+  if (!disableCheckCombCycles)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombLoopsPass());
 
   if (!disableInliner)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
