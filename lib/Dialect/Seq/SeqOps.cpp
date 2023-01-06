@@ -14,6 +14,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 
 #include "circt/Dialect/HW/HWTypes.h"
@@ -22,6 +23,24 @@
 using namespace mlir;
 using namespace circt;
 using namespace seq;
+
+namespace {
+struct ConstantIntMatcher {
+  APInt &value;
+  ConstantIntMatcher(APInt &value) : value(value) {}
+  bool match(Operation *op) {
+    if (auto cst = dyn_cast<hw::ConstantOp>(op)) {
+      value = cst.getValue();
+      return true;
+    }
+    return false;
+  }
+};
+} // end anonymous namespace
+
+static inline ConstantIntMatcher m_RConstant(APInt &value) {
+  return ConstantIntMatcher(value);
+}
 
 bool circt::seq::isValidIndexValues(Value hlmemHandle, ValueRange addresses) {
   auto memType = hlmemHandle.getType().cast<seq::HLMemType>();
@@ -453,6 +472,49 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
         op.getLoc(), APInt::getZero(hw::getBitWidth(op.getType())));
     rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, op.getType(), constant);
     return success();
+  }
+
+  // For reset-less 1d array registers, replace an uninitialized element with
+  // constant zero. For example, let `r` be a 2xi1 register and its next value
+  // be `{foo, r[0]}`. `r[0]` is connected to itself so will never be
+  // initialized. If we don't enable aggregate preservation, `r_0` is replaced
+  // with `0`. Hence this canonicalization replaces 0th element of the next
+  // value with zero to match the behaviour.
+  if (!op.getReset()) {
+    if (auto arrayCreate = op.getNext().getDefiningOp<hw::ArrayCreateOp>()) {
+      // For now only support 1d arrays.
+      // TODO: Support nested arrays and bundles.
+      if (arrayCreate.getOperands().front().getType().isa<IntegerType>()) {
+        SmallVector<Value> nextOperands;
+        bool changed = false;
+        for (const auto &e : llvm::enumerate(arrayCreate.getOperands())) {
+          auto index = arrayCreate.getOperands().size() - e.index() - 1;
+          APInt elementIndex;
+          // Check that the corresponding operand is op's element.
+          if (auto arrayGet = e.value().getDefiningOp<hw::ArrayGetOp>();
+              arrayGet && arrayGet.getInput() == op.getResult() &&
+              matchPattern(arrayGet.getIndex(), m_RConstant(elementIndex)) &&
+              elementIndex == index) {
+            nextOperands.push_back(rewriter.create<hw::ConstantOp>(
+                op.getLoc(),
+                APInt::getZero(hw::getBitWidth(arrayGet.getType()))));
+            changed = true;
+            continue;
+          }
+          nextOperands.push_back(e.value());
+        }
+        // If one of the operands is self loop, update the next value.
+        if (changed) {
+          rewriter.replaceOpWithNewOp<FirRegOp>(
+              op,
+              rewriter.create<hw::ArrayCreateOp>(op.getNext().getLoc(),
+                                                 nextOperands),
+              op.getClk(), op.getNameAttr(), op.getInnerSymAttr());
+
+          return success();
+        }
+      }
+    }
   }
 
   return failure();

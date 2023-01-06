@@ -74,3 +74,16 @@ hw.module @FirRegAggregate(%clk: i1) -> (out : !hw.struct<foo: i32>) {
   %reg = seq.firreg %reg clock %clk : !hw.struct<foo: i32>
   hw.output %reg : !hw.struct<foo: i32>
 }
+
+// CHECK-LABEL: @UninitializedArrayElement
+hw.module @UninitializedArrayElement(%a: i1, %clock: i1) -> (b: !hw.array<2xi1>) {
+  // CHECK:      %false = hw.constant false
+  // CHECK-NEXT: %0 = hw.array_create %false, %a : i1
+  // CHECK-NEXT: %r = seq.firreg %0 clock %clock : !hw.array<2xi1>
+  // CHECK-NEXT: hw.output %r : !hw.array<2xi1>
+  %true = hw.constant true
+  %r = seq.firreg %1 clock %clock : !hw.array<2xi1>
+  %0 = hw.array_get %r[%true] : !hw.array<2xi1>, i1
+  %1 = hw.array_create %0, %a : i1
+  hw.output %r : !hw.array<2xi1>
+}
