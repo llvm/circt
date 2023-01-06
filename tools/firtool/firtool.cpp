@@ -680,9 +680,6 @@ static LogicalResult processBuffer(
     }
   }
 
-  if (!disableCheckCombCycles)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombLoopsPass());
-
   if (!disableInliner)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
@@ -693,6 +690,17 @@ static LogicalResult processBuffer(
   if (isRandomEnabled(RandomKind::Reg))
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createRandomizeRegisterInitPass());
+
+  if (!disableCheckCombCycles) {
+    // TODO: Currently CheckCombCyles pass doesn't support aggregates so skip
+    // the pass for now.
+    if (preserveAggregate == firrtl::PreserveAggregate::None)
+      pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombCyclesPass());
+    else
+      emitWarning(module->getLoc())
+          << "CheckCombCyclesPass doens't support aggregate "
+             "values yet so it is skipped\n";
+  }
 
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!disableOptimization)
