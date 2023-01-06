@@ -62,7 +62,7 @@ set reg      [::ipx::add_register "{{reg.name}}_CTRL" $addr_block]
   set_property size           8 $reg
 set reg      [::ipx::add_register "{{reg.name}}" $addr_block]
   set_property description    "{{reg.name}} channel" $reg
-  set_property address_offset {{reg.offset + 1}} $reg
+  set_property address_offset {{reg.data_offset}} $reg
   set_property size           {{reg.size}} $reg
 {% endfor %}
 

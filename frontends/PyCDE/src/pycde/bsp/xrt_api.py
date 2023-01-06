@@ -33,7 +33,8 @@ class _XrtNode:
     for interactions."""
 
     return _XrtPort(self._root._acc,
-                    self._root._get_chan_offset_bitcount(client_path),
+                    self._root._get_chan_offset_bitcount(True, client_path),
+                    self._root._get_chan_offset_bitcount(False, client_path),
                     read_type, write_type)
 
 
@@ -56,12 +57,17 @@ class Xrt(_XrtNode):
     self._acc = Accelerator(os.path.abspath(str(xclbin)), kernel)
 
   def _get_chan_offset_bitcount(
-      self, client_path: typing.List[str]) -> typing.Tuple[int, int]:
-    for channel in self.chan_desc["from_host_regs"] + self.chan_desc[
-        "to_host_regs"]:
-      if channel["client_path"] == client_path:
-        return (channel["offset"], channel["size"])
-    raise ValueError(f"Could not find channel description for {client_path}")
+      self, from_host: bool,
+      client_path: typing.List[str]) -> typing.Tuple[int, int]:
+    if from_host:
+      for channel in self.chan_desc["from_host_regs"]:
+        if channel["client_path"] == client_path:
+          return (channel["offset"], channel["size"])
+    else:
+      for channel in self.chan_desc["to_host_regs"]:
+        if channel["client_path"] == client_path:
+          return (channel["offset"], channel["size"])
+    return (None, None)
 
 
 class _XrtPort:
@@ -129,11 +135,13 @@ class _XrtPort:
       StructType: _StructConverter
   }
 
-  def __init__(self, acc, chan_desc: typing.Tuple[int, int],
+  def __init__(self, acc, from_host_chan_desc: typing.Tuple[int, int],
+               to_host_chan_desc: typing.Tuple[int, int],
                read_type: typing.Optional[Type],
                write_type: typing.Optional[Type]):
     self._acc = acc
-    self.chan_offset, self.chan_size = chan_desc
+    self.from_host_chan_offset, self.from_host_chan_size = from_host_chan_desc
+    self.to_host_chan_offset, self.to_host_chan_size = to_host_chan_desc
     # For each type, lookup the type converter and store that instead of the
     # type itself.
     if read_type is not None:
@@ -145,8 +153,11 @@ class _XrtPort:
 
   def write(self, msg) -> bool:
     """Write a message to this port."""
+    if self.from_host_chan_offset is None:
+      raise RuntimeError("This port doesn't have a write channel")
     enc_msg = self._write_convert.write(msg)
-    self._acc.send_msg(self.chan_offset, self.chan_size, enc_msg)
+    self._acc.send_msg(self.from_host_chan_offset, self.from_host_chan_size,
+                       enc_msg)
     return True
 
   def read(self, blocking_time: typing.Optional[float]):
@@ -154,16 +165,21 @@ class _XrtPort:
     immediately. Otherwise, wait up to 'blocking_timeout' for a message. Returns
     the message if found, None if no message was read."""
 
+    if self.to_host_chan_offset is None:
+      raise RuntimeError("This port doesn't have a read channel")
+
     if blocking_time is None:
       # Non-blocking.
-      recvResp = self._acc.recv_msg(self.chan_offset, self.chan_size)
+      recvResp = self._acc.recv_msg(self.to_host_chan_offset,
+                                    self.to_host_chan_size)
     else:
       # Blocking. Since our cosim rpc server doesn't currently support blocking
       # reads, use polling instead.
       e = time.time() + blocking_time
       recvResp = None
       while recvResp is None or e > time.time():
-        recvResp = self._acc.recv_msg(self.chan_offset, self.chan_size)
+        recvResp = self._acc.recv_msg(self.to_host_chan_offset,
+                                      self.to_host_chan_size)
         if recvResp is not None:
           break
         else:

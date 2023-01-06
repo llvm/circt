@@ -14,12 +14,9 @@ namespace py = pybind11;
 #include "experimental/xrt_ip.h"
 #include "experimental/xrt_xclbin.h"
 
-#define IP_START_RD (1 << 0)
-#define IP_DONE_RD (1 << 1)
-#define IP_START_WR (1 << 4)
-#define IP_DONE_WR (1 << 5)
-#define CSR_OFFSET 0x0
-#define ARG_OFFSET 0x10
+#define VALID (1 << 0)
+#define DONE (1 << 1)
+#define DATA_WIDTH 32
 
 // We don't want to clutter up the symbol space any more than necessary, so use
 // an anonymous namespace.
@@ -36,18 +33,28 @@ public:
   }
 
   void sendMsg(uint32_t offset, uint32_t bitCount, py::int_ rawData) {
-    printf("offset %12x length %4d rawData %s\n", offset, bitCount,
-           std::string(py::str(rawData)).c_str());
     uint32_t regCount = (bitCount + 31) / 32;
     for (uint32_t regNum = 0; regNum < regCount; ++regNum) {
       uint32_t data = (rawData >> (regNum * 32));
       m_ip.write_register(offset + regNum, data);
-      printf("   num %12x data %8x\n", offset + regNum, data);
     }
     fflush(stdout);
   }
 
-  py::object recvMsg(uint32_t offset, uint32_t bitCount) { return py::none(); }
+  py::object recvMsg(uint32_t offset, uint32_t bitCount) {
+    uint32_t ctrl = m_ip.read_register(offset);
+    if ((ctrl & VALID) == 0)
+      return py::none();
+    size_t numRegs = (bitCount + DATA_WIDTH - 1) / DATA_WIDTH;
+    py::int_ ret;
+    for (uint32_t i = 1; i <= numRegs; ++i) {
+      uint32_t num = offset + i * 4;
+      uint32_t val = m_ip.read_register(num);
+      ret = ret | (py::int_(val) << (i * DATA_WIDTH));
+    }
+    m_ip.write_register(offset, DONE);
+    return ret;
+  }
 };
 
 } // namespace

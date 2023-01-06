@@ -9,7 +9,6 @@ from pycde import esi
 from pycde.constructs import Wire
 from pycde.dialects import comb
 from pycde.bsp import XrtBSP
-# from msft.xrt import XrtBSP
 
 import os
 import sys
@@ -107,38 +106,38 @@ elif command == "test":
                  hw_emu=True)
   top = esi_sys.top(acc_conn)
 
-  # assert top.bsp.req_resp_read_any() is None
-  # assert top.bsp.req_resp[0].read(blocking_timeout=None) is None
-  # assert top.bsp.to_host_read_any() is None
-  # assert top.bsp.to_host[0].read(blocking_timeout=None) is None
+  assert top.bsp.req_resp_read_any() is None
+  assert top.bsp.req_resp[0].read(blocking_timeout=None) is None
+  assert top.bsp.to_host_read_any() is None
+  assert top.bsp.to_host[0].read(blocking_timeout=None) is None
 
   assert top.bsp.req_resp[0].write(5) is True
-  # time.sleep(0.05)
-  # assert top.bsp.to_host_read_any() is None
-  # assert top.bsp.to_host[0].read(blocking_timeout=None) is None
-  # assert top.bsp.req_resp[0].read() == 12
-  # assert top.bsp.req_resp[0].read(blocking_timeout=None) is None
+  time.sleep(0.05)
+  assert top.bsp.to_host_read_any() is None
+  assert top.bsp.to_host[0].read(blocking_timeout=None) is None
+  assert top.bsp.req_resp[0].read(blocking_timeout=None) == 12
+  assert top.bsp.req_resp[0].read(blocking_timeout=None) is None
 
-  # assert top.bsp.req_resp[0].write(9) is True
-  # time.sleep(0.05)
-  # assert top.bsp.to_host_read_any() is None
-  # assert top.bsp.to_host[0].read(blocking_timeout=None) is None
-  # assert top.bsp.req_resp_read_any() == 16
-  # assert top.bsp.req_resp_read_any() is None
-  # assert top.bsp.req_resp[0].read(blocking_timeout=None) is None
+  assert top.bsp.req_resp[0].write(9) is True
+  time.sleep(0.05)
+  assert top.bsp.to_host_read_any() is None
+  assert top.bsp.to_host[0].read(blocking_timeout=None) is None
+  assert top.bsp.req_resp_read_any() == 16
+  assert top.bsp.req_resp_read_any() is None
+  assert top.bsp.req_resp[0].read(blocking_timeout=None) is None
 
-  # assert top.bsp.from_host[0].write(9) is True
-  # time.sleep(0.05)
-  # assert top.bsp.req_resp_read_any() is None
-  # assert top.bsp.req_resp[0].read(blocking_timeout=None) is None
-  # assert top.bsp.to_host_read_any() == 9
-  # assert top.bsp.to_host[0].read(blocking_timeout=None) is None
+  assert top.bsp.from_host[0].write(9) is True
+  time.sleep(0.05)
+  assert top.bsp.req_resp_read_any() is None
+  assert top.bsp.req_resp[0].read(blocking_timeout=None) is None
+  assert top.bsp.to_host_read_any() == 9
+  assert top.bsp.to_host[0].read(blocking_timeout=None) is None
 
-  # assert top.bsp.from_host[0].write(9) is True
-  # time.sleep(0.05)
-  # assert top.bsp.req_resp_read_any() is None
-  # assert top.bsp.req_resp[0].read(blocking_timeout=None) is None
-  # assert top.bsp.to_host[0].read() == 9
-  # assert top.bsp.to_host_read_any() is None
+  assert top.bsp.from_host[0].write(9) is True
+  time.sleep(0.05)
+  assert top.bsp.req_resp_read_any() is None
+  assert top.bsp.req_resp[0].read(blocking_timeout=None) is None
+  assert top.bsp.to_host[0].read() == 9
+  assert top.bsp.to_host_read_any() is None
 
   print("Success: all tests pass!")
