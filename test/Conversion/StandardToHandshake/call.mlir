@@ -61,9 +61,9 @@ func.func @sub(%arg0 : i32, %arg1: i32) -> i32 {
 // CHECK:           %[[VAL_25:.*]]:2 = instance @sub(%[[VAL_21]], %[[VAL_22]], %[[VAL_23]]) : (i32, i32, none) -> (i32, none)
 // CHECK:           %[[VAL_26:.*]] = br %[[VAL_23]] : none
 // CHECK:           %[[VAL_27:.*]] = br %[[VAL_25]]#0 : i32
-// CHECK:           %[[VAL_28:.*]] = mux %[[VAL_7]] {{\[}}%[[VAL_26]], %[[VAL_19]]] : i1, none
-// CHECK:           %[[VAL_29:.*]] = arith.index_cast %[[VAL_7]] : i1 to index
-// CHECK:           %[[VAL_30:.*]] = mux %[[VAL_29]] {{\[}}%[[VAL_27]], %[[VAL_20]]] : index, i32
+// CHECK:           %[[VAL_30:.*]] = mux %[[VAL_29:.*]] {{\[}}%[[VAL_27]], %[[VAL_20]]] : index, i32
+// CHECK:           %[[VAL_28:.*]] = mux %[[VAL_7:.*]] {{\[}}%[[VAL_26]], %[[VAL_19]]] : i1, none
+// CHECK:           %[[VAL_29]] = arith.index_cast %[[VAL_7]] : i1 to index
 // CHECK:           return %[[VAL_30]], %[[VAL_28]] : i32, none
 // CHECK:         }
 func.func @main(%arg0 : i32, %arg1 : i32, %cond : i1) -> i32 {

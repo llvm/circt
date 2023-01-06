@@ -29,6 +29,13 @@ class OperationPass;
 
 namespace circt {
 
+/// Converts a single value within a function into maximal SSA form. This
+/// removes any implicit dataflow of this specific value within the enclosing
+/// function. The function adds new block arguments wherever necessary to carry
+/// the value explicitly between blocks.
+/// Succeeds when it was possible to convert the value into maximal SSA form.
+LogicalResult maximizeSSA(Value value, PatternRewriter &rewriter);
+
 namespace handshake {
 
 // ============================================================================
@@ -64,6 +71,7 @@ public:
       llvm::MapVector<Value, std::vector<Operation *>>;
 
   explicit HandshakeLowering(Region &r) : r(r) {}
+  LogicalResult maximizeSSANoMem(ConversionPatternRewriter &rewriter);
   LogicalResult addMergeOps(ConversionPatternRewriter &rewriter);
   LogicalResult addBranchOps(ConversionPatternRewriter &rewriter);
   LogicalResult replaceCallOps(ConversionPatternRewriter &rewriter);
@@ -86,16 +94,35 @@ public:
       operands.push_back(startCtrl);
       rewriter.replaceOpWithNewOp<handshake::ReturnOp>(retOp, operands);
     }
+
+    // Store the number of block arguments in each block
+    DenseMap<Block *, unsigned> numArgsPerBlock;
+    for (auto &block : r.getBlocks())
+      numArgsPerBlock[&block] = block.getNumArguments();
+
+    // Apply SSA maximixation on the newly added entry block argument to
+    // propagate it explicitly between the start-point of the control-only
+    // network and the function's terminators
+    if (failed(maximizeSSA(startCtrl, rewriter)))
+      return failure();
+
+    // Identify all block arguments belonging to the control-only network
+    // (needed to later insert control merges after those values). These are the
+    // last arguments to blocks that got a new argument during SSA maximization
+    for (auto &[block, numArgs] : numArgsPerBlock)
+      if (block->getNumArguments() != numArgs)
+        setBlockEntryControl(block, block->getArguments().back());
+
     return success();
   }
+
   LogicalResult connectConstantsToControl(ConversionPatternRewriter &rewriter,
                                           bool sourceConstants);
 
   LogicalResult feedForwardRewriting(ConversionPatternRewriter &rewriter);
   LogicalResult loopNetworkRewriting(ConversionPatternRewriter &rewriter);
 
-  BlockOps insertMergeOps(BlockValues blockLiveIns, ValueMap &mergePairs,
-                          BackedgeBuilder &edgeBuilder,
+  BlockOps insertMergeOps(ValueMap &mergePairs, BackedgeBuilder &edgeBuilder,
                           ConversionPatternRewriter &rewriter);
 
   // Insert appropriate type of Merge CMerge for control-only path,
@@ -164,6 +191,9 @@ LogicalResult lowerRegion(HandshakeLowering &hl, bool sourceConstants,
   if (failed(
           runPartialLowering(hl, &HandshakeLowering::replaceMemoryOps, memOps)))
     return failure();
+  if (failed(runPartialLowering(hl, &HandshakeLowering::maximizeSSANoMem))) {
+    return failure();
+  }
   if (failed(runPartialLowering(hl,
                                 &HandshakeLowering::setControlOnlyPath<TTerm>)))
     return failure();
@@ -236,6 +266,23 @@ std::unique_ptr<mlir::Pass> createInsertMergeBlocksPass();
 // Returns true if the region is into maximal SSA form i.e., if all the values
 // within the region are in maximal SSA form.
 bool isRegionSSAMaximized(Region &region);
+
+/// Converts an operation's results within a function into maximal SSA form.
+/// This removes any implicit dataflow of the operation's results within the
+/// enclosing function. The function adds new block arguments wherever necessary
+/// to carry the results explicitly between blocks.
+/// Succeeds when it was possible to convert the operation's results into
+/// maximal SSA form.
+LogicalResult maximizeSSA(Operation *op, PatternRewriter &rewriter);
+
+/// Converts all values defined by a block (i.e., block arguments and block's
+/// operations' results) within a function into maximal SSA form. This removes
+/// any implicit dataflow of those values within the enclosing function. The
+/// function adds new block arguments wherever necessary to carry the values
+/// explicitly between blocks.
+/// Succeeds when it was possible to convert the values defined by the block
+/// into maximal SSA form.
+LogicalResult maximizeSSA(Block *block, PatternRewriter &rewriter);
 
 /// Converts a region within a function into maximal SSA form. This removes any
 /// implicit dataflow of the region's values. The function adds new block

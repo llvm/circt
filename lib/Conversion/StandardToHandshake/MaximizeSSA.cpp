@@ -59,7 +59,22 @@ static LogicalResult addArgToTerminator(Block *block, Block *predBlock,
   return success();
 }
 
-static LogicalResult maximizeValueSSA(Value value, PatternRewriter &rewriter) {
+namespace circt {
+
+bool isRegionSSAMaximized(Region &region) {
+
+  // Check whether all operands used within each block are also defined within
+  // the same block
+  for (auto &block : region.getBlocks())
+    for (auto &op : block.getOperations())
+      for (auto operand : op.getOperands())
+        if (getDefiningBlock(operand) != &block)
+          return false;
+
+  return true;
+}
+
+LogicalResult maximizeSSA(Value value, PatternRewriter &rewriter) {
 
   // Identify the basic block in which the value is defined
   Block *defBlock = getDefiningBlock(value);
@@ -128,48 +143,33 @@ static LogicalResult maximizeValueSSA(Value value, PatternRewriter &rewriter) {
   return success();
 }
 
-static LogicalResult maximizeOpSSA(Operation *op, PatternRewriter &rewriter) {
-  // Apply SSA maximization on each of the operation's result
+LogicalResult maximizeSSA(Operation *op, PatternRewriter &rewriter) {
+  // Apply SSA maximization on each of the operation's results
   for (auto res : op->getResults())
-    if (failed(maximizeValueSSA(res, rewriter)))
+    if (failed(maximizeSSA(res, rewriter)))
       return failure();
 
   return success();
 }
 
-static LogicalResult maximizeBlockSSA(Block *block, PatternRewriter &rewriter) {
+LogicalResult maximizeSSA(Block *block, PatternRewriter &rewriter) {
   // Apply SSA maximization on each of the block's arguments
   for (auto arg : block->getArguments())
-    if (failed(maximizeValueSSA(arg, rewriter)))
+    if (failed(maximizeSSA(arg, rewriter)))
       return failure();
 
   // Apply SSA maximization on each of the block's operations
   for (auto &op : block->getOperations())
-    if (failed(maximizeOpSSA(&op, rewriter)))
+    if (failed(maximizeSSA(&op, rewriter)))
       return failure();
 
   return success();
-}
-
-namespace circt {
-
-bool isRegionSSAMaximized(Region &region) {
-
-  // Check whether all operands used within each block are also defined within
-  // the same block
-  for (auto &block : region.getBlocks())
-    for (auto &op : block.getOperations())
-      for (auto operand : op.getOperands())
-        if (getDefiningBlock(operand) != &block)
-          return false;
-
-  return true;
 }
 
 LogicalResult maximizeSSA(Region &region, PatternRewriter &rewriter) {
   // Apply SSA maximization on each of the region's block
   for (auto &block : region.getBlocks())
-    if (failed(maximizeBlockSSA(&block, rewriter)))
+    if (failed(maximizeSSA(&block, rewriter)))
       return failure();
 
   return success();
@@ -207,7 +207,7 @@ public:
     // Check that the function is correctly SSA-maximized after the pattern has
     // been applied
     target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp func) {
-      return isRegionSSAMaximized(func.getRegion());
+      return isRegionSSAMaximized(func.getBody());
     });
 
     // Each function in the module is turned into maximal SSA form
