@@ -72,16 +72,21 @@ public:
           "detected combinational cycle in a FIRRTL module, sample path: ");
       if (!lastSignalName.empty())
         errorDiag << module.getName() << "." << lastSignalName << " <- ";
+      size_t pathSize = 1;
 
       for (auto n : llvm::reverse(currentPath)) {
         FieldRef f = getFieldRefFromValue(n);
         auto signalName = getFieldName(f).first;
-        if (!signalName.empty() && lastSignalName != signalName)
+        if (!signalName.empty() && lastSignalName != signalName) {
           errorDiag << module.getName() << "." << signalName << " <- ";
+          ++pathSize;
+        }
         lastSignalName = signalName;
         if (n == node)
           break;
       }
+      if (pathSize == 1)
+        errorDiag << module.getName() << "." << lastSignalName << " <- ";
       currentPath.push_back(node);
       return failure();
     }

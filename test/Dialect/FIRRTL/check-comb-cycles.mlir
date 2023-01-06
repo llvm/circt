@@ -44,7 +44,7 @@ module  {
   // Single-element combinational loop
   // CHECK-NOT: firrtl.circuit "loop"
   firrtl.circuit "loop"   {
-    // expected-error @+1 {{detected combinational cycle in a FIRRTL module, sample path: loop.w <- }}
+    // expected-error @+1 {{detected combinational cycle in a FIRRTL module, sample path: loop.w <- loop.w}}
     firrtl.module @loop(out %y: !firrtl.uint<8>) {
       %w = firrtl.wire  : !firrtl.uint<8>
       firrtl.connect %w, %w : !firrtl.uint<8>, !firrtl.uint<8>
