@@ -739,9 +739,6 @@ static LogicalResult processBuffer(
   if (!disableGrandCentral)
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createGrandCentralPass());
 
-  // Run SymbolDCE after GC for hierpathop's and just for general cleanup.
-  pm.addNestedPass<firrtl::CircuitOp>(mlir::createSymbolDCEPass());
-
   // Read black box source files into the IR.
   StringRef blackBoxRoot = blackBoxRootPath.empty()
                                ? llvm::sys::path::parent_path(inputFilename)
@@ -751,6 +748,10 @@ static LogicalResult processBuffer(
 
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createDropNamesPass(preserveMode));
+
+  // Run SymbolDCE as late as possible, but before InnerSymbolDCE. This is for
+  // hierpathop's and just for general cleanup.
+  pm.addNestedPass<firrtl::CircuitOp>(mlir::createSymbolDCEPass());
 
   // Run InnerSymbolDCE as late as possible, but before IMDCE.
   pm.addPass(firrtl::createInnerSymbolDCEPass());
