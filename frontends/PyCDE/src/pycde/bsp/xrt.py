@@ -5,7 +5,7 @@
 from pycde import Clock, Input, InputChannel, Output, OutputChannel, System
 from pycde import module, generator, esi, types
 from ..value import And, Or, BitVectorValue
-from ..constructs import ControlReg, Reg, Wire
+from ..constructs import ControlReg, Wire
 from ..module import _GeneratorPortAccess
 from .fifo import SimpleXilinxFifo
 from ..dialects import hw
@@ -111,7 +111,10 @@ def output_tcl(from_host_regs, to_host_regs, os: FileIO):
 def RegsToChannel(type, offset):
 
   class RegsToChannel:
-    """Convert a series of writes to a message."""
+    """Convert a series of writes to a message. Monitors addresses and
+    associated data for pieces of the message in correlated registers. Writes a
+    message to the output channel when all of the associated registers have been
+    written to. Buffers messages in a FIFO."""
 
     clk = Clock()
     rst = Input(types.i1)
@@ -263,6 +266,9 @@ def XrtBSP(user_module):
         req.assign(adapter.msgs)
         from_host_fifos_full.append(adapter.fifo_almost_full)
 
+      write_fifos_full.assign(Or(*from_host_fifos_full))
+      write_fifos_full.name = "write_fifos_full"
+
       # Build the read side.
       rd_addr_data = {}
       for req, reg_spec in zip(channels.to_server_reqs, to_host_regs):
@@ -303,9 +309,6 @@ def XrtBSP(user_module):
       rvalid = ports.axil_in.arvalid.reg(clk, rst)
       rdata = types.array(types.int(axil_data_width),
                           len(rd_space))(rd_space)[rd_addr]
-
-      write_fifos_full.assign(Or(*from_host_fifos_full))
-      write_fifos_full.name = "write_fifos_full"
 
       # Assign the outputs.
       ports.axil_out = axil_out_type(axil_data_width)({
@@ -360,8 +363,8 @@ def XrtBSP(user_module):
 
       rst = ~ports.ap_resetn
 
-      print("WARNING: this XRT bridge is still a work-in-progress! Use at your"
-            " own risk!")
+      print("WARNING: this XRT bridge is still a work-in-progress and largely"
+            " untested! Use at your own risk!")
       xrt = XrtService(clk=ports.ap_clk, rst=rst, axil_in=axil_in_sig)
 
       axil_out = xrt.axil_out
