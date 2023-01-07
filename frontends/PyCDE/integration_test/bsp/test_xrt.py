@@ -101,9 +101,7 @@ elif command == "test":
   import ESILoopback as esi_sys
   from ESILoopback.xrt import Xrt
 
-  acc_conn = Xrt(os.path.join(gendir, "ESILoopback.hw_emu.xclbin"),
-                 kernel="ESILoopback",
-                 hw_emu=True)
+  acc_conn = Xrt(hw_emu=True)
   top = esi_sys.top(acc_conn)
 
   assert top.bsp.req_resp_read_any() is None

@@ -41,10 +41,20 @@ class _XrtNode:
 class Xrt(_XrtNode):
 
   def __init__(self,
-               xclbin: os.PathLike,
-               kernel: str,
+               xclbin: os.PathLike = None,
+               kernel: str = None,
                chan_desc_path: os.PathLike = None,
                hw_emu: bool = False) -> None:
+    if xclbin is None:
+      xclbin_files = list(__dir__.glob("*.xclbin"))
+      if len(xclbin_files) == 0:
+        raise RuntimeError("Could not find FPGA image.")
+      if len(xclbin_files) > 1:
+        raise RuntimeError("Found multiple FPGA images.")
+      xclbin = __dir__ / xclbin_files[0]
+    if kernel is None:
+      xclbin_fn = os.path.basename(xclbin)
+      kernel = xclbin_fn.split('.')[0]
     if chan_desc_path is None:
       chan_desc_path = __dir__ / "xrt_mmio_descriptor.json"
     self.chan_desc = json.loads(open(chan_desc_path).read())
