@@ -260,8 +260,41 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     // Read Logic
     Value rdata = getMemoryRead(b, reg, addr, addMuxPragmas);
     if (!ignoreReadEnableMem) {
-      Value x = b.create<sv::ConstantXOp>(rdata.getType());
-      rdata = b.create<comb::MuxOp>(en, rdata, x, false);
+      size_t addrRange = 1 << addr.getType().getIntOrFloatBitWidth();
+      if (mem.depth < addrRange) {
+        // If out-of-bounds access is possible, then add a check.
+        auto isEnAndInBounds = en;
+        auto readWire = b.create<sv::WireOp>(rdata.getType());
+        // Create constant for mem.depth
+        auto maxAddr =
+            b.create<ConstantOp>(b.getIntegerAttr(addr.getType(), mem.depth));
+        // Is enable and in-bounds.
+        isEnAndInBounds = b.create<comb::AndOp>(
+            isEnAndInBounds, b.create<comb::ICmpOp>(comb::ICmpPredicate::ult,
+                                                    addr, maxAddr, false));
+        b.create<sv::IfDefOp>(
+            "RANDOMIZE_GARBAGE_ASSIGN",
+            [&]() {
+              auto randExpr = b.create<sv::VerbatimExprOp>(
+                  rdata.getType(), b.getStringAttr("`RANDOM"));
+              // If enable and is-in-bounds then get memory read, else get
+              // random.
+              b.create<sv::AssignOp>(
+                  readWire, b.create<comb::MuxOp>(isEnAndInBounds, rdata,
+                                                  randExpr, false));
+            },
+            [&]() {
+              // If enable and is-in-bounds then get memory read, else get X.
+              Value x = b.create<sv::ConstantXOp>(rdata.getType());
+              b.create<sv::AssignOp>(
+                  readWire,
+                  b.create<comb::MuxOp>(isEnAndInBounds, rdata, x, false));
+            });
+        rdata = b.create<sv::ReadInOutOp>(readWire);
+      } else {
+        Value x = b.create<sv::ConstantXOp>(rdata.getType());
+        rdata = b.create<comb::MuxOp>(en, rdata, x, false);
+      }
     }
     outputs.push_back(rdata);
   }

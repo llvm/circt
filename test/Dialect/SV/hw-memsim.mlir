@@ -80,8 +80,20 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-SAME:  !hw.inout<uarray<10xi16>>
 //CHECK-NEXT:  %[[rslot:.+]] = sv.array_index_inout %Memory[%ro_addr_0]
 //CHECK-NEXT:  %[[read:.+]] = sv.read_inout %[[rslot]]
-//CHECK-NEXT:  %[[x:.+]] = sv.constantX
-//CHECK-NEXT:  %[[readres:.+]] = comb.mux %ro_en_0, %[[read]], %[[x]]
+//CHECK-NEXT:  %[[wire2:.+]] = sv.wire  :
+//CHECK-NEXT:  %[[c6:.+]] = hw.constant -6 :
+//CHECK-NEXT:  %[[v3:.+]] = comb.icmp ult %ro_addr_0, %[[c6]] :
+//CHECK-NEXT:  %[[v4:.+]] = comb.and %ro_en_0, %[[v3]] :
+//CHECK-NEXT:  sv.ifdef  "RANDOMIZE_GARBAGE_ASSIGN"
+//CHECK-NEXT:      %[[RANDOM:.+]] = sv.verbatim.expr "`RANDOM" :
+//CHECK-NEXT:      %[[v13:.+]] = comb.mux %[[v4]], %[[read]], %[[RANDOM]] :
+//CHECK-NEXT:      sv.assign %[[wire2]], %[[v13]] :
+//CHECK-NEXT:    } else {
+//CHECK-NEXT:      %[[x_i16_1:.+]] = sv.constantX :
+//CHECK-NEXT:      %[[v13:.+]] = comb.mux %[[v4]], %[[read]], %[[x_i16_1]] :
+//CHECK-NEXT:      sv.assign %[[wire2]], %[[v13]] :
+//CHECK-NEXT:    }
+//CHECK-NEXT:  %[[readres:.+]] = sv.read_inout %2 :
 //CHECK-NEXT:  %true = hw.constant true
 //CHECK-NEXT:  %[[rwtmp:.+]] = sv.wire
 //CHECK-NEXT:  %[[rwres:.+]] = sv.read_inout %[[rwtmp]]
@@ -102,7 +114,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:        sv.passign %[[rwwslot]], %rw_wdata_0
 //CHECK-NEXT:      }
 //CHECK-NEXT:    }
-//CHECK-NEXT:  %true_1 = hw.constant true
+//CHECK-NEXT:  %[[true_1:.+]] = hw.constant true
 //CHECK-NEXT:  sv.always posedge %wo_clock_0 {
 //CHECK-NEXT:    sv.if %wo_en_0 {
 //CHECK-NEXT:      %[[wslot:.+]] = sv.array_index_inout %Memory[%wo_addr_0]

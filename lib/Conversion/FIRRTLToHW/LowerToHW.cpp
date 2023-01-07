@@ -657,7 +657,8 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
                                             CircuitLoweringState &state) {
   assert(!mems.empty());
   auto namesp = CircuitNamespace(state.circuitOp);
-  state.used_RANDOMIZE_MEM_INIT = 1;
+  state.used_RANDOMIZE_MEM_INIT = true;
+  state.used_RANDOMIZE_GARBAGE_ASSIGN = true;
   // Insert memories at the bottom of the file.
   OpBuilder b(state.circuitOp);
   b.setInsertionPointAfter(state.circuitOp);
