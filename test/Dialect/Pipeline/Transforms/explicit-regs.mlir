@@ -17,16 +17,18 @@ hw.module @test1(%arg0 : i32,  %go : i1, %clk : i1, %rst : i1) -> (out: i32) {
 
 // CHECK:      %0 = pipeline.pipeline(%arg0, %go) clock %clk reset %rst : (i32, i1) -> i32 {
 // CHECK-NEXT:   ^bb0(%[[ARG0]]: i32, %[[ARG1:.*]]: i1):
+// CHECK-NEXT:     %c1_i32 = hw.constant 1 : i32
 // CHECK-NEXT:     %[[S0_REG:.*]], %[[S0_VALID:.*]] = pipeline.stage.register when %[[ARG1]] regs %[[ARG0]] : i32
-// CHECK-NEXT:     %[[ADD0_OUT:.*]] = comb.add %[[S0_REG]], %[[S0_REG]] : i32
+// CHECK-NEXT:     %[[ADD0_OUT:.*]] = comb.add %[[S0_REG]], %c1_i32 : i32
 // CHECK-NEXT:     pipeline.return %[[ADD0_OUT]] valid %[[S0_VALID]] : i32
 // CHECK-NEXT: }
 
 hw.module @test2(%arg0 : i32,  %go : i1, %clk : i1, %rst : i1) -> (out: i32) {
   %out = pipeline.pipeline(%arg0, %go) clock %clk reset %rst : (i32, i1) -> (i32) {
     ^bb0(%a0 : i32, %g : i1):
+      %c1_i32 = hw.constant 1 : i32
       %s0_valid = pipeline.stage when %g
-      %add = comb.add %a0, %a0 : i32
+      %add = comb.add %a0, %c1_i32 : i32
       pipeline.return %add valid %s0_valid : i32
   }
   hw.output %out : i32

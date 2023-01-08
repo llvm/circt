@@ -46,3 +46,19 @@ hw.module @top(%clk: i1, %rst: i1, %i: i32, %s: !hw.struct<foo: i32>) {
   // SV: %bar = sv.reg sym @reg1
   // SV: sv.reg sym @reg2
 }
+
+hw.module @top_ce(%clk: i1, %rst: i1, %ce: i1, %i: i32) {
+  %rv = hw.constant 0 : i32
+
+  %r0 = seq.compreg.ce %i, %clk, %ce, %rst, %rv : i32
+  // CHECK: %r0 = seq.compreg.ce %i, %clk, %ce, %rst, %c0_i32  : i32
+  // SV: [[REG_CE0:%.+]] = sv.reg  : !hw.inout<i32>
+  // SV: [[REG_CE5:%.+]] = sv.read_inout [[REG0]] : !hw.inout<i32>
+  // SV: sv.alwaysff(posedge %clk)  {
+  // SV:   sv.if %ce {
+  // SV:     sv.passign [[REG_CE0]], %i : i32
+  // SV:   }
+  // SV: }(syncreset : posedge %rst)  {
+  // SV:   sv.passign [[REG_CE0]], %c0_i32 : i32
+  // SV: }
+}

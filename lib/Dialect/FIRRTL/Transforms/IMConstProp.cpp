@@ -772,6 +772,16 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
   // If the lattice value for the specified value is a constant update it and
   // return true.  Otherwise return false.
   auto replaceValueIfPossible = [&](Value value) -> bool {
+    // Lambda to replace all uses of this value a replacement, unless this is
+    // the destination of a connect.  We leave connects alone to avoid upsetting
+    // flow, i.e., to avoid trying to connect to a constant.
+    auto replaceIfNotConnect = [&value](Value replacement) {
+      value.replaceUsesWithIf(replacement, [](OpOperand &operand) {
+        return !isa<FConnectLike>(operand.getOwner()) ||
+               operand.getOperandNumber() != 0;
+      });
+    };
+
     auto it = latticeValues.find(value);
     if (it == latticeValues.end() || it->second.isOverdefined() ||
         it->second.isUnknown())
@@ -781,7 +791,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
         // Registers can get replaced with a unique (new) invalid value
         auto invalid =
             builder.create<InvalidValueOp>(reg.getLoc(), reg.getType());
-        reg.replaceAllUsesWith(invalid.getResult());
+        replaceIfNotConnect(invalid);
         return true;
       }
       return false;
@@ -794,12 +804,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     auto cstValue =
         getConst(it->second.getValue(), value.getType(), value.getLoc());
 
-    // Replace all uses of this value with the constant, unless this is the
-    // destination of a connect.  We leave those alone to avoid upsetting flow.
-    value.replaceUsesWithIf(cstValue, [](OpOperand &operand) {
-      return !isa<FConnectLike>(operand.getOwner()) ||
-             operand.getOperandNumber() != 0;
-    });
+    replaceIfNotConnect(cstValue);
     return true;
   };
 

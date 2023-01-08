@@ -47,7 +47,7 @@ namespace {
 
 class HWMemSimImpl {
   bool ignoreReadEnableMem;
-  bool stripMuxPragmas;
+  bool addMuxPragmas;
   bool disableMemRandomization;
   bool disableRegRandomization;
   bool addVivadoRAMAddressConflictSynthesisBugWorkaround;
@@ -60,11 +60,10 @@ class HWMemSimImpl {
   sv::AlwaysOp lastPipelineAlwaysOp;
 
 public:
-  HWMemSimImpl(bool ignoreReadEnableMem, bool stripMuxPragmas,
+  HWMemSimImpl(bool ignoreReadEnableMem, bool addMuxPragmas,
                bool disableMemRandomization, bool disableRegRandomization,
                bool addVivadoRAMAddressConflictSynthesisBugWorkaround)
-      : ignoreReadEnableMem(ignoreReadEnableMem),
-        stripMuxPragmas(stripMuxPragmas),
+      : ignoreReadEnableMem(ignoreReadEnableMem), addMuxPragmas(addMuxPragmas),
         disableMemRandomization(disableMemRandomization),
         disableRegRandomization(disableRegRandomization),
         addVivadoRAMAddressConflictSynthesisBugWorkaround(
@@ -78,7 +77,7 @@ struct HWMemSimImplPass : public sv::HWMemSimImplBase<HWMemSimImplPass> {
 
   using sv::HWMemSimImplBase<HWMemSimImplPass>::ignoreReadEnableMem;
   using sv::HWMemSimImplBase<HWMemSimImplPass>::replSeqMem;
-  using sv::HWMemSimImplBase<HWMemSimImplPass>::stripMuxPragmas;
+  using sv::HWMemSimImplBase<HWMemSimImplPass>::addMuxPragmas;
   using sv::HWMemSimImplBase<HWMemSimImplPass>::disableMemRandomization;
   using sv::HWMemSimImplBase<HWMemSimImplPass>::disableRegRandomization;
   using sv::HWMemSimImplBase<
@@ -133,18 +132,18 @@ static bool valueDefinedBeforeOp(Value value, Operation *op) {
 //   /* synopsys infer_mux_override */
 //   assign GEN = memory[addr] /* cadence map_to_mux */;
 // ```
-// If `stripMuxPragmas` is enabled, just return the read value without
+// If `addMuxPragmas` is enabled, just return the read value without
 // annotations.
 static Value getMemoryRead(ImplicitLocOpBuilder &b, Value memory, Value addr,
-                           bool stripMuxPragmas) {
+                           bool addMuxPragmas) {
   auto slot =
       b.create<sv::ReadInOutOp>(b.create<sv::ArrayIndexInOutOp>(memory, addr));
   // If we don't want to add mux pragmas, just return the read value.
-  if (stripMuxPragmas || memory.getType()
-                                 .cast<hw::InOutType>()
-                                 .getElementType()
-                                 .cast<hw::UnpackedArrayType>()
-                                 .getSize() <= 1)
+  if (!addMuxPragmas || memory.getType()
+                                .cast<hw::InOutType>()
+                                .getElementType()
+                                .cast<hw::UnpackedArrayType>()
+                                .getSize() <= 1)
     return slot;
   circt::sv::setSVAttributes(
       slot, sv::SVAttributesAttr::get(b.getContext(), {"cadence map_to_mux"},
@@ -259,7 +258,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     }
 
     // Read Logic
-    Value rdata = getMemoryRead(b, reg, addr, stripMuxPragmas);
+    Value rdata = getMemoryRead(b, reg, addr, addMuxPragmas);
     if (!ignoreReadEnableMem) {
       Value x = b.create<sv::ConstantXOp>(rdata.getType());
       rdata = b.create<comb::MuxOp>(en, rdata, x, false);
@@ -334,7 +333,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
             b.createOrFold<ConstantOp>(read_wmode.getType(), 0), false),
         false);
 
-    auto val = getMemoryRead(b, reg, read_addr, stripMuxPragmas);
+    auto val = getMemoryRead(b, reg, read_addr, addMuxPragmas);
     Value x = b.create<sv::ConstantXOp>(val.getType());
     b.create<sv::AssignOp>(rWire, b.create<comb::MuxOp>(rcond, val, x, false));
 
@@ -625,7 +624,7 @@ void HWMemSimImplPass::runOnOperation() {
         newModule.setCommentAttr(
             builder.getStringAttr("VCS coverage exclude_file"));
 
-        HWMemSimImpl(ignoreReadEnableMem, stripMuxPragmas,
+        HWMemSimImpl(ignoreReadEnableMem, addMuxPragmas,
                      disableMemRandomization, disableRegRandomization,
                      addVivadoRAMAddressConflictSynthesisBugWorkaround)
             .generateMemory(newModule, mem);
@@ -641,13 +640,13 @@ void HWMemSimImplPass::runOnOperation() {
 }
 
 std::unique_ptr<Pass> circt::sv::createHWMemSimImplPass(
-    bool replSeqMem, bool ignoreReadEnableMem, bool stripMuxPragmas,
+    bool replSeqMem, bool ignoreReadEnableMem, bool addMuxPragmas,
     bool disableMemRandomization, bool disableRegRandomization,
     bool addVivadoRAMAddressConflictSynthesisBugWorkaround) {
   auto pass = std::make_unique<HWMemSimImplPass>();
   pass->replSeqMem = replSeqMem;
   pass->ignoreReadEnableMem = ignoreReadEnableMem;
-  pass->stripMuxPragmas = stripMuxPragmas;
+  pass->addMuxPragmas = addMuxPragmas;
   pass->disableMemRandomization = disableMemRandomization;
   pass->disableRegRandomization = disableRegRandomization;
   pass->addVivadoRAMAddressConflictSynthesisBugWorkaround =

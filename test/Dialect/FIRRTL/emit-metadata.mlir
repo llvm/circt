@@ -88,8 +88,7 @@ firrtl.circuit "BasicBlackboxes" attributes { annotations = [{
   firrtl.extmodule @ignored2() attributes {annotations = [{class = "sifive.enterprise.firrtl.ScalaClassAnnotation", className = "freechips.rocketchip.util.BlackBoxedROM"}], defname = "ignored2"}
   firrtl.extmodule @ignored3() attributes {annotations = [{class = "sifive.enterprise.grandcentral.DataTapsAnnotation.blackbox"}], defname = "ignored3"}
   firrtl.extmodule @ignored4() attributes {annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation.blackbox", id = 4 : i64}], defname = "ignored4"}
-  firrtl.extmodule @ignored5() attributes {annotations = [{class = "sifive.enterprise.grandcentral.transforms.SignalMappingAnnotation"}], defname = "ignored5"}
-  firrtl.extmodule @ignored6() attributes {annotations = [{class = "firrtl.transforms.BlackBox"}], defname = "ignored6"}
+  firrtl.extmodule @ignored5() attributes {annotations = [{class = "firrtl.transforms.BlackBox"}], defname = "ignored5"}
 
   // ScalaClassAnnotation should be discarded after this pass.
   // CHECK: firrtl.extmodule @ignored2()

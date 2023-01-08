@@ -240,7 +240,7 @@ def IndexedPartSelectOp
                         " attr-dict `:` qualified(type($input)) `,` qualified(type($base))";
 }
 
-def SampledOp : SVOp<"system.sampled", [SameOperandsAndResultType]> {
+def SampledOp : SVOp<"system.sampled", [Pure, SameOperandsAndResultType]> {
   let summary = "`$sampled` system function to sample a value";
   let description = [{
     Sample a value using System Verilog sampling semantics (see Section 16.5.1

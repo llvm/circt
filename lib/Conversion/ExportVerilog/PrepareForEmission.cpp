@@ -285,6 +285,8 @@ static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
   newOps.push_back(newOp);
   if (name)
     newOp->setAttr("sv.namehint", name);
+  if (auto twoState = op.getAttr("twoState"))
+    newOp->setAttr("twoState", twoState);
   return newOp->getResult(0);
 }
 
@@ -829,8 +831,10 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
         op.hasTrait<mlir::OpTrait::IsCommutative>() &&
         mlir::isMemoryEffectFree(&op) && op.getNumRegions() == 0 &&
         op.getNumSuccessors() == 0 &&
-        (op.getAttrs().empty() ||
-         (op.getAttrs().size() == 1 && op.hasAttr("sv.namehint")))) {
+        llvm::all_of(op.getAttrs(), [](NamedAttribute attr) {
+          return attr.getNameDialect() != nullptr ||
+                 attr.getName() == "twoState";
+        })) {
       // Lower this operation to a balanced binary tree of the same operation.
       SmallVector<Operation *> newOps;
       auto result = lowerFullyAssociativeOp(op, op.getOperands(), newOps);

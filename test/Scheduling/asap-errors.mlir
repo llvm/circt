@@ -1,13 +1,13 @@
-// RUN: circt-opt %s -test-asap-scheduler -verify-diagnostics -split-input-file
+// RUN: circt-opt %s -ssp-schedule=scheduler=asap -verify-diagnostics -split-input-file
 
-// expected-error@+2 {{dependence cycle detected}}
-// expected-error@+1 {{scheduling failed}}
-func.func @cyclic_graph() attributes {
-  auxdeps = [ [0,1], [1,2], [2,3], [3,1] ]
-  } {
-  %0 = arith.constant 0 : i32
-  %1 = arith.constant 1 : i32
-  %2 = arith.constant 2 : i32
-  %3 = arith.constant 3 : i32
-  return
+// expected-error@+1 {{dependence cycle detected}}
+ssp.instance @cyclic_graph of "Problem" {
+  library {
+    operator_type @_1 [latency<1>]
+  }
+  graph {
+    %0 = operation<@_1>(@op2)
+    %1 = operation<@_1>(%0)
+    operation<@_1> @op2(%1)
+  }
 }

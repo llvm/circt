@@ -223,12 +223,12 @@ struct CircuitLoweringState {
   std::atomic<bool> used_RANDOMIZE_GARBAGE_ASSIGN{false};
 
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
-                       bool emitChiselAssertsAsSVA, bool stripMuxPragmas,
+                       bool emitChiselAssertsAsSVA, bool addMuxPragmas,
                        InstanceGraph *instanceGraph, NLATable *nlaTable)
       : circuitOp(circuitOp), instanceGraph(instanceGraph),
         enableAnnotationWarning(enableAnnotationWarning),
         emitChiselAssertsAsSVA(emitChiselAssertsAsSVA),
-        stripMuxPragmas(stripMuxPragmas), nlaTable(nlaTable) {
+        addMuxPragmas(addMuxPragmas), nlaTable(nlaTable) {
     auto *context = circuitOp.getContext();
 
     // Get the testbench output directory.
@@ -322,7 +322,7 @@ private:
   std::mutex annotationPrintingMtx;
 
   const bool emitChiselAssertsAsSVA;
-  const bool stripMuxPragmas;
+  const bool addMuxPragmas;
 
   // Records any sv::BindOps that are found during the course of execution.
   // This is unsafe to access directly and should only be used through addBind.
@@ -418,7 +418,7 @@ struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
   void setDisableRegRandomization() { disableRegRandomization = true; }
   void setEnableAnnotationWarning() { enableAnnotationWarning = true; }
   void setEmitChiselAssertAsSVA() { emitChiselAssertsAsSVA = true; }
-  void setStripMuxPragmas() { stripMuxPragmas = true; }
+  void setAddMuxPragmas() { addMuxPragmas = true; }
 
 private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
@@ -451,15 +451,15 @@ private:
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToHWPass(
     bool enableAnnotationWarning, bool emitChiselAssertsAsSVA,
-    bool stripMuxPragmas, bool disableMemRandomization,
+    bool addMuxPragmas, bool disableMemRandomization,
     bool disableRegRandomization) {
   auto pass = std::make_unique<FIRRTLModuleLowering>();
   if (enableAnnotationWarning)
     pass->setEnableAnnotationWarning();
   if (emitChiselAssertsAsSVA)
     pass->setEmitChiselAssertAsSVA();
-  if (stripMuxPragmas)
-    pass->setStripMuxPragmas();
+  if (addMuxPragmas)
+    pass->setAddMuxPragmas();
   if (disableMemRandomization)
     pass->setDisableMemRandomization();
   if (disableRegRandomization)
@@ -490,7 +490,7 @@ void FIRRTLModuleLowering::runOnOperation() {
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
   CircuitLoweringState state(
-      circuit, enableAnnotationWarning, emitChiselAssertsAsSVA, stripMuxPragmas,
+      circuit, enableAnnotationWarning, emitChiselAssertsAsSVA, addMuxPragmas,
       &getAnalysis<InstanceGraph>(), &getAnalysis<NLATable>());
 
   SmallVector<FModuleOp, 32> modulesToProcess;
@@ -3540,10 +3540,10 @@ Value FIRRTLLowering::createArrayIndexing(Value array, Value index) {
   }
 
   Value inBoundsRead;
-  // If `stripMuxPragmas` is specified, just lower to a vanilla array indexing.
-  // Also remove mux pragmas if the array size is 1 since it causes a
+  // If `addMuxPragmas` is enabled, add mux pragmas to array reads.
+  // Don't annotate mux pragmas if the array size is 1 since it causes a
   // complication failure.
-  if (circuitState.stripMuxPragmas || size <= 1) {
+  if (!circuitState.addMuxPragmas || size <= 1) {
     inBoundsRead = builder.create<hw::ArrayGetOp>(array, index);
   } else {
     auto arrayGet = builder.create<hw::ArrayGetOp>(array, index);
