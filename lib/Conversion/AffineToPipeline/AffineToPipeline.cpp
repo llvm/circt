@@ -54,6 +54,7 @@ struct AffineToPipeline : public AffineToPipelineBase<AffineToPipeline> {
   void runOnOperation() override;
 
 private:
+  ModuloProblem getModuloProblem(CyclicProblem &prob);
   LogicalResult
   lowerAffineStructures(MemoryDependenceAnalysis &dependenceAnalysis);
   LogicalResult populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest,
@@ -67,6 +68,32 @@ private:
 };
 
 } // namespace
+
+ModuloProblem AffineToPipeline::getModuloProblem(CyclicProblem &prob) {
+  auto modProb = ModuloProblem::get(prob.getContainingOp());
+  for (auto *op : prob.getOperations()) {
+    auto opr = prob.getLinkedOperatorType(op);
+    if (opr.has_value()) {
+      modProb.setLinkedOperatorType(op, opr.value());
+      auto latency = prob.getLatency(opr.value());
+      if (latency.has_value())
+        modProb.setLatency(opr.value(), latency.value());
+    }
+    modProb.insertOperation(op);
+  }
+
+  for (auto *op : prob.getOperations()) {
+    for (auto dep : prob.getDependences(op)) {
+      if (dep.isAuxiliary())
+        assert(modProb.insertDependence(dep).succeeded());
+      auto distance = prob.getDistance(dep);
+      if (distance.has_value())
+        modProb.setDistance(dep, distance.value());
+    }
+  }
+
+  return modProb;
+}
 
 void AffineToPipeline::runOnOperation() {
   // Get dependence analysis for the whole function.
@@ -90,7 +117,7 @@ void AffineToPipeline::runOnOperation() {
       continue;
 
     ModuloProblem moduloProblem =
-        ModuloProblem::get(schedulingAnalysis->getProblem(nestedLoops.back()));
+        getModuloProblem(schedulingAnalysis->getProblem(nestedLoops.back()));
 
     // Populate the target operator types.
     if (failed(populateOperatorTypes(nestedLoops, moduloProblem)))
@@ -369,20 +396,6 @@ AffineToPipeline::solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest,
   return success();
 }
 
-// Function for calcuating II limitations caused by an iteration variable
-unsigned computeRecurrenceII(Value iterArg, Operation *iterArgProducer,
-                             ModuloProblem &problem) {
-  unsigned producedTime =
-      *problem.getStartTime(iterArgProducer) +
-      *problem.getLatency(*problem.getLinkedOperatorType(iterArgProducer));
-  unsigned useTime = std::numeric_limits<unsigned>::max();
-
-  for (auto *use : iterArg.getUsers())
-    useTime = std::min(useTime, *problem.getStartTime(use));
-
-  return producedTime <= useTime ? 1 : producedTime - useTime;
-}
-
 /// Create the pipeline op for a loop nest.
 LogicalResult
 AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
@@ -405,21 +418,7 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
   // iter arg is created for the induction variable.
   TypeRange resultTypes = innerLoop.getResultTypes();
 
-  // Calculate recurrence II on iteration args (recurrence relationships besides
-  // memory ones)
-  unsigned recurrenceII = 1;
-  for (const auto &iterArg :
-       llvm::enumerate(forOp.getBody()->getTerminator()->getOperands())) {
-    recurrenceII = std::max(
-        recurrenceII,
-        computeRecurrenceII(innerLoop.getRegionIterArgs()[iterArg.index()],
-                            iterArg.value().getDefiningOp(), problem));
-  }
-
-  // TODO(matth2k): Set up explicit value plumbing on iterArgs in cases where
-  // value-forwarding/bypassing would require registers
-  auto ii = builder.getI64IntegerAttr(
-      std::max(problem.getInitiationInterval().value(), recurrenceII));
+  auto ii = builder.getI64IntegerAttr(problem.getInitiationInterval().value());
 
   SmallVector<Value> iterArgs;
   iterArgs.push_back(lowerBound);
@@ -505,11 +504,17 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
       unsigned pipeStartTime = std::numeric_limits<unsigned>::max();
       unsigned pipeEndTime = 0;
       for (auto *user : op->getUsers()) {
-        if (*problem.getStartTime(user) > startTime || isLoopTerminator(user)) {
+        if (*problem.getStartTime(user) > startTime) {
           pipeEndTime = std::max(pipeEndTime, *problem.getStartTime(user));
           pipeStartTime = std::min(pipeStartTime, *problem.getStartTime(user));
+        } else if (isLoopTerminator(user)) {
+          // Manually forward the value into the terminator's valueMap
+          pipeEndTime = std::max(pipeEndTime, *problem.getStartTime(user) + 1);
+          pipeStartTime =
+              std::min(pipeStartTime, *problem.getStartTime(user) + 1);
         }
       }
+
       // Skip iter if the user is in the same stage
       if (pipeStartTime > pipeEndTime)
         continue;
@@ -543,7 +548,8 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
     registerTypes.push_back(types);
     stageValueMaps.push_back(valueMap);
   }
-  // One extra value map for the affine.for terminator
+
+  // One more map is needed for the pipeline stages terminator
   stageValueMaps.push_back(valueMap);
 
   // Create stages along with maps
@@ -585,6 +591,7 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
       // registered value
       unsigned destTime =
           std::max(startTime + 1, pipeTimes[res.getDefiningOp()].first);
+      assert(destTime < stageValueMaps.size());
       stageValueMaps[destTime].map(res, stage.getResult(resIndex++));
     }
     // Add these mapped values to pipeline.register
@@ -610,12 +617,12 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
   SmallVector<Value> termResults;
   termIterArgs.push_back(
       stagesBlock.front().getResult(stagesBlock.front().getNumResults() - 1));
-  // TODO(matth2k): This 'back() + 1' is hardcoded, and must change to the
-  // actual cycle the yielded value is produced on. This is tricky if the
-  // defining Op takes multiple cycles
+
   for (auto value : forOp.getBody()->getTerminator()->getOperands()) {
-    termIterArgs.push_back(stageValueMaps[startTimes.back() + 1].lookup(value));
-    termResults.push_back(stageValueMaps[startTimes.back() + 1].lookup(value));
+    termIterArgs.push_back(
+        stageValueMaps[pipeTimes[value.getDefiningOp()].second].lookup(value));
+    termResults.push_back(
+        stageValueMaps[pipeTimes[value.getDefiningOp()].second].lookup(value));
   }
 
   stagesTerminator.getIterArgsMutable().append(termIterArgs);
