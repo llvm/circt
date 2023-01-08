@@ -1,5 +1,5 @@
 ; RUN: firtool --verilog %s | FileCheck %s
-; RUN: firtool --verilog -preserve-aggregate=1d-vec %s | FileCheck %s --check-prefix=AGGREGATE
+; RUN: firtool --verilog -preserve-aggregate=1d-vec %s | FileCheck %s --check-prefix=AGGGREGATE
 
 circuit Top : %[[
   {
@@ -62,12 +62,14 @@ circuit Top : %[[
 ; CHECK:  assign memTap_5 = Top.dut.rf_ext.Memory[5];
 ; CHECK:  assign memTap_6 = Top.dut.rf_ext.Memory[6];
 ; CHECK:  assign memTap_7 = Top.dut.rf_ext.Memory[7];
-; AGGREGATE:  assign memTap_0 = Top.dut.rf_ext.Memory[3'h0];
-; AGGREGATE:  assign memTap_1 = Top.dut.rf_ext.Memory[3'h1];
-; AGGREGATE:  assign memTap_2 = Top.dut.rf_ext.Memory[3'h2];
-; AGGREGATE:  assign memTap_3 = Top.dut.rf_ext.Memory[3'h3];
-; AGGREGATE:  assign memTap_4 = Top.dut.rf_ext.Memory[3'h4];
-; AGGREGATE:  assign memTap_5 = Top.dut.rf_ext.Memory[3'h5];
-; AGGREGATE:  assign memTap_6 = Top.dut.rf_ext.Memory[3'h6];
-; AGGREGATE:  assign memTap_7 = Top.dut.rf_ext.Memory[3'h7];
+; AGGGREGATE:       wire [7:0][7:0] memTap;
+; AGGGREGATE-NEXT:  assign memTap =
+; AGGGREGATE-NEXT{LITERAL}: {{Top.dut.rf_ext.Memory[7]},
+; AGGGREGATE-NEXT:           {Top.dut.rf_ext.Memory[6]},
+; AGGGREGATE-NEXT:           {Top.dut.rf_ext.Memory[5]},
+; AGGGREGATE-NEXT:           {Top.dut.rf_ext.Memory[4]},
+; AGGGREGATE-NEXT:           {Top.dut.rf_ext.Memory[3]},
+; AGGGREGATE-NEXT:           {Top.dut.rf_ext.Memory[2]},
+; AGGGREGATE-NEXT:           {Top.dut.rf_ext.Memory[1]},
+; AGGGREGATE-NEXT:           {Top.dut.rf_ext.Memory[0]}};
 ; CHECK:      endmodule

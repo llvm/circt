@@ -874,8 +874,6 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
         "cannot generate the MemTap, wiretap Type does not match the memory "
         "type");
   auto sink = wireTarget->ref.getOp()->getResult(0);
-  wireTarget->ref.getOp()->setAttr("firrtl.must_lower_types",
-                                   UnitAttr::get(sink.getContext()));
   state.wiringProblems.push_back({sendVal, sink, "memTap"});
   return success();
 }
