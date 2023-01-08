@@ -240,7 +240,7 @@ module  {
   // Node combinational loop through vector subindex
   // CHECK-NOT: firrtl.circuit "hasloops"
 firrtl.circuit "hasloops"   {
-  // expected-error @+1 {{detected combinational cycle in a FIRRTL module, sample path: hasloops.bar_b[0] <- hasloops.bar_a[0] <- hasloops.b[0] <- hasloops.bar_b[0] <-}}
+  // expected-error @+1 {{hasloops.b[0] <- hasloops.bar_b[0] <- hasloops.bar_a[0] <- hasloops.b[0]}}
   firrtl.module @hasloops(out %b: !firrtl.vector<uint<1>, 2>) {
     %bar_a = firrtl.wire : !firrtl.vector<uint<1>, 2>
     %bar_b = firrtl.wire : !firrtl.vector<uint<1>, 2>
@@ -291,7 +291,7 @@ firrtl.circuit "hasLoops"  {
 
 firrtl.circuit "bundleWire"   {
 
-  // expected-error @+1 {{detected combinational cycle in a FIRRTL module, sample path: bundleWire.out2 <- bundleWire.x <- bundleWire.w.foo.bar.baz <- bundleWire.out2 <-}}
+  // expected-error @+1 {{bundleWire.w.foo.bar.baz <- bundleWire.out2 <- bundleWire.x <- bundleWire.w.foo.bar.baz }}
   firrtl.module @bundleWire(in %arg: !firrtl.bundle<foo: bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>>,
                            out %out1: !firrtl.uint<1>, out %out2: !firrtl.sint<64>) {
 
@@ -306,12 +306,11 @@ firrtl.circuit "bundleWire"   {
     %2 = firrtl.subfield %1[baz] : !firrtl.bundle<baz: uint<1>>
     %3 = firrtl.subfield %0[qux] : !firrtl.bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>
     firrtl.connect %w0_0_0, %3 : !firrtl.sint<64>, !firrtl.sint<64>
-		// expected-remark @+1 {{this operation is part of the combinational cycle}}
     firrtl.connect %x, %w0_0_0 : !firrtl.sint<64>, !firrtl.sint<64>
 		// expected-remark @+1 {{this operation is part of the combinational cycle}}
     firrtl.connect %out2, %x : !firrtl.sint<64>, !firrtl.sint<64>
+		// expected-remark @+1 {{this operation is part of the combinational cycle}}
     firrtl.connect %w0_0_0, %out2 : !firrtl.sint<64>, !firrtl.sint<64>
-
     firrtl.connect %out1, %2 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
@@ -524,5 +523,57 @@ firrtl.circuit "revisitOps"   {
     // expected-remark @+1 {{this operation is part of the combinational cycle}}
     firrtl.connect %in2, %x : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %x, %out : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Two input ports share part of the path to an output port.
+// CHECK-NOT: firrtl.circuit "hasloops"
+firrtl.circuit "revisitOps2"   {
+  firrtl.module @thru(in %in1: !firrtl.vector<uint<1>,2>, in %in2: !firrtl.vector<uint<1>,3>, out %out: !firrtl.vector<uint<1>,2>) {
+    %w = firrtl.wire : !firrtl.uint<1>
+    %in1_0 = firrtl.subindex %in1[0] : !firrtl.vector<uint<1>,2>
+    %in2_1 = firrtl.subindex %in2[1] : !firrtl.vector<uint<1>,3>
+    %out_1 = firrtl.subindex %out[1] : !firrtl.vector<uint<1>,2>
+    %1 = firrtl.mux(%w, %in1_0, %in2_1)  : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %out_1, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  // expected-error @+1 {{revisitOps2.x <- revisitOps2.inner2.out[1] <- revisitOps2.inner2.in2[1] <- revisitOps2.x}}
+  firrtl.module @revisitOps2() {
+    %in1, %in2, %out = firrtl.instance inner2 @thru(in in1: !firrtl.vector<uint<1>,2>, in in2: !firrtl.vector<uint<1>,3>, out out: !firrtl.vector<uint<1>,2>)
+    %in1_0 = firrtl.subindex %in1[0] : !firrtl.vector<uint<1>,2>
+    %in2_1 = firrtl.subindex %in2[1] : !firrtl.vector<uint<1>,3>
+    %out_1 = firrtl.subindex %out[1] : !firrtl.vector<uint<1>,2>
+    %x = firrtl.wire  : !firrtl.uint<1>
+    firrtl.connect %in2_1, %x : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %x, %out_1 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "revisitOps2"   {
+  firrtl.module @thru(in %in0: !firrtl.vector<uint<1>,2>, in %in1: !firrtl.vector<uint<1>,2>, in %in2: !firrtl.vector<uint<1>,3>, out %out: !firrtl.vector<uint<1>,2>) {
+    %w = firrtl.wire : !firrtl.uint<1>
+    %in0_0 = firrtl.subindex %in0[0] : !firrtl.vector<uint<1>,2>
+    %in1_0 = firrtl.subindex %in1[0] : !firrtl.vector<uint<1>,2>
+    %in2_1 = firrtl.subindex %in2[1] : !firrtl.vector<uint<1>,3>
+    %out_1 = firrtl.subindex %out[1] : !firrtl.vector<uint<1>,2>
+    %1 = firrtl.mux(%w, %in1_0, %in2_1)  : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %2 = firrtl.mux(%w, %in0_0, %1)  : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %out_1, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  // expected-error @+1 {{revisitOps2.x <- revisitOps2.inner2.out[1] <- revisitOps2.inner2.in2[1] <- revisitOps2.x}}
+  firrtl.module @revisitOps2() {
+    %in0, %in1, %in2, %out = firrtl.instance inner2 @thru(in in0: !firrtl.vector<uint<1>,2>, in in1: !firrtl.vector<uint<1>,2>, in in2: !firrtl.vector<uint<1>,3>, out out: !firrtl.vector<uint<1>,2>)
+    %in1_0 = firrtl.subindex %in1[0] : !firrtl.vector<uint<1>,2>
+    %in2_1 = firrtl.subindex %in2[1] : !firrtl.vector<uint<1>,3>
+    %out_1 = firrtl.subindex %out[1] : !firrtl.vector<uint<1>,2>
+    %x = firrtl.wire  : !firrtl.uint<1>
+    firrtl.connect %in2_1, %x : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %x, %out_1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
