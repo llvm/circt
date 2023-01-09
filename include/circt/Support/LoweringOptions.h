@@ -110,9 +110,6 @@ struct LoweringOptions {
   /// When false (default), ports share declarations when possible.
   bool disallowPortDeclSharing = false;
 
-  /// Print debug info.
-  bool printDebugInfo = false;
-
   /// If true, every mux expression is spilled to a wire.
   bool disallowMuxInlining = false;
 

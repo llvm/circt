@@ -4489,13 +4489,6 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     ps.invokeWithStringOS(
         [&](auto &os) { emitter.printUnpackedTypePostfix(type, os); });
 
-    // Print debug info.
-    if (state.options.printDebugInfo) {
-      StringAttr sym = op->getAttr("inner_sym").dyn_cast_or_null<StringAttr>();
-      if (sym && !sym.getValue().empty())
-        ps << " /* inner_sym: " << PPExtString(sym.getValue()) << " */";
-    }
-
     if (auto localparam = dyn_cast<LocalParamOp>(op)) {
       ps << PP::space << "=" << PP::space;
       ps.invokeWithStringOS([&](auto &os) {
@@ -5014,12 +5007,6 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       ps.invokeWithStringOS(
           [&](auto &os) { printUnpackedTypePostfix(portType, os); });
 
-      if (state.options.printDebugInfo && portInfo[portIdx].sym &&
-          !portInfo[portIdx].sym.empty())
-        ps << " /* inner_sym: "
-           << PPExtString(portInfo[portIdx].sym.getSymName().getValue())
-           << " */";
-
       ++portIdx;
 
       if (isZeroWidth)
@@ -5042,12 +5029,6 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
           ps.invokeWithStringOS([&](auto &os) {
             printUnpackedTypePostfix(portInfo[portIdx].type, os);
           });
-
-          if (state.options.printDebugInfo && portInfo[portIdx].sym &&
-              !portInfo[portIdx].sym.empty())
-            ps << " /* inner_sym: "
-               << PPExtString(portInfo[portIdx].sym.getSymName().getValue())
-               << " */";
 
           ++portIdx;
         }

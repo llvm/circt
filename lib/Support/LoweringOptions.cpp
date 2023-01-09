@@ -89,8 +89,6 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       }
     } else if (option == "disallowPortDeclSharing") {
       disallowPortDeclSharing = true;
-    } else if (option == "printDebugInfo") {
-      printDebugInfo = true;
     } else if (option == "disallowExpressionInliningInPorts") {
       disallowExpressionInliningInPorts = true;
     } else if (option == "disallowMuxInlining") {
@@ -137,8 +135,6 @@ std::string LoweringOptions::toString() const {
     options += "locationInfoStyle=none,";
   if (disallowPortDeclSharing)
     options += "disallowPortDeclSharing,";
-  if (printDebugInfo)
-    options += "printDebugInfo,";
   if (isWireSpillingHeuristicEnabled(
           WireSpillingHeuristic::SpillLargeTermsWithNamehints))
     options += "wireSpillingHeuristic=spillLargeTermsWithNamehints,";

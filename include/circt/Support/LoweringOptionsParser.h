@@ -46,8 +46,8 @@ struct LoweringOptionsOption
                 "maximumNumberOfTermsPerExpression=<n>, "
                 "explicitBitcast, emitReplicatedOpsToHeader, "
                 "locationInfoStyle={plain,wrapInAtSquareBracket,none}, "
-                "disallowPortDeclSharing, printDebugInfo, "
-                "disallowExpressionInliningInPorts, disallowMuxInlining"),
+                "disallowPortDeclSharing, disallowExpressionInliningInPorts, "
+                "disallowMuxInlining"),
             llvm::cl::cat(cat), llvm::cl::value_desc("option")} {}
 };
 

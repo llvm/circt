@@ -90,8 +90,6 @@ The current set of "style" Lowering Options is:
    declaration.  Instead of `input a,\n b` this will produce
    `input a,\n input b`.  When false, ports are emitted using the same
    declaration when possible.
- * `printDebugInfo` (default=`false`). If true, emit additional debug information
-   (e.g. inner symbols) into comments.
  * `disallowMuxInlining` (default=`false`). If true, every mux expression is spilled to a wire.
    This is used to avoid emitting deeply nested mux expressions to improve readability.
  * `wireSpillingHeuristic` (default=`spillNone`). This controls extra wire spilling performed
