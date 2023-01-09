@@ -67,6 +67,17 @@ def GroupInvariantCodeMotion : Pass<"calyx-gicm", "calyx::ComponentOp"> {
   let constructor = "circt::calyx::createGroupInvariantCodeMotionPass()";
 }
 
+def RemoveCombGroups : Pass<"calyx-remove-comb-groups", "calyx::ComponentOp"> {
+  let summary = "";
+  let description = [{
+    Transforms combinational groups, which have a constant done condition,
+    into proper groups by registering the values read from the ports of cells
+    used within the combinational group.
+  }];
+  let dependentDialects = ["comb::CombDialect"];
+  let constructor = "circt::calyx::createRemoveCombGroupsPass()";
+}
+
 def CompileControl : Pass<"calyx-compile-control", "calyx::ComponentOp"> {
   let summary = "Generates latency-insensitive finite state machines to realize control.";
   let description = [{
