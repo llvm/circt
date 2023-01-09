@@ -199,6 +199,42 @@ struct ArraySliceOpConversion
 } // namespace
 
 //===----------------------------------------------------------------------===//
+// Explosion operation conversions
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Convert a StructExplodeOp to a LLVM dialect.
+/// Pattern: struct_explode(input) =>
+///          struct_extract(input, structElements_index(index)) ...
+struct StructExplodeOpConversion
+    : public ConvertOpToLLVMPattern<hw::StructExplodeOp> {
+  using ConvertOpToLLVMPattern<hw::StructExplodeOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(hw::StructExplodeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    SmallVector<Value> replacements;
+
+    for (size_t i = 0, e = adaptor.getInput()
+                               .getType()
+                               .cast<LLVM::LLVMStructType>()
+                               .getBody()
+                               .size();
+         i < e; ++i)
+
+      replacements.push_back(rewriter.create<LLVM::ExtractValueOp>(
+          op->getLoc(), adaptor.getInput(),
+          HWToLLVMEndianessConverter::convertToLLVMEndianess(
+              op.getInput().getType(), i)));
+
+    rewriter.replaceOp(op, replacements);
+    return success();
+  }
+};
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // Insertion operations conversion
 //===----------------------------------------------------------------------===//
 
@@ -513,6 +549,9 @@ void circt::populateHWToLLVMConversionPatterns(LLVMTypeConverter &converter,
   patterns.add<ArrayGetOpConversion, ArraySliceOpConversion,
                ArrayConcatOpConversion, StructExtractOpConversion,
                StructInjectOpConversion>(converter);
+
+  // Explosion operation conversion patterns.
+  patterns.add<StructExplodeOpConversion>(converter);
 }
 
 void circt::populateHWToLLVMTypeConversions(LLVMTypeConverter &converter) {

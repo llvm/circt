@@ -108,5 +108,8 @@ func.func @convertStruct(%arg0 : i32, %arg1: !hw.struct<foo: i32, bar: i8>) {
   // CHECK: llvm.insertvalue %arg0, %[[SCAST1]][1] : !llvm.struct<(i8, i32)>
   %1 = hw.struct_inject %arg1["foo"], %arg0 : !hw.struct<foo: i32, bar: i8>
 
+  // CHECK-NEXT: %[[SCAST2:.*]] = llvm.extractvalue %[[SCAST]][1] : !llvm.struct<(i8, i32)>
+  // CHECK-NEXT: %[[SCAST3:.*]] = llvm.extractvalue %[[SCAST]][0] : !llvm.struct<(i8, i32)>
+  %2:2 = hw.struct_explode %arg1 : !hw.struct<foo: i32, bar: i8>
   return
 }
