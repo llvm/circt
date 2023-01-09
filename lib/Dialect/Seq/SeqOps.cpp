@@ -24,24 +24,6 @@ using namespace mlir;
 using namespace circt;
 using namespace seq;
 
-namespace {
-struct ConstantIntMatcher {
-  APInt &value;
-  ConstantIntMatcher(APInt &value) : value(value) {}
-  bool match(Operation *op) {
-    if (auto cst = dyn_cast<hw::ConstantOp>(op)) {
-      value = cst.getValue();
-      return true;
-    }
-    return false;
-  }
-};
-} // end anonymous namespace
-
-static inline ConstantIntMatcher m_RConstant(APInt &value) {
-  return ConstantIntMatcher(value);
-}
-
 bool circt::seq::isValidIndexValues(Value hlmemHandle, ValueRange addresses) {
   auto memType = hlmemHandle.getType().cast<seq::HLMemType>();
   auto shape = memType.getShape();
@@ -484,24 +466,28 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
     if (auto arrayCreate = op.getNext().getDefiningOp<hw::ArrayCreateOp>()) {
       // For now only support 1d arrays.
       // TODO: Support nested arrays and bundles.
-      if (arrayCreate.getOperands().front().getType().isa<IntegerType>()) {
+      if (hw::type_cast<hw::ArrayType>(op.getResult().getType())
+              .getElementType()
+              .isa<IntegerType>()) {
         SmallVector<Value> nextOperands;
         bool changed = false;
-        for (const auto &e : llvm::enumerate(arrayCreate.getOperands())) {
-          auto index = arrayCreate.getOperands().size() - e.index() - 1;
+        for (const auto &[i, value] :
+             llvm::enumerate(arrayCreate.getOperands())) {
+          auto index = arrayCreate.getOperands().size() - i - 1;
           APInt elementIndex;
           // Check that the corresponding operand is op's element.
-          if (auto arrayGet = e.value().getDefiningOp<hw::ArrayGetOp>();
-              arrayGet && arrayGet.getInput() == op.getResult() &&
-              matchPattern(arrayGet.getIndex(), m_RConstant(elementIndex)) &&
-              elementIndex == index) {
-            nextOperands.push_back(rewriter.create<hw::ConstantOp>(
-                op.getLoc(),
-                APInt::getZero(hw::getBitWidth(arrayGet.getType()))));
-            changed = true;
-            continue;
-          }
-          nextOperands.push_back(e.value());
+          if (auto arrayGet = value.getDefiningOp<hw::ArrayGetOp>())
+            if (arrayGet.getInput() == op.getResult() &&
+                matchPattern(arrayGet.getIndex(),
+                             m_ConstantInt(&elementIndex)) &&
+                elementIndex == index) {
+              nextOperands.push_back(rewriter.create<hw::ConstantOp>(
+                  op.getLoc(),
+                  APInt::getZero(hw::getBitWidth(arrayGet.getType()))));
+              changed = true;
+              continue;
+            }
+          nextOperands.push_back(value);
         }
         // If one of the operands is self loop, update the next value.
         if (changed) {
