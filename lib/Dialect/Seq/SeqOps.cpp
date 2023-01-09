@@ -491,11 +491,18 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
         }
         // If one of the operands is self loop, update the next value.
         if (changed) {
-          rewriter.replaceOpWithNewOp<FirRegOp>(
-              op,
-              rewriter.create<hw::ArrayCreateOp>(op.getNext().getLoc(),
-                                                 nextOperands),
-              op.getClk(), op.getNameAttr(), op.getInnerSymAttr());
+          auto newNextVal = rewriter.create<hw::ArrayCreateOp>(
+              arrayCreate.getLoc(), nextOperands);
+          if (arrayCreate->hasOneUse())
+            // If the original next value has a single use, we can replace the
+            // value directly.
+            rewriter.replaceOp(arrayCreate, {newNextVal});
+          else {
+            // Otherwise, replace the entire firreg with a new one.
+            rewriter.replaceOpWithNewOp<FirRegOp>(op, newNextVal, op.getClk(),
+                                                  op.getNameAttr(),
+                                                  op.getInnerSymAttr());
+          }
 
           return success();
         }
