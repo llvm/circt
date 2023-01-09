@@ -172,8 +172,9 @@ struct RemoveCombGroupsPattern : public OpRewritePattern<calyx::CombGroupOp> {
             if (!alreadyAssignedResults.contains(combRes)) {
               rewriter.create<AssignOp>(combRes.getLoc(),
                                         combResReg->second.getIn(), combRes);
-              rewriter.create<AssignOp>(
-                  combRes.getLoc(), combResReg->second.getWriteEn(), oneConstant);
+              rewriter.create<AssignOp>(combRes.getLoc(),
+                                        combResReg->second.getWriteEn(),
+                                        oneConstant);
               alreadyAssignedResults.insert(combRes);
             }
 
