@@ -277,8 +277,8 @@ HandshakeLowering::insertMerge(Block *block, Value val,
   SmallVector<Backedge> dataEdges;
   SmallVector<Value> operands;
 
-  // Every block (except the entry block) needs a control merge for the
-  // control-only network
+  // Every block (except the entry block) needs to feed it's entry control into
+  // a control merge
   if (val == getBlockEntryControl(block)) {
 
     Operation *mergeOp;
