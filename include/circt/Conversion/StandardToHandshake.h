@@ -103,7 +103,7 @@ public:
     for (auto &block : r.getBlocks())
       numArgsPerBlock[&block] = block.getNumArguments();
 
-    // Apply SSA maximixation on the newly added entry block argument to
+    // Apply SSA maximization on the newly added entry block argument to
     // propagate it explicitly between the start-point of the control-only
     // network and the function's terminators
     if (failed(maximizeSSA(startCtrl, rewriter)))
@@ -194,9 +194,8 @@ LogicalResult lowerRegion(HandshakeLowering &hl, bool sourceConstants,
   if (failed(
           runPartialLowering(hl, &HandshakeLowering::replaceMemoryOps, memOps)))
     return failure();
-  if (failed(runPartialLowering(hl, &HandshakeLowering::maximizeSSANoMem))) {
+  if (failed(runPartialLowering(hl, &HandshakeLowering::maximizeSSANoMem)))
     return failure();
-  }
   if (failed(runPartialLowering(hl,
                                 &HandshakeLowering::setControlOnlyPath<TTerm>)))
     return failure();

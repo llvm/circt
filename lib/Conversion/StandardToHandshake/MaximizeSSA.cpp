@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "../PassDetail.h"
+#include "circt/Conversion/StandardToHandshake.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/MLIRContext.h"
@@ -51,17 +52,14 @@ static LogicalResult addArgToTerminator(Block *block, Block *predBlock,
   auto successors = branchOp->getSuccessors();
   for (uint idx = 0, numSucc = successors.size(); idx < numSucc; ++idx) {
     auto *succBlock = successors[idx];
-    if (succBlock == block) {
+    if (succBlock == block)
       branchOp.getSuccessorOperands(idx).append(value);
-    }
   }
 
   return success();
 }
 
-namespace circt {
-
-bool isRegionSSAMaximized(Region &region) {
+bool circt::isRegionSSAMaximized(Region &region) {
 
   // Check whether all operands used within each block are also defined within
   // the same block
@@ -74,7 +72,7 @@ bool isRegionSSAMaximized(Region &region) {
   return true;
 }
 
-LogicalResult maximizeSSA(Value value, PatternRewriter &rewriter) {
+LogicalResult circt::maximizeSSA(Value value, PatternRewriter &rewriter) {
 
   // Identify the basic block in which the value is defined
   Block *defBlock = getDefiningBlock(value);
@@ -121,12 +119,10 @@ LogicalResult maximizeSSA(Value value, PatternRewriter &rewriter) {
 
       // Now the predecessor block is using the value, so we must also make sure
       // to visit it
-      if (predBlock != defBlock) {
-        auto [_, blockNewlyUsing] = blocksUsing.insert(predBlock);
-        if (blockNewlyUsing) {
+      if (predBlock != defBlock)
+        if (auto [_, blockNewlyUsing] = blocksUsing.insert(predBlock);
+            blockNewlyUsing)
           blocksToVisit.push(predBlock);
-        }
-      }
     }
   }
 
@@ -143,7 +139,7 @@ LogicalResult maximizeSSA(Value value, PatternRewriter &rewriter) {
   return success();
 }
 
-LogicalResult maximizeSSA(Operation *op, PatternRewriter &rewriter) {
+LogicalResult circt::maximizeSSA(Operation *op, PatternRewriter &rewriter) {
   // Apply SSA maximization on each of the operation's results
   for (auto res : op->getResults())
     if (failed(maximizeSSA(res, rewriter)))
@@ -152,7 +148,7 @@ LogicalResult maximizeSSA(Operation *op, PatternRewriter &rewriter) {
   return success();
 }
 
-LogicalResult maximizeSSA(Block *block, PatternRewriter &rewriter) {
+LogicalResult circt::maximizeSSA(Block *block, PatternRewriter &rewriter) {
   // Apply SSA maximization on each of the block's arguments
   for (auto arg : block->getArguments())
     if (failed(maximizeSSA(arg, rewriter)))
@@ -166,7 +162,7 @@ LogicalResult maximizeSSA(Block *block, PatternRewriter &rewriter) {
   return success();
 }
 
-LogicalResult maximizeSSA(Region &region, PatternRewriter &rewriter) {
+LogicalResult circt::maximizeSSA(Region &region, PatternRewriter &rewriter) {
   // Apply SSA maximization on each of the region's block
   for (auto &block : region.getBlocks())
     if (failed(maximizeSSA(&block, rewriter)))
@@ -174,7 +170,6 @@ LogicalResult maximizeSSA(Region &region, PatternRewriter &rewriter) {
 
   return success();
 }
-} // namespace circt
 
 namespace {
 
@@ -191,7 +186,7 @@ struct FuncOpMaxSSAConversion : public OpConversionPattern<func::FuncOp> {
       if (failed(maximizeSSA(op.getRegion(), baseRewriter)))
         conversionStatus = failure();
     });
-    return success();
+    return conversionStatus;
   }
 };
 
@@ -202,7 +197,7 @@ public:
 
     RewritePatternSet patterns{ctx};
     patterns.add<FuncOpMaxSSAConversion>(ctx);
-    ConversionTarget target{*ctx};
+    ConversionTarget target(*ctx);
 
     // Check that the function is correctly SSA-maximized after the pattern has
     // been applied
@@ -214,10 +209,8 @@ public:
     // independently of the others. Function signatures are never modified
     // by SSA maximization
     if (failed(applyPartialConversion(getOperation(), target,
-                                      std::move(patterns)))) {
+                                      std::move(patterns))))
       signalPassFailure();
-      return;
-    }
   }
 };
 
