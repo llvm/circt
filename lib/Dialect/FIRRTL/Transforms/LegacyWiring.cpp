@@ -83,10 +83,8 @@ LogicalResult circt::firrtl::applyWiring(const AnnoPathValue &target,
   }
 
   // Get pin field
-  StringRef pin;
-  if (auto pinName = anno.getNamed("pin")) {
-    pin = pinName->getValue().cast<StringAttr>().getValue();
-  } else {
+  auto pin = anno.getAs<StringAttr>("pin");
+  if (!pin) {
     return mlir::emitError(state.circuit.getLoc())
            << "Annotation does not have an associated pin name: " << anno;
   }
