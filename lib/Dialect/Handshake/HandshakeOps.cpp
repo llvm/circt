@@ -718,7 +718,7 @@ LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
   if (!choiceUnused && !choiceResult.hasOneUse())
     return failure();
 
-  Operation *choiceUser;
+  Operation *choiceUser = nullptr;
   if (choiceResult.hasOneUse()) {
     choiceUser = choiceResult.getUses().begin().getUser();
     if (!isa<SinkOp>(choiceUser))
@@ -727,7 +727,7 @@ LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
 
   auto merge = rewriter.create<MergeOp>(op.getLoc(), op.getDataOperands());
 
-  for (auto &use : dataResult.getUses()) {
+  for (auto &use : llvm::make_early_inc_range(dataResult.getUses())) {
     auto *user = use.getOwner();
     rewriter.updateRootInPlace(
         user, [&]() { user->setOperand(use.getOperandNumber(), merge); });
