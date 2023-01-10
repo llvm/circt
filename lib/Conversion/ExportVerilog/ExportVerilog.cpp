@@ -582,9 +582,15 @@ static bool isOkToBitSelectFrom(Value v) {
 static bool isExpressionUnableToInline(Operation *op) {
   if (auto cast = dyn_cast<BitcastOp>(op))
     if (!haveMatchingDims(cast.getInput().getType(), cast.getResult().getType(),
-                          op->getLoc()))
+                          op->getLoc())) {
+      // Even if dimentions don't match, we can inline when its user doesn't
+      // rely on the type.
+      if (op->hasOneUse() &&
+          isa<comb::ConcatOp, hw::ArrayConcatOp>(*op->getUsers().begin()))
+        return false;
       // Bitcasts rely on the type being assigned to, so we cannot inline.
       return true;
+    }
 
   // StructCreateOp needs to be assigning to a named temporary so that types
   // are inferred properly by verilog

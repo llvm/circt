@@ -1333,3 +1333,16 @@ hw.module @Issue4485(%in: i4) {
   %2 = sv.system.sampled %1 : i1
   hw.output
 }
+
+// CHECK-LABEL: module inline_bitcast_in_concat(
+// CHECK-NEXT:    input  [6:0]      in1,
+// CHECK-NEXT:    input  [7:0][3:0] in2,
+// CHECK-NEXT:    output [38:0]     out);
+// CHECK-EMPTY:
+// CHECK-NEXT:    assign out = {in1, /*cast(bit[31:0])*/in2};
+// CHECK-NEXT:  endmodule
+hw.module @inline_bitcast_in_concat(%in1: i7, %in2: !hw.array<8xi4>) -> (out: i39) {
+  %r2 = hw.bitcast %in2 : (!hw.array<8xi4>) -> i32
+  %0 = comb.concat %in1, %r2: i7, i32
+  hw.output %0 : i39
+}
