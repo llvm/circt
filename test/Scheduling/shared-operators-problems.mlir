@@ -1,5 +1,6 @@
 // RUN: circt-opt %s -ssp-roundtrip=verify
 // RUN: circt-opt %s -ssp-schedule=scheduler=simplex | FileCheck %s -check-prefixes=CHECK,SIMPLEX
+// RUN: %if or-tools %{ circt-opt %s -ssp-schedule=scheduler=cpsat | FileCheck %s -check-prefixes=CHECK,CPSAT %} 
 
 // CHECK-LABEL: full_load
 ssp.instance @full_load of "SharedOperatorsProblem" {
@@ -15,6 +16,7 @@ ssp.instance @full_load of "SharedOperatorsProblem" {
     %4 = operation<@L1_3>() [t<4>]
     %5 = operation<@_1>(%0, %1, %2, %3, %4) [t<7>]
     // SIMPLEX: @last(%{{.*}}) [t<8>]
+    // CPSAT: @last(%{{.*}}) [t<8>]
     operation<@_1> @last(%5) [t<8>]
   }
 }
@@ -33,6 +35,7 @@ ssp.instance @partial_load of "SharedOperatorsProblem" {
     %4 = operation<@L3_3>() [t<1>]
     %5 = operation<@_1>(%0, %1, %2, %3, %4) [t<10>]
     // SIMPLEX: @last(%{{.*}}) [t<5>]
+    // CPSAT: @last(%{{.*}}) [t<5>]
     operation<@_1> @last(%5) [t<11>]
   }
 }
@@ -52,6 +55,7 @@ ssp.instance @multiple of "SharedOperatorsProblem" {
     %4 = operation<@L1_1>() [t<1>]
     %5 = operation<@_1>(%0, %1, %2, %3, %4) [t<10>]
     // SIMPLEX: @last(%{{.*}}) [t<5>]
+    // CPSAT: @last(%{{.*}}) [t<5>]
     operation<@_1> @last(%5) [t<11>]
   }
 }
