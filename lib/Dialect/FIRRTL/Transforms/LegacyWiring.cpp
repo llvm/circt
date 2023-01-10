@@ -89,23 +89,34 @@ LogicalResult circt::firrtl::applyWiring(const AnnoPathValue &target,
            << "Annotation does not have an associated pin name: " << anno;
   }
 
+  bool problemAlreadyDefined =
+      state.legacyWiringProblems.find(pin) != state.legacyWiringProblems.end();
+
   // Handle difference between sinks and sources
   auto clazz = anno.getAs<StringAttr>("class").getValue();
   if (clazz == wiringSourceAnnoClass) {
-    // Record any new SourceAnnotations
-    if (state.legacyWiringSources.find(pin) !=
-            state.legacyWiringSources.end() ||
-        targetsValues.size() != 1) {
-      return mlir::emitError(state.circuit.getLoc())
-             << "More than one " << wiringSourceAnnoClass << " defined for pin "
-             << pin;
+    if (problemAlreadyDefined) {
+      // Attempt to update the existing problem
+      if (state.legacyWiringProblems[pin].source || targetsValues.size() != 1) {
+        return mlir::emitError(state.circuit.getLoc())
+               << "More than one " << wiringSourceAnnoClass
+               << " defined for pin " << pin;
+      }
+      state.legacyWiringProblems[pin].source = targetsValues[0];
+    } else {
+      // Create a new problem
+      state.legacyWiringProblems[pin] = {targetsValues[0]};
     }
-    state.legacyWiringSources[pin] = targetsValues[0];
   } else if (clazz == wiringSinkAnnoClass) {
-    // Record any new SinkAnnotations
-    state.legacyWiringSinks[pin].insert(state.legacyWiringSinks[pin].end(),
-                                        targetsValues.begin(),
-                                        targetsValues.end());
+    if (problemAlreadyDefined) {
+      // Update the existing problem
+      state.legacyWiringProblems[pin].sinks.insert(
+          state.legacyWiringProblems[pin].sinks.end(), targetsValues.begin(),
+          targetsValues.end());
+    } else {
+      // Create a new problem
+      state.legacyWiringProblems[pin] = {.sinks = targetsValues};
+    }
   }
 
   return success();
