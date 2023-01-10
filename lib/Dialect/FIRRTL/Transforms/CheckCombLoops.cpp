@@ -186,15 +186,19 @@ public:
                   // Get all the ports that have a comb path from `port`.
                   for (const auto &portNode : portPaths[port])
                     for (auto outputPort : portNode.getSecond()) {
-                      auto instResult = ins.getResult(
+                      Value instResult = ins.getResult(
                           outputPort.val.cast<BlockArgument>().getArgNumber());
-                      assert(instResult.getType()
-                                 .cast<FIRRTLBaseType>()
-                                 .isGround() &&
-                             "only ground type value expected here");
-                      // Note that, in this case the instResult is always of
-                      // Ground Type. FieldRefs are handled as a pre-pass before
-                      // the DFS begins.
+                      if (!instResult.getType()
+                               .cast<FIRRTLBaseType>()
+                               .isGround()) {
+
+                        size_t outPortId;
+                        if (!getStorageLocIdFromVal(instResult, outPortId))
+                          continue;
+                        if (!getValueFromStorageLocId(
+                                outPortId + outputPort.fieldId, instResult))
+                          continue;
+                      }
                       children.push_back({instResult, ins});
                     }
                 }

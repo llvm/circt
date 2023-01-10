@@ -577,3 +577,25 @@ firrtl.circuit "revisitOps2"   {
     firrtl.connect %x, %out_1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+// -----
+
+// Comb path from ground type to aggregate.
+// CHECK-NOT: firrtl.circuit "scalarToVec"
+firrtl.circuit "scalarToVec"   {
+  firrtl.module @thru(in %in1: !firrtl.uint<1>, in %in2: !firrtl.vector<uint<1>,3>, out %out: !firrtl.vector<uint<1>,2>) {
+    %out_1 = firrtl.subindex %out[1] : !firrtl.vector<uint<1>,2>
+    firrtl.connect %out_1, %in1 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  // expected-error @+1 {{scalarToVec.inner2.in1 <- scalarToVec.x <- scalarToVec.inner2.out[1] <- scalarToVec.inner2.in1}}
+  firrtl.module @scalarToVec() {
+    %in1_0, %in2, %out = firrtl.instance inner2 @thru(in in1: !firrtl.uint<1>, in in2: !firrtl.vector<uint<1>,3>, out out: !firrtl.vector<uint<1>,2>)
+    //%in1_0 = firrtl.subindex %in1[0] : !firrtl.vector<uint<1>,2>
+    %out_1 = firrtl.subindex %out[1] : !firrtl.vector<uint<1>,2>
+    %x = firrtl.wire  : !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %in1_0, %x : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %x, %out_1 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
