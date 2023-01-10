@@ -304,6 +304,11 @@ static cl::opt<bool>
                            cl::desc("Disable the CheckCombCycles pass"),
                            cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
+static cl::opt<bool> useOldCheckCombCycles(
+    "use-old-check-comb-cycles",
+    cl::desc("Use old CheckCombCycles pass, that does not support aggregates"),
+    cl::init(false), cl::Hidden, cl::cat(mainCategory));
+
 static cl::opt<bool> disableIMDCE("disable-imdce",
                                   cl::desc("Disable the IMDCE pass"),
                                   cl::init(false), cl::Hidden,
@@ -680,9 +685,6 @@ static LogicalResult processBuffer(
     }
   }
 
-  if (!disableCheckCombCycles)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombLoopsPass());
-
   if (!disableInliner)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
@@ -693,6 +695,19 @@ static LogicalResult processBuffer(
   if (isRandomEnabled(RandomKind::Reg))
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createRandomizeRegisterInitPass());
+
+  if (!disableCheckCombCycles) {
+    if (useOldCheckCombCycles) {
+      if (preserveAggregate == firrtl::PreserveAggregate::None)
+        pm.nest<firrtl::CircuitOp>().addPass(
+            firrtl::createCheckCombCyclesPass());
+      else
+        emitWarning(module->getLoc())
+            << "CheckCombCyclesPass doens't support aggregate "
+               "values yet so it is skipped\n";
+    } else
+      pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombLoopsPass());
+  }
 
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!disableOptimization)
