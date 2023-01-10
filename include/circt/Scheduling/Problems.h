@@ -22,8 +22,9 @@
 
 #include "mlir/IR/BuiltinAttributes.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SetVector.h"
+
+#include <optional>
 
 #define DEFINE_COMMON_MEMBERS(ProblemClass)                                    \
 protected:                                                                     \
@@ -115,13 +116,13 @@ protected:
       llvm::DenseMap<Operation *, llvm::SmallSetVector<Operation *, 4>>;
 
   template <typename T>
-  using OperationProperty = llvm::DenseMap<Operation *, Optional<T>>;
+  using OperationProperty = llvm::DenseMap<Operation *, std::optional<T>>;
   template <typename T>
-  using DependenceProperty = llvm::DenseMap<Dependence, Optional<T>>;
+  using DependenceProperty = llvm::DenseMap<Dependence, std::optional<T>>;
   template <typename T>
-  using OperatorTypeProperty = llvm::DenseMap<OperatorType, Optional<T>>;
+  using OperatorTypeProperty = llvm::DenseMap<OperatorType, std::optional<T>>;
   template <typename T>
-  using InstanceProperty = Optional<T>;
+  using InstanceProperty = std::optional<T>;
 
   //===--------------------------------------------------------------------===//
   // Containers for problem components and properties
@@ -198,7 +199,7 @@ public:
   //===--------------------------------------------------------------------===//
 public:
   /// The linked operator type provides the runtime characteristics for \p op.
-  Optional<OperatorType> getLinkedOperatorType(Operation *op) {
+  std::optional<OperatorType> getLinkedOperatorType(Operation *op) {
     return linkedOperatorType.lookup(op);
   }
   void setLinkedOperatorType(Operation *op, OperatorType opr) {
@@ -206,7 +207,7 @@ public:
   }
 
   /// The latency is the number of cycles \p opr needs to compute its result.
-  Optional<unsigned> getLatency(OperatorType opr) {
+  std::optional<unsigned> getLatency(OperatorType opr) {
     return latency.lookup(opr);
   }
   void setLatency(OperatorType opr, unsigned val) { latency[opr] = val; }
@@ -214,10 +215,19 @@ public:
   /// Return the start time for \p op, as computed by the scheduler.
   /// These start times comprise the basic problem's solution, i.e. the
   /// *schedule*.
-  Optional<unsigned> getStartTime(Operation *op) {
+  std::optional<unsigned> getStartTime(Operation *op) {
     return startTime.lookup(op);
   }
   void setStartTime(Operation *op, unsigned val) { startTime[op] = val; }
+
+  //===--------------------------------------------------------------------===//
+  // Access to derived properties
+  //===--------------------------------------------------------------------===//
+public:
+  /// Returns the end time for \p op, as computed by the scheduler.
+  /// This end time is derived from the start time and the operator type's
+  /// latency.
+  std::optional<unsigned> getEndTime(Operation *op);
 
   //===--------------------------------------------------------------------===//
   // Optional names (for exporting and debugging instances)
@@ -289,7 +299,7 @@ private:
 public:
   /// The distance determines whether a dependence has to be satisfied in the
   /// same iteration (distance=0 or not set), or distance-many iterations later.
-  Optional<unsigned> getDistance(Dependence dep) {
+  std::optional<unsigned> getDistance(Dependence dep) {
     return distance.lookup(dep);
   }
   void setDistance(Dependence dep, unsigned val) { distance[dep] = val; }
@@ -299,7 +309,7 @@ public:
   /// steps. The best possible value is 1, meaning that a corresponding pipeline
   /// accepts new data every cycle. This property is part of the cyclic
   /// problem's solution.
-  Optional<unsigned> getInitiationInterval() { return initiationInterval; }
+  std::optional<unsigned> getInitiationInterval() { return initiationInterval; }
   void setInitiationInterval(unsigned val) { initiationInterval = val; }
 
   virtual PropertyStringVector getProperties(Dependence dep) override;
@@ -338,7 +348,7 @@ public:
   /// The incoming delay denotes the propagation time from the operand inputs to
   /// either the result outputs (combinational operators) or the first internal
   /// register stage.
-  Optional<float> getIncomingDelay(OperatorType opr) {
+  std::optional<float> getIncomingDelay(OperatorType opr) {
     return incomingDelay.lookup(opr);
   }
   void setIncomingDelay(OperatorType opr, float delay) {
@@ -348,7 +358,7 @@ public:
   /// The outgoing delay denotes the propagation time from either the operand
   /// inputs (combinational operators) or the last internal register stage to
   /// the result outputs.
-  Optional<float> getOutgoingDelay(OperatorType opr) {
+  std::optional<float> getOutgoingDelay(OperatorType opr) {
     return outgoingDelay.lookup(opr);
   }
   void setOutgoingDelay(OperatorType opr, float delay) {
@@ -357,7 +367,7 @@ public:
 
   /// Computed by the scheduler, this start time is relative to the beginning of
   /// the cycle that \p op starts in.
-  Optional<float> getStartTimeInCycle(Operation *op) {
+  std::optional<float> getStartTimeInCycle(Operation *op) {
     return startTimeInCycle.lookup(op);
   }
   void setStartTimeInCycle(Operation *op, float time) {
@@ -404,7 +414,9 @@ private:
 public:
   /// The limit is the maximum number of operations using \p opr that are
   /// allowed to start in the same time step.
-  Optional<unsigned> getLimit(OperatorType opr) { return limit.lookup(opr); }
+  std::optional<unsigned> getLimit(OperatorType opr) {
+    return limit.lookup(opr);
+  }
   void setLimit(OperatorType opr, unsigned val) { limit[opr] = val; }
 
   virtual PropertyStringVector getProperties(OperatorType opr) override;

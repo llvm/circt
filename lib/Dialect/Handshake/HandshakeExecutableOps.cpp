@@ -231,24 +231,6 @@ bool ConditionalBranchOp::tryExecute(
   valueMap.erase(in);
   return true;
 }
-bool StartOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> & /*valueMap*/,
-                         llvm::DenseMap<unsigned, unsigned> & /*memoryMap*/,
-                         llvm::DenseMap<mlir::Value, double> & /*timeMap*/,
-                         std::vector<std::vector<llvm::Any>> & /*store*/,
-                         std::vector<mlir::Value> & /*scheduleList*/) {
-  assert(false && "StartOp's should never exist in a real program due to being "
-                  "purely lowering helper operations.");
-  return true;
-}
-bool EndOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> & /*valueMap*/,
-                       llvm::DenseMap<unsigned, unsigned> & /*memoryMap*/,
-                       llvm::DenseMap<mlir::Value, double> & /*timeMap*/,
-                       std::vector<std::vector<llvm::Any>> & /*store*/,
-                       std::vector<mlir::Value> & /*scheduleList*/) {
-  assert(false && "EndOp's should never exist in a real program due to being "
-                  "purely lowering helper operations.");
-  return true;
-}
 
 bool SinkOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
                         llvm::DenseMap<unsigned, unsigned> & /*memoryMap*/,

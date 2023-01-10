@@ -253,6 +253,14 @@ module {
 // CHECK-LABEL: @SymNotExtracted
 // CHECK: hw.instance "foo"
 
+// In NoExtraInput, instance foo should be extracted, and no extra input should be added for %0
+// CHECK-LABEL: @NoExtraInput_cover
+// CHECK: %[[or0:.+]] = comb.or
+// CHECK: hw.instance "foo" @Foo(a: %[[or0]]: i1)
+// CHECK-LABEL: @NoExtraInput
+// CHECK: %[[or1:.+]] = comb.or
+// CHECK-NOT: %[[or1]]
+
 module attributes {
   firrtl.extract.testbench = #hw.output_file<"testbench/", excludeFromFileList, includeReplicatedOps>
 } {
@@ -341,6 +349,15 @@ module attributes {
   hw.module @SymNotExtracted(%clock: i1, %in: i1) {
     %foo.b = hw.instance "foo" sym @foo @Foo(a: %in: i1) -> (b: i1)
     sv.always posedge %clock {
+      sv.cover %foo.b, immediate
+    }
+  }
+
+  hw.module @NoExtraInput(%clock: i1, %in: i1) {
+    %0 = comb.or %in, %in : i1
+    %foo.b = hw.instance "foo" @Foo(a: %0: i1) -> (b: i1)
+    sv.always posedge %clock {
+      sv.cover %0, immediate
       sv.cover %foo.b, immediate
     }
   }

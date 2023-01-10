@@ -113,14 +113,15 @@ def Wire(type: PyCDEType, name: str = None):
 
 
 def Reg(type: PyCDEType,
-        clk: Value = None,
-        rst: Value = None,
-        rst_value: Value = None):
+        clk: PyCDEValue = None,
+        rst: PyCDEValue = None,
+        rst_value=None,
+        ce: PyCDEValue = None):
   """Declare a register. Must assign exactly once."""
 
   class RegisterValue(type._get_value_class()):
 
-    def assign(self, new_value: Value):
+    def assign(self, new_value: PyCDEValue):
       if self._wire is None:
         raise ValueError("Cannot assign value to Reg twice.")
       self._wire.assign(new_value)
@@ -128,7 +129,10 @@ def Reg(type: PyCDEType,
 
   # Create a wire and register it.
   wire = Wire(type)
-  value = RegisterValue(wire.reg(clk=clk, rst=rst, rst_value=rst_value), type)
+  if rst_value is not None and not isinstance(rst_value, PyCDEValue):
+    rst_value = type(rst_value)
+  value = RegisterValue(wire.reg(clk=clk, rst=rst, rst_value=rst_value, ce=ce),
+                        type)
   value._wire = wire
   return value
 

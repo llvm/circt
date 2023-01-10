@@ -157,11 +157,11 @@ protected:
 
   int getParametricConstant(unsigned row);
   SmallVector<int> getObjectiveVector(unsigned column);
-  Optional<unsigned> findDualPivotRow();
-  Optional<unsigned> findDualPivotColumn(unsigned pivotRow,
-                                         bool allowPositive = false);
-  Optional<unsigned> findPrimalPivotColumn();
-  Optional<unsigned> findPrimalPivotRow(unsigned pivotColumn);
+  std::optional<unsigned> findDualPivotRow();
+  std::optional<unsigned> findDualPivotColumn(unsigned pivotRow,
+                                              bool allowPositive = false);
+  std::optional<unsigned> findPrimalPivotColumn();
+  std::optional<unsigned> findPrimalPivotRow(unsigned pivotColumn);
   void multiplyRow(unsigned row, int factor);
   void addMultipleOfRow(unsigned sourceRow, int factor, unsigned targetRow);
   void pivot(unsigned pivotRow, unsigned pivotColumn);
@@ -393,7 +393,7 @@ SmallVector<int> SimplexSchedulerBase::getObjectiveVector(unsigned column) {
   return objVec;
 }
 
-Optional<unsigned> SimplexSchedulerBase::findDualPivotRow() {
+std::optional<unsigned> SimplexSchedulerBase::findDualPivotRow() {
   // Find the first row in which the parametric constant is negative.
   for (unsigned row = firstConstraintRow; row < nRows; ++row)
     if (getParametricConstant(row) < 0)
@@ -402,11 +402,11 @@ Optional<unsigned> SimplexSchedulerBase::findDualPivotRow() {
   return std::nullopt;
 }
 
-Optional<unsigned>
+std::optional<unsigned>
 SimplexSchedulerBase::findDualPivotColumn(unsigned pivotRow,
                                           bool allowPositive) {
   SmallVector<int> maxQuot(nObjectives, std::numeric_limits<int>::min());
-  Optional<unsigned> pivotCol;
+  std::optional<unsigned> pivotCol;
 
   // Look for non-zero entries in the constraint matrix (~A part of the
   // tableau). If multiple candidates exist, take the one corresponding to the
@@ -440,7 +440,7 @@ SimplexSchedulerBase::findDualPivotColumn(unsigned pivotRow,
   return pivotCol;
 }
 
-Optional<unsigned> SimplexSchedulerBase::findPrimalPivotColumn() {
+std::optional<unsigned> SimplexSchedulerBase::findPrimalPivotColumn() {
   // Find the first lexico-negative column in the cost matrix.
   SmallVector<int> zeroVec(nObjectives, 0);
   for (unsigned col = firstNonBasicVariableColumn; col < nColumns; ++col) {
@@ -457,10 +457,10 @@ Optional<unsigned> SimplexSchedulerBase::findPrimalPivotColumn() {
   return std::nullopt;
 }
 
-Optional<unsigned>
+std::optional<unsigned>
 SimplexSchedulerBase::findPrimalPivotRow(unsigned pivotColumn) {
   int minQuot = std::numeric_limits<int>::max();
-  Optional<unsigned> pivotRow;
+  std::optional<unsigned> pivotRow;
 
   // Look for positive entries in the constraint matrix (~A part of the
   // tableau). If multiple candidates exist, take the one corresponding to the

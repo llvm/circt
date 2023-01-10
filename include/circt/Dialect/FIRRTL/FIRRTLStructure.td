@@ -10,8 +10,17 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_FIRRTL_FIRRTLSTRUCTURE_TD
+#define CIRCT_DIALECT_FIRRTL_FIRRTLSTRUCTURE_TD
+
+include "FIRRTLAttributes.td"
+include "FIRRTLDialect.td"
+include "FIRRTLOpInterfaces.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Types.td"
+include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/SymbolInterfaces.td"
 
 def CircuitOp : FIRRTLOp<"circuit",
       [IsolatedFromAbove, SymbolTable, SingleBlock, NoTerminator,
@@ -200,3 +209,5 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
 
   let hasCustomAssemblyFormat = 1;
 }
+
+#endif // CIRCT_DIALECT_FIRRTL_FIRRTLSTRUCTURE_TD

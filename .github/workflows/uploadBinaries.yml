@@ -3,31 +3,36 @@ name: Upload Binaries
 on:
   release:
     types: [created]
+  workflow_dispatch:
 
 jobs:
   publish:
     strategy:
       matrix:
-        compiler:
-          - cc: clang
-            cxx: clang++
-            mode: release
+        build_config:
+          - mode: release
             assert: OFF
             shared: OFF
+            stats: ON
+            cmake-args: ''
         runner: [ubuntu-20.04, ubuntu-18.04, macos-11]
         include:
           - runner: ubuntu-20.04
             os: linux
-            cmake-args: ''
             tar: tar
+            # Default clang (11) is broken, see LLVM issue 59622.
+            cc: clang-12
+            cxx: clang++-12
           - runner: ubuntu-18.04
             os: linux
-            cmake-args: ''
             tar: tar
+            cc: clang
+            cxx: clang++
           - runner: macos-11
             os: macos
-            cmake-args: ''
             tar: gtar
+            cc: clang
+            cxx: clang++
     runs-on: ${{ matrix.runner }}
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
@@ -38,28 +43,6 @@ jobs:
           fetch-depth: 2
           submodules: "true"
 
-      # --------
-      # Restore LLVM from cache and build if it's not in there.
-      # --------
-
-      # Extract the LLVM submodule hash for use in the cache key.
-      - name: Get LLVM Hash
-        id: get-llvm-hash
-        run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
-
-      - name: Get workflow spec hash
-        id: get-workflow-hash
-        run: echo "::set-output name=hash::$(shasum $GITHUB_WORKSPACE/.github/workflows/uploadBinaries.yml | awk '{print $1}')"
-
-      # Try to fetch LLVM from the cache.
-      - name: Cache LLVM
-        id: cache-llvm
-        uses: actions/cache@v2
-        with:
-          path: |
-            llvm/build
-          key: ${{ matrix.runner }}-llvm-${{ steps.get-llvm-hash.outputs.hash }}-${{ steps.get-workflow-hash.outputs.hash }}-${{ matrix.compiler.cc }}
-
       - name: Setup Ninja Linux
         if: matrix.os == 'linux'
         run: sudo apt-get install ninja-build
@@ -68,22 +51,18 @@ jobs:
         if: matrix.os == 'macos'
         run: brew install ninja gnu-tar
 
-      # Build LLVM if we didn't hit in the cache. Even though we build it in
-      # the previous job, there is a low chance that it'll have been evicted by
-      # the time we get here.
-      - name: Rebuild LLVM
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
+      - name: Build LLVM
         run: |
           mkdir -p llvm/build
           cd llvm/build
           cmake -G Ninja ../llvm \
-              ${{ matrix.cmake-args }} \
-              -DCMAKE_BUILD_TYPE=${{ matrix.compiler.mode }} \
-              -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }} \
-              -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} \
-              -DBUILD_SHARED_LIBS=${{ matrix.compiler.shared }} \
+              ${{ matrix.build_config.cmake-args }} \
+              -DCMAKE_BUILD_TYPE=${{ matrix.build_config.mode }} \
+              -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+              -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+              -DBUILD_SHARED_LIBS=${{ matrix.build_config.shared }} \
               -DLLVM_BUILD_EXAMPLES=OFF \
-              -DLLVM_ENABLE_ASSERTIONS=${{ matrix.compiler.assert }} \
+              -DLLVM_ENABLE_ASSERTIONS=${{ matrix.build_config.assert }} \
               -DLLVM_ENABLE_BINDINGS=OFF \
               -DLLVM_ENABLE_OCAMLDOC=OFF \
               -DLLVM_ENABLE_PROJECTS='mlir' \
@@ -91,8 +70,10 @@ jobs:
               -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
               -DLLVM_ENABLE_TERMINFO=OFF \
               -DLLVM_PARALLEL_LINK_JOBS=1 \
-              -DLLVM_TARGETS_TO_BUILD="host"
+              -DLLVM_TARGETS_TO_BUILD="host" \
+              -DLLVM_FORCE_ENABLE_STATS=${{ matrix.build_config.stats }}
           ninja
+          ninja check-llvm check-mlir
 
       # --------
       # Build and test CIRCT
@@ -103,18 +84,19 @@ jobs:
           mkdir build
           cd build
           cmake -G Ninja .. \
-            ${{ matrix.cmake-args }} \
-            -DBUILD_SHARED_LIBS=${{ matrix.compiler.shared }} \
-            -DCMAKE_BUILD_TYPE=${{ matrix.compiler.mode }} \
-            -DLLVM_ENABLE_ASSERTIONS=${{ matrix.compiler.assert }} \
+            ${{ matrix.build_config.cmake-args }} \
+            -DBUILD_SHARED_LIBS=${{ matrix.build_config.shared }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_config.mode }} \
+            -DLLVM_ENABLE_ASSERTIONS=${{ matrix.build_config.assert }} \
             -DMLIR_DIR=`pwd`/../llvm/build/lib/cmake/mlir \
             -DLLVM_DIR=`pwd`/../llvm/build/lib/cmake/llvm \
-            -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }} \
-            -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} \
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
             -DVERILATOR_DISABLE=ON \
             -DLLVM_ENABLE_TERMINFO=OFF \
             -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
             -DLLVM_PARALLEL_LINK_JOBS=1 \
+            -DLLVM_FORCE_ENABLE_STATS=${{ matrix.build_config.stats }} \
             -DCIRCT_RELEASE_TAG_ENABLED=ON \
             -DCIRCT_RELEASE_TAG=${{ github.ref_name }} \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF
@@ -133,6 +115,7 @@ jobs:
           shasum -a 256 circt-bin-${{ matrix.runner }}.tar.gz
       - name: Upload Binaries
         uses: AButler/upload-release-assets@v2.0
+        if: startsWith(github.ref, 'refs/tags/')
         with:
           files: build/circt-bin-${{ matrix.runner }}.tar.gz
           repo-token: ${{ secrets.GITHUB_TOKEN }}

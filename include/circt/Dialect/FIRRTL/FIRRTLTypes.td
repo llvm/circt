@@ -10,6 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD
+#define CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD
+
+include "FIRRTLDialect.td"
 include "mlir/IR/EnumAttr.td"
 
 //===----------------------------------------------------------------------===//
@@ -187,3 +191,5 @@ def MemDir_ReadWrite: I32EnumAttrCase<"ReadWrite", 3>;
 def MemDirAttr: I32EnumAttr<"MemDirAttr", "Memory Direction Enum",
                             [MemDir_Infer, MemDir_Read, MemDir_Write,
                               MemDir_ReadWrite]>;
+
+#endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD

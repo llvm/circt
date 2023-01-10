@@ -329,7 +329,7 @@ public:
 
   /// If v is an input to any memory registered within this component, returns
   /// the memory. If not, returns null.
-  Optional<calyx::MemoryInterface> isInputPortOfMemory(Value v);
+  std::optional<calyx::MemoryInterface> isInputPortOfMemory(Value v);
 
   /// Assign a mapping between the source funcOp result indices and the
   /// corresponding output port indices of this componentOp.

@@ -44,15 +44,31 @@ struct SeqFIRRTLToSVPass
 };
 } // anonymous namespace
 
+/// Create the assign.
+static void createAssign(ConversionPatternRewriter &rewriter, sv::RegOp svReg,
+                         CompRegOp reg) {
+  rewriter.create<sv::PAssignOp>(reg.getLoc(), svReg, reg.getInput());
+}
+/// Create the assign inside of an if block.
+static void createAssign(ConversionPatternRewriter &rewriter, sv::RegOp svReg,
+                         CompRegClockEnabledOp reg) {
+  Location loc = reg.getLoc();
+  rewriter.create<sv::IfOp>(loc, reg.getClockEnable(), [&]() {
+    rewriter.create<sv::PAssignOp>(reg.getLoc(), svReg, reg.getInput());
+  });
+}
+
 namespace {
 /// Lower CompRegOp to `sv.reg` and `sv.alwaysff`. Use a posedge clock and
 /// synchronous reset.
-struct CompRegLower : public OpConversionPattern<CompRegOp> {
+template <typename OpTy>
+struct CompRegLower : public OpConversionPattern<OpTy> {
 public:
-  using OpConversionPattern::OpConversionPattern;
+  using OpConversionPattern<OpTy>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<OpTy>::OpAdaptor;
 
   LogicalResult
-  matchAndRewrite(CompRegOp reg, OpAdaptor adaptor,
+  matchAndRewrite(OpTy reg, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     Location loc = reg.getLoc();
 
@@ -73,15 +89,14 @@ public:
       rewriter.create<sv::AlwaysFFOp>(
           loc, sv::EventControl::AtPosEdge, reg.getClk(), ResetType::SyncReset,
           sv::EventControl::AtPosEdge, reg.getReset(),
-          [&]() { rewriter.create<sv::PAssignOp>(loc, svReg, reg.getInput()); },
+          [&]() { createAssign(rewriter, svReg, reg); },
           [&]() {
             rewriter.create<sv::PAssignOp>(loc, svReg, reg.getResetValue());
           });
     } else {
       rewriter.create<sv::AlwaysFFOp>(
-          loc, sv::EventControl::AtPosEdge, reg.getClk(), [&]() {
-            rewriter.create<sv::PAssignOp>(loc, svReg, reg.getInput());
-          });
+          loc, sv::EventControl::AtPosEdge, reg.getClk(),
+          [&]() { createAssign(rewriter, svReg, reg); });
     }
 
     rewriter.replaceOp(reg, {regVal});
@@ -114,6 +129,8 @@ private:
   RegLowerInfo lower(FirRegOp reg);
 
   void initialize(OpBuilder &builder, RegLowerInfo reg, ArrayRef<Value> rands);
+  void initializeRegisterElements(Location loc, OpBuilder &builder, Value reg,
+                                  Value rand, unsigned &pos);
 
   void createTree(OpBuilder &builder, Value reg, Value term, Value next);
 
@@ -421,6 +438,37 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
   return svReg;
 }
 
+// Initialize registers by assingning each element recursively instead of
+// intializing entire registers. This is necessary as a workaound for verilator
+// which allocates many local variables for concat.
+void FirRegLower::initializeRegisterElements(Location loc, OpBuilder &builder,
+                                             Value reg, Value randomSource,
+                                             unsigned &pos) {
+  auto type = reg.getType().cast<sv::InOutType>().getElementType();
+  if (auto intTy = hw::type_dyn_cast<IntegerType>(type)) {
+    // Use randomSource[pos-1:pos-width] as a random value.
+    pos -= intTy.getWidth();
+    auto elem = builder.createOrFold<comb::ExtractOp>(loc, randomSource, pos,
+                                                      intTy.getWidth());
+    builder.create<sv::BPAssignOp>(loc, reg, elem);
+  } else if (auto array = hw::type_dyn_cast<hw::ArrayType>(type)) {
+    for (unsigned i = 0, e = array.getSize(); i < e; ++i) {
+      auto index = getOrCreateConstant(loc, APInt(llvm::Log2_64_Ceil(e), i));
+      initializeRegisterElements(
+          loc, builder, builder.create<sv::ArrayIndexInOutOp>(loc, reg, index),
+          randomSource, pos);
+    }
+  } else if (auto structType = hw::type_dyn_cast<hw::StructType>(type)) {
+    for (auto e : structType.getElements())
+      initializeRegisterElements(
+          loc, builder,
+          builder.create<sv::StructFieldInOutOp>(loc, reg, e.name),
+          randomSource, pos);
+  } else {
+    assert(false && "unsupported type");
+  }
+}
+
 void FirRegLower::initialize(OpBuilder &builder, RegLowerInfo reg,
                              ArrayRef<Value> rands) {
   auto loc = reg.reg.getLoc();
@@ -442,9 +490,9 @@ void FirRegLower::initialize(OpBuilder &builder, RegLowerInfo reg,
     width -= nwidth;
   }
   auto concat = builder.createOrFold<comb::ConcatOp>(loc, nibbles);
-  auto bitcast = builder.createOrFold<hw::BitcastOp>(
-      loc, reg.reg.getElementType(), concat);
-  builder.create<sv::BPAssignOp>(loc, reg.reg, bitcast);
+  unsigned pos = reg.width;
+  // Initialize register elements.
+  initializeRegisterElements(loc, builder, reg.reg, concat, pos);
 }
 
 void FirRegLower::addToAlwaysBlock(Block *block, sv::EventControl clockEdge,
@@ -525,7 +573,8 @@ void SeqToSVPass::runOnOperation() {
   target.addIllegalDialect<SeqDialect>();
   target.addLegalDialect<sv::SVDialect>();
   RewritePatternSet patterns(&ctxt);
-  patterns.add<CompRegLower>(&ctxt);
+  patterns.add<CompRegLower<CompRegOp>>(&ctxt);
+  patterns.add<CompRegLower<CompRegClockEnabledOp>>(&ctxt);
 
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();

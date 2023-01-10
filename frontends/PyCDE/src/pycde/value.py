@@ -59,6 +59,7 @@ class PyCDEValue:
           clk=None,
           rst=None,
           rst_value=None,
+          ce=None,
           name=None,
           cycles=1,
           sv_attributes=None,
@@ -101,13 +102,24 @@ class PyCDEValue:
         give_name = name
         if give_name is None and basename is not None:
           give_name = f"{basename}__reg{i+starting_reg}"
-        reg = seq.CompRegOp(self.value.type,
-                            input=reg,
-                            clk=clk,
-                            reset=rst,
-                            reset_value=rst_value,
-                            name=give_name,
-                            sym_name=give_name)
+        if ce is None:
+          reg = seq.CompRegOp(self.value.type,
+                              input=reg,
+                              clk=clk,
+                              reset=rst,
+                              reset_value=rst_value,
+                              name=give_name,
+                              sym_name=give_name)
+        else:
+          reg = seq.CompRegClockEnabledOp(self.value.type,
+                                          input=reg,
+                                          clk=clk,
+                                          clockEnable=ce,
+                                          reset=rst,
+                                          reset_value=rst_value,
+                                          clock_enable=ce,
+                                          name=give_name,
+                                          sym_name=give_name)
       if sv_attributes is not None:
         reg.value.owner.attributes["sv.attributes"] = sv.SVAttributesAttr.get(
             ir.ArrayAttr.get(

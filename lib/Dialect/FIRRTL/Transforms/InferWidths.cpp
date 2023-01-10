@@ -92,7 +92,7 @@ namespace {
 /// An expression on the right-hand side of a constraint.
 struct Expr {
   enum class Kind { EXPR_KINDS };
-  llvm::Optional<int32_t> solution = {};
+  std::optional<int32_t> solution;
   Kind kind;
 
   /// Print a human-readable representation of this expr.
@@ -522,7 +522,7 @@ struct LinIneq {
 
     // Among those terms that have a maximum scaling factor, determine the
     // largest bias value.
-    Optional<int32_t> maxBias = std::nullopt;
+    std::optional<int32_t> maxBias;
     if (enable1 && scale1 == maxScale)
       maxBias = bias1;
     if (enable2 && scale2 == maxScale && (!maxBias || bias2 > *maxBias))
@@ -637,7 +637,7 @@ public:
   using ContextInfo = DenseMap<Expr *, llvm::SmallSetVector<FieldRef, 1>>;
   const ContextInfo &getContextInfo() const { return info; }
   void setCurrentContextInfo(FieldRef fieldRef) { currentInfo = fieldRef; }
-  void setCurrentLocation(Optional<Location> loc) { currentLoc = loc; }
+  void setCurrentLocation(std::optional<Location> loc) { currentLoc = loc; }
 
 private:
   // Allocator for constraint expressions.
@@ -670,7 +670,7 @@ private:
   ContextInfo info;
   FieldRef currentInfo = {};
   DenseMap<Expr *, llvm::SmallSetVector<Location, 1>> locs;
-  Optional<Location> currentLoc = {};
+  std::optional<Location> currentLoc;
 
   // Forbid copyign or moving the solver, which would invalidate the refs to
   // allocator held by the allocators.
@@ -805,7 +805,7 @@ LinIneq ConstraintSolver::checkCycles(VarExpr *var, Expr *expr,
   return ineq;
 }
 
-using ExprSolution = std::pair<Optional<int32_t>, bool>;
+using ExprSolution = std::pair<std::optional<int32_t>, bool>;
 
 static ExprSolution
 computeUnary(ExprSolution arg, llvm::function_ref<int32_t(int32_t)> operation) {
@@ -1515,6 +1515,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // and "wdata" fields in the bundle corresponding to a memory port.
         auto dataFieldIndices = [](MemOp::PortKind kind) -> ArrayRef<unsigned> {
           static const unsigned indices[] = {3, 5};
+          static const unsigned debug[] = {0};
           switch (kind) {
           case MemOp::PortKind::Read:
           case MemOp::PortKind::Write:
@@ -1522,7 +1523,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
           case MemOp::PortKind::ReadWrite:
             return ArrayRef<unsigned>(indices); // {3, 5}
           case MemOp::PortKind::Debug:
-            return ArrayRef<unsigned>({0});
+            return ArrayRef<unsigned>(debug);
           }
           llvm_unreachable("Imposible PortKind");
         };

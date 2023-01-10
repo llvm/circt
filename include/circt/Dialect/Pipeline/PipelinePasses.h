@@ -14,12 +14,15 @@
 #define CIRCT_DIALECT_PIPELINE_PIPELINEPASSES_H
 
 #include "circt/Support/LLVM.h"
+#include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassRegistry.h"
 #include <memory>
 
 namespace circt {
 namespace pipeline {
 
 std::unique_ptr<mlir::Pass> createExplicitRegsPass();
+std::unique_ptr<mlir::Pass> createScheduleLinearPipelinePass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

@@ -75,7 +75,7 @@ struct ResetDomain {
 
   // Implementation details for this domain.
   Value existingValue;
-  Optional<unsigned> existingPort;
+  std::optional<unsigned> existingPort;
   StringAttr newPortName;
 
   ResetDomain(Value reset) : reset(reset) {}
@@ -985,8 +985,10 @@ FailureOr<ResetKind> InferResetsPass::inferReset(ResetNetwork net) {
   // Handle the case where we have no votes for either kind.
   if (asyncDrives == 0 && syncDrives == 0 && invalidDrives == 0) {
     ResetSignal root = guessRoot(net);
-    mlir::emitError(root.field.getValue().getLoc())
-        << "reset network never driven with concrete type";
+    auto diag = mlir::emitError(root.field.getValue().getLoc())
+                << "reset network never driven with concrete type";
+    for (ResetSignal signal : net)
+      diag.attachNote(signal.field.getLoc()) << "here: ";
     return failure();
   }
 

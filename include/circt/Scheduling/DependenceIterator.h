@@ -17,9 +17,10 @@
 #include "circt/Support/LLVM.h"
 
 #include "llvm/ADT/DenseMapInfo.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/iterator.h"
+
+#include <optional>
 
 namespace circt {
 namespace scheduling {
@@ -34,8 +35,9 @@ class Dependence {
 public:
   /// The "expanded" representation of a dependence, intended as the key for
   /// comparisons and hashing.
-  using TupleRepr = std::tuple<Operation *, Operation *, Optional<unsigned>,
-                               Optional<unsigned>>;
+  using TupleRepr =
+      std::tuple<Operation *, Operation *, std::optional<unsigned>,
+                 std::optional<unsigned>>;
 
   /// Wrap a def-use dependence, which is uniquely identified in the SSA graph
   /// by an `OpOperand`.
@@ -61,9 +63,9 @@ public:
   Operation *getDestination() const;
 
   /// Return the source operation's result number, if applicable.
-  Optional<unsigned> getSourceIndex() const;
+  std::optional<unsigned> getSourceIndex() const;
   /// Return the destination operation's operand number, if applicable.
-  Optional<unsigned> getDestinationIndex() const;
+  std::optional<unsigned> getDestinationIndex() const;
 
   /// Return the tuple representation of this dependence.
   TupleRepr getAsTuple() const;

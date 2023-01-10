@@ -14,6 +14,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 
 #include "circt/Dialect/HW/HWTypes.h"
@@ -198,7 +199,8 @@ void HLMemOp::build(OpBuilder &builder, OperationState &result, Value clk,
 //===----------------------------------------------------------------------===//
 // CompRegOp
 
-ParseResult CompRegOp::parse(OpAsmParser &parser, OperationState &result) {
+template <bool ClockEnabled>
+static ParseResult parseCompReg(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc loc = parser.getCurrentLocation();
 
   if (succeeded(parser.parseOptionalKeyword("sym"))) {
@@ -207,7 +209,8 @@ ParseResult CompRegOp::parse(OpAsmParser &parser, OperationState &result) {
       return failure();
   }
 
-  SmallVector<OpAsmParser::UnresolvedOperand, 4> operands;
+  constexpr size_t ceOperandOffset = (size_t)ClockEnabled;
+  SmallVector<OpAsmParser::UnresolvedOperand, 5> operands;
   if (parser.parseOperandList(operands))
     return failure();
   switch (operands.size()) {
@@ -215,15 +218,17 @@ ParseResult CompRegOp::parse(OpAsmParser &parser, OperationState &result) {
     return parser.emitError(loc, "expected operands");
   case 1:
     return parser.emitError(loc, "expected clock operand");
-  case 2:
+  case 2 + ceOperandOffset:
     // No reset.
     break;
-  case 3:
+  case 3 + ceOperandOffset:
     return parser.emitError(loc, "expected resetValue operand");
-  case 4:
+  case 4 + ceOperandOffset:
     // reset and reset value included.
     break;
   default:
+    if (ClockEnabled && operands.size() == 2)
+      return parser.emitError(loc, "expected clock enable");
     return parser.emitError(loc, "too many operands");
   }
 
@@ -231,36 +236,48 @@ ParseResult CompRegOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
       parser.parseType(ty))
     return failure();
-  Type i1 = IntegerType::get(result.getContext(), 1);
 
   setNameFromResult(parser, result);
 
   result.addTypes({ty});
-  if (operands.size() == 2)
-    return parser.resolveOperands(operands, {ty, i1}, loc, result.operands);
-  else
-    return parser.resolveOperands(operands, {ty, i1, i1, ty}, loc,
-                                  result.operands);
+
+  Type i1 = IntegerType::get(result.getContext(), 1);
+  SmallVector<Type, 5> operandTypes;
+  operandTypes.append({ty, i1});
+  if constexpr (ClockEnabled)
+    operandTypes.push_back(i1);
+  if (operands.size() > 2 + ceOperandOffset)
+    operandTypes.append({i1, ty});
+  return parser.resolveOperands(operands, operandTypes, loc, result.operands);
 }
 
-void CompRegOp::print(::mlir::OpAsmPrinter &p) {
+static void printClockEnable(::mlir::OpAsmPrinter &p, CompRegOp op) {}
+
+static void printClockEnable(::mlir::OpAsmPrinter &p,
+                             CompRegClockEnabledOp op) {
+  p << ", " << op.getClockEnable();
+}
+
+template <class Op>
+static void printCompReg(::mlir::OpAsmPrinter &p, Op op) {
   SmallVector<StringRef> elidedAttrs;
-  if (auto sym = getSymName()) {
+  if (auto sym = op.getSymName()) {
     elidedAttrs.push_back("sym_name");
     p << ' ' << "sym ";
     p.printSymbolName(*sym);
   }
 
-  p << ' ' << getInput() << ", " << getClk();
-  if (getReset())
-    p << ", " << getReset() << ", " << getResetValue() << ' ';
+  p << ' ' << op.getInput() << ", " << op.getClk();
+  printClockEnable(p, op);
+  if (op.getReset())
+    p << ", " << op.getReset() << ", " << op.getResetValue() << ' ';
 
   // Determine if 'name' can be elided.
-  if (canElideName(p, *this))
+  if (canElideName(p, op))
     elidedAttrs.push_back("name");
 
-  p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
-  p << " : " << getInput().getType();
+  p.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
+  p << " : " << op.getInput().getType();
 }
 
 /// Suggest a name for each result value based on the saved result names
@@ -272,10 +289,40 @@ void CompRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 LogicalResult CompRegOp::verify() {
-  if ((getReset() && !getResetValue()) || (!getReset() && getResetValue()))
+  if (getReset() == nullptr ^ getResetValue() == nullptr)
     return emitOpError(
         "either reset and resetValue or neither must be specified");
   return success();
+}
+
+ParseResult CompRegOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseCompReg<false>(parser, result);
+}
+
+void CompRegOp::print(::mlir::OpAsmPrinter &p) { printCompReg(p, *this); }
+
+/// Suggest a name for each result value based on the saved result names
+/// attribute.
+void CompRegClockEnabledOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the wire has an optional 'name' attribute, use it.
+  if (!getName().empty())
+    setNameFn(getResult(), getName());
+}
+
+LogicalResult CompRegClockEnabledOp::verify() {
+  if (getReset() == nullptr ^ getResetValue() == nullptr)
+    return emitOpError(
+        "either reset and resetValue or neither must be specified");
+  return success();
+}
+
+ParseResult CompRegClockEnabledOp::parse(OpAsmParser &parser,
+                                         OperationState &result) {
+  return parseCompReg<true>(parser, result);
+}
+
+void CompRegClockEnabledOp::print(::mlir::OpAsmPrinter &p) {
+  printCompReg(p, *this);
 }
 
 //===----------------------------------------------------------------------===//
@@ -336,7 +383,7 @@ ParseResult FirRegOp::parse(OpAsmParser &parser, OperationState &result) {
   }
 
   // Parse reset [sync|async] %reset, %value
-  Optional<std::pair<Op, Op>> resetAndValue;
+  std::optional<std::pair<Op, Op>> resetAndValue;
   if (succeeded(parser.parseOptionalKeyword("reset"))) {
     bool isAsync;
     if (succeeded(parser.parseOptionalKeyword("async")))
@@ -453,6 +500,60 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
         op.getLoc(), APInt::getZero(hw::getBitWidth(op.getType())));
     rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, op.getType(), constant);
     return success();
+  }
+
+  // For reset-less 1d array registers, replace an uninitialized element with
+  // constant zero. For example, let `r` be a 2xi1 register and its next value
+  // be `{foo, r[0]}`. `r[0]` is connected to itself so will never be
+  // initialized. If we don't enable aggregate preservation, `r_0` is replaced
+  // with `0`. Hence this canonicalization replaces 0th element of the next
+  // value with zero to match the behaviour.
+  if (!op.getReset()) {
+    if (auto arrayCreate = op.getNext().getDefiningOp<hw::ArrayCreateOp>()) {
+      // For now only support 1d arrays.
+      // TODO: Support nested arrays and bundles.
+      if (hw::type_cast<hw::ArrayType>(op.getResult().getType())
+              .getElementType()
+              .isa<IntegerType>()) {
+        SmallVector<Value> nextOperands;
+        bool changed = false;
+        for (const auto &[i, value] :
+             llvm::enumerate(arrayCreate.getOperands())) {
+          auto index = arrayCreate.getOperands().size() - i - 1;
+          APInt elementIndex;
+          // Check that the corresponding operand is op's element.
+          if (auto arrayGet = value.getDefiningOp<hw::ArrayGetOp>())
+            if (arrayGet.getInput() == op.getResult() &&
+                matchPattern(arrayGet.getIndex(),
+                             m_ConstantInt(&elementIndex)) &&
+                elementIndex == index) {
+              nextOperands.push_back(rewriter.create<hw::ConstantOp>(
+                  op.getLoc(),
+                  APInt::getZero(hw::getBitWidth(arrayGet.getType()))));
+              changed = true;
+              continue;
+            }
+          nextOperands.push_back(value);
+        }
+        // If one of the operands is self loop, update the next value.
+        if (changed) {
+          auto newNextVal = rewriter.create<hw::ArrayCreateOp>(
+              arrayCreate.getLoc(), nextOperands);
+          if (arrayCreate->hasOneUse())
+            // If the original next value has a single use, we can replace the
+            // value directly.
+            rewriter.replaceOp(arrayCreate, {newNextVal});
+          else {
+            // Otherwise, replace the entire firreg with a new one.
+            rewriter.replaceOpWithNewOp<FirRegOp>(op, newNextVal, op.getClk(),
+                                                  op.getNameAttr(),
+                                                  op.getInnerSymAttr());
+          }
+
+          return success();
+        }
+      }
+    }
   }
 
   return failure();

@@ -97,9 +97,6 @@ def CMemoryPortType : TypeDef<CHIRRTLDialect, "CMemoryPort"> {
 // CHIRRTL Operations
 //===----------------------------------------------------------------------===//
 
-def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
-                         ["getAsmResultNames"]>;
-
 // Base class for the operation in this dialect.
 class CHIRRTLOp<string mnemonic, list<Trait> traits = []> :
     Op<CHIRRTLDialect, mnemonic, traits>;

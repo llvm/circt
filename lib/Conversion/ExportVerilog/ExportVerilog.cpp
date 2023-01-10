@@ -582,9 +582,15 @@ static bool isOkToBitSelectFrom(Value v) {
 static bool isExpressionUnableToInline(Operation *op) {
   if (auto cast = dyn_cast<BitcastOp>(op))
     if (!haveMatchingDims(cast.getInput().getType(), cast.getResult().getType(),
-                          op->getLoc()))
+                          op->getLoc())) {
+      // Even if dimentions don't match, we can inline when its user doesn't
+      // rely on the type.
+      if (op->hasOneUse() &&
+          isa<comb::ConcatOp, hw::ArrayConcatOp>(*op->getUsers().begin()))
+        return false;
       // Bitcasts rely on the type being assigned to, so we cannot inline.
       return true;
+    }
 
   // StructCreateOp needs to be assigning to a named temporary so that types
   // are inferred properly by verilog
@@ -681,6 +687,10 @@ static BlockStatementCount countStatements(Block &block) {
 /// that uses it.
 bool ExportVerilog::isExpressionEmittedInline(Operation *op,
                                               const LoweringOptions &options) {
+  // Never create a temporary for a dead expression.
+  if (op->getResult(0).use_empty())
+    return true;
+
   // Never create a temporary which is only going to be assigned to an output
   // port, wire, or reg.
   if (op->hasOneUse() &&
@@ -1579,7 +1589,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   StringRef openStr, closeStr;
   VerilogPrecedence subprecedence = LowestPrecedence;
   VerilogPrecedence prec; // precedence of the emitted expression.
-  Optional<SubExprSignResult> operandSign;
+  std::optional<SubExprSignResult> operandSign;
   bool isUnary = false;
   bool hasOpenClose = false;
 
@@ -2988,7 +2998,7 @@ private:
   template <typename Op>
   LogicalResult
   emitAssignLike(Op op, PPExtString syntax,
-                 Optional<PPExtString> wordBeforeLHS = std::nullopt);
+                 std::optional<PPExtString> wordBeforeLHS = std::nullopt);
   LogicalResult visitSV(AssignOp op);
   LogicalResult visitSV(BPAssignOp op);
   LogicalResult visitSV(PAssignOp op);
@@ -3018,13 +3028,13 @@ private:
   LogicalResult visitSV(VerbatimOp op);
 
   LogicalResult emitSimulationControlTask(Operation *op, PPExtString taskName,
-                                          Optional<unsigned> verbosity);
+                                          std::optional<unsigned> verbosity);
   LogicalResult visitSV(StopOp op);
   LogicalResult visitSV(FinishOp op);
   LogicalResult visitSV(ExitOp op);
 
   LogicalResult emitSeverityMessageTask(Operation *op, PPExtString taskName,
-                                        Optional<unsigned> verbosity,
+                                        std::optional<unsigned> verbosity,
                                         StringAttr message,
                                         ValueRange operands);
   LogicalResult visitSV(FatalOp op);
@@ -3102,8 +3112,9 @@ void StmtEmitter::emitSVAttributes(Operation *op) {
 }
 
 template <typename Op>
-LogicalResult StmtEmitter::emitAssignLike(Op op, PPExtString syntax,
-                                          Optional<PPExtString> wordBeforeLHS) {
+LogicalResult
+StmtEmitter::emitAssignLike(Op op, PPExtString syntax,
+                            std::optional<PPExtString> wordBeforeLHS) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -3393,7 +3404,7 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
 /// Emit one of the simulation control tasks `$stop`, `$finish`, or `$exit`.
 LogicalResult
 StmtEmitter::emitSimulationControlTask(Operation *op, PPExtString taskName,
-                                       Optional<unsigned> verbosity) {
+                                       std::optional<unsigned> verbosity) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
@@ -3426,11 +3437,10 @@ LogicalResult StmtEmitter::visitSV(ExitOp op) {
 
 /// Emit one of the severity message tasks `$fatal`, `$error`, `$warning`, or
 /// `$info`.
-LogicalResult StmtEmitter::emitSeverityMessageTask(Operation *op,
-                                                   PPExtString taskName,
-                                                   Optional<unsigned> verbosity,
-                                                   StringAttr message,
-                                                   ValueRange operands) {
+LogicalResult
+StmtEmitter::emitSeverityMessageTask(Operation *op, PPExtString taskName,
+                                     std::optional<unsigned> verbosity,
+                                     StringAttr message, ValueRange operands) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 

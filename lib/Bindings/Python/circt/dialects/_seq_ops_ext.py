@@ -3,10 +3,7 @@ from circt.support import BackedgeBuilder, NamedValueOpView
 from mlir.ir import ArrayAttr, IntegerType, OpView, StringAttr
 
 
-class CompRegBuilder(NamedValueOpView):
-
-  def operand_names(self):
-    return ["input", "clk"]
+class CompRegLikeBuilder(NamedValueOpView):
 
   def result_names(self):
     return ["data"]
@@ -19,12 +16,13 @@ class CompRegBuilder(NamedValueOpView):
     return BackedgeBuilder.create(operand_type, arg_name, self)
 
 
-class CompRegOp:
+class CompRegLike:
 
   def __init__(self,
                data_type,
                input,
                clk,
+               clockEnable=None,
                *,
                reset=None,
                reset_value=None,
@@ -38,6 +36,15 @@ class CompRegOp:
     results.append(data_type)
     operands.append(input)
     operands.append(clk)
+    if isinstance(self, CompRegOp):
+      if clockEnable is not None:
+        raise Exception("Clock enable not supported on compreg")
+    elif isinstance(self, CompRegClockEnabledOp):
+      if clockEnable is None:
+        raise Exception("Clock enable required on compreg.ce")
+      operands.append(clockEnable)
+    else:
+      assert False, "Class not recognized"
     if reset is not None:
       operands.append(reset)
     if reset_value is not None:
@@ -60,6 +67,15 @@ class CompRegOp:
         ),
     )
 
+
+class CompRegBuilder(CompRegLikeBuilder):
+
+  def operand_names(self):
+    return ["input", "clk"]
+
+
+class CompRegOp(CompRegLike):
+
   @classmethod
   def create(cls,
              result_type,
@@ -76,3 +92,29 @@ class CompRegOp:
                           name=name,
                           sym_name=sym_name,
                           needs_result_type=True)
+
+
+class CompRegClockEnabledBuilder(CompRegLikeBuilder):
+
+  def operand_names(self):
+    return ["input", "clk", "clockEnable"]
+
+
+class CompRegClockEnabledOp(CompRegLike):
+
+  @classmethod
+  def create(cls,
+             result_type,
+             reset=None,
+             reset_value=None,
+             name=None,
+             sym_name=None,
+             **kwargs):
+    return CompRegClockEnabledBuilder(cls,
+                                      result_type,
+                                      kwargs,
+                                      reset=reset,
+                                      reset_value=reset_value,
+                                      name=name,
+                                      sym_name=sym_name,
+                                      needs_result_type=True)

@@ -223,12 +223,12 @@ struct CircuitLoweringState {
   std::atomic<bool> used_RANDOMIZE_GARBAGE_ASSIGN{false};
 
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
-                       bool emitChiselAssertsAsSVA, bool stripMuxPragmas,
+                       bool emitChiselAssertsAsSVA, bool addMuxPragmas,
                        InstanceGraph *instanceGraph, NLATable *nlaTable)
       : circuitOp(circuitOp), instanceGraph(instanceGraph),
         enableAnnotationWarning(enableAnnotationWarning),
         emitChiselAssertsAsSVA(emitChiselAssertsAsSVA),
-        stripMuxPragmas(stripMuxPragmas), nlaTable(nlaTable) {
+        addMuxPragmas(addMuxPragmas), nlaTable(nlaTable) {
     auto *context = circuitOp.getContext();
 
     // Get the testbench output directory.
@@ -322,7 +322,7 @@ private:
   std::mutex annotationPrintingMtx;
 
   const bool emitChiselAssertsAsSVA;
-  const bool stripMuxPragmas;
+  const bool addMuxPragmas;
 
   // Records any sv::BindOps that are found during the course of execution.
   // This is unsafe to access directly and should only be used through addBind.
@@ -418,7 +418,7 @@ struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
   void setDisableRegRandomization() { disableRegRandomization = true; }
   void setEnableAnnotationWarning() { enableAnnotationWarning = true; }
   void setEmitChiselAssertAsSVA() { emitChiselAssertsAsSVA = true; }
-  void setStripMuxPragmas() { stripMuxPragmas = true; }
+  void setAddMuxPragmas() { addMuxPragmas = true; }
 
 private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
@@ -451,15 +451,15 @@ private:
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToHWPass(
     bool enableAnnotationWarning, bool emitChiselAssertsAsSVA,
-    bool stripMuxPragmas, bool disableMemRandomization,
+    bool addMuxPragmas, bool disableMemRandomization,
     bool disableRegRandomization) {
   auto pass = std::make_unique<FIRRTLModuleLowering>();
   if (enableAnnotationWarning)
     pass->setEnableAnnotationWarning();
   if (emitChiselAssertsAsSVA)
     pass->setEmitChiselAssertAsSVA();
-  if (stripMuxPragmas)
-    pass->setStripMuxPragmas();
+  if (addMuxPragmas)
+    pass->setAddMuxPragmas();
   if (disableMemRandomization)
     pass->setDisableMemRandomization();
   if (disableRegRandomization)
@@ -490,7 +490,7 @@ void FIRRTLModuleLowering::runOnOperation() {
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
   CircuitLoweringState state(
-      circuit, enableAnnotationWarning, emitChiselAssertsAsSVA, stripMuxPragmas,
+      circuit, enableAnnotationWarning, emitChiselAssertsAsSVA, addMuxPragmas,
       &getAnalysis<InstanceGraph>(), &getAnalysis<NLATable>());
 
   SmallVector<FModuleOp, 32> modulesToProcess;
@@ -797,6 +797,12 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     }
   };
 
+  // Helper function to emit #ifndef guard.
+  auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
+    b.create<sv::IfDefOp>(
+        guard, []() {}, body);
+  };
+
   bool needsRandomizeRegInit =
       state.used_RANDOMIZE_REG_INIT && !disableRegRandomization;
   bool needsRandomizeMemInit =
@@ -813,15 +819,19 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 
   bool needRandom = false;
   if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
-    emitGuardedDefine("RANDOMIZE_GARBAGE_ASSIGN", "RANDOMIZE");
+    emitGuard("RANDOMIZE", [&]() {
+      emitGuardedDefine("RANDOMIZE_GARBAGE_ASSIGN", "RANDOMIZE");
+    });
     needRandom = true;
   }
   if (needsRandomizeRegInit) {
-    emitGuardedDefine("RANDOMIZE_REG_INIT", "RANDOMIZE");
+    emitGuard("RANDOMIZE",
+              [&]() { emitGuardedDefine("RANDOMIZE_REG_INIT", "RANDOMIZE"); });
     needRandom = true;
   }
   if (needsRandomizeMemInit) {
-    emitGuardedDefine("RANDOMIZE_MEM_INIT", "RANDOMIZE");
+    emitGuard("RANDOMIZE",
+              [&]() { emitGuardedDefine("RANDOMIZE_MEM_INIT", "RANDOMIZE"); });
     needRandom = true;
   }
 
@@ -834,22 +844,28 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   if (state.used_PRINTF_COND) {
     emitString("\n// Users can define 'PRINTF_COND' to add an extra gate to "
                "prints.");
-    emitGuardedDefine("PRINTF_COND", "PRINTF_COND_ (`PRINTF_COND)",
-                      "PRINTF_COND_ 1");
+    emitGuard("PRINTF_COND_", [&]() {
+      emitGuardedDefine("PRINTF_COND", "PRINTF_COND_ (`PRINTF_COND)",
+                        "PRINTF_COND_ 1");
+    });
   }
 
   if (state.used_ASSERT_VERBOSE_COND) {
     emitString("\n// Users can define 'ASSERT_VERBOSE_COND' to add an extra "
                "gate to assert error printing.");
-    emitGuardedDefine("ASSERT_VERBOSE_COND",
-                      "ASSERT_VERBOSE_COND_ (`ASSERT_VERBOSE_COND)",
-                      "ASSERT_VERBOSE_COND_ 1");
+    emitGuard("ASSERT_VERBOSE_COND_", [&]() {
+      emitGuardedDefine("ASSERT_VERBOSE_COND",
+                        "ASSERT_VERBOSE_COND_ (`ASSERT_VERBOSE_COND)",
+                        "ASSERT_VERBOSE_COND_ 1");
+    });
   }
 
   if (state.used_STOP_COND) {
     emitString("\n// Users can define 'STOP_COND' to add an extra gate "
                "to stop conditions.");
-    emitGuardedDefine("STOP_COND", "STOP_COND_ (`STOP_COND)", "STOP_COND_ 1");
+    emitGuard("STOP_COND_", [&]() {
+      emitGuardedDefine("STOP_COND", "STOP_COND_ (`STOP_COND)", "STOP_COND_ 1");
+    });
   }
 
   if (needRandom) {
@@ -865,31 +881,35 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     emitGuardedDefine("RANDOMIZE_DELAY", nullptr, "RANDOMIZE_DELAY 0.002");
 
     emitString("\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
-    b.create<sv::IfDefOp>(
-        "RANDOMIZE",
-        [&]() {
-          emitGuardedDefine(
-              "VERILATOR", "INIT_RANDOM_PROLOG_ `INIT_RANDOM",
-              "INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end");
-        },
-        [&]() { emitString("`define INIT_RANDOM_PROLOG_"); });
+    emitGuard("INIT_RANDOM_PROLOG_", [&]() {
+      b.create<sv::IfDefOp>(
+          "RANDOMIZE",
+          [&]() {
+            emitGuardedDefine(
+                "VERILATOR", "INIT_RANDOM_PROLOG_ `INIT_RANDOM",
+                "INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end");
+          },
+          [&]() { emitString("`define INIT_RANDOM_PROLOG_"); });
+    });
   }
 
   if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
     emitString("\n// RANDOMIZE_GARBAGE_ASSIGN enable range checks for mem "
                "assignments.");
-    b.create<sv::IfDefOp>(
-        "RANDOMIZE_GARBAGE_ASSIGN",
-        [&]() {
-          emitString(
-              "`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, VALUE, "
-              "SIZE) \\");
-          emitString("  ((INDEX) < (SIZE) ? (VALUE) : {`RANDOM})");
-        },
-        [&]() {
-          emitString("`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, "
-                     "VALUE, SIZE) (VALUE)");
-        });
+    emitGuard("RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK", [&]() {
+      b.create<sv::IfDefOp>(
+          "RANDOMIZE_GARBAGE_ASSIGN",
+          [&]() {
+            emitString(
+                "`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, VALUE, "
+                "SIZE) \\");
+            emitString("  ((INDEX) < (SIZE) ? (VALUE) : {`RANDOM})");
+          },
+          [&]() {
+            emitString("`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, "
+                       "VALUE, SIZE) (VALUE)");
+          });
+    });
   }
 
   // Blank line to separate the header from the modules.
@@ -3520,10 +3540,10 @@ Value FIRRTLLowering::createArrayIndexing(Value array, Value index) {
   }
 
   Value inBoundsRead;
-  // If `stripMuxPragmas` is specified, just lower to a vanilla array indexing.
-  // Also remove mux pragmas if the array size is 1 since it causes a
+  // If `addMuxPragmas` is enabled, add mux pragmas to array reads.
+  // Don't annotate mux pragmas if the array size is 1 since it causes a
   // complication failure.
-  if (circuitState.stripMuxPragmas || size <= 1) {
+  if (!circuitState.addMuxPragmas || size <= 1) {
     inBoundsRead = builder.create<hw::ArrayGetOp>(array, index);
   } else {
     auto arrayGet = builder.create<hw::ArrayGetOp>(array, index);
@@ -4096,6 +4116,24 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
   if (getSingleNonInstanceOperand(op))
     return success();
 
+  // If all operands of the attach are internal to this module (none of them
+  // are ports), then they can all be replaced with a single wire, and we can
+  // delete the attach op.
+  bool isAttachInternalOnly =
+      llvm::none_of(inoutValues, [](auto v) { return isa<BlockArgument>(v); });
+
+  if (isAttachInternalOnly) {
+    auto v0 = inoutValues.front();
+    for (auto v : inoutValues) {
+      if (v == v0)
+        continue;
+      v.replaceAllUsesWith(v0);
+    }
+    return success();
+  }
+
+  // If the attach operands contain a port, then we can't do anything to
+  // simplify the attach operation.
   addToIfDefBlock(
       "SYNTHESIS",
       // If we're doing synthesis, we emit an all-pairs assign complex.

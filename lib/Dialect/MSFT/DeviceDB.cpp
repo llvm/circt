@@ -349,7 +349,7 @@ PlacementDB::PlacementCell *PlacementDB::getLeaf(PhysLocationAttr loc) {
 void PlacementDB::walkPlacements(
     function_ref<void(PhysLocationAttr, DynInstDataOpInterface)> callback,
     std::tuple<int64_t, int64_t, int64_t, int64_t> bounds,
-    Optional<PrimitiveType> primType, Optional<WalkOrder> walkOrder) {
+    std::optional<PrimitiveType> primType, std::optional<WalkOrder> walkOrder) {
   uint64_t xmin = std::get<0>(bounds) < 0 ? 0 : std::get<0>(bounds);
   uint64_t xmax = std::get<1>(bounds) < 0 ? std::numeric_limits<uint64_t>::max()
                                           : (uint64_t)std::get<1>(bounds);

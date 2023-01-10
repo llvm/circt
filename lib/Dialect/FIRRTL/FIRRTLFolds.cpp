@@ -141,8 +141,8 @@ bool circt::firrtl::hasDroppableName(Operation *op) {
 /// This makes constant folding significantly easier, as we can simply pass the
 /// operands to an operation through this function to appropriately replace any
 /// zero-width dynamic values or invalid values with a constant of value 0.
-static Optional<APSInt> getExtendedConstant(Value operand, Attribute constant,
-                                            int32_t destWidth) {
+static std::optional<APSInt>
+getExtendedConstant(Value operand, Attribute constant, int32_t destWidth) {
   assert(operand.getType().isa<IntType>() &&
          "getExtendedConstant is limited to integer types");
 
@@ -162,7 +162,7 @@ static Optional<APSInt> getExtendedConstant(Value operand, Attribute constant,
 }
 
 /// Determine the value of a constant operand for the sake of constant folding.
-static Optional<APSInt> getConstant(Attribute operand) {
+static std::optional<APSInt> getConstant(Attribute operand) {
   if (!operand)
     return {};
   if (auto attr = operand.dyn_cast<BoolAttr>())

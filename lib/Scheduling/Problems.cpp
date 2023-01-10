@@ -142,6 +142,14 @@ LogicalResult Problem::verify() {
   return success();
 }
 
+std::optional<unsigned> Problem::getEndTime(Operation *op) {
+  if (auto startTime = getStartTime(op))
+    if (auto opType = getLinkedOperatorType(op))
+      if (auto latency = getLatency(*opType))
+        return startTime.value() + latency.value();
+  return std::nullopt;
+}
+
 //===----------------------------------------------------------------------===//
 // CyclicProblem
 //===----------------------------------------------------------------------===//
@@ -411,7 +419,7 @@ Operation *Dependence::getDestination() const {
   return isDefUse() ? defUse->getOwner() : auxDst;
 }
 
-Optional<unsigned> Dependence::getSourceIndex() const {
+std::optional<unsigned> Dependence::getSourceIndex() const {
   if (!isDefUse())
     return std::nullopt;
 
@@ -419,7 +427,7 @@ Optional<unsigned> Dependence::getSourceIndex() const {
   return defUse->get().dyn_cast<OpResult>().getResultNumber();
 }
 
-Optional<unsigned> Dependence::getDestinationIndex() const {
+std::optional<unsigned> Dependence::getDestinationIndex() const {
   if (!isDefUse())
     return std::nullopt;
   return defUse->getOperandNumber();

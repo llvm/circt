@@ -1294,7 +1294,7 @@ hw.module @ParamConcatInst<name: none = "top">() -> () {
 }
 
 // CHECK-LABEL: module ParamsParensPrecedence
-hw.module @ParamsParensPrecedence<param: i32>() {
+hw.module @ParamsParensPrecedence<param: i32>() -> (a:i32, b:i32, c:i32) {
   // CHECK: = $clog2($unsigned(param));
   %1 = hw.param.value i32 = #hw.param.expr.clog2<#hw.param.decl.ref<"param">>
 
@@ -1303,6 +1303,7 @@ hw.module @ParamsParensPrecedence<param: i32>() {
 
   // CHECK: = $signed(param) >>> $signed(param & 8);
   %4 = hw.param.value i32 = #hw.param.expr.shrs<#hw.param.decl.ref<"param">,#hw.param.expr.and<8,#hw.param.decl.ref<"param">>>
+  hw.output %1, %3, %4: i32, i32, i32
 }
 
 // CHECK-LABEL: module ArrayGetInline
@@ -1320,4 +1321,28 @@ hw.module @UniformArrayCreate() -> (arr: !hw.array<5xi8>) {
   %arr = hw.array_create %c0_i8, %c0_i8, %c0_i8, %c0_i8, %c0_i8 : i8
   // CHECK: assign arr = {5{8'h0}};
   hw.output %arr : !hw.array<5xi8>
+}
+
+// CHECK-LABEL: module Issue4485(
+// CHECK-NEXT:    input [3:0] in);
+// CHECK-EMPTY:
+// CHECK-NEXT:  endmodule
+hw.module @Issue4485(%in: i4) {
+  %c0_i4 = hw.constant 0 : i4
+  %1 = comb.icmp eq %in, %c0_i4 : i4
+  %2 = sv.system.sampled %1 : i1
+  hw.output
+}
+
+// CHECK-LABEL: module inline_bitcast_in_concat(
+// CHECK-NEXT:    input  [6:0]      in1,
+// CHECK-NEXT:    input  [7:0][3:0] in2,
+// CHECK-NEXT:    output [38:0]     out);
+// CHECK-EMPTY:
+// CHECK-NEXT:    assign out = {in1, /*cast(bit[31:0])*/in2};
+// CHECK-NEXT:  endmodule
+hw.module @inline_bitcast_in_concat(%in1: i7, %in2: !hw.array<8xi4>) -> (out: i39) {
+  %r2 = hw.bitcast %in2 : (!hw.array<8xi4>) -> i32
+  %0 = comb.concat %in1, %r2: i7, i32
+  hw.output %0 : i39
 }

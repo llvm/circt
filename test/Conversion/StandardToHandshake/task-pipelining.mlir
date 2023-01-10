@@ -9,8 +9,9 @@
 // CHECK:           %[[VAL_3:.*]] = merge %[[VAL_0]] : i1
 // CHECK:           %[[VAL_4:.*]] = buffer [2] fifo %[[VAL_3]] : i1
 // CHECK:           %[[VAL_5:.*]] = merge %[[VAL_1]] : i64
+// CHECK:           %[[VAL_2x:.*]] = merge %[[VAL_2]] : none
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = cond_br %[[VAL_3]], %[[VAL_5]] : i64
-// CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = cond_br %[[VAL_3]], %[[VAL_2]] : none
+// CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = cond_br %[[VAL_3]], %[[VAL_2x]] : none
 // CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = control_merge %[[VAL_8]] : none
 // CHECK:           %[[VAL_12:.*]] = merge %[[VAL_6]] : i64
 // CHECK:           %[[VAL_13:.*]] = br %[[VAL_10]] : none
@@ -41,8 +42,9 @@ func.func @simpleDiamond(%arg0: i1, %arg1: i64) {
 // CHECK-SAME:                                  %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]] = merge %[[VAL_0]] : i1
 // CHECK:           %[[VAL_3:.*]] = buffer [2] fifo %[[VAL_2]] : i1
+// CHECK:           %[[VAL_1x:.*]] = merge %[[VAL_1]] : none
 // CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = cond_br %[[VAL_2]], %[[VAL_2]] : i1
-// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = cond_br %[[VAL_2]], %[[VAL_1]] : none
+// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = cond_br %[[VAL_2]], %[[VAL_1x]] : none
 // CHECK:           %[[VAL_8:.*]] = merge %[[VAL_4]] : i1
 // CHECK:           %[[VAL_9:.*]] = buffer [2] fifo %[[VAL_8]] : i1
 // CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = control_merge %[[VAL_6]] : none
@@ -87,8 +89,9 @@ func.func @nestedDiamond(%arg0: i1) {
 // CHECK:           %[[VAL_3:.*]] = merge %[[VAL_0]] : i1
 // CHECK:           %[[VAL_4:.*]] = buffer [2] fifo %[[VAL_3]] : i1
 // CHECK:           %[[VAL_5:.*]] = merge %[[VAL_1]] : i64
+// CHECK:           %[[VAL_2x:.*]] = merge %[[VAL_2]] : none
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = cond_br %[[VAL_3]], %[[VAL_5]] : i64
-// CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = cond_br %[[VAL_3]], %[[VAL_2]] : none
+// CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = cond_br %[[VAL_3]], %[[VAL_2x]] : none
 // CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = control_merge %[[VAL_8]] : none
 // CHECK:           %[[VAL_12:.*]] = merge %[[VAL_6]] : i64
 // CHECK:           %[[VAL_13:.*]] = br %[[VAL_10]] : none
@@ -115,8 +118,9 @@ func.func @triangle(%arg0: i1, %val0: i64) {
 // CHECK-SAME:                                   %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]] = merge %[[VAL_0]] : i1
 // CHECK:           %[[VAL_3:.*]] = buffer [2] fifo %[[VAL_2]] : i1
+// CHECK:           %[[VAL_1x:.*]] = merge %[[VAL_1]] : none
 // CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = cond_br %[[VAL_2]], %[[VAL_2]] : i1
-// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = cond_br %[[VAL_2]], %[[VAL_1]] : none
+// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = cond_br %[[VAL_2]], %[[VAL_1x]] : none
 // CHECK:           %[[VAL_8:.*]] = merge %[[VAL_4]] : i1
 // CHECK:           %[[VAL_9:.*]] = buffer [2] fifo %[[VAL_8]] : i1
 // CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = control_merge %[[VAL_6]] : none
@@ -153,8 +157,9 @@ func.func @nestedTriangle(%arg0: i1) {
 // CHECK-SAME:                                           %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]] = merge %[[VAL_0]] : i1
 // CHECK:           %[[VAL_3:.*]] = buffer [2] fifo %[[VAL_2]] : i1
+// CHECK:           %[[VAL_1x:.*]] = merge %[[VAL_1]] : none
 // CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = cond_br %[[VAL_2]], %[[VAL_2]] : i1
-// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = cond_br %[[VAL_2]], %[[VAL_1]] : none
+// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = cond_br %[[VAL_2]], %[[VAL_1x]] : none
 // CHECK:           %[[VAL_8:.*]] = merge %[[VAL_4]] : i1
 // CHECK:           %[[VAL_9:.*]] = buffer [2] fifo %[[VAL_8]] : i1
 // CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = control_merge %[[VAL_6]] : none
@@ -222,8 +227,9 @@ func.func @multiple_blocks_needed(%arg0: i1) {
 // CHECK-SAME:                                  %[[VAL_0:.*]]: i1,
 // CHECK-SAME:                                  %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]] = merge %[[VAL_0]] : i1
-// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = cond_br %[[VAL_2]], %[[VAL_1]] : none
-// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = cond_br %[[VAL_2]], %[[VAL_1]] : none
+// CHECK:           %[[VAL_1x:.*]] = merge %[[VAL_1]] : none
+// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = cond_br %[[VAL_2]], %[[VAL_1x]] : none
+// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = cond_br %[[VAL_2]], %[[VAL_1x]] : none
 // CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = control_merge %[[VAL_3]], %[[VAL_3]] : none
 // CHECK:           return %[[VAL_7]] : none
 // CHECK:         }
@@ -239,9 +245,10 @@ func.func @sameSuccessor(%cond: i1) {
 // CHECK-SAME:                                %[[VAL_0:.*]]: i64,
 // CHECK-SAME:                                %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]] = merge %[[VAL_0]] : i64
-// CHECK:           %[[VAL_3:.*]] = constant %[[VAL_1]] {value = 1 : i64} : i64
+// CHECK:           %[[VAL_1x:.*]] = merge %[[VAL_1]] : none
+// CHECK:           %[[VAL_3:.*]] = constant %[[VAL_1x]] {value = 1 : i64} : i64
 // CHECK:           %[[VAL_4:.*]] = br %[[VAL_2]] : i64
-// CHECK:           %[[VAL_5:.*]] = br %[[VAL_1]] : none
+// CHECK:           %[[VAL_5:.*]] = br %[[VAL_1x]] : none
 // CHECK:           %[[VAL_6:.*]] = br %[[VAL_3]] : i64
 // CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = control_merge %[[VAL_5]] : none
 // CHECK:           %[[VAL_9:.*]] = buffer [1] seq %[[VAL_10:.*]] {initValues = [0]} : i1
@@ -289,8 +296,9 @@ func.func @simple_loop(%arg0: i64) {
 // CHECK-SAME:                                           %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]] = merge %[[VAL_0]] : i1
 // CHECK:           %[[VAL_3:.*]] = buffer [2] fifo %[[VAL_2]] : i1
+// CHECK:           %[[VAL_1x:.*]] = merge %[[VAL_1]] : none
 // CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = cond_br %[[VAL_2]], %[[VAL_2]] : i1
-// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = cond_br %[[VAL_2]], %[[VAL_1]] : none
+// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = cond_br %[[VAL_2]], %[[VAL_1x]] : none
 // CHECK:           %[[VAL_8:.*]] = merge %[[VAL_4]] : i1
 // CHECK:           %[[VAL_9:.*]] = buffer [2] fifo %[[VAL_8]] : i1
 // CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = control_merge %[[VAL_6]] : none
@@ -353,8 +361,9 @@ func.func @blockWith3PredsAndLoop(%arg0: i1) {
 // CHECK-SAME:                                    %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]] = merge %[[VAL_0]] : i1
 // CHECK:           %[[VAL_3:.*]] = buffer [2] fifo %[[VAL_2]] : i1
+// CHECK:           %[[VAL_1x:.*]] = merge %[[VAL_1]] : none
 // CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = cond_br %[[VAL_2]], %[[VAL_2]] : i1
-// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = cond_br %[[VAL_2]], %[[VAL_1]] : none
+// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = cond_br %[[VAL_2]], %[[VAL_1x]] : none
 // CHECK:           %[[VAL_8:.*]] = merge %[[VAL_4]] : i1
 // CHECK:           %[[VAL_9:.*]] = buffer [2] fifo %[[VAL_8]] : i1
 // CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = control_merge %[[VAL_6]] : none
@@ -419,10 +428,11 @@ func.func @otherBlockOrder(%arg0: i1) {
 // CHECK:           %[[VAL_3:.*]] = merge %[[VAL_0]] : i1
 // CHECK:           %[[VAL_4:.*]] = buffer [2] fifo %[[VAL_3]] : i1
 // CHECK:           %[[VAL_5:.*]] = merge %[[VAL_1]] : i64
+// CHECK:           %[[VAL_2x:.*]] = merge %[[VAL_2]] : none
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = cond_br %[[VAL_3]], %[[VAL_3]] : i1
 // CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = cond_br %[[VAL_3]], %[[VAL_5]] : i64
 // CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = cond_br %[[VAL_3]], %[[VAL_5]] : i64
-// CHECK:           %[[VAL_12:.*]], %[[VAL_13:.*]] = cond_br %[[VAL_3]], %[[VAL_2]] : none
+// CHECK:           %[[VAL_12:.*]], %[[VAL_13:.*]] = cond_br %[[VAL_3]], %[[VAL_2x]] : none
 // CHECK:           %[[VAL_14:.*]] = merge %[[VAL_6]] : i1
 // CHECK:           %[[VAL_15:.*]] = buffer [2] fifo %[[VAL_14]] : i1
 // CHECK:           %[[VAL_16:.*]], %[[VAL_17:.*]] = control_merge %[[VAL_12]] : none
@@ -473,8 +483,9 @@ func.func @multiple_block_args(%arg0: i1, %arg1: i64) {
 // CHECK-SAME:                                           %[[VAL_1:.*]]: none, ...) -> none
 // CHECK:           %[[VAL_2:.*]] = merge %[[VAL_0]] : i1
 // CHECK:           %[[VAL_3:.*]] = buffer [2] fifo %[[VAL_2]] : i1
+// CHECK:           %[[VAL_1x:.*]] = merge %[[VAL_1]] : none
 // CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = cond_br %[[VAL_2]], %[[VAL_2]] : i1
-// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = cond_br %[[VAL_2]], %[[VAL_1]] : none
+// CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = cond_br %[[VAL_2]], %[[VAL_1x]] : none
 // CHECK:           %[[VAL_8:.*]] = merge %[[VAL_4]] : i1
 // CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = control_merge %[[VAL_6]] : none
 // CHECK:           %[[VAL_11:.*]] = br %[[VAL_8]] : i1

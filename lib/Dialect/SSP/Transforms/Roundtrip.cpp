@@ -58,7 +58,7 @@ void RoundtripPass::runOnOperation() {
   auto moduleOp = getOperation();
 
   // Solution constraint verification implies checking the input constraints.
-  bool check = checkInputConstraints | verifySolutionConstraints;
+  bool check = checkInputConstraints || verifySolutionConstraints;
   bool verify = verifySolutionConstraints;
 
   SmallVector<InstanceOp> instanceOps;
