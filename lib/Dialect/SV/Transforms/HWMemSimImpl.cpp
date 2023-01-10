@@ -260,17 +260,16 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     // Read Logic
     Value rdata = getMemoryRead(b, reg, addr, addMuxPragmas);
     if (!ignoreReadEnableMem) {
-      size_t addrRange = 1 << addr.getType().getIntOrFloatBitWidth();
-      if (mem.depth < addrRange) {
+      size_t addrRange = 1ULL << addr.getType().getIntOrFloatBitWidth();
+      if (!disableMemRandomization && mem.depth < addrRange) {
         // If out-of-bounds access is possible, then add a check.
-        auto isEnAndInBounds = en;
         auto readWire = b.create<sv::WireOp>(rdata.getType());
         // Create constant for mem.depth
         auto maxAddr =
             b.create<ConstantOp>(b.getIntegerAttr(addr.getType(), mem.depth));
         // Is enable and in-bounds.
-        isEnAndInBounds = b.create<comb::AndOp>(
-            isEnAndInBounds, b.create<comb::ICmpOp>(comb::ICmpPredicate::ult,
+        auto isEnAndInBounds = b.create<comb::AndOp>(
+            en, b.create<comb::ICmpOp>(comb::ICmpPredicate::ult,
                                                     addr, maxAddr, false));
         b.create<sv::IfDefOp>(
             "RANDOMIZE_GARBAGE_ASSIGN",
