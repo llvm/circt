@@ -247,6 +247,9 @@ struct ApplyState {
   InstancePathCache &instancePathCache;
   DenseMap<Attribute, FlatSymbolRefAttr> instPathToNLAMap;
   size_t numReusedHierPaths = 0;
+
+  llvm::StringMap<Value> legacyWiringSources;
+  llvm::StringMap<SmallVector<Value>> legacyWiringSinks;
   SmallVector<WiringProblem> wiringProblems;
 
   ModuleNamespace &getNamespace(FModuleLike module) {
@@ -280,6 +283,9 @@ LogicalResult applyOMIR(const AnnoPathValue &target, DictionaryAttr anno,
 
 LogicalResult applyTraceName(const AnnoPathValue &target, DictionaryAttr anno,
                              ApplyState &state);
+
+LogicalResult applyWiring(const AnnoPathValue &target, DictionaryAttr anno,
+                          ApplyState &state);
 
 /// Implements the same behavior as DictionaryAttr::getAs<A> to return the
 /// value of a specific type associated with a key in a dictionary. However,

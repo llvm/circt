@@ -459,6 +459,8 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {loadMemoryFromFileAnnoClass, {stdResolve, applyLoadMemoryAnno<false>}},
     {loadMemoryFromFileInlineAnnoClass,
      {stdResolve, applyLoadMemoryAnno<true>}},
+    {wiringSinkAnnoClass, {stdResolve, applyWiring}},
+    {wiringSourceAnnoClass, {stdResolve, applyWiring}},
 
 }};
 
@@ -487,6 +489,7 @@ struct LowerAnnotationsPass
     : public LowerFIRRTLAnnotationsBase<LowerAnnotationsPass> {
   void runOnOperation() override;
   LogicalResult applyAnnotation(DictionaryAttr anno, ApplyState &state);
+  LogicalResult legacyToWiringProblems(ApplyState &state);
   LogicalResult solveWiringProblems(ApplyState &state);
 
   bool ignoreUnhandledAnno = false;
@@ -531,6 +534,24 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
   if (record->applier(*target, anno, state).failed())
     return mlir::emitError(state.circuit.getLoc())
            << "Unable to apply annotation: " << anno;
+  return success();
+}
+
+/// Convert consumed SourceAnnotation and SinkAnnotation into WiringProblems,
+/// using the pin attribute as newNameHint
+LogicalResult LowerAnnotationsPass::legacyToWiringProblems(ApplyState &state) {
+  for (const auto &source : state.legacyWiringSources) {
+    auto pin = source.first();
+
+    if (state.legacyWiringSinks.find(pin) != state.legacyWiringSinks.end()) {
+      for (const auto &sink : state.legacyWiringSinks[pin]) {
+        state.wiringProblems.push_back({source.second, sink, pin.str()});
+      }
+    } else {
+      return mlir::emitError(state.circuit.getLoc())
+             << "Unable to resolve sink(s) for pin: " << pin;
+    }
+  }
   return success();
 }
 
@@ -919,6 +940,9 @@ void LowerAnnotationsPass::runOnOperation() {
     if (applyAnnotation(attr, state).failed())
       ++numFailures;
   }
+
+  if (failed(legacyToWiringProblems(state)))
+    ++numFailures;
 
   if (failed(solveWiringProblems(state)))
     ++numFailures;
