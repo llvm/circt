@@ -700,6 +700,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
 
+  // Run undefined value analysis, conditionally.
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createUndefAnalysisPass());
+
   // Run the infer-rw pass, which merges read and write ports of a memory with
   // mutually exclusive enables.
   if (!disableInferRW)

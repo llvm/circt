@@ -37,8 +37,14 @@ class LatticeValue {
     External
   };
 
+  LatticeValue(Kind k) : tag(k) {}
+
 public:
   LatticeValue() : tag(Kind::Unknown) {}
+
+  static LatticeValue getUndefined() {
+    return {Kind::Undefined};
+  }
 
   bool markUndefined() {
     if (tag == Undefined)
@@ -63,18 +69,123 @@ public:
   bool isValid() { return tag == Valid; }
   bool isExternal() { return tag == External; }
 
+  bool mergeIn(LatticeValue other) {
+    // no information
+    if (other.tag == Unknown)
+      return false;
+
+    // Undefined is a terminal state
+    if (tag == Undefined) {
+      return false;
+    }
+
+    // Unknown adopts rhs
+    if (tag == Unknown) {
+      tag = other.tag;
+      return true;
+    }
+
+    // Undefined is poison
+    if (other.tag == Undefined) {
+      if (tag == Undefined)
+        return false;
+      tag = Undefined;
+      return true;
+    }
+
+  // LHS is not Unkown or Undefined
+  // RHS is not Unkown or Undefined 
+
+    if (other.tag == External) {
+      if (tag == External)
+        return false;
+      tag = External;
+      return true;
+    }
+
+    // External <- Valid is a no-op
+    // Valid < Valid is a no-op
+    return false;
+  }
+
+
+raw_ostream& print(raw_ostream& os) const {
+  switch (tag) {
+    case Unknown:
+     os << "Unknown";
+     break;
+     case Undefined:
+     os << "Undefined";
+     break;
+     case Valid:
+     os << "Valid";
+     break;
+     case External:
+     os << "External";
+     break;
+  }
+  return os;
+}
 private:
   Kind tag;
 };
 
 struct InstPath {
-    SmallVector<InstanceOp> path;
+    const SmallVector<InstanceOp>* path;
 };
 
-using ValueKey = std::tuple<Value, const InstPath*>;
-using BlockKey = std::tuple<Block*, const InstPath*>;
+struct ValueKey {
+  Value value;
+  InstPath path;
+};
+
+struct BlockKey {
+  Block* block;
+  InstPath path;
+};
+
+bool operator<(const BlockKey& lhs, const BlockKey& rhs) {
+  if(lhs.block < rhs.block)
+    return true;
+  if (lhs.block > rhs.block)
+    return false;
+  return lhs.path.path < rhs.path.path;
+}
+
+raw_ostream& operator<<(raw_ostream& os, const InstPath& path) {
+  os << "[";
+
+  os << "]";
+  return os;
+}
+raw_ostream& operator<<(raw_ostream& os, const LatticeValue& lat) {
+  lat.print(os);
+  return os;
+}
 
 } // namespace
+
+namespace llvm {
+  template <>
+struct DenseMapInfo<ValueKey> {
+  static ValueKey getEmptyKey() {
+    auto pointer = llvm::DenseMapInfo<void *>::getEmptyKey();
+    return {Value::getFromOpaquePointer(pointer), {nullptr}};
+  }
+  static ValueKey getTombstoneKey() {
+    auto pointer = llvm::DenseMapInfo<void *>::getTombstoneKey();
+    return {Value::getFromOpaquePointer(pointer), {nullptr}};
+  }
+
+  static unsigned getHashValue(const ValueKey &node) {
+    return hash_combine(node.value, node.path.path);
+  }
+  static bool isEqual(const ValueKey &lhs, const ValueKey &rhs) { return lhs.value == rhs.value && lhs.path.path == rhs.path.path; }
+};
+
+} // namespace llvm
+
+
 /*
 undef = undef op *
 valid = valid op valid
@@ -103,13 +214,14 @@ struct UndefAnalysisPass : public UndefAnalysisBase<UndefAnalysisPass> {
   void runOnOperation() override;
 
   void markBlockExecutable(BlockKey block);
-  void visitOperation(Operation *op, const InstPath* path);
+  void visitOperation(Operation *op, InstPath path);
 
   /// Returns true if the given block is executable.
   bool isBlockExecutable(BlockKey block) const {
     return executableBlocks.count(block);
   }
 
+  // Force value to undefined
   void markUndefined(ValueKey value) {
     auto &entry = latticeValues[value];
     if (!entry.isUndefined()) {
@@ -118,6 +230,7 @@ struct UndefAnalysisPass : public UndefAnalysisBase<UndefAnalysisPass> {
     }
   }
 
+  // Force value to external
   void markExternal(ValueKey value) {
     auto &entry = latticeValues[value];
     if (!entry.isExternal()) {
@@ -126,6 +239,7 @@ struct UndefAnalysisPass : public UndefAnalysisBase<UndefAnalysisPass> {
     }
   }
 
+  // Force value to valid
   void markValid(ValueKey value) {
     auto &entry = latticeValues[value];
     if (!entry.isValid()) {
@@ -134,7 +248,28 @@ struct UndefAnalysisPass : public UndefAnalysisBase<UndefAnalysisPass> {
     }
   }
 
-  InstPath* ExtendPath(InstPath*, InstanceOp);
+  // merge an undefined value into the existing lattice element
+  void mergeUndefined(ValueKey value) {
+    mergeLattice(value, LatticeValue::getUndefined());
+  }
+
+  void mergeValues(ValueKey lhs, ValueKey rhs) {
+    mergeLattice(lhs, latticeValues[rhs]);
+  }
+
+  void mergeLattice(ValueKey lhs, LatticeValue rhs) {
+    auto& oldLhs = latticeValues[lhs];
+    if (oldLhs.mergeIn(rhs)) {
+      changedLatticeValueWorklist.push_back(lhs);
+    }
+  }
+
+  InstPath ExtendPath(InstPath, InstanceOp);
+
+  // visitors:
+  void visitConnect(ConnectOp con, InstPath path);
+void visitConnect(StrictConnectOp con, InstPath path);
+void visitInstance(InstanceOp inst, InstPath path);
 
 private:
 
@@ -148,7 +283,7 @@ private:
   /// The set of blocks that are known to execute, or are intrinsically live.
   std::set<BlockKey> executableBlocks;
 
-  std::set<InstPath> uniqPaths;
+  std::set<SmallVector<InstanceOp> > uniqPaths;
 };
 } // namespace
 
@@ -158,7 +293,7 @@ void UndefAnalysisPass::runOnOperation() {
   // Mark the input ports of the top-level modules as being external.  We ignore
   // all other public modules.
   auto top = cast<FModuleOp>(circuit.getMainModule());
-  auto* topPath = &*uniqPaths.emplace().first;
+  InstPath topPath{&*uniqPaths.emplace().first};
   for (auto port : top.getBodyBlock()->getArguments())
     markExternal({(Value)port, topPath});
   markBlockExecutable({top.getBodyBlock(), topPath});
@@ -171,30 +306,37 @@ void UndefAnalysisPass::runOnOperation() {
         visitOperation(user, path);
     }
   }
+
+  for (auto i : latticeValues) {
+    llvm::errs() << "***\n";
+    i.first.value.dump();
+    llvm::errs() << i.first.path
+     << "\n"
+     << i.second << "\n";
+  }
 }
 
 void UndefAnalysisPass::markBlockExecutable(BlockKey block) {
   if (!executableBlocks.insert(block).second)
     return;
 
-  auto path = get<1>(block);
-  for (auto &op : *get<0>(block)) {
-    visitOperation(op, path);
+  for (auto &op : *block.block) {
+    visitOperation(&op, block.path);
   }
 }
 
-void UndefAnalysisPass::visitOperation(Operation *op, const InstPath* path) {
+void UndefAnalysisPass::visitOperation(Operation *op, InstPath path) {
   if (auto reg = dyn_cast<RegOp>(op))
     return mergeUndefined({reg, path});
   if (isa<ConstantOp>(op))
-    return markValid({op, path})
-  if (isa<InvalidOp>(op))
-    return markUndefined({op, path});
+    return markValid({op->getResult(0), path});
+  if (isa<InvalidValueOp>(op))
+    return markUndefined({op->getResult(0), path});
   if (auto con = dyn_cast<ConnectOp>(op))
     return visitConnect(con, path);
-  if (auto con = dyn_cast<StrinctConnectOp>(op))
+  if (auto con = dyn_cast<StrictConnectOp>(op))
     return visitConnect(con, path);
-  if (auto inst = dyn_cast<Instanceop>(op))
+  if (auto inst = dyn_cast<InstanceOp>(op))
     return visitInstance(inst, path);
 
   // Everything else just uses simple transfer functions
@@ -203,23 +345,23 @@ void UndefAnalysisPass::visitOperation(Operation *op, const InstPath* path) {
             mergeValues({result, path}, {operand, path});
 }
 
-void visitConnect(ConnectOp con, const InstPath* path) {  
-  mergeValues(con.getDst(), con.getSrc());
+void UndefAnalysisPass::visitConnect(ConnectOp con, InstPath path) {  
+  mergeValues({con.getDest(), path}, {con.getSrc(), path});
 }
 
-void visitConnect(StrictConnectOp con, const InstPath* path) {  
-  mergeValues(con.getDst(), con.getSrc());
+void UndefAnalysisPass::visitConnect(StrictConnectOp con, InstPath path) {  
+  mergeValues({con.getDest(), path}, {con.getSrc(), path});
 }
 
-void visitInstance(InstanceOp inst, const InstPath* path) {
+void UndefAnalysisPass::visitInstance(InstanceOp inst, InstPath path) {
 
 }
 
-InstPath* ExtendPath(InstPath* path, InstanceOp inst) {
+InstPath UndefAnalysisPass::ExtendPath(InstPath path, InstanceOp inst) {
     auto newPath = *path.path;
     newPath.push_back(inst);
-    auto ins = uniqPaths.insert(newPath);
-    return &*inst.first;
+    auto newUniqPath = uniqPaths.emplace(newPath).first;
+    return {&*newUniqPath};
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createUndefAnalysisPass() {
