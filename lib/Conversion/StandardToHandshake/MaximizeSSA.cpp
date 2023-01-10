@@ -19,9 +19,8 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/raw_ostream.h"
-
-#include <stack>
 
 using namespace mlir;
 using namespace circt;
@@ -49,12 +48,9 @@ static LogicalResult addArgToTerminator(Block *block, Block *predBlock,
 
   // In the predecessor block's terminator, find all successors that equal
   // the block and add the value to the list of operands it's passed
-  auto successors = branchOp->getSuccessors();
-  for (uint idx = 0, numSucc = successors.size(); idx < numSucc; ++idx) {
-    auto *succBlock = successors[idx];
+  for (auto [idx, succBlock] : llvm::enumerate(branchOp->getSuccessors()))
     if (succBlock == block)
       branchOp.getSuccessorOperands(idx).append(value);
-  }
 
   return success();
 }
@@ -86,24 +82,21 @@ LogicalResult circt::maximizeSSA(Value value, PatternRewriter &rewriter) {
       blocksUsing.insert(block);
   }
 
-  // Prepare a stack to store the list of basic blocks that must be modified for
-  // the value to be in maximum SSA form. At all points, blocksUsing is a
-  // non-strict superset of the elements contained in blocksToVisit
-  std::stack<Block *> blocksToVisit;
-  for (auto *block : blocksUsing) {
-    blocksToVisit.push(block);
-  }
+  // Prepare a stack to iterate over the list of basic blocks that must be
+  // modified for the value to be in maximum SSA form. At all points,
+  // blocksUsing is a non-strict superset of the elements contained in
+  // blocksToVisit
+  SmallVector<Block *> blocksToVisit(blocksUsing.begin(), blocksUsing.end());
 
   // Backtrack from all blocks using the value to the value-defining basic
   // block, adding a new block argument for the value along the way. Keep
-  // track of which blocks have already been modified to avoid visiting a block
-  // more than once while backtracking (possible due to branching control flow)
+  // track of which blocks have already been modified to avoid visiting a
+  // block more than once while backtracking (possible due to branching
+  // control flow)
   DenseMap<Block *, BlockArgument> blockToArg;
   while (!blocksToVisit.empty()) {
-    // Retrieve the basic block at the top of the stack, remove it from the
-    // stack, and add it to the list of visited blocks
-    auto *block = blocksToVisit.top();
-    blocksToVisit.pop();
+    // Pop the basic block at the top of the stack
+    auto *block = blocksToVisit.pop_back_val();
 
     // Add an argument to the block to hold the value
     blockToArg[block] =
@@ -122,7 +115,7 @@ LogicalResult circt::maximizeSSA(Value value, PatternRewriter &rewriter) {
       if (predBlock != defBlock)
         if (auto [_, blockNewlyUsing] = blocksUsing.insert(predBlock);
             blockNewlyUsing)
-          blocksToVisit.push(predBlock);
+          blocksToVisit.push_back(predBlock);
     }
   }
 
