@@ -45,18 +45,15 @@ LogicalResult circt::firrtl::applyWiring(const AnnoPathValue &target,
               << target.ref;
           return failure();
         }
-        for (auto path : paths.back()) {
-          auto inst = cast<InstanceOp>(path);
-          builder.setInsertionPointAfter(inst);
-          targetsValues.push_back(getValueByFieldID(
-              builder, inst->getResult(portNum), target.fieldIdx));
-        }
+        auto inst = cast<InstanceOp>(paths[0].back());
+        builder.setInsertionPointAfter(inst);
+        targetsValues.push_back(getValueByFieldID(
+            builder, inst->getResult(portNum), target.fieldIdx));
       } else {
-        for (auto &inst : target.instances) {
-          builder.setInsertionPointAfter(inst);
-          targetsValues.push_back(getValueByFieldID(
-              builder, inst->getResult(portNum), target.fieldIdx));
-        }
+        auto inst = cast<InstanceOp>(target.instances.back());
+        builder.setInsertionPointAfter(inst);
+        targetsValues.push_back(getValueByFieldID(
+            builder, inst->getResult(portNum), target.fieldIdx));
       }
     } else {
       return mlir::emitError(state.circuit.getLoc())
