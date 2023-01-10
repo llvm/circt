@@ -650,7 +650,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
             [&](auto v) { return sinkBuilder.create<AsAsyncResetPrimOp>(v); });
     }
 
-    state.wiringProblems.push_back({sendVal, sink, ""});
+    state.wiringProblems.push_back({sendVal, sink, "", false});
   }
 
   return success();
@@ -738,6 +738,6 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
         "cannot generate the MemTap, wiretap Type does not match the memory "
         "type");
   auto sink = wireTarget->ref.getOp()->getResult(0);
-  state.wiringProblems.push_back({sendVal, sink, "memTap"});
+  state.wiringProblems.push_back({sendVal, sink, "memTap", false});
   return success();
 }

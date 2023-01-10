@@ -206,6 +206,9 @@ struct WiringProblem {
   /// A base name to use when generating new signals associated with this wiring
   /// problem.
   std::string newNameHint;
+
+  /// Create real type ports instead of ref type when solving this problem.
+  bool useRealTypePorts;
 };
 
 /// A store of pending modifications to a FIRRTL module associated with solving
