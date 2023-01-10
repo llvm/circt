@@ -193,8 +193,15 @@ static void addInstancesToCloneSet(
     // the input set. Add any instance inputs to the input set. Also add the
     // instance to the map of extracted instances by module.
     opsToClone.insert(instance);
-    for (auto operand : instance.getOperands())
+    for (auto operand : instance.getOperands()) {
+      // Don't add values to the input set if they are the result of an op we
+      // are already going to clone.
+      if (operand.getDefiningOp() &&
+          opsToClone.contains(operand.getDefiningOp()))
+        continue;
+
       inputsToAdd.push_back(operand);
+    }
     for (auto result : instance.getResults())
       inputsToRemove.push_back(result);
     extractedInstances[instance.getModuleNameAttr().getAttr()].insert(instance);
