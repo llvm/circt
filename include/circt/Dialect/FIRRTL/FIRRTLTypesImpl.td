@@ -71,26 +71,26 @@ def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
     /// Get an integer ID for the field. Field IDs start at 1, and are assigned
     /// to each field in a vector in a recursive depth-first walk of all
     /// elements. A field ID of 0 is used to reference the vector itself.
-    size_t getFieldID(size_t index);
+    uint64_t getFieldID(uint64_t index);
 
     /// Find the element index corresponding to the desired fieldID.  If the
     /// fieldID corresponds to a field in nested under an element, it will
     /// return the index of the parent element.
-    size_t getIndexForFieldID(size_t fieldID);
+    uint64_t getIndexForFieldID(uint64_t fieldID);
 
     /// Strip off a single layer of this type and return the sub-type and a
     /// field ID targeting the same field, but rebased on the sub-type.
-    std::pair<FIRRTLBaseType, size_t> getSubTypeByFieldID(size_t fieldID);
+    std::pair<FIRRTLBaseType, uint64_t> getSubTypeByFieldID(uint64_t fieldID);
 
     /// Get the maximum field ID in this vector.  This is helpful for
     /// constructing field IDs when this VectorType is nested in another
     /// aggregate type.
-    size_t getMaxFieldID();
+    uint64_t getMaxFieldID();
 
     /// Returns the effective field id when treating the index field as the root
     /// of the type.  Essentially maps a fieldID to a fieldID after a subfield
     /// op. Returns the new id and whether the id is in the given child.
-    std::pair<size_t, bool> rootChildFieldID(size_t fieldID, size_t index);
+    std::pair<uint64_t, bool> rootChildFieldID(uint64_t fieldID, uint64_t index);
   }];
 }
 
@@ -154,27 +154,27 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
     /// visiting all nested bundle fields.  A field ID of 0 is used to reference
     /// the bundle itself. The ID can be used to uniquely identify any specific
     /// field in this bundle.
-    unsigned getFieldID(unsigned index);
+    uint64_t getFieldID(uint64_t index);
 
     /// Find the element index corresponding to the desired fieldID.  If the
     /// fieldID corresponds to a field in a nested bundle, it will return the
     /// index of the parent field.
-    unsigned getIndexForFieldID(unsigned fieldID);
+    uint64_t getIndexForFieldID(uint64_t fieldID);
 
     /// Strip off a single layer of this type and return the sub-type and a
     /// field ID targeting the same field, but rebased on the sub-type.
-    std::pair<FIRRTLBaseType, unsigned> getSubTypeByFieldID(unsigned fieldID);
+    std::pair<FIRRTLBaseType, uint64_t> getSubTypeByFieldID(uint64_t fieldID);
 
     /// Get the maximum field ID in this bundle.  This is helpful for
     /// constructing field IDs when this BundleType is nested in another
     /// aggregate type.
-    unsigned getMaxFieldID();
+    uint64_t getMaxFieldID();
 
     /// Returns the effective field id when treating the index field as the root
     /// of the type.  Essentially maps a fieldID to a fieldID after a subfield
     /// op. Returns the new id and whether the id is in the given child.
-    std::pair<unsigned, bool> rootChildFieldID(unsigned fieldID,
-                                               unsigned index);
+    std::pair<uint64_t, bool> rootChildFieldID(uint64_t fieldID,
+                                               uint64_t index);
 
     using iterator = ArrayRef<BundleElement>::iterator;
     iterator begin() const { return getElements().begin(); }

@@ -514,7 +514,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
   if (!annotations || annotations.empty())
     return ArrayAttr::get(ctxt, retval);
   for (auto opAttr : annotations) {
-    std::optional<int64_t> maybeFieldID;
+    std::optional<uint64_t> maybeFieldID;
     DictionaryAttr annotation;
     annotation = opAttr.dyn_cast<DictionaryAttr>();
     if (annotations)

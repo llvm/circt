@@ -124,27 +124,27 @@ public:
   /// types and vector types, each field is assigned a field ID in a depth-first
   /// walk order. This function is used to calculate field IDs when this type is
   /// nested under another type.
-  unsigned getMaxFieldID();
+  uint64_t getMaxFieldID();
 
   /// Get the sub-type of a type for a field ID, and the subfield's ID. Strip
   /// off a single layer of this type and return the sub-type and a field ID
   /// targeting the same field, but rebased on the sub-type.
-  std::pair<FIRRTLBaseType, unsigned> getSubTypeByFieldID(unsigned fieldID);
+  std::pair<FIRRTLBaseType, uint64_t> getSubTypeByFieldID(uint64_t fieldID);
 
   /// Return the final type targeted by this field ID by recursively walking all
   /// nested aggregate types. This is the identity function for ground types.
-  FIRRTLBaseType getFinalTypeByFieldID(unsigned fieldID);
+  FIRRTLBaseType getFinalTypeByFieldID(uint64_t fieldID);
 
   /// Returns the effective field id when treating the index field as the
   /// root of the type.  Essentially maps a fieldID to a fieldID after a
   /// subfield op. Returns the new id and whether the id is in the given
   /// child.
-  std::pair<unsigned, bool> rootChildFieldID(unsigned fieldID, unsigned index);
+  std::pair<uint64_t, bool> rootChildFieldID(uint64_t fieldID, uint64_t index);
 
   /// Get the number of ground (non-aggregate) fields in the type.  A field
   /// which is a bundle or vector is not counted, but the recursive ground
   /// fields of are.
-  unsigned getGroundFields() const;
+  uint64_t getGroundFields() const;
 
 protected:
   using FIRRTLType::FIRRTLType;
