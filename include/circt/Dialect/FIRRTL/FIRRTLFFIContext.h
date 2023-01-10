@@ -14,6 +14,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLFFICONTEXT_H
 #define CIRCT_DIALECT_FIRRTL_FIRRTLFFICONTEXT_H
 
+#include "circt/Dialect/FIRRTL/FIRModuleContextBase.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -53,58 +54,23 @@ enum class ModuleKind {
   ExtModule,
 };
 
-using UnbundledID = llvm::PointerEmbeddedInt<unsigned, 31>;
-using SymbolValueEntry = llvm::PointerUnion<Value, UnbundledID>;
-using ModuleSymbolTable =
-    llvm::StringMap<SymbolValueEntry, llvm::BumpPtrAllocator>;
-using ModuleSymbolTableEntry = llvm::StringMapEntry<SymbolValueEntry>;
-using UnbundledValueEntry = SmallVector<std::pair<Attribute, Value>>;
-using UnbundledValuesList = std::vector<UnbundledValueEntry>;
-using SubaccessCache = llvm::DenseMap<std::pair<Value, unsigned>, Value>;
-
-// Extract from `class FIRModuleContext` in `FIRParser.cpp`.
-class ModuleContext {
+class ModuleContext final : public firrtl::FIRModuleContextBase {
 public:
-  ModuleContext(FFIContext &ctx, ModuleKind kind);
-
-  Value &getCachedSubaccess(Value value, unsigned int index);
-
-  bool addSymbolEntry(StringRef name, SymbolValueEntry entry,
-                      bool insertNameIntoGlobalScope = false);
-  bool addSymbolEntry(StringRef name, Value value,
-                      bool insertNameIntoGlobalScope = false);
-  bool lookupSymbolEntry(SymbolValueEntry &result, StringRef name);
-  bool resolveSymbolEntry(Value &result, SymbolValueEntry &entry, bool fatal);
-  bool resolveSymbolEntry(Value &result, SymbolValueEntry &entry,
-                          StringRef fieldName);
+  ModuleContext(FFIContext &ctx, ModuleKind kind, std::string moduleTarget);
 
   inline bool isExtModule() const { return kind == ModuleKind::ExtModule; }
 
-  class ContextScope {
-    friend struct ModuleContext;
+  MLIRContext *getContext() const override;
 
-    ContextScope(ModuleContext &moduleContext, Block *block);
-    ~ContextScope();
+  InFlightDiagnostic emitError(const Twine &message = {}) override;
+  InFlightDiagnostic emitError(llvm::SMLoc loc,
+                               const Twine &message = {}) override;
 
-  private:
-    void operator=(const ContextScope &) = delete;
-    ContextScope(const ContextScope &) = delete;
-
-    ModuleContext &moduleContext;
-    Block *block;
-    ContextScope *previousScope;
-    std::vector<ModuleSymbolTableEntry *> scopedDecls;
-    std::vector<std::pair<Value, unsigned int>> scopedSubaccesses;
-  };
+  Location translateLocation(llvm::SMLoc loc) override;
 
 private:
   FFIContext &ffiCtx;
   ModuleKind kind;
-  ModuleSymbolTable symbolTable;
-  SubaccessCache subaccessCache;
-  UnbundledValuesList unbundledValues;
-  DenseMap<Block *, ContextScope *> scopeMap;
-  ContextScope *currentScope = nullptr;
 };
 } // namespace details
 
@@ -137,6 +103,7 @@ private:
   std::unique_ptr<mlir::ModuleOp> module;
   std::unique_ptr<mlir::OpBuilder> opBuilder;
   details::RequireAssigned<firrtl::CircuitOp> circuitOp;
+  details::RequireAssigned<std::string> circuitTarget;
   std::variant<details::RequireAssigned<firrtl::FModuleOp>,
                details::RequireAssigned<firrtl::FExtModuleOp>>
       moduleOp;
@@ -144,6 +111,7 @@ private:
   details::RequireAssigned<details::ModuleContext> moduleContext;
 
   Location mockLoc() const;
+  llvm::SMLoc mockSMLoc() const;
   StringAttr stringRefToAttr(StringRef stringRef);
   std::optional<mlir::Attribute>
   ffiParamToFirParam(const FirrtlParameter &param);

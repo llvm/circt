@@ -23,6 +23,16 @@ using namespace circt;
 using namespace firrtl;
 using namespace chirrtl;
 
+using llvm::SMLoc;
+
+using ModuleSymbolTable = FIRModuleContextBase::ModuleSymbolTable;
+using ModuleSymbolTableEntry = FIRModuleContextBase::ModuleSymbolTableEntry;
+using SubaccessCache = FIRModuleContextBase::SubaccessCache;
+using SymbolValueEntry = FIRModuleContextBase::SymbolValueEntry;
+using UnbundledID = FIRModuleContextBase::UnbundledID;
+using UnbundledValueEntry = FIRModuleContextBase::UnbundledValueEntry;
+using UnbundledValuesList = FIRModuleContextBase::UnbundledValuesList;
+
 namespace {
 StringRef attrToStringRef(const Attribute &attr) {
   return llvm::dyn_cast<StringAttr>(attr);
@@ -41,114 +51,25 @@ StringRef attrToStringRef(const Attribute &attr) {
 
 namespace circt::chirrtl::details {
 
-ModuleContext::ModuleContext(FFIContext &ctx, ModuleKind kind)
-    : ffiCtx{ctx}, kind{kind} {}
+ModuleContext::ModuleContext(FFIContext &ctx, ModuleKind kind,
+                             std::string moduleTarget)
+    : FIRModuleContextBase{std::move(moduleTarget)}, ffiCtx{ctx}, kind{kind} {}
 
-Value &ModuleContext::getCachedSubaccess(Value value, unsigned int index) {
-  auto &result = subaccessCache[{value, index}];
-  if (!result) {
-    // The outer most block won't be in the map.
-    auto it = scopeMap.find(value.getParentBlock());
-    if (it != scopeMap.end())
-      it->second->scopedSubaccesses.emplace_back(result, index);
-  }
-  return result;
+MLIRContext *ModuleContext::getContext() const { return ffiCtx.mlirCtx.get(); }
+
+InFlightDiagnostic ModuleContext::emitError(const Twine &message) {
+  return emitError(ffiCtx.mockSMLoc(), message);
+}
+InFlightDiagnostic ModuleContext::emitError(SMLoc loc, const Twine &message) {
+  ffiCtx.emitError(message.str());
+  auto err = mlir::emitError(translateLocation(loc), message);
+  err.abandon();
+  return err;
 }
 
-bool ModuleContext::addSymbolEntry(StringRef name, SymbolValueEntry entry,
-                                   bool insertNameIntoGlobalScope) {
-  assert(!insertNameIntoGlobalScope && "unimplemented"); // TODO
-
-  auto result = symbolTable.try_emplace(name, SymbolValueEntry{});
-  if (!result.second) {
-    ffiCtx.emitError(("redefinition of name '" + name + "'").str());
-    return false;
-  }
-
-  result.first->second = entry;
-
-  if (currentScope && !insertNameIntoGlobalScope) {
-    currentScope->scopedDecls.push_back(&*result.first);
-  }
-
-  return true;
-}
-
-bool ModuleContext::addSymbolEntry(StringRef name, Value value,
-                                   bool insertNameIntoGlobalScope) {
-  return addSymbolEntry(name, SymbolValueEntry{value},
-                        insertNameIntoGlobalScope);
-}
-
-bool ModuleContext::lookupSymbolEntry(SymbolValueEntry &result,
-                                      StringRef name) {
-  if (symbolTable.find(name) == symbolTable.end()) {
-    ffiCtx.emitError(("use of unknown declaration '" + name + "'").str());
-    return false;
-  }
-
-  result = symbolTable[name];
-  assert(result && "name in symbol table without definition");
-
-  return true;
-}
-
-bool ModuleContext::resolveSymbolEntry(Value &result, SymbolValueEntry &entry,
-                                       bool fatal) {
-  if (!entry.is<Value>()) {
-    if (fatal) {
-      ffiCtx.emitError("bundle value should only be used from subfield");
-    }
-    return false;
-  }
-  result = entry.get<Value>();
-  return true;
-}
-
-bool ModuleContext::resolveSymbolEntry(Value &result, SymbolValueEntry &entry,
-                                       StringRef fieldName) {
-  if (!entry.is<UnbundledID>()) {
-    ffiCtx.emitError("value should not be used from subfield");
-    return false;
-  }
-
-  auto fieldAttr = StringAttr::get(ffiCtx.mlirCtx.get(), fieldName);
-
-  unsigned int unbundledId = entry.get<UnbundledID>() - 1;
-  assert(unbundledId < unbundledValues.size());
-  UnbundledValueEntry &ubEntry = unbundledValues[unbundledId];
-  for (auto elt : ubEntry) {
-    if (elt.first == fieldAttr) {
-      result = elt.second;
-      break;
-    }
-  }
-  if (!result) {
-    ffiCtx.emitError(
-        ("use of invalid field name '" + fieldName + "' on bundle value")
-            .str());
-    return false;
-  }
-
-  return true;
-}
-
-ModuleContext::ContextScope::ContextScope(ModuleContext &moduleContext,
-                                          Block *block)
-    : moduleContext(moduleContext), block(block),
-      previousScope(moduleContext.currentScope) {
-  moduleContext.currentScope = this;
-  moduleContext.scopeMap[block] = this;
-}
-ModuleContext::ContextScope::~ContextScope() {
-  // Erase the scoped subacceses from the cache. If the block is deleted we
-  // could resuse the memory, although the chances are quite small.
-  for (auto subaccess : scopedSubaccesses)
-    moduleContext.subaccessCache.erase(subaccess);
-  // Erase this context from the map.
-  moduleContext.scopeMap.erase(block);
-  // Reset to the previous scope.
-  moduleContext.currentScope = previousScope;
+Location ModuleContext::translateLocation(llvm::SMLoc loc) {
+  (void)loc;
+  return ffiCtx.mockLoc();
 }
 
 } // namespace circt::chirrtl::details
@@ -177,20 +98,26 @@ void FFIContext::visitCircuit(StringRef name) {
   moduleContext.underlying.reset();
 
   circuitOp = opBuilder->create<CircuitOp>(mockLoc(), stringRefToAttr(name));
+  circuitTarget = ("~" + name).str();
 }
 
 void FFIContext::visitModule(StringRef name) {
   RA_EXPECT(auto &circuitOp, this->circuitOp);
+  RA_EXPECT(auto &circuitTarget, this->circuitTarget);
 
   auto builder = circuitOp.getBodyBuilder();
   moduleOp =
       builder.create<FModuleOp>(mockLoc(), stringRefToAttr(name),
                                 ArrayRef<PortInfo>{} /* TODO: annotations */);
-  moduleContext.underlying.emplace(*this, details::ModuleKind::Module);
+
+  auto moduleTarget = (circuitTarget + "|" + name).str();
+  moduleContext.underlying.emplace(*this, details::ModuleKind::Module,
+                                   std::move(moduleTarget));
 }
 
 void FFIContext::visitExtModule(StringRef name, StringRef defName) {
   RA_EXPECT(auto &circuitOp, this->circuitOp);
+  RA_EXPECT(auto &circuitTarget, this->circuitTarget);
 
   seenParamNames.clear();
 
@@ -198,7 +125,10 @@ void FFIContext::visitExtModule(StringRef name, StringRef defName) {
   moduleOp = builder.create<FExtModuleOp>(mockLoc(), stringRefToAttr(name),
                                           ArrayRef<PortInfo>{}, defName
                                           /* TODO: annotations */);
-  moduleContext.underlying.emplace(*this, details::ModuleKind::ExtModule);
+
+  auto moduleTarget = (circuitTarget + "|" + name).str();
+  moduleContext.underlying.emplace(*this, details::ModuleKind::ExtModule,
+                                   std::move(moduleTarget));
 }
 
 void FFIContext::visitParameter(StringRef name, const FirrtlParameter &param) {
@@ -274,7 +204,7 @@ void FFIContext::visitPort(StringRef name, Direction direction,
 
         if (!lastModuleCtx.isExtModule()) {
           auto arg = lastModuleOp.getBody().getArgument(index);
-          lastModuleCtx.addSymbolEntry(name, std::move(arg));
+          (void)lastModuleCtx.addSymbolEntry(name, std::move(arg), mockSMLoc());
         }
       },
       moduleOp);
@@ -315,6 +245,11 @@ void FFIContext::exportFIRRTL(llvm::raw_ostream &os) const {
 Location FFIContext::mockLoc() const {
   // no location info available
   return mlir::UnknownLoc::get(mlirCtx.get());
+}
+
+SMLoc FFIContext::mockSMLoc() const {
+  // no location info available
+  return SMLoc::getFromPointer("no location info available");
 }
 
 StringAttr FFIContext::stringRefToAttr(StringRef stringRef) {
@@ -438,13 +373,15 @@ FFIContext::resolveModuleRefExpr(BodyOpBuilder &bodyOpBuilder,
     return {};
   }
 
-  details::SymbolValueEntry symtabEntry;
-  if (!lastModuleCtx.lookupSymbolEntry(symtabEntry, refExprParts[0])) {
+  SymbolValueEntry symtabEntry;
+  if (lastModuleCtx.lookupSymbolEntry(symtabEntry, refExprParts[0],
+                                      mockSMLoc())) {
     return {};
   }
 
   mlir::Value result;
-  if (lastModuleCtx.resolveSymbolEntry(result, symtabEntry, false)) {
+  if (!lastModuleCtx.resolveSymbolEntry(result, symtabEntry, mockSMLoc(),
+                                        false)) {
 
     // Handle fields
     for (size_t i = 1; i < refExprParts.size(); i++) {
@@ -495,7 +432,7 @@ FFIContext::resolveModuleRefExpr(BodyOpBuilder &bodyOpBuilder,
     return result;
   }
 
-  assert(symtabEntry.is<details::UnbundledID>() && "should be an instance");
+  assert(symtabEntry.is<UnbundledID>() && "should be an instance");
 
   assert(false && "UnbundledID unimplemented"); // TODO
 

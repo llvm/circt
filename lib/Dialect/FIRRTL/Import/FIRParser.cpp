@@ -15,6 +15,7 @@
 #include "FIRLexer.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRModuleContextBase.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
@@ -29,7 +30,6 @@
 #include "mlir/IR/Verifier.h"
 #include "mlir/Support/Timing.h"
 #include "mlir/Tools/mlir-translate/Translation.h"
-#include "llvm/ADT/PointerEmbeddedInt.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
@@ -46,6 +46,14 @@ using namespace chirrtl;
 using llvm::SMLoc;
 using llvm::SourceMgr;
 using mlir::LocationAttr;
+
+using ModuleSymbolTable = FIRModuleContextBase::ModuleSymbolTable;
+using ModuleSymbolTableEntry = FIRModuleContextBase::ModuleSymbolTableEntry;
+using SubaccessCache = FIRModuleContextBase::SubaccessCache;
+using SymbolValueEntry = FIRModuleContextBase::SymbolValueEntry;
+using UnbundledID = FIRModuleContextBase::UnbundledID;
+using UnbundledValueEntry = FIRModuleContextBase::UnbundledValueEntry;
+using UnbundledValuesList = FIRModuleContextBase::UnbundledValuesList;
 
 namespace json = llvm::json;
 
@@ -758,235 +766,28 @@ ParseResult FIRParser::parseOptionalRUW(RUWAttr &result) {
   return success();
 }
 
-//===----------------------------------------------------------------------===//
-// FIRModuleContext
-//===----------------------------------------------------------------------===//
-
-// Entries in a symbol table are either an mlir::Value for the operation that
-// defines the value or an unbundled ID tracking the index in the
-// UnbundledValues list.
-using UnbundledID = llvm::PointerEmbeddedInt<unsigned, 31>;
-using SymbolValueEntry = llvm::PointerUnion<Value, UnbundledID>;
-
-using ModuleSymbolTable =
-    llvm::StringMap<std::pair<SMLoc, SymbolValueEntry>, llvm::BumpPtrAllocator>;
-using ModuleSymbolTableEntry =
-    llvm::StringMapEntry<std::pair<SMLoc, SymbolValueEntry>>;
-
-using UnbundledValueEntry = SmallVector<std::pair<Attribute, Value>>;
-using UnbundledValuesList = std::vector<UnbundledValueEntry>;
-
-using SubaccessCache = llvm::DenseMap<std::pair<Value, unsigned>, Value>;
-
 namespace {
-/// This struct provides context information that is global to the module we're
-/// currently parsing into.
-struct FIRModuleContext : public FIRParser {
+struct FIRModuleContext final : public FIRModuleContextBase, public FIRParser {
   explicit FIRModuleContext(SharedParserConstants &constants, FIRLexer &lexer,
                             std::string moduleTarget)
-      : FIRParser(constants, lexer), moduleTarget(std::move(moduleTarget)) {}
+      : FIRModuleContextBase{std::move(moduleTarget), },
+        FIRParser(constants, lexer) {}
 
-  /// This is the module target used by annotations referring to this module.
-  std::string moduleTarget;
+  MLIRContext *getContext() const override { return getConstants().context; }
 
-  // The expression-oriented nature of firrtl syntax produces tons of constant
-  // nodes which are obviously redundant.  Instead of literally producing them
-  // in the parser, do an implicit CSE to reduce parse time and silliness in the
-  // resulting IR.
-  llvm::DenseMap<std::pair<Attribute, Type>, Value> constantCache;
-
-  //===--------------------------------------------------------------------===//
-  // SubaccessCache
-
-  /// This returns a reference with the assumption that the caller will fill in
-  /// the cached value. We keep track of inserted subaccesses so that we can
-  /// remove them when we exit a scope.
-  Value &getCachedSubaccess(Value value, unsigned index) {
-    auto &result = subaccessCache[{value, index}];
-    if (!result) {
-      // The outer most block won't be in the map.
-      auto it = scopeMap.find(value.getParentBlock());
-      if (it != scopeMap.end())
-        it->second->scopedSubaccesses.push_back({result, index});
-    }
-    return result;
+  InFlightDiagnostic emitError(const Twine &message = {}) override {
+    return FIRParser::emitError(message);
+  }
+  InFlightDiagnostic emitError(SMLoc loc, const Twine &message = {}) override {
+    return FIRParser::emitError(loc, message);
   }
 
-  //===--------------------------------------------------------------------===//
-  // SymbolTable
-
-  /// Add a symbol entry with the specified name, returning failure if the name
-  /// is already defined.
-  ParseResult addSymbolEntry(StringRef name, SymbolValueEntry entry, SMLoc loc,
-                             bool insertNameIntoGlobalScope = false);
-  ParseResult addSymbolEntry(StringRef name, Value value, SMLoc loc,
-                             bool insertNameIntoGlobalScope = false) {
-    return addSymbolEntry(name, SymbolValueEntry(value), loc,
-                          insertNameIntoGlobalScope);
+  Location translateLocation(llvm::SMLoc loc) override {
+    return FIRParser::translateLocation(loc);
   }
-
-  /// Resolved a symbol table entry to a value.  Emission of error is optional.
-  ParseResult resolveSymbolEntry(Value &result, SymbolValueEntry &entry,
-                                 SMLoc loc, bool fatal = true);
-
-  /// Resolved a symbol table entry if it is an expanded bundle e.g. from an
-  /// instance.  Emission of error is optional.
-  ParseResult resolveSymbolEntry(Value &result, SymbolValueEntry &entry,
-                                 StringRef field, SMLoc loc);
-
-  /// Look up the specified name, emitting an error and returning failure if the
-  /// name is unknown.
-  ParseResult lookupSymbolEntry(SymbolValueEntry &result, StringRef name,
-                                SMLoc loc);
-
-  UnbundledValueEntry &getUnbundledEntry(unsigned index) {
-    assert(index < unbundledValues.size());
-    return unbundledValues[index];
-  }
-
-  /// This contains one entry for each value in FIRRTL that is represented as a
-  /// bundle type in the FIRRTL spec but for which we represent as an exploded
-  /// set of elements in the FIRRTL dialect.
-  UnbundledValuesList unbundledValues;
-
-  /// Provide a symbol table scope that automatically pops all the entries off
-  /// the symbol table when the scope is exited.
-  struct ContextScope {
-    friend struct FIRModuleContext;
-    ContextScope(FIRModuleContext &moduleContext, Block *block)
-        : moduleContext(moduleContext), block(block),
-          previousScope(moduleContext.currentScope) {
-      moduleContext.currentScope = this;
-      moduleContext.scopeMap[block] = this;
-    }
-    ~ContextScope() {
-      // Mark all entries in this scope as being invalid.  We track validity
-      // through the SMLoc field instead of deleting entries.
-      for (auto *entryPtr : scopedDecls)
-        entryPtr->second.first = SMLoc();
-      // Erase the scoped subacceses from the cache. If the block is deleted we
-      // could resuse the memory, although the chances are quite small.
-      for (auto subaccess : scopedSubaccesses)
-        moduleContext.subaccessCache.erase(subaccess);
-      // Erase this context from the map.
-      moduleContext.scopeMap.erase(block);
-      // Reset to the previous scope.
-      moduleContext.currentScope = previousScope;
-    }
-
-  private:
-    void operator=(const ContextScope &) = delete;
-    ContextScope(const ContextScope &) = delete;
-
-    FIRModuleContext &moduleContext;
-    Block *block;
-    ContextScope *previousScope;
-    std::vector<ModuleSymbolTableEntry *> scopedDecls;
-    std::vector<std::pair<Value, unsigned>> scopedSubaccesses;
-  };
-
-private:
-  /// This symbol table holds the names of ports, wires, and other local decls.
-  /// This is scoped because conditional statements introduce subscopes.
-  ModuleSymbolTable symbolTable;
-
-  /// This is a cache of subindex and subfield operations so we don't constantly
-  /// recreate large chains of them.  This maps a bundle value + index to the
-  /// subaccess result.
-  SubaccessCache subaccessCache;
-
-  /// This maps a block to related ContextScope.
-  DenseMap<Block *, ContextScope *> scopeMap;
-
-  /// If non-null, all new entries added to the symbol table are added to this
-  /// list.  This allows us to "pop" the entries by resetting them to null when
-  /// scope is exited.
-  ContextScope *currentScope = nullptr;
 };
 
 } // end anonymous namespace
-
-/// Add a symbol entry with the specified name, returning failure if the name
-/// is already defined.
-///
-/// When 'insertNameIntoGlobalScope' is true, we don't allow the name to be
-/// popped.  This is a workaround for (firrtl scala bug) that should eventually
-/// be fixed.
-ParseResult FIRModuleContext::addSymbolEntry(StringRef name,
-                                             SymbolValueEntry entry, SMLoc loc,
-                                             bool insertNameIntoGlobalScope) {
-  // Do a lookup by trying to do an insertion.  Do so in a way that we can tell
-  // if we hit a missing element (SMLoc is null).
-  auto entryIt =
-      symbolTable.try_emplace(name, SMLoc(), SymbolValueEntry()).first;
-  if (entryIt->second.first.isValid()) {
-    emitError(loc, "redefinition of name '" + name + "'")
-            .attachNote(translateLocation(entryIt->second.first))
-        << "previous definition here";
-    return failure();
-  }
-
-  // If we didn't have a hit, then record the location, and remember that this
-  // was new to this scope.
-  entryIt->second = {loc, entry};
-  if (currentScope && !insertNameIntoGlobalScope)
-    currentScope->scopedDecls.push_back(&*entryIt);
-
-  return success();
-}
-
-/// Look up the specified name, emitting an error and returning null if the
-/// name is unknown.
-ParseResult FIRModuleContext::lookupSymbolEntry(SymbolValueEntry &result,
-                                                StringRef name, SMLoc loc) {
-  auto &entry = symbolTable[name];
-  if (!entry.first.isValid())
-    return emitError(loc, "use of unknown declaration '" + name + "'");
-  result = entry.second;
-  assert(result && "name in symbol table without definition");
-  return success();
-}
-
-ParseResult FIRModuleContext::resolveSymbolEntry(Value &result,
-                                                 SymbolValueEntry &entry,
-                                                 SMLoc loc, bool fatal) {
-  if (!entry.is<Value>()) {
-    if (fatal)
-      emitError(loc, "bundle value should only be used from subfield");
-    return failure();
-  }
-  result = entry.get<Value>();
-  return success();
-}
-
-ParseResult FIRModuleContext::resolveSymbolEntry(Value &result,
-                                                 SymbolValueEntry &entry,
-                                                 StringRef fieldName,
-                                                 SMLoc loc) {
-  if (!entry.is<UnbundledID>()) {
-    emitError(loc, "value should not be used from subfield");
-    return failure();
-  }
-
-  auto fieldAttr = StringAttr::get(getContext(), fieldName);
-
-  unsigned unbundledId = entry.get<UnbundledID>() - 1;
-  assert(unbundledId < unbundledValues.size());
-  UnbundledValueEntry &ubEntry = unbundledValues[unbundledId];
-  for (auto elt : ubEntry) {
-    if (elt.first == fieldAttr) {
-      result = elt.second;
-      break;
-    }
-  }
-  if (!result) {
-    emitError(loc, "use of invalid field name '")
-        << fieldName << "' on bundle value";
-    return failure();
-  }
-
-  return success();
-}
 
 //===----------------------------------------------------------------------===//
 // FIRStmtParser

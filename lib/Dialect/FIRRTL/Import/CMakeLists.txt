@@ -3,6 +3,7 @@ add_circt_translation_library(CIRCTImportFIRFile
   FIRLexer.cpp
   FIRParser.cpp
   FIRParserAsserts.cpp
+  FIRModuleContextBase.cpp
 
   ADDITIONAL_HEADER_DIRS
 
