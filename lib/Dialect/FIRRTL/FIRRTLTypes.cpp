@@ -966,25 +966,23 @@ std::pair<unsigned, bool> BundleType::rootChildFieldID(unsigned fieldID,
 }
 
 //===----------------------------------------------------------------------===//
-// Vector Type
+// FVectorType
 //===----------------------------------------------------------------------===//
 
-namespace circt {
-namespace firrtl {
-namespace detail {
-struct VectorTypeStorage : mlir::TypeStorage {
+struct circt::firrtl::detail::FVectorTypeStorage : mlir::TypeStorage {
   using KeyTy = std::pair<FIRRTLBaseType, size_t>;
 
-  VectorTypeStorage(KeyTy value) : value(value) {
+  FVectorTypeStorage(KeyTy value) : value(value) {
     auto properties = value.first.getRecursiveTypeProperties();
     passiveContainsAnalogTypeInfo.setInt(properties.toFlags());
   }
 
   bool operator==(const KeyTy &key) const { return key == value; }
 
-  static VectorTypeStorage *construct(TypeStorageAllocator &allocator,
-                                      KeyTy key) {
-    return new (allocator.allocate<VectorTypeStorage>()) VectorTypeStorage(key);
+  static FVectorTypeStorage *construct(TypeStorageAllocator &allocator,
+                                       KeyTy key) {
+    return new (allocator.allocate<FVectorTypeStorage>())
+        FVectorTypeStorage(key);
   }
 
   KeyTy value;
@@ -995,18 +993,16 @@ struct VectorTypeStorage : mlir::TypeStorage {
       passiveContainsAnalogTypeInfo;
 };
 
-} // namespace detail
-} // namespace firrtl
-} // namespace circt
-
 FVectorType FVectorType::get(FIRRTLBaseType elementType, size_t numElements) {
   return Base::get(elementType.getContext(),
                    std::make_pair(elementType, numElements));
 }
 
-FIRRTLBaseType FVectorType::getElementType() { return getImpl()->value.first; }
+FIRRTLBaseType FVectorType::getElementType() const {
+  return getImpl()->value.first;
+}
 
-size_t FVectorType::getNumElements() { return getImpl()->value.second; }
+size_t FVectorType::getNumElements() const { return getImpl()->value.second; }
 
 /// Return the recursive properties of the type.
 RecursiveTypeProperties FVectorType::getRecursiveTypeProperties() {

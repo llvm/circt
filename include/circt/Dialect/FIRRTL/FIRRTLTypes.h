@@ -373,53 +373,6 @@ public:
 };
 
 //===----------------------------------------------------------------------===//
-// FVector Type
-//===----------------------------------------------------------------------===//
-
-/// VectorType is a fixed size collection of elements, like an array.
-class FVectorType
-    : public FIRRTLType::TypeBase<FVectorType, FIRRTLBaseType,
-                                  detail::VectorTypeStorage,
-                                  circt::hw::FieldIDTypeInterface::Trait> {
-public:
-  using Base::Base;
-
-  static FVectorType get(FIRRTLBaseType elementType, size_t numElements);
-
-  FIRRTLBaseType getElementType();
-  size_t getNumElements();
-
-  /// Return the recursive properties of the type.
-  RecursiveTypeProperties getRecursiveTypeProperties();
-
-  /// Return this type with any flip types recursively removed from itself.
-  FIRRTLBaseType getPassiveType();
-
-  /// Get an integer ID for the field. Field IDs start at 1, and are assigned
-  /// to each field in a vector in a recursive depth-first walk of all elements.
-  /// A field ID of 0 is used to reference the vector itself.
-  size_t getFieldID(size_t index);
-
-  /// Find the element index corresponding to the desired fieldID.  If the
-  /// fieldID corresponds to a field in nested under an element, it will return
-  /// the index of the parent element.
-  size_t getIndexForFieldID(size_t fieldID);
-
-  /// Strip off a single layer of this type and return the sub-type and a field
-  /// ID targeting the same field, but rebased on the sub-type.
-  std::pair<FIRRTLBaseType, size_t> getSubTypeByFieldID(size_t fieldID);
-
-  /// Get the maximum field ID in this vector.  This is helpful for constructing
-  /// field IDs when this VectorType is nested in another aggregate type.
-  size_t getMaxFieldID();
-
-  /// Returns the effective field id when treating the index field as the root
-  /// of the type.  Essentially maps a fieldID to a fieldID after a subfield op.
-  /// Returns the new id and whether the id is in the given child.
-  std::pair<size_t, bool> rootChildFieldID(size_t fieldID, size_t index);
-};
-
-//===----------------------------------------------------------------------===//
 // Reference Type
 //===----------------------------------------------------------------------===//
 
