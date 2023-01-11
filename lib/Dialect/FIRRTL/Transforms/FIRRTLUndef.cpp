@@ -358,6 +358,13 @@ void UndefAnalysisPass::runOnOperation() {
     }
   }
 
+  LLVM_DEBUG(for (auto v
+                  : reportPoints) {
+    llvm::errs() << v.value << "\n"
+                 << v.path << "\n"
+                 << getLatticeValue(v) << "\n\n";
+  });
+
   // Report out
   for (auto v : reportPoints) {
     if (getLatticeValue(v).isUndefined()) {
@@ -417,8 +424,6 @@ void UndefAnalysisPass::markBlockExecutable(BlockKey block) {
 }
 
 void UndefAnalysisPass::visitOperation(Operation *op, InstPath path) {
-  if (auto reg = dyn_cast<RegOp>(op))
-    return mergeUndefined({reg, path});
   if (isa<ConstantOp, SpecialConstantOp, AggregateConstantOp>(op))
     return markValid({op->getResult(0), path});
   if (isa<InvalidValueOp>(op))
@@ -455,7 +460,6 @@ void UndefAnalysisPass::visitRegister(RegOp reg, InstPath path) {
   if (getLatticeValue({reg, path}).isUnknown()) {
     markUndefined({reg, path});
   }
-
   reportPoints.insert({reg, path});
 }
 
@@ -467,7 +471,6 @@ void UndefAnalysisPass::visitRegister(RegResetOp reg, InstPath path) {
   // The clock or reset or reset value will put registers back on the
   // worklist.
   mergeValues({reg, path}, {reg.getResetValue(), path});
-
   reportPoints.insert({reg, path});
 }
 
