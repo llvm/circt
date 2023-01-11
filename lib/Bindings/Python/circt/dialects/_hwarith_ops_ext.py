@@ -49,3 +49,19 @@ class CastOp:
   @classmethod
   def create(cls, value, result_type):
     return cls(result_type, value)
+
+
+class ICmpOp:
+
+  @classmethod
+  def create(cls, pred, a, b):
+    if isinstance(pred, int):
+      pred = IntegerAttr.get(IntegerType.get_signless(64), pred)
+    return cls(pred, a, b)
+
+
+class ConstantOp:
+
+  @classmethod
+  def create(cls, data_type, value):
+    return cls(IntegerAttr.get(data_type, value))
