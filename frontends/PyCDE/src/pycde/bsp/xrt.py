@@ -467,10 +467,10 @@ def XrtBSP(user_module):
       dst_makefile = sys.output_directory / "Makefile.xrt"
       dst_makefile.open("w").write(template.render(system_name=sys.name))
 
+      shutil.copy(__dir__ / "xrt.ini", sys.output_directory / "xrt.ini")
+      shutil.copy(__dir__ / "xsim.tcl", sys.output_directory / "xsim.tcl")
+
       runtime_dir = sys.output_directory / "runtime" / sys.name
-      so_sources = glob.glob(str(__dir__ / '*.so'))
-      for so in so_sources:
-        shutil.copy(so, runtime_dir)
       shutil.copy(__dir__ / "xrt_api.py", runtime_dir / "xrt.py")
       shutil.copy(__dir__ / "EsiXrtPython.cpp",
                   sys.sys_runtime_output_dir / "EsiXrtPython.cpp")
