@@ -15,11 +15,14 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 
 #include "mlir/IR/BuiltinOps.h"
+#include "llvm/Support/Debug.h"
 
 #include <set>
 
 using namespace mlir;
 using namespace circt::firrtl;
+
+#define DEBUG_TYPE "UNDEF"
 
 namespace {
 class LatticeValue {
@@ -64,6 +67,7 @@ public:
     return true;
   }
 
+  bool isUnknown() { return tag == Unknown; }
   bool isUndefined() { return tag == Undefined; }
   bool isValid() { return tag == Valid; }
   bool isExternal() { return tag == External; }
@@ -161,6 +165,15 @@ raw_ostream &operator<<(raw_ostream &os, const InstPath &path) {
   os << "]";
   return os;
 }
+
+Diagnostic &operator<<(Diagnostic &os, const InstPath &path) {
+  os << "[";
+  for (auto i : *path.path)
+    os << i.getName() << ", ";
+  os << "]";
+  return os;
+}
+
 raw_ostream &operator<<(raw_ostream &os, const LatticeValue &lat) {
   lat.print(os);
   return os;
@@ -225,6 +238,10 @@ struct UndefAnalysisPass : public UndefAnalysisBase<UndefAnalysisPass> {
     return executableBlocks.count(block);
   }
 
+  void schedule(ValueKey value) {
+    changedLatticeValueWorklist.push_back(value);
+  }
+
   LatticeValue getLatticeValue(ValueKey value) { return latticeValues[value]; }
 
   // Force value to undefined
@@ -232,7 +249,7 @@ struct UndefAnalysisPass : public UndefAnalysisBase<UndefAnalysisPass> {
     auto &entry = latticeValues[value];
     if (!entry.isUndefined()) {
       entry.markUndefined();
-      changedLatticeValueWorklist.push_back(value);
+      schedule(value);
     }
   }
 
@@ -241,7 +258,7 @@ struct UndefAnalysisPass : public UndefAnalysisBase<UndefAnalysisPass> {
     auto &entry = latticeValues[value];
     if (!entry.isExternal()) {
       entry.markExternal();
-      changedLatticeValueWorklist.push_back(value);
+      schedule(value);
     }
   }
 
@@ -250,7 +267,7 @@ struct UndefAnalysisPass : public UndefAnalysisBase<UndefAnalysisPass> {
     auto &entry = latticeValues[value];
     if (!entry.isValid()) {
       entry.markValid();
-      changedLatticeValueWorklist.push_back(value);
+      schedule(value);
     }
   }
 
@@ -266,7 +283,7 @@ struct UndefAnalysisPass : public UndefAnalysisBase<UndefAnalysisPass> {
   void mergeLattice(ValueKey lhs, LatticeValue rhs) {
     auto &oldLhs = latticeValues[lhs];
     if (oldLhs.mergeIn(rhs)) {
-      changedLatticeValueWorklist.push_back(lhs);
+      schedule(lhs);
     }
   }
 
@@ -282,6 +299,8 @@ struct UndefAnalysisPass : public UndefAnalysisBase<UndefAnalysisPass> {
   InstPath ExtendPath(InstPath, InstanceOp);
 
   // visitors:
+  void visitRegister(RegOp reg, InstPath path);
+  void visitRegister(RegResetOp reg, InstPath path);
   void visitConnect(ConnectOp con, InstPath path);
   void visitConnect(StrictConnectOp con, InstPath path);
   void visitInstance(InstanceOp inst, InstPath path);
@@ -306,6 +325,9 @@ private:
   /// This keeps track of users the instance results that correspond to output
   /// ports.
   DenseMap<ValueKey, ValueKey> resultPortToInstanceResultMapping;
+
+  /// The set of things to report
+  DenseSet<ValueKey> reportPoints;
 };
 } // namespace
 
@@ -313,12 +335,18 @@ void UndefAnalysisPass::runOnOperation() {
   auto circuit = getOperation();
   instanceGraph = &getAnalysis<InstanceGraph>();
 
-  // Mark the input ports of the top-level modules as being external.  We ignore
-  // all other public modules.
+  // Mark the input and inout ports of the top-level modules as being external.
+  // We ignore all other public modules.  Track output ports as interesting
+  // things which might be unknown.
   auto top = cast<FModuleOp>(circuit.getMainModule());
   InstPath topPath{&*uniqPaths.emplace().first};
-  for (auto port : top.getBodyBlock()->getArguments())
-    markExternal({(Value)port, topPath});
+  for (auto port : top.getBodyBlock()->getArguments()) {
+    if (top.getPortDirection(port.getArgNumber()) != Direction::Out)
+      markExternal({(Value)port, topPath});
+    else
+      reportPoints.insert({(Value)port, topPath});
+  }
+
   markBlockExecutable({top.getBodyBlock(), topPath});
 
   // If a value changed lattice state then reprocess any of its users.
@@ -330,7 +358,40 @@ void UndefAnalysisPass::runOnOperation() {
     }
   }
 
-  for (auto i : latticeValues) {
+  // Report out
+  for (auto v : reportPoints) {
+    if (getLatticeValue(v).isUndefined()) {
+      if (auto ba = v.value.dyn_cast<BlockArgument>()) {
+        auto mod = cast<FModuleLike>(ba.getOwner()->getParentOp());
+        auto diag = mlir::emitError(mod.getLoc(),
+                                    "Indeterminate value leaks out of circuit");
+        diag.attachNote(mod.getLoc())
+            << "In module '"
+            << mod->getAttrOfType<StringAttr>(
+                   ::mlir::SymbolTable::getSymbolAttrName())
+            << "'";
+        diag.attachNote(ba.getLoc())
+            << "Port '" << mod.getPortName(ba.getArgNumber()) << "'";
+        if (!v.path.path->empty())
+          diag.attachNote() << "Under instance path: " << v.path;
+        continue;
+      }
+      auto op = v.value.getDefiningOp();
+      auto diag = mlir::emitError(
+          op->getLoc(), "Indeterminate value leaks to post-reset state");
+      auto mod = op->getParentOfType<FModuleOp>();
+      diag.attachNote(mod.getLoc())
+          << "In module '"
+          << mod->getAttrOfType<StringAttr>(
+                 ::mlir::SymbolTable::getSymbolAttrName())
+          << "'";
+      if (!v.path.path->empty())
+        diag.attachNote() << "Under instance path: " << v.path;
+    }
+  }
+
+  LLVM_DEBUG(for (auto i
+                  : latticeValues) {
     llvm::errs() << i.second << " : " << i.first.path << " ";
     if (auto ba = i.first.value.dyn_cast<BlockArgument>()) {
       auto mod = cast<FModuleLike>(ba.getOwner()->getParentOp());
@@ -343,7 +404,7 @@ void UndefAnalysisPass::runOnOperation() {
                           ::mlir::SymbolTable::getSymbolAttrName())
                    << ":" << i.first.value << "\n";
     }
-  }
+  });
 }
 
 void UndefAnalysisPass::markBlockExecutable(BlockKey block) {
@@ -368,6 +429,10 @@ void UndefAnalysisPass::visitOperation(Operation *op, InstPath path) {
     return visitConnect(con, path);
   if (auto inst = dyn_cast<InstanceOp>(op))
     return visitInstance(inst, path);
+  if (auto reg = dyn_cast<RegOp>(op))
+    return visitRegister(reg, path);
+  if (auto reg = dyn_cast<RegResetOp>(op))
+    return visitRegister(reg, path);
 
   // Everything else just uses simple transfer functions
   for (auto result : op->getResults()) {
@@ -377,8 +442,33 @@ void UndefAnalysisPass::visitOperation(Operation *op, InstPath path) {
       newLatticeValue.mergeIn(getLatticeValue({operand, path}));
     changed |= setLattice({result, path}, newLatticeValue);
     if (changed)
-      changedLatticeValueWorklist.push_back({result, path});
+      schedule({result, path});
   }
+}
+
+void UndefAnalysisPass::visitRegister(RegOp reg, InstPath path) {
+  // Registers start undefined, but uniquely, are the only operation
+  // which can be upgraded from undefined.  If this register has been
+  // written to, it should not be undefined.
+  // We assume the clock is always valid.
+  // The clock is what will put registers back on the worklist.
+  if (getLatticeValue({reg, path}).isUnknown()) {
+    markUndefined({reg, path});
+  }
+
+  reportPoints.insert({reg, path});
+}
+
+void UndefAnalysisPass::visitRegister(RegResetOp reg, InstPath path) {
+  // Registers start undefined, but uniquely, are the only operation
+  // which can be upgraded from undefined.  If this register has been
+  // written to, it should not be undefined.
+  // We assume the clock is always valid.
+  // The clock or reset or reset value will put registers back on the
+  // worklist.
+  mergeValues({reg, path}, {reg.getResetValue(), path});
+
+  reportPoints.insert({reg, path});
 }
 
 void UndefAnalysisPass::visitConnect(ConnectOp con, InstPath path) {
@@ -403,11 +493,21 @@ void UndefAnalysisPass::visitConnect(StrictConnectOp con, InstPath path) {
 
   // For wires and registers, we drive the value of the wire itself, which
   // automatically propagates to users.
-  if (isa<RegOp, RegResetOp, WireOp>(dest.getOwner()))
+  if (isa<RegOp, RegResetOp, WireOp>(dest.getOwner())) {
+    // These elements are unique in that they can be upgraded out of undefined
+    // when they have a write.
+    if (getLatticeValue({con.getDest(), path}).isUndefined() &&
+        !getLatticeValue({con.getSrc(), path}).isUnknown()) {
+      if (setLattice({con.getDest(), path},
+                     getLatticeValue({con.getSrc(), path})))
+        schedule({con.getDest(), path});
+      return;
+    }
     return mergeValues({con.getDest(), path}, {con.getSrc(), path});
+  }
 
-  // Driving an instance argument port drives the corresponding argument of the
-  // referenced module.
+  // Driving an instance argument port drives the corresponding argument of
+  // the referenced module.
   if (auto instance = dest.getDefiningOp<InstanceOp>()) {
     // Update the dest, when its an instance op.
     mergeValues({con.getDest(), path}, {con.getSrc(), path});
@@ -462,8 +562,8 @@ void UndefAnalysisPass::visitInstance(InstanceOp inst, InstPath path) {
       }
 
       // Otherwise we have a result from the instance.  We need to forward
-      // results from the body to this instance result's SSA value, so remember
-      // it.
+      // results from the body to this instance result's SSA value, so
+      // remember it.
       BlockArgument modulePortVal = mod.getArgument(resultNo);
 
       resultPortToInstanceResultMapping[{modulePortVal, newPath}] = {
