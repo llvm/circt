@@ -472,6 +472,18 @@ class SIntValue(IntValue):
     return self * types.int(self.type.width)(-1).as_sint()
 
 
+def Or(*items: List[BitVectorValue]):
+  """Compute a bitwise 'or' of the arguments."""
+  from .dialects import comb
+  return comb.OrOp(*items)
+
+
+def And(*items: List[BitVectorValue]):
+  """Compute a bitwise 'and' of the arguments."""
+  from .dialects import comb
+  return comb.AndOp(*items)
+
+
 class ListValue(PyCDEValue):
 
   @singledispatchmethod
@@ -518,6 +530,12 @@ class ListValue(PyCDEValue):
       if self.name and isinstance(low_idx, int):
         v.name = self.name + f"__{low_idx}upto{low_idx+num_elems}"
       return v
+
+  def or_reduce(self):
+    from .pycde_types import types
+    bits = [self[i] for i in range(len(self))]
+    assert bits[0].type == types.i1
+    return Or(*bits)
 
   def __len__(self):
     return self.type.strip.size
