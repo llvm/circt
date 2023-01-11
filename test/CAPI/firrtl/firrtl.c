@@ -332,6 +332,10 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
       {.expr = MK_STR("analogBundle.field3")},
   };
 
+  FirrtlType tyUInt32 = {
+      .kind = FIRRTL_TYPE_KIND_UINT,
+      .u = {.uint = {.width = 32}},
+  };
   FirrtlStatement statements[] = {
       {.kind = FIRRTL_STATEMENT_KIND_ATTACH,
        .u = {.attach = {.operands = attachOperands,
@@ -341,6 +345,12 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
       {.kind = FIRRTL_STATEMENT_KIND_ATTACH,
        .u = {.attach = {.operands = attachBundleOperands,
                         .count = ARRAY_SIZE(attachBundleOperands)}}},
+      {.kind = FIRRTL_STATEMENT_KIND_SEQ_MEMORY,
+       .u = {.seqMem = {.name = MK_STR("seqMem"),
+                        .type = {.kind = FIRRTL_TYPE_KIND_VECTOR,
+                                 .u = {.vector = {.type = &tyUInt32,
+                                                  .count = 1024}}},
+                        .readUnderWrite = FIRRTL_READ_UNDER_WRITE_UNDEFINED}}},
   };
 
   for (unsigned int i = 0; i < ARRAY_SIZE(statements); i++) {
@@ -356,7 +366,8 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
     input analogBundle : { field1 : Analog<8>, flip field2 : Analog<8>, field3 : Analog<8> }\n\n\
     attach(analog1, analog2, analog3)\n\
     attach(analogBundle)\n\
-    attach(analogBundle.field1, analogBundle.field2, analogBundle.field3)\n\n");
+    attach(analogBundle.field1, analogBundle.field2, analogBundle.field3)\n\
+    smem seqMem : UInt<32>[1024] undefined\n\n");
 
   return 0;
 }

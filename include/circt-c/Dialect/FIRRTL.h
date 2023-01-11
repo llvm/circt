@@ -196,8 +196,15 @@ MLIR_CAPI_EXPORTED void firrtlVisitPort(FirrtlContext ctx, FirrtlStringRef name,
                                         FirrtlPortDirection direction,
                                         const FirrtlType *type);
 
+typedef enum FirrtlReadUnderWrite {
+  FIRRTL_READ_UNDER_WRITE_UNDEFINED,
+  FIRRTL_READ_UNDER_WRITE_OLD,
+  FIRRTL_READ_UNDER_WRITE_NEW,
+} FirrtlReadUnderWrite;
+
 typedef enum FirrtlStatementKind {
   FIRRTL_STATEMENT_KIND_ATTACH,
+  FIRRTL_STATEMENT_KIND_SEQ_MEMORY,
 } FirrtlStatementKind;
 
 typedef struct FirrtlStatementAttachOperand {
@@ -209,8 +216,15 @@ typedef struct FirrtlStatementAttach {
   size_t count;
 } FirrtlStatementAttach;
 
+typedef struct FirrtlStatementSeqMemory {
+  FirrtlStringRef name;
+  FirrtlType type;
+  FirrtlReadUnderWrite readUnderWrite; // defaults to `FIRRTL_RUW_UNDEFINED`
+} FirrtlStatementSeqMemory;
+
 typedef union FirrtlStatementUnion {
   FirrtlStatementAttach attach;
+  FirrtlStatementSeqMemory seqMem;
 } FirrtlStatementUnion;
 
 typedef struct FirrtlStatement {

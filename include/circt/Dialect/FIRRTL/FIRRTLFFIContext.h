@@ -29,6 +29,7 @@ struct FirrtlType;
 struct FirrtlParameter;
 struct FirrtlStatement;
 struct FirrtlStatementAttach;
+struct FirrtlStatementSeqMemory;
 
 namespace circt {
 namespace chirrtl {
@@ -121,6 +122,8 @@ private:
 
   bool visitStmtAttach(BodyOpBuilder &bodyOpBuilder,
                        const FirrtlStatementAttach &stmt);
+  bool visitStmtSeqMemory(BodyOpBuilder &bodyOpBuilder,
+                          const FirrtlStatementSeqMemory &stmt);
 };
 
 } // namespace chirrtl

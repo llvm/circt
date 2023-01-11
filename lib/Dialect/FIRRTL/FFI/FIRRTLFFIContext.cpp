@@ -227,6 +227,9 @@ void FFIContext::visitStatement(const FirrtlStatement &stmt) {
   case FIRRTL_STATEMENT_KIND_ATTACH:
     visitStmtAttach(bodyOpBuilder, stmt.u.attach);
     break;
+  case FIRRTL_STATEMENT_KIND_SEQ_MEMORY:
+    visitStmtSeqMemory(bodyOpBuilder, stmt.u.seqMem);
+    break;
   default:
     emitError("unknown statement kind");
     break;
@@ -455,6 +458,47 @@ bool FFIContext::visitStmtAttach(BodyOpBuilder &bodyOpBuilder,
 
   bodyOpBuilder.create<AttachOp>(mockLoc(), operands);
   return true;
+}
+
+bool FFIContext::visitStmtSeqMemory(BodyOpBuilder &bodyOpBuilder,
+                                    const FirrtlStatementSeqMemory &stmt) {
+  RA_EXPECT(auto &lastModuleCtx, this->moduleContext, false);
+
+  RUWAttr ruw;
+  switch (stmt.readUnderWrite) {
+  case FIRRTL_READ_UNDER_WRITE_UNDEFINED:
+    ruw = RUWAttr::Undefined;
+    break;
+  case FIRRTL_READ_UNDER_WRITE_OLD:
+    ruw = RUWAttr::Old;
+    break;
+  case FIRRTL_READ_UNDER_WRITE_NEW:
+    ruw = RUWAttr::New;
+    break;
+  default:
+    emitError("unknown RUW value");
+    return false;
+  }
+
+  auto firType = ffiTypeToFirType(stmt.type);
+  if (!firType.has_value()) {
+    return false;
+  }
+
+  // Transform the parsed vector type into a memory type.
+  auto vectorType = (*firType).dyn_cast<FVectorType>();
+  if (!vectorType) {
+    emitError("smem requires vector type");
+    return false;
+  }
+
+  auto name = unwrap(stmt.name);
+  auto annotations = ArrayAttr::get(mlirCtx.get(), {});
+  StringAttr sym = {};
+  auto result = bodyOpBuilder.create<SeqMemOp>(
+      vectorType.getElementType(), vectorType.getNumElements(), ruw, name,
+      NameKindEnum::InterestingName, annotations, sym);
+  return !lastModuleCtx.addSymbolEntry(name, result, mockSMLoc());
 }
 
 #undef RA_EXPECT
