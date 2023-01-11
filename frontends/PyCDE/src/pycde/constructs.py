@@ -141,7 +141,10 @@ def Reg(type: PyCDEType,
 
 def ControlReg(clk: PyCDEValue, rst: PyCDEValue, asserts: List[PyCDEValue],
                resets: List[PyCDEValue]) -> BitVectorValue:
-  """Constructs a 'control register' and returns the output."""
+  """Constructs a 'control register' and returns the output. Asserts are signals
+  which causes the output to go high (on the next cycle). Resets do the
+  opposite. If both an assert and a reset are active on the same cycle, the
+  assert takes priority."""
 
   @module
   def ControlReg(num_asserts: int, num_resets: int):

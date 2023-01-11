@@ -27,6 +27,13 @@ axil_data_width = 32
 axil_data_width_bytes = int(axil_data_width / 8)
 DONE_BIT = 0x2
 
+# TODO: supports backpressuring the host by de-asserting ready on MMIO writes
+# whenever _one_ of the from_host fifos is full. Not ideal since backpressure on
+# a single channel could end up backpressuring the entire system. Particularly
+# heinous if a module needs more data on a different channel to proceed. Switch
+# to using a control register on each from_host channel so software knows which
+# channels are full.
+
 
 # Signals from master
 def axil_in_type(addr_width, data_width):
@@ -64,27 +71,34 @@ class RegSpec:
   data_offset: int
   name: str
   client_path: list
+
+  # Only "direct_mmio" supported for now. "dma" to come.
   type: str
 
 
 def generate_mmio_map(channels, base_offset=0x0) -> Tuple[List, List]:
+  """From a set of channel requests, generate a list of from_host register specs
+  and a list of to_host register specs."""
+
   # curr_offset is in bytes.
   curr_offset = base_offset
 
-  def get_reg(req, write):
+  def get_reg(req, to_host):
     nonlocal curr_offset
     width = req.type.inner_type.bitwidth
 
-    reg = RegSpec(size=width,
-                  offset=curr_offset,
-                  data_offset=(curr_offset +
-                               axil_data_width_bytes) if write else curr_offset,
-                  name="_".join(req.client_name),
-                  client_path=req.client_name,
-                  type="direct_mmio")
+    reg = RegSpec(
+        size=width,
+        offset=curr_offset,
+        # to_host registers require extra space for control signals.
+        data_offset=(curr_offset +
+                     axil_data_width_bytes) if to_host else curr_offset,
+        name="_".join(req.client_name),
+        client_path=req.client_name,
+        type="direct_mmio")
 
     # A write reg requires extra space for control.
-    if write:
+    if to_host:
       width += axil_data_width
     curr_offset += int(
         (axil_data_width / 8) * math.ceil(width / axil_data_width))
@@ -96,6 +110,8 @@ def generate_mmio_map(channels, base_offset=0x0) -> Tuple[List, List]:
 
 
 def output_tcl(from_host_regs, to_host_regs, os: FileIO):
+  """Output Vitis tcl describing the registers."""
+
   from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
   env = Environment(loader=FileSystemLoader(str(__dir__)),
@@ -137,6 +153,9 @@ def RegsToChannel(type, offset):
       rst = ports.rst
       msg_type = RegsToChannel._type
 
+      # Create a set of 'axil_data_width' registers to buffer writes. Also
+      # create a 'valid' register for each one so we know when the message has
+      # been completely written.
       fifo_wr = Wire(types.i1)
       reg_valids = []
       data_regs = []
@@ -151,21 +170,26 @@ def RegsToChannel(type, offset):
                                   ce=write_reg,
                                   name=f"reg{reg_num}")
         data_regs.append(data_reg)
+
+      # Assemble into a msg/valid pair...
       fifo_wr.assign(And(*reg_valids))
       data_regs.reverse()
       msg = BitVectorValue.concat(data_regs)[0:msg_type.bitwidth]
 
+      # ...and insert into a fifo.
       outch_ready_wire = Wire(types.i1)
-      fifo_has_item = Wire(types.i1)
+      fifo_not_empty = Wire(types.i1)
       fifo = SimpleXilinxFifo(msg_type, depth=32, almost_full=4)(
           clk=clk,
           rst=rst,
-          rd_en=outch_ready_wire & fifo_has_item,
+          rd_en=outch_ready_wire & fifo_not_empty,
           wr_en=fifo_wr,
           wr_data=msg)
-      fifo_has_item.assign(~fifo.empty)
+      fifo_not_empty.assign(~fifo.empty)
+
+      # Read from the fifo into the channel.
       outch, outch_ready = types.channel(msg_type).wrap(
-          fifo.rd_data, fifo_has_item.reg(clk, rst))
+          fifo.rd_data, fifo_not_empty.reg(clk, rst))
       outch_ready_wire.assign(outch_ready)
       ports.msgs = outch
       ports.fifo_almost_full = fifo.almost_full
@@ -177,7 +201,11 @@ def RegsToChannel(type, offset):
 def ChannelToRegs(type):
 
   class ChannelToRegs:
-    """Convert a message stream into a set of `axil_data_width` registers."""
+    """Convert a message stream into a set of `axil_data_width`-sized values.
+    Does not have a FIFO and is entirely combinational."""
+    # TODO: add a fifo.
+    # TODO: push more logic in here.
+
     clk = Clock()
     rst = Input(types.i1)
     num_regs = int(math.ceil(type.inner.bitwidth / axil_data_width))
@@ -205,6 +233,8 @@ def ChannelToRegs(type):
 
 
 def XrtBSP(user_module):
+  """Use the Xilinx RunTime (XRT) shell to implement ESI services and build an
+  image or emulation package."""
 
   @esi.ServiceImplementation(None)
   class XrtService:
@@ -234,9 +264,18 @@ def XrtBSP(user_module):
               },
               indent=2))
 
-      # Build the write side.
+      ######
+      # Build the from_host side. Each channel listens for an MMIO write to its
+      # address space, notes it, then assembles a message once all of its
+      # registers have been written to.
+
+      # Backpressure.
       write_fifos_full = Wire(types.i1)
-      reg_write_happened = Wire(types.i1)
+
+      # Since address and data are two separate LI channels, simplify that by
+      # buffering them and have a valid signal when both are valid.
+      # TODO: Should really connect both to separate FIFOs.
+      reg_write_happened = Wire(types.i1, "reg_write_happened")
       address_valid = ControlReg(clk, rst, [ports.axil_in.awvalid],
                                  [reg_write_happened])
       awready = ~address_valid
@@ -244,8 +283,6 @@ def XrtBSP(user_module):
                               [reg_write_happened])
       wready = ~data_valid & ~write_fifos_full
       reg_write_happened.assign(address_valid & data_valid & ~write_fifos_full)
-      reg_write_happened.name = "reg_write_happened"
-
       wr_address_reg = ports.axil_in.awaddr.reg(clk=clk,
                                                 rst=rst,
                                                 ce=ports.axil_in.awvalid)
@@ -253,6 +290,8 @@ def XrtBSP(user_module):
                                             rst=rst,
                                             ce=ports.axil_in.wvalid)
 
+      # Build an adapter per channel which snoops on the register writes to
+      # recieve messages.
       from_host_fifos_full = [types.i1(0)]
       for req, reg_spec in zip(channels.to_client_reqs, from_host_regs):
         if reg_spec.type != "direct_mmio":
@@ -269,8 +308,17 @@ def XrtBSP(user_module):
       write_fifos_full.assign(Or(*from_host_fifos_full))
       write_fifos_full.name = "write_fifos_full"
 
-      # Build the read side.
+      ######
+      # Build the to_host side. On this side, we simply present the data and
+      # valid signals, then send a 'ready' pulse when the 'DONE' bit in the
+      # control register is written. This side is pretty hacky and needs some
+      # TLC. A FIFO would be better than a single register stage.
+
+      # Track the non-zero registers in the read address space.
       rd_addr_data = {}
+
+      # For each to_host channel, convert it to a set of backpressured
+      # registers (a channel whose message type is an array of signless ints).
       for req, reg_spec in zip(channels.to_server_reqs, to_host_regs):
         if reg_spec.type != "direct_mmio":
           continue
@@ -280,11 +328,14 @@ def XrtBSP(user_module):
                                           regs_ready=ready,
                                           msgs=req.value)
 
-        # Control reg
+        # Did our control register get written to?
         reg_write_happened_control = reg_write_happened & (
             ports.axil_in.awaddr == types.int(axil_addr_width)(reg_spec.offset))
+        # Was it our DONE bit?
         done = reg_write_happened_control & (
             wr_data_reg == types.int(axil_data_width)(DONE_BIT))
+
+        # Validity of the message in these registers.
         valid = ControlReg(clk, rst, [adapter.regs_valid & ready], [done])
         ready.assign(~valid)
         rd_addr_data[reg_spec.offset] = BitVectorValue.concat(
@@ -296,6 +347,14 @@ def XrtBSP(user_module):
           rd_addr_data[reg_spec.data_offset +
                        (i * axil_data_width_bytes)] = registered_regs[i]
 
+      ######
+      # Concatenate the outputs from each of the above adapters and create a
+      # potentially giant mux. There's probably a much better way to do this. I
+      # suspect this is a common high-level construct which should be
+      # automatically optimized, but I'm not sure how common this actually is.
+
+      # Convert the sparse dict into a zero filled array of registers indexed by
+      # address.
       max_addr_log2 = int(
           math.ceil(math.log2(max([a for a in rd_addr_data.keys()]) + 1)))
       zero = types.int(axil_data_width)(0)
@@ -303,6 +362,7 @@ def XrtBSP(user_module):
       for (addr, val) in rd_addr_data.items():
         rd_space[addr] = val
 
+      # Create the address index signal and do the muxing!
       addr_slice = ports.axil_in.araddr.slice(
           types.int(axil_addr_width)(0), max_addr_log2)
       rd_addr = addr_slice.reg(clk, rst)
@@ -310,7 +370,7 @@ def XrtBSP(user_module):
       rdata = types.array(types.int(axil_data_width),
                           len(rd_space))(rd_space)[rd_addr]
 
-      # Assign the outputs.
+      # Assign the module outputs.
       ports.axil_out = axil_out_type(axil_data_width)({
           "awready": awready,
           "wready": wready,
@@ -390,6 +450,10 @@ def XrtBSP(user_module):
 
     @staticmethod
     def package(sys: System):
+      """Assemble a 'build' package which includes all the necessary build
+      collateral (about which we are aware), build/debug scripts, and the
+      generated runtime."""
+
       from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
       sv_sources = glob.glob(str(__dir__ / '*.sv'))
