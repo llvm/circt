@@ -82,7 +82,7 @@ def _obj_to_value(x, type, result_type=None):
   from .value import PyCDEValue
   from .dialects import hw, hwarith
   from .pycde_types import (TypeAliasType, ArrayType, StructType, BitVectorType,
-                            SignlessBitVectorType, UIntType, SIntType, Type)
+                            BitsType, UIntType, SIntType, Type)
 
   if isinstance(x, PyCDEValue):
     return x
@@ -108,7 +108,7 @@ def _obj_to_value(x, type, result_type=None):
     if not isinstance(type, BitVectorType):
       raise ValueError(f"Int can only be converted to hw int, not '{type}'")
     with get_user_loc():
-      if isinstance(type, SignlessBitVectorType):
+      if isinstance(type, BitsType):
         return hw.ConstantOp(type, x)
       elif isinstance(type, (UIntType, SIntType)):
         return hwarith.ConstantOp(type, x)

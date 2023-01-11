@@ -342,17 +342,24 @@ class BitsValue(BitVectorValue):
 
   def __exec_signless_binop_nocast__(self, other, op, op_symbol: str,
                                      op_name: str):
+    from .dialects import comb
     if not isinstance(other, PyCDEValue):
       # Fall back to the default implementation in cases where we're not dealing
       # with PyCDE value comparison.
-      return super().__eq__(other)
+      if op == comb.EqOp:
+        return super().__eq__(other)
+      elif op == comb.NeOp:
+        return super().__ne__(other)
 
     if not isinstance(other, BitsValue):
       raise TypeError(
           f"Operator '{op_symbol}' requires RHS to be cast .as_bits().")
+    if self.type.width != other.type.width:
+      raise TypeError(
+          f"Operator '{op_symbol}' requires both operands to be the same width."
+      )
 
-    w = max(self.type.width, other.type.width)
-    ret = op(self.as_bits(w), other.as_bits(w))
+    ret = op(self, other)
     if self.name is not None and other.name is not None:
       ret.name = f"{self.name}_{op_name}_{other.name}"
     return ret

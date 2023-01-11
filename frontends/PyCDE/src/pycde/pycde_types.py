@@ -163,7 +163,7 @@ def Type(type: Union[mlir.ir.Type, PyCDEType]):
     elif type.is_unsigned:
       return UIntType(type)
     else:
-      return SignlessBitVectorType(type)
+      return BitsType(type)
   if isinstance(type, esi.ChannelType):
     return ChannelType(type)
   return PyCDEType(type)
@@ -271,7 +271,7 @@ class BitVectorType(PyCDEType):
     return self._type.width
 
 
-class SignlessBitVectorType(BitVectorType):
+class BitsType(BitVectorType):
 
   def _get_value_class(self):
     return BitsValue
