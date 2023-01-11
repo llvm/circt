@@ -52,6 +52,17 @@ class CastOp:
 
 
 class ICmpOp:
+  # Predicate constants.
+
+  # `==` and `!=`
+  PRED_EQ = 0b000
+  PRED_NE = 0b001
+  # `<` and `>=`
+  PRED_LT = 0b010
+  PRED_GE = 0b011
+  # `<=` and `>`
+  PRED_LE = 0b100
+  PRED_GT = 0b101
 
   @classmethod
   def create(cls, pred, a, b):

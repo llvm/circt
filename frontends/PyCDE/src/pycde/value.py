@@ -393,9 +393,6 @@ class BitsValue(BitVectorValue):
 
 
 class IntValue(BitVectorValue):
-  # hwarith icmp predicate constants.
-  _ICMP_PRED_EQ = 0
-  _ICMP_PRED_NE = 1
 
   #  === Infix operators ===
 
@@ -445,10 +442,12 @@ class IntValue(BitVectorValue):
     return ret
 
   def __eq__(self, other):
-    return self.__exec_icmp__(other, IntValue._ICMP_PRED_EQ, "eq")
+    from circt.dialects import hwarith
+    return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_EQ, "eq")
 
   def __ne__(self, other):
-    return self.__exec_icmp__(other, IntValue._ICMP_PRED_NE, "neq")
+    from circt.dialects import hwarith
+    return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_NE, "neq")
 
   # TODO: This class will contain comparison operators (<, >, <=, >=)
 
