@@ -4,7 +4,7 @@
 
 from pycde import Clock, Input, InputChannel, Output, OutputChannel, System
 from pycde import module, generator, esi, types
-from ..value import And, Or, BitVectorValue
+from ..value import And, Or, BitsValue, BitVectorValue
 from ..constructs import ControlReg, Wire
 from ..module import _GeneratorPortAccess
 from .fifo import SimpleXilinxFifo
@@ -174,7 +174,7 @@ def RegsToChannel(type, offset):
       # Assemble into a msg/valid pair...
       fifo_wr.assign(And(*reg_valids))
       data_regs.reverse()
-      msg = BitVectorValue.concat(data_regs)[0:msg_type.bitwidth]
+      msg = BitsValue.concat(data_regs)[0:msg_type.bitwidth]
 
       # ...and insert into a fifo.
       outch_ready_wire = Wire(types.i1)
@@ -338,7 +338,7 @@ def XrtBSP(user_module):
         # Validity of the message in these registers.
         valid = ControlReg(clk, rst, [adapter.regs_valid & ready], [done])
         ready.assign(~valid)
-        rd_addr_data[reg_spec.offset] = BitVectorValue.concat(
+        rd_addr_data[reg_spec.offset] = BitsValue.concat(
             [valid]).pad_or_truncate(axil_data_width)
         registered_regs = adapter.regs.reg(clk,
                                            rst,

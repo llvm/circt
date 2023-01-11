@@ -31,24 +31,17 @@ class InfixArith:
 # -----
 
 
-# CHECK: msft.module @InfixLogic {} (%in0: si16, %in1: ui16)
-# CHECK-NEXT:  %0 = hwarith.cast %in0 {{({sv.namehint = ".*"} )?}}: (si16) -> i16
-# CHECK-NEXT:  %1 = hwarith.cast %in1 {{({sv.namehint = ".*"} )?}}: (ui16) -> i16
-# CHECK-NEXT:  %2 = comb.and bin %0, %1 {{({sv.namehint = ".*"} )?}}: i16
-# CHECK-NEXT:  %3 = hwarith.cast %in0 {{({sv.namehint = ".*"} )?}}: (si16) -> i16
-# CHECK-NEXT:  %4 = hwarith.cast %in1 {{({sv.namehint = ".*"} )?}}: (ui16) -> i16
-# CHECK-NEXT:  %5 = comb.or bin %3, %4 {{({sv.namehint = ".*"} )?}}: i16
-# CHECK-NEXT:  %6 = hwarith.cast %in0 {{({sv.namehint = ".*"} )?}}: (si16) -> i16
-# CHECK-NEXT:  %7 = hwarith.cast %in1 {{({sv.namehint = ".*"} )?}}: (ui16) -> i16
-# CHECK-NEXT:  %8 = comb.xor bin %6, %7 {{({sv.namehint = ".*"} )?}}: i16
-# CHECK-NEXT:  %9 = hwarith.cast %in0 {{({sv.namehint = ".*"} )?}}: (si16) -> i16
+# CHECK: msft.module @InfixLogic {} (%in0: i16, %in1: i16)
+# CHECK-NEXT:  comb.and bin %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
+# CHECK-NEXT:  comb.or bin %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
+# CHECK-NEXT:  comb.xor bin %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
 # CHECK-NEXT:  %c-1_i16 = hw.constant -1 {{({sv.namehint = ".*"} )?}}: i16
-# CHECK-NEXT:  %10 = comb.xor bin %9, %c-1_i16 {{({sv.namehint = ".*"} )?}}: i16
+# CHECK-NEXT:  comb.xor bin %in0, %c-1_i16 {{({sv.namehint = ".*"} )?}}: i16
 # CHECK-NEXT:  msft.output
 @unittestmodule(run_passes=True)
 class InfixLogic:
-  in0 = Input(types.si16)
-  in1 = Input(types.ui16)
+  in0 = Input(types.i16)
+  in1 = Input(types.i16)
 
   @generator
   def construct(ports):
@@ -61,14 +54,32 @@ class InfixLogic:
 # -----
 
 
-# CHECK: msft.module @InfixComparison {} (%in0: i16, %in1: i16)
+# CHECK: msft.module @SignlessInfixComparison {} (%in0: i16, %in1: i16)
 # CHECK-NEXT:    %0 = comb.icmp bin eq %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
 # CHECK-NEXT:    %1 = comb.icmp bin ne %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
 # CHECK-NEXT:    msft.output
 @unittestmodule(run_passes=True)
-class InfixComparison:
+class SignlessInfixComparison:
   in0 = Input(types.i16)
   in1 = Input(types.i16)
+
+  @generator
+  def construct(ports):
+    eq = ports.in0 == ports.in1
+    neq = ports.in0 != ports.in1
+
+
+# -----
+
+
+# CHECK: msft.module @InfixComparison {} (%in0: ui16, %in1: ui16)
+# CHECK-NEXT:    %0 = hwarith.icmp eq %in0, %in1 {sv.namehint = "in0_eq_in1"} : ui16, ui16
+# CHECK-NEXT:    %1 = hwarith.icmp ne %in0, %in1 {sv.namehint = "in0_neq_in1"} : ui16, ui16
+# CHECK-NEXT:    msft.output
+@unittestmodule(run_passes=False)
+class InfixComparison:
+  in0 = Input(types.ui16)
+  in1 = Input(types.ui16)
 
   @generator
   def construct(ports):
@@ -93,7 +104,7 @@ class Multiple:
 
   @generator
   def construct(ports):
-    ports.out0 = (ports.in0 + ports.in1 + ports.in0 + ports.in1).as_int(16)
+    ports.out0 = (ports.in0 + ports.in1 + ports.in0 + ports.in1).as_bits(16)
 
 
 # -----
@@ -116,10 +127,10 @@ class Casting:
   def construct(ports):
     in0s = ports.in0.as_sint()
     in0u = ports.in0.as_uint()
-    in0s_i = in0s.as_int()
+    in0s_i = in0s.as_bits()
     in0s8 = ports.in0.as_sint(8)
     in0u8 = ports.in0.as_uint(8)
-    in0s_i8 = in0s.as_int(8)
+    in0s_i8 = in0s.as_bits(8)
     in0s_s24 = in0s.as_sint(24)
 
 
@@ -137,4 +148,4 @@ class Lowering:
 
   @generator
   def construct(ports):
-    ports.out0 = (ports.in0.as_sint() + ports.in1.as_sint()).as_int(16)
+    ports.out0 = (ports.in0.as_sint() + ports.in1.as_sint()).as_bits(16)

@@ -5,10 +5,10 @@
 from __future__ import annotations
 
 from .common import Clock, Input, Output
-from .module import module, generator
 from .pycde_types import PyCDEType, dim, types
-from .value import BitVectorValue, ListValue, Value, PyCDEValue
+from .value import BitsValue, BitVectorValue, ListValue, Value, PyCDEValue
 from .value import get_slice_bounds
+from .module import generator, module
 from circt.support import get_value, BackedgeBuilder
 from circt.dialects import msft, hw, sv
 from pycde.dialects import comb
@@ -109,7 +109,7 @@ def Wire(type: PyCDEType, name: str = None):
           last = p
           concat_operands.append(p)
         concat_operands.reverse()
-        self.assign(BitVectorValue.concat(concat_operands))
+        self.assign(BitsValue.concat(concat_operands))
 
   return WireValue()
 
