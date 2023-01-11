@@ -14,8 +14,8 @@ from pycde.testing import unittestmodule
 # CHECK:         {{%.+}} = sv.read_inout %in {sv.namehint = "in"} : !hw.inout<i8>
 # CHECK:         sv.assign %in, %In : i8
 # CHECK:         [[r1:%.+]] = seq.compreg %In, %clk : i8
-# CHECK:         [[c8:%.+]] = hw.constant 0 : i8
-# CHECK:         [[r5:%.+]] = seq.compreg %In, %clk, %rst, [[c8]]  : i8
+# CHECK:         %c0_i8 = hw.constant 0 : i8
+# CHECK:         [[r5:%.+]] = seq.compreg %In, %clk, %rst, %c0_i8  : i8
 # CHECK:         [[r6:%.+]] = seq.compreg.ce %In, %clk, %InCE : i8
 # CHECK:         msft.output [[r2]], [[r1]], [[r5]], [[r6]] : i8, i8, i8, i8
 

@@ -4,18 +4,16 @@
 
 from __future__ import annotations
 
-from .common import Clock, Input, Output
-from .pycde_types import PyCDEType, dim, types
+from .pycde_types import PyCDEType, dim
 from .value import BitsValue, BitVectorValue, ListValue, Value, PyCDEValue
 from .value import get_slice_bounds
-from .module import generator, module
 from circt.support import get_value, BackedgeBuilder
 from circt.dialects import msft, hw, sv
 from pycde.dialects import comb
 import mlir.ir as ir
 
 import typing
-from typing import List, Union
+from typing import Union
 
 
 def NamedWire(type_or_value: Union[PyCDEType, PyCDEValue], name: str):
@@ -117,7 +115,7 @@ def Wire(type: PyCDEType, name: str = None):
 def Reg(type: PyCDEType,
         clk: PyCDEValue = None,
         rst: PyCDEValue = None,
-        rst_value=0,
+        rst_value=None,
         ce: PyCDEValue = None):
   """Declare a register. Must assign exactly once."""
 
@@ -137,41 +135,6 @@ def Reg(type: PyCDEType,
                         type)
   value._wire = wire
   return value
-
-
-def ControlReg(clk: PyCDEValue, rst: PyCDEValue, asserts: List[PyCDEValue],
-               resets: List[PyCDEValue]) -> BitVectorValue:
-  """Constructs a 'control register' and returns the output. Asserts are signals
-  which causes the output to go high (on the next cycle). Resets do the
-  opposite. If both an assert and a reset are active on the same cycle, the
-  assert takes priority."""
-
-  @module
-  def ControlReg(num_asserts: int, num_resets: int):
-
-    class ControlReg:
-      clk = Clock()
-      rst = Input(types.i1)
-      out = Output(types.i1)
-      asserts = Input(dim(1, num_asserts))
-      resets = Input(dim(1, num_resets))
-
-      @generator
-      def generate(ports):
-        a = ports.asserts.or_reduce()
-        r = ports.resets.or_reduce()
-        reg = Reg(types.i1, ports.clk, ports.rst)
-        reg.name = "state"
-        next_value = Mux(a, Mux(r, reg, types.i1(0)), types.i1(1))
-        reg.assign(next_value)
-        ports.out = reg
-
-    return ControlReg
-
-  return ControlReg(len(asserts), len(resets))(clk=clk,
-                                               rst=rst,
-                                               asserts=asserts,
-                                               resets=resets).out
 
 
 def Mux(sel: BitVectorValue, *data_inputs: typing.List[Value]):
