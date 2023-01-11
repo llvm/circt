@@ -53,6 +53,7 @@ class HWMemSimImpl {
   bool addVivadoRAMAddressConflictSynthesisBugWorkaround;
 
   SmallVector<sv::RegOp> registers;
+  sv::RegOp garbageReadRegister;
 
   Value addPipelineStages(ImplicitLocOpBuilder &b,
                           ModuleNamespace &moduleNamespace, size_t stages,
@@ -225,6 +226,12 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   sv::RegOp reg = b.create<sv::RegOp>(
       UnpackedArrayType::get(dataType, mem.depth), b.getStringAttr("Memory"));
 
+  if (!disableMemRandomization) {
+    auto regName = b.getStringAttr(moduleNamespace.newName("_GARBAGE_READ"));
+    b.create<sv::IfDefOp>("RANDOMIZE_GARBAGE_ASSIGN", [&]() {
+      garbageReadRegister = b.create<sv::RegOp>(dataType, regName, regName);
+    });
+  }
   // If the read latency is zero, we regard the memory as write-first.
   // We add a SV attribute to specify a ram style to use LUTs for Vivado to
   // avoid a bug that miscompiles the write-first memory. See "RAM address
@@ -269,18 +276,21 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
             b.create<ConstantOp>(b.getIntegerAttr(addr.getType(), mem.depth));
         // Is enable and in-bounds.
         auto isEnAndInBounds = b.create<comb::AndOp>(
-            en, b.create<comb::ICmpOp>(comb::ICmpPredicate::ult,
-                                                    addr, maxAddr, false));
+            en, b.create<comb::ICmpOp>(comb::ICmpPredicate::ult, addr, maxAddr,
+                                       false));
         b.create<sv::IfDefOp>(
             "RANDOMIZE_GARBAGE_ASSIGN",
             [&]() {
-              auto randExpr = b.create<sv::VerbatimExprOp>(
-                  rdata.getType(), b.getStringAttr("`RANDOM"));
+              auto garbageReg = b.create<sv::VerbatimExprOp>(
+                  rdata.getType(), b.getStringAttr("{{0}}"), ValueRange{},
+                  b.getArrayAttr(hw::InnerRefAttr::get(
+                      op.getNameAttr(),
+                      garbageReadRegister.getInnerSymAttr())));
               // If enable and is-in-bounds then get memory read, else get
               // random.
               b.create<sv::AssignOp>(
                   readWire, b.create<comb::MuxOp>(isEnAndInBounds, rdata,
-                                                  randExpr, false));
+                                                  garbageReg, false));
             },
             [&]() {
               // If enable and is-in-bounds then get memory read, else get X.
@@ -477,6 +487,9 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   // values.
   if (disableMemRandomization && disableRegRandomization)
     return;
+
+  if (!disableMemRandomization)
+    registers.push_back(garbageReadRegister);
 
   constexpr unsigned randomWidth = 32;
   sv::RegOp randomMemReg;

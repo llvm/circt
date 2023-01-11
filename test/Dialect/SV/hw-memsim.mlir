@@ -78,6 +78,9 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK:       %Memory = sv.reg
 //VIVADO-SAME:  #sv.attribute<"ram_style" = "\22distributed\22">
 //CHECK-SAME:  !hw.inout<uarray<10xi16>>
+// CHECK-NEXT: sv.ifdef  "RANDOMIZE_GARBAGE_ASSIGN" {
+// CHECK-NEXT:   %[[_GARBAGE_READ:.+]] = sv.reg sym @[[_GARBAGE_READ]]  : !hw.inout<i16>
+// CHECK-NEXT: }
 //CHECK-NEXT:  %[[rslot:.+]] = sv.array_index_inout %Memory[%ro_addr_0]
 //CHECK-NEXT:  %[[read:.+]] = sv.read_inout %[[rslot]]
 //CHECK-NEXT:  %[[wire2:.+]] = sv.wire  :
@@ -85,7 +88,8 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:  %[[v3:.+]] = comb.icmp ult %ro_addr_0, %[[c6]] :
 //CHECK-NEXT:  %[[v4:.+]] = comb.and %ro_en_0, %[[v3]] :
 //CHECK-NEXT:  sv.ifdef  "RANDOMIZE_GARBAGE_ASSIGN"
-//CHECK-NEXT:      %[[RANDOM:.+]] = sv.verbatim.expr "`RANDOM" :
+//CHECK-NEXT:      %[[RANDOM:.+]] = sv.verbatim.expr
+// CHECK-SAME:      () -> i16 {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[_GARBAGE_READ]]>]}
 //CHECK-NEXT:      %[[v13:.+]] = comb.mux %[[v4]], %[[read]], %[[RANDOM]] :
 //CHECK-NEXT:      sv.assign %[[wire2]], %[[v13]] :
 //CHECK-NEXT:    } else {
@@ -129,6 +133,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:      %[[RANDOM_MEM:.+]] = sv.reg sym @[[_RANDOM_MEM:.+]] : !hw.inout<i32>
 //CHECK-NEXT:    }
 //CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT" {
+//CHECK-NEXT:        %_RANDOM = sv.reg sym @_RANDOM  : !hw.inout<i32>
 //CHECK-NEXT:    }
 //CHECK-NEXT:    sv.initial {
 //CHECK-NEXT:      sv.verbatim "`INIT_RANDOM_PROLOG_"
@@ -141,6 +146,10 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-SAME:          {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[_RANDOM_MEM]]>]}
 //CHECK-NEXT:      }
 //CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_REG_INIT" {
+//CHECK-NEXT{LITERAL}:          sv.verbatim "{{0}} = {`RANDOM};"
+//CHECK-SAME:                  {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@_RANDOM>]}
+//CHECK-NEXT{LITERAL}:          sv.verbatim "{{0}} = {{1}}[15:0];"
+//CHECK-SAME:                   {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@_GARBAGE_READ>, #hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@_RANDOM>]}
 //CHECK-NEXT:      }
 //CHECK-NEXT:    }
 //CHECK-NEXT:  }
@@ -151,7 +160,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_2_4_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //COMMON-LABEL: @FIRRTLMem_1_1_1_16_10_2_4_0_0
 //COM: This produces a lot of output, we check one field's pipeline
 //CHECK:         %Memory = sv.reg
-//CHECK-NEXT:    [[EN_0:%.+]] = sv.reg {{.+}} : !hw.inout<i1>
+//CHECK:    [[EN_0:%.+]] = sv.reg {{.+}} : !hw.inout<i1>
 //CHECK-NEXT:    [[EN_1:%.+]] = sv.reg {{.+}} : !hw.inout<i1>
 //CHECK-NEXT:    [[ADDR_0:%.+]] = sv.reg {{.+}} : !hw.inout<i4>
 //CHECK-NEXT:    [[ADDR_1:%.+]] = sv.reg {{.+}} : !hw.inout<i4>
