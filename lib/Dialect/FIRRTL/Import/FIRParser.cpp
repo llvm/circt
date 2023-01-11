@@ -1610,9 +1610,6 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
   default:
     emitError(loc, "primitive not supported yet");
     return failure();
-  case FIRToken::lp_validif:
-    numOperandsExpected = 2;
-    break;
 #define TOK_LPKEYWORD_PRIM(SPELLING, CLASS, NUMOPERANDS)                       \
   case FIRToken::lp_##SPELLING:                                                \
     numOperandsExpected = NUMOPERANDS;                                         \
@@ -1672,31 +1669,6 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
     return success();                                                          \
   }
 #include "FIRTokenKinds.def"
-
-  // Expand `validif(a, b)` expressions to simply `b`.  A `validif` expression
-  // is converted to a direct connect by the Scala FIRRTL Compiler's
-  // `RemoveValidIfs` pass.  We circumvent that and just squash these during
-  // parsing.
-  case FIRToken::lp_validif: {
-    if (opTypes.size() != 2 || !integers.empty()) {
-      emitError(loc, "operation requires two operands and no constants");
-      return failure();
-    }
-    auto lhsUInt = opTypes[0].dyn_cast<UIntType>();
-    if (!lhsUInt) {
-      emitError(loc, "first operand should have UInt type");
-      return failure();
-    }
-    auto lhsWidth = lhsUInt.getWidthOrSentinel();
-    if (lhsWidth != -1 && lhsWidth != 1) {
-      emitError(loc, "first operand should have 'uint<1>' type");
-      return failure();
-    }
-
-    // Skip the `validif` and emit the second, non-condition operand.
-    result = operands[1];
-    return success();
-  }
   }
 
   llvm_unreachable("all cases should return");

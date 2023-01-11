@@ -833,24 +833,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     mem.r.addr <= rAddr
     rData <= mem.r.data
 
-  ; https://github.com/llvm/circt/issues/886
-  ; CHECK-LABEL: ParseValidifAsMux
-  module ParseValidifAsMux:
-    input in1: Clock
-    input in2: UInt<42>
-    input en: UInt<1>
-
-    ; CHECK: %out1 = firrtl.node interesting_name %in1
-    node out1 = validif(en, in1)
-
-    ; CHECK: %out2 = firrtl.node interesting_name %in2
-    node out2 = validif(en, in2)
-
-    ; This is required for SFC compatibility.
-    ; https://github.com/llvm/circt/issues/1186
-    ; CHECK: %out3 = firrtl.node interesting_name %in1
-    node out3 = validif(UInt<1>(0), in1)
-
   ; Test that behavioral memory reads and writes both work and that flow checks
   ; don't fail here.  (A memory port should have duplex flow.)
   ; See: https://github.com/llvm/circt/issues/1058
