@@ -4,9 +4,8 @@
 
 from collections import OrderedDict
 
-from .value import (BitVectorValue, ChannelValue, ClockValue, ListValue,
-                    SignedBitVectorValue, UnsignedBitVectorValue, StructValue,
-                    RegularValue, InOutValue, Value)
+from .value import (BitsValue, ChannelValue, ClockValue, ListValue, SIntValue,
+                    UIntValue, StructValue, RegularValue, InOutValue, Value)
 
 import mlir.ir
 from circt.dialects import esi, hw, sv
@@ -160,11 +159,11 @@ def Type(type: Union[mlir.ir.Type, PyCDEType]):
     return InOutType(type)
   if isinstance(type, mlir.ir.IntegerType):
     if type.is_signed:
-      return SignedBitVectorType(type)
+      return SIntType(type)
     elif type.is_unsigned:
-      return UnsignedBitVectorType(type)
+      return UIntType(type)
     else:
-      return BitVectorType(type)
+      return BitsType(type)
   if isinstance(type, esi.ChannelType):
     return ChannelType(type)
   return PyCDEType(type)
@@ -271,20 +270,23 @@ class BitVectorType(PyCDEType):
   def width(self):
     return self._type.width
 
-  def _get_value_class(self):
-    return BitVectorValue
 
-
-class SignedBitVectorType(BitVectorType):
+class BitsType(BitVectorType):
 
   def _get_value_class(self):
-    return SignedBitVectorValue
+    return BitsValue
 
 
-class UnsignedBitVectorType(BitVectorType):
+class SIntType(BitVectorType):
 
   def _get_value_class(self):
-    return UnsignedBitVectorValue
+    return SIntValue
+
+
+class UIntType(BitVectorType):
+
+  def _get_value_class(self):
+    return UIntValue
 
 
 class ClockType(PyCDEType):
@@ -321,7 +323,7 @@ class ChannelType(PyCDEType):
     valid = _obj_to_value(valid, types.i1)
     wrap_op = esi.WrapValidReadyOp(self._type, types.i1, value.value,
                                    valid.value)
-    return Value(wrap_op.chanOutput), BitVectorValue(wrap_op.ready, types.i1)
+    return Value(wrap_op.chanOutput), BitsValue(wrap_op.ready, types.i1)
 
 
 def dim(inner_type_or_bitwidth, *size: int, name: str = None) -> ArrayType:

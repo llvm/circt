@@ -52,12 +52,9 @@ class LoopbackInOutAdd7:
     loopback = Wire(types.channel(types.i16))
     from_host = HostComms.req_resp(loopback, "loopback_inout")
     ready = Wire(types.i1)
-    wide_data, valid = from_host.unwrap(ready)
-    data = wide_data[0:16]
-    # TODO: clean this up with PyCDE overloads (they're currently a little bit
-    # broken for this use-case).
-    data = comb.AddOp(data, types.i16(7))
-    data_chan, data_ready = loopback.type.wrap(data, valid)
+    data, valid = from_host.unwrap(ready)
+    plus7 = data.as_uint(15) + types.ui8(7)
+    data_chan, data_ready = loopback.type.wrap(plus7.as_bits(), valid)
     ready.assign(data_ready)
     loopback.assign(data_chan)
 

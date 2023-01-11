@@ -80,9 +80,9 @@ def _obj_to_value(x, type, result_type=None):
     raise ValueError(
         "Encountered 'None' when trying to build hardware for python value.")
   from .value import PyCDEValue
-  from .dialects import hw
+  from .dialects import hw, hwarith
   from .pycde_types import (TypeAliasType, ArrayType, StructType, BitVectorType,
-                            Type)
+                            BitsType, UIntType, SIntType, Type)
 
   if isinstance(x, PyCDEValue):
     return x
@@ -108,7 +108,12 @@ def _obj_to_value(x, type, result_type=None):
     if not isinstance(type, BitVectorType):
       raise ValueError(f"Int can only be converted to hw int, not '{type}'")
     with get_user_loc():
-      return hw.ConstantOp(type, x)
+      if isinstance(type, BitsType):
+        return hw.ConstantOp(type, x)
+      elif isinstance(type, (UIntType, SIntType)):
+        return hwarith.ConstantOp(type, x)
+      else:
+        assert False, "Internal error: bit vector type unknown"
 
   if isinstance(x, (list, tuple)):
     if not isinstance(type, ArrayType):
