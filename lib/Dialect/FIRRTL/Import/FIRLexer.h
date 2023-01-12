@@ -99,7 +99,8 @@ class FIRLexerCursor;
 /// This implements a lexer for .fir files.
 class FIRLexer {
 public:
-  FIRLexer(const llvm::SourceMgr &sourceMgr, mlir::MLIRContext *context);
+  FIRLexer(const llvm::SourceMgr &sourceMgr, mlir::MLIRContext *context,
+           unsigned bufferID);
 
   const llvm::SourceMgr &getSourceMgr() const { return sourceMgr; }
 
@@ -116,6 +117,8 @@ public:
 
   /// Get an opaque pointer into the lexer state that can be restored later.
   FIRLexerCursor getCursor() const;
+
+  unsigned getBufferID() const { return bufferID; }
 
 private:
   FIRToken lexTokenImpl();
@@ -138,6 +141,7 @@ private:
 
   const llvm::SourceMgr &sourceMgr;
   mlir::MLIRContext *const context;
+  unsigned bufferID;
   const mlir::StringAttr bufferNameIdentifier;
 
   StringRef curBuffer;

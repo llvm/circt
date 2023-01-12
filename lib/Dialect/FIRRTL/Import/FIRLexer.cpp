@@ -147,20 +147,22 @@ std::string FIRToken::getRawStringValue(StringRef spelling) {
 // FIRLexer
 //===----------------------------------------------------------------------===//
 
-static StringAttr getMainBufferNameIdentifier(const llvm::SourceMgr &sourceMgr,
-                                              MLIRContext *context) {
-  auto mainBuffer = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
-  StringRef bufferName = mainBuffer->getBufferIdentifier();
+static StringAttr getBufferNameIdentifier(const llvm::SourceMgr &sourceMgr,
+                                          MLIRContext *context,
+                                          unsigned bufferID) {
+  auto buffer = sourceMgr.getMemoryBuffer(bufferID);
+  StringRef bufferName = buffer->getBufferIdentifier();
   if (bufferName.empty())
     bufferName = "<unknown>";
   return StringAttr::get(context, bufferName);
 }
 
-FIRLexer::FIRLexer(const llvm::SourceMgr &sourceMgr, MLIRContext *context)
-    : sourceMgr(sourceMgr), context(context),
-      bufferNameIdentifier(getMainBufferNameIdentifier(sourceMgr, context)),
-      curBuffer(
-          sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID())->getBuffer()),
+FIRLexer::FIRLexer(const llvm::SourceMgr &sourceMgr, MLIRContext *context,
+                   unsigned bufferID)
+    : sourceMgr(sourceMgr), context(context), bufferID(bufferID),
+      bufferNameIdentifier(
+          getBufferNameIdentifier(sourceMgr, context, bufferID)),
+      curBuffer(sourceMgr.getMemoryBuffer(bufferID)->getBuffer()),
       curPtr(curBuffer.begin()),
       // Prime the first token.
       curToken(lexTokenImpl()) {}
@@ -168,8 +170,7 @@ FIRLexer::FIRLexer(const llvm::SourceMgr &sourceMgr, MLIRContext *context)
 /// Encode the specified source location information into a Location object
 /// for attachment to the IR or error reporting.
 Location FIRLexer::translateLocation(llvm::SMLoc loc) {
-  unsigned mainFileID = sourceMgr.getMainFileID();
-  auto lineAndColumn = sourceMgr.getLineAndColumn(loc, mainFileID);
+  auto lineAndColumn = sourceMgr.getLineAndColumn(loc, bufferID);
   return FileLineColLoc::get(bufferNameIdentifier, lineAndColumn.first,
                              lineAndColumn.second);
 }
