@@ -3172,7 +3172,7 @@ ParseResult FIRCircuitParser::parseCircuit(
 
   // Deal with the annotation file if one was specified
   for (auto *annotationsBuf : annotationsBufs)
-    if (importAnnotationsRaw(inlineAnnotationsLoc, circuitTarget,
+    if (importAnnotationsRaw(info.getFIRLoc(), circuitTarget,
                              annotationsBuf->getBuffer(), annos))
       return failure();
 
