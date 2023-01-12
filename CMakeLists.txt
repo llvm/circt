@@ -502,8 +502,8 @@ else()
   
   if(Z3_FOUND)
     SET(CIRCT_LEC_Z3_VER 4.8.11)
-    if(Z3_VERSION VERSION_LESS ${CIRCT_LEC_Z3_VER})
-      message(WARNING "Cannot build circt-lec with outdated Z3 version ${Z3_VERSION}, requires ${CIRCT_LEC_Z3_VER}.")
+    if(Z3_VERSION_STRING VERSION_LESS ${CIRCT_LEC_Z3_VER})
+      message(WARNING "Cannot build circt-lec with outdated Z3 version ${Z3_VERSION_STRING}, requires ${CIRCT_LEC_Z3_VER}.")
     else()
       message(STATUS "Z3 identified as a logical backend.")
       # Signal to proceed building circt-lec.
