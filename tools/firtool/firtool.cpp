@@ -85,6 +85,10 @@ static cl::opt<bool>
                             "chunk independently"),
                    cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
+static cl::list<std::string> includeDirs(
+    "I", cl::desc("Directory to search in when resolving source references"),
+    cl::value_desc("directory"), cl::Prefix, cl::cat(mainCategory));
+
 static cl::opt<bool>
     verifyDiagnostics("verify-diagnostics",
                       cl::desc("Check that emitted diagnostics match "
@@ -941,6 +945,7 @@ static LogicalResult processInputSplit(
     std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(buffer), llvm::SMLoc());
+  sourceMgr.setIncludeDirs(includeDirs);
   if (!verifyDiagnostics) {
     SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
     return processBuffer(context, ts, sourceMgr, outputFile);
