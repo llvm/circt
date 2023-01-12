@@ -261,7 +261,7 @@ struct ApplyState {
   DenseMap<Attribute, FlatSymbolRefAttr> instPathToNLAMap;
   size_t numReusedHierPaths = 0;
 
-  DenseMap<Attribute, LegacyWiringProblem> legacyWiringProblems;
+  DenseMap<StringAttr, LegacyWiringProblem> legacyWiringProblems;
   SmallVector<WiringProblem> wiringProblems;
 
   ModuleNamespace &getNamespace(FModuleLike module) {

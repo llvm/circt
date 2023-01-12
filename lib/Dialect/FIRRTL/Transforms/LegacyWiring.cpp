@@ -1,4 +1,4 @@
-//===- LegacyWiring- legacy Wiring annotation resolver ----------*- C++ -*-===//
+//===- LegacyWiring- legacy Wiring annotation resolver --------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -28,33 +28,31 @@ LogicalResult circt::firrtl::applyWiring(const AnnoPathValue &target,
   ImplicitLocOpBuilder builder(target.ref.getOp()->getLoc(), context);
 
   // Convert target to Value
-  SmallVector<Value> targetsValues;
+  Value targetValue;
   if (auto portTarget = target.ref.dyn_cast<PortAnnoTarget>()) {
     auto portNum = portTarget.getImpl().getPortNo();
     if (auto module = dyn_cast<FModuleOp>(portTarget.getOp())) {
       builder.setInsertionPointToEnd(module.getBodyBlock());
-      targetsValues.push_back(getValueByFieldID(
-          builder, module.getArgument(portNum), target.fieldIdx));
+      targetValue = getValueByFieldID(builder, module.getArgument(portNum),
+                                      target.fieldIdx);
     } else if (auto ext = dyn_cast<FExtModuleOp>(portTarget.getOp())) {
+      InstanceOp inst;
       if (target.instances.empty()) {
         auto paths = state.instancePathCache.getAbsolutePaths(ext);
         if (paths.size() > 1) {
           mlir::emitError(state.circuit.getLoc())
               << "cannot resolve a unique instance path from the "
-                 "external module target"
+                 "external module target "
               << target.ref;
           return failure();
         }
-        auto inst = cast<InstanceOp>(paths[0].back());
-        builder.setInsertionPointAfter(inst);
-        targetsValues.push_back(getValueByFieldID(
-            builder, inst->getResult(portNum), target.fieldIdx));
+        inst = cast<InstanceOp>(paths[0].back());
       } else {
-        auto inst = cast<InstanceOp>(target.instances.back());
-        builder.setInsertionPointAfter(inst);
-        targetsValues.push_back(getValueByFieldID(
-            builder, inst->getResult(portNum), target.fieldIdx));
+        inst = cast<InstanceOp>(target.instances.back());
       }
+      builder.setInsertionPointAfter(inst);
+      targetValue =
+          getValueByFieldID(builder, inst->getResult(portNum), target.fieldIdx);
     } else {
       return mlir::emitError(state.circuit.getLoc())
              << "Annotation has invalid target: " << anno;
@@ -63,13 +61,8 @@ LogicalResult circt::firrtl::applyWiring(const AnnoPathValue &target,
     if (target.isOpOfType<WireOp, RegOp, RegResetOp>()) {
       auto module = cast<FModuleOp>(opResult.getModule());
       builder.setInsertionPointToEnd(module.getBodyBlock());
-      if (opResult.getOp()->getNumResults() != 1) {
-        // Unsure about what ops emit more/less than 1 result, perhaps the type
-        // check is enough
-        return failure();
-      }
-      targetsValues.push_back(getValueByFieldID(
-          builder, opResult.getOp()->getResult(0), target.fieldIdx));
+      targetValue = getValueByFieldID(builder, opResult.getOp()->getResult(0),
+                                      target.fieldIdx);
     } else {
       return mlir::emitError(state.circuit.getLoc())
              << "Annotation targets non-wireable operation: " << anno;
@@ -86,34 +79,21 @@ LogicalResult circt::firrtl::applyWiring(const AnnoPathValue &target,
            << "Annotation does not have an associated pin name: " << anno;
   }
 
-  bool problemAlreadyDefined =
-      state.legacyWiringProblems.find(pin) != state.legacyWiringProblems.end();
-
   // Handle difference between sinks and sources
   auto clazz = anno.getAs<StringAttr>("class").getValue();
   if (clazz == wiringSourceAnnoClass) {
-    if (problemAlreadyDefined) {
-      // Attempt to update the existing problem
-      if (state.legacyWiringProblems[pin].source || targetsValues.size() != 1) {
+    if (state.legacyWiringProblems.find(pin) !=
+        state.legacyWiringProblems.end()) {
+      // Check if existing problem can be updated
+      if (state.legacyWiringProblems[pin].source) {
         return mlir::emitError(state.circuit.getLoc())
                << "More than one " << wiringSourceAnnoClass
                << " defined for pin " << pin;
       }
-      state.legacyWiringProblems[pin].source = targetsValues[0];
-    } else {
-      // Create a new problem
-      state.legacyWiringProblems[pin] = {targetsValues[0]};
     }
+    state.legacyWiringProblems[pin].source = targetValue;
   } else if (clazz == wiringSinkAnnoClass) {
-    if (problemAlreadyDefined) {
-      // Update the existing problem
-      state.legacyWiringProblems[pin].sinks.insert(
-          state.legacyWiringProblems[pin].sinks.end(), targetsValues.begin(),
-          targetsValues.end());
-    } else {
-      // Create a new problem
-      state.legacyWiringProblems[pin] = {.sinks = targetsValues};
-    }
+    state.legacyWiringProblems[pin].sinks.push_back(targetValue);
   }
 
   return success();

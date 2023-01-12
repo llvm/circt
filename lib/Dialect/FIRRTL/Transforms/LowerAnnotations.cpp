@@ -541,20 +541,18 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
 /// using the pin attribute as newNameHint
 LogicalResult LowerAnnotationsPass::legacyToWiringProblems(ApplyState &state) {
   for (const auto &problem : state.legacyWiringProblems) {
-    auto pin = cast<StringAttr>(problem.first);
-
     if (!problem.second.source) {
       return mlir::emitError(state.circuit.getLoc())
-             << "Unable to resolve source for pin: " << pin;
+             << "Unable to resolve source for pin: " << problem.first;
     }
     if (problem.second.sinks.empty()) {
       return mlir::emitError(state.circuit.getLoc())
-             << "Unable to resolve sink(s) for pin: " << pin;
+             << "Unable to resolve sink(s) for pin: " << problem.first;
     }
 
     for (const auto &sink : problem.second.sinks) {
       state.wiringProblems.push_back(
-          {problem.second.source, sink, pin.str(), true});
+          {problem.second.source, sink, problem.first.str(), true});
     }
   }
   return success();
