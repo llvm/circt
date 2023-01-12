@@ -894,25 +894,6 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     });
   }
 
-  if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
-    emitString("\n// RANDOMIZE_GARBAGE_ASSIGN enable range checks for mem "
-               "assignments.");
-    emitGuard("RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK", [&]() {
-      b.create<sv::IfDefOp>(
-          "RANDOMIZE_GARBAGE_ASSIGN",
-          [&]() {
-            emitString(
-                "`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, VALUE, "
-                "SIZE) \\");
-            emitString("  ((INDEX) < (SIZE) ? (VALUE) : {`RANDOM})");
-          },
-          [&]() {
-            emitString("`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, "
-                       "VALUE, SIZE) (VALUE)");
-          });
-    });
-  }
-
   // Blank line to separate the header from the modules.
   emitString("");
 }
