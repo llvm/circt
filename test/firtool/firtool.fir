@@ -136,7 +136,8 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; VERILOG-NEXT:    output       c,
 ; VERILOG-NEXT:                 out_implicitTrunc,
 ; VERILOG-NEXT:                 out_prettifyExample,
-; VERILOG-NEXT:                 out_multibitMux);
+; VERILOG-NEXT:                 out_multibitMux
+; VERILOG-NEXT:    );
 ; VERILOG-EMPTY:
 ; VERILOG-NEXT:    wire [9:0] _prettifyExample_out1;
 ; VERILOG-NEXT:    wire [9:0] _prettifyExample_out2;
@@ -216,7 +217,8 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; VERILOG-NEXT:   input        inp_1,
 ; VERILOG-NEXT:   input  [4:0] inp_2,
 ; VERILOG-NEXT:   output [2:0] out1,
-; VERILOG-NEXT:                out2);
+; VERILOG-NEXT:                out2
+; VERILOG-NEXT:   );
 ; VERILOG-EMPTY:
 ; VERILOG-NEXT:   wire [5:0] _GEN = {inp_2[4], inp_2} << inp_1;
 ; VERILOG-NEXT:   assign out1 = _GEN[2:0];
@@ -253,9 +255,10 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     a_q <= r
 
 ; VERILOG-LABEL: module FlipFlop(
-; VERILOG-NEXT:    input clock,
-; VERILOG-NEXT:          a_d,
-; VERILOG-NEXT:    output a_q);
+; VERILOG-NEXT:    input  clock,
+; VERILOG-NEXT:           a_d,
+; VERILOG-NEXT:    output a_q
+; VERILOG-NEXT:  );
 ; VERILOG:         always @(posedge clock)
 ; VERILOG-NEXT:      r <= a_d;
 ; VERILOG:         assign a_q = r;

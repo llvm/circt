@@ -71,7 +71,7 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike"> {
       return $_op->template getAttrOfType<ArrayAttr>("resultNames").size();
     }]>,
 
-    InterfaceMethod<"Return the names of the inputs this module",
+    InterfaceMethod<"Return the names of the inputs to this module",
     "mlir::ArrayAttr", "getArgNames", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{
@@ -83,6 +83,20 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike"> {
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{
       return $_op->template getAttrOfType<ArrayAttr>("resultNames");
+    }]>,
+
+    InterfaceMethod<"Return the locations of the inputs to this module",
+    "mlir::ArrayAttr", "getArgLocs", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return $_op->template getAttrOfType<ArrayAttr>("argLocs");
+    }]>,
+
+    InterfaceMethod<"Return the locations of the outputs of this module",
+    "mlir::ArrayAttr", "getResultLocs", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return $_op->template getAttrOfType<ArrayAttr>("resultLocs");
     }]>,
 
     /// Insert and remove input and output ports of this module. Does not modify

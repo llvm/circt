@@ -256,6 +256,7 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
                                  FlatBundleFieldEntry field) {
   SmallVector<Type, 8> ports;
   SmallVector<Attribute, 8> portNames;
+  SmallVector<Attribute, 8> portLocations;
 
   auto oldPorts = op.getPorts();
   for (size_t portIdx = 0, e = oldPorts.size(); portIdx < e; ++portIdx) {
@@ -335,6 +336,7 @@ struct AttrCache {
     sPortNames = StringAttr::get(context, "portNames");
     sPortTypes = StringAttr::get(context, "portTypes");
     sPortSyms = StringAttr::get(context, "portSyms");
+    sPortLocations = StringAttr::get(context, "portLocations");
     sPortAnnotations = StringAttr::get(context, "portAnnotations");
     sEmpty = StringAttr::get(context, "");
   }
@@ -342,7 +344,7 @@ struct AttrCache {
 
   Type i64ty;
   StringAttr innerSymAttr, nameAttr, nameKindAttr, sPortDirections, sPortNames,
-      sPortTypes, sPortSyms, sPortAnnotations, sEmpty;
+      sPortTypes, sPortSyms, sPortLocations, sPortAnnotations, sEmpty;
 };
 
 // The visitors all return true if the operation should be deleted, false if
@@ -950,20 +952,22 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     // handled differently below.
     if (attr.getName() != "portDirections" && attr.getName() != "portNames" &&
         attr.getName() != "portTypes" && attr.getName() != "portAnnotations" &&
-        attr.getName() != "portSyms")
+        attr.getName() != "portSyms" && attr.getName() != "portLocations")
       newModuleAttrs.push_back(attr);
 
   SmallVector<Direction> newArgDirections;
   SmallVector<Attribute> newArgNames;
-  SmallVector<Attribute, 8> newPortTypes;
+  SmallVector<Attribute, 8> newArgTypes;
   SmallVector<Attribute, 8> newArgSyms;
+  SmallVector<Attribute, 8> newArgLocations;
   SmallVector<Attribute, 8> newArgAnnotations;
 
   for (auto &port : newArgs) {
     newArgDirections.push_back(port.direction);
     newArgNames.push_back(port.name);
-    newPortTypes.push_back(TypeAttr::get(port.type));
+    newArgTypes.push_back(TypeAttr::get(port.type));
     newArgSyms.push_back(port.sym);
+    newArgLocations.push_back(port.loc);
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
   }
 
@@ -975,7 +979,10 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
       NamedAttribute(cache.sPortNames, builder.getArrayAttr(newArgNames)));
 
   newModuleAttrs.push_back(
-      NamedAttribute(cache.sPortTypes, builder.getArrayAttr(newPortTypes)));
+      NamedAttribute(cache.sPortTypes, builder.getArrayAttr(newArgTypes)));
+
+  newModuleAttrs.push_back(NamedAttribute(
+      cache.sPortLocations, builder.getArrayAttr(newArgLocations)));
 
   newModuleAttrs.push_back(NamedAttribute(
       cache.sPortAnnotations, builder.getArrayAttr(newArgAnnotations)));
@@ -1025,19 +1032,21 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
     // handled differently below.
     if (attr.getName() != "portNames" && attr.getName() != "portDirections" &&
         attr.getName() != "portTypes" && attr.getName() != "portAnnotations" &&
-        attr.getName() != "portSyms")
+        attr.getName() != "portSyms" && attr.getName() != "portLocations")
       newModuleAttrs.push_back(attr);
 
   SmallVector<Direction> newArgDirections;
   SmallVector<Attribute> newArgNames;
   SmallVector<Attribute> newArgTypes;
   SmallVector<Attribute> newArgSyms;
+  SmallVector<Attribute> newArgLocations;
   SmallVector<Attribute, 8> newArgAnnotations;
   for (auto &port : newArgs) {
     newArgDirections.push_back(port.direction);
     newArgNames.push_back(port.name);
     newArgTypes.push_back(TypeAttr::get(port.type));
     newArgSyms.push_back(port.sym);
+    newArgLocations.push_back(port.loc);
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
   }
 
@@ -1050,6 +1059,10 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
   newModuleAttrs.push_back(
       NamedAttribute(cache.sPortTypes, builder->getArrayAttr(newArgTypes)));
+
+  newModuleAttrs.push_back(NamedAttribute(
+      cache.sPortLocations, builder->getArrayAttr(newArgLocations)));
+
   newModuleAttrs.push_back(NamedAttribute(
       cache.sPortAnnotations, builder->getArrayAttr(newArgAnnotations)));
 

@@ -457,9 +457,10 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
 }
 
 // CHECK-LABEL: module Aliasing(
-// CHECK-NEXT:             inout [41:0] a,
-// CHECK-NEXT:                          b,
-// CHECK-NEXT:                          c)
+// CHECK-NEXT:    inout [41:0] a, //
+// CHECK-NEXT:                 b, //
+// CHECK-NEXT:                 c //
+// CHECK-NEXT:  );
 hw.module @Aliasing(%a : !hw.inout<i42>, %b : !hw.inout<i42>,
                       %c : !hw.inout<i42>) {
 
@@ -474,7 +475,8 @@ hw.module @reg_0(%in4: i4, %in8: i8) -> (a: i8, b: i8) {
   // CHECK-NEXT:   input  [3:0] in4,
   // CHECK-NEXT:   input  [7:0] in8,
   // CHECK-NEXT:   output [7:0] a,
-  // CHECK-NEXT:                b);
+  // CHECK-NEXT:                b
+  // CHECK-NEXT:  );
 
   // CHECK-EMPTY:
   // CHECK-NEXT: (* dont_merge *)
@@ -526,8 +528,9 @@ hw.module @reg_1(%in4: i4, %in8: i8) -> (a : i3, b : i5) {
 }
 
 // CHECK-LABEL: module struct_field_inout1(
+// CHECK-NEXT:   inout struct packed {logic b; } a
+// CHECK-NEXT:  );
 hw.module @struct_field_inout1(%a : !hw.inout<struct<b: i1>>) {
-  // CHECK: inout struct packed {logic b; } a);
   // CHECK: assign a.b = 1'h1;
   %true = hw.constant true
   %0 = sv.struct_field_inout %a["b"] : !hw.inout<struct<b: i1>>
@@ -535,8 +538,9 @@ hw.module @struct_field_inout1(%a : !hw.inout<struct<b: i1>>) {
 }
 
 // CHECK-LABEL: module struct_field_inout2(
+// CHECK-NEXT:    inout struct packed {struct packed {logic c; } b; } a
+// CHECK-NEXT:  );
 hw.module @struct_field_inout2(%a: !hw.inout<struct<b: !hw.struct<c: i1>>>) {
-  // CHECK: inout struct packed {struct packed {logic c; } b; } a);
   // CHECK: assign a.b.c = 1'h1;
   %true = hw.constant true
   %0 = sv.struct_field_inout %a["b"] : !hw.inout<struct<b: !hw.struct<c: i1>>>
@@ -1562,9 +1566,10 @@ hw.module @ElseIfLocations(%clock: i1, %flag1 : i1, %flag2: i1, %flag3: i1) {
 }
 
 // CHECK-LABEL: ReuseExistingInOut
-// CHECK: input {{.+}},
-// CHECK:        [[INPUT:[:alnum:]+]],
-// CHECK: output [[OUTPUT:.+]])
+// CHECK: input {{.+}}, //
+// CHECK:        [[INPUT:[:alnum:]+]], //
+// CHECK: output [[OUTPUT:.+]] //
+// CHECK: );
 hw.module @ReuseExistingInOut(%clock: i1, %a: i1) -> (out1: i1) {
   %expr1 = comb.or %a, %a : i1
   %expr2 = comb.and %a, %a : i1

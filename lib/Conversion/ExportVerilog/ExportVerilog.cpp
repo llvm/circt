@@ -437,15 +437,9 @@ static void collectFileLineColLocs(Location loc,
 
 /// Return the location information as a (potentially empty) string.
 static std::string
-getLocationInfoAsStringImpl(const SmallPtrSetImpl<Operation *> &ops) {
+getLocationInfoAsStringImpl(const SmallPtrSetImpl<Attribute> &locationSet) {
   std::string resultStr;
   llvm::raw_string_ostream sstr(resultStr);
-
-  // Multiple operations may come from the same location or may not have useful
-  // location info.  Unique it now.
-  SmallPtrSet<Attribute, 8> locationSet;
-  for (auto *op : ops)
-    collectFileLineColLocs(op->getLoc(), locationSet);
 
   auto printLoc = [&](FileLineColLoc loc) {
     sstr << loc.getFilename().getValue();
@@ -527,29 +521,37 @@ getLocationInfoAsStringImpl(const SmallPtrSetImpl<Operation *> &ops) {
   return sstr.str();
 }
 
+static std::string
+getLocationInfoAsStringImpl(const SmallPtrSetImpl<Attribute> &locationSet,
+                            LoweringOptions::LocationInfoStyle style) {
+
+  if (style == LoweringOptions::LocationInfoStyle::None)
+    return "";
+  auto str = getLocationInfoAsStringImpl(locationSet);
+  if (style == LoweringOptions::LocationInfoStyle::WrapInAtSquareBracket)
+    return "@[" + str + "]";
+  return str;
+}
+
+/// Return the location information in the specified style.
+static std::string
+getLocationInfoAsString(Location loc,
+                        LoweringOptions::LocationInfoStyle style) {
+  SmallPtrSet<Attribute, 8> locationSet;
+  collectFileLineColLocs(loc, locationSet);
+  return getLocationInfoAsStringImpl(locationSet, style);
+}
+
 /// Return the location information in the specified style.
 static std::string
 getLocationInfoAsString(const SmallPtrSetImpl<Operation *> &ops,
                         LoweringOptions::LocationInfoStyle style) {
-  if (style == LoweringOptions::LocationInfoStyle::None)
-    return "";
-  auto str = getLocationInfoAsStringImpl(ops);
-  // If the location information is empty, just return an empty string.
-  if (str.empty())
-    return str;
-  switch (style) {
-  case LoweringOptions::LocationInfoStyle::Plain:
-    return str;
-  case LoweringOptions::LocationInfoStyle::WrapInAtSquareBracket:
-    return "@[" + str + ']';
-  // NOTE: We need this case to avoid a compiler warning regarding an unhandled
-  // switch case. Because we early return in the `None` case, this should be
-  // unreachable.
-  case LoweringOptions::LocationInfoStyle::None:
-    llvm_unreachable("`None` case handled in early return");
-  }
-
-  llvm_unreachable("all styles must be handled");
+  // Multiple operations may come from the same location or may not have useful
+  // location info.  Unique it now.
+  SmallPtrSet<Attribute, 8> locationSet;
+  for (auto *op : ops)
+    collectFileLineColLocs(op->getLoc(), locationSet);
+  return getLocationInfoAsStringImpl(locationSet, style);
 }
 
 /// Most expressions are invalid to bit-select from in Verilog, but some
@@ -851,18 +853,25 @@ public:
     return op->emitOpError(message);
   }
 
+  void emitLocationImpl(const std::string &location) {
+    // Break so previous content is not impacted by following,
+    // but use a 'neverbreak' so it always fits.
+    ps << PP::neverbreak;
+    if (!location.empty())
+      ps << "\t// " << location; // (don't use tabs in normal pretty-printing)
+  }
+
+  void emitLocationInfo(Location loc) {
+    emitLocationImpl(
+        getLocationInfoAsString(loc, state.options.locationInfoStyle));
+  }
+
   /// If we have location information for any of the specified operations,
   /// aggregate it together and print a pretty comment specifying where the
   /// operations came from.  In any case, print a newline.
   void emitLocationInfoAndNewLine(const SmallPtrSetImpl<Operation *> &ops) {
-    auto locInfo =
-        getLocationInfoAsString(ops, state.options.locationInfoStyle);
-    // Break so previous content is not impacted by following,
-    // but use a 'neverbreak' so it always fits.
-    ps << PP::neverbreak;
-
-    if (!locInfo.empty())
-      ps << "\t// " << locInfo; // (don't use tabs in normal pretty-printing)
+    emitLocationImpl(
+        getLocationInfoAsString(ops, state.options.locationInfoStyle));
     setPendingNewline();
   }
 
@@ -4717,7 +4726,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
 
   ps << "(";
   if (!portInfo.empty())
-    emitLocationInfoAndNewLine(moduleOpSet);
+    emitLocationInfo(module->getLoc());
 
   // Determine the width of the widest type we have to print so everything
   // lines up nicely.
@@ -4746,12 +4755,16 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   if (maxTypeWidth > 0) // add a space if any type exists
     maxTypeWidth += 1;
 
+  // Emit the port list.
   ps.scopedBox(PP::bbox2, [&]() {
     for (size_t portIdx = 0, e = portInfo.size(); portIdx != e;) {
-      startStatement();
+      auto lastPort = e - 1;
 
-      // Emit the arguments.
+      ps << PP::newline;
       auto portType = portInfo[portIdx].type;
+
+      // If this is a zero width type, emit the port as a comment and create a
+      // neverbox to ensure we don't insert a line break.
       bool isZeroWidth = false;
       if (hasZeroWidth) {
         isZeroWidth = isZeroBitType(portType);
@@ -4760,6 +4773,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
         ps << (isZeroWidth ? "// " : "   ");
       }
 
+      // Emit the port direction.
       PortDirection thisPortDirection = portInfo[portIdx].direction;
       switch (thisPortDirection) {
       case PortDirection::OUTPUT:
@@ -4779,24 +4793,34 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       if (portTypeStrings[portIdx].size() < maxTypeWidth)
         ps.nbsp(maxTypeWidth - portTypeStrings[portIdx].size());
 
-      size_t startOfNamePos =
-          (hasZeroWidth ? 3 : 0) + (hasOutputs ? 7 : 6) + maxTypeWidth;
+      size_t startOfNamePos = (hasOutputs ? 7 : 6) + maxTypeWidth;
 
       // Emit the name.
       ps << PPExtString(getPortVerilogName(module, portInfo[portIdx]));
+
+      // Emit array dimensions.
       ps.invokeWithStringOS(
           [&](auto &os) { printUnpackedTypePostfix(portType, os); });
 
+      // Emit the symbol.
       if (state.options.printDebugInfo && portInfo[portIdx].sym &&
           !portInfo[portIdx].sym.empty())
         ps << " /* inner_sym: "
            << PPExtString(portInfo[portIdx].sym.getSymName().getValue())
            << " */";
 
-      ++portIdx;
+      // Emit the comma if this is not the last real port.
+      if (portIdx != lastNonZeroPort && portIdx != lastPort)
+        ps << ",";
+
+      // Emit the location.
+      if (auto loc = portInfo[portIdx].loc)
+        emitLocationInfo(loc);
 
       if (isZeroWidth)
         ps << PP::end; // Close never-break group.
+
+      ++portIdx;
 
       // If we have any more ports with the same types and the same
       // direction, emit them in a list one per line. Optionally skip this
@@ -4806,42 +4830,61 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
                portInfo[portIdx].direction == thisPortDirection &&
                stripUnpackedTypes(portType) ==
                    stripUnpackedTypes(portInfo[portIdx].type)) {
-          StringRef name = getPortVerilogName(module, portInfo[portIdx]);
           // Append this to the running port decl.
-          ps << ",";
           ps << PP::newline;
+
+          bool isZeroWidth = false;
+          if (hasZeroWidth) {
+            isZeroWidth = isZeroBitType(portType);
+            if (isZeroWidth)
+              ps << PP::neverbox;
+            ps << (isZeroWidth ? "// " : "   ");
+          }
+
           ps.nbsp(startOfNamePos);
+
+          // Emit the name.
+          StringRef name = getPortVerilogName(module, portInfo[portIdx]);
           ps << PPExtString(name);
+
+          // Emit array dimensions.
           ps.invokeWithStringOS([&](auto &os) {
             printUnpackedTypePostfix(portInfo[portIdx].type, os);
           });
 
+          // Emit the symbol.
           if (state.options.printDebugInfo && portInfo[portIdx].sym &&
               !portInfo[portIdx].sym.empty())
             ps << " /* inner_sym: "
                << PPExtString(portInfo[portIdx].sym.getSymName().getValue())
                << " */";
 
+          // Emit the comma if this is not the last real port.
+          if (portIdx != lastNonZeroPort && portIdx != lastPort)
+            ps << ",";
+
+          // Emit the location.
+          if (auto loc = portInfo[portIdx].loc)
+            emitLocationInfo(loc);
+
+          if (isZeroWidth)
+            ps << PP::end; // Close never-break group.
+
           ++portIdx;
         }
       }
-
-      if (portIdx != e) {
-        if (portIdx <= lastNonZeroPort)
-          ps << ",";
-      } else if (isZeroWidth) {
-        ps << PP::newline << ");" << PP::newline;
-      } else {
-        ps << ");" << PP::newline;
-      }
-      setPendingNewline();
     }
   });
 
   if (portInfo.empty()) {
     ps << ");";
     emitLocationInfoAndNewLine(moduleOpSet);
+  } else {
+    ps << PP::newline;
+    ps << ");" << PP::newline;
+    setPendingNewline();
   }
+
   assert(state.pendingNewline);
 
   // Emit the body of the module.

@@ -438,33 +438,37 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
 
   // 'Ready' signals are outputs. Remember them for later when we deal with the
   // returns.
-  SmallVector<std::pair<Value, StringAttr>, 8> newReadySignals;
+  SmallVector<std::tuple<Value, StringAttr, Location>, 8> newReadySignals;
   SmallVector<Attribute> newArgNames;
+  SmallVector<Attribute> newArgLocs;
 
   for (size_t argNum = 0, blockArgNum = 0, e = mod.getNumArguments();
        argNum < e; ++argNum, ++blockArgNum) {
     Type argTy = funcType.getInput(argNum);
     auto argNameAttr = getModuleArgumentNameAttr(mod, argNum);
+    auto argLocAttr = getModuleArgumentLocAttr(mod, argNum);
 
     auto chanTy = argTy.dyn_cast<ChannelType>();
     if (!chanTy) {
       // If not ESI, pass through.
       newArgTypes.push_back(argTy);
       newArgNames.push_back(argNameAttr);
+      newArgLocs.push_back(argLocAttr);
       continue;
     }
     // When we find one, add a data and valid signal to the new args.
     Value data;
     newArgTypes.push_back(chanTy.getInner());
     newArgNames.push_back(argNameAttr);
-    data = mod.front().insertArgument(blockArgNum, chanTy.getInner(),
-                                      mod.getArgument(argNum).getLoc());
+    newArgLocs.push_back(argLocAttr);
+    data =
+        mod.front().insertArgument(blockArgNum, chanTy.getInner(), argLocAttr);
     ++blockArgNum;
 
     newArgTypes.push_back(i1);
     newArgNames.push_back(appendToRtlName(argNameAttr, "_valid"));
-    Value valid = mod.front().insertArgument(blockArgNum, i1,
-                                             mod.getArgument(argNum).getLoc());
+    newArgLocs.push_back(argLocAttr);
+    Value valid = mod.front().insertArgument(blockArgNum, i1, argLocAttr);
     ++blockArgNum;
     // Build the ESI wrap operation to translate the lowered signals to what
     // they were. (A later pass takes care of eliminating the ESI ops.)
@@ -476,8 +480,8 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
     // Delete the ESI port block argument.
     mod.front().eraseArgument(blockArgNum);
     --blockArgNum;
-    newReadySignals.push_back(std::make_pair(
-        wrap.getReady(), appendToRtlName(argNameAttr, "_ready")));
+    newReadySignals.emplace_back(
+        wrap.getReady(), appendToRtlName(argNameAttr, "_ready"), argLocAttr);
     updated = true;
   }
 
@@ -486,6 +490,7 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
   SmallVector<Type, 8> newResultTypes;
   SmallVector<Value, 8> newOutputOperands;
   SmallVector<Attribute> newResultNames;
+  SmallVector<Attribute> newResultLocs;
 
   modBuilder.setInsertionPointToEnd(mod.getBodyBlock());
   for (size_t resNum = 0, numRes = funcType.getNumResults(); resNum < numRes;
@@ -494,36 +499,41 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
     auto chanTy = resTy.dyn_cast<ChannelType>();
     Value oldOutputValue = outOp.getOperand(resNum);
     auto oldResultName = getModuleResultNameAttr(mod, resNum);
+    auto oldResultLoc = getModuleResultLocAttr(mod, resNum);
     if (!chanTy) {
       // If not ESI, pass through.
       newResultTypes.push_back(resTy);
       newResultNames.push_back(oldResultName);
+      newResultLocs.push_back(oldResultLoc);
       newOutputOperands.push_back(oldOutputValue);
       continue;
     }
 
     // Lower the output, adding ready signals directly to the arg list.
-    Value ready = mod.front().addArgument(
-        i1, modBuilder.getUnknownLoc()); // Ready block arg.
+    Value ready = mod.front().addArgument(i1, oldResultLoc); // Ready block arg.
     auto unwrap = modBuilder.create<UnwrapValidReadyOp>(oldOutputValue, ready);
     newOutputOperands.push_back(unwrap.getRawOutput());
     newResultTypes.push_back(chanTy.getInner()); // Raw data.
     newResultNames.push_back(oldResultName);
+    newResultLocs.push_back(oldResultLoc);
 
     newResultTypes.push_back(i1); // Valid.
     newOutputOperands.push_back(unwrap.getValid());
     newResultNames.push_back(appendToRtlName(oldResultName, "_valid"));
+    newResultLocs.push_back(oldResultLoc);
 
     newArgTypes.push_back(i1); // Ready func arg.
     newArgNames.push_back(appendToRtlName(oldResultName, "_ready"));
+    newArgLocs.push_back(oldResultLoc);
     updated = true;
   }
 
   // Append the ready list signals we remembered above.
-  for (const auto &readySig : newReadySignals) {
+  for (auto [value, name, location] : newReadySignals) {
     newResultTypes.push_back(i1);
-    newResultNames.push_back(readySig.second);
-    newOutputOperands.push_back(readySig.first);
+    newOutputOperands.push_back(value);
+    newResultNames.push_back(name);
+    newResultLocs.push_back(location);
   }
 
   if (!updated)
@@ -537,7 +547,9 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
   auto newFuncType = modBuilder.getFunctionType(newArgTypes, newResultTypes);
   mod.setType(newFuncType);
   setModuleArgumentNames(mod, newArgNames);
+  setModuleArgumentLocs(mod, newArgLocs);
   setModuleResultNames(mod, newResultNames);
+  setModuleResultLocs(mod, newResultLocs);
   return true;
 }
 
@@ -639,7 +651,7 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
 
   bool updated = false;
 
-  SmallVector<Attribute> newArgNames, newResultNames;
+  SmallVector<Attribute> newArgNames, newArgLocs, newResultNames, newResultLocs;
 
   // Reconstruct the list of operand types, changing the type whenever an ESI
   // port is found.
@@ -647,7 +659,9 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
   size_t nextArgNo = 0;
   for (auto argTy : mod.getArgumentTypes()) {
     auto chanTy = argTy.dyn_cast<ChannelType>();
-    newArgNames.push_back(getModuleArgumentNameAttr(mod, nextArgNo++));
+    newArgNames.push_back(getModuleArgumentNameAttr(mod, nextArgNo));
+    newArgLocs.push_back(getModuleArgumentLocAttr(mod, nextArgNo));
+    nextArgNo++;
 
     if (!chanTy) {
       newArgTypes.push_back(argTy);
@@ -672,9 +686,11 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
     Type resTy = funcType.getResult(resNum);
     auto chanTy = resTy.dyn_cast<ChannelType>();
     auto resNameAttr = getModuleResultNameAttr(mod, resNum);
+    auto resLocAttr = getModuleResultLocAttr(mod, resNum);
     if (!chanTy) {
       newResultTypes.push_back(resTy);
       newResultNames.push_back(resNameAttr);
+      newResultLocs.push_back(resLocAttr);
       continue;
     }
 
@@ -684,6 +700,7 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
     ModportType sinkPort = iface.getModportType(ESIHWBuilder::sinkStr);
     newArgTypes.push_back(sinkPort);
     newArgNames.push_back(resNameAttr);
+    newArgLocs.push_back(resLocAttr);
     updated = true;
   }
 
@@ -694,7 +711,9 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
   auto newFuncType = FunctionType::get(ctxt, newArgTypes, newResultTypes);
   mod.setType(newFuncType);
   setModuleArgumentNames(mod, newArgNames);
+  setModuleArgumentLocs(mod, newArgLocs);
   setModuleResultNames(mod, newResultNames);
+  setModuleResultLocs(mod, newResultLocs);
   return true;
 }
 

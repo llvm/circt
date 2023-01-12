@@ -67,6 +67,7 @@ struct StructuralHasher {
     nonessentialAttributes.insert(StringAttr::get(context, "portAnnotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "portNames"));
     nonessentialAttributes.insert(StringAttr::get(context, "portSyms"));
+    nonessentialAttributes.insert(StringAttr::get(context, "portLocations"));
     nonessentialAttributes.insert(StringAttr::get(context, "sym_name"));
     nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
   };
@@ -210,6 +211,7 @@ struct Equivalence {
     nonessentialAttributes.insert(StringAttr::get(context, "portNames"));
     nonessentialAttributes.insert(StringAttr::get(context, "portTypes"));
     nonessentialAttributes.insert(StringAttr::get(context, "portSyms"));
+    nonessentialAttributes.insert(StringAttr::get(context, "portLocations"));
     nonessentialAttributes.insert(StringAttr::get(context, "sym_name"));
     nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
   }
@@ -656,6 +658,18 @@ struct Deduper {
     // used to update NLAs that reference the "fromModule".
     RenameMap renameMap;
 
+    // Merge the port locations.
+    SmallVector<Attribute> newLocs;
+    for (auto [toLoc, fromLoc] : llvm::zip(toModule.getPortLocations(),
+                                           fromModule.getPortLocations())) {
+      if (toLoc == fromLoc)
+        newLocs.push_back(toLoc);
+      else
+        newLocs.push_back(mergeLoc(context, toLoc.cast<LocationAttr>(),
+                                   fromLoc.cast<LocationAttr>()));
+    }
+    toModule->setAttr("portLocations", ArrayAttr::get(context, newLocs));
+
     // Merge the two modules.
     mergeOps(renameMap, toModule, toModule, fromModule, fromModule);
 
@@ -1089,6 +1103,12 @@ private:
   /// Recursively merge two blocks.
   void mergeBlocks(RenameMap &renameMap, FModuleLike toModule, Block &toBlock,
                    FModuleLike fromModule, Block &fromBlock) {
+    // Merge the block locations.
+    for (auto [toArg, fromArg] :
+         llvm::zip(toBlock.getArguments(), fromBlock.getArguments()))
+      if (toArg.getLoc() != fromArg.getLoc())
+        toArg.setLoc(mergeLoc(context, toArg.getLoc(), fromArg.getLoc()));
+
     for (auto ops : llvm::zip(toBlock, fromBlock))
       mergeOps(renameMap, toModule, &std::get<0>(ops), fromModule,
                &std::get<1>(ops));

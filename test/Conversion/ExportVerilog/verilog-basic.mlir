@@ -1,8 +1,9 @@
 // RUN: circt-opt %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: module inputs_only(
-// CHECK-NEXT: input a,
-// CHECK-NEXT:       b);
+// CHECK-NEXT:   input a,{{.*}}
+// CHECK-NEXT:         b
+// CHECK-NEXT:  );
 hw.module @inputs_only(%a: i1, %b: i1) {
   hw.output
 }
@@ -27,7 +28,8 @@ hw.module @no_ports() {
 // CHECK-NEXT:    output [15:0] out16,
 // CHECK-NEXT:                  out16s,
 // CHECK-NEXT:    output [16:0] sext17,
-// CHECK-NEXT:    output [1:0]  orvout);
+// CHECK-NEXT:    output [1:0]  orvout
+// CHECK-NEXT:  );
 
 hw.module @Expressions(%in4: i4, %clock: i1) ->
   (out1a: i1, out1b: i1, out1c: i1, out1d: i1, out1e: i1, out1f: i1, out1g: i1,
@@ -313,7 +315,8 @@ hw.module @MultiUseExpr(%a: i4) -> (b0: i1, b1: i1, b2: i1, b3: i1, b4: i2) {
 
 // CHECK-LABEL: module SimpleConstPrint(
 // CHECK-NEXT:    input  [3:0] in4,
-// CHECK-NEXT:    output [3:0] out4);
+// CHECK-NEXT:    output [3:0] out4
+// CHECK-NEXT: );
 // CHECK:  wire [3:0] w = 4'h1;
 // CHECK:  assign out4 = in4 + 4'h1;
 // CHECK-NEXT: endmodule
@@ -347,6 +350,7 @@ hw.module @SimpleConstPrintReset(%clock: i1, %reset: i1, %in4: i4) -> () {
 
 // CHECK-LABEL: module ordered_region
 // CHECK-NEXT: input a
+// CHECK-NEXT: );
 // CHECK-EMPTY:
 hw.module @ordered_region(%a: i1) {
   sv.ordered {
@@ -417,7 +421,8 @@ hw.module @NestedParameterUsage<param: i32>(
   %in: !hw.int<#hw.param.decl.ref<"param">>) -> (out: !hw.int<#hw.param.decl.ref<"param">>) {
   // CHECK: #(parameter /*integer*/ param) (
   // CHECK: input  [param - 1:0] in,
-  // CHECK: output [param - 1:0] out);
+  // CHECK: output [param - 1:0] out
+  // CHECK: );
   // CHECK: ExternParametricWidth #(
   // CHECK:   .width(param)
   // CHECK: ) externWidth (

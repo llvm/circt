@@ -137,48 +137,47 @@ StringRef SCModuleOp::getModuleName() {
 }
 
 ParseResult SCModuleOp::parse(OpAsmParser &parser, OperationState &result) {
-  StringAttr moduleName;
-  SmallVector<OpAsmParser::Argument, 4> args;
-  SmallVector<Type, 4> argTypes;
-  SmallVector<Type, 4> resultTypes;
-  SmallVector<Attribute> argNames;
-  SmallVector<DictionaryAttr> resultAttrs;
 
   // Parse the visibility attribute.
   (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
 
+  // Parse the name as a symbol.
+  StringAttr moduleName;
   if (parser.parseSymbolName(moduleName, SymbolTable::getSymbolAttrName(),
                              result.attributes))
     return failure();
 
+  // Parse the function signature.
   bool isVariadic = false;
-  if (hw::module_like_impl::parseModuleFunctionSignature(
-          parser, args, isVariadic, resultTypes, resultAttrs, argNames))
+  SmallVector<OpAsmParser::Argument, 4> entryArgs;
+  SmallVector<Attribute> argNames;
+  SmallVector<Attribute> argLocs;
+  SmallVector<Attribute> resultNames;
+  SmallVector<DictionaryAttr> resultAttrs;
+  SmallVector<Attribute> resultLocs;
+  TypeAttr functionType;
+  if (failed(hw::module_like_impl::parseModuleFunctionSignature(
+          parser, isVariadic, entryArgs, argNames, argLocs, resultNames,
+          resultAttrs, resultLocs, functionType)))
     return failure();
 
+  // Parse the attribute dict.
   if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
-
-  for (auto &arg : args) {
-    argNames.push_back(
-        StringAttr::get(parser.getContext(), arg.ssaName.name.drop_front()));
-    argTypes.push_back(arg.type);
-  }
 
   result.addAttribute("portNames",
                       ArrayAttr::get(parser.getContext(), argNames));
 
-  auto type = parser.getBuilder().getFunctionType(argTypes, resultTypes);
   result.addAttribute(SCModuleOp::getFunctionTypeAttrName(result.name),
-                      TypeAttr::get(type));
+                      functionType);
 
   mlir::function_interface_impl::addArgAndResultAttrs(
-      parser.getBuilder(), result, args, resultAttrs,
+      parser.getBuilder(), result, entryArgs, resultAttrs,
       SCModuleOp::getArgAttrsAttrName(result.name),
       SCModuleOp::getResAttrsAttrName(result.name));
 
   auto &body = *result.addRegion();
-  if (parser.parseRegion(body, args))
+  if (parser.parseRegion(body, entryArgs))
     return failure();
   if (body.empty())
     body.push_back(std::make_unique<Block>().release());

@@ -113,6 +113,7 @@ class InFlightDiagnostic;
 class IntegerAttr;
 class IntegerType;
 class Location;
+class LocationAttr;
 class MemRefType;
 class MLIRContext;
 class ModuleOp;
@@ -220,6 +221,7 @@ using mlir::IntegerAttr;               // NOLINT(misc-unused-using-decls)
 using mlir::IntegerType;               // NOLINT(misc-unused-using-decls)
 using mlir::IRMapping;                 // NOLINT(misc-unused-using-decls)
 using mlir::Location;                  // NOLINT(misc-unused-using-decls)
+using mlir::LocationAttr;              // NOLINT(misc-unused-using-decls)
 using mlir::LogicalResult;             // NOLINT(misc-unused-using-decls)
 using mlir::MemRefAccess;              // NOLINT(misc-unused-using-decls)
 using mlir::MemRefType;                // NOLINT(misc-unused-using-decls)
