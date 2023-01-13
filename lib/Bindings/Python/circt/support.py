@@ -2,7 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-import mlir.ir as ir
+import .ir as ir
 
 from contextlib import AbstractContextManager
 from contextvars import ContextVar
@@ -77,7 +77,6 @@ def var_to_attribute(obj, none_on_fail: bool = False) -> ir.Attribute:
 # conversation regarding how to achieve this is ongoing and I expect it to be a
 # long one. This is a way that works for now.
 def type_to_pytype(t) -> ir.Type:
-  import mlir.ir as ir
 
   if not isinstance(t, ir.Type):
     raise TypeError("type_to_pytype only accepts MLIR Type objects")
@@ -124,7 +123,6 @@ def type_to_pytype(t) -> ir.Type:
 # conversation regarding how to achieve this is ongoing and I expect it to be a
 # long one. This is a way that works for now.
 def attribute_to_var(attr):
-  import mlir.ir as ir
 
   if attr is None:
     return None
@@ -171,7 +169,7 @@ def attribute_to_var(attr):
 
 
 def get_self_or_inner(mlir_type):
-  from circt.dialects import hw
+  from .dialects import hw
   if type(mlir_type) is ir.Type:
     mlir_type = type_to_pytype(mlir_type)
   if isinstance(mlir_type, hw.TypeAliasType):

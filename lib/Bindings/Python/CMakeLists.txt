@@ -8,19 +8,9 @@ include(AddMLIRPython)
 # Declare native Python extension
 ################################################################################
 
-declare_mlir_python_sources(CIRCTBindingsPythonExtension)
 
-set(_depends LLVMSupport)
-
-# TODO: remove these when ESIModule only uses C-APIs.
-if (BUILD_SHARED_LIBS)
-  list(APPEND _depends MLIRIR)
-  list(APPEND _depends MLIRParser)
-endif()
-
-declare_mlir_python_extension(CIRCTBindingsPythonExtension.Core
+declare_mlir_python_extension(CIRCTBindingsPythonExtension
   MODULE_NAME _circt
-  ADD_TO_PARENT CIRCTBindingsPythonExtension
   SOURCES
     CIRCTModule.cpp
     ESIModule.cpp
@@ -40,7 +30,7 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension.Core
     CIRCTCAPIHandshake
     MLIRCAPITransforms
   PRIVATE_LINK_LIBS
-    ${_depends}
+    LLVMSupport
 )
 
 ################################################################################
@@ -52,7 +42,7 @@ declare_mlir_python_sources(CIRCTBindingsPythonSources
   SOURCES
     circt/__init__.py
     circt/support.py
-    circt/dialects/_ods_common.py)
+)
 
 ################################################################################
 # Declare dialect-specific bindings.
@@ -144,10 +134,10 @@ declare_mlir_dialect_python_bindings(
 # Bundle our own, self-contained CAPI library with all of our deps.
 add_mlir_python_common_capi_library(CIRCTBindingsPythonCAPI
   INSTALL_COMPONENT CIRCTBindingsPythonModules
-  INSTALL_DESTINATION python_packages/circt_core/mlir/_mlir_libs
+  INSTALL_DESTINATION python_packages/circt_core/circt/_mlir_libs
   # NOTE: When the MLIR API is relocated under circt, this would change to
   # .../circt/_mlir_libs
-  OUTPUT_DIRECTORY "${CIRCT_PYTHON_PACKAGES_DIR}/circt_core/mlir/_mlir_libs"
+  OUTPUT_DIRECTORY "${CIRCT_PYTHON_PACKAGES_DIR}/circt_core/circt/_mlir_libs"
   RELATIVE_INSTALL_ROOT "../../../.."
   DECLARED_SOURCES
     MLIRPythonSources.Core
@@ -155,22 +145,16 @@ add_mlir_python_common_capi_library(CIRCTBindingsPythonCAPI
     CIRCTBindingsPythonExtension
 )
 
-# Bundle the MLIR python sources into our package.
-# The MLIR API is position independent, so we explicitly output it to the mlir/
-# folder as a temporary measure. It will eventually migrate under the circt/
-# folder and be accessible under the unified "import circt..." namespace.
+# Bundle the CIRCT python sources into our package.
 add_mlir_python_modules(CIRCTMLIRPythonModules
-  ROOT_PREFIX "${CIRCT_PYTHON_PACKAGES_DIR}/circt_core/mlir"
-  INSTALL_PREFIX "python_packages/circt_core/mlir"
+  ROOT_PREFIX "${CIRCT_PYTHON_PACKAGES_DIR}/circt_core/circt"
+  INSTALL_PREFIX "python_packages/circt_core/circt"
   DECLARED_SOURCES
     MLIRPythonSources.Core
-    # We need the circt extensions co-located with the MLIR extensions. When
-    # the namespace is unified, this moves to the below.
     CIRCTBindingsPythonExtension
   COMMON_CAPI_LINK_LIBS
     CIRCTBindingsPythonCAPI
 )
-
 # Bundle the CIRCT python sources into our package.
 add_mlir_python_modules(CIRCTPythonModules
   ROOT_PREFIX "${CIRCT_PYTHON_PACKAGES_DIR}/circt_core"
@@ -179,4 +163,8 @@ add_mlir_python_modules(CIRCTPythonModules
     CIRCTBindingsPythonSources
   COMMON_CAPI_LINK_LIBS
     CIRCTBindingsPythonCAPI
+)
+
+add_dependencies(CIRCTPythonModules
+  CIRCTMLIRPythonModules
 )
