@@ -14,7 +14,7 @@ from .seq import CompRegOp
 # named.
 def reg(value, clock, reset=None, reset_value=None, name=None):
   import circt.dialects.hw as hw
-  from mlir.ir import IntegerAttr
+  from circt.ir import IntegerAttr
   value_type = value.type
   if reset:
     if not reset_value:

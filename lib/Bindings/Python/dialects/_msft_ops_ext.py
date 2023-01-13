@@ -6,7 +6,7 @@ from circt.dialects import hw, msft as _msft
 import circt.dialects._hw_ops_ext as _hw_ext
 import circt.support as support
 
-import mlir.ir as _ir
+import circt.ir as _ir
 
 
 class InstanceBuilder(support.NamedValueOpView):

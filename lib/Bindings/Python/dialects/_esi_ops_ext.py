@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Sequence, Type
 from circt.dialects import esi
 import circt.support as support
 
-import mlir.ir as ir
+import circt.ir as ir
 
 
 class RequestToServerConnectionOp:

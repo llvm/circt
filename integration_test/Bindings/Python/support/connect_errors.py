@@ -1,14 +1,13 @@
 # REQUIRES: bindings_python
 # RUN: %PYTHON% %s | FileCheck %s
 
-import mlir
 import circt
 from circt.support import connect
 from circt.dialects import hw
 
 
 def build(top):
-  i32 = mlir.ir.IntegerType.get_signless(32)
+  i32 = circt.ir.IntegerType.get_signless(32)
   dummy = hw.HWModuleOp(name='dummy',
                         input_ports=[('x', i32)],
                         output_ports=[('y', i32)],
@@ -27,11 +26,11 @@ def build(top):
     print(e)
 
 
-with mlir.ir.Context() as ctx, mlir.ir.Location.unknown():
+with circt.ir.Context() as ctx, circt.ir.Location.unknown():
   circt.register_dialects(ctx)
 
-  mod = mlir.ir.Module.create()
-  with mlir.ir.InsertionPoint(mod.body):
+  mod = circt.ir.Module.create()
+  with circt.ir.InsertionPoint(mod.body):
     hw.HWModuleOp(name='top',
                   input_ports=[],
                   output_ports=[],

@@ -10,6 +10,7 @@ set(CIRCT_INTEGRATION_TEST_DEPENDS
   esi-cosim-runner
   firtool
   hlstool
+  handshake-runner
   )
 
 # If Python bindings are available to build then enable the tests.

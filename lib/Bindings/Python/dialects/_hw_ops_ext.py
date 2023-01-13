@@ -7,7 +7,7 @@ import inspect
 from circt.dialects import hw
 import circt.support as support
 
-from mlir.ir import *
+from circt.ir import *
 
 
 def create_parameters(parameters: dict[str, _ir.Attribute], module: ModuleLike):

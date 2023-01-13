@@ -7,7 +7,7 @@ from circt.dialects import hw, fsm as fsm
 import circt.dialects._hw_ops_ext as _hw_ext
 import circt.support as support
 
-from mlir.ir import *
+from circt.ir import *
 
 
 def _get_or_add_single_block(region, args=[]):

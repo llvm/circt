@@ -5,8 +5,8 @@
 import circt
 from circt.dialects import hw, msft
 
-import mlir.ir as ir
-import mlir.passmanager
+import circt.ir as ir
+import circt.passmanager
 import sys
 
 with ir.Context() as ctx, ir.Location.unknown():
@@ -255,7 +255,7 @@ with ir.Context() as ctx, ir.Location.unknown():
   # CHECK: proc top_config { parent } {
   # CHECK:   set_location_assignment M20K_X2_Y6_N1 -to $parent|inst1|ext1|foo_subpath
   print(mod)
-  pm = mlir.passmanager.PassManager.parse(
+  pm = circt.passmanager.PassManager.parse(
       "builtin.module(msft-lower-instances,lower-msft-to-hw,msft-export-tcl{tops=top})"
   )
   pm.run(mod)
