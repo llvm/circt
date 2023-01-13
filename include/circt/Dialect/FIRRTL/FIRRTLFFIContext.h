@@ -27,9 +27,12 @@
 
 struct FirrtlType;
 struct FirrtlParameter;
+struct FirrtlExpr;
+struct FirrtlPrim;
 struct FirrtlStatement;
 struct FirrtlStatementAttach;
 struct FirrtlStatementSeqMemory;
+struct FirrtlStatementNode;
 
 namespace circt {
 namespace chirrtl {
@@ -113,17 +116,27 @@ private:
 
   Location mockLoc() const;
   llvm::SMLoc mockSMLoc() const;
+
+  ArrayAttr emptyArrayAttr();
+
   StringAttr stringRefToAttr(StringRef stringRef);
   std::optional<mlir::Attribute>
   ffiParamToFirParam(const FirrtlParameter &param);
   std::optional<firrtl::FIRRTLType> ffiTypeToFirType(const FirrtlType &type);
-  std::optional<mlir::Value> resolveModuleRefExpr(BodyOpBuilder &bodyOpBuilder,
-                                                  StringRef refExpr);
+
+  std::optional<mlir::Value> resolveRef(BodyOpBuilder &bodyOpBuilder,
+                                        StringRef refExpr);
+  std::optional<mlir::Value> resolvePrim(BodyOpBuilder &bodyOpBuilder,
+                                         const FirrtlPrim &prim);
+  std::optional<mlir::Value> resolveExpr(BodyOpBuilder &bodyOpBuilder,
+                                         const FirrtlExpr &expr);
 
   bool visitStmtAttach(BodyOpBuilder &bodyOpBuilder,
                        const FirrtlStatementAttach &stmt);
   bool visitStmtSeqMemory(BodyOpBuilder &bodyOpBuilder,
                           const FirrtlStatementSeqMemory &stmt);
+  bool visitStmtNode(BodyOpBuilder &bodyOpBuilder,
+                     const FirrtlStatementNode &stmt);
 };
 
 } // namespace chirrtl

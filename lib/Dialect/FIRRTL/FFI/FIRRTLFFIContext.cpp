@@ -37,6 +37,13 @@ namespace {
 StringRef attrToStringRef(const Attribute &attr) {
   return llvm::dyn_cast<StringAttr>(attr);
 }
+
+std::string typeToString(const mlir::Type &type) {
+  std::string typeStr;
+  llvm::raw_string_ostream stream{typeStr};
+  type.print(stream);
+  return typeStr;
+}
 } // namespace
 
 // This macro returns the underlying value of a `RequireAssigned`, which
@@ -230,6 +237,9 @@ void FFIContext::visitStatement(const FirrtlStatement &stmt) {
   case FIRRTL_STATEMENT_KIND_SEQ_MEMORY:
     visitStmtSeqMemory(bodyOpBuilder, stmt.u.seqMem);
     break;
+  case FIRRTL_STATEMENT_KIND_NODE:
+    visitStmtNode(bodyOpBuilder, stmt.u.node);
+    break;
   default:
     emitError("unknown statement kind");
     break;
@@ -253,6 +263,10 @@ Location FFIContext::mockLoc() const {
 SMLoc FFIContext::mockSMLoc() const {
   // no location info available
   return SMLoc::getFromPointer("no location info available");
+}
+
+ArrayAttr FFIContext::emptyArrayAttr() {
+  return ArrayAttr::get(mlirCtx.get(), {});
 }
 
 StringAttr FFIContext::stringRefToAttr(StringRef stringRef) {
@@ -363,13 +377,14 @@ std::optional<FIRRTLType> FFIContext::ffiTypeToFirType(const FirrtlType &type) {
   return firType;
 }
 
-std::optional<mlir::Value>
-FFIContext::resolveModuleRefExpr(BodyOpBuilder &bodyOpBuilder,
-                                 StringRef refExpr) {
-  RA_EXPECT(auto &lastModuleCtx, this->moduleContext, {});
+std::optional<mlir::Value> FFIContext::resolveRef(BodyOpBuilder &bodyOpBuilder,
+                                                  StringRef refExpr) {
+  RA_EXPECT(auto &lastModuleCtx, this->moduleContext, std::nullopt);
 
   SmallVector<StringRef, 2> refExprParts;
   refExpr.split(refExprParts, ".");
+
+  // TODO: Handle subindex: exp ::= exp '[' intLit ']' | exp '[' exp ']'
 
   if (refExprParts[0].empty()) {
     emitError("expected an identifier");
@@ -402,12 +417,9 @@ FFIContext::resolveModuleRefExpr(BodyOpBuilder &bodyOpBuilder,
 
       auto indexV = bundle.getElementIndex(fieldName);
       if (!indexV.has_value()) {
-        std::string typeStr;
-        llvm::raw_string_ostream stream{typeStr};
-        result.getType().print(stream);
-        emitError(
-            ("unknown field '" + fieldName + "' in bundle type " + typeStr)
-                .str());
+        emitError(("unknown field '" + fieldName + "' in bundle type " +
+                   typeToString(result.getType()))
+                      .str());
         return {};
       }
 
@@ -442,6 +454,242 @@ FFIContext::resolveModuleRefExpr(BodyOpBuilder &bodyOpBuilder,
   return {};
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
+std::optional<mlir::Value> FFIContext::resolvePrim(BodyOpBuilder &bodyOpBuilder,
+                                                   const FirrtlPrim &prim) {
+  size_t numOperandsExpected;
+
+  // NOLINTNEXTLINE(bugprone-branch-clone)
+  switch (prim.op) {
+  case FIRRTL_PRIM_OP_VALIDIF:
+    numOperandsExpected = 2;
+    break;
+#define PRIM_OP(ENUM, CLASS, NUMOPERANDS)                                      \
+  case ENUM:                                                                   \
+    numOperandsExpected = NUMOPERANDS;                                         \
+    break;
+#include "FIRRTLPrimOp.def"
+  default: // NOLINT(clang-diagnostic-covered-switch-default)
+    emitError("unknown primitive operation");
+    return std::nullopt;
+  }
+
+  // Parse the operands and constant integer arguments.
+  SmallVector<Value, 3> operands;
+  SmallVector<int64_t, 3> integers;
+
+  for (size_t i = 0; i < prim.argsCount; i++) {
+    const auto &arg = prim.args[i];
+
+    switch (arg.kind) {
+    case FIRRTL_PRIM_ARG_KIND_INT_LIT:
+      // Handle the integer constant case if present.
+      integers.emplace_back(arg.u.intLit.value);
+      break;
+
+    case FIRRTL_PRIM_ARG_KIND_EXPR: {
+      // Otherwise it must be a value operand.  These must all come before the
+      // integers.
+      if (!integers.empty()) {
+        emitError("expected more integer constants");
+        return std::nullopt;
+      }
+
+      auto operand = resolveExpr(bodyOpBuilder, arg.u.expr.value);
+      if (!operand.has_value()) {
+        emitError("expected expression in primitive operand");
+        return std::nullopt;
+      }
+      operands.emplace_back(*operand);
+      break;
+    }
+    default: // NOLINT(clang-diagnostic-covered-switch-default)
+      emitError("unknown primitive arg kind (1)");
+      return std::nullopt;
+    }
+  }
+
+  SmallVector<FIRRTLType, 3> opTypes;
+  for (auto v : operands) {
+    opTypes.emplace_back(v.getType().cast<FIRRTLType>());
+  }
+
+  SmallVector<StringAttr, 2> attrNames;
+
+  switch (prim.op) {
+  case FIRRTL_PRIM_OP_BITS_EXTRACT: {
+    static auto hiIdentifier = StringAttr::get(mlirCtx.get(), "lo");
+    static auto loIdentifier = StringAttr::get(mlirCtx.get(), "hi");
+    attrNames.emplace_back(hiIdentifier); // "hi"
+    attrNames.emplace_back(loIdentifier); // "lo"
+    break;
+  }
+  case FIRRTL_PRIM_OP_HEAD:
+  case FIRRTL_PRIM_OP_PAD:
+  case FIRRTL_PRIM_OP_SHIFT_LEFT:
+  case FIRRTL_PRIM_OP_SHIFT_RIGHT:
+  case FIRRTL_PRIM_OP_TAIL: {
+    static auto amountIdentifier = StringAttr::get(mlirCtx.get(), "amount");
+    attrNames.emplace_back(amountIdentifier);
+    break;
+  }
+  default:
+    break;
+  }
+
+  if (operands.size() != numOperandsExpected) {
+    assert(numOperandsExpected <= 3);
+    static const char *numberName[] = {"zero", "one", "two", "three"};
+    const char *optionalS = &"s"[numOperandsExpected == 1];
+    emitError(std::string{"operation requires "} +
+              numberName[numOperandsExpected] + " operand" + optionalS);
+    return std::nullopt;
+  }
+
+  if (integers.size() != attrNames.size()) {
+    emitError("expected " + std::to_string(attrNames.size()) +
+              " constant arguments");
+    return std::nullopt;
+  }
+
+  NamedAttrList attrs;
+  for (size_t i = 0, e = attrNames.size(); i != e; ++i) {
+    attrs.append(attrNames[i], bodyOpBuilder.getI32IntegerAttr(integers[i]));
+  }
+
+  switch (prim.op) {
+#define PRIM_OP(ENUM, CLASS, NUMOPERANDS)                                      \
+  case ENUM: {                                                                 \
+    auto resultTy = CLASS::inferReturnType(operands, attrs, {});               \
+    if (!resultTy) {                                                           \
+      /* only call translateLocation on an error case, it is expensive. */     \
+      (void)CLASS::validateAndInferReturnType(operands, attrs, mockLoc());     \
+      return std::nullopt;                                                     \
+    }                                                                          \
+    return bodyOpBuilder.create<CLASS>(resultTy, operands, attrs);             \
+  }
+#include "FIRRTLPrimOp.def"
+
+  // Expand `validif(a, b)` expressions to simply `b`.  A `validif` expression
+  // is converted to a direct connect by the Scala FIRRTL Compiler's
+  // `RemoveValidIfs` pass.  We circumvent that and just squash these during
+  // parsing.
+  case FIRRTL_PRIM_OP_VALIDIF: {
+    if (opTypes.size() != 2 || !integers.empty()) {
+      emitError("operation requires two operands and no constants");
+      return std::nullopt;
+    }
+    auto lhsUInt = opTypes[0].dyn_cast<UIntType>();
+    if (!lhsUInt) {
+      emitError("first operand should have UInt type");
+      return std::nullopt;
+    }
+    auto lhsWidth = lhsUInt.getWidthOrSentinel();
+    if (lhsWidth != -1 && lhsWidth != 1) {
+      emitError("first operand should have 'uint<1>' type");
+      return std::nullopt;
+    }
+    // Skip the `validif` and emit the second, non-condition operand.
+    return operands[1];
+  }
+  default: // NOLINT(clang-diagnostic-covered-switch-default)
+    emitError("unknown primitive arg kind (2)");
+    return std::nullopt;
+  }
+}
+
+// NOLINTNEXTLINE(misc-no-recursion)
+std::optional<mlir::Value> FFIContext::resolveExpr(BodyOpBuilder &bodyOpBuilder,
+                                                   const FirrtlExpr &expr) {
+  RA_EXPECT(auto &lastModuleCtx, this->moduleContext, std::nullopt);
+
+  const auto &resolveIntExpr =
+      [&](const auto &intExpr) -> std::optional<mlir::Value> {
+    using E = std::decay_t<decltype(intExpr)>;
+
+    static_assert(std::is_same_v<E, FirrtlExprSInt> ||
+                  std::is_same_v<E, FirrtlExprUInt>);
+
+    constexpr bool isSigned = std::is_same_v<E, FirrtlExprSInt>;
+
+    std::optional<Value> result;
+
+    APInt value;
+    value = intExpr.value;
+    auto width = intExpr.width;
+
+    // Construct an integer attribute of the right width.
+    auto type = IntType::get(bodyOpBuilder.getContext(), isSigned, width);
+
+    IntegerType::SignednessSemantics signedness =
+        isSigned ? IntegerType::Signed : IntegerType::Unsigned;
+    if (width == 0) {
+      if (!value.isZero()) {
+        emitError("zero bit constant must be zero");
+        return std::nullopt;
+      }
+      value = value.trunc(0);
+    } else if (width != -1) {
+      // Convert to the type's width, checking value fits in destination width.
+      bool valueFits =
+          isSigned ? value.isSignedIntN(width) : value.isIntN(width);
+      if (!valueFits) {
+        emitError("initializer too wide for declared width");
+        return std::nullopt;
+      }
+      value = isSigned ? value.sextOrTrunc(width) : value.zextOrTrunc(width);
+    }
+
+    Type attrType =
+        IntegerType::get(type.getContext(), value.getBitWidth(), signedness);
+    auto attr = bodyOpBuilder.getIntegerAttr(attrType, value);
+
+    // Check to see if we've already created this constant.  If so, reuse it.
+    auto &entry = lastModuleCtx.constantCache[{attr, type}];
+    if (entry) {
+      // If we already had an entry, reuse it.
+      result = entry;
+      return result;
+    }
+
+    // Make sure to insert constants at the top level of the module to maintain
+    // dominance.
+    OpBuilder::InsertPoint savedIP;
+
+    auto *parentOp = bodyOpBuilder.getInsertionBlock()->getParentOp();
+    if (!isa<FModuleOp>(parentOp)) {
+      savedIP = bodyOpBuilder.saveInsertionPoint();
+      while (!isa<FModuleOp>(parentOp)) {
+        bodyOpBuilder.setInsertionPoint(parentOp);
+        parentOp = bodyOpBuilder.getInsertionBlock()->getParentOp();
+      }
+    }
+
+    auto op = bodyOpBuilder.create<ConstantOp>(type, value);
+    entry = op;
+    result = op;
+
+    if (savedIP.isSet()) {
+      bodyOpBuilder.setInsertionPoint(savedIP.getBlock(), savedIP.getPoint());
+    }
+    return result;
+  };
+
+  switch (expr.kind) {
+  case FIRRTL_EXPR_KIND_UINT:
+    return resolveIntExpr(expr.u.uint);
+  case FIRRTL_EXPR_KIND_SINT:
+    return resolveIntExpr(expr.u.sint);
+  case FIRRTL_EXPR_KIND_REF:
+    return resolveRef(bodyOpBuilder, unwrap(expr.u.ref.value));
+  case FIRRTL_EXPR_KIND_PRIM:
+    return resolvePrim(bodyOpBuilder, *expr.u.prim.value);
+  }
+
+  emitError("unknown expression kind");
+  return std::nullopt;
+}
+
 bool FFIContext::visitStmtAttach(BodyOpBuilder &bodyOpBuilder,
                                  const FirrtlStatementAttach &stmt) {
   SmallVector<Value, 4> operands;
@@ -449,7 +697,7 @@ bool FFIContext::visitStmtAttach(BodyOpBuilder &bodyOpBuilder,
 
   for (size_t i = 0; i < stmt.count; i++) {
     const auto &ffiOperand = stmt.operands[i];
-    auto operand = resolveModuleRefExpr(bodyOpBuilder, unwrap(ffiOperand.expr));
+    auto operand = resolveExpr(bodyOpBuilder, ffiOperand.expr);
     if (!operand.has_value()) {
       return false;
     }
@@ -493,11 +741,52 @@ bool FFIContext::visitStmtSeqMemory(BodyOpBuilder &bodyOpBuilder,
   }
 
   auto name = unwrap(stmt.name);
-  auto annotations = ArrayAttr::get(mlirCtx.get(), {});
+  auto annotations = emptyArrayAttr();
   StringAttr sym = {};
   auto result = bodyOpBuilder.create<SeqMemOp>(
       vectorType.getElementType(), vectorType.getNumElements(), ruw, name,
       NameKindEnum::InterestingName, annotations, sym);
+  return !lastModuleCtx.addSymbolEntry(name, result, mockSMLoc());
+}
+
+bool FFIContext::visitStmtNode(BodyOpBuilder &bodyOpBuilder,
+                               const FirrtlStatementNode &stmt) {
+  RA_EXPECT(auto &lastModuleCtx, this->moduleContext, false);
+
+  auto name = unwrap(stmt.name);
+
+  auto optInitializer = resolveExpr(bodyOpBuilder, stmt.expr);
+  if (!optInitializer.has_value()) {
+    emitError("expected expression for node");
+    return false;
+  }
+  auto initializer = *optInitializer;
+
+  // Error out in the following conditions:
+  //
+  //   1. Node type is Analog (at the top level)
+  //   2. Node type is not passive under an optional outer flip
+  //      (analog field is okay)
+  //
+  // Note: (1) is more restictive than normal NodeOp verification, but
+  // this is added to align with the SFC. (2) is less restrictive than
+  // the SFC to accomodate for situations where the node is something
+  // weird like a module output or an instance input.
+  auto initializerType = initializer.getType().cast<FIRRTLType>();
+  auto initializerBaseType = initializer.getType().dyn_cast<FIRRTLBaseType>();
+  if (initializerType.isa<AnalogType>() ||
+      !(initializerBaseType && initializerBaseType.isPassive())) {
+    emitError(
+        "Node cannot be analog and must be passive or passive under a flip" +
+        typeToString(initializer.getType()));
+    return false;
+  }
+
+  auto annotations = emptyArrayAttr();
+  auto sym = StringAttr{};
+  auto result = bodyOpBuilder.create<NodeOp>(
+      initializer.getType(), initializer, name, NameKindEnum::InterestingName,
+      annotations, sym);
   return !lastModuleCtx.addSymbolEntry(name, result, mockSMLoc());
 }
 

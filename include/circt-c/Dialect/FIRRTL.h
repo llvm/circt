@@ -202,13 +202,122 @@ typedef enum FirrtlReadUnderWrite {
   FIRRTL_READ_UNDER_WRITE_NEW,
 } FirrtlReadUnderWrite;
 
+typedef enum FirrtlPrimOp {
+  FIRRTL_PRIM_OP_VALIDIF,
+  FIRRTL_PRIM_OP_ADD,
+  FIRRTL_PRIM_OP_SUB,
+  FIRRTL_PRIM_OP_TAIL,
+  FIRRTL_PRIM_OP_HEAD,
+  FIRRTL_PRIM_OP_MUL,
+  FIRRTL_PRIM_OP_DIVIDE,
+  FIRRTL_PRIM_OP_REM,
+  FIRRTL_PRIM_OP_SHIFT_LEFT,
+  FIRRTL_PRIM_OP_SHIFT_RIGHT,
+  FIRRTL_PRIM_OP_DYNAMIC_SHIFT_LEFT,
+  FIRRTL_PRIM_OP_DYNAMIC_SHIFT_RIGHT,
+  FIRRTL_PRIM_OP_BIT_AND,
+  FIRRTL_PRIM_OP_BIT_OR,
+  FIRRTL_PRIM_OP_BIT_XOR,
+  FIRRTL_PRIM_OP_BIT_NOT,
+  FIRRTL_PRIM_OP_CONCAT,
+  FIRRTL_PRIM_OP_BITS_EXTRACT,
+  FIRRTL_PRIM_OP_LESS,
+  FIRRTL_PRIM_OP_LESS_EQ,
+  FIRRTL_PRIM_OP_GREATER,
+  FIRRTL_PRIM_OP_GREATER_EQ,
+  FIRRTL_PRIM_OP_EQUAL,
+  FIRRTL_PRIM_OP_PAD,
+  FIRRTL_PRIM_OP_NOT_EQUAL,
+  FIRRTL_PRIM_OP_NEG,
+  FIRRTL_PRIM_OP_MULTIPLEX,
+  FIRRTL_PRIM_OP_AND_REDUCE,
+  FIRRTL_PRIM_OP_OR_REDUCE,
+  FIRRTL_PRIM_OP_XOR_REDUCE,
+  FIRRTL_PRIM_OP_CONVERT,
+  FIRRTL_PRIM_OP_AS_UINT,
+  FIRRTL_PRIM_OP_AS_SINT,
+  // FIRRTL_PRIM_OP_AS_FIXED_POINT, // Unsupported
+  // FIRRTL_PRIM_OP_AS_INTERVAL,    // Unsupported
+  FIRRTL_PRIM_OP_AS_CLOCK,
+  FIRRTL_PRIM_OP_AS_ASYNC_RESET,
+} FirrtlPrimOp;
+
+typedef enum FirrtlExprKind {
+  FIRRTL_EXPR_KIND_UINT,
+  FIRRTL_EXPR_KIND_SINT,
+  FIRRTL_EXPR_KIND_REF,
+  FIRRTL_EXPR_KIND_PRIM,
+} FirrtlExprKind;
+
+typedef struct FirrtlExprUInt {
+  uint64_t value;
+  int32_t width;
+} FirrtlExprUInt;
+
+typedef struct FirrtlExprSInt {
+  int64_t value;
+  int32_t width;
+} FirrtlExprSInt;
+
+typedef struct FirrtlExprRef {
+  FirrtlStringRef value;
+} FirrtlExprRef;
+
+typedef struct FirrtlPrim FirrtlPrim;
+
+typedef struct FirrtlExprPrim {
+  FirrtlPrim *value;
+} FirrtlExprPrim;
+
+typedef union FirrtlExprUnion {
+  FirrtlExprUInt uint;
+  FirrtlExprSInt sint;
+  FirrtlExprRef ref;
+  FirrtlExprPrim prim;
+} FirrtlExprUnion;
+
+typedef struct FirrtlExpr {
+  FirrtlExprKind kind;
+  FirrtlExprUnion u;
+} FirrtlExpr;
+
+typedef struct FirrtlPrimArgIntLit {
+  int64_t value;
+} FirrtlPrimArgIntLit;
+
+typedef struct FirrtlPrimArgExpr {
+  FirrtlExpr value;
+} FirrtlPrimArgExpr;
+
+typedef enum FirrtlPrimArgKind {
+  FIRRTL_PRIM_ARG_KIND_INT_LIT,
+  FIRRTL_PRIM_ARG_KIND_EXPR,
+} FirrtlPrimArgKind;
+
+typedef union FirrtlPrimArgUnion {
+  FirrtlPrimArgIntLit intLit;
+  FirrtlPrimArgExpr expr;
+} FirrtlPrimArgUnion;
+
+typedef struct FirrtlPrimArg {
+  FirrtlPrimArgKind kind;
+  FirrtlPrimArgUnion u;
+} FirrtlPrimArg;
+
+typedef struct FirrtlPrim {
+  FirrtlPrimOp op;
+  FirrtlPrimArg *args;
+  size_t argsCount;
+} FirrtlPrim;
+
 typedef enum FirrtlStatementKind {
   FIRRTL_STATEMENT_KIND_ATTACH,
   FIRRTL_STATEMENT_KIND_SEQ_MEMORY,
+  FIRRTL_STATEMENT_KIND_NODE,
 } FirrtlStatementKind;
 
 typedef struct FirrtlStatementAttachOperand {
-  FirrtlStringRef expr;
+  FirrtlExpr expr;
 } FirrtlStatementAttachOperand;
 
 typedef struct FirrtlStatementAttach {
@@ -222,9 +331,15 @@ typedef struct FirrtlStatementSeqMemory {
   FirrtlReadUnderWrite readUnderWrite; // defaults to `FIRRTL_RUW_UNDEFINED`
 } FirrtlStatementSeqMemory;
 
+typedef struct FirrtlStatementNode {
+  FirrtlStringRef name;
+  FirrtlExpr expr;
+} FirrtlStatementNode;
+
 typedef union FirrtlStatementUnion {
   FirrtlStatementAttach attach;
   FirrtlStatementSeqMemory seqMem;
+  FirrtlStatementNode node;
 } FirrtlStatementUnion;
 
 typedef struct FirrtlStatement {

@@ -1,0 +1,53 @@
+//===- FIRRTLPrimOp.def - FIRRTL Primitive Operations -----------*- C++ -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file is intended to be #include'd multiple times to extract information
+// about primitive operations for various clients in the FFI context.
+//
+//===----------------------------------------------------------------------===//
+
+#if !defined(PRIM_OP)
+#error Must define `PRIM_OP` macro.
+#endif
+
+PRIM_OP(FIRRTL_PRIM_OP_ADD, AddPrimOp, 2)
+PRIM_OP(FIRRTL_PRIM_OP_SUB, SubPrimOp, 2)
+PRIM_OP(FIRRTL_PRIM_OP_TAIL, TailPrimOp, 1)
+PRIM_OP(FIRRTL_PRIM_OP_HEAD, HeadPrimOp, 1)
+PRIM_OP(FIRRTL_PRIM_OP_MUL, MulPrimOp, 2)
+PRIM_OP(FIRRTL_PRIM_OP_DIVIDE, DivPrimOp, 2)
+PRIM_OP(FIRRTL_PRIM_OP_REM, RemPrimOp, 2)
+PRIM_OP(FIRRTL_PRIM_OP_SHIFT_LEFT, ShlPrimOp, 1)
+PRIM_OP(FIRRTL_PRIM_OP_SHIFT_RIGHT, ShrPrimOp, 1)
+PRIM_OP(FIRRTL_PRIM_OP_DYNAMIC_SHIFT_LEFT, DShlPrimOp, 2)
+PRIM_OP(FIRRTL_PRIM_OP_DYNAMIC_SHIFT_RIGHT, DShrPrimOp, 2)
+PRIM_OP(FIRRTL_PRIM_OP_BIT_AND, AndPrimOp, 2)
+PRIM_OP(FIRRTL_PRIM_OP_BIT_OR, OrPrimOp, 2)
+PRIM_OP(FIRRTL_PRIM_OP_BIT_XOR, XorPrimOp, 2)
+PRIM_OP(FIRRTL_PRIM_OP_BIT_NOT, NotPrimOp, 1)
+PRIM_OP(FIRRTL_PRIM_OP_CONCAT, CatPrimOp, 2)
+PRIM_OP(FIRRTL_PRIM_OP_BITS_EXTRACT, BitsPrimOp, 1)
+PRIM_OP(FIRRTL_PRIM_OP_LESS, LTPrimOp, 2)
+PRIM_OP(FIRRTL_PRIM_OP_LESS_EQ, LEQPrimOp, 2)
+PRIM_OP(FIRRTL_PRIM_OP_GREATER, GTPrimOp, 2)
+PRIM_OP(FIRRTL_PRIM_OP_GREATER_EQ, GEQPrimOp, 2)
+PRIM_OP(FIRRTL_PRIM_OP_EQUAL, EQPrimOp, 2)
+PRIM_OP(FIRRTL_PRIM_OP_PAD, PadPrimOp, 1)
+PRIM_OP(FIRRTL_PRIM_OP_NOT_EQUAL, NEQPrimOp, 2)
+PRIM_OP(FIRRTL_PRIM_OP_NEG, NegPrimOp, 1)
+PRIM_OP(FIRRTL_PRIM_OP_MULTIPLEX, MulPrimOp, 3)
+PRIM_OP(FIRRTL_PRIM_OP_AND_REDUCE, AndRPrimOp, 1)
+PRIM_OP(FIRRTL_PRIM_OP_OR_REDUCE, OrRPrimOp, 1)
+PRIM_OP(FIRRTL_PRIM_OP_XOR_REDUCE, XorRPrimOp, 1)
+PRIM_OP(FIRRTL_PRIM_OP_CONVERT, CvtPrimOp, 1)
+PRIM_OP(FIRRTL_PRIM_OP_AS_UINT, AsUIntPrimOp, 1)
+PRIM_OP(FIRRTL_PRIM_OP_AS_SINT, AsSIntPrimOp, 1)
+PRIM_OP(FIRRTL_PRIM_OP_AS_CLOCK, AsClockPrimOp, 1)
+PRIM_OP(FIRRTL_PRIM_OP_AS_ASYNC_RESET, AsAsyncResetPrimOp, 1)
+
+#undef PRIM_OP

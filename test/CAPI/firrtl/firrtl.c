@@ -43,6 +43,10 @@
   } while (false)
 
 #define MK_STR firrtlCreateStringRefFromCString
+#define MK_REF_EXPR_INLINE(expr)                                               \
+  {                                                                            \
+    .kind = FIRRTL_EXPR_KIND_REF, .u = {.ref = {.value = MK_STR(expr)} }       \
+  }
 
 void errorHandler(FirrtlStringRef message, void *userData) {
   ++(*(size_t *)userData);
@@ -307,10 +311,21 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
     analogs[i] = analog;
   }
 
+  FirrtlType uint8s[2];
+  for (unsigned int i = 0; i < ARRAY_SIZE(uint8s); i++) {
+    FirrtlType port = {.kind = FIRRTL_TYPE_KIND_UINT,
+                       .u = {.uint = {.width = 8}}};
+    char name[64] = {};
+    sprintf(name, "uintPort%d", i + 1);
+    firrtlVisitPort(ctx, MK_STR(name), FIRRTL_PORT_DIRECTION_INPUT, &port);
+    uint8s[i] = port;
+  }
+
   FirrtlTypeBundleField analogFields[] = {
       {.name = MK_STR("field1"), .flip = false, .type = &analogs[0]},
       {.name = MK_STR("field2"), .flip = true, .type = &analogs[1]},
       {.name = MK_STR("field3"), .flip = false, .type = &analogs[2]},
+      {.name = MK_STR("field4"), .flip = true, .type = &uint8s[0]},
   };
   FirrtlType analogBundle = {
       .kind = FIRRTL_TYPE_KIND_BUNDLE,
@@ -320,22 +335,46 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
                   &analogBundle);
 
   FirrtlStatementAttachOperand attachOperands[] = {
-      {.expr = MK_STR("analog1")},
-      {.expr = MK_STR("analog2")},
-      {.expr = MK_STR("analog3")},
+      {.expr = MK_REF_EXPR_INLINE("analog1")},
+      {.expr = MK_REF_EXPR_INLINE("analog2")},
+      {.expr = MK_REF_EXPR_INLINE("analog3")},
   };
   FirrtlStatementAttachOperand attachBundleOperand = {
-      .expr = MK_STR("analogBundle")};
+      .expr = MK_REF_EXPR_INLINE("analogBundle")};
   FirrtlStatementAttachOperand attachBundleOperands[] = {
-      {.expr = MK_STR("analogBundle.field1")},
-      {.expr = MK_STR("analogBundle.field2")},
-      {.expr = MK_STR("analogBundle.field3")},
+      {.expr = MK_REF_EXPR_INLINE("analogBundle.field1")},
+      {.expr = MK_REF_EXPR_INLINE("analogBundle.field2")},
+      {.expr = MK_REF_EXPR_INLINE("analogBundle.field3")},
   };
 
   FirrtlType tyUInt32 = {
       .kind = FIRRTL_TYPE_KIND_UINT,
       .u = {.uint = {.width = 32}},
   };
+
+  FirrtlPrimArg argsAdd[] = {
+      {.kind = FIRRTL_PRIM_ARG_KIND_EXPR,
+       .u = {.expr = {.value = MK_REF_EXPR_INLINE("uintPort1")}}},
+      {.kind = FIRRTL_PRIM_ARG_KIND_EXPR,
+       .u = {.expr = {.value = MK_REF_EXPR_INLINE("uintPort2")}}},
+  };
+  FirrtlPrim primAdd = {
+      .op = FIRRTL_PRIM_OP_ADD,
+      .args = argsAdd,
+      .argsCount = ARRAY_SIZE(argsAdd),
+  };
+  FirrtlPrimArg argsSubField[] = {
+      {.kind = FIRRTL_PRIM_ARG_KIND_EXPR,
+       .u = {.expr = {.value = MK_REF_EXPR_INLINE("uintPort1")}}},
+      {.kind = FIRRTL_PRIM_ARG_KIND_EXPR,
+       .u = {.expr = {.value = MK_REF_EXPR_INLINE("analogBundle.field4")}}},
+  };
+  FirrtlPrim primSubField = {
+      .op = FIRRTL_PRIM_OP_SUB,
+      .args = argsSubField,
+      .argsCount = ARRAY_SIZE(argsSubField),
+  };
+
   FirrtlStatement statements[] = {
       {.kind = FIRRTL_STATEMENT_KIND_ATTACH,
        .u = {.attach = {.operands = attachOperands,
@@ -351,6 +390,20 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
                                  .u = {.vector = {.type = &tyUInt32,
                                                   .count = 1024}}},
                         .readUnderWrite = FIRRTL_READ_UNDER_WRITE_UNDEFINED}}},
+      {.kind = FIRRTL_STATEMENT_KIND_NODE,
+       .u = {.node =
+                 {
+                     .name = MK_STR("node1"),
+                     .expr = {.kind = FIRRTL_EXPR_KIND_PRIM,
+                              .u = {.prim = {.value = &primAdd}}},
+                 }}},
+      {.kind = FIRRTL_STATEMENT_KIND_NODE,
+       .u = {.node =
+                 {
+                     .name = MK_STR("node2"),
+                     .expr = {.kind = FIRRTL_EXPR_KIND_PRIM,
+                              .u = {.prim = {.value = &primSubField}}},
+                 }}},
   };
 
   for (unsigned int i = 0; i < ARRAY_SIZE(statements); i++) {
@@ -363,11 +416,15 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
     input analog1 : Analog<8>\n\
     input analog2 : Analog<8>\n\
     input analog3 : Analog<8>\n\
-    input analogBundle : { field1 : Analog<8>, flip field2 : Analog<8>, field3 : Analog<8> }\n\n\
+    input uintPort1 : UInt<8>\n\
+    input uintPort2 : UInt<8>\n\
+    input analogBundle : { field1 : Analog<8>, flip field2 : Analog<8>, field3 : Analog<8>, flip field4 : UInt<8> }\n\n\
     attach(analog1, analog2, analog3)\n\
     attach(analogBundle)\n\
     attach(analogBundle.field1, analogBundle.field2, analogBundle.field3)\n\
-    smem seqMem : UInt<32>[1024] undefined\n\n");
+    smem seqMem : UInt<32>[1024] undefined\n\
+    node node1 = add(uintPort1, uintPort2)\n\
+    node node2 = sub(uintPort1, analogBundle.field4)\n\n");
 
   return 0;
 }
@@ -471,11 +528,12 @@ int testErrStmtAttach(FirrtlContext ctx, size_t *errCount) {
   firrtlVisitPort(ctx, MK_STR("analogBundle"), FIRRTL_PORT_DIRECTION_INPUT,
                   &analogBundle);
 
+  EXPECT(*errCount == 0);
   size_t expectedErrCount = 0;
 
   {
-    FirrtlStatementAttachOperand attachOperand = {.expr =
-                                                      MK_STR("nonExistPort")};
+    FirrtlStatementAttachOperand attachOperand = {
+        .expr = MK_REF_EXPR_INLINE("nonExistPort")};
     FirrtlStatement statement = {
         .kind = FIRRTL_STATEMENT_KIND_ATTACH,
         .u = {.attach = {.operands = &attachOperand, .count = 1}}};
@@ -486,7 +544,7 @@ int testErrStmtAttach(FirrtlContext ctx, size_t *errCount) {
 
   {
     FirrtlStatementAttachOperand attachOperand = {
-        .expr = MK_STR("analogBundle.nonExistField")};
+        .expr = MK_REF_EXPR_INLINE("analogBundle.nonExistField")};
     FirrtlStatement statement = {
         .kind = FIRRTL_STATEMENT_KIND_ATTACH,
         .u = {.attach = {.operands = &attachOperand, .count = 1}}};
@@ -503,12 +561,100 @@ int testErrStmtAttach(FirrtlContext ctx, size_t *errCount) {
   return 0;
 }
 
+int testErrStmtNode(FirrtlContext ctx, size_t *errCount) {
+  firrtlVisitCircuit(ctx, MK_STR("StmtNode"));
+  firrtlVisitModule(ctx, MK_STR("StmtNode"));
+
+  FirrtlType tyUInt8 = {
+      .kind = FIRRTL_TYPE_KIND_UINT,
+      .u = {.uint = {.width = 8}},
+  };
+  FirrtlType tySInt8 = {
+      .kind = FIRRTL_TYPE_KIND_SINT,
+      .u = {.uint = {.width = 8}},
+  };
+  firrtlVisitPort(ctx, MK_STR("u8Port1"), FIRRTL_PORT_DIRECTION_INPUT,
+                  &tyUInt8);
+  firrtlVisitPort(ctx, MK_STR("u8Port2"), FIRRTL_PORT_DIRECTION_INPUT,
+                  &tyUInt8);
+  firrtlVisitPort(ctx, MK_STR("u8Port3"), FIRRTL_PORT_DIRECTION_INPUT,
+                  &tyUInt8);
+  firrtlVisitPort(ctx, MK_STR("s8Port3"), FIRRTL_PORT_DIRECTION_INPUT,
+                  &tySInt8);
+
+  EXPECT(*errCount == 0);
+  size_t expectedErrCount = 0;
+
+  // Args count mismatch
+  {
+    FirrtlPrimArg args[] = {
+        {.kind = FIRRTL_PRIM_ARG_KIND_EXPR,
+         .u = {.expr = {.value = MK_REF_EXPR_INLINE("u8Port1")}}},
+        {.kind = FIRRTL_PRIM_ARG_KIND_EXPR,
+         .u = {.expr = {.value = MK_REF_EXPR_INLINE("u8Port2")}}},
+        {.kind = FIRRTL_PRIM_ARG_KIND_EXPR,
+         .u = {.expr = {.value = MK_REF_EXPR_INLINE("u8Port3")}}},
+    };
+    FirrtlPrim prim = {
+        .op = FIRRTL_PRIM_OP_ADD,
+        .args = args,
+        .argsCount = ARRAY_SIZE(args),
+    };
+    FirrtlStatement statement = {
+        .kind = FIRRTL_STATEMENT_KIND_NODE,
+        .u = {.node = {
+                  .name = MK_STR("node1"),
+                  .expr = {.kind = FIRRTL_EXPR_KIND_PRIM,
+                           .u = {.prim = {.value = &prim}}},
+              }}};
+    firrtlVisitStatement(ctx, &statement);
+
+    EXPECT(*errCount >= ++expectedErrCount);
+    expectedErrCount = *errCount;
+  }
+
+  // Type mismatch
+  {
+    FirrtlPrimArg args[] = {
+        {.kind = FIRRTL_PRIM_ARG_KIND_EXPR,
+         .u = {.expr = {.value = MK_REF_EXPR_INLINE("u8Port1")}}},
+        {.kind = FIRRTL_PRIM_ARG_KIND_EXPR,
+         .u = {.expr = {.value = MK_REF_EXPR_INLINE("s8Port2")}}},
+    };
+    FirrtlPrim prim = {
+        .op = FIRRTL_PRIM_OP_ADD,
+        .args = args,
+        .argsCount = ARRAY_SIZE(args),
+    };
+    FirrtlStatement statement = {
+        .kind = FIRRTL_STATEMENT_KIND_NODE,
+        .u = {.node = {
+                  .name = MK_STR("node2"),
+                  .expr = {.kind = FIRRTL_EXPR_KIND_PRIM,
+                           .u = {.prim = {.value = &prim}}},
+              }}};
+    firrtlVisitStatement(ctx, &statement);
+
+    EXPECT(*errCount >= ++expectedErrCount);
+  }
+
+  EXPECT_EXPORT("circuit StmtNode :\n\
+  module StmtNode :\n\
+    input u8Port1 : UInt<8>\n\
+    input u8Port2 : UInt<8>\n\
+    input u8Port3 : UInt<8>\n\
+    input s8Port3 : SInt<8>\n\n");
+
+  return 0;
+}
+
 int testExpectedError() {
   IF_ERR_RET(runOnce(&testErrNoCircuit));
   IF_ERR_RET(runOnce(&testErrNoModule));
   IF_ERR_RET(runOnce(&testErrNoHeader));
   IF_ERR_RET(runOnce(&testErrDuplicatePortName));
   IF_ERR_RET(runOnce(&testErrStmtAttach));
+  IF_ERR_RET(runOnce(&testErrStmtNode));
 
   return 0;
 }
