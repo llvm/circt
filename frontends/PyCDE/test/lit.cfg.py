@@ -85,8 +85,6 @@ except ImportError:
 llvm_config.add_tool_substitutions(tools, tool_dirs)
 
 # Tweak the PYTHONPATH to include the binary dir.
-llvm_config.with_environment('PYTHONPATH', [
-    os.path.join(config.circt_python_packages_dir, 'circt_core'),
-    os.path.join(config.circt_python_packages_dir, 'pycde')
-],
-                             append_path=True)
+llvm_config.with_environment(
+    'PYTHONPATH', [os.path.join(config.circt_python_packages_dir, 'pycde')],
+    append_path=True)
