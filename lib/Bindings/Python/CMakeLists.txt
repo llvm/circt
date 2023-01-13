@@ -137,25 +137,12 @@ declare_mlir_dialect_python_bindings(
 add_mlir_python_common_capi_library(CIRCTBindingsPythonCAPI
   INSTALL_COMPONENT CIRCTBindingsPythonModules
   INSTALL_DESTINATION python_packages/circt_core/circt/_mlir_libs
-  # NOTE: When the MLIR API is relocated under circt, this would change to
-  # .../circt/_mlir_libs
   OUTPUT_DIRECTORY "${CIRCT_PYTHON_PACKAGES_DIR}/circt_core/circt/_mlir_libs"
   RELATIVE_INSTALL_ROOT "../../../.."
   DECLARED_SOURCES
     MLIRPythonSources.Core
     CIRCTBindingsPythonExtension
 )
-
-# # Bundle the CIRCT python sources into our package.
-# add_mlir_python_modules(CIRCTMLIRPythonModules
-#   ROOT_PREFIX "${CIRCT_PYTHON_PACKAGES_DIR}/circt_core/circt"
-#   INSTALL_PREFIX "python_packages/circt_core/circt"
-#   DECLARED_SOURCES
-#     MLIRPythonSources.Core
-#     CIRCTBindingsPythonExtension
-#   COMMON_CAPI_LINK_LIBS
-#     CIRCTBindingsPythonCAPI
-# )
 
 # Bundle the CIRCT python sources into our package.
 add_mlir_python_modules(CIRCTPythonModules
@@ -168,7 +155,3 @@ add_mlir_python_modules(CIRCTPythonModules
   COMMON_CAPI_LINK_LIBS
     CIRCTBindingsPythonCAPI
 )
-
-# add_dependencies(CIRCTPythonModules
-#   CIRCTMLIRPythonModules
-# )
