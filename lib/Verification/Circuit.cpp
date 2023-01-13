@@ -11,10 +11,10 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "Circuit.h"
-#include "LogicExporter.h"
-#include "Solver.h"
-#include "Utility.h"
+#include "circt/Verification/Circuit.h"
+#include "circt/Verification/LogicExporter.h"
+#include "circt/Verification/Solver.h"
+#include "circt/Verification/Utility.h"
 #include "mlir/IR/Builders.h"
 
 #define DEBUG_TYPE "lec-circuit"

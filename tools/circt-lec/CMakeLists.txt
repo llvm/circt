@@ -2,19 +2,11 @@
 if(CIRCT_LEC_ENABLED)
   add_llvm_tool(circt-lec
     circt-lec.cpp
-    Circuit.cpp
-    LogicExporter.cpp
-    Solver.cpp
   )
 
   target_link_libraries(circt-lec
     PRIVATE
-    MLIRTransforms
-    MLIRTranslateLib
-    CIRCTComb
-    CIRCTHW
-    CIRCTSupport
-    ${Z3_LIBRARIES}
+    CIRCTSMT
   )
 
   target_include_directories(circt-lec SYSTEM

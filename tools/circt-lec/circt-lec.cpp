@@ -12,11 +12,11 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "LogicExporter.h"
-#include "Solver.h"
-#include "Utility.h"
 #include "circt/InitAllDialects.h"
 #include "circt/Support/Version.h"
+#include "circt/Verification/LogicExporter.h"
+#include "circt/Verification/Solver.h"
+#include "circt/Verification/Utility.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OwningOpRef.h"
 #include "mlir/Parser/Parser.h"
