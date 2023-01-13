@@ -1041,4 +1041,4 @@ them to implement features not possible in the language.
 In FIRRTL, we support intrinsic modules.   The internal op is `firrtl.intmodule`
 which has all the properties of an external module.  Until the firrtl spec
 supports intrinsics, intrinsic modules are expressed in firrtl as external
-modules with the `circt.intrinsic` annotation on the module.
+modules with the `circt.Intrinsic` annotation on the module.
