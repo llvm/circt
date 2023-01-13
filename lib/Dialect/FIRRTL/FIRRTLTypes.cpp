@@ -190,7 +190,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
                                        parseBundleElement))
       return failure();
 
-    return result = BundleType::get(elements, context), success();
+    return result = BundleType::get(context, elements), success();
   }
 
   if (name.equals("vector")) {
@@ -408,7 +408,7 @@ FIRRTLBaseType FIRRTLBaseType::getMaskType() {
         for (auto elt : bundleType)
           newElements.push_back(
               {elt.name, false /* FIXME */, elt.type.getMaskType()});
-        return BundleType::get(newElements, this->getContext());
+        return BundleType::get(this->getContext(), newElements);
       })
       .Case<FVectorType>([](FVectorType vectorType) {
         return FVectorType::get(vectorType.getElementType().getMaskType(),
@@ -433,7 +433,7 @@ FIRRTLBaseType FIRRTLBaseType::getWidthlessType() {
         for (auto elt : a)
           newElements.push_back(
               {elt.name, elt.isFlip, elt.type.getWidthlessType()});
-        return BundleType::get(newElements, this->getContext());
+        return BundleType::get(this->getContext(), newElements);
       })
       .Case<FVectorType>([](auto a) {
         return FVectorType::get(a.getElementType().getWidthlessType(),
@@ -769,18 +769,7 @@ std::optional<int32_t> UIntType::getWidth() {
 // Bundle Type
 //===----------------------------------------------------------------------===//
 
-namespace circt {
-namespace firrtl {
-llvm::hash_code hash_value(const BundleType::BundleElement &arg) {
-  return mlir::hash_value(arg.name) ^ mlir::hash_value(arg.type);
-}
-} // namespace firrtl
-} // namespace circt
-
-namespace circt {
-namespace firrtl {
-namespace detail {
-struct BundleTypeStorage : mlir::TypeStorage {
+struct circt::firrtl::detail::BundleTypeStorage : mlir::TypeStorage {
   using KeyTy = ArrayRef<BundleType::BundleElement>;
 
   BundleTypeStorage(KeyTy elements)
@@ -824,15 +813,6 @@ struct BundleTypeStorage : mlir::TypeStorage {
       passiveContainsAnalogTypeInfo;
 };
 
-} // namespace detail
-} // namespace firrtl
-} // namespace circt
-
-BundleType BundleType::get(ArrayRef<BundleElement> elements,
-                           MLIRContext *context) {
-  return Base::get(context, elements);
-}
-
 auto BundleType::getElements() const -> ArrayRef<BundleElement> {
   return getImpl()->elements;
 }
@@ -864,7 +844,7 @@ FIRRTLBaseType BundleType::getPassiveType() {
     newElements.push_back({elt.name, false, elt.type.getPassiveType()});
   }
 
-  auto passiveType = BundleType::get(newElements, getContext());
+  auto passiveType = BundleType::get(getContext(), newElements);
   impl->passiveContainsAnalogTypeInfo.setPointer(passiveType);
   return passiveType;
 }
