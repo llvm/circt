@@ -97,10 +97,7 @@ public:
       llvm::MapVector<Value, std::vector<Operation *>>;
 
   explicit HandshakeLowering(Region &r) : r(r) {}
-  /// Converts every value in the region into maximal SSA form, unless the value
-  /// is a block argument of type MemRef or the result of an allocation
-  /// operation
-  LogicalResult maximizeSSANoMem(ConversionPatternRewriter &rewriter);
+
   LogicalResult addMergeOps(ConversionPatternRewriter &rewriter);
   LogicalResult addBranchOps(ConversionPatternRewriter &rewriter);
   LogicalResult replaceCallOps(ConversionPatternRewriter &rewriter);
@@ -219,8 +216,6 @@ LogicalResult lowerRegion(HandshakeLowering &hl, bool sourceConstants,
 
   if (failed(
           runPartialLowering(hl, &HandshakeLowering::replaceMemoryOps, memOps)))
-    return failure();
-  if (failed(runPartialLowering(hl, &HandshakeLowering::maximizeSSANoMem)))
     return failure();
   if (failed(runPartialLowering(hl,
                                 &HandshakeLowering::setControlOnlyPath<TTerm>)))

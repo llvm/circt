@@ -481,30 +481,6 @@ static bool isAllocOp(Operation *op) {
 }
 
 LogicalResult
-HandshakeLowering::maximizeSSANoMem(ConversionPatternRewriter &rewriter) {
-  // Convert all the function values that are not memref's into maximal
-
-  // Apply SSA maximization on each of the function's blocks
-  for (auto &block : r.getBlocks()) {
-    // Apply SSA maximization on each of the block's arguments, unless they are
-    // of memref type
-    for (auto arg : block.getArguments())
-      if (!arg.getType().isa<mlir::MemRefType>())
-        if (failed(maximizeSSA(arg, rewriter)))
-          return failure();
-
-    // Apply SSA maximization on each of the block's operations, unless the
-    // operation is an allocation operation
-    for (auto &op : block.getOperations())
-      if (!isAllocOp(&op))
-        if (failed(maximizeSSA(&op, rewriter)))
-          return failure();
-  }
-
-  return success();
-}
-
-LogicalResult
 HandshakeLowering::addMergeOps(ConversionPatternRewriter &rewriter) {
 
   // Stores mapping from each value that pass through a merge operation to the
@@ -1650,6 +1626,33 @@ HandshakeLowering::replaceCallOps(ConversionPatternRewriter &rewriter) {
   return success();
 }
 
+/// Converts every value in the region into maximal SSA form, unless the value
+/// is a block argument of type MemRef or the result of an allocation
+/// operation
+static LogicalResult maximizeSSANoMem(Region &r,
+                                      ConversionPatternRewriter &rewriter) {
+  // Convert all the function values that are not memref's into maximal
+
+  // Apply SSA maximization on each of the function's blocks
+  for (auto &block : r.getBlocks()) {
+    // Apply SSA maximization on each of the block's arguments, unless they are
+    // of memref type
+    for (auto arg : block.getArguments())
+      if (!arg.getType().isa<mlir::MemRefType>())
+        if (failed(maximizeSSA(arg, rewriter)))
+          return failure();
+
+    // Apply SSA maximization on each of the block's operations, unless the
+    // operation is an allocation operation
+    for (auto &op : block.getOperations())
+      if (!isAllocOp(&op))
+        if (failed(maximizeSSA(&op, rewriter)))
+          return failure();
+  }
+
+  return success();
+}
+
 static LogicalResult lowerFuncOp(func::FuncOp funcOp, MLIRContext *ctx,
                                  bool sourceConstants,
                                  bool disableTaskPipelining) {
@@ -1692,6 +1695,10 @@ static LogicalResult lowerFuncOp(func::FuncOp funcOp, MLIRContext *ctx,
         return success();
       },
       ctx, funcOp));
+
+  // Apply SSA maximization
+  returnOnError(
+      partiallyLowerRegion(maximizeSSANoMem, ctx, newFuncOp.getBody()));
 
   if (!newFuncOp.isExternal()) {
     HandshakeLowering fol(newFuncOp.getBody());
