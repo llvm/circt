@@ -29,6 +29,32 @@ class OperationPass;
 
 namespace circt {
 
+/// Strategy class to control the behavior of SSA maximization. The class
+/// exposes overridable filter functions to dynamically select which blocks,
+/// block arguments, operations, and operation results should be put into
+/// maximal SSA form. All filter functions should return true whenever the
+/// entity they operate on should be considered for SSA maximization. By
+/// default, all filter functions always return true.
+class SSAMaximizationStrategy {
+public:
+  /// Determines whether a block should have the values it defines (i.e., block
+  /// arguments and operation results within the block) SSA maximized. The
+  /// default implementation always returns true.
+  virtual bool maximizeBlock(Block *block);
+  /// Determines whether a block argument should be SSA maximized. The default
+  /// implementation always returns true.
+  virtual bool maximizeArgument(BlockArgument arg);
+  /// Determines whether an operation should have its results SSA maximized. The
+  /// default implementation always returns true.
+  virtual bool maximizeOp(Operation *op);
+  /// Determines whether an operation's result should be SSA maximized. The
+  /// default implementation always returns true.
+  virtual bool maximizeResult(OpResult res);
+
+  /// Default destructor does nothing.
+  virtual ~SSAMaximizationStrategy() = default;
+};
+
 /// Converts a single value within a function into maximal SSA form. This
 /// removes any implicit dataflow of this specific value within the enclosing
 /// function. The function adds new block arguments wherever necessary to carry
@@ -36,31 +62,33 @@ namespace circt {
 /// Succeeds when it was possible to convert the value into maximal SSA form.
 LogicalResult maximizeSSA(Value value, PatternRewriter &rewriter);
 
-/// Converts an operation's results within a function into maximal SSA form.
-/// This removes any implicit dataflow of the operation's results within the
-/// enclosing function. The function adds new block arguments wherever necessary
-/// to carry the results explicitly between blocks.
-/// Succeeds when it was possible to convert the operation's results into
-/// maximal SSA form.
-LogicalResult maximizeSSA(Operation *op, PatternRewriter &rewriter);
+/// Considers all of an operation's results for SSA maximization, following a
+/// provided strategy. This removes any implicit dataflow of the selected
+/// operation's results within the enclosing function. The function adds new
+/// block arguments wherever necessary to carry the results explicitly between
+/// blocks. Succeeds when it was possible to convert the selected operation's
+/// results into maximal SSA form.
+LogicalResult maximizeSSA(Operation *op, SSAMaximizationStrategy &strategy,
+                          PatternRewriter &rewriter);
 
-/// Converts all values defined by a block (i.e., block arguments and block's
-/// operations' results) within a function into maximal SSA form. This removes
-/// any implicit dataflow of those values within the enclosing function. The
-/// function adds new block arguments wherever necessary to carry the values
-/// explicitly between blocks.
-/// Succeeds when it was possible to convert the values defined by the block
-/// into maximal SSA form.
-LogicalResult maximizeSSA(Block *block, PatternRewriter &rewriter);
-
-/// Converts a region within a function into maximal SSA form. This removes any
-/// implicit dataflow of the region's values between the blocks that make up the
-/// region. The function adds new block arguments wherever necessary to carry
-/// the region's values explicitly between blocks.
-/// Succeeds when it was possible to convert all of the region's values into
+/// Considers all values defined by a block (i.e., block arguments and operation
+/// results within the block) for SSA maximization, following a provided
+/// strategy. This removes any implicit dataflow of the selected values within
+/// the enclosing function. The function adds new block arguments wherever
+/// necessary to carry the values explicitly between blocks. Succeeds when it
+/// was possible to convert the selected values defined by the block into
 /// maximal SSA form.
-LogicalResult maximizeSSA(mlir::Region &region,
-                          mlir::PatternRewriter &rewriter);
+LogicalResult maximizeSSA(Block *block, SSAMaximizationStrategy &strategy,
+                          PatternRewriter &rewriter);
+
+/// Considers all blocks within a region for SSA maximization, following a
+/// provided strategy. This removes any implicit dataflow of the values defined
+/// by selected blocks within the region. The function adds new block arguments
+/// wherever necessary to carry the region's values explicitly between blocks.
+/// Succeeds when it was possible to convert all of the values defined by
+/// selected blocks into maximal SSA form.
+LogicalResult maximizeSSA(Region &region, SSAMaximizationStrategy &strategy,
+                          PatternRewriter &rewriter);
 
 namespace handshake {
 

@@ -1626,31 +1626,28 @@ HandshakeLowering::replaceCallOps(ConversionPatternRewriter &rewriter) {
   return success();
 }
 
-/// Converts every value in the region into maximal SSA form, unless the value
-/// is a block argument of type MemRef or the result of an allocation
-/// operation
-static LogicalResult maximizeSSANoMem(Region &r,
-                                      ConversionPatternRewriter &rewriter) {
-  // Convert all the function values that are not memref's into maximal
-
-  // Apply SSA maximization on each of the function's blocks
-  for (auto &block : r.getBlocks()) {
-    // Apply SSA maximization on each of the block's arguments, unless they are
-    // of memref type
-    for (auto arg : block.getArguments())
-      if (!arg.getType().isa<mlir::MemRefType>())
-        if (failed(maximizeSSA(arg, rewriter)))
-          return failure();
-
-    // Apply SSA maximization on each of the block's operations, unless the
-    // operation is an allocation operation
-    for (auto &op : block.getOperations())
-      if (!isAllocOp(&op))
-        if (failed(maximizeSSA(&op, rewriter)))
-          return failure();
+namespace {
+/// Strategy class for SSA maximization during std-to-handshake conversion.
+/// Block arguments of type MemRefType and allocation operations are not
+/// considered for SSA maximization.
+class HandshakeLoweringSSAStrategy : public SSAMaximizationStrategy {
+  /// Filters out block arguments of type MemRefType
+  bool maximizeArgument(BlockArgument arg) override {
+    return !arg.getType().isa<mlir::MemRefType>();
   }
 
-  return success();
+  /// Filters out allocation operations
+  bool maximizeOp(Operation *op) override { return !isAllocOp(op); }
+};
+} // namespace
+
+/// Converts every value in the region into maximal SSA form, unless the value
+/// is a block argument of type MemRefType or the result of an allocation
+/// operation.
+static LogicalResult maximizeSSANoMem(Region &r,
+                                      ConversionPatternRewriter &rewriter) {
+  HandshakeLoweringSSAStrategy strategy;
+  return maximizeSSA(r, strategy, rewriter);
 }
 
 static LogicalResult lowerFuncOp(func::FuncOp funcOp, MLIRContext *ctx,

@@ -68,6 +68,17 @@ bool circt::isRegionSSAMaximized(Region &region) {
   return true;
 }
 
+bool circt::SSAMaximizationStrategy::maximizeBlock(Block *block) {
+  return true;
+}
+bool circt::SSAMaximizationStrategy::maximizeArgument(BlockArgument arg) {
+  return true;
+}
+bool circt::SSAMaximizationStrategy::maximizeOp(Operation *op) { return true; }
+bool circt::SSAMaximizationStrategy::maximizeResult(OpResult res) {
+  return true;
+}
+
 LogicalResult circt::maximizeSSA(Value value, PatternRewriter &rewriter) {
 
   // Identify the basic block in which the value is defined
@@ -132,34 +143,44 @@ LogicalResult circt::maximizeSSA(Value value, PatternRewriter &rewriter) {
   return success();
 }
 
-LogicalResult circt::maximizeSSA(Operation *op, PatternRewriter &rewriter) {
+LogicalResult circt::maximizeSSA(Operation *op,
+                                 SSAMaximizationStrategy &strategy,
+                                 PatternRewriter &rewriter) {
   // Apply SSA maximization on each of the operation's results
   for (auto res : op->getResults())
-    if (failed(maximizeSSA(res, rewriter)))
-      return failure();
+    if (strategy.maximizeResult(res))
+      if (failed(maximizeSSA(res, rewriter)))
+        return failure();
 
   return success();
 }
 
-LogicalResult circt::maximizeSSA(Block *block, PatternRewriter &rewriter) {
+LogicalResult circt::maximizeSSA(Block *block,
+                                 SSAMaximizationStrategy &strategy,
+                                 PatternRewriter &rewriter) {
   // Apply SSA maximization on each of the block's arguments
   for (auto arg : block->getArguments())
-    if (failed(maximizeSSA(arg, rewriter)))
-      return failure();
+    if (strategy.maximizeArgument(arg))
+      if (failed(maximizeSSA(arg, rewriter)))
+        return failure();
 
   // Apply SSA maximization on each of the block's operations
   for (auto &op : block->getOperations())
-    if (failed(maximizeSSA(&op, rewriter)))
-      return failure();
+    if (strategy.maximizeOp(&op))
+      if (failed(maximizeSSA(&op, strategy, rewriter)))
+        return failure();
 
   return success();
 }
 
-LogicalResult circt::maximizeSSA(Region &region, PatternRewriter &rewriter) {
+LogicalResult circt::maximizeSSA(Region &region,
+                                 SSAMaximizationStrategy &strategy,
+                                 PatternRewriter &rewriter) {
   // Apply SSA maximization on each of the region's block
   for (auto &block : region.getBlocks())
-    if (failed(maximizeSSA(&block, rewriter)))
-      return failure();
+    if (strategy.maximizeBlock(&block))
+      if (failed(maximizeSSA(&block, strategy, rewriter)))
+        return failure();
 
   return success();
 }
@@ -175,8 +196,8 @@ struct FuncOpMaxSSAConversion : public OpConversionPattern<func::FuncOp> {
                   ConversionPatternRewriter &rewriter) const override {
     LogicalResult conversionStatus = success();
     rewriter.updateRootInPlace(op, [&] {
-      PatternRewriter &baseRewriter = rewriter;
-      if (failed(maximizeSSA(op.getRegion(), baseRewriter)))
+      SSAMaximizationStrategy strategy;
+      if (failed(maximizeSSA(op.getRegion(), strategy, rewriter)))
         conversionStatus = failure();
     });
     return conversionStatus;
