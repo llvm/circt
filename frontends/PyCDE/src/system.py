@@ -287,11 +287,17 @@ class System:
 
     self._op_cache.release_ops()
     for idx, phase in enumerate(self.PASS_PHASES):
+      aplog = None
+      if debug:
+        aplog = open(f"after_phase_{idx}.mlir", "w")
       try:
         if isinstance(phase, str):
           passes = phase.format(tops=tops,
                                 verilog_file=verilog_file,
                                 tcl_file=tcl_file).strip()
+          if aplog is not None:
+            aplog.write(f"// passes ran: {passes}\n")
+            aplog.flush()
           pm = passmanager.PassManager.parse(passes)
           pm.run(self.mod)
         else:
@@ -300,8 +306,9 @@ class System:
         sys.stderr.write(f"Exception while executing phase {phase}.\n")
         raise err
       self._op_cache.release_ops()
-      if debug:
-        open(f"after_phase_{idx}.mlir", "w").write(str(self.mod))
+      if aplog is not None:
+        aplog.write(str(self.mod))
+        aplog.close()
     self.passed = True
 
   def emit_outputs(self):
