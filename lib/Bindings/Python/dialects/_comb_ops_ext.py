@@ -1,7 +1,6 @@
 from . import comb
 from ..support import NamedValueOpView, get_value
-
-from ..ir import IntegerAttr, IntegerType, Type
+from ..ir import IntegerAttr, IntegerType
 
 
 # Builder base classes for non-variadic unary and binary ops.

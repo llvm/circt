@@ -7,7 +7,7 @@ from __future__ import annotations
 import pycde
 from pycde import (AppID, Input, Output, module, externmodule, generator, types)
 from pycde.dialects import comb, hw
-from circt.support import connect
+from pycde.circt.support import connect
 
 import sys
 

@@ -6,7 +6,7 @@ from .value import BitVectorValue, ListValue
 from .pycde_types import BitVectorType, dim
 from pycde.dialects import hw, sv
 import numpy as np
-import mlir.ir as ir
+from .circt import ir
 from functools import lru_cache
 from dataclasses import dataclass
 from typing import Union

@@ -9,10 +9,10 @@ from .pycde_types import PyCDEType, dim, types
 from .value import BitsValue, BitVectorValue, ListValue, Value, PyCDEValue
 from .value import get_slice_bounds
 from .module import generator, module
-from circt.support import get_value, BackedgeBuilder
-from circt.dialects import msft, hw, sv
+from .circt.support import get_value, BackedgeBuilder
+from .circt.dialects import msft, hw, sv
 from pycde.dialects import comb
-import mlir.ir as ir
+from .circt import ir
 
 import typing
 from typing import List, Union

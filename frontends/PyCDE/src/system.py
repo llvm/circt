@@ -12,16 +12,10 @@ from .module import _SpecializedModule
 from .pycde_types import types
 from .instance import Instance, InstanceHierarchyRoot
 
-from circt.dialects import esi, hw, msft
+from . import circt
+from .circt import ir, passmanager, support
+from .circt.dialects import esi, hw, msft
 from .esi_api import PythonApiBuilder
-
-import mlir
-import mlir.ir as ir
-import mlir.passmanager
-
-import circt
-import circt.dialects.msft
-import circt.support
 
 from contextvars import ContextVar
 from collections.abc import Iterable
@@ -151,7 +145,7 @@ class System:
 
     compat_mod = ir.Module.parse(str(module))
     if lowering is not None:
-      pm = mlir.passmanager.PassManager.parse(",".join(lowering))
+      pm = passmanager.PassManager.parse(",".join(lowering))
       pm.run(compat_mod)
     ret: Dict[str, Any] = {}
     for op in compat_mod.body:
@@ -226,15 +220,8 @@ class System:
   def print(self, *argv, **kwargs):
     self.mod.operation.print(*argv, **kwargs)
 
-  def graph(self, short_names=True):
-    import mlir.all_passes_registration
-    pm = mlir.passmanager.PassManager.parse(
-        "builtin.module(view-op-graph{short-names=" +
-        ("1" if short_names else "0") + "})")
-    pm.run(self.mod)
-
   def cleanup(self):
-    pm = mlir.passmanager.PassManager.parse("builtin.module(canonicalize)")
+    pm = passmanager.PassManager.parse("builtin.module(canonicalize)")
     pm.run(self.mod)
 
   def generate(self, generator_names=[], iters=None):
@@ -252,8 +239,7 @@ class System:
     gen_left = len(self._generate_queue)
     if gen_left == 0:
       self._op_cache.release_ops()
-      pm = mlir.passmanager.PassManager.parse(
-          "builtin.module(msft-discover-appids)")
+      pm = passmanager.PassManager.parse("builtin.module(msft-discover-appids)")
       pm.run(self.mod)
     return
 
@@ -306,7 +292,7 @@ class System:
           passes = phase.format(tops=tops,
                                 verilog_file=verilog_file,
                                 tcl_file=tcl_file).strip()
-          pm = mlir.passmanager.PassManager.parse(passes)
+          pm = passmanager.PassManager.parse(passes)
           pm.run(self.mod)
         else:
           phase(self)

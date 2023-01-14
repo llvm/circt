@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
-from circt.dialects import esi as raw_esi, msft
-from .pycde_types import ChannelType
+from .circt.dialects import esi as raw_esi, msft
+from .circt import ir
 
-import mlir.ir
+from .pycde_types import ChannelType
 
 from functools import singledispatchmethod
 
@@ -17,9 +17,9 @@ class ModuleDecl:
 
   __slots__ = ["name", "_type"]
 
-  def __init__(self, type: mlir.ir.Type, name: str = None):
+  def __init__(self, type: ir.Type, name: str = None):
     self.name: str = name
-    self._type: mlir.ir.Type = type
+    self._type: ir.Type = type
 
   @property
   def type(self):
@@ -33,7 +33,7 @@ class Output(ModuleDecl):
 class OutputChannel(Output):
   """Create an ESI output channel port."""
 
-  def __init__(self, type: mlir.ir.Type, name: str = None):
+  def __init__(self, type: ir.Type, name: str = None):
     type = ChannelType(raw_esi.ChannelType.get(type))
     super().__init__(type, name)
 
@@ -46,13 +46,13 @@ class Clock(Input):
   """Create a clock input"""
 
   def __init__(self, name: str = None):
-    super().__init__(mlir.ir.IntegerType.get_signless(1), name)
+    super().__init__(ir.IntegerType.get_signless(1), name)
 
 
 class InputChannel(Input):
   """Create an ESI input channel port."""
 
-  def __init__(self, type: mlir.ir.Type, name: str = None):
+  def __init__(self, type: ir.Type, name: str = None):
     type = ChannelType(raw_esi.ChannelType.get(type))
     super().__init__(type, name)
 
@@ -64,8 +64,8 @@ class AppID:
   def __init__(self, name: str, idx: int):
     self._appid = msft.AppIDAttr.get(name, idx)
 
-  @__init__.register(mlir.ir.Attribute)
-  def __init__mlir_attr(self, attr: mlir.ir.Attribute):
+  @__init__.register(ir.Attribute)
+  def __init__mlir_attr(self, attr: ir.Attribute):
     self._appid = msft.AppIDAttr(attr)
 
   @property

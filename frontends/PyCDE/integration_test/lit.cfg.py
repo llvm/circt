@@ -67,11 +67,9 @@ llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 
 # Tweak the PYTHONPATH to include the binary dir.
 if config.bindings_python_enabled:
-  llvm_config.with_environment('PYTHONPATH', [
-      os.path.join(config.circt_python_packages_dir, 'circt_core'),
-      os.path.join(config.circt_python_packages_dir, 'pycde')
-  ],
-                               append_path=True)
+  llvm_config.with_environment(
+      'PYTHONPATH', [os.path.join(config.circt_python_packages_dir, 'pycde')],
+      append_path=True)
 
 tool_dirs = [
     config.circt_tools_dir, config.mlir_tools_dir, config.llvm_tools_dir

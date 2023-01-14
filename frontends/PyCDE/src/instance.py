@@ -5,9 +5,9 @@
 from __future__ import annotations
 from typing import Dict, Iterator, List, Optional, Tuple, Union
 
-from circt.dialects import msft, seq
+from .circt.dialects import msft, seq
+from .circt import ir
 
-import mlir.ir as ir
 from pycde.devicedb import LocationVector
 from pycde.module import AppID
 

@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-from typing import Dict, Optional, Sequence, Type
-
-import inspect
+from typing import Dict, Type
 
 from . import hw
 from .. import support
-
 from ..ir import *
 
 

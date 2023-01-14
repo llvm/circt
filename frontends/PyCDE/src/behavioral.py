@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from .value import BitVectorValue, PyCDEValue, Value
-from pycde.dialects import comb
+from .dialects import comb
 
 import ctypes
 from contextvars import ContextVar

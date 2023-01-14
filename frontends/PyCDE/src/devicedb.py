@@ -5,11 +5,11 @@
 from __future__ import annotations
 from typing import Any, List, Optional, Tuple, Union
 
-from circt.dialects import msft
-from circt.support import attribute_to_var
+from .circt.dialects import msft
+from .circt.support import attribute_to_var
 
-from mlir.ir import Attribute, StringAttr, ArrayAttr, FlatSymbolRefAttr
-from pycde.support import get_user_loc
+from .circt.ir import Attribute, StringAttr, ArrayAttr, FlatSymbolRefAttr
+from .support import get_user_loc
 
 from functools import singledispatchmethod
 
@@ -63,7 +63,7 @@ class LocationVector:
   def __init__(self, type: Type, locs: List[Optional[Tuple[int, int, int]]]):
     assert len(locs) == type.bitwidth, \
       "List length must match reg bitwidth"
-    from circt.dialects import msft as circt_msft
+    from .circt.dialects import msft as circt_msft
     self.type = type
     phys_locs: List[circt_msft.PhysLocationAttr] = list()
     for loc in locs:

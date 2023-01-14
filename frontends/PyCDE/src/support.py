@@ -1,6 +1,5 @@
-import circt.support as support
-
-import mlir.ir as ir
+from .circt import support
+from .circt import ir
 
 import os
 
