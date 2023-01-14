@@ -2,11 +2,9 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from . import hw, fsm as fsm
-from . import _hw_ops_ext as _hw_ext
+from . import fsm as fsm
 from .. import support
-
-from circt.ir import *
+from ..ir import *
 
 
 def _get_or_add_single_block(region, args=[]):

@@ -1,7 +1,5 @@
-from circt.dialects import hwarith
-from circt.support import NamedValueOpView, get_value
-
-from circt.ir import IntegerAttr, IntegerType, Type
+from ..support import NamedValueOpView, get_value
+from ..ir import IntegerAttr, IntegerType
 
 
 class BinaryOpBuilder(NamedValueOpView):

@@ -6,10 +6,9 @@ from __future__ import annotations
 
 from .support import get_user_loc, _obj_to_value_infer_type
 
-from circt.dialects import esi, sv
-import circt.support as support
-
-import mlir.ir as ir
+from .circt.dialects import esi, sv
+from .circt import support
+from .circt import ir
 
 from contextvars import ContextVar
 from functools import singledispatchmethod
@@ -140,7 +139,7 @@ class PyCDEValue:
     if hasattr(owner,
                "attributes") and self._namehint_attrname in owner.attributes:
       return ir.StringAttr(owner.attributes[self._namehint_attrname]).value
-    from circt.dialects import msft
+    from .circt.dialects import msft
     if isinstance(owner, ir.Block) and isinstance(owner.owner,
                                                   msft.MSFTModuleOp):
       block_arg = ir.BlockArgument(self.value)
@@ -442,11 +441,11 @@ class IntValue(BitVectorValue):
     return ret
 
   def __eq__(self, other):
-    from circt.dialects import hwarith
+    from .circt.dialects import hwarith
     return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_EQ, "eq")
 
   def __ne__(self, other):
-    from circt.dialects import hwarith
+    from .circt.dialects import hwarith
     return self.__exec_icmp__(other, hwarith.ICmpOp.PRED_NE, "neq")
 
   # TODO: This class will contain comparison operators (<, >, <=, >=)

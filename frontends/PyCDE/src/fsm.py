@@ -4,10 +4,10 @@ from pycde.dialects import fsm
 from pycde.pycde_types import types
 from typing import Callable
 
-from mlir.ir import InsertionPoint
+from .circt.ir import InsertionPoint
 
 from pycde.support import _obj_to_attribute, attributes_of_type
-from circt.support import connect
+from .circt.support import connect
 
 
 class State:

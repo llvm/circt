@@ -3,6 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from ..value import wrap_opviews_with_values
-from circt.dialects import hwarith
+from ..circt.dialects import fsm
 
-wrap_opviews_with_values(hwarith, __name__)
+wrap_opviews_with_values(fsm, __name__,
+                         ["MachineOp", "StateOp", "TransitionOp"])

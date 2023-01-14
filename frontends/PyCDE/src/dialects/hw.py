@@ -3,6 +3,6 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from ..value import wrap_opviews_with_values
-from circt.dialects import sv
+from ..circt.dialects import hw
 
-wrap_opviews_with_values(sv, __name__)
+wrap_opviews_with_values(hw, __name__)

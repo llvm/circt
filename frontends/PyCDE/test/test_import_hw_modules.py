@@ -1,11 +1,7 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
-from pathlib import Path
-from tempfile import NamedTemporaryFile
-
-from mlir.ir import Module
-
-from circt.dialects import hw
+from pycde.circt.ir import Module
+from pycde.circt.dialects import hw
 
 from pycde import Input, Output, System, generator, module, types
 from pycde.module import import_hw_module

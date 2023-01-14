@@ -3,7 +3,6 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from ..value import wrap_opviews_with_values
-from circt.dialects import fsm
+from ..circt.dialects import msft
 
-wrap_opviews_with_values(fsm, __name__,
-                         ["MachineOp", "StateOp", "TransitionOp"])
+wrap_opviews_with_values(msft, __name__)

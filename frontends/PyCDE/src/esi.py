@@ -7,11 +7,11 @@ from .module import (Generator, _module_base, _BlockContext,
                      _GeneratorPortAccess, _SpecializedModule)
 from pycde.value import ChannelValue, ClockValue, PyCDEValue, Value
 from .common import AppID, Input, Output, InputChannel, OutputChannel, _PyProxy
-from circt.dialects import esi as raw_esi, hw, msft
-from circt.support import BackedgeBuilder
+from .circt.dialects import esi as raw_esi, hw, msft
+from .circt.support import BackedgeBuilder
 from pycde.pycde_types import ChannelType, ClockType, PyCDEType, types
 
-import mlir.ir as ir
+from .circt import ir
 
 from pathlib import Path
 import shutil

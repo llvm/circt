@@ -2,7 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from circt.dialects import hw, msft as _msft
+from . import hw, msft as _msft
 from . import _hw_ops_ext as _hw_ext
 from .. import support
 

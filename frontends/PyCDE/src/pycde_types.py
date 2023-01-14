@@ -7,9 +7,8 @@ from collections import OrderedDict
 from .value import (BitsValue, ChannelValue, ClockValue, ListValue, SIntValue,
                     UIntValue, StructValue, RegularValue, InOutValue, Value)
 
-import mlir.ir
-from circt.dialects import esi, hw, sv
-import circt.support
+from .circt import ir, support
+from .circt.dialects import esi, hw, sv
 
 from typing import Union
 
@@ -22,19 +21,16 @@ class _Types:
   def __init__(self):
     self.registered_aliases = OrderedDict()
 
-  def __getattr__(self, name: str) -> mlir.ir.Type:
-    return self.wrap(mlir.ir.Type.parse(name))
+  def __getattr__(self, name: str) -> ir.Type:
+    return self.wrap(ir.Type.parse(name))
 
   def int(self, width: int, name: str = None):
-    return self.wrap(mlir.ir.IntegerType.get_signless(width), name)
+    return self.wrap(ir.IntegerType.get_signless(width), name)
 
-  def array(self,
-            inner: mlir.ir.Type,
-            size: int,
-            name: str = None) -> hw.ArrayType:
+  def array(self, inner: ir.Type, size: int, name: str = None) -> hw.ArrayType:
     return self.wrap(hw.ArrayType.get(inner, size), name)
 
-  def inout(self, inner: mlir.ir.Type):
+  def inout(self, inner: ir.Type):
     return self.wrap(hw.InOutValue.get(inner))
 
   def channel(self, inner):
@@ -91,17 +87,17 @@ class _Types:
     if len(type_scopes) == 1:
       type_scope = type_scopes[0]
     else:
-      with mlir.ir.InsertionPoint.at_block_begin(mod.body):
+      with ir.InsertionPoint.at_block_begin(mod.body):
         guard_name = "__PYCDE_TYPES__"
-        sv.VerbatimOp(mlir.ir.StringAttr.get("`ifndef " + guard_name), [],
-                      symbols=mlir.ir.ArrayAttr.get([]))
-        sv.VerbatimOp(mlir.ir.StringAttr.get("`define " + guard_name), [],
-                      symbols=mlir.ir.ArrayAttr.get([]))
+        sv.VerbatimOp(ir.StringAttr.get("`ifndef " + guard_name), [],
+                      symbols=ir.ArrayAttr.get([]))
+        sv.VerbatimOp(ir.StringAttr.get("`define " + guard_name), [],
+                      symbols=ir.ArrayAttr.get([]))
         type_scope = hw.TypeScopeOp.create(self.TYPE_SCOPE)
-        sv.VerbatimOp(mlir.ir.StringAttr.get("`endif // " + guard_name), [],
-                      symbols=mlir.ir.ArrayAttr.get([]))
+        sv.VerbatimOp(ir.StringAttr.get("`endif // " + guard_name), [],
+                      symbols=ir.ArrayAttr.get([]))
 
-    with mlir.ir.InsertionPoint(type_scope.body):
+    with ir.InsertionPoint(type_scope.body):
       for (name, type) in self.registered_aliases.items():
         declared_aliases = [
             op for op in type_scope.body.operations
@@ -115,13 +111,13 @@ class _Types:
 types = _Types()
 
 
-class PyCDEType(mlir.ir.Type):
+class PyCDEType(ir.Type):
   """PyCDE type hierarchy root class. Can wrap any MLIR/CIRCT type, but can only
   do anything useful with types for which subclasses exist."""
   __slots__ = ["_type"]
 
-  def __init__(self, mlir_type: mlir.ir.Type):
-    self._type = circt.support.type_to_pytype(mlir_type)
+  def __init__(self, mlir_type: ir.Type):
+    self._type = support.type_to_pytype(mlir_type)
     super().__init__(self._type)
 
   @property
@@ -145,10 +141,10 @@ class PyCDEType(mlir.ir.Type):
     return RegularValue
 
 
-def Type(type: Union[mlir.ir.Type, PyCDEType]):
+def Type(type: Union[ir.Type, PyCDEType]):
   if isinstance(type, PyCDEType):
     return type
-  type = circt.support.type_to_pytype(type)
+  type = support.type_to_pytype(type)
   if isinstance(type, hw.ArrayType):
     return ArrayType(type)
   if isinstance(type, hw.StructType):
@@ -157,7 +153,7 @@ def Type(type: Union[mlir.ir.Type, PyCDEType]):
     return TypeAliasType(type)
   if isinstance(type, hw.InOutType):
     return InOutType(type)
-  if isinstance(type, mlir.ir.IntegerType):
+  if isinstance(type, ir.IntegerType):
     if type.is_signed:
       return SIntType(type)
     elif type.is_unsigned:
@@ -294,7 +290,7 @@ class ClockType(PyCDEType):
   on it, except enter it as a implicit clock block."""
 
   def __init__(self):
-    super().__init__(mlir.ir.IntegerType.get_signless(1))
+    super().__init__(ir.IntegerType.get_signless(1))
 
   def _get_value_class(self):
     return ClockValue
@@ -329,7 +325,7 @@ class ChannelType(PyCDEType):
 def dim(inner_type_or_bitwidth, *size: int, name: str = None) -> ArrayType:
   """Creates a multidimensional array from innermost to outermost dimension."""
   if isinstance(inner_type_or_bitwidth, int):
-    ret = Type(mlir.ir.IntegerType.get_signless(inner_type_or_bitwidth))
+    ret = Type(ir.IntegerType.get_signless(inner_type_or_bitwidth))
   else:
     ret = inner_type_or_bitwidth
   for s in size:

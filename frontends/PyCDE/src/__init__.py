@@ -7,14 +7,14 @@ from .module import (externmodule, generator, module, no_connect)
 from .system import (System)
 from .pycde_types import (dim, types)
 from .value import (Value)
-from circt.support import (connect)
+from ._mlir_libs._pycde import *
 
-import mlir.ir
-import circt
+from .circt import ir
+from . import circt
 import atexit
 
 # Push a default context onto the context stack at import time.
-DefaultContext = mlir.ir.Context()
+DefaultContext = ir.Context()
 DefaultContext.__enter__()
 circt.register_dialects(DefaultContext)
 DefaultContext.allow_unregistered_dialects = True
@@ -27,7 +27,7 @@ def __exit_ctxt():
 
 # Until we get source location based on Python stack traces, default to unknown
 # locations.
-DefaultLocation = mlir.ir.Location.unknown()
+DefaultLocation = ir.Location.unknown()
 DefaultLocation.__enter__()
 
 
