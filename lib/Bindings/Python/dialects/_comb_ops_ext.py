@@ -1,7 +1,7 @@
-from circt.dialects import comb
-from circt.support import NamedValueOpView, get_value
+from . import comb
+from ..support import NamedValueOpView, get_value
 
-from mlir.ir import IntegerAttr, IntegerType, Type
+from ..ir import IntegerAttr, IntegerType, Type
 
 
 # Builder base classes for non-variadic unary and binary ops.

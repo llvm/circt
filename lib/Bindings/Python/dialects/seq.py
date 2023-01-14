@@ -13,8 +13,8 @@ from .seq import CompRegOp
 # otherwise it will reset to zero. If name is provided, the register will be
 # named.
 def reg(value, clock, reset=None, reset_value=None, name=None):
-  import circt.dialects.hw as hw
-  from mlir.ir import IntegerAttr
+  from . import hw
+  from ..ir import IntegerAttr
   value_type = value.type
   if reset:
     if not reset_value:

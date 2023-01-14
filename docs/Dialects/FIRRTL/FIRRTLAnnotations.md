@@ -771,11 +771,11 @@ Example:
 }
 ```
 
-### circt.intrinsic
+### circt.Intrinsic
 
 | Property   | Type   | Description       |
 | ---------- | ------ | -------------     |
-| class      | string | `circt.intrinsic` |
+| class      | string | `circt.Intrinsic` |
 | target     | string | Reference target  |
 | intrinsic  | string | Name of Intrinsic |
 

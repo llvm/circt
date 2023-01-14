@@ -210,7 +210,7 @@ void LowerIntrinsicsPass::runOnOperation() {
   InstancePathCache instancePathCache(getAnalysis<InstanceGraph>());
   for (auto op :
        llvm::make_early_inc_range(getOperation().getOps<FExtModuleOp>())) {
-    auto anno = AnnotationSet(op).getAnnotation("circt.intrinsic");
+    auto anno = AnnotationSet(op).getAnnotation("circt.Intrinsic");
     if (!anno)
       continue;
     auto intname = anno.getMember<StringAttr>("intrinsic");

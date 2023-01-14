@@ -125,8 +125,8 @@ setup(
     long_description="",
     include_package_data=True,
     ext_modules=[
-        CMakeExtension("mlir._mlir_libs._mlir"),
-        CMakeExtension("mlir._mlir_libs._circt"),
+        CMakeExtension("circt._mlir_libs._mlir"),
+        CMakeExtension("circt._mlir_libs._circt"),
     ],
     cmdclass={
         "build": CustomBuild,
