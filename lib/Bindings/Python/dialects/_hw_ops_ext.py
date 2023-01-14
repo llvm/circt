@@ -4,10 +4,10 @@ from typing import Dict, Optional, Sequence, Type
 
 import inspect
 
-from circt.dialects import hw
-import circt.support as support
+from . import hw
+from .. import support
 
-from mlir.ir import *
+from ..ir import *
 
 
 def create_parameters(parameters: dict[str, _ir.Attribute], module: ModuleLike):

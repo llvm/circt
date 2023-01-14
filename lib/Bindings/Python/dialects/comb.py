@@ -4,9 +4,9 @@
 
 from ._comb_ops_gen import *
 
-from circt.support import NamedValueOpView
+from ..support import NamedValueOpView
 
-from mlir.ir import IntegerAttr, IntegerType, OpView
+from ..ir import IntegerAttr, IntegerType, OpView
 
 
 # Sugar classes for the various possible verions of ICmpOp.

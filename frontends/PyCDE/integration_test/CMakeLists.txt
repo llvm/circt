@@ -14,7 +14,6 @@ set(PYCDE_INTEGRATION_TEST_DEPENDS
   PyCDE
   mlir-opt
   hlstool
-  CIRCTMLIRPythonModules
   CIRCTPythonModules)
 
 # If ESI Cosim is available to build then enable its tests.

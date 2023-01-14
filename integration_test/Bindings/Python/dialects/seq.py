@@ -7,8 +7,8 @@ import circt
 from circt.support import connect
 from circt.dialects import hw, seq, sv
 
-from mlir.ir import *
-from mlir.passmanager import PassManager
+from circt.ir import *
+from circt.passmanager import PassManager
 
 with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)

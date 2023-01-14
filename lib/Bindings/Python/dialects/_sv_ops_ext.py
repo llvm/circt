@@ -2,9 +2,9 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from mlir.ir import ArrayAttr, Attribute, FlatSymbolRefAttr, OpView, StringAttr
+from circt.ir import ArrayAttr, Attribute, FlatSymbolRefAttr, OpView, StringAttr
 from circt.dialects import sv, hw
-import circt.support as support
+from .. import support
 
 
 class IfDefOp:

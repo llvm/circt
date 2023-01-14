@@ -5,7 +5,7 @@
 import circt
 from circt.dialects import hw
 
-from mlir.ir import (Context, Location, InsertionPoint, IntegerType, Module)
+from circt.ir import (Context, Location, InsertionPoint, IntegerType, Module)
 
 import io
 import os
