@@ -7,7 +7,6 @@ from .module import (externmodule, generator, module, no_connect)
 from .system import (System)
 from .pycde_types import (dim, types)
 from .value import (Value)
-from ._mlir_libs._pycde import *
 
 from .circt import ir
 from . import circt

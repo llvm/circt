@@ -44,21 +44,6 @@ declare_mlir_python_sources(PyCDESources
 )
 
 ################################################################################
-# Declare native Python extension
-################################################################################
-
-declare_mlir_python_extension(PyCDEPythonExtension
-  MODULE_NAME _pycde
-  ADD_TO_PARENT PyCDESources
-  SOURCES
-    PyCDEModule.cpp 
-  EMBED_CAPI_LINK_LIBS
-
-  PRIVATE_LINK_LIBS
-    LLVMSupport
-)
-
-################################################################################
 # Build composite binaries
 ################################################################################
 set(PYCDE_PYTHON_PACKAGE_DIR "${CIRCT_PYTHON_PACKAGES_DIR}/pycde/")
@@ -72,7 +57,6 @@ add_mlir_python_common_capi_library(PyCDE_CIRCTPythonCAPI
   DECLARED_SOURCES
     MLIRPythonSources.Core
     CIRCTBindingsPythonExtension
-    PyCDEPythonExtension
 )
 
 add_mlir_python_modules(PyCDE_CIRCTPythonModules
@@ -91,7 +75,6 @@ add_mlir_python_modules(PyCDE
   INSTALL_PREFIX "python_packages/pycde/pycde"
   DECLARED_SOURCES
     PyCDESources
-    PyCDEPythonExtension
   COMMON_CAPI_LINK_LIBS
     PyCDE_CIRCTPythonCAPI
 )
