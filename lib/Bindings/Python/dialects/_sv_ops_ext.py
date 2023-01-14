@@ -4,7 +4,7 @@
 
 from circt.ir import ArrayAttr, Attribute, FlatSymbolRefAttr, OpView, StringAttr
 from circt.dialects import sv, hw
-import circt.support as support
+from .. import support
 
 
 class IfDefOp:

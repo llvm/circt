@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Sequence, Type
 
-from circt.dialects import esi
-import circt.support as support
+from . import esi
+from .. import support
 
-import circt.ir as ir
+from .. import ir
 
 
 class RequestToServerConnectionOp:

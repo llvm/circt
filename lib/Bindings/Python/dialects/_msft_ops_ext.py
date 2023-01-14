@@ -3,10 +3,10 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from circt.dialects import hw, msft as _msft
-import circt.dialects._hw_ops_ext as _hw_ext
-import circt.support as support
+from . import _hw_ops_ext as _hw_ext
+from .. import support
 
-import circt.ir as _ir
+from .. import ir as _ir
 
 
 class InstanceBuilder(support.NamedValueOpView):

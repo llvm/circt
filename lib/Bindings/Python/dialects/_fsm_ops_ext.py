@@ -2,10 +2,9 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from http.client import REQUEST_URI_TOO_LONG
-from circt.dialects import hw, fsm as fsm
-import circt.dialects._hw_ops_ext as _hw_ext
-import circt.support as support
+from . import hw, fsm as fsm
+from . import _hw_ops_ext as _hw_ext
+from .. import support
 
 from circt.ir import *
 
