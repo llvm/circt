@@ -33,6 +33,7 @@ struct FirrtlStatement;
 struct FirrtlStatementAttach;
 struct FirrtlStatementSeqMemory;
 struct FirrtlStatementNode;
+struct FirrtlStatementWire;
 
 namespace circt {
 namespace chirrtl {
@@ -137,6 +138,8 @@ private:
                           const FirrtlStatementSeqMemory &stmt);
   bool visitStmtNode(BodyOpBuilder &bodyOpBuilder,
                      const FirrtlStatementNode &stmt);
+  bool visitStmtWire(BodyOpBuilder &bodyOpBuilder,
+                     const FirrtlStatementWire &stmt);
 };
 
 } // namespace chirrtl

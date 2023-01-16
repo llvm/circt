@@ -404,6 +404,12 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
                      .expr = {.kind = FIRRTL_EXPR_KIND_PRIM,
                               .u = {.prim = {.value = &primSubField}}},
                  }}},
+      {.kind = FIRRTL_STATEMENT_KIND_WIRE,
+       .u = {.wire =
+                 {
+                     .name = MK_STR("wire1"),
+                     .type = uint8s[0],
+                 }}},
   };
 
   for (unsigned int i = 0; i < ARRAY_SIZE(statements); i++) {
@@ -424,7 +430,8 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
     attach(analogBundle.field1, analogBundle.field2, analogBundle.field3)\n\
     smem seqMem : UInt<32>[1024] undefined\n\
     node node1 = add(uintPort1, uintPort2)\n\
-    node node2 = sub(uintPort1, analogBundle.field4)\n\n");
+    node node2 = sub(uintPort1, analogBundle.field4)\n\
+    wire wire1 : UInt<8>\n\n");
 
   return 0;
 }

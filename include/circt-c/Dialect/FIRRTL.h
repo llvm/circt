@@ -314,6 +314,7 @@ typedef enum FirrtlStatementKind {
   FIRRTL_STATEMENT_KIND_ATTACH,
   FIRRTL_STATEMENT_KIND_SEQ_MEMORY,
   FIRRTL_STATEMENT_KIND_NODE,
+  FIRRTL_STATEMENT_KIND_WIRE,
 } FirrtlStatementKind;
 
 typedef struct FirrtlStatementAttachOperand {
@@ -336,10 +337,16 @@ typedef struct FirrtlStatementNode {
   FirrtlExpr expr;
 } FirrtlStatementNode;
 
+typedef struct FirrtlStatementWire {
+  FirrtlStringRef name;
+  FirrtlType type;
+} FirrtlStatementWire;
+
 typedef union FirrtlStatementUnion {
   FirrtlStatementAttach attach;
   FirrtlStatementSeqMemory seqMem;
   FirrtlStatementNode node;
+  FirrtlStatementWire wire;
 } FirrtlStatementUnion;
 
 typedef struct FirrtlStatement {

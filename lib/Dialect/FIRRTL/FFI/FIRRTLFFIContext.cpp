@@ -240,7 +240,10 @@ void FFIContext::visitStatement(const FirrtlStatement &stmt) {
   case FIRRTL_STATEMENT_KIND_NODE:
     visitStmtNode(bodyOpBuilder, stmt.u.node);
     break;
-  default:
+  case FIRRTL_STATEMENT_KIND_WIRE:
+    visitStmtWire(bodyOpBuilder, stmt.u.wire);
+    break;
+  default: // NOLINT(clang-diagnostic-covered-switch-default)
     emitError("unknown statement kind");
     break;
   }
@@ -787,6 +790,25 @@ bool FFIContext::visitStmtNode(BodyOpBuilder &bodyOpBuilder,
   auto result = bodyOpBuilder.create<NodeOp>(
       initializer.getType(), initializer, name, NameKindEnum::InterestingName,
       annotations, sym);
+  return !lastModuleCtx.addSymbolEntry(name, result, mockSMLoc());
+}
+
+bool FFIContext::visitStmtWire(BodyOpBuilder &bodyOpBuilder,
+                               const FirrtlStatementWire &stmt) {
+  RA_EXPECT(auto &lastModuleCtx, this->moduleContext, false);
+
+  auto name = unwrap(stmt.name);
+  auto type = ffiTypeToFirType(stmt.type);
+  if (!type.has_value()) {
+    return false;
+  }
+
+  auto annotations = emptyArrayAttr();
+  StringAttr sym = {};
+
+  auto result = bodyOpBuilder.create<WireOp>(
+      *type, name, NameKindEnum::InterestingName, annotations,
+      sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
   return !lastModuleCtx.addSymbolEntry(name, result, mockSMLoc());
 }
 
