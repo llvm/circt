@@ -44,6 +44,65 @@ std::string typeToString(const mlir::Type &type) {
   type.print(stream);
   return typeStr;
 }
+
+// Extracted from `FIRParser.cpp`
+// NOLINTNEXTLINE(misc-no-recursion)
+void emitInvalidate(details::ModuleContext &lastModuleCtx,
+                    FFIContext::BodyOpBuilder &bodyOpBuilder, Value val,
+                    Flow flow) {
+  auto tpe = val.getType().cast<FIRRTLBaseType>();
+
+  auto props = tpe.getRecursiveTypeProperties();
+  if (props.isPassive && !props.containsAnalog) {
+    if (flow == Flow::Source)
+      return;
+    if (props.hasUninferredWidth)
+      bodyOpBuilder.create<ConnectOp>(
+          val, bodyOpBuilder.create<InvalidValueOp>(tpe));
+    else
+      bodyOpBuilder.create<StrictConnectOp>(
+          val, bodyOpBuilder.create<InvalidValueOp>(tpe));
+    return;
+  }
+
+  // Recurse until we hit passive leaves.  Connect any leaves which have sink or
+  // duplex flow.
+  //
+  // TODO: This is very similar to connect expansion in the LowerTypes pass
+  // works.  Find a way to unify this with methods common to LowerTypes or to
+  // have LowerTypes to the actual work here, e.g., emitting a partial connect
+  // to only the leaf sources.
+  TypeSwitch<FIRRTLType>(tpe)
+      .Case<BundleType>([&](auto tpe) {
+        for (size_t i = 0, e = tpe.getNumElements(); i < e; ++i) {
+          auto &subfield = lastModuleCtx.getCachedSubaccess(val, i);
+          if (!subfield) {
+            OpBuilder::InsertionGuard guard(bodyOpBuilder);
+            bodyOpBuilder.setInsertionPointAfterValue(val);
+            subfield = bodyOpBuilder.create<SubfieldOp>(val, i);
+          }
+          emitInvalidate(lastModuleCtx, bodyOpBuilder, subfield,
+                         tpe.getElement(i).isFlip ? swapFlow(flow) : flow);
+        }
+      })
+      .Case<FVectorType>([&](auto tpe) {
+        auto tpex = tpe.getElementType();
+        for (size_t i = 0, e = tpe.getNumElements(); i != e; ++i) {
+          auto &subindex = lastModuleCtx.getCachedSubaccess(val, i);
+          if (!subindex) {
+            OpBuilder::InsertionGuard guard(bodyOpBuilder);
+            bodyOpBuilder.setInsertionPointAfterValue(val);
+            subindex = bodyOpBuilder.create<SubindexOp>(tpex, val, i);
+          }
+          emitInvalidate(lastModuleCtx, bodyOpBuilder, subindex, flow);
+        }
+      });
+}
+
+void emitInvalidate(details::ModuleContext &lastModuleCtx,
+                    FFIContext::BodyOpBuilder &bodyOpBuilder, Value val) {
+  emitInvalidate(lastModuleCtx, bodyOpBuilder, val, firrtl::foldFlow(val));
+}
 } // namespace
 
 // This macro returns the underlying value of a `RequireAssigned`, which
@@ -243,6 +302,9 @@ void FFIContext::visitStatement(const FirrtlStatement &stmt) {
   case FIRRTL_STATEMENT_KIND_WIRE:
     visitStmtWire(bodyOpBuilder, stmt.u.wire);
     break;
+  case FIRRTL_STATEMENT_KIND_INVALID:
+    visitStmtInvalid(bodyOpBuilder, stmt.u.invalid);
+    break;
   default: // NOLINT(clang-diagnostic-covered-switch-default)
     emitError("unknown statement kind");
     break;
@@ -381,80 +443,113 @@ std::optional<FIRRTLType> FFIContext::ffiTypeToFirType(const FirrtlType &type) {
 }
 
 std::optional<mlir::Value> FFIContext::resolveRef(BodyOpBuilder &bodyOpBuilder,
-                                                  StringRef refExpr) {
+                                                  StringRef refExpr,
+                                                  bool invalidate) {
   RA_EXPECT(auto &lastModuleCtx, this->moduleContext, std::nullopt);
 
-  SmallVector<StringRef, 2> refExprParts;
-  refExpr.split(refExprParts, ".");
+  SmallVector<StringRef, 2> unresolvedFields;
+  refExpr.split(unresolvedFields, ".");
+  std::reverse(unresolvedFields.begin(), unresolvedFields.end());
 
-  // TODO: Handle subindex: exp ::= exp '[' intLit ']' | exp '[' exp ']'
+  const auto &consumeField = [&]() -> std::optional<StringRef> {
+    if (unresolvedFields.empty()) {
+      return std::nullopt;
+    }
+    return unresolvedFields.pop_back_val();
+  };
 
-  if (refExprParts[0].empty()) {
+  auto field = consumeField();
+  if (!field.has_value()) {
     emitError("expected an identifier");
     return {};
   }
 
   SymbolValueEntry symtabEntry;
-  if (lastModuleCtx.lookupSymbolEntry(symtabEntry, refExprParts[0],
-                                      mockSMLoc())) {
+  if (lastModuleCtx.lookupSymbolEntry(symtabEntry, *field, mockSMLoc())) {
     return {};
   }
 
   mlir::Value result;
-  if (!lastModuleCtx.resolveSymbolEntry(result, symtabEntry, mockSMLoc(),
-                                        false)) {
+  if (lastModuleCtx.resolveSymbolEntry(result, symtabEntry, mockSMLoc(),
+                                       false)) {
+    assert(symtabEntry.is<UnbundledID>() && "should be an instance");
 
-    // Handle fields
-    for (size_t i = 1; i < refExprParts.size(); i++) {
-      const auto &fieldName = refExprParts[i];
-      if (fieldName.empty()) {
-        emitError("expected an field name after '.'");
-        return {};
+    if (invalidate && unresolvedFields.empty()) {
+      // Invalidate all of the results of the bundled value.
+      auto unbundledId = symtabEntry.get<UnbundledID>() - 1;
+      auto &ubEntry = lastModuleCtx.getUnbundledEntry(unbundledId);
+      for (auto elt : ubEntry) {
+        emitInvalidate(lastModuleCtx, bodyOpBuilder, elt.second);
       }
-
-      auto bundle = result.getType().dyn_cast<BundleType>();
-      if (!bundle) {
-        emitError("subfield requires bundle operand");
-        return {};
-      }
-
-      auto indexV = bundle.getElementIndex(fieldName);
-      if (!indexV.has_value()) {
-        emitError(("unknown field '" + fieldName + "' in bundle type " +
-                   typeToString(result.getType()))
-                      .str());
-        return {};
-      }
-
-      auto indexNo = *indexV;
-
-      NamedAttribute attrs = {StringAttr::get(mlirCtx.get(), "fieldIndex"),
-                              bodyOpBuilder.getI32IntegerAttr(indexNo)};
-      auto resultType = SubfieldOp::inferReturnType({result}, attrs, {});
-      if (!resultType) {
-        emitError("failed to infer the result type of field");
-        return {};
-      }
-
-      auto &value = lastModuleCtx.getCachedSubaccess(result, indexNo);
-      if (!value) {
-        OpBuilder::InsertionGuard guard{bodyOpBuilder};
-        bodyOpBuilder.setInsertionPointAfterValue(result);
-        auto op = bodyOpBuilder.create<SubfieldOp>(resultType, result, attrs);
-        value = op.getResult();
-      }
-
-      result = value;
+      return Value{};
     }
 
-    return result;
+    // Handle the normal "instance.x" reference.
+    field = consumeField();
+    if (!field.has_value()) {
+      emitError("expected field name in field reference");
+      return {};
+    }
+    if (lastModuleCtx.resolveSymbolEntry(result, symtabEntry, *field,
+                                         mockSMLoc())) {
+      return {};
+    }
   }
 
-  assert(symtabEntry.is<UnbundledID>() && "should be an instance");
+  // Handle optional exp postscript
 
-  assert(false && "UnbundledID unimplemented"); // TODO
+  // Handle fields
 
-  return {};
+  for (field = consumeField(); field.has_value(); field = consumeField()) {
+    const auto &fieldName = *field;
+    if (fieldName.empty()) {
+      emitError("expected an field name after '.'");
+      return {};
+    }
+
+    auto bundle = result.getType().dyn_cast<BundleType>();
+    if (!bundle) {
+      emitError("subfield requires bundle operand");
+      return {};
+    }
+
+    auto indexV = bundle.getElementIndex(fieldName);
+    if (!indexV.has_value()) {
+      emitError(("unknown field '" + fieldName + "' in bundle type " +
+                 typeToString(result.getType()))
+                    .str());
+      return {};
+    }
+
+    auto indexNo = *indexV;
+
+    NamedAttribute attrs = {StringAttr::get(mlirCtx.get(), "fieldIndex"),
+                            bodyOpBuilder.getI32IntegerAttr(indexNo)};
+    auto resultType = SubfieldOp::inferReturnType({result}, attrs, {});
+    if (!resultType) {
+      emitError("failed to infer the result type of field");
+      return {};
+    }
+
+    auto &value = lastModuleCtx.getCachedSubaccess(result, indexNo);
+    if (!value) {
+      OpBuilder::InsertionGuard guard{bodyOpBuilder};
+      bodyOpBuilder.setInsertionPointAfterValue(result);
+      auto op = bodyOpBuilder.create<SubfieldOp>(resultType, result, attrs);
+      value = op.getResult();
+    }
+
+    result = value;
+  }
+
+  // TODO: Handle subindex: exp ::= exp '[' intLit ']' | exp '[' exp ']'
+
+  if (invalidate) {
+    emitInvalidate(lastModuleCtx, bodyOpBuilder, result);
+    return Value{};
+  }
+
+  return result;
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
@@ -810,6 +905,11 @@ bool FFIContext::visitStmtWire(BodyOpBuilder &bodyOpBuilder,
       *type, name, NameKindEnum::InterestingName, annotations,
       sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
   return !lastModuleCtx.addSymbolEntry(name, result, mockSMLoc());
+}
+
+bool FFIContext::visitStmtInvalid(BodyOpBuilder &bodyOpBuilder,
+                                  const FirrtlStatementInvalid &stmt) {
+  return resolveRef(bodyOpBuilder, unwrap(stmt.ref.value), true).has_value();
 }
 
 #undef RA_EXPECT

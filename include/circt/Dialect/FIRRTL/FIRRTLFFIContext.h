@@ -34,6 +34,7 @@ struct FirrtlStatementAttach;
 struct FirrtlStatementSeqMemory;
 struct FirrtlStatementNode;
 struct FirrtlStatementWire;
+struct FirrtlStatementInvalid;
 
 namespace circt {
 namespace chirrtl {
@@ -82,6 +83,7 @@ private:
 class FFIContext {
 public:
   using Direction = firrtl::Direction;
+  using BodyOpBuilder = mlir::ImplicitLocOpBuilder;
 
   FFIContext();
 
@@ -98,8 +100,6 @@ public:
   void exportFIRRTL(llvm::raw_ostream &os) const;
 
 private:
-  using BodyOpBuilder = mlir::ImplicitLocOpBuilder;
-
   friend details::ModuleContext;
 
   std::function<void(std::string_view message)> errorHandler;
@@ -126,7 +126,8 @@ private:
   std::optional<firrtl::FIRRTLType> ffiTypeToFirType(const FirrtlType &type);
 
   std::optional<mlir::Value> resolveRef(BodyOpBuilder &bodyOpBuilder,
-                                        StringRef refExpr);
+                                        StringRef refExpr,
+                                        bool invalidate = false);
   std::optional<mlir::Value> resolvePrim(BodyOpBuilder &bodyOpBuilder,
                                          const FirrtlPrim &prim);
   std::optional<mlir::Value> resolveExpr(BodyOpBuilder &bodyOpBuilder,
@@ -140,6 +141,8 @@ private:
                      const FirrtlStatementNode &stmt);
   bool visitStmtWire(BodyOpBuilder &bodyOpBuilder,
                      const FirrtlStatementWire &stmt);
+  bool visitStmtInvalid(BodyOpBuilder &bodyOpBuilder,
+                        const FirrtlStatementInvalid &stmt);
 };
 
 } // namespace chirrtl

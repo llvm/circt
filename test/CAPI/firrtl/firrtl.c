@@ -334,6 +334,25 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
   firrtlVisitPort(ctx, MK_STR("analogBundle"), FIRRTL_PORT_DIRECTION_INPUT,
                   &analogBundle);
 
+  FirrtlTypeBundleField uintFields[] = {
+      {.name = MK_STR("field1"), .flip = false, .type = &uint8s[0]},
+      {.name = MK_STR("field2"), .flip = true, .type = &uint8s[0]},
+      {.name = MK_STR("field3"), .flip = false, .type = &uint8s[0]},
+      {.name = MK_STR("field4"), .flip = true, .type = &uint8s[0]},
+  };
+  FirrtlType uintBundle = {
+      .kind = FIRRTL_TYPE_KIND_BUNDLE,
+      .u = {.bundle = {.fields = uintFields, .count = ARRAY_SIZE(uintFields)}}};
+  firrtlVisitPort(ctx, MK_STR("uintIOBundle"), FIRRTL_PORT_DIRECTION_INPUT,
+                  &uintBundle);
+  for (unsigned int i = 0; i < ARRAY_SIZE(uintFields); i++) {
+    uintFields[i].flip = false;
+  }
+  firrtlVisitPort(ctx, MK_STR("uintInputBundle"), FIRRTL_PORT_DIRECTION_INPUT,
+                  &uintBundle);
+  firrtlVisitPort(ctx, MK_STR("uintOutputBundle"), FIRRTL_PORT_DIRECTION_OUTPUT,
+                  &uintBundle);
+
   FirrtlStatementAttachOperand attachOperands[] = {
       {.expr = MK_REF_EXPR_INLINE("analog1")},
       {.expr = MK_REF_EXPR_INLINE("analog2")},
@@ -410,6 +429,32 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
                      .name = MK_STR("wire1"),
                      .type = uint8s[0],
                  }}},
+      {.kind = FIRRTL_STATEMENT_KIND_INVALID,
+       .u = {.invalid =
+                 {
+                     .ref = {.value = MK_STR("wire1")},
+                 }}},
+      // Invalidate bundle
+      {.kind = FIRRTL_STATEMENT_KIND_INVALID,
+       .u = {.invalid =
+                 {
+                     .ref = {.value = MK_STR("uintIOBundle")},
+                 }}},
+      {.kind = FIRRTL_STATEMENT_KIND_INVALID,
+       .u = {.invalid =
+                 {
+                     .ref = {.value = MK_STR("uintInputBundle")},
+                 }}},
+      {.kind = FIRRTL_STATEMENT_KIND_INVALID,
+       .u = {.invalid =
+                 {
+                     .ref = {.value = MK_STR("uintOutputBundle")},
+                 }}},
+      {.kind = FIRRTL_STATEMENT_KIND_INVALID,
+       .u = {.invalid =
+                 {
+                     .ref = {.value = MK_STR("analogBundle.field4")},
+                 }}},
   };
 
   for (unsigned int i = 0; i < ARRAY_SIZE(statements); i++) {
@@ -424,14 +469,22 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
     input analog3 : Analog<8>\n\
     input uintPort1 : UInt<8>\n\
     input uintPort2 : UInt<8>\n\
-    input analogBundle : { field1 : Analog<8>, flip field2 : Analog<8>, field3 : Analog<8>, flip field4 : UInt<8> }\n\n\
+    input analogBundle : { field1 : Analog<8>, flip field2 : Analog<8>, field3 : Analog<8>, flip field4 : UInt<8> }\n\
+    input uintIOBundle : { field1 : UInt<8>, flip field2 : UInt<8>, field3 : UInt<8>, flip field4 : UInt<8> }\n\
+    input uintInputBundle : { field1 : UInt<8>, field2 : UInt<8>, field3 : UInt<8>, field4 : UInt<8> }\n\
+    output uintOutputBundle : { field1 : UInt<8>, field2 : UInt<8>, field3 : UInt<8>, field4 : UInt<8> }\n\n\
     attach(analog1, analog2, analog3)\n\
     attach(analogBundle)\n\
     attach(analogBundle.field1, analogBundle.field2, analogBundle.field3)\n\
     smem seqMem : UInt<32>[1024] undefined\n\
     node node1 = add(uintPort1, uintPort2)\n\
     node node2 = sub(uintPort1, analogBundle.field4)\n\
-    wire wire1 : UInt<8>\n\n");
+    wire wire1 : UInt<8>\n\
+    wire1 is invalid\n\
+    uintIOBundle.field2 is invalid\n\
+    uintIOBundle.field4 is invalid\n\
+    uintOutputBundle is invalid\n\
+    analogBundle.field4 is invalid\n\n");
 
   return 0;
 }
