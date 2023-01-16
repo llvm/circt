@@ -38,20 +38,15 @@ namespace circt {
 class SSAMaximizationStrategy {
 public:
   /// Determines whether a block should have the values it defines (i.e., block
-  /// arguments and operation results within the block) SSA maximized. The
-  /// default implementation always returns true.
+  /// arguments and operation results within the block) SSA maximized.
   virtual bool maximizeBlock(Block *block);
-  /// Determines whether a block argument should be SSA maximized. The default
-  /// implementation always returns true.
+  /// Determines whether a block argument should be SSA maximized.
   virtual bool maximizeArgument(BlockArgument arg);
-  /// Determines whether an operation should have its results SSA maximized. The
-  /// default implementation always returns true.
+  /// Determines whether an operation should have its results SSA maximized.
   virtual bool maximizeOp(Operation *op);
-  /// Determines whether an operation's result should be SSA maximized. The
-  /// default implementation always returns true.
+  /// Determines whether an operation's result should be SSA maximized.
   virtual bool maximizeResult(OpResult res);
 
-  /// Default destructor does nothing.
   virtual ~SSAMaximizationStrategy() = default;
 };
 

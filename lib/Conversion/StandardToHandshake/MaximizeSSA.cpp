@@ -113,9 +113,18 @@ LogicalResult circt::maximizeSSA(Value value, PatternRewriter &rewriter) {
     blockToArg[block] =
         block->addArgument(value.getType(), rewriter.getUnknownLoc());
 
-    // In all block predecessors, modify the terminator branching instruction to
-    // also pass the value to the block
+    // In all unique block predecessors, modify the terminator branching
+    // instruction to also pass the value to the block
+    SmallPtrSet<Block *, 8> uniquePredecessors;
     for (auto *predBlock : block->getPredecessors()) {
+      // If we have already visited the block predecessor, skip it. It's
+      // possible to get duplicate block predecessors when there exists a
+      // conditional branch with both branches going to the same block e.g.,
+      // cf.cond_br %cond, ^bbx, ^bbx
+      if (auto [_, newPredecessor] = uniquePredecessors.insert(predBlock);
+          !newPredecessor) {
+        continue;
+      }
 
       // Modify the terminator instruction
       if (failed(addArgToTerminator(block, predBlock, value)))
