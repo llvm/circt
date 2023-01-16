@@ -91,6 +91,7 @@ firrtl.circuit "FooBar" attributes {
   }
   // CHECK: firrtl.module @FooBar
   firrtl.module @FooBar(out %io: !firrtl.bundle<in flip: uint<1>, out_foo0: uint<1>, out_foo1: uint<1>, out_bar: uint<1>>) {
+    // CHECK: %0 = firrtl.subfield %io[in] : !firrtl.bundle<in flip: uint<1>, out_foo0: uint<1>, out_foo1: uint<1>, out_bar: uint<1>>
     %0 = firrtl.subfield %io[out_bar] : !firrtl.bundle<in flip: uint<1>, out_foo0: uint<1>, out_foo1: uint<1>, out_bar: uint<1>>
     %1 = firrtl.subfield %io[out_foo1] : !firrtl.bundle<in flip: uint<1>, out_foo0: uint<1>, out_foo1: uint<1>, out_bar: uint<1>>
     %2 = firrtl.subfield %io[out_foo0] : !firrtl.bundle<in flip: uint<1>, out_foo0: uint<1>, out_foo1: uint<1>, out_bar: uint<1>>
@@ -109,9 +110,8 @@ firrtl.circuit "FooBar" attributes {
     firrtl.strictconnect %2, %3 : !firrtl.uint<1>
     firrtl.strictconnect %1, %4 : !firrtl.uint<1>
     firrtl.strictconnect %0, %5 : !firrtl.uint<1>
-    // CHECK: %6 = firrtl.subfield %io[in] : !firrtl.bundle<in flip: uint<1>, out_foo0: uint<1>, out_foo1: uint<1>, out_bar: uint<1>>
-    // CHECK: firrtl.connect %foo0_in, %6 : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %foo1_in, %6 : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %bar_in, %6 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %foo0_in, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %foo1_in, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %bar_in, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }

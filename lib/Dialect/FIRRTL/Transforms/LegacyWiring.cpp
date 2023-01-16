@@ -24,6 +24,7 @@ using namespace firrtl;
 LogicalResult circt::firrtl::applyWiring(const AnnoPathValue &target,
                                          DictionaryAttr anno,
                                          ApplyState &state) {
+  auto clazz = anno.getAs<StringAttr>("class").getValue();
   auto *context = anno.getContext();
   ImplicitLocOpBuilder builder(target.ref.getOp()->getLoc(), context);
 
@@ -32,7 +33,11 @@ LogicalResult circt::firrtl::applyWiring(const AnnoPathValue &target,
   if (auto portTarget = target.ref.dyn_cast<PortAnnoTarget>()) {
     auto portNum = portTarget.getImpl().getPortNo();
     if (auto module = dyn_cast<FModuleOp>(portTarget.getOp())) {
-      builder.setInsertionPointToEnd(module.getBodyBlock());
+      if (clazz == wiringSourceAnnoClass) {
+        builder.setInsertionPointToStart(module.getBodyBlock());
+      } else if (clazz == wiringSinkAnnoClass) {
+        builder.setInsertionPointToEnd(module.getBodyBlock());
+      }
       targetValue = getValueByFieldID(builder, module.getArgument(portNum),
                                       target.fieldIdx);
     } else if (auto ext = dyn_cast<FExtModuleOp>(portTarget.getOp())) {
@@ -60,7 +65,11 @@ LogicalResult circt::firrtl::applyWiring(const AnnoPathValue &target,
   } else if (auto opResult = target.ref.dyn_cast<OpAnnoTarget>()) {
     if (target.isOpOfType<WireOp, RegOp, RegResetOp>()) {
       auto module = cast<FModuleOp>(opResult.getModule());
-      builder.setInsertionPointToEnd(module.getBodyBlock());
+      if (clazz == wiringSourceAnnoClass) {
+        builder.setInsertionPointToStart(module.getBodyBlock());
+      } else if (clazz == wiringSinkAnnoClass) {
+        builder.setInsertionPointToEnd(module.getBodyBlock());
+      }
       targetValue = getValueByFieldID(builder, opResult.getOp()->getResult(0),
                                       target.fieldIdx);
     } else {
@@ -80,7 +89,6 @@ LogicalResult circt::firrtl::applyWiring(const AnnoPathValue &target,
   }
 
   // Handle difference between sinks and sources
-  auto clazz = anno.getAs<StringAttr>("class").getValue();
   if (clazz == wiringSourceAnnoClass) {
     if (state.legacyWiringProblems.find(pin) !=
         state.legacyWiringProblems.end()) {
