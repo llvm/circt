@@ -5,7 +5,7 @@
 from pycde.system import System
 from .module import (Generator, _module_base, _BlockContext,
                      _GeneratorPortAccess, _SpecializedModule)
-from pycde.value import ChannelValue, ClockValue, PyCDEValue, Value
+from pycde.value import ChannelValue, ClockSignal, Signal, Value
 from .common import AppID, Input, Output, InputChannel, OutputChannel, _PyProxy
 from .circt.dialects import esi as raw_esi, hw, msft
 from .circt.support import BackedgeBuilder
@@ -92,7 +92,7 @@ class ServiceDecl(_PyProxy):
   def instantiate_builtin(self,
                           builtin: str,
                           result_types: List[PyCDEType] = [],
-                          inputs: List[PyCDEValue] = []):
+                          inputs: List[Signal] = []):
     """Implement a service using an implementation builtin to CIRCT. Needs the
     input ports which the implementation expects and returns the outputs."""
 
@@ -331,7 +331,7 @@ def ServiceImplementation(decl: Optional[ServiceDecl]):
         clk = None
         if len(spec_mod.clock_ports) == 1:
           clk_port = list(spec_mod.clock_ports.values())[0]
-          clk = ClockValue(arguments[clk_port], ClockType())
+          clk = ClockSignal(arguments[clk_port], ClockType())
           clk.__enter__()
 
         # Run the generator.

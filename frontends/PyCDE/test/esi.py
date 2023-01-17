@@ -8,7 +8,7 @@ from pycde.common import Output
 from pycde.constructs import Wire
 from pycde.pycde_types import ChannelType
 from pycde.testing import unittestmodule
-from pycde.value import BitVectorValue, ChannelValue
+from pycde.value import BitVectorSignal, ChannelValue
 
 
 @esi.ServiceDecl
@@ -138,7 +138,7 @@ class MultiplexerService:
     Unwrap the input channel and pad it to 256 bits.
     """
     (data, valid) = input_channel.unwrap(ports.trunk_out_ready)
-    assert isinstance(data, BitVectorValue)
+    assert isinstance(data, BitVectorSignal)
     assert len(data) <= 256
     ports.trunk_out = data.pad_or_truncate(256)
     ports.trunk_out_valid = valid
