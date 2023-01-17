@@ -20,7 +20,7 @@ import numpy as np
 def Value(value, type=None):
   from .pycde_types import Type
 
-  if isinstance(value, PyCDEValue):
+  if isinstance(value, Signal):
     return value
 
   resvalue = support.get_value(value)
@@ -34,7 +34,7 @@ def Value(value, type=None):
   return type._get_value_class()(resvalue, type)
 
 
-class PyCDEValue:
+class Signal:
   """Root of the PyCDE value (signal, in RTL terms) hierarchy."""
 
   def __init__(self, value, type=None):
@@ -69,7 +69,7 @@ class PyCDEValue:
     `cycles`: number of registers to add."""
 
     if clk is None:
-      clk = ClockValue._get_current_clock_block()
+      clk = ClockSignal._get_current_clock_block()
       if clk is None:
         raise ValueError("If 'clk' not specified, must be in clock block")
 
@@ -78,7 +78,7 @@ class PyCDEValue:
     if name is None:
       basename = None
       if self.name is not None:
-        m = PyCDEValue._reg_name.match(self.name)
+        m = Signal._reg_name.match(self.name)
         if m:
           basename = m.group(1)
           reg_num = m.group(2)
@@ -173,14 +173,14 @@ class PyCDEValue:
     self.value.owner.attributes[AppID.AttributeName] = appid._appid
 
 
-class RegularValue(PyCDEValue):
+class UntypedSignal(Signal):
   pass
 
 
 _current_clock_context = ContextVar("current_clock_context")
 
 
-class ClockValue(PyCDEValue):
+class ClockSignal(Signal):
   """A clock signal."""
 
   __slots__ = ["_old_token"]
@@ -198,7 +198,7 @@ class ClockValue(PyCDEValue):
     return _current_clock_context.get(None)
 
 
-class InOutValue(PyCDEValue):
+class InOutSignal(Signal):
   # Maintain a caching of the read value.
   read_value = None
 
@@ -209,7 +209,7 @@ class InOutValue(PyCDEValue):
     return self.read_value
 
 
-def _validate_idx(size: int, idx: Union[int, BitVectorValue]):
+def _validate_idx(size: int, idx: Union[int, BitVectorSignal]):
   """Validate that `idx` is a valid index into a bitvector or array."""
   if isinstance(idx, int):
     if idx >= size:
@@ -238,7 +238,7 @@ def get_slice_bounds(size, idxOrSlice: Union[int, slice]):
   return idxs[0], idxs[1]
 
 
-class BitVectorValue(PyCDEValue):
+class BitVectorSignal(Signal):
 
   def __len__(self):
     return self.type.width
@@ -260,7 +260,7 @@ class BitVectorValue(PyCDEValue):
     Returns this value as a signless integer. If 'width' is provided, this value
     will be truncated to that width.
     """
-    return self._exec_cast(BitsValue, ir.IntegerType.get_signless, width)
+    return self._exec_cast(BitsSignal, ir.IntegerType.get_signless, width)
 
   def as_sint(self, width: int = None):
     """
@@ -277,12 +277,12 @@ class BitVectorValue(PyCDEValue):
     return self._exec_cast(UIntValue, ir.IntegerType.get_unsigned, width)
 
 
-class BitsValue(BitVectorValue):
+class BitsSignal(BitVectorSignal):
   """Operations on signless ints (bits). These will all return signless values -
   a user is expected to reapply signedness semantics if needed."""
 
   @singledispatchmethod
-  def __getitem__(self, idxOrSlice: Union[int, slice]) -> BitVectorValue:
+  def __getitem__(self, idxOrSlice: Union[int, slice]) -> BitVectorSignal:
     lo, hi = get_slice_bounds(len(self), idxOrSlice)
     from .pycde_types import types
     from .dialects import comb
@@ -294,18 +294,18 @@ class BitsValue(BitVectorValue):
         ret.name = f"{self.name}_{lo}upto{hi}"
       return ret
 
-  @__getitem__.register(PyCDEValue)
-  def __get_item__value(self, idx: BitVectorValue) -> BitVectorValue:
+  @__getitem__.register(Signal)
+  def __get_item__value(self, idx: BitVectorSignal) -> BitVectorSignal:
     """Get the single bit at `idx`."""
     return self.slice(idx, 1)
 
   @staticmethod
-  def concat(items: List[BitVectorValue]):
+  def concat(items: List[BitVectorSignal]):
     """Concatenate a list of bitvectors into one larger bitvector."""
     from .dialects import comb
     return comb.ConcatOp(*items)
 
-  def slice(self, low_bit: BitVectorValue, num_bits: int):
+  def slice(self, low_bit: BitVectorSignal, num_bits: int):
     """Get a constant-width slice starting at `low_bit` and ending at `low_bit +
     num_bits`."""
     _validate_idx(self.type.width, low_bit)
@@ -332,7 +332,7 @@ class BitsValue(BitVectorValue):
     if pad_width == 0:
       return self
     pad = hw.ConstantOp(ir.IntegerType.get_signless(pad_width), 0)
-    v: PyCDEValue = comb.ConcatOp(pad.value, self.value)
+    v: Signal = comb.ConcatOp(pad.value, self.value)
     if self.name is not None:
       v.name = f"{self.name}_padto_{num_bits}"
     return v
@@ -342,7 +342,7 @@ class BitsValue(BitVectorValue):
   def __exec_signless_binop_nocast__(self, other, op, op_symbol: str,
                                      op_name: str):
     from .dialects import comb
-    if not isinstance(other, PyCDEValue):
+    if not isinstance(other, Signal):
       # Fall back to the default implementation in cases where we're not dealing
       # with PyCDE value comparison.
       if op == comb.EqOp:
@@ -350,7 +350,7 @@ class BitsValue(BitVectorValue):
       elif op == comb.NeOp:
         return super().__ne__(other)
 
-    if not isinstance(other, BitsValue):
+    if not isinstance(other, BitsSignal):
       raise TypeError(
           f"Operator '{op_symbol}' requires RHS to be cast .as_bits().")
     if self.type.width != other.type.width:
@@ -391,7 +391,7 @@ class BitsValue(BitVectorValue):
     return ret
 
 
-class IntValue(BitVectorValue):
+class IntValue(BitVectorSignal):
 
   #  === Infix operators ===
 
@@ -471,22 +471,22 @@ class SIntValue(IntValue):
     return self * types.int(self.type.width)(-1).as_sint()
 
 
-def Or(*items: List[BitVectorValue]):
+def Or(*items: List[BitVectorSignal]):
   """Compute a bitwise 'or' of the arguments."""
   from .dialects import comb
   return comb.OrOp(*items)
 
 
-def And(*items: List[BitVectorValue]):
+def And(*items: List[BitVectorSignal]):
   """Compute a bitwise 'and' of the arguments."""
   from .dialects import comb
   return comb.AndOp(*items)
 
 
-class ListValue(PyCDEValue):
+class ListValue(Signal):
 
   @singledispatchmethod
-  def __getitem__(self, idx: Union[int, BitVectorValue]) -> PyCDEValue:
+  def __getitem__(self, idx: Union[int, BitVectorSignal]) -> Signal:
     _validate_idx(self.type.size, idx)
     from .dialects import hw
     with get_user_loc():
@@ -511,15 +511,15 @@ class ListValue(PyCDEValue):
         ret.name = f"{self.name}_{idxs[0]}upto{idxs[1]}"
       return ret
 
-  def slice(self, low_idx: Union[int, BitVectorValue],
-            num_elems: int) -> PyCDEValue:
+  def slice(self, low_idx: Union[int, BitVectorSignal],
+            num_elems: int) -> Signal:
     """Get an array slice starting at `low_idx` and ending at `low_idx +
     num_elems`."""
     _validate_idx(self.type.size, low_idx)
     if num_elems > self.type.size:
       raise ValueError(
           f"num_bits ({num_elems}) must be <= value width ({len(self)})")
-    if isinstance(low_idx, BitVectorValue):
+    if isinstance(low_idx, BitVectorSignal):
       low_idx = low_idx.pad_or_truncate(self.type.size.bit_length())
 
     from .dialects import hw
@@ -582,7 +582,7 @@ class ListValue(PyCDEValue):
     return np.roll(NDArray(from_value=self), shift=shift, axis=axis).to_circt()
 
 
-class StructValue(PyCDEValue):
+class StructValue(Signal):
 
   def __getitem__(self, sub):
     if sub not in [name for name, _ in self.type.strip.fields]:
@@ -603,7 +603,7 @@ class StructValue(PyCDEValue):
     raise AttributeError(f"'Value' object has no attribute '{attr}'")
 
 
-class ChannelValue(PyCDEValue):
+class ChannelValue(Signal):
 
   def reg(self, clk, rst=None, name=None):
     raise TypeError("Cannot register a channel")
@@ -634,9 +634,9 @@ def wrap_opviews_with_values(dialect, module_name, excluded=[]):
 
         def create(*args, **kwargs):
           # If any of the arguments are Value objects, we need to convert them.
-          args = [v.value if isinstance(v, PyCDEValue) else v for v in args]
+          args = [v.value if isinstance(v, Signal) else v for v in args]
           kwargs = {
-              k: v.value if isinstance(v, PyCDEValue) else v
+              k: v.value if isinstance(v, Signal) else v
               for k, v in kwargs.items()
           }
           # Create the OpView.

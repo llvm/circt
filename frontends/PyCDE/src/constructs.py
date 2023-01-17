@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from .common import Clock, Input, Output
 from .pycde_types import PyCDEType, dim, types
-from .value import BitsValue, BitVectorValue, ListValue, Value, PyCDEValue
+from .value import BitsSignal, BitVectorSignal, ListValue, Value, Signal
 from .value import get_slice_bounds
 from .module import generator, module
 from .circt.support import get_value, BackedgeBuilder
@@ -18,7 +18,7 @@ import typing
 from typing import List, Union
 
 
-def NamedWire(type_or_value: Union[PyCDEType, PyCDEValue], name: str):
+def NamedWire(type_or_value: Union[PyCDEType, Signal], name: str):
   """Create a named wire which is guaranteed to appear in the Verilog output.
   This construct precludes many optimizations (since it introduces an
   optimization barrier) so it should be used sparingly."""
@@ -26,7 +26,7 @@ def NamedWire(type_or_value: Union[PyCDEType, PyCDEValue], name: str):
   assert name is not None
   value = None
   type = type_or_value
-  if isinstance(type_or_value, PyCDEValue):
+  if isinstance(type_or_value, Signal):
     type = type_or_value.type
     value = type_or_value
 
@@ -109,21 +109,21 @@ def Wire(type: PyCDEType, name: str = None):
           last = p
           concat_operands.append(p)
         concat_operands.reverse()
-        self.assign(BitsValue.concat(concat_operands))
+        self.assign(BitsSignal.concat(concat_operands))
 
   return WireValue()
 
 
 def Reg(type: PyCDEType,
-        clk: PyCDEValue = None,
-        rst: PyCDEValue = None,
+        clk: Signal = None,
+        rst: Signal = None,
         rst_value=None,
-        ce: PyCDEValue = None):
+        ce: Signal = None):
   """Declare a register. Must assign exactly once."""
 
   class RegisterValue(type._get_value_class()):
 
-    def assign(self, new_value: PyCDEValue):
+    def assign(self, new_value: Signal):
       if self._wire is None:
         raise ValueError("Cannot assign value to Reg twice.")
       self._wire.assign(new_value)
@@ -131,7 +131,7 @@ def Reg(type: PyCDEType,
 
   # Create a wire and register it.
   wire = Wire(type)
-  if rst_value is not None and not isinstance(rst_value, PyCDEValue):
+  if rst_value is not None and not isinstance(rst_value, Signal):
     rst_value = type(rst_value)
   value = RegisterValue(wire.reg(clk=clk, rst=rst, rst_value=rst_value, ce=ce),
                         type)
@@ -139,8 +139,8 @@ def Reg(type: PyCDEType,
   return value
 
 
-def ControlReg(clk: PyCDEValue, rst: PyCDEValue, asserts: List[PyCDEValue],
-               resets: List[PyCDEValue]) -> BitVectorValue:
+def ControlReg(clk: Signal, rst: Signal, asserts: List[Signal],
+               resets: List[Signal]) -> BitVectorSignal:
   """Constructs a 'control register' and returns the output. Asserts are signals
   which causes the output to go high (on the next cycle). Resets do the
   opposite. If both an assert and a reset are active on the same cycle, the
@@ -174,7 +174,7 @@ def ControlReg(clk: PyCDEValue, rst: PyCDEValue, asserts: List[PyCDEValue],
                                                resets=resets).out
 
 
-def Mux(sel: BitVectorValue, *data_inputs: typing.List[Value]):
+def Mux(sel: BitVectorSignal, *data_inputs: typing.List[Value]):
   """Create a single mux from a list of values."""
   num_inputs = len(data_inputs)
   if num_inputs == 0:

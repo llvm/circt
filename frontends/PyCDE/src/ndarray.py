@@ -2,7 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from .value import BitVectorValue, ListValue
+from .value import BitVectorSignal, ListValue
 from .pycde_types import BitVectorType, dim
 from pycde.dialects import hw, sv
 import numpy as np
@@ -132,13 +132,13 @@ class NDArray(np.ndarray):
     return hw.ConstantOp(ir.IntegerType.get_signless(width), value)
 
   @staticmethod
-  def _circt_to_arr(value: Union[BitVectorValue, ListValue],
+  def _circt_to_arr(value: Union[BitVectorSignal, ListValue],
                     target_shape: _TargetShape):
     """Converts a CIRCT value into a numpy array."""
-    from .value import (BitVectorValue, ListValue)
+    from .value import (BitVectorSignal, ListValue)
 
-    if isinstance(value, BitVectorValue) and isinstance(target_shape.dtype,
-                                                        BitVectorType):
+    if isinstance(value, BitVectorSignal) and isinstance(
+        target_shape.dtype, BitVectorType):
       # Direct match on the target shape?
       if value.type == target_shape.type:
         return value
@@ -271,10 +271,10 @@ class NDArray(np.ndarray):
     self.check_is_fully_assigned()
 
     def build_subarray(lstOrVal):
-      from .value import BitVectorValue
+      from .value import BitVectorSignal
       # Recursively converts this matrix into ListValues through hw.array_create
       # operations.
-      if not isinstance(lstOrVal, BitVectorValue):
+      if not isinstance(lstOrVal, BitVectorSignal):
         subarrays = [build_subarray(v) for v in lstOrVal]
         return hw.ArrayCreateOp(subarrays)
       return lstOrVal

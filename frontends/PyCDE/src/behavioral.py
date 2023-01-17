@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .value import BitVectorValue, PyCDEValue, Value
+from .value import BitVectorSignal, Signal, Value
 from .dialects import comb
 
 import ctypes
@@ -45,7 +45,7 @@ class If:
       ports.out = v
   ```"""
 
-  def __init__(self, cond: BitVectorValue):
+  def __init__(self, cond: BitVectorSignal):
     if (cond.type.width != 1):
       raise TypeError("'Cond' bit width must be 1")
     self._cond = cond
@@ -115,7 +115,7 @@ class _IfBlock:
     new_lcls: Dict[str, Value] = {}
     for (varname, value) in s.f_locals.items():
       # Only operate on Values.
-      if not isinstance(value, PyCDEValue):
+      if not isinstance(value, Signal):
         continue
       # If the value was in the original scope and it hasn't changed, don't
       # touch it.

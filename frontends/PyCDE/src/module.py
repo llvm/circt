@@ -11,7 +11,7 @@ from pycde.support import _obj_to_value
 from .common import (AppID, Clock, Input, Output, _PyProxy)
 from .support import (get_user_loc, _obj_to_attribute, OpOperandConnect,
                       create_type_string, create_const_zero)
-from .value import ClockValue, PyCDEValue, Value
+from .value import ClockSignal, Signal, Value
 
 from .circt import ir, support
 from .circt.dialects import hw, msft
@@ -93,7 +93,7 @@ def generate_msft_module_op(generator: Generator, spec_mod: _SpecializedModule,
     if len(spec_mod.clock_ports) == 1:
       clk_port = list(spec_mod.clock_ports.values())[0]
       val = entry_block.arguments[clk_port]
-      clk = ClockValue(val, ClockType())
+      clk = ClockSignal(val, ClockType())
       clk.__enter__()
 
     outputs = generator.gen_func(args, **kwargs)
@@ -598,7 +598,7 @@ class _GeneratorPortAccess:
       idx = self._mod.input_port_lookup[name]
       val = self._block_args[idx]
       if name in self._mod.clock_ports:
-        return ClockValue(val, ClockType())
+        return ClockSignal(val, ClockType())
       return Value(val)
     if name in self._mod.output_port_lookup:
       if name not in self._output_values:
@@ -623,7 +623,7 @@ class _GeneratorPortAccess:
 
     output_port = self._mod.output_ports[self._mod.output_port_lookup[name]]
     output_port_type = output_port[1]
-    if not isinstance(value, PyCDEValue):
+    if not isinstance(value, Signal):
       value = _obj_to_value(value, output_port_type)
     if value.type != output_port_type:
       if value.type == output_port_type.strip:

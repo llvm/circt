@@ -4,8 +4,8 @@
 
 from collections import OrderedDict
 
-from .value import (BitsValue, ChannelValue, ClockValue, ListValue, SIntValue,
-                    UIntValue, StructValue, RegularValue, InOutValue, Value)
+from .value import (BitsSignal, ChannelValue, ClockSignal, ListValue, SIntValue,
+                    UIntValue, StructValue, UntypedSignal, InOutSignal, Value)
 
 from .circt import ir, support
 from .circt.dialects import esi, hw, sv
@@ -138,7 +138,7 @@ class PyCDEType(ir.Type):
 
   def _get_value_class(self):
     """Return the class which should be instantiated to create a Value."""
-    return RegularValue
+    return UntypedSignal
 
 
 def Type(type: Union[ir.Type, PyCDEType]):
@@ -172,7 +172,7 @@ class InOutType(PyCDEType):
     return Type(self._type.element_type)
 
   def _get_value_class(self):
-    return InOutValue
+    return InOutSignal
 
 
 class TypeAliasType(PyCDEType):
@@ -270,7 +270,7 @@ class BitVectorType(PyCDEType):
 class BitsType(BitVectorType):
 
   def _get_value_class(self):
-    return BitsValue
+    return BitsSignal
 
 
 class SIntType(BitVectorType):
@@ -293,7 +293,7 @@ class ClockType(PyCDEType):
     super().__init__(ir.IntegerType.get_signless(1))
 
   def _get_value_class(self):
-    return ClockValue
+    return ClockSignal
 
 
 class ChannelType(PyCDEType):
@@ -319,7 +319,7 @@ class ChannelType(PyCDEType):
     valid = _obj_to_value(valid, types.i1)
     wrap_op = esi.WrapValidReadyOp(self._type, types.i1, value.value,
                                    valid.value)
-    return Value(wrap_op.chanOutput), BitsValue(wrap_op.ready, types.i1)
+    return Value(wrap_op.chanOutput), BitsSignal(wrap_op.ready, types.i1)
 
 
 def dim(inner_type_or_bitwidth, *size: int, name: str = None) -> ArrayType:
