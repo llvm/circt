@@ -53,7 +53,7 @@ class HWMemSimImpl {
   bool addVivadoRAMAddressConflictSynthesisBugWorkaround;
 
   SmallVector<sv::RegOp> registers;
-  sv::RegOp garbageReadRegister;
+  SmallVector<sv::RegOp> garbageReadRegisters;
 
   Value addPipelineStages(ImplicitLocOpBuilder &b,
                           ModuleNamespace &moduleNamespace, size_t stages,
@@ -227,9 +227,13 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       UnpackedArrayType::get(dataType, mem.depth), b.getStringAttr("Memory"));
 
   if (!disableMemRandomization) {
-    auto regName = b.getStringAttr(moduleNamespace.newName("_GARBAGE_READ"));
     b.create<sv::IfDefOp>("RANDOMIZE_GARBAGE_ASSIGN", [&]() {
-      garbageReadRegister = b.create<sv::RegOp>(dataType, regName, regName);
+      for (size_t readPort = 0; readPort < mem.numReadPorts; ++readPort) {
+        auto regName =
+            b.getStringAttr(moduleNamespace.newName("_GARBAGE_READ"));
+        garbageReadRegisters.push_back(
+            b.create<sv::RegOp>(dataType, regName, regName));
+      }
     });
   }
   // If the read latency is zero, we regard the memory as write-first.
@@ -285,7 +289,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
                   rdata.getType(), b.getStringAttr("{{0}}"), ValueRange{},
                   b.getArrayAttr(hw::InnerRefAttr::get(
                       op.getNameAttr(),
-                      garbageReadRegister.getInnerSymAttr())));
+                      garbageReadRegisters[i].getInnerSymAttr())));
               // If enable and is-in-bounds then get memory read, else get
               // random.
               b.create<sv::AssignOp>(
@@ -488,9 +492,6 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   if (disableMemRandomization && disableRegRandomization)
     return;
 
-  if (!disableMemRandomization)
-    registers.push_back(garbageReadRegister);
-
   constexpr unsigned randomWidth = 32;
   sv::RegOp randomMemReg;
   b.create<sv::IfDefOp>("SYNTHESIS", std::function<void()>(), [&]() {
@@ -565,6 +566,14 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       // TODO: This shares a lot of common logic with LowerToHW.  Combine
       // these two in a common randomization utility.
       if (!disableRegRandomization) {
+        b.create<sv::IfDefProceduralOp>("RANDOMIZE_GARBAGE_ASSIGN", [&]() {
+          for (auto &reg : garbageReadRegisters) {
+            b.create<sv::VerbatimOp>(
+                b.getStringAttr("{{0}} = {`RANDOM};"), ValueRange{},
+                b.getArrayAttr(hw::InnerRefAttr::get(op.getNameAttr(),
+                                                     reg.getInnerSymAttr())));
+          }
+        });
         b.create<sv::IfDefProceduralOp>("RANDOMIZE_REG_INIT", [&]() {
           unsigned bits = randomWidth;
           for (sv::RegOp &reg : randRegs)

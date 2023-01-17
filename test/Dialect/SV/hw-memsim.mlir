@@ -89,7 +89,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:  %[[v4:.+]] = comb.and %ro_en_0, %[[v3]] :
 //CHECK-NEXT:  sv.ifdef  "RANDOMIZE_GARBAGE_ASSIGN"
 //CHECK-NEXT:      %[[RANDOM:.+]] = sv.verbatim.expr
-// CHECK-SAME:      () -> i16 {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[_GARBAGE_READ]]>]}
+//CHECK-SAME:      () -> i16 {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[_GARBAGE_READ]]>]}
 //CHECK-NEXT:      %[[v13:.+]] = comb.mux %[[v4]], %[[read]], %[[RANDOM]] :
 //CHECK-NEXT:      sv.assign %[[wire2]], %[[v13]] :
 //CHECK-NEXT:    } else {
@@ -133,7 +133,6 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:      %[[RANDOM_MEM:.+]] = sv.reg sym @[[_RANDOM_MEM:.+]] : !hw.inout<i32>
 //CHECK-NEXT:    }
 //CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT" {
-//CHECK-NEXT:        %_RANDOM = sv.reg sym @_RANDOM  : !hw.inout<i32>
 //CHECK-NEXT:    }
 //CHECK-NEXT:    sv.initial {
 //CHECK-NEXT:      sv.verbatim "`INIT_RANDOM_PROLOG_"
@@ -145,11 +144,10 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-SAME:          end"
 //CHECK-SAME:          {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[_RANDOM_MEM]]>]}
 //CHECK-NEXT:      }
-//CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_REG_INIT" {
+//CHECK-NEXT:        sv.ifdef.procedural  "RANDOMIZE_GARBAGE_ASSIGN" {
 //CHECK-NEXT{LITERAL}:          sv.verbatim "{{0}} = {`RANDOM};"
-//CHECK-SAME:                  {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@_RANDOM>]}
-//CHECK-NEXT{LITERAL}:          sv.verbatim "{{0}} = {{1}}[15:0];"
-//CHECK-SAME:                   {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@_GARBAGE_READ>, #hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@_RANDOM>]}
+//CHECK-SAME:                   symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[_GARBAGE_READ]]>]
+//CHECK:      sv.ifdef.procedural "RANDOMIZE_REG_INIT" {
 //CHECK-NEXT:      }
 //CHECK-NEXT:    }
 //CHECK-NEXT:  }
@@ -413,3 +411,21 @@ hw.module.generated @ReadWriteWithHighWriteLatency, @FIRRTLMem(%rw_addr: i4, %rw
 // CHECK: [[TMP:%.+]] = comb.and %true, [[WRITE_WMODE_3R]]
 // CHECK: [[WCOND:%.+]] comb.and [[WRITE_EN_3R]], [[TMP]]
 // CHECK: [[WPTR:%.+]] = sv.array_index_inout [[MEM]][[[WRITE_ADDR_3R]]]
+
+hw.module.generated @mem_2Reads, @FIRRTLMem(%R0_addr: i2, %R0_en: i1, %R0_clk: i1, %R1_addr: i2, %R1_en: i1, %R1_clk: i1, %W0_addr: i2, %W0_en: i1, %W0_clk: i1, %W0_data: i32) -> (R0_data: i32, R1_data: i32) attributes {depth = 3 : i64, maskGran = 32 : ui32, numReadPorts = 2 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : ui32, width = 32 : ui32, writeClockIDs = [0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+hw.module @Example(%clock: i1, %reset: i1, %io_enable: i1, %io_write: i1, %io_addr: i2, %io_dataIn: i32) -> (io_dataOut1: i32, io_dataOut2: i32) {
+  %true = hw.constant true
+  %mem_ext.R0_data, %mem_ext.R1_data = hw.instance "mem_ext" @mem_2Reads(R0_addr: %io_addr: i2, R0_en: %io_enable: i1, R0_clk: %clock: i1, R1_addr: %io_addr: i2, R1_en: %io_enable: i1, R1_clk: %clock: i1, W0_addr: %io_addr: i2, W0_en: %true: i1, W0_clk: %clock: i1, W0_data: %io_dataIn: i32) -> (R0_data: i32, R1_data: i32)
+  hw.output %mem_ext.R0_data, %mem_ext.R1_data : i32, i32
+}
+// CHECK-LABEL: hw.module @mem_2Reads(%R0_addr: i2, %R0_en: i1, %R0_clk: i1, %R1_addr: i2, %R1_en: i1, %R1_clk: i1, %W0_addr: i2, %W0_en: i1, %W0_clk: i1, %W0_data: i32) -> (R0_data: i32, R1_data: i32)
+// CHECK:  sv.ifdef  "RANDOMIZE_GARBAGE_ASSIGN" {
+// CHECK-NEXT:    %[[_GARBAGE_READ:.+]] = sv.reg sym @[[_GARBAGE_READ]]  : !hw.inout<i32>
+// CHECK-NEXT:    %[[_GARBAGE_READ_0:.+]] = sv.reg sym @[[_GARBAGE_READ_0]]  : !hw.inout<i32>
+// CHECK-NEXT:  }
+// CHECK:  sv.ifdef  "RANDOMIZE_GARBAGE_ASSIGN" {
+// CHECK-NEXT:    sv.verbatim.expr
+// CHECK-SAME: symbols = [#hw.innerNameRef<@mem_2Reads::@[[_GARBAGE_READ]]>]
+// CHECK:  sv.ifdef  "RANDOMIZE_GARBAGE_ASSIGN" {
+// CHECK-NEXT:    sv.verbatim.expr
+// CHECK-SAME: symbols = [#hw.innerNameRef<@mem_2Reads::@[[_GARBAGE_READ_0]]>]
