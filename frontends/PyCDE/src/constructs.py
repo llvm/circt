@@ -8,7 +8,7 @@ from .common import Clock, Input, Output
 from .pycde_types import PyCDEType, dim, types
 from .value import BitsSignal, BitVectorSignal, ListValue, Value, Signal
 from .value import get_slice_bounds
-from .module import generator, module
+from .module import generator, module, _BlockContext
 from .circt.support import get_value, BackedgeBuilder
 from .circt.dialects import msft, hw, sv
 from pycde.dialects import comb
@@ -38,7 +38,10 @@ def NamedWire(type_or_value: Union[PyCDEType, Signal], name: str):
       # necessarily the case. We may have to introduce a module-scope list of
       # inner_symbols purely for the purpose of disallowing the SV
       # canonicalizers to eliminate wires!
-      self.wire_op = sv.WireOp(hw.InOutType.get(type), name, inner_sym=name)
+      uniq_name = _BlockContext.current().uniquify_symbol(name)
+      self.wire_op = sv.WireOp(hw.InOutType.get(type),
+                               name,
+                               inner_sym=uniq_name)
       read_val = sv.ReadInOutOp(type, self.wire_op)
       super().__init__(Value(read_val), type)
       self.name = name
