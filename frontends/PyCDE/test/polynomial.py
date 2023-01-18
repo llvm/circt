@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import pycde
-from pycde import (AppID, Input, Output, externmodule, generator, types)
+from pycde import (AppID, Input, Output, generator, types)
 from pycde.module import Module, params
 from pycde.dialects import comb, hw
 
@@ -17,6 +17,7 @@ def PolynomialCompute(coefficients: Coefficients):
 
   class PolynomialCompute(Module):
     """Module to compute ax^3 + bx^2 + cx + d for design-time coefficients"""
+    module_name = f"PolyComputeForCoeff_{coefficients.coeff}"
 
     # Evaluate polynomial for 'x'.
     x = Input(types.i32)
@@ -25,10 +26,6 @@ def PolynomialCompute(coefficients: Coefficients):
     def __init__(self, name: str, **kwargs):
       """coefficients is in 'd' -> 'a' order."""
       super().__init__(instance_name=name, **kwargs)
-
-    @staticmethod
-    def get_module_name():
-      return f"PolyComputeForCoeff_{coefficients.coeff}"
 
     @generator
     def construct(mod):
@@ -57,22 +54,23 @@ def PolynomialCompute(coefficients: Coefficients):
   return PolynomialCompute
 
 
-@externmodule("supercooldevice")
-class CoolPolynomialCompute:
+class CoolPolynomialCompute(Module):
+  module_name = "supercooldevice"
   x = Input(types.i32)
   y = Output(types.i32)
 
-  def __init__(self, coefficients):
+  def __init__(self, coefficients, **inputs):
+    super().__init__(**inputs)
     self.coefficients = coefficients
 
 
-@externmodule("parameterized_extern")
+@params
 def ExternWithParams(a, b):
 
   typedef1 = types.struct({"a": types.i1}, "exTypedef")
 
-  class M:
-    pass
+  class M(Module):
+    module_name = "parameterized_extern"
 
   return M
 
@@ -97,8 +95,7 @@ class PolynomialSystem(Module):
                                                               x=poly.y)
     PolynomialCompute(Coefficients([1, 2, 3, 4, 5]))("example2", x=poly.y)
 
-    cp = CoolPolynomialCompute([4, 42])
-    cp.x.connect(23)
+    CoolPolynomialCompute([4, 42], x=23)
 
     m = ExternWithParams(8, 3)()
     m.name = "pexternInst"

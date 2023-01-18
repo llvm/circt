@@ -694,8 +694,8 @@ class GenSpec(_PyProxy):
     self.set_name()
 
   def set_name(self):
-    if hasattr(self.cls, "get_module_name"):
-      self.name = self.cls.get_module_name()
+    if hasattr(self.cls, "module_name"):
+      self.name = self.cls.module_name
     elif self.parameters is not None:
       self.name = _create_module_name(self.cls.__name__, self.parameters)
     else:
@@ -792,11 +792,28 @@ class ModuleSpec(GenSpec):
 
   def create_op(self, sys, symbol):
     """Creation callback for creating a MSFTModuleOp."""
-    return msft.MSFTModuleOp(
+    if len(self.generators) > 0:
+      return msft.MSFTModuleOp(
+          symbol,
+          self.inputs,
+          self.outputs,
+          self.parameters if hasattr(self, "parameters") else None,
+          loc=self.loc,
+          ip=sys._get_ip())
+
+    if self.parameters is None:
+      paramdecl_list = []
+    else:
+      paramdecl_list = [
+          hw.ParamDeclAttr.get_nodefault(i.name, i.attr.type)
+          for i in self.parameters
+      ]
+    return msft.MSFTModuleExternOp(
         symbol,
         self.inputs,
         self.outputs,
-        self.parameters if hasattr(self, "parameters") else None,
+        parameters=paramdecl_list,
+        attributes={"verilogName": ir.StringAttr.get(self.name)},
         loc=self.loc,
         ip=sys._get_ip())
 
@@ -817,10 +834,8 @@ class ModuleSpec(GenSpec):
   def set_output(self, idx, val):
     self.output_values[idx] = val
 
-  def generator_cb(self):
-    pass
-
   def instantiate(self, instance_name: str, **inputs):
+    from .circt.dialects import _hw_ops_ext as hwext
     circt_mod = self.circt_mod
     input_lookup = {
         name: (idx, ptype) for idx, (name, ptype) in enumerate(self.inputs)
@@ -830,21 +845,29 @@ class ModuleSpec(GenSpec):
       if name not in input_lookup:
         raise PortError(f"Input port {name} not found in module")
       idx, ptype = input_lookup[name]
-      if ptype != signal.type:
-        raise PortError(
-            f"Input port {name} expected type {ptype}, not {signal.type}")
+      if isinstance(signal, Signal):
+        if ptype != signal.type:
+          raise PortError(
+              f"Input port {name} expected type {ptype}, not {signal.type}")
+      else:
+        signal = _obj_to_value(signal, ptype)
       input_values[idx] = signal
       del input_lookup[name]
     if len(input_lookup) > 0:
       missing = ", ".join(list(input_lookup.keys()))
       raise ValueError(f"Missing input signals for ports: {missing}")
 
+    parameters = None
+    if len(self.generators) == 0 and self.parameters is not None:
+      parameters = ir.ArrayAttr.get(
+          hwext.create_parameters(self.parameters, circt_mod))
     inst = msft.InstanceOp(circt_mod.type.results,
                            instance_name,
                            ir.FlatSymbolRefAttr.get(
                                ir.StringAttr(
                                    circt_mod.attributes["sym_name"]).value),
                            [sig.value for sig in input_values],
+                           parameters=parameters,
                            loc=get_user_loc())
     inst.verify()
     return inst

@@ -8,7 +8,7 @@ from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
                             PhysicalRegion)
 
 from .common import _PyProxy
-from .module import _SpecializedModule, ModuleLikeType
+from .module import _SpecializedModule, ModuleLikeType, GenSpec
 from .pycde_types import types
 from .instance import Instance, InstanceHierarchyRoot
 
@@ -196,8 +196,13 @@ class System:
     # Install the op in the cache.
     install_func(op)
     # Add to the generation queue if the module has a generator callback.
+    has_generator = False
     if hasattr(spec_mod, 'generator_cb') and spec_mod.generator_cb is not None:
       assert callable(spec_mod.generator_cb)
+      has_generator = True
+    if isinstance(spec_mod, GenSpec) and len(spec_mod.generators) > 0:
+      has_generator = True
+    if has_generator:
       self._generate_queue.append(spec_mod)
       file_name = spec_mod.modcls.__name__ + ".sv"
       outfn = self.output_directory / file_name
