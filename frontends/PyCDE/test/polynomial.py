@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import pycde
 from pycde import (AppID, Input, Output, module, externmodule, generator, types)
+from pycde.module import Module
 from pycde.dialects import comb, hw
 from pycde.circt.support import connect
 
@@ -83,16 +84,16 @@ class Coefficients:
     self.coeff = coeff
 
 
-@module
-class PolynomialSystem:
+class PolynomialSystem(Module):
   y = Output(types.i32)
 
   @generator
-  def construct(ports):
+  def construct(self):
     i32 = types.i32
     x = hw.ConstantOp(i32, 23)
     poly = PolynomialCompute(Coefficients([62, 42, 6]))("example",
-                                                        appid=AppID("poly", 0))
+                                                        appid=AppID("poly", 0),
+                                                        x=x)
     connect(poly.x, x)
     PolynomialCompute(coefficients=Coefficients([62, 42, 6]))("example2",
                                                               x=poly.y)
@@ -104,7 +105,7 @@ class PolynomialSystem:
     m = ExternWithParams(8, 3)()
     m.name = "pexternInst"
 
-    ports.y = poly.y
+    self.y = poly.y
 
 
 poly = pycde.System([PolynomialSystem],
@@ -132,6 +133,7 @@ poly.print()
 
 print("Generating rest...")
 poly.generate()
+poly.print()
 
 print("=== Post-generate IR...")
 poly.run_passes()

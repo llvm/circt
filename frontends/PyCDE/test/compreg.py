@@ -4,7 +4,7 @@
 # RUN: FileCheck %s --input-file %t/hw/CompReg.tcl --check-prefix TCL
 
 import pycde
-from pycde import types, module, AppID, Clock, Input, Output
+from pycde import types, Module, AppID, Clock, Input, Output
 from pycde.devicedb import LocationVector
 
 from pycde.module import generator
@@ -25,8 +25,7 @@ import sys
 # CHECK: end
 
 
-@module
-class CompReg:
+class CompReg(Module):
   clk = Clock()
   rst = Input(types.i1)
   input = Input(types.i8)

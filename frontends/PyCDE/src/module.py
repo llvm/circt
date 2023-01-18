@@ -277,6 +277,62 @@ class _SpecializedModule(_PyProxy):
 no_connect = object()
 
 
+class params:
+  """When the @module decorator detects that it is decorating a function, use
+  this class to wrap it."""
+
+  mod = None
+  func = None
+  extern_mod = None
+
+  # When the decorator is attached, this runs.
+  def __init__(self, func: builtins.function):
+
+    # If it's a module parameterization function, inspect the arguments to
+    # ensure sanity.
+    self.func = func
+    self.sig = inspect.signature(self.func)
+    for (_, param) in self.sig.parameters.items():
+      if param.kind == param.VAR_KEYWORD:
+        raise TypeError("Module parameter definitions cannot have **kwargs")
+      if param.kind == param.VAR_POSITIONAL:
+        raise TypeError("Module parameter definitions cannot have *args")
+
+  # This function gets executed in two situations:
+  #   - In the case of a module function parameterizer, it is called when the
+  #   user wants to apply specific parameters to the module. In this case, we
+  #   should call the function, wrap the returned module class, and return it.
+  #   The result is cached in _MODULE_CACHE.
+  #   - A simple (non-parameterized) module has been wrapped and the user wants
+  #   to construct one. Just forward to the module class' constructor.
+  def __call__(self, *args, **kwargs):
+    assert self.func is not None
+    param_values = self.sig.bind(*args, **kwargs)
+    param_values.apply_defaults()
+
+    # Function arguments which start with '_' don't become parameters.
+    params = {
+        n: v for n, v in param_values.arguments.items() if not n.startswith("_")
+    }
+
+    # Check cache
+    cache_key = _get_module_cache_key(self.func, params)
+    if cache_key in _MODULE_CACHE:
+      return _MODULE_CACHE[cache_key]
+
+    cls = self.func(*args, **kwargs)
+    if cls is None:
+      raise ValueError("Parameterization function must return module class")
+
+    mod = _module_base(cls,
+                       self.extern_name,
+                       params=params,
+                       create_cb=self.create_cb,
+                       generator_cb=self.generator_cb)
+    _MODULE_CACHE[cache_key] = mod
+    return mod
+
+
 def module(func_or_class):
   """Decorator to signal that a class should be treated as a module or a
   function should be treated as a module parameterization function. In the
@@ -528,6 +584,22 @@ def _module_base(cls,
   return mod
 
 
+def create_msft_module_extern_op(sys, mod: _SpecializedModule, symbol):
+  """Creation callback for creating a MSFTModuleExternOp."""
+  paramdecl_list = [
+      hw.ParamDeclAttr.get_nodefault(i.name, i.attr.type)
+      for i in mod.parameters
+  ]
+  return msft.MSFTModuleExternOp(
+      symbol,
+      mod.input_ports,
+      mod.output_ports,
+      parameters=paramdecl_list,
+      attributes={"verilogName": ir.StringAttr.get(mod.extern_name)},
+      loc=mod.loc,
+      ip=sys._get_ip())
+
+
 _current_block_context = ContextVar("current_block_context")
 
 
@@ -655,3 +727,173 @@ class DesignPartition:
     parent_mod = dp.operation.parent.attributes["sym_name"]
     # TODO: Add SymbolRefAttr to mlir.ir
     self._tag = ir.Attribute.parse(f"@{parent_mod}::@{sym_name}")
+
+
+class GenSpec(_PyProxy):
+
+  def __init__(self, cls, outputs, inputs, clocks, generators):
+    super().__init__(cls.__name__)
+    self.cls = cls
+    self.modcls = cls  #backwards compat
+    self.outputs = outputs
+    self.inputs = inputs
+    self.clocks = clocks
+    self.generators = generators
+    self.builder_type = None
+    self.created = False
+
+  def print(self, out):
+    print(
+        f"<pycde.Module: {self.name} inputs: {self.input_ports} "
+        f"outputs: {self.output_ports}>",
+        file=out)
+
+
+class ModuleLikeType(type):
+  """ModuleLikeType is a metaclass for Module and other things which look like
+  modules (e.g. ServiceGenerators). It reads the ports and constructs a builder
+  to give access to the module ports."""
+
+  def __init__(cls, name, bases, dct: Dict):
+    super(ModuleLikeType, cls).__init__(name, bases, dct)
+    cls._loc = get_user_loc()
+
+    # Inputs, Outputs, and parameters are all class members. We must populate
+    # them. Scan 'dct' for them.
+    input_ports = []
+    output_ports = []
+    clock_ports = set()
+    generators = {}
+    builder_attrs = {}
+    for attr_name, attr in dct.items():
+      if attr_name.startswith("_"):
+        continue
+
+      if isinstance(attr, Clock):
+        clock_ports.add(len(input_ports))
+        input_ports.append((attr_name, ir.IntegerType.get_signless(1)))
+      elif isinstance(attr, Input):
+        input_ports.append((attr_name, attr.type))
+      elif isinstance(attr, Output):
+        output_ports.append((attr_name, attr.type))
+      elif isinstance(attr, Generator):
+        generators[attr_name] = attr
+
+    genspec = cls.GenSpecType(cls, output_ports, input_ports, clock_ports,
+                              generators)
+
+    for idx, (name, port_type) in enumerate(input_ports):
+      builder_attrs[name] = property(
+          lambda self, idx=idx, gs=genspec: gs.get_input(idx))
+    for idx, (name, port_type) in enumerate(output_ports):
+
+      def fget(self, idx=idx, genspec=genspec):
+        genspec.get_output(idx)
+
+      def fset(self, val, idx=idx, genspec=genspec):
+        genspec.set_output(idx, val)
+
+      builder_attrs[name] = property(fget=fget, fset=fset)
+
+    genspec.builder_type = type(name + "Builder", (), builder_attrs)
+    cls._genspec = genspec
+    cls._pycde_mod = genspec  # backwards compat
+
+
+class ModuleSpec(GenSpec):
+  # Bug: currently only works with one System. See notes at the top of this
+  # class.
+  def create(self):
+    """Create the module op. Should not be called outside of a 'System'
+    context. Returns the symbol of the module op."""
+
+    assert not self.created
+    from .system import System
+    sys = System.current()
+    sys._create_circt_mod(self)
+    self.created = True
+
+  def create_op(self, sys, symbol):
+    """Creation callback for creating a MSFTModuleOp."""
+    return msft.MSFTModuleOp(symbol,
+                             self.inputs,
+                             self.outputs,
+                             loc=self.cls._loc,
+                             ip=sys._get_ip())
+
+  @property
+  def circt_mod(self):
+    if not self.created:
+      self.create()
+    from .system import System
+    sys: System = System.current()
+    return sys._op_cache.get_circt_mod(self)
+
+  def get_input(self, idx):
+    val = self.block_args[idx]
+    if idx in self.clocks:
+      return ClockSignal(val, ClockType())
+    return Value(val)
+
+  def set_output(self, idx, val):
+    self.output_values[idx] = val
+
+  def generator_cb(self):
+    pass
+
+  def generate(self):
+    """Fill in (generate) this module. Only supports a single generator
+    currently."""
+    assert len(self.generators) == 1
+    g: Generator = list(self.generators.values())[0]
+
+    def create_output_op():
+      """Create the hw.OutputOp from module I/O ports in 'args'."""
+      unconnected_ports = []
+      for idx, value in enumerate(self.output_values):
+        if value is None:
+          unconnected_ports.append(self.outputs[idx][0])
+      if len(unconnected_ports) > 0:
+        raise support.UnconnectedSignalError(self.name, unconnected_ports)
+
+      msft.OutputOp([o.value for o in self.output_values])
+
+    bc = _BlockContext()
+    circt_mod = self.circt_mod
+    entry_block = circt_mod.add_entry_block()
+    self.block_args = entry_block.arguments
+    self.output_values = [None] * len(self.outputs)
+    builder = self.builder_type()
+    with ir.InsertionPoint(entry_block), g.loc, BackedgeBuilder(), bc:
+      # Enter clock block implicitly if only one clock given
+      clk = None
+      if len(self.clocks) == 1:
+        clk_port = list(self.clocks)[0]
+        clk = ClockSignal(self.block_args[clk_port], ClockType())
+        clk.__enter__()
+
+      outputs = g.gen_func(builder)
+      if outputs is not None:
+        raise ValueError("Generators must not return a value")
+      if create_output_op is not None:
+        create_output_op()
+
+      if clk is not None:
+        clk.__exit__(None, None, None)
+      self.output_values = None
+      self.block_args = None
+
+
+class Module(metaclass=ModuleLikeType):
+  GenSpecType = ModuleSpec
+
+  def __init__(self, instance_name: str = None, appid: AppID = None, **inputs):
+    """Create an instance of this module."""
+    if instance_name is None:
+      instance_name = _BlockContext.current().uniquify_symbol(
+          self.__class__.__name__)
+    self.inst = self._genspec.circt_mod.instantiate(instance_name,
+                                                    **inputs,
+                                                    loc=self._loc)
+    if appid is not None:
+      self.inst.operation.attributes[AppID.AttributeName] = appid._appid

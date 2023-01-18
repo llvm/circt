@@ -8,7 +8,7 @@ from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
                             PhysicalRegion)
 
 from .common import _PyProxy
-from .module import _SpecializedModule
+from .module import _SpecializedModule, ModuleLikeType
 from .pycde_types import types
 from .instance import Instance, InstanceHierarchyRoot
 
@@ -58,6 +58,7 @@ class System:
                name: str = "PyCDESystem",
                output_directory: str = None,
                sw_api_langs: List[str] = None):
+    from .module import Module
     self.passed = False
     self.mod = ir.Module.create()
     if isinstance(top_modules, Iterable):
@@ -88,7 +89,11 @@ class System:
     self.hw_output_dir.mkdir(exist_ok=True)
 
     with self:
-      [m._pycde_mod.create() for m in self.top_modules]
+      [
+          m._genspec.create()
+          if issubclass(m, Module) else m._pycde_mod.create()
+          for m in self.top_modules
+      ]
 
   def add_packaging_step(self, func: Callable):
     self.packaging_funcs.append(func)
@@ -184,7 +189,10 @@ class System:
       return
 
     # Build the correct op.
-    op = spec_mod.create_cb(self, spec_mod, symbol)
+    if hasattr(spec_mod, "create_op"):
+      op = spec_mod.create_op(self, symbol)
+    else:
+      op = spec_mod.create_cb(self, spec_mod, symbol)
     # Install the op in the cache.
     install_func(op)
     # Add to the generation queue if the module has a generator callback.
@@ -451,6 +459,8 @@ class _OpCache:
     if not isinstance(spec_mod, _SpecializedModule):
       if hasattr(spec_mod, "_pycde_mod"):
         spec_mod = spec_mod._pycde_mod
+      if isinstance(spec_mod, ModuleLikeType):
+        spec_mod = spec_mod._genspec
     if spec_mod not in self._pyproxy_symbols:
       return None
     return self._pyproxy_symbols[spec_mod]
