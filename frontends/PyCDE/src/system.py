@@ -8,7 +8,7 @@ from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
                             PhysicalRegion)
 
 from .common import _PyProxy
-from .module import _SpecializedModule, ModuleLikeType, GenSpec
+from .module import Module, ModuleLikeType, GenSpec
 from .pycde_types import types
 from .instance import Instance, InstanceHierarchyRoot
 
@@ -54,7 +54,7 @@ class System:
   """
 
   def __init__(self,
-               top_modules: Union[list, _SpecializedModule],
+               top_modules: Union[list, Module],
                name: str = "PyCDESystem",
                output_directory: str = None,
                sw_api_langs: List[str] = None):
@@ -70,8 +70,7 @@ class System:
 
     self._generate_queue = []
     # _instance_roots indexed by (module, instance_name).
-    self._instance_roots: dict[(_SpecializedModule, str),
-                               InstanceHierarchyRoot] = {}
+    self._instance_roots: dict[(Module, str), InstanceHierarchyRoot] = {}
 
     self._placedb: PlacementDB = None
 
@@ -113,7 +112,7 @@ class System:
   def set_debug():
     ir._GlobalDebug.flag = True
 
-  def import_modules(self, modules: list[_SpecializedModule]):
+  def import_modules(self, modules: list[Module]):
     # Call the imported modules' `create` methods to import the IR into the
     # PyCDE System ModuleOp. Also add them to the list of top-level modules so
     # later emission stages know about them.
@@ -180,7 +179,7 @@ class System:
       entity_extern = EntityExtern(tag, metadata)
     return entity_extern
 
-  def _create_circt_mod(self, spec_mod: _SpecializedModule):
+  def _create_circt_mod(self, spec_mod: Module):
     """Wrapper for a callback (which actually builds the CIRCT op) which
     controls all the bookkeeping around CIRCT module ops."""
 
@@ -461,7 +460,7 @@ class _OpCache:
 
   def get_pyproxy_symbol(self, spec_mod) -> str:
     """Get the symbol for a module or its associated _PyProxy."""
-    if not isinstance(spec_mod, _SpecializedModule):
+    if not isinstance(spec_mod, Module):
       if hasattr(spec_mod, "_pycde_mod"):
         spec_mod = spec_mod._pycde_mod
       if isinstance(spec_mod, ModuleLikeType):
@@ -470,7 +469,7 @@ class _OpCache:
       return None
     return self._pyproxy_symbols[spec_mod]
 
-  def get_circt_mod(self, spec_mod: _SpecializedModule) -> ir.Operation:
+  def get_circt_mod(self, spec_mod: Module) -> ir.Operation:
     """Get the CIRCT module op for a PyCDE module."""
     return self.symbols[self.get_pyproxy_symbol(spec_mod)]
 
@@ -550,8 +549,8 @@ class _OpCache:
     raise TypeError(
         "Can only resolve from InstanceHierarchyOp or DynamicInstanceOp")
 
-  def get_sym_ops_in_module(
-      self, module: _SpecializedModule) -> Dict[ir.Attribute, ir.Operation]:
+  def get_sym_ops_in_module(self,
+                            module: Module) -> Dict[ir.Attribute, ir.Operation]:
     """Look into the IR inside 'module' for any ops which have a `sym_name`
     attribute. Cached."""
 

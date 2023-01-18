@@ -15,11 +15,11 @@ from pycde.module import AppID
 class Instance:
   """Represents a _specific_ instance, unique in a design. This is in contrast
   to a module instantiation within another module."""
-  from .module import _SpecializedModule
+  from .module import Module
 
   __slots__ = ["parent", "inside_of", "root", "symbol", "_op_cache"]
 
-  def __init__(self, parent: Instance, inside_of: _SpecializedModule,
+  def __init__(self, parent: Instance, inside_of: Module,
                symbol: Optional[ir.Attribute]):
     """
     Construct a new instance. Since the terminology can be confusing:
@@ -106,10 +106,10 @@ class ModuleInstance(Instance):
   """Instance specialization for modules. Since they are the only thing which
   can contain operations (for now), put all of the children stuff in here."""
 
-  from .module import _SpecializedModule
+  from .module import Module
 
   def __init__(self, parent: Instance, instance_sym: Optional[ir.Attribute],
-               inside_of: _SpecializedModule, tgt_mod: _SpecializedModule):
+               inside_of: Module, tgt_mod: Module):
     super().__init__(parent, inside_of, instance_sym)
     self.tgt_mod = tgt_mod
     self._child_cache: Dict[ir.StringAttr, Instance] = None
@@ -258,11 +258,11 @@ class _AppIDInstance:
 class RegInstance(Instance):
   """Instance specialization for registers."""
 
-  from .module import _SpecializedModule
+  from .module import Module
 
   __slots__ = ["type"]
 
-  def __init__(self, parent: Instance, inside_of: _SpecializedModule,
+  def __init__(self, parent: Instance, inside_of: Module,
                symbol: Optional[ir.Attribute], static_op: seq.CompRegOp):
     super().__init__(parent, inside_of, symbol)
 
@@ -286,10 +286,9 @@ class InstanceHierarchyRoot(ModuleInstance):
   'top' module). Plus, CIRCT models it this way.
   """
   import pycde.system as cdesys
-  from .module import _SpecializedModule
+  from .module import Module
 
-  def __init__(self, module: _SpecializedModule, instance_name: str,
-               sys: cdesys.System):
+  def __init__(self, module: Module, instance_name: str, sys: cdesys.System):
     self.instance_name = instance_name
     self.system = sys
     self.root = self

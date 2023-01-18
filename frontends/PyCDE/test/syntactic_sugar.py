@@ -1,8 +1,6 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
-from pycde import (Output, Input, module, generator, types, dim, System,
-                   no_connect)
-from pycde.module import externmodule
+from pycde import (Output, Input, generator, types, dim, Module)
 from pycde.testing import unittestmodule
 
 # CHECK-LABEL:  msft.module @Top {} () attributes {fileName = "Top.sv"} {
@@ -28,8 +26,7 @@ from pycde.testing import unittestmodule
 # CHECK:  msft.module.extern @StupidLegacy(%ignore: !hw.array<4xi1>) attributes {verilogName = "StupidLegacy"}
 
 
-@module
-class Taps:
+class Taps(Module):
   taps = Output(dim(8, 3))
 
   @generator
@@ -37,16 +34,11 @@ class Taps:
     ports.taps = [203, 100, 23]
 
 
-@externmodule
-class StupidLegacy:
-  ignore = Input(dim(1, 4))
-
-
 BarType = types.struct({"foo": types.i12}, "bar")
 
 
 @unittestmodule()
-class Top:
+class Top(Module):
 
   @generator
   def build(_):
@@ -57,7 +49,6 @@ class Top:
     BarType({"foo": 7})
 
     Taps()
-    StupidLegacy(ignore=no_connect)
 
 
 # -----
@@ -74,7 +65,7 @@ class Top:
 
 
 @unittestmodule()
-class ComplexPorts:
+class ComplexPorts(Module):
   clk = Input(types.i1)
   data_in = Input(dim(32, 3))
   sel = Input(types.i2)
@@ -85,10 +76,8 @@ class ComplexPorts:
   c = Output(types.i32)
 
   @generator
-  def build(ports):
-    assert len(ports.data_in) == 3
-    ports.set_all_ports({
-        'a': ports.data_in[0].reg(ports.clk).reg(ports.clk),
-        'b': ports.data_in[ports.sel],
-        'c': ports.struct_data_in.foo[:-4]
-    })
+  def build(self):
+    assert len(self.data_in) == 3
+    self.a = self.data_in[0].reg(self.clk).reg(self.clk)
+    self.b = self.data_in[self.sel]
+    self.c = self.struct_data_in.foo[:-4]

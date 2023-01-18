@@ -19,7 +19,7 @@ def __exit_ctxt():
 
 
 from .common import (AppID, Clock, Input, InputChannel, Output, OutputChannel)
-from .module import (externmodule, generator, module, no_connect, Module)
+from .module import (generator, params, Module)
 from .system import (System)
 from .pycde_types import (dim, types)
 from .value import (Value)
