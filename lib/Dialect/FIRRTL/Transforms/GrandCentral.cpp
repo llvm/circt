@@ -1865,7 +1865,7 @@ void GrandCentralPass::runOnOperation() {
               // Assert that the companion is instantiated once and only once.
               auto instance = exactlyOneInstance(op, "companion");
               if (!instance)
-                return false;
+                goto FModuleOp_error;
 
               // If no extraction info was provided, exit.  Otherwise, setup the
               // lone instance of the companion to be lowered as a bind.
