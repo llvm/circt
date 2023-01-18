@@ -5,27 +5,26 @@
 from __future__ import annotations
 
 import pycde
-from pycde import (AppID, Input, Output, module, externmodule, generator, types)
-from pycde.module import Module
+from pycde import (AppID, Input, Output, externmodule, generator, types)
+from pycde.module import Module, params
 from pycde.dialects import comb, hw
-from pycde.circt.support import connect
 
 import sys
 
 
-@module
+@params
 def PolynomialCompute(coefficients: Coefficients):
 
-  class PolynomialCompute:
+  class PolynomialCompute(Module):
     """Module to compute ax^3 + bx^2 + cx + d for design-time coefficients"""
 
     # Evaluate polynomial for 'x'.
     x = Input(types.i32)
     y = Output(types.int(8 * 4))
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, **kwargs):
       """coefficients is in 'd' -> 'a' order."""
-      self.instance_name = name
+      super().__init__(instance_name=name, **kwargs)
 
     @staticmethod
     def get_module_name():
@@ -94,7 +93,6 @@ class PolynomialSystem(Module):
     poly = PolynomialCompute(Coefficients([62, 42, 6]))("example",
                                                         appid=AppID("poly", 0),
                                                         x=x)
-    connect(poly.x, x)
     PolynomialCompute(coefficients=Coefficients([62, 42, 6]))("example2",
                                                               x=poly.y)
     PolynomialCompute(Coefficients([1, 2, 3, 4, 5]))("example2", x=poly.y)

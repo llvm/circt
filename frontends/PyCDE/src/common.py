@@ -88,3 +88,7 @@ class _PyProxy:
 
   def __init__(self, name: str):
     self.name = name
+
+
+class PortError(Exception):
+  pass
