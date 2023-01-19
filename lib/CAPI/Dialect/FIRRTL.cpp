@@ -78,6 +78,13 @@ void firrtlVisitPort(FirrtlContext ctx, FirrtlStringRef name,
   ffiCtx->visitPort(unwrap(name), dir, *type);
 }
 
+MLIR_CAPI_EXPORTED void firrtlVisitDeclaration(FirrtlContext ctx,
+                                               const FirrtlDeclaration *decl) {
+  auto *ffiCtx = unwrap(ctx);
+
+  ffiCtx->visitDeclaration(*decl);
+}
+
 void firrtlVisitStatement(FirrtlContext ctx, const FirrtlStatement *stmt) {
   auto *ffiCtx = unwrap(ctx);
 

@@ -297,9 +297,9 @@ int testGenExtModule(FirrtlContext ctx, size_t *errCount) {
   return 0;
 }
 
-int testGenStatement(FirrtlContext ctx, size_t *errCount) {
-  firrtlVisitCircuit(ctx, MK_STR("StatementTest"));
-  firrtlVisitModule(ctx, MK_STR("StatementTest"));
+int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
+  firrtlVisitCircuit(ctx, MK_STR("DeclStmtTest"));
+  firrtlVisitModule(ctx, MK_STR("DeclStmtTest"));
 
   FirrtlType analogs[3];
   for (unsigned int i = 0; i < ARRAY_SIZE(analogs); i++) {
@@ -409,6 +409,44 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
                                   .u = {.uint = {.value = 123, .width = 8}}}};
   FirrtlStringRef optName = MK_STR("optName");
 
+  FirrtlDeclaration declarations[] = {
+      {.kind = FIRRTL_DECLARATION_KIND_SEQ_MEMORY,
+       .u = {.seqMem = {.name = MK_STR("seqMem"),
+                        .type = {.kind = FIRRTL_TYPE_KIND_VECTOR,
+                                 .u = {.vector = {.type = &tyUInt32,
+                                                  .count = 1024}}},
+                        .readUnderWrite = FIRRTL_READ_UNDER_WRITE_UNDEFINED}}},
+      {.kind = FIRRTL_DECLARATION_KIND_NODE,
+       .u = {.node =
+                 {
+                     .name = MK_STR("node1"),
+                     .expr = {.kind = FIRRTL_EXPR_KIND_PRIM,
+                              .u = {.prim = {.value = &primAdd}}},
+                 }}},
+      {.kind = FIRRTL_DECLARATION_KIND_NODE,
+       .u = {.node =
+                 {
+                     .name = MK_STR("node2"),
+                     .expr = {.kind = FIRRTL_EXPR_KIND_PRIM,
+                              .u = {.prim = {.value = &primSubField}}},
+                 }}},
+  };
+
+  for (unsigned int i = 0; i < ARRAY_SIZE(declarations); i++) {
+    firrtlVisitDeclaration(ctx, &declarations[i]);
+  }
+
+  for (unsigned int i = 0; i < 7; i++) {
+    char name[64] = {};
+    sprintf(name, "wire%d", i + 1);
+    FirrtlDeclaration wire = {.kind = FIRRTL_DECLARATION_KIND_WIRE,
+                              .u = {.wire = {
+                                        .name = MK_STR(name),
+                                        .type = uint1,
+                                    }}};
+    firrtlVisitDeclaration(ctx, &wire);
+  }
+
   FirrtlStatement statements[] = {
       {.kind = FIRRTL_STATEMENT_KIND_ATTACH,
        .u = {.attach = {.operands = attachOperands,
@@ -418,38 +456,6 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
       {.kind = FIRRTL_STATEMENT_KIND_ATTACH,
        .u = {.attach = {.operands = attachBundleOperands,
                         .count = ARRAY_SIZE(attachBundleOperands)}}},
-      {.kind = FIRRTL_STATEMENT_KIND_SEQ_MEMORY,
-       .u = {.seqMem = {.name = MK_STR("seqMem"),
-                        .type = {.kind = FIRRTL_TYPE_KIND_VECTOR,
-                                 .u = {.vector = {.type = &tyUInt32,
-                                                  .count = 1024}}},
-                        .readUnderWrite = FIRRTL_READ_UNDER_WRITE_UNDEFINED}}},
-      {.kind = FIRRTL_STATEMENT_KIND_NODE,
-       .u = {.node =
-                 {
-                     .name = MK_STR("node1"),
-                     .expr = {.kind = FIRRTL_EXPR_KIND_PRIM,
-                              .u = {.prim = {.value = &primAdd}}},
-                 }}},
-      {.kind = FIRRTL_STATEMENT_KIND_NODE,
-       .u = {.node =
-                 {
-                     .name = MK_STR("node2"),
-                     .expr = {.kind = FIRRTL_EXPR_KIND_PRIM,
-                              .u = {.prim = {.value = &primSubField}}},
-                 }}},
-      {.kind = FIRRTL_STATEMENT_KIND_WIRE,
-       .u = {.wire =
-                 {
-                     .name = MK_STR("wire1"),
-                     .type = uint1,
-                 }}},
-      {.kind = FIRRTL_STATEMENT_KIND_WIRE,
-       .u = {.wire =
-                 {
-                     .name = MK_STR("wireEnable"),
-                     .type = uint1,
-                 }}},
       {.kind = FIRRTL_STATEMENT_KIND_INVALID,
        .u = {.invalid =
                  {
@@ -481,11 +487,10 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
                  {
                      .condition = MK_REF_EXPR_INLINE("wire1"),
                  }}},
-      {.kind = FIRRTL_STATEMENT_KIND_WIRE,
-       .u = {.wire =
+      {.kind = FIRRTL_STATEMENT_KIND_INVALID,
+       .u = {.invalid =
                  {
-                     .name = MK_STR("wire2"),
-                     .type = uint1,
+                     .ref = {.value = MK_STR("wire2")},
                  }}},
       {.kind = FIRRTL_STATEMENT_KIND_ELSE, .u = {.else_ = {}}},
       {.kind = FIRRTL_STATEMENT_KIND_WHEN_BEGIN,
@@ -493,11 +498,10 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
                  {
                      .condition = MK_REF_EXPR_INLINE("wire1"),
                  }}},
-      {.kind = FIRRTL_STATEMENT_KIND_WIRE,
-       .u = {.wire =
+      {.kind = FIRRTL_STATEMENT_KIND_INVALID,
+       .u = {.invalid =
                  {
-                     .name = MK_STR("wire3"),
-                     .type = uint1,
+                     .ref = {.value = MK_STR("wire3")},
                  }}},
       {.kind = FIRRTL_STATEMENT_KIND_ELSE, .u = {.else_ = {}}},
       {.kind = FIRRTL_STATEMENT_KIND_WHEN_BEGIN,
@@ -505,25 +509,22 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
                  {
                      .condition = MK_REF_EXPR_INLINE("wire1"),
                  }}},
-      {.kind = FIRRTL_STATEMENT_KIND_WIRE,
-       .u = {.wire =
+      {.kind = FIRRTL_STATEMENT_KIND_INVALID,
+       .u = {.invalid =
                  {
-                     .name = MK_STR("wire4"),
-                     .type = uint1,
+                     .ref = {.value = MK_STR("wire4")},
                  }}},
       {.kind = FIRRTL_STATEMENT_KIND_ELSE, .u = {.else_ = {}}},
-      {.kind = FIRRTL_STATEMENT_KIND_WIRE,
-       .u = {.wire =
+      {.kind = FIRRTL_STATEMENT_KIND_INVALID,
+       .u = {.invalid =
                  {
-                     .name = MK_STR("wire5"),
-                     .type = uint1,
+                     .ref = {.value = MK_STR("wire5")},
                  }}},
       {.kind = FIRRTL_STATEMENT_KIND_WHEN_END, .u = {.whenEnd = {}}},
-      {.kind = FIRRTL_STATEMENT_KIND_WIRE,
-       .u = {.wire =
+      {.kind = FIRRTL_STATEMENT_KIND_INVALID,
+       .u = {.invalid =
                  {
-                     .name = MK_STR("wire6"),
-                     .type = uint1,
+                     .ref = {.value = MK_STR("wire6")},
                  }}},
       {.kind = FIRRTL_STATEMENT_KIND_WHEN_END, .u = {.whenEnd = {}}},
       {.kind = FIRRTL_STATEMENT_KIND_WHEN_END, .u = {.whenEnd = {}}},
@@ -579,37 +580,37 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
       {.kind = FIRRTL_STATEMENT_KIND_ASSERT,
        .u = {.assert = {.clock = MK_REF_EXPR_INLINE("clock"),
                         .predicate = MK_REF_EXPR_INLINE("wire1"),
-                        .enable = MK_REF_EXPR_INLINE("wireEnable"),
+                        .enable = MK_REF_EXPR_INLINE("wire7"),
                         .message = MK_STR("assertion failed message"),
                         .name = NULL}}},
       {.kind = FIRRTL_STATEMENT_KIND_ASSERT,
        .u = {.assert = {.clock = MK_REF_EXPR_INLINE("clock"),
                         .predicate = MK_REF_EXPR_INLINE("wire1"),
-                        .enable = MK_REF_EXPR_INLINE("wireEnable"),
+                        .enable = MK_REF_EXPR_INLINE("wire7"),
                         .message = MK_STR("assertion failed message"),
                         .name = &optName}}},
       {.kind = FIRRTL_STATEMENT_KIND_ASSUME,
        .u = {.assume = {.clock = MK_REF_EXPR_INLINE("clock"),
                         .predicate = MK_REF_EXPR_INLINE("wire1"),
-                        .enable = MK_REF_EXPR_INLINE("wireEnable"),
+                        .enable = MK_REF_EXPR_INLINE("wire7"),
                         .message = MK_STR("assertion failed message"),
                         .name = NULL}}},
       {.kind = FIRRTL_STATEMENT_KIND_ASSUME,
        .u = {.assume = {.clock = MK_REF_EXPR_INLINE("clock"),
                         .predicate = MK_REF_EXPR_INLINE("wire1"),
-                        .enable = MK_REF_EXPR_INLINE("wireEnable"),
+                        .enable = MK_REF_EXPR_INLINE("wire7"),
                         .message = MK_STR("assertion failed message"),
                         .name = &optName}}},
       {.kind = FIRRTL_STATEMENT_KIND_COVER,
        .u = {.cover = {.clock = MK_REF_EXPR_INLINE("clock"),
                        .predicate = MK_REF_EXPR_INLINE("wire1"),
-                       .enable = MK_REF_EXPR_INLINE("wireEnable"),
+                       .enable = MK_REF_EXPR_INLINE("wire7"),
                        .message = MK_STR("assertion failed message"),
                        .name = NULL}}},
       {.kind = FIRRTL_STATEMENT_KIND_COVER,
        .u = {.cover = {.clock = MK_REF_EXPR_INLINE("clock"),
                        .predicate = MK_REF_EXPR_INLINE("wire1"),
-                       .enable = MK_REF_EXPR_INLINE("wireEnable"),
+                       .enable = MK_REF_EXPR_INLINE("wire7"),
                        .message = MK_STR("assertion failed message"),
                        .name = &optName}}},
   };
@@ -619,8 +620,8 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
   }
 
   EXPECT(*errCount == 0);
-  EXPECT_EXPORT("circuit StatementTest :\n\
-  module StatementTest :\n\
+  EXPECT_EXPORT("circuit DeclStmtTest :\n\
+  module DeclStmtTest :\n\
     input analog1 : Analog<8>\n\
     input analog2 : Analog<8>\n\
     input analog3 : Analog<8>\n\
@@ -633,29 +634,34 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
     input uintInputConnectBundle : { field1 : UInt<8>, field2 : UInt<8> }\n\
     input clock : Clock\n\
 \n\
-    attach(analog1, analog2, analog3)\n\
-    attach(analogBundle)\n\
-    attach(analogBundle.field1, analogBundle.field2, analogBundle.field3)\n\
     smem seqMem : UInt<32>[1024] undefined\n\
     node node1 = add(uintPort1, uintPort2)\n\
     node node2 = sub(uintPort1, analogBundle.field4)\n\
     wire wire1 : UInt<1>\n\
-    wire wireEnable : UInt<1>\n\
+    wire wire2 : UInt<1>\n\
+    wire wire3 : UInt<1>\n\
+    wire wire4 : UInt<1>\n\
+    wire wire5 : UInt<1>\n\
+    wire wire6 : UInt<1>\n\
+    wire wire7 : UInt<1>\n\
+    attach(analog1, analog2, analog3)\n\
+    attach(analogBundle)\n\
+    attach(analogBundle.field1, analogBundle.field2, analogBundle.field3)\n\
     wire1 is invalid\n\
     uintIOBundle.field2 is invalid\n\
     uintIOBundle.field4 is invalid\n\
     uintOutputBundle is invalid\n\
     analogBundle.field4 is invalid\n\
     when wire1 :\n\
-      wire wire2 : UInt<1>\n\
+      wire2 is invalid\n\
     else when wire1 :\n\
-      wire wire3 : UInt<1>\n\
+      wire3 is invalid\n\
     else :\n\
       when wire1 :\n\
-        wire wire4 : UInt<1>\n\
+        wire4 is invalid\n\
       else :\n\
-        wire wire5 : UInt<1>\n\
-      wire wire6 : UInt<1>\n\
+        wire5 is invalid\n\
+      wire6 is invalid\n\
     uintOutputBundle.field1 <= uintInputBundle.field1\n\
     uintOutputBundle <= uintInputBundle\n\
     uintOutputBundle.field1 <= uintInputConnectBundle.field1\n\
@@ -667,12 +673,12 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
     skip\n\
     stop(clock, wire1, 123)\n\
     stop(clock, wire1, 123) : optName\n\
-    assert(clock, wire1, wireEnable, \"assertion failed message\")\n\
-    assert(clock, wire1, wireEnable, \"assertion failed message\") : optName\n\
-    assume(clock, wire1, wireEnable, \"assertion failed message\")\n\
-    assume(clock, wire1, wireEnable, \"assertion failed message\") : optName\n\
-    cover(clock, wire1, wireEnable, \"assertion failed message\")\n\
-    cover(clock, wire1, wireEnable, \"assertion failed message\") : optName\n\n");
+    assert(clock, wire1, wire7, \"assertion failed message\")\n\
+    assert(clock, wire1, wire7, \"assertion failed message\") : optName\n\
+    assume(clock, wire1, wire7, \"assertion failed message\")\n\
+    assume(clock, wire1, wire7, \"assertion failed message\") : optName\n\
+    cover(clock, wire1, wire7, \"assertion failed message\")\n\
+    cover(clock, wire1, wire7, \"assertion failed message\") : optName\n\n");
   EXPECT(*errCount == 0);
 
   return 0;
@@ -682,7 +688,7 @@ int testGenerated() {
   IF_ERR_RET(runOnce(&testGenHeader));
   IF_ERR_RET(runOnce(&testGenPorts));
   IF_ERR_RET(runOnce(&testGenExtModule));
-  IF_ERR_RET(runOnce(&testGenStatement));
+  IF_ERR_RET(runOnce(&testGenDeclStmt));
 
   return 0;
 }
@@ -763,6 +769,95 @@ int testErrDuplicatePortName(FirrtlContext ctx, size_t *errCount) {
   return 0;
 }
 
+int testErrDeclNode(FirrtlContext ctx, size_t *errCount) {
+  firrtlVisitCircuit(ctx, MK_STR("DeclNode"));
+  firrtlVisitModule(ctx, MK_STR("DeclNode"));
+
+  FirrtlType tyUInt8 = {
+      .kind = FIRRTL_TYPE_KIND_UINT,
+      .u = {.uint = {.width = 8}},
+  };
+  FirrtlType tySInt8 = {
+      .kind = FIRRTL_TYPE_KIND_SINT,
+      .u = {.uint = {.width = 8}},
+  };
+  firrtlVisitPort(ctx, MK_STR("u8Port1"), FIRRTL_PORT_DIRECTION_INPUT,
+                  &tyUInt8);
+  firrtlVisitPort(ctx, MK_STR("u8Port2"), FIRRTL_PORT_DIRECTION_INPUT,
+                  &tyUInt8);
+  firrtlVisitPort(ctx, MK_STR("u8Port3"), FIRRTL_PORT_DIRECTION_INPUT,
+                  &tyUInt8);
+  firrtlVisitPort(ctx, MK_STR("s8Port3"), FIRRTL_PORT_DIRECTION_INPUT,
+                  &tySInt8);
+
+  EXPECT(*errCount == 0);
+  size_t expectedErrCount = 0;
+
+  // Args count mismatch
+  {
+    FirrtlPrimArg args[] = {
+        {.kind = FIRRTL_PRIM_ARG_KIND_EXPR,
+         .u = {.expr = {.value = MK_REF_EXPR_INLINE("u8Port1")}}},
+        {.kind = FIRRTL_PRIM_ARG_KIND_EXPR,
+         .u = {.expr = {.value = MK_REF_EXPR_INLINE("u8Port2")}}},
+        {.kind = FIRRTL_PRIM_ARG_KIND_EXPR,
+         .u = {.expr = {.value = MK_REF_EXPR_INLINE("u8Port3")}}},
+    };
+    FirrtlPrim prim = {
+        .op = FIRRTL_PRIM_OP_ADD,
+        .args = args,
+        .argsCount = ARRAY_SIZE(args),
+    };
+    FirrtlDeclaration declaration = {
+        .kind = FIRRTL_DECLARATION_KIND_NODE,
+        .u = {.node = {
+                  .name = MK_STR("node1"),
+                  .expr = {.kind = FIRRTL_EXPR_KIND_PRIM,
+                           .u = {.prim = {.value = &prim}}},
+              }}};
+    firrtlVisitDeclaration(ctx, &declaration);
+
+    EXPECT(*errCount >= ++expectedErrCount);
+    expectedErrCount = *errCount;
+  }
+
+  // Type mismatch
+  {
+    FirrtlPrimArg args[] = {
+        {.kind = FIRRTL_PRIM_ARG_KIND_EXPR,
+         .u = {.expr = {.value = MK_REF_EXPR_INLINE("u8Port1")}}},
+        {.kind = FIRRTL_PRIM_ARG_KIND_EXPR,
+         .u = {.expr = {.value = MK_REF_EXPR_INLINE("s8Port2")}}},
+    };
+    FirrtlPrim prim = {
+        .op = FIRRTL_PRIM_OP_ADD,
+        .args = args,
+        .argsCount = ARRAY_SIZE(args),
+    };
+    FirrtlDeclaration declration = {
+        .kind = FIRRTL_DECLARATION_KIND_NODE,
+        .u = {.node = {
+                  .name = MK_STR("node2"),
+                  .expr = {.kind = FIRRTL_EXPR_KIND_PRIM,
+                           .u = {.prim = {.value = &prim}}},
+              }}};
+    firrtlVisitDeclaration(ctx, &declration);
+
+    EXPECT(*errCount >= ++expectedErrCount);
+    expectedErrCount = *errCount;
+  }
+
+  EXPECT_EXPORT("circuit DeclNode :\n\
+  module DeclNode :\n\
+    input u8Port1 : UInt<8>\n\
+    input u8Port2 : UInt<8>\n\
+    input u8Port3 : UInt<8>\n\
+    input s8Port3 : SInt<8>\n\n");
+  EXPECT(*errCount == expectedErrCount);
+
+  return 0;
+}
+
 int testErrStmtAttach(FirrtlContext ctx, size_t *errCount) {
   firrtlVisitCircuit(ctx, MK_STR("StmtAttach"));
   firrtlVisitModule(ctx, MK_STR("StmtAttach"));
@@ -815,95 +910,6 @@ int testErrStmtAttach(FirrtlContext ctx, size_t *errCount) {
   return 0;
 }
 
-int testErrStmtNode(FirrtlContext ctx, size_t *errCount) {
-  firrtlVisitCircuit(ctx, MK_STR("StmtNode"));
-  firrtlVisitModule(ctx, MK_STR("StmtNode"));
-
-  FirrtlType tyUInt8 = {
-      .kind = FIRRTL_TYPE_KIND_UINT,
-      .u = {.uint = {.width = 8}},
-  };
-  FirrtlType tySInt8 = {
-      .kind = FIRRTL_TYPE_KIND_SINT,
-      .u = {.uint = {.width = 8}},
-  };
-  firrtlVisitPort(ctx, MK_STR("u8Port1"), FIRRTL_PORT_DIRECTION_INPUT,
-                  &tyUInt8);
-  firrtlVisitPort(ctx, MK_STR("u8Port2"), FIRRTL_PORT_DIRECTION_INPUT,
-                  &tyUInt8);
-  firrtlVisitPort(ctx, MK_STR("u8Port3"), FIRRTL_PORT_DIRECTION_INPUT,
-                  &tyUInt8);
-  firrtlVisitPort(ctx, MK_STR("s8Port3"), FIRRTL_PORT_DIRECTION_INPUT,
-                  &tySInt8);
-
-  EXPECT(*errCount == 0);
-  size_t expectedErrCount = 0;
-
-  // Args count mismatch
-  {
-    FirrtlPrimArg args[] = {
-        {.kind = FIRRTL_PRIM_ARG_KIND_EXPR,
-         .u = {.expr = {.value = MK_REF_EXPR_INLINE("u8Port1")}}},
-        {.kind = FIRRTL_PRIM_ARG_KIND_EXPR,
-         .u = {.expr = {.value = MK_REF_EXPR_INLINE("u8Port2")}}},
-        {.kind = FIRRTL_PRIM_ARG_KIND_EXPR,
-         .u = {.expr = {.value = MK_REF_EXPR_INLINE("u8Port3")}}},
-    };
-    FirrtlPrim prim = {
-        .op = FIRRTL_PRIM_OP_ADD,
-        .args = args,
-        .argsCount = ARRAY_SIZE(args),
-    };
-    FirrtlStatement statement = {
-        .kind = FIRRTL_STATEMENT_KIND_NODE,
-        .u = {.node = {
-                  .name = MK_STR("node1"),
-                  .expr = {.kind = FIRRTL_EXPR_KIND_PRIM,
-                           .u = {.prim = {.value = &prim}}},
-              }}};
-    firrtlVisitStatement(ctx, &statement);
-
-    EXPECT(*errCount >= ++expectedErrCount);
-    expectedErrCount = *errCount;
-  }
-
-  // Type mismatch
-  {
-    FirrtlPrimArg args[] = {
-        {.kind = FIRRTL_PRIM_ARG_KIND_EXPR,
-         .u = {.expr = {.value = MK_REF_EXPR_INLINE("u8Port1")}}},
-        {.kind = FIRRTL_PRIM_ARG_KIND_EXPR,
-         .u = {.expr = {.value = MK_REF_EXPR_INLINE("s8Port2")}}},
-    };
-    FirrtlPrim prim = {
-        .op = FIRRTL_PRIM_OP_ADD,
-        .args = args,
-        .argsCount = ARRAY_SIZE(args),
-    };
-    FirrtlStatement statement = {
-        .kind = FIRRTL_STATEMENT_KIND_NODE,
-        .u = {.node = {
-                  .name = MK_STR("node2"),
-                  .expr = {.kind = FIRRTL_EXPR_KIND_PRIM,
-                           .u = {.prim = {.value = &prim}}},
-              }}};
-    firrtlVisitStatement(ctx, &statement);
-
-    EXPECT(*errCount >= ++expectedErrCount);
-    expectedErrCount = *errCount;
-  }
-
-  EXPECT_EXPORT("circuit StmtNode :\n\
-  module StmtNode :\n\
-    input u8Port1 : UInt<8>\n\
-    input u8Port2 : UInt<8>\n\
-    input u8Port3 : UInt<8>\n\
-    input s8Port3 : SInt<8>\n\n");
-  EXPECT(*errCount == expectedErrCount);
-
-  return 0;
-}
-
 int testErrStmtWhen(FirrtlContext ctx, size_t *errCount) {
   firrtlVisitCircuit(ctx, MK_STR("StmtWhen"));
   firrtlVisitModule(ctx, MK_STR("StmtWhen"));
@@ -913,12 +919,12 @@ int testErrStmtWhen(FirrtlContext ctx, size_t *errCount) {
       .u = {.uint = {.width = 1}},
   };
 
-  FirrtlStatement wire = {.kind = FIRRTL_STATEMENT_KIND_WIRE,
-                          .u = {.wire = {
-                                    .name = MK_STR("wire1"),
-                                    .type = tyUInt1,
-                                }}};
-  firrtlVisitStatement(ctx, &wire);
+  FirrtlDeclaration wire = {.kind = FIRRTL_DECLARATION_KIND_WIRE,
+                            .u = {.wire = {
+                                      .name = MK_STR("wire1"),
+                                      .type = tyUInt1,
+                                  }}};
+  firrtlVisitDeclaration(ctx, &wire);
 
   EXPECT(*errCount == 0);
   size_t expectedErrCount = 0;
@@ -940,24 +946,31 @@ int testErrStmtWhen(FirrtlContext ctx, size_t *errCount) {
 
   // Reference to items inside when block
   {
-    FirrtlStatement stmts[] = {
-        {.kind = FIRRTL_STATEMENT_KIND_WIRE,
-         .u = {.wire =
-                   {
-                       .name = MK_STR("wire2"),
-                       .type = tyUInt1,
-                   }}},
-        {.kind = FIRRTL_STATEMENT_KIND_ELSE, .u = {.else_ = {}}},
-        {.kind = FIRRTL_STATEMENT_KIND_WIRE,
-         .u = {.wire =
-                   {
-                       .name = MK_STR("wire3"),
-                       .type = tyUInt1,
-                   }}},
-        {.kind = FIRRTL_STATEMENT_KIND_WHEN_END, .u = {.whenEnd = {}}},
-    };
-    for (unsigned int i = 0; i < ARRAY_SIZE(stmts); i++) {
-      firrtlVisitStatement(ctx, &stmts[i]);
+    {
+      FirrtlDeclaration decl = {.kind = FIRRTL_DECLARATION_KIND_WIRE,
+                                .u = {.wire = {
+                                          .name = MK_STR("wire2"),
+                                          .type = tyUInt1,
+                                      }}};
+      firrtlVisitDeclaration(ctx, &decl);
+    }
+    {
+      FirrtlStatement stmt = {.kind = FIRRTL_STATEMENT_KIND_ELSE,
+                              .u = {.else_ = {}}};
+      firrtlVisitStatement(ctx, &stmt);
+    }
+    {
+      FirrtlDeclaration decl = {.kind = FIRRTL_DECLARATION_KIND_WIRE,
+                                .u = {.wire = {
+                                          .name = MK_STR("wire3"),
+                                          .type = tyUInt1,
+                                      }}};
+      firrtlVisitDeclaration(ctx, &decl);
+    }
+    {
+      FirrtlStatement stmt = {.kind = FIRRTL_STATEMENT_KIND_WHEN_END,
+                              .u = {.whenEnd = {}}};
+      firrtlVisitStatement(ctx, &stmt);
     }
 
     EXPECT(*errCount == expectedErrCount);
@@ -982,23 +995,26 @@ int testErrStmtWhen(FirrtlContext ctx, size_t *errCount) {
   {
     firrtlVisitStatement(ctx, &whenBegin);
 
-    FirrtlStatement stmts[] = {
-        {.kind = FIRRTL_STATEMENT_KIND_WIRE,
-         .u = {.wire =
-                   {
-                       .name = MK_STR("wire2"),
-                       .type = tyUInt1,
-                   }}},
-        {.kind = FIRRTL_STATEMENT_KIND_ELSE, .u = {.else_ = {}}},
-        {.kind = FIRRTL_STATEMENT_KIND_WIRE,
-         .u = {.wire =
-                   {
-                       .name = MK_STR("wire3"),
-                       .type = tyUInt1,
-                   }}},
-    };
-    for (unsigned int i = 0; i < ARRAY_SIZE(stmts); i++) {
-      firrtlVisitStatement(ctx, &stmts[i]);
+    {
+      FirrtlDeclaration decl = {.kind = FIRRTL_DECLARATION_KIND_WIRE,
+                                .u = {.wire = {
+                                          .name = MK_STR("wire2"),
+                                          .type = tyUInt1,
+                                      }}};
+      firrtlVisitDeclaration(ctx, &decl);
+    }
+    {
+      FirrtlStatement stmt = {.kind = FIRRTL_STATEMENT_KIND_ELSE,
+                              .u = {.else_ = {}}};
+      firrtlVisitStatement(ctx, &stmt);
+    }
+    {
+      FirrtlDeclaration decl = {.kind = FIRRTL_DECLARATION_KIND_WIRE,
+                                .u = {.wire = {
+                                          .name = MK_STR("wire3"),
+                                          .type = tyUInt1,
+                                      }}};
+      firrtlVisitDeclaration(ctx, &decl);
     }
 
     EXPECT(*errCount == expectedErrCount);
@@ -1079,8 +1095,8 @@ int testExpectedError() {
   IF_ERR_RET(runOnce(&testErrNoModule));
   IF_ERR_RET(runOnce(&testErrNoHeader));
   IF_ERR_RET(runOnce(&testErrDuplicatePortName));
+  IF_ERR_RET(runOnce(&testErrDeclNode));
   IF_ERR_RET(runOnce(&testErrStmtAttach));
-  IF_ERR_RET(runOnce(&testErrStmtNode));
   IF_ERR_RET(runOnce(&testErrStmtWhen));
   IF_ERR_RET(runOnce(&testErrStmtConnect));
 

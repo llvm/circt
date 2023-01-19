@@ -30,11 +30,12 @@ struct FirrtlType;
 struct FirrtlParameter;
 struct FirrtlExpr;
 struct FirrtlPrim;
+struct FirrtlDeclaration;
+struct FirrtlDeclarationSeqMemory;
+struct FirrtlDeclarationNode;
+struct FirrtlDeclarationWire;
 struct FirrtlStatement;
 struct FirrtlStatementAttach;
-struct FirrtlStatementSeqMemory;
-struct FirrtlStatementNode;
-struct FirrtlStatementWire;
 struct FirrtlStatementInvalid;
 struct FirrtlStatementWhenBegin;
 struct FirrtlStatementElse;
@@ -144,6 +145,7 @@ public:
   void visitExtModule(StringRef name, StringRef defName);
   void visitParameter(StringRef name, const FirrtlParameter &param);
   void visitPort(StringRef name, Direction direction, const FirrtlType &type);
+  void visitDeclaration(const FirrtlDeclaration &decl);
   void visitStatement(const FirrtlStatement &stmt);
 
   void exportFIRRTL(llvm::raw_ostream &os) const;
@@ -175,6 +177,7 @@ private:
   ffiParamToFirParam(const FirrtlParameter &param);
   std::optional<firrtl::FIRRTLType> ffiTypeToFirType(const FirrtlType &type);
 
+  std::optional<std::pair<firrtl::FModuleOp &, Block *>> currentModule();
   bool checkFinal() const;
 
   std::optional<mlir::Value> resolveRef(BodyOpBuilder &bodyOpBuilder,
@@ -185,14 +188,15 @@ private:
   std::optional<mlir::Value> resolveExpr(BodyOpBuilder &bodyOpBuilder,
                                          const FirrtlExpr &expr);
 
+  bool visitDeclSeqMemory(BodyOpBuilder &bodyOpBuilder,
+                          const FirrtlDeclarationSeqMemory &decl);
+  bool visitDeclNode(BodyOpBuilder &bodyOpBuilder,
+                     const FirrtlDeclarationNode &decl);
+  bool visitDeclWire(BodyOpBuilder &bodyOpBuilder,
+                     const FirrtlDeclarationWire &decl);
+
   bool visitStmtAttach(BodyOpBuilder &bodyOpBuilder,
                        const FirrtlStatementAttach &stmt);
-  bool visitStmtSeqMemory(BodyOpBuilder &bodyOpBuilder,
-                          const FirrtlStatementSeqMemory &stmt);
-  bool visitStmtNode(BodyOpBuilder &bodyOpBuilder,
-                     const FirrtlStatementNode &stmt);
-  bool visitStmtWire(BodyOpBuilder &bodyOpBuilder,
-                     const FirrtlStatementWire &stmt);
   bool visitStmtInvalid(BodyOpBuilder &bodyOpBuilder,
                         const FirrtlStatementInvalid &stmt);
   bool visitStmtWhenBegin(BodyOpBuilder &bodyOpBuilder,

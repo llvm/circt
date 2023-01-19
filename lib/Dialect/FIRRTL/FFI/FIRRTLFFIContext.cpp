@@ -311,22 +311,38 @@ void FFIContext::visitPort(StringRef name, Direction direction,
       moduleOp);
 }
 
-void FFIContext::visitStatement(const FirrtlStatement &stmt) {
-  auto *moduleOpPtr =
-      std::get_if<details::RequireAssigned<firrtl::FModuleOp>>(&this->moduleOp);
-  if (moduleOpPtr == nullptr) {
-    emitError("statement cannot be placed under an `extmodule`");
+void FFIContext::visitDeclaration(const FirrtlDeclaration &decl) {
+  auto currMod = currentModule();
+  if (!currMod.has_value()) {
     return;
   }
-  auto &moduleOp = *moduleOpPtr;
-  RA_EXPECT(auto &lastModuleOp, moduleOp);
+  auto &[lastModuleOp, blockToInsertInto] = *currMod;
 
-  Block *blockToInsertInto;
-  if (!whenStack.empty()) {
-    blockToInsertInto = &whenStack.top().currentBlock();
-  } else {
-    blockToInsertInto = lastModuleOp.getBodyBlock();
+  auto bodyOpBuilder =
+      mlir::ImplicitLocOpBuilder::atBlockEnd(mockLoc(), blockToInsertInto);
+
+  switch (decl.kind) {
+  case FIRRTL_DECLARATION_KIND_SEQ_MEMORY:
+    visitDeclSeqMemory(bodyOpBuilder, decl.u.seqMem);
+    break;
+  case FIRRTL_DECLARATION_KIND_NODE:
+    visitDeclNode(bodyOpBuilder, decl.u.node);
+    break;
+  case FIRRTL_DECLARATION_KIND_WIRE:
+    visitDeclWire(bodyOpBuilder, decl.u.wire);
+    break;
+  default: // NOLINT(clang-diagnostic-covered-switch-default)
+    emitError("unknown declaration kind");
+    break;
   }
+}
+
+void FFIContext::visitStatement(const FirrtlStatement &stmt) {
+  auto currMod = currentModule();
+  if (!currMod.has_value()) {
+    return;
+  }
+  auto &[lastModuleOp, blockToInsertInto] = *currMod;
 
   auto bodyOpBuilder =
       mlir::ImplicitLocOpBuilder::atBlockEnd(mockLoc(), blockToInsertInto);
@@ -334,15 +350,6 @@ void FFIContext::visitStatement(const FirrtlStatement &stmt) {
   switch (stmt.kind) {
   case FIRRTL_STATEMENT_KIND_ATTACH:
     visitStmtAttach(bodyOpBuilder, stmt.u.attach);
-    break;
-  case FIRRTL_STATEMENT_KIND_SEQ_MEMORY:
-    visitStmtSeqMemory(bodyOpBuilder, stmt.u.seqMem);
-    break;
-  case FIRRTL_STATEMENT_KIND_NODE:
-    visitStmtNode(bodyOpBuilder, stmt.u.node);
-    break;
-  case FIRRTL_STATEMENT_KIND_WIRE:
-    visitStmtWire(bodyOpBuilder, stmt.u.wire);
     break;
   case FIRRTL_STATEMENT_KIND_INVALID:
     visitStmtInvalid(bodyOpBuilder, stmt.u.invalid);
@@ -525,6 +532,27 @@ bool FFIContext::checkFinal() const {
     return false;
   }
   return true;
+}
+
+std::optional<std::pair<firrtl::FModuleOp &, Block *>>
+FFIContext::currentModule() {
+  auto *moduleOpPtr =
+      std::get_if<details::RequireAssigned<firrtl::FModuleOp>>(&this->moduleOp);
+  if (moduleOpPtr == nullptr) {
+    emitError("declaration or statement cannot be placed under an `extmodule`");
+    return std::nullopt;
+  }
+  auto &moduleOp = *moduleOpPtr;
+  RA_EXPECT(auto &lastModuleOp, moduleOp, std::nullopt);
+
+  Block *blockToInsertInto;
+  if (!whenStack.empty()) {
+    blockToInsertInto = &whenStack.top().currentBlock();
+  } else {
+    blockToInsertInto = lastModuleOp.getBodyBlock();
+  }
+
+  return std::make_pair(std::ref(lastModuleOp), blockToInsertInto);
 }
 
 std::optional<mlir::Value> FFIContext::resolveRef(BodyOpBuilder &bodyOpBuilder,
@@ -873,30 +901,12 @@ std::optional<mlir::Value> FFIContext::resolveExpr(BodyOpBuilder &bodyOpBuilder,
   return std::nullopt;
 }
 
-bool FFIContext::visitStmtAttach(BodyOpBuilder &bodyOpBuilder,
-                                 const FirrtlStatementAttach &stmt) {
-  SmallVector<Value, 4> operands;
-  operands.reserve(stmt.count);
-
-  for (size_t i = 0; i < stmt.count; i++) {
-    const auto &ffiOperand = stmt.operands[i];
-    auto operand = resolveExpr(bodyOpBuilder, ffiOperand.expr);
-    if (!operand.has_value()) {
-      return false;
-    }
-    operands.push_back(*operand);
-  }
-
-  bodyOpBuilder.create<AttachOp>(mockLoc(), operands);
-  return true;
-}
-
-bool FFIContext::visitStmtSeqMemory(BodyOpBuilder &bodyOpBuilder,
-                                    const FirrtlStatementSeqMemory &stmt) {
+bool FFIContext::visitDeclSeqMemory(BodyOpBuilder &bodyOpBuilder,
+                                    const FirrtlDeclarationSeqMemory &decl) {
   RA_EXPECT(auto &lastModuleCtx, this->moduleContext, false);
 
   RUWAttr ruw;
-  switch (stmt.readUnderWrite) {
+  switch (decl.readUnderWrite) {
   case FIRRTL_READ_UNDER_WRITE_UNDEFINED:
     ruw = RUWAttr::Undefined;
     break;
@@ -911,7 +921,7 @@ bool FFIContext::visitStmtSeqMemory(BodyOpBuilder &bodyOpBuilder,
     return false;
   }
 
-  auto firType = ffiTypeToFirType(stmt.type);
+  auto firType = ffiTypeToFirType(decl.type);
   if (!firType.has_value()) {
     return false;
   }
@@ -923,7 +933,7 @@ bool FFIContext::visitStmtSeqMemory(BodyOpBuilder &bodyOpBuilder,
     return false;
   }
 
-  auto name = unwrap(stmt.name);
+  auto name = unwrap(decl.name);
   auto annotations = emptyArrayAttr();
   StringAttr sym = {};
   auto result = bodyOpBuilder.create<SeqMemOp>(
@@ -932,13 +942,13 @@ bool FFIContext::visitStmtSeqMemory(BodyOpBuilder &bodyOpBuilder,
   return !lastModuleCtx.addSymbolEntry(name, result, mockSMLoc());
 }
 
-bool FFIContext::visitStmtNode(BodyOpBuilder &bodyOpBuilder,
-                               const FirrtlStatementNode &stmt) {
+bool FFIContext::visitDeclNode(BodyOpBuilder &bodyOpBuilder,
+                               const FirrtlDeclarationNode &decl) {
   RA_EXPECT(auto &lastModuleCtx, this->moduleContext, false);
 
-  auto name = unwrap(stmt.name);
+  auto name = unwrap(decl.name);
 
-  auto optInitializer = resolveExpr(bodyOpBuilder, stmt.expr);
+  auto optInitializer = resolveExpr(bodyOpBuilder, decl.expr);
   if (!optInitializer.has_value()) {
     emitError("expected expression for node");
     return false;
@@ -973,12 +983,12 @@ bool FFIContext::visitStmtNode(BodyOpBuilder &bodyOpBuilder,
   return !lastModuleCtx.addSymbolEntry(name, result, mockSMLoc());
 }
 
-bool FFIContext::visitStmtWire(BodyOpBuilder &bodyOpBuilder,
-                               const FirrtlStatementWire &stmt) {
+bool FFIContext::visitDeclWire(BodyOpBuilder &bodyOpBuilder,
+                               const FirrtlDeclarationWire &decl) {
   RA_EXPECT(auto &lastModuleCtx, this->moduleContext, false);
 
-  auto name = unwrap(stmt.name);
-  auto type = ffiTypeToFirType(stmt.type);
+  auto name = unwrap(decl.name);
+  auto type = ffiTypeToFirType(decl.type);
   if (!type.has_value()) {
     return false;
   }
@@ -990,6 +1000,24 @@ bool FFIContext::visitStmtWire(BodyOpBuilder &bodyOpBuilder,
       *type, name, NameKindEnum::InterestingName, annotations,
       sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
   return !lastModuleCtx.addSymbolEntry(name, result, mockSMLoc());
+}
+
+bool FFIContext::visitStmtAttach(BodyOpBuilder &bodyOpBuilder,
+                                 const FirrtlStatementAttach &stmt) {
+  SmallVector<Value, 4> operands;
+  operands.reserve(stmt.count);
+
+  for (size_t i = 0; i < stmt.count; i++) {
+    const auto &ffiOperand = stmt.operands[i];
+    auto operand = resolveExpr(bodyOpBuilder, ffiOperand.expr);
+    if (!operand.has_value()) {
+      return false;
+    }
+    operands.push_back(*operand);
+  }
+
+  bodyOpBuilder.create<AttachOp>(mockLoc(), operands);
+  return true;
 }
 
 bool FFIContext::visitStmtInvalid(BodyOpBuilder &bodyOpBuilder,

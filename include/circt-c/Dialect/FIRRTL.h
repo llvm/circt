@@ -310,11 +310,44 @@ typedef struct FirrtlPrim {
   size_t argsCount;
 } FirrtlPrim;
 
+typedef enum FirrtlDeclarationKind {
+  FIRRTL_DECLARATION_KIND_SEQ_MEMORY,
+  FIRRTL_DECLARATION_KIND_NODE,
+  FIRRTL_DECLARATION_KIND_WIRE,
+} FirrtlDeclarationKind;
+
+typedef struct FirrtlDeclarationSeqMemory {
+  FirrtlStringRef name;
+  FirrtlType type;
+  FirrtlReadUnderWrite readUnderWrite; // defaults to `FIRRTL_RUW_UNDEFINED`
+} FirrtlDeclarationSeqMemory;
+
+typedef struct FirrtlDeclarationNode {
+  FirrtlStringRef name;
+  FirrtlExpr expr;
+} FirrtlDeclarationNode;
+
+typedef struct FirrtlDeclarationWire {
+  FirrtlStringRef name;
+  FirrtlType type;
+} FirrtlDeclarationWire;
+
+typedef union FirrtlDeclarationUnion {
+  FirrtlDeclarationSeqMemory seqMem;
+  FirrtlDeclarationNode node;
+  FirrtlDeclarationWire wire;
+} FirrtlDeclarationUnion;
+
+typedef struct FirrtlDeclaration {
+  FirrtlDeclarationKind kind;
+  FirrtlDeclarationUnion u;
+} FirrtlDeclaration;
+
+MLIR_CAPI_EXPORTED void firrtlVisitDeclaration(FirrtlContext ctx,
+                                               const FirrtlDeclaration *decl);
+
 typedef enum FirrtlStatementKind {
   FIRRTL_STATEMENT_KIND_ATTACH,
-  FIRRTL_STATEMENT_KIND_SEQ_MEMORY,
-  FIRRTL_STATEMENT_KIND_NODE,
-  FIRRTL_STATEMENT_KIND_WIRE,
   FIRRTL_STATEMENT_KIND_INVALID,
   FIRRTL_STATEMENT_KIND_WHEN_BEGIN,
   FIRRTL_STATEMENT_KIND_ELSE,
@@ -337,22 +370,6 @@ typedef struct FirrtlStatementAttach {
   FirrtlStatementAttachOperand *operands;
   size_t count;
 } FirrtlStatementAttach;
-
-typedef struct FirrtlStatementSeqMemory {
-  FirrtlStringRef name;
-  FirrtlType type;
-  FirrtlReadUnderWrite readUnderWrite; // defaults to `FIRRTL_RUW_UNDEFINED`
-} FirrtlStatementSeqMemory;
-
-typedef struct FirrtlStatementNode {
-  FirrtlStringRef name;
-  FirrtlExpr expr;
-} FirrtlStatementNode;
-
-typedef struct FirrtlStatementWire {
-  FirrtlStringRef name;
-  FirrtlType type;
-} FirrtlStatementWire;
 
 typedef struct FirrtlStatementInvalid {
   FirrtlExprRef ref;
@@ -437,9 +454,6 @@ typedef struct FirrtlStatementCover {
 
 typedef union FirrtlStatementUnion {
   FirrtlStatementAttach attach;
-  FirrtlStatementSeqMemory seqMem;
-  FirrtlStatementNode node;
-  FirrtlStatementWire wire;
   FirrtlStatementInvalid invalid;
   FirrtlStatementWhenBegin whenBegin;
   FirrtlStatementElse else_;
