@@ -112,15 +112,6 @@ class System:
   def set_debug():
     ir._GlobalDebug.flag = True
 
-  def import_modules(self, modules: list[Module]):
-    # Call the imported modules' `create` methods to import the IR into the
-    # PyCDE System ModuleOp. Also add them to the list of top-level modules so
-    # later emission stages know about them.
-    with self:
-      for module in modules:
-        module._pycde_mod.create()
-        self.top_modules.append(module)
-
   # TODO: Ideally, we'd be able to run the std-to-handshake lowering passes in
   # pycde.  As of now, however, the cf/memref/arith dialects are not registered
   # so the assembly can't be loaded. The right way to do this is to have pycde
