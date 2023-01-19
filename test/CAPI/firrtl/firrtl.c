@@ -292,6 +292,7 @@ int testGenExtModule(FirrtlContext ctx, size_t *errCount) {
   extmodule ExtMeow3 :\n\
     defname = ExtMeow3\n\
     parameter param0 = 0\n\n");
+  EXPECT(*errCount == 1);
 
   return 0;
 }
@@ -311,6 +312,8 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
     analogs[i] = analog;
   }
 
+  FirrtlType uint1 = {.kind = FIRRTL_TYPE_KIND_UINT,
+                      .u = {.uint = {.width = 1}}};
   FirrtlType uint8s[2];
   for (unsigned int i = 0; i < ARRAY_SIZE(uint8s); i++) {
     FirrtlType port = {.kind = FIRRTL_TYPE_KIND_UINT,
@@ -427,7 +430,7 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
        .u = {.wire =
                  {
                      .name = MK_STR("wire1"),
-                     .type = uint8s[0],
+                     .type = uint1,
                  }}},
       {.kind = FIRRTL_STATEMENT_KIND_INVALID,
        .u = {.invalid =
@@ -455,6 +458,57 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
                  {
                      .ref = {.value = MK_STR("analogBundle.field4")},
                  }}},
+      {.kind = FIRRTL_STATEMENT_KIND_WHEN_BEGIN,
+       .u = {.whenBegin =
+                 {
+                     .condition = MK_REF_EXPR_INLINE("wire1"),
+                 }}},
+      {.kind = FIRRTL_STATEMENT_KIND_WIRE,
+       .u = {.wire =
+                 {
+                     .name = MK_STR("wire2"),
+                     .type = uint1,
+                 }}},
+      {.kind = FIRRTL_STATEMENT_KIND_ELSE, .u = {.else_ = {}}},
+      {.kind = FIRRTL_STATEMENT_KIND_WHEN_BEGIN,
+       .u = {.whenBegin =
+                 {
+                     .condition = MK_REF_EXPR_INLINE("wire1"),
+                 }}},
+      {.kind = FIRRTL_STATEMENT_KIND_WIRE,
+       .u = {.wire =
+                 {
+                     .name = MK_STR("wire3"),
+                     .type = uint1,
+                 }}},
+      {.kind = FIRRTL_STATEMENT_KIND_ELSE, .u = {.else_ = {}}},
+      {.kind = FIRRTL_STATEMENT_KIND_WHEN_BEGIN,
+       .u = {.whenBegin =
+                 {
+                     .condition = MK_REF_EXPR_INLINE("wire1"),
+                 }}},
+      {.kind = FIRRTL_STATEMENT_KIND_WIRE,
+       .u = {.wire =
+                 {
+                     .name = MK_STR("wire4"),
+                     .type = uint1,
+                 }}},
+      {.kind = FIRRTL_STATEMENT_KIND_ELSE, .u = {.else_ = {}}},
+      {.kind = FIRRTL_STATEMENT_KIND_WIRE,
+       .u = {.wire =
+                 {
+                     .name = MK_STR("wire5"),
+                     .type = uint1,
+                 }}},
+      {.kind = FIRRTL_STATEMENT_KIND_WHEN_END, .u = {.whenEnd = {}}},
+      {.kind = FIRRTL_STATEMENT_KIND_WIRE,
+       .u = {.wire =
+                 {
+                     .name = MK_STR("wire6"),
+                     .type = uint1,
+                 }}},
+      {.kind = FIRRTL_STATEMENT_KIND_WHEN_END, .u = {.whenEnd = {}}},
+      {.kind = FIRRTL_STATEMENT_KIND_WHEN_END, .u = {.whenEnd = {}}},
   };
 
   for (unsigned int i = 0; i < ARRAY_SIZE(statements); i++) {
@@ -479,12 +533,23 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
     smem seqMem : UInt<32>[1024] undefined\n\
     node node1 = add(uintPort1, uintPort2)\n\
     node node2 = sub(uintPort1, analogBundle.field4)\n\
-    wire wire1 : UInt<8>\n\
+    wire wire1 : UInt<1>\n\
     wire1 is invalid\n\
     uintIOBundle.field2 is invalid\n\
     uintIOBundle.field4 is invalid\n\
     uintOutputBundle is invalid\n\
-    analogBundle.field4 is invalid\n\n");
+    analogBundle.field4 is invalid\n\
+    when wire1 :\n\
+      wire wire2 : UInt<1>\n\
+    else when wire1 :\n\
+      wire wire3 : UInt<1>\n\
+    else :\n\
+      when wire1 :\n\
+        wire wire4 : UInt<1>\n\
+      else :\n\
+        wire wire5 : UInt<1>\n\
+      wire wire6 : UInt<1>\n\n");
+  EXPECT(*errCount == 0);
 
   return 0;
 }
@@ -503,6 +568,7 @@ int testErrNoCircuit(FirrtlContext ctx, size_t *errCount) {
   firrtlVisitModule(ctx, MK_STR("NoCircuit"));
   EXPECT(*errCount == 1);
   EXPECT_EXPORT("");
+  EXPECT(*errCount == 1);
 
   return 0;
 }
@@ -518,6 +584,7 @@ int testErrNoModule(FirrtlContext ctx, size_t *errCount) {
   firrtlVisitPort(ctx, MK_STR("port"), FIRRTL_PORT_DIRECTION_INPUT, &tyUInt8);
   EXPECT(*errCount == 1);
   EXPECT_EXPORT("circuit NoModule :\n");
+  EXPECT(*errCount == 1);
 
   return 0;
 }
@@ -532,6 +599,7 @@ int testErrNoHeader(FirrtlContext ctx, size_t *errCount) {
   firrtlVisitPort(ctx, MK_STR("port"), FIRRTL_PORT_DIRECTION_INPUT, &tyUInt8);
   EXPECT(*errCount == 1);
   EXPECT_EXPORT("");
+  EXPECT(*errCount == 1);
 
   return 0;
 }
@@ -566,6 +634,7 @@ int testErrDuplicatePortName(FirrtlContext ctx, size_t *errCount) {
 \n\
   module AnotherMod :\n\
     input port : UInt<8>\n\n");
+  EXPECT(*errCount == 2);
 
   return 0;
 }
@@ -617,6 +686,7 @@ int testErrStmtAttach(FirrtlContext ctx, size_t *errCount) {
   module StmtAttach :\n\
     input analogPort : Analog<8>\n\
     input analogBundle : { field : Analog<8> }\n\n");
+  EXPECT(*errCount == expectedErrCount);
 
   return 0;
 }
@@ -696,6 +766,7 @@ int testErrStmtNode(FirrtlContext ctx, size_t *errCount) {
     firrtlVisitStatement(ctx, &statement);
 
     EXPECT(*errCount >= ++expectedErrCount);
+    expectedErrCount = *errCount;
   }
 
   EXPECT_EXPORT("circuit StmtNode :\n\
@@ -704,6 +775,133 @@ int testErrStmtNode(FirrtlContext ctx, size_t *errCount) {
     input u8Port2 : UInt<8>\n\
     input u8Port3 : UInt<8>\n\
     input s8Port3 : SInt<8>\n\n");
+  EXPECT(*errCount == expectedErrCount);
+
+  return 0;
+}
+
+int testErrStmtWhen(FirrtlContext ctx, size_t *errCount) {
+  firrtlVisitCircuit(ctx, MK_STR("StmtWhen"));
+  firrtlVisitModule(ctx, MK_STR("StmtWhen"));
+
+  FirrtlType tyUInt1 = {
+      .kind = FIRRTL_TYPE_KIND_UINT,
+      .u = {.uint = {.width = 1}},
+  };
+
+  FirrtlStatement wire = {.kind = FIRRTL_STATEMENT_KIND_WIRE,
+                          .u = {.wire = {
+                                    .name = MK_STR("wire1"),
+                                    .type = tyUInt1,
+                                }}};
+  firrtlVisitStatement(ctx, &wire);
+
+  EXPECT(*errCount == 0);
+  size_t expectedErrCount = 0;
+
+  FirrtlStatement whenBegin = {
+      .kind = FIRRTL_STATEMENT_KIND_WHEN_BEGIN,
+      .u = {.whenBegin = {
+                .condition = MK_REF_EXPR_INLINE("wire1"),
+            }}};
+
+  // No WhenEnd
+  {
+    firrtlVisitStatement(ctx, &whenBegin);
+
+    EXPECT(*errCount == expectedErrCount);
+    EXPECT_EXPORT("");
+    EXPECT(*errCount == ++expectedErrCount);
+  }
+
+  // Reference to items inside when block
+  {
+    FirrtlStatement stmts[] = {
+        {.kind = FIRRTL_STATEMENT_KIND_WIRE,
+         .u = {.wire =
+                   {
+                       .name = MK_STR("wire2"),
+                       .type = tyUInt1,
+                   }}},
+        {.kind = FIRRTL_STATEMENT_KIND_ELSE, .u = {.else_ = {}}},
+        {.kind = FIRRTL_STATEMENT_KIND_WIRE,
+         .u = {.wire =
+                   {
+                       .name = MK_STR("wire3"),
+                       .type = tyUInt1,
+                   }}},
+        {.kind = FIRRTL_STATEMENT_KIND_WHEN_END, .u = {.whenEnd = {}}},
+    };
+    for (unsigned int i = 0; i < ARRAY_SIZE(stmts); i++) {
+      firrtlVisitStatement(ctx, &stmts[i]);
+    }
+
+    EXPECT(*errCount == expectedErrCount);
+
+    FirrtlStatement ref = {.kind = FIRRTL_STATEMENT_KIND_INVALID,
+                           .u = {.invalid = {
+                                     .ref = {.value = MK_STR("wire1")},
+                                 }}};
+    firrtlVisitStatement(ctx, &ref);
+    EXPECT(*errCount == expectedErrCount);
+
+    ref.u.invalid.ref.value = MK_STR("wire2");
+    firrtlVisitStatement(ctx, &ref);
+    EXPECT(*errCount == ++expectedErrCount);
+
+    ref.u.invalid.ref.value = MK_STR("wire3");
+    firrtlVisitStatement(ctx, &ref);
+    EXPECT(*errCount == ++expectedErrCount);
+  }
+
+  // Multiple `else` regions
+  {
+    firrtlVisitStatement(ctx, &whenBegin);
+
+    FirrtlStatement stmts[] = {
+        {.kind = FIRRTL_STATEMENT_KIND_WIRE,
+         .u = {.wire =
+                   {
+                       .name = MK_STR("wire2"),
+                       .type = tyUInt1,
+                   }}},
+        {.kind = FIRRTL_STATEMENT_KIND_ELSE, .u = {.else_ = {}}},
+        {.kind = FIRRTL_STATEMENT_KIND_WIRE,
+         .u = {.wire =
+                   {
+                       .name = MK_STR("wire3"),
+                       .type = tyUInt1,
+                   }}},
+    };
+    for (unsigned int i = 0; i < ARRAY_SIZE(stmts); i++) {
+      firrtlVisitStatement(ctx, &stmts[i]);
+    }
+
+    EXPECT(*errCount == expectedErrCount);
+
+    FirrtlStatement else_ = {.kind = FIRRTL_STATEMENT_KIND_ELSE,
+                             .u = {.else_ = {}}};
+    firrtlVisitStatement(ctx, &else_);
+    EXPECT(*errCount == ++expectedErrCount);
+
+    FirrtlStatement whenEnd = {.kind = FIRRTL_STATEMENT_KIND_WHEN_END,
+                               .u = {.whenEnd = {}}};
+    firrtlVisitStatement(ctx, &whenEnd);
+  }
+
+  EXPECT_EXPORT("circuit StmtWhen :\n\
+  module StmtWhen :\n\
+    wire wire1 : UInt<1>\n\
+    when wire1 :\n\
+      wire wire2 : UInt<1>\n\
+    else :\n\
+      wire wire3 : UInt<1>\n\
+    wire1 is invalid\n\
+    when wire1 :\n\
+      wire wire2 : UInt<1>\n\
+    else :\n\
+      wire wire3 : UInt<1>\n\n");
+  EXPECT(*errCount == expectedErrCount);
 
   return 0;
 }
@@ -715,6 +913,7 @@ int testExpectedError() {
   IF_ERR_RET(runOnce(&testErrDuplicatePortName));
   IF_ERR_RET(runOnce(&testErrStmtAttach));
   IF_ERR_RET(runOnce(&testErrStmtNode));
+  IF_ERR_RET(runOnce(&testErrStmtWhen));
 
   return 0;
 }

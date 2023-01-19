@@ -138,6 +138,40 @@ Location ModuleContext::translateLocation(llvm::SMLoc loc) {
   return ffiCtx.mockLoc();
 }
 
+//
+// WhenContext
+//
+
+WhenContext::WhenContext(ModuleContext &moduleCtx, firrtl::WhenOp whenOp)
+    : moduleCtx{moduleCtx}, whenOp{whenOp} {
+  newScope();
+}
+
+bool WhenContext::hasElseRegion() { return whenOp.hasElseRegion(); }
+
+void WhenContext::createElseRegion() {
+  whenOp.createElseRegion();
+  newScope();
+}
+
+Block &WhenContext::currentBlock() {
+  if (!whenOp.hasElseRegion()) {
+    return whenOp.getThenBlock();
+  }
+  return whenOp.getElseBlock();
+}
+
+void WhenContext::newScope() {
+  scope.reset();
+  scope.emplace(
+      // Declarations within the suite are scoped to within the suite.
+      moduleCtx, &currentBlock(),
+      // After parsing the when region, we can release any new entries
+      // in unbundledValues since the symbol table entries that refer
+      // to them will be gone.
+      moduleCtx.unbundledValues);
+}
+
 } // namespace circt::chirrtl::details
 
 FFIContext::FFIContext() : mlirCtx{std::make_unique<MLIRContext>()} {
@@ -286,8 +320,15 @@ void FFIContext::visitStatement(const FirrtlStatement &stmt) {
   auto &moduleOp = *moduleOpPtr;
   RA_EXPECT(auto &lastModuleOp, moduleOp);
 
-  auto bodyOpBuilder = mlir::ImplicitLocOpBuilder::atBlockEnd(
-      mockLoc(), lastModuleOp.getBodyBlock());
+  Block *blockToInsertInto;
+  if (!whenStack.empty()) {
+    blockToInsertInto = &whenStack.top().currentBlock();
+  } else {
+    blockToInsertInto = lastModuleOp.getBodyBlock();
+  }
+
+  auto bodyOpBuilder =
+      mlir::ImplicitLocOpBuilder::atBlockEnd(mockLoc(), blockToInsertInto);
 
   switch (stmt.kind) {
   case FIRRTL_STATEMENT_KIND_ATTACH:
@@ -305,6 +346,15 @@ void FFIContext::visitStatement(const FirrtlStatement &stmt) {
   case FIRRTL_STATEMENT_KIND_INVALID:
     visitStmtInvalid(bodyOpBuilder, stmt.u.invalid);
     break;
+  case FIRRTL_STATEMENT_KIND_WHEN_BEGIN:
+    visitStmtWhenBegin(bodyOpBuilder, stmt.u.whenBegin);
+    break;
+  case FIRRTL_STATEMENT_KIND_ELSE:
+    visitStmtElse(bodyOpBuilder, stmt.u.else_);
+    break;
+  case FIRRTL_STATEMENT_KIND_WHEN_END:
+    visitStmtWhenEnd(bodyOpBuilder, stmt.u.whenEnd);
+    break;
   default: // NOLINT(clang-diagnostic-covered-switch-default)
     emitError("unknown statement kind");
     break;
@@ -312,7 +362,9 @@ void FFIContext::visitStatement(const FirrtlStatement &stmt) {
 }
 
 void FFIContext::exportFIRRTL(llvm::raw_ostream &os) const {
-  // TODO: check states first, otherwise a sigsegv will probably happen.
+  if (!checkFinal()) {
+    return;
+  }
 
   auto result = exportFIRFile(*module, os);
   if (result.failed()) {
@@ -440,6 +492,14 @@ std::optional<FIRRTLType> FFIContext::ffiTypeToFirType(const FirrtlType &type) {
   }
 
   return firType;
+}
+
+bool FFIContext::checkFinal() const {
+  if (!whenStack.empty()) {
+    emitError("expected " + std::to_string(whenStack.size()) + " WhenEnd");
+    return false;
+  }
+  return true;
 }
 
 std::optional<mlir::Value> FFIContext::resolveRef(BodyOpBuilder &bodyOpBuilder,
@@ -910,6 +970,51 @@ bool FFIContext::visitStmtWire(BodyOpBuilder &bodyOpBuilder,
 bool FFIContext::visitStmtInvalid(BodyOpBuilder &bodyOpBuilder,
                                   const FirrtlStatementInvalid &stmt) {
   return resolveRef(bodyOpBuilder, unwrap(stmt.ref.value), true).has_value();
+}
+
+bool FFIContext::visitStmtWhenBegin(BodyOpBuilder &bodyOpBuilder,
+                                    const FirrtlStatementWhenBegin &stmt) {
+  RA_EXPECT(auto &lastModuleCtx, this->moduleContext, false);
+
+  auto condition = resolveExpr(bodyOpBuilder, stmt.condition);
+  if (!condition.has_value()) {
+    return false;
+  }
+
+  // Create the IR representation for the when.
+  auto whenStmt =
+      bodyOpBuilder.create<WhenOp>(*condition, /*createElse*/ false);
+  whenStack.emplace(lastModuleCtx, whenStmt);
+  return true;
+}
+
+bool FFIContext::visitStmtElse(BodyOpBuilder &bodyOpBuilder,
+                               const FirrtlStatementElse &stmt) {
+  if (whenStack.empty()) {
+    emitError("expected a WhenBegin before WhenElse");
+    return false;
+  }
+
+  auto &whenCtx = whenStack.top();
+
+  if (whenCtx.hasElseRegion()) {
+    emitError("already has an else region");
+    return false;
+  }
+
+  // Create an else block to parse into.
+  whenCtx.createElseRegion();
+  return true;
+}
+
+bool FFIContext::visitStmtWhenEnd(BodyOpBuilder &bodyOpBuilder,
+                                  const FirrtlStatementWhenEnd &stmt) {
+  if (whenStack.empty()) {
+    emitError("expected a WhenBegin before WhenEnd");
+    return false;
+  }
+  whenStack.pop();
+  return true;
 }
 
 #undef RA_EXPECT

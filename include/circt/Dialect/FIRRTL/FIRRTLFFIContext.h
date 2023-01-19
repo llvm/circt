@@ -23,6 +23,7 @@
 
 #include <memory>
 #include <optional>
+#include <stack>
 #include <variant>
 
 struct FirrtlType;
@@ -35,6 +36,9 @@ struct FirrtlStatementSeqMemory;
 struct FirrtlStatementNode;
 struct FirrtlStatementWire;
 struct FirrtlStatementInvalid;
+struct FirrtlStatementWhenBegin;
+struct FirrtlStatementElse;
+struct FirrtlStatementWhenEnd;
 
 namespace circt {
 namespace chirrtl {
@@ -78,6 +82,43 @@ private:
   FFIContext &ffiCtx;
   ModuleKind kind;
 };
+
+class WhenContext {
+public:
+  WhenContext(ModuleContext &moduleCtx, firrtl::WhenOp whenOp);
+
+  bool hasElseRegion();
+  void createElseRegion();
+  Block &currentBlock();
+
+private:
+  ModuleContext &moduleCtx;
+  firrtl::WhenOp whenOp;
+
+  struct UnbundledValueRestorer {
+    ModuleContext::UnbundledValuesList &list;
+    size_t startingSize;
+
+    inline UnbundledValueRestorer(ModuleContext::UnbundledValuesList &list)
+        : list(list) {
+      startingSize = list.size();
+    }
+    inline ~UnbundledValueRestorer() { list.resize(startingSize); }
+  };
+
+  struct Scope {
+    inline Scope(ModuleContext &moduleContext, Block *block,
+                 const UnbundledValueRestorer &uvr)
+        : suiteScope{moduleContext, block}, uvr{uvr} {}
+    ModuleContext::ContextScope suiteScope;
+    UnbundledValueRestorer uvr;
+  };
+
+  std::optional<Scope> scope;
+
+  void newScope();
+};
+
 } // namespace details
 
 class FFIContext {
@@ -114,6 +155,7 @@ private:
       moduleOp;
   SmallPtrSet<StringAttr, 8> seenParamNames;
   details::RequireAssigned<details::ModuleContext> moduleContext;
+  std::stack<details::WhenContext> whenStack;
 
   Location mockLoc() const;
   llvm::SMLoc mockSMLoc() const;
@@ -124,6 +166,8 @@ private:
   std::optional<mlir::Attribute>
   ffiParamToFirParam(const FirrtlParameter &param);
   std::optional<firrtl::FIRRTLType> ffiTypeToFirType(const FirrtlType &type);
+
+  bool checkFinal() const;
 
   std::optional<mlir::Value> resolveRef(BodyOpBuilder &bodyOpBuilder,
                                         StringRef refExpr,
@@ -143,6 +187,12 @@ private:
                      const FirrtlStatementWire &stmt);
   bool visitStmtInvalid(BodyOpBuilder &bodyOpBuilder,
                         const FirrtlStatementInvalid &stmt);
+  bool visitStmtWhenBegin(BodyOpBuilder &bodyOpBuilder,
+                          const FirrtlStatementWhenBegin &stmt);
+  bool visitStmtElse(BodyOpBuilder &bodyOpBuilder,
+                     const FirrtlStatementElse &stmt);
+  bool visitStmtWhenEnd(BodyOpBuilder &bodyOpBuilder,
+                        const FirrtlStatementWhenEnd &stmt);
 };
 
 } // namespace chirrtl
