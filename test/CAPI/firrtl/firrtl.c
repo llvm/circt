@@ -444,6 +444,12 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
                      .name = MK_STR("wire1"),
                      .type = uint1,
                  }}},
+      {.kind = FIRRTL_STATEMENT_KIND_WIRE,
+       .u = {.wire =
+                 {
+                     .name = MK_STR("wireEnable"),
+                     .type = uint1,
+                 }}},
       {.kind = FIRRTL_STATEMENT_KIND_INVALID,
        .u = {.invalid =
                  {
@@ -570,6 +576,18 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
                       .condition = MK_REF_EXPR_INLINE("wire1"),
                       .exitCode = 123,
                       .name = &optName}}},
+      {.kind = FIRRTL_STATEMENT_KIND_ASSERT,
+       .u = {.assert = {.clock = MK_REF_EXPR_INLINE("clock"),
+                        .predicate = MK_REF_EXPR_INLINE("wire1"),
+                        .enable = MK_REF_EXPR_INLINE("wireEnable"),
+                        .message = MK_STR("assertion failed message"),
+                        .name = NULL}}},
+      {.kind = FIRRTL_STATEMENT_KIND_ASSERT,
+       .u = {.assert = {.clock = MK_REF_EXPR_INLINE("clock"),
+                        .predicate = MK_REF_EXPR_INLINE("wire1"),
+                        .enable = MK_REF_EXPR_INLINE("wireEnable"),
+                        .message = MK_STR("assertion failed message"),
+                        .name = &optName}}},
   };
 
   for (unsigned int i = 0; i < ARRAY_SIZE(statements); i++) {
@@ -598,6 +616,7 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
     node node1 = add(uintPort1, uintPort2)\n\
     node node2 = sub(uintPort1, analogBundle.field4)\n\
     wire wire1 : UInt<1>\n\
+    wire wireEnable : UInt<1>\n\
     wire1 is invalid\n\
     uintIOBundle.field2 is invalid\n\
     uintIOBundle.field4 is invalid\n\
@@ -623,7 +642,9 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
     printf(clock, wire1, \"test2 %d\", UInt<8>(1)) : optName\n\
     skip\n\
     stop(clock, wire1, 123)\n\
-    stop(clock, wire1, 123) : optName\n\n");
+    stop(clock, wire1, 123) : optName\n\
+    assert(clock, wire1, wireEnable, \"assertion failed message\")\n\
+    assert(clock, wire1, wireEnable, \"assertion failed message\") : optName\n\n");
   EXPECT(*errCount == 0);
 
   return 0;
