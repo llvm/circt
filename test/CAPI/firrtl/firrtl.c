@@ -360,6 +360,10 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
   firrtlVisitPort(ctx, MK_STR("uintInputConnectBundle"),
                   FIRRTL_PORT_DIRECTION_INPUT, &uintBundle);
 
+  FirrtlType clockPort = {.kind = FIRRTL_TYPE_KIND_CLOCK, .u = {.clock = {}}};
+  firrtlVisitPort(ctx, MK_STR("clock"), FIRRTL_PORT_DIRECTION_INPUT,
+                  &clockPort);
+
   FirrtlStatementAttachOperand attachOperands[] = {
       {.expr = MK_REF_EXPR_INLINE("analog1")},
       {.expr = MK_REF_EXPR_INLINE("analog2")},
@@ -525,6 +529,18 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
        .u = {.connect = {.left = {.value = MK_STR("uintOutputBundle")},
                          .right = {.value = MK_STR("uintInputConnectBundle")},
                          .isPartial = true}}},
+      {.kind = FIRRTL_STATEMENT_KIND_MEM_PORT,
+       .u = {.memPort = {.direction = FIRRTL_MEM_DIRECTION_INFER,
+                         .name = MK_STR("mpInfer"),
+                         .memName = {.value = MK_STR("seqMem")},
+                         .memIndex = MK_REF_EXPR_INLINE("uintPort1"),
+                         .clock = MK_REF_EXPR_INLINE("clock")}}},
+      {.kind = FIRRTL_STATEMENT_KIND_MEM_PORT,
+       .u = {.memPort = {.direction = FIRRTL_MEM_DIRECTION_READ_WRITE,
+                         .name = MK_STR("mpRW"),
+                         .memName = {.value = MK_STR("seqMem")},
+                         .memIndex = MK_REF_EXPR_INLINE("uintPort1"),
+                         .clock = MK_REF_EXPR_INLINE("clock")}}},
   };
 
   for (unsigned int i = 0; i < ARRAY_SIZE(statements); i++) {
@@ -543,7 +559,9 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
     input uintIOBundle : { field1 : UInt<8>, flip field2 : UInt<8>, field3 : UInt<8>, flip field4 : UInt<8> }\n\
     input uintInputBundle : { field1 : UInt<8>, field2 : UInt<8>, field3 : UInt<8>, field4 : UInt<8> }\n\
     output uintOutputBundle : { field1 : UInt<8>, field2 : UInt<8>, field3 : UInt<8>, field4 : UInt<8> }\n\
-    input uintInputConnectBundle : { field1 : UInt<8>, field2 : UInt<8> }\n\n\
+    input uintInputConnectBundle : { field1 : UInt<8>, field2 : UInt<8> }\n\
+    input clock : Clock\n\
+\n\
     attach(analog1, analog2, analog3)\n\
     attach(analogBundle)\n\
     attach(analogBundle.field1, analogBundle.field2, analogBundle.field3)\n\
@@ -569,7 +587,9 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
     uintOutputBundle.field1 <= uintInputBundle.field1\n\
     uintOutputBundle <= uintInputBundle\n\
     uintOutputBundle.field1 <= uintInputConnectBundle.field1\n\
-    uintOutputBundle.field2 <= uintInputConnectBundle.field2\n\n");
+    uintOutputBundle.field2 <= uintInputConnectBundle.field2\n\
+    infer mport mpInfer = seqMem[uintPort1], clock\n\
+    rdwr mport mpRW = seqMem[uintPort1], clock\n\n");
   EXPECT(*errCount == 0);
 
   return 0;

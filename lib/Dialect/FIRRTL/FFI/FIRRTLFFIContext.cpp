@@ -359,6 +359,9 @@ void FFIContext::visitStatement(const FirrtlStatement &stmt) {
   case FIRRTL_STATEMENT_KIND_CONNECT:
     visitStmtConnect(bodyOpBuilder, stmt.u.connect);
     break;
+  case FIRRTL_STATEMENT_KIND_MEM_PORT:
+    visitStmtMemPort(bodyOpBuilder, stmt.u.memPort);
+    break;
   default: // NOLINT(clang-diagnostic-covered-switch-default)
     emitError("unknown statement kind");
     break;
@@ -1050,6 +1053,63 @@ bool FFIContext::visitStmtConnect(BodyOpBuilder &bodyOpBuilder,
     emitPartialConnect(bodyOpBuilder, *lhs, *rhs, lastModuleCtx);
   }
   return true;
+}
+
+bool FFIContext::visitStmtMemPort(BodyOpBuilder &bodyOpBuilder,
+                                  const FirrtlStatementMemPort &stmt) {
+  RA_EXPECT(auto &lastModuleCtx, this->moduleContext, false);
+
+  MemDirAttr direction;
+  switch (stmt.direction) {
+  case FIRRTL_MEM_DIRECTION_INFER:
+    direction = MemDirAttr::Infer;
+    break;
+  case FIRRTL_MEM_DIRECTION_READ:
+    direction = MemDirAttr::Read;
+    break;
+  case FIRRTL_MEM_DIRECTION_WRITE:
+    direction = MemDirAttr::Write;
+    break;
+  case FIRRTL_MEM_DIRECTION_READ_WRITE:
+    direction = MemDirAttr::ReadWrite;
+    break;
+  default: // NOLINT(clang-diagnostic-covered-switch-default)
+    emitError("unknown memory port direction");
+    return false;
+  }
+
+  auto memory = resolveRef(bodyOpBuilder, unwrap(stmt.memName.value));
+  auto indexExpr = resolveExpr(bodyOpBuilder, stmt.memIndex);
+  auto clock = resolveExpr(bodyOpBuilder, stmt.clock);
+  if (!memory.has_value() || !indexExpr.has_value() || !clock.has_value()) {
+    return false;
+  }
+
+  auto memVType = memory->getType().dyn_cast<CMemoryType>();
+  if (!memVType) {
+    emitError("memory port should have behavioral memory type");
+    return false;
+  }
+
+  auto resultType = memVType.getElementType();
+  auto annotations = emptyArrayAttr();
+  auto name = unwrap(stmt.name);
+
+  // Create the memory port at the location of the cmemory.
+  Value memoryPort, memoryData;
+  {
+    OpBuilder::InsertionGuard guard(bodyOpBuilder);
+    bodyOpBuilder.setInsertionPointAfterValue(*memory);
+    auto memoryPortOp = bodyOpBuilder.create<MemoryPortOp>(
+        resultType, CMemoryPortType::get(mlirCtx.get()), *memory, direction,
+        name, annotations);
+    memoryData = memoryPortOp.getResult(0);
+    memoryPort = memoryPortOp.getResult(1);
+  }
+
+  // Create a memory port access in the current scope.
+  bodyOpBuilder.create<MemoryPortAccessOp>(memoryPort, *indexExpr, *clock);
+  return !lastModuleCtx.addSymbolEntry(name, memoryData, mockSMLoc(), true);
 }
 
 #undef RA_EXPECT

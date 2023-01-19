@@ -320,6 +320,7 @@ typedef enum FirrtlStatementKind {
   FIRRTL_STATEMENT_KIND_ELSE,
   FIRRTL_STATEMENT_KIND_WHEN_END,
   FIRRTL_STATEMENT_KIND_CONNECT,
+  FIRRTL_STATEMENT_KIND_MEM_PORT,
 } FirrtlStatementKind;
 
 typedef struct FirrtlStatementAttachOperand {
@@ -369,6 +370,21 @@ typedef struct FirrtlStatementConnect {
   bool isPartial;
 } FirrtlStatementConnect;
 
+typedef enum FirrtlMemDirection {
+  FIRRTL_MEM_DIRECTION_INFER,
+  FIRRTL_MEM_DIRECTION_READ,
+  FIRRTL_MEM_DIRECTION_WRITE,
+  FIRRTL_MEM_DIRECTION_READ_WRITE,
+} FirrtlMemDirection;
+
+typedef struct FirrtlStatementMemPort {
+  FirrtlMemDirection direction;
+  FirrtlStringRef name;
+  FirrtlExprRef memName;
+  FirrtlExpr memIndex;
+  FirrtlExpr clock;
+} FirrtlStatementMemPort;
+
 typedef union FirrtlStatementUnion {
   FirrtlStatementAttach attach;
   FirrtlStatementSeqMemory seqMem;
@@ -379,6 +395,7 @@ typedef union FirrtlStatementUnion {
   FirrtlStatementElse else_;
   FirrtlStatementWhenEnd whenEnd;
   FirrtlStatementConnect connect;
+  FirrtlStatementMemPort memPort;
 } FirrtlStatementUnion;
 
 typedef struct FirrtlStatement {
