@@ -22,8 +22,8 @@ firrtl.circuit "ExtractClockGatesMultigrouping" attributes {annotations = [{clas
   // CHECK: firrtl.instance inst1 sym [[INST1_SYM:@.+]] @SomeModule
 
   // CHECK-LABEL: firrtl.module private @ClockGatesGroup
-  // CHECK: firrtl.instance gate sym [[CKG0_SYM:@.+]] @EICG_wrapper
-  // CHECK: firrtl.instance gate sym [[CKG1_SYM:@.+]] @EICG_wrapper
+  // CHECK: firrtl.instance gate @EICG_wrapper
+  // CHECK: firrtl.instance gate @EICG_wrapper
 
   // CHECK-LABEL: firrtl.module private @DUTModule
   firrtl.module private @DUTModule(in %clock: !firrtl.clock, in %foo_en: !firrtl.uint<1>, in %bar_en: !firrtl.uint<1>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
@@ -46,15 +46,13 @@ firrtl.circuit "ExtractClockGatesMultigrouping" attributes {annotations = [{clas
     firrtl.connect %dut_foo_en, %foo_en : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: clock_gate_1 -> {{0}}.{{1}}.{{2}}.{{3}}\0A
-  // CHECK-SAME{LITERAL}: clock_gate_0 -> {{0}}.{{1}}.{{4}}.{{5}}\0A
+  // CHECK-SAME{LITERAL}: clock_gate_1 -> {{0}}.{{1}}.{{2}}\0A
+  // CHECK-SAME{LITERAL}: clock_gate_0 -> {{0}}.{{1}}.{{3}}\0A
   // CHECK-SAME: output_file = #hw.output_file<"ClockGates.txt", excludeFromFileList>
   // CHECK-SAME: symbols = [
   // CHECK-SAME: @DUTModule
   // CHECK-SAME: #hw.innerNameRef<@DUTModule::[[INJMOD_SYM]]>
   // CHECK-SAME: #hw.innerNameRef<@InjectedSubmodule::[[INST0_SYM]]>
-  // CHECK-SAME: #hw.innerNameRef<@ClockGatesGroup::[[CKG0_SYM]]>
   // CHECK-SAME: #hw.innerNameRef<@InjectedSubmodule::[[INST1_SYM]]>
-  // CHECK-SAME: #hw.innerNameRef<@ClockGatesGroup::[[CKG1_SYM]]>
   // CHECK-SAME: ]
 }

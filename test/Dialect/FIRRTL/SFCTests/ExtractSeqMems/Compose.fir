@@ -154,8 +154,8 @@ circuit TestHarness : %[[
   ; MEM-NOT: Prefix_mem_ext mem_ext
 
   ; MEMS-CONF: name Prefix_mem_ext depth 8 width 8 ports write,read
-  ; SEQMEMS-TXT: mem_wiring_1 -> Prefix_DUTModule.InjectedSubmodule.inst0.mem.mem_ext
-  ; SEQMEMS-TXT: mem_wiring_0 -> Prefix_DUTModule.InjectedSubmodule.inst1.mem.mem_ext
+  ; SEQMEMS-TXT: mem_wiring_1 -> Prefix_DUTModule.InjectedSubmodule.inst0.mem
+  ; SEQMEMS-TXT: mem_wiring_0 -> Prefix_DUTModule.InjectedSubmodule.inst1.mem
 
   ; OMIR:      "id": "OMID:0"
   ; OMIR:      "name": "finalPath"
