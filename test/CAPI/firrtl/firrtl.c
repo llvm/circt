@@ -559,6 +559,7 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
                         .operands = printfOperands,
                         .operandsCount = ARRAY_SIZE(printfOperands),
                         .name = &printfName}}},
+      {.kind = FIRRTL_STATEMENT_KIND_SKIP, .u = {.skip = {}}},
   };
 
   for (unsigned int i = 0; i < ARRAY_SIZE(statements); i++) {
@@ -609,7 +610,8 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
     infer mport mpInfer = seqMem[uintPort1], clock\n\
     rdwr mport mpRW = seqMem[uintPort1], clock\n\
     printf(clock, wire1, \"test %d\", UInt<8>(1))\n\
-    printf(clock, wire1, \"test2 %d\", UInt<8>(1)) : name\n\n");
+    printf(clock, wire1, \"test2 %d\", UInt<8>(1)) : name\n\
+    skip\n\n");
   EXPECT(*errCount == 0);
 
   return 0;
