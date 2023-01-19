@@ -362,6 +362,9 @@ void FFIContext::visitStatement(const FirrtlStatement &stmt) {
   case FIRRTL_STATEMENT_KIND_MEM_PORT:
     visitStmtMemPort(bodyOpBuilder, stmt.u.memPort);
     break;
+  case FIRRTL_STATEMENT_KIND_PRINTF:
+    visitStmtPrintf(bodyOpBuilder, stmt.u.printf);
+    break;
   default: // NOLINT(clang-diagnostic-covered-switch-default)
     emitError("unknown statement kind");
     break;
@@ -1110,6 +1113,37 @@ bool FFIContext::visitStmtMemPort(BodyOpBuilder &bodyOpBuilder,
   // Create a memory port access in the current scope.
   bodyOpBuilder.create<MemoryPortAccessOp>(memoryPort, *indexExpr, *clock);
   return !lastModuleCtx.addSymbolEntry(name, memoryData, mockSMLoc(), true);
+}
+
+bool FFIContext::visitStmtPrintf(BodyOpBuilder &bodyOpBuilder,
+                                 const FirrtlStatementPrintf &stmt) {
+  auto clock = resolveExpr(bodyOpBuilder, stmt.clock);
+  auto condition = resolveExpr(bodyOpBuilder, stmt.condition);
+  if (!clock.has_value() || !condition.has_value()) {
+    return false;
+  }
+
+  SmallVector<Value, 4> operands;
+  operands.reserve(stmt.operandsCount);
+  for (size_t i = 0; i < stmt.operandsCount; i++) {
+    auto operand = resolveExpr(bodyOpBuilder, stmt.operands[i]);
+    if (!operand.has_value()) {
+      return false;
+    }
+    operands.emplace_back(*operand);
+  }
+
+  StringAttr name;
+  if (stmt.name != NULL) {
+    name = stringRefToAttr(unwrap(*stmt.name));
+  } else {
+    name = StringAttr::get(mlirCtx.get(), "");
+  }
+
+  bodyOpBuilder.create<PrintFOp>(
+      *clock, *condition, bodyOpBuilder.getStringAttr(unwrap(stmt.format)),
+      operands, name);
+  return true;
 }
 
 #undef RA_EXPECT

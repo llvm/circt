@@ -405,6 +405,10 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
       .argsCount = ARRAY_SIZE(argsSubField),
   };
 
+  FirrtlExpr printfOperands[] = {{.kind = FIRRTL_EXPR_KIND_UINT,
+                                  .u = {.uint = {.value = 123, .width = 8}}}};
+  FirrtlStringRef printfName = MK_STR("name");
+
   FirrtlStatement statements[] = {
       {.kind = FIRRTL_STATEMENT_KIND_ATTACH,
        .u = {.attach = {.operands = attachOperands,
@@ -541,6 +545,20 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
                          .memName = {.value = MK_STR("seqMem")},
                          .memIndex = MK_REF_EXPR_INLINE("uintPort1"),
                          .clock = MK_REF_EXPR_INLINE("clock")}}},
+      {.kind = FIRRTL_STATEMENT_KIND_PRINTF,
+       .u = {.printf = {.clock = MK_REF_EXPR_INLINE("clock"),
+                        .condition = MK_REF_EXPR_INLINE("wire1"),
+                        .format = MK_STR("test %d"),
+                        .operands = printfOperands,
+                        .operandsCount = ARRAY_SIZE(printfOperands),
+                        .name = NULL}}},
+      {.kind = FIRRTL_STATEMENT_KIND_PRINTF,
+       .u = {.printf = {.clock = MK_REF_EXPR_INLINE("clock"),
+                        .condition = MK_REF_EXPR_INLINE("wire1"),
+                        .format = MK_STR("test2 %d"),
+                        .operands = printfOperands,
+                        .operandsCount = ARRAY_SIZE(printfOperands),
+                        .name = &printfName}}},
   };
 
   for (unsigned int i = 0; i < ARRAY_SIZE(statements); i++) {
@@ -589,7 +607,9 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
     uintOutputBundle.field1 <= uintInputConnectBundle.field1\n\
     uintOutputBundle.field2 <= uintInputConnectBundle.field2\n\
     infer mport mpInfer = seqMem[uintPort1], clock\n\
-    rdwr mport mpRW = seqMem[uintPort1], clock\n\n");
+    rdwr mport mpRW = seqMem[uintPort1], clock\n\
+    printf(clock, wire1, \"test %d\", UInt<8>(1))\n\
+    printf(clock, wire1, \"test2 %d\", UInt<8>(1)) : name\n\n");
   EXPECT(*errCount == 0);
 
   return 0;
