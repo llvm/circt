@@ -1048,8 +1048,9 @@ void ExtractInstancesPass::createTraceFiles() {
         os << ".";
         addSymbol(sym);
       }
-      os << ".";
-      addSymbol(getInnerRefTo(inst));
+      // The final instance name is excluded as this does not provide useful
+      // additional information and could conflict with a name inside the final
+      // module.
       os << "\n";
     }
 
