@@ -83,6 +83,10 @@ public:
   /// types recursively within itself.
   bool isPassive() { return getRecursiveTypeProperties().isPassive; }
 
+  /// Returns true if this is a 'const' type that can only hold compile-time
+  /// constant values
+  bool isConst();
+
   /// Return true if this is or contains an Analog type.
   bool containsAnalog() { return getRecursiveTypeProperties().containsAnalog; }
 
@@ -229,15 +233,20 @@ class IntType : public FIRRTLBaseType, public WidthQualifiedTypeTrait<IntType> {
 public:
   using FIRRTLBaseType::FIRRTLBaseType;
 
-  /// Return an SIntType or UIntType with the specified signedness and width.
+  /// Return an SIntType or UIntType with the specified signedness, width, and
+  /// constness.
   static IntType get(MLIRContext *context, bool isSigned,
-                     int32_t widthOrSentinel = -1);
+                     int32_t widthOrSentinel = -1, bool isConst = false);
 
   bool isSigned() { return isa<SIntType>(); }
   bool isUnsigned() { return isa<UIntType>(); }
 
   /// Return the width of this type, or -1 if it has none specified.
   int32_t getWidthOrSentinel();
+
+  /// Returns true if this is a 'const' type that can only hold compile-time
+  /// constant values
+  bool isConst();
 
   static bool classof(Type type) {
     return type.isa<SIntType>() || type.isa<UIntType>();
@@ -259,10 +268,11 @@ std::optional<int64_t> getBitWidth(FIRRTLBaseType type,
 
 // Parse a FIRRTL type without a leading `!firrtl.` dialect tag.
 ParseResult parseNestedType(FIRRTLType &result, AsmParser &parser);
-ParseResult parseNestedBaseType(FIRRTLBaseType &result, AsmParser &parser);
+ParseResult parseNestedBaseType(FIRRTLBaseType &result, AsmParser &parser,
+                                bool isConst = false);
 
 // Print a FIRRTL type without a leading `!firrtl.` dialect tag.
-void printNestedType(Type type, AsmPrinter &os);
+void printNestedType(Type type, AsmPrinter &os, bool includeConst = true);
 
 using FIRRTLValue = mlir::TypedValue<FIRRTLType>;
 using FIRRTLBaseValue = mlir::TypedValue<FIRRTLBaseType>;

@@ -38,15 +38,16 @@ def SIntImpl : FIRRTLImplType<"SInt",
                               [WidthQualifiedTypeTrait, FieldIDTypeInterface],
                               "::circt::firrtl::IntType"> {
   let summary = "A signed integer type, whose width may not be known.";
-  let parameters = (ins "int32_t":$widthOrSentinel);
+  let parameters = (ins "int32_t":$widthOrSentinel, "bool":$isConst);
   let builders = [
-    TypeBuilder<(ins "std::optional<int32_t>":$width)>,
+    TypeBuilder<(ins "std::optional<int32_t>":$width, CArg<"bool", "false">:$isConst)>,
     TypeBuilder<(ins)>,
   ];
   let genVerifyDecl = true;
   let extraClassDeclaration = [{
     using WidthQualifiedTypeTrait<SIntType>::getWidth;
     using WidthQualifiedTypeTrait<SIntType>::hasWidth;
+    bool isConst() { return getIsConst(); }
   }];
 }
 
@@ -54,15 +55,16 @@ def UIntImpl : FIRRTLImplType<"UInt",
                               [WidthQualifiedTypeTrait, FieldIDTypeInterface],
                               "::circt::firrtl::IntType"> {
   let summary = "An unsigned integer type, whose width may not be known.";
-  let parameters = (ins "int32_t":$widthOrSentinel);
+  let parameters = (ins "int32_t":$widthOrSentinel, "bool":$isConst);
   let builders = [
-    TypeBuilder<(ins "std::optional<int32_t>":$width)>,
+    TypeBuilder<(ins "std::optional<int32_t>":$width, CArg<"bool", "false">:$isConst)>,
     TypeBuilder<(ins)>,
   ];
   let genVerifyDecl = true;
   let extraClassDeclaration = [{
     using WidthQualifiedTypeTrait<UIntType>::getWidth;
     using WidthQualifiedTypeTrait<UIntType>::hasWidth;
+    bool isConst() { return getIsConst(); }
   }];
 }
 
@@ -109,6 +111,10 @@ def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
 
     /// Return this type with any flip types recursively removed from itself.
     FIRRTLBaseType getPassiveType();
+
+    /// Returns true if this is a 'const' type that can only hold compile-time
+    /// constant values
+    bool isConst();
 
     /// Get an integer ID for the field. Field IDs start at 1, and are assigned
     /// to each field in a vector in a recursive depth-first walk of all
@@ -195,6 +201,10 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
 
     /// Return this type with any flip types recursively removed from itself.
     FIRRTLBaseType getPassiveType();
+
+    /// Returns true if this is a 'const' type that can only hold compile-time
+    /// constant values
+    bool isConst();
 
     /// Get an integer ID for the field. Field IDs start at 1, and are assigned
     /// to each field in a bundle in a recursive pre-order walk of all fields,
