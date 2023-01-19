@@ -43,6 +43,7 @@ struct FirrtlStatementConnect;
 struct FirrtlStatementMemPort;
 struct FirrtlStatementPrintf;
 struct FirrtlStatementSkip;
+struct FirrtlStatementStop;
 
 namespace circt {
 namespace chirrtl {
@@ -205,6 +206,8 @@ private:
                        const FirrtlStatementPrintf &stmt);
   bool visitStmtSkip(BodyOpBuilder &bodyOpBuilder,
                      const FirrtlStatementSkip &stmt);
+  bool visitStmtStop(BodyOpBuilder &bodyOpBuilder,
+                     const FirrtlStatementStop &stmt);
 };
 
 } // namespace chirrtl

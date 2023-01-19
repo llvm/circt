@@ -407,7 +407,7 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
 
   FirrtlExpr printfOperands[] = {{.kind = FIRRTL_EXPR_KIND_UINT,
                                   .u = {.uint = {.value = 123, .width = 8}}}};
-  FirrtlStringRef printfName = MK_STR("name");
+  FirrtlStringRef optName = MK_STR("optName");
 
   FirrtlStatement statements[] = {
       {.kind = FIRRTL_STATEMENT_KIND_ATTACH,
@@ -558,8 +558,18 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
                         .format = MK_STR("test2 %d"),
                         .operands = printfOperands,
                         .operandsCount = ARRAY_SIZE(printfOperands),
-                        .name = &printfName}}},
+                        .name = &optName}}},
       {.kind = FIRRTL_STATEMENT_KIND_SKIP, .u = {.skip = {}}},
+      {.kind = FIRRTL_STATEMENT_KIND_STOP,
+       .u = {.stop = {.clock = MK_REF_EXPR_INLINE("clock"),
+                      .condition = MK_REF_EXPR_INLINE("wire1"),
+                      .exitCode = 123,
+                      .name = NULL}}},
+      {.kind = FIRRTL_STATEMENT_KIND_STOP,
+       .u = {.stop = {.clock = MK_REF_EXPR_INLINE("clock"),
+                      .condition = MK_REF_EXPR_INLINE("wire1"),
+                      .exitCode = 123,
+                      .name = &optName}}},
   };
 
   for (unsigned int i = 0; i < ARRAY_SIZE(statements); i++) {
@@ -610,8 +620,10 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
     infer mport mpInfer = seqMem[uintPort1], clock\n\
     rdwr mport mpRW = seqMem[uintPort1], clock\n\
     printf(clock, wire1, \"test %d\", UInt<8>(1))\n\
-    printf(clock, wire1, \"test2 %d\", UInt<8>(1)) : name\n\
-    skip\n\n");
+    printf(clock, wire1, \"test2 %d\", UInt<8>(1)) : optName\n\
+    skip\n\
+    stop(clock, wire1, 123)\n\
+    stop(clock, wire1, 123) : optName\n\n");
   EXPECT(*errCount == 0);
 
   return 0;

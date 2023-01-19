@@ -323,6 +323,7 @@ typedef enum FirrtlStatementKind {
   FIRRTL_STATEMENT_KIND_MEM_PORT,
   FIRRTL_STATEMENT_KIND_PRINTF,
   FIRRTL_STATEMENT_KIND_SKIP,
+  FIRRTL_STATEMENT_KIND_STOP,
 } FirrtlStatementKind;
 
 typedef struct FirrtlStatementAttachOperand {
@@ -400,6 +401,13 @@ typedef struct FirrtlStatementSkip {
   // No fields
 } FirrtlStatementSkip;
 
+typedef struct FirrtlStatementStop {
+  FirrtlExpr clock;
+  FirrtlExpr condition;
+  int32_t exitCode;
+  FirrtlStringRef *name; // Optional, `NULL` for empty
+} FirrtlStatementStop;
+
 typedef union FirrtlStatementUnion {
   FirrtlStatementAttach attach;
   FirrtlStatementSeqMemory seqMem;
@@ -413,6 +421,7 @@ typedef union FirrtlStatementUnion {
   FirrtlStatementMemPort memPort;
   FirrtlStatementPrintf printf;
   FirrtlStatementSkip skip;
+  FirrtlStatementStop stop;
 } FirrtlStatementUnion;
 
 typedef struct FirrtlStatement {

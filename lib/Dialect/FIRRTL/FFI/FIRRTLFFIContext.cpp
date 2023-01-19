@@ -368,6 +368,9 @@ void FFIContext::visitStatement(const FirrtlStatement &stmt) {
   case FIRRTL_STATEMENT_KIND_SKIP:
     visitStmtSkip(bodyOpBuilder, stmt.u.skip);
     break;
+  case FIRRTL_STATEMENT_KIND_STOP:
+    visitStmtStop(bodyOpBuilder, stmt.u.stop);
+    break;
   default: // NOLINT(clang-diagnostic-covered-switch-default)
     emitError("unknown statement kind");
     break;
@@ -1152,6 +1155,26 @@ bool FFIContext::visitStmtPrintf(BodyOpBuilder &bodyOpBuilder,
 bool FFIContext::visitStmtSkip(BodyOpBuilder &bodyOpBuilder,
                                const FirrtlStatementSkip &stmt) {
   bodyOpBuilder.create<SkipOp>();
+  return true;
+}
+
+bool FFIContext::visitStmtStop(BodyOpBuilder &bodyOpBuilder,
+                               const FirrtlStatementStop &stmt) {
+  auto clock = resolveExpr(bodyOpBuilder, stmt.clock);
+  auto condition = resolveExpr(bodyOpBuilder, stmt.condition);
+  if (!clock.has_value() || !condition.has_value()) {
+    return false;
+  }
+
+  StringAttr name;
+  if (stmt.name != nullptr) {
+    name = stringRefToAttr(unwrap(*stmt.name));
+  } else {
+    name = StringAttr::get(mlirCtx.get(), "");
+  }
+
+  bodyOpBuilder.create<StopOp>(
+      *clock, *condition, bodyOpBuilder.getI32IntegerAttr(stmt.exitCode), name);
   return true;
 }
 
