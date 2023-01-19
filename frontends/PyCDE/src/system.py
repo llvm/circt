@@ -23,7 +23,7 @@ import gc
 import os
 import pathlib
 import sys
-from typing import Any, Callable, Dict, List, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 _current_system = ContextVar("current_pycde_system")
 
@@ -89,7 +89,7 @@ class System:
 
     with self:
       [
-          m._genspec.create()
+          m._genspec.circt_mod
           if issubclass(m, Module) else m._pycde_mod.create()
           for m in self.top_modules
       ]
@@ -208,6 +208,7 @@ class System:
       self.files.add(outfn)
       self.mod_files.add(outfn)
       op.fileName = ir.StringAttr.get(str(file_name))
+    return op
 
   @staticmethod
   def current():
@@ -469,9 +470,12 @@ class _OpCache:
       return None
     return self._pyproxy_symbols[spec_mod]
 
-  def get_circt_mod(self, spec_mod: Module) -> ir.Operation:
+  def get_circt_mod(self, spec_mod: Module) -> Optional[ir.Operation]:
     """Get the CIRCT module op for a PyCDE module."""
-    return self.symbols[self.get_pyproxy_symbol(spec_mod)]
+    sym = self.get_pyproxy_symbol(spec_mod)
+    if sym in self.symbols:
+      return self.symbols[sym]
+    return None
 
   def _build_instance_hier_cache(self):
     """If the instance hierarchy cache doesn't exist, build it."""

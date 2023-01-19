@@ -1,6 +1,6 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
-from pycde import System, Input, Output, module, generator
+from pycde import System, Input, Output, generator, Module
 from pycde.pycde_types import dim
 
 # CHECK-LABEL: msft.module @MyMod {} (%in_port: i8) -> (out0: i5, out1: i5) attributes {fileName = "MyMod.sv"} {
@@ -10,8 +10,7 @@ from pycde.pycde_types import dim
 # CHECK:       }
 
 
-@module
-class MyMod:
+class MyMod(Module):
   in_port = Input(dim(8))
   out0 = Output(dim(5))
   out1 = Output(dim(5))

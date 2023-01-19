@@ -1,6 +1,6 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
-from pycde import generator, dim, Clock, Input, Output, Value, types
+from pycde import generator, dim, Clock, Input, Output, Module, Value, types
 from pycde.constructs import Mux
 from pycde.testing import unittestmodule
 
@@ -35,7 +35,7 @@ def array_from_tuple(*input):
 
 
 @unittestmodule()
-class ComplexMux:
+class ComplexMux(Module):
 
   Clk = Clock()
   In = Input(dim(3, 4, 5))
@@ -71,7 +71,7 @@ class ComplexMux:
 
 
 @unittestmodule()
-class Slicing:
+class Slicing(Module):
   In = Input(dim(8, 4, 5))
   Sel8 = Input(types.i8)
   Sel2 = Input(types.i2)

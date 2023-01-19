@@ -4,10 +4,10 @@ import pycde
 import pycde.dialects.hw
 
 
-@pycde.module
+@pycde.params
 def Parameterized(param):
 
-  class TestModule:
+  class TestModule(pycde.Module):
     x = pycde.Input(pycde.types.i1)
     y = pycde.Output(pycde.types.i1)
 

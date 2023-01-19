@@ -1,12 +1,12 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
-from pycde import Input, generator, dim
+from pycde import Input, generator, dim, Module
 from pycde.constructs import Mux
 from pycde.testing import unittestmodule
 
 
 @unittestmodule()
-class Mux1:
+class Mux1(Module):
 
   In = Input(dim(3, 4, 5))
   Sel = Input(dim(8))
@@ -21,7 +21,7 @@ class Mux1:
 
 
 @unittestmodule()
-class Mux2:
+class Mux2(Module):
 
   Sel = Input(dim(8))
 

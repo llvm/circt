@@ -679,9 +679,14 @@ class GenSpec(_PyProxy):
     self.clocks = clocks
     self.generators = generators
     self.builder_type = None
-    self.created = False
     self.parameters = None
     self.set_name()
+
+  def reset_generate(self, args=None):
+    """Resets member variables to their defaults. Should be called before and
+    after each generate."""
+    self.block_args = args
+    self.output_values = [None] * len(self.outputs)
 
   def set_name(self):
     if hasattr(self.cls, "module_name"):
@@ -695,10 +700,35 @@ class GenSpec(_PyProxy):
     self.parameters = params
     self.set_name()
 
+  def get_input(self, idx):
+    val = self.block_args[idx]
+    if idx in self.clocks:
+      return ClockSignal(val, ClockType())
+    return Value(val)
+
+  def set_output(self, idx, signal):
+    assert signal is not None
+    pname, ptype = self.outputs[idx]
+    if isinstance(signal, Signal):
+      if ptype != signal.type:
+        raise PortError(
+            f"Input port {pname} expected type {ptype}, not {signal.type}")
+    else:
+      signal = _obj_to_value(signal, ptype)
+    self.output_values[idx] = signal
+
+  def check_unconnected_outputs(self):
+    unconnected_ports = []
+    for idx, value in enumerate(self.output_values):
+      if value is None:
+        unconnected_ports.append(self.outputs[idx][0])
+    if len(unconnected_ports) > 0:
+      raise support.UnconnectedSignalError(self.name, unconnected_ports)
+
   def print(self, out):
     print(
-        f"<pycde.Module: {self.name} inputs: {self.input_ports} "
-        f"outputs: {self.output_ports}>",
+        f"<pycde.Module: {self.name} inputs: {self.inputs} "
+        f"outputs: {self.outputs}>",
         file=out)
 
 
@@ -768,17 +798,15 @@ class ModuleLikeType(type):
 
 
 class ModuleSpec(GenSpec):
-  # Bug: currently only works with one System. See notes at the top of this
-  # class.
-  def create(self):
-    """Create the module op. Should not be called outside of a 'System'
-    context. Returns the symbol of the module op."""
 
-    assert not self.created
+  @property
+  def circt_mod(self):
     from .system import System
     sys: System = System.current()
-    sys._create_circt_mod(self)
-    self.created = True
+    ret = sys._op_cache.get_circt_mod(self)
+    if ret is None:
+      return sys._create_circt_mod(self)
+    return ret
 
   def create_op(self, sys, symbol):
     """Creation callback for creating a MSFTModuleOp."""
@@ -807,32 +835,7 @@ class ModuleSpec(GenSpec):
         loc=self.loc,
         ip=sys._get_ip())
 
-  @property
-  def circt_mod(self):
-    if not self.created:
-      self.create()
-    from .system import System
-    sys: System = System.current()
-    return sys._op_cache.get_circt_mod(self)
-
-  def get_input(self, idx):
-    val = self.block_args[idx]
-    if idx in self.clocks:
-      return ClockSignal(val, ClockType())
-    return Value(val)
-
-  def set_output(self, idx, signal):
-    assert signal is not None
-    pname, ptype = self.outputs[idx]
-    if isinstance(signal, Signal):
-      if ptype != signal.type:
-        raise PortError(
-            f"Input port {pname} expected type {ptype}, not {signal.type}")
-    else:
-      signal = _obj_to_value(signal, ptype)
-    self.output_values[idx] = signal
-
-  def instantiate(self, instance_name: str, **inputs):
+  def instantiate(self, module_inst, instance_name: str, **inputs):
     from .circt.dialects import _hw_ops_ext as hwext
     circt_mod = self.circt_mod
     input_lookup = {
@@ -878,23 +881,16 @@ class ModuleSpec(GenSpec):
 
     def create_output_op():
       """Create the hw.OutputOp from module I/O ports in 'args'."""
-      unconnected_ports = []
-      for idx, value in enumerate(self.output_values):
-        if value is None:
-          unconnected_ports.append(self.outputs[idx][0])
-      if len(unconnected_ports) > 0:
-        raise support.UnconnectedSignalError(self.name, unconnected_ports)
-
+      self.check_unconnected_outputs()
       msft.OutputOp([o.value for o in self.output_values])
 
     bc = _BlockContext()
     circt_mod = self.circt_mod
     entry_block = circt_mod.add_entry_block()
-    self.block_args = entry_block.arguments
-    self.output_values = [None] * len(self.outputs)
+    self.reset_generate(entry_block.arguments)
     builder = self.builder_type()
     with ir.InsertionPoint(entry_block), g.loc, BackedgeBuilder(), bc:
-      # Enter clock block implicitly if only one clock given
+      # Enter clock block implicitly if only one clock given.
       clk = None
       if len(self.clocks) == 1:
         clk_port = list(self.clocks)[0]
@@ -909,8 +905,7 @@ class ModuleSpec(GenSpec):
 
       if clk is not None:
         clk.__exit__(None, None, None)
-      self.output_values = None
-      self.block_args = None
+    self.reset_generate()
 
 
 class Module(metaclass=ModuleLikeType):
@@ -921,9 +916,13 @@ class Module(metaclass=ModuleLikeType):
     if instance_name is None:
       instance_name = self.__class__.__name__
     instance_name = _BlockContext.current().uniquify_symbol(instance_name)
-    self.inst = self._genspec.instantiate(instance_name, **inputs)
+    self.inst = self._genspec.instantiate(self, instance_name, **inputs)
     if appid is not None:
       self.inst.operation.attributes[AppID.AttributeName] = appid._appid
+
+  @classmethod
+  def print(cls, out=sys.stdout):
+    cls._genspec.print(out)
 
 
 class params:

@@ -1,6 +1,6 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
-from pycde import System, Input, generator
+from pycde import Module, Input, generator
 from pycde.testing import unittestmodule
 from pycde.pycde_types import types, dim
 from pycde.ndarray import NDArray
@@ -9,7 +9,7 @@ from pycde.ndarray import NDArray
 
 
 @unittestmodule()
-class M1:
+class M1(Module):
   in1 = Input(types.i32)
 
   @generator
@@ -28,7 +28,7 @@ class M1:
 
 
 @unittestmodule()
-class M1:
+class M1(Module):
   in1 = Input(types.i33)
 
   @generator
@@ -44,7 +44,7 @@ class M1:
 
 
 @unittestmodule()
-class M1:
+class M1(Module):
   in1 = Input(dim(types.i32, 10))
 
   @generator
@@ -59,7 +59,7 @@ class M1:
 
 
 @unittestmodule()
-class M1:
+class M1(Module):
   in1 = Input(types.i31)
 
   @generator

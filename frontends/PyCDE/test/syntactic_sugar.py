@@ -13,9 +13,6 @@ from pycde.testing import unittestmodule
 # CHECK:    %c7_i12_0 = hw.constant 7 : i12
 # CHECK:    hw.struct_create (%c7_i12_0) : !hw.typealias<@pycde::@bar, !hw.struct<foo: i12>>
 # CHECK:    %Taps.taps = msft.instance @Taps @Taps()  : () -> !hw.array<3xi8>
-# CHECK:    %c0_i4 = hw.constant 0 : i4
-# CHECK:    [[ARG0:%.+]] = hw.bitcast %c0_i4 : (i4) -> !hw.array<4xi1>
-# CHECK:    msft.instance @StupidLegacy @StupidLegacy([[ARG0]])  : (!hw.array<4xi1>) -> ()
 # CHECK:    msft.output
 # CHECK-LABEL:  msft.module @Taps {} () -> (taps: !hw.array<3xi8>) attributes {fileName = "Taps.sv"} {
 # CHECK:    %c-53_i8 = hw.constant -53 : i8
@@ -23,7 +20,6 @@ from pycde.testing import unittestmodule
 # CHECK:    %c23_i8 = hw.constant 23 : i8
 # CHECK:    [[R0:%.+]] = hw.array_create %c23_i8, %c100_i8, %c-53_i8 : i8
 # CHECK:    msft.output [[R0]] : !hw.array<3xi8>
-# CHECK:  msft.module.extern @StupidLegacy(%ignore: !hw.array<4xi1>) attributes {verilogName = "StupidLegacy"}
 
 
 class Taps(Module):

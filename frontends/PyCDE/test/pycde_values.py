@@ -1,7 +1,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 from pycde.dialects import comb, hw
-from pycde import dim, generator, types, Input, Output
+from pycde import dim, generator, types, Input, Output, Module
 from pycde.value import And, Or
 from pycde.testing import unittestmodule
 
@@ -9,7 +9,7 @@ from pycde.testing import unittestmodule
 @unittestmodule(SIZE=4)
 def MyModule(SIZE: int):
 
-  class Mod:
+  class Mod(Module):
     inp = Input(dim(SIZE))
     out = Output(dim(SIZE))
 
@@ -31,7 +31,7 @@ def MyModule(SIZE: int):
 
 # CHECK-LABEL: msft.module @Mod {} (%inp: !hw.array<5xi1>)
 @unittestmodule()
-class Mod:
+class Mod(Module):
   inp = Input(dim(types.i1, 5))
 
   @generator
