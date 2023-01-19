@@ -196,6 +196,7 @@ bool isAnnoClassLowered(StringRef className);
 /// A representation of a deferred Wiring problem consisting of a source that
 /// should be connected to a sink.
 struct WiringProblem {
+  enum class RefTypeUsage { Prefer, Never };
 
   /// A source to wire from.
   Value source;
@@ -207,8 +208,8 @@ struct WiringProblem {
   /// problem.
   std::string newNameHint;
 
-  /// Create real type ports instead of ref type when solving this problem.
-  bool useRealTypePorts;
+  /// The usage of ref type ports when solving this problem.
+  RefTypeUsage refTypeUsage;
 };
 
 /// A representation of a legacy Wiring problem consisting of a signal source

@@ -541,26 +541,25 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
 /// using the pin attribute as newNameHint
 LogicalResult LowerAnnotationsPass::legacyToWiringProblems(ApplyState &state) {
   for (const auto &problem : state.legacyWiringProblems) {
-    if (!problem.second.source) {
+    if (!problem.second.source)
       return mlir::emitError(state.circuit.getLoc())
              << "Unable to resolve source for pin: " << problem.first;
-    }
-    if (problem.second.sinks.empty()) {
+
+    if (problem.second.sinks.empty())
       return mlir::emitError(state.circuit.getLoc())
              << "Unable to resolve sink(s) for pin: " << problem.first;
-    }
 
-    for (const auto &sink : problem.second.sinks) {
-      state.wiringProblems.push_back(
-          {problem.second.source, sink, problem.first.str(), true});
-    }
+    for (const auto &sink : problem.second.sinks)
+      state.wiringProblems.push_back({problem.second.source, sink,
+                                      problem.first.str(),
+                                      WiringProblem::RefTypeUsage::Never});
   }
   return success();
 }
 
 /// Modify the circuit to solve and apply all Wiring Problems in the circuit.  A
 /// Wiring Problem is a mapping from a source to a sink that can be connected
-/// via a real Type or RefType as requested.  This uses a two-step approach.
+/// via a base Type or RefType as requested.  This uses a two-step approach.
 /// First, all Wiring Problems are analyzed to compute pending modifications to
 /// modules. Second, modules are visited from leaves to roots to apply module
 /// modifications.  Module modifications include addings ports and connecting
@@ -776,8 +775,10 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
 
     // Record port types that should be added to each module along the LCA path.
     Type sourceType, sinkType;
-    if (!noRefTypePorts && !problem.useRealTypePorts) {
-      // Use RefType ports
+    auto useRefTypes = !noRefTypePorts &&
+        problem.refTypeUsage == WiringProblem::RefTypeUsage::Prefer;
+    if (useRefTypes) {
+      // Use RefType ports if possible
       RefType refType = TypeSwitch<Type, RefType>(source.getType())
                             .Case<FIRRTLBaseType>([](FIRRTLBaseType base) {
                               return RefType::get(base);
@@ -786,7 +787,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       sourceType = refType;
       sinkType = refType.getType();
     } else {
-      // Use real Type ports
+      // Use base Type ports
       sourceType = source.getType();
       sinkType = sink.getType();
 
