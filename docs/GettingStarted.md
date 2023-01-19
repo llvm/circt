@@ -99,6 +99,8 @@ in performance.
 If you plan to use the Python bindings, you should also specify
 `-DCIRCT_BINDINGS_PYTHON_ENABLED=ON`.
 
+If you don't need circt-tools, you can specify `-DCIRCT_TOOLS_DISABLE=ON`.
+
 5) **Optionally configure your environment**:
 
 It is useful to add the `.../circt/build/bin` and `.../circt/llvm/build/bin` 

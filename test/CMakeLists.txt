@@ -19,16 +19,21 @@ set(CIRCT_TEST_DEPENDS
   FileCheck count not
   split-file
   circt-capi-ir-test
-  circt-as
-  circt-dis
-  circt-opt
-  circt-translate
-  circt-reduce
   esi-tester
-  handshake-runner
-  firtool
-  hlstool
   )
+
+if(NOT CIRCT_TOOLS_DISABLE)
+  list(APPEND CIRCT_TEST_DEPENDS
+    circt-as
+    circt-dis
+    circt-opt
+    circt-translate
+    circt-reduce
+    handshake-runner
+    firtool
+    hlstool
+    )
+endif()
 
 if (CIRCT_GTEST_AVAILABLE)
   list(APPEND CIRCT_TEST_DEPENDS CIRCTUnitTests)

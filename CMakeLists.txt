@@ -473,6 +473,20 @@ endif()
 llvm_canonicalize_cmake_booleans(CIRCT_LLHD_SIM_ENABLED)
 
 #-------------------------------------------------------------------------------
+# circt tools Configuration
+#-------------------------------------------------------------------------------
+
+option(CIRCT_TOOLS_DISABLE "Disable circt tools." OFF)
+
+if(NOT CIRCT_TOOLS_DISABLE)
+  message(STATUS "circt tools is enabled.")
+else()
+  message(STATUS "circt tools is disabled.")
+endif()
+
+llvm_canonicalize_cmake_booleans(CIRCT_TOOLS_DISABLE)
+
+#-------------------------------------------------------------------------------
 # Python Configuration
 #-------------------------------------------------------------------------------
 

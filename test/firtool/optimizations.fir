@@ -1,3 +1,4 @@
+; REQUIRES: circt-tools
 ; RUN: firtool %s --format=fir --ir-fir              | circt-opt | FileCheck %s --check-prefix=OPT
 ; RUN: firtool %s --format=fir --ir-fir -disable-opt | circt-opt | FileCheck %s --check-prefix=NOOPT
 

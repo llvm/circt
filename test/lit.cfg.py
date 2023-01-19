@@ -55,10 +55,7 @@ llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 tool_dirs = [
     config.circt_tools_dir, config.mlir_tools_dir, config.llvm_tools_dir
 ]
-tools = [
-    'firtool', 'circt-as', 'circt-dis', 'circt-opt', 'circt-reduce',
-    'circt-translate', 'circt-capi-ir-test', 'esi-tester', 'hlstool'
-]
+tools = ['circt-capi-ir-test', 'esi-tester']
 
 # Enable Verilator if it has been detected.
 if config.verilator_path != "":
@@ -73,6 +70,14 @@ if config.esi_capnp != "":
 # Enable tests for schedulers relying on an external solver from OR-Tools.
 if config.scheduling_or_tools != "":
   config.available_features.add('or-tools')
+
+# Add tools if it is built.
+if not config.circt_tools_disable:
+  config.available_features.add('circt-tools')
+  tools.extend([
+      'firtool', 'circt-as', 'circt-dis', 'circt-opt', 'circt-reduce',
+      'circt-translate', 'hlstool'
+  ])
 
 # Add llhd-sim if it is built.
 if config.llhd_sim_enabled:

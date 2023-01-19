@@ -4,14 +4,20 @@ llvm_canonicalize_cmake_booleans(
 
 set(CIRCT_INTEGRATION_TEST_DEPENDS
   FileCheck count not split-file
-  circt-opt
-  circt-translate
-  circt-rtl-sim
-  esi-cosim-runner
-  firtool
-  hlstool
-  handshake-runner
   )
+
+# If circt tools is available to build then enable the tests.
+if(NOT CIRCT_TOOLS_DISABLE)
+  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS
+    circt-opt
+    circt-translate
+    circt-rtl-sim
+    esi-cosim-runner
+    firtool
+    hlstool
+    handshake-runner
+    )
+endif()
 
 # If Python bindings are available to build then enable the tests.
 if(CIRCT_BINDINGS_PYTHON_ENABLED)
