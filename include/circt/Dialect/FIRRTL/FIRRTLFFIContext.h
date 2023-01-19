@@ -31,6 +31,7 @@ struct FirrtlParameter;
 struct FirrtlExpr;
 struct FirrtlPrim;
 struct FirrtlDeclaration;
+struct FirrtlDeclarationInstance;
 struct FirrtlDeclarationSeqMemory;
 struct FirrtlDeclarationNode;
 struct FirrtlDeclarationWire;
@@ -188,6 +189,8 @@ private:
   std::optional<mlir::Value> resolveExpr(BodyOpBuilder &bodyOpBuilder,
                                          const FirrtlExpr &expr);
 
+  bool visitDeclInstance(BodyOpBuilder &bodyOpBuilder,
+                         const FirrtlDeclarationInstance &decl);
   bool visitDeclSeqMemory(BodyOpBuilder &bodyOpBuilder,
                           const FirrtlDeclarationSeqMemory &decl);
   bool visitDeclNode(BodyOpBuilder &bodyOpBuilder,

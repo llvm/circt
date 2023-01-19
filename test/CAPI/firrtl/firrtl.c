@@ -299,6 +299,16 @@ int testGenExtModule(FirrtlContext ctx, size_t *errCount) {
 
 int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
   firrtlVisitCircuit(ctx, MK_STR("DeclStmtTest"));
+
+  FirrtlType uint1 = {.kind = FIRRTL_TYPE_KIND_UINT,
+                      .u = {.uint = {.width = 1}}};
+  FirrtlType uint8 = {.kind = FIRRTL_TYPE_KIND_UINT,
+                      .u = {.uint = {.width = 8}}};
+
+  firrtlVisitModule(ctx, MK_STR("ModForInst"));
+  firrtlVisitPort(ctx, MK_STR("otherModPort"), FIRRTL_PORT_DIRECTION_INPUT,
+                  &uint8);
+
   firrtlVisitModule(ctx, MK_STR("DeclStmtTest"));
 
   FirrtlType analogs[3];
@@ -312,23 +322,17 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
     analogs[i] = analog;
   }
 
-  FirrtlType uint1 = {.kind = FIRRTL_TYPE_KIND_UINT,
-                      .u = {.uint = {.width = 1}}};
-  FirrtlType uint8s[2];
-  for (unsigned int i = 0; i < ARRAY_SIZE(uint8s); i++) {
-    FirrtlType port = {.kind = FIRRTL_TYPE_KIND_UINT,
-                       .u = {.uint = {.width = 8}}};
+  for (unsigned int i = 0; i < 2; i++) {
     char name[64] = {};
     sprintf(name, "uintPort%d", i + 1);
-    firrtlVisitPort(ctx, MK_STR(name), FIRRTL_PORT_DIRECTION_INPUT, &port);
-    uint8s[i] = port;
+    firrtlVisitPort(ctx, MK_STR(name), FIRRTL_PORT_DIRECTION_INPUT, &uint8);
   }
 
   FirrtlTypeBundleField analogFields[] = {
       {.name = MK_STR("field1"), .flip = false, .type = &analogs[0]},
       {.name = MK_STR("field2"), .flip = true, .type = &analogs[1]},
       {.name = MK_STR("field3"), .flip = false, .type = &analogs[2]},
-      {.name = MK_STR("field4"), .flip = true, .type = &uint8s[0]},
+      {.name = MK_STR("field4"), .flip = true, .type = &uint8},
   };
   FirrtlType analogBundle = {
       .kind = FIRRTL_TYPE_KIND_BUNDLE,
@@ -338,10 +342,10 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
                   &analogBundle);
 
   FirrtlTypeBundleField uintFields[] = {
-      {.name = MK_STR("field1"), .flip = false, .type = &uint8s[0]},
-      {.name = MK_STR("field2"), .flip = true, .type = &uint8s[0]},
-      {.name = MK_STR("field3"), .flip = false, .type = &uint8s[0]},
-      {.name = MK_STR("field4"), .flip = true, .type = &uint8s[0]},
+      {.name = MK_STR("field1"), .flip = false, .type = &uint8},
+      {.name = MK_STR("field2"), .flip = true, .type = &uint8},
+      {.name = MK_STR("field3"), .flip = false, .type = &uint8},
+      {.name = MK_STR("field4"), .flip = true, .type = &uint8},
   };
   FirrtlType uintBundle = {
       .kind = FIRRTL_TYPE_KIND_BUNDLE,
@@ -410,6 +414,12 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
   FirrtlStringRef optName = MK_STR("optName");
 
   FirrtlDeclaration declarations[] = {
+      {.kind = FIRRTL_DECLARATION_KIND_INSTANCE,
+       .u = {.instance =
+                 {
+                     .name = MK_STR("outside"),
+                     .moduleName = MK_STR("ModForInst"),
+                 }}},
       {.kind = FIRRTL_DECLARATION_KIND_SEQ_MEMORY,
        .u = {.seqMem = {.name = MK_STR("seqMem"),
                         .type = {.kind = FIRRTL_TYPE_KIND_VECTOR,
@@ -530,6 +540,10 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
       {.kind = FIRRTL_STATEMENT_KIND_WHEN_END, .u = {.whenEnd = {}}},
       {.kind = FIRRTL_STATEMENT_KIND_CONNECT,
        .u = {.connect = {.left = {.value = MK_STR("uintOutputBundle.field1")},
+                         .right = {.value = MK_STR("outside.otherModPort")},
+                         .isPartial = false}}},
+      {.kind = FIRRTL_STATEMENT_KIND_CONNECT,
+       .u = {.connect = {.left = {.value = MK_STR("uintOutputBundle.field1")},
                          .right = {.value = MK_STR("uintInputBundle.field1")},
                          .isPartial = false}}},
       {.kind = FIRRTL_STATEMENT_KIND_CONNECT,
@@ -621,6 +635,9 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
 
   EXPECT(*errCount == 0);
   EXPECT_EXPORT("circuit DeclStmtTest :\n\
+  module ModForInst :\n\
+    input otherModPort : UInt<8>\n\
+\n\
   module DeclStmtTest :\n\
     input analog1 : Analog<8>\n\
     input analog2 : Analog<8>\n\
@@ -634,6 +651,7 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
     input uintInputConnectBundle : { field1 : UInt<8>, field2 : UInt<8> }\n\
     input clock : Clock\n\
 \n\
+    inst outside of ModForInst\n\
     smem seqMem : UInt<32>[1024] undefined\n\
     node node1 = add(uintPort1, uintPort2)\n\
     node node2 = sub(uintPort1, analogBundle.field4)\n\
@@ -662,6 +680,7 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
       else :\n\
         wire5 is invalid\n\
       wire6 is invalid\n\
+    uintOutputBundle.field1 <= outside.otherModPort\n\
     uintOutputBundle.field1 <= uintInputBundle.field1\n\
     uintOutputBundle <= uintInputBundle\n\
     uintOutputBundle.field1 <= uintInputConnectBundle.field1\n\
@@ -765,6 +784,69 @@ int testErrDuplicatePortName(FirrtlContext ctx, size_t *errCount) {
   module AnotherMod :\n\
     input port : UInt<8>\n\n");
   EXPECT(*errCount == 2);
+
+  return 0;
+}
+
+int testErrDeclInstance(FirrtlContext ctx, size_t *errCount) {
+  firrtlVisitCircuit(ctx, MK_STR("DeclInstance"));
+
+  FirrtlType tyUInt8 = {
+      .kind = FIRRTL_TYPE_KIND_UINT,
+      .u = {.uint = {.width = 8}},
+  };
+
+  firrtlVisitModule(ctx, MK_STR("OtherMod"));
+
+  firrtlVisitPort(ctx, MK_STR("other1"), FIRRTL_PORT_DIRECTION_INPUT, &tyUInt8);
+
+  firrtlVisitModule(ctx, MK_STR("DeclInstance"));
+
+  firrtlVisitPort(ctx, MK_STR("port1"), FIRRTL_PORT_DIRECTION_OUTPUT, &tyUInt8);
+
+  FirrtlDeclaration inst = {.kind = FIRRTL_DECLARATION_KIND_INSTANCE,
+                            .u = {.instance = {
+                                      .name = MK_STR("otherMod"),
+                                      .moduleName = MK_STR("OtherMod"),
+                                  }}};
+  firrtlVisitDeclaration(ctx, &inst);
+
+  EXPECT(*errCount == 0);
+  size_t expectedErrCount = 0;
+
+  // Non-existent port
+  FirrtlStatement connect = {
+      .kind = FIRRTL_STATEMENT_KIND_CONNECT,
+      .u = {.connect = {.left = {.value = MK_STR("port1")},
+                        .right = {.value = MK_STR("otherMod.nonExistent")},
+                        .isPartial = false}}};
+  firrtlVisitStatement(ctx, &connect);
+
+  EXPECT(*errCount == ++expectedErrCount);
+  EXPECT_EXPORT("circuit DeclInstance :\n\
+  module OtherMod :\n\
+    input other1 : UInt<8>\n\
+\n\
+  module DeclInstance :\n\
+    output port1 : UInt<8>\n\
+\n\
+    inst otherMod of OtherMod\n\n");
+  EXPECT(*errCount == expectedErrCount);
+
+  // Fixed
+  connect.u.connect.right.value = MK_STR("otherMod.other1");
+  firrtlVisitStatement(ctx, &connect);
+
+  EXPECT_EXPORT("circuit DeclInstance :\n\
+  module OtherMod :\n\
+    input other1 : UInt<8>\n\
+\n\
+  module DeclInstance :\n\
+    output port1 : UInt<8>\n\
+\n\
+    inst otherMod of OtherMod\n\
+    port1 <= otherMod.other1\n\n");
+  EXPECT(*errCount == expectedErrCount);
 
   return 0;
 }
@@ -1095,6 +1177,7 @@ int testExpectedError() {
   IF_ERR_RET(runOnce(&testErrNoModule));
   IF_ERR_RET(runOnce(&testErrNoHeader));
   IF_ERR_RET(runOnce(&testErrDuplicatePortName));
+  IF_ERR_RET(runOnce(&testErrDeclInstance));
   IF_ERR_RET(runOnce(&testErrDeclNode));
   IF_ERR_RET(runOnce(&testErrStmtAttach));
   IF_ERR_RET(runOnce(&testErrStmtWhen));

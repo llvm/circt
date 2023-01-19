@@ -322,6 +322,9 @@ void FFIContext::visitDeclaration(const FirrtlDeclaration &decl) {
       mlir::ImplicitLocOpBuilder::atBlockEnd(mockLoc(), blockToInsertInto);
 
   switch (decl.kind) {
+  case FIRRTL_DECLARATION_KIND_INSTANCE:
+    visitDeclInstance(bodyOpBuilder, decl.u.instance);
+    break;
   case FIRRTL_DECLARATION_KIND_SEQ_MEMORY:
     visitDeclSeqMemory(bodyOpBuilder, decl.u.seqMem);
     break;
@@ -899,6 +902,59 @@ std::optional<mlir::Value> FFIContext::resolveExpr(BodyOpBuilder &bodyOpBuilder,
 
   emitError("unknown expression kind");
   return std::nullopt;
+}
+
+bool FFIContext::visitDeclInstance(BodyOpBuilder &bodyOpBuilder,
+                                   const FirrtlDeclarationInstance &decl) {
+  RA_EXPECT(auto &lastModuleCtx, this->moduleContext, false);
+
+  auto name = unwrap(decl.name);
+  auto moduleName = unwrap(decl.moduleName);
+
+  // Look up the module that is being referenced.
+  auto circuit =
+      bodyOpBuilder.getBlock()->getParentOp()->getParentOfType<CircuitOp>();
+  auto referencedModule =
+      dyn_cast_or_null<FModuleLike>(circuit.lookupSymbol(moduleName));
+  if (!referencedModule) {
+    emitError(("use of undefined module name '" + moduleName + "' in instance")
+                  .str());
+    return false;
+  }
+
+  SmallVector<PortInfo> modulePorts = referencedModule.getPorts();
+
+  // Make a bundle of the inputs and outputs of the specified module.
+  SmallVector<Type, 4> resultTypes;
+  resultTypes.reserve(modulePorts.size());
+  SmallVector<std::pair<StringAttr, Type>, 4> resultNamesAndTypes;
+
+  for (auto port : modulePorts) {
+    resultTypes.push_back(port.type);
+    resultNamesAndTypes.push_back({port.name, port.type});
+  }
+
+  auto annotations = emptyArrayAttr();
+  SmallVector<Attribute, 4> portAnnotations(modulePorts.size(), annotations);
+
+  StringAttr sym = {};
+  auto result = bodyOpBuilder.create<InstanceOp>(
+      referencedModule, name, NameKindEnum::InterestingName,
+      annotations.getValue(), portAnnotations, false, sym);
+
+  // Since we are implicitly unbundling the instance results, we need to keep
+  // track of the mapping from bundle fields to results in the unbundledValues
+  // data structure.  Build our entry now.
+  UnbundledValueEntry unbundledValueEntry;
+  unbundledValueEntry.reserve(modulePorts.size());
+  for (size_t i = 0, e = modulePorts.size(); i != e; ++i)
+    unbundledValueEntry.push_back({modulePorts[i].name, result.getResult(i)});
+
+  // Add it to unbundledValues and add an entry to the symbol table to remember
+  // it.
+  lastModuleCtx.unbundledValues.push_back(std::move(unbundledValueEntry));
+  auto entryId = UnbundledID(lastModuleCtx.unbundledValues.size());
+  return !lastModuleCtx.addSymbolEntry(name, entryId, mockSMLoc());
 }
 
 bool FFIContext::visitDeclSeqMemory(BodyOpBuilder &bodyOpBuilder,
