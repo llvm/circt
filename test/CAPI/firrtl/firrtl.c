@@ -413,6 +413,11 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
                                   .u = {.uint = {.value = 123, .width = 8}}}};
   FirrtlStringRef optName = MK_STR("optName");
 
+  FirrtlMemoryPort memPorts[] = {
+      {.kind = FIRRTL_MEMORY_PORT_KIND_WRITER, .name = MK_STR("mpW")},
+      {.kind = FIRRTL_MEMORY_PORT_KIND_READER_WRITER, .name = MK_STR("mpRW")},
+  };
+
   FirrtlDeclaration declarations[] = {
       {.kind = FIRRTL_DECLARATION_KIND_INSTANCE,
        .u = {.instance =
@@ -431,6 +436,15 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
                                  .u = {.vector = {.type = &tyUInt32,
                                                   .count = 1024}}},
                         .readUnderWrite = FIRRTL_READ_UNDER_WRITE_UNDEFINED}}},
+      {.kind = FIRRTL_DECLARATION_KIND_MEMORY,
+       .u = {.memory = {.name = MK_STR("memory"),
+                        .dataType = uint8,
+                        .depth = 16,
+                        .readLatency = 1,
+                        .writeLatency = 0,
+                        .readUnderWrite = FIRRTL_READ_UNDER_WRITE_NEW,
+                        .ports = memPorts,
+                        .portsCount = ARRAY_SIZE(memPorts)}}},
       {.kind = FIRRTL_DECLARATION_KIND_NODE,
        .u = {.node =
                  {
@@ -544,7 +558,7 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
       {.kind = FIRRTL_STATEMENT_KIND_WHEN_END, .u = {.whenEnd = {}}},
       {.kind = FIRRTL_STATEMENT_KIND_WHEN_END, .u = {.whenEnd = {}}},
       {.kind = FIRRTL_STATEMENT_KIND_CONNECT,
-       .u = {.connect = {.left = {.value = MK_STR("uintOutputBundle.field1")},
+       .u = {.connect = {.left = {.value = MK_STR("memory.mpW.data")},
                          .right = {.value = MK_STR("outside.otherModPort")},
                          .isPartial = false}}},
       {.kind = FIRRTL_STATEMENT_KIND_CONNECT,
@@ -659,6 +673,14 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
     inst outside of ModForInst\n\
     cmem combMem : UInt<32>[1024]\n\
     smem seqMem : UInt<32>[1024] undefined\n\
+    mem memory :\n\
+      data-type => UInt<8>\n\
+      depth => 16\n\
+      read-latency => 1\n\
+      write-latency => 0\n\
+      writer => mpW\n\
+      readwriter => mpRW\n\
+      read-under-write => new\n\
     node node1 = add(uintPort1, uintPort2)\n\
     node node2 = sub(uintPort1, analogBundle.field4)\n\
     wire wire1 : UInt<1>\n\
@@ -686,7 +708,7 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
       else :\n\
         wire5 is invalid\n\
       wire6 is invalid\n\
-    uintOutputBundle.field1 <= outside.otherModPort\n\
+    memory.mpW.data <= outside.otherModPort\n\
     uintOutputBundle.field1 <= uintInputBundle.field1\n\
     uintOutputBundle <= uintInputBundle\n\
     uintOutputBundle.field1 <= uintInputConnectBundle.field1\n\

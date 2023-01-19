@@ -46,6 +46,19 @@ std::string typeToString(const mlir::Type &type) {
   return typeStr;
 }
 
+std::optional<RUWAttr> ruwToAttr(FirrtlReadUnderWrite input) {
+  switch (input) {
+  case FIRRTL_READ_UNDER_WRITE_UNDEFINED:
+    return RUWAttr::Undefined;
+  case FIRRTL_READ_UNDER_WRITE_OLD:
+    return RUWAttr::Old;
+  case FIRRTL_READ_UNDER_WRITE_NEW:
+    return RUWAttr::New;
+  default: // NOLINT(clang-diagnostic-covered-switch-default)
+    return std::nullopt;
+  }
+}
+
 // Extracted from `FIRParser.cpp`
 // NOLINTNEXTLINE(misc-no-recursion)
 void emitInvalidate(details::ModuleContext &lastModuleCtx,
@@ -330,6 +343,9 @@ void FFIContext::visitDeclaration(const FirrtlDeclaration &decl) {
     break;
   case FIRRTL_DECLARATION_KIND_SEQ_MEMORY:
     visitDeclSeqMemory(bodyOpBuilder, decl.u.seqMem);
+    break;
+  case FIRRTL_DECLARATION_KIND_MEMORY:
+    visitDeclMemory(bodyOpBuilder, decl.u.memory);
     break;
   case FIRRTL_DECLARATION_KIND_NODE:
     visitDeclNode(bodyOpBuilder, decl.u.node);
@@ -989,18 +1005,8 @@ bool FFIContext::visitDeclSeqMemory(BodyOpBuilder &bodyOpBuilder,
                                     const FirrtlDeclarationSeqMemory &decl) {
   RA_EXPECT(auto &lastModuleCtx, this->moduleContext, false);
 
-  RUWAttr ruw;
-  switch (decl.readUnderWrite) {
-  case FIRRTL_READ_UNDER_WRITE_UNDEFINED:
-    ruw = RUWAttr::Undefined;
-    break;
-  case FIRRTL_READ_UNDER_WRITE_OLD:
-    ruw = RUWAttr::Old;
-    break;
-  case FIRRTL_READ_UNDER_WRITE_NEW:
-    ruw = RUWAttr::New;
-    break;
-  default:
+  auto ruw = ruwToAttr(decl.readUnderWrite);
+  if (!ruw.has_value()) {
     emitError("unknown RUW value");
     return false;
   }
@@ -1021,9 +1027,99 @@ bool FFIContext::visitDeclSeqMemory(BodyOpBuilder &bodyOpBuilder,
   auto annotations = emptyArrayAttr();
   StringAttr sym = {};
   auto result = bodyOpBuilder.create<SeqMemOp>(
-      vectorType.getElementType(), vectorType.getNumElements(), ruw, name,
+      vectorType.getElementType(), vectorType.getNumElements(), *ruw, name,
       NameKindEnum::InterestingName, annotations, sym);
   return !lastModuleCtx.addSymbolEntry(name, result, mockSMLoc());
+}
+
+bool FFIContext::visitDeclMemory(BodyOpBuilder &bodyOpBuilder,
+                                 const FirrtlDeclarationMemory &decl) {
+  RA_EXPECT(auto &lastModuleCtx, this->moduleContext, false);
+
+  auto name = unwrap(decl.name);
+
+  auto type = ffiTypeToFirType(decl.dataType);
+  if (!type.has_value()) {
+    return false;
+  }
+
+  auto baseType = type->dyn_cast<FIRRTLBaseType>();
+  if (!baseType) {
+    emitError("unexpected type, must be base type");
+    return false;
+  }
+
+  auto ruw = ruwToAttr(decl.readUnderWrite);
+  if (!ruw.has_value()) {
+    emitError("unknown RUW value");
+    return false;
+  }
+
+  SmallVector<std::pair<StringAttr, Type>, 4> ports;
+
+  for (size_t i = 0; i < decl.portsCount; i++) {
+    const auto &port = decl.ports[i];
+
+    MemOp::PortKind portKind;
+    switch (port.kind) {
+    case FIRRTL_MEMORY_PORT_KIND_READER:
+      portKind = MemOp::PortKind::Read;
+      break;
+    case FIRRTL_MEMORY_PORT_KIND_WRITER:
+      portKind = MemOp::PortKind::Write;
+      break;
+    case FIRRTL_MEMORY_PORT_KIND_READER_WRITER:
+      portKind = MemOp::PortKind::ReadWrite;
+      break;
+    default: // NOLINT(clang-diagnostic-covered-switch-default)
+      emitError("unknown memory port kind");
+      return false;
+    }
+
+    ports.push_back({bodyOpBuilder.getStringAttr(unwrap(port.name)),
+                     MemOp::getTypeForPort(decl.depth, baseType, portKind)});
+  }
+
+  // The FIRRTL dialect requires mems to have at least one port.  Since portless
+  // mems can never be referenced, it is always safe to drop them.
+  if (ports.empty()) {
+    return true;
+  }
+
+  // Canonicalize the ports into alphabetical order.
+  // TODO: Move this into MemOp construction/canonicalization.
+  llvm::array_pod_sort(ports.begin(), ports.end(),
+                       [](const std::pair<StringAttr, Type> *lhs,
+                          const std::pair<StringAttr, Type> *rhs) -> int {
+                         return lhs->first.getValue().compare(
+                             rhs->first.getValue());
+                       });
+
+  auto annotations = emptyArrayAttr();
+  SmallVector<Attribute, 4> resultNames;
+  SmallVector<Type, 4> resultTypes;
+  SmallVector<Attribute, 4> resultAnnotations;
+  for (auto p : ports) {
+    resultNames.push_back(p.first);
+    resultTypes.push_back(p.second);
+    resultAnnotations.push_back(annotations);
+  }
+
+  auto result = bodyOpBuilder.create<MemOp>(
+      resultTypes, decl.readLatency, decl.writeLatency, decl.depth, *ruw,
+      bodyOpBuilder.getArrayAttr(resultNames), name,
+      NameKindEnum::InterestingName, annotations,
+      bodyOpBuilder.getArrayAttr(resultAnnotations), hw::InnerSymAttr(),
+      IntegerAttr());
+
+  UnbundledValueEntry unbundledValueEntry;
+  unbundledValueEntry.reserve(result.getNumResults());
+  for (size_t i = 0, e = result.getNumResults(); i != e; ++i)
+    unbundledValueEntry.push_back({resultNames[i], result.getResult(i)});
+
+  lastModuleCtx.unbundledValues.push_back(std::move(unbundledValueEntry));
+  auto entryID = UnbundledID(lastModuleCtx.unbundledValues.size());
+  return !lastModuleCtx.addSymbolEntry(name, entryID, mockSMLoc());
 }
 
 bool FFIContext::visitDeclNode(BodyOpBuilder &bodyOpBuilder,

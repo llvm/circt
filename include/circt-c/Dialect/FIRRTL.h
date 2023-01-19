@@ -314,6 +314,7 @@ typedef enum FirrtlDeclarationKind {
   FIRRTL_DECLARATION_KIND_INSTANCE,
   FIRRTL_DECLARATION_KIND_COMB_MEMORY,
   FIRRTL_DECLARATION_KIND_SEQ_MEMORY,
+  FIRRTL_DECLARATION_KIND_MEMORY,
   FIRRTL_DECLARATION_KIND_NODE,
   FIRRTL_DECLARATION_KIND_WIRE,
 } FirrtlDeclarationKind;
@@ -334,6 +335,28 @@ typedef struct FirrtlDeclarationSeqMemory {
   FirrtlReadUnderWrite readUnderWrite; // defaults to `FIRRTL_RUW_UNDEFINED`
 } FirrtlDeclarationSeqMemory;
 
+typedef enum FirrtlMemoryPortKind {
+  FIRRTL_MEMORY_PORT_KIND_READER,
+  FIRRTL_MEMORY_PORT_KIND_WRITER,
+  FIRRTL_MEMORY_PORT_KIND_READER_WRITER,
+} FirrtlMemoryPortKind;
+
+typedef struct FirrtlMemoryPort {
+  FirrtlMemoryPortKind kind;
+  FirrtlStringRef name;
+} FirrtlMemoryPort;
+
+typedef struct FirrtlDeclarationMemory {
+  FirrtlStringRef name;
+  FirrtlType dataType;
+  int64_t depth;
+  int64_t readLatency;
+  int64_t writeLatency;
+  FirrtlReadUnderWrite readUnderWrite;
+  FirrtlMemoryPort *ports;
+  size_t portsCount;
+} FirrtlDeclarationMemory;
+
 typedef struct FirrtlDeclarationNode {
   FirrtlStringRef name;
   FirrtlExpr expr;
@@ -348,6 +371,7 @@ typedef union FirrtlDeclarationUnion {
   FirrtlDeclarationInstance instance;
   FirrtlDeclarationCombMemory combMem;
   FirrtlDeclarationSeqMemory seqMem;
+  FirrtlDeclarationMemory memory;
   FirrtlDeclarationNode node;
   FirrtlDeclarationWire wire;
 } FirrtlDeclarationUnion;

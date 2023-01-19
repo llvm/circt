@@ -34,6 +34,7 @@ struct FirrtlDeclaration;
 struct FirrtlDeclarationInstance;
 struct FirrtlDeclarationCombMemory;
 struct FirrtlDeclarationSeqMemory;
+struct FirrtlDeclarationMemory;
 struct FirrtlDeclarationNode;
 struct FirrtlDeclarationWire;
 struct FirrtlStatement;
@@ -196,6 +197,8 @@ private:
                            const FirrtlDeclarationCombMemory &decl);
   bool visitDeclSeqMemory(BodyOpBuilder &bodyOpBuilder,
                           const FirrtlDeclarationSeqMemory &decl);
+  bool visitDeclMemory(BodyOpBuilder &bodyOpBuilder,
+                       const FirrtlDeclarationMemory &decl);
   bool visitDeclNode(BodyOpBuilder &bodyOpBuilder,
                      const FirrtlDeclarationNode &decl);
   bool visitDeclWire(BodyOpBuilder &bodyOpBuilder,
