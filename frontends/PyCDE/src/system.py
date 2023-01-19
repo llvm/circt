@@ -8,7 +8,7 @@ from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
                             PhysicalRegion)
 
 from .common import _PyProxy
-from .module import Module, ModuleLikeType, GenSpec
+from .module import Module, ModuleLikeType, ModuleLikeBuilder
 from .pycde_types import types
 from .instance import Instance, InstanceHierarchyRoot
 
@@ -89,7 +89,7 @@ class System:
 
     with self:
       [
-          m._genspec.circt_mod
+          m._builder.circt_mod
           if issubclass(m, Module) else m._pycde_mod.create()
           for m in self.top_modules
       ]
@@ -170,31 +170,22 @@ class System:
       entity_extern = EntityExtern(tag, metadata)
     return entity_extern
 
-  def _create_circt_mod(self, spec_mod: Module):
+  def _create_circt_mod(self, builder: ModuleLikeBuilder):
     """Wrapper for a callback (which actually builds the CIRCT op) which
     controls all the bookkeeping around CIRCT module ops."""
 
-    (symbol, install_func) = self._op_cache.create_symbol(spec_mod)
+    (symbol, install_func) = self._op_cache.create_symbol(builder)
     if symbol is None:
       return
 
     # Build the correct op.
-    if hasattr(spec_mod, "create_op"):
-      op = spec_mod.create_op(self, symbol)
-    else:
-      op = spec_mod.create_cb(self, spec_mod, symbol)
+    op = builder.create_op(self, symbol)
     # Install the op in the cache.
     install_func(op)
     # Add to the generation queue if the module has a generator callback.
-    has_generator = False
-    if hasattr(spec_mod, 'generator_cb') and spec_mod.generator_cb is not None:
-      assert callable(spec_mod.generator_cb)
-      has_generator = True
-    if isinstance(spec_mod, GenSpec) and len(spec_mod.generators) > 0:
-      has_generator = True
-    if has_generator:
-      self._generate_queue.append(spec_mod)
-      file_name = spec_mod.modcls.__name__ + ".sv"
+    if len(builder.generators) > 0:
+      self._generate_queue.append(builder)
+      file_name = builder.modcls.__name__ + ".sv"
       outfn = self.output_directory / file_name
       self.files.add(outfn)
       self.mod_files.add(outfn)
@@ -251,7 +242,7 @@ class System:
                    mod_cls: object,
                    instance_name: str = None) -> InstanceHierarchyRoot:
     assert len(self._generate_queue) == 0, "Ungenerated modules left"
-    mod = mod_cls._pycde_mod
+    mod = mod_cls._builder
     key = (mod, instance_name)
     if key not in self._instance_roots:
       self._instance_roots[key] = InstanceHierarchyRoot(mod, instance_name,
@@ -453,10 +444,8 @@ class _OpCache:
   def get_pyproxy_symbol(self, spec_mod) -> str:
     """Get the symbol for a module or its associated _PyProxy."""
     if not isinstance(spec_mod, Module):
-      if hasattr(spec_mod, "_pycde_mod"):
-        spec_mod = spec_mod._pycde_mod
       if isinstance(spec_mod, ModuleLikeType):
-        spec_mod = spec_mod._genspec
+        spec_mod = spec_mod._builder
     if spec_mod not in self._pyproxy_symbols:
       return None
     return self._pyproxy_symbols[spec_mod]

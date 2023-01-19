@@ -3,7 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from pycde.system import System
-from .module import Generator, _BlockContext, Module, GenSpec
+from .module import Generator, _BlockContext, Module, ModuleLikeBuilder
 from pycde.value import ChannelValue, ClockSignal, Signal, Value
 from .common import Input, Output, InputChannel, OutputChannel, _PyProxy
 from .circt.dialects import esi as raw_esi, hw, msft
@@ -292,7 +292,7 @@ class _ServiceGeneratorChannels:
         raise ValueError(f"{name_str} has not been connected.")
 
 
-class ServiceImplementationModuleSpec(GenSpec):
+class ServiceImplementationModuleSpec(ModuleLikeBuilder):
 
   def instantiate(self, impl, instance_name: str, **inputs):
     # Each instantiation of the ServiceImplementation has its own
@@ -314,7 +314,7 @@ class ServiceImplementationModuleSpec(GenSpec):
     assert len(self.generators) == 1
     generator: Generator = list(self.generators.values())[0]
     self.reset_generate(serviceReq.operation.operands)
-    builder = self.builder_type()
+    builder = self.generator_port_proxy()
     with ir.InsertionPoint(
         serviceReq), generator.loc, BackedgeBuilder(), _BlockContext():
 
@@ -356,7 +356,7 @@ class ServiceImplementationModule(Module):
   'channels' argument containing lists of the input and output channels which
   need to be connected to the service being implemented."""
 
-  GenSpecType = ServiceImplementationModuleSpec
+  BuilderType = ServiceImplementationModuleSpec
 
   def __init__(self, decl: Optional[ServiceDecl], **inputs):
     self.decl = decl
@@ -409,7 +409,7 @@ class _ServiceGeneratorRegistry:
       return False
     (impl, sys) = self._registry[impl_name]
     with sys:
-      return impl._genspec.generate_svc_impl(serviceReq=req.opview)
+      return impl._builder.generate_svc_impl(serviceReq=req.opview)
 
 
 _service_generator_registry = _ServiceGeneratorRegistry()

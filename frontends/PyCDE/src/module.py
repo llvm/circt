@@ -122,19 +122,78 @@ def generator(func):
 ###############################################################################
 
 
-class GenSpec(_PyProxy):
+class ModuleLikeBuilder(_PyProxy):
 
-  def __init__(self, cls, loc, outputs, inputs, clocks, generators):
-    self.cls = cls
-    self.modcls = cls  # backwards compat
+  def __init__(self, cls, cls_dct, loc):
+    self.modcls = cls
+    self.cls_dct = cls_dct
     self.loc = loc
-    self.outputs = outputs
-    self.inputs = inputs
-    self.clocks = clocks
-    self.generators = generators
-    self.builder_type = None
     self.parameters = None
     self.set_name()
+
+  def go(self):
+    self.scan_cls()
+    self.generator_port_proxy = self.create_port_proxy()
+    self.add_external_port_accessors()
+
+  def scan_cls(self):
+    # Inputs, Outputs, and parameters are all class members. We must populate
+    # them. Scan 'dct' for them.
+    input_ports = []
+    output_ports = []
+    clock_ports = set()
+    generators = {}
+    for attr_name, attr in self.cls_dct.items():
+      if attr_name.startswith("_"):
+        continue
+
+      if isinstance(attr, Clock):
+        clock_ports.add(len(input_ports))
+        input_ports.append((attr_name, ir.IntegerType.get_signless(1)))
+      elif isinstance(attr, Input):
+        input_ports.append((attr_name, attr.type))
+      elif isinstance(attr, Output):
+        output_ports.append((attr_name, attr.type))
+      elif isinstance(attr, Generator):
+        generators[attr_name] = attr
+
+    self.outputs = output_ports
+    self.inputs = input_ports
+    self.clocks = clock_ports
+    self.generators = generators
+
+  def create_port_proxy(self):
+    proxy_attrs = {}
+    for idx, (name, port_type) in enumerate(self.inputs):
+      proxy_attrs[name] = property(
+          lambda self, idx=idx, gs=self: gs.get_input(idx))
+
+    for idx, (name, port_type) in enumerate(self.outputs):
+
+      def fget(self, idx=idx, builder=self):
+        builder.get_output(idx)
+
+      def fset(self, val, idx=idx, builder=self):
+        builder.set_output(idx, val)
+
+      proxy_attrs[name] = property(fget=fget, fset=fset)
+
+    return type(self.modcls.__name__ + "Builder", (), proxy_attrs)
+
+  def add_external_port_accessors(self):
+    for idx, (name, port_type) in enumerate(self.inputs):
+
+      def fget(self):
+        raise PortError("Cannot access signal via instance input")
+
+      setattr(self.modcls, name, property(fget=fget))
+
+    for idx, (name, port_type) in enumerate(self.outputs):
+
+      def fget(self, idx=idx):
+        return Value(self.inst.results[idx])
+
+      setattr(self.modcls, name, property(fget=fget))
 
   def reset_generate(self, args=None):
     """Resets member variables to their defaults. Should be called before and
@@ -143,12 +202,12 @@ class GenSpec(_PyProxy):
     self.output_values = [None] * len(self.outputs)
 
   def set_name(self):
-    if hasattr(self.cls, "module_name"):
-      self.name = self.cls.module_name
+    if hasattr(self.modcls, "module_name"):
+      self.name = self.modcls.module_name
     elif self.parameters is not None:
-      self.name = _create_module_name(self.cls.__name__, self.parameters)
+      self.name = _create_module_name(self.modcls.__name__, self.parameters)
     else:
-      self.name = self.cls.__name__
+      self.name = self.modcls.__name__
 
   def set_params(self, params: ir.DictAttr):
     self.parameters = params
@@ -193,65 +252,11 @@ class ModuleLikeType(type):
 
   def __init__(cls, name, bases, dct: Dict):
     super(ModuleLikeType, cls).__init__(name, bases, dct)
-
-    # Inputs, Outputs, and parameters are all class members. We must populate
-    # them. Scan 'dct' for them.
-    input_ports = []
-    output_ports = []
-    clock_ports = set()
-    generators = {}
-    builder_attrs = {}
-    for attr_name, attr in dct.items():
-      if attr_name.startswith("_"):
-        continue
-
-      if isinstance(attr, Clock):
-        clock_ports.add(len(input_ports))
-        input_ports.append((attr_name, ir.IntegerType.get_signless(1)))
-      elif isinstance(attr, Input):
-        input_ports.append((attr_name, attr.type))
-      elif isinstance(attr, Output):
-        output_ports.append((attr_name, attr.type))
-      elif isinstance(attr, Generator):
-        generators[attr_name] = attr
-
-    genspec = cls.GenSpecType(cls, get_user_loc(), output_ports, input_ports,
-                              clock_ports, generators)
-
-    for idx, (name, port_type) in enumerate(input_ports):
-      builder_attrs[name] = property(
-          lambda self, idx=idx, gs=genspec: gs.get_input(idx))
-
-    for idx, (name, port_type) in enumerate(output_ports):
-
-      def fget(self, idx=idx, genspec=genspec):
-        genspec.get_output(idx)
-
-      def fset(self, val, idx=idx, genspec=genspec):
-        genspec.set_output(idx, val)
-
-      builder_attrs[name] = property(fget=fget, fset=fset)
-
-    genspec.builder_type = type(name + "Builder", (), builder_attrs)
-    cls._genspec = genspec
-    cls._pycde_mod = genspec  # backwards compat
-
-    for idx, (name, port_type) in enumerate(input_ports):
-
-      def fget(self):
-        raise PortError("Cannot access signal via instance input")
-
-      setattr(cls, name, property(fget=fget))
-
-    for idx, (name, port_type) in enumerate(output_ports):
-
-      def fget(self, idx=idx):
-        return Value(self.inst.results[idx])
-
-      setattr(cls, name, property(fget=fget))
+    cls._builder = cls.BuilderType(cls, dct, get_user_loc())
+    cls._builder.go()
 
 
-class ModuleSpec(GenSpec):
+class ModuleSpec(ModuleLikeBuilder):
 
   @property
   def circt_mod(self):
@@ -342,7 +347,7 @@ class ModuleSpec(GenSpec):
     circt_mod = self.circt_mod
     entry_block = circt_mod.add_entry_block()
     self.reset_generate(entry_block.arguments)
-    builder = self.builder_type()
+    builder = self.generator_port_proxy()
     with ir.InsertionPoint(entry_block), g.loc, BackedgeBuilder(), bc:
       # Enter clock block implicitly if only one clock given.
       clk = None
@@ -363,20 +368,20 @@ class ModuleSpec(GenSpec):
 
 
 class Module(metaclass=ModuleLikeType):
-  GenSpecType = ModuleSpec
+  BuilderType = ModuleSpec
 
   def __init__(self, instance_name: str = None, appid: AppID = None, **inputs):
     """Create an instance of this module."""
     if instance_name is None:
       instance_name = self.__class__.__name__
     instance_name = _BlockContext.current().uniquify_symbol(instance_name)
-    self.inst = self._genspec.instantiate(self, instance_name, **inputs)
+    self.inst = self._builder.instantiate(self, instance_name, **inputs)
     if appid is not None:
       self.inst.operation.attributes[AppID.AttributeName] = appid._appid
 
   @classmethod
   def print(cls, out=sys.stdout):
-    cls._genspec.print(out)
+    cls._builder.print(out)
 
 
 class params:
@@ -424,7 +429,7 @@ class params:
     if not issubclass(cls, Module):
       raise ValueError("Parameterization function must return Module class")
 
-    cls._genspec.set_params(cache_key[1])
+    cls._builder.set_params(cache_key[1])
     _MODULE_CACHE[cache_key] = cls
     return cls
 
@@ -433,7 +438,7 @@ class ImportedModSpec(ModuleSpec):
   # Creation callback that just moves the already build module into the System's
   # ModuleOp and returns it.
   def create_op(self, sys, symbol: str):
-    hw_module = self.cls.hw_module
+    hw_module = self.modcls.hw_module
 
     # TODO: deal with symbolrefs to this (potentially renamed) module symbol.
     sys.mod.body.append(hw_module)
@@ -441,7 +446,7 @@ class ImportedModSpec(ModuleSpec):
     # Need to clear out the reference to ourselves so that we can release the
     # raw reference to `hw_module`. It's safe to do so since unlike true PyCDE
     # modules, this can only be run once during the import_mlir.
-    self.cls.hw_module = None
+    self.modcls.hw_module = None
     return hw_module
 
   def instantiate(self, module_inst, instance_name: str, **inputs):
@@ -464,7 +469,7 @@ def import_hw_module(hw_module: hw.HWModuleOp):
     modattrs[input_name] = Input(block_arg.type, input_name)
   for output_name, output_type in hw_module.outputs().items():
     modattrs[output_name] = Output(output_type, output_name)
-  modattrs["GenSpecType"] = ImportedModSpec
+  modattrs["BuilderType"] = ImportedModSpec
   modattrs["hw_module"] = hw_module
 
   # Use the name and ports to construct a class object like what externmodule
