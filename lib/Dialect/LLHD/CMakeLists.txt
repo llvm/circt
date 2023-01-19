@@ -1,3 +1,5 @@
 add_subdirectory(IR)
-add_subdirectory(Simulator)
+if(CIRCT_LLHD_SIM_ENABLED)
+  add_subdirectory(Simulator)
+endif()
 add_subdirectory(Transforms)
