@@ -80,7 +80,7 @@ static Value zextByOne(Location loc, ConversionPatternRewriter &rewriter,
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Convert a StructExplodeOp to a LLVM dialect.
+/// Convert a StructExplodeOp to the LLVM dialect.
 /// Pattern: struct_explode(input) =>
 ///          struct_extract(input, structElements_index(index)) ...
 struct StructExplodeOpConversion
