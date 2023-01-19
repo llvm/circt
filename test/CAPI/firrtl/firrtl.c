@@ -418,6 +418,30 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
       {.kind = FIRRTL_MEMORY_PORT_KIND_READER_WRITER, .name = MK_STR("mpRW")},
   };
 
+  FirrtlDeclarationRegisterWith regWithSelf = {
+      .resetSignal = {.kind = FIRRTL_EXPR_KIND_UINT,
+                      .u =
+                          {
+                              .uint =
+                                  {
+                                      .value = 1,
+                                      .width = 1,
+                                  },
+                          }},
+      .resetValue = MK_REF_EXPR_INLINE("r2")};
+
+  FirrtlDeclarationRegisterWith regWithOther = {
+      .resetSignal = {.kind = FIRRTL_EXPR_KIND_UINT,
+                      .u =
+                          {
+                              .uint =
+                                  {
+                                      .value = 1,
+                                      .width = 1,
+                                  },
+                          }},
+      .resetValue = MK_REF_EXPR_INLINE("uintPort1")};
+
   FirrtlDeclaration declarations[] = {
       {.kind = FIRRTL_DECLARATION_KIND_INSTANCE,
        .u = {.instance =
@@ -459,6 +483,33 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
                      .expr = {.kind = FIRRTL_EXPR_KIND_PRIM,
                               .u = {.prim = {.value = &primSubField}}},
                  }}},
+      {.kind = FIRRTL_DECLARATION_KIND_REGISTER,
+       .u = {.register_ = {.name = MK_STR("r1"),
+                           .type =
+                               {
+                                   .kind = FIRRTL_TYPE_KIND_UINT,
+                                   .u = {.uint = {.width = 33}},
+                               },
+                           .clock = MK_REF_EXPR_INLINE("clock"),
+                           .with = NULL}}},
+      {.kind = FIRRTL_DECLARATION_KIND_REGISTER,
+       .u = {.register_ = {.name = MK_STR("r2"),
+                           .type =
+                               {
+                                   .kind = FIRRTL_TYPE_KIND_UINT,
+                                   .u = {.uint = {.width = 33}},
+                               },
+                           .clock = MK_REF_EXPR_INLINE("clock"),
+                           .with = &regWithSelf}}},
+      {.kind = FIRRTL_DECLARATION_KIND_REGISTER,
+       .u = {.register_ = {.name = MK_STR("r3"),
+                           .type =
+                               {
+                                   .kind = FIRRTL_TYPE_KIND_UINT,
+                                   .u = {.uint = {.width = 33}},
+                               },
+                           .clock = MK_REF_EXPR_INLINE("clock"),
+                           .with = &regWithOther}}},
   };
 
   for (unsigned int i = 0; i < ARRAY_SIZE(declarations); i++) {
@@ -683,6 +734,10 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
       read-under-write => new\n\
     node node1 = add(uintPort1, uintPort2)\n\
     node node2 = sub(uintPort1, analogBundle.field4)\n\
+    reg r1 : UInt<33>, clock\n\
+    reg r2 : UInt<33>, clock\n\
+    reg r3 : UInt<33>, clock with :\n\
+      reset => (UInt<1>(1), uintPort1)\n\
     wire wire1 : UInt<1>\n\
     wire wire2 : UInt<1>\n\
     wire wire3 : UInt<1>\n\

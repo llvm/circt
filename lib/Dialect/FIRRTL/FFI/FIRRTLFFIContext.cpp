@@ -353,6 +353,9 @@ void FFIContext::visitDeclaration(const FirrtlDeclaration &decl) {
   case FIRRTL_DECLARATION_KIND_WIRE:
     visitDeclWire(bodyOpBuilder, decl.u.wire);
     break;
+  case FIRRTL_DECLARATION_KIND_REGISTER:
+    visitDeclRegister(bodyOpBuilder, decl.u.register_);
+    break;
   default: // NOLINT(clang-diagnostic-covered-switch-default)
     emitError("unknown declaration kind");
     break;
@@ -1179,6 +1182,48 @@ bool FFIContext::visitDeclWire(BodyOpBuilder &bodyOpBuilder,
   auto result = bodyOpBuilder.create<WireOp>(
       *type, name, NameKindEnum::InterestingName, annotations,
       sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
+  return !lastModuleCtx.addSymbolEntry(name, result, mockSMLoc());
+}
+
+bool FFIContext::visitDeclRegister(BodyOpBuilder &bodyOpBuilder,
+                                   const FirrtlDeclarationRegister &decl) {
+  RA_EXPECT(auto &lastModuleCtx, this->moduleContext, false);
+
+  auto name = unwrap(decl.name);
+  auto type = ffiTypeToFirType(decl.type);
+  auto clock = resolveExpr(bodyOpBuilder, decl.clock);
+  if (!type.has_value() || !clock.has_value()) {
+    return false;
+  }
+
+  Value resetSignal, resetValue;
+  // The Scala implementation of FIRRTL represents registers without resets
+  // as a self referential register... and the pretty printer doesn't print
+  // the right form. Recognize that this is happening and treat it as a
+  // register without a reset for compatibility.
+  // TODO(firrtl scala impl): pretty print registers without resets right.
+  if (decl.with != nullptr &&
+      !(decl.with->resetValue.kind == FIRRTL_EXPR_KIND_REF &&
+        unwrap(decl.with->resetValue.u.ref.value) == name)) {
+    auto optResetSignal = resolveExpr(bodyOpBuilder, decl.with->resetSignal);
+    auto optResetValue = resolveExpr(bodyOpBuilder, decl.with->resetValue);
+    if (!optResetSignal.has_value() || !optResetValue.has_value()) {
+      return false;
+    }
+    resetSignal = *optResetSignal;
+    resetValue = *optResetValue;
+  }
+
+  ArrayAttr annotations = emptyArrayAttr();
+  Value result;
+  StringAttr sym = {};
+  if (resetSignal)
+    result = bodyOpBuilder.create<RegResetOp>(
+        *type, *clock, resetSignal, resetValue, name,
+        NameKindEnum::InterestingName, annotations, sym);
+  else
+    result = bodyOpBuilder.create<RegOp>(
+        *type, *clock, name, NameKindEnum::InterestingName, annotations, sym);
   return !lastModuleCtx.addSymbolEntry(name, result, mockSMLoc());
 }
 

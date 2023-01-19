@@ -317,6 +317,7 @@ typedef enum FirrtlDeclarationKind {
   FIRRTL_DECLARATION_KIND_MEMORY,
   FIRRTL_DECLARATION_KIND_NODE,
   FIRRTL_DECLARATION_KIND_WIRE,
+  FIRRTL_DECLARATION_KIND_REGISTER,
 } FirrtlDeclarationKind;
 
 typedef struct FirrtlDeclarationInstance {
@@ -367,6 +368,18 @@ typedef struct FirrtlDeclarationWire {
   FirrtlType type;
 } FirrtlDeclarationWire;
 
+typedef struct FirrtlDeclarationRegisterWith {
+  FirrtlExpr resetSignal;
+  FirrtlExpr resetValue;
+} FirrtlDeclarationRegisterWith;
+
+typedef struct FirrtlDeclarationRegister {
+  FirrtlStringRef name;
+  FirrtlType type;
+  FirrtlExpr clock;
+  FirrtlDeclarationRegisterWith *with; // Optional
+} FirrtlDeclarationRegister;
+
 typedef union FirrtlDeclarationUnion {
   FirrtlDeclarationInstance instance;
   FirrtlDeclarationCombMemory combMem;
@@ -374,6 +387,7 @@ typedef union FirrtlDeclarationUnion {
   FirrtlDeclarationMemory memory;
   FirrtlDeclarationNode node;
   FirrtlDeclarationWire wire;
+  FirrtlDeclarationRegister register_;
 } FirrtlDeclarationUnion;
 
 typedef struct FirrtlDeclaration {
