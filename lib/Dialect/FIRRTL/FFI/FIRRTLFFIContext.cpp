@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIREmitter.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "mlir/CAPI/Support.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Location.h"
@@ -25,13 +26,13 @@ using namespace chirrtl;
 
 using llvm::SMLoc;
 
-using ModuleSymbolTable = FIRModuleContextBase::ModuleSymbolTable;
-using ModuleSymbolTableEntry = FIRModuleContextBase::ModuleSymbolTableEntry;
-using SubaccessCache = FIRModuleContextBase::SubaccessCache;
-using SymbolValueEntry = FIRModuleContextBase::SymbolValueEntry;
-using UnbundledID = FIRModuleContextBase::UnbundledID;
-using UnbundledValueEntry = FIRModuleContextBase::UnbundledValueEntry;
-using UnbundledValuesList = FIRModuleContextBase::UnbundledValuesList;
+using ModuleSymbolTable = FIRRTLModuleContext::ModuleSymbolTable;
+using ModuleSymbolTableEntry = FIRRTLModuleContext::ModuleSymbolTableEntry;
+using SubaccessCache = FIRRTLModuleContext::SubaccessCache;
+using SymbolValueEntry = FIRRTLModuleContext::SymbolValueEntry;
+using UnbundledID = FIRRTLModuleContext::UnbundledID;
+using UnbundledValueEntry = FIRRTLModuleContext::UnbundledValueEntry;
+using UnbundledValuesList = FIRRTLModuleContext::UnbundledValuesList;
 
 namespace {
 StringRef attrToStringRef(const Attribute &attr) {
@@ -119,7 +120,7 @@ namespace circt::chirrtl::details {
 
 ModuleContext::ModuleContext(FFIContext &ctx, ModuleKind kind,
                              std::string moduleTarget)
-    : FIRModuleContextBase{std::move(moduleTarget)}, ffiCtx{ctx}, kind{kind} {}
+    : FIRRTLModuleContext{std::move(moduleTarget)}, ffiCtx{ctx}, kind{kind} {}
 
 MLIRContext *ModuleContext::getContext() const { return ffiCtx.mlirCtx.get(); }
 
@@ -354,6 +355,9 @@ void FFIContext::visitStatement(const FirrtlStatement &stmt) {
     break;
   case FIRRTL_STATEMENT_KIND_WHEN_END:
     visitStmtWhenEnd(bodyOpBuilder, stmt.u.whenEnd);
+    break;
+  case FIRRTL_STATEMENT_KIND_CONNECT:
+    visitStmtConnect(bodyOpBuilder, stmt.u.connect);
     break;
   default: // NOLINT(clang-diagnostic-covered-switch-default)
     emitError("unknown statement kind");
@@ -1014,6 +1018,37 @@ bool FFIContext::visitStmtWhenEnd(BodyOpBuilder &bodyOpBuilder,
     return false;
   }
   whenStack.pop();
+  return true;
+}
+
+bool FFIContext::visitStmtConnect(BodyOpBuilder &bodyOpBuilder,
+                                  const FirrtlStatementConnect &stmt) {
+  RA_EXPECT(auto &lastModuleCtx, this->moduleContext, false);
+
+  auto lhs = resolveRef(bodyOpBuilder, unwrap(stmt.left.value));
+  auto rhs = resolveRef(bodyOpBuilder, unwrap(stmt.right.value));
+  if (!lhs.has_value() || !rhs.has_value()) {
+    return false;
+  }
+
+  auto lhsType = lhs->getType().cast<FIRRTLType>();
+  auto rhsType = rhs->getType().cast<FIRRTLType>();
+
+  if (!stmt.isPartial) {
+    if (!areTypesEquivalent(lhsType, rhsType)) {
+      emitError("cannot connect non-equivalent type " + typeToString(rhsType) +
+                " to " + typeToString(lhsType));
+      return false;
+    }
+    emitConnect(bodyOpBuilder, *lhs, *rhs);
+  } else {
+    if (!areTypesWeaklyEquivalent(lhsType, rhsType)) {
+      emitError("cannot partially connect non-weakly-equivalent type " +
+                typeToString(rhsType) + " to " + typeToString(lhsType));
+      return false;
+    }
+    emitPartialConnect(bodyOpBuilder, *lhs, *rhs, lastModuleCtx);
+  }
   return true;
 }
 

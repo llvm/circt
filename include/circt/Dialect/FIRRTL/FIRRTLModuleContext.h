@@ -1,4 +1,4 @@
-//===- FIRModuleContextBase.h - Module context base -------------*- C++ -*-===//
+//===- FIRRTLModuleContext.h - Module context base --------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,13 +8,13 @@
 //
 // Provides context information that is global to the module.
 //
-// The pure virtual class `FIRModuleContextBase` is inherited and implemented in
+// The pure virtual class `FIRRTLModuleContext` is inherited and implemented in
 // `FIRParser.cpp` and `FIRRTLFFIContext.cpp`.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_FIRRTL_FIRMODULECONTEXTBASE_H
-#define CIRCT_DIALECT_FIRRTL_FIRMODULECONTEXTBASE_H
+#ifndef CIRCT_DIALECT_FIRRTL_FIRRTLMODULECONTEXT_H
+#define CIRCT_DIALECT_FIRRTL_FIRRTLMODULECONTEXT_H
 
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -31,10 +31,10 @@ namespace circt {
 namespace firrtl {
 
 //===----------------------------------------------------------------------===//
-// FIRModuleContextBase
+// FIRRTLModuleContext
 //===----------------------------------------------------------------------===//
 
-class FIRModuleContextBase {
+class FIRRTLModuleContext {
 public:
   // Entries in a symbol table are either an mlir::Value for the operation that
   // defines the value or an unbundled ID tracking the index in the
@@ -53,8 +53,8 @@ public:
 
   using SubaccessCache = llvm::DenseMap<std::pair<Value, unsigned>, Value>;
 
-  explicit FIRModuleContextBase(std::string moduleTarget);
-  virtual ~FIRModuleContextBase() = default;
+  explicit FIRRTLModuleContext(std::string moduleTarget);
+  virtual ~FIRRTLModuleContext() = default;
 
   virtual MLIRContext *getContext() const = 0;
 
@@ -134,15 +134,15 @@ public:
   /// Provide a symbol table scope that automatically pops all the entries off
   /// the symbol table when the scope is exited.
   struct ContextScope {
-    friend class FIRModuleContextBase;
-    ContextScope(FIRModuleContextBase &moduleContext, Block *block);
+    friend class FIRRTLModuleContext;
+    ContextScope(FIRRTLModuleContext &moduleContext, Block *block);
     ~ContextScope();
 
   private:
     void operator=(const ContextScope &) = delete;
     ContextScope(const ContextScope &) = delete;
 
-    FIRModuleContextBase &moduleContext;
+    FIRRTLModuleContext &moduleContext;
     Block *block;
     ContextScope *previousScope;
     std::vector<ModuleSymbolTableEntry *> scopedDecls;

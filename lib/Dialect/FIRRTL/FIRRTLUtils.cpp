@@ -120,6 +120,79 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     builder.create<ConnectOp>(dst, src);
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
+void circt::firrtl::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
+                                       Value src,
+                                       FIRRTLModuleContext &moduleContext) {
+  auto dstType = dst.getType().dyn_cast<FIRRTLBaseType>();
+  auto srcType = src.getType().dyn_cast<FIRRTLBaseType>();
+  if (!dstType || !srcType)
+    return emitConnect(builder, dst, src);
+
+  if (dstType.isa<AnalogType>()) {
+    builder.create<AttachOp>(ArrayRef<Value>{dst, src});
+  } else if (dstType == srcType && !dstType.containsAnalog()) {
+    emitConnect(builder, dst, src);
+  } else if (auto dstBundle = dstType.dyn_cast<BundleType>()) {
+    auto srcBundle = srcType.cast<BundleType>();
+    auto numElements = dstBundle.getNumElements();
+    for (size_t dstIndex = 0; dstIndex < numElements; ++dstIndex) {
+      // Find a matching field by name in the other bundle.
+      auto &dstElement = dstBundle.getElements()[dstIndex];
+      auto name = dstElement.name;
+      auto maybe = srcBundle.getElementIndex(name);
+      // If there was no matching field name, don't connect this one.
+      if (!maybe)
+        continue;
+      auto dstRef = moduleContext.getCachedSubaccess(dst, dstIndex);
+      if (!dstRef) {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointAfterValue(dst);
+        dstRef = builder.create<SubfieldOp>(dst, dstIndex);
+      }
+      // We are pulling two fields from the cache. If the dstField was a
+      // pointer into the cache, then the lookup for srcField might invalidate
+      // it. So, we just copy dstField into a local.
+      auto dstField = dstRef;
+      auto srcIndex = *maybe;
+      auto &srcField = moduleContext.getCachedSubaccess(src, srcIndex);
+      if (!srcField) {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointAfterValue(src);
+        srcField = builder.create<SubfieldOp>(src, srcIndex);
+      }
+      if (!dstElement.isFlip)
+        emitPartialConnect(builder, dstField, srcField, moduleContext);
+      else
+        emitPartialConnect(builder, srcField, dstField, moduleContext);
+    }
+  } else if (auto dstVector = dstType.dyn_cast<FVectorType>()) {
+    auto srcVector = srcType.cast<FVectorType>();
+    auto dstNumElements = dstVector.getNumElements();
+    auto srcNumEelemnts = srcVector.getNumElements();
+    // Partial connect will connect all elements up to the end of the array.
+    auto numElements = std::min(dstNumElements, srcNumEelemnts);
+    for (size_t i = 0; i != numElements; ++i) {
+      auto &dstRef = moduleContext.getCachedSubaccess(dst, i);
+      if (!dstRef) {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointAfterValue(dst);
+        dstRef = builder.create<SubindexOp>(dst, i);
+      }
+      auto dstField = dstRef; // copy to ensure not invalidated
+      auto &srcField = moduleContext.getCachedSubaccess(src, i);
+      if (!srcField) {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointAfterValue(src);
+        srcField = builder.create<SubindexOp>(src, i);
+      }
+      emitPartialConnect(builder, dstField, srcField, moduleContext);
+    }
+  } else {
+    emitConnect(builder, dst, src);
+  }
+}
+
 IntegerAttr circt::firrtl::getIntAttr(Type type, const APInt &value) {
   auto intType = type.cast<IntType>();
   assert((!intType.hasWidth() ||

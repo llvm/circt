@@ -15,8 +15,8 @@
 #include "FIRLexer.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
-#include "circt/Dialect/FIRRTL/FIRModuleContextBase.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLModuleContext.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
@@ -47,13 +47,13 @@ using llvm::SMLoc;
 using llvm::SourceMgr;
 using mlir::LocationAttr;
 
-using ModuleSymbolTable = FIRModuleContextBase::ModuleSymbolTable;
-using ModuleSymbolTableEntry = FIRModuleContextBase::ModuleSymbolTableEntry;
-using SubaccessCache = FIRModuleContextBase::SubaccessCache;
-using SymbolValueEntry = FIRModuleContextBase::SymbolValueEntry;
-using UnbundledID = FIRModuleContextBase::UnbundledID;
-using UnbundledValueEntry = FIRModuleContextBase::UnbundledValueEntry;
-using UnbundledValuesList = FIRModuleContextBase::UnbundledValuesList;
+using ModuleSymbolTable = FIRRTLModuleContext::ModuleSymbolTable;
+using ModuleSymbolTableEntry = FIRRTLModuleContext::ModuleSymbolTableEntry;
+using SubaccessCache = FIRRTLModuleContext::SubaccessCache;
+using SymbolValueEntry = FIRRTLModuleContext::SymbolValueEntry;
+using UnbundledID = FIRRTLModuleContext::UnbundledID;
+using UnbundledValueEntry = FIRRTLModuleContext::UnbundledValueEntry;
+using UnbundledValuesList = FIRRTLModuleContext::UnbundledValuesList;
 
 namespace json = llvm::json;
 
@@ -767,10 +767,10 @@ ParseResult FIRParser::parseOptionalRUW(RUWAttr &result) {
 }
 
 namespace {
-struct FIRModuleContext final : public FIRModuleContextBase, public FIRParser {
+struct FIRModuleContext final : public FIRRTLModuleContext, public FIRParser {
   explicit FIRModuleContext(SharedParserConstants &constants, FIRLexer &lexer,
                             std::string moduleTarget)
-      : FIRModuleContextBase{std::move(moduleTarget), },
+      : FIRRTLModuleContext{std::move(moduleTarget), },
         FIRParser(constants, lexer) {}
 
   MLIRContext *getContext() const override { return getConstants().context; }
@@ -920,9 +920,6 @@ private:
   // the representation simpler and more consistent.
   void emitInvalidate(Value val) { emitInvalidate(val, foldFlow(val)); }
 
-  /// Emit the logic for a partial connect using standard connect.
-  void emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst, Value src);
-
   /// Parse an @info marker if present and inform locationProcessor about it.
   ParseResult parseOptionalInfo() {
     LocationAttr loc;
@@ -1031,77 +1028,6 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
           emitInvalidate(subindex, flow);
         }
       });
-}
-
-void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
-                                       Value src) {
-  auto dstType = dst.getType().dyn_cast<FIRRTLBaseType>();
-  auto srcType = src.getType().dyn_cast<FIRRTLBaseType>();
-  if (!dstType || !srcType)
-    return emitConnect(builder, dst, src);
-
-  if (dstType.isa<AnalogType>()) {
-    builder.create<AttachOp>(ArrayRef<Value>{dst, src});
-  } else if (dstType == srcType && !dstType.containsAnalog()) {
-    emitConnect(builder, dst, src);
-  } else if (auto dstBundle = dstType.dyn_cast<BundleType>()) {
-    auto srcBundle = srcType.cast<BundleType>();
-    auto numElements = dstBundle.getNumElements();
-    for (size_t dstIndex = 0; dstIndex < numElements; ++dstIndex) {
-      // Find a matching field by name in the other bundle.
-      auto &dstElement = dstBundle.getElements()[dstIndex];
-      auto name = dstElement.name;
-      auto maybe = srcBundle.getElementIndex(name);
-      // If there was no matching field name, don't connect this one.
-      if (!maybe)
-        continue;
-      auto dstRef = moduleContext.getCachedSubaccess(dst, dstIndex);
-      if (!dstRef) {
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointAfterValue(dst);
-        dstRef = builder.create<SubfieldOp>(dst, dstIndex);
-      }
-      // We are pulling two fields from the cache. If the dstField was a
-      // pointer into the cache, then the lookup for srcField might invalidate
-      // it. So, we just copy dstField into a local.
-      auto dstField = dstRef;
-      auto srcIndex = *maybe;
-      auto &srcField = moduleContext.getCachedSubaccess(src, srcIndex);
-      if (!srcField) {
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointAfterValue(src);
-        srcField = builder.create<SubfieldOp>(src, srcIndex);
-      }
-      if (!dstElement.isFlip)
-        emitPartialConnect(builder, dstField, srcField);
-      else
-        emitPartialConnect(builder, srcField, dstField);
-    }
-  } else if (auto dstVector = dstType.dyn_cast<FVectorType>()) {
-    auto srcVector = srcType.cast<FVectorType>();
-    auto dstNumElements = dstVector.getNumElements();
-    auto srcNumEelemnts = srcVector.getNumElements();
-    // Partial connect will connect all elements up to the end of the array.
-    auto numElements = std::min(dstNumElements, srcNumEelemnts);
-    for (size_t i = 0; i != numElements; ++i) {
-      auto &dstRef = moduleContext.getCachedSubaccess(dst, i);
-      if (!dstRef) {
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointAfterValue(dst);
-        dstRef = builder.create<SubindexOp>(dst, i);
-      }
-      auto dstField = dstRef; // copy to ensure not invalidated
-      auto &srcField = moduleContext.getCachedSubaccess(src, i);
-      if (!srcField) {
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointAfterValue(src);
-        srcField = builder.create<SubindexOp>(src, i);
-      }
-      emitPartialConnect(builder, dstField, srcField);
-    }
-  } else {
-    emitConnect(builder, dst, src);
-  }
 }
 
 //===-------------------------------
@@ -2069,7 +1995,7 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
       return emitError(loc,
                        "cannot partially connect non-weakly-equivalent type ")
              << rhsType << " to " << lhsType;
-    emitPartialConnect(builder, lhs, rhs);
+    emitPartialConnect(builder, lhs, rhs, moduleContext);
   }
   return success();
 }

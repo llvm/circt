@@ -355,6 +355,10 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
                   &uintBundle);
   firrtlVisitPort(ctx, MK_STR("uintOutputBundle"), FIRRTL_PORT_DIRECTION_OUTPUT,
                   &uintBundle);
+  uintBundle.u.bundle.fields[3].flip = true;
+  uintBundle.u.bundle.count = 2;
+  firrtlVisitPort(ctx, MK_STR("uintInputConnectBundle"),
+                  FIRRTL_PORT_DIRECTION_INPUT, &uintBundle);
 
   FirrtlStatementAttachOperand attachOperands[] = {
       {.expr = MK_REF_EXPR_INLINE("analog1")},
@@ -509,6 +513,18 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
                  }}},
       {.kind = FIRRTL_STATEMENT_KIND_WHEN_END, .u = {.whenEnd = {}}},
       {.kind = FIRRTL_STATEMENT_KIND_WHEN_END, .u = {.whenEnd = {}}},
+      {.kind = FIRRTL_STATEMENT_KIND_CONNECT,
+       .u = {.connect = {.left = {.value = MK_STR("uintOutputBundle.field1")},
+                         .right = {.value = MK_STR("uintInputBundle.field1")},
+                         .isPartial = false}}},
+      {.kind = FIRRTL_STATEMENT_KIND_CONNECT,
+       .u = {.connect = {.left = {.value = MK_STR("uintOutputBundle")},
+                         .right = {.value = MK_STR("uintInputBundle")},
+                         .isPartial = true}}},
+      {.kind = FIRRTL_STATEMENT_KIND_CONNECT,
+       .u = {.connect = {.left = {.value = MK_STR("uintOutputBundle")},
+                         .right = {.value = MK_STR("uintInputConnectBundle")},
+                         .isPartial = true}}},
   };
 
   for (unsigned int i = 0; i < ARRAY_SIZE(statements); i++) {
@@ -526,7 +542,8 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
     input analogBundle : { field1 : Analog<8>, flip field2 : Analog<8>, field3 : Analog<8>, flip field4 : UInt<8> }\n\
     input uintIOBundle : { field1 : UInt<8>, flip field2 : UInt<8>, field3 : UInt<8>, flip field4 : UInt<8> }\n\
     input uintInputBundle : { field1 : UInt<8>, field2 : UInt<8>, field3 : UInt<8>, field4 : UInt<8> }\n\
-    output uintOutputBundle : { field1 : UInt<8>, field2 : UInt<8>, field3 : UInt<8>, field4 : UInt<8> }\n\n\
+    output uintOutputBundle : { field1 : UInt<8>, field2 : UInt<8>, field3 : UInt<8>, field4 : UInt<8> }\n\
+    input uintInputConnectBundle : { field1 : UInt<8>, field2 : UInt<8> }\n\n\
     attach(analog1, analog2, analog3)\n\
     attach(analogBundle)\n\
     attach(analogBundle.field1, analogBundle.field2, analogBundle.field3)\n\
@@ -548,7 +565,11 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
         wire wire4 : UInt<1>\n\
       else :\n\
         wire wire5 : UInt<1>\n\
-      wire wire6 : UInt<1>\n\n");
+      wire wire6 : UInt<1>\n\
+    uintOutputBundle.field1 <= uintInputBundle.field1\n\
+    uintOutputBundle <= uintInputBundle\n\
+    uintOutputBundle.field1 <= uintInputConnectBundle.field1\n\
+    uintOutputBundle.field2 <= uintInputConnectBundle.field2\n\n");
   EXPECT(*errCount == 0);
 
   return 0;
@@ -906,6 +927,50 @@ int testErrStmtWhen(FirrtlContext ctx, size_t *errCount) {
   return 0;
 }
 
+int testErrStmtConnect(FirrtlContext ctx, size_t *errCount) {
+  firrtlVisitCircuit(ctx, MK_STR("StmtConnect"));
+  firrtlVisitModule(ctx, MK_STR("StmtConnect"));
+
+  FirrtlType tyUInt8 = {
+      .kind = FIRRTL_TYPE_KIND_UINT,
+      .u = {.uint = {.width = 8}},
+  };
+
+  FirrtlType tySInt8 = {
+      .kind = FIRRTL_TYPE_KIND_SINT,
+      .u = {.uint = {.width = 8}},
+  };
+
+  EXPECT(*errCount == 0);
+  size_t expectedErrCount = 0;
+
+  // Type mismatch
+  {
+    firrtlVisitPort(ctx, MK_STR("uiIn8"), FIRRTL_PORT_DIRECTION_INPUT,
+                    &tyUInt8);
+    firrtlVisitPort(ctx, MK_STR("siOut8"), FIRRTL_PORT_DIRECTION_OUTPUT,
+                    &tySInt8);
+
+    FirrtlStatement connect = {
+        .kind = FIRRTL_STATEMENT_KIND_CONNECT,
+        .u = {.connect = {.left = {.value = MK_STR("siOut8")},
+                          .right = {.value = MK_STR("uiIn8")},
+                          .isPartial = false}}};
+
+    EXPECT(*errCount == expectedErrCount);
+    firrtlVisitStatement(ctx, &connect);
+    EXPECT(*errCount == ++expectedErrCount);
+  }
+
+  EXPECT_EXPORT("circuit StmtConnect :\n\
+  module StmtConnect :\n\
+    input uiIn8 : UInt<8>\n\
+    output siOut8 : SInt<8>\n\n");
+  EXPECT(*errCount == expectedErrCount);
+
+  return 0;
+}
+
 int testExpectedError() {
   IF_ERR_RET(runOnce(&testErrNoCircuit));
   IF_ERR_RET(runOnce(&testErrNoModule));
@@ -914,6 +979,7 @@ int testExpectedError() {
   IF_ERR_RET(runOnce(&testErrStmtAttach));
   IF_ERR_RET(runOnce(&testErrStmtNode));
   IF_ERR_RET(runOnce(&testErrStmtWhen));
+  IF_ERR_RET(runOnce(&testErrStmtConnect));
 
   return 0;
 }

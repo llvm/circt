@@ -14,7 +14,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLFFICONTEXT_H
 #define CIRCT_DIALECT_FIRRTL_FIRRTLFFICONTEXT_H
 
-#include "circt/Dialect/FIRRTL/FIRModuleContextBase.h"
+#include "circt/Dialect/FIRRTL/FIRRTLModuleContext.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -39,6 +39,7 @@ struct FirrtlStatementInvalid;
 struct FirrtlStatementWhenBegin;
 struct FirrtlStatementElse;
 struct FirrtlStatementWhenEnd;
+struct FirrtlStatementConnect;
 
 namespace circt {
 namespace chirrtl {
@@ -64,7 +65,7 @@ enum class ModuleKind {
   ExtModule,
 };
 
-class ModuleContext final : public firrtl::FIRModuleContextBase {
+class ModuleContext final : public firrtl::FIRRTLModuleContext {
 public:
   ModuleContext(FFIContext &ctx, ModuleKind kind, std::string moduleTarget);
 
@@ -193,6 +194,8 @@ private:
                      const FirrtlStatementElse &stmt);
   bool visitStmtWhenEnd(BodyOpBuilder &bodyOpBuilder,
                         const FirrtlStatementWhenEnd &stmt);
+  bool visitStmtConnect(BodyOpBuilder &bodyOpBuilder,
+                        const FirrtlStatementConnect &stmt);
 };
 
 } // namespace chirrtl

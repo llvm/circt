@@ -319,6 +319,7 @@ typedef enum FirrtlStatementKind {
   FIRRTL_STATEMENT_KIND_WHEN_BEGIN,
   FIRRTL_STATEMENT_KIND_ELSE,
   FIRRTL_STATEMENT_KIND_WHEN_END,
+  FIRRTL_STATEMENT_KIND_CONNECT,
 } FirrtlStatementKind;
 
 typedef struct FirrtlStatementAttachOperand {
@@ -362,6 +363,12 @@ typedef struct FirrtlStatementWhenEnd {
   // No fields
 } FirrtlStatementWhenEnd;
 
+typedef struct FirrtlStatementConnect {
+  FirrtlExprRef left;
+  FirrtlExprRef right;
+  bool isPartial;
+} FirrtlStatementConnect;
+
 typedef union FirrtlStatementUnion {
   FirrtlStatementAttach attach;
   FirrtlStatementSeqMemory seqMem;
@@ -371,6 +378,7 @@ typedef union FirrtlStatementUnion {
   FirrtlStatementWhenBegin whenBegin;
   FirrtlStatementElse else_;
   FirrtlStatementWhenEnd whenEnd;
+  FirrtlStatementConnect connect;
 } FirrtlStatementUnion;
 
 typedef struct FirrtlStatement {

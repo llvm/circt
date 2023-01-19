@@ -1,4 +1,4 @@
-//===- FIRModuleContextBase.cpp - Module context base -----------*- C++ -*-===//
+//===- FIRRTLModuleContext.cpp - Module context base ------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,11 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// The implementation of class `FIRModuleContextBase`.
+// The implementation of class `FIRRTLModuleContext`.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/FIRRTL/FIRModuleContextBase.h"
+#include "circt/Dialect/FIRRTL/FIRRTLModuleContext.h"
 #include "llvm/Support/SMLoc.h"
 
 using namespace circt;
@@ -18,10 +18,10 @@ using namespace firrtl;
 
 using llvm::SMLoc;
 
-FIRModuleContextBase::FIRModuleContextBase(std::string moduleTarget)
+FIRRTLModuleContext::FIRRTLModuleContext(std::string moduleTarget)
     : moduleTarget(std::move(moduleTarget)) {}
 
-Value &FIRModuleContextBase::getCachedSubaccess(Value value, unsigned index) {
+Value &FIRRTLModuleContext::getCachedSubaccess(Value value, unsigned index) {
   auto &result = subaccessCache[{value, index}];
   if (!result) {
     // The outer most block won't be in the map.
@@ -33,9 +33,8 @@ Value &FIRModuleContextBase::getCachedSubaccess(Value value, unsigned index) {
 }
 
 ParseResult
-FIRModuleContextBase::addSymbolEntry(StringRef name, SymbolValueEntry entry,
-                                     SMLoc loc,
-                                     bool insertNameIntoGlobalScope) {
+FIRRTLModuleContext::addSymbolEntry(StringRef name, SymbolValueEntry entry,
+                                    SMLoc loc, bool insertNameIntoGlobalScope) {
   // Do a lookup by trying to do an insertion.  Do so in a way that we can tell
   // if we hit a missing element (SMLoc is null).
   auto entryIt =
@@ -57,15 +56,15 @@ FIRModuleContextBase::addSymbolEntry(StringRef name, SymbolValueEntry entry,
 }
 
 ParseResult
-FIRModuleContextBase::addSymbolEntry(StringRef name, Value value, SMLoc loc,
-                                     bool insertNameIntoGlobalScope) {
+FIRRTLModuleContext::addSymbolEntry(StringRef name, Value value, SMLoc loc,
+                                    bool insertNameIntoGlobalScope) {
   return addSymbolEntry(name, SymbolValueEntry(value), loc,
                         insertNameIntoGlobalScope);
 }
 
-ParseResult FIRModuleContextBase::resolveSymbolEntry(Value &result,
-                                                     SymbolValueEntry &entry,
-                                                     SMLoc loc, bool fatal) {
+ParseResult FIRRTLModuleContext::resolveSymbolEntry(Value &result,
+                                                    SymbolValueEntry &entry,
+                                                    SMLoc loc, bool fatal) {
   if (!entry.is<Value>()) {
     if (fatal)
       emitError(loc, "bundle value should only be used from subfield");
@@ -75,10 +74,10 @@ ParseResult FIRModuleContextBase::resolveSymbolEntry(Value &result,
   return success();
 }
 
-ParseResult FIRModuleContextBase::resolveSymbolEntry(Value &result,
-                                                     SymbolValueEntry &entry,
-                                                     StringRef fieldName,
-                                                     SMLoc loc) {
+ParseResult FIRRTLModuleContext::resolveSymbolEntry(Value &result,
+                                                    SymbolValueEntry &entry,
+                                                    StringRef fieldName,
+                                                    SMLoc loc) {
   if (!entry.is<UnbundledID>()) {
     emitError(loc, "value should not be used from subfield");
     return failure();
@@ -104,8 +103,8 @@ ParseResult FIRModuleContextBase::resolveSymbolEntry(Value &result,
   return success();
 }
 
-ParseResult FIRModuleContextBase::lookupSymbolEntry(SymbolValueEntry &result,
-                                                    StringRef name, SMLoc loc) {
+ParseResult FIRRTLModuleContext::lookupSymbolEntry(SymbolValueEntry &result,
+                                                   StringRef name, SMLoc loc) {
   auto &entry = symbolTable[name];
   if (!entry.first.isValid())
     return emitError(loc, "use of unknown declaration '" + name + "'");
@@ -114,21 +113,21 @@ ParseResult FIRModuleContextBase::lookupSymbolEntry(SymbolValueEntry &result,
   return success();
 }
 
-auto FIRModuleContextBase::getUnbundledEntry(unsigned index)
+auto FIRRTLModuleContext::getUnbundledEntry(unsigned index)
     -> UnbundledValueEntry & {
   assert(index < unbundledValues.size());
   return unbundledValues[index];
 }
 
-FIRModuleContextBase::ContextScope::ContextScope(
-    FIRModuleContextBase &moduleContext, Block *block)
+FIRRTLModuleContext::ContextScope::ContextScope(
+    FIRRTLModuleContext &moduleContext, Block *block)
     : moduleContext(moduleContext), block(block),
       previousScope(moduleContext.currentScope) {
   moduleContext.currentScope = this;
   moduleContext.scopeMap[block] = this;
 }
 
-FIRModuleContextBase::ContextScope::~ContextScope() {
+FIRRTLModuleContext::ContextScope::~ContextScope() {
   // Mark all entries in this scope as being invalid.  We track validity
   // through the SMLoc field instead of deleting entries.
   for (auto *entryPtr : scopedDecls)

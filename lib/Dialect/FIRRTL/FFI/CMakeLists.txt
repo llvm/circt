@@ -5,6 +5,5 @@ add_circt_translation_library(CIRCTFIRRTLFFI
 
   LINK_LIBS PUBLIC
   CIRCTFIRRTL
-  CIRCTImportFIRFile
   CIRCTExportFIRRTL
   )

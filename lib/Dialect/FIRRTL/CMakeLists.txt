@@ -7,6 +7,7 @@ add_circt_dialect_library(CIRCTFIRRTL
   FIRRTLDialect.cpp
   FIRRTLFolds.cpp
   FIRRTLInstanceGraph.cpp
+  FIRRTLModuleContext.cpp
   FIRRTLOpInterfaces.cpp
   FIRRTLOps.cpp
   FIRRTLTypes.cpp

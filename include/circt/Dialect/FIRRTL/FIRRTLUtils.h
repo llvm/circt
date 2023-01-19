@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLUTILS_H
 #define CIRCT_DIALECT_FIRRTL_FIRRTLUTILS_H
 
+#include "circt/Dialect/FIRRTL/FIRRTLModuleContext.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -23,6 +24,10 @@ namespace firrtl {
 /// Emit a connect between two values.
 void emitConnect(OpBuilder &builder, Location loc, Value lhs, Value rhs);
 void emitConnect(ImplicitLocOpBuilder &builder, Value lhs, Value rhs);
+
+/// Emit the logic for a partial connect using standard connect.
+void emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst, Value src,
+                        FIRRTLModuleContext &moduleContext);
 
 /// Utiility for generating a constant attribute.
 IntegerAttr getIntAttr(Type type, const APInt &value);
