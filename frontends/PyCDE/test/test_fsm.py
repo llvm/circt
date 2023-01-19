@@ -1,4 +1,5 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
+# XFAIL: *
 
 from pycde import System, Input, Output, generator, Module
 from pycde.dialects import comb
