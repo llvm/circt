@@ -312,6 +312,7 @@ typedef struct FirrtlPrim {
 
 typedef enum FirrtlDeclarationKind {
   FIRRTL_DECLARATION_KIND_INSTANCE,
+  FIRRTL_DECLARATION_KIND_COMB_MEMORY,
   FIRRTL_DECLARATION_KIND_SEQ_MEMORY,
   FIRRTL_DECLARATION_KIND_NODE,
   FIRRTL_DECLARATION_KIND_WIRE,
@@ -321,6 +322,11 @@ typedef struct FirrtlDeclarationInstance {
   FirrtlStringRef name;
   FirrtlStringRef moduleName;
 } FirrtlDeclarationInstance;
+
+typedef struct FirrtlDeclarationCombMemory {
+  FirrtlStringRef name;
+  FirrtlType type;
+} FirrtlDeclarationCombMemory;
 
 typedef struct FirrtlDeclarationSeqMemory {
   FirrtlStringRef name;
@@ -340,6 +346,7 @@ typedef struct FirrtlDeclarationWire {
 
 typedef union FirrtlDeclarationUnion {
   FirrtlDeclarationInstance instance;
+  FirrtlDeclarationCombMemory combMem;
   FirrtlDeclarationSeqMemory seqMem;
   FirrtlDeclarationNode node;
   FirrtlDeclarationWire wire;

@@ -325,6 +325,9 @@ void FFIContext::visitDeclaration(const FirrtlDeclaration &decl) {
   case FIRRTL_DECLARATION_KIND_INSTANCE:
     visitDeclInstance(bodyOpBuilder, decl.u.instance);
     break;
+  case FIRRTL_DECLARATION_KIND_COMB_MEMORY:
+    visitDeclCombMemory(bodyOpBuilder, decl.u.combMem);
+    break;
   case FIRRTL_DECLARATION_KIND_SEQ_MEMORY:
     visitDeclSeqMemory(bodyOpBuilder, decl.u.seqMem);
     break;
@@ -955,6 +958,31 @@ bool FFIContext::visitDeclInstance(BodyOpBuilder &bodyOpBuilder,
   lastModuleCtx.unbundledValues.push_back(std::move(unbundledValueEntry));
   auto entryId = UnbundledID(lastModuleCtx.unbundledValues.size());
   return !lastModuleCtx.addSymbolEntry(name, entryId, mockSMLoc());
+}
+
+bool FFIContext::visitDeclCombMemory(BodyOpBuilder &bodyOpBuilder,
+                                     const FirrtlDeclarationCombMemory &decl) {
+  RA_EXPECT(auto &lastModuleCtx, this->moduleContext, false);
+
+  auto firType = ffiTypeToFirType(decl.type);
+  if (!firType.has_value()) {
+    return false;
+  }
+
+  // Transform the parsed vector type into a memory type.
+  auto vectorType = firType->dyn_cast<FVectorType>();
+  if (!vectorType) {
+    emitError("cmem requires vector type");
+    return false;
+  }
+
+  auto name = unwrap(decl.name);
+  auto annotations = emptyArrayAttr();
+  StringAttr sym = {};
+  auto result = bodyOpBuilder.create<CombMemOp>(
+      vectorType.getElementType(), vectorType.getNumElements(), name,
+      NameKindEnum::InterestingName, annotations, sym);
+  return !lastModuleCtx.addSymbolEntry(name, result, mockSMLoc());
 }
 
 bool FFIContext::visitDeclSeqMemory(BodyOpBuilder &bodyOpBuilder,

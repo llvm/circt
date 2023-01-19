@@ -420,6 +420,11 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
                      .name = MK_STR("outside"),
                      .moduleName = MK_STR("ModForInst"),
                  }}},
+      {.kind = FIRRTL_DECLARATION_KIND_COMB_MEMORY,
+       .u = {.combMem = {.name = MK_STR("combMem"),
+                         .type = {.kind = FIRRTL_TYPE_KIND_VECTOR,
+                                  .u = {.vector = {.type = &tyUInt32,
+                                                   .count = 1024}}}}}},
       {.kind = FIRRTL_DECLARATION_KIND_SEQ_MEMORY,
        .u = {.seqMem = {.name = MK_STR("seqMem"),
                         .type = {.kind = FIRRTL_TYPE_KIND_VECTOR,
@@ -652,6 +657,7 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
     input clock : Clock\n\
 \n\
     inst outside of ModForInst\n\
+    cmem combMem : UInt<32>[1024]\n\
     smem seqMem : UInt<32>[1024] undefined\n\
     node node1 = add(uintPort1, uintPort2)\n\
     node node2 = sub(uintPort1, analogBundle.field4)\n\
