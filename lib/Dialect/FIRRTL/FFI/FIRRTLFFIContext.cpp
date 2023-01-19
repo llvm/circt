@@ -377,6 +377,9 @@ void FFIContext::visitStatement(const FirrtlStatement &stmt) {
   case FIRRTL_STATEMENT_KIND_ASSUME:
     visitStmtAssume(bodyOpBuilder, stmt.u.assume);
     break;
+  case FIRRTL_STATEMENT_KIND_COVER:
+    visitStmtCover(bodyOpBuilder, stmt.u.cover);
+    break;
   default: // NOLINT(clang-diagnostic-covered-switch-default)
     emitError("unknown statement kind");
     break;
@@ -1225,6 +1228,29 @@ bool FFIContext::visitStmtAssume(BodyOpBuilder &bodyOpBuilder,
   bodyOpBuilder.create<AssumeOp>(*clock, *predicate, *enable,
                                  stringRefToAttr(unwrap(stmt.message)),
                                  ValueRange{}, name.getValue());
+  return true;
+}
+
+bool FFIContext::visitStmtCover(BodyOpBuilder &bodyOpBuilder,
+                                const FirrtlStatementCover &stmt) {
+
+  auto clock = resolveExpr(bodyOpBuilder, stmt.clock);
+  auto predicate = resolveExpr(bodyOpBuilder, stmt.predicate);
+  auto enable = resolveExpr(bodyOpBuilder, stmt.enable);
+  if (!clock.has_value() || !predicate.has_value() || !enable.has_value()) {
+    return false;
+  }
+
+  StringAttr name;
+  if (stmt.name != nullptr) {
+    name = stringRefToAttr(unwrap(*stmt.name));
+  } else {
+    name = StringAttr::get(mlirCtx.get(), "");
+  }
+
+  bodyOpBuilder.create<CoverOp>(*clock, *predicate, *enable,
+                                stringRefToAttr(unwrap(stmt.message)),
+                                ValueRange{}, name.getValue());
   return true;
 }
 

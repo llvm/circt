@@ -326,6 +326,7 @@ typedef enum FirrtlStatementKind {
   FIRRTL_STATEMENT_KIND_STOP,
   FIRRTL_STATEMENT_KIND_ASSERT,
   FIRRTL_STATEMENT_KIND_ASSUME,
+  FIRRTL_STATEMENT_KIND_COVER,
 } FirrtlStatementKind;
 
 typedef struct FirrtlStatementAttachOperand {
@@ -426,6 +427,14 @@ typedef struct FirrtlStatementAssume {
   FirrtlStringRef *name; // Optional, `NULL` for empty
 } FirrtlStatementAssume;
 
+typedef struct FirrtlStatementCover {
+  FirrtlExpr clock;
+  FirrtlExpr predicate;
+  FirrtlExpr enable;
+  FirrtlStringRef message;
+  FirrtlStringRef *name; // Optional, `NULL` for empty
+} FirrtlStatementCover;
+
 typedef union FirrtlStatementUnion {
   FirrtlStatementAttach attach;
   FirrtlStatementSeqMemory seqMem;
@@ -442,6 +451,7 @@ typedef union FirrtlStatementUnion {
   FirrtlStatementStop stop;
   FirrtlStatementAssert assert;
   FirrtlStatementAssume assume;
+  FirrtlStatementCover cover;
 } FirrtlStatementUnion;
 
 typedef struct FirrtlStatement {
