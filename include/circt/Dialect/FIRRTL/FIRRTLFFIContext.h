@@ -45,6 +45,7 @@ struct FirrtlStatementPrintf;
 struct FirrtlStatementSkip;
 struct FirrtlStatementStop;
 struct FirrtlStatementAssert;
+struct FirrtlStatementAssume;
 
 namespace circt {
 namespace chirrtl {
@@ -211,6 +212,8 @@ private:
                      const FirrtlStatementStop &stmt);
   bool visitStmtAssert(BodyOpBuilder &bodyOpBuilder,
                        const FirrtlStatementAssert &stmt);
+  bool visitStmtAssume(BodyOpBuilder &bodyOpBuilder,
+                       const FirrtlStatementAssume &stmt);
 };
 
 } // namespace chirrtl

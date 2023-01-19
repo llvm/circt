@@ -588,6 +588,18 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
                         .enable = MK_REF_EXPR_INLINE("wireEnable"),
                         .message = MK_STR("assertion failed message"),
                         .name = &optName}}},
+      {.kind = FIRRTL_STATEMENT_KIND_ASSUME,
+       .u = {.assume = {.clock = MK_REF_EXPR_INLINE("clock"),
+                        .predicate = MK_REF_EXPR_INLINE("wire1"),
+                        .enable = MK_REF_EXPR_INLINE("wireEnable"),
+                        .message = MK_STR("assertion failed message"),
+                        .name = NULL}}},
+      {.kind = FIRRTL_STATEMENT_KIND_ASSUME,
+       .u = {.assume = {.clock = MK_REF_EXPR_INLINE("clock"),
+                        .predicate = MK_REF_EXPR_INLINE("wire1"),
+                        .enable = MK_REF_EXPR_INLINE("wireEnable"),
+                        .message = MK_STR("assertion failed message"),
+                        .name = &optName}}},
   };
 
   for (unsigned int i = 0; i < ARRAY_SIZE(statements); i++) {
@@ -644,7 +656,9 @@ int testGenStatement(FirrtlContext ctx, size_t *errCount) {
     stop(clock, wire1, 123)\n\
     stop(clock, wire1, 123) : optName\n\
     assert(clock, wire1, wireEnable, \"assertion failed message\")\n\
-    assert(clock, wire1, wireEnable, \"assertion failed message\") : optName\n\n");
+    assert(clock, wire1, wireEnable, \"assertion failed message\") : optName\n\
+    assume(clock, wire1, wireEnable, \"assertion failed message\")\n\
+    assume(clock, wire1, wireEnable, \"assertion failed message\") : optName\n\n");
   EXPECT(*errCount == 0);
 
   return 0;
