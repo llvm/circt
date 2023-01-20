@@ -701,68 +701,58 @@ Type firrtl::getPassiveType(Type anyBaseFIRRTLType) {
 // IntType
 //===----------------------------------------------------------------------===//
 
-/// Return the bitwidth of this type or None if unknown.
-std::optional<int32_t> IntType::getWidth() {
-  return isSigned() ? this->cast<SIntType>().getWidth()
-                    : this->cast<UIntType>().getWidth();
-}
-
 /// Return a SIntType or UInt type with the specified signedness and width.
-IntType IntType::get(MLIRContext *context, bool isSigned, int32_t width) {
+IntType IntType::get(MLIRContext *context, bool isSigned,
+                     int32_t widthOrSentinel) {
   if (isSigned)
-    return SIntType::get(context, width);
-  return UIntType::get(context, width);
+    return SIntType::get(context, widthOrSentinel);
+  return UIntType::get(context, widthOrSentinel);
+}
+
+int32_t IntType::getWidthOrSentinel() {
+  if (isa<SIntType>())
+    return this->cast<SIntType>().getWidthOrSentinel();
+  if (isa<UIntType>())
+    return this->cast<UIntType>().getWidthOrSentinel();
+  return -1;
 }
 
 //===----------------------------------------------------------------------===//
-// Width Qualified Ground Types
+// SIntType
 //===----------------------------------------------------------------------===//
 
-namespace circt {
-namespace firrtl {
-namespace detail {
-struct WidthTypeStorage : mlir::TypeStorage {
-  WidthTypeStorage(int32_t width) : width(width) {}
-  using KeyTy = int32_t;
+SIntType SIntType::get(MLIRContext *context) { return get(context, -1); }
 
-  bool operator==(const KeyTy &key) const { return key == width; }
-
-  static WidthTypeStorage *construct(TypeStorageAllocator &allocator,
-                                     const KeyTy &key) {
-    return new (allocator.allocate<WidthTypeStorage>()) WidthTypeStorage(key);
-  }
-
-  int32_t width;
-};
-} // namespace detail
-} // namespace firrtl
-} // namespace circt
-
-static std::optional<int32_t>
-getWidthQualifiedTypeWidth(firrtl::detail::WidthTypeStorage *impl) {
-  int width = impl->width;
-  if (width < 0)
-    return std::nullopt;
-  return width;
+SIntType SIntType::get(MLIRContext *context, std::optional<int32_t> width) {
+  if (!width)
+    return get(context);
+  return get(context, *width);
 }
 
-/// Get an with a known width, or -1 for unknown.
-SIntType SIntType::get(MLIRContext *context, int32_t width) {
-  assert(width >= -1 && "unknown width");
-  return Base::get(context, width);
+LogicalResult SIntType::verify(function_ref<InFlightDiagnostic()> emitError,
+                               int32_t widthOrSentinel) {
+  if (widthOrSentinel < -1)
+    return emitError() << "invalid width";
+  return success();
 }
 
-std::optional<int32_t> SIntType::getWidth() {
-  return getWidthQualifiedTypeWidth(this->getImpl());
+//===----------------------------------------------------------------------===//
+// UIntType
+//===----------------------------------------------------------------------===//
+
+UIntType UIntType::get(MLIRContext *context) { return get(context, -1); }
+
+UIntType UIntType::get(MLIRContext *context, std::optional<int32_t> width) {
+  if (!width)
+    return get(context);
+  return get(context, *width);
 }
 
-UIntType UIntType::get(MLIRContext *context, int32_t width) {
-  assert(width >= -1 && "unknown width");
-  return Base::get(context, width);
-}
-
-std::optional<int32_t> UIntType::getWidth() {
-  return getWidthQualifiedTypeWidth(this->getImpl());
+LogicalResult UIntType::verify(function_ref<InFlightDiagnostic()> emitError,
+                               int32_t widthOrSentinel) {
+  if (widthOrSentinel < -1)
+    return emitError() << "invalid width";
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1081,11 +1071,25 @@ auto RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
 }
 
 //===----------------------------------------------------------------------===//
-// ODS Custom Builders
+// AnalogType
 //===----------------------------------------------------------------------===//
 
 AnalogType AnalogType::get(mlir::MLIRContext *context) {
   return AnalogType::get(context, -1);
+}
+
+AnalogType AnalogType::get(mlir::MLIRContext *context,
+                           std::optional<int32_t> width) {
+  if (!width)
+    return AnalogType::get(context);
+  return AnalogType::get(context, *width);
+}
+
+LogicalResult AnalogType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                 int32_t widthOrSentinel) {
+  if (widthOrSentinel < -1)
+    return emitError() << "invalid width";
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
