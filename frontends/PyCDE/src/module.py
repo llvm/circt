@@ -67,7 +67,7 @@ _current_block_context = ContextVar("current_block_context")
 
 
 class _BlockContext:
-  """Bookkeeping for a scope."""
+  """Bookkeeping for a generator scope."""
 
   def __init__(self):
     self.symbols: set[str] = set()
@@ -95,7 +95,7 @@ class _BlockContext:
     ret = sym
     while ret in self.symbols:
       ctr += 1
-      ret = sym + "_" + str(ctr)
+      ret = f"{sym}_{ctr}"
     self.symbols.add(ret)
     return ret
 
@@ -169,12 +169,12 @@ class PortProxyBase:
 
 
 class ModuleLikeBuilderBase(_PyProxy):
-  """`ModuleLikeBuilder`s are responsible for preparing `Module` and ilk
-  subclasses for use. They are responsible for scanning the subclass' attribute,
-  recognizing certain types (e.g. `InputPort`), and taking actions/mutating the
-  subclass based on that information. They are also responsible for creating
-  CIRCT IR -- creating the initial op, generating the bodies, instantiating
-  modules, etc.
+  """`ModuleLikeBuilder`s are responsible for preparing `Module` and other
+  module-like subclasses for use. They are responsible for scanning the
+  subclass' attribute, recognizing certain types (e.g. `InputPort`), and taking
+  actions/mutating the subclass based on that information. They are also
+  responsible for creating CIRCT IR -- creating the initial op, generating the
+  bodies, instantiating modules, etc.
 
   This is the base class for common functionality which all 'ModuleLike` classes
   are likely to need. Each `ModuleLike` type will need to subclass this base.
