@@ -15,6 +15,7 @@
 
 include "FIRRTLAttributes.td"
 include "FIRRTLDialect.td"
+include "FIRRTLEnums.td"
 include "FIRRTLOpInterfaces.td"
 include "FIRRTLTypes.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
