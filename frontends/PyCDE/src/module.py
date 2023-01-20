@@ -268,6 +268,36 @@ class ModuleLikeBuilderBase(_PyProxy):
         f"outputs: {self.outputs}>",
         file=out)
 
+  class GeneratorCtxt:
+    """Provides an context which most genertors need."""
+
+    def __init__(self, builder, ports, ip, loc) -> None:
+      self.bc = _BlockContext()
+      self.bb = BackedgeBuilder()
+      self.ip = ir.InsertionPoint(ip)
+      self.loc = loc
+      self.clk = None
+      if len(builder.clocks) == 1:
+        # Enter clock block implicitly if only one clock given.
+        clk_port = list(builder.clocks)[0]
+        self.clk = ClockSignal(ports._block_args[clk_port], ClockType())
+
+    def __enter__(self):
+      self.bc.__enter__()
+      self.bb.__enter__()
+      self.ip.__enter__()
+      self.loc.__enter__()
+      if self.clk is not None:
+        self.clk.__enter__()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+      if self.clk is not None:
+        self.clk.__exit__(exc_type, exc_value, traceback)
+      self.loc.__exit__(exc_type, exc_value, traceback)
+      self.ip.__exit__(exc_type, exc_value, traceback)
+      self.bb.__exit__(exc_type, exc_value, traceback)
+      self.bc.__exit__(exc_type, exc_value, traceback)
+
 
 class ModuleLikeType(type):
   """ModuleLikeType is a metaclass for Module and other things which look like
@@ -385,24 +415,13 @@ class ModuleBuilder(ModuleLikeBuilderBase):
 
     entry_block = self.circt_mod.add_entry_block()
     ports = self.generator_port_proxy(entry_block.arguments, self)
-    with ir.InsertionPoint(
-        entry_block), g.loc, BackedgeBuilder(), _BlockContext():
-      # Enter clock block implicitly if only one clock given.
-      clk = None
-      if len(self.clocks) == 1:
-        clk_port = list(self.clocks)[0]
-        clk = ClockSignal(ports._block_args[clk_port], ClockType())
-        clk.__enter__()
-
+    with self.GeneratorCtxt(self, ports, entry_block, g.loc):
       outputs = g.gen_func(ports)
       if outputs is not None:
         raise ValueError("Generators must not return a value")
 
       ports._check_unconnected_outputs()
       msft.OutputOp([o.value for o in ports._output_values])
-
-      if clk is not None:
-        clk.__exit__(None, None, None)
 
 
 class Module(metaclass=ModuleLikeType):

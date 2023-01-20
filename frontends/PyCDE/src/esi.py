@@ -314,15 +314,7 @@ class ServiceImplementationModuleSpec(ModuleLikeBuilderBase):
     assert len(self.generators) == 1
     generator: Generator = list(self.generators.values())[0]
     ports = self.generator_port_proxy(serviceReq.operation.operands, self)
-    with ir.InsertionPoint(
-        serviceReq), generator.loc, BackedgeBuilder(), _BlockContext():
-
-      # Enter clock block implicitly if only one clock given.
-      clk = None
-      if len(self.clocks) == 1:
-        clk_port = list(self.clocks)[0]
-        clk = ClockSignal(ports._block_args[clk_port], ClockType())
-        clk.__enter__()
+    with self.GeneratorCtxt(self, ports, serviceReq, generator.loc):
 
       # Run the generator.
       channels = _ServiceGeneratorChannels(self, serviceReq)
@@ -340,9 +332,6 @@ class ServiceImplementationModuleSpec(ModuleLikeBuilderBase):
         msft.replaceAllUsesWith(serviceReq.operation.results[idx],
                                 port_value.value)
       serviceReq.operation.erase()
-
-      if clk is not None:
-        clk.__exit__(None, None, None)
 
     return rc
 
