@@ -163,8 +163,8 @@ struct RemoveCombGroupsPattern : public OpRewritePattern<calyx::CombGroupOp> {
               auto reg = createReg(component, rewriter, combRes.getLoc(),
                                    cell.instanceName(),
                                    combRes.getType().getIntOrFloatBitWidth());
-              combResRegMapping->insert({combRes, reg});
-              combResReg = combResRegMapping->find(combRes);
+              auto it = combResRegMapping->insert({combRes, reg});
+              combResReg = it.first;
             }
 
             // Assign the cell result register - a register should only be
