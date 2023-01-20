@@ -45,7 +45,7 @@ class LoopbackTop(Module):
     esi.Cosim(HostComms, ports.clk, ports.rst)
 
 
-class MultiplexerService(esi.ServiceImplementationModule):
+class MultiplexerService(esi.ServiceImplementation):
   clk = Clock()
   rst = Input(types.i1)
 
@@ -90,7 +90,7 @@ class MultiplexerTop(Module):
 # -----
 
 
-class BrokenService(esi.ServiceImplementationModule):
+class BrokenService(esi.ServiceImplementation):
   clk = Clock()
   rst = Input(types.i1)
 

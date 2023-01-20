@@ -94,7 +94,7 @@ class LoopbackInOutTop(Module):
     loopback.assign(data_chan)
 
 
-class MultiplexerService(esi.ServiceImplementationModule):
+class MultiplexerService(esi.ServiceImplementation):
   clk = Clock()
   rst = Input(types.i1)
 

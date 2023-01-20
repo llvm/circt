@@ -118,6 +118,10 @@ def generator(func):
 
 
 class PortProxyBase:
+  """Extensions of this class provide access to module ports in generators.
+  Subclasses essentially just provide syntactic sugar around the methods in this
+  base class. None of the methods here are intended to be directly used by the
+  PyCDE developer."""
 
   def __init__(self, block_args, builder):
     self._block_args = block_args
@@ -149,6 +153,20 @@ class PortProxyBase:
     if len(unconnected_ports) > 0:
       raise support.UnconnectedSignalError(self.name, unconnected_ports)
 
+  def _clear(self):
+    """TL;DR: Downgrade a shotgun to a handgun.
+
+    Instances are not _supposed_ to be held on beyond the end of generators...
+    but at least one user will try. This method clears the contents of this
+    class to prevent users from encountering a totally bizzare, unrelated error
+    message when they make this mistake. If users reach into this class and hold
+    on to private references... well, we did what we could to prevent their foot
+    damage."""
+
+    self._block_args = None
+    self._output_values = None
+    self._builder = None
+
 
 class ModuleLikeBuilderBase(_PyProxy):
   """`ModuleLikeBuilder`s are responsible for preparing `Module` and ilk
@@ -177,7 +195,7 @@ class ModuleLikeBuilderBase(_PyProxy):
     self.parameters = None
 
   def go(self):
-    """Execute the analysis and mutation to make the `ModuleLike` class operate
+    """Execute the analysis and mutation to make a `ModuleLike` class operate
     as such."""
 
     self.scan_cls()
@@ -271,12 +289,14 @@ class ModuleLikeBuilderBase(_PyProxy):
   class GeneratorCtxt:
     """Provides an context which most genertors need."""
 
-    def __init__(self, builder, ports, ip, loc) -> None:
+    def __init__(self, builder: ModuleLikeBuilderBase, ports: PortProxyBase, ip,
+                 loc: ir.Location) -> None:
       self.bc = _BlockContext()
       self.bb = BackedgeBuilder()
       self.ip = ir.InsertionPoint(ip)
       self.loc = loc
       self.clk = None
+      self.ports = ports
       if len(builder.clocks) == 1:
         # Enter clock block implicitly if only one clock given.
         clk_port = list(builder.clocks)[0]
@@ -297,18 +317,19 @@ class ModuleLikeBuilderBase(_PyProxy):
       self.ip.__exit__(exc_type, exc_value, traceback)
       self.bb.__exit__(exc_type, exc_value, traceback)
       self.bc.__exit__(exc_type, exc_value, traceback)
+      self.ports._clear()
 
 
 class ModuleLikeType(type):
   """ModuleLikeType is a metaclass for Module and other things which look like
-  modules (e.g. ServiceGenerators). A metaclass is nice since it gets run on
-  each class (including subclasses), so has the ability to modify it. This is in
-  constrast to a decorator which gets run once. It also has the advance of being
-  able to pretty easily extend `Module` or create an entirely new `ModuleLike`
-  hierarchy.
+  modules (e.g. ServiceImplementations). A metaclass is nice since it gets run
+  on each class (including subclasses), so has the ability to modify it. This is
+  in contrast to a decorator which gets run once. It also has the advantage of
+  being able to pretty easily extend `Module` or create an entirely new
+  `ModuleLike` hierarchy.
 
   This metaclass essentially just kicks the brunt of the work over to a
-  specified `ModulerLikeBuilder`, which can -- unlike metaclasses -- have state.
+  specified `ModuleLikeBuilder`, which can -- unlike metaclasses -- have state.
   Presumably, the usual thing is to store all of this state in the class itself,
   but we need this state to be private. Given that this isn't possible in
   Python, a single '_' variable is as small a surface area as we can get."""
@@ -337,7 +358,7 @@ class ModuleBuilder(ModuleLikeBuilderBase):
     return ret
 
   def create_op(self, sys, symbol):
-    """Creation callback for creating a MSFTModuleOp."""
+    """Callback for creating a module op."""
 
     if len(self.generators) > 0:
       # If this Module has a generator, it's a real module.
@@ -367,32 +388,38 @@ class ModuleBuilder(ModuleLikeBuilderBase):
         ip=sys._get_ip())
 
   def instantiate(self, module_inst, instance_name: str, **inputs):
-    """"Instantiate this Module. Check that the input types match expectations.
-    Annotate the instance with the instance with the module parameters."""
+    """"Instantiate this Module. Check that the input types match expectations."""
 
     from .circt.dialects import _hw_ops_ext as hwext
     input_lookup = {
         name: (idx, ptype) for idx, (name, ptype) in enumerate(self.inputs)
     }
     input_values: List[Optional[Signal]] = [None] * len(self.inputs)
+
     for name, signal in inputs.items():
       if name not in input_lookup:
         raise PortError(f"Input port {name} not found in module")
       idx, ptype = input_lookup[name]
       if isinstance(signal, Signal):
+        # If the input is a signal, the types must match.
         if ptype != signal.type:
           raise PortError(
               f"Input port {name} expected type {ptype}, not {signal.type}")
       else:
+        # If it's not a signal, assume the user wants to specify a constant and
+        # try to convert it to a hardware constant.
         signal = _obj_to_value(signal, ptype)
       input_values[idx] = signal
       del input_lookup[name]
+
     if len(input_lookup) > 0:
       missing = ", ".join(list(input_lookup.keys()))
       raise ValueError(f"Missing input signals for ports: {missing}")
 
     circt_mod = self.circt_mod
     parameters = None
+    # If this is a parameterized external module, the parameters must be
+    # supplied.
     if len(self.generators) == 0 and self.parameters is not None:
       parameters = ir.ArrayAttr.get(
           hwext.create_parameters(self.parameters, circt_mod))
@@ -427,7 +454,17 @@ class ModuleBuilder(ModuleLikeBuilderBase):
 class Module(metaclass=ModuleLikeType):
   """Subclass this class to define a regular PyCDE or external module. To define
   a module in PyCDE, supply a `@generator` method. To create an external module,
-  don't. In either case, a list of ports is required."""
+  don't. In either case, a list of ports is required.
+
+  A few important notes:
+  - If your subclass overrides the constructor, it MUST call the parent
+  constructor AND pass through all of the input port signals to said parent
+  constructor. Using kwargs (e.g. **inputs) is the easiest way to fulfill this
+  requirement.
+  - If you have a @generator, you MUST NOT hold on to, store, or otherwise leak
+  the first argument (i.e. self) beyond the function return. It is a special
+  instance constructed exclusively for the generator.
+  """
 
   BuilderType = ModuleBuilder
 
@@ -451,8 +488,10 @@ class Module(metaclass=ModuleLikeType):
 class modparams:
   """Decorate a function to indicate that it is returning a Module which is
   parameterized by this function. Arguments to this class MUST be convertible to
-  hardware constants. Arguments with underscore prefixes are ignored and thus
-  exempt from the previous requirement."""
+  a recognizable constant. Ideally, they would be simple since (by default) they
+  will be turned into strings and appended to the module name in the resulting
+  RTL. Arguments with underscore prefixes are ignored and thus exempt from the
+  previous requirement."""
 
   func = None
 

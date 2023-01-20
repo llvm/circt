@@ -88,11 +88,7 @@ class System:
     self.hw_output_dir.mkdir(exist_ok=True)
 
     with self:
-      [
-          m._builder.circt_mod
-          if issubclass(m, Module) else m._pycde_mod.create()
-          for m in self.top_modules
-      ]
+      [m._builder.circt_mod for m in self.top_modules]
 
   def add_packaging_step(self, func: Callable):
     self.packaging_funcs.append(func)

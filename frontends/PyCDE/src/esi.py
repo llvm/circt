@@ -292,12 +292,17 @@ class _ServiceGeneratorChannels:
         raise ValueError(f"{name_str} has not been connected.")
 
 
-class ServiceImplementationModuleSpec(ModuleLikeBuilderBase):
+class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
+  """Define how to build ESI service implementations. Unlike Modules, there is
+  no distinction between definition and instance -- ESI service providers are
+  built where they are instantiated."""
 
   def instantiate(self, impl, instance_name: str, **inputs):
     # Each instantiation of the ServiceImplementation has its own
     # registration.
     opts = _service_generator_registry.register(impl)
+
+    # Create the op.
     decl_sym = None
     if impl.decl is not None:
       decl_sym = ir.FlatSymbolRefAttr.get(impl.decl._materialize_service_decl())
@@ -310,6 +315,8 @@ class ServiceImplementationModuleSpec(ModuleLikeBuilderBase):
         loc=self.loc)
 
   def generate_svc_impl(self, serviceReq: raw_esi.ServiceInstanceOp):
+    """"Generate the service inline and replace the `ServiceInstanceOp` which is
+    being implemented."""
 
     assert len(self.generators) == 1
     generator: Generator = list(self.generators.values())[0]
@@ -336,16 +343,19 @@ class ServiceImplementationModuleSpec(ModuleLikeBuilderBase):
     return rc
 
 
-class ServiceImplementationModule(Module):
+class ServiceImplementation(Module):
   """A generator for a service implementation. Must contain a @generator method
   which will be called whenever required to implement the server. Said generator
   function will be called with the same 'ports' argument as modules and a
   'channels' argument containing lists of the input and output channels which
   need to be connected to the service being implemented."""
 
-  BuilderType = ServiceImplementationModuleSpec
+  BuilderType = ServiceImplementationModuleBuilder
 
   def __init__(self, decl: Optional[ServiceDecl], **inputs):
+    """Instantiate a service provider for service declaration 'decl'. If decl,
+    implementation is expected to handle any and all service declarations."""
+
     self.decl = decl
     super().__init__(**inputs)
 
@@ -361,7 +371,7 @@ class _ServiceGeneratorRegistry:
   _impl_type_name = ir.StringAttr.get("pycde")
 
   def __init__(self):
-    self._registry: Dict[str, ServiceImplementationModule] = {}
+    self._registry: Dict[str, ServiceImplementation] = {}
 
     # Register myself with ESI so I can dispatch to my internal registry.
     assert _ServiceGeneratorRegistry._registered is False, \
@@ -371,7 +381,8 @@ class _ServiceGeneratorRegistry:
         self._implement_service)
     _ServiceGeneratorRegistry._registered = True
 
-  def register(self, service_implementation) -> ir.DictAttr:
+  def register(self,
+               service_implementation: ServiceImplementation) -> ir.DictAttr:
     """Register a ServiceImplementation generator with the PyCDE generator.
     Called when the ServiceImplamentation is defined."""
 
