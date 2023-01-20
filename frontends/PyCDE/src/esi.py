@@ -3,7 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from pycde.system import System
-from .module import Generator, _BlockContext, Module, ModuleLikeBuilder
+from .module import Generator, _BlockContext, Module, ModuleLikeBuilderBase
 from pycde.value import ChannelValue, ClockSignal, Signal, Value
 from .common import Input, Output, InputChannel, OutputChannel, _PyProxy
 from .circt.dialects import esi as raw_esi, hw, msft
@@ -292,7 +292,7 @@ class _ServiceGeneratorChannels:
         raise ValueError(f"{name_str} has not been connected.")
 
 
-class ServiceImplementationModuleSpec(ModuleLikeBuilder):
+class ServiceImplementationModuleSpec(ModuleLikeBuilderBase):
 
   def instantiate(self, impl, instance_name: str, **inputs):
     # Each instantiation of the ServiceImplementation has its own
@@ -313,8 +313,7 @@ class ServiceImplementationModuleSpec(ModuleLikeBuilder):
 
     assert len(self.generators) == 1
     generator: Generator = list(self.generators.values())[0]
-    self.reset_generate(serviceReq.operation.operands)
-    builder = self.generator_port_proxy()
+    ports = self.generator_port_proxy(serviceReq.operation.operands, self)
     with ir.InsertionPoint(
         serviceReq), generator.loc, BackedgeBuilder(), _BlockContext():
 
@@ -322,29 +321,28 @@ class ServiceImplementationModuleSpec(ModuleLikeBuilder):
       clk = None
       if len(self.clocks) == 1:
         clk_port = list(self.clocks)[0]
-        clk = ClockSignal(self.block_args[clk_port], ClockType())
+        clk = ClockSignal(ports._block_args[clk_port], ClockType())
         clk.__enter__()
 
       # Run the generator.
       channels = _ServiceGeneratorChannels(self, serviceReq)
-      rc = generator.gen_func(builder, channels=channels)
+      rc = generator.gen_func(ports, channels=channels)
       if rc is None:
         rc = True
       elif not isinstance(rc, bool):
         raise ValueError("Generators must a return a bool or None")
-      self.check_unconnected_outputs()
+      ports._check_unconnected_outputs()
       channels.check_unconnected_outputs()
 
       # Replace the output values from the service implement request op with
       # the generated values. Erase the service implement request op.
-      for idx, port_value in enumerate(self.output_values):
+      for idx, port_value in enumerate(ports._output_values):
         msft.replaceAllUsesWith(serviceReq.operation.results[idx],
                                 port_value.value)
       serviceReq.operation.erase()
 
       if clk is not None:
         clk.__exit__(None, None, None)
-    self.reset_generate()
 
     return rc
 

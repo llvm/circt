@@ -117,28 +117,77 @@ def generator(func):
   return Generator(func)
 
 
-###############################################################################
-# New style Modules.
-###############################################################################
+class PortProxyBase:
+
+  def __init__(self, block_args, builder):
+    self._block_args = block_args
+    self._output_values = [None] * len(builder.outputs)
+    self._builder = builder
+
+  def _get_input(self, idx):
+    val = self._block_args[idx]
+    if idx in self._builder.clocks:
+      return ClockSignal(val, ClockType())
+    return Value(val)
+
+  def _set_output(self, idx, signal):
+    assert signal is not None
+    pname, ptype = self._builder.outputs[idx]
+    if isinstance(signal, Signal):
+      if ptype != signal.type:
+        raise PortError(
+            f"Input port {pname} expected type {ptype}, not {signal.type}")
+    else:
+      signal = _obj_to_value(signal, ptype)
+    self._output_values[idx] = signal
+
+  def _check_unconnected_outputs(self):
+    unconnected_ports = []
+    for idx, value in enumerate(self._output_values):
+      if value is None:
+        unconnected_ports.append(self._builder.outputs[idx][0])
+    if len(unconnected_ports) > 0:
+      raise support.UnconnectedSignalError(self.name, unconnected_ports)
 
 
-class ModuleLikeBuilder(_PyProxy):
+class ModuleLikeBuilderBase(_PyProxy):
+  """`ModuleLikeBuilder`s are responsible for preparing `Module` and ilk
+  subclasses for use. They are responsible for scanning the subclass' attribute,
+  recognizing certain types (e.g. `InputPort`), and taking actions/mutating the
+  subclass based on that information. They are also responsible for creating
+  CIRCT IR -- creating the initial op, generating the bodies, instantiating
+  modules, etc.
+
+  This is the base class for common functionality which all 'ModuleLike` classes
+  are likely to need. Each `ModuleLike` type will need to subclass this base.
+  For instance, plain 'ol `Module`s have a corresponding subclass called
+  `ModuleBuilder`. The correspondence is given by the `BuilderType` class
+  variable in `Module`."""
 
   def __init__(self, cls, cls_dct, loc):
     self.modcls = cls
     self.cls_dct = cls_dct
     self.loc = loc
+
+    self.outputs = None
+    self.inputs = None
+    self.clocks = None
+    self.generators = None
+    self.generator_port_proxy = None
     self.parameters = None
-    self.set_name()
 
   def go(self):
+    """Execute the analysis and mutation to make the `ModuleLike` class operate
+    as such."""
+
     self.scan_cls()
     self.generator_port_proxy = self.create_port_proxy()
     self.add_external_port_accessors()
 
   def scan_cls(self):
-    # Inputs, Outputs, and parameters are all class members. We must populate
-    # them. Scan 'dct' for them.
+    """Scan the class for input/output ports and generators. (Most `ModuleLike`
+    will use these.) Store the results for later use."""
+
     input_ports = []
     output_ports = []
     clock_ports = set()
@@ -163,24 +212,33 @@ class ModuleLikeBuilder(_PyProxy):
     self.generators = generators
 
   def create_port_proxy(self):
+    """Create a proxy class for generators to use in order to access module
+    ports. Instances of this will (usually) be used in place of the `self`
+    argument in generator calls.
+
+    Replaces the dynamic lookup scheme previously utilized. Should be faster and
+    (more importantly) reduces the amount of bookkeeping necessary."""
+
     proxy_attrs = {}
     for idx, (name, port_type) in enumerate(self.inputs):
-      proxy_attrs[name] = property(
-          lambda self, idx=idx, gs=self: gs.get_input(idx))
+      proxy_attrs[name] = property(lambda self, idx=idx: self._get_input(idx))
 
     for idx, (name, port_type) in enumerate(self.outputs):
 
-      def fget(self, idx=idx, builder=self):
-        builder.get_output(idx)
+      def fget(self, idx=idx):
+        self._get_output(idx)
 
-      def fset(self, val, idx=idx, builder=self):
-        builder.set_output(idx, val)
+      def fset(self, val, idx=idx):
+        self._set_output(idx, val)
 
       proxy_attrs[name] = property(fget=fget, fset=fset)
 
-    return type(self.modcls.__name__ + "Builder", (), proxy_attrs)
+    return type(self.modcls.__name__ + "Ports", (PortProxyBase,), proxy_attrs)
 
   def add_external_port_accessors(self):
+    """For each port, replace it with a property to provide access to the
+    instances output in OTHER generators which are instantiating this module."""
+
     for idx, (name, port_type) in enumerate(self.inputs):
 
       def fget(self):
@@ -195,48 +253,14 @@ class ModuleLikeBuilder(_PyProxy):
 
       setattr(self.modcls, name, property(fget=fget))
 
-  def reset_generate(self, args=None):
-    """Resets member variables to their defaults. Should be called before and
-    after each generate."""
-    self.block_args = args
-    self.output_values = [None] * len(self.outputs)
-
-  def set_name(self):
+  @property
+  def name(self):
     if hasattr(self.modcls, "module_name"):
-      self.name = self.modcls.module_name
+      return self.modcls.module_name
     elif self.parameters is not None:
-      self.name = _create_module_name(self.modcls.__name__, self.parameters)
+      return _create_module_name(self.modcls.__name__, self.parameters)
     else:
-      self.name = self.modcls.__name__
-
-  def set_params(self, params: ir.DictAttr):
-    self.parameters = params
-    self.set_name()
-
-  def get_input(self, idx):
-    val = self.block_args[idx]
-    if idx in self.clocks:
-      return ClockSignal(val, ClockType())
-    return Value(val)
-
-  def set_output(self, idx, signal):
-    assert signal is not None
-    pname, ptype = self.outputs[idx]
-    if isinstance(signal, Signal):
-      if ptype != signal.type:
-        raise PortError(
-            f"Input port {pname} expected type {ptype}, not {signal.type}")
-    else:
-      signal = _obj_to_value(signal, ptype)
-    self.output_values[idx] = signal
-
-  def check_unconnected_outputs(self):
-    unconnected_ports = []
-    for idx, value in enumerate(self.output_values):
-      if value is None:
-        unconnected_ports.append(self.outputs[idx][0])
-    if len(unconnected_ports) > 0:
-      raise support.UnconnectedSignalError(self.name, unconnected_ports)
+      return self.modcls.__name__
 
   def print(self, out):
     print(
@@ -247,8 +271,17 @@ class ModuleLikeBuilder(_PyProxy):
 
 class ModuleLikeType(type):
   """ModuleLikeType is a metaclass for Module and other things which look like
-  modules (e.g. ServiceGenerators). It reads the ports and constructs a builder
-  to give access to the module ports."""
+  modules (e.g. ServiceGenerators). A metaclass is nice since it gets run on
+  each class (including subclasses), so has the ability to modify it. This is in
+  constrast to a decorator which gets run once. It also has the advance of being
+  able to pretty easily extend `Module` or create an entirely new `ModuleLike`
+  hierarchy.
+
+  This metaclass essentially just kicks the brunt of the work over to a
+  specified `ModulerLikeBuilder`, which can -- unlike metaclasses -- have state.
+  Presumably, the usual thing is to store all of this state in the class itself,
+  but we need this state to be private. Given that this isn't possible in
+  Python, a single '_' variable is as small a surface area as we can get."""
 
   def __init__(cls, name, bases, dct: Dict):
     super(ModuleLikeType, cls).__init__(name, bases, dct)
@@ -256,10 +289,16 @@ class ModuleLikeType(type):
     cls._builder.go()
 
 
-class ModuleSpec(ModuleLikeBuilder):
+class ModuleBuilder(ModuleLikeBuilderBase):
+  """Defines how a `Module` gets built. Extend the base class and customize."""
 
   @property
   def circt_mod(self):
+    """Get the raw CIRCT operation for the module definition. DO NOT store the
+    returned value!!! It needs to get reaped after the current action (e.g.
+    instantiation, generation). Memory safety when interacting with native code
+    can be painful."""
+
     from .system import System
     sys: System = System.current()
     ret = sys._op_cache.get_circt_mod(self)
@@ -269,7 +308,9 @@ class ModuleSpec(ModuleLikeBuilder):
 
   def create_op(self, sys, symbol):
     """Creation callback for creating a MSFTModuleOp."""
+
     if len(self.generators) > 0:
+      # If this Module has a generator, it's a real module.
       return msft.MSFTModuleOp(
           symbol,
           self.inputs,
@@ -278,6 +319,7 @@ class ModuleSpec(ModuleLikeBuilder):
           loc=self.loc,
           ip=sys._get_ip())
 
+    # Modules without generators are implicitly considered to be external.
     if self.parameters is None:
       paramdecl_list = []
     else:
@@ -295,8 +337,10 @@ class ModuleSpec(ModuleLikeBuilder):
         ip=sys._get_ip())
 
   def instantiate(self, module_inst, instance_name: str, **inputs):
+    """"Instantiate this Module. Check that the input types match expectations.
+    Annotate the instance with the instance with the module parameters."""
+
     from .circt.dialects import _hw_ops_ext as hwext
-    circt_mod = self.circt_mod
     input_lookup = {
         name: (idx, ptype) for idx, (name, ptype) in enumerate(self.inputs)
     }
@@ -317,6 +361,7 @@ class ModuleSpec(ModuleLikeBuilder):
       missing = ", ".join(list(input_lookup.keys()))
       raise ValueError(f"Missing input signals for ports: {missing}")
 
+    circt_mod = self.circt_mod
     parameters = None
     if len(self.generators) == 0 and self.parameters is not None:
       parameters = ir.ArrayAttr.get(
@@ -338,40 +383,40 @@ class ModuleSpec(ModuleLikeBuilder):
     assert len(self.generators) == 1
     g: Generator = list(self.generators.values())[0]
 
-    def create_output_op():
-      """Create the hw.OutputOp from module I/O ports in 'args'."""
-      self.check_unconnected_outputs()
-      msft.OutputOp([o.value for o in self.output_values])
-
-    bc = _BlockContext()
-    circt_mod = self.circt_mod
-    entry_block = circt_mod.add_entry_block()
-    self.reset_generate(entry_block.arguments)
-    builder = self.generator_port_proxy()
-    with ir.InsertionPoint(entry_block), g.loc, BackedgeBuilder(), bc:
+    entry_block = self.circt_mod.add_entry_block()
+    ports = self.generator_port_proxy(entry_block.arguments, self)
+    with ir.InsertionPoint(
+        entry_block), g.loc, BackedgeBuilder(), _BlockContext():
       # Enter clock block implicitly if only one clock given.
       clk = None
       if len(self.clocks) == 1:
         clk_port = list(self.clocks)[0]
-        clk = ClockSignal(self.block_args[clk_port], ClockType())
+        clk = ClockSignal(ports._block_args[clk_port], ClockType())
         clk.__enter__()
 
-      outputs = g.gen_func(builder)
+      outputs = g.gen_func(ports)
       if outputs is not None:
         raise ValueError("Generators must not return a value")
-      if create_output_op is not None:
-        create_output_op()
+
+      ports._check_unconnected_outputs()
+      msft.OutputOp([o.value for o in ports._output_values])
 
       if clk is not None:
         clk.__exit__(None, None, None)
-    self.reset_generate()
 
 
 class Module(metaclass=ModuleLikeType):
-  BuilderType = ModuleSpec
+  """Subclass this class to define a regular PyCDE or external module. To define
+  a module in PyCDE, supply a `@generator` method. To create an external module,
+  don't. In either case, a list of ports is required."""
+
+  BuilderType = ModuleBuilder
 
   def __init__(self, instance_name: str = None, appid: AppID = None, **inputs):
-    """Create an instance of this module."""
+    """Create an instance of this module. Instance namd and appid are optional.
+    All inputs must be specified. If a signal has not been produced yet, use the
+    `Wire` construct and assign the signal to that wire later on."""
+
     if instance_name is None:
       instance_name = self.__class__.__name__
     instance_name = _BlockContext.current().uniquify_symbol(instance_name)
@@ -385,8 +430,10 @@ class Module(metaclass=ModuleLikeType):
 
 
 class params:
-  """When the @module decorator detects that it is decorating a function, use
-  this class to wrap it."""
+  """Decorate a function to indicate that it is returning a Module which is
+  parameterized by this function. Arguments to this class MUST be convertible to
+  hardware constants. Arguments with underscore prefixes are ignored and thus
+  exempt from the previous requirement."""
 
   func = None
 
@@ -429,12 +476,14 @@ class params:
     if not issubclass(cls, Module):
       raise ValueError("Parameterization function must return Module class")
 
-    cls._builder.set_params(cache_key[1])
+    cls._builder.parameters = cache_key[1]
     _MODULE_CACHE[cache_key] = cls
     return cls
 
 
-class ImportedModSpec(ModuleSpec):
+class ImportedModSpec(ModuleBuilder):
+  """Specialization to support imported CIRCT modules."""
+
   # Creation callback that just moves the already build module into the System's
   # ModuleOp and returns it.
   def create_op(self, sys, symbol: str):
@@ -460,6 +509,11 @@ class ImportedModSpec(ModuleSpec):
 
 
 def import_hw_module(hw_module: hw.HWModuleOp):
+  """Import a CIRCT module into PyCDE. Returns a standard Module subclass which
+  operates just like an external PyCDE module.
+
+  For now, the imported module name MUST NOT conflict with any other modules."""
+
   # Get the module name to use in the generated class and as the external name.
   name = ir.StringAttr(hw_module.name).value
 

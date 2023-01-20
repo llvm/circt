@@ -8,7 +8,7 @@ from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
                             PhysicalRegion)
 
 from .common import _PyProxy
-from .module import Module, ModuleLikeType, ModuleLikeBuilder
+from .module import Module, ModuleLikeType, ModuleLikeBuilderBase
 from .pycde_types import types
 from .instance import Instance, InstanceHierarchyRoot
 
@@ -170,7 +170,7 @@ class System:
       entity_extern = EntityExtern(tag, metadata)
     return entity_extern
 
-  def _create_circt_mod(self, builder: ModuleLikeBuilder):
+  def _create_circt_mod(self, builder: ModuleLikeBuilderBase):
     """Wrapper for a callback (which actually builds the CIRCT op) which
     controls all the bookkeeping around CIRCT module ops."""
 
