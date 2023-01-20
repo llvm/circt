@@ -448,7 +448,7 @@ class Module(metaclass=ModuleLikeType):
     cls._builder.print(out)
 
 
-class params:
+class modparams:
   """Decorate a function to indicate that it is returning a Module which is
   parameterized by this function. Arguments to this class MUST be convertible to
   hardware constants. Arguments with underscore prefixes are ignored and thus

@@ -1,12 +1,12 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
 from pycde import Clock, Input, types, System
-from pycde.module import AppID, generator, Module, params
+from pycde.module import AppID, generator, Module, modparams
 from pycde.testing import unittestmodule
 
 
 # CHECK: TypeError: Module parameter definitions cannot have *args
-@params
+@modparams
 def foo(*args):
   pass
 
@@ -15,7 +15,7 @@ def foo(*args):
 
 
 # CHECK: TypeError: Module parameter definitions cannot have **kwargs
-@params
+@modparams
 def bar(**kwargs):
   pass
 

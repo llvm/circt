@@ -4,7 +4,7 @@ import pycde
 import pycde.dialects.hw
 
 
-@pycde.params
+@pycde.modparams
 def Parameterized(param):
 
   class TestModule(pycde.Module):

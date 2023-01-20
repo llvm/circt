@@ -6,13 +6,13 @@ from __future__ import annotations
 
 import pycde
 from pycde import (AppID, Input, Output, generator, types)
-from pycde.module import Module, params
+from pycde.module import Module, modparams
 from pycde.dialects import comb, hw
 
 import sys
 
 
-@params
+@modparams
 def PolynomialCompute(coefficients: Coefficients):
 
   class PolynomialCompute(Module):
@@ -64,7 +64,7 @@ class CoolPolynomialCompute(Module):
     self.coefficients = coefficients
 
 
-@params
+@modparams
 def ExternWithParams(a, b):
 
   typedef1 = types.struct({"a": types.i1}, "exTypedef")
