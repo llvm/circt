@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTLSTATEMENTS_TD
 
 include "FIRRTLDialect.td"
+include "FIRRTLEnums.td"
 include "FIRRTLOpInterfaces.td"
 include "FIRRTLTypes.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
@@ -107,16 +108,6 @@ def StopOp : FIRRTLOp<"stop"> {
 
   let assemblyFormat = "$clock `,` $cond `,` $exitCode custom<StopAttrs>(attr-dict)";
 }
-
-/// AtPosEdge triggers on a rise from 0 to 1/X/Z, or X/Z to 1.
-def AtPosEdge: I32EnumAttrCase<"AtPosEdge", 0, "posedge">;
-/// AtNegEdge triggers on a drop from 1 to 0/X/Z, or X/Z to 0.
-def AtNegEdge: I32EnumAttrCase<"AtNegEdge", 1, "negedge">;
-/// AtEdge(v) is syntactic sugar for "AtPosEdge(v) or AtNegEdge(v)".
-def AtEdge   : I32EnumAttrCase<"AtEdge", 2, "edge">;
-
-def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
-                                   [AtPosEdge, AtNegEdge, AtEdge]>  {}
 
 class VerifOp<string mnemonic, list<Trait> traits = []> :
     FIRRTLOp<mnemonic, traits> {
