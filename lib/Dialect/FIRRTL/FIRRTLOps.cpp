@@ -883,7 +883,7 @@ static void printParameterList(ArrayAttr parameters, OpAsmPrinter &p) {
 
   p << '<';
   llvm::interleaveComma(parameters, p, [&](Attribute param) {
-    auto paramAttr = param.cast<ParamDeclAttr>();
+    auto paramAttr = param.cast<hw::ParamDeclAttr>();
     p << paramAttr.getName().getValue() << ": " << paramAttr.getType();
     if (auto value = paramAttr.getValue()) {
       p << " = ";
@@ -985,7 +985,7 @@ parseOptionalParameters(OpAsmParser &parser,
         }
 
         auto &builder = parser.getBuilder();
-        parameters.push_back(ParamDeclAttr::get(
+        parameters.push_back(hw::ParamDeclAttr::get(
             builder.getContext(), builder.getStringAttr(name), type, value));
         return success();
       });
@@ -1101,7 +1101,7 @@ LogicalResult FExtModuleOp::verify() {
     return success();
 
   auto checkParmValue = [&](Attribute elt) -> bool {
-    auto param = elt.cast<ParamDeclAttr>();
+    auto param = elt.cast<hw::ParamDeclAttr>();
     auto value = param.getValue();
     if (value.isa<IntegerAttr>() || value.isa<StringAttr>() ||
         value.isa<FloatAttr>())

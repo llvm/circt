@@ -93,7 +93,7 @@ static ParseResult hasNParam(StringRef name, FExtModuleOp mod, unsigned n) {
 static ParseResult namedParam(StringRef name, FExtModuleOp mod,
                               StringRef paramName) {
   for (auto a : mod.getParameters()) {
-    auto param = a.cast<ParamDeclAttr>();
+    auto param = a.cast<hw::ParamDeclAttr>();
     if (param.getName().getValue().equals(paramName)) {
       if (param.getValue().isa<StringAttr>())
         return success();
@@ -159,7 +159,7 @@ static bool lowerCirctPlusArgTest(InstancePathCache &instancePathCache,
       namedParam("circt.plusargs.test", mod, "FORMAT"))
     return false;
 
-  auto param = mod.getParameters()[0].cast<ParamDeclAttr>();
+  auto param = mod.getParameters()[0].cast<hw::ParamDeclAttr>();
   for (auto *use : instancePathCache.instanceGraph[mod]->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
@@ -181,7 +181,7 @@ static bool lowerCirctPlusArgValue(InstancePathCache &instancePathCache,
       namedParam("circt.plusargs.value", mod, "FORMAT"))
     return false;
 
-  auto param = mod.getParameters()[0].cast<ParamDeclAttr>();
+  auto param = mod.getParameters()[0].cast<hw::ParamDeclAttr>();
 
   for (auto *use : instancePathCache.instanceGraph[mod]->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());

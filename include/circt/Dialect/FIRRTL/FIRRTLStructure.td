@@ -18,6 +18,7 @@ include "FIRRTLDialect.td"
 include "FIRRTLOpInterfaces.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/HW/HWAttributes.td"
 include "circt/Types.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
@@ -85,7 +86,6 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
   }];
 
 }
-
 
 def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
   let summary = "FIRRTL Module";

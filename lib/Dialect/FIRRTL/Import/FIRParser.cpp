@@ -3037,7 +3037,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     auto nameId = builder.getStringAttr(paramName);
     if (!seenNames.insert(nameId).second)
       return emitError(loc, "redefinition of parameter '" + paramName + "'");
-    parameters.push_back(ParamDeclAttr::get(nameId, value));
+    parameters.push_back(hw::ParamDeclAttr::get(nameId, value));
   }
 
   auto fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList,

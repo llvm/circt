@@ -265,7 +265,7 @@ void Emitter::emitModule(FExtModuleOp op) {
 
   // Emit the parameters.
   for (auto param : llvm::map_range(op.getParameters(), [](Attribute attr) {
-         return attr.cast<ParamDeclAttr>();
+         return attr.cast<hw::ParamDeclAttr>();
        })) {
     indent() << "parameter " << param.getName().getValue() << " = ";
     TypeSwitch<Attribute>(param.getValue())

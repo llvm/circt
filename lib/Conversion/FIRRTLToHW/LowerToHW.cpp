@@ -980,7 +980,7 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
 /// are dropped.
 static ArrayAttr getHWParameters(FExtModuleOp module, bool ignoreValues) {
   auto params = llvm::map_range(module.getParameters(), [](Attribute a) {
-    return a.cast<ParamDeclAttr>();
+    return a.cast<hw::ParamDeclAttr>();
   });
   if (params.empty())
     return {};
@@ -991,7 +991,7 @@ static ArrayAttr getHWParameters(FExtModuleOp module, bool ignoreValues) {
   // directly.  MLIR's DictionaryAttr always stores keys in the dictionary
   // in sorted order which is nicely stable.
   SmallVector<Attribute> newParams;
-  for (const ParamDeclAttr &entry : params) {
+  for (const hw::ParamDeclAttr &entry : params) {
     auto name = entry.getName();
     auto type = entry.getType();
     auto value = ignoreValues ? Attribute() : entry.getValue();

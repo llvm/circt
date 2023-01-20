@@ -68,39 +68,3 @@ void FIRRTLDialect::registerAttributes() {
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.cpp.inc"
       >();
 }
-
-//===----------------------------------------------------------------------===//
-// ParamDeclAttr
-//===----------------------------------------------------------------------===//
-
-Attribute ParamDeclAttr::parse(AsmParser &p, Type trailing) {
-  std::string name;
-  Type type;
-  Attribute value;
-  // < "FOO" : i32 > : i32
-  // < "FOO" : i32 = 0 > : i32
-  // < "FOO" : none >
-  if (p.parseLess() || p.parseString(&name) || p.parseColonType(type))
-    return Attribute();
-
-  if (succeeded(p.parseOptionalEqual())) {
-    if (p.parseAttribute(value, type))
-      return Attribute();
-  }
-
-  if (p.parseGreater())
-    return Attribute();
-
-  if (value)
-    return ParamDeclAttr::get(name, value);
-  return ParamDeclAttr::get(name, type);
-}
-
-void ParamDeclAttr::print(AsmPrinter &p) const {
-  p << "<" << getName() << ": " << getType();
-  if (getValue()) {
-    p << " = ";
-    p.printAttributeWithoutType(getValue());
-  }
-  p << ">";
-}
