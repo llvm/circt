@@ -179,11 +179,10 @@ def Cosim(decl: ServiceDecl, clk, rst):
 def CosimBSP(user_module):
   """Wrap and return a cosimulation 'board support package' containing
   'user_module'"""
-  from .module import module, generator
+  from .module import Module, generator
   from .common import Clock, Input
 
-  @module
-  class top:
+  class top(Module):
     clk = Clock()
     rst = Input(types.int(1))
 

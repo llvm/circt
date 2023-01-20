@@ -144,7 +144,7 @@ class System:
       if isinstance(op, hw.HWModuleOp):
         from .module import import_hw_module
         im = import_hw_module(op)
-        self._create_circt_mod(im._pycde_mod)
+        self._create_circt_mod(im._builder)
         ret[ir.StringAttr(op.name).value] = im
       elif isinstance(op, esi.RandomAccessMemoryDeclOp):
         from .esi import _import_ram_decl
