@@ -6,11 +6,10 @@
 # PY: run_cosim(tmpdir, rpcschemapath, simhostport)
 
 import pycde
-from pycde import (Clock, Input, InputChannel, OutputChannel, module, generator,
+from pycde import (Clock, Input, InputChannel, OutputChannel, Module, generator,
                    types)
 from pycde import esi
 from pycde.constructs import Wire
-from pycde.dialects import comb
 
 import sys
 
@@ -23,8 +22,7 @@ class HostComms:
                               to_client_type=types.i32)
 
 
-@module
-class Producer:
+class Producer(Module):
   clk = Input(types.i1)
   int_out = OutputChannel(types.i32)
 
@@ -34,8 +32,7 @@ class Producer:
     ports.int_out = chan
 
 
-@module
-class Consumer:
+class Consumer(Module):
   clk = Input(types.i1)
   int_in = InputChannel(types.i32)
 
@@ -44,8 +41,7 @@ class Consumer:
     HostComms.to_host(ports.int_in, "loopback_out")
 
 
-@module
-class LoopbackInOutAdd7:
+class LoopbackInOutAdd7(Module):
 
   @generator
   def construct(ports):
@@ -59,8 +55,7 @@ class LoopbackInOutAdd7:
     loopback.assign(data_chan)
 
 
-@module
-class Mid:
+class Mid(Module):
   clk = Clock(types.i1)
   rst = Input(types.i1)
 
@@ -72,8 +67,7 @@ class Mid:
     LoopbackInOutAdd7()
 
 
-@module
-class Top:
+class Top(Module):
   clk = Clock(types.i1)
   rst = Input(types.i1)
 

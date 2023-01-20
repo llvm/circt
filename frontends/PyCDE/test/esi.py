@@ -1,7 +1,7 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
 
-from pycde import (Clock, Input, InputChannel, OutputChannel, module, generator,
+from pycde import (Clock, Input, InputChannel, OutputChannel, Module, generator,
                    types)
 from pycde import esi
 from pycde.common import Output
@@ -19,8 +19,7 @@ class HostComms:
                               to_client_type=types.i32)
 
 
-@module
-class Producer:
+class Producer(Module):
   clk = Input(types.i1)
   int_out = OutputChannel(types.i32)
 
@@ -30,8 +29,7 @@ class Producer:
     ports.int_out = chan
 
 
-@module
-class Consumer:
+class Consumer(Module):
   clk = Input(types.i1)
   int_in = InputChannel(types.i32)
 
@@ -57,7 +55,7 @@ class Consumer:
 
 
 @unittestmodule(print=True)
-class LoopbackTop:
+class LoopbackTop(Module):
   clk = Clock(types.i1)
   rst = Input(types.i1)
 
@@ -77,14 +75,14 @@ class LoopbackTop:
 # CHECK:         %chanOutput, %ready = esi.wrap.vr %1, %valid : i16
 # CHECK:         msft.output
 @unittestmodule(print=True)
-class LoopbackInOutTop:
+class LoopbackInOutTop(Module):
   clk = Clock(types.i1)
   rst = Input(types.i1)
 
   @generator
-  def construct(ports):
+  def construct(self):
     # Use Cosim to implement the standard 'HostComms' service.
-    esi.Cosim(HostComms, ports.clk, ports.rst)
+    esi.Cosim(HostComms, self.clk, self.rst)
 
     loopback = Wire(types.channel(types.i16))
     from_host = HostComms.req_resp(loopback, "loopback_inout")
@@ -96,8 +94,7 @@ class LoopbackInOutTop:
     loopback.assign(data_chan)
 
 
-@esi.ServiceImplementation(HostComms)
-class MultiplexerService:
+class MultiplexerService(esi.ServiceImplementation):
   clk = Clock()
   rst = Input(types.i1)
 
@@ -110,21 +107,21 @@ class MultiplexerService:
   trunk_out_ready = Input(types.i1)
 
   @generator
-  def generate(ports, channels):
+  def generate(self, channels):
 
     input_reqs = channels.to_server_reqs
     if len(input_reqs) > 1:
       raise Exception("Multiple to_server requests not supported")
-    MultiplexerService.unwrap_and_pad(ports, input_reqs[0])
+    MultiplexerService.unwrap_and_pad(self, input_reqs[0])
 
     output_reqs = channels.to_client_reqs
     if len(output_reqs) > 1:
       raise Exception("Multiple to_client requests not supported")
     output_req = output_reqs[0]
     output_chan, ready = MultiplexerService.slice_and_wrap(
-        ports, output_req.type)
+        self, output_req.type)
     output_req.assign(output_chan)
-    ports.trunk_in_ready = ready
+    self.trunk_in_ready = ready
 
   @staticmethod
   def slice_and_wrap(ports, channel_type: ChannelType):
@@ -158,7 +155,7 @@ class MultiplexerService:
 
 
 @unittestmodule(run_passes=True, print_after_passes=True, emit_outputs=True)
-class MultiplexerTop:
+class MultiplexerTop(Module):
   clk = Clock(types.i1)
   rst = Input(types.i1)
 
@@ -171,7 +168,8 @@ class MultiplexerTop:
 
   @generator
   def construct(ports):
-    m = MultiplexerService(clk=ports.clk,
+    m = MultiplexerService(HostComms,
+                           clk=ports.clk,
                            rst=ports.rst,
                            trunk_in=ports.trunk_in,
                            trunk_in_valid=ports.trunk_in_valid,

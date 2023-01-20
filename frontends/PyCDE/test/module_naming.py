@@ -4,10 +4,10 @@ import pycde
 import pycde.dialects.hw
 
 
-@pycde.module
+@pycde.modparams
 def Parameterized(param):
 
-  class TestModule:
+  class TestModule(pycde.Module):
     x = pycde.Input(pycde.types.i1)
     y = pycde.Output(pycde.types.i1)
 
@@ -18,8 +18,7 @@ def Parameterized(param):
   return TestModule
 
 
-@pycde.module
-class UnParameterized:
+class UnParameterized(pycde.Module):
   x = pycde.Input(pycde.types.i1)
   y = pycde.Output(pycde.types.i1)
 
@@ -28,8 +27,7 @@ class UnParameterized:
     ports.y = ports.x
 
 
-@pycde.module
-class Test:
+class Test(pycde.Module):
   inputs = []
   outputs = []
 

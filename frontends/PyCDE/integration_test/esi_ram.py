@@ -6,7 +6,7 @@
 # PY: run_cosim(tmpdir, rpcschemapath, simhostport)
 
 import pycde
-from pycde import (Clock, Input, module, generator, types)
+from pycde import (Clock, Input, Module, generator, types)
 from pycde.constructs import Wire
 from pycde import esi
 
@@ -24,8 +24,7 @@ class MemComms:
                               to_client_type=WriteType)
 
 
-@module
-class Mid:
+class Mid(Module):
   clk = Clock(types.i1)
   rst = Input(types.i1)
 
@@ -40,8 +39,7 @@ class Mid:
     RamI64x8.write(write_data)
 
 
-@module
-class top:
+class top(Module):
   clk = Clock(types.i1)
   rst = Input(types.i1)
 

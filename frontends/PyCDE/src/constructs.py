@@ -8,7 +8,7 @@ from .common import Clock, Input, Output
 from .pycde_types import PyCDEType, dim, types
 from .value import BitsSignal, BitVectorSignal, ListValue, Value, Signal
 from .value import get_slice_bounds
-from .module import generator, module, _BlockContext
+from .module import generator, modparams, Module, _BlockContext
 from .circt.support import get_value, BackedgeBuilder
 from .circt.dialects import msft, hw, sv
 from pycde.dialects import comb
@@ -149,10 +149,10 @@ def ControlReg(clk: Signal, rst: Signal, asserts: List[Signal],
   opposite. If both an assert and a reset are active on the same cycle, the
   assert takes priority."""
 
-  @module
+  @modparams
   def ControlReg(num_asserts: int, num_resets: int):
 
-    class ControlReg:
+    class ControlReg(Module):
       clk = Clock()
       rst = Input(types.i1)
       out = Output(types.i1)

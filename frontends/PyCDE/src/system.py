@@ -8,7 +8,7 @@ from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
                             PhysicalRegion)
 
 from .common import _PyProxy
-from .module import _SpecializedModule
+from .module import Module, ModuleLikeType, ModuleLikeBuilderBase
 from .pycde_types import types
 from .instance import Instance, InstanceHierarchyRoot
 
@@ -23,7 +23,7 @@ import gc
 import os
 import pathlib
 import sys
-from typing import Any, Callable, Dict, List, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 _current_system = ContextVar("current_pycde_system")
 
@@ -54,10 +54,11 @@ class System:
   """
 
   def __init__(self,
-               top_modules: Union[list, _SpecializedModule],
+               top_modules: Union[list, Module],
                name: str = "PyCDESystem",
                output_directory: str = None,
                sw_api_langs: List[str] = None):
+    from .module import Module
     self.passed = False
     self.mod = ir.Module.create()
     if isinstance(top_modules, Iterable):
@@ -69,8 +70,7 @@ class System:
 
     self._generate_queue = []
     # _instance_roots indexed by (module, instance_name).
-    self._instance_roots: dict[(_SpecializedModule, str),
-                               InstanceHierarchyRoot] = {}
+    self._instance_roots: dict[(Module, str), InstanceHierarchyRoot] = {}
 
     self._placedb: PlacementDB = None
 
@@ -88,7 +88,7 @@ class System:
     self.hw_output_dir.mkdir(exist_ok=True)
 
     with self:
-      [m._pycde_mod.create() for m in self.top_modules]
+      [m._builder.circt_mod for m in self.top_modules]
 
   def add_packaging_step(self, func: Callable):
     self.packaging_funcs.append(func)
@@ -107,15 +107,6 @@ class System:
   @staticmethod
   def set_debug():
     ir._GlobalDebug.flag = True
-
-  def import_modules(self, modules: list[_SpecializedModule]):
-    # Call the imported modules' `create` methods to import the IR into the
-    # PyCDE System ModuleOp. Also add them to the list of top-level modules so
-    # later emission stages know about them.
-    with self:
-      for module in modules:
-        module._pycde_mod.create()
-        self.top_modules.append(module)
 
   # TODO: Ideally, we'd be able to run the std-to-handshake lowering passes in
   # pycde.  As of now, however, the cf/memref/arith dialects are not registered
@@ -153,7 +144,7 @@ class System:
       if isinstance(op, hw.HWModuleOp):
         from .module import import_hw_module
         im = import_hw_module(op)
-        self._create_circt_mod(im._pycde_mod)
+        self._create_circt_mod(im._builder)
         ret[ir.StringAttr(op.name).value] = im
       elif isinstance(op, esi.RandomAccessMemoryDeclOp):
         from .esi import _import_ram_decl
@@ -175,27 +166,27 @@ class System:
       entity_extern = EntityExtern(tag, metadata)
     return entity_extern
 
-  def _create_circt_mod(self, spec_mod: _SpecializedModule):
+  def _create_circt_mod(self, builder: ModuleLikeBuilderBase):
     """Wrapper for a callback (which actually builds the CIRCT op) which
     controls all the bookkeeping around CIRCT module ops."""
 
-    (symbol, install_func) = self._op_cache.create_symbol(spec_mod)
+    (symbol, install_func) = self._op_cache.create_symbol(builder)
     if symbol is None:
       return
 
     # Build the correct op.
-    op = spec_mod.create_cb(self, spec_mod, symbol)
+    op = builder.create_op(self, symbol)
     # Install the op in the cache.
     install_func(op)
     # Add to the generation queue if the module has a generator callback.
-    if hasattr(spec_mod, 'generator_cb') and spec_mod.generator_cb is not None:
-      assert callable(spec_mod.generator_cb)
-      self._generate_queue.append(spec_mod)
-      file_name = spec_mod.modcls.__name__ + ".sv"
+    if len(builder.generators) > 0:
+      self._generate_queue.append(builder)
+      file_name = builder.modcls.__name__ + ".sv"
       outfn = self.output_directory / file_name
       self.files.add(outfn)
       self.mod_files.add(outfn)
       op.fileName = ir.StringAttr.get(str(file_name))
+    return op
 
   @staticmethod
   def current():
@@ -247,7 +238,7 @@ class System:
                    mod_cls: object,
                    instance_name: str = None) -> InstanceHierarchyRoot:
     assert len(self._generate_queue) == 0, "Ungenerated modules left"
-    mod = mod_cls._pycde_mod
+    mod = mod_cls._builder
     key = (mod, instance_name)
     if key not in self._instance_roots:
       self._instance_roots[key] = InstanceHierarchyRoot(mod, instance_name,
@@ -448,16 +439,19 @@ class _OpCache:
 
   def get_pyproxy_symbol(self, spec_mod) -> str:
     """Get the symbol for a module or its associated _PyProxy."""
-    if not isinstance(spec_mod, _SpecializedModule):
-      if hasattr(spec_mod, "_pycde_mod"):
-        spec_mod = spec_mod._pycde_mod
+    if not isinstance(spec_mod, Module):
+      if isinstance(spec_mod, ModuleLikeType):
+        spec_mod = spec_mod._builder
     if spec_mod not in self._pyproxy_symbols:
       return None
     return self._pyproxy_symbols[spec_mod]
 
-  def get_circt_mod(self, spec_mod: _SpecializedModule) -> ir.Operation:
+  def get_circt_mod(self, spec_mod: Module) -> Optional[ir.Operation]:
     """Get the CIRCT module op for a PyCDE module."""
-    return self.symbols[self.get_pyproxy_symbol(spec_mod)]
+    sym = self.get_pyproxy_symbol(spec_mod)
+    if sym in self.symbols:
+      return self.symbols[sym]
+    return None
 
   def _build_instance_hier_cache(self):
     """If the instance hierarchy cache doesn't exist, build it."""
@@ -535,8 +529,8 @@ class _OpCache:
     raise TypeError(
         "Can only resolve from InstanceHierarchyOp or DynamicInstanceOp")
 
-  def get_sym_ops_in_module(
-      self, module: _SpecializedModule) -> Dict[ir.Attribute, ir.Operation]:
+  def get_sym_ops_in_module(self,
+                            module: Module) -> Dict[ir.Attribute, ir.Operation]:
     """Look into the IR inside 'module' for any ops which have a `sym_name`
     attribute. Cached."""
 

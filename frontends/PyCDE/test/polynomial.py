@@ -5,30 +5,27 @@
 from __future__ import annotations
 
 import pycde
-from pycde import (AppID, Input, Output, module, externmodule, generator, types)
+from pycde import (AppID, Input, Output, generator, types)
+from pycde.module import Module, modparams
 from pycde.dialects import comb, hw
-from pycde.circt.support import connect
 
 import sys
 
 
-@module
+@modparams
 def PolynomialCompute(coefficients: Coefficients):
 
-  class PolynomialCompute:
+  class PolynomialCompute(Module):
     """Module to compute ax^3 + bx^2 + cx + d for design-time coefficients"""
+    module_name = f"PolyComputeForCoeff_{coefficients.coeff}"
 
     # Evaluate polynomial for 'x'.
     x = Input(types.i32)
     y = Output(types.int(8 * 4))
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, **kwargs):
       """coefficients is in 'd' -> 'a' order."""
-      self.instance_name = name
-
-    @staticmethod
-    def get_module_name():
-      return f"PolyComputeForCoeff_{coefficients.coeff}"
+      super().__init__(instance_name=name, **kwargs)
 
     @generator
     def construct(mod):
@@ -57,22 +54,23 @@ def PolynomialCompute(coefficients: Coefficients):
   return PolynomialCompute
 
 
-@externmodule("supercooldevice")
-class CoolPolynomialCompute:
+class CoolPolynomialCompute(Module):
+  module_name = "supercooldevice"
   x = Input(types.i32)
   y = Output(types.i32)
 
-  def __init__(self, coefficients):
+  def __init__(self, coefficients, **inputs):
+    super().__init__(**inputs)
     self.coefficients = coefficients
 
 
-@externmodule("parameterized_extern")
+@modparams
 def ExternWithParams(a, b):
 
   typedef1 = types.struct({"a": types.i1}, "exTypedef")
 
-  class M:
-    pass
+  class M(Module):
+    module_name = "parameterized_extern"
 
   return M
 
@@ -83,28 +81,26 @@ class Coefficients:
     self.coeff = coeff
 
 
-@module
-class PolynomialSystem:
+class PolynomialSystem(Module):
   y = Output(types.i32)
 
   @generator
-  def construct(ports):
+  def construct(self):
     i32 = types.i32
     x = hw.ConstantOp(i32, 23)
     poly = PolynomialCompute(Coefficients([62, 42, 6]))("example",
-                                                        appid=AppID("poly", 0))
-    connect(poly.x, x)
+                                                        appid=AppID("poly", 0),
+                                                        x=x)
     PolynomialCompute(coefficients=Coefficients([62, 42, 6]))("example2",
                                                               x=poly.y)
     PolynomialCompute(Coefficients([1, 2, 3, 4, 5]))("example2", x=poly.y)
 
-    cp = CoolPolynomialCompute([4, 42])
-    cp.x.connect(23)
+    CoolPolynomialCompute([4, 42], x=23)
 
     m = ExternWithParams(8, 3)()
     m.name = "pexternInst"
 
-    ports.y = poly.y
+    self.y = poly.y
 
 
 poly = pycde.System([PolynomialSystem],
@@ -132,6 +128,7 @@ poly.print()
 
 print("Generating rest...")
 poly.generate()
+poly.print()
 
 print("=== Post-generate IR...")
 poly.run_passes()

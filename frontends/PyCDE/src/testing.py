@@ -1,10 +1,9 @@
-from pycde import System, module
+from pycde import System, Module
 
 import builtins
 import inspect
 from pathlib import Path
 import subprocess
-import inspect
 import re
 import os
 
@@ -23,11 +22,14 @@ def unittestmodule(generate=True,
   """
 
   def testmodule_inner(func_or_class):
-    mod = module(func_or_class)
-
     # Apply any provided kwargs if this was a function.
     if inspect.isfunction(func_or_class):
-      mod = mod(**kwargs)
+      mod = func_or_class(**kwargs)
+    elif inspect.isclass(func_or_class) and issubclass(func_or_class, Module):
+      mod = func_or_class
+    else:
+      raise AssertionError("unittest() must decorate a function or"
+                           " a Module subclass")
 
     # Add the module to global scope in case it's referenced within the
     # module generator functions

@@ -2,12 +2,6 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from .common import (AppID, Clock, Input, InputChannel, Output, OutputChannel)
-from .module import (externmodule, generator, module, no_connect)
-from .system import (System)
-from .pycde_types import (dim, types)
-from .value import (Value)
-
 from .circt import ir
 from . import circt
 import atexit
@@ -23,6 +17,12 @@ DefaultContext.allow_unregistered_dialects = True
 def __exit_ctxt():
   DefaultContext.__exit__(None, None, None)
 
+
+from .common import (AppID, Clock, Input, InputChannel, Output, OutputChannel)
+from .module import (generator, modparams, Module)
+from .system import (System)
+from .pycde_types import (dim, types)
+from .value import (Value)
 
 # Until we get source location based on Python stack traces, default to unknown
 # locations.

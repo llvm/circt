@@ -1,6 +1,6 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
-from pycde import generator, types, dim
+from pycde import generator, types, dim, Module
 from pycde.common import Clock, Input, Output
 from pycde.constructs import ControlReg, NamedWire, Reg, Wire, SystolicArray
 from pycde.dialects import comb
@@ -21,7 +21,7 @@ from pycde.testing import unittestmodule
 
 
 @unittestmodule()
-class WireAndRegTest:
+class WireAndRegTest(Module):
   In = Input(types.i8)
   InCE = Input(types.i1)
   clk = Clock()
@@ -63,7 +63,7 @@ class WireAndRegTest:
 # CHECK:         %sum__reg1_0_0 = sv.reg sym @sum__reg1  : !hw.inout<i8>
 # CHECK:         sv.read_inout %sum__reg1_0_0 : !hw.inout<i8>
 @unittestmodule(print=True, run_passes=True, print_after_passes=True)
-class SystolicArrayTest:
+class SystolicArrayTest(Module):
   clk = Input(types.i1)
   col_data = Input(dim(8, 2))
   row_data = Input(dim(8, 3))
@@ -97,7 +97,7 @@ class SystolicArrayTest:
 # CHECK:          [[r6:%.+]] = comb.mux bin [[r2]], %true{{.*}}, [[r5]]
 # CHECK:          msft.output %state
 @unittestmodule()
-class ControlRegTest:
+class ControlRegTest(Module):
   clk = Clock()
   rst = Input(types.i1)
   a1 = Input(types.i1)

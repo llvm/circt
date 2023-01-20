@@ -1,5 +1,5 @@
-from pycde import Input, Output, module, generator
-from pycde.module import _SpecializedModule, Generator, _GeneratorPortAccess
+from pycde import Input, Output, generator
+from pycde.module import Generator, Module
 from pycde.dialects import fsm
 from pycde.pycde_types import types
 from typing import Callable
@@ -71,7 +71,7 @@ def States(n):
   return [State() for _ in range(n)]
 
 
-def create_fsm_machine_op(sys, mod: _SpecializedModule, symbol):
+def create_fsm_machine_op(sys, mod: Module, symbol):
   """Creation callback for creating a FSM MachineOp."""
 
   # Add attributes for in- and output names.
@@ -94,8 +94,7 @@ def create_fsm_machine_op(sys, mod: _SpecializedModule, symbol):
                        ip=sys._get_ip())
 
 
-def generate_fsm_machine_op(generate_obj: Generator,
-                            spec_mod: _SpecializedModule):
+def generate_fsm_machine_op(generate_obj: Generator, spec_mod):
   """ Generator callback for generating an FSM op. """
   entry_block = spec_mod.circt_mod.body.blocks[0]
   ports = _GeneratorPortAccess(spec_mod, entry_block.arguments)

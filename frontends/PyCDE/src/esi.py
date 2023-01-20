@@ -3,10 +3,9 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from pycde.system import System
-from .module import (Generator, _module_base, _BlockContext,
-                     _GeneratorPortAccess, _SpecializedModule)
+from .module import Generator, _BlockContext, Module, ModuleLikeBuilderBase
 from pycde.value import ChannelValue, ClockSignal, Signal, Value
-from .common import AppID, Input, Output, InputChannel, OutputChannel, _PyProxy
+from .common import Input, Output, InputChannel, OutputChannel, _PyProxy
 from .circt.dialects import esi as raw_esi, hw, msft
 from .circt.support import BackedgeBuilder
 from pycde.pycde_types import ChannelType, ClockType, PyCDEType, types
@@ -15,7 +14,7 @@ from .circt import ir
 
 from pathlib import Path
 import shutil
-from typing import List, Optional, Type
+from typing import Dict, List, Optional, Type
 
 __dir__ = Path(__file__).parent
 
@@ -180,11 +179,10 @@ def Cosim(decl: ServiceDecl, clk, rst):
 def CosimBSP(user_module):
   """Wrap and return a cosimulation 'board support package' containing
   'user_module'"""
-  from .module import module, generator
+  from .module import Module, generator
   from .common import Clock, Input
 
-  @module
-  class top:
+  class top(Module):
     clk = Clock()
     rst = Input(types.int(1))
 
@@ -256,8 +254,7 @@ class _ServiceGeneratorChannels:
   """Provide access to the channels which the service generator is responsible
   for connecting up."""
 
-  def __init__(self, mod: _SpecializedModule,
-               req: raw_esi.ServiceImplementReqOp):
+  def __init__(self, mod: Module, req: raw_esi.ServiceImplementReqOp):
     self._req = req
     portReqsBlock = req.portReqs.blocks[0]
 
@@ -269,7 +266,7 @@ class _ServiceGeneratorChannels:
     ]
 
     # Find the output channel requests and store the settable proxies.
-    num_output_ports = len(mod.output_port_lookup)
+    num_output_ports = len(mod.outputs)
     self._output_reqs = [
         _OutputChannelSetter(req, self._req.results[num_output_ports + idx])
         for idx, req in enumerate(portReqsBlock)
@@ -294,75 +291,76 @@ class _ServiceGeneratorChannels:
         raise ValueError(f"{name_str} has not been connected.")
 
 
-def ServiceImplementation(decl: Optional[ServiceDecl]):
+class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
+  """Define how to build ESI service implementations. Unlike Modules, there is
+  no distinction between definition and instance -- ESI service providers are
+  built where they are instantiated."""
+
+  def instantiate(self, impl, instance_name: str, **inputs):
+    # Each instantiation of the ServiceImplementation has its own
+    # registration.
+    opts = _service_generator_registry.register(impl)
+
+    # Create the op.
+    decl_sym = None
+    if impl.decl is not None:
+      decl_sym = ir.FlatSymbolRefAttr.get(impl.decl._materialize_service_decl())
+    return raw_esi.ServiceInstanceOp(
+        result=[t for _, t in self.outputs],
+        service_symbol=decl_sym,
+        impl_type=_ServiceGeneratorRegistry._impl_type_name,
+        inputs=[inputs[pn].value for pn, _ in self.inputs],
+        impl_opts=opts,
+        loc=self.loc)
+
+  def generate_svc_impl(self, serviceReq: raw_esi.ServiceInstanceOp):
+    """"Generate the service inline and replace the `ServiceInstanceOp` which is
+    being implemented."""
+
+    assert len(self.generators) == 1
+    generator: Generator = list(self.generators.values())[0]
+    ports = self.generator_port_proxy(serviceReq.operation.operands, self)
+    with self.GeneratorCtxt(self, ports, serviceReq, generator.loc):
+
+      # Run the generator.
+      channels = _ServiceGeneratorChannels(self, serviceReq)
+      rc = generator.gen_func(ports, channels=channels)
+      if rc is None:
+        rc = True
+      elif not isinstance(rc, bool):
+        raise ValueError("Generators must a return a bool or None")
+      ports._check_unconnected_outputs()
+      channels.check_unconnected_outputs()
+
+      # Replace the output values from the service implement request op with
+      # the generated values. Erase the service implement request op.
+      for idx, port_value in enumerate(ports._output_values):
+        msft.replaceAllUsesWith(serviceReq.operation.results[idx],
+                                port_value.value)
+      serviceReq.operation.erase()
+
+    return rc
+
+
+class ServiceImplementation(Module):
   """A generator for a service implementation. Must contain a @generator method
   which will be called whenever required to implement the server. Said generator
   function will be called with the same 'ports' argument as modules and a
   'channels' argument containing lists of the input and output channels which
   need to be connected to the service being implemented."""
 
-  def wrap(service_impl, decl: Optional[ServiceDecl] = decl):
+  BuilderType = ServiceImplementationModuleBuilder
 
-    def instantiate_cb(mod: _SpecializedModule, instance_name: str,
-                       inputs: dict, appid: AppID, loc):
-      # Each instantiation of the ServiceImplementation has its own
-      # registration.
-      opts = _service_generator_registry.register(mod)
-      decl_sym = None
-      if decl is not None:
-        decl_sym = ir.FlatSymbolRefAttr.get(decl._materialize_service_decl())
-      return raw_esi.ServiceInstanceOp(
-          result=[t for _, t in mod.output_ports],
-          service_symbol=decl_sym,
-          impl_type=_ServiceGeneratorRegistry._impl_type_name,
-          inputs=[inputs[pn].value for pn, _ in mod.input_ports],
-          impl_opts=opts,
-          loc=loc)
+  def __init__(self, decl: Optional[ServiceDecl], **inputs):
+    """Instantiate a service provider for service declaration 'decl'. If decl,
+    implementation is expected to handle any and all service declarations."""
 
-    def generate(generator: Generator, spec_mod: _SpecializedModule,
-                 serviceReq: raw_esi.ServiceInstanceOp):
-      arguments = serviceReq.operation.operands
-      with ir.InsertionPoint(
-          serviceReq), generator.loc, BackedgeBuilder(), _BlockContext():
-        # Insert generated code after the service instance op.
-        ports = _GeneratorPortAccess(spec_mod, arguments)
+    self.decl = decl
+    super().__init__(**inputs)
 
-        # Enter clock block implicitly if only one clock given
-        clk = None
-        if len(spec_mod.clock_ports) == 1:
-          clk_port = list(spec_mod.clock_ports.values())[0]
-          clk = ClockSignal(arguments[clk_port], ClockType())
-          clk.__enter__()
-
-        # Run the generator.
-        channels = _ServiceGeneratorChannels(spec_mod, serviceReq)
-        rc = generator.gen_func(ports, channels=channels)
-        if rc is None:
-          rc = True
-        elif not isinstance(rc, bool):
-          raise ValueError("Generators must a return a bool or None")
-        ports.check_unconnected_outputs()
-        channels.check_unconnected_outputs()
-
-        # Replace the output values from the service implement request op with
-        # the generated values. Erase the service implement request op.
-        for port_name, port_value in ports._output_values.items():
-          port_num = spec_mod.output_port_lookup[port_name]
-          msft.replaceAllUsesWith(serviceReq.operation.results[port_num],
-                                  port_value.value)
-        serviceReq.operation.erase()
-
-        if clk is not None:
-          clk.__exit__(None, None, None)
-
-        return rc
-
-    return _module_base(service_impl,
-                        extern_name=None,
-                        generator_cb=generate,
-                        instantiate_cb=instantiate_cb)
-
-  return wrap
+  @property
+  def name(self):
+    return self.__class__.__name__
 
 
 class _ServiceGeneratorRegistry:
@@ -372,7 +370,7 @@ class _ServiceGeneratorRegistry:
   _impl_type_name = ir.StringAttr.get("pycde")
 
   def __init__(self):
-    self._registry = {}
+    self._registry: Dict[str, ServiceImplementation] = {}
 
     # Register myself with ESI so I can dispatch to my internal registry.
     assert _ServiceGeneratorRegistry._registered is False, \
@@ -382,7 +380,8 @@ class _ServiceGeneratorRegistry:
         self._implement_service)
     _ServiceGeneratorRegistry._registered = True
 
-  def register(self, service_implementation: _SpecializedModule) -> ir.DictAttr:
+  def register(self,
+               service_implementation: ServiceImplementation) -> ir.DictAttr:
     """Register a ServiceImplementation generator with the PyCDE generator.
     Called when the ServiceImplamentation is defined."""
 
@@ -407,7 +406,7 @@ class _ServiceGeneratorRegistry:
       return False
     (impl, sys) = self._registry[impl_name]
     with sys:
-      return impl.generate(serviceReq=req.opview)
+      return impl._builder.generate_svc_impl(serviceReq=req.opview)
 
 
 _service_generator_registry = _ServiceGeneratorRegistry()
