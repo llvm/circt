@@ -131,6 +131,7 @@ def ReadInOutOp
   let arguments = (ins InOutType:$input);
   let results = (outs HWValueType:$result);
 
+  let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "Value":$input)>
   ];
@@ -157,6 +158,7 @@ def ArrayIndexInOutOp
   let arguments = (ins InOutArrayType:$input, HWIntegerType:$index);
   let results = (outs InOutType:$result);
 
+  let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "Value":$input, "Value":$index)>
   ];
