@@ -49,7 +49,7 @@ struct HWInlinerInterface : public mlir::DialectInlinerInterface {
   using mlir::DialectInlinerInterface::DialectInlinerInterface;
 
   bool isLegalToInline(Operation *op, Region *, bool,
-                       BlockAndValueMapping &) const final {
+                       mlir::IRMapping &) const final {
     return isa<ConstantOp>(op) || isa<BitcastOp>(op) ||
            isa<ArrayCreateOp>(op) || isa<ArrayConcatOp>(op) ||
            isa<ArraySliceOp>(op) || isa<ArrayGetOp>(op) ||
@@ -58,7 +58,7 @@ struct HWInlinerInterface : public mlir::DialectInlinerInterface {
   }
 
   bool isLegalToInline(Region *, Region *, bool,
-                       BlockAndValueMapping &) const final {
+                       mlir::IRMapping &) const final {
     return false;
   }
 };
