@@ -132,6 +132,10 @@ private:
   void newScope();
 };
 
+// Returns a pair<Parsed, Remaining>
+std::optional<std::pair<StringRef, StringRef>>
+parseUntilUnbalanced(StringRef input, char openingBracket, char closingBracket);
+
 } // namespace details
 
 class FFIContext {

@@ -186,6 +186,25 @@ void WhenContext::newScope() {
       moduleCtx.unbundledValues);
 }
 
+std::optional<std::pair<StringRef, StringRef>>
+parseUntilUnbalanced(StringRef input, char openingBracket,
+                     char closingBracket) {
+  assert(!input.empty() && input[0] == openingBracket);
+
+  size_t balance = 0;
+  for (size_t i = 0; i < input.size(); i++) {
+    if (input[i] == openingBracket) {
+      balance++;
+    } else if (input[i] == closingBracket) {
+      balance--;
+      if (balance == 0) {
+        return std::make_pair(input.substr(1, i - 1), input.substr(i + 1));
+      }
+    }
+  }
+  return std::nullopt;
+}
+
 } // namespace circt::chirrtl::details
 
 FFIContext::FFIContext() : mlirCtx{std::make_unique<MLIRContext>()} {
@@ -580,107 +599,261 @@ FFIContext::currentModule() {
   return std::make_pair(std::ref(lastModuleOp), blockToInsertInto);
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 std::optional<mlir::Value> FFIContext::resolveRef(BodyOpBuilder &bodyOpBuilder,
                                                   StringRef refExpr,
                                                   bool invalidate) {
   RA_EXPECT(auto &lastModuleCtx, this->moduleContext, std::nullopt);
 
-  SmallVector<StringRef, 2> unresolvedFields;
-  refExpr.split(unresolvedFields, ".");
-  std::reverse(unresolvedFields.begin(), unresolvedFields.end());
-
-  const auto &consumeField = [&]() -> std::optional<StringRef> {
-    if (unresolvedFields.empty()) {
-      return std::nullopt;
-    }
-    return unresolvedFields.pop_back_val();
-  };
-
-  auto field = consumeField();
-  if (!field.has_value()) {
+  if (refExpr.empty()) {
+    emitError("expected an reference expression");
+    return {};
+  }
+  if (refExpr[0] == '[') {
     emitError("expected an identifier");
     return {};
   }
-
-  SymbolValueEntry symtabEntry;
-  if (lastModuleCtx.lookupSymbolEntry(symtabEntry, *field, mockSMLoc())) {
+  if (refExpr.count('[') != refExpr.count(']') ||
+      refExpr.find('[') > refExpr.find(']')) {
+    emitError("unbalanced square brackets in reference expression");
     return {};
   }
 
-  mlir::Value result;
-  if (lastModuleCtx.resolveSymbolEntry(result, symtabEntry, mockSMLoc(),
-                                       false)) {
-    assert(symtabEntry.is<UnbundledID>() && "should be an instance");
+  // TODO: Manual parsing is so boring, maybe there is a mini lexer that can be
+  // used directly? Or should we implement one?
 
-    if (invalidate && unresolvedFields.empty()) {
-      // Invalidate all of the results of the bundled value.
-      auto unbundledId = symtabEntry.get<UnbundledID>() - 1;
-      auto &ubEntry = lastModuleCtx.getUnbundledEntry(unbundledId);
-      for (auto elt : ubEntry) {
-        emitInvalidate(lastModuleCtx, bodyOpBuilder, elt.second);
+  using SubIndex = std::variant<int32_t, Value>;
+  using Part = std::variant<std::monostate, StringRef, SubIndex>;
+
+  // NOLINTNEXTLINE(misc-no-recursion)
+  const auto &consumePart = [&](StringRef &remaining) -> std::optional<Part> {
+    assert(!remaining.empty());
+
+    Part part;
+
+    if (remaining[0] != '[') {
+      auto sepPos = remaining.find_first_of(".[");
+      if (sepPos == StringRef::npos) {
+        part = remaining;
+        remaining = "";
+      } else if (remaining[sepPos] == '.') {
+        part = remaining.substr(0, sepPos);
+        remaining = remaining.substr(sepPos + 1);
+      } else if (remaining[sepPos] == '[') {
+        part = remaining.substr(0, sepPos);
+        remaining = remaining.substr(sepPos);
+      } else {
+        llvm_unreachable("unreachable");
       }
-      return Value{};
+
+      if (std::get<1>(part).empty()) {
+        emitError("expected an identifier");
+        return {};
+      }
+    } else {
+      auto optResult = details::parseUntilUnbalanced(remaining, '[', ']');
+      assert(optResult.has_value()); // We have checked the balance before
+
+      const auto &[squareExpr, r] = *optResult;
+      if (squareExpr.empty()) {
+        emitError("expected an identifier in subindex");
+        return {};
+      }
+
+      // if `squareExpr` is an integer literal
+      if (squareExpr.find_first_not_of("0123456789") == StringRef::npos) {
+        part = std::stoi(squareExpr.str());
+      } else {
+        // if `squareExpr` is a reference
+        auto optSubIndex = resolveRef(bodyOpBuilder, squareExpr, false);
+        if (!optSubIndex.has_value()) {
+          return {};
+        }
+        part = *optSubIndex;
+      }
+
+      remaining = r;
     }
 
-    // Handle the normal "instance.x" reference.
-    field = consumeField();
-    if (!field.has_value()) {
-      emitError("expected field name in field reference");
+    return part;
+  };
+
+  auto remaining = refExpr;
+  size_t partIndex = 0;
+  mlir::Value result;
+
+  while (true) {
+    if (remaining.empty()) {
+      break;
+    }
+
+    auto optPart = consumePart(remaining);
+    if (!optPart.has_value()) {
       return {};
     }
-    if (lastModuleCtx.resolveSymbolEntry(result, symtabEntry, *field,
-                                         mockSMLoc())) {
-      return {};
+    auto part = *optPart;
+
+    // parse root
+    if (partIndex == 0) {
+      assert(part.index() == 1);
+      auto fieldName = std::get<1>(part);
+
+      SymbolValueEntry symtabEntry;
+      if (lastModuleCtx.lookupSymbolEntry(symtabEntry, fieldName,
+                                          mockSMLoc())) {
+        return {};
+      }
+
+      if (lastModuleCtx.resolveSymbolEntry(result, symtabEntry, mockSMLoc(),
+                                           false)) {
+        assert(symtabEntry.is<UnbundledID>() && "should be an instance");
+
+        if (invalidate && remaining.empty()) {
+          // Invalidate all of the results of the bundled value.
+          auto unbundledId = symtabEntry.get<UnbundledID>() - 1;
+          auto &ubEntry = lastModuleCtx.getUnbundledEntry(unbundledId);
+          for (auto elt : ubEntry) {
+            emitInvalidate(lastModuleCtx, bodyOpBuilder, elt.second);
+          }
+          return Value{};
+        }
+
+        // Handle the normal "instance.x" reference.
+        if (remaining.empty()) {
+          emitError("expected field name in field reference");
+          return {};
+        }
+        optPart = consumePart(remaining);
+        if (!optPart.has_value()) {
+          return {};
+        }
+        fieldName = std::get<1>(*optPart);
+        if (lastModuleCtx.resolveSymbolEntry(result, symtabEntry, fieldName,
+                                             mockSMLoc())) {
+          return {};
+        }
+      }
+    } else {
+      // optional postscript
+
+      if (part.index() == 1) {
+        // field: exp ::= exp '.' fieldId
+
+        auto fieldName = std::get<1>(part);
+
+        auto bundle = result.getType().dyn_cast<BundleType>();
+        if (!bundle) {
+          emitError("subfield requires bundle operand");
+          return {};
+        }
+
+        auto indexV = bundle.getElementIndex(fieldName);
+        if (!indexV.has_value()) {
+          emitError(("unknown field '" + fieldName + "' in bundle type " +
+                     typeToString(result.getType()))
+                        .str());
+          return {};
+        }
+
+        auto indexNo = *indexV;
+
+        NamedAttribute attrs = {StringAttr::get(mlirCtx.get(), "fieldIndex"),
+                                bodyOpBuilder.getI32IntegerAttr(indexNo)};
+        auto resultType = SubfieldOp::inferReturnType({result}, attrs, {});
+        if (!resultType) {
+          emitError("failed to infer the result type of field");
+          return {};
+        }
+
+        auto &value = lastModuleCtx.getCachedSubaccess(result, indexNo);
+        if (!value) {
+          OpBuilder::InsertionGuard guard{bodyOpBuilder};
+          bodyOpBuilder.setInsertionPointAfterValue(result);
+          auto op = bodyOpBuilder.create<SubfieldOp>(resultType, result, attrs);
+          value = op.getResult();
+        }
+
+        result = value;
+      } else if (part.index() == 2) {
+        // subindex: exp ::= exp '[' intLit ']' | exp '[' exp ']'
+
+        auto subIndex = std::get<2>(part);
+
+        if (subIndex.index() == 0) {
+          // Integer literal
+
+          auto subIndexIntLit = std::get<0>(subIndex);
+
+          // Make sure the index expression is valid and compute the result type
+          // for the
+          // expression.
+          // TODO: This should ideally be folded into a `tryCreate` method on
+          // the builder (https://llvm.discourse.group/t/3504).
+          NamedAttribute attrs = {
+              StringAttr::get(mlirCtx.get(), "index"),
+              bodyOpBuilder.getI32IntegerAttr(subIndexIntLit)};
+          auto resultType = SubindexOp::inferReturnType({result}, attrs, {});
+          if (!resultType) {
+            emitError(
+                "failed to infer the result type of integer literal subindex");
+            return {};
+          }
+
+          // Check if we already have created this Subindex op.
+          auto &value =
+              lastModuleCtx.getCachedSubaccess(result, subIndexIntLit);
+          if (value) {
+            result = value;
+          } else {
+            // Create the result operation, inserting at the location of the
+            // declaration. This will cache the subindex operation for further
+            // uses.
+            OpBuilder::InsertionGuard guard(bodyOpBuilder);
+            bodyOpBuilder.setInsertionPointAfterValue(result);
+            auto op =
+                bodyOpBuilder.create<SubindexOp>(resultType, result, attrs);
+
+            // Insert the newly creatd operation into the cache.
+            result = op.getResult();
+          }
+        } else if (subIndex.index() == 1) {
+          // Reference expression
+
+          auto subIndexRefExpr = std::get<1>(subIndex);
+
+          // If the index expression is a flip type, strip it off.
+          auto indexType = subIndexRefExpr.getType().dyn_cast<FIRRTLBaseType>();
+          if (!indexType) {
+            emitError("expected base type for index expression");
+            return {};
+          }
+          indexType = indexType.getPassiveType();
+
+          // Make sure the index expression is valid and compute the result type
+          // for the expression.
+          auto resultType =
+              SubaccessOp::inferReturnType({result, subIndexRefExpr}, {}, {});
+          if (!resultType) {
+            emitError("failed to infer the result type of reference expression "
+                      "subindex");
+            return {};
+          }
+
+          // Create the result operation.
+          auto op = bodyOpBuilder.create<SubaccessOp>(resultType, result,
+                                                      subIndexRefExpr);
+          result = op.getResult();
+        } else {
+          llvm_unreachable("unreachable");
+        }
+
+      } else {
+        llvm_unreachable("unreachable");
+      }
     }
+
+    partIndex++;
   }
-
-  // Handle optional exp postscript
-
-  // Handle fields
-
-  for (field = consumeField(); field.has_value(); field = consumeField()) {
-    const auto &fieldName = *field;
-    if (fieldName.empty()) {
-      emitError("expected an field name after '.'");
-      return {};
-    }
-
-    auto bundle = result.getType().dyn_cast<BundleType>();
-    if (!bundle) {
-      emitError("subfield requires bundle operand");
-      return {};
-    }
-
-    auto indexV = bundle.getElementIndex(fieldName);
-    if (!indexV.has_value()) {
-      emitError(("unknown field '" + fieldName + "' in bundle type " +
-                 typeToString(result.getType()))
-                    .str());
-      return {};
-    }
-
-    auto indexNo = *indexV;
-
-    NamedAttribute attrs = {StringAttr::get(mlirCtx.get(), "fieldIndex"),
-                            bodyOpBuilder.getI32IntegerAttr(indexNo)};
-    auto resultType = SubfieldOp::inferReturnType({result}, attrs, {});
-    if (!resultType) {
-      emitError("failed to infer the result type of field");
-      return {};
-    }
-
-    auto &value = lastModuleCtx.getCachedSubaccess(result, indexNo);
-    if (!value) {
-      OpBuilder::InsertionGuard guard{bodyOpBuilder};
-      bodyOpBuilder.setInsertionPointAfterValue(result);
-      auto op = bodyOpBuilder.create<SubfieldOp>(resultType, result, attrs);
-      value = op.getResult();
-    }
-
-    result = value;
-  }
-
-  // TODO: Handle subindex: exp ::= exp '[' intLit ']' | exp '[' exp ']'
 
   if (invalidate) {
     emitInvalidate(lastModuleCtx, bodyOpBuilder, result);

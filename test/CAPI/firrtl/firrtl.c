@@ -368,6 +368,37 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
   firrtlVisitPort(ctx, MK_STR("clock"), FIRRTL_PORT_DIRECTION_INPUT,
                   &clockPort);
 
+  FirrtlType nestedVecElement = {.kind = FIRRTL_TYPE_KIND_VECTOR,
+                                 .u.vector = {
+                                     .type = &uint8,
+                                     .count = 5,
+                                 }};
+  FirrtlTypeBundleField nestedFieldElement[] = {
+      {.flip = false,
+       .name = MK_STR("nestedField1"),
+       .type = &nestedVecElement},
+      {.flip = true, .name = MK_STR("nestedField2"), .type = &nestedVecElement},
+  };
+  FirrtlType nestedFieldElementTy = {
+      .kind = FIRRTL_TYPE_KIND_BUNDLE,
+      .u.bundle = {
+          .fields = nestedFieldElement,
+          .count = ARRAY_SIZE(nestedFieldElement),
+      }};
+  FirrtlTypeBundleField subFields[] = {
+      {.flip = false, .name = MK_STR("field1"), .type = &uint8},
+      {.flip = true, .name = MK_STR("field2"), .type = &nestedVecElement},
+      {.flip = false, .name = MK_STR("field3"), .type = &nestedFieldElementTy},
+  };
+  FirrtlType bundleVec = {
+      .kind = FIRRTL_TYPE_KIND_BUNDLE,
+      .u = {.bundle = {.fields = subFields, ARRAY_SIZE(subFields)}},
+  };
+  firrtlVisitPort(ctx, MK_STR("leftBundleVec"), FIRRTL_PORT_DIRECTION_OUTPUT,
+                  &bundleVec);
+  firrtlVisitPort(ctx, MK_STR("rightBundleVec"), FIRRTL_PORT_DIRECTION_INPUT,
+                  &bundleVec);
+
   FirrtlStatementAttachOperand attachOperands[] = {
       {.expr = MK_REF_EXPR_INLINE("analog1")},
       {.expr = MK_REF_EXPR_INLINE("analog2")},
@@ -624,6 +655,34 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
        .u = {.connect = {.left = {.value = MK_STR("uintOutputBundle")},
                          .right = {.value = MK_STR("uintInputConnectBundle")},
                          .isPartial = true}}},
+      {.kind = FIRRTL_STATEMENT_KIND_CONNECT,
+       .u = {.connect = {.left = {.value = MK_STR("leftBundleVec")},
+                         .right = {.value = MK_STR("rightBundleVec")},
+                         .isPartial = false}}},
+      {.kind = FIRRTL_STATEMENT_KIND_CONNECT,
+       .u = {.connect = {.left = {.value = MK_STR("leftBundleVec.field1")},
+                         .right = {.value = MK_STR("rightBundleVec.field1")},
+                         .isPartial = false}}},
+      {.kind = FIRRTL_STATEMENT_KIND_CONNECT,
+       .u = {.connect = {.left = {.value = MK_STR("leftBundleVec.field2[3]")},
+                         .right = {.value = MK_STR("rightBundleVec.field2[3]")},
+                         .isPartial = false}}},
+      {.kind = FIRRTL_STATEMENT_KIND_CONNECT,
+       .u = {.connect =
+                 {.left = {.value = MK_STR(
+                               "leftBundleVec.field2[rightBundleVec.field1]")},
+                  .right =
+                      {.value = MK_STR(
+                           "rightBundleVec.field2[rightBundleVec.field1]")},
+                  .isPartial = false}}},
+      {.kind = FIRRTL_STATEMENT_KIND_CONNECT,
+       .u = {.connect = {.left = {.value = MK_STR(
+                                      "leftBundleVec.field2[rightBundleVec."
+                                      "field3.nestedField1[3]]")},
+                         .right = {.value = MK_STR(
+                                       "rightBundleVec.field2[rightBundleVec."
+                                       "field3.nestedField1[3]]")},
+                         .isPartial = false}}},
       {.kind = FIRRTL_STATEMENT_KIND_MEM_PORT,
        .u = {.memPort = {.direction = FIRRTL_MEM_DIRECTION_INFER,
                          .name = MK_STR("mpInfer"),
@@ -720,6 +779,8 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
     output uintOutputBundle : { field1 : UInt<8>, field2 : UInt<8>, field3 : UInt<8>, field4 : UInt<8> }\n\
     input uintInputConnectBundle : { field1 : UInt<8>, field2 : UInt<8> }\n\
     input clock : Clock\n\
+    output leftBundleVec : { field1 : UInt<8>, flip field2 : UInt<8>[5], field3 : { nestedField1 : UInt<8>[5], flip nestedField2 : UInt<8>[5] } }\n\
+    input rightBundleVec : { field1 : UInt<8>, flip field2 : UInt<8>[5], field3 : { nestedField1 : UInt<8>[5], flip nestedField2 : UInt<8>[5] } }\n\
 \n\
     inst outside of ModForInst\n\
     cmem combMem : UInt<32>[1024]\n\
@@ -768,6 +829,11 @@ int testGenDeclStmt(FirrtlContext ctx, size_t *errCount) {
     uintOutputBundle <= uintInputBundle\n\
     uintOutputBundle.field1 <= uintInputConnectBundle.field1\n\
     uintOutputBundle.field2 <= uintInputConnectBundle.field2\n\
+    leftBundleVec <= rightBundleVec\n\
+    leftBundleVec.field1 <= rightBundleVec.field1\n\
+    leftBundleVec.field2[3] <= rightBundleVec.field2[3]\n\
+    leftBundleVec.field2[rightBundleVec.field1] <= rightBundleVec.field2[rightBundleVec.field1]\n\
+    leftBundleVec.field2[rightBundleVec.field3.nestedField1[3]] <= rightBundleVec.field2[rightBundleVec.field3.nestedField1[3]]\n\
     infer mport mpInfer = seqMem[uintPort1], clock\n\
     rdwr mport mpRW = seqMem[uintPort1], clock\n\
     printf(clock, wire1, \"test %d\", UInt<8>(1))\n\
