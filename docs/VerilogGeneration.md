@@ -38,6 +38,17 @@ quality of the generated Verilog directly reflects on the quality of the
 corresponding products.  This means that small details, including indentation
 and use of the correct idioms is important.
 
+## Baseline Assumptions
+
+Circt assumes, as a baseline, that tools support the subset of verilog specified 
+in IEEE 1364.1-2002 "IEEE Standard for Verilog Register Transfer Level 
+Synthesis".  Although this standard is deprecated and no replacement has been 
+create for System Verilog, it provides a reasonable, established, defined, 
+subset of the verilog specification which all tools should support.  Circt may 
+assume more features than specified in that document (e.g. system verilog 
+constructs).  Supporting tools which do not meet this baseline will require 
+substantial justification.
+
 ## Controlling output style with `LoweringOptions`
 
 The primary interface to control the output style from a CIRCT-based tool is
