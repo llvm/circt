@@ -24,10 +24,6 @@ set(SCHEDULING_LIBS
   )
 
 if(ortools_FOUND)
-  option(SCHEDULING_OR_TOOLS "Enable schedulers relying on an external solver from OR-Tools" ON)
-endif()
-
-if(SCHEDULING_OR_TOOLS)
   list(APPEND SCHEDULING_SOURCES LPSchedulers.cpp CPSATSchedulers.cpp)
   list(APPEND SCHEDULING_LIBS ortools::ortools)
 endif()
@@ -47,6 +43,6 @@ add_circt_library(CIRCTSchedulingTestPasses
   MLIRPass
   )
 
-if(SCHEDULING_OR_TOOLS)
+if(ortools_FOUND)
   target_compile_definitions(obj.CIRCTSchedulingTestPasses PRIVATE SCHEDULING_OR_TOOLS)
 endif()
