@@ -86,8 +86,13 @@ static cl::opt<bool>
                    cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
 static cl::list<std::string> includeDirs(
-    "I", cl::desc("Directory to search in when resolving source references"),
-    cl::value_desc("directory"), cl::Prefix, cl::cat(mainCategory));
+    "include-dir",
+    cl::desc("Directory to search in when resolving source references"),
+    cl::value_desc("directory"), cl::cat(mainCategory));
+static cl::alias includeDirsShort(
+    "I", cl::desc("Alias for --include-dir.  Example: -I<directory>"),
+    cl::aliasopt(includeDirs), cl::Prefix, cl::NotHidden,
+    cl::cat(mainCategory));
 
 static cl::opt<bool>
     verifyDiagnostics("verify-diagnostics",
