@@ -325,8 +325,9 @@ bool isExpressionEmittedInline(Operation *op, const LoweringOptions &options);
 
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
-void prepareHWModule(Block &block, const LoweringOptions &options);
-void prepareHWModule(hw::HWModuleOp module, const LoweringOptions &options);
+LogicalResult prepareHWModule(Block &block, const LoweringOptions &options);
+LogicalResult prepareHWModule(hw::HWModuleOp module,
+                              const LoweringOptions &options);
 
 void pruneZeroValuedLogic(hw::HWModuleOp module);
 

@@ -163,8 +163,8 @@ static bool isDuplicatableExpression(Operation *op) {
 }
 
 /// Return the verilog name of the operations that can define a symbol.
-/// Except for <WireOp, RegOp, LogicOp, LocalParamOp, InstanceOp>, check global
-/// state `getDeclarationVerilogName` for them.
+/// Legalized names are added to "hw.verilogName" so look up it when the
+/// attribute already exists.
 StringRef ExportVerilog::getSymOpName(Operation *symOp) {
   // Typeswitch of operation types which can define a symbol.
   // If legalizeNames has renamed it, then the attribute must be set.
@@ -748,13 +748,10 @@ static void emitSVAttributesImpl(PPS &os, sv::SVAttributesAttr svAttrs) {
   os << (emitAsComments ? " */" : " *)");
 }
 
-//===----------------------------------------------------------------------===//
-// ModuleNameManager Implementation
-//===----------------------------------------------------------------------===//
-/// Retrieve a name from the name table.  The name must already have been
-/// added.
+/// Retrieve value's verilog name from IR. The name must already have been
+/// added in pre-pass and passed through "hw.verilogName" attr.
 StringRef getVerilogValueName(Value val) {
-  if (auto op = val.getDefiningOp())
+  if (auto *op = val.getDefiningOp())
     return getSymOpName(op);
 
   if (auto port = val.dyn_cast<BlockArgument>())
@@ -1174,7 +1171,8 @@ public:
   void emitBind(BindOp op);
   void emitBindInterface(BindInterfaceOp op);
 
-  StringRef getNameRemotely(Value value);
+  StringRef getNameRemotely(Value value, const ModulePortInfo &modulePorts,
+                            HWModuleOp remoteModule);
 
   /// Legalize the given field name if it is an invalid verilog name.
   StringRef getVerilogStructFieldName(StringAttr field) {
@@ -2775,15 +2773,12 @@ private:
 
 // NOLINTNEXTLINE(misc-no-recursion)
 void NameCollector::collectNames(Block &block) {
-
-  SmallString<32> nameTmp;
-
   // Loop over all of the results of all of the ops. Anything that defines a
   // value needs to be noticed.
   for (auto &op : block) {
     // Instances have an instance name to recognize but we don't need to look
-    // at the result values and don't need to schedule them as valuesToEmit.
-    // They already had their names added in the first loop, and can be skipped.
+    // at the result values since wires used by instances should be traversed
+    // anyway.
     if (isa<InstanceOp, InterfaceInstanceOp>(op))
       continue;
 
@@ -4593,9 +4588,8 @@ void ModuleEmitter::emitBind(BindOp op) {
 
 /// Return the name of a value in a remote module to be used in a `bind`
 /// statement. This function examines the remote module `remoteModule` and looks
-/// up the corresponding name in the provide `GlobalNameTable`. This requires
-/// that all names this function may be asked to lookup have been legalized and
-/// added to that name table.
+/// up the corresponding name. This requires that all names this function may be
+/// asked to lookup have been legalized in pre-pass.
 StringRef ModuleEmitter::getNameRemotely(Value value,
                                          const ModulePortInfo &modulePorts,
                                          HWModuleOp remoteModule) {
@@ -4705,13 +4699,7 @@ void ModuleEmitter::emitBindInterface(BindInterfaceOp op) {
 void ModuleEmitter::emitHWModule(HWModuleOp module) {
   currentModuleOp = module;
 
-  // Add all the ports to the name table so wires etc don't reuse the name.
   SmallVector<PortInfo> portInfo = module.getAllPorts();
-  for (auto &port : portInfo) {
-    Value value;
-    if (!port.isOutput())
-      value = module.getArgument(port.argNum);
-  }
 
   SmallPtrSet<Operation *, 8> moduleOpSet;
   moduleOpSet.insert(module);
@@ -5307,8 +5295,10 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   LoweringOptions options(module);
   SmallVector<HWModuleOp> modulesToPrepare;
   module.walk([&](HWModuleOp op) { modulesToPrepare.push_back(op); });
-  parallelForEach(module->getContext(), modulesToPrepare,
-                  [&](auto op) { prepareHWModule(op, options); });
+  if (failed(failableParallelForEach(
+          module->getContext(), modulesToPrepare,
+          [&](auto op) { return prepareHWModule(op, options); })))
+    return failure();
   return exportVerilogImpl(module, os);
 }
 
@@ -5460,8 +5450,11 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   LoweringOptions options(module);
   SmallVector<HWModuleOp> modulesToPrepare;
   module.walk([&](HWModuleOp op) { modulesToPrepare.push_back(op); });
-  parallelForEach(module->getContext(), modulesToPrepare,
-                  [&](auto op) { prepareHWModule(op, options); });
+  if (failed(failableParallelForEach(
+          module->getContext(), modulesToPrepare,
+          [&](auto op) { return prepareHWModule(op, options); })))
+    return failure();
+
   return exportSplitVerilogImpl(module, dirname);
 }
 
