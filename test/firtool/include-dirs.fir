@@ -11,6 +11,8 @@
 
 ; Check referenced file is found when its directory is specified.
 ; RUN: not firtool %s -I %t -I %t/subdir 2>&1 | FileCheck %s --check-prefixes=COMMON,FOUND
+; Same check, but checking -Idir works (no space) and that `--include-dir` works.
+; RUN: not firtool %s --include-dir %t -I%t/subdir 2>&1 | FileCheck %s --check-prefixes=COMMON,FOUND
 
 ; Check search order.
 ; RUN: not firtool %s -I %t/alt -I %t 2>&1 | FileCheck %s --check-prefixes=COMMON,ALTERNATE
