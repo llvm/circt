@@ -5,7 +5,6 @@ set(LLVM_OPTIONAL_SOURCES
   LPSchedulers.cpp
   Problems.cpp
   SimplexSchedulers.cpp
-  TestPasses.cpp
   Utilities.cpp
   )
 
@@ -34,15 +33,3 @@ add_circt_library(CIRCTScheduling
   LINK_LIBS PUBLIC
   ${SCHEDULING_LIBS}
   )
-
-add_circt_library(CIRCTSchedulingTestPasses
-  TestPasses.cpp
-
-  LINK_LIBS PUBLIC
-  CIRCTScheduling
-  MLIRPass
-  )
-
-if(ortools_FOUND)
-  target_compile_definitions(obj.CIRCTSchedulingTestPasses PRIVATE SCHEDULING_OR_TOOLS)
-endif()
