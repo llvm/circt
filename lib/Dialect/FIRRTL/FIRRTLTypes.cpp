@@ -149,24 +149,12 @@ void circt::firrtl::printNestedType(Type type, AsmPrinter &os,
 static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
                                             Type &result, bool isConst) {
   auto *context = parser.getContext();
-  if (name.equals("clock")) {
-    if (isConst)
-      return parser.emitError(parser.getNameLoc(),
-                              "clock types cannot be 'const'");
-    return result = ClockType::get(context), success();
-  }
-  if (name.equals("reset")) {
-    if (isConst)
-      return parser.emitError(parser.getNameLoc(),
-                              "reset types cannot be 'const'");
-    return result = ResetType::get(context), success();
-  }
-  if (name.equals("asyncreset")) {
-    if (isConst)
-      return parser.emitError(parser.getNameLoc(),
-                              "asyncreset types cannot be 'const'");
-    return result = AsyncResetType::get(context), success();
-  }
+  if (name.equals("clock"))
+    return result = ClockType::get(context, isConst), success();
+  if (name.equals("reset"))
+    return result = ResetType::get(context, isConst), success();
+  if (name.equals("asyncreset"))
+    return result = AsyncResetType::get(context, isConst), success();
 
   if (name.equals("sint") || name.equals("uint") || name.equals("analog")) {
     // Parse the width specifier if it exists.
@@ -186,10 +174,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       result = UIntType::get(context, width, isConst);
     else {
       assert(name.equals("analog"));
-      if (isConst)
-        return parser.emitError(parser.getNameLoc(),
-                                "analog types cannot be 'const'");
-      result = AnalogType::get(context, width);
+      result = AnalogType::get(context, width, isConst);
     }
     return success();
   }
@@ -325,9 +310,9 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
 
 /// Parse a type defined by this dialect.
 ///
-/// This will first try the generated type parsers and then resort to the custom
-/// parser implementation. Emits an error and returns failure if `name` does not
-/// refer to a type defined in this dialect.
+/// This will first try the generated type parsers and then resort to the
+/// custom parser implementation. Emits an error and returns failure if `name`
+/// does not refer to a type defined in this dialect.
 static ParseResult parseType(Type &result, StringRef name, AsmParser &parser,
                              bool isConst = false) {
   // Try the custom type parser.
@@ -344,8 +329,8 @@ static ParseResult parseType(Type &result, StringRef name, AsmParser &parser,
 
 /// Parse a `FIRRTLType` with a `name` that has already been parsed.
 ///
-/// Note that only a subset of types defined in the FIRRTL dialect inherit from
-/// `FIRRTLType`. Use `parseType` to parse *any* of the defined types.
+/// Note that only a subset of types defined in the FIRRTL dialect inherit
+/// from `FIRRTLType`. Use `parseType` to parse *any* of the defined types.
 static ParseResult parseFIRRTLType(FIRRTLType &result, StringRef name,
                                    AsmParser &parser, bool isConst = false) {
   Type type;
@@ -374,8 +359,8 @@ static ParseResult parseFIRRTLBaseType(FIRRTLBaseType &result, StringRef name,
 
 /// Parse a `FIRRTLType`.
 ///
-/// Note that only a subset of types defined in the FIRRTL dialect inherit from
-/// `FIRRTLType`. Use `parseType` to parse *any* of the defined types.
+/// Note that only a subset of types defined in the FIRRTL dialect inherit
+/// from `FIRRTLType`. Use `parseType` to parse *any* of the defined types.
 ParseResult circt::firrtl::parseNestedType(FIRRTLType &result,
                                            AsmParser &parser) {
   StringRef name;
@@ -442,9 +427,8 @@ bool FIRRTLBaseType::isGround() {
 
 bool FIRRTLBaseType::isConst() {
   return TypeSwitch<FIRRTLBaseType, bool>(*this)
-      .Case<ClockType, ResetType, AsyncResetType, AnalogType>(
-          [](Type) { return false; })
-      .Case<SIntType, UIntType, BundleType, FVectorType>(
+      .Case<ClockType, ResetType, AsyncResetType, AnalogType, SIntType,
+            UIntType, BundleType, FVectorType>(
           [](auto type) { return type.isConst(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
@@ -642,9 +626,10 @@ uint64_t FIRRTLBaseType::getGroundFields() const {
 
 /// Helper to implement the equivalence logic for a pair of bundle elements.
 /// Note that the FIRRTL spec requires bundle elements to have the same
-/// orientation, but this only compares their passive types. The FIRRTL dialect
-/// differs from the spec in how it uses flip types for module output ports and
-/// canonicalizes flips in bundles, so only passive types can be compared here.
+/// orientation, but this only compares their passive types. The FIRRTL
+/// dialect differs from the spec in how it uses flip types for module output
+/// ports and canonicalizes flips in bundles, so only passive types can be
+/// compared here.
 static bool areBundleElementsEquivalent(BundleType::BundleElement destElement,
                                         BundleType::BundleElement srcElement) {
   if (destElement.name != srcElement.name)
@@ -657,8 +642,8 @@ static bool areBundleElementsEquivalent(BundleType::BundleElement destElement,
 
 /// Returns whether the two types are equivalent.  This implements the exact
 /// definition of type equivalence in the FIRRTL spec.  If the types being
-/// compared have any outer flips that encode FIRRTL module directions (input or
-/// output), these should be stripped before using this method.
+/// compared have any outer flips that encode FIRRTL module directions (input
+/// or output), these should be stripped before using this method.
 bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType) {
   auto destType = destFType.dyn_cast<FIRRTLBaseType>();
   auto srcType = srcFType.dyn_cast<FIRRTLBaseType>();
@@ -679,7 +664,8 @@ bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType) {
   if (srcType.isa<ResetType>())
     return destType.isResetType();
 
-  // Vector types can be connected if they have the same size and element type.
+  // Vector types can be connected if they have the same size and element
+  // type.
   auto destVectorType = destType.dyn_cast<FVectorType>();
   auto srcVectorType = srcType.dyn_cast<FVectorType>();
   if (destVectorType && srcVectorType)
@@ -734,8 +720,8 @@ bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
   if (srcType.isa<ResetType>())
     return destType.isResetType();
 
-  // Vector types can be connected if their element types are weakly equivalent.
-  // Size doesn't matter.
+  // Vector types can be connected if their element types are weakly
+  // equivalent. Size doesn't matter.
   auto destVectorType = destType.dyn_cast<FVectorType>();
   auto srcVectorType = srcType.dyn_cast<FVectorType>();
   if (destVectorType && srcVectorType)
@@ -766,7 +752,8 @@ bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
          destFlip == srcFlip;
 }
 
-/// Returns true if the destination is at least as wide as an equivalent source.
+/// Returns true if the destination is at least as wide as an equivalent
+/// source.
 bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
   return TypeSwitch<FIRRTLBaseType, bool>(dstType)
       .Case<BundleType>([&](auto dstBundle) {
@@ -1352,18 +1339,16 @@ auto RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
 //===----------------------------------------------------------------------===//
 
 AnalogType AnalogType::get(mlir::MLIRContext *context) {
-  return AnalogType::get(context, -1);
+  return AnalogType::get(context, -1, false);
 }
 
 AnalogType AnalogType::get(mlir::MLIRContext *context,
-                           std::optional<int32_t> width) {
-  if (!width)
-    return AnalogType::get(context);
-  return AnalogType::get(context, *width);
+                           std::optional<int32_t> width, bool isConst) {
+  return AnalogType::get(context, width ? *width : -1, isConst);
 }
 
 LogicalResult AnalogType::verify(function_ref<InFlightDiagnostic()> emitError,
-                                 int32_t widthOrSentinel) {
+                                 int32_t widthOrSentinel, bool isConst) {
   if (widthOrSentinel < -1)
     return emitError() << "invalid width";
   return success();
@@ -1383,8 +1368,8 @@ void FIRRTLDialect::registerTypes() {
 // getBitWidthOrSentinel(), this can recursively compute the bitwidth of
 // aggregate types. For bundle and vectors, recursively get the width of each
 // field element and return the total bit width of the aggregate type. This
-// returns None, if any of the bundle fields is a flip type, or ground type with
-// unknown bit width.
+// returns None, if any of the bundle fields is a flip type, or ground type
+// with unknown bit width.
 std::optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
                                            bool ignoreFlip) {
   std::function<std::optional<int64_t>(FIRRTLBaseType)> getWidth =

@@ -571,7 +571,7 @@ The reason we provide this foreign type support is to allow for partial lowering
 
 ### Const Types
 
-Integer and aggregates of integer types can be specified as `const`, meaning they can only be assigned compile-time constant values or values of other `const` types.
+FIRRTL hardware types can be specified as `const`, meaning they can only be assigned compile-time constant values or values of other `const` types.
 
 All members of a `const` aggregate type must be `const`. A non-`const` aggregate can contain members that are both `const` and non-`const`.
 

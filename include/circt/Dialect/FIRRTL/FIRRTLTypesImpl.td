@@ -70,24 +70,54 @@ def UIntImpl : FIRRTLImplType<"UInt",
 
 def ClockTypeImpl : FIRRTLImplType<"Clock", [FieldIDTypeInterface]> {
   let summary = "Clock signal";
+  let parameters = (ins "bool":$isConst);
+  let builders = [
+    TypeBuilder<(ins), [{
+      return $_get($_ctxt, false);
+    }]>
+  ];
+  let extraClassDeclaration = [{
+    bool isConst() { return getIsConst(); }
+  }];
 }
 
 def ResetTypeImpl : FIRRTLImplType<"Reset", [FieldIDTypeInterface]> {
   let summary = "Reset Signal";
+  let parameters = (ins "bool":$isConst);
+  let builders = [
+    TypeBuilder<(ins), [{
+      return $_get($_ctxt, false);
+    }]>
+  ];
+  let extraClassDeclaration = [{
+    bool isConst() { return getIsConst(); }
+  }];
 }
 
 def AsyncResetTypeImpl : FIRRTLImplType<"AsyncReset", [FieldIDTypeInterface]> {
   let summary = "AsyncReset signal";
+  let parameters = (ins "bool":$isConst);
+  let builders = [
+    TypeBuilder<(ins), [{
+      return $_get($_ctxt, false);
+    }]>
+  ];
+  let extraClassDeclaration = [{
+    bool isConst() { return getIsConst(); }
+  }];
 }
 
 def AnalogTypeImpl : FIRRTLImplType<"Analog",
   [WidthQualifiedTypeTrait, FieldIDTypeInterface]> {
   let summary = "Analog signal";
-  let parameters = (ins "int32_t":$widthOrSentinel);
+  let parameters = (ins "int32_t":$widthOrSentinel, "bool":$isConst);
   let builders = [
-    TypeBuilder<(ins "std::optional<int32_t>":$width)>,
+    TypeBuilder<(ins "std::optional<int32_t>":$width, CArg<"bool", "false">:$isConst)>,
     TypeBuilder<(ins)>,
   ];
+  let extraClassDeclaration = [{
+    bool isConst() { return getIsConst(); }
+  }];
   let genVerifyDecl = true;
 }
 
