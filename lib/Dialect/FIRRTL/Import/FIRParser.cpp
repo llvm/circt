@@ -2751,7 +2751,7 @@ private:
 
   ParseResult parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                             SmallVectorImpl<SMLoc> &resultPortLocs,
-                            Location defaultLoc, unsigned indent);
+                            unsigned indent);
 
   struct DeferredModuleToParse {
     FModuleOp moduleOp;
@@ -2830,14 +2830,10 @@ ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
 /// pohwist ::= port*
 /// port     ::= dir id ':' type info? NEWLINE
 /// dir      ::= 'input' | 'output'
-///
-/// defaultLoc specifies a location to use if there is no info locator for the
-/// port.
-///
 ParseResult
 FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                                 SmallVectorImpl<SMLoc> &resultPortLocs,
-                                Location defaultLoc, unsigned indent) {
+                                unsigned indent) {
   // Parse any ports.
   while (getToken().isAny(FIRToken::kw_input, FIRToken::kw_output) &&
          // Must be nested under the module.
@@ -2867,12 +2863,6 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
         parseType(type, "expected a type in port declaration") ||
         info.parseOptionalInfo())
       return failure();
-
-    // Ports typically do not have locators.  We rather default to the locaiton
-    // of the module rather than a location in a .fir file.  If the module had a
-    // locator then this will be more friendly.  If not, this doesn't burn
-    // compile time creating too many unique locations.
-    info.setDefaultLoc(defaultLoc);
 
     StringAttr innerSym = {};
     resultPorts.push_back(
@@ -2911,8 +2901,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   ArrayAttr annotations = getConstants().emptyArrayAttr;
 
   if (parseToken(FIRToken::colon, "expected ':' in module definition") ||
-      info.parseOptionalInfo() ||
-      parsePortList(portList, portLocs, info.getLoc(), indent))
+      info.parseOptionalInfo() || parsePortList(portList, portLocs, indent))
     return failure();
 
   auto builder = circuit.getBodyBuilder();
