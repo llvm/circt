@@ -610,7 +610,7 @@ hw.module @SiFive_MulDiv(%clock: i1, %reset: i1) -> (io_req_ready: i1) {
   hw.probe @unused, %false, %reset, %clock: i1,i1,i1
   hw.output %false : i1
   //      CHECK: bind_rename_port InvisibleBind_assert (
-  // CHECK-NEXT:   ._io_req_ready_output (_InvisibleBind_assert__io_req_ready_output),
+  // CHECK-NEXT:   ._io_req_ready_output (1'h0),
   // CHECK-NEXT:   .resetSignalName      (reset),
   // CHECK-NEXT:   .clock                (clock)
   // CHECK-NEXT: );
@@ -654,6 +654,6 @@ hw.module @BindInterface() -> () {
 
 sv.bind #hw.innerNameRef<@SiFive_MulDiv::@__ETC_SiFive_MulDiv_assert>
 // CHECK-LABEL: bind SiFive_MulDiv bind_rename_port InvisibleBind_assert
-// CHECK-NEXT:  ._io_req_ready_output (_InvisibleBind_assert__io_req_ready_output)
+// CHECK-NEXT:  ._io_req_ready_output (1'h0)
 // CHECK-NEXT:  .resetSignalName      (reset),
 // CHECK-NEXT:  .clock                (clock)
