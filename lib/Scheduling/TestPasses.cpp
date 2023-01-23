@@ -559,6 +559,76 @@ void TestSimplexSchedulerPass::runOnOperation() {
 }
 
 //===----------------------------------------------------------------------===//
+// PresburgerScheduler
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct TestPresburgerSchedulerPass
+    : public PassWrapper<TestPresburgerSchedulerPass,
+                         OperationPass<func::FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestPresburgerSchedulerPass)
+
+  TestPresburgerSchedulerPass() = default;
+  TestPresburgerSchedulerPass(const TestPresburgerSchedulerPass &) {}
+  Option<std::string> problemToTest{*this, "with", llvm::cl::init("Problem")};
+  void runOnOperation() override;
+  StringRef getArgument() const override { return "test-presburger-scheduler"; }
+  StringRef getDescription() const override {
+    return "Emit a presburger scheduler's solution as attributes";
+  }
+};
+} // anonymous namespace
+
+void TestPresburgerSchedulerPass::runOnOperation() {
+  auto func = getOperation();
+  Operation *lastOp = func.getBlocks().front().getTerminator();
+  OpBuilder builder(func.getContext());
+
+  if (problemToTest == "Problem") {
+    auto prob = Problem::get(func);
+    constructProblem(prob, func);
+    assert(succeeded(prob.check()));
+
+    if (failed(schedulePresburger(prob, lastOp))) {
+      func->emitError("scheduling failed");
+      return signalPassFailure();
+    }
+
+    if (failed(prob.verify())) {
+      func->emitError("schedule verification failed");
+      return signalPassFailure();
+    }
+
+    emitSchedule(prob, "simplexStartTime", builder);
+    return;
+  }
+
+  if (problemToTest == "CyclicProblem") {
+    auto prob = CyclicProblem::get(func);
+    constructProblem(prob, func);
+    constructCyclicProblem(prob, func);
+    assert(succeeded(prob.check()));
+
+    if (failed(schedulePresburger(prob, lastOp))) {
+      func->emitError("scheduling failed");
+      return signalPassFailure();
+    }
+
+    if (failed(prob.verify())) {
+      func->emitError("schedule verification failed");
+      return signalPassFailure();
+    }
+
+    func->setAttr("simplexInitiationInterval",
+                  builder.getI32IntegerAttr(*prob.getInitiationInterval()));
+    emitSchedule(prob, "simplexStartTime", builder);
+    return;
+  }
+
+  llvm_unreachable("Unsupported scheduling problem");
+}
+
+//===----------------------------------------------------------------------===//
 // LPScheduler
 //===----------------------------------------------------------------------===//
 
@@ -702,6 +772,9 @@ void registerSchedulingTestPasses() {
   });
   mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
     return std::make_unique<TestSimplexSchedulerPass>();
+  });
+  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+    return std::make_unique<TestPresburgerSchedulerPass>();
   });
 #ifdef SCHEDULING_OR_TOOLS
   mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
