@@ -301,6 +301,8 @@ static inline bool isExpressionAlwaysInline(Operation *op) {
   return false;
 }
 
+StringRef getSymOpName(Operation *symOp);
+
 /// Return whether an operation is a constant.
 static inline bool isConstantExpression(Operation *op) {
   return isa<hw::ConstantOp, sv::ConstantXOp, sv::ConstantZOp,
@@ -330,7 +332,8 @@ void pruneZeroValuedLogic(hw::HWModuleOp module);
 
 /// Rewrite module names and interfaces to not conflict with each other or with
 /// Verilog keywords.
-GlobalNameTable legalizeGlobalNames(ModuleOp topLevel);
+GlobalNameTable legalizeGlobalNames(ModuleOp topLevel,
+                                    const LoweringOptions &options);
 
 } // namespace ExportVerilog
 } // namespace circt

@@ -11,9 +11,9 @@ hw.module @namechange(%casex: i4) -> (if: i4) {
 hw.module.extern @module_with_bool<bparam: i1>() -> ()
 
 // CHECK-LABEL: module parametersNameConflict
-// CHECK-NEXT:    #(parameter [41:0] p1_0 = 42'd17,
+// CHECK-NEXT:    #(parameter [41:0] p1 = 42'd17,
 // CHECK-NEXT:      parameter [0:0]  wire_0) (
-// CHECK-NEXT:    input [7:0] p1);
+// CHECK-NEXT:    input [7:0] p1_0);
 hw.module @parametersNameConflict<p1: i42 = 17, wire: i1>(%p1: i8) {
   %myWire = sv.wire : !hw.inout<i1>
 
@@ -43,10 +43,10 @@ hw.module @parametersNameConflict<p1: i42 = 17, wire: i1>(%p1: i8) {
 // CHECK-LABEL: module useParametersNameConflict(
 hw.module @useParametersNameConflict(%xxx: i8) {
   // CHECK: parametersNameConflict #(
-  // CHECK:  .p1_0(42'd27),
+  // CHECK:  .p1(42'd27),
   // CHECK:  .wire_0(0)
   // CHECK: ) inst (
-  // CHECK:  .p1 (xxx)
+  // CHECK:  .p1_0 (xxx)
   // CHECK: );
   hw.instance "inst" @parametersNameConflict<p1: i42 = 27, wire: i1 = 0>(p1: %xxx: i8) -> ()
 
