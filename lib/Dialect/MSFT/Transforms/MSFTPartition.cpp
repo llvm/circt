@@ -17,8 +17,8 @@
 #include "circt/Dialect/MSFT/MSFTPasses.h"
 #include "circt/Support/Namespace.h"
 
-#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
@@ -92,8 +92,7 @@ void PartitionPass::runOnOperation() {
 /// Determine if 'op' is driven exclusively by other tagged ops or wires which
 /// are themselves exclusively driven by tagged ops. Recursive but memoized via
 /// `seen`.
-static bool isDrivenByPartOpsOnly(Operation *op,
-                                  const IRMapping &partOps,
+static bool isDrivenByPartOpsOnly(Operation *op, const IRMapping &partOps,
                                   DenseMap<Operation *, bool> &seen) {
   auto prevResult = seen.find(op);
   if (prevResult != seen.end())

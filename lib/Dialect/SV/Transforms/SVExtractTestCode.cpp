@@ -19,8 +19,8 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/SV/SVPasses.h"
-#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/IRMapping.h"
 
 #include <set>
 
@@ -247,10 +247,11 @@ static StringRef getNameForPort(Value val, ArrayAttr modulePorts) {
 // Given a set of values, construct a module and bind instance of that module
 // that passes those values through.  Returns the new module and the instance
 // pointing to it.
-static hw::HWModuleOp
-createModuleForCut(hw::HWModuleOp op, SetVector<Value> &inputs,
-                   IRMapping &cutMap, StringRef suffix,
-                   Attribute path, Attribute fileName, BindTable &bindTable) {
+static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
+                                         SetVector<Value> &inputs,
+                                         IRMapping &cutMap, StringRef suffix,
+                                         Attribute path, Attribute fileName,
+                                         BindTable &bindTable) {
   // Filter duplicates and track duplicate reads of elements so we don't
   // make ports for them
   SmallVector<Value> realInputs;
@@ -365,8 +366,7 @@ static void updateOoOArgs(SmallVectorImpl<Operation *> &lateBoundOps,
 // Do the cloning, which is just a pre-order traversal over the module looking
 // for marked ops.
 static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
-                       SetVector<Operation *> &depOps,
-                       IRMapping &cutMap,
+                       SetVector<Operation *> &depOps, IRMapping &cutMap,
                        hw::InstanceGraph &instanceGraph) {
   hw::InstanceGraphNode *newModNode = instanceGraph.lookup(newMod);
   SmallVector<Operation *, 16> lateBoundOps;

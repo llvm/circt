@@ -501,8 +501,8 @@ static unsigned getIndexOfOperandResult(Operation *op, Value result) {
 /// up to the initial constant value(s). This is required to clone the
 /// initialization of array and struct signals, where the init operand cannot
 /// originate from a constant operation.
-static Value recursiveCloneInit(OpBuilder &initBuilder,
-                                IRMapping &mapping, Value init) {
+static Value recursiveCloneInit(OpBuilder &initBuilder, IRMapping &mapping,
+                                Value init) {
   SmallVector<Value> clonedOperands;
   Operation *initOp = init.getDefiningOp();
 
