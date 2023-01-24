@@ -241,7 +241,7 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel,
     }
   }
 
-  // Legalize names with HW modules parallelly.
+  // Legalize names in HW modules parallelly.
   mlir::parallelForEach(
       topLevel.getContext(), topLevel.getOps<HWModuleOp>(), [&](auto module) {
         legalizeModuleLocalNames(module, options, globalNameTable);
