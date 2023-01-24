@@ -395,8 +395,7 @@ public:
 /// result of the instance operation.  When future operations are cloned from
 /// the current block, they will use the value of the wire instead of the
 /// instance results.
-static void mapResultsToWires(IRMapping &mapper,
-                              SmallVectorImpl<Value> &wires,
+static void mapResultsToWires(IRMapping &mapper, SmallVectorImpl<Value> &wires,
                               InstanceOp instance) {
   for (unsigned i = 0, e = instance.getNumResults(); i < e; ++i) {
     auto result = instance.getResult(i);
@@ -519,17 +518,16 @@ private:
               SmallVector<StringAttr> &validHierPaths);
 
   /// Clone and rename an operation.
-  void cloneAndRename(StringRef prefix, OpBuilder &b,
-                      IRMapping &mapper, Operation &op,
+  void cloneAndRename(StringRef prefix, OpBuilder &b, IRMapping &mapper,
+                      Operation &op,
                       const DenseMap<Attribute, Attribute> &symbolRenames,
                       const DenseSet<Attribute> &localSymbols,
                       ModuleNamespace &moduleNamespace);
 
   /// Rewrite the ports of a module as wires.  This is similar to
   /// cloneAndRename, but operating on ports.
-  void mapPortsToWires(StringRef prefix, OpBuilder &b,
-                       IRMapping &mapper, BackedgeBuilder &beb,
-                       FModuleOp target,
+  void mapPortsToWires(StringRef prefix, OpBuilder &b, IRMapping &mapper,
+                       BackedgeBuilder &beb, FModuleOp target,
                        const DenseSet<Attribute> &localSymbols,
                        ModuleNamespace &moduleNamespace,
                        SmallVectorImpl<Value> &wires,
@@ -706,8 +704,7 @@ void Inliner::rename(StringRef prefix, Operation *op,
 /// used instead of the module's ports.
 /// Cannot have a RefType wire, so create backedge and put in 'edges' for
 /// resolution later.  Mapper and 'wires' will have the placeholder value.
-void Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b,
-                              IRMapping &mapper,
+void Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b, IRMapping &mapper,
                               BackedgeBuilder &beb, FModuleOp target,
                               const DenseSet<Attribute> &localSymbols,
                               ModuleNamespace &moduleNamespace,
@@ -863,8 +860,8 @@ bool Inliner::shouldInline(Operation *op) {
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
-void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
-                          IRMapping &mapper, BackedgeBuilder &beb,
+void Inliner::flattenInto(StringRef prefix, OpBuilder &b, IRMapping &mapper,
+                          BackedgeBuilder &beb,
                           SmallVectorImpl<Backedge> &edges, FModuleOp target,
                           DenseSet<Attribute> localSymbols,
                           ModuleNamespace &moduleNamespace) {
@@ -983,9 +980,9 @@ void Inliner::flattenInstances(FModuleOp module) {
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
-void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
-                         IRMapping &mapper, BackedgeBuilder &beb,
-                         SmallVectorImpl<Backedge> &edges, FModuleOp target,
+void Inliner::inlineInto(StringRef prefix, OpBuilder &b, IRMapping &mapper,
+                         BackedgeBuilder &beb, SmallVectorImpl<Backedge> &edges,
+                         FModuleOp target,
                          DenseMap<Attribute, Attribute> &symbolRenames,
                          ModuleNamespace &moduleNamespace) {
   auto moduleName = target.getNameAttr();
