@@ -615,7 +615,8 @@ bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
   // to a wire.
   if (op.hasOneUse()) {
     auto *singleUser = *op.getUsers().begin();
-    if (isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp>(singleUser))
+    if (isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp, hw::InstanceOp>(
+            singleUser))
       return false;
 
     // If the single user is bitcast, we check the same property for the bitcast
@@ -705,10 +706,9 @@ static LogicalResult legalizeHWModule(Block &block,
     if (auto instance = dyn_cast<InstanceOp>(op)) {
       // Anchor return values to wires early
       lowerInstanceResults(instance);
-      // Anchor ports of instances when the instance is bound by bind op, or
-      // forced by the option.
-      if (instance->hasAttr("doNotPrint") ||
-          options.disallowExpressionInliningInPorts)
+      // Anchor ports of instances when `disallowExpressionInliningInPorts` is
+      // enabled.
+      if (options.disallowExpressionInliningInPorts)
         spillWiresForInstanceInputs(instance);
     }
 
