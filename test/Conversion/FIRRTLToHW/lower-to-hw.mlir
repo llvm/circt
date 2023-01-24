@@ -5,6 +5,43 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 "sifive.enterprise.firrtl.ExtractCoverageAnnotation", directory = "dir2",  filename = "./dir2/filename2" }, {class =
 "sifive.enterprise.firrtl.ExtractAssertionsAnnotation", directory = "dir3",  filename = "./dir3/filename3" }]}
 {
+  // Headers
+  // CHECK:      sv.ifdef  "PRINTF_COND_" {
+  // CHECK-NEXT: } else {
+  // CHECK-NEXT:   sv.ifdef  "PRINTF_COND" {
+  // CHECK-NEXT:     sv.verbatim "`define PRINTF_COND_ (`PRINTF_COND)"
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT{LITERAL}:     sv.verbatim "`define PRINTF_COND_ 1" {symbols = []}
+  // CHECK-NEXT:   }
+  // CHECK-NEXT: }
+  // CHECK:      sv.ifdef  "ASSERT_VERBOSE_COND_" {
+  // CHECK-NEXT: } else {
+  // CHECK-NEXT:   sv.ifdef  "ASSERT_VERBOSE_COND" {
+  // CHECK-NEXT:     sv.verbatim "`define ASSERT_VERBOSE_COND_ (`ASSERT_VERBOSE_COND)"
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT{LITERAL}:     sv.verbatim "`define ASSERT_VERBOSE_COND_ 1" {symbols = []}
+  // CHECK-NEXT:   }
+  // CHECK-NEXT: }
+  // CHECK:      sv.ifdef  "STOP_COND_" {
+  // CHECK-NEXT: } else {
+  // CHECK-NEXT:   sv.ifdef  "STOP_COND" {
+  // CHECK-NEXT:     sv.verbatim "`define STOP_COND_ (`STOP_COND)"
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT:     sv.verbatim "`define STOP_COND_ 1" {symbols = []}
+  // CHECK-NEXT:   }
+  // CHECK-NEXT: }
+  // CHECK:      sv.ifdef  "INIT_RANDOM_PROLOG_" {
+  // CHECK-NEXT: } else {
+  // CHECK-NEXT:   sv.ifdef  "RANDOMIZE" {
+  // CHECK-NEXT:     sv.ifdef  "VERILATOR" {
+  // CHECK-NEXT:       sv.verbatim "`define INIT_RANDOM_PROLOG_ `INIT_RANDOM"
+  // CHECK-NEXT:     } else {
+  // CHECK-NEXT{LITERAL}:       sv.verbatim "`define INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end" {symbols = []}
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT{LITERAL}:     sv.verbatim "`define INIT_RANDOM_PROLOG_" {symbols = []}
+  // CHECK-NEXT:   }
+  // CHECK-NEXT: }
 
   //These come from MemSimple, IncompleteRead, and MemDepth1
   // CHECK-LABEL: hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "maskGran", "readUnderWrite", "writeUnderWrite", "writeClockIDs"]
