@@ -808,6 +808,12 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     b.create<sv::VerbatimOp>(verilogString);
   };
 
+  // Helper function to emit #ifndef guard.
+  auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
+    b.create<sv::IfDefOp>(
+        guard, []() {}, body);
+  };
+
   // Helper function to emit a "#ifdef guard" with a `define in the then and
   // optionally in the else branch.
   auto emitGuardedDefine = [&](const char *guard, const char *defineTrue,
@@ -838,15 +844,19 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 
   bool needRandom = false;
   if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
-    emitGuardedDefine("RANDOMIZE_GARBAGE_ASSIGN", "RANDOMIZE");
+    emitGuard("RANDOMIZE", [&]() {
+      emitGuardedDefine("RANDOMIZE_GARBAGE_ASSIGN", "RANDOMIZE");
+    });
     needRandom = true;
   }
   if (state.used_RANDOMIZE_REG_INIT) {
-    emitGuardedDefine("RANDOMIZE_REG_INIT", "RANDOMIZE");
+    emitGuard("RANDOMIZE",
+              [&]() { emitGuardedDefine("RANDOMIZE_REG_INIT", "RANDOMIZE"); });
     needRandom = true;
   }
   if (state.used_RANDOMIZE_MEM_INIT) {
-    emitGuardedDefine("RANDOMIZE_MEM_INIT", "RANDOMIZE");
+    emitGuard("RANDOMIZE",
+              [&]() { emitGuardedDefine("RANDOMIZE_MEM_INIT", "RANDOMIZE"); });
     needRandom = true;
   }
 
@@ -859,22 +869,28 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   if (state.used_PRINTF_COND) {
     emitString("\n// Users can define 'PRINTF_COND' to add an extra gate to "
                "prints.");
-    emitGuardedDefine("PRINTF_COND", "PRINTF_COND_ (`PRINTF_COND)",
-                      "PRINTF_COND_ 1");
+    emitGuard("PRINTF_COND_", [&]() {
+      emitGuardedDefine("PRINTF_COND", "PRINTF_COND_ (`PRINTF_COND)",
+                        "PRINTF_COND_ 1");
+    });
   }
 
   if (state.used_ASSERT_VERBOSE_COND) {
     emitString("\n// Users can define 'ASSERT_VERBOSE_COND' to add an extra "
                "gate to assert error printing.");
-    emitGuardedDefine("ASSERT_VERBOSE_COND",
-                      "ASSERT_VERBOSE_COND_ (`ASSERT_VERBOSE_COND)",
-                      "ASSERT_VERBOSE_COND_ 1");
+    emitGuard("ASSERT_VERBOSE_COND_", [&]() {
+      emitGuardedDefine("ASSERT_VERBOSE_COND",
+                        "ASSERT_VERBOSE_COND_ (`ASSERT_VERBOSE_COND)",
+                        "ASSERT_VERBOSE_COND_ 1");
+    });
   }
 
   if (state.used_STOP_COND) {
     emitString("\n// Users can define 'STOP_COND' to add an extra gate "
                "to stop conditions.");
-    emitGuardedDefine("STOP_COND", "STOP_COND_ (`STOP_COND)", "STOP_COND_ 1");
+    emitGuard("STOP_COND_", [&]() {
+      emitGuardedDefine("STOP_COND", "STOP_COND_ (`STOP_COND)", "STOP_COND_ 1");
+    });
   }
 
   if (needRandom) {
@@ -890,31 +906,35 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     emitGuardedDefine("RANDOMIZE_DELAY", nullptr, "RANDOMIZE_DELAY 0.002");
 
     emitString("\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
-    b.create<sv::IfDefOp>(
-        "RANDOMIZE",
-        [&]() {
-          emitGuardedDefine(
-              "VERILATOR", "INIT_RANDOM_PROLOG_ `INIT_RANDOM",
-              "INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end");
-        },
-        [&]() { emitString("`define INIT_RANDOM_PROLOG_"); });
+    emitGuard("INIT_RANDOM_PROLOG_", [&]() {
+      b.create<sv::IfDefOp>(
+          "RANDOMIZE",
+          [&]() {
+            emitGuardedDefine(
+                "VERILATOR", "INIT_RANDOM_PROLOG_ `INIT_RANDOM",
+                "INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end");
+          },
+          [&]() { emitString("`define INIT_RANDOM_PROLOG_"); });
+    });
   }
 
   if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
     emitString("\n// RANDOMIZE_GARBAGE_ASSIGN enable range checks for mem "
                "assignments.");
-    b.create<sv::IfDefOp>(
-        "RANDOMIZE_GARBAGE_ASSIGN",
-        [&]() {
-          emitString(
-              "`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, VALUE, "
-              "SIZE) \\");
-          emitString("  ((INDEX) < (SIZE) ? (VALUE) : {`RANDOM})");
-        },
-        [&]() {
-          emitString("`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, "
-                     "VALUE, SIZE) (VALUE)");
-        });
+    emitGuard("RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK", [&]() {
+      b.create<sv::IfDefOp>(
+          "RANDOMIZE_GARBAGE_ASSIGN",
+          [&]() {
+            emitString(
+                "`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, VALUE, "
+                "SIZE) \\");
+            emitString("  ((INDEX) < (SIZE) ? (VALUE) : {`RANDOM})");
+          },
+          [&]() {
+            emitString("`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, "
+                       "VALUE, SIZE) (VALUE)");
+          });
+    });
   }
 
   // Blank line to separate the header from the modules.
