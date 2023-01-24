@@ -19,7 +19,7 @@
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/Namespace.h"
 
-#include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"

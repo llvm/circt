@@ -777,17 +777,6 @@ ParseResult BranchOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void BranchOp::print(OpAsmPrinter &p) { sostPrint(p, false); }
 
-LogicalResult ConditionalBranchOp::inferReturnTypes(
-    MLIRContext *context, std::optional<Location> location, ValueRange operands,
-    DictionaryAttr attributes, mlir::RegionRange regions,
-    SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
-  // Return type is type of data operand (second argument), twice
-  auto resType = operands[1].getType();
-  inferredReturnTypes.push_back(resType);
-  inferredReturnTypes.push_back(resType);
-  return success();
-}
-
 ParseResult ConditionalBranchOp::parse(OpAsmParser &parser,
                                        OperationState &result) {
   SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
@@ -833,15 +822,6 @@ std::string handshake::ConditionalBranchOp::getResultName(unsigned int idx) {
 bool ConditionalBranchOp::isControl() {
   return isControlCheckTypeAndOperand(getDataOperand().getType(),
                                       getDataOperand());
-}
-
-LogicalResult SelectOp::inferReturnTypes(
-    MLIRContext *context, std::optional<Location> location, ValueRange operands,
-    DictionaryAttr attributes, mlir::RegionRange regions,
-    SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
-  // Return type is type of true operand (equivalently, of false operand)
-  inferredReturnTypes.push_back(operands[1].getType());
-  return success();
 }
 
 ParseResult SelectOp::parse(OpAsmParser &parser, OperationState &result) {

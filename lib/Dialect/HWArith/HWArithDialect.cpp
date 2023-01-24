@@ -28,7 +28,7 @@ struct HWArithInlinerInterface : public mlir::DialectInlinerInterface {
   // Operations in the hwarith dialect are always legal to inline since they are
   // pure.
   bool isLegalToInline(Operation *, Region *, bool,
-                       BlockAndValueMapping &) const final {
+                       IRMapping &) const final {
     return true;
   }
 };
