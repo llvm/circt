@@ -1441,10 +1441,22 @@ static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &printer,
 
   return TypeSwitch<Type, LogicalResult>(type)
       // Unit types
-      .Case<VoidType>([&](auto) { return printer << "void", success(); })
-      .Case<StringType>([&](auto) { return printer << "string", success(); })
-      .Case<ChandleType>([&](auto) { return printer << "chandle", success(); })
-      .Case<EventType>([&](auto) { return printer << "event", success(); })
+      .Case<VoidType>([&](auto) {
+        printer << "void";
+        return success();
+      })
+      .Case<StringType>([&](auto) {
+        printer << "string";
+        return success();
+      })
+      .Case<ChandleType>([&](auto) {
+        printer << "chandle";
+        return success();
+      })
+      .Case<EventType>([&](auto) {
+        printer << "event";
+        return success();
+      })
 
       // Integers and reals
       .Case<IntType>([&](auto type) {

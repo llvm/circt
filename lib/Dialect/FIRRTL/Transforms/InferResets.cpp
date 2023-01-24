@@ -1184,11 +1184,13 @@ bool InferResetsPass::updateReset(FieldRef field, FIRRTLBaseType resetType) {
 LogicalResult InferResetsPass::collectAnnos(CircuitOp circuit) {
   LLVM_DEBUG(
       llvm::dbgs() << "\n===----- Gather async reset annotations -----===\n\n");
-  circuit.walk<WalkOrder::PreOrder>([&](FModuleOp module) {
+  auto result = circuit.walk<WalkOrder::PreOrder>([&](FModuleOp module) {
     if (failed(collectAnnos(module)))
       return WalkResult::interrupt();
     return WalkResult::skip();
   });
+  if (result == WalkResult::interrupt())
+    return failure();
   return success();
 }
 

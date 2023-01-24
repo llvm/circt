@@ -1,76 +1,88 @@
-// RUN: circt-opt %s -test-scheduling-problem -allow-unregistered-dialect
-// RUN: circt-opt %s -test-asap-scheduler -allow-unregistered-dialect | FileCheck %s -check-prefix=ASAP
-// RUN: circt-opt %s -test-simplex-scheduler=with=Problem -allow-unregistered-dialect | FileCheck %s -check-prefix=SIMPLEX
+// RUN: circt-opt %s -ssp-roundtrip=verify
+// RUN: circt-opt %s -ssp-schedule=scheduler=asap | FileCheck %s -check-prefixes=CHECK,ASAP
+// RUN: circt-opt %s -ssp-schedule=scheduler=simplex | FileCheck %s -check-prefixes=CHECK,SIMPLEX
+// RUN: %if or-tools %{ circt-opt %s -ssp-schedule=scheduler=lp | FileCheck %s -check-prefixes=CHECK,LP %} 
 
-// ASAP-LABEL: unit_latencies
-// SIMPLEX-LABEL: unit_latencies
-func.func @unit_latencies(%a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32) -> i32 {
-  // ASAP-NEXT: asapStartTime = 0
-  %0 = arith.addi %a1, %a2 { problemStartTime = 0 } : i32
-  // ASAP-NEXT: asapStartTime = 1
-  %1 = arith.addi %0, %a3 { problemStartTime = 1 } : i32
-  // ASAP-NEXT: asapStartTime = 2
-  %2:3 = "more.results"(%0, %1) { problemStartTime = 2 } : (i32, i32) -> (i32, i32, i32)
-  // ASAP-NEXT: asapStartTime = 3
-  %3 = arith.addi %a4, %2#1 { problemStartTime = 3 } : i32
-  // ASAP-NEXT: asapStartTime = 3
-  %4 = arith.addi %2#0, %2#2 { problemStartTime = 4 } : i32
-  // ASAP-NEXT: asapStartTime = 4
-  %5 = arith.addi %3, %3 { problemStartTime = 4 } : i32
-  // ASAP-NEXT: asapStartTime = 5
-  %6 = "more.operands"(%3, %4, %5) { problemStartTime = 6 } : (i32, i32, i32) -> i32
-  // ASAP-NEXT: asapStartTime = 6
-  // SIMPLEX: return
-  // SIMPLEX-SAME: simplexStartTime = 6
-  return { problemStartTime = 7 } %6 : i32
+// CHECK-LABEL: unit_latencies
+ssp.instance @unit_latencies of "Problem" {
+  library {
+    operator_type @_1 [latency<1>]
+  }
+  // ASAP: graph
+  graph {
+    // ASAP-NEXT: [t<0>]
+    %0 = operation<@_1>() [t<0>]
+    // ASAP-NEXT: [t<1>]
+    %1 = operation<@_1>(%0) [t<1>]
+    // ASAP-NEXT: [t<2>]
+    %2:3 = operation<@_1>(%0, %1)[t<2>]
+    // ASAP-NEXT: [t<3>]
+    %3 = operation<@_1>(%2#1) [t<3>]
+    // ASAP-NEXT: [t<3>]
+    %4 = operation<@_1>(%2#0, %2#2) [t<3>]
+    // ASAP-NEXT: [t<4>]
+    %5 = operation<@_1>(%3) [t<4>]
+    // ASAP-NEXT: [t<5>]
+    %6 = operation<@_1>(%3, %4, %5) [t<5>]
+    // ASAP-NEXT: [t<6>]
+    // SIMPLEX: @last(%{{.*}}) [t<6>]
+    // LP: @last(%{{.*}}) [t<6>]
+    operation<@_1> @last(%6) [t<6>]
+  }
 }
 
-// ASAP-LABEL: arbitrary_latencies
-// SIMPLEX-LABEL: arbitrary_latencies
-func.func @arbitrary_latencies(%v : complex<f32>) -> f32 attributes {
-  operatortypes = [
-    { name = "extr", latency = 0 },
-    { name = "add", latency = 3 },
-    { name = "mult", latency = 6 },
-    { name = "sqrt", latency = 10 }
-  ] } {
-  // ASAP-NEXT: asapStartTime = 0
-  %0 = "complex.re"(%v) { opr = "extr", problemStartTime = 0 } : (complex<f32>) -> f32
-  // ASAP-NEXT: asapStartTime = 0
-  %1 = "complex.im"(%v) { opr = "extr", problemStartTime = 10 } : (complex<f32>) -> f32
-  // ASAP-NEXT: asapStartTime = 0
-  %2 = arith.mulf %0, %0 { opr = "mult", problemStartTime = 20 } : f32
-  // ASAP-NEXT: asapStartTime = 0
-  %3 = arith.mulf %1, %1 { opr = "mult", problemStartTime = 30 } : f32
-  // ASAP-NEXT: asapStartTime = 6
-  %4 = arith.addf %2, %3 { opr = "add", problemStartTime = 40 } : f32
-  // ASAP-NEXT: asapStartTime = 9
-  %5 = "math.sqrt"(%4) { opr = "sqrt", problemStartTime = 50 } : (f32) -> f32
-  // ASAP-NEXT: asapStartTime = 19
-  // SIMPLEX: return
-  // SIMPLEX-SAME: simplexStartTime = 19
-  return { problemStartTime = 60 } %5 : f32
+// CHECK-LABEL: arbitrary_latencies
+ssp.instance @arbitrary_latencies of "Problem" {
+  library {
+    operator_type @_0 [latency<0>]
+    operator_type @_1 [latency<1>]
+    operator_type @_3 [latency<3>]
+    operator_type @_6 [latency<6>]
+    operator_type @_10 [latency<10>]
+  }
+  // ASAP: graph
+  graph {
+    // ASAP-NEXT: [t<0>]
+    %0 = operation<@_0>() [t<0>]
+    // ASAP-NEXT: [t<0>]
+    %1 = operation<@_0>() [t<10>]
+    // ASAP-NEXT: [t<0>]
+    %2 = operation<@_6>(%0) [t<20>]
+    // ASAP-NEXT: [t<0>]
+    %3 = operation<@_6>(%1) [t<30>]
+    // ASAP-NEXT: [t<6>]
+    %4 = operation<@_3>(%2, %3) [t<40>]
+    // ASAP-NEXT: [t<9>]
+    %5 = operation<@_10>(%4) [t<50>]
+    // ASAP-NEXT: [t<19>]
+    // SIMPLEX: @last(%{{.*}}) [t<19>]
+    // LP: @last(%{{.*}}) [t<19>]
+    operation<@_1> @last(%5) [t<60>]
+  }
 }
 
-// ASAP-LABEL: auxiliary_dependences
-// SIMPLEX-LABEL: auxiliary_dependences
-func.func @auxiliary_dependences() attributes { auxdeps = [
-    [0,1], [0,2], [2,3], [3,4], [3,6], [4,5], [5,6]
-  ] } {
-  // ASAP-NEXT: asapStartTime = 0
-  %0 = arith.constant { problemStartTime = 0 } 0 : i32
-  // ASAP-NEXT: asapStartTime = 1
-  %1 = arith.constant { problemStartTime = 1 } 1 : i32
-  // ASAP-NEXT: asapStartTime = 1
-  %2 = arith.constant { problemStartTime = 2 } 2 : i32
-  // ASAP-NEXT: asapStartTime = 2
-  %3 = arith.constant { problemStartTime = 3 } 3 : i32
-  // ASAP-NEXT: asapStartTime = 3
-  %4 = arith.constant { problemStartTime = 4 } 4 : i32
-  // ASAP-NEXT: asapStartTime = 4
-  %5 = arith.constant { problemStartTime = 5 } 5 : i32
-  // ASAP-NEXT: asapStartTime = 5
-  // SIMPLEX: return
-  // SIMPLEX-SAME: simplexStartTime = 5
-  return { problemStartTime = 6 }
+// CHECK-LABEL: auxiliary_dependences
+ssp.instance @auxiliary_dependences of "Problem" {
+  library {
+    operator_type @_1 [latency<1>]
+  }
+  // ASAP: graph
+  graph {
+    // ASAP-NEXT: [t<0>]
+    operation<@_1> @op0() [t<0>]
+    // ASAP-NEXT: [t<1>]
+    operation<@_1> @op1(@op0) [t<1>]
+    // ASAP-NEXT: [t<1>]
+    operation<@_1> @op2(@op0) [t<1>]
+    // ASAP-NEXT: [t<2>]
+    operation<@_1> @op3(@op2) [t<2>]
+    // ASAP-NEXT: [t<3>]
+    operation<@_1> @op4(@op3) [t<3>]
+    // ASAP-NEXT: [t<4>]
+    operation<@_1> @op5(@op4) [t<4>]
+    // ASAP-NEXT: [t<5>]
+    // SIMPLEX: @last(@op3, @op5) [t<5>]
+    // LP: @last(@op3, @op5) [t<5>]
+    operation<@_1> @last(@op3, @op5) [t<5>]
+  }
 }
