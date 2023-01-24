@@ -1171,8 +1171,6 @@ public:
   void emitBind(BindOp op);
   void emitBindInterface(BindInterfaceOp op);
 
-  StringRef getNameRemotely(Value value);
-
   /// Legalize the given field name if it is an invalid verilog name.
   StringRef getVerilogStructFieldName(StringAttr field) {
     return fieldNameResolver.getRenamedFieldName(field).getValue();
