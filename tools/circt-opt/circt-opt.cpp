@@ -32,7 +32,6 @@
 namespace circt {
 namespace test {
 void registerAnalysisTestPasses();
-void registerSchedulingTestPasses();
 } // namespace test
 } // namespace circt
 
@@ -65,7 +64,6 @@ int main(int argc, char **argv) {
 
   // Register test passes
   circt::test::registerAnalysisTestPasses();
-  circt::test::registerSchedulingTestPasses();
 
   return mlir::failed(mlir::MlirOptMain(
       argc, argv, "CIRCT modular optimizer driver", registry));

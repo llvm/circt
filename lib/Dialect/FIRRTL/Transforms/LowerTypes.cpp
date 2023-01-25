@@ -451,8 +451,12 @@ TypeLoweringVisitor::getPreservatinoModeForModule(FModuleLike module) {
   // We cannot preserve external module ports.
   if (!isa<FModuleOp>(module))
     return PreserveAggregate::None;
+
+  // If `module` is a top-module, we have to lower ports. Don't read attributes
+  // of `module` since the attributes could be mutated in a different thread.
   if (aggregatePreservationMode != PreserveAggregate::None &&
-      preservePublicTypes && cast<hw::HWModuleLike>(*module).isPublic())
+      preservePublicTypes &&
+      module->getParentOfType<CircuitOp>().getMainModule(&symTbl) == module)
     return PreserveAggregate::None;
   return aggregatePreservationMode;
 }
