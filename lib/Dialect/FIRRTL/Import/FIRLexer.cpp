@@ -409,6 +409,17 @@ FIRToken FIRLexer::lexIdentifierOrKeyword(const char *tokStart) {
 #include "FIRTokenKinds.def"
                             .Default(FIRToken::identifier);
 
+  // Check if the current token is an inst identifier. This is
+  // necessary since we currently need to catch when 'module' is being
+  // used as an id and set it as an identifier instead of a keyword.
+  if (kind == FIRToken::kw_module && isInstIdentifier == true) {
+    isInstIdentifier = false;
+    return FIRToken(FIRToken::identifier, spelling);
+  } else if (kind == FIRToken::kw_inst)
+    isInstIdentifier = true;
+  else
+    isInstIdentifier = false;
+
   return FIRToken(kind, spelling);
 }
 

@@ -149,6 +149,9 @@ private:
   FIRLexer(const FIRLexer &) = delete;
   void operator=(const FIRLexer &) = delete;
   friend class FIRLexerCursor;
+
+  /// Used to detect 'module' as instance name ids.
+  bool isInstIdentifier = false;
 };
 
 /// This is the state captured for a lexer cursor.
