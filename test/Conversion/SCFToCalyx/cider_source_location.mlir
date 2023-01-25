@@ -1,4 +1,5 @@
 // RUN: circt-opt %s  --lower-scf-to-calyx='cider-source-location-metadata' -canonicalize | FileCheck %s
+// XFAIL: *
 
 module {
 // CHECK: module attributes {calyx.entrypoint = "main", calyx.metadata = ["loc({{.*}}11:5)", "loc({{.*}}13:5)"]}

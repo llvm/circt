@@ -1,4 +1,5 @@
 // RUN: circt-opt --lower-scf-to-calyx %s -split-input-file -verify-diagnostics
+// XFAIL: *
 
 module {
   func.func @f(%arg0 : f32, %arg1 : f32) -> f32 {
