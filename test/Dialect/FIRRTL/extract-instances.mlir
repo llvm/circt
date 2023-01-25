@@ -399,6 +399,7 @@ firrtl.circuit "ExtractClockGatesComposed" attributes {annotations = [
     firrtl.connect %dut_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %dut_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
   }
+  // CHECK: sv.verbatim ""
   // CHECK: sv.verbatim "
   // CHECK-SAME{LITERAL}: clock_gate_0 -> {{0}}.{{1}}\0A
   // CHECK-SAME: output_file = #hw.output_file<"ClockGates.txt", excludeFromFileList>
@@ -438,6 +439,7 @@ firrtl.circuit "ExtractSeqMemsSimple2" attributes {annotations = [{class = "sifi
     // CHECK-NEXT: firrtl.instance dut sym [[DUT_SYM:@.+]] @DUTModule
     // CHECK-NEXT: firrtl.instance mem_ext sym [[MEM_EXT_SYM:@.+]] @mem_ext
   }
+  // CHECK: sv.verbatim ""
   // CHECK: sv.verbatim "
   // CHECK-SAME{LITERAL}: mem_wiring_0 -> {{0}}.{{1}}.{{2}}\0A
   // CHECK-SAME: output_file = #hw.output_file<"SeqMems.txt", excludeFromFileList>
@@ -446,6 +448,17 @@ firrtl.circuit "ExtractSeqMemsSimple2" attributes {annotations = [{class = "sifi
   // CHECK-SAME: @DUTModule::[[MEM_SYM]]
   // CHECK-SAME: @ExtractSeqMemsSimple2::[[MEM_EXT_SYM]]
   // CHECK-SAME: ]
+}
+
+//===----------------------------------------------------------------------===//
+// ExtractSeqMems NoExtraction
+//===----------------------------------------------------------------------===//
+
+// CHECK: firrtl.circuit "ExtractSeqMemsNoExtraction"
+firrtl.circuit "ExtractSeqMemsNoExtraction"  attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractSeqMemsFileAnnotation", filename = "SeqMems.txt"}]} {
+  firrtl.module @ExtractSeqMemsNoExtraction() {}
+  // CHECK: sv.verbatim ""
+  // CHECK-SAME: output_file = #hw.output_file<"SeqMems.txt", excludeFromFileList>
 }
 
 //===----------------------------------------------------------------------===//
