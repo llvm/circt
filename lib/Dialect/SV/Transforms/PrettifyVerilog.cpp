@@ -33,6 +33,20 @@ using namespace circt;
 //===----------------------------------------------------------------------===//
 
 namespace {
+class SideEffectTracker {
+public:
+  SideEffectTracker(hw::HWModuleOp module);
+  // Return true if the given expression is immutable within procedural regions.
+  // In other words, the expression is not modified by blocking assignments,
+  // force or other unknown side-effecting ops.
+  bool isExpressionImmutableInProceduralRegions(Operation *op) const;
+  bool isReadInoutImmutableInProceduralRegions(sv::ReadInOutOp read) const;
+
+private:
+  // Track root declarations that might be mutated.
+  DenseSet<Operation *> mutatedDecls;
+};
+
 struct PrettifyVerilogPass
     : public sv::PrettifyVerilogBase<PrettifyVerilogPass> {
   void runOnOperation() override;
@@ -51,10 +65,82 @@ private:
   bool splitAssignment(OpBuilder &builder, Value dst, Value src);
 
   bool anythingChanged;
+  SideEffectTracker *tracker;
 
   DenseSet<Operation *> toDelete;
 };
 } // end anonymous namespace
+
+SideEffectTracker::SideEffectTracker(hw::HWModuleOp module) {
+  // Visit all side-effecting operations in procedural regions.
+  module.walk([&](Operation *op) {
+    // Ignore operations if they are in non-procedural regions, or they don't
+    // have side-effect. Importantly, we have to skip procedural assignments.
+    if (!op->getParentOp()->hasTrait<sv::ProceduralRegion>() ||
+        mlir::isMemoryEffectFree(op) || isa<sv::PAssignOp>(op))
+      return;
+
+    // Mark all operands with inout types as mutated.
+    for (auto operand : op->getOperands()) {
+      if (!hw::type_isa<hw::InOutType>(operand.getType()))
+        continue;
+      Operation *rootDecl;
+      // Get operand's root declaration.
+      while ((rootDecl = operand.getDefiningOp())) {
+        if (rootDecl->getNumOperands() == 0)
+          break;
+        operand = rootDecl->getOperand(0);
+      }
+      // If the declaration is a port, just ignore.
+      if (rootDecl)
+        mutatedDecls.insert(rootDecl);
+    }
+  });
+}
+
+bool SideEffectTracker::isReadInoutImmutableInProceduralRegions(
+    sv::ReadInOutOp readInout) const {
+  auto *defOp = readInout.getOperand().getDefiningOp();
+  while (defOp) {
+    if (defOp->getNumOperands() == 0)
+      return !mutatedDecls.contains(defOp);
+    defOp = defOp->getOperand(0).getDefiningOp();
+  }
+  return false;
+}
+
+/// Return true if the expression is immutable in procedural regions.
+/// The expression is immutable iff all subexpression are immutable so
+/// inspect all the subexpressions.
+bool SideEffectTracker::isExpressionImmutableInProceduralRegions(
+    Operation *op) const {
+  // Bail out if the expression has side-effect.
+  if (!isMemoryEffectFree(op))
+    return false;
+
+  if (auto read = dyn_cast<sv::ReadInOutOp>(op))
+    return isReadInoutImmutableInProceduralRegions(read);
+
+  SmallVector<Value, 8> exprsToScan(op->getOperands());
+  while (!exprsToScan.empty()) {
+    Operation *expr = exprsToScan.pop_back_val().getDefiningOp();
+    if (!expr || isa<hw::InstanceOp>(expr))
+      continue; // Ports are always safe to reference from anywhere.
+
+    if (!isMemoryEffectFree(expr))
+      return false;
+
+    // If this is an inout op, check that the value is immutable in a procedural
+    // region.
+    if (auto readInout = dyn_cast<sv::ReadInOutOp>(expr))
+      return isReadInoutImmutableInProceduralRegions(readInout);
+
+    // Otherwise, add its operands to the worklist.
+    exprsToScan.append(expr->getOperands().begin(), expr->getOperands().end());
+  }
+
+  return true;
+}
 
 /// Return true if this is something that will get printed as a unary operator
 /// by the Verilog printer.
@@ -401,9 +487,9 @@ void PrettifyVerilogPass::sinkExpression(Operation *op) {
   // Single-used expressions are the most common and simple to handle.
   if (op->hasOneUse()) {
     if (curOpBlock != op->user_begin()->getBlock()) {
-      // Ok, we're about to make a change, ensure that there are no side
-      // effects.
-      if (!mlir::isMemoryEffectFree(op))
+      // Ok, we're about to make a change, ensure that if's safe to move the
+      // expression.
+      if (!tracker->isExpressionImmutableInProceduralRegions(op))
         return;
 
       op->moveBefore(*op->user_begin());
@@ -451,7 +537,7 @@ void PrettifyVerilogPass::sinkExpression(Operation *op) {
 
   // Ok, we're about to make a change, ensure that there are no side
   // effects.
-  if (!mlir::isMemoryEffectFree(op))
+  if (!tracker->isExpressionImmutableInProceduralRegions(op))
     return;
 
   // Ok, we found a common ancestor between all the users that is deeper than
@@ -497,11 +583,17 @@ void PrettifyVerilogPass::processPostOrder(Block &body) {
     // block as their use.  This will allow the verilog emitter to inline
     // constant expressions and avoids ReadInOutOp from preventing motion.
     if (matchPattern(&op, mlir::m_Constant()) ||
-        isa<sv::ReadInOutOp, sv::ArrayIndexInOutOp, sv::StructFieldInOutOp,
+        isa<sv::ArrayIndexInOutOp, sv::StructFieldInOutOp,
             sv::IndexedPartSelectInOutOp, hw::ParamValueOp>(op)) {
       sinkOrCloneOpToUses(&op);
       continue;
     }
+
+    if (auto read = dyn_cast<sv::ReadInOutOp>(op))
+      if (tracker->isReadInoutImmutableInProceduralRegions(read)) {
+        sinkOrCloneOpToUses(&op);
+        continue;
+      }
 
     // Sink normal expressions down the region tree if they aren't used within
     // their current block.  This allows them to be folded into the using
@@ -535,6 +627,9 @@ void PrettifyVerilogPass::runOnOperation() {
   // Keeps track if anything changed during this pass, used to determine if
   // the analyses were preserved.
   anythingChanged = false;
+
+  SideEffectTracker sideEffectTracker(thisModule);
+  tracker = &sideEffectTracker;
 
   // Walk the operations in post-order, transforming any that are interesting.
   processPostOrder(*thisModule.getBodyBlock());
