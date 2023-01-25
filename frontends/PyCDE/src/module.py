@@ -417,6 +417,12 @@ class ModuleBuilder(ModuleLikeBuilderBase):
       if name not in input_lookup:
         raise PortError(f"Input port {name} not found in module")
       idx, ptype = input_lookup[name]
+      if signal is None:
+        if len(self.generators) > 0:
+          raise PortError(
+              f"Port {name} cannot be None (disconnected ports only allowed "
+              "on extern mods.")
+        signal = create_const_zero(ptype)
       if isinstance(signal, Signal):
         # If the input is a signal, the types must match.
         if ptype != signal.type:
@@ -491,7 +497,10 @@ class Module(metaclass=ModuleLikeType):
     `Wire` construct and assign the signal to that wire later on."""
 
     if instance_name is None:
-      instance_name = self.__class__.__name__
+      if hasattr(self, "instance_name"):
+        instance_name = self.instance_name
+      else:
+        instance_name = self.__class__.__name__
     instance_name = _BlockContext.current().uniquify_symbol(instance_name)
     self.inst = self._builder.instantiate(self, instance_name, **inputs)
     if appid is not None:
@@ -551,7 +560,8 @@ class modparams:
     if not issubclass(cls, Module):
       raise ValueError("Parameterization function must return Module class")
 
-    cls._builder.parameters = cache_key[1]
+    if len(cls._builder.generators) > 0:
+      cls._builder.parameters = cache_key[1]
     _MODULE_CACHE[cache_key] = cls
     return cls
 
