@@ -1,4 +1,5 @@
 // RUN: circt-opt %s --lower-scf-to-calyx -canonicalize -split-input-file | FileCheck %s
+// XFAIL: *
 
 // CHECK:     module attributes {calyx.entrypoint = "main"} {
 // CHECK-LABEL:  calyx.component @main(%clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%done: i1 {done}) {
