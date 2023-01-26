@@ -368,6 +368,18 @@ void ExtractInstancesPass::collectAnnos() {
   // mark them as to be extracted.
   // somewhat configurable.
   if (!memoryFileName.empty()) {
+    // Create an empty verbatim to guarantee that this file will exist even if
+    // no memories are found.  This is done to align with the SFC implementation
+    // of this pass where the file is always created.  This does introduce an
+    // additional leading newline in the file.
+    auto *context = circuit.getContext();
+    auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
+                                                    circuit.getBodyBlock());
+    builder.create<sv::VerbatimOp>("")->setAttr(
+        "output_file",
+        hw::OutputFileAttr::getFromFilename(context, memoryFileName,
+                                            /*excludeFromFilelist=*/true));
+
     for (auto module : circuit.getOps<FMemModuleOp>()) {
       LLVM_DEBUG(llvm::dbgs() << "Memory `" << module.moduleName() << "`\n");
       if (!dutModules.contains(module)) {
@@ -1036,8 +1048,9 @@ void ExtractInstancesPass::createTraceFiles() {
         os << ".";
         addSymbol(sym);
       }
-      os << ".";
-      addSymbol(getInnerRefTo(inst));
+      // The final instance name is excluded as this does not provide useful
+      // additional information and could conflict with a name inside the final
+      // module.
       os << "\n";
     }
 

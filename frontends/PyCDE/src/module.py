@@ -145,6 +145,14 @@ class PortProxyBase:
       signal = _obj_to_value(signal, ptype)
     self._output_values[idx] = signal
 
+  def _set_outputs(self, signal_dict: Dict[str, Signal]):
+    """Set outputs from a dictionary of port names to signals."""
+    for name, signal in signal_dict.items():
+      if name not in self._output_port_lookup:
+        raise PortError(f"Could not find output port '{name}'")
+      idx = self._output_port_lookup[name]
+      self._set_output(idx, signal)
+
   def _check_unconnected_outputs(self):
     unconnected_ports = []
     for idx, value in enumerate(self._output_values):
@@ -241,6 +249,7 @@ class ModuleLikeBuilderBase(_PyProxy):
     for idx, (name, port_type) in enumerate(self.inputs):
       proxy_attrs[name] = property(lambda self, idx=idx: self._get_input(idx))
 
+    output_port_lookup: Dict[str, int] = {}
     for idx, (name, port_type) in enumerate(self.outputs):
 
       def fget(self, idx=idx):
@@ -250,6 +259,8 @@ class ModuleLikeBuilderBase(_PyProxy):
         self._set_output(idx, val)
 
       proxy_attrs[name] = property(fget=fget, fset=fset)
+      output_port_lookup[name] = idx
+    proxy_attrs["_output_port_lookup"] = output_port_lookup
 
     return type(self.modcls.__name__ + "Ports", (PortProxyBase,), proxy_attrs)
 
@@ -264,12 +275,18 @@ class ModuleLikeBuilderBase(_PyProxy):
 
       setattr(self.modcls, name, property(fget=fget))
 
+    named_outputs = {}
     for idx, (name, port_type) in enumerate(self.outputs):
 
       def fget(self, idx=idx):
         return Value(self.inst.results[idx])
 
+      named_outputs[name] = fget
       setattr(self.modcls, name, property(fget=fget))
+    setattr(self.modcls,
+            "_outputs",
+            lambda self, outputs=named_outputs:
+            {n: g(self) for n, g in outputs.items()})
 
   @property
   def name(self):
@@ -400,6 +417,12 @@ class ModuleBuilder(ModuleLikeBuilderBase):
       if name not in input_lookup:
         raise PortError(f"Input port {name} not found in module")
       idx, ptype = input_lookup[name]
+      if signal is None:
+        if len(self.generators) > 0:
+          raise PortError(
+              f"Port {name} cannot be None (disconnected ports only allowed "
+              "on extern mods.")
+        signal = create_const_zero(ptype)
       if isinstance(signal, Signal):
         # If the input is a signal, the types must match.
         if ptype != signal.type:
@@ -474,7 +497,10 @@ class Module(metaclass=ModuleLikeType):
     `Wire` construct and assign the signal to that wire later on."""
 
     if instance_name is None:
-      instance_name = self.__class__.__name__
+      if hasattr(self, "instance_name"):
+        instance_name = self.instance_name
+      else:
+        instance_name = self.__class__.__name__
     instance_name = _BlockContext.current().uniquify_symbol(instance_name)
     self.inst = self._builder.instantiate(self, instance_name, **inputs)
     if appid is not None:
@@ -534,7 +560,8 @@ class modparams:
     if not issubclass(cls, Module):
       raise ValueError("Parameterization function must return Module class")
 
-    cls._builder.parameters = cache_key[1]
+    if len(cls._builder.generators) > 0:
+      cls._builder.parameters = cache_key[1]
     _MODULE_CACHE[cache_key] = cls
     return cls
 

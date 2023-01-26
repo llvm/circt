@@ -615,7 +615,8 @@ bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
   // to a wire.
   if (op.hasOneUse()) {
     auto *singleUser = *op.getUsers().begin();
-    if (isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp>(singleUser))
+    if (isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp, hw::InstanceOp>(
+            singleUser))
       return false;
 
     // If the single user is bitcast, we check the same property for the bitcast
@@ -663,7 +664,8 @@ static void prettifyAfterLegalization(
 
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
-static void legalizeHWModule(Block &block, const LoweringOptions &options) {
+static LogicalResult legalizeHWModule(Block &block,
+                                      const LoweringOptions &options) {
 
   // First step, check any nested blocks that exist in this region.  This walk
   // can pull things out to our level of the hierarchy.
@@ -671,7 +673,8 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
     // If the operations has regions, prepare each of the region bodies.
     for (auto &region : op.getRegions()) {
       if (!region.empty())
-        legalizeHWModule(region.front(), options);
+        if (failed(legalizeHWModule(region.front(), options)))
+          return failure();
     }
   }
 
@@ -688,6 +691,13 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
        opIterator != e;) {
     auto &op = *opIterator++;
 
+    if (!isa<CombDialect, SVDialect, HWDialect>(op.getDialect())) {
+      op.emitError() << "this is an instance of unknown dialect detecetd. "
+                        "ExportVerilog cannot emit this operation so it needs "
+                        "to be lowered before running ExportVerilog";
+      return failure();
+    }
+
     // Name legalization should have happened in a different pass for these sv
     // elements and we don't want to change their name through re-legalization
     // (e.g. letting a temporary take the name of an unvisited wire). Adding
@@ -696,10 +706,9 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
     if (auto instance = dyn_cast<InstanceOp>(op)) {
       // Anchor return values to wires early
       lowerInstanceResults(instance);
-      // Anchor ports of instances when the instance is bound by bind op, or
-      // forced by the option.
-      if (instance->hasAttr("doNotPrint") ||
-          options.disallowExpressionInliningInPorts)
+      // Anchor ports of instances when `disallowExpressionInliningInPorts` is
+      // enabled.
+      if (options.disallowExpressionInliningInPorts)
         spillWiresForInstanceInputs(instance);
     }
 
@@ -876,7 +885,7 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
   if (isProceduralRegion) {
     // If there is no operation, there is nothing to do.
     if (block.empty())
-      return;
+      return success();
 
     // In a procedural region, logic operations needs to be top of blocks so
     // mvoe logic operations to valid program points.
@@ -897,7 +906,7 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
                           logicOpInsertionPoint.second);
       }
     }
-    return;
+    return success();
   }
 
   // Now that all the basic ops are settled, check for any use-before def issues
@@ -958,19 +967,23 @@ static void legalizeHWModule(Block &block, const LoweringOptions &options) {
     lowerUsersToTemporaryWire(op,
                               /*emitWireAtBlockBegin=*/true);
   }
+  return success();
 }
 
-void ExportVerilog::prepareHWModule(hw::HWModuleOp module,
-                                    const LoweringOptions &options) {
+// NOLINTNEXTLINE(misc-no-recursion)
+LogicalResult ExportVerilog::prepareHWModule(hw::HWModuleOp module,
+                                             const LoweringOptions &options) {
   // Zero-valued logic pruning.
   pruneZeroValuedLogic(module);
 
   // Legalization.
-  legalizeHWModule(*module.getBodyBlock(), options);
+  if (failed(legalizeHWModule(*module.getBodyBlock(), options)))
+    return failure();
 
   EmittedExpressionStateManager expressionStateManager(options);
   // Spill wires to prettify verilog outputs.
   prettifyAfterLegalization(*module.getBodyBlock(), expressionStateManager);
+  return success();
 }
 
 namespace {
@@ -980,7 +993,8 @@ struct PrepareForEmissionPass
   void runOnOperation() override {
     HWModuleOp module = getOperation();
     LoweringOptions options(cast<mlir::ModuleOp>(module->getParentOp()));
-    prepareHWModule(module, options);
+    if (failed(prepareHWModule(module, options)))
+      signalPassFailure();
   }
 };
 

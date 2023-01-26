@@ -17,7 +17,7 @@
 
 #include "external/dpi/svdpi.h"
 
-#ifdef _WIN32
+#ifdef WIN32
 #define DPI extern "C" __declspec(dllexport)
 #else
 #define DPI extern "C"
@@ -27,24 +27,24 @@
 extern "C" {
 #endif
 /// Register an endpoint.
-extern int sv2cCosimserverEpRegister(char *endpointId, long long sendTypeId,
-                                     int sendTypeSize, long long recvTypeId,
-                                     int recvTypeSize);
+DPI int sv2cCosimserverEpRegister(char *endpointId, long long sendTypeId,
+                                  int sendTypeSize, long long recvTypeId,
+                                  int recvTypeSize);
 /// Try to get a message from a client.
-extern int sv2cCosimserverEpTryGet(char *endpointId,
-                                   // NOLINTNEXTLINE(misc-misplaced-const)
-                                   const svOpenArrayHandle data,
-                                   unsigned int *sizeBytes);
+DPI int sv2cCosimserverEpTryGet(char *endpointId,
+                                // NOLINTNEXTLINE(misc-misplaced-const)
+                                const svOpenArrayHandle data,
+                                unsigned int *sizeBytes);
 /// Send a message to a client.
-extern int sv2cCosimserverEpTryPut(char *endpointId,
-                                   // NOLINTNEXTLINE(misc-misplaced-const)
-                                   const svOpenArrayHandle data, int dataLimit);
+DPI int sv2cCosimserverEpTryPut(char *endpointId,
+                                // NOLINTNEXTLINE(misc-misplaced-const)
+                                const svOpenArrayHandle data, int dataLimit);
 
 /// Start the server. Not required as the first endpoint registration will do
 /// this. Provided if one wants to start the server early.
-extern int sv2cCosimserverInit();
+DPI int sv2cCosimserverInit();
 /// Shutdown the RPC server.
-extern void sv2cCosimserverFinish();
+DPI void sv2cCosimserverFinish();
 #ifdef __cplusplus
 }
 
