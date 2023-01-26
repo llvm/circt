@@ -121,6 +121,9 @@ struct ExtractInstancesPass
   DenseSet<Operation *> dutModules;
   /// All DUT module names.
   DenseSet<Attribute> dutModuleNames;
+  /// The prefix of the DUT module.  This is used when creating new modules
+  /// under the DUT.
+  StringRef dutPrefix = "";
 
   /// A worklist of instances that need to be moved.
   SmallVector<std::pair<InstanceOp, ExtractionInfo>> extractionWorklist;
@@ -272,6 +275,8 @@ void ExtractInstancesPass::collectAnnos() {
                    << "Marking DUT `" << module.moduleName() << "`\n");
         dutRootModules.insert(module);
         dutModules.insert(module);
+        if (auto prefix = anno.getMember<StringAttr>("prefix"))
+          dutPrefix = prefix;
         return false; // other passes may rely on this anno; keep it
       }
       if (!isAnnoInteresting(anno))
@@ -936,7 +941,8 @@ void ExtractInstancesPass::groupInstances() {
 
     // Create the wrapper module.
     auto wrapper = builder.create<FModuleOp>(
-        builder.getUnknownLoc(), builder.getStringAttr(wrapperName), ports);
+        builder.getUnknownLoc(), builder.getStringAttr(dutPrefix + wrapperName),
+        ports);
 
     // Instantiate the wrapper module in the parent and replace uses of the
     // extracted instances' ports with the corresponding wrapper module ports.

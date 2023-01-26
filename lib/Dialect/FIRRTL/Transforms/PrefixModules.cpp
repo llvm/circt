@@ -304,38 +304,46 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
                   StringAttr::get(module.getContext(), newModuleName));
   renameModuleBody(prefixFull, module);
 
-  // If this module contains a Grand Central interface, then also apply renames
-  // to that, but only if there are prefixes to apply.
   AnnotationSet annotations(module);
-  if (!annotations.hasAnnotation(parentAnnoClass) &&
-      !annotations.hasAnnotation(companionAnnoClass))
-    return;
-  SmallVector<Attribute> newAnnotations;
-  for (auto anno : annotations) {
-    if (!anno.isClass(parentAnnoClass) && !anno.isClass(companionAnnoClass)) {
+  SmallVector<Attribute, 1> newAnnotations;
+  annotations.removeAnnotations([&](Annotation anno) {
+    if (anno.getClass() == dutAnnoClass) {
+      anno.setMember("prefix", builder.getStringAttr(prefixFull));
       newAnnotations.push_back(anno.getDict());
-      continue;
+      return true;
     }
 
-    NamedAttrList newAnno;
-    for (auto attr : anno) {
-      if (attr.getName() == "name") {
-        newAnno.append(attr.getName(),
-                       (Attribute)builder.getStringAttr(
-                           Twine(prefixFull) +
-                           attr.getValue().cast<StringAttr>().getValue()));
-        continue;
+    if (anno.isClass(parentAnnoClass) || anno.isClass(companionAnnoClass)) {
+      NamedAttrList newAnno;
+      for (auto attr : anno) {
+        if (attr.getName() == "name") {
+          newAnno.append(attr.getName(),
+                         (Attribute)builder.getStringAttr(
+                             Twine(prefixFull) +
+                             attr.getValue().cast<StringAttr>().getValue()));
+          continue;
+        }
+        newAnno.append(attr.getName(), attr.getValue());
       }
-      newAnno.append(attr.getName(), attr.getValue());
-    }
-    newAnnotations.push_back(
-        DictionaryAttr::getWithSorted(builder.getContext(), newAnno));
+      newAnnotations.push_back(
+          DictionaryAttr::getWithSorted(builder.getContext(), newAnno));
 
-    // Record that we need to apply this prefix to the interface definition.
-    if (anno.getMember<StringAttr>("type").getValue() == "parent")
-      interfacePrefixMap[anno.getMember<IntegerAttr>("id")] = prefixFull;
+      // If this module contains a Grand Central interface, then also apply
+      // renames to that, but only if there are prefixes to apply.
+      if (anno.getClass() == companionAnnoClass) {
+        interfacePrefixMap[anno.getMember<IntegerAttr>("id")] = prefixFull;
+      }
+      return true;
+    }
+
+    return false;
+  });
+
+  // If any annotations were updated, then update the annotations on the module.
+  if (!newAnnotations.empty()) {
+    annotations.addAnnotations(newAnnotations);
+    annotations.applyToOperation(module);
   }
-  AnnotationSet(newAnnotations, builder.getContext()).applyToOperation(module);
 }
 
 /// Apply prefixes from the `prefixMap` to an external module.  No modifications
