@@ -256,7 +256,7 @@ PassReduction::PassReduction(MLIRContext *context, std::unique_ptr<Pass> pass,
     pm->nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         std::move(pass));
   else
-    pm->addPass(std::move(pass));
+    pm->nest<mlir::ModuleOp>().addPass(std::move(pass));
 }
 
 uint64_t PassReduction::match(Operation *op) {
