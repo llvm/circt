@@ -1,5 +1,4 @@
 // RUN: circt-opt %s --lower-scf-to-calyx -canonicalize -split-input-file | FileCheck %s
-// XFAIL: *
 
 // CHECK:     module attributes {calyx.entrypoint = "main"} {
 // CHECK-LABEL:  calyx.component @main(%clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%done: i1 {done}) {
@@ -416,7 +415,7 @@ module {
 // CHECK-NEXT:         calyx.assign %ret_arg0_reg.write_en = %true : i1
 // CHECK-NEXT:         calyx.assign %ret_arg1_reg.in = %load_1_reg.out : i32
 // CHECK-NEXT:         calyx.assign %ret_arg1_reg.write_en = %true : i1
-// CHECK-NEXT:         %0 = comb.and %ret_arg0_reg.done, %ret_arg1_reg.done : i1
+// CHECK-NEXT:         %0 = comb.and %ret_arg1_reg.done, %ret_arg0_reg.done : i1
 // CHECK-NEXT:         calyx.group_done %0 ? %true : i1
 // CHECK-NEXT:       }
 // CHECK-NEXT:     }
