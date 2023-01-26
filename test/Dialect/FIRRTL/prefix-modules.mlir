@@ -370,3 +370,22 @@ firrtl.circuit "Test"   {
   // CHECK: firrtl.memmodule @B_Bar() attributes {annotations = [{circt.nonlocal = @nla_2, class = "test2"}]
   firrtl.memmodule @Bar() attributes {annotations = [{circt.nonlocal = @nla_1, class = "test1"}, {circt.nonlocal = @nla_2, class = "test2"}], dataWidth = 1 : ui32, depth = 16 : ui64, extraPorts = [], maskBits = 0 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32,  writeLatency = 1 : ui32}
 }
+
+// Test that the MarkDUTAnnotation receives a prefix.
+// CHECK-LABEL: firrtl.circuit "Prefix_MarkDUTAnnotationGetsPrefix"
+firrtl.circuit "MarkDUTAnnotationGetsPrefix" {
+  // CHECK-NEXT: firrtl.module @Prefix_MarkDUTAnnotationGetsPrefix
+  // CHECK-SAME:   class = "sifive.enterprise.firrtl.MarkDUTAnnotation", prefix = "Prefix_"
+  firrtl.module @MarkDUTAnnotationGetsPrefix() attributes {
+    annotations = [
+     {
+       class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+     },
+     {
+       class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
+       prefix = "Prefix_",
+       inclusive = true
+     }
+    ]
+  } {}
+}
