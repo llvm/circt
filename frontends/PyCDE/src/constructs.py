@@ -78,9 +78,11 @@ def Wire(type: PyCDEType, name: str = None):
       self._orig_name = name
       self.assign_parts = None
 
-    def assign(self, new_value: Value):
+    def assign(self, new_value: Union[Signal, object]):
       if self._backedge is None:
         raise ValueError("Cannot assign value to Wire twice.")
+      if not isinstance(new_value, Signal):
+        new_value = type(new_value)
       if new_value.type != self.type:
         raise TypeError(
             f"Cannot assign {new_value.value.type} to {self.value.type}")

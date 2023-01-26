@@ -8,6 +8,7 @@ import pycde
 from pycde import (AppID, Input, Output, generator, types)
 from pycde.module import Module, modparams
 from pycde.dialects import comb, hw
+from pycde.constructs import Wire
 
 import sys
 
@@ -71,6 +72,12 @@ def ExternWithParams(a, b):
 
   class M(Module):
     module_name = "parameterized_extern"
+    ignored_input = Input(types.i1)
+    used_input = Input(types.i4)
+
+    @property
+    def instance_name(self):
+      return "singleton"
 
   return M
 
@@ -97,10 +104,12 @@ class PolynomialSystem(Module):
 
     CoolPolynomialCompute([4, 42], x=23)
 
-    m = ExternWithParams(8, 3)()
+    w1 = Wire(types.i4)
+    m = ExternWithParams({"foo": "bar"}, 3)(ignored_input=None, used_input=w1)
     m.name = "pexternInst"
+    w1.assign(0)
 
-    self.y = poly.y
+    self._set_outputs(poly._outputs())
 
 
 poly = pycde.System([PolynomialSystem],
@@ -118,13 +127,15 @@ poly.print()
 # CHECK:         %example2.y = msft.instance @example2 @PolyComputeForCoeff__62__42__6_(%example.y) : (i32) -> i32
 # CHECK:         %example2_1.y = msft.instance @example2_1 @PolyComputeForCoeff__1__2__3__4__5_(%example.y) : (i32) -> i32
 # CHECK:         %CoolPolynomialCompute.y = msft.instance @CoolPolynomialCompute @supercooldevice(%{{.+}}) : (i32) -> i32
-# CHECK:         msft.instance @M @parameterized_extern() <a: i64 = 8, b: i64 = 3> : () -> ()
+# CHECK:         [[R0:%.+]] = hw.bitcast %false : (i1) -> i1
+# CHECK:         msft.instance @singleton @parameterized_extern([[R0]], %c0_i4)  : (i1, i4) -> ()
+# CHECK:         %c0_i4 = hw.constant 0 : i4
 # CHECK:         msft.output %example.y : i32
 # CHECK:       }
 # CHECK:       msft.module @PolyComputeForCoeff__62__42__6_ {coefficients = {coeff = [62, 42, 6]}} (%x: i32) -> (y: i32)
 # CHECK:       msft.module @PolyComputeForCoeff__1__2__3__4__5_ {coefficients = {coeff = [1, 2, 3, 4, 5]}} (%x: i32) -> (y: i32)
 # CHECK:       msft.module.extern @supercooldevice(%x: i32) -> (y: i32) attributes {verilogName = "supercooldevice"}
-# CHECK:       msft.module.extern @parameterized_extern<a: i64, b: i64>() attributes {verilogName = "parameterized_extern"}
+# CHECK:       msft.module.extern @parameterized_extern(%ignored_input: i1, %used_input: i4) attributes {verilogName = "parameterized_extern"}
 
 print("Generating rest...")
 poly.generate()
