@@ -97,4 +97,4 @@ class ReadInOutOp:
   def create(value):
     value = support.get_value(value)
     type = support.get_self_or_inner(value.type).element_type
-    return sv.ReadInOutOp(type, value)
+    return sv.ReadInOutOp(value)

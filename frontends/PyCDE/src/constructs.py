@@ -42,7 +42,7 @@ def NamedWire(type_or_value: Union[PyCDEType, Signal], name: str):
       self.wire_op = sv.WireOp(hw.InOutType.get(type),
                                name,
                                inner_sym=uniq_name)
-      read_val = sv.ReadInOutOp(type, self.wire_op)
+      read_val = sv.ReadInOutOp(self.wire_op)
       super().__init__(Value(read_val), type)
       self.name = name
 

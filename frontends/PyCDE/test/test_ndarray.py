@@ -64,7 +64,7 @@ class M2(Module):
 class M5(Module):
   in0 = Input(dim(types.i32, 16))
   in1 = Input(types.i32)
-  t_c = dim(types.i32, 16)
+  t_c = dim(types.i32, 32)
   c = Output(t_c)
 
   @generator
