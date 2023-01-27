@@ -140,6 +140,12 @@ static cl::opt<bool> disableAnnotationsUnknown(
     cl::desc("Ignore unknown annotations when parsing"), cl::init(false),
     cl::cat(mainCategory));
 
+static cl::opt<bool> lowerAnnotationsNoRefTypePorts(
+    "lower-annotations-no-ref-type-ports",
+    cl::desc("Create real ports instead of ref type ports when resolving "
+             "wiring problems inside the LowerAnnotations pass"),
+    cl::init(false), cl::Hidden, cl::cat(mainCategory));
+
 static cl::opt<bool>
     emitMetadata("emit-metadata",
                  cl::desc("Emit metadata for metadata annotations"),
@@ -631,7 +637,8 @@ static LogicalResult processBuffer(
   applyPassManagerCLOptions(pm);
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
-      disableAnnotationsUnknown, disableAnnotationsClassless));
+      disableAnnotationsUnknown, disableAnnotationsClassless,
+      lowerAnnotationsNoRefTypePorts));
 
   // If the user asked for --parse-only, stop after running LowerAnnotations.
   if (outputFormat == OutputParseOnly) {
