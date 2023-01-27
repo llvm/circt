@@ -652,7 +652,7 @@ bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType) {
     return destFType == srcFType;
 
   // Type constness must match for equivalence
-  if (destType.isConst() != srcType.isConst())
+  if (destType.isConst() && !srcType.isConst())
     return false;
 
   // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
@@ -707,7 +707,7 @@ bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
     return destFType == srcFType;
 
   // Type constness must match for equivalence
-  if (destType.isConst() != srcType.isConst())
+  if (destType.isConst() && !srcType.isConst())
     return false;
 
   // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.

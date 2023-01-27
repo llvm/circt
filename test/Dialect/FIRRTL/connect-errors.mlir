@@ -537,14 +537,3 @@ firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.const.uint<1>) {
   firrtl.connect %b, %a : !firrtl.const.uint<1>, !firrtl.uint<1>
 }
 }
-
-// -----
-
-/// Const types cannot be connected to non-const types
-
-firrtl.circuit "test" {
-firrtl.module @test(in %a : !firrtl.const.uint<1>, out %b : !firrtl.uint<1>) {
-  // expected-error @+1 {{type mismatch}}
-  firrtl.connect %b, %a : !firrtl.uint<1>, !firrtl.const.uint<1>
-}
-}

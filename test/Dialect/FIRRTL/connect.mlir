@@ -166,4 +166,19 @@ firrtl.module @MixedConstBundle(in %in : !firrtl.bundle<a: uint<1>, b: const.sin
   firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: const.sint<2>>, !firrtl.bundle<a: uint<1>, b: const.sint<2>>
 }
 
+firrtl.module @ConstToNonConst(in %in : !firrtl.const.uint<2>, out %out : !firrtl.uint<2>) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.uint<2>, !firrtl.const.uint<2>
+  firrtl.connect %out, %in : !firrtl.uint<2>, !firrtl.const.uint<2>
+}
+
+firrtl.module @MixedConstToNonConstBundle(in %in : !firrtl.bundle<a: uint<1>, b: const.sint<2>>, out %out : !firrtl.bundle<a: uint<1>, b: sint<2>>) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: sint<2>>, !firrtl.bundle<a: uint<1>, b: const.sint<2>>
+  firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: sint<2>>, !firrtl.bundle<a: uint<1>, b: const.sint<2>>
+}
+
+firrtl.module @ConstToNonConstVec(in %in : !firrtl.const.vector<uint<1>, 3>, out %out : !firrtl.vector<uint<1>, 3>) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.vector<uint<1>, 3>, !firrtl.const.vector<uint<1>, 3>
+  firrtl.connect %out, %in : !firrtl.vector<uint<1>, 3>, !firrtl.const.vector<uint<1>, 3>
+}
+
 }
