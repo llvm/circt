@@ -184,6 +184,10 @@ jobs:
           fetch-depth: 2
           submodules: "true"
 
+      - name: Set git safe
+        run: |
+          git config --global --add safe.directory $PWD
+
       # --------
       # Restore LLVM from cache and build if it's not in there.
       # --------
@@ -234,8 +238,8 @@ jobs:
             -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} \
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-          make check-circt check-circt-unit -j$(nproc)
-          make circt-doc
+          ninja check-circt check-circt-unit -j$(nproc)
+          ninja circt-doc
 
       # --------
       # Lint the CIRCT C++ code.
