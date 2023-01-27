@@ -102,7 +102,8 @@ std::unique_ptr<mlir::Pass> createPrintNLATablePass();
 std::unique_ptr<mlir::Pass>
 createBlackBoxReaderPass(std::optional<mlir::StringRef> inputPrefix = {});
 
-std::unique_ptr<mlir::Pass> createGrandCentralPass();
+std::unique_ptr<mlir::Pass>
+createGrandCentralPass(bool instantiateCompanionOnly = false);
 
 std::unique_ptr<mlir::Pass> createCheckCombCyclesPass();
 
