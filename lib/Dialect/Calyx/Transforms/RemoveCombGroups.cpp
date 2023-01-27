@@ -133,7 +133,7 @@ struct RemoveCombGroupsPattern : public OpRewritePattern<calyx::CombGroupOp> {
 
     rewriter.setInsertionPointToStart(group.getBodyBlock());
     auto oneConstant = rewriter.create<hw::ConstantOp>(
-        group.getLoc(), APInt(1, 1, /*unsigned=*/true));
+        group.getLoc(), APInt(1, 1, /*isSigned=*/true));
 
     // Maintain the set of cell results which have already been assigned to
     // its register within this group.
@@ -152,7 +152,7 @@ struct RemoveCombGroupsPattern : public OpRewritePattern<calyx::CombGroupOp> {
     // following code relies on a checking cell result value use in the
     // control schedule, which needs to remain even when two combinational
     // groups assign to the same cell.
-    for (auto cellOp : cellsAssigned) {
+    for (auto *cellOp : cellsAssigned) {
       auto cell = dyn_cast<CellInterface>(cellOp);
       for (auto combRes : cell.getOutputPorts()) {
         for (auto &use : llvm::make_early_inc_range(combRes.getUses())) {
