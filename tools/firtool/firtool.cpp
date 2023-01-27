@@ -303,6 +303,15 @@ static cl::opt<bool>
                         cl::desc("Disable the Grand Central passes"),
                         cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
+static cl::opt<bool> grandCentralInstantiateCompanionOnly(
+    "grand-central-instantiate-companion",
+    cl::desc(
+        "Run Grand Central in a mode where the companion module is "
+        "instantiated and not bound in and the interface is dropped.  This is "
+        "intended for situations where there is useful assertion logic inside "
+        "the companion, but you don't care about the actual interface."),
+    cl::init(false), cl::Hidden, cl::cat(mainCategory));
+
 static cl::opt<bool> exportModuleHierarchy(
     "export-module-hierarchy",
     cl::desc("Export module and instance hierarchy as JSON"), cl::init(false),
@@ -753,7 +762,8 @@ static LogicalResult processBuffer(
   // certain black boxes should be placed.  Note: all Grand Central Taps related
   // collateral is resolved entirely by LowerAnnotations.
   if (!disableGrandCentral)
-    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createGrandCentralPass());
+    pm.addNestedPass<firrtl::CircuitOp>(
+        firrtl::createGrandCentralPass(grandCentralInstantiateCompanionOnly));
 
   // Read black box source files into the IR.
   StringRef blackBoxRoot = blackBoxRootPath.empty()
