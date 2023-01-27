@@ -27,7 +27,8 @@ namespace firrtl {
 
 std::unique_ptr<mlir::Pass>
 createLowerFIRRTLAnnotationsPass(bool ignoreUnhandledAnnotations = false,
-                                 bool ignoreClasslessAnnotations = false);
+                                 bool ignoreClasslessAnnotations = false,
+                                 bool noRefTypePorts = false);
 
 /// Configure which aggregate values will be preserved by the LowerTypes pass.
 namespace PreserveAggregate {

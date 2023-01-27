@@ -27,7 +27,9 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
     Option<"ignoreAnnotationClassless", "disable-annotation-classless", "bool", "false",
       "Ignore classless annotations.">,
     Option<"ignoreAnnotationUnknown", "disable-annotation-unknown", "bool", "true",
-      "Ignore unknown annotations.">
+      "Ignore unknown annotations.">,
+    Option<"noRefTypePorts", "no-ref-type-ports", "bool", "false",
+      "Create normal ports, not ref type ports.">,
   ];
   let dependentDialects = ["hw::HWDialect"];
   let statistics = [
