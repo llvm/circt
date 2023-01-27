@@ -1,5 +1,5 @@
 if(CIRCT_LEC_ENABLED)
-  add_circt_library(CIRCTSMT
+  add_circt_verification_library(CIRCTSMT
     Solver.cpp
     Circuit.cpp
     LogicExporter.cpp
