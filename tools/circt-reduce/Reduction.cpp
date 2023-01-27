@@ -248,7 +248,8 @@ PassReduction::PassReduction(MLIRContext *context, std::unique_ptr<Pass> pass,
   if (passName.empty())
     passName = pass->getName();
 
-  pm = std::make_unique<PassManager>(context);
+  pm = std::make_unique<PassManager>(context, "builtin.module",
+                                     mlir::OpPassManager::Nesting::Explicit);
   auto opName = pass->getOpName();
   if (opName && opName->equals("firrtl.circuit"))
     pm->nest<firrtl::CircuitOp>().addPass(std::move(pass));
