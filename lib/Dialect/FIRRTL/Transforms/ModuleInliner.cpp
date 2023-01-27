@@ -24,7 +24,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
-#include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/IRMapping.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/SetOperations.h"
 #include "llvm/ADT/SetVector.h"
@@ -395,8 +395,7 @@ public:
 /// result of the instance operation.  When future operations are cloned from
 /// the current block, they will use the value of the wire instead of the
 /// instance results.
-static void mapResultsToWires(BlockAndValueMapping &mapper,
-                              SmallVectorImpl<Value> &wires,
+static void mapResultsToWires(IRMapping &mapper, SmallVectorImpl<Value> &wires,
                               InstanceOp instance) {
   for (unsigned i = 0, e = instance.getNumResults(); i < e; ++i) {
     auto result = instance.getResult(i);
@@ -519,17 +518,16 @@ private:
               SmallVector<StringAttr> &validHierPaths);
 
   /// Clone and rename an operation.
-  void cloneAndRename(StringRef prefix, OpBuilder &b,
-                      BlockAndValueMapping &mapper, Operation &op,
+  void cloneAndRename(StringRef prefix, OpBuilder &b, IRMapping &mapper,
+                      Operation &op,
                       const DenseMap<Attribute, Attribute> &symbolRenames,
                       const DenseSet<Attribute> &localSymbols,
                       ModuleNamespace &moduleNamespace);
 
   /// Rewrite the ports of a module as wires.  This is similar to
   /// cloneAndRename, but operating on ports.
-  void mapPortsToWires(StringRef prefix, OpBuilder &b,
-                       BlockAndValueMapping &mapper, BackedgeBuilder &beb,
-                       FModuleOp target,
+  void mapPortsToWires(StringRef prefix, OpBuilder &b, IRMapping &mapper,
+                       BackedgeBuilder &beb, FModuleOp target,
                        const DenseSet<Attribute> &localSymbols,
                        ModuleNamespace &moduleNamespace,
                        SmallVectorImpl<Value> &wires,
@@ -544,7 +542,7 @@ private:
   /// Flattens a target module into the insertion point of the builder,
   /// renaming all operations using the prefix.  This clones all operations from
   /// the target, and does not trigger inlining on the target itself.
-  void flattenInto(StringRef prefix, OpBuilder &b, BlockAndValueMapping &mapper,
+  void flattenInto(StringRef prefix, OpBuilder &b, IRMapping &mapper,
                    BackedgeBuilder &beb, SmallVectorImpl<Backedge> &edges,
                    FModuleOp target, DenseSet<Attribute> localSymbols,
                    ModuleNamespace &moduleNamespace);
@@ -552,7 +550,7 @@ private:
   /// Inlines a target module into the insertion point of the builder,
   /// prefixing all operations with prefix.  This clones all operations from
   /// the target, and does not trigger inlining on the target itself.
-  void inlineInto(StringRef prefix, OpBuilder &b, BlockAndValueMapping &mapper,
+  void inlineInto(StringRef prefix, OpBuilder &b, IRMapping &mapper,
                   BackedgeBuilder &beb, SmallVectorImpl<Backedge> &edges,
                   FModuleOp target,
                   DenseMap<Attribute, Attribute> &symbolRenames,
@@ -706,8 +704,7 @@ void Inliner::rename(StringRef prefix, Operation *op,
 /// used instead of the module's ports.
 /// Cannot have a RefType wire, so create backedge and put in 'edges' for
 /// resolution later.  Mapper and 'wires' will have the placeholder value.
-void Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b,
-                              BlockAndValueMapping &mapper,
+void Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b, IRMapping &mapper,
                               BackedgeBuilder &beb, FModuleOp target,
                               const DenseSet<Attribute> &localSymbols,
                               ModuleNamespace &moduleNamespace,
@@ -782,7 +779,7 @@ void Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b,
 /// apply the prefix to the name of the operation. This will clone to the
 /// insert point of the builder.
 void Inliner::cloneAndRename(
-    StringRef prefix, OpBuilder &b, BlockAndValueMapping &mapper, Operation &op,
+    StringRef prefix, OpBuilder &b, IRMapping &mapper, Operation &op,
     const DenseMap<Attribute, Attribute> &symbolRenames,
     const DenseSet<Attribute> &localSymbols, ModuleNamespace &moduleNamespace) {
   // Strip any non-local annotations which are local.
@@ -863,8 +860,8 @@ bool Inliner::shouldInline(Operation *op) {
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
-void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
-                          BlockAndValueMapping &mapper, BackedgeBuilder &beb,
+void Inliner::flattenInto(StringRef prefix, OpBuilder &b, IRMapping &mapper,
+                          BackedgeBuilder &beb,
                           SmallVectorImpl<Backedge> &edges, FModuleOp target,
                           DenseSet<Attribute> localSymbols,
                           ModuleNamespace &moduleNamespace) {
@@ -958,7 +955,7 @@ void Inliner::flattenInstances(FModuleOp module) {
 
     // Create the wire mapping for results + ports. We RAUW the results instead
     // of mapping them.
-    BlockAndValueMapping mapper;
+    IRMapping mapper;
     b.setInsertionPoint(instance);
 
     auto nestedPrefix = (instance.getName() + "_").str();
@@ -983,9 +980,9 @@ void Inliner::flattenInstances(FModuleOp module) {
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
-void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
-                         BlockAndValueMapping &mapper, BackedgeBuilder &beb,
-                         SmallVectorImpl<Backedge> &edges, FModuleOp target,
+void Inliner::inlineInto(StringRef prefix, OpBuilder &b, IRMapping &mapper,
+                         BackedgeBuilder &beb, SmallVectorImpl<Backedge> &edges,
+                         FModuleOp target,
                          DenseMap<Attribute, Attribute> &symbolRenames,
                          ModuleNamespace &moduleNamespace) {
   auto moduleName = target.getNameAttr();
@@ -1158,7 +1155,7 @@ void Inliner::inlineInstances(FModuleOp parent) {
     currentPath.emplace_back(moduleName, instInnerSym);
     // Create the wire mapping for results + ports. We RAUW the results instead
     // of mapping them.
-    BlockAndValueMapping mapper;
+    IRMapping mapper;
     b.setInsertionPoint(instance);
     auto nestedPrefix = (instance.getName() + "_").str();
     mapPortsToWires(nestedPrefix, b, mapper, beb, target, {}, moduleNamespace,

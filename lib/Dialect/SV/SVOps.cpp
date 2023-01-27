@@ -1513,28 +1513,6 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
-// ReadInOutOp
-//===----------------------------------------------------------------------===//
-
-void ReadInOutOp::build(OpBuilder &builder, OperationState &result,
-                        Value input) {
-  auto resultType = input.getType().cast<InOutType>().getElementType();
-  build(builder, result, resultType, input);
-}
-
-//===----------------------------------------------------------------------===//
-// ArrayIndexInOutOp
-//===----------------------------------------------------------------------===//
-
-void ArrayIndexInOutOp::build(OpBuilder &builder, OperationState &result,
-                              Value input, Value index) {
-  auto resultType = input.getType().cast<InOutType>().getElementType();
-  resultType = getAnyHWArrayElementType(resultType);
-  assert(resultType && "input should have 'inout of an array' type");
-  build(builder, result, InOutType::get(resultType), input, index);
-}
-
-//===----------------------------------------------------------------------===//
 // IndexedPartSelectInOutOp
 //===----------------------------------------------------------------------===//
 

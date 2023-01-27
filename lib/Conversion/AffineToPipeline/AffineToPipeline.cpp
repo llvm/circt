@@ -25,9 +25,9 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/Dominance.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/STLExtras.h"
@@ -397,7 +397,7 @@ LogicalResult AffineToPipeline::createPipelinePipeline(
 
   // Maintain mappings of values in the loop body and results of stages,
   // initially populated with the iter args.
-  BlockAndValueMapping valueMap;
+  IRMapping valueMap;
   for (size_t i = 0; i < iterArgs.size(); ++i)
     valueMap.map(forOp.getBody()->getArgument(i),
                  pipeline.getStagesBlock().getArgument(i));

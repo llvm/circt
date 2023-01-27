@@ -14,8 +14,8 @@
 #include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
-#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -994,7 +994,7 @@ void FuncOp::print(OpAsmPrinter &p) {
 
 /// Clone the internal blocks from this function into dest and all attributes
 /// from this function to dest.
-void FuncOp::cloneInto(FuncOp dest, BlockAndValueMapping &mapper) {
+void FuncOp::cloneInto(FuncOp dest, IRMapping &mapper) {
   // Add the attributes of this function to dest.
   llvm::MapVector<StringAttr, Attribute> newAttrMap;
   for (const auto &attr : dest->getAttrs())
@@ -1017,7 +1017,7 @@ void FuncOp::cloneInto(FuncOp dest, BlockAndValueMapping &mapper) {
 /// provided (leaving them alone if no entry is present). Replaces references
 /// to cloned sub-values with the corresponding value that is copied, and adds
 /// those mappings to the mapper.
-FuncOp FuncOp::clone(BlockAndValueMapping &mapper) {
+FuncOp FuncOp::clone(IRMapping &mapper) {
   // Create the new function.
   FuncOp newFunc = cast<FuncOp>(getOperation()->cloneWithoutRegions());
 
@@ -1057,7 +1057,7 @@ FuncOp FuncOp::clone(BlockAndValueMapping &mapper) {
 }
 
 FuncOp FuncOp::clone() {
-  BlockAndValueMapping mapper;
+  IRMapping mapper;
   return clone(mapper);
 }
 

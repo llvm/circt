@@ -25,7 +25,7 @@
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -501,8 +501,8 @@ static unsigned getIndexOfOperandResult(Operation *op, Value result) {
 /// up to the initial constant value(s). This is required to clone the
 /// initialization of array and struct signals, where the init operand cannot
 /// originate from a constant operation.
-static Value recursiveCloneInit(OpBuilder &initBuilder,
-                                BlockAndValueMapping &mapping, Value init) {
+static Value recursiveCloneInit(OpBuilder &initBuilder, IRMapping &mapping,
+                                Value init) {
   SmallVector<Value> clonedOperands;
   Operation *initOp = init.getDefiningOp();
 
@@ -1143,7 +1143,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
         // Clone and insert the operation that defines the signal's init
         // operand (assmued to be a constant/array op)
-        BlockAndValueMapping mapping;
+        IRMapping mapping;
         Value initDef = recursiveCloneInit(initBuilder, mapping, op.getInit());
 
         if (!initDef)
