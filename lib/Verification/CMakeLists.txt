@@ -25,4 +25,5 @@ if(CIRCT_LEC_ENABLED)
     CIRCTSystemC
 
   )
+  target_include_directories(CIRCTSMT PRIVATE ${CIRCT_Z3_INCLUDES})
 endif()
