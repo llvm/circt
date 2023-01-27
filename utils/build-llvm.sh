@@ -23,6 +23,7 @@ mkdir -p llvm/$BUILD_DIR
 mkdir -p llvm/$INSTALL_DIR
 cd llvm/$BUILD_DIR
 cmake ../llvm \
+  -GNinja \
   -DBUILD_SHARED_LIBS=ON \
   -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
   -DCMAKE_C_COMPILER=$CC \
