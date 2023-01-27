@@ -1112,8 +1112,16 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
       llvm::StringSwitch<bool>(classBase)
           .Cases("StringType", "BooleanType", "IntegerType", "DoubleType", true)
           .Default(false);
-  if (isIgnorable)
-    return augmentedType;
+  if (isIgnorable) {
+    NamedAttrList attrs;
+    attrs.append("class", classAttr);
+    attrs.append("name", name);
+    auto value = tryGetAs<Attribute>(augmentedType, root, "value", loc, clazz, path);
+    if (!value)
+      return std::nullopt;
+    attrs.append("value", value);
+    return DictionaryAttr::getWithSorted(context, attrs);
+  }
 
   // Anything else is unexpected or a user error if they manually wrote
   // annotations.  Print an error and error out.
