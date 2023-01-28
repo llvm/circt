@@ -18,7 +18,6 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OperationSupport.h"
 
-
 using namespace circt;
 using namespace calyx;
 using namespace mlir;
