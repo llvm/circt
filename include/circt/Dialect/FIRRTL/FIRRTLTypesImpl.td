@@ -20,7 +20,11 @@ include "circt/Dialect/HW/HWTypeInterfaces.td"
 class FIRRTLImplType<string name,
                      list<Trait> traits = [],
                      string baseCppClass = "::circt::firrtl::FIRRTLBaseType">
-    : TypeDef<FIRRTLDialect, name, traits, baseCppClass> {}
+    : TypeDef<FIRRTLDialect, name, traits, baseCppClass> {
+  // Storage classes must be defined in C++ and 
+  // inherit from FIRRTLBaseTypeStorage
+  let genStorageClass = false;
+}
 
 //===----------------------------------------------------------------------===//
 // Type Traits
@@ -39,6 +43,7 @@ def SIntImpl : FIRRTLImplType<"SInt",
                               "::circt::firrtl::IntType"> {
   let summary = "A signed integer type, whose width may not be known.";
   let parameters = (ins "int32_t":$widthOrSentinel, "bool":$isConst);
+  let storageClass = "WidthTypeStorage";
   let builders = [
     TypeBuilder<(ins "std::optional<int32_t>":$width, CArg<"bool", "false">:$isConst)>,
     TypeBuilder<(ins)>,
@@ -47,7 +52,6 @@ def SIntImpl : FIRRTLImplType<"SInt",
   let extraClassDeclaration = [{
     using WidthQualifiedTypeTrait<SIntType>::getWidth;
     using WidthQualifiedTypeTrait<SIntType>::hasWidth;
-    bool isConst() { return getIsConst(); }
   }];
 }
 
@@ -56,6 +60,7 @@ def UIntImpl : FIRRTLImplType<"UInt",
                               "::circt::firrtl::IntType"> {
   let summary = "An unsigned integer type, whose width may not be known.";
   let parameters = (ins "int32_t":$widthOrSentinel, "bool":$isConst);
+  let storageClass = "WidthTypeStorage";
   let builders = [
     TypeBuilder<(ins "std::optional<int32_t>":$width, CArg<"bool", "false">:$isConst)>,
     TypeBuilder<(ins)>,
@@ -64,66 +69,56 @@ def UIntImpl : FIRRTLImplType<"UInt",
   let extraClassDeclaration = [{
     using WidthQualifiedTypeTrait<UIntType>::getWidth;
     using WidthQualifiedTypeTrait<UIntType>::hasWidth;
-    bool isConst() { return getIsConst(); }
   }];
 }
 
 def ClockTypeImpl : FIRRTLImplType<"Clock", [FieldIDTypeInterface]> {
   let summary = "Clock signal";
   let parameters = (ins "bool":$isConst);
+  let storageClass = "FIRRTLBaseTypeStorage";
   let builders = [
     TypeBuilder<(ins), [{
       return $_get($_ctxt, false);
     }]>
   ];
-  let extraClassDeclaration = [{
-    bool isConst() { return getIsConst(); }
-  }];
 }
 
 def ResetTypeImpl : FIRRTLImplType<"Reset", [FieldIDTypeInterface]> {
   let summary = "Reset Signal";
   let parameters = (ins "bool":$isConst);
+  let storageClass = "FIRRTLBaseTypeStorage";
   let builders = [
     TypeBuilder<(ins), [{
       return $_get($_ctxt, false);
     }]>
   ];
-  let extraClassDeclaration = [{
-    bool isConst() { return getIsConst(); }
-  }];
 }
 
 def AsyncResetTypeImpl : FIRRTLImplType<"AsyncReset", [FieldIDTypeInterface]> {
   let summary = "AsyncReset signal";
   let parameters = (ins "bool":$isConst);
+  let storageClass = "FIRRTLBaseTypeStorage";
   let builders = [
     TypeBuilder<(ins), [{
       return $_get($_ctxt, false);
     }]>
   ];
-  let extraClassDeclaration = [{
-    bool isConst() { return getIsConst(); }
-  }];
 }
 
 def AnalogTypeImpl : FIRRTLImplType<"Analog",
   [WidthQualifiedTypeTrait, FieldIDTypeInterface]> {
   let summary = "Analog signal";
   let parameters = (ins "int32_t":$widthOrSentinel, "bool":$isConst);
+  let storageClass = "WidthTypeStorage";
   let builders = [
     TypeBuilder<(ins "std::optional<int32_t>":$width, CArg<"bool", "false">:$isConst)>,
     TypeBuilder<(ins)>,
   ];
-  let extraClassDeclaration = [{
-    bool isConst() { return getIsConst(); }
-  }];
   let genVerifyDecl = true;
 }
 
 def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
   let summary = "a fixed size collection of elements, like an array.";
-  let genStorageClass = false;
   let parameters = (ins
       TypeParameter<"::circt::firrtl::FIRRTLBaseType", "Type of vector elements">:$elementType,
      "size_t":$numElements
@@ -141,10 +136,6 @@ def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
 
     /// Return this type with any flip types recursively removed from itself.
     FIRRTLBaseType getPassiveType();
-
-    /// Returns true if this is a 'const' type that can only hold compile-time
-    /// constant values
-    bool isConst();
 
     /// Get an integer ID for the field. Field IDs start at 1, and are assigned
     /// to each field in a vector in a recursive depth-first walk of all
@@ -179,7 +170,6 @@ def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
 
 def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
   let summary = "an aggregate of named elements. This is effectively a struct.";
-  let genStorageClass = false;
   let parameters = (ins "ArrayRef<BundleElement>":$elements);
   let extraClassDeclaration = [{
     /// Each element of a bundle, which is a name and type.
@@ -231,10 +221,6 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
 
     /// Return this type with any flip types recursively removed from itself.
     FIRRTLBaseType getPassiveType();
-
-    /// Returns true if this is a 'const' type that can only hold compile-time
-    /// constant values
-    bool isConst();
 
     /// Get an integer ID for the field. Field IDs start at 1, and are assigned
     /// to each field in a bundle in a recursive pre-order walk of all fields,
