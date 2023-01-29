@@ -812,7 +812,7 @@ FuncOp FuncOp::create(Location location, StringRef name, ArrayAttr argNames,
 FuncOp FuncOp::create(Location location, StringRef name, ArrayAttr argNames,
                       FunctionType type, Operation::dialect_attr_range attrs) {
   SmallVector<NamedAttribute, 8> attrRef(attrs);
-  return create(location, name, argNames, type, llvm::makeArrayRef(attrRef));
+  return create(location, name, argNames, type, ArrayRef(attrRef));
 }
 
 FuncOp FuncOp::create(Location location, StringRef name, ArrayAttr argNames,

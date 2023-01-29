@@ -1270,7 +1270,7 @@ static ParseResult parseMemoryAccessOp(OpAsmParser &parser,
   // The last type will be the data type of the operation; the prior will be the
   // address types.
   Type dataType = parsedTypes.back();
-  auto parsedTypesRef = llvm::makeArrayRef(parsedTypes);
+  auto parsedTypesRef = ArrayRef(parsedTypes);
   result.addTypes(dataType);
   result.addTypes(parsedTypesRef.drop_back());
   allOperands.append(addressOperands);

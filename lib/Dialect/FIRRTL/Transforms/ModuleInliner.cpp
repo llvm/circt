@@ -378,9 +378,7 @@ public:
     return sym;
   }
 
-  ArrayRef<InnerRefAttr> getAdditionalSymbols() {
-    return llvm::makeArrayRef(newTops);
-  }
+  ArrayRef<InnerRefAttr> getAdditionalSymbols() { return ArrayRef(newTops); }
 
   void setInnerSym(Attribute module, StringAttr innerSym) {
     assert(symIdx.count(module) && "Mutable NLA did not contain symbol");
