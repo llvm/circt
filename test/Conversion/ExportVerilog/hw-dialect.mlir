@@ -1348,13 +1348,13 @@ hw.module @inline_bitcast_in_concat(%in1: i7, %in2: !hw.array<8xi4>) -> (out: i3
   hw.output %0 : i39
 }
 
-// CHECK-LABEL: module dont_inline_aggregate_constant_into_port(
+// CHECK-LABEL: module DontInlineAggregateConstantIntoPorts(
 // CHECK:         wire [1:0][3:0] _GEN = '{4'h0, 4'h1};
 // CHECK-NEXT:    Array i0 (
 // CHECK-NEXT:     .a (_GEN)
 // CHECK-NEXT:    );
 // CHECK-NEXT:  endmodule
-hw.module @dont_inline_aggregate_constant_into_port() -> () {
+hw.module @DontInlineAggregateConstantIntoPorts() -> () {
   %0 = hw.aggregate_constant [0 : i4, 1 : i4] : !hw.array<2xi4>
   hw.instance "i0" @Array(a: %0: !hw.array<2xi4>) -> ()
 }
