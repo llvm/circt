@@ -57,18 +57,90 @@ private:
   LogicalResult populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest);
   LogicalResult solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest);
   LogicalResult createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest);
+  LogicalResult constantCSE();
+  LogicalResult unrollAndForwardStores();
 
   CyclicSchedulingAnalysis *schedulingAnalysis;
 };
 
+// This forwards stores to loads for a very specific, particular pattern: store-load pairs on memrefs that accumulate
+// accumulates results in the body of a for loop:
+//  affine.for %arg3 = 0 to 8 {
+//    %3 = affine.load %arg0[%arg1, %arg3] : memref<1x8xi32>
+//    %4 = affine.load %1[%arg3, %arg2] : memref<8x8xi32>
+//    %5 = affine.load %2[%arg1, %arg2] : memref<1x8xi32>
+//    %6 = arith.muli %3, %4 : i32
+//    %7 = arith.addi %5, %6 : i32
+//    affine.store %7, %2[%arg1, %arg2] : memref<1x8xi32>
+//  }
+// After unrolling this looks like
+//  ...
+//  %281 = arith.muli %278, %279 : i32
+//  %282 = arith.addi %280, %281 : i32
+//  affine.store %282, %1[%arg1, %241] : memref<1x8xi32>
+//  %283 = affine.apply #map6(%c0_0)
+//  %284 = affine.load %arg0[%arg1, %283] : memref<1x8xi32>
+//  %285 = affine.load %0[%283, %241] : memref<8x8xi32>
+//  %286 = affine.load %1[%arg1, %241] : memref<1x8xi32>
+//  %287 = arith.muli %284, %285 : i32
+// where we observe that affine.store %282 can be forwarded to %284 = affine.load.
+// Thus, in this method we search for such pairs - a load and its immediately prior store.
+static LogicalResult forwardFullyUnrolledStoreToLoad(AffineReadOpInterface loadOp,
+                                                     SmallVectorImpl<Operation *> &opsToErase) {
+  Operation *prevOp = loadOp->getPrevNode();
+  while (prevOp) {
+    auto storeOp = dyn_cast<AffineWriteOpInterface>(prevOp);
+    if (!storeOp) {
+      prevOp = prevOp->getPrevNode();
+      continue;
+    }
+
+    MemRefAccess srcAccess(storeOp);
+    MemRefAccess dstAccess(loadOp);
+
+    if (srcAccess != dstAccess)
+      return failure();
+
+    // Since we forward only from the immediately prior store, we verify that there are neither intervening
+    // stores nor intervening loads in between.
+    if (!mlir::hasNoInterveningEffect<MemoryEffects::Write>(storeOp, loadOp))
+      return failure();
+
+    // Perform the actual store to load forwarding.
+    Value storeVal = cast<AffineWriteOpInterface>(storeOp).getValueToStore();
+    // Check if 2 values have the same shape. This is needed for affine
+    // vector loads and stores.
+    if (storeVal.getType() != loadOp.getValue().getType())
+      return failure();
+    loadOp.getValue().replaceAllUsesWith(storeVal);
+    // Record this to erase later.
+    opsToErase.push_back(storeOp);
+    // Record this to erase later.
+    opsToErase.push_back(loadOp);
+    return success();
+  }
+  return failure();
+}
+
 } // namespace
 
 void AffineToPipeline::runOnOperation() {
-  // Get dependence analysis for the whole function.
-  auto dependenceAnalysis = getAnalysis<MemoryDependenceAnalysis>();
+  if (failed(unrollAndForwardStores()))
+    return signalPassFailure();
+
+  // auto dependenceAnalysis = getAnalysis<MemoryDependenceAnalysis>();
+  auto funcOp = getOperation();
+  ImplicitLocOpBuilder builder(funcOp.getLoc(), funcOp);
+  auto dummyFuncOp =
+      builder.create<func::FuncOp>("dummyFuncOp", funcOp.getFunctionType());
+  MemoryDependenceAnalysis dependenceAnalysis(dummyFuncOp);
+  dummyFuncOp.erase();
 
   // After dependence analysis, materialize affine structures.
   if (failed(lowerAffineStructures(dependenceAnalysis)))
+    return signalPassFailure();
+
+  if (failed(constantCSE()))
     return signalPassFailure();
 
   // Get scheduling analysis for the whole function.
@@ -79,10 +151,6 @@ void AffineToPipeline::runOnOperation() {
   for (auto root : llvm::make_early_inc_range(outerLoops)) {
     SmallVector<AffineForOp> nestedLoops;
     getPerfectlyNestedLoops(nestedLoops, root);
-
-    // Restrict to single loops to simplify things for now.
-    if (nestedLoops.size() != 1)
-      continue;
 
     // Populate the target operator types.
     if (failed(populateOperatorTypes(nestedLoops)))
@@ -190,6 +258,22 @@ struct IfOpHoisting : OpConversionPattern<IfOp> {
   }
 };
 
+class AffineApplyLowering : public OpRewritePattern<AffineApplyOp> {
+public:
+  using OpRewritePattern<AffineApplyOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(AffineApplyOp op,
+                                PatternRewriter &rewriter) const override {
+    auto maybeExpandedMap =
+        expandAffineMap(rewriter, op.getLoc(), op.getAffineMap(),
+                        llvm::to_vector<8>(op.getOperands()));
+    if (!maybeExpandedMap)
+      return failure();
+    rewriter.replaceOp(op, *maybeExpandedMap);
+    return success();
+  }
+};
+
 /// Helper to determine if an scf::IfOp is in mux-like form.
 static bool ifOpLegalityCallback(IfOp op) {
   return op.thenBlock()->without_terminator().empty() &&
@@ -217,7 +301,7 @@ LogicalResult AffineToPipeline::lowerAffineStructures(
   ConversionTarget target(*context);
   target.addLegalDialect<AffineDialect, ArithDialect, MemRefDialect,
                          SCFDialect>();
-  target.addIllegalOp<AffineIfOp, AffineLoadOp, AffineStoreOp>();
+  target.addIllegalOp<AffineIfOp, AffineLoadOp, AffineStoreOp, AffineApplyOp>();
   target.addDynamicallyLegalOp<IfOp>(ifOpLegalityCallback);
   target.addDynamicallyLegalOp<AffineYieldOp>(yieldOpLegalityCallback);
 
@@ -226,6 +310,7 @@ LogicalResult AffineToPipeline::lowerAffineStructures(
   patterns.add<AffineLoadLowering>(context, dependenceAnalysis);
   patterns.add<AffineStoreLowering>(context, dependenceAnalysis);
   patterns.add<IfOpHoisting>(context);
+  patterns.add<AffineApplyLowering>(context);
 
   if (failed(applyPartialConversion(op, target, std::move(patterns))))
     return failure();
@@ -259,11 +344,12 @@ LogicalResult AffineToPipeline::populateOperatorTypes(
   WalkResult result = forOp.getBody()->walk([&](Operation *op) {
     return TypeSwitch<Operation *, WalkResult>(op)
         .Case<AddIOp, IfOp, AffineYieldOp, arith::ConstantOp, CmpIOp,
-              IndexCastOp, memref::AllocaOp, YieldOp>([&](Operation *combOp) {
-          // Some known combinational ops.
-          problem.setLinkedOperatorType(combOp, combOpr);
-          return WalkResult::advance();
-        })
+              IndexCastOp, memref::AllocaOp, YieldOp, arith::SelectOp>(
+            [&](Operation *combOp) {
+              // Some known combinational ops.
+              problem.setLinkedOperatorType(combOp, combOpr);
+              return WalkResult::advance();
+            })
         .Case<AffineLoadOp, AffineStoreOp, memref::LoadOp, memref::StoreOp>(
             [&](Operation *seqOp) {
               // Some known sequential ops. In certain cases, reads may be
@@ -334,6 +420,64 @@ LogicalResult AffineToPipeline::solveSchedulingProblem(
     });
   });
 
+  return success();
+}
+
+LogicalResult AffineToPipeline::constantCSE() {
+  auto funcOp = mlir::OperationPass<FuncOp>::getOperation();
+  SmallVector<arith::ConstantOp, 8> constsToRemove;
+  llvm::SmallDenseMap<TypedAttr, arith::ConstantOp> knownConstants;
+  funcOp.walk([&](arith::ConstantOp constOp) {
+    auto val = constOp.getValue();
+    if (!knownConstants.count(val))
+      knownConstants[val] = constOp;
+    else
+      constsToRemove.push_back(constOp);
+  });
+  if (knownConstants.empty())
+    return success();
+
+  auto firstConst = *funcOp.getOps<arith::ConstantOp>().begin();
+  for (auto &item : knownConstants) {
+    auto constOp = item.getSecond();
+    if (constOp != firstConst)
+      constOp->moveAfter(firstConst);
+  }
+  for (auto &constOp : constsToRemove) {
+    constOp->replaceAllUsesWith(knownConstants[constOp.getValue()]);
+  }
+  for (auto &constOp : constsToRemove) {
+    constOp->erase();
+  }
+  return success();
+}
+
+LogicalResult AffineToPipeline::unrollAndForwardStores() {
+  auto outerLoops = getOperation().getOps<AffineForOp>();
+  for (auto root : llvm::make_early_inc_range(outerLoops)) {
+    SmallVector<AffineForOp> nestedLoops;
+    getPerfectlyNestedLoops(nestedLoops, root);
+    if (nestedLoops.size() != 1) {
+      nestedLoops[0].getBody(0)->walk<WalkOrder::PostOrder>([&](AffineForOp forOp) {
+        // TODO(max): figure out a smarter way to compute factor (something something dependence analysis)
+        auto unrollFactor = getConstantTripCount(forOp).value_or(std::numeric_limits<int>::max());
+        if (failed(loopUnrollUpToFactor(forOp, unrollFactor)))
+          return signalPassFailure();
+      });
+    }
+  }
+
+  SmallVector<Operation *, 8> opsToErase;
+  for (auto forOp : llvm::make_early_inc_range(outerLoops)) {
+    // Walk all load's and perform store to load forwarding.
+    forOp.walk([&](AffineReadOpInterface loadOp) {
+      forwardFullyUnrolledStoreToLoad(loadOp, opsToErase);
+    });
+    // Erase all load op's whose results were replaced with store fwd'ed ones.
+    for (auto *op : opsToErase)
+      op->erase();
+    opsToErase.clear();
+  }
   return success();
 }
 
@@ -430,6 +574,7 @@ LogicalResult AffineToPipeline::createPipelinePipeline(
           opsWithReturns.insert(op);
           stageTypes.append(op->getResultTypes().begin(),
                             op->getResultTypes().end());
+          break;
         }
       }
     }
@@ -448,8 +593,9 @@ LogicalResult AffineToPipeline::createPipelinePipeline(
     builder.setInsertionPointToStart(&stageBlock);
 
     // Sort the group according to original dominance.
-    llvm::sort(group,
-               [&](Operation *a, Operation *b) { return dom.dominates(a, b); });
+    //    llvm::sort(group,
+    //               [&](Operation *a, Operation *b) { return dom.dominates(a,
+    //               b); });
 
     // Move over the operations and add their results to the terminator.
     SmallVector<std::tuple<Operation *, Operation *, unsigned>> movedOps;
