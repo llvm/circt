@@ -696,8 +696,8 @@ bool ExportVerilog::isExpressionEmittedInline(Operation *op,
   // Never create a temporary which is only going to be assigned to an output
   // port, wire, or reg.
   if (op->hasOneUse() &&
-      isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp, sv::PAssignOp,
-          hw::InstanceOp>(*op->getUsers().begin()))
+      isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp, sv::PAssignOp>(
+          *op->getUsers().begin()))
     return true;
 
   // If mux inlining is dissallowed, we cannot inline muxes.
