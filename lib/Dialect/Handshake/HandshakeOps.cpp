@@ -1419,6 +1419,10 @@ FunctionType InstanceOp::getModuleType() {
   return FunctionType::get(getContext(), getOperandTypes(), getResultTypes());
 }
 
+FunctionType ExternalInstanceOp::getModuleType() {
+  return FunctionType::get(getContext(), getOperandTypes(), getResultTypes());
+}
+
 ParseResult UnpackOp::parse(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::UnresolvedOperand tuple;
   TupleType type;

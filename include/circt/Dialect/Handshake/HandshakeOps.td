@@ -184,6 +184,35 @@ def InstanceOp : Handshake_Op<"instance", [
   }];
 }
 
+// ExternalInstanceOp
+def ExternalInstanceOp : Handshake_Op<"external_instance", []> {
+  let summary = "external module instantiate operation";
+  let description = [{
+    The `external_instance` operation represents the instantiation of an external module.  This
+    is similar to a function call, except that different instances of the
+    same module are guaranteed to have their own distinct state.
+    The instantiated module is encoded as a symbol reference attribute named
+    "module". Compared to the instance operation this operation references an external function
+    from a different dialect than the Handshake dialect.
+
+    Example:
+    ```mlir
+    %2 = handshake.external_instance @ext1(%0, %1) : (f32, f32) -> (f32)
+    ```
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$module, Variadic<AnyType>:$opOperands);
+  let results = (outs Variadic<AnyType>);
+
+  let extraClassDeclaration = [{
+    FunctionType getModuleType();
+  }];
+
+  let assemblyFormat = [{
+    $module `(` $opOperands `)` attr-dict `:` functional-type($opOperands, results)
+  }];
+}
+
 // This is almost exactly like a standard FuncOp, except that it has some
 // extra verification conditions.  In particular, each Value must
 // only have a single use.
