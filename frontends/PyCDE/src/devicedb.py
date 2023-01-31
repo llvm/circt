@@ -55,12 +55,13 @@ class PhysLocation:
 
 
 class LocationVector:
-  from .pycde_types import Type
+  from .types import _FromCirctType
 
   __slots__ = ["type", "_loc"]
 
   @singledispatchmethod
-  def __init__(self, type: Type, locs: List[Optional[Tuple[int, int, int]]]):
+  def __init__(self, type: _FromCirctType, locs: List[Optional[Tuple[int, int,
+                                                                     int]]]):
     assert len(locs) == type.bitwidth, \
       "List length must match reg bitwidth"
     from .circt.dialects import msft as circt_msft

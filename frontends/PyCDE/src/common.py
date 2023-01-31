@@ -7,7 +7,7 @@ from __future__ import annotations
 from .circt.dialects import esi as raw_esi, msft
 from .circt import ir
 
-from .pycde_types import ChannelType
+from .types import Type, Channel, ClockType
 
 from functools import singledispatchmethod
 
@@ -17,9 +17,9 @@ class ModuleDecl:
 
   __slots__ = ["name", "_type"]
 
-  def __init__(self, type: ir.Type, name: str = None):
+  def __init__(self, type: Type, name: str = None):
     self.name: str = name
-    self._type: ir.Type = type
+    self._type: Type = type
 
   @property
   def type(self):
@@ -33,8 +33,8 @@ class Output(ModuleDecl):
 class OutputChannel(Output):
   """Create an ESI output channel port."""
 
-  def __init__(self, type: ir.Type, name: str = None):
-    type = ChannelType(raw_esi.ChannelType.get(type))
+  def __init__(self, type: Type, name: str = None):
+    type = Channel(type)
     super().__init__(type, name)
 
 
@@ -46,14 +46,14 @@ class Clock(Input):
   """Create a clock input"""
 
   def __init__(self, name: str = None):
-    super().__init__(ir.IntegerType.get_signless(1), name)
+    super().__init__(ClockType(), name)
 
 
 class InputChannel(Input):
   """Create an ESI input channel port."""
 
-  def __init__(self, type: ir.Type, name: str = None):
-    type = ChannelType(raw_esi.ChannelType.get(type))
+  def __init__(self, type: Type, name: str = None):
+    type = Channel(type)
     super().__init__(type, name)
 
 

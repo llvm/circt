@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from .support import get_user_loc, _obj_to_value_infer_type
 
-from .circt.dialects import esi, sv
+from .circt.dialects import sv
 from .circt import support
 from .circt import ir
 
@@ -18,7 +18,7 @@ import numpy as np
 
 
 def Value(value, type=None):
-  from .pycde_types import Type
+  from .types import _FromCirctType
 
   if isinstance(value, Signal):
     return value
@@ -29,7 +29,7 @@ def Value(value, type=None):
 
   if type is None:
     type = resvalue.type
-  type = Type(type)
+  type = _FromCirctType(type)
 
   return type._get_value_class()(resvalue, type)
 
@@ -38,7 +38,7 @@ class Signal:
   """Root of the PyCDE value (signal, in RTL terms) hierarchy."""
 
   def __init__(self, value, type=None):
-    from .pycde_types import Type
+    from .types import _FromCirctType
 
     if isinstance(value, ir.Value):
       self.value = value
@@ -50,7 +50,7 @@ class Signal:
     if type is not None:
       self.type = type
     else:
-      self.type = Type(self.value.type)
+      self.type = _FromCirctType(self.value.type)
 
   _reg_name = re.compile(r"^(.*)__reg(\d+)$")
 
@@ -74,7 +74,7 @@ class Signal:
         raise ValueError("If 'clk' not specified, must be in clock block")
 
     from .dialects import seq, hw
-    from .pycde_types import types, BitVectorType
+    from .types import types, Bits
     if name is None:
       basename = None
       if self.name is not None:
@@ -93,7 +93,7 @@ class Signal:
       # If rst without reset value, provide a default '0'.
       if rst_value is None and rst is not None:
         rst_value = types.int(self.type.bitwidth)(0)
-        if not isinstance(self.type, BitVectorType):
+        if not isinstance(self.type, Bits):
           rst_value = hw.BitcastOp(self.type, rst_value)
 
       reg = self.value
@@ -284,7 +284,7 @@ class BitsSignal(BitVectorSignal):
   @singledispatchmethod
   def __getitem__(self, idxOrSlice: Union[int, slice]) -> BitVectorSignal:
     lo, hi = get_slice_bounds(len(self), idxOrSlice)
-    from .pycde_types import types
+    from .types import types
     from .dialects import comb
     ret_type = types.int(hi - lo)
 
@@ -384,7 +384,7 @@ class BitsSignal(BitVectorSignal):
     return self.__exec_signless_binop_nocast__(other, comb.XorOp, "^", "xor")
 
   def __invert__(self):
-    from .pycde_types import types
+    from .types import types
     ret = self ^ types.int(self.type.width)(-1)
     if self.name is not None:
       ret.name = f"inv_{self.name}"
@@ -467,7 +467,7 @@ class UIntValue(IntValue):
 class SIntValue(IntValue):
 
   def __neg__(self):
-    from .pycde_types import types
+    from .types import types
     return self * types.int(self.type.width)(-1).as_sint()
 
 
@@ -483,7 +483,7 @@ def And(*items: List[BitVectorSignal]):
   return comb.AndOp(*items)
 
 
-class ListValue(Signal):
+class ArraySignal(Signal):
 
   @singledispatchmethod
   def __getitem__(self, idx: Union[int, BitVectorSignal]) -> Signal:
@@ -501,7 +501,7 @@ class ListValue(Signal):
     if idxs[2] != 1:
       raise ValueError("Array slices do not support steps")
 
-    from .pycde_types import types
+    from .types import types
     from .dialects import hw
     ret_type = types.array(self.type.element_type, idxs[1] - idxs[0])
 
@@ -523,15 +523,16 @@ class ListValue(Signal):
       low_idx = low_idx.pad_or_truncate(self.type.size.bit_length())
 
     from .dialects import hw
+    from .types import Array
     with get_user_loc():
       v = hw.ArraySliceOp(self.value, low_idx,
-                          hw.ArrayType.get(self.type.element_type, num_elems))
+                          Array(self.type.element_type, num_elems))
       if self.name and isinstance(low_idx, int):
         v.name = self.name + f"__{low_idx}upto{low_idx+num_elems}"
       return v
 
   def or_reduce(self):
-    from .pycde_types import types
+    from .types import types
     bits = [self[i] for i in range(len(self))]
     assert bits[0].type == types.i1
     return Or(*bits)
@@ -609,12 +610,13 @@ class ChannelValue(Signal):
     raise TypeError("Cannot register a channel")
 
   def unwrap(self, ready):
-    from .pycde_types import types
+    from .dialects import esi
     from .support import _obj_to_value
+    from .types import types
     ready = _obj_to_value(ready, types.i1)
     unwrap_op = esi.UnwrapValidReadyOp(self.type.inner_type, types.i1,
                                        self.value, ready.value)
-    return Value(unwrap_op.rawOutput), Value(unwrap_op.valid)
+    return Value(unwrap_op[0]), Value(unwrap_op[1])
 
 
 def wrap_opviews_with_values(dialect, module_name, excluded=[]):
@@ -622,6 +624,7 @@ def wrap_opviews_with_values(dialect, module_name, excluded=[]):
      a PyCDE Value instead of an OpView. The wrapped classes are inserted into
      the provided module."""
   import sys
+  from .types import Type
   module = sys.modules[module_name]
 
   for attr in dir(dialect):
@@ -634,14 +637,21 @@ def wrap_opviews_with_values(dialect, module_name, excluded=[]):
 
         def create(*args, **kwargs):
           # If any of the arguments are Value objects, we need to convert them.
-          args = [v.value if isinstance(v, Signal) else v for v in args]
-          kwargs = {
-              k: v.value if isinstance(v, Signal) else v
-              for k, v in kwargs.items()
-          }
+          def to_circt(arg):
+            if isinstance(arg, Signal):
+              return arg.value
+            elif isinstance(arg, Type):
+              return arg._type
+            return arg
+
+          args = [to_circt(arg) for arg in args]
+          kwargs = {k: to_circt(v) for k, v in kwargs.items()}
           # Create the OpView.
           with get_user_loc():
-            created = cls.create(*args, **kwargs)
+            if hasattr(cls, "create"):
+              created = cls.create(*args, **kwargs)
+            else:
+              created = cls(*args, **kwargs)
             if isinstance(created, support.NamedValueOpView):
               created = created.opview
             if hasattr(created, "twoState"):

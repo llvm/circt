@@ -1,7 +1,7 @@
 # REQUIRES: iverilog,cocotb
 # RUN: %PYTHON% %s 2>&1 | FileCheck %s
 from pycde import Input, Output, generator, module, Clock, externmodule
-from pycde.pycde_types import types
+from pycde.types import types
 from pycde.testing import cocotestbench, cocotest, cocoextra
 from pycde.dialects import comb
 import os

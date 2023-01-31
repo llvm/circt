@@ -9,7 +9,7 @@ from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
 
 from .common import _PyProxy
 from .module import Module, ModuleLikeType, ModuleLikeBuilderBase
-from .pycde_types import types
+from .types import TypeAlias
 from .instance import Instance, InstanceHierarchyRoot
 
 from . import circt
@@ -251,7 +251,7 @@ class System:
       lambda sys: sys.generate(),
       # After all of the pycde code has been executed, we have all the types
       # defined so we can go through and output the typedefs delcarations.
-      lambda sys: types.declare_types(sys.mod),
+      lambda sys: TypeAlias.declare_aliases(sys.mod),
       "builtin.module(lower-hwarith-to-hw, msft-lower-constructs, msft-lower-instances)",
       "builtin.module(esi-emit-collateral{{tops={tops} schema-file=schema.capnp}})",
       "builtin.module(lower-msft-to-hw{{verilog-file={verilog_file}}})",

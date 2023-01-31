@@ -5,20 +5,20 @@
 from __future__ import annotations
 
 from .common import Clock, Input, Output
-from .pycde_types import PyCDEType, dim, types
-from .value import BitsSignal, BitVectorSignal, ListValue, Value, Signal
+from .types import dim, types, Array, InOut, Type
+from .value import ArraySignal, BitsSignal, BitVectorSignal, ArraySignal, Value, Signal
 from .value import get_slice_bounds
 from .module import generator, modparams, Module, _BlockContext
-from .circt.support import get_value, BackedgeBuilder
-from .circt.dialects import msft, hw, sv
-from pycde.dialects import comb
+from .circt.support import BackedgeBuilder
+from .circt.dialects import msft as raw_msft
+from pycde.dialects import comb, msft, sv
 from .circt import ir
 
 import typing
 from typing import List, Union
 
 
-def NamedWire(type_or_value: Union[PyCDEType, Signal], name: str):
+def NamedWire(type_or_value: Union[Type, Signal], name: str):
   """Create a named wire which is guaranteed to appear in the Verilog output.
   This construct precludes many optimizations (since it introduces an
   optimization barrier) so it should be used sparingly."""
@@ -39,9 +39,7 @@ def NamedWire(type_or_value: Union[PyCDEType, Signal], name: str):
       # inner_symbols purely for the purpose of disallowing the SV
       # canonicalizers to eliminate wires!
       uniq_name = _BlockContext.current().uniquify_symbol(name)
-      self.wire_op = sv.WireOp(hw.InOutType.get(type),
-                               name,
-                               inner_sym=uniq_name)
+      self.wire_op = sv.WireOp(InOut(type), name, inner_sym=uniq_name)
       read_val = sv.ReadInOutOp(self.wire_op)
       super().__init__(Value(read_val), type)
       self.name = name
@@ -62,14 +60,14 @@ def NamedWire(type_or_value: Union[PyCDEType, Signal], name: str):
   return w
 
 
-def Wire(type: PyCDEType, name: str = None):
+def Wire(type: Type, name: str = None):
   """Declare a wire. Used to create backedges. Must assign exactly once. If
   'name' is specified, use 'NamedWire' instead."""
 
   class WireValue(type._get_value_class()):
 
     def __init__(self):
-      self._backedge = BackedgeBuilder.create(type,
+      self._backedge = BackedgeBuilder.create(type._type,
                                               "wire" if name is None else name,
                                               None)
       super().__init__(self._backedge.result, type)
@@ -119,7 +117,7 @@ def Wire(type: PyCDEType, name: str = None):
   return WireValue()
 
 
-def Reg(type: PyCDEType,
+def Reg(type: Type,
         clk: Signal = None,
         rst: Signal = None,
         rst_value=None,
@@ -192,7 +190,7 @@ def Mux(sel: BitVectorSignal, *data_inputs: typing.List[Value]):
   if num_inputs == 2:
     m = comb.MuxOp(sel, data_inputs[1], data_inputs[0])
   else:
-    a = ListValue(data_inputs)
+    a = ArraySignal(data_inputs)
     a.name = "arr_" + "_".join([i.name for i in data_inputs])
     m = a[sel]
 
@@ -204,26 +202,26 @@ def Mux(sel: BitVectorSignal, *data_inputs: typing.List[Value]):
   return m
 
 
-def SystolicArray(row_inputs, col_inputs, pe_builder):
+def SystolicArray(row_inputs: ArraySignal, col_inputs: ArraySignal, pe_builder):
   """Build a systolic array."""
 
-  row_inputs_type = hw.ArrayType(row_inputs.type)
-  col_inputs_type = hw.ArrayType(col_inputs.type)
+  row_inputs_type = row_inputs.type
+  col_inputs_type = col_inputs.type
 
   dummy_op = ir.Operation.create("dummy", regions=1)
-  pe_block = dummy_op.regions[0].blocks.append(row_inputs_type.element_type,
-                                               col_inputs_type.element_type)
+  pe_block = dummy_op.regions[0].blocks.append(
+      row_inputs_type.element_type._type, col_inputs_type.element_type._type)
   with ir.InsertionPoint(pe_block):
     result = pe_builder(Value(pe_block.arguments[0]),
                         Value(pe_block.arguments[1]))
     value = Value(result)
     pe_output_type = value.type
-    msft.PEOutputOp(value.value)
+    msft.PEOutputOp(value)
 
   sa_result_type = dim(pe_output_type, col_inputs_type.size,
                        row_inputs_type.size)
-  array = msft.SystolicArrayOp(sa_result_type, get_value(row_inputs),
-                               get_value(col_inputs))
+  array = raw_msft.SystolicArrayOp(sa_result_type._type, row_inputs.value,
+                                   col_inputs.value)
   dummy_op.regions[0].blocks[0].append_to(array.regions[0])
   dummy_op.operation.erase()
 

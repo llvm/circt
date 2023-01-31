@@ -52,11 +52,11 @@ def get_user_loc() -> ir.Location:
   return ir.Location.unknown()
 
 
-def create_const_zero(type: ir.Type):
+def create_const_zero(type):
   """Create a 'default' constant value of zero. Used for creating dummy values
   to connect to extern modules with input ports we want to ignore."""
   from .dialects import hw
-  width = hw.get_bitwidth(type)
+  width = hw.get_bitwidth(type._type)
 
   with get_user_loc():
     zero = hw.ConstantOp(ir.IntegerType.get_signless(width), 0)
@@ -80,21 +80,21 @@ def _obj_to_value(x, type, result_type=None):
         "Encountered 'None' when trying to build hardware for python value.")
   from .value import Signal
   from .dialects import hw, hwarith
-  from .pycde_types import (TypeAliasType, ArrayType, StructType, BitVectorType,
-                            BitsType, UIntType, SIntType, Type)
+  from .types import (TypeAlias, Array, Struct, BitVectorType, Bits, UInt, SInt,
+                      _FromCirctType)
 
   if isinstance(x, Signal):
     return x
 
-  type = Type(type)
-  if isinstance(type, TypeAliasType):
+  type = _FromCirctType(type)
+  if isinstance(type, TypeAlias):
     return _obj_to_value(x, type.inner_type, type)
 
   if result_type is None:
     result_type = type
   else:
-    result_type = Type(result_type)
-    assert isinstance(result_type, TypeAliasType) or result_type == type
+    result_type = _FromCirctType(result_type)
+    assert isinstance(result_type, TypeAlias) or result_type == type
 
   val = support.get_value(x)
   # If x is already a valid value, just return it.
@@ -107,15 +107,15 @@ def _obj_to_value(x, type, result_type=None):
     if not isinstance(type, BitVectorType):
       raise ValueError(f"Int can only be converted to hw int, not '{type}'")
     with get_user_loc():
-      if isinstance(type, BitsType):
+      if isinstance(type, Bits):
         return hw.ConstantOp(type, x)
-      elif isinstance(type, (UIntType, SIntType)):
+      elif isinstance(type, (UInt, SInt)):
         return hwarith.ConstantOp(type, x)
       else:
         assert False, "Internal error: bit vector type unknown"
 
   if isinstance(x, (list, tuple)):
-    if not isinstance(type, ArrayType):
+    if not isinstance(type, Array):
       raise ValueError(f"List is only convertable to hw array, not '{type}'")
     elemty = result_type.element_type
     if len(x) != type.size:
@@ -127,7 +127,7 @@ def _obj_to_value(x, type, result_type=None):
       return hw.ArrayCreateOp(reversed(list_of_vals))
 
   if isinstance(x, dict):
-    if not isinstance(type, StructType):
+    if not isinstance(type, Struct):
       raise ValueError(f"Dict is only convertable to hw struct, not '{type}'")
     elem_name_values = []
     for (fname, ftype) in type.fields:
@@ -145,7 +145,7 @@ def _obj_to_value(x, type, result_type=None):
 
 def _infer_type(x):
   """Infer the CIRCT type from a python object. Only works on lists."""
-  from .pycde_types import types
+  from .types import types
   from .value import Signal
   if isinstance(x, Signal):
     return x.type

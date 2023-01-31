@@ -52,10 +52,10 @@ class WireOp:
                            ip=ip))
 
   @staticmethod
-  def create(data_type, name=None):
+  def create(data_type, name=None, inner_sym=None):
     if not isinstance(data_type, hw.InOutType):
       data_type = hw.InOutType.get(data_type)
-    return sv.WireOp(data_type, name)
+    return sv.WireOp(data_type, name, inner_sym=inner_sym)
 
 
 class RegOp:

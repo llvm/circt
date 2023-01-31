@@ -1,7 +1,7 @@
 from pycde import Input, Output, generator
 from pycde.module import Generator, Module
 from pycde.dialects import fsm
-from pycde.pycde_types import types
+from pycde.types import types
 from typing import Callable
 
 from .circt.ir import InsertionPoint

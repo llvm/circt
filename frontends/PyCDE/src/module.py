@@ -3,8 +3,8 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from typing import List, Optional, Tuple, Union, Dict
-from pycde.pycde_types import ClockType
+from typing import List, Optional, Set, Tuple, Union, Dict
+from pycde.types import ClockType
 
 from pycde.support import _obj_to_value
 
@@ -191,13 +191,14 @@ class ModuleLikeBuilderBase(_PyProxy):
   variable in `Module`."""
 
   def __init__(self, cls, cls_dct, loc):
+    from .types import Type
     self.modcls = cls
     self.cls_dct = cls_dct
     self.loc = loc
 
-    self.outputs = None
-    self.inputs = None
-    self.clocks = None
+    self.outputs: Optional[List[Tuple[str, Type]]] = None
+    self.inputs: Optional[List[Tuple[str, Type]]] = None
+    self.clocks: Optional[Set[int]] = None
     self.generators = None
     self.generator_port_proxy = None
     self.parameters = None
@@ -213,6 +214,7 @@ class ModuleLikeBuilderBase(_PyProxy):
   def scan_cls(self):
     """Scan the class for input/output ports and generators. (Most `ModuleLike`
     will use these.) Store the results for later use."""
+    from .types import Bits
 
     input_ports = []
     output_ports = []
@@ -224,7 +226,7 @@ class ModuleLikeBuilderBase(_PyProxy):
 
       if isinstance(attr, Clock):
         clock_ports.add(len(input_ports))
-        input_ports.append((attr_name, ir.IntegerType.get_signless(1)))
+        input_ports.append((attr_name, Bits(1)))
       elif isinstance(attr, Input):
         input_ports.append((attr_name, attr.type))
       elif isinstance(attr, Output):
@@ -381,11 +383,12 @@ class ModuleBuilder(ModuleLikeBuilderBase):
       # If this Module has a generator, it's a real module.
       return msft.MSFTModuleOp(
           symbol,
-          self.inputs,
-          self.outputs,
+          [(n, t._type) for (n, t) in self.inputs],
+          [(n, t._type) for (n, t) in self.outputs],
           self.parameters if hasattr(self, "parameters") else None,
           loc=self.loc,
-          ip=sys._get_ip())
+          ip=sys._get_ip(),
+      )
 
     # Modules without generators are implicitly considered to be external.
     if self.parameters is None:
@@ -397,12 +400,13 @@ class ModuleBuilder(ModuleLikeBuilderBase):
       ]
     return msft.MSFTModuleExternOp(
         symbol,
-        self.inputs,
-        self.outputs,
+        [(n, t._type) for (n, t) in self.inputs],
+        [(n, t._type) for (n, t) in self.outputs],
         parameters=paramdecl_list,
         attributes={"verilogName": ir.StringAttr.get(self.name)},
         loc=self.loc,
-        ip=sys._get_ip())
+        ip=sys._get_ip(),
+    )
 
   def instantiate(self, module_inst, instance_name: str, **inputs):
     """"Instantiate this Module. Check that the input types match expectations."""
@@ -425,7 +429,7 @@ class ModuleBuilder(ModuleLikeBuilderBase):
         signal = create_const_zero(ptype)
       if isinstance(signal, Signal):
         # If the input is a signal, the types must match.
-        if ptype != signal.type:
+        if ptype._type != signal.type._type:
           raise PortError(
               f"Input port {name} expected type {ptype}, not {signal.type}")
       else:
@@ -586,7 +590,10 @@ class ImportedModSpec(ModuleBuilder):
   def instantiate(self, module_inst, instance_name: str, **inputs):
     inst = self.circt_mod.instantiate(
         instance_name,
-        **inputs,
+        **{
+            n: i.value if isinstance(i, Signal) else i
+            for (n, i) in inputs.items()
+        },
         parameters={} if self.parameters is None else self.parameters,
         loc=get_user_loc())
     inst.operation.verify()
