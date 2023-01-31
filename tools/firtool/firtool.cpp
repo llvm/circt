@@ -85,6 +85,15 @@ static cl::opt<bool>
                             "chunk independently"),
                    cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
+static cl::list<std::string> includeDirs(
+    "include-dir",
+    cl::desc("Directory to search in when resolving source references"),
+    cl::value_desc("directory"), cl::cat(mainCategory));
+static cl::alias includeDirsShort(
+    "I", cl::desc("Alias for --include-dir.  Example: -I<directory>"),
+    cl::aliasopt(includeDirs), cl::Prefix, cl::NotHidden,
+    cl::cat(mainCategory));
+
 static cl::opt<bool>
     verifyDiagnostics("verify-diagnostics",
                       cl::desc("Check that emitted diagnostics match "
@@ -130,6 +139,12 @@ static cl::opt<bool> disableAnnotationsUnknown(
     "disable-annotation-unknown",
     cl::desc("Ignore unknown annotations when parsing"), cl::init(false),
     cl::cat(mainCategory));
+
+static cl::opt<bool> lowerAnnotationsNoRefTypePorts(
+    "lower-annotations-no-ref-type-ports",
+    cl::desc("Create real ports instead of ref type ports when resolving "
+             "wiring problems inside the LowerAnnotations pass"),
+    cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
 static cl::opt<bool>
     emitMetadata("emit-metadata",
@@ -294,6 +309,15 @@ static cl::opt<bool>
                         cl::desc("Disable the Grand Central passes"),
                         cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
+static cl::opt<bool> grandCentralInstantiateCompanionOnly(
+    "grand-central-instantiate-companion",
+    cl::desc(
+        "Run Grand Central in a mode where the companion module is "
+        "instantiated and not bound in and the interface is dropped.  This is "
+        "intended for situations where there is useful assertion logic inside "
+        "the companion, but you don't care about the actual interface."),
+    cl::init(false), cl::Hidden, cl::cat(mainCategory));
+
 static cl::opt<bool> exportModuleHierarchy(
     "export-module-hierarchy",
     cl::desc("Export module and instance hierarchy as JSON"), cl::init(false),
@@ -303,6 +327,11 @@ static cl::opt<bool>
     disableCheckCombCycles("disable-check-comb-cycles",
                            cl::desc("Disable the CheckCombCycles pass"),
                            cl::init(false), cl::Hidden, cl::cat(mainCategory));
+
+static cl::opt<bool> useOldCheckCombCycles(
+    "use-old-check-comb-cycles",
+    cl::desc("Use old CheckCombCycles pass, that does not support aggregates"),
+    cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
 static cl::opt<bool> disableIMDCE("disable-imdce",
                                   cl::desc("Disable the IMDCE pass"),
@@ -608,7 +637,8 @@ static LogicalResult processBuffer(
   applyPassManagerCLOptions(pm);
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
-      disableAnnotationsUnknown, disableAnnotationsClassless));
+      disableAnnotationsUnknown, disableAnnotationsClassless,
+      lowerAnnotationsNoRefTypePorts));
 
   // If the user asked for --parse-only, stop after running LowerAnnotations.
   if (outputFormat == OutputParseOnly) {
@@ -692,14 +722,16 @@ static LogicalResult processBuffer(
         firrtl::createRandomizeRegisterInitPass());
 
   if (!disableCheckCombCycles) {
-    // TODO: Currently CheckCombCyles pass doesn't support aggregates so skip
-    // the pass for now.
-    if (preserveAggregate == firrtl::PreserveAggregate::None)
-      pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombCyclesPass());
-    else
-      emitWarning(module->getLoc())
-          << "CheckCombCyclesPass doens't support aggregate "
-             "values yet so it is skipped\n";
+    if (useOldCheckCombCycles) {
+      if (preserveAggregate == firrtl::PreserveAggregate::None)
+        pm.nest<firrtl::CircuitOp>().addPass(
+            firrtl::createCheckCombCyclesPass());
+      else
+        emitWarning(module->getLoc())
+            << "CheckCombCyclesPass doens't support aggregate "
+               "values yet so it is skipped\n";
+    } else
+      pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombLoopsPass());
   }
 
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
@@ -737,7 +769,8 @@ static LogicalResult processBuffer(
   // certain black boxes should be placed.  Note: all Grand Central Taps related
   // collateral is resolved entirely by LowerAnnotations.
   if (!disableGrandCentral)
-    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createGrandCentralPass());
+    pm.addNestedPass<firrtl::CircuitOp>(
+        firrtl::createGrandCentralPass(grandCentralInstantiateCompanionOnly));
 
   // Read black box source files into the IR.
   StringRef blackBoxRoot = blackBoxRootPath.empty()
@@ -934,6 +967,7 @@ static LogicalResult processInputSplit(
     std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(buffer), llvm::SMLoc());
+  sourceMgr.setIncludeDirs(includeDirs);
   if (!verifyDiagnostics) {
     SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
     return processBuffer(context, ts, sourceMgr, outputFile);

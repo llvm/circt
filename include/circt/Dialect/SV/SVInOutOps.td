@@ -130,11 +130,6 @@ def ReadInOutOp
                 " inout port) as the value itself.";
   let arguments = (ins InOutType:$input);
   let results = (outs HWValueType:$result);
-
-  let builders = [
-    OpBuilder<(ins "Value":$input)>
-  ];
-
   let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
 }
 
@@ -156,11 +151,6 @@ def ArrayIndexInOutOp
   let description = "See SV Spec 11.5.2.";
   let arguments = (ins InOutArrayType:$input, HWIntegerType:$index);
   let results = (outs InOutType:$result);
-
-  let builders = [
-    OpBuilder<(ins "Value":$input, "Value":$index)>
-  ];
-
   let assemblyFormat =
     "$input`[`$index`]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))";
 }

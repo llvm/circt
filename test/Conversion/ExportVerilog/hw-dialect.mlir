@@ -2,6 +2,7 @@
 
 // CHECK-LABEL: // external module E
 hw.module.extern @E(%a: i1, %b: i1, %c: i1)
+hw.module.extern @Array(%a: !hw.array<2xi4>)
 
 hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
                         %array2d: !hw.array<12 x array<10xi4>>,
@@ -1332,4 +1333,28 @@ hw.module @Issue4485(%in: i4) {
   %1 = comb.icmp eq %in, %c0_i4 : i4
   %2 = sv.system.sampled %1 : i1
   hw.output
+}
+
+// CHECK-LABEL: module inline_bitcast_in_concat(
+// CHECK-NEXT:    input  [6:0]      in1,
+// CHECK-NEXT:    input  [7:0][3:0] in2,
+// CHECK-NEXT:    output [38:0]     out);
+// CHECK-EMPTY:
+// CHECK-NEXT:    assign out = {in1, /*cast(bit[31:0])*/in2};
+// CHECK-NEXT:  endmodule
+hw.module @inline_bitcast_in_concat(%in1: i7, %in2: !hw.array<8xi4>) -> (out: i39) {
+  %r2 = hw.bitcast %in2 : (!hw.array<8xi4>) -> i32
+  %0 = comb.concat %in1, %r2: i7, i32
+  hw.output %0 : i39
+}
+
+// CHECK-LABEL: module DontInlineAggregateConstantIntoPorts(
+// CHECK:         wire [1:0][3:0] _GEN = '{4'h0, 4'h1};
+// CHECK-NEXT:    Array i0 (
+// CHECK-NEXT:     .a (_GEN)
+// CHECK-NEXT:    );
+// CHECK-NEXT:  endmodule
+hw.module @DontInlineAggregateConstantIntoPorts() -> () {
+  %0 = hw.aggregate_constant [0 : i4, 1 : i4] : !hw.array<2xi4>
+  hw.instance "i0" @Array(a: %0: !hw.array<2xi4>) -> ()
 }

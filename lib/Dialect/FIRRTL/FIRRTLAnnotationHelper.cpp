@@ -656,7 +656,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
     if (!wireTarget)
       return mlir::emitError(loc, "Annotation '" + Twine(dataTapsClass) +
                                       "' with wire path '" + wirePathStr +
-                                      "' couldnot be resolved.");
+                                      "' could not be resolved.");
     if (!wireTarget->ref.getImpl().isOp())
       return mlir::emitError(loc, "Annotation '" + Twine(dataTapsClass) +
                                       "' with path '" +
@@ -711,7 +711,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
     }
     if (!srcTarget)
       return mlir::emitError(loc, "Annotation '" + Twine(dataTapsClass) +
-                                      "' source path couldnot be resolved.");
+                                      "' source path could not be resolved.");
 
     auto wireModule =
         cast<FModuleOp>(wireTarget->ref.getModule().getOperation());

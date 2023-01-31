@@ -186,11 +186,19 @@ public:
                   // Get all the ports that have a comb path from `port`.
                   for (const auto &portNode : portPaths[port])
                     for (auto outputPort : portNode.getSecond()) {
-                      auto instResult = ins.getResult(
+                      Value instResult = ins.getResult(
                           outputPort.val.cast<BlockArgument>().getArgNumber());
-                      // Note that, in this case the instResult is always of
-                      // Ground Type. FieldRefs are handled as a pre-pass before
-                      // the DFS begins.
+                      if (!instResult.getType()
+                               .cast<FIRRTLBaseType>()
+                               .isGround()) {
+
+                        size_t outPortId;
+                        if (!getStorageLocIdFromVal(instResult, outPortId))
+                          continue;
+                        if (!getValueFromStorageLocId(
+                                outPortId + outputPort.fieldId, instResult))
+                          continue;
+                      }
                       children.push_back({instResult, ins});
                     }
                 }
@@ -262,11 +270,15 @@ public:
   /// the set and ignore all other fields. This is used for MemOp ports, and it
   /// will only contain 3 elements, so the copy shouldn't be a concern.
   void gatherAggregateLeafs(Value val,
+                            SmallVector<std::pair<Value, Node>> &rootValues,
                             llvm::SmallDenseSet<size_t> fieldIdsToAdd = {}) {
     auto valType = val.getType().dyn_cast<FIRRTLBaseType>();
     // Ignore RefType and GroundType Values.
     if (!valType || valType.isGround())
       return;
+    Node inputArg = Node();
+    if (val.isa<BlockArgument>())
+      inputArg = Node(val, 0);
     SmallVector<Node> worklist;
     worklist.push_back(Node(val, 0));
     // Assign a unique storage location for the `val`, which is the aggregate
@@ -286,7 +298,12 @@ public:
         // The results of subaccess op can refer to multiple storage locations.
         valToStorageLocIdMap[res].push_back(storageLocId);
         storageLocIdToValuesMap[storageLocId].push_back(res);
-        leafToBaseValMap[res] = val;
+        if (!leafToBaseValMap.count(res)) {
+          leafToBaseValMap[res] = val;
+          if (inputArg.isValid())
+            inputArg.fieldId = fieldId;
+          rootValues.push_back({res, inputArg});
+        }
       } else
         worklist.push_back(Node(res, fieldId));
     };
@@ -346,7 +363,9 @@ public:
   }
 
   LogicalResult processModule() {
-    SmallVector<Value> rootValues;
+    // The list of Values, from which the DFS traversal can start, and the
+    // second element of the pair indicates if the Value is an input port.
+    SmallVector<std::pair<Value, Node>> rootValues;
     LLVM_DEBUG(llvm::dbgs() << "\n processing module :" << module.getName());
     // Given any Value `val`, add it to `rootValues`, if it is Ground Type. Else
     // traverse the IR, to discover all the ground type leaf sub fields of
@@ -356,11 +375,14 @@ public:
       if (!type)
         return;
       if (type.isGround()) {
-        rootValues.push_back(val);
+        Node inputArg = Node();
+        if (val.isa<BlockArgument>())
+          inputArg = Node(val, 0);
+        rootValues.push_back({val, inputArg});
         return;
       }
       // Discover all the ground type leaf subfields.
-      gatherAggregateLeafs(val);
+      gatherAggregateLeafs(val, rootValues);
     };
     // Gather all the Ground type Values which can serve as the root for a DFS
     // traversal. First use ports as the seed.
@@ -422,7 +444,7 @@ public:
                   type.getFieldID((unsigned)ReadPortSubfield::addr);
               llvm::SmallDenseSet<size_t> fieldIdsToAdd = {
                   enableFieldId, dataFieldId, addressFieldId};
-              gatherAggregateLeafs(memPort, fieldIdsToAdd);
+              gatherAggregateLeafs(memPort, rootValues, fieldIdsToAdd);
 
               size_t baseId;
               if (!getStorageLocIdFromVal(memPort, baseId))
@@ -444,41 +466,23 @@ public:
         for (auto val : leaf.second)
           llvm::dbgs() << "\n leaf:" << val;
       }
+      for (const auto &i1 : valToStorageLocIdMap) {
+        llvm::dbgs() << "\n val : " << i1.first;
+        for (const auto &i2 : i1.second) {
+          llvm::dbgs() << "\n indices :" << i2;
+        }
+      }
     });
 
     auto traverseDFSFrom = [&](Value root, Node inputArg) -> LogicalResult {
-      auto node = Node(root, 0);
       if (visited.contains(root))
         return success();
       return dfsFromNode(root, inputArg);
     };
     for (auto root : rootValues) {
-      Node inputArg = Node();
-      if (root.isa<BlockArgument>()) {
-        inputArg = Node(root, 0);
-        // Clear the visited set, such that all possible paths between the ports
-        // can be traversed. Otherwise, if two input ports share a path to an
-        // output port, the second traversal would ignore the visited ops, and
-        // the comb path wouldnot be recorded. See lit test `revisitOps`
+      if (root.second.isValid())
         visited.clear();
-      }
-      if (traverseDFSFrom(root, inputArg).failed())
-        return failure();
-    }
-    for (auto storageLocIter : storageLocIdToValuesMap) {
-      auto id = storageLocIter.first;
-      if (storageLocIter.getSecond().empty())
-        continue;
-      auto leaf = storageLocIter.getSecond().front();
-      if (!leaf.getType().cast<FIRRTLBaseType>().isGround())
-        continue;
-      auto baseVal = leafToBaseValMap[leaf];
-      auto baseId = valToStorageLocIdMap[baseVal].front();
-      auto fieldId = id - baseId;
-      Node inputArg = Node();
-      if (baseVal.isa<BlockArgument>())
-        inputArg = Node(baseVal, fieldId);
-      if (traverseDFSFrom(leaf, inputArg).failed())
+      if (traverseDFSFrom(root.first, root.second).failed())
         return failure();
     }
 

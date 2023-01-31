@@ -317,8 +317,6 @@ void CalyxToFSMPass::runOnOperation() {
   machine->setAttr(
       "compiledGroups",
       ArrayAttr::get(builder.getContext(), visitor.getCompiledGroups()));
-
-  machine->getParentOp()->dump();
 }
 
 } // namespace

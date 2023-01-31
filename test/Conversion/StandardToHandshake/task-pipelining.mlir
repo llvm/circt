@@ -12,17 +12,17 @@
 // CHECK:           %[[VAL_2x:.*]] = merge %[[VAL_2]] : none
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = cond_br %[[VAL_3]], %[[VAL_5]] : i64
 // CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = cond_br %[[VAL_3]], %[[VAL_2x]] : none
-// CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = control_merge %[[VAL_8]] : none
 // CHECK:           %[[VAL_12:.*]] = merge %[[VAL_6]] : i64
-// CHECK:           %[[VAL_13:.*]] = br %[[VAL_10]] : none
+// CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = control_merge %[[VAL_8]] : none
 // CHECK:           %[[VAL_14:.*]] = br %[[VAL_12]] : i64
-// CHECK:           %[[VAL_15:.*]], %[[VAL_16:.*]] = control_merge %[[VAL_9]] : none
+// CHECK:           %[[VAL_13:.*]] = br %[[VAL_10]] : none
 // CHECK:           %[[VAL_17:.*]] = merge %[[VAL_7]] : i64
-// CHECK:           %[[VAL_18:.*]] = br %[[VAL_15]] : none
+// CHECK:           %[[VAL_15:.*]], %[[VAL_16:.*]] = control_merge %[[VAL_9]] : none
 // CHECK:           %[[VAL_19:.*]] = br %[[VAL_17]] : i64
+// CHECK:           %[[VAL_18:.*]] = br %[[VAL_15]] : none
+// CHECK:           %[[VAL_22:.*]] = mux %[[VAL_21:.*]] {{\[}}%[[VAL_19]], %[[VAL_14]]] : index, i64
 // CHECK:           %[[VAL_20:.*]] = mux %[[VAL_4]] {{\[}}%[[VAL_18]], %[[VAL_13]]] : i1, none
-// CHECK:           %[[VAL_21:.*]] = arith.index_cast %[[VAL_4]] : i1 to index
-// CHECK:           %[[VAL_22:.*]] = mux %[[VAL_21]] {{\[}}%[[VAL_19]], %[[VAL_14]]] : index, i64
+// CHECK:           %[[VAL_21]] = arith.index_cast %[[VAL_4]] : i1 to index
 // CHECK:           return %[[VAL_20]] : none
 // CHECK:         }
 func.func @simpleDiamond(%arg0: i1, %arg1: i64) {
@@ -92,15 +92,15 @@ func.func @nestedDiamond(%arg0: i1) {
 // CHECK:           %[[VAL_2x:.*]] = merge %[[VAL_2]] : none
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = cond_br %[[VAL_3]], %[[VAL_5]] : i64
 // CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = cond_br %[[VAL_3]], %[[VAL_2x]] : none
-// CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = control_merge %[[VAL_8]] : none
 // CHECK:           %[[VAL_12:.*]] = merge %[[VAL_6]] : i64
-// CHECK:           %[[VAL_13:.*]] = br %[[VAL_10]] : none
+// CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = control_merge %[[VAL_8]] : none
 // CHECK:           %[[VAL_14:.*]] = br %[[VAL_12]] : i64
+// CHECK:           %[[VAL_13:.*]] = br %[[VAL_10]] : none
+// CHECK:           %[[VAL_19:.*]] = mux %[[VAL_18:.*]] {{\[}}%[[VAL_14]], %[[VAL_7]]] : index, i64
 // CHECK:           %[[VAL_15:.*]] = mux %[[VAL_4]] {{\[}}%[[VAL_9]], %[[VAL_13]]] : i1, none
 // CHECK:           %[[VAL_16:.*]] = constant %[[VAL_15]] {value = true} : i1
 // CHECK:           %[[VAL_17:.*]] = arith.xori %[[VAL_4]], %[[VAL_16]] : i1
-// CHECK:           %[[VAL_18:.*]] = arith.index_cast %[[VAL_17]] : i1 to index
-// CHECK:           %[[VAL_19:.*]] = mux %[[VAL_18]] {{\[}}%[[VAL_14]], %[[VAL_7]]] : index, i64
+// CHECK:           %[[VAL_18]] = arith.index_cast %[[VAL_17]] : i1 to index
 // CHECK:           return %[[VAL_15]] : none
 // CHECK:         }
 func.func @triangle(%arg0: i1, %val0: i64) {
@@ -253,19 +253,19 @@ func.func @sameSuccessor(%cond: i1) {
 // CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = control_merge %[[VAL_5]] : none
 // CHECK:           %[[VAL_9:.*]] = buffer [1] seq %[[VAL_10:.*]] {initValues = [0]} : i1
 // CHECK:           %[[VAL_11:.*]] = mux %[[VAL_9]] {{\[}}%[[VAL_7]], %[[VAL_12:.*]]] : i1, none
-// CHECK:           %[[VAL_13:.*]] = mux %[[VAL_8]] {{\[}}%[[VAL_4]]] : index, i64
-// CHECK:           %[[VAL_14:.*]] = mux %[[VAL_9]] {{\[}}%[[VAL_13]], %[[VAL_15:.*]]] : i1, i64
 // CHECK:           %[[VAL_16:.*]] = mux %[[VAL_8]] {{\[}}%[[VAL_6]]] : index, i64
 // CHECK:           %[[VAL_17:.*]] = mux %[[VAL_9]] {{\[}}%[[VAL_16]], %[[VAL_18:.*]]] : i1, i64
+// CHECK:           %[[VAL_13:.*]] = mux %[[VAL_8]] {{\[}}%[[VAL_4]]] : index, i64
+// CHECK:           %[[VAL_14:.*]] = mux %[[VAL_9]] {{\[}}%[[VAL_13]], %[[VAL_15:.*]]] : i1, i64
 // CHECK:           %[[VAL_19:.*]] = arith.cmpi eq, %[[VAL_17]], %[[VAL_14]] : i64
+// CHECK:           %[[VAL_26:.*]], %[[VAL_27:.*]] = cond_br %[[VAL_19]], %[[VAL_17]] : i64
 // CHECK:           %[[VAL_20:.*]], %[[VAL_21:.*]] = cond_br %[[VAL_19]], %[[VAL_14]] : i64
 // CHECK:           %[[VAL_22:.*]] = constant %[[VAL_11]] {value = true} : i1
 // CHECK:           %[[VAL_23:.*]] = arith.xori %[[VAL_19]], %[[VAL_22]] : i1
 // CHECK:           %[[VAL_10]] = merge %[[VAL_23]] : i1
 // CHECK:           %[[VAL_24:.*]], %[[VAL_25:.*]] = cond_br %[[VAL_19]], %[[VAL_11]] : none
-// CHECK:           %[[VAL_26:.*]], %[[VAL_27:.*]] = cond_br %[[VAL_19]], %[[VAL_17]] : i64
-// CHECK:           %[[VAL_28:.*]] = merge %[[VAL_27]] : i64
 // CHECK:           %[[VAL_29:.*]] = merge %[[VAL_21]] : i64
+// CHECK:           %[[VAL_28:.*]] = merge %[[VAL_27]] : i64
 // CHECK:           %[[VAL_30:.*]], %[[VAL_31:.*]] = control_merge %[[VAL_25]] : none
 // CHECK:           %[[VAL_32:.*]] = constant %[[VAL_30]] {value = 1 : i64} : i64
 // CHECK:           %[[VAL_33:.*]] = arith.addi %[[VAL_28]], %[[VAL_32]] : i64
@@ -433,23 +433,23 @@ func.func @otherBlockOrder(%arg0: i1) {
 // CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = cond_br %[[VAL_3]], %[[VAL_5]] : i64
 // CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = cond_br %[[VAL_3]], %[[VAL_5]] : i64
 // CHECK:           %[[VAL_12:.*]], %[[VAL_13:.*]] = cond_br %[[VAL_3]], %[[VAL_2x]] : none
+// CHECK:           %[[VAL_18:.*]] = merge %[[VAL_8]] : i64
 // CHECK:           %[[VAL_14:.*]] = merge %[[VAL_6]] : i1
 // CHECK:           %[[VAL_15:.*]] = buffer [2] fifo %[[VAL_14]] : i1
 // CHECK:           %[[VAL_16:.*]], %[[VAL_17:.*]] = control_merge %[[VAL_12]] : none
-// CHECK:           %[[VAL_18:.*]] = merge %[[VAL_8]] : i64
-// CHECK:           %[[VAL_19:.*]], %[[VAL_20:.*]] = cond_br %[[VAL_14]], %[[VAL_16]] : none
 // CHECK:           %[[VAL_21:.*]], %[[VAL_22:.*]] = cond_br %[[VAL_14]], %[[VAL_18]] : i64
 // CHECK:           %[[VAL_23:.*]], %[[VAL_24:.*]] = cond_br %[[VAL_14]], %[[VAL_18]] : i64
-// CHECK:           %[[VAL_25:.*]], %[[VAL_26:.*]] = control_merge %[[VAL_19]] : none
+// CHECK:           %[[VAL_19:.*]], %[[VAL_20:.*]] = cond_br %[[VAL_14]], %[[VAL_16]] : none
 // CHECK:           %[[VAL_27:.*]] = merge %[[VAL_21]] : i64
+// CHECK:           %[[VAL_25:.*]], %[[VAL_26:.*]] = control_merge %[[VAL_19]] : none
 // CHECK:           %[[VAL_28:.*]] = br %[[VAL_25]] : none
-// CHECK:           %[[VAL_29:.*]], %[[VAL_30:.*]] = control_merge %[[VAL_20]] : none
 // CHECK:           %[[VAL_31:.*]] = merge %[[VAL_24]] : i64
 // CHECK:           %[[VAL_32:.*]] = merge %[[VAL_22]] : i64
+// CHECK:           %[[VAL_29:.*]], %[[VAL_30:.*]] = control_merge %[[VAL_20]] : none
 // CHECK:           %[[VAL_33:.*]] = br %[[VAL_29]] : none
-// CHECK:           %[[VAL_34:.*]], %[[VAL_35:.*]] = control_merge %[[VAL_13]] : none
 // CHECK:           %[[VAL_36:.*]] = merge %[[VAL_11]] : i64
 // CHECK:           %[[VAL_37:.*]] = merge %[[VAL_9]] : i64
+// CHECK:           %[[VAL_34:.*]], %[[VAL_35:.*]] = control_merge %[[VAL_13]] : none
 // CHECK:           %[[VAL_38:.*]] = br %[[VAL_34]] : none
 // CHECK:           %[[VAL_39:.*]] = mux %[[VAL_15]] {{\[}}%[[VAL_33]], %[[VAL_28]]] : i1, none
 // CHECK:           %[[VAL_40:.*]] = arith.index_cast %[[VAL_15]] : i1 to index

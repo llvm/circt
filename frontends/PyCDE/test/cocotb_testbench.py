@@ -18,7 +18,7 @@ import os
 @module
 def make_adder(width):
 
-  class Adder:
+  class Adder(Module):
     in1 = Input(types.int(width))
     in2 = Input(types.int(width))
     out = Output(types.int(width))
@@ -31,7 +31,7 @@ def make_adder(width):
 
 
 @module
-class RegAdd:
+class RegAdd(Module):
   rst = Input(types.i1)
   clk = Clock()
   in1 = Input(types.i16)
@@ -104,14 +104,14 @@ class RegAddTester:
 
 
 @externmodule("adder")
-class ExternAdder:
+class ExternAdder(Module):
   in1 = Input(types.i16)
   in2 = Input(types.i16)
   out = Output(types.i16)
 
 
 @module
-class RegAdd:
+class RegAdd(Module):
   rst = Input(types.i1)
   clk = Clock()
   in1 = Input(types.i16)

@@ -1440,6 +1440,14 @@ hw.module @GetOfConcat(%a: !hw.array<5xi1>, %b: !hw.array<2xi1>) -> (out0: i1, o
   hw.output %out0, %out1 : i1, i1
 }
 
+// CHECK-LABEL: hw.module @zeroLenArrSlice(%arg0: !hw.array<4xi8>) -> ("": !hw.array<0xi8>) {
+// CHECK: = hw.array_slice %arg0[%c0_i2] : (!hw.array<4xi8>) -> !hw.array<0xi8>
+hw.module @zeroLenArrSlice(%arg0: !hw.array<4xi8>) -> ("": !hw.array<0xi8>) {
+  %c0_i2 = hw.constant 0 : i2
+  %x = hw.array_slice %arg0[%c0_i2] : (!hw.array<4xi8>) -> !hw.array<0xi8>
+  hw.output %x : !hw.array<0xi8>
+}
+
 // CHECK-LABEL: hw.module @GetOfSliceStatic
 hw.module @GetOfSliceStatic(%a: !hw.array<5xi1>) -> (out0: i1) {
   %c1_i3 = hw.constant 1 : i3

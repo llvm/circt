@@ -2,6 +2,7 @@
 # RUN: cat err.txt | FileCheck --check-prefix=ERR %s
 
 from pycde import dim, types
+from pycde.circt.ir import Module
 
 # CHECK: [('foo', Type(i1)), ('bar', Type(i13))]
 # ERR: i1
@@ -9,8 +10,6 @@ st1 = types.struct({"foo": types.i1, "bar": types.i13})
 print(st1.fields)
 st1.foo.dump()
 print()
-
-from mlir.ir import Module
 
 # ERR: i6
 array1 = dim(types.i6)

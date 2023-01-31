@@ -6,11 +6,10 @@
 # PY: run_cosim(tmpdir, rpcschemapath, simhostport)
 
 import pycde
-from pycde import (Clock, Input, InputChannel, OutputChannel, module, generator,
+from pycde import (Clock, Input, InputChannel, OutputChannel, Module, generator,
                    types)
 from pycde import esi
 from pycde.constructs import Wire
-from pycde.dialects import comb
 
 import sys
 
@@ -23,8 +22,7 @@ class HostComms:
                               to_client_type=types.i32)
 
 
-@module
-class Producer:
+class Producer(Module):
   clk = Input(types.i1)
   int_out = OutputChannel(types.i32)
 
@@ -34,8 +32,7 @@ class Producer:
     ports.int_out = chan
 
 
-@module
-class Consumer:
+class Consumer(Module):
   clk = Input(types.i1)
   int_in = InputChannel(types.i32)
 
@@ -44,26 +41,21 @@ class Consumer:
     HostComms.to_host(ports.int_in, "loopback_out")
 
 
-@module
-class LoopbackInOutAdd7:
+class LoopbackInOutAdd7(Module):
 
   @generator
   def construct(ports):
     loopback = Wire(types.channel(types.i16))
     from_host = HostComms.req_resp(loopback, "loopback_inout")
     ready = Wire(types.i1)
-    wide_data, valid = from_host.unwrap(ready)
-    data = wide_data[0:16]
-    # TODO: clean this up with PyCDE overloads (they're currently a little bit
-    # broken for this use-case).
-    data = comb.AddOp(data, types.i16(7))
-    data_chan, data_ready = loopback.type.wrap(data, valid)
+    data, valid = from_host.unwrap(ready)
+    plus7 = data.as_uint(15) + types.ui8(7)
+    data_chan, data_ready = loopback.type.wrap(plus7.as_bits(), valid)
     ready.assign(data_ready)
     loopback.assign(data_chan)
 
 
-@module
-class Mid:
+class Mid(Module):
   clk = Clock(types.i1)
   rst = Input(types.i1)
 
@@ -75,8 +67,7 @@ class Mid:
     LoopbackInOutAdd7()
 
 
-@module
-class Top:
+class Top(Module):
   clk = Clock(types.i1)
   rst = Input(types.i1)
 

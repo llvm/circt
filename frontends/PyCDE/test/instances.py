@@ -10,16 +10,14 @@ from pycde.devicedb import (PhysLocation, PrimitiveDB, PrimitiveType)
 import sys
 
 from pycde.instance import InstanceDoesNotExistError, Instance, RegInstance
-from pycde.module import AppID
+from pycde.module import AppID, Module
 
 
-@pycde.externmodule
-class Nothing:
+class Nothing(Module):
   pass
 
 
-@pycde.module
-class Delay:
+class Delay(Module):
   clk = pycde.Clock()
   x = pycde.Input(pycde.types.i1)
   y = pycde.Output(pycde.types.i1)
@@ -35,8 +33,7 @@ class Delay:
     print(f"r appid: {r.appid}")
 
 
-@pycde.module
-class UnParameterized:
+class UnParameterized(Module):
   clk = pycde.Clock()
   x = pycde.Input(pycde.types.i1)
   y = pycde.Output(pycde.types.i1)
@@ -47,8 +44,7 @@ class UnParameterized:
     mod.y = Delay(clk=mod.clk, x=mod.x).y
 
 
-@pycde.module
-class Test:
+class Test(Module):
   clk = pycde.Clock()
 
   @pycde.generator
@@ -63,9 +59,9 @@ class Test:
 t = pycde.System([Test], name="Test", output_directory=sys.argv[1])
 t.generate(["construct"])
 t.print()
-# CHECK: msft.module @UnParameterized
-# CHECK-NOT: msft.module @UnParameterized
+# CHECK: <pycde.Module: Test inputs: [('clk', Type(i1))] outputs: []>
 Test.print()
+# CHECK: <pycde.Module: UnParameterized inputs: [('clk', Type(i1)), ('x', Type(i1))] outputs: [('y', Type(i1))]>
 UnParameterized.print()
 
 print(PhysLocation(PrimitiveType.DSP, 39, 25))

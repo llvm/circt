@@ -17,8 +17,8 @@
 #include "circt/Dialect/MSFT/MSFTPasses.h"
 #include "circt/Support/Namespace.h"
 
-#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
@@ -92,8 +92,7 @@ void PartitionPass::runOnOperation() {
 /// Determine if 'op' is driven exclusively by other tagged ops or wires which
 /// are themselves exclusively driven by tagged ops. Recursive but memoized via
 /// `seen`.
-static bool isDrivenByPartOpsOnly(Operation *op,
-                                  const BlockAndValueMapping &partOps,
+static bool isDrivenByPartOpsOnly(Operation *op, const IRMapping &partOps,
                                   DenseMap<Operation *, bool> &seen) {
   auto prevResult = seen.find(op);
   if (prevResult != seen.end())
@@ -120,7 +119,7 @@ static bool isDrivenByPartOpsOnly(Operation *op,
 /// attempt to copy all the way up to the block args.
 void copyIntoPart(ArrayRef<Operation *> taggedOps, Block *partBlock,
                   bool extendMaximalUp) {
-  BlockAndValueMapping map;
+  IRMapping map;
   if (taggedOps.empty())
     return;
   OpBuilder b(taggedOps[0]->getContext());
@@ -579,7 +578,7 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
   auto cloneOpsGetOperands = [&](InstanceOp newInst, InstanceOp oldInst,
                                  SmallVectorImpl<Value> &newOperands) {
     OpBuilder b(newInst);
-    BlockAndValueMapping map;
+    IRMapping map;
 
     // Add all of 'mod''s block args to the map in case one of the tagged ops
     // was driven by a block arg. Map to the oldInst operand Value.

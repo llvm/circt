@@ -5,30 +5,28 @@
 from __future__ import annotations
 
 import pycde
-from pycde import (AppID, Input, Output, module, externmodule, generator, types)
+from pycde import (AppID, Input, Output, generator, types)
+from pycde.module import Module, modparams
 from pycde.dialects import comb, hw
-from circt.support import connect
+from pycde.constructs import Wire
 
 import sys
 
 
-@module
+@modparams
 def PolynomialCompute(coefficients: Coefficients):
 
-  class PolynomialCompute:
+  class PolynomialCompute(Module):
     """Module to compute ax^3 + bx^2 + cx + d for design-time coefficients"""
+    module_name = f"PolyComputeForCoeff_{coefficients.coeff}"
 
     # Evaluate polynomial for 'x'.
     x = Input(types.i32)
     y = Output(types.int(8 * 4))
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, **kwargs):
       """coefficients is in 'd' -> 'a' order."""
-      self.instance_name = name
-
-    @staticmethod
-    def get_module_name():
-      return f"PolyComputeForCoeff_{coefficients.coeff}"
+      super().__init__(instance_name=name, **kwargs)
 
     @generator
     def construct(mod):
@@ -57,22 +55,29 @@ def PolynomialCompute(coefficients: Coefficients):
   return PolynomialCompute
 
 
-@externmodule("supercooldevice")
-class CoolPolynomialCompute:
+class CoolPolynomialCompute(Module):
+  module_name = "supercooldevice"
   x = Input(types.i32)
   y = Output(types.i32)
 
-  def __init__(self, coefficients):
+  def __init__(self, coefficients, **inputs):
+    super().__init__(**inputs)
     self.coefficients = coefficients
 
 
-@externmodule("parameterized_extern")
+@modparams
 def ExternWithParams(a, b):
 
   typedef1 = types.struct({"a": types.i1}, "exTypedef")
 
-  class M:
-    pass
+  class M(Module):
+    module_name = "parameterized_extern"
+    ignored_input = Input(types.i1)
+    used_input = Input(types.i4)
+
+    @property
+    def instance_name(self):
+      return "singleton"
 
   return M
 
@@ -83,28 +88,28 @@ class Coefficients:
     self.coeff = coeff
 
 
-@module
-class PolynomialSystem:
+class PolynomialSystem(Module):
   y = Output(types.i32)
 
   @generator
-  def construct(ports):
+  def construct(self):
     i32 = types.i32
     x = hw.ConstantOp(i32, 23)
     poly = PolynomialCompute(Coefficients([62, 42, 6]))("example",
-                                                        appid=AppID("poly", 0))
-    connect(poly.x, x)
+                                                        appid=AppID("poly", 0),
+                                                        x=x)
     PolynomialCompute(coefficients=Coefficients([62, 42, 6]))("example2",
                                                               x=poly.y)
     PolynomialCompute(Coefficients([1, 2, 3, 4, 5]))("example2", x=poly.y)
 
-    cp = CoolPolynomialCompute([4, 42])
-    cp.x.connect(23)
+    CoolPolynomialCompute([4, 42], x=23)
 
-    m = ExternWithParams(8, 3)()
+    w1 = Wire(types.i4)
+    m = ExternWithParams({"foo": "bar"}, 3)(ignored_input=None, used_input=w1)
     m.name = "pexternInst"
+    w1.assign(0)
 
-    ports.y = poly.y
+    self._set_outputs(poly._outputs())
 
 
 poly = pycde.System([PolynomialSystem],
@@ -122,16 +127,19 @@ poly.print()
 # CHECK:         %example2.y = msft.instance @example2 @PolyComputeForCoeff__62__42__6_(%example.y) : (i32) -> i32
 # CHECK:         %example2_1.y = msft.instance @example2_1 @PolyComputeForCoeff__1__2__3__4__5_(%example.y) : (i32) -> i32
 # CHECK:         %CoolPolynomialCompute.y = msft.instance @CoolPolynomialCompute @supercooldevice(%{{.+}}) : (i32) -> i32
-# CHECK:         msft.instance @M @parameterized_extern() <a: i64 = 8, b: i64 = 3> : () -> ()
+# CHECK:         [[R0:%.+]] = hw.bitcast %false : (i1) -> i1
+# CHECK:         msft.instance @singleton @parameterized_extern([[R0]], %c0_i4)  : (i1, i4) -> ()
+# CHECK:         %c0_i4 = hw.constant 0 : i4
 # CHECK:         msft.output %example.y : i32
 # CHECK:       }
 # CHECK:       msft.module @PolyComputeForCoeff__62__42__6_ {coefficients = {coeff = [62, 42, 6]}} (%x: i32) -> (y: i32)
 # CHECK:       msft.module @PolyComputeForCoeff__1__2__3__4__5_ {coefficients = {coeff = [1, 2, 3, 4, 5]}} (%x: i32) -> (y: i32)
 # CHECK:       msft.module.extern @supercooldevice(%x: i32) -> (y: i32) attributes {verilogName = "supercooldevice"}
-# CHECK:       msft.module.extern @parameterized_extern<a: i64, b: i64>() attributes {verilogName = "parameterized_extern"}
+# CHECK:       msft.module.extern @parameterized_extern(%ignored_input: i1, %used_input: i4) attributes {verilogName = "parameterized_extern"}
 
 print("Generating rest...")
 poly.generate()
+poly.print()
 
 print("=== Post-generate IR...")
 poly.run_passes()

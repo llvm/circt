@@ -1,12 +1,12 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
 from pycde import Clock, Input, types, System
-from pycde.module import AppID, externmodule, generator, module
+from pycde.module import AppID, generator, Module, modparams
 from pycde.testing import unittestmodule
 
 
 # CHECK: TypeError: Module parameter definitions cannot have *args
-@externmodule
+@modparams
 def foo(*args):
   pass
 
@@ -15,7 +15,7 @@ def foo(*args):
 
 
 # CHECK: TypeError: Module parameter definitions cannot have **kwargs
-@externmodule
+@modparams
 def bar(**kwargs):
   pass
 
@@ -24,7 +24,7 @@ def bar(**kwargs):
 
 
 @unittestmodule()
-class ClkError:
+class ClkError(Module):
   a = Input(types.i32)
 
   @generator
@@ -37,7 +37,7 @@ class ClkError:
 
 
 @unittestmodule()
-class AppIDError:
+class AppIDError(Module):
 
   @generator
   def build(ports):
@@ -49,8 +49,7 @@ class AppIDError:
 # -----
 
 
-@module
-class Test:
+class Test(Module):
   clk = Clock()
   x = Input(types.i32)
 
@@ -70,27 +69,13 @@ inst.reg[8]
 
 
 @unittestmodule()
-class OperatorError:
+class OperatorError(Module):
   a = Input(types.i32)
   b = Input(types.si32)
 
   @generator
   def build(ports):
-    # CHECK: Operator '+' is not supported on signless values. LHS operand should be cast .as_sint()/.as_uint().
-    ports.a + ports.b
-
-
-# -----
-
-
-@unittestmodule()
-class OperatorError2:
-  a = Input(types.i32)
-  b = Input(types.si32)
-
-  @generator
-  def build(ports):
-    # CHECK: Operator '+' is not supported on signless values. RHS operand should be cast .as_sint()/.as_uint().
+    # CHECK: Operator '+' is not supported on non-int or signless values. RHS operand should be cast .as_sint()/.as_uint() if possible.
     ports.b + ports.a
 
 
@@ -98,11 +83,11 @@ class OperatorError2:
 
 
 @unittestmodule()
-class OperatorError2:
+class OperatorError2(Module):
   a = Input(types.i32)
   b = Input(types.si32)
 
   @generator
   def build(ports):
-    # CHECK: Operator '==' requires LHS to be cast .as_int().
+    # CHECK: Comparisons of signed/unsigned integers to i32 not supported. RHS operand should be cast .as_sint()/.as_uint() if possible.
     ports.b == ports.a

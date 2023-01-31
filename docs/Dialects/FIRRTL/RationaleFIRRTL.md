@@ -886,38 +886,6 @@ firrtl.module @Foo(out %a: !firrtl.bundle<a: uint<1>, b: flip<uint<1>>>) {
 }
 ```
 
-### `validif` represented as a multiplexer
-
-The FIRRTL spec describes a `validif(en, x)` operation that is used during
-lowering from high to low FIRRTL. Consider the following example:
-
-```firrtl
-c <= invalid
-when a:
-  c <= b
-```
-
-Lowering will introduce the following intermediate representation in low FIRRTL:
-
-```firrtl
-c <= validif(a, b)
-```
-
-Since there is no precedence of this `validif` being used anywhere in the
-Chisel/FIRRTL ecosystem thus far and instead is always replaced by its
-right-hand operand `b`, the FIRRTL MLIR dialect does not provide such an
-operation at all. Rather it directly replaces any `validif` in FIRRTL input with
-the following equivalent operations:
-
-```mlir
-%0 = firrtl.invalidvalue : !firrtl.uint<42>
-%c = firrtl.mux(%a, %b, %0) : (!firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>) -> !firrtl.uint<42>
-```
-
-A canonicalization then folds this combination of `firrtl.invalidvalue` and
-`firrtl.mux` to the "high" operand of the multiplexer to facilitate downstream
-transformation passes.
-
 ### Inline SystemVerilog through `verbatim.expr` operation
 
 The FIRRTL dialect offers a `firrtl.verbatim.expr` operation that allows for
@@ -974,7 +942,6 @@ interpretations is enumerated below and then described in more detail.
    register.
 1. An invalid value used in a `when`-encoded multiplexer tree results in a
    direct connection to the non-invalid leg of the multiplexer.
-1. A `validif` construct is a direct connection.
 1. Any other use of an invalid value is treated as constant zero.
 
 Interpretation (1) is a mechanism to remove unnecessary reset connections in a
@@ -999,8 +966,8 @@ reg r: UInt<8>, clock with : (reset => (reset, tmp))
 
 Notably, if `tmp` is a `node`, this optimization should not be performed.
 
-Interpretation (2) and Interpretation (3) mean that either of the following
-circuits should be optimized to a direct connection from `bar` to `foo`:
+Interpretation (2) means that the following circuit should be optimized to a
+direct connection from `bar` to `foo`:
 
 ```firrtl
 foo is invalid
@@ -1008,20 +975,18 @@ when cond:
   foo <= bar
 ```
 
-```firrtl
-foo <= validif(cond, bar)
-```
-
 Note that the SFC implementation of this optimization is handled via two passes.
 An `ExpandWhens` (later refactored as `ExpandWhensAndCheck`) pass converts all
 `when` blocks to multiplexer trees.  Any invalid values that arise from this
-conversion produce `validif` expressions.  A later pass, `RemoveValidIfs`
-optimizes/removes `validif` by replacing it with a direct connection.
+conversion produce `validif` expressions.  (This is the "conditionally valid"
+expression which is an internal detail of the SFC which was removed from the
+FIRRTL specification.)  A later pass, `RemoveValidIfs` optimizes/removes
+`validif` by replacing it with a direct connection.
 
-It is important to note that the above two formulations using `when` or
-`validif` _are not equivalent to a mux formulation_ like the following.  The
-code below should be optimized using Interpretation (4) of invalid as constant
-zero:
+It is important to note that the above formulations using `when` or the
+SFC-internal representation using `validif` _are not equivalent to a mux
+formulation_ like the following.  The code below should be optimized using
+Interpretation (3) of invalid as constant zero:
 
 ```firrtl
 wire inv: UInt<8>
@@ -1036,7 +1001,7 @@ A legal lowering of this is only to:
 foo <= mux(cond, bar, UInt<8>(0))
 ```
 
-Interpretation (4) is used in all other situations involving an invalid value.
+Interpretation (3) is used in all other situations involving an invalid value.
 
 **Critically, the nature of an invalid value has context-sensitive information
 that relies on the exact structural nature of the circuit.**  It follows that
@@ -1062,19 +1027,18 @@ to:
 b <= mux(cond, a, inv)
 ```
 
-It follows that interpretation (4) will then convert the false leg of the `mux`
+It follows that interpretation (3) will then convert the false leg of the `mux`
 to a constant zero.
 
 ## Intrinsics
 
-Intrinsics are implementation-defined constructs.  Intrinsics provide a way to 
+Intrinsics are implementation-defined constructs.  Intrinsics provide a way to
 extend the system with funcitonality without changing the langauge.  They form
 an implementation-specific built-in library.  Unlike traditional libraries,
 implementations of intrinsics have access to internals of the compiler, allowing
 them to implement features not possible in the language.
 
-In FIRRTL, we support intrinsic modules.   The internal op is `firrtl.intmodule` 
+In FIRRTL, we support intrinsic modules.   The internal op is `firrtl.intmodule`
 which has all the properties of an external module.  Until the firrtl spec
-supports intrinsics, intrinsic modules are expressed in firrtl as external 
-modules with the `circt.intrinsic` annotation on the module.
-
+supports intrinsics, intrinsic modules are expressed in firrtl as external
+modules with the `circt.Intrinsic` annotation on the module.

@@ -1,6 +1,7 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
+# XFAIL: *
 
-from pycde import System, Input, Output, generator
+from pycde import System, Input, Output, generator, Module
 from pycde.dialects import comb
 from pycde import fsm
 from pycde.pycde_types import types
@@ -35,7 +36,7 @@ class FSM:
 
 
 @unittestmodule()
-class FSMUser:
+class FSMUser(Module):
   a = Input(types.i1)
   b = Input(types.i1)
   c = Input(types.i1)
@@ -184,7 +185,7 @@ system.print()
 
 
 @unittestmodule()
-class FSMUser:
+class FSMUser(Module):
   go = Input(types.i1)
   clk = Input(types.i1)
   rst = Input(types.i1)

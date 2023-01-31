@@ -709,7 +709,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
           return success();
         }))
       return failure();
-    result = BundleType::get(elements, getContext());
+    result = BundleType::get(getContext(), elements);
     break;
   }
   }
@@ -1610,9 +1610,6 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
   default:
     emitError(loc, "primitive not supported yet");
     return failure();
-  case FIRToken::lp_validif:
-    numOperandsExpected = 2;
-    break;
 #define TOK_LPKEYWORD_PRIM(SPELLING, CLASS, NUMOPERANDS)                       \
   case FIRToken::lp_##SPELLING:                                                \
     numOperandsExpected = NUMOPERANDS;                                         \
@@ -1672,31 +1669,6 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
     return success();                                                          \
   }
 #include "FIRTokenKinds.def"
-
-  // Expand `validif(a, b)` expressions to simply `b`.  A `validif` expression
-  // is converted to a direct connect by the Scala FIRRTL Compiler's
-  // `RemoveValidIfs` pass.  We circumvent that and just squash these during
-  // parsing.
-  case FIRToken::lp_validif: {
-    if (opTypes.size() != 2 || !integers.empty()) {
-      emitError(loc, "operation requires two operands and no constants");
-      return failure();
-    }
-    auto lhsUInt = opTypes[0].dyn_cast<UIntType>();
-    if (!lhsUInt) {
-      emitError(loc, "first operand should have UInt type");
-      return failure();
-    }
-    auto lhsWidth = lhsUInt.getWidthOrSentinel();
-    if (lhsWidth != -1 && lhsWidth != 1) {
-      emitError(loc, "first operand should have 'uint<1>' type");
-      return failure();
-    }
-
-    // Skip the `validif` and emit the second, non-condition operand.
-    result = operands[1];
-    return success();
-  }
   }
 
   llvm_unreachable("all cases should return");
@@ -2779,7 +2751,7 @@ private:
 
   ParseResult parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                             SmallVectorImpl<SMLoc> &resultPortLocs,
-                            Location defaultLoc, unsigned indent);
+                            unsigned indent);
 
   struct DeferredModuleToParse {
     FModuleOp moduleOp;
@@ -2858,14 +2830,10 @@ ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
 /// pohwist ::= port*
 /// port     ::= dir id ':' type info? NEWLINE
 /// dir      ::= 'input' | 'output'
-///
-/// defaultLoc specifies a location to use if there is no info locator for the
-/// port.
-///
 ParseResult
 FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                                 SmallVectorImpl<SMLoc> &resultPortLocs,
-                                Location defaultLoc, unsigned indent) {
+                                unsigned indent) {
   // Parse any ports.
   while (getToken().isAny(FIRToken::kw_input, FIRToken::kw_output) &&
          // Must be nested under the module.
@@ -2895,12 +2863,6 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
         parseType(type, "expected a type in port declaration") ||
         info.parseOptionalInfo())
       return failure();
-
-    // Ports typically do not have locators.  We rather default to the locaiton
-    // of the module rather than a location in a .fir file.  If the module had a
-    // locator then this will be more friendly.  If not, this doesn't burn
-    // compile time creating too many unique locations.
-    info.setDefaultLoc(defaultLoc);
 
     StringAttr innerSym = {};
     resultPorts.push_back(
@@ -2939,8 +2901,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   ArrayAttr annotations = getConstants().emptyArrayAttr;
 
   if (parseToken(FIRToken::colon, "expected ':' in module definition") ||
-      info.parseOptionalInfo() ||
-      parsePortList(portList, portLocs, info.getLoc(), indent))
+      info.parseOptionalInfo() || parsePortList(portList, portLocs, indent))
     return failure();
 
   auto builder = circuit.getBodyBuilder();
@@ -3200,7 +3161,7 @@ ParseResult FIRCircuitParser::parseCircuit(
 
   // Deal with the annotation file if one was specified
   for (auto *annotationsBuf : annotationsBufs)
-    if (importAnnotationsRaw(inlineAnnotationsLoc, circuitTarget,
+    if (importAnnotationsRaw(info.getFIRLoc(), circuitTarget,
                              annotationsBuf->getBuffer(), annos))
       return failure();
 

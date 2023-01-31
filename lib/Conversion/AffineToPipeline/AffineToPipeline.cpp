@@ -25,9 +25,9 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/Dominance.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/STLExtras.h"
@@ -454,7 +454,7 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
 
   // Maintain mappings of values in the loop body and results of stages,
   // initially populated with the iter args.
-  BlockAndValueMapping valueMap;
+  IRMapping valueMap;
   // Nested loops are not supported yet.
   assert(iterArgs.size() == forOp.getBody()->getNumArguments());
   for (size_t i = 0; i < iterArgs.size(); ++i)
@@ -478,7 +478,7 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
   SmallVector<SmallVector<mlir::Type>> registerTypes;
 
   // The maps that ensure a stage uses the correct version of a value
-  SmallVector<BlockAndValueMapping> stageValueMaps;
+  SmallVector<IRMapping> stageValueMaps;
 
   // For storing the range of stages an operation's results need to be valid for
   DenseMap<Operation *, std::pair<unsigned, unsigned>> pipeTimes;

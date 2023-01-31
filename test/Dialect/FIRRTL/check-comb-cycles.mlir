@@ -1,161 +1,149 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-check-comb-loops))' --split-input-file --verify-diagnostics %s | FileCheck %s
 
-module  {
-  // Loop-free circuit
-  // CHECK: firrtl.circuit "hasnoloops"
-  firrtl.circuit "hasnoloops"   {
-    firrtl.module @thru(in %in1: !firrtl.uint<1>, in %in2: !firrtl.uint<1>, out %out1: !firrtl.uint<1>, out %out2: !firrtl.uint<1>) {
-      firrtl.connect %out1, %in1 : !firrtl.uint<1>, !firrtl.uint<1>
-      firrtl.connect %out2, %in2 : !firrtl.uint<1>, !firrtl.uint<1>
-    }
-    firrtl.module @hasnoloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
-      %x = firrtl.wire  : !firrtl.uint<1>
-      %inner_in1, %inner_in2, %inner_out1, %inner_out2 = firrtl.instance inner @thru(in in1: !firrtl.uint<1>, in in2: !firrtl.uint<1>, out out1: !firrtl.uint<1>, out out2: !firrtl.uint<1>)
-      firrtl.connect %inner_in1, %a : !firrtl.uint<1>, !firrtl.uint<1>
-      firrtl.connect %x, %inner_out1 : !firrtl.uint<1>, !firrtl.uint<1>
-      firrtl.connect %inner_in2, %x : !firrtl.uint<1>, !firrtl.uint<1>
-      firrtl.connect %b, %inner_out2 : !firrtl.uint<1>, !firrtl.uint<1>
-    }
+// Loop-free circuit
+// CHECK: firrtl.circuit "hasnoloops"
+firrtl.circuit "hasnoloops"   {
+  firrtl.module @thru(in %in1: !firrtl.uint<1>, in %in2: !firrtl.uint<1>, out %out1: !firrtl.uint<1>, out %out2: !firrtl.uint<1>) {
+    firrtl.connect %out1, %in1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %out2, %in2 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  firrtl.module @hasnoloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    %x = firrtl.wire  : !firrtl.uint<1>
+    %inner_in1, %inner_in2, %inner_out1, %inner_out2 = firrtl.instance inner @thru(in in1: !firrtl.uint<1>, in in2: !firrtl.uint<1>, out out1: !firrtl.uint<1>, out out2: !firrtl.uint<1>)
+    firrtl.connect %inner_in1, %a : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %x, %inner_out1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %inner_in2, %x : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %b, %inner_out2 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 
 // -----
 
-module  {
-  // Simple combinational loop
-  // CHECK-NOT: firrtl.circuit "hasloops"
-  firrtl.circuit "hasloops"   {
-    // expected-error @+1 {{detected combinational cycle in a FIRRTL module, sample path: hasloops.y <- hasloops.z <- hasloops.y}}
-    firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
-      %y = firrtl.wire  : !firrtl.uint<1>
-      %z = firrtl.wire  : !firrtl.uint<1>
-      firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
-      firrtl.connect %z, %y : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-remark @+1 {{this operation is part of the combinational cycle}}
-      firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
-      firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
-    }
+// Simple combinational loop
+// CHECK-NOT: firrtl.circuit "hasloops"
+firrtl.circuit "hasloops"   {
+  // expected-error @+1 {{detected combinational cycle in a FIRRTL module, sample path: hasloops.y <- hasloops.z <- hasloops.y}}
+  firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
+    %y = firrtl.wire  : !firrtl.uint<1>
+    %z = firrtl.wire  : !firrtl.uint<1>
+    firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %z, %y : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 
 // -----
 
-module  {
-  // Single-element combinational loop
-  // CHECK-NOT: firrtl.circuit "loop"
-  firrtl.circuit "loop"   {
-    // expected-error @+1 {{detected combinational cycle in a FIRRTL module, sample path: loop.w <- loop.w}}
-    firrtl.module @loop(out %y: !firrtl.uint<8>) {
-      %w = firrtl.wire  : !firrtl.uint<8>
-      firrtl.connect %w, %w : !firrtl.uint<8>, !firrtl.uint<8>
-    }
+// Single-element combinational loop
+// CHECK-NOT: firrtl.circuit "loop"
+firrtl.circuit "loop"   {
+  // expected-error @+1 {{detected combinational cycle in a FIRRTL module, sample path: loop.w <- loop.w}}
+  firrtl.module @loop(out %y: !firrtl.uint<8>) {
+    %w = firrtl.wire  : !firrtl.uint<8>
+    firrtl.connect %w, %w : !firrtl.uint<8>, !firrtl.uint<8>
   }
 }
 
 // -----
 
-module  {
-  // Node combinational loop
-  // CHECK-NOT: firrtl.circuit "hasloops"
-  firrtl.circuit "hasloops"   {
-    // expected-error @+1 {{detected combinational cycle in a FIRRTL module, sample path: hasloops.y <- hasloops.z <-}}
-    firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
-      %y = firrtl.wire  : !firrtl.uint<1>
-      firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-remark @+1 {{this operation is part of the combinational cycle}}
-      %0 = firrtl.and %c, %y : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-      %z = firrtl.node %0  : !firrtl.uint<1>
-      // expected-remark @+1 {{this operation is part of the combinational cycle}}
-      firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
-      firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
-    }
+// Node combinational loop
+// CHECK-NOT: firrtl.circuit "hasloops"
+firrtl.circuit "hasloops"   {
+  // expected-error @+1 {{detected combinational cycle in a FIRRTL module, sample path: hasloops.y <- hasloops.z <-}}
+  firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
+    %y = firrtl.wire  : !firrtl.uint<1>
+    firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    %0 = firrtl.and %c, %y : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %z = firrtl.node %0  : !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 
 // -----
 
-module  {
-  // Combinational loop through a combinational memory read port
-  // CHECK-NOT: firrtl.circuit "hasloops"
-  firrtl.circuit "hasloops"   {
-    // expected-error @+1 {{detected combinational cycle in a FIRRTL module, sample path: hasloops.y <- hasloops.z <- hasloops.m.r.data <- hasloops.m.r.addr <- hasloops.y <-}}
-    firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
-      %y = firrtl.wire  : !firrtl.uint<1>
-      %z = firrtl.wire  : !firrtl.uint<1>
-      firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
-      %m_r = firrtl.mem Undefined  {depth = 2 : i64, name = "m", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-      %0 = firrtl.subfield %m_r[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-      firrtl.connect %0, %clk : !firrtl.clock, !firrtl.clock
-      %1 = firrtl.subfield %m_r[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-      firrtl.connect %1, %y : !firrtl.uint<1>, !firrtl.uint<1>
-      %2 = firrtl.subfield %m_r[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-      %c1_ui = firrtl.constant 1 : !firrtl.uint
-      firrtl.connect %2, %c1_ui : !firrtl.uint<1>, !firrtl.uint
-      %3 = firrtl.subfield %m_r[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-      // expected-remark @+1 {{this operation is part of the combinational cycle}}
-      firrtl.connect %z, %3 : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-remark @+1 {{this operation is part of the combinational cycle}}
-      firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
-      firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
-    }
+// Combinational loop through a combinational memory read port
+// CHECK-NOT: firrtl.circuit "hasloops"
+firrtl.circuit "hasloops"   {
+  // expected-error @+1 {{detected combinational cycle in a FIRRTL module, sample path: hasloops.y <- hasloops.z <- hasloops.m.r.data <- hasloops.m.r.addr <- hasloops.y <-}}
+  firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
+    %y = firrtl.wire  : !firrtl.uint<1>
+    %z = firrtl.wire  : !firrtl.uint<1>
+    firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    %m_r = firrtl.mem Undefined  {depth = 2 : i64, name = "m", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    %0 = firrtl.subfield %m_r[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    firrtl.connect %0, %clk : !firrtl.clock, !firrtl.clock
+    %1 = firrtl.subfield %m_r[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    firrtl.connect %1, %y : !firrtl.uint<1>, !firrtl.uint<1>
+    %2 = firrtl.subfield %m_r[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    %c1_ui = firrtl.constant 1 : !firrtl.uint
+    firrtl.connect %2, %c1_ui : !firrtl.uint<1>, !firrtl.uint
+    %3 = firrtl.subfield %m_r[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %z, %3 : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+
+// -----
+
+// Combination loop through an instance
+// CHECK-NOT: firrtl.circuit "hasloops"
+firrtl.circuit "hasloops"   {
+  firrtl.module @thru(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+    firrtl.connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  // expected-error @+1 {{detected combinational cycle in a FIRRTL module, sample path: hasloops.y <- hasloops.z <- hasloops.inner.out <- hasloops.inner.in <- hasloops.y <-}}
+  firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
+    %y = firrtl.wire  : !firrtl.uint<1>
+    %z = firrtl.wire  : !firrtl.uint<1>
+    firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{instance is part of a combinational cycle, instance port number '1' has a path from port number '0', inner.out <- inner.in}}
+    %inner_in, %inner_out = firrtl.instance inner @thru(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    firrtl.connect %inner_in, %y : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %z, %inner_out : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 
 // -----
 
-module  {
-  // Combination loop through an instance
-  // CHECK-NOT: firrtl.circuit "hasloops"
-  firrtl.circuit "hasloops"   {
-    firrtl.module @thru(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
-      firrtl.connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
-    }
-    // expected-error @+1 {{detected combinational cycle in a FIRRTL module, sample path: hasloops.y <- hasloops.z <- hasloops.inner.out <- hasloops.inner.in <- hasloops.y <-}}
-    firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
-      %y = firrtl.wire  : !firrtl.uint<1>
-      %z = firrtl.wire  : !firrtl.uint<1>
-      firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-remark @+1 {{instance is part of a combinational cycle, instance port number '1' has a path from port number '0', inner.out <- inner.in}}
-      %inner_in, %inner_out = firrtl.instance inner @thru(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
-      firrtl.connect %inner_in, %y : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-remark @+1 {{this operation is part of the combinational cycle}}
-      firrtl.connect %z, %inner_out : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-remark @+1 {{this operation is part of the combinational cycle}}
-      firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
-      firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
-    }
+// Multiple simple loops in one SCC
+// CHECK-NOT: firrtl.circuit "hasloops"
+firrtl.circuit "hasloops"   {
+  // expected-error @+1 {{hasloops.d <- hasloops.e <- hasloops.b <-}}
+  firrtl.module @hasloops(in %i: !firrtl.uint<1>, out %o: !firrtl.uint<1>) {
+    %a = firrtl.wire  : !firrtl.uint<1>
+    %b = firrtl.wire  : !firrtl.uint<1>
+    %c = firrtl.wire  : !firrtl.uint<1>
+    %d = firrtl.wire  : !firrtl.uint<1>
+    %e = firrtl.wire  : !firrtl.uint<1>
+    %0 = firrtl.and %c, %i : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %a, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    %1 = firrtl.and %a, %d : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %b, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    %2 = firrtl.and %c, %e : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %d, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %e, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %o, %e : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 
-// -----
-
-module  {
-  // Multiple simple loops in one SCC
-  // CHECK-NOT: firrtl.circuit "hasloops"
-  firrtl.circuit "hasloops"   {
-    // expected-error @+1 {{hasloops.d <- hasloops.e <- hasloops.b <-}}
-    firrtl.module @hasloops(in %i: !firrtl.uint<1>, out %o: !firrtl.uint<1>) {
-      %a = firrtl.wire  : !firrtl.uint<1>
-      %b = firrtl.wire  : !firrtl.uint<1>
-      %c = firrtl.wire  : !firrtl.uint<1>
-      %d = firrtl.wire  : !firrtl.uint<1>
-      %e = firrtl.wire  : !firrtl.uint<1>
-      %0 = firrtl.and %c, %i : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-      firrtl.connect %a, %0 : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-remark @+1 {{this operation is part of the combinational cycle}}
-      %1 = firrtl.and %a, %d : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-      firrtl.connect %b, %1 : !firrtl.uint<1>, !firrtl.uint<1>
-      firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-remark @+1 {{this operation is part of the combinational cycle}}
-      %2 = firrtl.and %c, %e : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-      // expected-remark @+1 {{this operation is part of the combinational cycle}}
-      firrtl.connect %d, %2 : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-remark @+1 {{this operation is part of the combinational cycle}}
-      firrtl.connect %e, %b : !firrtl.uint<1>, !firrtl.uint<1>
-      firrtl.connect %o, %e : !firrtl.uint<1>, !firrtl.uint<1>
-    }
-  }
-}
 
 // -----
 
@@ -216,31 +204,29 @@ firrtl.circuit "Foo"  {
 
 // -----
 
-module  {
-  // Node combinational loop through vector subindex
-  // CHECK-NOT: firrtl.circuit "hasloops"
-  firrtl.circuit "hasloops"   {
-    // expected-error @+1 {{hasloops.w[3] <- hasloops.z <-}}
-    firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
-      %w = firrtl.wire  : !firrtl.vector<uint<1>,10>
-      %y = firrtl.subindex %w[3]  : !firrtl.vector<uint<1>,10>
-      firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-remark @+1 {{this operation is part of the combinational cycle}}
-      %0 = firrtl.and %c, %y : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-      %z = firrtl.node %0  : !firrtl.uint<1>
-      // expected-remark @+1 {{this operation is part of the combinational cycle}}
-      firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
-      firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
-    }
+// Node combinational loop through vector subindex
+// CHECK-NOT: firrtl.circuit "hasloops"
+firrtl.circuit "hasloops"   {
+  // expected-error @+1 {{hasloops.w[3] <- hasloops.z <-}}
+  firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
+    %w = firrtl.wire  : !firrtl.vector<uint<1>,10>
+    %y = firrtl.subindex %w[3]  : !firrtl.vector<uint<1>,10>
+    firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    %0 = firrtl.and %c, %y : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %z = firrtl.node %0  : !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 
 // -----
 
-  // Node combinational loop through vector subindex
-  // CHECK-NOT: firrtl.circuit "hasloops"
+// Node combinational loop through vector subindex
+// CHECK-NOT: firrtl.circuit "hasloops"
 firrtl.circuit "hasloops"   {
-  // expected-error @+1 {{detected combinational cycle in a FIRRTL module, sample path: hasloops.bar_b[0] <- hasloops.bar_a[0] <- hasloops.b[0] <- hasloops.bar_b[0] <-}}
+  // expected-error @+1 {{hasloops.b[0] <- hasloops.bar_b[0] <- hasloops.bar_a[0] <- hasloops.b[0]}}
   firrtl.module @hasloops(out %b: !firrtl.vector<uint<1>, 2>) {
     %bar_a = firrtl.wire : !firrtl.vector<uint<1>, 2>
     %bar_b = firrtl.wire : !firrtl.vector<uint<1>, 2>
@@ -290,8 +276,7 @@ firrtl.circuit "hasLoops"  {
 // -----
 
 firrtl.circuit "bundleWire"   {
-
-  // expected-error @+1 {{detected combinational cycle in a FIRRTL module, sample path: bundleWire.out2 <- bundleWire.x <- bundleWire.w.foo.bar.baz <- bundleWire.out2 <-}}
+  // expected-error @+1 {{bundleWire.w.foo.bar.baz <- bundleWire.out2 <- bundleWire.x <- bundleWire.w.foo.bar.baz }}
   firrtl.module @bundleWire(in %arg: !firrtl.bundle<foo: bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>>,
                            out %out1: !firrtl.uint<1>, out %out2: !firrtl.sint<64>) {
 
@@ -306,12 +291,11 @@ firrtl.circuit "bundleWire"   {
     %2 = firrtl.subfield %1[baz] : !firrtl.bundle<baz: uint<1>>
     %3 = firrtl.subfield %0[qux] : !firrtl.bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>
     firrtl.connect %w0_0_0, %3 : !firrtl.sint<64>, !firrtl.sint<64>
-		// expected-remark @+1 {{this operation is part of the combinational cycle}}
     firrtl.connect %x, %w0_0_0 : !firrtl.sint<64>, !firrtl.sint<64>
 		// expected-remark @+1 {{this operation is part of the combinational cycle}}
     firrtl.connect %out2, %x : !firrtl.sint<64>, !firrtl.sint<64>
+		// expected-remark @+1 {{this operation is part of the combinational cycle}}
     firrtl.connect %w0_0_0, %out2 : !firrtl.sint<64>, !firrtl.sint<64>
-
     firrtl.connect %out1, %2 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
@@ -334,83 +318,79 @@ firrtl.circuit "registerLoop"   {
 
 // -----
 
-module  {
-  // Simple combinational loop
-  // CHECK-NOT: firrtl.circuit "hasloops"
-  firrtl.circuit "hasloops"   {
-    // expected-error @+1 {{hasloops.y <- hasloops.z <- hasloops.y <-}}
-    firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
-      %y = firrtl.wire  : !firrtl.uint<1>
-      %z = firrtl.wire  : !firrtl.uint<1>
-      firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
-      firrtl.connect %z, %y : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-remark @+1 {{this operation is part of the combinational cycle}}
-      firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
-      firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
-    }
+// Simple combinational loop
+// CHECK-NOT: firrtl.circuit "hasloops"
+firrtl.circuit "hasloops"   {
+  // expected-error @+1 {{hasloops.y <- hasloops.z <- hasloops.y <-}}
+  firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
+    %y = firrtl.wire  : !firrtl.uint<1>
+    %z = firrtl.wire  : !firrtl.uint<1>
+    firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %z, %y : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 
 // -----
 
-module  {
-  // Combinational loop through a combinational memory read port
-  // CHECK-NOT: firrtl.circuit "hasloops"
-  firrtl.circuit "hasloops"   {
-    // expected-error @+1 {{hasloops.y <- hasloops.z <- hasloops.m.r.data <- hasloops.m.r.en <- hasloops.y <-}}
-    firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
-      %y = firrtl.wire  : !firrtl.uint<1>
-      %z = firrtl.wire  : !firrtl.uint<1>
-      firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
-      %m_r = firrtl.mem Undefined  {depth = 2 : i64, name = "m", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-      %0 = firrtl.subfield %m_r[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-      firrtl.connect %0, %clk : !firrtl.clock, !firrtl.clock
-      %1 = firrtl.subfield %m_r[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-      %2 = firrtl.subfield %m_r[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-      firrtl.connect %2, %y : !firrtl.uint<1>, !firrtl.uint<1>
-      %c1_ui = firrtl.constant 1 : !firrtl.uint
-      firrtl.connect %2, %c1_ui : !firrtl.uint<1>, !firrtl.uint
-      %3 = firrtl.subfield %m_r[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-      // expected-remark @+1 {{this operation is part of the combinational cycle}}
-      firrtl.connect %z, %3 : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-remark @+1 {{this operation is part of the combinational cycle}}
-      firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
-      firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
-    }
+// Combinational loop through a combinational memory read port
+// CHECK-NOT: firrtl.circuit "hasloops"
+firrtl.circuit "hasloops"   {
+  // expected-error @+1 {{hasloops.y <- hasloops.z <- hasloops.m.r.data <- hasloops.m.r.en <- hasloops.y <-}}
+  firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
+    %y = firrtl.wire  : !firrtl.uint<1>
+    %z = firrtl.wire  : !firrtl.uint<1>
+    firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    %m_r = firrtl.mem Undefined  {depth = 2 : i64, name = "m", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    %0 = firrtl.subfield %m_r[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    firrtl.connect %0, %clk : !firrtl.clock, !firrtl.clock
+    %1 = firrtl.subfield %m_r[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    %2 = firrtl.subfield %m_r[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    firrtl.connect %2, %y : !firrtl.uint<1>, !firrtl.uint<1>
+    %c1_ui = firrtl.constant 1 : !firrtl.uint
+    firrtl.connect %2, %c1_ui : !firrtl.uint<1>, !firrtl.uint
+    %3 = firrtl.subfield %m_r[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %z, %3 : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
 
 // -----
 
-module  {
-  // Combination loop through an instance
-  // CHECK-NOT: firrtl.circuit "hasloops"
-  firrtl.circuit "hasloops"   {
-    firrtl.module @thru1(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
-      firrtl.connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
-    }
+// Combination loop through an instance
+// CHECK-NOT: firrtl.circuit "hasloops"
+firrtl.circuit "hasloops"   {
+  firrtl.module @thru1(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+    firrtl.connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
+  }
 
-    firrtl.module @thru2(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
-      %inner_in, %inner_out = firrtl.instance inner1 @thru1(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
-      firrtl.connect %inner_in, %in : !firrtl.uint<1>, !firrtl.uint<1>
-      firrtl.connect %out, %inner_out : !firrtl.uint<1>, !firrtl.uint<1>
-    }
-    // expected-error @+1 {{hasloops.y <- hasloops.z <- hasloops.inner2.out <- hasloops.inner2.in <- hasloops.y <-}}
-    firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
-      %y = firrtl.wire  : !firrtl.uint<1>
-      %z = firrtl.wire  : !firrtl.uint<1>
-      firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-remark @+1 {{instance is part of a combinational cycle, instance port number '1' has a path from port number '0', inner2.out <- inner2.in}}
-      %inner_in, %inner_out = firrtl.instance inner2 @thru2(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
-      firrtl.connect %inner_in, %y : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-remark @+1 {{this operation is part of the combinational cycle}}
-      firrtl.connect %z, %inner_out : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-remark @+1 {{this operation is part of the combinational cycle}}
-      firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
-      firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
-    }
+  firrtl.module @thru2(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+    %inner_in, %inner_out = firrtl.instance inner1 @thru1(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    firrtl.connect %inner_in, %in : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %out, %inner_out : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  // expected-error @+1 {{hasloops.y <- hasloops.z <- hasloops.inner2.out <- hasloops.inner2.in <- hasloops.y <-}}
+  firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
+    %y = firrtl.wire  : !firrtl.uint<1>
+    %z = firrtl.wire  : !firrtl.uint<1>
+    firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{instance is part of a combinational cycle, instance port number '1' has a path from port number '0', inner2.out <- inner2.in}}
+    %inner_in, %inner_out = firrtl.instance inner2 @thru2(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    firrtl.connect %inner_in, %y : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %z, %inner_out : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
 
 // -----
 
@@ -510,7 +490,7 @@ firrtl.circuit "subaccess"   {
 // -----
 
 // Two input ports share part of the path to an output port.
-// CHECK-NOT: firrtl.circuit "hasloops"
+// CHECK-NOT: firrtl.circuit "revisitOps"
 firrtl.circuit "revisitOps"   {
   firrtl.module @thru(in %in1: !firrtl.uint<1>,in %in2: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
     %1 = firrtl.mux(%in1, %in1, %in2)  : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
@@ -524,5 +504,81 @@ firrtl.circuit "revisitOps"   {
     // expected-remark @+1 {{this operation is part of the combinational cycle}}
     firrtl.connect %in2, %x : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %x, %out : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Two input ports and a wire share path to an output port.
+// CHECK-NOT: firrtl.circuit "revisitOps"
+firrtl.circuit "revisitOps"   {
+  firrtl.module @thru(in %in1: !firrtl.vector<uint<1>,2>, in %in2: !firrtl.vector<uint<1>,3>, out %out: !firrtl.vector<uint<1>,2>) {
+    %w = firrtl.wire : !firrtl.uint<1>
+    %in1_0 = firrtl.subindex %in1[0] : !firrtl.vector<uint<1>,2>
+    %in2_1 = firrtl.subindex %in2[1] : !firrtl.vector<uint<1>,3>
+    %out_1 = firrtl.subindex %out[1] : !firrtl.vector<uint<1>,2>
+    %1 = firrtl.mux(%w, %in1_0, %in2_1)  : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %out_1, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  // expected-error @+1 {{revisitOps.x <- revisitOps.inner2.out[1] <- revisitOps.inner2.in2[1] <- revisitOps.x}}
+  firrtl.module @revisitOps() {
+    %in1, %in2, %out = firrtl.instance inner2 @thru(in in1: !firrtl.vector<uint<1>,2>, in in2: !firrtl.vector<uint<1>,3>, out out: !firrtl.vector<uint<1>,2>)
+    %in1_0 = firrtl.subindex %in1[0] : !firrtl.vector<uint<1>,2>
+    %in2_1 = firrtl.subindex %in2[1] : !firrtl.vector<uint<1>,3>
+    %out_1 = firrtl.subindex %out[1] : !firrtl.vector<uint<1>,2>
+    %x = firrtl.wire  : !firrtl.uint<1>
+    firrtl.connect %in2_1, %x : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %x, %out_1 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Shared comb path from input ports, ensure that all the paths to the output port are discovered.
+// CHECK-NOT: firrtl.circuit "revisitOps"
+firrtl.circuit "revisitOps"   {
+  firrtl.module @thru(in %in0: !firrtl.vector<uint<1>,2>, in %in1: !firrtl.vector<uint<1>,2>, in %in2: !firrtl.vector<uint<1>,3>, out %out: !firrtl.vector<uint<1>,2>) {
+    %w = firrtl.wire : !firrtl.uint<1>
+    %in0_0 = firrtl.subindex %in0[0] : !firrtl.vector<uint<1>,2>
+    %in1_0 = firrtl.subindex %in1[0] : !firrtl.vector<uint<1>,2>
+    %in2_1 = firrtl.subindex %in2[1] : !firrtl.vector<uint<1>,3>
+    %out_1 = firrtl.subindex %out[1] : !firrtl.vector<uint<1>,2>
+    %1 = firrtl.mux(%w, %in1_0, %in2_1)  : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %2 = firrtl.mux(%w, %in0_0, %1)  : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %out_1, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  // expected-error @+1 {{revisitOps.x <- revisitOps.inner2.out[1] <- revisitOps.inner2.in2[1] <- revisitOps.x}}
+  firrtl.module @revisitOps() {
+    %in0, %in1, %in2, %out = firrtl.instance inner2 @thru(in in0: !firrtl.vector<uint<1>,2>, in in1: !firrtl.vector<uint<1>,2>, in in2: !firrtl.vector<uint<1>,3>, out out: !firrtl.vector<uint<1>,2>)
+    %in1_0 = firrtl.subindex %in1[0] : !firrtl.vector<uint<1>,2>
+    %in2_1 = firrtl.subindex %in2[1] : !firrtl.vector<uint<1>,3>
+    %out_1 = firrtl.subindex %out[1] : !firrtl.vector<uint<1>,2>
+    %x = firrtl.wire  : !firrtl.uint<1>
+    firrtl.connect %in2_1, %x : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %x, %out_1 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Comb path from ground type to aggregate.
+// CHECK-NOT: firrtl.circuit "scalarToVec"
+firrtl.circuit "scalarToVec"   {
+  firrtl.module @thru(in %in1: !firrtl.uint<1>, in %in2: !firrtl.vector<uint<1>,3>, out %out: !firrtl.vector<uint<1>,2>) {
+    %out_1 = firrtl.subindex %out[1] : !firrtl.vector<uint<1>,2>
+    firrtl.connect %out_1, %in1 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  // expected-error @+1 {{scalarToVec.inner2.in1 <- scalarToVec.x <- scalarToVec.inner2.out[1] <- scalarToVec.inner2.in1}}
+  firrtl.module @scalarToVec() {
+    %in1_0, %in2, %out = firrtl.instance inner2 @thru(in in1: !firrtl.uint<1>, in in2: !firrtl.vector<uint<1>,3>, out out: !firrtl.vector<uint<1>,2>)
+    //%in1_0 = firrtl.subindex %in1[0] : !firrtl.vector<uint<1>,2>
+    %out_1 = firrtl.subindex %out[1] : !firrtl.vector<uint<1>,2>
+    %x = firrtl.wire  : !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %in1_0, %x : !firrtl.uint<1>, !firrtl.uint<1>
+    // expected-remark @+1 {{this operation is part of the combinational cycle}}
+    firrtl.connect %x, %out_1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }

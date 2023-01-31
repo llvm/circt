@@ -22,7 +22,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/LLVM.h"
-#include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/DenseMap.h"
@@ -269,9 +269,8 @@ struct Equivalence {
     return failure();
   }
 
-  LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
-                      Operation *a, Block &aBlock, Operation *b,
-                      Block &bBlock) {
+  LogicalResult check(InFlightDiagnostic &diag, IRMapping &map, Operation *a,
+                      Block &aBlock, Operation *b, Block &bBlock) {
 
     // Block argument types.
     auto portNames = a->getAttrOfType<ArrayAttr>("portNames");
@@ -348,9 +347,8 @@ struct Equivalence {
     return success();
   }
 
-  LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
-                      Operation *a, Region &aRegion, Operation *b,
-                      Region &bRegion) {
+  LogicalResult check(InFlightDiagnostic &diag, IRMapping &map, Operation *a,
+                      Region &aRegion, Operation *b, Region &bRegion) {
     auto aIt = aRegion.begin();
     auto aEnd = aRegion.end();
     auto bIt = bRegion.begin();
@@ -395,8 +393,8 @@ struct Equivalence {
     return success();
   }
 
-  LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
-                      Operation *a, DictionaryAttr aDict, Operation *b,
+  LogicalResult check(InFlightDiagnostic &diag, IRMapping &map, Operation *a,
+                      DictionaryAttr aDict, Operation *b,
                       DictionaryAttr bDict) {
     // Fast path.
     if (aDict == bDict)
@@ -471,8 +469,8 @@ struct Equivalence {
   }
 
   // NOLINTNEXTLINE(misc-no-recursion)
-  LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
-                      Operation *a, Operation *b) {
+  LogicalResult check(InFlightDiagnostic &diag, IRMapping &map, Operation *a,
+                      Operation *b) {
     // Operation name.
     if (a->getName() != b->getName()) {
       diag.attachNote(a->getLoc()) << "first operation is a " << a->getName();
@@ -551,7 +549,7 @@ struct Equivalence {
 
   // NOLINTNEXTLINE(misc-no-recursion)
   void check(InFlightDiagnostic &diag, Operation *a, Operation *b) {
-    BlockAndValueMapping map;
+    IRMapping map;
     if (AnnotationSet(a).hasAnnotation(noDedupClass)) {
       diag.attachNote(a->getLoc()) << "module marked NoDedup";
       return;

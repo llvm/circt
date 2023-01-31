@@ -1,6 +1,6 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
-from pycde import generator, types, Input, Output
+from pycde import generator, types, Module, Input, Output
 from pycde.behavioral import If, Else, EndIf
 from pycde.testing import unittestmodule
 
@@ -19,7 +19,7 @@ from pycde.testing import unittestmodule
 
 
 @unittestmodule()
-class IfNestedTest:
+class IfNestedTest(Module):
   a = Input(types.ui8)
   b = Input(types.ui8)
   cond = Input(types.i1)
@@ -60,7 +60,7 @@ class IfNestedTest:
 
 
 @unittestmodule()
-class IfDefaultTest:
+class IfDefaultTest(Module):
   a = Input(types.ui8)
   b = Input(types.ui8)
   cond = Input(types.i1)
@@ -83,7 +83,7 @@ class IfDefaultTest:
 
 
 @unittestmodule()
-class IfMismatchErrorTest:
+class IfMismatchErrorTest(Module):
   cond = Input(types.i1)
   a = Input(types.ui8)
   b = Input(types.ui4)
@@ -104,7 +104,7 @@ class IfMismatchErrorTest:
 
 
 @unittestmodule()
-class IfMismatchEndIfTest:
+class IfMismatchEndIfTest(Module):
 
   @generator
   def build(ports):
@@ -116,7 +116,7 @@ class IfMismatchEndIfTest:
 
 
 @unittestmodule()
-class IfCondErrorTest:
+class IfCondErrorTest(Module):
   cond = Input(types.i2)
 
   @generator

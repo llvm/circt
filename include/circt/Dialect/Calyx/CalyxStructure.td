@@ -39,6 +39,7 @@ def UndefinedOp : CalyxOp<"undef", [
 
 def ComponentOp : CalyxOp<"component", [
     HasParent<"mlir::ModuleOp">,
+    RegionKindInterface,
     SymbolTable, /* contains Cell names. */
     Symbol,
     FunctionOpInterface,
@@ -84,6 +85,9 @@ def ComponentOp : CalyxOp<"component", [
   let extraClassDeclaration = [{
       using mlir::detail::FunctionOpInterfaceTrait<ComponentOp>::front;
       using mlir::detail::FunctionOpInterfaceTrait<ComponentOp>::getFunctionBody;
+
+      // Implement RegionKindInterface.
+      static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
       /// Returns the argument types of this function.
       ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }

@@ -718,7 +718,7 @@ LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
   if (!choiceUnused && !choiceResult.hasOneUse())
     return failure();
 
-  Operation *choiceUser;
+  Operation *choiceUser = nullptr;
   if (choiceResult.hasOneUse()) {
     choiceUser = choiceResult.getUses().begin().getUser();
     if (!isa<SinkOp>(choiceUser))
@@ -727,7 +727,7 @@ LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
 
   auto merge = rewriter.create<MergeOp>(op.getLoc(), op.getDataOperands());
 
-  for (auto &use : dataResult.getUses()) {
+  for (auto &use : llvm::make_early_inc_range(dataResult.getUses())) {
     auto *user = use.getOwner();
     rewriter.updateRootInPlace(
         user, [&]() { user->setOperand(use.getOperandNumber(), merge); });
@@ -777,17 +777,6 @@ ParseResult BranchOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void BranchOp::print(OpAsmPrinter &p) { sostPrint(p, false); }
 
-LogicalResult ConditionalBranchOp::inferReturnTypes(
-    MLIRContext *context, std::optional<Location> location, ValueRange operands,
-    DictionaryAttr attributes, mlir::RegionRange regions,
-    SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
-  // Return type is type of data operand (second argument), twice
-  auto resType = operands[1].getType();
-  inferredReturnTypes.push_back(resType);
-  inferredReturnTypes.push_back(resType);
-  return success();
-}
-
 ParseResult ConditionalBranchOp::parse(OpAsmParser &parser,
                                        OperationState &result) {
   SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
@@ -833,15 +822,6 @@ std::string handshake::ConditionalBranchOp::getResultName(unsigned int idx) {
 bool ConditionalBranchOp::isControl() {
   return isControlCheckTypeAndOperand(getDataOperand().getType(),
                                       getDataOperand());
-}
-
-LogicalResult SelectOp::inferReturnTypes(
-    MLIRContext *context, std::optional<Location> location, ValueRange operands,
-    DictionaryAttr attributes, mlir::RegionRange regions,
-    SmallVectorImpl<mlir::Type> &inferredReturnTypes) {
-  // Return type is type of true operand (equivalently, of false operand)
-  inferredReturnTypes.push_back(operands[1].getType());
-  return success();
 }
 
 ParseResult SelectOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -1290,7 +1270,7 @@ static ParseResult parseMemoryAccessOp(OpAsmParser &parser,
   // The last type will be the data type of the operation; the prior will be the
   // address types.
   Type dataType = parsedTypes.back();
-  auto parsedTypesRef = llvm::makeArrayRef(parsedTypes);
+  auto parsedTypesRef = ArrayRef(parsedTypes);
   result.addTypes(dataType);
   result.addTypes(parsedTypesRef.drop_back());
   allOperands.append(addressOperands);

@@ -4,7 +4,7 @@
 import circt
 from circt.dialects import comb, hw
 
-from mlir.ir import Context, Location, InsertionPoint, IntegerType, IntegerAttr, Module
+from circt.ir import Context, Location, InsertionPoint, IntegerType, IntegerAttr, Module
 
 with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)

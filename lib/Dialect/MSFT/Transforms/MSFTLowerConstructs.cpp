@@ -16,8 +16,8 @@
 #include "circt/Dialect/MSFT/MSFTPasses.h"
 #include "circt/Support/Namespace.h"
 
-#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
@@ -119,7 +119,7 @@ public:
         // the corresponding row/column broadcast value.
         // NOTE: the PE region is NOT a graph region so we don't have to deal
         // with backedges.
-        BlockAndValueMapping mapper;
+        IRMapping mapper;
         mapper.map(peBlock.getArgument(0), rowValue);
         mapper.map(peBlock.getArgument(1), colValue);
         for (Operation &peOperation : peBlock)

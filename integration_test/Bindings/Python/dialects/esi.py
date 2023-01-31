@@ -5,8 +5,8 @@
 import circt
 from circt.dialects import esi
 
-from mlir.ir import *
-from mlir import passmanager
+from circt.ir import *
+from circt import passmanager
 
 with Context() as ctx:
   circt.register_dialects(ctx)

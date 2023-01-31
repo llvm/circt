@@ -577,6 +577,10 @@ struct InterfaceElemsBuilder {
 ///    instantiate interfaces and to generate the "mappings" file that produces
 ///    cross-module references (XMRs) to drive the interface.
 struct GrandCentralPass : public GrandCentralBase<GrandCentralPass> {
+  GrandCentralPass(bool instantiateCompanionOnlyFlag) {
+    instantiateCompanionOnly = instantiateCompanionOnlyFlag;
+  }
+
   void runOnOperation() override;
 
 private:
@@ -1112,8 +1116,17 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
       llvm::StringSwitch<bool>(classBase)
           .Cases("StringType", "BooleanType", "IntegerType", "DoubleType", true)
           .Default(false);
-  if (isIgnorable)
-    return augmentedType;
+  if (isIgnorable) {
+    NamedAttrList attrs;
+    attrs.append("class", classAttr);
+    attrs.append("name", name);
+    auto value =
+        tryGetAs<Attribute>(augmentedType, root, "value", loc, clazz, path);
+    if (!value)
+      return std::nullopt;
+    attrs.append("value", value);
+    return DictionaryAttr::getWithSorted(context, attrs);
+  }
 
   // Anything else is unexpected or a user error if they manually wrote
   // annotations.  Print an error and error out.
@@ -1865,7 +1878,7 @@ void GrandCentralPass::runOnOperation() {
               // Assert that the companion is instantiated once and only once.
               auto instance = exactlyOneInstance(op, "companion");
               if (!instance)
-                return false;
+                goto FModuleOp_error;
 
               // If no extraction info was provided, exit.  Otherwise, setup the
               // lone instance of the companion to be lowered as a bind.
@@ -1882,7 +1895,11 @@ void GrandCentralPass::runOnOperation() {
                 return true;
               }
 
-              (*instance)->setAttr("lowerToBind", builder.getUnitAttr());
+              // Lower the companion to a bind unless the user told us
+              // explicitly not to.
+              if (!instantiateCompanionOnly)
+                (*instance)->setAttr("lowerToBind", builder.getUnitAttr());
+
               (*instance)->setAttr(
                   "output_file",
                   hw::OutputFileAttr::getFromFilename(
@@ -2015,6 +2032,14 @@ void GrandCentralPass::runOnOperation() {
       }
     }
   });
+
+  // If we are in "instantiateCompanionOnly" mode, then just exit here.  We
+  // don't need to create the interface.  This is a janky hack for situations
+  // where you want to synthesize assertion logic included in the companion, but
+  // don't want to have a dead interface hanging around (or have problems with
+  // tools understanding interfaces).
+  if (instantiateCompanionOnly)
+    return;
 
   // Now, iterate over the worklist of interface-encoding annotations to create
   // the interface and all its sub-interfaces (interfaces that it instantiates),
@@ -2242,6 +2267,7 @@ void GrandCentralPass::runOnOperation() {
 // Pass Creation
 //===----------------------------------------------------------------------===//
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createGrandCentralPass() {
-  return std::make_unique<GrandCentralPass>();
+std::unique_ptr<mlir::Pass>
+circt::firrtl::createGrandCentralPass(bool instantiateCompanionOnly) {
+  return std::make_unique<GrandCentralPass>(instantiateCompanionOnly);
 }

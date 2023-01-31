@@ -1762,7 +1762,8 @@ LogicalResult ArraySliceOp::canonicalize(ArraySliceOp op,
   auto sliceTy = hw::type_cast<ArrayType>(op.getType());
   auto elemTy = sliceTy.getElementType();
   uint64_t sliceSize = sliceTy.getSize();
-  assert(sliceSize != 0 && "empty slice");
+  if (sliceSize == 0)
+    return failure();
 
   if (sliceSize == 1) {
     // slice(a, n) -> create(a[n])

@@ -13,6 +13,7 @@ jobs:
           - mode: release
             assert: OFF
             shared: OFF
+            stats: ON
             cmake-args: ''
         runner: [ubuntu-20.04, ubuntu-18.04, macos-11]
         include:
@@ -69,7 +70,8 @@ jobs:
               -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
               -DLLVM_ENABLE_TERMINFO=OFF \
               -DLLVM_PARALLEL_LINK_JOBS=1 \
-              -DLLVM_TARGETS_TO_BUILD="host"
+              -DLLVM_TARGETS_TO_BUILD="host" \
+              -DLLVM_FORCE_ENABLE_STATS=${{ matrix.build_config.stats }}
           ninja
           ninja check-llvm check-mlir
 
@@ -94,6 +96,7 @@ jobs:
             -DLLVM_ENABLE_TERMINFO=OFF \
             -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
             -DLLVM_PARALLEL_LINK_JOBS=1 \
+            -DLLVM_FORCE_ENABLE_STATS=${{ matrix.build_config.stats }} \
             -DCIRCT_RELEASE_TAG_ENABLED=ON \
             -DCIRCT_RELEASE_TAG=${{ github.ref_name }} \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF

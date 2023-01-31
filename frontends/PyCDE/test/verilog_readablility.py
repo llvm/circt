@@ -1,10 +1,9 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
-from pycde import (Output, Input, module, generator, types, dim, System)
+from pycde import (Output, Input, Module, generator, types, dim, System)
 
 
-@module
-class WireNames:
+class WireNames(Module):
   clk = Input(types.i1)
   data_in = Input(dim(32, 3))
   sel = Input(types.i2)
@@ -13,14 +12,12 @@ class WireNames:
   b = Output(types.i32)
 
   @generator
-  def build(ports):
-    foo = ports.data_in[0]
+  def build(self):
+    foo = self.data_in[0]
     foo.name = "foo"
     arr_data = dim(32, 4)([1, 2, 3, 4], "arr_data")
-    ports.set_all_ports({
-        'a': foo.reg(ports.clk).reg(ports.clk),
-        'b': arr_data[ports.sel],
-    })
+    self.a = foo.reg(self.clk).reg(self.clk)
+    self.b = arr_data[self.sel]
 
 
 sys = System([WireNames])

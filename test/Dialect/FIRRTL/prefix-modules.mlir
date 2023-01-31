@@ -305,47 +305,46 @@ firrtl.circuit "GCTDataMemTapsPrefix" {
 
 // Test the NonLocalAnchor is properly updated.
 // CHECK-LABEL: firrtl.circuit "FixNLA" {
-  firrtl.circuit "FixNLA"   {
-    hw.hierpath private @nla_1 [@FixNLA::@bar, @Bar::@baz, @Baz]
-    // CHECK:   hw.hierpath private @nla_1 [@FixNLA::@bar, @Bar::@baz, @Baz]
-    hw.hierpath private @nla_2 [@FixNLA::@foo, @Foo::@bar, @Bar::@baz, @Baz::@s1]
-    // CHECK:   hw.hierpath private @nla_2 [@FixNLA::@foo, @X_Foo::@bar, @X_Bar::@baz, @X_Baz::@s1]
-    hw.hierpath private @nla_3 [@FixNLA::@bar, @Bar::@baz, @Baz]
-    // CHECK:   hw.hierpath private @nla_3 [@FixNLA::@bar, @Bar::@baz, @Baz]
-    hw.hierpath private @nla_4 [@Foo::@bar, @Bar::@baz, @Baz]
-    // CHECK:       hw.hierpath private @nla_4 [@X_Foo::@bar, @X_Bar::@baz, @X_Baz]
-    // CHECK-LABEL: firrtl.module @FixNLA()
-    firrtl.module @FixNLA() {
-      firrtl.instance foo sym @foo  @Foo()
-      firrtl.instance bar sym @bar  @Bar()
-      // CHECK:   firrtl.instance foo sym @foo @X_Foo()
-      // CHECK:   firrtl.instance bar sym @bar @Bar()
-    }
-    firrtl.module @Foo() attributes {annotations = [{class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation", inclusive = true, prefix = "X_"}]} {
-      firrtl.instance bar sym @bar  @Bar()
-    }
-    // CHECK-LABEL:   firrtl.module @X_Foo()
-    // CHECK:         firrtl.instance bar sym @bar @X_Bar()
-
-    // CHECK-LABEL:   firrtl.module @Bar()
-    firrtl.module @Bar() {
-      firrtl.instance baz sym @baz @Baz()
-      // CHECK:     firrtl.instance baz sym @baz @Baz()
-    }
-    // CHECK-LABEL: firrtl.module @X_Bar()
-    // CHECK:       firrtl.instance baz sym @baz @X_Baz()
-
-    firrtl.module @Baz() attributes {annotations = [{circt.nonlocal = @nla_1, class = "nla_1"}, {circt.nonlocal = @nla_3, class = "nla_3"}, {circt.nonlocal = @nla_4, class = "nla_4"}]} {
-      %mem_MPORT_en = firrtl.wire sym @s1  {annotations = [{circt.nonlocal = @nla_2, class = "nla_2"}]} : !firrtl.uint<1>
-    }
-    // CHECK-LABEL: firrtl.module @X_Baz()
-    // CHECK-SAME:  annotations = [{circt.nonlocal = @nla_4, class = "nla_4"}]
-    // CHECK:       %mem_MPORT_en = firrtl.wire sym @s1  {annotations = [{circt.nonlocal = @nla_2, class = "nla_2"}]} : !firrtl.uint<1>
-    // CHECK:       firrtl.module @Baz()
-    // CHECK-SAME:  annotations = [{circt.nonlocal = @nla_1, class = "nla_1"}, {circt.nonlocal = @nla_3, class = "nla_3"}]
-    // CHECK:       %mem_MPORT_en = firrtl.wire sym @s1  : !firrtl.uint<1>
-
+firrtl.circuit "FixNLA"   {
+  hw.hierpath private @nla_1 [@FixNLA::@bar, @Bar::@baz, @Baz]
+  // CHECK:   hw.hierpath private @nla_1 [@FixNLA::@bar, @Bar::@baz, @Baz]
+  hw.hierpath private @nla_2 [@FixNLA::@foo, @Foo::@bar, @Bar::@baz, @Baz::@s1]
+  // CHECK:   hw.hierpath private @nla_2 [@FixNLA::@foo, @X_Foo::@bar, @X_Bar::@baz, @X_Baz::@s1]
+  hw.hierpath private @nla_3 [@FixNLA::@bar, @Bar::@baz, @Baz]
+  // CHECK:   hw.hierpath private @nla_3 [@FixNLA::@bar, @Bar::@baz, @Baz]
+  hw.hierpath private @nla_4 [@Foo::@bar, @Bar::@baz, @Baz]
+  // CHECK:       hw.hierpath private @nla_4 [@X_Foo::@bar, @X_Bar::@baz, @X_Baz]
+  // CHECK-LABEL: firrtl.module @FixNLA()
+  firrtl.module @FixNLA() {
+    firrtl.instance foo sym @foo  @Foo()
+    firrtl.instance bar sym @bar  @Bar()
+    // CHECK:   firrtl.instance foo sym @foo @X_Foo()
+    // CHECK:   firrtl.instance bar sym @bar @Bar()
   }
+  firrtl.module @Foo() attributes {annotations = [{class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation", inclusive = true, prefix = "X_"}]} {
+    firrtl.instance bar sym @bar  @Bar()
+  }
+  // CHECK-LABEL:   firrtl.module @X_Foo()
+  // CHECK:         firrtl.instance bar sym @bar @X_Bar()
+
+  // CHECK-LABEL:   firrtl.module @Bar()
+  firrtl.module @Bar() {
+    firrtl.instance baz sym @baz @Baz()
+    // CHECK:     firrtl.instance baz sym @baz @Baz()
+  }
+  // CHECK-LABEL: firrtl.module @X_Bar()
+  // CHECK:       firrtl.instance baz sym @baz @X_Baz()
+
+  firrtl.module @Baz() attributes {annotations = [{circt.nonlocal = @nla_1, class = "nla_1"}, {circt.nonlocal = @nla_3, class = "nla_3"}, {circt.nonlocal = @nla_4, class = "nla_4"}]} {
+    %mem_MPORT_en = firrtl.wire sym @s1  {annotations = [{circt.nonlocal = @nla_2, class = "nla_2"}]} : !firrtl.uint<1>
+  }
+  // CHECK-LABEL: firrtl.module @X_Baz()
+  // CHECK-SAME:  annotations = [{circt.nonlocal = @nla_4, class = "nla_4"}]
+  // CHECK:       %mem_MPORT_en = firrtl.wire sym @s1  {annotations = [{circt.nonlocal = @nla_2, class = "nla_2"}]} : !firrtl.uint<1>
+  // CHECK:       firrtl.module @Baz()
+  // CHECK-SAME:  annotations = [{circt.nonlocal = @nla_1, class = "nla_1"}, {circt.nonlocal = @nla_3, class = "nla_3"}]
+  // CHECK:       %mem_MPORT_en = firrtl.wire sym @s1  : !firrtl.uint<1>
+}
 
 // Test that NonLocalAnchors are properly updated with memmodules.
 firrtl.circuit "Test"   {
@@ -370,4 +369,23 @@ firrtl.circuit "Test"   {
   // CHECK: firrtl.memmodule @A_Bar() attributes {annotations = [{circt.nonlocal = @nla_1, class = "test1"}]
   // CHECK: firrtl.memmodule @B_Bar() attributes {annotations = [{circt.nonlocal = @nla_2, class = "test2"}]
   firrtl.memmodule @Bar() attributes {annotations = [{circt.nonlocal = @nla_1, class = "test1"}, {circt.nonlocal = @nla_2, class = "test2"}], dataWidth = 1 : ui32, depth = 16 : ui64, extraPorts = [], maskBits = 0 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32,  writeLatency = 1 : ui32}
+}
+
+// Test that the MarkDUTAnnotation receives a prefix.
+// CHECK-LABEL: firrtl.circuit "Prefix_MarkDUTAnnotationGetsPrefix"
+firrtl.circuit "MarkDUTAnnotationGetsPrefix" {
+  // CHECK-NEXT: firrtl.module @Prefix_MarkDUTAnnotationGetsPrefix
+  // CHECK-SAME:   class = "sifive.enterprise.firrtl.MarkDUTAnnotation", prefix = "Prefix_"
+  firrtl.module @MarkDUTAnnotationGetsPrefix() attributes {
+    annotations = [
+     {
+       class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+     },
+     {
+       class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
+       prefix = "Prefix_",
+       inclusive = true
+     }
+    ]
+  } {}
 }
