@@ -59,9 +59,12 @@ class Type:
   """PyCDE type hierarchy root class. Can wrap any MLIR/CIRCT type, but can only
   do anything useful with types for which subclasses exist."""
 
+  # Global Type cache.
   _cache: typing.Dict[typing.Tuple[type, ir.Type], "Type"] = {}
 
   def __new__(cls, circt_type: ir.Type) -> "Type":
+    """Look up a type in the Type cache. If present, return it. If not, create
+    it and put it in the cache."""
     assert isinstance(circt_type, ir.Type)
     cache_key = (cls, circt_type)
     if cache_key not in Type._cache:
@@ -349,6 +352,10 @@ class UInt(BitVectorType):
 class ClockType(Bits):
   """A special single bit to represent a clock. Can't do any special operations
   on it, except enter it as a implicit clock block."""
+
+  # TODO: the 'clock' type isn't represented in CIRCT IR. It may be useful to
+  # have it there if for no other reason than being able to round trip this
+  # type.
 
   def __new__(cls):
     super(ClockType, cls).__new__(cls, 1)

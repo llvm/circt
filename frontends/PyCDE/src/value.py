@@ -636,7 +636,8 @@ def wrap_opviews_with_values(dialect, module_name, excluded=[]):
       def specialize_create(cls):
 
         def create(*args, **kwargs):
-          # If any of the arguments are Value objects, we need to convert them.
+          # If any of the arguments are Value or Type (which are both PyCDE
+          # classes) objects, we need to convert them.
           def to_circt(arg):
             if isinstance(arg, Signal):
               return arg.value
