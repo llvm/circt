@@ -62,7 +62,7 @@ firrtl.circuit "Simple" {
 
     firrtl.connect %xyz#2, %s8 : !firrtl.sint<8>, !firrtl.sint<8>
 
-    firrtl.printf %clock, %reset, "%x"(%xyz#3) : !firrtl.uint<4>
+    firrtl.printf %clock, %reset, "%x"(%xyz#3) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>
 
     // Parameterized module reference.
     // hw.instance carries the parameters, unlike at the FIRRTL layer.
@@ -76,7 +76,7 @@ firrtl.circuit "Simple" {
 
     firrtl.connect %myext#0, %reset : !firrtl.uint<1>, !firrtl.uint<1>
 
-    firrtl.printf %clock, %reset, "Something interesting! %x"(%myext#1) : !firrtl.uint<8>
+    firrtl.printf %clock, %reset, "Something interesting! %x"(%myext#1) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>
   }
 
   // CHECK-LABEL: hw.module private @OutputFirst(%in1: i1, %in4: i4) -> (out4: i4) {

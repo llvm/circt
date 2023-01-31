@@ -651,7 +651,7 @@ def PlusArgsValueIntrinsicOp
 
   let arguments = (ins StrAttr:$formatString);
   let results = (outs UInt1Type:$found, AnyType:$result);
-  let assemblyFormat = "$formatString attr-dict `:` type($result)";
+  let assemblyFormat = "$formatString attr-dict `:` type($found) `,` type($result)";
 }
 
 //===----------------------------------------------------------------------===//

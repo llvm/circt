@@ -12,7 +12,7 @@ firrtl.circuit "SFCCompatTests" {
     %invalid_ui1_dead = firrtl.invalidvalue : !firrtl.uint<1>
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
     // CHECK: firrtl.reg %clock
-    %r = firrtl.regreset %clock, %reset, %invalid_ui1  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %r = firrtl.regreset %clock, %reset, %invalid_ui1  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %r, %d : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %q, %r : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -25,7 +25,7 @@ firrtl.circuit "SFCCompatTests" {
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
     firrtl.connect %inv, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: firrtl.reg %clock
-    %r = firrtl.regreset %clock, %reset, %inv  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %r = firrtl.regreset %clock, %reset, %inv  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %r, %d : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %q, %r : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -46,8 +46,8 @@ firrtl.circuit "SFCCompatTests" {
     %inv1_1 = firrtl.subindex %inv1[0] : !firrtl.vector<bundle<a: uint<1>>, 2>
     firrtl.strictconnect %inv1_1, %inv : !firrtl.bundle<a: uint<1>>
 
-    // CHECK: firrtl.reg %clock : !firrtl.vector<bundle<a: uint<1>>, 2>
-    %r = firrtl.regreset %clock, %reset, %inv1  : !firrtl.uint<1>, !firrtl.vector<bundle<a: uint<1>>, 2>, !firrtl.vector<bundle<a: uint<1>>, 2>
+    // CHECK: firrtl.reg %clock : !firrtl.clock, !firrtl.vector<bundle<a: uint<1>>, 2>
+    %r = firrtl.regreset %clock, %reset, %inv1  : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<bundle<a: uint<1>>, 2>, !firrtl.vector<bundle<a: uint<1>>, 2>
     firrtl.strictconnect %r, %d : !firrtl.vector<bundle<a: uint<1>>, 2>
     firrtl.strictconnect %q, %r : !firrtl.vector<bundle<a: uint<1>>, 2>
   }
@@ -61,7 +61,7 @@ firrtl.circuit "SFCCompatTests" {
     firrtl.connect %inv, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %x, %inv : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: firrtl.reg %clock
-    %r = firrtl.regreset %clock, %reset, %x  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %r = firrtl.regreset %clock, %reset, %x  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %r, %d : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %q, %r : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -78,7 +78,7 @@ firrtl.circuit "SFCCompatTests" {
     %submodule_inv = firrtl.instance submodule  @InvalidInstancePort_Submodule(in inv: !firrtl.uint<1>)
     firrtl.connect %submodule_inv, %inv : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: firrtl.reg %clock
-    %r = firrtl.regreset %clock, %reset, %submodule_inv  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %r = firrtl.regreset %clock, %reset, %submodule_inv  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %r, %d : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %q, %r : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -88,7 +88,7 @@ firrtl.circuit "SFCCompatTests" {
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
     %0 = firrtl.not %invalid_ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK: firrtl.regreset %clock
-    %r = firrtl.regreset %clock, %reset, %0  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %r = firrtl.regreset %clock, %reset, %0  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %r, %d : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %q, %r : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -100,7 +100,7 @@ firrtl.circuit "SFCCompatTests" {
     firrtl.connect %inv, %invalid_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
     %_T = firrtl.node %inv  : !firrtl.uint<8>
     // CHECK: firrtl.regreset %clock
-    %r = firrtl.regreset %clock, %reset, %_T  : !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+    %r = firrtl.regreset %clock, %reset, %_T  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %r, %d : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %q, %r : !firrtl.uint<8>, !firrtl.uint<8>
   }
@@ -127,21 +127,21 @@ firrtl.circuit "SFCCompatTests" {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %r0_init = firrtl.wire sym @r0_init : !firrtl.uint<1>
     firrtl.strictconnect %r0_init, %c0_ui1 : !firrtl.uint<1>
-    %r0 = firrtl.regreset %clock, %reset, %r0_init : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %r0 = firrtl.regreset %clock, %reset, %r0_init : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
 
     %r1_init = firrtl.node %c0_ui1 : !firrtl.uint<1>
-    %r1 = firrtl.regreset %clock, %reset, %r1_init : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %r1 = firrtl.regreset %clock, %reset, %r1_init : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
 
     %inv_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
     %r2_init = firrtl.wire : !firrtl.uint<1>
     firrtl.strictconnect %r2_init, %inv_ui1 : !firrtl.uint<1>
-    %r2 = firrtl.regreset %clock, %reset, %r2_init : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %r2 = firrtl.regreset %clock, %reset, %r2_init : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
 
     %c0_si1 = firrtl.asSInt %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.sint<1>
     %c0_clock = firrtl.asClock %c0_si1 : (!firrtl.sint<1>) -> !firrtl.clock
     %c0_asyncreset = firrtl.asAsyncReset %c0_clock : (!firrtl.clock) -> !firrtl.asyncreset
     %r3_init = firrtl.asUInt %c0_asyncreset : (!firrtl.asyncreset) -> !firrtl.uint<1>
-    %r3 = firrtl.regreset %clock, %reset, %r3_init : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %r3 = firrtl.regreset %clock, %reset, %r3_init : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
   }
 
   // CHECK-LABEL: firrtl.module @TailPrimOp
@@ -151,7 +151,7 @@ firrtl.circuit "SFCCompatTests" {
     %1 = firrtl.tail %0, 2 : (!firrtl.uint<3>) -> !firrtl.uint<1>
     %r0_init = firrtl.wire sym @r0_init : !firrtl.uint<1>
     firrtl.strictconnect %r0_init, %1: !firrtl.uint<1>
-    %r0 = firrtl.regreset %clock, %reset, %r0_init : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %r0 = firrtl.regreset %clock, %reset, %r0_init : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 
@@ -161,7 +161,7 @@ firrtl.circuit "NonConstantAsyncReset_Port" {
   // expected-note @below {{reset driver is "x"}}
   firrtl.module @NonConstantAsyncReset_Port(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %x: !firrtl.uint<1>) {
     // expected-error @below {{register "r0" has an async reset, but its reset value "x" is not driven with a constant value through wires, nodes, or connects}}
-    %r0 = firrtl.regreset %clock, %reset, %x : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %r0 = firrtl.regreset %clock, %reset, %x : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 
@@ -173,7 +173,7 @@ firrtl.circuit "NonConstantAsyncReset_PrimOp" {
     // expected-note @+1 {{reset driver is here}}
     %c1_ui1 = firrtl.not %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // expected-error @below {{register "r0" has an async reset, but its reset value is not driven with a constant value through wires, nodes, or connects}}
-    %r0 = firrtl.regreset %clock, %reset, %c1_ui1 : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %r0 = firrtl.regreset %clock, %reset, %c1_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 
@@ -185,7 +185,7 @@ firrtl.circuit "NonConstantAsyncReset_Aggregate0" {
     %value = firrtl.wire : !firrtl.vector<uint<1>, 2>
     firrtl.strictconnect %value, %x : !firrtl.vector<uint<1>, 2>
     // expected-error @below {{register "r0" has an async reset, but its reset value "value" is not driven with a constant value through wires, nodes, or connects}}
-    %r0 = firrtl.regreset %clock, %reset, %value : !firrtl.asyncreset, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+    %r0 = firrtl.regreset %clock, %reset, %value : !firrtl.clock, !firrtl.asyncreset, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
 }
 
@@ -211,6 +211,6 @@ firrtl.circuit "NonConstantAsyncReset_Aggregate1" {
     firrtl.strictconnect %value_1, %subfield : !firrtl.uint<1>
 
     // expected-error @below {{register "r0" has an async reset, but its reset value "value[1]" is not driven with a constant value through wires, nodes, or connects}}
-    %r0 = firrtl.regreset %clock, %reset, %value : !firrtl.asyncreset, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+    %r0 = firrtl.regreset %clock, %reset, %value : !firrtl.clock, !firrtl.asyncreset, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
 }

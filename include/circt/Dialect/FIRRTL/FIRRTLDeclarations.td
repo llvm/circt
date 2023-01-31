@@ -269,7 +269,7 @@ def RegOp : ReferableDeclOp<"reg"> {
     Declare a new register:
 
     ```
-    %name = firrtl.reg %clockVal : t1
+    %name = firrtl.reg %clockVal : !firrtl.clock, t1
     ```
     }];
 
@@ -300,7 +300,7 @@ def RegOp : ReferableDeclOp<"reg"> {
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
-    operands `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` qualified(type($result))
+    operands `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` type($clockVal) `,` qualified(type($result))
   }];
   let hasCanonicalizeMethod = true;
 }
@@ -310,7 +310,7 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
   let description = [{
     Declare a new register:
     ```
-      %name = firrtl.regreset %clockVal, %resetSignal, %resetValue : t1
+      %name = firrtl.regreset %clockVal, %resetSignal, %resetValue : !firrtl.clock, t1
     ```
     }];
 
@@ -347,7 +347,7 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
     operands `` custom<FIRRTLImplicitSSAName>(attr-dict)
-    `:` qualified(type($resetSignal)) `,` qualified(type($resetValue)) `,` qualified(type($result))
+    `:` type($clockVal) `,` qualified(type($resetSignal)) `,` qualified(type($resetValue)) `,` qualified(type($result))
   }];
 
   let hasCanonicalizer = true;

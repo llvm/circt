@@ -11,10 +11,10 @@ firrtl.circuit "top" {
     %dead_wire = firrtl.wire : !firrtl.uint<1>
     firrtl.strictconnect %dead_wire, %dead_node : !firrtl.uint<1>
 
-    %dead_reg = firrtl.reg %clock : !firrtl.uint<1>
+    %dead_reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
     firrtl.strictconnect %dead_reg, %dead_wire : !firrtl.uint<1>
 
-    %dead_reg_reset = firrtl.regreset %clock, %reset, %dead_reg  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %dead_reg_reset = firrtl.regreset %clock, %reset, %dead_reg  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.strictconnect %dead_reg_reset, %dead_reg : !firrtl.uint<1>
 
     %not = firrtl.not %dead_reg_reset : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -86,7 +86,7 @@ firrtl.circuit "top"  {
   }
   // CHECK-NOT: @Child2
   firrtl.module private @Child2(in %input: !firrtl.uint<1>, in %clock: !firrtl.clock, out %output: !firrtl.uint<1>) {
-    %r = firrtl.reg %clock  : !firrtl.uint<1>
+    %r = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
     firrtl.strictconnect %r, %input : !firrtl.uint<1>
     firrtl.strictconnect %output, %r : !firrtl.uint<1>
   }

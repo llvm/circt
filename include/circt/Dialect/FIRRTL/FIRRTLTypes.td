@@ -45,8 +45,7 @@ def ForeignType : FIRRTLDialectType<CPred<"!$_self.isa<FIRRTLType>()">,
                                     "foreign type", "::mlir::Type">;
 
 def ClockType : FIRRTLDialectType<CPred<"$_self.isa<ClockType>()">,
-    "clock", "::circt::firrtl::ClockType">,
-  BuildableType<"ClockType::get($_builder.getContext())">;
+    "clock", "::circt::firrtl::ClockType">;
 
 def IntType : FIRRTLDialectType<CPred<"$_self.isa<IntType>()">,
  "sint or uint type", "::circt::firrtl::IntType">;
@@ -102,24 +101,20 @@ def UInt1Type : FIRRTLDialectType<
     CPred<"$_self.isa<UIntType>() && "
           "($_self.cast<UIntType>().getWidth() == 1 ||"
           " $_self.cast<UIntType>().getWidth() == std::nullopt)">,
-    "UInt<1> or UInt", "::circt::firrtl::UIntType">,
-  BuildableType<"UIntType::get($_builder.getContext(), 1)">;
+    "UInt<1> or UInt", "::circt::firrtl::UIntType">;
 
 def UInt32Type : FIRRTLDialectType<
     CPred<"$_self.isa<UIntType>() && "
           "$_self.cast<UIntType>().getWidth() == 32">,
-    "UInt<32>", "::circt::firrtl::UIntType">,
-  BuildableType<"UIntType::get($_builder.getContext(), 32)">;
+    "UInt<32>", "::circt::firrtl::UIntType">;
 
 def AsyncResetType : FIRRTLDialectType<
     CPred<"$_self.isa<AsyncResetType>()">,
-    "AsyncReset", "::circt::firrtl::AsyncResetType">,
-  BuildableType<"AsyncResetType::get($_builder.getContext())">;
+    "AsyncReset", "::circt::firrtl::AsyncResetType">;
 
 def ResetType : FIRRTLDialectType<
     CPred<"$_self.isa<ResetType>()">,
-    "Reset", "::circt::firrtl::ResetType">,
-  BuildableType<"ResetType::get($_builder.getContext())">;
+    "Reset", "::circt::firrtl::ResetType">;
 
 def PassiveType : FIRRTLDialectType<
   CPred<"$_self.isa<FIRRTLBaseType>() && $_self.cast<FIRRTLBaseType>().isPassive()">,

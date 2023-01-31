@@ -7,7 +7,7 @@
 firrtl.circuit "uninitSelfReg"   {
   // CHECK-LABEL: firrtl.module @uninitSelfReg
   firrtl.module @uninitSelfReg(in %clock: !firrtl.clock, out %z: !firrtl.uint<8>) {
-    %r = firrtl.reg %clock  :  !firrtl.uint<8>
+    %r = firrtl.reg %clock  :  !firrtl.clock, !firrtl.uint<8>
     firrtl.connect %r, %r : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
     // CHECK: %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8>
@@ -19,7 +19,7 @@ firrtl.circuit "uninitSelfReg"   {
 firrtl.circuit "padZeroReg"   {
   // CHECK-LABEL: firrtl.module @padZeroReg
   firrtl.module @padZeroReg(in %clock: !firrtl.clock, out %z: !firrtl.uint<16>) {
-      %_r = firrtl.reg droppable_name %clock  :  !firrtl.uint<8>
+      %_r = firrtl.reg droppable_name %clock  :  !firrtl.clock, !firrtl.uint<8>
       %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
       %0 = firrtl.or %_r, %c0_ui1 : (!firrtl.uint<8>, !firrtl.uint<1>) -> !firrtl.uint<8>
       firrtl.connect %_r, %0 : !firrtl.uint<8>, !firrtl.uint<8>

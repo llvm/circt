@@ -369,11 +369,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
-   firrtl.printf %clock, %reset, "No operands!\0A"
+   firrtl.printf %clock, %reset, "No operands!\0A" : !firrtl.clock, !firrtl.uint<1>
 
     %0 = firrtl.add %a, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
-    firrtl.printf %clock, %reset, "Hi %x %x\0A"(%0, %b) : !firrtl.uint<5>, !firrtl.uint<4>
+    firrtl.printf %clock, %reset, "Hi %x %x\0A"(%0, %b) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<4>
 
     firrtl.skip
 
@@ -401,7 +401,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:       sv.fatal
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
-    firrtl.stop %clock1, %reset, 42
+    firrtl.stop %clock1, %reset, 42 : !firrtl.clock, !firrtl.uint<1>
 
     // CHECK-NEXT:   sv.always posedge %clock2 {
     // CHECK-NEXT:     %STOP_COND_ = sv.macro.ref< "STOP_COND_"> : i1
@@ -411,7 +411,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
-    firrtl.stop %clock2, %reset, 0
+    firrtl.stop %clock2, %reset, 0 : !firrtl.clock, !firrtl.uint<1>
   }
 
   // circuit Verification:
@@ -435,9 +435,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     in %aEn: !firrtl.uint<1>, in %bCond: !firrtl.uint<1>, in %bEn: !firrtl.uint<1>,
     in %cCond: !firrtl.uint<1>, in %cEn: !firrtl.uint<1>, in %value: !firrtl.uint<42>) {
 
-    firrtl.assert %clock, %aCond, %aEn, "assert0" {isConcurrent = true}
-    firrtl.assert %clock, %aCond, %aEn, "assert0" {isConcurrent = true, name = "assert_0"}
-    firrtl.assert %clock, %aCond, %aEn, "assert0"(%value) : !firrtl.uint<42> {isConcurrent = true}
+    firrtl.assert %clock, %aCond, %aEn, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true}
+    firrtl.assert %clock, %aCond, %aEn, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, name = "assert_0"}
+    firrtl.assert %clock, %aCond, %aEn, "assert0"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42> {isConcurrent = true}
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %aEn, [[TRUE]]
     // CHECK-NEXT: [[TMP2:%.+]] = comb.or bin [[TMP1]], %aCond
@@ -456,9 +456,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:   sv.assume.concurrent posedge %clock, [[TMP4]] label "assume__assert_0"
     // CHECK-NEXT:   sv.assume.concurrent posedge %clock, [[TMP6]]
     // CHECK-NEXT: }
-    firrtl.assume %clock, %bCond, %bEn, "assume0" {isConcurrent = true}
-    firrtl.assume %clock, %bCond, %bEn, "assume0" {isConcurrent = true, name = "assume_0"}
-    firrtl.assume %clock, %bCond, %bEn, "assume0"(%value) : !firrtl.uint<42> {isConcurrent = true}
+    firrtl.assume %clock, %bCond, %bEn, "assume0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true}
+    firrtl.assume %clock, %bCond, %bEn, "assume0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, name = "assume_0"}
+    firrtl.assume %clock, %bCond, %bEn, "assume0"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42> {isConcurrent = true}
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %bEn, [[TRUE]]
     // CHECK-NEXT: [[TMP2:%.+]] = comb.or bin [[TMP1]], %bCond
@@ -472,17 +472,17 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %bEn, [[TRUE]]
     // CHECK-NEXT: [[TMP2:%.+]] = comb.or bin [[TMP1]], %bCond
     // CHECK-NEXT: sv.assume.concurrent posedge %clock, [[TMP2]] message "assume0"([[SAMPLED]]) : i42
-    firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true}
-    firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true, name = "cover_0"}
-    firrtl.cover %clock, %cCond, %cEn, "cover0"(%value) : !firrtl.uint<42> {isConcurrent = true}
+    firrtl.cover %clock, %cCond, %cEn, "cover0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true}
+    firrtl.cover %clock, %cCond, %cEn, "cover0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, name = "cover_0"}
+    firrtl.cover %clock, %cCond, %cEn, "cover0"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42> {isConcurrent = true}
     // CHECK-NEXT: [[TMP:%.+]] = comb.and bin %cEn, %cCond
     // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP]]
     // CHECK-NEXT: [[TMP:%.+]] = comb.and bin %cEn, %cCond
     // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP]] label "cover__cover_0"
     // CHECK-NEXT: [[TMP:%.+]] = comb.and bin %cEn, %cCond
     // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP]]
-    firrtl.cover %clock, %cCond, %cEn, "cover1" {eventControl = 1 : i32, isConcurrent = true, name = "cover_1"}
-    firrtl.cover %clock, %cCond, %cEn, "cover2" {eventControl = 2 : i32, isConcurrent = true, name = "cover_2"}
+    firrtl.cover %clock, %cCond, %cEn, "cover1" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 1 : i32, isConcurrent = true, name = "cover_1"}
+    firrtl.cover %clock, %cCond, %cEn, "cover2" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 2 : i32, isConcurrent = true, name = "cover_2"}
     // CHECK: sv.cover.concurrent negedge %clock, {{%.+}} label "cover__cover_1"
     // CHECK: sv.cover.concurrent edge %clock, {{%.+}} label "cover__cover_2"
 
@@ -505,15 +505,15 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NOT:        label
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
-    firrtl.assert %clock, %aCond, %aEn, "assert0"
-    firrtl.assert %clock, %aCond, %aEn, "assert0" {name = "assert_0"}
-    firrtl.assert %clock, %aCond, %aEn, "assert0"(%value) : !firrtl.uint<42>
-    firrtl.assume %clock, %bCond, %bEn, "assume0"
-    firrtl.assume %clock, %bCond, %bEn, "assume0" {name = "assume_0"}
-    firrtl.assume %clock, %bCond, %bEn, "assume0"(%value) : !firrtl.uint<42>
-    firrtl.cover %clock, %cCond, %cEn, "cover0"
-    firrtl.cover %clock, %cCond, %cEn, "cover0" {name = "cover_0"}
-    firrtl.cover %clock, %cCond, %cEn, "cover0"(%value) : !firrtl.uint<42>
+    firrtl.assert %clock, %aCond, %aEn, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.assert %clock, %aCond, %aEn, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {name = "assert_0"}
+    firrtl.assert %clock, %aCond, %aEn, "assert0"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42>
+    firrtl.assume %clock, %bCond, %bEn, "assume0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.assume %clock, %bCond, %bEn, "assume0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {name = "assume_0"}
+    firrtl.assume %clock, %bCond, %bEn, "assume0"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42>
+    firrtl.cover %clock, %cCond, %cEn, "cover0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.cover %clock, %cCond, %cEn, "cover0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {name = "cover_0"}
+    firrtl.cover %clock, %cCond, %cEn, "cover0"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42>
     // CHECK-NEXT: hw.output
   }
 
@@ -523,9 +523,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     in %cond: !firrtl.uint<1>,
     in %enable: !firrtl.uint<1>
   ) {
-    firrtl.assert %clock, %cond, %enable, "assert0" {isConcurrent = true, guards = ["HELLO", "WORLD"]}
-    firrtl.assume %clock, %cond, %enable, "assume0" {isConcurrent = true, guards = ["HELLO", "WORLD"]}
-    firrtl.cover %clock, %cond, %enable, "cover0" {isConcurrent = true, guards = ["HELLO", "WORLD"]}
+    firrtl.assert %clock, %cond, %enable, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, guards = ["HELLO", "WORLD"]} 
+    firrtl.assume %clock, %cond, %enable, "assume0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, guards = ["HELLO", "WORLD"]}
+    firrtl.cover %clock, %cond, %enable, "cover0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, guards = ["HELLO", "WORLD"]}
 
     // CHECK-NEXT: sv.ifdef "HELLO" {
     // CHECK-NEXT:   sv.ifdef "WORLD" {
@@ -555,7 +555,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     in %value: !firrtl.uint<42>,
     in %i0: !firrtl.uint<0>
   ) {
-    firrtl.assert %clock, %cond, %enable, "assert0" {isConcurrent = true, format = "sva"}
+    firrtl.assert %clock, %cond, %enable, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, format = "sva"}
     // CHECK-NEXT: [[FALSE:%.+]] = hw.constant false
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %enable, [[TRUE]]
@@ -564,7 +564,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: sv.ifdef "USE_PROPERTY_AS_CONSTRAINT" {
     // CHECK-NEXT:   sv.assume.concurrent posedge %clock, [[TMP2]]
     // CHECK-NEXT: }
-    firrtl.assert %clock, %cond, %enable, "assert1 %d, %d"(%value, %i0) : !firrtl.uint<42>, !firrtl.uint<0> {isConcurrent = true, format = "ifElseFatal"}
+    firrtl.assert %clock, %cond, %enable, "assert1 %d, %d"(%value, %i0) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<0> {isConcurrent = true, format = "ifElseFatal"}
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %cond, [[TRUE]]
     // CHECK-NEXT: [[TMP2:%.+]] = comb.and bin %enable, [[TMP1]]
@@ -884,7 +884,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // https://github.com/llvm/circt/issues/699
   firrtl.module private @ASQ(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %widx_widx_bin = firrtl.regreset %clock, %reset, %c0_ui1 {name = "widx_widx_bin"} : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<4>
+    %widx_widx_bin = firrtl.regreset %clock, %reset, %c0_ui1 {name = "widx_widx_bin"} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<4>
   }
 
   // CHECK-LABEL: hw.module private @Struct0bits(%source: !hw.struct<valid: i1, ready: i1, data: i0>) {
@@ -1010,10 +1010,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c9_ui42 = firrtl.constant 9 : !firrtl.uint<42>
     %c-9_si42 = firrtl.constant -9 : !firrtl.sint<42>
     // The following should not error because the reset values are constant.
-    %r0 = firrtl.regreset %clock, %arst, %c9_ui42 : !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
-    %r1 = firrtl.regreset %clock, %srst, %c9_ui42 : !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
-    %r2 = firrtl.regreset %clock, %arst, %c-9_si42 : !firrtl.asyncreset, !firrtl.sint<42>, !firrtl.sint<42>
-    %r3 = firrtl.regreset %clock, %srst, %c-9_si42 : !firrtl.uint<1>, !firrtl.sint<42>, !firrtl.sint<42>
+    %r0 = firrtl.regreset %clock, %arst, %c9_ui42 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
+    %r1 = firrtl.regreset %clock, %srst, %c9_ui42 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
+    %r2 = firrtl.regreset %clock, %arst, %c-9_si42 : !firrtl.clock, !firrtl.asyncreset, !firrtl.sint<42>, !firrtl.sint<42>
+    %r3 = firrtl.regreset %clock, %srst, %c-9_si42 : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<42>, !firrtl.sint<42>
   }
 
   // CHECK-LABEL: hw.module private @BitCast1
@@ -1072,9 +1072,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: sv.assign [[WIRE]], %value
     %wireName = firrtl.wire sym @wireSym : !firrtl.uint<42>
     // CHECK: %wireName = sv.wire sym @wireSym : !hw.inout<i42>
-    %regName = firrtl.reg sym @regSym %clock : !firrtl.uint<42>
+    %regName = firrtl.reg sym @regSym %clock : !firrtl.clock, !firrtl.uint<42>
     // CHECK: %regName = seq.firreg %regName clock %clock sym @regSym : i42
-    %regResetName = firrtl.regreset sym @regResetSym %clock, %reset, %value : !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
+    %regResetName = firrtl.regreset sym @regResetSym %clock, %reset, %value : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
     // CHECK: %regResetName = seq.firreg %regResetName clock %clock sym @regResetSym reset sync %reset, %value : i42
     %memName_port = firrtl.mem sym @memSym Undefined {depth = 12 : i64, name = "memName", portNames = ["port"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     // CHECK: {{%.+}} = hw.instance "memName_ext" sym @memSym
@@ -1083,7 +1083,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @connectNarrowUIntVector
   firrtl.module private @connectNarrowUIntVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 1>, out %b: !firrtl.vector<uint<3>, 1>) {
-    %r1 = firrtl.reg %clock  : !firrtl.vector<uint<2>, 1>
+    %r1 = firrtl.reg %clock  : !firrtl.clock, !firrtl.vector<uint<2>, 1>
     firrtl.connect %r1, %a : !firrtl.vector<uint<2>, 1>, !firrtl.vector<uint<1>, 1>
     firrtl.connect %b, %r1 : !firrtl.vector<uint<3>, 1>, !firrtl.vector<uint<2>, 1>
     // CHECK:      %r1 = seq.firreg %3 clock %clock : !hw.array<1xi2>
@@ -1099,7 +1099,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @connectNarrowSIntVector
   firrtl.module private @connectNarrowSIntVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<sint<1>, 1>, out %b: !firrtl.vector<sint<3>, 1>) {
-    %r1 = firrtl.reg %clock  : !firrtl.vector<sint<2>, 1>
+    %r1 = firrtl.reg %clock  : !firrtl.clock, !firrtl.vector<sint<2>, 1>
     firrtl.connect %r1, %a : !firrtl.vector<sint<2>, 1>, !firrtl.vector<sint<1>, 1>
     firrtl.connect %b, %r1 : !firrtl.vector<sint<3>, 1>, !firrtl.vector<sint<2>, 1>
     // CHECK:      %r1 = seq.firreg %3 clock %clock : !hw.array<1xi2>
@@ -1116,8 +1116,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @SubIndex
   firrtl.module private @SubIndex(in %a: !firrtl.vector<vector<uint<1>, 1>, 1>, in %clock: !firrtl.clock, out %o1: !firrtl.uint<1>, out %o2: !firrtl.vector<uint<1>, 1>) {
-    %r1 = firrtl.reg %clock  : !firrtl.uint<1>
-    %r2 = firrtl.reg %clock  : !firrtl.vector<uint<1>, 1>
+    %r1 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+    %r2 = firrtl.reg %clock  : !firrtl.clock, !firrtl.vector<uint<1>, 1>
     %0 = firrtl.subindex %a[0] : !firrtl.vector<vector<uint<1>, 1>, 1>
     %1 = firrtl.subindex %0[0] : !firrtl.vector<uint<1>, 1>
     firrtl.connect %r1, %1 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -1133,8 +1133,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @SubAccess
   firrtl.module private @SubAccess(in %x: !firrtl.uint<1>, in %y: !firrtl.uint<1>, in %a: !firrtl.vector<vector<uint<1>, 1>, 1>, in %clock: !firrtl.clock, out %o1: !firrtl.uint<1>, out %o2: !firrtl.vector<uint<1>, 1>) {
-    %r1 = firrtl.reg %clock  : !firrtl.uint<1>
-    %r2 = firrtl.reg %clock  : !firrtl.vector<uint<1>, 1>
+    %r1 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+    %r2 = firrtl.reg %clock  : !firrtl.clock, !firrtl.vector<uint<1>, 1>
     %0 = firrtl.subaccess %a[%x] : !firrtl.vector<vector<uint<1>, 1>, 1>, !firrtl.uint<1>
     %1 = firrtl.subaccess %0[%y] : !firrtl.vector<uint<1>, 1>, !firrtl.uint<1>
     firrtl.connect %r1, %1 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -1224,7 +1224,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: [[PADDED:%.*]] = comb.concat [[FALSE]], [[A]] : i1, i2
     // CHECK-NEXT: [[STRUCT:%.*]] = hw.struct_create ([[PADDED]]) : !hw.struct<a: i3>
     // CHECK-NEXT: %reg = seq.firreg %reg clock %clock reset sync %reset, [[STRUCT]] : !hw.struct<a: i3>
-    %reg = firrtl.regreset %clock, %reset, %init  : !firrtl.uint<1>, !firrtl.bundle<a: uint<2>>, !firrtl.bundle<a: uint<3>>
+    %reg = firrtl.regreset %clock, %reset, %init  : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<2>>, !firrtl.bundle<a: uint<3>>
   }
 
   // CHECK-LABEL: hw.module private @BundleConnection
@@ -1243,7 +1243,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: hw.module private @AggregateInvalidValue
   firrtl.module private @AggregateInvalidValue(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
     %invalid = firrtl.invalidvalue : !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>
-    %reg = firrtl.regreset %clock, %reset, %invalid : !firrtl.uint<1>, !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>, !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>
+    %reg = firrtl.regreset %clock, %reset, %invalid : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>, !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>
     // CHECK:      %c0_i101 = hw.constant 0 : i101
     // CHECK-NEXT: %0 = hw.bitcast %c0_i101 : (i101) -> !hw.struct<a: i1, b: !hw.array<10xi10>>
     // CHECK-NEXT: %reg = seq.firreg %reg clock %clock reset sync %reset, %0 : !hw.struct<a: i1, b: !hw.array<10xi10>>
@@ -1251,7 +1251,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @AggregateRegAssign
   firrtl.module private @AggregateRegAssign(in %clock: !firrtl.clock, in %value: !firrtl.uint<1>) {
-    %reg = firrtl.reg %clock : !firrtl.vector<uint<1>, 1>
+    %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<uint<1>, 1>
     %reg_0 = firrtl.subindex %reg[0] : !firrtl.vector<uint<1>, 1>
     firrtl.connect %reg_0, %value : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: %reg = seq.firreg [[INPUT:%.+]] clock %clock : !hw.array<1xi1>
@@ -1261,7 +1261,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: hw.module private @AggregateRegResetAssign
   firrtl.module private @AggregateRegResetAssign(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
                                          in %init: !firrtl.vector<uint<1>, 1>, in %value: !firrtl.uint<1>) {
-    %reg = firrtl.regreset %clock, %reset, %init  : !firrtl.uint<1>, !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
+    %reg = firrtl.regreset %clock, %reset, %init  : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
     %reg_0 = firrtl.subindex %reg[0] : !firrtl.vector<uint<1>, 1>
     firrtl.connect %reg_0, %value : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: %reg = seq.firreg [[INPUT:%.+]] clock %clock reset sync %reset, %init : !hw.array<1xi1>
@@ -1423,7 +1423,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                      in %reset: !firrtl.uint<1>,
                      in %value: !firrtl.uint<2>,
                      out %result: !firrtl.uint<2>) {
-    %count = firrtl.reg %clock: !firrtl.uint<2>
+    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.uint<2>
     // CHECK: %count = seq.firreg %value clock %clock : i2
 
     firrtl.strictconnect %result, %count : !firrtl.uint<2>
@@ -1437,7 +1437,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                                  in %reset: !firrtl.uint<1>,
                                  in %value: !firrtl.uint<2>,
                                  out %result: !firrtl.bundle<a: uint<2>>) {
-    %count = firrtl.reg %clock: !firrtl.bundle<a: uint<2>>
+    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.bundle<a: uint<2>>
     // CHECK: %count = seq.firreg %0 clock %clock : !hw.struct<a: i2>
 
     firrtl.strictconnect %result, %count : !firrtl.bundle<a: uint<2>>
@@ -1456,7 +1456,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                                  in %value2: !firrtl.uint<2>,
                                  in %value3: !firrtl.uint<3>,
                                  out %result: !firrtl.bundle<a: uint<2>, b: uint<3>>) {
-    %count = firrtl.reg %clock: !firrtl.bundle<a: uint<2>, b: uint<3>>
+    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.bundle<a: uint<2>, b: uint<3>>
     // CHECK: %count = seq.firreg [[AFTER_B:%.+]] clock %clock : !hw.struct<a: i2, b: i3>
 
     firrtl.strictconnect %result, %count : !firrtl.bundle<a: uint<2>, b: uint<3>>
@@ -1477,7 +1477,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                                        in %reset: !firrtl.uint<1>,
                                        in %value: !firrtl.uint<2>,
                                        out %result: !firrtl.bundle<a: bundle<b: uint<2>>>) {
-    %count = firrtl.reg %clock: !firrtl.bundle<a: bundle<b: uint<2>>>
+    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.bundle<a: bundle<b: uint<2>>>
     // CHECK: %count = seq.firreg %1 clock %clock : !hw.struct<a: !hw.struct<b: i2>>
 
     firrtl.strictconnect %result, %count : !firrtl.bundle<a: bundle<b: uint<2>>>
@@ -1499,7 +1499,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                                  in %reset: !firrtl.uint<1>,
                                  in %value: !firrtl.uint<2>,
                                  out %result: !firrtl.vector<bundle<a: vector<bundle<b: uint<2>>, 3>>, 5>) {
-    %count = firrtl.reg %clock: !firrtl.vector<bundle<a: vector<bundle<b: uint<2>>, 3>>, 5>
+    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.vector<bundle<a: vector<bundle<b: uint<2>>, 3>>, 5>
     %field1 = firrtl.subindex %count[1] : !firrtl.vector<bundle<a: vector<bundle<b: uint<2>>, 3>>, 5>
     %field2 = firrtl.subfield %field1[a] : !firrtl.bundle<a: vector<bundle<b: uint<2>>, 3>>
     %field3 = firrtl.subindex %field2[1] : !firrtl.vector<bundle<b: uint<2>>, 3>
@@ -1532,7 +1532,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                                  in %reset: !firrtl.uint<1>,
                                  in %value: !firrtl.uint<2>,
                                  out %result: !firrtl.vector<uint<2>, 3>) {
-    %count = firrtl.reg %clock: !firrtl.vector<uint<2>, 3>
+    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.vector<uint<2>, 3>
     // CHECK: %count = seq.firreg [[REG:%.+]] clock %clock : !hw.array<3xi2>
 
     firrtl.strictconnect %result, %count : !firrtl.vector<uint<2>, 3>
@@ -1552,7 +1552,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                                  in %reset: !firrtl.uint<1>,
                                  in %value: !firrtl.uint<2>,
                                  out %result: !firrtl.vector<uint<2>, 1>) {
-    %count = firrtl.reg %clock: !firrtl.vector<uint<2>, 1>
+    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.vector<uint<2>, 1>
     // CHECK: %count = seq.firreg [[INPUT:%.+]] clock %clock : !hw.array<1xi2>
 
     firrtl.strictconnect %result, %count : !firrtl.vector<uint<2>, 1>
@@ -1568,7 +1568,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                                  in %reset: !firrtl.uint<1>,
                                  in %value: !firrtl.uint<2>,
                                  out %result: !firrtl.vector<uint<2>, 3>) {
-    %count = firrtl.reg %clock: !firrtl.vector<uint<2>, 3>
+    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.vector<uint<2>, 3>
     // CHECK: %count = seq.firreg [[INPUT:%.+]] clock %clock : !hw.array<3xi2>
 
     firrtl.strictconnect %result, %count : !firrtl.vector<uint<2>, 3>
@@ -1587,7 +1587,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                                  in %reset: !firrtl.uint<1>,
                                  in %value: !firrtl.uint<2>,
                                  out %result: !firrtl.vector<uint<2>, 3>) {
-    %count = firrtl.reg %clock: !firrtl.vector<uint<2>, 3>
+    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.vector<uint<2>, 3>
     // CHECK: %count = seq.firreg [[INPUT:%.+]] clock %clock : !hw.array<3xi2>
 
     firrtl.strictconnect %result, %count : !firrtl.vector<uint<2>, 3>
@@ -1606,7 +1606,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                                  in %reset: !firrtl.uint<1>,
                                  in %value: !firrtl.uint<2>,
                                  out %result: !firrtl.vector<uint<2>, 5>) {
-    %count = firrtl.reg %clock: !firrtl.vector<uint<2>, 5>
+    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.vector<uint<2>, 5>
     // CHECK: %count = seq.firreg [[NEXT:%.+]] clock %clock : !hw.array<5xi2>
 
     firrtl.strictconnect %result, %count : !firrtl.vector<uint<2>, 5>
@@ -1638,7 +1638,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                                        in %reset: !firrtl.uint<1>,
                                        in %value: !firrtl.uint<2>,
                                        out %result: !firrtl.vector<vector<uint<2>, 3>, 3>) {
-    %count = firrtl.reg %clock: !firrtl.vector<vector<uint<2>, 3>, 3>
+    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.vector<vector<uint<2>, 3>, 3>
     // CHECK: %count = seq.firreg %10 clock %clock : !hw.array<3xarray<3xi2>>
 
     firrtl.strictconnect %result, %count : !firrtl.vector<vector<uint<2>, 3>, 3>
@@ -1667,7 +1667,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                            in %reset: !firrtl.uint<1>,
                            in %value: !firrtl.uint<2>,
                            out %result: !firrtl.uint<2>) {
-    %count = firrtl.regreset %clock, %reset, %value : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
+    %count = firrtl.regreset %clock, %reset, %value : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
 
     // CHECK: %count = seq.firreg %count clock %clock reset sync %reset, %value : i2
     // CHECK: hw.output %count : i2
@@ -1680,7 +1680,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                            in %reset: !firrtl.asyncreset,
                            in %value: !firrtl.uint<2>,
                            out %result: !firrtl.uint<2>) {
-    %count = firrtl.regreset %clock, %reset, %value : !firrtl.asyncreset, !firrtl.uint<2>, !firrtl.uint<2>
+    %count = firrtl.regreset %clock, %reset, %value : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<2>, !firrtl.uint<2>
 
     // CHECK: %count = seq.firreg %value clock %clock reset async %reset, %value : i2
     // CHECK: hw.output %count : i2
@@ -1693,7 +1693,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module @NoConnect(in %clock: !firrtl.clock,
                      in %reset: !firrtl.uint<1>,
                      out %result: !firrtl.uint<2>) {
-    %count = firrtl.reg %clock: !firrtl.uint<2>
+    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.uint<2>
     // CHECK: %count = seq.firreg %count clock %clock : i2
 
     firrtl.strictconnect %result, %count : !firrtl.uint<2>
@@ -1809,7 +1809,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: %[[foo:.*]] = sv.constantStr "foo"
     // CHECK: sv.system "test$plusargs"(%[[foo]])
 
-    %3, %4 = firrtl.int.plusargs.value "foo" : !firrtl.uint<5>
+    %3, %4 = firrtl.int.plusargs.value "foo" : !firrtl.uint<1>, !firrtl.uint<5>
     firrtl.strictconnect %io3, %3 : !firrtl.uint<1>
     firrtl.strictconnect %io4, %4 : !firrtl.uint<5>
     // CHECK: %[[foo:.*]] = sv.constantStr "foo"

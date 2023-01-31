@@ -41,7 +41,7 @@
 // CHECK:             %[[VAL_36:.*]] = firrtl.wire   : !firrtl.uint<1>
 // CHECK:             %[[VAL_37:.*]] = firrtl.not %[[VAL_33]] : (!firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:             firrtl.connect %[[VAL_36]], %[[VAL_37]] : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:             %[[VAL_38:.*]] = firrtl.regreset  %[[VAL_6]], %[[VAL_7]], %[[VAL_29]]  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:             %[[VAL_38:.*]] = firrtl.regreset  %[[VAL_6]], %[[VAL_7]], %[[VAL_29]]  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:             %[[VAL_39:.*]] = firrtl.and %[[VAL_30]], %[[VAL_36]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:             firrtl.connect %[[VAL_38]], %[[VAL_39]] : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:             %[[VAL_40:.*]] = firrtl.wire   : !firrtl.uint<1>
@@ -54,7 +54,7 @@
 // CHECK:             firrtl.connect %[[VAL_43]], %[[VAL_44]] : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:             %[[VAL_45:.*]] = firrtl.or %[[VAL_43]], %[[VAL_38]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:             firrtl.connect %[[VAL_30]], %[[VAL_45]] : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:             %[[VAL_46:.*]] = firrtl.regreset  %[[VAL_6]], %[[VAL_7]], %[[VAL_29]]  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:             %[[VAL_46:.*]] = firrtl.regreset  %[[VAL_6]], %[[VAL_7]], %[[VAL_29]]  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:             %[[VAL_47:.*]] = firrtl.and %[[VAL_31]], %[[VAL_36]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:             firrtl.connect %[[VAL_46]], %[[VAL_47]] : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:             %[[VAL_48:.*]] = firrtl.wire   : !firrtl.uint<1>
@@ -67,7 +67,7 @@
 // CHECK:             firrtl.connect %[[VAL_51]], %[[VAL_52]] : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:             %[[VAL_53:.*]] = firrtl.or %[[VAL_51]], %[[VAL_46]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:             firrtl.connect %[[VAL_31]], %[[VAL_53]] : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:             %[[VAL_54:.*]] = firrtl.regreset  %[[VAL_6]], %[[VAL_7]], %[[VAL_29]]  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:             %[[VAL_54:.*]] = firrtl.regreset  %[[VAL_6]], %[[VAL_7]], %[[VAL_29]]  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:             %[[VAL_55:.*]] = firrtl.and %[[VAL_32]], %[[VAL_36]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:             firrtl.connect %[[VAL_54]], %[[VAL_55]] : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:             %[[VAL_56:.*]] = firrtl.wire   : !firrtl.uint<1>
