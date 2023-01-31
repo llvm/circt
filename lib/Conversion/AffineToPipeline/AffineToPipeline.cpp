@@ -501,26 +501,17 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
       if (op->getUsers().empty())
         continue;
 
-      unsigned pipeStartTime = std::numeric_limits<unsigned>::max();
       unsigned pipeEndTime = 0;
       for (auto *user : op->getUsers()) {
-        if (*problem.getStartTime(user) > startTime) {
+        if (*problem.getStartTime(user) > startTime)
           pipeEndTime = std::max(pipeEndTime, *problem.getStartTime(user));
-          pipeStartTime = std::min(pipeStartTime, *problem.getStartTime(user));
-        } else if (isLoopTerminator(user)) {
+        else if (isLoopTerminator(user))
           // Manually forward the value into the terminator's valueMap
           pipeEndTime = std::max(pipeEndTime, *problem.getStartTime(user) + 1);
-          pipeStartTime =
-              std::min(pipeStartTime, *problem.getStartTime(user) + 1);
-        }
       }
 
-      // Skip iter if the user is in the same stage
-      if (pipeStartTime > pipeEndTime)
-        continue;
-
       // Insert the range of pipeline stages the value needs to be valid for
-      pipeTimes[op] = std::pair(pipeStartTime, pipeEndTime);
+      pipeTimes[op] = std::pair(startTime, pipeEndTime);
 
       // Add register stages for each time slice we need to pipe to
       for (unsigned i = registerValues.size(); i <= pipeEndTime; ++i)
@@ -531,8 +522,10 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
         registerValues[startTime].push_back(result);
 
       // Other stages that use the value will need these values as keys too
-      for (unsigned i = std::max(startTime + 1, pipeStartTime); i < pipeEndTime;
-           ++i) {
+      unsigned firstUse = std::max(
+          startTime + 1,
+          startTime + *problem.getLatency(*problem.getLinkedOperatorType(op)));
+      for (unsigned i = firstUse; i < pipeEndTime; ++i) {
         for (auto result : op->getResults())
           registerValues[i].push_back(result);
       }
@@ -589,9 +582,13 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
       stageOperands.push_back(stageValueMaps[startTime].lookup(res));
       // Additionally, update the map of the stage that will consume the
       // registered value
-      unsigned destTime =
-          std::max(startTime + 1, pipeTimes[res.getDefiningOp()].first);
-      assert(destTime < stageValueMaps.size());
+      unsigned destTime = startTime + 1;
+      unsigned latency = *problem.getLatency(
+          *problem.getLinkedOperatorType(res.getDefiningOp()));
+      // Multi-cycle case
+      if (problem.getStartTime(res.getDefiningOp()) == startTime && latency > 1)
+        destTime = startTime + latency;
+      destTime = std::min((unsigned)(stageValueMaps.size() - 1), destTime);
       stageValueMaps[destTime].map(res, stage.getResult(resIndex++));
     }
     // Add these mapped values to pipeline.register
@@ -619,10 +616,11 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
       stagesBlock.front().getResult(stagesBlock.front().getNumResults() - 1));
 
   for (auto value : forOp.getBody()->getTerminator()->getOperands()) {
-    termIterArgs.push_back(
-        stageValueMaps[pipeTimes[value.getDefiningOp()].second].lookup(value));
-    termResults.push_back(
-        stageValueMaps[pipeTimes[value.getDefiningOp()].second].lookup(value));
+    unsigned lookupTime = std::min((unsigned)(stageValueMaps.size() - 1),
+                                   pipeTimes[value.getDefiningOp()].second);
+
+    termIterArgs.push_back(stageValueMaps[lookupTime].lookup(value));
+    termResults.push_back(stageValueMaps[lookupTime].lookup(value));
   }
 
   stagesTerminator.getIterArgsMutable().append(termIterArgs);
