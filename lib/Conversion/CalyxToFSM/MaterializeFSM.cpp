@@ -63,6 +63,9 @@ struct MaterializeCalyxToFSMPass
 
     for (auto transition :
          stateOp.getTransitions().getOps<fsm::TransitionOp>()) {
+
+      if (!transition.hasGuard() && doneGuards.empty())
+        continue;
       transition.ensureGuard(b);
       auto guardOp = transition.getGuardReturn();
       llvm::SmallVector<Value> guards;
@@ -110,14 +113,103 @@ struct MaterializeCalyxToFSMPass
 
   /// Constant cache.
   DenseMap<APInt, Value> constants;
+
+  OpBuilder *b;
+
+  FSMStateNode *entryState;
+  FSMStateNode *exitState;
+
+  // Walks the machine and gathers the set of referenced groups and SSA values.
+  void walkMachine();
+
+  // Creates the top-level group go/done I/O for the machine.
+  void materializeGroupIO();
+
+  // Add attributes to the machine op to indicate which in/out ports are
+  // associated with group activations and which are additional inputs to the
+  // FSM.
+  void assignAttributes();
 };
 
 } // end anonymous namespace
 
+void MaterializeCalyxToFSMPass::walkMachine() {
+  // Walk the states of the machine and gather the relation between states and
+  // the groups which they enable as well as the set of all enabled states.
+  for (auto stateOp : machineOp.getOps<fsm::StateOp>()) {
+    for (auto enableOp : llvm::make_early_inc_range(
+             stateOp.getOutput().getOps<calyx::EnableOp>())) {
+      auto groupName = enableOp.getGroupNameAttr().getAttr();
+      stateEnables[stateOp].insert(groupName);
+      referencedGroups.insert(groupName);
+      // Erase the enable op now that we've recorded the information.
+      enableOp.erase();
+    }
+  }
+}
+
+void MaterializeCalyxToFSMPass::materializeGroupIO() {
+  // Materialize the top-level I/O ports of the fsm.machine. We add an in- and
+  // output for every unique group referenced within the machine, as well as an
+  // additional in- and output to represent the top-level "go" input and "done"
+  // output ports.
+  SmallVector<Type> ioTypes = SmallVector<Type>(
+      referencedGroups.size() + /*top-level go/done*/ 1, b->getI1Type());
+  size_t nGroups = ioTypes.size() - 1;
+  machineOp.setType(b->getFunctionType(ioTypes, ioTypes));
+  assert(machineOp.getBody().getNumArguments() == 0 &&
+         "expected no inputs to the FSM");
+  machineOp.getBody().addArguments(
+      ioTypes, SmallVector<Location, 4>(ioTypes.size(), b->getUnknownLoc()));
+
+  // Build output assignments and transition guards in every state. We here
+  // assume that the ordering of states in referencedGroups is fixed and
+  // deterministic, since it is used as an analogue for port I/O ordering.
+  for (auto stateOp : machineOp.getOps<fsm::StateOp>()) {
+    assignStateOutputOperands(*b, stateOp,
+                              /*topLevelDone=*/false);
+    assignStateTransitionGuard(*b, stateOp);
+  }
+
+  // Assign top-level go guard in the transition state.
+  size_t topLevelGoIdx = nGroups;
+  assignStateTransitionGuard(*b, entryState->getState(),
+                             {machineOp.getArgument(topLevelGoIdx)});
+
+  // Assign top-level done in the exit state.
+  assignStateOutputOperands(*b, exitState->getState(),
+                            /*topLevelDone=*/true);
+}
+
+void MaterializeCalyxToFSMPass::assignAttributes() {
+  // sGroupDoneInputs is a mapping from group name to the index of the
+  // corresponding done input port.
+  llvm::SmallVector<NamedAttribute> groupDoneInputs;
+  for (size_t i = 0; i < referencedGroups.size(); ++i)
+    groupDoneInputs.push_back({referencedGroups[i], b->getI64IntegerAttr(i)});
+  machineOp->setAttr(calyxToFSM::sGroupDoneInputs,
+                     b->getDictionaryAttr(groupDoneInputs));
+
+  // sGroupGoOutputs is a mapping from group name to the index of the
+  // corresponding go output port.
+  llvm::SmallVector<NamedAttribute> groupGoOutputs;
+  for (size_t i = 0; i < referencedGroups.size(); ++i)
+    groupGoOutputs.push_back({referencedGroups[i], b->getI64IntegerAttr(i)});
+  machineOp->setAttr(calyxToFSM::sGroupGoOutputs,
+                     b->getDictionaryAttr(groupGoOutputs));
+
+  // Assign top level go/done attributes
+  machineOp->setAttr(calyxToFSM::sFSMTopLevelGoIndex,
+                     b->getI64IntegerAttr(referencedGroups.size()));
+  machineOp->setAttr(calyxToFSM::sFSMTopLevelDoneIndex,
+                     b->getI64IntegerAttr(referencedGroups.size()));
+}
+
 void MaterializeCalyxToFSMPass::runOnOperation() {
   ComponentOp component = getOperation();
   auto *ctx = &getContext();
-  auto b = OpBuilder(ctx);
+  auto builder = OpBuilder(ctx);
+  b = &builder;
   auto controlOp = component.getControlOp();
   machineOp =
       dyn_cast_or_null<fsm::MachineOp>(controlOp.getBodyBlock()->front());
@@ -131,8 +223,8 @@ void MaterializeCalyxToFSMPass::runOnOperation() {
 
   // Ensure a well-formed FSM.
   auto graph = FSMGraph(machineOp);
-  auto *entryState = graph.lookup(b.getStringAttr(calyxToFSM::sEntryStateName));
-  auto *exitState = graph.lookup(b.getStringAttr(calyxToFSM::sExitStateName));
+  entryState = graph.lookup(b->getStringAttr(calyxToFSM::sEntryStateName));
+  exitState = graph.lookup(b->getStringAttr(calyxToFSM::sExitStateName));
 
   if (!(entryState && exitState)) {
     machineOp.emitOpError()
@@ -142,49 +234,9 @@ void MaterializeCalyxToFSMPass::runOnOperation() {
     return;
   }
 
-  // Walk the states of the machine and gather the relation between states and
-  // the groups which they enable as well as the set of all enabled states.
-  for (auto stateOp : machineOp.getOps<fsm::StateOp>()) {
-    for (auto enableOp : llvm::make_early_inc_range(
-             stateOp.getOutput().getOps<calyx::EnableOp>())) {
-      auto groupName = enableOp.getGroupNameAttr().getAttr();
-      stateEnables[stateOp].insert(groupName);
-      referencedGroups.insert(groupName);
-      // Erase the enable op now that we've recorded the information.
-      enableOp.erase();
-    }
-  }
-
-  // Materialize the top-level I/O ports of the fsm.machine. We add an in- and
-  // output for every unique group referenced within the machine, as well as an
-  // additional in- and output to represent the top-level "go" input and "done"
-  // output ports.
-  SmallVector<Type> ioTypes = SmallVector<Type>(
-      referencedGroups.size() + /*top-level go/done*/ 1, b.getI1Type());
-  size_t nGroups = ioTypes.size() - 1;
-  machineOp.setType(b.getFunctionType(ioTypes, ioTypes));
-  assert(machineOp.getBody().getNumArguments() == 0 &&
-         "expected no inputs to the FSM");
-  machineOp.getBody().addArguments(
-      ioTypes, SmallVector<Location, 4>(ioTypes.size(), b.getUnknownLoc()));
-
-  // Build output assignments and transition guards in every state. We here
-  // assume that the ordering of states in referencedGroups is fixed and
-  // deterministic, since it is used as an analogue for port I/O ordering.
-  for (auto stateOp : machineOp.getOps<fsm::StateOp>()) {
-    assignStateOutputOperands(b, stateOp,
-                              /*topLevelDone=*/false);
-    assignStateTransitionGuard(b, stateOp);
-  }
-
-  // Assign top-level go guard in the transition state.
-  size_t topLevelGoIdx = nGroups;
-  assignStateTransitionGuard(b, entryState->getState(),
-                             {machineOp.getArgument(topLevelGoIdx)});
-
-  // Assign top-level done in the exit state.
-  assignStateOutputOperands(b, exitState->getState(),
-                            /*topLevelDone=*/true);
+  walkMachine();
+  materializeGroupIO();
+  assignAttributes();
 }
 
 std::unique_ptr<mlir::Pass> circt::createMaterializeCalyxToFSMPass() {

@@ -3,18 +3,15 @@
 // RUN: circt-opt %s \
 // RUN:     --lower-scf-to-calyx -canonicalize \
 // RUN:     --calyx-remove-comb-groups --canonicalize \
-// RUN:     --calyx-go-insertion --canonicalize \
 // RUN:     --lower-calyx-to-fsm --canonicalize \
-// RUN:     --materialize-calyx-to-fsm
+// RUN:     --materialize-calyx-to-fsm --canonicalize \
+// RUN:     --calyx-remove-groups-fsm --canonicalize | FileCheck %s
 
-// This is the end of the road (for now) for Calyx in CIRCT.
-// The materialized FSM now needs to be outlined from within the
-// calyx module, and within the Calyx module it can be instantiated
-// as any other HW component. The FSM will then be lowered through
-// the existing FSM-to-HW flow.
+// This is the end of the road for this example since there (as of writing)
+// does not yet exist a lowering for calyx.memory operations.
 
-// CHECK: calyx.control {
-// CHECK: fsm.machine @control(
+// CHECK: fsm.machine @control
+// CHECK: calyx.component @main
 
 func.func @main() {
   %c0 = arith.constant 0 : index

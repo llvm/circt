@@ -218,6 +218,14 @@ def SliceLibOp : UnaryLibraryOp<"slice"> {
 
 def NotLibOp  : UnaryLibraryOp<"not"> {}
 
-def WireLibOp : UnaryLibraryOp<"wire", [SameTypeConstraint<"in", "out">]> {}
+def WireLibOp : UnaryLibraryOp<"wire", [SameTypeConstraint<"in", "out">]> {
+  let builders = [
+    OpBuilder<(ins "StringRef":$sym_name, "::mlir::Type":$wireType), [{
+      llvm::SmallVector<mlir::Type> resultTypes = {wireType, wireType};
+      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), $_builder.getStringAttr(sym_name));
+      $_state.addTypes(resultTypes);
+    }]>
+  ];
+}
 
 def ExtSILibOp  : UnaryLibraryOp<"extsi"> {}
