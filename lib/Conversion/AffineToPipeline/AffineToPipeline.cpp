@@ -475,7 +475,7 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
 
   // Keys for translating values in each stage
   SmallVector<SmallVector<Value>> registerValues;
-  SmallVector<SmallVector<mlir::Type>> registerTypes;
+  SmallVector<SmallVector<Type>> registerTypes;
 
   // The maps that ensure a stage uses the correct version of a value
   SmallVector<IRMapping> stageValueMaps;
@@ -494,7 +494,7 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
 
     // Initialize set of registers up until this point in time
     for (unsigned i = registerValues.size(); i <= startTime; ++i)
-      registerValues.push_back(SmallVector<Value>());
+      registerValues.emplace_back(SmallVector<Value>());
 
     // Check each operation to see if its results need plumbing
     for (auto *op : group) {
@@ -503,11 +503,12 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
 
       unsigned pipeEndTime = 0;
       for (auto *user : op->getUsers()) {
+        unsigned userStartTime = *problem.getStartTime(user);
         if (*problem.getStartTime(user) > startTime)
-          pipeEndTime = std::max(pipeEndTime, *problem.getStartTime(user));
+          pipeEndTime = std::max(pipeEndTime, userStartTime);
         else if (isLoopTerminator(user))
           // Manually forward the value into the terminator's valueMap
-          pipeEndTime = std::max(pipeEndTime, *problem.getStartTime(user) + 1);
+          pipeEndTime = std::max(pipeEndTime, userStartTime + 1);
       }
 
       // Insert the range of pipeline stages the value needs to be valid for
@@ -535,9 +536,9 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
   // Now make register Types and stageValueMaps
   for (unsigned i = 0; i < registerValues.size(); ++i) {
     SmallVector<mlir::Type> types;
-    for (auto val : registerValues[i]) {
+    for (auto val : registerValues[i])
       types.push_back(val.getType());
-    }
+
     registerTypes.push_back(types);
     stageValueMaps.push_back(valueMap);
   }
@@ -586,7 +587,8 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
       unsigned latency = *problem.getLatency(
           *problem.getLinkedOperatorType(res.getDefiningOp()));
       // Multi-cycle case
-      if (problem.getStartTime(res.getDefiningOp()) == startTime && latency > 1)
+      if (*problem.getStartTime(res.getDefiningOp()) == startTime &&
+          latency > 1)
         destTime = startTime + latency;
       destTime = std::min((unsigned)(stageValueMaps.size() - 1), destTime);
       stageValueMaps[destTime].map(res, stage.getResult(resIndex++));
