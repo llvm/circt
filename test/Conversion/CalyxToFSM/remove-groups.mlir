@@ -100,10 +100,10 @@ calyx.component @main(%go: i1 {go}, %reset: i1 {reset}, %clk: i1 {clk}) -> (%don
   calyx.control {
     fsm.machine @control(%arg0: i1, %arg1: i1, %arg2: i1, %arg3: i1) -> (i1, i1, i1, i1) attributes
         {compiledGroups = [@C, @B, @A],
-        fsm_group_done_inputs = {A = 2 : i64, B = 1 : i64, C = 0 : i64},
-        fsm_group_go_outputs = {A = 2 : i64, B = 1 : i64, C = 0 : i64},
-        fsm_top_level_done = 3 : i64,
-        fsm_top_level_go = 3 : i64,
+        calyx.fsm_group_done_inputs = {A = 2 : i64, B = 1 : i64, C = 0 : i64},
+        calyx.fsm_group_go_outputs = {A = 2 : i64, B = 1 : i64, C = 0 : i64},
+        calyx.fsm_top_level_done = 3 : i64,
+        calyx.fsm_top_level_go = 3 : i64,
         initialState = "fsm_entry"} {
       %true_0 = hw.constant true
       %false = hw.constant false

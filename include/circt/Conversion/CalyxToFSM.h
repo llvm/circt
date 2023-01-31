@@ -29,11 +29,15 @@ namespace calyxToFSM {
 // Entry and exit state names of the Calyx control program in the FSM.
 static constexpr std::string_view sEntryStateName = "fsm_entry";
 static constexpr std::string_view sExitStateName = "fsm_exit";
-static constexpr std::string_view sGroupDoneInputs = "fsm_group_done_inputs";
-static constexpr std::string_view sGroupGoOutputs = "fsm_group_go_outputs";
-static constexpr std::string_view sSSAInputIndices = "fsm_ssa_inputs";
-static constexpr std::string_view sFSMTopLevelGoIndex = "fsm_top_level_go";
-static constexpr std::string_view sFSMTopLevelDoneIndex = "fsm_top_level_done";
+static constexpr std::string_view sGroupDoneInputs =
+    "calyx.fsm_group_done_inputs";
+static constexpr std::string_view sGroupGoOutputs =
+    "calyx.fsm_group_go_outputs";
+static constexpr std::string_view sSSAInputIndices = "calyx.fsm_ssa_inputs";
+static constexpr std::string_view sFSMTopLevelGoIndex =
+    "calyx.fsm_top_level_go";
+static constexpr std::string_view sFSMTopLevelDoneIndex =
+    "calyx.fsm_top_level_done";
 
 } // namespace calyxToFSM
 
