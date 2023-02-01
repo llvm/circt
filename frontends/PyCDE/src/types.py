@@ -4,9 +4,7 @@
 
 from collections import OrderedDict
 
-from .value import (BitsSignal, ChannelValue, ClockSignal, ArraySignal,
-                    SIntValue, UIntValue, StructValue, UntypedSignal,
-                    InOutSignal, Value)
+from .support import _obj_to_value
 
 from .circt import ir, support
 from .circt.dialects import esi, hw, sv
@@ -37,7 +35,7 @@ class _Types:
     return self.wrap(Channel(inner))
 
   def struct(self, members, name: str = None) -> hw.StructType:
-    s = Struct(members)
+    s = StructType(members)
     if name is None:
       return s
     return TypeAlias(s, name)
@@ -62,11 +60,15 @@ class Type:
   # Global Type cache.
   _cache: typing.Dict[typing.Tuple[type, ir.Type], "Type"] = {}
 
-  def __new__(cls, circt_type: ir.Type) -> "Type":
+  def __new__(cls, circt_type: ir.Type, incl_cls_in_key: bool = True) -> "Type":
     """Look up a type in the Type cache. If present, return it. If not, create
     it and put it in the cache."""
     assert isinstance(circt_type, ir.Type)
-    cache_key = (cls, circt_type)
+    if incl_cls_in_key:
+      cache_key = (cls, circt_type)
+    else:
+      cache_key = circt_type
+
     if cache_key not in Type._cache:
       t = super(Type, cls).__new__(cls)
       t._type = circt_type
@@ -94,6 +96,7 @@ class Type:
 
   def _get_value_class(self):
     """Return the class which should be instantiated to create a Value."""
+    from .value import UntypedSignal
     return UntypedSignal
 
   def __repr__(self):
@@ -107,9 +110,9 @@ def _FromCirctType(type: Union[ir.Type, Type]) -> Type:
   if isinstance(type, hw.ArrayType):
     return Type.__new__(Array, type)
   if isinstance(type, hw.StructType):
-    return Type.__new__(Struct, type)
+    return Type.__new__(StructType, type)
   if isinstance(type, hw.TypeAliasType):
-    return Type.__new__(TypeAlias, type)
+    return Type.__new__(TypeAlias, type, incl_cls_in_key=False)
   if isinstance(type, hw.InOutType):
     return Type.__new__(InOut, type)
   if isinstance(type, ir.IntegerType):
@@ -136,6 +139,7 @@ class InOut(Type):
     return _FromCirctType(self._type.element_type)
 
   def _get_value_class(self):
+    from .value import InOutSignal
     return InOutSignal
 
 
@@ -145,20 +149,21 @@ class TypeAlias(Type):
   RegisteredAliases: typing.Optional[OrderedDict] = None
 
   def __new__(cls, inner_type: Type, name: str):
-    if not TypeAlias.RegisteredAliases:
+    if TypeAlias.RegisteredAliases is None:
       TypeAlias.RegisteredAliases = OrderedDict()
-    alias = hw.TypeAliasType.get(TypeAlias.TYPE_SCOPE, name, inner_type._type)
 
     if name in TypeAlias.RegisteredAliases:
-      if alias != TypeAlias.RegisteredAliases[name]:
+      if inner_type._type != TypeAlias.RegisteredAliases[name].inner_type:
         raise RuntimeError(
             f"Re-defining type alias for {name}! "
             f"Given: {inner_type}, "
             f"existing: {TypeAlias.RegisteredAliases[name].inner_type}")
-      return TypeAlias.RegisteredAliases[name]
+      alias = TypeAlias.RegisteredAliases[name]
+    else:
+      alias = hw.TypeAliasType.get(TypeAlias.TYPE_SCOPE, name, inner_type._type)
+      TypeAlias.RegisteredAliases[name] = alias
 
-    TypeAlias.RegisteredAliases[name] = alias
-    return super(TypeAlias, cls).__new__(cls, alias)
+    return super(TypeAlias, cls).__new__(cls, alias, incl_cls_in_key=False)
 
   @staticmethod
   def declare_aliases(mod):
@@ -254,13 +259,14 @@ class Array(Type):
     return self.size
 
   def _get_value_class(self):
+    from .value import ArraySignal
     return ArraySignal
 
   def __str__(self) -> str:
     return f"[{self.size}]{self.element_type}"
 
 
-class Struct(Type):
+class StructType(Type):
 
   def __new__(cls, fields: typing.Union[typing.List[typing.Tuple[str, Type]],
                                         typing.Dict[str, Type]]):
@@ -268,7 +274,7 @@ class Struct(Type):
       fields = list(fields.items())
     if not isinstance(fields, list):
       raise TypeError("Expected either list or dict.")
-    return super(Struct, cls).__new__(
+    return super(StructType, cls).__new__(
         cls, hw.StructType.get([(n, t._type) for (n, t) in fields]))
 
   @property
@@ -282,7 +288,8 @@ class Struct(Type):
     return super().__getattribute__(attrname)
 
   def _get_value_class(self):
-    return StructValue
+    from .value import StructSignal
+    return StructSignal
 
   def __str__(self) -> str:
     ret = "struct { "
@@ -295,6 +302,25 @@ class Struct(Type):
       ret += f"{field[0]}: {_FromCirctType(field[1])}"
     ret += "}"
     return ret
+
+
+class RegisteredStruct(TypeAlias):
+  """Represents a named struct with a custom signal class. Primarily used by
+  `value.Struct`."""
+
+  def __new__(cls, fields: typing.List[typing.Tuple[str, Type]], name: str,
+              value_class):
+    inner_type = StructType(fields)
+    inst = super().__new__(cls, inner_type, name)
+    inst._value_class = value_class
+    return inst
+
+  def __call__(self, **kwargs):
+    from .value import Value
+    return Value(kwargs, self._type)
+
+  def _get_value_class(self):
+    return self._value_class
 
 
 class BitVectorType(Type):
@@ -313,6 +339,7 @@ class Bits(BitVectorType):
     )
 
   def _get_value_class(self):
+    from .value import BitsSignal
     return BitsSignal
 
   def __repr__(self):
@@ -328,6 +355,7 @@ class SInt(BitVectorType):
     )
 
   def _get_value_class(self):
+    from .value import SIntValue
     return SIntValue
 
   def __repr__(self):
@@ -343,6 +371,7 @@ class UInt(BitVectorType):
     )
 
   def _get_value_class(self):
+    from .value import UIntValue
     return UIntValue
 
   def __repr__(self):
@@ -361,6 +390,7 @@ class ClockType(Bits):
     super(ClockType, cls).__new__(cls, 1)
 
   def _get_value_class(self):
+    from .value import ClockSignal
     return ClockSignal
 
   def __repr__(self):
@@ -385,6 +415,7 @@ class Channel(Type):
     return _FromCirctType(self._type.inner)
 
   def _get_value_class(self):
+    from .value import ChannelValue
     return ChannelValue
 
   def __str__(self):
@@ -397,6 +428,7 @@ class Channel(Type):
   def wrap(self, value, valid):
     from .dialects import esi
     from .support import _obj_to_value
+    from .value import Value, BitsSignal
     value = _obj_to_value(value, self._type.inner)
     valid = _obj_to_value(valid, types.i1)
     wrap_op = esi.WrapValidReadyOp(self._type, types.i1, value.value,

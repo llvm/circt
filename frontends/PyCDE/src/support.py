@@ -73,20 +73,22 @@ class OpOperandConnect(support.OpOperand):
     support.connect(self, val)
 
 
-def _obj_to_value(x, type, result_type=None):
+def _obj_to_value(x, type, result_type=None) -> ir.Value:
   """Convert a python object to a CIRCT value, given the CIRCT type."""
   if x is None:
     raise ValueError(
         "Encountered 'None' when trying to build hardware for python value.")
   from .value import Signal
   from .dialects import hw, hwarith
-  from .types import (TypeAlias, Array, Struct, BitVectorType, Bits, UInt, SInt,
-                      _FromCirctType)
-
-  if isinstance(x, Signal):
-    return x
+  from .types import (TypeAlias, Array, StructType, BitVectorType, Bits, UInt,
+                      SInt, _FromCirctType)
 
   type = _FromCirctType(type)
+  if isinstance(x, Signal):
+    if x.type != type:
+      raise TypeError(f"expected {x.type}, got {type}")
+    return x
+
   if isinstance(type, TypeAlias):
     return _obj_to_value(x, type.inner_type, type)
 
@@ -127,13 +129,14 @@ def _obj_to_value(x, type, result_type=None):
       return hw.ArrayCreateOp(reversed(list_of_vals))
 
   if isinstance(x, dict):
-    if not isinstance(type, Struct):
+    if not isinstance(type, StructType):
       raise ValueError(f"Dict is only convertable to hw struct, not '{type}'")
     elem_name_values = []
     for (fname, ftype) in type.fields:
       if fname not in x:
         raise ValueError(f"Could not find expected field: {fname}")
-      elem_name_values.append((fname, _obj_to_value(x[fname], ftype)))
+      v = _obj_to_value(x[fname], ftype)
+      elem_name_values.append((fname, v))
       x.pop(fname)
     if len(x) > 0:
       raise ValueError(f"Extra fields specified: {x}")
@@ -163,7 +166,7 @@ def _infer_type(x):
   return None
 
 
-def _obj_to_value_infer_type(value):
+def _obj_to_value_infer_type(value) -> ir.Value:
   """Infer the CIRCT type, then convert the Python object to a CIRCT Value of
   that type."""
   type = _infer_type(value)

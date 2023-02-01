@@ -4,7 +4,8 @@
 
 from __future__ import annotations
 
-from .support import get_user_loc, _obj_to_value_infer_type
+from .types import Type
+from .support import get_user_loc, _obj_to_value_infer_type, _obj_to_value
 
 from .circt.dialects import sv
 from .circt import support
@@ -12,12 +13,12 @@ from .circt import ir
 
 from contextvars import ContextVar
 from functools import singledispatchmethod
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 import re
 import numpy as np
 
 
-def Value(value, type=None):
+def Value(value, type: Type = None):
   from .types import _FromCirctType
 
   if isinstance(value, Signal):
@@ -25,7 +26,10 @@ def Value(value, type=None):
 
   resvalue = support.get_value(value)
   if resvalue is None:
-    return _obj_to_value_infer_type(value)
+    if type is None:
+      resvalue = _obj_to_value_infer_type(value)
+    else:
+      resvalue = _obj_to_value(value, type)
 
   if type is None:
     type = resvalue.type
@@ -602,7 +606,7 @@ class ArraySignal(Signal):
     return np.roll(NDArray(from_value=self), shift=shift, axis=axis).to_circt()
 
 
-class StructValue(Signal):
+class StructSignal(Signal):
 
   def __getitem__(self, sub):
     if sub not in [name for name, _ in self.type.strip.fields]:
@@ -621,6 +625,48 @@ class StructValue(Signal):
           v.name = f"{self.name}__{attr}"
         return v
     raise AttributeError(f"'Value' object has no attribute '{attr}'")
+
+
+class StructMetaType(type):
+
+  def __new__(self, name, bases, dct):
+    """Scans the class being created for type hints, creates a CIRCT struct
+    object and returns the CIRCT struct object instead of the class. Use the
+    class when a `Signal` of the struct type is instantiated."""
+
+    cls = super().__new__(self, name, bases, dct)
+    from .types import RegisteredStruct, Type
+    if "__annotations__" not in dct:
+      return cls
+    fields: List[Tuple[str, Type]] = []
+    for attr_name, attr in dct["__annotations__"].items():
+      if isinstance(attr, Type):
+        fields.append((attr_name, attr))
+
+    return RegisteredStruct(fields, name, cls)
+
+
+class Struct(StructSignal, metaclass=StructMetaType):
+  """Subclassing this class creates a hardware struct which can be used in port
+  definitions and will be instantiated in generators:
+
+  ```
+  class ExStruct(Struct):
+    a: Bits(4)
+    b: UInt(32)
+
+    def get_b(self):
+      return self.b
+
+  class TestStruct(Module):
+    inp1 = Input(ExStruct)
+
+    @generator
+    def build(self):
+      ... = self.inp1.get_b()
+  ```
+  """
+  # All the work is done in the metaclass.
 
 
 class ChannelValue(Signal):
