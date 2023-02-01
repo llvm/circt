@@ -2,7 +2,7 @@
 
 from pycde import Input, Output, generator, Module
 from pycde.testing import unittestmodule
-from pycde.pycde_types import types
+from pycde.types import types
 
 
 # CHECK: msft.module @InfixArith {} (%in0: si16, %in1: ui16)

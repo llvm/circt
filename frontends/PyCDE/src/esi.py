@@ -2,19 +2,18 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from pycde.system import System
+from .system import System
 from .module import Generator, _BlockContext, Module, ModuleLikeBuilderBase
-from pycde.value import ChannelValue, ClockSignal, Signal, Value
+from .value import ChannelValue, Signal, Value
 from .common import Input, Output, InputChannel, OutputChannel, _PyProxy
-from .circt.dialects import esi as raw_esi, hw, msft
-from .circt.support import BackedgeBuilder
-from pycde.pycde_types import ChannelType, ClockType, PyCDEType, types
+from .types import Channel, Type, types, _FromCirctType
 
 from .circt import ir
+from .circt.dialects import esi as raw_esi, hw, msft
 
 from pathlib import Path
 import shutil
-from typing import Dict, List, Optional, Type
+from typing import Dict, List, Optional
 
 __dir__ = Path(__file__).parent
 
@@ -26,8 +25,8 @@ class ToFromServer:
   """A bidirectional channel declaration."""
 
   def __init__(self, to_server_type: Type, to_client_type: Type):
-    self.to_server_type = ChannelType(raw_esi.ChannelType.get(to_server_type))
-    self.to_client_type = ChannelType(raw_esi.ChannelType.get(to_client_type))
+    self.to_server_type = Channel(to_server_type)
+    self.to_client_type = Channel(to_client_type)
 
 
 class ServiceDecl(_PyProxy):
@@ -78,19 +77,19 @@ class ServiceDecl(_PyProxy):
           for (_, attr) in self.__dict__.items():
             if isinstance(attr, _RequestToServerConn):
               raw_esi.ToServerOp(attr._name,
-                                 ir.TypeAttr.get(attr.to_server_type))
+                                 ir.TypeAttr.get(attr.to_server_type._type))
             elif isinstance(attr, _RequestToClientConn):
               raw_esi.ToClientOp(attr._name,
-                                 ir.TypeAttr.get(attr.to_client_type))
+                                 ir.TypeAttr.get(attr.to_client_type._type))
             elif isinstance(attr, _RequestToFromServerConn):
-              raw_esi.ServiceDeclInOutOp(attr._name,
-                                         ir.TypeAttr.get(attr.to_server_type),
-                                         ir.TypeAttr.get(attr.to_client_type))
+              raw_esi.ServiceDeclInOutOp(
+                  attr._name, ir.TypeAttr.get(attr.to_server_type._type),
+                  ir.TypeAttr.get(attr.to_client_type._type))
     return sym_name
 
   def instantiate_builtin(self,
                           builtin: str,
-                          result_types: List[PyCDEType] = [],
+                          result_types: List[Type] = [],
                           inputs: List[Signal] = []):
     """Implement a service using an implementation builtin to CIRCT. Needs the
     input ports which the implementation expects and returns the outputs."""
@@ -110,13 +109,13 @@ class _RequestConnection:
   ServiceDecl class. Provides syntactic sugar for constructing service
   connection requests."""
 
-  def __init__(self, decl: ServiceDecl, to_server_type: Optional[ir.Type],
-               to_client_type: Optional[ir.Type], attr_name: str):
+  def __init__(self, decl: ServiceDecl, to_server_type: Optional[Type],
+               to_client_type: Optional[Type], attr_name: str):
     self.decl = decl
     self._name = ir.StringAttr.get(attr_name)
-    self.to_server_type = ChannelType(
+    self.to_server_type = Channel(
         to_server_type) if to_server_type is not None else None
-    self.to_client_type = ChannelType(
+    self.to_client_type = Channel(
         to_client_type) if to_client_type is not None else None
 
   @property
@@ -135,17 +134,17 @@ class _RequestToServerConn(_RequestConnection):
 
 class _RequestToClientConn(_RequestConnection):
 
-  def __call__(self, chan_name: str = "", type: Optional[PyCDEType] = None):
+  def __call__(self, chan_name: str = "", type: Optional[Type] = None):
     self.decl._materialize_service_decl()
     if type is None:
       type = self.to_client_type
       if type == types.any:
         raise ValueError(
             "If service port has type 'any', then 'type' must be specified.")
-    if not isinstance(type, ChannelType):
+    if not isinstance(type, Channel):
       type = types.channel(type)
     req_op = raw_esi.RequestToClientConnectionOp(
-        type, self.service_port,
+        type._type, self.service_port,
         ir.ArrayAttr.get([ir.StringAttr.get(chan_name)]))
     return ChannelValue(req_op)
 
@@ -155,7 +154,7 @@ class _RequestToFromServerConn(_RequestConnection):
   def __call__(self,
                to_server_channel: ChannelValue,
                chan_name: str = "",
-               to_client_type: Optional[PyCDEType] = None):
+               to_client_type: Optional[Type] = None):
     self.decl._materialize_service_decl()
     type = to_client_type
     if type is None:
@@ -163,10 +162,10 @@ class _RequestToFromServerConn(_RequestConnection):
       if type == types.any:
         raise ValueError(
             "If service port has type 'any', then 'type' must be specified.")
-    if not isinstance(type, ChannelType):
+    if not isinstance(type, Channel):
       type = types.channel(type)
     to_client = raw_esi.RequestInOutChannelOp(
-        self.to_client_type, self.service_port, to_server_channel.value,
+        self.to_client_type._type, self.service_port, to_server_channel.value,
         ir.ArrayAttr.get([ir.StringAttr.get(chan_name)]))
     return ChannelValue(to_client)
 
@@ -234,7 +233,7 @@ class _OutputChannelSetter:
 
   def __init__(self, req: raw_esi.RequestToClientConnectionOp,
                old_chan_to_replace: ChannelValue):
-    self.type = ChannelType(req.toClient.type)
+    self.type = Channel(_FromCirctType(req.toClient.type))
     self.client_name = req.clientNamePath
     self._chan_to_replace = old_chan_to_replace
 
@@ -245,7 +244,7 @@ class _OutputChannelSetter:
       raise ValueError(f"{name_str} has already been connected.")
     if new_value.type != self.type:
       raise TypeError(
-          f"ChannelType mismatch. Expected {self.type}, got {new_value.type}.")
+          f"Channel type mismatch. Expected {self.type}, got {new_value.type}.")
     msft.replaceAllUsesWith(self._chan_to_replace, new_value.value)
     self._chan_to_replace = None
 
@@ -306,7 +305,7 @@ class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
     if impl.decl is not None:
       decl_sym = ir.FlatSymbolRefAttr.get(impl.decl._materialize_service_decl())
     return raw_esi.ServiceInstanceOp(
-        result=[t for _, t in self.outputs],
+        result=[t._type for _, t in self.outputs],
         service_symbol=decl_sym,
         impl_type=_ServiceGeneratorRegistry._impl_type_name,
         inputs=[inputs[pn].value for pn, _ in self.inputs],
@@ -412,7 +411,7 @@ class _ServiceGeneratorRegistry:
 _service_generator_registry = _ServiceGeneratorRegistry()
 
 
-def DeclareRandomAccessMemory(inner_type: PyCDEType,
+def DeclareRandomAccessMemory(inner_type: Type,
                               depth: int,
                               name: Optional[str] = None):
   """Declare an ESI RAM with elements of type 'inner_type' and has 'depth' of
@@ -431,7 +430,7 @@ def DeclareRandomAccessMemory(inner_type: PyCDEType,
     @staticmethod
     def _op(sym_name: ir.StringAttr):
       return raw_esi.RandomAccessMemoryDeclOp(
-          sym_name, ir.TypeAttr.get(inner_type),
+          sym_name, ir.TypeAttr.get(inner_type._type),
           ir.IntegerAttr.get(ir.IntegerType.get_signless(64), depth))
 
   if name is not None:
@@ -444,7 +443,7 @@ def _import_ram_decl(sys: "System", ram_op: raw_esi.RandomAccessMemoryDeclOp):
   """Create a DeclareRandomAccessMemory object from an existing CIRCT op and
   install it in the sym cache."""
   from .system import _OpCache
-  ram = DeclareRandomAccessMemory(inner_type=PyCDEType(ram_op.innerType.value),
+  ram = DeclareRandomAccessMemory(inner_type=Type(ram_op.innerType.value),
                                   depth=ram_op.depth.value,
                                   name=ram_op.sym_name.value)
   cache: _OpCache = sys._op_cache

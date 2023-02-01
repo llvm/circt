@@ -4,7 +4,7 @@
 from pycde import System, Input, Output, generator, Module
 from pycde.dialects import comb
 from pycde import fsm
-from pycde.pycde_types import types
+from pycde.types import types
 from pycde.testing import unittestmodule
 
 # FSM instantiation example

@@ -2,7 +2,7 @@
 
 from pycde import System, Input, Output, generator
 from pycde import fsm
-from pycde.pycde_types import types
+from pycde.types import types
 
 
 @fsm.machine()

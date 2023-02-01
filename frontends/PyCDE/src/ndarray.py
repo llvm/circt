@@ -2,8 +2,8 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from .value import BitVectorSignal, ListValue
-from .pycde_types import BitVectorType, dim
+from .value import BitVectorSignal, ArraySignal
+from .types import BitVectorType, dim
 from pycde.dialects import hw, sv
 import numpy as np
 from .circt import ir
@@ -79,7 +79,7 @@ class NDArray(np.ndarray):
         TypeError: _description_
     """
 
-    from pycde.value import ListValue
+    from pycde.value import ArraySignal
 
     if (from_value is not None) and (shape is not None or dtype is not None):
       raise ValueError(
@@ -87,7 +87,7 @@ class NDArray(np.ndarray):
       )
 
     if from_value is not None:
-      if isinstance(from_value, ListValue):
+      if isinstance(from_value, ArraySignal):
         shape = from_value.type.shape
         dtype = from_value.type.inner_type
         name = from_value.name
@@ -113,7 +113,7 @@ class NDArray(np.ndarray):
     self.circt_output = None
 
     if from_value is not None:
-      if isinstance(from_value, ListValue):
+      if isinstance(from_value, ArraySignal):
         # PyCDE and numpy do not play nicely when doing np.arr(Matrix._circt_to_arr(...))
         # but individual assignments work.
         target_shape = self._target_shape_for_idxs(0)
@@ -132,10 +132,10 @@ class NDArray(np.ndarray):
     return hw.ConstantOp(ir.IntegerType.get_signless(width), value)
 
   @staticmethod
-  def _circt_to_arr(value: Union[BitVectorSignal, ListValue],
+  def _circt_to_arr(value: Union[BitVectorSignal, ArraySignal],
                     target_shape: _TargetShape):
     """Converts a CIRCT value into a numpy array."""
-    from .value import (BitVectorSignal, ListValue)
+    from .value import (BitVectorSignal, ArraySignal)
 
     if isinstance(value, BitVectorSignal) and isinstance(
         target_shape.dtype, BitVectorType):
@@ -173,7 +173,7 @@ class NDArray(np.ndarray):
           startbit = i * slice_elem_width
           endbit = i * slice_elem_width + slice_elem_width
           arr.append(value[startbit:endbit])
-    elif isinstance(value, ListValue):
+    elif isinstance(value, ArraySignal):
       # Recursively convert the list.
       arr = []
       for i in range(value.type.size):
@@ -298,7 +298,7 @@ class NDArray(np.ndarray):
     """
     ndarrays = []
     for l in lst:
-      if isinstance(l, ListValue):
+      if isinstance(l, ArraySignal):
         ndarrays.append(NDArray(from_value=l))
       else:
         if not isinstance(l, np.ndarray):

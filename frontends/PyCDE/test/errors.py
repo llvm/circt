@@ -89,5 +89,5 @@ class OperatorError2(Module):
 
   @generator
   def build(ports):
-    # CHECK: Comparisons of signed/unsigned integers to i32 not supported. RHS operand should be cast .as_sint()/.as_uint() if possible.
+    # CHECK: Comparisons of signed/unsigned integers to bits32 not supported. RHS operand should be cast .as_sint()/.as_uint() if possible.
     ports.b == ports.a

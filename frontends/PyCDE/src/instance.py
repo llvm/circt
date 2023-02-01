@@ -266,8 +266,8 @@ class RegInstance(Instance):
                symbol: Optional[ir.Attribute], static_op: seq.CompRegOp):
     super().__init__(parent, inside_of, symbol)
 
-    from .pycde_types import Type
-    self.type = Type(static_op.operation.operands[0].type)
+    from .types import _FromCirctType
+    self.type = _FromCirctType(static_op.operation.operands[0].type)
 
   def place(self, locs: Union[LocationVector, List[Optional[Tuple[int, int,
                                                                   int]]]]):

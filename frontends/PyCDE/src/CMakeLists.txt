@@ -14,7 +14,7 @@ declare_mlir_python_sources(PyCDESources
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   SOURCES
   __init__.py
-  pycde_types.py
+  types.py
   dialects/__init__.py
   dialects/msft.py
   dialects/seq.py
@@ -22,6 +22,7 @@ declare_mlir_python_sources(PyCDESources
   dialects/comb.py
   dialects/sv.py
   dialects/fsm.py
+  dialects/esi.py
   dialects/hwarith.py
   support.py
   module.py

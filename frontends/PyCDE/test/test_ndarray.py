@@ -5,7 +5,7 @@ from pycde.testing import unittestmodule
 
 from pycde.ndarray import NDArray
 from pycde.dialects import hw
-from pycde.pycde_types import types, dim
+from pycde.types import types, dim
 
 # ndarray transposition via injected ndarray on a ListValue
 # Putting this as first test in case users use this file as a reference.

@@ -55,7 +55,7 @@ class PhysLocation:
 
 
 class LocationVector:
-  from .pycde_types import Type
+  from .types import Type
 
   __slots__ = ["type", "_loc"]
 

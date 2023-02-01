@@ -6,7 +6,7 @@ from pycde import (Clock, Input, InputChannel, OutputChannel, Module, generator,
 from pycde import esi
 from pycde.common import Output
 from pycde.constructs import Wire
-from pycde.pycde_types import ChannelType
+from pycde.types import Channel
 from pycde.testing import unittestmodule
 from pycde.value import BitVectorSignal, ChannelValue
 
@@ -124,7 +124,7 @@ class MultiplexerService(esi.ServiceImplementation):
     self.trunk_in_ready = ready
 
   @staticmethod
-  def slice_and_wrap(ports, channel_type: ChannelType):
+  def slice_and_wrap(ports, channel_type: Channel):
     assert (channel_type.inner_type.width <= 256)
     sliced = ports.trunk_in[:channel_type.inner_type.width]
     return channel_type.wrap(sliced, ports.trunk_in_valid)
