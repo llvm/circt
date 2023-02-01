@@ -149,3 +149,35 @@ class Lowering(Module):
   @generator
   def construct(ports):
     ports.out0 = (ports.in0.as_sint() + ports.in1.as_sint()).as_bits(16)
+
+
+# -----
+
+
+# CHECK-LABEL:  msft.module @Constants {} (%uin: ui16, %sin: si16) attributes {fileName = "Constants.sv"} {
+# CHECK-NEXT:     [[R0:%.+]] = hwarith.constant 1 : ui1
+# CHECK-NEXT:     [[R1:%.+]] = hwarith.add %uin, [[R0]] : (ui16, ui1) -> ui17
+# CHECK-NEXT:     [[R2:%.+]] = hwarith.constant -1 : si2
+# CHECK-NEXT:     [[R3:%.+]] = hwarith.add %uin, [[R2]] : (ui16, si2) -> si18
+# CHECK-NEXT:     [[R4:%.+]] = hwarith.constant 1 : ui1
+# CHECK-NEXT:     [[R5:%.+]] = hwarith.icmp eq %uin, [[R4]] : ui16, ui1
+# CHECK-NEXT:     [[R6:%.+]] = hwarith.constant 1 : ui1
+# CHECK-NEXT:     [[R7:%.+]] = hwarith.add %sin, [[R6]] : (si16, ui1) -> si17
+# CHECK-NEXT:     [[R8:%.+]] = hwarith.constant -1 : si2
+# CHECK-NEXT:     [[R9:%.+]] = hwarith.add %sin, [[R8]] : (si16, si2) -> si17
+# CHECK-NEXT:     [[R10:%.+]] = hwarith.constant 1 : ui1
+# CHECK-NEXT:     [[R11:%.+]] = hwarith.icmp eq %sin, [[R10]] : si16, ui1
+@unittestmodule()
+class Constants(Module):
+  uin = Input(types.ui16)
+  sin = Input(types.si16)
+
+  @generator
+  def construct(ports):
+    ports.uin + 1
+    ports.uin + -1
+    ports.uin == 1
+
+    ports.sin + 1
+    ports.sin + -1
+    ports.sin == 1

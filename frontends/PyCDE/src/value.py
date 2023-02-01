@@ -399,6 +399,16 @@ class IntValue(BitVectorSignal):
   # a check to ensure that the operands have signedness semantics, and then
   # calls the provided operator.
   def __exec_signedness_binop__(self, other, op, op_symbol: str, op_name: str):
+    from .dialects import hwarith
+
+    # If a python int, create a minimum-width constant.
+    if isinstance(other, int):
+      if other < 0:
+        const_type = ir.IntegerType.get_signed(other.bit_length() + 1)
+      else:
+        const_type = ir.IntegerType.get_unsigned(other.bit_length())
+      other = hwarith.ConstantOp(const_type, other)
+
     if not isinstance(other, IntValue):
       raise TypeError(
           f"Operator '{op_symbol}' is not supported on non-int or signless "
@@ -429,6 +439,15 @@ class IntValue(BitVectorSignal):
   # Generalized function for executing sign-aware int comparisons.
   def __exec_icmp__(self, other, pred: int, op_name: str):
     from .dialects import hwarith
+
+    # If a python int, create a minimum-width constant.
+    if isinstance(other, int):
+      if other < 0:
+        const_type = ir.IntegerType.get_signed(other.bit_length() + 1)
+      else:
+        const_type = ir.IntegerType.get_unsigned(other.bit_length())
+      other = hwarith.ConstantOp(const_type, other)
+
     if not isinstance(other, IntValue):
       raise TypeError(
           f"Comparisons of signed/unsigned integers to {other.type} not "
