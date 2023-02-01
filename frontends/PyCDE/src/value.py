@@ -607,6 +607,10 @@ class StructSignal(Signal):
 class StructMetaType(type):
 
   def __new__(self, name, bases, dct):
+    """Scans the class being created for type hints, creates a CIRCT struct
+    object and returns the CIRCT struct object instead of the class. Use the
+    class when a `Signal` of the struct type is instantiated."""
+
     cls = super().__new__(self, name, bases, dct)
     from .types import RegisteredStruct, Type
     if "__annotations__" not in dct:
@@ -620,7 +624,26 @@ class StructMetaType(type):
 
 
 class Struct(StructSignal, metaclass=StructMetaType):
-  pass
+  """Subclassing this class creates a hardware struct which can be used in port
+  definitions and will be instantiated in generators:
+
+  ```
+  class ExStruct(Struct):
+    a: Bits(4)
+    b: UInt(32)
+
+    def get_b(self):
+      return self.b
+
+  class TestStruct(Module):
+    inp1 = Input(ExStruct)
+
+    @generator
+    def build(self):
+      ... = self.inp1.get_b()
+  ```
+  """
+  # All the work is done in the metaclass.
 
 
 class ChannelValue(Signal):

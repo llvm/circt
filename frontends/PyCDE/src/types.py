@@ -303,6 +303,8 @@ class StructType(Type):
 
 
 class RegisteredStruct(TypeAlias):
+  """Represents a named struct with a custom signal class. Primarily used by
+  `value.Struct`."""
 
   def __new__(cls, fields: typing.List[typing.Tuple[str, Type]], name: str,
               value_class):

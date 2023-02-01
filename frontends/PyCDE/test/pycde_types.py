@@ -35,7 +35,7 @@ dim_alias = dim(1, 8, name="myname5")
 # CHECK: hw.typedecl @myname5 : !hw.array<8xi1>
 # CHECK-NOT: hw.typedecl @myname1
 # CHECK-NOT: hw.typedecl @myname5
-m = System([]).mod.create()
+m = System([]).mod
 TypeAlias.declare_aliases(m)
 TypeAlias.declare_aliases(m)
 print(m)
@@ -52,6 +52,11 @@ class ExStruct(Struct):
 print(ExStruct)
 
 
+# CHECK-LABEL:  msft.module @TestStruct {} (%inp1: !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>) -> (out1: ui33)
+# CHECK-NEXT:     %b = hw.struct_extract %inp1["b"] {sv.namehint = "inp1__b"} : !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>
+# CHECK-NEXT:     [[r0:%.+]] = hwarith.constant 1 : ui1
+# CHECK-NEXT:     [[r1:%.+]] = hwarith.add %b, [[r0]] : (ui32, ui1) -> ui33
+# CHECK-NEXT:     msft.output [[r1]] : ui33
 @unittestmodule()
 class TestStruct(Module):
   inp1 = Input(ExStruct)
