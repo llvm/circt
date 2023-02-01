@@ -3,7 +3,7 @@
 from pycde import dim, types, Input, Output, generator, System, Module
 from pycde.types import Bits, StructType, TypeAlias, UInt
 from pycde.testing import unittestmodule
-from pycde.value import Struct
+from pycde.value import Struct, UIntValue
 
 # CHECK: [('foo', bits1), ('bar', bits13)]
 st1 = StructType({"foo": types.i1, "bar": types.i13})
@@ -45,23 +45,33 @@ class ExStruct(Struct):
   a: Bits(4)
   b: UInt(32)
 
-  def get_b_plus1(self):
-    return self.b + UInt(1)(1)
+  def get_b_plus1(self) -> UIntValue:
+    return self.b + 1
 
 
 print(ExStruct)
 
 
-# CHECK-LABEL:  msft.module @TestStruct {} (%inp1: !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>) -> (out1: ui33)
+# CHECK-LABEL:  msft.module @TestStruct {} (%inp1: !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>) -> (out1: ui33, out2: !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>)
 # CHECK-NEXT:     %b = hw.struct_extract %inp1["b"] {sv.namehint = "inp1__b"} : !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>
 # CHECK-NEXT:     [[r0:%.+]] = hwarith.constant 1 : ui1
 # CHECK-NEXT:     [[r1:%.+]] = hwarith.add %b, [[r0]] : (ui32, ui1) -> ui33
-# CHECK-NEXT:     msft.output [[r1]] : ui33
+# CHECK-NEXT:     %a = hw.struct_extract %inp1["a"] {sv.namehint = "inp1__a"} : !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>
+# CHECK-NEXT:     %b_0 = hw.struct_extract %inp1["b"] {sv.namehint = "inp1__b"} : !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>
+# CHECK-NEXT:     [[r2:%.+]] = hwarith.constant 1 : ui1
+# CHECK-NEXT:     [[r3:%.+]] = hwarith.add %b_0, [[r2]] : (ui32, ui1) -> ui33
+# CHECK-NEXT:     [[r4:%.+]] = hwarith.cast [[r3]] : (ui33) -> ui32
+# CHECK-NEXT:     [[r5:%.+]] = hw.struct_create (%a, [[r4]]) : !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>
+# CHECK-NEXT:     msft.output [[r1]], [[r5]] : ui33, !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>
 @unittestmodule()
 class TestStruct(Module):
   inp1 = Input(ExStruct)
   out1 = Output(UInt(33))
+  out2 = Output(ExStruct)
 
   @generator
   def build(self):
     self.out1 = self.inp1.get_b_plus1()
+    s = ExStruct(a=self.inp1.a, b=self.inp1.get_b_plus1().as_uint(32))
+    assert type(s) is ExStruct._get_value_class()
+    self.out2 = s

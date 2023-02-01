@@ -4,7 +4,8 @@
 
 from __future__ import annotations
 
-from .support import get_user_loc, _obj_to_value_infer_type
+from .types import Type
+from .support import get_user_loc, _obj_to_value_infer_type, _obj_to_value
 
 from .circt.dialects import sv
 from .circt import support
@@ -17,7 +18,7 @@ import re
 import numpy as np
 
 
-def Value(value, type=None):
+def Value(value, type: Type = None):
   from .types import _FromCirctType
 
   if isinstance(value, Signal):
@@ -25,7 +26,10 @@ def Value(value, type=None):
 
   resvalue = support.get_value(value)
   if resvalue is None:
-    return _obj_to_value_infer_type(value)
+    if type is None:
+      resvalue = _obj_to_value_infer_type(value)
+    else:
+      resvalue = _obj_to_value(value, type)
 
   if type is None:
     type = resvalue.type

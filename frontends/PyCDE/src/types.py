@@ -4,6 +4,8 @@
 
 from collections import OrderedDict
 
+from .support import _obj_to_value
+
 from .circt import ir, support
 from .circt.dialects import esi, hw, sv
 
@@ -312,6 +314,10 @@ class RegisteredStruct(TypeAlias):
     inst = super().__new__(cls, inner_type, name)
     inst._value_class = value_class
     return inst
+
+  def __call__(self, **kwargs):
+    from .value import Value
+    return Value(kwargs, self._type)
 
   def _get_value_class(self):
     return self._value_class
