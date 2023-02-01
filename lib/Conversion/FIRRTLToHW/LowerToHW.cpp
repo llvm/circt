@@ -1850,7 +1850,7 @@ Attribute FIRRTLLowering::getOrCreateAggregateConstantAttribute(Attribute value,
                                                                 Type type) {
   // Base case.
   if (hw::type_isa<IntegerType>(type))
-    return value;
+    return builder.getIntegerAttr(type, cast<IntegerAttr>(value).getValue());
 
   auto cache = hwAggregateConstantMap.lookup({value, type});
   if (cache)

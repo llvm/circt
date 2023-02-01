@@ -1792,7 +1792,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %0 = firrtl.aggregateconstant [[[0 : ui8, 1: ui8], [2 : ui8, 3: ui8]], [[4: ui8, 5: ui8], [6: ui8, 7:ui8]]] :
       !firrtl.bundle<a: vector<vector<uint<8>, 2>, 2>, b: vector<vector<uint<8>, 2>, 2>>
     firrtl.strictconnect %out, %0 : !firrtl.bundle<a: vector<vector<uint<8>, 2>, 2>, b: vector<vector<uint<8>, 2>, 2>>
-    // CHECK-LITERAL:   %0 = hw.aggregate_constant [[[3 : ui8, 2 : ui8], [1 : ui8, 0 : ui8]], [[7 : ui8, 6 : ui8], [5 : ui8, 4 : ui8]]]
+    // CHECK{LITERAL}:   %0 = hw.aggregate_constant [[[3 : i8, 2 : i8], [1 : i8, 0 : i8]], [[7 : i8, 6 : i8], [5 : i8, 4 : i8]]]
     // CHECK-SAME: !hw.struct<a: !hw.array<2xarray<2xi8>>, b: !hw.array<2xarray<2xi8>>>
     // CHECK: hw.output %0
   }
