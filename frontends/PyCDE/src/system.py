@@ -88,7 +88,9 @@ class System:
     self.hw_output_dir.mkdir(exist_ok=True)
 
     with self:
-      [m._builder.circt_mod for m in self.top_modules]
+      for m in self.top_modules:
+        assert issubclass(m, Module)
+        m._builder.circt_mod
 
   def add_packaging_step(self, func: Callable):
     self.packaging_funcs.append(func)

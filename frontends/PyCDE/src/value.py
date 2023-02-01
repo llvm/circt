@@ -12,7 +12,7 @@ from .circt import ir
 
 from contextvars import ContextVar
 from functools import singledispatchmethod
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 import re
 import numpy as np
 
@@ -583,7 +583,7 @@ class ArraySignal(Signal):
     return np.roll(NDArray(from_value=self), shift=shift, axis=axis).to_circt()
 
 
-class StructValue(Signal):
+class StructSignal(Signal):
 
   def __getitem__(self, sub):
     if sub not in [name for name, _ in self.type.strip.fields]:
@@ -602,6 +602,25 @@ class StructValue(Signal):
           v.name = f"{self.name}__{attr}"
         return v
     raise AttributeError(f"'Value' object has no attribute '{attr}'")
+
+
+class StructMetaType(type):
+
+  def __new__(self, name, bases, dct):
+    cls = super().__new__(self, name, bases, dct)
+    from .types import RegisteredStruct, Type
+    if "__annotations__" not in dct:
+      return cls
+    fields: List[Tuple[str, Type]] = []
+    for attr_name, attr in dct["__annotations__"].items():
+      if isinstance(attr, Type):
+        fields.append((attr_name, attr))
+
+    return RegisteredStruct(fields, name, cls)
+
+
+class Struct(StructSignal, metaclass=StructMetaType):
+  pass
 
 
 class ChannelValue(Signal):

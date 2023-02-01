@@ -80,8 +80,8 @@ def _obj_to_value(x, type, result_type=None):
         "Encountered 'None' when trying to build hardware for python value.")
   from .value import Signal
   from .dialects import hw, hwarith
-  from .types import (TypeAlias, Array, Struct, BitVectorType, Bits, UInt, SInt,
-                      _FromCirctType)
+  from .types import (TypeAlias, Array, StructType, BitVectorType, Bits, UInt,
+                      SInt, _FromCirctType)
 
   if isinstance(x, Signal):
     return x
@@ -127,7 +127,7 @@ def _obj_to_value(x, type, result_type=None):
       return hw.ArrayCreateOp(reversed(list_of_vals))
 
   if isinstance(x, dict):
-    if not isinstance(type, Struct):
+    if not isinstance(type, StructType):
       raise ValueError(f"Dict is only convertable to hw struct, not '{type}'")
     elem_name_values = []
     for (fname, ftype) in type.fields:

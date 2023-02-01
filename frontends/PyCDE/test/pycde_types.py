@@ -1,11 +1,12 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
-from pycde import dim, types
-from pycde.types import Bits, Struct, TypeAlias
-from pycde.circt.ir import Module
+from pycde import dim, types, Input, Output, generator, System, Module
+from pycde.types import Bits, StructType, TypeAlias, UInt
+from pycde.testing import unittestmodule
+from pycde.value import Struct
 
 # CHECK: [('foo', bits1), ('bar', bits13)]
-st1 = Struct({"foo": types.i1, "bar": types.i13})
+st1 = StructType({"foo": types.i1, "bar": types.i13})
 print(st1.fields)
 # CHECK: bits1
 print(st1.foo)
@@ -34,7 +35,28 @@ dim_alias = dim(1, 8, name="myname5")
 # CHECK: hw.typedecl @myname5 : !hw.array<8xi1>
 # CHECK-NOT: hw.typedecl @myname1
 # CHECK-NOT: hw.typedecl @myname5
-m = Module.create()
+m = System([]).mod.create()
 TypeAlias.declare_aliases(m)
 TypeAlias.declare_aliases(m)
 print(m)
+
+
+class ExStruct(Struct):
+  a: Bits(4)
+  b: UInt(32)
+
+  def get_b_plus1(self):
+    return self.b + UInt(1)(1)
+
+
+print(ExStruct)
+
+
+@unittestmodule()
+class TestStruct(Module):
+  inp1 = Input(ExStruct)
+  out1 = Output(UInt(33))
+
+  @generator
+  def build(self):
+    self.out1 = self.inp1.get_b_plus1()
