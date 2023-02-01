@@ -74,4 +74,5 @@ class TestStruct(Module):
     self.out1 = self.inp1.get_b_plus1()
     s = ExStruct(a=self.inp1.a, b=self.inp1.get_b_plus1().as_uint(32))
     assert type(s) is ExStruct._get_value_class()
+    assert s.a == self.inp1.a
     self.out2 = s
