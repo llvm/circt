@@ -4,8 +4,8 @@
 
 from __future__ import annotations
 
-from .types import Type
 from .support import get_user_loc, _obj_to_value_infer_type, _obj_to_value
+from .types import Type
 
 from .circt.dialects import sv
 from .circt import support
@@ -282,8 +282,8 @@ class BitVectorSignal(Signal):
 
   def as_uint(self, width: int = None):
     """
-    Returns this value as an unsigned integer. If 'width' is provided, this value
-    will be truncated or zero-padded to that width.
+    Returns this value as an unsigned integer. If 'width' is provided, this
+    value will be truncated or zero-padded to that width.
     """
     return self._exec_cast(UIntSignal, ir.IntegerType.get_unsigned, width)
 
@@ -423,8 +423,8 @@ class IntSignal(BitVectorSignal):
     if not isinstance(other, IntSignal):
       raise TypeError(
           f"Operator '{op_symbol}' is not supported on non-int or signless "
-          "values. RHS operand should be cast .as_sint()/.as_uint() if possible."
-      )
+          "signals. RHS operand should be cast .as_sint()/.as_uint() if "
+          "possible.")
 
     ret = op(self, other)
     if self.name is not None and other.name is not None:

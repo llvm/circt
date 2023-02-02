@@ -2,10 +2,10 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from .system import System
-from .module import Generator, _BlockContext, Module, ModuleLikeBuilderBase
-from .signals import ChannelSignal, Signal, _FromCirctValue
 from .common import Input, Output, InputChannel, OutputChannel, _PyProxy
+from .module import Generator, Module, ModuleLikeBuilderBase
+from .signals import ChannelSignal, Signal, _FromCirctValue
+from .system import System
 from .types import Channel, Type, types, _FromCirctType
 
 from .circt import ir

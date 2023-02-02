@@ -3,15 +3,13 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from typing import List, Optional, Set, Tuple, Union, Dict
-from pycde.types import ClockType
-
-from pycde.support import _obj_to_value
+from typing import List, Optional, Set, Tuple, Dict
 
 from .common import (AppID, Clock, Input, Output, PortError, _PyProxy)
-from .support import (get_user_loc, _obj_to_attribute, OpOperandConnect,
+from .support import (get_user_loc, _obj_to_attribute, _obj_to_value,
                       create_type_string, create_const_zero)
 from .signals import ClockSignal, Signal, _FromCirctValue
+from .types import ClockType
 
 from .circt import ir, support
 from .circt.dialects import hw, msft

@@ -9,7 +9,6 @@ from .support import _obj_to_value
 from .circt import ir, support
 from .circt.dialects import esi, hw, sv
 
-from typing import Union
 import typing
 
 
@@ -103,7 +102,7 @@ class Type:
     return self._type.__repr__()
 
 
-def _FromCirctType(type: Union[ir.Type, Type]) -> Type:
+def _FromCirctType(type: typing.Union[ir.Type, Type]) -> Type:
   if isinstance(type, Type):
     return type
   type = support.type_to_pytype(type)
@@ -427,7 +426,6 @@ class Channel(Type):
 
   def wrap(self, value, valid):
     from .dialects import esi
-    from .support import _obj_to_value
     from .signals import _FromCirctValue, BitsSignal
     value = _obj_to_value(value, self._type.inner)
     valid = _obj_to_value(valid, types.i1)

@@ -2,11 +2,13 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+from .dialects import hw, sv
 from .signals import BitVectorSignal, ArraySignal
 from .types import BitVectorType, dim
-from pycde.dialects import hw, sv
-import numpy as np
+
 from .circt import ir
+
+import numpy as np
 from functools import lru_cache
 from dataclasses import dataclass
 from typing import Union

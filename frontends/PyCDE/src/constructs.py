@@ -5,14 +5,15 @@
 from __future__ import annotations
 
 from .common import Clock, Input, Output
-from .types import dim, types, Array, InOut, Type
-from .signals import ArraySignal, BitsSignal, BitVectorSignal, ArraySignal, _FromCirctValue, Signal
-from .signals import get_slice_bounds
+from .dialects import comb, msft, sv
 from .module import generator, modparams, Module, _BlockContext
+from .signals import ArraySignal, BitsSignal, BitVectorSignal, Signal
+from .signals import get_slice_bounds, _FromCirctValue
+from .types import dim, types, InOut, Type
+
+from .circt import ir
 from .circt.support import BackedgeBuilder
 from .circt.dialects import msft as raw_msft
-from pycde.dialects import comb, msft, sv
-from .circt import ir
 
 import typing
 from typing import List, Union
@@ -41,17 +42,17 @@ def NamedWire(type_or_value: Union[Type, Signal], name: str):
       uniq_name = _BlockContext.current().uniquify_symbol(name)
       self.wire_op = sv.WireOp(InOut(type), name, inner_sym=uniq_name)
       read_val = sv.ReadInOutOp(self.wire_op)
-      super().__init__(_FromCirctValue(read_val), type)
+      super().__init__(read_val, type)
       self.name = name
 
-    def assign(self, new_value: _FromCirctValue):
+    def assign(self, new_signal: Signal):
       if self.assigned_value is not None:
         raise ValueError("Cannot assign value to Wire twice.")
-      if new_value.type != self.type:
+      if new_signal.type != self.type:
         raise TypeError(
-            f"Cannot assign {new_value.value.type} to {self.value.type}")
-      sv.AssignOp(self.wire_op, new_value.value)
-      self.assigned_value = new_value
+            f"Cannot assign {new_signal.value.type} to {self.value.type}")
+      sv.AssignOp(self.wire_op, new_signal.value)
+      self.assigned_value = new_signal
       return self
 
   w = NamedWire()
@@ -177,7 +178,7 @@ def ControlReg(clk: Signal, rst: Signal, asserts: List[Signal],
                                                resets=resets).out
 
 
-def Mux(sel: BitVectorSignal, *data_inputs: typing.List[_FromCirctValue]):
+def Mux(sel: BitVectorSignal, *data_inputs: typing.List[Signal]):
   """Create a single mux from a list of values."""
   num_inputs = len(data_inputs)
   if num_inputs == 0:
