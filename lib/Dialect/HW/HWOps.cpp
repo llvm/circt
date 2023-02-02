@@ -747,8 +747,12 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
   bodyRegion->push_back(body);
 
   // Add arguments to the body block.
-  for (auto elt : ports.inputs)
-    body->addArgument(elt.type, builder.getUnknownLoc());
+  for (auto port : ports.inputs) {
+    auto type = port.type;
+    if (port.isInOut() && !type.isa<InOutType>())
+      type = InOutType::get(type);
+    body->addArgument(type, builder.getUnknownLoc());
+  }
 
   if (shouldEnsureTerminator)
     HWModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
@@ -1204,7 +1208,25 @@ static LogicalResult verifyModuleCommon(Operation *module) {
   return success();
 }
 
-LogicalResult HWModuleOp::verify() { return verifyModuleCommon(*this); }
+LogicalResult HWModuleOp::verify() {
+  if (failed(verifyModuleCommon(*this)))
+    return failure();
+
+  auto type = getFunctionType();
+  auto *body = getBodyBlock();
+
+  // Verify the number of block arguments.
+  auto numInputs = type.getNumInputs();
+  if (body->getNumArguments() != numInputs)
+    return emitOpError("entry block must have")
+           << numInputs << " arguments to match module signature";
+
+  // Verify that the block arguments match the op's attributes.
+  for (auto [arg, type] : llvm::zip(getArguments(), type.getInputs()))
+    if (arg.getType() != type)
+      return emitOpError("block argument types should match signature types");
+  return success();
+}
 
 LogicalResult HWModuleExternOp::verify() { return verifyModuleCommon(*this); }
 

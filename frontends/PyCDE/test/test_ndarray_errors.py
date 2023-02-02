@@ -34,7 +34,7 @@ class M1(Module):
   @generator
   def build(ports):
     m = NDArray((32), dtype=types.i32, name='m1')
-    # CHECK: ValueError: Width mismatch between provided BitVectorValue (bits33) and target shape (bits32).
+    # CHECK: ValueError: Width mismatch between provided BitVectorValue (Bits<33>) and target shape (Bits<32>).
     m[0] = ports.in1
 
 
@@ -65,5 +65,5 @@ class M1(Module):
   @generator
   def build(ports):
     m = NDArray((32, 32), dtype=types.i1, name='m1')
-    # CHECK: ValueError: Width mismatch between provided BitVectorValue (bits31) and target shape ([32]bits1).
+    # CHECK: ValueError: Width mismatch between provided BitVectorValue (Bits<31>) and target shape (Bits<1>[32]).
     m[0] = ports.in1

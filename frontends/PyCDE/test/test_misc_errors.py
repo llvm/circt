@@ -52,14 +52,14 @@ class WrongInts(Module):
       print(e)
 
     try:
-      # CHECK: 300 overflows type bits4
+      # CHECK: 300 overflows type Bits<4>
       b4(300)
       assert False
     except ValueError as e:
       print(e)
 
     try:
-      # CHECK: 15 overflows type sint4
+      # CHECK: 15 overflows type SInt<4>
       si4(15)
       assert False
     except ValueError as e:

@@ -1446,11 +1446,7 @@ public:
       return failure();
 
     // Program conversion
-    RewritePatternSet conversionPatterns(&getContext());
-    conversionPatterns.add<calyx::ModuleOpConversion>(&getContext(),
-                                                      topLevelFunction);
-    return applyOpPatternsAndFold(getOperation(),
-                                  std::move(conversionPatterns));
+    return calyx::applyModuleOpConversion(getOperation(), topLevelFunction);
   }
 
   /// 'Once' patterns are expected to take an additional LogicalResult&

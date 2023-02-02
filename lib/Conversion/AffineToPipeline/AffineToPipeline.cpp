@@ -84,8 +84,11 @@ ModuloProblem AffineToPipeline::getModuloProblem(CyclicProblem &prob) {
 
   for (auto *op : prob.getOperations()) {
     for (auto dep : prob.getDependences(op)) {
-      if (dep.isAuxiliary())
-        assert(modProb.insertDependence(dep).succeeded());
+      if (dep.isAuxiliary()) {
+        auto depInserted = modProb.insertDependence(dep);
+        assert(succeeded(depInserted));
+        (void)depInserted;
+      }
       auto distance = prob.getDistance(dep);
       if (distance.has_value())
         modProb.setDistance(dep, distance.value());

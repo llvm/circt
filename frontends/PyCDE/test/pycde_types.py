@@ -5,18 +5,18 @@ from pycde.types import Bits, StructType, TypeAlias, UInt
 from pycde.testing import unittestmodule
 from pycde.signals import Struct, UIntSignal
 
-# CHECK: [('foo', bits1), ('bar', bits13)]
+# CHECK: [('foo', Bits<1>), ('bar', Bits<13>)]
 st1 = StructType({"foo": types.i1, "bar": types.i13})
 print(st1.fields)
-# CHECK: bits1
+# CHECK: Bits<1>
 print(st1.foo)
 
 array1 = dim(types.ui6)
-# CHECK: uint6
+# CHECK: UInt<6>
 print(array1)
 
 array2 = dim(6, 10, 12)
-# CHECK: [12][10]bits6
+# CHECK: Bits<6>[10][12]
 print(array2)
 
 int_alias = TypeAlias(Bits(8), "myname1")
@@ -24,7 +24,7 @@ int_alias = TypeAlias(Bits(8), "myname1")
 print(int_alias)
 assert int_alias == types.int(8, "myname1")
 
-# CHECK: struct { a: bits1, b: sint1}
+# CHECK: struct { a: Bits<1>, b: SInt<1>}
 struct = types.struct({"a": types.i1, "b": types.si1})
 print(struct)
 

@@ -34,6 +34,10 @@ circuit Foo : %[[
     "class": "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
     "directory": "Wire/firrtl/gct",
     "filename": "Wire/firrtl/bindings.sv"
+  },
+  {
+    "class": "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
+    "filename": "gct.yaml"
   }
 ]]
   module Companion :
@@ -57,3 +61,7 @@ circuit Foo : %[[
     ; CHECK-NOT:   emitted as a bind statement
     ; CHECK:       Companion companion
     ; CHECK:     endmodule
+
+; Verify that an empty yaml file is created.
+; CHECK: FILE "gct.yaml"
+; CHECK: []  

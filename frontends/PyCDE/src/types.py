@@ -149,6 +149,9 @@ class InOut(Type):
     from .signals import InOutSignal
     return InOutSignal
 
+  def __repr__(self):
+    return f"InOut<{repr(self.element_type)}"
+
 
 class TypeAlias(Type):
 
@@ -214,12 +217,15 @@ class TypeAlias(Type):
         hw.TypedeclOp.create(name, type.inner_type)
 
   @property
-  def name(self):
+  def name(self) -> str:
     return self._type.name
 
   @property
   def inner_type(self):
     return _FromCirctType(self._type.inner_type)
+
+  def __repr__(self):
+    return f"TypeAlias<'{self.name}', {repr(self.inner_type)}"
 
   def __str__(self):
     return self.name
@@ -272,8 +278,11 @@ class Array(Type):
     from .signals import ArraySignal
     return ArraySignal
 
+  def __repr__(self) -> str:
+    return f"Array({self.size}, {self.element_type})"
+
   def __str__(self) -> str:
-    return f"[{self.size}]{self.element_type}"
+    return f"{self.element_type}[{self.size}]"
 
   def _from_obj(self, obj, alias: typing.Optional[TypeAlias] = None):
     from .dialects import hw
@@ -334,7 +343,7 @@ class StructType(Type):
     with get_user_loc():
       return hw.StructCreateOp(elem_name_values, result_type=result_type._type)
 
-  def __str__(self) -> str:
+  def __repr__(self) -> str:
     ret = "struct { "
     first = True
     for field in self.fields:
@@ -378,6 +387,8 @@ class BitVectorType(Type):
     signed_bit = 1 if isinstance(self, SInt) else 0
     if x.bit_length() + signed_bit > self.width:
       raise ValueError(f"{x} overflows type {self}")
+  def __repr__(self) -> str:
+    return f"{type(self).__name__}<{self.width}>"
 
 
 class Bits(BitVectorType):
@@ -391,10 +402,6 @@ class Bits(BitVectorType):
   def _get_value_class(self):
     from .signals import BitsSignal
     return BitsSignal
-
-  def __repr__(self):
-    return f"bits{self.width}"
-
   def _from_obj(self, x: int, alias: typing.Optional[TypeAlias] = None):
     from .dialects import hw
     self._from_obj_check(x)
@@ -414,8 +421,6 @@ class SInt(BitVectorType):
     from .signals import SIntSignal
     return SIntSignal
 
-  def __repr__(self):
-    return f"sint{self.width}"
 
   def _from_obj(self, x: int, alias: typing.Optional[TypeAlias] = None):
     from .dialects import hwarith
@@ -436,8 +441,6 @@ class UInt(BitVectorType):
     from .signals import UIntSignal
     return UIntSignal
 
-  def __repr__(self):
-    return f"uint{self.width}"
 
   def _from_obj(self, x: int, alias: typing.Optional[TypeAlias] = None):
     from .dialects import hwarith
@@ -464,7 +467,7 @@ class ClockType(Bits):
     return ClockSignal
 
   def __repr__(self):
-    return "clk"
+    return "Clk"
 
 
 class Any(Type):
@@ -488,8 +491,8 @@ class Channel(Type):
     from .signals import ChannelSignal
     return ChannelSignal
 
-  def __str__(self):
-    return f"channel<{self.inner_type}>"
+  def __repr__(self):
+    return f"Channel<{self.inner_type}>"
 
   @property
   def inner(self):
