@@ -82,7 +82,7 @@ class Type:
   def bitwidth(self):
     return hw.get_bitwidth(self._type)
 
-  def __call__(self, obj, name: str = None):
+  def __call__(self, obj, name: str = None) -> "Signal":
     """Create a Value of this type from a python object."""
     assert not isinstance(obj, ir.Value)
     v = self._from_obj_or_sig(obj)
@@ -90,7 +90,14 @@ class Type:
       v.name = name
     return v
 
-  def _from_obj_or_sig(self, obj, alias: typing.Optional["TypeAlias"] = None):
+  def _from_obj_or_sig(self,
+                       obj,
+                       alias: typing.Optional["TypeAlias"] = None) -> "Signal":
+    """Implement the object-signal conversion wherein 'obj' can be a Signal. If
+    'obj' is already a Signal, check its type and return it. Can be overriden by
+    subclasses, though calls _from_obj() to do the type-specific const
+    conversion so we recommend subclasses override that method."""
+
     from .signals import Signal
     if isinstance(obj, Signal):
       if obj.type != self:
@@ -98,7 +105,13 @@ class Type:
       return obj
     return self._from_obj(obj, alias)
 
-  def _from_obj(self, obj, alias: typing.Optional["TypeAlias"] = None):
+  def _from_obj(self,
+                obj,
+                alias: typing.Optional["TypeAlias"] = None) -> "Signal":
+    """Do the type-specific object validity checks and return a Signal from the
+    object. Can assume the 'obj' is NOT a Signal. Any subclass which wants to be
+    created MUST override this method."""
+
     assert False, "Subclass must override this method"
 
   def _get_value_class(self):
@@ -381,12 +394,14 @@ class BitVectorType(Type):
     return self._type.width
 
   def _from_obj_check(self, x):
+    """This functionality can be shared by all the int types."""
     if not isinstance(x, int):
       raise ValueError(f"{type(self).__name__} can only be created from ints, "
                        f"not {type(x).__name__}")
     signed_bit = 1 if isinstance(self, SInt) else 0
     if x.bit_length() + signed_bit > self.width:
       raise ValueError(f"{x} overflows type {self}")
+
   def __repr__(self) -> str:
     return f"{type(self).__name__}<{self.width}>"
 
@@ -402,6 +417,7 @@ class Bits(BitVectorType):
   def _get_value_class(self):
     from .signals import BitsSignal
     return BitsSignal
+
   def _from_obj(self, x: int, alias: typing.Optional[TypeAlias] = None):
     from .dialects import hw
     self._from_obj_check(x)
@@ -421,7 +437,6 @@ class SInt(BitVectorType):
     from .signals import SIntSignal
     return SIntSignal
 
-
   def _from_obj(self, x: int, alias: typing.Optional[TypeAlias] = None):
     from .dialects import hwarith
     self._from_obj_check(x)
@@ -440,7 +455,6 @@ class UInt(BitVectorType):
   def _get_value_class(self):
     from .signals import UIntSignal
     return UIntSignal
-
 
   def _from_obj(self, x: int, alias: typing.Optional[TypeAlias] = None):
     from .dialects import hwarith
@@ -498,7 +512,15 @@ class Channel(Type):
   def inner(self):
     return self.inner_type
 
-  def wrap(self, value, valid):
+  def wrap(self, value, valid) -> typing.Tuple["ChannelSignal", "BitsSignal"]:
+    """Wrap a data signal and valid signal into a data channel signal and a
+    ready signal."""
+
+    # Instead of implementing __call__(), we require users to call this method
+    # instead. In addition to being clearer, the type signature isn't the same
+    # -- this returns a tuple of Signals (data, ready) -- rather than a single
+    # one.
+
     from .dialects import esi
     value = self.inner_type(value)
     valid = types.i1(valid)
