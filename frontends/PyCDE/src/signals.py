@@ -668,9 +668,8 @@ class ChannelSignal(Signal):
 
   def unwrap(self, ready):
     from .dialects import esi
-    from .support import _obj_to_value
     from .types import types
-    ready = _obj_to_value(ready, types.i1)
+    ready = types.i1(ready)
     unwrap_op = esi.UnwrapValidReadyOp(self.type.inner_type, types.i1,
                                        self.value, ready.value)
     return unwrap_op[0], unwrap_op[1]

@@ -4,7 +4,7 @@
 
 from collections import OrderedDict
 
-from .support import _obj_to_value
+from .support import get_user_loc
 
 from .circt import ir, support
 from .circt.dialects import esi, hw, sv
@@ -19,12 +19,12 @@ class _Types:
     self.registered_aliases = OrderedDict()
 
   def __getattr__(self, name: str) -> ir.Type:
-    return self.wrap(ir.Type.parse(name))
+    return self.wrap(_FromCirctType(ir.Type.parse(name)))
 
   def int(self, width: int, name: str = None):
     return self.wrap(Bits(width), name)
 
-  def array(self, inner: ir.Type, size: int, name: str = None) -> hw.ArrayType:
+  def array(self, inner: ir.Type, size: int, name: str = None) -> "Array":
     return self.wrap(Array(inner, size), name)
 
   def inout(self, inner: ir.Type):
@@ -33,11 +33,8 @@ class _Types:
   def channel(self, inner):
     return self.wrap(Channel(inner))
 
-  def struct(self, members, name: str = None) -> hw.StructType:
-    s = StructType(members)
-    if name is None:
-      return s
-    return TypeAlias(s, name)
+  def struct(self, members, name: str = None) -> "StructType":
+    return self.wrap(StructType(members), name)
 
   @property
   def any(self):
@@ -46,7 +43,7 @@ class _Types:
   def wrap(self, type, name=None):
     if name is not None:
       type = TypeAlias(type, name)
-    return _FromCirctType(type)
+    return type
 
 
 types = _Types()
@@ -88,10 +85,21 @@ class Type:
   def __call__(self, obj, name: str = None):
     """Create a Value of this type from a python object."""
     assert not isinstance(obj, ir.Value)
-    v = _obj_to_value(obj, self, self)
+    v = self._from_obj_or_sig(obj)
     if name is not None:
       v.name = name
     return v
+
+  def _from_obj_or_sig(self, obj, alias: typing.Optional["TypeAlias"] = None):
+    from .signals import Signal
+    if isinstance(obj, Signal):
+      if obj.type != self:
+        raise TypeError(f"Expected signal of type {self} but got {obj.type}")
+      return obj
+    return self._from_obj(obj, alias)
+
+  def _from_obj(self, obj, alias: typing.Optional["TypeAlias"] = None):
+    assert False, "Subclass must override this method"
 
   def _get_value_class(self):
     """Return the class which should be instantiated to create a Value."""
@@ -226,6 +234,9 @@ class TypeAlias(Type):
   def wrap(self, value):
     return self(value)
 
+  def _from_obj(self, obj, alias: typing.Optional["TypeAlias"] = None):
+    return self.inner_type._from_obj_or_sig(obj, alias=self)
+
 
 class Array(Type):
 
@@ -264,6 +275,20 @@ class Array(Type):
   def __str__(self) -> str:
     return f"[{self.size}]{self.element_type}"
 
+  def _from_obj(self, obj, alias: typing.Optional[TypeAlias] = None):
+    from .dialects import hw
+    if not isinstance(obj, (list, tuple)):
+      raise ValueError(
+          f"Arrays can only be created from lists or tuples, not '{type(obj)}'")
+    if len(obj) != self.size:
+      raise ValueError("List must have same size as array "
+                       f"{len(obj)} vs {self.size}")
+    elemty = self.element_type
+    list_of_vals = list(map(lambda x: elemty._from_obj_or_sig(x), obj))
+    with get_user_loc():
+      # CIRCT's ArrayCreate op takes the array in reverse order.
+      return hw.ArrayCreateOp(reversed(list_of_vals))
+
 
 class StructType(Type):
 
@@ -290,6 +315,25 @@ class StructType(Type):
     from .signals import StructSignal
     return StructSignal
 
+  def _from_obj(self, x, alias: typing.Optional[TypeAlias] = None):
+    from .dialects import hw
+    if not isinstance(x, dict):
+      raise ValueError(
+          f"Structs can only be created from dicts, not '{type(x)}'")
+    elem_name_values = []
+    for (fname, ftype) in self.fields:
+      if fname not in x:
+        raise ValueError(f"Could not find expected field: {fname}")
+      v = ftype._from_obj_or_sig(x[fname])
+      elem_name_values.append((fname, v))
+      x.pop(fname)
+    if len(x) > 0:
+      raise ValueError(f"Extra fields specified: {x}")
+
+    result_type = self if alias is None else alias
+    with get_user_loc():
+      return hw.StructCreateOp(elem_name_values, result_type=result_type._type)
+
   def __str__(self) -> str:
     ret = "struct { "
     first = True
@@ -298,7 +342,7 @@ class StructType(Type):
         first = False
       else:
         ret += ", "
-      ret += f"{field[0]}: {_FromCirctType(field[1])}"
+      ret += f"{field[0]}: {field[1]}"
     ret += "}"
     return ret
 
@@ -315,7 +359,7 @@ class RegisteredStruct(TypeAlias):
     return inst
 
   def __call__(self, **kwargs):
-    return _obj_to_value(kwargs, self)
+    return self._from_obj_or_sig(kwargs)
 
   def _get_value_class(self):
     return self._value_class
@@ -326,6 +370,13 @@ class BitVectorType(Type):
   @property
   def width(self):
     return self._type.width
+
+  def _from_obj_check(self, x):
+    if not isinstance(x, int):
+      raise ValueError(
+          f"'{type(self)}' can only be created from ints, not {type(x)}")
+    if x.bit_length() > self.width:
+      raise ValueError(f"{x} overflows type {self}")
 
 
 class Bits(BitVectorType):
@@ -343,6 +394,12 @@ class Bits(BitVectorType):
   def __repr__(self):
     return f"bits{self.width}"
 
+  def _from_obj(self, x: int, alias: typing.Optional[TypeAlias] = None):
+    from .dialects import hw
+    self._from_obj_check(x)
+    circt_type = self if alias is None else alias
+    return hw.ConstantOp(circt_type, x)
+
 
 class SInt(BitVectorType):
 
@@ -359,6 +416,12 @@ class SInt(BitVectorType):
   def __repr__(self):
     return f"sint{self.width}"
 
+  def _from_obj(self, x: int, alias: typing.Optional[TypeAlias] = None):
+    from .dialects import hwarith
+    self._from_obj_check(x)
+    circt_type = self if alias is None else alias
+    return hwarith.ConstantOp(circt_type, x)
+
 
 class UInt(BitVectorType):
 
@@ -374,6 +437,14 @@ class UInt(BitVectorType):
 
   def __repr__(self):
     return f"uint{self.width}"
+
+  def _from_obj(self, x: int, alias: typing.Optional[TypeAlias] = None):
+    from .dialects import hwarith
+    self._from_obj_check(x)
+    if x < 0:
+      raise ValueError(f"'UInt' can only store positive numbers, not {type(x)}")
+    circt_type = self if alias is None else alias
+    return hwarith.ConstantOp(circt_type, x)
 
 
 class ClockType(Bits):
@@ -425,8 +496,8 @@ class Channel(Type):
 
   def wrap(self, value, valid):
     from .dialects import esi
-    value = _obj_to_value(value, self.inner_type)
-    valid = _obj_to_value(valid, types.i1)
+    value = self.inner_type(value)
+    valid = types.i1(valid)
     wrap_op = esi.WrapValidReadyOp(self._type, types.i1, value.value,
                                    valid.value)
     return wrap_op[0], wrap_op[1]

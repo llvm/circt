@@ -6,8 +6,8 @@ from __future__ import annotations
 from typing import List, Optional, Set, Tuple, Dict
 
 from .common import (AppID, Clock, Input, Output, PortError, _PyProxy)
-from .support import (get_user_loc, _obj_to_attribute, _obj_to_value,
-                      create_type_string, create_const_zero)
+from .support import (get_user_loc, _obj_to_attribute, create_type_string,
+                      create_const_zero)
 from .signals import ClockSignal, Signal, _FromCirctValue
 from .types import ClockType
 
@@ -140,7 +140,7 @@ class PortProxyBase:
         raise PortError(
             f"Input port {pname} expected type {ptype}, not {signal.type}")
     else:
-      signal = _obj_to_value(signal, ptype)
+      signal = ptype(signal)
     self._output_values[idx] = signal
 
   def _set_outputs(self, signal_dict: Dict[str, Signal]):
@@ -433,7 +433,7 @@ class ModuleBuilder(ModuleLikeBuilderBase):
       else:
         # If it's not a signal, assume the user wants to specify a constant and
         # try to convert it to a hardware constant.
-        signal = _obj_to_value(signal, ptype)
+        signal = ptype(signal)
       input_values[idx] = signal
       del input_lookup[name]
 
