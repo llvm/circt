@@ -78,7 +78,7 @@ def _obj_to_value(x, type, result_type=None) -> ir.Value:
   if x is None:
     raise ValueError(
         "Encountered 'None' when trying to build hardware for python value.")
-  from .value import Signal
+  from .signals import Signal
   from .dialects import hw, hwarith
   from .types import (TypeAlias, Array, StructType, BitVectorType, Bits, UInt,
                       SInt, _FromCirctType)
@@ -149,7 +149,7 @@ def _obj_to_value(x, type, result_type=None) -> ir.Value:
 def _infer_type(x):
   """Infer the CIRCT type from a python object. Only works on lists."""
   from .types import types
-  from .value import Signal
+  from .signals import Signal
   if isinstance(x, Signal):
     return x.type
 

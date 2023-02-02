@@ -2,7 +2,7 @@
 
 from pycde.dialects import comb, hw
 from pycde import dim, generator, types, Input, Output, Module
-from pycde.value import And, Or
+from pycde.signals import And, Or
 from pycde.testing import unittestmodule
 
 

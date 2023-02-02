@@ -96,7 +96,7 @@ class Type:
 
   def _get_value_class(self):
     """Return the class which should be instantiated to create a Value."""
-    from .value import UntypedSignal
+    from .signals import UntypedSignal
     return UntypedSignal
 
   def __repr__(self):
@@ -139,7 +139,7 @@ class InOut(Type):
     return _FromCirctType(self._type.element_type)
 
   def _get_value_class(self):
-    from .value import InOutSignal
+    from .signals import InOutSignal
     return InOutSignal
 
 
@@ -259,7 +259,7 @@ class Array(Type):
     return self.size
 
   def _get_value_class(self):
-    from .value import ArraySignal
+    from .signals import ArraySignal
     return ArraySignal
 
   def __str__(self) -> str:
@@ -288,7 +288,7 @@ class StructType(Type):
     return super().__getattribute__(attrname)
 
   def _get_value_class(self):
-    from .value import StructSignal
+    from .signals import StructSignal
     return StructSignal
 
   def __str__(self) -> str:
@@ -316,8 +316,8 @@ class RegisteredStruct(TypeAlias):
     return inst
 
   def __call__(self, **kwargs):
-    from .value import Value
-    return Value(kwargs, self._type)
+    from .signals import _FromCirctValue
+    return _FromCirctValue(kwargs, self._type)
 
   def _get_value_class(self):
     return self._value_class
@@ -339,7 +339,7 @@ class Bits(BitVectorType):
     )
 
   def _get_value_class(self):
-    from .value import BitsSignal
+    from .signals import BitsSignal
     return BitsSignal
 
   def __repr__(self):
@@ -355,8 +355,8 @@ class SInt(BitVectorType):
     )
 
   def _get_value_class(self):
-    from .value import SIntValue
-    return SIntValue
+    from .signals import SIntSignal
+    return SIntSignal
 
   def __repr__(self):
     return f"sint{self.width}"
@@ -371,8 +371,8 @@ class UInt(BitVectorType):
     )
 
   def _get_value_class(self):
-    from .value import UIntValue
-    return UIntValue
+    from .signals import UIntSignal
+    return UIntSignal
 
   def __repr__(self):
     return f"uint{self.width}"
@@ -390,7 +390,7 @@ class ClockType(Bits):
     super(ClockType, cls).__new__(cls, 1)
 
   def _get_value_class(self):
-    from .value import ClockSignal
+    from .signals import ClockSignal
     return ClockSignal
 
   def __repr__(self):
@@ -415,8 +415,8 @@ class Channel(Type):
     return _FromCirctType(self._type.inner)
 
   def _get_value_class(self):
-    from .value import ChannelValue
-    return ChannelValue
+    from .signals import ChannelSignal
+    return ChannelSignal
 
   def __str__(self):
     return f"channel<{self.inner_type}>"
@@ -428,12 +428,12 @@ class Channel(Type):
   def wrap(self, value, valid):
     from .dialects import esi
     from .support import _obj_to_value
-    from .value import Value, BitsSignal
+    from .signals import _FromCirctValue, BitsSignal
     value = _obj_to_value(value, self._type.inner)
     valid = _obj_to_value(valid, types.i1)
     wrap_op = esi.WrapValidReadyOp(self._type, types.i1, value.value,
                                    valid.value)
-    return Value(wrap_op[0]), BitsSignal(wrap_op[1], types.i1)
+    return _FromCirctValue(wrap_op[0]), BitsSignal(wrap_op[1], types.i1)
 
 
 def dim(inner_type_or_bitwidth: typing.Union[Type, int],

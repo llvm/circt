@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .value import BitVectorSignal, Signal, Value
+from .signals import BitVectorSignal, Signal, _FromCirctValue
 from .dialects import comb
 
 import ctypes
@@ -49,7 +49,7 @@ class If:
     if (cond.type.width != 1):
       raise TypeError("'Cond' bit width must be 1")
     self._cond = cond
-    self._muxes: Dict[str, Tuple[Value, Value]] = {}
+    self._muxes: Dict[str, Tuple[_FromCirctValue, _FromCirctValue]] = {}
 
   @staticmethod
   def current() -> Optional[If]:
@@ -71,7 +71,7 @@ class If:
     _current_if_stmt.reset(self._old_system_token)
 
     # Create the set of muxes from the 'then' and/or 'else' blocks.
-    new_locals: Dict[str, Value] = {}
+    new_locals: Dict[str, _FromCirctValue] = {}
     for (varname, (else_value, then_value)) in self._muxes.items():
       # New values need to have a value assigned from both the 'then' and 'else'.
       if then_value is None or else_value is None:
@@ -112,7 +112,7 @@ class _IfBlock:
     if_stmt = If.current()
     s = inspect.stack()[stack_level][0]
     lcls_to_del = set()
-    new_lcls: Dict[str, Value] = {}
+    new_lcls: Dict[str, _FromCirctValue] = {}
     for (varname, value) in s.f_locals.items():
       # Only operate on Values.
       if not isinstance(value, Signal):

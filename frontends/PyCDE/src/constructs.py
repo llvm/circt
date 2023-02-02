@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from .common import Clock, Input, Output
 from .types import dim, types, Array, InOut, Type
-from .value import ArraySignal, BitsSignal, BitVectorSignal, ArraySignal, Value, Signal
-from .value import get_slice_bounds
+from .signals import ArraySignal, BitsSignal, BitVectorSignal, ArraySignal, _FromCirctValue, Signal
+from .signals import get_slice_bounds
 from .module import generator, modparams, Module, _BlockContext
 from .circt.support import BackedgeBuilder
 from .circt.dialects import msft as raw_msft
@@ -41,10 +41,10 @@ def NamedWire(type_or_value: Union[Type, Signal], name: str):
       uniq_name = _BlockContext.current().uniquify_symbol(name)
       self.wire_op = sv.WireOp(InOut(type), name, inner_sym=uniq_name)
       read_val = sv.ReadInOutOp(self.wire_op)
-      super().__init__(Value(read_val), type)
+      super().__init__(_FromCirctValue(read_val), type)
       self.name = name
 
-    def assign(self, new_value: Value):
+    def assign(self, new_value: _FromCirctValue):
       if self.assigned_value is not None:
         raise ValueError("Cannot assign value to Wire twice.")
       if new_value.type != self.type:
@@ -177,7 +177,7 @@ def ControlReg(clk: Signal, rst: Signal, asserts: List[Signal],
                                                resets=resets).out
 
 
-def Mux(sel: BitVectorSignal, *data_inputs: typing.List[Value]):
+def Mux(sel: BitVectorSignal, *data_inputs: typing.List[_FromCirctValue]):
   """Create a single mux from a list of values."""
   num_inputs = len(data_inputs)
   if num_inputs == 0:
@@ -212,9 +212,9 @@ def SystolicArray(row_inputs: ArraySignal, col_inputs: ArraySignal, pe_builder):
   pe_block = dummy_op.regions[0].blocks.append(
       row_inputs_type.element_type._type, col_inputs_type.element_type._type)
   with ir.InsertionPoint(pe_block):
-    result = pe_builder(Value(pe_block.arguments[0]),
-                        Value(pe_block.arguments[1]))
-    value = Value(result)
+    result = pe_builder(_FromCirctValue(pe_block.arguments[0]),
+                        _FromCirctValue(pe_block.arguments[1]))
+    value = _FromCirctValue(result)
     pe_output_type = value.type
     msft.PEOutputOp(value)
 
@@ -225,4 +225,4 @@ def SystolicArray(row_inputs: ArraySignal, col_inputs: ArraySignal, pe_builder):
   dummy_op.regions[0].blocks[0].append_to(array.regions[0])
   dummy_op.operation.erase()
 
-  return Value(array.peOutputs)
+  return _FromCirctValue(array.peOutputs)

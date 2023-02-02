@@ -1,13 +1,9 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
-from pycde import generator, dim, Clock, Input, Output, Module, Value, types
+from pycde import generator, dim, Clock, Input, Output, Module, types
+from pycde.signals import Signal
 from pycde.constructs import Mux
 from pycde.testing import unittestmodule
-
-
-def array_from_tuple(*input):
-  return Value(input)
-
 
 # CHECK-LABEL: msft.module @ComplexMux {} (%Clk: i1, %In: !hw.array<5xarray<4xi3>>, %Sel: i1) -> (Out: !hw.array<4xi3>, OutArr: !hw.array<2xarray<4xi3>>, OutInt: i1, OutSlice: !hw.array<3xarray<4xi3>>)
 # CHECK:         %c3_i3 = hw.constant 3 : i3
@@ -49,7 +45,7 @@ class ComplexMux(Module):
   def create(ports):
     ports.Out = Mux(ports.Sel, ports.In[3].reg().reg(cycles=2), ports.In[1])
 
-    ports.OutArr = array_from_tuple(ports.In[0], ports.In[1])
+    ports.OutArr = Signal.create([ports.In[0], ports.In[1]])
     ports.OutSlice = ports.In[0:3]
 
     ports.OutInt = ports.In[0][0][ports.Sel]

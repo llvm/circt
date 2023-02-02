@@ -4,7 +4,7 @@
 
 from .system import System
 from .module import Generator, _BlockContext, Module, ModuleLikeBuilderBase
-from .value import ChannelValue, Signal, Value
+from .signals import ChannelSignal, Signal, _FromCirctValue
 from .common import Input, Output, InputChannel, OutputChannel, _PyProxy
 from .types import Channel, Type, types, _FromCirctType
 
@@ -101,7 +101,7 @@ class ServiceDecl(_PyProxy):
             self._materialize_service_decl()),
         impl_type=ir.StringAttr.get(builtin),
         inputs=[x.value for x in inputs]).operation.results
-    return [Value(x) for x in impl_results]
+    return [_FromCirctValue(x) for x in impl_results]
 
 
 class _RequestConnection:
@@ -125,7 +125,7 @@ class _RequestConnection:
 
 class _RequestToServerConn(_RequestConnection):
 
-  def __call__(self, chan: ChannelValue, chan_name: str = ""):
+  def __call__(self, chan: ChannelSignal, chan_name: str = ""):
     self.decl._materialize_service_decl()
     raw_esi.RequestToServerConnectionOp(
         self.service_port, chan.value,
@@ -146,13 +146,13 @@ class _RequestToClientConn(_RequestConnection):
     req_op = raw_esi.RequestToClientConnectionOp(
         type._type, self.service_port,
         ir.ArrayAttr.get([ir.StringAttr.get(chan_name)]))
-    return ChannelValue(req_op)
+    return ChannelSignal(req_op)
 
 
 class _RequestToFromServerConn(_RequestConnection):
 
   def __call__(self,
-               to_server_channel: ChannelValue,
+               to_server_channel: ChannelSignal,
                chan_name: str = "",
                to_client_type: Optional[Type] = None):
     self.decl._materialize_service_decl()
@@ -167,7 +167,7 @@ class _RequestToFromServerConn(_RequestConnection):
     to_client = raw_esi.RequestInOutChannelOp(
         self.to_client_type._type, self.service_port, to_server_channel.value,
         ir.ArrayAttr.get([ir.StringAttr.get(chan_name)]))
-    return ChannelValue(to_client)
+    return ChannelSignal(to_client)
 
 
 def Cosim(decl: ServiceDecl, clk, rst):
@@ -218,7 +218,7 @@ def CosimBSP(user_module):
   return top
 
 
-class NamedChannelValue(ChannelValue):
+class NamedChannelValue(ChannelSignal):
   """A ChannelValue with the name of the client request."""
 
   def __init__(self, input_chan: ir.Value, client_name: List[str]):
@@ -232,12 +232,12 @@ class _OutputChannelSetter:
   have implemented for this request."""
 
   def __init__(self, req: raw_esi.RequestToClientConnectionOp,
-               old_chan_to_replace: ChannelValue):
+               old_chan_to_replace: ChannelSignal):
     self.type = Channel(_FromCirctType(req.toClient.type))
     self.client_name = req.clientNamePath
     self._chan_to_replace = old_chan_to_replace
 
-  def assign(self, new_value: ChannelValue):
+  def assign(self, new_value: ChannelSignal):
     """Assign the generated channel to this request."""
     if self._chan_to_replace is None:
       name_str = ".".join(self.client_name)

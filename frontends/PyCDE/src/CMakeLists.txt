@@ -32,7 +32,7 @@ declare_mlir_python_sources(PyCDESources
   system.py
   devicedb.py
   instance.py
-  value.py
+  signals.py
   ndarray.py
   esi.py
   esi_api.py
