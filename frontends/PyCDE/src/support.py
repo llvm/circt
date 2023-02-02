@@ -63,92 +63,9 @@ def create_const_zero(type):
     return hw.BitcastOp(type, zero)
 
 
-class OpOperandConnect(support.OpOperand):
-  """An OpOperand pycde extension which adds a connect method."""
-
-  def connect(self, obj, result_type=None):
-    if result_type is None:
-      result_type = self.type
-    val = _obj_to_value(obj, self.type, result_type)
-    support.connect(self, val)
-
-
-def _obj_to_value(x, type: "Type", result_type=None) -> ir.Value:
-  """Convert a python object to a CIRCT value, given the CIRCT type."""
-  if x is None:
-    raise ValueError(
-        "Encountered 'None' when trying to build hardware for python value.")
-  from .signals import Signal
-  from .dialects import hw, hwarith
-  from .types import (Type, TypeAlias, Array, StructType, BitVectorType, Bits,
-                      UInt, SInt, _FromCirctType)
-
-  assert isinstance(type, Type)
-  if isinstance(x, Signal):
-    if x.type != type:
-      raise TypeError(f"expected {x.type}, got {type}")
-    return x
-
-  if isinstance(type, TypeAlias):
-    return _obj_to_value(x, type.inner_type, type)
-
-  if result_type is None:
-    result_type = type
-  else:
-    result_type = _FromCirctType(result_type)
-    assert isinstance(result_type, TypeAlias) or result_type == type
-
-  val = support.get_value(x)
-  # If x is already a valid value, just return it.
-  if val is not None:
-    if val.type != result_type:
-      raise ValueError(f"Expected {result_type}, got {val.type}")
-    return val
-
-  if isinstance(x, int):
-    if not isinstance(type, BitVectorType):
-      raise ValueError(f"Int can only be converted to hw int, not '{type}'")
-    with get_user_loc():
-      if isinstance(type, Bits):
-        return hw.ConstantOp(type, x)
-      elif isinstance(type, (UInt, SInt)):
-        return hwarith.ConstantOp(type, x)
-      else:
-        assert False, "Internal error: bit vector type unknown"
-
-  if isinstance(x, (list, tuple)):
-    if not isinstance(type, Array):
-      raise ValueError(f"List is only convertable to hw array, not '{type}'")
-    elemty = result_type.element_type
-    if len(x) != type.size:
-      raise ValueError("List must have same size as array "
-                       f"{len(x)} vs {type.size}")
-    list_of_vals = list(map(lambda x: _obj_to_value(x, elemty), x))
-    # CIRCT's ArrayCreate op takes the array in reverse order.
-    with get_user_loc():
-      return hw.ArrayCreateOp(reversed(list_of_vals))
-
-  if isinstance(x, dict):
-    if not isinstance(type, StructType):
-      raise ValueError(f"Dict is only convertable to hw struct, not '{type}'")
-    elem_name_values = []
-    for (fname, ftype) in type.fields:
-      if fname not in x:
-        raise ValueError(f"Could not find expected field: {fname}")
-      v = _obj_to_value(x[fname], ftype)
-      elem_name_values.append((fname, v))
-      x.pop(fname)
-    if len(x) > 0:
-      raise ValueError(f"Extra fields specified: {x}")
-    with get_user_loc():
-      return hw.StructCreateOp(elem_name_values, result_type=result_type._type)
-
-  raise ValueError(f"Unable to map object '{x}' to MLIR Value")
-
-
 def _infer_type(x):
   """Infer the CIRCT type from a python object. Only works on lists."""
-  from .types import Array, _FromCirctType
+  from .types import Array
   from .signals import Signal
   if isinstance(x, Signal):
     return x.type
@@ -169,10 +86,10 @@ def _infer_type(x):
 def _obj_to_value_infer_type(value) -> ir.Value:
   """Infer the CIRCT type, then convert the Python object to a CIRCT Value of
   that type."""
-  type = _infer_type(value)
-  if type is None:
+  cde_type = _infer_type(value)
+  if cde_type is None:
     raise ValueError(f"Cannot infer CIRCT type from '{value}")
-  return _obj_to_value(value, type)
+  return cde_type(value)
 
 
 def create_type_string(ty):
