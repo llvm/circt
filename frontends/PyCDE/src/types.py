@@ -373,9 +373,10 @@ class BitVectorType(Type):
 
   def _from_obj_check(self, x):
     if not isinstance(x, int):
-      raise ValueError(
-          f"'{type(self)}' can only be created from ints, not {type(x)}")
-    if x.bit_length() > self.width:
+      raise ValueError(f"{type(self).__name__} can only be created from ints, "
+                       f"not {type(x).__name__}")
+    signed_bit = 1 if isinstance(self, SInt) else 0
+    if x.bit_length() + signed_bit > self.width:
       raise ValueError(f"{x} overflows type {self}")
 
 
@@ -442,7 +443,7 @@ class UInt(BitVectorType):
     from .dialects import hwarith
     self._from_obj_check(x)
     if x < 0:
-      raise ValueError(f"'UInt' can only store positive numbers, not {type(x)}")
+      raise ValueError(f"UInt can only store positive numbers, not {x}")
     circt_type = self if alias is None else alias
     return hwarith.ConstantOp(circt_type, x)
 
