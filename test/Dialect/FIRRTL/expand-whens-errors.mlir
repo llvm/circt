@@ -155,3 +155,44 @@ firrtl.module @RefInitIn() {
   // expected-error @above {{sink "child.in" not fully initialized in module "RefInitIn"}}
 }
 }
+
+// -----
+
+firrtl.circuit "CheckConstInitInNonConstCondition" {
+firrtl.module @CheckConstInitInNonConstCondition(in %p: !firrtl.uint<1>, in %in: !firrtl.const.uint<2>, out %out: !firrtl.const.uint<2>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    // expected-error @+1 {{'const' sink "out" initialization is dependent on a non-'const' condition}}
+    firrtl.connect %out, %in : !firrtl.const.uint<2>, !firrtl.const.uint<2>
+  } else {
+    // expected-error @+1 {{'const' sink "out" initialization is dependent on a non-'const' condition}}
+    firrtl.connect %out, %in : !firrtl.const.uint<2>, !firrtl.const.uint<2>
+  }
+}
+}
+
+// -----
+
+firrtl.circuit "CheckNestedConstInitInNonConstCondition" {
+firrtl.module @CheckNestedConstInitInNonConstCondition(in %constP: !firrtl.const.uint<1>, in %p: !firrtl.uint<1>, in %in: !firrtl.const.uint<2>, out %out: !firrtl.const.uint<2>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    firrtl.when %constP : !firrtl.const.uint<1> {
+      // expected-error @+1 {{'const' sink "out" initialization is dependent on a non-'const' condition}}
+      firrtl.connect %out, %in : !firrtl.const.uint<2>, !firrtl.const.uint<2>
+    }
+  }
+}
+}
+
+// -----
+
+firrtl.circuit "CheckAggregateConstFieldInitInNonConstCondition" {
+firrtl.module @CheckAggregateConstFieldInitInNonConstCondition(in %p: !firrtl.uint<1>, in %in: !firrtl.bundle<a: const.uint<2>>, out %out: !firrtl.bundle<a: const.uint<2>>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    // expected-error @+1 {{nested 'const' member of sink "out" initialization is dependent on a non-'const' condition}}
+    firrtl.connect %out, %in : !firrtl.bundle<a: const.uint<2>>, !firrtl.bundle<a: const.uint<2>>
+  } else {
+    // expected-error @+1 {{nested 'const' member of sink "out" initialization is dependent on a non-'const' condition}}
+    firrtl.connect %out, %in :!firrtl.bundle<a: const.uint<2>>, !firrtl.bundle<a: const.uint<2>>
+  }
+}
+}

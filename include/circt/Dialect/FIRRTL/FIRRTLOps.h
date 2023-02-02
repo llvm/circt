@@ -55,6 +55,9 @@ bool isConstant(Value value);
 /// constant values
 bool isConst(Type type);
 
+/// Returns true if any nested members of this type are 'const'
+bool hasConst(Type type);
+
 /// Returns true if the provided types are equal except for constness
 bool mixedConstTypes(FIRRTLBaseType a, FIRRTLBaseType b);
 

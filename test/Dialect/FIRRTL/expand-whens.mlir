@@ -558,5 +558,38 @@ firrtl.module @WhenCForce(in %c: !firrtl.uint<1>, in %clock : !firrtl.clock, in 
     firrtl.ref.release_initial %c1_ui1, %n_ref : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
   }
 }
+ 
+// Const connections can occur within const-conditioned whens
+// CHECK-LABEL: @ConstConditionConstConnection
+firrtl.module @ConstConditionConstConnection(in %cond: !firrtl.const.uint<1>, in %in1: !firrtl.const.sint<2>, in %in2: !firrtl.const.sint<2>, out %out: !firrtl.const.sint<2>) {
+  firrtl.when %cond : !firrtl.const.uint<1> {
+    firrtl.connect %out, %in1 : !firrtl.const.sint<2>, !firrtl.const.sint<2>
+  } else {
+    firrtl.connect %out, %in2 : !firrtl.const.sint<2>, !firrtl.const.sint<2>
+  }
+  // CHECK:      [[MUX:%.+]] = firrtl.mux(%cond, %in1, %in2) : (!firrtl.const.uint<1>, !firrtl.const.sint<2>, !firrtl.const.sint<2>) -> !firrtl.const.sint<2>
+  // CHECK-NEXT: firrtl.connect %out, [[MUX]] : !firrtl.const.sint<2>, !firrtl.const.sint<2>
+}
 
+// Non-const connections can occur within const-conditioned whens
+// CHECK-LABEL: @ConstConditionNonconstConnection
+firrtl.module @ConstConditionNonconstConnection(in %cond: !firrtl.const.uint<1>, in %in1: !firrtl.sint<2>, in %in2: !firrtl.sint<2>, out %out: !firrtl.sint<2>) {
+  firrtl.when %cond : !firrtl.const.uint<1> {
+    firrtl.connect %out, %in1 : !firrtl.sint<2>, !firrtl.sint<2>
+  } else {
+    firrtl.connect %out, %in2 : !firrtl.sint<2>, !firrtl.sint<2>
+  }
+  // CHECK:      [[MUX:%.+]] = firrtl.mux(%cond, %in1, %in2) : (!firrtl.const.uint<1>, !firrtl.sint<2>, !firrtl.sint<2>) -> !firrtl.sint<2>
+  // CHECK-NEXT: firrtl.connect %out, [[MUX]] : !firrtl.sint<2>, !firrtl.sint<2>
+}
+
+// Const connections can occur when the destination is local to a non-const conditioned when block
+// CHECK-LABEL: @WhenConstWireInit
+firrtl.module @WhenConstWireInit(in %cond: !firrtl.uint<1>) {
+  firrtl.when %cond : !firrtl.uint<1> {
+    %w = firrtl.wire : !firrtl.const.uint<9>
+    %c = firrtl.constant 0 : !firrtl.const.uint<9>
+    firrtl.strictconnect %w, %c : !firrtl.const.uint<9>
+  }
+}
 }
