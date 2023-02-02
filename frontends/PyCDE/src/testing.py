@@ -1,4 +1,5 @@
-from pycde import System, Module
+from .system import System
+from .module import Module
 
 import builtins
 import inspect

@@ -8,12 +8,12 @@ from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
                             PhysicalRegion)
 
 from .common import _PyProxy
+from .instance import Instance, InstanceHierarchyRoot
 from .module import Module, ModuleLikeType, ModuleLikeBuilderBase
 from .types import TypeAlias
-from .instance import Instance, InstanceHierarchyRoot
 
 from . import circt
-from .circt import ir, passmanager, support
+from .circt import ir, passmanager
 from .circt.dialects import esi, hw, msft
 from .esi_api import PythonApiBuilder
 

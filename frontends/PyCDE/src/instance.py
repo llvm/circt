@@ -3,13 +3,14 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from typing import Dict, Iterator, List, Optional, Tuple, Union
+
+from .devicedb import LocationVector
+from .module import AppID
 
 from .circt.dialects import msft, seq
 from .circt import ir
 
-from pycde.devicedb import LocationVector
-from pycde.module import AppID
+from typing import Dict, Iterator, List, Optional, Tuple, Union
 
 
 class Instance:

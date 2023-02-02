@@ -5,14 +5,15 @@
 from __future__ import annotations
 
 from .common import Clock, Input, Output
-from .types import dim, types, Array, InOut, Type
-from .value import ArraySignal, BitsSignal, BitVectorSignal, ArraySignal, Value, Signal
-from .value import get_slice_bounds
+from .dialects import comb, msft, sv
 from .module import generator, modparams, Module, _BlockContext
+from .signals import ArraySignal, BitsSignal, BitVectorSignal, Signal
+from .signals import get_slice_bounds, _FromCirctValue
+from .types import dim, types, InOut, Type
+
+from .circt import ir
 from .circt.support import BackedgeBuilder
 from .circt.dialects import msft as raw_msft
-from pycde.dialects import comb, msft, sv
-from .circt import ir
 
 import typing
 from typing import List, Union
@@ -41,17 +42,17 @@ def NamedWire(type_or_value: Union[Type, Signal], name: str):
       uniq_name = _BlockContext.current().uniquify_symbol(name)
       self.wire_op = sv.WireOp(InOut(type), name, inner_sym=uniq_name)
       read_val = sv.ReadInOutOp(self.wire_op)
-      super().__init__(Value(read_val), type)
+      super().__init__(read_val, type)
       self.name = name
 
-    def assign(self, new_value: Value):
+    def assign(self, new_signal: Signal):
       if self.assigned_value is not None:
         raise ValueError("Cannot assign value to Wire twice.")
-      if new_value.type != self.type:
+      if new_signal.type != self.type:
         raise TypeError(
-            f"Cannot assign {new_value.value.type} to {self.value.type}")
-      sv.AssignOp(self.wire_op, new_value.value)
-      self.assigned_value = new_value
+            f"Cannot assign {new_signal.value.type} to {self.value.type}")
+      sv.AssignOp(self.wire_op, new_signal.value)
+      self.assigned_value = new_signal
       return self
 
   w = NamedWire()
@@ -177,7 +178,7 @@ def ControlReg(clk: Signal, rst: Signal, asserts: List[Signal],
                                                resets=resets).out
 
 
-def Mux(sel: BitVectorSignal, *data_inputs: typing.List[Value]):
+def Mux(sel: BitVectorSignal, *data_inputs: typing.List[Signal]):
   """Create a single mux from a list of values."""
   num_inputs = len(data_inputs)
   if num_inputs == 0:
@@ -212,11 +213,13 @@ def SystolicArray(row_inputs: ArraySignal, col_inputs: ArraySignal, pe_builder):
   pe_block = dummy_op.regions[0].blocks.append(
       row_inputs_type.element_type._type, col_inputs_type.element_type._type)
   with ir.InsertionPoint(pe_block):
-    result = pe_builder(Value(pe_block.arguments[0]),
-                        Value(pe_block.arguments[1]))
-    value = Value(result)
-    pe_output_type = value.type
-    msft.PEOutputOp(value)
+    result = pe_builder(_FromCirctValue(pe_block.arguments[0]),
+                        _FromCirctValue(pe_block.arguments[1]))
+    if not isinstance(result, Signal):
+      raise TypeError(
+          f"pe_builder function must return a `Signal` not {result}")
+    pe_output_type = result.type
+    msft.PEOutputOp(result)
 
   sa_result_type = dim(pe_output_type, col_inputs_type.size,
                        row_inputs_type.size)
@@ -225,4 +228,4 @@ def SystolicArray(row_inputs: ArraySignal, col_inputs: ArraySignal, pe_builder):
   dummy_op.regions[0].blocks[0].append_to(array.regions[0])
   dummy_op.operation.erase()
 
-  return Value(array.peOutputs)
+  return _FromCirctValue(array.peOutputs)

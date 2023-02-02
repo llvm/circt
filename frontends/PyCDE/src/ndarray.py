@@ -2,11 +2,13 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from .value import BitVectorSignal, ArraySignal
+from .dialects import hw, sv
+from .signals import BitVectorSignal, ArraySignal
 from .types import BitVectorType, dim
-from pycde.dialects import hw, sv
-import numpy as np
+
 from .circt import ir
+
+import numpy as np
 from functools import lru_cache
 from dataclasses import dataclass
 from typing import Union
@@ -79,7 +81,7 @@ class NDArray(np.ndarray):
         TypeError: _description_
     """
 
-    from pycde.value import ArraySignal
+    from pycde.signals import ArraySignal
 
     if (from_value is not None) and (shape is not None or dtype is not None):
       raise ValueError(
@@ -135,7 +137,7 @@ class NDArray(np.ndarray):
   def _circt_to_arr(value: Union[BitVectorSignal, ArraySignal],
                     target_shape: _TargetShape):
     """Converts a CIRCT value into a numpy array."""
-    from .value import (BitVectorSignal, ArraySignal)
+    from .signals import (BitVectorSignal, ArraySignal)
 
     if isinstance(value, BitVectorSignal) and isinstance(
         target_shape.dtype, BitVectorType):
@@ -271,7 +273,7 @@ class NDArray(np.ndarray):
     self.check_is_fully_assigned()
 
     def build_subarray(lstOrVal):
-      from .value import BitVectorSignal
+      from .signals import BitVectorSignal
       # Recursively converts this matrix into ListValues through hw.array_create
       # operations.
       if not isinstance(lstOrVal, BitVectorSignal):

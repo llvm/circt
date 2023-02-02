@@ -5,11 +5,11 @@
 from __future__ import annotations
 from typing import Any, List, Optional, Tuple, Union
 
+from .support import get_user_loc
+
 from .circt.dialects import msft
 from .circt.support import attribute_to_var
-
 from .circt.ir import Attribute, StringAttr, ArrayAttr, FlatSymbolRefAttr
-from .support import get_user_loc
 
 from functools import singledispatchmethod
 

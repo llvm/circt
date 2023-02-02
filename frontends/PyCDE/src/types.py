@@ -9,7 +9,6 @@ from .support import _obj_to_value
 from .circt import ir, support
 from .circt.dialects import esi, hw, sv
 
-from typing import Union
 import typing
 
 
@@ -86,24 +85,24 @@ class Type:
   def bitwidth(self):
     return hw.get_bitwidth(self._type)
 
-  def __call__(self, value_obj, name: str = None):
+  def __call__(self, obj, name: str = None):
     """Create a Value of this type from a python object."""
-    from .support import _obj_to_value
-    v = _obj_to_value(value_obj, self, self)
+    assert not isinstance(obj, ir.Value)
+    v = _obj_to_value(obj, self, self)
     if name is not None:
       v.name = name
     return v
 
   def _get_value_class(self):
     """Return the class which should be instantiated to create a Value."""
-    from .value import UntypedSignal
+    from .signals import UntypedSignal
     return UntypedSignal
 
   def __repr__(self):
     return self._type.__repr__()
 
 
-def _FromCirctType(type: Union[ir.Type, Type]) -> Type:
+def _FromCirctType(type: typing.Union[ir.Type, Type]) -> Type:
   if isinstance(type, Type):
     return type
   type = support.type_to_pytype(type)
@@ -139,7 +138,7 @@ class InOut(Type):
     return _FromCirctType(self._type.element_type)
 
   def _get_value_class(self):
-    from .value import InOutSignal
+    from .signals import InOutSignal
     return InOutSignal
 
 
@@ -259,7 +258,7 @@ class Array(Type):
     return self.size
 
   def _get_value_class(self):
-    from .value import ArraySignal
+    from .signals import ArraySignal
     return ArraySignal
 
   def __str__(self) -> str:
@@ -288,7 +287,7 @@ class StructType(Type):
     return super().__getattribute__(attrname)
 
   def _get_value_class(self):
-    from .value import StructSignal
+    from .signals import StructSignal
     return StructSignal
 
   def __str__(self) -> str:
@@ -316,8 +315,7 @@ class RegisteredStruct(TypeAlias):
     return inst
 
   def __call__(self, **kwargs):
-    from .value import Value
-    return Value(kwargs, self._type)
+    return _obj_to_value(kwargs, self)
 
   def _get_value_class(self):
     return self._value_class
@@ -339,7 +337,7 @@ class Bits(BitVectorType):
     )
 
   def _get_value_class(self):
-    from .value import BitsSignal
+    from .signals import BitsSignal
     return BitsSignal
 
   def __repr__(self):
@@ -355,8 +353,8 @@ class SInt(BitVectorType):
     )
 
   def _get_value_class(self):
-    from .value import SIntValue
-    return SIntValue
+    from .signals import SIntSignal
+    return SIntSignal
 
   def __repr__(self):
     return f"sint{self.width}"
@@ -371,8 +369,8 @@ class UInt(BitVectorType):
     )
 
   def _get_value_class(self):
-    from .value import UIntValue
-    return UIntValue
+    from .signals import UIntSignal
+    return UIntSignal
 
   def __repr__(self):
     return f"uint{self.width}"
@@ -387,10 +385,10 @@ class ClockType(Bits):
   # type.
 
   def __new__(cls):
-    super(ClockType, cls).__new__(cls, 1)
+    return super(ClockType, cls).__new__(cls, 1)
 
   def _get_value_class(self):
-    from .value import ClockSignal
+    from .signals import ClockSignal
     return ClockSignal
 
   def __repr__(self):
@@ -415,8 +413,8 @@ class Channel(Type):
     return _FromCirctType(self._type.inner)
 
   def _get_value_class(self):
-    from .value import ChannelValue
-    return ChannelValue
+    from .signals import ChannelSignal
+    return ChannelSignal
 
   def __str__(self):
     return f"channel<{self.inner_type}>"
@@ -427,13 +425,11 @@ class Channel(Type):
 
   def wrap(self, value, valid):
     from .dialects import esi
-    from .support import _obj_to_value
-    from .value import Value, BitsSignal
-    value = _obj_to_value(value, self._type.inner)
+    value = _obj_to_value(value, self.inner_type)
     valid = _obj_to_value(valid, types.i1)
     wrap_op = esi.WrapValidReadyOp(self._type, types.i1, value.value,
                                    valid.value)
-    return Value(wrap_op[0]), BitsSignal(wrap_op[1], types.i1)
+    return wrap_op[0], wrap_op[1]
 
 
 def dim(inner_type_or_bitwidth: typing.Union[Type, int],

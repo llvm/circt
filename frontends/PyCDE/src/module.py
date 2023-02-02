@@ -3,15 +3,13 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from typing import List, Optional, Set, Tuple, Union, Dict
-from pycde.types import ClockType
-
-from pycde.support import _obj_to_value
+from typing import List, Optional, Set, Tuple, Dict
 
 from .common import (AppID, Clock, Input, Output, PortError, _PyProxy)
-from .support import (get_user_loc, _obj_to_attribute, OpOperandConnect,
+from .support import (get_user_loc, _obj_to_attribute, _obj_to_value,
                       create_type_string, create_const_zero)
-from .value import ClockSignal, Signal, Value
+from .signals import ClockSignal, Signal, _FromCirctValue
+from .types import ClockType
 
 from .circt import ir, support
 from .circt.dialects import hw, msft
@@ -132,7 +130,7 @@ class PortProxyBase:
     val = self._block_args[idx]
     if idx in self._builder.clocks:
       return ClockSignal(val, ClockType())
-    return Value(val)
+    return _FromCirctValue(val)
 
   def _set_output(self, idx, signal):
     assert signal is not None
@@ -281,7 +279,7 @@ class ModuleLikeBuilderBase(_PyProxy):
     for idx, (name, port_type) in enumerate(self.outputs):
 
       def fget(self, idx=idx):
-        return Value(self.inst.results[idx])
+        return _FromCirctValue(self.inst.results[idx])
 
       named_outputs[name] = fget
       setattr(self.modcls, name, property(fget=fget))

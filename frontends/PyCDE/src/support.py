@@ -73,17 +73,17 @@ class OpOperandConnect(support.OpOperand):
     support.connect(self, val)
 
 
-def _obj_to_value(x, type, result_type=None) -> ir.Value:
+def _obj_to_value(x, type: "Type", result_type=None) -> ir.Value:
   """Convert a python object to a CIRCT value, given the CIRCT type."""
   if x is None:
     raise ValueError(
         "Encountered 'None' when trying to build hardware for python value.")
-  from .value import Signal
+  from .signals import Signal
   from .dialects import hw, hwarith
-  from .types import (TypeAlias, Array, StructType, BitVectorType, Bits, UInt,
-                      SInt, _FromCirctType)
+  from .types import (Type, TypeAlias, Array, StructType, BitVectorType, Bits,
+                      UInt, SInt, _FromCirctType)
 
-  type = _FromCirctType(type)
+  assert isinstance(type, Type)
   if isinstance(x, Signal):
     if x.type != type:
       raise TypeError(f"expected {x.type}, got {type}")
@@ -148,8 +148,8 @@ def _obj_to_value(x, type, result_type=None) -> ir.Value:
 
 def _infer_type(x):
   """Infer the CIRCT type from a python object. Only works on lists."""
-  from .types import types
-  from .value import Signal
+  from .types import Array, _FromCirctType
+  from .signals import Signal
   if isinstance(x, Signal):
     return x.type
 
@@ -158,7 +158,7 @@ def _infer_type(x):
     list_type = list_types[0]
     if not all([i == list_type for i in list_types]):
       raise ValueError("CIRCT array must be homogenous, unlike object")
-    return types.array(list_type, len(x))
+    return Array(list_type, len(x))
   if isinstance(x, int):
     raise ValueError(f"Cannot infer width of {x}")
   if isinstance(x, dict):

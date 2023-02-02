@@ -75,7 +75,7 @@ class OperatorError(Module):
 
   @generator
   def build(ports):
-    # CHECK: Operator '+' is not supported on non-int or signless values. RHS operand should be cast .as_sint()/.as_uint() if possible.
+    # CHECK: Operator '+' is not supported on non-int or signless signals. RHS operand should be cast .as_sint()/.as_uint() if possible.
     ports.b + ports.a
 
 

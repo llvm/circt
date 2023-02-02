@@ -4,8 +4,8 @@
 
 from __future__ import annotations
 
+from .support import get_user_loc, _obj_to_value_infer_type
 from .types import Type
-from .support import get_user_loc, _obj_to_value_infer_type, _obj_to_value
 
 from .circt.dialects import sv
 from .circt import support
@@ -18,45 +18,37 @@ import re
 import numpy as np
 
 
-def Value(value, type: Type = None):
+def _FromCirctValue(value: ir.Value, type: Type = None) -> Signal:
   from .types import _FromCirctType
-
-  if isinstance(value, Signal):
-    return value
-
-  resvalue = support.get_value(value)
-  if resvalue is None:
-    if type is None:
-      resvalue = _obj_to_value_infer_type(value)
-    else:
-      resvalue = _obj_to_value(value, type)
-
+  assert isinstance(value, ir.Value)
   if type is None:
-    type = resvalue.type
-  type = _FromCirctType(type)
-
-  return type._get_value_class()(resvalue, type)
+    type = _FromCirctType(value.type)
+  return type._get_value_class()(value, type)
 
 
 class Signal:
   """Root of the PyCDE value (signal, in RTL terms) hierarchy."""
 
-  def __init__(self, value, type=None):
-    from .types import _FromCirctType
+  def __init__(self, value: Union[Signal, ir.Value], type: Type):
+    assert value is not None
+    assert type is not None
 
+    self.type = type
     if isinstance(value, ir.Value):
       self.value = value
+    elif isinstance(value, Signal):
+      self.value = value.value
     else:
-      self.value = support.get_value(value)
-      if self.value is None:
-        self.value = _obj_to_value_infer_type(value).value
-
-    if type is not None:
-      self.type = type
-    else:
-      self.type = _FromCirctType(self.value.type)
+      assert False, "'value' must be either ir.Value or Signal"
 
   _reg_name = re.compile(r"^(.*)__reg(\d+)$")
+
+  @staticmethod
+  def create(obj) -> Signal:
+    """Create a Signal from any python object from which the hardware type can
+    be inferred. For instance, a list of Signals is inferred as an `Array` of
+    those signal types, assuming the types of all the `Signal` are the same."""
+    return _obj_to_value_infer_type(obj)
 
   def reg(self,
           clk=None,
@@ -209,7 +201,7 @@ class InOutSignal(Signal):
   @property
   def read(self):
     if self.read_value is None:
-      self.read_value = Value(sv.ReadInOutOp.create(self).results[0])
+      self.read_value = _FromCirctValue(sv.ReadInOutOp.create(self).results[0])
     return self.read_value
 
 
@@ -222,8 +214,8 @@ def _validate_idx(size: int, idx: Union[int, BitVectorSignal]):
     idx = support.get_value(idx)
     if idx is None or not isinstance(support.type_to_pytype(idx.type),
                                      ir.IntegerType):
-      raise TypeError("Subscript on array must be either int or MLIR int"
-                      f" Value, not {type(idx)}.")
+      raise TypeError("Subscript on array must be either int or int signal"
+                      f" not {type(idx)}.")
 
 
 def get_slice_bounds(size, idxOrSlice: Union[int, slice]):
@@ -271,14 +263,14 @@ class BitVectorSignal(Signal):
     Returns this value as a a signed integer. If 'width' is provided, this value
     will be truncated or sign-extended to that width.
     """
-    return self._exec_cast(SIntValue, ir.IntegerType.get_signed, width)
+    return self._exec_cast(SIntSignal, ir.IntegerType.get_signed, width)
 
   def as_uint(self, width: int = None):
     """
-    Returns this value as an unsigned integer. If 'width' is provided, this value
-    will be truncated or zero-padded to that width.
+    Returns this value as an unsigned integer. If 'width' is provided, this
+    value will be truncated or zero-padded to that width.
     """
-    return self._exec_cast(UIntValue, ir.IntegerType.get_unsigned, width)
+    return self._exec_cast(UIntSignal, ir.IntegerType.get_unsigned, width)
 
 
 class BitsSignal(BitVectorSignal):
@@ -395,7 +387,7 @@ class BitsSignal(BitVectorSignal):
     return ret
 
 
-class IntValue(BitVectorSignal):
+class IntSignal(BitVectorSignal):
 
   #  === Infix operators ===
 
@@ -413,11 +405,11 @@ class IntValue(BitVectorSignal):
         const_type = ir.IntegerType.get_unsigned(other.bit_length())
       other = hwarith.ConstantOp(const_type, other)
 
-    if not isinstance(other, IntValue):
+    if not isinstance(other, IntSignal):
       raise TypeError(
           f"Operator '{op_symbol}' is not supported on non-int or signless "
-          "values. RHS operand should be cast .as_sint()/.as_uint() if possible."
-      )
+          "signals. RHS operand should be cast .as_sint()/.as_uint() if "
+          "possible.")
 
     ret = op(self, other)
     if self.name is not None and other.name is not None:
@@ -452,7 +444,7 @@ class IntValue(BitVectorSignal):
         const_type = ir.IntegerType.get_unsigned(other.bit_length())
       other = hwarith.ConstantOp(const_type, other)
 
-    if not isinstance(other, IntValue):
+    if not isinstance(other, IntSignal):
       raise TypeError(
           f"Comparisons of signed/unsigned integers to {other.type} not "
           "supported. RHS operand should be cast .as_sint()/.as_uint() if "
@@ -483,11 +475,11 @@ class IntValue(BitVectorSignal):
     assert False, "Unimplemented"
 
 
-class UIntValue(IntValue):
+class UIntSignal(IntSignal):
   pass
 
 
-class SIntValue(IntValue):
+class SIntSignal(IntSignal):
 
   def __neg__(self):
     from .types import types
@@ -564,12 +556,12 @@ class ArraySignal(Signal):
     return self.type.strip.size
 
   """
-  Add a curated set of Numpy functions through the Matrix class.
-  This allows for directly manipulating the ListValues with numpy functionality.
+  Add a curated set of Numpy functions through the Matrix class. This allows
+  for directly manipulating the ArraySignals with numpy functionality.
   Power-users who use the Matrix directly have access to all numpy functions.
   In reality, it will only be a subset of the numpy array functions which are
   safe to be used in the PyCDE context. Curating access at the level of
-  ListValues seems like a safe starting point.
+  ArraySignals seems like a safe starting point.
   """
 
   def transpose(self, *args, **kwargs):
@@ -624,7 +616,7 @@ class StructSignal(Signal):
         if self.name:
           v.name = f"{self.name}__{attr}"
         return v
-    raise AttributeError(f"'Value' object has no attribute '{attr}'")
+    raise AttributeError(f"{type(self)} object has no attribute '{attr}'")
 
 
 class StructMetaType(type):
@@ -669,7 +661,7 @@ class Struct(StructSignal, metaclass=StructMetaType):
   # All the work is done in the metaclass.
 
 
-class ChannelValue(Signal):
+class ChannelSignal(Signal):
 
   def reg(self, clk, rst=None, name=None):
     raise TypeError("Cannot register a channel")
@@ -681,12 +673,12 @@ class ChannelValue(Signal):
     ready = _obj_to_value(ready, types.i1)
     unwrap_op = esi.UnwrapValidReadyOp(self.type.inner_type, types.i1,
                                        self.value, ready.value)
-    return Value(unwrap_op[0]), Value(unwrap_op[1])
+    return unwrap_op[0], unwrap_op[1]
 
 
 def wrap_opviews_with_values(dialect, module_name, excluded=[]):
   """Wraps all of a dialect's OpView classes to have their create method return
-     a PyCDE Value instead of an OpView. The wrapped classes are inserted into
+     a Signal instead of an OpView. The wrapped classes are inserted into
      the provided module."""
   import sys
   from .types import Type
@@ -701,7 +693,7 @@ def wrap_opviews_with_values(dialect, module_name, excluded=[]):
       def specialize_create(cls):
 
         def create(*args, **kwargs):
-          # If any of the arguments are Value or Type (which are both PyCDE
+          # If any of the arguments are Signal or Type (which are both PyCDE
           # classes) objects, we need to convert them.
           def to_circt(arg):
             if isinstance(arg, Signal):
@@ -724,7 +716,8 @@ def wrap_opviews_with_values(dialect, module_name, excluded=[]):
               created.twoState = True
 
           # Return the wrapped values, if any.
-          converted_results = tuple(Value(res) for res in created.results)
+          converted_results = tuple(
+              _FromCirctValue(res) for res in created.results)
           return converted_results[0] if len(
               converted_results) == 1 else converted_results
 

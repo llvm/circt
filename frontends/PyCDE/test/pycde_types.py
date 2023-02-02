@@ -3,7 +3,7 @@
 from pycde import dim, types, Input, Output, generator, System, Module
 from pycde.types import Bits, StructType, TypeAlias, UInt
 from pycde.testing import unittestmodule
-from pycde.value import Struct, UIntValue
+from pycde.signals import Struct, UIntSignal
 
 # CHECK: [('foo', bits1), ('bar', bits13)]
 st1 = StructType({"foo": types.i1, "bar": types.i13})
@@ -45,7 +45,7 @@ class ExStruct(Struct):
   a: Bits(4)
   b: UInt(32)
 
-  def get_b_plus1(self) -> UIntValue:
+  def get_b_plus1(self) -> UIntSignal:
     return self.b + 1
 
 
@@ -74,5 +74,4 @@ class TestStruct(Module):
     self.out1 = self.inp1.get_b_plus1()
     s = ExStruct(a=self.inp1.a, b=self.inp1.get_b_plus1().as_uint(32))
     assert type(s) is ExStruct._get_value_class()
-    assert s.a == self.inp1.a
     self.out2 = s

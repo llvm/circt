@@ -1,13 +1,13 @@
-from pycde import Input, Output, generator
-from pycde.module import Generator, Module
-from pycde.dialects import fsm
-from pycde.types import types
-from typing import Callable
+from .common import Input, Output
+from .dialects import fsm
+from .module import generator, Generator, Module
+from .support import _obj_to_attribute, attributes_of_type
+from .types import types
 
 from .circt.ir import InsertionPoint
-
-from pycde.support import _obj_to_attribute, attributes_of_type
 from .circt.support import connect
+
+from typing import Callable
 
 
 class State:

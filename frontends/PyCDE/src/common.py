@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .circt.dialects import esi as raw_esi, msft
+from .circt.dialects import msft
 from .circt import ir
 
 from .types import Type, Channel, ClockType
