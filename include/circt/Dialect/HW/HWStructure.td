@@ -254,7 +254,8 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
                        OptionalAttr<DictArrayAttr>:$res_attrs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
-                       OptionalAttr<StrAttr>:$verilogName);
+                       OptionalAttr<StrAttr>:$verilogName,
+                       OptionalAttr<ESIWrapAttr>:$esiWrap);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 

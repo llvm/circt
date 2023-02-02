@@ -299,6 +299,36 @@ def EnumFieldAttr : AttrDef<HWDialect, "EnumField"> {
   }];
 }
 
+// An attribute to define the wrapping interface for an external module.
+def ESIWrapAttr : AttrDef<HWDialect, "ESIWrap"> {
+  let summary = "ESIWrap Attribute with Interface information of hw.module.extern";
+  let description = [{
+    This attribute represents all the necessary information to wrap arround a statically
+    scheduled hw.module.extern and embed it into a dynamically scheduled module.
+
+    There are two parameters. The first one is called target. The target specifies the 
+    target hw.module that we wrap arround. The second parameter is called type. It defines
+    the interface of the hw.module. This could be for example "combinational" or "pipeline"
+
+    Examples:
+    ```mlir
+      #hw.esi.wrap<@ext_add, "combinational">
+      #hw.esi.wrap<@ext_complex, "pipeline">
+    ```
+  }];
+  let mnemonic = "esi.wrap";
+  let parameters = (ins "::mlir::FlatSymbolRefAttr":$target, "::mlir::StringAttr":$type);
+
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "::mlir::FlatSymbolRefAttr":$target,
+                                        "::mlir::StringAttr":$type), [{
+      return get(target.getContext(), target, type);
+    }]>
+  ];
+
+  let hasCustomAssemblyFormat = 1;
+}
+
 
 let cppNamespace = "circt::hw" in {
 def WUW_Undefined : I32EnumAttrCase<"Undefined", 0>;

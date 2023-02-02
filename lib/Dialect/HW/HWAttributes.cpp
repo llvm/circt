@@ -333,6 +333,24 @@ void InnerSymAttr::print(AsmPrinter &odsPrinter) const {
 }
 
 //===----------------------------------------------------------------------===//
+// ESIWrapAttr
+//===----------------------------------------------------------------------===//
+
+
+Attribute ESIWrapAttr::parse(AsmParser &p, Type type) {
+  FlatSymbolRefAttr target;
+  StringAttr wrap_type;
+  if (p.parseAttribute(target) || p.parseAttribute(wrap_type))
+    return Attribute();
+
+  return ESIWrapAttr::get(target, wrap_type);
+}
+
+void ESIWrapAttr::print(AsmPrinter &p) const {
+  p << "<" << getTarget() << ", " << getType() << ">";
+}
+
+//===----------------------------------------------------------------------===//
 // ParamDeclAttr
 //===----------------------------------------------------------------------===//
 

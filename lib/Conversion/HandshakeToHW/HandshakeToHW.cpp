@@ -1827,9 +1827,17 @@ public:
     hw::HWModuleLike implModule = checkSubModuleOp(ls.parentModule, op);
     if (!implModule) {
       auto portInfo = ModulePortInfo(getPortInfoForOp(op));
-      implModule = submoduleBuilder.create<hw::HWModuleExternOp>(
-          op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
-          portInfo);
+      if (auto externalInstanceOp = dyn_cast<handshake::ExternalInstanceOp>(op); externalInstanceOp){
+        implModule = submoduleBuilder.create<hw::HWModuleExternOp>(
+            auto target = externalInstanceOp.getModule();
+            op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
+            submoduleBuilder.getESIWrapAttr(target, submoduleBuilder.getStringAttr("combinational")), portInfo);
+      }
+      else {
+        implModule = submoduleBuilder.create<hw::HWModuleExternOp>(
+            op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
+            portInfo);  
+      }
     }
 
     llvm::SmallVector<Value> operands = adaptor.getOperands();
