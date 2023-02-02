@@ -540,18 +540,17 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
 /// Convert consumed SourceAnnotation and SinkAnnotation into WiringProblems,
 /// using the pin attribute as newNameHint
 LogicalResult LowerAnnotationsPass::legacyToWiringProblems(ApplyState &state) {
-  for (const auto &problem : state.legacyWiringProblems) {
-    if (!problem.second.source)
+  for (const auto &[name, problem] : state.legacyWiringProblems) {
+    if (!problem.source)
       return mlir::emitError(state.circuit.getLoc())
-             << "Unable to resolve source for pin: " << problem.first;
+             << "Unable to resolve source for pin: " << name;
 
-    if (problem.second.sinks.empty())
+    if (problem.sinks.empty())
       return mlir::emitError(state.circuit.getLoc())
-             << "Unable to resolve sink(s) for pin: " << problem.first;
+             << "Unable to resolve sink(s) for pin: " << name;
 
-    for (const auto &sink : problem.second.sinks)
-      state.wiringProblems.push_back({problem.second.source, sink,
-                                      problem.first.str(),
+    for (const auto &sink : problem.sinks)
+      state.wiringProblems.push_back({problem.source, sink, name.str(),
                                       WiringProblem::RefTypeUsage::Never});
   }
   return success();
@@ -775,7 +774,8 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
 
     // Record port types that should be added to each module along the LCA path.
     Type sourceType, sinkType;
-    auto useRefTypes = !noRefTypePorts &&
+    auto useRefTypes =
+        !noRefTypePorts &&
         problem.refTypeUsage == WiringProblem::RefTypeUsage::Prefer;
     if (useRefTypes) {
       // Use RefType ports if possible
