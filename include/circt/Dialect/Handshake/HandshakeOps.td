@@ -116,8 +116,9 @@ def FuncOp : Op<Handshake_Dialect, "func", [
 
 // InstanceOp
 def InstanceOp : Handshake_Op<"instance", [
-    CallOpInterface,
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+    CallOpInterface, HasClock,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+
 ]> {
   let summary = "module instantiate operation";
   let description = [{
@@ -185,7 +186,7 @@ def InstanceOp : Handshake_Op<"instance", [
 }
 
 // ExternalInstanceOp
-def ExternalInstanceOp : Handshake_Op<"external_instance", []> {
+def ExternalInstanceOp : Handshake_Op<"external_instance", [HasClock]> {
   let summary = "external module instantiate operation";
   let description = [{
     The `external_instance` operation represents the instantiation of an external module.  This

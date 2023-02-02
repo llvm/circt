@@ -172,6 +172,10 @@ static std::string getSubModuleName(Operation *oldOp) {
 
   std::string subModuleName = getBareSubModuleName(oldOp);
 
+  // Construct name for handshake.external_instance
+  if (auto externalInstanceOp = dyn_cast<handshake::ExternalInstanceOp>(oldOp); externalInstanceOp)
+    return subModuleName + "_" + externalInstanceOp.getModule().str();
+
   // Add value of the constant operation.
   if (auto constOp = dyn_cast<handshake::ConstantOp>(oldOp)) {
     if (auto intAttr = constOp.getValue().dyn_cast<IntegerAttr>()) {
@@ -1059,6 +1063,36 @@ public:
   };
 };
 
+// Rewrite handshake.instance op. Simply replace it with a hw.instance op
+class InstanceConversionPattern 
+    : public OpConversionPattern<handshake::InstanceOp> {
+public:
+  InstanceConversionPattern(ESITypeConverter &typeConverter,
+                             MLIRContext *context, 
+                             HandshakeLoweringState &ls)
+      : OpConversionPattern<handshake::InstanceOp>::OpConversionPattern(typeConverter, context),
+        ls(ls) {}
+
+  LogicalResult
+  matchAndRewrite(handshake::InstanceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    
+    // check if referenced module already exists
+    hw::HWModuleLike refModule = checkSubModuleOp(ls.parentModule, op);
+    if(!refModule)
+      assert(refModule && "handshake.instance references a module that does not exists");
+
+    // Instantiate the referenced module
+    llvm::SmallVector<Value> operands = adaptor.getOperands();
+    addSequentialIOOperandsIfNeeded(op, operands);
+    rewriter.replaceOpWithNewOp<hw::InstanceOp>(
+      op, refModule, rewriter.getStringAttr(ls.nameUniquer(op)), operands);
+    return success();
+  }
+private:
+  HandshakeLoweringState &ls;
+};
+
 class ReturnConversionPattern
     : public OpConversionPattern<handshake::ReturnOp> {
 public:
@@ -1782,12 +1816,14 @@ public:
                              HandshakeLoweringState &ls)
       : OpConversionPattern<T>::OpConversionPattern(typeConverter, context),
         submoduleBuilder(submoduleBuilder), ls(ls) {}
+
   using OpAdaptor = typename T::Adaptor;
 
   LogicalResult
   matchAndRewrite(T op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
+                  ConversionPatternRewriter &rewriter) const override {  
+    // Check if a external submodule has already been created for the op. If so,
+    // Instantiate the external submodule. Else, build the external module 
     hw::HWModuleLike implModule = checkSubModuleOp(ls.parentModule, op);
     if (!implModule) {
       auto portInfo = ModulePortInfo(getPortInfoForOp(op));
@@ -1806,6 +1842,12 @@ public:
 private:
   OpBuilder &submoduleBuilder;
   HandshakeLoweringState &ls;
+};
+
+// Conversion Pattern for ExternalInstanceOp -> simply inherit from ExtModuleConversionPattern class
+class ExternalInstanceConversionPattern : public ExtModuleConversionPattern<ExternalInstanceOp> {
+public:
+  using ExtModuleConversionPattern<ExternalInstanceOp>::ExtModuleConversionPattern;
 };
 
 class FuncOpConversionPattern : public OpConversionPattern<handshake::FuncOp> {
@@ -1880,11 +1922,15 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
   auto ls = HandshakeLoweringState{op->getParentOfType<mlir::ModuleOp>(),
                                    instanceUniquer};
   RewritePatternSet patterns(op.getContext());
-  patterns.insert<FuncOpConversionPattern, ReturnConversionPattern>(
-      op.getContext());
+  patterns.insert<FuncOpConversionPattern, ReturnConversionPattern>
+                 (op.getContext());
+
   patterns.insert<JoinConversionPattern, ForkConversionPattern,
                   SyncConversionPattern>(typeConverter, op.getContext(),
                                          moduleBuilder, ls);
+
+  patterns.insert<InstanceConversionPattern>(
+      typeConverter, op.getContext(), ls);
 
   patterns.insert<
       // Comb operations.
@@ -1910,6 +1956,7 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
       SourceConversionPattern, SinkConversionPattern, ConstantConversionPattern,
       MergeConversionPattern, ControlMergeConversionPattern,
       LoadConversionPattern, StoreConversionPattern, MemoryConversionPattern,
+      ExternalInstanceConversionPattern,
       // Arith operations.
       ExtendConversionPattern<arith::ExtUIOp, /*signExtend=*/false>,
       ExtendConversionPattern<arith::ExtSIOp, /*signExtend=*/true>,
