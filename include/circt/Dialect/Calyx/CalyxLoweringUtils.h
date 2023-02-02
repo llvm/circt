@@ -509,15 +509,9 @@ private:
   PatternApplicationState &patternState;
 };
 
-struct ModuleOpConversion : public OpRewritePattern<mlir::ModuleOp> {
-  ModuleOpConversion(MLIRContext *context, StringRef topLevelFunction);
-
-  LogicalResult matchAndRewrite(mlir::ModuleOp moduleOp,
-                                PatternRewriter &rewriter) const override;
-
-private:
-  StringRef topLevelFunction;
-};
+/// Helper to update the top-level ModuleOp to set the entrypoing function.
+LogicalResult applyModuleOpConversion(mlir::ModuleOp,
+                                      StringRef topLevelFunction);
 
 /// FuncOpPartialLoweringPatterns are patterns which intend to match on FuncOps
 /// and then perform their own walking of the IR.
