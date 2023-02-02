@@ -1549,7 +1549,14 @@ void GrandCentralPass::runOnOperation() {
   bool removalError = false;
   AnnotationSet::removeAnnotations(circuitOp, [&](Annotation anno) {
     if (anno.isClass(augmentedBundleTypeClass)) {
-      worklist.push_back(anno);
+      // If we are in "instantiateCompanionOnly" mode, then we don't need to
+      // create the interface, so we can skip adding it to the worklist.  This
+      // is a janky hack for situations where you want to synthesize assertion
+      // logic included in the companion, but don't want to have a dead
+      // interface hanging around (or have problems with tools understanding
+      // interfaces).
+      if (!instantiateCompanionOnly)
+        worklist.push_back(anno);
       ++numAnnosRemoved;
       return true;
     }
@@ -2032,14 +2039,6 @@ void GrandCentralPass::runOnOperation() {
       }
     }
   });
-
-  // If we are in "instantiateCompanionOnly" mode, then just exit here.  We
-  // don't need to create the interface.  This is a janky hack for situations
-  // where you want to synthesize assertion logic included in the companion, but
-  // don't want to have a dead interface hanging around (or have problems with
-  // tools understanding interfaces).
-  if (instantiateCompanionOnly)
-    return;
 
   // Now, iterate over the worklist of interface-encoding annotations to create
   // the interface and all its sub-interfaces (interfaces that it instantiates),
