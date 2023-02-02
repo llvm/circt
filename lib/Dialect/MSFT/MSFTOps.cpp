@@ -614,8 +614,12 @@ void MSFTModuleOp::build(OpBuilder &builder, OperationState &result,
   bodyRegion->push_back(body);
 
   // Add arguments to the body block.
-  for (auto elt : ports.inputs)
-    body->addArgument(elt.type, builder.getUnknownLoc());
+  for (auto port : ports.inputs) {
+    auto type = port.type;
+    if (port.isInOut() && !type.isa<hw::InOutType>())
+      type = hw::InOutType::get(type);
+    body->addArgument(type, builder.getUnknownLoc());
+  }
 
   MSFTModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
@@ -626,6 +630,27 @@ ParseResult MSFTModuleOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void MSFTModuleOp::print(OpAsmPrinter &p) {
   printModuleLikeOp<MSFTModuleOp>(*this, p, getParametersAttr());
+}
+
+LogicalResult MSFTModuleOp::verify() {
+  auto &body = getBody();
+  if (body.empty())
+    return success();
+
+  // Verify the number of block arguments.
+  auto type = getFunctionType();
+  auto numInputs = type.getNumInputs();
+  auto *bodyBlock = &body.front();
+  if (bodyBlock->getNumArguments() != numInputs)
+    return emitOpError("entry block must have")
+           << numInputs << " arguments to match module signature";
+
+  // Verify that the block arguments match the op's attributes.
+  for (auto [arg, type] : llvm::zip(getArguments(), type.getInputs()))
+    if (arg.getType() != type)
+      return emitOpError("block argument types should match signature types");
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
