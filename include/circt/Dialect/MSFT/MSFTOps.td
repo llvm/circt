@@ -191,6 +191,7 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
   }];
 
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
 def MSFTModuleExternOp : MSFTOp<"module.extern",
