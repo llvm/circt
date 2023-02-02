@@ -146,7 +146,7 @@ class _RequestToClientConn(_RequestConnection):
     req_op = raw_esi.RequestToClientConnectionOp(
         type._type, self.service_port,
         ir.ArrayAttr.get([ir.StringAttr.get(chan_name)]))
-    return ChannelSignal(req_op)
+    return ChannelSignal(req_op.result, type)
 
 
 class _RequestToFromServerConn(_RequestConnection):
@@ -167,7 +167,7 @@ class _RequestToFromServerConn(_RequestConnection):
     to_client = raw_esi.RequestInOutChannelOp(
         self.to_client_type._type, self.service_port, to_server_channel.value,
         ir.ArrayAttr.get([ir.StringAttr.get(chan_name)]))
-    return ChannelSignal(to_client)
+    return ChannelSignal(to_client.result, type)
 
 
 def Cosim(decl: ServiceDecl, clk, rst):
@@ -223,7 +223,7 @@ class NamedChannelValue(ChannelSignal):
 
   def __init__(self, input_chan: ir.Value, client_name: List[str]):
     self.client_name = client_name
-    super().__init__(input_chan)
+    super().__init__(input_chan, _FromCirctType(input_chan.type))
 
 
 class _OutputChannelSetter:

@@ -215,9 +215,11 @@ def SystolicArray(row_inputs: ArraySignal, col_inputs: ArraySignal, pe_builder):
   with ir.InsertionPoint(pe_block):
     result = pe_builder(_FromCirctValue(pe_block.arguments[0]),
                         _FromCirctValue(pe_block.arguments[1]))
-    value = _FromCirctValue(result)
-    pe_output_type = value.type
-    msft.PEOutputOp(value)
+    if not isinstance(result, Signal):
+      raise TypeError(
+          f"pe_builder function must return a `Signal` not {result}")
+    pe_output_type = result.type
+    msft.PEOutputOp(result)
 
   sa_result_type = dim(pe_output_type, col_inputs_type.size,
                        row_inputs_type.size)

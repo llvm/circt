@@ -85,10 +85,10 @@ class Type:
   def bitwidth(self):
     return hw.get_bitwidth(self._type)
 
-  def __call__(self, value_obj, name: str = None):
+  def __call__(self, obj, name: str = None):
     """Create a Value of this type from a python object."""
-    from .support import _obj_to_value
-    v = _obj_to_value(value_obj, self, self)
+    assert not isinstance(obj, ir.Value)
+    v = _obj_to_value(obj, self, self)
     if name is not None:
       v.name = name
     return v
@@ -315,8 +315,7 @@ class RegisteredStruct(TypeAlias):
     return inst
 
   def __call__(self, **kwargs):
-    from .signals import _FromCirctValue
-    return _FromCirctValue(kwargs, self._type)
+    return _obj_to_value(kwargs, self)
 
   def _get_value_class(self):
     return self._value_class
@@ -386,7 +385,7 @@ class ClockType(Bits):
   # type.
 
   def __new__(cls):
-    super(ClockType, cls).__new__(cls, 1)
+    return super(ClockType, cls).__new__(cls, 1)
 
   def _get_value_class(self):
     from .signals import ClockSignal
@@ -426,12 +425,11 @@ class Channel(Type):
 
   def wrap(self, value, valid):
     from .dialects import esi
-    from .signals import _FromCirctValue, BitsSignal
-    value = _obj_to_value(value, self._type.inner)
+    value = _obj_to_value(value, self.inner_type)
     valid = _obj_to_value(valid, types.i1)
     wrap_op = esi.WrapValidReadyOp(self._type, types.i1, value.value,
                                    valid.value)
-    return _FromCirctValue(wrap_op[0]), BitsSignal(wrap_op[1], types.i1)
+    return wrap_op[0], wrap_op[1]
 
 
 def dim(inner_type_or_bitwidth: typing.Union[Type, int],

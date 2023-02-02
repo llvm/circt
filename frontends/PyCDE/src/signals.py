@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .support import get_user_loc, _obj_to_value_infer_type, _obj_to_value
+from .support import get_user_loc, _obj_to_value_infer_type
 from .types import Type
 
 from .circt.dialects import sv
@@ -18,43 +18,28 @@ import re
 import numpy as np
 
 
-def _FromCirctValue(value, type: Type = None) -> Signal:
+def _FromCirctValue(value: ir.Value, type: Type = None) -> Signal:
   from .types import _FromCirctType
-
-  if isinstance(value, Signal):
-    return value
-
-  resvalue = support.get_value(value)
-  if resvalue is None:
-    if type is None:
-      resvalue = _obj_to_value_infer_type(value)
-    else:
-      resvalue = _obj_to_value(value, type)
-
+  assert isinstance(value, ir.Value)
   if type is None:
-    type = resvalue.type
-  type = _FromCirctType(type)
-
-  return type._get_value_class()(resvalue, type)
+    type = _FromCirctType(value.type)
+  return type._get_value_class()(value, type)
 
 
 class Signal:
   """Root of the PyCDE value (signal, in RTL terms) hierarchy."""
 
-  def __init__(self, value, type=None):
-    from .types import _FromCirctType
+  def __init__(self, value: Union[Signal, ir.Value], type: Type):
+    assert value is not None
+    assert type is not None
 
+    self.type = type
     if isinstance(value, ir.Value):
       self.value = value
+    elif isinstance(value, Signal):
+      self.value = value.value
     else:
-      self.value = support.get_value(value)
-      if self.value is None:
-        self.value = _obj_to_value_infer_type(value).value
-
-    if type is not None:
-      self.type = type
-    else:
-      self.type = _FromCirctType(self.value.type)
+      assert False, "'value' must be either ir.Value or Signal"
 
   _reg_name = re.compile(r"^(.*)__reg(\d+)$")
 
@@ -688,7 +673,7 @@ class ChannelSignal(Signal):
     ready = _obj_to_value(ready, types.i1)
     unwrap_op = esi.UnwrapValidReadyOp(self.type.inner_type, types.i1,
                                        self.value, ready.value)
-    return _FromCirctValue(unwrap_op[0]), _FromCirctValue(unwrap_op[1])
+    return unwrap_op[0], unwrap_op[1]
 
 
 def wrap_opviews_with_values(dialect, module_name, excluded=[]):
