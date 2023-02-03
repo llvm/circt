@@ -348,7 +348,7 @@ void SignalOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // ConvertOp
 //===----------------------------------------------------------------------===//
 
-OpFoldResult ConvertOp::fold(ArrayRef<Attribute> operands) {
+OpFoldResult ConvertOp::fold(FoldAdaptor) {
   if (getInput().getType() == getResult().getType())
     return getInput();
 

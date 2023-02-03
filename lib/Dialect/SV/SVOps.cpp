@@ -1570,7 +1570,7 @@ LogicalResult IndexedPartSelectInOutOp::verify() {
   return success();
 }
 
-OpFoldResult IndexedPartSelectInOutOp::fold(ArrayRef<Attribute> constants) {
+OpFoldResult IndexedPartSelectInOutOp::fold(FoldAdaptor) {
   if (getType() == getInput().getType())
     return getInput();
   return {};

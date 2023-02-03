@@ -27,6 +27,7 @@ def CombDialect : Dialect {
     representation of combinational logic outside of a particular use-case.
   }];
   let hasConstantMaterializer = 1;
+  let useFoldAPI = kEmitFoldAdaptorFolder;
   let cppNamespace = "::circt::comb";
 }
 
