@@ -173,7 +173,8 @@ static std::string getSubModuleName(Operation *oldOp) {
   std::string subModuleName = getBareSubModuleName(oldOp);
 
   // Construct name for handshake.external_instance
-  if (auto externalInstanceOp = dyn_cast<handshake::ExternalInstanceOp>(oldOp); externalInstanceOp)
+  if (auto externalInstanceOp = dyn_cast<handshake::ExternalInstanceOp>(oldOp);
+      externalInstanceOp)
     return subModuleName + "_" + externalInstanceOp.getModule().str();
 
   // Add value of the constant operation.
@@ -1064,31 +1065,33 @@ public:
 };
 
 // Rewrite handshake.instance op. Simply replace it with a hw.instance op
-class InstanceConversionPattern 
+class InstanceConversionPattern
     : public OpConversionPattern<handshake::InstanceOp> {
 public:
   InstanceConversionPattern(ESITypeConverter &typeConverter,
-                             MLIRContext *context, 
-                             HandshakeLoweringState &ls)
-      : OpConversionPattern<handshake::InstanceOp>::OpConversionPattern(typeConverter, context),
+                            MLIRContext *context, HandshakeLoweringState &ls)
+      : OpConversionPattern<handshake::InstanceOp>::OpConversionPattern(
+            typeConverter, context),
         ls(ls) {}
-
   LogicalResult
   matchAndRewrite(handshake::InstanceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    
-    // check if referenced module already exists
+
     hw::HWModuleLike refModule = checkSubModuleOp(ls.parentModule, op);
-    if(!refModule)
-      assert(refModule && "handshake.instance references a module that does not exists");
+
+    // Is already checked by the function
+    // handshake::InstanceOp::verifySymbolUses
+    assert(refModule &&
+           "handshake.instance references a module that does not exists");
 
     // Instantiate the referenced module
     llvm::SmallVector<Value> operands = adaptor.getOperands();
     addSequentialIOOperandsIfNeeded(op, operands);
     rewriter.replaceOpWithNewOp<hw::InstanceOp>(
-      op, refModule, rewriter.getStringAttr(ls.nameUniquer(op)), operands);
+        op, refModule, rewriter.getStringAttr(ls.nameUniquer(op)), operands);
     return success();
   }
+
 private:
   HandshakeLoweringState &ls;
 };
@@ -1816,28 +1819,19 @@ public:
                              HandshakeLoweringState &ls)
       : OpConversionPattern<T>::OpConversionPattern(typeConverter, context),
         submoduleBuilder(submoduleBuilder), ls(ls) {}
-
   using OpAdaptor = typename T::Adaptor;
 
   LogicalResult
   matchAndRewrite(T op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {  
+                  ConversionPatternRewriter &rewriter) const override {
     // Check if a external submodule has already been created for the op. If so,
-    // Instantiate the external submodule. Else, build the external module 
+    // Instantiate the external submodule. Else, build the external module
     hw::HWModuleLike implModule = checkSubModuleOp(ls.parentModule, op);
     if (!implModule) {
       auto portInfo = ModulePortInfo(getPortInfoForOp(op));
-      if (auto externalInstanceOp = dyn_cast<handshake::ExternalInstanceOp>(op); externalInstanceOp){
-        implModule = submoduleBuilder.create<hw::HWModuleExternOp>(
-            auto target = externalInstanceOp.getModule();
-            op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
-            submoduleBuilder.getESIWrapAttr(target, submoduleBuilder.getStringAttr("combinational")), portInfo);
-      }
-      else {
-        implModule = submoduleBuilder.create<hw::HWModuleExternOp>(
-            op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
-            portInfo);  
-      }
+      implModule = submoduleBuilder.create<hw::HWModuleExternOp>(
+          op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
+          portInfo);
     }
 
     llvm::SmallVector<Value> operands = adaptor.getOperands();
@@ -1852,10 +1846,50 @@ private:
   HandshakeLoweringState &ls;
 };
 
-// Conversion Pattern for ExternalInstanceOp -> simply inherit from ExtModuleConversionPattern class
-class ExternalInstanceConversionPattern : public ExtModuleConversionPattern<ExternalInstanceOp> {
+// Rewrite handshake.instance op. Simply replace it with a hw.instance op
+class ExternalInstanceConversionPattern
+    : public OpConversionPattern<handshake::ExternalInstanceOp> {
 public:
-  using ExtModuleConversionPattern<ExternalInstanceOp>::ExtModuleConversionPattern;
+  ExternalInstanceConversionPattern(ESITypeConverter &typeConverter,
+                                    MLIRContext *context, OpBuilder &builder,
+                                    HandshakeLoweringState &ls)
+      : OpConversionPattern<handshake::ExternalInstanceOp>::OpConversionPattern(
+            typeConverter, context),
+        builder(builder), ls(ls) {}
+  LogicalResult
+  matchAndRewrite(handshake::ExternalInstanceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Check if a external submodule has already been created for the op. If so,
+    // Instantiate the external submodule. Else, build the external module
+    hw::HWModuleLike implModule = checkSubModuleOp(ls.parentModule, op);
+    if (!implModule) {
+      auto portInfo = ModulePortInfo(getPortInfoForOp(op));
+      implModule = builder.create<hw::HWModuleExternOp>(
+          op.getLoc(), builder.getStringAttr(getSubModuleName(op)), portInfo);
+
+      // add EsiWrap attribute
+      auto target = op.getModuleAttr();
+      auto targetIdent = StringAttr::get(builder.getContext(), "target");
+      // for the moment hard coded to combinational. Could later also be
+      // pipeline
+      auto type = StringAttr::get(builder.getContext(), "combinational");
+      auto typeIdent = StringAttr::get(builder.getContext(), "type");
+      auto esiWrapper =
+          builder.getDictionaryAttr({{targetIdent, target}, {typeIdent, type}});
+
+      implModule->setAttr("esiWrap", esiWrapper);
+    }
+
+    llvm::SmallVector<Value> operands = adaptor.getOperands();
+    addSequentialIOOperandsIfNeeded(op, operands);
+    rewriter.replaceOpWithNewOp<hw::InstanceOp>(
+        op, implModule, rewriter.getStringAttr(ls.nameUniquer(op)), operands);
+    return success();
+  }
+
+private:
+  OpBuilder &builder;
+  HandshakeLoweringState &ls;
 };
 
 class FuncOpConversionPattern : public OpConversionPattern<handshake::FuncOp> {
@@ -1930,15 +1964,15 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
   auto ls = HandshakeLoweringState{op->getParentOfType<mlir::ModuleOp>(),
                                    instanceUniquer};
   RewritePatternSet patterns(op.getContext());
-  patterns.insert<FuncOpConversionPattern, ReturnConversionPattern>
-                 (op.getContext());
+  patterns.insert<FuncOpConversionPattern, ReturnConversionPattern>(
+      op.getContext());
 
   patterns.insert<JoinConversionPattern, ForkConversionPattern,
                   SyncConversionPattern>(typeConverter, op.getContext(),
                                          moduleBuilder, ls);
 
-  patterns.insert<InstanceConversionPattern>(
-      typeConverter, op.getContext(), ls);
+  patterns.insert<InstanceConversionPattern>(typeConverter, op.getContext(),
+                                             ls);
 
   patterns.insert<
       // Comb operations.
