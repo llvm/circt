@@ -278,6 +278,62 @@ static LogicalResult drop(const AnnoPathValue &target, DictionaryAttr anno,
 }
 
 //===----------------------------------------------------------------------===//
+// Customized Appliers
+//===----------------------------------------------------------------------===//
+
+/// Update a memory op with attributes about memory file loading.
+template <bool isInline>
+static LogicalResult applyLoadMemoryAnno(const AnnoPathValue &target,
+                                         DictionaryAttr anno,
+                                         ApplyState &state) {
+  if (!target.isLocal()) {
+    mlir::emitError(state.circuit.getLoc())
+        << "has a " << anno.get("class")
+        << " annotation which is non-local, but this annotation is not allowed "
+           "to be non-local";
+    return failure();
+  }
+
+  auto *op = target.ref.getOp();
+
+  if (!target.isOpOfType<MemOp, CombMemOp, SeqMemOp>()) {
+    mlir::emitError(op->getLoc())
+        << "can only apply a load memory annotation to a memory";
+    return failure();
+  }
+
+  // The two annotations have different case usage in "filename".
+  StringAttr filename = tryGetAs<StringAttr>(
+      anno, anno, isInline ? "filename" : "fileName", op->getLoc(),
+      anno.getAs<StringAttr>("class").getValue());
+  if (!filename)
+    return failure();
+
+  auto hexOrBinary =
+      tryGetAs<StringAttr>(anno, anno, "hexOrBinary", op->getLoc(),
+                           anno.getAs<StringAttr>("class").getValue());
+  if (!hexOrBinary)
+    return failure();
+
+  auto hexOrBinaryValue = hexOrBinary.getValue();
+  if (hexOrBinaryValue != "h" && hexOrBinaryValue != "b") {
+    auto diag = mlir::emitError(op->getLoc())
+                << "has memory initialization annotation with invalid format, "
+                   "'hexOrBinary' field must be either 'h' or 'b'";
+    diag.attachNote() << "the full annotation is: " << anno;
+    return failure();
+  }
+
+  op->setAttr("init",
+              MemoryInitAttr::get(
+                  op->getContext(), filename,
+                  BoolAttr::get(op->getContext(), hexOrBinaryValue == "b"),
+                  BoolAttr::get(op->getContext(), isInline)));
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Driving table
 //===----------------------------------------------------------------------===//
 
@@ -400,6 +456,9 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {blackBoxTargetDirAnnoClass, NoTargetAnnotation},
     {traceNameAnnoClass, {stdResolve, applyTraceName}},
     {traceAnnoClass, {stdResolve, applyWithoutTarget<true>}},
+    {loadMemoryFromFileAnnoClass, {stdResolve, applyLoadMemoryAnno<false>}},
+    {loadMemoryFromFileInlineAnnoClass,
+     {stdResolve, applyLoadMemoryAnno<true>}},
 
 }};
 

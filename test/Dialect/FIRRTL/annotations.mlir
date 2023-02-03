@@ -1749,3 +1749,80 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [{
     // CHECK:  firrtl.ref.resolve %[[localparam__gen_ref]] : !firrtl.ref<uint<1>>
   }
 }
+
+// -----
+
+// Test memory initialization setting.
+// CHECK-LABEL: firrtl.circuit "MemoryInitializationAnnotations"
+firrtl.circuit "MemoryInitializationAnnotations" attributes {
+  rawAnnotations = [
+    {
+      class = "firrtl.annotations.LoadMemoryAnnotation",
+      fileName = "mem1.txt",
+      hexOrBinary = "b",
+      originalMemoryNameOpt = "m",
+      target = "~MemoryInitializationAnnotations|MemoryInitializationAnnotations>m1"
+    },
+    {
+      class = "firrtl.annotations.MemoryFileInlineAnnotation",
+      filename = "mem2.txt",
+      hexOrBinary = "h",
+      target = "~MemoryInitializationAnnotations|MemoryInitializationAnnotations>m2"
+    },
+    {
+      class = "firrtl.annotations.LoadMemoryAnnotation",
+      fileName = "mem3.txt",
+      hexOrBinary = "b",
+      originalMemoryNameOpt = "m",
+      target = "~MemoryInitializationAnnotations|MemoryInitializationAnnotations>m3"
+    },
+    {
+      class = "firrtl.annotations.MemoryFileInlineAnnotation",
+      filename = "mem4.txt",
+      hexOrBinary = "h",
+      target = "~MemoryInitializationAnnotations|MemoryInitializationAnnotations>m4"
+    },
+    {
+      class = "firrtl.annotations.LoadMemoryAnnotation",
+      fileName = "mem5.txt",
+      hexOrBinary = "b",
+      originalMemoryNameOpt = "m",
+      target = "~MemoryInitializationAnnotations|MemoryInitializationAnnotations>m5"
+    },
+    {
+      class = "firrtl.annotations.MemoryFileInlineAnnotation",
+      filename = "mem6.txt",
+      hexOrBinary = "h",
+      target = "~MemoryInitializationAnnotations|MemoryInitializationAnnotations>m6"
+    }
+  ]
+} {
+  firrtl.module @MemoryInitializationAnnotations() {
+    // CHECK:      %m1_r = firrtl.mem
+    // CHECK-SAME:   #firrtl.meminit<"mem1.txt", true, false>
+    %m1_r = firrtl.mem Undefined {
+      depth = 2 : i64,
+      name = "m1",
+      portNames = ["r"],
+      readLatency = 1 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<8>>
+    // CHECK-NEXT: %m2_r = firrtl.mem
+    // CHECK-SAME:   #firrtl.meminit<"mem2.txt", false, true>
+    %m2_r = firrtl.mem Undefined {
+      depth = 2 : i64,
+      name = "m2",
+      portNames = ["r"],
+      readLatency = 1 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<8>>
+    // CHECK-NEXT: %m3 = chirrtl.seqmem Undefined {init = #firrtl.meminit<"mem3.txt", true, false>}
+    %m3 = chirrtl.seqmem Undefined : !chirrtl.cmemory<uint<8>, 32>
+    // CHECK-NEXT: %m4 = chirrtl.seqmem Undefined {init = #firrtl.meminit<"mem4.txt", false, true>}
+    %m4 = chirrtl.seqmem Undefined : !chirrtl.cmemory<uint<8>, 32>
+    // CHECK-NEXT: %m5 = chirrtl.combmem {init = #firrtl.meminit<"mem5.txt", true, false>}
+    %m5 = chirrtl.combmem : !chirrtl.cmemory<uint<8>, 32>
+    // CHECK-NEXT: %m6 = chirrtl.combmem {init = #firrtl.meminit<"mem6.txt", false, true>}
+    %m6 = chirrtl.combmem : !chirrtl.cmemory<uint<8>, 32>
+  }
+}
