@@ -171,4 +171,22 @@ def ParamDeclAttr : AttrDef<FIRRTLDialect, "ParamDecl", [TypedAttrInterface]> {
 def ParamDeclArrayAttr
   : TypedArrayAttrBase<ParamDeclAttr, "parameter array attribute">;
 
+/// An attribute holding information about memory initialization.
+def MemoryInitAttr : AttrDef<FIRRTLDialect, "MemoryInit"> {
+  let mnemonic = "meminit";
+  let summary = "Information about the initial state of a memory";
+  let description = [{
+    This attribute captures information about the external initialization of a
+    memory.  This is the FIRRTL Dialect representation of both
+    "firrtl.annotations.LoadMemoryFromFile" and
+    "firrtl.annotations.MemoryFileInlineAnnotation".
+  }];
+  let parameters = (
+    ins "::mlir::StringAttr":$filename,
+        "::mlir::BoolAttr":$isBinary,
+        "::mlir::BoolAttr":$isInline
+  );
+ let assemblyFormat = "`<` $filename `,` $isBinary `,` $isInline `>`";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD
