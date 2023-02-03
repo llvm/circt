@@ -137,7 +137,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
           builder.getArrayAttr(resultNames), memOp.getNameAttr(),
           memOp.getNameKind(), memOp.getAnnotations(),
           builder.getArrayAttr(portAnnotations), memOp.getInnerSymAttr(),
-          memOp.getGroupIDAttr());
+          memOp.getGroupIDAttr(), memOp.getInitAttr());
       ++numRWPortMemoriesInferred;
       auto rwPort = rwMem->getResult(nDbgs);
       // Create the subfield access to all fields of the port.

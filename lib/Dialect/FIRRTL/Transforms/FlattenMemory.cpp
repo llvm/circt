@@ -113,7 +113,7 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
           memOp.getDepth(), memOp.getRuw(), builder.getArrayAttr(portNames),
           memOp.getNameAttr(), memOp.getNameKind(), memOp.getAnnotations(),
           memOp.getPortAnnotations(), memOp.getInnerSymAttr(),
-          memOp.getGroupIDAttr());
+          memOp.getGroupIDAttr(), memOp.getInitAttr());
       // Hook up the new memory to the wires the old memory was replaced with.
       for (size_t index = 0, rend = memOp.getNumResults(); index < rend;
            ++index) {
