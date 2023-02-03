@@ -1801,4 +1801,3 @@ sv.bind #hw.innerNameRef<@InlineBind::@foo2>
 // CHECK-LABEL:  hw.module @remoteInstDut
 // CHECK:    %signed = sv.wire  {hw.verilogName = "signed_0"} : !hw.inout<i1>
 // CHECK:    %output = sv.reg  {hw.verilogName = "output_0"} : !hw.inout<i1>
-
