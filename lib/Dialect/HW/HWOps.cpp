@@ -2505,8 +2505,11 @@ OpFoldResult ArrayGetOp::fold(FoldAdaptor adaptor) {
   if (inputCst) {
     // Constant array index.
     if (indexCst) {
-      auto index = indexCst.getValue().getZExtValue();
-      return inputCst[inputCst.size() - 1 - index];
+      auto indexVal = indexCst.getValue();
+      if (indexVal.getBitWidth() < 64) {
+        auto index = indexVal.getZExtValue();
+        return inputCst[inputCst.size() - 1 - index];
+      }
     }
     // If all elements of the array are the same, we can return any element of
     // array.

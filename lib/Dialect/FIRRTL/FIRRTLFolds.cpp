@@ -194,10 +194,9 @@ enum class BinOpKind {
 /// result type if \p useDstWidth is true, else to the larger of the two operand
 /// bit widths and depending on whether the operation is to be performed on
 /// signed or unsigned operands.
-static Attribute
-constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
-                        BinOpKind opKind,
-                        const function_ref<APInt(APSInt, APSInt)> &calculate) {
+static Attribute constFoldFIRRTLBinaryOp(
+    Operation *op, ArrayRef<Attribute> operands, BinOpKind opKind,
+    const function_ref<APInt(const APSInt &, const APSInt &)> &calculate) {
   assert(operands.size() == 2 && "binary op takes two operands");
 
   // We cannot fold something to an unknown width.
@@ -363,9 +362,9 @@ OpFoldResult AggregateConstantOp::fold(FoldAdaptor adaptor) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult AddPrimOp::fold(FoldAdaptor adaptor) {
-  return constFoldFIRRTLBinaryOp(*this, adaptor.getOperands(),
-                                 BinOpKind::Normal,
-                                 [=](APSInt a, APSInt b) { return a + b; });
+  return constFoldFIRRTLBinaryOp(
+      *this, adaptor.getOperands(), BinOpKind::Normal,
+      [=](const APSInt &a, const APSInt &b) { return a + b; });
 }
 
 void AddPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -376,9 +375,9 @@ void AddPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 OpFoldResult SubPrimOp::fold(FoldAdaptor adaptor) {
-  return constFoldFIRRTLBinaryOp(*this, adaptor.getOperands(),
-                                 BinOpKind::Normal,
-                                 [=](APSInt a, APSInt b) { return a - b; });
+  return constFoldFIRRTLBinaryOp(
+      *this, adaptor.getOperands(), BinOpKind::Normal,
+      [=](const APSInt &a, const APSInt &b) { return a - b; });
 }
 
 void SubPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -397,9 +396,9 @@ OpFoldResult MulPrimOp::fold(FoldAdaptor adaptor) {
   if (isConstantZero(adaptor.getRhs()) || isConstantZero(adaptor.getLhs()))
     return getIntZerosAttr(getType());
 
-  return constFoldFIRRTLBinaryOp(*this, adaptor.getOperands(),
-                                 BinOpKind::Normal,
-                                 [=](APSInt a, APSInt b) { return a * b; });
+  return constFoldFIRRTLBinaryOp(
+      *this, adaptor.getOperands(), BinOpKind::Normal,
+      [=](const APSInt &a, const APSInt &b) { return a * b; });
 }
 
 OpFoldResult DivPrimOp::fold(FoldAdaptor adaptor) {
@@ -436,13 +435,13 @@ OpFoldResult DivPrimOp::fold(FoldAdaptor adaptor) {
     if (rhsCst.getValue().isOne() && getLhs().getType() == getType())
       return getLhs();
 
-  return constFoldFIRRTLBinaryOp(*this, adaptor.getOperands(),
-                                 BinOpKind::DivideOrShift,
-                                 [=](APSInt a, APSInt b) -> APInt {
-                                   if (!!b)
-                                     return a / b;
-                                   return APInt(a.getBitWidth(), 0);
-                                 });
+  return constFoldFIRRTLBinaryOp(
+      *this, adaptor.getOperands(), BinOpKind::DivideOrShift,
+      [=](const APSInt &a, const APSInt &b) -> APInt {
+        if (!!b)
+          return a / b;
+        return APInt(a.getBitWidth(), 0);
+      });
 }
 
 OpFoldResult RemPrimOp::fold(FoldAdaptor adaptor) {
@@ -464,31 +463,31 @@ OpFoldResult RemPrimOp::fold(FoldAdaptor adaptor) {
   if (isConstantZero(adaptor.getLhs()))
     return getIntZerosAttr(getType());
 
-  return constFoldFIRRTLBinaryOp(*this, adaptor.getOperands(),
-                                 BinOpKind::DivideOrShift,
-                                 [=](APSInt a, APSInt b) -> APInt {
-                                   if (!!b)
-                                     return a % b;
-                                   return APInt(a.getBitWidth(), 0);
-                                 });
+  return constFoldFIRRTLBinaryOp(
+      *this, adaptor.getOperands(), BinOpKind::DivideOrShift,
+      [=](const APSInt &a, const APSInt &b) -> APInt {
+        if (!!b)
+          return a % b;
+        return APInt(a.getBitWidth(), 0);
+      });
 }
 
 OpFoldResult DShlPrimOp::fold(FoldAdaptor adaptor) {
   return constFoldFIRRTLBinaryOp(
       *this, adaptor.getOperands(), BinOpKind::DivideOrShift,
-      [=](APSInt a, APSInt b) -> APInt { return a.shl(b); });
+      [=](const APSInt &a, const APSInt &b) -> APInt { return a.shl(b); });
 }
 
 OpFoldResult DShlwPrimOp::fold(FoldAdaptor adaptor) {
   return constFoldFIRRTLBinaryOp(
       *this, adaptor.getOperands(), BinOpKind::DivideOrShift,
-      [=](APSInt a, APSInt b) -> APInt { return a.shl(b); });
+      [=](const APSInt &a, const APSInt &b) -> APInt { return a.shl(b); });
 }
 
 OpFoldResult DShrPrimOp::fold(FoldAdaptor adaptor) {
   return constFoldFIRRTLBinaryOp(
       *this, adaptor.getOperands(), BinOpKind::DivideOrShift,
-      [=](APSInt a, APSInt b) -> APInt {
+      [=](const APSInt &a, const APSInt &b) -> APInt {
         return getType().isUnsigned() || !a.getBitWidth() ? a.lshr(b)
                                                           : a.ashr(b);
       });
@@ -524,7 +523,7 @@ OpFoldResult AndPrimOp::fold(FoldAdaptor adaptor) {
 
   return constFoldFIRRTLBinaryOp(
       *this, adaptor.getOperands(), BinOpKind::Normal,
-      [](APSInt a, APSInt b) -> APInt { return a & b; });
+      [](const APSInt &a, const APSInt &b) -> APInt { return a & b; });
 }
 
 void AndPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -563,7 +562,7 @@ OpFoldResult OrPrimOp::fold(FoldAdaptor adaptor) {
 
   return constFoldFIRRTLBinaryOp(
       *this, adaptor.getOperands(), BinOpKind::Normal,
-      [](APSInt a, APSInt b) -> APInt { return a | b; });
+      [](const APSInt &a, const APSInt &b) -> APInt { return a | b; });
 }
 
 void OrPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -590,7 +589,7 @@ OpFoldResult XorPrimOp::fold(FoldAdaptor adaptor) {
 
   return constFoldFIRRTLBinaryOp(
       *this, adaptor.getOperands(), BinOpKind::Normal,
-      [](APSInt a, APSInt b) -> APInt { return a ^ b; });
+      [](const APSInt &a, const APSInt &b) -> APInt { return a ^ b; });
 }
 
 void XorPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -639,7 +638,9 @@ OpFoldResult LEQPrimOp::fold(FoldAdaptor adaptor) {
 
   return constFoldFIRRTLBinaryOp(
       *this, adaptor.getOperands(), BinOpKind::Compare,
-      [=](APSInt a, APSInt b) -> APInt { return APInt(1, a <= b); });
+      [=](const APSInt &a, const APSInt &b) -> APInt {
+        return APInt(1, a <= b);
+      });
 }
 
 void LTPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -688,7 +689,9 @@ OpFoldResult LTPrimOp::fold(FoldAdaptor adaptor) {
 
   return constFoldFIRRTLBinaryOp(
       *this, adaptor.getOperands(), BinOpKind::Compare,
-      [=](APSInt a, APSInt b) -> APInt { return APInt(1, a < b); });
+      [=](const APSInt &a, const APSInt &b) -> APInt {
+        return APInt(1, a < b);
+      });
 }
 
 void GEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -737,7 +740,9 @@ OpFoldResult GEQPrimOp::fold(FoldAdaptor adaptor) {
 
   return constFoldFIRRTLBinaryOp(
       *this, adaptor.getOperands(), BinOpKind::Compare,
-      [=](APSInt a, APSInt b) -> APInt { return APInt(1, a >= b); });
+      [=](const APSInt &a, const APSInt &b) -> APInt {
+        return APInt(1, a >= b);
+      });
 }
 
 void GTPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -780,7 +785,9 @@ OpFoldResult GTPrimOp::fold(FoldAdaptor adaptor) {
 
   return constFoldFIRRTLBinaryOp(
       *this, adaptor.getOperands(), BinOpKind::Compare,
-      [=](APSInt a, APSInt b) -> APInt { return APInt(1, a > b); });
+      [=](const APSInt &a, const APSInt &b) -> APInt {
+        return APInt(1, a > b);
+      });
 }
 
 OpFoldResult EQPrimOp::fold(FoldAdaptor adaptor) {
@@ -798,7 +805,9 @@ OpFoldResult EQPrimOp::fold(FoldAdaptor adaptor) {
 
   return constFoldFIRRTLBinaryOp(
       *this, adaptor.getOperands(), BinOpKind::Compare,
-      [=](APSInt a, APSInt b) -> APInt { return APInt(1, a == b); });
+      [=](const APSInt &a, const APSInt &b) -> APInt {
+        return APInt(1, a == b);
+      });
 }
 
 LogicalResult EQPrimOp::canonicalize(EQPrimOp op, PatternRewriter &rewriter) {
@@ -848,7 +857,9 @@ OpFoldResult NEQPrimOp::fold(FoldAdaptor adaptor) {
 
   return constFoldFIRRTLBinaryOp(
       *this, adaptor.getOperands(), BinOpKind::Compare,
-      [=](APSInt a, APSInt b) -> APInt { return APInt(1, a != b); });
+      [=](const APSInt &a, const APSInt &b) -> APInt {
+        return APInt(1, a != b);
+      });
 }
 
 LogicalResult NEQPrimOp::canonicalize(NEQPrimOp op, PatternRewriter &rewriter) {
