@@ -144,10 +144,11 @@ class ModuleLike:
     input_types = []
     input_names = []
     input_locs = []
+    unknownLoc = Location.unknown().attr
     for (i, (port_name, port_type)) in enumerate(input_ports):
       input_types.append(port_type)
       input_names.append(StringAttr.get(str(port_name)))
-      input_locs.append(Attribute.parse("loc(unknown)"))
+      input_locs.append(unknownLoc)
     attributes["argNames"] = ArrayAttr.get(input_names)
     attributes["argLocs"] = ArrayAttr.get(input_locs)
 
@@ -157,7 +158,7 @@ class ModuleLike:
     for (i, (port_name, port_type)) in enumerate(output_ports):
       output_types.append(port_type)
       output_names.append(StringAttr.get(str(port_name)))
-      output_locs.append(Attribute.parse("loc(unknown)"))
+      output_locs.append(unknownLoc)
     attributes["resultNames"] = ArrayAttr.get(output_names)
     attributes["resultLocs"] = ArrayAttr.get(output_locs)
 
