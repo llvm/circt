@@ -61,6 +61,7 @@ private:
   ///   This represent the next state which this visitor eventually must
   ///   transition to.
   LogicalResult visit(StateOp currentState, SeqOp, StateOp nextState);
+  LogicalResult visit(StateOp currentState, ParOp, StateOp nextState);
   LogicalResult visit(StateOp currentState, EnableOp, StateOp nextState);
   LogicalResult visit(StateOp currentState, IfOp, StateOp nextState);
   LogicalResult visit(StateOp currentState, WhileOp, StateOp nextState);
@@ -159,6 +160,53 @@ LogicalResult CompileFSMVisitor::visit(StateOp currentState, IfOp ifOp,
       failed(lowerBranch(ifOp.getCond(), "else", /*invert=*/true,
                          &ifOp.getElseBody()->front())))
     return failure();
+
+  return success();
+}
+
+LogicalResult CompileFSMVisitor::visit(StateOp currentState, ParOp parOp,
+                                       StateOp nextState) {
+  Location loc = seqOp.getLoc();
+  auto parStateGuard = pushStateScope("par");
+
+  // Create a new state for each nested operation within this seqOp.
+  auto &parOps = seqOp.getBodyBlock()->getOperations();
+  auto numStates = parOps.size();
+  llvm::SmallVector<std::pair<Operation *, StateOp>> parStates;
+
+  // Create an FSM variable for tracking whether each substate has finished
+  // (1 bit for each substate).
+  OpBuilder::InsertionGuard g(builder);
+  builder.setInsertionPointToStart(&graph.getMachine().getBody().front());
+  Type varType = builder.getIntegerType(numStates);
+  Type i1Type = builder.getI1Type();
+  auto doneVar = builder.create<fsm::VariableOp>(
+      loc, builder.getIntegerType(numStates),
+      builder.getIntegerAttr(varType, 0), parStateGuard.getName() + "_done");
+
+  // Extract the bits for each substate and store them in a map.
+  llvm::DenseMap<Operation *, Value> substateDoneBits;
+  llvm::SmallVector<Value> substateDoneBitsVec;
+  for (int i = 0; i < numStates; ++i) {
+    auto bit = builder.create<comb::ExtractOp>(loc, doneVar, i, i1Type);
+    substateDoneBits[&parOps[i]] = bit;
+    substateDoneBitsVec.push_back(bit);
+  }
+
+  // The finished transition is taken when all substates have finished.
+  auto finishedTransition =
+      graph.createTransition(builder, loc, currentState, nextState)
+          ->getTransition();
+  auto finishedGuardBlock = finishedTransition.ensureGuard(builder);
+  builder.setInsertionPointToStart(finishedGuardBlock);
+  Value allDone = builder.create<comb::AndOp>(loc, i1Type, substateDoneBitsVec);
+  finishedTransition.getGuardReturn().setOperand(allDone);
+
+  // the 'stay' transition always transitions to the current state, updating
+  // the 'done' variables based on
+  auto stayTransition =
+      graph.createTransition(builder, loc, currentState, currentState)
+          ->getTransition();
 
   return success();
 }
