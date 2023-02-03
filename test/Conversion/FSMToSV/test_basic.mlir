@@ -177,3 +177,55 @@ module {
     }
   }
 }
+
+// -----
+
+// Test a machine which updates a variable based on inputs.
+// Note: this machine replicates an FSM which activates different outputs
+// in parallel.
+
+// CHECK-LABEL:   hw.module @ParFSM
+
+module {
+  fsm.machine @ParFSM(%go : i1, %a_done : i1, %b_done : i1) -> (i1, i1 , i1) attributes {initialState = "idle"} {
+    %c0 = hw.constant 0 : i1
+    %c1 = hw.constant 1 : i1
+    %c0_i2 = hw.constant 0 : i2
+    %done = fsm.variable "done" {initValue = 0 : i2} : i2
+    %a = comb.extract %done from 0 : (i2) -> i1
+    %b = comb.extract %done from 1 : (i2) -> i1
+
+    fsm.state @idle output {
+      fsm.output %c0, %c0, %c1 : i1, i1, i1
+    } transitions {
+      fsm.transition @work guard {
+        fsm.return %go
+      }
+    }
+
+    fsm.state @work output {
+      // Each output is active when the corresponding input has not yet fired.
+      %a_out = comb.xor %a, %a_done : i1
+      %b_out = comb.xor %b, %b_done : i1
+      fsm.output %a_out, %b_out, %c0 : i1, i1, i1
+    } transitions {
+      // Go to idle when all inputs have fired.
+      fsm.transition @idle guard {
+        %all_done = comb.and %a, %b : i1
+        fsm.return %all_done
+      } action {
+        // Reset the done variable.
+        fsm.update %done, %c0_i2 : i2
+      }
+
+      // Else, always transition back to work, updating the done variables based
+      // on the inputs.
+      fsm.transition @work action {
+        %a_next = comb.or %a, %a_done : i1
+        %b_next = comb.or %b, %b_done : i1
+        %done_next = comb.concat %a_next, %b_next : i1, i1
+        fsm.update %done, %done_next : i2
+      }
+    }
+  }
+}
