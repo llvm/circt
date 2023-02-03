@@ -54,6 +54,7 @@ struct PortInfo {
 
   /// The optional symbol for this port.
   InnerSymAttr sym = {};
+  LocationAttr loc = {};
 
   StringRef getName() const { return name.getValue(); }
   bool isInput() const { return direction == PortDirection::INPUT; }
@@ -152,7 +153,7 @@ inline StringRef getVerilogModuleName(Operation *module) {
 /// Return the port name for the specified argument or result.  These can only
 /// return a null StringAttr when the IR is invalid.
 StringAttr getModuleArgumentNameAttr(Operation *module, size_t argNo);
-StringAttr getModuleResultNameAttr(Operation *module, size_t argNo);
+StringAttr getModuleResultNameAttr(Operation *module, size_t resultNo);
 
 static inline StringRef getModuleArgumentName(Operation *module, size_t argNo) {
   auto attr = getModuleArgumentNameAttr(module, argNo);
@@ -164,12 +165,19 @@ static inline StringRef getModuleResultName(Operation *module,
   return attr ? attr.getValue() : StringRef();
 }
 
+/// Return the port location for the specified argument or result.  These can
+/// only return a null LocationAttr when the IR is invalid.
+LocationAttr getModuleArgumentLocAttr(Operation *module, size_t argNo);
+LocationAttr getModuleResultLocAttr(Operation *module, size_t resultNo);
+
 // Index width should be exactly clog2 (size of array), or either 0 or 1 if the
 // array is a singleton.
 bool isValidIndexBitWidth(Value index, Value array);
 
 void setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names);
 void setModuleResultNames(Operation *module, ArrayRef<Attribute> names);
+void setModuleArgumentLocs(Operation *module, ArrayRef<Attribute> locs);
+void setModuleResultLocs(Operation *module, ArrayRef<Attribute> locs);
 
 /// Return true if the specified operation is a combinational logic op.
 bool isCombinational(Operation *op);

@@ -969,6 +969,7 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
       hwPort.direction = hw::PortDirection::INOUT;
       hwPort.argNum = numArgs++;
     }
+    hwPort.loc = firrtlPort.loc;
     ports.push_back(hwPort);
     loweringState.processRemainingAnnotations(moduleOp, firrtlPort.annotations);
   }

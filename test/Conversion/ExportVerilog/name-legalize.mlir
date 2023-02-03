@@ -2,7 +2,8 @@
 
 // CHECK: module namechange(
 // CHECK: input  [3:0] casex_0,
-// CHECK: output [3:0] if_0);
+// CHECK: output [3:0] if_0
+// CHECK: );
 hw.module @namechange(%casex: i4) -> (if: i4) {
   // CHECK: assign if_0 = casex_0;
   hw.output %casex : i4
@@ -13,7 +14,8 @@ hw.module.extern @module_with_bool<bparam: i1>() -> ()
 // CHECK-LABEL: module parametersNameConflict
 // CHECK-NEXT:    #(parameter [41:0] p2 = 42'd17,
 // CHECK-NEXT:      parameter [0:0]  wire_0) (
-// CHECK-NEXT:    input [7:0] p1);
+// CHECK-NEXT:    input [7:0] p1
+// CHECK-NEXT: );
 hw.module @parametersNameConflict<p2: i42 = 17, wire: i1>(%p1: i8) {
   %myWire = sv.wire : !hw.inout<i1>
 
@@ -61,7 +63,8 @@ hw.module @useParametersNameConflict(%xxx: i8) {
 // Rename keywords used in variable/module names
 // CHECK-LABEL: module inout_0(
 // CHECK:         input  inout_0,
-// CHECK:         output output_0);
+// CHECK:         output output_0
+// CHECK:       );
 hw.module @inout(%inout: i1) -> (output: i1) {
 // CHECK:       assign output_0 = inout_0;
   hw.output %inout : i1
@@ -80,7 +83,8 @@ hw.module @inout_inst(%a: i1) {
 // Rename keywords used in variable/module names
 // CHECK-LABEL: module reg_0(
 // CHECK-NEXT:    input  inout_0,
-// CHECK-NEXT:    output output_0);
+// CHECK-NEXT:    output output_0
+// CHECK-NEXT:  );
 hw.module @reg(%inout: i1) -> (output: i1) {
   // CHECK: assign output_0 = inout_0;
   hw.output %inout : i1
@@ -90,7 +94,8 @@ hw.module @reg(%inout: i1) -> (output: i1) {
 // CHECK-LABEL: module issue525(
 // CHECK-NEXT:    input  [1:0] struct_0,
 // CHECK-NEXT:                 else_0,
-// CHECK-NEXT:    output [1:0] casex_0);
+// CHECK-NEXT:    output [1:0] casex_0
+// CHECK-NEXT:  );
 hw.module @issue525(%struct: i2, %else: i2) -> (casex: i2) {
   // CHECK: assign casex_0 = struct_0 + else_0;
   %2 = comb.add %struct, %else : i2

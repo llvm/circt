@@ -102,6 +102,7 @@ def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
 
   let skipDefaultBuilders = 1;
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
   let builders = [
     OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
                CArg<"ArrayAttr","ArrayAttr()">:$annotations)>

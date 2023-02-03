@@ -699,7 +699,7 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
                 ctxt, opName + (portName.empty() ? "" : "." + portName)),
             /*direction*/ hw::PortDirection::INPUT,
             /*type*/ v.getType(),
-            /*argNum*/ inputPorts.size()});
+            /*argNum*/ inputPorts.size(), /*sym*/ {}, /*location*/ loc});
       } else {
         // There's already an existing port. Just set it.
         oper.set(partBlock->getArgument(existingF->second));

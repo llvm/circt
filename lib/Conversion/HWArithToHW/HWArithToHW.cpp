@@ -539,6 +539,17 @@ public:
 
     if (failed(applyPartialConversion(module, target, std::move(patterns))))
       return signalPassFailure();
+
+    // Fix up block argument locations since the signature converter drops
+    // all locations.
+    for (auto &op : module.getOps()) {
+      auto argLocs = op.getAttrOfType<ArrayAttr>("argLocs");
+      if (argLocs && op.getNumRegions() == 1 && op.getRegion(0).hasOneBlock()) {
+        auto *block = &op.getRegion(0).front();
+        for (auto [arg, loc] : llvm::zip(block->getArguments(), argLocs))
+          arg.setLoc(loc.cast<LocationAttr>());
+      }
+    }
   }
 };
 } // namespace
