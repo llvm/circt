@@ -22,6 +22,7 @@ def HWArithDialect : Dialect {
     This dialect defines the `HWArith` dialect, modeling bit-width aware
     arithmetic operations.
   }];
+  let useFoldAPI = kEmitFoldAdaptorFolder;
 }
 
 #endif // HWARITHDIALECT_TD

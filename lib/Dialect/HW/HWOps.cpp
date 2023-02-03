@@ -362,8 +362,8 @@ void ConstantOp::getAsmResultNames(
   setNameFn(getResult(), specialName.str());
 }
 
-OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
-  assert(constants.empty() && "constant has no operands");
+OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "constant has no operands");
   return getValueAttr();
 }
 
@@ -431,9 +431,7 @@ LogicalResult AggregateConstantOp::verify() {
   return checkAttributes(*this, getFieldsAttr(), getType());
 }
 
-OpFoldResult AggregateConstantOp::fold(ArrayRef<Attribute> operands) {
-  return getFieldsAttr();
-}
+OpFoldResult AggregateConstantOp::fold(FoldAdaptor) { return getFieldsAttr(); }
 
 //===----------------------------------------------------------------------===//
 // ParamValueOp
@@ -459,8 +457,8 @@ LogicalResult ParamValueOp::verify() {
       getValue(), (*this)->getParentOfType<hw::HWModuleOp>(), *this);
 }
 
-OpFoldResult ParamValueOp::fold(ArrayRef<Attribute> constants) {
-  assert(constants.empty() && "hw.param.value has no operands");
+OpFoldResult ParamValueOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "hw.param.value has no operands");
   return getValueAttr();
 }
 
@@ -1736,10 +1734,10 @@ LogicalResult ArrayCreateOp::verify() {
   return success();
 }
 
-OpFoldResult ArrayCreateOp::fold(ArrayRef<Attribute> constants) {
-  if (llvm::any_of(constants, [](Attribute attr) { return !attr; }))
+OpFoldResult ArrayCreateOp::fold(FoldAdaptor adaptor) {
+  if (llvm::any_of(adaptor.getInputs(), [](Attribute attr) { return !attr; }))
     return {};
-  return ArrayAttr::get(getContext(), constants);
+  return ArrayAttr::get(getContext(), adaptor.getInputs());
 }
 
 // Check whether an integer value is an offset from a base.
@@ -1857,7 +1855,7 @@ LogicalResult ArraySliceOp::verify() {
   return success();
 }
 
-OpFoldResult ArraySliceOp::fold(ArrayRef<Attribute> constants) {
+OpFoldResult ArraySliceOp::fold(FoldAdaptor adaptor) {
   // If we are slicing the entire input, then return it.
   if (getType() == getInput().getType())
     return getInput();
@@ -2019,12 +2017,13 @@ void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
   build(b, state, ArrayType::get(elemTy, resultSize), values);
 }
 
-OpFoldResult ArrayConcatOp::fold(ArrayRef<Attribute> constants) {
+OpFoldResult ArrayConcatOp::fold(FoldAdaptor adaptor) {
+  auto inputs = adaptor.getInputs();
   SmallVector<Attribute> array;
   for (size_t i = 0, e = getNumOperands(); i < e; ++i) {
-    if (!constants[i])
+    if (!inputs[i])
       return {};
-    llvm::copy(constants[i].cast<ArrayAttr>(), std::back_inserter(array));
+    llvm::copy(inputs[i].cast<ArrayAttr>(), std::back_inserter(array));
   }
   return ArrayAttr::get(getContext(), array);
 }
@@ -2181,8 +2180,8 @@ void EnumConstantOp::getAsmResultNames(
   setNameFn(getResult(), getField().getField().str());
 }
 
-OpFoldResult EnumConstantOp::fold(ArrayRef<Attribute> constants) {
-  assert(constants.empty() && "constant has no operands");
+OpFoldResult EnumConstantOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "constant has no operands");
   return getFieldAttr();
 }
 
@@ -2237,10 +2236,11 @@ LogicalResult StructCreateOp::verify() {
   return success();
 }
 
-OpFoldResult StructCreateOp::fold(ArrayRef<Attribute> constants) {
-  if (llvm::any_of(constants, [](Attribute attr) { return !attr; }))
+OpFoldResult StructCreateOp::fold(FoldAdaptor adaptor) {
+  auto inputs = adaptor.getInput();
+  if (llvm::any_of(inputs, [](Attribute attr) { return !attr; }))
     return {};
-  return ArrayAttr::get(getContext(), constants);
+  return ArrayAttr::get(getContext(), inputs);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2277,11 +2277,12 @@ void StructExplodeOp::print(OpAsmPrinter &printer) {
   printer << " : " << getInput().getType();
 }
 
-LogicalResult StructExplodeOp::fold(ArrayRef<Attribute> operands,
+LogicalResult StructExplodeOp::fold(FoldAdaptor adaptor,
                                     SmallVectorImpl<OpFoldResult> &results) {
-  if (!operands[0])
+  auto input = adaptor.getInput();
+  if (!input)
     return failure();
-  llvm::copy(operands[0].cast<ArrayAttr>(), std::back_inserter(results));
+  llvm::copy(input.cast<ArrayAttr>(), std::back_inserter(results));
   return success();
 }
 
@@ -2373,7 +2374,7 @@ void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
   build(builder, odsState, resultType, input, fieldAttr);
 }
 
-OpFoldResult StructExtractOp::fold(ArrayRef<Attribute> operands) {
+OpFoldResult StructExtractOp::fold(FoldAdaptor) {
   if (auto foldResult =
           foldStructExtract(getInput().getDefiningOp(), getField()))
     return foldResult;
@@ -2450,14 +2451,16 @@ void StructInjectOp::print(OpAsmPrinter &printer) {
   printer << " : " << getInput().getType();
 }
 
-OpFoldResult StructInjectOp::fold(ArrayRef<Attribute> operands) {
-  if (!operands[0] || !operands[1])
+OpFoldResult StructInjectOp::fold(FoldAdaptor adaptor) {
+  auto input = adaptor.getInput();
+  auto newValue = adaptor.getNewValue();
+  if (!input || !newValue)
     return {};
   SmallVector<Attribute> array;
-  llvm::copy(operands[0].cast<ArrayAttr>(), std::back_inserter(array));
+  llvm::copy(input.cast<ArrayAttr>(), std::back_inserter(array));
   StructType structType = getInput().getType();
   auto index = *structType.getFieldIndex(getField());
-  array[index] = operands[1];
+  array[index] = newValue;
   return ArrayAttr::get(getContext(), array);
 }
 
@@ -2580,18 +2583,23 @@ void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
 // single uniform value for each element, just return that value regardless of
 // the index. If the array is constructed from a constant by a bitcast
 // operation, we can fold into a constant.
-OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
-  if (operands[0]) {
-    auto arrayAttr = operands[0].cast<ArrayAttr>();
+OpFoldResult ArrayGetOp::fold(FoldAdaptor adaptor) {
+  auto inputCst = adaptor.getInput().dyn_cast_or_null<ArrayAttr>();
+  auto indexCst = adaptor.getIndex().dyn_cast_or_null<IntegerAttr>();
+
+  if (inputCst) {
     // Constant array index.
-    if (operands[1]) {
-      auto index = operands[1].cast<IntegerAttr>().getValue();
-      return arrayAttr[arrayAttr.size() - 1 - index.getZExtValue()];
+    if (indexCst) {
+      auto indexVal = indexCst.getValue();
+      if (indexVal.getBitWidth() < 64) {
+        auto index = indexVal.getZExtValue();
+        return inputCst[inputCst.size() - 1 - index];
+      }
     }
     // If all elements of the array are the same, we can return any element of
     // array.
-    if (!arrayAttr.empty() && llvm::all_equal(arrayAttr))
-      return arrayAttr[0];
+    if (!inputCst.empty() && llvm::all_equal(inputCst))
+      return inputCst[0];
   }
 
   // array_get(bitcast(c), i) -> c[i*w+w-1:i*w]
@@ -2599,39 +2607,36 @@ OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
     auto intTy = getType().dyn_cast<IntegerType>();
     if (!intTy)
       return {};
-    auto inputConsatnt = bitcast.getInput().getDefiningOp<hw::ConstantOp>();
-    if (!inputConsatnt)
+    auto bitcastInputOp = bitcast.getInput().getDefiningOp<hw::ConstantOp>();
+    if (!bitcastInputOp)
       return {};
-    IntegerAttr constIdx = operands[1].dyn_cast_or_null<IntegerAttr>();
-    if (!constIdx)
+    if (!indexCst)
       return {};
-    auto constant = inputConsatnt.getValue();
+    auto bitcastInputCst = bitcastInputOp.getValue();
     // Calculate the index. Make sure to zero-extend the index value before
     // multiplying the element width.
-    auto startIdx = constIdx.getValue().zext(constant.getBitWidth()) *
+    auto startIdx = indexCst.getValue().zext(bitcastInputCst.getBitWidth()) *
                     getType().getIntOrFloatBitWidth();
     // Extract [startIdx + width - 1: startIdx].
-    return IntegerAttr::get(
-        intTy, constant.lshr(startIdx).trunc(intTy.getIntOrFloatBitWidth()));
+    return IntegerAttr::get(intTy, bitcastInputCst.lshr(startIdx).trunc(
+                                       intTy.getIntOrFloatBitWidth()));
   }
 
-  auto inputCreate =
-      dyn_cast_or_null<ArrayCreateOp>(getInput().getDefiningOp());
+  auto inputCreate = getInput().getDefiningOp<ArrayCreateOp>();
   if (!inputCreate)
     return {};
 
   if (auto uniformValue = inputCreate.getUniformElement())
     return uniformValue;
 
-  IntegerAttr constIdx = operands[1].dyn_cast_or_null<IntegerAttr>();
-  if (!constIdx || constIdx.getValue().getBitWidth() > 64)
+  if (!indexCst || indexCst.getValue().getBitWidth() > 64)
     return {};
 
-  uint64_t idx = constIdx.getValue().getLimitedValue();
+  uint64_t index = indexCst.getValue().getLimitedValue();
   auto createInputs = inputCreate.getInputs();
-  if (idx >= createInputs.size())
+  if (index >= createInputs.size())
     return {};
-  return createInputs[createInputs.size() - idx - 1];
+  return createInputs[createInputs.size() - index - 1];
 }
 
 LogicalResult ArrayGetOp::canonicalize(ArrayGetOp op,
@@ -2699,7 +2704,7 @@ Type TypedeclOp::getAliasType() {
 // BitcastOp
 //===----------------------------------------------------------------------===//
 
-OpFoldResult BitcastOp::fold(ArrayRef<Attribute> operands) {
+OpFoldResult BitcastOp::fold(FoldAdaptor) {
   // Identity.
   // bitcast(%a) : A -> A ==> %a
   if (getOperand().getType() == getType())
