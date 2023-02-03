@@ -481,18 +481,40 @@ hw.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
 
 // CHECK-LABEL: module ReadMem()
 hw.module @ReadMem() {
-
-  // CHECK:      initial begin
-  // CHECK-NEXT:   reg [31:0] memForReadMem[0:7];
-  // CHECK-NEXT:   $readmemb("file1.txt", memForReadMem);
-  // CHECK-NEXT:   $readmemh("file2.txt", memForReadMem);
+  // CHECK:      reg [31:0] mem[0:7];
+  %mem = sv.reg sym @mem : !hw.inout<uarray<8xi32>>
+  // CHECK-NEXT: initial begin
+  // CHECK-NEXT:   $readmemb("file1.txt", mem);
+  // CHECK-NEXT:   $readmemh("file2.txt", mem);
   // CHECK-NEXT: end
   sv.initial {
-    %memForReadMem = sv.reg sym @MemForReadMem : !hw.inout<uarray<8xi32>>
-    sv.readmem @MemForReadMem, "file1.txt", MemBaseBin
-    sv.readmem @MemForReadMem, "file2.txt", MemBaseHex
+    sv.readmem %mem, "file1.txt", MemBaseBin : !hw.inout<uarray<8xi32>>
+    sv.readmem %mem, "file2.txt", MemBaseHex : !hw.inout<uarray<8xi32>>
   }
 
+}
+
+// CHECK: module ReadMemXMR()
+hw.module @ReadMemXMR() {
+  hw.instance "ReadMem" sym @ReadMem_sym @ReadMem() -> ()
+  // CHECK:      initial
+  // CHECK-NEXT:   $readmemb("file3.txt", ReadMem.mem)
+  sv.initial {
+    %xmr = sv.xmr.ref #hw.innerNameRef<@ReadMem::@mem> {} : !hw.inout<uarray<8xi32>>
+    sv.readmem %xmr, "file3.txt", MemBaseBin : !hw.inout<uarray<8xi32>>
+  }
+}
+
+hw.hierpath @ReadMem_path [@ReadMemXMRHierPath::@ReadMemXMR_sym, @ReadMemXMR::@ReadMem_sym, @ReadMem::@mem]
+// CHECK: module ReadMemXMRHierPath()
+hw.module @ReadMemXMRHierPath() {
+  hw.instance "ReadMemXMR" sym @ReadMemXMR_sym @ReadMemXMR() -> ()
+  // CHECK:      initial
+  // CHECK-NEXT:   $readmemb("file4.txt", ReadMemXMRHierPath.ReadMemXMR.ReadMem.mem)
+  sv.initial {
+    %xmr = sv.xmr.ref @ReadMem_path : !hw.inout<uarray<8xi32>>
+    sv.readmem %xmr, "file4.txt", MemBaseBin : !hw.inout<uarray<8xi32>>
+  }
 }
 
 // CHECK-LABEL: module UninitReg1(

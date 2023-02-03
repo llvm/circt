@@ -3396,13 +3396,7 @@ LogicalResult StmtEmitter::visitSV(ReadMemOp op) {
   ps.scopedBox(PP::ibox0, [&]() {
     ps.writeQuotedEscaped(op.getFilename());
     ps << "," << PP::space;
-
-    auto *reg =
-        state.symbolCache
-            .getInnerDefinition(op->getParentOfType<HWModuleOp>().getNameAttr(),
-                                op.getInnerSymAttr())
-            .getOp();
-    ps << PPExtString(getSymOpName(reg));
+    emitExpression(op.getDest(), ops);
   });
 
   ps << ");";
