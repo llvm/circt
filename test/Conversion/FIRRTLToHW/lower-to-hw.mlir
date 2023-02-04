@@ -1815,7 +1815,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: %[[foo:.*]] = sv.constantStr "foo"
     // CHECK: %[[tmp:.*]] = sv.wire : !hw.inout<i5>
     // CHECK: sv.system "value$plusargs"(%[[foo]], %[[tmp]])
-    
+
   }
 
   // An internal-only analog connection between two instances should be implemented with a wire
