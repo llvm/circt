@@ -598,3 +598,16 @@ hw.module @Issue4030(%a: i1, %clock: i1, %in1: !hw.array<2xi1>) -> (b: !hw.array
   }
   hw.output %2 : !hw.array<5xi1>
 }
+
+// CHECK-LABEL: @BlockAssignment
+hw.module private @BlockAssignment(%val: i2) -> () {
+  %r = sv.reg : !hw.inout<i2>
+  %0 = sv.read_inout %r : !hw.inout<i2>
+  // Check that %0 is not sank into initial op.
+  // CHECK: %r = sv.reg  : !hw.inout<i2>
+  // CHECK-NEXT: %0 = sv.read_inout %r
+  // CHECK-NEXT: sv.initial
+  sv.initial {
+    sv.bpassign %r, %0 : i2
+  }
+}
