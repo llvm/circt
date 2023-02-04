@@ -2024,6 +2024,7 @@ FirMemory MemOp::getSummary() {
   uint32_t groupID = 0;
   if (auto gID = op.getGroupIDAttr())
     groupID = gID.getUInt();
+  MemoryInitAttr init = op->getAttrOfType<MemoryInitAttr>("init");
   StringAttr modName;
   if (op->hasAttr("modName"))
     modName = op->getAttrOfType<StringAttr>("modName");
@@ -2031,20 +2032,36 @@ FirMemory MemOp::getSummary() {
     SmallString<8> clocks;
     for (auto a : writeClockIDs)
       clocks.append(Twine((char)(a + 'a')).str());
+    SmallString<32> initStr;
+    // If there is a file initialization, then come up with a decent
+    // representation for this.  Use the filename, but only characters
+    // [a-zA-Z0-9] and the bool/hex and inline booleans.
+    if (init) {
+      for (auto c : init.getFilename().getValue())
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9'))
+          initStr.push_back(c);
+      initStr.push_back('_');
+      initStr.push_back(init.getIsBinary().getValue() ? 't' : 'f');
+      initStr.push_back('_');
+      initStr.push_back(init.getIsInline().getValue() ? 't' : 'f');
+    }
     modName = StringAttr::get(
         op->getContext(),
         llvm::formatv(
-            "FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}_{10}{11}",
+            "FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}_{10}{11}{12}",
             numReadPorts, numWritePorts, numReadWritePorts, (size_t)width,
             op.getDepth(), op.getReadLatency(), op.getWriteLatency(),
             op.getMaskBits(), (size_t)op.getRuw(), (unsigned)hw::WUW::PortOrder,
-            groupID, clocks.empty() ? "" : "_" + clocks));
+            groupID, clocks.empty() ? "" : "_" + clocks,
+            init ? initStr.str() : ""));
   }
   return {numReadPorts,         numWritePorts,    numReadWritePorts,
           (size_t)width,        op.getDepth(),    op.getReadLatency(),
           op.getWriteLatency(), op.getMaskBits(), (size_t)op.getRuw(),
           hw::WUW::PortOrder,   writeClockIDs,    modName,
-          op.getMaskBits() > 1, groupID,          op.getLoc()};
+          op.getMaskBits() > 1, groupID,          init,
+          op.getLoc()};
 }
 
 void MemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
