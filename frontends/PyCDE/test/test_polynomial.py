@@ -163,4 +163,5 @@ poly.emit_outputs()
 
 # OUTPUT-LABEL:   module PolyComputeForCoeff__62__42__6_
 # OUTPUT:    input  [31:0] x,
-# OUTPUT:    output [31:0] y);
+# OUTPUT:    output [31:0] y
+# OUTPUT:    );
