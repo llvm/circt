@@ -310,10 +310,9 @@ AffineToPipeline::populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest,
           // Some known sequential ops. In certain cases, reads may be
           // combinational in Calyx, but taking advantage of that is left as
           // a future enhancement.
-          TypedValue<MemRefType> memRef =
-              isa<AffineStoreOp>(*memOp)
-                  ? cast<AffineStoreOp>(*memOp).getMemRef()
-                  : cast<memref::StoreOp>(*memOp).getMemRef();
+          Value memRef = isa<AffineStoreOp>(*memOp)
+                             ? cast<AffineStoreOp>(*memOp).getMemRef()
+                             : cast<memref::StoreOp>(*memOp).getMemRef();
           Problem::OperatorType memOpr = problem.getOrInsertOperatorType(
               "mem_" + std::to_string(hash_value(memRef)));
           problem.setLatency(memOpr, 1);
@@ -325,10 +324,9 @@ AffineToPipeline::populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest,
           // Some known sequential ops. In certain cases, reads may be
           // combinational in Calyx, but taking advantage of that is left as
           // a future enhancement.
-          TypedValue<MemRefType> memRef =
-              isa<AffineLoadOp>(*memOp)
-                  ? cast<AffineLoadOp>(*memOp).getMemRef()
-                  : cast<memref::LoadOp>(*memOp).getMemRef();
+          Value memRef = isa<AffineLoadOp>(*memOp)
+                             ? cast<AffineLoadOp>(*memOp).getMemRef()
+                             : cast<memref::LoadOp>(*memOp).getMemRef();
           Problem::OperatorType memOpr = problem.getOrInsertOperatorType(
               "mem_" + std::to_string(hash_value(memRef)));
           problem.setLatency(memOpr, 1);

@@ -512,7 +512,7 @@ void LastConnectResolver<ConcreteT>::processWhenOp(WhenOp whenOp,
 
   // Process the `then` block. If we are already in a whenblock, the we need to
   // conjoin ('and') the outer conditions.
-  auto thenCondition = whenOp.getCondition();
+  Value thenCondition = whenOp.getCondition();
   if (outerCondition)
     thenCondition =
         b.createOrFold<AndPrimOp>(loc, ui1Type, outerCondition, thenCondition);
