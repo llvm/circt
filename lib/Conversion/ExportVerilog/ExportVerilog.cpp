@@ -581,7 +581,8 @@ static bool isOkToBitSelectFrom(Value v) {
 /// happens because not all Verilog expressions are composable, notably you
 /// can only use bit selects like x[4:6] on simple expressions, you cannot use
 /// expressions in the sensitivity list of always blocks, etc.
-static bool isExpressionUnableToInline(Operation *op) {
+static bool isExpressionUnableToInline(Operation *op,
+                                       const LoweringOptions &options) {
   if (auto cast = dyn_cast<BitcastOp>(op))
     if (!haveMatchingDims(cast.getInput().getType(), cast.getResult().getType(),
                           op->getLoc())) {
@@ -625,7 +626,7 @@ static bool isExpressionUnableToInline(Operation *op) {
         return true;
 
     // Always blocks must have a name in their sensitivity list, not an expr.
-    if (isa<AlwaysOp>(user) || isa<AlwaysFFOp>(user)) {
+    if (!options.allowExprInEventControl && isa<AlwaysOp, AlwaysFFOp>(user)) {
       // Anything other than a read of a wire must be out of line.
       if (auto read = dyn_cast<ReadInOutOp>(op))
         if (read.getInput().getDefiningOp<WireOp>() ||
@@ -711,7 +712,7 @@ bool ExportVerilog::isExpressionEmittedInline(Operation *op,
 
   // If it isn't structurally possible to inline this expression, emit it out
   // of line.
-  return !isExpressionUnableToInline(op);
+  return !isExpressionUnableToInline(op, options);
 }
 
 /// Find a nested IfOp in an else block that can be printed as `else if`
