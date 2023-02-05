@@ -876,5 +876,33 @@ firrtl.circuit "RefResetBundle" {
    %r_b = firrtl.subfield %r[b] : !firrtl.bundle<a: reset, b flip: reset>
    firrtl.connect %r_a, %driver : !firrtl.reset, !firrtl.asyncreset
    firrtl.connect %r_b, %driver : !firrtl.reset, !firrtl.asyncreset
+}
+
+// -----
+
+// CHECK-LABEL: "ConstReset"
+firrtl.circuit "ConstReset" {
+  // CHECK-LABEL: firrtl.module private @InfersConstAsync(in %r: !firrtl.const.asyncreset)
+  firrtl.module private @InfersConstAsync(in %r: !firrtl.const.reset) {}
+
+  // CHECK-LABEL: firrtl.module private @InfersConstSync(in %r: !firrtl.const.uint<1>)
+  firrtl.module private @InfersConstSync(in %r: !firrtl.const.reset) {}
+
+  // CHECK-LABEL: firrtl.module private @InfersAsync(in %r: !firrtl.asyncreset)
+  firrtl.module private @InfersAsync(in %r: !firrtl.reset) {}
+
+  // CHECK-LABEL: firrtl.module private @InfersSync(in %r: !firrtl.uint<1>)
+  firrtl.module private @InfersSync(in %r: !firrtl.reset) {}
+
+  firrtl.module @ConstReset(in %async: !firrtl.const.asyncreset, in %sync: !firrtl.const.uint<1>) {
+    %constAsyncTarget = firrtl.instance infersConstAsync @InfersConstAsync(in r: !firrtl.const.reset)
+    %constSyncTarget = firrtl.instance infersConstSync @InfersConstSync(in r: !firrtl.const.reset)
+    %asyncTarget = firrtl.instance infersAsync @InfersAsync(in r: !firrtl.reset)
+    %syncTarget = firrtl.instance infersSync @InfersSync(in r: !firrtl.reset)
+
+    firrtl.connect %constAsyncTarget, %async : !firrtl.const.reset, !firrtl.const.asyncreset
+    firrtl.connect %constSyncTarget, %sync : !firrtl.const.reset, !firrtl.const.uint<1>
+    firrtl.connect %asyncTarget, %async : !firrtl.reset, !firrtl.const.asyncreset
+    firrtl.connect %syncTarget, %sync : !firrtl.reset, !firrtl.const.uint<1>
   }
 }

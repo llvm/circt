@@ -1144,10 +1144,10 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
 /// Update the type of a single field within a type.
 static FIRRTLBaseType updateType(FIRRTLBaseType oldType, unsigned fieldID,
                                  FIRRTLBaseType fieldType) {
-  // If this is a ground type, simply replace it.
+  // If this is a ground type, simply replace it, preserving constness.
   if (oldType.isGround()) {
     assert(fieldID == 0);
-    return fieldType;
+    return fieldType.getConstType(oldType.isConst());
   }
 
   // If this is a bundle type, update the corresponding field.

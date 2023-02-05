@@ -1972,12 +1972,15 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
 static FIRRTLBaseType resizeType(FIRRTLBaseType type, uint32_t newWidth) {
   auto *context = type.getContext();
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(type)
-      .Case<UIntType>(
-          [&](auto type) { return UIntType::get(context, newWidth); })
-      .Case<SIntType>(
-          [&](auto type) { return SIntType::get(context, newWidth); })
-      .Case<AnalogType>(
-          [&](auto type) { return AnalogType::get(context, newWidth); })
+      .Case<UIntType>([&](auto type) {
+        return UIntType::get(context, newWidth, type.isConst());
+      })
+      .Case<SIntType>([&](auto type) {
+        return SIntType::get(context, newWidth, type.isConst());
+      })
+      .Case<AnalogType>([&](auto type) {
+        return AnalogType::get(context, newWidth, type.isConst());
+      })
       .Default([&](auto type) { return type; });
 }
 
