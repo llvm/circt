@@ -24,6 +24,7 @@
 #include "circt/Support/LLVM.h"
 #include "circt/Support/SymCache.h"
 
+#include "iostream"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -858,6 +859,238 @@ void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
 }
 
 //===----------------------------------------------------------------------===//
+// ESI Wrap Combinational External Module pass.
+//===----------------------------------------------------------------------===//
+
+// namespace {
+/// Todo: Write proper description
+/// Convert all the hw.external.modules with the esiWrap.type attribute set to
+/// combinational. There are 3 steps that need to be done:
+/// 1. Change the external module into a regular module with same interface
+/// 2. Instantiate the module which is specified in the esiWrap.target
+/// 3. Add the wrapping logic to embed the combinational module into a dynamic
+/// surrounding
+
+// namespace {
+// /// Wrap arround external modules
+// struct CombinationalExtModWrapping
+//     : public OpConversionPattern<HWModuleExternOp> {
+// public:
+//   using OpConversionPattern<HWModuleExternOp>::OpConversionPattern;
+
+//   LogicalResult
+//   matchAndRewrite(HWModuleExternOp extModule, OpAdaptor adaptor,
+//                   ConversionPatternRewriter &rewriter) const override;
+// };
+// } // anonymous namespace
+
+// LogicalResult CombinationalExtModWrapping::matchAndRewrite(
+//     HWModuleExternOp extModule, OpAdaptor adaptor,
+//     ConversionPatternRewriter &rewriter) const {
+
+//   auto loc = extModule.getLoc();
+
+//   // collect all informations
+//   auto modName = extModule.getNameAttr();
+//   auto ports = extModule.getPorts();
+
+//   auto esiWrap = extModule.getEsiWrapAttr();
+
+//   std::cout << "Before if statement";
+
+//   if (esiWrap) {
+
+//     std::cout << "Beginning of if statement";
+//     // decode EsiWrap
+//     auto type = dyn_cast<StringAttr>(esiWrap.get("type"));
+//     auto extModName = dyn_cast<StringAttr>(
+//         dyn_cast<FlatSymbolRefAttr>(esiWrap.get("target")).getAttr());
+
+//     // build the wrapping module
+//     std::cout << "Before createing hw.module op";
+//     rewriter.create<hw::HWModuleOp>(loc, modName, ports);
+
+//     std::cout << "Before replacing hw.module.extern";
+//     llvm::SmallVector<Value> operands = adaptor.getOperands();
+//     rewriter.replaceOp(extModule, operands);
+//   }
+//   return success();
+// }
+
+// namespace {
+// /// Run all the wrappings
+// struct ESIWrapCombinationalPass
+//     : public ESIWrapCombinationalBase<ESIWrapCombinationalPass> {
+//   void runOnOperation() override;
+// };
+// } // anonymous namespace
+
+// void ESIWrapCombinationalPass::runOnOperation() {
+//   // Set up a conversion and give it a set of laws.
+//   ConversionTarget target(getContext());
+//   target.addLegalDialect<ESIDialect>();
+
+//   // Probably outcomment this
+//   // target.addIllegalOp<HWModuleExternOp>();
+
+//   // Add all the conversion patterns.
+//   RewritePatternSet patterns(&getContext());
+//   patterns.add<CombinationalExtModWrapping>(&getContext());
+
+//   // Run the conversion.
+//   if (failed(
+//           applyPartialConversion(getOperation(), target,
+//           std::move(patterns))))
+//     signalPassFailure();
+// }
+
+namespace {
+struct ESIWrapCombinationalPass
+    : public ESIWrapCombinationalBase<ESIWrapCombinationalPass> {
+
+public:
+  void runOnOperation() override;
+
+private:
+  std::string getEsiWrapType(HWModuleExternOp extMod);
+  std::string getEsiWrapTarget(HWModuleExternOp extMod);
+  LogicalResult wrapCombinationalModule(HWModuleExternOp extMod);
+};
+} // anonymous namespace
+
+void ESIWrapCombinationalPass::runOnOperation() {
+
+  // get the current external module
+  HWModuleExternOp extMod = getOperation();
+
+  if (getEsiWrapType(extMod) == "combinational")
+    if (failed(wrapCombinationalModule(extMod)))
+      signalPassFailure();
+}
+
+// helper function to build the wrapping module
+LogicalResult
+ESIWrapCombinationalPass::wrapCombinationalModule(HWModuleExternOp extMod) {
+
+  // get moduleBuilder
+  mlir::ModuleOp top = extMod->getParentOfType<mlir::ModuleOp>();
+  OpBuilder moduleBuilder(top.getContext());
+
+  // next set insertion point to current extMod
+  // subsequent insertions go right before it
+  moduleBuilder.setInsertionPoint(extMod);
+
+  // Build a similar hw.module as the external one
+  StringAttr newName =
+      moduleBuilder.getStringAttr("_" + extMod.getNameAttr().str());
+  hw::HWModuleOp mod = moduleBuilder.create<hw::HWModuleOp>(
+      extMod.getLoc(), newName, extMod.getPorts());
+
+  // get terminator
+  hw::OutputOp outOp = cast<hw::OutputOp>(mod.getBodyBlock()->getTerminator());
+
+  // CONTRACT: this module should be present
+  hw::HWModuleOp targetMod =
+      top.lookupSymbol<hw::HWModuleOp>(getEsiWrapTarget(extMod));
+
+  if (!targetMod) {
+    // contract is broken
+    signalPassFailure();
+  }
+
+  // Build ops insied module
+  ImplicitLocOpBuilder modBuilder(mod.getLoc(), mod.getBody());
+
+  SymbolTable::replaceAllSymbolUses(extMod, mod.moduleNameAttr(), top);
+  // extMod.erase(top);
+
+  return success();
+}
+
+// helper function to get esiWrap target
+std::string
+ESIWrapCombinationalPass::getEsiWrapTarget(HWModuleExternOp extMod) {
+  DictionaryAttr esiWrapAttr = extMod.getEsiWrapAttr();
+  if (esiWrapAttr) {
+    FlatSymbolRefAttr targetAttr =
+        dyn_cast<FlatSymbolRefAttr>(esiWrapAttr.get("target"));
+    if (targetAttr) {
+      return targetAttr.getAttr().str();
+    }
+  }
+  return std::string();
+}
+
+// helper function to get esiWrap type
+std::string ESIWrapCombinationalPass::getEsiWrapType(HWModuleExternOp extMod) {
+  DictionaryAttr esiWrapAttr = extMod.getEsiWrapAttr();
+  if (esiWrapAttr) {
+    StringAttr typeAttr = dyn_cast<StringAttr>(esiWrapAttr.get("type"));
+    if (typeAttr) {
+      return typeAttr.str();
+    }
+  }
+  return std::string();
+}
+
+// namespace {
+// struct ESIWrapCombinationalPass
+//     : public ESIWrapCombinationalBase<ESIWrapCombinationalPass> {
+
+// public:
+//   void runOnOperation() override;
+
+// private:
+//   // bool updateFunc(HWModuleExternOp mod);
+//   // void updateInstance(HWModuleExternOp mod, InstanceOp inst);
+//   // ESIHWBuilder *build;
+// };
+// } // anonymous namespace
+
+// static LogicalResult wrapCombinationalModule(HWModuleExternOp &op) {
+//   // OpBuilder builder(op.getParentOp());
+//   std::cout << "inside wrapCombinationalModule";
+//   // auto loc = op.getLoc();
+//   op.removeEsiWrapAttr();
+
+//   return success();
+// }
+
+// void ESIWrapCombinationalPass::runOnOperation() {
+//   ModuleOp top = getOperation();
+//   // ESIHWBuilder b(top);
+//   // build = &b;
+
+//   // Find all externmodules and try to add wrapping logic
+//   for (auto mod : top.getOps<HWModuleExternOp>()) {
+//     // check esiWrap attribute is set and type is combinational
+
+//     if (auto esiWrap = mod->getAttrOfType<DictionaryAttr>("esiWrap")) {
+//       if (auto type = dyn_cast<StringAttr>(esiWrap.get("type"))) {
+//         if (type.getValue() == "combinational") {
+//           wrapCombinationalModule(dynamic_cast<HWModuleExternOp &>(mod));
+//           // mod->removeAttr("esiWrap");
+//         }
+//       }
+//     }
+//   }
+// }
+
+// Don't know why it is not working
+//   hw::HWModuleExternOp extMod = getOperation();
+
+//   // check if type is set to combinational
+//   auto esiWrap = extMod.getEsiWrapAttr();
+//   if (esiWrap) {
+//     if (auto type = dyn_cast<StringAttr>(esiWrap.get("type"))) {
+//       if (type.getValue() == "combinational") {
+//         extMod.removeEsiWrapAttr();
+//       }
+//     }
+//   }
+// }
+
+//===----------------------------------------------------------------------===//
 // Lower to HW/SV conversions and pass.
 //===----------------------------------------------------------------------===//
 
@@ -1598,6 +1831,10 @@ circt::esi::createESIPhysicalLoweringPass() {
 std::unique_ptr<OperationPass<ModuleOp>>
 circt::esi::createESIPortLoweringPass() {
   return std::make_unique<ESIPortsPass>();
+}
+std::unique_ptr<OperationPass<circt::hw::HWModuleExternOp>>
+circt::esi::createESIWrapCombinationalPass() {
+  return std::make_unique<ESIWrapCombinationalPass>();
 }
 std::unique_ptr<OperationPass<ModuleOp>> circt::esi::createESItoHWPass() {
   return std::make_unique<ESItoHWPass>();

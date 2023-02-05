@@ -185,8 +185,8 @@ def InstanceOp : Handshake_Op<"instance", [
   }];
 }
 
-// ExternalInstanceOp
-def ExternalInstanceOp : Handshake_Op<"external_instance", [HasClock]> {
+// ExternalInstanceOp Todo add HasClock for pipeline
+def ExternalInstanceOp : Handshake_Op<"external_instance", []> {
   let summary = "external module instantiate operation";
   let description = [{
     The `external_instance` operation represents the instantiation of an external module.  This

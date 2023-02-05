@@ -54,4 +54,11 @@ def LowerESItoHW: Pass<"lower-esi-to-hw", "mlir::ModuleOp"> {
   let dependentDialects = ["circt::comb::CombDialect", "circt::hw::HWDialect"];
 }
 
+def ESIWrapCombinational: Pass<"esi-wrap-combinational", "circt::hw::HWModuleExternOp"> {
+  let summary = "Wrap around each hw.external.module with EsiWrap attribute set to combinational";
+  let constructor = "circt::esi::createESIWrapCombinationalPass()";
+  let dependentDialects = ["circt::comb::CombDialect", "circt::hw::HWDialect"];
+}
+
+
 #endif // CIRCT_DIALECT_ESI_ESIPASSES_TD
