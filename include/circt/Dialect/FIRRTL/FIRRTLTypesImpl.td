@@ -52,6 +52,7 @@ def SIntImpl : FIRRTLImplType<"SInt",
   let extraClassDeclaration = [{
     using WidthQualifiedTypeTrait<SIntType>::getWidth;
     using WidthQualifiedTypeTrait<SIntType>::hasWidth;
+    SIntType getConstType(bool isConst);
   }];
 }
 
@@ -69,6 +70,7 @@ def UIntImpl : FIRRTLImplType<"UInt",
   let extraClassDeclaration = [{
     using WidthQualifiedTypeTrait<UIntType>::getWidth;
     using WidthQualifiedTypeTrait<UIntType>::hasWidth;
+    UIntType getConstType(bool isConst);
   }];
 }
 
@@ -81,6 +83,9 @@ def ClockTypeImpl : FIRRTLImplType<"Clock", [FieldIDTypeInterface]> {
       return $_get($_ctxt, false);
     }]>
   ];
+  let extraClassDeclaration = [{
+    ClockType getConstType(bool isConst);
+  }];
 }
 
 def ResetTypeImpl : FIRRTLImplType<"Reset", [FieldIDTypeInterface]> {
@@ -92,6 +97,9 @@ def ResetTypeImpl : FIRRTLImplType<"Reset", [FieldIDTypeInterface]> {
       return $_get($_ctxt, false);
     }]>
   ];
+  let extraClassDeclaration = [{
+    ResetType getConstType(bool isConst);
+  }];
 }
 
 def AsyncResetTypeImpl : FIRRTLImplType<"AsyncReset", [FieldIDTypeInterface]> {
@@ -103,6 +111,9 @@ def AsyncResetTypeImpl : FIRRTLImplType<"AsyncReset", [FieldIDTypeInterface]> {
       return $_get($_ctxt, false);
     }]>
   ];
+  let extraClassDeclaration = [{
+    AsyncResetType getConstType(bool isConst);
+  }];
 }
 
 def AnalogTypeImpl : FIRRTLImplType<"Analog",
@@ -114,6 +125,9 @@ def AnalogTypeImpl : FIRRTLImplType<"Analog",
     TypeBuilder<(ins "std::optional<int32_t>":$width, CArg<"bool", "false">:$isConst)>,
     TypeBuilder<(ins)>,
   ];
+  let extraClassDeclaration = [{
+    AnalogType getConstType(bool isConst);
+  }];
   let genVerifyDecl = true;
 }
 
@@ -136,6 +150,9 @@ def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
 
     /// Return this type with any flip types recursively removed from itself.
     FIRRTLBaseType getPassiveType();
+
+    /// Return a 'const' or non-'const' version of this type.
+    FVectorType getConstType(bool isConst);
 
     /// Get an integer ID for the field. Field IDs start at 1, and are assigned
     /// to each field in a vector in a recursive depth-first walk of all
@@ -221,6 +238,9 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
 
     /// Return this type with any flip types recursively removed from itself.
     FIRRTLBaseType getPassiveType();
+
+    /// Return a 'const' or non-'const' version of this type.
+    BundleType getConstType(bool isConst);
 
     /// Get an integer ID for the field. Field IDs start at 1, and are assigned
     /// to each field in a bundle in a recursive pre-order walk of all fields,

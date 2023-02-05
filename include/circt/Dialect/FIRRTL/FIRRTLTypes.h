@@ -118,6 +118,9 @@ public:
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLBaseType getPassiveType();
 
+  /// Return a 'const' or non-'const' version of this type.
+  FIRRTLBaseType getConstType(bool isConst);
+
   /// Return this type with all ground types replaced with UInt<1>.  This is
   /// used for `mem` operations.
   FIRRTLBaseType getMaskType();
@@ -246,6 +249,9 @@ public:
 
   /// Return the width of this type, or -1 if it has none specified.
   int32_t getWidthOrSentinel();
+
+  /// Return a 'const' or non-'const' version of this type.
+  IntType getConstType(bool isConst);
 
   static bool classof(Type type) {
     return type.isa<SIntType>() || type.isa<UIntType>();

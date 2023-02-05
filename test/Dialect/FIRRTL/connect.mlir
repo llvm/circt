@@ -141,6 +141,21 @@ firrtl.module @registers1(in %clock : !firrtl.clock) {
   firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
+firrtl.module @ConstClock(in %in : !firrtl.const.clock, out %out : !firrtl.const.clock) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.const.clock, !firrtl.const.clock
+  firrtl.connect %out, %in : !firrtl.const.clock, !firrtl.const.clock
+}
+
+firrtl.module @ConstReset(in %in : !firrtl.const.reset, out %out : !firrtl.const.reset) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.const.reset, !firrtl.const.reset
+  firrtl.connect %out, %in : !firrtl.const.reset, !firrtl.const.reset
+}
+
+firrtl.module @ConstAsyncReset(in %in : !firrtl.const.asyncreset, out %out : !firrtl.const.asyncreset) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.const.asyncreset, !firrtl.const.asyncreset
+  firrtl.connect %out, %in : !firrtl.const.asyncreset, !firrtl.const.asyncreset
+}
+
 firrtl.module @ConstUInt(in %in : !firrtl.const.uint<2>, out %out : !firrtl.const.uint<2>) {
   // CHECK: firrtl.connect %out, %in : !firrtl.const.uint<2>, !firrtl.const.uint<2>
   firrtl.connect %out, %in : !firrtl.const.uint<2>, !firrtl.const.uint<2>
@@ -166,7 +181,22 @@ firrtl.module @MixedConstBundle(in %in : !firrtl.bundle<a: uint<1>, b: const.sin
   firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: const.sint<2>>, !firrtl.bundle<a: uint<1>, b: const.sint<2>>
 }
 
-firrtl.module @ConstToNonConst(in %in : !firrtl.const.uint<2>, out %out : !firrtl.uint<2>) {
+firrtl.module @ConstToNonConstClock(in %in : !firrtl.const.clock, out %out : !firrtl.clock) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.clock, !firrtl.const.clock
+  firrtl.connect %out, %in : !firrtl.clock, !firrtl.const.clock
+}
+
+firrtl.module @ConstToNonConstReset(in %in : !firrtl.const.reset, out %out : !firrtl.reset) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.reset, !firrtl.const.reset
+  firrtl.connect %out, %in : !firrtl.reset, !firrtl.const.reset
+}
+
+firrtl.module @ConstToNonConstAsyncReset(in %in : !firrtl.const.asyncreset, out %out : !firrtl.asyncreset) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.asyncreset, !firrtl.const.asyncreset
+  firrtl.connect %out, %in : !firrtl.asyncreset, !firrtl.const.asyncreset
+}
+
+firrtl.module @ConstToNonConstUInt(in %in : !firrtl.const.uint<2>, out %out : !firrtl.uint<2>) {
   // CHECK: firrtl.connect %out, %in : !firrtl.uint<2>, !firrtl.const.uint<2>
   firrtl.connect %out, %in : !firrtl.uint<2>, !firrtl.const.uint<2>
 }
