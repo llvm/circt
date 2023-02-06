@@ -42,6 +42,7 @@ class {{ svc['name' ]}}:
     {%- for port in svc.ports %}
     self.{{port.name}} = {{port.name}}_ports
     {%- endfor %}
+    pass
 
   {% for port in svc.ports if port['to-server-type'] is defined -%}
   def {{port.name}}_read_any(self):
@@ -112,6 +113,7 @@ class DesignModules:
         {%- for pn in ports.keys() -%}{{pn}}_ports={{pn}}{% if not loop.last %}, {% endif %}{% endfor -%}
       )
       {%- endfor %}
+      pass
 
 {% endfor %} 
 
@@ -131,6 +133,7 @@ class ESITypes:
   {{type_name}}.capnp_name = "{{type_dict.capnp_name}}"
   {% endif -%}
 {%- endfor %}
+  pass
 
 {# Instantiate the top modules. E.g.: 
 
