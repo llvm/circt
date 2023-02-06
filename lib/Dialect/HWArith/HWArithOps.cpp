@@ -60,8 +60,8 @@ void CastOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 APSInt ConstantOp::getConstantValue() { return getRawValueAttr().getAPSInt(); }
 
-OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
-  assert(constants.empty() && "constant has no operands");
+OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "constant has no operands");
   return getRawValueAttr();
 }
 

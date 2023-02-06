@@ -1,13 +1,13 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
-from pycde import generator, types
+from pycde import generator, types, Module
 from pycde.common import Clock, Input
 from pycde.constructs import Reg, Wire
 from pycde.testing import unittestmodule
 
 
 @unittestmodule()
-class WireTypeTest:
+class WireTypeTest(Module):
   In = Input(types.i8)
 
   @generator
@@ -21,7 +21,7 @@ class WireTypeTest:
 
 
 @unittestmodule()
-class WireDoubleAssignTest:
+class WireDoubleAssignTest(Module):
   In = Input(types.i8)
 
   @generator
@@ -36,7 +36,7 @@ class WireDoubleAssignTest:
 
 
 @unittestmodule()
-class RegTypeTest:
+class RegTypeTest(Module):
   clk = Clock()
   In = Input(types.i8)
 
@@ -51,7 +51,7 @@ class RegTypeTest:
 
 
 @unittestmodule()
-class RegDoubleAssignTest:
+class RegDoubleAssignTest(Module):
   Clk = Clock()
   In = Input(types.i8)
 

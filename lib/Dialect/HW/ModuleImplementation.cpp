@@ -13,6 +13,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include <mlir/IR/BuiltinAttributes.h>
 
 using namespace circt;
 using namespace circt::hw;
@@ -40,26 +41,40 @@ StringAttr module_like_impl::getPortNameAttr(MLIRContext *context,
 ///   function-result-list-no-parens ::= function-result (`,` function-result)*
 ///   function-result ::= (percent-identifier `:`) type attribute-dict?
 ///
-ParseResult module_like_impl::parseFunctionResultList(
-    OpAsmParser &parser, SmallVectorImpl<Type> &resultTypes,
-    SmallVectorImpl<DictionaryAttr> &resultAttrs,
-    SmallVectorImpl<Attribute> &resultNames) {
+static ParseResult
+parseFunctionResultList(OpAsmParser &parser,
+                        SmallVectorImpl<Attribute> &resultNames,
+                        SmallVectorImpl<Type> &resultTypes,
+                        SmallVectorImpl<DictionaryAttr> &resultAttrs,
+                        SmallVectorImpl<Attribute> &resultLocs) {
 
   auto parseElt = [&]() -> ParseResult {
+    // Stash the current location parser location.
+    auto irLoc = parser.getCurrentLocation();
+
+    // Parse the result name.
     std::string portName;
     if (parser.parseKeywordOrString(&portName))
       return failure();
     resultNames.push_back(StringAttr::get(parser.getContext(), portName));
 
+    // Parse the results type.
     resultTypes.emplace_back();
-    resultAttrs.emplace_back();
-
-    NamedAttrList attrs;
-    if (parser.parseColonType(resultTypes.back()) ||
-        parser.parseOptionalAttrDict(attrs))
+    if (parser.parseColonType(resultTypes.back()))
       return failure();
 
-    resultAttrs.back() = attrs.getDictionary(parser.getContext());
+    // Parse the result attributes.
+    NamedAttrList attrs;
+    if (failed(parser.parseOptionalAttrDict(attrs)))
+      return failure();
+    resultAttrs.push_back(attrs.getDictionary(parser.getContext()));
+
+    // Parse the result location.
+    llvm::Optional<Location> maybeLoc;
+    if (failed(parser.parseOptionalLocationSpecifier(maybeLoc)))
+      return failure();
+    Location loc = maybeLoc ? *maybeLoc : parser.getEncodedSourceLoc(irLoc);
+    resultLocs.push_back(loc);
 
     return success();
   };
@@ -68,22 +83,41 @@ ParseResult module_like_impl::parseFunctionResultList(
                                         parseElt);
 }
 
-/// This is a variant of mlir::parseFunctionSignature that allows names on
-/// result arguments.
 ParseResult module_like_impl::parseModuleFunctionSignature(
-    OpAsmParser &parser, SmallVectorImpl<OpAsmParser::Argument> &args,
-    bool &isVariadic, SmallVectorImpl<Type> &resultTypes,
+    OpAsmParser &parser, bool &isVariadic,
+    SmallVectorImpl<OpAsmParser::Argument> &args,
+    SmallVectorImpl<Attribute> &argNames, SmallVectorImpl<Attribute> &argLocs,
+    SmallVectorImpl<Attribute> &resultNames,
     SmallVectorImpl<DictionaryAttr> &resultAttrs,
-    SmallVectorImpl<Attribute> &resultNames) {
+    SmallVectorImpl<Attribute> &resultLocs, TypeAttr &type) {
 
   using namespace mlir::function_interface_impl;
+  auto *context = parser.getContext();
+
+  // Parse the argument list.
   if (parser.parseArgumentList(args, OpAsmParser::Delimiter::Paren,
                                /*allowTypes=*/true, /*allowAttrs=*/true))
     return failure();
 
+  // Parse the result list.
+  SmallVector<Type> resultTypes;
   if (succeeded(parser.parseOptionalArrow()))
-    return parseFunctionResultList(parser, resultTypes, resultAttrs,
-                                   resultNames);
+    if (failed(parseFunctionResultList(parser, resultNames, resultTypes,
+                                       resultAttrs, resultLocs)))
+      return failure();
+
+  // Process the ssa args for the information we're looking for.
+  SmallVector<Type> argTypes;
+  for (auto &arg : args) {
+    argNames.push_back(getPortNameAttr(context, arg.ssaName.name));
+    argTypes.push_back(arg.type);
+    if (!arg.sourceLoc)
+      arg.sourceLoc = parser.getEncodedSourceLoc(arg.ssaName.location);
+    argLocs.push_back(*arg.sourceLoc);
+  }
+
+  type = TypeAttr::get(FunctionType::get(context, argTypes, resultTypes));
+
   return success();
 }
 
@@ -97,6 +131,7 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
   Region &body = op->getRegion(0);
   bool isExternal = body.empty();
   SmallString<32> resultNameStr;
+  mlir::OpPrintingFlags flags;
 
   p << '(';
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
@@ -123,6 +158,13 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
 
     p.printType(argTypes[i]);
     p.printOptionalAttrDict(getArgAttrs(op, i));
+
+    // TODO: `printOptionalLocationSpecifier` will emit aliases for locations,
+    // even if they are not printed.  This will have to be fixed upstream.  For
+    // now, use what was specified on the command line.
+    if (flags.shouldPrintDebugInfo())
+      if (auto loc = getModuleArgumentLocAttr(op, i))
+        p.printOptionalLocationSpecifier(loc);
   }
 
   if (isVariadic) {
@@ -143,6 +185,13 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
       p << ": ";
       p.printType(resultTypes[i]);
       p.printOptionalAttrDict(getResultAttrs(op, i));
+
+      // TODO: `printOptionalLocationSpecifier` will emit aliases for locations,
+      // even if they are not printed.  This will have to be fixed upstream. For
+      // now, use what was specified on the command line.
+      if (flags.shouldPrintDebugInfo())
+        if (auto loc = getModuleResultLocAttr(op, i))
+          p.printOptionalLocationSpecifier(loc);
     }
     p << ')';
   }

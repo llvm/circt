@@ -86,10 +86,6 @@ class CMakeBuild(build_py):
                           cwd=cmake_build_dir)
     cmake_python_package = os.path.join(cmake_build_dir, "tools", "circt",
                                         "python_packages")
-    shutil.copytree(os.path.join(cmake_python_package, "circt_core"),
-                    target_dir,
-                    symlinks=False,
-                    dirs_exist_ok=True)
     shutil.copytree(os.path.join(cmake_python_package, "pycde"),
                     target_dir,
                     symlinks=False,
@@ -110,8 +106,8 @@ setup(name="pycde",
       long_description="",
       include_package_data=True,
       ext_modules=[
-          CMakeExtension("mlir._mlir_libs._mlir"),
-          CMakeExtension("mlir._mlir_libs._circt"),
+          CMakeExtension("pycde.circt._mlir_libs._mlir"),
+          CMakeExtension("pycde.circt._mlir_libs._circt"),
       ],
       cmdclass={
           "build": CustomBuild,
@@ -120,8 +116,6 @@ setup(name="pycde",
       },
       zip_safe=False,
       packages=find_namespace_packages(include=[
-          "circt",
-          "circt.*",
           "pycde",
           "pycde.*",
       ]))

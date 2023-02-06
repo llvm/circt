@@ -14,8 +14,8 @@
 #include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
-#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -137,48 +137,47 @@ StringRef SCModuleOp::getModuleName() {
 }
 
 ParseResult SCModuleOp::parse(OpAsmParser &parser, OperationState &result) {
-  StringAttr moduleName;
-  SmallVector<OpAsmParser::Argument, 4> args;
-  SmallVector<Type, 4> argTypes;
-  SmallVector<Type, 4> resultTypes;
-  SmallVector<Attribute> argNames;
-  SmallVector<DictionaryAttr> resultAttrs;
 
   // Parse the visibility attribute.
   (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
 
+  // Parse the name as a symbol.
+  StringAttr moduleName;
   if (parser.parseSymbolName(moduleName, SymbolTable::getSymbolAttrName(),
                              result.attributes))
     return failure();
 
+  // Parse the function signature.
   bool isVariadic = false;
-  if (hw::module_like_impl::parseModuleFunctionSignature(
-          parser, args, isVariadic, resultTypes, resultAttrs, argNames))
+  SmallVector<OpAsmParser::Argument, 4> entryArgs;
+  SmallVector<Attribute> argNames;
+  SmallVector<Attribute> argLocs;
+  SmallVector<Attribute> resultNames;
+  SmallVector<DictionaryAttr> resultAttrs;
+  SmallVector<Attribute> resultLocs;
+  TypeAttr functionType;
+  if (failed(hw::module_like_impl::parseModuleFunctionSignature(
+          parser, isVariadic, entryArgs, argNames, argLocs, resultNames,
+          resultAttrs, resultLocs, functionType)))
     return failure();
 
+  // Parse the attribute dict.
   if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
-
-  for (auto &arg : args) {
-    argNames.push_back(
-        StringAttr::get(parser.getContext(), arg.ssaName.name.drop_front()));
-    argTypes.push_back(arg.type);
-  }
 
   result.addAttribute("portNames",
                       ArrayAttr::get(parser.getContext(), argNames));
 
-  auto type = parser.getBuilder().getFunctionType(argTypes, resultTypes);
   result.addAttribute(SCModuleOp::getFunctionTypeAttrName(result.name),
-                      TypeAttr::get(type));
+                      functionType);
 
   mlir::function_interface_impl::addArgAndResultAttrs(
-      parser.getBuilder(), result, args, resultAttrs,
+      parser.getBuilder(), result, entryArgs, resultAttrs,
       SCModuleOp::getArgAttrsAttrName(result.name),
       SCModuleOp::getResAttrsAttrName(result.name));
 
   auto &body = *result.addRegion();
-  if (parser.parseRegion(body, args))
+  if (parser.parseRegion(body, entryArgs))
     return failure();
   if (body.empty())
     body.push_back(std::make_unique<Block>().release());
@@ -348,7 +347,7 @@ void SignalOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // ConvertOp
 //===----------------------------------------------------------------------===//
 
-OpFoldResult ConvertOp::fold(ArrayRef<Attribute> operands) {
+OpFoldResult ConvertOp::fold(FoldAdaptor) {
   if (getInput().getType() == getResult().getType())
     return getInput();
 
@@ -812,7 +811,7 @@ FuncOp FuncOp::create(Location location, StringRef name, ArrayAttr argNames,
 FuncOp FuncOp::create(Location location, StringRef name, ArrayAttr argNames,
                       FunctionType type, Operation::dialect_attr_range attrs) {
   SmallVector<NamedAttribute, 8> attrRef(attrs);
-  return create(location, name, argNames, type, llvm::makeArrayRef(attrRef));
+  return create(location, name, argNames, type, ArrayRef(attrRef));
 }
 
 FuncOp FuncOp::create(Location location, StringRef name, ArrayAttr argNames,
@@ -994,7 +993,7 @@ void FuncOp::print(OpAsmPrinter &p) {
 
 /// Clone the internal blocks from this function into dest and all attributes
 /// from this function to dest.
-void FuncOp::cloneInto(FuncOp dest, BlockAndValueMapping &mapper) {
+void FuncOp::cloneInto(FuncOp dest, IRMapping &mapper) {
   // Add the attributes of this function to dest.
   llvm::MapVector<StringAttr, Attribute> newAttrMap;
   for (const auto &attr : dest->getAttrs())
@@ -1017,7 +1016,7 @@ void FuncOp::cloneInto(FuncOp dest, BlockAndValueMapping &mapper) {
 /// provided (leaving them alone if no entry is present). Replaces references
 /// to cloned sub-values with the corresponding value that is copied, and adds
 /// those mappings to the mapper.
-FuncOp FuncOp::clone(BlockAndValueMapping &mapper) {
+FuncOp FuncOp::clone(IRMapping &mapper) {
   // Create the new function.
   FuncOp newFunc = cast<FuncOp>(getOperation()->cloneWithoutRegions());
 
@@ -1057,7 +1056,7 @@ FuncOp FuncOp::clone(BlockAndValueMapping &mapper) {
 }
 
 FuncOp FuncOp::clone() {
-  BlockAndValueMapping mapper;
+  IRMapping mapper;
   return clone(mapper);
 }
 

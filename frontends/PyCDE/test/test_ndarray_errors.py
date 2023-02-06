@@ -1,15 +1,15 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
-from pycde import System, Input, generator
+from pycde import Module, Input, generator
 from pycde.testing import unittestmodule
-from pycde.pycde_types import types, dim
+from pycde.types import types, dim
 from pycde.ndarray import NDArray
 
 # Missing assignment
 
 
 @unittestmodule()
-class M1:
+class M1(Module):
   in1 = Input(types.i32)
 
   @generator
@@ -28,13 +28,13 @@ class M1:
 
 
 @unittestmodule()
-class M1:
+class M1(Module):
   in1 = Input(types.i33)
 
   @generator
   def build(ports):
     m = NDArray((32), dtype=types.i32, name='m1')
-    # CHECK: ValueError: Width mismatch between provided BitVectorValue (i33) and target shape (i32).
+    # CHECK: ValueError: Width mismatch between provided BitVectorValue (Bits<33>) and target shape (Bits<32>).
     m[0] = ports.in1
 
 
@@ -44,7 +44,7 @@ class M1:
 
 
 @unittestmodule()
-class M1:
+class M1(Module):
   in1 = Input(dim(types.i32, 10))
 
   @generator
@@ -59,11 +59,11 @@ class M1:
 
 
 @unittestmodule()
-class M1:
+class M1(Module):
   in1 = Input(types.i31)
 
   @generator
   def build(ports):
     m = NDArray((32, 32), dtype=types.i1, name='m1')
-    # CHECK: ValueError: Width mismatch between provided BitVectorValue (i31) and target shape ([32]i1).
+    # CHECK: ValueError: Width mismatch between provided BitVectorValue (Bits<31>) and target shape (Bits<1>[32]).
     m[0] = ports.in1

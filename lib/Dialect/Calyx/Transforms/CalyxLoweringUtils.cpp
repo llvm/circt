@@ -347,19 +347,15 @@ std::string CalyxLoweringState::blockName(Block *b) {
 // ModuleOpConversion
 //===----------------------------------------------------------------------===//
 
-ModuleOpConversion::ModuleOpConversion(MLIRContext *context,
-                                       StringRef topLevelFunction)
-    : OpRewritePattern<mlir::ModuleOp>(context),
-      topLevelFunction(topLevelFunction) {}
+/// Helper to update the top-level ModuleOp to set the entrypoing function.
+LogicalResult applyModuleOpConversion(mlir::ModuleOp moduleOp,
+                                      StringRef topLevelFunction) {
 
-LogicalResult
-ModuleOpConversion::matchAndRewrite(mlir::ModuleOp moduleOp,
-                                    PatternRewriter &rewriter) const {
   if (moduleOp->hasAttr("calyx.entrypoint"))
     return failure();
 
   moduleOp->setAttr("calyx.entrypoint",
-                    rewriter.getStringAttr(topLevelFunction));
+                    StringAttr::get(moduleOp.getContext(), topLevelFunction));
   return success();
 }
 

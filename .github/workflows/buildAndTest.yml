@@ -14,7 +14,7 @@ jobs:
     name: Sanity Check
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-ci-build:20220216182244
+      image: ghcr.io/circt/images/circt-ci-build:20230126201226
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -23,6 +23,10 @@ jobs:
         with:
           fetch-depth: 2
           submodules: "false"
+
+      - name: Set git safe
+        run: |
+          git config --global --add safe.directory $PWD
 
       # --------
       # Lint the CIRCT C++ code.
@@ -150,7 +154,7 @@ jobs:
     needs: sanity-check
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-ci-build:20220216182244
+      image: ghcr.io/circt/images/circt-ci-build:20230126201226
     strategy:
       matrix:
         compiler:
@@ -179,6 +183,10 @@ jobs:
         with:
           fetch-depth: 2
           submodules: "true"
+
+      - name: Set git safe
+        run: |
+          git config --global --add safe.directory $PWD
 
       # --------
       # Restore LLVM from cache and build if it's not in there.
@@ -219,6 +227,7 @@ jobs:
           mkdir build
           cd build
           cmake .. \
+            -GNinja \
             -DBUILD_SHARED_LIBS=${{ matrix.compiler.shared }} \
             -DCMAKE_BUILD_TYPE=${{ matrix.compiler.mode }} \
             -DLLVM_ENABLE_ASSERTIONS=${{ matrix.compiler.assert }} \
@@ -229,8 +238,8 @@ jobs:
             -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} \
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-          make check-circt check-circt-unit -j$(nproc)
-          make circt-doc
+          ninja check-circt check-circt-unit -j$(nproc)
+          ninja circt-doc
 
       # --------
       # Lint the CIRCT C++ code.

@@ -559,7 +559,7 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
   return failure();
 }
 
-OpFoldResult FirRegOp::fold(ArrayRef<Attribute> constants) {
+OpFoldResult FirRegOp::fold(FoldAdaptor adaptor) {
   // If the register has a symbol, we can't optimize it away.
   if (getInnerSymAttr())
     return {};
@@ -580,7 +580,8 @@ OpFoldResult FirRegOp::fold(ArrayRef<Attribute> constants) {
   // register is never clocked, we can replace the register with a constant
   // value.
   bool isTrivialFeedback = (getNext() == getResult());
-  bool isNeverClocked = !!constants[1]; // clock operand is constant
+  bool isNeverClocked =
+      adaptor.getClk() != nullptr; // clock operand is constant
   if (!isTrivialFeedback && !isNeverClocked)
     return {};
 

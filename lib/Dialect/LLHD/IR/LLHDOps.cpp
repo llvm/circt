@@ -159,8 +159,8 @@ Type circt::llhd::getLLHDElementType(Type type) {
 // ConstantTimeOp
 //===----------------------------------------------------------------------===//
 
-OpFoldResult llhd::ConstantTimeOp::fold(ArrayRef<Attribute> operands) {
-  assert(operands.empty() && "const has no operands");
+OpFoldResult llhd::ConstantTimeOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "const has no operands");
   return getValueAttr();
 }
 
@@ -190,12 +190,12 @@ static OpFoldResult foldSigPtrExtractOp(Op op, ArrayRef<Attribute> operands) {
   return nullptr;
 }
 
-OpFoldResult llhd::SigExtractOp::fold(ArrayRef<Attribute> operands) {
-  return foldSigPtrExtractOp(*this, operands);
+OpFoldResult llhd::SigExtractOp::fold(FoldAdaptor adaptor) {
+  return foldSigPtrExtractOp(*this, adaptor.getOperands());
 }
 
-OpFoldResult llhd::PtrExtractOp::fold(ArrayRef<Attribute> operands) {
-  return foldSigPtrExtractOp(*this, operands);
+OpFoldResult llhd::PtrExtractOp::fold(FoldAdaptor adaptor) {
+  return foldSigPtrExtractOp(*this, adaptor.getOperands());
 }
 
 //===----------------------------------------------------------------------===//
@@ -216,12 +216,12 @@ static OpFoldResult foldSigPtrArraySliceOp(Op op,
   return nullptr;
 }
 
-OpFoldResult llhd::SigArraySliceOp::fold(ArrayRef<Attribute> operands) {
-  return foldSigPtrArraySliceOp(*this, operands);
+OpFoldResult llhd::SigArraySliceOp::fold(FoldAdaptor adaptor) {
+  return foldSigPtrArraySliceOp(*this, adaptor.getOperands());
 }
 
-OpFoldResult llhd::PtrArraySliceOp::fold(ArrayRef<Attribute> operands) {
-  return foldSigPtrArraySliceOp(*this, operands);
+OpFoldResult llhd::PtrArraySliceOp::fold(FoldAdaptor adaptor) {
+  return foldSigPtrArraySliceOp(*this, adaptor.getOperands());
 }
 
 template <class Op>
@@ -306,7 +306,7 @@ LogicalResult llhd::PtrStructExtractOp::inferReturnTypes(
 // DrvOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult llhd::DrvOp::fold(ArrayRef<Attribute> operands,
+LogicalResult llhd::DrvOp::fold(FoldAdaptor adaptor,
                                 SmallVectorImpl<OpFoldResult> &result) {
   if (!getEnable())
     return failure();

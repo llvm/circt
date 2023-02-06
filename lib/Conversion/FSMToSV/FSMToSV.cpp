@@ -614,7 +614,9 @@ MachineOpConverter::convertTransitions( // NOLINT(misc-no-recursion)
       if (failed(guardOpRes))
         return failure();
 
-      auto guard = cast<ReturnOp>(*guardOpRes).getOperand();
+      auto guardOp = cast<ReturnOp>(*guardOpRes);
+      assert(guardOp && "guard should be defined");
+      auto guard = guardOp.getOperand();
       auto otherNextState =
           convertTransitions(currentState, transitions.drop_front());
       if (failed(otherNextState))

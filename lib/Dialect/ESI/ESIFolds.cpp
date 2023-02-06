@@ -14,7 +14,7 @@
 using namespace circt;
 using namespace circt::esi;
 
-LogicalResult WrapValidReadyOp::fold(ArrayRef<Attribute> operands,
+LogicalResult WrapValidReadyOp::fold(FoldAdaptor,
                                      SmallVectorImpl<OpFoldResult> &results) {
   if (!getChanOutput().getUsers().empty())
     return failure();

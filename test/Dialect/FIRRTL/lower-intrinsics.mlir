@@ -4,16 +4,16 @@
 firrtl.circuit "Foo" {
   // CHECK-NOT: NameDoesNotMatter
   firrtl.extmodule @NameDoesNotMatter(in i : !firrtl.clock, out size : !firrtl.uint<32>) attributes
-                                     {annotations = [{class = "circt.intrinsic", intrinsic = "circt.sizeof"}]}
+                                     {annotations = [{class = "circt.Intrinsic", intrinsic = "circt.sizeof"}]}
   // CHECK-NOT: NameDoesNotMatter2
   firrtl.extmodule @NameDoesNotMatter2(in i : !firrtl.clock, out found : !firrtl.uint<1>) attributes
-                                     {annotations = [{class = "circt.intrinsic", intrinsic = "circt.isX"}]}
+                                     {annotations = [{class = "circt.Intrinsic", intrinsic = "circt.isX"}]}
   // CHECK-NOT: NameDoesNotMatter3
   firrtl.extmodule @NameDoesNotMatter3<FORMAT: none = "foo">(out found : !firrtl.uint<1>) attributes
-                                     {annotations = [{class = "circt.intrinsic", intrinsic = "circt.plusargs.test"}]}
+                                     {annotations = [{class = "circt.Intrinsic", intrinsic = "circt.plusargs.test"}]}
   // CHECK-NOT: NameDoesNotMatter4
   firrtl.extmodule @NameDoesNotMatter4<FORMAT: none = "foo">(out found : !firrtl.uint<1>, out result: !firrtl.uint<5>) attributes
-                                     {annotations = [{class = "circt.intrinsic", intrinsic = "circt.plusargs.value"}]}
+                                     {annotations = [{class = "circt.Intrinsic", intrinsic = "circt.plusargs.value"}]}
 
   // CHECK: Foo
   firrtl.module @Foo(in %clk : !firrtl.clock, out %s : !firrtl.uint<32>, out %io1 : !firrtl.uint<1>, out %io2 : !firrtl.uint<1>, out %io3 : !firrtl.uint<1>, out %io4 : !firrtl.uint<5>) {

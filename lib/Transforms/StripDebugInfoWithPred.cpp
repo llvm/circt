@@ -47,6 +47,20 @@ struct StripDebugInfoWithPred
     return loc;
   }
 
+  void updateLocArray(Operation *op, StringRef attributeName) {
+    SmallVector<Attribute> newLocs;
+    if (auto resLocs = op->getAttrOfType<ArrayAttr>(attributeName)) {
+      bool changed = false;
+      for (auto loc : resLocs.getAsRange<LocationAttr>()) {
+        auto newLoc = getStrippedLoc(loc);
+        changed |= newLoc != loc;
+        newLocs.push_back(newLoc);
+      }
+      if (changed)
+        op->setAttr(attributeName, ArrayAttr::get(&getContext(), newLocs));
+    }
+  }
+
 private:
   std::function<bool(mlir::Location)> pred;
 };
@@ -73,7 +87,8 @@ void StripDebugInfoWithPred::runOnOperation() {
       &getContext(), getOperation().getOps(), [&](Operation &toplevelOp) {
         toplevelOp.walk([&](Operation *op) {
           updateLocIfChanged(op, getStrippedLoc(op->getLoc()));
-
+          updateLocArray(op, "argLocs");
+          updateLocArray(op, "resultLocs");
           // Strip block arguments debug info.
           for (Region &region : op->getRegions())
             for (Block &block : region.getBlocks())

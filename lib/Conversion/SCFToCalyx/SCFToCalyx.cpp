@@ -1132,10 +1132,15 @@ class LateSSAReplacement : public calyx::FuncOpPartialLoweringPattern {
 class CleanupFuncOps : public calyx::FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
+  LogicalResult matchAndRewrite(FuncOp funcOp,
+                                PatternRewriter &rewriter) const override {
+    rewriter.eraseOp(funcOp);
+    return success();
+  }
+
   LogicalResult
   partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
-    rewriter.eraseOp(funcOp);
     return success();
   }
 };
@@ -1222,11 +1227,7 @@ public:
       return failure();
 
     // Program conversion
-    RewritePatternSet conversionPatterns(&getContext());
-    conversionPatterns.add<calyx::ModuleOpConversion>(&getContext(),
-                                                      topLevelFunction);
-    return applyOpPatternsAndFold(getOperation(),
-                                  std::move(conversionPatterns));
+    return calyx::applyModuleOpConversion(getOperation(), topLevelFunction);
   }
 
   /// 'Once' patterns are expected to take an additional LogicalResult&
@@ -1261,7 +1262,7 @@ public:
     GreedyRewriteConfig config;
     config.enableRegionSimplification = false;
     if (runOnce)
-      config.maxIterations = 0;
+      config.maxIterations = 1;
 
     /// Can't return applyPatternsAndFoldGreedily. Root isn't
     /// necessarily erased so it will always return failed(). Instead,

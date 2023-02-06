@@ -27,7 +27,8 @@ circuit Top:
     b <= signed.b
 
     ; CHECK:      module Companion(
-    ; CHECK:        input [[port:[a-zA-Z0-9_]+]]);
+    ; CHECK:        input [[port:[a-zA-Z0-9_]+]]
+    ; CHECK:      );
     ; CHECK:        MyInterface MyView();
     ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = [[port]];
     ; CHECK-NEXT: endmodule

@@ -38,6 +38,7 @@ def LLHD_Dialect : Dialect {
   let hasConstantMaterializer = 1;
   let useDefaultTypePrinterParser = 1;
   let useDefaultAttributePrinterParser = 1;
+  let useFoldAPI = kEmitFoldAdaptorFolder;
 
   let extraClassDeclaration = [{
     /// Register all LLHD types.

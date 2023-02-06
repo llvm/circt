@@ -35,6 +35,88 @@ func.func @load_store(%1 : index) {
 
 // -----
 
+// CHECK-LABEL:   handshake.func @store_mul_blocks(
+// CHECK-SAME:                                      %[[VAL_0:.*]]: i1,
+// CHECK-SAME:                                      %[[VAL_1:.*]]: index,
+// CHECK-SAME:                                      %[[VAL_2:.*]]: none, ...) -> none 
+// CHECK:           %[[VAL_3:.*]]:2 = memory[ld = 0, st = 2] (%[[VAL_4:.*]], %[[VAL_5:.*]], %[[VAL_6:.*]], %[[VAL_7:.*]]) {id = 0 : i32, lsq = false} : memref<4xi32>, (i32, index, i32, index) -> (none, none)
+// CHECK:           %[[VAL_8:.*]] = merge %[[VAL_0]] : i1
+// CHECK:           %[[VAL_9:.*]] = buffer [2] fifo %[[VAL_8]] : i1
+// CHECK:           %[[VAL_10:.*]] = merge %[[VAL_1]] : index
+// CHECK:           %[[VAL_11:.*]] = merge %[[VAL_2]] : none
+// CHECK:           %[[VAL_12:.*]], %[[VAL_13:.*]] = cond_br %[[VAL_8]], %[[VAL_10]] : index
+// CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]] = cond_br %[[VAL_8]], %[[VAL_11]] : none
+// CHECK:           %[[VAL_16:.*]] = merge %[[VAL_12]] : index
+// CHECK:           %[[VAL_17:.*]], %[[VAL_18:.*]] = control_merge %[[VAL_14]] : none
+// CHECK:           %[[VAL_19:.*]] = join %[[VAL_17]], %[[VAL_3]]#0 : none, none
+// CHECK:           %[[VAL_20:.*]] = constant %[[VAL_17]] {value = 1 : i32} : i32
+// CHECK:           %[[VAL_4]], %[[VAL_5]] = store {{\[}}%[[VAL_16]]] %[[VAL_20]], %[[VAL_17]] : index, i32
+// CHECK:           %[[VAL_21:.*]] = br %[[VAL_19]] : none
+// CHECK:           %[[VAL_22:.*]] = merge %[[VAL_13]] : index
+// CHECK:           %[[VAL_23:.*]], %[[VAL_24:.*]] = control_merge %[[VAL_15]] : none
+// CHECK:           %[[VAL_25:.*]] = join %[[VAL_23]], %[[VAL_3]]#1 : none, none
+// CHECK:           %[[VAL_26:.*]] = constant %[[VAL_23]] {value = 2 : i32} : i32
+// CHECK:           %[[VAL_6]], %[[VAL_7]] = store {{\[}}%[[VAL_22]]] %[[VAL_26]], %[[VAL_23]] : index, i32
+// CHECK:           %[[VAL_27:.*]] = br %[[VAL_25]] : none
+// CHECK:           %[[VAL_28:.*]] = mux %[[VAL_9]] {{\[}}%[[VAL_27]], %[[VAL_21]]] : i1, none
+// CHECK:           %[[VAL_29:.*]] = arith.index_cast %[[VAL_9]] : i1 to index
+// CHECK:           return %[[VAL_28]] : none
+// CHECK:         }
+func.func @store_mul_blocks(%arg0 : i1, %arg1 : index) {
+  %0 = memref.alloc() : memref<4xi32>
+  cf.cond_br %arg0, ^bb1, ^bb2
+^bb1:
+  %c1 = arith.constant 1 : i32
+  memref.store %c1, %0[%arg1] : memref<4xi32>
+  cf.br ^bb3
+^bb2:
+  %c2 = arith.constant 2 : i32
+  memref.store %c2, %0[%arg1] : memref<4xi32>
+  cf.br ^bb3
+^bb3:
+  return
+}
+
+// -----
+
+// CHECK-LABEL:   handshake.func @forward_load_to_bb(
+// CHECK-SAME:                                       %[[VAL_0:.*]]: i1,
+// CHECK-SAME:                                       %[[VAL_1:.*]]: memref<32xi32>,
+// CHECK-SAME:                                       %[[VAL_2:.*]]: index,
+// CHECK-SAME:                                       %[[VAL_3:.*]]: none, ...) -> none
+// CHECK:           %[[VAL_4:.*]]:2 = extmemory[ld = 1, st = 0] (%[[VAL_1]] : memref<32xi32>) (%[[VAL_5:.*]]) {id = 0 : i32} : (index) -> (i32, none)
+// CHECK:           %[[VAL_6:.*]] = merge %[[VAL_0]] : i1
+// CHECK:           %[[VAL_7:.*]] = buffer [2] fifo %[[VAL_6]] : i1
+// CHECK:           %[[VAL_8:.*]] = merge %[[VAL_2]] : index
+// CHECK:           %[[VAL_9:.*]] = merge %[[VAL_3]] : none
+// CHECK:           %[[VAL_10:.*]] = join %[[VAL_9]], %[[VAL_4]]#1 : none, none
+// CHECK:           %[[VAL_11:.*]], %[[VAL_5]] = load {{\[}}%[[VAL_8]]] %[[VAL_4]]#0, %[[VAL_9]] : index, i32
+// CHECK:           %[[VAL_12:.*]], %[[VAL_13:.*]] = cond_br %[[VAL_6]], %[[VAL_10]] : none
+// CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]] = cond_br %[[VAL_6]], %[[VAL_11]] : i32
+// CHECK:           %[[VAL_16:.*]] = merge %[[VAL_14]] : i32
+// CHECK:           %[[VAL_17:.*]], %[[VAL_18:.*]] = control_merge %[[VAL_12]] : none
+// CHECK:           %[[VAL_19:.*]] = constant %[[VAL_17]] {value = 1 : i32} : i32
+// CHECK:           %[[VAL_20:.*]] = arith.addi %[[VAL_16]], %[[VAL_19]] : i32
+// CHECK:           %[[VAL_21:.*]] = br %[[VAL_17]] : none
+// CHECK:           %[[VAL_22:.*]] = mux %[[VAL_7]] {{\[}}%[[VAL_13]], %[[VAL_21]]] : i1, none
+// CHECK:           %[[VAL_23:.*]] = constant %[[VAL_22]] {value = true} : i1
+// CHECK:           %[[VAL_24:.*]] = arith.xori %[[VAL_7]], %[[VAL_23]] : i1
+// CHECK:           %[[VAL_25:.*]] = arith.index_cast %[[VAL_24]] : i1 to index
+// CHECK:           return %[[VAL_22]] : none
+// CHECK:         }
+func.func @forward_load_to_bb(%arg0 : i1, %arg1: memref<32xi32>, %arg2 : index) {
+  %0 = memref.load %arg1[%arg2] : memref<32xi32>
+  cf.cond_br %arg0, ^bb1, ^bb2
+^bb1:
+  %c1 = arith.constant 1 : i32
+  %1 = arith.addi %0, %c1 : i32 
+  cf.br ^bb2
+^bb2:
+  return
+}
+
+// -----
+
 // CHECK-LABEL:   handshake.func @dma(
 // CHECK-SAME:                             %[[VAL_0:.*]]: index,
 // CHECK-SAME:                             %[[VAL_1:.*]]: none, ...) -> none

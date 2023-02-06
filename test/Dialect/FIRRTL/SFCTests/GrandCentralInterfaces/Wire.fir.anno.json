@@ -705,6 +705,34 @@
               "class": "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"
             }
           }
+        },
+        {
+          "name": "foo_string",
+          "tpe": {
+            "class": "sifive.enterprise.grandcentral.AugmentedStringType",
+            "value": "FOO"
+          }
+        },
+        {
+          "name": "foo_integer",
+          "tpe": {
+            "class": "sifive.enterprise.grandcentral.AugmentedIntegerType",
+            "value": 123
+          }
+        },
+        {
+          "name": "foo_double",
+          "tpe": {
+            "class": "sifive.enterprise.grandcentral.AugmentedDoubleType",
+            "value": 123.456
+          }
+        },
+        {
+          "name": "foo_boolean",
+          "tpe": {
+            "class": "sifive.enterprise.grandcentral.AugmentedBooleanType",
+            "value": true
+          }
         }
       ]
     }

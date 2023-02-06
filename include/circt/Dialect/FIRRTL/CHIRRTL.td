@@ -20,6 +20,7 @@ include "circt/Dialect/FIRRTL/FIRRTLDialect.td"
 include "circt/Dialect/FIRRTL/FIRRTLTypes.td"
 include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.td"
 include "circt/Dialect/FIRRTL/FIRRTLAttributes.td"
+include "circt/Dialect/FIRRTL/FIRRTLEnums.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
@@ -36,6 +37,7 @@ def CHIRRTLDialect : Dialect {
   let dependentDialects = ["circt::firrtl::FIRRTLDialect"];
 
   let useDefaultTypePrinterParser = 1;
+  let useFoldAPI = kEmitFoldAdaptorFolder;
 }
 
 //===----------------------------------------------------------------------===//

@@ -15,9 +15,8 @@
 
 include "circt/Dialect/HW/HWDialect.td"
 include "mlir/IR/AttrTypeBase.td"
-include "mlir/IR/SubElementInterfaces.td"
 
-def InnerRefAttr : AttrDef<HWDialect, "InnerRef", [SubElementAttrInterface]> {
+def InnerRefAttr : AttrDef<HWDialect, "InnerRef"> {
   let summary = "Refer to a name inside a module";
   let description = [{
     This works like a symbol reference, but to a name inside a module.
@@ -41,14 +40,6 @@ def InnerRefAttr : AttrDef<HWDialect, "InnerRef", [SubElementAttrInterface]> {
     static InnerRefAttr getFromOperation(mlir::Operation *op,
                                          mlir::StringAttr symName,
                                          mlir::StringAttr moduleName);
-
-    /// Recursively traverse the sub-attribute.
-    void walkImmediateSubElements(
-        llvm::function_ref<void(mlir::Attribute)> walkAttrsFn,
-        llvm::function_ref<void(mlir::Type)> walkTypesFn) {
-      walkAttrsFn(getModuleRef());
-      walkAttrsFn(getName());
-    }
 
     /// Return the name of the referenced module.
     mlir::StringAttr getModule() const { return getModuleRef().getAttr(); }

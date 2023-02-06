@@ -353,76 +353,6 @@ InstanceOp firrtl::addPortsToModule(
   return clonedInstOnPath;
 }
 
-Value firrtl::borePortsOnPath(
-    SmallVector<InstanceOp> &instancePath, FModuleOp lcaModule, Value fromVal,
-    StringRef newNameHint, InstancePathCache &instancePathcache,
-    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
-    CircuitTargetCache *targetCachesInstancePathCache) {
-  // Create connections of the `fromVal` by adding ports through all the
-  // instances of `instancePath`. `instancePath` specifies a path from a source
-  // module through the lcaModule till a target module. source module is the
-  // parent module of `fromval` and target module is the referenced target
-  // module of the last instance in the instancePath.
-
-  // If instancePath empty then just return the `fromVal`.
-  if (instancePath.empty())
-    return fromVal;
-
-  FModuleOp srcModule;
-  if (auto block = fromVal.dyn_cast<BlockArgument>())
-    srcModule = cast<FModuleOp>(block.getOwner()->getParentOp());
-  else
-    srcModule = fromVal.getDefiningOp()->getParentOfType<FModuleOp>();
-
-  // If the `srcModule` is the `lcaModule`, then we only need to drill input
-  // ports starting from the `lcaModule` till the end of `instancePath`. For all
-  // other cases, we start to drill output ports from the `srcModule` till the
-  // `lcaModule`, and then input ports from `lcaModule` till the end of
-  // `instancePath`.
-  Direction dir = Direction::Out;
-  if (srcModule == lcaModule)
-    dir = Direction::In;
-
-  auto valType = fromVal.getType().cast<FIRRTLType>();
-  auto forwardVal = fromVal;
-  for (auto instOnPath : instancePath) {
-    auto referencedModule = cast<FModuleOp>(
-        instancePathcache.instanceGraph.getReferencedModule(instOnPath));
-    unsigned portNo = referencedModule.getNumPorts();
-    // Add a new port to referencedModule, and all its uses/instances.
-    InstanceOp clonedInst = addPortsToModule(
-        referencedModule, instOnPath, valType, dir, newNameHint,
-        instancePathcache, getNamespace, targetCachesInstancePathCache);
-    //  `instOnPath` will be erased and replaced with `clonedInst`. So, there
-    //  should be no more use of `instOnPath`.
-    auto clonedInstRes = clonedInst.getResult(portNo);
-    auto referencedModNewPort = referencedModule.getArgument(portNo);
-    // If out direction, then connect `forwardVal` to the `referencedModNewPort`
-    // (the new port of referenced module) else set the new input port of the
-    // cloned instance with `forwardVal`. If out direction, then set the
-    // `forwardVal` to the result of the cloned instance, else set the
-    // `forwardVal` to the new port of the referenced module.
-    if (dir == Direction::Out) {
-      auto builder = ImplicitLocOpBuilder::atBlockEnd(
-          forwardVal.getLoc(), forwardVal.isa<BlockArgument>()
-                                   ? referencedModule.getBodyBlock()
-                                   : forwardVal.getDefiningOp()->getBlock());
-      builder.create<ConnectOp>(referencedModNewPort, forwardVal);
-      forwardVal = clonedInstRes;
-    } else {
-      auto builder = ImplicitLocOpBuilder::atBlockEnd(clonedInst.getLoc(),
-                                                      clonedInst->getBlock());
-      builder.create<ConnectOp>(clonedInstRes, forwardVal);
-      forwardVal = referencedModNewPort;
-    }
-
-    // Switch direction of reached the `lcaModule`.
-    if (clonedInst->getParentOfType<FModuleOp>() == lcaModule)
-      dir = Direction::In;
-  }
-  return forwardVal;
-}
-
 //===----------------------------------------------------------------------===//
 // AnnoTargetCache
 //===----------------------------------------------------------------------===//
@@ -434,72 +364,6 @@ void AnnoTargetCache::gatherTargets(FModuleLike mod) {
 
   // And named things
   mod.walk([&](Operation *op) { insertOp(op); });
-}
-
-LogicalResult
-firrtl::findLCAandSetPath(AnnoPathValue &srcTarget, AnnoPathValue &dstTarget,
-                          SmallVector<InstanceOp> &pathFromSrcToDst,
-                          FModuleOp &lcaModule, ApplyState &state) {
-
-  auto srcModule = cast<FModuleOp>(srcTarget.ref.getModule().getOperation());
-  auto dstModule = cast<FModuleOp>(dstTarget.ref.getModule().getOperation());
-  // Get the path from top to `srcModule` and `dstModule`, and then compare the
-  // path to find the lca. Then use that to get the path from `srcModule` to the
-  // `dstModule`.
-  pathFromSrcToDst.clear();
-  if (srcModule == dstModule) {
-    lcaModule = srcModule;
-    return success();
-  }
-  auto *top = state.instancePathCache.instanceGraph.getTopLevelNode();
-  lcaModule = cast<FModuleOp>(top->getModule().getOperation());
-  auto initializeInstances = [&](SmallVector<InstanceOp> &instances,
-                                 FModuleLike targetModule) -> LogicalResult {
-    if (!instances.empty())
-      return success();
-    auto instancePathsFromTop = state.instancePathCache.getAbsolutePaths(
-        cast<hw::HWModuleLike>(*targetModule));
-    if (instancePathsFromTop.size() > 1)
-      return targetModule->emitError("cannot handle multiple paths to target");
-
-    // Get the path from top to dst
-    for (auto inst : instancePathsFromTop.back())
-      instances.push_back(cast<InstanceOp>(inst));
-    return success();
-  };
-  if (initializeInstances(dstTarget.instances, dstModule).failed() ||
-      initializeInstances(srcTarget.instances, srcModule).failed())
-    return failure();
-
-  auto &dstPathFromTop = dstTarget.instances;
-  // A map of the modules in the path from top to dst to its index into the
-  // `dstPathFromTop`.
-  DenseMap<FModuleOp, size_t> dstPathMap;
-  // Initialize the leaf module, to end of path.
-  dstPathMap[dstModule] = dstPathFromTop.size();
-  for (auto &dstInstance : llvm::enumerate(dstPathFromTop))
-    dstPathMap[dstInstance.value()->getParentOfType<FModuleOp>()] =
-        dstInstance.index();
-  auto *dstPathIterator = dstPathFromTop.begin();
-  // Now, reverse iterate over the path of the source, from the source module to
-  // the Top.
-  for (auto srcInstPath : llvm::reverse(srcTarget.instances)) {
-    auto refModule = cast<FModuleOp>(
-        state.instancePathCache.instanceGraph.getReferencedModule(srcInstPath)
-            .getOperation());
-    auto mapIter = dstPathMap.find(refModule);
-    // If `refModule` exists on the dst path, then this is the Lowest Common
-    // Ancestor between the source and dst module.
-    if (mapIter != dstPathMap.end()) {
-      lcaModule = refModule;
-      dstPathIterator += mapIter->getSecond();
-      break;
-    }
-    pathFromSrcToDst.push_back(srcInstPath);
-  }
-  pathFromSrcToDst.insert(pathFromSrcToDst.end(), dstPathIterator,
-                          dstPathFromTop.end());
-  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -656,7 +520,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
     if (!wireTarget)
       return mlir::emitError(loc, "Annotation '" + Twine(dataTapsClass) +
                                       "' with wire path '" + wirePathStr +
-                                      "' couldnot be resolved.");
+                                      "' could not be resolved.");
     if (!wireTarget->ref.getImpl().isOp())
       return mlir::emitError(loc, "Annotation '" + Twine(dataTapsClass) +
                                       "' with path '" +
@@ -711,7 +575,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
     }
     if (!srcTarget)
       return mlir::emitError(loc, "Annotation '" + Twine(dataTapsClass) +
-                                      "' source path couldnot be resolved.");
+                                      "' source path could not be resolved.");
 
     auto wireModule =
         cast<FModuleOp>(wireTarget->ref.getModule().getOperation());

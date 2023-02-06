@@ -1,14 +1,13 @@
 # REQUIRES: bindings_python
 # RUN: %PYTHON% %s | FileCheck %s
 
-import mlir
 import circt
 from circt.support import connect
 from circt.dialects import hw
 
 
 def build(mod, dummy_mod):
-  i32 = mlir.ir.IntegerType.get_signless(32)
+  i32 = circt.ir.IntegerType.get_signless(32)
   # CHECK: %[[C0:.+]] = hw.constant 0
   const = hw.ConstantOp.create(i32, 0)
   inst = dummy_mod.instantiate("d")
@@ -18,11 +17,11 @@ def build(mod, dummy_mod):
   # CHECK: hw.instance "d" @Dummy(x: %[[C0]]: i32)
 
 
-with mlir.ir.Context() as ctx, mlir.ir.Location.unknown():
+with circt.ir.Context() as ctx, circt.ir.Location.unknown():
   circt.register_dialects(ctx)
-  i32 = mlir.ir.IntegerType.get_signless(32)
-  m = mlir.ir.Module.create()
-  with mlir.ir.InsertionPoint(m.body):
+  i32 = circt.ir.IntegerType.get_signless(32)
+  m = circt.ir.Module.create()
+  with circt.ir.InsertionPoint(m.body):
     dummy = hw.HWModuleOp(name='Dummy',
                           input_ports=[("x", i32)],
                           output_ports=[("y", i32)],

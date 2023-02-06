@@ -54,7 +54,7 @@ module {
 // CHECK-NEXT:         calyx.assign %ret_arg0_reg.write_en = %true : i1
 // CHECK-NEXT:         calyx.assign %ret_arg1_reg.in = %in1 : i32
 // CHECK-NEXT:         calyx.assign %ret_arg1_reg.write_en = %true : i1
-// CHECK-NEXT:         %0 = comb.and %ret_arg0_reg.done, %ret_arg1_reg.done : i1
+// CHECK-NEXT:         %0 = comb.and %ret_arg1_reg.done, %ret_arg0_reg.done : i1
 // CHECK-NEXT:         calyx.group_done %0 ? %true : i1
 // CHECK-NEXT:       }
 // CHECK-NEXT:     }
@@ -169,7 +169,7 @@ module {
 // CHECK-DAG:      calyx.assign %ret_arg3_reg.write_en = %true : i1
 // CHECK-DAG:      calyx.assign %ret_arg4_reg.in = %in0 : i32
 // CHECK-DAG:      calyx.assign %ret_arg4_reg.write_en = %true : i1
-// CHECK-DAG:      %0 = comb.and %ret_arg0_reg.done, %ret_arg1_reg.done, %ret_arg2_reg.done, %ret_arg3_reg.done, %ret_arg4_reg.done : i1
+// CHECK-DAG:      %0 = comb.and %ret_arg4_reg.done, %ret_arg3_reg.done, %ret_arg2_reg.done, %ret_arg1_reg.done, %ret_arg0_reg.done : i1
 // CHECK-DAG:      calyx.group_done %0 ? %true : i1
 // CHECK-NEXT: }
 module {
@@ -189,7 +189,7 @@ module {
 // CHECK-DAG:   calyx.assign %ret_arg1_reg.write_en = %true : i1
 // CHECK-DAG:   calyx.assign %std_pad_0.in = %in0 : i4
 // CHECK-DAG:   calyx.assign %std_extsi_0.in = %in0 : i4
-// CHECK-DAG:   %0 = comb.and %ret_arg0_reg.done, %ret_arg1_reg.done : i1
+// CHECK-DAG:   %0 = comb.and %ret_arg1_reg.done, %ret_arg0_reg.done : i1
 // CHECK-DAG:   calyx.group_done %0 ? %true : i1
 // CHECK-DAG: }
 
