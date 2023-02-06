@@ -249,7 +249,9 @@ class System:
       # defined so we can go through and output the typedefs delcarations.
       lambda sys: TypeAlias.declare_aliases(sys.mod),
       "builtin.module(lower-hwarith-to-hw, msft-lower-constructs, msft-lower-instances)",
+      "builtin.module(esi-emit-cpp-cosim-api{{tops={tops} output-file=ESIRuntime.h}})",
       "builtin.module(esi-emit-collateral{{tops={tops} schema-file=schema.capnp}})",
+      "builtin.module(esi-clean-metadata)",
       "builtin.module(lower-msft-to-hw{{verilog-file={verilog_file}}})",
       "builtin.module(hw.module(lower-seq-hlmem))",
       "builtin.module(lower-esi-to-physical, lower-esi-ports, lower-esi-to-hw)",
@@ -329,21 +331,24 @@ class System:
 
     sw_api_langs = self.sw_api_langs
     if sw_api_langs is None:
-      sw_api_langs = ["python"]
+      sw_api_langs = ["python", "cpp"]
+
+    services_file = (self.hw_output_dir / "services.json")
+    if not services_file.exists():
+      raise FileNotFoundError("Could not locate ESI services description. " +
+                              "Have you emitted the outputs?")
+
+    api_output_dir = self.output_directory / "runtime"
+    if not api_output_dir.exists():
+      api_output_dir.mkdir()
 
     for lang in sw_api_langs:
-      if lang != "python":
+      if lang not in ["python", "cpp"]:
         raise ValueError(f"Language '{lang}' not supported")
 
-      services_file = (self.hw_output_dir / "services.json")
-      if not services_file.exists():
-        raise FileNotFoundError("Could not locate ESI services description. " +
-                                "Have you emitted the outputs?")
+      if lang == "python":
+        b = PythonApiBuilder(services_file.open().read())
 
-      api_output_dir = self.output_directory / "runtime"
-      if not api_output_dir.exists():
-        api_output_dir.mkdir()
-      b = PythonApiBuilder(services_file.open().read())
       b.build(self.name, api_output_dir)
 
   def package(self):

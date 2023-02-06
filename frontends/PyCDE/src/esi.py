@@ -231,9 +231,14 @@ def CosimBSP(user_module):
         shutil.copy(f, hw_src)
       shutil.copy(bin_dir / "driver.cpp", hw_src)
       shutil.copy(bin_dir / "driver.sv", hw_src)
-      shutil.copy(esi_inc_dir / "ESIPrimitives.sv", hw_src)
-      shutil.copy(esi_inc_dir / "Cosim_DpiPkg.sv", hw_src)
-      shutil.copy(esi_inc_dir / "Cosim_Endpoint.sv", hw_src)
+
+      # Are these still required? Verilator chokes on an internal error with
+      # having these declared in multiple placed, since it also seems to be
+      # including esi_inc_dir in the cosim runner... or maybe it's just my
+      # local setup.
+      #shutil.copy(esi_inc_dir / "ESIPrimitives.sv", hw_src)
+      #shutil.copy(esi_inc_dir / "Cosim_DpiPkg.sv", hw_src)
+      #shutil.copy(esi_inc_dir / "Cosim_Endpoint.sv", hw_src)
       shutil.copy(__dir__ / "Makefile.cosim", sys.output_directory)
       shutil.copy(sys.hw_output_dir / "schema.capnp", sys.runtime_output_dir)
 

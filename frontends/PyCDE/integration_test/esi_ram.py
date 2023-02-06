@@ -39,7 +39,7 @@ class Mid(Module):
     RamI64x8.write(write_data)
 
 
-class top(Module):
+class Top(Module):
   clk = Clock(types.i1)
   rst = Input(types.i1)
 
@@ -57,7 +57,6 @@ class top(Module):
     RamI64x8.instantiate_builtin("sv_mem",
                                  result_types=[],
                                  inputs=[ports.clk, ports.rst])
-    esi.Cosim(MemComms, ports.clk, ports.rst)
 
 
 def run_cosim(tmpdir=".", schema_path="schema.capnp", rpchostport=None):
@@ -90,6 +89,8 @@ def run_cosim(tmpdir=".", schema_path="schema.capnp", rpchostport=None):
 
 
 if __name__ == "__main__":
-  s = pycde.System([top], name="ESIMem", output_directory=sys.argv[1])
+  s = pycde.System([esi.CosimBSP(Top)],
+                   name="ESIMem",
+                   output_directory=sys.argv[1])
   s.compile()
   s.package()

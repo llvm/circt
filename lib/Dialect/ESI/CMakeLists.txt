@@ -14,6 +14,7 @@ set(srcs
   ESIStdServices.cpp
   ESITranslations.cpp
   ESITypes.cpp
+  capnp/ESIAddCPPCapnpAPI.cpp
 )
 
 set(ESI_LinkLibs
@@ -46,7 +47,11 @@ if(CapnProto_FOUND)
 endif()
 
 if (ESI_CAPNP)
-  list(APPEND srcs capnp/Schema.cpp)
+  list(APPEND srcs
+    capnp/Schema.cpp
+    capnp/ESICapnp.cpp
+    capnp/CPPAPI.cpp
+  )
   list(APPEND ESI_LinkLibs CapnProto::capnp CapnProto::capnpc)
   list(APPEND CP_FILES ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/ESI/cosim/CosimDpi.capnp)
   list(APPEND CP_FILES cosim/Cosim_DpiPkg.sv)
