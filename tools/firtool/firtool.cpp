@@ -905,7 +905,8 @@ static LogicalResult processBuffer(
           }));
 
     if (stripDebugInfo)
-      exportPm.addPass(mlir::createStripDebugInfoPass());
+      exportPm.addPass(circt::createStripDebugInfoWithPredPass(
+          [](mlir::Location loc) { return true; }));
 
     // Emit a single file or multiple files depending on the output format.
     switch (outputFormat) {
