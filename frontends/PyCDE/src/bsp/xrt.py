@@ -3,7 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from pycde import Clock, Input, Output, System
-from pycde import module, generator, types
+from pycde import Module, generator, types
 
 import glob
 import pathlib
@@ -39,8 +39,7 @@ def XrtBSP(user_module):
   environment), set the PYTHON variable (e.g. 'PYTHON=python3.9').
   """
 
-  @module
-  class top:
+  class top(Module):
     ap_clk = Clock()
     ap_resetn = Input(types.i1)
 

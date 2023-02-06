@@ -93,26 +93,23 @@ class System:
   def add_packaging_step(self, func: Callable):
     self.packaging_funcs.append(func)
 
+  def _return_create_if_necessary(self, dir: pathlib.Path):
+    """Return the director given by 'dir' but create it if it doesn't exist."""
+    if not dir.exists():
+      dir.mkdir()
+    return dir
+
   @property
   def hw_output_dir(self):
-    ret = self.output_directory / "hw"
-    if not ret.exists():
-      ret.mkdir()
-    return ret
+    return self._return_create_if_necessary(self.output_directory / "hw")
 
   @property
   def runtime_output_dir(self):
-    ret = self.output_directory / "runtime"
-    if not ret.exists():
-      ret.mkdir()
-    return ret
+    return self._return_create_if_necessary(self.output_directory / "runtime")
 
   @property
   def sys_runtime_output_dir(self):
-    ret = self.runtime_output_dir / self.name
-    if not ret.exists():
-      ret.mkdir()
-    return ret
+    return self._return_create_if_necessary(self.output_directory / self.name)
 
   def _get_ip(self):
     return ir.InsertionPoint(self.mod.body)
