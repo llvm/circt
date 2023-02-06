@@ -1846,7 +1846,6 @@ private:
   HandshakeLoweringState &ls;
 };
 
-// Rewrite handshake.instance op. Simply replace it with a hw.instance op
 class ExternalInstanceConversionPattern
     : public OpConversionPattern<handshake::ExternalInstanceOp> {
 public:

@@ -238,7 +238,7 @@ def HWModuleOp : HWModuleOpBase<"module",
   let hasVerifier = 1;
 }
 
-def HWModuleExternOp : HWModuleOpBase<"module.extern",[IsolatedFromAbove]> {
+def HWModuleExternOp : HWModuleOpBase<"module.extern",[]> {
   let summary = "HW external Module";
   let description = [{
     The "hw.module.extern" operation represents an external reference to a
