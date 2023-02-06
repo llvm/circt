@@ -528,9 +528,11 @@ getLocationInfoAsStringImpl(const SmallPtrSetImpl<Attribute> &locationSet,
   if (style == LoweringOptions::LocationInfoStyle::None)
     return "";
   auto str = getLocationInfoAsStringImpl(locationSet);
-  if (style == LoweringOptions::LocationInfoStyle::WrapInAtSquareBracket)
-    return "@[" + str + "]";
-  return str;
+  if (str.empty() || style == LoweringOptions::LocationInfoStyle::Plain)
+    return str;
+  assert(style == LoweringOptions::LocationInfoStyle::WrapInAtSquareBracket &&
+         "other styles must be already handled");
+  return "@[" + str + "]";
 }
 
 /// Return the location information in the specified style.
