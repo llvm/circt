@@ -723,42 +723,6 @@ static LogicalResult legalizeHWModule(Block &block,
       }
     }
 
-    // Force any expression used in the event control of an always process to be
-    // a trivial wire, if the corresponding option is set.
-    if (!options.allowExprInEventControl) {
-      auto enforceWire = [&](Value expr) {
-        // Direct port uses are fine.
-        if (isSimpleReadOrPort(expr))
-          return;
-        if (auto inst = expr.getDefiningOp<InstanceOp>())
-          return;
-        auto builder = ImplicitLocOpBuilder::atBlockBegin(
-            op.getLoc(), &op.getParentOfType<HWModuleOp>().front());
-        auto newWire = builder.create<WireOp>(expr.getType());
-        builder.setInsertionPoint(&op);
-        auto newWireRead = builder.create<ReadInOutOp>(newWire);
-        // For simplicity, replace all uses with the read first.  This lets us
-        // recursive root out all uses of the expression.
-        expr.replaceAllUsesWith(newWireRead);
-        builder.setInsertionPoint(&op);
-        builder.create<AssignOp>(newWire, expr);
-        // To get the output correct, given that reads are always inline,
-        // duplicate them for each use.
-        lowerAlwaysInlineOperation(newWireRead);
-      };
-      if (auto always = dyn_cast<AlwaysOp>(op)) {
-        for (auto clock : always.getClocks())
-          enforceWire(clock);
-        continue;
-      }
-      if (auto always = dyn_cast<AlwaysFFOp>(op)) {
-        enforceWire(always.getClock());
-        if (auto reset = always.getReset())
-          enforceWire(reset);
-        continue;
-      }
-    }
-
     // If the target doesn't support local variables, hoist all the expressions
     // out to the nearest non-procedural region.
     if (options.disallowLocalVariables && isVerilogExpression(&op) &&
