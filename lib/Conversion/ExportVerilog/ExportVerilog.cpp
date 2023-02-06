@@ -5059,7 +5059,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         })
         .Case<BindOp, BindInterfaceOp>([&](auto op) {
           if (!attr) {
-            separateFile(op, "bindfile");
+            separateFile(op, "bindfile.sv");
           } else {
             separateFile(op);
           }
