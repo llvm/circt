@@ -41,14 +41,6 @@ def InnerRefAttr : AttrDef<HWDialect, "InnerRef"> {
                                          mlir::StringAttr symName,
                                          mlir::StringAttr moduleName);
 
-    /// Recursively traverse the sub-attribute.
-    void walkImmediateSubElements(
-        llvm::function_ref<void(mlir::Attribute)> walkAttrsFn,
-        llvm::function_ref<void(mlir::Type)> walkTypesFn) {
-      walkAttrsFn(getModuleRef());
-      walkAttrsFn(getName());
-    }
-
     /// Return the name of the referenced module.
     mlir::StringAttr getModule() const { return getModuleRef().getAttr(); }
   }];
