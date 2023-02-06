@@ -390,7 +390,7 @@ followed by instance `@baz` in module `@Bar`, followed by the wire named `@w` in
 module `@Baz`.
 
 ``` mlir
-firrtl.circuit "Foo"   {
+firrtl.circuit "Foo" {
   firrtl.hierpath @nla [@Foo::@bar, @Bar::@baz, @Baz::@w]
   firrtl.module @Baz() {
     %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla, class = "ExampleAnno"}]} : !firrtl.uint

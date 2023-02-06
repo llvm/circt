@@ -77,7 +77,7 @@ def PrintFOp : FIRRTLOp<"printf"> {
   let results = (outs);
 
   let assemblyFormat = [{
-    $clock `,` $cond `,` $formatString custom<PrintfAttrs>(attr-dict)
+    $clock `,` $cond `,` $formatString `` custom<PrintfAttrs>(attr-dict) ` `
     (`(` $substitutions^ `)` `:` qualified(type($substitutions)))?
   }];
 }
@@ -106,7 +106,7 @@ def StopOp : FIRRTLOp<"stop"> {
                        StrAttr:$name);
   let results = (outs);
 
-  let assemblyFormat = "$clock `,` $cond `,` $exitCode custom<StopAttrs>(attr-dict)";
+  let assemblyFormat = "$clock `,` $cond `,` $exitCode `` custom<StopAttrs>(attr-dict)";
 }
 
 class VerifOp<string mnemonic, list<Trait> traits = []> :

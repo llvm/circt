@@ -173,7 +173,7 @@ operation or port attributes.  As an example of this, the above parses into the
 following MLIR representation:
 
 ```mlir
-firrtl.circuit "Foo"  {
+firrtl.circuit "Foo" {
   firrtl.module @Foo() attributes {annotations = [{hello = "world"}]} {
     firrtl.skip
   }
