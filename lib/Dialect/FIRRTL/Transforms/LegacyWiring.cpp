@@ -55,6 +55,7 @@ LogicalResult circt::firrtl::applyWiring(const AnnoPathValue &target,
       } else {
         inst = cast<InstanceOp>(target.instances.back());
       }
+      state.wiringProblemInstRefs.insert(inst);
       builder.setInsertionPointAfter(inst);
       targetValue =
           getValueByFieldID(builder, inst->getResult(portNum), target.fieldIdx);

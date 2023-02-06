@@ -262,6 +262,7 @@ struct ApplyState {
   DenseMap<Attribute, FlatSymbolRefAttr> instPathToNLAMap;
   size_t numReusedHierPaths = 0;
 
+  DenseSet<InstanceOp> wiringProblemInstRefs;
   DenseMap<StringAttr, LegacyWiringProblem> legacyWiringProblems;
   SmallVector<WiringProblem> wiringProblems;
 

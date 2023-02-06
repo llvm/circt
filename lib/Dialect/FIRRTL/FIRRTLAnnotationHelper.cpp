@@ -412,13 +412,22 @@ static Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
   // module. This also updates all the instances of the external module.
   // This removes and replaces the instance, and returns the updated
   // instance.
-  modInstance = addPortsToModule(
-      mod, modInstance, portRefType, Direction::Out, refName,
-      state.instancePathCache,
-      [&](FModuleLike mod) -> ModuleNamespace & {
-        return state.getNamespace(mod);
-      },
-      &state.targetCaches);
+  if (!state.wiringProblemInstRefs.contains(modInstance)) {
+    modInstance = addPortsToModule(
+        mod, modInstance, portRefType, Direction::Out, refName,
+        state.instancePathCache,
+        [&](FModuleLike mod) -> ModuleNamespace & {
+          return state.getNamespace(mod);
+        },
+        &state.targetCaches);
+  } else {
+    // As a current limitation, mixing legacy Wiring and Data Taps is forbidden
+    // to prevent invalidating Values used later
+    mod->emitOpError(
+        "cannot be used for both legacy Wiring and DataTaps simultaneously");
+    return nullptr;
+  }
+
   // Since the instance op generates the RefType output, no need of another
   // RefSendOp.  Store into an op to ensure we have stable reference,
   // so future tapping won't invalidate this Value.
