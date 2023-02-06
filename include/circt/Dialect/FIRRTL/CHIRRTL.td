@@ -37,6 +37,7 @@ def CHIRRTLDialect : Dialect {
   let dependentDialects = ["circt::firrtl::FIRRTLDialect"];
 
   let useDefaultTypePrinterParser = 1;
+  let useFoldAPI = kEmitFoldAdaptorFolder;
 }
 
 //===----------------------------------------------------------------------===//
