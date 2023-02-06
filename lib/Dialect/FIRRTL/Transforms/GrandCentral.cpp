@@ -2133,11 +2133,15 @@ void GrandCentralPass::runOnOperation() {
       continue;
     auto companionBuilder =
         OpBuilder::atBlockEnd(companionModule.getBodyBlock());
+
+    // Generate gathered XMR's.
     for (auto xmrElem : xmrElems) {
       auto uloc = companionBuilder.getUnknownLoc();
       companionBuilder.create<sv::VerbatimOp>(uloc, xmrElem.str, xmrElem.val,
                                               xmrElem.syms);
     }
+    numXMRs += xmrElems.size();
+
     sv::InterfaceOp topIface;
     for (const auto &ifaceBuilder : interfaceBuilder) {
       auto builder = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
