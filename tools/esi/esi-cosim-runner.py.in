@@ -29,7 +29,7 @@ class CosimTestRunner:
     class to allow for per-test mutable state variables."""
 
   def __init__(self, testFile, schema, tmpdir, addlArgs, interactive: bool,
-               include_aux_files: bool, exec: bool, exec_args: str):
+               include_aux_files: bool, exec: bool, exec_args: str, server_only: bool):
     """Parse a test file. Look for comments we recognize anywhere in the
         file. Assemble a list of sources."""
 
@@ -55,7 +55,7 @@ class CosimTestRunner:
                             "ESI", "CosimDpi.capnp")
     self.schema = schema
 
-    if not self.exec:
+    if not self.exec and not self.server_only:
       fileReader = open(self.file, "r")
       for line in fileReader:
         # Run this Python line.
@@ -195,30 +195,41 @@ class CosimTestRunner:
       if not self.exec:
         self.writeScript(port)
 
-      # Pycapnp complains if the PWD environment var doesn't match the
-      # actual CWD.
-      testEnv = os.environ.copy()
-      testEnv["PWD"] = os.getcwd()
-      testEnv["PYTHONPATH"] = testEnv[
-          "PYTHONPATH"] + f":{os.path.dirname(__file__)}"
-      # Run the test script.
-      if self.exec:
-        args = [str(port), self.schema] + self.exec_args.split(" ")
-        if self.file.endswith(".py"):
-          cmd = [sys.executable, "-u", self.file] + args
-        else:
-          cmd = [self.file] + args
+      if self.server_only:
+        # wait for user input to kill the server
+        input("Running in server-only mode - Press anything to kill the server...")
+
+
       else:
-        cmd = [sys.executable, "-u", "script.py"]
-      print("[INFO] Test run command: " + " ".join(cmd))
-      testProc = subprocess.run(cmd,
-                                stdout=testStdout,
-                                stderr=testStderr,
-                                cwd=os.getcwd(),
-                                env=testEnv)
-      if not self.interactive:
-        testStdout.close()
-        testStderr.close()
+        # Test mode
+
+        # Pycapnp complains if the PWD environment var doesn't match the
+        # actual CWD.
+        testEnv = os.environ.copy()
+        testEnv["PWD"] = os.getcwd()
+        testEnv["PYTHONPATH"] = testEnv[
+            "PYTHONPATH"] + f":{os.path.dirname(__file__)}"
+        # Run the test script.
+        if self.exec:
+          args = [f"localhost:{port}", self.schema] + self.exec_args.split(" ")
+          if self.file.endswith(".py"):
+            cmd = [sys.executable, "-u", self.file] + args
+          else:
+            cmd = [self.file] + args
+        else:
+          cmd = [sys.executable, "-u", "script.py"]
+        
+        # strip out empty args
+        cmd = [x for x in cmd if x]
+        print("[INFO] Test run command: " + " ".join(cmd))
+        testProc = subprocess.run(cmd,
+                                  stdout=testStdout,
+                                  stderr=testStderr,
+                                  cwd=os.getcwd(),
+                                  env=testEnv)
+        if not self.interactive:
+          testStdout.close()
+          testStderr.close()
     finally:
       # Make sure to stop the simulation no matter what.
       if simProc:
@@ -305,11 +316,14 @@ def __main__(args):
   argparser.add_argument("--test-args",
                          default="",
                          help="Extra args to pass to the test.")
-  argparser.add_argument("source", help="The source run spec file")
+  argparser.add_argument("source", help="The source run spec file", default=None)
   argparser.add_argument("addlArgs",
                          nargs=argparse.REMAINDER,
                          help="Additional arguments to pass through to " +
                          "'circt-rtl-sim.py'")
+  argparser.add_argument("--server-only",
+                         action="store_true",
+                         help="Only run the cosim server, and do not run any test files")
 
   if len(args) <= 1:
     argparser.print_help()
@@ -325,7 +339,7 @@ def __main__(args):
 
   runner = CosimTestRunner(args.source, args.schema, args.tmpdir, args.addlArgs,
                            args.interactive, not args.no_aux_files, args.exec,
-                           args.test_args)
+                           args.test_args, args.server_only)
   rc = runner.compile()
   if rc != 0:
     return rc

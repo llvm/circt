@@ -36,3 +36,7 @@ add_lit_testsuite(check-pycde-integration "Running the PyCDE integration tests"
   DEPENDS ${PYCDE_INTEGRATION_TEST_DEPENDS}
   )
 set_target_properties(check-pycde-integration PROPERTIES FOLDER "PyCDEIntegrationTests")
+
+add_lit_testsuites(PYCDE_INTEGRATION ${CMAKE_CURRENT_SOURCE_DIR}
+  DEPENDS ${CIRCT_INTEGRATION_TEST_DEPS}
+  )
