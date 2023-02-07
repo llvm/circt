@@ -10,7 +10,6 @@ include "circt/Dialect/HW/HWOpInterfaces.td"
 
 def InstanceOp : MSFTOp<"instance", [
         Symbol,
-        ParentOneOf<["MSFTModuleOp"]>,
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>,
         DeclareOpInterfaceMethods<HWInstanceLike>
