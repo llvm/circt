@@ -33,3 +33,12 @@ class RandomAccessMemoryDeclOp:
   @property
   def innerType(self):
     return ir.TypeAttr(self.attributes["innerType"])
+
+
+class ESIPureModuleOp:
+
+  def add_entry_block(self):
+    if len(self.body.blocks) > 0:
+      raise IndexError('The module already has an entry block')
+    self.body.blocks.append()
+    return self.body.blocks[0]
