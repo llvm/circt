@@ -12,7 +12,7 @@
 
 include "mlir/IR/OpBase.td"
 
-def ESIPureModule : ESI_Op<"pure_module",
+def ESIPureModuleOp : ESI_Op<"pure_module",
       [Symbol, NoTerminator, RegionKindInterface, NoRegionArguments,
        SingleBlock, HasParent<"mlir::ModuleOp">]> {
   let summary = "ESI pure module";

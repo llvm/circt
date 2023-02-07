@@ -428,7 +428,7 @@ void ServiceImplementReqOp::gatherPairedReqs(
 // Structural ops.
 //===----------------------------------------------------------------------===//
 
-LogicalResult ESIPureModule::verify() {
+LogicalResult ESIPureModuleOp::verify() {
   ESIDialect *esiDialect = getContext()->getLoadedDialect<ESIDialect>();
 
   Block &body = getBody().front();
