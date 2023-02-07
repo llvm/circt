@@ -37,14 +37,13 @@ public:
     bool isRoot() const { return path.empty(); }
   };
 
-  PathNode* nodeForValue(Value v);
+  PathNode *nodeForValue(Value v);
 
-  private:
-  void visitOp(Operation* op);
+private:
+  void visitOp(Operation *op);
   void visitSubfield(SubfieldOp sf);
   void visitSubindex(SubindexOp si);
   void visitSubaccess(SubaccessOp sa);
-
 
   void makeNodeForValue(Value dst, Value src, ArrayRef<int64_t> path);
 

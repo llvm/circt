@@ -22,32 +22,32 @@ struct PrintFIRRTLFieldSourcePass
     : public PrintFIRRTLFieldSourcePassBase<PrintFIRRTLFieldSourcePass> {
   PrintFIRRTLFieldSourcePass(raw_ostream &os) : os(os) {}
 
-    void visitValue(const FieldSource& fieldRefs, Value v) {
-      auto* p = fieldRefs.nodeForValue(v);
-      if (p) {
-        os << v << " : " << p->src << " : {";
-        llvm::interleaveComma(p->path, os);
-        os << "}\n";
-      }
+  void visitValue(const FieldSource &fieldRefs, Value v) {
+    auto *p = fieldRefs.nodeForValue(v);
+    if (p) {
+      os << v << " : " << p->src << " : {";
+      llvm::interleaveComma(p->path, os);
+      os << "}\n";
     }
+  }
 
-    void visitOp(const FieldSource& fieldRefs, Operation* op) {
-      for (auto r : op->getResults())
-        visitValue(fieldRefs, r);
+  void visitOp(const FieldSource &fieldRefs, Operation *op) {
+    for (auto r : op->getResults())
+      visitValue(fieldRefs, r);
     // recurse in to regions
-    for (auto& r : op->getRegions())
-        for (auto& b : r.getBlocks())
-            for (auto& op : b)
-            visitOp(fieldRefs, &op);
-    }
+    for (auto &r : op->getRegions())
+      for (auto &b : r.getBlocks())
+        for (auto &op : b)
+          visitOp(fieldRefs, &op);
+  }
 
   void runOnOperation() override {
     auto modOp = getOperation();
     auto &fieldRefs = getAnalysis<FieldSource>();
     for (auto port : modOp.getBodyBlock()->getArguments())
-        visitValue(fieldRefs, port);
-        for (auto& op : *modOp.getBodyBlock())
-            visitOp(fieldRefs, op);
+      visitValue(fieldRefs, port);
+    for (auto &op : *modOp.getBodyBlock())
+      visitOp(fieldRefs, op);
 
     markAllAnalysesPreserved();
   }
