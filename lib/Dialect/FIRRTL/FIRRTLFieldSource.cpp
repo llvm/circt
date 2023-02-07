@@ -22,6 +22,12 @@ void FieldSource::visitOp(Operation *op) {
     return visitSubindex(si);
   else if (auto sa = dyn_cast<SubaccessOp>(op))
     return visitSubaccess(sa);
+  else if (isa<WireOp, NodeOp, RegOp, RegResetOp, BitCastOp>(op))
+    return makeNodeForValue(op->getResult(0), op->getResult(0), {});
+  else if (auto mem = dyn_cast<MemOp>(op))
+    return visitMem(mem);
+  else if (auto inst = dyn_cast<InstanceOp>(op))
+    return visitInst(inst);
   // recurse in to regions
   for (auto &r : op->getRegions())
     for (auto &b : r.getBlocks())
@@ -56,7 +62,17 @@ void FieldSource::visitSubaccess(SubaccessOp sa) {
   makeNodeForValue(sa.getResult(), node->src, sv);
 }
 
-FieldSource::PathNode *FieldSource::nodeForValue(Value v) {
+void FieldSource::visitMem(MemOp mem) {
+  for (auto r : mem.getResults())
+    makeNodeForValue(r, r, {});
+}
+
+void FieldSource::visitInst(InstanceOp inst) {
+  for (auto r : inst.getResults())
+    makeNodeForValue(r, r, {});
+}
+
+const FieldSource::PathNode *FieldSource::nodeForValue(Value v) const {
   auto ii = paths.find(v);
   if (ii == paths.end())
     return nullptr;

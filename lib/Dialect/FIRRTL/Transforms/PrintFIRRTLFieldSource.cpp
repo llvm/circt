@@ -25,7 +25,11 @@ struct PrintFIRRTLFieldSourcePass
   void visitValue(const FieldSource &fieldRefs, Value v) {
     auto *p = fieldRefs.nodeForValue(v);
     if (p) {
-      os << v << " : " << p->src << " : {";
+      if (p->isRoot())
+        os << "ROOT: ";
+      else
+        os << "SUB:  " << v;
+      os << " : " << p->src << " : {";
       llvm::interleaveComma(p->path, os);
       os << "}\n";
     }
@@ -43,11 +47,12 @@ struct PrintFIRRTLFieldSourcePass
 
   void runOnOperation() override {
     auto modOp = getOperation();
+    os << "** " << modOp.getName() << "\n";
     auto &fieldRefs = getAnalysis<FieldSource>();
     for (auto port : modOp.getBodyBlock()->getArguments())
       visitValue(fieldRefs, port);
     for (auto &op : *modOp.getBodyBlock())
-      visitOp(fieldRefs, op);
+      visitOp(fieldRefs, &op);
 
     markAllAnalysesPreserved();
   }
