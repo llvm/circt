@@ -500,7 +500,8 @@ class PureModuleBuilder(ModuleLikeBuilderBase):
   def generate(self):
     """Fill in (generate) this module. Only supports a single generator
     currently."""
-    assert len(self.generators) == 1
+    if len(self.generators) != 1:
+      raise ValueError("Must have exactly one generator.")
     g: Generator = list(self.generators.values())[0]
 
     entry_block = self.circt_mod.add_entry_block()
