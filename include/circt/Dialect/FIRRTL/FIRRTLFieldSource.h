@@ -25,8 +25,30 @@ namespace firrtl {
 /// To use this class, retrieve a cached copy from the analysis manager:
 ///   auto &fieldsource = getAnalysis<FieldSource>(getOperation());
 class FieldSource {
+
 public:
   explicit FieldSource(Operation *operation);
+
+  struct PathNode {
+    PathNode(Value src, ArrayRef<int64_t> ar) : src(src), path(ar) {}
+    Value src;
+    SmallVector<int64_t, 4> path;
+
+    bool isRoot() const { return path.empty(); }
+  };
+
+  PathNode* nodeForValue(Value v);
+
+  private:
+  void visitOp(Operation* op);
+  void visitSubfield(SubfieldOp sf);
+  void visitSubindex(SubindexOp si);
+  void visitSubaccess(SubaccessOp sa);
+
+
+  void makeNodeForValue(Value dst, Value src, ArrayRef<int64_t> path);
+
+  DenseMap<Value, PathNode> paths;
 };
 
 } // namespace firrtl
