@@ -2,12 +2,16 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from pycde import Clock, Input, InputChannel, Output, OutputChannel, System
-from pycde import Module, generator, esi, modparams, types
-from ..signals import And, Or, BitsSignal
-from ..constructs import ControlReg, Wire
 from .fifo import SimpleXilinxFifo
+
+from .. import esi
+from ..common import Clock, Input, InputChannel, Output, OutputChannel
+from ..constructs import ControlReg, Wire
 from ..dialects import hw
+from ..module import Module, generator, modparams
+from ..signals import And, Or, BitsSignal
+from ..system import System
+from ..types import types
 
 from dataclasses import asdict, dataclass
 import glob
@@ -233,10 +237,27 @@ def ChannelToRegs(type):
 
 def XrtBSP(user_module):
   """Use the Xilinx RunTime (XRT) shell to implement ESI services and build an
-  image or emulation package."""
+  image or emulation package.
+  How to use this BSP:
+  - Wrap your top PyCDE module in `XrtBSP`.
+  - Run your script. This BSP will write a 'build package' to the output dir.
+  This package contains a Makefile.xrt which (given a proper Vitis dev
+  environment) will compile a hw image or hw_emu image. It is a free-standing
+  build package -- you do not need PyCDE installed on the same machine as you
+  want to do the image build.
+  - To build the `hw` image, run 'make -f Makefile.xrt TARGET=hw'. If you want
+  an image which runs on an Azure NP-series instance, run the 'azure' target
+  (requires an Azure subscription set up with as per
+  https://learn.microsoft.com/en-us/azure/virtual-machines/field-programmable-gate-arrays-attestation).
+  This target requires a few environment variables to be set (which the Makefile
+  will tell you about).
+  - To build a hw emulation image, run with TARGET=hw_emu.
+  - The makefile also builds a Python plugin. To specify the python version to
+  build against (if different from the version ran by 'python3' in your
+  environment), set the PYTHON variable (e.g. 'PYTHON=python3.9').
+  """
 
-  @esi.ServiceImplementation(None)
-  class XrtService:
+  class XrtService(esi.ServiceImplementation):
     clk = Clock(types.i1)
     rst = Input(types.i1)
 
@@ -325,7 +346,7 @@ def XrtBSP(user_module):
         adapter = ChannelToRegs(req.type)(clk=clk,
                                           rst=rst,
                                           regs_ready=ready,
-                                          msgs=req.value)
+                                          msgs=req)
 
         # Did our control register get written to?
         reg_write_happened_control = reg_write_happened & (
@@ -423,7 +444,10 @@ def XrtBSP(user_module):
 
       print("WARNING: this XRT bridge is still a work-in-progress and largely"
             " untested! Use at your own risk!")
-      xrt = XrtService(clk=ports.ap_clk, rst=rst, axil_in=axil_in_sig)
+      xrt = XrtService(decl=None,
+                       clk=ports.ap_clk,
+                       rst=rst,
+                       axil_in=axil_in_sig)
 
       axil_out = xrt.axil_out
 

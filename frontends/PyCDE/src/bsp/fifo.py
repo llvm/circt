@@ -1,7 +1,7 @@
 import math
-import pycde
-from pycde import modparams, types, Input, Output, Module
-from pycde.dialects import hw
+from ..module import modparams, generator, Input, Output, Module
+from ..types import types
+from ..dialects import hw
 
 # See UG974 for additional usage information
 
@@ -82,7 +82,7 @@ def SimpleXilinxFifo(type=types.int(32),
     full = Output(types.i1)
     empty = Output(types.i1)
 
-    @pycde.generator
+    @generator
     def generate(mod):
       zero = hw.ConstantOp(types.i1, 0)
       ecc_mode = "en_ecc" if ecc else "no_ecc"
