@@ -47,7 +47,7 @@ void FieldSource::visitOp(Operation *op) {
 
 void FieldSource::visitSubfield(SubfieldOp sf) {
   auto value = sf.getInput();
-  const auto* node = nodeForValue(value);
+  const auto *node = nodeForValue(value);
   assert(node && "node should be in the map");
   auto sv = node->path;
   sv.push_back(sf.getFieldIndex());
@@ -56,7 +56,7 @@ void FieldSource::visitSubfield(SubfieldOp sf) {
 
 void FieldSource::visitSubindex(SubindexOp si) {
   auto value = si.getInput();
-  const auto* node = nodeForValue(value);
+  const auto *node = nodeForValue(value);
   assert(node && "node should be in the map");
   auto sv = node->path;
   sv.push_back(si.getIndex());
@@ -65,7 +65,7 @@ void FieldSource::visitSubindex(SubindexOp si) {
 
 void FieldSource::visitSubaccess(SubaccessOp sa) {
   auto value = sa.getInput();
-  const auto* node = nodeForValue(value);
+  const auto *node = nodeForValue(value);
   assert(node && "node should be in the map");
   auto sv = node->path;
   sv.push_back(-1);
