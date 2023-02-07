@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -test-apply-lowering-options='options=exprInEventControl,explicitBitcast,maximumNumberOfTermsPerExpression=10' -export-verilog -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s -test-apply-lowering-options='options=explicitBitcast,maximumNumberOfTermsPerExpression=10' -export-verilog -verify-diagnostics | FileCheck %s
 
 // CHECK-LABEL: module M1
 // CHECK-NEXT:    #(parameter [41:0] param1) (
@@ -457,9 +457,10 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
 }
 
 // CHECK-LABEL: module Aliasing(
-// CHECK-NEXT:             inout [41:0] a,
-// CHECK-NEXT:                          b,
-// CHECK-NEXT:                          c)
+// CHECK-NEXT:    inout [41:0] a, //
+// CHECK-NEXT:                 b, //
+// CHECK-NEXT:                 c //
+// CHECK-NEXT:  );
 hw.module @Aliasing(%a : !hw.inout<i42>, %b : !hw.inout<i42>,
                       %c : !hw.inout<i42>) {
 
@@ -471,10 +472,11 @@ hw.module @Aliasing(%a : !hw.inout<i42>, %b : !hw.inout<i42>,
 
 hw.module @reg_0(%in4: i4, %in8: i8) -> (a: i8, b: i8) {
   // CHECK-LABEL: module reg_0(
-  // CHECK-NEXT:   input  [3:0] in4,
-  // CHECK-NEXT:   input  [7:0] in8,
-  // CHECK-NEXT:   output [7:0] a,
-  // CHECK-NEXT:                b);
+  // CHECK-NEXT:   input  [3:0] in4, //
+  // CHECK-NEXT:   input  [7:0] in8, //
+  // CHECK-NEXT:   output [7:0] a, //
+  // CHECK-NEXT:                b //
+  // CHECK-NEXT:  );
 
   // CHECK-EMPTY:
   // CHECK-NEXT: (* dont_merge *)
@@ -526,8 +528,9 @@ hw.module @reg_1(%in4: i4, %in8: i8) -> (a : i3, b : i5) {
 }
 
 // CHECK-LABEL: module struct_field_inout1(
+// CHECK-NEXT:   inout struct packed {logic b; } a
+// CHECK-NEXT:  );
 hw.module @struct_field_inout1(%a : !hw.inout<struct<b: i1>>) {
-  // CHECK: inout struct packed {logic b; } a);
   // CHECK: assign a.b = 1'h1;
   %true = hw.constant true
   %0 = sv.struct_field_inout %a["b"] : !hw.inout<struct<b: i1>>
@@ -535,8 +538,9 @@ hw.module @struct_field_inout1(%a : !hw.inout<struct<b: i1>>) {
 }
 
 // CHECK-LABEL: module struct_field_inout2(
+// CHECK-NEXT:    inout struct packed {struct packed {logic c; } b; } a
+// CHECK-NEXT:  );
 hw.module @struct_field_inout2(%a: !hw.inout<struct<b: !hw.struct<c: i1>>>) {
-  // CHECK: inout struct packed {struct packed {logic c; } b; } a);
   // CHECK: assign a.b.c = 1'h1;
   %true = hw.constant true
   %0 = sv.struct_field_inout %a["b"] : !hw.inout<struct<b: !hw.struct<c: i1>>>
@@ -1352,6 +1356,32 @@ hw.module @wait_order() {
 }
 
 hw.module.extern @MyExtModule(%in: i8)
+hw.module.extern @ExtModule(%in: i8) -> (out: i8)
+
+// CHECK-LABEL: module InlineBind
+// CHEC:        output wire_0
+hw.module @InlineBind(%a_in: i8) -> (wire: i8){
+  // CHECK:      wire [7:0] _ext1_out;
+  // CHECK-NEXT: wire [7:0] _GEN;
+  // CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement.
+  // CHECK-NEXT:   ExtModule ext1 (
+  // CHECK-NEXT:     .in  (8'(a_in + _GEN)),
+  // CHECK-NEXT:     .out (_ext1_out)
+  // CHECK-NEXT:   );
+  // CHECK-NEXT: */
+  // CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement.
+  // CHECK-NEXT:   ExtModule ext2 (
+  // CHECK-NEXT:     .in  (_ext1_out),
+  // CHECK-NEXT:     .out (wire_0)
+  // CHECK-NEXT:   );
+  // CHECK-NEXT: */
+  %0 = sv.wire : !hw.inout<i8>
+  %1 = sv.read_inout %0: !hw.inout<i8>
+  %2 = comb.add %a_in, %1 : i8
+  %3 = hw.instance "ext1" sym @foo1 @ExtModule(in: %2: i8) -> (out: i8) {doNotPrint=1}
+  %4 = hw.instance "ext2" sym @foo2 @ExtModule(in: %3: i8) -> (out: i8) {doNotPrint=1}
+  hw.output %4: i8
+}
 
 // CHECK-LABEL: module MoveInstances
 hw.module @MoveInstances(%a_in: i8) -> (outc : i8){
@@ -1403,10 +1433,7 @@ hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
   hw.instance "a1" sym @bindInst @extInst(_h: %mywire_rd: i1, _i: %myreg_rd: i1, _j: %j: i1, _k: %0: i1, _z: %z: i0) -> () {doNotPrint=1}
   hw.instance "a2" sym @bindInst2 @extInst(_h: %mywire_rd: i1, _i: %myreg_rd: i1, _j: %j: i1, _k: %0: i1, _z: %z: i0) -> () {doNotPrint=1}
   hw.instance "signed" sym @bindInst3 @extInst2(signed: %mywire_rd1 : i1, _i: %myreg_rd1 : i1, _j: %j: i1, _k: %0: i1, _z: %z: i0) -> () {doNotPrint=1}
-// CHECK: wire _signed__k
-// CHECK-NEXT: wire _a2__k = 1'h1;
-// CHECK-NEXT: wire _a1__k = 1'h1;
-// CHECK-NEXT: wire mywire
+// CHECK:      wire mywire
 // CHECK-NEXT: myreg
 // CHECK-NEXT: wire signed_0
 // CHECK-NEXT: reg  output_0
@@ -1539,9 +1566,10 @@ hw.module @ElseIfLocations(%clock: i1, %flag1 : i1, %flag2: i1, %flag3: i1) {
 }
 
 // CHECK-LABEL: ReuseExistingInOut
-// CHECK: input {{.+}},
-// CHECK:        [[INPUT:[:alnum:]+]],
-// CHECK: output [[OUTPUT:.+]])
+// CHECK: input {{.+}}, //
+// CHECK:        [[INPUT:[:alnum:]+]], //
+// CHECK: output [[OUTPUT:.+]] //
+// CHECK: );
 hw.module @ReuseExistingInOut(%clock: i1, %a: i1) -> (out1: i1) {
   %expr1 = comb.or %a, %a : i1
   %expr2 = comb.and %a, %a : i1
@@ -1711,14 +1739,14 @@ hw.module @bindInMod() {
 // CHECK-NEXT:   ._h (mywire),
 // CHECK-NEXT:   ._i (myreg),
 // CHECK-NEXT:   ._j (j),
-// CHECK-NEXT:   ._k (_a1__k)
+// CHECK-NEXT:   ._k (1'h1)
 // CHECK-NEXT: //._z (z)
 // CHECK-NEXT: );
 // CHECK-NEXT:  bind remoteInstDut extInst2 signed_1 (
 // CHECK-NEXT:    .signed_0 (signed_0),
 // CHECK-NEXT:    ._i       (output_0),
 // CHECK-NEXT:    ._j       (j),
-// CHECK-NEXT:    ._k       (_signed__k)
+// CHECK-NEXT:    ._k       (1'h1)
 // CHECK: endmodule
 
 sv.bind <@wait_order::@baz>
@@ -1734,7 +1762,7 @@ sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst2>
 // CHECK-NEXT:   ._h (mywire),
 // CHECK-NEXT:   ._i (myreg),
 // CHECK-NEXT:   ._j (j),
-// CHECK-NEXT:   ._k (_a2__k)
+// CHECK-NEXT:   ._k (1'h1)
 // CHECK-NEXT: //._z (z)
 // CHECK-NEXT: );
 
@@ -1749,8 +1777,19 @@ hw.module @NastyPort(%.lots$of.dots: i1) -> (".more.dots": i1) {
 }
 sv.bind #hw.innerNameRef<@NastyPortParent::@foo>
 // CHECK-LABEL: bind NastyPortParent NastyPort foo (
-// CHECK-NEXT:    ._lots24of_dots (_foo__lots24of_dots)
+// CHECK-NEXT:    ._lots24of_dots (1'h0)
 // CHECK-NEXT:    ._more_dots     (_foo__more_dots)
+// CHECK-NEXT:  );
+
+sv.bind #hw.innerNameRef<@InlineBind::@foo1>
+sv.bind #hw.innerNameRef<@InlineBind::@foo2>
+// CHECK-LABEL: bind InlineBind ExtModule ext1 (
+// CHECK-NEXT:    .in  (8'(a_in + _GEN))
+// CHECK-NEXT:    .out (_ext1_out)
+// CHECK-NEXT:  );
+// CHECK-LABEL: bind InlineBind ExtModule ext2 (
+// CHECK-NEXT:    .in  (_ext1_out)
+// CHECK-NEXT:    .out (wire_0)
 // CHECK-NEXT:  );
 
 // CHECK-LABEL:  hw.module @issue595
@@ -1762,4 +1801,3 @@ sv.bind #hw.innerNameRef<@NastyPortParent::@foo>
 // CHECK-LABEL:  hw.module @remoteInstDut
 // CHECK:    %signed = sv.wire  {hw.verilogName = "signed_0"} : !hw.inout<i1>
 // CHECK:    %output = sv.reg  {hw.verilogName = "output_0"} : !hw.inout<i1>
-

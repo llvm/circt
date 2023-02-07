@@ -332,25 +332,6 @@ InstanceOp addPortsToModule(
     llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
     CircuitTargetCache *targetCaches = nullptr);
 
-/// Add a port to each instance on the path `instancePath` and forward the
-/// `fromVal` through them. It returns the port added to the last module on the
-/// given path. The module referenced by the first instance on the path must
-/// contain `fromVal`.
-Value borePortsOnPath(
-    SmallVector<InstanceOp> &instancePath, FModuleOp lcaModule, Value fromVal,
-    StringRef newNameHint, InstancePathCache &instancePathcache,
-    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
-    CircuitTargetCache *targetCachesInstancePathCache);
-
-/// Find the lowest-common-ancestor `lcaModule`, between `srcTarget` and
-/// `dstTarget`, and set `pathFromSrcToWire` with the path between them through
-/// the `lcaModule`. The assumption here is that the srcTarget and dstTarget can
-/// be uniquely identified. Either the instnaces field of their AnnoPathValue is
-/// set or there exists a single path from Top.
-LogicalResult findLCAandSetPath(AnnoPathValue &srcTarget,
-                                AnnoPathValue &dstTarget,
-                                SmallVector<InstanceOp> &pathFromSrcToWire,
-                                FModuleOp &lcaModule, ApplyState &state);
 } // namespace firrtl
 } // namespace circt
 

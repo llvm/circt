@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-dedup))' %s -mlir-print-debuginfo | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-dedup))' %s | FileCheck %s
 
 // CHECK-LABEL: firrtl.circuit "Empty"
 firrtl.circuit "Empty" {
@@ -628,61 +628,3 @@ firrtl.circuit "Foo"  {
     firrtl.instance y1 @Y()
   }
 }
-
-
-// Check that locations are limited.
-// CHECK-LABEL: firrtl.circuit "LimitLoc"
-firrtl.circuit "LimitLoc" {
-  // CHECK: @Simple0
-  // CHECK-NEXT: loc(#loc[[num:.+]])
-  firrtl.module @Simple0() { } loc(#loc0)
-  // CHECK-NOT: @Simple1
-  firrtl.module @Simple1() { } loc(#loc1)
-  // CHECK-NOT: @Simple2
-  firrtl.module @Simple2() { } loc(#loc2)
-  // CHECK-NOT: @Simple3
-  firrtl.module @Simple3() { } loc(#loc3)
-  // CHECK-NOT: @Simple4
-  firrtl.module @Simple4() { } loc(#loc4)
-  // CHECK-NOT: @Simple5
-  firrtl.module @Simple5() { } loc(#loc5)
-  // CHECK-NOT: @Simple6
-  firrtl.module @Simple6() { } loc(#loc6)
-  // CHECK-NOT: @Simple7
-  firrtl.module @Simple7() { } loc(#loc7)
-  // CHECK-NOT: @Simple8
-  firrtl.module @Simple8() { } loc(#loc8)
-  // CHECK-NOT: @Simple9
-  firrtl.module @Simple9() { } loc(#loc9)
-  firrtl.module @LimitLoc() {
-    firrtl.instance simple0 @Simple0()
-    firrtl.instance simple1 @Simple1()
-    firrtl.instance simple2 @Simple2()
-    firrtl.instance simple3 @Simple3()
-    firrtl.instance simple4 @Simple4()
-    firrtl.instance simple5 @Simple5()
-    firrtl.instance simple6 @Simple6()
-    firrtl.instance simple7 @Simple7()
-    firrtl.instance simple8 @Simple8()
-    firrtl.instance simple9 @Simple9()
-  }
-}
-  #loc0 = loc("A.fir":0:1)
-  #loc1 = loc("A.fir":1:1)
-  #loc2 = loc("A.fir":2:1)
-  #loc3 = loc("A.fir":3:1)
-  #loc4 = loc("A.fir":4:1)
-  #loc5 = loc("A.fir":5:1)
-  #loc6 = loc("A.fir":6:1)
-  #loc7 = loc("A.fir":7:1)
-  #loc8 = loc("A.fir":8:1)
-  #loc9 = loc("A.fir":9:1)
-// CHECK: [[L1:#loc.*]] = loc("A.fir":0:1)
-// CHECK: [[L2:#loc.*]] = loc("A.fir":1:1)
-// CHECK: [[L3:#loc.*]] = loc("A.fir":2:1)
-// CHECK: [[L4:#loc.*]] = loc("A.fir":3:1)
-// CHECK: [[L5:#loc.*]] = loc("A.fir":4:1)
-// CHECK: [[L6:#loc.*]] = loc("A.fir":5:1)
-// CHECK: [[L7:#loc.*]] = loc("A.fir":6:1)
-// CHECK: [[L8:#loc.*]] = loc("A.fir":7:1)
-// CHECK: #loc[[num]] = loc(fused[[[L1]], [[L2]], [[L3]], [[L4]], [[L5]], [[L6]], [[L7]], [[L8]]])

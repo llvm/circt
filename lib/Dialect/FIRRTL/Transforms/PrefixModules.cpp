@@ -302,10 +302,27 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
                   StringAttr::get(module.getContext(), newModuleName));
   renameModuleBody(prefixFull, module);
 
-  // If this module contains a Grand Central interface, then also apply renames
-  // to that, but only if there are prefixes to apply.
-  if (auto anno = AnnotationSet(module).getAnnotation(companionAnnoClass))
-    interfacePrefixMap[anno.getMember<IntegerAttr>("id")] = prefixFull;
+  AnnotationSet annotations(module);
+  SmallVector<Annotation, 1> newAnnotations;
+  annotations.removeAnnotations([&](Annotation anno) {
+    if (anno.getClass() == dutAnnoClass) {
+      anno.setMember("prefix", builder.getStringAttr(prefixFull));
+      newAnnotations.push_back(anno);
+      return true;
+    }
+
+    // If this module contains a Grand Central interface, then also apply
+    // renames to that, but only if there are prefixes to apply.
+    if (anno.getClass() == companionAnnoClass)
+      interfacePrefixMap[anno.getMember<IntegerAttr>("id")] = prefixFull;
+    return false;
+  });
+
+  // If any annotations were updated, then update the annotations on the module.
+  if (!newAnnotations.empty()) {
+    annotations.addAnnotations(newAnnotations);
+    annotations.applyToOperation(module);
+  }
 }
 
 /// Apply prefixes from the `prefixMap` to an external module.  No modifications

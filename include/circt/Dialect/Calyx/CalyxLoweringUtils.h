@@ -491,6 +491,16 @@ public:
     return partialPatternRes;
   }
 
+  // Hook for subclasses to lower the op using the rewriter.
+  //
+  // Note that this call is wrapped in `updateRootInPlace`, so any direct IR
+  // mutations that are legal to apply during a root update of op are allowed.
+  //
+  // Also note that this means the op will be re-enqueued to the greedy
+  // rewriter's worklist. A safeguard is in place to prevent patterns from
+  // running multiple times, but if the op is erased or otherwise becomes dead
+  // after the call to `partiallyLower`, there will likely be use-after-free
+  // violations. If you will erase the op, override `matchAndRewrite` directly.
   virtual LogicalResult partiallyLower(OpType op,
                                        PatternRewriter &rewriter) const = 0;
 
@@ -499,15 +509,9 @@ private:
   PatternApplicationState &patternState;
 };
 
-struct ModuleOpConversion : public OpRewritePattern<mlir::ModuleOp> {
-  ModuleOpConversion(MLIRContext *context, StringRef topLevelFunction);
-
-  LogicalResult matchAndRewrite(mlir::ModuleOp moduleOp,
-                                PatternRewriter &rewriter) const override;
-
-private:
-  StringRef topLevelFunction;
-};
+/// Helper to update the top-level ModuleOp to set the entrypoing function.
+LogicalResult applyModuleOpConversion(mlir::ModuleOp,
+                                      StringRef topLevelFunction);
 
 /// FuncOpPartialLoweringPatterns are patterns which intend to match on FuncOps
 /// and then perform their own walking of the IR.
@@ -545,7 +549,16 @@ public:
   /// Return the calyx lowering state for this pattern.
   CalyxLoweringState &loweringState() const;
 
-  /// Partial lowering implementation.
+  // Hook for subclasses to lower the op using the rewriter.
+  //
+  // Note that this call is wrapped in `updateRootInPlace`, so any direct IR
+  // mutations that are legal to apply during a root update of op are allowed.
+  //
+  // Also note that this means the op will be re-enqueued to the greedy
+  // rewriter's worklist. A safeguard is in place to prevent patterns from
+  // running multiple times, but if the op is erased or otherwise becomes dead
+  // after the call to `partiallyLower`, there will likely be use-after-free
+  // violations. If you will erase the op, override `matchAndRewrite` directly.
   virtual LogicalResult
   partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
                            PatternRewriter &rewriter) const = 0;

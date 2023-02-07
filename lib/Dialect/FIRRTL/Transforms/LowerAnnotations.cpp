@@ -314,7 +314,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {"circt.testLocalOnly", {stdResolve, applyWithoutTarget<>}},
     {"circt.testNT", {noResolve, applyWithoutTarget<>}},
     {"circt.missing", {tryResolve, applyWithoutTarget<true>}},
-    {"circt.intrinsic", {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
+    {"circt.Intrinsic", {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
     // Grand Central Views/Interfaces Annotations
     {extractGrandCentralClass, NoTargetAnnotation},
     {grandCentralHierarchyFileAnnoClass, NoTargetAnnotation},
@@ -392,6 +392,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {addSeqMemPortAnnoClass, NoTargetAnnotation},
     {addSeqMemPortsFileAnnoClass, NoTargetAnnotation},
     {extractClockGatesAnnoClass, NoTargetAnnotation},
+    {extractBlackBoxAnnoClass, {stdResolve, applyWithoutTarget<false>}},
     {fullAsyncResetAnnoClass, {stdResolve, applyWithoutTarget<true>}},
     {ignoreFullAsyncResetAnnoClass,
      {stdResolve, applyWithoutTarget<true, FModuleOp>}},
@@ -431,6 +432,7 @@ struct LowerAnnotationsPass
 
   bool ignoreUnhandledAnno = false;
   bool ignoreClasslessAnno = false;
+  bool noRefTypePorts = false;
   SmallVector<DictionaryAttr> worklistAttrs;
 };
 } // end anonymous namespace
@@ -720,7 +722,10 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     };
 
     // Record the addition of ports.
-    addPorts(sources, source, refType, Direction::Out);
+    if (noRefTypePorts)
+      addPorts(sources, source, refType.getType(), Direction::Out);
+    else
+      addPorts(sources, source, refType, Direction::Out);
     addPorts(sinks, sink, refType.getType(), Direction::In);
   }
 
@@ -870,10 +875,13 @@ void LowerAnnotationsPass::runOnOperation() {
 }
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLAnnotationsPass(
-    bool ignoreUnhandledAnnotations, bool ignoreClasslessAnnotations) {
+std::unique_ptr<mlir::Pass>
+circt::firrtl::createLowerFIRRTLAnnotationsPass(bool ignoreUnhandledAnnotations,
+                                                bool ignoreClasslessAnnotations,
+                                                bool noRefTypePorts) {
   auto pass = std::make_unique<LowerAnnotationsPass>();
   pass->ignoreUnhandledAnno = ignoreUnhandledAnnotations;
   pass->ignoreClasslessAnno = ignoreClasslessAnnotations;
+  pass->noRefTypePorts = noRefTypePorts;
   return pass;
 }

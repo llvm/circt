@@ -111,6 +111,9 @@ struct ExtractInstancesPass
   DenseSet<Operation *> dutModules;
   /// All DUT module names.
   DenseSet<Attribute> dutModuleNames;
+  /// The prefix of the DUT module.  This is used when creating new modules
+  /// under the DUT.
+  StringRef dutPrefix = "";
 
   /// A worklist of instances that need to be moved.
   SmallVector<std::pair<InstanceOp, ExtractionInfo>> extractionWorklist;
@@ -262,6 +265,8 @@ void ExtractInstancesPass::collectAnnos() {
                    << "Marking DUT `" << module.moduleName() << "`\n");
         dutRootModules.insert(module);
         dutModules.insert(module);
+        if (auto prefix = anno.getMember<StringAttr>("prefix"))
+          dutPrefix = prefix;
         return false; // other passes may rely on this anno; keep it
       }
       if (!isAnnoInteresting(anno))
@@ -368,6 +373,18 @@ void ExtractInstancesPass::collectAnnos() {
   // mark them as to be extracted.
   // somewhat configurable.
   if (!memoryFileName.empty()) {
+    // Create an empty verbatim to guarantee that this file will exist even if
+    // no memories are found.  This is done to align with the SFC implementation
+    // of this pass where the file is always created.  This does introduce an
+    // additional leading newline in the file.
+    auto *context = circuit.getContext();
+    auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
+                                                    circuit.getBodyBlock());
+    builder.create<sv::VerbatimOp>("")->setAttr(
+        "output_file",
+        hw::OutputFileAttr::getFromFilename(context, memoryFileName,
+                                            /*excludeFromFilelist=*/true));
+
     for (auto module : circuit.getOps<FMemModuleOp>()) {
       LLVM_DEBUG(llvm::dbgs() << "Memory `" << module.moduleName() << "`\n");
       if (!dutModules.contains(module)) {
@@ -927,7 +944,8 @@ void ExtractInstancesPass::groupInstances() {
 
     // Create the wrapper module.
     auto wrapper = builder.create<FModuleOp>(
-        builder.getUnknownLoc(), builder.getStringAttr(wrapperName), ports);
+        builder.getUnknownLoc(), builder.getStringAttr(dutPrefix + wrapperName),
+        ports);
     SymbolTable::setSymbolVisibility(wrapper, SymbolTable::Visibility::Private);
 
     // Instantiate the wrapper module in the parent and replace uses of the
@@ -1036,8 +1054,9 @@ void ExtractInstancesPass::createTraceFiles() {
         os << ".";
         addSymbol(sym);
       }
-      os << ".";
-      addSymbol(getInnerRefTo(inst));
+      // The final instance name is excluded as this does not provide useful
+      // additional information and could conflict with a name inside the final
+      // module.
       os << "\n";
     }
 

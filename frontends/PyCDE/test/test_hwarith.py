@@ -1,8 +1,8 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
-from pycde import Input, Output, generator
+from pycde import Input, Output, generator, Module
 from pycde.testing import unittestmodule
-from pycde.pycde_types import types
+from pycde.types import types
 
 
 # CHECK: msft.module @InfixArith {} (%in0: si16, %in1: ui16)
@@ -15,7 +15,7 @@ from pycde.pycde_types import types
 # CHECK-NEXT:   %5 = hwarith.mul %in0, %4 {{({sv.namehint = ".*"} )?}}: (si16, si16) -> si32
 # CHECK-NEXT:   msft.output
 @unittestmodule(run_passes=True)
-class InfixArith:
+class InfixArith(Module):
   in0 = Input(types.si16)
   in1 = Input(types.ui16)
 
@@ -39,7 +39,7 @@ class InfixArith:
 # CHECK-NEXT:  comb.xor bin %in0, %c-1_i16 {{({sv.namehint = ".*"} )?}}: i16
 # CHECK-NEXT:  msft.output
 @unittestmodule(run_passes=True)
-class InfixLogic:
+class InfixLogic(Module):
   in0 = Input(types.i16)
   in1 = Input(types.i16)
 
@@ -59,7 +59,7 @@ class InfixLogic:
 # CHECK-NEXT:    %1 = comb.icmp bin ne %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
 # CHECK-NEXT:    msft.output
 @unittestmodule(run_passes=True)
-class SignlessInfixComparison:
+class SignlessInfixComparison(Module):
   in0 = Input(types.i16)
   in1 = Input(types.i16)
 
@@ -77,7 +77,7 @@ class SignlessInfixComparison:
 # CHECK-NEXT:    %1 = hwarith.icmp ne %in0, %in1 {sv.namehint = "in0_neq_in1"} : ui16, ui16
 # CHECK-NEXT:    msft.output
 @unittestmodule(run_passes=False)
-class InfixComparison:
+class InfixComparison(Module):
   in0 = Input(types.ui16)
   in1 = Input(types.ui16)
 
@@ -97,7 +97,7 @@ class InfixComparison:
 # CHECK-NEXT:    %3 = hwarith.cast %2 {{({sv.namehint = ".*"} )?}}: (si19) -> i16
 # CHECK-NEXT:    msft.output %3 {{({sv.namehint = ".*"} )?}}: i16
 @unittestmodule(run_passes=True)
-class Multiple:
+class Multiple(Module):
   in0 = Input(types.si16)
   in1 = Input(types.si16)
   out0 = Output(types.i16)
@@ -120,7 +120,7 @@ class Multiple:
 # CHECK-NEXT:    %6 = hwarith.cast %0 {{({sv.namehint = ".*"} )?}}: (si16) -> si24
 # CHECK-NEXT:    msft.output
 @unittestmodule(run_passes=True)
-class Casting:
+class Casting(Module):
   in0 = Input(types.i16)
 
   @generator
@@ -141,7 +141,7 @@ class Casting:
 # CHECK-NEXT:    %0 = comb.add %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
 # CHECK-NEXT:    hw.output %0 {{({sv.namehint = ".*"} )?}}: i16
 @unittestmodule(generate=True, run_passes=True, print_after_passes=True)
-class Lowering:
+class Lowering(Module):
   in0 = Input(types.i16)
   in1 = Input(types.i16)
   out0 = Output(types.i16)
@@ -149,3 +149,35 @@ class Lowering:
   @generator
   def construct(ports):
     ports.out0 = (ports.in0.as_sint() + ports.in1.as_sint()).as_bits(16)
+
+
+# -----
+
+
+# CHECK-LABEL:  msft.module @Constants {} (%uin: ui16, %sin: si16) attributes {fileName = "Constants.sv"} {
+# CHECK-NEXT:     [[R0:%.+]] = hwarith.constant 1 : ui1
+# CHECK-NEXT:     [[R1:%.+]] = hwarith.add %uin, [[R0]] : (ui16, ui1) -> ui17
+# CHECK-NEXT:     [[R2:%.+]] = hwarith.constant -1 : si2
+# CHECK-NEXT:     [[R3:%.+]] = hwarith.add %uin, [[R2]] : (ui16, si2) -> si18
+# CHECK-NEXT:     [[R4:%.+]] = hwarith.constant 1 : ui1
+# CHECK-NEXT:     [[R5:%.+]] = hwarith.icmp eq %uin, [[R4]] : ui16, ui1
+# CHECK-NEXT:     [[R6:%.+]] = hwarith.constant 1 : ui1
+# CHECK-NEXT:     [[R7:%.+]] = hwarith.add %sin, [[R6]] : (si16, ui1) -> si17
+# CHECK-NEXT:     [[R8:%.+]] = hwarith.constant -1 : si2
+# CHECK-NEXT:     [[R9:%.+]] = hwarith.add %sin, [[R8]] : (si16, si2) -> si17
+# CHECK-NEXT:     [[R10:%.+]] = hwarith.constant 1 : ui1
+# CHECK-NEXT:     [[R11:%.+]] = hwarith.icmp eq %sin, [[R10]] : si16, ui1
+@unittestmodule()
+class Constants(Module):
+  uin = Input(types.ui16)
+  sin = Input(types.si16)
+
+  @generator
+  def construct(ports):
+    ports.uin + 1
+    ports.uin + -1
+    ports.uin == 1
+
+    ports.sin + 1
+    ports.sin + -1
+    ports.sin == 1

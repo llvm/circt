@@ -97,7 +97,7 @@ func.func @convertConstArray(%arg0 : i1, %arg1: !hw.array<2xi32>) {
 }
 
 // CHECK-LABEL: @convertStruct
-func.func @convertStruct(%arg0 : i32, %arg1: !hw.struct<foo: i32, bar: i8>) {
+func.func @convertStruct(%arg0 : i32, %arg1: !hw.struct<foo: i32, bar: i8>, %arg2: !hw.struct<>) {
   // COM: Produces 2 casts here - first one automatically, second one for use in extractvalue
   // CHECK-NEXT: %[[SCAST:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.struct<foo: i32, bar: i8> to !llvm.struct<(i8, i32)>
   // CHECK-NEXT: %[[SCAST0:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.struct<foo: i32, bar: i8> to !llvm.struct<(i8, i32)>
@@ -108,5 +108,10 @@ func.func @convertStruct(%arg0 : i32, %arg1: !hw.struct<foo: i32, bar: i8>) {
   // CHECK: llvm.insertvalue %arg0, %[[SCAST1]][1] : !llvm.struct<(i8, i32)>
   %1 = hw.struct_inject %arg1["foo"], %arg0 : !hw.struct<foo: i32, bar: i8>
 
+  // CHECK: llvm.extractvalue %[[SCAST]][1] : !llvm.struct<(i8, i32)>
+  // CHECK: llvm.extractvalue %[[SCAST]][0] : !llvm.struct<(i8, i32)>
+  %2:2 = hw.struct_explode %arg1 : !hw.struct<foo: i32, bar: i8>
+
+  hw.struct_explode %arg2 : !hw.struct<>
   return
 }

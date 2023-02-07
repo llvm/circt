@@ -33,6 +33,7 @@ def FIRRTLDialect : Dialect {
   let hasConstantMaterializer = 1;
   let useDefaultTypePrinterParser = 0;
   let useDefaultAttributePrinterParser = 1;
+  let useFoldAPI = kEmitFoldAdaptorFolder;
 
   let dependentDialects = [
     "circt::hw::HWDialect"

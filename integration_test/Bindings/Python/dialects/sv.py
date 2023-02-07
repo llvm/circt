@@ -4,7 +4,7 @@
 import circt
 from circt.dialects import hw, sv
 
-from mlir import ir
+from circt import ir
 
 with ir.Context() as ctx, ir.Location.unknown() as loc:
   circt.register_dialects(ctx)

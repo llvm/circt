@@ -12,6 +12,7 @@ fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
 
   fsm.state @IDLE output  {
     %true = arith.constant true
+// expected-error @+2 {{mismatch in number of types compared (1 != 2)}}
 // expected-error @+1 {{'fsm.output' op operand types must match the machine output types}}
     fsm.output %true, %true : i1, i1
   } transitions {

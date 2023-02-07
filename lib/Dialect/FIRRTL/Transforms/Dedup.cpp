@@ -22,7 +22,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/LLVM.h"
-#include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/DenseMap.h"
@@ -67,6 +67,7 @@ struct StructuralHasher {
     nonessentialAttributes.insert(StringAttr::get(context, "portAnnotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "portNames"));
     nonessentialAttributes.insert(StringAttr::get(context, "portSyms"));
+    nonessentialAttributes.insert(StringAttr::get(context, "portLocations"));
     nonessentialAttributes.insert(StringAttr::get(context, "sym_name"));
     nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
   };
@@ -210,6 +211,7 @@ struct Equivalence {
     nonessentialAttributes.insert(StringAttr::get(context, "portNames"));
     nonessentialAttributes.insert(StringAttr::get(context, "portTypes"));
     nonessentialAttributes.insert(StringAttr::get(context, "portSyms"));
+    nonessentialAttributes.insert(StringAttr::get(context, "portLocations"));
     nonessentialAttributes.insert(StringAttr::get(context, "sym_name"));
     nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
   }
@@ -269,9 +271,8 @@ struct Equivalence {
     return failure();
   }
 
-  LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
-                      Operation *a, Block &aBlock, Operation *b,
-                      Block &bBlock) {
+  LogicalResult check(InFlightDiagnostic &diag, IRMapping &map, Operation *a,
+                      Block &aBlock, Operation *b, Block &bBlock) {
 
     // Block argument types.
     auto portNames = a->getAttrOfType<ArrayAttr>("portNames");
@@ -348,9 +349,8 @@ struct Equivalence {
     return success();
   }
 
-  LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
-                      Operation *a, Region &aRegion, Operation *b,
-                      Region &bRegion) {
+  LogicalResult check(InFlightDiagnostic &diag, IRMapping &map, Operation *a,
+                      Region &aRegion, Operation *b, Region &bRegion) {
     auto aIt = aRegion.begin();
     auto aEnd = aRegion.end();
     auto bIt = bRegion.begin();
@@ -395,8 +395,8 @@ struct Equivalence {
     return success();
   }
 
-  LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
-                      Operation *a, DictionaryAttr aDict, Operation *b,
+  LogicalResult check(InFlightDiagnostic &diag, IRMapping &map, Operation *a,
+                      DictionaryAttr aDict, Operation *b,
                       DictionaryAttr bDict) {
     // Fast path.
     if (aDict == bDict)
@@ -471,8 +471,8 @@ struct Equivalence {
   }
 
   // NOLINTNEXTLINE(misc-no-recursion)
-  LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
-                      Operation *a, Operation *b) {
+  LogicalResult check(InFlightDiagnostic &diag, IRMapping &map, Operation *a,
+                      Operation *b) {
     // Operation name.
     if (a->getName() != b->getName()) {
       diag.attachNote(a->getLoc()) << "first operation is a " << a->getName();
@@ -551,7 +551,7 @@ struct Equivalence {
 
   // NOLINTNEXTLINE(misc-no-recursion)
   void check(InFlightDiagnostic &diag, Operation *a, Operation *b) {
-    BlockAndValueMapping map;
+    IRMapping map;
     if (AnnotationSet(a).hasAnnotation(noDedupClass)) {
       diag.attachNote(a->getLoc()) << "module marked NoDedup";
       return;
@@ -657,6 +657,18 @@ struct Deduper {
     // A map of operation (e.g. wires, nodes) names which are changed, which is
     // used to update NLAs that reference the "fromModule".
     RenameMap renameMap;
+
+    // Merge the port locations.
+    SmallVector<Attribute> newLocs;
+    for (auto [toLoc, fromLoc] : llvm::zip(toModule.getPortLocations(),
+                                           fromModule.getPortLocations())) {
+      if (toLoc == fromLoc)
+        newLocs.push_back(toLoc);
+      else
+        newLocs.push_back(mergeLoc(context, toLoc.cast<LocationAttr>(),
+                                   fromLoc.cast<LocationAttr>()));
+    }
+    toModule->setAttr("portLocations", ArrayAttr::get(context, newLocs));
 
     // Merge the two modules.
     mergeOps(renameMap, toModule, toModule, fromModule, fromModule);
@@ -1091,6 +1103,12 @@ private:
   /// Recursively merge two blocks.
   void mergeBlocks(RenameMap &renameMap, FModuleLike toModule, Block &toBlock,
                    FModuleLike fromModule, Block &fromBlock) {
+    // Merge the block locations.
+    for (auto [toArg, fromArg] :
+         llvm::zip(toBlock.getArguments(), fromBlock.getArguments()))
+      if (toArg.getLoc() != fromArg.getLoc())
+        toArg.setLoc(mergeLoc(context, toArg.getLoc(), fromArg.getLoc()));
+
     for (auto ops : llvm::zip(toBlock, fromBlock))
       mergeOps(renameMap, toModule, &std::get<0>(ops), fromModule,
                &std::get<1>(ops));

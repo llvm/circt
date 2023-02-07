@@ -353,7 +353,7 @@ namespace {
 ///
 /// 5. For every module in the design, determine the full async reset domain it
 ///    is in. Note that this very narrowly deals with the inference of a
-///    "default" async reset, which bascially goes through the IR and attaches
+///    "default" async reset, which basically goes through the IR and attaches
 ///    all non-reset registers to a default async reset signal. If a module
 ///    carries one of the annotations mentioned in (4), the annotated port or
 ///    wire is used as its reset domain. Otherwise, it inherits the reset domain
@@ -1146,7 +1146,7 @@ static FIRRTLBaseType updateType(FIRRTLBaseType oldType, unsigned fieldID,
                                                   bundleType.end());
     fields[index].type = updateType(
         fields[index].type, fieldID - getFieldID(bundleType, index), fieldType);
-    return BundleType::get(fields, oldType.getContext());
+    return BundleType::get(oldType.getContext(), fields);
   }
 
   // If this is a vector type, update the element type.
@@ -1184,11 +1184,13 @@ bool InferResetsPass::updateReset(FieldRef field, FIRRTLBaseType resetType) {
 LogicalResult InferResetsPass::collectAnnos(CircuitOp circuit) {
   LLVM_DEBUG(
       llvm::dbgs() << "\n===----- Gather async reset annotations -----===\n\n");
-  circuit.walk<WalkOrder::PreOrder>([&](FModuleOp module) {
+  auto result = circuit.walk<WalkOrder::PreOrder>([&](FModuleOp module) {
     if (failed(collectAnnos(module)))
       return WalkResult::interrupt();
     return WalkResult::skip();
   });
+  if (result == WalkResult::interrupt())
+    return failure();
   return success();
 }
 

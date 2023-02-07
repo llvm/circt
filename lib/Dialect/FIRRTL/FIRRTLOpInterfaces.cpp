@@ -83,29 +83,20 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
       }))
     return module.emitOpError("port symbols should all be InnerSym attributes");
 
+  // Verify the port locations.
+  auto portLocs = module.getPortLocationsAttr();
+  if (!portLocs)
+    return module.emitOpError("requires valid port locations");
+  if (portLocs.size() != numPorts)
+    return module.emitOpError("requires ") << numPorts << " port locations";
+  if (llvm::any_of(portLocs.getValue(), [](Attribute attr) {
+        return !attr || !attr.isa<LocationAttr>();
+      }))
+    return module.emitOpError("port symbols should all be location attributes");
+
   // Verify the body.
   if (module->getNumRegions() != 1)
     return module.emitOpError("requires one region");
-
-  // Verify the block arguments.
-  auto &body = module->getRegion(0);
-  if (!body.empty()) {
-    auto &block = body.front();
-    if (block.getNumArguments() != numPorts)
-      return module.emitOpError("entry block must have ")
-             << numPorts << " arguments to match module signature";
-
-    if (llvm::any_of(
-            llvm::zip(block.getArguments(), portTypes.getValue()),
-            [](auto pair) {
-              auto blockType = std::get<0>(pair).getType();
-              auto portType =
-                  std::get<1>(pair).template cast<TypeAttr>().getValue();
-              return blockType != portType;
-            }))
-      return module.emitOpError(
-          "block argument types should match signature types");
-  }
 
   return success();
 }

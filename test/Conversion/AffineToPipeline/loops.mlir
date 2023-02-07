@@ -98,3 +98,83 @@ func.func @affine_dimension(%arg0: i32) -> i32 {
   }
   return %1 : i32
 }
+
+// CHECK-LABEL: func @dot_mul_accumulate
+func.func @dot_mul_accumulate(%arg0: memref<64xi32>, %arg1: memref<64xi32>) -> i32 {
+  // Pipeline boilerplate checked above, just check the stages computations.
+
+  // CHECK: pipeline.while II = 3
+  // First stage.
+  // CHECK: %[[STAGE0:.+]]:3 = pipeline.while.stage
+  // CHECK-DAG: %[[STAGE0_0:.+]] = memref.load %arg0[%arg2]
+  // CHECK-DAG: %[[STAGE0_1:.+]] = memref.load %arg1[%arg2]
+  // CHECK-DAG: %[[STAGE0_2:.+]] = arith.addi %arg2, %c1
+  // CHECK: pipeline.register %[[STAGE0_0]], %[[STAGE0_1]], %[[STAGE0_2]]
+
+  // Second stage.
+  // CHECK: %[[STAGE1:.+]] = pipeline.while.stage
+  // CHECK: %[[STAGE1_0:.+]] = arith.muli %[[STAGE0]]#0, %[[STAGE0]]#1 : i32
+  // CHECK: pipeline.register %[[STAGE1_0]]
+
+  // Third stage.
+  // CHECK: %[[STAGE2:.+]] = pipeline.while.stage
+  // CHECK: %[[STAGE2_0:.+]] = arith.muli %arg3, %[[STAGE1]]
+  // CHECK: pipeline.register %[[STAGE2_0]]
+
+  // Pipeline terminator.
+  // CHECK: pipeline.terminator iter_args(%[[STAGE0]]#2, %[[STAGE2]]), results(%[[STAGE2]])
+
+  %c0_i32 = arith.constant 0 : i32
+  %0 = affine.for %arg2 = 0 to 64 iter_args(%arg3 = %c0_i32) -> (i32) {
+    %1 = affine.load %arg0[%arg2] : memref<64xi32>
+    %2 = affine.load %arg1[%arg2] : memref<64xi32>
+    %3 = arith.muli %1, %2 : i32
+    %4 = arith.muli %arg3, %3 : i32
+    affine.yield %4 : i32
+  }
+
+  return %0 : i32
+}
+
+// CHECK-LABEL: func @dot_shared_mem
+func.func @dot_shared_mem(%arg0: memref<128xi32>) -> i32 {
+  // Pipeline boilerplate checked above, just check the stages computations.
+
+  // CHECK: pipeline.while II = 2
+  // First stage.
+  // CHECK: %[[STAGE0:.+]]:3 = pipeline.while.stage
+  // CHECK-DAG: %[[STAGE0_0:.+]] = memref.load %arg0[%arg1] : memref<128xi32>
+  // CHECK-DAG: %[[STAGE0_1:.+]] = arith.addi %arg1, %c64 : index
+  // CHECK-DAG: %[[STAGE0_2:.+]] = arith.addi %arg1, %c1 : index
+  // CHECK: pipeline.register %[[STAGE0_0]], %[[STAGE0_1]], %[[STAGE0_2]]
+
+  // Second stage.
+  // CHECK: %[[STAGE1:.+]]:2 = pipeline.while.stage
+  // CHECK: %[[STAGE1_0:.+]] = memref.load %arg0[%[[STAGE0]]#1] : memref<128xi32>
+  // CHECK: pipeline.register %[[STAGE0]]#0, %[[STAGE1_0]]
+
+  // Third stage.
+  // CHECK: %[[STAGE2:.+]] = pipeline.while.stage
+  // CHECK: %[[STAGE2_0:.+]] = arith.muli %[[STAGE1]]#0, %[[STAGE1]]#1 : i32
+  // CHECK: pipeline.register %[[STAGE2_0]]
+
+  // Fourth stage.
+  // CHECK: %[[STAGE3:.+]] = pipeline.while.stage
+  // CHECK: %[[STAGE3_0:.+]] = arith.addi %arg2, %[[STAGE2]] : i32
+  // CHECK: pipeline.register %[[STAGE3_0]]
+
+  // Pipeline terminator.
+  // CHECK: pipeline.terminator iter_args(%[[STAGE0]]#2, %[[STAGE3]]), results(%[[STAGE3]])
+
+  %c0_i32 = arith.constant 0 : i32
+  %c64_index = arith.constant 64 : index
+  %0 = affine.for %arg2 = 0 to 64 iter_args(%arg3 = %c0_i32) -> (i32) {
+    %1 = affine.load %arg0[%arg2] : memref<128xi32>
+    %2 = affine.load %arg0[%arg2 + %c64_index] : memref<128xi32>
+    %3 = arith.muli %1, %2 : i32
+    %4 = arith.addi %arg3, %3 : i32
+    affine.yield %4 : i32
+  }
+
+  return %0 : i32
+}

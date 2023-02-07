@@ -214,6 +214,36 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     }]>,
 
     //===------------------------------------------------------------------===//
+    // Port Locations
+    //===------------------------------------------------------------------===//
+
+    InterfaceMethod<"Get the port locations attribute",
+    "ArrayAttr", "getPortLocationsAttr", (ins), [{}],
+    /*defaultImplementation=*/[{
+      return $_op->template
+        getAttrOfType<ArrayAttr>(FModuleLike::getPortLocationsAttrName());
+    }]>,
+
+    InterfaceMethod<"Get the port locations attribute",
+    "ArrayRef<Attribute>", "getPortLocations", (ins), [{}],
+    /*defaultImplementation=*/[{
+      return $_op.getPortLocationsAttr().getValue();
+    }]>,
+
+    InterfaceMethod<"Get a port's location attribute",
+    "LocationAttr", "getPortLocationAttr", (ins "size_t":$portIndex), [{}],
+    /*defaultImplementation=*/[{
+      return $_op.getPortLocationsAttr()[portIndex].
+        template cast<LocationAttr>();
+    }]>,
+
+    InterfaceMethod<"Get a port's location",
+    "Location", "getPortLocation", (ins "size_t":$portIndex), [{}],
+    /*defaultImplementation=*/[{
+      return $_op.getPortLocationAttr(portIndex);
+    }]>,
+
+    //===------------------------------------------------------------------===//
     // All Port Information
     //===------------------------------------------------------------------===//
 
@@ -253,6 +283,11 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     /// Get the attribute name for port symbols.
     static StringRef getPortSymbolsAttrName() {
       return "portSyms";
+    }
+
+    /// Get the attribute name for port locations.
+    static StringRef getPortLocationsAttrName() {
+      return "portLocations";
     }
 
     /// Replace NULL entries with invalid sym and clear array if all elements

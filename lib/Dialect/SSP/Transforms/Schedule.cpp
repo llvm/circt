@@ -21,6 +21,36 @@ using namespace scheduling;
 using namespace ssp;
 
 //===----------------------------------------------------------------------===//
+// Helpers
+//===----------------------------------------------------------------------===//
+
+// Determine "last" operation, i.e. the one whose start time we are supposed to
+// minimize.
+static OperationOp getLastOp(InstanceOp instOp, StringRef options) {
+  StringRef lastOpName = "";
+  for (StringRef option : llvm::split(options, ',')) {
+    if (option.consume_front("last-op-name=")) {
+      lastOpName = option;
+      break;
+    }
+  }
+
+  auto graphOp = instOp.getDependenceGraph();
+  if (lastOpName.empty() && !graphOp.getBodyBlock()->empty())
+    return cast<OperationOp>(graphOp.getBodyBlock()->back());
+  return graphOp.lookupSymbol<OperationOp>(lastOpName);
+}
+
+// Determine desired cycle time (only relevant for `ChainingProblem` instances).
+static std::optional<float> getCycleTime(StringRef options) {
+  for (StringRef option : llvm::split(options, ',')) {
+    if (option.consume_front("cycle-time="))
+      return std::stof(option.str());
+  }
+  return std::nullopt;
+}
+
+//===----------------------------------------------------------------------===//
 // ASAP scheduler
 //===----------------------------------------------------------------------===//
 
@@ -69,33 +99,7 @@ static InstanceOp scheduleChainingProblemWithSimplex(InstanceOp instOp,
 
 static InstanceOp scheduleWithSimplex(InstanceOp instOp, StringRef options,
                                       OpBuilder &builder) {
-  // Parse options.
-  StringRef lastOpName = "";
-  float cycleTime = 0.0f;
-  for (StringRef option : llvm::split(options, ',')) {
-    if (option.empty())
-      continue;
-    if (option.consume_front("last-op-name=")) {
-      lastOpName = option;
-      continue;
-    }
-    if (option.consume_front("cycle-time=")) {
-      cycleTime = std::stof(option.str());
-      continue;
-    }
-    llvm::errs() << "ssp-schedule: Ignoring option '" << option
-                 << "' for simplex scheduler\n";
-  }
-
-  // Determine "last" operation, i.e. the one whose start time is minimized by
-  // the simplex scheduler.
-  auto graph = instOp.getDependenceGraph();
-  OperationOp lastOp;
-  if (lastOpName.empty() && !graph.getBodyBlock()->empty())
-    lastOp = cast<OperationOp>(graph.getBodyBlock()->back());
-  else
-    lastOp = graph.lookupSymbol<OperationOp>(lastOpName);
-
+  auto lastOp = getLastOp(instOp, options);
   if (!lastOp) {
     auto instName = instOp.getSymName().value_or("unnamed");
     llvm::errs()
@@ -104,7 +108,6 @@ static InstanceOp scheduleWithSimplex(InstanceOp instOp, StringRef options,
     return {};
   }
 
-  // Dispatch for known problems.
   auto problemName = instOp.getProblemName();
   if (problemName.equals("Problem"))
     return scheduleProblemTWithSimplex<Problem>(instOp, lastOp, builder);
@@ -115,14 +118,88 @@ static InstanceOp scheduleWithSimplex(InstanceOp instOp, StringRef options,
                                                                builder);
   if (problemName.equals("ModuloProblem"))
     return scheduleProblemTWithSimplex<ModuloProblem>(instOp, lastOp, builder);
-  if (problemName.equals("ChainingProblem"))
-    return scheduleChainingProblemWithSimplex(instOp, lastOp, cycleTime,
-                                              builder);
+  if (problemName.equals("ChainingProblem")) {
+    if (auto cycleTime = getCycleTime(options))
+      return scheduleChainingProblemWithSimplex(instOp, lastOp,
+                                                cycleTime.value(), builder);
+    llvm::errs() << "ssp-schedule: Missing option 'cycle-time' for "
+                    "ChainingProblem simplex scheduler\n";
+    return {};
+  }
 
   llvm::errs() << "ssp-schedule: Unsupported problem '" << problemName
                << "' for simplex scheduler\n";
   return {};
 }
+
+#ifdef SCHEDULING_OR_TOOLS
+
+//===----------------------------------------------------------------------===//
+// LP schedulers (require OR-Tools)
+//===----------------------------------------------------------------------===//
+
+template <typename ProblemT>
+static InstanceOp scheduleProblemTWithLP(InstanceOp instOp, Operation *lastOp,
+                                         OpBuilder &builder) {
+  auto prob = loadProblem<ProblemT>(instOp);
+  if (failed(prob.check()) || failed(scheduling::scheduleLP(prob, lastOp)) ||
+      failed(prob.verify()))
+    return {};
+  return saveProblem(prob, builder);
+}
+
+static InstanceOp scheduleWithLP(InstanceOp instOp, StringRef options,
+                                 OpBuilder &builder) {
+  auto lastOp = getLastOp(instOp, options);
+  if (!lastOp) {
+    auto instName = instOp.getSymName().value_or("unnamed");
+    llvm::errs()
+        << "ssp-schedule: Ambiguous objective for LP scheduler: Instance '"
+        << instName << "' has no designated last operation\n";
+    return {};
+  }
+
+  auto problemName = instOp.getProblemName();
+  if (problemName.equals("Problem"))
+    return scheduleProblemTWithLP<Problem>(instOp, lastOp, builder);
+  if (problemName.equals("CyclicProblem"))
+    return scheduleProblemTWithLP<CyclicProblem>(instOp, lastOp, builder);
+
+  llvm::errs() << "ssp-schedule: Unsupported problem '" << problemName
+               << "' for LP scheduler\n";
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// CPSAT scheduler (requires OR-Tools)
+//===----------------------------------------------------------------------===//
+
+static InstanceOp scheduleWithCPSAT(InstanceOp instOp, StringRef options,
+                                    OpBuilder &builder) {
+  auto lastOp = getLastOp(instOp, options);
+  if (!lastOp) {
+    auto instName = instOp.getSymName().value_or("unnamed");
+    llvm::errs()
+        << "ssp-schedule: Ambiguous objective for CPSAT scheduler: Instance '"
+        << instName << "' has no designated last operation\n";
+    return {};
+  }
+
+  auto problemName = instOp.getProblemName();
+  if (!problemName.equals("SharedOperatorsProblem")) {
+    llvm::errs() << "ssp-schedule: Unsupported problem '" << problemName
+                 << "' for CPSAT scheduler\n";
+    return {};
+  }
+
+  auto prob = loadProblem<SharedOperatorsProblem>(instOp);
+  if (failed(prob.check()) || failed(scheduling::scheduleCPSAT(prob, lastOp)) ||
+      failed(prob.verify()))
+    return {};
+  return saveProblem(prob, builder);
+}
+
+#endif // SCHEDULING_OR_TOOLS
 
 //===----------------------------------------------------------------------===//
 // Algorithm dispatcher
@@ -134,6 +211,12 @@ static InstanceOp scheduleWith(InstanceOp instOp, StringRef scheduler,
     return scheduleWithSimplex(instOp, options, builder);
   if (scheduler.equals("asap"))
     return scheduleWithASAP(instOp, builder);
+#ifdef SCHEDULING_OR_TOOLS
+  if (scheduler.equals("lp"))
+    return scheduleWithLP(instOp, options, builder);
+  if (scheduler.equals("cpsat"))
+    return scheduleWithCPSAT(instOp, options, builder);
+#endif
 
   llvm::errs() << "ssp-schedule: Unsupported scheduler '" << scheduler
                << "' requested\n";

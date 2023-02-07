@@ -7,7 +7,7 @@
 # PY: from dot_prod_system import run_cosim
 # PY: run_cosim(tmpdir, rpcschemapath, simhostport)
 
-from pycde import Input, module, generator, types
+from pycde import Input, Module, generator, types
 from pycde.common import Clock
 from pycde.system import System
 from pycde.esi import FromServer, ToFromServer, ServiceDecl, CosimBSP
@@ -41,8 +41,7 @@ __dir__ = pathlib.Path(__file__).parent
 #                                   output_type="linalg-on-tensors")
 
 
-@module
-class Gasket:
+class Gasket(Module):
   """Wrap the accelerator IP module. Instantiate the requiste memories. Wire the
   memories to the host and the host to the module control signals."""
 

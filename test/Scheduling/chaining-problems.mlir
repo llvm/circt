@@ -1,62 +1,63 @@
-// RUN: circt-opt %s -test-chaining-problem -allow-unregistered-dialect
-// RUN: circt-opt %s -test-simplex-scheduler=with=ChainingProblem -allow-unregistered-dialect | FileCheck %s -check-prefix=SIMPLEX
+// RUN: circt-opt %s -ssp-roundtrip=verify
+// RUN: circt-opt %s -ssp-schedule="scheduler=simplex options=cycle-time=5.0" | FileCheck %s -check-prefixes=CHECK,SIMPLEX
 
-// SIMPLEX-LABEL: adder_chain
-func.func @adder_chain(%arg0 : i32, %arg1 : i32) -> i32 attributes {
-  cycletime = 5.0, // only evaluated for scheduler test; ignored by the problem test!
-  operatortypes = [
-   { name = "add", latency = 0, incdelay = 2.34, outdelay = 2.34}
-  ] } {
-  %0 = arith.addi %arg0, %arg1 { opr = "add", problemStartTime = 0, problemStartTimeInCycle = 0.0 } : i32
-  %1 = arith.addi %0, %arg1 { opr = "add", problemStartTime = 0, problemStartTimeInCycle = 2.34 } : i32
-  %2 = arith.addi %1, %arg1 { opr = "add", problemStartTime = 0, problemStartTimeInCycle = 4.68 } : i32
-  %3 = arith.addi %2, %arg1 { opr = "add", problemStartTime = 1, problemStartTimeInCycle = 0.0 } : i32
-  %4 = arith.addi %3, %arg1 { opr = "add", problemStartTime = 1, problemStartTimeInCycle = 2.34 } : i32
-  // SIMPLEX: return
-  // SIMPLEX-SAME: simplexStartTime = 2
-  return { problemStartTime = 2, problemStartTimeInCycle = 0.0 } %4 : i32
+// Note: Cycle time is only evaluated for scheduler test; ignored by the problem test!
+
+// CHECK-LABEL: adder_chain
+ssp.instance @adder_chain of "ChainingProblem" {
+  library {
+    operator_type @_0 [latency<0>, incDelay<2.34>, outDelay<2.34>]
+    operator_type @_1 [latency<1>, incDelay<0.0>, outDelay<0.0>]
+  }
+  graph {
+    %0 = operation<@_0>() [t<0>, z<0.0>]
+    %1 = operation<@_0>(%0) [t<0>, z<2.34>]
+    %2 = operation<@_0>(%1) [t<0>, z<4.68>]
+    %3 = operation<@_0>(%2) [t<1>, z<0.0>]
+    %4 = operation<@_0>(%3) [t<1>, z<2.34>]
+    // SIMPLEX: @last(%{{.*}}) [t<2>,
+    operation<@_1> @last(%4) [t<2>, z<0.0>]
+  }
 }
 
-// SIMPLEX-LABEL: multi_cycle
-func.func @multi_cycle(%arg0 : i32, %arg1 : i32) -> i32 attributes {
-  cycletime = 5.0, // only evaluated for scheduler test; ignored by the problem test!
-  operatortypes = [
-   { name = "add", latency = 0, incdelay = 2.34, outdelay = 2.34},
-   { name = "mul", latency = 3, incdelay = 2.5, outdelay = 3.75}
-  ] } {
-  %0 = arith.addi %arg0, %arg1 { opr = "add", problemStartTime = 0, problemStartTimeInCycle = 0.0 } : i32
-  %1 = arith.addi %0, %arg1 { opr = "add", problemStartTime = 0, problemStartTimeInCycle = 2.34 } : i32
-  %2 = arith.muli %1, %0 { opr = "mul", problemStartTime = 0, problemStartTimeInCycle = 4.68 } : i32
-  %3 = arith.addi %2, %1 { opr = "add", problemStartTime = 3, problemStartTimeInCycle = 3.75 } : i32
-  %4 = arith.addi %3, %2 { opr = "add", problemStartTime = 3, problemStartTimeInCycle = 6.09 } : i32
-  // SIMPLEX: return
-  // SIMPLEX-SAME: simplexStartTime = 5
-  return { problemStartTime = 4, problemStartTimeInCycle = 0.0 } %4 : i32
+// CHECK-LABEL: multi_cycle
+ssp.instance @multi_cycle of "ChainingProblem" {
+  library {
+    operator_type @_0 [latency<0>, incDelay<2.34>, outDelay<2.34>]
+    operator_type @_1 [latency<1>, incDelay<0.0>, outDelay<0.0>]
+    operator_type @_3 [latency<3>, incDelay<2.5>, outDelay<3.75>]
+  }
+  graph {
+    %0 = operation<@_0>() [t<0>, z<0.0>]
+    %1 = operation<@_0>(%0) [t<0>, z<2.34>]
+    %2 = operation<@_3>(%1, %0) [t<0>, z<4.68>]
+    %3 = operation<@_0>(%2, %1) [t<3>, z<3.75>]
+    %4 = operation<@_0>(%3, %2) [t<3>, z<6.09>]
+    // SIMPLEX: @last(%{{.*}}) [t<5>,
+    operation<@_1> @last(%4) [t<4>, z<0.0>]
+  }
 }
 
-// SIMPLEX-LABEL: mco_outgoing_delays
-func.func @mco_outgoing_delays(%arg0 : i32, %arg1 : i32) -> i32 attributes {
-  cycletime = 5.0, // only evaluated for scheduler test; ignored by the problem test!
-  operatortypes = [
-   { name = "add", latency = 2, incdelay = 0.1, outdelay = 0.1},
-   { name = "mul", latency = 3, incdelay = 5.0, outdelay = 0.1}
-  ] } {
-  // SIMPLEX: simplexStartTime = 0
-  // SIMPLEX-SAME: simplexStartTimeInCycle = 0.000000e+00
-  %0 = arith.addi %arg0, %arg1 { opr = "add", problemStartTime = 0, problemStartTimeInCycle = 0.0 } : i32
-  
-  // Next op cannot start in cycle 2 due to %0's outgoing delay: 0.1+5.0 > 5.0.
-  // SIMPLEX: simplexStartTime = 3
-  // SIMPLEX-SAME: simplexStartTimeInCycle = 0.000000e+00
-  %1 = arith.muli %0, %0 { opr = "mul", problemStartTime = 3, problemStartTimeInCycle = 0.0 } : i32
-  
-  // SIMPLEX: simplexStartTime = 6
-  // SIMPLEX-SAME: simplexStartTimeInCycle = 1.000000e-01
-  %2 = arith.addi %1, %1 { opr = "add", problemStartTime = 6, problemStartTimeInCycle = 0.1 } : i32
-  
-  // Next op should have SITC=0.1 (not: 0.2), because we only consider %2's outgoing delay.
-  // SIMPLEX: return
-  // SIMPLEX-SAME: simplexStartTime = 8
-  // SIMPLEX-SAME: simplexStartTimeInCycle = 1.000000e-01
-  return { problemStartTime = 8, problemStartTimeInCycle = 0.1 } %2 : i32
+// CHECK-LABEL: mco_outgoing_delays
+ssp.instance @mco_outgoing_delays of "ChainingProblem" {
+  library {
+    operator_type @_2 [latency<2>, incDelay<0.1>, outDelay<0.1>]
+    operator_type @_3 [latency<3>, incDelay<5.0>, outDelay<0.1>]
+  }
+  // SIMPLEX: graph
+  graph {
+    // SIMPLEX-NEXT: [t<0>, z<0.000000e+00 : f32>]
+    %0 = operation<@_2>() [t<0>, z<0.0>]
+
+    // Next op cannot start in cycle 2 due to %0's outgoing delay: 0.1+5.0 > 5.0.
+    // SIMPLEX-NEXT: [t<3>, z<0.000000e+00 : f32>]
+    %1 = operation<@_3>(%0) [t<3>, z<0.0>]
+    
+    // SIMPLEX-NEXT: [t<6>, z<1.000000e-01 : f32>]
+    %2 = operation<@_2>(%1) [t<6>, z<0.1>]
+
+    // Next op should have SITC=0.1 (not: 0.2), because we only consider %2's outgoing delay.
+    // SIMPLEX-NEXT: [t<8>, z<1.000000e-01 : f32>]
+    operation<@_2> @last(%2) [t<8>, z<0.1>]
+  }
 }

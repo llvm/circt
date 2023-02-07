@@ -15,7 +15,6 @@
 
 include "FIRRTLDialect.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
-include "mlir/IR/EnumAttr.td"
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Annotations Definition
@@ -171,19 +170,5 @@ def ParamDeclAttr : AttrDef<FIRRTLDialect, "ParamDecl", [TypedAttrInterface]> {
 /// ensures that all the values are specified.
 def ParamDeclArrayAttr
   : TypedArrayAttrBase<ParamDeclAttr, "parameter array attribute">;
-
-/// An attribute describing a kind of a name which defines name preservation
-/// semantics. We preserve names tagged with `InterestingName`.
-def DroppableName: I32EnumAttrCase<"DroppableName", 0, "droppable_name">;
-def InterestingName: I32EnumAttrCase<"InterestingName", 1, "interesting_name">;
-
-def NameKindEnumImpl: I32EnumAttr<"NameKindEnum", "name kind",
-              [DroppableName, InterestingName]> {
-  let genSpecializedAttr = 0;
-  let cppNamespace = "::circt::firrtl";
-}
-
-def NameKindAttr: EnumAttr<FIRRTLDialect, NameKindEnumImpl, "name_kind">;
-
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD

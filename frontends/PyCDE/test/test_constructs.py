@@ -1,8 +1,8 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
-from pycde import generator, types, dim
+from pycde import generator, types, dim, Module
 from pycde.common import Clock, Input, Output
-from pycde.constructs import NamedWire, Reg, Wire, SystolicArray
+from pycde.constructs import ControlReg, NamedWire, Reg, Wire, SystolicArray
 from pycde.dialects import comb
 from pycde.testing import unittestmodule
 
@@ -14,14 +14,14 @@ from pycde.testing import unittestmodule
 # CHECK:         {{%.+}} = sv.read_inout %in {sv.namehint = "in"} : !hw.inout<i8>
 # CHECK:         sv.assign %in, %In : i8
 # CHECK:         [[r1:%.+]] = seq.compreg %In, %clk : i8
-# CHECK:         [[c8:%.+]] = hw.constant 0 : i8
-# CHECK:         [[r5:%.+]] = seq.compreg %In, %clk, %rst, [[c8]]  : i8
+# CHECK:         %c0_i8{{.*}} = hw.constant 0 : i8
+# CHECK:         [[r5:%.+]] = seq.compreg %In, %clk, %rst, %c0_i8{{.*}}  : i8
 # CHECK:         [[r6:%.+]] = seq.compreg.ce %In, %clk, %InCE : i8
 # CHECK:         msft.output [[r2]], [[r1]], [[r5]], [[r6]] : i8, i8, i8, i8
 
 
 @unittestmodule()
-class WireAndRegTest:
+class WireAndRegTest(Module):
   In = Input(types.i8)
   InCE = Input(types.i1)
   clk = Clock()
@@ -63,7 +63,7 @@ class WireAndRegTest:
 # CHECK:         %sum__reg1_0_0 = sv.reg sym @sum__reg1  : !hw.inout<i8>
 # CHECK:         sv.read_inout %sum__reg1_0_0 : !hw.inout<i8>
 @unittestmodule(print=True, run_passes=True, print_after_passes=True)
-class SystolicArrayTest:
+class SystolicArrayTest(Module):
   clk = Input(types.i1)
   col_data = Input(dim(8, 2))
   row_data = Input(dim(8, 3))
@@ -84,3 +84,29 @@ class SystolicArrayTest:
     pe_outputs = SystolicArray(ports.row_data, ports.col_data, pe)
 
     ports.out = pe_outputs
+
+
+# CHECK-LABEL:  msft.module @ControlReg_num_asserts2_num_resets1
+# CHECK:          [[r0:%.+]] = hw.array_get %asserts[%false]
+# CHECK:          [[r1:%.+]] = hw.array_get %asserts[%true]
+# CHECK:          [[r2:%.+]] = comb.or bin [[r0]], [[r1]]
+# CHECK:          [[r3:%.+]] = hw.array_get %resets[%c0_i0]
+# CHECK:          [[r4:%.+]] = comb.or bin [[r3]]
+# CHECK:          %state = seq.compreg [[r6]], %clk, %rst, %false{{.*}}
+# CHECK:          [[r5:%.+]] = comb.mux bin [[r4]], %false{{.*}}, %state
+# CHECK:          [[r6:%.+]] = comb.mux bin [[r2]], %true{{.*}}, [[r5]]
+# CHECK:          msft.output %state
+@unittestmodule()
+class ControlRegTest(Module):
+  clk = Clock()
+  rst = Input(types.i1)
+  a1 = Input(types.i1)
+  a2 = Input(types.i1)
+  r1 = Input(types.i1)
+
+  @generator
+  def build(ports):
+    ControlReg(ports.clk,
+               ports.rst,
+               asserts=[ports.a1, ports.a2],
+               resets=[ports.r1])

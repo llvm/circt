@@ -25,14 +25,16 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/Dominance.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
+#include <cassert>
+#include <limits>
 
 #define DEBUG_TYPE "affine-to-pipeline"
 
@@ -52,16 +54,49 @@ struct AffineToPipeline : public AffineToPipelineBase<AffineToPipeline> {
   void runOnOperation() override;
 
 private:
+  ModuloProblem getModuloProblem(CyclicProblem &prob);
   LogicalResult
   lowerAffineStructures(MemoryDependenceAnalysis &dependenceAnalysis);
-  LogicalResult populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest);
-  LogicalResult solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest);
-  LogicalResult createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest);
+  LogicalResult populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest,
+                                      ModuloProblem &problem);
+  LogicalResult solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest,
+                                       ModuloProblem &problem);
+  LogicalResult createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
+                                       ModuloProblem &problem);
 
   CyclicSchedulingAnalysis *schedulingAnalysis;
 };
 
 } // namespace
+
+ModuloProblem AffineToPipeline::getModuloProblem(CyclicProblem &prob) {
+  auto modProb = ModuloProblem::get(prob.getContainingOp());
+  for (auto *op : prob.getOperations()) {
+    auto opr = prob.getLinkedOperatorType(op);
+    if (opr.has_value()) {
+      modProb.setLinkedOperatorType(op, opr.value());
+      auto latency = prob.getLatency(opr.value());
+      if (latency.has_value())
+        modProb.setLatency(opr.value(), latency.value());
+    }
+    modProb.insertOperation(op);
+  }
+
+  for (auto *op : prob.getOperations()) {
+    for (auto dep : prob.getDependences(op)) {
+      if (dep.isAuxiliary()) {
+        auto depInserted = modProb.insertDependence(dep);
+        assert(succeeded(depInserted));
+        (void)depInserted;
+      }
+      auto distance = prob.getDistance(dep);
+      if (distance.has_value())
+        modProb.setDistance(dep, distance.value());
+    }
+  }
+
+  return modProb;
+}
 
 void AffineToPipeline::runOnOperation() {
   // Get dependence analysis for the whole function.
@@ -84,16 +119,19 @@ void AffineToPipeline::runOnOperation() {
     if (nestedLoops.size() != 1)
       continue;
 
+    ModuloProblem moduloProblem =
+        getModuloProblem(schedulingAnalysis->getProblem(nestedLoops.back()));
+
     // Populate the target operator types.
-    if (failed(populateOperatorTypes(nestedLoops)))
+    if (failed(populateOperatorTypes(nestedLoops, moduloProblem)))
       return signalPassFailure();
 
     // Solve the scheduling problem computed by the analysis.
-    if (failed(solveSchedulingProblem(nestedLoops)))
+    if (failed(solveSchedulingProblem(nestedLoops, moduloProblem)))
       return signalPassFailure();
 
     // Convert the IR.
-    if (failed(createPipelinePipeline(nestedLoops)))
+    if (failed(createPipelinePipeline(nestedLoops, moduloProblem)))
       return signalPassFailure();
   }
 }
@@ -237,13 +275,11 @@ LogicalResult AffineToPipeline::lowerAffineStructures(
 /// targetting. Right now, we assume Calyx, which has a standard library with
 /// well-defined operator latencies. Ultimately, we should move this to a
 /// dialect interface in the Scheduling dialect.
-LogicalResult AffineToPipeline::populateOperatorTypes(
-    SmallVectorImpl<AffineForOp> &loopNest) {
+LogicalResult
+AffineToPipeline::populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest,
+                                        ModuloProblem &problem) {
   // Scheduling analyis only considers the innermost loop nest for now.
   auto forOp = loopNest.back();
-
-  // Retrieve the cyclic scheduling problem for this loop.
-  CyclicProblem &problem = schedulingAnalysis->getProblem(forOp);
 
   // Load the Calyx operator library into the problem. This is a very minimal
   // set of arithmetic and memory operators for now. This should ultimately be
@@ -264,14 +300,40 @@ LogicalResult AffineToPipeline::populateOperatorTypes(
           problem.setLinkedOperatorType(combOp, combOpr);
           return WalkResult::advance();
         })
-        .Case<AffineLoadOp, AffineStoreOp, memref::LoadOp, memref::StoreOp>(
-            [&](Operation *seqOp) {
-              // Some known sequential ops. In certain cases, reads may be
-              // combinational in Calyx, but taking advantage of that is left as
-              // a future enhancement.
-              problem.setLinkedOperatorType(seqOp, seqOpr);
-              return WalkResult::advance();
-            })
+        .Case<AddIOp, CmpIOp>([&](Operation *seqOp) {
+          // These ops need to be sequential for now because we do not
+          // have enough information to chain them together yet.
+          problem.setLinkedOperatorType(seqOp, seqOpr);
+          return WalkResult::advance();
+        })
+        .Case<AffineStoreOp, memref::StoreOp>([&](Operation *memOp) {
+          // Some known sequential ops. In certain cases, reads may be
+          // combinational in Calyx, but taking advantage of that is left as
+          // a future enhancement.
+          Value memRef = isa<AffineStoreOp>(*memOp)
+                             ? cast<AffineStoreOp>(*memOp).getMemRef()
+                             : cast<memref::StoreOp>(*memOp).getMemRef();
+          Problem::OperatorType memOpr = problem.getOrInsertOperatorType(
+              "mem_" + std::to_string(hash_value(memRef)));
+          problem.setLatency(memOpr, 1);
+          problem.setLimit(memOpr, 1);
+          problem.setLinkedOperatorType(memOp, memOpr);
+          return WalkResult::advance();
+        })
+        .Case<AffineLoadOp, memref::LoadOp>([&](Operation *memOp) {
+          // Some known sequential ops. In certain cases, reads may be
+          // combinational in Calyx, but taking advantage of that is left as
+          // a future enhancement.
+          Value memRef = isa<AffineLoadOp>(*memOp)
+                             ? cast<AffineLoadOp>(*memOp).getMemRef()
+                             : cast<memref::LoadOp>(*memOp).getMemRef();
+          Problem::OperatorType memOpr = problem.getOrInsertOperatorType(
+              "mem_" + std::to_string(hash_value(memRef)));
+          problem.setLatency(memOpr, 1);
+          problem.setLimit(memOpr, 1);
+          problem.setLinkedOperatorType(memOp, memOpr);
+          return WalkResult::advance();
+        })
         .Case<MulIOp>([&](Operation *mcOp) {
           // Some known multi-cycle ops.
           problem.setLinkedOperatorType(mcOp, mcOpr);
@@ -290,13 +352,11 @@ LogicalResult AffineToPipeline::populateOperatorTypes(
 }
 
 /// Solve the pre-computed scheduling problem.
-LogicalResult AffineToPipeline::solveSchedulingProblem(
-    SmallVectorImpl<AffineForOp> &loopNest) {
+LogicalResult
+AffineToPipeline::solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest,
+                                         ModuloProblem &problem) {
   // Scheduling analyis only considers the innermost loop nest for now.
   auto forOp = loopNest.back();
-
-  // Retrieve the cyclic scheduling problem for this loop.
-  CyclicProblem &problem = schedulingAnalysis->getProblem(forOp);
 
   // Optionally debug problem inputs.
   LLVM_DEBUG(forOp.getBody()->walk<WalkOrder::PreOrder>([&](Operation *op) {
@@ -338,13 +398,11 @@ LogicalResult AffineToPipeline::solveSchedulingProblem(
 }
 
 /// Create the pipeline op for a loop nest.
-LogicalResult AffineToPipeline::createPipelinePipeline(
-    SmallVectorImpl<AffineForOp> &loopNest) {
+LogicalResult
+AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
+                                         ModuloProblem &problem) {
   // Scheduling analyis only considers the innermost loop nest for now.
   auto forOp = loopNest.back();
-
-  // Retrieve the cyclic scheduling problem for this loop.
-  CyclicProblem &problem = schedulingAnalysis->getProblem(forOp);
 
   auto outerLoop = loopNest.front();
   auto innerLoop = loopNest.back();
@@ -361,7 +419,7 @@ LogicalResult AffineToPipeline::createPipelinePipeline(
   // iter arg is created for the induction variable.
   TypeRange resultTypes = innerLoop.getResultTypes();
 
-  auto ii = builder.getI64IntegerAttr(*problem.getInitiationInterval());
+  auto ii = builder.getI64IntegerAttr(problem.getInitiationInterval().value());
 
   SmallVector<Value> iterArgs;
   iterArgs.push_back(lowerBound);
@@ -397,7 +455,9 @@ LogicalResult AffineToPipeline::createPipelinePipeline(
 
   // Maintain mappings of values in the loop body and results of stages,
   // initially populated with the iter args.
-  BlockAndValueMapping valueMap;
+  IRMapping valueMap;
+  // Nested loops are not supported yet.
+  assert(iterArgs.size() == forOp.getBody()->getNumArguments());
   for (size_t i = 0; i < iterArgs.size(); ++i)
     valueMap.map(forOp.getBody()->getArgument(i),
                  pipeline.getStagesBlock().getArgument(i));
@@ -408,37 +468,97 @@ LogicalResult AffineToPipeline::createPipelinePipeline(
 
   // Iterate in order of the start times.
   SmallVector<unsigned> startTimes;
-  for (auto group : startGroups)
+  for (const auto &group : startGroups)
     startTimes.push_back(group.first);
   llvm::sort(startTimes);
 
   DominanceInfo dom(getOperation());
+
+  // Keys for translating values in each stage
+  SmallVector<SmallVector<Value>> registerValues;
+  SmallVector<SmallVector<Type>> registerTypes;
+
+  // The maps that ensure a stage uses the correct version of a value
+  SmallVector<IRMapping> stageValueMaps;
+
+  // For storing the range of stages an operation's results need to be valid for
+  DenseMap<Operation *, std::pair<unsigned, unsigned>> pipeTimes;
+
   for (auto startTime : startTimes) {
     auto group = startGroups[startTime];
-    OpBuilder::InsertionGuard g(builder);
 
     // Collect the return types for this stage. Operations whose results are not
     // used within this stage are returned.
     auto isLoopTerminator = [forOp](Operation *op) {
       return isa<AffineYieldOp>(op) && op->getParentOp() == forOp;
     };
-    SmallVector<Type> stageTypes;
-    DenseSet<Operation *> opsWithReturns;
+
+    // Initialize set of registers up until this point in time
+    for (unsigned i = registerValues.size(); i <= startTime; ++i)
+      registerValues.emplace_back(SmallVector<Value>());
+
+    // Check each operation to see if its results need plumbing
     for (auto *op : group) {
+      if (op->getUsers().empty())
+        continue;
+
+      unsigned pipeEndTime = 0;
       for (auto *user : op->getUsers()) {
-        if (*problem.getStartTime(user) > startTime || isLoopTerminator(user)) {
-          opsWithReturns.insert(op);
-          stageTypes.append(op->getResultTypes().begin(),
-                            op->getResultTypes().end());
-        }
+        unsigned userStartTime = *problem.getStartTime(user);
+        if (*problem.getStartTime(user) > startTime)
+          pipeEndTime = std::max(pipeEndTime, userStartTime);
+        else if (isLoopTerminator(user))
+          // Manually forward the value into the terminator's valueMap
+          pipeEndTime = std::max(pipeEndTime, userStartTime + 1);
+      }
+
+      // Insert the range of pipeline stages the value needs to be valid for
+      pipeTimes[op] = std::pair(startTime, pipeEndTime);
+
+      // Add register stages for each time slice we need to pipe to
+      for (unsigned i = registerValues.size(); i <= pipeEndTime; ++i)
+        registerValues.push_back(SmallVector<Value>());
+
+      // Keep a collection of this stages results as keys to our valueMaps
+      for (auto result : op->getResults())
+        registerValues[startTime].push_back(result);
+
+      // Other stages that use the value will need these values as keys too
+      unsigned firstUse = std::max(
+          startTime + 1,
+          startTime + *problem.getLatency(*problem.getLinkedOperatorType(op)));
+      for (unsigned i = firstUse; i < pipeEndTime; ++i) {
+        for (auto result : op->getResults())
+          registerValues[i].push_back(result);
       }
     }
+  }
 
+  // Now make register Types and stageValueMaps
+  for (unsigned i = 0; i < registerValues.size(); ++i) {
+    SmallVector<mlir::Type> types;
+    for (auto val : registerValues[i])
+      types.push_back(val.getType());
+
+    registerTypes.push_back(types);
+    stageValueMaps.push_back(valueMap);
+  }
+
+  // One more map is needed for the pipeline stages terminator
+  stageValueMaps.push_back(valueMap);
+
+  // Create stages along with maps
+  for (auto startTime : startTimes) {
+    auto group = startGroups[startTime];
+    llvm::sort(group,
+               [&](Operation *a, Operation *b) { return dom.dominates(a, b); });
+    auto stageTypes = registerTypes[startTime];
     // Add the induction variable increment in the first stage.
     if (startTime == 0)
       stageTypes.push_back(lowerBound.getType());
 
     // Create the stage itself.
+    builder.setInsertionPoint(stagesBlock.getTerminator());
     auto startTimeAttr = builder.getIntegerAttr(
         builder.getIntegerType(64, /*isSigned=*/true), startTime);
     auto stage =
@@ -447,32 +567,36 @@ LogicalResult AffineToPipeline::createPipelinePipeline(
     auto *stageTerminator = stageBlock.getTerminator();
     builder.setInsertionPointToStart(&stageBlock);
 
-    // Sort the group according to original dominance.
-    llvm::sort(group,
-               [&](Operation *a, Operation *b) { return dom.dominates(a, b); });
-
-    // Move over the operations and add their results to the terminator.
-    SmallVector<std::tuple<Operation *, Operation *, unsigned>> movedOps;
     for (auto *op : group) {
-      unsigned resultIndex = stageTerminator->getNumOperands();
-      auto *newOp = builder.clone(*op, valueMap);
-      if (opsWithReturns.contains(op)) {
-        stageTerminator->insertOperands(resultIndex, newOp->getResults());
-        movedOps.emplace_back(op, newOp, resultIndex);
-      }
+      auto *newOp = builder.clone(*op, stageValueMaps[startTime]);
+
+      // All further uses in this stage should used the cloned-version of values
+      // So we update the mapping in this stage
+      for (auto result : op->getResults())
+        stageValueMaps[startTime].map(
+            result, newOp->getResult(result.getResultNumber()));
     }
 
-    // Add the stage results to the value map for the original op.
-    for (auto tuple : movedOps) {
-      Operation *op = std::get<0>(tuple);
-      Operation *newOp = std::get<1>(tuple);
-      unsigned resultIndex = std::get<2>(tuple);
-      for (size_t i = 0; i < newOp->getNumResults(); ++i) {
-        auto newValue = stage->getResult(resultIndex + i);
-        auto oldValue = op->getResult(i);
-        valueMap.map(oldValue, newValue);
-      }
+    // Register all values in the terminator, using their mapped value
+    SmallVector<Value> stageOperands;
+    unsigned resIndex = 0;
+    for (auto res : registerValues[startTime]) {
+      stageOperands.push_back(stageValueMaps[startTime].lookup(res));
+      // Additionally, update the map of the stage that will consume the
+      // registered value
+      unsigned destTime = startTime + 1;
+      unsigned latency = *problem.getLatency(
+          *problem.getLinkedOperatorType(res.getDefiningOp()));
+      // Multi-cycle case
+      if (*problem.getStartTime(res.getDefiningOp()) == startTime &&
+          latency > 1)
+        destTime = startTime + latency;
+      destTime = std::min((unsigned)(stageValueMaps.size() - 1), destTime);
+      stageValueMaps[destTime].map(res, stage.getResult(resIndex++));
     }
+    // Add these mapped values to pipeline.register
+    stageTerminator->insertOperands(stageTerminator->getNumOperands(),
+                                    stageOperands);
 
     // Add the induction variable increment to the first stage.
     if (startTime == 0) {
@@ -493,9 +617,13 @@ LogicalResult AffineToPipeline::createPipelinePipeline(
   SmallVector<Value> termResults;
   termIterArgs.push_back(
       stagesBlock.front().getResult(stagesBlock.front().getNumResults() - 1));
+
   for (auto value : forOp.getBody()->getTerminator()->getOperands()) {
-    termIterArgs.push_back(valueMap.lookup(value));
-    termResults.push_back(valueMap.lookup(value));
+    unsigned lookupTime = std::min((unsigned)(stageValueMaps.size() - 1),
+                                   pipeTimes[value.getDefiningOp()].second);
+
+    termIterArgs.push_back(stageValueMaps[lookupTime].lookup(value));
+    termResults.push_back(stageValueMaps[lookupTime].lookup(value));
   }
 
   stagesTerminator.getIterArgsMutable().append(termIterArgs);

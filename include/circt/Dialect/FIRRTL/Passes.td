@@ -27,7 +27,9 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
     Option<"ignoreAnnotationClassless", "disable-annotation-classless", "bool", "false",
       "Ignore classless annotations.">,
     Option<"ignoreAnnotationUnknown", "disable-annotation-unknown", "bool", "true",
-      "Ignore unknown annotations.">
+      "Ignore unknown annotations.">,
+    Option<"noRefTypePorts", "no-ref-type-ports", "bool", "false",
+      "Create normal ports, not ref type ports.">,
   ];
   let dependentDialects = ["hw::HWDialect"];
   let statistics = [
@@ -420,6 +422,10 @@ def GrandCentral : Pass<"firrtl-grand-central", "CircuitOp"> {
 
   let constructor = "circt::firrtl::createGrandCentralPass()";
   let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
+  let options = [
+    Option<"instantiateCompanionOnly", "instantiate-companion-only", "bool", "false",
+      "Instantiate the companion without a bind and drop the interface">
+  ];
   let statistics = [
     Statistic<"numViews", "num-views-created",
       "Number of top-level SystemVerilog interfaces that were created">,
