@@ -16,17 +16,17 @@ firrtl.circuit "FooBar" attributes {
     }]} {
   // CHECK: firrtl.module @Foo
   // The real port type of the source should be bored
-  // CHECK-SAME: in %foo_out: !firrtl.uint<1>
+  // CHECK-SAME: in %io_out__bore: !firrtl.uint<1>
   firrtl.module@Foo(out %io: !firrtl.bundle<out: uint<1>>) {
       firrtl.skip
   }
   // CHECK: firrtl.module @Bar
   // The real port type of the source should be bored in the parent
-  // CHECK-SAME: in %foo_foo_out: !firrtl.uint<1>
+  // CHECK-SAME: in %foo_io_out__bore: !firrtl.uint<1>
   firrtl.module @Bar(out %io: !firrtl.bundle<out: uint<1>>) {
       %0 = firrtl.subfield %io[out] : !firrtl.bundle<out: uint<1>>
       // CHECK: firrtl.instance foo
-      // CHECK-SAME: in foo_out: !firrtl.uint<1>
+      // CHECK-SAME: in io_out__bore: !firrtl.uint<1>
       %foo_io = firrtl.instance foo interesting_name  @Foo(out io: !firrtl.bundle<out: uint<1>>)
       %1 = firrtl.subfield %foo_io[out] : !firrtl.bundle<out: uint<1>>
       firrtl.strictconnect %0, %1 : !firrtl.uint<1>
@@ -35,7 +35,7 @@ firrtl.circuit "FooBar" attributes {
   firrtl.module @FooBar(out %io: !firrtl.bundle<in flip: uint<1>, out: uint<1>>) {
       %0 = firrtl.subfield %io[out] : !firrtl.bundle<in flip: uint<1>, out: uint<1>>
       // CHECK: firrtl.instance bar
-      // CHECK-SAME: in foo_foo_out: !firrtl.uint<1>
+      // CHECK-SAME: in foo_io_out__bore: !firrtl.uint<1>
       %bar_io = firrtl.instance bar interesting_name  @Bar(out io: !firrtl.bundle<out: uint<1>>)
       %1 = firrtl.subfield %bar_io[out] : !firrtl.bundle<out: uint<1>>
       firrtl.strictconnect %0, %1 : !firrtl.uint<1>
@@ -69,25 +69,25 @@ firrtl.circuit "FooBar" attributes {
       pin = "in"
     }]} {
   // CHECK: firrtl.module @Foo
-  // CHECK-SAME: in %in: !firrtl.uint<1>
+  // CHECK-SAME: in %io_out__bore: !firrtl.uint<1>
   firrtl.module @Foo(out %io: !firrtl.bundle<out: uint<1>>) {
     firrtl.skip
     // CHECK: %0 = firrtl.subfield %io[out] : !firrtl.bundle<out: uint<1>>
-    // CHECK: firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %0, %io_out__bore : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // CHECK: firrtl.module @Foo_1
-  // CHECK-SAME: in %in: !firrtl.uint<1>
+  // CHECK-SAME: in %io_out__bore: !firrtl.uint<1>
   firrtl.module @Foo_1(out %io: !firrtl.bundle<out: uint<1>>) {
     firrtl.skip
     // CHECK: %0 = firrtl.subfield %io[out] : !firrtl.bundle<out: uint<1>>
-    // CHECK: firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %0, %io_out__bore : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // CHECK: firrtl.module @Bar
-  // CHECK-SAME: in %in: !firrtl.uint<1>
+  // CHECK-SAME: in %io_out__bore: !firrtl.uint<1>
   firrtl.module @Bar(out %io: !firrtl.bundle<out: uint<1>>) {
     firrtl.skip
     // CHECK: %0 = firrtl.subfield %io[out] : !firrtl.bundle<out: uint<1>>
-    // CHECK: firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %0, %io_out__bore : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // CHECK: firrtl.module @FooBar
   firrtl.module @FooBar(out %io: !firrtl.bundle<in flip: uint<1>, out_foo0: uint<1>, out_foo1: uint<1>, out_bar: uint<1>>) {
@@ -96,22 +96,22 @@ firrtl.circuit "FooBar" attributes {
     %1 = firrtl.subfield %io[out_foo1] : !firrtl.bundle<in flip: uint<1>, out_foo0: uint<1>, out_foo1: uint<1>, out_bar: uint<1>>
     %2 = firrtl.subfield %io[out_foo0] : !firrtl.bundle<in flip: uint<1>, out_foo0: uint<1>, out_foo1: uint<1>, out_bar: uint<1>>
     // CHECK: firrtl.instance foo0
-    // CHECK-SAME: in in: !firrtl.uint<1>
+    // CHECK-SAME: in io_out__bore: !firrtl.uint<1>
     %foo0_io = firrtl.instance foo0 interesting_name  @Foo(out io: !firrtl.bundle<out: uint<1>>)
     %3 = firrtl.subfield %foo0_io[out] : !firrtl.bundle<out: uint<1>>
     // CHECK: firrtl.instance foo1
-    // CHECK-SAME: in in: !firrtl.uint<1>
+    // CHECK-SAME: in io_out__bore: !firrtl.uint<1>
     %foo1_io = firrtl.instance foo1 interesting_name  @Foo_1(out io: !firrtl.bundle<out: uint<1>>)
     %4 = firrtl.subfield %foo1_io[out] : !firrtl.bundle<out: uint<1>>
     // CHECK: firrtl.instance bar
-    // CHECK-SAME: in in: !firrtl.uint<1>
+    // CHECK-SAME: in io_out__bore: !firrtl.uint<1>
     %bar_io = firrtl.instance bar interesting_name  @Bar(out io: !firrtl.bundle<out: uint<1>>)
     %5 = firrtl.subfield %bar_io[out] : !firrtl.bundle<out: uint<1>>
     firrtl.strictconnect %2, %3 : !firrtl.uint<1>
     firrtl.strictconnect %1, %4 : !firrtl.uint<1>
     firrtl.strictconnect %0, %5 : !firrtl.uint<1>
-    // CHECK: firrtl.connect %foo0_in, %0 : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %foo1_in, %0 : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %bar_in, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %foo0_io_out__bore, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %foo1_io_out__bore, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %bar_io_out__bore, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }

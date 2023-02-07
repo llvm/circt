@@ -549,9 +549,10 @@ LogicalResult LowerAnnotationsPass::legacyToWiringProblems(ApplyState &state) {
       return mlir::emitError(state.circuit.getLoc())
              << "Unable to resolve sink(s) for pin: " << name;
 
-    for (const auto &sink : problem.sinks)
-      state.wiringProblems.push_back({problem.source, sink, name.str(),
-                                      WiringProblem::RefTypeUsage::Never});
+    for (const auto &sink : problem.sinks) {
+      state.wiringProblems.push_back(
+          {problem.source, sink, {}, WiringProblem::RefTypeUsage::Never});
+    }
   }
   return success();
 }
