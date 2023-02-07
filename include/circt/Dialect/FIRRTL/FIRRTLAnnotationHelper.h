@@ -196,6 +196,7 @@ bool isAnnoClassLowered(StringRef className);
 /// A representation of a deferred Wiring problem consisting of a source that
 /// should be connected to a sink.
 struct WiringProblem {
+  enum class RefTypeUsage { Prefer, Never };
 
   /// A source to wire from.
   Value source;
@@ -206,6 +207,19 @@ struct WiringProblem {
   /// A base name to use when generating new signals associated with this wiring
   /// problem.
   std::string newNameHint;
+
+  /// The usage of ref type ports when solving this problem.
+  RefTypeUsage refTypeUsage;
+};
+
+/// A representation of a legacy Wiring problem consisting of a signal source
+/// that should be connected to one or many sinks.
+struct LegacyWiringProblem {
+  /// A source to wire from.
+  Value source;
+
+  /// Sink(s) to wire to.
+  SmallVector<Value> sinks;
 };
 
 /// A store of pending modifications to a FIRRTL module associated with solving
@@ -247,6 +261,9 @@ struct ApplyState {
   InstancePathCache &instancePathCache;
   DenseMap<Attribute, FlatSymbolRefAttr> instPathToNLAMap;
   size_t numReusedHierPaths = 0;
+
+  DenseSet<InstanceOp> wiringProblemInstRefs;
+  DenseMap<StringAttr, LegacyWiringProblem> legacyWiringProblems;
   SmallVector<WiringProblem> wiringProblems;
 
   ModuleNamespace &getNamespace(FModuleLike module) {
@@ -280,6 +297,9 @@ LogicalResult applyOMIR(const AnnoPathValue &target, DictionaryAttr anno,
 
 LogicalResult applyTraceName(const AnnoPathValue &target, DictionaryAttr anno,
                              ApplyState &state);
+
+LogicalResult applyWiring(const AnnoPathValue &target, DictionaryAttr anno,
+                          ApplyState &state);
 
 /// Implements the same behavior as DictionaryAttr::getAs<A> to return the
 /// value of a specific type associated with a key in a dictionary. However,
