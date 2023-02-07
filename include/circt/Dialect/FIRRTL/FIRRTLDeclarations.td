@@ -15,6 +15,7 @@
 
 include "FIRRTLAttributes.td"
 include "FIRRTLDialect.td"
+include "FIRRTLEnums.td"
 include "FIRRTLOpInterfaces.td"
 include "FIRRTLTypes.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
@@ -129,12 +130,13 @@ def MemOp : ReferableDeclOp<"mem"> {
          AnnotationArrayAttr:$annotations,
          PortAnnotationsAttr:$portAnnotations,
          OptionalAttr<InnerSymAttr>:$inner_sym,
-         OptionalAttr<UI32Attr>:$groupID);
+         OptionalAttr<UI32Attr>:$groupID,
+         OptionalAttr<MemoryInitAttr>:$init);
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($nameKind)
-    $ruw custom<MemOp>(attr-dict) `:` qualified(type($results))
+    (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
+    $ruw `` custom<MemOp>(attr-dict) `:` qualified(type($results))
   }];
 
   let builders = [
@@ -253,8 +255,8 @@ def NodeOp : ReferableDeclOp<"node",
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($nameKind)
-    $input custom<ImplicitSSAName>(attr-dict) `:` qualified(type($input))
+    (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
+    $input `` custom<ImplicitSSAName>(attr-dict) `:` qualified(type($input))
   }];
 
   let hasCanonicalizer = true;
@@ -297,8 +299,8 @@ def RegOp : ReferableDeclOp<"reg"> {
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($nameKind)
-    operands custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
+    (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
+    operands `` custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
   }];
   let hasCanonicalizeMethod = true;
 }
@@ -343,8 +345,8 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($nameKind)
-    operands custom<ImplicitSSAName>(attr-dict)
+    (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
+    operands `` custom<ImplicitSSAName>(attr-dict)
     `:` qualified(type($resetSignal)) `,` qualified(type($resetValue)) `,` qualified(type($result))
   }];
 
@@ -387,8 +389,9 @@ def WireOp : ReferableDeclOp<"wire"> {
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($nameKind)
-    custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
+    (`sym` $inner_sym^)? `` custom<NameKind>($nameKind) ``
+    custom<ImplicitSSAName>(attr-dict) `:`
+    qualified(type($result))
   }];
 }
 

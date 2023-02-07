@@ -128,7 +128,6 @@ TOK_LPKEYWORD(stop)
 TOK_LPKEYWORD(assert)
 TOK_LPKEYWORD(assume)
 TOK_LPKEYWORD(cover)
-TOK_LPKEYWORD(validif)
 
 // These are for LPKEYWORD cases that correspond to a primitive operation.
 TOK_LPKEYWORD_PRIM(add, AddPrimOp, 2)

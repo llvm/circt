@@ -196,6 +196,7 @@ bool isAnnoClassLowered(StringRef className);
 /// A representation of a deferred Wiring problem consisting of a source that
 /// should be connected to a sink.
 struct WiringProblem {
+  enum class RefTypeUsage { Prefer, Never };
 
   /// A source to wire from.
   Value source;
@@ -206,6 +207,19 @@ struct WiringProblem {
   /// A base name to use when generating new signals associated with this wiring
   /// problem.
   std::string newNameHint;
+
+  /// The usage of ref type ports when solving this problem.
+  RefTypeUsage refTypeUsage;
+};
+
+/// A representation of a legacy Wiring problem consisting of a signal source
+/// that should be connected to one or many sinks.
+struct LegacyWiringProblem {
+  /// A source to wire from.
+  Value source;
+
+  /// Sink(s) to wire to.
+  SmallVector<Value> sinks;
 };
 
 /// A store of pending modifications to a FIRRTL module associated with solving
@@ -247,6 +261,9 @@ struct ApplyState {
   InstancePathCache &instancePathCache;
   DenseMap<Attribute, FlatSymbolRefAttr> instPathToNLAMap;
   size_t numReusedHierPaths = 0;
+
+  DenseSet<InstanceOp> wiringProblemInstRefs;
+  DenseMap<StringAttr, LegacyWiringProblem> legacyWiringProblems;
   SmallVector<WiringProblem> wiringProblems;
 
   ModuleNamespace &getNamespace(FModuleLike module) {
@@ -280,6 +297,9 @@ LogicalResult applyOMIR(const AnnoPathValue &target, DictionaryAttr anno,
 
 LogicalResult applyTraceName(const AnnoPathValue &target, DictionaryAttr anno,
                              ApplyState &state);
+
+LogicalResult applyWiring(const AnnoPathValue &target, DictionaryAttr anno,
+                          ApplyState &state);
 
 /// Implements the same behavior as DictionaryAttr::getAs<A> to return the
 /// value of a specific type associated with a key in a dictionary. However,
@@ -332,25 +352,6 @@ InstanceOp addPortsToModule(
     llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
     CircuitTargetCache *targetCaches = nullptr);
 
-/// Add a port to each instance on the path `instancePath` and forward the
-/// `fromVal` through them. It returns the port added to the last module on the
-/// given path. The module referenced by the first instance on the path must
-/// contain `fromVal`.
-Value borePortsOnPath(
-    SmallVector<InstanceOp> &instancePath, FModuleOp lcaModule, Value fromVal,
-    StringRef newNameHint, InstancePathCache &instancePathcache,
-    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
-    CircuitTargetCache *targetCachesInstancePathCache);
-
-/// Find the lowest-common-ancestor `lcaModule`, between `srcTarget` and
-/// `dstTarget`, and set `pathFromSrcToWire` with the path between them through
-/// the `lcaModule`. The assumption here is that the srcTarget and dstTarget can
-/// be uniquely identified. Either the instnaces field of their AnnoPathValue is
-/// set or there exists a single path from Top.
-LogicalResult findLCAandSetPath(AnnoPathValue &srcTarget,
-                                AnnoPathValue &dstTarget,
-                                SmallVector<InstanceOp> &pathFromSrcToWire,
-                                FModuleOp &lcaModule, ApplyState &state);
 } // namespace firrtl
 } // namespace circt
 

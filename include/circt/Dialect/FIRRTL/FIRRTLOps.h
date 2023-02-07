@@ -188,6 +188,7 @@ struct FirMemory {
   StringAttr modName;
   bool isMasked;
   uint32_t groupID;
+  MemoryInitAttr init;
 
   // Location is carried along but not considered part of the identity of this.
   Location loc;
@@ -198,11 +199,15 @@ struct FirMemory {
   Operation *op = nullptr;
 
   std::tuple<size_t, size_t, size_t, size_t, size_t, size_t, size_t, size_t,
-             size_t, hw::WUW, SmallVector<int32_t>, uint32_t>
+             size_t, hw::WUW, SmallVector<int32_t>, uint32_t, StringRef, bool,
+             bool>
   getTuple() const {
-    return std::tie(numReadPorts, numWritePorts, numReadWritePorts, dataWidth,
-                    depth, readLatency, writeLatency, maskBits, readUnderWrite,
-                    writeUnderWrite, writeClockIDs, groupID);
+    return std::make_tuple(
+        numReadPorts, numWritePorts, numReadWritePorts, dataWidth, depth,
+        readLatency, writeLatency, maskBits, readUnderWrite, writeUnderWrite,
+        writeClockIDs, groupID, init ? init.getFilename().getValue() : "",
+        init ? init.getIsBinary().getValue() : false,
+        init ? init.getIsInline().getValue() : false);
   }
   bool operator<(const FirMemory &rhs) const {
     return getTuple() < rhs.getTuple();

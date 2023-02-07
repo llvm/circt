@@ -29,10 +29,21 @@ namespace calyxToFSM {
 // Entry and exit state names of the Calyx control program in the FSM.
 static constexpr std::string_view sEntryStateName = "fsm_entry";
 static constexpr std::string_view sExitStateName = "fsm_exit";
+static constexpr std::string_view sGroupDoneInputs =
+    "calyx.fsm_group_done_inputs";
+static constexpr std::string_view sGroupGoOutputs =
+    "calyx.fsm_group_go_outputs";
+static constexpr std::string_view sSSAInputIndices = "calyx.fsm_ssa_inputs";
+static constexpr std::string_view sFSMTopLevelGoIndex =
+    "calyx.fsm_top_level_go";
+static constexpr std::string_view sFSMTopLevelDoneIndex =
+    "calyx.fsm_top_level_done";
+
 } // namespace calyxToFSM
 
 std::unique_ptr<mlir::Pass> createCalyxToFSMPass();
 std::unique_ptr<mlir::Pass> createMaterializeCalyxToFSMPass();
+std::unique_ptr<mlir::Pass> createRemoveGroupsFromFSMPass();
 
 } // namespace circt
 

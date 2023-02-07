@@ -661,10 +661,11 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
   // Insert memories at the bottom of the file.
   OpBuilder b(state.circuitOp);
   b.setInsertionPointAfter(state.circuitOp);
-  std::array<StringRef, 11> schemaFields = {
+  std::array<StringRef, 14> schemaFields = {
       "depth",          "numReadPorts",    "numWritePorts", "numReadWritePorts",
       "readLatency",    "writeLatency",    "width",         "maskGran",
-      "readUnderWrite", "writeUnderWrite", "writeClockIDs"};
+      "readUnderWrite", "writeUnderWrite", "writeClockIDs", "initFilename",
+      "initIsBinary",   "initIsInline"};
   auto schemaFieldsAttr = b.getStrArrayAttr(schemaFields);
   auto schema = b.create<hw::HWGeneratorSchemaOp>(
       mems.front().loc, "FIRRTLMem", "FIRRTL_Memory", schemaFieldsAttr);
@@ -742,7 +743,13 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
                        b.getUI32IntegerAttr(mem.readUnderWrite)),
         b.getNamedAttr("writeUnderWrite",
                        hw::WUWAttr::get(b.getContext(), mem.writeUnderWrite)),
-        b.getNamedAttr("writeClockIDs", b.getI32ArrayAttr(mem.writeClockIDs))};
+        b.getNamedAttr("writeClockIDs", b.getI32ArrayAttr(mem.writeClockIDs)),
+        b.getNamedAttr("initFilename",
+                       mem.init ? mem.init.getFilename() : b.getStringAttr("")),
+        b.getNamedAttr("initIsBinary", mem.init ? mem.init.getIsBinary()
+                                                : b.getBoolAttr(false)),
+        b.getNamedAttr("initIsInline", mem.init ? mem.init.getIsInline()
+                                                : b.getBoolAttr(false))};
 
     // Make the global module for the memory
     // Set a name for the memory wrapper module, the combMem is an arbitrary
@@ -969,6 +976,7 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
       hwPort.direction = hw::PortDirection::INOUT;
       hwPort.argNum = numArgs++;
     }
+    hwPort.loc = firrtlPort.loc;
     ports.push_back(hwPort);
     loweringState.processRemainingAnnotations(moduleOp, firrtlPort.annotations);
   }
@@ -1441,6 +1449,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                                bool isSigned = false) {
     return getOrCreateIntConstant(APInt(numBits, val, isSigned));
   }
+  Attribute getOrCreateAggregateConstantAttribute(Attribute value, Type type);
   Value getOrCreateXConstant(unsigned numBits);
   Value getPossiblyInoutLoweredValue(Value value);
   Value getLoweredValue(Value value);
@@ -1653,6 +1662,7 @@ private:
   /// This keeps track of constants that we have created so we can reuse them.
   /// This is populated by the getOrCreateIntConstant method.
   DenseMap<Attribute, Value> hwConstantMap;
+  DenseMap<std::pair<Attribute, Type>, Attribute> hwAggregateConstantMap;
 
   /// This keeps track of constant X that we have created so we can reuse them.
   /// This is populated by the getOrCreateXConstant method.
@@ -1839,6 +1849,41 @@ Value FIRRTLLowering::getOrCreateIntConstant(const APInt &value) {
 
   OpBuilder entryBuilder(&theModule.getBodyBlock()->front());
   entry = entryBuilder.create<hw::ConstantOp>(builder.getLoc(), attr);
+  return entry;
+}
+
+/// Check to see if we've already created the specified aggregate constant
+/// attribute. If so, return it.  Otherwise create it.
+Attribute FIRRTLLowering::getOrCreateAggregateConstantAttribute(Attribute value,
+                                                                Type type) {
+  // Base case.
+  if (hw::type_isa<IntegerType>(type))
+    return builder.getIntegerAttr(type, cast<IntegerAttr>(value).getValue());
+
+  auto cache = hwAggregateConstantMap.lookup({value, type});
+  if (cache)
+    return cache;
+
+  // Recursively construct elements.
+  SmallVector<Attribute> values;
+  for (auto &e : llvm::enumerate(value.cast<ArrayAttr>())) {
+    Type subType;
+    if (auto array = hw::type_dyn_cast<hw::ArrayType>(type))
+      subType = array.getElementType();
+    else if (auto structType = hw::type_dyn_cast<hw::StructType>(type))
+      subType = structType.getElements()[e.index()].type;
+    else
+      assert(false && "type must be either array or struct");
+
+    values.push_back(getOrCreateAggregateConstantAttribute(e.value(), subType));
+  }
+
+  // FIRRTL and HW have a different operand ordering for arrays.
+  if (hw::type_isa<hw::ArrayType>(type))
+    std::reverse(values.begin(), values.end());
+
+  auto &entry = hwAggregateConstantMap[{value, type}];
+  entry = builder.getArrayAttr(values);
   return entry;
 }
 
@@ -2551,22 +2596,11 @@ LogicalResult FIRRTLLowering::visitExpr(BundleCreateOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(AggregateConstantOp op) {
   auto resultType = lowerType(op.getResult().getType());
-  auto vec = op.getType().dyn_cast<FVectorType>();
-  // Currently we only support 1d vector types.
-  if (!vec || !vec.getElementType().isa<IntType>()) {
-    op.emitError()
-        << "has an unsupported type; currently we only support 1d vectors";
-    return failure();
-  }
+  auto attr =
+      getOrCreateAggregateConstantAttribute(op.getFieldsAttr(), resultType);
 
-  // TODO: Use hw aggregate constant
-  SmallVector<Value> operands;
-  // Make sure to reverse the operands.
-  for (auto elem : llvm::reverse(op.getFields()))
-    operands.push_back(
-        getOrCreateIntConstant(elem.cast<IntegerAttr>().getValue()));
-
-  return setLoweringTo<hw::ArrayCreateOp>(op, resultType, operands);
+  return setLoweringTo<hw::AggregateConstantOp>(op, resultType,
+                                                attr.cast<ArrayAttr>());
 }
 
 //===----------------------------------------------------------------------===//

@@ -82,7 +82,10 @@ def HWModuleOp : HWModuleOpBase<"module",
   let arguments = (ins TypeAttrOf<FunctionType>:$function_type,
                        OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
-                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+                       StrArrayAttr:$argNames,
+                       StrArrayAttr:$resultNames,
+                       LocationArrayAttr:$argLocs,
+                       LocationArrayAttr:$resultLocs,
                        ParamDeclArrayAttr:$parameters,
                        StrAttr:$comment);
   let results = (outs);

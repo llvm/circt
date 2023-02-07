@@ -23,7 +23,7 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-integration-test:v11.2
+      image: ghcr.io/circt/images/circt-integration-test:v11.3
     strategy:
       # Keep the 'matrix' strategy with one data point to make it obvious that
       # this is one point in the overall matrix.

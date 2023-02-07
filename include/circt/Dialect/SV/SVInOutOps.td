@@ -38,7 +38,7 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
   }];
   let hasCanonicalizeMethod = true;
 
@@ -68,7 +68,7 @@ def RegOp : SVOp<"reg", [
 
   // We handle the name in a custom way, so we use a customer parser/printer.
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict)
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>(attr-dict)
      `:` qualified(type($result))
   }];
   let hasCanonicalizeMethod = true;
@@ -130,11 +130,6 @@ def ReadInOutOp
                 " inout port) as the value itself.";
   let arguments = (ins InOutType:$input);
   let results = (outs HWValueType:$result);
-
-  let builders = [
-    OpBuilder<(ins "Value":$input)>
-  ];
-
   let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
 }
 
@@ -156,11 +151,6 @@ def ArrayIndexInOutOp
   let description = "See SV Spec 11.5.2.";
   let arguments = (ins InOutArrayType:$input, HWIntegerType:$index);
   let results = (outs InOutType:$result);
-
-  let builders = [
-    OpBuilder<(ins "Value":$input, "Value":$index)>
-  ];
-
   let assemblyFormat =
     "$input`[`$index`]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))";
 }
@@ -246,7 +236,7 @@ def LogicOp : SVOp<"logic", [DeclareOpInterfaceMethods<OpAsmOpInterface,
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict) `:`
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>(attr-dict) `:`
                                                 qualified(type($result))
   }];
 

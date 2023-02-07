@@ -14,7 +14,6 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD
 
 include "FIRRTLDialect.td"
-include "mlir/IR/EnumAttr.td"
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Definitions
@@ -170,26 +169,5 @@ def OneBitCastableType : AnyTypeOf<
   [OneBitType, AnyResetType, AsyncResetType, ClockType],
   "1-bit uint/sint/analog, reset, asyncreset, or clock",
                                   "::circt::firrtl::FIRRTLBaseType">;
-
-//===----------------------------------------------------------------------===//
-// FIRRTL Enum Definitions
-//===----------------------------------------------------------------------===//
-
-/// RUWAttr: Undefined/Old/New.
-def RUW_Undefined: I32EnumAttrCase<"Undefined", 0>;
-def RUW_Old: I32EnumAttrCase<"Old", 1>;
-def RUW_New: I32EnumAttrCase<"New", 2>;
-
-def RUWAttr: I32EnumAttr<"RUWAttr", "Read Under Write Enum",
-                         [RUW_Undefined, RUW_Old, RUW_New]>;
-
-def MemDir_Infer    : I32EnumAttrCase<"Infer", 0>;
-def MemDir_Read     : I32EnumAttrCase<"Read", 1>;
-def MemDir_Write    : I32EnumAttrCase<"Write", 2>;
-def MemDir_ReadWrite: I32EnumAttrCase<"ReadWrite", 3>;
-
-def MemDirAttr: I32EnumAttr<"MemDirAttr", "Memory Direction Enum",
-                            [MemDir_Infer, MemDir_Read, MemDir_Write,
-                              MemDir_ReadWrite]>;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD

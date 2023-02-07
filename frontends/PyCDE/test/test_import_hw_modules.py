@@ -1,16 +1,12 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
-from pathlib import Path
-from tempfile import NamedTemporaryFile
+from pycde.circt.ir import Module as IrModule
+from pycde.circt.dialects import hw
 
-from mlir.ir import Module
-
-from circt.dialects import hw
-
-from pycde import Input, Output, System, generator, module, types
+from pycde import Input, Output, System, generator, Module, types
 from pycde.module import import_hw_module
 
-mlir_module = Module.parse("""
+mlir_module = IrModule.parse("""
 hw.module @add(%a: i1, %b: i1) -> (out: i1) {
   %0 = comb.add %a, %b : i1
   hw.output %0 : i1
@@ -29,8 +25,7 @@ for op in mlir_module.body:
     imported_modules.append(imported_module)
 
 
-@module
-class Top:
+class Top(Module):
   a = Input(types.i1)
   b = Input(types.i1)
   out0 = Output(types.i1)
@@ -47,7 +42,6 @@ class Top:
 
 
 system = System([Top])
-system.import_modules(imported_modules)
 system.generate()
 
 # CHECK: msft.module @Top {} (%a: i1, %b: i1) -> (out0: i1, out1: i1)

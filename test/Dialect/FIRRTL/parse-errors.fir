@@ -278,30 +278,6 @@ circuit circuit:
 
 ;// -----
 
-circuit Issue886:
-  module Issue886 :
-    input a: SInt<1>
-    input b: UInt<42>
-    node n = validif(a, b)  ; expected-error {{first operand should have UInt type}}
-
-;// -----
-
-circuit Issue886:
-  module Issue886 :
-    input a: UInt<2>
-    input b: UInt<42>
-    node n = validif(a, b)  ; expected-error {{first operand should have 'uint<1>' type}}
-
-;// -----
-
-circuit Issue886:
-  module Issue886 :
-    input a: UInt<1>
-    input b: UInt<42>
-    node n = validif(a, b, b)  ; expected-error {{operation requires two operands}}
-
-;// -----
-
 circuit Issue2971: ; expected-error {{no main module}}
   module NotIssue2971:
     input in: UInt<1>

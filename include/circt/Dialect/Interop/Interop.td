@@ -32,6 +32,7 @@ def InteropDialect : Dialect {
     solutions.
   }];
   let cppNamespace = "::circt::interop";
+  let useFoldAPI = kEmitFoldAdaptorFolder;
 }
 
 //===----------------------------------------------------------------------===//

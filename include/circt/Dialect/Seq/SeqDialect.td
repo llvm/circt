@@ -23,6 +23,7 @@ def SeqDialect : Dialect {
 
   let hasConstantMaterializer = 1;
   let useDefaultTypePrinterParser = 1;
+  let useFoldAPI = kEmitFoldAdaptorFolder;
   let cppNamespace = "::circt::seq";
 
   let extraClassDeclaration = [{

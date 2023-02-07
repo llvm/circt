@@ -377,6 +377,10 @@ circuit Top :
     ; CHECK-NEXT:       Sub_vecOfBundle sub_vecOfBundle[2]();
     ; CHECK-NEXT:       // The second element of an external port
     ; CHECK-NEXT:       logic ext_port_1;
+    ; CHECK-NEXT:       // <unsupported string type> foo_string;
+    ; CHECK-NEXT:       // <unsupported integer type> foo_integer;
+    ; CHECK-NEXT:       // <unsupported double type> foo_double;
+    ; CHECK-NEXT:       // <unsupported boolean type> foo_boolean;
     ; CHECK-NEXT:     endinterface
 
     ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}VecOfBundle.sv"

@@ -743,7 +743,8 @@ def ReadMemOp : SVOp<"readmem", [ProceduralOp]> {
     See Section 21.4 of IEEE 1800-2017 for more information.
   }];
   let arguments =
-    (ins SymbolNameAttr:$inner_sym, StrAttr:$filename, MemBaseTypeAttr:$base);
+    (ins InOutType:$dest, StrAttr:$filename, MemBaseTypeAttr:$base);
   let results = (outs);
-  let assemblyFormat = "$inner_sym `,` $filename `,` $base attr-dict";
+  let assemblyFormat =
+    "$dest `,` $filename `,` $base attr-dict `:` qualified(type($dest))";
 }

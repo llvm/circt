@@ -124,27 +124,27 @@ public:
   /// types and vector types, each field is assigned a field ID in a depth-first
   /// walk order. This function is used to calculate field IDs when this type is
   /// nested under another type.
-  unsigned getMaxFieldID();
+  uint64_t getMaxFieldID();
 
   /// Get the sub-type of a type for a field ID, and the subfield's ID. Strip
   /// off a single layer of this type and return the sub-type and a field ID
   /// targeting the same field, but rebased on the sub-type.
-  std::pair<FIRRTLBaseType, unsigned> getSubTypeByFieldID(unsigned fieldID);
+  std::pair<FIRRTLBaseType, uint64_t> getSubTypeByFieldID(uint64_t fieldID);
 
   /// Return the final type targeted by this field ID by recursively walking all
   /// nested aggregate types. This is the identity function for ground types.
-  FIRRTLBaseType getFinalTypeByFieldID(unsigned fieldID);
+  FIRRTLBaseType getFinalTypeByFieldID(uint64_t fieldID);
 
   /// Returns the effective field id when treating the index field as the
   /// root of the type.  Essentially maps a fieldID to a fieldID after a
   /// subfield op. Returns the new id and whether the id is in the given
   /// child.
-  std::pair<unsigned, bool> rootChildFieldID(unsigned fieldID, unsigned index);
+  std::pair<uint64_t, bool> rootChildFieldID(uint64_t fieldID, uint64_t index);
 
   /// Get the number of ground (non-aggregate) fields in the type.  A field
   /// which is a bundle or vector is not counted, but the recursive ground
   /// fields of are.
-  unsigned getGroundFields() const;
+  uint64_t getGroundFields() const;
 
 protected:
   using FIRRTLType::FIRRTLType;
@@ -179,244 +179,56 @@ mlir::Type getPassiveType(mlir::Type anyBaseFIRRTLType);
 // Width Qualified Ground Types
 //===----------------------------------------------------------------------===//
 
+/// Trait for types which have a width.
+/// Users must implement:
+/// ```c++
+/// /// Return the width if known, or -1 if unknown.
+/// int32_t getWidthOrSentinel();
+/// ```
 template <typename ConcreteType>
-class WidthQualifiedTrait
-    : public mlir::OpTrait::TraitBase<ConcreteType, WidthQualifiedTrait> {
+class WidthQualifiedTypeTrait
+    : public mlir::TypeTrait::TraitBase<ConcreteType, WidthQualifiedTypeTrait> {
 public:
+  /// Return an optional containing the width, if the width is known (or empty
+  /// if width is unknown).
   std::optional<int32_t> getWidth() {
-    auto v = static_cast<ConcreteType *>(this)->getBaseWidth();
-    if (v >= 0)
-      return v;
-    return {};
+    auto width = static_cast<ConcreteType *>(this)->getWidthOrSentinel();
+    if (width < 0)
+      return std::nullopt;
+    return width;
   }
-  int32_t getWidthOrSentinel() {
-    return static_cast<ConcreteType *>(this)->getBaseWidth();
-  }
+
+  /// Return true if this integer type has a known width.
   bool hasWidth() {
-    return static_cast<ConcreteType *>(this)->getBaseWidth() >= 0;
-  }
-  ConcreteType changeWidth(int32_t width) {
-    return ConcreteType::get(static_cast<ConcreteType *>(this)->getContext(),
-                             width);
+    return 0 <= static_cast<ConcreteType *>(this)->getWidthOrSentinel();
   }
 };
 
-template <typename ConcreteType, typename ParentType>
-class WidthQualifiedType
-    : public FIRRTLType::TypeBase<ConcreteType, ParentType,
-                                  detail::WidthTypeStorage,
-                                  circt::hw::FieldIDTypeInterface::Trait> {
-public:
-  using FIRRTLType::TypeBase<
-      ConcreteType, ParentType, detail::WidthTypeStorage,
-      circt::hw::FieldIDTypeInterface::Trait>::Base::Base;
-
-  /// Return the bitwidth of this type or None if unknown.
-  std::optional<int32_t> getWidth() {
-    return static_cast<ConcreteType *>(this)->getWidth();
-  }
-
-  /// Return the width of this type, or -1 if it has none specified.
-  int32_t getWidthOrSentinel() { return getWidth().value_or(-1); }
-
-  /// Return true if this type has a known width.
-  bool hasWidth() { return getWidth().has_value(); }
-
-  /// Return a new type with the width changed to a different value.
-  ConcreteType changeWidth(int32_t width) {
-    return ConcreteType::get(static_cast<ConcreteType *>(this)->getContext(),
-                             width);
-  }
-};
+//===----------------------------------------------------------------------===//
+// IntType
+//===----------------------------------------------------------------------===//
 
 class SIntType;
 class UIntType;
 
 /// This is the common base class between SIntType and UIntType.
-class IntType : public FIRRTLBaseType {
+class IntType : public FIRRTLBaseType, public WidthQualifiedTypeTrait<IntType> {
 public:
   using FIRRTLBaseType::FIRRTLBaseType;
 
-  /// Return a SIntType or UInt type with the specified signedness and width.
-  static IntType get(MLIRContext *context, bool isSigned, int32_t width = -1);
+  /// Return an SIntType or UIntType with the specified signedness and width.
+  static IntType get(MLIRContext *context, bool isSigned,
+                     int32_t widthOrSentinel = -1);
 
   bool isSigned() { return isa<SIntType>(); }
   bool isUnsigned() { return isa<UIntType>(); }
 
-  /// Return true if this integer type has a known width.
-  bool hasWidth() { return getWidth().has_value(); }
-
-  /// Return the bitwidth of this type or None if unknown.
-  std::optional<int32_t> getWidth();
-
   /// Return the width of this type, or -1 if it has none specified.
-  int32_t getWidthOrSentinel() { return getWidth().value_or(-1); }
+  int32_t getWidthOrSentinel();
 
   static bool classof(Type type) {
     return type.isa<SIntType>() || type.isa<UIntType>();
   }
-};
-
-/// A signed integer type, whose width may not be known.
-class SIntType : public WidthQualifiedType<SIntType, IntType> {
-public:
-  using WidthQualifiedType::WidthQualifiedType;
-
-  /// Get an with a known width, or -1 for unknown.
-  static SIntType get(MLIRContext *context, int32_t width = -1);
-
-  /// Return the bitwidth of this type or None if unknown.
-  std::optional<int32_t> getWidth();
-};
-
-/// An unsigned integer type, whose width may not be known.
-class UIntType : public WidthQualifiedType<UIntType, IntType> {
-public:
-  using WidthQualifiedType::WidthQualifiedType;
-
-  /// Get an with a known width, or -1 for unknown.
-  static UIntType get(MLIRContext *context, int32_t width = -1);
-
-  /// Return the bitwidth of this type or None if unknown.
-  std::optional<int32_t> getWidth();
-};
-
-//===----------------------------------------------------------------------===//
-// Bundle Type
-//===----------------------------------------------------------------------===//
-
-/// BundleType is an aggregate of named elements.  This is effectively a struct
-/// for FIRRTL.
-class BundleType
-    : public FIRRTLType::TypeBase<BundleType, FIRRTLBaseType,
-                                  detail::BundleTypeStorage,
-                                  circt::hw::FieldIDTypeInterface::Trait> {
-public:
-  using Base::Base;
-
-  // Each element of a bundle, which is a name and type.
-  struct BundleElement {
-    StringAttr name;
-    bool isFlip;
-    FIRRTLBaseType type;
-
-    BundleElement(StringAttr name, bool isFlip, FIRRTLBaseType type)
-        : name(name), isFlip(isFlip), type(type) {}
-
-    bool operator==(const BundleElement &rhs) const {
-      return name == rhs.name && isFlip == rhs.isFlip && type == rhs.type;
-    }
-    bool operator!=(const BundleElement &rhs) const { return !operator==(rhs); }
-  };
-
-  static BundleType get(ArrayRef<BundleElement> elements, MLIRContext *context);
-
-  ArrayRef<BundleElement> getElements() const;
-
-  size_t getNumElements() { return getElements().size(); }
-
-  /// Look up an element's index by name.  This returns None on failure.
-  std::optional<unsigned> getElementIndex(StringAttr name);
-  std::optional<unsigned> getElementIndex(StringRef name);
-
-  /// Look up an element's name by index. This asserts if index is invalid.
-  StringRef getElementName(size_t index);
-
-  /// Look up an element by name.  This returns None on failure.
-  std::optional<BundleElement> getElement(StringAttr name);
-  std::optional<BundleElement> getElement(StringRef name);
-
-  /// Look up an element by index.  This asserts if index is invalid.
-  BundleElement getElement(size_t index);
-
-  /// Look up an element type by name.
-  FIRRTLBaseType getElementType(StringAttr name);
-  FIRRTLBaseType getElementType(StringRef name);
-
-  /// Look up an element type by index.
-  FIRRTLBaseType getElementType(size_t index);
-
-  /// Return the recursive properties of the type.
-  RecursiveTypeProperties getRecursiveTypeProperties();
-
-  /// Return this type with any flip types recursively removed from itself.
-  FIRRTLBaseType getPassiveType();
-
-  /// Get an integer ID for the field. Field IDs start at 1, and are assigned
-  /// to each field in a bundle in a recursive pre-order walk of all fields,
-  /// visiting all nested bundle fields.  A field ID of 0 is used to reference
-  /// the bundle itself. The ID can be used to uniquely identify any specific
-  /// field in this bundle.
-  unsigned getFieldID(unsigned index);
-
-  /// Find the element index corresponding to the desired fieldID.  If the
-  /// fieldID corresponds to a field in a nested bundle, it will return the
-  /// index of the parent field.
-  unsigned getIndexForFieldID(unsigned fieldID);
-
-  /// Strip off a single layer of this type and return the sub-type and a field
-  /// ID targeting the same field, but rebased on the sub-type.
-  std::pair<FIRRTLBaseType, unsigned> getSubTypeByFieldID(unsigned fieldID);
-
-  /// Get the maximum field ID in this bundle.  This is helpful for constructing
-  /// field IDs when this BundleType is nested in another aggregate type.
-  unsigned getMaxFieldID();
-
-  /// Returns the effective field id when treating the index field as the root
-  /// of the type.  Essentially maps a fieldID to a fieldID after a subfield op.
-  /// Returns the new id and whether the id is in the given child.
-  std::pair<unsigned, bool> rootChildFieldID(unsigned fieldID, unsigned index);
-
-  using iterator = ArrayRef<BundleElement>::iterator;
-  iterator begin() const { return getElements().begin(); }
-  iterator end() const { return getElements().end(); }
-};
-
-//===----------------------------------------------------------------------===//
-// FVector Type
-//===----------------------------------------------------------------------===//
-
-/// VectorType is a fixed size collection of elements, like an array.
-class FVectorType
-    : public FIRRTLType::TypeBase<FVectorType, FIRRTLBaseType,
-                                  detail::VectorTypeStorage,
-                                  circt::hw::FieldIDTypeInterface::Trait> {
-public:
-  using Base::Base;
-
-  static FVectorType get(FIRRTLBaseType elementType, size_t numElements);
-
-  FIRRTLBaseType getElementType();
-  size_t getNumElements();
-
-  /// Return the recursive properties of the type.
-  RecursiveTypeProperties getRecursiveTypeProperties();
-
-  /// Return this type with any flip types recursively removed from itself.
-  FIRRTLBaseType getPassiveType();
-
-  /// Get an integer ID for the field. Field IDs start at 1, and are assigned
-  /// to each field in a vector in a recursive depth-first walk of all elements.
-  /// A field ID of 0 is used to reference the vector itself.
-  size_t getFieldID(size_t index);
-
-  /// Find the element index corresponding to the desired fieldID.  If the
-  /// fieldID corresponds to a field in nested under an element, it will return
-  /// the index of the parent element.
-  size_t getIndexForFieldID(size_t fieldID);
-
-  /// Strip off a single layer of this type and return the sub-type and a field
-  /// ID targeting the same field, but rebased on the sub-type.
-  std::pair<FIRRTLBaseType, size_t> getSubTypeByFieldID(size_t fieldID);
-
-  /// Get the maximum field ID in this vector.  This is helpful for constructing
-  /// field IDs when this VectorType is nested in another aggregate type.
-  size_t getMaxFieldID();
-
-  /// Returns the effective field id when treating the index field as the root
-  /// of the type.  Essentially maps a fieldID to a fieldID after a subfield op.
-  /// Returns the new id and whether the id is in the given child.
-  std::pair<size_t, bool> rootChildFieldID(size_t fieldID, size_t index);
 };
 
 //===----------------------------------------------------------------------===//

@@ -79,7 +79,8 @@ FirMemory getSummary(MemOp op) {
           (size_t)width,        op.getDepth(),    op.getReadLatency(),
           op.getWriteLatency(), op.getMaskBits(), (size_t)op.getRuw(),
           hw::WUW::PortOrder,   writeClockIDs,    op.getNameAttr(),
-          op.getMaskBits() > 1, groupID,          op.getLoc()};
+          op.getMaskBits() > 1, groupID,          op.getInitAttr(),
+          op.getLoc()};
 }
 
 namespace {

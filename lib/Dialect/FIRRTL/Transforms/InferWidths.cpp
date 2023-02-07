@@ -1986,7 +1986,7 @@ bool InferenceTypeUpdate::updateValue(Value value) {
         elements.emplace_back(element.name, element.isFlip,
                               updateBase(element.type));
       }
-      return BundleType::get(elements, context);
+      return BundleType::get(context, elements);
     } else if (auto vecType = type.dyn_cast<FVectorType>()) {
       fieldID++;
       auto save = fieldID;

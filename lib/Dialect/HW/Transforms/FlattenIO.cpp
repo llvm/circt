@@ -216,6 +216,43 @@ static void updateNameAttribute(FunctionOpInterface op, StringRef attrName,
                              ArrayAttr::get(op.getContext(), newNames));
 }
 
+static void updateLocAttribute(FunctionOpInterface op, StringRef attrName,
+                               DenseMap<unsigned, hw::StructType> &structMap) {
+  llvm::SmallVector<Attribute> newLocs;
+  auto oldLocs = op.getOperation()->getAttrOfType<ArrayAttr>(attrName);
+  if (!oldLocs)
+    return;
+  for (auto [i, oldLoc] : llvm::enumerate(oldLocs)) {
+    // Was this arg/res index a struct?
+    auto it = structMap.find(i);
+    if (it == structMap.end()) {
+      // No, keep old name.
+      newLocs.push_back(oldLoc);
+      continue;
+    }
+
+    auto structType = it->second;
+    for (size_t i = 0, e = structType.getElements().size(); i < e; ++i)
+      newLocs.push_back(oldLoc);
+  }
+  op.getOperation()->setAttr(attrName,
+                             ArrayAttr::get(op.getContext(), newLocs));
+}
+
+/// The conversion framework seems to throw away block argument locations.  We
+/// use this function to copy the location from the original argument to the
+/// set of flattened arguments.
+static void
+updateBlockLocations(FunctionOpInterface op, StringRef attrName,
+                     DenseMap<unsigned, hw::StructType> &structMap) {
+  auto locs = op.getOperation()->getAttrOfType<ArrayAttr>(attrName);
+  if (!locs)
+    return;
+  for (auto [arg, loc] :
+       llvm::zip(op.getArguments(), locs.getAsRange<LocationAttr>()))
+    arg.setLoc(loc);
+}
+
 template <typename T>
 static DenseMap<Operation *, IOInfo> populateIOInfoMap(mlir::ModuleOp module) {
   DenseMap<Operation *, IOInfo> ioInfoMap;
@@ -273,6 +310,9 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
       auto ioInfo = ioInfoMap[op];
       updateNameAttribute(op, "argNames", ioInfo.argStructs);
       updateNameAttribute(op, "resultNames", ioInfo.resStructs);
+      updateLocAttribute(op, "argLocs", ioInfo.argStructs);
+      updateLocAttribute(op, "resultLocs", ioInfo.resStructs);
+      updateBlockLocations(op, "argLocs", ioInfo.argStructs);
     }
 
     // Break if we've only lowering a single level of structs.

@@ -22,6 +22,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Matchers.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -51,6 +52,7 @@ private:
   bool splitAssignment(OpBuilder &builder, Value dst, Value src);
 
   bool anythingChanged;
+  LoweringOptions options;
 
   DenseSet<Operation *> toDelete;
 };
@@ -337,6 +339,9 @@ bool PrettifyVerilogPass::prettifyUnaryOperator(Operation *op) {
   for (auto *user : op->getUsers()) {
     if (isa<comb::ExtractOp, hw::ArraySliceOp>(user))
       return false;
+    if (!options.allowExprInEventControl &&
+        isa<sv::AlwaysFFOp, sv::AlwaysOp>(user))
+      return false;
   }
 
   // Duplicating unary operations can move them across blocks (down the region
@@ -531,6 +536,7 @@ void PrettifyVerilogPass::processPostOrder(Block &body) {
 
 void PrettifyVerilogPass::runOnOperation() {
   hw::HWModuleOp thisModule = getOperation();
+  options = LoweringOptions(thisModule->getParentOfType<mlir::ModuleOp>());
 
   // Keeps track if anything changed during this pass, used to determine if
   // the analyses were preserved.

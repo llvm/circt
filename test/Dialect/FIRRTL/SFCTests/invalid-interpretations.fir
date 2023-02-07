@@ -11,7 +11,6 @@ circuit InvalidInterpretations:
     input cond: UInt<1>
     input a: UInt<8>
     output out_when: UInt<8>
-    output out_validif: UInt<8>
     output out_reg: UInt<8>
     output out_mux: UInt<8>
     output out_add: UInt<9>
@@ -32,10 +31,6 @@ circuit InvalidInterpretations:
       out_when <= a
     ; Interpretation 2: Invalid is undefined when used as a default value.
     ; CHECK:       assign out_when = a;
-
-    out_validif <= validif(cond, a)
-    ; Interpretation 3: Invalid is undefined as the false leg of a validif.
-    ; CHECK:       assign out_validif = a;
 
     out_mux <= mux(cond, a, _inv)
     out_add <= add(a, _inv)
