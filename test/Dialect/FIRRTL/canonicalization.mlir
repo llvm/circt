@@ -2553,4 +2553,38 @@ firrtl.module @CrashRegResetWithOneReset(in %clock: !firrtl.clock, in %reset: !f
   firrtl.connect %io_q, %reg : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
+// A read-only memory with memory initialization should not be removed.
+// CHECK-LABEL: firrtl.module @ReadOnlyFileInitialized
+firrtl.module @ReadOnlyFileInitialized(
+  in %clock: !firrtl.clock,
+  in %reset: !firrtl.uint<1>,
+  in %read_en: !firrtl.uint<1>,
+  out %read_data: !firrtl.uint<8>,
+  in %read_addr: !firrtl.uint<5>
+) {
+  // CHECK-NEXT: firrtl.mem
+  // CHECK-SAME:   name = "withInit"
+  %m_r = firrtl.mem Undefined {
+    depth = 32 : i64,
+    groupID = 1 : ui32,
+    init = #firrtl.meminit<"mem1.hex.txt", false, true>,
+    name = "withInit",
+    portNames = ["m_r"],
+    readLatency = 1 : i32,
+    writeLatency = 1 : i32
+  } : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data flip: uint<8>>
+  %0 = firrtl.subfield %m_r[addr] :
+    !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data flip: uint<8>>
+  %1 = firrtl.subfield %m_r[en] :
+    !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data flip: uint<8>>
+  %2 = firrtl.subfield %m_r[clk] :
+    !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data flip: uint<8>>
+  %3 = firrtl.subfield %m_r[data] :
+    !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data flip: uint<8>>
+  firrtl.strictconnect %0, %read_addr : !firrtl.uint<5>
+  firrtl.strictconnect %1, %read_en : !firrtl.uint<1>
+  firrtl.strictconnect %2, %clock : !firrtl.clock
+  firrtl.strictconnect %read_data, %3 : !firrtl.uint<8>
+}
+
 }

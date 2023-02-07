@@ -2078,7 +2078,7 @@ struct FoldZeroWidthMemory : public mlir::RewritePattern {
   }
 };
 
-// If memory has no write ports, eliminate it.
+// If memory has no write ports and no file initialization, eliminate it.
 struct FoldReadOrWriteOnlyMemory : public mlir::RewritePattern {
   FoldReadOrWriteOnlyMemory(MLIRContext *context)
       : RewritePattern(MemOp::getOperationName(), 0, context) {}
@@ -2107,6 +2107,12 @@ struct FoldReadOrWriteOnlyMemory : public mlir::RewritePattern {
       llvm_unreachable("unknown port kind");
     }
     assert((!isWritten || !isRead) && "memory is in use");
+
+    // If the memory is read only, but has a file initialization, then we can't
+    // remove it.  A write only memory with file initialization is okay to
+    // remove.
+    if (isRead && mem.getInit())
+      return failure();
 
     for (auto port : mem.getResults())
       erasePort(rewriter, port);
