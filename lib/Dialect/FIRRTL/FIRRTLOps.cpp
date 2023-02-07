@@ -951,7 +951,7 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
       p, body, portDirections, op.getPortNames(), op.getPortTypes(),
       op.getPortAnnotations(), op.getPortSymbols(), op.getPortLocations());
 
-  SmallVector<StringRef, 4> omittedAttrs = {
+  SmallVector<StringRef, 11> omittedAttrs = {
       "sym_name", "portDirections", "portTypes",  "portAnnotations",
       "portSyms", "portLocations",  "parameters", visibilityAttrName};
 
@@ -1515,7 +1515,7 @@ void InstanceOp::print(OpAsmPrinter &p) {
     p << ' ' << stringifyNameKindEnum(getNameKindAttr().getValue());
 
   // Print the attr-dict.
-  SmallVector<StringRef, 4> omittedAttrs = {"moduleName",     "name",
+  SmallVector<StringRef, 9> omittedAttrs = {"moduleName",     "name",
                                             "portDirections", "portNames",
                                             "portTypes",      "portAnnotations",
                                             "inner_sym",      "nameKind"};
