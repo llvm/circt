@@ -28,15 +28,15 @@ FieldSource::FieldSource(Operation *operation) {
 void FieldSource::visitOp(Operation *op) {
   if (auto sf = dyn_cast<SubfieldOp>(op))
     return visitSubfield(sf);
-  else if (auto si = dyn_cast<SubindexOp>(op))
+  if (auto si = dyn_cast<SubindexOp>(op))
     return visitSubindex(si);
-  else if (auto sa = dyn_cast<SubaccessOp>(op))
+  if (auto sa = dyn_cast<SubaccessOp>(op))
     return visitSubaccess(sa);
-  else if (isa<WireOp, NodeOp, RegOp, RegResetOp, BitCastOp>(op))
+  if (isa<WireOp, NodeOp, RegOp, RegResetOp, BitCastOp>(op))
     return makeNodeForValue(op->getResult(0), op->getResult(0), {});
-  else if (auto mem = dyn_cast<MemOp>(op))
+  if (auto mem = dyn_cast<MemOp>(op))
     return visitMem(mem);
-  else if (auto inst = dyn_cast<InstanceOp>(op))
+  if (auto inst = dyn_cast<InstanceOp>(op))
     return visitInst(inst);
   // recurse in to regions
   for (auto &r : op->getRegions())
@@ -47,7 +47,7 @@ void FieldSource::visitOp(Operation *op) {
 
 void FieldSource::visitSubfield(SubfieldOp sf) {
   auto value = sf.getInput();
-  auto node = nodeForValue(value);
+  const auto* node = nodeForValue(value);
   assert(node && "node should be in the map");
   auto sv = node->path;
   sv.push_back(sf.getFieldIndex());
@@ -56,7 +56,7 @@ void FieldSource::visitSubfield(SubfieldOp sf) {
 
 void FieldSource::visitSubindex(SubindexOp si) {
   auto value = si.getInput();
-  auto node = nodeForValue(value);
+  const auto* node = nodeForValue(value);
   assert(node && "node should be in the map");
   auto sv = node->path;
   sv.push_back(si.getIndex());
@@ -65,7 +65,7 @@ void FieldSource::visitSubindex(SubindexOp si) {
 
 void FieldSource::visitSubaccess(SubaccessOp sa) {
   auto value = sa.getInput();
-  auto node = nodeForValue(value);
+  const auto* node = nodeForValue(value);
   assert(node && "node should be in the map");
   auto sv = node->path;
   sv.push_back(-1);
