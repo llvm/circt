@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-
 #include "circt/Dialect/FIRRTL/FIRRTLFieldSource.h"
 
 using namespace circt;
