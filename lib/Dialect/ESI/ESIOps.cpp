@@ -434,14 +434,14 @@ LogicalResult ESIPureModuleOp::verify() {
   Block &body = getBody().front();
   for (Operation &op : body.getOperations()) {
     if (hw::HWInstanceLike inst = dyn_cast<hw::HWInstanceLike>(op)) {
-      for (auto operand : op.getOperands())
-        if (!operand.getType().isa<ChannelType>())
-          return inst.emitOpError(
-              "instances in ESI pure modules can only contain channel ports");
-      for (auto resType : op.getResultTypes())
-        if (!resType.isa<ChannelType>())
-          return inst.emitOpError(
-              "instances in ESI pure modules can only contain channel ports");
+      if (llvm::any_of(op.getOperands(),
+                       [](Value v) { return !v.getType().isa<ChannelType>(); }))
+        return inst.emitOpError(
+            "instances in ESI pure modules can only contain channel ports");
+      if (llvm::any_of(op.getResultTypes(),
+                       [](Type t) { return !t.isa<ChannelType>(); }))
+        return inst.emitOpError(
+            "instances in ESI pure modules can only contain channel ports");
     } else {
       // Pure modules can only contain instance ops and ESI ops.
       if (op.getDialect() != esiDialect)
