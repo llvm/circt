@@ -232,16 +232,34 @@ static void addInstancesToCloneSet(
     inputs.insert(v);
 }
 
-static StringRef getNameForPort(Value val, ArrayAttr modulePorts) {
-  if (auto readinout = dyn_cast_or_null<ReadInOutOp>(val.getDefiningOp())) {
-    if (auto wire = dyn_cast<WireOp>(readinout.getInput().getDefiningOp()))
-      return wire.getName();
-    if (auto reg = dyn_cast<RegOp>(readinout.getInput().getDefiningOp()))
-      return reg.getName();
-  } else if (auto bv = val.dyn_cast<BlockArgument>()) {
-    return modulePorts[bv.getArgNumber()].cast<StringAttr>().getValue();
+static StringAttr getNameForPort(Value val, ArrayAttr modulePorts) {
+  if (auto bv = val.dyn_cast<BlockArgument>())
+    return modulePorts[bv.getArgNumber()].cast<StringAttr>();
+
+  if (auto *op = val.getDefiningOp()) {
+    if (auto readinout = dyn_cast<ReadInOutOp>(op)) {
+      if (auto *readOp = readinout.getInput().getDefiningOp()) {
+        if (auto wire = dyn_cast<WireOp>(readOp))
+          return wire.getNameAttr();
+        if (auto reg = dyn_cast<RegOp>(readOp))
+          return reg.getNameAttr();
+      }
+    } else if (auto inst = dyn_cast<hw::InstanceOp>(op)) {
+      for (auto [index, result] : llvm::enumerate(inst.getResults()))
+        if (result == val) {
+          SmallString<64> portName = inst.getInstanceName();
+          portName += ".";
+          auto resultName = inst.getResultName(index);
+          if (resultName && !resultName.getValue().empty())
+            portName += resultName.getValue();
+          else
+            Twine(index).toVector(portName);
+          return StringAttr::get(val.getContext(), portName);
+        }
+    }
   }
-  return "";
+
+  return StringAttr::get(val.getContext(), "");
 }
 
 // Given a set of values, construct a module and bind instance of that module
@@ -279,8 +297,8 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
     auto srcPorts = op.getArgNames();
     for (auto &port : llvm::enumerate(realInputs)) {
       auto name = getNameForPort(port.value(), srcPorts);
-      ports.push_back({b.getStringAttr(name), hw::PortDirection::INPUT,
-                       port.value().getType(), port.index()});
+      ports.push_back({name, hw::PortDirection::INPUT, port.value().getType(),
+                       port.index()});
     }
   }
 

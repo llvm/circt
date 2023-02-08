@@ -134,6 +134,29 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 }
 
 // -----
+// Check extracted module ports take name of instance result when needed.
+
+// CHECK-LABEL: @InstResult(
+// CHECK: hw.instance "[[name:.+]]_cover"  sym @{{[^ ]+}} @[[name]]_cover(mem.result_name: %{{[^ ]+}}: i1, mem.1: %{{[^ ]+}}: i1, clock: %clock: i1)
+module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
+  hw.module @Mem() -> (result_name: i1, "": i1) {
+    %reg = sv.reg : !hw.inout<i1>
+    %0 = sv.read_inout %reg : !hw.inout<i1>
+    hw.output %0, %0 : i1, i1
+  }
+  // Dummy is needed to prevent the instance itself being extracted
+  hw.module @Dummy(%in1: i1, %in2: i1) -> () {}
+  hw.module @InstResult(%clock: i1) -> () {
+    %0, %1 = hw.instance "mem" @Mem() -> (result_name: i1, "": i1)
+    hw.instance "dummy" sym @keep @Dummy(in1: %0 : i1, in2: %1 : i1) -> ()
+    %2 = comb.and bin %0, %1 : i1
+    sv.always posedge %clock  {
+      sv.cover %2, immediate
+    }
+  }
+}
+
+// -----
 // Check "empty" modules are inlined
 
 // CHECK-NOT: @InputOnly(
