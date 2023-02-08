@@ -233,14 +233,24 @@ static void addInstancesToCloneSet(
 }
 
 static StringRef getNameForPort(Value val, ArrayAttr modulePorts) {
-  if (auto readinout = dyn_cast_or_null<ReadInOutOp>(val.getDefiningOp())) {
-    if (auto wire = dyn_cast<WireOp>(readinout.getInput().getDefiningOp()))
-      return wire.getName();
-    if (auto reg = dyn_cast<RegOp>(readinout.getInput().getDefiningOp()))
-      return reg.getName();
-  } else if (auto bv = val.dyn_cast<BlockArgument>()) {
+  if (auto bv = val.dyn_cast<BlockArgument>())
     return modulePorts[bv.getArgNumber()].cast<StringAttr>().getValue();
+
+  if (auto *op = val.getDefiningOp()) {
+    if (auto readinout = dyn_cast<ReadInOutOp>(op)) {
+      if (auto *readOp = readinout.getInput().getDefiningOp()) {
+        if (auto wire = dyn_cast<WireOp>(readOp))
+          return wire.getName();
+        if (auto reg = dyn_cast<RegOp>(readOp))
+          return reg.getName();
+      }
+    } else if (auto inst = dyn_cast<hw::InstanceOp>(op)) {
+      for (auto [index, result] : llvm::enumerate(inst.getResults()))
+        if (result == val)
+          return inst.getResultName(index);
+    }
   }
+
   return "";
 }
 
