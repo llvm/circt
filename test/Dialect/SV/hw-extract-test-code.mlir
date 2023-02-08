@@ -137,9 +137,14 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // Check extracted module ports take name of instance result when needed.
 
 // CHECK-LABEL: @InstResult(
-// CHECK: hw.instance "[[name:.+]]_cover"  sym @{{[^ ]+}} @[[name]]_cover(result_name: %{{[^ ]+}}: i1, clock: %clock: i1)
+// CHECK: hw.instance "[[name:.+]]_cover"  sym @{{[^ ]+}} @[[name]]_cover(mem1.result_name: %{{[^ ]+}}: i1, mem2.0: %{{[^ ]+}}: i1, clock: %clock: i1)
 module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
-  hw.module @Mem() -> (result_name: i1) {
+  hw.module @Mem1() -> (result_name: i1) {
+    %reg = sv.reg : !hw.inout<i1>
+    %0 = sv.read_inout %reg : !hw.inout<i1>
+    hw.output %0 : i1
+  }
+  hw.module @Mem2() -> ("": i1) {
     %reg = sv.reg : !hw.inout<i1>
     %0 = sv.read_inout %reg : !hw.inout<i1>
     hw.output %0 : i1
@@ -147,10 +152,13 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
   // Dummy is needed to prevent the instance itself being extracted
   hw.module @Dummy(%input: i1) -> () {}
   hw.module @InstResult(%clock: i1) -> () {
-    %0 = hw.instance "test" @Mem() -> (result_name: i1)
+    %0 = hw.instance "mem1" @Mem1() -> (result_name: i1)
+    %1 = hw.instance "mem2" @Mem2() -> ("": i1)
     hw.instance "dummy" sym @keep @Dummy(input: %0 : i1) -> ()
+    hw.instance "dummy" sym @keep2 @Dummy(input: %1 : i1) -> ()
+    %2 = comb.and bin %0, %1 : i1
     sv.always posedge %clock  {
-      sv.cover %0, immediate
+      sv.cover %2, immediate
     }
   }
 }
