@@ -55,9 +55,21 @@ def LowerESItoHW: Pass<"lower-esi-to-hw", "mlir::ModuleOp"> {
 }
 
 def ESIWrapCombinational: Pass<"esi-wrap-combinational", "mlir::ModuleOp"> {
-  let summary = "Wrap around each hw.external.module with EsiWrap attribute set to combinational";
+  let summary = "Materialize dynamically scheduled wrapper module around combinational module";
+  let description = [{
+    Todo: write a good description
+  }];
   let constructor = "circt::esi::createESIWrapCombinationalPass()";
   let dependentDialects = ["circt::comb::CombDialect", "circt::hw::HWDialect"];
+}
+
+def ESIWrapPipeline: Pass<"esi-wrap-pipeline", "mlir::ModuleOp"> {
+  let summary = "Materialize dynamically scheduled wrapper module around statically scheduled pipeline module";
+  let description = [{
+    Todo: write a good description
+  }];
+  let constructor = "circt::esi::createESIWrapPipelinePass()";
+  let dependentDialects = ["circt::comb::CombDialect", "circt::hw::HWDialect", "circt::seq::SeqDialect"];
 }
 
 

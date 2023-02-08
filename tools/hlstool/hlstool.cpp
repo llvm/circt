@@ -365,6 +365,7 @@ static LogicalResult doHLSFlowDynamic(
       pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
       pm.addPass(circt::createHandshakeToHWPass());
       pm.addPass(createSimpleCanonicalizerPass());
+      pm.addPass(circt::esi::createESIWrapCombinationalPass());
     });
     addIRLevel(HLSFlowDynamicIRLevel::Rtl,
                [&]() { loadESILoweringPipeline(pm); });

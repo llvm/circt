@@ -1868,14 +1868,11 @@ public:
 
       // add EsiWrap attribute
       auto target = op.getModuleAttr();
+      auto type = op.getTypeAttr();
       auto targetIdent = StringAttr::get(builder.getContext(), "target");
-      // for the moment hard coded to combinational. Could later also be
-      // pipeline
-      auto type = StringAttr::get(builder.getContext(), "combinational");
       auto typeIdent = StringAttr::get(builder.getContext(), "type");
       auto esiWrapper =
           builder.getDictionaryAttr({{targetIdent, target}, {typeIdent, type}});
-
       implModule->setAttr("esiWrap", esiWrapper);
     }
 

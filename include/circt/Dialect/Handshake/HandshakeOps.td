@@ -186,7 +186,7 @@ def InstanceOp : Handshake_Op<"instance", [
 }
 
 // ExternalInstanceOp Todo add HasClock for pipeline
-def ExternalInstanceOp : Handshake_Op<"external_instance", []> {
+def ExternalInstanceOp : Handshake_Op<"external_instance", [HasClock]> {
   let summary = "external module instantiate operation";
   let description = [{
     The `external_instance` operation represents the instantiation of an external module.  This
@@ -194,15 +194,18 @@ def ExternalInstanceOp : Handshake_Op<"external_instance", []> {
     same module are guaranteed to have their own distinct state.
     The instantiated module is encoded as a symbol reference attribute named
     "module". Compared to the instance operation this operation references an external function
-    from a different dialect than the Handshake dialect.
+    from a different dialect than the Handshake dialect. Further you need to specify the type of
+    the external module. This type information is later used to wrap these modules correctly into
+    the dynamic surrounding. At the moment "combinational" and "pipeline" is supported.
+    Todo: Describe Pipeline and Combinational interface
 
     Example:
     ```mlir
-    %2 = handshake.external_instance @ext1(%0, %1) : (f32, f32) -> (f32)
+    %2 = handshake.external_instance @ext1(%0, %1) {type = "pipeline"} : (f32, f32) -> (f32) 
     ```
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$module, Variadic<AnyType>:$opOperands);
+  let arguments = (ins FlatSymbolRefAttr:$module, Variadic<AnyType>:$opOperands, StrAttr:$type);
   let results = (outs Variadic<AnyType>);
 
   let extraClassDeclaration = [{
