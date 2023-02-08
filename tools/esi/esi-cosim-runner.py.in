@@ -29,13 +29,15 @@ class CosimTestRunner:
     class to allow for per-test mutable state variables."""
 
   def __init__(self, testFile, schema, tmpdir, addlArgs, interactive: bool,
-               include_aux_files: bool):
+               include_aux_files: bool, exec: bool, exec_args: str):
     """Parse a test file. Look for comments we recognize anywhere in the
         file. Assemble a list of sources."""
 
     self.args = addlArgs
     self.file = testFile
     self.interactive = interactive
+    self.exec = exec
+    self.exec_args = exec_args
     self.runs = list()
     self.srcdir = os.path.dirname(self.file)
     self.sources = list()
@@ -53,30 +55,16 @@ class CosimTestRunner:
                             "ESI", "CosimDpi.capnp")
     self.schema = schema
 
-    fileReader = open(self.file, "r")
-    sources = []
-    for line in fileReader:
-      # Arguments to circt-rtl-sim, except for source files list
-      m = re.match(r"^(//|#)\s*ARGS:(.*)$", line)
-      if m:
-        self.args.extend(m.group(2).split())
-      # SOURCES are the additional source files (if any). If specified,
-      # must include the current file. These files are either absolute or
-      # relative to the current file.
-      m = re.match(r"^(//|#)\s*SOURCES:(.*)$", line)
-      if m:
-        sources.extend(m.group(2).split())
-      # Run this Python line.
-      m = re.match(r"^(//|#)\s*PY:(.*)$", line)
-      if m:
-        self.runs.append(m.group(2).strip())
-    fileReader.close()
+    if not self.exec:
+      fileReader = open(self.file, "r")
+      for line in fileReader:
+        # Run this Python line.
+        m = re.match(r"^(//|#)\s*PY:(.*)$", line)
+        if m:
+          self.runs.append(m.group(2).strip())
+      fileReader.close()
 
-    self.sources = [
-        (src if os.path.isabs(src) else os.path.join(self.srcdir, src))
-        for src in self.sources
-    ]
-
+    self.sources = []
     # Include the cosim DPI SystemVerilog files.
     if include_aux_files:
       esiInclude = os.path.join("@CIRCT_BINARY_DIR@", "include", "circt",
@@ -96,7 +84,6 @@ class CosimTestRunner:
         + self.sources + self.args
     print("[INFO] Compile command: " + " ".join(cmd))
     vrun = subprocess.run(cmd, capture_output=True, text=True)
-    # cwd=self.execdir)
     output = vrun.stdout + "\n----- STDERR ------\n" + vrun.stderr
     if vrun.returncode != 0:
       print("====== Compilation failure:")
@@ -205,14 +192,24 @@ class CosimTestRunner:
         time.sleep(0.05)
 
       # Write the test script.
-      self.writeScript(port)
+      if not self.exec:
+        self.writeScript(port)
 
       # Pycapnp complains if the PWD environment var doesn't match the
       # actual CWD.
       testEnv = os.environ.copy()
       testEnv["PWD"] = os.getcwd()
+      testEnv["PYTHONPATH"] = testEnv[
+          "PYTHONPATH"] + f":{os.path.dirname(__file__)}"
       # Run the test script.
-      cmd = [sys.executable, "-u", "script.py"]
+      if self.exec:
+        args = [str(port), self.schema] + self.exec_args.split(" ")
+        if self.file.endswith(".py"):
+          cmd = [sys.executable, "-u", self.file] + args
+        else:
+          cmd = [self.file] + args
+      else:
+        cmd = [sys.executable, "-u", "script.py"]
       print("[INFO] Test run command: " + " ".join(cmd))
       testProc = subprocess.run(cmd,
                                 stdout=testStdout,
@@ -300,6 +297,14 @@ def __main__(args):
   argparser.add_argument("--no-aux-files",
                          action="store_true",
                          help="Don't include the ESI cosim auxiliary files.")
+  argparser.add_argument(
+      "--exec",
+      action="store_true",
+      help="Instead of inline python, run an executable or python "
+      "script with the sim port and schema path as the first two arguments.")
+  argparser.add_argument("--test-args",
+                         default="",
+                         help="Extra args to pass to the test.")
   argparser.add_argument("source", help="The source run spec file")
   argparser.add_argument("addlArgs",
                          nargs=argparse.REMAINDER,
@@ -319,7 +324,8 @@ def __main__(args):
   os.chdir(testDir)
 
   runner = CosimTestRunner(args.source, args.schema, args.tmpdir, args.addlArgs,
-                           args.interactive, not args.no_aux_files)
+                           args.interactive, not args.no_aux_files, args.exec,
+                           args.test_args)
   rc = runner.compile()
   if rc != 0:
     return rc

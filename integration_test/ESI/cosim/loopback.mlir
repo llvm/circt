@@ -4,13 +4,8 @@
 // RUN: circt-opt %t4.mlir --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw --export-split-verilog -o %t3.mlir
 // RUN: circt-translate %t4.mlir -export-esi-capnp -verify-diagnostics > %t2.capnp
 // RUN: cd ..
-// RUN: esi-cosim-runner.py --schema %t2.capnp %s %t6/*.sv
-// PY: import loopback as test
-// PY: rpc = test.LoopbackTester(rpcschemapath, simhostport)
-// PY: print(rpc.list())
-// PY: rpc.test_two_chan_loopback(25)
-// PY: rpc.test_i32(25)
-// PY: rpc.test_keytext(25)
+// RUN: esi-cosim-runner.py --schema %t2.capnp --exec %S/loopback.py %t6/*.sv
+
 
 hw.module @intLoopback(%clk:i1, %rst:i1) -> () {
   %cosimRecv = esi.cosim %clk, %rst, %bufferedResp, "IntTestEP" {name_ext="loopback"} : !esi.channel<i32> -> !esi.channel<i32>
