@@ -1542,7 +1542,7 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   if (getSingleConnectUserOf(op.getDest()) != op)
     return failure();
 
-  // Only foward if there is more than one use
+  // Only forward if there is more than one use
   if (connectedDecl->hasOneUse())
     return failure();
 
