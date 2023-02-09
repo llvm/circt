@@ -636,4 +636,13 @@ def InnerSymbolDCE : Pass<"firrtl-inner-symbol-dce", "mlir::ModuleOp"> {
   ];
 }
 
+def Wire2Node : Pass<"firrtl-wire-to-node", "firrtl::FModuleOp"> {
+  let summary = "Convert wires to nodes";
+  let description = [{
+    This pass performs a topological sort of each module.  It then converts
+    any wires whose reads are dominated by writes into nodes.
+  }];
+  let constructor = "circt::firrtl::createWire2NodePass()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
