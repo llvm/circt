@@ -1147,6 +1147,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output out: UInt
     out <= in
 
+    ; Module as identifier
+    ; Test parsing of "module" as an identifier for instance names
+
   module ModuleAsIdentifier:
     inst module of SomeModule
+    ; CHECK: %module_in, %module_out = firrtl.instance module
     module.in <= UInt(1)
+    ; CHECK: firrtl.connect %module_in, %c1_ui : !firrtl.uint, !firrtl.uint
