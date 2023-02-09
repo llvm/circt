@@ -12,6 +12,7 @@ if(CIRCT_LEC_ENABLED)
     MLIRTranslateLib
     CIRCTComb
     CIRCTHW
+    CIRCTSeq
     CIRCTSupport
   )
 

@@ -41,10 +41,15 @@ public:
   void addInput(mlir::Value);
   /// Add an output to the circuit.
   void addOutput(mlir::Value);
+  /// Add a new clock to the list of clocks.
+  void addClk(mlir::Value);
   /// Recover the inputs.
   llvm::ArrayRef<z3::expr> getInputs();
   /// Recover the outputs.
   llvm::ArrayRef<z3::expr> getOutputs();
+
+  /// Execute a clock cycle and check that the properties hold throughout
+  bool checkCycle(int count);
 
   // `hw` dialect operations.
   void addConstant(mlir::Value result, const mlir::APInt &value);
@@ -75,7 +80,30 @@ public:
   void performSub(mlir::Value result, mlir::OperandRange operands);
   void performXor(mlir::Value result, mlir::OperandRange operands);
 
+  // `seq` dialect operations.
+  void performCompReg(mlir::Value input, mlir::Value clk, mlir::Value data,
+                      mlir::Value reset, mlir::Value resetValue);
+  void performFirReg(mlir::Value next, mlir::Value clk, mlir::Value data,
+                     mlir::Value reset, mlir::Value resetValue);
+
 private:
+  /// Struct to represent computational registers
+  struct CompRegStruct {
+    mlir::Value input;
+    mlir::Value clk;
+    mlir::Value data;
+    mlir::Value reset;
+    mlir::Value resetValue;
+  };
+  /// Struct to represent FIRTLL registers
+  struct FirRegStruct {
+    mlir::Value next;
+    mlir::Value clk;
+    mlir::Value data;
+    mlir::Value reset;
+    mlir::Value resetValue;
+    bool isAsync;
+  };
   /// Helper function for performing a variadic operation: it executes a lambda
   /// over a range of operands.
   void variadicOperation(
@@ -98,6 +126,27 @@ private:
   /// Convert from a boolean sort to the corresponding 1-width bitvector.
   z3::expr boolToBv(const z3::expr &condition);
 
+  /// Apply variadic operation and update the state given a variadic comb
+  /// transform
+  void applyCombVariadicOperation(
+      mlir::Value,
+      std::pair<mlir::OperandRange, llvm::function_ref<z3::expr(
+                                        const z3::expr &, const z3::expr &)>>);
+
+  /// Push solver constraints assigning registers and inputs to their current
+  /// state
+  void loadStateConstraints();
+  /// Execute a clock posedge (i.e. update registers and combinatorial logic)
+  void runClockPosedge();
+  /// Execute a clock negedge (i.e. update combinatorial logic)
+  void runClockNegedge();
+  /// Assign a new set of symbolic values to all inputs
+  void updateInputs(int count, bool posedge);
+  /// Check that the properties hold for the current state
+  bool checkState();
+  /// Update combinatorial logic states (to propagate new inputs/reg outputs)
+  void applyCombUpdates();
+
   /// The name of the circuit; it corresponds to its scope within the parsed IR.
   std::string name;
   /// A counter for how many assignments have occurred; it's used to uniquely
@@ -110,8 +159,45 @@ private:
   llvm::SmallVector<z3::expr> inputs;
   /// The list for the circuit's outputs.
   llvm::SmallVector<z3::expr> outputs;
+
+  // Duplicates of these lists are, for now, created holding the corresponding
+  // MLIR value. It may eventually be nicer to have a dedicated ID that can be
+  // mapped to different Z3 constructs
+  /// The list for the circuit's inputs.
+  llvm::SmallVector<mlir::Value> inputsByVal;
+  /// The list for the circuit's outputs.
+  llvm::SmallVector<mlir::Value> outputsByVal;
+
+  /// The list for the circuit's registers.
+  llvm::SmallVector<std::variant<CompRegStruct, FirRegStruct>> regs;
+  /// The list for the circuit's wires.
+  llvm::SmallVector<mlir::Value> wires;
+  /// The list for the circuit's clocks.
+  // Note: currently circt-mc supports only single clocks, but this is a vector
+  // to avoid later reworking.
+  llvm::SmallVector<mlir::Value> clks;
   /// A map from IR values to their corresponding logical representation.
   llvm::DenseMap<mlir::Value, z3::expr> exprTable;
+  /// A map from IR values to their corresponding state.
+  llvm::DenseMap<mlir::Value, z3::expr> stateTable;
+  /// A type to represent the different representations of combinational
+  /// transforms
+  using TransformVariant = std::variant<
+      std::pair<mlir::OperandRange, llvm::function_ref<z3::expr(
+                                        const z3::expr &, const z3::expr &)>>,
+      std::pair<std::tuple<mlir::Value>,
+                llvm::function_ref<z3::expr(const z3::expr &)>>,
+      std::pair<
+          std::tuple<mlir::Value, mlir::Value>,
+          llvm::function_ref<z3::expr(const z3::expr &, const z3::expr &)>>,
+      std::pair<std::tuple<mlir::Value, mlir::Value, mlir::Value>,
+                llvm::function_ref<z3::expr(const z3::expr &, const z3::expr &,
+                                            const z3::expr &)>>>;
+  /// A map from wire values to their corresponding transformations.
+  llvm::DenseMap<mlir::Value, TransformVariant> combTransformTable;
+
+  /// A map from IR values to their corresponding name.
+  llvm::DenseMap<mlir::Value, std::string> nameTable;
 };
 
 } // namespace circt
