@@ -402,6 +402,12 @@ def PrefixModules : Pass<"firrtl-prefix-modules", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createPrefixModulesPass()";
 }
 
+def PrintFIRRTLFieldSourcePass
+    : Pass<"firrtl-print-field-source", "firrtl::FModuleOp"> {
+  let summary = "Print field source information.";
+  let constructor =  "circt::firrtl::createFIRRTLFieldSourcePass()";
+}
+
 def PrintInstanceGraph
     : Pass<"firrtl-print-instance-graph", "firrtl::CircuitOp"> {
   let summary = "Print a DOT graph of the module hierarchy.";

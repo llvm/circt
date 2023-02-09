@@ -422,6 +422,8 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
      {stdResolve, applyWithoutTarget<false, FModuleOp, FExtModuleOp>}},
     {blackBoxInlineAnnoClass,
      {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
+    {blackBoxPathAnnoClass,
+     {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
     {dontObfuscateModuleAnnoClass,
      {stdResolve, applyWithoutTarget<false, FModuleOp>}},
     {verifBlackBoxAnnoClass,
