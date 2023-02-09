@@ -75,15 +75,15 @@ public:
     if (backend.supportsImpl(implType)) {
       // Create the port
       port =
-          backend.template getPort<typename ReadType::BackendType,
-                                   typename WriteType::BackendType>(clientPath);
+          backend.template getPort<typename WriteType::BackendType,
+                                   typename ReadType::BackendType>(clientPath);
     }
   }
 
   ReadType operator()(WriteType arg) {
     // something like:
     auto req = port->sendRequest();
-    arg.toCapnp(req.getMsg());
+    arg.fillCapnp(req.getMsg());
     req.send().wait(this->backend->getWaitScope());
     std::optional<capnp::Response<
         typename EsiDpiEndpoint<typename WriteType::BackendType,
@@ -100,7 +100,7 @@ public:
   }
 
   std::optional<typename ::EsiDpiEndpoint<
-      typename ReadType::BackendType, typename WriteType::BackendType>::Client>
+      typename WriteType::BackendType, typename ReadType::BackendType>::Client>
       port;
 };
 
@@ -112,13 +112,22 @@ public:
       : Port<TBackend>(std::in_place_type<void>, std::in_place_type<WriteType>,
                        clientPath, backend, implType) {
 
-    auto ep = backend.template getPort<void, WriteType>(clientPath);
+    if (backend.supportsImpl(implType)) {
+      // Create the port
+      port = backend.template getPort<typename WriteType::BackendType, ::I1>(
+          clientPath);
+    }
   }
 
   void operator()(WriteType arg) {
-    // something like:
-    // return backend(arg.toBackendType());
+    auto req = port->sendRequest();
+    arg.fillCapnp(req.getMsg());
+    req.send().wait(this->backend->getWaitScope());
   }
+
+  std::optional<
+      typename ::EsiDpiEndpoint<typename WriteType::BackendType, ::I1>::Client>
+      port;
 };
 
 template <typename TBackend>
@@ -136,26 +145,26 @@ protected:
 namespace esi_cosim {
 // ESI cosim backend goes here.
 
-template <typename TClient, typename T>
-class CosimPort {
-public:
-  CosimPort(TClient &client, const std::string &epName) {}
+// template <typename TClient, typename T>
+// class CosimPort {
+// public:
+//   CosimPort(TClient &client, const std::string &epName) {}
 
-  template <typename TMessage>
-  bool write(TMessage &msg) {
+//   template <typename TMessage>
+//   bool write(TMessage &msg) {
 
-    // ep.send(msg).wait();
-    return true;
-  }
+//     // ep.send(msg).wait();
+//     return true;
+//   }
 
-  template <typename TMessage>
-  TMessage read(TMessage &msg) {
-    // ep.recv(msg).wait();
-    return true;
-  }
+//   template <typename TMessage>
+//   TMessage read(TMessage &msg) {
+//     // ep.recv(msg).wait();
+//     return true;
+//   }
 
-private:
-};
+// private:
+// };
 
 class Cosim {
 public:
@@ -268,11 +277,8 @@ struct I1 {
 
   // Generated sibling type.
   using BackendType = ::I1;
-  BackendType::Builder toCapnp() {
-    auto cp = BackendType::Builder(capnp::_::StructBuilder());
-    cp.setI(i);
-    return cp;
-  }
+  void fillCapnp(BackendType::Builder cp) { cp.setI(i); }
+  static I1 fromCapnp(BackendType::Reader msg) { return I1(msg.getI()); }
 };
 
 struct I3 {
@@ -287,11 +293,8 @@ struct I3 {
   operator uint8_t() const { return i; }
   auto operator<=>(const I3 &) const = default;
 
-  BackendType::Builder toCapnp() {
-    auto cp = BackendType::Builder(capnp::_::StructBuilder());
-    cp.setI(i);
-    return cp;
-  }
+  void fillCapnp(BackendType::Builder cp) { cp.setI(i); }
+  static I3 fromCapnp(BackendType::Reader msg) { return I3(msg.getI()); }
 };
 
 struct I64 {
@@ -304,11 +307,8 @@ struct I64 {
   auto operator<=>(const I64 &) const = default;
 
   operator uint64_t() const { return i; }
-  BackendType::Builder toCapnp() {
-    auto cp = BackendType::Builder(capnp::_::StructBuilder());
-    cp.setI(i);
-    return cp;
-  }
+  void fillCapnp(BackendType::Builder cp) { cp.setI(i); }
+  static I64 fromCapnp(BackendType::Reader msg) { return I64(msg.getI()); }
 };
 
 struct Struct16871797234873963366 {
@@ -318,11 +318,9 @@ struct Struct16871797234873963366 {
 
   auto operator<=>(const Struct16871797234873963366 &) const = default;
 
-  BackendType::Builder toCapnp(BackendType::Builder cp) {
-    // auto cp = BackendType::Builder(capnp::_::StructBuilder());
+  void fillCapnp(BackendType::Builder cp) {
     cp.setAddress(address);
     cp.setData(data);
-    return cp;
   }
 
   static Struct16871797234873963366 fromCapnp(BackendType::Reader msg) {
@@ -337,8 +335,8 @@ class MemComms : public ESICPP::Module<TBackend> {
 
 public:
   // Port type declarations
-  using Tread0 = ESICPP::ReadWritePort</*readType=*/ESIMem::I64,
-                                       /*writeType=*/ESIMem::I3, TBackend>;
+  using Tread0 = ESICPP::ReadWritePort</*readType=*/ESIMem::I3,
+                                       /*writeType=*/ESIMem::I64, TBackend>;
   using Tread0Ptr = std::shared_ptr<Tread0>;
 
   using Tloopback0 = ESICPP::ReadWritePort<
@@ -350,49 +348,52 @@ public:
       /*writeType=*/ESIMem::Struct16871797234873963366, TBackend>;
   using Twrite0Ptr = std::shared_ptr<Twrite0>;
 
-  MemComms(Tloopback0Ptr loopback0)
-      : ESICPP::Module<TBackend>({loopback0}), loopback0(loopback0) {}
+  MemComms(Tread0Ptr read0, Tloopback0Ptr loopback0, Twrite0Ptr write0)
+      : ESICPP::Module<TBackend>({read0, loopback0, write0}), read0(read0),
+        loopback0(loopback0), write0(write0) {}
 
-  // std::shared_ptr<Tread0> read0;
+  std::shared_ptr<Tread0> read0;
   std::shared_ptr<Tloopback0> loopback0;
-  // std::shared_ptr<Twrite0> write0;
+  std::shared_ptr<Twrite0> write0;
 };
 
-template <typename TBackend>
-class DeclareRandomAccessMemory : public ESICPP::Module<TBackend> {
-  using Port = ESICPP::Port<TBackend>;
+// template <typename TBackend>
+// class DeclareRandomAccessMemory : public ESICPP::Module<TBackend> {
+//   using Port = ESICPP::Port<TBackend>;
 
-public:
-  // Port type declarations
-  using Tread0 = ESICPP::ReadWritePort</*readType=*/ESIMem::I3,
-                                       /*writeType=*/ESIMem::I64, TBackend>;
-  using Tread0Ptr = std::shared_ptr<Tread0>;
+// public:
+//   // Port type declarations
+//   using Tread0 = ESICPP::ReadWritePort</*readType=*/ESIMem::I3,
+//                                        /*writeType=*/ESIMem::I64, TBackend>;
+//   using Tread0Ptr = std::shared_ptr<Tread0>;
 
-  using Tread1 = ESICPP::ReadWritePort</*readType=*/ESIMem::I3,
-                                       /*writeType=*/ESIMem::I64, TBackend>;
-  using Tread1Ptr = std::shared_ptr<Tread1>;
+//   using Tread1 = ESICPP::ReadWritePort</*readType=*/ESIMem::I3,
+//                                        /*writeType=*/ESIMem::I64, TBackend>;
+//   using Tread1Ptr = std::shared_ptr<Tread1>;
 
-  using Twrite0 = ESICPP::ReadWritePort<
-      /*readType=*/ESIMem::Struct16871797234873963366,
-      /*writeType=*/ESIMem::I1, TBackend>;
-  using Twrite0Ptr = std::shared_ptr<Twrite0>;
+//   using Twrite0 = ESICPP::ReadWritePort<
+//       /*readType=*/ESIMem::Struct16871797234873963366,
+//       /*writeType=*/ESIMem::I1, TBackend>;
+//   using Twrite0Ptr = std::shared_ptr<Twrite0>;
 
-  using Twrite1 = ESICPP::ReadWritePort<
-      /*readType=*/ESIMem::Struct16871797234873963366,
-      /*writeType=*/ESIMem::I1, TBackend>;
-  using Twrite1Ptr = std::shared_ptr<Twrite1>;
+//   using Twrite1 = ESICPP::ReadWritePort<
+//       /*readType=*/ESIMem::Struct16871797234873963366,
+//       /*writeType=*/ESIMem::I1, TBackend>;
+//   using Twrite1Ptr = std::shared_ptr<Twrite1>;
 
-  DeclareRandomAccessMemory(Tread0Ptr read0, Tread1Ptr read1, Twrite0Ptr write0,
-                            Twrite1Ptr write1)
-      : ESICPP::Module<TBackend>({read0, read1, write0, write1}), read0(read0),
-        read1(read1), write0(write0), write1(write1) {}
+//   DeclareRandomAccessMemory(Tread0Ptr read0, Tread1Ptr read1, Twrite0Ptr
+//   write0,
+//                             Twrite1Ptr write1)
+//       : ESICPP::Module<TBackend>({read0, read1, write0, write1}),
+//       read0(read0),
+//         read1(read1), write0(write0), write1(write1) {}
 
-  Tread0Ptr read0;
-  Tread1Ptr read1;
-  Twrite0Ptr write0;
-  Twrite1Ptr write1;
-  std::vector<std::shared_ptr<Port>> ports;
-};
+//   Tread0Ptr read0;
+//   Tread1Ptr read1;
+//   Twrite0Ptr write0;
+//   Twrite1Ptr write1;
+//   std::vector<std::shared_ptr<Port>> ports;
+// };
 
 template <typename TBackend>
 class Top {
@@ -428,20 +429,20 @@ public:
     {
 
       // memComms initialization
-      // auto read0 = std::make_shared<
-      //     ESICPP::ReadWritePort</*readType=*/ESIMem::I64,
-      //                           /*writeType=*/ESIMem::I3, TBackend>>(
-      //     std::vector<std::string>{"Top_read"}, backend, "cosim");
+      auto read0 = std::make_shared<
+          ESICPP::ReadWritePort</*readType=*/ESIMem::I3,
+                                /*writeType=*/ESIMem::I64, TBackend>>(
+          std::vector<std::string>{"Top_read"}, backend, "cosim");
 
       auto loopback0 = std::make_shared<ESICPP::ReadWritePort<
           /*readType=*/ESIMem::Struct16871797234873963366,
           /*writeType=*/ESIMem::Struct16871797234873963366, TBackend>>(
           std::vector<std::string>{"Top_loopback"}, backend, "cosim");
 
-      // auto write0 = std::make_shared<ESICPP::WritePort<
-      //     /*writeType=*/ESIMem::Struct16871797234873963366, TBackend>>(
-      //     std::vector<std::string>{"Top_write"}, backend, "cosim");
-      memComms = std::make_unique<MemComms<TBackend>>(loopback0);
+      auto write0 = std::make_shared<ESICPP::WritePort<
+          /*writeType=*/ESIMem::Struct16871797234873963366, TBackend>>(
+          std::vector<std::string>{"Top_write"}, backend, "cosim");
+      memComms = std::make_unique<MemComms<TBackend>>(read0, loopback0, write0);
     };
 
   }; // namespace ESIMem
@@ -466,20 +467,20 @@ int runTest(TBackend &backend) {
   if (loopback_result != write_cmd)
     return 1;
 
-  // auto read_result = (*top.memComms->read0)(2);
-  // if (read_result != ESIMem::I64(0))
-  //   return 2;
-  // read_result = (*top.memComms->read0)(3);
-  // if (read_result != ESIMem::I64(0))
-  //   return 3;
+  auto read_result = (*top.memComms->read0)(2);
+  if (read_result != ESIMem::I64(0))
+    return 2;
+  read_result = (*top.memComms->read0)(3);
+  if (read_result != ESIMem::I64(0))
+    return 3;
 
-  // (*top.memComms->write0)(write_cmd);
-  // read_result = (*top.memComms->read0)(2);
-  // if (read_result != ESIMem::I64(42))
-  //   return 4;
-  // read_result = (*top.memComms->read0)(3);
-  // if (read_result != ESIMem::I64(42))
-  //   return 5;
+  (*top.memComms->write0)(write_cmd);
+  read_result = (*top.memComms->read0)(2);
+  if (read_result != ESIMem::I64(42))
+    return 4;
+  read_result = (*top.memComms->read0)(3);
+  if (read_result != ESIMem::I64(42))
+    return 5;
 
   return 0;
 }
