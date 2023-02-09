@@ -2952,11 +2952,11 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
         // If we got to the next module, then we're done.
       case FIRToken::kw_module:
       case FIRToken::kw_extmodule: {
-	  // All module declerations should have the same indentation
-	  // level.  Use this fact to differentiate between module
-	  // declarations and usages of "module" as identifiers.
-	  if (getIndentation() == indent)
-	    return success();
+        // All module declerations should have the same indentation
+        // level.  Use this fact to differentiate between module
+        // declarations and usages of "module" as identifiers.
+        if (getIndentation() == indent)
+          return success();
       }
       default:
         consumeToken();
