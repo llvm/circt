@@ -92,3 +92,13 @@ class LoopbackTester(esi_cosim.CosimBase):
       print(f"got:      {kt}")
       assert list(kt.key) == list(kts[i].key)
       assert list(kt.text) == list(kts[i].text)
+
+
+if __name__ == "__main__":
+  import os
+  import sys
+  rpc = LoopbackTester(sys.argv[2], f"{os.uname()[1]}:{sys.argv[1]}")
+  print(rpc.list())
+  rpc.test_two_chan_loopback(25)
+  rpc.test_i32(25)
+  rpc.test_keytext(25)

@@ -339,7 +339,7 @@ def PrimitiveOp : CalyxCell<"primitive", [
   let results = (outs Variadic<AnyType>:$results);
 
   let assemblyFormat = [{
-    $sym_name `of` $primitiveName``custom<ParameterList>($parameters) attr-dict (`:` qualified(type($results))^)?
+    $sym_name `of` $primitiveName `` custom<ParameterList>($parameters) attr-dict (`:` qualified(type($results))^)?
   }];
 }
 

@@ -661,10 +661,11 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
   // Insert memories at the bottom of the file.
   OpBuilder b(state.circuitOp);
   b.setInsertionPointAfter(state.circuitOp);
-  std::array<StringRef, 11> schemaFields = {
+  std::array<StringRef, 14> schemaFields = {
       "depth",          "numReadPorts",    "numWritePorts", "numReadWritePorts",
       "readLatency",    "writeLatency",    "width",         "maskGran",
-      "readUnderWrite", "writeUnderWrite", "writeClockIDs"};
+      "readUnderWrite", "writeUnderWrite", "writeClockIDs", "initFilename",
+      "initIsBinary",   "initIsInline"};
   auto schemaFieldsAttr = b.getStrArrayAttr(schemaFields);
   auto schema = b.create<hw::HWGeneratorSchemaOp>(
       mems.front().loc, "FIRRTLMem", "FIRRTL_Memory", schemaFieldsAttr);
@@ -742,7 +743,13 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
                        b.getUI32IntegerAttr(mem.readUnderWrite)),
         b.getNamedAttr("writeUnderWrite",
                        hw::WUWAttr::get(b.getContext(), mem.writeUnderWrite)),
-        b.getNamedAttr("writeClockIDs", b.getI32ArrayAttr(mem.writeClockIDs))};
+        b.getNamedAttr("writeClockIDs", b.getI32ArrayAttr(mem.writeClockIDs)),
+        b.getNamedAttr("initFilename",
+                       mem.init ? mem.init.getFilename() : b.getStringAttr("")),
+        b.getNamedAttr("initIsBinary", mem.init ? mem.init.getIsBinary()
+                                                : b.getBoolAttr(false)),
+        b.getNamedAttr("initIsInline", mem.init ? mem.init.getIsInline()
+                                                : b.getBoolAttr(false))};
 
     // Make the global module for the memory
     // Set a name for the memory wrapper module, the combMem is an arbitrary

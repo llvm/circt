@@ -1542,7 +1542,7 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   if (getSingleConnectUserOf(op.getDest()) != op)
     return failure();
 
-  // Only foward if there is more than one use
+  // Only forward if there is more than one use
   if (connectedDecl->hasOneUse())
     return failure();
 
@@ -2078,7 +2078,7 @@ struct FoldZeroWidthMemory : public mlir::RewritePattern {
   }
 };
 
-// If memory has no write ports, eliminate it.
+// If memory has no write ports and no file initialization, eliminate it.
 struct FoldReadOrWriteOnlyMemory : public mlir::RewritePattern {
   FoldReadOrWriteOnlyMemory(MLIRContext *context)
       : RewritePattern(MemOp::getOperationName(), 0, context) {}
@@ -2107,6 +2107,12 @@ struct FoldReadOrWriteOnlyMemory : public mlir::RewritePattern {
       llvm_unreachable("unknown port kind");
     }
     assert((!isWritten || !isRead) && "memory is in use");
+
+    // If the memory is read only, but has a file initialization, then we can't
+    // remove it.  A write only memory with file initialization is okay to
+    // remove.
+    if (isRead && mem.getInit())
+      return failure();
 
     for (auto port : mem.getResults())
       erasePort(rewriter, port);
@@ -2170,7 +2176,7 @@ struct FoldUnusedPorts : public mlir::RewritePattern {
           mem.getWriteLatency(), mem.getDepth(), mem.getRuw(),
           rewriter.getStrArrayAttr(portNames), mem.getName(), mem.getNameKind(),
           mem.getAnnotations(), rewriter.getArrayAttr(portAnnotations),
-          mem.getInnerSymAttr(), mem.getGroupIDAttr());
+          mem.getInnerSymAttr(), mem.getGroupIDAttr(), mem.getInitAttr());
 
     // Replace the dead ports with dummy wires.
     unsigned nextPort = 0;
@@ -2231,7 +2237,7 @@ struct FoldReadWritePorts : public mlir::RewritePattern {
         mem.getDepth(), mem.getRuw(), rewriter.getStrArrayAttr(portNames),
         mem.getName(), mem.getNameKind(), mem.getAnnotations(),
         rewriter.getArrayAttr(portAnnotations), mem.getInnerSymAttr(),
-        mem.getGroupIDAttr());
+        mem.getGroupIDAttr(), mem.getInitAttr());
 
     for (unsigned i = 0, n = mem.getNumResults(); i < n; ++i) {
       auto result = mem.getResult(i);

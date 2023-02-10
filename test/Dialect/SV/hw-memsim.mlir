@@ -5,7 +5,7 @@
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-mem-randomization disable-reg-randomization})" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG --implicit-check-not RANDOMIZE_MEM
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{add-vivado-ram-address-conflict-synthesis-bug-workaround})" %s | FileCheck %s --check-prefixes=CHECK,COMMON,VIVADO
 
-hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "readUnderWrite", "writeUnderWrite", "writeClockIDs"]
+hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "readUnderWrite", "writeUnderWrite", "writeClockIDs", "initFilename", "initIsBinary", "initIsInline"]
 
 // COMMON-LABEL: @complex
 hw.module @complex(%clock: i1, %reset: i1, %r0en: i1, %mode: i1, %data0: i16) -> (data1: i16, data2: i16) {
@@ -71,7 +71,7 @@ hw.module @WriteOrderedDifferentClock(%clock: i1, %clock2: i1, %w0_addr: i4, %w0
   hw.output
 }
 
-hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0: i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i16,  %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1, %wo_data_0: i16) -> (ro_data_0: i16, rw_rdata_0: i16) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 0 : i32}
+hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0: i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i16,  %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1, %wo_data_0: i16) -> (ro_data_0: i16, rw_rdata_0: i16) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 0 : i32, initFilename = "", initIsBinary = false, initIsInline = false}
 
 //COMMON-LABEL: @FIRRTLMem_1_1_1_16_10_0_1_0_0
 //CHECK-SAME:  attributes {comment = "VCS coverage exclude_file"}
@@ -134,7 +134,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:  }
 //CHECK-NEXT:  hw.output %[[readres]], %[[rwres]]
 
-hw.module.generated @FIRRTLMem_1_1_1_16_10_2_4_0_0, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0: i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i16, %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1, %wo_data_0: i16) -> (ro_data_0: i16, rw_rdata_0: i16) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 4 : ui32, writeUnderWrite = 0 : i32}
+hw.module.generated @FIRRTLMem_1_1_1_16_10_2_4_0_0, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0: i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i16, %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1, %wo_data_0: i16) -> (ro_data_0: i16, rw_rdata_0: i16) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 4 : ui32, writeUnderWrite = 0 : i32, initFilename = "", initIsBinary = false, initIsInline = false}
 
 //COMMON-LABEL: @FIRRTLMem_1_1_1_16_10_2_4_0_0
 //COM: This produces a lot of output, we check one field's pipeline
@@ -155,24 +155,24 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_2_4_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:    [[ADDR_1R:%.+]] = sv.read_inout [[ADDR_1]] : !hw.inout<i4>
 //CHECK-NEXT:    {{%.+}} = sv.array_index_inout %Memory[[[ADDR_1R]]] : !hw.inout<uarray<10xi16>>, i4
 
-hw.module.generated @FIRRTLMem_1_1_1_16_1_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0: i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i16,  %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1, %wo_data_0: i16) -> (ro_data_0: i16, rw_rdata_0: i16) attributes {depth = 1 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 0 : i32}
+hw.module.generated @FIRRTLMem_1_1_1_16_1_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0: i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i16,  %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1, %wo_data_0: i16) -> (ro_data_0: i16, rw_rdata_0: i16) attributes {depth = 1 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 0 : i32, initFilename = "", initIsBinary = false, initIsInline = false}
 // COMMON-LABEL: @FIRRTLMem_1_1_1_16_1_0_1_0_0
 // CHECK-NOT: infer_mux_override
 
-hw.module.generated @FIRRTLMemOneAlways, @FIRRTLMem( %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1,%wo_data_0: i8, %wo_addr_1: i4,  %wo_en_1: i1, %wo_clock_1: i1, %wo_data_1: i8) attributes {depth = 16 : i64, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : ui32, width = 8 : ui32, writeClockIDs = [0 : i32, 0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+hw.module.generated @FIRRTLMemOneAlways, @FIRRTLMem( %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1,%wo_data_0: i8, %wo_addr_1: i4,  %wo_en_1: i1, %wo_clock_1: i1, %wo_data_1: i8) attributes {depth = 16 : i64, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : ui32, width = 8 : ui32, writeClockIDs = [0 : i32, 0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32, initFilename = "", initIsBinary = false, initIsInline = false}
 
 //COMMON-LABEL: @FIRRTLMemOneAlways
 //CHECK-COUNT-1:  sv.always
 //CHECK-NOT:      sv.always
 
-hw.module.generated @FIRRTLMemTwoAlways, @FIRRTLMem( %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1,%wo_data_0: i8, %wo_addr_1: i4,  %wo_en_1: i1, %wo_clock_1: i1, %wo_data_1: i8) attributes {depth = 16 : i64, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : ui32, width = 8 : ui32, writeClockIDs = [0 : i32, 1 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+hw.module.generated @FIRRTLMemTwoAlways, @FIRRTLMem( %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1,%wo_data_0: i8, %wo_addr_1: i4,  %wo_en_1: i1, %wo_clock_1: i1, %wo_data_1: i8) attributes {depth = 16 : i64, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : ui32, width = 8 : ui32, writeClockIDs = [0 : i32, 1 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32, initFilename = "", initIsBinary = false, initIsInline = false}
 
 //COMMON-LABEL: @FIRRTLMemTwoAlways
 //CHECK-COUNT-2:  sv.always
 //CHECK-NOT:      sv.always
 
 
-  hw.module.generated @FIRRTLMem_1_1_0_32_16_1_1_0_1_a, @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i32, %W0_mask: i4) -> (R0_data: i32) attributes {depth = 16 : i64, maskGran = 8 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : ui32, width = 32 : ui32, writeClockIDs = [0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+  hw.module.generated @FIRRTLMem_1_1_0_32_16_1_1_0_1_a, @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i32, %W0_mask: i4) -> (R0_data: i32) attributes {depth = 16 : i64, maskGran = 8 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : ui32, width = 32 : ui32, writeClockIDs = [0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32, initFilename = "", initIsBinary = false, initIsInline = false}
   hw.module @memTestFoo(%clock: i1, %rAddr: i4, %rEn: i1, %wAddr: i4, %wEn: i1, %wMask: i4, %wData: i32) -> (rData: i32) attributes {firrtl.moduleHierarchyFile = #hw.output_file<"testharness_hier.json", excludeFromFileList>} {
     %memory.R0_data = hw.instance "memory" @FIRRTLMem_1_1_0_32_16_1_1_0_1_a(R0_addr: %rAddr: i4, R0_en: %rEn: i1, R0_clk: %clock: i1, W0_addr: %wAddr: i4, W0_en: %wEn: i1, W0_clk: %clock: i1, W0_data: %wData: i32, W0_mask: %wMask: i4) -> (R0_data: i32)
     hw.output %memory.R0_data : i32
@@ -201,7 +201,7 @@ hw.module.generated @FIRRTLMemTwoAlways, @FIRRTLMem( %wo_addr_0: i4, %wo_en_0: i
   // CHECK-NEXT:      %[[v220:.+]] = sv.indexed_part_select_inout %[[v26]][%[[c0_i32]] : 8] : !hw.inout<i32>, i32
   // CHECK-NEXT:      sv.passign %[[v220]], %[[v15]] : i8
 
-  hw.module.generated @FIRRTLMem_1_1_0_32_16_1_1_0_1_b, @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i32, %W0_mask: i2) -> (R0_data: i32) attributes {depth = 16 : i64, maskGran = 16 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : ui32, width = 32 : ui32, writeClockIDs = [0 : i32], writeLatency = 3 : ui32, writeUnderWrite = 1 : i32}
+  hw.module.generated @FIRRTLMem_1_1_0_32_16_1_1_0_1_b, @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i32, %W0_mask: i2) -> (R0_data: i32) attributes {depth = 16 : i64, maskGran = 16 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : ui32, width = 32 : ui32, writeClockIDs = [0 : i32], writeLatency = 3 : ui32, writeUnderWrite = 1 : i32, initFilename = "", initIsBinary = false, initIsInline = false}
   hw.module @memTestBar(%clock: i1, %rAddr: i4, %rEn: i1, %wAddr: i4, %wEn: i1, %wMask: i2, %wData: i32) -> (rData: i32) attributes {firrtl.moduleHierarchyFile = #hw.output_file<"testharness_hier.json", excludeFromFileList>} {
     %memory.R0_data = hw.instance "memory" @FIRRTLMem_1_1_0_32_16_1_1_0_1_b(R0_addr: %rAddr: i4, R0_en: %rEn: i1,
     R0_clk: %clock: i1, W0_addr: %wAddr: i4, W0_en: %wEn: i1, W0_clk: %clock: i1, W0_data: %wData: i32, W0_mask: %wMask:  i2) -> (R0_data: i32)
@@ -242,7 +242,7 @@ hw.module.generated @FIRRTLMemTwoAlways, @FIRRTLMem( %wo_addr_0: i4, %wo_en_0: i
 hw.module.generated @FIRRTLMem_1_1_1_16_10_2_4_0_0_multi, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0:
 i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i16,  %rw_wmask_0: i2,  %wo_addr_0: i4, %wo_en_0: i1,
 %wo_clock_0: i1, %wo_data_0: i16, %wo_mask_0: i2) -> (ro_data_0: i16, rw_rdata_0: i16) attributes {depth = 10 : i64,
-numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32,maskGran = 8 :ui32, numWritePorts = 1 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 4 : ui32, writeUnderWrite = 0 : i32}
+numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32,maskGran = 8 :ui32, numWritePorts = 1 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 4 : ui32, writeUnderWrite = 0 : i32, initFilename = "", initIsBinary = false, initIsInline = false}
 
 // COMMON-LABEL:  hw.module @FIRRTLMem_1_1_1_16_10_2_4_0_0_multi
 // CHECK-SAME: %ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1, %rw_addr_0: i4,
@@ -288,15 +288,15 @@ numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32,maskGran = 8 :ui32, numWri
 
 // COMMON-LABEL: hw.module @PR2769
 // CHECK-NOT: _GEN
-hw.module.generated @PR2769, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0: i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i16,  %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1, %wo_data_0: i16) -> (ro_data_0: i16, rw_rdata_0: i16) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 0 : i32}
+hw.module.generated @PR2769, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0: i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i16,  %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1, %wo_data_0: i16) -> (ro_data_0: i16, rw_rdata_0: i16) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 0 : i32, initFilename = "", initIsBinary = false, initIsInline = false}
 
 // COMMON-LABEL: hw.module @RandomizeWeirdWidths
 // CHECK: sv.ifdef.procedural "RANDOMIZE_MEM_INIT"
 // CHECK-NEXT{LITERAL}: sv.verbatim "for (initvar = 0; initvar < 10; initvar = initvar + 1) begin\0A  {{0}} = {{`RANDOM}, {`RANDOM}, {`RANDOM}, {`RANDOM}, {`RANDOM}};\0A  Memory[initvar] = {{0}}[144:0];\0Aend"
-hw.module.generated @RandomizeWeirdWidths, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0: i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i145, %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1, %wo_data_0: i145) -> (ro_data_0: i145, rw_rdata_0: i145) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : ui32, width = 145 : ui32, writeClockIDs = [], writeLatency = 4 : ui32, writeUnderWrite = 0 : i32}
+hw.module.generated @RandomizeWeirdWidths, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0: i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i145, %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1, %wo_data_0: i145) -> (ro_data_0: i145, rw_rdata_0: i145) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : ui32, width = 145 : ui32, writeClockIDs = [], writeLatency = 4 : ui32, writeUnderWrite = 0 : i32, initFilename = "", initIsBinary = false, initIsInline = false}
 
 // COMMON-LABEL: hw.module @ReadWriteWithHighReadLatency
-hw.module.generated @ReadWriteWithHighReadLatency, @FIRRTLMem(%rw_addr: i4, %rw_en: i1,  %rw_clock: i1, %rw_wmode: i1, %rw_wdata: i16) -> (rw_rdata: i16) attributes {depth = 16 : i64, numReadPorts = 0 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 0 : ui32, readLatency = 4 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 3 : ui32, writeUnderWrite = 0 : i32}
+hw.module.generated @ReadWriteWithHighReadLatency, @FIRRTLMem(%rw_addr: i4, %rw_en: i1,  %rw_clock: i1, %rw_wmode: i1, %rw_wdata: i16) -> (rw_rdata: i16) attributes {depth = 16 : i64, numReadPorts = 0 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 0 : ui32, readLatency = 4 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 3 : ui32, writeUnderWrite = 0 : i32, initFilename = "", initIsBinary = false, initIsInline = false}
 // CHECK: [[MEM:%.+]] = sv.reg
 
 // Common pipeline stages (2x)
@@ -345,7 +345,7 @@ hw.module.generated @ReadWriteWithHighReadLatency, @FIRRTLMem(%rw_addr: i4, %rw_
 // CHECK: [[WPTR:%.+]] = sv.array_index_inout [[MEM]][[[ADDR_1R]]]
 
 // COMMON-LABEL: hw.module @ReadWriteWithHighWriteLatency
-hw.module.generated @ReadWriteWithHighWriteLatency, @FIRRTLMem(%rw_addr: i4, %rw_en: i1,  %rw_clock: i1, %rw_wmode: i1, %rw_wdata: i16) -> (rw_rdata: i16) attributes {depth = 16 : i64, numReadPorts = 0 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 0 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 5 : ui32, writeUnderWrite = 0 : i32}
+hw.module.generated @ReadWriteWithHighWriteLatency, @FIRRTLMem(%rw_addr: i4, %rw_en: i1,  %rw_clock: i1, %rw_wmode: i1, %rw_wdata: i16) -> (rw_rdata: i16) attributes {depth = 16 : i64, numReadPorts = 0 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 0 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 5 : ui32, writeUnderWrite = 0 : i32, initFilename = "", initIsBinary = false, initIsInline = false}
 // CHECK: [[MEM:%.+]] = sv.reg
 
 // Common pipeline stages (2x)

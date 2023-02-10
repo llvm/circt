@@ -951,7 +951,7 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
       p, body, portDirections, op.getPortNames(), op.getPortTypes(),
       op.getPortAnnotations(), op.getPortSymbols(), op.getPortLocations());
 
-  SmallVector<StringRef, 4> omittedAttrs = {
+  SmallVector<StringRef, 11> omittedAttrs = {
       "sym_name", "portDirections", "portTypes",  "portAnnotations",
       "portSyms", "portLocations",  "parameters", visibilityAttrName};
 
@@ -1513,10 +1513,9 @@ void InstanceOp::print(OpAsmPrinter &p) {
   }
   if (getNameKindAttr().getValue() != NameKindEnum::DroppableName)
     p << ' ' << stringifyNameKindEnum(getNameKindAttr().getValue());
-  p << " ";
 
   // Print the attr-dict.
-  SmallVector<StringRef, 4> omittedAttrs = {"moduleName",     "name",
+  SmallVector<StringRef, 9> omittedAttrs = {"moduleName",     "name",
                                             "portDirections", "portNames",
                                             "portTypes",      "portAnnotations",
                                             "inner_sym",      "nameKind"};
@@ -2025,6 +2024,7 @@ FirMemory MemOp::getSummary() {
   uint32_t groupID = 0;
   if (auto gID = op.getGroupIDAttr())
     groupID = gID.getUInt();
+  MemoryInitAttr init = op->getAttrOfType<MemoryInitAttr>("init");
   StringAttr modName;
   if (op->hasAttr("modName"))
     modName = op->getAttrOfType<StringAttr>("modName");
@@ -2032,20 +2032,36 @@ FirMemory MemOp::getSummary() {
     SmallString<8> clocks;
     for (auto a : writeClockIDs)
       clocks.append(Twine((char)(a + 'a')).str());
+    SmallString<32> initStr;
+    // If there is a file initialization, then come up with a decent
+    // representation for this.  Use the filename, but only characters
+    // [a-zA-Z0-9] and the bool/hex and inline booleans.
+    if (init) {
+      for (auto c : init.getFilename().getValue())
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9'))
+          initStr.push_back(c);
+      initStr.push_back('_');
+      initStr.push_back(init.getIsBinary().getValue() ? 't' : 'f');
+      initStr.push_back('_');
+      initStr.push_back(init.getIsInline().getValue() ? 't' : 'f');
+    }
     modName = StringAttr::get(
         op->getContext(),
         llvm::formatv(
-            "FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}_{10}{11}",
+            "FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}_{10}{11}{12}",
             numReadPorts, numWritePorts, numReadWritePorts, (size_t)width,
             op.getDepth(), op.getReadLatency(), op.getWriteLatency(),
             op.getMaskBits(), (size_t)op.getRuw(), (unsigned)hw::WUW::PortOrder,
-            groupID, clocks.empty() ? "" : "_" + clocks));
+            groupID, clocks.empty() ? "" : "_" + clocks,
+            init ? initStr.str() : ""));
   }
   return {numReadPorts,         numWritePorts,    numReadWritePorts,
           (size_t)width,        op.getDepth(),    op.getReadLatency(),
           op.getWriteLatency(), op.getMaskBits(), (size_t)op.getRuw(),
           hw::WUW::PortOrder,   writeClockIDs,    modName,
-          op.getMaskBits() > 1, groupID,          op.getLoc()};
+          op.getMaskBits() > 1, groupID,          init,
+          op.getLoc()};
 }
 
 void MemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -3578,7 +3594,7 @@ static void printNameKind(OpAsmPrinter &p, Operation *op,
                           firrtl::NameKindEnumAttr attr,
                           ArrayRef<StringRef> extraElides = {}) {
   if (attr.getValue() != NameKindEnum::DroppableName)
-    p << stringifyNameKindEnum(attr.getValue());
+    p << " " << stringifyNameKindEnum(attr.getValue());
 }
 
 //===----------------------------------------------------------------------===//

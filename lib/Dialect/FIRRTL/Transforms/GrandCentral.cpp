@@ -1075,7 +1075,8 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
 
     // Append this new Wiring Problem to the ApplyState.  The Wiring Problem
     // will be resolved to bore RefType ports before LowerAnnotations finishes.
-    state.wiringProblems.push_back({*source, sink, (path + "__bore").str()});
+    state.wiringProblems.push_back({*source, sink, (path + "__bore").str(),
+                                    WiringProblem::RefTypeUsage::Prefer});
 
     return DictionaryAttr::getWithSorted(context, elementIface);
   }
@@ -2133,11 +2134,15 @@ void GrandCentralPass::runOnOperation() {
       continue;
     auto companionBuilder =
         OpBuilder::atBlockEnd(companionModule.getBodyBlock());
+
+    // Generate gathered XMR's.
     for (auto xmrElem : xmrElems) {
       auto uloc = companionBuilder.getUnknownLoc();
       companionBuilder.create<sv::VerbatimOp>(uloc, xmrElem.str, xmrElem.val,
                                               xmrElem.syms);
     }
+    numXMRs += xmrElems.size();
+
     sv::InterfaceOp topIface;
     for (const auto &ifaceBuilder : interfaceBuilder) {
       auto builder = OpBuilder::atBlockEnd(getOperation().getBodyBlock());

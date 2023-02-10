@@ -11,10 +11,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/ESIOps.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Support/LLVM.h"
+
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/SymbolTable.h"
@@ -51,7 +53,7 @@ ParseResult ChannelBufferOp::parse(OpAsmParser &parser,
 }
 
 void ChannelBufferOp::print(OpAsmPrinter &p) {
-  p << " " << getClk() << ", " << getRst() << ", " << getInput() << " ";
+  p << " " << getClk() << ", " << getRst() << ", " << getInput();
   p.printOptionalAttrDict((*this)->getAttrs());
   p << " : " << innerType();
 }
@@ -86,7 +88,7 @@ ParseResult PipelineStageOp::parse(OpAsmParser &parser,
 }
 
 void PipelineStageOp::print(OpAsmPrinter &p) {
-  p << " " << getClk() << ", " << getRst() << ", " << getInput() << " ";
+  p << " " << getClk() << ", " << getRst() << ", " << getInput();
   p.printOptionalAttrDict((*this)->getAttrs());
   p << " : " << innerType();
 }
@@ -420,6 +422,33 @@ void ServiceImplementReqOp::gatherPairedReqs(
     else if (auto req = dyn_cast<RequestToServerConnectionOp>(op))
       reqPairs.push_back(std::make_pair(req, nullptr));
   }
+}
+
+//===----------------------------------------------------------------------===//
+// Structural ops.
+//===----------------------------------------------------------------------===//
+
+LogicalResult ESIPureModuleOp::verify() {
+  ESIDialect *esiDialect = getContext()->getLoadedDialect<ESIDialect>();
+
+  Block &body = getBody().front();
+  for (Operation &op : body.getOperations()) {
+    if (hw::HWInstanceLike inst = dyn_cast<hw::HWInstanceLike>(op)) {
+      if (llvm::any_of(op.getOperands(),
+                       [](Value v) { return !v.getType().isa<ChannelType>(); }))
+        return inst.emitOpError(
+            "instances in ESI pure modules can only contain channel ports");
+      if (llvm::any_of(op.getResultTypes(),
+                       [](Type t) { return !t.isa<ChannelType>(); }))
+        return inst.emitOpError(
+            "instances in ESI pure modules can only contain channel ports");
+    } else {
+      // Pure modules can only contain instance ops and ESI ops.
+      if (op.getDialect() != esiDialect)
+        return op.emitOpError("operation not allowed in ESI pure modules");
+    }
+  }
+  return success();
 }
 
 #define GET_OP_CLASSES

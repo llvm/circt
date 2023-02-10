@@ -18,6 +18,14 @@
 ; RUN: not firtool %s -I %t/alt -I %t 2>&1 | FileCheck %s --check-prefixes=COMMON,ALTERNATE
 ; RUN: not firtool %s -I %t -I %t/alt 2>&1 | FileCheck %s --check-prefixes=COMMON,FOUND
 
+; Include paths are extra, searched after normal resolution (matters for relative paths).
+; Expect this to resolve to %t/subdir/source.dummy.
+; RUN: cd %t && not firtool %s -Ialt 2>&1 | FileCheck %s --check-prefixes=COMMON,FOUND
+
+; Check relative path (look in '../alt' from 'subdir').
+; RUN: cd %t/subdir && not firtool %s -I../alt 2>&1 | FileCheck %s --check-prefixes=COMMON,ALTERNATE
+
+
 ; COMMON: subdir/source.dummy:2:3:
 ; MISSING-NOT: alternate
 ; MISSING-NOT: generate

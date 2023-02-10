@@ -93,13 +93,23 @@ class System:
   def add_packaging_step(self, func: Callable):
     self.packaging_funcs.append(func)
 
+  def _return_create_if_necessary(self, dir: pathlib.Path):
+    """Return the director given by 'dir' but create it if it doesn't exist."""
+    if not dir.exists():
+      dir.mkdir()
+    return dir
+
   @property
   def hw_output_dir(self):
-    return self.output_directory / "hw"
+    return self._return_create_if_necessary(self.output_directory / "hw")
 
   @property
   def runtime_output_dir(self):
-    return self.output_directory / "runtime"
+    return self._return_create_if_necessary(self.output_directory / "runtime")
+
+  @property
+  def sys_runtime_output_dir(self):
+    return self._return_create_if_necessary(self.output_directory / self.name)
 
   def _get_ip(self):
     return ir.InsertionPoint(self.mod.body)
@@ -277,6 +287,8 @@ class System:
     self.files.add(self.output_directory / tcl_file)
 
     self._op_cache.release_ops()
+    if debug:
+      open("after_generate.mlir", "w").write(str(self.mod))
     for idx, phase in enumerate(self.PASS_PHASES):
       aplog = None
       if debug:
@@ -296,6 +308,9 @@ class System:
       except RuntimeError as err:
         sys.stderr.write(f"Exception while executing phase {phase}.\n")
         raise err
+      finally:
+        if debug:
+          open(f"after_phase_{idx}.mlir", "w").write(str(self.mod))
       self._op_cache.release_ops()
       if aplog is not None:
         aplog.write(str(self.mod))

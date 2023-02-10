@@ -15,10 +15,12 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/Namespace.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Path.h"
 
 using namespace circt;
 using namespace hw;
@@ -40,6 +42,9 @@ struct FirMemory {
   size_t readUnderWrite;
   WUW writeUnderWrite;
   SmallVector<int32_t> writeClockIDs;
+  StringRef initFilename;
+  bool initIsBinary;
+  bool initIsInline;
 };
 } // end anonymous namespace
 
@@ -60,14 +65,18 @@ class HWMemSimImpl {
   sv::AlwaysOp lastPipelineAlwaysOp;
 
 public:
+  Namespace &mlirModuleNamespace;
+
   HWMemSimImpl(bool ignoreReadEnableMem, bool addMuxPragmas,
                bool disableMemRandomization, bool disableRegRandomization,
-               bool addVivadoRAMAddressConflictSynthesisBugWorkaround)
+               bool addVivadoRAMAddressConflictSynthesisBugWorkaround,
+               Namespace &mlirModuleNamespace)
       : ignoreReadEnableMem(ignoreReadEnableMem), addMuxPragmas(addMuxPragmas),
         disableMemRandomization(disableMemRandomization),
         disableRegRandomization(disableRegRandomization),
         addVivadoRAMAddressConflictSynthesisBugWorkaround(
-            addVivadoRAMAddressConflictSynthesisBugWorkaround) {}
+            addVivadoRAMAddressConflictSynthesisBugWorkaround),
+        mlirModuleNamespace(mlirModuleNamespace) {}
 
   void generateMemory(HWModuleOp op, FirMemory mem);
 };
@@ -108,6 +117,9 @@ static FirMemory analyzeMemOp(HWModuleGeneratedOp op) {
     for (auto clockID : clockIDsAttr)
       mem.writeClockIDs.push_back(
           clockID.cast<IntegerAttr>().getValue().getZExtValue());
+  mem.initFilename = op->getAttrOfType<StringAttr>("initFilename").getValue();
+  mem.initIsBinary = op->getAttrOfType<BoolAttr>("initIsBinary").getValue();
+  mem.initIsInline = op->getAttrOfType<BoolAttr>("initIsInline").getValue();
   return mem;
 }
 
@@ -441,6 +453,74 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   auto *outputOp = op.getBodyBlock()->getTerminator();
   outputOp->setOperands(outputs);
 
+  // Add logic to initialize the memory based on a file emission request.  This
+  // disables randomization.
+  if (!mem.initFilename.empty()) {
+    // Set an inner symbol on the register if one does not exist.
+    if (!reg.getInnerSymAttr())
+      reg.setInnerSymAttr(
+          b.getStringAttr(moduleNamespace.newName(reg.getName())));
+
+    if (mem.initIsInline) {
+      b.create<sv::IfDefOp>("SYNTHESIS", std::function<void()>(), [&]() {
+        b.create<sv::InitialOp>([&]() {
+          b.create<sv::ReadMemOp>(reg, mem.initFilename,
+                                  mem.initIsBinary
+                                      ? MemBaseTypeAttr::MemBaseBin
+                                      : MemBaseTypeAttr::MemBaseHex);
+        });
+      });
+    } else {
+      OpBuilder::InsertionGuard guard(b);
+
+      // Create a new module with the readmem op.
+      b.setInsertionPointAfter(op);
+      auto boundModule = b.create<HWModuleOp>(
+          b.getStringAttr(mlirModuleNamespace.newName(op.getName() + "_init")),
+          ArrayRef<PortInfo>());
+
+      auto filename = op->getAttrOfType<OutputFileAttr>("output_file");
+      if (filename) {
+        if (!filename.isDirectory()) {
+          SmallString<128> dir(filename.getFilename().getValue());
+          llvm::sys::path::remove_filename(dir);
+          filename = hw::OutputFileAttr::getFromDirectoryAndFilename(
+              b.getContext(), dir, boundModule.getName() + ".sv");
+        }
+      } else {
+        filename = hw::OutputFileAttr::getFromFilename(
+            b.getContext(), boundModule.getName() + ".sv");
+      }
+
+      boundModule->setAttr("output_file", filename);
+      b.setInsertionPointToStart(op.getBodyBlock());
+      b.setInsertionPointToStart(boundModule.getBodyBlock());
+      b.create<sv::InitialOp>([&]() {
+        auto xmr = b.create<sv::XMRRefOp>(
+            reg.getType(),
+            hw::InnerRefAttr::get(op.getNameAttr(), reg.getInnerSymAttr()));
+        b.create<sv::ReadMemOp>(xmr, mem.initFilename,
+                                mem.initIsBinary ? MemBaseTypeAttr::MemBaseBin
+                                                 : MemBaseTypeAttr::MemBaseHex);
+      });
+
+      // Instantiate this new module inside the memory module.
+      b.setInsertionPointAfter(reg);
+      auto boundInstance = b.create<hw::InstanceOp>(
+          boundModule, boundModule.getName(), ArrayRef<Value>());
+      boundInstance->setAttr("inner_sym",
+                             b.getStringAttr(moduleNamespace.newName(
+                                 boundInstance.getName().getValue())));
+      boundInstance->setAttr("doNotPrint", b.getBoolAttr(true));
+
+      // Bind the new module.
+      b.setInsertionPointAfter(boundModule);
+      auto bind = b.create<sv::BindOp>(hw::InnerRefAttr::get(
+          op.getNameAttr(), boundInstance.getInnerSymAttr()));
+      bind->setAttr("output_file", filename);
+    }
+  }
+
   // Add logic to initialize the memory and any internal registers to random
   // values.
   if (disableMemRandomization && disableRegRandomization)
@@ -453,7 +533,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     StringRef initvar;
 
     // Declare variables for use by memory randomization logic.
-    if (!disableMemRandomization) {
+    if (!disableMemRandomization || !mem.initFilename.empty()) {
       b.create<sv::IfDefOp>("RANDOMIZE_MEM_INIT", [&]() {
         initvar = moduleNamespace.newName("initvar");
         b.create<sv::VerbatimOp>("integer " + Twine(initvar) + ";\n");
@@ -588,13 +668,21 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
 }
 
 void HWMemSimImplPass::runOnOperation() {
-  auto topModule = getOperation().getBody();
+  auto topModule = getOperation();
+
+  // Populate a namespace from the symbols visible to the top-level MLIR module.
+  // Memories with initializations create modules and these need to be legal
+  // symbols.
+  SymbolCache symbolCache;
+  symbolCache.addDefinitions(topModule);
+  Namespace mlirModuleNamespace;
+  mlirModuleNamespace.add(symbolCache);
 
   SmallVector<HWModuleGeneratedOp> toErase;
   bool anythingChanged = false;
 
   for (auto op :
-       llvm::make_early_inc_range(topModule->getOps<HWModuleGeneratedOp>())) {
+       llvm::make_early_inc_range(topModule.getOps<HWModuleGeneratedOp>())) {
     auto oldModule = cast<HWModuleGeneratedOp>(op);
     auto gen = oldModule.getGeneratorKind();
     auto genOp = cast<HWGeneratorSchemaOp>(
@@ -626,7 +714,8 @@ void HWMemSimImplPass::runOnOperation() {
 
         HWMemSimImpl(ignoreReadEnableMem, addMuxPragmas,
                      disableMemRandomization, disableRegRandomization,
-                     addVivadoRAMAddressConflictSynthesisBugWorkaround)
+                     addVivadoRAMAddressConflictSynthesisBugWorkaround,
+                     mlirModuleNamespace)
             .generateMemory(newModule, mem);
       }
 

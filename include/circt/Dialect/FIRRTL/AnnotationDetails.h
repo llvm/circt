@@ -197,6 +197,18 @@ constexpr const char *addSeqMemPortAnnoClass =
 constexpr const char *addSeqMemPortsFileAnnoClass =
     "sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation";
 
+// Memory file loading annotations.
+constexpr const char *loadMemoryFromFileAnnoClass =
+    "firrtl.annotations.LoadMemoryAnnotation";
+constexpr const char *loadMemoryFromFileInlineAnnoClass =
+    "firrtl.annotations.MemoryFileInlineAnnotation";
+
+// WiringTransform Annotations
+constexpr const char *wiringSinkAnnoClass =
+    "firrtl.passes.wiring.SinkAnnotation";
+constexpr const char *wiringSourceAnnoClass =
+    "firrtl.passes.wiring.SourceAnnotation";
+
 } // namespace firrtl
 } // namespace circt
 

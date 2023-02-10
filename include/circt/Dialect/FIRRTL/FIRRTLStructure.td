@@ -56,7 +56,7 @@ def CircuitOp : FIRRTLOp<"circuit",
     FModuleLike getMainModule(mlir::SymbolTable* symtbl = nullptr);
   }];
 
-  let assemblyFormat = "$name custom<CircuitOpAttrs>(attr-dict) $body";
+  let assemblyFormat = "$name `` custom<CircuitOpAttrs>(attr-dict) $body";
   let hasRegionVerifier = 1;
 }
 
