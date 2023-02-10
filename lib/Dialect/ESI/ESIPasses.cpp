@@ -1028,40 +1028,49 @@ void ESIWrapPipelinePass::runOnOperation() {
       if (targetMod) {
         // contract is valid
         moduleBuilder.setInsertionPoint(extMod);
+
         // build valid tag shift register module (helper module)
-        SmallVector<hw::PortInfo, 4> shiftRegisterPorts;
-        auto i1Type = moduleBuilder.getI1Type();
-        shiftRegisterPorts.push_back(
-            hw::PortInfo{moduleBuilder.getStringAttr("in_valid"),
-                         hw::PortDirection::INPUT, i1Type, 0});
-        shiftRegisterPorts.push_back(
-            hw::PortInfo{moduleBuilder.getStringAttr("clock"),
-                         hw::PortDirection::INPUT, i1Type, 1});
-        shiftRegisterPorts.push_back(
-            hw::PortInfo{moduleBuilder.getStringAttr("reset"),
-                         hw::PortDirection::INPUT, i1Type, 2});
-        shiftRegisterPorts.push_back(
-            hw::PortInfo{moduleBuilder.getStringAttr("out_valid"),
-                         hw::PortDirection::OUTPUT, i1Type, 0});
-        ModulePortInfo shiftRegisterPortInfo(shiftRegisterPorts);
+        // only build the shift register if it has not been
+        // previously build by another pipeline wrapper
         auto numPipelineStages =
             dyn_cast<IntegerAttr>(targetMod->getAttr("latency")).getInt();
         auto shiftRegisterName =
             StringAttr::get(moduleBuilder.getContext(),
                             "valid_tag_shift_register_" +
                                 std::to_string(numPipelineStages) + "stages");
-        auto shiftRegisterMod = moduleBuilder.create<hw::HWModuleOp>(
-            extMod.getLoc(), shiftRegisterName, shiftRegisterPortInfo);
+        auto shiftRegisterMod =
+            top.lookupSymbol<hw::HWModuleOp>(shiftRegisterName.str());
+        if (!shiftRegisterMod) {
+          // shift register is not present
+          SmallVector<hw::PortInfo, 4> shiftRegisterPorts;
+          auto i1Type = moduleBuilder.getI1Type();
+          shiftRegisterPorts.push_back(
+              hw::PortInfo{moduleBuilder.getStringAttr("in_valid"),
+                           hw::PortDirection::INPUT, i1Type, 0});
+          shiftRegisterPorts.push_back(
+              hw::PortInfo{moduleBuilder.getStringAttr("clock"),
+                           hw::PortDirection::INPUT, i1Type, 1});
+          shiftRegisterPorts.push_back(
+              hw::PortInfo{moduleBuilder.getStringAttr("reset"),
+                           hw::PortDirection::INPUT, i1Type, 2});
+          shiftRegisterPorts.push_back(
+              hw::PortInfo{moduleBuilder.getStringAttr("out_valid"),
+                           hw::PortDirection::OUTPUT, i1Type, 0});
+          ModulePortInfo shiftRegisterPortInfo(shiftRegisterPorts);
+          shiftRegisterMod = moduleBuilder.create<hw::HWModuleOp>(
+              extMod.getLoc(), shiftRegisterName, shiftRegisterPortInfo);
 
-        // build the content of the shiftRegisterModule
-        buildShiftRegisterModule(shiftRegisterMod, numPipelineStages);
-
+          // build the content of the shiftRegisterModule
+          buildShiftRegisterModule(shiftRegisterMod, numPipelineStages);
+        }
         // build wrapping module
         auto wrappingModName =
             StringAttr::get(moduleBuilder.getContext(),
                             extMod.getNameAttr().str() + "_wrap_pipeline");
         auto wrappingMod = moduleBuilder.create<hw::HWModuleOp>(
             extMod.getLoc(), wrappingModName, extMod.getPorts());
+        // collect the synchronizer that we built during the handshake to hw
+        // lowering
         auto syncMod =
             top.lookupSymbol<hw::HWModuleOp>(getEsiWrapSynchronizer(extMod));
         wrapPipelineModule(wrappingMod, shiftRegisterMod, targetMod, syncMod);
