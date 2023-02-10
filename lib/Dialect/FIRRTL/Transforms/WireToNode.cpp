@@ -25,23 +25,11 @@
 using namespace circt;
 using namespace firrtl;
 
-namespace {
-struct Wire2Node {
-  FModuleOp mod;
-  FieldSource &fields;
-
-  Wire2Node(FModuleOp mod, FieldSource &fields) : mod(mod), fields(fields) {}
-  LogicalResult run();
-};
-} // namespace
-
-static bool isIndexing(Operation *op) {
-  return isa<SubfieldOp, SubindexOp, SubaccessOp>(op);
-}
+#define DEBUG_TYPE "Wire2Node"
 
 /// Return `true` if the given operation is ready to be scheduled.
-static bool isOpReadyEx(Operation *op, DenseSet<Operation *> &unscheduledOps,
-                        FieldSource &sources, DenseSet<Value> &readsSeen) {
+static bool isOpReadyBase(Operation *op,
+                          DenseSet<Operation *> &unscheduledOps) {
   // An operation is ready to be scheduled if all its operands are ready. An
   // operation is ready if:
   const auto isReady = [&](Value value) {
@@ -55,21 +43,10 @@ static bool isOpReadyEx(Operation *op, DenseSet<Operation *> &unscheduledOps,
       // Stop traversal when op under examination is reached.
       if (parent == op)
         return true;
-      if (unscheduledOps.contains(parent)) {
+      if (unscheduledOps.contains(parent))
         return false;
-      }
     } while ((parent = parent->getParentOp()));
     // No unscheduled op found.
-    // If this is a write, it's fine as long as the rhs has been seen.
-    if (isa<ConnectOp, StrictConnectOp>(op) && value == op->getOperand(0) &&
-        readsSeen.count(sources.nodeForValue(op->getOperand(1))->src))
-      return true;
-    // If this reads, then it is ready if its source is in the read set.  That
-    // is, we've had to schedule a read already.  This prioritizes writes.
-    const auto *node = sources.nodeForValue(value);
-    if (node)
-      return readsSeen.contains(node->src);
-    // It is not a read, so it is ready
     return true;
   };
 
@@ -80,6 +57,48 @@ static bool isOpReadyEx(Operation *op, DenseSet<Operation *> &unscheduledOps,
                         [&](Value operand) { return isReady(operand); })
                ? WalkResult::advance()
                : WalkResult::interrupt();
+  });
+  return !readyToSchedule.wasInterrupted();
+}
+
+/// Return `true` if the given operation is ready to be scheduled.
+static bool isOpReadyEx(Operation *op, DenseSet<Operation *> &unscheduledOps,
+                        FieldSource &sources, DenseSet<Value> &readsSeen) {
+  if (!isOpReadyBase(op, unscheduledOps))
+    return false;
+
+  LLVM_DEBUG({
+    llvm::errs() << "isOpReadyEx R/W : ";
+    op->dump();
+  });
+
+  // Check Read/Write availabilty
+  const auto isReady = [&](Value value) {
+    // If operand is a reads of already read values or are simple data-flow,
+    // they are ready.
+    const auto *node = sources.nodeForValue(value);
+    if (!node)
+      return true;
+    if (!node->isSrcTransparent())
+      return true;
+    return readsSeen.contains(node->src);
+  };
+
+  // Writes don't care about the lhs, only the rhs.
+  if (isa<ConnectOp, StrictConnectOp>(op)) {
+    return isReady(op->getOperand(1));
+  }
+
+  // An operation is recursively ready to be scheduled of it and its nested
+  // operations are ready.
+  WalkResult readyToSchedule = op->walk([&](Operation *nestedOp) {
+    return llvm::all_of(nestedOp->getOperands(),
+                        [&](Value operand) { return isReady(operand); })
+               ? WalkResult::advance()
+               : WalkResult::interrupt();
+  });
+  LLVM_DEBUG({
+    llvm::errs() << "Ans: " << !readyToSchedule.wasInterrupted() << "\n\n";
   });
   return !readyToSchedule.wasInterrupted();
 }
@@ -124,17 +143,24 @@ static SmallVector<Operation *> sortTopologicallyEx(Block *block,
       op.moveBefore(block, nextScheduledOp);
       scheduledAtLeastOnce = true;
       if (isa<ConnectOp, StrictConnectOp>(&op) &&
-          dyn_cast_or_null<WireOp>(op.getOperand(0).getDefiningOp()))
+          dyn_cast_or_null<WireOp>(op.getOperand(0).getDefiningOp()) &&
+          !readsSeen.count(op.getOperand(0)))
         nodePoints.push_back(&op);
       // It doesn't matter that we mark the write value as a read
-      for (auto operand : nextScheduledOp->getOperands())
-        readsSeen.insert(operand);
+      for (auto operand : op.getOperands())
+        if (const auto *node = sources.nodeForValue(operand))
+          readsSeen.insert(node->src);
       // Move the iterator forward if we schedule the operation at the front.
       if (&op == &*nextScheduledOp)
         ++nextScheduledOp;
     }
     // If no operations were scheduled, give up and advance the iterator.
     if (!scheduledAtLeastOnce) {
+      LLVM_DEBUG({
+        llvm::errs() << "Gave up on: ";
+        nextScheduledOp->dump();
+        llvm::errs() << "\n";
+      });
       for (auto operand : nextScheduledOp->getOperands())
         if (const auto *node = sources.nodeForValue(operand))
           readsSeen.insert(node->src);
@@ -144,25 +170,6 @@ static SmallVector<Operation *> sortTopologicallyEx(Block *block,
   }
 
   return nodePoints;
-}
-
-LogicalResult Wire2Node::run() {
-  // First sort based on ssa and r/w to locations
-  auto replacePoints = sortTopologicallyEx(mod.getBodyBlock(), fields);
-  // Replace wires with nodes if dominance works out.
-  OpBuilder builder(mod.getContext());
-  for (auto *op : replacePoints) {
-    auto wire = cast<WireOp>(op->getOperand(0).getDefiningOp());
-    builder.setInsertionPointAfter(op);
-    auto node = builder.create<NodeOp>(
-        wire.getLoc(), wire.getType(), op->getOperand(1), wire.getName(),
-        wire.getNameKind(), wire.getAnnotations(),
-        wire.getInnerSym() ? *wire.getInnerSym() : nullptr);
-    wire.replaceAllUsesWith(node.getResult());
-    wire.erase();
-    op->erase();
-  }
-  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -178,11 +185,27 @@ struct Wire2NodePass : public Wire2NodeBase<Wire2NodePass> {
 
 // This is the main entrypoint for the wire2node pass.
 void Wire2NodePass::runOnOperation() {
-  llvm::errs() << "Running on: " << getOperation().getName() << "\n";
+  LLVM_DEBUG(
+      { llvm::errs() << "Running on: " << getOperation().getName() << "\n"; });
   auto &fields = getAnalysis<FieldSource>();
-  Wire2Node transform(getOperation(), fields);
-  if (failed(transform.run()))
-    signalPassFailure();
+  auto mod = getOperation();
+
+  // First sort based on ssa and r/w to locations
+  auto replacePoints = sortTopologicallyEx(mod.getBodyBlock(), fields);
+
+  // Replace wires with nodes if dominance works out.
+  OpBuilder builder(mod.getContext());
+  for (auto *op : replacePoints) {
+    auto wire = cast<WireOp>(op->getOperand(0).getDefiningOp());
+    builder.setInsertionPointAfter(op);
+    auto node = builder.create<NodeOp>(
+        wire.getLoc(), wire.getType(), op->getOperand(1), wire.getName(),
+        wire.getNameKind(), wire.getAnnotations(),
+        wire.getInnerSym() ? *wire.getInnerSym() : nullptr);
+    wire.replaceAllUsesWith(node.getResult());
+    wire.erase();
+    op->erase();
+  }
 }
 
 /// This is the pass constructor.

@@ -34,7 +34,28 @@ public:
     Value src;
     SmallVector<int64_t, 4> path;
 
+    /// Roots are operations which define the storage or aggregate value.
     bool isRoot() const { return path.empty(); }
+
+    /// Writable sources can appear as a LHS of a connect.
+    bool isSrcWritable() const {
+      // over approximate ports
+      if (!src.getDefiningOp())
+        return true;
+      // over approximate instances too
+      return isa<WireOp, RegOp, RegResetOp, InstanceOp, MemOp>(
+          src.getDefiningOp());
+    }
+    /// Transparent sources reflect a value written to them in the same cycle it
+    /// is written.  These are sources which provide dataflow backwards in SSA
+    /// durring one logical execution of a module body.
+    bool isSrcTransparent() const {
+      // over approximate ports
+      if (!src.getDefiningOp())
+        return true;
+      // over approximate instances too
+      return isa<WireOp, InstanceOp>(src.getDefiningOp());
+    }
   };
 
   const PathNode *nodeForValue(Value v) const;

@@ -31,18 +31,25 @@ void FieldSource::visitOp(Operation *op) {
     return visitSubindex(si);
   if (auto sa = dyn_cast<SubaccessOp>(op))
     return visitSubaccess(sa);
-  if (isa<WireOp, NodeOp, RegOp, RegResetOp, BitCastOp, BundleCreateOp,
-          VectorCreateOp>(op))
+  if (isa<WireOp, RegOp, RegResetOp>(op))
     return makeNodeForValue(op->getResult(0), op->getResult(0), {});
   if (auto mem = dyn_cast<MemOp>(op))
     return visitMem(mem);
   if (auto inst = dyn_cast<InstanceOp>(op))
     return visitInst(inst);
+
   // recurse in to regions
   for (auto &r : op->getRegions())
     for (auto &b : r.getBlocks())
       for (auto &op : b)
         visitOp(&op);
+
+  if (op->getNumResults()) {
+    auto type = op->getResult(0).getType();
+    if (dyn_cast<FIRRTLBaseType>(type) &&
+        !cast<FIRRTLBaseType>(type).isGround())
+      makeNodeForValue(op->getResult(0), op->getResult(0), {});
+  }
 }
 
 void FieldSource::visitSubfield(SubfieldOp sf) {
