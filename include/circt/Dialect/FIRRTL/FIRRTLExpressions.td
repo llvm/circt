@@ -748,7 +748,7 @@ def BitCastOp: FIRRTLOp<"bitcast", [Pure]> {
   }];
 
   let arguments = (ins FIRRTLBaseType:$input);
-  let results = (outs FIRRTLBaseType:$result);
+  let results = (outs PassiveType:$result);
   let hasVerifier = 1;
   let hasFolder = 1;
 
