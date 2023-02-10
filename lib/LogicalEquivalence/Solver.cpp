@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 ///
-/// This file defines a SMT solver interface for the 'circt-lec' tool.
+/// This file defines a SMT solver interface for verification tools.
 ///
 //===----------------------------------------------------------------------===//
 

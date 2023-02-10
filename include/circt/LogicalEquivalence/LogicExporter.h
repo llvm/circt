@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 ///
-/// This file defines the logic-exporting class for the `circt-lec` tool.
+/// This file defines the logic-exporting pass for verification tools.
 ///
 //===----------------------------------------------------------------------===//
 

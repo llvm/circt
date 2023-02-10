@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// This header provides a variety of utility functions and macros for use
-/// throughout the tool.
+/// throughout verification tools.
 ///
 //===----------------------------------------------------------------------===//
 
