@@ -246,38 +246,47 @@ public:
               } else
                 return;
             }
+            SmallVector<Node, 4> fields;
             forallRefersTo(
                 sub.getInput(),
                 [&](Node subBase) {
                   isValid = true;
-                  setValRefsTo(res, Node(subBase.getValue(),
-                                         subBase.getFieldID() + fieldIndex));
+                  fields.push_back(Node(subBase.getValue(),
+                                        subBase.getFieldID() + fieldIndex));
                   return success();
                 },
                 false);
-            if (isValid)
+            if (isValid) {
+              for (auto f : fields)
+                setValRefsTo(res, f);
               worklist.push_back(res);
+            }
           })
           .Case<SubindexOp>([&](SubindexOp sub) {
             auto res = sub.getResult();
             bool isValid = false;
             auto index = sub.getIndex();
+            SmallVector<Node, 4> fields;
             forallRefersTo(
                 sub.getInput(),
                 [&](Node subBase) {
                   isValid = true;
-                  setValRefsTo(res, Node(subBase.getValue(),
-                                         subBase.getFieldID() + index + 1));
+                  fields.push_back(Node(subBase.getValue(),
+                                        subBase.getFieldID() + index + 1));
                   return success();
                 },
                 false);
-            if (isValid)
+            if (isValid) {
+              for (auto f : fields)
+                setValRefsTo(res, f);
               worklist.push_back(res);
+            }
           })
           .Case<SubaccessOp>([&](SubaccessOp sub) {
             auto vecType = sub.getInput().getType().cast<FVectorType>();
             auto res = sub.getResult();
             bool isValid = false;
+            SmallVector<Node, 4> fields;
             forallRefersTo(
                 sub.getInput(),
                 [&](Node subBase) {
@@ -286,18 +295,19 @@ public:
                   // locations corresponding to all the possible indices.
                   for (size_t index = 0; index < vecType.getNumElements();
                        ++index)
-                    setValRefsTo(
-                        res,
-                        Node(subBase.getValue(),
-                             subBase.getFieldID() + 1 +
-                                 index *
-                                     (vecType.getElementType().getMaxFieldID() +
-                                      1)));
+                    fields.push_back(Node(
+                        subBase.getValue(),
+                        subBase.getFieldID() + 1 +
+                            index * (vecType.getElementType().getMaxFieldID() +
+                                     1)));
                   return success();
                 },
                 false);
-            if (isValid)
+            if (isValid) {
+              for (auto f : fields)
+                setValRefsTo(res, f);
               worklist.push_back(res);
+            }
           })
           .Case<InstanceOp>(
               [&](InstanceOp ins) { handleInstanceOp(ins, worklist); })
