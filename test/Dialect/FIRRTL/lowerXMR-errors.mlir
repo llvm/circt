@@ -13,9 +13,9 @@ firrtl.circuit "xmr" {
 
 firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    %zero = firrtl.constant 0 : !firrtl.const.uint<1>
+    %1 = firrtl.ref.send %zero : !firrtl.const.uint<1>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<const.uint<1>>
   }
   firrtl.module @Top() {
     %xmr_a = firrtl.instance xmr sym @xmr @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
@@ -39,9 +39,9 @@ firrtl.circuit "Top" {
 
 firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    %zero = firrtl.constant 0 : !firrtl.const.uint<1>
+    %1 = firrtl.ref.send %zero : !firrtl.const.uint<1>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<const.uint<1>>
   }
   firrtl.module @Top() {
     %xmr_a = firrtl.instance xmr sym @xmr @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)

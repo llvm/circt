@@ -410,7 +410,7 @@ void AddSeqMemPortsPass::runOnOperation() {
           if (portInfo.direction == Direction::Out)
             continue;
           auto value = inst.getResult(firstResult + i);
-          auto type = value.getType();
+          auto type = value.getType().cast<FIRRTLBaseType>().getConstType(true);
           auto attr = getIntZerosAttr(type);
           auto zero = builder.create<ConstantOp>(portInfo.loc, type, attr);
           builder.create<StrictConnectOp>(portInfo.loc, value, zero);

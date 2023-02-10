@@ -251,7 +251,10 @@ void IMDeadCodeElimPass::forwardConstantOutputPort(FModuleOp module) {
       assert(ports[index].isOutput() && "must be an output port");
 
       // Replace the port with the constant.
-      result.replaceAllUsesWith(builder.create<ConstantOp>(constant));
+      auto replacement = builder.create<ConstantOp>(constant);
+      result.replaceAllUsesWith(replacement);
+      if (!isConst(result.getType()))
+        propagateTypeChangeToUsersOf(replacement);
     }
   }
 }

@@ -799,9 +799,9 @@ void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
 
   for (size_t index = 0, e = saoType.getNumElements(); index < e; ++index) {
     auto cond = builder->create<EQPrimOp>(
-        sao.getIndex(),
-        builder->createOrFold<ConstantOp>(UIntType::get(context, selectWidth),
-                                          APInt(selectWidth, index)));
+        sao.getIndex(), builder->createOrFold<ConstantOp>(
+                            UIntType::get(context, selectWidth, true),
+                            APInt(selectWidth, index)));
     builder->create<WhenOp>(cond, false, [&]() {
       // Recreate the write Path
       Value leaf = builder->create<SubindexOp>(sao.getInput(), index);

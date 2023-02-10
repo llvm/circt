@@ -60,7 +60,7 @@ struct LowerCHIRRTLPass : public LowerCHIRRTLPassBase<LowerCHIRRTLPass>,
     if (!value) {
       auto module = getOperation();
       auto builder = OpBuilder::atBlockBegin(module.getBodyBlock());
-      auto u1Type = UIntType::get(builder.getContext(), /*width*/ 1);
+      auto u1Type = UIntType::get(builder.getContext(), /*width*/ 1, true);
       value = builder.create<ConstantOp>(module.getLoc(), u1Type, APInt(1, c));
     }
     return value;

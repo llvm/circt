@@ -20,8 +20,8 @@ using namespace circt;
 
 Backedge::Backedge(mlir::Operation *op) : value(op->getResult(0)) {}
 
-void Backedge::setValue(mlir::Value newValue) {
-  assert(value.getType() == newValue.getType());
+void Backedge::setValue(mlir::Value newValue, bool allowTypeChange) {
+  assert(value.getType() == newValue.getType() || allowTypeChange);
   assert(!set && "backedge already set to a value!");
   value.replaceAllUsesWith(newValue);
   value = newValue; // In case the backedge is still referred to after setting.

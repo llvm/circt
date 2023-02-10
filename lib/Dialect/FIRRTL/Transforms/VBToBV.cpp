@@ -141,7 +141,10 @@ FIRRTLBaseType Visitor::convertType(FIRRTLBaseType type,
                                     SmallVector<unsigned> &dimensions) {
   if (auto vectorType = type.dyn_cast<FVectorType>(); vectorType) {
     dimensions.push_back(vectorType.getNumElements());
-    auto converted = convertType(vectorType.getElementType(), dimensions);
+    auto converted = convertType(
+        vectorType.getElementType().getConstType(
+            vectorType.isConst() || vectorType.getElementType().isConst()),
+        dimensions);
     dimensions.pop_back();
     return converted;
   }
@@ -149,12 +152,15 @@ FIRRTLBaseType Visitor::convertType(FIRRTLBaseType type,
     SmallVector<BundleType::BundleElement> elements;
     for (auto element : bundleType.getElements()) {
       elements.push_back(BundleType::BundleElement(
-          element.name, element.isFlip, convertType(element.type, dimensions)));
+          element.name, element.isFlip,
+          convertType(element.type.getConstType(bundleType.isConst() ||
+                                                element.type.isConst()),
+                      dimensions)));
     }
-    return BundleType::get(context, elements);
+    return BundleType::get(context, elements, bundleType.isConst());
   }
   for (auto size : llvm::reverse(dimensions))
-    type = FVectorType::get(type, size);
+    type = FVectorType::get(type, size, type.isConst());
   return type;
 }
 
@@ -722,7 +728,7 @@ Attribute Visitor::convertVectorConstant(FVectorType oldType,
   auto oldElementType = oldType.getElementType();
   auto newElementType = convertType(oldElementType);
 
-  if (oldElementType == newElementType)
+  if (mixedConstTypes(oldElementType, newElementType))
     if (auto bundleElementType = oldElementType.dyn_cast<BundleType>())
       return convertBundleInVectorConstant(bundleElementType,
                                            oldElements.getValue());
@@ -762,7 +768,7 @@ LogicalResult Visitor::visitExpr(AggregateConstantOp op) {
 
   auto oldType = oldValue.getType();
   auto newType = convertType(oldType);
-  if (oldType == newType) {
+  if (mixedConstTypes(oldType, newType)) {
     valueMap[oldValue] = oldValue;
     return success();
   }
@@ -800,11 +806,12 @@ Value Visitor::sinkVecDimIntoOperands(ImplicitLocOpBuilder &builder,
       newElements.emplace_back(elt.name, /*isFlip=*/false,
                                newField.getType().cast<FIRRTLBaseType>());
     }
-    auto newType = BundleType::get(builder.getContext(), newElements);
+    auto newType = BundleType::get(builder.getContext(), newElements,
+                                   bundleType.isConst());
     auto newBundle = builder.create<BundleCreateOp>(newType, newFields);
     return newBundle;
   }
-  auto newType = FVectorType::get(type, length);
+  auto newType = FVectorType::get(type, length, type.isConst());
   return builder.create<VectorCreateOp>(newType, values);
 }
 
@@ -814,7 +821,7 @@ LogicalResult Visitor::visitExpr(VectorCreateOp op) {
   auto oldType = op.getType();
   auto newType = convertType(oldType);
 
-  if (oldType == newType) {
+  if (mixedConstTypes(oldType, newType)) {
     auto changed = false;
     SmallVector<Value> newFields;
     for (auto oldField : op.getFields()) {
@@ -845,7 +852,10 @@ LogicalResult Visitor::visitExpr(VectorCreateOp op) {
   }
 
   auto value = sinkVecDimIntoOperands(
-      builder, convertType(oldType.getElementType()), convertedOldFields);
+      builder,
+      convertType(oldType.getElementType().getConstType(
+          oldType.isConst() || oldType.getElementType().isConst())),
+      convertedOldFields);
   valueMap[op.getResult()] = value;
   toDelete.push_back(op);
   return success();
@@ -922,7 +932,10 @@ LogicalResult Visitor::visit(FModuleOp op) {
     for (auto [index, port] : llvm::enumerate(ports)) {
       auto oldType = port.type;
       auto newType = convertType(oldType);
-      if (newType == oldType)
+      if (newType == oldType ||
+          (oldType.isa<FIRRTLBaseType>() &&
+           mixedConstTypes(oldType.cast<FIRRTLBaseType>(),
+                           newType.cast<FIRRTLBaseType>())))
         continue;
       auto newPort = port;
       newPort.type = newType;

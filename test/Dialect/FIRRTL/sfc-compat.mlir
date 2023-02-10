@@ -124,33 +124,33 @@ firrtl.circuit "SFCCompatTests" {
   //
   // CHECK-LABEL: firrtl.module @ConstantAsyncReset
   firrtl.module @ConstantAsyncReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
     %r0_init = firrtl.wire sym @r0_init : !firrtl.uint<1>
-    firrtl.strictconnect %r0_init, %c0_ui1 : !firrtl.uint<1>
+    firrtl.strictconnect %r0_init, %c0_ui1 : !firrtl.uint<1>, !firrtl.const.uint<1>
     %r0 = firrtl.regreset %clock, %reset, %r0_init : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
 
-    %r1_init = firrtl.node %c0_ui1 : !firrtl.uint<1>
-    %r1 = firrtl.regreset %clock, %reset, %r1_init : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %r1_init = firrtl.node %c0_ui1 : !firrtl.const.uint<1>
+    %r1 = firrtl.regreset %clock, %reset, %r1_init : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.uint<1>, !firrtl.uint<1>
 
     %inv_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
     %r2_init = firrtl.wire : !firrtl.uint<1>
     firrtl.strictconnect %r2_init, %inv_ui1 : !firrtl.uint<1>
     %r2 = firrtl.regreset %clock, %reset, %r2_init : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
 
-    %c0_si1 = firrtl.asSInt %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.sint<1>
-    %c0_clock = firrtl.asClock %c0_si1 : (!firrtl.sint<1>) -> !firrtl.clock
-    %c0_asyncreset = firrtl.asAsyncReset %c0_clock : (!firrtl.clock) -> !firrtl.asyncreset
-    %r3_init = firrtl.asUInt %c0_asyncreset : (!firrtl.asyncreset) -> !firrtl.uint<1>
-    %r3 = firrtl.regreset %clock, %reset, %r3_init : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %c0_si1 = firrtl.asSInt %c0_ui1 : (!firrtl.const.uint<1>) -> !firrtl.const.sint<1>
+    %c0_clock = firrtl.asClock %c0_si1 : (!firrtl.const.sint<1>) -> !firrtl.const.clock
+    %c0_asyncreset = firrtl.asAsyncReset %c0_clock : (!firrtl.const.clock) -> !firrtl.const.asyncreset
+    %r3_init = firrtl.asUInt %c0_asyncreset : (!firrtl.const.asyncreset) -> !firrtl.const.uint<1>
+    %r3 = firrtl.regreset %clock, %reset, %r3_init : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.uint<1>, !firrtl.uint<1>
   }
 
   // CHECK-LABEL: firrtl.module @TailPrimOp
   firrtl.module @TailPrimOp(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %0 = firrtl.pad %c0_ui1, 3 : (!firrtl.uint<1>) -> !firrtl.uint<3>
-    %1 = firrtl.tail %0, 2 : (!firrtl.uint<3>) -> !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
+    %0 = firrtl.pad %c0_ui1, 3 : (!firrtl.const.uint<1>) -> !firrtl.const.uint<3>
+    %1 = firrtl.tail %0, 2 : (!firrtl.const.uint<3>) -> !firrtl.const.uint<1>
     %r0_init = firrtl.wire sym @r0_init : !firrtl.uint<1>
-    firrtl.strictconnect %r0_init, %1: !firrtl.uint<1>
+    firrtl.strictconnect %r0_init, %1: !firrtl.uint<1>, !firrtl.const.uint<1>
     %r0 = firrtl.regreset %clock, %reset, %r0_init : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
@@ -169,11 +169,11 @@ firrtl.circuit "NonConstantAsyncReset_Port" {
 
 firrtl.circuit "NonConstantAsyncReset_PrimOp" {
   firrtl.module @NonConstantAsyncReset_PrimOp(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
     // expected-note @+1 {{reset driver is here}}
-    %c1_ui1 = firrtl.not %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    %c1_ui1 = firrtl.not %c0_ui1 : (!firrtl.const.uint<1>) -> !firrtl.const.uint<1>
     // expected-error @below {{register "r0" has an async reset, but its reset value is not driven with a constant value through wires, nodes, or connects}}
-    %r0 = firrtl.regreset %clock, %reset, %c1_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %r0 = firrtl.regreset %clock, %reset, %c1_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.uint<1>, !firrtl.uint<1>
   }
 }
 
@@ -199,9 +199,9 @@ firrtl.circuit "NonConstantAsyncReset_Aggregate1" {
     %value = firrtl.wire : !firrtl.vector<uint<1>, 2>
 
     // Connect a constant 0 to value[0].
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
     %value_0 = firrtl.subindex %value[0] : !firrtl.vector<uint<1>, 2>
-    firrtl.strictconnect %value_0, %c0_ui1 : !firrtl.uint<1>
+    firrtl.strictconnect %value_0, %c0_ui1 : !firrtl.uint<1>, !firrtl.const.uint<1>
 
     // Connect a complex chain of operations leading to the port to value[1].
     %subindex = firrtl.subindex %x[0] : !firrtl.vector<bundle<y : uint<1>>, 1>

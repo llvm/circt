@@ -14,8 +14,8 @@
 // CHECK:   %[[ARG3_DATA:.+]] = firrtl.subfield %[[VAL_3]][data] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
 
 // Common definitions.
-// CHECK:   %[[NO_WINNER:.+]] = firrtl.constant 0 : !firrtl.uint<2>
-// CHECK:   %[[FALSE_CONST:.+]] = firrtl.constant 0 : !firrtl.uint<1>
+// CHECK:   %[[NO_WINNER:.+]] = firrtl.constant 0 : !firrtl.const.uint<2>
+// CHECK:   %[[FALSE_CONST:.+]] = firrtl.constant 0 : !firrtl.const.uint<1>
 
 // Won register and win wire.
 // CHECK:   %[[WON:won]] = firrtl.regreset %[[CLOCK]], %[[RESET]], %[[NO_WINNER]] {{.+}} !firrtl.uint<2>

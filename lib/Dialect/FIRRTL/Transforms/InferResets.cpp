@@ -111,12 +111,13 @@ static inline StringAttr getResetName(Value reset) {
 /// Construct a zero value of the given type using the given builder.
 static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
                              SmallDenseMap<FIRRTLBaseType, Value> &cache) {
+  type = type.getConstType(true);
   auto it = cache.find(type);
   if (it != cache.end())
     return it->second;
   auto nullBit = [&]() {
-    return createZeroValue(builder, UIntType::get(builder.getContext(), 1),
-                           cache);
+    return createZeroValue(builder,
+                           UIntType::get(builder.getContext(), 1, true), cache);
   };
   auto value =
       TypeSwitch<FIRRTLBaseType, Value>(type)
@@ -133,9 +134,11 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
           .Case<BundleType>([&](auto type) {
             auto wireOp = builder.create<WireOp>(type);
             for (auto field : llvm::enumerate(type)) {
-              auto zero = createZeroValue(builder, field.value().type, cache);
+              auto fieldType = field.value().type;
+              auto zero = createZeroValue(builder, fieldType, cache);
               auto acc = builder.create<SubfieldOp>(
-                  field.value().type, wireOp.getResult(), field.index());
+                  fieldType.getConstType(fieldType.isConst() || type.isConst()),
+                  wireOp.getResult(), field.index());
               builder.create<StrictConnectOp>(acc, zero);
             }
             return wireOp.getResult();

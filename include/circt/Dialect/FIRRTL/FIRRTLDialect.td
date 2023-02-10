@@ -95,10 +95,8 @@ class FIRRTLOp<string mnemonic, list<Trait> traits = []> :
                   && "result type can only differ by constness");
             (*this)->getResult(0).setType(value.getType());
           } else {
-            // TODO: Uncomment once constant ops return const types
-            // if (auto resultType =
-            // (*this)->getResultTypes()[0].dyn_cast<FIRRTLBaseType>())
-            //   (*this)->getResult(0).setType(resultType.getConstType(true));
+            if (auto resultType = (*this)->getResultTypes()[0].dyn_cast<FIRRTLBaseType>())
+              (*this)->getResult(0).setType(resultType.getConstType(true));
           }
         }
         return result;
@@ -117,11 +115,8 @@ class FIRRTLOp<string mnemonic, list<Trait> traits = []> :
                   && "result type can only differ by constness");
             (*this)->getResult(i).setType(value.getType());
           } else if (results[i]) {
-            // TODO: Uncomment once constant ops return const types
-            // if (auto resultType =
-            // (*this)->getResultTypes()[i].dyn_cast<FIRRTLBaseType>();
-            //     resultType && result)
-            //   (*this)->getResult(i).setType(resultType.getConstType(true));
+            if (auto resultType = (*this)->getResultTypes()[i].dyn_cast<FIRRTLBaseType>())
+              (*this)->getResult(i).setType(resultType.getConstType(true));
           }
         }
         return success();

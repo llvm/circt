@@ -299,11 +299,11 @@ firrtl.circuit "Foo" attributes {rawAnnotations = [
     in %cond_0: !firrtl.uint<1>,
     in %cond_1: !firrtl.uint<1>
   ) {
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %bar = firrtl.node %c0_ui1  : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
+    %bar = firrtl.node %c0_ui1  : !firrtl.const.uint<1>
     firrtl.when %cond_0 : !firrtl.uint<1> {
       firrtl.when %cond_1 : !firrtl.uint<1> {
-        %baz = firrtl.node %c0_ui1  : !firrtl.uint<1>
+        %baz = firrtl.node %c0_ui1  : !firrtl.const.uint<1>
       }
     }
   }
@@ -359,8 +359,8 @@ firrtl.circuit "Foo" attributes {rawAnnotations = [
 ]} {
   firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
     %bar = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %baz = firrtl.regreset %clock, %reset, %c0_ui1  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
+    %baz = firrtl.regreset %clock, %reset, %c0_ui1  : !firrtl.clock, !firrtl.uint<1>, !firrtl.const.uint<1>, !firrtl.uint<1>
   }
 }
 
@@ -763,10 +763,10 @@ firrtl.circuit "Foo"  attributes {
     %_T_1 = firrtl.node %_T_0  : !firrtl.uint<1>
     // CHECK-NEXT: %_T_2 = firrtl.reg %clock {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     %_T_2 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
-    %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
+    %c0_ui4 = firrtl.constant 0 : !firrtl.const.uint<4>
     // CHECK: %_T_3 = firrtl.regreset
     // CHECK-SAME: {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
-    %_T_3 = firrtl.regreset %clock, %reset, %c0_ui4  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>
+    %_T_3 = firrtl.regreset %clock, %reset, %c0_ui4  : !firrtl.clock, !firrtl.uint<1>, !firrtl.const.uint<4>, !firrtl.uint<4>
     // CHECK-NEXT: %_T_4 = chirrtl.seqmem
     // CHECK-SAME: {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     %_T_4 = chirrtl.seqmem Undefined  : !chirrtl.cmemory<vector<uint<1>, 9>, 256>
@@ -1693,8 +1693,8 @@ firrtl.circuit "GrandCentralViewInsideCompanion" attributes {
 } {
   // CHECK:      firrtl.module @Companion
   firrtl.module @Companion(out %b: !firrtl.uint<2>) {
-    %clock = firrtl.specialconstant 0 : !firrtl.clock
-    %a = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
+    %clock = firrtl.specialconstant 0 : !firrtl.const.clock
+    %a = firrtl.reg %clock : !firrtl.const.clock, !firrtl.uint<1>
     // CHECK:      firrtl.node %a
     // CHECK-SAME:   {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = [[aId]] : i64}
     // CHECK-SAME:   : !firrtl.uint<1>

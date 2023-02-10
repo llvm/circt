@@ -63,6 +63,18 @@ def MismatchWidth : Constraint<CPred<[{
   $0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel() != $1.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel()
 }]>>;
 
+// Constraint that argument is ref-of-vector type.
+def IsRefVectorType : Constraint<CPred<[{
+  $0.getType().isa<RefType>() &&
+  $0.getType().cast<RefType>().getType().isa<FVectorType>()
+}]>>;
+
+// Constraint that argument is ref-of-bundle type.
+def IsRefBundleType : Constraint<CPred<[{
+  $0.getType().isa<RefType>() &&
+  $0.getType().cast<RefType>().getType().isa<BundleType>()
+}]>>;
+
 // Constraint that enforces types of known width
 def KnownWidth : Constraint<CPred<[{
   $0.getType().isa<FIRRTLBaseType>() &&
@@ -250,7 +262,7 @@ def SubFromZeroUnsigned : Pat <
 //sub(a,a) -> 0
 def SubOfSelf : Pat <
   (SubPrimOp:$old $x, $x),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), $0.getType().cast<IntType>(), getIntZerosAttr($0.getType()))"> $old),
+  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), $0.getType().cast<IntType>().getConstType(true), getIntZerosAttr($0.getType()))"> $old),
   [(KnownWidth $x)]>;
 
 // sub((pad a, n), b) -> pad(sub(a, b), n)
@@ -268,7 +280,7 @@ def SubOfPadR : Pat <
 // and(x, 0) -> 0, fold can't handle all cases
 def AndOfZero : Pat <
   (AndPrimOp:$old $x, (ConstantOp:$zcst $cst)),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), $0.getType().cast<IntType>(), getIntZerosAttr($0.getType()))"> $old),
+  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), $0.getType().cast<IntType>().getConstType(true), getIntZerosAttr($0.getType()))"> $old),
   [(KnownWidth $x), (ZeroConstantOp $zcst)]>;
 
 // and(x, -1) -> x, fold can't handle all cases
@@ -298,7 +310,7 @@ def OrOfZero : Pat <
 // or(x, -1) -> -1, fold can't handle all cases
 def OrOfAllOne : Pat <
   (OrPrimOp:$old $x, (ConstantOp:$ocst $cst)),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), $0.getType().cast<IntType>(), getIntOnesAttr($0.getType()))"> $old),
+  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), $0.getType().cast<IntType>().getConstType(true), getIntOnesAttr($0.getType()))"> $old),
   [(KnownWidth $x), (MixedConstTypes $x, $ocst), (AllOneConstantOp $ocst)]>;
 
 /// or(x,x) -> x, fold can't handle all cases
@@ -323,7 +335,7 @@ def XorOfZero : Pat <
 /// xor(x,x) -> 0, fold can't handle all cases
 def XorOfSelf : Pat <
   (XorPrimOp:$old $x, $x),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), $0.getType().cast<IntType>(), getIntZerosAttr($0.getType()))"> $old),
+  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), $0.getType().cast<IntType>().getConstType(true), getIntZerosAttr($0.getType()))"> $old),
   [(KnownWidth $x)]>;
 
 /// xor(x, pad(y, n)) -> cat(head(x), xor(tail(x), y))

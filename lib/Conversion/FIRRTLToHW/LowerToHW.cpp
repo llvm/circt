@@ -1292,13 +1292,12 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   }
 
   // Convert fliped sources to passive sources.
-  if (!connectSrc.getType().cast<FIRRTLBaseType>().isPassive())
-    connectSrc =
-        builder
-            .create<mlir::UnrealizedConversionCastOp>(
-                connectSrc.getType().cast<FIRRTLBaseType>().getPassiveType(),
-                connectSrc)
-            .getResult(0);
+  auto srcTy = connectSrc.getType().cast<FIRRTLBaseType>();
+  if (!srcTy.isPassive())
+    connectSrc = builder
+                     .create<mlir::UnrealizedConversionCastOp>(
+                         srcTy.getPassiveType(), connectSrc)
+                     .getResult(0);
 
   // We know it must be the destination operand due to the types, but the
   // source may not match the destination width.
@@ -1306,7 +1305,7 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
 
   if (!destTy.isGround()) {
     // If types are not ground type and they don't match, we give up.
-    if (destTy != connectSrc.getType().cast<FIRRTLType>())
+    if (destTy != connectSrc.getType() && destTy != srcTy.getConstType(false))
       return {};
   } else if (destTy.getBitWidthOrSentinel() != connectSrc.getType()
                                                    .cast<FIRRTLBaseType>()

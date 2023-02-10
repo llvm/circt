@@ -88,7 +88,7 @@ public:
 
   explicit operator bool() const { return !!value; }
   operator mlir::Value() const { return value; }
-  void setValue(mlir::Value);
+  void setValue(mlir::Value, bool allowTypeChange = false);
 
 private:
   mlir::Value value;

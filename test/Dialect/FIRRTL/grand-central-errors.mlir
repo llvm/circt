@@ -205,8 +205,8 @@ firrtl.circuit "FieldNotInCompanion" attributes {
   // expected-note @+1 {{the leaf value is inside this module}}
   firrtl.module @FieldNotInCompanion() {
 
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %c-1_si2 = firrtl.constant -1 : !firrtl.sint<2>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
+    %c-1_si2 = firrtl.constant -1 : !firrtl.const.sint<2>
 
     // expected-note @+1 {{the leaf value is declared here}}
     %node_c0_ui1 = firrtl.node %c0_ui1 {
@@ -216,7 +216,7 @@ firrtl.circuit "FieldNotInCompanion" attributes {
           id = 1 : i64
         }
       ]
-    } : !firrtl.uint<1>
+    } : !firrtl.const.uint<1>
 
     firrtl.instance companion @Companion()
   }
@@ -288,7 +288,7 @@ firrtl.circuit "MultiplyInstantiated" attributes {
        defName = "Companion",
        id = 0 : i64,
        name = "View"}]} {
-    %0 = firrtl.constant 0 :!firrtl.uint<1>
+    %0 = firrtl.constant 0 :!firrtl.const.uint<1>
     %zero = firrtl.node  %0  {
       annotations = [
         {
@@ -296,7 +296,7 @@ firrtl.circuit "MultiplyInstantiated" attributes {
           id = 42 : i64
         }
       ]
-    } : !firrtl.uint<1>
+    } : !firrtl.const.uint<1>
   }
   firrtl.module private @DUT() {
     // expected-note @below {{it is instantiated here}}
@@ -330,7 +330,7 @@ firrtl.circuit "NotInstantiated" attributes {
        defName = "Companion",
        id = 0 : i64,
        name = "View"}]} {
-    %0 = firrtl.constant 0 :!firrtl.uint<1>
+    %0 = firrtl.constant 0 :!firrtl.const.uint<1>
     %zero = firrtl.node  %0  {
       annotations = [
         {
@@ -338,7 +338,7 @@ firrtl.circuit "NotInstantiated" attributes {
           id = 42 : i64
         }
       ]
-    } : !firrtl.uint<1>
+    } : !firrtl.const.uint<1>
   }
   firrtl.module private @DUT() {
   }

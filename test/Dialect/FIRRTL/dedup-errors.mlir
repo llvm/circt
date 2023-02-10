@@ -50,7 +50,7 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
   }
   firrtl.module @Test1() {
     // expected-note@below {{second operation is a firrtl.constant}}
-    %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
+    %c1_ui8 = firrtl.constant 1 : !firrtl.const.uint<8>
   }
 }
 
@@ -78,7 +78,7 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
   }
   firrtl.module @Test1() {
     // expected-note@below {{second operation is a firrtl.constant}}
-    %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
+    %c1_ui8 = firrtl.constant 1 : !firrtl.const.uint<8>
   }
 }
 

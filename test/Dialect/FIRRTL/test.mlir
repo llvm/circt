@@ -12,26 +12,26 @@ firrtl.memmodule @memmod () attributes {
 
 // Constant op supports different return types.
 firrtl.module @Constants() {
-  // CHECK: %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
-  firrtl.constant 0 : !firrtl.uint<0>
-  // CHECK: %c0_si0 = firrtl.constant 0 : !firrtl.sint<0>
-  firrtl.constant 0 : !firrtl.sint<0>
-  // CHECK: %c4_ui8 = firrtl.constant 4 : !firrtl.uint<8>
-  firrtl.constant 4 : !firrtl.uint<8>
-  // CHECK: %c-4_si16 = firrtl.constant -4 : !firrtl.sint<16>
-  firrtl.constant -4 : !firrtl.sint<16>
-  // CHECK: %c1_clock = firrtl.specialconstant 1 : !firrtl.clock
-  firrtl.specialconstant 1 : !firrtl.clock
-  // CHECK: %c1_reset = firrtl.specialconstant 1 : !firrtl.reset
-  firrtl.specialconstant 1 : !firrtl.reset
-  // CHECK: %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.asyncreset
-  firrtl.specialconstant 1 : !firrtl.asyncreset
-  // CHECK: firrtl.constant 4 : !firrtl.uint<8> {name = "test"}
-  firrtl.constant 4 : !firrtl.uint<8> {name = "test"}
+  // CHECK: %c0_ui0 = firrtl.constant 0 : !firrtl.const.uint<0>
+  firrtl.constant 0 : !firrtl.const.uint<0>
+  // CHECK: %c0_si0 = firrtl.constant 0 : !firrtl.const.sint<0>
+  firrtl.constant 0 : !firrtl.const.sint<0>
+  // CHECK: %c4_ui8 = firrtl.constant 4 : !firrtl.const.uint<8>
+  firrtl.constant 4 : !firrtl.const.uint<8>
+  // CHECK: %c-4_si16 = firrtl.constant -4 : !firrtl.const.sint<16>
+  firrtl.constant -4 : !firrtl.const.sint<16>
+  // CHECK: %c1_clock = firrtl.specialconstant 1 : !firrtl.const.clock
+  firrtl.specialconstant 1 : !firrtl.const.clock
+  // CHECK: %c1_reset = firrtl.specialconstant 1 : !firrtl.const.reset
+  firrtl.specialconstant 1 : !firrtl.const.reset
+  // CHECK: %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.const.asyncreset
+  firrtl.specialconstant 1 : !firrtl.const.asyncreset
+  // CHECK: firrtl.constant 4 : !firrtl.const.uint<8> {name = "test"}
+  firrtl.constant 4 : !firrtl.const.uint<8> {name = "test"}
 
-  firrtl.aggregateconstant [1, 2, 3] : !firrtl.bundle<a: uint<8>, b: uint<5>, c: uint<4>>
-  firrtl.aggregateconstant [1, 2, 3] : !firrtl.vector<uint<8>, 3>
-  firrtl.aggregateconstant [[1, 2], [3, 4]] : !firrtl.vector<bundle<a: uint<8>, b: uint<5>>, 2>
+  firrtl.aggregateconstant [1, 2, 3] : !firrtl.const.bundle<a: uint<8>, b: uint<5>, c: uint<4>>
+  firrtl.aggregateconstant [1, 2, 3] : !firrtl.const.vector<uint<8>, 3>
+  firrtl.aggregateconstant [[1, 2], [3, 4]] : !firrtl.const.vector<bundle<a: uint<8>, b: uint<5>>, 2>
 
 }
 
@@ -204,8 +204,8 @@ firrtl.module @EnumTest(in %in : !firrtl.enum<a: uint<1>, b: uint<2>>,
 
   %p = firrtl.istag %in a : !firrtl.enum<a: uint<1>, b: uint<2>>
 
-  %c1_u1 = firrtl.constant 0 : !firrtl.uint<8>
-  %some = firrtl.enumcreate Some(%c1_u1) : !firrtl.enum<None: uint<0>, Some: uint<8>>
+  %c1_u1 = firrtl.constant 0 : !firrtl.const.uint<8>
+  %some = firrtl.enumcreate Some(%c1_u1) : !firrtl.enum<None: uint<0>, Some: uint<8>>, !firrtl.const.uint<8>
 
   firrtl.match %in : !firrtl.enum<a: uint<1>, b: uint<2>> {
     case a(%arg0) {

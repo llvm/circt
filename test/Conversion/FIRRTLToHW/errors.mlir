@@ -55,24 +55,24 @@ firrtl.circuit "UnknownWidth" {
 // https://github.com/llvm/circt/issues/778
 firrtl.circuit "zero_width_mem" {
   firrtl.module @zero_width_mem(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %r0en: !firrtl.uint<1>) {
-    %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %c0_ui25 = firrtl.constant 0 : !firrtl.uint<25>
+    %c0_ui4 = firrtl.constant 0 : !firrtl.const.uint<4>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
+    %c0_ui25 = firrtl.constant 0 : !firrtl.const.uint<25>
     %tmp41_r0, %tmp41_w0 = firrtl.mem Undefined {depth = 10 : i64, name = "tmp41", portNames = ["r0", "w0"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<0>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>
     %0 = firrtl.subfield %tmp41_r0[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<0>>
     firrtl.connect %0, %clock : !firrtl.clock, !firrtl.clock
     %1 = firrtl.subfield %tmp41_r0[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<0>>
     firrtl.connect %1, %r0en : !firrtl.uint<1>, !firrtl.uint<1>
     %2 = firrtl.subfield %tmp41_r0[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<0>>
-    firrtl.connect %2, %c0_ui4 : !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.connect %2, %c0_ui4 : !firrtl.uint<4>, !firrtl.const.uint<4>
     %3 = firrtl.subfield %tmp41_w0[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>
     firrtl.connect %3, %clock : !firrtl.clock, !firrtl.clock
     %4 = firrtl.subfield %tmp41_w0[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>
     firrtl.connect %4, %r0en : !firrtl.uint<1>, !firrtl.uint<1>
     %5 = firrtl.subfield %tmp41_w0[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>
-    firrtl.connect %5, %c0_ui4 : !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.connect %5, %c0_ui4 : !firrtl.uint<4>, !firrtl.const.uint<4>
     %6 = firrtl.subfield %tmp41_w0[mask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>
-    firrtl.connect %6, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %6, %c0_ui1 : !firrtl.uint<1>, !firrtl.const.uint<1>
     %7 = firrtl.subfield %tmp41_w0[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>
   }
 }

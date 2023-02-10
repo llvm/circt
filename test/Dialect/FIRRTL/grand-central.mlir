@@ -428,8 +428,8 @@ firrtl.circuit "InterfaceGroundType" attributes {
       ]
     } : !firrtl.uint<0>
 
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %c-1_si2 = firrtl.constant -1 : !firrtl.sint<2>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
+    %c-1_si2 = firrtl.constant -1 : !firrtl.const.sint<2>
 
     %node_c0_ui1 = firrtl.node %c0_ui1 {
       annotations = [
@@ -438,7 +438,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
           id = 22 : i64
         }
       ]
-    } : !firrtl.uint<1>
+    } : !firrtl.const.uint<1>
 
     %node_c-1_si2 = firrtl.node %c-1_si2 {
       annotations = [
@@ -447,7 +447,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
           id = 23 : i64
         }
       ]
-    } : !firrtl.sint<2>
+    } : !firrtl.const.sint<2>
 
   }
   firrtl.module @InterfaceGroundType() {
@@ -614,10 +614,10 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-SAME:         {symbols = [#hw.innerNameRef<@Companion::@[[vectorOfVectorSym]]>]}
 //
 // CHECK{LITERAL}:   sv.verbatim "assign {{1}}.foo = {{0}};"
-// CHECK-SAME:         (%c0_ui1) : !firrtl.uint<1>
+// CHECK-SAME:         (%c0_ui1) : !firrtl.const.uint<1>
 // CHECK-SAME:         {symbols = [#hw.innerNameRef<@Companion::@[[constantSym]]>]}
 // CHECK{LITERAL}:   sv.verbatim "assign {{1}}.bar = {{0}};"
-// CHECK-SAME:         (%c-1_si2) : !firrtl.sint<2>
+// CHECK-SAME:         (%c-1_si2) : !firrtl.const.sint<2>
 // CHECK-SAME:         {symbols = [#hw.innerNameRef<@Companion::@[[constantSym]]>]}
 //
 // There are no more verbatim assigns after this.  The zero-width view and any
@@ -1017,12 +1017,12 @@ firrtl.circuit "Top" attributes {
     } : !firrtl.uint<2>
   }
   firrtl.module private @DUT() {
-    %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c0_ui2 = firrtl.constant 0 : !firrtl.const.uint<2>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
     %a_w1 = firrtl.wire   {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
-    firrtl.strictconnect %a_w1, %c0_ui1 : !firrtl.uint<1>
+    firrtl.strictconnect %a_w1, %c0_ui1 : !firrtl.uint<1>, !firrtl.const.uint<1>
     %a_w2 = firrtl.wire   {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
-    firrtl.strictconnect %a_w2, %c0_ui2 : !firrtl.uint<2>
+    firrtl.strictconnect %a_w2, %c0_ui2 : !firrtl.uint<2>, !firrtl.const.uint<2>
     %companion_w1__gen_uint = firrtl.instance companion_w1  @Companion_w1(in _gen_uint: !firrtl.probe<uint<1>>)
     %companion_w2__gen_uint = firrtl.instance companion_w2  @Companion_w2(in _gen_uint: !firrtl.probe<uint<2>>)
     %0 = firrtl.ref.send %a_w1 : !firrtl.uint<1>

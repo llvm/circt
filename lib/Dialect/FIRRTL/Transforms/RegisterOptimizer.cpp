@@ -110,7 +110,8 @@ void RegisterOptimizerPass::checkRegReset(mlir::DominanceInfo &dom,
     return;
 
   // Register is only written by itself, and reset with a constant.
-  if (reg.getResetValue().getType() == reg.getResult().getType()) {
+  if (mixedConstTypes(reg.getResetValue().getType(),
+                      reg.getResult().getType())) {
     if (con.getSrc() == reg.getResult() && isConstant(reg.getResetValue())) {
       // constant obviously dominates the register.
       reg.getResult().replaceAllUsesWith(reg.getResetValue());

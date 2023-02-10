@@ -136,6 +136,11 @@ bool hasDontTouch(Operation *op);
 /// which does likely not dominate the original value.
 StrictConnectOp getSingleConnectUserOf(Value value);
 
+/// Iterate over users of the specified value that infer result types and
+/// reinfer them. This is meant to be used when an operand is replaced with a
+/// 'const' version, where the result types might change to be 'const'.
+void propagateTypeChangeToUsersOf(Value value);
+
 // Out-of-line implementation of various trait verification methods and
 // functions commonly used among operations.
 namespace impl {

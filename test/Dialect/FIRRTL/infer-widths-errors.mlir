@@ -38,10 +38,10 @@ firrtl.circuit "Issue1255" {
   // CHECK-LABEL: @Issue1255
   firrtl.module @Issue1255() {
     %tmp74 = firrtl.wire  : !firrtl.uint
-    %c14972_ui = firrtl.constant 14972 : !firrtl.uint
+    %c14972_ui = firrtl.constant 14972 : !firrtl.const.uint
     // expected-error @+1 {{amount must be less than or equal operand width}}
-    %0 = firrtl.tail %c14972_ui, 15 : (!firrtl.uint) -> !firrtl.uint
-    firrtl.connect %tmp74, %0 : !firrtl.uint, !firrtl.uint
+    %0 = firrtl.tail %c14972_ui, 15 : (!firrtl.const.uint) -> !firrtl.const.uint
+    firrtl.connect %tmp74, %0 : !firrtl.uint, !firrtl.const.uint
   }
 }
 

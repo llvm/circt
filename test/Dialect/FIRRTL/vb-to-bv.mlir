@@ -33,16 +33,16 @@ firrtl.circuit "Test" {
 
   // CHECK-LABEL: @TestAggregateConstants
   firrtl.module @TestAggregateConstants() {
-    // CHECK{LITERAL}: firrtl.aggregateconstant [1, 2, 3] : !firrtl.bundle<a: uint<8>, b: uint<5>, c: uint<4>>
-    firrtl.aggregateconstant [1, 2, 3] : !firrtl.bundle<a: uint<8>, b: uint<5>, c: uint<4>>
-    // CHECK{LITERAL}: firrtl.aggregateconstant [1, 2, 3] : !firrtl.vector<uint<8>, 3>
-    firrtl.aggregateconstant [1, 2, 3] : !firrtl.vector<uint<8>, 3>
-    // CHECK{LITERAL}: firrtl.aggregateconstant [[1, 3], [2, 4]] : !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<5>, 2>>
-    firrtl.aggregateconstant [[1, 2], [3, 4]] : !firrtl.vector<bundle<a: uint<8>, b: uint<5>>, 2>
-    // CHECK{LITERAL}: firrtl.aggregateconstant [[[1, 3], [2, 4]], [[5, 7], [6, 8]]] : !firrtl.bundle<a: bundle<c: vector<uint<8>, 2>, d: vector<uint<5>, 2>>, b: bundle<e: vector<uint<8>, 2>, f: vector<uint<5>, 2>>>
-    firrtl.aggregateconstant [[[1, 2], [3, 4]], [[5, 6], [7, 8]]] : !firrtl.bundle<a: vector<bundle<c: uint<8>, d: uint<5>>, 2>, b: vector<bundle<e: uint<8>, f: uint<5>>, 2>>
-    // CHECK{LITERAL}: firrtl.aggregateconstant [[[1, 3], [5, 7], [9, 11]], [[2, 4], [6, 8], [10, 12]]] : !firrtl.bundle<a: vector<vector<uint<8>, 2>, 3>, b: vector<vector<uint<8>, 2>, 3>>
-    firrtl.aggregateconstant [[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]] : !firrtl.vector<vector<bundle<a: uint<8>, b: uint<8>>, 2>, 3>
+    // CHECK{LITERAL}: firrtl.aggregateconstant [1, 2, 3] : !firrtl.const.bundle<a: uint<8>, b: uint<5>, c: uint<4>>
+    firrtl.aggregateconstant [1, 2, 3] : !firrtl.const.bundle<a: uint<8>, b: uint<5>, c: uint<4>>
+    // CHECK{LITERAL}: firrtl.aggregateconstant [1, 2, 3] : !firrtl.const.vector<uint<8>, 3>
+    firrtl.aggregateconstant [1, 2, 3] : !firrtl.const.vector<uint<8>, 3>
+    // CHECK{LITERAL}: firrtl.aggregateconstant [[1, 3], [2, 4]] : !firrtl.const.bundle<a: const.vector<const.uint<8>, 2>, b: const.vector<const.uint<5>, 2>>
+    firrtl.aggregateconstant [[1, 2], [3, 4]] : !firrtl.const.vector<bundle<a: uint<8>, b: uint<5>>, 2>
+    // CHECK{LITERAL}: firrtl.aggregateconstant [[[1, 3], [2, 4]], [[5, 7], [6, 8]]] : !firrtl.const.bundle<a: const.bundle<c: const.vector<const.uint<8>, 2>, d: const.vector<const.uint<5>, 2>>, b: const.bundle<e: const.vector<const.uint<8>, 2>, f: const.vector<const.uint<5>, 2>>>
+    firrtl.aggregateconstant [[[1, 2], [3, 4]], [[5, 6], [7, 8]]] : !firrtl.const.bundle<a: vector<bundle<c: uint<8>, d: uint<5>>, 2>, b: vector<bundle<e: uint<8>, f: uint<5>>, 2>>
+    // CHECK{LITERAL}: firrtl.aggregateconstant [[[1, 3], [5, 7], [9, 11]], [[2, 4], [6, 8], [10, 12]]] : !firrtl.const.bundle<a: const.vector<const.vector<const.uint<8>, 2>, 3>, b: const.vector<const.vector<const.uint<8>, 2>, 3>>
+    firrtl.aggregateconstant [[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]] : !firrtl.const.vector<vector<bundle<a: uint<8>, b: uint<8>>, 2>, 3>
   }
 
   // CHECK-LABEL: @TestBundleCreate
@@ -50,26 +50,26 @@ firrtl.circuit "Test" {
     // CHECK: %0 = firrtl.bundlecreate  : () -> !firrtl.bundle<>
     %be = firrtl.bundlecreate : () -> !firrtl.bundle<>
 
-    // CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
-    // CHECK: %c1_ui4 = firrtl.constant 1 : !firrtl.uint<4>
-    // %1 = firrtl.bundlecreate %c0_ui8, %c1_ui4 : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.bundle<a: uint<8>, b: uint<4>>
-    %c0 = firrtl.constant 0 : !firrtl.uint<8>
-    %c1 = firrtl.constant 1 : !firrtl.uint<4>
-    %bc = firrtl.bundlecreate %c0, %c1 : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.bundle<a: uint<8>, b: uint<4>>
+    // CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.const.uint<8>
+    // CHECK: %c1_ui4 = firrtl.constant 1 : !firrtl.const.uint<4>
+    // %1 = firrtl.bundlecreate %c0_ui8, %c1_ui4 : (!firrtl.const.uint<8>, !firrtl.const.uint<4>) -> !firrtl.const.bundle<a: uint<8>, b: uint<4>>
+    %c0 = firrtl.constant 0 : !firrtl.const.uint<8>
+    %c1 = firrtl.constant 1 : !firrtl.const.uint<4>
+    %bc = firrtl.bundlecreate %c0, %c1 : (!firrtl.const.uint<8>, !firrtl.const.uint<4>) -> !firrtl.const.bundle<a: uint<8>, b: uint<4>>
 
-    // %2 = firrtl.aggregateconstant [1, 2, 3, 4] : !firrtl.vector<uint<8>, 4>
-    // %3 = firrtl.aggregateconstant [5, 6] : !firrtl.vector<uint<4>, 2>
-    // %4 = firrtl.bundlecreate %2, %3 : (!firrtl.vector<uint<8>, 4>, !firrtl.vector<uint<4>, 2>) -> !firrtl.bundle<a: vector<uint<8>, 4>, b: vector<uint<4>, 2>>
-    %v0 = firrtl.aggregateconstant [1, 2, 3, 4] : !firrtl.vector<uint<8>, 4>
-    %v1 = firrtl.aggregateconstant [5, 6] : !firrtl.vector<uint<4>, 2>
-    %bv = firrtl.bundlecreate %v0, %v1 : (!firrtl.vector<uint<8>, 4>, !firrtl.vector<uint<4>, 2>) -> !firrtl.bundle<a: vector<uint<8>, 4>, b: vector<uint<4>, 2>>
+    // %2 = firrtl.aggregateconstant [1, 2, 3, 4] : !firrtl.const.vector<uint<8>, 4>
+    // %3 = firrtl.aggregateconstant [5, 6] : !firrtl.const.vector<uint<4>, 2>
+    // %4 = firrtl.bundlecreate %2, %3 : (!firrtl.const.vector<uint<8>, 4>, !firrtl.const.vector<uint<4>, 2>) -> !firrtl.const.bundle<a: vector<uint<8>, 4>, b: vector<uint<4>, 2>>
+    %v0 = firrtl.aggregateconstant [1, 2, 3, 4] : !firrtl.const.vector<uint<8>, 4>
+    %v1 = firrtl.aggregateconstant [5, 6] : !firrtl.const.vector<uint<4>, 2>
+    %bv = firrtl.bundlecreate %v0, %v1 : (!firrtl.const.vector<uint<8>, 4>, !firrtl.const.vector<uint<4>, 2>) -> !firrtl.const.bundle<a: vector<uint<8>, 4>, b: vector<uint<4>, 2>>
 
-    // %5 = firrtl.aggregateconstant [[1, 3], [2, 4]] : !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<5>, 2>>
-    // %6 = firrtl.aggregateconstant [[1, 3], [2, 4]] : !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<5>, 2>>
-    // %7 = firrtl.bundlecreate %5, %6 : (!firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<5>, 2>>, !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<5>, 2>>) -> !firrtl.bundle<a: bundle<a: vector<uint<8>, 2>, b: vector<uint<5>, 2>>, b: bundle<a: vector<uint<8>, 2>, b: vector<uint<5>, 2>>>
-    %vb0 = firrtl.aggregateconstant [[1, 2], [3, 4]] : !firrtl.vector<bundle<a: uint<8>, b: uint<5>>, 2>
-    %vb1 = firrtl.aggregateconstant [[1, 2], [3, 4]] : !firrtl.vector<bundle<a: uint<8>, b: uint<5>>, 2>
-    %bvb = firrtl.bundlecreate %vb0, %vb1 : (!firrtl.vector<bundle<a: uint<8>, b: uint<5>>, 2>, !firrtl.vector<bundle<a: uint<8>, b: uint<5>>, 2>) -> !firrtl.bundle<a: vector<bundle<a: uint<8>, b: uint<5>>, 2>, b: vector<bundle<a: uint<8>, b: uint<5>>, 2>>
+    // %5 = firrtl.aggregateconstant [[1, 3], [2, 4]] : !firrtl.const.bundle<a: vector<uint<8>, 2>, b: vector<uint<5>, 2>>
+    // %6 = firrtl.aggregateconstant [[1, 3], [2, 4]] : !firrtl.const.bundle<a: vector<uint<8>, 2>, b: vector<uint<5>, 2>>
+    // %7 = firrtl.bundlecreate %5, %6 : (!firrtl.const.bundle<a: vector<uint<8>, 2>, b: vector<uint<5>, 2>>, !firrtl.const.bundle<a: vector<uint<8>, 2>, b: vector<uint<5>, 2>>) -> !firrtl.const.bundle<a: bundle<a: vector<uint<8>, 2>, b: vector<uint<5>, 2>>, b: bundle<a: vector<uint<8>, 2>, b: vector<uint<5>, 2>>>
+    %vb0 = firrtl.aggregateconstant [[1, 2], [3, 4]] : !firrtl.const.vector<bundle<a: uint<8>, b: uint<5>>, 2>
+    %vb1 = firrtl.aggregateconstant [[1, 2], [3, 4]] : !firrtl.const.vector<bundle<a: uint<8>, b: uint<5>>, 2>
+    %bvb = firrtl.bundlecreate %vb0, %vb1 : (!firrtl.const.vector<bundle<a: uint<8>, b: uint<5>>, 2>, !firrtl.const.vector<bundle<a: uint<8>, b: uint<5>>, 2>) -> !firrtl.const.bundle<a: vector<bundle<a: uint<8>, b: uint<5>>, 2>, b: vector<bundle<a: uint<8>, b: uint<5>>, 2>>
   }
 
   // CHECK-LABEL: @TestVectorCreate
@@ -77,61 +77,61 @@ firrtl.circuit "Test" {
     // CHECK: %0 = firrtl.vectorcreate  : () -> !firrtl.vector<uint<8>, 0>
     %v0 = firrtl.vectorcreate : () -> !firrtl.vector<uint<8>, 0>
 
-    // CHECK: %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
-    // CHECK: %1 = firrtl.vectorcreate %c1_ui8, %c1_ui8 : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.vector<uint<8>, 2>
-    %c0 = firrtl.constant 1 : !firrtl.uint<8>
-    %v1 = firrtl.vectorcreate %c0, %c0: (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.vector<uint<8>, 2>
+    // CHECK: %c1_ui8 = firrtl.constant 1 : !firrtl.const.uint<8>
+    // CHECK: %1 = firrtl.vectorcreate %c1_ui8, %c1_ui8 : (!firrtl.const.uint<8>, !firrtl.const.uint<8>) -> !firrtl.const.vector<uint<8>, 2>
+    %c0 = firrtl.constant 1 : !firrtl.const.uint<8>
+    %v1 = firrtl.vectorcreate %c0, %c0: (!firrtl.const.uint<8>, !firrtl.const.uint<8>) -> !firrtl.const.vector<uint<8>, 2>
 
-    // CHECK: %2 = firrtl.bundlecreate %c1_ui8 : (!firrtl.uint<8>) -> !firrtl.bundle<a: uint<8>>
-    %b0 = firrtl.bundlecreate %c0 : (!firrtl.uint<8>) -> !firrtl.bundle<a: uint<8>>
+    // CHECK: %2 = firrtl.bundlecreate %c1_ui8 : (!firrtl.const.uint<8>) -> !firrtl.const.bundle<a: const.uint<8>>
+    %b0 = firrtl.bundlecreate %c0 : (!firrtl.const.uint<8>) -> !firrtl.const.bundle<a: uint<8>>
 
-    // CHECK: %3 = firrtl.subfield %2[a] : !firrtl.bundle<a: uint<8>>
-    // CHECK: %4 = firrtl.vectorcreate %3 : (!firrtl.uint<8>) -> !firrtl.vector<uint<8>, 1>
-    // CHECK: %5 = firrtl.bundlecreate %4 : (!firrtl.vector<uint<8>, 1>) -> !firrtl.bundle<a: vector<uint<8>, 1>>
-    %v2 = firrtl.vectorcreate %b0 : (!firrtl.bundle<a: uint<8>>) -> !firrtl.vector<bundle<a: uint<8>>, 1>
+    // CHECK: %3 = firrtl.subfield %2[a] : !firrtl.const.bundle<a: const.uint<8>>
+    // CHECK: %4 = firrtl.vectorcreate %3 : (!firrtl.const.uint<8>) -> !firrtl.const.vector<const.uint<8>, 1>
+    // CHECK: %5 = firrtl.bundlecreate %4 : (!firrtl.const.vector<const.uint<8>, 1>) -> !firrtl.const.bundle<a: const.vector<const.uint<8>, 1>>
+    %v2 = firrtl.vectorcreate %b0 : (!firrtl.const.bundle<a: uint<8>>) -> !firrtl.const.vector<bundle<a: uint<8>>, 1>
 
-    // CHECK: %6 = firrtl.bundlecreate %1 : (!firrtl.vector<uint<8>, 2>) -> !firrtl.bundle<a: vector<uint<8>, 2>>
-    %b1 = firrtl.bundlecreate %v1 : (!firrtl.vector<uint<8>, 2>) -> !firrtl.bundle<a: vector<uint<8>, 2>>
+    // CHECK: %6 = firrtl.bundlecreate %1 : (!firrtl.const.vector<uint<8>, 2>) -> !firrtl.const.bundle<a: const.vector<const.uint<8>, 2>>
+    %b1 = firrtl.bundlecreate %v1 : (!firrtl.const.vector<uint<8>, 2>) -> !firrtl.const.bundle<a: vector<uint<8>, 2>>
 
-    // CHECK: %7 = firrtl.subfield %6[a] : !firrtl.bundle<a: vector<uint<8>, 2>>
-    // CHECK: %8 = firrtl.vectorcreate %7 : (!firrtl.vector<uint<8>, 2>) -> !firrtl.vector<vector<uint<8>, 2>, 1>
-    // CHECK: %9 = firrtl.bundlecreate %8 : (!firrtl.vector<vector<uint<8>, 2>, 1>) -> !firrtl.bundle<a: vector<vector<uint<8>, 2>, 1>>
-    %v3 = firrtl.vectorcreate %b1 : (!firrtl.bundle<a: vector<uint<8>, 2>>) -> !firrtl.vector<bundle<a: vector<uint<8>, 2>>, 1>
+    // CHECK: %7 = firrtl.subfield %6[a] : !firrtl.const.bundle<a: const.vector<const.uint<8>, 2>>
+    // CHECK: %8 = firrtl.vectorcreate %7 : (!firrtl.const.vector<const.uint<8>, 2>) -> !firrtl.const.vector<const.vector<const.uint<8>, 2>, 1>
+    // CHECK: %9 = firrtl.bundlecreate %8 : (!firrtl.const.vector<const.vector<const.uint<8>, 2>, 1>) -> !firrtl.const.bundle<a: const.vector<const.vector<const.uint<8>, 2>, 1>>
+    %v3 = firrtl.vectorcreate %b1 : (!firrtl.const.bundle<a: vector<uint<8>, 2>>) -> !firrtl.const.vector<bundle<a: vector<uint<8>, 2>>, 1>
   }
 
     // CHECK-LABEL @TestVBAggregate
   firrtl.module @TestVBAggregate() {
-    // CHECK: %0 = firrtl.aggregateconstant [1, 2] : !firrtl.bundle<a: uint<8>, b: uint<5>>
-    // CHECK: %1 = firrtl.subfield %0[b] : !firrtl.bundle<a: uint<8>, b: uint<5>>
-    // CHECK: %2 = firrtl.subfield %0[a] : !firrtl.bundle<a: uint<8>, b: uint<5>>
-    %0 = firrtl.aggregateconstant [1, 2] : !firrtl.bundle<a: uint<8>, b: uint<5>>
+    // CHECK: %0 = firrtl.aggregateconstant [1, 2] : !firrtl.const.bundle<a: uint<8>, b: uint<5>>
+    // CHECK: %1 = firrtl.subfield %0[b] : !firrtl.const.bundle<a: uint<8>, b: uint<5>>
+    // CHECK: %2 = firrtl.subfield %0[a] : !firrtl.const.bundle<a: uint<8>, b: uint<5>>
+    %0 = firrtl.aggregateconstant [1, 2] : !firrtl.const.bundle<a: uint<8>, b: uint<5>>
 
-    // CHECK: %3 = firrtl.aggregateconstant [3, 4] : !firrtl.bundle<a: uint<8>, b: uint<5>>
-    // CHECK: %4 = firrtl.subfield %3[b] : !firrtl.bundle<a: uint<8>, b: uint<5>>
-    // CHECK: %5 = firrtl.subfield %3[a] : !firrtl.bundle<a: uint<8>, b: uint<5>>
-    %1 = firrtl.aggregateconstant [3, 4] : !firrtl.bundle<a: uint<8>, b: uint<5>>
+    // CHECK: %3 = firrtl.aggregateconstant [3, 4] : !firrtl.const.bundle<a: uint<8>, b: uint<5>>
+    // CHECK: %4 = firrtl.subfield %3[b] : !firrtl.const.bundle<a: uint<8>, b: uint<5>>
+    // CHECK: %5 = firrtl.subfield %3[a] : !firrtl.const.bundle<a: uint<8>, b: uint<5>>
+    %1 = firrtl.aggregateconstant [3, 4] : !firrtl.const.bundle<a: uint<8>, b: uint<5>>
 
-    // CHECK: %6 = firrtl.vectorcreate %2, %5 : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.vector<uint<8>, 2>
-    // CHECK: %7 = firrtl.vectorcreate %1, %4 : (!firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.vector<uint<5>, 2>
-    // CHECK: %8 = firrtl.bundlecreate %6, %7 : (!firrtl.vector<uint<8>, 2>, !firrtl.vector<uint<5>, 2>) -> !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<5>, 2>>
-    %2 = firrtl.vectorcreate %0, %1 : (!firrtl.bundle<a: uint<8>, b: uint<5>>, !firrtl.bundle<a: uint<8>, b: uint<5>>) -> !firrtl.vector<bundle<a: uint<8>, b: uint<5>>, 2>
+    // CHECK: %6 = firrtl.vectorcreate %2, %5 : (!firrtl.const.uint<8>, !firrtl.const.uint<8>) -> !firrtl.const.vector<const.uint<8>, 2>
+    // CHECK: %7 = firrtl.vectorcreate %1, %4 : (!firrtl.const.uint<5>, !firrtl.const.uint<5>) -> !firrtl.const.vector<const.uint<5>, 2>
+    // CHECK: %8 = firrtl.bundlecreate %6, %7 : (!firrtl.const.vector<const.uint<8>, 2>, !firrtl.const.vector<const.uint<5>, 2>) -> !firrtl.const.bundle<a: const.vector<const.uint<8>, 2>, b: const.vector<const.uint<5>, 2>>
+    %2 = firrtl.vectorcreate %0, %1 : (!firrtl.const.bundle<a: uint<8>, b: uint<5>>, !firrtl.const.bundle<a: uint<8>, b: uint<5>>) -> !firrtl.const.vector<bundle<a: uint<8>, b: uint<5>>, 2>
   }
 
   firrtl.module @TestVVBAggregate() {
-    // CHECK{LITERAL}: %0 = firrtl.aggregateconstant [[1, 3], [2, 4]] : !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<5>, 2>>
-    // CHECK: %1 = firrtl.subfield %0[b] : !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<5>, 2>>
-    // CHECK: %2 = firrtl.subfield %0[a] : !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<5>, 2>>
-    %0 = firrtl.aggregateconstant [[1, 2], [3, 4]] : !firrtl.vector<bundle<a: uint<8>, b: uint<5>>, 2>
+    // CHECK{LITERAL}: %0 = firrtl.aggregateconstant [[1, 3], [2, 4]] : !firrtl.const.bundle<a: const.vector<const.uint<8>, 2>, b: const.vector<const.uint<5>, 2>>
+    // CHECK: %1 = firrtl.subfield %0[b] : !firrtl.const.bundle<a: const.vector<const.uint<8>, 2>, b: const.vector<const.uint<5>, 2>>
+    // CHECK: %2 = firrtl.subfield %0[a] : !firrtl.const.bundle<a: const.vector<const.uint<8>, 2>, b: const.vector<const.uint<5>, 2>>
+    %0 = firrtl.aggregateconstant [[1, 2], [3, 4]] : !firrtl.const.vector<bundle<a: uint<8>, b: uint<5>>, 2>
     
-    // CHECK{LITERAL}: %3 = firrtl.aggregateconstant [[5, 7], [6, 8]] : !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<5>, 2>>
-    // CHECK: %4 = firrtl.subfield %3[b] : !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<5>, 2>>
-    // CHECK: %5 = firrtl.subfield %3[a] : !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<5>, 2>>
-    %1 = firrtl.aggregateconstant [[5, 6], [7, 8]] : !firrtl.vector<bundle<a: uint<8>, b: uint<5>>, 2>
+    // CHECK{LITERAL}: %3 = firrtl.aggregateconstant [[5, 7], [6, 8]] : !firrtl.const.bundle<a: const.vector<const.uint<8>, 2>, b: const.vector<const.uint<5>, 2>>
+    // CHECK: %4 = firrtl.subfield %3[b] : !firrtl.const.bundle<a: const.vector<const.uint<8>, 2>, b: const.vector<const.uint<5>, 2>>
+    // CHECK: %5 = firrtl.subfield %3[a] : !firrtl.const.bundle<a: const.vector<const.uint<8>, 2>, b: const.vector<const.uint<5>, 2>>
+    %1 = firrtl.aggregateconstant [[5, 6], [7, 8]] : !firrtl.const.vector<bundle<a: uint<8>, b: uint<5>>, 2>
 
-    // CHECK: %6 = firrtl.vectorcreate %2, %5 : (!firrtl.vector<uint<8>, 2>, !firrtl.vector<uint<8>, 2>) -> !firrtl.vector<vector<uint<8>, 2>, 2>
-    // CHECK: %7 = firrtl.vectorcreate %1, %4 : (!firrtl.vector<uint<5>, 2>, !firrtl.vector<uint<5>, 2>) -> !firrtl.vector<vector<uint<5>, 2>, 2>
-    // CHECK: %8 = firrtl.bundlecreate %6, %7 : (!firrtl.vector<vector<uint<8>, 2>, 2>, !firrtl.vector<vector<uint<5>, 2>, 2>) -> !firrtl.bundle<a: vector<vector<uint<8>, 2>, 2>, b: vector<vector<uint<5>, 2>, 2>>
-    %2 = firrtl.vectorcreate %0, %1 : (!firrtl.vector<bundle<a: uint<8>, b: uint<5>>, 2>, !firrtl.vector<bundle<a: uint<8>, b: uint<5>>, 2>) -> !firrtl.vector<vector<bundle<a: uint<8>, b: uint<5>>, 2>, 2>
+    // CHECK: %6 = firrtl.vectorcreate %2, %5 : (!firrtl.const.vector<const.uint<8>, 2>, !firrtl.const.vector<const.uint<8>, 2>) -> !firrtl.const.vector<const.vector<const.uint<8>, 2>, 2>
+    // CHECK: %7 = firrtl.vectorcreate %1, %4 : (!firrtl.const.vector<const.uint<5>, 2>, !firrtl.const.vector<const.uint<5>, 2>) -> !firrtl.const.vector<const.vector<const.uint<5>, 2>, 2>
+    // CHECK: %8 = firrtl.bundlecreate %6, %7 : (!firrtl.const.vector<const.vector<const.uint<8>, 2>, 2>, !firrtl.const.vector<const.vector<const.uint<5>, 2>, 2>) -> !firrtl.const.bundle<a: const.vector<const.vector<const.uint<8>, 2>, 2>, b: const.vector<const.vector<const.uint<5>, 2>, 2>>
+    %2 = firrtl.vectorcreate %0, %1 : (!firrtl.const.vector<bundle<a: uint<8>, b: uint<5>>, 2>, !firrtl.const.vector<bundle<a: uint<8>, b: uint<5>>, 2>) -> !firrtl.const.vector<vector<bundle<a: uint<8>, b: uint<5>>, 2>, 2>
   }
 
   //===--------------------------------------------------------------------===//
@@ -186,48 +186,48 @@ firrtl.circuit "Test" {
 
   // CHECK-LABEL: @TestRegReset
   firrtl.module @TestRegReset(in %clock: !firrtl.clock) {
-    // CHECK{LITERAL}: %0 = firrtl.aggregateconstant [[1, 3], [2, 4]] : !firrtl.bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>
-     %rval = firrtl.aggregateconstant [[1, 2], [3, 4]] : !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2> 
-    // CHECK: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %rsig = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK: %r = firrtl.regreset %clock, %c0_ui1, %0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>, !firrtl.bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>
-    %r = firrtl.regreset %clock, %rsig, %rval : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2>, !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2>
+    // CHECK{LITERAL}: %0 = firrtl.aggregateconstant [[1, 3], [2, 4]] : !firrtl.const.bundle<a: const.vector<const.uint<4>, 2>, b: const.vector<const.uint<8>, 2>>
+     %rval = firrtl.aggregateconstant [[1, 2], [3, 4]] : !firrtl.const.vector<bundle<a: uint<4>, b: uint<8>>, 2> 
+    // CHECK: %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
+    %rsig = firrtl.constant 0 : !firrtl.const.uint<1>
+    // CHECK: %r = firrtl.regreset %clock, %c0_ui1, %0 : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.const.bundle<a: const.vector<const.uint<4>, 2>, b: const.vector<const.uint<8>, 2>>, !firrtl.bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>
+    %r = firrtl.regreset %clock, %rsig, %rval : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.const.vector<bundle<a: uint<4>, b: uint<8>>, 2>, !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2>
   }
 
   // CHECK-LABEL: @TestRegResetMaterializedFromExplodedBundle
   firrtl.module @TestRegResetMaterializedFromExplodedBundle(in %clock: !firrtl.clock) {
-    // CHECK{LITERAL}: %0 = firrtl.aggregateconstant [[1, 3], [2, 4]] : !firrtl.bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>
-    %storage = firrtl.aggregateconstant [[1, 2], [3, 4]] : !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2> 
-    // CHECK: %1 = firrtl.subfield %0[b] : !firrtl.bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>
-    // CHECK: %2 = firrtl.subindex %1[0] : !firrtl.vector<uint<8>, 2>
-    // CHECK: %3 = firrtl.subfield %0[a] : !firrtl.bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>
-    // CHECK: %4 = firrtl.subindex %3[0] : !firrtl.vector<uint<4>, 2>
-    // CHECK: %5 = firrtl.bundlecreate %4, %2 : (!firrtl.uint<4>, !firrtl.uint<8>) -> !firrtl.bundle<a: uint<4>, b: uint<8>>
-    %rval = firrtl.subindex %storage[0] : !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2>
-    // CHECK: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %rsig = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK: %r = firrtl.regreset %clock, %c0_ui1, %5 : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<4>, b: uint<8>>, !firrtl.bundle<a: uint<4>, b: uint<8>>
-    %r = firrtl.regreset %clock, %rsig, %rval : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<4>, b: uint<8>>, !firrtl.bundle<a: uint<4>, b: uint<8>>
+    // CHECK{LITERAL}: %0 = firrtl.aggregateconstant [[1, 3], [2, 4]] : !firrtl.const.bundle<a: const.vector<const.uint<4>, 2>, b: const.vector<const.uint<8>, 2>>
+    %storage = firrtl.aggregateconstant [[1, 2], [3, 4]] : !firrtl.const.vector<bundle<a: uint<4>, b: uint<8>>, 2> 
+    // CHECK: %1 = firrtl.subfield %0[b] : !firrtl.const.bundle<a: const.vector<const.uint<4>, 2>, b: const.vector<const.uint<8>, 2>>
+    // CHECK: %2 = firrtl.subindex %1[0] : !firrtl.const.vector<const.uint<8>, 2>
+    // CHECK: %3 = firrtl.subfield %0[a] : !firrtl.const.bundle<a: const.vector<const.uint<4>, 2>, b: const.vector<const.uint<8>, 2>>
+    // CHECK: %4 = firrtl.subindex %3[0] : !firrtl.const.vector<const.uint<4>, 2>
+    // CHECK: %5 = firrtl.bundlecreate %4, %2 : (!firrtl.const.uint<4>, !firrtl.const.uint<8>) -> !firrtl.const.bundle<a: const.uint<4>, b: const.uint<8>>
+    %rval = firrtl.subindex %storage[0] : !firrtl.const.vector<bundle<a: uint<4>, b: uint<8>>, 2>
+    // CHECK: %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
+    %rsig = firrtl.constant 0 : !firrtl.const.uint<1>
+    // CHECK: %r = firrtl.regreset %clock, %c0_ui1, %5 : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.const.bundle<a: const.uint<4>, b: const.uint<8>>, !firrtl.bundle<a: uint<4>, b: uint<8>>
+    %r = firrtl.regreset %clock, %rsig, %rval : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.const.bundle<a: uint<4>, b: uint<8>>, !firrtl.bundle<a: uint<4>, b: uint<8>>
   }
 
   // CHECK-LABEL: @TestRegResetMaterializedFromDeepExplodedBundle
   firrtl.module @TestRegResetMaterializedFromDeepExplodedBundle(in %clock: !firrtl.clock) {
-    // CHECK{LITERAL}: %0 = firrtl.aggregateconstant [[1, 4], [[2, 3], [5, 6]]] : !firrtl.bundle<a: vector<uint<4>, 2>, b: bundle<c: vector<uint<8>, 2>, d: vector<uint<16>, 2>>>
-    // CHECK: %1 = firrtl.subfield %0[b] : !firrtl.bundle<a: vector<uint<4>, 2>, b: bundle<c: vector<uint<8>, 2>, d: vector<uint<16>, 2>>>
-    // CHECK: %2 = firrtl.subfield %1[d] : !firrtl.bundle<c: vector<uint<8>, 2>, d: vector<uint<16>, 2>>
-    // CHECK: %3 = firrtl.subindex %2[1] : !firrtl.vector<uint<16>, 2>
-    // CHECK: %4 = firrtl.subfield %1[c] : !firrtl.bundle<c: vector<uint<8>, 2>, d: vector<uint<16>, 2>>
-    // CHECK: %5 = firrtl.subindex %4[1] : !firrtl.vector<uint<8>, 2>
-    // CHECK: %6 = firrtl.subfield %0[a] : !firrtl.bundle<a: vector<uint<4>, 2>, b: bundle<c: vector<uint<8>, 2>, d: vector<uint<16>, 2>>>
-    // CHECK: %7 = firrtl.subindex %6[1] : !firrtl.vector<uint<4>, 2>
-    // CHECK: %8 = firrtl.bundlecreate %5, %3 : (!firrtl.uint<8>, !firrtl.uint<16>) -> !firrtl.bundle<c: uint<8>, d: uint<16>>
-    // CHECK: %9 = firrtl.bundlecreate %7, %8 : (!firrtl.uint<4>, !firrtl.bundle<c: uint<8>, d: uint<16>>) -> !firrtl.bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>
-    // CHECK: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK: %reg = firrtl.regreset %clock, %c0_ui1, %9 : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>, !firrtl.bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>
-    %reset_value_storage = firrtl.aggregateconstant [[1, [2, 3]], [4, [5, 6]]] : !firrtl.vector<bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>, 2> 
-    %reset_value = firrtl.subindex %reset_value_storage[1] : !firrtl.vector<bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>, 2>
-    %reset = firrtl.constant 0 : !firrtl.uint<1>
-    %reg = firrtl.regreset %clock, %reset, %reset_value : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>, !firrtl.bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>
+    // CHECK{LITERAL}: %0 = firrtl.aggregateconstant [[1, 4], [[2, 3], [5, 6]]] : !firrtl.const.bundle<a: const.vector<const.uint<4>, 2>, b: const.bundle<c: const.vector<const.uint<8>, 2>, d: const.vector<const.uint<16>, 2>>>
+    // CHECK: %1 = firrtl.subfield %0[b] : !firrtl.const.bundle<a: const.vector<const.uint<4>, 2>, b: const.bundle<c: const.vector<const.uint<8>, 2>, d: const.vector<const.uint<16>, 2>>>
+    // CHECK: %2 = firrtl.subfield %1[d] : !firrtl.const.bundle<c: const.vector<const.uint<8>, 2>, d: const.vector<const.uint<16>, 2>>
+    // CHECK: %3 = firrtl.subindex %2[1] : !firrtl.const.vector<const.uint<16>, 2>
+    // CHECK: %4 = firrtl.subfield %1[c] : !firrtl.const.bundle<c: const.vector<const.uint<8>, 2>, d: const.vector<const.uint<16>, 2>>
+    // CHECK: %5 = firrtl.subindex %4[1] : !firrtl.const.vector<const.uint<8>, 2>
+    // CHECK: %6 = firrtl.subfield %0[a] : !firrtl.const.bundle<a: const.vector<const.uint<4>, 2>, b: const.bundle<c: const.vector<const.uint<8>, 2>, d: const.vector<const.uint<16>, 2>>>
+    // CHECK: %7 = firrtl.subindex %6[1] : !firrtl.const.vector<const.uint<4>, 2>
+    // CHECK: %8 = firrtl.bundlecreate %5, %3 : (!firrtl.const.uint<8>, !firrtl.const.uint<16>) -> !firrtl.const.bundle<c: const.uint<8>, d: const.uint<16>>
+    // CHECK: %9 = firrtl.bundlecreate %7, %8 : (!firrtl.const.uint<4>, !firrtl.const.bundle<c: const.uint<8>, d: const.uint<16>>) -> !firrtl.const.bundle<a: const.uint<4>, b: const.bundle<c: const.uint<8>, d: const.uint<16>>>
+    // CHECK: %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
+    // CHECK: %reg = firrtl.regreset %clock, %c0_ui1, %9 : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.const.bundle<a: const.uint<4>, b: const.bundle<c: const.uint<8>, d: const.uint<16>>>, !firrtl.bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>
+    %reset_value_storage = firrtl.aggregateconstant [[1, [2, 3]], [4, [5, 6]]] : !firrtl.const.vector<bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>, 2> 
+    %reset_value = firrtl.subindex %reset_value_storage[1] : !firrtl.const.vector<bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>, 2>
+    %reset = firrtl.constant 0 : !firrtl.const.uint<1>
+    %reg = firrtl.regreset %clock, %reset, %reset_value : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.const.bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>, !firrtl.bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>
   }
 
   // CHECK-LABEL: @TestInstance
@@ -242,12 +242,12 @@ firrtl.circuit "Test" {
 
   // CHECK-LABEL: @TestBasicConnects
   firrtl.module @TestBasicConnects() {
-    // CHECK: %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    // CHECK: %w0 = firrtl.wire : !firrtl.uint<1>
-    // CHECK: firrtl.strictconnect %w0, %c1_ui1 : !firrtl.uint<1>
-    %c1 = firrtl.constant 1 : !firrtl.uint<1>
-    %w0 = firrtl.wire : !firrtl.uint<1>
-    firrtl.strictconnect %w0, %c1 : !firrtl.uint<1>
+    // CHECK: %c1_ui1 = firrtl.constant 1 : !firrtl.const.uint<1>
+    // CHECK: %w0 = firrtl.wire : !firrtl.const.uint<1>
+    // CHECK: firrtl.strictconnect %w0, %c1_ui1 : !firrtl.const.uint<1>
+    %c1 = firrtl.constant 1 : !firrtl.const.uint<1>
+    %w0 = firrtl.wire : !firrtl.const.uint<1>
+    firrtl.strictconnect %w0, %c1 : !firrtl.const.uint<1>
 
     // CHECK: %w1 = firrtl.wire : !firrtl.bundle<a: bundle<>>
     // CHECK: %w2 = firrtl.wire : !firrtl.bundle<a: bundle<>>
@@ -333,12 +333,12 @@ firrtl.circuit "Test" {
   
     // CHECK: %0 = firrtl.subfield %port[a] : !firrtl.bundle<a flip: vector<uint<8>, 4>>
     // CHECK: %1 = firrtl.subindex %0[3] : !firrtl.vector<uint<8>, 4>
-    // CHECK: %c7_ui8 = firrtl.constant 7 : !firrtl.uint<8>
-    // CHECK: firrtl.connect %1, %c7_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
+    // CHECK: %c7_ui8 = firrtl.constant 7 : !firrtl.const.uint<8>
+    // CHECK: firrtl.connect %1, %c7_ui8 : !firrtl.uint<8>, !firrtl.const.uint<8>
     %bundle = firrtl.subindex %port[3] : !firrtl.vector<bundle<a flip: uint<8>>, 4>
     %field  = firrtl.subfield %bundle[a] : !firrtl.bundle<a flip: uint<8>>
-    %value  = firrtl.constant 7 : !firrtl.uint<8>
-    firrtl.connect %field, %value : !firrtl.uint<8>, !firrtl.uint<8>
+    %value  = firrtl.constant 7 : !firrtl.const.uint<8>
+    firrtl.connect %field, %value : !firrtl.uint<8>, !firrtl.const.uint<8>
 
     // Connect two exploded bundles.
   
@@ -361,32 +361,32 @@ firrtl.circuit "Test" {
 
   // CHECK-LABEL: TestSubaccess
   firrtl.module @TestSubaccess() {
-    // CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
-    %0 = firrtl.constant 0 : !firrtl.uint<8>
-    // CHECK: %0 = firrtl.vectorcreate %c0_ui8, %c0_ui8 : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.vector<uint<8>, 2>
-    %v = firrtl.vectorcreate %0, %0 : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.vector<uint<8>, 2>
-    // CHECK: %dst = firrtl.wire : !firrtl.uint<8>
-    %dst = firrtl.wire : !firrtl.uint<8>
-    // CHECK: %1 = firrtl.subaccess %0[%c0_ui8] : !firrtl.vector<uint<8>, 2>, !firrtl.uint<8>
-    %src = firrtl.subaccess %v[%0] : !firrtl.vector<uint<8>, 2>, !firrtl.uint<8>
-    // CHECK: firrtl.strictconnect %dst, %1 : !firrtl.uint<8>
-    firrtl.strictconnect %dst, %src : !firrtl.uint<8>
+    // CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.const.uint<8>
+    %0 = firrtl.constant 0 : !firrtl.const.uint<8>
+    // CHECK: %0 = firrtl.vectorcreate %c0_ui8, %c0_ui8 : (!firrtl.const.uint<8>, !firrtl.const.uint<8>) -> !firrtl.const.vector<uint<8>, 2>
+    %v = firrtl.vectorcreate %0, %0 : (!firrtl.const.uint<8>, !firrtl.const.uint<8>) -> !firrtl.const.vector<uint<8>, 2>
+    // CHECK: %dst = firrtl.wire : !firrtl.const.uint<8>
+    %dst = firrtl.wire : !firrtl.const.uint<8>
+    // CHECK: %1 = firrtl.subaccess %0[%c0_ui8] : !firrtl.const.vector<uint<8>, 2>, !firrtl.const.uint<8>
+    %src = firrtl.subaccess %v[%0] : !firrtl.const.vector<uint<8>, 2>, !firrtl.const.uint<8>
+    // CHECK: firrtl.strictconnect %dst, %1 : !firrtl.const.uint<8>
+    firrtl.strictconnect %dst, %src : !firrtl.const.uint<8>
   }
 
   // CHECK-LABEL: TestSubaccess2
   firrtl.module @TestSubaccess2() {
-    // CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
-    %0 = firrtl.constant 0 : !firrtl.uint<8>
-    // CHECK: %0 = firrtl.vectorcreate %c0_ui8, %c0_ui8 : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.vector<uint<8>, 2>
-    %v = firrtl.vectorcreate %0, %0 : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.vector<uint<8>, 2>
-    // CHECK: %c0_ui8_0 = firrtl.constant 0 : !firrtl.uint<8>
-    %i = firrtl.constant 0 : !firrtl.uint<8>
-    // CHECK: %dst = firrtl.wire : !firrtl.uint<8>
-    %dst = firrtl.wire : !firrtl.uint<8>
-    // CHECK: %1 = firrtl.subaccess %0[%c0_ui8_0] : !firrtl.vector<uint<8>, 2>, !firrtl.uint<8>
-    %src = firrtl.subaccess %v[%i] : !firrtl.vector<uint<8>, 2>, !firrtl.uint<8>
-    // CHECK: firrtl.strictconnect %dst, %1 : !firrtl.uint<8>
-    firrtl.strictconnect %dst, %src : !firrtl.uint<8>
+    // CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.const.uint<8>
+    %0 = firrtl.constant 0 : !firrtl.const.uint<8>
+    // CHECK: %0 = firrtl.vectorcreate %c0_ui8, %c0_ui8 : (!firrtl.const.uint<8>, !firrtl.const.uint<8>) -> !firrtl.const.vector<uint<8>, 2>
+    %v = firrtl.vectorcreate %0, %0 : (!firrtl.const.uint<8>, !firrtl.const.uint<8>) -> !firrtl.const.vector<uint<8>, 2>
+    // CHECK: %c0_ui8_0 = firrtl.constant 0 : !firrtl.const.uint<8>
+    %i = firrtl.constant 0 : !firrtl.const.uint<8>
+    // CHECK: %dst = firrtl.wire : !firrtl.const.uint<8>
+    %dst = firrtl.wire : !firrtl.const.uint<8>
+    // CHECK: %1 = firrtl.subaccess %0[%c0_ui8_0] : !firrtl.const.vector<uint<8>, 2>, !firrtl.const.uint<8>
+    %src = firrtl.subaccess %v[%i] : !firrtl.const.vector<uint<8>, 2>, !firrtl.const.uint<8>
+    // CHECK: firrtl.strictconnect %dst, %1 : !firrtl.const.uint<8>
+    firrtl.strictconnect %dst, %src : !firrtl.const.uint<8>
   }
 
   // CHECK-LABEL: @TestPathCaching()
@@ -542,46 +542,46 @@ firrtl.circuit "Test" {
   firrtl.module @TestWhen() {
     // CHECK: %w = firrtl.wire : !firrtl.bundle<a: uint<8>>
     // CHECK: %0 = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<8>>
-    // CHECK: %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    // CHECK: firrtl.when %c1_ui1 : !firrtl.uint<1> {
+    // CHECK: %c1_ui1 = firrtl.constant 1 : !firrtl.const.uint<1>
+    // CHECK: firrtl.when %c1_ui1 : !firrtl.const.uint<1> {
     // CHECK:   %n2 = firrtl.node %0 : !firrtl.uint<8>
     // CHECK: }
     // CHECK: %n3 = firrtl.node %0 : !firrtl.uint<8>
-    // CHECK: firrtl.when %c1_ui1 : !firrtl.uint<1> {
+    // CHECK: firrtl.when %c1_ui1 : !firrtl.const.uint<1> {
     // CHECK:   %w2 = firrtl.wire : !firrtl.bundle<a: vector<uint<8>, 2>>
     // CHECK: }
     %w = firrtl.wire : !firrtl.bundle<a: uint<8>>
     %a = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<8>>
-    %p = firrtl.constant 1 : !firrtl.uint<1>
-    firrtl.when %p : !firrtl.uint<1> {
+    %p = firrtl.constant 1 : !firrtl.const.uint<1>
+    firrtl.when %p : !firrtl.const.uint<1> {
       %n2 = firrtl.node %a : !firrtl.uint<8>
     }
     %n3 = firrtl.node %a : !firrtl.uint<8>
-    firrtl.when %p : !firrtl.uint<1> {
+    firrtl.when %p : !firrtl.const.uint<1> {
       %w2 = firrtl.wire : !firrtl.vector<bundle<a: uint<8>>, 2>
     }
   }
 
   // CHECK-LABEL: @TestWhenWithSubaccess
   firrtl.module @TestWhenWithSubaccess() {
-    // CHECK: %0 = firrtl.aggregateconstant [123] : !firrtl.vector<uint<8>, 1>
-    // CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
-    // CHECK: %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    // CHECK: firrtl.when %c1_ui1 : !firrtl.uint<1> {
-    // CHECK:   %2 = firrtl.subaccess %0[%c0_ui8] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<8>
-    // CHECK:   %nod_0 = firrtl.node %2 {name = "nod"} : !firrtl.uint<8>
+    // CHECK: %0 = firrtl.aggregateconstant [123] : !firrtl.const.vector<uint<8>, 1>
+    // CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.const.uint<8>
+    // CHECK: %c1_ui1 = firrtl.constant 1 : !firrtl.const.uint<1>
+    // CHECK: firrtl.when %c1_ui1 : !firrtl.const.uint<1> {
+    // CHECK:   %2 = firrtl.subaccess %0[%c0_ui8] : !firrtl.const.vector<uint<8>, 1>, !firrtl.const.uint<8>
+    // CHECK:   %nod_0 = firrtl.node %2 {name = "nod"} : !firrtl.const.uint<8>
     // CHECK: }
-    // CHECK: %1 = firrtl.subaccess %0[%c0_ui8] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<8>
-    // CHECK: %nod = firrtl.node %1 : !firrtl.uint<8>
-    %vec = firrtl.aggregateconstant [123] :  !firrtl.vector<uint<8>, 1>
-    %idx = firrtl.constant 0 : !firrtl.uint<8>
-    %cnd = firrtl.constant 1 : !firrtl.uint<1>
-    firrtl.when %cnd : !firrtl.uint<1> {
-      %val = firrtl.subaccess %vec[%idx] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<8>
-      %nod = firrtl.node %val : !firrtl.uint<8>
+    // CHECK: %1 = firrtl.subaccess %0[%c0_ui8] : !firrtl.const.vector<uint<8>, 1>, !firrtl.const.uint<8>
+    // CHECK: %nod = firrtl.node %1 : !firrtl.const.uint<8>
+    %vec = firrtl.aggregateconstant [123] :  !firrtl.const.vector<uint<8>, 1>
+    %idx = firrtl.constant 0 : !firrtl.const.uint<8>
+    %cnd = firrtl.constant 1 : !firrtl.const.uint<1>
+    firrtl.when %cnd : !firrtl.const.uint<1> {
+      %val = firrtl.subaccess %vec[%idx] : !firrtl.const.vector<uint<8>, 1>, !firrtl.const.uint<8>
+      %nod = firrtl.node %val : !firrtl.const.uint<8>
     }
-    %val = firrtl.subaccess %vec[%idx] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<8>
-    %nod = firrtl.node %val : !firrtl.uint<8>
+    %val = firrtl.subaccess %vec[%idx] : !firrtl.const.vector<uint<8>, 1>, !firrtl.const.uint<8>
+    %nod = firrtl.node %val : !firrtl.const.uint<8>
   }
 
   //===--------------------------------------------------------------------===//
@@ -660,29 +660,29 @@ firrtl.circuit "Test" {
 
   // CHECK-LABEL: TestBundleCreate_VB
   firrtl.module @TestBundleCreate_VB(out %out : !firrtl.vector<bundle<a: uint<8>, b: uint<16>>, 2>) {
-    // CHECK: %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
-    %0 = firrtl.constant 1 : !firrtl.uint<8>
+    // CHECK: %c1_ui8 = firrtl.constant 1 : !firrtl.const.uint<8>
+    %0 = firrtl.constant 1 : !firrtl.const.uint<8>
   
-    // CHECK: %c2_ui16 = firrtl.constant 2 : !firrtl.uint<16>
-    %1 = firrtl.constant 2 : !firrtl.uint<16>
+    // CHECK: %c2_ui16 = firrtl.constant 2 : !firrtl.const.uint<16>
+    %1 = firrtl.constant 2 : !firrtl.const.uint<16>
   
-    // CHECK: %0 = firrtl.bundlecreate %c1_ui8, %c2_ui16 : (!firrtl.uint<8>, !firrtl.uint<16>) -> !firrtl.bundle<a: uint<8>, b: uint<16>>
-    // CHECK: %1 = firrtl.subfield %0[b] : !firrtl.bundle<a: uint<8>, b: uint<16>>
-    // CHECK: %2 = firrtl.subfield %0[a] : !firrtl.bundle<a: uint<8>, b: uint<16>>
-    %bundle1 = firrtl.bundlecreate %0, %1 : (!firrtl.uint<8>, !firrtl.uint<16>) -> !firrtl.bundle<a: uint<8>, b: uint<16>>
+    // CHECK: %0 = firrtl.bundlecreate %c1_ui8, %c2_ui16 : (!firrtl.const.uint<8>, !firrtl.const.uint<16>) -> !firrtl.const.bundle<a: const.uint<8>, b: const.uint<16>>
+    // CHECK: %1 = firrtl.subfield %0[b] : !firrtl.const.bundle<a: const.uint<8>, b: const.uint<16>>
+    // CHECK: %2 = firrtl.subfield %0[a] : !firrtl.const.bundle<a: const.uint<8>, b: const.uint<16>>
+    %bundle1 = firrtl.bundlecreate %0, %1 : (!firrtl.const.uint<8>, !firrtl.const.uint<16>) -> !firrtl.const.bundle<a: uint<8>, b: uint<16>>
 
-    // CHECK: %3 = firrtl.bundlecreate %c1_ui8, %c2_ui16 : (!firrtl.uint<8>, !firrtl.uint<16>) -> !firrtl.bundle<a: uint<8>, b: uint<16>>
-    // CHECK: %4 = firrtl.subfield %3[b] : !firrtl.bundle<a: uint<8>, b: uint<16>>
-    // CHECK: %5 = firrtl.subfield %3[a] : !firrtl.bundle<a: uint<8>, b: uint<16>>
-    %bundle2 = firrtl.bundlecreate %0, %1 : (!firrtl.uint<8>, !firrtl.uint<16>) -> !firrtl.bundle<a: uint<8>, b: uint<16>>
+    // CHECK: %3 = firrtl.bundlecreate %c1_ui8, %c2_ui16 : (!firrtl.const.uint<8>, !firrtl.const.uint<16>) -> !firrtl.const.bundle<a: const.uint<8>, b: const.uint<16>>
+    // CHECK: %4 = firrtl.subfield %3[b] : !firrtl.const.bundle<a: const.uint<8>, b: const.uint<16>>
+    // CHECK: %5 = firrtl.subfield %3[a] : !firrtl.const.bundle<a: const.uint<8>, b: const.uint<16>>
+    %bundle2 = firrtl.bundlecreate %0, %1 : (!firrtl.const.uint<8>, !firrtl.const.uint<16>) -> !firrtl.const.bundle<a: uint<8>, b: uint<16>>
     
-    // CHECK: %6 = firrtl.vectorcreate %2, %5 : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.vector<uint<8>, 2>
-    // CHECK: %7 = firrtl.vectorcreate %1, %4 : (!firrtl.uint<16>, !firrtl.uint<16>) -> !firrtl.vector<uint<16>, 2>
-    // CHECK: %8 = firrtl.bundlecreate %6, %7 : (!firrtl.vector<uint<8>, 2>, !firrtl.vector<uint<16>, 2>) -> !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>
-    %vector  = firrtl.vectorcreate %bundle1, %bundle2 : (!firrtl.bundle<a: uint<8>, b: uint<16>>, !firrtl.bundle<a: uint<8>, b: uint<16>>) -> !firrtl.vector<bundle<a: uint<8>, b: uint<16>>, 2>
+    // CHECK: %6 = firrtl.vectorcreate %2, %5 : (!firrtl.const.uint<8>, !firrtl.const.uint<8>) -> !firrtl.const.vector<const.uint<8>, 2>
+    // CHECK: %7 = firrtl.vectorcreate %1, %4 : (!firrtl.const.uint<16>, !firrtl.const.uint<16>) -> !firrtl.const.vector<const.uint<16>, 2>
+    // CHECK: %8 = firrtl.bundlecreate %6, %7 : (!firrtl.const.vector<const.uint<8>, 2>, !firrtl.const.vector<const.uint<16>, 2>) -> !firrtl.const.bundle<a: const.vector<const.uint<8>, 2>, b: const.vector<const.uint<16>, 2>>
+    %vector  = firrtl.vectorcreate %bundle1, %bundle2 : (!firrtl.const.bundle<a: uint<8>, b: uint<16>>, !firrtl.const.bundle<a: uint<8>, b: uint<16>>) -> !firrtl.const.vector<bundle<a: uint<8>, b: uint<16>>, 2>
     
-    // CHECK firrtl.connect %out, %8 : !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>, !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>
-    firrtl.connect %out, %vector : !firrtl.vector<bundle<a: uint<8>, b: uint<16>>, 2>, !firrtl.vector<bundle<a: uint<8>, b: uint<16>>, 2>
+    // CHECK firrtl.connect %out, %8 : !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>, !firrtl.const.bundle<a: const.vector<const.uint<8>, 2>, b: const.vector<const.uint<16>, 2>>
+    firrtl.connect %out, %vector : !firrtl.vector<bundle<a: uint<8>, b: uint<16>>, 2>, !firrtl.const.vector<bundle<a: uint<8>, b: uint<16>>, 2>
   }
 
   //===--------------------------------------------------------------------===//

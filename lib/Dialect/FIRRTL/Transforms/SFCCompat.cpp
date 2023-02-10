@@ -113,10 +113,11 @@ void SFCCompatPass::runOnOperation() {
             .Case<ClockType, AsyncResetType, ResetType>(
                 [&](auto type) -> Value {
                   return builder.create<SpecialConstantOp>(
-                      type, builder.getBoolAttr(false));
+                      type.getConstType(true), builder.getBoolAttr(false));
                 })
             .Case<IntType>([&](IntType type) -> Value {
-              return builder.create<ConstantOp>(type, getIntZerosAttr(type));
+              return builder.create<ConstantOp>(type.getConstType(true),
+                                                getIntZerosAttr(type));
             })
             .Case<BundleType, FVectorType>([&](auto type) -> Value {
               auto width = circt::firrtl::getBitWidth(type);
@@ -131,6 +132,7 @@ void SFCCompatPass::runOnOperation() {
     inv.replaceAllUsesWith(replacement);
     inv.erase();
     madeModifications = true;
+    propagateTypeChangeToUsersOf(replacement);
   }
 
   if (!madeModifications)

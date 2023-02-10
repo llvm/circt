@@ -10,7 +10,7 @@
 // CHECK:   %[[RES1_READY:.+]] = firrtl.subfield %[[ARG2]][ready] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
 
 // Done logic.
-// CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+// CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
 // CHECK:   %done0 = firrtl.wire : !firrtl.uint<1>
 // CHECK:   %done1 = firrtl.wire : !firrtl.uint<1>
 
@@ -24,7 +24,7 @@
 // CHECK:   firrtl.strictconnect %notAllDone, %7 : !firrtl.uint<1>
 
 // Result 0 logic.
-// CHECK:   %emtd0 = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   %emtd0 = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.const.uint<1>, !firrtl.uint<1>
 // CHECK:   %8 = firrtl.and %done0, %notAllDone : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:   firrtl.strictconnect %emtd0, %8 : !firrtl.uint<1>
 
@@ -42,7 +42,7 @@
 // CHECK:   firrtl.strictconnect %done0, %12 : !firrtl.uint<1>
 
 // Result1 logic.
-// CHECK:   %emtd1 = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   %emtd1 = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.const.uint<1>, !firrtl.uint<1>
 // CHECK:   %13 = firrtl.and %done1, %notAllDone : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:   firrtl.strictconnect %emtd1, %13 : !firrtl.uint<1>
 

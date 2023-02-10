@@ -16,17 +16,17 @@ firrtl.circuit "AsyncResetConst" {
     out %z5: !firrtl.vector<uint<8>, 1>
   ) {
     // Constant check should handle trivial cases.
-    %c0_ui = firrtl.constant 0 : !firrtl.uint<8>
-    %0 = firrtl.regreset %clock, %reset, %c0_ui : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
+    %c0_ui = firrtl.constant 0 : !firrtl.const.uint<8>
+    %0 = firrtl.regreset %clock, %reset, %c0_ui : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.uint<8>, !firrtl.uint<8>
 
     // Constant check should see through nodes.
-    %node = firrtl.node %c0_ui : !firrtl.uint<8>
-    %1 = firrtl.regreset %clock, %reset, %node : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
+    %node = firrtl.node %c0_ui : !firrtl.const.uint<8>
+    %1 = firrtl.regreset %clock, %reset, %node : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.uint<8>, !firrtl.uint<8>
 
     // Constant check should see through subfield connects.
     %bundle0 = firrtl.wire : !firrtl.bundle<a: uint<8>>
     %bundle0.a = firrtl.subfield %bundle0[a] : !firrtl.bundle<a: uint<8>>
-    firrtl.connect %bundle0.a, %c0_ui : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.connect %bundle0.a, %c0_ui : !firrtl.uint<8>, !firrtl.const.uint<8>
     %2 = firrtl.regreset %clock, %reset, %bundle0 : !firrtl.clock, !firrtl.asyncreset, !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint<8>>
 
     // Constant check should see through multiple connect hops.
@@ -37,7 +37,7 @@ firrtl.circuit "AsyncResetConst" {
     // Constant check should see through subindex connects.
     %vector0 = firrtl.wire : !firrtl.vector<uint<8>, 1>
     %vector0.a = firrtl.subindex %vector0[0] : !firrtl.vector<uint<8>, 1>
-    firrtl.connect %vector0.a, %c0_ui : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.connect %vector0.a, %c0_ui : !firrtl.uint<8>, !firrtl.const.uint<8>
     %4 = firrtl.regreset %clock, %reset, %vector0 : !firrtl.clock, !firrtl.asyncreset, !firrtl.vector<uint<8>, 1>, !firrtl.vector<uint<8>, 1>
 
     // Constant check should see through multiple connect hops.

@@ -6,8 +6,8 @@
 firrtl.circuit "xmr" {
   firrtl.module private @Test(out %x: !firrtl.probe<uint<2>>) {
     %w = firrtl.wire : !firrtl.uint<2>
-    %zero = firrtl.constant 0 : !firrtl.uint<2>
-    firrtl.strictconnect %w, %zero : !firrtl.uint<2>
+    %zero = firrtl.constant 0 : !firrtl.const.uint<2>
+    firrtl.strictconnect %w, %zero : !firrtl.uint<2>, !firrtl.const.uint<2>
     %1 = firrtl.ref.send %w : !firrtl.uint<2>
     firrtl.ref.define %x, %1 : !firrtl.probe<uint<2>>
   }
@@ -22,9 +22,9 @@ firrtl.circuit "xmr" {
 // Simple 1 level read from constant.
 firrtl.circuit "SimpleRead" {
   firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>) {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    %zero = firrtl.constant 0 : !firrtl.const.uint<1>
+    %1 = firrtl.ref.send %zero : !firrtl.const.uint<1>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<const.uint<1>>
   }
   firrtl.module @SimpleRead() {
     %bar_a = firrtl.instance bar @Bar(out _a: !firrtl.probe<uint<1>>)
@@ -39,9 +39,9 @@ firrtl.circuit "SimpleRead" {
 // Forward module port to instance
 firrtl.circuit "ForwardToInstance" {
   firrtl.module @Bar2(out %_a: !firrtl.probe<uint<1>>) {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    %zero = firrtl.constant 0 : !firrtl.const.uint<1>
+    %1 = firrtl.ref.send %zero : !firrtl.const.uint<1>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<const.uint<1>>
   }
   firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>) {
     %bar_2 = firrtl.instance bar @Bar2(out _a: !firrtl.probe<uint<1>>)
@@ -60,9 +60,9 @@ firrtl.circuit "ForwardToInstance" {
 // Multiple readers, for a single remote value.
 firrtl.circuit "ForwardToInstance" {
   firrtl.module @Bar2(out %_a: !firrtl.probe<uint<1>>) {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1    : !firrtl.probe<uint<1>>
+    %zero = firrtl.constant 0 : !firrtl.const.uint<1>
+    %1 = firrtl.ref.send %zero : !firrtl.const.uint<1>
+    firrtl.ref.define %_a, %1    : !firrtl.probe<uint<1>>, !firrtl.probe<const.uint<1>>
   }
   firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>) {
     %bar_2 = firrtl.instance bar @Bar2(out _a: !firrtl.probe<uint<1>>)
@@ -86,14 +86,14 @@ firrtl.circuit "ForwardToInstance" {
 // Two references passed by value.
 firrtl.circuit "DUT" {
   firrtl.module private @Submodule (out %ref_out1: !firrtl.probe<uint<1>>, out %ref_out2: !firrtl.probe<uint<4>>) {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    %zero = firrtl.constant 0 : !firrtl.const.uint<1>
     %w_data1 = firrtl.wire : !firrtl.uint<1>
-    firrtl.strictconnect %w_data1, %zero : !firrtl.uint<1>
+    firrtl.strictconnect %w_data1, %zero : !firrtl.uint<1>, !firrtl.const.uint<1>
     %1 = firrtl.ref.send %w_data1 : !firrtl.uint<1>
     firrtl.ref.define %ref_out1, %1 : !firrtl.probe<uint<1>>
     %w_data2 = firrtl.wire : !firrtl.uint<4>
-    %zero4 = firrtl.constant 0 : !firrtl.uint<4>
-    firrtl.strictconnect %w_data2, %zero4 : !firrtl.uint<4>
+    %zero4 = firrtl.constant 0 : !firrtl.const.uint<4>
+    firrtl.strictconnect %w_data2, %zero4 : !firrtl.uint<4>, !firrtl.const.uint<4>
     %2 = firrtl.ref.send %w_data2 : !firrtl.uint<4>
     firrtl.ref.define %ref_out2, %2 : !firrtl.probe<uint<4>>
   }
@@ -108,9 +108,9 @@ firrtl.circuit "DUT" {
   }
 
   firrtl.module private @MyView_companion (in %ref_in1: !firrtl.uint<1>, in %ref_in2: !firrtl.uint<4>) {
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
     %_WIRE = firrtl.wire sym @_WIRE : !firrtl.uint<1>
-    firrtl.strictconnect %_WIRE, %c0_ui1 : !firrtl.uint<1>
+    firrtl.strictconnect %_WIRE, %c0_ui1 : !firrtl.uint<1>, !firrtl.const.uint<1>
     %iface = sv.interface.instance sym @__MyView_MyInterface__  : !sv.interface<@MyInterface>
   }
 
@@ -125,19 +125,19 @@ firrtl.circuit "DUT" {
 // RefType of aggregates and RefSub. 
 firrtl.circuit "RefTypeVector" {
   firrtl.module @RefTypeVector(in %bundle : !firrtl.bundle<a: uint<1>, b flip: uint<2>>) {
-    %zero = firrtl.constant 0 : !firrtl.uint<4>
-    %z = firrtl.bitcast %zero : (!firrtl.uint<4>) -> !firrtl.vector<uint<1>,4>
-    %1 = firrtl.ref.send %z : !firrtl.vector<uint<1>,4>
-    %10 = firrtl.ref.sub %1[0] : !firrtl.probe<vector<uint<1>,4>>
-    %11 = firrtl.ref.sub %1[1] : !firrtl.probe<vector<uint<1>,4>>
-    %a = firrtl.ref.resolve %10 : !firrtl.probe<uint<1>>
-    %b = firrtl.ref.resolve %11 : !firrtl.probe<uint<1>>
+    %zero = firrtl.constant 0 : !firrtl.const.uint<4>
+    %z = firrtl.bitcast %zero : (!firrtl.const.uint<4>) -> !firrtl.const.vector<uint<1>,4>
+    %1 = firrtl.ref.send %z : !firrtl.const.vector<uint<1>,4>
+    %10 = firrtl.ref.sub %1[0] : !firrtl.probe<const.vector<uint<1>,4>>
+    %11 = firrtl.ref.sub %1[1] : !firrtl.probe<const.vector<uint<1>,4>>
+    %a = firrtl.ref.resolve %10 : !firrtl.probe<const.uint<1>>
+    %b = firrtl.ref.resolve %11 : !firrtl.probe<const.uint<1>>
     %b1 = firrtl.ref.send %bundle : !firrtl.bundle<a: uint<1>, b flip: uint<2>>
     %12 = firrtl.ref.sub %b1[1] : !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>
     %rb = firrtl.ref.resolve %12 : !firrtl.probe<uint<2>>
     %bundle_b = firrtl.subfield %bundle[b] : !firrtl.bundle<a: uint<1>, b flip: uint<2>>
-    %zero2 = firrtl.constant 0 : !firrtl.uint<2>
-    firrtl.strictconnect %bundle_b, %zero2 : !firrtl.uint<2>
+    %zero2 = firrtl.constant 0 : !firrtl.const.uint<2>
+    firrtl.strictconnect %bundle_b, %zero2 : !firrtl.uint<2>, !firrtl.const.uint<2>
   }
 }
 
@@ -147,11 +147,11 @@ firrtl.circuit "RefTypeVector" {
 firrtl.circuit "Issue3715" {
   firrtl.module private @Test(in %p: !firrtl.uint<1>, out %x: !firrtl.probe<uint<2>>) {
     firrtl.when %p : !firrtl.uint<1> {
-      %zero = firrtl.constant 1 : !firrtl.uint<2>
+      %zero = firrtl.constant 1 : !firrtl.const.uint<2>
       %w = firrtl.wire : !firrtl.uint<2>
       %1 = firrtl.ref.send %w : !firrtl.uint<2>
       firrtl.ref.define %x, %1 : !firrtl.probe<uint<2>>
-      firrtl.strictconnect %w, %zero : !firrtl.uint<2>
+      firrtl.strictconnect %w, %zero : !firrtl.uint<2>, !firrtl.const.uint<2>
     }
   }
   firrtl.module @Issue3715(in %p: !firrtl.uint<1>) {

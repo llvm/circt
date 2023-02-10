@@ -388,8 +388,9 @@ private:
             WireOp dummy = builder.create<WireOp>(oldRes.getType());
             oldRes->replaceAllUsesWith(dummy);
             builder.create<StrictConnectOp>(
-                sf, builder.create<ConstantOp>(
-                        UIntType::get(builder.getContext(), 1), APInt(1, 1)));
+                sf,
+                builder.create<ConstantOp>(
+                    UIntType::get(builder.getContext(), 1, true), APInt(1, 1)));
           } else
             oldRes->replaceAllUsesWith(sf);
 

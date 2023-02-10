@@ -1669,13 +1669,18 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
     if (isa<InvalidValueOp>(srcValueOp)) {
       if (op.getDest().getType().isa<BundleType, FVectorType>())
         return failure();
+
+      auto destType = op.getDest().getType();
+      // Make sure FIRRTLBaseType constants are 'const'
+      if (auto destBaseType = destType.dyn_cast<FIRRTLBaseType>())
+        destType = destBaseType.getConstType(true);
+
       if (op.getDest().getType().isa<ClockType, AsyncResetType, ResetType>())
         replacement = rewriter.create<SpecialConstantOp>(
-            op.getSrc().getLoc(), op.getDest().getType(),
-            rewriter.getBoolAttr(false));
+            op.getSrc().getLoc(), destType, rewriter.getBoolAttr(false));
       else
         replacement = rewriter.create<ConstantOp>(
-            op.getSrc().getLoc(), op.getDest().getType(),
+            op.getSrc().getLoc(), destType,
             getIntZerosAttr(op.getDest().getType()));
     }
     // This will be replaced with the constant source.  First, make sure the
@@ -2206,7 +2211,7 @@ static void erasePort(PatternRewriter &rewriter, Value port) {
   auto getClock = [&] {
     if (!clock)
       clock = rewriter.create<SpecialConstantOp>(
-          port.getLoc(), ClockType::get(rewriter.getContext()), false);
+          port.getLoc(), ClockType::get(rewriter.getContext(), true), false);
     return clock;
   };
 

@@ -42,9 +42,9 @@ firrtl.circuit "Simple" attributes {
     // CHECK-NEXT: @w5
     %w5 = firrtl.wire sym @w5 : !firrtl.uint<1>
 
-    %c0_ui1 = firrtl.constant 0: !firrtl.uint<1>
-    firrtl.strictconnect %out, %c0_ui1 : !firrtl.uint<1>
-    firrtl.strictconnect %out2, %c0_ui1 : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0: !firrtl.const.uint<1>
+    firrtl.strictconnect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.const.uint<1>
+    firrtl.strictconnect %out2, %c0_ui1 : !firrtl.uint<1>, !firrtl.const.uint<1>
 
     // CHECK: @x
     // CHECK-NOT: @y

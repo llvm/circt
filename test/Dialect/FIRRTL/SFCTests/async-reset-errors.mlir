@@ -74,7 +74,7 @@ firrtl.circuit "Foo" {
   firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %x: !firrtl.vector<uint<1>, 4>, in %y: !firrtl.uint<1>, out %z: !firrtl.vector<uint<1>, 4>) {
     %literal = firrtl.wire  : !firrtl.vector<uint<1>, 4>
     %0 = firrtl.subindex %literal[0] : !firrtl.vector<uint<1>, 4>
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
     firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     %1 = firrtl.subindex %literal[1] : !firrtl.vector<uint<1>, 4>
     firrtl.connect %1, %y : !firrtl.uint<1>, !firrtl.uint<1>
@@ -97,7 +97,7 @@ firrtl.circuit "Foo"   {
   firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %x: !firrtl.uint<1>, in %y: !firrtl.uint<1>, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<1>) {
     // expected-note @+1 {{reset value defined here:}}
     %w = firrtl.wire  : !firrtl.uint<1>
-    %c1_ui = firrtl.constant 1 : !firrtl.uint
+    %c1_ui = firrtl.constant 1 : !firrtl.const.uint
     firrtl.connect %w, %c1_ui : !firrtl.uint<1>, !firrtl.uint
     firrtl.when %cond : !firrtl.uint<1> {
       firrtl.connect %w, %y : !firrtl.uint<1>, !firrtl.uint<1>

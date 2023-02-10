@@ -77,8 +77,8 @@ firrtl.circuit "hasloops"   {
     %1 = firrtl.subfield %m_r[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
     firrtl.connect %1, %y : !firrtl.uint<1>, !firrtl.uint<1>
     %2 = firrtl.subfield %m_r[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-    %c1_ui = firrtl.constant 1 : !firrtl.uint
-    firrtl.connect %2, %c1_ui : !firrtl.uint<1>, !firrtl.uint
+    %c1_ui = firrtl.constant 1 : !firrtl.const.uint
+    firrtl.connect %2, %c1_ui : !firrtl.uint<1>, !firrtl.const.uint
     %3 = firrtl.subfield %m_r[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
     firrtl.connect %z, %3 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
@@ -327,8 +327,8 @@ firrtl.circuit "hasloops"   {
     %1 = firrtl.subfield %m_r[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
     %2 = firrtl.subfield %m_r[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
     firrtl.connect %2, %y : !firrtl.uint<1>, !firrtl.uint<1>
-    %c1_ui = firrtl.constant 1 : !firrtl.uint
-    firrtl.connect %2, %c1_ui : !firrtl.uint<1>, !firrtl.uint
+    %c1_ui = firrtl.constant 1 : !firrtl.const.uint
+    firrtl.connect %2, %c1_ui : !firrtl.uint<1>, !firrtl.const.uint
     %3 = firrtl.subfield %m_r[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
     firrtl.connect %z, %3 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>

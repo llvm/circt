@@ -255,7 +255,7 @@ firrtl.module @renaming() {
   %0, %1, %2 = firrtl.instance myinst @declarations(in clock : !firrtl.clock, in u8 : !firrtl.uint<8>, in reset : !firrtl.asyncreset)
 }
 firrtl.module @declarations(in %clock : !firrtl.clock, in %u8 : !firrtl.uint<8>, in %reset : !firrtl.asyncreset) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
-  %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
+  %c0_ui8 = firrtl.constant 0 : !firrtl.const.uint<8>
   // CHECK: %cmem = chirrtl.combmem : !chirrtl.cmemory<uint<8>, 8>
   %cmem = chirrtl.combmem : !chirrtl.cmemory<uint<8>, 8>
   // CHECK: %mem_read = firrtl.mem Undefined {depth = 1 : i64, name = "mem", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: sint<42>>
@@ -267,8 +267,8 @@ firrtl.module @declarations(in %clock : !firrtl.clock, in %u8 : !firrtl.uint<8>,
   %node = firrtl.node %u8 {name = "node"} : !firrtl.uint<8>
   // CHECK: %myinst_reg = firrtl.reg %myinst_clock : !firrtl.clock, !firrtl.uint<8>
   %reg = firrtl.reg %clock {name = "reg"} : !firrtl.clock, !firrtl.uint<8>
-  // CHECK: %myinst_regreset = firrtl.regreset %myinst_clock, %myinst_reset, %c0_ui8 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
-  %regreset = firrtl.regreset %clock, %reset, %c0_ui8 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
+  // CHECK: %myinst_regreset = firrtl.regreset %myinst_clock, %myinst_reset, %c0_ui8 : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.uint<8>, !firrtl.uint<8>
+  %regreset = firrtl.regreset %clock, %reset, %c0_ui8 : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.uint<8>, !firrtl.uint<8>
   // CHECK: %smem = chirrtl.seqmem Undefined : !chirrtl.cmemory<uint<8>, 8>
   %smem = chirrtl.seqmem Undefined : !chirrtl.cmemory<uint<8>, 8>
   // CHECK: %myinst_wire = firrtl.wire  : !firrtl.uint<1>
@@ -830,27 +830,27 @@ firrtl.circuit "CollidingSymbolsMultiInline" {
 // CHECK-LABEL: firrtl.circuit "Top" {
 firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    %zero = firrtl.constant 0 : !firrtl.const.uint<1>
+    %1 = firrtl.ref.send %zero : !firrtl.const.uint<1>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<const.uint<1>>
   }
   firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
     firrtl.ref.define %_a, %xmr   : !firrtl.probe<uint<1>>
-    // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK:  %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
-    // CHECK:  firrtl.ref.define %_a, %0 : !firrtl.probe<uint<1>>
+    // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
+    // CHECK:  %0 = firrtl.ref.send %c0_ui1 : !firrtl.const.uint<1>
+    // CHECK:  firrtl.ref.define %_a, %0 : !firrtl.probe<uint<1>>, !firrtl.probe<const.uint<1>>
   }
   firrtl.module @Top() {
     %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.probe<uint<1>>)
     %a = firrtl.wire : !firrtl.uint<1>
     %0 = firrtl.ref.resolve %bar_a : !firrtl.probe<uint<1>>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
-    // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK:  %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
+    // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
+    // CHECK:  %0 = firrtl.ref.send %c0_ui1 : !firrtl.const.uint<1>
     // CHECK:  %a = firrtl.wire   : !firrtl.uint<1>
-    // CHECK:  %1 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
-    // CHECK:  firrtl.strictconnect %a, %1 : !firrtl.uint<1>
+    // CHECK:  %1 = firrtl.ref.resolve %0 : !firrtl.probe<const.uint<1>>
+    // CHECK:  firrtl.strictconnect %a, %1 : !firrtl.uint<1>, !firrtl.const.uint<1>
   }
 }
 
@@ -888,9 +888,9 @@ firrtl.circuit "Top" {
 // CHECK-LABEL: firrtl.circuit "Top" {
 firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    %zero = firrtl.constant 0 : !firrtl.const.uint<1>
+    %1 = firrtl.ref.send %zero : !firrtl.const.uint<1>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<const.uint<1>>
   }
   firrtl.module @Foo(out %_a: !firrtl.probe<uint<1>>) {
     %xmr   = firrtl.instance bar sym @fooXMR @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
@@ -908,35 +908,35 @@ firrtl.circuit "Top" {
   }
   firrtl.module @Top() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]}{
     %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.probe<uint<1>>)
-    // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK:  %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
-    // CHECK:  %1 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
+    // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
+    // CHECK:  %0 = firrtl.ref.send %c0_ui1 : !firrtl.const.uint<1>
+    // CHECK:  %1 = firrtl.ref.resolve %0 : !firrtl.probe<const.uint<1>>
     // CHECK:  %bar_a = firrtl.wire   : !firrtl.uint<1>
-    // CHECK:  firrtl.strictconnect %bar_a, %1 : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %bar_a, %1 : !firrtl.uint<1>, !firrtl.const.uint<1>
     %foo_a = firrtl.instance foo sym @foo @Foo(out _a: !firrtl.probe<uint<1>>)
-    // CHECK:  %c0_ui1_0 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK:  %2 = firrtl.ref.send %c0_ui1_0 : !firrtl.uint<1>
-    // CHECK:  %3 = firrtl.ref.resolve %2 : !firrtl.probe<uint<1>>
+    // CHECK:  %c0_ui1_0 = firrtl.constant 0 : !firrtl.const.uint<1>
+    // CHECK:  %2 = firrtl.ref.send %c0_ui1_0 : !firrtl.const.uint<1>
+    // CHECK:  %3 = firrtl.ref.resolve %2 : !firrtl.probe<const.uint<1>>
     // CHECK:  %foo_a = firrtl.wire   : !firrtl.uint<1>
-    // CHECK:  firrtl.strictconnect %foo_a, %3 : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %foo_a, %3 : !firrtl.uint<1>, !firrtl.const.uint<1>
     %xmr_a = firrtl.instance xmr sym @xmr @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
-    // CHECK:  %c0_ui1_1 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK:  %4 = firrtl.ref.send %c0_ui1_1 : !firrtl.uint<1>
+    // CHECK:  %c0_ui1_1 = firrtl.constant 0 : !firrtl.const.uint<1>
+    // CHECK:  %4 = firrtl.ref.send %c0_ui1_1 : !firrtl.const.uint<1>
     %a = firrtl.wire : !firrtl.uint<1>
     %b = firrtl.wire : !firrtl.uint<1>
     %c = firrtl.wire : !firrtl.uint<1>
     %0 = firrtl.ref.resolve %bar_a : !firrtl.probe<uint<1>>
     %1 = firrtl.ref.resolve %foo_a : !firrtl.probe<uint<1>>
     %2 = firrtl.ref.resolve %xmr_a : !firrtl.probe<uint<1>>
-    // CHECK:  %5 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
-    // CHECK:  %6 = firrtl.ref.resolve %2 : !firrtl.probe<uint<1>>
-    // CHECK:  %7 = firrtl.ref.resolve %4 : !firrtl.probe<uint<1>>
+    // CHECK:  %5 = firrtl.ref.resolve %0 : !firrtl.probe<const.uint<1>>
+    // CHECK:  %6 = firrtl.ref.resolve %2 : !firrtl.probe<const.uint<1>>
+    // CHECK:  %7 = firrtl.ref.resolve %4 : !firrtl.probe<const.uint<1>>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
     firrtl.strictconnect %b, %1 : !firrtl.uint<1>
     firrtl.strictconnect %c, %2 : !firrtl.uint<1>
-    // CHECK:  firrtl.strictconnect %a, %5 : !firrtl.uint<1>
-    // CHECK:  firrtl.strictconnect %b, %6 : !firrtl.uint<1>
-    // CHECK:  firrtl.strictconnect %c, %7 : !firrtl.uint<1>
+    // CHECK:  firrtl.strictconnect %a, %5 : !firrtl.uint<1>, !firrtl.const.uint<1>
+    // CHECK:  firrtl.strictconnect %b, %6 : !firrtl.uint<1>, !firrtl.const.uint<1>
+    // CHECK:  firrtl.strictconnect %c, %7 : !firrtl.uint<1>, !firrtl.const.uint<1>
   }
 }
 
@@ -946,9 +946,9 @@ firrtl.circuit "Top" {
 // CHECK-LABEL: firrtl.circuit "Top" {
 firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    %zero = firrtl.constant 0 : !firrtl.const.uint<1>
+    %1 = firrtl.ref.send %zero : !firrtl.const.uint<1>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<const.uint<1>>
   }
   firrtl.module @Top() {
     %xmr = firrtl.instance xmr sym @TopXMR @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
@@ -977,9 +977,9 @@ firrtl.circuit "Top" {
 // CHECK-LABEL: firrtl.circuit "Top" {
 firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    %zero = firrtl.constant 0 : !firrtl.const.uint<1>
+    %1 = firrtl.ref.send %zero : !firrtl.const.uint<1>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<const.uint<1>>
   }
   firrtl.module @Top() {
     %xmr = firrtl.instance xmr sym @TopXMR @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
@@ -1007,9 +1007,9 @@ firrtl.circuit "Top" {
 // CHECK-LABEL: firrtl.circuit "Top" {
 firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    %zero = firrtl.constant 0 : !firrtl.const.uint<1>
+    %1 = firrtl.ref.send %zero : !firrtl.const.uint<1>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<const.uint<1>>
   }
   firrtl.module @Top() {
     %xmr = firrtl.instance xmr sym @TopXMR @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
@@ -1049,22 +1049,22 @@ firrtl.circuit "Top" {
 // CHECK-LABEL: firrtl.circuit "Top"
 firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    %zero = firrtl.constant 0 : !firrtl.const.uint<1>
+    %1 = firrtl.ref.send %zero : !firrtl.const.uint<1>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<const.uint<1>>
   }
   firrtl.module @Top() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]}{
     %xmr = firrtl.instance xmr sym @TopXMR @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
-    // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK:  %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
+    // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
+    // CHECK:  %0 = firrtl.ref.send %c0_ui1 : !firrtl.const.uint<1>
     %a = firrtl.wire : !firrtl.uint<1>
     %xmr2 = firrtl.ref.send %a : !firrtl.uint<1>
     %0 = firrtl.ref.resolve %xmr : !firrtl.probe<uint<1>>
-    // CHECK:  %2 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
+    // CHECK:  %2 = firrtl.ref.resolve %0 : !firrtl.probe<const.uint<1>>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
     %c_a1, %c_a2  = firrtl.instance child @Child(in  _a1: !firrtl.probe<uint<1>>, in  _a2: !firrtl.probe<uint<1>>)
-    // CHECK:  %3 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
-    // CHECK:  %4 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
+    // CHECK:  %3 = firrtl.ref.resolve %0 : !firrtl.probe<const.uint<1>>
+    // CHECK:  %4 = firrtl.ref.resolve %0 : !firrtl.probe<const.uint<1>>
     // CHECK:  %5 = firrtl.ref.resolve %1 : !firrtl.probe<uint<1>>
     // CHECK:  %child_cw = firrtl.wire   : !firrtl.uint<1>
     // CHECK:  firrtl.strictconnect %child_cw, %5 : !firrtl.uint<1>

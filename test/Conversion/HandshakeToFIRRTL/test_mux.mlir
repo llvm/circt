@@ -23,8 +23,8 @@
 // CHECK:             %[[VAL_21:.*]] = firrtl.and %[[VAL_20]], %[[VAL_14]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:             firrtl.strictconnect %[[VAL_5]], %[[VAL_21]] : !firrtl.uint<1>
 // CHECK:             %[[VAL_22:.*]] = firrtl.tail %[[VAL_6]], 63 : (!firrtl.uint<64>) -> !firrtl.uint<1>
-// CHECK:             %[[VAL_23:.*]] = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK:             %[[VAL_24:.*]] = firrtl.dshl %[[VAL_23]], %[[VAL_22]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+// CHECK:             %[[VAL_23:.*]] = firrtl.constant 1 : !firrtl.const.uint<1>
+// CHECK:             %[[VAL_24:.*]] = firrtl.dshl %[[VAL_23]], %[[VAL_22]] : (!firrtl.const.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
 // CHECK:             %[[VAL_25:.*]] = firrtl.bits %[[VAL_24]] 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
 // CHECK:             %[[VAL_26:.*]] = firrtl.and %[[VAL_25]], %[[VAL_21]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:             firrtl.strictconnect %[[VAL_8]], %[[VAL_26]] : !firrtl.uint<1>

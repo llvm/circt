@@ -814,6 +814,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
   // Unique constants per <Const,Type> pair, inserted at entry
   DenseMap<std::pair<Attribute, Type>, Operation *> constPool;
   auto getConst = [&](Attribute constantValue, Type type, Location loc) {
+    type = type.cast<FIRRTLBaseType>().getConstType(true);
     auto constIt = constPool.find({constantValue, type});
     if (constIt != constPool.end()) {
       auto *cst = constIt->second;
@@ -858,6 +859,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
         getConst(it->second.getValue(), value.getType(), value.getLoc());
 
     replaceIfNotConnect(cstValue);
+    propagateTypeChangeToUsersOf(cstValue);
     return true;
   };
 

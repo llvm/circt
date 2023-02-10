@@ -271,6 +271,33 @@ void getAsmBlockArgumentNamesImpl(Operation *op, mlir::Region &region,
 static ParseResult parseNameKind(OpAsmParser &parser,
                                  firrtl::NameKindEnumAttr &result);
 
+void firrtl::propagateTypeChangeToUsersOf(Value value) {
+  SmallVector<Value> worklist{value};
+  while (!worklist.empty()) {
+    auto value = worklist.pop_back_val();
+    for (auto *op : value.getUsers()) {
+      if (auto inferredOp = dyn_cast_or_null<mlir::InferTypeOpInterface>(op)) {
+        SmallVector<Type, 4> inferredReturnTypes;
+        if (failed(inferredOp.inferReturnTypes(
+                op->getContext(), op->getLoc(), op->getOperands(),
+                op->getAttrDictionary(), op->getRegions(),
+                inferredReturnTypes))) {
+          return;
+        }
+
+        for (size_t i = 0, e = inferredReturnTypes.size(); i != e; ++i) {
+          auto result = op->getResult(i);
+          auto inferredType = inferredReturnTypes[i];
+          if (result.getType() != inferredType) {
+            result.setType(inferredType);
+            worklist.push_back(result);
+          }
+        }
+      }
+    }
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // CircuitOp
 //===----------------------------------------------------------------------===//
@@ -2226,11 +2253,23 @@ LogicalResult NodeOp::inferReturnTypes(
     ::llvm::SmallVectorImpl<::mlir::Type> &inferredReturnTypes) {
   if (operands.empty())
     return failure();
-  inferredReturnTypes.push_back(operands[0].getType());
-  for (auto &attr : attributes)
-    if (attr.getName() == Forceable::getForceableAttrName())
-      inferredReturnTypes.push_back(
-          firrtl::detail::getForceableResultType(true, operands[0].getType()));
+
+  bool isForceable = false;
+  for (auto &attr : attributes) {
+    if (attr.getName() == Forceable::getForceableAttrName()) {
+      isForceable = true;
+      break;
+    }
+  }
+
+  auto resultType =
+      isForceable
+          ? operands[0].getType().cast<FIRRTLBaseType>().getPurelyNonConstType()
+          : operands[0].getType();
+  inferredReturnTypes.push_back(resultType);
+  if (isForceable)
+    inferredReturnTypes.push_back(
+        firrtl::detail::getForceableResultType(true, resultType));
   return success();
 }
 
@@ -2249,7 +2288,7 @@ LogicalResult RegResetOp::verify() {
   FIRRTLBaseType regType = getResult().getType();
 
   // The type of the initialiser must be equivalent to the register type.
-  if (!areTypesEquivalent(resetType, regType))
+  if (!areTypesEquivalent(regType, resetType))
     return emitError("type mismatch between register ")
            << regType << " and reset value " << resetType;
 
@@ -2330,7 +2369,11 @@ LogicalResult ConnectOp::verify() {
   auto dstBaseType = dstType.dyn_cast<FIRRTLBaseType>();
   auto srcBaseType = srcType.dyn_cast<FIRRTLBaseType>();
   if (!dstBaseType || !srcBaseType) {
-    if (dstType != srcType)
+    auto dstRefType = dstType.dyn_cast<RefType>();
+    auto srcRefType = srcType.dyn_cast<RefType>();
+    if (dstType != srcType &&
+        (!dstRefType || !srcRefType ||
+         dstRefType.getType() != srcRefType.getType().getConstType(false)))
       return emitError("may not connect different non-base types");
   } else {
     // Analog types cannot be connected and must be attached.
@@ -2607,10 +2650,10 @@ void MatchOp::build(OpBuilder &builder, OperationState &result, Value input,
 //===----------------------------------------------------------------------===//
 
 /// Type inference adaptor that narrows from the very generic MLIR
-/// `InferTypeOpInterface` to what we need in the FIRRTL dialect: just operands
-/// and attributes, no context or regions. Also, we only ever produce a single
-/// result value, so the FIRRTL-specific type inference ops directly return the
-/// inferred type rather than pushing into the `results` vector.
+/// `InferTypeOpInterface` to what we need in the FIRRTL dialect: just
+/// operands and attributes, no context or regions. Also, we only ever produce
+/// a single result value, so the FIRRTL-specific type inference ops directly
+/// return the inferred type rather than pushing into the `results` vector.
 LogicalResult impl::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, RegionRange regions, SmallVectorImpl<Type> &results,
@@ -2712,8 +2755,8 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
       // top bits if it is a positive number.
       value = value.sext(width);
     } else if (width < value.getBitWidth()) {
-      // The parser can return an unnecessarily wide result with leading zeros.
-      // This isn't a problem, but truncating off bits is bad.
+      // The parser can return an unnecessarily wide result with leading
+      // zeros. This isn't a problem, but truncating off bits is bad.
       if (value.getNumSignBits() < value.getBitWidth() - width)
         return parser.emitError(loc, "constant too large for result type ")
                << resultType;
@@ -2736,7 +2779,8 @@ LogicalResult ConstantOp::verify() {
     return emitError(
         "firrtl.constant attribute bitwidth doesn't match return type");
 
-  // The sign of the attribute's integer type must match our integer type sign.
+  // The sign of the attribute's integer type must match our integer type
+  // sign.
   auto attrType = getValueAttr().getType().cast<IntegerType>();
   if (attrType.isSignless() || attrType.isSigned() != getType().isSigned())
     return emitError("firrtl.constant attribute has wrong sign");
@@ -2752,19 +2796,20 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
   (void)width;
   assert((width == -1 || (int32_t)value.getBitWidth() == width) &&
          "incorrect attribute bitwidth for firrtl.constant");
+  assert(type.isConst() && "type must be 'const' for firrtl.constant");
 
   auto attr =
       IntegerAttr::get(type.getContext(), APSInt(value, !type.isSigned()));
   return build(builder, result, type, attr);
 }
 
-/// Build a ConstantOp from an APSInt, handling the attribute formation for the
-/// 'value' attribute and inferring the FIRRTL type.
+/// Build a ConstantOp from an APSInt, handling the attribute formation for
+/// the 'value' attribute and inferring the FIRRTL type.
 void ConstantOp::build(OpBuilder &builder, OperationState &result,
                        const APSInt &value) {
   auto attr = IntegerAttr::get(builder.getContext(), value);
-  auto type =
-      IntType::get(builder.getContext(), value.isSigned(), value.getBitWidth());
+  auto type = IntType::get(builder.getContext(), value.isSigned(),
+                           value.getBitWidth(), true);
   return build(builder, result, type, attr);
 }
 
@@ -2839,8 +2884,8 @@ void SpecialConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), specialName.str());
 }
 
-// Checks that an array attr representing an aggregate constant has the correct
-// shape.  This recurses on the type.
+// Checks that an array attr representing an aggregate constant has the
+// correct shape.  This recurses on the type.
 static bool checkAggConstant(Operation *op, Attribute attr,
                              FIRRTLBaseType type) {
   if (type.isGround()) {
@@ -2916,10 +2961,14 @@ Attribute AggregateConstantOp::getAttributeFromFieldID(uint64_t fieldID) {
 LogicalResult BundleCreateOp::verify() {
   if (getType().getNumElements() != getFields().size())
     return emitOpError("number of fields doesn't match type");
-  for (size_t i = 0; i < getType().getNumElements(); ++i)
-    if (getType().getElement(i).type != getOperand(i).getType())
+  for (size_t i = 0; i < getType().getNumElements(); ++i) {
+    auto elemTy = getType().getElement(i).type.cast<FIRRTLBaseType>();
+    elemTy = elemTy.getConstType(elemTy.isConst() || getType().isConst());
+    if (!areTypesStrictlyEquivalent(
+            elemTy, getOperand(i).getType().cast<FIRRTLBaseType>()))
       return emitOpError("type of element doesn't match bundle for field ")
              << getType().getElement(i).name;
+  }
   // TODO: check flow
   return success();
 }
@@ -2927,9 +2976,11 @@ LogicalResult BundleCreateOp::verify() {
 LogicalResult VectorCreateOp::verify() {
   if (getType().getNumElements() != getFields().size())
     return emitOpError("number of fields doesn't match type");
-  auto elemTy = getType().getElementType();
+  auto elemTy = getType().getElementType().getConstType(
+      getType().isConst() || getType().getElementType().isConst());
   for (size_t i = 0; i < getType().getNumElements(); ++i)
-    if (elemTy != getOperand(i).getType())
+    if (!areTypesStrictlyEquivalent(
+            elemTy, getOperand(i).getType().cast<FIRRTLBaseType>()))
       return emitOpError("type of element doesn't match vector element");
   // TODO: check flow
   return success();
@@ -2954,6 +3005,9 @@ void FEnumCreateOp::print(OpAsmPrinter &printer) {
   SmallVector<StringRef> elidedAttrs = {"fieldIndex"};
   printer.printOptionalAttrDictWithKeyword((*this)->getAttrs(), elidedAttrs);
   printer << " : " << getResult().getType();
+
+  if (getOperand().getType() != getResult().getType())
+    printer << ", " << getOperand().getType();
 }
 
 ParseResult FEnumCreateOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -2979,7 +3033,14 @@ ParseResult FEnumCreateOp::parse(OpAsmParser &parser, OperationState &result) {
                             "unknown field " + fieldName + " in enum type ")
            << enumType;
 
-  Type inputType = enumType.getElementType(*fieldIndex);
+  Type inputType;
+  if (succeeded(parser.parseOptionalComma())) {
+    if (parser.parseType(inputType))
+      return failure();
+  } else {
+    inputType = enumType.getElementType(*fieldIndex);
+  }
+
   if (parser.resolveOperand(input, inputType, result.operands))
     return failure();
 
@@ -3175,14 +3236,14 @@ bool firrtl::isConstant(Operation *op) {
   // order for the input operation to be constant.
   SmallVector<Operation *, 8> worklist({op});
 
-  // Mutable state indicating if this op is a constant.  Assume it is a constant
-  // and look for counterexamples.
+  // Mutable state indicating if this op is a constant.  Assume it is a
+  // constant and look for counterexamples.
   bool constant = true;
 
   // While we haven't found a counterexample and there are still ops in the
-  // worklist, pull ops off the worklist.  If it provides a counterexample, set
-  // the `constant` to false (and exit on the next loop iteration).  Otherwise,
-  // look through the op or spawn off more ops to look at.
+  // worklist, pull ops off the worklist.  If it provides a counterexample,
+  // set the `constant` to false (and exit on the next loop iteration).
+  // Otherwise, look through the op or spawn off more ops to look at.
   while (constant && !(worklist.empty()))
     TypeSwitch<Operation *>(worklist.pop_back_val())
         .Case<NodeOp, AsSIntPrimOp, AsUIntPrimOp>([&](auto op) {
@@ -3200,8 +3261,8 @@ bool firrtl::isConstant(Operation *op) {
   return constant;
 }
 
-/// Return true if the specified value is a constant. This trivially checks for
-/// `firrtl.constant` and friends, but also looks through subaccesses and
+/// Return true if the specified value is a constant. This trivially checks
+/// for `firrtl.constant` and friends, but also looks through subaccesses and
 /// correctly handles wires driven with only constant values.
 bool firrtl::isConstant(Value value) {
   if (auto *op = value.getDefiningOp())
@@ -3409,13 +3470,13 @@ FIRRTLType MultibitMuxOp::inferReturnType(ValueRange operands,
 // Binary Primitives
 //===----------------------------------------------------------------------===//
 
-/// If LHS and RHS are both UInt or SInt types, the return true and fill in the
-/// width of them if known.  If unknown, return -1 for the widths.
-/// The constness of the result is also returned, where if both lhs and rhs are
+/// If LHS and RHS are both UInt or SInt types, the return true and fill in
+/// the width of them if known.  If unknown, return -1 for the widths. The
+/// constness of the result is also returned, where if both lhs and rhs are
 /// const, then the result is const.
 ///
-/// On failure, this reports and error and returns false.  This function should
-/// not be used if you don't want an error reported.
+/// On failure, this reports and error and returns false.  This function
+/// should not be used if you don't want an error reported.
 static bool isSameIntTypeKind(Type lhs, Type rhs, int32_t &lhsWidth,
                               int32_t &rhsWidth, bool &isConstResult,
                               std::optional<Location> loc) {
@@ -3792,7 +3853,8 @@ LogicalResult MuxPrimOp::validateArguments(ValueRange operands,
 /// This essentially performs a pairwise comparison of fields and elements, as
 /// follows:
 /// - Identical operands inferred to their common type
-/// - Integer operands inferred to the larger one if both have a known width, a
+/// - Integer operands inferred to the larger one if both have a known width,
+/// a
 ///   widthless integer otherwise.
 /// - Vectors inferred based on the element type.
 /// - Bundles inferred in a pairwise fashion based on the field types.
@@ -4070,8 +4132,14 @@ LogicalResult BitCastOp::verify() {
   auto resTypeBits = getBitWidth(getType());
   if (inTypeBits.has_value() && resTypeBits.has_value()) {
     // Bitwidths must match for valid bit
-    if (*inTypeBits == *resTypeBits)
+    if (*inTypeBits == *resTypeBits) {
+      // non-'const' cannot be casted to 'const'
+      if (isConst(getType()) && !isConst(getOperand().getType()))
+        return emitError("cannot cast non-'const' input type ")
+               << getOperand().getType() << " to 'const' result type "
+               << getType();
       return success();
+    }
     return emitError("the bitwidth of input (")
            << *inTypeBits << ") and result (" << *resTypeBits
            << ") don't match";

@@ -39,12 +39,12 @@ firrtl.circuit "Test"   {
   // COMMON-NEXT:    firrtl.strictconnect %a, %0
   // COMMON-NEXT:  }
   firrtl.module @Constant(out %a: !firrtl.bundle<b: uint<1>, c: uint<1>>) {
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.const.uint<1>
     %0 = firrtl.subfield %a[b] : !firrtl.bundle<b: uint<1>, c: uint<1>>
     %1 = firrtl.subfield %a[c] : !firrtl.bundle<b: uint<1>, c: uint<1>>
-    firrtl.strictconnect %0, %c0_ui1 : !firrtl.uint<1>
-    firrtl.strictconnect %1, %c1_ui1 : !firrtl.uint<1>
+    firrtl.strictconnect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.const.uint<1>
+    firrtl.strictconnect %1, %c1_ui1 : !firrtl.uint<1>, !firrtl.const.uint<1>
   }
 
   // AGGRESSIVE-LABEL:  firrtl.module @ConcatToVector(

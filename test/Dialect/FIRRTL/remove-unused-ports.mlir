@@ -29,8 +29,8 @@ firrtl.circuit "Top"   {
 
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
     firrtl.connect %d_invalid, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    %c1_i1 = firrtl.constant 1 : !firrtl.uint<1>
-    firrtl.connect %d_constant, %c1_i1 : !firrtl.uint<1>, !firrtl.uint<1>
+    %c1_i1 = firrtl.constant 1 : !firrtl.const.uint<1>
+    firrtl.connect %d_constant, %c1_i1 : !firrtl.uint<1>, !firrtl.const.uint<1>
   }
 
   // Check that %a, %d_unused, %d_invalid and %d_constant are removed.
@@ -100,8 +100,8 @@ firrtl.circuit "Top"   {
 
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
     firrtl.strictconnect %d_invalid, %invalid_ui1 : !firrtl.uint<1>
-    %c1_i1 = firrtl.constant 1 : !firrtl.uint<1>
-    firrtl.strictconnect %d_constant, %c1_i1 : !firrtl.uint<1>
+    %c1_i1 = firrtl.constant 1 : !firrtl.const.uint<1>
+    firrtl.strictconnect %d_constant, %c1_i1 : !firrtl.uint<1>, !firrtl.const.uint<1>
   }
 
   // Check that %a, %d_unused, %d_invalid and %d_constant are removed.

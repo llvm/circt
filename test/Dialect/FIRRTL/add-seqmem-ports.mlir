@@ -127,8 +127,8 @@ firrtl.circuit "TestHarness" attributes {annotations = [
   firrtl.module @TestHarness() {
     firrtl.instance dut @DUT()
     // CHECK: %dut_sram_0_user_output, %dut_sram_0_user_input = firrtl.instance dut @DUT(out sram_0_user_output: !firrtl.uint<4> [{class = "firrtl.transforms.DontTouchAnnotation"}], in sram_0_user_input: !firrtl.uint<3> [{class = "firrtl.transforms.DontTouchAnnotation"}])
-    // CHECK: %c0_ui3 = firrtl.constant 0 : !firrtl.uint<3>
-    // CHECK: firrtl.strictconnect %dut_sram_0_user_input, %c0_ui3 : !firrtl.uint<3>
+    // CHECK: %c0_ui3 = firrtl.constant 0 : !firrtl.const.uint<3>
+    // CHECK: firrtl.strictconnect %dut_sram_0_user_input, %c0_ui3 : !firrtl.uint<3>, !firrtl.const.uint<3>
   }
 }
 

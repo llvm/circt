@@ -1814,7 +1814,7 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
     return failure();
 
   // Construct an integer attribute of the right width.
-  auto type = IntType::get(builder.getContext(), isSigned, width);
+  auto type = IntType::get(builder.getContext(), isSigned, width, true);
 
   IntegerType::SignednessSemantics signedness =
       isSigned ? IntegerType::Signed : IntegerType::Unsigned;
@@ -2596,7 +2596,7 @@ ParseResult FIRStmtParser::parseRefForceInitial() {
   locationProcessor.setLoc(startTok.getLoc());
 
   auto value = APInt::getAllOnes(1);
-  auto type = UIntType::get(builder.getContext(), 1);
+  auto type = UIntType::get(builder.getContext(), 1, true);
   auto attr = builder.getIntegerAttr(IntegerType::get(type.getContext(),
                                                       value.getBitWidth(),
                                                       IntegerType::Unsigned),
@@ -2655,7 +2655,7 @@ ParseResult FIRStmtParser::parseRefReleaseInitial() {
   locationProcessor.setLoc(startTok.getLoc());
 
   auto value = APInt::getAllOnes(1);
-  auto type = UIntType::get(builder.getContext(), 1);
+  auto type = UIntType::get(builder.getContext(), 1, true);
   auto attr = builder.getIntegerAttr(IntegerType::get(type.getContext(),
                                                       value.getBitWidth(),
                                                       IntegerType::Unsigned),
