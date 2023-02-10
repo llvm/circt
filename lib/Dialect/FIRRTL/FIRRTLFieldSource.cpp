@@ -19,7 +19,7 @@ FieldSource::FieldSource(Operation *operation) {
   FModuleOp mod = cast<FModuleOp>(operation);
   // All ports define locations
   for (auto port : mod.getBodyBlock()->getArguments())
-        makeNodeForValue(port, port, {});
+    makeNodeForValue(port, port, {});
   for (auto &op : *mod.getBodyBlock())
     visitOp(&op);
 }
@@ -31,7 +31,8 @@ void FieldSource::visitOp(Operation *op) {
     return visitSubindex(si);
   if (auto sa = dyn_cast<SubaccessOp>(op))
     return visitSubaccess(sa);
-  if (isa<WireOp, NodeOp, RegOp, RegResetOp, BitCastOp, BundleCreateOp, VectorCreateOp>(op))
+  if (isa<WireOp, NodeOp, RegOp, RegResetOp, BitCastOp, BundleCreateOp,
+          VectorCreateOp>(op))
     return makeNodeForValue(op->getResult(0), op->getResult(0), {});
   if (auto mem = dyn_cast<MemOp>(op))
     return visitMem(mem);
