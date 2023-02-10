@@ -43,6 +43,9 @@ static bool isOpReadyBase(Operation *op,
       // Stop traversal when op under examination is reached.
       if (parent == op)
         return true;
+      // Stop if we pass the op.
+      if (isa<FModuleOp>(parent))
+        return true;
       if (unscheduledOps.contains(parent))
         return false;
     } while ((parent = parent->getParentOp()));
@@ -79,13 +82,17 @@ static bool isOpReadyEx(Operation *op, DenseSet<Operation *> &unscheduledOps,
     const auto *node = sources.nodeForValue(value);
     if (!node)
       return true;
-    if (!node->isSrcTransparent())
+    // We only care about wires.  Any other pointer source is always ready.
+    auto *destop = node->src.getDefiningOp();
+    if (!destop || !isa<WireOp>(destop))
       return true;
     return readsSeen.contains(node->src);
   };
 
   // Writes don't care about the lhs, only the rhs.
   if (isa<ConnectOp, StrictConnectOp>(op)) {
+    LLVM_DEBUG(
+        { llvm::errs() << "Ans: " << isReady(op->getOperand(1)) << "\n\n"; });
     return isReady(op->getOperand(1));
   }
 
@@ -113,18 +120,41 @@ static SmallVector<Operation *> sortTopologicallyEx(Block *block,
 
   // The set of operations that have not yet been scheduled.
   DenseSet<Operation *> unscheduledOps;
+
+  // Track reads
   DenseSet<Value> readsSeen;
-  // Mark all operations as unscheduled.
-  for (Operation &op : ops)
-    unscheduledOps.insert(&op);
+
+  // range to schedule
+  Block::iterator nextScheduledOp = ops.begin();
+  Block::iterator end = ops.end();
+
+  // Mark all operations as unscheduled which are not wires.  Move wires to the
+  // front so they are always available.
+  for (Operation &op :
+       llvm::make_early_inc_range(llvm::make_range(nextScheduledOp, end))) {
+    // Move all wires and instances and memories to the front
+    bool isConst = isa<ConstantOp, AggregateConstantOp, SpecialConstantOp>(&op);
+    if (isConst || isa<WireOp, InstanceOp, MemOp>(&op)) {
+      if (isConst) {
+        // Move the iterator forward if we schedule the operation at the front.
+        if (&op == &*nextScheduledOp)
+          ++nextScheduledOp;
+        op.moveBefore(block, block->begin());
+      } else {
+        op.moveBefore(block, nextScheduledOp);
+        // Move the iterator forward if we schedule the operation at the front.
+        if (&op == &*nextScheduledOp)
+          ++nextScheduledOp;
+      }
+    } else {
+      unscheduledOps.insert(&op);
+    }
+  }
 
   // All block arguments are already read.  This way we reduce the checks in
   // isReady.
   for (auto &barg : block->getArguments())
     readsSeen.insert(barg);
-
-  Block::iterator nextScheduledOp = ops.begin();
-  Block::iterator end = ops.end();
 
   SmallVector<Operation *> nodePoints;
   while (!unscheduledOps.empty()) {
@@ -142,14 +172,13 @@ static SmallVector<Operation *> sortTopologicallyEx(Block *block,
       unscheduledOps.erase(&op);
       op.moveBefore(block, nextScheduledOp);
       scheduledAtLeastOnce = true;
-      if (isa<ConnectOp, StrictConnectOp>(&op) &&
-          dyn_cast_or_null<WireOp>(op.getOperand(0).getDefiningOp()) &&
-          !readsSeen.count(op.getOperand(0)))
-        nodePoints.push_back(&op);
-      // It doesn't matter that we mark the write value as a read
-      for (auto operand : op.getOperands())
-        if (const auto *node = sources.nodeForValue(operand))
-          readsSeen.insert(node->src);
+      if (isa<ConnectOp, StrictConnectOp>(&op)) {
+        // writes to fresh wires are convertable
+        if (dyn_cast_or_null<WireOp>(op.getOperand(0).getDefiningOp()) &&
+            !readsSeen.count(op.getOperand(0)))
+          nodePoints.push_back(&op);
+        readsSeen.insert(op.getOperand(0)); // writes free up the source
+      }
       // Move the iterator forward if we schedule the operation at the front.
       if (&op == &*nextScheduledOp)
         ++nextScheduledOp;
@@ -163,7 +192,8 @@ static SmallVector<Operation *> sortTopologicallyEx(Block *block,
       });
       for (auto operand : nextScheduledOp->getOperands())
         if (const auto *node = sources.nodeForValue(operand))
-          readsSeen.insert(node->src);
+          if (node->isSrcTransparent())
+            readsSeen.insert(node->src);
       unscheduledOps.erase(&*nextScheduledOp);
       ++nextScheduledOp;
     }
