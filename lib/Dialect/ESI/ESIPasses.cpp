@@ -896,6 +896,17 @@ std::string getEsiWrapType(HWModuleExternOp extMod) {
   return std::string();
 }
 
+std::string getEsiWrapSynchronizer(HWModuleExternOp extMod) {
+  DictionaryAttr esiWrapAttr = extMod.getEsiWrapAttr();
+  if (esiWrapAttr) {
+    StringAttr syncAttr = dyn_cast<StringAttr>(esiWrapAttr.get("synchronizer"));
+    if (syncAttr) {
+      return syncAttr.str();
+    }
+  }
+  return std::string();
+}
+
 namespace {
 struct ESIWrapCombinationalPass
     : public ESIWrapCombinationalBase<ESIWrapCombinationalPass> {
@@ -997,7 +1008,7 @@ struct ESIWrapPipelinePass : public ESIWrapPipelineBase<ESIWrapPipelinePass> {
 
 private:
   void wrapPipelineModule(HWModuleOp wrappingMod, HWModuleOp shiftRegisterMod,
-                          HWModuleOp targetMod);
+                          HWModuleOp targetMod, HWModuleOp syncMod);
   void buildShiftRegisterModule(HWModuleOp shiftRegisterMod,
                                 unsigned int numPipelineStages);
 };
@@ -1045,15 +1056,15 @@ void ESIWrapPipelinePass::runOnOperation() {
         // build the content of the shiftRegisterModule
         buildShiftRegisterModule(shiftRegisterMod, numPipelineStages);
 
-        // build synchronizer module (helper module)
-
         // build wrapping module
         auto wrappingModName =
             StringAttr::get(moduleBuilder.getContext(),
                             extMod.getNameAttr().str() + "_wrap_pipeline");
         auto wrappingMod = moduleBuilder.create<hw::HWModuleOp>(
             extMod.getLoc(), wrappingModName, extMod.getPorts());
-        wrapPipelineModule(wrappingMod, shiftRegisterMod, targetMod);
+        auto syncMod =
+            top.lookupSymbol<hw::HWModuleOp>(getEsiWrapSynchronizer(extMod));
+        wrapPipelineModule(wrappingMod, shiftRegisterMod, targetMod, syncMod);
         SymbolTable::replaceAllSymbolUses(extMod, wrappingMod.moduleNameAttr(),
                                           top);
         extMod.erase();
@@ -1075,8 +1086,6 @@ void ESIWrapPipelinePass::buildShiftRegisterModule(
 
   // create true and false values
   auto i1Type = b.getI1Type();
-  auto trueValue =
-      b.create<hw::ConstantOp>(shiftRegisterMod.getLoc(), i1Type, true);
   auto falseValue =
       b.create<hw::ConstantOp>(shiftRegisterMod.getLoc(), i1Type, false);
 
@@ -1087,9 +1096,7 @@ void ESIWrapPipelinePass::buildShiftRegisterModule(
         shiftRegisterMod.getLoc(), propagateValid, clock, reset, falseValue,
         "propagate_valid" + std::to_string(i));
     // propagate valid bit to next stage
-    auto propagateNewValid =
-        b.create<comb::AndOp>(shiftRegisterMod.getLoc(), validReg, trueValue);
-    propagateValid = propagateNewValid;
+    propagateValid = validReg;
   }
   // // Update terminator with last propagated valid bit
   auto outOp = cast<hw::OutputOp>(body->getTerminator());
@@ -1100,24 +1107,42 @@ void ESIWrapPipelinePass::buildShiftRegisterModule(
 // wrapping logic in detail
 void ESIWrapPipelinePass::wrapPipelineModule(HWModuleOp wrappingMod,
                                              HWModuleOp shiftRegisterMod,
-                                             HWModuleOp targetMod) {
+                                             HWModuleOp targetMod,
+                                             HWModuleOp syncMod) {
   // Need a Builder and a BackedgeBuilder
   auto body = wrappingMod.getBodyBlock();
   OpBuilder b(body, body->begin());
   BackedgeBuilder beb(b, wrappingMod.getLoc());
 
-  // Todo: Synchronize all inputs
+  // collect all data inputs
+  SmallVector<Value, 16> inputs;
+  auto numArgs = body->getNumArguments();
+  for (unsigned int i = 0; i < numArgs - 2; i++) {
+    inputs.push_back(body->getArgument(i));
+  }
+  // the last two arguments are clock and reset which we don't need to unwrap
+  auto clock = body->getArgument(numArgs - 2);
+  auto reset = body->getArgument(numArgs - 1);
 
-  // Unwrap and collect all inputs
+  // Synchronize all inputs
+  if (syncMod) {
+    // instantiate sync mod with inputs
+    // need to first push clock and reset back to the inputs
+    inputs.push_back(clock);
+    inputs.push_back(reset);
+    auto syncInst = b.create<hw::InstanceOp>(
+        wrappingMod.getLoc(), syncMod,
+        StringAttr::get(b.getContext(), "handshake_sync"), inputs);
+    SmallVector<Value, 16> syncInputs(syncInst.getResults());
+    // swap the inputs with the synchronized inputs
+    std::swap(inputs, syncInputs);
+  }
+
+  // Unwrap and collect all the now synchronized inputs
   auto apReady = beb.get(b.getI1Type());
   SmallVector<Value, 16> inValidAll;
   SmallVector<Value, 16> targetInputs;
-  // the last two arguments are clock and reset which we don't need to unwrap
-  auto numArgs = body->getNumArguments();
-  auto clock = body->getArgument(numArgs - 2);
-  auto reset = body->getArgument(numArgs - 1);
-  for (unsigned int i = 0; i < numArgs - 2; i++) {
-    auto input = body->getArgument(i);
+  for (auto input : inputs) {
     auto unwrap =
         b.create<esi::UnwrapValidReadyOp>(wrappingMod.getLoc(), input, apReady);
     inValidAll.push_back(unwrap.getValid());
@@ -1286,11 +1311,17 @@ void ESIWrapCalyxPipelinePass::runOnOperation() {
         auto newTarget = SymbolRefAttr::get(moduleBuilder.getContext(),
                                             wrappingMod.getNameAttr());
         auto newType = StringAttr::get(moduleBuilder.getContext(), "pipeline");
+        auto synchronizer = StringAttr::get(moduleBuilder.getContext(),
+                                            getEsiWrapSynchronizer(extMod));
         auto targetIdent =
             StringAttr::get(moduleBuilder.getContext(), "target");
         auto typeIdent = StringAttr::get(moduleBuilder.getContext(), "type");
+        auto synchronizerIdent =
+            StringAttr::get(moduleBuilder.getContext(), "synchronizer");
         auto esiWrapper = moduleBuilder.getDictionaryAttr(
-            {{targetIdent, newTarget}, {typeIdent, newType}});
+            {{targetIdent, newTarget},
+             {typeIdent, newType},
+             {synchronizerIdent, synchronizer}});
         // update Name
         extMod.setName(newExtModName);
         // update EsiWrapAttr

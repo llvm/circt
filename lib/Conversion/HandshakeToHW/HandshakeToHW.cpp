@@ -955,7 +955,7 @@ public:
     return priorityArb;
   }
 
-private:
+  // private:
   OpBuilder &submoduleBuilder;
   HandshakeLoweringState &ls;
 };
@@ -1846,33 +1846,142 @@ private:
   HandshakeLoweringState &ls;
 };
 
+// some helper functions
+
+static StringAttr getSyncOpModName(ExternalInstanceOp op) {
+  std::string subModuleName = "handshake_sync";
+  std::vector<Type> inTypes, outTypes;
+  // same input types as output types
+  llvm::transform(op->getOperands(), std::back_inserter(inTypes),
+                  getOperandDataType);
+  llvm::transform(op->getOperands(), std::back_inserter(outTypes),
+                  getOperandDataType);
+  if (!inTypes.empty())
+    subModuleName += "_in";
+  for (auto inType : inTypes)
+    subModuleName += getTypeName(op->getLoc(), inType);
+
+  if (!outTypes.empty())
+    subModuleName += "_out";
+  for (auto outType : outTypes)
+    subModuleName += getTypeName(op->getLoc(), outType);
+
+  return StringAttr::get(op.getContext(), subModuleName);
+}
+
 class ExternalInstanceConversionPattern
-    : public OpConversionPattern<handshake::ExternalInstanceOp> {
+    : public HandshakeConversionPattern<handshake::ExternalInstanceOp> {
 public:
-  ExternalInstanceConversionPattern(ESITypeConverter &typeConverter,
-                                    MLIRContext *context, OpBuilder &builder,
-                                    HandshakeLoweringState &ls)
-      : OpConversionPattern<handshake::ExternalInstanceOp>::OpConversionPattern(
-            typeConverter, context),
-        builder(builder), ls(ls) {}
+  using HandshakeConversionPattern<
+      handshake::ExternalInstanceOp>::HandshakeConversionPattern;
+  // copied from sync op with removed operation
+  void buildModule(handshake::ExternalInstanceOp op, BackedgeBuilder &bb,
+                   RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = unwrapIO(s, bb, ports);
+
+    // A helper wire that will be used to connect the two built logics
+    HandshakeWire wire(bb, s.b.getNoneType());
+
+    OutputHandshake output = wire.getAsOutput();
+    buildJoinLogic(s, unwrappedIO.inputs, output);
+
+    InputHandshake input = wire.getAsInput();
+
+    // The state-keeping fork logic is required here, as the circuit isn't
+    // allowed to wait for all the consumers to be ready. Connecting the ready
+    // signals of the outputs to their corresponding valid signals leads to
+    // combinatorial cycles. The paper which introduced compositional dataflow
+    // circuits explicitly mentions this limitation:
+    // http://arcade.cs.columbia.edu/df-memocode17.pdf
+    buildForkLogic(s, bb, input, unwrappedIO.outputs);
+
+    // Directly connect the data wires, only the control signals need to be
+    // combined.
+    for (auto &&[in, out] : llvm::zip(unwrappedIO.inputs, unwrappedIO.outputs))
+      out.data->setValue(in.data);
+  }
+
   LogicalResult
   matchAndRewrite(handshake::ExternalInstanceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Check if a external submodule has already been created for the op. If so,
     // Instantiate the external submodule. Else, build the external module
-    hw::HWModuleLike implModule = checkSubModuleOp(ls.parentModule, op);
+    auto implModule = checkSubModuleOp(ls.parentModule, op);
     if (!implModule) {
       auto portInfo = ModulePortInfo(getPortInfoForOp(op));
-      implModule = builder.create<hw::HWModuleExternOp>(
-          op.getLoc(), builder.getStringAttr(getSubModuleName(op)), portInfo);
+      implModule = submoduleBuilder.create<hw::HWModuleExternOp>(
+          op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
+          portInfo);
 
-      // add EsiWrap attribute
-      auto target = op.getModuleAttr();
+      // if the type is not combinational and we have more than one input we
+      // need to sync all inputs. We build the sync module here that we then
+      // later instantiate in the esi wrapping passes
       auto type = op.getTypeAttr();
-      auto targetIdent = StringAttr::get(builder.getContext(), "target");
-      auto typeIdent = StringAttr::get(builder.getContext(), "type");
-      auto esiWrapper =
-          builder.getDictionaryAttr({{targetIdent, target}, {typeIdent, type}});
+      auto syncModName = StringAttr::get(submoduleBuilder.getContext(), "none");
+      if (type.str() != "combinational" && op->getNumOperands() > 1) {
+        // build name of desired sync op that we need
+        syncModName = getSyncOpModName(op);
+        // check if the syncModule already exists
+        hw::HWModuleOp syncMod =
+            ls.parentModule.lookupSymbol<hw::HWModuleOp>(syncModName.str());
+        // build sync
+        if (!syncMod) {
+          // build input and output ports based on external module for sync op
+          SmallVector<hw::PortInfo, 16> syncModPorts;
+          unsigned int numInputs = getModuleNumInputs(implModule);
+          auto i1Type = submoduleBuilder.getI1Type();
+          // hw::HWModuleExternOp extMod =
+          //   dyn_cast<hw::HWModuleExternOp>(implModule);
+          auto funcType =
+              dyn_cast<hw::HWModuleExternOp>(implModule).getFunctionType();
+          // push all data input and output ports
+          for (unsigned int i = 0; i < numInputs - 2; i++) {
+            // extract the esi channel type
+            Type dataType = funcType.getInput(i);
+            syncModPorts.push_back(hw::PortInfo{
+                submoduleBuilder.getStringAttr("in" + std::to_string(i)),
+                hw::PortDirection::INPUT, dataType, i});
+            syncModPorts.push_back(hw::PortInfo{
+                submoduleBuilder.getStringAttr("out" + std::to_string(i)),
+                hw::PortDirection::OUTPUT, dataType, i});
+          }
+          // push clock and reset
+          syncModPorts.push_back(
+              hw::PortInfo{submoduleBuilder.getStringAttr("clock"),
+                           hw::PortDirection::INPUT, i1Type, numInputs - 2});
+          syncModPorts.push_back(
+              hw::PortInfo{submoduleBuilder.getStringAttr("reset"),
+                           hw::PortDirection::INPUT, i1Type, numInputs - 1});
+
+          ModulePortInfo syncModPortInfo(syncModPorts);
+          // build the sync module
+          syncMod = submoduleBuilder.create<hw::HWModuleOp>(
+              op.getLoc(), syncModName, syncModPortInfo,
+              [&](OpBuilder &b, hw::HWModulePortAccessor &ports) {
+                // clock and reset are present
+                Value clk = ports.getInput("clock");
+                Value rst = ports.getInput("reset");
+                BackedgeBuilder bb(b, op.getLoc());
+                RTLBuilder s(ports.getModulePortInfo(), b, op.getLoc(), clk,
+                             rst);
+                this->buildModule(op, bb, s, ports);
+              });
+        }
+      }
+      // add Esi Wrap Attribute with synchronizer
+
+      auto target = op.getModuleAttr();
+      auto synchronizer = syncModName;
+      auto targetIdent =
+          StringAttr::get(submoduleBuilder.getContext(), "target");
+      auto typeIdent = StringAttr::get(submoduleBuilder.getContext(), "type");
+      auto synchronizerIdent =
+          StringAttr::get(submoduleBuilder.getContext(), "synchronizer");
+      auto esiWrapper = submoduleBuilder.getDictionaryAttr(
+          {{targetIdent, target},
+           {typeIdent, type},
+           {synchronizerIdent, synchronizer}});
       implModule->setAttr("esiWrap", esiWrapper);
     }
 
@@ -1884,8 +1993,8 @@ public:
   }
 
 private:
-  OpBuilder &builder;
-  HandshakeLoweringState &ls;
+  // OpBuilder &builder;
+  // HandshakeLoweringState &ls;
 };
 
 class FuncOpConversionPattern : public OpConversionPattern<handshake::FuncOp> {
