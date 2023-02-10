@@ -328,7 +328,7 @@ public:
 
   void handleInstanceOp(InstanceOp ins, SmallVector<Value> &worklist) {
     FModuleOp refModule =
-        dyn_cast<FModuleOp>(instanceGraph.getReferencedModule(ins));
+        dyn_cast<FModuleOp>(*instanceGraph.getReferencedModule(ins));
     if (!refModule)
       return;
     for (auto port : ins.getResults()) {
@@ -344,7 +344,7 @@ public:
       auto res = ref.getValue().cast<OpResult>();
       auto portNum = res.getResultNumber();
       auto refMod =
-          dyn_cast<FModuleOp>(instanceGraph.getReferencedModule(inst));
+          dyn_cast<FModuleOp>(*instanceGraph.getReferencedModule(inst));
       if (!refMod)
         return;
       Node modArg(refMod.getArgument(portNum), ref.getFieldID());
