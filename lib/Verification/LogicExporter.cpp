@@ -187,7 +187,6 @@ LogicExporter::Visitor::visitInvalidTypeOp(mlir::Operation *op,
   return visitSeq(op, circuit);
 }
 
-
 //===----------------------------------------------------------------------===//
 // CombinationalVisitor implementation
 //===----------------------------------------------------------------------===//
@@ -366,7 +365,6 @@ LogicExporter::Visitor::visitSeqOp(circt::seq::FirRegOp &op,
   circuit->performCompReg(next, clk, data, reset, resetValue);
   return mlir::success();
 }
-
 
 //===----------------------------------------------------------------------===//
 // Additional Visitor implementations

@@ -10,18 +10,18 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/InitAllDialects.h"
 #include "circt/LogicalEquivalence/Circuit.h"
 #include "circt/LogicalEquivalence/LogicExporter.h"
 #include "circt/LogicalEquivalence/Solver.h"
 #include "circt/LogicalEquivalence/Utility.h"
-#include "circt/InitAllDialects.h"
-#include "mlir/Parser/Parser.h"
 #include "circt/Support/Version.h"
-#include "mlir/Pass/PassManager.h"
-#include "llvm/Support/SourceMgr.h"
 #include "mlir/IR/Diagnostics.h"
-#include "llvm/Support/PrettyStackTrace.h"
+#include "mlir/Parser/Parser.h"
+#include "mlir/Pass/PassManager.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/PrettyStackTrace.h"
+#include "llvm/Support/SourceMgr.h"
 
 namespace cl = llvm::cl;
 using namespace circt;
@@ -60,10 +60,10 @@ static mlir::LogicalResult checkProperty(mlir::MLIRContext &context,
   Solver::Circuit *circuitModel = s.addCircuit(inputFileName);
 
   auto exporter = std::make_unique<LogicExporter>(moduleName1, circuitModel);
-  mlir::ModuleOp m = mlir::parseSourceFile<mlir::ModuleOp>(inputFileName, &context).get();
+  mlir::ModuleOp m =
+      mlir::parseSourceFile<mlir::ModuleOp>(inputFileName, &context).get();
   if (failed(exporter->run(m)))
     return mlir::failure();
-
 
   // TODO: load property constraints
   // circuitModel->loadProperty();
@@ -95,7 +95,8 @@ int main(int argc, char **argv) {
 
   // Register the supported CIRCT dialects and create a context to work with.
   mlir::DialectRegistry registry;
-  registry.insert<circt::comb::CombDialect, circt::hw::HWDialect, circt::seq::SeqDialect>();
+  registry.insert<circt::comb::CombDialect, circt::hw::HWDialect,
+                  circt::seq::SeqDialect>();
   mlir::MLIRContext context(registry);
 
   // Setup of diagnostic handling.
