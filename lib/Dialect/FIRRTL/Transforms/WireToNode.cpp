@@ -177,14 +177,13 @@ static SmallVector<Operation *> sortTopologicallyEx(Block *block,
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct Wire2NodePass : public Wire2NodeBase<Wire2NodePass> {
-  Wire2NodePass() = default;
+struct WireToNodePass : public WireToNodeBase<WireToNodePass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace
 
 // This is the main entrypoint for the wire2node pass.
-void Wire2NodePass::runOnOperation() {
+void WireToNodePass::runOnOperation() {
   LLVM_DEBUG(
       { llvm::errs() << "Running on: " << getOperation().getName() << "\n"; });
   auto &fields = getAnalysis<FieldSource>();
@@ -209,6 +208,6 @@ void Wire2NodePass::runOnOperation() {
 }
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createWire2NodePass() {
-  return std::make_unique<Wire2NodePass>();
+std::unique_ptr<mlir::Pass> circt::firrtl::createWireToNodePass() {
+  return std::make_unique<WireToNodePass>();
 }

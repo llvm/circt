@@ -375,6 +375,11 @@ static cl::opt<bool> addVivadoRAMAddressConflictSynthesisBugWorkaround(
         "memories"),
     cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool>
+    disableWireToNode("disable-wire-to-node",
+                      cl::desc("Disable wire to node transformation"),
+                      cl::init(true), cl::cat(mainCategory));
+
 enum class RandomKind { None, Mem, Reg, All };
 
 static cl::opt<RandomKind> disableRandom(
@@ -735,9 +740,13 @@ static LogicalResult processBuffer(
   }
 
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
-  if (!disableOptimization)
+  if (!disableOptimization) {
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
+    if (!disableWireToNode)
+      pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+          firrtl::createWireToNodePass());
+  }
 
   // Run the infer-rw pass, which merges read and write ports of a memory with
   // mutually exclusive enables.
