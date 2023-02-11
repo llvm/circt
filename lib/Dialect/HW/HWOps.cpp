@@ -673,7 +673,8 @@ static void modifyModuleArgs(
 
   for (unsigned argIdx = 0, idx = 0; argIdx <= oldArgCount; ++argIdx, ++idx) {
     // Insert new ports at this position.
-    while (!insertArgs.empty() && insertArgs[0].first == argIdx) {
+    while (!insertArgs.empty() &&
+           (insertArgs[0].first == argIdx || argIdx == oldArgCount)) {
       auto port = insertArgs[0].second;
       if (port.direction == PortDirection::INOUT && !port.type.isa<InOutType>())
         port.type = InOutType::get(port.type);
@@ -691,7 +692,7 @@ static void modifyModuleArgs(
         body->insertArgument(idx++, port.type, loc);
     }
     if (argIdx == oldArgCount)
-      break;
+      continue;
 
     // Migrate the old port at this position.
     bool removed = false;
@@ -835,7 +836,7 @@ void HWModuleOp::modifyPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
     ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
   hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
-                        eraseOutputs, getBodyBlock());
+                        eraseOutputs);
 }
 
 /// Return the name to use for the Verilog module that we're referencing
