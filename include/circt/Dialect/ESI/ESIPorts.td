@@ -14,7 +14,19 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/EnumAttr.td"
+
+
 class ESI_Port<string name> : TypeDef<ESI_Dialect, name> {}
+
+def ChannelSignalingValidReady : I32EnumAttrCase<"ValidReady", 0>;
+def ChannelSignaling : I32EnumAttr<
+    "ChannelSignaling",
+    "ESI channel wire signaling standard",
+    [ChannelSignalingValidReady]>{
+  let cppNamespace = "::circt::esi";
+}
 
 def ChannelType : ESI_Port<"Channel"> {
   let summary = "An ESI-compatible channel port";
@@ -33,9 +45,20 @@ def ChannelType : ESI_Port<"Channel"> {
   }];
 
   let mnemonic = "channel";
-  let parameters = (ins "Type":$inner);
+  let parameters = (ins
+      "Type":$inner,
+      DefaultValuedParameter<
+        "::circt::esi::ChannelSignaling",
+        "::circt::esi::ChannelSignaling::ValidReady">:$signaling);
 
-  let assemblyFormat = "`<` $inner `>`";
+  let assemblyFormat = "`<` $inner (`,` $signaling^)? `>`";
+ 
+  let builders = [
+    TypeBuilder<(ins "Type":$type), [{
+        return Base::get(type.getContext(), type,
+                         ::circt::esi::ChannelSignaling::ValidReady);
+      }]>,
+  ];
 }
 
 //=========

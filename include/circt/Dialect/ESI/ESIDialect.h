@@ -57,4 +57,7 @@ Operation *buildESIWrapper(OpBuilder &b, Operation *mod,
 
 #include "circt/Dialect/ESI/ESIDialect.h.inc"
 
+// Pull in all enum type definitions and utility function declarations.
+#include "circt/Dialect/ESI/ESIEnums.h.inc"
+
 #endif
