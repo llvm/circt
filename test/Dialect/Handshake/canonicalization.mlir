@@ -216,7 +216,7 @@ handshake.func @cbranch_into_mux_extend(%arg0 : i1, %arg1 : index, %arg2 : i32, 
 
 // -----
 
-// CHECK-LABEL:   handshake.func @cbranch_into_mux_elim(
+// CHECK-LABEL:   handshake.func @cbranch_into_mux_no_erase(
 // CHECK-SAME:                                          %[[VAL_0:.*]]: i1,
 // CHECK-SAME:                                          %[[VAL_1:.*]]: index,
 // CHECK-SAME:                                          %[[VAL_2:.*]]: i32,
@@ -225,7 +225,7 @@ handshake.func @cbranch_into_mux_extend(%arg0 : i1, %arg1 : index, %arg2 : i32, 
 // CHECK:           %[[VAL_6:.*]] = arith.addi %[[VAL_4]], %[[VAL_4]] : i32
 // CHECK:           return %[[VAL_2]], %[[VAL_6]], %[[VAL_3]] : i32, i32, none
 // CHECK:         }
-handshake.func @cbranch_into_mux_elim(%arg0 : i1, %arg1 : index, %arg2 : i32, %arg3: none) -> (i32, i32, none) {
+handshake.func @cbranch_into_mux_no_erase(%arg0 : i1, %arg1 : index, %arg2 : i32, %arg3: none) -> (i32, i32, none) {
   %trueResult, %falseResult = cond_br %arg0, %arg2 : i32
   %0 = mux %arg1 [%trueResult, %falseResult] : index, i32
   %1 = arith.addi %trueResult, %trueResult : i32 
