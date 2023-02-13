@@ -730,9 +730,8 @@ public:
     // instantiate the submodule. Else, run the pattern-defined module
     // builder.
     hw::HWModuleLike implModule = checkSubModuleOp(ls.parentModule, op);
-    if (!implModule) {
+    if (!implModule && !isa<handshake::InstanceOp>(op)) {
       auto portInfo = ModulePortInfo(getPortInfoForOp(op));
-
       implModule = submoduleBuilder.create<hw::HWModuleOp>(
           op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
           portInfo, [&](OpBuilder &b, hw::HWModulePortAccessor &ports) {
@@ -1064,38 +1063,6 @@ public:
   };
 };
 
-// Rewrite handshake.instance op. Simply replace it with a hw.instance op
-class InstanceConversionPattern
-    : public OpConversionPattern<handshake::InstanceOp> {
-public:
-  InstanceConversionPattern(ESITypeConverter &typeConverter,
-                            MLIRContext *context, HandshakeLoweringState &ls)
-      : OpConversionPattern<handshake::InstanceOp>::OpConversionPattern(
-            typeConverter, context),
-        ls(ls) {}
-  LogicalResult
-  matchAndRewrite(handshake::InstanceOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    hw::HWModuleLike refModule = checkSubModuleOp(ls.parentModule, op);
-
-    // Is already checked by the function
-    // handshake::InstanceOp::verifySymbolUses
-    assert(refModule &&
-           "handshake.instance references a module that does not exists");
-
-    // Instantiate the referenced module
-    llvm::SmallVector<Value> operands = adaptor.getOperands();
-    addSequentialIOOperandsIfNeeded(op, operands);
-    rewriter.replaceOpWithNewOp<hw::InstanceOp>(
-        op, refModule, rewriter.getStringAttr(ls.nameUniquer(op)), operands);
-    return success();
-  }
-
-private:
-  HandshakeLoweringState &ls;
-};
-
 class ReturnConversionPattern
     : public OpConversionPattern<handshake::ReturnOp> {
 public:
@@ -1143,6 +1110,15 @@ public:
     buildUnitRateJoinLogic(s, unwrappedIO,
                            [&](ValueRange inputs) { return s.pack(inputs); });
   };
+};
+
+class InstanceConversionPattern
+    : public HandshakeConversionPattern<handshake::InstanceOp> {
+public:
+  using HandshakeConversionPattern<
+      handshake::InstanceOp>::HandshakeConversionPattern;
+  void buildModule(handshake::InstanceOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override{};
 };
 
 class StructCreateConversionPattern
@@ -1907,6 +1883,7 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     // Check if a external submodule has already been created for the op. If so,
     // Instantiate the external submodule. Else, build the external module
+
     auto implModule = checkSubModuleOp(ls.parentModule, op);
     if (!implModule) {
       auto portInfo = ModulePortInfo(getPortInfoForOp(op));
@@ -2076,9 +2053,6 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
                   SyncConversionPattern>(typeConverter, op.getContext(),
                                          moduleBuilder, ls);
 
-  patterns.insert<InstanceConversionPattern>(typeConverter, op.getContext(),
-                                             ls);
-
   patterns.insert<
       // Comb operations.
       UnitRateConversionPattern<arith::AddIOp, comb::AddOp>,
@@ -2103,7 +2077,7 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
       SourceConversionPattern, SinkConversionPattern, ConstantConversionPattern,
       MergeConversionPattern, ControlMergeConversionPattern,
       LoadConversionPattern, StoreConversionPattern, MemoryConversionPattern,
-      ExternalInstanceConversionPattern,
+      ExternalInstanceConversionPattern, InstanceConversionPattern,
       // Arith operations.
       ExtendConversionPattern<arith::ExtUIOp, /*signExtend=*/false>,
       ExtendConversionPattern<arith::ExtSIOp, /*signExtend=*/true>,
@@ -2158,6 +2132,7 @@ public:
     submoduleBuilder.setInsertionPointToStart(mod.getBody());
     for (auto &funcName : llvm::reverse(sortedFuncs)) {
       auto funcOp = mod.lookupSymbol<handshake::FuncOp>(funcName);
+      submoduleBuilder.setInsertionPoint(funcOp);
       assert(funcOp && "handshake.func not found in module!");
       if (failed(
               convertFuncOp(typeConverter, target, funcOp, submoduleBuilder))) {
