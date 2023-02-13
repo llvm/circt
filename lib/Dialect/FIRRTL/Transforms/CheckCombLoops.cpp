@@ -29,27 +29,45 @@ using namespace firrtl;
 
 using SetOfNodes = DenseSet<FieldRef>;
 using Node = FieldRef;
+
+/// A value is in VisitingSet if its subtree is still being traversed. That is,
+/// all its children have not yet been visited. If any Value is visited while
+/// its still in the `VisitingSet`, that implies a back edge and a cycle.
 struct VisitingSet {
 private:
-  SmallVector<SmallVector<Value, 2>, 16> visitingStack;
-  DenseSet<Value> set;
+  /// The stack is maintained to keep track of the cycle, if one is found. This
+  /// is required for an iterative DFS traversal, its implicitly recorded for a
+  /// recursive version of this algorithm. Each entry in the stack is a list of
+  /// aliasing Values, which were visited at the same time.
+  SmallVector<SmallVector<Value, 2>> visitingStack;
+  /// This map of the Visiting values, is for faster query, to check if a Value
+  /// is in VisitingSet. It also records the corresponding index into the
+  /// visitingStack, for faster pop until the Value.
+  DenseMap<Value, unsigned> valToStackMap;
 
 public:
   void appendEmpty() { visitingStack.push_back({}); }
   void appendToEnd(SmallVector<Value> &values) {
+    auto stackSize = visitingStack.size() - 1;
     visitingStack.back().append(values.begin(), values.end());
-    set.insert(values.begin(), values.end());
+    // Record the stack location where this Value is pushed.
+    llvm::for_each(values, [&](Value v) { valToStackMap[v] = stackSize; });
   }
-  bool contains(Value v) { return set.contains(v); }
+  bool contains(Value v) {
+    return valToStackMap.find(v) != valToStackMap.end();
+  }
+  // Pop all the Values which were visited after v. Then invoke f (if present)
+  // on a popped value for each index.
   void popUntillVal(Value v,
                     const llvm::function_ref<void(Value poppedVal)> f = {}) {
-    while (contains(v)) {
+    auto valPos = valToStackMap[v];
+    while (visitingStack.size() != valPos) {
       auto poppedVals = visitingStack.pop_back_val();
       Value poppedVal;
       llvm::for_each(poppedVals, [&](Value pv) {
         if (!poppedVal)
           poppedVal = pv;
-        set.erase(pv);
+        valToStackMap.erase(pv);
       });
       if (f && poppedVal)
         f(poppedVal);
@@ -113,7 +131,7 @@ public:
           // aliasingValues.
           SmallVector<Value> aliasingValues = {dfsVal};
           // If `dfsVal` is a subfield, then get all the FieldRefs that it
-          // refers to and add them to the visiting set.
+          // refers to and then get all the values that alias with it.
           forallRefersTo(dfsVal, [&](Node ref) {
             // If this subfield refers to instance/mem results(input port), then
             // add the output port FieldRefs that exist in the referenced module
@@ -133,37 +151,34 @@ public:
           });
           if (!inputArgFieldsTemp.empty())
             inputArgFields = std::move(inputArgFieldsTemp);
+          auto type = dfsVal.getType().dyn_cast<FIRRTLBaseType>();
 
           aliasingValues.erase(
               std::unique(aliasingValues.begin(), aliasingValues.end()),
               aliasingValues.end());
           visiting.appendToEnd(aliasingValues);
+          visited.insert(aliasingValues.begin(), aliasingValues.end());
           // Add the Value to `children`, to which a path exists from `dfsVal`.
           for (auto dfsFromVal : aliasingValues) {
 
             for (auto &use : dfsFromVal.getUses()) {
               Operation *owner = use.getOwner();
               Value childVal;
-              if (owner->getNumResults() == 1)
+              if (owner->getNumResults() == 1 && !type.isa<ClockType>())
                 childVal = owner->getResult(0);
               else if (auto connect = dyn_cast<FConnectLike>(owner))
                 if (use.getOperandNumber() == 1) {
-                  childVal = connect.getDest();
-                  handleConnects(childVal, inputArgFields);
+                  auto dst = connect.getDest();
+                  if (handleConnects(dst, inputArgFields).succeeded())
+                    childVal = dst;
                 }
-              if (childVal)
+              if (childVal && childVal.getType().isa<FIRRTLBaseType>())
                 children.push_back(childVal);
             }
           }
           for (auto childVal : children) {
             // This childVal can be ignored, if
             // It is a Register or a subfield of a register.
-            if (childVal.getDefiningOp() &&
-                (isa<RegOp, RegResetOp>(childVal.getDefiningOp()) ||
-                 (isa<SubfieldOp, SubaccessOp, SubindexOp>(
-                      childVal.getDefiningOp()) &&
-                  valRefersTo.find(childVal) == valRefersTo.end())))
-              continue;
             if (!visited.contains(childVal))
               dfsStack.push_back(childVal);
             // If the childVal is a sub, then check if it aliases with any of
@@ -188,6 +203,7 @@ public:
         auto popped = dfsStack.pop_back_val();
         LLVM_DEBUG(llvm::dbgs()
                    << "\n dfs popped :" << getFieldName(Node(popped, 0)).first);
+        dump();
       }
     }
     LLVM_DEBUG({
@@ -206,7 +222,9 @@ public:
   // 2. roots for DFS traversal,
   void preprocess(SmallVector<Value> &worklist) {
     // All the input ports are added to the worklist.
+    size_t ops = 0;
     for (BlockArgument arg : module.getArguments()) {
+      ops++;
       auto argType = arg.getType();
       if (argType.isa<RefType>())
         continue;
@@ -218,6 +236,7 @@ public:
     DenseSet<Value> memPorts;
 
     for (auto &op : module.getOps()) {
+      ops++;
       TypeSwitch<Operation *>(&op)
           // Wire is added to the worklist
           .Case<WireOp>([&](WireOp wire) {
@@ -259,7 +278,6 @@ public:
             if (isValid) {
               for (auto f : fields)
                 setValRefsTo(res, f);
-              worklist.push_back(res);
             }
           })
           .Case<SubindexOp>([&](SubindexOp sub) {
@@ -279,7 +297,6 @@ public:
             if (isValid) {
               for (auto f : fields)
                 setValRefsTo(res, f);
-              worklist.push_back(res);
             }
           })
           .Case<SubaccessOp>([&](SubaccessOp sub) {
@@ -306,7 +323,6 @@ public:
             if (isValid) {
               for (auto f : fields)
                 setValRefsTo(res, f);
-              worklist.push_back(res);
             }
           })
           .Case<InstanceOp>(
@@ -323,28 +339,24 @@ public:
           })
           .Default([&](auto) {});
     }
-    dump();
   }
 
   void handleInstanceOp(InstanceOp ins, SmallVector<Value> &worklist) {
-    FModuleOp refModule =
-        dyn_cast<FModuleOp>(*instanceGraph.getReferencedModule(ins));
-    if (!refModule)
-      return;
     for (auto port : ins.getResults()) {
-      worklist.push_back(port);
-      if (auto type = port.getType().dyn_cast<FIRRTLBaseType>())
+      if (auto type = port.getType().dyn_cast<FIRRTLBaseType>()) {
+        worklist.push_back(port);
         if (!type.isGround())
           setValRefsTo(port, Node(port, 0));
+      }
     }
   }
 
   void handlePorts(Node ref, SmallVectorImpl<Value> &children) {
-    if (auto inst = dyn_cast<InstanceOp>(ref.getDefiningOp())) {
+    if (auto inst = dyn_cast_or_null<InstanceOp>(ref.getDefiningOp())) {
       auto res = ref.getValue().cast<OpResult>();
       auto portNum = res.getResultNumber();
       auto refMod =
-          dyn_cast<FModuleOp>(*instanceGraph.getReferencedModule(inst));
+          dyn_cast_or_null<FModuleOp>(*instanceGraph.getReferencedModule(inst));
       if (!refMod)
         return;
       Node modArg(refMod.getArgument(portNum), ref.getFieldID());
@@ -402,16 +414,29 @@ public:
       errorDiag << module.getName() << "." << lastSignalName;
   }
 
-  void handleConnects(Value dst, SmallVector<Node> &inputArgFields) {
+  LogicalResult handleConnects(Value dst, SmallVector<Node> &inputArgFields) {
+
+    bool onlyFieldZero = true;
     auto pathsToOutPort = [&](Node dstNode) {
-      if (!dstNode.getValue().isa<BlockArgument>())
-        return success();
+      if (dstNode.getFieldID() != 0)
+        onlyFieldZero = false;
+      if (!dstNode.getValue().isa<BlockArgument>()) {
+        return failure();
+      }
+      onlyFieldZero = false;
       for (auto inArg : inputArgFields) {
         portPaths[inArg].insert(dstNode);
       }
       return success();
     };
     forallRefersTo(dst, pathsToOutPort);
+
+    if (onlyFieldZero) {
+      if (isa<RegOp, RegResetOp, SubfieldOp, SubaccessOp, SubindexOp>(
+              dst.getDefiningOp()))
+        return failure();
+    }
+    return success();
   }
 
   void setValRefsTo(Value val, Node ref) {
@@ -424,18 +449,16 @@ public:
   void forallRefersTo(Value val,
                       const llvm::function_ref<LogicalResult(Node &refNode)> f,
                       bool baseCase = true) {
-    if (baseCase &&
-        (val.isa<BlockArgument>() ||
-         !isa<SubindexOp, SubfieldOp, SubaccessOp>(val.getDefiningOp()))) {
+    auto refersToIter = valRefersTo.find(val);
+    if (refersToIter != valRefersTo.end()) {
+      for (auto ref : refersToIter->second)
+        if (f(ref).failed())
+          return;
+    } else if (baseCase) {
       Node base(val, 0);
       if (f(base).failed())
         return;
     }
-    auto refersToIter = valRefersTo.find(val);
-    if (refersToIter != valRefersTo.end())
-      for (auto ref : refersToIter->second)
-        if (f(ref).failed())
-          return;
   }
 
   void dump() {
@@ -462,12 +485,12 @@ public:
 
   FModuleOp module;
   InstanceGraph &instanceGraph;
-  // Map of a Value to all the FieldRefs that it refers to.
+  /// Map of a Value to all the FieldRefs that it refers to.
   DenseMap<Value, SetOfNodes> valRefersTo;
 
   DenseMap<Node, DenseSet<Value>> fieldToVals;
-  // Comb paths that exist between module ports. This is maintained across
-  // modules.
+  /// Comb paths that exist between module ports. This is maintained across
+  /// modules.
   DenseMap<Node, SetOfNodes> &portPaths;
 };
 
