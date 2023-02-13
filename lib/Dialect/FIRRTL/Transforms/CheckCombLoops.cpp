@@ -458,21 +458,21 @@ public:
   }
 
   void dump() {
-    for (auto valRef : valRefersTo) {
+    for (const auto &valRef : valRefersTo) {
       llvm::dbgs() << "\n val :" << valRef.first;
       for (auto node : valRef.second)
         llvm::dbgs() << "\n Refers to :" << getFieldName(node).first;
     }
-    for (auto dtv : fieldToVals) {
+    for (const auto &dtv : fieldToVals) {
       llvm::dbgs() << "\n Field :" << getFieldName(dtv.first).first
                    << " ::" << dtv.first.getValue();
       for (auto val : dtv.second)
         llvm::dbgs() << "\n val :" << val;
     }
-    for (auto p : portPaths) {
+    for (const auto &p : portPaths) {
       llvm::dbgs() << "\n Output port : " << getFieldName(p.first).first
                    << " has comb path from :";
-      for (auto src : p.second)
+      for (const auto &src : p.second)
         llvm::dbgs() << "\n Input port : " << getFieldName(src).first;
     }
   }
