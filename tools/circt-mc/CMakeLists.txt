@@ -1,5 +1,5 @@
 # circt-mc builds if a logic backend is found
-if(CIRCT_LEC_ENABLED)
+if(CIRCTSMT_ENABLED)
   add_llvm_tool(circt-mc
     circt-mc.cpp
   )

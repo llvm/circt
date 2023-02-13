@@ -37,7 +37,7 @@ if (ESI_RUNTIME)
 endif()
 
 # Enable circt-lec tests if it is built.
-if(CIRCT_LEC_ENABLED)
+if(CIRCTSMT_ENABLED)
   list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS circt-lec)
 endif()
 
