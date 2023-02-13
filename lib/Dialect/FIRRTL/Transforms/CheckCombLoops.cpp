@@ -92,12 +92,19 @@ public:
 
     llvm::DenseSet<Value> visited;
     VisitingSet visiting;
+    SmallVector<Value> dfsStack;
+    SmallVector<Node> inputArgFields;
+    // Record all the children of Value being visited.
+    SmallVector<Value, 8> children;
+    // If this is an input port field, then record it. This is used to
+    // discover paths from input to output ports. Only the last input port
+    // that is visited on the DFS traversal is recorded.
+    SmallVector<Node, 2> inputArgFieldsTemp;
 
     // worklist is the list of roots, to begin the traversal from.
     for (auto root : worklist) {
-      SmallVector<Value> dfsStack;
-      dfsStack.push_back(root);
-      SmallVector<Node> inputArgFields;
+      dfsStack = {root};
+      inputArgFields.clear();
       LLVM_DEBUG(llvm::dbgs() << "\n Starting traversal from root :"
                               << getFieldName(Node(root, 0)).first);
       if (auto inArg = dyn_cast<BlockArgument>(root)) {
@@ -121,12 +128,8 @@ public:
           // dfsVal, this is required to detect back edges to aliasing Values.
           // That is fieldRefs that can refer to the same memory location.
           visiting.appendEmpty();
-          // Record all the children of `dfsVal`.
-          SmallVector<Value, 8> children;
-          // If this is an input port field, then record it. This is used to
-          // discover paths from input to output ports. Only the last input port
-          // that is visited on the DFS traversal is recorded.
-          SmallVector<Node, 2> inputArgFieldsTemp;
+          children.clear();
+          inputArgFieldsTemp.clear();
           // All the Values that refer to the same FieldRef are added to the
           // aliasingValues.
           SmallVector<Value> aliasingValues = {dfsVal};
@@ -201,9 +204,11 @@ public:
         visiting.popUntillVal(dfsVal);
 
         auto popped = dfsStack.pop_back_val();
-        LLVM_DEBUG(llvm::dbgs()
-                   << "\n dfs popped :" << getFieldName(Node(popped, 0)).first);
-        dump();
+        LLVM_DEBUG({
+          llvm::dbgs() << "\n dfs popped :"
+                       << getFieldName(Node(popped, 0)).first;
+          dump();
+        });
       }
     }
     LLVM_DEBUG({
@@ -222,9 +227,7 @@ public:
   // 2. roots for DFS traversal,
   void preprocess(SmallVector<Value> &worklist) {
     // All the input ports are added to the worklist.
-    size_t ops = 0;
     for (BlockArgument arg : module.getArguments()) {
-      ops++;
       auto argType = arg.getType();
       if (argType.isa<RefType>())
         continue;
@@ -236,7 +239,6 @@ public:
     DenseSet<Value> memPorts;
 
     for (auto &op : module.getOps()) {
-      ops++;
       TypeSwitch<Operation *>(&op)
           // Wire is added to the worklist
           .Case<WireOp>([&](WireOp wire) {
@@ -258,7 +260,6 @@ public:
                   type.getFieldID((unsigned)ReadPortSubfield::data);
               auto addressFieldId =
                   type.getFieldID((unsigned)ReadPortSubfield::addr);
-              memPorts.insert(memPort);
               if (fieldIndex == enableFieldId || fieldIndex == dataFieldId ||
                   fieldIndex == addressFieldId) {
                 setValRefsTo(memPort, Node(memPort, 0));
@@ -270,8 +271,7 @@ public:
                 sub.getInput(),
                 [&](Node subBase) {
                   isValid = true;
-                  fields.push_back(Node(subBase.getValue(),
-                                        subBase.getFieldID() + fieldIndex));
+                  fields.push_back(Node(subBase.getSubField(fieldIndex)));
                   return success();
                 },
                 false);
@@ -289,8 +289,7 @@ public:
                 sub.getInput(),
                 [&](Node subBase) {
                   isValid = true;
-                  fields.push_back(Node(subBase.getValue(),
-                                        subBase.getFieldID() + index + 1));
+                  fields.push_back(subBase.getSubField(index + 1));
                   return success();
                 },
                 false);
@@ -312,10 +311,8 @@ public:
                   // locations corresponding to all the possible indices.
                   for (size_t index = 0; index < vecType.getNumElements();
                        ++index)
-                    fields.push_back(Node(
-                        subBase.getValue(),
-                        subBase.getFieldID() + 1 +
-                            index * (vecType.getElementType().getMaxFieldID() +
+                    fields.push_back(subBase.getSubField(
+                        1 + index * (vecType.getElementType().getMaxFieldID() +
                                      1)));
                   return success();
                 },
@@ -440,8 +437,7 @@ public:
   }
 
   void setValRefsTo(Value val, Node ref) {
-    if (!val || !ref)
-      return;
+    assert(val && ref && " Value and Ref cannot be null");
     fieldToVals[ref].insert(val);
     valRefersTo[val].insert(ref);
   }
@@ -462,25 +458,23 @@ public:
   }
 
   void dump() {
-    LLVM_DEBUG({
-      for (auto valRef : valRefersTo) {
-        llvm::dbgs() << "\n val :" << valRef.first;
-        for (auto node : valRef.second)
-          llvm::dbgs() << "\n Refers to :" << getFieldName(node).first;
-      }
-      for (auto dtv : fieldToVals) {
-        llvm::dbgs() << "\n Field :" << getFieldName(dtv.first).first
-                     << " ::" << dtv.first.getValue();
-        for (auto val : dtv.second)
-          llvm::dbgs() << "\n val :" << val;
-      }
-      for (auto p : portPaths) {
-        llvm::dbgs() << "\n Output port : " << getFieldName(p.first).first
-                     << " has comb path from :";
-        for (auto src : p.second)
-          llvm::dbgs() << "\n Input port : " << getFieldName(src).first;
-      }
-    });
+    for (auto valRef : valRefersTo) {
+      llvm::dbgs() << "\n val :" << valRef.first;
+      for (auto node : valRef.second)
+        llvm::dbgs() << "\n Refers to :" << getFieldName(node).first;
+    }
+    for (auto dtv : fieldToVals) {
+      llvm::dbgs() << "\n Field :" << getFieldName(dtv.first).first
+                   << " ::" << dtv.first.getValue();
+      for (auto val : dtv.second)
+        llvm::dbgs() << "\n val :" << val;
+    }
+    for (auto p : portPaths) {
+      llvm::dbgs() << "\n Output port : " << getFieldName(p.first).first
+                   << " has comb path from :";
+      for (auto src : p.second)
+        llvm::dbgs() << "\n Input port : " << getFieldName(src).first;
+    }
   }
 
   FModuleOp module;
