@@ -216,6 +216,25 @@ struct FirMemory {
     return getTuple() == rhs.getTuple();
   }
   StringAttr getFirMemoryName() const;
+
+  /**
+   * Check whether the memory is a seq mem.
+   *
+   * The following conditions must hold:
+   *   1. read latency and write latency of one.
+   *   2. only one readwrite port or write port.
+   *   3. zero or one read port.
+   *   4. undefined read-under-write behavior.
+   */
+  bool isSeqMem() const {
+    if (readLatency != 1 || writeLatency != 1)
+      return false;
+    if (numWritePorts + numReadWritePorts != 1)
+      return false;
+    if (numReadPorts > 1)
+      return false;
+    return dataWidth > 0;
+  }
 };
 
 // Record of the inner sym name, the module name and the corresponding
