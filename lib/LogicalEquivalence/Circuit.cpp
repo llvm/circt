@@ -719,12 +719,6 @@ bool Solver::Circuit::checkCycle(int count) {
   updateInputs(count, true);
   runClockPosedge();
   if (!checkState()) {
-    // Print all the solver constraints
-    lec::dbgs() << "Solver constraints:\n";
-    for (auto constraint : solver.solver.assertions()) {
-      // Convert the assertion to a string
-      llvm::errs() << constraint.to_string() << "\n";
-    }
     return false;
   }
   updateInputs(count, false);
