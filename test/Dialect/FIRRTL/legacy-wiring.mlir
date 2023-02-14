@@ -141,3 +141,67 @@ firrtl.circuit "Sub" attributes {
   }
 }
 
+// -----
+
+// https://github.com/llvm/circt/issues/4651
+// Check that wiring can convert compatible types that can normally be connected.
+
+firrtl.circuit "ResetToI1" attributes {
+ rawAnnotations = [
+  {
+    class = "firrtl.passes.wiring.SourceAnnotation",
+    target = "~ResetToI1|Bar>y",
+    pin = "xyz"
+  },
+  {
+    class = "firrtl.passes.wiring.SinkAnnotation",
+    target = "~ResetToI1|ResetToI1>x",
+    pin = "xyz"
+  }
+  ]} {
+  firrtl.module private @Bar() {
+    %y = firrtl.wire interesting_name : !firrtl.reset
+    %invalid_reset = firrtl.invalidvalue : !firrtl.reset
+    firrtl.strictconnect %y, %invalid_reset : !firrtl.reset
+  }
+  // CHECK-LABEL module @ResetToI1
+  firrtl.module @ResetToI1() {
+    // CHECK: firrtl.connect %x, %{{[^ ]*}} : !firrtl.uint<1>, !firrtl.reset
+    firrtl.instance bar interesting_name @Bar()
+    %x = firrtl.wire interesting_name : !firrtl.uint<1>
+    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+    firrtl.strictconnect %x, %invalid_ui1 : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Similarly, but for integer types.
+
+firrtl.circuit "IntWidths" attributes {
+ rawAnnotations = [
+  {
+    class = "firrtl.passes.wiring.SourceAnnotation",
+    target = "~IntWidths|Bar>y",
+    pin = "xyz"
+  },
+  {
+    class = "firrtl.passes.wiring.SinkAnnotation",
+    target = "~IntWidths|IntWidths>x",
+    pin = "xyz"
+  }
+  ]} {
+  firrtl.module private @Bar() {
+    %y = firrtl.wire interesting_name : !firrtl.uint<4>
+    %invalid_reset = firrtl.invalidvalue : !firrtl.uint<4>
+    firrtl.strictconnect %y, %invalid_reset : !firrtl.uint<4>
+  }
+  // CHECK-LABEL module @IntWidths
+  firrtl.module @IntWidths() {
+    // CHECK: firrtl.connect %x, %{{[^ ]*}} : !firrtl.uint, !firrtl.uint<4>
+    firrtl.instance bar interesting_name @Bar()
+    %x = firrtl.wire interesting_name : !firrtl.uint
+    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint
+    firrtl.connect %x, %invalid_ui1 : !firrtl.uint, !firrtl.uint
+  }
+}
