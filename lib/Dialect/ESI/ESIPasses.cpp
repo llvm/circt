@@ -385,9 +385,8 @@ void ESIPortsPass::runOnOperation() {
   // Find all externmodules and try to modify them. Remember the modified ones.
   DenseMap<StringRef, HWModuleExternOp> externModsMutated;
   for (auto mod : top.getOps<HWModuleExternOp>()) {
-    BoolAttr bundleSigs =
-        mod->getAttrOfType<BoolAttr>(ExtModBundleSignalsAttrName);
-    if (bundleSigs && bundleSigs.getValue() && updateFunc(mod))
+    if (mod->hasAttrOfType<UnitAttr>(ExtModBundleSignalsAttrName) &&
+        updateFunc(mod))
       externModsMutated[mod.getName()] = mod;
   }
   // Find all instances and update them.
@@ -421,18 +420,18 @@ static StringAttr appendToRtlName(StringAttr base, StringRef suffix) {
 }
 
 /// Convert all input and output ChannelTypes into valid/ready wires. Try not to
-/// change the order and materialize ops in reasonably intuitive locations.
+/// change the order and materialize ops in reasonably intuitive locations. Will
+/// modify the body only if one exists.
 bool ESIPortsPass::updateFunc(HWMutableModuleLike mod) {
-  // auto funcType = mod.getFunctionType();
   Block *body = nullptr;
   if (mod->getNumRegions() == 1 && mod->getRegion(0).getBlocks().size() == 1)
     body = &mod->getRegion(0).front();
 
   // Build ops in the module.
   ImplicitLocOpBuilder modBuilder(mod.getLoc(), mod);
+  Type i1 = modBuilder.getI1Type();
   if (body)
     modBuilder.setInsertionPointToStart(body);
-  Type i1 = modBuilder.getI1Type();
 
   ModulePortInfo ports = mod.getPorts();
   bool updated = false;
@@ -458,29 +457,32 @@ bool ESIPortsPass::updateFunc(HWMutableModuleLike mod) {
       continue;
 
     // When we find one, add a data and valid signal to the new args.
+    PortInfo dataPort;
+    dataPort.name = port.name;
+    dataPort.type = chanTy.getInner();
+    dataPort.loc = port.loc;
+    inputsToInsert.emplace_back(argNum, dataPort);
+
+    PortInfo validPort;
+    validPort.name = appendToRtlName(port.name, "_valid");
+    validPort.type = i1;
+    validPort.loc = port.loc;
+    inputsToInsert.emplace_back(argNum, validPort);
+
     Value data, valid;
-    PortInfo dataPort, validPort;
     if (body) {
       valid = body->insertArgument(blockArgNum, i1, port.loc);
       data = body->insertArgument(blockArgNum, chanTy.getInner(), port.loc);
       blockArgNum += 2;
     }
 
-    dataPort.name = port.name;
-    dataPort.type = chanTy.getInner();
-    dataPort.loc = port.loc;
-    inputsToInsert.emplace_back(argNum, dataPort);
-
-    validPort.name = appendToRtlName(port.name, "_valid");
-    validPort.type = i1;
-    validPort.loc = port.loc;
-    inputsToInsert.emplace_back(argNum, validPort);
-
-    Value ready;
+    // And add the corresponding output ready signal.
     PortInfo readyPort;
     readyPort.name = appendToRtlName(port.name, "_ready");
     readyPort.type = i1;
     readyPort.loc = port.loc;
+
+    Value ready;
     if (body) {
       // Build the ESI wrap operation to translate the lowered signals to what
       // they were. (A later pass takes care of eliminating the ESI ops.)
@@ -494,6 +496,7 @@ bool ESIPortsPass::updateFunc(HWMutableModuleLike mod) {
       --blockArgNum;
     }
     newReadySignals.emplace_back(ready, readyPort);
+
     inputsToErase.push_back(argNum);
     updated = true;
   }
@@ -532,6 +535,7 @@ bool ESIPortsPass::updateFunc(HWMutableModuleLike mod) {
       newOutputOperands.push_back(unwrap.getRawOutput());
       newOutputOperands.push_back(unwrap.getValid());
     }
+    // New outputs.
     PortInfo dataPort, validPort;
     dataPort.name = port.name;
     dataPort.type = chanTy.getInner();
@@ -543,6 +547,7 @@ bool ESIPortsPass::updateFunc(HWMutableModuleLike mod) {
     validPort.loc = port.loc;
     outputsToInsert.emplace_back(resNum, validPort);
 
+    // New 'ready' input port.
     PortInfo readyPort;
     readyPort.type = i1;
     readyPort.name = appendToRtlName(port.name, "_ready");

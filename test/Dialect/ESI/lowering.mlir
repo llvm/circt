@@ -2,9 +2,9 @@
 // RUN: circt-opt %s --lower-esi-ports -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=IFACE %s
 // RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=HW %s
 
-hw.module.extern @Sender(%clk: i1) -> (x: !esi.channel<i4>, y: i8) attributes {esi.bundle = true}
-hw.module.extern @ArrSender() -> (x: !esi.channel<!hw.array<4xi64>>) attributes {esi.bundle = true}
-hw.module.extern @Reciever(%a: !esi.channel<i4>, %clk: i1) attributes {esi.bundle = true}
+hw.module.extern @Sender(%clk: i1) -> (x: !esi.channel<i4>, y: i8) attributes {esi.bundle}
+hw.module.extern @ArrSender() -> (x: !esi.channel<!hw.array<4xi64>>) attributes {esi.bundle}
+hw.module.extern @Reciever(%a: !esi.channel<i4>, %clk: i1) attributes {esi.bundle}
 hw.module.extern @i0SenderReceiver(%in: !esi.channel<i0>) -> (out: !esi.channel<i0>)
 
 // CHECK-LABEL: hw.module.extern @Sender(%clk: i1) -> (x: !esi.channel<i4>, y: i8)
@@ -102,7 +102,7 @@ hw.module @twoChannelArgs(%clk: i1, %ints: !esi.channel<i32>, %foo: !esi.channel
 // HW:   hw.output %true, %true : i1, i1
 
 // IFACE: %i1ToHandshake_fork0FromArg0 = sv.interface.instance : !sv.interface<@IValidReady_i1>
-hw.module.extern @handshake_fork_1ins_2outs_ctrl(%in0: !esi.channel<i1>, %clock: i1, %reset: i1) -> (out0: !esi.channel<i1>, out1: !esi.channel<i1>) attributes {esi.bundle = true}
+hw.module.extern @handshake_fork_1ins_2outs_ctrl(%in0: !esi.channel<i1>, %clock: i1, %reset: i1) -> (out0: !esi.channel<i1>, out1: !esi.channel<i1>) attributes {esi.bundle}
 hw.module @test_constant(%arg0: !esi.channel<i1>, %clock: i1, %reset: i1) -> (outCtrl: !esi.channel<i1>) {
   %handshake_fork0.out0, %handshake_fork0.out1 = hw.instance "handshake_fork0" @handshake_fork_1ins_2outs_ctrl(in0: %arg0: !esi.channel<i1>, clock: %clock: i1, reset: %reset: i1) -> (out0: !esi.channel<i1>, out1: !esi.channel<i1>)
   hw.output %handshake_fork0.out1 : !esi.channel<i1>
