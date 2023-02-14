@@ -692,7 +692,7 @@ static void modifyModuleArgs(
         body->insertArgument(idx++, port.type, loc);
     }
     if (argIdx == oldArgCount)
-      continue;
+      break;
 
     // Migrate the old port at this position.
     bool removed = false;
