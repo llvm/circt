@@ -453,10 +453,9 @@ bool ESIPortsPass::updateFunc(HWMutableModuleLike mod) {
     PortInfo &port = ports.inputs[argNum];
 
     auto chanTy = port.type.dyn_cast<ChannelType>();
-    if (!chanTy) {
+    if (!chanTy)
       // If not ESI, pass through.
       continue;
-    }
 
     // When we find one, add a data and valid signal to the new args.
     Value data, valid;
@@ -555,7 +554,7 @@ bool ESIPortsPass::updateFunc(HWMutableModuleLike mod) {
   }
 
   // Append the ready list signals we remembered above.
-  unsigned oldNumOutputs = ports.inputs.size();
+  unsigned oldNumOutputs = ports.outputs.size();
   for (auto [value, port] : newReadySignals) {
     if (body)
       newOutputOperands.push_back(value);

@@ -673,8 +673,7 @@ static void modifyModuleArgs(
 
   for (unsigned argIdx = 0, idx = 0; argIdx <= oldArgCount; ++argIdx, ++idx) {
     // Insert new ports at this position.
-    while (!insertArgs.empty() &&
-           (insertArgs[0].first == argIdx || argIdx == oldArgCount)) {
+    while (!insertArgs.empty() && insertArgs[0].first == argIdx) {
       auto port = insertArgs[0].second;
       if (port.direction == PortDirection::INOUT && !port.type.isa<InOutType>())
         port.type = InOutType::get(port.type);
