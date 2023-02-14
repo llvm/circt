@@ -29,7 +29,7 @@ struct PrintNLATablePass : public PrintNLATableBase<PrintNLATablePass> {
       auto mod = dyn_cast<FModuleLike>(mop);
       if (!mod)
         continue;
-      os << mod.moduleName() << ": ";
+      os << mod.getModuleName() << ": ";
       for (auto nla : nlaTable.lookup(mod))
         os << nla.getSymName() << ", ";
       os << '\n';

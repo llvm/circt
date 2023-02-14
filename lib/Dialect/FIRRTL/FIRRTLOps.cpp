@@ -221,7 +221,7 @@ DeclKind firrtl::getDeclarationKind(Value val) {
 }
 
 size_t firrtl::getNumPorts(Operation *op) {
-  if (auto module = dyn_cast<hw::HWModuleLike>(*op))
+  if (auto module = dyn_cast<hw::HWModuleLike>(op))
     return module.getNumPorts();
   return op->getNumResults();
 }
@@ -338,7 +338,7 @@ LogicalResult CircuitOp::verifyRegions() {
   }
 
   // Check that the main module is public.
-  if (!cast<hw::HWModuleLike>(*mainModule).isPublic()) {
+  if (!mainModule.isPublic()) {
     emitOpError("main module '" + main + "' must be public");
     return failure();
   }
@@ -459,8 +459,7 @@ static SmallVector<PortInfo> getPorts(FModuleLike module) {
   SmallVector<PortInfo> results;
   for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
     results.push_back({module.getPortNameAttr(i), module.getPortType(i),
-                       module.getPortDirection(i),
-                       cast<hw::HWModuleLike>(*module).getPortSymbolAttr(i),
+                       module.getPortDirection(i), module.getPortSymbolAttr(i),
                        module.getPortLocation(i),
                        AnnotationSet::forPort(module, i)});
   }
@@ -527,7 +526,7 @@ static void insertPorts(FModuleLike op,
       newNames.push_back(existingNames[oldIdx]);
       newTypes.push_back(existingTypes[oldIdx]);
       newAnnos.push_back(op.getAnnotationsAttrForPort(oldIdx));
-      newSyms.push_back(cast<hw::HWModuleLike>(*op).getPortSymbolAttr(oldIdx));
+      newSyms.push_back(op.getPortSymbolAttr(oldIdx));
       newLocs.push_back(existingLocs[oldIdx]);
       ++oldIdx;
     }
@@ -981,7 +980,7 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
     p << visibility.getValue() << ' ';
 
   // Print the operation and the function name.
-  p.printSymbolName(op.moduleName());
+  p.printSymbolName(op.getModuleName());
 
   // Print the parameter list (if non-empty).
   printParameterList(op->getAttrOfType<ArrayAttr>("parameters"), p);
@@ -1396,7 +1395,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 
   return build(
       builder, result, resultTypes,
-      SymbolRefAttr::get(builder.getContext(), module.moduleNameAttr()),
+      SymbolRefAttr::get(builder.getContext(), module.getModuleNameAttr()),
       builder.getStringAttr(name),
       NameKindEnumAttr::get(builder.getContext(), nameKind),
       module.getPortDirectionsAttr(), module.getPortNamesAttr(),

@@ -338,7 +338,7 @@ struct InstanceStubber : public OpReduction<firrtl::InstanceOp> {
                 symbols.getSymbolUserMap(tableOp).getUsers(moduleOp),
                 [&](Operation *user) { return deadInsts.contains(user); })) {
           LLVM_DEBUG(llvm::dbgs() << "- Removing transitively unused module `"
-                                  << moduleOp.moduleName() << "`\n");
+                                  << moduleOp.getModuleName() << "`\n");
           erasedModules.insert(moduleOp);
           worklist.push_back(moduleOp);
         }
@@ -385,7 +385,7 @@ struct InstanceStubber : public OpReduction<firrtl::InstanceOp> {
             symbols.getSymbolUserMap(tableOp).getUsers(moduleOp),
             [&](Operation *user) { return erasedInsts.contains(user); })) {
       LLVM_DEBUG(llvm::dbgs() << "- Removing now unused module `"
-                              << moduleOp.moduleName() << "`\n");
+                              << moduleOp.getModuleName() << "`\n");
       erasedModules.insert(moduleOp);
     }
     return success();
