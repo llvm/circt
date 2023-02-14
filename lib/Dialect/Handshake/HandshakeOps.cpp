@@ -343,10 +343,6 @@ struct EliminateCBranchIntoMuxPattern : OpRewritePattern<MuxOp> {
       rewriter.replaceOp(op, firstParentCBranch.getDataOperand());
     });
 
-    // Remove the cbranch if it has no uses
-    if (firstParentCBranch.use_empty())
-      rewriter.eraseOp(firstParentCBranch);
-
     return success();
   }
 };
