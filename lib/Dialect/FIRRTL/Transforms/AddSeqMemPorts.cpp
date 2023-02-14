@@ -194,13 +194,15 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
   for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
     if (auto inst = dyn_cast<InstanceOp>(op)) {
       auto submodule = instanceGraph->getReferencedModule(inst);
-      auto &subMemInfo = memInfoMap[submodule];
+
+      auto subMemInfoIt = memInfoMap.find(submodule);
+      // If there are no extra ports, we don't have to do anything.
+      if (subMemInfoIt == memInfoMap.end() ||
+          subMemInfoIt->second.extraPorts.empty())
+        continue;
+      auto &subMemInfo = subMemInfoIt->second;
       // Find out how many memory ports we have to add.
       auto &subExtraPorts = subMemInfo.extraPorts;
-
-      // If there are no extra ports, we don't have to do anything.
-      if (subExtraPorts.size() == 0)
-        continue;
 
       // Add the extra ports to the instance operation.
       auto clone = inst.cloneAndInsertPorts(subExtraPorts);

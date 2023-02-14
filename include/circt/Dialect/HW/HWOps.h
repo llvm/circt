@@ -31,63 +31,8 @@ namespace hw {
 
 class EnumFieldAttr;
 
-/// A module port direction.
-enum class PortDirection {
-  INPUT = 1,
-  OUTPUT = 2,
-  INOUT = 3,
-};
-
 /// Flip a port direction.
 PortDirection flip(PortDirection direction);
-
-/// This holds the name, type, direction of a module's ports
-struct PortInfo {
-  StringAttr name;
-  PortDirection direction;
-  Type type;
-
-  /// This is the argument index or the result index depending on the direction.
-  /// "0" for an output means the first output, "0" for a in/inout means the
-  /// first argument.
-  size_t argNum = ~0U;
-
-  /// The optional symbol for this port.
-  InnerSymAttr sym = {};
-  LocationAttr loc = {};
-
-  StringRef getName() const { return name.getValue(); }
-  bool isInput() const { return direction == PortDirection::INPUT; }
-  bool isOutput() const { return direction == PortDirection::OUTPUT; }
-  bool isInOut() const { return direction == PortDirection::INOUT; }
-
-  /// Return a unique numeric identifier for this port.
-  ssize_t getId() const { return isOutput() ? argNum : (-1 - argNum); };
-};
-
-/// This holds a decoded list of input/inout and output ports for a module or
-/// instance.
-struct ModulePortInfo {
-  explicit ModulePortInfo(ArrayRef<PortInfo> inputs, ArrayRef<PortInfo> outputs)
-      : inputs(inputs.begin(), inputs.end()),
-        outputs(outputs.begin(), outputs.end()) {}
-
-  explicit ModulePortInfo(ArrayRef<PortInfo> mergedPorts) {
-    inputs.reserve(mergedPorts.size());
-    outputs.reserve(mergedPorts.size());
-    for (auto port : mergedPorts) {
-      if (port.isOutput())
-        outputs.push_back(port);
-      else
-        inputs.push_back(port);
-    }
-  }
-
-  /// This contains a list of the input and inout ports.
-  SmallVector<PortInfo> inputs;
-  /// This is a list of the output ports.
-  SmallVector<PortInfo> outputs;
-};
 
 /// TODO: Move all these functions to a hw::ModuleLike interface.
 

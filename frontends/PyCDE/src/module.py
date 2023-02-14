@@ -123,7 +123,8 @@ class PortProxyBase:
 
   def __init__(self, block_args, builder):
     self._block_args = block_args
-    self._output_values = [None] * len(builder.outputs)
+    if builder.outputs is not None:
+      self._output_values = [None] * len(builder.outputs)
     self._builder = builder
 
   def _get_input(self, idx):
@@ -314,7 +315,7 @@ class ModuleLikeBuilderBase(_PyProxy):
       self.loc = loc
       self.clk = None
       self.ports = ports
-      if len(builder.clocks) == 1:
+      if builder.clocks is not None and len(builder.clocks) == 1:
         # Enter clock block implicitly if only one clock given.
         clk_port = list(builder.clocks)[0]
         self.clk = ClockSignal(ports._block_args[clk_port], ClockType())

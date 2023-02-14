@@ -20,4 +20,10 @@ firrtl.circuit "TopLevel" {
   // 1D_VEC: %a_0: !firrtl.uint<1>
   firrtl.module private @Bar(in %a: !firrtl.vector<uint<1>, 1>) {
   }
+  // CHECK-LABEL: PublicModule
+  // CHECK-NOT: firrtl.bundle
+  // NOT_PRESERVE_PUBLIC_TYPES-LABEL: PublicModule
+  // NOT_PRESERVE_PUBLIC_TYPES: firrtl.bundle
+  firrtl.module public @PublicModule(in %source: !firrtl.bundle<valid: uint<1>>) {
+  }
 }

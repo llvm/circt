@@ -489,7 +489,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             builder.getArrayAttr(resultNames), mem.getNameAttr(),
             mem.getNameKind(), mem.getAnnotations(),
             builder.getArrayAttr(portAnnotations), mem.getInnerSymAttr(),
-            mem.getGroupIDAttr());
+            mem.getGroupIDAttr(), mem.getInitAttr());
         for (const auto &res : llvm::enumerate(oldResults))
           res.value().replaceAllUsesWith(newMem.getResult(res.index()));
         mem.erase();

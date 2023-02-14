@@ -278,6 +278,62 @@ static LogicalResult drop(const AnnoPathValue &target, DictionaryAttr anno,
 }
 
 //===----------------------------------------------------------------------===//
+// Customized Appliers
+//===----------------------------------------------------------------------===//
+
+/// Update a memory op with attributes about memory file loading.
+template <bool isInline>
+static LogicalResult applyLoadMemoryAnno(const AnnoPathValue &target,
+                                         DictionaryAttr anno,
+                                         ApplyState &state) {
+  if (!target.isLocal()) {
+    mlir::emitError(state.circuit.getLoc())
+        << "has a " << anno.get("class")
+        << " annotation which is non-local, but this annotation is not allowed "
+           "to be non-local";
+    return failure();
+  }
+
+  auto *op = target.ref.getOp();
+
+  if (!target.isOpOfType<MemOp, CombMemOp, SeqMemOp>()) {
+    mlir::emitError(op->getLoc())
+        << "can only apply a load memory annotation to a memory";
+    return failure();
+  }
+
+  // The two annotations have different case usage in "filename".
+  StringAttr filename = tryGetAs<StringAttr>(
+      anno, anno, isInline ? "filename" : "fileName", op->getLoc(),
+      anno.getAs<StringAttr>("class").getValue());
+  if (!filename)
+    return failure();
+
+  auto hexOrBinary =
+      tryGetAs<StringAttr>(anno, anno, "hexOrBinary", op->getLoc(),
+                           anno.getAs<StringAttr>("class").getValue());
+  if (!hexOrBinary)
+    return failure();
+
+  auto hexOrBinaryValue = hexOrBinary.getValue();
+  if (hexOrBinaryValue != "h" && hexOrBinaryValue != "b") {
+    auto diag = mlir::emitError(op->getLoc())
+                << "has memory initialization annotation with invalid format, "
+                   "'hexOrBinary' field must be either 'h' or 'b'";
+    diag.attachNote() << "the full annotation is: " << anno;
+    return failure();
+  }
+
+  op->setAttr("init",
+              MemoryInitAttr::get(
+                  op->getContext(), filename,
+                  BoolAttr::get(op->getContext(), hexOrBinaryValue == "b"),
+                  BoolAttr::get(op->getContext(), isInline)));
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Driving table
 //===----------------------------------------------------------------------===//
 
@@ -366,6 +422,8 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
      {stdResolve, applyWithoutTarget<false, FModuleOp, FExtModuleOp>}},
     {blackBoxInlineAnnoClass,
      {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
+    {blackBoxPathAnnoClass,
+     {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
     {dontObfuscateModuleAnnoClass,
      {stdResolve, applyWithoutTarget<false, FModuleOp>}},
     {verifBlackBoxAnnoClass,
@@ -400,6 +458,11 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {blackBoxTargetDirAnnoClass, NoTargetAnnotation},
     {traceNameAnnoClass, {stdResolve, applyTraceName}},
     {traceAnnoClass, {stdResolve, applyWithoutTarget<true>}},
+    {loadMemoryFromFileAnnoClass, {stdResolve, applyLoadMemoryAnno<false>}},
+    {loadMemoryFromFileInlineAnnoClass,
+     {stdResolve, applyLoadMemoryAnno<true>}},
+    {wiringSinkAnnoClass, {stdResolve, applyWiring}},
+    {wiringSourceAnnoClass, {stdResolve, applyWiring}},
 
 }};
 
@@ -428,6 +491,7 @@ struct LowerAnnotationsPass
     : public LowerFIRRTLAnnotationsBase<LowerAnnotationsPass> {
   void runOnOperation() override;
   LogicalResult applyAnnotation(DictionaryAttr anno, ApplyState &state);
+  LogicalResult legacyToWiringProblems(ApplyState &state);
   LogicalResult solveWiringProblems(ApplyState &state);
 
   bool ignoreUnhandledAnno = false;
@@ -475,12 +539,33 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
   return success();
 }
 
+/// Convert consumed SourceAnnotation and SinkAnnotation into WiringProblems,
+/// using the pin attribute as newNameHint
+LogicalResult LowerAnnotationsPass::legacyToWiringProblems(ApplyState &state) {
+  for (const auto &[name, problem] : state.legacyWiringProblems) {
+    if (!problem.source)
+      return mlir::emitError(state.circuit.getLoc())
+             << "Unable to resolve source for pin: " << name;
+
+    if (problem.sinks.empty())
+      return mlir::emitError(state.circuit.getLoc())
+             << "Unable to resolve sink(s) for pin: " << name;
+
+    for (const auto &sink : problem.sinks) {
+      state.wiringProblems.push_back(
+          {problem.source, sink, {}, WiringProblem::RefTypeUsage::Never});
+    }
+  }
+  return success();
+}
+
 /// Modify the circuit to solve and apply all Wiring Problems in the circuit.  A
-/// Wiring Problem is a mapping from a source to a sink that should be connected
-/// via a RefType.  This uses a two-step approach.  First, all Wiring Problems
-/// are analyzed to compute pending modifications to modules.  Second, modules
-/// are visited from leaves to roots to apply module modifications.  Module
-/// modifications include addings ports and connecting things up.
+/// Wiring Problem is a mapping from a source to a sink that can be connected
+/// via a base Type or RefType as requested.  This uses a two-step approach.
+/// First, all Wiring Problems are analyzed to compute pending modifications to
+/// modules. Second, modules are visited from leaves to roots to apply module
+/// modifications.  Module modifications include addings ports and connecting
+/// things up.
 LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
   // Utility function to extract the defining module from a value which may be
   // either a BlockArgument or an Operation result.
@@ -690,12 +775,33 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     moduleModifications[sourceModule].connectionMap[index] = source;
     moduleModifications[sinkModule].connectionMap[index] = sink;
 
-    // Record ports that should be added to each module along the LCA path.
-    RefType refType = TypeSwitch<Type, RefType>(problem.source.getType())
-                          .Case<FIRRTLBaseType>([](FIRRTLBaseType base) {
-                            return RefType::get(base);
-                          })
-                          .Case<RefType>([](RefType ref) { return ref; });
+    // Record port types that should be added to each module along the LCA path.
+    Type sourceType, sinkType;
+    auto useRefTypes =
+        !noRefTypePorts &&
+        problem.refTypeUsage == WiringProblem::RefTypeUsage::Prefer;
+    if (useRefTypes) {
+      // Use RefType ports if possible
+      RefType refType = TypeSwitch<Type, RefType>(source.getType())
+                            .Case<FIRRTLBaseType>([](FIRRTLBaseType base) {
+                              return RefType::get(base);
+                            })
+                            .Case<RefType>([](RefType ref) { return ref; });
+      sourceType = refType;
+      sinkType = refType.getType();
+    } else {
+      // Use base Type ports
+      sourceType = source.getType();
+      sinkType = sink.getType();
+
+      if (sourceType != sinkType) {
+        auto diag = mlir::emitError(source.getLoc())
+                    << "Wiring Problem source type " << sourceType
+                    << " does not match sink type " << sinkType;
+        diag.attachNote(sink.getLoc()) << "The sink is here.";
+        return failure();
+      }
+    }
 
     // Record module modifications related to adding ports to modules.
     auto addPorts = [&](ArrayRef<hw::HWInstanceLike> insts, Value val, Type tpe,
@@ -722,11 +828,8 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     };
 
     // Record the addition of ports.
-    if (noRefTypePorts)
-      addPorts(sources, source, refType.getType(), Direction::Out);
-    else
-      addPorts(sources, source, refType, Direction::Out);
-    addPorts(sinks, sink, refType.getType(), Direction::In);
+    addPorts(sources, source, sourceType, Direction::Out);
+    addPorts(sinks, sink, sinkType, Direction::In);
   }
 
   // Iterate over modules from leaves to roots, applying ModuleModifications to
@@ -860,6 +963,9 @@ void LowerAnnotationsPass::runOnOperation() {
     if (applyAnnotation(attr, state).failed())
       ++numFailures;
   }
+
+  if (failed(legacyToWiringProblems(state)))
+    ++numFailures;
 
   if (failed(solveWiringProblems(state)))
     ++numFailures;

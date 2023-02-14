@@ -99,6 +99,14 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike"> {
       return $_op->template getAttrOfType<ArrayAttr>("resultLocs");
     }]>,
 
+    InterfaceMethod<
+    "Decode information about the input and output ports on this module.",
+    "::circt::hw::ModulePortInfo", "getPorts", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return getModulePortInfo($_op);
+    }]>,
+
     /// Insert and remove input and output ports of this module. Does not modify
     /// the block arguments of the module body. The insertion and removal
     /// indices must be in ascending order. The indices refer to the port

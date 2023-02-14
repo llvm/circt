@@ -330,4 +330,7 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
   return shell;
 }
 
+// Provide implementations for the enums we use.
+#include "circt/Dialect/ESI/ESIEnums.cpp.inc"
+
 #include "circt/Dialect/ESI/ESIDialect.cpp.inc"

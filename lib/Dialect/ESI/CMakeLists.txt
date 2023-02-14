@@ -61,6 +61,7 @@ add_circt_dialect_library(CIRCTESI
 
   DEPENDS
   MLIRESITransformsIncGen
+  MLIRESIEnumsIncGen
   ${ESI_Deps}
 
   LINK_COMPONENTS

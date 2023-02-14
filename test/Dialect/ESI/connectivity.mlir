@@ -6,7 +6,7 @@ hw.module @Sender() -> (x: !esi.channel<i1>) {
   %ch, %rcvrRdy = esi.wrap.vr %0, %0 : i1
   hw.output %ch : !esi.channel<i1>
 }
-hw.module @Reciever(%a: !esi.channel<i1>) {
+hw.module @Reciever(%a: !esi.channel<i1, ValidReady>) {
   %rdy = arith.constant 1 : i1
   // Recieve bits.
   %data, %valid = esi.unwrap.vr %a, %rdy : i1

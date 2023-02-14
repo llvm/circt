@@ -18,6 +18,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   InferWidths.cpp
   InjectDUTHierarchy.cpp
   InnerSymbolDCE.cpp
+  LegacyWiring.cpp
   LowerAnnotations.cpp
   LowerCHIRRTL.cpp
   LowerIntrinsics.cpp
@@ -28,6 +29,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   MemToRegOfVec.cpp
   ModuleInliner.cpp
   PrefixModules.cpp
+  PrintFIRRTLFieldSource.cpp
   PrintInstanceGraph.cpp
   PrintNLATable.cpp
   RandomizeRegisterInit.cpp

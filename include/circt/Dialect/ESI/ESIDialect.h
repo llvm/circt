@@ -37,6 +37,10 @@ struct ESIPortValidReadyMapping {
   hw::PortInfo data, valid, ready;
 };
 
+/// Name of dialect attribute which governs whether or not to bundle (i.e. use
+/// SystemVerilog interfaces) channel signal wires on external modules.
+constexpr StringRef extModBundleSignalsAttrName = "esi.bundle";
+
 /// Find all the port triples on a module which fit the
 /// <name>/<name>_valid/<name>_ready pattern. Ready must be the opposite
 /// direction of the other two.
@@ -56,5 +60,8 @@ Operation *buildESIWrapper(OpBuilder &b, Operation *mod,
 } // namespace circt
 
 #include "circt/Dialect/ESI/ESIDialect.h.inc"
+
+// Pull in all enum type definitions and utility function declarations.
+#include "circt/Dialect/ESI/ESIEnums.h.inc"
 
 #endif

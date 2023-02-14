@@ -94,6 +94,17 @@ class LoopbackInOutTop(Module):
     loopback.assign(data_chan)
 
 
+# CHECK-LABEL:  esi.pure_module @LoopbackInOutPure {
+# CHECK:          [[r0:%.+]] = esi.service.req.to_client <@HostComms::@from_host>(["loopback_in"]) : !esi.channel<i16>
+# CHECK:          esi.service.req.to_server [[r0]] -> <@HostComms::@to_host>(["loopback"]) : !esi.channel<i16>
+@unittestmodule(print=True)
+class LoopbackInOutPure(esi.PureModule):
+
+  @generator
+  def construct(self):
+    HostComms.to_host(HostComms.from_host("loopback_in", types.i16), "loopback")
+
+
 class MultiplexerService(esi.ServiceImplementation):
   clk = Clock()
   rst = Input(types.i1)

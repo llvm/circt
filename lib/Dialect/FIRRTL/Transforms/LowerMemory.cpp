@@ -79,7 +79,8 @@ FirMemory getSummary(MemOp op) {
           (size_t)width,        op.getDepth(),    op.getReadLatency(),
           op.getWriteLatency(), op.getMaskBits(), (size_t)op.getRuw(),
           hw::WUW::PortOrder,   writeClockIDs,    op.getNameAttr(),
-          op.getMaskBits() > 1, groupID,          op.getLoc()};
+          op.getMaskBits() > 1, groupID,          op.getInitAttr(),
+          op.getLoc()};
 }
 
 namespace {
@@ -489,15 +490,7 @@ LogicalResult LowerMemoryPass::runOnModule(FModuleOp module, bool shouldDedup) {
           "memories should be flattened before running LowerMemory");
 
     auto summary = getSummary(op);
-
-    // The only remaining memory kind should be seq mems.
-    // 1. read latency and write latency of one.
-    // 2. only one readwrite port or write port.
-    // 3. zero or one read port.
-    // 4. undefined read-under-write behavior.
-    if (!((summary.readLatency == 1 && summary.writeLatency == 1) &&
-          (summary.numWritePorts + summary.numReadWritePorts == 1) &&
-          (summary.numReadPorts <= 1) && summary.dataWidth > 0))
+    if (!summary.isSeqMem())
       continue;
 
     lowerMemory(op, summary, shouldDedup);

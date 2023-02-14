@@ -2,9 +2,9 @@
 // RUN: circt-opt %s --lower-esi-ports -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=IFACE %s
 // RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=HW %s
 
-hw.module.extern @Sender(%clk: i1) -> (x: !esi.channel<i4>, y: i8)
-hw.module.extern @ArrSender() -> (x: !esi.channel<!hw.array<4xi64>>)
-hw.module.extern @Reciever(%a: !esi.channel<i4>, %clk: i1)
+hw.module.extern @Sender(%clk: i1) -> (x: !esi.channel<i4>, y: i8) attributes {esi.bundle}
+hw.module.extern @ArrSender() -> (x: !esi.channel<!hw.array<4xi64>>) attributes {esi.bundle}
+hw.module.extern @Reciever(%a: !esi.channel<i4>, %clk: i1) attributes {esi.bundle}
 hw.module.extern @i0SenderReceiver(%in: !esi.channel<i0>) -> (out: !esi.channel<i0>)
 
 // CHECK-LABEL: hw.module.extern @Sender(%clk: i1) -> (x: !esi.channel<i4>, y: i8)
@@ -22,16 +22,10 @@ hw.module.extern @i0SenderReceiver(%in: !esi.channel<i0>) -> (out: !esi.channel<
 // IFACE-NEXT:    sv.interface.signal @data : !hw.array<4xi64>
 // IFACE-NEXT:    sv.interface.modport @sink  (input @ready, output @valid, output @data)
 // IFACE-NEXT:    sv.interface.modport @source  (input @valid, input @data, output @ready)
-// IFACE-LABEL: sv.interface @IValidReady_i0 {
-// IFACE-NEXT:    sv.interface.signal @valid : i1
-// IFACE-NEXT:    sv.interface.signal @ready : i1
-// IFACE-NEXT:    sv.interface.signal @data : i0
-// IFACE-NEXT:    sv.interface.modport @sink (input @ready, output @valid, output @data)
-// IFACE-NEXT:    sv.interface.modport @source (input @valid, input @data, output @ready)
 // IFACE-LABEL: hw.module.extern @Sender(%clk: i1, %x: !sv.modport<@IValidReady_i4::@sink>) -> (y: i8)
 // IFACE-LABEL: hw.module.extern @ArrSender(%x: !sv.modport<@IValidReady_ArrayOf4xi64::@sink>)
 // IFACE-LABEL: hw.module.extern @Reciever(%a: !sv.modport<@IValidReady_i4::@source>, %clk: i1)
-// IFACE-LABEL: hw.module.extern @i0SenderReceiver(%in: !sv.modport<@IValidReady_i0::@source>, %out: !sv.modport<@IValidReady_i0::@sink>)
+// IFACE-LABEL: hw.module.extern @i0SenderReceiver(%in: i0, %in_valid: i1, %out_ready: i1) -> (out: i0, out_valid: i1, in_ready: i1)
 
 hw.module @test(%clk:i1, %rst:i1) {
 
@@ -108,7 +102,7 @@ hw.module @twoChannelArgs(%clk: i1, %ints: !esi.channel<i32>, %foo: !esi.channel
 // HW:   hw.output %true, %true : i1, i1
 
 // IFACE: %i1ToHandshake_fork0FromArg0 = sv.interface.instance : !sv.interface<@IValidReady_i1>
-hw.module.extern @handshake_fork_1ins_2outs_ctrl(%in0: !esi.channel<i1>, %clock: i1, %reset: i1) -> (out0: !esi.channel<i1>, out1: !esi.channel<i1>)
+hw.module.extern @handshake_fork_1ins_2outs_ctrl(%in0: !esi.channel<i1>, %clock: i1, %reset: i1) -> (out0: !esi.channel<i1>, out1: !esi.channel<i1>) attributes {esi.bundle}
 hw.module @test_constant(%arg0: !esi.channel<i1>, %clock: i1, %reset: i1) -> (outCtrl: !esi.channel<i1>) {
   %handshake_fork0.out0, %handshake_fork0.out1 = hw.instance "handshake_fork0" @handshake_fork_1ins_2outs_ctrl(in0: %arg0: !esi.channel<i1>, clock: %clock: i1, reset: %reset: i1) -> (out0: !esi.channel<i1>, out1: !esi.channel<i1>)
   hw.output %handshake_fork0.out1 : !esi.channel<i1>

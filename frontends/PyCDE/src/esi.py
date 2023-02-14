@@ -2,8 +2,9 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from .common import Input, Output, InputChannel, OutputChannel, _PyProxy
-from .module import Generator, Module, ModuleLikeBuilderBase
+from .common import (Input, Output, InputChannel, OutputChannel, Clock,
+                     _PyProxy, PortError)
+from .module import Generator, Module, ModuleLikeBuilderBase, PortProxyBase
 from .signals import ChannelSignal, Signal, _FromCirctValue
 from .system import System
 from .types import Channel, Type, types, _FromCirctType
@@ -452,3 +453,66 @@ def _import_ram_decl(sys: "System", ram_op: raw_esi.RandomAccessMemoryDeclOp):
   ram.symbol = ir.StringAttr.get(sym)
   install(ram_op)
   return ram
+
+
+class PureModuleBuilder(ModuleLikeBuilderBase):
+  """Defines how an ESI `PureModule` gets built."""
+
+  @property
+  def circt_mod(self):
+    from .system import System
+    sys: System = System.current()
+    ret = sys._op_cache.get_circt_mod(self)
+    if ret is None:
+      return sys._create_circt_mod(self)
+    return ret
+
+  def create_op(self, sys: System, symbol):
+    """Callback for creating a ESIPureModule op."""
+    return raw_esi.ESIPureModuleOp(symbol, loc=self.loc, ip=sys._get_ip())
+
+  def scan_cls(self):
+    """Scan the class for input/output ports and generators. (Most `ModuleLike`
+    will use these.) Store the results for later use."""
+
+    generators = {}
+    for attr_name, attr in self.cls_dct.items():
+      if attr_name.startswith("_"):
+        continue
+
+      if isinstance(attr, (Clock, Input, Output)):
+        raise PortError("ESI pure modules cannot have ports")
+      elif isinstance(attr, Generator):
+        generators[attr_name] = attr
+
+    self.generators = generators
+
+  def create_port_proxy(self):
+    """Since pure ESI modules don't have any ports, this function is pretty
+    boring."""
+    proxy_attrs = {}
+    return type(self.modcls.__name__ + "Ports", (PortProxyBase,), proxy_attrs)
+
+  def add_external_port_accessors(self):
+    """Since we don't have ports, do nothing."""
+    pass
+
+  def generate(self):
+    """Fill in (generate) this module. Only supports a single generator
+    currently."""
+    if len(self.generators) != 1:
+      raise ValueError("Must have exactly one generator.")
+    g: Generator = list(self.generators.values())[0]
+
+    entry_block = self.circt_mod.add_entry_block()
+    ports = self.generator_port_proxy(None, self)
+    with self.GeneratorCtxt(self, ports, entry_block, g.loc):
+      g.gen_func(ports)
+
+
+class PureModule(Module):
+  """A pure ESI module has no ports and contains only instances of modules with
+  only ESI ports and connections between said instances. Use ESI services for
+  external communication."""
+
+  BuilderType = PureModuleBuilder
