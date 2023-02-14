@@ -173,7 +173,6 @@ public:
           });
           if (!inputArgFieldsTemp.empty())
             inputArgFields = std::move(inputArgFieldsTemp);
-          auto type = dfsVal.getType().dyn_cast<FIRRTLBaseType>();
 
           visiting.appendToEnd(aliasingValues);
           visited.insert(aliasingValues.begin(), aliasingValues.end());
@@ -182,8 +181,10 @@ public:
 
             for (auto &use : dfsFromVal.getUses()) {
               Operation *owner = use.getOwner();
+              if (isa<RegResetOp, RegOp>(owner))
+                continue;
               Value childVal;
-              if (owner->getNumResults() == 1 && !type.isa<ClockType>())
+              if (owner->getNumResults() == 1)
                 childVal = owner->getResult(0);
               else if (auto connect = dyn_cast<FConnectLike>(owner))
                 if (use.getOperandNumber() == 1) {
@@ -258,7 +259,7 @@ public:
           .Case<SubfieldOp>([&](SubfieldOp sub) {
             auto res = sub.getResult();
             bool isValid = false;
-            auto fieldIndex = sub.getFieldIndex() + 1;
+            auto fieldIndex = sub.getAccessedField().getFieldID();
             if (memPorts.contains(sub.getInput())) {
               auto memPort = sub.getInput();
               auto type = memPort.getType().cast<BundleType>();
@@ -279,7 +280,7 @@ public:
                 sub.getInput(),
                 [&](FieldRef subBase) {
                   isValid = true;
-                  fields.push_back(FieldRef(subBase.getSubField(fieldIndex)));
+                  fields.push_back(subBase.getSubField(fieldIndex));
                   return success();
                 },
                 false);
@@ -291,13 +292,13 @@ public:
           .Case<SubindexOp>([&](SubindexOp sub) {
             auto res = sub.getResult();
             bool isValid = false;
-            auto index = sub.getIndex();
+            auto index = sub.getAccessedField().getFieldID();
             SmallVector<FieldRef, 4> fields;
             forallRefersTo(
                 sub.getInput(),
                 [&](FieldRef subBase) {
                   isValid = true;
-                  fields.push_back(subBase.getSubField(index + 1));
+                  fields.push_back(subBase.getSubField(index));
                   return success();
                 },
                 false);
