@@ -367,8 +367,8 @@ struct ESIPortsPass : public LowerESIPortsBase<ESIPortsPass> {
   void runOnOperation() override;
 
 private:
-  bool updateFunc(HWModuleOp mod);
-  void updateInstance(HWModuleOp mod, InstanceOp inst);
+  bool updateFunc(HWMutableModuleLike mod);
+  void updateInstance(HWMutableModuleLike mod, InstanceOp inst);
 
   bool updateFunc(HWModuleExternOp mod);
   void updateInstance(HWModuleExternOp mod, InstanceOp inst);
@@ -385,7 +385,8 @@ void ESIPortsPass::runOnOperation() {
   // Find all externmodules and try to modify them. Remember the modified ones.
   DenseMap<StringRef, HWModuleExternOp> externModsMutated;
   for (auto mod : top.getOps<HWModuleExternOp>())
-    if (updateFunc(mod))
+    if (mod->hasAttrOfType<UnitAttr>(extModBundleSignalsAttrName) &&
+        updateFunc(mod))
       externModsMutated[mod.getName()] = mod;
 
   // Find all instances and update them.
@@ -397,14 +398,14 @@ void ESIPortsPass::runOnOperation() {
 
   // Find all modules and try to modify them to have wires with valid/ready
   // semantics. Remember the modified ones.
-  DenseMap<StringRef, HWModuleOp> modsMutated;
-  for (auto mod : top.getOps<HWModuleOp>())
+  DenseMap<SymbolRefAttr, HWMutableModuleLike> modsMutated;
+  for (auto mod : top.getOps<HWMutableModuleLike>())
     if (updateFunc(mod))
-      modsMutated[mod.getName()] = mod;
+      modsMutated[FlatSymbolRefAttr::get(mod)] = mod;
 
   // Find all instances and update them.
   top.walk([&modsMutated, this](InstanceOp inst) {
-    auto mapIter = modsMutated.find(inst.getModuleName());
+    auto mapIter = modsMutated.find(inst.getModuleNameAttr());
     if (mapIter != modsMutated.end())
       updateInstance(mapIter->second, inst);
   });
@@ -419,16 +420,20 @@ static StringAttr appendToRtlName(StringAttr base, StringRef suffix) {
 }
 
 /// Convert all input and output ChannelTypes into valid/ready wires. Try not to
-/// change the order and materialize ops in reasonably intuitive locations.
-bool ESIPortsPass::updateFunc(HWModuleOp mod) {
-  auto funcType = mod.getFunctionType();
+/// change the order and materialize ops in reasonably intuitive locations. Will
+/// modify the body only if one exists.
+bool ESIPortsPass::updateFunc(HWMutableModuleLike mod) {
+  Block *body = nullptr;
+  if (mod->getNumRegions() == 1 && mod->getRegion(0).getBlocks().size() == 1)
+    body = &mod->getRegion(0).front();
+
   // Build ops in the module.
-  ImplicitLocOpBuilder modBuilder(mod.getLoc(), mod.getBody());
+  ImplicitLocOpBuilder modBuilder(mod.getLoc(), mod);
   Type i1 = modBuilder.getI1Type();
+  if (body)
+    modBuilder.setInsertionPointToStart(body);
 
-  // Get information to be used later on.
-  hw::OutputOp outOp = cast<hw::OutputOp>(mod.getBodyBlock()->getTerminator());
-
+  ModulePortInfo ports = mod.getPorts();
   bool updated = false;
 
   // Reconstruct the list of operand types, changing the type whenever an ESI
@@ -438,125 +443,150 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
 
   // 'Ready' signals are outputs. Remember them for later when we deal with the
   // returns.
-  SmallVector<std::tuple<Value, StringAttr, Location>, 8> newReadySignals;
-  SmallVector<Attribute> newArgNames;
-  SmallVector<Attribute> newArgLocs;
+  SmallVector<std::tuple<Value, PortInfo>, 8> newReadySignals;
+  SmallVector<std::pair<unsigned, PortInfo>> inputsToInsert;
+  SmallVector<unsigned> inputsToErase;
 
-  for (size_t argNum = 0, blockArgNum = 0, e = mod.getNumArguments();
-       argNum < e; ++argNum, ++blockArgNum) {
-    Type argTy = funcType.getInput(argNum);
-    auto argNameAttr = getModuleArgumentNameAttr(mod, argNum);
-    auto argLocAttr = getModuleArgumentLocAttr(mod, argNum);
+  for (size_t argNum = 0, e = ports.inputs.size(), blockArgNum = 0; argNum < e;
+       ++argNum, ++blockArgNum) {
+    PortInfo &port = ports.inputs[argNum];
 
-    auto chanTy = argTy.dyn_cast<ChannelType>();
-    if (!chanTy) {
+    auto chanTy = port.type.dyn_cast<ChannelType>();
+    if (!chanTy)
       // If not ESI, pass through.
-      newArgTypes.push_back(argTy);
-      newArgNames.push_back(argNameAttr);
-      newArgLocs.push_back(argLocAttr);
       continue;
-    }
-    // When we find one, add a data and valid signal to the new args.
-    Value data;
-    newArgTypes.push_back(chanTy.getInner());
-    newArgNames.push_back(argNameAttr);
-    newArgLocs.push_back(argLocAttr);
-    data =
-        mod.front().insertArgument(blockArgNum, chanTy.getInner(), argLocAttr);
-    ++blockArgNum;
 
-    newArgTypes.push_back(i1);
-    newArgNames.push_back(appendToRtlName(argNameAttr, "_valid"));
-    newArgLocs.push_back(argLocAttr);
-    Value valid = mod.front().insertArgument(blockArgNum, i1, argLocAttr);
-    ++blockArgNum;
-    // Build the ESI wrap operation to translate the lowered signals to what
-    // they were. (A later pass takes care of eliminating the ESI ops.)
-    auto wrap = modBuilder.create<WrapValidReadyOp>(data, valid);
-    // Replace uses of the old ESI port argument with the new one from the wrap.
-    mod.front()
-        .getArgument(blockArgNum)
-        .replaceAllUsesWith(wrap.getChanOutput());
-    // Delete the ESI port block argument.
-    mod.front().eraseArgument(blockArgNum);
-    --blockArgNum;
-    newReadySignals.emplace_back(
-        wrap.getReady(), appendToRtlName(argNameAttr, "_ready"), argLocAttr);
+    // When we find one, add a data and valid signal to the new args.
+    PortInfo dataPort = {
+        port.name, PortDirection::INPUT, chanTy.getInner(), ~0U, {}, port.loc};
+    inputsToInsert.emplace_back(argNum, dataPort);
+
+    PortInfo validPort = {appendToRtlName(port.name, "_valid"),
+                          PortDirection::INPUT,
+                          i1,
+                          ~0U,
+                          {},
+                          port.loc};
+    inputsToInsert.emplace_back(argNum, validPort);
+
+    Value data, valid;
+    if (body) {
+      valid = body->insertArgument(blockArgNum, i1, port.loc);
+      data = body->insertArgument(blockArgNum, chanTy.getInner(), port.loc);
+      blockArgNum += 2;
+    }
+
+    // And add the corresponding output ready signal.
+    PortInfo readyPort = {appendToRtlName(port.name, "_ready"),
+                          PortDirection::OUTPUT,
+                          i1,
+                          ~0U,
+                          {},
+                          port.loc};
+
+    Value ready;
+    if (body) {
+      // Build the ESI wrap operation to translate the lowered signals to what
+      // they were. (A later pass takes care of eliminating the ESI ops.)
+      auto wrap = modBuilder.create<WrapValidReadyOp>(data, valid);
+      ready = wrap.getReady();
+      // Replace uses of the old ESI port argument with the new one from the
+      // wrap.
+      body->getArgument(blockArgNum).replaceAllUsesWith(wrap.getChanOutput());
+      // Delete the ESI port block argument.
+      body->eraseArgument(blockArgNum);
+      --blockArgNum;
+    }
+    newReadySignals.emplace_back(ready, readyPort);
+
+    inputsToErase.push_back(argNum);
     updated = true;
   }
 
   // Iterate through the outputs, appending to all of the next three lists.
   // Lower the ESI ports.
-  SmallVector<Type, 8> newResultTypes;
+  SmallVector<std::pair<unsigned, PortInfo>> outputsToInsert;
+  SmallVector<unsigned> outputsToErase;
   SmallVector<Value, 8> newOutputOperands;
-  SmallVector<Attribute> newResultNames;
-  SmallVector<Attribute> newResultLocs;
+  unsigned oldNumInputs = ports.inputs.size();
 
-  modBuilder.setInsertionPointToEnd(mod.getBodyBlock());
-  for (size_t resNum = 0, numRes = funcType.getNumResults(); resNum < numRes;
+  Operation *outOp = nullptr;
+  if (body) {
+    outOp = body->getTerminator();
+    modBuilder.setInsertionPoint(outOp);
+  }
+  for (size_t resNum = 0, numRes = ports.outputs.size(); resNum < numRes;
        ++resNum) {
-    Type resTy = funcType.getResult(resNum);
-    auto chanTy = resTy.dyn_cast<ChannelType>();
-    Value oldOutputValue = outOp.getOperand(resNum);
-    auto oldResultName = getModuleResultNameAttr(mod, resNum);
-    auto oldResultLoc = getModuleResultLocAttr(mod, resNum);
+    PortInfo &port = ports.outputs[resNum];
+    auto chanTy = port.type.dyn_cast<ChannelType>();
+    Value oldOutputValue;
+    if (outOp)
+      oldOutputValue = outOp->getOperand(resNum);
     if (!chanTy) {
       // If not ESI, pass through.
-      newResultTypes.push_back(resTy);
-      newResultNames.push_back(oldResultName);
-      newResultLocs.push_back(oldResultLoc);
       newOutputOperands.push_back(oldOutputValue);
       continue;
     }
 
     // Lower the output, adding ready signals directly to the arg list.
-    Value ready = mod.front().addArgument(i1, oldResultLoc); // Ready block arg.
-    auto unwrap = modBuilder.create<UnwrapValidReadyOp>(oldOutputValue, ready);
-    newOutputOperands.push_back(unwrap.getRawOutput());
-    newResultTypes.push_back(chanTy.getInner()); // Raw data.
-    newResultNames.push_back(oldResultName);
-    newResultLocs.push_back(oldResultLoc);
+    Value ready;
+    if (body) {
+      ready = body->addArgument(i1, port.loc); // Ready block arg.
+      auto unwrap =
+          modBuilder.create<UnwrapValidReadyOp>(oldOutputValue, ready);
+      newOutputOperands.push_back(unwrap.getRawOutput());
+      newOutputOperands.push_back(unwrap.getValid());
+    }
+    // New outputs.
+    // When we find one, add a data and valid signal to the new args.
+    PortInfo dataPort = {
+        port.name, PortDirection::OUTPUT, chanTy.getInner(), ~0U, {}, port.loc};
+    outputsToInsert.emplace_back(resNum, dataPort);
 
-    newResultTypes.push_back(i1); // Valid.
-    newOutputOperands.push_back(unwrap.getValid());
-    newResultNames.push_back(appendToRtlName(oldResultName, "_valid"));
-    newResultLocs.push_back(oldResultLoc);
+    PortInfo validPort = {appendToRtlName(port.name, "_valid"),
+                          PortDirection::OUTPUT,
+                          i1,
+                          ~0U,
+                          {},
+                          port.loc};
+    outputsToInsert.emplace_back(resNum, validPort);
 
-    newArgTypes.push_back(i1); // Ready func arg.
-    newArgNames.push_back(appendToRtlName(oldResultName, "_ready"));
-    newArgLocs.push_back(oldResultLoc);
+    // New 'ready' input port.
+    PortInfo readyPort = {appendToRtlName(port.name, "_ready"),
+                          PortDirection::INPUT,
+                          i1,
+                          ~0U,
+                          {},
+                          port.loc};
+    inputsToInsert.emplace_back(oldNumInputs, readyPort);
+
+    outputsToErase.push_back(resNum);
     updated = true;
   }
 
   // Append the ready list signals we remembered above.
-  for (auto [value, name, location] : newReadySignals) {
-    newResultTypes.push_back(i1);
-    newOutputOperands.push_back(value);
-    newResultNames.push_back(name);
-    newResultLocs.push_back(location);
+  unsigned oldNumOutputs = ports.outputs.size();
+  for (auto [value, port] : newReadySignals) {
+    if (body)
+      newOutputOperands.push_back(value);
+    outputsToInsert.emplace_back(oldNumOutputs, port);
   }
 
   if (!updated)
     return false;
 
-  // A new output op is necessary.
-  outOp.erase();
-  modBuilder.create<hw::OutputOp>(newOutputOperands);
-
-  // Set the new types.
-  auto newFuncType = modBuilder.getFunctionType(newArgTypes, newResultTypes);
-  mod.setType(newFuncType);
-  setModuleArgumentNames(mod, newArgNames);
-  setModuleArgumentLocs(mod, newArgLocs);
-  setModuleResultNames(mod, newResultNames);
-  setModuleResultLocs(mod, newResultLocs);
+  // A new set of output values is needed.
+  if (outOp)
+    outOp->setOperands(newOutputOperands);
+  mod.modifyPorts(inputsToInsert, outputsToInsert, inputsToErase,
+                  outputsToErase);
   return true;
 }
 
 /// Update an instance of an updated module by adding `esi.[un]wrap.vr`
 /// ops around the instance. Lowering or folding away `[un]wrap` ops is another
 /// pass.
-void ESIPortsPass::updateInstance(HWModuleOp mod, InstanceOp inst) {
+void ESIPortsPass::updateInstance(HWMutableModuleLike mod, InstanceOp inst) {
   ImplicitLocOpBuilder b(inst.getLoc(), inst);
   BackedgeBuilder beb(b, inst.getLoc());
   Type i1 = b.getI1Type();
@@ -704,6 +734,7 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
     updated = true;
   }
 
+  mod->removeAttr(extModBundleSignalsAttrName);
   if (!updated)
     return false;
 
