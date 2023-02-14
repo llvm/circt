@@ -38,6 +38,7 @@
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
@@ -354,10 +355,11 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   TypeLoweringVisitor(MLIRContext *context,
                       PreserveAggregate::PreserveMode preserveAggregate,
                       bool preservePublicTypes, SymbolTable &symTbl,
-                      const AttrCache &cache)
+                      const AttrCache &cache,
+                      const llvm::DenseSet<FModuleLike> &publicModuleSet)
       : context(context), aggregatePreservationMode(preserveAggregate),
-        preservePublicTypes(preservePublicTypes), symTbl(symTbl), cache(cache) {
-  }
+        preservePublicTypes(preservePublicTypes), symTbl(symTbl), cache(cache),
+        publicModuleSet(publicModuleSet) {}
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitStmt;
@@ -440,6 +442,9 @@ private:
   // Cache some attributes
   const AttrCache &cache;
 
+  // Keep track of public modules.
+  const llvm::DenseSet<FModuleLike> &publicModuleSet;
+
   // Set true if the lowering failed.
   bool encounteredError = false;
 };
@@ -454,11 +459,12 @@ TypeLoweringVisitor::getPreservatinoModeForModule(FModuleLike module) {
   if (!isa<FModuleOp>(module))
     return PreserveAggregate::None;
 
-  // If `module` is a top-module, we have to lower ports. Don't read attributes
-  // of `module` since the attributes could be mutated in a different thread.
+  // If preservePublicTypes is true, we have to lower ports of public modules.
+  // Query the module visibility to `publicModuleSet`. Don't call
+  // `module.isPublic` since the attributes could be mutated in a different
+  // thread.
   if (aggregatePreservationMode != PreserveAggregate::None &&
-      preservePublicTypes &&
-      module->getParentOfType<CircuitOp>().getMainModule(&symTbl) == module)
+      preservePublicTypes && publicModuleSet.count(module))
     return PreserveAggregate::None;
   return aggregatePreservationMode;
 }
@@ -1395,6 +1401,7 @@ void LowerTypesPass::runOnOperation() {
       llvm::dbgs() << "===- Running LowerTypes Pass "
                       "------------------------------------------------===\n");
   std::vector<FModuleLike> ops;
+  llvm::DenseSet<FModuleLike> publicModuleSet;
   // Symbol Table
   SymbolTable symTbl(getOperation());
   // Cached attr
@@ -1405,8 +1412,11 @@ void LowerTypesPass::runOnOperation() {
                  [&](Operation &op) {
                    // Creating a map of all ops in the circt, but only modules
                    // are relevant.
-                   if (auto module = dyn_cast<FModuleLike>(op))
+                   if (auto module = dyn_cast<FModuleLike>(op)) {
                      ops.push_back(module);
+                     if (cast<hw::HWModuleLike>(op).isPublic())
+                       publicModuleSet.insert(module);
+                   }
                  });
 
   LLVM_DEBUG(llvm::dbgs() << "Recording Inner Symbol Renames:\n");
@@ -1414,7 +1424,8 @@ void LowerTypesPass::runOnOperation() {
   // This lambda, executes in parallel for each Op within the circt.
   auto lowerModules = [&](FModuleLike op) -> LogicalResult {
     auto tl = TypeLoweringVisitor(&getContext(), preserveAggregate,
-                                  preservePublicTypes, symTbl, cache);
+                                  preservePublicTypes, symTbl, cache,
+                                  publicModuleSet);
     tl.lowerModule(op);
 
     return LogicalResult::failure(tl.isFailed());
