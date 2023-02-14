@@ -39,7 +39,7 @@ struct ESIPortValidReadyMapping {
 
 /// Name of dialect attribute which governs whether or not to bundle (i.e. use
 /// SystemVerilog interfaces) channel signal wires on external modules.
-constexpr StringRef ExtModBundleSignalsAttrName = "esi.bundle";
+constexpr StringRef extModBundleSignalsAttrName = "esi.bundle";
 
 /// Find all the port triples on a module which fit the
 /// <name>/<name>_valid/<name>_ready pattern. Ready must be the opposite

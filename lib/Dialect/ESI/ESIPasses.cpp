@@ -385,7 +385,7 @@ void ESIPortsPass::runOnOperation() {
   // Find all externmodules and try to modify them. Remember the modified ones.
   DenseMap<StringRef, HWModuleExternOp> externModsMutated;
   for (auto mod : top.getOps<HWModuleExternOp>()) {
-    if (mod->hasAttrOfType<UnitAttr>(ExtModBundleSignalsAttrName) &&
+    if (mod->hasAttrOfType<UnitAttr>(extModBundleSignalsAttrName) &&
         updateFunc(mod))
       externModsMutated[mod.getName()] = mod;
   }
@@ -734,7 +734,7 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
     updated = true;
   }
 
-  mod->removeAttr(ExtModBundleSignalsAttrName);
+  mod->removeAttr(extModBundleSignalsAttrName);
   if (!updated)
     return false;
 
