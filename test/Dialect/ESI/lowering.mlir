@@ -5,7 +5,7 @@
 hw.module.extern @Sender(%clk: i1) -> (x: !esi.channel<i4>, y: i8) attributes {esi.bundle = true}
 hw.module.extern @ArrSender() -> (x: !esi.channel<!hw.array<4xi64>>) attributes {esi.bundle = true}
 hw.module.extern @Reciever(%a: !esi.channel<i4>, %clk: i1) attributes {esi.bundle = true}
-hw.module.extern @i0SenderReceiver(%in: !esi.channel<i0>) -> (out: !esi.channel<i0>) attributes {esi.bundle = true}
+hw.module.extern @i0SenderReceiver(%in: !esi.channel<i0>) -> (out: !esi.channel<i0>)
 
 // CHECK-LABEL: hw.module.extern @Sender(%clk: i1) -> (x: !esi.channel<i4>, y: i8)
 // CHECK-LABEL: hw.module.extern @Reciever(%a: !esi.channel<i4>, %clk: i1)
@@ -22,16 +22,10 @@ hw.module.extern @i0SenderReceiver(%in: !esi.channel<i0>) -> (out: !esi.channel<
 // IFACE-NEXT:    sv.interface.signal @data : !hw.array<4xi64>
 // IFACE-NEXT:    sv.interface.modport @sink  (input @ready, output @valid, output @data)
 // IFACE-NEXT:    sv.interface.modport @source  (input @valid, input @data, output @ready)
-// IFACE-LABEL: sv.interface @IValidReady_i0 {
-// IFACE-NEXT:    sv.interface.signal @valid : i1
-// IFACE-NEXT:    sv.interface.signal @ready : i1
-// IFACE-NEXT:    sv.interface.signal @data : i0
-// IFACE-NEXT:    sv.interface.modport @sink (input @ready, output @valid, output @data)
-// IFACE-NEXT:    sv.interface.modport @source (input @valid, input @data, output @ready)
 // IFACE-LABEL: hw.module.extern @Sender(%clk: i1, %x: !sv.modport<@IValidReady_i4::@sink>) -> (y: i8)
 // IFACE-LABEL: hw.module.extern @ArrSender(%x: !sv.modport<@IValidReady_ArrayOf4xi64::@sink>)
 // IFACE-LABEL: hw.module.extern @Reciever(%a: !sv.modport<@IValidReady_i4::@source>, %clk: i1)
-// IFACE-LABEL: hw.module.extern @i0SenderReceiver(%in: !sv.modport<@IValidReady_i0::@source>, %out: !sv.modport<@IValidReady_i0::@sink>)
+// IFACE-LABEL: hw.module.extern @i0SenderReceiver(%in: i0, %in_valid: i1, %out_ready: i1) -> (out: i0, out_valid: i1, in_ready: i1)
 
 hw.module @test(%clk:i1, %rst:i1) {
 
