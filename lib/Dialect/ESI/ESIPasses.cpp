@@ -457,16 +457,16 @@ bool ESIPortsPass::updateFunc(HWMutableModuleLike mod) {
       continue;
 
     // When we find one, add a data and valid signal to the new args.
-    PortInfo dataPort;
-    dataPort.name = port.name;
-    dataPort.type = chanTy.getInner();
-    dataPort.loc = port.loc;
+    PortInfo dataPort = {
+        port.name, PortDirection::INPUT, chanTy.getInner(), ~0U, {}, port.loc};
     inputsToInsert.emplace_back(argNum, dataPort);
 
-    PortInfo validPort;
-    validPort.name = appendToRtlName(port.name, "_valid");
-    validPort.type = i1;
-    validPort.loc = port.loc;
+    PortInfo validPort = {appendToRtlName(port.name, "_valid"),
+                          PortDirection::INPUT,
+                          i1,
+                          ~0U,
+                          {},
+                          port.loc};
     inputsToInsert.emplace_back(argNum, validPort);
 
     Value data, valid;
@@ -477,10 +477,12 @@ bool ESIPortsPass::updateFunc(HWMutableModuleLike mod) {
     }
 
     // And add the corresponding output ready signal.
-    PortInfo readyPort;
-    readyPort.name = appendToRtlName(port.name, "_ready");
-    readyPort.type = i1;
-    readyPort.loc = port.loc;
+    PortInfo readyPort = {appendToRtlName(port.name, "_ready"),
+                          PortDirection::OUTPUT,
+                          i1,
+                          ~0U,
+                          {},
+                          port.loc};
 
     Value ready;
     if (body) {
@@ -536,22 +538,26 @@ bool ESIPortsPass::updateFunc(HWMutableModuleLike mod) {
       newOutputOperands.push_back(unwrap.getValid());
     }
     // New outputs.
-    PortInfo dataPort, validPort;
-    dataPort.name = port.name;
-    dataPort.type = chanTy.getInner();
-    dataPort.loc = port.loc;
+    // When we find one, add a data and valid signal to the new args.
+    PortInfo dataPort = {
+        port.name, PortDirection::OUTPUT, chanTy.getInner(), ~0U, {}, port.loc};
     outputsToInsert.emplace_back(resNum, dataPort);
 
-    validPort.name = appendToRtlName(port.name, "_valid");
-    validPort.type = i1;
-    validPort.loc = port.loc;
+    PortInfo validPort = {appendToRtlName(port.name, "_valid"),
+                          PortDirection::OUTPUT,
+                          i1,
+                          ~0U,
+                          {},
+                          port.loc};
     outputsToInsert.emplace_back(resNum, validPort);
 
     // New 'ready' input port.
-    PortInfo readyPort;
-    readyPort.type = i1;
-    readyPort.name = appendToRtlName(port.name, "_ready");
-    readyPort.loc = port.loc;
+    PortInfo readyPort = {appendToRtlName(port.name, "_ready"),
+                          PortDirection::INPUT,
+                          i1,
+                          ~0U,
+                          {},
+                          port.loc};
     inputsToInsert.emplace_back(oldNumInputs, readyPort);
 
     outputsToErase.push_back(resNum);
