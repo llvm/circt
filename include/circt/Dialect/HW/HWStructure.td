@@ -274,11 +274,6 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
   ];
 
   let extraModuleClassDeclaration = [{
-    /// Decode information about the input and output ports on this module.
-    ModulePortInfo getPorts() {
-      return getModulePortInfo(*this);
-    }
-
     /// Return all the module ports merged into one list.
     SmallVector<PortInfo> getAllPorts() {
       return getAllModulePortInfos(*this);
