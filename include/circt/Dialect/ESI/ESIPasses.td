@@ -40,6 +40,7 @@ def ESIEmitCollateral: Pass<"esi-emit-collateral", "mlir::ModuleOp"> {
 def LowerESIToPhysical: Pass<"lower-esi-to-physical", "mlir::ModuleOp"> {
   let summary = "Lower ESI abstract Ops to ESI physical ops.";
   let constructor = "circt::esi::createESIPhysicalLoweringPass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
 }
 
 def LowerESIPorts: Pass<"lower-esi-ports", "mlir::ModuleOp"> {
