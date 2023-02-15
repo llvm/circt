@@ -333,6 +333,96 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
 }
 
 namespace {
+/// Lower pure modules into hw.modules.
+struct PureModuleLowering : public OpConversionPattern<ESIPureModuleOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ESIPureModuleOp pureMod, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final;
+};
+} // anonymous namespace
+
+LogicalResult
+PureModuleLowering::matchAndRewrite(ESIPureModuleOp pureMod, OpAdaptor adaptor,
+                                    ConversionPatternRewriter &rewriter) const {
+  auto loc = pureMod.getLoc();
+  Block *body = &pureMod.getBody().front();
+
+  // Track existing names (so we can de-dup) and get op result when we want to
+  // replace it with the block args.
+  DenseMap<StringAttr, ESIPureModuleInputOp> inputPortNames;
+  // Build the port list for `hw.module` construction.
+  SmallVector<hw::PortInfo> ports;
+  // List the input and output ops.
+  SmallVector<ESIPureModuleInputOp> inputs;
+  SmallVector<ESIPureModuleOutputOp> outputs;
+
+  for (Operation &op : llvm::make_early_inc_range(body->getOperations())) {
+    if (auto port = dyn_cast<ESIPureModuleInputOp>(op)) {
+      // If we already have an input port of the same name, replace the result
+      // value with the previous one. Checking that the types match is done in
+      // the pure module verifier.
+      auto existingPort = inputPortNames.find(port.getNameAttr());
+      if (existingPort != inputPortNames.end()) {
+        rewriter.replaceAllUsesWith(port.getResult(),
+                                    existingPort->getSecond().getResult());
+        rewriter.eraseOp(port);
+        continue;
+      }
+      // Normal port construction.
+      ports.push_back(hw::PortInfo{port.getNameAttr(),
+                                   hw::PortDirection::INPUT,
+                                   port.getResult().getType(),
+                                   inputs.size(),
+                                   {},
+                                   port.getLoc()});
+      inputs.push_back(port);
+    } else if (auto port = dyn_cast<ESIPureModuleOutputOp>(op)) {
+      ports.push_back(hw::PortInfo{port.getNameAttr(),
+                                   hw::PortDirection::OUTPUT,
+                                   port.getValue().getType(),
+                                   outputs.size(),
+                                   {},
+                                   port.getLoc()});
+      outputs.push_back(port);
+    }
+  }
+
+  // Create the replacement `hw.module`.
+  auto hwMod =
+      rewriter.create<hw::HWModuleOp>(loc, pureMod.getNameAttr(), ports);
+  rewriter.eraseBlock(hwMod.getBodyBlock());
+  rewriter.inlineRegionBefore(*body->getParent(), hwMod.getBodyRegion(),
+                              hwMod.getBodyRegion().end());
+  body = hwMod.getBodyBlock();
+
+  // Re-wire the inputs and erase them.
+  for (auto input : inputs) {
+    BlockArgument newArg;
+    rewriter.updateRootInPlace(hwMod, [&]() {
+      newArg = body->addArgument(input.getResult().getType(), input.getLoc());
+    });
+    rewriter.replaceAllUsesWith(input.getResult(), newArg);
+    rewriter.eraseOp(input);
+  }
+
+  // Assemble the output values.
+  SmallVector<Value> hwOutputOperands;
+  for (auto output : outputs) {
+    hwOutputOperands.push_back(output.getValue());
+    rewriter.eraseOp(output);
+  }
+  rewriter.setInsertionPointToEnd(body);
+  rewriter.create<hw::OutputOp>(pureMod.getLoc(), hwOutputOperands);
+
+  // Erase the original op.
+  rewriter.eraseOp(pureMod);
+  return success();
+}
+
+namespace {
 /// Run all the physical lowerings.
 struct ESIToPhysicalPass : public LowerESIToPhysicalBase<ESIToPhysicalPass> {
   void runOnOperation() override;
@@ -342,12 +432,14 @@ struct ESIToPhysicalPass : public LowerESIToPhysicalBase<ESIToPhysicalPass> {
 void ESIToPhysicalPass::runOnOperation() {
   // Set up a conversion and give it a set of laws.
   ConversionTarget target(getContext());
-  target.addLegalDialect<ESIDialect>();
+  target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
   target.addIllegalOp<ChannelBufferOp>();
+  target.addIllegalOp<ESIPureModuleOp>();
 
   // Add all the conversion patterns.
   RewritePatternSet patterns(&getContext());
   patterns.insert<ChannelBufferLowering>(&getContext());
+  patterns.insert<PureModuleLowering>(&getContext());
 
   // Run the conversion.
   if (failed(
