@@ -282,7 +282,7 @@ struct ESIConnectServicesPass
 
   /// Copy all service metadata up the instance hierarchy. Modify the service
   /// name path while copying.
-  void copyMetadata(hw::HWMutableModuleLike);
+  void copyMetadata(hw::HWModuleLike);
 
   /// For any service which is "local" (provides the requested service) in a
   /// module, replace it with a ServiceImplementOp. Said op is to be replaced
@@ -291,7 +291,7 @@ struct ESIConnectServicesPass
 
   /// Figure out which requests are "local" vs need to be surfaced. Call
   /// 'surfaceReqs' and/or 'replaceInst' as appropriate.
-  LogicalResult process(hw::HWMutableModuleLike);
+  LogicalResult process(hw::HWModuleLike);
 
 private:
   ServiceGeneratorDispatcher genDispatcher;
@@ -315,8 +315,7 @@ void ESIConnectServicesPass::runOnOperation() {
 
   // Process each module.
   for (auto mod : sortedMods) {
-    hw::HWMutableModuleLike mutableMod =
-        dyn_cast<hw::HWMutableModuleLike>(*mod);
+    hw::HWModuleLike mutableMod = dyn_cast<hw::HWModuleLike>(*mod);
     if (mutableMod && failed(process(mutableMod))) {
       signalPassFailure();
       return;
@@ -324,7 +323,7 @@ void ESIConnectServicesPass::runOnOperation() {
   }
 }
 
-LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
+LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
   Block &modBlock = mod->getRegion(0).front();
 
   // Index the local services and create blocks in which to put the requests.
@@ -401,10 +400,14 @@ LogicalResult ESIConnectServicesPass::process(hw::HWMutableModuleLike mod) {
   // Surface all of the requests which cannot be fulfilled locally.
   if (nonLocalToClientReqs.empty() && nonLocalToServerReqs.empty())
     return success();
-  return surfaceReqs(mod, nonLocalToClientReqs, nonLocalToServerReqs);
+
+  if (auto mutableMod = dyn_cast<hw::HWMutableModuleLike>(mod.getOperation()))
+    return surfaceReqs(mutableMod, nonLocalToClientReqs, nonLocalToServerReqs);
+  return mod.emitOpError(
+      "Cannot surface requests through module without mutable ports");
 }
 
-void ESIConnectServicesPass::copyMetadata(hw::HWMutableModuleLike mod) {
+void ESIConnectServicesPass::copyMetadata(hw::HWModuleLike mod) {
   SmallVector<ServiceHierarchyMetadataOp, 8> metadataOps;
   mod.walk([&](ServiceHierarchyMetadataOp op) { metadataOps.push_back(op); });
 
@@ -413,9 +416,7 @@ void ESIConnectServicesPass::copyMetadata(hw::HWMutableModuleLike mod) {
     auto instName = b.getStringAttr(inst.instanceName());
     for (auto metadata : metadataOps) {
       SmallVector<Attribute, 4> path;
-      path.push_back(hw::InnerRefAttr::get(
-          cast<hw::HWModuleLike>(mod.getOperation()).moduleNameAttr(),
-          instName));
+      path.push_back(hw::InnerRefAttr::get(mod.moduleNameAttr(), instName));
       for (auto attr : metadata.getServerNamePathAttr())
         path.push_back(attr);
 
