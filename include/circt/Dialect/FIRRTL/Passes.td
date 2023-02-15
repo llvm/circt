@@ -60,9 +60,6 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
   let options = [
     Option<"flattenAggregateMemData", "flatten-mem", "bool", "false",
            "Concat all elements of the aggregate data into a single element.">,
-    Option<"preservePublicTypes", "preserve-public-types", "bool",
-           "true", "Force to lower ports of toplevel and external modules even"
-           "when aggregate preservation mode.">,
     Option<"preserveAggregate", "preserve-aggregate", "PreserveAggregate::PreserveMode",
           "PreserveAggregate::None",
           "Specify aggregate preservation mode",

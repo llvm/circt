@@ -170,7 +170,8 @@ void InjectDUTHierarchy::runOnOperation() {
   {
     b.setInsertionPointAfter(dut);
     auto newDUT = b.create<FModuleOp>(dut.getLoc(), dut.getNameAttr(),
-                                      dut.getPorts(), dut.getAnnotations());
+                                      dut.getConventionAttr(), dut.getPorts(),
+                                      dut.getAnnotations());
 
     SymbolTable::setSymbolVisibility(newDUT, dut.getVisibility());
     dut.setName(b.getStringAttr(circuitNS.newName(wrapperName.getValue())));

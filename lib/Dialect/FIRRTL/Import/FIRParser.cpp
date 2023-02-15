@@ -3134,6 +3134,7 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
 ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
                                           StringRef circuitTarget,
                                           unsigned indent) {
+  auto circuitName = circuit.getName();
   bool isExtModule = getToken().is(FIRToken::kw_extmodule);
   bool isIntModule = getToken().is(FIRToken::kw_intmodule);
   consumeToken();
@@ -3176,10 +3177,20 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     return failure();
   }
 
+  auto isMainModule = (name == circuitName);
+
   // If this is a normal module, parse the body into an FModuleOp.
   if (!isExtModule && !isIntModule) {
-    auto moduleOp =
-        builder.create<FModuleOp>(info.getLoc(), name, portList, annotations);
+    auto convention = Convention::Internal;
+    if (isMainModule && getConstants().options.scalarizeTopModule)
+      convention = Convention::Scalarized;
+    auto conventionAttr = ConventionAttr::get(getContext(), convention);
+
+    auto moduleOp = builder.create<FModuleOp>(
+        info.getLoc(), name, conventionAttr, portList, annotations);
+    auto visibility = isMainModule ? SymbolTable::Visibility::Public
+                                   : SymbolTable::Visibility::Private;
+    SymbolTable::setSymbolVisibility(moduleOp, visibility);
 
     // Parse the body of this module after all prototypes have been parsed. This
     // allows us to handle forward references correctly.
@@ -3354,15 +3365,18 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   }
   internalPaths = builder.getArrayAttr(internalPathAttrs);
 
-  if (isExtModule)
-    builder.create<FExtModuleOp>(info.getLoc(), name, portList, defName,
-                                 annotations, builder.getArrayAttr(parameters),
-                                 internalPaths);
-  else
+  if (isExtModule) {
+    auto convention = getConstants().options.scalarizeExtModules
+                          ? Convention::Scalarized
+                          : Convention::Internal;
+    auto conventionAttr = ConventionAttr::get(builder.getContext(), convention);
+    builder.create<FExtModuleOp>(
+        info.getLoc(), name, conventionAttr, portList, defName, annotations,
+        builder.getArrayAttr(parameters), internalPaths);
+  } else
     builder.create<FIntModuleOp>(info.getLoc(), name, portList, intName,
                                  annotations, builder.getArrayAttr(parameters),
                                  internalPaths);
-
   return success();
 }
 

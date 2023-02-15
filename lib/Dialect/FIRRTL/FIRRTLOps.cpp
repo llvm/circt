@@ -699,9 +699,10 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
-                      StringAttr name, ArrayRef<PortInfo> ports,
-                      ArrayAttr annotations) {
+                      StringAttr name, ConventionAttr convention,
+                      ArrayRef<PortInfo> ports, ArrayAttr annotations) {
   buildModule(builder, result, name, ports, annotations);
+  result.addAttribute("convention", convention);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -714,10 +715,12 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 }
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
-                         StringAttr name, ArrayRef<PortInfo> ports,
-                         StringRef defnameAttr, ArrayAttr annotations,
-                         ArrayAttr parameters, ArrayAttr internalPaths) {
+                         StringAttr name, ConventionAttr convention,
+                         ArrayRef<PortInfo> ports, StringRef defnameAttr,
+                         ArrayAttr annotations, ArrayAttr parameters,
+                         ArrayAttr internalPaths) {
   buildModule(builder, result, name, ports, annotations);
+  result.addAttribute("convention", convention);
   if (!defnameAttr.empty())
     result.addAttribute("defname", builder.getStringAttr(defnameAttr));
   if (!parameters)
@@ -994,9 +997,12 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
       p, body, portDirections, op.getPortNames(), op.getPortTypes(),
       op.getPortAnnotations(), op.getPortSymbols(), op.getPortLocations());
 
-  SmallVector<StringRef, 11> omittedAttrs = {
+  SmallVector<StringRef, 12> omittedAttrs = {
       "sym_name", "portDirections", "portTypes",  "portAnnotations",
       "portSyms", "portLocations",  "parameters", visibilityAttrName};
+
+  if (op.getConvention() == Convention::Internal)
+    omittedAttrs.push_back("convention");
 
   // We can omit the portNames if they were able to be printed as properly as
   // block arguments.
@@ -1166,11 +1172,23 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
 }
 
 ParseResult FModuleOp::parse(OpAsmParser &parser, OperationState &result) {
-  return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/true);
+  if (parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/true))
+    return failure();
+  if (!result.attributes.get("convention"))
+    result.addAttribute(
+        "convention",
+        ConventionAttr::get(result.getContext(), Convention::Internal));
+  return success();
 }
 
 ParseResult FExtModuleOp::parse(OpAsmParser &parser, OperationState &result) {
-  return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false);
+  if (parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false))
+    return failure();
+  if (!result.attributes.get("convention"))
+    result.addAttribute(
+        "convention",
+        ConventionAttr::get(result.getContext(), Convention::Internal));
+  return success();
 }
 
 ParseResult FIntModuleOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -1272,6 +1290,18 @@ void FMemModuleOp::getAsmBlockArgumentNames(
 ArrayAttr FMemModuleOp::getParameters() { return {}; }
 
 ArrayAttr FModuleOp::getParameters() { return {}; }
+
+Convention FIntModuleOp::getConvention() { return Convention::Internal; }
+
+ConventionAttr FIntModuleOp::getConventionAttr() {
+  return ConventionAttr::get(getContext(), getConvention());
+}
+
+Convention FMemModuleOp::getConvention() { return Convention::Internal; }
+
+ConventionAttr FMemModuleOp::getConventionAttr() {
+  return ConventionAttr::get(getContext(), getConvention());
+}
 
 //===----------------------------------------------------------------------===//
 // Declarations
