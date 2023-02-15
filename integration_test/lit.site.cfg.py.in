@@ -53,7 +53,7 @@ config.esi_runtime = "@ESI_RUNTIME@"
 config.esi_collateral_path = "@ESI_COLLATERAL_PATH@"
 config.bindings_python_enabled = @CIRCT_BINDINGS_PYTHON_ENABLED@
 config.bindings_tcl_enabled = @CIRCT_BINDINGS_TCL_ENABLED@
-config.lec_enabled = "@CIRCT_LEC_ENABLED@"
+config.circtsmt_enabled = "@CIRCTSMT_ENABLED@"
 
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.

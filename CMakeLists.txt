@@ -480,7 +480,7 @@ endif()
 llvm_canonicalize_cmake_booleans(CIRCT_LLHD_SIM_ENABLED)
 
 #-------------------------------------------------------------------------------
-# circt-lec Configuration
+# SMT Verification Configuration
 #-------------------------------------------------------------------------------
 
 # If circt-lec hasn't been explicitly disabled, find it.
