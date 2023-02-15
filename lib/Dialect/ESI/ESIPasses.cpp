@@ -350,12 +350,20 @@ PureModuleLowering::matchAndRewrite(ESIPureModuleOp pureMod, OpAdaptor adaptor,
   auto loc = pureMod.getLoc();
   Block *body = &pureMod.getBody().front();
 
+  // Track existing names (so we can de-dup) and get op result when we want to
+  // replace it with the block args.
   DenseMap<StringAttr, ESIPureModuleInputOp> inputPortNames;
+  // Build the port list for `hw.module` construction.
   SmallVector<hw::PortInfo> ports;
+  // List the input and output ops.
   SmallVector<ESIPureModuleInputOp> inputs;
   SmallVector<ESIPureModuleOutputOp> outputs;
+
   for (Operation &op : llvm::make_early_inc_range(body->getOperations())) {
     if (auto port = dyn_cast<ESIPureModuleInputOp>(op)) {
+      // If we already have an input port of the same name, replace the result
+      // value with the previous one. Checking that the types match is done in
+      // the pure module verifier.
       auto existingPort = inputPortNames.find(port.getNameAttr());
       if (existingPort != inputPortNames.end()) {
         rewriter.replaceAllUsesWith(port.getResult(),
@@ -363,6 +371,7 @@ PureModuleLowering::matchAndRewrite(ESIPureModuleOp pureMod, OpAdaptor adaptor,
         rewriter.eraseOp(port);
         continue;
       }
+      // Normal port construction.
       ports.push_back(hw::PortInfo{port.getNameAttr(),
                                    hw::PortDirection::INPUT,
                                    port.getResult().getType(),
@@ -381,18 +390,23 @@ PureModuleLowering::matchAndRewrite(ESIPureModuleOp pureMod, OpAdaptor adaptor,
     }
   }
 
+  // Create the replacement `hw.module`.
   auto hwMod =
       rewriter.create<hw::HWModuleOp>(loc, pureMod.getNameAttr(), ports);
   rewriter.eraseBlock(hwMod.getBodyBlock());
   rewriter.inlineRegionBefore(*body->getParent(), hwMod.getBodyRegion(),
                               hwMod.getBodyRegion().end());
   body = hwMod.getBodyBlock();
+
+  // Re-wire the inputs and erase them.
   for (auto input : inputs) {
     rewriter.replaceAllUsesWith(
         input.getResult(),
         body->addArgument(input.getResult().getType(), input.getLoc()));
     rewriter.eraseOp(input);
   }
+
+  // Assemble the output values.
   SmallVector<Value> hwOutputOperands;
   for (auto output : outputs) {
     hwOutputOperands.push_back(output.getValue());
@@ -401,6 +415,7 @@ PureModuleLowering::matchAndRewrite(ESIPureModuleOp pureMod, OpAdaptor adaptor,
   rewriter.setInsertionPointToEnd(body);
   rewriter.create<hw::OutputOp>(pureMod.getLoc(), hwOutputOperands);
 
+  // Erase the original op.
   rewriter.eraseOp(pureMod);
   return success();
 }
