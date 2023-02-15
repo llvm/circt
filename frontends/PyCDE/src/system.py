@@ -43,16 +43,6 @@ class System:
       "packaging_funcs", "sw_api_langs", "_instance_roots", "_placedb"
   ]
 
-  PASSES = """
-    builtin.module(lower-hwarith-to-hw, msft-lower-constructs,
-    msft-lower-instances, {partition} esi-connect-services,
-    esi-emit-collateral{{tops={tops} schema-file=schema.capnp}},
-    lower-msft-to-hw{{verilog-file={verilog_file}}},
-    lower-esi-to-physical, lower-esi-ports, lower-esi-to-hw, convert-fsm-to-sv,
-    lower-seq-to-sv, hw.module(prettify-verilog), hw.module(hw-cleanup),
-    msft-export-tcl{{tops={tops} tcl-file={tcl_file}}})
-  """
-
   def __init__(self,
                top_modules: Union[list, Module],
                name: str = "PyCDESystem",
