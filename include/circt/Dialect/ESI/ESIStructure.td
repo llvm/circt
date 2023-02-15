@@ -46,8 +46,8 @@ def ESIPureModuleInputOp : ESI_Op<"pure_module.input",
     this op. This op is typically created by a service implementation generator.
 
     If two 'input' ops exist in the same block, the names match, and the type
-    matches they'll become one port during lowering. If two exist with the same
-    name and different types, lowering should error. Useful for 'clk' and 'rst'.
+    matches they'll become one port during lowering. Two or more may not exist
+    with the same name and different types. Useful for 'clk' and 'rst'.
   }];
 
   let arguments = (ins StrAttr:$name);
