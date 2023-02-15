@@ -10,11 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/HW/HWOpInterfaces.td"
 include "mlir/IR/OpBase.td"
 
 def ESIPureModuleOp : ESI_Op<"pure_module",
       [Symbol, NoTerminator, RegionKindInterface, NoRegionArguments,
-       SingleBlock, HasParent<"mlir::ModuleOp">]> {
+       SingleBlock, HasParent<"mlir::ModuleOp">,
+       DeclareOpInterfaceMethods<HWModuleLike>]> {
   let summary = "ESI pure module";
   let description = [{
     A module containing only ESI channels and modules with only ESI ports. All
