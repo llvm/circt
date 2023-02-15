@@ -295,16 +295,18 @@ class System:
           pm.run(self.mod)
         else:
           phase(self)
+          if aplog is not None:
+            aplog.write(f"// <python code>\n")
+            aplog.flush()
       except RuntimeError as err:
         sys.stderr.write(f"Exception while executing phase {phase}.\n")
         raise err
       finally:
-        if debug:
-          open(f"after_phase_{idx}.mlir", "w").write(str(self.mod))
+        if aplog is not None:
+          aplog.write(str(self.mod))
+          aplog.close()
       self._op_cache.release_ops()
-      if aplog is not None:
-        aplog.write(str(self.mod))
-        aplog.close()
+
     self.passed = True
 
   def emit_outputs(self):
