@@ -430,22 +430,59 @@ void ServiceImplementReqOp::gatherPairedReqs(
 
 LogicalResult ESIPureModuleOp::verify() {
   ESIDialect *esiDialect = getContext()->getLoadedDialect<ESIDialect>();
-
   Block &body = getBody().front();
+  auto channelOrOutput = [](Value v) {
+    if (v.getType().isa<ChannelType>())
+      return true;
+    if (v.getUsers().empty())
+      return false;
+    return llvm::all_of(v.getUsers(), [](Operation *op) {
+      return isa<ESIPureModuleOutputOp>(op);
+    });
+  };
+
+  DenseMap<StringAttr, std::tuple<hw::PortDirection, Type, Operation *>> ports;
   for (Operation &op : body.getOperations()) {
     if (hw::HWInstanceLike inst = dyn_cast<hw::HWInstanceLike>(op)) {
-      if (llvm::any_of(op.getOperands(),
-                       [](Value v) { return !v.getType().isa<ChannelType>(); }))
+      if (llvm::any_of(op.getOperands(), [](Value v) {
+            return !(v.getType().isa<ChannelType>() ||
+                     isa<ESIPureModuleInputOp>(v.getDefiningOp()));
+          }))
         return inst.emitOpError(
-            "instances in ESI pure modules can only contain channel ports");
-      if (llvm::any_of(op.getResultTypes(),
-                       [](Type t) { return !t.isa<ChannelType>(); }))
+            "instances in ESI pure modules can only contain channel ports or "
+            "ports driven by 'input' ops");
+      if (!llvm::all_of(op.getResults(), channelOrOutput))
         return inst.emitOpError(
-            "instances in ESI pure modules can only contain channel ports");
+            "instances in ESI pure modules can only contain channel ports or "
+            "drive only 'outputs'");
     } else {
       // Pure modules can only contain instance ops and ESI ops.
       if (op.getDialect() != esiDialect)
         return op.emitOpError("operation not allowed in ESI pure modules");
+    }
+
+    // Check for port validity.
+    if (auto port = dyn_cast<ESIPureModuleInputOp>(op)) {
+      auto existing = ports.find(port.getNameAttr());
+      Type portType = port.getResult().getType();
+      if (existing != ports.end()) {
+        auto [dir, type, op] = existing->getSecond();
+        if (dir != hw::PortDirection::INPUT || type != portType)
+          return (port.emitOpError("port '")
+                  << port.getName() << "' previously declared as type " << type)
+              .attachNote(op->getLoc());
+      }
+      ports[port.getNameAttr()] = std::make_tuple(
+          hw::PortDirection::INPUT, portType, port.getOperation());
+    } else if (auto port = dyn_cast<ESIPureModuleOutputOp>(op)) {
+      auto existing = ports.find(port.getNameAttr());
+      if (existing != ports.end())
+        return (port.emitOpError("port '")
+                << port.getName() << "' previously declared")
+            .attachNote(std::get<2>(existing->getSecond())->getLoc());
+      ports[port.getNameAttr()] =
+          std::make_tuple(hw::PortDirection::INPUT, port.getValue().getType(),
+                          port.getOperation());
     }
   }
   return success();
