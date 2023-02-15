@@ -55,10 +55,15 @@ LogicalResult circt::firrtl::applyWiring(const AnnoPathValue &target,
       } else {
         inst = cast<InstanceOp>(target.instances.back());
       }
-      state.wiringProblemInstRefs.insert(inst);
       builder.setInsertionPointAfter(inst);
+      // Insert dummy cast op for stable reference to port.
+      auto wireTarget = builder
+                            .create<mlir::UnrealizedConversionCastOp>(
+                                inst.getType(portNum), inst.getResult(portNum))
+                            ->getResult(0);
+
       targetValue =
-          getValueByFieldID(builder, inst->getResult(portNum), target.fieldIdx);
+          getValueByFieldID(builder, wireTarget, target.fieldIdx);
     } else {
       return mlir::emitError(state.circuit.getLoc())
              << "Annotation has invalid target: " << anno;
