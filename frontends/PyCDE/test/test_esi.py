@@ -192,3 +192,34 @@ class MultiplexerTop(Module):
 
     p = Producer(clk=ports.clk)
     Consumer(clk=ports.clk, int_in=p.int_out)
+
+
+class PassUpService(esi.ServiceImplementation):
+
+  @generator
+  def generate(self, channels):
+    for req in channels.to_server_reqs:
+      name = "out_" + "_".join(req.client_name)
+      esi.PureModule.output_port(name, req)
+    for req in channels.to_client_reqs:
+      name = "in_" + "_".join(req.client_name)
+      req.assign(esi.PureModule.input_port(name, req.type))
+
+
+# CHECK-LABEL:  hw.module @PureTest(%in_Producer_loopback_in: i32, %in_Producer_loopback_in_valid: i1, %in_prod2_loopback_in: i32, %in_prod2_loopback_in_valid: i1, %clk: i1, %out_Consumer_loopback_out_ready: i1, %p2_int_ready: i1) -> (out_Consumer_loopback_out: i32, out_Consumer_loopback_out_valid: i1, p2_int: i32, p2_int_valid: i1, in_Producer_loopback_in_ready: i1, in_prod2_loopback_in_ready: i1) {
+# CHECK-NEXT:     %Producer.int_out, %Producer.int_out_valid, %Producer.loopback_in_ready = hw.instance "Producer" sym @Producer @Producer<__INST_HIER: none = "PureTest.Producer">(clk: %clk: i1, loopback_in: %in_Producer_loopback_in: i32, loopback_in_valid: %in_Producer_loopback_in_valid: i1, int_out_ready: %Consumer.int_in_ready: i1) -> (int_out: i32, int_out_valid: i1, loopback_in_ready: i1)
+# CHECK-NEXT:     %Consumer.loopback_out, %Consumer.loopback_out_valid, %Consumer.int_in_ready = hw.instance "Consumer" sym @Consumer @Consumer<__INST_HIER: none = "PureTest.Consumer">(clk: %clk: i1, int_in: %Producer.int_out: i32, int_in_valid: %Producer.int_out_valid: i1, loopback_out_ready: %out_Consumer_loopback_out_ready: i1) -> (loopback_out: i32, loopback_out_valid: i1, int_in_ready: i1)
+# CHECK-NEXT:     %prod2.int_out, %prod2.int_out_valid, %prod2.loopback_in_ready = hw.instance "prod2" sym @prod2 @Producer<__INST_HIER: none = "PureTest.prod2">(clk: %clk: i1, loopback_in: %in_prod2_loopback_in: i32, loopback_in_valid: %in_prod2_loopback_in_valid: i1, int_out_ready: %p2_int_ready: i1) -> (int_out: i32, int_out_valid: i1, loopback_in_ready: i1)
+# CHECK-NEXT:     hw.output %Consumer.loopback_out, %Consumer.loopback_out_valid, %prod2.int_out, %prod2.int_out_valid, %Producer.loopback_in_ready, %prod2.loopback_in_ready : i32, i1, i32, i1, i1, i1
+@unittestmodule(run_passes=True, print_after_passes=True, emit_outputs=True)
+class PureTest(esi.PureModule):
+
+  @generator
+  def construct(ports):
+    PassUpService(None)
+
+    clk = esi.PureModule.input_port("clk", types.i1)
+    p = Producer(clk=clk)
+    Consumer(clk=clk, int_in=p.int_out)
+    p2 = Producer(clk=clk, instance_name="prod2")
+    esi.PureModule.output_port("p2_int", p2.int_out)

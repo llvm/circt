@@ -267,10 +267,13 @@ class _ServiceGeneratorChannels:
 
     # Find the output channel requests and store the settable proxies.
     num_output_ports = len(mod.outputs)
+    to_client_reqs = [
+        req for req in portReqsBlock
+        if isinstance(req, raw_esi.RequestToClientConnectionOp)
+    ]
     self._output_reqs = [
         _OutputChannelSetter(req, self._req.results[num_output_ports + idx])
-        for idx, req in enumerate(portReqsBlock)
-        if isinstance(req, raw_esi.RequestToClientConnectionOp)
+        for idx, req in enumerate(to_client_reqs)
     ]
     assert len(self._output_reqs) == len(req.results) - num_output_ports
 
@@ -313,7 +316,8 @@ class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
         impl_opts=opts,
         loc=self.loc)
 
-  def generate_svc_impl(self, serviceReq: raw_esi.ServiceInstanceOp):
+  def generate_svc_impl(self,
+                        serviceReq: raw_esi.ServiceImplementReqOp) -> bool:
     """"Generate the service inline and replace the `ServiceInstanceOp` which is
     being implemented."""
 
@@ -516,3 +520,13 @@ class PureModule(Module):
   external communication."""
 
   BuilderType = PureModuleBuilder
+
+  @staticmethod
+  def input_port(name: str, type: Type):
+    from .dialects import esi
+    return esi.ESIPureModuleInputOp(type, name)
+
+  @staticmethod
+  def output_port(name: str, signal: Signal):
+    from .dialects import esi
+    return esi.ESIPureModuleOutputOp(name, signal)
