@@ -36,3 +36,37 @@ def ESIPureModuleOp : ESI_Op<"pure_module",
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
   }];
 }
+
+def ESIPureModuleInputOp : ESI_Op<"pure_module.input",
+      [HasParent<"ESIPureModuleOp">]> {
+
+  let summary = "Inputs become input ports when the module is lowered";
+  let description = [{
+    To create input ports when lowering a pure module op into an HWModuleOp, use
+    this op. This op is typically created by a service implementation generator.
+
+    If two 'input' ops exist in the same block, the names match, and the type
+    matches they'll become one port during lowering. If two exist with the same
+    name and different types, lowering should error. Useful for 'clk' and 'rst'.
+  }];
+
+  let arguments = (ins StrAttr:$name);
+  let results = (outs AnyType:$value);
+  let assemblyFormat = [{ $name attr-dict `:` type($value) }];
+}
+
+def ESIPureModuleOutputOp : ESI_Op<"pure_module.output",
+      [HasParent<"ESIPureModuleOp">]> {
+
+  let summary = "Outputs become output ports when the module is lowered";
+  let description = [{
+    To create output ports when lowering a pure module op into an HWModuleOp, use
+    this op. This op is typically created by a service implementation generator.
+
+    Two 'output' ops with the same name cannot exist in the same block.
+  }];
+
+  let arguments = (ins StrAttr:$name, AnyType:$value);
+  let results = (outs);
+  let assemblyFormat = [{ $name `,` $value attr-dict `:` type($value) }];
+}

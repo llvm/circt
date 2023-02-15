@@ -430,18 +430,30 @@ void ServiceImplementReqOp::gatherPairedReqs(
 
 LogicalResult ESIPureModuleOp::verify() {
   ESIDialect *esiDialect = getContext()->getLoadedDialect<ESIDialect>();
-
   Block &body = getBody().front();
+  auto channelOrOutput = [](Value v) {
+    if (v.getType().isa<ChannelType>())
+      return true;
+    if (v.getUsers().empty())
+      return false;
+    return llvm::all_of(v.getUsers(), [](Operation *op) {
+      return isa<ESIPureModuleOutputOp>(op);
+    });
+  };
+
   for (Operation &op : body.getOperations()) {
     if (hw::HWInstanceLike inst = dyn_cast<hw::HWInstanceLike>(op)) {
-      if (llvm::any_of(op.getOperands(),
-                       [](Value v) { return !v.getType().isa<ChannelType>(); }))
+      if (llvm::any_of(op.getOperands(), [](Value v) {
+            return !(v.getType().isa<ChannelType>() ||
+                     isa<ESIPureModuleInputOp>(v.getDefiningOp()));
+          }))
         return inst.emitOpError(
-            "instances in ESI pure modules can only contain channel ports");
-      if (llvm::any_of(op.getResultTypes(),
-                       [](Type t) { return !t.isa<ChannelType>(); }))
+            "instances in ESI pure modules can only contain channel ports or "
+            "ports driven by 'input' ops");
+      if (!llvm::all_of(op.getResults(), channelOrOutput))
         return inst.emitOpError(
-            "instances in ESI pure modules can only contain channel ports");
+            "instances in ESI pure modules can only contain channel ports or "
+            "drive only 'outputs'");
     } else {
       // Pure modules can only contain instance ops and ESI ops.
       if (op.getDialect() != esiDialect)
