@@ -115,3 +115,29 @@ firrtl.circuit "FooBar" attributes {
     // CHECK: firrtl.connect %bar_io_out__bore, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+// -----
+
+// CHECK-LABEL: circuit "Sub"
+firrtl.circuit "Sub" attributes {
+  rawAnnotations = [
+    {
+      class = "firrtl.passes.wiring.SourceAnnotation",
+      target = "Sub.Sub.a[0]",
+      pin = "test"
+    },
+    {
+      class = "firrtl.passes.wiring.SinkAnnotation",
+      target = "Sub.Sub.b[0]",
+      pin = "test"
+    }]} {
+  firrtl.module @Sub() {
+    // CHECK:      %[[a:.+]] = firrtl.wire
+    // CHECK-NEXT: %[[a_0:.+]] = firrtl.subindex %[[a]][0]
+    // CHECK:      %[[b:.+]] = firrtl.wire
+    // CHECK-NEXT: %[[b_0:.+]] = firrtl.subindex %[[b]][0]
+    %a = firrtl.wire interesting_name : !firrtl.vector<uint<1>,1>
+    %b = firrtl.wire interesting_name : !firrtl.vector<uint<1>,1>
+  }
+}
+

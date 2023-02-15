@@ -65,14 +65,10 @@ LogicalResult circt::firrtl::applyWiring(const AnnoPathValue &target,
     }
   } else if (auto opResult = target.ref.dyn_cast<OpAnnoTarget>()) {
     if (target.isOpOfType<WireOp, RegOp, RegResetOp>()) {
-      auto module = cast<FModuleOp>(opResult.getModule());
-      if (clazz == wiringSourceAnnoClass) {
-        builder.setInsertionPointToStart(module.getBodyBlock());
-      } else if (clazz == wiringSinkAnnoClass) {
-        builder.setInsertionPointToEnd(module.getBodyBlock());
-      }
-      targetValue = getValueByFieldID(builder, opResult.getOp()->getResult(0),
-                                      target.fieldIdx);
+      auto *targetBase = opResult.getOp();
+      builder.setInsertionPointAfter(targetBase);
+      targetValue =
+          getValueByFieldID(builder, targetBase->getResult(0), target.fieldIdx);
     } else {
       return mlir::emitError(state.circuit.getLoc())
              << "Annotation targets non-wireable operation: " << anno;
