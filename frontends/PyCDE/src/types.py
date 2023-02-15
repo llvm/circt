@@ -425,6 +425,10 @@ class Bits(BitVectorType):
     return hw.ConstantOp(circt_type, x)
 
 
+# A single bit is common enough to provide an alias to save 4 key strokes.
+bit = Bits(1)
+
+
 class SInt(BitVectorType):
 
   def __new__(cls, width: int):
