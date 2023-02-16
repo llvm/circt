@@ -2681,6 +2681,28 @@ LogicalResult ArrayGetOp::canonicalize(ArrayGetOp op,
     return failure();
   }
 
+  // array_get(const, array_get sel, (array_create a, b, c, d)) -->
+  // array_get sel, (array_create (array_get const a), (array_get const b),
+  // (array_get const c), (array_get c d))
+  if (auto innerGet = dyn_cast_or_null<hw::ArrayGetOp>(inputOp)) {
+    if (!innerGet.getIndex().getDefiningOp<hw::ConstantOp>()) {
+      if (auto create =
+              innerGet.getInput().getDefiningOp<hw::ArrayCreateOp>()) {
+
+        SmallVector<Value> newValues;
+        for (auto operand : create.getOperands())
+          newValues.push_back(rewriter.createOrFold<hw::ArrayGetOp>(
+              op.getLoc(), operand, op.getIndex()));
+
+        rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(
+            op,
+            rewriter.createOrFold<hw::ArrayCreateOp>(op.getLoc(), newValues),
+            innerGet.getIndex());
+        return success();
+      }
+    }
+  }
+
   return failure();
 }
 
