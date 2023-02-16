@@ -67,8 +67,11 @@ firrtl.circuit "TopLevel" {
   // AGGREGATE-SAME: in %[[ARG_NAME:arg]]: [[ARG_TYPE:!firrtl.bundle<foo: bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>>]]
   // AGGREGATE-SAME: out %[[OUT_1_NAME:out1]]: [[OUT_1_TYPE:!firrtl.uint<1>]]
   // AGGREGATE-SAME: out %[[OUT_2_NAME:out2]]: [[OUT_2_TYPE:!firrtl.sint<64>]]
+  // COMMON-SAME: in %clock_reset_clocks_0
+  // COMMON-SAME: in %clock_reset_resets_0
+  // COMMON-SAME: in %clock_reset_asyncresets_0
   firrtl.module private @Recursive(in %arg: !firrtl.bundle<foo: bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>>,
-                           out %out1: !firrtl.uint<1>, out %out2: !firrtl.sint<64>) {
+                           out %out1: !firrtl.uint<1>, out %out2: !firrtl.sint<64>, in %clock_reset : !firrtl.bundle<clocks: vector<clock, 2>, resets: vector<reset, 2>, asyncresets: vector<asyncreset, 2>>) {
 
     // CHECK-NEXT: firrtl.connect %[[OUT_1_NAME]], %[[FLAT_ARG_1_NAME]] : [[OUT_1_TYPE]], [[FLAT_ARG_1_TYPE]]
     // CHECK-NEXT: firrtl.connect %[[OUT_2_NAME]], %[[FLAT_ARG_2_NAME]] : [[OUT_2_TYPE]], [[FLAT_ARG_2_TYPE]]

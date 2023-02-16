@@ -80,13 +80,13 @@ struct FlatBundleFieldEntry {
 };
 } // end anonymous namespace
 
-/// Return true if the type has more than zero bitwidth.
-static bool hasZeroBitWidth(FIRRTLType type) {
+/// Return true if the type has a zero bitwidth type, clock or reset.
+static bool hasZeroBitWidthOrClockReset(FIRRTLType type) {
   return TypeSwitch<FIRRTLType, bool>(type)
       .Case<BundleType>([&](auto bundle) {
         for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
           auto elt = bundle.getElement(i);
-          if (hasZeroBitWidth(elt.type))
+          if (hasZeroBitWidthOrClockReset(elt.type))
             return true;
         }
         return bundle.getNumElements() == 0;
@@ -94,12 +94,15 @@ static bool hasZeroBitWidth(FIRRTLType type) {
       .Case<FVectorType>([&](auto vector) {
         if (vector.getNumElements() == 0)
           return true;
-        return hasZeroBitWidth(vector.getElementType());
+        return hasZeroBitWidthOrClockReset(vector.getElementType());
       })
+      .Case<ClockType, AsyncResetType, firrtl::ResetType>(
+          [&](auto) { return true; })
       .Case<FIRRTLBaseType>([](auto groundType) {
         return firrtl::getBitWidth(groundType).value_or(0) == 0;
       })
-      .Case<RefType>([](auto ref) { return hasZeroBitWidth(ref.getType()); })
+      .Case<RefType>(
+          [](auto ref) { return hasZeroBitWidthOrClockReset(ref.getType()); })
       .Default([](auto) { return false; });
 }
 
@@ -141,10 +144,10 @@ static bool isPreservableAggregateType(Type type,
   if (!firrtlType)
     return false;
 
-  // We can a preserve the type iff (i) the type is not passive, (ii) the type
-  // doesn't contain analog and (iii) type don't contain zero bitwidth.
+  // Don't preserve types which contain flips, analog, clock, reset or zero
+  // bitwidth integer type.
   if (!firrtlType.isPassive() || firrtlType.containsAnalog() ||
-      hasZeroBitWidth(firrtlType))
+      hasZeroBitWidthOrClockReset(firrtlType))
     return false;
 
   switch (mode) {
