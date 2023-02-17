@@ -32,6 +32,7 @@ public:
   struct PathNode {
     PathNode(Value src, ArrayRef<int64_t> ar) : src(src), path(ar) {}
     Value src;
+    Flow flow;
     SmallVector<int64_t, 4> path;
 
     /// Roots are operations which define the storage or aggregate value.
@@ -39,23 +40,13 @@ public:
 
     /// Writable sources can appear as a LHS of a connect.
     // FIXME: This is just flow.
-    bool isSrcWritable() const {
-      // Ports need to check direction
-      if (!src.getDefiningOp()) {
-        auto barg = cast<BlockArgument>(src);
-        auto module = cast<FModuleOp>(barg.getOwner()->getParentOp());
-        auto direction = module.getPortDirection(barg.getArgNumber());
-        return direction != Direction::In;
-      }
-      // over approximate instances too
-      return isa<WireOp, RegOp, RegResetOp, InstanceOp, MemOp>(
-          src.getDefiningOp());
-    }
+    bool isSrcWritable() const { return flow != Flow::Source; }
 
     /// Transparent sources reflect a value written to them in the same cycle it
     /// is written.  These are sources which provide dataflow backwards in SSA
     /// during one logical execution of a module body.
-    /// This property only makes sense to ask of writable sources.
+    /// A port may be transparent (no storage), but not be writable from the
+    /// side of the instance we are on.
     bool isSrcTransparent() const {
       // ports are wires
       if (!src.getDefiningOp())
