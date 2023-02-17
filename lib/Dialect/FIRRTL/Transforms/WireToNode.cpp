@@ -21,11 +21,65 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallSet.h"
 
 using namespace circt;
 using namespace firrtl;
 
 #define DEBUG_TYPE "Wire2Node"
+
+// Read Op -> List of writers
+void computeRWDeps(Block *block, FieldSource &sources,
+                   DenseMap<Operation *, Operation *> &deps,
+                   DenseSet<WireOp> &candidates,
+                   DenseSet<Operation *> &unscheduledOps) {
+  DenseMap<WireOp, llvm::SmallSet<Operation *, 8>> readers;
+  DenseMap<WireOp, Operation *> writer;
+    auto ops = block->back().hasTrait<OpTrait::IsTerminator>()
+                 ? block->without_terminator()
+                 : *block;
+
+  for (Operation &op : ops) {
+    unscheduledOps.insert(&op);
+    if (isa<StrictConnectOp, ConnectOp>(&op)) {
+      const auto *dstnode = sources.nodeForValue(op.getOperand(0));
+      // We only care about wires
+      if (dstnode)
+        if (WireOp wire = dstnode->src.getDefiningOp<WireOp>()) {
+          auto w = writer.find(wire);
+          if (w == writer.end())
+            writer[wire] = &op;
+          else // keep track of multi-writers with a sentinel
+            writer[wire] = nullptr;
+        }
+      const auto *srcnode = sources.nodeForValue(op.getOperand(1));
+      // We only care about wires
+      if (srcnode)
+        if (WireOp wire = srcnode->src.getDefiningOp<WireOp>())
+          readers[wire].insert(&op);
+    } else {
+      assert(!op.getBlock());
+      for (auto operand : op.getOperands()) {
+        const auto *node = sources.nodeForValue(operand);
+        if (node)
+          if (WireOp wire = node->src.getDefiningOp<WireOp>())
+            readers[wire].insert(&op);
+      }
+    }
+  }
+  for (auto vrp : readers) {
+    // We can only handle a single writer to the destination
+    auto vwp = writer.find(vrp.first);
+    // No writer or multiple writers are a pass
+    if (vwp == writer.end() || !vwp->second)
+      continue;
+
+    candidates.insert(vrp.first);
+    for (auto reader : vrp.second)
+      deps[reader] = vwp->second;
+  }
+  return;
+}
 
 /// Return `true` if the given operation is ready to be scheduled.
 static bool isOpReadyBase(Operation *op,
@@ -114,15 +168,25 @@ static SmallVector<Operation *> sortTopologicallyEx(Block *block,
                                                     FieldSource &sources) {
   if (block->empty())
     return {};
-  auto ops = block->back().hasTrait<OpTrait::IsTerminator>()
-                 ? block->without_terminator()
-                 : *block;
-
   // The set of operations that have not yet been scheduled.
   DenseSet<Operation *> unscheduledOps;
 
+  // Auxilary dependencies through wires
+  DenseMap<Operation *, Operation *> deps;
+
+  // Wires which might be convertable
+  DenseSet<WireOp> candidates;
+
+  // Prep the various data structures
+  computeRWDeps(block, sources, deps, candidates, unscheduledOps);
+
+
   // Track reads
   DenseSet<Value> readsSeen;
+
+    auto ops = block->back().hasTrait<OpTrait::IsTerminator>()
+                 ? block->without_terminator()
+                 : *block;
 
   // range to schedule
   Block::iterator nextScheduledOp = ops.begin();
