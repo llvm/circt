@@ -38,22 +38,29 @@ public:
     bool isRoot() const { return path.empty(); }
 
     /// Writable sources can appear as a LHS of a connect.
+    // FIXME: This is just flow.
     bool isSrcWritable() const {
-      // over approximate ports
-      if (!src.getDefiningOp())
-        return true;
+      // Ports need to check direction
+      if (!src.getDefiningOp()) {
+        auto barg = cast<BlockArgument>(src);
+        auto module = cast<FModuleOp>(barg.getOwner()->getParentOp());
+        auto direction = module.getPortDirection(barg.getArgNumber());
+        return direction != Direction::In;
+      }
       // over approximate instances too
       return isa<WireOp, RegOp, RegResetOp, InstanceOp, MemOp>(
           src.getDefiningOp());
     }
+
     /// Transparent sources reflect a value written to them in the same cycle it
     /// is written.  These are sources which provide dataflow backwards in SSA
-    /// durring one logical execution of a module body.
+    /// during one logical execution of a module body.
+    /// This property only makes sense to ask of writable sources.
     bool isSrcTransparent() const {
-      // over approximate ports
+      // ports are wires
       if (!src.getDefiningOp())
         return true;
-      // over approximate instances too
+      // ports are wires, on this side of the instance too.
       return isa<WireOp, InstanceOp>(src.getDefiningOp());
     }
   };

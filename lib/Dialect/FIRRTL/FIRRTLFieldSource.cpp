@@ -12,7 +12,7 @@
 // aggregate along with a path through the type from the source. In parallel,
 // this tracks any value which is an alias for a writable storage element, even
 // if scalar.  This is sufficient to allow any value used on the LHS of a
-// connect to be traced to it's source, and to track any value which is a read
+// connect to be traced to its source, and to track any value which is a read
 // of a storage element back to the source storage element.
 //
 //===----------------------------------------------------------------------===//
@@ -27,8 +27,8 @@ FieldSource::FieldSource(Operation *operation) {
   // All ports define locations
   for (auto port : mod.getBodyBlock()->getArguments())
     makeNodeForValue(port, port, {});
-  for (auto &op : *mod.getBodyBlock())
-    visitOp(&op);
+
+  mod.walk<mlir::WalkOrder::PreOrder>([&](Operation *op) { visitOp(op); });
 }
 
 void FieldSource::visitOp(Operation *op) {
@@ -44,12 +44,8 @@ void FieldSource::visitOp(Operation *op) {
     return visitMem(mem);
   if (auto inst = dyn_cast<InstanceOp>(op))
     return visitInst(inst);
-  // recurse in to regions
-  for (auto &r : op->getRegions())
-    for (auto &b : r.getBlocks())
-      for (auto &op : b)
-        visitOp(&op);
 
+  // Track all other definitions of aggregates.
   if (op->getNumResults()) {
     auto type = op->getResult(0).getType();
     if (dyn_cast<FIRRTLBaseType>(type) &&
@@ -70,10 +66,6 @@ void FieldSource::visitSubfield(SubfieldOp sf) {
 void FieldSource::visitSubindex(SubindexOp si) {
   auto value = si.getInput();
   const auto *node = nodeForValue(value);
-  if (!node) {
-    si.dump();
-    value.dump();
-  }
   assert(node && "node should be in the map");
   auto sv = node->path;
   sv.push_back(si.getIndex());
