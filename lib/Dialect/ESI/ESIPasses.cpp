@@ -461,9 +461,12 @@ namespace {
 class ChannelRewriter;
 class SignalingStandard;
 
+/// Responsible for: lowering module ports, updating the module body, and
+/// updating said modules instances.
 class ChannelRewriter {
 public:
-  ChannelRewriter(hw::HWMutableModuleLike mod) : mod(mod), body(nullptr) {
+  ChannelRewriter(hw::HWMutableModuleLike mod)
+      : mod(mod), body(nullptr), foundEsiPorts(false) {
     if (mod->getNumRegions() == 1 && mod->getRegion(0).hasOneBlock())
       body = &mod->getRegion(0).front();
   }
@@ -481,20 +484,25 @@ public:
 private:
   hw::HWMutableModuleLike mod;
   Block *body;
+  bool foundEsiPorts;
   SmallVector<std::unique_ptr<SignalingStandard>> loweredInputs;
   SmallVector<std::unique_ptr<SignalingStandard>> loweredOutputs;
 
-  SmallVector<std::pair<unsigned, PortInfo>> newInputs;
-  SmallVector<std::pair<unsigned, PortInfo>> newOutputs;
-  SmallVector<Value> newOutputValues;
+  SmallVector<std::pair<unsigned, PortInfo>, 0> newInputs;
+  SmallVector<std::pair<unsigned, PortInfo>, 0> newOutputs;
+  SmallVector<Value, 0> newOutputValues;
 };
 
+/// Base class for the signaling standard of a particular port. Abstracts the
+/// details of a particular signaling standard from the port layout.
 class SignalingStandard {
 public:
   SignalingStandard(ChannelRewriter &rewriter, PortInfo origPort)
       : rewriter(rewriter), body(rewriter.getBody()), origPort(origPort) {}
   virtual ~SignalingStandard() {}
 
+  // Lower the specified (possibly high-level ESI) port into a wire-level
+  // signaling protocol.
   void lowerPort() {
     if (origPort.direction == PortDirection::OUTPUT)
       buildOutputSignals();
@@ -502,6 +510,7 @@ public:
       buildInputSignals();
   }
 
+  //  This class stores bookkeeping information to make that easier.
   virtual void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
                                SmallVectorImpl<Value> &newOperands,
                                ArrayRef<Backedge> newResults) = 0;
@@ -620,12 +629,12 @@ LogicalResult ChannelRewriter::rewriteChannelsOnModule() {
 
     auto chanTy = port.type.dyn_cast<ChannelType>();
     if (!chanTy) {
-      loweredPorts.emplace_back(new RawWires(*this, port))->lowerPort();
+      loweredPorts.emplace_back(new RawWires(*this, port));
     } else {
-      // Build the control signals.
+      foundEsiPorts = true;
       ChannelSignaling signaling = chanTy.getSignaling();
       if (signaling == ChannelSignaling::ValidReady) {
-        loweredPorts.emplace_back(new ValidReady(*this, port))->lowerPort();
+        loweredPorts.emplace_back(new ValidReady(*this, port));
       } else {
         auto error =
             mod.emitOpError("encountered unknown signaling standard on port '")
@@ -637,7 +646,7 @@ LogicalResult ChannelRewriter::rewriteChannelsOnModule() {
     return success();
   };
 
-  // Lower the ESI ports.
+  // Find the ESI ports.
   for (PortInfo port : ports.inputs)
     if (failed(lowerPort(port)))
       return failure();
@@ -645,6 +654,21 @@ LogicalResult ChannelRewriter::rewriteChannelsOnModule() {
     if (failed(lowerPort(port)))
       return failure();
 
+  // Bail early if we didn't find any.
+  if (!foundEsiPorts) {
+    // Memory optimization.
+    loweredInputs.clear();
+    loweredOutputs.clear();
+    return success();
+  }
+
+  // Lower the ESI ports.
+  for (auto &lowering : loweredInputs)
+    lowering->lowerPort();
+  for (auto &lowering : loweredOutputs)
+    lowering->lowerPort();
+
+  // Set up vectors to erase _all_ the ports.
   SmallVector<unsigned> inputsToErase;
   for (size_t i = 0, e = mod.getNumInputs(); i < e; ++i)
     inputsToErase.push_back(i);
@@ -662,6 +686,10 @@ LogicalResult ChannelRewriter::rewriteChannelsOnModule() {
   });
   body->getTerminator()->setOperands(newOutputValues);
 
+  // Memory optimization -- we don't need these anymore.
+  newInputs.clear();
+  newOutputs.clear();
+  newOutputValues.clear();
   return success();
 }
 
@@ -735,6 +763,9 @@ void ValidReady::mapOutputSignals(OpBuilder &b, Operation *inst,
 /// ops around the instance. Lowering or folding away `[un]wrap` ops is
 /// another pass.
 void ChannelRewriter::updateInstance(InstanceOp inst) {
+  if (!foundEsiPorts)
+    return;
+
   ImplicitLocOpBuilder b(inst.getLoc(), inst);
   BackedgeBuilder beb(b, inst.getLoc());
   ModulePortInfo ports = mod.getPorts();
@@ -762,6 +793,7 @@ void ChannelRewriter::updateInstance(InstanceOp inst) {
   auto newInst =
       b.create<InstanceOp>(mod, inst.getInstanceNameAttr(), newOperands,
                            inst.getParameters(), inst.getInnerSymAttr());
+  newInst->setDialectAttrs(inst->getDialectAttrs());
 
   // Assign the backedges.
   for (auto [idx, be] : llvm::enumerate(newResults))
