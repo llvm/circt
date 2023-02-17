@@ -945,7 +945,8 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
         return failure();
       }
     hwPort.sym = firrtlPort.sym;
-    if (firrtlPort.annotations.removeDontTouch() && !hwPort.sym)
+    bool hadDontTouch = firrtlPort.annotations.removeDontTouch();
+    if (hadDontTouch && !hwPort.sym)
       hwPort.sym = hw::InnerSymAttr::get(StringAttr::get(
           moduleOp->getContext(),
           Twine("__") + moduleName + Twine("__") + firrtlPort.name.strref()));
@@ -960,10 +961,13 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
     // input, output, or inout.  We don't want these at the HW level.
     if (hwPort.type.isInteger(0)) {
       if (hwPort.sym && !hwPort.sym.empty()) {
-        moduleOp->emitError("zero width port ")
-            << hwPort.name << " is referenced by name [" << hwPort.sym
-            << "] (e.g. in an XMR).";
-        return failure();
+        auto d = moduleOp->emitError("zero width port ") << hwPort.name;
+        if (hadDontTouch)
+          d << " has dontTouch annotation";
+        else
+          d << " is referenced by name [" << hwPort.sym << "] (e.g. in an XMR)";
+        d << " but must be removed";
+        return d;
       }
       continue;
     }

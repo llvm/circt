@@ -120,7 +120,15 @@ firrtl.circuit "Foo" attributes {annotations = [
 // -----
 
 firrtl.circuit "SymArgZero" {
-  // expected-error @+1 {{zero width port "foo" is referenced by name [#hw<innerSym@symfoo>] (e.g. in an XMR).}}
+  // expected-error @+1 {{zero width port "foo" is referenced by name [#hw<innerSym@symfoo>] (e.g. in an XMR) but must be removed}}
   firrtl.module @SymArgZero(in %foo :!firrtl.uint<0> sym @symfoo) {
+  }
+}
+
+// -----
+
+firrtl.circuit "DTArgZero" {
+  // expected-error @below {{zero width port "foo" has dontTouch annotation but must be removed}}
+  firrtl.module @DTArgZero(in %foo :!firrtl.uint<0> [{class = "firrtl.transforms.DontTouchAnnotation"}]) {
   }
 }
