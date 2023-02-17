@@ -525,7 +525,7 @@ class SignalingStandard {
 public:
   SignalingStandard(ChannelRewriter &rewriter, PortInfo origPort)
       : rewriter(rewriter), body(rewriter.getBody()), origPort(origPort) {}
-  virtual ~SignalingStandard() {}
+  virtual ~SignalingStandard() = default;
 
   // Lower the specified (possibly high-level ESI) port into a wire-level
   // signaling protocol. The two virtual methods 'build*Signals' should be
@@ -780,7 +780,7 @@ void ValidReady::buildOutputSignals() {
   Value ready = rewriter.createNewInput(origPort, "_ready", i1, readyPort);
   Value data, valid;
   if (body) {
-    auto terminator = body->getTerminator();
+    auto *terminator = body->getTerminator();
     ImplicitLocOpBuilder b(origPort.loc, terminator);
 
     auto unwrap = b.create<UnwrapValidReadyOp>(
