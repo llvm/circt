@@ -30,7 +30,8 @@ public:
   explicit FieldSource(Operation *operation);
 
   struct PathNode {
-    PathNode(Value src, ArrayRef<int64_t> ar) : src(src), path(ar) {}
+    PathNode(Value src, ArrayRef<int64_t> ar, Flow flow)
+        : src(src), flow(flow), path(ar) {}
     Value src;
     Flow flow;
     SmallVector<int64_t, 4> path;
@@ -38,8 +39,8 @@ public:
     /// Roots are operations which define the storage or aggregate value.
     bool isRoot() const { return path.empty(); }
 
-    /// Writable sources can appear as a LHS of a connect.
-    // FIXME: This is just flow.
+    /// Writable sources can appear as a LHS of a connect given this node's
+    /// path.
     bool isSrcWritable() const { return flow != Flow::Source; }
 
     /// Transparent sources reflect a value written to them in the same cycle it
@@ -66,7 +67,8 @@ private:
   void visitMem(MemOp mem);
   void visitInst(InstanceOp inst);
 
-  void makeNodeForValue(Value dst, Value src, ArrayRef<int64_t> path);
+  void makeNodeForValue(Value dst, Value src, ArrayRef<int64_t> path,
+                        Flow flow);
 
   DenseMap<Value, PathNode> paths;
 };
