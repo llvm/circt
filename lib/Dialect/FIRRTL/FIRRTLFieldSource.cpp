@@ -15,6 +15,10 @@
 // connect to be traced to its source, and to track any value which is a read
 // of a storage element back to the source storage element.
 //
+// There is a redundant walk of the IR going on since flow is walking backwards
+// over operations we've already visited.  We need to refactor foldFlow so we
+// can build up the flow incrementally.
+//
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLFieldSource.h"
