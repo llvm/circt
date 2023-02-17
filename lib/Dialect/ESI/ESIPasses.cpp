@@ -458,7 +458,6 @@ static StringAttr appendToRtlName(StringAttr base, Twine suffix) {
 }
 
 namespace {
-class ChannelRewriter;
 class SignalingStandard;
 
 /// Responsible for: lowering module ports, updating the module body, and
@@ -470,31 +469,58 @@ public:
     if (mod->getNumRegions() == 1 && mod->getRegion(0).hasOneBlock())
       body = &mod->getRegion(0).front();
   }
+
+  /// Convert all input and output ChannelTypes into the specified wire-level
+  /// signaling standard. Try not to change the order and materialize ops in
+  /// reasonably intuitive locations. Will modify the module and body only if
+  /// one exists.
   LogicalResult rewriteChannelsOnModule();
+
+  /// Update an instance pointing to this module. Uses the bookkeeping
+  /// information stored in this class to ease the update instead of recreating
+  /// the algorithm which did the mapping initially.
   void updateInstance(InstanceOp inst);
 
   hw::HWMutableModuleLike getModule() const { return mod; }
   Block *getBody() const { return body; }
 
+  /// These two methods take care of allocating new ports in the correct place
+  /// based on the position of 'origPort'. The new port is based on the original
+  /// name and suffix. The specification for the new port is given by `newPort`
+  /// and is recorded internally. Any changes to 'newPort' after calling this
+  /// will not be reflected in the modules new port list.
   Value createNewInput(PortInfo origPort, Twine suffix, Type type,
                        PortInfo &newPort);
+  /// Same as above. 'output' is the value fed into the new port and is required
+  /// if 'body' is non-null. Important note: cannot be a backedge which gets
+  /// replaced since this isn't attached to an op until later in the pass.
   void createNewOutput(PortInfo origPort, Twine suffix, Type type, Value output,
                        PortInfo &newPort);
 
 private:
   hw::HWMutableModuleLike mod;
+  // If the module has a block and it wants to be modified, this'll be non-null.
   Block *body;
+  // Did we find an ESI port?
   bool foundEsiPorts;
+  // Keep around a reference to the specific signaling standard classes to
+  // facilitate updating the instance ops. Indexed by the original port
+  // location.
   SmallVector<std::unique_ptr<SignalingStandard>> loweredInputs;
   SmallVector<std::unique_ptr<SignalingStandard>> loweredOutputs;
 
+  // Tracking information to modify the module. Populated by the
+  // 'createNew(Input|Output)' methods. Not needed by `updateInstance`, so we
+  // can clear them once the module ports have been modified. Default length is
+  // 0 to save memory since we'll be keeping this around for later use.
   SmallVector<std::pair<unsigned, PortInfo>, 0> newInputs;
   SmallVector<std::pair<unsigned, PortInfo>, 0> newOutputs;
   SmallVector<Value, 0> newOutputValues;
 };
 
 /// Base class for the signaling standard of a particular port. Abstracts the
-/// details of a particular signaling standard from the port layout.
+/// details of a particular signaling standard from the port layout. Subclasses
+/// keep around port mapping information to use when updating instances.
 class SignalingStandard {
 public:
   SignalingStandard(ChannelRewriter &rewriter, PortInfo origPort)
@@ -502,7 +528,9 @@ public:
   virtual ~SignalingStandard() {}
 
   // Lower the specified (possibly high-level ESI) port into a wire-level
-  // signaling protocol.
+  // signaling protocol. The two virtual methods 'build*Signals' should be
+  // overridden by subclasses. They should use the 'create*' methods in
+  // 'ChannelRewriter' to create the necessary ports.
   void lowerPort() {
     if (origPort.direction == PortDirection::OUTPUT)
       buildOutputSignals();
@@ -510,7 +538,9 @@ public:
       buildInputSignals();
   }
 
-  //  This class stores bookkeeping information to make that easier.
+  /// Update an instance port to the new port information. Also adds the proper
+  /// ESI ops to map the channel to the wire signaling standard. These get
+  /// lowered away in a later pass.
   virtual void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
                                SmallVectorImpl<Value> &newOperands,
                                ArrayRef<Backedge> newResults) = 0;
@@ -530,54 +560,61 @@ protected:
   MLIRContext *getContext() { return getModule()->getContext(); }
 };
 
+/// We consider non-ESI ports to be ad-hoc signaling or 'raw wires'. (Which
+/// counts as a signaling protocol if one squints pretty hard). We mostly do
+/// this since it allows us a more consistent internal API.
 class RawWires : public SignalingStandard {
 public:
   using SignalingStandard::SignalingStandard;
 
   void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
                        SmallVectorImpl<Value> &newOperands,
-                       ArrayRef<Backedge> newResults) {
+                       ArrayRef<Backedge> newResults) override {
     newOperands[newPort.argNum] = instValue;
   }
   void mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
                         SmallVectorImpl<Value> &newOperands,
-                        ArrayRef<Backedge> newResults) {
+                        ArrayRef<Backedge> newResults) override {
     instValue.replaceAllUsesWith(newResults[newPort.argNum]);
   }
 
 private:
-  void buildInputSignals() {
+  void buildInputSignals() override {
     Value newValue =
         rewriter.createNewInput(origPort, "", origPort.type, newPort);
     if (body)
       body->getArgument(origPort.argNum).replaceAllUsesWith(newValue);
   }
 
-  void buildOutputSignals() {
+  void buildOutputSignals() override {
     Value output;
     if (body)
       output = body->getTerminator()->getOperand(origPort.argNum);
     rewriter.createNewOutput(origPort, "", origPort.type, output, newPort);
   }
 
+  // Track where the new port location.
   PortInfo newPort;
 };
 
+/// Implement the Valid/Ready signaling standard.
 class ValidReady : public SignalingStandard {
 public:
   using SignalingStandard::SignalingStandard;
 
   void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
                        SmallVectorImpl<Value> &newOperands,
-                       ArrayRef<Backedge> newResults);
+                       ArrayRef<Backedge> newResults) override;
   void mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
                         SmallVectorImpl<Value> &newOperands,
-                        ArrayRef<Backedge> newResults);
+                        ArrayRef<Backedge> newResults) override;
 
 private:
-  void buildInputSignals();
-  void buildOutputSignals();
+  void buildInputSignals() override;
+  void buildOutputSignals() override;
 
+  // Keep around information about the port numbers of the relevant ports and
+  // use that later to update the instances.
   PortInfo dataPort;
   PortInfo validPort;
   PortInfo readyPort;
@@ -615,14 +652,12 @@ void ChannelRewriter::createNewOutput(PortInfo origPort, Twine suffix,
   newOutputValues.push_back(output);
 }
 
-/// Convert all input and output ChannelTypes into valid/ready wires. Try not to
-/// change the order and materialize ops in reasonably intuitive locations. Will
-/// modify the body only if one exists.
 LogicalResult ChannelRewriter::rewriteChannelsOnModule() {
   // Build ops in the module.
   ModulePortInfo ports = mod.getPorts();
 
-  auto lowerPort = [&](PortInfo port) -> LogicalResult {
+  // Determine and create a `SignalingStandard` for said port.
+  auto createLowering = [&](PortInfo port) -> LogicalResult {
     auto &loweredPorts = port.direction == PortDirection::OUTPUT
                              ? loweredOutputs
                              : loweredInputs;
@@ -631,7 +666,10 @@ LogicalResult ChannelRewriter::rewriteChannelsOnModule() {
     if (!chanTy) {
       loweredPorts.emplace_back(new RawWires(*this, port));
     } else {
+      // Mark this as a module which needs port lowering.
       foundEsiPorts = true;
+
+      // Determine which ESI signaling standard is specified.
       ChannelSignaling signaling = chanTy.getSignaling();
       if (signaling == ChannelSignaling::ValidReady) {
         loweredPorts.emplace_back(new ValidReady(*this, port));
@@ -646,12 +684,12 @@ LogicalResult ChannelRewriter::rewriteChannelsOnModule() {
     return success();
   };
 
-  // Find the ESI ports.
+  // Find the ESI ports and decide the signaling standard.
   for (PortInfo port : ports.inputs)
-    if (failed(lowerPort(port)))
+    if (failed(createLowering(port)))
       return failure();
   for (PortInfo port : ports.outputs)
-    if (failed(lowerPort(port)))
+    if (failed(createLowering(port)))
       return failure();
 
   // Bail early if we didn't find any.
@@ -662,13 +700,18 @@ LogicalResult ChannelRewriter::rewriteChannelsOnModule() {
     return success();
   }
 
-  // Lower the ESI ports.
+  // Lower the ESI ports -- this mutates the body directly and builds the port
+  // lists.
   for (auto &lowering : loweredInputs)
     lowering->lowerPort();
   for (auto &lowering : loweredOutputs)
     lowering->lowerPort();
 
-  // Set up vectors to erase _all_ the ports.
+  // Set up vectors to erase _all_ the ports. It's easier to rebuild everything
+  // (including the non-ESI ports) than reason about interleaving the newly
+  // lowered ESI ports with the non-ESI ports. Also, the 'modifyPorts' method
+  // ends up rebuilding the port lists anyway, so this isn't nearly as expensive
+  // as it may seem.
   SmallVector<unsigned> inputsToErase;
   for (size_t i = 0, e = mod.getNumInputs(); i < e; ++i)
     inputsToErase.push_back(i);
@@ -681,9 +724,12 @@ LogicalResult ChannelRewriter::rewriteChannelsOnModule() {
   if (!body)
     return success();
 
+  // We should only erase the original arguments. New ones were appended with
+  // the `createInput` method call.
   body->eraseArguments([&ports](BlockArgument arg) {
     return arg.getArgNumber() < ports.inputs.size();
   });
+  // Set the new operands, overwriting the old ones.
   body->getTerminator()->setOperands(newOutputValues);
 
   // Memory optimization -- we don't need these anymore.
@@ -788,14 +834,15 @@ void ChannelRewriter::updateInstance(InstanceOp inst) {
     loweredOutputs[oldResIdx]->mapOutputSignals(
         b, inst, inst->getResult(oldResIdx), newOperands, newResults);
 
-  // Clone the instance.
+  // Clone the instance. We cannot just modifiy the existing one since the
+  // result types might have changed types and number of them.
   b.setInsertionPointAfter(inst);
   auto newInst =
       b.create<InstanceOp>(mod, inst.getInstanceNameAttr(), newOperands,
                            inst.getParameters(), inst.getInnerSymAttr());
   newInst->setDialectAttrs(inst->getDialectAttrs());
 
-  // Assign the backedges.
+  // Assign the backedges to the new results.
   for (auto [idx, be] : llvm::enumerate(newResults))
     be.setValue(newInst.getResult(idx));
 
