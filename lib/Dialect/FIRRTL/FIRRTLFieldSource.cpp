@@ -72,10 +72,6 @@ void FieldSource::visitSubfield(SubfieldOp sf) {
 void FieldSource::visitSubindex(SubindexOp si) {
   auto value = si.getInput();
   const auto *node = nodeForValue(value);
-  if (!node) {
-    si.dump();
-    value.dump();
-  }
   assert(node && "node should be in the map");
   auto sv = node->path;
   sv.push_back(si.getIndex());
