@@ -30,30 +30,29 @@ public:
   explicit FieldSource(Operation *operation);
 
   struct PathNode {
-    PathNode(Value src, ArrayRef<int64_t> ar) : src(src), path(ar) {}
+    PathNode(Value src, ArrayRef<int64_t> ar, Flow flow)
+        : src(src), flow(flow), path(ar) {}
     Value src;
+    Flow flow;
     SmallVector<int64_t, 4> path;
 
     /// Roots are operations which define the storage or aggregate value.
     bool isRoot() const { return path.empty(); }
 
-    /// Writable sources can appear as a LHS of a connect.
-    bool isSrcWritable() const {
-      // over approximate ports
-      if (!src.getDefiningOp())
-        return true;
-      // over approximate instances too
-      return isa<WireOp, RegOp, RegResetOp, InstanceOp, MemOp>(
-          src.getDefiningOp());
-    }
+    /// Writable sources can appear as a LHS of a connect given this node's
+    /// path.
+    bool isSrcWritable() const { return flow != Flow::Source; }
+
     /// Transparent sources reflect a value written to them in the same cycle it
     /// is written.  These are sources which provide dataflow backwards in SSA
-    /// durring one logical execution of a module body.
+    /// during one logical execution of a module body.
+    /// A port may be transparent (no storage), but not be writable from the
+    /// side of the instance we are on.
     bool isSrcTransparent() const {
-      // over approximate ports
+      // ports are wires
       if (!src.getDefiningOp())
         return true;
-      // over approximate instances too
+      // ports are wires, on this side of the instance too.
       return isa<WireOp, InstanceOp>(src.getDefiningOp());
     }
   };
@@ -68,7 +67,8 @@ private:
   void visitMem(MemOp mem);
   void visitInst(InstanceOp inst);
 
-  void makeNodeForValue(Value dst, Value src, ArrayRef<int64_t> path);
+  void makeNodeForValue(Value dst, Value src, ArrayRef<int64_t> path,
+                        Flow flow);
 
   DenseMap<Value, PathNode> paths;
 };

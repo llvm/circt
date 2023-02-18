@@ -707,6 +707,7 @@ static LogicalResult processBuffer(
       auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
       modulePM.addPass(firrtl::createExpandWhensPass());
       modulePM.addPass(firrtl::createSFCCompatPass());
+      modulePM.addPass(firrtl::createWireDetanglePass());
     }
   }
 
