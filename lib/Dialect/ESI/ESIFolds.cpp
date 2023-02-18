@@ -33,26 +33,30 @@ LogicalResult UnwrapFIFOOp::mergeAndErase(UnwrapFIFOOp unwrap, WrapFIFOOp wrap,
   }
   return failure();
 }
-LogicalResult UnwrapFIFOOp::canonicalize(UnwrapFIFOOp unwrap,
+LogicalResult UnwrapFIFOOp::canonicalize(UnwrapFIFOOp op,
                                          PatternRewriter &rewriter) {
-  auto wrap =
-      dyn_cast_or_null<WrapFIFOOp>(unwrap.getChanInput().getDefiningOp());
-  if (succeeded(UnwrapFIFOOp::mergeAndErase(unwrap, wrap, rewriter)))
+  auto wrap = dyn_cast_or_null<WrapFIFOOp>(op.getChanInput().getDefiningOp());
+  if (succeeded(UnwrapFIFOOp::mergeAndErase(op, wrap, rewriter)))
     return success();
   return failure();
 }
 
-LogicalResult WrapFIFOOp::canonicalize(WrapFIFOOp wrap,
-                                       PatternRewriter &rewriter) {
-  if (wrap.getChanOutput().getUsers().empty()) {
-    auto c0_i1 = rewriter.create<hw::ConstantOp>(
-        wrap.getLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
-    rewriter.replaceOp(wrap, {{}, c0_i1});
+LogicalResult WrapFIFOOp::fold(FoldAdaptor,
+                               SmallVectorImpl<OpFoldResult> &results) {
+  if (getChanOutput().getUsers().empty()) {
+    results.push_back({});
+    results.push_back(IntegerAttr::get(
+        IntegerType::get(getContext(), 1, IntegerType::Signless), 0));
     return success();
   }
+  return failure();
+}
+
+LogicalResult WrapFIFOOp::canonicalize(WrapFIFOOp op,
+                                       PatternRewriter &rewriter) {
   auto unwrap =
-      dyn_cast_or_null<UnwrapFIFOOp>(*wrap.getChanOutput().getUsers().begin());
-  if (succeeded(UnwrapFIFOOp::mergeAndErase(unwrap, wrap, rewriter)))
+      dyn_cast_or_null<UnwrapFIFOOp>(*op.getChanOutput().getUsers().begin());
+  if (succeeded(UnwrapFIFOOp::mergeAndErase(unwrap, op, rewriter)))
     return success();
   return failure();
 }

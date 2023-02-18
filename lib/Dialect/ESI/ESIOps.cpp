@@ -228,14 +228,15 @@ LogicalResult UnwrapFIFOOp::verify() {
   return success();
 }
 
-LogicalResult UnwrapFIFOOp::inferReturnTypes(MLIRContext *context,
-                                             std::optional<Location> loc,
-                                             ValueRange operands,
-                                             DictionaryAttr attrs,
-                                             mlir::RegionRange regions,
-                                             SmallVectorImpl<Type> &results) {
-  results.push_back(operands[0].getType().cast<ChannelType>().getInner());
-  results.push_back(IntegerType::get(context, 1, IntegerType::Signless));
+LogicalResult
+UnwrapFIFOOp::inferReturnTypes(MLIRContext *context, std::optional<Location>,
+                               ValueRange operands, DictionaryAttr,
+                               mlir::RegionRange,
+                               SmallVectorImpl<Type> &inferredResulTypes) {
+  inferredResulTypes.push_back(
+      operands[0].getType().cast<ChannelType>().getInner());
+  inferredResulTypes.push_back(
+      IntegerType::get(context, 1, IntegerType::Signless));
   return success();
 }
 

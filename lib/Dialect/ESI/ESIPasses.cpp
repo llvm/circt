@@ -1404,11 +1404,12 @@ public:
 } // anonymous namespace
 
 namespace {
+/// Use the op canonicalizer to lower away the op. Assumes the canonicalizer
+/// deletes the op.
 template <typename Op>
 struct CanonicalizerOpLowering : public OpConversionPattern<Op> {
 public:
   CanonicalizerOpLowering(MLIRContext *ctxt) : OpConversionPattern<Op>(ctxt) {}
-  using OpConversionPattern<Op>::OpConversionPattern;
 
   LogicalResult
   matchAndRewrite(Op op, typename Op::Adaptor adaptor,

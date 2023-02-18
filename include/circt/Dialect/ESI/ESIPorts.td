@@ -114,14 +114,11 @@ def WrapFIFOOp : ESI_Op<"wrap.fifo", [
     DeclareOpInterfaceMethods<ChannelOpInterface>
   ]> {
   let summary = "Wrap a value into an ESI port with FIFO signaling";
-  let description = [{
-    Wrapping a value into an ESI port type allows modules to send values down
-    an ESI port. 
-  }];
 
   let arguments = (ins AnyType:$data, I1:$empty);
   let results = (outs ChannelType:$chanOutput, I1:$rden);
   let hasCanonicalizeMethod = true;
+  let hasFolder = true;
   let hasVerifier = 1;
 
   let assemblyFormat = [{
@@ -135,10 +132,6 @@ def UnwrapFIFOOp : ESI_Op<"unwrap.fifo", [
     DeclareOpInterfaceMethods<ChannelOpInterface>
   ]> {
   let summary = "Unwrap a value from an ESI port into a FIFO interface";
-  let description = [{
-    Unwrapping a value allows operations on the contained value. Unwrap the
-    channel 
-  }];
 
   let arguments = (ins ChannelType:$chanInput, I1:$rden);
   let results = (outs AnyType:$data, I1:$empty);
