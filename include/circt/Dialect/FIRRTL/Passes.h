@@ -114,8 +114,6 @@ std::unique_ptr<mlir::Pass> createCheckCombLoopsPass();
 
 std::unique_ptr<mlir::Pass> createSFCCompatPass();
 
-std::unique_ptr<mlir::Pass> createWireDetanglePass();
-
 std::unique_ptr<mlir::Pass>
 createMergeConnectionsPass(bool enableAggressiveMerging = false);
 

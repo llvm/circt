@@ -642,12 +642,4 @@ def InnerSymbolDCE : Pass<"firrtl-inner-symbol-dce", "mlir::ModuleOp"> {
   ];
 }
 
-def WireDetangle : Pass<"firrtl-wire-detangle", "firrtl::FModuleOp"> {
-  let summary = "Detangle wires";
-  let description = [{
-    This pass eliminates syntactic loops through wires of aggregates.
-  }];
-  let constructor = "circt::firrtl::createWireDetanglePass()";
-}
-
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
