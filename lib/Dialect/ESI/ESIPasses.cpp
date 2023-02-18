@@ -619,6 +619,29 @@ private:
   PortInfo validPort;
   PortInfo readyPort;
 };
+
+/// Implement the FIFO signaling standard.
+class FIFO : public SignalingStandard {
+public:
+  using SignalingStandard::SignalingStandard;
+
+  void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                       SmallVectorImpl<Value> &newOperands,
+                       ArrayRef<Backedge> newResults) override;
+  void mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                        SmallVectorImpl<Value> &newOperands,
+                        ArrayRef<Backedge> newResults) override;
+
+private:
+  void buildInputSignals() override;
+  void buildOutputSignals() override;
+
+  // Keep around information about the port numbers of the relevant ports and
+  // use that later to update the instances.
+  PortInfo dataPort;
+  PortInfo rdenPort;
+  PortInfo emptyPort;
+};
 } // namespace
 
 Value ChannelRewriter::createNewInput(PortInfo origPort, Twine suffix,
@@ -673,6 +696,8 @@ LogicalResult ChannelRewriter::rewriteChannelsOnModule() {
       ChannelSignaling signaling = chanTy.getSignaling();
       if (signaling == ChannelSignaling::ValidReady) {
         loweredPorts.emplace_back(new ValidReady(*this, port));
+      } else if (signaling == ChannelSignaling::FIFO0) {
+        loweredPorts.emplace_back(new FIFO(*this, port));
       } else {
         auto error =
             mod.emitOpError("encountered unknown signaling standard on port '")
@@ -805,6 +830,72 @@ void ValidReady::mapOutputSignals(OpBuilder &b, Operation *inst,
   newOperands[readyPort.argNum] = wrap.getReady();
 }
 
+void FIFO::buildInputSignals() {
+  Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
+  auto chanTy = origPort.type.cast<ChannelType>();
+
+  // When we find one, add a data and valid signal to the new args.
+  Value data =
+      rewriter.createNewInput(origPort, "", chanTy.getInner(), dataPort);
+  Value empty = rewriter.createNewInput(origPort, "_empty", i1, emptyPort);
+
+  Value rden;
+  if (body) {
+    ImplicitLocOpBuilder b(origPort.loc, body, body->begin());
+    // Build the ESI wrap operation to translate the lowered signals to what
+    // they were. (A later pass takes care of eliminating the ESI ops.)
+    auto wrap = b.create<WrapFIFOOp>(ArrayRef<Type>({chanTy, b.getI1Type()}),
+                                     data, empty);
+    rden = wrap.getRden();
+    // Replace uses of the old ESI port argument with the new one from the
+    // wrap.
+    body->getArgument(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
+  }
+
+  rewriter.createNewOutput(origPort, "_ready", i1, rden, rdenPort);
+}
+
+void FIFO::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                           SmallVectorImpl<Value> &newOperands,
+                           ArrayRef<Backedge> newResults) {
+  auto unwrap =
+      b.create<UnwrapFIFOOp>(inst->getLoc(), inst->getOperand(origPort.argNum),
+                             newResults[rdenPort.argNum]);
+  newOperands[dataPort.argNum] = unwrap.getData();
+  newOperands[emptyPort.argNum] = unwrap.getEmpty();
+}
+
+void FIFO::buildOutputSignals() {
+  Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
+  auto chanTy = origPort.type.cast<ChannelType>();
+
+  Value rden = rewriter.createNewInput(origPort, "_rden", i1, rdenPort);
+  Value data, empty;
+  if (body) {
+    auto *terminator = body->getTerminator();
+    ImplicitLocOpBuilder b(origPort.loc, terminator);
+
+    auto unwrap =
+        b.create<UnwrapFIFOOp>(terminator->getOperand(origPort.argNum), rden);
+    data = unwrap.getData();
+    empty = unwrap.getEmpty();
+  }
+
+  // New outputs.
+  rewriter.createNewOutput(origPort, "", chanTy.getInner(), data, dataPort);
+  rewriter.createNewOutput(origPort, "_empty", i1, empty, emptyPort);
+}
+
+void FIFO::mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                            SmallVectorImpl<Value> &newOperands,
+                            ArrayRef<Backedge> newResults) {
+  auto wrap = b.create<WrapFIFOOp>(
+      inst->getLoc(), ArrayRef<Type>({origPort.type, b.getI1Type()}),
+      newResults[dataPort.argNum], newResults[emptyPort.argNum]);
+  inst->getResult(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
+  newOperands[rdenPort.argNum] = wrap.getRden();
+}
+
 /// Update an instance of an updated module by adding `esi.[un]wrap.vr`
 /// ops around the instance. Lowering or folding away `[un]wrap` ops is
 /// another pass.
@@ -836,6 +927,7 @@ void ChannelRewriter::updateInstance(InstanceOp inst) {
 
   // Clone the instance. We cannot just modifiy the existing one since the
   // result types might have changed types and number of them.
+  assert(llvm::none_of(newOperands, [](Value v) { return !v; }));
   b.setInsertionPointAfter(inst);
   auto newInst =
       b.create<InstanceOp>(mod, inst.getInstanceNameAttr(), newOperands,
@@ -1270,6 +1362,7 @@ public:
   virtual LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
+    // if (isa<UnwrapFIFOOp)
     Value valid, ready, data;
     WrapValidReadyOp wrap = dyn_cast<WrapValidReadyOp>(op);
     UnwrapValidReadyOp unwrap = dyn_cast<UnwrapValidReadyOp>(op);
@@ -1305,6 +1398,23 @@ public:
       });
     rewriter.replaceOp(wrap, {nullptr, ready});
     rewriter.replaceOp(unwrap, {data, valid});
+    return success();
+  }
+};
+} // anonymous namespace
+
+namespace {
+template <typename Op>
+struct CanonicalizerOpLowering : public OpConversionPattern<Op> {
+public:
+  CanonicalizerOpLowering(MLIRContext *ctxt) : OpConversionPattern<Op>(ctxt) {}
+  using OpConversionPattern<Op>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(Op op, typename Op::Adaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    if (failed(Op::canonicalize(op, rewriter)))
+      return rewriter.notifyMatchFailure(op->getLoc(), "canonicalizer failed");
     return success();
   }
 };
@@ -1609,6 +1719,8 @@ void ESItoHWPass::runOnOperation() {
   pass2Target.addIllegalDialect<ESIDialect>();
 
   RewritePatternSet pass2Patterns(ctxt);
+  pass2Patterns.insert<CanonicalizerOpLowering<UnwrapFIFOOp>>(ctxt);
+  pass2Patterns.insert<CanonicalizerOpLowering<WrapFIFOOp>>(ctxt);
   pass2Patterns.insert<RemoveWrapUnwrap>(ctxt);
   pass2Patterns.insert<EncoderLowering>(ctxt);
   pass2Patterns.insert<DecoderLowering>(ctxt);
