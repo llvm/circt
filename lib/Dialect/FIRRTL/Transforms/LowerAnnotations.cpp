@@ -294,6 +294,7 @@ static LogicalResult applyDUTAnno(const AnnoPathValue &target,
 
   auto moduleOp = cast<FModuleOp>(op);
 
+  // DUT has public visibility.
   moduleOp.setPublic();
   SmallVector<NamedAttribute> newAnnoAttrs;
   for (auto &na : anno)
