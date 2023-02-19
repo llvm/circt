@@ -518,11 +518,11 @@ static void buildComponentLike(OpBuilder &builder, OperationState &result,
 
   // Build the function type of the component.
   auto functionType = builder.getFunctionType(portTypes, {});
-  if (!combinational) {
-    result.addAttribute(ComponentOp::getFunctionTypeAttrName(result.name),
+  if (combinational) {
+    result.addAttribute(CombComponentOp::getFunctionTypeAttrName(result.name),
                         TypeAttr::get(functionType));
   } else {
-    result.addAttribute(CombComponentOp::getFunctionTypeAttrName(result.name),
+    result.addAttribute(ComponentOp::getFunctionTypeAttrName(result.name),
                         TypeAttr::get(functionType));
   }
 
