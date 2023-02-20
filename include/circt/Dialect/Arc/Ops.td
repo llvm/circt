@@ -116,12 +116,14 @@ def StateOp : ArcOp<"state", [
     FlatSymbolRefAttr:$arc,
     Optional<I1>:$clock,
     Optional<I1>:$enable,
+    Optional<I1>:$reset,
     I32Attr:$latency,
     Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>);
 
   let assemblyFormat = [{
-    $arc `(` $inputs `)` (`clock` $clock^)? (`enable` $enable^)? `lat` $latency attr-dict
+    $arc `(` $inputs `)` (`clock` $clock^)? (`enable` $enable^)?
+    (`reset` $reset^)? `lat` $latency attr-dict
     `:` functional-type($inputs, results)
   }];
 
@@ -134,13 +136,23 @@ def StateOp : ArcOp<"state", [
             arc.getFunctionType().getResults(), clock, enable, latency,
             inputs);
     }]>,
-    OpBuilder<(ins "mlir::SymbolRefAttr":$arc, "mlir::TypeRange":$results, "mlir::Value":$clock,
-      "mlir::Value":$enable, "unsigned":$latency, CArg<"mlir::ValueRange", "{}">:$inputs
+    OpBuilder<(ins "mlir::SymbolRefAttr":$arc, "mlir::TypeRange":$results,
+      "mlir::Value":$clock, "mlir::Value":$enable, "unsigned":$latency,
+      CArg<"mlir::ValueRange", "{}">:$inputs
+    ), [{
+      build($_builder, $_state, arc, results, clock, enable, Value(), latency,
+      inputs);
+    }]>,
+    OpBuilder<(ins "mlir::SymbolRefAttr":$arc, "mlir::TypeRange":$results,
+      "mlir::Value":$clock, "mlir::Value":$enable, "mlir::Value":$reset,
+      "unsigned":$latency, CArg<"mlir::ValueRange", "{}">:$inputs
     ), [{
       if (clock)
         $_state.addOperands(clock);
       if (enable)
         $_state.addOperands(enable);
+      if (reset)
+        $_state.addOperands(reset);
       $_state.addOperands(inputs);
       $_state.addAttribute("arc", arc);
       $_state.addAttribute("latency", $_builder.getI32IntegerAttr(latency));
@@ -148,6 +160,7 @@ def StateOp : ArcOp<"state", [
         $_builder.getDenseI32ArrayAttr({
           clock ? 1 : 0,
           enable ? 1 : 0,
+          reset ? 1 : 0,
           static_cast<int32_t>(inputs.size())}));
       $_state.addTypes(results);
     }]>,

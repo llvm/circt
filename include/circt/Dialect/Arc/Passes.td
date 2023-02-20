@@ -71,6 +71,13 @@ def InlineModules : Pass<"arc-inline-modules", "mlir::ModuleOp"> {
   let constructor = "circt::arc::createInlineModulesPass()";
 }
 
+def InferStateProperties : Pass<"arc-infer-state-properties",
+                                "mlir::ModuleOp"> {
+  let summary = "Add resets and enables explicitly to the state operations";
+  let constructor = "circt::arc::createInferStatePropertiesPass()";
+  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
+}
+
 def LegalizeStateUpdate : Pass<"arc-legalize-state-update", "mlir::ModuleOp"> {
   let summary = "Insert temporaries such that state reads don't see writes";
   let constructor = "circt::arc::createLegalizeStateUpdatePass()";
