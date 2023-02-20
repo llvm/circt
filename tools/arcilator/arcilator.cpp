@@ -77,8 +77,9 @@ static cl::opt<bool>
                    cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
 // Options to control early-out from pipeline.
-enum Until { UntilArcConversion, UntilArcOpt, UntilEnd };
+enum Until { UntilPreprocessing, UntilArcConversion, UntilArcOpt, UntilEnd };
 static auto runUntilValues = cl::values(
+    clEnumValN(UntilPreprocessing, "preproc", "Input preprocessing"),
     clEnumValN(UntilArcConversion, "arc-conv", "Conversion of modules to arcs"),
     clEnumValN(UntilArcOpt, "arc-opt", "Arc optimizations"),
     clEnumValN(UntilEnd, "all", "Run entire pipeline (default)"));
@@ -109,6 +110,16 @@ static void populatePipeline(PassManager &pm) {
   auto untilReached = [](Until until) {
     return until >= runUntilBefore || until > runUntilAfter;
   };
+
+  // Pre-process the input such that it no longer contains any SV dialect ops
+  // and external modules that are relevant to the arc transformation are
+  // represented as intrinsic ops.
+  if (untilReached(UntilPreprocessing))
+    return;
+  pm.addPass(arc::createStripSVPass());
+  pm.addPass(arc::createInferMemoriesPass());
+  pm.addPass(createCSEPass());
+  pm.addPass(createSimpleCanonicalizerPass());
 
   // Restructure the input from a `hw.module` hierarchy to a collection of arcs.
   if (untilReached(UntilArcConversion))

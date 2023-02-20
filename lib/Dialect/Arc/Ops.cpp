@@ -145,5 +145,16 @@ LogicalResult StateOp::verify() {
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// MemoryWriteOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult MemoryWriteOp::verify() {
+  if (getMask() && getMask().getType() != getData().getType())
+    return emitOpError("mask and data operand types do not match");
+
+  return success();
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/Arc/Arc.cpp.inc"
