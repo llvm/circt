@@ -566,4 +566,14 @@ def ConvertToArcs : Pass<"convert-to-arcs", "mlir::ModuleOp"> {
   let dependentDialects = ["circt::arc::ArcDialect"];
 }
 
+//===----------------------------------------------------------------------===//
+// ConvertCombToArith
+//===----------------------------------------------------------------------===//
+
+def ConvertCombToArith : Pass<"convert-comb-to-arith", "mlir::ModuleOp"> {
+  let summary = "Convert combinational ops and constants into arith ops";
+  let constructor = "circt::createConvertCombToArithPass()";
+  let dependentDialects = ["mlir::arith::ArithDialect"];
+}
+
 #endif // CIRCT_CONVERSION_PASSES_TD
