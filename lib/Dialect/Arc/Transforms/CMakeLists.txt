@@ -3,6 +3,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   AllocateState.cpp
   Dedup.cpp
   InferMemories.cpp
+  InferStateProperties.cpp
   InlineArcs.cpp
   InlineModules.cpp
   LegalizeStateUpdate.cpp

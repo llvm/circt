@@ -184,6 +184,23 @@ static void populatePipeline(PassManager &pm) {
   pm.addPass(createCSEPass());
   pm.addPass(createSimpleCanonicalizerPass());
 
+  // TODO: the following is commented out because the backend does not support
+  // StateOp resets yet.
+  // pm.addPass(arc::createInferStatePropertiesPass());
+  // InferStateProperties does not remove all ops it bypasses and inserts a lot
+  // of constant ops that should be uniqued
+  // pm.addPass(createSimpleCanonicalizerPass());
+  // Now some arguments may be unused because reset conditions are not passed as
+  // inputs anymore pm.addPass(arc::createRemoveUnusedArcArgumentsPass());
+  // Because we replace a lot of StateOp inputs with constants in the enable
+  // patterns we may be able to sink a lot of them
+  // TODO: maybe merge RemoveUnusedArcArguments with SinkInputs?
+  // pm.addPass(arc::createSinkInputsPass());
+  // pm.addPass(createCSEPass());
+  // pm.addPass(createSimpleCanonicalizerPass());
+  // Removing some muxes etc. may lead to additional dedup opportunities
+  // pm.addPass(arc::createDedupPass());
+
   // Lower stateful arcs into explicit state reads and writes.
   if (untilReached(UntilStateLowering))
     return;
