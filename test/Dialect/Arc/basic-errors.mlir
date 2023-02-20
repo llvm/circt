@@ -53,3 +53,24 @@ arc.define @SupportRecurisveMemoryEffects(%arg0: i1, %arg1: i1) {
 arc.define @Bar() {
   arc.output
 }
+
+// -----
+
+// expected-error @below {{op must have exactly one argument}}
+arc.model "MissingArg" {
+^bb0:
+}
+
+// -----
+
+// expected-error @below {{op must have exactly one argument}}
+arc.model "TooManyArgs" {
+^bb0(%arg0: !arc.storage, %arg1: !arc.storage):
+}
+
+// -----
+
+// expected-error @below {{op argument must be of storage type}}
+arc.model "WrongArgType" {
+^bb0(%arg0: i32):
+}

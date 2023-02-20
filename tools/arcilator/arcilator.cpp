@@ -67,6 +67,9 @@ static cl::opt<bool> observeWires("observe-wires",
                                   cl::desc("Make all wires observable"),
                                   cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool> shouldInline("inline", cl::desc("Inline arcs"),
+                                  cl::init(true), cl::cat(mainCategory));
+
 static cl::opt<bool>
     verifyPasses("verify-each",
                  cl::desc("Run the verifier after each transformation pass"),
@@ -85,11 +88,18 @@ static cl::opt<bool>
                    cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
 // Options to control early-out from pipeline.
-enum Until { UntilPreprocessing, UntilArcConversion, UntilArcOpt, UntilEnd };
+enum Until {
+  UntilPreprocessing,
+  UntilArcConversion,
+  UntilArcOpt,
+  UntilStateLowering,
+  UntilEnd
+};
 static auto runUntilValues = cl::values(
     clEnumValN(UntilPreprocessing, "preproc", "Input preprocessing"),
     clEnumValN(UntilArcConversion, "arc-conv", "Conversion of modules to arcs"),
     clEnumValN(UntilArcOpt, "arc-opt", "Arc optimizations"),
+    clEnumValN(UntilStateLowering, "state-lowering", "Stateful arc lowering"),
     clEnumValN(UntilEnd, "all", "Run entire pipeline (default)"));
 static cl::opt<Until>
     runUntilBefore("until-before",
@@ -151,6 +161,18 @@ static void populatePipeline(PassManager &pm) {
   pm.addPass(arc::createMakeTablesPass());
   pm.addPass(createCSEPass());
   pm.addPass(createSimpleCanonicalizerPass());
+
+  // Lower stateful arcs into explicit state reads and writes.
+  if (untilReached(UntilStateLowering))
+    return;
+  pm.addPass(arc::createLowerStatePass());
+  pm.addPass(createCSEPass());
+  pm.addPass(createSimpleCanonicalizerPass());
+  if (shouldInline) {
+    pm.addPass(arc::createInlineArcsPass());
+    pm.addPass(createSimpleCanonicalizerPass());
+    pm.addPass(createCSEPass());
+  }
   pm.addPass(arc::createRemoveUnusedArcArgumentsPass());
 }
 

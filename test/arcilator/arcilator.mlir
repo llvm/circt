@@ -1,4 +1,4 @@
-// RUN: arcilator %s | FileCheck %s
+// RUN: arcilator --inline=0 %s | FileCheck %s
 
 // CHECK:      arc.define @[[XOR_ARC:.+]](
 // CHECK-NEXT:   comb.xor
@@ -15,30 +15,41 @@
 // CHECK-NEXT:   arc.output
 // CHECK-NEXT: }
 
-// CHECK-LABEL: hw.module @Top
+// CHECK-NOT: hw.module @Top
+// CHECK-LABEL: arc.model "Top" {
+// CHECK-NEXT: ^bb0(%arg0: !arc.storage):
 hw.module @Top(%clock: i1, %i0: i4, %i1: i4) -> (out: i4) {
-  // CHECK-NOT: hw.instance
-  // CHECK-DAG: [[T0:%.+]] = arc.state @[[ADD_ARC]](%i0, %i1) lat 0
+  // CHECK-DAG: [[CLOCK:%.+]] = arc.root_input "clock"
+  // CHECK-DAG: [[I0:%.+]] = arc.root_input "i0"
+  // CHECK-DAG: [[I1:%.+]] = arc.root_input "i1"
+  // CHECK-DAG: [[OUT:%.+]] = arc.root_output "out"
+
+  // CHECK-DAG: [[FOO:%.+]] = arc.alloc_state %arg0 {name = "foo"}
+  // CHECK-DAG: [[BAR:%.+]] = arc.alloc_state %arg0 {name = "bar"}
+
+  // CHECK-DAG: arc.passthrough {
+  // CHECK-DAG:   [[READ_FOO:%.+]] = arc.state_read [[FOO]]
+  // CHECK-DAG:   [[READ_BAR:%.+]] = arc.state_read [[BAR]]
+  // CHECK-DAG:   [[MUL:%.+]] = arc.state @[[MUL_ARC]]([[READ_FOO]], [[READ_BAR]]) lat 0
+  // CHECK-DAG:   arc.state_write [[OUT]] = [[MUL]]
+  // CHECK-DAG: }
+
+  // CHECK-DAG: [[READ_CLOCK:%.+]] = arc.state_read [[CLOCK]]
+  // CHECK-DAG:  arc.clock_tree [[READ_CLOCK]] {
+  // CHECK-DAG:   [[READ_I0:%.+]] = arc.state_read [[I0]]
+  // CHECK-DAG:   [[READ_I1:%.+]] = arc.state_read [[I1]]
+  // CHECK-DAG:   [[ADD:%.+]] = arc.state @[[ADD_ARC]]([[READ_I0]], [[READ_I1]]) lat 0
+  // CHECK-DAG:   [[XOR1:%.+]] = arc.state @[[XOR_ARC]]([[ADD]], [[READ_I0]]) lat 0
+  // CHECK-DAG:   [[XOR2:%.+]] = arc.state @[[XOR_ARC]]([[ADD]], [[READ_I1]]) lat 0
+  // CHECK-DAG:   arc.state_write [[FOO]] = [[XOR1]]
+  // CHECK-DAG:   arc.state_write [[BAR]] = [[XOR2]]
+  // CHECK-DAG:  }
+
   %0 = comb.add %i0, %i1 : i4
-  // CHECK-DAG: [[T3:%.+]] = arc.state @[[XOR_ARC]]([[T0]], %i0) clock %clock lat 1
-  // CHECK-DAG: [[T4:%.+]] = arc.state @[[XOR_ARC]]([[T0]], %i1) clock %clock lat 1
   %1 = comb.xor %0, %i0 : i4
   %2 = comb.xor %0, %i1 : i4
-  %3 = seq.compreg %1, %clock : i4
-  %4 = seq.compreg %2, %clock : i4
-  // CHECK-DAG: [[T5:%.+]] = arc.state @[[MUL_ARC]]([[T3]], [[T4]]) lat 0
-  %5 = comb.mul %3, %4 : i4
-  // CHECK-DAG: [[K:%.+]] = hw.constant 6 :
-  // CHECK-DAG: [[T6:%.+]] = arc.state @[[ADD_ARC]]([[T5]], [[K]]) clock %clock lat 1
-  %6 = hw.instance "child" @Child(clock: %clock: i1, a: %5: i4) -> (z: i4)
-  // CHECK-DAG: hw.output [[T6]]
-  hw.output %6 : i4
-}
-
-// CHECK-NOT: hw.module private @Child
-hw.module private @Child(%clock: i1, %a: i4) -> (z: i4) {
-  %c6_i4 = hw.constant 6 : i4
-  %0 = comb.add %a, %c6_i4 : i4
-  %1 = seq.compreg %0, %clock : i4
-  hw.output %1 : i4
+  %foo = seq.compreg %1, %clock : i4
+  %bar = seq.compreg %2, %clock : i4
+  %3 = comb.mul %foo, %bar : i4
+  hw.output %3 : i4
 }

@@ -14,11 +14,28 @@ include "mlir/IR/AttrTypeBase.td"
 
 class ArcTypeDef<string name> : TypeDef<ArcDialect, name> { }
 
+def StateType : ArcTypeDef<"State"> {
+  let mnemonic = "state";
+  let parameters = (ins "::mlir::IntegerType":$type);
+  let assemblyFormat = "`<` $type `>`";
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "::mlir::IntegerType":$type), [{
+      return $_get(type.getContext(), type);
+    }]>
+  ];
+}
+
 def MemoryType : ArcTypeDef<"Memory"> {
   let mnemonic = "memory";
   let parameters = (ins "unsigned":$numWords, "::mlir::IntegerType":$wordType,
     OptionalParameter<"unsigned">:$stride);
   let assemblyFormat = "`<` $numWords `x` $wordType (`,` $stride^)? `>`";
+}
+
+def StorageType : ArcTypeDef<"Storage"> {
+  let mnemonic = "storage";
+  let parameters = (ins OptionalParameter<"unsigned">:$size);
+  let assemblyFormat = "(`<` $size^ `>`)?";
 }
 
 #endif // CIRCT_DIALECT_ARC_TYPES_TD
