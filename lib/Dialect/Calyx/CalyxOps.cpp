@@ -518,8 +518,13 @@ static void buildComponentLike(OpBuilder &builder, OperationState &result,
 
   // Build the function type of the component.
   auto functionType = builder.getFunctionType(portTypes, {});
-  result.addAttribute(ComponentOp::getFunctionTypeAttrName(result.name),
-                      TypeAttr::get(functionType));
+  if (combinational) {
+    result.addAttribute(CombComponentOp::getFunctionTypeAttrName(result.name),
+                        TypeAttr::get(functionType));
+  } else {
+    result.addAttribute(ComponentOp::getFunctionTypeAttrName(result.name),
+                        TypeAttr::get(functionType));
+  }
 
   // Record the port names and number of input ports of the component.
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
