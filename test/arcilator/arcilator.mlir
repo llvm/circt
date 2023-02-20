@@ -1,4 +1,5 @@
-// RUN: arcilator --inline=0 %s | FileCheck %s
+// RUN: arcilator %s --inline=0 --until-before=llvm-lowering | FileCheck %s
+// RUN: arcilator %s | FileCheck %s --check-prefix=LLVM
 
 // CHECK:      arc.define @[[XOR_ARC:.+]](
 // CHECK-NEXT:   comb.xor
@@ -60,3 +61,10 @@ hw.module @Top(%clock: i1, %i0: i4, %i1: i4) -> (out: i4) {
   %3 = comb.mul %foo, %bar : i4
   hw.output %3 : i4
 }
+
+// LLVM: define void @Top_passthrough(ptr %0)
+// LLVM:   mul i4
+// LLVM: define void @Top_clock(ptr %0)
+// LLVM:   add i4
+// LLVM:   xor i4
+// LLVM:   xor i4

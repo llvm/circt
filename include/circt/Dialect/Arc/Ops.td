@@ -253,10 +253,10 @@ def MemoryWriteOp : ArcOp<"memory_write", [
 
 def ClockTreeOp : ArcOp<"clock_tree", [NoTerminator, NoRegionArguments]> {
   let summary = "A clock tree";
-  let arguments = (ins I1:$clock, Optional<I1>:$enable);
+  let arguments = (ins I1:$clock);
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
-    $clock (`if` $enable^)? attr-dict-with-keyword $body
+    $clock attr-dict-with-keyword $body
   }];
   let extraClassDeclaration = [{
     mlir::Block &getBodyBlock() { return getBody().front(); }
