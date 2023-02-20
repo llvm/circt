@@ -59,6 +59,14 @@ static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
                                            cl::init("-"),
                                            cl::cat(mainCategory));
 
+static cl::opt<bool> observePorts("observe-ports",
+                                  cl::desc("Make all ports observable"),
+                                  cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool> observeWires("observe-wires",
+                                  cl::desc("Make all wires observable"),
+                                  cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool>
     verifyPasses("verify-each",
                  cl::desc("Run the verifier after each transformation pass"),
@@ -116,6 +124,7 @@ static void populatePipeline(PassManager &pm) {
   // represented as intrinsic ops.
   if (untilReached(UntilPreprocessing))
     return;
+  pm.addPass(arc::createAddTapsPass(observePorts, observeWires));
   pm.addPass(arc::createStripSVPass());
   pm.addPass(arc::createInferMemoriesPass());
   pm.addPass(createCSEPass());

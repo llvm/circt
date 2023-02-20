@@ -245,6 +245,16 @@ def MemoryWriteOp : ArcOp<"memory_write", [
   let hasVerifier = 1;
 }
 
+//===----------------------------------------------------------------------===//
+// Miscellaneous
+//===----------------------------------------------------------------------===//
+
+def TapOp : ArcOp<"tap"> {
+  let summary = "A tracker op to observe a value under a given name";
+  let arguments = (ins AnySignlessInteger:$value, StrAttr:$name);
+  let assemblyFormat = [{ $value attr-dict `:` type($value) }];
+}
+
 def LutOp : ArcOp<"lut", [
   IsolatedFromAbove,
   SingleBlockImplicitTerminator<"arc::OutputOp">,
