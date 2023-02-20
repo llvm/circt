@@ -11,6 +11,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   LowerLUT.cpp
   LowerState.cpp
   MakeTables.cpp
+  MuxToControlFlow.cpp
   PrintStateInfo.cpp
   RemoveUnusedArcArguments.cpp
   SimplifyVariadicOps.cpp
@@ -23,6 +24,7 @@ add_circt_dialect_library(CIRCTArcTransforms
 
   LINK_LIBS PUBLIC
   CIRCTArc
+  CIRCTArcExternalInterfaces
   CIRCTComb
   CIRCTHW
   CIRCTSV

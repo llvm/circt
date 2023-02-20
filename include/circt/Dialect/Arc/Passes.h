@@ -33,6 +33,7 @@ std::unique_ptr<mlir::Pass> createLowerClocksToFuncsPass();
 std::unique_ptr<mlir::Pass> createLowerLUTPass();
 std::unique_ptr<mlir::Pass> createLowerStatePass();
 std::unique_ptr<mlir::Pass> createMakeTablesPass();
+std::unique_ptr<mlir::Pass> createMuxToControlFlowPass();
 std::unique_ptr<mlir::Pass>
 createPrintStateInfoPass(llvm::StringRef stateFile = "");
 std::unique_ptr<mlir::Pass> createRemoveUnusedArcArgumentsPass();

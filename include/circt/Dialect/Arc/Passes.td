@@ -108,6 +108,12 @@ def MakeTables : Pass<"arc-make-tables", "mlir::ModuleOp"> {
   let dependentDialects = ["arc::ArcDialect"];
 }
 
+def MuxToControlFlow : Pass<"arc-mux-to-control-flow", "mlir::ModuleOp"> {
+  let summary = "Converts muxes with large independent fan-ins to if-statements";
+  let constructor = "circt::arc::createMuxToControlFlowPass()";
+  let dependentDialects = ["mlir::scf::SCFDialect"];
+}
+
 def PrintStateInfo : Pass<"arc-print-state-info", "mlir::ModuleOp"> {
   let summary = "Print the state storage layout in JSON format";
   let constructor = "circt::arc::createPrintStateInfoPass()";
