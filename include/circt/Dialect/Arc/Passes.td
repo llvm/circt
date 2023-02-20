@@ -29,6 +29,18 @@ def InferMemories : Pass<"arc-infer-memories", "mlir::ModuleOp"> {
   ];
 }
 
+def InlineArcs : Pass<"arc-inline" , "mlir::ModuleOp"> {
+  let summary = "Inline very small arcs";
+  let constructor = "circt::arc::createInlineArcsPass()";
+  let statistics = [
+    Statistic<"numInlinedArcs", "inlined-arcs", "Arcs inlined at a use site">,
+    Statistic<"numRemovedArcs", "removed-arcs",
+      "Arcs removed after full inlining">,
+    Statistic<"numTrivialArcs", "trivial-arcs", "Arcs with very few ops">,
+    Statistic<"numSingleUseArcs", "single-use-arcs", "Arcs with a single use">,
+  ];
+}
+
 def InlineModules : Pass<"arc-inline-modules", "mlir::ModuleOp"> {
   let summary = "Eagerly inline private modules";
   let description = [{
