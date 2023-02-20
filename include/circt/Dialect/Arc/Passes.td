@@ -43,6 +43,12 @@ def InlineModules : Pass<"arc-inline-modules", "mlir::ModuleOp"> {
   let constructor = "circt::arc::createInlineModulesPass()";
 }
 
+def LowerLUT : Pass<"arc-lower-lut", "arc::DefineOp"> {
+  let summary = "Lowers arc.lut into a comb and hw only representation.";
+  let constructor = "circt::arc::createLowerLUTPass()";
+  let dependentDialects = ["hw::HWDialect", "comb::CombDialect"];
+}
+
 def MakeTables : Pass<"arc-make-tables", "mlir::ModuleOp"> {
   let summary = "Transform appropriate arc logic into lookup tables";
   let constructor = "circt::arc::createMakeTablesPass()";

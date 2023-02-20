@@ -90,7 +90,7 @@ def DefineOp : ArcOp<"define", [
 
 def OutputOp : ArcOp<"output", [
   Terminator,
-  ParentOneOf<["DefineOp"]>,
+  ParentOneOf<["DefineOp", "LutOp"]>,
   Pure,
   ReturnLike
 ]> {
@@ -240,6 +240,39 @@ def MemoryWriteOp : ArcOp<"memory_write", [
     ( `mask` `(` $mask^ `:` type($mask) `)`)?
     (` ` `(` `reads` $reads^ `:` type($reads) `)`)?
     attr-dict `:` type($memory) `,` type($address)
+  }];
+
+  let hasVerifier = 1;
+}
+
+def LutOp : ArcOp<"lut", [
+  IsolatedFromAbove,
+  SingleBlockImplicitTerminator<"arc::OutputOp">,
+  Pure
+]> {
+  let summary = "A lookup-table.";
+  let description = [{
+    Represents a lookup-table as one operation. The operations that map the
+    lookup/input values to the corresponding table-entry are collected inside
+    the body of this operation.
+    Note that the operation is marked to be isolated from above to guarantee
+    that all input values have to be passed as an operand. This allows for
+    simpler analyses and canonicalizations of the LUT as well as lowering.
+    Only combinational operations are allowed inside the LUT, i.e., no
+    side-effects, state, time delays, etc.
+  }];
+
+  let arguments = (ins Variadic<AnySignlessInteger>:$inputs);
+  let results = (outs AnySignlessInteger:$output);
+  let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = [{
+    `(` $inputs `)` `:` functional-type($inputs, $output)
+    attr-dict-with-keyword $body
+  }];
+
+  let extraClassDeclaration = [{
+    mlir::Block *getBodyBlock() { return &getBody().front(); }
   }];
 
   let hasVerifier = 1;

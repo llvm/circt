@@ -22,6 +22,7 @@ namespace arc {
 std::unique_ptr<mlir::Pass> createDedupPass();
 std::unique_ptr<mlir::Pass> createInferMemoriesPass();
 std::unique_ptr<mlir::Pass> createInlineModulesPass();
+std::unique_ptr<mlir::Pass> createLowerLUTPass();
 std::unique_ptr<mlir::Pass> createMakeTablesPass();
 std::unique_ptr<mlir::Pass> createRemoveUnusedArcArgumentsPass();
 std::unique_ptr<mlir::Pass> createSimplifyVariadicOpsPass();
