@@ -3,6 +3,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   InferMemories.cpp
   InlineModules.cpp
   MakeTables.cpp
+  SimplifyVariadicOps.cpp
   SinkInputs.cpp
   SplitLoops.cpp
   StripSV.cpp
