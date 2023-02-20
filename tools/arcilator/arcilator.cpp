@@ -67,6 +67,10 @@ static cl::opt<bool> observeWires("observe-wires",
                                   cl::desc("Make all wires observable"),
                                   cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<std::string> stateFile("state-file", cl::desc("State file"),
+                                      cl::value_desc("filename"), cl::init(""),
+                                      cl::cat(mainCategory));
+
 static cl::opt<bool> shouldInline("inline", cl::desc("Inline arcs"),
                                   cl::init(true), cl::cat(mainCategory));
 
@@ -93,6 +97,7 @@ enum Until {
   UntilArcConversion,
   UntilArcOpt,
   UntilStateLowering,
+  UntilStateAlloc,
   UntilEnd
 };
 static auto runUntilValues = cl::values(
@@ -100,6 +105,7 @@ static auto runUntilValues = cl::values(
     clEnumValN(UntilArcConversion, "arc-conv", "Conversion of modules to arcs"),
     clEnumValN(UntilArcOpt, "arc-opt", "Arc optimizations"),
     clEnumValN(UntilStateLowering, "state-lowering", "Stateful arc lowering"),
+    clEnumValN(UntilStateAlloc, "state-alloc", "State allocation"),
     clEnumValN(UntilEnd, "all", "Run entire pipeline (default)"));
 static cl::opt<Until>
     runUntilBefore("until-before",
@@ -173,6 +179,14 @@ static void populatePipeline(PassManager &pm) {
     pm.addPass(createSimpleCanonicalizerPass());
     pm.addPass(createCSEPass());
   }
+
+  // Allocate states.
+  if (untilReached(UntilStateAlloc))
+    return;
+  pm.addPass(arc::createLegalizeStateUpdatePass());
+  pm.nest<arc::ModelOp>().addPass(arc::createAllocateStatePass());
+  if (!stateFile.empty())
+    pm.addPass(arc::createPrintStateInfoPass(stateFile));
   pm.addPass(arc::createRemoveUnusedArcArgumentsPass());
 }
 

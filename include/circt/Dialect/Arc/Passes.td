@@ -21,6 +21,12 @@ def AddTaps : Pass<"arc-add-taps", "mlir::ModuleOp"> {
   ];
 }
 
+def AllocateState : Pass<"arc-allocate-state", "arc::ModelOp"> {
+  let summary = "Allocate and layout the global simulation state";
+  let constructor = "circt::arc::createAllocateStatePass()";
+  let dependentDialects = ["arc::ArcDialect"];
+}
+
 def Dedup : Pass<"arc-dedup", "mlir::ModuleOp"> {
   let summary = "Deduplicate identical arc definitions";
   let description = [{
@@ -65,6 +71,12 @@ def InlineModules : Pass<"arc-inline-modules", "mlir::ModuleOp"> {
   let constructor = "circt::arc::createInlineModulesPass()";
 }
 
+def LegalizeStateUpdate : Pass<"arc-legalize-state-update", "mlir::ModuleOp"> {
+  let summary = "Insert temporaries such that state reads don't see writes";
+  let constructor = "circt::arc::createLegalizeStateUpdatePass()";
+  let dependentDialects = ["arc::ArcDialect"];
+}
+
 def LowerLUT : Pass<"arc-lower-lut", "arc::DefineOp"> {
   let summary = "Lowers arc.lut into a comb and hw only representation.";
   let constructor = "circt::arc::createLowerLUTPass()";
@@ -81,6 +93,15 @@ def MakeTables : Pass<"arc-make-tables", "mlir::ModuleOp"> {
   let summary = "Transform appropriate arc logic into lookup tables";
   let constructor = "circt::arc::createMakeTablesPass()";
   let dependentDialects = ["arc::ArcDialect"];
+}
+
+def PrintStateInfo : Pass<"arc-print-state-info", "mlir::ModuleOp"> {
+  let summary = "Print the state storage layout in JSON format";
+  let constructor = "circt::arc::createPrintStateInfoPass()";
+  let options = [
+    Option<"stateFile", "state-file", "std::string", "",
+      "Emit file with state description">
+  ];
 }
 
 def RemoveUnusedArcArguments : Pass<"arc-remove-unused-arc-arguments",
