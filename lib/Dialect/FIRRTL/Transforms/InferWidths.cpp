@@ -1100,7 +1100,7 @@ public:
   /// Declare a variable associated with a specific field of an aggregate.
   Expr *declareVar(FieldRef fieldRef, Location loc);
 
-  /// Declarate a variable for a type with an unknown width.  The type must be a
+  /// Declare a variable for a type with an unknown width.  The type must be a
   /// non-aggregate.
   Expr *declareVar(FIRRTLType type, Location loc);
 
@@ -1177,48 +1177,46 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
              << "\n===----- Mapping ops to constraint exprs -----===\n\n");
 
   // Ensure we have constraint variables established for all module ports.
-  op.walk<WalkOrder::PostOrder>([&](FModuleOp module) {
+  for (auto module : op.getOps<FModuleOp>()) {
     for (auto arg : module.getArguments()) {
       solver.setCurrentContextInfo(FieldRef(arg, 0));
       declareVars(arg, module.getLoc());
     }
-    return WalkResult::skip(); // no need to look inside the module
-  });
+  }
 
   // Go through the module bodies and populate the constraint problem.
-  auto result = op.walk<WalkOrder::PostOrder>([&](FModuleOp module) {
+  for (auto module : op.getOps<FModuleOp>()) {
     // Check if the module contains *any* uninferred widths. This allows us to
     // do an early skip if the module is already fully inferred.
-    bool anyUninferred = false;
-    for (auto arg : module.getArguments()) {
-      anyUninferred |= hasUninferredWidth(arg.getType());
-      if (anyUninferred)
-        break;
-    }
-    module.walk([&](Operation *op) {
-      for (auto type : op->getResultTypes())
-        anyUninferred |= hasUninferredWidth(type);
-      if (anyUninferred)
-        return WalkResult::interrupt();
-      return WalkResult::advance();
+    bool anyUninferred = llvm::any_of(module.getArguments(), [](auto arg) {
+      return hasUninferredWidth(arg.getType());
     });
+
+    if (!anyUninferred)
+      anyUninferred = module
+                          .walk([&](Operation *op) {
+                            for (auto type : op->getResultTypes())
+                              if (hasUninferredWidth(type))
+                                return WalkResult::interrupt();
+                            return WalkResult::advance();
+                          })
+                          .wasInterrupted();
     if (!anyUninferred) {
       LLVM_DEBUG(llvm::dbgs() << "Skipping fully-inferred module '"
                               << module.getName() << "'\n");
       skippedModules.insert(module);
-      return WalkResult::skip();
+      continue;
     }
     allModulesSkipped = false;
 
     // Go through operations in the module, creating type variables for results,
     // and generating constraints.
-    auto result = module.getBodyBlock()->walk(
-        [&](Operation *op) { return WalkResult(mapOperation(op)); });
-    if (result.wasInterrupted())
-      return WalkResult::interrupt();
-    return WalkResult::skip(); // walk above already visited module body
-  });
-  return failure(result.wasInterrupted());
+    if (module.getBodyBlock()
+            ->walk([&](Operation *op) { return WalkResult(mapOperation(op)); })
+            .wasInterrupted())
+      return failure();
+  }
+  return success();
 }
 
 LogicalResult InferenceMapping::mapOperation(Operation *op) {
@@ -1228,10 +1226,10 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
   // `KnownExpr` nodes for all known widths -- which are the only ones in this
   // case.
   bool allWidthsKnown = true;
-  for (auto result : op->getResults()) {
-    if (auto mux = dyn_cast<MuxPrimOp>(op))
+   if (auto mux = dyn_cast<MuxPrimOp>(op))
       if (hasUninferredWidth(mux.getSel().getType()))
         allWidthsKnown = false;
+  for (auto result : op->getResults()) {
     // Only consider FIRRTL types for width constraints. Ignore any foreign
     // types as they don't participate in the width inference process.
     auto resultTy = result.getType().dyn_cast<FIRRTLType>();
@@ -1271,6 +1269,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // Nothing required.
       })
       .Case<InvalidValueOp>([&](auto op) {
+        // FIXME: This shouldn't be true anymore.
         // We must duplicate the invalid value for each use, since each use can
         // be inferred to a different width.
         if (!hasUninferredWidth(op.getType()) || op->use_empty())
@@ -1294,7 +1293,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // dialect enforces the reset signal to be an async reset or a
         // `uint<1>`.
         declareVars(op.getResult(), op.getLoc());
-        // Contrain the register to be greater than or equal to the reset
+        // Constrain the register to be greater than or equal to the reset
         // signal.
         constrainTypes(op.getResult(), op.getResetValue());
       })
