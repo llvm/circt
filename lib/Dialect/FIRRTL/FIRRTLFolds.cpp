@@ -2392,7 +2392,7 @@ struct FoldUnusedBits : public mlir::RewritePattern {
         }
       }
       ranges.emplace_back(i, e - 1);
-      i = usedBits.find_next(e);
+      i = e != width ? usedBits.find_next(e) : e;
     }
 
     // Create the new op with the new port types.
