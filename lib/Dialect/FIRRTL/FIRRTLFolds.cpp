@@ -1950,26 +1950,31 @@ void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                  patterns::RegResetWithOneReset, FoldResetMux>(context);
 }
 
-// Returns true if the enable field of a port is set to false.
-static bool isPortDisabled(Value port) {
+// Returns the value connected to a port, if there is only one.
+static Value getPortFieldValue(Value port, StringRef name) {
   auto portTy = port.getType().cast<BundleType>();
-  auto enableIndex = portTy.getElementIndex("en");
-  assert(enableIndex && "missing enable flag on memory port");
+  auto fieldIndex = portTy.getElementIndex(name);
+  assert(fieldIndex && "missing field on memory port");
 
-  Value en = {};
+  Value value = {};
   for (auto *op : port.getUsers()) {
     auto portAccess = cast<SubfieldOp>(op);
-    if (enableIndex != portAccess.getFieldIndex())
+    if (fieldIndex != portAccess.getFieldIndex())
       continue;
     auto conn = getSingleConnectUserOf(portAccess);
-    if (!conn || en)
-      return false;
-    en = conn.getSrc();
+    if (!conn || value)
+      return {};
+    value = conn.getSrc();
   }
-  if (!en)
-    return false;
+  return value;
+}
 
-  auto portConst = en.getDefiningOp<ConstantOp>();
+// Returns true if the enable field of a port is set to false.
+static bool isPortDisabled(Value port) {
+  auto value = getPortFieldValue(port, "en");
+  if (!value)
+    return false;
+  auto portConst = value.getDefiningOp<ConstantOp>();
   if (!portConst)
     return false;
   return portConst.getValue().isZero();
@@ -1990,6 +1995,22 @@ static bool isPortUnused(Value port, StringRef data) {
   }
 
   return true;
+}
+
+// Returns the value connected to a port, if there is only one.
+static void replacePortField(PatternRewriter &rewriter, Value port,
+                             StringRef name, Value value) {
+  auto portTy = port.getType().cast<BundleType>();
+  auto fieldIndex = portTy.getElementIndex(name);
+  assert(fieldIndex && "missing field on memory port");
+
+  for (auto *op : port.getUsers()) {
+    auto portAccess = cast<SubfieldOp>(op);
+    if (fieldIndex != portAccess.getFieldIndex())
+      continue;
+    rewriter.replaceAllUsesWith(portAccess, value);
+    rewriter.eraseOp(portAccess);
+  }
 }
 
 // Remove accesses to a port which is used.
@@ -2474,6 +2495,191 @@ struct FoldUnusedBits : public mlir::RewritePattern {
       rewriter.replaceOpWithNewOp<StrictConnectOp>(writeOp, writeOp.getDest(),
                                                    catOfSlices);
     }
+
+    return success();
+  }
+};
+
+// Rewrite single-address memories to a firrtl register.
+struct FoldRegMems : public mlir::RewritePattern {
+  FoldRegMems(MLIRContext *context)
+      : RewritePattern(MemOp::getOperationName(), 0, context) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    MemOp mem = cast<MemOp>(op);
+    const FirMemory &info = mem.getSummary();
+    if (hasDontTouch(mem) || info.depth != 1)
+      return failure();
+
+    auto memModule = mem->getParentOfType<FModuleOp>();
+
+    // Find the clock of the register-to-be, all write ports should share it.
+    Value clock;
+    SmallVector<FConnectLike> connects;
+    for (auto [i, port] : llvm::enumerate(mem.getResults())) {
+      if (!mem.getPortAnnotation(i).empty())
+        continue;
+
+      auto collect = [&, port = port](ArrayRef<StringRef> fields) {
+        auto portTy = port.getType().cast<BundleType>();
+        for (auto field : fields) {
+          auto fieldIndex = portTy.getElementIndex(field);
+          assert(fieldIndex && "missing field on memory port");
+
+          for (auto *op : port.getUsers()) {
+            auto portAccess = cast<SubfieldOp>(op);
+            if (fieldIndex != portAccess.getFieldIndex())
+              continue;
+            for (auto *user : portAccess->getUsers()) {
+              auto conn = dyn_cast<FConnectLike>(user);
+              if (!conn)
+                return failure();
+              connects.push_back(conn);
+            }
+          }
+        }
+        return success();
+      };
+
+      switch (mem.getPortKind(i)) {
+      case MemOp::PortKind::Debug:
+        return failure();
+      case MemOp::PortKind::Read:
+        if (failed(collect({"clk", "en", "addr"})))
+          return failure();
+        continue;
+      case MemOp::PortKind::Write:
+        if (failed(collect({"clk", "en", "addr", "data", "mask"})))
+          return failure();
+        break;
+      case MemOp::PortKind::ReadWrite:
+        if (failed(collect({"clk", "en", "addr", "wmode", "wdata", "wmask"})))
+          return failure();
+        break;
+      }
+
+      Value portClock = getPortFieldValue(port, "clk");
+      if (!portClock || (clock && portClock != clock))
+        return failure();
+      clock = portClock;
+    }
+
+    // Create a new register to store the data.
+    auto ty = mem.getDataType();
+    rewriter.setInsertionPointAfterValue(clock);
+    auto reg = rewriter.create<RegOp>(mem.getLoc(), ty, clock, mem.getName());
+
+    // Helper to insert a given number of pipeline stages through registers.
+    auto pipeline = [&](Value value, Value clock, const Twine &name,
+                        unsigned latency) {
+      for (unsigned i = 0; i < latency; ++i) {
+        std::string regName;
+        {
+          llvm::raw_string_ostream os(regName);
+          os << mem.getName() << "_" << name << "_" << i;
+        }
+
+        auto reg = rewriter.create<RegOp>(mem.getLoc(), value.getType(), clock,
+                                          rewriter.getStringAttr(regName));
+        rewriter.create<StrictConnectOp>(value.getLoc(), reg, value);
+        value = reg;
+      }
+      return value;
+    };
+
+    const unsigned readStages = info.readLatency;
+    const unsigned writeStages = info.writeLatency - 1;
+
+    // Traverse each port. Replace reads with the pipelined register, discarding
+    // the enable flag and reading unconditionally. Pipeline the mask, enable
+    // and data bits of all write ports to be arbitrated and wired to the reg.
+    SmallVector<std::tuple<Value, Value, Value>> writes;
+    for (auto [i, port] : llvm::enumerate(mem.getResults())) {
+      Value portClock = getPortFieldValue(port, "clk");
+      StringRef name = mem.getPortName(i);
+
+      auto portPipeline = [&, port = port](StringRef field, unsigned stages) {
+        Value value = getPortFieldValue(port, field);
+        rewriter.setInsertionPointAfterValue(value);
+        return pipeline(value, portClock, name + "_" + field, stages);
+      };
+
+      switch (mem.getPortKind(i)) {
+      case MemOp::PortKind::Debug:
+        llvm_unreachable("unknown port kind");
+      case MemOp::PortKind::Read: {
+        rewriter.setInsertionPointAfterValue(reg);
+        Value data = pipeline(reg, portClock, "data", readStages);
+        replacePortField(rewriter, port, "data", data);
+        break;
+      }
+      case MemOp::PortKind::Write: {
+        auto data = portPipeline("data", writeStages);
+        auto en = portPipeline("en", writeStages);
+        auto mask = portPipeline("mask", writeStages);
+        writes.emplace_back(data, en, mask);
+        break;
+      }
+      case MemOp::PortKind::ReadWrite: {
+        // Always read the register into the read end.
+        rewriter.setInsertionPointAfterValue(reg);
+        Value rdata = pipeline(reg, portClock, name, readStages);
+        replacePortField(rewriter, port, "rdata", rdata);
+
+        // Create a write enable and pipeline stages.
+        auto wdata = portPipeline("wdata", writeStages);
+        auto wmask = portPipeline("wmask", writeStages);
+
+        Value en = getPortFieldValue(port, "en");
+        Value wmode = getPortFieldValue(port, "wmode");
+        rewriter.setInsertionPointToEnd(memModule.getBodyBlock());
+
+        auto wen = rewriter.create<AndPrimOp>(port.getLoc(), en, wmode);
+        auto wenPipelined =
+            pipeline(wen, portClock, name + "_wen", writeStages);
+        writes.emplace_back(wdata, wenPipelined, wmask);
+        break;
+      }
+      }
+    }
+
+    // Regardless of `writeUnderWrite`, always implement PortOrder.
+    rewriter.setInsertionPointToEnd(memModule.getBodyBlock());
+    Value next = reg;
+    for (auto &[data, en, mask] : writes) {
+      Value masked;
+
+      // If a mask bit is used, emit muxes to select the input from the
+      // register (no mask) or the input (mask bit set).
+      Location loc = mem.getLoc();
+      unsigned maskGran = info.dataWidth / info.maskBits;
+      for (unsigned i = 0; i < info.maskBits; ++i) {
+        unsigned hi = (i + 1) * maskGran - 1;
+        unsigned lo = i * maskGran;
+
+        auto dataPart = rewriter.createOrFold<BitsPrimOp>(loc, data, hi, lo);
+        auto nextPart = rewriter.createOrFold<BitsPrimOp>(loc, next, hi, lo);
+        auto bit = rewriter.createOrFold<BitsPrimOp>(loc, mask, i, i);
+        auto chunk = rewriter.create<MuxPrimOp>(loc, bit, dataPart, nextPart);
+
+        if (masked) {
+          masked = rewriter.create<CatPrimOp>(loc, chunk, masked);
+        } else {
+          masked = chunk;
+        }
+      }
+
+      next = rewriter.create<MuxPrimOp>(next.getLoc(), en, masked, next);
+    }
+    rewriter.create<StrictConnectOp>(reg.getLoc(), reg, next);
+
+    // Delete the fields and their associated connects.
+    for (FConnectLike conn : connects) {
+      rewriter.eraseOp(conn);
+      rewriter.eraseOp(conn.getDest().getDefiningOp<SubfieldOp>());
+    }
+    rewriter.eraseOp(mem);
+
     return success();
   }
 };
@@ -2481,8 +2687,10 @@ struct FoldUnusedBits : public mlir::RewritePattern {
 
 void MemOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                         MLIRContext *context) {
-  results.insert<FoldZeroWidthMemory, FoldReadOrWriteOnlyMemory,
-                 FoldReadWritePorts, FoldUnusedPorts, FoldUnusedBits>(context);
+  results
+      .insert<FoldZeroWidthMemory, FoldReadOrWriteOnlyMemory,
+              FoldReadWritePorts, FoldUnusedPorts, FoldUnusedBits, FoldRegMems>(
+          context);
 }
 
 //===----------------------------------------------------------------------===//
