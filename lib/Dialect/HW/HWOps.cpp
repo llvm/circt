@@ -835,7 +835,7 @@ void HWModuleOp::modifyPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
     ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
   hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
-                        eraseOutputs);
+                        eraseOutputs, getBodyBlock());
 }
 
 /// Return the name to use for the Verilog module that we're referencing

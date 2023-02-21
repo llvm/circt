@@ -552,7 +552,6 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
     ArrayRef<RequestToClientConnectionOp> toClientReqs,
     ArrayRef<RequestToServerConnectionOp> toServerReqs) {
   auto ctxt = mod.getContext();
-  Block *body = &mod->getRegion(0).front();
 
   // Track initial operand/result counts and the new IO.
   unsigned origNumInputs = mod.getNumInputs();
@@ -574,13 +573,12 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
   // Insert new module input ESI ports.
   for (auto toClient : toClientReqs) {
     newInputs.push_back(std::make_pair(
-        origNumInputs,
-        hw::PortInfo{getPortName(toClient.getClientNamePath()),
-                     hw::PortDirection::INPUT, toClient.getType(),
-                     origNumInputs, nullptr, toClient.getLoc()}));
-    body->addArgument(toClient.getType(), toClient.getLoc());
+        origNumInputs, hw::PortInfo{getPortName(toClient.getClientNamePath()),
+                                    hw::PortDirection::INPUT,
+                                    toClient.getType(), origNumInputs}));
   }
   mod.insertPorts(newInputs, {});
+  Block *body = &mod->getRegion(0).front();
 
   // Replace uses with new block args which will correspond to said ports.
   // Note: no zip or enumerate here because we need mutable access to
