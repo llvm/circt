@@ -137,3 +137,14 @@ func.func @MemoryUpdates(%arg0: !arc.storage<24>, %enable: i1) {
   // CHECK-NEXT:   llvm.return
 }
 // CHECK-NEXT: }
+
+// CHECK-LABEL: llvm.func @zeroCount
+func.func @zeroCount(%arg0 : i32) {
+  // CHECK-NEXT: [[TRUE1:%.+]] = llvm.mlir.constant(true) : i1
+  // CHECK-NEXT: "llvm.intr.ctlz"(%arg0, [[TRUE1]]) : (i32, i1) -> i32
+  %0 = arc.zero_count leading %arg0  : i32
+  // CHECK-NEXT: [[TRUE2:%.+]] = llvm.mlir.constant(true) : i1
+  // CHECK-NEXT: "llvm.intr.cttz"(%arg0, [[TRUE2]]) : (i32, i1) -> i32
+  %1 = arc.zero_count trailing %arg0  : i32
+  return
+}

@@ -22,3 +22,4 @@ void ArcDialect::initialize() {
 }
 
 #include "circt/Dialect/Arc/ArcDialect.cpp.inc"
+#include "circt/Dialect/Arc/ArcEnums.cpp.inc"

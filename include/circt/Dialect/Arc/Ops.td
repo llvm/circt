@@ -11,12 +11,14 @@
 
 include "circt/Dialect/Arc/Dialect.td"
 include "circt/Dialect/Arc/Types.td"
+include "mlir/IR/EnumAttr.td"
 include "mlir/IR/FunctionInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 class ArcOp<string mnemonic, list<Trait> traits = []> :
@@ -119,7 +121,7 @@ def StateOp : ArcOp<"state", [
     Optional<I1>:$reset,
     I32Attr:$latency,
     Variadic<AnyType>:$inputs);
-  let results = (outs Variadic<AnyType>);
+  let results = (outs Variadic<AnyType>:$outputs);
 
   let assemblyFormat = [{
     $arc `(` $inputs `)` (`clock` $clock^)? (`enable` $enable^)?
@@ -198,11 +200,6 @@ def ClockGateOp : ArcOp<"clock_gate", [Pure]> {
   let assemblyFormat = [{
     $input `,` $enable attr-dict
   }];
-  let builders = [
-    OpBuilder<(ins "mlir::Value":$input, "mlir::Value":$enable), [{
-      build($_builder, $_state, input.getType(), input, enable);
-    }]>
-  ];
 }
 
 def MemoryOp : ArcOp<"memory", [MemoryEffects<[MemAlloc]>]> {
@@ -374,12 +371,6 @@ def StateReadOp : ArcOp<"state_read", [
   let assemblyFormat = [{
     $state attr-dict `:` type($state)
   }];
-  let builders = [
-    OpBuilder<(ins "mlir::Value":$state), [{
-      build($_builder, $_state, state.getType().cast<StateType>().getType(),
-            state);
-    }]>
-  ];
 }
 
 def StateWriteOp : ArcOp<"state_write", [
@@ -468,6 +459,22 @@ def LutOp : ArcOp<"lut", [
   }];
 
   let hasVerifier = 1;
+}
+
+def ZeroCountPredicateLeading  : I32EnumAttrCase<"leading", 0>;
+def ZeroCountPredicateTrailing  : I32EnumAttrCase<"trailing", 1>;
+def ZeroCountPredicate : I32EnumAttr<
+    "ZeroCountPredicate", "arc.zero_count predicate",
+    [ZeroCountPredicateLeading, ZeroCountPredicateTrailing]> {
+  let cppNamespace = "circt::arc";
+}
+
+def ZeroCountOp : ArcOp<"zero_count", [Pure, SameOperandsAndResultType]> {
+  let summary = "leading/trailing zero count operation";
+  let arguments = (ins AnySignlessInteger:$input,
+                       ZeroCountPredicate:$predicate);
+  let results = (outs AnySignlessInteger:$output);
+  let assemblyFormat = "$predicate $input attr-dict `:` type($input)";
 }
 
 #endif // CIRCT_DIALECT_ARC_OPS_TD
