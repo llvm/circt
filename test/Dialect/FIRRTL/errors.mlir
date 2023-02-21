@@ -700,9 +700,19 @@ firrtl.circuit "BitCast2" {
 
 firrtl.circuit "BitCast4" {
   firrtl.module @BitCast4() {
-    %a = firrtl.wire : !firrtl.bundle<valid flip: uint<1>, ready: uint<1>, data: uint<1>>
+    %a = firrtl.wire : !firrtl.analog
     // expected-error @+1 {{bitwidth cannot be determined for input operand type}}
-    %b = firrtl.bitcast %a : (!firrtl.bundle<valid flip: uint<1>, ready: uint<1>, data: uint<1>>) -> (!firrtl.uint<6>)
+    %b = firrtl.bitcast %a : (!firrtl.analog) -> (!firrtl.uint<1>)
+  }
+}
+
+// -----
+
+firrtl.circuit "BitCast5" {
+  firrtl.module @BitCast5() {
+    %a = firrtl.wire : !firrtl.uint<3>
+    // expected-error @below {{'firrtl.bitcast' op result #0 must be a passive base type (contain no flips), but got}}
+    %b = firrtl.bitcast %a : (!firrtl.uint<3>) -> (!firrtl.bundle<valid flip: uint<1>, ready: uint<1>, data: uint<1>>)
   }
 }
 

@@ -891,10 +891,8 @@ static LogicalResult processBuffer(
     exportPm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
 
     // Tidy up the IR to improve verilog emission quality.
-    if (!disableOptimization) {
-      auto &modulePM = exportPm.nest<hw::HWModuleOp>();
-      modulePM.addPass(sv::createPrettifyVerilogPass());
-    }
+    if (!disableOptimization)
+      exportPm.nest<hw::HWModuleOp>().addPass(sv::createPrettifyVerilogPass());
 
     if (stripFirDebugInfo)
       exportPm.addPass(

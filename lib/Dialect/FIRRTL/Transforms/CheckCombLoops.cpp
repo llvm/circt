@@ -220,6 +220,7 @@ public:
         visiting.popUntilVal(dfsVal);
 
         auto popped = dfsStack.pop_back_val();
+        (void)popped;
         LLVM_DEBUG({
           llvm::dbgs() << "\n dfs popped :"
                        << getFieldName(FieldRef(popped, 0)).first;

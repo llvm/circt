@@ -268,4 +268,14 @@ firrtl.circuit "Simple" {
   // The following operations should be passed through without an error.
   // CHECK: sv.interface @SVInterface
   sv.interface @SVInterface { }
+
+  // DontTouch on ports becomes symbol.
+  // CHECK-LABEL: hw.module.extern private @PortDT
+  // CHECK-SAME: (%a: i1 {hw.exportPort = #hw<innerSym@__PortDT__a>}, %hassym: i1 {hw.exportPort = #hw<innerSym@hassym>})
+  // CHECK-SAME: -> (b: i2 {hw.exportPort = #hw<innerSym@__PortDT__b>})
+  firrtl.extmodule private @PortDT(
+    in a: !firrtl.uint<1> [{class = "firrtl.transforms.DontTouchAnnotation"}],
+    in hassym: !firrtl.uint<1> sym @hassym [{class = "firrtl.transforms.DontTouchAnnotation"}],
+    out b: !firrtl.uint<2> [{class = "firrtl.transforms.DontTouchAnnotation"}]
+  )
 }

@@ -31,7 +31,15 @@ struct PrintFIRRTLFieldSourcePass
         os << "SUB:  " << v;
       os << " : " << p->src << " : {";
       llvm::interleaveComma(p->path, os);
-      os << "}\n";
+      os << "} ";
+      os << ((p->flow == Flow::Source) ? "Source"
+             : (p->flow == Flow::Sink) ? "Sink"
+                                       : "Duplex");
+      if (p->isSrcWritable())
+        os << " writable";
+      if (p->isSrcTransparent())
+        os << " transparent";
+      os << "\n";
     }
   }
 

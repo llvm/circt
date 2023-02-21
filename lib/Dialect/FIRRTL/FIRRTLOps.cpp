@@ -3497,7 +3497,7 @@ LogicalResult HWStructCastOp::verify() {
 }
 
 LogicalResult BitCastOp::verify() {
-  auto inTypeBits = getBitWidth(getOperand().getType().cast<FIRRTLBaseType>());
+  auto inTypeBits = getBitWidth(getInput().getType(), /*ignoreFlip=*/true);
   auto resTypeBits = getBitWidth(getType());
   if (inTypeBits.has_value() && resTypeBits.has_value()) {
     // Bitwidths must match for valid bit
@@ -3509,7 +3509,7 @@ LogicalResult BitCastOp::verify() {
   }
   if (!inTypeBits.has_value())
     return emitError("bitwidth cannot be determined for input operand type ")
-           << getOperand().getType();
+           << getInput().getType();
   return emitError("bitwidth cannot be determined for result type ")
          << getType();
 }
