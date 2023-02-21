@@ -108,11 +108,11 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike"> {
     }]>,
 
     /// Insert and remove input and output ports of this module. Modifies the
-    /// body block if 'body' is non-null.  The insertion and removal indices
+    /// body block if 'body' is non-null. The insertion and removal indices
     /// must be in ascending order. The indices refer to the port positions
     /// before any insertion or removal occurs. Ports inserted at the same index
     /// will appear in the module in the same order as they were listed in the
-    /// insertion arrays. If 'body'
+    /// insertion arrays.
     InterfaceMethod<"Insert and remove input and output ports",
     "void", "modifyPorts", (ins
       "ArrayRef<std::pair<unsigned, circt::hw::PortInfo>>":$insertInputs,
@@ -124,8 +124,8 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike"> {
                        eraseInputs, eraseOutputs, body);
     }]>,
 
-    /// Insert ports into the module. Does modifies the block arguments of the
-    /// module body if 'body' is non-null.
+    /// Insert ports into the module. Modifies the block arguments of 'body' if
+    /// non-null.
     InterfaceMethod<"Insert ports into this module",
     "void", "insertPorts", (ins
       "ArrayRef<std::pair<unsigned, circt::hw::PortInfo>>":$insertInputs,
@@ -136,8 +136,8 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike"> {
       $_op.modifyPorts(insertInputs, insertOutputs, {}, {}, body);
     }]>,
 
-    /// Erase ports from the module. Does modifies the block arguments of the
-    /// module body if 'body' is non-null.
+    /// Erase ports from the module. Modifies the block arguments of 'body' if
+    /// non-null.
     InterfaceMethod<"Erase ports from this module",
     "void", "erasePorts", (ins
       "ArrayRef<unsigned>":$eraseInputs,
