@@ -1362,7 +1362,6 @@ public:
   virtual LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    // if (isa<UnwrapFIFOOp)
     Value valid, ready, data;
     WrapValidReadyOp wrap = dyn_cast<WrapValidReadyOp>(op);
     UnwrapValidReadyOp unwrap = dyn_cast<UnwrapValidReadyOp>(op);
