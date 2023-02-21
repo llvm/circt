@@ -152,17 +152,17 @@ class MultiplexerService(esi.ServiceImplementation):
     ports.trunk_out_valid = valid
 
 
-# CHECK-LABEL: hw.module @MultiplexerTop<__INST_HIER: none = "INSTANTIATE_WITH_INSTANCE_PATH">(%clk: i1, %rst: i1, %trunk_in: i256, %trunk_in_valid: i1, %trunk_out_ready: i1) -> (trunk_in_ready: i1, trunk_out: i256, trunk_out_valid: i1) attributes {output_file = #hw.output_file<"MultiplexerTop.sv", includeReplicatedOps>} {
+# CHECK-LABEL: hw.module @MultiplexerTop{{.*}}(%clk: i1, %rst: i1, %trunk_in: i256, %trunk_in_valid: i1, %trunk_out_ready: i1) -> (trunk_in_ready: i1, trunk_out: i256, trunk_out_valid: i1)
 # CHECK:         %c0_i224 = hw.constant 0 : i224
 # CHECK:         [[r0:%.+]] = comb.concat %c0_i224, %Consumer.loopback_out : i224, i32
 # CHECK:         [[r1:%.+]] = comb.extract %trunk_in from 0 {sv.namehint = "trunk_in_0upto32"} : (i256) -> i32
-# CHECK:         %Producer.int_out, %Producer.int_out_valid, %Producer.loopback_in_ready = hw.instance "Producer" sym @Producer @Producer<__INST_HIER: none = #hw.param.expr.str.concat<#hw.param.decl.ref<"__INST_HIER">, ".Producer">>(clk: %clk: i1, loopback_in: [[r1]]: i32, loopback_in_valid: %trunk_in_valid: i1, int_out_ready: %Consumer.int_in_ready: i1) -> (int_out: i32, int_out_valid: i1, loopback_in_ready: i1)
-# CHECK:         %Consumer.loopback_out, %Consumer.loopback_out_valid, %Consumer.int_in_ready = hw.instance "Consumer" sym @Consumer @Consumer<__INST_HIER: none = #hw.param.expr.str.concat<#hw.param.decl.ref<"__INST_HIER">, ".Consumer">>(clk: %clk: i1, int_in: %Producer.int_out: i32, int_in_valid: %Producer.int_out_valid: i1, loopback_out_ready: %trunk_out_ready: i1) -> (loopback_out: i32, loopback_out_valid: i1, int_in_ready: i1)
+# CHECK:         %Producer.loopback_in_ready, %Producer.int_out, %Producer.int_out_valid = hw.instance "Producer" sym @Producer @Producer{{.*}}(clk: %clk: i1, loopback_in: [[r1]]: i32, loopback_in_valid: %trunk_in_valid: i1, int_out_ready: %Consumer.int_in_ready: i1) -> (loopback_in_ready: i1, int_out: i32, int_out_valid: i1)
+# CHECK:         %Consumer.int_in_ready, %Consumer.loopback_out, %Consumer.loopback_out_valid = hw.instance "Consumer" sym @Consumer @Consumer{{.*}}(clk: %clk: i1, int_in: %Producer.int_out: i32, int_in_valid: %Producer.int_out_valid: i1, loopback_out_ready: %trunk_out_ready: i1) -> (int_in_ready: i1, loopback_out: i32, loopback_out_valid: i1)
 # CHECK:         hw.output %Producer.loopback_in_ready, [[r0]], %Consumer.loopback_out_valid : i1, i256, i1
-# CHECK-LABEL: hw.module @Producer<__INST_HIER: none = "INSTANTIATE_WITH_INSTANCE_PATH">(%clk: i1, %loopback_in: i32, %loopback_in_valid: i1, %int_out_ready: i1) -> (int_out: i32, int_out_valid: i1, loopback_in_ready: i1) attributes {output_file = #hw.output_file<"Producer.sv", includeReplicatedOps>} {
-# CHECK:         hw.output %loopback_in, %loopback_in_valid, %int_out_ready : i32, i1, i1
-# CHECK-LABEL: hw.module @Consumer<__INST_HIER: none = "INSTANTIATE_WITH_INSTANCE_PATH">(%clk: i1, %int_in: i32, %int_in_valid: i1, %loopback_out_ready: i1) -> (loopback_out: i32, loopback_out_valid: i1, int_in_ready: i1) attributes {output_file = #hw.output_file<"Consumer.sv", includeReplicatedOps>} {
-# CHECK:         hw.output %int_in, %int_in_valid, %loopback_out_ready : i32, i1, i1
+# CHECK-LABEL: hw.module @Producer{{.*}}(%clk: i1, %loopback_in: i32, %loopback_in_valid: i1, %int_out_ready: i1) -> (loopback_in_ready: i1, int_out: i32, int_out_valid: i1)
+# CHECK:         hw.output %int_out_ready, %loopback_in, %loopback_in_valid : i1, i32, i1
+# CHECK-LABEL: hw.module @Consumer{{.*}}(%clk: i1, %int_in: i32, %int_in_valid: i1, %loopback_out_ready: i1) -> (int_in_ready: i1, loopback_out: i32, loopback_out_valid: i1)
+# CHECK:         hw.output %loopback_out_ready, %int_in, %int_in_valid : i1, i32, i1
 
 
 @unittestmodule(run_passes=True, print_after_passes=True, emit_outputs=True)
@@ -206,11 +206,11 @@ class PassUpService(esi.ServiceImplementation):
       req.assign(esi.PureModule.input_port(name, req.type))
 
 
-# CHECK-LABEL:  hw.module @PureTest(%in_Producer_loopback_in: i32, %in_Producer_loopback_in_valid: i1, %in_prod2_loopback_in: i32, %in_prod2_loopback_in_valid: i1, %clk: i1, %out_Consumer_loopback_out_ready: i1, %p2_int_ready: i1) -> (out_Consumer_loopback_out: i32, out_Consumer_loopback_out_valid: i1, p2_int: i32, p2_int_valid: i1, in_Producer_loopback_in_ready: i1, in_prod2_loopback_in_ready: i1) {
-# CHECK-NEXT:     %Producer.int_out, %Producer.int_out_valid, %Producer.loopback_in_ready = hw.instance "Producer" sym @Producer @Producer<__INST_HIER: none = "PureTest.Producer">(clk: %clk: i1, loopback_in: %in_Producer_loopback_in: i32, loopback_in_valid: %in_Producer_loopback_in_valid: i1, int_out_ready: %Consumer.int_in_ready: i1) -> (int_out: i32, int_out_valid: i1, loopback_in_ready: i1)
-# CHECK-NEXT:     %Consumer.loopback_out, %Consumer.loopback_out_valid, %Consumer.int_in_ready = hw.instance "Consumer" sym @Consumer @Consumer<__INST_HIER: none = "PureTest.Consumer">(clk: %clk: i1, int_in: %Producer.int_out: i32, int_in_valid: %Producer.int_out_valid: i1, loopback_out_ready: %out_Consumer_loopback_out_ready: i1) -> (loopback_out: i32, loopback_out_valid: i1, int_in_ready: i1)
-# CHECK-NEXT:     %prod2.int_out, %prod2.int_out_valid, %prod2.loopback_in_ready = hw.instance "prod2" sym @prod2 @Producer<__INST_HIER: none = "PureTest.prod2">(clk: %clk: i1, loopback_in: %in_prod2_loopback_in: i32, loopback_in_valid: %in_prod2_loopback_in_valid: i1, int_out_ready: %p2_int_ready: i1) -> (int_out: i32, int_out_valid: i1, loopback_in_ready: i1)
-# CHECK-NEXT:     hw.output %Consumer.loopback_out, %Consumer.loopback_out_valid, %prod2.int_out, %prod2.int_out_valid, %Producer.loopback_in_ready, %prod2.loopback_in_ready : i32, i1, i32, i1, i1, i1
+# CHECK-LABEL:  hw.module @PureTest(%in_Producer_loopback_in: i32, %in_Producer_loopback_in_valid: i1, %in_prod2_loopback_in: i32, %in_prod2_loopback_in_valid: i1, %clk: i1, %out_Consumer_loopback_out_ready: i1, %p2_int_ready: i1) -> (in_Producer_loopback_in_ready: i1, in_prod2_loopback_in_ready: i1, out_Consumer_loopback_out: i32, out_Consumer_loopback_out_valid: i1, p2_int: i32, p2_int_valid: i1) {
+# CHECK-NEXT:     %Producer.loopback_in_ready, %Producer.int_out, %Producer.int_out_valid = hw.instance "Producer" sym @Producer @Producer{{.*}}(clk: %clk: i1, loopback_in: %in_Producer_loopback_in: i32, loopback_in_valid: %in_Producer_loopback_in_valid: i1, int_out_ready: %Consumer.int_in_ready: i1) -> (loopback_in_ready: i1, int_out: i32, int_out_valid: i1)
+# CHECK-NEXT:     %Consumer.int_in_ready, %Consumer.loopback_out, %Consumer.loopback_out_valid = hw.instance "Consumer" sym @Consumer @Consumer{{.*}}(clk: %clk: i1, int_in: %Producer.int_out: i32, int_in_valid: %Producer.int_out_valid: i1, loopback_out_ready: %out_Consumer_loopback_out_ready: i1) -> (int_in_ready: i1, loopback_out: i32, loopback_out_valid: i1)
+# CHECK-NEXT:     %prod2.loopback_in_ready, %prod2.int_out, %prod2.int_out_valid = hw.instance "prod2" sym @prod2 @Producer{{.*}}(clk: %clk: i1, loopback_in: %in_prod2_loopback_in: i32, loopback_in_valid: %in_prod2_loopback_in_valid: i1, int_out_ready: %p2_int_ready: i1) -> (loopback_in_ready: i1, int_out: i32, int_out_valid: i1)
+# CHECK-NEXT:     hw.output %Producer.loopback_in_ready, %prod2.loopback_in_ready, %Consumer.loopback_out, %Consumer.loopback_out_valid, %prod2.int_out, %prod2.int_out_valid : i1, i1, i32, i1, i32, i1
 @unittestmodule(run_passes=True, print_after_passes=True, emit_outputs=True)
 class PureTest(esi.PureModule):
 
