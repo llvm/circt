@@ -64,3 +64,12 @@ func.func @StorageAccess(%arg0: !arc.storage<10000>) {
   %2 = arc.storage.get %arg0[9001] : !arc.storage<10000> -> !arc.storage<123>
   return
 }
+
+// CHECK-LABEL: func.func @zeroCount
+func.func @zeroCount(%arg0 : i32) {
+  // CHECK-NEXT: {{%.+}} = arc.zero_count leading %arg0  : i32
+  %0 = arc.zero_count leading %arg0  : i32
+  // CHECK-NEXT: {{%.+}} = arc.zero_count trailing %arg0  : i32
+  %1 = arc.zero_count trailing %arg0  : i32
+  return
+}

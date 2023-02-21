@@ -7,6 +7,7 @@ add_circt_dialect_library(CIRCTArc
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Arc
 
   DEPENDS
+  CIRCTArcEnumsIncGen
   MLIRArcIncGen
 
   LINK_COMPONENTS
