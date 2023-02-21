@@ -612,3 +612,32 @@ hw.module @AsyncResetUndriven(%clock: i1, %reset: i1) -> (q: i32) {
   // CHECK-NEXT:   } else {
   // CHECK-NEXT:     sv.passign %r, %[[regRead]]
 }
+
+// COMMON-LABEL: @Subaccess
+hw.module @Subaccess(%clock: i1, %en: i1, %addr: i2, %data: i32) -> (out: !hw.array<3xi32>) {
+  %c0_i2 = hw.constant 0 : i2
+  %c1_i2 = hw.constant 1 : i2
+  %c-2_i2 = hw.constant -2 : i2
+  %r = seq.firreg %12 clock %clock {firrtl.random_init_start = 0 : ui64} : !hw.array<3xi32>
+  %0 = hw.array_get %r[%c0_i2] : !hw.array<3xi32>, i2
+  %1 = hw.array_get %r[%c1_i2] : !hw.array<3xi32>, i2
+  %2 = hw.array_get %r[%c-2_i2] : !hw.array<3xi32>, i2
+  %3 = comb.icmp bin eq %addr, %c0_i2 : i2
+  %4 = comb.and bin %en, %3 : i1
+  %5 = comb.mux bin %4, %data, %0 : i32
+  %6 = comb.icmp bin eq %addr, %c1_i2 : i2
+  %7 = comb.and bin %en, %6 : i1
+  %8 = comb.mux bin %7, %data, %1 : i32
+  %9 = comb.icmp bin eq %addr, %c-2_i2 : i2
+  %10 = comb.and bin %en, %9 : i1
+  %11 = comb.mux bin %10, %data, %2 : i32
+  %12 = hw.array_create %11, %8, %5 : i32
+  hw.output %r : !hw.array<3xi32>
+  // CHECK:      sv.always posedge %clock {
+  // CHECK-NEXT:   sv.if %en {
+  // CHECK-NEXT:     %[[IDX:.+]] = sv.array_index_inout %r[%addr] : !hw.inout<array<3xi32>>, i2
+  // CHECK-NEXT:     sv.passign %[[IDX]], %data : i32
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT:   }
+  // CHECK-NEXT: }
+}
