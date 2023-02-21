@@ -610,7 +610,7 @@ void MSFTModuleOp::modifyPorts(
     llvm::ArrayRef<unsigned int> eraseInputs,
     llvm::ArrayRef<unsigned int> eraseOutputs) {
   hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
-                        eraseOutputs, getBodyBlock());
+                        eraseOutputs);
 }
 
 void MSFTModuleOp::appendOutputs(
