@@ -136,6 +136,9 @@ private:
                                   Value rand, unsigned &pos);
 
   void createTree(OpBuilder &builder, Value reg, Value term, Value next);
+  std::optional<std::tuple<Value, Value, Value>>
+  tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
+                        hw::ArrayCreateOp nextArray);
 
   void addToAlwaysBlock(Block *block, sv::EventControl clockEdge, Value clock,
                         std::function<void(OpBuilder &)> body,
@@ -352,9 +355,9 @@ static std::optional<APInt> getConstantValue(Value value) {
 // if (cond)
 //   reg[idx] <= val;
 //
-static std::optional<std::tuple<Value, Value, Value>>
-tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
-                      hw::ArrayCreateOp nextRegValue) {
+std::optional<std::tuple<Value, Value, Value>>
+FirRegLower::tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
+                                   hw::ArrayCreateOp nextRegValue) {
   Value trueVal;
   SmallVector<Value> muxConditions;
   if (!llvm::all_of(
@@ -417,8 +420,7 @@ tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
   builder.setInsertionPointAfterValue(reg);
   Value commonConditionValue;
   if (commonConditions.empty())
-    commonConditionValue =
-        builder.create<hw::ConstantOp>(reg.getLoc(), APInt(1, 1));
+    commonConditionValue = getOrCreateConstant(reg.getLoc(), APInt(1, 1));
   else
     commonConditionValue = builder.createOrFold<comb::AndOp>(
         reg.getLoc(), builder.getI1Type(), commonConditions.takeVector(), true);
@@ -456,7 +458,7 @@ void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
               createTree(builder, nextReg, termElement, trueValue);
               termElement.erase();
             },
-            [&]() {});
+            []() {});
         ++numSubaccessRestored;
         return;
       }
