@@ -103,6 +103,7 @@ void SFCCompatPass::runOnOperation() {
     // Delete invalids which have no uses.
     if (inv->getUses().empty()) {
       inv->erase();
+      madeModifications = true;
       continue;
     }
     ImplicitLocOpBuilder builder(inv.getLoc(), inv);

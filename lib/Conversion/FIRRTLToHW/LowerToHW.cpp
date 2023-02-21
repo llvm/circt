@@ -424,7 +424,7 @@ private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
   LogicalResult lowerPorts(ArrayRef<PortInfo> firrtlPorts,
                            SmallVectorImpl<hw::PortInfo> &ports,
-                           Operation *moduleOp,
+                           Operation *moduleOp, StringRef moduleName,
                            CircuitLoweringState &loweringState);
   bool handleForceNameAnnos(FModuleLike oldModule, AnnotationSet &annos,
                             CircuitLoweringState &loweringState);
@@ -923,9 +923,11 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   emitString("");
 }
 
-LogicalResult FIRRTLModuleLowering::lowerPorts(
-    ArrayRef<PortInfo> firrtlPorts, SmallVectorImpl<hw::PortInfo> &ports,
-    Operation *moduleOp, CircuitLoweringState &loweringState) {
+LogicalResult
+FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
+                                 SmallVectorImpl<hw::PortInfo> &ports,
+                                 Operation *moduleOp, StringRef moduleName,
+                                 CircuitLoweringState &loweringState) {
   ports.reserve(firrtlPorts.size());
   size_t numArgs = 0;
   size_t numResults = 0;
@@ -943,6 +945,11 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
         return failure();
       }
     hwPort.sym = firrtlPort.sym;
+    bool hadDontTouch = firrtlPort.annotations.removeDontTouch();
+    if (hadDontTouch && !hwPort.sym)
+      hwPort.sym = hw::InnerSymAttr::get(StringAttr::get(
+          moduleOp->getContext(),
+          Twine("__") + moduleName + Twine("__") + firrtlPort.name.strref()));
 
     // We can't lower all types, so make sure to cleanly reject them.
     if (!hwPort.type) {
@@ -954,10 +961,13 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
     // input, output, or inout.  We don't want these at the HW level.
     if (hwPort.type.isInteger(0)) {
       if (hwPort.sym && !hwPort.sym.empty()) {
-        moduleOp->emitError("zero width port ")
-            << hwPort.name << " is referenced by name [" << hwPort.sym
-            << "] (e.g. in an XMR).";
-        return failure();
+        auto d = moduleOp->emitError("zero width port ") << hwPort.name;
+        if (hadDontTouch)
+          d << " has dontTouch annotation";
+        else
+          d << " is referenced by name [" << hwPort.sym << "] (e.g. in an XMR)";
+        d << " but must be removed";
+        return d;
       }
       continue;
     }
@@ -1083,7 +1093,8 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   // Map the ports over, lowering their types as we go.
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<hw::PortInfo, 8> ports;
-  if (failed(lowerPorts(firrtlPorts, ports, oldModule, loweringState)))
+  if (failed(lowerPorts(firrtlPorts, ports, oldModule, oldModule.getName(),
+                        loweringState)))
     return {};
 
   StringRef verilogName;
@@ -1124,7 +1135,8 @@ FIRRTLModuleLowering::lowerMemModule(FMemModuleOp oldModule,
   // Map the ports over, lowering their types as we go.
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<hw::PortInfo, 8> ports;
-  if (failed(lowerPorts(firrtlPorts, ports, oldModule, loweringState)))
+  if (failed(lowerPorts(firrtlPorts, ports, oldModule, oldModule.getName(),
+                        loweringState)))
     return {};
 
   // Build the new hw.module op.
@@ -1145,7 +1157,8 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   // Map the ports over, lowering their types as we go.
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<hw::PortInfo, 8> ports;
-  if (failed(lowerPorts(firrtlPorts, ports, oldModule, loweringState)))
+  if (failed(lowerPorts(firrtlPorts, ports, oldModule, oldModule.getName(),
+                        loweringState)))
     return {};
 
   // Build the new hw.module op.

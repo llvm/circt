@@ -1826,3 +1826,26 @@ firrtl.circuit "MemoryInitializationAnnotations" attributes {
     %m6 = chirrtl.combmem : !chirrtl.cmemory<uint<8>, 32>
   }
 }
+
+// -----
+
+// CHECK-LABEL: firrtl.circuit "Top"
+firrtl.circuit "Top" attributes {
+  rawAnnotations = [
+    {
+      class = "sifive.enterprise.firrtl.MarkDUTAnnotation",
+      target = "~Top|DUT"
+    }]
+  } {
+  // CHECK-LABEL: firrtl.module
+  // CHECK-NOT:     private
+  // CHECK-SAME:     @DUT()
+  // CHECK-SAME:    class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+  firrtl.module private @DUT() {}
+
+  // CHECK-LABEL:      firrtl.module @Top
+  // CHECK-NEXT:   firrtl.instance dut @DUT
+  firrtl.module @Top() {
+    firrtl.instance dut @DUT()
+  }
+}
