@@ -161,7 +161,8 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
     void modifyPorts(
       ArrayRef<std::pair<unsigned, circt::hw::PortInfo>> insertInputs,
       ArrayRef<std::pair<unsigned, circt::hw::PortInfo>> insertOutputs,
-      ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs);
+      ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs,
+      Block *body);
 
     // Adds input and output ports. Returns a list of new block arguments for
     // the new inputs.

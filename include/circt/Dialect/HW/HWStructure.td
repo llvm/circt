@@ -47,7 +47,8 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
       ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
       ArrayRef<unsigned> eraseInputs,
-      ArrayRef<unsigned> eraseOutputs
+      ArrayRef<unsigned> eraseOutputs,
+      Block *body
     );
   }];
 

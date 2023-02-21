@@ -671,7 +671,7 @@ bool ESIPortsPass::updateFunc(HWMutableModuleLike mod) {
   if (outOp)
     outOp->setOperands(newOutputOperands);
   mod.modifyPorts(inputsToInsert, outputsToInsert, inputsToErase,
-                  outputsToErase);
+                  outputsToErase, nullptr);
   return true;
 }
 

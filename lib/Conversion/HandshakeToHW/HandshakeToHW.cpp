@@ -331,7 +331,7 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
     auto inPortInfo =
         getMemoryIOInfo(arg.getLoc(), memName.strref() + "_in", i,
                         portInfo.outputs, hw::PortDirection::INPUT);
-    mod.insertPorts({{i, inPortInfo}}, {});
+    mod.insertPorts({{i, inPortInfo}}, {}, mod.getBodyBlock());
     auto newInPort = mod.getArgument(i);
     // Replace the extmemory submodule outputs with the newly created inputs.
     b.setInsertionPointToStart(mod.getBodyBlock());
@@ -360,7 +360,8 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
     // Erase the original memref argument of the top-level i/o now that it's use
     // has been removed.
     mod.modifyPorts(/*insertInputs*/ {}, /*insertOutputs*/ {},
-                    /*eraseInputs*/ {i + 1}, /*eraseOutputs*/ {});
+                    /*eraseInputs*/ {i + 1}, /*eraseOutputs*/ {},
+                    mod.getBodyBlock());
   }
 
   return success();

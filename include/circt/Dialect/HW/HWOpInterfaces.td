@@ -107,41 +107,45 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike"> {
       return getModulePortInfo($_op);
     }]>,
 
-    /// Insert and remove input and output ports of this module. Does not modify
-    /// the block arguments of the module body. The insertion and removal
-    /// indices must be in ascending order. The indices refer to the port
-    /// positions before any insertion or removal occurs. Ports inserted at the
-    /// same index will appear in the module in the same order as they were
-    /// listed in the insertion arrays.
+    /// Insert and remove input and output ports of this module. Modifies the
+    /// body block if 'body' is non-null.  The insertion and removal indices
+    /// must be in ascending order. The indices refer to the port positions
+    /// before any insertion or removal occurs. Ports inserted at the same index
+    /// will appear in the module in the same order as they were listed in the
+    /// insertion arrays. If 'body'
     InterfaceMethod<"Insert and remove input and output ports",
     "void", "modifyPorts", (ins
       "ArrayRef<std::pair<unsigned, circt::hw::PortInfo>>":$insertInputs,
       "ArrayRef<std::pair<unsigned, circt::hw::PortInfo>>":$insertOutputs,
-      "ArrayRef<unsigned>":$eraseInputs, "ArrayRef<unsigned>":$eraseOutputs),
+      "ArrayRef<unsigned>":$eraseInputs, "ArrayRef<unsigned>":$eraseOutputs,
+      "Block *":$body),
     /*methodBody=*/[{
-      $_op.modifyPorts(insertInputs, insertOutputs, eraseInputs, eraseOutputs);
+      $_op.modifyPorts(insertInputs, insertOutputs,
+                       eraseInputs, eraseOutputs, body);
     }]>,
 
-    /// Insert ports into the module. Does not modify the block arguments of the
-    /// module body.
+    /// Insert ports into the module. Does modifies the block arguments of the
+    /// module body if 'body' is non-null.
     InterfaceMethod<"Insert ports into this module",
     "void", "insertPorts", (ins
       "ArrayRef<std::pair<unsigned, circt::hw::PortInfo>>":$insertInputs,
-      "ArrayRef<std::pair<unsigned, circt::hw::PortInfo>>":$insertOutputs),
+      "ArrayRef<std::pair<unsigned, circt::hw::PortInfo>>":$insertOutputs,
+      "Block *":$body),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{
-      $_op.modifyPorts(insertInputs, insertOutputs, {}, {});
+      $_op.modifyPorts(insertInputs, insertOutputs, {}, {}, body);
     }]>,
 
-    /// Erase ports from the module. Does not modify the block arguments of the
-    /// module body.
+    /// Erase ports from the module. Does modifies the block arguments of the
+    /// module body if 'body' is non-null.
     InterfaceMethod<"Erase ports from this module",
     "void", "erasePorts", (ins
       "ArrayRef<unsigned>":$eraseInputs,
-      "ArrayRef<unsigned>":$eraseOutputs),
+      "ArrayRef<unsigned>":$eraseOutputs,
+      "Block *":$body),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{
-      $_op.modifyPorts({}, {}, eraseInputs, eraseOutputs);
+      $_op.modifyPorts({}, {}, eraseInputs, eraseOutputs, body);
     }]>,
 
     /// Appends output ports to the module with the specified names and rewrites

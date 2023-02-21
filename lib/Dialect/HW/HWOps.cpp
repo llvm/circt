@@ -833,9 +833,10 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &odsState,
 void HWModuleOp::modifyPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
-    ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
+    ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs,
+    Block *body) {
   hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
-                        eraseOutputs);
+                        eraseOutputs, body);
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -878,9 +879,10 @@ void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
 void HWModuleExternOp::modifyPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
-    ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
+    ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs,
+    Block *body) {
   hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
-                        eraseOutputs);
+                        eraseOutputs, body);
 }
 
 void HWModuleExternOp::appendOutputs(
@@ -910,9 +912,10 @@ void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
 void HWModuleGeneratedOp::modifyPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
-    ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
+    ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs,
+    Block *body) {
   hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
-                        eraseOutputs);
+                        eraseOutputs, body);
 }
 
 void HWModuleGeneratedOp::appendOutputs(
@@ -1326,7 +1329,7 @@ HWModuleOp::insertInput(unsigned index, StringAttr name, Type ty) {
   port.name = nameAttr;
   port.direction = PortDirection::INPUT;
   port.type = ty;
-  insertPorts({std::make_pair(index, port)}, {});
+  insertPorts({std::make_pair(index, port)}, {}, getBodyBlock());
 
   // Add a new argument.
   return {nameAttr, getBody().getArgument(index)};
@@ -1347,7 +1350,7 @@ void HWModuleOp::insertOutputs(unsigned index,
     port.type = value.getType();
     indexedNewPorts.emplace_back(index, port);
   }
-  insertPorts({}, indexedNewPorts);
+  insertPorts({}, indexedNewPorts, getBodyBlock());
 
   // Rewrite the output op.
   for (auto &[name, value] : outputs)

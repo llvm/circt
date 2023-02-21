@@ -580,7 +580,7 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
                      origNumInputs, nullptr, toClient.getLoc()}));
     body->addArgument(toClient.getType(), toClient.getLoc());
   }
-  mod.insertPorts(newInputs, {});
+  mod.insertPorts(newInputs, {}, nullptr);
 
   // Replace uses with new block args which will correspond to said ports.
   // Note: no zip or enumerate here because we need mutable access to

@@ -608,9 +608,9 @@ void MSFTModuleOp::modifyPorts(
     llvm::ArrayRef<std::pair<unsigned int, circt::hw::PortInfo>> insertInputs,
     llvm::ArrayRef<std::pair<unsigned int, circt::hw::PortInfo>> insertOutputs,
     llvm::ArrayRef<unsigned int> eraseInputs,
-    llvm::ArrayRef<unsigned int> eraseOutputs) {
+    llvm::ArrayRef<unsigned int> eraseOutputs, Block *body) {
   hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
-                        eraseOutputs);
+                        eraseOutputs, body);
 }
 
 void MSFTModuleOp::appendOutputs(
