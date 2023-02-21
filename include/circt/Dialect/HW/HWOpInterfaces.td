@@ -108,11 +108,12 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike"> {
     }]>,
 
     /// Insert and remove input and output ports of this module. Modifies the
-    /// body block if 'body' is non-null. The insertion and removal indices
-    /// must be in ascending order. The indices refer to the port positions
-    /// before any insertion or removal occurs. Ports inserted at the same index
-    /// will appear in the module in the same order as they were listed in the
-    /// insertion arrays.
+    /// body block arguments if 'body' is non-null to match the new inputs. Does
+    /// _not_ modify the terminator to match the outputs. The insertion and
+    /// removal indices must be in ascending order. The indices refer to the
+    /// port positions before any insertion or removal occurs. Ports inserted at
+    /// the same index will appear in the module in the same order as they were
+    /// listed in the insertion arrays.
     InterfaceMethod<"Insert and remove input and output ports",
     "void", "modifyPorts", (ins
       "ArrayRef<std::pair<unsigned, circt::hw::PortInfo>>":$insertInputs,
