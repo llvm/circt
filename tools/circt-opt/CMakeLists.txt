@@ -11,6 +11,7 @@ target_link_libraries(circt-opt
   CIRCTAffineToPipeline
   CIRCTAnalysisTestPasses
   CIRCTArc
+  CIRCTArcTransforms
   CIRCTCalyx
   CIRCTCalyxToHW
   CIRCTCalyxToFSM

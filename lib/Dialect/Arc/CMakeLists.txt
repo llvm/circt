@@ -20,3 +20,5 @@ add_circt_dialect_library(CIRCTArc
 add_dependencies(circt-headers
   MLIRArcIncGen
 )
+
+add_subdirectory(Transforms)
