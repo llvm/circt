@@ -19,6 +19,7 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -2004,7 +2005,7 @@ static void replacePortField(PatternRewriter &rewriter, Value port,
   auto fieldIndex = portTy.getElementIndex(name);
   assert(fieldIndex && "missing field on memory port");
 
-  for (auto *op : port.getUsers()) {
+  for (auto *op : llvm::make_early_inc_range(port.getUsers())) {
     auto portAccess = cast<SubfieldOp>(op);
     if (fieldIndex != portAccess.getFieldIndex())
       continue;
@@ -2515,7 +2516,8 @@ struct FoldRegMems : public mlir::RewritePattern {
 
     // Find the clock of the register-to-be, all write ports should share it.
     Value clock;
-    SmallVector<FConnectLike> connects;
+    SmallPtrSet<Operation *, 8> connects;
+    SmallVector<SubfieldOp> portAccesses;
     for (auto [i, port] : llvm::enumerate(mem.getResults())) {
       if (!mem.getPortAnnotation(i).empty())
         continue;
@@ -2530,11 +2532,12 @@ struct FoldRegMems : public mlir::RewritePattern {
             auto portAccess = cast<SubfieldOp>(op);
             if (fieldIndex != portAccess.getFieldIndex())
               continue;
+            portAccesses.push_back(portAccess);
             for (auto *user : portAccess->getUsers()) {
               auto conn = dyn_cast<FConnectLike>(user);
               if (!conn)
                 return failure();
-              connects.push_back(conn);
+              connects.insert(conn);
             }
           }
         }
@@ -2600,6 +2603,7 @@ struct FoldRegMems : public mlir::RewritePattern {
 
       auto portPipeline = [&, port = port](StringRef field, unsigned stages) {
         Value value = getPortFieldValue(port, field);
+        assert(value);
         rewriter.setInsertionPointAfterValue(value);
         return pipeline(value, portClock, name + "_" + field, stages);
       };
@@ -2674,10 +2678,10 @@ struct FoldRegMems : public mlir::RewritePattern {
     rewriter.create<StrictConnectOp>(reg.getLoc(), reg, next);
 
     // Delete the fields and their associated connects.
-    for (FConnectLike conn : connects) {
+    for (Operation *conn : connects)
       rewriter.eraseOp(conn);
-      rewriter.eraseOp(conn.getDest().getDefiningOp<SubfieldOp>());
-    }
+    for (auto portAccess : portAccesses)
+      rewriter.eraseOp(portAccess);
     rewriter.eraseOp(mem);
 
     return success();
