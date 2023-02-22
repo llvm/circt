@@ -128,7 +128,7 @@ firrtl.circuit "SymArgZero" {
 // -----
 
 firrtl.circuit "DTArgZero" {
-  // expected-error @below {{zero width port "foo" has dontTouch annotation but must be removed}}
+  // expected-warning @below {{zero width port "foo" has dontTouch annotation, removing anyway}}
   firrtl.module @DTArgZero(in %foo :!firrtl.uint<0> [{class = "firrtl.transforms.DontTouchAnnotation"}]) {
   }
 }
