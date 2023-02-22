@@ -852,7 +852,7 @@ void FIFO::buildInputSignals() {
     body->getArgument(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
   }
 
-  rewriter.createNewOutput(origPort, "_ready", i1, rden, rdenPort);
+  rewriter.createNewOutput(origPort, "_rden", i1, rden, rdenPort);
 }
 
 void FIFO::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,

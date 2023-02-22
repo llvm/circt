@@ -138,22 +138,22 @@ hw.module @ServiceWrapper(%clock: i1, %reset: i1, %ctrl: !esi.channel<i0>, %port
   hw.output %HandshakeToESIWrapper.out_ctrl, %HandshakeToESIWrapper.in0_ld_addr0, %HandshakeToESIWrapper.in1_ld_addr0 : !esi.channel<i0>, !esi.channel<i64>, !esi.channel<i64>
 }
 
-// IFACE-LABEL:  hw.module @i1Fifo0Loopback(%in: i3, %in_empty: i1, %out_rden: i1) -> (in_ready: i1, out: i3, out_empty: i1)
+// IFACE-LABEL:  hw.module @i1Fifo0Loopback(%in: i3, %in_empty: i1, %out_rden: i1) -> (in_rden: i1, out: i3, out_empty: i1)
 // IFACE-NEXT:     %chanOutput, %rden = esi.wrap.fifo %in, %in_empty : !esi.channel<i3, FIFO0>
 // IFACE-NEXT:     %data, %empty = esi.unwrap.fifo %chanOutput, %out_rden : !esi.channel<i3, FIFO0>
 // IFACE-NEXT:     hw.output %rden, %data, %empty : i1, i3, i1
-// HW-LABEL:     hw.module @i1Fifo0Loopback(%in: i3, %in_empty: i1, %out_rden: i1) -> (in_ready: i1, out: i3, out_empty: i1)
+// HW-LABEL:     hw.module @i1Fifo0Loopback(%in: i3, %in_empty: i1, %out_rden: i1) -> (in_rden: i1, out: i3, out_empty: i1)
 // HW-NEXT:        hw.output %out_rden, %in, %in_empty : i1, i3, i1
 hw.module @i1Fifo0Loopback(%in: !esi.channel<i3, FIFO0>) -> (out: !esi.channel<i3, FIFO0>) {
   hw.output %in : !esi.channel<i3, FIFO0>
 }
 
 // IFACE-LABEL:  hw.module @fifo0LoopbackTop()
-// IFACE-NEXT:     %data, %empty = esi.unwrap.fifo %chanOutput, %foo.in_ready : !esi.channel<i3, FIFO0>
+// IFACE-NEXT:     %data, %empty = esi.unwrap.fifo %chanOutput, %foo.in_rden : !esi.channel<i3, FIFO0>
 // IFACE-NEXT:     %chanOutput, %rden = esi.wrap.fifo %foo.out, %foo.out_empty : !esi.channel<i3, FIFO0>
-// IFACE-NEXT:     %foo.in_ready, %foo.out, %foo.out_empty = hw.instance "foo" @i1Fifo0Loopback(in: %data: i3, in_empty: %empty: i1, out_rden: %rden: i1) -> (in_ready: i1, out: i3, out_empty: i1)
+// IFACE-NEXT:     %foo.in_rden, %foo.out, %foo.out_empty = hw.instance "foo" @i1Fifo0Loopback(in: %data: i3, in_empty: %empty: i1, out_rden: %rden: i1) -> (in_rden: i1, out: i3, out_empty: i1)
 // HW-LABEL:     hw.module @fifo0LoopbackTop()
-// HW-NEXT:        %foo.in_ready, %foo.out, %foo.out_empty = hw.instance "foo" @i1Fifo0Loopback(in: %foo.out: i3, in_empty: %foo.out_empty: i1, out_rden: %foo.in_ready: i1) -> (in_ready: i1, out: i3, out_empty: i1)
+// HW-NEXT:        %foo.in_rden, %foo.out, %foo.out_empty = hw.instance "foo" @i1Fifo0Loopback(in: %foo.out: i3, in_empty: %foo.out_empty: i1, out_rden: %foo.in_rden: i1) -> (in_rden: i1, out: i3, out_empty: i1)
 hw.module @fifo0LoopbackTop() -> () {
   %chan = hw.instance "foo" @i1Fifo0Loopback(in: %chan: !esi.channel<i3, FIFO0>) -> (out: !esi.channel<i3, FIFO0>)
 }
