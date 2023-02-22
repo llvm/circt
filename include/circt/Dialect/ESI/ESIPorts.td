@@ -16,15 +16,20 @@
 
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/EnumAttr.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 
 
 class ESI_Port<string name> : TypeDef<ESI_Dialect, name> {}
 
+// Standard valid-ready signaling.
 def ChannelSignalingValidReady : I32EnumAttrCase<"ValidReady", 0>;
+// FIFO interface with a read latency of zero. Very similiar to valid-ready, but
+// cannot assert ready if data is not available.
+def ChannelSignalingFIFO0      : I32EnumAttrCase<"FIFO0",      1>;
 def ChannelSignaling : I32EnumAttr<
     "ChannelSignaling",
     "ESI channel wire signaling standard",
-    [ChannelSignalingValidReady]>{
+    [ChannelSignalingValidReady, ChannelSignalingFIFO0]>{
   let cppNamespace = "::circt::esi";
 }
 
@@ -65,7 +70,6 @@ def ChannelType : ESI_Port<"Channel"> {
 // Operations on ports.
 
 def WrapValidReadyOp : ESI_Op<"wrap.vr", [
-    Pure,
     DeclareOpInterfaceMethods<ChannelOpInterface>
   ]> {
   let summary = "Wrap a value into an ESI port";
@@ -79,6 +83,7 @@ def WrapValidReadyOp : ESI_Op<"wrap.vr", [
   let results = (outs ChannelType:$chanOutput, I1:$ready);
   let hasCustomAssemblyFormat = 1;
   let hasFolder = 1;
+  let hasVerifier = 1;
 
   let builders = [
     OpBuilder<(ins "mlir::Value":$data, "mlir::Value":$valid)>
@@ -86,7 +91,6 @@ def WrapValidReadyOp : ESI_Op<"wrap.vr", [
 }
 
 def UnwrapValidReadyOp : ESI_Op<"unwrap.vr", [
-    Pure,
     DeclareOpInterfaceMethods<ChannelOpInterface>
   ]> {
   let summary = "Unwrap a value from an ESI port";
@@ -99,17 +103,54 @@ def UnwrapValidReadyOp : ESI_Op<"unwrap.vr", [
   let arguments = (ins ChannelType:$chanInput, I1:$ready);
   let results = (outs AnyType:$rawOutput, I1:$valid);
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 
   let builders = [
     OpBuilder<(ins "mlir::Value":$inChan, "mlir::Value":$ready)>
   ];
 }
 
+def WrapFIFOOp : ESI_Op<"wrap.fifo", [
+    DeclareOpInterfaceMethods<ChannelOpInterface>
+  ]> {
+  let summary = "Wrap a value into an ESI port with FIFO signaling";
+
+  let arguments = (ins AnyType:$data, I1:$empty);
+  let results = (outs ChannelType:$chanOutput, I1:$rden);
+  let hasCanonicalizeMethod = true;
+  let hasFolder = true;
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    $data `,` $empty attr-dict `:`
+      custom<WrapFIFOType>(type($data), type($chanOutput))
+  }];
+}
+
+def UnwrapFIFOOp : ESI_Op<"unwrap.fifo", [
+    DeclareOpInterfaceMethods<InferTypeOpInterface>,
+    DeclareOpInterfaceMethods<ChannelOpInterface>
+  ]> {
+  let summary = "Unwrap a value from an ESI port into a FIFO interface";
+
+  let arguments = (ins ChannelType:$chanInput, I1:$rden);
+  let results = (outs AnyType:$data, I1:$empty);
+  let hasCanonicalizeMethod = true;
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    $chanInput `,` $rden attr-dict `:` qualified(type($chanInput))
+  }];
+
+  let extraClassDeclaration = [{
+    static LogicalResult mergeAndErase(UnwrapFIFOOp, WrapFIFOOp, PatternRewriter&);
+  }];
+}
+
 def ModportType:
   Type<CPred<"$_self.isa<::circt::sv::ModportType>()">, "sv.interface">;
 
 def WrapSVInterfaceOp: ESI_Op<"wrap.iface", [
-    Pure,
     DeclareOpInterfaceMethods<ChannelOpInterface>
   ]> {
   let summary = "Wrap an SV interface into an ESI port";

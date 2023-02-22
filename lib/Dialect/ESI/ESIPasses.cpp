@@ -451,17 +451,506 @@ void ESIToPhysicalPass::runOnOperation() {
 // Lower ESI ports pass.
 //===----------------------------------------------------------------------===//
 
+/// Return a attribute with the specified suffix appended.
+static StringAttr appendToRtlName(StringAttr base, Twine suffix) {
+  auto *context = base.getContext();
+  return StringAttr::get(context, base.getValue() + suffix);
+}
+
 namespace {
-/// Convert all the ESI ports on modules to some lower construct. SV interfaces
-/// for now on external modules, ready/valid to modules defined internally. In
-/// the future, it may be possible to select a different format.
+class SignalingStandard;
+
+/// Responsible for: lowering module ports, updating the module body, and
+/// updating said modules instances.
+class ChannelRewriter {
+public:
+  ChannelRewriter(hw::HWMutableModuleLike mod)
+      : mod(mod), body(nullptr), foundEsiPorts(false) {
+    if (mod->getNumRegions() == 1 && mod->getRegion(0).hasOneBlock())
+      body = &mod->getRegion(0).front();
+  }
+
+  /// Convert all input and output ChannelTypes into the specified wire-level
+  /// signaling standard. Try not to change the order and materialize ops in
+  /// reasonably intuitive locations. Will modify the module and body only if
+  /// one exists.
+  LogicalResult rewriteChannelsOnModule();
+
+  /// Update an instance pointing to this module. Uses the bookkeeping
+  /// information stored in this class to ease the update instead of recreating
+  /// the algorithm which did the mapping initially.
+  void updateInstance(InstanceOp inst);
+
+  hw::HWMutableModuleLike getModule() const { return mod; }
+  Block *getBody() const { return body; }
+
+  /// These two methods take care of allocating new ports in the correct place
+  /// based on the position of 'origPort'. The new port is based on the original
+  /// name and suffix. The specification for the new port is given by `newPort`
+  /// and is recorded internally. Any changes to 'newPort' after calling this
+  /// will not be reflected in the modules new port list.
+  Value createNewInput(PortInfo origPort, Twine suffix, Type type,
+                       PortInfo &newPort);
+  /// Same as above. 'output' is the value fed into the new port and is required
+  /// if 'body' is non-null. Important note: cannot be a backedge which gets
+  /// replaced since this isn't attached to an op until later in the pass.
+  void createNewOutput(PortInfo origPort, Twine suffix, Type type, Value output,
+                       PortInfo &newPort);
+
+private:
+  hw::HWMutableModuleLike mod;
+  // If the module has a block and it wants to be modified, this'll be non-null.
+  Block *body;
+  // Did we find an ESI port?
+  bool foundEsiPorts;
+  // Keep around a reference to the specific signaling standard classes to
+  // facilitate updating the instance ops. Indexed by the original port
+  // location.
+  SmallVector<std::unique_ptr<SignalingStandard>> loweredInputs;
+  SmallVector<std::unique_ptr<SignalingStandard>> loweredOutputs;
+
+  // Tracking information to modify the module. Populated by the
+  // 'createNew(Input|Output)' methods. Not needed by `updateInstance`, so we
+  // can clear them once the module ports have been modified. Default length is
+  // 0 to save memory since we'll be keeping this around for later use.
+  SmallVector<std::pair<unsigned, PortInfo>, 0> newInputs;
+  SmallVector<std::pair<unsigned, PortInfo>, 0> newOutputs;
+  SmallVector<Value, 0> newOutputValues;
+};
+
+/// Base class for the signaling standard of a particular port. Abstracts the
+/// details of a particular signaling standard from the port layout. Subclasses
+/// keep around port mapping information to use when updating instances.
+class SignalingStandard {
+public:
+  SignalingStandard(ChannelRewriter &rewriter, PortInfo origPort)
+      : rewriter(rewriter), body(rewriter.getBody()), origPort(origPort) {}
+  virtual ~SignalingStandard() = default;
+
+  // Lower the specified (possibly high-level ESI) port into a wire-level
+  // signaling protocol. The two virtual methods 'build*Signals' should be
+  // overridden by subclasses. They should use the 'create*' methods in
+  // 'ChannelRewriter' to create the necessary ports.
+  void lowerPort() {
+    if (origPort.direction == PortDirection::OUTPUT)
+      buildOutputSignals();
+    else
+      buildInputSignals();
+  }
+
+  /// Update an instance port to the new port information. Also adds the proper
+  /// ESI ops to map the channel to the wire signaling standard. These get
+  /// lowered away in a later pass.
+  virtual void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                               SmallVectorImpl<Value> &newOperands,
+                               ArrayRef<Backedge> newResults) = 0;
+  virtual void mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                                SmallVectorImpl<Value> &newOperands,
+                                ArrayRef<Backedge> newResults) = 0;
+
+protected:
+  virtual void buildInputSignals() = 0;
+  virtual void buildOutputSignals() = 0;
+
+  ChannelRewriter &rewriter;
+  Block *body;
+  PortInfo origPort;
+
+  hw::HWMutableModuleLike getModule() { return rewriter.getModule(); }
+  MLIRContext *getContext() { return getModule()->getContext(); }
+};
+
+/// We consider non-ESI ports to be ad-hoc signaling or 'raw wires'. (Which
+/// counts as a signaling protocol if one squints pretty hard). We mostly do
+/// this since it allows us a more consistent internal API.
+class RawWires : public SignalingStandard {
+public:
+  using SignalingStandard::SignalingStandard;
+
+  void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                       SmallVectorImpl<Value> &newOperands,
+                       ArrayRef<Backedge> newResults) override {
+    newOperands[newPort.argNum] = instValue;
+  }
+  void mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                        SmallVectorImpl<Value> &newOperands,
+                        ArrayRef<Backedge> newResults) override {
+    instValue.replaceAllUsesWith(newResults[newPort.argNum]);
+  }
+
+private:
+  void buildInputSignals() override {
+    Value newValue =
+        rewriter.createNewInput(origPort, "", origPort.type, newPort);
+    if (body)
+      body->getArgument(origPort.argNum).replaceAllUsesWith(newValue);
+  }
+
+  void buildOutputSignals() override {
+    Value output;
+    if (body)
+      output = body->getTerminator()->getOperand(origPort.argNum);
+    rewriter.createNewOutput(origPort, "", origPort.type, output, newPort);
+  }
+
+  // Track where the new port location.
+  PortInfo newPort;
+};
+
+/// Implement the Valid/Ready signaling standard.
+class ValidReady : public SignalingStandard {
+public:
+  using SignalingStandard::SignalingStandard;
+
+  void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                       SmallVectorImpl<Value> &newOperands,
+                       ArrayRef<Backedge> newResults) override;
+  void mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                        SmallVectorImpl<Value> &newOperands,
+                        ArrayRef<Backedge> newResults) override;
+
+private:
+  void buildInputSignals() override;
+  void buildOutputSignals() override;
+
+  // Keep around information about the port numbers of the relevant ports and
+  // use that later to update the instances.
+  PortInfo dataPort;
+  PortInfo validPort;
+  PortInfo readyPort;
+};
+
+/// Implement the FIFO signaling standard.
+class FIFO : public SignalingStandard {
+public:
+  using SignalingStandard::SignalingStandard;
+
+  void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                       SmallVectorImpl<Value> &newOperands,
+                       ArrayRef<Backedge> newResults) override;
+  void mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                        SmallVectorImpl<Value> &newOperands,
+                        ArrayRef<Backedge> newResults) override;
+
+private:
+  void buildInputSignals() override;
+  void buildOutputSignals() override;
+
+  // Keep around information about the port numbers of the relevant ports and
+  // use that later to update the instances.
+  PortInfo dataPort;
+  PortInfo rdenPort;
+  PortInfo emptyPort;
+};
+} // namespace
+
+Value ChannelRewriter::createNewInput(PortInfo origPort, Twine suffix,
+                                      Type type, PortInfo &newPort) {
+  newPort = PortInfo{appendToRtlName(origPort.name, suffix),
+                     PortDirection::INPUT,
+                     type,
+                     newInputs.size(),
+                     {},
+                     origPort.loc};
+  newInputs.emplace_back(0, newPort);
+
+  if (!body)
+    return {};
+  return body->addArgument(type, origPort.loc);
+}
+
+void ChannelRewriter::createNewOutput(PortInfo origPort, Twine suffix,
+                                      Type type, Value output,
+                                      PortInfo &newPort) {
+  newPort = PortInfo{appendToRtlName(origPort.name, suffix),
+                     PortDirection::OUTPUT,
+                     type,
+                     newOutputs.size(),
+                     {},
+                     origPort.loc};
+  newOutputs.emplace_back(0, newPort);
+
+  if (!body)
+    return;
+  newOutputValues.push_back(output);
+}
+
+LogicalResult ChannelRewriter::rewriteChannelsOnModule() {
+  // Build ops in the module.
+  ModulePortInfo ports = mod.getPorts();
+
+  // Determine and create a `SignalingStandard` for said port.
+  auto createLowering = [&](PortInfo port) -> LogicalResult {
+    auto &loweredPorts = port.direction == PortDirection::OUTPUT
+                             ? loweredOutputs
+                             : loweredInputs;
+
+    auto chanTy = port.type.dyn_cast<ChannelType>();
+    if (!chanTy) {
+      loweredPorts.emplace_back(new RawWires(*this, port));
+    } else {
+      // Mark this as a module which needs port lowering.
+      foundEsiPorts = true;
+
+      // Determine which ESI signaling standard is specified.
+      ChannelSignaling signaling = chanTy.getSignaling();
+      if (signaling == ChannelSignaling::ValidReady) {
+        loweredPorts.emplace_back(new ValidReady(*this, port));
+      } else if (signaling == ChannelSignaling::FIFO0) {
+        loweredPorts.emplace_back(new FIFO(*this, port));
+      } else {
+        auto error =
+            mod.emitOpError("encountered unknown signaling standard on port '")
+            << stringifyEnum(signaling) << "'";
+        error.attachNote(port.loc);
+        return error;
+      }
+    }
+    return success();
+  };
+
+  // Find the ESI ports and decide the signaling standard.
+  for (PortInfo port : ports.inputs)
+    if (failed(createLowering(port)))
+      return failure();
+  for (PortInfo port : ports.outputs)
+    if (failed(createLowering(port)))
+      return failure();
+
+  // Bail early if we didn't find any.
+  if (!foundEsiPorts) {
+    // Memory optimization.
+    loweredInputs.clear();
+    loweredOutputs.clear();
+    return success();
+  }
+
+  // Lower the ESI ports -- this mutates the body directly and builds the port
+  // lists.
+  for (auto &lowering : loweredInputs)
+    lowering->lowerPort();
+  for (auto &lowering : loweredOutputs)
+    lowering->lowerPort();
+
+  // Set up vectors to erase _all_ the ports. It's easier to rebuild everything
+  // (including the non-ESI ports) than reason about interleaving the newly
+  // lowered ESI ports with the non-ESI ports. Also, the 'modifyPorts' method
+  // ends up rebuilding the port lists anyway, so this isn't nearly as expensive
+  // as it may seem.
+  SmallVector<unsigned> inputsToErase;
+  for (size_t i = 0, e = mod.getNumInputs(); i < e; ++i)
+    inputsToErase.push_back(i);
+  SmallVector<unsigned> outputsToErase;
+  for (size_t i = 0, e = mod.getNumOutputs(); i < e; ++i)
+    outputsToErase.push_back(i);
+
+  mod.modifyPorts(newInputs, newOutputs, inputsToErase, outputsToErase);
+
+  if (!body)
+    return success();
+
+  // We should only erase the original arguments. New ones were appended with
+  // the `createInput` method call.
+  body->eraseArguments([&ports](BlockArgument arg) {
+    return arg.getArgNumber() < ports.inputs.size();
+  });
+  // Set the new operands, overwriting the old ones.
+  body->getTerminator()->setOperands(newOutputValues);
+
+  // Memory optimization -- we don't need these anymore.
+  newInputs.clear();
+  newOutputs.clear();
+  newOutputValues.clear();
+  return success();
+}
+
+void ValidReady::buildInputSignals() {
+  Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
+  auto chanTy = origPort.type.cast<ChannelType>();
+
+  // When we find one, add a data and valid signal to the new args.
+  Value data =
+      rewriter.createNewInput(origPort, "", chanTy.getInner(), dataPort);
+  Value valid = rewriter.createNewInput(origPort, "_valid", i1, validPort);
+
+  Value ready;
+  if (body) {
+    ImplicitLocOpBuilder b(origPort.loc, body, body->begin());
+    // Build the ESI wrap operation to translate the lowered signals to what
+    // they were. (A later pass takes care of eliminating the ESI ops.)
+    auto wrap = b.create<WrapValidReadyOp>(data, valid);
+    ready = wrap.getReady();
+    // Replace uses of the old ESI port argument with the new one from the
+    // wrap.
+    body->getArgument(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
+  }
+
+  rewriter.createNewOutput(origPort, "_ready", i1, ready, readyPort);
+}
+
+void ValidReady::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                                 SmallVectorImpl<Value> &newOperands,
+                                 ArrayRef<Backedge> newResults) {
+  auto unwrap = b.create<UnwrapValidReadyOp>(inst->getLoc(),
+                                             inst->getOperand(origPort.argNum),
+                                             newResults[readyPort.argNum]);
+  newOperands[dataPort.argNum] = unwrap.getRawOutput();
+  newOperands[validPort.argNum] = unwrap.getValid();
+}
+
+void ValidReady::buildOutputSignals() {
+  Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
+  auto chanTy = origPort.type.cast<ChannelType>();
+
+  Value ready = rewriter.createNewInput(origPort, "_ready", i1, readyPort);
+  Value data, valid;
+  if (body) {
+    auto *terminator = body->getTerminator();
+    ImplicitLocOpBuilder b(origPort.loc, terminator);
+
+    auto unwrap = b.create<UnwrapValidReadyOp>(
+        terminator->getOperand(origPort.argNum), ready);
+    data = unwrap.getRawOutput();
+    valid = unwrap.getValid();
+  }
+
+  // New outputs.
+  rewriter.createNewOutput(origPort, "", chanTy.getInner(), data, dataPort);
+  rewriter.createNewOutput(origPort, "_valid", i1, valid, validPort);
+}
+
+void ValidReady::mapOutputSignals(OpBuilder &b, Operation *inst,
+                                  Value instValue,
+                                  SmallVectorImpl<Value> &newOperands,
+                                  ArrayRef<Backedge> newResults) {
+  auto wrap =
+      b.create<WrapValidReadyOp>(inst->getLoc(), newResults[dataPort.argNum],
+                                 newResults[validPort.argNum]);
+  inst->getResult(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
+  newOperands[readyPort.argNum] = wrap.getReady();
+}
+
+void FIFO::buildInputSignals() {
+  Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
+  auto chanTy = origPort.type.cast<ChannelType>();
+
+  // When we find one, add a data and valid signal to the new args.
+  Value data =
+      rewriter.createNewInput(origPort, "", chanTy.getInner(), dataPort);
+  Value empty = rewriter.createNewInput(origPort, "_empty", i1, emptyPort);
+
+  Value rden;
+  if (body) {
+    ImplicitLocOpBuilder b(origPort.loc, body, body->begin());
+    // Build the ESI wrap operation to translate the lowered signals to what
+    // they were. (A later pass takes care of eliminating the ESI ops.)
+    auto wrap = b.create<WrapFIFOOp>(ArrayRef<Type>({chanTy, b.getI1Type()}),
+                                     data, empty);
+    rden = wrap.getRden();
+    // Replace uses of the old ESI port argument with the new one from the
+    // wrap.
+    body->getArgument(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
+  }
+
+  rewriter.createNewOutput(origPort, "_ready", i1, rden, rdenPort);
+}
+
+void FIFO::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                           SmallVectorImpl<Value> &newOperands,
+                           ArrayRef<Backedge> newResults) {
+  auto unwrap =
+      b.create<UnwrapFIFOOp>(inst->getLoc(), inst->getOperand(origPort.argNum),
+                             newResults[rdenPort.argNum]);
+  newOperands[dataPort.argNum] = unwrap.getData();
+  newOperands[emptyPort.argNum] = unwrap.getEmpty();
+}
+
+void FIFO::buildOutputSignals() {
+  Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
+  auto chanTy = origPort.type.cast<ChannelType>();
+
+  Value rden = rewriter.createNewInput(origPort, "_rden", i1, rdenPort);
+  Value data, empty;
+  if (body) {
+    auto *terminator = body->getTerminator();
+    ImplicitLocOpBuilder b(origPort.loc, terminator);
+
+    auto unwrap =
+        b.create<UnwrapFIFOOp>(terminator->getOperand(origPort.argNum), rden);
+    data = unwrap.getData();
+    empty = unwrap.getEmpty();
+  }
+
+  // New outputs.
+  rewriter.createNewOutput(origPort, "", chanTy.getInner(), data, dataPort);
+  rewriter.createNewOutput(origPort, "_empty", i1, empty, emptyPort);
+}
+
+void FIFO::mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                            SmallVectorImpl<Value> &newOperands,
+                            ArrayRef<Backedge> newResults) {
+  auto wrap = b.create<WrapFIFOOp>(
+      inst->getLoc(), ArrayRef<Type>({origPort.type, b.getI1Type()}),
+      newResults[dataPort.argNum], newResults[emptyPort.argNum]);
+  inst->getResult(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
+  newOperands[rdenPort.argNum] = wrap.getRden();
+}
+
+/// Update an instance of an updated module by adding `esi.[un]wrap.vr`
+/// ops around the instance. Lowering or folding away `[un]wrap` ops is
+/// another pass.
+void ChannelRewriter::updateInstance(InstanceOp inst) {
+  if (!foundEsiPorts)
+    return;
+
+  ImplicitLocOpBuilder b(inst.getLoc(), inst);
+  BackedgeBuilder beb(b, inst.getLoc());
+  ModulePortInfo ports = mod.getPorts();
+
+  // Create backedges for the future instance results so the signal mappers can
+  // use the future results as values.
+  SmallVector<Backedge> newResults;
+  for (PortInfo outputPort : ports.outputs)
+    newResults.push_back(beb.get(outputPort.type));
+
+  // Map the operands.
+  SmallVector<Value> newOperands(ports.inputs.size(), {});
+  for (size_t oldOpIdx = 0, e = inst.getNumOperands(); oldOpIdx < e; ++oldOpIdx)
+    loweredInputs[oldOpIdx]->mapInputSignals(
+        b, inst, inst->getOperand(oldOpIdx), newOperands, newResults);
+
+  // Map the results.
+  for (size_t oldResIdx = 0, e = inst.getNumResults(); oldResIdx < e;
+       ++oldResIdx)
+    loweredOutputs[oldResIdx]->mapOutputSignals(
+        b, inst, inst->getResult(oldResIdx), newOperands, newResults);
+
+  // Clone the instance. We cannot just modifiy the existing one since the
+  // result types might have changed types and number of them.
+  assert(llvm::none_of(newOperands, [](Value v) { return !v; }));
+  b.setInsertionPointAfter(inst);
+  auto newInst =
+      b.create<InstanceOp>(mod, inst.getInstanceNameAttr(), newOperands,
+                           inst.getParameters(), inst.getInnerSymAttr());
+  newInst->setDialectAttrs(inst->getDialectAttrs());
+
+  // Assign the backedges to the new results.
+  for (auto [idx, be] : llvm::enumerate(newResults))
+    be.setValue(newInst.getResult(idx));
+
+  // Erase the old instance.
+  inst.erase();
+}
+
+namespace {
+/// Convert all the ESI ports on modules to some lower construct. SV
+/// interfaces for now on external modules, ready/valid to modules defined
+/// internally. In the future, it may be possible to select a different
+/// format.
 struct ESIPortsPass : public LowerESIPortsBase<ESIPortsPass> {
   void runOnOperation() override;
 
 private:
-  bool updateFunc(HWMutableModuleLike mod);
-  void updateInstance(HWMutableModuleLike mod, InstanceOp inst);
-
   bool updateFunc(HWModuleExternOp mod);
   void updateInstance(HWModuleExternOp mod, InstanceOp inst);
   ESIHWBuilder *build;
@@ -474,293 +963,48 @@ void ESIPortsPass::runOnOperation() {
   ESIHWBuilder b(top);
   build = &b;
 
-  // Find all externmodules and try to modify them. Remember the modified ones.
-  DenseMap<StringRef, HWModuleExternOp> externModsMutated;
+  // Find all externmodules and try to modify them. Remember the modified
+  // ones.
+  DenseMap<SymbolRefAttr, HWModuleExternOp> externModsMutated;
   for (auto mod : top.getOps<HWModuleExternOp>())
     if (mod->hasAttrOfType<UnitAttr>(extModBundleSignalsAttrName) &&
         updateFunc(mod))
-      externModsMutated[mod.getName()] = mod;
+      externModsMutated[FlatSymbolRefAttr::get(mod)] = mod;
 
   // Find all instances and update them.
   top.walk([&externModsMutated, this](InstanceOp inst) {
-    auto mapIter = externModsMutated.find(inst.getModuleName());
+    auto mapIter = externModsMutated.find(inst.getModuleNameAttr());
     if (mapIter != externModsMutated.end())
       updateInstance(mapIter->second, inst);
   });
 
   // Find all modules and try to modify them to have wires with valid/ready
   // semantics. Remember the modified ones.
-  DenseMap<SymbolRefAttr, HWMutableModuleLike> modsMutated;
-  for (auto mod : top.getOps<HWMutableModuleLike>())
-    if (updateFunc(mod))
-      modsMutated[FlatSymbolRefAttr::get(mod)] = mod;
+  DenseMap<SymbolRefAttr, ChannelRewriter> modsMutated;
+  for (auto mod : top.getOps<HWMutableModuleLike>()) {
+    auto modSym = FlatSymbolRefAttr::get(mod);
+    if (externModsMutated.find(modSym) != externModsMutated.end())
+      continue;
+    auto [entry, emplaced] = modsMutated.try_emplace(modSym, mod);
+    if (!emplaced) {
+      auto error = mod.emitOpError("Detected duplicate symbol on module: ")
+                   << modSym;
+      error.attachNote(entry->second.getModule().getLoc());
+      signalPassFailure();
+      continue;
+    }
+    if (failed(entry->second.rewriteChannelsOnModule()))
+      signalPassFailure();
+  }
 
   // Find all instances and update them.
-  top.walk([&modsMutated, this](InstanceOp inst) {
+  top.walk([&modsMutated](InstanceOp inst) {
     auto mapIter = modsMutated.find(inst.getModuleNameAttr());
     if (mapIter != modsMutated.end())
-      updateInstance(mapIter->second, inst);
+      mapIter->second.updateInstance(inst);
   });
 
   build = nullptr;
-}
-
-/// Return a attribute with the specified suffix appended.
-static StringAttr appendToRtlName(StringAttr base, StringRef suffix) {
-  auto *context = base.getContext();
-  return StringAttr::get(context, base.getValue().str() + suffix.str());
-}
-
-/// Convert all input and output ChannelTypes into valid/ready wires. Try not to
-/// change the order and materialize ops in reasonably intuitive locations. Will
-/// modify the body only if one exists.
-bool ESIPortsPass::updateFunc(HWMutableModuleLike mod) {
-  Block *body = nullptr;
-  if (mod->getNumRegions() == 1 && mod->getRegion(0).getBlocks().size() == 1)
-    body = &mod->getRegion(0).front();
-
-  // Build ops in the module.
-  ImplicitLocOpBuilder modBuilder(mod.getLoc(), mod);
-  Type i1 = modBuilder.getI1Type();
-  if (body)
-    modBuilder.setInsertionPointToStart(body);
-
-  ModulePortInfo ports = mod.getPorts();
-  bool updated = false;
-
-  // Reconstruct the list of operand types, changing the type whenever an ESI
-  // port is found. Keep the argument attributes, apply the ESI ports attributes
-  // to the data port only.
-  SmallVector<Type, 16> newArgTypes;
-
-  // 'Ready' signals are outputs. Remember them for later when we deal with the
-  // returns.
-  SmallVector<std::tuple<Value, PortInfo>, 8> newReadySignals;
-  SmallVector<std::pair<unsigned, PortInfo>> inputsToInsert;
-  SmallVector<unsigned> inputsToErase;
-
-  for (size_t argNum = 0, e = ports.inputs.size(), blockArgNum = 0; argNum < e;
-       ++argNum, ++blockArgNum) {
-    PortInfo &port = ports.inputs[argNum];
-
-    auto chanTy = port.type.dyn_cast<ChannelType>();
-    if (!chanTy)
-      // If not ESI, pass through.
-      continue;
-
-    // When we find one, add a data and valid signal to the new args.
-    PortInfo dataPort = {
-        port.name, PortDirection::INPUT, chanTy.getInner(), ~0U, {}, port.loc};
-    inputsToInsert.emplace_back(argNum, dataPort);
-
-    PortInfo validPort = {appendToRtlName(port.name, "_valid"),
-                          PortDirection::INPUT,
-                          i1,
-                          ~0U,
-                          {},
-                          port.loc};
-    inputsToInsert.emplace_back(argNum, validPort);
-
-    Value data, valid;
-    if (body) {
-      valid = body->insertArgument(blockArgNum, i1, port.loc);
-      data = body->insertArgument(blockArgNum, chanTy.getInner(), port.loc);
-      blockArgNum += 2;
-    }
-
-    // And add the corresponding output ready signal.
-    PortInfo readyPort = {appendToRtlName(port.name, "_ready"),
-                          PortDirection::OUTPUT,
-                          i1,
-                          ~0U,
-                          {},
-                          port.loc};
-
-    Value ready;
-    if (body) {
-      // Build the ESI wrap operation to translate the lowered signals to what
-      // they were. (A later pass takes care of eliminating the ESI ops.)
-      auto wrap = modBuilder.create<WrapValidReadyOp>(data, valid);
-      ready = wrap.getReady();
-      // Replace uses of the old ESI port argument with the new one from the
-      // wrap.
-      body->getArgument(blockArgNum).replaceAllUsesWith(wrap.getChanOutput());
-      // Delete the ESI port block argument.
-      body->eraseArgument(blockArgNum);
-      --blockArgNum;
-    }
-    newReadySignals.emplace_back(ready, readyPort);
-
-    inputsToErase.push_back(argNum);
-    updated = true;
-  }
-
-  // Iterate through the outputs, appending to all of the next three lists.
-  // Lower the ESI ports.
-  SmallVector<std::pair<unsigned, PortInfo>> outputsToInsert;
-  SmallVector<unsigned> outputsToErase;
-  SmallVector<Value, 8> newOutputOperands;
-  unsigned oldNumInputs = ports.inputs.size();
-
-  Operation *outOp = nullptr;
-  if (body) {
-    outOp = body->getTerminator();
-    modBuilder.setInsertionPoint(outOp);
-  }
-  for (size_t resNum = 0, numRes = ports.outputs.size(); resNum < numRes;
-       ++resNum) {
-    PortInfo &port = ports.outputs[resNum];
-    auto chanTy = port.type.dyn_cast<ChannelType>();
-    Value oldOutputValue;
-    if (outOp)
-      oldOutputValue = outOp->getOperand(resNum);
-    if (!chanTy) {
-      // If not ESI, pass through.
-      newOutputOperands.push_back(oldOutputValue);
-      continue;
-    }
-
-    // Lower the output, adding ready signals directly to the arg list.
-    Value ready;
-    if (body) {
-      ready = body->addArgument(i1, port.loc); // Ready block arg.
-      auto unwrap =
-          modBuilder.create<UnwrapValidReadyOp>(oldOutputValue, ready);
-      newOutputOperands.push_back(unwrap.getRawOutput());
-      newOutputOperands.push_back(unwrap.getValid());
-    }
-    // New outputs.
-    // When we find one, add a data and valid signal to the new args.
-    PortInfo dataPort = {
-        port.name, PortDirection::OUTPUT, chanTy.getInner(), ~0U, {}, port.loc};
-    outputsToInsert.emplace_back(resNum, dataPort);
-
-    PortInfo validPort = {appendToRtlName(port.name, "_valid"),
-                          PortDirection::OUTPUT,
-                          i1,
-                          ~0U,
-                          {},
-                          port.loc};
-    outputsToInsert.emplace_back(resNum, validPort);
-
-    // New 'ready' input port.
-    PortInfo readyPort = {appendToRtlName(port.name, "_ready"),
-                          PortDirection::INPUT,
-                          i1,
-                          ~0U,
-                          {},
-                          port.loc};
-    inputsToInsert.emplace_back(oldNumInputs, readyPort);
-
-    outputsToErase.push_back(resNum);
-    updated = true;
-  }
-
-  // Append the ready list signals we remembered above.
-  unsigned oldNumOutputs = ports.outputs.size();
-  for (auto [value, port] : newReadySignals) {
-    if (body)
-      newOutputOperands.push_back(value);
-    outputsToInsert.emplace_back(oldNumOutputs, port);
-  }
-
-  if (!updated)
-    return false;
-
-  // A new set of output values is needed.
-  if (outOp)
-    outOp->setOperands(newOutputOperands);
-  mod.modifyPorts(inputsToInsert, outputsToInsert, inputsToErase,
-                  outputsToErase);
-  return true;
-}
-
-/// Update an instance of an updated module by adding `esi.[un]wrap.vr`
-/// ops around the instance. Lowering or folding away `[un]wrap` ops is another
-/// pass.
-void ESIPortsPass::updateInstance(HWMutableModuleLike mod, InstanceOp inst) {
-  ImplicitLocOpBuilder b(inst.getLoc(), inst);
-  BackedgeBuilder beb(b, inst.getLoc());
-  Type i1 = b.getI1Type();
-
-  // -----
-  // Lower the operands.
-
-  SmallVector<Value, 16> newOperands;
-  // Store the 'ready' operands from the unwrap as a list of backedges. This
-  // doubles as a count of `i1`s to append to the existing results.
-  SmallVector<Backedge, 8> inputReadysToConnect;
-  for (auto operand : inst.getOperands()) {
-    if (!operand.getType().isa<ChannelType>()) {
-      newOperands.push_back(operand);
-      continue;
-    }
-
-    auto ready = beb.get(i1);
-    inputReadysToConnect.push_back(ready);
-    auto unwrap = b.create<UnwrapValidReadyOp>(operand, ready);
-    newOperands.push_back(unwrap.getRawOutput());
-    newOperands.push_back(unwrap.getValid());
-  }
-
-  // -----
-  // Lower the result types.
-
-  SmallVector<Type, 16> resTypes;
-  // Backedges which we add as operands to be used later when we build the
-  // 'wrap' ops.
-  SmallVector<Backedge, 8> outputReadysToConnect;
-  for (auto resTy : inst.getResultTypes()) {
-    auto cpTy = resTy.dyn_cast<ChannelType>();
-    if (!cpTy) {
-      resTypes.push_back(resTy);
-      continue;
-    }
-    resTypes.push_back(cpTy.getInner());
-    resTypes.push_back(i1);
-    Backedge ready = beb.get(i1);
-    newOperands.push_back(ready);
-    outputReadysToConnect.push_back(ready);
-  }
-  resTypes.append(inputReadysToConnect.size(), i1);
-
-  // -----
-  // Clone the instance.
-  b.setInsertionPointAfter(inst);
-  auto newInst =
-      b.create<InstanceOp>(mod, inst.getInstanceNameAttr(), newOperands,
-                           inst.getParameters(), inst.getInnerSymAttr());
-
-  // -----
-  // Wrap the results back into ESI channels and connect up all the ready
-  // signals.
-
-  size_t newInstResNum = 0;
-  size_t readyIdx = 0;
-  for (auto res : inst.getResults()) {
-    auto cpTy = res.getType().dyn_cast<ChannelType>();
-    if (!cpTy) {
-      res.replaceAllUsesWith(newInst.getResult(newInstResNum));
-      newInstResNum++;
-      continue;
-    }
-
-    WrapValidReadyOp wrap;
-    wrap = b.create<WrapValidReadyOp>(newInst.getResult(newInstResNum),
-                                      newInst.getResult(newInstResNum + 1));
-    newInstResNum += 2;
-    res.replaceAllUsesWith(wrap.getChanOutput());
-    outputReadysToConnect[readyIdx].setValue(wrap.getReady());
-    readyIdx++;
-  }
-
-  for (auto inputReady : inputReadysToConnect) {
-    inputReady.setValue(newInst.getResult(newInstResNum));
-    newInstResNum++;
-  }
-
-  // Erase the old instance.
-  inst.erase();
 }
 
 /// Convert all input and output ChannelTypes into SV Interfaces. For inputs,
@@ -790,16 +1034,16 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
       continue;
     }
 
-    // When we find one, construct an interface, and add the 'source' modport to
-    // the type list.
+    // When we find one, construct an interface, and add the 'source' modport
+    // to the type list.
     auto iface = build->getOrConstructInterface(chanTy);
     newArgTypes.push_back(iface.getModportType(ESIHWBuilder::sourceStr));
     updated = true;
   }
 
   // Iterate through the results and append to one of the two below lists. The
-  // first for non-ESI-ports. The second, ports which have been re-located to an
-  // operand.
+  // first for non-ESI-ports. The second, ports which have been re-located to
+  // an operand.
   SmallVector<Type, 8> newResultTypes;
   SmallVector<DictionaryAttr, 4> newResultAttrs;
   auto funcType = mod.getFunctionType();
@@ -989,8 +1233,8 @@ void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
       mod, inst.getInstanceNameAttr(), newOperands, inst.getParameters(),
       inst.getInnerSymAttr());
 
-  // Go through the old list of non-ESI result values, and replace them with the
-  // new non-ESI results.
+  // Go through the old list of non-ESI result values, and replace them with
+  // the new non-ESI results.
   for (size_t resNum = 0, numRes = newResults.size(); resNum < numRes;
        ++resNum) {
     newResults[resNum].replaceAllUsesWith(newInst.getResult(resNum));
@@ -1037,9 +1281,9 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   ArrayAttr stageParams =
       builder.getStageParameterList(rewriter.getUI32IntegerAttr(width));
 
-  // Unwrap the channel. The ready signal is a Value we haven't created yet, so
-  // create a temp value and replace it later. Give this constant an odd-looking
-  // type to make debugging easier.
+  // Unwrap the channel. The ready signal is a Value we haven't created yet,
+  // so create a temp value and replace it later. Give this constant an
+  // odd-looking type to make debugging easier.
   circt::BackedgeBuilder back(rewriter, loc);
   circt::Backedge wrapReady = back.get(rewriter.getI1Type());
   auto unwrap =
@@ -1059,7 +1303,8 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
                                                operands, stageParams);
   auto stageInstResults = stageInst.getResults();
 
-  // Set a_ready (from the unwrap) back edge correctly to its output from stage.
+  // Set a_ready (from the unwrap) back edge correctly to its output from
+  // stage.
   wrapReady.setValue(stageInstResults[0]);
   Value x, xValid;
   x = stageInstResults[1];
@@ -1152,6 +1397,24 @@ public:
       });
     rewriter.replaceOp(wrap, {nullptr, ready});
     rewriter.replaceOp(unwrap, {data, valid});
+    return success();
+  }
+};
+} // anonymous namespace
+
+namespace {
+/// Use the op canonicalizer to lower away the op. Assumes the canonicalizer
+/// deletes the op.
+template <typename Op>
+struct CanonicalizerOpLowering : public OpConversionPattern<Op> {
+public:
+  CanonicalizerOpLowering(MLIRContext *ctxt) : OpConversionPattern<Op>(ctxt) {}
+
+  LogicalResult
+  matchAndRewrite(Op op, typename Op::Adaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    if (failed(Op::canonicalize(op, rewriter)))
+      return rewriter.notifyMatchFailure(op->getLoc(), "canonicalizer failed");
     return success();
   }
 };
@@ -1456,6 +1719,8 @@ void ESItoHWPass::runOnOperation() {
   pass2Target.addIllegalDialect<ESIDialect>();
 
   RewritePatternSet pass2Patterns(ctxt);
+  pass2Patterns.insert<CanonicalizerOpLowering<UnwrapFIFOOp>>(ctxt);
+  pass2Patterns.insert<CanonicalizerOpLowering<WrapFIFOOp>>(ctxt);
   pass2Patterns.insert<RemoveWrapUnwrap>(ctxt);
   pass2Patterns.insert<EncoderLowering>(ctxt);
   pass2Patterns.insert<DecoderLowering>(ctxt);
@@ -1681,8 +1946,8 @@ void ESIEmitCollateralPass::emitServiceJSON() {
   auto outputFileAttr = OutputFileAttr::getFromFilename(ctxt, "services.json");
   verbatim->setAttr("output_file", outputFileAttr);
 
-  // By now, we should be done with all of the service declarations and metadata
-  // ops so we should delete them.
+  // By now, we should be done with all of the service declarations and
+  // metadata ops so we should delete them.
   mod.walk([&](ServiceHierarchyMetadataOp op) { op.erase(); });
   // Track declarations which are still used so that the service impl reqs are
   // still valid.

@@ -19,6 +19,7 @@
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/SymbolTable.h"
 
 using namespace circt;
@@ -134,6 +135,12 @@ void WrapValidReadyOp::build(OpBuilder &b, OperationState &state, Value data,
         b.getI1Type(), data, valid);
 }
 
+LogicalResult WrapValidReadyOp::verify() {
+  if (getChanOutput().getType().getSignaling() != ChannelSignaling::ValidReady)
+    return emitOpError("only supports valid-ready signaling");
+  return success();
+}
+
 ParseResult UnwrapValidReadyOp::parse(OpAsmParser &parser,
                                       OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
@@ -163,6 +170,12 @@ void UnwrapValidReadyOp::print(OpAsmPrinter &p) {
   p << " : " << getRawOutput().getType();
 }
 
+LogicalResult UnwrapValidReadyOp::verify() {
+  if (getChanInput().getType().getSignaling() != ChannelSignaling::ValidReady)
+    return emitOpError("only supports valid-ready signaling");
+  return success();
+}
+
 circt::esi::ChannelType WrapValidReadyOp::channelType() {
   return getChanOutput().getType().cast<circt::esi::ChannelType>();
 }
@@ -175,6 +188,56 @@ void UnwrapValidReadyOp::build(OpBuilder &b, OperationState &state,
 
 circt::esi::ChannelType UnwrapValidReadyOp::channelType() {
   return getChanInput().getType().cast<circt::esi::ChannelType>();
+}
+
+circt::esi::ChannelType WrapFIFOOp::channelType() {
+  return getChanOutput().getType().cast<circt::esi::ChannelType>();
+}
+
+ParseResult parseWrapFIFOType(OpAsmParser &p, Type &dataType,
+                              Type &chanInputType) {
+  auto loc = p.getCurrentLocation();
+  ChannelType chType;
+  if (p.parseType(chType))
+    return failure();
+  if (chType.getSignaling() != ChannelSignaling::FIFO0)
+    return p.emitError(loc, "can only wrap into FIFO type");
+  dataType = chType.getInner();
+  chanInputType = chType;
+  return success();
+}
+
+void printWrapFIFOType(OpAsmPrinter &p, WrapFIFOOp wrap, Type dataType,
+                       Type chanType) {
+  p << chanType;
+}
+
+LogicalResult WrapFIFOOp::verify() {
+  if (getChanOutput().getType().getSignaling() != ChannelSignaling::FIFO0)
+    return emitOpError("only supports FIFO signaling");
+  return success();
+}
+
+circt::esi::ChannelType UnwrapFIFOOp::channelType() {
+  return getChanInput().getType().cast<circt::esi::ChannelType>();
+}
+
+LogicalResult UnwrapFIFOOp::verify() {
+  if (getChanInput().getType().getSignaling() != ChannelSignaling::FIFO0)
+    return emitOpError("only supports FIFO signaling");
+  return success();
+}
+
+LogicalResult
+UnwrapFIFOOp::inferReturnTypes(MLIRContext *context, std::optional<Location>,
+                               ValueRange operands, DictionaryAttr,
+                               mlir::RegionRange,
+                               SmallVectorImpl<Type> &inferredResulTypes) {
+  inferredResulTypes.push_back(
+      operands[0].getType().cast<ChannelType>().getInner());
+  inferredResulTypes.push_back(
+      IntegerType::get(context, 1, IntegerType::Signless));
+  return success();
 }
 
 /// If 'iface' looks like an ESI interface, return the inner data type.
