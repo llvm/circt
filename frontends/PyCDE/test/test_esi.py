@@ -226,7 +226,9 @@ class PureTest(esi.PureModule):
 
 
 # CHECK-LABEL:  msft.module @FIFOSignalingMod {} (%a: !esi.channel<i32, FIFO0>) -> (x: !esi.channel<i32, FIFO0>)
-# CHECK-NEXT:     msft.output %a : !esi.channel<i32, FIFO0>
+# CHECK-NEXT:     %data, %empty = esi.unwrap.fifo %a, %rden : !esi.channel<i32, FIFO0>
+# CHECK-NEXT:     %chanOutput, %rden = esi.wrap.fifo %data, %empty : !esi.channel<i32, FIFO0>
+# CHECK-NEXT:     msft.output %chanOutput : !esi.channel<i32, FIFO0>
 @unittestmodule(print=True)
 class FIFOSignalingMod(Module):
   a = InputChannel(Bits(32), ChannelSignaling.FIFO0)
@@ -234,4 +236,8 @@ class FIFOSignalingMod(Module):
 
   @generator
   def build(self):
-    self.x = self.a
+    rden_wire = Wire(types.i1)
+    data, empty = self.a.unwrap(rden_wire)
+    chan, rden = self.a.type.wrap(data, empty)
+    rden_wire.assign(rden)
+    self.x = chan

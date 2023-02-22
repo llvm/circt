@@ -509,6 +509,10 @@ class Channel(Type):
   def inner_type(self):
     return _FromCirctType(self._type.inner)
 
+  @property
+  def signaling(self):
+    return self._type.signaling
+
   def _get_value_class(self):
     from .signals import ChannelSignal
     return ChannelSignal
@@ -520,7 +524,8 @@ class Channel(Type):
   def inner(self):
     return self.inner_type
 
-  def wrap(self, value, valid) -> typing.Tuple["ChannelSignal", "BitsSignal"]:
+  def wrap(self, value,
+           valueOrEmpty) -> typing.Tuple["ChannelSignal", "BitsSignal"]:
     """Wrap a data signal and valid signal into a data channel signal and a
     ready signal."""
 
@@ -530,11 +535,20 @@ class Channel(Type):
     # one.
 
     from .dialects import esi
-    value = self.inner_type(value)
-    valid = types.i1(valid)
-    wrap_op = esi.WrapValidReadyOp(self._type, types.i1, value.value,
-                                   valid.value)
-    return wrap_op[0], wrap_op[1]
+    signaling = self.signaling
+    if signaling == ChannelSignaling.ValidReady:
+      value = self.inner_type(value)
+      valid = types.i1(valueOrEmpty)
+      wrap_op = esi.WrapValidReadyOp(self._type, types.i1, value.value,
+                                     valid.value)
+      return wrap_op[0], wrap_op[1]
+    elif signaling == ChannelSignaling.FIFO0:
+      value = self.inner_type(value)
+      empty = types.i1(valueOrEmpty)
+      wrap_op = esi.WrapFIFOOp(self._type, types.i1, value.value, empty.value)
+      return wrap_op[0], wrap_op[1]
+    else:
+      raise TypeError("Unknown signaling standard")
 
 
 def dim(inner_type_or_bitwidth: typing.Union[Type, int],
