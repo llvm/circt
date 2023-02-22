@@ -10,6 +10,7 @@ target_link_libraries(circt-opt
   PRIVATE
   CIRCTAffineToPipeline
   CIRCTAnalysisTestPasses
+  CIRCTArc
   CIRCTCalyx
   CIRCTCalyxToHW
   CIRCTCalyxToFSM
