@@ -425,7 +425,7 @@ def ConvertMooreToCore : Pass<"convert-moore-to-core", "mlir::ModuleOp"> {
 def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "mlir::ModuleOp"> {
   let summary = "Convert LLHD to LLVM";
   let description = [{
-    This pass translates LLHD to LLVM."
+    This pass translates LLHD to LLVM.
   }];
   let constructor = "circt::createConvertLLHDToLLVMPass()";
   let dependentDialects = ["mlir::LLVM::LLVMDialect"];
@@ -438,7 +438,7 @@ def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "mlir::ModuleOp"> {
 def ConvertHWToLLVM : Pass<"convert-hw-to-llvm", "mlir::ModuleOp"> {
   let summary = "Convert HW to LLVM";
   let description = [{
-    This pass translates HW to LLVM."
+    This pass translates HW to LLVM.
   }];
   let constructor = "circt::createConvertHWToLLVMPass()";
   let dependentDialects = ["mlir::LLVM::LLVMDialect"];
@@ -451,7 +451,7 @@ def ConvertHWToLLVM : Pass<"convert-hw-to-llvm", "mlir::ModuleOp"> {
 def ConvertCombToLLVM : Pass<"convert-comb-to-llvm", "mlir::ModuleOp"> {
   let summary = "Convert Comb to LLVM";
   let description = [{
-    This pass translates Comb to LLVM."
+    This pass translates Comb to LLVM.
   }];
   let constructor = "circt::createConvertCombToLLVMPass()";
   let dependentDialects = ["mlir::LLVM::LLVMDialect"];
@@ -548,6 +548,22 @@ def MaximizeSSA : Pass<"maximize-ssa", "::mlir::ModuleOp"> {
     necessary to forward values to the block(s) where they are used.
   }];
   let constructor = "circt::createMaximizeSSAPass()";
+}
+
+//===----------------------------------------------------------------------===//
+// ConvertToArcs
+//===----------------------------------------------------------------------===//
+
+def ConvertToArcs : Pass<"convert-to-arcs", "mlir::ModuleOp"> {
+  let summary = "Outline logic between registers into state transfer arcs";
+  let description = [{
+    This pass outlines combinational logic between registers into state transfer
+    arc definitions. The the original combinational logic and register is
+    replaced with an arc invocation, where the register is now represented as a
+    latency.
+  }];
+  let constructor = "circt::createConvertToArcsPass()";
+  let dependentDialects = ["circt::arc::ArcDialect"];
 }
 
 #endif // CIRCT_CONVERSION_PASSES_TD

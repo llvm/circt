@@ -22,4 +22,14 @@
 #define GET_OP_CLASSES
 #include "circt/Dialect/Arc/Arc.h.inc"
 
+namespace circt {
+namespace arc {
+
+/// Check if an operation causes logic to be split into separate arcs before and
+/// after it.
+bool isArcBreakingOp(Operation *op);
+
+} // namespace arc
+} // namespace circt
+
 #endif // CIRCT_DIALECT_ARC_OPS_H

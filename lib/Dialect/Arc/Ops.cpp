@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Arc/Ops.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/OpImplementation.h"
@@ -15,6 +17,13 @@
 using namespace circt;
 using namespace arc;
 using namespace mlir;
+using mlir::OpTrait::ConstantLike;
+
+bool arc::isArcBreakingOp(Operation *op) {
+  return op->hasTrait<ConstantLike>() ||
+         isa<hw::InstanceOp, seq::CompRegOp, StateOp>(op) ||
+         op->getNumResults() > 1;
+}
 
 //===----------------------------------------------------------------------===//
 // DefineOp

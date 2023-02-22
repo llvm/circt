@@ -7,6 +7,8 @@ add_circt_dialect_library(CIRCTArc
 
   DEPENDS
   MLIRArcIncGen
+  MLIRHWIncGen
+  MLIRSeqIncGen
 
   LINK_COMPONENTS
   Support
