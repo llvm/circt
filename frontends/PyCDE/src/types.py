@@ -498,6 +498,11 @@ class Any(Type):
 class Channel(Type):
   """An ESI channel type."""
 
+  SignalingNames = {
+      ChannelSignaling.ValidReady: "ValidReady",
+      ChannelSignaling.FIFO0: "FIFO0"
+  }
+
   def __new__(cls,
               inner_type: Type,
               signaling: int = ChannelSignaling.ValidReady):
@@ -518,7 +523,8 @@ class Channel(Type):
     return ChannelSignal
 
   def __repr__(self):
-    return f"Channel<{self.inner_type}>"
+    signaling = Channel.SignalingNames[self.signaling]
+    return f"Channel<{self.inner_type}, {signaling}>"
 
   @property
   def inner(self):
