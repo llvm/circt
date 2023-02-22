@@ -546,6 +546,9 @@ static bool extractFromReplicate(ExtractOp op, ReplicateOp replicate,
 LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   auto *inputOp = op.getInput().getDefiningOp();
 
+  // This turns out to be incredibly expensive.  Disable until performance is
+  // addressed.
+#if 0
   // If the extracted bits are all known, then return the result.
   auto knownBits = computeKnownBits(op.getInput())
                        .extractBits(op.getType().cast<IntegerType>().getWidth(),
@@ -555,6 +558,7 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
                                                   knownBits.getConstant());
     return success();
   }
+#endif
 
   // extract(olo, extract(ilo, x)) = extract(olo + ilo, x)
   if (auto innerExtract = dyn_cast_or_null<ExtractOp>(inputOp)) {
