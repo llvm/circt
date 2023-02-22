@@ -8,6 +8,7 @@ from .support import get_user_loc
 
 from .circt import ir, support
 from .circt.dialects import esi, hw, sv
+from .circt.dialects.esi import ChannelSignaling
 
 import typing
 
@@ -497,9 +498,12 @@ class Any(Type):
 class Channel(Type):
   """An ESI channel type."""
 
-  def __new__(cls, inner_type: Type):
-    return super(Channel, cls).__new__(cls,
-                                       esi.ChannelType.get(inner_type._type))
+  def __new__(cls,
+              inner_type: Type,
+              signaling: int = ChannelSignaling.ValidReady):
+    return super(Channel,
+                 cls).__new__(cls,
+                              esi.ChannelType.get(inner_type._type, signaling))
 
   @property
   def inner_type(self):
