@@ -21,4 +21,18 @@ def Dedup : Pass<"arc-dedup", "mlir::ModuleOp"> {
   let dependentDialects = ["arc::ArcDialect"];
 }
 
+def InlineModules : Pass<"arc-inline-modules", "mlir::ModuleOp"> {
+  let summary = "Eagerly inline private modules";
+  let description = [{
+    This pass eagerly inlines private HW modules into their instantiation sites.
+    After outlining combinational logic and registers into arcs, module bodies
+    become fairly lightweight. Since arc definitions now fulfill the purpose of
+    code reuse by allowing a single definition to be called multiple times, the
+    module hierarchy degenerates into a purely cosmetic construct. At that point
+    it is beneficial to fully flatten the module hierarchy to simplify further
+    analysis and optimization of state transfer arcs.
+  }];
+  let constructor = "circt::arc::createInlineModulesPass()";
+}
+
 #endif // CIRCT_DIALECT_ARC_PASSES_TD
