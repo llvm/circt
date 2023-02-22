@@ -21,7 +21,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   r42: !hw.struct<a: !hw.array<1xi1>>, r43: i4,
   r44: !hw.struct<foo: i2, bar: i4>, r45: !hw.struct<foo: i2, bar: i4>,
   r46: !hw.struct<foo: i2, bar: i4>, r47: i1
-  ) {
+  ) attributes {sv.attributes=#sv.attributes<[#sv.attribute<"svAttr">]>} {
 
   %0 = comb.add %a, %b : i4
   %2 = comb.sub %a, %b : i4
@@ -102,7 +102,9 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
     !hw.struct<foo: i2, bar: i4>, !hw.struct<foo: i2, bar: i4>, 
     !hw.struct<foo: i2, bar: i4>, i1
 }
-// CHECK-LABEL: module TESTSIMPLE(
+
+// CHECK-LABEL: (* svAttr *)
+// CHECK-NEXT: module TESTSIMPLE(
 // CHECK-NEXT:      input  [3:0]                                              a,
 // CHECK-NEXT:                                                                b,
 // CHECK-NEXT:      input  [1:0]                                              c,
