@@ -7,6 +7,8 @@ Each but will have a brief description, example code, and the mitigation added
 
 # Inline Array calculations can cause synthesis failures
 
+Some tools have bugs (version dependent) in const prop in this case.
+
 ## Example
 ```
 module Foo (input clock, input in, output [2:0] out);
@@ -28,6 +30,12 @@ Flag added to export verilog to force array index calculations to not be inline.
 https://github.com/llvm/circt/commit/15a1f95f2d59767f20b459a12ac42338de22bc97
 
 # Memory semantics changed by synthesis
+
+Read/Write forwarding behavior is dependent on memory size, since the synthesis 
+tool changes it's mapping based on that.  The "optimized" mapping does not 
+preserve the behavior of the verilog.  This is a known issue reported on various
+forums by multiple people.  There are some version dependencies on when this
+manifests.
 
 ## Example
 ```
