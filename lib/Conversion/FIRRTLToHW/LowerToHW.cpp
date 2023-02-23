@@ -937,19 +937,18 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
     hwPort.type = lowerType(firrtlPort.type);
     if (firrtlPort.sym)
       if (firrtlPort.sym.size() > 1 ||
-          (firrtlPort.sym.size() == 1 && !firrtlPort.sym.getSymName())) {
-        moduleOp->emitError("cannot lower aggregate port `" +
-                            firrtlPort.name.getValue() +
-                            "` with field sensitive symbols, HW dialect does  "
-                            "not support per field symbols yet.");
-        return failure();
-      }
+          (firrtlPort.sym.size() == 1 && !firrtlPort.sym.getSymName()))
+        return emitError(firrtlPort.loc)
+               << "cannot lower aggregate port " << firrtlPort.name
+               << " with field sensitive symbols, HW dialect does not support "
+                  "per field symbols yet.";
     hwPort.sym = firrtlPort.sym;
     bool hadDontTouch = firrtlPort.annotations.removeDontTouch();
     if (hadDontTouch && !hwPort.sym) {
       if (hwPort.type.isInteger(0)) {
-        moduleOp->emitWarning("zero width port ")
-            << hwPort.name << " has dontTouch annotation, removing anyway";
+        mlir::emitWarning(firrtlPort.loc)
+            << "zero width port " << hwPort.name
+            << " has dontTouch annotation, removing anyway";
         continue;
       }
       hwPort.sym = hw::InnerSymAttr::get(StringAttr::get(
@@ -967,8 +966,9 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
     // input, output, or inout.  We don't want these at the HW level.
     if (hwPort.type.isInteger(0)) {
       if (hwPort.sym && !hwPort.sym.empty()) {
-        return moduleOp->emitError("zero width port ")
-               << hwPort.name << " is referenced by name [" << hwPort.sym
+        return mlir::emitError(firrtlPort.loc)
+               << "zero width port " << hwPort.name
+               << " is referenced by name [" << hwPort.sym
                << "] (e.g. in an XMR) but must be removed";
       }
       continue;
