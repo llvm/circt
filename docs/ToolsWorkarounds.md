@@ -67,3 +67,14 @@ Qux:
     m.w.mask <= w.mask
 ```
 Compile with either firtool -repl-seq-mem -repl-seq-mem-file=mem.conf Foo.fir and firrtl -i Foo.fir.
+
+## Workaround
+
+FIRRTL memory lowering has a flag to generate attributes on memory 
+implementations that preserve the behavior described in the verilog.  This is 
+not a general solution, this bug could impact anyone making memory-looking 
+things.  It was decided not to try to reverse engineer the conditions which
+cause the bug to manifest (since they are version dependent), thus there isn't
+a universal fix that can be applied in the generated verilog.
+
+https://github.com/llvm/circt/commit/e9f443be475e0ef796c0c6af1ce09d6e783fcd5a
