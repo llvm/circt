@@ -132,3 +132,11 @@ firrtl.circuit "DTArgZero" {
   firrtl.module @DTArgZero(in %foo :!firrtl.uint<0> [{class = "firrtl.transforms.DontTouchAnnotation"}]) {
   }
 }
+
+// -----
+
+firrtl.circuit "ArgWithFieldSym" {
+  // expected-error @below {{cannot lower aggregate port "foo" with field sensitive symbols, HW dialect does not support per field symbols yet}}
+  firrtl.module @ArgWithFieldSym(in %foo :!firrtl.vector<uint<1>,2> sym [<@x,1,public>]) {
+  }
+}
