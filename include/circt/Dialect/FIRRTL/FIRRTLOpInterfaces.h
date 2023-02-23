@@ -94,6 +94,13 @@ struct PortInfo {
            Location loc, AnnotationSet annos)
       : name(name), type(type), direction(dir), sym(sym), loc(loc),
         annotations(annos) {}
+
+  /// Diagnostic emission helpers.
+  /// Use Port's location if specified, fallback to module's location.
+  InFlightDiagnostic emitError(Location modLoc,
+                               const Twine &message = {}) const;
+  InFlightDiagnostic emitWarning(Location modLoc,
+                                 const Twine &message = {}) const;
 };
 
 /// Verification hook for verifying module like operations.

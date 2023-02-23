@@ -938,7 +938,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
     if (firrtlPort.sym)
       if (firrtlPort.sym.size() > 1 ||
           (firrtlPort.sym.size() == 1 && !firrtlPort.sym.getSymName()))
-        return emitError(firrtlPort.loc)
+        return firrtlPort.emitError(moduleOp->getLoc())
                << "cannot lower aggregate port " << firrtlPort.name
                << " with field sensitive symbols, HW dialect does not support "
                   "per field symbols yet.";
@@ -946,7 +946,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
     bool hadDontTouch = firrtlPort.annotations.removeDontTouch();
     if (hadDontTouch && !hwPort.sym) {
       if (hwPort.type.isInteger(0)) {
-        mlir::emitWarning(firrtlPort.loc)
+        firrtlPort.emitWarning(moduleOp->getLoc())
             << "zero width port " << hwPort.name
             << " has dontTouch annotation, removing anyway";
         continue;
@@ -966,7 +966,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
     // input, output, or inout.  We don't want these at the HW level.
     if (hwPort.type.isInteger(0)) {
       if (hwPort.sym && !hwPort.sym.empty()) {
-        return mlir::emitError(firrtlPort.loc)
+        return firrtlPort.emitError(moduleOp->getLoc())
                << "zero width port " << hwPort.name
                << " is referenced by name [" << hwPort.sym
                << "] (e.g. in an XMR) but must be removed";
