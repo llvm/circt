@@ -137,6 +137,11 @@ struct LoweringOptions {
   /// Some lint tools dislike expressions being inlined into input ports so this
   /// option avoids such warnings.
   bool disallowExpressionInliningInPorts = false;
+
+  /// If true, every expression used as an array index is driven by a wire. Some
+  /// tools, notably Vivado, produce incorrect synthesis results for certain
+  /// arithmetic ops inlined into the array index.
+  bool disallowArrayIndexInlining = false;
 };
 } // namespace circt
 
