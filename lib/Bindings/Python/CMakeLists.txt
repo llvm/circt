@@ -135,7 +135,7 @@ declare_mlir_dialect_python_bindings(
 
 # Bundle our own, self-contained CAPI library with all of our deps.
 add_mlir_python_common_capi_library(CIRCTBindingsPythonCAPI
-  INSTALL_COMPONENT CIRCTBindingsPythonModules
+  INSTALL_COMPONENT CIRCTPythonModules
   INSTALL_DESTINATION python_packages/circt_core/circt/_mlir_libs
   OUTPUT_DIRECTORY "${CIRCT_PYTHON_PACKAGES_DIR}/circt_core/circt/_mlir_libs"
   RELATIVE_INSTALL_ROOT "../../../.."
