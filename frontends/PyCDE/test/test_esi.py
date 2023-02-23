@@ -6,7 +6,7 @@ from pycde import (Clock, Input, InputChannel, OutputChannel, Module, generator,
 from pycde import esi
 from pycde.common import Output
 from pycde.constructs import Wire
-from pycde.types import Channel
+from pycde.types import Bits, Channel, ChannelSignaling
 from pycde.testing import unittestmodule
 from pycde.signals import BitVectorSignal, ChannelSignal
 
@@ -223,3 +223,21 @@ class PureTest(esi.PureModule):
     Consumer(clk=clk, int_in=p.int_out)
     p2 = Producer(clk=clk, instance_name="prod2")
     esi.PureModule.output_port("p2_int", p2.int_out)
+
+
+# CHECK-LABEL:  msft.module @FIFOSignalingMod {} (%a: !esi.channel<i32, FIFO0>) -> (x: !esi.channel<i32, FIFO0>)
+# CHECK-NEXT:     %data, %empty = esi.unwrap.fifo %a, %rden : !esi.channel<i32, FIFO0>
+# CHECK-NEXT:     %chanOutput, %rden = esi.wrap.fifo %data, %empty : !esi.channel<i32, FIFO0>
+# CHECK-NEXT:     msft.output %chanOutput : !esi.channel<i32, FIFO0>
+@unittestmodule(print=True)
+class FIFOSignalingMod(Module):
+  a = InputChannel(Bits(32), ChannelSignaling.FIFO0)
+  x = OutputChannel(Bits(32), ChannelSignaling.FIFO0)
+
+  @generator
+  def build(self):
+    rden_wire = Wire(types.i1)
+    data, empty = self.a.unwrap(rden_wire)
+    chan, rden = self.a.type.wrap(data, empty)
+    rden_wire.assign(rden)
+    self.x = chan

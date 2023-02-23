@@ -59,7 +59,7 @@ class MultiplexerService(esi.ServiceImplementation):
     v = types.i1(0)
     chan, rdy = types.channel(types.i128).wrap(c, v)
     try:
-      # CHECK: Channel type mismatch. Expected Channel<Bits<32>>, got Channel<Bits<128>>.
+      # CHECK: Channel type mismatch. Expected Channel<Bits<32>, ValidReady>, got Channel<Bits<128>, ValidReady>.
       channels.to_client_reqs[0].assign(chan)
     except Exception as e:
       print(e)
