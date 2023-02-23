@@ -43,6 +43,11 @@ jobs:
           fetch-depth: 2
           submodules: "true"
 
+      # We need unshallow CIRCT for later "git describe"
+      - name: Unshallow CIRCT (but not LLVM)
+        run: |
+          git fetch --unshallow --no-recurse-submodules
+
       - name: Setup Ninja Linux
         if: matrix.os == 'linux'
         run: sudo apt-get install ninja-build
