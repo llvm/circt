@@ -1,6 +1,7 @@
 add_circt_dialect_library(CIRCTArcTransforms
   Dedup.cpp
   InlineModules.cpp
+  MakeTables.cpp
   SinkInputs.cpp
   SplitLoops.cpp
 
@@ -10,6 +11,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   LINK_LIBS PUBLIC
   CIRCTArc
   CIRCTHW
+  CIRCTComb
   CIRCTSupport
   MLIRIR
   MLIRPass
