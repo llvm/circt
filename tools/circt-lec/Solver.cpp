@@ -102,8 +102,7 @@ void Solver::printModel() {
                   << "\n";
       } else {
         // Argument of a different operation.
-        lec::dbgs << "<block argument> of type '" << arg.getType()
-                  << "' at index: " << arg.getArgNumber() << "\n";
+        lec::dbgs << arg << "\n";
       }
     }
     // Accompanying model information.
