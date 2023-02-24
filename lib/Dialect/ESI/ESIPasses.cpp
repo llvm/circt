@@ -596,19 +596,18 @@ Value SignalingStandard::buildInputDataPorts() {
   if (!rewriter.shouldFlattenStructs() || !origStruct) {
     dataPorts.push_back({});
     return rewriter.createNewInput(origPort, "", dataPortType, dataPorts[0]);
-  } else {
-    ArrayRef<hw::StructType::FieldInfo> elements = origStruct.getElements();
-    dataPorts.append(elements.size(), {});
-    SmallVector<Value, 16> elementValues;
-    for (auto [idx, element] : llvm::enumerate(elements))
-      elementValues.push_back(
-          rewriter.createNewInput(origPort, "_" + element.name.getValue(),
-                                  element.type, dataPorts[idx]));
-    if (!body)
-      return {};
-    return OpBuilder::atBlockBegin(body).create<hw::StructCreateOp>(
-        origPort.loc, origStruct, elementValues);
   }
+
+  ArrayRef<hw::StructType::FieldInfo> elements = origStruct.getElements();
+  dataPorts.append(elements.size(), {});
+  SmallVector<Value, 16> elementValues;
+  for (auto [idx, element] : llvm::enumerate(elements))
+    elementValues.push_back(rewriter.createNewInput(
+        origPort, "_" + element.name.getValue(), element.type, dataPorts[idx]));
+  if (!body)
+    return {};
+  return OpBuilder::atBlockBegin(body).create<hw::StructCreateOp>(
+      origPort.loc, origStruct, elementValues);
 }
 
 // Map a data value into the new operands for an instance. If the original type
@@ -643,8 +642,7 @@ void SignalingStandard::buildOutputDataPorts(Value data) {
 
   if (!rewriter.shouldFlattenStructs() || !origStruct) {
     dataPorts.push_back({});
-    return rewriter.createNewOutput(origPort, "", dataPortType, data,
-                                    dataPorts[0]);
+    rewriter.createNewOutput(origPort, "", dataPortType, data, dataPorts[0]);
   } else {
     ArrayRef<hw::StructType::FieldInfo> elements = origStruct.getElements();
     dataPorts.append(elements.size(), {});
@@ -673,14 +671,13 @@ Value SignalingStandard::mapOutputDataPorts(OpBuilder &b,
   hw::StructType origStruct =
       chanTy ? dataPortType.dyn_cast<hw::StructType>() : hw::StructType();
 
-  if (!rewriter.shouldFlattenStructs() || !origStruct) {
+  if (!rewriter.shouldFlattenStructs() || !origStruct)
     return newResults[dataPorts[0].argNum];
-  } else {
-    SmallVector<Value, 16> fieldValues;
-    for (auto portInfo : dataPorts)
-      fieldValues.push_back(newResults[portInfo.argNum]);
-    return b.create<hw::StructCreateOp>(origPort.loc, origStruct, fieldValues);
-  }
+
+  SmallVector<Value, 16> fieldValues;
+  for (auto portInfo : dataPorts)
+    fieldValues.push_back(newResults[portInfo.argNum]);
+  return b.create<hw::StructCreateOp>(origPort.loc, origStruct, fieldValues);
 }
 
 /// We consider non-ESI ports to be ad-hoc signaling or 'raw wires'. (Which
