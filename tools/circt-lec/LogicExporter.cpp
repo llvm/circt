@@ -45,7 +45,7 @@ template <class ConcreteOp>
 static inline void
 debugOpResults(mlir::OpTrait::VariadicResults<ConcreteOp> *op) {
   lec::dbgs << "Results:\n";
-  for (const mlir::OpResult result : op->getResults()) {
+  for (mlir::OpResult result : op->getResults()) {
     INDENT();
     lec::dbgs << "#" << result.getResultNumber() << " ";
     debugOpResult(result);
