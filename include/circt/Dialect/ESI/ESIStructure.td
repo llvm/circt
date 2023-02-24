@@ -72,3 +72,19 @@ def ESIPureModuleOutputOp : ESI_Op<"pure_module.output",
   let results = (outs);
   let assemblyFormat = [{ $name `,` $value attr-dict `:` type($value) }];
 }
+
+def ESIPureModuleParamOp : ESI_Op<"pure_module.param",
+      [HasParent<"ESIPureModuleOp">]> {
+
+  let summary = "Params become module parameters when the module is lowered";
+  let description = [{
+    Allows attaching parameters to modules which become HW module parameters
+    when lowering. Currently, they are ignored. Some low-level BSPs instantiate
+    modules with parameters. This allows the modules produced to accept
+    parameters so those BSPs can instantiate them.
+  }];
+
+  let arguments = (ins StrAttr:$name, TypeAttr:$type);
+  let results = (outs);
+  let assemblyFormat = [{ $name `:` $type attr-dict }];
+}

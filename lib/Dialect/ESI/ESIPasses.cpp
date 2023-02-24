@@ -358,6 +358,7 @@ PureModuleLowering::matchAndRewrite(ESIPureModuleOp pureMod, OpAdaptor adaptor,
   // List the input and output ops.
   SmallVector<ESIPureModuleInputOp> inputs;
   SmallVector<ESIPureModuleOutputOp> outputs;
+  SmallVector<Attribute> params;
 
   for (Operation &op : llvm::make_early_inc_range(body->getOperations())) {
     if (auto port = dyn_cast<ESIPureModuleInputOp>(op)) {
@@ -387,12 +388,16 @@ PureModuleLowering::matchAndRewrite(ESIPureModuleOp pureMod, OpAdaptor adaptor,
                                    {},
                                    port.getLoc()});
       outputs.push_back(port);
+    } else if (auto param = dyn_cast<ESIPureModuleParamOp>(op)) {
+      params.push_back(
+          ParamDeclAttr::get(param.getNameAttr(), param.getType()));
+      rewriter.eraseOp(param);
     }
   }
 
   // Create the replacement `hw.module`.
-  auto hwMod =
-      rewriter.create<hw::HWModuleOp>(loc, pureMod.getNameAttr(), ports);
+  auto hwMod = rewriter.create<hw::HWModuleOp>(
+      loc, pureMod.getNameAttr(), ports, ArrayAttr::get(getContext(), params));
   hwMod->setDialectAttrs(pureMod->getDialectAttrs());
   rewriter.eraseBlock(hwMod.getBodyBlock());
   rewriter.inlineRegionBefore(*body->getParent(), hwMod.getBodyRegion(),
