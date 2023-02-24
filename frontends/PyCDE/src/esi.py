@@ -530,3 +530,14 @@ class PureModule(Module):
   def output_port(name: str, signal: Signal):
     from .dialects import esi
     return esi.ESIPureModuleOutputOp(name, signal)
+
+  @staticmethod
+  def param(name: str, type: Type = None):
+    """Create a parameter in the resulting module."""
+    from .dialects import esi
+    from .circt import ir
+    if type is None:
+      type_attr = ir.TypeAttr.get(ir.NoneType.get())
+    else:
+      type_attr = ir.TypeAttr.get(type._type)
+    esi.ESIPureModuleParamOp(name, type_attr)
