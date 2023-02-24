@@ -584,6 +584,9 @@ protected:
   Value mapOutputDataPorts(OpBuilder &b, ArrayRef<Backedge> newResults);
 };
 
+// Build the input data ports. If it's a channel of a struct (and we've been
+// asked to flatten it), flatten it into a port for each wire. If there's a
+// body, re-construct the struct.
 Value SignalingStandard::buildInputDataPorts() {
   auto chanTy = origPort.type.dyn_cast<ChannelType>();
   Type dataPortType = chanTy ? chanTy.getInner() : origPort.type;
@@ -608,6 +611,9 @@ Value SignalingStandard::buildInputDataPorts() {
   }
 }
 
+// Map a data value into the new operands for an instance. If the original type
+// was a channel of a struct (and we've been asked to flatten it), break it up
+// into per-field values.
 void SignalingStandard::mapInputDataPorts(OpBuilder &b, Value unwrappedData,
                                           SmallVectorImpl<Value> &newOperands) {
   auto chanTy = origPort.type.dyn_cast<ChannelType>();
@@ -626,6 +632,9 @@ void SignalingStandard::mapInputDataPorts(OpBuilder &b, Value unwrappedData,
   }
 }
 
+// Build the data ports for outputs. If the original type was a channel of a
+// struct (and we've been asked to flatten it), explode the struct to create
+// individual ports.
 void SignalingStandard::buildOutputDataPorts(Value data) {
   auto chanTy = origPort.type.dyn_cast<ChannelType>();
   Type dataPortType = chanTy ? chanTy.getInner() : origPort.type;
@@ -654,6 +663,9 @@ void SignalingStandard::buildOutputDataPorts(Value data) {
   }
 }
 
+// Map the data ports coming off an instance back into the original ports. If
+// the original type was a channel of a struct (and we've been asked to flatten
+// it), construct the original struct from the new ports.
 Value SignalingStandard::mapOutputDataPorts(OpBuilder &b,
                                             ArrayRef<Backedge> newResults) {
   auto chanTy = origPort.type.dyn_cast<ChannelType>();
