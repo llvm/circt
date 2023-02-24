@@ -158,14 +158,14 @@ hw.module @fifo0LoopbackTop() -> () {
   %chan = hw.instance "foo" @i1Fifo0Loopback(in: %chan: !esi.channel<i3, FIFO0>) -> (out: !esi.channel<i3, FIFO0>)
 }
 
-// IFACE-LABEL:  hw.module @structFifo0Loopback(%in_a: i3, %in_b: i7, %in_empty: i1, %out_rden: i1) -> (in_rden: i1, out_a: i3, out_b: i7, out_empty: i1) attributes {esi.port_flatten_structs}
+// IFACE-LABEL:  hw.module @structFifo0Loopback(%in_a: i3, %in_b: i7, %in_empty: i1, %out_rden: i1) -> (in_rden: i1, out_a: i3, out_b: i7, out_empty: i1) attributes {esi.portFlattenStructs}
 // IFACE-NEXT:     %chanOutput, %rden = esi.wrap.fifo [[r0:%.+]], %in_empty : !esi.channel<!hw.struct<a: i3, b: i7>, FIFO0>
 // IFACE-NEXT:     [[r0]] = hw.struct_create (%in_a, %in_b) : !hw.struct<a: i3, b: i7>
 // IFACE-NEXT:     %data, %empty = esi.unwrap.fifo %chanOutput, %out_rden : !esi.channel<!hw.struct<a: i3, b: i7>, FIFO0>
 // IFACE-NEXT:     %a, %b = hw.struct_explode %data : !hw.struct<a: i3, b: i7>
 // IFACE-NEXT:     hw.output %rden, %a, %b, %empty : i1, i3, i7, i1
 !st1 = !hw.struct<a: i3, b: i7>
-hw.module @structFifo0Loopback(%in: !esi.channel<!st1, FIFO0>) -> (out: !esi.channel<!st1, FIFO0>) attributes { esi.port_flatten_structs } {
+hw.module @structFifo0Loopback(%in: !esi.channel<!st1, FIFO0>) -> (out: !esi.channel<!st1, FIFO0>) attributes {esi.portFlattenStructs} {
   hw.output %in : !esi.channel<!st1, FIFO0>
 }
 
