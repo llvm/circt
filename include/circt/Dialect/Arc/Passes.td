@@ -35,4 +35,10 @@ def InlineModules : Pass<"arc-inline-modules", "mlir::ModuleOp"> {
   let constructor = "circt::arc::createInlineModulesPass()";
 }
 
+def SplitLoops : Pass<"arc-split-loops", "mlir::ModuleOp"> {
+  let summary = "Split arcs to break zero latency loops";
+  let constructor = "circt::arc::createSplitLoopsPass()";
+  let dependentDialects = ["arc::ArcDialect"];
+}
+
 #endif // CIRCT_DIALECT_ARC_PASSES_TD
