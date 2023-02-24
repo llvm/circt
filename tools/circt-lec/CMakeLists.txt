@@ -8,18 +8,11 @@ if(CIRCT_LEC_ENABLED)
   )
 
   list(APPEND CIRCT_LEC_LIBS
-    CIRCTCalyx
-    CIRCTESI
-    CIRCTFIRRTL
-    CIRCTFSM
-    CIRCTHandshake
-    CIRCTHWArith
-    CIRCTInteropDialect
-    CIRCTLLHD
-    CIRCTMoore
-    CIRCTPipelineOps
-    CIRCTSSP
-    CIRCTSystemC
+    MLIRTransforms
+    MLIRTranslateLib
+    CIRCTComb
+    CIRCTHW
+    CIRCTSupport
   )
 
   add_llvm_tool(circt-lec ${CIRCT_LEC_SOURCES})

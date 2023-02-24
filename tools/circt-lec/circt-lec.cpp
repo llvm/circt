@@ -143,9 +143,9 @@ int main(int argc, char **argv) {
   // llvm/circt and not llvm/llvm-project.
   llvm::setBugReportMsg(circt::circtBugReportMsg);
 
-  // Register all the CIRCT dialects and create a context to work with.
+  // Register the supported CIRCT dialects and create a context to work with.
   mlir::DialectRegistry registry;
-  circt::registerAllDialects(registry);
+  registry.insert<circt::comb::CombDialect, circt::hw::HWDialect>();
   mlir::MLIRContext context(registry);
 
   // Setup of diagnostic handling.
