@@ -157,3 +157,24 @@ hw.module @i1Fifo0Loopback(%in: !esi.channel<i3, FIFO0>) -> (out: !esi.channel<i
 hw.module @fifo0LoopbackTop() -> () {
   %chan = hw.instance "foo" @i1Fifo0Loopback(in: %chan: !esi.channel<i3, FIFO0>) -> (out: !esi.channel<i3, FIFO0>)
 }
+
+// IFACE-LABEL:  hw.module @structFifo0Loopback(%in_a: i3, %in_b: i7, %in_empty: i1, %out_rden: i1) -> (in_rden: i1, out_a: i3, out_b: i7, out_empty: i1) attributes {esi.port_flatten_structs}
+// IFACE-NEXT:     %chanOutput, %rden = esi.wrap.fifo [[r0:%.+]], %in_empty : !esi.channel<!hw.struct<a: i3, b: i7>, FIFO0>
+// IFACE-NEXT:     [[r0]] = hw.struct_create (%in_a, %in_b) : !hw.struct<a: i3, b: i7>
+// IFACE-NEXT:     %data, %empty = esi.unwrap.fifo %chanOutput, %out_rden : !esi.channel<!hw.struct<a: i3, b: i7>, FIFO0>
+// IFACE-NEXT:     %a, %b = hw.struct_explode %data : !hw.struct<a: i3, b: i7>
+// IFACE-NEXT:     hw.output %rden, %a, %b, %empty : i1, i3, i7, i1
+!st1 = !hw.struct<a: i3, b: i7>
+hw.module @structFifo0Loopback(%in: !esi.channel<!st1, FIFO0>) -> (out: !esi.channel<!st1, FIFO0>) attributes { esi.port_flatten_structs } {
+  hw.output %in : !esi.channel<!st1, FIFO0>
+}
+
+// IFACE-LABEL:  hw.module @structFifo0LoopbackTop()
+// IFACE-NEXT:     %data, %empty = esi.unwrap.fifo %chanOutput, %foo.in_rden : !esi.channel<!hw.struct<a: i3, b: i7>, FIFO0>
+// IFACE-NEXT:     %a, %b = hw.struct_explode %data : !hw.struct<a: i3, b: i7>
+// IFACE-NEXT:     [[r0:%.+]] = hw.struct_create (%foo.out_a, %foo.out_b) : !hw.struct<a: i3, b: i7>
+// IFACE-NEXT:     %chanOutput, %rden = esi.wrap.fifo [[r0]], %foo.out_empty : !esi.channel<!hw.struct<a: i3, b: i7>, FIFO0>
+// IFACE-NEXT:     %foo.in_rden, %foo.out_a, %foo.out_b, %foo.out_empty = hw.instance "foo" @structFifo0Loopback(in_a: %a: i3, in_b: %b: i7, in_empty: %empty: i1, out_rden: %rden: i1) -> (in_rden: i1, out_a: i3, out_b: i7, out_empty: i1)
+hw.module @structFifo0LoopbackTop() -> () {
+  %chan = hw.instance "foo" @structFifo0Loopback(in: %chan: !esi.channel<!st1, FIFO0>) -> (out: !esi.channel<!st1, FIFO0>)
+}

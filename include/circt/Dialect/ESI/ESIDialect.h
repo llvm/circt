@@ -41,6 +41,11 @@ struct ESIPortValidReadyMapping {
 /// SystemVerilog interfaces) channel signal wires on external modules.
 constexpr StringRef extModBundleSignalsAttrName = "esi.bundle";
 
+/// Name of dialect attribute which governs whether or not to flatten struct
+/// ports into a bunch of individual 'data' wires.
+constexpr StringRef extModPortFlattenStructsAttrName =
+    "esi.port_flatten_structs";
+
 /// Find all the port triples on a module which fit the
 /// <name>/<name>_valid/<name>_ready pattern. Ready must be the opposite
 /// direction of the other two.

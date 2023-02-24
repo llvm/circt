@@ -2311,6 +2311,15 @@ void StructExplodeOp::getAsmResultNames(
     setNameFn(res, field.name.str());
 }
 
+void StructExplodeOp::build(OpBuilder &b, OperationState &state, Value input) {
+  StructType inputType = input.getType().dyn_cast<StructType>();
+  assert(inputType);
+  SmallVector<Type, 16> fieldTypes;
+  for (auto field : inputType.getElements())
+    fieldTypes.push_back(field.type);
+  build(b, state, fieldTypes, input);
+}
+
 //===----------------------------------------------------------------------===//
 // StructExtractOp
 //===----------------------------------------------------------------------===//
