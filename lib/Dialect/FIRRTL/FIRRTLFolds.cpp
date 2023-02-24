@@ -1272,9 +1272,10 @@ public:
 
 void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.add<MuxPad, patterns::MuxSameCondLow, patterns::MuxSameCondHigh,
-              patterns::MuxSameTrue, patterns::MuxSameFalse,
-              patterns::NarrowMuxLHS, patterns::NarrowMuxRHS>(context);
+  results.add<MuxPad, patterns::MuxNot, patterns::MuxSameCondLow,
+              patterns::MuxSameCondHigh, patterns::MuxSameTrue,
+              patterns::MuxSameFalse, patterns::NarrowMuxLHS,
+              patterns::NarrowMuxRHS>(context);
 }
 
 OpFoldResult PadPrimOp::fold(FoldAdaptor adaptor) {
