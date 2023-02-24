@@ -48,6 +48,10 @@ class EmitCDialect;
 
 namespace circt {
 
+namespace arc {
+class ArcDialect;
+} // namespace arc
+
 namespace fsm {
 class FSMDialect;
 } // namespace fsm
