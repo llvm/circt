@@ -1,0 +1,56 @@
+// RUN: circt-opt %s --arc-canonicalizer | FileCheck %s
+
+// CHECK-LABEL: hw.module @passthoughChecks
+hw.module @passthoughChecks(%in0: i1, %in1: i1) -> (out0: i1, out1: i1, out2: i1, out3: i1, out4: i1, out5: i1, out6: i1, out7: i1, out8: i1, out9: i1) {
+  %0:2 = arc.call @passthrough(%in0, %in1) : (i1, i1) -> (i1, i1)
+  %1:2 = arc.call @noPassthrough(%in0, %in1) : (i1, i1) -> (i1, i1)
+  %2:2 = arc.state @passthrough(%in0, %in1) lat 0 : (i1, i1) -> (i1, i1)
+  %3:2 = arc.state @noPassthrough(%in0, %in1) lat 0 : (i1, i1) -> (i1, i1)
+  %4:2 = arc.state @passthrough(%in0, %in1) clock %in0 lat 1 : (i1, i1) -> (i1, i1)
+  hw.output %0#0, %0#1, %1#0, %1#1, %2#0, %2#1, %3#0, %3#1, %4#0, %4#1 : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
+  // CHECK-NEXT: [[V0:%.+]]:2 = arc.call @noPassthrough(%in0, %in1) :
+  // CHECK-NEXT: [[V1:%.+]]:2 = arc.state @noPassthrough(%in0, %in1) lat 0 :
+  // CHECK-NEXT: [[V2:%.+]]:2 = arc.state @passthrough(%in0, %in1) clock %in0 lat 1 :
+  // CHECK-NEXT: hw.output %in0, %in1, [[V0]]#0, [[V0]]#1, %in0, %in1, [[V1]]#0, [[V1]]#1, [[V2]]#0, [[V2]]#1 :
+}
+arc.define @passthrough(%arg0: i1, %arg1: i1) -> (i1, i1) {
+  arc.output %arg0, %arg1 : i1, i1
+}
+arc.define @noPassthrough(%arg0: i1, %arg1: i1) -> (i1, i1) {
+  arc.output %arg1, %arg0 : i1, i1
+}
+
+arc.define @memArcFalse(%arg0: i1, %arg1: i32) -> (i1, i32, i1) {
+  %false = hw.constant false
+  arc.output %arg0, %arg1, %false : i1, i32, i1
+}
+arc.define @memArcTrue(%arg0: i1, %arg1: i32) -> (i1, i32, i1) {
+  %true = hw.constant true
+  arc.output %arg0, %arg1, %true : i1, i32, i1
+}
+
+// CHECK-LABEL: hw.module @memoryWritePortCanonicalizations
+hw.module @memoryWritePortCanonicalizations(%clk: i1, %addr: i1, %data: i32) {
+  // CHECK-NEXT: [[MEM:%.+]] = arc.memory <2 x i32, i1>
+  %mem = arc.memory <2 x i32, i1>
+  arc.memory_write_port %mem, @memArcFalse(%addr, %data) clock %clk enable lat 1 : <2 x i32, i1>, i1, i32
+  // CHECK-NEXT: arc.memory_write_port [[MEM]], @memArcTrue_0(%addr, %data) clock %clk lat 1 :
+  arc.memory_write_port %mem, @memArcTrue(%addr, %data) clock %clk enable lat 1 : <2 x i32, i1>, i1, i32
+  // CHECK-NEXT: arc.memory_write_port [[MEM]], @memArcTrue_0(%addr, %data) clock %clk lat 1 :
+  arc.memory_write_port %mem, @memArcTrue(%addr, %data) clock %clk enable lat 1 : <2 x i32, i1>, i1, i32
+  // CHECK-NEXT: arc.state
+  %0:3 = arc.state @memArcTrue(%addr, %data) lat 0 : (i1, i32) -> (i1, i32, i1)
+  // CHECK-NEXT: hw.output
+  hw.output
+}
+
+// CHECK-NOT: arc.define @unusedArcIsDeleted
+arc.define @unusedArcIsDeleted(%arg0: i32, %arg1: i32) -> i32 {
+  %0 = arc.call @nestedUnused(%arg0, %arg1) : (i32, i32) -> i32
+  arc.output %0 : i32
+}
+// CHECK-NOT: arc.define @nestedUnused
+arc.define @nestedUnused(%arg0: i32, %arg1: i32) -> i32 {
+  %0 = comb.add %arg0, %arg1 : i32
+  arc.output %0 : i32
+}
