@@ -27,6 +27,14 @@ def AllocateState : Pass<"arc-allocate-state", "arc::ModelOp"> {
   let dependentDialects = ["arc::ArcDialect"];
 }
 
+def ArcCanonicalizer : Pass<"arc-canonicalizer", "mlir::ModuleOp"> {
+  let summary = "Simulation centric canonicalizations";
+  let constructor = "createArcCanonicalizerPass()";
+  let dependentDialects = ["hw::HWDialect",
+                           "comb::CombDialect",
+                           "arc::ArcDialect"];
+}
+
 def Dedup : Pass<"arc-dedup", "mlir::ModuleOp"> {
   let summary = "Deduplicate identical arc definitions";
   let description = [{
