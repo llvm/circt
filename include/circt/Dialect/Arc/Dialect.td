@@ -17,8 +17,6 @@ def ArcDialect : Dialect {
     in a circuit.
   }];
   let cppNamespace = "circt::arc";
-
-  let useFoldAPI = kEmitFoldAdaptorFolder;
 }
 
 #endif // CIRCT_DIALECT_ARC_DIALECT_TD

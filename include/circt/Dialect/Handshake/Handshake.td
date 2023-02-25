@@ -34,7 +34,6 @@ def Handshake_Dialect : Dialect {
   }];
 
   let useDefaultAttributePrinterParser = 1;
-  let useFoldAPI = kEmitFoldAdaptorFolder;
 }
 
 // Base class for Handshake dialect ops.

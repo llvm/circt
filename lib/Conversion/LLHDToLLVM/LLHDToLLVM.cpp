@@ -1072,7 +1072,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
     if (!parentSym) {
       owner = LLVM::createGlobalString(
           op->getLoc(), initBuilder, "instance." + ownerName, ownerName + '\0',
-          LLVM::Linkage::Internal);
+          LLVM::Linkage::Internal, /*useOpaquePointers=*/false);
       parentSym = module.lookupSymbol<LLVM::GlobalOp>("instance." + ownerName);
     } else {
       owner =
