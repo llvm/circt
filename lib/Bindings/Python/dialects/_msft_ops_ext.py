@@ -74,20 +74,22 @@ class MSFTModuleOp(_hw_ext.ModuleLike):
       output_ports=[],
       parameters: _ir.DictAttr = None,
       file_name: str = None,
+      attributes=None,
       loc=None,
       ip=None,
   ):
-    attrs = {"parameters": parameters}
+    if attributes is None:
+      attributes = {}
     if parameters is not None:
-      attrs["parameters"] = parameters
+      attributes["parameters"] = parameters
     else:
-      attrs["parameters"] = _ir.DictAttr.get({})
+      attributes["parameters"] = _ir.DictAttr.get({})
     if file_name is not None:
-      attrs["fileName"] = _ir.StringAttr.get(file_name)
+      attributes["fileName"] = _ir.StringAttr.get(file_name)
     super().__init__(name,
                      input_ports,
                      output_ports,
-                     attributes=attrs,
+                     attributes=attributes,
                      loc=loc,
                      ip=ip)
 

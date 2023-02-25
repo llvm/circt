@@ -6,9 +6,9 @@ from pycde import (Clock, Input, InputChannel, OutputChannel, Module, generator,
 from pycde import esi
 from pycde.common import Output
 from pycde.constructs import Wire
-from pycde.types import Bits, Channel, ChannelSignaling
+from pycde.types import Bits, Channel, ChannelSignaling, UInt
 from pycde.testing import unittestmodule
-from pycde.signals import BitVectorSignal, ChannelSignal
+from pycde.signals import BitVectorSignal, ChannelSignal, Struct
 
 
 @esi.ServiceDecl
@@ -243,3 +243,40 @@ class FIFOSignalingMod(Module):
     chan, rden = self.a.type.wrap(data, empty)
     rden_wire.assign(rden)
     self.x = chan
+
+
+ExStruct = types.struct({
+    'a': Bits(4),
+    'b': UInt(32),
+})
+
+
+# CHECK-LABEL:  hw.module @FlattenTest{{.*}}(%a_a: i4, %a_b: ui32, %a_valid: i1) -> (a_ready: i1)
+@unittestmodule(print=False, run_passes=True, print_after_passes=True)
+class FlattenTest(Module):
+  a = InputChannel(ExStruct)
+
+  Attributes = {esi.FlattenStructPorts}
+
+  @generator
+  def build(self):
+    pass
+
+
+# CHECK-LABEL:  hw.module.extern @FlattenExternTest{{.*}}(%a_a: i4, %a_b: ui32, %a_valid: i1) -> (a_ready: i1)
+@unittestmodule(print=False, run_passes=True, print_after_passes=True)
+class FlattenExternTest(Module):
+  a = InputChannel(ExStruct)
+
+  Attributes = {esi.FlattenStructPorts}
+
+
+# CHECK-LABEL:   hw.module @FlattenPureTest(%a_a: i4, %a_b: ui32, %a_valid: i1) -> (a_ready: i1) attributes {esi.portFlattenStructs}
+@unittestmodule(print=False, run_passes=True, print_after_passes=True)
+class FlattenPureTest(esi.PureModule):
+
+  Attributes = {esi.FlattenStructPorts}
+
+  @generator
+  def build(self):
+    esi.PureModule.input_port("a", types.channel(ExStruct))
