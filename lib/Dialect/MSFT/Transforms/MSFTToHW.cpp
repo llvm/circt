@@ -160,6 +160,7 @@ ModuleOpLowering::matchAndRewrite(MSFTModuleOp mod, OpAdaptor adaptor,
         rewriter.getContext(), outputFile, false, true);
     hwmod->setAttr("output_file", outputFileAttr);
   }
+  hwmod->setDialectAttrs(mod->getDialectAttrs());
 
   return success();
 }
@@ -193,6 +194,7 @@ LogicalResult ModuleExternOpLowering::matchAndRewrite(
         rewriter.getContext(), outputFile, false, true);
     hwMod->setAttr("output_file", outputFileAttr);
   }
+  hwMod->setDialectAttrs(mod->getDialectAttrs());
 
   return success();
 }
