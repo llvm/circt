@@ -154,7 +154,9 @@ LogicalResult Converter::analyzeFanIn() {
       if (it != faninMasks.end())
         mask |= it->second;
     }
-    assert(faninMasks.insert({op, mask}).second && "duplicate op in order");
+
+    auto duplicateOp = faninMasks.insert({op, mask});
+    assert(duplicateOp.second && "duplicate op in order");
   }
 
   // Group the operations by their fan-in mask.
