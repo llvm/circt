@@ -742,6 +742,10 @@ static IfOp findNestedElseIf(Block *elseBlock) {
     if (!isVerilogExpression(&op))
       return {};
   }
+  // SV attributes cannot be attached to `else if` so reject when ifOp has SV
+  // attributes.
+  if (ifOp && hasSVAttributes(ifOp))
+    return {};
   return ifOp;
 }
 
@@ -1190,6 +1194,8 @@ public:
   void emitStatement(Operation *op);
   void emitBind(BindOp op);
   void emitBindInterface(BindInterfaceOp op);
+
+  void emitSVAttributes(Operation *op);
 
   /// Legalize the given field name if it is an invalid verilog name.
   StringRef getVerilogStructFieldName(StringAttr field) {
@@ -3416,9 +3422,7 @@ LogicalResult StmtEmitter::visitSV(ReadMemOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(GenerateOp op) {
-  if (hasSVAttributes(op))
-    emitError(op, "SV attributes emission is unimplemented for the op");
-
+  emitSVAttributes(op);
   // TODO: location info?
   startStatement();
   ps << "generate" << PP::newline;
@@ -3433,9 +3437,7 @@ LogicalResult StmtEmitter::visitSV(GenerateOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
-  if (hasSVAttributes(op))
-    emitError(op, "SV attributes emission is unimplemented for the op");
-
+  emitSVAttributes(op);
   // TODO: location info?
   startStatement();
   ps << "case (";
@@ -3683,13 +3685,11 @@ LogicalResult StmtEmitter::visitSV(OrderedOutputOp ooop) {
 }
 
 LogicalResult StmtEmitter::visitSV(IfOp op) {
-  if (hasSVAttributes(op))
-    emitError(op, "SV attributes emission is unimplemented for the op");
-
   SmallPtrSet<Operation *, 8> ops;
 
   auto ifcondBox = PP::ibox2;
 
+  emitSVAttributes(op);
   startStatement();
   ps << "if (" << ifcondBox;
 
@@ -3730,9 +3730,7 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(AlwaysOp op) {
-  if (hasSVAttributes(op))
-    emitError(op, "SV attributes emission is unimplemented for the op");
-
+  emitSVAttributes(op);
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   startStatement();
@@ -3786,9 +3784,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(AlwaysCombOp op) {
-  if (hasSVAttributes(op))
-    emitError(op, "SV attributes emission is unimplemented for the op");
-
+  emitSVAttributes(op);
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   startStatement();
@@ -3803,8 +3799,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysCombOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
-  if (hasSVAttributes(op))
-    emitError(op, "SV attributes emission is unimplemented for the op");
+  emitSVAttributes(op);
 
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -3864,22 +3859,17 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(InitialOp op) {
-  if (hasSVAttributes(op))
-    emitError(op, "SV attributes emission is unimplemented for the op");
-
+  emitSVAttributes(op);
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   startStatement();
-
   ps << "initial";
   emitBlockAsStatement(op.getBodyBlock(), ops, "initial");
   return success();
 }
 
 LogicalResult StmtEmitter::visitSV(CaseOp op) {
-  if (hasSVAttributes(op))
-    emitError(op, "SV attributes emission is unimplemented for the op");
-
+  emitSVAttributes(op);
   SmallPtrSet<Operation *, 8> ops, emptyOps;
   ops.insert(op);
   startStatement();
@@ -3941,12 +3931,18 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
 }
 
 LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
-  startStatement();
   bool doNotPrint = op->hasAttr("doNotPrint");
+  // Emit SV attributes if the op is not emitted as a bind statement.
+  if (!doNotPrint)
+    emitSVAttributes(op);
+  startStatement();
   if (doNotPrint) {
     ps << PP::ibox2
        << "/* This instance is elsewhere emitted as a bind statement."
        << PP::newline;
+    if (hasSVAttributes(op))
+      op->emitWarning() << "is emitted as a bind statement but has SV "
+                           "attributes. The attributes will not be emitted.";
   }
 
   SmallPtrSet<Operation *, 8> ops;
@@ -4130,10 +4126,9 @@ LogicalResult StmtEmitter::visitSV(BindOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
-  if (hasSVAttributes(op))
-    emitError(op, "SV attributes emission is unimplemented for the op");
-
   emitComment(op.getCommentAttr());
+  // Emit SV attributes.
+  emitSVAttributes(op);
   // TODO: source info!
   startStatement();
   ps << "interface " << PPExtString(getSymOpName(op)) << ";";
@@ -4147,9 +4142,8 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
-  if (hasSVAttributes(op))
-    emitError(op, "SV attributes emission is unimplemented for the op");
-
+  // Emit SV attributes.
+  emitSVAttributes(op);
   startStatement();
   if (isZeroBitType(op.getType()))
     ps << PP::neverbox << "// ";
@@ -4483,6 +4477,19 @@ void ModuleEmitter::emitStatement(Operation *op) {
   StmtEmitter(*this).emitStatement(op);
 }
 
+/// Emit SystemVerilog attributes attached to the expression op as dialect
+/// attributes.
+void ModuleEmitter::emitSVAttributes(Operation *op) {
+  // SystemVerilog 2017 Section 5.12.
+  auto svAttrs = getSVAttributes(op);
+  if (!svAttrs)
+    return;
+
+  startStatement(); // For attributes.
+  emitSVAttributesImpl(ps, svAttrs);
+  setPendingNewline();
+}
+
 //===----------------------------------------------------------------------===//
 // Module Driver
 //===----------------------------------------------------------------------===//
@@ -4512,7 +4519,6 @@ void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
 void ModuleEmitter::emitBind(BindOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
-
   InstanceOp inst = op.getReferencedInstance(&state.symbolCache);
 
   HWModuleOp parentMod = inst->getParentOfType<hw::HWModuleOp>();
@@ -4636,10 +4642,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   moduleOpSet.insert(module);
 
   emitComment(module.getCommentAttr());
-
-  if (hasSVAttributes(module))
-    emitError(module, "SV attributes emission is unimplemented for the op");
-
+  emitSVAttributes(module);
   startStatement();
   ps << "module " << PPExtString(getVerilogModuleName(module));
 

@@ -22,7 +22,8 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   %logic_op_struct = sv.logic : !hw.inout<struct<b: i1>>
   sv.assign %logic_op, %val: i8
 
-  // CHECK:      always @(posedge clock) begin
+  // CHECK:           (* sv attr *)
+  // CHECK-NEXT:      always @(posedge clock) begin
   sv.always posedge %clock {
     // CHECK: automatic logic [7:0]                     logic_op_procedural = val;
     // CHECK-NEXT: automatic       struct packed {logic b; } logic_op_struct_procedural
@@ -52,7 +53,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT:   `endif
   // CHECK-NEXT: end // always @(posedge)
     }
-  }
+  } {sv.attributes = #sv.attributes<[#sv.attribute<"sv attr">]>}
 
   // CHECK-NEXT: always @(negedge clock) begin
   // CHECK-NEXT: end // always @(negedge)
@@ -103,7 +104,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   } ( asyncreset : negedge %cond) {
     sv.fwrite %fd, "Async Reset Block\n"
   }
-
+  // CHECK-NEXT:  (* sv attr *)
   // CHECK-NEXT:  initial begin
   sv.initial {
     // CHECK-NEXT:   if (cond)
@@ -254,7 +255,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
       sv.fwrite %fd, "M: %x\n"(%text) : i8
 
     }// CHECK-NEXT:   {{end$}}
-  }
+  } {sv.attributes = #sv.attributes<[#sv.attribute<"sv attr">]>}
   // CHECK-NEXT:  end // initial
 
   // CHECK-NEXT: assert property (@(posedge clock) cond);
@@ -1449,9 +1450,12 @@ hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
 // CHECK-LABEL: SimplyNestedElseIf
 // CHECK: if (flag1)
 // CHECK: else if (flag2)
-// CHECK: else if (flag3)
+// CHECK: else if (flag3) begin
+// CHECK-NEXT: (* sv attr *)
+// CHECK-NEXT: if (flag4)
+// CHECK: end
 // CHECK: else
-hw.module @SimplyNestedElseIf(%clock: i1, %flag1 : i1, %flag2: i1, %flag3: i1) {
+hw.module @SimplyNestedElseIf(%clock: i1, %flag1 : i1, %flag2: i1, %flag3: i1, %flag4: i1) {
   %fd = hw.constant 0x80000002 : i32
 
   sv.always posedge %clock {
@@ -1462,6 +1466,9 @@ hw.module @SimplyNestedElseIf(%clock: i1, %flag1 : i1, %flag2: i1, %flag3: i1) {
         sv.fwrite %fd, "B"
       } else {
         sv.if %flag3 {
+          sv.if %flag4 {
+            sv.fwrite %fd, "E"
+          } {sv.attributes = #sv.attributes<[#sv.attribute<"sv attr">]>}
           sv.fwrite %fd, "C"
         } else {
           sv.fwrite %fd, "D"
