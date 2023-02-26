@@ -78,25 +78,6 @@ void LogicExporter::runOnOperation() {
   }
 }
 
-/// Visits the given `builtin.module` in search of a specified `hw.module`
-/// and returns it.
-circt::hw::HWModuleOp
-LogicExporter::fetchModuleOp(mlir::ModuleOp builtinModule,
-                             llvm::StringRef targetModule) {
-  for (const mlir::Operation &op : builtinModule.getOps()) {
-    if (auto hwModule = llvm::dyn_cast<circt::hw::HWModuleOp>(op)) {
-      llvm::StringRef moduleName = hwModule.getName();
-      LLVM_DEBUG(lec::dbgs << "found `hw.module@" << moduleName << "`\n");
-
-      if (moduleName == targetModule)
-        return hwModule;
-    }
-  }
-  builtinModule.emitError("expected `" + targetModule + "` module not found");
-  // Suppress the compiler's warning.
-  return circt::hw::HWModuleOp();
-}
-
 //===----------------------------------------------------------------------===//
 // Visitor implementation
 //===----------------------------------------------------------------------===//
@@ -119,12 +100,15 @@ LogicExporter::Visitor::visitStmt(circt::hw::InstanceOp &op,
   llvm::Optional<llvm::StringRef> innerSym = op.getInnerSym();
   LLVM_DEBUG(lec::dbgs << "Inner symbol: " << innerSym << "\n");
 
-  mlir::ModuleOp builtinModule = op->getParentOfType<mlir::ModuleOp>();
-  circt::hw::HWModuleOp hwModule =
-      LogicExporter::fetchModuleOp(builtinModule, targetModule);
-  circuit->addInstance(instanceName.str(), hwModule, op->getOperands(),
-                       op->getResults());
-  return mlir::success();
+  auto hwModule = llvm::dyn_cast_if_present<circt::hw::HWModuleOp>(
+      op.getReferencedModule());
+  if (hwModule) {
+    circuit->addInstance(instanceName.str(), hwModule, op->getOperands(),
+                         op->getResults());
+    return mlir::success();
+  }
+  op.emitError("expected referenced module `" + targetModule + "` not found");
+  return mlir::failure();
 }
 
 mlir::LogicalResult

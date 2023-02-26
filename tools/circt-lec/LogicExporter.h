@@ -136,11 +136,6 @@ private:
     mlir::LogicalResult dispatch(mlir::Operation *op, Solver::Circuit *circuit);
   };
 
-  /// Visits the given `builtin.module` in search of a specified `hw.module`
-  /// and returns it.
-  static circt::hw::HWModuleOp fetchModuleOp(mlir::ModuleOp builtinModule,
-                                             llvm::StringRef targetModule);
-
   // For Solver::Circuit::addInstance to access Visitor::visitHW.
   friend Solver::Circuit;
 
