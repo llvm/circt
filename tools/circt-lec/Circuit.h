@@ -56,8 +56,9 @@ public:
   void performDivS(mlir::Value result, mlir::Value lhs, mlir::Value rhs);
   void performDivU(mlir::Value result, mlir::Value lhs, mlir::Value rhs);
   void performExtract(mlir::Value result, mlir::Value input, uint32_t lowBit);
-  void performICmp(mlir::Value result, circt::comb::ICmpPredicate predicate,
-                   mlir::Value lhs, mlir::Value rhs);
+  mlir::LogicalResult performICmp(mlir::Value result,
+                                  circt::comb::ICmpPredicate predicate,
+                                  mlir::Value lhs, mlir::Value rhs);
   void performModS(mlir::Value result, mlir::Value lhs, mlir::Value rhs);
   void performModU(mlir::Value result, mlir::Value lhs, mlir::Value rhs);
   void performMul(mlir::Value result, mlir::OperandRange operands);

@@ -144,9 +144,10 @@ void Solver::Circuit::performExtract(mlir::Value result, mlir::Value input,
   constrainResult(result, extract);
 }
 
-void Solver::Circuit::performICmp(mlir::Value result,
-                                  circt::comb::ICmpPredicate predicate,
-                                  mlir::Value lhs, mlir::Value rhs) {
+mlir::LogicalResult
+Solver::Circuit::performICmp(mlir::Value result,
+                             circt::comb::ICmpPredicate predicate,
+                             mlir::Value lhs, mlir::Value rhs) {
   LLVM_DEBUG(lec::dbgs << name << " performICmp\n");
   INDENT();
   LLVM_DEBUG(lec::dbgs << "lhs:\n");
@@ -157,15 +158,9 @@ void Solver::Circuit::performICmp(mlir::Value result,
 
   switch (predicate) {
   case circt::comb::ICmpPredicate::eq:
-  // Multi-valued logic is not accounted for.
-  case circt::comb::ICmpPredicate::ceq:
-  case circt::comb::ICmpPredicate::weq:
     icmp = boolToBv(lhsExpr == rhsExpr);
     break;
   case circt::comb::ICmpPredicate::ne:
-  // Multi-valued logic is not accounted for.
-  case circt::comb::ICmpPredicate::cne:
-  case circt::comb::ICmpPredicate::wne:
     icmp = boolToBv(lhsExpr != rhsExpr);
     break;
   case circt::comb::ICmpPredicate::slt:
@@ -192,9 +187,16 @@ void Solver::Circuit::performICmp(mlir::Value result,
   case circt::comb::ICmpPredicate::uge:
     icmp = boolToBv(z3::uge(lhsExpr, rhsExpr));
     break;
+  // Multi-valued logic comparisons are not supported.
+  case circt::comb::ICmpPredicate::ceq:
+  case circt::comb::ICmpPredicate::weq:
+  case circt::comb::ICmpPredicate::cne:
+  case circt::comb::ICmpPredicate::wne:
+    return mlir::failure();
   };
 
   constrainResult(result, icmp);
+  return mlir::success();
 }
 
 performBinaryCombOp(ModS, smod);

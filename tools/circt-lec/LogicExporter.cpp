@@ -272,8 +272,11 @@ LogicExporter::Visitor::visitComb(circt::comb::ICmpOp &op,
   mlir::Value rhs = op.getRhs();
   mlir::Value result = op.getResult();
   LLVM_DEBUG(debugOpResult(result));
-  circuit->performICmp(result, predicate, lhs, rhs);
-  return mlir::success();
+  mlir::LogicalResult comparisonResult =
+      circuit->performICmp(result, predicate, lhs, rhs);
+  if (failed(comparisonResult))
+    op.emitError("n-state logic predicate are not supported");
+  return comparisonResult;
 }
 
 visitBinaryCombOp(ModS, comb.mods, circt::comb::ModSOp &);
