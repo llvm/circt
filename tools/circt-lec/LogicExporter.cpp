@@ -324,21 +324,18 @@ LogicExporter::Visitor::visitBuiltin(mlir::ModuleOp &op,
                                      llvm::StringRef targetModule) {
   LLVM_DEBUG(lec::dbgs << "Visiting `builtin.module`\n");
   INDENT();
-  for (mlir::Operation &op : op.getOps()) {
-    if (auto hwModule = llvm::dyn_cast<circt::hw::HWModuleOp>(op)) {
-      llvm::StringRef moduleName = hwModule.getName();
-      LLVM_DEBUG(lec::dbgs << "found `hw.module@" << moduleName << "`\n");
+  // Currently only `hw.module` handling is implemented.
+  for (auto hwModule : op.getOps<circt::hw::HWModuleOp>()) {
+    llvm::StringRef moduleName = hwModule.getName();
+    LLVM_DEBUG(lec::dbgs << "found `hw.module@" << moduleName << "`\n");
 
-      // When no module name is specified the first module encountered is
-      // selected.
-      if (targetModule.empty() || moduleName == targetModule) {
-        INDENT();
-        LLVM_DEBUG(lec::dbgs << "proceeding with this module\n");
-        return visitHW(hwModule, circuit);
-      }
-    } else
-      op.emitWarning("only `hw.module` checking is implemented");
-    // return mlir::failure();
+    // When no module name is specified the first module encountered is
+    // selected.
+    if (targetModule.empty() || moduleName == targetModule) {
+      INDENT();
+      LLVM_DEBUG(lec::dbgs << "proceeding with this module\n");
+      return visitHW(hwModule, circuit);
+    }
   }
   op.emitError("expected `" + targetModule + "` module not found");
   return mlir::failure();
