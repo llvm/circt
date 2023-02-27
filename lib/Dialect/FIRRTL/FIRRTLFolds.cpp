@@ -1842,9 +1842,90 @@ struct SubfieldAggOneShot : public AggOneShot {
 };
 } // namespace
 
+namespace {
+// For a lhs, find all the writers of fields of the aggregate type.  If there
+// is one writer for each field, merge the writes
+struct PassivizeWire : public mlir::RewritePattern {
+  PassivizeWire(MLIRContext *context)
+      : RewritePattern(WireOp::getOperationName(), 0, context) {}
+
+  void expandConnects(PatternRewriter &rewriter, Location loc, Value dst,
+                      Value src) const {
+    auto dstType = dst.getType().cast<FIRRTLBaseType>();
+    auto srcType = src.getType().cast<FIRRTLBaseType>();
+    llvm::errs() << "** expand connects\n";
+    dstType.dump();
+    srcType.dump();
+    dst.dump();
+    src.dump();
+    llvm::errs() << "\n";
+    if (dstType.isPassive()) {
+      llvm::errs() << "Made connect\n";
+      // connect
+      rewriter.create<StrictConnectOp>(loc, dst, src);
+      return;
+    }
+
+    if (auto dstBundle = dstType.dyn_cast<BundleType>()) {
+      // Connect all the bundle elements pairwise.
+      auto numElements = dstBundle.getNumElements();
+      for (size_t i = 0; i < numElements; ++i) {
+        auto dstField = rewriter.create<SubfieldOp>(loc, dst, i);
+        auto srcField = rewriter.create<SubfieldOp>(loc, src, i);
+        if (dstBundle.getElement(i).isFlip)
+          std::swap(dstField, srcField);
+        expandConnects(rewriter, loc, dstField, srcField);
+      }
+      return;
+    }
+
+    if (auto dstVector = dstType.dyn_cast<FVectorType>()) {
+      // Connect all the vector elements pairwise.
+      auto numElements = dstVector.getNumElements();
+      for (size_t i = 0; i < numElements; ++i) {
+        auto dstField = rewriter.create<SubindexOp>(loc, dst, i);
+        auto srcField = rewriter.create<SubindexOp>(loc, src, i);
+        expandConnects(rewriter, loc, dstField, srcField);
+      }
+      return;
+    }
+  }
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    WireOp wire = cast<WireOp>(op);
+    auto wireType = wire.getType().cast<FIRRTLBaseType>();
+    if (wire.getType().cast<FIRRTLBaseType>().isPassive())
+      return failure();
+
+    // Only handle fully written wires.
+    StrictConnectOp connect = getSingleConnectUserOf(wire);
+    if (!connect)
+      return failure();
+
+    // Lower Connect
+    rewriter.setInsertionPointAfter(connect);
+    expandConnects(rewriter, connect.getLoc(), connect.getSrc(),
+                   connect.getDest());
+                   llvm::errs() << "Erasing ";
+                   connect.dump();
+                   llvm::errs() << "\n";
+    rewriter.eraseOp(connect);
+
+    // new wire
+    rewriter.setInsertionPointAfter(wire);
+    wire = rewriter.replaceOpWithNewOp<WireOp>(
+        wire, wireType.getPassiveType(), wire.getName(), wire.getNameKind(),
+        wire.getAnnotations(), wire.getInnerSym() ?  *wire.getInnerSym() : nullptr );
+
+    return success();
+  }
+};
+} // namespace
+
 void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
-  results.insert<WireAggOneShot>(context);
+  results.insert<PassivizeWire, WireAggOneShot>(context);
 }
 
 void SubindexOp::getCanonicalizationPatterns(RewritePatternSet &results,

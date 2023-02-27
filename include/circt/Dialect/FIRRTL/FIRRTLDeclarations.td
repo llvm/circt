@@ -395,4 +395,50 @@ def WireOp : ReferableDeclOp<"wire"> {
   }];
 }
 
+
+class WritableResultTypeConstraint<string base, string w>
+  : TypesMatchWith<"writable base type should match",
+                   base, w,
+                   "WritableType::get($_self.cast<FIRRTLBaseType>())">;
+
+def StrictWireOp : ReferableDeclOp<"strictwire", [WritableResultTypeConstraint<"result", "wresult">]> {
+  let summary = "Define a new wire";
+  let description = [{
+    Declare a new wire:
+    ```
+      %name,%name_w = firrtl.strictwire : t1
+    ```
+    This wire has separate read and write ports.
+    }];
+
+  let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
+                       AnnotationArrayAttr:$annotations,
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
+  let results = (outs PassiveType:$result, WritableType:$wresult);
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$elementType,
+                      CArg<"StringRef", "{}">:$name,
+                      CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
+                      CArg<"ArrayRef<Attribute>","{}">:$annotations,
+                      CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+      return build($_builder, $_state, elementType, name, nameKind,
+                   $_builder.getArrayAttr(annotations),
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
+    }]>,
+    OpBuilder<(ins "::mlir::Type":$elementType, "StringRef":$name,
+                   "NameKindEnum":$nameKind, "::mlir::ArrayAttr":$annotations,
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+      return build($_builder, $_state, elementType, name, nameKind, annotations,
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
+    }]>
+  ];
+
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? `` custom<NameKind>($nameKind) ``
+    custom<ImplicitSSAName>(attr-dict) `:`
+    qualified(type($result))
+  }];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLDECLARATIONS_TD

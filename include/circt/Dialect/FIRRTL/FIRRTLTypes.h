@@ -27,6 +27,7 @@ struct BundleTypeStorage;
 struct VectorTypeStorage;
 struct CMemoryTypeStorage;
 struct RefTypeStorage;
+struct WritableTypeStorage;
 } // namespace detail.
 
 class ClockType;
@@ -38,6 +39,7 @@ class AnalogType;
 class BundleType;
 class FVectorType;
 class RefType;
+class WritableType;
 
 /// A collection of bits indicating the recursive properties of a type.
 struct RecursiveTypeProperties {
@@ -240,6 +242,23 @@ class RefType
 public:
   using Base::Base;
   static RefType get(FIRRTLBaseType type);
+
+  /// Return the underlying type.
+  FIRRTLBaseType getType();
+
+  static LogicalResult verify(function_ref<InFlightDiagnostic()> emitErrorFn,
+                              FIRRTLBaseType base);
+};
+
+//===----------------------------------------------------------------------===//
+// Writable Types (passive)
+//===----------------------------------------------------------------------===//
+
+class WritableType
+    : public FIRRTLType::TypeBase<WritableType, FIRRTLType, detail::WritableTypeStorage> {
+public:
+  using Base::Base;
+  static WritableType get(FIRRTLBaseType type);
 
   /// Return the underlying type.
   FIRRTLBaseType getType();

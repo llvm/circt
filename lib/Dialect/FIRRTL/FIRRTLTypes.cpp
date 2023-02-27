@@ -83,6 +83,11 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         printNestedType(refType.getType(), os);
         os << '>';
       })
+      .Case<WritableType>([&](auto wType) {
+        os << "writable<";
+        printNestedType(wType.getType(), os);
+        os << '>';
+      })
       .Default([&](auto) { anyFailed = true; });
   return failure(anyFailed);
 }
@@ -216,6 +221,19 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       return failure();
 
     return result = RefType::get(type), success();
+  }
+
+  if (name.equals("writable")) {
+    FIRRTLBaseType type;
+    if (parser.parseLess() || parseNestedBaseType(type, parser) ||
+        parser.parseGreater())
+      return failure();
+
+    if (failed(WritableType::verify(
+            [&]() { return parser.emitError(parser.getNameLoc()); }, type)))
+      return failure();
+
+    return result = WritableType::get(type), success();
   }
 
   return {};
@@ -1071,6 +1089,44 @@ auto RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
 }
 
 //===----------------------------------------------------------------------===//
+// WritableType
+//===----------------------------------------------------------------------===//
+
+namespace circt {
+namespace firrtl {
+namespace detail {
+struct WritableTypeStorage : mlir::TypeStorage {
+  using KeyTy = FIRRTLBaseType;
+
+  WritableTypeStorage(KeyTy value) : value(value) {}
+
+  bool operator==(const KeyTy &key) const { return key == value; }
+
+  static WritableTypeStorage *construct(TypeStorageAllocator &allocator, KeyTy key) {
+    return new (allocator.allocate<WritableTypeStorage>()) WritableTypeStorage(key);
+  }
+
+  KeyTy value;
+};
+
+} // namespace detail
+} // namespace firrtl
+} // namespace circt
+
+auto WritableType::get(FIRRTLBaseType type) -> WritableType {
+  return Base::get(type.getContext(), type);
+}
+
+auto WritableType::getType() -> FIRRTLBaseType { return getImpl()->value; }
+
+auto WritableType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
+                     FIRRTLBaseType base) -> LogicalResult {
+  if (!base.isPassive())
+    return emitErrorFn() << "reference base type must be passive";
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // AnalogType
 //===----------------------------------------------------------------------===//
 
@@ -1099,7 +1155,7 @@ LogicalResult AnalogType::verify(function_ref<InFlightDiagnostic()> emitError,
 void FIRRTLDialect::registerTypes() {
   addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
            // Derived Types
-           BundleType, FVectorType, RefType>();
+           BundleType, FVectorType, RefType, WritableType>();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike

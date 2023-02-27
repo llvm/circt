@@ -141,6 +141,19 @@ def RefType : FIRRTLDialectType<
     and do not represent a circuit element or entity.
   }]>;
 
+def WritableType : FIRRTLDialectType<
+   CPred<"$_self.isa<WritableType>()">,
+  "writable type", "::circt::firrtl::WritableType", [{
+    A writable type, such as `firrtl.writable<uint<1>>`.
+
+    Used for write ports of strict storage elements.
+
+    Parameterized over the wirtable base type,
+    which must be passive.
+
+    Not a base type.
+  }]>;
+
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates
 //===----------------------------------------------------------------------===//
