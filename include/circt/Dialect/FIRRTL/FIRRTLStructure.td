@@ -173,6 +173,39 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
   let hasVerifier = 1;
 }
 
+def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
+  let summary = "FIRRTL intrinsic module";
+  let description = [{
+    The "firrtl.intmodule" operation represents a compiler intrinsic.
+  }];
+  let arguments = (ins
+                   OptionalAttr<StrAttr>:$intrinsicName,
+                   ParamDeclArrayAttr:$parameters,
+                   DefaultValuedAttr<AnnotationArrayAttr,
+                   "ArrayAttr()">:$annotations,
+                   DefaultValuedAttr<ArrayAttr, "{}">:$internalPaths
+                  );
+  let results = (outs);
+  let regions = (region AnyRegion:$body);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name,
+                      "ArrayRef<PortInfo>":$ports,
+                      CArg<"StringRef", "StringRef()">:$intrinsicnamAttr,
+                      CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
+                      CArg<"ArrayAttr", "ArrayAttr()">:$parameters)>
+  ];
+
+  let extraClassDeclaration = [{
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
+  }];
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
 def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
   let summary = "FIRRTL Generated Memory Module";
   let description = [{

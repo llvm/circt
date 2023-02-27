@@ -45,6 +45,34 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     parameter WIDTH = 32
     parameter DEPTH = 32.42
 
+
+  ; CHECK-LABEL: firrtl.intmodule private @MyIntModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
+  ; CHECK: attributes {intrinsic = "testIntrinsic1"}
+  ; CHECK-NOT: {
+  intmodule MyIntModule :
+    input in: UInt
+    output out: UInt<8>
+    intrinsic = testIntrinsic1
+
+
+  ; CHECK-LABEL: firrtl.intmodule private @MyParameterizedIntModule
+  ; CHECK-SAME:    <FORMAT: none = "xyz_timeout=%d\0A",
+  ; CHECK-SAME:     DEFAULT: ui32 = 0,
+  ; CHECK-SAME:     WIDTH: ui32 = 32,
+  ; CHECK-SAME:     DEPTH: f64 = 3.242000e+01>
+  ; CHECK-SAME:    (in in: !firrtl.uint,
+  ; CHECK-SAME:     out out: !firrtl.uint<8>)
+  ; CHECK-SAME:    attributes {intrinsic = "testIntrinsic2"}
+  ; CHECK-NOT: {
+  intmodule MyParameterizedIntModule :
+    input in: UInt
+    output out: UInt<8>
+    intrinsic = testIntrinsic2
+    parameter FORMAT = "xyz_timeout=%d\n"
+    parameter DEFAULT = 0
+    parameter WIDTH = 32
+    parameter DEPTH = 32.42
+
   ; Check that integers are extended to 32 bits if they are smaller.
   ; CHECK-LABEL: firrtl.extmodule private @IntegerParamsModule
   extmodule IntegerParamsModule :
