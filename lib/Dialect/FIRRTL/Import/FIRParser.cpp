@@ -695,6 +695,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
 
           StringRef fieldName;
           FIRRTLType type;
+          auto fieldLoc = getToken().getLoc();
           if (parseFieldId(fieldName, "expected bundle field name") ||
               parseToken(FIRToken::colon, "expected ':' in bundle") ||
               parseType(type, "expected bundle field type"))
@@ -702,7 +703,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
 
           auto baseType = type.dyn_cast<FIRRTLBaseType>();
           if (!baseType)
-            return emitError(getToken().getLoc(), "field must be base type");
+            return emitError(fieldLoc, "field must be base type");
 
           elements.push_back(
               {StringAttr::get(getContext(), fieldName), isFlipped, baseType});
@@ -727,7 +728,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
 
     auto baseType = result.dyn_cast<FIRRTLBaseType>();
     if (!baseType)
-      return emitError(getToken().getLoc(), "element must be base type");
+      return emitError(sizeLoc, "vector element must be base type");
 
     result = FVectorType::get(baseType, size);
   }
