@@ -221,4 +221,27 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
   }];
 }
 
+def RefImpl : FIRRTLImplType<"Ref", [], "::circt::firrtl::FIRRTLType"> {
+  let summary = [{
+    A reference type, such as `firrtl.ref<uint<1>>`.
+
+    Used for remote reads and writes of the wrapped base type.
+
+    Parameterized over the referenced base type,
+    which must be passive and for now must also be ground.
+
+    Not a base type.
+
+    Values of this type are used to capture dataflow paths,
+    and do not represent a circuit element or entity.
+  }];
+  let parameters = (ins "FIRRTLBaseType":$type);
+  let genVerifyDecl = true;
+
+  let skipDefaultBuilders = true;
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "FIRRTLBaseType":$type)>
+  ];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD

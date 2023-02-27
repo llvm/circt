@@ -1036,32 +1036,9 @@ std::pair<uint64_t, bool> FVectorType::rootChildFieldID(uint64_t fieldID,
 // RefType
 //===----------------------------------------------------------------------===//
 
-namespace circt {
-namespace firrtl {
-namespace detail {
-struct RefTypeStorage : mlir::TypeStorage {
-  using KeyTy = FIRRTLBaseType;
-
-  RefTypeStorage(KeyTy value) : value(value) {}
-
-  bool operator==(const KeyTy &key) const { return key == value; }
-
-  static RefTypeStorage *construct(TypeStorageAllocator &allocator, KeyTy key) {
-    return new (allocator.allocate<RefTypeStorage>()) RefTypeStorage(key);
-  }
-
-  KeyTy value;
-};
-
-} // namespace detail
-} // namespace firrtl
-} // namespace circt
-
 auto RefType::get(FIRRTLBaseType type) -> RefType {
   return Base::get(type.getContext(), type);
 }
-
-auto RefType::getType() -> FIRRTLBaseType { return getImpl()->value; }
 
 auto RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
                      FIRRTLBaseType base) -> LogicalResult {
