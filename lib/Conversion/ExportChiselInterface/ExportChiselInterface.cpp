@@ -35,7 +35,8 @@ static const unsigned int indentIncrement = 2;
 static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
                                   Direction direction, llvm::raw_ostream &os,
                                   unsigned int indent,
-                                  bool hasEmittedDirection = false) {
+                                  bool hasEmittedDirection = false,
+                                  bool hasEmittedConst = false) {
   auto emitTypeWithArguments =
       [&](StringRef name,
           // A lambda of type (bool hasEmittedDirection) -> LogicalResult.
@@ -58,6 +59,12 @@ static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
       }
     }
 
+    bool emitConst = type.isConst() && !hasEmittedConst;
+    if (emitConst) {
+      os << "Const(";
+      hasEmittedConst = true;
+    }
+
     os << name;
 
     if (emitParentheses)
@@ -67,6 +74,9 @@ static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
       return failure();
 
     if (emitParentheses)
+      os << ')';
+
+    if (emitConst)
       os << ')';
 
     if (emitDirection)
@@ -124,7 +134,7 @@ static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
                 auto elementResult = emitPortType(
                     location, element.type,
                     element.isFlip ? direction::flip(direction) : direction, os,
-                    nestedIndent, hasEmittedDirection);
+                    nestedIndent, hasEmittedDirection, hasEmittedConst);
                 if (failed(elementResult))
                   return failure();
                 os << '\n';
@@ -139,7 +149,7 @@ static LogicalResult emitPortType(Location location, FIRRTLBaseType type,
         return emitTypeWithArguments("Vec", [&](bool hasEmittedDirection) {
           os << vectorType.getNumElements() << ", ";
           return emitPortType(location, vectorType.getElementType(), direction,
-                              os, indent, hasEmittedDirection);
+                              os, indent, hasEmittedDirection, hasEmittedConst);
         });
       })
       .Default([](FIRRTLBaseType) {

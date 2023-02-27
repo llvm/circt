@@ -31,6 +31,14 @@
 // CHECK-NEXT:      val valid = Input(UInt(1.W))
 // CHECK-NEXT:      val ready = Output(UInt(1.W))
 // CHECK-NEXT:    }))
+// CHECK-NEXT:    val constUInt = IO(Input(Const(UInt(3.W))))
+// CHECK-NEXT:    val constBundle = IO(Input(Const(new Bundle {
+// CHECK-NEXT:      val a = SInt(8.W)
+// CHECK-NEXT:    })))
+// CHECK-NEXT:    val mixedConstBundle = IO(Input(new Bundle {
+// CHECK-NEXT:      val a = SInt(8.W)
+// CHECK-NEXT:      val b = Const(UInt(4.W))
+// CHECK-NEXT:    }))
 // CHECK-NEXT:  }
 firrtl.circuit "Foo"  {
     firrtl.module @Foo(
@@ -43,5 +51,8 @@ firrtl.circuit "Foo"  {
       out %bundleWithFlip: !firrtl.bundle<word: uint<32>, valid: uint<1>, ready flip: uint<1>>,
       in %vector: !firrtl.vector<uint<16>, 10>,
       in %vectorOfVector: !firrtl.vector<vector<uint<16>, 10>, 20>,
-      in %vectorOfBundle: !firrtl.vector<bundle<word: uint<32>, valid: uint<1>, ready flip: uint<1>>, 5>) {}
+      in %vectorOfBundle: !firrtl.vector<bundle<word: uint<32>, valid: uint<1>, ready flip: uint<1>>, 5>,
+      in %constUInt: !firrtl.const.uint<3>,
+      in %constBundle: !firrtl.const.bundle<a: sint<8>>,
+      in %mixedConstBundle: !firrtl.bundle<a: sint<8>, b: const.uint<4>>) {}
 }

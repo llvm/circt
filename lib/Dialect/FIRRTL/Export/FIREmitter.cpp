@@ -145,7 +145,7 @@ struct Emitter {
   void emitAttribute(RUWAttr attr);
 
   // Types
-  void emitType(Type type);
+  void emitType(Type type, bool includeConst = true);
 
   // Locations
   void emitLocation(Location loc);
@@ -655,7 +655,8 @@ void Emitter::emitExpression(Value value) {
 }
 
 void Emitter::emitExpression(ConstantOp op) {
-  emitType(op.getType());
+  // Don't include 'const' on the type in a literal expression
+  emitType(op.getType(), false);
   // TODO: Add option to control base-2/8/10/16 output here.
   os << "(" << op.getValue() << ")";
 }
@@ -739,7 +740,12 @@ void Emitter::emitAttribute(RUWAttr attr) {
 }
 
 /// Emit a FIRRTL type into the output.
-void Emitter::emitType(Type type) {
+void Emitter::emitType(Type type, bool includeConst) {
+  if (includeConst && isConst(type)) {
+    os << "const ";
+    includeConst = false;
+  }
+
   auto emitWidth = [&](std::optional<int32_t> width) {
     if (width)
       os << "<" << *width << ">";
@@ -768,7 +774,7 @@ void Emitter::emitType(Type type) {
           if (element.isFlip)
             os << "flip ";
           os << element.name.getValue() << " : ";
-          emitType(element.type);
+          emitType(element.type, includeConst);
           anyEmitted = true;
         }
         if (anyEmitted)
@@ -776,11 +782,11 @@ void Emitter::emitType(Type type) {
         os << "}";
       })
       .Case<FVectorType>([&](auto type) {
-        emitType(type.getElementType());
+        emitType(type.getElementType(), includeConst);
         os << "[" << type.getNumElements() << "]";
       })
       .Case<CMemoryType>([&](auto type) {
-        emitType(type.getElementType());
+        emitType(type.getElementType(), includeConst);
         os << "[" << type.getNumElements() << "]";
       })
       .Default([&](auto type) {

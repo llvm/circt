@@ -1293,6 +1293,35 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output p : Probe<UInt<1>>
     p is invalid
 
+; CHECK-LABEL: firrtl.module private @ConstTypes(
+  module ConstTypes:
+    input c: const Clock         ; CHECK: %c: !firrtl.const.clock,
+    input r: const Reset         ; CHECK: %r: !firrtl.const.reset,
+    input ar: const AsyncReset   ; CHECK: %ar: !firrtl.const.asyncreset,
+    input a: const Analog        ; CHECK: %a: !firrtl.const.analog,
+    input a8: const Analog<8>    ; CHECK: %a8: !firrtl.const.analog<8>,
+    input s: const SInt          ; CHECK: %s: !firrtl.const.sint,
+    input s4: const SInt<4>      ; CHECK: %s4: !firrtl.const.sint<4>,
+    input u: const UInt          ; CHECK: %u: !firrtl.const.uint,
+    
+    ; CHECK: %b: !firrtl.const.bundle<int_1 flip: uint<1>, int_out: uint<2>>
+    input b: const {flip int_1 : UInt<1>, int_out : UInt<2>}
+    ; CHECK: %b_constfields: !firrtl.bundle<int_1 flip: const.uint<1>, int_out: const.uint<2>>
+    input b_constfields: {flip int_1 : const UInt<1>, int_out : const UInt<2>}
+    ; CHECK: %mixedb: !firrtl.bundle<a: sint<1>, b: const.uint<2>>
+    input mixedb: {a: SInt<1>, b: const UInt<2>}
+    ; CHECK: %vec: !firrtl.const.vector<const.uint<1>, 4>) {
+    input vec: const UInt<1>[4]
+
+    ; CHECK-NEXT: %w = firrtl.wire interesting_name : !firrtl.const.sint<4>
+    wire w: const SInt<4>
+    ; CHECK-NEXT: firrtl.strictconnect %w, %s4 : !firrtl.const.sint<4>
+    w <= s4
+    ; CHECK-NEXT: %nonconst_w = firrtl.wire interesting_name : !firrtl.sint<4>
+    wire nonconst_w: SInt<4>
+    ; CHECK-NEXT: firrtl.strictconnect %nonconst_w, %s4 : !firrtl.sint<4>, !firrtl.const.sint<4>
+    nonconst_w <= s4
+
 ;// -----
 
 FIRRTL version 3.0.0

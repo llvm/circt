@@ -257,7 +257,8 @@ struct FIRParser {
   ParseResult parseId(StringRef &result, const Twine &message);
   ParseResult parseId(StringAttr &result, const Twine &message);
   ParseResult parseFieldId(StringRef &result, const Twine &message);
-  ParseResult parseType(FIRRTLType &result, const Twine &message);
+  ParseResult parseType(FIRRTLType &result, const Twine &message,
+                        bool isConst = false);
 
   ParseResult parseOptionalRUW(RUWAttr &result);
 
@@ -669,28 +670,30 @@ ParseResult FIRParser::parseFieldId(StringRef &result, const Twine &message) {
 ///      ::= type '[' intLit ']'
 ///      ::= 'Probe' '<' type '>'
 ///      ::= 'RWProbe' '<' type '>'
+///      ::= 'const' type
 ///
 /// field: 'flip'? fieldId ':' type
 ///
 // NOLINTNEXTLINE(misc-no-recursion)
-ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
+ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message,
+                                 bool isConst) {
   switch (getToken().getKind()) {
   default:
     return emitError(message), failure();
 
   case FIRToken::kw_Clock:
     consumeToken(FIRToken::kw_Clock);
-    result = ClockType::get(getContext());
+    result = ClockType::get(getContext(), isConst);
     break;
 
   case FIRToken::kw_Reset:
     consumeToken(FIRToken::kw_Reset);
-    result = ResetType::get(getContext());
+    result = ResetType::get(getContext(), isConst);
     break;
 
   case FIRToken::kw_AsyncReset:
     consumeToken(FIRToken::kw_AsyncReset);
-    result = AsyncResetType::get(getContext());
+    result = AsyncResetType::get(getContext(), isConst);
     break;
 
   case FIRToken::kw_UInt:
@@ -705,12 +708,12 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
       return failure();
 
     if (kind == FIRToken::kw_SInt)
-      result = SIntType::get(getContext(), width);
+      result = SIntType::get(getContext(), width, isConst);
     else if (kind == FIRToken::kw_UInt)
-      result = UIntType::get(getContext(), width);
+      result = UIntType::get(getContext(), width, isConst);
     else {
       assert(kind == FIRToken::kw_Analog);
-      result = AnalogType::get(getContext(), width);
+      result = AnalogType::get(getContext(), width, isConst);
     }
     break;
   }
@@ -764,9 +767,13 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
           return success();
         }))
       return failure();
-    result = BundleType::get(getContext(), elements);
+    result = BundleType::get(getContext(), elements, isConst);
     break;
   }
+
+  case FIRToken::kw_const:
+    consumeToken(FIRToken::kw_const);
+    return parseType(result, message, true);
   }
 
   // Handle postfix vector sizes.
@@ -784,7 +791,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     if (!baseType)
       return emitError(sizeLoc, "vector element must be base type");
 
-    result = FVectorType::get(baseType, size);
+    result = FVectorType::get(baseType, size, isConst);
   }
 
   return success();
