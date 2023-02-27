@@ -2960,7 +2960,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     }
   }
 
-  // Otherwise, handle extmodule and intmodule specific features like 
+  // Otherwise, handle extmodule and intmodule specific features like
   // parameters.
 
   // Parse a defname if present and is an extmodule.
@@ -2978,7 +2978,6 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
         parseId(intName, "expected defname name"))
       return failure();
   }
-
 
   SmallVector<Attribute> parameters;
   SmallPtrSet<StringAttr, 8> seenNames;
@@ -3044,11 +3043,11 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
 
   FModuleLike fmodule;
   if (isExtModule)
-   fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList,
-                                              defName, annotations);
-else
- fmodule = builder.create<FIntModuleOp>(info.getLoc(), name, portList,
-                                              intName, annotations);
+    fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList,
+                                           defName, annotations);
+  else
+    fmodule = builder.create<FIntModuleOp>(info.getLoc(), name, portList,
+                                           intName, annotations);
 
   fmodule->setAttr("parameters", builder.getArrayAttr(parameters));
 
