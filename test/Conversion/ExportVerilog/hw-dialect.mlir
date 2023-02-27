@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --test-apply-lowering-options='options=emittedLineLength=100' -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s
+// RUN: circt-opt %s --test-apply-lowering-options='options=emittedLineLength=100,emitBindComments' -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s
 
 // CHECK-LABEL: // external module E
 hw.module.extern @E(%a: i1, %b: i1, %c: i1)

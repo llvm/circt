@@ -146,6 +146,10 @@ struct LoweringOptions {
   /// If true, emit `wire` in port lists rather than nothing. Used in cases
   /// where `default_nettype is not set to wire.
   bool emitWireInPorts = false;
+
+  /// If true, emit a comment wherever an instance wasn't printed, because
+  /// it's emitted elsewhere as a bind.
+  bool emitBindComments = false;
 };
 } // namespace circt
 
