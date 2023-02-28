@@ -45,6 +45,13 @@ constexpr StringRef extModBundleSignalsAttrName = "esi.bundle";
 /// ports into a bunch of individual 'data' wires.
 constexpr StringRef extModPortFlattenStructsAttrName = "esi.portFlattenStructs";
 
+constexpr StringRef extModPortInSuffix = "esi.portInSuffix";
+constexpr StringRef extModPortOutSuffix = "esi.portOutSuffix";
+constexpr StringRef extModPortValidSuffix = "esi.portValidSuffix";
+constexpr StringRef extModPortReadySuffix = "esi.portReadySuffix";
+constexpr StringRef extModPortRdenSuffix = "esi.portRdenSuffix";
+constexpr StringRef extModPortEmptySuffix = "esi.portEmptySuffix";
+
 /// Find all the port triples on a module which fit the
 /// <name>/<name>_valid/<name>_ready pattern. Ready must be the opposite
 /// direction of the other two.

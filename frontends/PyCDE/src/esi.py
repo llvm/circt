@@ -19,6 +19,12 @@ from typing import Dict, List, Optional
 __dir__ = Path(__file__).parent
 
 FlattenStructPorts = "esi.portFlattenStructs"
+PortInSuffix = "esi.portInSuffix"
+PortOutSuffix = "esi.portOutSuffix"
+PortValidSuffix = "esi.portValidSuffix"
+PortReadySuffix = "esi.portReadySuffix"
+PortRdenSuffix = "esi.portRdenSuffix"
+PortEmptySuffix = "esi.portEmptySuffix"
 
 ToServer = InputChannel
 FromServer = OutputChannel

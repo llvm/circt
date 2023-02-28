@@ -226,7 +226,7 @@ class ModuleLikeBuilderBase(_PyProxy):
 
       if attr_name == "Attributes":
         self.attributes = {
-            mod_attr[0]: mod_attr[1]
+            mod_attr[0]: _obj_to_attribute(mod_attr[1])
             for mod_attr in attr
             if isinstance(mod_attr, tuple)
         }
