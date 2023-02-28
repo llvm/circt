@@ -463,6 +463,8 @@ static StringAttr appendToRtlName(StringAttr base, Twine suffix) {
   return StringAttr::get(context, base.getValue() + suffix);
 }
 
+// Returns either the string dialect attr stored in 'op' going by the name
+// 'attrName' or 'def' if the attribute doesn't exist in 'op'.
 inline static StringRef getStringAttributeOr(Operation *op, StringRef attrName,
                                              StringRef def) {
   auto attr = op->getAttrOfType<StringAttr>(attrName);
@@ -533,7 +535,6 @@ private:
   // Does the module demand that we break out all the struct fields into
   // individual fields?
   bool flattenStructs;
-
   // If the module has a block and it wants to be modified, this'll be non-null.
   Block *body;
   // Did we find an ESI port?
