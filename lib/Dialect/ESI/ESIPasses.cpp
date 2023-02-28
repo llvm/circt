@@ -463,6 +463,16 @@ static StringAttr appendToRtlName(StringAttr base, Twine suffix) {
   return StringAttr::get(context, base.getValue() + suffix);
 }
 
+// Returns either the string dialect attr stored in 'op' going by the name
+// 'attrName' or 'def' if the attribute doesn't exist in 'op'.
+inline static StringRef getStringAttributeOr(Operation *op, StringRef attrName,
+                                             StringRef def) {
+  auto attr = op->getAttrOfType<StringAttr>(attrName);
+  if (attr)
+    return attr.getValue();
+  return def;
+}
+
 namespace {
 class SignalingStandard;
 
@@ -471,8 +481,16 @@ class SignalingStandard;
 class ChannelRewriter {
 public:
   ChannelRewriter(hw::HWMutableModuleLike mod)
-      : mod(mod), body(nullptr), foundEsiPorts(false) {
-    flattenStructs = mod->hasAttr(extModPortFlattenStructsAttrName);
+      : inSuffix(getStringAttributeOr(mod, extModPortInSuffix, "")),
+        outSuffix(getStringAttributeOr(mod, extModPortOutSuffix, "")),
+        validSuffix(getStringAttributeOr(mod, extModPortValidSuffix, "_valid")),
+        readySuffix(getStringAttributeOr(mod, extModPortReadySuffix, "_ready")),
+        rdenSuffix(getStringAttributeOr(mod, extModPortRdenSuffix, "_rden")),
+        emptySuffix(getStringAttributeOr(mod, extModPortEmptySuffix, "_empty")),
+        mod(mod),
+        flattenStructs(mod->hasAttr(extModPortFlattenStructsAttrName)),
+        body(nullptr), foundEsiPorts(false) {
+
     if (mod->getNumRegions() == 1 && mod->getRegion(0).hasOneBlock())
       body = &mod->getRegion(0).front();
   }
@@ -505,6 +523,12 @@ public:
                        PortInfo &newPort);
 
   bool shouldFlattenStructs() const { return flattenStructs; }
+
+  /// Some external modules use unusual port naming conventions. Since we want
+  /// to avoid needing to write wrappers, provide some flexibility in the naming
+  /// convention.
+  const StringRef inSuffix, outSuffix;
+  const StringRef validSuffix, readySuffix, rdenSuffix, emptySuffix;
 
 private:
   hw::HWMutableModuleLike mod;
@@ -760,7 +784,9 @@ private:
 
 Value ChannelRewriter::createNewInput(PortInfo origPort, Twine suffix,
                                       Type type, PortInfo &newPort) {
-  newPort = PortInfo{appendToRtlName(origPort.name, suffix),
+  newPort = PortInfo{appendToRtlName(origPort.name, suffix.isTriviallyEmpty()
+                                                        ? ""
+                                                        : suffix + inSuffix),
                      PortDirection::INPUT,
                      type,
                      newInputs.size(),
@@ -776,7 +802,9 @@ Value ChannelRewriter::createNewInput(PortInfo origPort, Twine suffix,
 void ChannelRewriter::createNewOutput(PortInfo origPort, Twine suffix,
                                       Type type, Value output,
                                       PortInfo &newPort) {
-  newPort = PortInfo{appendToRtlName(origPort.name, suffix),
+  newPort = PortInfo{appendToRtlName(origPort.name, suffix.isTriviallyEmpty()
+                                                        ? ""
+                                                        : suffix + outSuffix),
                      PortDirection::OUTPUT,
                      type,
                      newOutputs.size(),
@@ -883,7 +911,8 @@ void ValidReady::buildInputSignals() {
 
   // When we find one, add a data and valid signal to the new args.
   Value data = buildInputDataPorts();
-  Value valid = rewriter.createNewInput(origPort, "_valid", i1, validPort);
+  Value valid =
+      rewriter.createNewInput(origPort, rewriter.validSuffix, i1, validPort);
 
   Value ready;
   if (body) {
@@ -897,7 +926,8 @@ void ValidReady::buildInputSignals() {
     body->getArgument(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
   }
 
-  rewriter.createNewOutput(origPort, "_ready", i1, ready, readyPort);
+  rewriter.createNewOutput(origPort, rewriter.readySuffix, i1, ready,
+                           readyPort);
 }
 
 void ValidReady::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
@@ -913,7 +943,8 @@ void ValidReady::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
 void ValidReady::buildOutputSignals() {
   Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
 
-  Value ready = rewriter.createNewInput(origPort, "_ready", i1, readyPort);
+  Value ready =
+      rewriter.createNewInput(origPort, rewriter.readySuffix, i1, readyPort);
   Value data, valid;
   if (body) {
     auto *terminator = body->getTerminator();
@@ -927,7 +958,8 @@ void ValidReady::buildOutputSignals() {
 
   // New outputs.
   buildOutputDataPorts(data);
-  rewriter.createNewOutput(origPort, "_valid", i1, valid, validPort);
+  rewriter.createNewOutput(origPort, rewriter.validSuffix, i1, valid,
+                           validPort);
 }
 
 void ValidReady::mapOutputSignals(OpBuilder &b, Operation *inst,
@@ -947,7 +979,8 @@ void FIFO::buildInputSignals() {
 
   // When we find one, add a data and valid signal to the new args.
   Value data = buildInputDataPorts();
-  Value empty = rewriter.createNewInput(origPort, "_empty", i1, emptyPort);
+  Value empty =
+      rewriter.createNewInput(origPort, rewriter.emptySuffix, i1, emptyPort);
 
   Value rden;
   if (body) {
@@ -962,7 +995,7 @@ void FIFO::buildInputSignals() {
     body->getArgument(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
   }
 
-  rewriter.createNewOutput(origPort, "_rden", i1, rden, rdenPort);
+  rewriter.createNewOutput(origPort, rewriter.rdenSuffix, i1, rden, rdenPort);
 }
 
 void FIFO::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
@@ -978,7 +1011,8 @@ void FIFO::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
 void FIFO::buildOutputSignals() {
   Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
 
-  Value rden = rewriter.createNewInput(origPort, "_rden", i1, rdenPort);
+  Value rden =
+      rewriter.createNewInput(origPort, rewriter.rdenSuffix, i1, rdenPort);
   Value data, empty;
   if (body) {
     auto *terminator = body->getTerminator();
@@ -992,7 +1026,8 @@ void FIFO::buildOutputSignals() {
 
   // New outputs.
   buildOutputDataPorts(data);
-  rewriter.createNewOutput(origPort, "_empty", i1, empty, emptyPort);
+  rewriter.createNewOutput(origPort, rewriter.emptySuffix, i1, empty,
+                           emptyPort);
 }
 
 void FIFO::mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
