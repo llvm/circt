@@ -109,6 +109,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
             "expected integer for number of namehint heurstic term limit");
         wireSpillingNamehintTermLimit = DEFAULT_NAMEHINT_TERM_LIMIT;
       }
+    } else if (option == "emitWireInPorts") {
+      emitWireInPorts = true;
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
@@ -156,6 +158,8 @@ std::string LoweringOptions::toString() const {
   if (maximumNumberOfTermsPerExpression != DEFAULT_TERM_LIMIT)
     options += "maximumNumberOfTermsPerExpression=" +
                std::to_string(maximumNumberOfTermsPerExpression) + ',';
+  if (emitWireInPorts)
+    options += "emitWireInPorts,";
 
   // Remove a trailing comma if present.
   if (!options.empty()) {

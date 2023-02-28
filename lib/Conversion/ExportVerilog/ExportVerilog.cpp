@@ -4794,6 +4794,9 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
         ps << (hasOutputs ? "inout  " : "inout ");
         break;
       }
+      bool emitWireInPorts = state.options.emitWireInPorts;
+      if (emitWireInPorts)
+        ps << "wire ";
 
       // Emit the type.
       if (!portTypeStrings[portIdx].empty())
@@ -4801,7 +4804,8 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       if (portTypeStrings[portIdx].size() < maxTypeWidth)
         ps.nbsp(maxTypeWidth - portTypeStrings[portIdx].size());
 
-      size_t startOfNamePos = (hasOutputs ? 7 : 6) + maxTypeWidth;
+      size_t startOfNamePos =
+          (hasOutputs ? 7 : 6) + (emitWireInPorts ? 5 : 0) + maxTypeWidth;
 
       // Emit the name.
       ps << PPExtString(getPortVerilogName(module, portInfo[portIdx]));
