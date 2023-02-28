@@ -479,14 +479,14 @@ class SignalingStandard;
 class ChannelRewriter {
 public:
   ChannelRewriter(hw::HWMutableModuleLike mod)
-      : mod(mod),
-        flattenStructs(mod->hasAttr(extModPortFlattenStructsAttrName)),
-        inSuffix(getStringAttributeOr(mod, extModPortInSuffix, "")),
+      : inSuffix(getStringAttributeOr(mod, extModPortInSuffix, "")),
         outSuffix(getStringAttributeOr(mod, extModPortOutSuffix, "")),
         validSuffix(getStringAttributeOr(mod, extModPortValidSuffix, "_valid")),
         readySuffix(getStringAttributeOr(mod, extModPortReadySuffix, "_ready")),
         rdenSuffix(getStringAttributeOr(mod, extModPortRdenSuffix, "_rden")),
         emptySuffix(getStringAttributeOr(mod, extModPortEmptySuffix, "_empty")),
+        mod(mod),
+        flattenStructs(mod->hasAttr(extModPortFlattenStructsAttrName)),
         body(nullptr), foundEsiPorts(false) {
 
     if (mod->getNumRegions() == 1 && mod->getRegion(0).hasOneBlock())
@@ -522,6 +522,9 @@ public:
 
   bool shouldFlattenStructs() const { return flattenStructs; }
 
+  /// Some external modules use unusual port naming conventions. Since we want
+  /// to avoid needing to write wrappers, provide some flexibility in the naming
+  /// convention.
   const StringRef inSuffix, outSuffix;
   const StringRef validSuffix, readySuffix, rdenSuffix, emptySuffix;
 
@@ -780,8 +783,9 @@ private:
 
 Value ChannelRewriter::createNewInput(PortInfo origPort, Twine suffix,
                                       Type type, PortInfo &newPort) {
-  Twine actualSuffix = suffix.isTriviallyEmpty() ? "" : suffix + inSuffix;
-  newPort = PortInfo{appendToRtlName(origPort.name, actualSuffix),
+  newPort = PortInfo{appendToRtlName(origPort.name, suffix.isTriviallyEmpty()
+                                                        ? ""
+                                                        : suffix + inSuffix),
                      PortDirection::INPUT,
                      type,
                      newInputs.size(),
@@ -797,8 +801,9 @@ Value ChannelRewriter::createNewInput(PortInfo origPort, Twine suffix,
 void ChannelRewriter::createNewOutput(PortInfo origPort, Twine suffix,
                                       Type type, Value output,
                                       PortInfo &newPort) {
-  Twine actualSuffix = suffix.isTriviallyEmpty() ? "" : suffix + outSuffix;
-  newPort = PortInfo{appendToRtlName(origPort.name, actualSuffix),
+  newPort = PortInfo{appendToRtlName(origPort.name, suffix.isTriviallyEmpty()
+                                                        ? ""
+                                                        : suffix + outSuffix),
                      PortDirection::OUTPUT,
                      type,
                      newOutputs.size(),
