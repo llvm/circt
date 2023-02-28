@@ -27,6 +27,7 @@
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/LoweringOptionsParser.h"
+#include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Bytecode/BytecodeReader.h"
@@ -506,46 +507,6 @@ static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
   return mlir::createCanonicalizerPass(config);
 }
 
-// This class prints logs before and after of pass executions. This
-// insrumentation assumes that passes are not parallelized for firrtl::CircuitOp
-// and mlir::ModuleOp.
-class FirtoolPassInstrumentation : public mlir::PassInstrumentation {
-  // This stores start time points of passes.
-  using TimePoint = llvm::sys::TimePoint<>;
-  llvm::SmallVector<TimePoint> timePoints;
-  int level = 0;
-
-public:
-  void runBeforePass(Pass *pass, Operation *op) override {
-    // This assumes that it is safe to log messages to stderr if the operation
-    // is circuit or module op.
-    if (isa<firrtl::CircuitOp, mlir::ModuleOp>(op)) {
-      timePoints.push_back(TimePoint::clock::now());
-      auto &os = llvm::errs();
-      os << "[firtool] ";
-      os.indent(2 * level++);
-      os << "Running \"";
-      pass->printAsTextualPipeline(llvm::errs());
-      os << "\"\n";
-    }
-  }
-
-  void runAfterPass(Pass *pass, Operation *op) override {
-    using namespace std::chrono;
-    // This assumes that it is safe to log messages to stderr if the operation
-    // is circuit or module op.
-    if (isa<firrtl::CircuitOp, mlir::ModuleOp>(op)) {
-      auto &os = llvm::errs();
-      auto elapsed = duration<double>(TimePoint::clock::now() -
-                                      timePoints.pop_back_val()) /
-                     seconds(1);
-      os << "[firtool] ";
-      os.indent(2 * --level);
-      os << "-- Done in " << llvm::format("%.3f", elapsed) << " sec\n";
-    }
-  }
-};
-
 /// Check output stream before writing bytecode to it.
 /// Warn and return true if output is known to be displayed.
 static bool checkBytecodeOutputToConsole(raw_ostream &os) {
@@ -633,7 +594,10 @@ static LogicalResult processBuffer(
   pm.enableVerifier(verifyPasses);
   pm.enableTiming(ts);
   if (verbosePassExecutions)
-    pm.addInstrumentation(std::make_unique<FirtoolPassInstrumentation>());
+    pm.addInstrumentation(
+        std::make_unique<
+            VerbosePassInstrumentation<firrtl::CircuitOp, mlir::ModuleOp>>(
+            "firtool"));
   applyPassManagerCLOptions(pm);
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
@@ -886,7 +850,9 @@ static LogicalResult processBuffer(
     applyPassManagerCLOptions(exportPm);
     if (verbosePassExecutions)
       exportPm.addInstrumentation(
-          std::make_unique<FirtoolPassInstrumentation>());
+          std::make_unique<
+              VerbosePassInstrumentation<firrtl::CircuitOp, mlir::ModuleOp>>(
+              "firtool"));
     // Legalize unsupported operations within the modules.
     exportPm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
 
