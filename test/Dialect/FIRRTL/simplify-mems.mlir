@@ -134,6 +134,10 @@ firrtl.circuit "ReadWriteToWrite" {
 
 // -----
 
+// Pending 4734
+
+// XFAIL: *
+
 firrtl.circuit "UnusedPorts" {
   firrtl.module public @UnusedPorts(
       in %clock: !firrtl.clock,

@@ -2692,10 +2692,8 @@ struct FoldRegMems : public mlir::RewritePattern {
 
 void MemOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                         MLIRContext *context) {
-  results
-      .insert<FoldZeroWidthMemory, FoldReadOrWriteOnlyMemory,
-              FoldReadWritePorts, FoldUnusedPorts, FoldUnusedBits, FoldRegMems>(
-          context);
+  results.insert<FoldZeroWidthMemory, FoldReadOrWriteOnlyMemory,
+                 FoldReadWritePorts, FoldUnusedPorts, FoldUnusedBits>(context);
 }
 
 //===----------------------------------------------------------------------===//
