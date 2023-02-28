@@ -119,7 +119,7 @@ class NoopBuildExtension(build_ext):
 
 
 setup(
-    name="circt-python",
+    name="circt",
     version="0.0.1",
     author="Mike Urbach",
     author_email="mikeurbach@gmail.com",
