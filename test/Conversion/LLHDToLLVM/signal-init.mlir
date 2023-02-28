@@ -1,53 +1,25 @@
 // RUN: circt-opt %s --convert-llhd-to-llvm | FileCheck %s
 
-// CHECK-LABEL: llvm.mlir.global internal @_array_global() {addr_space = 0 : i32} : !llvm.array<2 x i1> {
-// CHECK: [[VAL_0:%.+]] = llvm.mlir.undef : !llvm.array<2 x i1>
-// CHECK: [[VAL_1:%.+]] = llvm.mlir.constant(false) : i1
-// CHECK: [[VAL_2:%.+]] = llvm.insertvalue [[VAL_1]], [[VAL_0]][0] : !llvm.array<2 x i1>
-// CHECK: [[VAL_3:%.+]] = llvm.mlir.constant(false) : i1
-// CHECK: [[VAL_4:%.+]] = llvm.insertvalue [[VAL_3]], [[VAL_2]][1] : !llvm.array<2 x i1>
-// CHECK: llvm.return [[VAL_4]] : !llvm.array<2 x i1>
-// CHECK: }
-
 // CHECK-LABEL: llvm.func @llhd_init
-// CHECK: llvm.mlir.constant(false) : i1
 llhd.entity @root() -> () {
-  llhd.inst "inst1" @initArraySig () -> () : () -> ()
-  llhd.inst "inst2" @initStructSig () -> () : () -> ()
-  llhd.inst "inst3" @initPartiallyLowered () -> () : () -> ()
-  llhd.inst "inst4" @initMultipleResults () -> () : () -> ()
+  llhd.inst "inst0" @initSig () -> () : () -> ()
+  llhd.inst "inst1" @initPartiallyLowered () -> () : () -> ()
+  llhd.inst "inst2" @initMultipleResults () -> () : () -> ()
 }
 
-// CHECK: [[ZERO:%.+]] = llvm.mlir.constant(false) : i1
-// CHECK: [[A2:%.+]] = llvm.mlir.addressof @_array_global : !llvm.ptr<array<2 x i1>>
-// CHECK: [[A3:%.+]] = llvm.load [[A2]] : !llvm.ptr<array<2 x i1>>
-// CHECK: llvm.store [[A3]], {{%.+}} : !llvm.ptr<array<2 x i1>>
-llhd.entity @initArraySig () -> () {
-  %init = hw.constant 0 : i1
-  %initArr = hw.array_create %init, %init : i1
-  %0 = llhd.sig "sig" %initArr : !hw.array<2xi1>
+llhd.entity @initSig () -> () {
+  %1 = hw.aggregate_constant [ 0 : i1, 1 : i1] : !hw.array<2xi1>
+  %2 = hw.aggregate_constant [ 0 : i1, 1 : i5] : !hw.struct<f1: i1, f2: i5>
+  // CHECK: [[V0:%.+]] = llvm.mlir.addressof @{{.+}} : !llvm.ptr<array<2 x i1>>
+  // CHECK: [[V1:%.+]] = llvm.load [[V0]] : !llvm.ptr<array<2 x i1>>
+  // CHECK: llvm.store [[V1]], {{%.+}} : !llvm.ptr<array<2 x i1>>
+  %3 = llhd.sig "sig1" %1 : !hw.array<2xi1>
+  // CHECK: [[V2:%.+]] = llvm.mlir.addressof @{{.+}} : !llvm.ptr<struct<(i5, i1)>>
+  // CHECK: [[V3:%.+]] = llvm.load [[V2]] : !llvm.ptr<struct<(i5, i1)>>
+  // CHECK: llvm.store [[V3]], {{%.+}} : !llvm.ptr<struct<(i5, i1)>>
+  %4 = llhd.sig "sig2" %2 : !hw.struct<f1: i1, f2: i5>
 }
 
-// CHECK: llvm.mlir.constant(false) : i1
-
-// CHECK: [[FALSE:%.+]] = llvm.mlir.constant(false) : i1
-// CHECK: [[THREE:%.+]] = llvm.mlir.constant(3 : i5) : i5
-// CHECK: [[S1:%.+]] = llvm.mlir.undef : !llvm.struct<(i5, i1)>
-// CHECK: [[S2:%.+]] = llvm.insertvalue [[THREE]], [[S1]][0] : !llvm.struct<(i5, i1)>
-// CHECK: [[S3:%.+]] = llvm.insertvalue [[FALSE]], [[S2]][1] : !llvm.struct<(i5, i1)>
-// CHECK: llvm.store [[S3]], {{%.+}} : !llvm.ptr<struct<(i5, i1)>>
-llhd.entity @initStructSig () -> () {
-  %init = hw.constant 0 : i1
-  %init1 = hw.constant 3 : i5
-  %initStruct = hw.struct_create (%init, %init1) : !hw.struct<f1: i1, f2: i5>
-  %0 = llhd.sig "sig" %initStruct : !hw.struct<f1: i1, f2: i5>
-}
-
-// CHECK: [[B1:%.+]] = llvm.mlir.undef : !llvm.array<2 x i1>
-// CHECK: [[FALSE1:%.+]] = llvm.mlir.constant(false) : i1
-// CHECK: [[B2:%.+]] = llvm.insertvalue [[FALSE1]], [[B1]][0] : !llvm.array<2 x i1>
-// CHECK: [[B3:%.+]] = llvm.insertvalue [[FALSE1]], [[B2]][1] : !llvm.array<2 x i1>
-// CHECK: llvm.store [[B3]], {{%.+}} : !llvm.ptr<array<2 x i1>>
 llhd.entity @initPartiallyLowered () -> () {
   %0 = llvm.mlir.constant(false) : i1
   %1 = llvm.mlir.undef : !llvm.array<2 x i1>

@@ -13,6 +13,7 @@ add_circt_conversion_library(CIRCTLLHDToLLVM
   CIRCTCombToLLVM
   CIRCTHWToLLVM
   CIRCTHW
+  CIRCTSupport
   MLIRArithToLLVM
   MLIRControlFlowToLLVM
   MLIRFuncToLLVM
