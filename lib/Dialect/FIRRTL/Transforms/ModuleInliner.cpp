@@ -682,8 +682,6 @@ void Inliner::rename(StringRef prefix, Operation *op,
           auto &mnla = nlaMap[nla];
           mnla.setInnerSym(moduleNamespace.module.moduleNameAttr(), newSymAttr);
         }
-        auto oldInnerRef = InnerRefAttr::get(instanceParent, oldInstSym);
-        instOpHierPaths.erase(oldInnerRef);
       }
     }
   }
