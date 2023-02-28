@@ -130,6 +130,7 @@ def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
 
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
+    ArrayAttr getParameters();
   }];
 
 }
@@ -179,7 +180,7 @@ def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
     The "firrtl.intmodule" operation represents a compiler intrinsic.
   }];
   let arguments = (ins
-                   OptionalAttr<StrAttr>:$intrinsicName,
+                   OptionalAttr<StrAttr>:$intrinsic,
                    ParamDeclArrayAttr:$parameters,
                    DefaultValuedAttr<AnnotationArrayAttr,
                    "ArrayAttr()">:$annotations,
@@ -192,7 +193,7 @@ def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
   let builders = [
     OpBuilder<(ins "StringAttr":$name,
                       "ArrayRef<PortInfo>":$ports,
-                      CArg<"StringRef", "StringRef()">:$intrinsicnamAttr,
+                      CArg<"StringRef", "StringRef()">:$intrinsicNameAttr,
                       CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
                       CArg<"ArrayAttr", "ArrayAttr()">:$parameters)>
   ];
@@ -239,6 +240,7 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
     bool isMasked() { return getMaskBits() > 1; }
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
+    ArrayAttr getParameters();
   }];
 
   let hasCustomAssemblyFormat = 1;

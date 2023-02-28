@@ -711,10 +711,10 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
 
 void FIntModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<PortInfo> ports,
-                         StringRef intnameAttr, ArrayAttr annotations,
+                         StringRef intrinsicNameAttr, ArrayAttr annotations,
                          ArrayAttr parameters) {
   buildModule(builder, result, name, ports, annotations);
-  result.addAttribute("intrinsic", builder.getStringAttr(intnameAttr));
+  result.addAttribute("intrinsic", builder.getStringAttr(intrinsicNameAttr));
   if (!parameters)
     result.addAttribute("parameters", builder.getArrayAttr({}));
 }
@@ -1247,6 +1247,10 @@ void FMemModuleOp::getAsmBlockArgumentNames(
     mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
   getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
 }
+
+ArrayAttr FMemModuleOp::getParameters() { return {}; }
+
+ArrayAttr FModuleOp::getParameters() { return {}; }
 
 //===----------------------------------------------------------------------===//
 // Declarations
