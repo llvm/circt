@@ -2753,8 +2753,9 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
     createBackedge(op.getResult(), origResultType);
     return success();
   }
+  auto hwModule = cast<hw::HWModuleOp>(op->getParentOp());
 
-  auto resultType = lowerType(origResultType);
+  auto resultType = lowerType(origResultType, hwModule);
   if (!resultType)
     return failure();
 
@@ -2765,7 +2766,7 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   StringAttr symName = getInnerSymName(op);
   auto name = op.getNameAttr();
   if (AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) && !symName) {
-    auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
+    auto moduleName = hwModule.getName();
     // Prepend the name of the module to make the symbol name unique in the
     // symbol table, it is already unique in the module. Checking if the name
     // is unique in the SymbolTable is non-trivial.

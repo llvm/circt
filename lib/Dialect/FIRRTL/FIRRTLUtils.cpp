@@ -858,3 +858,59 @@ Type circt::firrtl::lowerType(Type type) {
 
   return {};
 }
+
+Type circt::firrtl::lowerType(Type type, hw::HWModuleOp module) {
+  hw::TypeScopeOp typeScope;
+  for (auto scopeOp : module.getOps<hw::TypeScopeOp>()) {
+    typeScope = scopeOp;
+    break;
+  }
+  auto firType = type.dyn_cast<FIRRTLBaseType>();
+  if (!firType)
+    return type;
+
+  // Ignore flip types.
+  firType = firType.getPassiveType();
+
+  if (BundleType bundle = firType.dyn_cast<BundleType>()) {
+    mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
+    for (auto element : bundle) {
+      Type etype = lowerType(element.type, module);
+      if (!etype)
+        return {};
+      hwfields.push_back(hw::StructType::FieldInfo{element.name, etype});
+    }
+    Type rawType = hw::StructType::get(type.getContext(), hwfields);
+    if (auto bundleName = bundle.getBundleName()) {
+      if (!typeScope) {
+        auto b = OpBuilder(module);
+        b.setInsertionPointToStart(module.getBodyBlock());
+        typeScope = b.create<hw::TypeScopeOp>(
+            module.getLoc(),
+            b.getStringAttr(module.getName() + "__TYPESCOPE_"));
+        typeScope.getBodyRegion().push_back(new Block());
+      }
+      auto b = OpBuilder(typeScope);
+      b.setInsertionPointToEnd(&typeScope.getBodyRegion().front());
+      auto typeDecl = b.create<hw::TypedeclOp>(module.getLoc(), bundleName,
+                                               rawType, nullptr);
+      rawType = hw::TypeAliasType::get(
+          SymbolRefAttr::get(typeScope.getSymNameAttr(),
+                             {FlatSymbolRefAttr::get(typeDecl)}),
+          rawType);
+    }
+    return rawType;
+  }
+  if (FVectorType vec = firType.dyn_cast<FVectorType>()) {
+    auto elemTy = lowerType(vec.getElementType(), module);
+    if (!elemTy)
+      return {};
+    return hw::ArrayType::get(elemTy, vec.getNumElements());
+  }
+
+  auto width = firType.getBitWidthOrSentinel();
+  if (width >= 0) // IntType, analog with known width, clock, etc.
+    return IntegerType::get(type.getContext(), width);
+
+  return {};
+}

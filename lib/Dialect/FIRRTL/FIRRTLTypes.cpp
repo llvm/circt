@@ -66,13 +66,19 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         os << "analog";
         printWidthQualifier(analogType.getWidth());
       })
-      .Case<BundleType>([&](auto bundleType) {
-        os << "bundle<";
+      .Case<BundleType>([&](BundleType bundleType) {
+        os << "bundle";
+        // If the bundle has a name.
+        if (auto bundleName = bundleType.getBundleName())
+          os << " " << bundleName << " ";
+        os << "<";
         llvm::interleaveComma(bundleType, os,
                               [&](BundleType::BundleElement element) {
                                 os << element.name.getValue();
                                 if (element.isFlip)
                                   os << " flip";
+                                if (element.description)
+                                  os << " " << element.description << " ";
                                 os << ": ";
                                 printNestedType(element.type, os);
                               });
@@ -185,11 +191,16 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
 
   if (name.equals("bundle")) {
     SmallVector<BundleType::BundleElement, 4> elements;
+    std::string bundleName;
+    StringAttr bundleNameAttr;
+    if (parser.parseOptionalString(&bundleName).succeeded())
+      bundleNameAttr = StringAttr::get(context, bundleName);
 
     auto parseBundleElement = [&]() -> ParseResult {
       std::string nameStr;
       StringRef name;
       FIRRTLBaseType type;
+      StringAttr descriptionAttr;
 
       // The 'name' can be an identifier or an integer.
       uint32_t fieldIntName;
@@ -206,10 +217,17 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       }
 
       bool isFlip = succeeded(parser.parseOptionalKeyword("flip"));
+      std::string description;
+      if (parser.parseOptionalString(&description).succeeded()) {
+        if (!description.empty())
+          descriptionAttr = StringAttr::get(context, description);
+      }
+
       if (parser.parseColon() || parseNestedBaseType(type, parser))
         return failure();
 
-      elements.push_back({StringAttr::get(context, name), isFlip, type});
+      elements.push_back(
+          {StringAttr::get(context, name), isFlip, type, descriptionAttr});
       return success();
     };
 
@@ -217,7 +235,13 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
                                        parseBundleElement))
       return failure();
 
-    return result = BundleType::get(context, elements, isConst), success();
+    BundleType bundleType;
+    if (!bundleNameAttr)
+      bundleType = BundleType::get(context, elements, isConst);
+    else
+      bundleType = BundleType::get(elements, isConst, bundleNameAttr);
+
+    return result = bundleType, success();
   }
 
   if (name.equals("enum")) {
@@ -918,6 +942,7 @@ UIntType UIntType::getConstType(bool isConst) {
 // Bundle Type
 //===----------------------------------------------------------------------===//
 
+<<<<<<< HEAD
 struct circt::firrtl::detail::BundleTypeStorage
     : detail::FIRRTLBaseTypeStorage {
   using KeyTy = std::pair<ArrayRef<BundleType::BundleElement>, char>;
@@ -926,6 +951,16 @@ struct circt::firrtl::detail::BundleTypeStorage
       : detail::FIRRTLBaseTypeStorage(isConst),
         elements(elements.begin(), elements.end()), props{true, false, false,
                                                           false, false} {
+=======
+struct circt::firrtl::detail::BundleTypeStorage : mlir::TypeStorage {
+  using ElementsType = ArrayRef<BundleType::BundleElement>;
+  using KeyTy = std::pair<ArrayRef<BundleType::BundleElement>, StringAttr>;
+
+  BundleTypeStorage(KeyTy value)
+      : elements(value.first.begin(), value.first.end()),
+        bundleName(value.second) {
+    RecursiveTypeProperties props{true, false, false};
+>>>>>>> e7259f548... [FIRRTLType] Add bundle name and field description to BundleType
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
@@ -945,6 +980,7 @@ struct circt::firrtl::detail::BundleTypeStorage
   }
 
   bool operator==(const KeyTy &key) const {
+<<<<<<< HEAD
     return key == KeyTy(elements, isConst);
   }
 
@@ -952,6 +988,18 @@ struct circt::firrtl::detail::BundleTypeStorage
     return llvm::hash_combine(
         llvm::hash_combine_range(key.first.begin(), key.first.end()),
         key.second);
+=======
+    return key.first == (ElementsType)elements && key.second == bundleName;
+  }
+
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    if (key.second)
+      return llvm::hash_combine(
+          llvm::hash_combine_range(key.first.begin(), key.first.end()),
+          llvm::hash_value(key.second));
+    else
+      return llvm::hash_combine_range(key.first.begin(), key.first.end());
+>>>>>>> e7259f548... [FIRRTLType] Add bundle name and field description to BundleType
   }
 
   static BundleTypeStorage *construct(TypeStorageAllocator &allocator,
@@ -963,6 +1011,7 @@ struct circt::firrtl::detail::BundleTypeStorage
   SmallVector<BundleType::BundleElement, 4> elements;
   SmallVector<uint64_t, 4> fieldIDs;
   uint64_t maxFieldID;
+  StringAttr bundleName;
 
   /// This holds the bits for the type's recursive properties, and can hold a
   /// pointer to a passive version of the type.
@@ -970,13 +1019,29 @@ struct circt::firrtl::detail::BundleTypeStorage
   BundleType passiveType;
 };
 
+<<<<<<< HEAD
 BundleType BundleType::get(MLIRContext *context,
                            ArrayRef<BundleElement> elements, bool isConst) {
   return Base::get(context, elements, isConst);
+=======
+auto BundleType::getBundleName() const -> StringAttr {
+  return getImpl()->bundleName;
+>>>>>>> e7259f548... [FIRRTLType] Add bundle name and field description to BundleType
 }
 
 auto BundleType::getElements() const -> ArrayRef<BundleElement> {
   return getImpl()->elements;
+}
+
+BundleType BundleType::get(ArrayRef<BundleElement> elements,
+                           StringAttr bundleName) {
+  return Base::get(bundleName.getContext(),
+                   std::make_pair(elements, bundleName));
+}
+
+BundleType BundleType::get(MLIRContext *context,
+                           ArrayRef<BundleElement> elements) {
+  return Base::get(context, std::make_pair(elements, StringAttr()));
 }
 
 /// Return a pair with the 'isPassive' and 'containsAnalog' bits.

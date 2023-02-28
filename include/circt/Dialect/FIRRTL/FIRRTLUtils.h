@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "llvm/Support/Parallel.h"
 
@@ -169,6 +170,8 @@ inline FIRRTLType mapBaseType(FIRRTLType type,
 /// Non-FIRRTL types are simply passed through. This returns a null type if it
 /// cannot be lowered.
 Type lowerType(Type type);
+
+Type lowerType(Type type, hw::HWModuleOp module);
 
 //===----------------------------------------------------------------------===//
 // Parser-related utilities
