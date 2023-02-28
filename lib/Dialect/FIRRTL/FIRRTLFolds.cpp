@@ -2591,7 +2591,6 @@ struct FoldRegMems : public mlir::RewritePattern {
       return value;
     };
 
-    const unsigned readStages = info.readLatency;
     const unsigned writeStages = info.writeLatency - 1;
 
     // Traverse each port. Replace reads with the pipelined register, discarding
@@ -2613,9 +2612,12 @@ struct FoldRegMems : public mlir::RewritePattern {
       case MemOp::PortKind::Debug:
         llvm_unreachable("unknown port kind");
       case MemOp::PortKind::Read: {
+        // Read ports pipeline the addr and enable signals. However, the
+        // address must be 0 for single-address memories and the enable signal
+        // is ignored, always reading out the register. Under these constraints,
+        // the read port can be replaced with the value from the register.
         rewriter.setInsertionPointAfterValue(reg);
-        Value data = pipeline(reg, portClock, "data", readStages);
-        replacePortField(rewriter, port, "data", data);
+        replacePortField(rewriter, port, "data", reg);
         break;
       }
       case MemOp::PortKind::Write: {
@@ -2628,8 +2630,7 @@ struct FoldRegMems : public mlir::RewritePattern {
       case MemOp::PortKind::ReadWrite: {
         // Always read the register into the read end.
         rewriter.setInsertionPointAfterValue(reg);
-        Value rdata = pipeline(reg, portClock, name, readStages);
-        replacePortField(rewriter, port, "rdata", rdata);
+        replacePortField(rewriter, port, "rdata", reg);
 
         // Create a write enable and pipeline stages.
         auto wdata = portPipeline("wdata", writeStages);
@@ -2692,8 +2693,10 @@ struct FoldRegMems : public mlir::RewritePattern {
 
 void MemOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                         MLIRContext *context) {
-  results.insert<FoldZeroWidthMemory, FoldReadOrWriteOnlyMemory,
-                 FoldReadWritePorts, FoldUnusedPorts, FoldUnusedBits>(context);
+  results
+      .insert<FoldZeroWidthMemory, FoldReadOrWriteOnlyMemory,
+              FoldReadWritePorts, FoldUnusedPorts, FoldUnusedBits, FoldRegMems>(
+          context);
 }
 
 //===----------------------------------------------------------------------===//

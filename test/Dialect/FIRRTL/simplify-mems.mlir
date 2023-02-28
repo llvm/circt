@@ -134,10 +134,6 @@ firrtl.circuit "ReadWriteToWrite" {
 
 // -----
 
-// Pending 4734
-
-// XFAIL: *
-
 firrtl.circuit "UnusedPorts" {
   firrtl.module public @UnusedPorts(
       in %clock: !firrtl.clock,
@@ -470,17 +466,7 @@ firrtl.circuit "OneAddressNoMask" {
 
     // CHECK: %Memory = firrtl.reg %clock : !firrtl.uint<32>
 
-    // CHECK: %Memory_rw_0 = firrtl.reg %clock : !firrtl.uint<32>
-    // CHECK: firrtl.strictconnect %Memory_rw_0, %Memory : !firrtl.uint<32>
-    // CHECK: %Memory_rw_1 = firrtl.reg %clock : !firrtl.uint<32>
-    // CHECK: firrtl.strictconnect %Memory_rw_1, %Memory_rw_0 : !firrtl.uint<32>
-
-    // CHECK: %Memory_data_0 = firrtl.reg %clock : !firrtl.uint<32>
-    // CHECK: firrtl.strictconnect %Memory_data_0, %Memory : !firrtl.uint<32>
-    // CHECK: %Memory_data_1 = firrtl.reg %clock : !firrtl.uint<32>
-    // CHECK: firrtl.strictconnect %Memory_data_1, %Memory_data_0 : !firrtl.uint<32>
-
-    // CHECK: firrtl.strictconnect %result_read, %Memory_data_1 : !firrtl.uint<32>
+    // CHECK: firrtl.strictconnect %result_read, %Memory : !firrtl.uint<32>
     %read_addr = firrtl.subfield %Memory_read[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
     firrtl.connect %read_addr, %addr : !firrtl.uint<1>, !firrtl.uint<1>
     %read_en = firrtl.subfield %Memory_read[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
@@ -490,7 +476,7 @@ firrtl.circuit "OneAddressNoMask" {
     %read_data = firrtl.subfield %Memory_read[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
     firrtl.connect %result_read, %read_data : !firrtl.uint<32>, !firrtl.uint<32>
 
-    // CHECK: firrtl.strictconnect %result_rw, %Memory_rw_1 : !firrtl.uint<32>
+    // CHECK: firrtl.strictconnect %result_rw, %Memory : !firrtl.uint<32>
     %rw_addr = firrtl.subfield %Memory_rw[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, rdata flip: uint<32>, wmode: uint<1>, wdata: uint<32>, wmask: uint<1>>
     firrtl.connect %rw_addr, %addr : !firrtl.uint<1>, !firrtl.uint<1>
     %rw_en = firrtl.subfield %Memory_rw[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, rdata flip: uint<32>, wmode: uint<1>, wdata: uint<32>, wmask: uint<1>>
