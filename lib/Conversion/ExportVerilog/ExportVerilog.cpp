@@ -767,14 +767,16 @@ static void emitSVAttributesImpl(PPS &ps, ArrayAttr attrs, bool mayBreak) {
     currentContainer = NoContainer;
   };
 
+  bool isFirstContainer = true;
   auto openContainer = [&](Container newContainer) {
     assert(newContainer != NoContainer);
     if (currentContainer == newContainer)
       return false;
     closeContainer();
     // If not first container, insert break point but no space.
-    if (mayBreak && currentContainer != newContainer)
-      ps << PP::zerobreak;
+    if (!isFirstContainer)
+      ps << (mayBreak ? PP::space : PP::nbsp);
+    isFirstContainer = false;
     // fit container on one line if possible, break if needed.
     ps << PP::ibox0;
     if (newContainer == InComment)

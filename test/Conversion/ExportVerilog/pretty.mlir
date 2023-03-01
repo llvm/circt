@@ -205,7 +205,7 @@ hw.module @svattrs() {
    ]} : !hw.inout<i10>
 
 // Put containers on same line if they fit!
-//      CHECK:  (* start *)/* comment */(* end *)
+//      CHECK:  (* start *) /* comment */ (* end *)
 // CHECK-NEXT:  reg [9:0] reg2;{{.*}}
   %reg2 = sv.reg {
     sv.attributes = [

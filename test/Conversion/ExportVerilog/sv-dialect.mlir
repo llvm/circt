@@ -485,8 +485,16 @@ hw.module @reg_0(%in4: i4, %in8: i8) -> (a: i8, b: i8) {
   %myReg = sv.reg {sv.attributes = [#sv.attribute<"dont_merge">]} : !hw.inout<i8>
 
   // CHECK-NEXT: (* dont_merge, dont_retime = true *)
+  // CHECK-NEXT: /* comment_merge, comment_retime = true */
+  // CHECK-NEXT: (* another_attr *)
   // CHECK-NEXT: reg [41:0][7:0] myRegArray1;
-  %myRegArray1 = sv.reg {sv.attributes = [#sv.attribute<"dont_merge">, #sv.attribute<"dont_retime"="true">]} : !hw.inout<array<42 x i8>>
+  %myRegArray1 = sv.reg {sv.attributes = [
+    #sv.attribute<"dont_merge">,
+    #sv.attribute<"dont_retime" = "true">,
+    #sv.attribute<"comment_merge", emitAsComment>,
+    #sv.attribute<"comment_retime" = "true", emitAsComment>,
+    #sv.attribute<"another_attr">
+  ]} : !hw.inout<array<42 x i8>>
 
   // CHECK:      /* assign_attr */
   // CHECK-NEXT: assign myReg = in8;
