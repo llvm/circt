@@ -14,6 +14,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLFieldSource.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -43,6 +44,42 @@ static bool isAggregate(Operation *op) {
 static bool isDeletableWireOrRegOrNode(Operation *op) {
   return (isWireOrReg(op) || isa<NodeOp>(op)) && AnnotationSet(op).empty() &&
          !hasDontTouch(op) && hasDroppableName(op);
+}
+
+/// This function recursively applies `fn` to leaf ground types of `type`.
+static void
+foreachFIRRTLGroundType(FIRRTLType firrtlType,
+                        llvm::function_ref<void(unsigned, FIRRTLBaseType)> fn) {
+  auto type = firrtlType.dyn_cast<FIRRTLBaseType>();
+  if (!type)
+    type = firrtlType.cast<RefType>().getType();
+  // The type is always a ground type if aggregate types don't appear.
+  // So it is better to try a ground type first.
+  if (type.isGround())
+    return fn(0, type);
+
+  unsigned fieldID = 0;
+  auto recurse = [&](auto &&f, FIRRTLBaseType type) -> void {
+    TypeSwitch<FIRRTLBaseType>(type)
+        .Case<BundleType>([&](BundleType bundle) {
+          for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
+            fieldID++;
+            f(f, bundle.getElementType(i));
+          }
+        })
+        .template Case<FVectorType>([&](FVectorType vector) {
+          for (size_t i = 0, e = vector.getNumElements(); i < e; ++i) {
+            fieldID++;
+            f(f, vector.getElementType());
+          }
+        })
+        .Default([&](auto groundType) {
+          assert(groundType.template cast<FIRRTLBaseType>().isGround() &&
+                 "only ground types are expected here");
+          fn(fieldID, groundType.template cast<FIRRTLBaseType>());
+        });
+  };
+  recurse(recurse, type);
 }
 
 //===----------------------------------------------------------------------===//
@@ -166,28 +203,51 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     return executableBlocks.count(block);
   }
 
-  bool isOverdefined(Value value) const {
+  bool isOverdefined(FieldRef value) const {
     auto it = latticeValues.find(value);
     return it != latticeValues.end() && it->second.isOverdefined();
   }
 
+  void markOverdefined(Value value) {
+    FieldRef fieldRef = getOrCacheFieldRefFromValue(value);
+    auto firrtlType = value.getType().dyn_cast<FIRRTLType>();
+    if (!firrtlType) {
+      markOverdefined(fieldRef);
+      return;
+    }
+
+    foreachFIRRTLGroundType(firrtlType, [&](unsigned fieldID, auto) {
+      markOverdefined(fieldRef.getSubField(fieldID));
+    });
+  }
+
   /// Mark the given value as overdefined. This means that we cannot refine a
   /// specific constant for this value.
-  void markOverdefined(Value value) {
+  void markOverdefined(FieldRef value) {
     auto &entry = latticeValues[value];
     if (!entry.isOverdefined()) {
       LLVM_DEBUG({
-        logger.getOStream() << "Setting overdefined : (" << value << ")\n";
+        logger.getOStream()
+            << "Setting overdefined : (" << getFieldName(value).first << ")\n";
       });
       entry.markOverdefined();
       changedLatticeValueWorklist.push_back(value);
     }
   }
 
+  FieldRef getOrCacheFieldRefFromValue(Value value) {
+    if (!value.getDefiningOp() || !isAggregate(value.getDefiningOp()))
+      return FieldRef(value, 0);
+    auto &fieldRef = valueToFieldRef[value];
+    if (fieldRef)
+      return fieldRef;
+    return fieldRef = getFieldRefFromValue(value);
+  }
+
   /// Merge information from the 'from' lattice value into value.  If it
   /// changes, then users of the value are added to the worklist for
   /// revisitation.
-  void mergeLatticeValue(Value value, LatticeValue &valueEntry,
+  void mergeLatticeValue(FieldRef value, LatticeValue &valueEntry,
                          LatticeValue source) {
     if (valueEntry.mergeIn(source)) {
       LLVM_DEBUG({
@@ -197,13 +257,15 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
       changedLatticeValueWorklist.push_back(value);
     }
   }
-  void mergeLatticeValue(Value value, LatticeValue source) {
+
+  void mergeLatticeValue(FieldRef value, LatticeValue source) {
     // Don't even do a map lookup if from has no info in it.
     if (source.isUnknown())
       return;
     mergeLatticeValue(value, latticeValues[value], source);
   }
-  void mergeLatticeValue(Value result, Value from) {
+
+  void mergeLatticeValue(FieldRef result, FieldRef from) {
     // If 'from' hasn't been computed yet, then it is unknown, don't do
     // anything.
     auto it = latticeValues.find(from);
@@ -212,12 +274,24 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     mergeLatticeValue(result, it->second);
   }
 
+  void mergeLatticeValue(Value result, Value from) {
+    FieldRef fieldRefFrom = getOrCacheFieldRefFromValue(from);
+    FieldRef fieldRefResult = getOrCacheFieldRefFromValue(result);
+    if (!result.getType().isa<FIRRTLType>())
+      return mergeLatticeValue(fieldRefResult, fieldRefFrom);
+    foreachFIRRTLGroundType(
+        result.getType().cast<FIRRTLType>(), [&](unsigned fieldID, auto) {
+          mergeLatticeValue(fieldRefResult.getSubField(fieldID),
+                            fieldRefFrom.getSubField(fieldID));
+        });
+  }
+
   /// setLatticeValue - This is used when a new LatticeValue is computed for
   /// the result of the specified value that replaces any previous knowledge,
   /// e.g. because a fold() function on an op returned a new thing.  This should
   /// not be used on operations that have multiple contributors to it, e.g.
   /// wires or ports.
-  void setLatticeValue(Value value, LatticeValue source) {
+  void setLatticeValue(FieldRef value, LatticeValue source) {
     // Don't even do a map lookup if from has no info in it.
     if (source.isUnknown())
       return;
@@ -233,7 +307,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// Return the lattice value for the specified SSA value, extended to the
   /// width of the specified destType.  If allowTruncation is true, then this
   /// allows truncating the lattice value to the specified type.
-  LatticeValue getExtendedLatticeValue(Value value, FIRRTLBaseType destType,
+  LatticeValue getExtendedLatticeValue(FieldRef value, FIRRTLBaseType destType,
                                        bool allowTruncation = false);
 
   /// Mark the given block as executable.
@@ -257,14 +331,21 @@ private:
   InstanceGraph *instanceGraph = nullptr;
 
   /// This keeps track of the current state of each tracked value.
-  DenseMap<Value, LatticeValue> latticeValues;
+  DenseMap<FieldRef, LatticeValue> latticeValues;
 
   /// The set of blocks that are known to execute, or are intrinsically live.
   SmallPtrSet<Block *, 16> executableBlocks;
 
   /// A worklist of values whose LatticeValue recently changed, indicating the
   /// users need to be reprocessed.
-  SmallVector<Value, 64> changedLatticeValueWorklist;
+  SmallVector<FieldRef, 64> changedLatticeValueWorklist;
+
+  // A map to give operations to be reprocessed.
+  DenseMap<FieldRef, llvm::TinyPtrVector<Operation *>> fieldRefToUsers;
+
+  // A map to cache results of getFieldRefFromValue since it's costly traverse
+  // the IR>
+  llvm::DenseMap<Value, FieldRef> valueToFieldRef;
 
   /// This keeps track of users the instance results that correspond to output
   /// ports.
@@ -297,8 +378,8 @@ void IMConstPropPass::runOnOperation() {
 
   // If a value changed lattice state then reprocess any of its users.
   while (!changedLatticeValueWorklist.empty()) {
-    Value changedVal = changedLatticeValueWorklist.pop_back_val();
-    for (Operation *user : changedVal.getUsers()) {
+    FieldRef changedFieldRef = changedLatticeValueWorklist.pop_back_val();
+    for (Operation *user : fieldRefToUsers[changedFieldRef]) {
       if (isBlockExecutable(user->getBlock()))
         visitOperation(user);
     }
@@ -319,7 +400,7 @@ void IMConstPropPass::runOnOperation() {
 /// Return the lattice value for the specified SSA value, extended to the width
 /// of the specified destType.  If allowTruncation is true, then this allows
 /// truncating the lattice value to the specified type.
-LatticeValue IMConstPropPass::getExtendedLatticeValue(Value value,
+LatticeValue IMConstPropPass::getExtendedLatticeValue(FieldRef value,
                                                       FIRRTLBaseType destType,
                                                       bool allowTruncation) {
   // If 'value' hasn't been computed yet, then it is unknown.
@@ -372,8 +453,6 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markOverdefined(op.getResult(0));
     else if (auto wire = dyn_cast<WireOp>(&op))
       markWireOp(wire);
-    else if (isAggregate(&op))
-      markOverdefined(op.getResult(0));
     else if (auto constant = dyn_cast<ConstantOp>(op))
       markConstantOp(constant);
     else if (auto specialConstant = dyn_cast<SpecialConstantOp>(op))
@@ -391,20 +470,51 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markOverdefined(verbatim.getResult());
     else if (auto verbatim = dyn_cast<VerbatimWireOp>(op))
       markOverdefined(verbatim.getResult());
+    else if (auto subaccess = dyn_cast<SubaccessOp>(op)) {
+      markOverdefined(subaccess);
+    } else if (!isa<SubindexOp, SubfieldOp, NodeOp>(&op) &&
+               op.getNumResults() > 0) {
+      // If an unknown operation has a result and an aggregate operand, mark
+      // results overdefined since we cannot track the dataflow. Similar if the
+      // operations create aggregate values, we mark them overdefined.
+
+      // TODO: We should handle vector_create, bundle_create and aggregate
+      // constant.
+
+      bool hasAggregateOperand =
+          llvm::any_of(op.getOperandTypes(), [](Type type) {
+            return type.isa<FVectorType, BundleType>();
+          });
+
+      for (auto result : op.getResults())
+        if (hasAggregateOperand ||
+            result.getType().isa<FVectorType, BundleType>())
+          markOverdefined(result);
+    }
+
+    // This tracks a dependency from field refs to operations which need to be
+    // added to worklist when lattice values change.
+    if (!isAggregate(&op)) {
+      for (auto operand : op.getOperands()) {
+        auto fieldRef = getOrCacheFieldRefFromValue(operand);
+        auto firrtlType = operand.getType().dyn_cast<FIRRTLType>();
+        if (!firrtlType)
+          continue;
+        foreachFIRRTLGroundType(firrtlType, [&](unsigned fieldID, auto type) {
+          fieldRefToUsers[fieldRef.getSubField(fieldID)].push_back(&op);
+        });
+      }
+    }
   }
 }
 
 void IMConstPropPass::markWireOp(WireOp wire) {
-  // If the wire/reg/node has a non-ground type, then it is too complex for us
-  // to handle, mark it as overdefined.
-  // TODO: Eventually add a field-sensitive model.
-  auto resultValue = wire->getResult(0);
-  auto type = resultValue.getType().dyn_cast<FIRRTLBaseType>();
-  if (!type || !type.getPassiveType().isGround())
-    return markOverdefined(resultValue);
+  auto type = wire.getType().dyn_cast<FIRRTLType>();
+  if (!type)
+    return markOverdefined(wire);
 
   if (hasDontTouch(wire.getResult()))
-    return markOverdefined(resultValue);
+    return markOverdefined(wire);
 
   // Otherwise, this starts out as unknown and is upgraded by connects.
 }
@@ -415,11 +525,12 @@ void IMConstPropPass::markMemOp(MemOp mem) {
 }
 
 void IMConstPropPass::markConstantOp(ConstantOp constant) {
-  mergeLatticeValue(constant, LatticeValue(constant.getValueAttr()));
+  mergeLatticeValue(getOrCacheFieldRefFromValue(constant),
+                    LatticeValue(constant.getValueAttr()));
 }
 
 void IMConstPropPass::markSpecialConstantOp(SpecialConstantOp specialConstant) {
-  mergeLatticeValue(specialConstant,
+  mergeLatticeValue(getOrCacheFieldRefFromValue(specialConstant),
                     LatticeValue(specialConstant.getValueAttr()));
 }
 
@@ -463,13 +574,6 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
     // get handled when any connects to it are processed.
     if (fModule.getPortDirection(resultNo) == Direction::In)
       continue;
-    // We only support simple values so far.
-    auto portType = instancePortVal.getType().dyn_cast<FIRRTLBaseType>();
-    if (portType && !portType.isGround()) {
-      // TODO: Add field sensitivity.
-      markOverdefined(instancePortVal);
-      continue;
-    }
 
     // Otherwise we have a result from the instance.  We need to forward results
     // from the body to this instance result's SSA value, so remember it.
@@ -490,58 +594,78 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect) {
     markOverdefined(connect.getSrc());
     return markOverdefined(connect.getDest());
   }
-  auto destType = getBaseType(destTypeFIRRTL).getPassiveType();
 
-  // Handle implicit extensions.
-  auto srcValue = getExtendedLatticeValue(connect.getSrc(), destType);
-  if (srcValue.isUnknown())
-    return;
+  FIRRTLBaseType baseType = getBaseType(destTypeFIRRTL);
 
-  // Driving result ports propagates the value to each instance using the
-  // module.
-  if (auto blockArg = connect.getDest().dyn_cast<BlockArgument>()) {
-    for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
-      mergeLatticeValue(userOfResultPort, srcValue);
-    // Output ports are wire-like and may have users.
-    return mergeLatticeValue(connect.getDest(), srcValue);
+  auto fieldRefSrc = getOrCacheFieldRefFromValue(connect.getSrc());
+  auto fieldRefDest = getOrCacheFieldRefFromValue(connect.getDest());
+  if (auto subaccess = fieldRefDest.getValue().getDefiningOp<SubaccessOp>()) {
+    // If the destination is subaccess, we give up to precisely track
+    // lattice values and marke entire aggregate as overdefined. These code
+    // should be dead unless we stop lowering of subaccess in LowerTypes,
+    Value parent = subaccess.getInput();
+    while (parent.getDefiningOp() &&
+           parent.getDefiningOp()->getNumOperands() > 0)
+      parent = parent.getDefiningOp()->getOperand(0);
+    return markOverdefined(parent);
   }
 
-  auto dest = connect.getDest().cast<mlir::OpResult>();
+  auto propagateElementLattice = [&](unsigned fieldID,
+                                     FIRRTLBaseType destType) {
+    auto fieldRefDestConnected = fieldRefDest.getSubField(fieldID);
 
-  // For wires and registers, we drive the value of the wire itself, which
-  // automatically propagates to users.
-  if (isWireOrReg(dest.getOwner()))
-    return mergeLatticeValue(connect.getDest(), srcValue);
-
-  // Driving an instance argument port drives the corresponding argument of the
-  // referenced module.
-  if (auto instance = dest.getDefiningOp<InstanceOp>()) {
-    // Update the dest, when its an instance op.
-    mergeLatticeValue(connect.getDest(), srcValue);
-    auto module =
-        dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(instance));
-    if (!module)
+    // Handle implicit extensions.
+    auto srcValue =
+        getExtendedLatticeValue(fieldRefSrc.getSubField(fieldID), destType);
+    if (srcValue.isUnknown())
       return;
 
-    BlockArgument modulePortVal = module.getArgument(dest.getResultNumber());
-    return mergeLatticeValue(modulePortVal, srcValue);
-  }
+    // Driving result ports propagates the value to each instance using the
+    // module.
+    if (auto blockArg = fieldRefDest.getValue().dyn_cast<BlockArgument>()) {
+      for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
+        mergeLatticeValue(
+            FieldRef(userOfResultPort, fieldRefDestConnected.getFieldID()),
+            srcValue);
+      // Output ports are wire-like and may have users.
+      return mergeLatticeValue(fieldRefDestConnected, srcValue);
+    }
 
-  // Driving a memory result is ignored because these are always treated as
-  // overdefined.
-  if (auto subfield = dest.getDefiningOp<SubfieldOp>()) {
-    if (subfield.getOperand().getDefiningOp<MemOp>())
+    auto dest = fieldRefDest.getValue().cast<mlir::OpResult>();
+
+    // For wires and registers, we drive the value of the wire itself, which
+    // automatically propagates to users.
+    if (isWireOrReg(dest.getOwner()))
+      return mergeLatticeValue(fieldRefDestConnected, srcValue);
+
+    // Driving an instance argument port drives the corresponding argument
+    // of the referenced module.
+    if (auto instance = dest.getDefiningOp<InstanceOp>()) {
+      // Update the dest, when its an instance op.
+      mergeLatticeValue(fieldRefDestConnected, srcValue);
+      auto module =
+          dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(instance));
+      if (!module)
+        return;
+
+      BlockArgument modulePortVal = module.getArgument(dest.getResultNumber());
+
+      return mergeLatticeValue(
+          FieldRef(modulePortVal, fieldRefDestConnected.getFieldID()),
+          srcValue);
+    }
+
+    // Driving a memory result is ignored because these are always treated
+    // as overdefined.
+    if (dest.getDefiningOp<MemOp>())
       return;
-  }
 
-  // Skip if the dest is an aggregate value. Aggregate values are firstly marked
-  // overdefined.
-  if (isAggregate(dest.getOwner()))
-    return;
+    connect.emitError("connectlike operation unhandled by IMConstProp")
+            .attachNote(connect.getDest().getLoc())
+        << "connect destination is here";
+  };
 
-  connect.emitError("connectlike operation unhandled by IMConstProp")
-          .attachNote(connect.getDest().getLoc())
-      << "connect destination is here";
+  foreachFIRRTLGroundType(baseType, propagateElementLattice);
 }
 
 void IMConstPropPass::visitRefSend(RefSendOp send) {
@@ -583,14 +707,17 @@ void IMConstPropPass::visitOperation(Operation *op) {
     return visitNode(nodeOp);
 
   // The clock operand of regop changing doesn't change its result value.  All
-  // other registers are over-defined.
-  if (isa<RegOp, RegResetOp>(op))
+  // other registers are over-defined. Aggregate operations also doesn't change
+  // its result value.
+  if (isa<RegOp, RegResetOp>(op) || isAggregate(op))
     return;
   // TODO: Handle 'when' operations.
 
   // If all of the results of this operation are already overdefined (or if
   // there are no results) then bail out early: we've converged.
-  auto isOverdefinedFn = [&](Value value) { return isOverdefined(value); };
+  auto isOverdefinedFn = [&](Value value) {
+    return isOverdefined(getOrCacheFieldRefFromValue(value));
+  };
   if (llvm::all_of(op->getResults(), isOverdefinedFn))
     return;
 
@@ -600,7 +727,8 @@ void IMConstPropPass::visitOperation(Operation *op) {
   operandConstants.reserve(op->getNumOperands());
   bool hasUnknown = false;
   for (Value operand : op->getOperands()) {
-    auto &operandLattice = latticeValues[operand];
+
+    auto &operandLattice = latticeValues[getOrCacheFieldRefFromValue(operand)];
 
     // If the operand is an unknown value, then we generally don't want to
     // process it - we want to wait until the value is resolved to by the SCCP
@@ -670,13 +798,15 @@ void IMConstPropPass::visitOperation(Operation *op) {
       else // Treat non integer constants as overdefined.
         resultLattice = LatticeValue::getOverdefined();
     } else { // Folding to an operand results in its value.
-      resultLattice = latticeValues[foldResult.get<Value>()];
+      resultLattice =
+          latticeValues[getOrCacheFieldRefFromValue(foldResult.get<Value>())];
     }
 
     // We do not "merge" the lattice value in, we set it.  This is because the
     // fold functions can produce different values over time, e.g. in the
     // presence of InvalidValue operands that get resolved to other constants.
-    setLatticeValue(op->getResult(i), resultLattice);
+    setLatticeValue(getOrCacheFieldRefFromValue(op->getResult(i)),
+                    resultLattice);
   }
 }
 
@@ -721,7 +851,8 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
       });
     };
 
-    auto it = latticeValues.find(value);
+    // TODO: Replace entire aggregate.
+    auto it = latticeValues.find(getOrCacheFieldRefFromValue(value));
     if (it == latticeValues.end() || it->second.isOverdefined() ||
         it->second.isUnknown())
       return false;
@@ -751,10 +882,18 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     // Connects to values that we found to be constant can be dropped.
     if (auto connect = dyn_cast<FConnectLike>(op)) {
       if (auto *destOp = connect.getDest().getDefiningOp()) {
-        if (isDeletableWireOrRegOrNode(destOp) &&
-            !isOverdefined(connect.getDest())) {
-          connect.erase();
-          ++numErasedOp;
+        auto fieldRef = getOrCacheFieldRefFromValue(connect.getDest());
+        // Don't remove a field-level connection even if the src value is
+        // constant. If other elements of the aggregate value are not constant,
+        // the aggregate value cannot be replaced. We can forward the constant
+        // to its users, so IMDCE (or SV/HW canonicalizer) should remove the
+        // aggregate if entire aggregate is dead.
+        if (auto type = connect.getDest().getType().dyn_cast<FIRRTLType>()) {
+          if (getBaseType(type).isGround() &&
+              isDeletableWireOrRegOrNode(destOp) && !isOverdefined(fieldRef)) {
+            connect.erase();
+            ++numErasedOp;
+          }
         }
       }
       continue;
