@@ -248,4 +248,50 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
   let hasCustomAssemblyFormat = 1;
 }
 
+def FInterfaceOp : FIRRTLModuleLike<"interface", [SingleBlock, NoTerminator]> {
+  let summary = "FIRRTL Interface";
+  let description = [{
+    The "firrtl.interface" operation represents an SV Interface. It is exactly
+    like an FModuleOp. LowerToHW lowers this to an sv.interface.
+  }];
+  let arguments =
+            (ins DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+
+  let skipDefaultBuilders = 1;
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
+               CArg<"ArrayAttr","ArrayAttr()">:$annotations)>
+  ];
+
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &getBody().front(); }
+
+    using iterator = Block::iterator;
+    iterator begin() { return getBodyBlock()->begin(); }
+    iterator end() { return getBodyBlock()->end(); }
+
+    Block::BlockArgListType getArguments() {
+      return getBodyBlock()->getArguments();
+    }
+
+    // Return the block argument for the port with the specified index.
+    BlockArgument getArgument(size_t portNumber);
+
+    OpBuilder getBodyBuilder() {
+      assert(!getBody().empty() && "Unexpected empty 'body' region.");
+      Block &bodyBlock = getBody().front();
+      return OpBuilder::atBlockEnd(&bodyBlock);
+    }
+
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
+  }];
+
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLSTRUCTURE_TD

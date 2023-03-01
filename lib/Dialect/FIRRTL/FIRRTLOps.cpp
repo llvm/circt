@@ -470,6 +470,10 @@ SmallVector<PortInfo> FModuleOp::getPorts() {
   return ::getPorts(cast<FModuleLike>((Operation *)*this));
 }
 
+SmallVector<PortInfo> FInterfaceOp::getPorts() {
+  return ::getPorts(cast<FModuleLike>((Operation *)*this));
+}
+
 SmallVector<PortInfo> FExtModuleOp::getPorts() {
   return ::getPorts(cast<FModuleLike>((Operation *)*this));
 }
@@ -484,6 +488,10 @@ SmallVector<PortInfo> FMemModuleOp::getPorts() {
 
 // Return the port with the specified name.
 BlockArgument FModuleOp::getArgument(size_t portNumber) {
+  return getBodyBlock()->getArgument(portNumber);
+}
+
+BlockArgument FInterfaceOp::getArgument(size_t portNumber) {
   return getBodyBlock()->getArgument(portNumber);
 }
 
@@ -620,6 +628,21 @@ void FModuleOp::erasePorts(const llvm::BitVector &portIndices) {
   getBodyBlock()->eraseArguments(portIndices);
 }
 
+void FInterfaceOp::erasePorts(const llvm::BitVector &portIndices) {
+  ::erasePorts(cast<FModuleLike>((Operation *)*this), portIndices);
+  getBodyBlock()->eraseArguments(portIndices);
+}
+
+static void insertBlockArguments(ArrayRef<std::pair<unsigned, PortInfo>> ports,
+                                 Block *body) {
+  for (size_t i = 0, e = ports.size(); i < e; ++i) {
+    // Block arguments are inserted one at a time, so for each argument we
+    // insert we have to increase the index by 1.
+    auto &[index, port] = ports[i];
+    body->insertArgument(index + i, port.type, port.loc);
+  }
+}
+
 /// Inserts the given ports. The insertion indices are expected to be in order.
 /// Insertion occurs in-order, such that ports with the same insertion index
 /// appear in the module in the same order they appeared in the list.
@@ -627,13 +650,14 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
 
   // Insert the block arguments.
-  auto *body = getBodyBlock();
-  for (size_t i = 0, e = ports.size(); i < e; ++i) {
-    // Block arguments are inserted one at a time, so for each argument we
-    // insert we have to increase the index by 1.
-    auto &[index, port] = ports[i];
-    body->insertArgument(index + i, port.type, port.loc);
-  }
+  insertBlockArguments(ports, getBodyBlock());
+}
+
+void FInterfaceOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
+  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
+
+  // Insert the block arguments.
+  insertBlockArguments(ports, getBodyBlock());
 }
 
 void FExtModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
@@ -698,19 +722,30 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addRegion();
 }
 
-void FModuleOp::build(OpBuilder &builder, OperationState &result,
-                      StringAttr name, ArrayRef<PortInfo> ports,
-                      ArrayAttr annotations) {
-  buildModule(builder, result, name, ports, annotations);
-
+static void buildBody(Region *bodyRegion, Block *body,
+                      ArrayRef<PortInfo> ports) {
   // Create a region and a block for the body.
-  auto *bodyRegion = result.regions[0].get();
-  Block *body = new Block();
   bodyRegion->push_back(body);
 
   // Add arguments to the body block.
   for (auto &elt : ports)
     body->addArgument(elt.type, elt.loc);
+}
+
+void FModuleOp::build(OpBuilder &builder, OperationState &result,
+                      StringAttr name, ArrayRef<PortInfo> ports,
+                      ArrayAttr annotations) {
+  buildModule(builder, result, name, ports, annotations);
+  Block *body = new Block();
+  buildBody(result.regions[0].get(), body, ports);
+}
+
+void FInterfaceOp::build(OpBuilder &builder, OperationState &result,
+                         StringAttr name, ArrayRef<PortInfo> ports,
+                         ArrayAttr annotations) {
+  buildModule(builder, result, name, ports, annotations);
+  Block *body = new Block();
+  buildBody(result.regions[0].get(), body, ports);
 }
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -1023,18 +1058,27 @@ void FIntModuleOp::print(OpAsmPrinter &p) { printFModuleLikeOp(p, *this); }
 
 void FMemModuleOp::print(OpAsmPrinter &p) { printFModuleLikeOp(p, *this); }
 
-void FModuleOp::print(OpAsmPrinter &p) {
-  printFModuleLikeOp(p, *this);
-
+static void printBody(Region &fbody, OpAsmPrinter &p) {
   // Print the body if this is not an external function. Since this block does
   // not have terminators, printing the terminator actually just prints the last
   // operation.
-  Region &fbody = getBody();
   if (!fbody.empty()) {
     p << " ";
     p.printRegion(fbody, /*printEntryBlockArgs=*/false,
                   /*printBlockTerminators=*/true);
   }
+}
+
+void FModuleOp::print(OpAsmPrinter &p) {
+  printFModuleLikeOp(p, *this);
+  Region &fbody = getBody();
+  printBody(fbody, p);
+}
+
+void FInterfaceOp::print(OpAsmPrinter &p) {
+  printFModuleLikeOp(p, *this);
+  Region &fbody = getBody();
+  printBody(fbody, p);
 }
 
 /// Parse an parameter list if present.
@@ -1169,6 +1213,10 @@ ParseResult FModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/true);
 }
 
+ParseResult FInterfaceOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/true);
+}
+
 ParseResult FExtModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false);
 }
@@ -1181,27 +1229,43 @@ ParseResult FMemModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false);
 }
 
-LogicalResult FModuleOp::verify() {
-  // Verify the block arguments.
-  auto *body = getBodyBlock();
-  auto portTypes = getPortTypes();
-  auto portLocs = getPortLocations();
+static LogicalResult verifyModule(Block *body, ArrayRef<Attribute> portTypes,
+                                  ArrayRef<Attribute> portLocs, Operation *op) {
   auto numPorts = portTypes.size();
-
   // Verify that we have the correct number of block arguments.
   if (body->getNumArguments() != numPorts)
-    return emitOpError("entry block must have ")
+    return op->emitOpError("entry block must have ")
            << numPorts << " arguments to match module signature";
 
   // Verify the block arguments' types and locations match our attributes.
   for (auto [arg, type, loc] : zip(body->getArguments(), portTypes, portLocs)) {
     if (arg.getType() != type.cast<TypeAttr>().getValue())
-      return emitOpError("block argument types should match signature types");
+      return op->emitOpError(
+          "block argument types should match signature types");
     if (arg.getLoc() != loc.cast<LocationAttr>())
-      return emitOpError(
+      return op->emitOpError(
           "block argument locations should match signature locations");
   }
+  return success();
+}
 
+LogicalResult FModuleOp::verify() {
+  // Verify the block arguments.
+  auto *body = getBodyBlock();
+  auto portTypes = getPortTypes();
+  auto portLocs = getPortLocations();
+  if (verifyModule(body, portTypes, portLocs, *this).failed())
+    return failure();
+  return success();
+}
+
+LogicalResult FInterfaceOp::verify() {
+  // Verify the block arguments.
+  auto *body = getBodyBlock();
+  auto portTypes = getPortTypes();
+  auto portLocs = getPortLocations();
+  if (verifyModule(body, portTypes, portLocs, *this).failed())
+    return failure();
   return success();
 }
 
@@ -1251,6 +1315,11 @@ LogicalResult FIntModuleOp::verify() {
 
 void FModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
                                          mlir::OpAsmSetValueNameFn setNameFn) {
+  getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
+}
+
+void FInterfaceOp::getAsmBlockArgumentNames(
+    mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
   getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
 }
 
