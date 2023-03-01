@@ -638,14 +638,6 @@ static bool isExpressionUnableToInline(Operation *op,
           continue;
       return true;
     }
-
-    // Force array index expressions to be a simple name when the
-    // `disallowArrayIndexInlining` option is set.
-    if (options.disallowArrayIndexInlining && !isa<sv::ReadInOutOp>(op))
-      if (isa<ArraySliceOp, ArrayGetOp, ArrayIndexInOutOp,
-              IndexedPartSelectInOutOp, IndexedPartSelectOp>(user))
-        if (op->getResult(0) == user->getOperand(1))
-          return true;
   }
   return false;
 }

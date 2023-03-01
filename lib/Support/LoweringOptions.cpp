@@ -95,8 +95,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       disallowExpressionInliningInPorts = true;
     } else if (option == "disallowMuxInlining") {
       disallowMuxInlining = true;
-    } else if (option == "disallowArrayIndexInlining") {
-      disallowArrayIndexInlining = true;
+    } else if (option == "mitigateVivadoArrayIndexConstPropBug") {
+      mitigateVivadoArrayIndexConstPropBug = true;
     } else if (option.consume_front("wireSpillingHeuristic=")) {
       if (auto heuristic = parseWireSpillingHeuristic(option)) {
         wireSpillingHeuristicSet |= *heuristic;
@@ -150,8 +150,8 @@ std::string LoweringOptions::toString() const {
     options += "disallowExpressionInliningInPorts,";
   if (disallowMuxInlining)
     options += "disallowMuxInlining,";
-  if (disallowArrayIndexInlining)
-    options += "disallowArrayIndexInlining,";
+  if (mitigateVivadoArrayIndexConstPropBug)
+    options += "mitigateVivadoArrayIndexConstPropBug,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
