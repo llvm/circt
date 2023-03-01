@@ -751,18 +751,57 @@ static IfOp findNestedElseIf(Block *elseBlock) {
 
 /// Emit SystemVerilog attributes.
 template <typename PPS>
-static void emitSVAttributesImpl(PPS &os, sv::SVAttributesAttr svAttrs) {
-  // Emit without any breaks.
-  auto body = svAttrs.getAttributes();
-  auto emitAsComments = svAttrs.getEmitAsComments().getValue();
-  os << (emitAsComments ? "/* " : "(* ");
-  llvm::interleaveComma(body, os, [&](Attribute attr) {
-    auto svattr = attr.cast<SVAttributeAttr>();
-    os << PPExtString(svattr.getName().getValue());
-    if (svattr.getExpression())
-      os << " = " << PPExtString(svattr.getExpression().getValue());
+static void emitSVAttributesImpl(PPS &ps, ArrayAttr attrs, bool mayBreak) {
+  enum Container { NoContainer, InComment, InAttr };
+  Container currentContainer = NoContainer;
+
+  auto closeContainer = [&] {
+    if (currentContainer == NoContainer)
+      return;
+    if (currentContainer == InComment)
+      ps << " */";
+    else if (currentContainer == InAttr)
+      ps << " *)";
+    ps << PP::end << PP::end;
+
+    currentContainer = NoContainer;
+  };
+
+  bool isFirstContainer = true;
+  auto openContainer = [&](Container newContainer) {
+    assert(newContainer != NoContainer);
+    if (currentContainer == newContainer)
+      return false;
+    closeContainer();
+    // If not first container, insert break point but no space.
+    if (!isFirstContainer)
+      ps << (mayBreak ? PP::space : PP::nbsp);
+    isFirstContainer = false;
+    // fit container on one line if possible, break if needed.
+    ps << PP::ibox0;
+    if (newContainer == InComment)
+      ps << "/* ";
+    else if (newContainer == InAttr)
+      ps << "(* ";
+    currentContainer = newContainer;
+    // Pack attributes within to fit, align to current column when breaking.
+    ps << PP::ibox0;
+    return true;
+  };
+
+  // Break containers to starting column (0), put all on same line OR
+  // put each on their own line (cbox).
+  ps.scopedBox(PP::cbox0, [&]() {
+    for (auto attr : attrs.getAsRange<SVAttributeAttr>()) {
+      if (!openContainer(attr.getEmitAsComment().getValue() ? InComment
+                                                            : InAttr))
+        ps << "," << (mayBreak ? PP::space : PP::nbsp);
+      ps << PPExtString(attr.getName().getValue());
+      if (attr.getExpression())
+        ps << " = " << PPExtString(attr.getExpression().getValue());
+    }
+    closeContainer();
   });
-  os << (emitAsComments ? " */" : " *)");
 }
 
 /// Retrieve value's verilog name from IR. The name must already have been
@@ -2055,7 +2094,7 @@ void ExprEmitter::emitSVAttributes(Operation *op) {
 
   // For now, no breaks for attributes.
   ps << PP::nbsp;
-  emitSVAttributesImpl(ps, svAttrs);
+  emitSVAttributesImpl(ps, svAttrs, /*mayBreak=*/false);
 }
 
 /// If the specified extension is a zero extended version of another value,
@@ -3003,7 +3042,7 @@ void StmtEmitter::emitSVAttributes(Operation *op) {
     return;
 
   startStatement(); // For attributes.
-  emitSVAttributesImpl(ps, svAttrs);
+  emitSVAttributesImpl(ps, svAttrs, /*mayBreak=*/true);
   setPendingNewline();
 }
 
@@ -4486,7 +4525,7 @@ void ModuleEmitter::emitSVAttributes(Operation *op) {
     return;
 
   startStatement(); // For attributes.
-  emitSVAttributesImpl(ps, svAttrs);
+  emitSVAttributesImpl(ps, svAttrs, /*mayBreak=*/true);
   setPendingNewline();
 }
 

@@ -3601,14 +3601,14 @@ Value FIRRTLLowering::createArrayIndexing(Value array, Value index) {
     // Use SV attributes to annotate pragmas.
     circt::sv::setSVAttributes(
         arrayGet,
-        sv::SVAttributesAttr::get(builder.getContext(), {"cadence map_to_mux"},
-                                  /*emitAsComments=*/true));
+        sv::SVAttributeAttr::get(builder.getContext(), "cadence map_to_mux",
+                                 /*emitAsComment=*/true));
 
     auto assignOp = builder.create<sv::AssignOp>(valWire, arrayGet);
-    sv::setSVAttributes(
-        assignOp, sv::SVAttributesAttr::get(builder.getContext(),
-                                            {"synopsys infer_mux_override"},
-                                            /*emitAsComments=*/true));
+    sv::setSVAttributes(assignOp,
+                        sv::SVAttributeAttr::get(builder.getContext(),
+                                                 "synopsys infer_mux_override",
+                                                 /*emitAsComment=*/true));
     inBoundsRead = builder.create<sv::ReadInOutOp>(valWire);
   }
 

@@ -22,13 +22,15 @@ bool svAttrIsASVAttributeAttr(MlirAttribute cAttr) {
 }
 
 MlirAttribute svSVAttributeAttrGet(MlirContext cCtxt, MlirStringRef cName,
-                                   MlirStringRef cExpression) {
+                                   MlirStringRef cExpression,
+                                   bool emitAsComment) {
   mlir::MLIRContext *ctxt = unwrap(cCtxt);
   mlir::StringAttr expr;
   if (cExpression.data != nullptr)
     expr = mlir::StringAttr::get(ctxt, unwrap(cExpression));
-  return wrap(SVAttributeAttr::get(
-      ctxt, mlir::StringAttr::get(ctxt, unwrap(cName)), expr));
+  return wrap(
+      SVAttributeAttr::get(ctxt, mlir::StringAttr::get(ctxt, unwrap(cName)),
+                           expr, mlir::BoolAttr::get(ctxt, emitAsComment)));
 }
 
 MlirStringRef svSVAttributeAttrGetName(MlirAttribute cAttr) {
@@ -42,25 +44,9 @@ MlirStringRef svSVAttributeAttrGetExpression(MlirAttribute cAttr) {
   return {nullptr, 0};
 }
 
-bool svAttrIsASVAttributesAttr(MlirAttribute cAttr) {
-  return unwrap(cAttr).isa<SVAttributesAttr>();
-}
-
-MlirAttribute svSVAttributesAttrGet(MlirContext cCtxt, MlirAttribute attributes,
-                                    bool emitAsComments) {
-  mlir::MLIRContext *ctxt = unwrap(cCtxt);
-  return wrap(SVAttributesAttr::get(ctxt,
-                                    unwrap(attributes).cast<mlir::ArrayAttr>(),
-                                    mlir::BoolAttr::get(ctxt, emitAsComments)));
-}
-
-MlirAttribute svSVAttributesAttrGetAttributes(MlirAttribute attributes) {
-  return wrap(unwrap(attributes).cast<SVAttributesAttr>().getAttributes());
-}
-
-bool svSVAttributesAttrGetEmitAsComments(MlirAttribute attributes) {
-  return unwrap(attributes)
-      .cast<SVAttributesAttr>()
-      .getEmitAsComments()
+bool svSVAttributeAttrGetEmitAsComment(MlirAttribute attribute) {
+  return unwrap(attribute)
+      .cast<SVAttributeAttr>()
+      .getEmitAsComment()
       .getValue();
 }

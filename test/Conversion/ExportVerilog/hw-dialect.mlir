@@ -21,7 +21,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   r42: !hw.struct<a: !hw.array<1xi1>>, r43: i4,
   r44: !hw.struct<foo: i2, bar: i4>, r45: !hw.struct<foo: i2, bar: i4>,
   r46: !hw.struct<foo: i2, bar: i4>, r47: i1
-  ) attributes {sv.attributes=#sv.attributes<[#sv.attribute<"svAttr">]>} {
+  ) attributes {sv.attributes = [#sv.attribute<"svAttr">]} {
 
   %0 = comb.add %a, %b : i4
   %2 = comb.sub %a, %b : i4
@@ -75,7 +75,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 
   %36 = hw.array_concat %subArr, %subArr : !hw.array<3 x i4>, !hw.array<3 x i4>
   %elem2d = hw.array_get %array2d[%a] : !hw.array<12 x array<10xi4>>, i4
-  %37 = hw.array_get %elem2d[%b] {sv.attributes=#sv.attributes<[#sv.attribute<"svAttr">]>}: !hw.array<10xi4>, i4
+  %37 = hw.array_get %elem2d[%b] {sv.attributes = [#sv.attribute<"svAttr">]}: !hw.array<10xi4>, i4
 
   %38 = comb.replicate %a : (i4) -> i12
 

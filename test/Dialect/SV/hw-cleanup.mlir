@@ -345,9 +345,9 @@ hw.module @sv_attributes() {
   // CHECK: sv.initial
   sv.initial  {
     sv.fwrite %fd, "A"
-  } {sv.attributes = #sv.attribute<"dont merge">}
+  } {sv.attributes = [#sv.attribute<"dont_merge">]}
 
   sv.initial  {
     sv.fwrite %fd, "B"
-  } {sv.attributes = #sv.attribute<"dont merge">}
+  } {sv.attributes = [#sv.attribute<"dont_merge">]}
 }
