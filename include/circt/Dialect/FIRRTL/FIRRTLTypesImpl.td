@@ -117,6 +117,10 @@ def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
     /// return the index of the parent element.
     uint64_t getIndexForFieldID(uint64_t fieldID);
 
+    /// Find the index of the element that contains the given fieldID.
+    /// As well, rebase the fieldID to the element.
+    std::pair<uint64_t, uint64_t> getIndexAndSubfieldID(uint64_t fieldID);
+
     /// Strip off a single layer of this type and return the sub-type and a
     /// field ID targeting the same field, but rebased on the sub-type.
     std::pair<FIRRTLBaseType, uint64_t> getSubTypeByFieldID(uint64_t fieldID);
@@ -199,6 +203,10 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
     /// fieldID corresponds to a field in a nested bundle, it will return the
     /// index of the parent field.
     uint64_t getIndexForFieldID(uint64_t fieldID);
+
+    /// Find the index of the element that contains the given fieldID.
+    /// As well, rebase the fieldID to the element.
+    std::pair<uint64_t, uint64_t> getIndexAndSubfieldID(uint64_t fieldID);
 
     /// Strip off a single layer of this type and return the sub-type and a
     /// field ID targeting the same field, but rebased on the sub-type.

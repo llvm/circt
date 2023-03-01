@@ -225,6 +225,11 @@ static cl::opt<bool>
                        cl::desc("Disable the LowerMemory pass"),
                        cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
+static cl::opt<bool>
+    vbToBV("vb-to-bv",
+           cl::desc("Transform vectors of bundles to bundles of vectors"),
+           cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool> disableLowerTypes("disable-lower-types",
                                        cl::desc("Disable the LowerTypes pass"),
                                        cl::init(false), cl::Hidden,
@@ -660,6 +665,13 @@ static LogicalResult processBuffer(
   if (!lowerMemories)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createFlattenMemoryPass());
+
+  if (vbToBV) {
+    if (!disableLowerTypes && preservePublicTypes)
+      pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
+          firrtl::PreserveAggregate::All, preservePublicTypes));
+    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createVBToBVPass());
+  }
 
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
