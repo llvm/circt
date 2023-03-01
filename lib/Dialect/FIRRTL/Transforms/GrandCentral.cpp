@@ -754,7 +754,7 @@ private:
 /// annotations:
 ///   1) Annotations necessary to build interfaces and store them at "~"
 ///   2) Scattered annotations for how components bind to interfaces
-static std::optional<FIRRTLBaseType>
+static std::pair<LogicalResult, FIRRTLBaseType>
 parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
                    DictionaryAttr root, StringRef companion, StringAttr &name,
                    StringAttr &defName, std::optional<IntegerAttr> id,
@@ -880,7 +880,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
   auto classAttr =
       tryGetAs<StringAttr>(augmentedType, root, "class", loc, clazz, path);
   if (!classAttr)
-    return std::nullopt;
+    return {failure(), {}};
   StringRef classBase = classAttr.getValue();
   if (!classBase.consume_front("sifive.enterprise.grandcentral.Augmented")) {
     mlir::emitError(loc,
@@ -889,7 +889,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
                         classAttr.getValue() + "' (Did you misspell it?)")
             .attachNote()
         << "see annotation: " << augmentedType;
-    return std::nullopt;
+    return {failure(), {}};
   }
 
   // An AugmentedBundleType looks like:
@@ -905,7 +905,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     auto elementsAttr =
         tryGetAs<ArrayAttr>(augmentedType, root, "elements", loc, clazz, path);
     if (!elementsAttr)
-      return std::nullopt;
+      return {failure(), {}};
     for (size_t i = 0, e = elementsAttr.size(); i != e; ++i) {
       auto field = elementsAttr[i].dyn_cast_or_null<DictionaryAttr>();
       if (!field) {
@@ -916,7 +916,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
                 "]' contained an unexpected type (expected a DictionaryAttr).")
                 .attachNote()
             << "The received element was: " << elementsAttr[i] << "\n";
-        return std::nullopt;
+        return {failure(), {}};
       }
       auto ePath = (path + ".elements[" + Twine(i) + "]").str();
       auto name = tryGetAs<StringAttr>(field, root, "name", loc, clazz, ePath);
@@ -925,20 +925,27 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
       StringAttr description;
       if (auto maybeDescription = field.get("description"))
         description = maybeDescription.cast<StringAttr>();
-      auto eltType = parseAugmentedType(
+      auto [resType, eltType] = parseAugmentedType(
           state, tpe, root, companion, name, defName, std::nullopt, description,
           clazz, companionAttr, interfaceSrcVals, path + "_" + name.getValue());
-      if (!name || !tpe || !eltType)
-        return std::nullopt;
+      if (!name || !tpe || resType.failed())
+        return {failure(), {}};
+      // Ignore the following kinds of elements
+      //   - AugmentedStringType
+      //   - AugmentedBooleanType
+      //   - AugmentedIntegerType
+      //   - AugmentedDoubleType
+      if (!eltType)
+        continue;
 
       elements.push_back(
-          BundleType::BundleElement(name, false, *eltType, description));
+          BundleType::BundleElement(name, false, eltType, description));
     }
     defName =
         tryGetAs<StringAttr>(augmentedType, root, "defName", loc, clazz, path);
     if (!defName)
-      return std::nullopt;
-    return BundleType::get(elements, defName);
+      return {failure(), {}};
+    return {success(), BundleType::get(elements, defName)};
   }
 
   // An AugmentedGroundType looks like:
@@ -952,7 +959,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     if (!maybeTarget) {
       mlir::emitError(loc, "Failed to parse ReferenceTarget").attachNote()
           << "See the full Annotation here: " << root;
-      return std::nullopt;
+      return {failure(), {}};
     }
 
     auto target = *maybeTarget;
@@ -963,7 +970,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
                                     state.symTbl, state.targetCaches);
     if (!xmrSrcTarget) {
       mlir::emitError(loc, "Failed to resolve target ") << targetAttr;
-      return std::nullopt;
+      return {failure(), {}};
     }
 
     // Determine the source for this Wiring Problem.  The source is the value
@@ -1023,7 +1030,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
 
     // Exit if there was an error in the source.
     if (!source)
-      return std::nullopt;
+      return {failure(), {}};
 
     // Compute the sink of this Wiring Problem.  The final sink will eventually
     // be a SystemVerilog Interface.  However, this cannot exist until the
@@ -1038,14 +1045,14 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     builder.setInsertionPointToEnd(companionMod.getBodyBlock());
     auto sink = builder.create<WireOp>(source->getType(), name);
     state.targetCaches.insertOp(sink);
-    interfaceSrcVals.push_back(builder.createOrFold<AsUIntPrimOp>(sink));
+    interfaceSrcVals.push_back(sink);
 
     // Append this new Wiring Problem to the ApplyState.  The Wiring Problem
     // will be resolved to bore RefType ports before LowerAnnotations finishes.
     state.wiringProblems.push_back({*source, sink, (path + "__bore").str(),
                                     WiringProblem::RefTypeUsage::Prefer});
 
-    return source->getType().cast<FIRRTLBaseType>();
+    return {success(), source->getType().cast<FIRRTLBaseType>()};
   }
 
   // An AugmentedVectorType looks like:
@@ -1054,20 +1061,21 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     auto elementsAttr =
         tryGetAs<ArrayAttr>(augmentedType, root, "elements", loc, clazz, path);
     if (!elementsAttr)
-      return std::nullopt;
+      return {failure(), {}};
     FIRRTLBaseType elementType;
     size_t numElements = elementsAttr.size();
     StringAttr dummyDefName, dummyDescription;
     for (auto &[i, elt] : llvm::enumerate(elementsAttr)) {
-      auto eltAttr = parseAugmentedType(
+      auto [resType, eltType] = parseAugmentedType(
           state, elt.cast<DictionaryAttr>(), root, companion, name,
           dummyDefName, id, dummyDescription, clazz, companionAttr,
           interfaceSrcVals, path + "_" + Twine(i));
-      if (!eltAttr)
-        return std::nullopt;
-      elementType = *eltAttr;
+      if (resType.failed())
+        return {failure(), {}};
+      if (eltType)
+        elementType = eltType;
     }
-    return FVectorType::get(elementType, numElements);
+    return {success(), FVectorType::get(elementType, numElements)};
   }
 
   // Any of the following are known and expected, but are legacy AugmentedTypes
@@ -1081,7 +1089,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
           .Cases("StringType", "BooleanType", "IntegerType", "DoubleType", true)
           .Default(false);
   if (isIgnorable) {
-    return BundleType::get(context, {});
+    return {success(), {}};
   }
 
   // Anything else is unexpected or a user error if they manually wrote
@@ -1090,7 +1098,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
                            "' (Did you misspell it?)")
           .attachNote()
       << "see annotation: " << augmentedType;
-  return std::nullopt;
+  return {failure(), {}};
 }
 
 LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
@@ -1120,53 +1128,45 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
 
   StringAttr defName, description;
   SmallVector<Value> interfaceSrcVals;
-  auto interfaceType = parseAugmentedType(
+  auto [resType, interfaceType] = parseAugmentedType(
       state, viewAttr, anno, companionAttr.getValue(), name, defName, id,
       description, viewAnnoClass, companionAttr, interfaceSrcVals, Twine(name));
-  if (!interfaceType)
+  if (resType.failed())
     return failure();
+  if (!interfaceType)
+    return success();
   OpBuilder builder = OpBuilder::atBlockEnd(state.circuit.getBodyBlock());
+  // Add each GroundType interface signal as one of the ports.
   SmallVector<PortInfo, 1> ports;
-  ports.push_back(
-      {StringAttr::get(context, defName.getValue() + "_interFacePort_"),
-       *interfaceType,
-       Direction::In,
-       {},
-       loc});
+  for (auto &[num, leafSignal] : llvm::enumerate(interfaceSrcVals))
+    ports.push_back({StringAttr::get(context, "_interFacePort_" + Twine(num)),
+                     leafSignal.getType(),
+                     Direction::In,
+                     {},
+                     loc});
 
-  FModuleOp interfaceModule = builder.create<FModuleOp>(loc, defName, ports);
-  auto arg = interfaceModule.getArgument(0);
-  for (auto &[fieldNum, elem] :
-       llvm::enumerate(interfaceType->cast<BundleType>())) {
-    ImplicitLocOpBuilder b(loc, context);
-    b.setInsertionPointToStart(interfaceModule.getBodyBlock());
-    auto wire = b.create<WireOp>(loc, elem.type, elem.name);
-    b.create<StrictConnectOp>(loc, wire,
-                              b.create<SubfieldOp>(loc, arg, fieldNum));
-  }
+  auto interfaceModule = builder.create<FInterfaceOp>(loc, defName, ports);
+  ImplicitLocOpBuilder b(loc, context);
+  b.setInsertionPointToStart(interfaceModule.getBodyBlock());
+  // Create one wire for each field of the BundleType. The Wires are left
+  // un-initialized, lowering will generate the appropriate remote assignments.
+  // The order of the Wires in the module is important.
+  for (auto &elem : interfaceType.cast<BundleType>())
+    b.create<WireOp>(loc, elem.type, elem.name);
+
   auto companionMod =
       cast<FModuleOp>(resolvePath(companionAttr.getValue(), state.circuit,
                                   state.symTbl, state.targetCaches)
                           ->ref.getOp());
-  Value catInterfaceFields;
   ImplicitLocOpBuilder companionBuilder(loc, context);
   companionBuilder.setInsertionPointToEnd(companionMod.getBodyBlock());
-
-  for (auto fieldVal : interfaceSrcVals)
-    if (catInterfaceFields)
-      catInterfaceFields = companionBuilder.createOrFold<CatPrimOp>(
-          fieldVal, catInterfaceFields);
-    else
-      catInterfaceFields = fieldVal;
   auto interfaceInstance =
       companionBuilder.create<InstanceOp>(loc, interfaceModule, name);
-  auto interfacePort = interfaceInstance.getResult(0);
-  if (catInterfaceFields)
-    companionBuilder.create<StrictConnectOp>(
-        interfacePort,
-        companionBuilder.createOrFold<BitCastOp>(
-            interfacePort.getType().cast<FIRRTLType>(), catInterfaceFields));
 
+  for (auto &[num, leafSignal] : llvm::enumerate(interfaceSrcVals)) {
+    auto instRes = interfaceInstance.getResult(num);
+    companionBuilder.create<StrictConnectOp>(instRes, leafSignal);
+  }
   return success();
 }
 
