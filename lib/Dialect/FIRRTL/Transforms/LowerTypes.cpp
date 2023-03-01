@@ -354,10 +354,12 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
   TypeLoweringVisitor(MLIRContext *context,
                       PreserveAggregate::PreserveMode preserveAggregate,
+                      PreserveAggregate::PreserveMode memoryPreservationMode,
                       bool preservePublicTypes, SymbolTable &symTbl,
                       const AttrCache &cache,
                       const llvm::DenseSet<FModuleLike> &publicModuleSet)
       : context(context), aggregatePreservationMode(preserveAggregate),
+        memoryPreservationMode(memoryPreservationMode),
         preservePublicTypes(preservePublicTypes), symTbl(symTbl), cache(cache),
         publicModuleSet(publicModuleSet) {}
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitDecl;
@@ -428,6 +430,7 @@ private:
 
   /// Aggregate preservation mode.
   PreserveAggregate::PreserveMode aggregatePreservationMode;
+  PreserveAggregate::PreserveMode memoryPreservationMode;
 
   /// Exteranal modules and toplevel modules should have lowered types if this
   /// flag is enabled.
@@ -867,7 +870,7 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
   SmallVector<FlatBundleFieldEntry> fields;
 
   // MemOp should have ground types so we can't preserve aggregates.
-  if (!peelType(op.getDataType(), fields, PreserveAggregate::None))
+  if (!peelType(op.getDataType(), fields, memoryPreservationMode))
     return false;
 
   SmallVector<MemOp> newMemories;
@@ -1387,8 +1390,10 @@ namespace {
 struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
   LowerTypesPass(
       circt::firrtl::PreserveAggregate::PreserveMode preserveAggregateFlag,
+      circt::firrtl::PreserveAggregate::PreserveMode preserveMemoriesFlag,
       bool preservePublicTypesFlag) {
     preserveAggregate = preserveAggregateFlag;
+    preserveMemories = preserveMemoriesFlag;
     preservePublicTypes = preservePublicTypesFlag;
   }
   void runOnOperation() override;
@@ -1424,8 +1429,8 @@ void LowerTypesPass::runOnOperation() {
   // This lambda, executes in parallel for each Op within the circt.
   auto lowerModules = [&](FModuleLike op) -> LogicalResult {
     auto tl = TypeLoweringVisitor(&getContext(), preserveAggregate,
-                                  preservePublicTypes, symTbl, cache,
-                                  publicModuleSet);
+                                  preserveMemories, preservePublicTypes, symTbl,
+                                  cache, publicModuleSet);
     tl.lowerModule(op);
 
     return LogicalResult::failure(tl.isFailed());
@@ -1438,9 +1443,9 @@ void LowerTypesPass::runOnOperation() {
 }
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createLowerFIRRTLTypesPass(PreserveAggregate::PreserveMode mode,
-                                          bool preservePublicTypes) {
-
-  return std::make_unique<LowerTypesPass>(mode, preservePublicTypes);
+std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLTypesPass(
+    PreserveAggregate::PreserveMode mode,
+    PreserveAggregate::PreserveMode memoryMode, bool preservePublicTypes) {
+  return std::make_unique<LowerTypesPass>(mode, memoryMode,
+                                          preservePublicTypes);
 }

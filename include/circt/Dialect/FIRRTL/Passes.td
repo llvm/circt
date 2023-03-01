@@ -71,6 +71,15 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
             clEnumValN(PreserveAggregate::OneDimVec, "1d-vec", "Preserve 1d vectors"),
             clEnumValN(PreserveAggregate::Vec, "vec", "Preserve vectors"),
             clEnumValN(PreserveAggregate::All, "all", "Preserve vectors and bundles")
+          )}]>,
+    Option<"preserveMemories", "preserve-memories", "PreserveAggregate::PreserveMode",
+          "PreserveAggregate::None",
+          "Specify memory preservation mode",
+          [{::llvm::cl::values(
+            clEnumValN(PreserveAggregate::None, "none", "Preserve no aggregate"),
+            clEnumValN(PreserveAggregate::OneDimVec, "1d-vec", "Preserve 1d vectors"),
+            clEnumValN(PreserveAggregate::Vec, "vec", "Preserve vectors"),
+            clEnumValN(PreserveAggregate::All, "all", "Preserve vectors and bundles")
           )}]>
   ];
   let dependentDialects = ["hw::HWDialect"];
