@@ -1261,6 +1261,10 @@ bool TypeLoweringVisitor::visitExpr(RefResolveOp op) {
 
 bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   bool skip = true;
+  
+  auto refMod = op.getReferencedModule(symTbl);
+  if (isa<FInterfaceOp>(refMod))
+    return false;
   SmallVector<Type, 8> resultTypes;
   SmallVector<int64_t, 8> endFields; // Compressed sparse row encoding
   auto oldPortAnno = op.getPortAnnotations();
@@ -1268,7 +1272,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newPortAnno;
   PreserveAggregate::PreserveMode mode =
-      getPreservatinoModeForModule(op.getReferencedModule(symTbl));
+      getPreservatinoModeForModule(refMod);
 
   endFields.push_back(0);
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
