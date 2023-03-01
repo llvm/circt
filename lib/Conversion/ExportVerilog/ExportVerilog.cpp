@@ -751,18 +751,38 @@ static IfOp findNestedElseIf(Block *elseBlock) {
 
 /// Emit SystemVerilog attributes.
 template <typename PPS>
-static void emitSVAttributesImpl(PPS &os, sv::SVAttributesAttr svAttrs) {
-  // Emit without any breaks.
-  auto body = svAttrs.getAttributes();
-  auto emitAsComments = svAttrs.getEmitAsComments().getValue();
-  os << (emitAsComments ? "/* " : "(* ");
-  llvm::interleaveComma(body, os, [&](Attribute attr) {
-    auto svattr = attr.cast<SVAttributeAttr>();
-    os << PPExtString(svattr.getName().getValue());
-    if (svattr.getExpression())
-      os << " = " << PPExtString(svattr.getExpression().getValue());
-  });
-  os << (emitAsComments ? " */" : " *)");
+static void emitSVAttributesImpl(PPS &os, ArrayAttr attrs) {
+  enum Container { NoContainer, InComment, InAttr };
+  Container currentContainer = NoContainer;
+
+  auto closeContainer = [&] {
+    if (currentContainer == InComment)
+      os << " */";
+    else if (currentContainer == InAttr)
+      os << " *)";
+    currentContainer = NoContainer;
+  };
+
+  auto openContainer = [&](Container newContainer) {
+    if (currentContainer == newContainer)
+      return false;
+    closeContainer();
+    if (newContainer == InComment)
+      os << "/* ";
+    else if (newContainer == InAttr)
+      os << "(* ";
+    currentContainer = newContainer;
+    return true;
+  };
+
+  for (auto attr : attrs.getAsRange<SVAttributeAttr>()) {
+    if (!openContainer(attr.getEmitAsComment().getValue() ? InComment : InAttr))
+      os << ", ";
+    os << PPExtString(attr.getName().getValue());
+    if (attr.getExpression())
+      os << " = " << PPExtString(attr.getExpression().getValue());
+  }
+  closeContainer();
 }
 
 /// Retrieve value's verilog name from IR. The name must already have been
