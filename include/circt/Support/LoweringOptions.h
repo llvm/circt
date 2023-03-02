@@ -138,10 +138,11 @@ struct LoweringOptions {
   /// option avoids such warnings.
   bool disallowExpressionInliningInPorts = false;
 
-  /// If true, every expression used as an array index is driven by a wire. Some
-  /// tools, notably Vivado, produce incorrect synthesis results for certain
-  /// arithmetic ops inlined into the array index.
-  bool disallowArrayIndexInlining = false;
+  /// If true, every expression used as an array index is driven by a wire, and
+  /// the wire is marked as `(* keep = "true" *)`. Certain versions of Vivado
+  /// produce incorrect synthesis results for certain arithmetic ops inlined
+  /// into the array index.
+  bool mitigateVivadoArrayIndexConstPropBug = false;
 
   /// If true, emit `wire` in port lists rather than nothing. Used in cases
   /// where `default_nettype is not set to wire.
