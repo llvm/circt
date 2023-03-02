@@ -19,6 +19,7 @@
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/SymbolTable.h"
 
 using namespace circt;
@@ -134,6 +135,12 @@ void WrapValidReadyOp::build(OpBuilder &b, OperationState &state, Value data,
         b.getI1Type(), data, valid);
 }
 
+LogicalResult WrapValidReadyOp::verify() {
+  if (getChanOutput().getType().getSignaling() != ChannelSignaling::ValidReady)
+    return emitOpError("only supports valid-ready signaling");
+  return success();
+}
+
 ParseResult UnwrapValidReadyOp::parse(OpAsmParser &parser,
                                       OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
@@ -163,6 +170,12 @@ void UnwrapValidReadyOp::print(OpAsmPrinter &p) {
   p << " : " << getRawOutput().getType();
 }
 
+LogicalResult UnwrapValidReadyOp::verify() {
+  if (getChanInput().getType().getSignaling() != ChannelSignaling::ValidReady)
+    return emitOpError("only supports valid-ready signaling");
+  return success();
+}
+
 circt::esi::ChannelType WrapValidReadyOp::channelType() {
   return getChanOutput().getType().cast<circt::esi::ChannelType>();
 }
@@ -175,6 +188,56 @@ void UnwrapValidReadyOp::build(OpBuilder &b, OperationState &state,
 
 circt::esi::ChannelType UnwrapValidReadyOp::channelType() {
   return getChanInput().getType().cast<circt::esi::ChannelType>();
+}
+
+circt::esi::ChannelType WrapFIFOOp::channelType() {
+  return getChanOutput().getType().cast<circt::esi::ChannelType>();
+}
+
+ParseResult parseWrapFIFOType(OpAsmParser &p, Type &dataType,
+                              Type &chanInputType) {
+  auto loc = p.getCurrentLocation();
+  ChannelType chType;
+  if (p.parseType(chType))
+    return failure();
+  if (chType.getSignaling() != ChannelSignaling::FIFO0)
+    return p.emitError(loc, "can only wrap into FIFO type");
+  dataType = chType.getInner();
+  chanInputType = chType;
+  return success();
+}
+
+void printWrapFIFOType(OpAsmPrinter &p, WrapFIFOOp wrap, Type dataType,
+                       Type chanType) {
+  p << chanType;
+}
+
+LogicalResult WrapFIFOOp::verify() {
+  if (getChanOutput().getType().getSignaling() != ChannelSignaling::FIFO0)
+    return emitOpError("only supports FIFO signaling");
+  return success();
+}
+
+circt::esi::ChannelType UnwrapFIFOOp::channelType() {
+  return getChanInput().getType().cast<circt::esi::ChannelType>();
+}
+
+LogicalResult UnwrapFIFOOp::verify() {
+  if (getChanInput().getType().getSignaling() != ChannelSignaling::FIFO0)
+    return emitOpError("only supports FIFO signaling");
+  return success();
+}
+
+LogicalResult
+UnwrapFIFOOp::inferReturnTypes(MLIRContext *context, std::optional<Location>,
+                               ValueRange operands, DictionaryAttr,
+                               mlir::RegionRange,
+                               SmallVectorImpl<Type> &inferredResulTypes) {
+  inferredResulTypes.push_back(
+      operands[0].getType().cast<ChannelType>().getInner());
+  inferredResulTypes.push_back(
+      IntegerType::get(context, 1, IntegerType::Signless));
+  return success();
 }
 
 /// If 'iface' looks like an ESI interface, return the inner data type.
@@ -430,25 +493,68 @@ void ServiceImplementReqOp::gatherPairedReqs(
 
 LogicalResult ESIPureModuleOp::verify() {
   ESIDialect *esiDialect = getContext()->getLoadedDialect<ESIDialect>();
-
   Block &body = getBody().front();
+  auto channelOrOutput = [](Value v) {
+    if (v.getType().isa<ChannelType>())
+      return true;
+    if (v.getUsers().empty())
+      return false;
+    return llvm::all_of(v.getUsers(), [](Operation *op) {
+      return isa<ESIPureModuleOutputOp>(op);
+    });
+  };
+
+  DenseMap<StringAttr, std::tuple<hw::PortDirection, Type, Operation *>> ports;
   for (Operation &op : body.getOperations()) {
     if (hw::HWInstanceLike inst = dyn_cast<hw::HWInstanceLike>(op)) {
-      if (llvm::any_of(op.getOperands(),
-                       [](Value v) { return !v.getType().isa<ChannelType>(); }))
+      if (llvm::any_of(op.getOperands(), [](Value v) {
+            return !(v.getType().isa<ChannelType>() ||
+                     isa<ESIPureModuleInputOp>(v.getDefiningOp()));
+          }))
         return inst.emitOpError(
-            "instances in ESI pure modules can only contain channel ports");
-      if (llvm::any_of(op.getResultTypes(),
-                       [](Type t) { return !t.isa<ChannelType>(); }))
+            "instances in ESI pure modules can only contain channel ports or "
+            "ports driven by 'input' ops");
+      if (!llvm::all_of(op.getResults(), channelOrOutput))
         return inst.emitOpError(
-            "instances in ESI pure modules can only contain channel ports");
+            "instances in ESI pure modules can only contain channel ports or "
+            "drive only 'outputs'");
     } else {
       // Pure modules can only contain instance ops and ESI ops.
       if (op.getDialect() != esiDialect)
         return op.emitOpError("operation not allowed in ESI pure modules");
     }
+
+    // Check for port validity.
+    if (auto port = dyn_cast<ESIPureModuleInputOp>(op)) {
+      auto existing = ports.find(port.getNameAttr());
+      Type portType = port.getResult().getType();
+      if (existing != ports.end()) {
+        auto [dir, type, op] = existing->getSecond();
+        if (dir != hw::PortDirection::INPUT || type != portType)
+          return (port.emitOpError("port '")
+                  << port.getName() << "' previously declared as type " << type)
+              .attachNote(op->getLoc());
+      }
+      ports[port.getNameAttr()] = std::make_tuple(
+          hw::PortDirection::INPUT, portType, port.getOperation());
+    } else if (auto port = dyn_cast<ESIPureModuleOutputOp>(op)) {
+      auto existing = ports.find(port.getNameAttr());
+      if (existing != ports.end())
+        return (port.emitOpError("port '")
+                << port.getName() << "' previously declared")
+            .attachNote(std::get<2>(existing->getSecond())->getLoc());
+      ports[port.getNameAttr()] =
+          std::make_tuple(hw::PortDirection::INPUT, port.getValue().getType(),
+                          port.getOperation());
+    }
   }
   return success();
+}
+
+size_t ESIPureModuleOp::getNumPorts() { return 0; }
+hw::InnerSymAttr ESIPureModuleOp::getPortSymbolAttr(size_t portIndex) {
+  assert(false);
+  return {};
 }
 
 #define GET_OP_CLASSES

@@ -258,7 +258,7 @@ static bool hasMooreType(ValueRange values) {
 }
 
 template <typename Op>
-void addGenericLegality(ConversionTarget &target) {
+static void addGenericLegality(ConversionTarget &target) {
   target.addDynamicallyLegalOp<Op>([](Op op) {
     return !hasMooreType(op->getOperands()) && !hasMooreType(op->getResults());
   });

@@ -459,6 +459,10 @@ SmallVector<PortInfo> FExtModuleOp::getPorts() {
   return ::getPorts(cast<FModuleLike>((Operation *)*this));
 }
 
+SmallVector<PortInfo> FIntModuleOp::getPorts() {
+  return ::getPorts(cast<FModuleLike>((Operation *)*this));
+}
+
 SmallVector<PortInfo> FMemModuleOp::getPorts() {
   return ::getPorts(cast<FModuleLike>((Operation *)*this));
 }
@@ -588,6 +592,10 @@ void FExtModuleOp::erasePorts(const llvm::BitVector &portIndices) {
   ::erasePorts(cast<FModuleLike>((Operation *)*this), portIndices);
 }
 
+void FIntModuleOp::erasePorts(const llvm::BitVector &portIndices) {
+  ::erasePorts(cast<FModuleLike>((Operation *)*this), portIndices);
+}
+
 void FMemModuleOp::erasePorts(const llvm::BitVector &portIndices) {
   ::erasePorts(cast<FModuleLike>((Operation *)*this), portIndices);
 }
@@ -614,6 +622,10 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
 }
 
 void FExtModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
+  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
+}
+
+void FIntModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
 }
 
@@ -693,6 +705,16 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
   buildModule(builder, result, name, ports, annotations);
   if (!defnameAttr.empty())
     result.addAttribute("defname", builder.getStringAttr(defnameAttr));
+  if (!parameters)
+    result.addAttribute("parameters", builder.getArrayAttr({}));
+}
+
+void FIntModuleOp::build(OpBuilder &builder, OperationState &result,
+                         StringAttr name, ArrayRef<PortInfo> ports,
+                         StringRef intrinsicNameAttr, ArrayAttr annotations,
+                         ArrayAttr parameters) {
+  buildModule(builder, result, name, ports, annotations);
+  result.addAttribute("intrinsic", builder.getStringAttr(intrinsicNameAttr));
   if (!parameters)
     result.addAttribute("parameters", builder.getArrayAttr({}));
 }
@@ -976,6 +998,8 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
 
 void FExtModuleOp::print(OpAsmPrinter &p) { printFModuleLikeOp(p, *this); }
 
+void FIntModuleOp::print(OpAsmPrinter &p) { printFModuleLikeOp(p, *this); }
+
 void FMemModuleOp::print(OpAsmPrinter &p) { printFModuleLikeOp(p, *this); }
 
 void FModuleOp::print(OpAsmPrinter &p) {
@@ -1128,6 +1152,10 @@ ParseResult FExtModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false);
 }
 
+ParseResult FIntModuleOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false);
+}
+
 ParseResult FMemModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false);
 }
@@ -1178,6 +1206,28 @@ LogicalResult FExtModuleOp::verify() {
   return success();
 }
 
+LogicalResult FIntModuleOp::verify() {
+  auto params = getParameters();
+  if (params.empty())
+    return success();
+
+  auto checkParmValue = [&](Attribute elt) -> bool {
+    auto param = elt.cast<ParamDeclAttr>();
+    auto value = param.getValue();
+    if (value.isa<IntegerAttr>() || value.isa<StringAttr>() ||
+        value.isa<FloatAttr>())
+      return true;
+    emitError() << "has unknown intmodule parameter value '"
+                << param.getName().getValue() << "' = " << value;
+    return false;
+  };
+
+  if (!llvm::all_of(params, checkParmValue))
+    return failure();
+
+  return success();
+}
+
 void FModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
                                          mlir::OpAsmSetValueNameFn setNameFn) {
   getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
@@ -1188,10 +1238,19 @@ void FExtModuleOp::getAsmBlockArgumentNames(
   getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
 }
 
+void FIntModuleOp::getAsmBlockArgumentNames(
+    mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
+  getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
+}
+
 void FMemModuleOp::getAsmBlockArgumentNames(
     mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
   getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
 }
+
+ArrayAttr FMemModuleOp::getParameters() { return {}; }
+
+ArrayAttr FModuleOp::getParameters() { return {}; }
 
 //===----------------------------------------------------------------------===//
 // Declarations
@@ -3497,7 +3556,7 @@ LogicalResult HWStructCastOp::verify() {
 }
 
 LogicalResult BitCastOp::verify() {
-  auto inTypeBits = getBitWidth(getOperand().getType().cast<FIRRTLBaseType>());
+  auto inTypeBits = getBitWidth(getInput().getType(), /*ignoreFlip=*/true);
   auto resTypeBits = getBitWidth(getType());
   if (inTypeBits.has_value() && resTypeBits.has_value()) {
     // Bitwidths must match for valid bit
@@ -3509,7 +3568,7 @@ LogicalResult BitCastOp::verify() {
   }
   if (!inTypeBits.has_value())
     return emitError("bitwidth cannot be determined for input operand type ")
-           << getOperand().getType();
+           << getInput().getType();
   return emitError("bitwidth cannot be determined for result type ")
          << getType();
 }

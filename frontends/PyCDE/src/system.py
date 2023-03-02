@@ -43,16 +43,6 @@ class System:
       "packaging_funcs", "sw_api_langs", "_instance_roots", "_placedb"
   ]
 
-  PASSES = """
-    builtin.module(lower-hwarith-to-hw, msft-lower-constructs,
-    msft-lower-instances, {partition} esi-connect-services,
-    esi-emit-collateral{{tops={tops} schema-file=schema.capnp}},
-    lower-msft-to-hw{{verilog-file={verilog_file}}},
-    lower-esi-to-physical, lower-esi-ports, lower-esi-to-hw, convert-fsm-to-sv,
-    lower-seq-to-sv, hw.module(prettify-verilog), hw.module(hw-cleanup),
-    msft-export-tcl{{tops={tops} tcl-file={tcl_file}}})
-  """
-
   def __init__(self,
                top_modules: Union[list, Module],
                name: str = "PyCDESystem",
@@ -305,16 +295,18 @@ class System:
           pm.run(self.mod)
         else:
           phase(self)
+          if aplog is not None:
+            aplog.write(f"// <python code>\n")
+            aplog.flush()
       except RuntimeError as err:
         sys.stderr.write(f"Exception while executing phase {phase}.\n")
         raise err
       finally:
-        if debug:
-          open(f"after_phase_{idx}.mlir", "w").write(str(self.mod))
+        if aplog is not None:
+          aplog.write(str(self.mod))
+          aplog.close()
       self._op_cache.release_ops()
-      if aplog is not None:
-        aplog.write(str(self.mod))
-        aplog.close()
+
     self.passed = True
 
   def emit_outputs(self):

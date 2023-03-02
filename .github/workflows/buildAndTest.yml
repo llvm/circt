@@ -163,14 +163,14 @@ jobs:
           # gcc   + debug   + assert   + shared
           - cc: clang
             cxx: clang++
-            mode: release
-            assert: OFF
-            shared: OFF
-          - cc: gcc
-            cxx: g++
             mode: debug
             assert: ON
             shared: ON
+          - cc: gcc
+            cxx: g++
+            mode: release
+            assert: OFF
+            shared: OFF
 
     steps:
       - name: Configure Environment

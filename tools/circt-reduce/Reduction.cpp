@@ -180,6 +180,7 @@ struct NLARemover {
   /// order to validate the IR.
   void remove(mlir::ModuleOp module) {
     unsigned numRemoved = 0;
+    (void)numRemoved;
     for (Operation &rootOp : *module.getBody()) {
       if (!isa<firrtl::CircuitOp>(&rootOp))
         continue;

@@ -24,7 +24,6 @@ def FSMDialect : Dialect {
   }];
 
   let useDefaultTypePrinterParser = 1;
-  let useFoldAPI = kEmitFoldAdaptorFolder;
 }
 
 // Base class for the types in this dialect.

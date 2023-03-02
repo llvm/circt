@@ -114,7 +114,7 @@ with Context() as ctx, Location.unknown():
   print("=== Verilog ===")
 
   pm = PassManager.parse("builtin.module(hw.module(hw-cleanup))")
-  pm.run(m)
+  pm.run(m.operation)
   # CHECK: module MyWidget
   # CHECK: external module FancyThing
   circt.export_verilog(m, sys.stdout)

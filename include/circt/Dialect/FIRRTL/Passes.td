@@ -642,4 +642,13 @@ def InnerSymbolDCE : Pass<"firrtl-inner-symbol-dce", "mlir::ModuleOp"> {
   ];
 }
 
+def VBToBV : Pass<"firrtl-vb-to-bv", "firrtl::CircuitOp"> {
+  let summary = "Transform vector-of-bundles to bundle-of-vectors";
+  let description = [{
+    This pass converts vectors containing bundles, into bundles containing
+    vectors.
+  }];
+  let constructor = "circt::firrtl::createVBToBVPass()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

@@ -11,7 +11,7 @@ add_circt_library(CIRCTTransforms
   MLIRMemRefDialect
   MLIRFuncDialect
   MLIRSupport
-  MLIRTransformUtils
+  MLIRTransforms
 
   DEPENDS
   CIRCTTransformsPassIncGen

@@ -4,3 +4,8 @@
 
 from ._esi_ops_gen import *
 from .._mlir_libs._circt._esi import *
+
+
+class ChannelSignaling:
+  ValidReady: int = 0
+  FIFO0: int = 1

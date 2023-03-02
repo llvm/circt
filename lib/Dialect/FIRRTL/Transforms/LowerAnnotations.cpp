@@ -281,6 +281,29 @@ static LogicalResult drop(const AnnoPathValue &target, DictionaryAttr anno,
 // Customized Appliers
 //===----------------------------------------------------------------------===//
 
+static LogicalResult applyDUTAnno(const AnnoPathValue &target,
+                                  DictionaryAttr anno, ApplyState &state) {
+  auto *op = target.ref.getOp();
+  auto loc = op->getLoc();
+
+  if (!target.isLocal())
+    return mlir::emitError(loc) << "must be local";
+
+  if (!target.ref.isa<OpAnnoTarget>() || !isa<FModuleOp>(op))
+    return mlir::emitError(loc) << "can only target to a module";
+
+  auto moduleOp = cast<FModuleOp>(op);
+
+  // DUT has public visibility.
+  moduleOp.setPublic();
+  SmallVector<NamedAttribute> newAnnoAttrs;
+  for (auto &na : anno)
+    if (na.getName().getValue() != "target")
+      newAnnoAttrs.push_back(na);
+  addAnnotation(target.ref, target.fieldIdx, newAnnoAttrs);
+  return success();
+}
+
 /// Update a memory op with attributes about memory file loading.
 template <bool isInline>
 static LogicalResult applyLoadMemoryAnno(const AnnoPathValue &target,
@@ -404,7 +427,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {prefixModulesAnnoClass,
      {stdResolve,
       applyWithoutTarget<true, FModuleOp, FExtModuleOp, InstanceOp>}},
-    {dutAnnoClass, {stdResolve, applyWithoutTarget<false, FModuleOp>}},
+    {dutAnnoClass, {stdResolve, applyDUTAnno}},
     {extractSeqMemsAnnoClass, NoTargetAnnotation},
     {injectDUTHierarchyAnnoClass, NoTargetAnnotation},
     {convertMemToRegOfVecAnnoClass, NoTargetAnnotation},
@@ -790,11 +813,26 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       sourceType = refType;
       sinkType = refType.getType();
     } else {
-      // Use base Type ports
+      // Use specified port types.
       sourceType = source.getType();
       sinkType = sink.getType();
 
-      if (sourceType != sinkType) {
+      // Types must be connectable, which means FIRRTLType's.
+      auto sourceFType = dyn_cast<FIRRTLType>(sourceType);
+      auto sinkFType = dyn_cast<FIRRTLType>(sinkType);
+      if (!sourceFType)
+        return emitError(source.getLoc())
+               << "Wiring Problem source type \"" << sourceType
+               << "\" must be a FIRRTL type";
+      if (!sinkFType)
+        return emitError(sink.getLoc())
+               << "Wiring Problem sink type \"" << sinkType
+               << "\" must be a FIRRTL type";
+
+      // Otherwise they must be identical or FIRRTL type-equivalent
+      // (connectable).
+      if (sourceFType != sinkFType &&
+          !areTypesEquivalent(sourceFType, sinkFType)) {
         auto diag = mlir::emitError(source.getLoc())
                     << "Wiring Problem source type " << sourceType
                     << " does not match sink type " << sinkType;

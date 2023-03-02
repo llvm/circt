@@ -293,6 +293,14 @@ def SubaccessOfConstant : Pat<
   (MoveNameHint $old, (SubindexOp $array, (NativeCodeCall<"$_builder.getI32IntegerAttr($0.cast<IntegerAttr>().getAPSInt().getExtValue())"> $cst))),
   []>;
 
+// mux(cond, 0, 1) -> ~cond
+def MuxNot : Pat<
+  (MuxPrimOp:$old $cond, (ConstantOp:$zcst $_), (ConstantOp:$ocst $_)),
+  (MoveNameHint $old, (NotPrimOp $cond)), [
+    (EqualTypes $cond, $zcst),
+    (ZeroConstantOp $zcst) , (OneConstantOp $ocst)
+  ]>;
+
 // mux(cond, x, mux(cond, y, z)) -> mux(cond, x, z)
 def MuxSameCondLow : Pat<
   (MuxPrimOp:$old $cond, $x, (MuxPrimOp $cond, $y, $z)),

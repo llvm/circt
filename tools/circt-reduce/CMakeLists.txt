@@ -2,34 +2,12 @@ set(LLVM_LINK_COMPONENTS
   Support
 )
 
-add_llvm_tool(circt-reduce
- circt-reduce.cpp
- Reduction.cpp
- Tester.cpp
-)
-llvm_update_compile_flags(circt-reduce)
-target_link_libraries(circt-reduce
-  PRIVATE
-  CIRCTCalyx
-  CIRCTESI
-  CIRCTFIRRTL
-  CIRCTFIRRTLTransforms
-  CIRCTFSM
-  CIRCTHandshake
-  CIRCTInteropDialect
-  CIRCTLLHD
-  CIRCTMoore
-  CIRCTMSFT
-  CIRCTMSFTTransforms
-  CIRCTHW
-  CIRCTHWTransforms
-  CIRCTScheduling
-  CIRCTSeq
-  CIRCTSSP
-  CIRCTPipelineOps
-  CIRCTHWArith
-  CIRCTSV
-  CIRCTSystemC
+get_property(dialect_libs GLOBAL PROPERTY CIRCT_DIALECT_LIBS)
+get_property(mlir_dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
+
+set(LIBS
+  ${dialect_libs}
+  ${mlir_dialect_libs}
 
   MLIRIR
   MLIRParser
@@ -37,3 +15,14 @@ target_link_libraries(circt-reduce
   MLIRTransforms
   MLIRReduceLib
 )
+
+add_llvm_tool(circt-reduce
+ circt-reduce.cpp
+ Reduction.cpp
+ Tester.cpp
+ DEPENDS ${LIBS}
+)
+target_link_libraries(circt-reduce PRIVATE ${LIBS})
+
+llvm_update_compile_flags(circt-reduce)
+mlir_check_all_link_libraries(circt-reduce)

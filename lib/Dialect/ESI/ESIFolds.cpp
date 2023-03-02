@@ -10,6 +10,7 @@
 #include "circt/Support/LLVM.h"
 
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/PatternMatch.h"
 
 using namespace circt;
 using namespace circt::esi;
@@ -21,4 +22,41 @@ LogicalResult WrapValidReadyOp::fold(FoldAdaptor,
   results.push_back(mlir::UnitAttr::get(getContext()));
   results.push_back(IntegerAttr::get(IntegerType::get(getContext(), 1), 1));
   return success();
+}
+
+LogicalResult UnwrapFIFOOp::mergeAndErase(UnwrapFIFOOp unwrap, WrapFIFOOp wrap,
+                                          PatternRewriter &rewriter) {
+  if (unwrap && wrap) {
+    rewriter.replaceOp(unwrap, {wrap.getData(), wrap.getEmpty()});
+    rewriter.replaceOp(wrap, {{}, unwrap.getRden()});
+    return success();
+  }
+  return failure();
+}
+LogicalResult UnwrapFIFOOp::canonicalize(UnwrapFIFOOp op,
+                                         PatternRewriter &rewriter) {
+  auto wrap = dyn_cast_or_null<WrapFIFOOp>(op.getChanInput().getDefiningOp());
+  if (succeeded(UnwrapFIFOOp::mergeAndErase(op, wrap, rewriter)))
+    return success();
+  return failure();
+}
+
+LogicalResult WrapFIFOOp::fold(FoldAdaptor,
+                               SmallVectorImpl<OpFoldResult> &results) {
+  if (getChanOutput().getUsers().empty()) {
+    results.push_back({});
+    results.push_back(IntegerAttr::get(
+        IntegerType::get(getContext(), 1, IntegerType::Signless), 0));
+    return success();
+  }
+  return failure();
+}
+
+LogicalResult WrapFIFOOp::canonicalize(WrapFIFOOp op,
+                                       PatternRewriter &rewriter) {
+  auto unwrap =
+      dyn_cast_or_null<UnwrapFIFOOp>(*op.getChanOutput().getUsers().begin());
+  if (succeeded(UnwrapFIFOOp::mergeAndErase(unwrap, op, rewriter)))
+    return success();
+  return failure();
 }

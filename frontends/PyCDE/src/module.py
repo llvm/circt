@@ -201,6 +201,7 @@ class ModuleLikeBuilderBase(_PyProxy):
     self.generators = None
     self.generator_port_proxy = None
     self.parameters = None
+    self.attributes: Dict = {}
 
   def go(self):
     """Execute the analysis and mutation to make a `ModuleLike` class operate
@@ -221,6 +222,19 @@ class ModuleLikeBuilderBase(_PyProxy):
     generators = {}
     for attr_name, attr in self.cls_dct.items():
       if attr_name.startswith("_"):
+        continue
+
+      if attr_name == "Attributes":
+        self.attributes = {
+            mod_attr[0]: _obj_to_attribute(mod_attr[1])
+            for mod_attr in attr
+            if isinstance(mod_attr, tuple)
+        }
+        self.attributes.update({
+            mod_attr: ir.UnitAttr.get()
+            for mod_attr in attr
+            if not isinstance(mod_attr, tuple)
+        })
         continue
 
       if isinstance(attr, Clock):
@@ -385,6 +399,7 @@ class ModuleBuilder(ModuleLikeBuilderBase):
           [(n, t._type) for (n, t) in self.inputs],
           [(n, t._type) for (n, t) in self.outputs],
           self.parameters if hasattr(self, "parameters") else None,
+          attributes=self.attributes,
           loc=self.loc,
           ip=sys._get_ip(),
       )
@@ -397,12 +412,13 @@ class ModuleBuilder(ModuleLikeBuilderBase):
           hw.ParamDeclAttr.get_nodefault(i.name, i.attr.type)
           for i in self.parameters
       ]
+    self.attributes["verilogName"] = ir.StringAttr.get(self.name)
     return msft.MSFTModuleExternOp(
         symbol,
         [(n, t._type) for (n, t) in self.inputs],
         [(n, t._type) for (n, t) in self.outputs],
         parameters=paramdecl_list,
-        attributes={"verilogName": ir.StringAttr.get(self.name)},
+        attributes=self.attributes,
         loc=self.loc,
         ip=sys._get_ip(),
     )

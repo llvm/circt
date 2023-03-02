@@ -26,3 +26,21 @@ esi.pure_module @top {
   %double = comb.add %data, %data : i1
   %loopbackDouble, %ready = esi.wrap.vr %double, %valid : i1
 }
+
+// -----
+
+esi.pure_module @top {
+  // expected-note @+1 {{}}
+  %a0 = esi.pure_module.input "a" : i1
+  // expected-error @+1 {{port 'a' previously declared as type 'i1'}}
+  %a1 = esi.pure_module.input "a" : i5
+}
+
+// -----
+
+esi.pure_module @top {
+  // expected-note @+1 {{}}
+  %a0 = esi.pure_module.input "a" : i1
+  // expected-error @+1 {{port 'a' previously declared}}
+  esi.pure_module.output "a", %a0 : i1
+}

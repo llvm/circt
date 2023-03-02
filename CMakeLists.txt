@@ -196,7 +196,7 @@ if (NOT CIRCT_RELEASE_TAG_ENABLED)
 endif()
 
 set(CIRCT_RELEASE_TAG "circtorg" CACHE STRING
-    "Prefix of the release tag (e.g. circtorg, pycde and sifive).")
+    "Prefix of the release tag (e.g. circtorg, firtool, and pycde).")
 
 #-------------------------------------------------------------------------------
 # Verilator Configuration

@@ -25,7 +25,7 @@ hw.module.extern @i0SenderReceiver(%in: !esi.channel<i0>) -> (out: !esi.channel<
 // IFACE-LABEL: hw.module.extern @Sender(%clk: i1, %x: !sv.modport<@IValidReady_i4::@sink>) -> (y: i8)
 // IFACE-LABEL: hw.module.extern @ArrSender(%x: !sv.modport<@IValidReady_ArrayOf4xi64::@sink>)
 // IFACE-LABEL: hw.module.extern @Reciever(%a: !sv.modport<@IValidReady_i4::@source>, %clk: i1)
-// IFACE-LABEL: hw.module.extern @i0SenderReceiver(%in: i0, %in_valid: i1, %out_ready: i1) -> (out: i0, out_valid: i1, in_ready: i1)
+// IFACE-LABEL: hw.module.extern @i0SenderReceiver(%in: i0, %in_valid: i1, %out_ready: i1) -> (in_ready: i1, out: i0, out_valid: i1)
 
 hw.module @test(%clk:i1, %rst:i1) {
 
@@ -65,11 +65,11 @@ hw.module @add11(%clk: i1, %ints: !esi.channel<i32>) -> (mutatedInts: !esi.chann
   %c4 = hw.constant 0 : i4
   hw.output %mutInts, %c4 : !esi.channel<i32>, i4
 }
-// HW-LABEL: hw.module @add11(%clk: i1, %ints: i32, %ints_valid: i1, %mutatedInts_ready: i1) -> (mutatedInts: i32, mutatedInts_valid: i1, c4: i4, ints_ready: i1) {
+// HW-LABEL: hw.module @add11(%clk: i1, %ints: i32, %ints_valid: i1, %mutatedInts_ready: i1) -> (ints_ready: i1, mutatedInts: i32, mutatedInts_valid: i1, c4: i4) {
 // HW:   %{{.+}} = hw.constant 11 : i32
 // HW:   [[RES0:%.+]] = comb.add %{{.+}}, %ints : i32
 // HW:   %{{.+}} = hw.constant 0 : i4
-// HW:   hw.output [[RES0]], %ints_valid, %{{.+}}, %mutatedInts_ready : i32, i1, i4, i1
+// HW:   hw.output %mutatedInts_ready, [[RES0]], %ints_valid, %{{.+}} : i1, i32, i1, i4
 
 hw.module @InternRcvr(%in: !esi.channel<!hw.array<4xi8>>) {}
 
@@ -83,7 +83,7 @@ hw.module @test2(%clk:i1, %rst:i1) {
   hw.instance "nullInternRcvr" @InternRcvr(in: %nullArray: !esi.channel<!hw.array<4xi8>>) -> ()
 }
 // HW-LABEL: hw.module @test2(%clk: i1, %rst: i1) {
-// HW:   %adder.mutatedInts, %adder.mutatedInts_valid, %adder.c4, %adder.ints_ready = hw.instance "adder" @add11(clk: %clk: i1, ints: %adder.mutatedInts: i32, ints_valid: %adder.mutatedInts_valid: i1, mutatedInts_ready: %adder.ints_ready: i1) -> (mutatedInts: i32, mutatedInts_valid: i1, c4: i4, ints_ready: i1)
+// HW:   %adder.ints_ready, %adder.mutatedInts, %adder.mutatedInts_valid, %adder.c4 = hw.instance "adder" @add11(clk: %clk: i1, ints: %adder.mutatedInts: i32, ints_valid: %adder.mutatedInts_valid: i1, mutatedInts_ready: %adder.ints_ready: i1) -> (ints_ready: i1, mutatedInts: i32, mutatedInts_valid: i1, c4: i4)
 // HW:   [[ZERO:%.+]] = hw.bitcast %c0_i4 : (i4) -> i4
 // HW:   sv.interface.signal.assign %i4ToNullRcvr(@IValidReady_i4::@data) = [[ZERO]] : i4
 // HW:   [[ZM:%.+]] = sv.modport.get %{{.+}} @source : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@source>
@@ -108,9 +108,9 @@ hw.module @test_constant(%arg0: !esi.channel<i1>, %clock: i1, %reset: i1) -> (ou
   hw.output %handshake_fork0.out1 : !esi.channel<i1>
 }
 
-// HW-LABEL: hw.module @i0Typed(%a: i0, %a_valid: i1, %clk: i1, %rst: i1, %x_ready: i1) -> (x: i0, x_valid: i1, a_ready: i1) {
+// HW-LABEL: hw.module @i0Typed(%a: i0, %a_valid: i1, %clk: i1, %rst: i1, %x_ready: i1) -> (a_ready: i1, x: i0, x_valid: i1) {
 // HW:         %pipelineStage.a_ready, %pipelineStage.x, %pipelineStage.x_valid = hw.instance "pipelineStage" @ESI_PipelineStage1<WIDTH: ui32 = 0>(clk: %clk: i1, rst: %rst: i1, a: %a: i0, a_valid: %a_valid: i1, x_ready: %x_ready: i1) -> (a_ready: i1, x: i0, x_valid: i1)
-// HW:         hw.output %pipelineStage.x, %pipelineStage.x_valid, %pipelineStage.a_ready : i0, i1, i1
+// HW:         hw.output %pipelineStage.a_ready, %pipelineStage.x, %pipelineStage.x_valid : i1, i0, i1
 // HW:       }
 hw.module @i0Typed(%a: !esi.channel<i0>, %clk: i1, %rst: i1) -> (x: !esi.channel<i0>) {
   %0 = esi.buffer %clk, %rst, %a  : i0
@@ -119,7 +119,7 @@ hw.module @i0Typed(%a: !esi.channel<i0>, %clk: i1, %rst: i1) -> (x: !esi.channel
   hw.output %chanOutput : !esi.channel<i0>
 }
 
-// IFACE: hw.module @HandshakeToESIWrapper(%clock: i1, %reset: i1, %in_ctrl: i0, %in_ctrl_valid: i1, %in0_ld_data0: i32, %in0_ld_data0_valid: i1, %in1_ld_data0: i32, %in1_ld_data0_valid: i1, %out_ctrl_ready: i1, %in0_ld_addr0_ready: i1, %in1_ld_addr0_ready: i1, %out0_ready: i1) -> (out_ctrl: i0, out_ctrl_valid: i1, in0_ld_addr0: i64, in0_ld_addr0_valid: i1, in1_ld_addr0: i64, in1_ld_addr0_valid: i1, out0: i32, out0_valid: i1, in_ctrl_ready: i1, in0_ld_data0_ready: i1, in1_ld_data0_ready: i1)
+// IFACE: hw.module @HandshakeToESIWrapper(%clock: i1, %reset: i1, %in_ctrl: i0, %in_ctrl_valid: i1, %in0_ld_data0: i32, %in0_ld_data0_valid: i1, %in1_ld_data0: i32, %in1_ld_data0_valid: i1, %out_ctrl_ready: i1, %in0_ld_addr0_ready: i1, %in1_ld_addr0_ready: i1, %out0_ready: i1) -> (in_ctrl_ready: i1, in0_ld_data0_ready: i1, in1_ld_data0_ready: i1, out_ctrl: i0, out_ctrl_valid: i1, in0_ld_addr0: i64, in0_ld_addr0_valid: i1, in1_ld_addr0: i64, in1_ld_addr0_valid: i1, out0: i32, out0_valid: i1)
 hw.module @HandshakeToESIWrapper(%clock: i1, %reset: i1, %in_ctrl: !esi.channel<i0>, %in0_ld_data0: !esi.channel<i32>, %in1_ld_data0: !esi.channel<i32>) -> (out_ctrl: !esi.channel<i0>, in0_ld_addr0: !esi.channel<i64>, in1_ld_addr0: !esi.channel<i64>, out0: !esi.channel<i32>) {
   %i0 = hw.constant 0 : i0
   %c1 = hw.constant 1 : i1
@@ -132,8 +132,62 @@ hw.module @HandshakeToESIWrapper(%clock: i1, %reset: i1, %in_ctrl: !esi.channel<
   hw.output %chanOutput, %chanOutput_2, %chanOutput_6, %chanOutput_8 : !esi.channel<i0>, !esi.channel<i64>, !esi.channel<i64>, !esi.channel<i32>
 }
 
-// IFACE: hw.module @ServiceWrapper(%clock: i1, %reset: i1, %ctrl: i0, %ctrl_valid: i1, %port0: i32, %port0_valid: i1, %port1: i32, %port1_valid: i1, %ctrl_ready: i1, %port0_ready: i1, %port1_ready: i1) -> (ctrl: i0, ctrl_valid: i1, port0: i64, port0_valid: i1, port1: i64, port1_valid: i1, ctrl_ready: i1, port0_ready: i1, port1_ready: i1)
+// IFACE: hw.module @ServiceWrapper(%clock: i1, %reset: i1, %ctrl: i0, %ctrl_valid: i1, %port0: i32, %port0_valid: i1, %port1: i32, %port1_valid: i1, %ctrl_ready: i1, %port0_ready: i1, %port1_ready: i1) -> (ctrl_ready: i1, port0_ready: i1, port1_ready: i1, ctrl: i0, ctrl_valid: i1, port0: i64, port0_valid: i1, port1: i64, port1_valid: i1)
 hw.module @ServiceWrapper(%clock: i1, %reset: i1, %ctrl: !esi.channel<i0>, %port0: !esi.channel<i32>, %port1: !esi.channel<i32>) -> (ctrl: !esi.channel<i0>, port0: !esi.channel<i64>, port1: !esi.channel<i64>) {
   %HandshakeToESIWrapper.out_ctrl, %HandshakeToESIWrapper.in0_ld_addr0, %HandshakeToESIWrapper.in1_ld_addr0, %HandshakeToESIWrapper.out0 = hw.instance "HandshakeToESIWrapper" @HandshakeToESIWrapper(clock: %clock: i1, reset: %reset: i1, in_ctrl: %ctrl: !esi.channel<i0>, in0_ld_data0: %port0: !esi.channel<i32>, in1_ld_data0: %port1: !esi.channel<i32>) -> (out_ctrl: !esi.channel<i0>, in0_ld_addr0: !esi.channel<i64>, in1_ld_addr0: !esi.channel<i64>, out0: !esi.channel<i32>)
   hw.output %HandshakeToESIWrapper.out_ctrl, %HandshakeToESIWrapper.in0_ld_addr0, %HandshakeToESIWrapper.in1_ld_addr0 : !esi.channel<i0>, !esi.channel<i64>, !esi.channel<i64>
+}
+
+// IFACE-LABEL:  hw.module @i1Fifo0Loopback(%in: i3, %in_empty: i1, %out_rden: i1) -> (in_rden: i1, out: i3, out_empty: i1)
+// IFACE-NEXT:     %chanOutput, %rden = esi.wrap.fifo %in, %in_empty : !esi.channel<i3, FIFO0>
+// IFACE-NEXT:     %data, %empty = esi.unwrap.fifo %chanOutput, %out_rden : !esi.channel<i3, FIFO0>
+// IFACE-NEXT:     hw.output %rden, %data, %empty : i1, i3, i1
+// HW-LABEL:     hw.module @i1Fifo0Loopback(%in: i3, %in_empty: i1, %out_rden: i1) -> (in_rden: i1, out: i3, out_empty: i1)
+// HW-NEXT:        hw.output %out_rden, %in, %in_empty : i1, i3, i1
+hw.module @i1Fifo0Loopback(%in: !esi.channel<i3, FIFO0>) -> (out: !esi.channel<i3, FIFO0>) {
+  hw.output %in : !esi.channel<i3, FIFO0>
+}
+
+// IFACE-LABEL:  hw.module @fifo0LoopbackTop()
+// IFACE-NEXT:     %data, %empty = esi.unwrap.fifo %chanOutput, %foo.in_rden : !esi.channel<i3, FIFO0>
+// IFACE-NEXT:     %chanOutput, %rden = esi.wrap.fifo %foo.out, %foo.out_empty : !esi.channel<i3, FIFO0>
+// IFACE-NEXT:     %foo.in_rden, %foo.out, %foo.out_empty = hw.instance "foo" @i1Fifo0Loopback(in: %data: i3, in_empty: %empty: i1, out_rden: %rden: i1) -> (in_rden: i1, out: i3, out_empty: i1)
+// HW-LABEL:     hw.module @fifo0LoopbackTop()
+// HW-NEXT:        %foo.in_rden, %foo.out, %foo.out_empty = hw.instance "foo" @i1Fifo0Loopback(in: %foo.out: i3, in_empty: %foo.out_empty: i1, out_rden: %foo.in_rden: i1) -> (in_rden: i1, out: i3, out_empty: i1)
+hw.module @fifo0LoopbackTop() -> () {
+  %chan = hw.instance "foo" @i1Fifo0Loopback(in: %chan: !esi.channel<i3, FIFO0>) -> (out: !esi.channel<i3, FIFO0>)
+}
+
+// IFACE-LABEL:  hw.module @structFifo0Loopback(%in_a_in: i3, %in_b_in: i7, %in_flatBroke_in: i1, %out_readEnable_in: i1) -> (in_readEnable: i1, out_a: i3, out_b: i7, out_flatBroke: i1)
+// IFACE-NEXT:     %chanOutput, %rden = esi.wrap.fifo [[r0:%.+]], %in_flatBroke_in : !esi.channel<!hw.struct<a: i3, b: i7>, FIFO0>
+// IFACE-NEXT:     [[r0]] = hw.struct_create (%in_a_in, %in_b_in) : !hw.struct<a: i3, b: i7>
+// IFACE-NEXT:     %data, %empty = esi.unwrap.fifo %chanOutput, %out_readEnable_in : !esi.channel<!hw.struct<a: i3, b: i7>, FIFO0>
+// IFACE-NEXT:     %a, %b = hw.struct_explode %data : !hw.struct<a: i3, b: i7>
+// IFACE-NEXT:     hw.output %rden, %a, %b, %empty : i1, i3, i7, i1
+!st1 = !hw.struct<a: i3, b: i7>
+hw.module @structFifo0Loopback(%in: !esi.channel<!st1, FIFO0>) -> (out: !esi.channel<!st1, FIFO0>)
+    attributes {esi.portFlattenStructs, esi.portRdenSuffix="_readEnable",
+                esi.portEmptySuffix="_flatBroke", esi.portInSuffix="_in"} {
+  hw.output %in : !esi.channel<!st1, FIFO0>
+}
+
+
+// IFACE-LABEL:  hw.module @structFifo0LoopbackTop()
+// IFACE-NEXT:     %data, %empty = esi.unwrap.fifo %chanOutput, %foo.in_readEnable : !esi.channel<!hw.struct<a: i3, b: i7>, FIFO0>
+// IFACE-NEXT:     %a, %b = hw.struct_explode %data : !hw.struct<a: i3, b: i7>
+// IFACE-NEXT:     [[r0:%.+]] = hw.struct_create (%foo.out_a, %foo.out_b) : !hw.struct<a: i3, b: i7>
+// IFACE-NEXT:     %chanOutput, %rden = esi.wrap.fifo [[r0]], %foo.out_flatBroke : !esi.channel<!hw.struct<a: i3, b: i7>, FIFO0>
+// IFACE-NEXT:     %foo.in_readEnable, %foo.out_a, %foo.out_b, %foo.out_flatBroke = hw.instance "foo" @structFifo0Loopback(in_a_in: %a: i3, in_b_in: %b: i7, in_flatBroke_in: %empty: i1, out_readEnable_in: %rden: i1) -> (in_readEnable: i1, out_a: i3, out_b: i7, out_flatBroke: i1)
+hw.module @structFifo0LoopbackTop() -> () {
+  %chan = hw.instance "foo" @structFifo0Loopback(in: %chan: !esi.channel<!st1, FIFO0>) -> (out: !esi.channel<!st1, FIFO0>)
+}
+
+// IFACE-LABEL:  hw.module @i3LoopbackOddNames(%in: i3, %in_good: i1, %out_letErRip: i1) -> (in_letErRip_out: i1, out: i3, out_good_out: i1)
+// IFACE-NEXT:     %chanOutput, %ready = esi.wrap.vr %in, %in_good : i3
+// IFACE-NEXT:     %rawOutput, %valid = esi.unwrap.vr %chanOutput, %out_letErRip : i3
+// IFACE-NEXT:     hw.output %ready, %rawOutput, %valid : i1, i3, i1
+hw.module @i3LoopbackOddNames(%in: !esi.channel<i3>) -> (out: !esi.channel<i3>)
+    attributes {esi.portFlattenStructs, esi.portValidSuffix="_good",
+                esi.portReadySuffix="_letErRip", esi.portOutSuffix="_out"} {
+  hw.output %in : !esi.channel<i3>
 }

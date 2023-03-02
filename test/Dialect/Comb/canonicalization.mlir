@@ -273,22 +273,6 @@ hw.module @extractNested(%0: i5) -> (o1 : i1) {
   hw.output %3 : i1
 }
 
-// CHECK-LABEL: @extractConstant
-hw.module @extractConstant(%arg0: i5, %cond1: i1, %cond2: i1) -> (o1: i1, o2: i4) {
-  //c2 ? (c1 ? 4'h2 : 4'h4) : 4'h0;
-  %c0 = hw.constant 0 : i4
-  %c2 = hw.constant 2 : i4
-  %c4 = hw.constant 4 : i4
-  %0 = comb.mux %cond1, %c0, %c4 : i4
-  %1 = comb.mux %cond2, %0, %c2 : i4
-
-  // CHECK: %false = hw.constant false
-  // CHECK: hw.output %false, 
-  %2 = comb.extract %1 from 3 : (i4) -> i1
-  hw.output %2, %1 : i1, i4
-}
-
-
 // CHECK-LABEL: @flattenMuxTrue
 hw.module @flattenMuxTrue(%arg0: i1, %arg1: i8, %arg2: i8, %arg3: i8, %arg4 : i8) -> (o1 : i8) {
 // CHECK-NEXT:    [[RET:%[0-9]+]] = comb.mux %arg0, %arg1, %arg4
@@ -1466,3 +1450,11 @@ hw.module @MuxSimplify(%index: i1, %a: i1, %foo_0: i2, %foo_1: i2) -> (r_0: i2, 
 // CHECK-NEXT:  %15 = comb.or %14, %index : i1
 // CHECK-NEXT:  %16 = comb.mux bin %15, %foo_0, %foo_1 : i2
 // CHECK-NEXT:  hw.output %1, %3, %6, %8, %10, %13, %16
+
+// CHECK-LABEL: @twoStateICmp
+hw.module @twoStateICmp(%arg: i4) -> (cond: i1) {
+  // CHECK: %0 = comb.icmp bin eq %arg, %c-1_i4
+  %c-1_i4 = hw.constant -1 : i4
+  %0 = comb.icmp bin eq %c-1_i4, %arg : i4
+  hw.output %0 : i1
+}

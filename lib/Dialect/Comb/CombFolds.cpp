@@ -162,6 +162,13 @@ static bool tryFlatteningOperands(Operation *op, PatternRewriter &rewriter) {
 
     Value result =
         createGenericOp(op->getLoc(), op->getName(), newOperands, rewriter);
+
+    // If the original operation and flatten operand have bin flags, propagte
+    // the flag to new one.
+    if (op->hasAttrOfType<UnitAttr>("twoState") &&
+        flattenOp->hasAttrOfType<UnitAttr>("twoState"))
+      result.getDefiningOp()->setAttr("twoState", rewriter.getUnitAttr());
+
     replaceOpAndCopyName(rewriter, op, result);
     return true;
   }
@@ -539,6 +546,9 @@ static bool extractFromReplicate(ExtractOp op, ReplicateOp replicate,
 LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   auto *inputOp = op.getInput().getDefiningOp();
 
+  // This turns out to be incredibly expensive.  Disable until performance is
+  // addressed.
+#if 0
   // If the extracted bits are all known, then return the result.
   auto knownBits = computeKnownBits(op.getInput())
                        .extractBits(op.getType().cast<IntegerType>().getWidth(),
@@ -548,6 +558,7 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
                                                   knownBits.getConstant());
     return success();
   }
+#endif
 
   // extract(olo, extract(ilo, x)) = extract(olo + ilo, x)
   if (auto innerExtract = dyn_cast_or_null<ExtractOp>(inputOp)) {
@@ -1221,7 +1232,7 @@ static void canonicalizeXorIcmpTrue(XorOp op, unsigned icmpOperand,
 
   Value result =
       rewriter.create<ICmpOp>(icmp.getLoc(), negatedPred, icmp.getOperand(0),
-                              icmp.getOperand(1), false);
+                              icmp.getOperand(1), icmp.getTwoState());
 
   // If the xor had other operands, rebuild it.
   if (op.getNumOperands() > 2) {
@@ -1229,7 +1240,7 @@ static void canonicalizeXorIcmpTrue(XorOp op, unsigned icmpOperand,
     newOperands.pop_back();
     newOperands.erase(newOperands.begin() + icmpOperand);
     newOperands.push_back(result);
-    result = rewriter.create<XorOp>(op.getLoc(), newOperands, false);
+    result = rewriter.create<XorOp>(op.getLoc(), newOperands, op.getTwoState());
   }
 
   replaceOpAndCopyName(rewriter, op, result);
@@ -2664,7 +2675,7 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, Operation *lhs,
   auto replaceWith = [&](ICmpPredicate predicate, Value lhs,
                          Value rhs) -> LogicalResult {
     replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, op, predicate, lhs, rhs,
-                                          false);
+                                          op.getTwoState());
     return success();
   };
 
@@ -2814,7 +2825,8 @@ static void combineEqualityICmpWithKnownBitsAndConstant(
       cmpOp.getOperand(1).getLoc(), newConstant);
 
   replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, cmpOp, cmpOp.getPredicate(),
-                                        concatResult, newConstantOp, false);
+                                        concatResult, newConstantOp,
+                                        cmpOp.getTwoState());
 }
 
 // Simplify icmp eq(xor(a,b,cst1), cst2) -> icmp eq(xor(a,b), cst1^cst2).
@@ -2865,7 +2877,7 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
     assert(!matchPattern(op.getRhs(), m_RConstant(rhs)) && "Should be folded");
     replaceOpWithNewOpAndCopyName<ICmpOp>(
         rewriter, op, ICmpOp::getFlippedPredicate(op.getPredicate()),
-        op.getRhs(), op.getLhs(), false);
+        op.getRhs(), op.getLhs(), op.getTwoState());
     return success();
   }
 
@@ -2878,7 +2890,7 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
     auto replaceWith = [&](ICmpPredicate predicate, Value lhs,
                            Value rhs) -> LogicalResult {
       replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, op, predicate, lhs, rhs,
-                                            false);
+                                            op.getTwoState());
       return success();
     };
 
@@ -2988,7 +3000,8 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
         if (rhs.isZero()) {
           // x == 0 -> x ^ 1
           replaceOpWithNewOpAndCopyName<XorOp>(rewriter, op, op.getLhs(),
-                                               getConstant(APInt(1, 1)), false);
+                                               getConstant(APInt(1, 1)),
+                                               op.getTwoState());
           return success();
         }
         if (rhs.isAllOnes()) {
@@ -3008,7 +3021,8 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
         if (rhs.isAllOnes()) {
           // x != 1 -> x ^ 1
           replaceOpWithNewOpAndCopyName<XorOp>(rewriter, op, op.getLhs(),
-                                               getConstant(APInt(1, 1)), false);
+                                               getConstant(APInt(1, 1)),
+                                               op.getTwoState());
           return success();
         }
       }
@@ -3050,7 +3064,7 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
                                            : APInt::getZero(width));
           replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, op, op.getPredicate(),
                                                 replicateOp.getInput(), cst,
-                                                false);
+                                                op.getTwoState());
           return success();
         }
     }

@@ -8,6 +8,24 @@
 //
 // This file implements the FIRRTL combinational cycles detection pass. The
 // algorithm handles aggregates and sub-index/field/access ops.
+// 1. Traverse each module in the Instance Graph bottom up.
+// 2. Preprocess step: Gather all the Value which serve as the root for the
+//    DFS traversal. The input arguments and wire ops and Instance results
+//    are the roots.
+//    Then populate the map for Value to all the FieldRefs it can refer to,
+//    and another map of FieldRef to all the Values that refer to it.
+//    (A single Value can refer to multiple FieldRefs, if the Value is the
+//    result of a SubAccess op. Multiple values can refer to the same
+//    FieldRef, since multiple SubIndex/Field ops with the same fieldIndex
+//    can exist in the IR). We also maintain an aliasingValuesMap that maps
+//    each Value to the set of Values that can refer to the same FieldRef.
+// 3. Start from DFS traversal from the root. Push the root to the DFS stack.
+// 4. Pop a Value from the DFS stack, add all the Values that alias with it
+//    to the Visiting set. Add all the unvisited children of the Values in the
+//    alias set to the DFS stack.
+// 5. If any child is already present in the Visiting set, then a cycle is
+//    found.
+//
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
@@ -15,6 +33,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SCCIterator.h"
@@ -25,416 +44,225 @@
 
 using namespace circt;
 using namespace firrtl;
-struct Node {
-  Value val = nullptr;
-  size_t fieldId = 0;
-  Node() = default;
-  Node(Value val, size_t fieldId) : val(val), fieldId(fieldId) {}
-  Node(const Node &rhs) = default;
-  Node &operator=(const Node &rhs) = default;
-  bool operator==(const Node &rhs) const {
-    return (val == rhs.val && fieldId == rhs.fieldId);
+
+using SetOfFieldRefs = DenseSet<FieldRef>;
+
+/// A value is in VisitingSet if its subtree is still being traversed. That is,
+/// all its children have not yet been visited. If any Value is visited while
+/// its still in the `VisitingSet`, that implies a back edge and a cycle.
+struct VisitingSet {
+private:
+  /// The stack is maintained to keep track of the cycle, if one is found. This
+  /// is required for an iterative DFS traversal, its implicitly recorded for a
+  /// recursive version of this algorithm. Each entry in the stack is a list of
+  /// aliasing Values, which were visited at the same time.
+  SmallVector<SmallVector<Value, 2>> visitingStack;
+  /// This map of the Visiting values, is for faster query, to check if a Value
+  /// is in VisitingSet. It also records the corresponding index into the
+  /// visitingStack, for faster pop until the Value.
+  DenseMap<Value, unsigned> valToStackMap;
+
+public:
+  void appendEmpty() { visitingStack.push_back({}); }
+  void appendToEnd(SmallVector<Value> &values) {
+    auto stackSize = visitingStack.size() - 1;
+    visitingStack.back().append(values.begin(), values.end());
+    // Record the stack location where this Value is pushed.
+    llvm::for_each(values, [&](Value v) { valToStackMap[v] = stackSize; });
   }
-  bool operator!=(const Node &rhs) const { return !(*this == rhs); }
-  bool isValid() { return val != nullptr; }
-  FModuleOp getParentModule() {
-    assert(val && "Must be a valid node");
-    if (val.isa<BlockArgument>())
-      return cast<FModuleOp>(val.getParentBlock()->getParentOp());
-    return val.getDefiningOp()->getParentOfType<FModuleOp>();
+  bool contains(Value v) {
+    return valToStackMap.find(v) != valToStackMap.end();
+  }
+  // Pop all the Values which were visited after v. Then invoke f (if present)
+  // on a popped value for each index.
+  void popUntilVal(Value v,
+                   const llvm::function_ref<void(Value poppedVal)> f = {}) {
+    auto valPos = valToStackMap[v];
+    while (visitingStack.size() != valPos) {
+      auto poppedVals = visitingStack.pop_back_val();
+      Value poppedVal;
+      llvm::for_each(poppedVals, [&](Value pv) {
+        if (!poppedVal)
+          poppedVal = pv;
+        valToStackMap.erase(pv);
+      });
+      if (f && poppedVal)
+        f(poppedVal);
+    }
   }
 };
 
-class ModuleDFS {
-  using ValueOpPair = std::pair<Value, Operation *>;
+class DiscoverLoops {
 
 public:
-  ModuleDFS(
-      FModuleOp module, InstanceGraph &instanceGraph,
-      llvm::SmallDenseMap<Value, llvm::SmallDenseMap<size_t, SmallVector<Node>>>
-          &portPaths)
+  DiscoverLoops(FModuleOp module, InstanceGraph &instanceGraph,
+                DenseMap<FieldRef, SetOfFieldRefs> &portPaths)
       : module(module), instanceGraph(instanceGraph), portPaths(portPaths) {}
 
-  LogicalResult dfsFromNode(Value node, Node inputArg) {
+  LogicalResult processModule() {
+    LLVM_DEBUG(llvm::dbgs() << "\n processing module :" << module.getName());
+    SmallVector<Value> worklist;
+    // Traverse over ports and ops, to populate the worklist and get the
+    // FieldRef corresponding to every Value. Also process the InstanceOps and
+    // get the paths that exist between the ports of the referenced module.
+    preprocess(worklist);
 
-    LLVM_DEBUG(llvm::dbgs() << "\n visiting node :" << node);
-    if (!node.getType().isa<FIRRTLBaseType>())
-      return success();
-    if (visited.contains(node))
-      return success();
-    // visiting: Set of nodes that have a path to this current node.
-    if (visiting.contains(node)) {
-      // A comb cycle exists, print an error.
-      FieldRef f = getFieldRef(node);
-      auto lastSignalName = getFieldName(f).first;
-      auto errorDiag = mlir::emitError(
-          module.getLoc(),
-          "detected combinational cycle in a FIRRTL module, sample path: ");
-      if (!lastSignalName.empty())
-        errorDiag << module.getName() << "." << lastSignalName << " <- ";
-      size_t pathSize = 1;
+    llvm::DenseSet<Value> visited;
+    VisitingSet visiting;
+    SmallVector<Value> dfsStack;
+    SmallVector<FieldRef> inputArgFields;
+    // Record all the children of Value being visited.
+    SmallVector<Value, 8> children;
+    // If this is an input port field, then record it. This is used to
+    // discover paths from input to output ports. Only the last input port
+    // that is visited on the DFS traversal is recorded.
+    SmallVector<FieldRef, 2> inputArgFieldsTemp;
+    SmallVector<Value> aliasingValues;
 
-      for (auto n : llvm::reverse(currentPath)) {
-        FieldRef f = getFieldRefFromValue(n);
-        auto signalName = getFieldName(f).first;
-        if (!signalName.empty() && lastSignalName != signalName) {
-          errorDiag << module.getName() << "." << signalName << " <- ";
-          ++pathSize;
-        }
-        lastSignalName = signalName;
-        if (n == node)
-          break;
+    // worklist is the list of roots, to begin the traversal from.
+    for (auto root : worklist) {
+      dfsStack = {root};
+      inputArgFields.clear();
+      LLVM_DEBUG(llvm::dbgs() << "\n Starting traversal from root :"
+                              << getFieldName(FieldRef(root, 0)).first);
+      if (auto inArg = dyn_cast<BlockArgument>(root)) {
+        if (module.getPortDirection(inArg.getArgNumber()) == Direction::In)
+          // This is required, such that paths to output port can be discovered.
+          // If there is an overlapping path from two input ports to an output
+          // port, then the already visited nodes must be re-visited to discover
+          // the comb paths to the output port.
+          visited.clear();
       }
-      if (pathSize == 1)
-        errorDiag << module.getName() << "." << lastSignalName << " <- ";
-      currentPath.push_back(node);
-      return failure();
-    }
-    auto tmpVisiting = visiting;
-    visiting.insert(node);
-    SmallVector<Value> valuesForSameStorageLoc = {node};
+      while (!dfsStack.empty()) {
+        auto dfsVal = dfsStack.back();
+        if (!visiting.contains(dfsVal)) {
+          unsigned dfsSize = dfsStack.size();
 
-    SmallVector<ValueOpPair> children;
-    // Now get all the Values, that refer to the same storage location as
-    // `node`.
-    auto storageLocIter = valToStorageLocIdMap.find(node);
-    if (storageLocIter != valToStorageLocIdMap.end())
-      // A Value can refer to multiple Storage locations, (for example, result
-      // of subaccess op).
-      for (auto storageLocId : storageLocIter->getSecond())
-        // All the values that refer to `storageLocId` are a valid child of
-        // `node`.
-        for (auto aliasVal : storageLocIdToValuesMap[storageLocId])
-          // The following check ensures, Values referring to the same Location
-          // Id are added only once.
-          if (aliasVal != node) {
-            valuesForSameStorageLoc.push_back(aliasVal);
-            visiting.insert(aliasVal);
+          LLVM_DEBUG(llvm::dbgs() << "\n Stack pop :"
+                                  << getFieldName(FieldRef(dfsVal, 0)).first
+                                  << "," << dfsVal;);
+
+          // Visiting set will contain all the values which alias with the
+          // dfsVal, this is required to detect back edges to aliasing Values.
+          // That is fieldRefs that can refer to the same memory location.
+          visiting.appendEmpty();
+          children.clear();
+          inputArgFieldsTemp.clear();
+          // All the Values that refer to the same FieldRef are added to the
+          // aliasingValues.
+          aliasingValues = {dfsVal};
+          auto aToVIter = aliasingValuesMap.find(dfsVal);
+          if (aToVIter != aliasingValuesMap.end()) {
+            aliasingValues.append(aToVIter->getSecond().begin(),
+                                  aToVIter->getSecond().end());
           }
-    currentPath.push_back(node);
-    for (auto visitingNode : valuesForSameStorageLoc) {
-      // Record the current value being traversed, used for printing the
-      // discovered cycle.
-      currentPath.push_back(visitingNode);
-      // Get the Values that have an edge from this node. The ValueOpPair
-      // records the Operation that is the owner of the corresponding child
-      // value. The operation will only be used for error reporting.
-      getChildren(visitingNode, inputArg, children);
-      // Now continue the DFS recursively.
-      for (auto childNode : children)
-        if (dfsFromNode(childNode.first, inputArg).failed()) {
-          printError(visitingNode, childNode);
-          return failure();
-        }
-      currentPath.pop_back();
-    }
-    currentPath.pop_back();
+          // If `dfsVal` is a subfield, then get all the FieldRefs that it
+          // refers to and then get all the values that alias with it.
+          forallRefersTo(dfsVal, [&](FieldRef ref) {
+            // If this subfield refers to instance/mem results(input port), then
+            // add the output port FieldRefs that exist in the referenced module
+            // comb paths to the children.
+            handlePorts(ref, children);
+            // Get all the values that refer to this FieldRef, and add them to
+            // the aliasing values.
+            if (auto arg = dyn_cast<BlockArgument>(ref.getValue()))
+              if (module.getPortDirection(arg.getArgNumber()) == Direction::In)
+                inputArgFieldsTemp.push_back(ref);
 
-    visiting = std::move(tmpVisiting);
-    // Finished discovering all the reachable nodes from node.
-    visited.insert(node);
+            return success();
+          });
+          if (!inputArgFieldsTemp.empty())
+            inputArgFields = std::move(inputArgFieldsTemp);
+
+          visiting.appendToEnd(aliasingValues);
+          visited.insert(aliasingValues.begin(), aliasingValues.end());
+          // Add the Value to `children`, to which a path exists from `dfsVal`.
+          for (auto dfsFromVal : aliasingValues) {
+
+            for (auto &use : dfsFromVal.getUses()) {
+              Operation *owner = use.getOwner();
+              if (isa<RegResetOp, RegOp>(owner))
+                continue;
+              Value childVal;
+              if (owner->getNumResults() == 1)
+                childVal = owner->getResult(0);
+              else if (auto connect = dyn_cast<FConnectLike>(owner))
+                if (use.getOperandNumber() == 1) {
+                  auto dst = connect.getDest();
+                  if (handleConnects(dst, inputArgFields).succeeded())
+                    childVal = dst;
+                }
+              if (childVal && childVal.getType().isa<FIRRTLBaseType>())
+                children.push_back(childVal);
+            }
+          }
+          for (auto childVal : children) {
+            // This childVal can be ignored, if
+            // It is a Register or a subfield of a register.
+            if (!visited.contains(childVal))
+              dfsStack.push_back(childVal);
+            // If the childVal is a sub, then check if it aliases with any of
+            // the predecessors (the visiting set).
+            if (visiting.contains(childVal)) {
+              // Comb Cycle Detected !!
+              reportLoopFound(childVal, visiting);
+              return failure();
+            }
+          }
+          // child nodes added, continue the DFS
+          if (dfsSize != dfsStack.size())
+            continue;
+        }
+        // FieldRef is an SCC root node, pop the visiting stack to remove the
+        // nodes that are no longer active predecessors, that is their sub-tree
+        // is already explored. All the Values reachable from `dfsVal` have been
+        // explored, remove it and its children from the visiting stack.
+        visiting.popUntilVal(dfsVal);
+
+        auto popped = dfsStack.pop_back_val();
+        (void)popped;
+        LLVM_DEBUG({
+          llvm::dbgs() << "\n dfs popped :"
+                       << getFieldName(FieldRef(popped, 0)).first;
+          dump();
+        });
+      }
+    }
+
     return success();
   }
 
-  /// Customized implementation of getFieldRefFromValue. If `field` is a
-  /// subfield, then this will return the base aggregate Value and the
-  /// corresponding fieldId. This will return nullptr if thie field is a result
-  /// of a register and can be ignored.
-  FieldRef getFieldRef(Value field) {
-    if (!isa_and_nonnull<SubfieldOp, SubaccessOp, SubindexOp>(
-            field.getDefiningOp()))
-      return FieldRef(field, 0);
-    auto iter = leafToBaseValMap.find(field);
-    if (iter == leafToBaseValMap.end())
-      return FieldRef(nullptr, 0);
-    auto baseVal = iter->second;
-    auto storIter = valToStorageLocIdMap.find(baseVal);
-    if (storIter == valToStorageLocIdMap.end())
-      return FieldRef(nullptr, 0);
-    auto baseStorId = storIter->getSecond().front();
-    auto fieldStorIter = valToStorageLocIdMap.find(field);
-    if (fieldStorIter == valToStorageLocIdMap.end())
-      return FieldRef(nullptr, 0);
-    auto fieldStorId = fieldStorIter->getSecond().front();
-
-    return FieldRef(baseVal, fieldStorId - baseStorId);
-  }
-
-  // Add all the Values to `children` that have a valid dataflow from `node`.
-  // The `inputArg` is valid, only if it is one of the reaching definitions to
-  // `node`.
-  void getChildren(Value node, Node &inputArg,
-                   SmallVector<ValueOpPair> &children) {
-
-    // Handle the following cases
-    // Case: Not a BlockArgument
-    if (!node.isa<BlockArgument>()) {
-      // Any Value that is derived from a Register must be ignored. `skip` is
-      // true, only if this node is the result of some Register.
-      bool skip =
-          TypeSwitch<Operation *, bool>(node.getDefiningOp())
-              // Case: Instance port: Add the port fields that have a
-              // combinational path in the referenced module, to the children.
-              .Case<InstanceOp>([&](InstanceOp ins) {
-                // Get the port index for `node`.
-                size_t portNum = node.cast<mlir::OpResult>().getResultNumber();
-                FModuleOp referencedModule = dyn_cast<FModuleOp>(
-                    *instanceGraph.getReferencedModule(ins));
-                if (referencedModule) {
-                  auto port =
-                      referencedModule.getBodyBlock()->getArgument(portNum);
-                  // Get all the ports that have a comb path from `port`.
-                  for (const auto &portNode : portPaths[port])
-                    for (auto outputPort : portNode.getSecond()) {
-                      Value instResult = ins.getResult(
-                          outputPort.val.cast<BlockArgument>().getArgNumber());
-                      if (!instResult.getType()
-                               .cast<FIRRTLBaseType>()
-                               .isGround()) {
-
-                        size_t outPortId;
-                        if (!getStorageLocIdFromVal(instResult, outPortId))
-                          continue;
-                        if (!getValueFromStorageLocId(
-                                outPortId + outputPort.fieldId, instResult))
-                          continue;
-                      }
-                      children.push_back({instResult, ins});
-                    }
-                }
-                return false;
-              })
-              .Case<RegOp, RegResetOp>([&](auto) {
-                children.clear();
-                return true;
-              })
-              .Case<SubfieldOp, SubindexOp, SubaccessOp>([&](auto sub) {
-                // If the subfield result is not recorded then it must be
-                // ignored. Only aggregate port and wire ops are recorded.
-                if (valToStorageLocIdMap.find(node) ==
-                    valToStorageLocIdMap.end()) {
-                  children.clear();
-                  // This subfield is derived from some Register.
-                  return true;
-                }
-                return false;
-              })
-              .Default([&](auto) { return false; });
-      if (skip)
-        return;
+  // Preprocess the module ops to get the
+  // 1. roots for DFS traversal,
+  // 2. FieldRef corresponding to each Value.
+  void preprocess(SmallVector<Value> &worklist) {
+    // All the input ports are added to the worklist.
+    for (BlockArgument arg : module.getArguments()) {
+      auto argType = arg.getType();
+      if (argType.isa<RefType>())
+        continue;
+      if (module.getPortDirection(arg.getArgNumber()) == Direction::In)
+        worklist.push_back(arg);
+      if (!argType.cast<FIRRTLBaseType>().isGround())
+        setValRefsTo(arg, FieldRef(arg, 0));
     }
+    DenseSet<Value> memPorts;
 
-    // Now, handle the ops which create an explicit comb path from `node` to
-    // another Value.
-    for (auto &child : node.getUses()) {
-      Operation *owner = child.getOwner();
-      LLVM_DEBUG(llvm::dbgs() << "\n owner: " << *owner);
-      auto childVal =
-          TypeSwitch<Operation *, Value>(owner)
-              .Case<FConnectLike>([&](FConnectLike connect) -> Value {
-                // Ignore connects, where the child is the destination.
-                if (child.getOperandNumber() == 0)
-                  return {};
-                // Get the aggregate base type Value, if the dest is a subfield
-                // of it. Returns an invalid FieldRef, if this Value can be
-                // ignored.
-                auto fRef = getFieldRef(connect.getDest());
-
-                if (!fRef.getValue())
-                  return {};
-                if (inputArg.isValid())
-                  if (auto sinkOut = fRef.getValue().dyn_cast<BlockArgument>())
-                    // Record the combinational path that was discovered between
-                    // the ports of this module.
-                    portPaths[inputArg.val][inputArg.fieldId].push_back(
-                        Node(sinkOut, fRef.getFieldID()));
-
-                return connect.getDest();
-              })
-              .Case<RegOp, RegResetOp, SubaccessOp>(
-                  [&](auto reg) -> Value { return {}; })
-              .Default([&](Operation *op) -> Value {
-                if (op->getNumResults() == 1)
-                  return op->getResult(0);
-
-                return {};
-              });
-      if (childVal) {
-        children.push_back({childVal, owner});
-      }
-    }
-  }
-
-  /// Record all the leaf ground type values for an aggregate type value. The
-  /// Optional `fieldIdsToAdd` can be used to only add field ids that exist in
-  /// the set and ignore all other fields. This is used for MemOp ports, and it
-  /// will only contain 3 elements, so the copy shouldn't be a concern.
-  void gatherAggregateLeafs(Value val,
-                            SmallVector<std::pair<Value, Node>> &rootValues,
-                            llvm::SmallDenseSet<size_t> fieldIdsToAdd = {}) {
-    auto valType = val.getType().dyn_cast<FIRRTLBaseType>();
-    // Ignore RefType and GroundType Values.
-    if (!valType || valType.isGround())
-      return;
-    Node inputArg = Node();
-    if (val.isa<BlockArgument>())
-      inputArg = Node(val, 0);
-    SmallVector<Node> worklist;
-    worklist.push_back(Node(val, 0));
-    // Assign a unique storage location for the `val`, which is the aggregate
-    // base Value.
-    auto baseStorageLocId = maxStorageLocId;
-    valToStorageLocIdMap[val] = {baseStorageLocId};
-    storageLocIdToValuesMap[baseStorageLocId] = {val};
-    // Reserve unique storage location ids for all the subfields of `val`.
-    maxStorageLocId += valType.getMaxFieldID() + 1;
-    auto handleSub = [&](Value res, size_t fieldId) {
-      if (res.getType().cast<FIRRTLBaseType>().isGround()) {
-        if (!fieldIdsToAdd.empty())
-          if (!fieldIdsToAdd.contains(fieldId))
-            return;
-        // Compute the storage location id based on the fieldIndex.
-        auto storageLocId = baseStorageLocId + fieldId;
-        // The results of subaccess op can refer to multiple storage locations.
-        valToStorageLocIdMap[res].push_back(storageLocId);
-        storageLocIdToValuesMap[storageLocId].push_back(res);
-        if (!leafToBaseValMap.count(res)) {
-          leafToBaseValMap[res] = val;
-          if (inputArg.isValid())
-            inputArg.fieldId = fieldId;
-          rootValues.push_back({res, inputArg});
-        }
-      } else
-        worklist.push_back(Node(res, fieldId));
-    };
-    // Traverse the IR, to get all the lowered fields of the aggregate type.
-    // This representation is equivalent to the LowerTypes transformation.
-    while (!worklist.empty()) {
-      Node node = worklist.pop_back_val();
-      for (auto &use : node.val.getUses()) {
-        Operation *op = use.getOwner();
-        TypeSwitch<Operation *>(op)
-            .Case<SubfieldOp>([&](SubfieldOp sub) {
-              auto bundleType = sub.getInput().getType();
-              auto fId = bundleType.getFieldID(sub.getFieldIndex());
-              auto res = sub.getResult();
-              handleSub(res, node.fieldId + fId);
-            })
-            .Case<SubindexOp>([&](SubindexOp sub) {
-              auto vecType = sub.getInput().getType().cast<FVectorType>();
-              auto res = sub.getResult();
-              auto fId = vecType.getFieldID(sub.getIndex());
-              handleSub(res, node.fieldId + fId);
-            })
-            .Case<SubaccessOp>([&](SubaccessOp sub) {
-              auto vecType = sub.getInput().getType().cast<FVectorType>();
-              auto res = sub.getResult();
-              // The result of a subaccess can refer to multiple storage
-              // locations corresponding to all the possible indices.
-              for (size_t index = 0; index < vecType.getNumElements(); ++index)
-                handleSub(
-                    res,
-                    node.fieldId + 1 +
-                        index * (vecType.getElementType().getMaxFieldID() + 1));
-            })
-            .Default([&](auto op) {});
-      }
-    }
-  }
-
-  bool getValueFromStorageLocId(size_t storageLocId, Value &val) {
-    auto iter = storageLocIdToValuesMap.find(storageLocId);
-    if (iter == storageLocIdToValuesMap.end())
-      return false;
-    if (iter->getSecond().empty())
-      return false;
-    val = iter->getSecond().front();
-    return true;
-  }
-
-  bool getStorageLocIdFromVal(Value val, size_t &storageLocId) {
-    auto iter = valToStorageLocIdMap.find(val);
-    if (iter == valToStorageLocIdMap.end())
-      return false;
-    if (iter->getSecond().empty())
-      return false;
-    storageLocId = iter->getSecond().front();
-    return true;
-  }
-
-  LogicalResult processModule() {
-    // The list of Values, from which the DFS traversal can start, and the
-    // second element of the pair indicates if the Value is an input port.
-    SmallVector<std::pair<Value, Node>> rootValues;
-    LLVM_DEBUG(llvm::dbgs() << "\n processing module :" << module.getName());
-    // Given any Value `val`, add it to `rootValues`, if it is Ground Type. Else
-    // traverse the IR, to discover all the ground type leaf sub fields of
-    // `val`.
-    auto addRoots = [&](Value val) {
-      auto type = val.getType().dyn_cast<FIRRTLBaseType>();
-      if (!type)
-        return;
-      if (type.isGround()) {
-        Node inputArg = Node();
-        if (val.isa<BlockArgument>())
-          inputArg = Node(val, 0);
-        rootValues.push_back({val, inputArg});
-        return;
-      }
-      // Discover all the ground type leaf subfields.
-      gatherAggregateLeafs(val, rootValues);
-    };
-    // Gather all the Ground type Values which can serve as the root for a DFS
-    // traversal. First use ports as the seed.
-    for (auto arg : module.getArguments())
-      addRoots(arg);
-
-    // Then use Wires, Instances and Memory results as the seed.
     for (auto &op : module.getOps()) {
       TypeSwitch<Operation *>(&op)
-          .Case<WireOp>([&](WireOp wire) { addRoots(wire.getResult()); })
-          .Case<InstanceOp>([&](InstanceOp ins) {
-            FModuleOp referencedModule =
-                dyn_cast<FModuleOp>(*instanceGraph.getReferencedModule(ins));
-            for (auto instPort : op.getResults())
-              addRoots(instPort);
-            for (const auto &instPort : llvm::enumerate(op.getResults())) {
-              auto portType =
-                  instPort.value().getType().dyn_cast<FIRRTLBaseType>();
-              if (!portType || portType.isGround())
-                continue;
-              size_t inPortBaseId;
-              if (!getStorageLocIdFromVal(instPort.value(), inPortBaseId))
-                continue;
-              if (referencedModule) {
-                auto port = referencedModule.getBodyBlock()->getArgument(
-                    instPort.index());
-                // Get all the ports that have a comb path from `port`.
-                for (const auto &portNode : portPaths[port]) {
-                  for (auto outputPort : portNode.getSecond()) {
-                    auto instResult = ins.getResult(
-                        outputPort.val.cast<BlockArgument>().getArgNumber());
-                    size_t outPortId;
-                    if (!getStorageLocIdFromVal(instResult, outPortId))
-                      continue;
-                    Value outLeafVal;
-                    if (!getValueFromStorageLocId(
-                            outPortId + outputPort.fieldId, outLeafVal))
-                      continue;
-                    storageLocIdToValuesMap[inPortBaseId + portNode.first]
-                        .push_back(outLeafVal);
-                  }
-                }
-              }
-            }
+          // Wire is added to the worklist
+          .Case<WireOp>([&](WireOp wire) {
+            worklist.push_back(wire.getResult());
+            if (!wire.getType().cast<FIRRTLBaseType>().isGround())
+              setValRefsTo(wire.getResult(), FieldRef(wire.getResult(), 0));
           })
-          .Case<MemOp>([&](MemOp mem) {
-            if (!(mem.getReadLatency() == 0)) {
-              return;
-            }
-            for (auto memPort : mem.getResults()) {
-              if (!memPort.getType().isa<FIRRTLBaseType>())
-                continue;
+          // All sub elements are added to the worklist.
+          .Case<SubfieldOp>([&](SubfieldOp sub) {
+            auto res = sub.getResult();
+            bool isValid = false;
+            auto fieldIndex = sub.getAccessedField().getFieldID();
+            if (memPorts.contains(sub.getInput())) {
+              auto memPort = sub.getInput();
               auto type = memPort.getType().cast<BundleType>();
               auto enableFieldId =
                   type.getFieldID((unsigned)ReadPortSubfield::en);
@@ -442,116 +270,244 @@ public:
                   type.getFieldID((unsigned)ReadPortSubfield::data);
               auto addressFieldId =
                   type.getFieldID((unsigned)ReadPortSubfield::addr);
-              llvm::SmallDenseSet<size_t> fieldIdsToAdd = {
-                  enableFieldId, dataFieldId, addressFieldId};
-              gatherAggregateLeafs(memPort, rootValues, fieldIdsToAdd);
-
-              size_t baseId;
-              if (!getStorageLocIdFromVal(memPort, baseId))
+              if (fieldIndex == enableFieldId || fieldIndex == dataFieldId ||
+                  fieldIndex == addressFieldId) {
+                setValRefsTo(memPort, FieldRef(memPort, 0));
+              } else
+                return;
+            }
+            SmallVector<FieldRef, 4> fields;
+            forallRefersTo(
+                sub.getInput(),
+                [&](FieldRef subBase) {
+                  isValid = true;
+                  fields.push_back(subBase.getSubField(fieldIndex));
+                  return success();
+                },
+                false);
+            if (isValid) {
+              for (auto f : fields)
+                setValRefsTo(res, f);
+            }
+          })
+          .Case<SubindexOp>([&](SubindexOp sub) {
+            auto res = sub.getResult();
+            bool isValid = false;
+            auto index = sub.getAccessedField().getFieldID();
+            SmallVector<FieldRef, 4> fields;
+            forallRefersTo(
+                sub.getInput(),
+                [&](FieldRef subBase) {
+                  isValid = true;
+                  fields.push_back(subBase.getSubField(index));
+                  return success();
+                },
+                false);
+            if (isValid) {
+              for (auto f : fields)
+                setValRefsTo(res, f);
+            }
+          })
+          .Case<SubaccessOp>([&](SubaccessOp sub) {
+            auto vecType = sub.getInput().getType().cast<FVectorType>();
+            auto res = sub.getResult();
+            bool isValid = false;
+            SmallVector<FieldRef, 4> fields;
+            forallRefersTo(
+                sub.getInput(),
+                [&](FieldRef subBase) {
+                  isValid = true;
+                  // The result of a subaccess can refer to multiple storage
+                  // locations corresponding to all the possible indices.
+                  for (size_t index = 0; index < vecType.getNumElements();
+                       ++index)
+                    fields.push_back(subBase.getSubField(
+                        1 + index * (vecType.getElementType().getMaxFieldID() +
+                                     1)));
+                  return success();
+                },
+                false);
+            if (isValid) {
+              for (auto f : fields)
+                setValRefsTo(res, f);
+            }
+          })
+          .Case<InstanceOp>(
+              [&](InstanceOp ins) { handleInstanceOp(ins, worklist); })
+          .Case<MemOp>([&](MemOp mem) {
+            if (!(mem.getReadLatency() == 0)) {
+              return;
+            }
+            for (auto memPort : mem.getResults()) {
+              if (!memPort.getType().isa<FIRRTLBaseType>())
                 continue;
-              Value dataField;
-              if (!getValueFromStorageLocId(baseId + dataFieldId, dataField))
-                continue;
-              storageLocIdToValuesMap[baseId + enableFieldId].push_back(
-                  dataField);
-              storageLocIdToValuesMap[baseId + addressFieldId].push_back(
-                  dataField);
+              memPorts.insert(memPort);
             }
           })
           .Default([&](auto) {});
     }
-    LLVM_DEBUG({
-      for (auto leaf : storageLocIdToValuesMap) {
-        llvm::dbgs() << "\n Valueindex :" << leaf.first;
-        for (auto val : leaf.second)
-          llvm::dbgs() << "\n leaf:" << val;
-      }
-      for (const auto &i1 : valToStorageLocIdMap) {
-        llvm::dbgs() << "\n val : " << i1.first;
-        for (const auto &i2 : i1.second) {
-          llvm::dbgs() << "\n indices :" << i2;
-        }
-      }
-    });
+  }
 
-    auto traverseDFSFrom = [&](Value root, Node inputArg) -> LogicalResult {
-      if (visited.contains(root))
-        return success();
-      return dfsFromNode(root, inputArg);
+  void handleInstanceOp(InstanceOp ins, SmallVector<Value> &worklist) {
+    for (auto port : ins.getResults()) {
+      if (auto type = port.getType().dyn_cast<FIRRTLBaseType>()) {
+        worklist.push_back(port);
+        if (!type.isGround())
+          setValRefsTo(port, FieldRef(port, 0));
+      }
+    }
+  }
+
+  void handlePorts(FieldRef ref, SmallVectorImpl<Value> &children) {
+    if (auto inst = dyn_cast_or_null<InstanceOp>(ref.getDefiningOp())) {
+      auto res = ref.getValue().cast<OpResult>();
+      auto portNum = res.getResultNumber();
+      auto refMod =
+          dyn_cast_or_null<FModuleOp>(*instanceGraph.getReferencedModule(inst));
+      if (!refMod)
+        return;
+      FieldRef modArg(refMod.getArgument(portNum), ref.getFieldID());
+      auto pathIter = portPaths.find(modArg);
+      if (pathIter == portPaths.end())
+        return;
+      for (auto modOutPort : pathIter->second) {
+        auto outPortNum =
+            cast<BlockArgument>(modOutPort.getValue()).getArgNumber();
+        if (modOutPort.getFieldID() == 0) {
+          children.push_back(inst.getResult(outPortNum));
+          return;
+        }
+        FieldRef instanceOutPort(inst.getResult(outPortNum),
+                                 modOutPort.getFieldID());
+        llvm::append_range(children, fieldToVals[instanceOutPort]);
+      }
+    } else if (auto mem = dyn_cast<MemOp>(ref.getDefiningOp())) {
+      if (mem.getReadLatency() > 0)
+        return;
+      auto memPort = ref.getValue();
+      auto type = memPort.getType().cast<BundleType>();
+      auto enableFieldId = type.getFieldID((unsigned)ReadPortSubfield::en);
+      auto dataFieldId = type.getFieldID((unsigned)ReadPortSubfield::data);
+      auto addressFieldId = type.getFieldID((unsigned)ReadPortSubfield::addr);
+      if (ref.getFieldID() == enableFieldId ||
+          ref.getFieldID() == addressFieldId) {
+        for (auto dataField : fieldToVals[FieldRef(memPort, dataFieldId)])
+          children.push_back(dataField);
+      }
+    }
+  }
+
+  void reportLoopFound(Value childVal, VisitingSet visiting) {
+    auto getName = [&](FieldRef node) {
+      if (isa<SubfieldOp, SubindexOp, SubaccessOp>(node.getDefiningOp())) {
+        assert(!valRefersTo[node.getValue()].empty());
+        return getFieldName(*valRefersTo[node.getValue()].begin()).first;
+      }
+      return getFieldName(node).first;
     };
-    for (auto root : rootValues) {
-      if (root.second.isValid())
-        visited.clear();
-      if (traverseDFSFrom(root.first, root.second).failed())
+    FieldRef childNode(childVal, 0);
+    auto lastSignalName = getName(childNode);
+    auto errorDiag = mlir::emitError(
+        module.getLoc(),
+        "detected combinational cycle in a FIRRTL module, sample path: ");
+    if (!lastSignalName.empty())
+      errorDiag << module.getName() << "." << lastSignalName << " <- ";
+    visiting.popUntilVal(childVal, [&](Value visitingVal) {
+      auto signalName = getName(FieldRef(visitingVal, 0));
+      if (!signalName.empty())
+        errorDiag << module.getName() << "." << signalName << " <- ";
+    });
+    if (!lastSignalName.empty())
+      errorDiag << module.getName() << "." << lastSignalName;
+  }
+
+  LogicalResult handleConnects(Value dst,
+                               SmallVector<FieldRef> &inputArgFields) {
+
+    bool onlyFieldZero = true;
+    auto pathsToOutPort = [&](FieldRef dstFieldRef) {
+      if (dstFieldRef.getFieldID() != 0)
+        onlyFieldZero = false;
+      if (!dstFieldRef.getValue().isa<BlockArgument>()) {
+        return failure();
+      }
+      onlyFieldZero = false;
+      for (auto inArg : inputArgFields) {
+        portPaths[inArg].insert(dstFieldRef);
+      }
+      return success();
+    };
+    forallRefersTo(dst, pathsToOutPort);
+
+    if (onlyFieldZero) {
+      if (isa<RegOp, RegResetOp, SubfieldOp, SubaccessOp, SubindexOp>(
+              dst.getDefiningOp()))
         return failure();
     }
-
-    LLVM_DEBUG({
-      for (const auto &i1 : portPaths)
-        for (const auto &i2 : i1.second)
-          for (const auto &i3 : i2.second)
-            llvm::dbgs() << "\n node :" << i1.first << "," << i2.first
-                         << " is connected to " << i3.val << "," << i3.fieldId;
-    });
     return success();
   }
 
-  void printError(Value node, ValueOpPair &childNode) {
-    if (!printCycle || currentPath.back() == node) {
-      printCycle = false;
-      return;
+  void setValRefsTo(Value val, FieldRef ref) {
+    assert(val && ref && " Value and Ref cannot be null");
+    valRefersTo[val].insert(ref);
+    auto fToVIter = fieldToVals.find(ref);
+    if (fToVIter != fieldToVals.end()) {
+      for (auto aliasingVal : fToVIter->second) {
+        aliasingValuesMap[val].insert(aliasingVal);
+        aliasingValuesMap[aliasingVal].insert(val);
+      }
+      fToVIter->getSecond().insert(val);
+    } else
+      fieldToVals[ref].insert(val);
+  }
+
+  void
+  forallRefersTo(Value val,
+                 const llvm::function_ref<LogicalResult(FieldRef &refNode)> f,
+                 bool baseCase = true) {
+    auto refersToIter = valRefersTo.find(val);
+    if (refersToIter != valRefersTo.end()) {
+      for (auto ref : refersToIter->second)
+        if (f(ref).failed())
+          return;
+    } else if (baseCase) {
+      FieldRef base(val, 0);
+      if (f(base).failed())
+        return;
     }
-    if (childNode.second)
-      TypeSwitch<Operation *>(childNode.second)
-          .Case<InstanceOp>([&](InstanceOp ins) {
-            size_t portNum = 0, childPortNum = 0;
-            // Get the port index for `node.val`.
-            for (const auto &p : llvm::enumerate(ins->getOpResults())) {
-              if (p.value() == childNode.first)
-                childPortNum = p.index();
-              if (p.value() == node)
-                portNum = p.index();
-            }
-            auto remark = ins.emitRemark("instance is part of a combinational "
-                                         "cycle, instance port number '")
-                          << childPortNum << "' has a path from port number '"
-                          << portNum << "'";
-            FieldRef fOut = getFieldRef(node);
-            FieldRef fIn = getFieldRef(childNode.first);
-            auto inName = getFieldName(fIn).first;
-            auto outName = getFieldName(fOut).first;
-            remark << ", " << inName << " <- " << outName;
-          })
-          .Case<MemOp>([&](MemOp mem) {
-            mem.emitRemark("memory is part of a combinational cycle");
-          })
-          .Case<SubfieldOp, SubindexOp, SubaccessOp>([&](auto op) {})
-          .Default([&](auto owner) {
-            owner->emitRemark(
-                "this operation is part of the combinational cycle");
-          });
+  }
+
+  void dump() {
+    for (const auto &valRef : valRefersTo) {
+      llvm::dbgs() << "\n val :" << valRef.first;
+      for (auto node : valRef.second)
+        llvm::dbgs() << "\n Refers to :" << getFieldName(node).first;
+    }
+    for (const auto &dtv : fieldToVals) {
+      llvm::dbgs() << "\n Field :" << getFieldName(dtv.first).first
+                   << " ::" << dtv.first.getValue();
+      for (auto val : dtv.second)
+        llvm::dbgs() << "\n val :" << val;
+    }
+    for (const auto &p : portPaths) {
+      llvm::dbgs() << "\n Output port : " << getFieldName(p.first).first
+                   << " has comb path from :";
+      for (const auto &src : p.second)
+        llvm::dbgs() << "\n Input port : " << getFieldName(src).first;
+    }
   }
 
   FModuleOp module;
   InstanceGraph &instanceGraph;
-  // Set of visiting and visited nodes.
-  llvm::SmallDenseSet<Value> visiting, visited;
-  // Combinational paths between the ports of a module.
-  llvm::SmallDenseMap<Value, llvm::SmallDenseMap<size_t, SmallVector<Node>>>
-      &portPaths;
-  // Map of each unique storage location id and the list of SSA values that
-  // refer to it.
-  llvm::DenseMap<size_t, SmallVector<Value>> storageLocIdToValuesMap;
-  // Map of an SSA value to the list of storage location ids, that it can refer
-  // to.
-  llvm::DenseMap<Value, SmallVector<size_t>> valToStorageLocIdMap;
-  // For each leaf value, record the aggregate base value that it corresponds
-  // to.
-  llvm::DenseMap<Value, Value> leafToBaseValMap;
-  size_t maxStorageLocId = 0;
-  SmallVector<Value> currentPath;
-  bool printCycle = true;
-  bool detectedCycle = false;
+  /// Map of a Value to all the FieldRefs that it refers to.
+  DenseMap<Value, SetOfFieldRefs> valRefersTo;
+
+  DenseMap<Value, DenseSet<Value>> aliasingValuesMap;
+
+  DenseMap<FieldRef, DenseSet<Value>> fieldToVals;
+  /// Comb paths that exist between module ports. This is maintained across
+  /// modules.
+  DenseMap<FieldRef, SetOfFieldRefs> &portPaths;
 };
 
 /// This pass constructs a local graph for each module to detect combinational
@@ -562,16 +518,16 @@ class CheckCombLoopsPass : public CheckCombLoopsBase<CheckCombLoopsPass> {
 public:
   void runOnOperation() override {
     auto &instanceGraph = getAnalysis<InstanceGraph>();
-    llvm::SmallDenseMap<Value, llvm::SmallDenseMap<size_t, SmallVector<Node>>>
-        portPaths;
+    DenseMap<FieldRef, SetOfFieldRefs> portPaths;
     // Traverse modules in a post order to make sure the combinational paths
     // between IOs of a module have been detected and recorded in `portPaths`
     // before we handle its parent modules.
     for (auto *igNode : llvm::post_order<InstanceGraph *>(&instanceGraph)) {
       if (auto module = dyn_cast<FModuleOp>(*igNode->getModule())) {
-        ModuleDFS m(module, instanceGraph, portPaths);
-        if (m.processModule().failed())
+        DiscoverLoops rdf(module, instanceGraph, portPaths);
+        if (rdf.processModule().failed()) {
           return signalPassFailure();
+        }
       }
     }
     markAllAnalysesPreserved();

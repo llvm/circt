@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from .support import get_user_loc, _obj_to_value_infer_type
-from .types import Type
+from .types import ChannelSignaling, Type
 
 from .circt.dialects import sv
 from .circt import support
@@ -666,13 +666,21 @@ class ChannelSignal(Signal):
   def reg(self, clk, rst=None, name=None):
     raise TypeError("Cannot register a channel")
 
-  def unwrap(self, ready):
+  def unwrap(self, readyOrRden):
     from .dialects import esi
     from .types import types
-    ready = types.i1(ready)
-    unwrap_op = esi.UnwrapValidReadyOp(self.type.inner_type, types.i1,
-                                       self.value, ready.value)
-    return unwrap_op[0], unwrap_op[1]
+    signaling = self.type.signaling
+    if signaling == ChannelSignaling.ValidReady:
+      ready = types.i1(readyOrRden)
+      unwrap_op = esi.UnwrapValidReadyOp(self.type.inner_type, types.i1,
+                                         self.value, ready.value)
+      return unwrap_op[0], unwrap_op[1]
+    elif signaling == ChannelSignaling.FIFO0:
+      rden = types.i1(readyOrRden)
+      wrap_op = esi.UnwrapFIFOOp(self.value, rden.value)
+      return wrap_op[0], wrap_op[1]
+    else:
+      raise TypeError("Unknown signaling standard")
 
 
 def wrap_opviews_with_values(dialect, module_name, excluded=[]):

@@ -81,8 +81,7 @@ public:
     if (reg.getSymName().has_value())
       svReg.setInnerSymAttr(reg.getSymNameAttr());
 
-    if (auto attribute = circt::sv::getSVAttributes(reg))
-      circt::sv::setSVAttributes(svReg, attribute);
+    circt::sv::setSVAttributes(svReg, circt::sv::getSVAttributes(reg));
 
     auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
     if (reg.getReset() && reg.getResetValue()) {
@@ -397,9 +396,9 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
   if (addVivadoRAMAddressConflictSynthesisBugWorkaround &&
       hw::type_isa<hw::ArrayType, hw::UnpackedArrayType>(reg.getType()))
     circt::sv::setSVAttributes(
-        svReg.reg, sv::SVAttributesAttr::get(
-                       builder.getContext(),
-                       {std::make_pair("ram_style", R"("distributed")")}));
+        svReg.reg,
+        sv::SVAttributeAttr::get(builder.getContext(), "ram_style",
+                                 R"("distributed")", /*emitAsComment=*/false));
 
   if (auto innerSymAttr = reg.getInnerSymAttr())
     svReg.reg.setInnerSymAttr(innerSymAttr);

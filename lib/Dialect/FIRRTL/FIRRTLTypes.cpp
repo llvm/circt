@@ -913,6 +913,13 @@ uint64_t BundleType::getIndexForFieldID(uint64_t fieldID) {
   return std::distance(fieldIDs.begin(), it);
 }
 
+std::pair<uint64_t, uint64_t>
+BundleType::getIndexAndSubfieldID(uint64_t fieldID) {
+  auto index = getIndexForFieldID(fieldID);
+  auto elementFieldID = getFieldID(index);
+  return {index, fieldID - elementFieldID};
+}
+
 std::pair<FIRRTLBaseType, uint64_t>
 BundleType::getSubTypeByFieldID(uint64_t fieldID) {
   if (fieldID == 0)
@@ -1011,12 +1018,18 @@ uint64_t FVectorType::getIndexForFieldID(uint64_t fieldID) {
   return (fieldID - 1) / (getElementType().getMaxFieldID() + 1);
 }
 
+std::pair<uint64_t, uint64_t>
+FVectorType::getIndexAndSubfieldID(uint64_t fieldID) {
+  auto index = getIndexForFieldID(fieldID);
+  auto elementFieldID = getFieldID(index);
+  return {index, fieldID - elementFieldID};
+}
+
 std::pair<FIRRTLBaseType, uint64_t>
 FVectorType::getSubTypeByFieldID(uint64_t fieldID) {
   if (fieldID == 0)
     return {*this, 0};
-  auto subfieldIndex = getIndexForFieldID(fieldID);
-  return {getElementType(), fieldID - getFieldID(subfieldIndex)};
+  return {getElementType(), getIndexForFieldID(fieldID)};
 }
 
 uint64_t FVectorType::getMaxFieldID() {
@@ -1036,32 +1049,9 @@ std::pair<uint64_t, bool> FVectorType::rootChildFieldID(uint64_t fieldID,
 // RefType
 //===----------------------------------------------------------------------===//
 
-namespace circt {
-namespace firrtl {
-namespace detail {
-struct RefTypeStorage : mlir::TypeStorage {
-  using KeyTy = FIRRTLBaseType;
-
-  RefTypeStorage(KeyTy value) : value(value) {}
-
-  bool operator==(const KeyTy &key) const { return key == value; }
-
-  static RefTypeStorage *construct(TypeStorageAllocator &allocator, KeyTy key) {
-    return new (allocator.allocate<RefTypeStorage>()) RefTypeStorage(key);
-  }
-
-  KeyTy value;
-};
-
-} // namespace detail
-} // namespace firrtl
-} // namespace circt
-
 auto RefType::get(FIRRTLBaseType type) -> RefType {
   return Base::get(type.getContext(), type);
 }
-
-auto RefType::getType() -> FIRRTLBaseType { return getImpl()->value; }
 
 auto RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
                      FIRRTLBaseType base) -> LogicalResult {
