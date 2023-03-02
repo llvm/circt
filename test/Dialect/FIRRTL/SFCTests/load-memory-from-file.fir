@@ -1,6 +1,6 @@
-; RUN: firtool %s -disable-all-randomization | FileCheck %s --check-prefixes=CHECK,INIT_NONE
-; RUN: firtool %s -annotation-file %s.inline.anno.json -disable-all-randomization | FileCheck %s --check-prefixes=CHECK,INIT_INLINE
-; RUN: firtool %s -annotation-file %s.outline.anno.json -disable-all-randomization | FileCheck %s --check-prefixes=CHECK,INIT_OUTLINE
+; RUN: firtool %s -disable-all-randomization -lowering-options=emitBindComments | FileCheck %s --check-prefixes=CHECK,INIT_NONE
+; RUN: firtool %s -annotation-file %s.inline.anno.json -disable-all-randomization -lowering-options=emitBindComments | FileCheck %s --check-prefixes=CHECK,INIT_INLINE
+; RUN: firtool %s -annotation-file %s.outline.anno.json -disable-all-randomization -lowering-options=emitBindComments | FileCheck %s --check-prefixes=CHECK,INIT_OUTLINE
 
 circuit Foo :
   module Foo :

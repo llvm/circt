@@ -3142,12 +3142,16 @@ LogicalResult StmtEmitter::visitSV(AliasOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(InterfaceInstanceOp op) {
+  auto doNotPrint = op->hasAttr("doNotPrint");
+  if (doNotPrint && !state.options.emitBindComments)
+    return success();
+
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   startStatement();
   StringRef prefix = "";
-  if (op->hasAttr("doNotPrint")) {
+  if (doNotPrint) {
     prefix = "// ";
     ps << "// This interface is elsewhere emitted as a bind statement."
        << PP::newline;
@@ -3963,6 +3967,9 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
 
 LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   bool doNotPrint = op->hasAttr("doNotPrint");
+  if (doNotPrint && !state.options.emitBindComments)
+    return success();
+
   // Emit SV attributes if the op is not emitted as a bind statement.
   if (!doNotPrint)
     emitSVAttributes(op);

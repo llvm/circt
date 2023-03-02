@@ -118,6 +118,8 @@ The current set of "style" Lowering Options is:
  * `emitWireInPorts` (default=`false`). Emits `wire` in port lists rather than
   relying on 'default_nettype'. For instance, instead of `input a` this option
   would emit that port as `input wire a`.
+* `emitBindComments` (default=`false`). Emits a comment wherever an instance or
+  interface instance is not printed, because it was emitted as a bind elsewhere.
 
 The current set of "lint warnings fix" Lowering Options is:
 

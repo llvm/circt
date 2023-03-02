@@ -111,6 +111,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       }
     } else if (option == "emitWireInPorts") {
       emitWireInPorts = true;
+    } else if (option == "emitBindComments") {
+      emitBindComments = true;
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
@@ -160,6 +162,8 @@ std::string LoweringOptions::toString() const {
                std::to_string(maximumNumberOfTermsPerExpression) + ',';
   if (emitWireInPorts)
     options += "emitWireInPorts,";
+  if (emitBindComments)
+    options += "emitBindComments,";
 
   // Remove a trailing comma if present.
   if (!options.empty()) {
