@@ -258,7 +258,7 @@ with ir.Context() as ctx, ir.Location.unknown():
   pm = circt.passmanager.PassManager.parse(
       "builtin.module(msft-lower-instances,lower-msft-to-hw,msft-export-tcl{tops=top})"
   )
-  pm.run(mod)
+  pm.run(mod.operation)
   circt.export_verilog(mod, sys.stdout)
 
   appid1 = msft.AppIDAttr.get("foo", 4)

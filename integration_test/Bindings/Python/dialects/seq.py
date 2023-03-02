@@ -77,7 +77,7 @@ with Context() as ctx, Location.unknown():
   print("=== Verilog ===")
 
   pm = PassManager.parse("builtin.module(lower-seq-to-sv)")
-  pm.run(m)
+  pm.run(m.operation)
   # CHECK: always_ff @(posedge clk)
   # CHECK: my_reg <= {{.+}}
   # CHECK: (* no_merge *)
