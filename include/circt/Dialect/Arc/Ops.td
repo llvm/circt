@@ -40,6 +40,8 @@ def DefineOp : ArcOp<"define", [
   let regions = (region SizedRegion<1>:$body);
   let hasCustomAssemblyFormat = 1;
 
+  let hasRegionVerifier = 1;
+
   let builders = [
     OpBuilder<(ins "mlir::StringAttr":$sym_name, "mlir::TypeAttr":$function_type), [{
       build($_builder, $_state, sym_name, function_type, mlir::ArrayAttr(), mlir::ArrayAttr());
@@ -105,7 +107,7 @@ def OutputOp : ArcOp<"output", [
 def StateOp : ArcOp<"state", [
   CallOpInterface, MemRefsNormalizable,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-  AttrSizedOperandSegments, Pure
+  AttrSizedOperandSegments
 ]> {
   let summary = "State transfer arc";
 

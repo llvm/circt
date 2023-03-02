@@ -2,11 +2,10 @@
 
 // CHECK-LABEL: arc.define @Foo
 arc.define @Foo(%arg0: i42, %arg1: i9) -> (i42, i9) {
-  // CHECK: arc.state @Bar(%arg0) lat 0 : (i42) -> i42
-  %0 = arc.state @Bar(%arg0) lat 0 : (i42) -> i42
+  %c-1_i42 = hw.constant -1 : i42
 
-  // CHECK: arc.output %arg0, %arg1 : i42, i9
-  arc.output %arg0, %arg1 : i42, i9
+  // CHECK: arc.output %c-1_i42, %arg1 : i42, i9
+  arc.output %c-1_i42, %arg1 : i42, i9
 }
 
 arc.define @Bar(%arg0: i42) -> i42 {

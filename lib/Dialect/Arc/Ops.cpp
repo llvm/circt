@@ -38,6 +38,33 @@ void DefineOp::print(OpAsmPrinter &p) {
       getResAttrsAttrName());
 }
 
+LogicalResult DefineOp::verifyRegions() {
+  Operation *firstNonPureOp;
+  auto result = getBody().walk([&](Operation *op) {
+    if (!isPure(op)) {
+      firstNonPureOp = op;
+      return WalkResult::interrupt();
+    }
+
+    return WalkResult::advance();
+  });
+
+  if (result.wasInterrupted()) {
+    // We don't use a op-error here because that leads to the whole arc being
+    // printed. This can be switched of when creating the context, but one might
+    // not want to switch that off for other error messages. Here it's
+    // definitely not desirable as arcs can be very big and would fill up the
+    // error log, making it hard to read. Currently, only the signature (first
+    // line) of the arc is printed.
+    auto diag = mlir::emitError(getLoc(), "body contains non-pure operation");
+    diag.attachNote(firstNonPureOp->getLoc())
+        .append("first non-pure operation here: ");
+    return diag;
+  }
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // OutputOp
 //===----------------------------------------------------------------------===//
@@ -109,18 +136,16 @@ LogicalResult StateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 LogicalResult StateOp::verify() {
-  if (getLatency() > 0) {
-    if (getOperation()->getParentOfType<DefineOp>())
-      return emitOpError(
-          "with non-zero latency cannot be in an arc definition");
-    if (!getClock())
-      return emitOpError("with non-zero latency requires a clock");
-  } else {
+  if (getLatency() > 0 && !getClock())
+    return emitOpError("with non-zero latency requires a clock");
+
+  if (getLatency() == 0) {
     if (getClock())
       return emitOpError("with zero latency cannot have a clock");
     if (getEnable())
       return emitOpError("with zero latency cannot have an enable");
   }
+
   return success();
 }
 

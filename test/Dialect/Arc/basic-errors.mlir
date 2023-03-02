@@ -1,7 +1,8 @@
 // RUN: circt-opt %s --split-input-file --verify-diagnostics
 
+// expected-error @+1 {{body contains non-pure operation}}
 arc.define @Foo(%arg0: i1) {
-  // expected-error @+1 {{'arc.state' op with non-zero latency cannot be in an arc definition}}
+  // expected-note @+1 {{first non-pure operation here:}}
   arc.state @Bar() clock %arg0 lat 1 : () -> ()
   arc.output
 }
