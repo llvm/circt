@@ -163,9 +163,12 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             markForRemoval(op);
             if (isZeroWidth(op.getType().getType()))
               return success();
-            auto defMem = dyn_cast<MemOp>(op.getInput().getDefiningOp());
+            auto defMem =
+                dyn_cast_or_null<MemOp>(op.getInput().getDefiningOp());
             if (!defMem) {
-              defMem.emitOpError("can only lower RefSubOp of Memory");
+              op.emitError("can only lower RefSubOp of Memory")
+                      .attachNote(op.getInput().getLoc())
+                  << "input here";
               return failure();
             }
             auto inRef = getInnerRefTo(defMem);
