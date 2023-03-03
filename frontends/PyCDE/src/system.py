@@ -97,10 +97,6 @@ class System:
   def runtime_output_dir(self):
     return self._return_create_if_necessary(self.output_directory / "runtime")
 
-  @property
-  def sys_runtime_output_dir(self):
-    return self._return_create_if_necessary(self.output_directory / self.name)
-
   def _get_ip(self):
     return ir.InsertionPoint(self.mod.body)
 

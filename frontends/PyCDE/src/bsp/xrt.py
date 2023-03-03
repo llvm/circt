@@ -2,22 +2,17 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from .. import esi
 from ..common import Clock, Input, Output
 from ..constructs import ControlReg, Wire
-from ..module import Module, generator, modparams
-from ..signals import And, Or, BitsSignal
+from ..module import Module, generator
 from ..system import System
 from ..types import bit, types, Bits
 
-from dataclasses import asdict, dataclass
 import glob
 from io import FileIO
-import json
 import math
 import pathlib
 import shutil
-from typing import List, Tuple
 
 __dir__ = pathlib.Path(__file__).parent
 
@@ -110,9 +105,9 @@ def XrtBSP(user_module):
 
       # Track the non-zero registers in the read address space.
       rd_addr_data = {
-          0: Bits(32)(MagicNumberLo),
-          4: Bits(32)(MagicNumberHi),
-          8: Bits(32)(VersionNumber),
+          16: Bits(32)(MagicNumberLo),
+          20: Bits(32)(MagicNumberHi),
+          24: Bits(32)(VersionNumber),
       }
 
       ######
@@ -244,9 +239,9 @@ def XrtBSP(user_module):
       shutil.copy(__dir__ / "xrt.ini", sys.output_directory / "xrt.ini")
       shutil.copy(__dir__ / "xsim.tcl", sys.output_directory / "xsim.tcl")
 
-      runtime_dir = sys.output_directory / "runtime" / sys.name
+      runtime_dir = sys.runtime_output_dir / sys.name
       shutil.copy(__dir__ / "xrt_api.py", runtime_dir / "xrt.py")
       shutil.copy(__dir__ / "EsiXrtPython.cpp",
-                  sys.sys_runtime_output_dir / "EsiXrtPython.cpp")
+                  runtime_dir / "EsiXrtPython.cpp")
 
   return top

@@ -13,8 +13,7 @@
 # RUN: ls %t/Makefile.xrt
 # RUN: ls %t/xrt.ini
 # RUN: ls %t/xsim.tcl
-# RUN: ls %t/ESILoopback
-# RUN: ls %t/ESILoopback/EsiXrtPython.cpp
+# RUN: ls %t/runtime/ESILoopback/EsiXrtPython.cpp
 
 # RUN: FileCheck %s --input-file %t/hw/top.sv --check-prefix=TOP
 
