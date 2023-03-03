@@ -17,6 +17,7 @@
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Support/LLVM.h"
+#include "circt/Support/Namespace.h"
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
@@ -2012,6 +2013,11 @@ void circt::populateLLHDToLLVMTypeConversions(LLVMTypeConverter &converter) {
 }
 
 void LLHDToLLVMLoweringPass::runOnOperation() {
+  Namespace globals;
+  SymbolCache cache;
+  cache.addDefinitions(getOperation());
+  globals.add(cache);
+
   // Keep a counter to infer a signal's index in his entity's signal table.
   size_t sigCounter = 0;
 
@@ -2047,7 +2053,9 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
                                        regCounter);
 
   // Populate with HW and Comb conversion patterns
-  populateHWToLLVMConversionPatterns(converter, patterns);
+  DenseMap<std::pair<Type, ArrayAttr>, LLVM::GlobalOp> constAggregateGlobalsMap;
+  populateHWToLLVMConversionPatterns(converter, patterns, globals,
+                                     constAggregateGlobalsMap);
   populateCombToLLVMConversionPatterns(converter, patterns);
 
   target.addLegalDialect<LLVM::LLVMDialect>();
