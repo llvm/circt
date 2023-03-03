@@ -662,22 +662,24 @@ static LogicalResult processBuffer(
   if (!disableWireDFT)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createWireDFTPass());
 
-  if (!lowerMemories)
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        firrtl::createFlattenMemoryPass());
-
   if (vbToBV) {
     if (!disableLowerTypes && preservePublicTypes)
       pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
-          firrtl::PreserveAggregate::All, preservePublicTypes));
+          firrtl::PreserveAggregate::All, firrtl::PreserveAggregate::All,
+          preservePublicTypes));
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createVBToBVPass());
   }
+
+  if (!lowerMemories)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createFlattenMemoryPass());
 
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
   if (!disableLowerTypes) {
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
-        preserveAggregate, preservePublicTypes));
+        preserveAggregate, firrtl::PreserveAggregate::None,
+        preservePublicTypes));
     // Only enable expand whens if lower types is also enabled.
     if (!disableExpandWhens) {
       auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
