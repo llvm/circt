@@ -808,6 +808,7 @@ def RefResolveOp: FIRRTLExprOp<"ref.resolve",
   let results = (outs FIRRTLBaseType:$result);
 
   let assemblyFormat = "$ref attr-dict `:` qualified(type($ref))";
+  let hasCanonicalizer = true;
 }
 
 def RefSendOp: FIRRTLExprOp<"ref.send", [RefResultTypeConstraint<"base", "result">]> {
@@ -840,6 +841,7 @@ def RefSubOp : FIRRTLExprOp<"ref.sub"> {
 
   let assemblyFormat =
      "$input `[` $index `]` attr-dict `:` qualified(type($input))";
+  let hasCanonicalizer = true;
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLEXPRESSIONS_TD

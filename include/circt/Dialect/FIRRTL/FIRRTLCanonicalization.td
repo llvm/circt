@@ -86,6 +86,8 @@ def DropWrite : NativeCodeCall<"dropWrite($_builder, $0, $1)">;
 
 def MoveNameHint : NativeCodeCall<"moveNameHint($0, $1)">;
 
+def SubFieldOrIndex : NativeCodeCall<"subfieldOrIndex($_builder, $_loc, $0, $1)">;
+
 def GetEmptyString : NativeCodeCall<
   "StringAttr::get($_builder.getContext(), {}) ">;
 
@@ -349,5 +351,22 @@ def RegResetWithOneReset : Pat<
   (RegResetOp:$reg $clock, $reset, $resetVal, $name, $nameKind, $annotations, $inner_sym),
   (DropWrite $reg, (NodeOp $resetVal, $name, $nameKind, $annotations, $inner_sym)),
   [(OneConstantOp $reset)]>;
+
+// refresolve(refsend(x)) -> x
+def RefResolveOfSend : Pat<
+  (RefResolveOp (RefSendOp $orig)),
+  (replaceWithValue $orig) >;
+
+// Sink ref.sub through resolve.
+// refresolve(refsub(x, idx)) -> sub{index,field}(refresolve(x))
+def RefResolveOfSub : Pat<
+  (RefResolveOp (RefSubOp $ref, $idx)),
+  (SubFieldOrIndex (RefResolveOp $ref), $idx) >;
+
+// Hoist ref.sub through send.
+// refsub(refsend(orig), idx) -> refsend(sub{index,field}(orig, idx))
+def RefSubOfSend : Pat<
+  (RefSubOp (RefSendOp $orig), $idx),
+  (RefSendOp (SubFieldOrIndex $orig, $idx)) >;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD
