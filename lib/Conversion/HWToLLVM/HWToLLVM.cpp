@@ -560,7 +560,8 @@ LogicalResult AggregateConstantOpConversion::matchAndRewrite(
   auto llvmTy = typeConverter->convertType(op.getResult().getType());
   auto typeAttrPair = std::make_pair(aggregateType, adaptor.getFields());
 
-  if (!constAggregateGlobalsMap.count(typeAttrPair)) {
+  if (!constAggregateGlobalsMap.count(typeAttrPair) ||
+      !constAggregateGlobalsMap[typeAttrPair]) {
     auto ipSave = rewriter.saveInsertionPoint();
 
     Operation *parent = op->getParentOp();
