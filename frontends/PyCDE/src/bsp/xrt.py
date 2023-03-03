@@ -238,9 +238,10 @@ def XrtBSP(user_module):
 
       env = Environment(loader=FileSystemLoader(str(__dir__)),
                         undefined=StrictUndefined)
-      template = env.get_template("Makefile.xrt.j2")
+      makefile_template = env.get_template("Makefile.xrt.j2")
       dst_makefile = sys.output_directory / "Makefile.xrt"
-      dst_makefile.open("w").write(template.render(system_name=sys.name))
+      dst_makefile.open("w").write(
+          makefile_template.render(system_name=sys.name))
 
       shutil.copy(__dir__ / "xrt.ini", sys.output_directory / "xrt.ini")
       shutil.copy(__dir__ / "xsim.tcl", sys.output_directory / "xsim.tcl")
