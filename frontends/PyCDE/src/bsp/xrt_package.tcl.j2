@@ -46,25 +46,15 @@ ipx::associate_bus_interfaces -busif s_axi_control -clock ap_clk $core
 set mem_map     [::ipx::add_memory_map -quiet "s_axi_control" $core]
 set addr_block  [::ipx::add_address_block -quiet "reg0" $mem_map]
 
-# Tell Vitis about our MMIO channel regs for writing to the device.
-{% for reg in from_host_regs %}
-set reg      [::ipx::add_register "{{reg.name}}" $addr_block]
-  set_property description    "{{reg.name}} channel" $reg
-  set_property address_offset {{reg.offset}} $reg
-  set_property size           {{reg.size}} $reg
-{% endfor %}
+set reg      [::ipx::add_register "SystemDescription" $addr_block]
+  # Required so we don't get the error "ERROR: [Common 17-69] Command failed: No kernel args have been found from IP"
+  set_property description    "ESI magic number" $reg
+  set_property address_offset 0  $reg
+  set_property size           32 $reg
 
-# Tell Vitis about our MMIO channel regs for reading from the device.
-{% for reg in to_host_regs %}
-set reg      [::ipx::add_register "{{reg.name}}_CTRL" $addr_block]
-  set_property description    "{{reg.name}} channel control" $reg
-  set_property address_offset {{reg.offset}} $reg
-  set_property size           8 $reg
-set reg      [::ipx::add_register "{{reg.name}}" $addr_block]
-  set_property description    "{{reg.name}} channel" $reg
-  set_property address_offset {{reg.data_offset}} $reg
-  set_property size           {{reg.size}} $reg
-{% endfor %}
+  set_property description    "ESI version number" $reg
+  set_property address_offset 8  $reg
+  set_property size           32 $reg
 
 set_property slave_memory_map_ref "s_axi_control" [::ipx::get_bus_interfaces -of $core "s_axi_control"]
 

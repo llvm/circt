@@ -2,16 +2,13 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from .fifo import SimpleXilinxFifo
-
 from .. import esi
-from ..common import Clock, Input, InputChannel, Output, OutputChannel
+from ..common import Clock, Input, Output
 from ..constructs import ControlReg, Wire
-from ..dialects import hw
 from ..module import Module, generator, modparams
 from ..signals import And, Or, BitsSignal
 from ..system import System
-from ..types import types
+from ..types import bit, types, Bits
 
 from dataclasses import asdict, dataclass
 import glob
@@ -28,14 +25,10 @@ __dir__ = pathlib.Path(__file__).parent
 axil_addr_width = 24
 axil_data_width = 32
 axil_data_width_bytes = int(axil_data_width / 8)
-DONE_BIT = 0x2
 
-# TODO: supports backpressuring the host by de-asserting ready on MMIO writes
-# whenever _one_ of the from_host fifos is full. Not ideal since backpressure on
-# a single channel could end up backpressuring the entire system. Particularly
-# heinous if a module needs more data on a different channel to proceed. Switch
-# to using a control register on each from_host channel so software knows which
-# channels are full.
+MagicNumberLo = 0xE5100E51  # ESI__ESI
+MagicNumberHi = 0x207D98E5  # Random
+VersionNumber = 0  # Version 0: format subject to change
 
 
 # Signals from master
@@ -67,52 +60,7 @@ def axil_out_type(data_width):
   })
 
 
-@dataclass
-class RegSpec:
-  size: int
-  offset: int
-  data_offset: int
-  name: str
-  client_path: list
-
-  # Only "direct_mmio" supported for now. "dma" to come.
-  type: str
-
-
-def generate_mmio_map(channels, base_offset=0x0) -> Tuple[List, List]:
-  """From a set of channel requests, generate a list of from_host register specs
-  and a list of to_host register specs."""
-
-  # curr_offset is in bytes.
-  curr_offset = base_offset
-
-  def get_reg(req, to_host):
-    nonlocal curr_offset
-    width = req.type.inner_type.bitwidth
-
-    reg = RegSpec(
-        size=width,
-        offset=curr_offset,
-        # to_host registers require extra space for control signals.
-        data_offset=(curr_offset +
-                     axil_data_width_bytes) if to_host else curr_offset,
-        name="_".join(req.client_name),
-        client_path=req.client_name,
-        type="direct_mmio")
-
-    # A write reg requires extra space for control.
-    if to_host:
-      width += axil_data_width
-    curr_offset += int(
-        (axil_data_width / 8) * math.ceil(width / axil_data_width))
-    return reg
-
-  from_host_regs = [get_reg(req, False) for req in channels.to_client_reqs]
-  to_host_regs = [get_reg(req, True) for req in channels.to_server_reqs]
-  return (from_host_regs, to_host_regs)
-
-
-def output_tcl(from_host_regs, to_host_regs, os: FileIO):
+def output_tcl(os: FileIO):
   """Output Vitis tcl describing the registers."""
 
   from jinja2 import Environment, FileSystemLoader, StrictUndefined
@@ -120,119 +68,7 @@ def output_tcl(from_host_regs, to_host_regs, os: FileIO):
   env = Environment(loader=FileSystemLoader(str(__dir__)),
                     undefined=StrictUndefined)
   template = env.get_template("xrt_package.tcl.j2")
-  os.write(
-      template.render(system_name=System.current().name,
-                      from_host_regs=from_host_regs,
-                      to_host_regs=to_host_regs))
-
-
-@modparams
-def RegsToChannel(type, offset):
-
-  class RegsToChannel(Module):
-    """Convert a series of writes to a message. Monitors addresses and
-    associated data for pieces of the message in correlated registers. Writes a
-    message to the output channel when all of the associated registers have been
-    written to. Buffers messages in a FIFO."""
-
-    clk = Clock()
-    rst = Input(types.i1)
-
-    # `address` and `data` are both valid on `valid`.
-    valid = Input(types.i1)
-    address = Input(types.int(axil_addr_width))
-    data = Input(types.int(axil_data_width))
-
-    fifo_almost_full = Output(types.i1)
-
-    msgs = OutputChannel(type)
-
-    _offset = offset
-    _type = type
-
-    @generator
-    def build(ports):
-      clk = ports.clk
-      rst = ports.rst
-      msg_type = RegsToChannel._type
-
-      # Create a set of 'axil_data_width' registers to buffer writes. Also
-      # create a 'valid' register for each one so we know when the message has
-      # been completely written.
-      fifo_wr = Wire(types.i1)
-      reg_valids = []
-      data_regs = []
-      for reg_offset in range(math.ceil(msg_type.bitwidth / axil_data_width)):
-        reg_num = RegsToChannel._offset + (reg_offset * axil_data_width_bytes)
-        addr_match = ports.address == types.int(axil_addr_width)(reg_num)
-        write_reg = addr_match & ports.valid
-        reg_valid = ControlReg(clk, rst, [write_reg], [fifo_wr])
-        reg_valids.append(reg_valid)
-        data_reg = ports.data.reg(clk=clk,
-                                  rst=rst,
-                                  ce=write_reg,
-                                  name=f"reg{reg_num}")
-        data_regs.append(data_reg)
-
-      # Assemble into a msg/valid pair...
-      fifo_wr.assign(And(*reg_valids))
-      data_regs.reverse()
-      msg = BitsSignal.concat(data_regs)[0:msg_type.bitwidth]
-
-      # ...and insert into a fifo.
-      outch_ready_wire = Wire(types.i1)
-      fifo_not_empty = Wire(types.i1)
-      fifo = SimpleXilinxFifo(msg_type, depth=32, almost_full=4)(
-          clk=clk,
-          rst=rst,
-          rd_en=outch_ready_wire & fifo_not_empty,
-          wr_en=fifo_wr,
-          wr_data=msg)
-      fifo_not_empty.assign(~fifo.empty)
-
-      # Read from the fifo into the channel.
-      outch, outch_ready = types.channel(msg_type).wrap(
-          fifo.rd_data, fifo_not_empty.reg(clk, rst))
-      outch_ready_wire.assign(outch_ready)
-      ports.msgs = outch
-      ports.fifo_almost_full = fifo.almost_full
-
-  return RegsToChannel
-
-
-@modparams
-def ChannelToRegs(type):
-
-  class ChannelToRegs(Module):
-    """Convert a message stream into a set of `axil_data_width`-sized values.
-    Does not have a FIFO and is entirely combinational."""
-    # TODO: add a fifo.
-    # TODO: push more logic in here.
-
-    clk = Clock()
-    rst = Input(types.i1)
-    num_regs = int(math.ceil(type.inner.bitwidth / axil_data_width))
-
-    regs_valid = Output(types.i1)
-    regs_ready = Input(types.i1)
-    regs = Output(types.array(types.int(axil_data_width), num_regs))
-
-    msgs = InputChannel(type)
-
-    @generator
-    def generate(ports):
-      (msg, valid) = ports.msgs.unwrap(ports.regs_ready)
-      ports.regs_valid = valid
-
-      width = msg.type.bitwidth
-      bits = hw.BitcastOp(types.int(width), msg)
-      bits_padded = bits.pad_or_truncate(ChannelToRegs.num_regs *
-                                         axil_data_width)
-      ports.regs = hw.BitcastOp(
-          types.array(types.int(axil_data_width), ChannelToRegs.num_regs),
-          bits_padded)
-
-  return ChannelToRegs
+  os.write(template.render(system_name=System.current().name))
 
 
 def XrtBSP(user_module):
@@ -257,7 +93,7 @@ def XrtBSP(user_module):
   environment), set the PYTHON variable (e.g. 'PYTHON=python3.9').
   """
 
-  class XrtService(esi.ServiceImplementation):
+  class XrtService(Module):
     clk = Clock(types.i1)
     rst = Input(types.i1)
 
@@ -265,107 +101,28 @@ def XrtBSP(user_module):
     axil_out = Output(axil_out_type(axil_data_width))
 
     @generator
-    def generate(self, channels):
+    def generate(self):
       clk = self.clk
       rst = self.rst
 
-      # Generate MMIO map and output it both to tcl and to json.
-      from_host_regs, to_host_regs = generate_mmio_map(channels)
       sys: System = System.current()
-      output_tcl(from_host_regs, to_host_regs,
-                 (sys.hw_output_dir / "xrt_package.tcl").open("w"))
-      chan_md_file = (sys.sys_runtime_output_dir /
-                      "xrt_mmio_descriptor.json").open("w")
-      chan_md_file.write(
-          json.dumps(
-              {
-                  "from_host_regs": [asdict(r) for r in from_host_regs],
-                  "to_host_regs": [asdict(r) for r in to_host_regs]
-              },
-              indent=2))
-
-      ######
-      # Build the from_host side. Each channel listens for an MMIO write to its
-      # address space, notes it, then assembles a message once all of its
-      # registers have been written to.
-
-      # Backpressure.
-      write_fifos_full = Wire(types.i1)
-
-      # Since address and data are two separate LI channels, simplify that by
-      # buffering them and have a valid signal when both are valid.
-      # TODO: Should really connect both to separate FIFOs.
-      reg_write_happened = Wire(types.i1, "reg_write_happened")
-      address_valid = ControlReg(clk, rst, [self.axil_in.awvalid],
-                                 [reg_write_happened])
-      awready = ~address_valid
-      data_valid = ControlReg(clk, rst, [self.axil_in.wvalid],
-                              [reg_write_happened])
-      wready = ~data_valid & ~write_fifos_full
-      reg_write_happened.assign(address_valid & data_valid & ~write_fifos_full)
-      wr_address_reg = self.axil_in.awaddr.reg(clk=clk,
-                                               rst=rst,
-                                               ce=self.axil_in.awvalid)
-      wr_data_reg = self.axil_in.wdata.reg(clk=clk,
-                                           rst=rst,
-                                           ce=self.axil_in.wvalid)
-
-      # Build an adapter per channel which snoops on the register writes to
-      # recieve messages.
-      from_host_fifos_full = [types.i1(0)]
-      for req, reg_spec in zip(channels.to_client_reqs, from_host_regs):
-        if reg_spec.type != "direct_mmio":
-          continue
-        adapter = RegsToChannel(req.type.inner,
-                                reg_spec.offset)(clk=clk,
-                                                 rst=rst,
-                                                 valid=reg_write_happened,
-                                                 address=wr_address_reg,
-                                                 data=wr_data_reg)
-        req.assign(adapter.msgs)
-        from_host_fifos_full.append(adapter.fifo_almost_full)
-
-      write_fifos_full.assign(Or(*from_host_fifos_full))
-      write_fifos_full.name = "write_fifos_full"
-
-      ######
-      # Build the to_host side. On this side, we simply present the data and
-      # valid signals, then send a 'ready' pulse when the 'DONE' bit in the
-      # control register is written. This side is pretty hacky and needs some
-      # TLC. A FIFO would be better than a single register stage.
+      output_tcl((sys.hw_output_dir / "xrt_package.tcl").open("w"))
 
       # Track the non-zero registers in the read address space.
-      rd_addr_data = {}
+      rd_addr_data = {
+          0: Bits(32)(MagicNumberLo),
+          4: Bits(32)(MagicNumberHi),
+          8: Bits(32)(VersionNumber),
+      }
 
-      # For each to_host channel, convert it to a set of backpressured
-      # registers (a channel whose message type is an array of signless ints).
-      for req, reg_spec in zip(channels.to_server_reqs, to_host_regs):
-        if reg_spec.type != "direct_mmio":
-          continue
-        ready = Wire(types.i1, "rready")
-        adapter = ChannelToRegs(req.type)(clk=clk,
-                                          rst=rst,
-                                          regs_ready=ready,
-                                          msgs=req)
-
-        # Did our control register get written to?
-        reg_write_happened_control = reg_write_happened & (
-            self.axil_in.awaddr == types.int(axil_addr_width)(reg_spec.offset))
-        # Was it our DONE bit?
-        done = reg_write_happened_control & (
-            wr_data_reg == types.int(axil_data_width)(DONE_BIT))
-
-        # Validity of the message in these registers.
-        valid = ControlReg(clk, rst, [adapter.regs_valid & ready], [done])
-        ready.assign(~valid)
-        rd_addr_data[reg_spec.offset] = BitsSignal.concat(
-            [valid]).pad_or_truncate(axil_data_width)
-        registered_regs = adapter.regs.reg(clk,
-                                           rst,
-                                           ce=adapter.regs_valid & ready)
-        for i in range(adapter.num_regs):
-          rd_addr_data[reg_spec.data_offset +
-                       (i * axil_data_width_bytes)] = registered_regs[i]
+      ######
+      # So that we don't wedge the AXI-lite for writes, just ack all of them.
+      write_happened = Wire(bit)
+      latched_aw = ControlReg(self.clk, self.rst, [self.axil_in.awvalid],
+                              [write_happened])
+      latched_w = ControlReg(self.clk, self.rst, [self.axil_in.wvalid],
+                             [write_happened])
+      write_happened.assign(latched_aw & latched_w)
 
       ######
       # Concatenate the outputs from each of the above adapters and create a
@@ -392,13 +149,13 @@ def XrtBSP(user_module):
 
       # Assign the module outputs.
       self.axil_out = axil_out_type(axil_data_width)({
-          "awready": awready,
-          "wready": wready,
+          "awready": 1,
+          "wready": 1,
           "arready": 1,
           "rvalid": rvalid,
           "rdata": rdata,
           "rresp": 0,
-          "bvalid": reg_write_happened,
+          "bvalid": write_happened,
           "bresp": 0
       })
 
@@ -442,12 +199,7 @@ def XrtBSP(user_module):
 
       rst = ~ports.ap_resetn
 
-      print("WARNING: this XRT bridge is still a work-in-progress and largely"
-            " untested! Use at your own risk!")
-      xrt = XrtService(decl=None,
-                       clk=ports.ap_clk,
-                       rst=rst,
-                       axil_in=axil_in_sig)
+      xrt = XrtService(clk=ports.ap_clk, rst=rst, axil_in=axil_in_sig)
 
       axil_out = xrt.axil_out
 
