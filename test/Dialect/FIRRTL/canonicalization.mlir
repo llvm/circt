@@ -2601,7 +2601,11 @@ firrtl.module @ReadOnlyFileInitialized(
   firrtl.strictconnect %read_data, %3 : !firrtl.uint<8>
 }
 
+// CHECK-LABEL: @MuxCondWidth
 firrtl.module @MuxCondWidth(in %cond: !firrtl.uint<1>, out %foo: !firrtl.uint<3>) {
+  // Don't canonicalize if the type is not UInt<1>
+  // CHECK: %0 = firrtl.mux(%cond, %c0_ui3, %c1_ui3) : (!firrtl.uint<3>, !firrtl.uint<1>, !firrtl.uint<3>) -> !firrtl.uint<3>
+  // CHECK-NEXT:  firrtl.strictconnect %foo, %0
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   %c1_ui3 = firrtl.constant 1 : !firrtl.uint<3>
   %0 = firrtl.mux(%cond, %c0_ui1, %c1_ui3) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<3>) -> !firrtl.uint<3>
