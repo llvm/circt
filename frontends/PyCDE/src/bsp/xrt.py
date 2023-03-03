@@ -21,6 +21,7 @@ axil_addr_width = 24
 axil_data_width = 32
 axil_data_width_bytes = int(axil_data_width / 8)
 
+# Constants for MMIO registers
 MagicNumberLo = 0xE5100E51  # ESI__ESI
 MagicNumberHi = 0x207D98E5  # Random
 VersionNumber = 0  # Version 0: format subject to change
@@ -103,13 +104,6 @@ def XrtBSP(user_module):
       sys: System = System.current()
       output_tcl((sys.hw_output_dir / "xrt_package.tcl").open("w"))
 
-      # Track the non-zero registers in the read address space.
-      rd_addr_data = {
-          16: Bits(32)(MagicNumberLo),
-          20: Bits(32)(MagicNumberHi),
-          24: Bits(32)(VersionNumber),
-      }
-
       ######
       # So that we don't wedge the AXI-lite for writes, just ack all of them.
       write_happened = Wire(bit)
@@ -120,6 +114,15 @@ def XrtBSP(user_module):
       write_happened.assign(latched_aw & latched_w)
 
       ######
+      # Read side.
+
+      # Track the non-zero registers in the read address space.
+      rd_addr_data = {
+          16: Bits(32)(MagicNumberLo),
+          20: Bits(32)(MagicNumberHi),
+          24: Bits(32)(VersionNumber),
+      }
+
       # Concatenate the outputs from each of the above adapters and create a
       # potentially giant mux. There's probably a much better way to do this. I
       # suspect this is a common high-level construct which should be
