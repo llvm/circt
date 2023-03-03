@@ -17,7 +17,7 @@ import shutil
 __dir__ = pathlib.Path(__file__).parent
 
 # Parameters for AXI4-Lite interface
-axil_addr_width = 24
+axil_addr_width = 32
 axil_data_width = 32
 axil_data_width_bytes = int(axil_data_width / 8)
 
@@ -105,6 +105,8 @@ def XrtBSP(user_module):
       output_tcl((sys.hw_output_dir / "xrt_package.tcl").open("w"))
 
       ######
+      # Write side.
+
       # So that we don't wedge the AXI-lite for writes, just ack all of them.
       write_happened = Wire(bit)
       latched_aw = ControlReg(self.clk, self.rst, [self.axil_in.awvalid],
@@ -123,21 +125,22 @@ def XrtBSP(user_module):
           24: Bits(32)(VersionNumber),
       }
 
-      # Concatenate the outputs from each of the above adapters and create a
-      # potentially giant mux. There's probably a much better way to do this. I
-      # suspect this is a common high-level construct which should be
-      # automatically optimized, but I'm not sure how common this actually is.
+      # Create an array out of the sparse value map 'rd_addr_data' and zero
+      # constants. Then create a potentially giant mux. There's probably a much
+      # better way to do this. I suspect this is a common high-level construct
+      # which should be automatically optimized, but I'm not sure how common
+      # this actually is.
 
-      # Convert the sparse dict into a zero filled array of registers indexed by
-      # address.
       max_addr_log2 = int(
           math.ceil(math.log2(max([a for a in rd_addr_data.keys()]) + 1)))
+
+      # Convert the sparse dict into a zero filled array.
       zero = types.int(axil_data_width)(0)
       rd_space = [zero] * int(math.pow(2, max_addr_log2))
       for (addr, val) in rd_addr_data.items():
         rd_space[addr] = val
 
-      # Create the address index signal and do the muxing!
+      # Create the address index signal and do the muxing.
       addr_slice = self.axil_in.araddr.slice(
           types.int(axil_addr_width)(0), max_addr_log2)
       rd_addr = addr_slice.reg(clk, rst)
@@ -164,7 +167,7 @@ def XrtBSP(user_module):
     # AXI4-Lite slave interface
     s_axi_control_AWVALID = Input(types.i1)
     s_axi_control_AWREADY = Output(types.i1)
-    s_axi_control_AWADDR = Input(types.int(32))
+    s_axi_control_AWADDR = Input(types.int(axil_addr_width))
     s_axi_control_WVALID = Input(types.i1)
     s_axi_control_WREADY = Output(types.i1)
     s_axi_control_WDATA = Input(types.int(axil_data_width))
@@ -185,7 +188,7 @@ def XrtBSP(user_module):
 
       axil_in_sig = axil_in_type(axil_addr_width, axil_data_width)({
           "awvalid": ports.s_axi_control_AWVALID,
-          "awaddr": ports.s_axi_control_AWADDR[0:24],
+          "awaddr": ports.s_axi_control_AWADDR,
           "wvalid": ports.s_axi_control_WVALID,
           "wdata": ports.s_axi_control_WDATA,
           "wstrb": ports.s_axi_control_WSTRB,
