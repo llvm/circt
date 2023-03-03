@@ -11,19 +11,11 @@ if(CIRCT_LEC_ENABLED)
     ${CIRCT_Z3_LIBS}
     
     LINK_LIBS PUBLIC
-    CIRCTCalyx
-    CIRCTESI
-    CIRCTFIRRTL
-    CIRCTFSM
-    CIRCTHandshake
-    CIRCTHWArith
-    CIRCTInteropDialect
-    CIRCTLLHD
-    CIRCTMoore
-    CIRCTPipelineOps
-    CIRCTSSP
-    CIRCTSystemC
-
+    MLIRTransforms
+    MLIRTranslateLib
+    CIRCTComb
+    CIRCTHW
+    CIRCTSupport
   )
   target_include_directories(CIRCTSMT PRIVATE ${CIRCT_Z3_INCLUDES})
 endif()
