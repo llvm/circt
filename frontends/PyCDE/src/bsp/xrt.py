@@ -144,9 +144,9 @@ def XrtBSP(user_module):
       addr_slice = self.axil_in.araddr.slice(
           types.int(axil_addr_width)(0), max_addr_log2)
       rd_addr = addr_slice.reg(clk, rst)
-      rvalid = self.axil_in.arvalid.reg(clk, rst)
+      rvalid = self.axil_in.arvalid.reg(clk, rst, cycles=2)
       rdata = types.array(types.int(axil_data_width),
-                          len(rd_space))(rd_space)[rd_addr]
+                          len(rd_space))(rd_space)[rd_addr].reg(clk)
 
       # Assign the module outputs.
       self.axil_out = axil_out_type(axil_data_width)({
