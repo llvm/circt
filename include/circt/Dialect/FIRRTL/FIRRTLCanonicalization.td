@@ -297,7 +297,7 @@ def SubaccessOfConstant : Pat<
 def MuxNot : Pat<
   (MuxPrimOp:$old $cond, (ConstantOp:$zcst $_), (ConstantOp:$ocst $_)),
   (MoveNameHint $old, (NotPrimOp $cond)), [
-    (EqualTypes $cond, $zcst),
+    (EqualTypes $cond, $zcst), (EqualTypes $cond, $ocst),
     (ZeroConstantOp $zcst) , (OneConstantOp $ocst)
   ]>;
 
