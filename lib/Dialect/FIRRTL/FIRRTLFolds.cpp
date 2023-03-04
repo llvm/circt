@@ -1598,12 +1598,6 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   return success();
 }
 
-void ConnectOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                            MLIRContext *context) {
-//  results.insert<patterns::ConnectExtension, patterns::ConnectSameType>(
-//      context);
-}
-
 LogicalResult StrictConnectOp::canonicalize(StrictConnectOp op,
                                             PatternRewriter &rewriter) {
   // TODO: Canonicalize towards explicit extensions and flips here.
