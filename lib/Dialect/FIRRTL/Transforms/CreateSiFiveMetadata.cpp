@@ -370,7 +370,7 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
     }
 
     // Record the defname of the module.
-    if (dutModuleSet.contains(extModule)) {
+    if (!dutMod || dutModuleSet.contains(extModule)) {
       dutModules.push_back(*extModule.getDefname());
     } else {
       testModules.push_back(*extModule.getDefname());
