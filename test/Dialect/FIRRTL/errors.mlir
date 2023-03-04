@@ -1111,6 +1111,19 @@ firrtl.circuit "Bar" {
 }
 
 // -----
+// Can't assign into a ref.sub.
+
+firrtl.circuit "NoAssignIntoRefSub" {
+  firrtl.module @NoAssignIntoRefSub(out %r: !firrtl.ref<vector<uint<1>,2>>) {
+    %sub = firrtl.ref.sub %r[1] : !firrtl.ref<vector<uint<1>,2>>
+    %x = firrtl.wire : !firrtl.uint<1>
+    %xref = firrtl.ref.send %x : !firrtl.uint<1>
+    // expected-error @below {{destination reference cannot be a sub-element of a reference}}
+    firrtl.ref.assign %sub, %xref : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
 // Issue 4174-- handle duplicate module names.
 
 firrtl.circuit "hi" {
