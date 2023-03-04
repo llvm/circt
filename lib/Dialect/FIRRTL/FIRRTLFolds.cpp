@@ -31,8 +31,8 @@ using namespace firrtl;
 static Value dropWrite(PatternRewriter &rewriter, OpResult old,
                        Value passthrough) {
   for (auto *user : llvm::make_early_inc_range(old.getUsers())) {
-    if (isa<StrictConnectOp, ConnectOp>(user)) {
-      if (user->getOperand(0) == old)
+    if (auto connect = dyn_cast<FConnectLike>(user)) {
+      if (connect.getDest() == old)
         rewriter.eraseOp(user);
     }
   }
