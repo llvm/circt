@@ -736,7 +736,9 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
         .Case<ConnectOp, StrictConnectOp>([&](auto op) {
           traceResets(op.getDest(), op.getSrc(), op.getLoc());
         })
-
+        .Case<UninferredResetCastOp>([&](auto op) {
+          traceResets(op.getResult(), op.getInput(), op.getLoc());
+        })
         .Case<InstanceOp>([&](auto op) { traceResets(op); })
         .Case<RefSendOp>([&](auto op) {
           // Trace using base types.
@@ -1070,29 +1072,34 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
   // reset types in aggregates, and then need all the subindex, subfield, and
   // subaccess operations to be updated as appropriate.
   while (!worklist.empty()) {
-    auto op = dyn_cast_or_null<InferTypeOpInterface>(worklist.pop_back_val());
-    if (!op)
-      continue;
 
-    // Determine the new result types.
-    SmallVector<Type, 2> types;
-    if (failed(op.inferReturnTypes(op->getContext(), op->getLoc(),
-                                   op->getOperands(), op->getAttrDictionary(),
-                                   op->getRegions(), types)))
-      return failure();
-    assert(types.size() == op->getNumResults());
+    auto wop = worklist.pop_back_val();
 
-    // Update the results and add the changed ones to the worklist.
-    for (auto it : llvm::zip(op->getResults(), types)) {
-      auto newType = std::get<1>(it);
-      if (std::get<0>(it).getType() == newType)
-        continue;
-      std::get<0>(it).setType(newType);
-      for (auto user : std::get<0>(it).getUsers())
-        worklist.insert(user);
+    if (auto op = dyn_cast<InferTypeOpInterface>(wop)) {
+      // Determine the new result types.
+      SmallVector<Type, 2> types;
+
+      if (failed(op.inferReturnTypes(op->getContext(), op->getLoc(),
+                                     op->getOperands(), op->getAttrDictionary(),
+                                     op->getRegions(), types)))
+        return failure();
+      assert(types.size() == op->getNumResults());
+
+      // Update the results and add the changed ones to the worklist.
+      for (auto it : llvm::zip(op->getResults(), types)) {
+        auto newType = std::get<1>(it);
+        if (std::get<0>(it).getType() == newType)
+          continue;
+        std::get<0>(it).setType(newType);
+        for (auto user : std::get<0>(it).getUsers())
+          worklist.insert(user);
+      }
+      //    LLVM_DEBUG(llvm::dbgs() << "- Inferred " << *op << "\n");
+    } else if (auto uop = dyn_cast<UninferredResetCastOp>(wop)) {
+      uop.replaceAllUsesWith(uop.getInput());
+      LLVM_DEBUG(llvm::dbgs() << "- Inferred " << uop << "\n");
+      uop.erase();
     }
-
-    LLVM_DEBUG(llvm::dbgs() << "- Inferred " << *op << "\n");
   }
 
   // Update module types based on the type of the block arguments.

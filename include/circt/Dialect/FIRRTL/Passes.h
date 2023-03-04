@@ -52,6 +52,8 @@ std::unique_ptr<mlir::Pass> createLowerFIRRTLTypesPass(
     PreserveAggregate::PreserveMode mode = PreserveAggregate::None,
     bool preservePublicTypes = true);
 
+std::unique_ptr<mlir::Pass> createLowerFIRRTLConnectsPass();
+
 std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
 
 std::unique_ptr<mlir::Pass> createLowerCHIRRTLPass();

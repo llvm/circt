@@ -76,6 +76,17 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
   let dependentDialects = ["hw::HWDialect"];
 }
 
+def LowerFIRRTLConnects : Pass<"firrtl-lower-connects", "firrtl::FModuleOp"> {
+  let summary = "Lower FIRRTL aggregate connects types to passive types";
+  let description = [{
+    Lower aggregate FIRRTL connects to passsive types.  This does not split 
+    storage elements, only connects.
+
+    Connect expansion and canonicalization happen in this pass.
+  }];
+  let constructor = "circt::firrtl::createLowerFIRRTLConnectsPass()";
+}
+
 def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
   let summary = "Intermodule constant propagation and dead code elimination";
   let description = [{
