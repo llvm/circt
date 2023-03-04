@@ -56,6 +56,19 @@ def UIntTypes : Constraint<CPred<"$0.isa<UIntType>()">>;
 // Constraint that enforces types mismatches
 def mismatchTypes : Constraint<CPred<"$0.getType() != $1.getType()">>;
 
+// Constraint that argument is ref-of-vector type.
+def IsRefVectorType : Constraint<CPred<[{
+  $0.getType().isa<RefType>() &&
+  $0.getType().cast<RefType>().getType().isa<FVectorType>()
+}]>>;
+
+// Constraint that argument is ref-of-bundle type.
+def IsRefBundleType : Constraint<CPred<[{
+  $0.getType().isa<RefType>() &&
+  $0.getType().cast<RefType>().getType().isa<BundleType>()
+}]>>;
+
+
 // Constraint that enforces types of known width
 def KnownWidth : Constraint<CPred<[{
   $0.getType().isa<FIRRTLBaseType>() &&
@@ -85,8 +98,6 @@ def AllOneConstantOp : Constraint<CPred<"$0.getDefiningOp<ConstantOp>() && $0.ge
 def DropWrite : NativeCodeCall<"dropWrite($_builder, $0, $1)">;
 
 def MoveNameHint : NativeCodeCall<"moveNameHint($0, $1)">;
-
-def SubFieldOrIndex : NativeCodeCall<"subfieldOrIndex($_builder, $_loc, $0, $1)">;
 
 def GetEmptyString : NativeCodeCall<
   "StringAttr::get($_builder.getContext(), {}) ">;
@@ -357,16 +368,18 @@ def RefResolveOfSend : Pat<
   (RefResolveOp (RefSendOp $orig)),
   (replaceWithValue $orig) >;
 
-// Sink ref.sub through resolve.
-// refresolve(refsub(x, idx)) -> sub{index,field}(refresolve(x))
-def RefResolveOfSub : Pat<
-  (RefResolveOp (RefSubOp $ref, $idx)),
-  (SubFieldOrIndex (RefResolveOp $ref), $idx) >;
+// Hoist ref.sub through send, vector variant.
+// refsub(refsend(orig), idx) -> refsend(subindex(orig, idx))
+def RefSubOfSendVector : Pat<
+  (RefSubOp (RefSendOp:$send $orig), $idx),
+  (RefSendOp (SubindexOp $orig, $idx)),
+  [(IsRefVectorType $send)] >;
 
-// Hoist ref.sub through send.
-// refsub(refsend(orig), idx) -> refsend(sub{index,field}(orig, idx))
-def RefSubOfSend : Pat<
-  (RefSubOp (RefSendOp $orig), $idx),
-  (RefSendOp (SubFieldOrIndex $orig, $idx)) >;
+// Hoist ref.sub through send, bundle variant.
+// refsub(refsend(orig), idx) -> refsend(subfield(orig, idx))
+def RefSubOfSendBundle : Pat<
+  (RefSubOp (RefSendOp:$send $orig), $idx),
+  (RefSendOp (SubfieldOp $orig, $idx)),
+  [(IsRefBundleType $send)] >;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD

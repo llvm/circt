@@ -2643,17 +2643,6 @@ firrtl.module @RefSubHoistBundle(in %x: !firrtl.bundle<a: uint<1>, b: uint<2>>, 
   firrtl.strictconnect %y, %sub: !firrtl.ref<uint<2>>
 }
 
-// CHECK-LABEL: @RefSubSink
-firrtl.module private @RefSubSink(in %xref: !firrtl.ref<vector<uint<1>,2>>, out %y : !firrtl.uint<1>) {
-  // CHECK-NEXT: %[[res:.+]] = firrtl.ref.resolve %xref
-  // CHECK-NEXT: %[[sub:.+]] = firrtl.subindex %[[res]][1]
-  // CHECK-NEXT: firrtl.strictconnect %y, %[[sub]]
-  // CHECK-NEXT: }
-  %sub = firrtl.ref.sub %xref[1] : !firrtl.ref<vector<uint<1>,2>>
-  %res = firrtl.ref.resolve %sub: !firrtl.ref<uint<1>>
-  firrtl.strictconnect %y, %res : !firrtl.uint<1>
-}
-
 // CHECK-LABEL: @RefResolveSubSend
 firrtl.module private @RefResolveSubSend(in %x: !firrtl.bundle<a: uint<1>, b: uint<2>>, out %y : !firrtl.uint<2>) {
   // CHECK-NEXT: %[[sub:.+]] = firrtl.subfield %x[b]
