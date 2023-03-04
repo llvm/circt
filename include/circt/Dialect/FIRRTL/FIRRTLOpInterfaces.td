@@ -360,6 +360,9 @@ def FConnectLike : OpInterface<"FConnectLike"> {
     "Value", "getDest", (ins)>,
     InterfaceMethod<"Return a source of connection.",
     "Value", "getSrc", (ins)>,
+    StaticInterfaceMethod<"Return whether this connection is static single connect.",
+    "bool", "isStaticSingleConnect", (ins), [{}],
+     /*defaultImplementation=*/[{ return false; }]>
   ];
 }
 
