@@ -2828,3 +2828,18 @@ void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                           MLIRContext *context) {
   results.add(canonicalizeImmediateVerifOp<CoverOp, /* EraseIfZero = */ true>);
 }
+
+//===----------------------------------------------------------------------===//
+// References.
+//===----------------------------------------------------------------------===//
+
+void RefResolveOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                               MLIRContext *context) {
+  results.insert<patterns::RefResolveOfSend>(context);
+}
+
+void RefSubOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
+  results.insert<patterns::RefSubOfSendVector, patterns::RefSubOfSendBundle>(
+      context);
+}
