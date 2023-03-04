@@ -618,3 +618,21 @@ firrtl.circuit "Top"  {
     // CHECK: firrtl.strictconnect %a, %c0_ui0 : !firrtl.uint<0>
   }
 }
+
+// -----
+// Test lowering of XMR to instance port (result).
+// https://github.com/llvm/circt/issues/4559
+
+firrtl.circuit "Issue4559" {
+  firrtl.extmodule @Source(out sourceport: !firrtl.uint<1>)
+  // CHECK-LABEL: @Issue4559
+  firrtl.module @Issue4559() {
+    // CHECK-NEXT: %[[PORT:.+]] = firrtl.instance source @Source
+    // CHECK-NEXT: %[[NODE:.+]] = firrtl.node sym @[[SYM:.+]] interesting_name %[[PORT]]
+    // CHECK-NEXT: = sv.xmr.ref
+    // CHECK-SAME: @Issue4559::@[[SYM]]
+    %port = firrtl.instance source @Source(out sourceport: !firrtl.uint<1>)
+    %port_ref = firrtl.ref.send %port : !firrtl.uint<1>
+    %port_val = firrtl.ref.resolve %port_ref : !firrtl.ref<uint<1>>
+  }
+}

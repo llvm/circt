@@ -90,6 +90,10 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
                   return success();
                 }
               if (!isa<hw::InnerSymbolOpInterface>(xmrDefOp) ||
+                  /* No innner symbols for results of instances */
+                  isa<InstanceOp>(xmrDefOp) ||
+                  /* Similarly, anything with multiple results isn't named by
+                     the inner sym */
                   xmrDefOp->getResults().size() > 1) {
                 // Add a node, for non-innerSym ops. Otherwise the sym will be
                 // dropped after LowerToHW.
