@@ -1242,7 +1242,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
     else
       allWidthsKnown = false;
   }
-  if (allWidthsKnown && !isa<ConnectOp, StrictConnectOp, AttachOp>(op))
+  if (allWidthsKnown && !isa<FConnectLike, AttachOp>(op))
     return success();
 
   // Actually generate the necessary constraint expressions.
@@ -1438,7 +1438,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
 
       // Handle the various connect statements that imply a type constraint.
-      .Case<ConnectOp, StrictConnectOp>([&](auto op) {
+      .Case<FConnectLike>([&](auto op) {
         // If the source is an invalid value, we don't set a constraint between
         // these two types.
         if (dyn_cast_or_null<InvalidValueOp>(op.getSrc().getDefiningOp()))
@@ -1844,8 +1844,7 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
   // operand width will have definitely been mapped in.
   if (isa<InvalidValueOp>(op) &&
       hasUninferredWidth(op->getResultTypes().front())) {
-    if (op->use_empty() ||
-        !isa<ConnectOp, StrictConnectOp>(*op->getUsers().begin())) {
+    if (op->use_empty() || !isa<FConnectLike>(*op->getUsers().begin())) {
       auto diag = mlir::emitError(
           op->getLoc(), "uninferred width: invalid value is unconstrained");
       anyFailed = true;

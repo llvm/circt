@@ -733,7 +733,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
       llvm::dbgs() << "\n===----- Tracing uninferred resets -----===\n\n");
   circuit.walk([&](Operation *op) {
     TypeSwitch<Operation *>(op)
-        .Case<ConnectOp, StrictConnectOp>([&](auto op) {
+        .Case<FConnectLike>([&](auto op) {
           traceResets(op.getDest(), op.getSrc(), op.getLoc());
         })
 
