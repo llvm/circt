@@ -340,6 +340,9 @@ def FConnectLike : OpInterface<"FConnectLike"> {
     "Value", "getDest", (ins)>,
     InterfaceMethod<"Return a source of connection.",
     "Value", "getSrc", (ins)>,
+    StaticInterfaceMethod<"Return whether this connection has last-connect semantics.",
+    "bool", "hasLastConnectSemantics", (ins), [{}],
+     /*defaultImplementation=*/[{ return true; }]>
   ];
 }
 

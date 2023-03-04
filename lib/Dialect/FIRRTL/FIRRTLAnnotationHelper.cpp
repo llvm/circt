@@ -452,8 +452,8 @@ static Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
     auto pathStr = builder.create<VerbatimExprOp>(
         portRefType.getType(), internalPathAttr.getValue(), ValueRange{});
     auto sendPath = builder.create<RefSendOp>(pathStr);
-    builder.create<StrictConnectOp>(intMod.getArguments().back(),
-                                    sendPath.getResult());
+    builder.create<RefAssignOp>(intMod.getArguments().back(),
+                                sendPath.getResult());
   }
 
   if (!moduleTarget.instances.empty())

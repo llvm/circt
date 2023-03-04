@@ -2833,3 +2833,19 @@ void RefSubOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.insert<patterns::RefSubOfSendVector, patterns::RefSubOfSendBundle>(
       context);
 }
+
+LogicalResult RefAssignOp::canonicalize(RefAssignOp op,
+                                        PatternRewriter &rewriter) {
+  bool replacedAny = false;
+  std::function<bool(OpOperand &)> isRADest = [&](auto &oper) {
+    auto ra = dyn_cast<RefAssignOp>(oper.getOwner());
+    // Replace if user is not an ref.assign, or if not the dest of the assign.
+    // (the user might be the source here, but regardless skip if dest)
+    bool shouldRemove = !ra || !oper.is(ra.getDest());
+    replacedAny |= shouldRemove;
+    return shouldRemove;
+  };
+  rewriter.replaceUsesWithIf(op.getDest(), op.getSrc(), isRADest);
+
+  return success(replacedAny);
+}

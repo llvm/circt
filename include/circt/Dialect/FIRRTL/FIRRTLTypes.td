@@ -73,30 +73,18 @@ def AggregateType : FIRRTLDialectType<
   ]>,
   "a aggregate type", "::circt::firrtl::FIRRTLBaseType">;
 
+// TODO: When Refs can appear within Base, need to disallow that too.
 def ConnectableType : FIRRTLDialectType<
-  Or<[
     CPred<"$_self.isa<FIRRTLBaseType>()">,
-    CPred<"$_self.isa<RefType>()">,
-    ]>,
-    "a connectable type (base or ref type)", "::circt::firrtl::FIRRTLType", [{
+    "a connectable type (base type)", "::circt::firrtl::FIRRTLType", [{
     Any type that is valid for use in connect statements.
-    Currently this is any base type or ref type.
+    Currently this is any base type.
   }]>;
-
-def SizedBaseOrRefType : FIRRTLDialectType<
-  Or<[
-    CPred<"$_self.isa<FIRRTLBaseType>() && "
-          "!$_self.cast<FIRRTLBaseType>().hasUninferredWidth()">,
-    CPred<"$_self.isa<RefType>() && "
-          "!$_self.cast<RefType>().getType().hasUninferredWidth()">,
-    ]>,
-  "a sized base or ref type (contains no uninferred widths)", "::circt::firrtl::FIRRTLType">;
 
 def SizedType : FIRRTLDialectType<CPred<"$_self.isa<FIRRTLBaseType>() && "
     "!$_self.cast<FIRRTLBaseType>().hasUninferredWidth()">,
     "a sized type (contains no uninferred widths)", "::circt::firrtl::FIRRTLType">;
 def SizedOrForeignType : AnyTypeOf<[SizedType, ForeignType]>;
-def SizedBaseOrRefTypeOrForeignType : AnyTypeOf<[SizedBaseOrRefType, ForeignType]>;
 
 def UInt1Type : FIRRTLDialectType<
     CPred<"$_self.isa<UIntType>() && "

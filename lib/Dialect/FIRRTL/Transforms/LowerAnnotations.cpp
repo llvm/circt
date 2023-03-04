@@ -681,8 +681,13 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       opsToErase.push_back(destOp);
       return success();
     }
+
     // Otherwise, just connect to the source.
-    builder.create<ConnectOp>(dest, src);
+    if (isa<RefType>(dest.getType()))
+      builder.create<RefAssignOp>(dest, src);
+    else
+      builder.create<ConnectOp>(dest, src);
+
     return success();
   };
 
