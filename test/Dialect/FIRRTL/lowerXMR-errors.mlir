@@ -15,19 +15,19 @@ firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.ref.assign %_a, %1 : !firrtl.ref<uint<1>>
   }
   firrtl.module @Top() {
     %xmr_a = firrtl.instance xmr sym @xmr @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
     %c_a = firrtl.instance child @Child1(in _a: !firrtl.ref<uint<1>>)
     %c_b = firrtl.instance child @Child2(in _a: !firrtl.ref<uint<1>>)
-    firrtl.strictconnect %c_a, %xmr_a : !firrtl.ref<uint<1>>
-    firrtl.strictconnect %c_b, %xmr_a : !firrtl.ref<uint<1>>
+    firrtl.ref.assign %c_a, %xmr_a : !firrtl.ref<uint<1>>
+    firrtl.ref.assign %c_b, %xmr_a : !firrtl.ref<uint<1>>
   }
   firrtl.module @Child1(in  %_a: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
     %c_b = firrtl.instance child @Child2(in _a: !firrtl.ref<uint<1>>)
-    firrtl.strictconnect %c_b, %_a : !firrtl.ref<uint<1>>
+    firrtl.ref.assign %c_b, %_a : !firrtl.ref<uint<1>>
   }
   // expected-error @+1 {{op multiply instantiated module with input RefType port '_a'}}
   firrtl.module @Child2(in  %_a: !firrtl.ref<uint<1>>) {
@@ -41,13 +41,13 @@ firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.ref.assign %_a, %1 : !firrtl.ref<uint<1>>
   }
   firrtl.module @Top() {
     %xmr_a = firrtl.instance xmr sym @xmr @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
     %c_a = firrtl.instance child @Child1(in _a: !firrtl.ref<uint<1>>)
     %c_b = firrtl.instance child @Child2(in _a: !firrtl.ref<uint<1>>)
-    firrtl.strictconnect %c_a, %xmr_a : !firrtl.ref<uint<1>>
+    firrtl.ref.assign %c_a, %xmr_a : !firrtl.ref<uint<1>>
   }
   firrtl.module @Child1(in  %_a: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
@@ -84,6 +84,6 @@ firrtl.circuit "RefSubNotFromOp" {
   firrtl.module @RefSubNotFromOp(in %in : !firrtl.bundle<a: uint<1>, b: uint<2>>) {
     %ref = firrtl.ref.send %in : !firrtl.bundle<a: uint<1>, b: uint<2>>
     %child_ref = firrtl.instance child @Child(in ref : !firrtl.ref<bundle<a: uint<1>, b: uint<2>>>)
-    firrtl.strictconnect %child_ref, %ref : !firrtl.ref<bundle<a: uint<1>, b: uint<2>>>
+    firrtl.ref.assign %child_ref, %ref : !firrtl.ref<bundle<a: uint<1>, b: uint<2>>>
   }
 }

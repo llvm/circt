@@ -199,21 +199,21 @@ firrtl.circuit "RefPorts" {
   // CHECK-NOT: @dead_ref_send
   firrtl.module private @dead_ref_send(in %source: !firrtl.uint<1>, out %dest: !firrtl.ref<uint<1>>) {
     %ref = firrtl.ref.send %source: !firrtl.uint<1>
-    firrtl.strictconnect %dest, %ref : !firrtl.ref<uint<1>>
+    firrtl.ref.assign %dest, %ref : !firrtl.ref<uint<1>>
   }
 
   // CHECK-LABEL: @dead_ref_port
   // CHECK-NOT: firrtl.ref
   firrtl.module private @dead_ref_port(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>, out %ref_dest: !firrtl.ref<uint<1>>) {
     %ref_not = firrtl.ref.send %source: !firrtl.uint<1>
-    firrtl.strictconnect %ref_dest, %ref_not : !firrtl.ref<uint<1>>
+    firrtl.ref.assign %ref_dest, %ref_not : !firrtl.ref<uint<1>>
     firrtl.strictconnect %dest, %source : !firrtl.uint<1>
   }
 
   // CHECK: @live_ref
   firrtl.module private @live_ref(in %source: !firrtl.uint<1>, out %dest: !firrtl.ref<uint<1>>) {
     %ref_source = firrtl.ref.send %source: !firrtl.uint<1>
-    firrtl.strictconnect %dest, %ref_source : !firrtl.ref<uint<1>>
+    firrtl.ref.assign %dest, %ref_source : !firrtl.ref<uint<1>>
   }
 
   // CHECK-LABEL: @RefPorts

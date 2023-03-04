@@ -1202,7 +1202,7 @@ firrtl.circuit "GCTDataTap" attributes {rawAnnotations = [{
 // CHECK-LABEL: firrtl.module private @InnerMod
 // CHECK-SAME:    out %[[tap_6:[a-zA-Z0-9_]+]]: !firrtl.ref<uint<1>>
 // CHECK:         %[[w_ref:[a-zA-Z09_]+]] = firrtl.ref.send %w
-// CHECK:         firrtl.connect %[[tap_6]], %[[w_ref]]
+// CHECK:         firrtl.ref.assign %[[tap_6]], %[[w_ref]]
 
 // CHECK-LABEL: firrtl.module @GCTDataTap
 // CHECK:         %[[w_a0:[a-zA-Z0-9_]+]] = firrtl.subfield %w[a]
@@ -1377,9 +1377,9 @@ firrtl.circuit "GrandCentralViewsBundle"  attributes {
     // CHECK:      %[[a_0:[a-zA-Z0-9_]+]] = firrtl.subfield %a[a]
     // CHECK-NEXT: %[[a_1:[a-zA-Z0-9_]+]] = firrtl.subfield %a[b]
     // CHECK-NEXT: %[[a_0_ref:[a-zA-Z0-9_]+]] = firrtl.ref.send %[[a_0]]
-    // CHECK-NEXT: firrtl.connect %[[refPort_0]], %[[a_0_ref]]
+    // CHECK-NEXT: firrtl.ref.assign %[[refPort_0]], %[[a_0_ref]]
     // CHECK-NEXT: %[[a_1_ref:[a-zA-Z0-9_]+]] = firrtl.ref.send %[[a_1]]
-    // CHECK-NEXT: firrtl.connect %[[refPort_1]], %[[a_1_ref]]
+    // CHECK-NEXT: firrtl.ref.assign %[[refPort_1]], %[[a_1_ref]]
   }
   // CHECK:      firrtl.module @GrandCentralViewsBundle()
   firrtl.module @GrandCentralViewsBundle() {
@@ -1410,13 +1410,13 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [{
   firrtl.module private @Bar() {
     %inv = firrtl.wire interesting_name  : !firrtl.uint<1>
     // CHECK:  %0 = firrtl.ref.send %inv : !firrtl.uint<1>
-    // CHECK:  firrtl.connect %inv__bore, %0 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+    // CHECK:  firrtl.ref.assign %inv__bore, %0 : !firrtl.ref<uint<1>>
   }
   // CHECK-LABEL: firrtl.module private @Foo(out %b_inv__bore: !firrtl.ref<uint<1>>)
   firrtl.module private @Foo() {
     firrtl.instance b interesting_name  @Bar()
     // CHECK:  %[[b_inv:[a-zA-Z0-9_]+]] = firrtl.instance b interesting_name  @Bar(out inv__bore: !firrtl.ref<uint<1>>)
-    // CHECK:  firrtl.connect %b_inv__bore, %[[b_inv]] : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+    // CHECK:  firrtl.ref.assign %b_inv__bore, %[[b_inv]] : !firrtl.ref<uint<1>>
   }
   // CHECK: firrtl.module @Top()
   firrtl.module @Top() {
@@ -1453,7 +1453,7 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [
   // CHECK:  firrtl.module private @Bar(out %[[_gen_ref2:.+]]: !firrtl.ref<uint<1>>)
   // CHECK:  %[[random:.+]] = firrtl.verbatim.expr "random.something" : () -> !firrtl.uint<1>
   // CHECK:  %0 = firrtl.ref.send %[[random]] : !firrtl.uint<1>
-  // CHECK:  firrtl.strictconnect %[[_gen_ref2]], %0 : !firrtl.ref<uint<1>>
+  // CHECK:  firrtl.ref.assign %[[_gen_ref2]], %0 : !firrtl.ref<uint<1>>
   firrtl.module private @Bar() {
   }
 
@@ -1544,7 +1544,7 @@ firrtl.circuit "GrandCentralParentIsNotLCA"  attributes {
   firrtl.module @Bar() {
     %a = firrtl.wire : !firrtl.uint<1>
     // CHECK:        %[[a_ref:[a-zA-Z0-9_]+]] = firrtl.ref.send %a
-    // CHECK-NEXT:   firrtl.connect %[[a_refPort]], %[[a_ref]]
+    // CHECK-NEXT:   firrtl.ref.assign %[[a_refPort]], %[[a_ref]]
   }
   // CHECK:        firrtl.module @Companion()
   firrtl.module @Companion() {

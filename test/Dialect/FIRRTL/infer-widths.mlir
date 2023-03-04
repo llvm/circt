@@ -740,8 +740,8 @@ firrtl.circuit "Foo" {
     firrtl.connect %m_p1_data, %c0_ui5 : !firrtl.uint, !firrtl.uint<5>
     firrtl.connect %m_p2_wdata, %c0_ui7 : !firrtl.uint, !firrtl.uint<7>
     firrtl.connect %out, %m_p0_data : !firrtl.uint, !firrtl.uint
-    firrtl.connect %dbg, %m_dbg : !firrtl.ref<vector<uint, 8>>, !firrtl.ref<vector<uint, 8>>
-    // CHECK:  firrtl.connect %dbg, %m_dbg : !firrtl.ref<vector<uint<7>, 8>>, !firrtl.ref<vector<uint<7>, 8>>
+    firrtl.ref.assign %dbg, %m_dbg : !firrtl.ref<vector<uint, 8>>
+    // CHECK:  firrtl.ref.assign %dbg, %m_dbg : !firrtl.ref<vector<uint<7>, 8>>
   }
 
   // CHECK-LABEL: @MemBundle
@@ -812,7 +812,7 @@ firrtl.circuit "Foo" {
   firrtl.module private @SubRef(out %x: !firrtl.ref<uint>) {
     %w = firrtl.wire : !firrtl.uint
     %ref_w = firrtl.ref.send %w : !firrtl.uint
-    firrtl.connect %x, %ref_w : !firrtl.ref<uint>, !firrtl.ref<uint>
+    firrtl.ref.assign %x, %ref_w : !firrtl.ref<uint>
 
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     firrtl.connect %w, %c0_ui2 : !firrtl.uint, !firrtl.uint<2>
