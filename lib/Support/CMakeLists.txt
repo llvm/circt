@@ -9,6 +9,7 @@ add_circt_library(CIRCTSupport
   APInt.cpp
   BackedgeBuilder.cpp
   FieldRef.cpp
+  JSON.cpp
   LoweringOptions.cpp
   Path.cpp
   PrettyPrinter.cpp
