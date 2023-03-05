@@ -290,6 +290,7 @@ def FInterfaceOp : FIRRTLModuleLike<"interface", [SingleBlock, NoTerminator]> {
 
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
+    ArrayAttr getParameters();
   }];
 
 }

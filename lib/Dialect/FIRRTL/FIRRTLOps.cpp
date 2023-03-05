@@ -1342,6 +1342,8 @@ ArrayAttr FMemModuleOp::getParameters() { return {}; }
 
 ArrayAttr FModuleOp::getParameters() { return {}; }
 
+ArrayAttr FInterfaceOp::getParameters() { return {}; }
+
 //===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//
