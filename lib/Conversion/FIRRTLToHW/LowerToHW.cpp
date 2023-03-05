@@ -430,6 +430,8 @@ private:
                             CircuitLoweringState &loweringState);
   hw::HWModuleOp lowerModule(FModuleOp oldModule, Block *topLevelModule,
                              CircuitLoweringState &loweringState);
+  sv::InterfaceOp  lowerIntreface(FInterfaceOp oldModule, Block *topLevelModule,
+                             CircuitLoweringState &loweringState);
   hw::HWModuleExternOp lowerExtModule(FExtModuleOp oldModule,
                                       Block *topLevelModule,
                                       CircuitLoweringState &loweringState);
@@ -538,6 +540,14 @@ void FIRRTLModuleLowering::runOnOperation() {
           if (!loweredMod)
             return signalPassFailure();
           state.oldToNewModuleMap[&op] = loweredMod;
+        })
+        .Case<FInterfaceOp>([&](auto module) {
+          auto loweredInterface = lowerIntreface(module, topLevelModule, state);
+          if (!loweredInterface)
+            return signalPassFailure();
+
+          state.oldToNewModuleMap[&op] = loweredInterface;
+          //modulesToProcess.push_back(module);
         })
         .Default([&](Operation *op) {
           // We don't know what this op is.  If it has no illegal FIRRTL types,
@@ -1205,6 +1215,61 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   return newModule;
 }
 
+sv::InterfaceOp FIRRTLModuleLowering::lowerIntreface(FInterfaceOp interface, Block *topLevelModule,
+    CircuitLoweringState &loweringState){
+
+  // Map the ports over, lowering their types as we go.
+  SmallVector<PortInfo> firrtlPorts = interface.getPorts();
+  SmallVector<hw::PortInfo, 8> ports;
+  if (failed(lowerPorts(firrtlPorts, ports, interface, interface.getName(),
+                        loweringState)))
+    return {};
+
+  auto builder = OpBuilder::atBlockEnd(topLevelModule);
+  auto nameAttr = builder.getStringAttr(interface.getName());
+  auto newInterface =
+      builder.create<sv::InterfaceOp>(interface.getLoc(), nameAttr);
+auto loc = interface.getLoc();
+std::function<Operation*(FIRRTLBaseType)> buildNestedInterface = [&](FIRRTLBaseType bundleType) -> Operation* {
+    return TypeSwitch<FIRRTLBaseType, Operation *>(bundleType)
+      .Case<BundleType>([&](BundleType bundleType) {
+          auto builder = OpBuilder::atBlockEnd(topLevelModule);
+          auto nestedInterfacename = bundleType.getBundleName();
+          if (!nestedInterfacename)
+            return nullptr;
+          auto nestedInterface = builder.create<sv::InterfaceOp>( loc, nestedInterfacename);
+
+          for (auto elem : bundleType.getElements()){
+            auto interfaceElem = buildNestedInterface(elem.type);
+          }
+          return nullptr;
+          })
+      .Case<FVectorType>([&](auto bundleType) {
+          })
+      .Default([&](auto bundleType) {
+            return nullptr;
+          });
+
+  };
+ for (auto &op : interface) {
+   llvm::errs() << "\n op : "<< op;
+   auto wire = cast<WireOp>(op);
+   auto type = wire.getType().cast<FIRRTLBaseType>();
+   if (type.isGround()){
+     auto width = type.getBitWidthOrSentinel();
+     if (width < 0) {
+      wire.emitError()
+         << "zero width Interface signal not expected" ;
+       return {};
+     }
+     builder.setInsertionPointToEnd(newInterface.getBodyBlock());
+     builder.create<sv::InterfaceSignalOp>(interface.getLoc(), wire.getNameAttr(), IntegerType::get(builder.getContext(), width));
+
+   }
+ }
+ llvm::errs() << "\n New Interface\n" << newInterface;
+ return newInterface;
+}
 /// Given a value of analog type, check to see the only use of it is an
 /// attach. If so, remove the attach and return the value being attached to
 /// it, converted to an HW inout type.  If this isn't a situation we can
@@ -3015,6 +3080,19 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     oldInstance->emitOpError("could not find module [")
         << oldInstance.getModuleName() << "] referenced by instance";
     return failure();
+  }
+  if (auto interface = dyn_cast<sv::InterfaceOp>(newModule)){
+    builder.create<sv::InterfaceInstanceOp>(interface.getInterfaceType(), oldInstance.getNameAttr(), 
+        
+      builder.getStringAttr("__" + oldInstance.getName() + "__")
+        );
+    for (auto port : oldInstance.getResults()) {
+      for (Operation* use : port.getUsers()) {
+        llvm::errs() << "\n use :" << use;
+        use->erase();
+      }
+    }
+    return success();
   }
 
   // If this is a referenced to a parameterized extmodule, then bring the
