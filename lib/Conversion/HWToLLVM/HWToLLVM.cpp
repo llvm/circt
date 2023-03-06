@@ -149,16 +149,14 @@ struct ArrayGetOpConversion : public ConvertOpToLLVMPattern<hw::ArrayGetOp> {
       // just grab that address instead of reallocating the array on the stack.
       arrPtr = load.getAddr();
     } else {
-      auto inputTy = typeConverter->convertType(op.getInput().getType());
       auto oneC = rewriter.create<LLVM::ConstantOp>(
           op->getLoc(), IntegerType::get(rewriter.getContext(), 32),
           rewriter.getI32IntegerAttr(1));
       arrPtr = rewriter.create<LLVM::AllocaOp>(
-          op->getLoc(), LLVM::LLVMPointerType::get(inputTy), oneC,
+          op->getLoc(),
+          LLVM::LLVMPointerType::get(adaptor.getInput().getType()), oneC,
           /*alignment=*/4);
-      Value castInput = typeConverter->materializeTargetConversion(
-          rewriter, op.getInput().getLoc(), inputTy, op.getInput());
-      rewriter.create<LLVM::StoreOp>(op->getLoc(), castInput, arrPtr);
+      rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getInput(), arrPtr);
     }
 
     auto elemTy = typeConverter->convertType(op.getResult().getType());
@@ -192,20 +190,18 @@ struct ArraySliceOpConversion
     auto dstTy = typeConverter->convertType(op.getDst().getType());
     auto elemTy = typeConverter->convertType(
         op.getDst().getType().cast<hw::ArrayType>().getElementType());
-    auto inputTy = typeConverter->convertType(op.getInput().getType());
 
     auto zeroC = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(0));
     auto oneC = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(1));
-    Value castInput = typeConverter->materializeTargetConversion(
-        rewriter, op.getInput().getLoc(), inputTy, op.getInput());
 
     auto arrPtr = rewriter.create<LLVM::AllocaOp>(
-        op->getLoc(), LLVM::LLVMPointerType::get(inputTy), oneC,
+        op->getLoc(), LLVM::LLVMPointerType::get(adaptor.getInput().getType()),
+        oneC,
         /*alignment=*/4);
 
-    rewriter.create<LLVM::StoreOp>(op->getLoc(), castInput, arrPtr);
+    rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getInput(), arrPtr);
 
     auto zextIndex = zextByOne(op->getLoc(), rewriter, op.getLowIndex());
 
@@ -274,12 +270,8 @@ struct ArrayConcatOpConversion
     size_t j = op.getInputs().size() - 1, k = 0;
 
     for (size_t i = 0, e = arrTy.getSize(); i < e; ++i) {
-      Type inputTy = typeConverter->convertType(op.getInputs()[j].getType());
-      Value castInput = typeConverter->materializeTargetConversion(
-          rewriter, op.getInputs()[j].getLoc(), inputTy, op.getInputs()[j]);
-
-      Value element =
-          rewriter.create<LLVM::ExtractValueOp>(op->getLoc(), castInput, k);
+      Value element = rewriter.create<LLVM::ExtractValueOp>(
+          op->getLoc(), adaptor.getInputs()[j], k);
       arr = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), arr, element, i);
 
       ++k;
@@ -312,18 +304,16 @@ struct BitcastOpConversion : public ConvertOpToLLVMPattern<hw::BitcastOp> {
                   ConversionPatternRewriter &rewriter) const override {
 
     Type resultTy = typeConverter->convertType(op.getResult().getType());
-    Type inputTy = typeConverter->convertType(op.getInput().getType());
 
-    Value castInput = getTypeConverter()->materializeTargetConversion(
-        rewriter, op.getInput().getLoc(), inputTy, op.getInput());
     auto oneC = rewriter.createOrFold<LLVM::ConstantOp>(
         op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(1));
 
     auto ptr = rewriter.create<LLVM::AllocaOp>(
-        op->getLoc(), LLVM::LLVMPointerType::get(inputTy), oneC,
+        op->getLoc(), LLVM::LLVMPointerType::get(adaptor.getInput().getType()),
+        oneC,
         /*alignment=*/4);
 
-    rewriter.create<LLVM::StoreOp>(op->getLoc(), castInput, ptr);
+    rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getInput(), ptr);
 
     auto cast = rewriter.create<LLVM::BitcastOp>(
         op.getLoc(), LLVM::LLVMPointerType::get(resultTy), ptr);
