@@ -221,6 +221,11 @@ static bool insertResetMux(ImplicitLocOpBuilder &builder, Value target,
             resetValueUsed = true;
           else
             resetSubValue.erase();
+        })
+        .Default([&](auto op) {
+          LLVM_DEBUG(llvm::dbgs()
+                     << "  - Unhandled insert mux into " << op << "\n");
+          abort();
         });
   }
   return resetValueUsed;
@@ -1052,8 +1057,8 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
   for (auto signal : net) {
     Value value = signal.field.getValue();
     if (!value.isa<BlockArgument>() &&
-        !isa_and_nonnull<WireOp, RegOp, RegResetOp, InstanceOp, InvalidValueOp>(
-            value.getDefiningOp()))
+        !isa_and_nonnull<WireOp, RegOp, RegResetOp, InstanceOp, InvalidValueOp,
+                         UninferredResetCastOp>(value.getDefiningOp()))
       continue;
     if (updateReset(signal.field, resetType)) {
       for (auto user : value.getUsers())
@@ -1094,8 +1099,11 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
         for (auto user : std::get<0>(it).getUsers())
           worklist.insert(user);
       }
-      //    LLVM_DEBUG(llvm::dbgs() << "- Inferred " << *op << "\n");
+      LLVM_DEBUG(llvm::dbgs() << "- Inferred " << *op << "\n");
     } else if (auto uop = dyn_cast<UninferredResetCastOp>(wop)) {
+      uop.dump();
+      for (auto user : uop.getResult().getUsers())
+        worklist.insert(user);
       uop.replaceAllUsesWith(uop.getInput());
       LLVM_DEBUG(llvm::dbgs() << "- Inferred " << uop << "\n");
       uop.erase();
