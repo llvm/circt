@@ -16,10 +16,12 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
@@ -1790,6 +1792,180 @@ void CoverConcurrentOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                     MLIRContext *context) {
   results.add(
       canonicalizeConcurrentVerifOp<CoverConcurrentOp, /* EraseIfZero */ true>);
+}
+
+//===----------------------------------------------------------------------===//
+// SV DPI Import operation
+//===----------------------------------------------------------------------===//
+
+ParseResult DPIImportOp::parse(OpAsmParser &parser, OperationState &result) {
+  using namespace mlir::function_interface_impl;
+  auto *context = parser.getContext();
+
+  // Parse the name as a symbol.
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  // Parse the arguments.
+  SmallVector<Attribute> argNames;
+  SmallVector<OpAsmParser::Argument, 4> args;
+  SmallVector<Type> argTypes;
+  {
+    if (parser.parseArgumentList(args, OpAsmParser::Delimiter::Paren,
+                                 /*allowType=*/true, /*allowAttrs=*/true))
+      return failure();
+
+    for (auto &arg : args) {
+      argNames.push_back(
+          hw::module_like_impl::getPortNameAttr(context, arg.ssaName.name));
+      argTypes.push_back(arg.type);
+    }
+  }
+
+  // Parse the results.
+  SmallVector<Attribute> resultNames;
+  SmallVector<DictionaryAttr> resultAttrs;
+  SmallVector<Type> resultTypes;
+  if (succeeded(parser.parseOptionalArrow())) {
+    auto parseResult = [&]() -> ParseResult {
+      // Parse the result name.
+      std::string portName;
+      if (parser.parseKeywordOrString(&portName))
+        return failure();
+      resultNames.push_back(StringAttr::get(parser.getContext(), portName));
+
+      // Parse the results type.
+      resultTypes.emplace_back();
+      if (parser.parseColonType(resultTypes.back()))
+        return failure();
+
+      // Parse the result attributes.
+      NamedAttrList attrs;
+      if (failed(parser.parseOptionalAttrDict(attrs)))
+        return failure();
+      resultAttrs.push_back(attrs.getDictionary(parser.getContext()));
+      return success();
+    };
+    if (failed(parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                              parseResult)))
+      return failure();
+  }
+
+  // Build the op.
+  result.addAttribute(
+      DPIImportOp::getFunctionTypeAttrName(result.name),
+      TypeAttr::get(FunctionType::get(context, argTypes, resultTypes)));
+  result.addAttribute("argNames", ArrayAttr::get(context, argNames));
+  result.addAttribute("resultNames", ArrayAttr::get(context, resultNames));
+  mlir::function_interface_impl::addArgAndResultAttrs(
+      parser.getBuilder(), result, args, resultAttrs,
+      DPIImportOp::getArgAttrsAttrName(result.name),
+      DPIImportOp::getResAttrsAttrName(result.name));
+
+  // Add a dummy region for the functional op interface.
+  result.addRegion();
+  return success();
+}
+
+void DPIImportOp::print(OpAsmPrinter &p) {
+  using namespace mlir::function_interface_impl;
+
+  FunctionType fnTy = cast<mlir::FunctionOpInterface>(getOperation())
+                          .getFunctionType()
+                          .cast<FunctionType>();
+  auto argTys = fnTy.getInputs();
+  auto resTys = fnTy.getResults();
+
+  p << ' ';
+
+  // Print the imported function name.
+  p.printSymbolName(SymbolTable::getSymbolName(*this).getValue());
+
+  // Print the arguments.
+  {
+    auto argNames = (*this)->getAttrOfType<ArrayAttr>("argNames");
+
+    p << '(';
+    for (auto &[i, nameAndTy] : llvm::enumerate(llvm::zip(argNames, argTys))) {
+      auto &[argName, argTy] = nameAndTy;
+      if (i > 0)
+        p << ", ";
+
+      p << '%';
+      p.printKeywordOrString(argName.cast<StringAttr>());
+      p << ": ";
+      p.printType(argTy);
+      p.printOptionalAttrDict(
+          mlir::function_interface_impl::getArgAttrs(*this, i));
+    }
+    p << ')';
+  }
+
+  // Print the results if there are any.
+  if (!resTys.empty()) {
+    auto resNames = (*this)->getAttrOfType<ArrayAttr>("resultNames");
+    p << " -> (";
+    for (auto &[i, nameAndTy] : llvm::enumerate(llvm::zip(resNames, resTys))) {
+      auto &[resName, resTy] = nameAndTy;
+      if (i != 0)
+        p << ", ";
+      p.printKeywordOrString(resName.cast<StringAttr>());
+      p << ": ";
+      p.printType(resTys[i]);
+      p.printOptionalAttrDict(
+          mlir::function_interface_impl::getResultAttrs(*this, i));
+    }
+    p << ')';
+  }
+
+  // Print the rest of the attributes.
+  auto opName = (*this)->getName();
+  SmallVector<StringRef, 3> omittedAttrs;
+  omittedAttrs.push_back(DPIImportOp::getFunctionTypeAttrName(opName));
+  omittedAttrs.push_back(DPIImportOp::getArgAttrsAttrName(opName));
+  omittedAttrs.push_back(DPIImportOp::getResAttrsAttrName(opName));
+  omittedAttrs.push_back("argNames");
+  omittedAttrs.push_back("resultNames");
+  printFunctionAttributes(p, *this, omittedAttrs);
+}
+
+//===----------------------------------------------------------------------===//
+// SV DPI Call operation
+//===----------------------------------------------------------------------===//
+
+LogicalResult DPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto func = dyn_cast_or_null<DPIImportOp>(
+      symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr()));
+  if (!func)
+    return emitError("Cannot find function definition '") << getCallee() << "'";
+
+  auto resultTys = func.getResultTypes();
+  if (resultTys.size() != getNumResults())
+    return emitError() << getNumResults() << " results present, expected "
+                       << resultTys.size();
+  for (auto &[idx, refAndValue] :
+       llvm::enumerate(llvm::zip(resultTys, getResults()))) {
+    auto &[ref, value] = refAndValue;
+    if (ref != value.getType())
+      return emitError() << "invalid result #" << idx << ": expected " << ref
+                         << ", got " << value.getType();
+  }
+
+  auto argTys = func.getArgumentTypes();
+  if (argTys.size() != getArgs().size())
+    return emitError() << getArgs().size() << " arguments present, expected "
+                       << argTys.size();
+  for (auto &[idx, refAndValue] :
+       llvm::enumerate(llvm::zip(argTys, getArgs()))) {
+    auto &[ref, value] = refAndValue;
+    if (ref != value.getType())
+      return emitError() << "invalid argument #" << idx << ": expected " << ref
+                         << ", got " << value.getType();
+  }
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

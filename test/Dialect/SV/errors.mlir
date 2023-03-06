@@ -229,3 +229,69 @@ hw.module @CaseEnum() {
       sv.fwrite %fd, "x"
     }
 }
+
+// -----
+
+hw.module @DPINoFunction(%clk: i1) -> () {
+  sv.alwaysff(posedge %clk) {
+    // expected-error @+1 {{Cannot find function definition 'no_declared_function'}}
+    sv.dpi.call @no_declared_function() : () -> ()
+  }
+}
+
+// -----
+
+sv.dpi.import @func(%arg0: i32) -> (res0: i5)
+
+hw.module @dpi_invalid_result_count(%clk: i1) -> () {
+  %arg0 = hw.constant 0 : i32
+  %arg1 = hw.constant 1 : i64
+  %fd = hw.constant 0x80000002 : i32
+  sv.alwaysff(posedge %clk) {
+    // expected-error @+1 {{2 results present, expected 1}}
+    %res0, %res1 = sv.dpi.call @func(%arg0) : (i32) -> (i5, i8)
+  }
+}
+
+// -----
+
+sv.dpi.import @func(%arg0: i32) -> (res0: i5)
+
+hw.module @dpi_invalid_result(%clk: i1) -> () {
+  %arg0 = hw.constant 0 : i32
+  %arg1 = hw.constant 1 : i64
+  %fd = hw.constant 0x80000002 : i32
+  sv.alwaysff(posedge %clk) {
+    // expected-error @+1 {{invalid result #0: expected 'i5', got 'i7'}}
+    %res2 = sv.dpi.call @func(%arg0) : (i32) -> (i7)
+  }
+}
+
+// -----
+
+sv.dpi.import @func(%arg0: i32) -> (res0: i5)
+
+hw.module @dpi_invalid_argument(%clk: i1) -> () {
+  %arg0 = hw.constant 0 : i32
+  %arg1 = hw.constant 1 : i64
+  %fd = hw.constant 0x80000002 : i32
+  sv.alwaysff(posedge %clk) {
+    // expected-error @+1 {{invalid argument #0: expected 'i32', got 'i64'}}
+    %res3 = sv.dpi.call @func(%arg1) : (i64) -> (i5)
+  }
+}
+
+// -----
+
+sv.dpi.import @func(%arg0: i32) -> (res0: i5)
+
+hw.module @dpi_invalid_argument_count(%clk: i1) -> () {
+  %arg0 = hw.constant 0 : i32
+  %arg1 = hw.constant 1 : i64
+  %fd = hw.constant 0x80000002 : i32
+  sv.alwaysff(posedge %clk) {
+    // expected-error @+1 {{2 arguments present, expected 1}}
+    %res4 = sv.dpi.call @func(%arg0, %arg1) : (i32, i64) -> (i5)
+  }
+}
+

@@ -92,6 +92,38 @@ static void spillWiresForInstanceInputs(InstanceOp op) {
   }
 }
 
+// Introduces a wire to replace an output port SSA wire. If the operation
+// is in a procedural region, it creates a temporary register, otherwise it
+// places a wire. The connecting op is inserted in the op's region.
+static void replacePortWithWire(ImplicitLocOpBuilder &builder, Operation *op,
+                                Value result, StringRef name) {
+
+  bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
+
+  Value newTarget;
+  if (isProcedural) {
+    newTarget = builder.create<sv::RegOp>(result.getType(),
+                                          builder.getStringAttr(name));
+  } else {
+    newTarget = builder.create<sv::WireOp>(result.getType(), name);
+  }
+
+  while (!result.use_empty()) {
+    auto newRead = builder.create<sv::ReadInOutOp>(newTarget);
+    OpOperand &use = *result.getUses().begin();
+    use.set(newRead);
+    newRead->moveBefore(use.getOwner());
+  }
+
+  Operation *connect;
+  if (isProcedural) {
+    connect = builder.create<sv::BPAssignOp>(newTarget, result);
+  } else {
+    connect = builder.create<sv::AssignOp>(newTarget, result);
+  }
+  connect->moveAfter(op);
+}
+
 // Ensure that each output of an instance are used only by a wire
 static void lowerInstanceResults(InstanceOp op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
@@ -100,16 +132,17 @@ static void lowerInstanceResults(InstanceOp op) {
   SmallString<32> nameTmp{"_", op.instanceName(), "_"};
   auto namePrefixSize = nameTmp.size();
 
-  size_t nextResultNo = 0;
-  for (auto &port : getModulePortInfo(op).outputs) {
-    auto result = op.getResult(nextResultNo);
-    ++nextResultNo;
+  for (auto &[i, port] : llvm::enumerate(getModulePortInfo(op).outputs)) {
+    Value result = op.getResult(i);
 
     if (result.hasOneUse()) {
-      OpOperand &use = *result.getUses().begin();
-      if (dyn_cast_or_null<OutputOp>(use.getOwner()))
+      Operation *user = *result.getUsers().begin();
+      if (dyn_cast_or_null<OutputOp>(user)) {
+        // Output op users of the instance are handled during the lowering
+        // of the instance op itself.
         continue;
-      if (auto assign = dyn_cast_or_null<AssignOp>(use.getOwner())) {
+      }
+      if (auto assign = dyn_cast_or_null<AssignOp>(user)) {
         // Move assign op after instance to resolve cyclic dependencies.
         assign->moveAfter(op);
         continue;
@@ -120,18 +153,32 @@ static void lowerInstanceResults(InstanceOp op) {
     if (port.name)
       nameTmp += port.name.getValue().str();
     else
-      nameTmp += std::to_string(nextResultNo - 1);
-    Value newWire = builder.create<sv::WireOp>(result.getType(), nameTmp);
+      nameTmp += std::to_string(i);
+    replacePortWithWire(builder, op, result, nameTmp);
+  }
+}
 
-    while (!result.use_empty()) {
-      auto newWireRead = builder.create<ReadInOutOp>(newWire);
-      OpOperand &use = *result.getUses().begin();
-      use.set(newWireRead);
-      newWireRead->moveBefore(use.getOwner());
+// Ensure that each output of a DPI call is used only by a wire.
+static void lowerDPICallResults(DPICallOp op) {
+  Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
+  auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
+
+  SmallString<32> nameTmp{"_", op.getCallee(), "_"};
+  auto namePrefixSize = nameTmp.size();
+
+  for (auto &[i, result] : llvm::enumerate(op.getResults())) {
+    if (result.hasOneUse()) {
+      Operation *user = *result.getUsers().begin();
+      if (isa<BPAssignOp, PAssignOp>(user)) {
+        // Move assign op after instance to resolve cyclic dependencies.
+        user->moveAfter(op);
+        continue;
+      }
     }
 
-    auto connect = builder.create<AssignOp>(newWire, result);
-    connect->moveAfter(op);
+    nameTmp.resize(namePrefixSize);
+    nameTmp += std::to_string(i);
+    replacePortWithWire(builder, op, result, nameTmp);
   }
 }
 
@@ -823,6 +870,10 @@ static LogicalResult legalizeHWModule(Block &block,
       // enabled.
       if (options.disallowExpressionInliningInPorts)
         spillWiresForInstanceInputs(instance);
+    }
+
+    if (auto call = dyn_cast<DPICallOp>(op)) {
+      lowerDPICallResults(call);
     }
 
     // If logic op is located in a procedural region, we have to move the logic

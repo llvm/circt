@@ -44,6 +44,8 @@ public:
             InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
             InterfaceInstanceOp, GetModportOp, AssignInterfaceSignalOp,
             ReadInterfaceSignalOp,
+            // DPI ops.
+            DPIImportOp, DPICallOp,
             // Verification statements.
             AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
             CoverConcurrentOp,
@@ -135,6 +137,10 @@ public:
   HANDLE(GetModportOp, Unhandled);
   HANDLE(AssignInterfaceSignalOp, Unhandled);
   HANDLE(ReadInterfaceSignalOp, Unhandled);
+
+  // DPI ops.
+  HANDLE(DPIImportOp, Unhandled);
+  HANDLE(DPICallOp, Unhandled);
 
   // Verification statements.
   HANDLE(AssertOp, Unhandled);

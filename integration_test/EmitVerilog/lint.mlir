@@ -120,3 +120,12 @@ hw.module @UniformArrayCreate() -> (arr: !hw.array<5xi8>) {
   %arr = hw.array_create %c0_i8, %c0_i8, %c0_i8, %c0_i8, %c0_i8 : i8
   hw.output %arr : !hw.array<5xi8>
 }
+
+sv.dpi.import @test(%arg0: i32) -> (res0: i5, res1: i6)
+
+hw.module @top(%clk: i1, %arg1: i64) -> () {
+  %arg0 = hw.constant 0 : i32
+  sv.alwaysff(posedge %clk) {
+    %res0, %res1 = sv.dpi.call @test(%arg0) : (i32) -> (i5, i6)
+  }
+}
