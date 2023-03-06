@@ -18,6 +18,14 @@ from typing import Dict, List, Optional
 
 __dir__ = Path(__file__).parent
 
+FlattenStructPorts = "esi.portFlattenStructs"
+PortInSuffix = "esi.portInSuffix"
+PortOutSuffix = "esi.portOutSuffix"
+PortValidSuffix = "esi.portValidSuffix"
+PortReadySuffix = "esi.portReadySuffix"
+PortRdenSuffix = "esi.portRdenSuffix"
+PortEmptySuffix = "esi.portEmptySuffix"
+
 ToServer = InputChannel
 FromServer = OutputChannel
 
@@ -473,23 +481,19 @@ class PureModuleBuilder(ModuleLikeBuilderBase):
 
   def create_op(self, sys: System, symbol):
     """Callback for creating a ESIPureModule op."""
-    return raw_esi.ESIPureModuleOp(symbol, loc=self.loc, ip=sys._get_ip())
+    mod = raw_esi.ESIPureModuleOp(symbol, loc=self.loc, ip=sys._get_ip())
+    for k, v in self.attributes.items():
+      mod.attributes[k] = v
+    return mod
 
   def scan_cls(self):
     """Scan the class for input/output ports and generators. (Most `ModuleLike`
     will use these.) Store the results for later use."""
 
-    generators = {}
-    for attr_name, attr in self.cls_dct.items():
-      if attr_name.startswith("_"):
-        continue
+    super().scan_cls()
 
-      if isinstance(attr, (Clock, Input, Output)):
-        raise PortError("ESI pure modules cannot have ports")
-      elif isinstance(attr, Generator):
-        generators[attr_name] = attr
-
-    self.generators = generators
+    if len(self.inputs) != 0 or len(self.outputs) != 0 or len(self.clocks) != 0:
+      raise PortError("ESI pure modules cannot have ports")
 
   def create_port_proxy(self):
     """Since pure ESI modules don't have any ports, this function is pretty
@@ -530,3 +534,14 @@ class PureModule(Module):
   def output_port(name: str, signal: Signal):
     from .dialects import esi
     return esi.ESIPureModuleOutputOp(name, signal)
+
+  @staticmethod
+  def param(name: str, type: Type = None):
+    """Create a parameter in the resulting module."""
+    from .dialects import esi
+    from .circt import ir
+    if type is None:
+      type_attr = ir.TypeAttr.get(ir.NoneType.get())
+    else:
+      type_attr = ir.TypeAttr.get(type._type)
+    esi.ESIPureModuleParamOp(name, type_attr)

@@ -813,11 +813,26 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       sourceType = refType;
       sinkType = refType.getType();
     } else {
-      // Use base Type ports
+      // Use specified port types.
       sourceType = source.getType();
       sinkType = sink.getType();
 
-      if (sourceType != sinkType) {
+      // Types must be connectable, which means FIRRTLType's.
+      auto sourceFType = dyn_cast<FIRRTLType>(sourceType);
+      auto sinkFType = dyn_cast<FIRRTLType>(sinkType);
+      if (!sourceFType)
+        return emitError(source.getLoc())
+               << "Wiring Problem source type \"" << sourceType
+               << "\" must be a FIRRTL type";
+      if (!sinkFType)
+        return emitError(sink.getLoc())
+               << "Wiring Problem sink type \"" << sinkType
+               << "\" must be a FIRRTL type";
+
+      // Otherwise they must be identical or FIRRTL type-equivalent
+      // (connectable).
+      if (sourceFType != sinkFType &&
+          !areTypesEquivalent(sourceFType, sinkFType)) {
         auto diag = mlir::emitError(source.getLoc())
                     << "Wiring Problem source type " << sourceType
                     << " does not match sink type " << sinkType;

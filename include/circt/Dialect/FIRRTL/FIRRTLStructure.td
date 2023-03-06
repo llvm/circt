@@ -130,6 +130,7 @@ def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
 
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
+    ArrayAttr getParameters();
   }];
 
 }
@@ -160,6 +161,39 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
     OpBuilder<(ins "StringAttr":$name,
                       "ArrayRef<PortInfo>":$ports,
                       CArg<"StringRef", "StringRef()">:$defnamAttr,
+                      CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
+                      CArg<"ArrayAttr", "ArrayAttr()">:$parameters)>
+  ];
+
+  let extraClassDeclaration = [{
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
+  }];
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
+def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
+  let summary = "FIRRTL intrinsic module";
+  let description = [{
+    The "firrtl.intmodule" operation represents a compiler intrinsic.
+  }];
+  let arguments = (ins
+                   OptionalAttr<StrAttr>:$intrinsic,
+                   ParamDeclArrayAttr:$parameters,
+                   DefaultValuedAttr<AnnotationArrayAttr,
+                   "ArrayAttr()">:$annotations,
+                   DefaultValuedAttr<ArrayAttr, "{}">:$internalPaths
+                  );
+  let results = (outs);
+  let regions = (region AnyRegion:$body);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name,
+                      "ArrayRef<PortInfo>":$ports,
+                      CArg<"StringRef", "StringRef()">:$intrinsicNameAttr,
                       CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
                       CArg<"ArrayAttr", "ArrayAttr()">:$parameters)>
   ];
@@ -206,6 +240,7 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
     bool isMasked() { return getMaskBits() > 1; }
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
+    ArrayAttr getParameters();
   }];
 
   let hasCustomAssemblyFormat = 1;

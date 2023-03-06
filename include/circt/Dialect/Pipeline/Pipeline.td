@@ -26,7 +26,6 @@ include "mlir/IR/EnumAttr.td"
 def Pipeline_Dialect : Dialect {
   let name = "pipeline";
   let cppNamespace = "::circt::pipeline";
-  let useFoldAPI = kEmitFoldAdaptorFolder;
 }
 
 def PipelineOp : Op<Pipeline_Dialect, "pipeline", [

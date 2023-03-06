@@ -1,5 +1,6 @@
 add_subdirectory(AffineToPipeline)
 add_subdirectory(CalyxToFSM)
+add_subdirectory(ConvertToArcs)
 add_subdirectory(CalyxToHW)
 add_subdirectory(ExportChiselInterface)
 add_subdirectory(ExportVerilog)

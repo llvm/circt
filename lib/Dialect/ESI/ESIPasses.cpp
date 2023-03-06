@@ -358,6 +358,7 @@ PureModuleLowering::matchAndRewrite(ESIPureModuleOp pureMod, OpAdaptor adaptor,
   // List the input and output ops.
   SmallVector<ESIPureModuleInputOp> inputs;
   SmallVector<ESIPureModuleOutputOp> outputs;
+  SmallVector<Attribute> params;
 
   for (Operation &op : llvm::make_early_inc_range(body->getOperations())) {
     if (auto port = dyn_cast<ESIPureModuleInputOp>(op)) {
@@ -387,12 +388,17 @@ PureModuleLowering::matchAndRewrite(ESIPureModuleOp pureMod, OpAdaptor adaptor,
                                    {},
                                    port.getLoc()});
       outputs.push_back(port);
+    } else if (auto param = dyn_cast<ESIPureModuleParamOp>(op)) {
+      params.push_back(
+          ParamDeclAttr::get(param.getNameAttr(), param.getType()));
+      rewriter.eraseOp(param);
     }
   }
 
   // Create the replacement `hw.module`.
-  auto hwMod =
-      rewriter.create<hw::HWModuleOp>(loc, pureMod.getNameAttr(), ports);
+  auto hwMod = rewriter.create<hw::HWModuleOp>(
+      loc, pureMod.getNameAttr(), ports, ArrayAttr::get(getContext(), params));
+  hwMod->setDialectAttrs(pureMod->getDialectAttrs());
   rewriter.eraseBlock(hwMod.getBodyBlock());
   rewriter.inlineRegionBefore(*body->getParent(), hwMod.getBodyRegion(),
                               hwMod.getBodyRegion().end());
@@ -457,6 +463,16 @@ static StringAttr appendToRtlName(StringAttr base, Twine suffix) {
   return StringAttr::get(context, base.getValue() + suffix);
 }
 
+// Returns either the string dialect attr stored in 'op' going by the name
+// 'attrName' or 'def' if the attribute doesn't exist in 'op'.
+inline static StringRef getStringAttributeOr(Operation *op, StringRef attrName,
+                                             StringRef def) {
+  auto attr = op->getAttrOfType<StringAttr>(attrName);
+  if (attr)
+    return attr.getValue();
+  return def;
+}
+
 namespace {
 class SignalingStandard;
 
@@ -465,7 +481,16 @@ class SignalingStandard;
 class ChannelRewriter {
 public:
   ChannelRewriter(hw::HWMutableModuleLike mod)
-      : mod(mod), body(nullptr), foundEsiPorts(false) {
+      : inSuffix(getStringAttributeOr(mod, extModPortInSuffix, "")),
+        outSuffix(getStringAttributeOr(mod, extModPortOutSuffix, "")),
+        validSuffix(getStringAttributeOr(mod, extModPortValidSuffix, "_valid")),
+        readySuffix(getStringAttributeOr(mod, extModPortReadySuffix, "_ready")),
+        rdenSuffix(getStringAttributeOr(mod, extModPortRdenSuffix, "_rden")),
+        emptySuffix(getStringAttributeOr(mod, extModPortEmptySuffix, "_empty")),
+        mod(mod),
+        flattenStructs(mod->hasAttr(extModPortFlattenStructsAttrName)),
+        body(nullptr), foundEsiPorts(false) {
+
     if (mod->getNumRegions() == 1 && mod->getRegion(0).hasOneBlock())
       body = &mod->getRegion(0).front();
   }
@@ -497,8 +522,19 @@ public:
   void createNewOutput(PortInfo origPort, Twine suffix, Type type, Value output,
                        PortInfo &newPort);
 
+  bool shouldFlattenStructs() const { return flattenStructs; }
+
+  /// Some external modules use unusual port naming conventions. Since we want
+  /// to avoid needing to write wrappers, provide some flexibility in the naming
+  /// convention.
+  const StringRef inSuffix, outSuffix;
+  const StringRef validSuffix, readySuffix, rdenSuffix, emptySuffix;
+
 private:
   hw::HWMutableModuleLike mod;
+  // Does the module demand that we break out all the struct fields into
+  // individual fields?
+  bool flattenStructs;
   // If the module has a block and it wants to be modified, this'll be non-null.
   Block *body;
   // Did we find an ESI port?
@@ -558,7 +594,115 @@ protected:
 
   hw::HWMutableModuleLike getModule() { return rewriter.getModule(); }
   MLIRContext *getContext() { return getModule()->getContext(); }
+
+  SmallVector<PortInfo> dataPorts;
+
+  /// Data ports aren't (generally) treated differently by different signaling
+  /// standards. Since we want to support "flattened" structs as well as not
+  /// (which is orthogonal to the control signals), put all of the data port
+  /// transform logic in these general methods.
+  Value buildInputDataPorts();
+  void buildOutputDataPorts(Value data);
+  void mapInputDataPorts(OpBuilder &b, Value unwrappedData,
+                         SmallVectorImpl<Value> &newOperands);
+  Value mapOutputDataPorts(OpBuilder &b, ArrayRef<Backedge> newResults);
 };
+
+// Build the input data ports. If it's a channel of a struct (and we've been
+// asked to flatten it), flatten it into a port for each wire. If there's a
+// body, re-construct the struct.
+Value SignalingStandard::buildInputDataPorts() {
+  auto chanTy = origPort.type.dyn_cast<ChannelType>();
+  Type dataPortType = chanTy ? chanTy.getInner() : origPort.type;
+  hw::StructType origStruct =
+      chanTy ? dataPortType.dyn_cast<hw::StructType>() : hw::StructType();
+
+  if (!rewriter.shouldFlattenStructs() || !origStruct) {
+    dataPorts.push_back({});
+    return rewriter.createNewInput(origPort, "", dataPortType, dataPorts[0]);
+  }
+
+  ArrayRef<hw::StructType::FieldInfo> elements = origStruct.getElements();
+  dataPorts.append(elements.size(), {});
+  SmallVector<Value, 16> elementValues;
+  for (auto [idx, element] : llvm::enumerate(elements))
+    elementValues.push_back(rewriter.createNewInput(
+        origPort, "_" + element.name.getValue(), element.type, dataPorts[idx]));
+  if (!body)
+    return {};
+  return OpBuilder::atBlockBegin(body).create<hw::StructCreateOp>(
+      origPort.loc, origStruct, elementValues);
+}
+
+// Map a data value into the new operands for an instance. If the original type
+// was a channel of a struct (and we've been asked to flatten it), break it up
+// into per-field values.
+void SignalingStandard::mapInputDataPorts(OpBuilder &b, Value unwrappedData,
+                                          SmallVectorImpl<Value> &newOperands) {
+  auto chanTy = origPort.type.dyn_cast<ChannelType>();
+  Type dataPortType = chanTy ? chanTy.getInner() : origPort.type;
+  hw::StructType origStruct =
+      chanTy ? dataPortType.dyn_cast<hw::StructType>() : hw::StructType();
+
+  if (!rewriter.shouldFlattenStructs() || !origStruct) {
+    newOperands[dataPorts[0].argNum] = unwrappedData;
+  } else {
+    auto explode = b.create<hw::StructExplodeOp>(origPort.loc, unwrappedData);
+    assert(explode->getNumResults() == dataPorts.size());
+    for (auto [dataPort, fieldValue] :
+         llvm::zip(dataPorts, explode.getResults()))
+      newOperands[dataPort.argNum] = fieldValue;
+  }
+}
+
+// Build the data ports for outputs. If the original type was a channel of a
+// struct (and we've been asked to flatten it), explode the struct to create
+// individual ports.
+void SignalingStandard::buildOutputDataPorts(Value data) {
+  auto chanTy = origPort.type.dyn_cast<ChannelType>();
+  Type dataPortType = chanTy ? chanTy.getInner() : origPort.type;
+  hw::StructType origStruct =
+      chanTy ? dataPortType.dyn_cast<hw::StructType>() : hw::StructType();
+
+  if (!rewriter.shouldFlattenStructs() || !origStruct) {
+    dataPorts.push_back({});
+    rewriter.createNewOutput(origPort, "", dataPortType, data, dataPorts[0]);
+  } else {
+    ArrayRef<hw::StructType::FieldInfo> elements = origStruct.getElements();
+    dataPorts.append(elements.size(), {});
+
+    Operation *explode = nullptr;
+    if (body)
+      explode = OpBuilder::atBlockTerminator(body).create<hw::StructExplodeOp>(
+          origPort.loc, data);
+
+    for (size_t idx = 0, e = elements.size(); idx < e; ++idx) {
+      auto field = elements[idx];
+      Value fieldValue = explode ? explode->getResult(idx) : Value();
+      rewriter.createNewOutput(origPort, "_" + field.name.getValue(),
+                               field.type, fieldValue, dataPorts[idx]);
+    }
+  }
+}
+
+// Map the data ports coming off an instance back into the original ports. If
+// the original type was a channel of a struct (and we've been asked to flatten
+// it), construct the original struct from the new ports.
+Value SignalingStandard::mapOutputDataPorts(OpBuilder &b,
+                                            ArrayRef<Backedge> newResults) {
+  auto chanTy = origPort.type.dyn_cast<ChannelType>();
+  Type dataPortType = chanTy ? chanTy.getInner() : origPort.type;
+  hw::StructType origStruct =
+      chanTy ? dataPortType.dyn_cast<hw::StructType>() : hw::StructType();
+
+  if (!rewriter.shouldFlattenStructs() || !origStruct)
+    return newResults[dataPorts[0].argNum];
+
+  SmallVector<Value, 16> fieldValues;
+  for (auto portInfo : dataPorts)
+    fieldValues.push_back(newResults[portInfo.argNum]);
+  return b.create<hw::StructCreateOp>(origPort.loc, origStruct, fieldValues);
+}
 
 /// We consider non-ESI ports to be ad-hoc signaling or 'raw wires'. (Which
 /// counts as a signaling protocol if one squints pretty hard). We mostly do
@@ -570,18 +714,17 @@ public:
   void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
                        SmallVectorImpl<Value> &newOperands,
                        ArrayRef<Backedge> newResults) override {
-    newOperands[newPort.argNum] = instValue;
+    mapInputDataPorts(b, instValue, newOperands);
   }
   void mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
                         SmallVectorImpl<Value> &newOperands,
                         ArrayRef<Backedge> newResults) override {
-    instValue.replaceAllUsesWith(newResults[newPort.argNum]);
+    instValue.replaceAllUsesWith(mapOutputDataPorts(b, newResults));
   }
 
 private:
   void buildInputSignals() override {
-    Value newValue =
-        rewriter.createNewInput(origPort, "", origPort.type, newPort);
+    Value newValue = buildInputDataPorts();
     if (body)
       body->getArgument(origPort.argNum).replaceAllUsesWith(newValue);
   }
@@ -590,11 +733,8 @@ private:
     Value output;
     if (body)
       output = body->getTerminator()->getOperand(origPort.argNum);
-    rewriter.createNewOutput(origPort, "", origPort.type, output, newPort);
+    buildOutputDataPorts(output);
   }
-
-  // Track where the new port location.
-  PortInfo newPort;
 };
 
 /// Implement the Valid/Ready signaling standard.
@@ -615,7 +755,6 @@ private:
 
   // Keep around information about the port numbers of the relevant ports and
   // use that later to update the instances.
-  PortInfo dataPort;
   PortInfo validPort;
   PortInfo readyPort;
 };
@@ -638,7 +777,6 @@ private:
 
   // Keep around information about the port numbers of the relevant ports and
   // use that later to update the instances.
-  PortInfo dataPort;
   PortInfo rdenPort;
   PortInfo emptyPort;
 };
@@ -646,7 +784,9 @@ private:
 
 Value ChannelRewriter::createNewInput(PortInfo origPort, Twine suffix,
                                       Type type, PortInfo &newPort) {
-  newPort = PortInfo{appendToRtlName(origPort.name, suffix),
+  newPort = PortInfo{appendToRtlName(origPort.name, suffix.isTriviallyEmpty()
+                                                        ? ""
+                                                        : suffix + inSuffix),
                      PortDirection::INPUT,
                      type,
                      newInputs.size(),
@@ -662,7 +802,9 @@ Value ChannelRewriter::createNewInput(PortInfo origPort, Twine suffix,
 void ChannelRewriter::createNewOutput(PortInfo origPort, Twine suffix,
                                       Type type, Value output,
                                       PortInfo &newPort) {
-  newPort = PortInfo{appendToRtlName(origPort.name, suffix),
+  newPort = PortInfo{appendToRtlName(origPort.name, suffix.isTriviallyEmpty()
+                                                        ? ""
+                                                        : suffix + outSuffix),
                      PortDirection::OUTPUT,
                      type,
                      newOutputs.size(),
@@ -766,12 +908,11 @@ LogicalResult ChannelRewriter::rewriteChannelsOnModule() {
 
 void ValidReady::buildInputSignals() {
   Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
-  auto chanTy = origPort.type.cast<ChannelType>();
 
   // When we find one, add a data and valid signal to the new args.
-  Value data =
-      rewriter.createNewInput(origPort, "", chanTy.getInner(), dataPort);
-  Value valid = rewriter.createNewInput(origPort, "_valid", i1, validPort);
+  Value data = buildInputDataPorts();
+  Value valid =
+      rewriter.createNewInput(origPort, rewriter.validSuffix, i1, validPort);
 
   Value ready;
   if (body) {
@@ -785,7 +926,8 @@ void ValidReady::buildInputSignals() {
     body->getArgument(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
   }
 
-  rewriter.createNewOutput(origPort, "_ready", i1, ready, readyPort);
+  rewriter.createNewOutput(origPort, rewriter.readySuffix, i1, ready,
+                           readyPort);
 }
 
 void ValidReady::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
@@ -794,15 +936,15 @@ void ValidReady::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
   auto unwrap = b.create<UnwrapValidReadyOp>(inst->getLoc(),
                                              inst->getOperand(origPort.argNum),
                                              newResults[readyPort.argNum]);
-  newOperands[dataPort.argNum] = unwrap.getRawOutput();
+  mapInputDataPorts(b, unwrap.getRawOutput(), newOperands);
   newOperands[validPort.argNum] = unwrap.getValid();
 }
 
 void ValidReady::buildOutputSignals() {
   Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
-  auto chanTy = origPort.type.cast<ChannelType>();
 
-  Value ready = rewriter.createNewInput(origPort, "_ready", i1, readyPort);
+  Value ready =
+      rewriter.createNewInput(origPort, rewriter.readySuffix, i1, readyPort);
   Value data, valid;
   if (body) {
     auto *terminator = body->getTerminator();
@@ -815,17 +957,18 @@ void ValidReady::buildOutputSignals() {
   }
 
   // New outputs.
-  rewriter.createNewOutput(origPort, "", chanTy.getInner(), data, dataPort);
-  rewriter.createNewOutput(origPort, "_valid", i1, valid, validPort);
+  buildOutputDataPorts(data);
+  rewriter.createNewOutput(origPort, rewriter.validSuffix, i1, valid,
+                           validPort);
 }
 
 void ValidReady::mapOutputSignals(OpBuilder &b, Operation *inst,
                                   Value instValue,
                                   SmallVectorImpl<Value> &newOperands,
                                   ArrayRef<Backedge> newResults) {
-  auto wrap =
-      b.create<WrapValidReadyOp>(inst->getLoc(), newResults[dataPort.argNum],
-                                 newResults[validPort.argNum]);
+  Value data = mapOutputDataPorts(b, newResults);
+  auto wrap = b.create<WrapValidReadyOp>(inst->getLoc(), data,
+                                         newResults[validPort.argNum]);
   inst->getResult(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
   newOperands[readyPort.argNum] = wrap.getReady();
 }
@@ -835,9 +978,9 @@ void FIFO::buildInputSignals() {
   auto chanTy = origPort.type.cast<ChannelType>();
 
   // When we find one, add a data and valid signal to the new args.
-  Value data =
-      rewriter.createNewInput(origPort, "", chanTy.getInner(), dataPort);
-  Value empty = rewriter.createNewInput(origPort, "_empty", i1, emptyPort);
+  Value data = buildInputDataPorts();
+  Value empty =
+      rewriter.createNewInput(origPort, rewriter.emptySuffix, i1, emptyPort);
 
   Value rden;
   if (body) {
@@ -852,7 +995,7 @@ void FIFO::buildInputSignals() {
     body->getArgument(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
   }
 
-  rewriter.createNewOutput(origPort, "_ready", i1, rden, rdenPort);
+  rewriter.createNewOutput(origPort, rewriter.rdenSuffix, i1, rden, rdenPort);
 }
 
 void FIFO::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
@@ -861,15 +1004,15 @@ void FIFO::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
   auto unwrap =
       b.create<UnwrapFIFOOp>(inst->getLoc(), inst->getOperand(origPort.argNum),
                              newResults[rdenPort.argNum]);
-  newOperands[dataPort.argNum] = unwrap.getData();
+  mapInputDataPorts(b, unwrap.getData(), newOperands);
   newOperands[emptyPort.argNum] = unwrap.getEmpty();
 }
 
 void FIFO::buildOutputSignals() {
   Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
-  auto chanTy = origPort.type.cast<ChannelType>();
 
-  Value rden = rewriter.createNewInput(origPort, "_rden", i1, rdenPort);
+  Value rden =
+      rewriter.createNewInput(origPort, rewriter.rdenSuffix, i1, rdenPort);
   Value data, empty;
   if (body) {
     auto *terminator = body->getTerminator();
@@ -882,16 +1025,18 @@ void FIFO::buildOutputSignals() {
   }
 
   // New outputs.
-  rewriter.createNewOutput(origPort, "", chanTy.getInner(), data, dataPort);
-  rewriter.createNewOutput(origPort, "_empty", i1, empty, emptyPort);
+  buildOutputDataPorts(data);
+  rewriter.createNewOutput(origPort, rewriter.emptySuffix, i1, empty,
+                           emptyPort);
 }
 
 void FIFO::mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
                             SmallVectorImpl<Value> &newOperands,
                             ArrayRef<Backedge> newResults) {
+  Value data = mapOutputDataPorts(b, newResults);
   auto wrap = b.create<WrapFIFOOp>(
-      inst->getLoc(), ArrayRef<Type>({origPort.type, b.getI1Type()}),
-      newResults[dataPort.argNum], newResults[emptyPort.argNum]);
+      inst->getLoc(), ArrayRef<Type>({origPort.type, b.getI1Type()}), data,
+      newResults[emptyPort.argNum]);
   inst->getResult(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
   newOperands[rdenPort.argNum] = wrap.getRden();
 }

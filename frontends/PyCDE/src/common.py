@@ -7,7 +7,7 @@ from __future__ import annotations
 from .circt.dialects import msft
 from .circt import ir
 
-from .types import Type, Channel, ClockType
+from .types import Type, Channel, ChannelSignaling, ClockType
 
 from functools import singledispatchmethod
 
@@ -33,8 +33,11 @@ class Output(ModuleDecl):
 class OutputChannel(Output):
   """Create an ESI output channel port."""
 
-  def __init__(self, type: Type, name: str = None):
-    type = Channel(type)
+  def __init__(self,
+               type: Type,
+               signaling: int = ChannelSignaling.ValidReady,
+               name: str = None):
+    type = Channel(type, signaling)
     super().__init__(type, name)
 
 
@@ -52,8 +55,11 @@ class Clock(Input):
 class InputChannel(Input):
   """Create an ESI input channel port."""
 
-  def __init__(self, type: Type, name: str = None):
-    type = Channel(type)
+  def __init__(self,
+               type: Type,
+               signaling: int = ChannelSignaling.ValidReady,
+               name: str = None):
+    type = Channel(type, signaling)
     super().__init__(type, name)
 
 

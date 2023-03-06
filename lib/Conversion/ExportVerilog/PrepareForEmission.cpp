@@ -764,6 +764,48 @@ static LogicalResult legalizeHWModule(Block &block,
       continue;
     }
 
+    // Force array index expressions to be a simple name when the
+    // `mitigateVivadoArrayIndexConstPropBug` option is set.
+    if (options.mitigateVivadoArrayIndexConstPropBug &&
+        isa<ArraySliceOp, ArrayGetOp, ArrayIndexInOutOp,
+            IndexedPartSelectInOutOp, IndexedPartSelectOp>(&op)) {
+
+      // Check if the index expression is already a wire.
+      Value wireOp;
+      Value readOp;
+      if (auto maybeReadOp =
+              op.getOperand(1).getDefiningOp<sv::ReadInOutOp>()) {
+        if (isa_and_nonnull<WireOp, LogicOp>(
+                maybeReadOp.getInput().getDefiningOp())) {
+          wireOp = maybeReadOp.getInput();
+          readOp = maybeReadOp;
+        }
+      }
+
+      // Insert a wire and read if necessary.
+      ImplicitLocOpBuilder builder(op.getLoc(), &op);
+      if (!wireOp) {
+        auto type = op.getOperand(1).getType();
+        const auto *name = "_GEN_ARRAY_IDX";
+        if (op.getParentOp()->hasTrait<ProceduralRegion>()) {
+          wireOp = builder.create<LogicOp>(type, name);
+          builder.create<BPAssignOp>(wireOp, op.getOperand(1));
+        } else {
+          wireOp = builder.create<WireOp>(type, name);
+          builder.create<AssignOp>(wireOp, op.getOperand(1));
+        }
+        readOp = builder.create<ReadInOutOp>(wireOp);
+      }
+      op.setOperand(1, readOp);
+
+      // Add a `(* keep = "true" *)` SV attribute to the wire.
+      sv::addSVAttributes(wireOp.getDefiningOp(),
+                          SVAttributeAttr::get(wireOp.getContext(), "keep",
+                                               R"("true")",
+                                               /*emitAsComment=*/false));
+      continue;
+    }
+
     // If this expression is deemed worth spilling into a wire, do it here.
     if (shouldSpillWire(op, options)) {
       // We first check that it is possible to reuse existing wires as a spilled

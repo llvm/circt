@@ -33,6 +33,14 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     /*methodBody=*/[{ return $_op.getNameAttr(); }]>,
 
     //===------------------------------------------------------------------===//
+    // Parameters
+    //===------------------------------------------------------------------===//
+
+    InterfaceMethod<"Get the parameters",
+    "ArrayAttr", "getParameters", (ins),
+    /*methodBody=*/[{ return $_op.getParameters(); }]>,
+
+    //===------------------------------------------------------------------===//
     // Port Directions
     //===------------------------------------------------------------------===//
 

@@ -232,23 +232,6 @@ public:
 };
 
 //===----------------------------------------------------------------------===//
-// Reference Type
-//===----------------------------------------------------------------------===//
-
-class RefType
-    : public FIRRTLType::TypeBase<RefType, FIRRTLType, detail::RefTypeStorage> {
-public:
-  using Base::Base;
-  static RefType get(FIRRTLBaseType type);
-
-  /// Return the underlying type.
-  FIRRTLBaseType getType();
-
-  static LogicalResult verify(function_ref<InFlightDiagnostic()> emitErrorFn,
-                              FIRRTLBaseType base);
-};
-
-//===----------------------------------------------------------------------===//
 // Type helpers
 //===----------------------------------------------------------------------===//
 

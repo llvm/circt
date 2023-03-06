@@ -13,8 +13,7 @@
 # RUN: ls %t/Makefile.xrt
 # RUN: ls %t/xrt.ini
 # RUN: ls %t/xsim.tcl
-# RUN: ls %t/ESILoopback
-# RUN: ls %t/ESILoopback/EsiXrtPython.cpp
+# RUN: ls %t/runtime/ESILoopback/EsiXrtPython.cpp
 
 # RUN: FileCheck %s --input-file %t/hw/top.sv --check-prefix=TOP
 
@@ -64,18 +63,28 @@ s.package()
 # TOP:         output [1:0]  s_axi_control_RRESP,
 # TOP:         output        s_axi_control_BVALID,
 # TOP:         output [1:0]  s_axi_control_BRESP
+
+# TOP:         XrtService #(
+# TOP:         ) XrtService (
+# TOP:           .clk      (ap_clk),
+# TOP:           .rst      (~ap_resetn),
+# TOP:           .axil_in  (_GEN),
+# TOP:           .axil_out (_XrtService_axil_out)
+# TOP:         );
+
 # TOP:         Top #(
-# TOP:           .__INST_HIER({__INST_HIER, ".Top"})
 # TOP:         ) Top (
 # TOP:           .clk (ap_clk),
 # TOP:           .rst (~ap_resetn)
 # TOP:         );
-# TOP:         assign s_axi_control_AWREADY = 1'h0;
-# TOP:         assign s_axi_control_WREADY = 1'h0;
-# TOP:         assign s_axi_control_ARREADY = 1'h0;
-# TOP:         assign s_axi_control_RVALID = 1'h0;
-# TOP:         assign s_axi_control_RDATA = 32'h0;
-# TOP:         assign s_axi_control_RRESP = 2'h0;
-# TOP:         assign s_axi_control_BVALID = 1'h0;
-# TOP:         assign s_axi_control_BRESP = 2'h0;
+
+# TOP:         assign s_axi_control_AWREADY = _XrtService_axil_out.awready;
+# TOP:         assign s_axi_control_WREADY = _XrtService_axil_out.wready;
+# TOP:         assign s_axi_control_ARREADY = _XrtService_axil_out.arready;
+# TOP:         assign s_axi_control_RVALID = _XrtService_axil_out.rvalid;
+# TOP:         assign s_axi_control_RDATA = _XrtService_axil_out.rdata;
+# TOP:         assign s_axi_control_RRESP = _XrtService_axil_out.rresp;
+# TOP:         assign s_axi_control_BVALID = _XrtService_axil_out.bvalid;
+# TOP:         assign s_axi_control_BRESP = _XrtService_axil_out.bresp;
+
 # TOP:       endmodule

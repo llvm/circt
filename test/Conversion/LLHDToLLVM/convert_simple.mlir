@@ -45,3 +45,11 @@ llhd.entity @Foo () -> () {
   %dt = llhd.constant_time #llhd.time<1ns, 0d, 0e>
   llhd.drv %toggle, %2 after %dt : !llhd.sig<i1>
 }
+
+// CHECK-LABEL: @convertConstantTime
+llvm.func @convertConstantTime() {
+  // CHECK-NEXT: {{%.+}} = llvm.mlir.constant(dense<[0, 1, 2]> : tensor<3xi64>) : !llvm.array<3 x i64>
+  %2 = llhd.constant_time #llhd.time<0ns, 1d, 2e>
+  // CHECK-NEXT: llvm.return
+  llvm.return
+}

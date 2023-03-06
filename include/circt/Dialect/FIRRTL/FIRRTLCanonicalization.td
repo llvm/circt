@@ -56,6 +56,19 @@ def UIntTypes : Constraint<CPred<"$0.isa<UIntType>()">>;
 // Constraint that enforces types mismatches
 def mismatchTypes : Constraint<CPred<"$0.getType() != $1.getType()">>;
 
+// Constraint that argument is ref-of-vector type.
+def IsRefVectorType : Constraint<CPred<[{
+  $0.getType().isa<RefType>() &&
+  $0.getType().cast<RefType>().getType().isa<FVectorType>()
+}]>>;
+
+// Constraint that argument is ref-of-bundle type.
+def IsRefBundleType : Constraint<CPred<[{
+  $0.getType().isa<RefType>() &&
+  $0.getType().cast<RefType>().getType().isa<BundleType>()
+}]>>;
+
+
 // Constraint that enforces types of known width
 def KnownWidth : Constraint<CPred<[{
   $0.getType().isa<FIRRTLBaseType>() &&
@@ -293,6 +306,14 @@ def SubaccessOfConstant : Pat<
   (MoveNameHint $old, (SubindexOp $array, (NativeCodeCall<"$_builder.getI32IntegerAttr($0.cast<IntegerAttr>().getAPSInt().getExtValue())"> $cst))),
   []>;
 
+// mux(cond, 0, 1) -> ~cond
+def MuxNot : Pat<
+  (MuxPrimOp:$old $cond, (ConstantOp:$zcst $_), (ConstantOp:$ocst $_)),
+  (MoveNameHint $old, (NotPrimOp $cond)), [
+    (EqualTypes $cond, $zcst), (EqualTypes $cond, $ocst),
+    (ZeroConstantOp $zcst) , (OneConstantOp $ocst)
+  ]>;
+
 // mux(cond, x, mux(cond, y, z)) -> mux(cond, x, z)
 def MuxSameCondLow : Pat<
   (MuxPrimOp:$old $cond, $x, (MuxPrimOp $cond, $y, $z)),
@@ -341,5 +362,24 @@ def RegResetWithOneReset : Pat<
   (RegResetOp:$reg $clock, $reset, $resetVal, $name, $nameKind, $annotations, $inner_sym),
   (DropWrite $reg, (NodeOp $resetVal, $name, $nameKind, $annotations, $inner_sym)),
   [(OneConstantOp $reset)]>;
+
+// refresolve(refsend(x)) -> x
+def RefResolveOfSend : Pat<
+  (RefResolveOp (RefSendOp $orig)),
+  (replaceWithValue $orig) >;
+
+// Hoist ref.sub through send, vector variant.
+// refsub(refsend(orig), idx) -> refsend(subindex(orig, idx))
+def RefSubOfSendVector : Pat<
+  (RefSubOp (RefSendOp:$send $orig), $idx),
+  (RefSendOp (SubindexOp $orig, $idx)),
+  [(IsRefVectorType $send)] >;
+
+// Hoist ref.sub through send, bundle variant.
+// refsub(refsend(orig), idx) -> refsend(subfield(orig, idx))
+def RefSubOfSendBundle : Pat<
+  (RefSubOp (RefSendOp:$send $orig), $idx),
+  (RefSendOp (SubfieldOp $orig, $idx)),
+  [(IsRefBundleType $send)] >;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD

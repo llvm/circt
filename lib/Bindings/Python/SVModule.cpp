@@ -31,7 +31,7 @@ void circt::python::populateDialectSVSubmodule(py::module &m) {
       .def_classmethod(
           "get",
           [](py::object cls, std::string name, py::object expressionObj,
-             MlirContext ctxt) {
+             bool emitAsComment, MlirContext ctxt) {
             // Need temporary storage for casted string.
             std::string expr;
             MlirStringRef expression = {nullptr, 0};
@@ -40,11 +40,12 @@ void circt::python::populateDialectSVSubmodule(py::module &m) {
               expression = mlirStringRefCreateFromCString(expr.c_str());
             }
             return cls(svSVAttributeAttrGet(
-                ctxt, mlirStringRefCreateFromCString(name.c_str()),
-                expression));
+                ctxt, mlirStringRefCreateFromCString(name.c_str()), expression,
+                emitAsComment));
           },
           "Create a SystemVerilog attribute", py::arg(), py::arg("name"),
-          py::arg("expression") = py::none(), py::arg("ctxt") = py::none())
+          py::arg("expression") = py::none(),
+          py::arg("emit_as_comment") = py::none(), py::arg("ctxt") = py::none())
       .def_property_readonly("name",
                              [](MlirAttribute self) {
                                MlirStringRef name =
@@ -52,28 +53,14 @@ void circt::python::populateDialectSVSubmodule(py::module &m) {
                                return std::string(name.data, name.length);
                              })
       .def_property_readonly(
-          "expression", [](MlirAttribute self) -> py::object {
+          "expression",
+          [](MlirAttribute self) -> py::object {
             MlirStringRef name = svSVAttributeAttrGetExpression(self);
             if (name.data == nullptr)
               return py::none();
             return py::str(std::string(name.data, name.length));
-          });
-
-  mlir_attribute_subclass(m, "SVAttributesAttr", svAttrIsASVAttributesAttr)
-      .def_classmethod(
-          "get",
-          [](py::object cls, MlirAttribute attributes, bool emitAsComments,
-             MlirContext ctxt) {
-            return cls(svSVAttributesAttrGet(ctxt, attributes, emitAsComments));
-          },
-          "Create SV attributes attr", py::arg(), py::arg("attributes"),
-          py::arg("emit_as_comments") = py::none(),
-          py::arg("ctxt") = py::none())
-      .def_property_readonly("attributes",
-                             [](MlirAttribute self) {
-                               return svSVAttributesAttrGetAttributes(self);
-                             })
-      .def_property_readonly("emit_as_comments", [](MlirAttribute self) {
-        return svSVAttributesAttrGetEmitAsComments(self);
+          })
+      .def_property_readonly("emit_as_comment", [](MlirAttribute self) {
+        return svSVAttributeAttrGetEmitAsComment(self);
       });
 }

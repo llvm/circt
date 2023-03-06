@@ -71,6 +71,15 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
             clEnumValN(PreserveAggregate::OneDimVec, "1d-vec", "Preserve 1d vectors"),
             clEnumValN(PreserveAggregate::Vec, "vec", "Preserve vectors"),
             clEnumValN(PreserveAggregate::All, "all", "Preserve vectors and bundles")
+          )}]>,
+    Option<"preserveMemories", "preserve-memories", "PreserveAggregate::PreserveMode",
+          "PreserveAggregate::None",
+          "Specify memory preservation mode",
+          [{::llvm::cl::values(
+            clEnumValN(PreserveAggregate::None, "none", "Preserve no aggregate"),
+            clEnumValN(PreserveAggregate::OneDimVec, "1d-vec", "Preserve 1d vectors"),
+            clEnumValN(PreserveAggregate::Vec, "vec", "Preserve vectors"),
+            clEnumValN(PreserveAggregate::All, "all", "Preserve vectors and bundles")
           )}]>
   ];
   let dependentDialects = ["hw::HWDialect"];
@@ -640,6 +649,15 @@ def InnerSymbolDCE : Pass<"firrtl-inner-symbol-dce", "mlir::ModuleOp"> {
     Statistic<"numSymbolsFound", "num-sym-found", "Number of symbols found">,
     Statistic<"numSymbolsRemoved", "num-sym-removed", "Number of symbols removed">
   ];
+}
+
+def VBToBV : Pass<"firrtl-vb-to-bv", "firrtl::CircuitOp"> {
+  let summary = "Transform vector-of-bundles to bundle-of-vectors";
+  let description = [{
+    This pass converts vectors containing bundles, into bundles containing
+    vectors.
+  }];
+  let constructor = "circt::firrtl::createVBToBVPass()";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

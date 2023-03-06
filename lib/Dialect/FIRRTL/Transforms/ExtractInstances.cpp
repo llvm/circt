@@ -845,7 +845,7 @@ void ExtractInstancesPass::groupInstances() {
   // module. Note that we cannot group instances that landed in different parent
   // modules into the same submodule, so we use that parent module as a grouping
   // key.
-  SmallDenseMap<std::pair<Operation *, StringRef>, SmallVector<InstanceOp>>
+  llvm::MapVector<std::pair<Operation *, StringRef>, SmallVector<InstanceOp>>
       instsByWrapper;
   for (auto &[inst, info] : extractedInstances) {
     if (!info.wrapperModule.empty())

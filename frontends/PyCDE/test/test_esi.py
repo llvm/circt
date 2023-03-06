@@ -6,9 +6,9 @@ from pycde import (Clock, Input, InputChannel, OutputChannel, Module, generator,
 from pycde import esi
 from pycde.common import Output
 from pycde.constructs import Wire
-from pycde.types import Channel
+from pycde.types import Bits, Channel, ChannelSignaling, UInt
 from pycde.testing import unittestmodule
-from pycde.signals import BitVectorSignal, ChannelSignal
+from pycde.signals import BitVectorSignal, ChannelSignal, Struct
 
 
 @esi.ServiceDecl
@@ -206,7 +206,7 @@ class PassUpService(esi.ServiceImplementation):
       req.assign(esi.PureModule.input_port(name, req.type))
 
 
-# CHECK-LABEL:  hw.module @PureTest(%in_Producer_loopback_in: i32, %in_Producer_loopback_in_valid: i1, %in_prod2_loopback_in: i32, %in_prod2_loopback_in_valid: i1, %clk: i1, %out_Consumer_loopback_out_ready: i1, %p2_int_ready: i1) -> (in_Producer_loopback_in_ready: i1, in_prod2_loopback_in_ready: i1, out_Consumer_loopback_out: i32, out_Consumer_loopback_out_valid: i1, p2_int: i32, p2_int_valid: i1) {
+# CHECK-LABEL:  hw.module @PureTest<FOO: i5, STR: none>(%in_Producer_loopback_in: i32, %in_Producer_loopback_in_valid: i1, %in_prod2_loopback_in: i32, %in_prod2_loopback_in_valid: i1, %clk: i1, %out_Consumer_loopback_out_ready: i1, %p2_int_ready: i1) -> (in_Producer_loopback_in_ready: i1, in_prod2_loopback_in_ready: i1, out_Consumer_loopback_out: i32, out_Consumer_loopback_out_valid: i1, p2_int: i32, p2_int_valid: i1) {
 # CHECK-NEXT:     %Producer.loopback_in_ready, %Producer.int_out, %Producer.int_out_valid = hw.instance "Producer" sym @Producer @Producer{{.*}}(clk: %clk: i1, loopback_in: %in_Producer_loopback_in: i32, loopback_in_valid: %in_Producer_loopback_in_valid: i1, int_out_ready: %Consumer.int_in_ready: i1) -> (loopback_in_ready: i1, int_out: i32, int_out_valid: i1)
 # CHECK-NEXT:     %Consumer.int_in_ready, %Consumer.loopback_out, %Consumer.loopback_out_valid = hw.instance "Consumer" sym @Consumer @Consumer{{.*}}(clk: %clk: i1, int_in: %Producer.int_out: i32, int_in_valid: %Producer.int_out_valid: i1, loopback_out_ready: %out_Consumer_loopback_out_ready: i1) -> (int_in_ready: i1, loopback_out: i32, loopback_out_valid: i1)
 # CHECK-NEXT:     %prod2.loopback_in_ready, %prod2.int_out, %prod2.int_out_valid = hw.instance "prod2" sym @prod2 @Producer{{.*}}(clk: %clk: i1, loopback_in: %in_prod2_loopback_in: i32, loopback_in_valid: %in_prod2_loopback_in_valid: i1, int_out_ready: %p2_int_ready: i1) -> (loopback_in_ready: i1, int_out: i32, int_out_valid: i1)
@@ -223,3 +223,60 @@ class PureTest(esi.PureModule):
     Consumer(clk=clk, int_in=p.int_out)
     p2 = Producer(clk=clk, instance_name="prod2")
     esi.PureModule.output_port("p2_int", p2.int_out)
+    esi.PureModule.param("FOO", Bits(5))
+    esi.PureModule.param("STR")
+
+
+# CHECK-LABEL:  msft.module @FIFOSignalingMod {} (%a: !esi.channel<i32, FIFO0>) -> (x: !esi.channel<i32, FIFO0>)
+# CHECK-NEXT:     %data, %empty = esi.unwrap.fifo %a, %rden : !esi.channel<i32, FIFO0>
+# CHECK-NEXT:     %chanOutput, %rden = esi.wrap.fifo %data, %empty : !esi.channel<i32, FIFO0>
+# CHECK-NEXT:     msft.output %chanOutput : !esi.channel<i32, FIFO0>
+@unittestmodule(print=True)
+class FIFOSignalingMod(Module):
+  a = InputChannel(Bits(32), ChannelSignaling.FIFO0)
+  x = OutputChannel(Bits(32), ChannelSignaling.FIFO0)
+
+  @generator
+  def build(self):
+    rden_wire = Wire(types.i1)
+    data, empty = self.a.unwrap(rden_wire)
+    chan, rden = self.a.type.wrap(data, empty)
+    rden_wire.assign(rden)
+    self.x = chan
+
+
+ExStruct = types.struct({
+    'a': Bits(4),
+    'b': UInt(32),
+})
+
+
+# CHECK-LABEL:  hw.module @FlattenTest{{.*}}(%a_a: i4, %a_b: ui32, %a_valid: i1) -> (a_ready: i1)
+@unittestmodule(print=False, run_passes=True, print_after_passes=True)
+class FlattenTest(Module):
+  a = InputChannel(ExStruct)
+
+  Attributes = {esi.FlattenStructPorts}
+
+  @generator
+  def build(self):
+    pass
+
+
+# CHECK-LABEL:  hw.module.extern @FlattenExternTest{{.*}}(%a_a: i4, %a_b: ui32, %a_valid: i1) -> (a_ready: i1)
+@unittestmodule(print=False, run_passes=True, print_after_passes=True)
+class FlattenExternTest(Module):
+  a = InputChannel(ExStruct)
+
+  Attributes = {esi.FlattenStructPorts}
+
+
+# CHECK-LABEL:   hw.module @FlattenPureTest(%a_a: i4, %a_b: ui32, %a_valid: i1) -> (a_ready: i1) attributes {esi.portFlattenStructs}
+@unittestmodule(print=False, run_passes=True, print_after_passes=True)
+class FlattenPureTest(esi.PureModule):
+
+  Attributes = {esi.FlattenStructPorts}
+
+  @generator
+  def build(self):
+    esi.PureModule.input_port("a", types.channel(ExStruct))

@@ -49,7 +49,7 @@ public:
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
-            RefResolveOp, mlir::UnrealizedConversionCastOp>(
+            RefResolveOp, RefSubOp, mlir::UnrealizedConversionCastOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitExpr(expr, args...);
             })
@@ -153,6 +153,7 @@ public:
   HANDLE(VerbatimExprOp, Unhandled);
   HANDLE(RefSendOp, Unhandled);
   HANDLE(RefResolveOp, Unhandled);
+  HANDLE(RefSubOp, Unhandled);
 
   // Conversions.
   HANDLE(HWStructCastOp, Unhandled);

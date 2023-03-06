@@ -57,3 +57,33 @@ firrtl.circuit "Top" {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
   }
 }
+
+// -----
+// Check handling of unexpected ref.sub.
+
+firrtl.circuit "RefSubNotFromMemory" {
+  firrtl.module @RefSubNotFromMemory(in %in : !firrtl.bundle<a: uint<1>, b: uint<2>>) {
+    // expected-note @below {{input here}}
+    %ref = firrtl.ref.send %in : !firrtl.bundle<a: uint<1>, b: uint<2>>
+    // expected-error @below {{can only lower RefSubOp of Memory}}
+    %sub = firrtl.ref.sub %ref[1] : !firrtl.ref<bundle<a: uint<1>, b: uint<2>>>
+    %res = firrtl.ref.resolve %sub : !firrtl.ref<uint<2>>
+  }
+}
+
+// -----
+// Check handling of unexpected ref.sub, from port.
+
+firrtl.circuit "RefSubNotFromOp" {
+  // expected-note @below {{input here}}
+  firrtl.module private @Child(in %ref : !firrtl.ref<bundle<a: uint<1>, b: uint<2>>>) {
+    // expected-error @below {{can only lower RefSubOp of Memory}}
+    %sub = firrtl.ref.sub %ref[1] : !firrtl.ref<bundle<a: uint<1>, b: uint<2>>>
+    %res = firrtl.ref.resolve %sub : !firrtl.ref<uint<2>>
+  }
+  firrtl.module @RefSubNotFromOp(in %in : !firrtl.bundle<a: uint<1>, b: uint<2>>) {
+    %ref = firrtl.ref.send %in : !firrtl.bundle<a: uint<1>, b: uint<2>>
+    %child_ref = firrtl.instance child @Child(in ref : !firrtl.ref<bundle<a: uint<1>, b: uint<2>>>)
+    firrtl.strictconnect %child_ref, %ref : !firrtl.ref<bundle<a: uint<1>, b: uint<2>>>
+  }
+}

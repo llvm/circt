@@ -158,14 +158,14 @@ static Value getMemoryRead(ImplicitLocOpBuilder &b, Value memory, Value addr,
                                 .getSize() <= 1)
     return slot;
   circt::sv::setSVAttributes(
-      slot, sv::SVAttributesAttr::get(b.getContext(), {"cadence map_to_mux"},
-                                      /*emitAsComments=*/true));
+      slot, sv::SVAttributeAttr::get(b.getContext(), "cadence map_to_mux",
+                                     /*emitAsComment=*/true));
   auto valWire = b.create<sv::WireOp>(slot.getType());
   auto assignOp = b.create<sv::AssignOp>(valWire, slot);
   sv::setSVAttributes(assignOp,
-                      sv::SVAttributesAttr::get(b.getContext(),
-                                                {"synopsys infer_mux_override"},
-                                                /*emitAsComments=*/true));
+                      sv::SVAttributeAttr::get(b.getContext(),
+                                               "synopsys infer_mux_override",
+                                               /*emitAsComment=*/true));
 
   return b.create<sv::ReadInOutOp>(valWire);
 }
@@ -245,8 +245,8 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   if (addVivadoRAMAddressConflictSynthesisBugWorkaround && mem.readLatency == 0)
     circt::sv::setSVAttributes(
         reg,
-        sv::SVAttributesAttr::get(
-            b.getContext(), {std::make_pair("ram_style", R"("distributed")")}));
+        sv::SVAttributeAttr::get(b.getContext(), "ram_style",
+                                 R"("distributed")", /*emitAsComment=*/false));
 
   SmallVector<Value, 4> outputs;
 

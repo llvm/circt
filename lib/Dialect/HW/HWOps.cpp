@@ -1321,15 +1321,18 @@ HWModuleOp::insertInput(unsigned index, StringAttr name, Type ty) {
     ns.newName(port.name.getValue());
   auto nameAttr = StringAttr::get(getContext(), ns.newName(name.getValue()));
 
+  Block *body = getBodyBlock();
+
   // Create a new port for the host clock.
   PortInfo port;
   port.name = nameAttr;
   port.direction = PortDirection::INPUT;
   port.type = ty;
-  insertPorts({std::make_pair(index, port)}, {});
+  hw::modifyModulePorts(getOperation(), {std::make_pair(index, port)}, {}, {},
+                        {}, body);
 
   // Add a new argument.
-  return {nameAttr, getBody().getArgument(index)};
+  return {nameAttr, body->getArgument(index)};
 }
 
 void HWModuleOp::insertOutputs(unsigned index,
@@ -1347,7 +1350,8 @@ void HWModuleOp::insertOutputs(unsigned index,
     port.type = value.getType();
     indexedNewPorts.emplace_back(index, port);
   }
-  insertPorts({}, indexedNewPorts);
+  hw::modifyModulePorts(getOperation(), {}, indexedNewPorts, {}, {},
+                        getBodyBlock());
 
   // Rewrite the output op.
   for (auto &[name, value] : outputs)
@@ -2305,6 +2309,16 @@ void StructExplodeOp::getAsmResultNames(
   auto structType = type_cast<StructType>(getInput().getType());
   for (auto [res, field] : llvm::zip(getResults(), structType.getElements()))
     setNameFn(res, field.name.str());
+}
+
+void StructExplodeOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                            Value input) {
+  StructType inputType = input.getType().dyn_cast<StructType>();
+  assert(inputType);
+  SmallVector<Type, 16> fieldTypes;
+  for (auto field : inputType.getElements())
+    fieldTypes.push_back(field.type);
+  build(odsBuilder, odsState, fieldTypes, input);
 }
 
 //===----------------------------------------------------------------------===//

@@ -95,6 +95,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       disallowExpressionInliningInPorts = true;
     } else if (option == "disallowMuxInlining") {
       disallowMuxInlining = true;
+    } else if (option == "mitigateVivadoArrayIndexConstPropBug") {
+      mitigateVivadoArrayIndexConstPropBug = true;
     } else if (option.consume_front("wireSpillingHeuristic=")) {
       if (auto heuristic = parseWireSpillingHeuristic(option)) {
         wireSpillingHeuristicSet |= *heuristic;
@@ -107,6 +109,10 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
             "expected integer for number of namehint heurstic term limit");
         wireSpillingNamehintTermLimit = DEFAULT_NAMEHINT_TERM_LIMIT;
       }
+    } else if (option == "emitWireInPorts") {
+      emitWireInPorts = true;
+    } else if (option == "emitBindComments") {
+      emitBindComments = true;
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
@@ -146,12 +152,18 @@ std::string LoweringOptions::toString() const {
     options += "disallowExpressionInliningInPorts,";
   if (disallowMuxInlining)
     options += "disallowMuxInlining,";
+  if (mitigateVivadoArrayIndexConstPropBug)
+    options += "mitigateVivadoArrayIndexConstPropBug,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
   if (maximumNumberOfTermsPerExpression != DEFAULT_TERM_LIMIT)
     options += "maximumNumberOfTermsPerExpression=" +
                std::to_string(maximumNumberOfTermsPerExpression) + ',';
+  if (emitWireInPorts)
+    options += "emitWireInPorts,";
+  if (emitBindComments)
+    options += "emitBindComments,";
 
   // Remove a trailing comma if present.
   if (!options.empty()) {

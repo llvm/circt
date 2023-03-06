@@ -32,13 +32,19 @@ bool circtESITypeIsAChannelType(MlirType type) {
   return unwrap(type).isa<ChannelType>();
 }
 
-MlirType circtESIChannelTypeGet(MlirType inner) {
+MlirType circtESIChannelTypeGet(MlirType inner, uint32_t signaling) {
+  auto signalEnum = symbolizeChannelSignaling(signaling);
+  if (!signalEnum)
+    return {};
   auto cppInner = unwrap(inner);
-  return wrap(ChannelType::get(cppInner.getContext(), cppInner));
+  return wrap(ChannelType::get(cppInner.getContext(), cppInner, *signalEnum));
 }
 
 MlirType circtESIChannelGetInner(MlirType channelType) {
   return wrap(unwrap(channelType).cast<ChannelType>().getInner());
+}
+uint32_t circtESIChannelGetSignaling(MlirType channelType) {
+  return (uint32_t)unwrap(channelType).cast<ChannelType>().getSignaling();
 }
 
 bool circtESITypeIsAnAnyType(MlirType type) {

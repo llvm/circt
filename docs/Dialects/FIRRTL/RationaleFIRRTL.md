@@ -1037,8 +1037,3 @@ extend the system with funcitonality without changing the langauge.  They form
 an implementation-specific built-in library.  Unlike traditional libraries,
 implementations of intrinsics have access to internals of the compiler, allowing
 them to implement features not possible in the language.
-
-In FIRRTL, we support intrinsic modules.   The internal op is `firrtl.intmodule`
-which has all the properties of an external module.  Until the firrtl spec
-supports intrinsics, intrinsic modules are expressed in firrtl as external
-modules with the `circt.Intrinsic` annotation on the module.

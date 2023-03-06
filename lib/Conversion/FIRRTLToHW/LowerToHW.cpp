@@ -937,19 +937,24 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
     hwPort.type = lowerType(firrtlPort.type);
     if (firrtlPort.sym)
       if (firrtlPort.sym.size() > 1 ||
-          (firrtlPort.sym.size() == 1 && !firrtlPort.sym.getSymName())) {
-        moduleOp->emitError("cannot lower aggregate port `" +
-                            firrtlPort.name.getValue() +
-                            "` with field sensitive symbols, HW dialect does  "
-                            "not support per field symbols yet.");
-        return failure();
-      }
+          (firrtlPort.sym.size() == 1 && !firrtlPort.sym.getSymName()))
+        return emitError(firrtlPort.loc)
+               << "cannot lower aggregate port " << firrtlPort.name
+               << " with field sensitive symbols, HW dialect does not support "
+                  "per field symbols yet.";
     hwPort.sym = firrtlPort.sym;
     bool hadDontTouch = firrtlPort.annotations.removeDontTouch();
-    if (hadDontTouch && !hwPort.sym)
+    if (hadDontTouch && !hwPort.sym) {
+      if (hwPort.type.isInteger(0)) {
+        mlir::emitWarning(firrtlPort.loc)
+            << "zero width port " << hwPort.name
+            << " has dontTouch annotation, removing anyway";
+        continue;
+      }
       hwPort.sym = hw::InnerSymAttr::get(StringAttr::get(
           moduleOp->getContext(),
           Twine("__") + moduleName + Twine("__") + firrtlPort.name.strref()));
+    }
 
     // We can't lower all types, so make sure to cleanly reject them.
     if (!hwPort.type) {
@@ -961,13 +966,10 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
     // input, output, or inout.  We don't want these at the HW level.
     if (hwPort.type.isInteger(0)) {
       if (hwPort.sym && !hwPort.sym.empty()) {
-        auto d = moduleOp->emitError("zero width port ") << hwPort.name;
-        if (hadDontTouch)
-          d << " has dontTouch annotation";
-        else
-          d << " is referenced by name [" << hwPort.sym << "] (e.g. in an XMR)";
-        d << " but must be removed";
-        return d;
+        return mlir::emitError(firrtlPort.loc)
+               << "zero width port " << hwPort.name
+               << " is referenced by name [" << hwPort.sym
+               << "] (e.g. in an XMR) but must be removed";
       }
       continue;
     }
@@ -3599,14 +3601,14 @@ Value FIRRTLLowering::createArrayIndexing(Value array, Value index) {
     // Use SV attributes to annotate pragmas.
     circt::sv::setSVAttributes(
         arrayGet,
-        sv::SVAttributesAttr::get(builder.getContext(), {"cadence map_to_mux"},
-                                  /*emitAsComments=*/true));
+        sv::SVAttributeAttr::get(builder.getContext(), "cadence map_to_mux",
+                                 /*emitAsComment=*/true));
 
     auto assignOp = builder.create<sv::AssignOp>(valWire, arrayGet);
-    sv::setSVAttributes(
-        assignOp, sv::SVAttributesAttr::get(builder.getContext(),
-                                            {"synopsys infer_mux_override"},
-                                            /*emitAsComments=*/true));
+    sv::setSVAttributes(assignOp,
+                        sv::SVAttributeAttr::get(builder.getContext(),
+                                                 "synopsys infer_mux_override",
+                                                 /*emitAsComment=*/true));
     inBoundsRead = builder.create<sv::ReadInOutOp>(valWire);
   }
 

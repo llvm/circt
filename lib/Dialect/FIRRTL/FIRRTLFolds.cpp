@@ -19,6 +19,7 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -30,8 +31,8 @@ using namespace firrtl;
 static Value dropWrite(PatternRewriter &rewriter, OpResult old,
                        Value passthrough) {
   for (auto *user : llvm::make_early_inc_range(old.getUsers())) {
-    if (isa<StrictConnectOp, ConnectOp>(user)) {
-      if (user->getOperand(0) == old)
+    if (auto connect = dyn_cast<FConnectLike>(user)) {
+      if (connect.getDest() == old)
         rewriter.eraseOp(user);
     }
   }
@@ -1271,9 +1272,10 @@ public:
 
 void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.add<MuxPad, patterns::MuxSameCondLow, patterns::MuxSameCondHigh,
-              patterns::MuxSameTrue, patterns::MuxSameFalse,
-              patterns::NarrowMuxLHS, patterns::NarrowMuxRHS>(context);
+  results.add<MuxPad, patterns::MuxNot, patterns::MuxSameCondLow,
+              patterns::MuxSameCondHigh, patterns::MuxSameTrue,
+              patterns::MuxSameFalse, patterns::NarrowMuxLHS,
+              patterns::NarrowMuxRHS>(context);
 }
 
 OpFoldResult PadPrimOp::fold(FoldAdaptor adaptor) {
@@ -2004,7 +2006,7 @@ static void replacePortField(PatternRewriter &rewriter, Value port,
   auto fieldIndex = portTy.getElementIndex(name);
   assert(fieldIndex && "missing field on memory port");
 
-  for (auto *op : port.getUsers()) {
+  for (auto *op : llvm::make_early_inc_range(port.getUsers())) {
     auto portAccess = cast<SubfieldOp>(op);
     if (fieldIndex != portAccess.getFieldIndex())
       continue;
@@ -2515,7 +2517,8 @@ struct FoldRegMems : public mlir::RewritePattern {
 
     // Find the clock of the register-to-be, all write ports should share it.
     Value clock;
-    SmallVector<FConnectLike> connects;
+    SmallPtrSet<Operation *, 8> connects;
+    SmallVector<SubfieldOp> portAccesses;
     for (auto [i, port] : llvm::enumerate(mem.getResults())) {
       if (!mem.getPortAnnotation(i).empty())
         continue;
@@ -2530,11 +2533,12 @@ struct FoldRegMems : public mlir::RewritePattern {
             auto portAccess = cast<SubfieldOp>(op);
             if (fieldIndex != portAccess.getFieldIndex())
               continue;
+            portAccesses.push_back(portAccess);
             for (auto *user : portAccess->getUsers()) {
               auto conn = dyn_cast<FConnectLike>(user);
               if (!conn)
                 return failure();
-              connects.push_back(conn);
+              connects.insert(conn);
             }
           }
         }
@@ -2587,7 +2591,6 @@ struct FoldRegMems : public mlir::RewritePattern {
       return value;
     };
 
-    const unsigned readStages = info.readLatency;
     const unsigned writeStages = info.writeLatency - 1;
 
     // Traverse each port. Replace reads with the pipelined register, discarding
@@ -2600,6 +2603,7 @@ struct FoldRegMems : public mlir::RewritePattern {
 
       auto portPipeline = [&, port = port](StringRef field, unsigned stages) {
         Value value = getPortFieldValue(port, field);
+        assert(value);
         rewriter.setInsertionPointAfterValue(value);
         return pipeline(value, portClock, name + "_" + field, stages);
       };
@@ -2608,9 +2612,12 @@ struct FoldRegMems : public mlir::RewritePattern {
       case MemOp::PortKind::Debug:
         llvm_unreachable("unknown port kind");
       case MemOp::PortKind::Read: {
+        // Read ports pipeline the addr and enable signals. However, the
+        // address must be 0 for single-address memories and the enable signal
+        // is ignored, always reading out the register. Under these constraints,
+        // the read port can be replaced with the value from the register.
         rewriter.setInsertionPointAfterValue(reg);
-        Value data = pipeline(reg, portClock, "data", readStages);
-        replacePortField(rewriter, port, "data", data);
+        replacePortField(rewriter, port, "data", reg);
         break;
       }
       case MemOp::PortKind::Write: {
@@ -2623,8 +2630,7 @@ struct FoldRegMems : public mlir::RewritePattern {
       case MemOp::PortKind::ReadWrite: {
         // Always read the register into the read end.
         rewriter.setInsertionPointAfterValue(reg);
-        Value rdata = pipeline(reg, portClock, name, readStages);
-        replacePortField(rewriter, port, "rdata", rdata);
+        replacePortField(rewriter, port, "rdata", reg);
 
         // Create a write enable and pipeline stages.
         auto wdata = portPipeline("wdata", writeStages);
@@ -2674,10 +2680,10 @@ struct FoldRegMems : public mlir::RewritePattern {
     rewriter.create<StrictConnectOp>(reg.getLoc(), reg, next);
 
     // Delete the fields and their associated connects.
-    for (FConnectLike conn : connects) {
+    for (Operation *conn : connects)
       rewriter.eraseOp(conn);
-      rewriter.eraseOp(conn.getDest().getDefiningOp<SubfieldOp>());
-    }
+    for (auto portAccess : portAccesses)
+      rewriter.eraseOp(portAccess);
     rewriter.eraseOp(mem);
 
     return success();
@@ -2821,4 +2827,19 @@ void AssumeOp::getCanonicalizationPatterns(RewritePatternSet &results,
 void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                           MLIRContext *context) {
   results.add(canonicalizeImmediateVerifOp<CoverOp, /* EraseIfZero = */ true>);
+}
+
+//===----------------------------------------------------------------------===//
+// References.
+//===----------------------------------------------------------------------===//
+
+void RefResolveOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                               MLIRContext *context) {
+  results.insert<patterns::RefResolveOfSend>(context);
+}
+
+void RefSubOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
+  results.insert<patterns::RefSubOfSendVector, patterns::RefSubOfSendBundle>(
+      context);
 }

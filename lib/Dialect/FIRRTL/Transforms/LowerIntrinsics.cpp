@@ -37,7 +37,7 @@ struct LowerIntrinsicsPass : public LowerIntrinsicsBase<LowerIntrinsicsPass> {
 };
 } // end anonymous namespace
 
-static ParseResult hasNPorts(StringRef name, FExtModuleOp mod, unsigned n) {
+static ParseResult hasNPorts(StringRef name, FModuleLike mod, unsigned n) {
   if (mod.getPorts().size() != n) {
     mod.emitError(name) << " has " << mod.getPorts().size()
                         << " ports instead of " << n;
@@ -46,7 +46,7 @@ static ParseResult hasNPorts(StringRef name, FExtModuleOp mod, unsigned n) {
   return success();
 }
 
-static ParseResult namedPort(StringRef name, FExtModuleOp mod, unsigned n,
+static ParseResult namedPort(StringRef name, FModuleLike mod, unsigned n,
                              StringRef portName) {
   auto ports = mod.getPorts();
   if (n >= ports.size()) {
@@ -62,7 +62,7 @@ static ParseResult namedPort(StringRef name, FExtModuleOp mod, unsigned n,
 }
 
 template <typename T>
-static ParseResult sizedPort(StringRef name, FExtModuleOp mod, unsigned n,
+static ParseResult sizedPort(StringRef name, FModuleLike mod, unsigned n,
                              int32_t size) {
   auto ports = mod.getPorts();
   if (n >= ports.size()) {
@@ -80,7 +80,7 @@ static ParseResult sizedPort(StringRef name, FExtModuleOp mod, unsigned n,
   return success();
 }
 
-static ParseResult hasNParam(StringRef name, FExtModuleOp mod, unsigned n) {
+static ParseResult hasNParam(StringRef name, FModuleLike mod, unsigned n) {
   unsigned num = 0;
   if (mod.getParameters())
     num = mod.getParameters().size();
@@ -90,7 +90,7 @@ static ParseResult hasNParam(StringRef name, FExtModuleOp mod, unsigned n) {
   }
   return success();
 }
-static ParseResult namedParam(StringRef name, FExtModuleOp mod,
+static ParseResult namedParam(StringRef name, FModuleLike mod,
                               StringRef paramName) {
   for (auto a : mod.getParameters()) {
     auto param = a.cast<ParamDeclAttr>();
@@ -107,8 +107,16 @@ static ParseResult namedParam(StringRef name, FExtModuleOp mod,
   return failure();
 }
 
+static InstanceGraphNode *lookupInstNode(InstancePathCache &instancePathCache,
+                                         FModuleLike mod) {
+  // Seems like you should be able to use a dyn_cast here, but alas
+  if (isa<FIntModuleOp>(mod))
+    return instancePathCache.instanceGraph[cast<FIntModuleOp>(mod)];
+  return instancePathCache.instanceGraph[cast<FExtModuleOp>(mod)];
+}
+
 static bool lowerCirctSizeof(InstancePathCache &instancePathCache,
-                             FExtModuleOp mod) {
+                             FModuleLike mod) {
   auto ports = mod.getPorts();
   if (hasNPorts("circt.sizeof", mod, 2) ||
       namedPort("circt.sizeof", mod, 0, "i") ||
@@ -117,7 +125,7 @@ static bool lowerCirctSizeof(InstancePathCache &instancePathCache,
       hasNParam("circt.sizeof", mod, 0))
     return false;
 
-  for (auto *use : instancePathCache.instanceGraph[mod]->uses()) {
+  for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto inputWire = builder.create<WireOp>(ports[0].type);
@@ -130,7 +138,7 @@ static bool lowerCirctSizeof(InstancePathCache &instancePathCache,
 }
 
 static bool lowerCirctIsX(InstancePathCache &instancePathCache,
-                          FExtModuleOp mod) {
+                          FModuleLike mod) {
   auto ports = mod.getPorts();
   if (hasNPorts("circt.isaX", mod, 2) || namedPort("circt.isX", mod, 0, "i") ||
       namedPort("circt.isX", mod, 1, "found") ||
@@ -138,7 +146,7 @@ static bool lowerCirctIsX(InstancePathCache &instancePathCache,
       hasNParam("circt.isX", mod, 0))
     return false;
 
-  for (auto *use : instancePathCache.instanceGraph[mod]->uses()) {
+  for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto inputWire = builder.create<WireOp>(ports[0].type);
@@ -151,7 +159,7 @@ static bool lowerCirctIsX(InstancePathCache &instancePathCache,
 }
 
 static bool lowerCirctPlusArgTest(InstancePathCache &instancePathCache,
-                                  FExtModuleOp mod) {
+                                  FModuleLike mod) {
   if (hasNPorts("circt.plusargs.test", mod, 1) ||
       namedPort("circt.plusargs.test", mod, 0, "found") ||
       sizedPort<UIntType>("circt.plusargs.test", mod, 0, 1) ||
@@ -160,7 +168,7 @@ static bool lowerCirctPlusArgTest(InstancePathCache &instancePathCache,
     return false;
 
   auto param = mod.getParameters()[0].cast<ParamDeclAttr>();
-  for (auto *use : instancePathCache.instanceGraph[mod]->uses()) {
+  for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto newop = builder.create<PlusArgsTestIntrinsicOp>(
@@ -172,7 +180,7 @@ static bool lowerCirctPlusArgTest(InstancePathCache &instancePathCache,
 }
 
 static bool lowerCirctPlusArgValue(InstancePathCache &instancePathCache,
-                                   FExtModuleOp mod) {
+                                   FModuleLike mod) {
   if (hasNPorts("circt.plusargs.value", mod, 2) ||
       namedPort("circt.plusargs.value", mod, 0, "found") ||
       namedPort("circt.plusargs.value", mod, 1, "result") ||
@@ -183,7 +191,7 @@ static bool lowerCirctPlusArgValue(InstancePathCache &instancePathCache,
 
   auto param = mod.getParameters()[0].cast<ParamDeclAttr>();
 
-  for (auto *use : instancePathCache.instanceGraph[mod]->uses()) {
+  for (auto *use : lookupInstNode(instancePathCache, mod)->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto newop = builder.create<PlusArgsValueIntrinsicOp>(
@@ -195,7 +203,7 @@ static bool lowerCirctPlusArgValue(InstancePathCache &instancePathCache,
   return true;
 }
 
-std::pair<const char *, std::function<bool(InstancePathCache &, FExtModuleOp)>>
+std::pair<const char *, std::function<bool(InstancePathCache &, FModuleLike)>>
     intrinsics[] = {
         {"circt.sizeof", lowerCirctSizeof},
         {"circt.isX", lowerCirctIsX},
@@ -208,22 +216,34 @@ void LowerIntrinsicsPass::runOnOperation() {
   size_t numFailures = 0;
   size_t numConverted = 0;
   InstancePathCache instancePathCache(getAnalysis<InstanceGraph>());
-  for (auto op :
-       llvm::make_early_inc_range(getOperation().getOps<FExtModuleOp>())) {
-    auto anno = AnnotationSet(op).getAnnotation("circt.Intrinsic");
-    if (!anno)
+  for (auto &op : llvm::make_early_inc_range(getOperation().getOps())) {
+    if (!isa<FExtModuleOp, FIntModuleOp>(op))
       continue;
-    auto intname = anno.getMember<StringAttr>("intrinsic");
-    if (!intname) {
-      op.emitError("Intrinsic annotation with no intrinsic name");
-      ++numFailures;
-      continue;
+    StringAttr intname;
+    if (isa<FExtModuleOp>(op)) {
+      auto anno = AnnotationSet(&op).getAnnotation("circt.Intrinsic");
+      if (!anno)
+        continue;
+      intname = anno.getMember<StringAttr>("intrinsic");
+      if (!intname) {
+        op.emitError("Intrinsic annotation with no intrinsic name");
+        ++numFailures;
+        continue;
+      }
+    } else {
+      intname = cast<FIntModuleOp>(op).getIntrinsicAttr();
+      if (!intname) {
+        op.emitError("Intrinsic module with no intrinsic name");
+        ++numFailures;
+        continue;
+      }
     }
+
     bool found = false;
     for (const auto &intrinsic : intrinsics) {
       if (intname.getValue().equals(intrinsic.first)) {
         found = true;
-        if (intrinsic.second(instancePathCache, op)) {
+        if (intrinsic.second(instancePathCache, cast<FModuleLike>(op))) {
           ++numConverted;
           op.erase();
         } else {

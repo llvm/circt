@@ -499,6 +499,10 @@ circt::firrtl::getFieldName(const FieldRef &fieldRef, bool nameSafe) {
   auto type = value.getType();
   auto localID = fieldRef.getFieldID();
   while (localID) {
+    // Index directly into ref inner type.
+    if (auto refTy = dyn_cast<RefType>(type))
+      type = refTy.getType();
+
     if (auto bundleType = type.dyn_cast<BundleType>()) {
       auto index = bundleType.getIndexForFieldID(localID);
       // Add the current field string, and recurse into a subfield.
