@@ -22,7 +22,6 @@
 namespace circt {
 namespace firrtl {
 namespace detail {
-struct WidthTypeStorage;
 struct BundleTypeStorage;
 struct VectorTypeStorage;
 struct CMemoryTypeStorage;
