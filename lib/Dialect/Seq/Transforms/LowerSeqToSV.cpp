@@ -331,13 +331,15 @@ static bool areEquivalentValues(Value term, Value next) {
   return false;
 }
 
-llvm::SetVector<Value> extract(Value value) {
+static llvm::SetVector<Value> extractConditions(Value value) {
   auto andOp = value.getDefiningOp<comb::AndOp>();
+  // If the value is not AndOp with a bin flag, use it as a condition.
   if (!andOp || !andOp.getTwoState()) {
     llvm::SetVector<Value> ret;
     ret.insert(value);
     return ret;
   }
+
   return llvm::SetVector<Value>(andOp.getOperands().begin(),
                                 andOp.getOperands().end());
 }
@@ -386,14 +388,15 @@ FirRegLower::tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
     return {};
 
   // Extract common expressions among mux conditions.
-  llvm::SetVector<Value> commonConditions = extract(muxConditions.front());
+  llvm::SetVector<Value> commonConditions =
+      extractConditions(muxConditions.front());
   for (auto condition : ArrayRef(muxConditions).drop_front()) {
-    auto cond = extract(condition);
+    auto cond = extractConditions(condition);
     commonConditions.remove_if([&](auto v) { return !cond.contains(v); });
   }
   Value indexValue;
   for (auto [idx, condition] : llvm::enumerate(muxConditions)) {
-    llvm::SetVector<Value> extractedConditions = extract(condition);
+    llvm::SetVector<Value> extractedConditions = extractConditions(condition);
     // Remove common conditions and check the remaining condition is only an
     // index comparision.
     extractedConditions.remove_if(
