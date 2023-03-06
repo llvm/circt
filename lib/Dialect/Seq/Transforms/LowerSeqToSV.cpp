@@ -560,9 +560,9 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
   return svReg;
 }
 
-// Initialize registers by assingning each element recursively instead of
-// intializing entire registers. This is necessary as a workaound for verilator
-// which allocates many local variables for concat.
+// Initialize registers by assigning each element recursively instead of
+// initializing entire registers. This is necessary as a workaround for
+// verilator which allocates many local variables for concat op.
 void FirRegLower::initializeRegisterElements(Location loc, OpBuilder &builder,
                                              Value reg, Value randomSource,
                                              unsigned &pos) {
