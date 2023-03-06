@@ -32,6 +32,10 @@ def LowerSeqFIRRTLToSV: Pass<"lower-seq-firrtl-to-sv", "hw::HWModuleOp"> {
            "add-vivado-ram-address-conflict-synthesis-bug-workaround", "bool", "false",
             "Add a vivado attribute to specify a ram style of array registers">
   ];
+  let statistics = [
+    Statistic<"numSubaccessRestored", "num-subaccess-restored",
+      "Number of lhs subaccess operations restored ">
+  ];
 }
 
 def LowerSeqHLMem: Pass<"lower-seq-hlmem", "hw::HWModuleOp"> {
