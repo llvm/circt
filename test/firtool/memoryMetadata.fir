@@ -63,7 +63,7 @@ circuit test:
 ; CHECK-LABEL: module dutModule2
 ; CHECK:  dutMemory dutMemory
 
-  module hier1: 
+  module hier1:
     input clock: Clock
     input rAddr: UInt<4>
     input rEn: UInt<1>
@@ -94,7 +94,7 @@ circuit test:
 ; CHECK:  tbMemoryKind1_0 tbMemoryKind1
 
 
-  module hier2: 
+  module hier2:
     input clock: Clock
     input rAddr: UInt<4>
     input rEn: UInt<1>
@@ -111,7 +111,7 @@ circuit test:
     m.wMask <= wMask
     m.wData <= wData
 
-  module test: 
+  module test:
     input clock: Clock
     input rAddr: UInt<4>
     input rEn: UInt<1>
