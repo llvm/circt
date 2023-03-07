@@ -129,6 +129,48 @@ The current set of "lint warnings fix" Lowering Options is:
    passed to an instance port is driven by a wire. Some lint tools dislike expressions
    being inlined into input ports so this option avoids such warnings.
 
+## Recommended `LoweringOptions` by Target
+
+This section presents a list of recommended `LoweringOptions` for various tools.
+Unlike LLVM, CIRCT doesn't use target triples to specify options. Instead,
+depending on the target you may use, you'll need to manually specify the
+appropriate options.
+
+### Questa
+For Questa, we recommend using the `emitWireInPorts` option. This option is
+helpful because Questa emits warnings when ports do not have net types such as
+`wire`, `reg`, or `logic`.
+
+### Spyglass
+We suggest using two options for Spyglass: `explicitBitcast` and
+`disallowExpressionInliningInPorts`. Spyglass implements its own width rules,
+and `explicitBitcast` helps to ensure that the widths are correctly inferred.
+Additionally, `disallowExpressionInliningInPorts` helps to surpass `NoExprInPorts`
+lint warnings.
+
+### Verilator
+For Verilator, we recommend using the `locationInfoStyle=wrapInAtSquareBracket`
+and `disallowLocalVariables` options. Verilator treats comments such as `//
+verilator ..` as verilator metadata. If your file location starts with "verilator",
+the location string will be recognized as verilator metadata, but it will cause
+a complication error. The `locationInfoStyle=wrapInAtSquareBracket` option helps
+to wrap file locations in `@[..]` to avoid this issue. Additionally, Verilator
+sometimes infers automatic logic variables as latches and emits warnings if these
+variables are conditionally assigned in procedural statements, so we recommend
+using `disallowLocalVariables`.
+
+### Vivado
+For Vivado, we recommend using the `mitigateVivadoArrayIndexConstPropBug` option.
+Vivado (at least 2020.2, 2021.2, and 2022.2) has a bug in constant propagation,
+and this option helps to create a wire with the desired behavior.
+
+### Yosys
+For Yosys, we recommend using the `disallowLocalVariables` and `disallowPackedArrays`
+options. Yosys doesn't parse `automatic` variables, so `disallowLocalVariables` is
+required. Additionally, Yosys doesn't accept packed arrays, so we suggest using
+`disallowPackedArrays`.
+
+
 ### Specifying `LoweringOptions` in a front-end HDL tool
 
 The [`circt::LoweringOptions` struct itself](https://github.com/llvm/circt/blob/main/include/circt/Support/LoweringOptions.h) 
