@@ -446,6 +446,10 @@ void CreateSiFiveMetadataPass::runOnOperation() {
 
   // This pass does not modify the hierarchy.
   markAnalysesPreserved<InstanceGraph>();
+
+  // Clear pass-global state as required by MLIR pass infrastructure.
+  dutMod = {};
+  dutModuleSet.empty();
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createCreateSiFiveMetadataPass(
