@@ -161,7 +161,7 @@ static bool isDuplicatableExpression(Operation *op) {
     if (isa<ConstantOp>(indexOp))
       return true;
     if (auto read = dyn_cast<ReadInOutOp>(indexOp)) {
-      auto op = read.getInput().getDefiningOp();
+      auto *op = read.getInput().getDefiningOp();
       return isa<WireOp, LogicOp>(op);
     }
     return false;
