@@ -605,7 +605,7 @@ void LEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 OpFoldResult LEQPrimOp::fold(FoldAdaptor adaptor) {
-  bool isUnsigned = getLhs().getType().isa<UIntType>();
+  bool isUnsigned = getLhs().getType().isUnsigned();
 
   // leq(x, x) -> 1
   if (getLhs() == getRhs())
@@ -650,7 +650,7 @@ void LTPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 OpFoldResult LTPrimOp::fold(FoldAdaptor adaptor) {
-  bool isUnsigned = getLhs().getType().isa<UIntType>();
+  bool isUnsigned = getLhs().getType().isUnsigned();
 
   // lt(x, x) -> 0
   if (getLhs() == getRhs())
@@ -658,7 +658,7 @@ OpFoldResult LTPrimOp::fold(FoldAdaptor adaptor) {
 
   // lt(x, 0) -> 0 when x is unsigned
   if (auto rhsCst = getConstant(adaptor.getRhs())) {
-    if (rhsCst->isZero() && getLhs().getType().isa<UIntType>())
+    if (rhsCst->isZero() && getLhs().getType().isUnsigned())
       return getIntAttr(getType(), APInt(1, 0));
   }
 
@@ -701,7 +701,7 @@ void GEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 OpFoldResult GEQPrimOp::fold(FoldAdaptor adaptor) {
-  bool isUnsigned = getLhs().getType().isa<UIntType>();
+  bool isUnsigned = getLhs().getType().isUnsigned();
 
   // geq(x, x) -> 1
   if (getLhs() == getRhs())
@@ -709,7 +709,7 @@ OpFoldResult GEQPrimOp::fold(FoldAdaptor adaptor) {
 
   // geq(x, 0) -> 1 when x is unsigned
   if (auto rhsCst = getConstant(adaptor.getRhs())) {
-    if (rhsCst->isZero() && getLhs().getType().isa<UIntType>())
+    if (rhsCst->isZero() && isUnsigned)
       return getIntAttr(getType(), APInt(1, 1));
   }
 
@@ -752,7 +752,7 @@ void GTPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 OpFoldResult GTPrimOp::fold(FoldAdaptor adaptor) {
-  bool isUnsigned = getLhs().getType().isa<UIntType>();
+  bool isUnsigned = getLhs().getType().isUnsigned();
 
   // gt(x, x) -> 0
   if (getLhs() == getRhs())
