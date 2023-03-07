@@ -668,7 +668,7 @@ void IMConstPropPass::visitOperation(Operation *op) {
     // If the operand is an unknown value, then we generally don't want to
     // process it - we want to wait until the value is resolved to by the SCCP
     // algorithm.
-    if (operandLattice.isUnknown())
+    if (operandLattice.isUnknown() || operandLattice.isUnwritten())
       return;
 
     // Otherwise, it must be constant, invalid, or overdefined.  Translate them
