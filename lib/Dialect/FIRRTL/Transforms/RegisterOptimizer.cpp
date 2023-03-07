@@ -5,16 +5,13 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 //
-// This pass optimized registers as allowed by historic firrtl register 
+// This pass optimized registers as allowed by historic firrtl register
 // behaviors.
 //
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
-#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-register-optimizer"
