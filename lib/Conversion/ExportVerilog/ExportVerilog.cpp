@@ -160,8 +160,10 @@ static bool isDuplicatableExpression(Operation *op) {
     auto *indexOp = array.getIndex().getDefiningOp();
     if (isa<ConstantOp>(indexOp))
       return true;
-    if (auto read = dyn_cast<ReadInOutOp>(indexOp))
-      return read.getInput().getDefiningOp<WireOp>();
+    if (auto read = dyn_cast<ReadInOutOp>(indexOp)) {
+      auto op = read.getInput().getDefiningOp();
+      return isa<WireOp, LogicOp>(op);
+    }
     return false;
   }
 
@@ -2843,6 +2845,12 @@ void NameCollector::collectNames(Block &block) {
       continue;
 
     bool isExpr = isVerilogExpression(&op);
+    if (isExpr &&
+        !isExpressionEmittedInline(&op, moduleEmitter.state.options)) {
+      llvm::errs() << "WTF\n";
+      op.dump();
+      abort();
+    }
     assert((!isExpr ||
             isExpressionEmittedInline(&op, moduleEmitter.state.options)) &&
            "If 'op' is a verilog expression, the expression must be inlinable. "
