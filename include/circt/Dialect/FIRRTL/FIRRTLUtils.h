@@ -73,7 +73,7 @@ static bool isModuleScopedDrivenBy(Value val, bool lookThroughWires,
 using WalkDriverCallback =
     llvm::function_ref<bool(const FieldRef &dst, const FieldRef &src)>;
 bool walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
-                 bool lookTWalkDriverCallbackhroughNodes, bool lookThroughCasts,
+                 bool lookThroughNodes, bool lookThroughCasts,
                  WalkDriverCallback callback);
 
 /// Get the FieldRef from a value.  This will travel backwards to through the

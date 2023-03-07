@@ -241,12 +241,12 @@ Value circt::firrtl::getModuleScopedDriver(Value val, bool lookThroughWires,
   return val;
 }
 
-bool circt::firrtl::walkDrivers(FIRRTLBaseValue val, bool lookThroughWires,
+bool circt::firrtl::walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
                                 bool lookThroughNodes, bool lookThroughCasts,
                                 WalkDriverCallback callback) {
   // TODO: what do we want to happen when there are flips in the type? Do we
   // want to filter out fields which have reverse flow?
-  assert(val.getType().isPassive() && "this code was not tested with flips");
+  assert(value.getType().isPassive() && "this code was not tested with flips");
 
   // This method keeps a stack of wires (or ports) and subfields of those that
   // it still has to process.  It keeps track of which fields in the
@@ -288,7 +288,7 @@ bool circt::firrtl::walkDrivers(FIRRTLBaseValue val, bool lookThroughWires,
 
   // Create an initial fieldRef from the input value.  As a starting state, the
   // dst and src are the same value.
-  auto original = getFieldRefFromValue(val);
+  auto original = getFieldRefFromValue(value);
   auto fieldRef = original;
 
   // This loop wraps the worklist, which processes wires. Initially the worklist
