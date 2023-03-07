@@ -773,6 +773,8 @@ static LogicalResult processBuffer(
   if (!disableOptimization) {
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        circt::firrtl::createRegisterOptimizerPass());
     if (!disableIMDCE)
       pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMDeadCodeElimPass());
   }

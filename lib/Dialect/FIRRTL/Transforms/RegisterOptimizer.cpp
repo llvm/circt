@@ -1,23 +1,12 @@
-//===- MergeConnections.cpp - Merge expanded connections --------*- C++ -*-===//
+//===- RegisterOptimizer.cpp - Register Optimizer ---------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 //
-// This pass merges expanded connections into one connection.
-// LowerTypes fully expands aggregate connections even when semantically
-// not necessary to expand because it is required for ExpandWhen.
-//
-// More specifically this pass folds the following patterns:
-//   %dest(0) <= v0
-//   %dest(1) <= v1
-//   ...
-//   %dest(n) <= vn
-// into
-//   %dest <= {vn, .., v1, v0}
-// Also if v0, v1, .., vn are subfield op like %a(0), %a(1), ..., a(n), then we
-// merge entire connections into %dest <= %a.
+// This pass optimized registers as allowed by historic firrtl register 
+// behaviors.
 //
 //===----------------------------------------------------------------------===//
 
