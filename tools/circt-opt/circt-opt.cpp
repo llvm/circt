@@ -61,6 +61,8 @@ int main(int argc, char **argv) {
   mlir::registerInlinerPass();
   mlir::registerCanonicalizerPass();
   mlir::registerSymbolDCEPass();
+  llvm::cl::AddExtraVersionPrinter(
+      [](llvm::raw_ostream &os) { os << circt::getCirctVersion() << '\n'; });
 
   // Register test passes
   circt::test::registerAnalysisTestPasses();
