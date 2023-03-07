@@ -203,9 +203,7 @@ static bool isNotSubAccess(Operation *op) {
   if (!sao)
     return true;
   ConstantOp arg = dyn_cast_or_null<ConstantOp>(sao.getIndex().getDefiningOp());
-  if (arg && sao.getInput().getType().getNumElements() != 0)
-    return true;
-  return false;
+  return arg && sao.getInput().getType().getNumElements() != 0;
 }
 
 /// Look through and collect subfields leading to a subaccess.
