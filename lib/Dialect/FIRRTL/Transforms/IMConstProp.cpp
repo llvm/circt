@@ -595,13 +595,12 @@ void IMConstPropPass::visitRegResetOp(RegResetOp regReset) {
 
   // The reset value may be known - if so, merge it in if the enable is greater
   // than invalid.
-  auto srcValue = getExtendedLatticeValue(
-      regReset.getResetValue(), regReset.getType(),
-      /*allowTruncation=*/true);
-  auto enable = getExtendedLatticeValue(
-      regReset.getResetSignal(),
-      regReset.getResetSignal().getType(),
-      /*allowTruncation=*/true);
+  auto srcValue =
+      getExtendedLatticeValue(regReset.getResetValue(), regReset.getType(),
+                              /*allowTruncation=*/true);
+  auto enable = getExtendedLatticeValue(regReset.getResetSignal(),
+                                        regReset.getResetSignal().getType(),
+                                        /*allowTruncation=*/true);
   if (enable.isOverdefined() ||
       (enable.isConstant() && !enable.getConstant().getValue().isZero()))
     mergeLatticeValue(regReset, srcValue);

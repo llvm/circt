@@ -815,8 +815,7 @@ LogicalResult EQPrimOp::canonicalize(EQPrimOp op, PatternRewriter &rewriter) {
   return canonicalizePrimOp(
       op, rewriter, [&](ArrayRef<Attribute> operands) -> OpFoldResult {
         if (auto rhsCst = getConstant(operands[1])) {
-          auto width =
-              op.getLhs().getType().getBitWidthOrSentinel();
+          auto width = op.getLhs().getType().getBitWidthOrSentinel();
 
           // eq(x, 0) ->  not(x) when x is 1 bit.
           if (rhsCst->isZero() && op.getLhs().getType() == op.getType() &&
@@ -867,8 +866,7 @@ LogicalResult NEQPrimOp::canonicalize(NEQPrimOp op, PatternRewriter &rewriter) {
   return canonicalizePrimOp(
       op, rewriter, [&](ArrayRef<Attribute> operands) -> OpFoldResult {
         if (auto rhsCst = getConstant(operands[1])) {
-          auto width =
-              op.getLhs().getType().getBitWidthOrSentinel();
+          auto width = op.getLhs().getType().getBitWidthOrSentinel();
 
           // neq(x, 1) -> not(x) when x is 1 bit
           if (rhsCst->isAllOnes() && op.getLhs().getType() == op.getType() &&
@@ -1247,8 +1245,7 @@ public:
       return failure();
 
     auto pad = [&](FIRRTLBaseValue input) -> Value {
-      auto inputWidth = input.getType()
-                            .getBitWidthOrSentinel();
+      auto inputWidth = input.getType().getBitWidthOrSentinel();
       if (inputWidth < 0 || width == inputWidth)
         return input;
       return rewriter
@@ -1359,8 +1356,7 @@ OpFoldResult ShrPrimOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ShrPrimOp::canonicalize(ShrPrimOp op, PatternRewriter &rewriter) {
-  auto inputWidth =
-      op.getInput().getType().getWidthOrSentinel();
+  auto inputWidth = op.getInput().getType().getWidthOrSentinel();
   if (inputWidth <= 0)
     return failure();
 
@@ -1383,8 +1379,7 @@ LogicalResult ShrPrimOp::canonicalize(ShrPrimOp op, PatternRewriter &rewriter) {
 
 LogicalResult HeadPrimOp::canonicalize(HeadPrimOp op,
                                        PatternRewriter &rewriter) {
-  auto inputWidth =
-      op.getInput().getType().getWidthOrSentinel();
+  auto inputWidth = op.getInput().getType().getWidthOrSentinel();
   if (inputWidth <= 0)
     return failure();
 
@@ -1399,9 +1394,7 @@ LogicalResult HeadPrimOp::canonicalize(HeadPrimOp op,
 OpFoldResult HeadPrimOp::fold(FoldAdaptor adaptor) {
   if (hasKnownWidthIntTypes(*this))
     if (auto cst = getConstant(adaptor.getInput())) {
-      int shiftAmount =
-          getInput().getType().getWidthOrSentinel() -
-          getAmount();
+      int shiftAmount = getInput().getType().getWidthOrSentinel() - getAmount();
       return getIntAttr(getType(), cst->lshr(shiftAmount).trunc(getAmount()));
     }
 
@@ -1417,8 +1410,7 @@ OpFoldResult TailPrimOp::fold(FoldAdaptor adaptor) {
 
 LogicalResult TailPrimOp::canonicalize(TailPrimOp op,
                                        PatternRewriter &rewriter) {
-  auto inputWidth =
-      op.getInput().getType().getWidthOrSentinel();
+  auto inputWidth = op.getInput().getType().getWidthOrSentinel();
   if (inputWidth <= 0)
     return failure();
 

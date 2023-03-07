@@ -374,7 +374,8 @@ static Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
                                    const AnnoPathValue &moduleTarget,
                                    const AnnoPathValue &target,
                                    StringAttr internalPathAttr,
-                                   FIRRTLBaseType targetType, ApplyState &state) {
+                                   FIRRTLBaseType targetType,
+                                   ApplyState &state) {
   Value sendVal;
   FModuleLike mod = cast<FModuleLike>(moduleTarget.ref.getOp());
   InstanceOp modInstance;

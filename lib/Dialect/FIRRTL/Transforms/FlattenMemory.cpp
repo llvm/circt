@@ -142,8 +142,8 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
           Value realOldField = oldField;
           if (rType.getElement(fieldIndex).isFlip) {
             // Cast the memory read data from flat type to aggregate.
-            auto castField = builder.createOrFold<BitCastOp>(
-                oldField.getType(), newField);
+            auto castField =
+                builder.createOrFold<BitCastOp>(oldField.getType(), newField);
             // Write the aggregate read data.
             emitConnect(builder, realOldField, castField);
           } else {
@@ -177,10 +177,9 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
             }
             // Now set the mask or write data.
             // Ensure that the types match.
-            emitConnect(
-                builder, newField,
-                builder.createOrFold<BitCastOp>(
-                    newField.getType(), realOldField));
+            emitConnect(builder, newField,
+                        builder.createOrFold<BitCastOp>(newField.getType(),
+                                                        realOldField));
           }
         }
       }

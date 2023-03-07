@@ -125,7 +125,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             // is assumed to be "Memory". Note that MemOp creates RefType
             // without a RefSend.
             for (const auto &res : llvm::enumerate(mem.getResults()))
-              if (mem.getResult(res.index()) .getType() .isa<RefType>()) {
+              if (mem.getResult(res.index()).getType().isa<RefType>()) {
                 auto inRef = getInnerRefTo(mem);
                 auto ind = addReachingSendsEntry(res.value(), inRef);
                 xmrPathSuffix[ind] = "Memory";

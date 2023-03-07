@@ -2674,8 +2674,7 @@ void SubfieldOp::print(::mlir::OpAsmPrinter &printer) {
 }
 
 LogicalResult SubfieldOp::verify() {
-  if (getFieldIndex() >=
-      getInput().getType().getNumElements())
+  if (getFieldIndex() >= getInput().getType().getNumElements())
     return emitOpError("subfield element index is greater than the number "
                        "of fields in the bundle type");
   return success();
@@ -3940,7 +3939,8 @@ void RefSubOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
                                      ArrayRef<NamedAttribute> attrs,
                                      std::optional<Location> loc) {
-  // TODO: Don't cast without checking, we're careful to check in all the others.
+  // TODO: Don't cast without checking, we're careful to check in all the
+  // others.
   auto inType = operands[0].getType().cast<RefType>().getType();
   auto fieldIdx =
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
