@@ -95,7 +95,7 @@ FieldRef getFieldRefFromValue(Value value);
 std::pair<std::string, bool> getFieldName(const FieldRef &fieldRef,
                                           bool nameSafe = false);
 
-FIRRTLBaseValue getValueByFieldID(ImplicitLocOpBuilder builder, FIRRTLBaseValue value,
+Value getValueByFieldID(ImplicitLocOpBuilder builder, Value value,
                         unsigned fieldID);
 
 //===----------------------------------------------------------------------===//

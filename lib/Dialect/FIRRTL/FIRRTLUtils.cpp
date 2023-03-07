@@ -537,8 +537,8 @@ circt::firrtl::getFieldName(const FieldRef &fieldRef, bool nameSafe) {
 /// the value itself, it returns it unchanged. If it is targeting a single field
 /// in a aggregate value, such as a bundle or vector, this will create the
 /// necessary subaccesses to get the value.
-FIRRTLBaseValue circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
-                                       FIRRTLBaseValue value, unsigned fieldID) {
+Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
+                                       Value value, unsigned fieldID) {
   // When the fieldID hits 0, we've found the target value.
   while (fieldID != 0) {
     auto type = value.getType();
