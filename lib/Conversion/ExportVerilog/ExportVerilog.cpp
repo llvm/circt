@@ -2845,12 +2845,6 @@ void NameCollector::collectNames(Block &block) {
       continue;
 
     bool isExpr = isVerilogExpression(&op);
-    if (isExpr &&
-        !isExpressionEmittedInline(&op, moduleEmitter.state.options)) {
-      llvm::errs() << "WTF\n";
-      op.dump();
-      abort();
-    }
     assert((!isExpr ||
             isExpressionEmittedInline(&op, moduleEmitter.state.options)) &&
            "If 'op' is a verilog expression, the expression must be inlinable. "
