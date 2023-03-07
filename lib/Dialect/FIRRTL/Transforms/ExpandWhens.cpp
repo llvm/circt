@@ -293,7 +293,7 @@ public:
   void visitDecl(MemOp op) {
     // Track any memory inputs which require connections.
     for (auto result : op.getResults())
-      if (!result.getType().cast<FIRRTLType>().isa<RefType>())
+      if (!result.getType().isa<RefType>())
         declareSinks(result, Flow::Sink);
   }
 

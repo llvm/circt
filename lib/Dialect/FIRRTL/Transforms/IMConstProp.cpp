@@ -440,8 +440,8 @@ void IMConstPropPass::markWireOrRegOp(Operation *wireOrReg) {
   // to handle, mark it as overdefined.
   // TODO: Eventually add a field-sensitive model.
   auto resultValue = wireOrReg->getResult(0);
-  auto type = resultValue.getType().dyn_cast<FIRRTLType>();
-  if (!type || !type.cast<FIRRTLBaseType>().getPassiveType().isGround())
+  auto type = resultValue.getType().dyn_cast<FIRRTLBaseType>();
+  if (!type || !type.getPassiveType().isGround())
     return markOverdefined(resultValue);
 
   if (hasDontTouch(wireOrReg))
@@ -595,13 +595,12 @@ void IMConstPropPass::visitRegResetOp(RegResetOp regReset) {
 
   // The reset value may be known - if so, merge it in if the enable is greater
   // than invalid.
-  auto srcValue = getExtendedLatticeValue(
-      regReset.getResetValue(), regReset.getType().cast<FIRRTLBaseType>(),
-      /*allowTruncation=*/true);
-  auto enable = getExtendedLatticeValue(
-      regReset.getResetSignal(),
-      regReset.getResetSignal().getType().cast<FIRRTLBaseType>(),
-      /*allowTruncation=*/true);
+  auto srcValue =
+      getExtendedLatticeValue(regReset.getResetValue(), regReset.getType(),
+                              /*allowTruncation=*/true);
+  auto enable = getExtendedLatticeValue(regReset.getResetSignal(),
+                                        regReset.getResetSignal().getType(),
+                                        /*allowTruncation=*/true);
   if (enable.isOverdefined() ||
       (enable.isConstant() && !enable.getConstant().getValue().isZero()))
     mergeLatticeValue(regReset, srcValue);

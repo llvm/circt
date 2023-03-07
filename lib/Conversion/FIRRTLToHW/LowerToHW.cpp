@@ -1325,12 +1325,10 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
 static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
                                                    StringRef field) {
   SmallVector<SubfieldOp> accesses;
-  for (auto op : structValue.getUsers()) {
+  for (auto *op : structValue.getUsers()) {
     assert(isa<SubfieldOp>(op));
     auto fieldAccess = cast<SubfieldOp>(op);
-    auto elemIndex =
-        fieldAccess.getInput().getType().cast<BundleType>().getElementIndex(
-            field);
+    auto elemIndex = fieldAccess.getInput().getType().getElementIndex(field);
     if (elemIndex && *elemIndex == fieldAccess.getFieldIndex())
       accesses.push_back(fieldAccess);
   }

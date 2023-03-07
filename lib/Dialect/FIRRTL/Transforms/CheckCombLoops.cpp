@@ -263,7 +263,7 @@ public:
             auto fieldIndex = sub.getAccessedField().getFieldID();
             if (memPorts.contains(sub.getInput())) {
               auto memPort = sub.getInput();
-              auto type = memPort.getType().cast<BundleType>();
+              auto type = memPort.getType();
               auto enableFieldId =
                   type.getFieldID((unsigned)ReadPortSubfield::en);
               auto dataFieldId =
@@ -309,7 +309,7 @@ public:
             }
           })
           .Case<SubaccessOp>([&](SubaccessOp sub) {
-            auto vecType = sub.getInput().getType().cast<FVectorType>();
+            auto vecType = sub.getInput().getType();
             auto res = sub.getResult();
             bool isValid = false;
             SmallVector<FieldRef, 4> fields;
