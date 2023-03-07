@@ -106,7 +106,7 @@ void WireDFTPass::runOnOperation() {
 
   // This is the signal marked as the DFT enable, a 1-bit signal to be wired to
   // the EICG modules.
-  Value enableSignal;
+  FIRRTLValue enableSignal;
   FModuleOp enableModule;
 
   // Walk all modules looking for the DUT module and the annotated enable

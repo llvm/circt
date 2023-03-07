@@ -125,10 +125,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             // is assumed to be "Memory". Note that MemOp creates RefType
             // without a RefSend.
             for (const auto &res : llvm::enumerate(mem.getResults()))
-              if (mem.getResult(res.index())
-                      .getType()
-                      .cast<FIRRTLType>()
-                      .isa<RefType>()) {
+              if (mem.getResult(res.index()) .getType() .isa<RefType>()) {
                 auto inRef = getInnerRefTo(mem);
                 auto ind = addReachingSendsEntry(res.value(), inRef);
                 xmrPathSuffix[ind] = "Memory";
@@ -320,10 +317,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       size_t pathsIndex = 0;
       auto numPorts = inst.getNumResults();
       for (const auto &res : llvm::enumerate(inst.getResults())) {
-        if (!inst.getResult(res.index())
-                 .getType()
-                 .cast<FIRRTLType>()
-                 .isa<RefType>())
+        if (!isa<RefType>(inst.getResult(res.index()).getType()))
           continue;
 
         auto inRef = getInnerRefTo(inst);
@@ -480,10 +474,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         SmallVector<Attribute, 4> portAnnotations;
         SmallVector<Value, 4> oldResults;
         for (const auto &res : llvm::enumerate(mem.getResults())) {
-          if (mem.getResult(res.index())
-                  .getType()
-                  .cast<FIRRTLType>()
-                  .isa<RefType>())
+          if (isa<RefType>(mem.getResult(res.index()).getType()))
             continue;
           resultNames.push_back(mem.getPortName(res.index()));
           resultTypes.push_back(res.value().getType());

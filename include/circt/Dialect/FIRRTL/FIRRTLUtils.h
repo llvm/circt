@@ -72,7 +72,7 @@ static bool isModuleScopedDrivenBy(Value val, bool lookThroughWires,
 /// if walking was broken, and true otherwise.
 using WalkDriverCallback =
     llvm::function_ref<bool(const FieldRef &dst, const FieldRef &src)>;
-bool walkDrivers(Value value, bool lookThroughWires,
+bool walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
                  bool lookTWalkDriverCallbackhroughNodes, bool lookThroughCasts,
                  WalkDriverCallback callback);
 
@@ -95,7 +95,7 @@ FieldRef getFieldRefFromValue(Value value);
 std::pair<std::string, bool> getFieldName(const FieldRef &fieldRef,
                                           bool nameSafe = false);
 
-Value getValueByFieldID(ImplicitLocOpBuilder builder, Value value,
+FIRRTLBaseValue getValueByFieldID(ImplicitLocOpBuilder builder, FIRRTLBaseValue value,
                         unsigned fieldID);
 
 //===----------------------------------------------------------------------===//
