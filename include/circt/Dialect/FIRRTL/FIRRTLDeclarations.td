@@ -256,7 +256,7 @@ def NodeOp : ReferableDeclOp<"node",
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
-    $input `` custom<ImplicitSSAName>(attr-dict) `:` qualified(type($input))
+    $input `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` qualified(type($input))
   }];
 
   let hasCanonicalizer = true;
@@ -300,7 +300,7 @@ def RegOp : ReferableDeclOp<"reg"> {
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
-    operands `` custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
+    operands `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` qualified(type($result))
   }];
   let hasCanonicalizeMethod = true;
 }
@@ -346,7 +346,7 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
-    operands `` custom<ImplicitSSAName>(attr-dict)
+    operands `` custom<FIRRTLImplicitSSAName>(attr-dict)
     `:` qualified(type($resetSignal)) `,` qualified(type($resetValue)) `,` qualified(type($result))
   }];
 
@@ -390,7 +390,7 @@ def WireOp : ReferableDeclOp<"wire"> {
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind) ``
-    custom<ImplicitSSAName>(attr-dict) `:`
+    custom<FIRRTLImplicitSSAName>(attr-dict) `:`
     qualified(type($result))
   }];
 }

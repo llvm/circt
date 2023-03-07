@@ -19,6 +19,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -3660,46 +3661,20 @@ static void printNameKind(OpAsmPrinter &p, Operation *op,
 // ImplicitSSAName Custom Directive
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseImplicitSSAName(OpAsmParser &parser,
-                                        NamedAttrList &resultAttrs) {
+static ParseResult parseFIRRTLImplicitSSAName(OpAsmParser &parser,
+                                              NamedAttrList &resultAttrs) {
   if (parseElideAnnotations(parser, resultAttrs))
     return failure();
-
-  // If the attribute dictionary contains no 'name' attribute, infer it from
-  // the SSA name (if specified).
-  if (resultAttrs.get("name"))
-    return success();
-
-  auto resultName = parser.getResultName(0).first;
-  if (!resultName.empty() && isdigit(resultName[0]))
-    resultName = "";
-  auto nameAttr = parser.getBuilder().getStringAttr(resultName);
-  auto *context = parser.getBuilder().getContext();
-  resultAttrs.push_back({StringAttr::get(context, "name"), nameAttr});
+  inferImplicitSSAName(parser, resultAttrs);
   return success();
 }
 
-static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
-                                 DictionaryAttr attr,
-                                 ArrayRef<StringRef> extraElides = {}) {
-  // List of attributes to elide when printing the dictionary.
-  SmallVector<StringRef, 2> elides(extraElides.begin(), extraElides.end());
+static void printFIRRTLImplicitSSAName(OpAsmPrinter &p, Operation *op,
+                                       DictionaryAttr attrs) {
+  SmallVector<StringRef, 2> elides;
   elides.push_back(hw::InnerName::getInnerNameAttrName());
-
-  // Note that we only need to print the "name" attribute if the asmprinter
-  // result name disagrees with it.  This can happen in strange cases, e.g.
-  // when there are conflicts.
-  SmallString<32> resultNameStr;
-  llvm::raw_svector_ostream tmpStream(resultNameStr);
-  p.printOperand(op->getResult(0), tmpStream);
-  auto actualName = tmpStream.str().drop_front();
-  auto expectedName = op->getAttrOfType<StringAttr>("name").getValue();
-  // Anonymous names are printed as digits, which is fine.
-  if (actualName == expectedName ||
-      (expectedName.empty() && isdigit(actualName[0])))
-    elides.push_back("name");
-
-  printElideAnnotations(p, op, attr, elides);
+  elideImplicitSSAName(p, op, attrs, elides);
+  printElideAnnotations(p, op, attrs, elides);
 }
 
 //===----------------------------------------------------------------------===//
