@@ -92,7 +92,8 @@ static void emitStrictConnect(ImplicitLocOpBuilder &builder, Value dst,
     llvm::errs() << "Uninferred connect\n";
     dst.dump();
     src.dump();
-    builder.create<ConnectOp>(dst, src);
+    auto a = builder.create<ConnectOp>(dst, src);
+    a.dump();
     return;
   }
 
