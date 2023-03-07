@@ -582,7 +582,8 @@ void IMConstPropPass::visitOperation(Operation *op) {
   if (auto nodeOp = dyn_cast<NodeOp>(op))
     return visitNode(nodeOp);
 
-  // The clock operand of regop changing doesn't change its result value.  All other registers are over-defined.
+  // The clock operand of regop changing doesn't change its result value.  All
+  // other registers are over-defined.
   if (isa<RegOp, RegResetOp>(op))
     return;
   // TODO: Handle 'when' operations.
@@ -605,7 +606,7 @@ void IMConstPropPass::visitOperation(Operation *op) {
     // process it - we want to wait until the value is resolved to by the SCCP
     // algorithm.
     if (operandLattice.isUnknown())
-        hasUnknown = true;
+      hasUnknown = true;
 
     // Otherwise, it must be constant, invalid, or overdefined.  Translate them
     // into attributes that the fold hook can look at.
