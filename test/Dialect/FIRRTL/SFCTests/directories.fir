@@ -1,9 +1,10 @@
-; RUN: firtool %s -annotation-file %s.sitestblackboxes.anno.json | FileCheck %s -check-prefixes=CHECK,SITEST_NODUT
-; RUN: firtool %s -annotation-file %s.sitestblackboxes.anno.json -annotation-file %s.markdut.anno.json | FileCheck %s -check-prefixes=CHECK,SITEST_DUT
+; RUN: firtool %s -disable-all-randomization -disable-opt -annotation-file %s.sitestblackboxes.anno.json | FileCheck %s -check-prefixes=CHECK,SITEST_NODUT
+; RUN: firtool %s -disable-all-randomization -disable-opt -annotation-file %s.sitestblackboxes.anno.json -annotation-file %s.markdut.anno.json | FileCheck %s -check-prefixes=CHECK,SITEST_DUT
 ; RUN: firtool %s -repl-seq-mem -repl-seq-mem-file=mems.conf -disable-all-randomization -disable-opt | FileCheck %s -check-prefixes=CHECK,MEMS_NODUT
 ; RUN: firtool %s -repl-seq-mem -repl-seq-mem-file=mems.conf -disable-all-randomization -disable-opt -annotation-file %s.markdut.anno.json | FileCheck %s -check-prefixes=CHECK,MEMS_DUT
+; RUN: firtool %s -disable-all-randomization -disable-opt -annotation-file %s.memtoregofvec.anno.json | FileCheck %s -check-prefixes=CHECK,MEMTOREG_NODUT
+; RUN: firtool %s -disable-all-randomization -disable-opt -annotation-file %s.memtoregofvec.anno.json -annotation-file %s.markdut.anno.json | FileCheck %s -check-prefixes=CHECK,MEMTOREG_DUT
 
-; CHECK: module Foo
 circuit TestHarness:
   ; Foo* are instantiated only by the TestHarness
   module Foo:
@@ -17,7 +18,17 @@ circuit TestHarness:
       write-latency => 1
       read-under-write => undefined
 
+    mem foo_combmem :
+      data-type => UInt<8>
+      depth => 1
+      reader => r
+      writer => w
+      read-latency => 0
+      write-latency => 1
+      read-under-write => undefined
+
     foo_m is invalid
+    foo_combmem is invalid
 
   extmodule Foo_BlackBox:
     defname = Foo_BlackBox
@@ -34,7 +45,17 @@ circuit TestHarness:
       write-latency => 1
       read-under-write => undefined
 
+    mem bar_combmem :
+      data-type => UInt<8>
+      depth => 2
+      reader => r
+      writer => w
+      read-latency => 0
+      write-latency => 1
+      read-under-write => undefined
+
     bar_m is invalid
+    bar_combmem is invalid
 
   extmodule Bar_BlackBox:
     defname = Bar_BlackBox
@@ -51,7 +72,17 @@ circuit TestHarness:
       write-latency => 1
       read-under-write => undefined
 
+    mem baz_combmem :
+      data-type => UInt<8>
+      depth => 3
+      reader => r
+      writer => w
+      read-latency => 0
+      write-latency => 1
+      read-under-write => undefined
+
     baz_m is invalid
+    baz_combmem is invalid
 
   extmodule Baz_BlackBox:
     defname = Baz_BlackBox
@@ -74,6 +105,21 @@ circuit TestHarness:
     inst baz of Baz
     inst baz_bbox of Baz_BlackBox
 
+
+; CHECK:            module Foo()
+; MEMTOREG_DUT-NOT:   reg [7:0] foo_combmem
+; MEMTOREG_NODUT:     reg [7:0] foo_combmem
+; CHECK:            endmodule
+
+; CHECK:            module Bar()
+; MEMTOREG_DUT:       reg [7:0] bar_combmem
+; MEMTOREG_NODUT:     reg [7:0] bar_combmem
+; CHECK:            endmodule
+
+; CHECK:            module Baz()
+; MEMTOREG_DUT:       reg [7:0] baz_combmem
+; MEMTOREG_NODUT:     reg [7:0] baz_combmem
+; CHECK:            endmodule
 
 ; SITEST_DUT:       FILE "testbench.sitest.json"
 ; SITEST-DUT-NOT:   FILE

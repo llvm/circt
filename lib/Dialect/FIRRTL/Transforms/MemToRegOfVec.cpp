@@ -52,6 +52,9 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
       llvm::for_each(llvm::depth_first(node), [&](hw::InstanceGraphNode *node) {
         dutModuleSet.insert(node->getModule());
       });
+    } else {
+      auto mods = circtOp.getOps<FModuleOp>();
+      dutModuleSet.insert(mods.begin(), mods.end());
     }
 
     mlir::parallelForEach(circtOp.getContext(), dutModuleSet,
