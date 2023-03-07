@@ -20,7 +20,7 @@ ParseResult circt::parseImplicitSSAName(OpAsmParser &parser,
 }
 
 bool circt::inferImplicitSSAName(OpAsmParser &parser, NamedAttrList &attrs) {
-  // Don't do anythign if a `name` attribute is explicitly provided.
+  // Don't do anything if a `name` attribute is explicitly provided.
   if (attrs.get("name"))
     return false;
 
