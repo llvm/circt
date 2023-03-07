@@ -6,8 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Utilities for file system path handling, supplementing the ones from
-// llvm::sys::path.
+// Utilities for JSON-to-Attribute conversion.
 //
 //===----------------------------------------------------------------------===//
 
