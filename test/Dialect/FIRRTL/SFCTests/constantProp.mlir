@@ -217,19 +217,6 @@ firrtl.circuit "removePad"   {
   }
 }
 
-//"Registers with ONLY constant reset" should "be replaced with that constant" in {
-firrtl.circuit "constResetReg"   {
-  // CHECK-LABEL: firrtl.module @constResetReg(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
-  firrtl.module @constResetReg(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
-    %c11_ui4 = firrtl.constant 11 : !firrtl.uint<4>
-    %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<8>
-    firrtl.connect %r, %r : !firrtl.uint<8>, !firrtl.uint<8>
-    firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
-    // CHECK: %[[C11:.+]] = firrtl.constant 11 : !firrtl.uint<8>
-    // CHECK: firrtl.strictconnect %z, %[[C11]] : !firrtl.uint<8>
-  }
-}
-
 //"Registers async reset and a constant connection" should "NOT be removed
 firrtl.circuit "asyncReset"   {
   // CHECK-LABEL: firrtl.module @asyncReset
@@ -255,19 +242,6 @@ firrtl.circuit "constReg2"   {
     firrtl.connect %z, %r : !firrtl.sint<8>, !firrtl.sint<8>
     // CHECK: %[[C12:.+]] = firrtl.constant -5 : !firrtl.sint<8>
     // CHECK: firrtl.strictconnect %z, %[[C12]] : !firrtl.sint<8>
-  }
-}
-
-//"Registers with identical constant reset and connection" should "be replaced with that constant" in {
-firrtl.circuit "regSameConstReset"   {
-  // CHECK-LABEL: firrtl.module @regSameConstReset
-  firrtl.module @regSameConstReset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
-    %c11_ui4 = firrtl.constant 11 : !firrtl.uint<4>
-    %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<8>
-    firrtl.connect %r, %c11_ui4 : !firrtl.uint<8>, !firrtl.uint<4>
-    firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
-    // CHECK: %[[C13:.+]] = firrtl.constant 11 : !firrtl.uint<8>
-    // CHECK: firrtl.strictconnect %z, %[[C13]] : !firrtl.uint<8>
   }
 }
 

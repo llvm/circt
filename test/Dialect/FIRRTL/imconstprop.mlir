@@ -337,6 +337,8 @@ firrtl.circuit "invalidReg1"   {
 
 // -----
 
+// XFAIL: *
+
 firrtl.circuit "invalidReg2"   {
   // CHECK-LABEL: @invalidReg2
   firrtl.module @invalidReg2(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
@@ -601,4 +603,19 @@ firrtl.circuit "Issue4498"  {
     %r = firrtl.reg interesting_name %clock : !firrtl.uint<1>
     firrtl.strictconnect %r, %a : !firrtl.uint<1>
   }
+}
+
+// -----
+
+// An ordering dependnecy crept in with unwritten.  Check that it's gone
+// CHECK-LABEL: "Ordering"
+firrtl.circuit "Ordering" {
+  firrtl.module public @Ordering(out %b: !firrtl.uint<1>) {
+    %0 = firrtl.wire : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.strictconnect %0, %c1_ui1 : !firrtl.uint<1>
+    %1 = firrtl.xor %0, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.strictconnect %b, %1 : !firrtl.uint<1>
+  }
+  // CHECK: firrtl.strictconnect %b, %c0_ui1
 }

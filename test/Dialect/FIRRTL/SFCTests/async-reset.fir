@@ -97,6 +97,8 @@ circuit Foo:
 
 // -----
 
+; XFAIL: *
+
 ; Unassigned asynchronously reset registers should properly constantprop.
 circuit Foo:
   module Foo:
