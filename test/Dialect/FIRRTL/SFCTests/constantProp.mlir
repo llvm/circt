@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-imconstprop), canonicalize{top-down region-simplify})'  %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-imconstprop), canonicalize{top-down region-simplify}, firrtl.circuit(firrtl.module(firrtl-register-optimizer)))'  %s | FileCheck %s
 // github.com/chipsalliance/firrtl: test/scala/firrtlTests/ConstantPropagationTests.scala
 
 //propagate constant inputs  
@@ -369,5 +369,39 @@ firrtl.circuit "constPropRegMux"   {
   firrtl.connect %out, %2 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: %[[C23:.+]] = firrtl.constant 1
     // CHECK: firrtl.strictconnect %out, %[[C23]]
+  }
+}
+
+// Registers with no reset or connections" should "be replaced with constant zero
+firrtl.circuit "uninitSelfReg"   {
+  // CHECK-LABEL: firrtl.module @uninitSelfReg
+  firrtl.module @uninitSelfReg(in %clock: !firrtl.clock, out %z: !firrtl.uint<8>) {
+    %r = firrtl.reg %clock  :  !firrtl.uint<8>
+    firrtl.strictconnect %r, %r : !firrtl.uint<8>
+    firrtl.strictconnect %z, %r : !firrtl.uint<8>
+    // CHECK: %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8>
+    // CHECK: firrtl.strictconnect %z, %invalid_ui8 : !firrtl.uint<8>
+  }
+
+//"Registers with ONLY constant reset" should "be replaced with that constant" in {
+  // CHECK-LABEL: firrtl.module @constResetReg(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
+  firrtl.module @constResetReg(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
+    %c11_ui4 = firrtl.constant 11 : !firrtl.uint<8>
+    %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.strictconnect %r, %r : !firrtl.uint<8>
+    firrtl.strictconnect %z, %r : !firrtl.uint<8>
+    // CHECK: %[[C11:.+]] = firrtl.constant 11 : !firrtl.uint<8>
+    // CHECK: firrtl.strictconnect %z, %[[C11]] : !firrtl.uint<8>
+  }
+
+//"Registers with identical constant reset and connection" should "be replaced with that constant" in {
+  // CHECK-LABEL: firrtl.module @regSameConstReset
+  firrtl.module @regSameConstReset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
+    %c11_ui4 = firrtl.constant 11 : !firrtl.uint<8>
+    %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.strictconnect %r, %c11_ui4 : !firrtl.uint<8>
+    firrtl.strictconnect %z, %r : !firrtl.uint<8>
+    // CHECK: %[[C13:.+]] = firrtl.constant 11 : !firrtl.uint<8>
+    // CHECK: firrtl.strictconnect %z, %[[C13]] : !firrtl.uint<8>
   }
 }

@@ -97,6 +97,16 @@ def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
   ];
 }
 
+def RegisterOptimizer : Pass<"firrtl-register-optimizer", "firrtl::FModuleOp"> {
+  let summary = "Optimizer Registers";
+  let description = [{
+    This pass applies classic FIRRTL register optimizations.  These 
+    optimizations are isolated to this pass as they can change the visible 
+    behavior of the register, especially before reset.
+  }];
+  let constructor = "circt::firrtl::createRegisterOptimizerPass()";
+}
+
 def RemoveUnusedPorts : Pass<"firrtl-remove-unused-ports", "firrtl::CircuitOp"> {
   let summary = "Remove unused ports";
   let description = [{
