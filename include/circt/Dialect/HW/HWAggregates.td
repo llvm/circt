@@ -18,6 +18,7 @@ include "circt/Dialect/HW/HWDialect.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/IR/OpAsmInterface.td"
 
 //===----------------------------------------------------------------------===//
@@ -174,10 +175,6 @@ def ArrayGetOp : HWOp<"array_get",
   let assemblyFormat = [{
     $input`[`$index`]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))
   }];
-
-  let builders = [
-    OpBuilder<(ins "Value":$input, "Value":$index)>
-  ];
 
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;

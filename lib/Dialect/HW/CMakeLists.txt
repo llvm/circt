@@ -26,6 +26,7 @@ add_circt_dialect_library(
 
   LINK_LIBS PUBLIC
   MLIRIR
+  MLIRInferTypeOpInterface
 )
 
 add_subdirectory(Transforms)
