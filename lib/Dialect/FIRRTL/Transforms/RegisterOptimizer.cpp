@@ -68,7 +68,7 @@ void RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
     // operation, so we can't just move it.  Straight constants can be
     // rematerialized.  Derived constants are piped through wires.
     bool dominatesAll = true;
-    for (auto use : reg->getUsers()) {
+    for (auto *use : reg->getUsers()) {
       if (use == con)
         continue;
       if (!dom.dominates(con.getSrc(), use)) {
