@@ -95,8 +95,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
       return pipeInput;
 
     while (stages--) {
-      auto reg = b.create<RegOp>(pipeInput.getType(), clock,
-                                 moduleNamespace.newName(name));
+      auto reg = b.create<RegOp>(pipeInput.getType(), clock, name);
       if (gate) {
         b.create<WhenOp>(gate, /*withElseRegion*/ false,
                          [&]() { b.create<StrictConnectOp>(reg, pipeInput); });
@@ -379,7 +378,6 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
   /// Generate the logic for implementing the memory using Registers.
   void generateMemory(MemOp memOp, FirMemory &firMem) {
     ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
-    moduleNamespace.add(memOp->getParentOfType<FModuleOp>());
     auto dataType = memOp.getDataType();
 
     auto innerSym = memOp.getInnerSym();
@@ -443,7 +441,6 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
 private:
   bool replSeqMem;
   bool ignoreReadEnable;
-  ModuleNamespace moduleNamespace;
 };
 } // end anonymous namespace
 
