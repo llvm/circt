@@ -3,7 +3,7 @@
 firrtl.circuit "invalidReg"   {
   // CHECK-LABEL: @invalidReg
   firrtl.module @invalidReg(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
-    %foobar = firrtl.reg %clock  : !firrtl.uint<1>
+    %foobar = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
     firrtl.strictconnect %foobar, %foobar : !firrtl.uint<1>
     //CHECK-NOT: firrtl.connect %foobar, %foobar
     //CHECK: %[[inv:.*]] = firrtl.invalidvalue
@@ -14,7 +14,7 @@ firrtl.circuit "invalidReg"   {
   // CHECK-LABEL: @constantRegWrite
   firrtl.module @constantRegWrite(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
     %c = firrtl.constant 0 : !firrtl.uint<1>
-    %foobar = firrtl.reg %clock  : !firrtl.uint<1>
+    %foobar = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
     firrtl.strictconnect %foobar, %c : !firrtl.uint<1>
     //CHECK-NOT: firrtl.connect %foobar, %c
     //CHECK: %[[const:.*]] = firrtl.constant
@@ -24,7 +24,7 @@ firrtl.circuit "invalidReg"   {
 
   // CHECK-LABEL: @constantRegWriteDom
   firrtl.module @constantRegWriteDom(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
-    %foobar = firrtl.reg %clock  : !firrtl.uint<1>
+    %foobar = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
     //CHECK-NOT: firrtl.connect %foobar, %c
     //CHECK: %[[const:.*]] = firrtl.constant
     //CHECK: firrtl.strictconnect %a, %[[const]]
@@ -36,7 +36,7 @@ firrtl.circuit "invalidReg"   {
   // CHECK-LABEL: @constantRegResetWrite
   firrtl.module @constantRegResetWrite(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %a: !firrtl.uint<1>) {
     %c = firrtl.constant 0 : !firrtl.uint<1>
-    %foobar = firrtl.regreset %clock, %reset, %c  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %foobar = firrtl.regreset %clock, %reset, %c  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.strictconnect %foobar, %c : !firrtl.uint<1>
     //CHECK-NOT: firrtl.connect %foobar, %c
     //CHECK: %[[const:.*]] = firrtl.constant
@@ -47,7 +47,7 @@ firrtl.circuit "invalidReg"   {
   // CHECK-LABEL: @constantRegResetWriteSelf
   firrtl.module @constantRegResetWriteSelf(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %a: !firrtl.uint<1>) {
     %c = firrtl.constant 0 : !firrtl.uint<1>
-    %foobar = firrtl.regreset %clock, %reset, %c  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %foobar = firrtl.regreset %clock, %reset, %c  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.strictconnect %foobar, %foobar : !firrtl.uint<1>
     //CHECK-NOT: firrtl.connect %foobar, %c
     //CHECK: %[[const:.*]] = firrtl.constant
@@ -67,7 +67,7 @@ firrtl.circuit "invalidReg"   {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 
     // regreset
-    %regreset = firrtl.regreset %clock, %reset, %c0_ui2 : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
+    %regreset = firrtl.regreset %clock, %reset, %c0_ui2 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
 
     firrtl.strictconnect %regreset, %c0_ui2 : !firrtl.uint<2>
 
@@ -75,7 +75,7 @@ firrtl.circuit "invalidReg"   {
     firrtl.strictconnect %result6, %regreset: !firrtl.uint<2>
 
     // reg
-    %reg = firrtl.reg %clock  : !firrtl.uint<4>
+    %reg = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<4>
     firrtl.strictconnect %reg, %c0_ui4 : !firrtl.uint<4>
     // CHECK: firrtl.strictconnect %result7, %c0_ui4
     firrtl.strictconnect %result7, %reg: !firrtl.uint<4>

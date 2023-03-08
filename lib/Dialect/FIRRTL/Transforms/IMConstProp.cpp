@@ -398,7 +398,7 @@ void IMConstPropPass::markWireOp(Operation *wire) {
   // If the wire/reg/node has a non-ground type, then it is too complex for us
   // to handle, mark it as overdefined.
   // TODO: Eventually add a field-sensitive model.
-  auto resultValue = wireOrReg->getResult(0);
+  auto resultValue = wire->getResult(0);
   auto type = resultValue.getType().dyn_cast<FIRRTLBaseType>();
   if (!type || !type.getPassiveType().isGround())
     return markOverdefined(resultValue);

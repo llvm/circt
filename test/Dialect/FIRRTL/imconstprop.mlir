@@ -145,7 +145,7 @@ firrtl.circuit "testDontTouch"  {
   firrtl.module private @blockProp1(in %clock: !firrtl.clock,
     in %a: !firrtl.uint<1> sym @dntSym, out %b: !firrtl.uint<1>){
     //CHECK: %c = firrtl.reg
-    %c = firrtl.reg %clock : !firrtl.uint<1>
+    %c = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
     firrtl.strictconnect %c, %a : !firrtl.uint<1>
     firrtl.strictconnect %b, %c : !firrtl.uint<1>
   }
@@ -160,7 +160,7 @@ firrtl.circuit "testDontTouch"  {
   // CHECK-LABEL: firrtl.module private @blockProp3
   firrtl.module private @blockProp3(in %clock: !firrtl.clock, in %a: !firrtl.uint<1> , out %b: !firrtl.uint<1>) {
     //CHECK: %c = firrtl.reg
-    %c = firrtl.reg sym @s2 %clock : !firrtl.uint<1>
+    %c = firrtl.reg sym @s2 %clock : !firrtl.clock, !firrtl.uint<1>
     firrtl.strictconnect %c, %a : !firrtl.uint<1>
     firrtl.strictconnect %b, %c : !firrtl.uint<1>
   }
