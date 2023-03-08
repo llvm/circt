@@ -1152,7 +1152,7 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
   // un-initialized, lowering will generate the appropriate remote assignments.
   // The order of the Wires in the module is important.
   for (auto &elem : interfaceType.cast<BundleType>())
-    b.create<WireOp>(loc, elem.type, elem.name);
+    b.create<WireOp>(loc, elem.type, elem.name, elem.name);
 
   auto companionMod =
       cast<FModuleOp>(resolvePath(companionAttr.getValue(), state.circuit,
