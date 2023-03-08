@@ -817,8 +817,7 @@ struct circt::firrtl::detail::BundleTypeStorage : mlir::TypeStorage {
       return llvm::hash_combine(
           llvm::hash_combine_range(key.first.begin(), key.first.end()),
           llvm::hash_value(key.second));
-    else
-      return llvm::hash_combine_range(key.first.begin(), key.first.end());
+    return llvm::hash_combine_range(key.first.begin(), key.first.end());
   }
 
   static BundleTypeStorage *construct(TypeStorageAllocator &allocator,
