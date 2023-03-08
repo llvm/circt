@@ -1145,14 +1145,29 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
                      {},
                      loc});
 
+  auto cleanupDescription = [&](StringRef description) -> std::string {
+    StringRef head;
+    SmallString<64> out;
+    do {
+      std::tie(head, description) = description.split("\n");
+      out.append(head);
+      if (!description.empty())
+        out.append("\n// ");
+    } while (!description.empty());
+    return std::string(out);
+  };
   auto interfaceModule = builder.create<FInterfaceOp>(loc, defName, ports);
   ImplicitLocOpBuilder b(loc, context);
   b.setInsertionPointToStart(interfaceModule.getBodyBlock());
   // Create one wire for each field of the BundleType. The Wires are left
   // un-initialized, lowering will generate the appropriate remote assignments.
   // The order of the Wires in the module is important.
-  for (auto &elem : interfaceType.cast<BundleType>())
+  for (auto &elem : interfaceType.cast<BundleType>()) {
+    if (elem.description)
+      b.create<sv::VerbatimOp>(
+          loc, "// " + cleanupDescription(elem.description.getValue()));
     b.create<WireOp>(loc, elem.type, elem.name, elem.name);
+  }
 
   auto companionMod =
       cast<FModuleOp>(resolvePath(companionAttr.getValue(), state.circuit,
@@ -1668,25 +1683,26 @@ void GrandCentralPass::runOnOperation() {
   // Exit immediately if no annotations indicative of interfaces that need to be
   // built exist.  However, still generate the YAML file if the annotation for
   // this was passed in because some flows expect this.
-  if (worklist.empty()) {
-    if (!maybeHierarchyFileYAML)
-      return markAllAnalysesPreserved();
-    std::string yamlString;
-    llvm::raw_string_ostream stream(yamlString);
-    ::yaml::Context yamlContext({interfaceMap});
-    llvm::yaml::Output yout(stream);
-    OpBuilder builder(circuitOp);
-    SmallVector<sv::InterfaceOp, 0> interfaceVec;
-    yamlize(yout, interfaceVec, true, yamlContext);
-    builder.setInsertionPointToStart(circuitOp.getBodyBlock());
-    builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), yamlString)
-        ->setAttr("output_file",
-                  hw::OutputFileAttr::getFromFilename(
-                      &getContext(), maybeHierarchyFileYAML->getValue(),
-                      /*excludFromFileList=*/true));
-    LLVM_DEBUG({ llvm::dbgs() << "Generated YAML:" << yamlString << "\n"; });
-    return;
-  }
+  // TODO: YAML flow does not work YET!!!!
+  // if (worklist.empty()) {
+  //   if (!maybeHierarchyFileYAML)
+  //     return markAllAnalysesPreserved();
+  //   std::string yamlString;
+  //   llvm::raw_string_ostream stream(yamlString);
+  //   ::yaml::Context yamlContext({interfaceMap});
+  //   llvm::yaml::Output yout(stream);
+  //   OpBuilder builder(circuitOp);
+  //   SmallVector<sv::InterfaceOp, 0> interfaceVec;
+  //   yamlize(yout, interfaceVec, true, yamlContext);
+  //   builder.setInsertionPointToStart(circuitOp.getBodyBlock());
+  //   builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), yamlString)
+  //       ->setAttr("output_file",
+  //                 hw::OutputFileAttr::getFromFilename(
+  //                     &getContext(), maybeHierarchyFileYAML->getValue(),
+  //                     /*excludFromFileList=*/true));
+  //   LLVM_DEBUG({ llvm::dbgs() << "Generated YAML:" << yamlString << "\n"; });
+  //   return;
+  // }
 
   // Setup the builder to create ops _inside the FIRRTL circuit_.  This is
   // necessary because interfaces and interface instances are created.
@@ -1722,8 +1738,10 @@ void GrandCentralPass::runOnOperation() {
   DenseSet<hw::HWModuleLike> dutModules;
   FModuleOp effectiveDUT = dut;
   if (!effectiveDUT)
-    effectiveDUT = cast<FModuleOp>(
+    effectiveDUT = dyn_cast<FModuleOp>(
         *instancePaths->instanceGraph.getTopLevelNode()->getModule());
+  if (!effectiveDUT)
+    return;
   auto dfRange =
       llvm::depth_first(instancePaths->instanceGraph.lookup(effectiveDUT));
   for (auto i = dfRange.begin(), e = dfRange.end(); i != e;) {

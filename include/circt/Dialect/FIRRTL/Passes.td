@@ -31,7 +31,7 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
     Option<"noRefTypePorts", "no-ref-type-ports", "bool", "false",
       "Create normal ports, not ref type ports.">,
   ];
-  let dependentDialects = ["hw::HWDialect"];
+  let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
   let statistics = [
     Statistic<"numRawAnnotations", "num-raw-annos",
       "Number of raw annotations on circuit">,
