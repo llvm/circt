@@ -22,10 +22,8 @@ using namespace firrtl;
 // Instantiated for RegOp and RegResetOp
 template <typename T>
 static bool canErase(T op) {
-  if (hasDontTouch(op.getResult()) ||
-      (op.getAnnotationsAttr() && !op.getAnnotationsAttr().empty()))
-    return false;
-  return true;
+  return !(hasDontTouch(op.getResult()) ||
+           (op.getAnnotationsAttr() && !op.getAnnotationsAttr().empty()));
 }
 
 namespace {
