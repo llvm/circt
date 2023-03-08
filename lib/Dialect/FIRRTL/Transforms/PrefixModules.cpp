@@ -96,6 +96,7 @@ class PrefixModulesPass : public PrefixModulesBase<PrefixModulesPass> {
   void renameModule(FModuleOp module);
   void renameExtModule(FExtModuleOp extModule);
   void renameMemModule(FMemModuleOp memModule);
+  void renameInterface(FInterfaceOp interface);
   void runOnOperation() override;
 
   /// Mutate Grand Central Interface definitions (an Annotation on the circuit)
@@ -117,6 +118,7 @@ class PrefixModulesPass : public PrefixModulesBase<PrefixModulesPass> {
   /// Cached instance graph analysis.
   InstanceGraph *instanceGraph = nullptr;
 
+  StringRef interfacePrefix;
   /// Cached nla table analysis.
   NLATable *nlaTable = nullptr;
 
@@ -208,6 +210,9 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
                             .hasAnnotation(memTapPortClass);
         if (!isDataTap && !isMemTap)
           return;
+      }
+      if (isa<FInterfaceOp>(&target) && !interfacePrefix.empty()) {
+        prefix += interfacePrefix;
       }
 
       // Record that we must prefix the target module with the current prefix.
@@ -385,6 +390,27 @@ void PrefixModulesPass::renameMemModule(FMemModuleOp memModule) {
   removeDeadAnnotations(memModule.getNameAttr(), memModule);
 }
 
+void PrefixModulesPass::renameInterface(FInterfaceOp interface) {
+  // Lookup prefixes for this module.  If none exist, bail out.
+  auto &prefixes = prefixMap[interface.getName()];
+  if (prefixes.empty())
+    return;
+
+  OpBuilder builder(interface);
+  builder.setInsertionPointAfter(interface);
+
+  auto originalName = interface.getName();
+
+  // Duplicate the external module if there is more than one prefix.
+  for (auto &prefix : llvm::drop_begin(prefixes)) {
+    auto duplicate = cast<FExtModuleOp>(builder.clone(*interface));
+    duplicate.setName((prefix + originalName).str());
+  }
+
+  // Update the original module with a new prefix.
+  interface.setName((prefixes.front() + originalName).str());
+}
+
 /// Mutate circuit-level annotations to add prefix information to Grand Central
 /// (SystemVerilog) interfaces.  Add a "prefix" field to each interface
 /// definition (an annotation with class "AugmentedBundleType") that holds the
@@ -433,6 +459,30 @@ void PrefixModulesPass::runOnOperation() {
   instanceGraph = &getAnalysis<InstanceGraph>();
   nlaTable = &getAnalysis<NLATable>();
   auto circuitOp = getOperation();
+  // An optional prefix applied to all interfaces in the design.  This is set
+  // based on a PrefixInterfacesAnnotation.
+  AnnotationSet::removeAnnotations(circuitOp, [&](Annotation anno) {
+    if (anno.isClass(prefixInterfacesAnnoClass)) {
+      if (!interfacePrefix.empty()) {
+        circuitOp.emitError("more than one 'PrefixInterfacesAnnotation' was "
+                            "found, but zero or one may be provided");
+        return false;
+      }
+
+      auto prefix = anno.getMember<StringAttr>("prefix");
+      if (!prefix) {
+        circuitOp.emitError()
+            << "contained an invalid 'PrefixInterfacesAnnotation' that does "
+               "not contain a 'prefix' field: "
+            << anno.getDict();
+        return false;
+      }
+
+      interfacePrefix = prefix.getValue();
+      return true;
+    }
+    return false;
+  });
 
   // If the main module is prefixed, we have to update the CircuitOp.
   auto mainModule = instanceGraph->getTopLevelModule();
@@ -461,6 +511,8 @@ void PrefixModulesPass::runOnOperation() {
         renameExtModule(extModule);
       if (auto memModule = dyn_cast<FMemModuleOp>(*node->getModule()))
         renameMemModule(memModule);
+      if (auto interface = dyn_cast<FInterfaceOp>(*node->getModule()))
+        renameInterface(interface);
     }
   }
 
