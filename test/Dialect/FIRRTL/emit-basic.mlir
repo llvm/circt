@@ -46,14 +46,14 @@ firrtl.circuit "Foo" {
   firrtl.module @Statements(in %ui1: !firrtl.uint<1>, in %someAddr: !firrtl.uint<8>, in %someClock: !firrtl.clock, in %someReset: !firrtl.reset, out %someOut: !firrtl.uint<1>) {
     // CHECK: when ui1 :
     // CHECK:   skip
-    firrtl.when %ui1 {
+    firrtl.when %ui1 : !firrtl.uint<1> {
       firrtl.skip
     }
     // CHECK: when ui1 :
     // CHECK:   skip
     // CHECK: else :
     // CHECK:   skip
-    firrtl.when %ui1 {
+    firrtl.when %ui1 : !firrtl.uint<1> {
       firrtl.skip
     } else {
       firrtl.skip
@@ -62,34 +62,34 @@ firrtl.circuit "Foo" {
     // CHECK:   skip
     // CHECK: else when ui1 :
     // CHECK:   skip
-    firrtl.when %ui1 {
+    firrtl.when %ui1 : !firrtl.uint<1> {
       firrtl.skip
     } else {
-      firrtl.when %ui1 {
+      firrtl.when %ui1 : !firrtl.uint<1> {
         firrtl.skip
       }
     }
     // CHECK: wire someWire : UInt<1>
     %someWire = firrtl.wire : !firrtl.uint<1>
     // CHECK: reg someReg : UInt<1>, someClock
-    %someReg = firrtl.reg %someClock : !firrtl.uint<1>
+    %someReg = firrtl.reg %someClock : !firrtl.clock, !firrtl.uint<1>
     // CHECK: reg someReg2 : UInt<1>, someClock with :
     // CHECK:   reset => (someReset, ui1)
-    %someReg2 = firrtl.regreset %someClock, %someReset, %ui1 : !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
+    %someReg2 = firrtl.regreset %someClock, %someReset, %ui1 : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: node someNode = ui1
     %someNode = firrtl.node %ui1 : !firrtl.uint<1>
     // CHECK: stop(someClock, ui1, 42) : foo
-    firrtl.stop %someClock, %ui1, 42 {name = "foo"}
+    firrtl.stop %someClock, %ui1, 42 {name = "foo"} : !firrtl.clock, !firrtl.uint<1>
     // CHECK: skip
     firrtl.skip
     // CHECK: printf(someClock, ui1, "some\n magic\"stuff\"", ui1, someReset) : foo
-    firrtl.printf %someClock, %ui1, "some\n magic\"stuff\"" {name = "foo"} (%ui1, %someReset) : !firrtl.uint<1>, !firrtl.reset
+    firrtl.printf %someClock, %ui1, "some\n magic\"stuff\"" {name = "foo"} (%ui1, %someReset) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.reset
     // CHECK: assert(someClock, ui1, ui1, "msg") : foo
     // CHECK: assume(someClock, ui1, ui1, "msg") : foo
     // CHECK: cover(someClock, ui1, ui1, "msg") : foo
-    firrtl.assert %someClock, %ui1, %ui1, "msg" {name = "foo"}
-    firrtl.assume %someClock, %ui1, %ui1, "msg" {name = "foo"}
-    firrtl.cover %someClock, %ui1, %ui1, "msg" {name = "foo"}
+    firrtl.assert %someClock, %ui1, %ui1, "msg" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {name = "foo"}
+    firrtl.assume %someClock, %ui1, %ui1, "msg" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {name = "foo"}
+    firrtl.cover %someClock, %ui1, %ui1, "msg" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {name = "foo"}
     // CHECK: someOut <= ui1
     firrtl.connect %someOut, %ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: inst someInst of Simple
@@ -281,7 +281,7 @@ firrtl.circuit "Foo" {
 
     %combmem = chirrtl.combmem : !chirrtl.cmemory<uint<3>, 256>
     %port0_data, %port0_port = chirrtl.memoryport Infer %combmem {name = "port0"} : (!chirrtl.cmemory<uint<3>, 256>) -> (!firrtl.uint<3>, !chirrtl.cmemoryport)
-    firrtl.when %ui1 {
+    firrtl.when %ui1 : !firrtl.uint<1> {
       chirrtl.memoryport.access %port0_port[%someAddr], %someClock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
     }
     // CHECK:      cmem combmem : UInt<3>[256]
@@ -290,7 +290,7 @@ firrtl.circuit "Foo" {
 
     %seqmem = chirrtl.seqmem Undefined : !chirrtl.cmemory<uint<3>, 256>
     %port1_data, %port1_port = chirrtl.memoryport Infer %seqmem {name = "port1"} : (!chirrtl.cmemory<uint<3>, 256>) -> (!firrtl.uint<3>, !chirrtl.cmemoryport)
-    firrtl.when %ui1 {
+    firrtl.when %ui1 : !firrtl.uint<1> {
       chirrtl.memoryport.access %port1_port[%someAddr], %someClock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
     }
     // CHECK:      smem seqmem : UInt<3>[256] undefined
@@ -301,7 +301,7 @@ firrtl.circuit "Foo" {
     // CHECK: port0 <= port1
 
     %invalid_clock = firrtl.invalidvalue : !firrtl.clock
-    %dummyReg = firrtl.reg %invalid_clock : !firrtl.uint<42>
+    %dummyReg = firrtl.reg %invalid_clock : !firrtl.clock, !firrtl.uint<42>
     // CHECK: wire [[INV:_invalid.*]] : Clock
     // CHECK-NEXT: [[INV]] is invalid
     // CHECK-NEXT: reg dummyReg : UInt<42>, [[INV]]

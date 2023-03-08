@@ -203,9 +203,7 @@ static bool isNotSubAccess(Operation *op) {
   if (!sao)
     return true;
   ConstantOp arg = dyn_cast_or_null<ConstantOp>(sao.getIndex().getDefiningOp());
-  if (arg && sao.getInput().getType().cast<FVectorType>().getNumElements() != 0)
-    return true;
-  return false;
+  return arg && sao.getInput().getType().getNumElements() != 0;
 }
 
 /// Look through and collect subfields leading to a subaccess.
@@ -671,7 +669,7 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
                           "with non-ground type elements");
           return;
         }
-        if (val.getType().cast<FIRRTLType>().isa<FVectorType>())
+        if (isa<FVectorType>(val.getType()))
           accumulate =
               (accumulate ? b.createOrFold<CatPrimOp>(v, accumulate) : v);
         else
@@ -772,7 +770,7 @@ static Value cloneAccess(ImplicitLocOpBuilder *builder, Operation *op,
 void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
                                            ArrayRef<Operation *> writePath) {
   SubaccessOp sao = cast<SubaccessOp>(writePath.back());
-  auto saoType = sao.getInput().getType().cast<FVectorType>();
+  auto saoType = sao.getInput().getType();
   auto selectWidth = llvm::Log2_64_Ceil(saoType.getNumElements());
 
   for (size_t index = 0, e = saoType.getNumElements(); index < e; ++index) {
@@ -1323,7 +1321,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
 bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   auto input = op.getInput();
-  auto vType = input.getType().cast<FVectorType>();
+  auto vType = input.getType();
 
   // Check for empty vectors
   if (vType.getNumElements() == 0) {

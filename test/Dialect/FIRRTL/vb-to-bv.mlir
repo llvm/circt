@@ -180,8 +180,8 @@ firrtl.circuit "Test" {
   
   // CHECK-LABEL: @TestReg
   firrtl.module @TestReg(in %clock: !firrtl.clock) {
-    // CHECK: %r = firrtl.reg %clock : !firrtl.bundle<a: vector<uint<8>, 2>>
-    %r = firrtl.reg %clock : !firrtl.vector<bundle<a: uint<8>>, 2>
+    // CHECK: %r = firrtl.reg %clock : !firrtl.clock, !firrtl.bundle<a: vector<uint<8>, 2>>
+    %r = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<bundle<a: uint<8>>, 2>
   }
 
   // CHECK-LABEL: @TestRegReset
@@ -190,8 +190,8 @@ firrtl.circuit "Test" {
      %rval = firrtl.aggregateconstant [[1, 2], [3, 4]] : !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2> 
     // CHECK: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %rsig = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK: %r = firrtl.regreset %clock, %c0_ui1, %0 : !firrtl.uint<1>, !firrtl.bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>, !firrtl.bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>
-    %r = firrtl.regreset %clock, %rsig, %rval : !firrtl.uint<1>, !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2>, !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2>
+    // CHECK: %r = firrtl.regreset %clock, %c0_ui1, %0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>, !firrtl.bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>
+    %r = firrtl.regreset %clock, %rsig, %rval : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2>, !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2>
   }
 
   // CHECK-LABEL: @TestRegResetMaterializedFromExplodedBundle
@@ -206,8 +206,8 @@ firrtl.circuit "Test" {
     %rval = firrtl.subindex %storage[0] : !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2>
     // CHECK: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %rsig = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK: %r = firrtl.regreset %clock, %c0_ui1, %5 : !firrtl.uint<1>, !firrtl.bundle<a: uint<4>, b: uint<8>>, !firrtl.bundle<a: uint<4>, b: uint<8>>
-    %r = firrtl.regreset %clock, %rsig, %rval : !firrtl.uint<1>, !firrtl.bundle<a: uint<4>, b: uint<8>>, !firrtl.bundle<a: uint<4>, b: uint<8>>
+    // CHECK: %r = firrtl.regreset %clock, %c0_ui1, %5 : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<4>, b: uint<8>>, !firrtl.bundle<a: uint<4>, b: uint<8>>
+    %r = firrtl.regreset %clock, %rsig, %rval : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<4>, b: uint<8>>, !firrtl.bundle<a: uint<4>, b: uint<8>>
   }
 
   // CHECK-LABEL: @TestRegResetMaterializedFromDeepExplodedBundle
@@ -223,11 +223,11 @@ firrtl.circuit "Test" {
     // CHECK: %8 = firrtl.bundlecreate %5, %3 : (!firrtl.uint<8>, !firrtl.uint<16>) -> !firrtl.bundle<c: uint<8>, d: uint<16>>
     // CHECK: %9 = firrtl.bundlecreate %7, %8 : (!firrtl.uint<4>, !firrtl.bundle<c: uint<8>, d: uint<16>>) -> !firrtl.bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>
     // CHECK: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK: %reg = firrtl.regreset %clock, %c0_ui1, %9 : !firrtl.uint<1>, !firrtl.bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>, !firrtl.bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>
+    // CHECK: %reg = firrtl.regreset %clock, %c0_ui1, %9 : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>, !firrtl.bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>
     %reset_value_storage = firrtl.aggregateconstant [[1, [2, 3]], [4, [5, 6]]] : !firrtl.vector<bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>, 2> 
     %reset_value = firrtl.subindex %reset_value_storage[1] : !firrtl.vector<bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>, 2>
     %reset = firrtl.constant 0 : !firrtl.uint<1>
-    %reg = firrtl.regreset %clock, %reset, %reset_value : !firrtl.uint<1>, !firrtl.bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>, !firrtl.bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>
+    %reg = firrtl.regreset %clock, %reset, %reset_value : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>, !firrtl.bundle<a: uint<4>, b: bundle<c: uint<8>, d: uint<16>>>
   }
 
   // CHECK-LABEL: @TestInstance
@@ -543,21 +543,21 @@ firrtl.circuit "Test" {
     // CHECK: %w = firrtl.wire : !firrtl.bundle<a: uint<8>>
     // CHECK: %0 = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<8>>
     // CHECK: %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    // CHECK: firrtl.when %c1_ui1 {
+    // CHECK: firrtl.when %c1_ui1 : !firrtl.uint<1> {
     // CHECK:   %n2 = firrtl.node %0 : !firrtl.uint<8>
     // CHECK: }
     // CHECK: %n3 = firrtl.node %0 : !firrtl.uint<8>
-    // CHECK: firrtl.when %c1_ui1 {
+    // CHECK: firrtl.when %c1_ui1 : !firrtl.uint<1> {
     // CHECK:   %w2 = firrtl.wire : !firrtl.bundle<a: vector<uint<8>, 2>>
     // CHECK: }
     %w = firrtl.wire : !firrtl.bundle<a: uint<8>>
     %a = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<8>>
     %p = firrtl.constant 1 : !firrtl.uint<1>
-    firrtl.when %p {
+    firrtl.when %p : !firrtl.uint<1> {
       %n2 = firrtl.node %a : !firrtl.uint<8>
     }
     %n3 = firrtl.node %a : !firrtl.uint<8>
-    firrtl.when %p {
+    firrtl.when %p : !firrtl.uint<1> {
       %w2 = firrtl.wire : !firrtl.vector<bundle<a: uint<8>>, 2>
     }
   }
@@ -567,7 +567,7 @@ firrtl.circuit "Test" {
     // CHECK: %0 = firrtl.aggregateconstant [123] : !firrtl.vector<uint<8>, 1>
     // CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
     // CHECK: %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    // CHECK: firrtl.when %c1_ui1 {
+    // CHECK: firrtl.when %c1_ui1 : !firrtl.uint<1> {
     // CHECK:   %2 = firrtl.subaccess %0[%c0_ui8] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<8>
     // CHECK:   %nod_0 = firrtl.node %2 {name = "nod"} : !firrtl.uint<8>
     // CHECK: }
@@ -576,7 +576,7 @@ firrtl.circuit "Test" {
     %vec = firrtl.aggregateconstant [123] :  !firrtl.vector<uint<8>, 1>
     %idx = firrtl.constant 0 : !firrtl.uint<8>
     %cnd = firrtl.constant 1 : !firrtl.uint<1>
-    firrtl.when %cnd {
+    firrtl.when %cnd : !firrtl.uint<1> {
       %val = firrtl.subaccess %vec[%idx] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<8>
       %nod = firrtl.node %val : !firrtl.uint<8>
     }

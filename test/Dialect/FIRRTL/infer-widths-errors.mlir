@@ -3,7 +3,7 @@
 firrtl.circuit "Foo" {
   firrtl.module @Foo(in %clk: !firrtl.clock) {
     // expected-error @+1 {{'firrtl.reg' op is constrained to be wider than itself}}
-    %0 = firrtl.reg %clk : !firrtl.uint
+    %0 = firrtl.reg %clk : !firrtl.clock, !firrtl.uint
     // expected-note @+1 {{constrained width W >= W+3 here}}
     %1 = firrtl.shl %0, 3 : (!firrtl.uint) -> !firrtl.uint
     // expected-note @+1 {{constrained width W >= W+4 here}}

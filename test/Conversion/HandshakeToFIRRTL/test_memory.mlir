@@ -63,7 +63,7 @@
 // CHECK: firrtl.connect %[[MEM_STORE_DATA]], %[[ST_DATA_DATA]]
 
 // Create the write valid buffer.
-// CHECK: %[[WRITE_VALID_BUFFER:.+]] = firrtl.regreset {{.+}} !firrtl.uint<1>
+// CHECK: %[[WRITE_VALID_BUFFER:.+]] = firrtl.regreset {{.+}} !firrtl.clock, !firrtl.uint<1>
 
 // Connect the write valid buffer to the store control valid.
 // CHECK: firrtl.connect %[[ST_CONTROL_VALID]], %[[WRITE_VALID_BUFFER]]

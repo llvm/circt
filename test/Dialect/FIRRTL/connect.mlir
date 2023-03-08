@@ -127,7 +127,7 @@ firrtl.module @wires4(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>) {
 }
 
 firrtl.module @registers0(in %clock : !firrtl.clock, in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>) {
-  %0 = firrtl.reg %clock : !firrtl.uint<1>
+  %0 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
   // CHECK: firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK: firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
@@ -135,8 +135,8 @@ firrtl.module @registers0(in %clock : !firrtl.clock, in %in : !firrtl.uint<1>, o
 }
 
 firrtl.module @registers1(in %clock : !firrtl.clock) {
-  %0 = firrtl.reg %clock : !firrtl.uint<1>
-  %1 = firrtl.reg %clock : !firrtl.uint<1>
+  %0 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
+  %1 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
   // CHECK: firrtl.connect %0, %1
   firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
 }

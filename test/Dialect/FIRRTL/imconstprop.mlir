@@ -119,7 +119,7 @@ firrtl.circuit "Test" {
 firrtl.circuit "Issue1188"  {
   firrtl.module @Issue1188(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %io_out: !firrtl.uint<6>, out %io_out3: !firrtl.uint<3>) {
     %c1_ui6 = firrtl.constant 1 : !firrtl.uint<6>
-    %D0123456 = firrtl.reg %clock  : !firrtl.uint<6>
+    %D0123456 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<6>
     %0 = firrtl.bits %D0123456 4 to 0 : (!firrtl.uint<6>) -> !firrtl.uint<5>
     %1 = firrtl.bits %D0123456 5 to 5 : (!firrtl.uint<6>) -> !firrtl.uint<1>
     %2 = firrtl.cat %0, %1 : (!firrtl.uint<5>, !firrtl.uint<1>) -> !firrtl.uint<6>
@@ -298,7 +298,7 @@ firrtl.circuit "InstanceOut2"   {
 firrtl.circuit "invalidReg1"   {
   // CHECK-LABEL: @invalidReg1
   firrtl.module @invalidReg1(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
-    %foobar = firrtl.reg %clock  : !firrtl.uint<1>
+    %foobar = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
       //CHECK: %0 = firrtl.not %foobar : (!firrtl.uint<1>) -> !firrtl.uint<1>
       %0 = firrtl.not %foobar : (!firrtl.uint<1>) -> !firrtl.uint<1>
       //CHECK: firrtl.strictconnect %foobar, %0 : !firrtl.uint<1>
@@ -322,10 +322,10 @@ firrtl.circuit "Oscillators"   {
   // CHECK: firrtl.module private @Foo
   firrtl.module private @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
     // CHECK: firrtl.reg
-    %r = firrtl.reg %clock : !firrtl.uint<1>
+    %r = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK: firrtl.regreset
-    %s = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %s = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
     %0 = firrtl.not %r : (!firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.strictconnect %r, %0 : !firrtl.uint<1>
     %1 = firrtl.not %s : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -336,10 +336,10 @@ firrtl.circuit "Oscillators"   {
   // CHECK: firrtl.module private @Bar
   firrtl.module private @Bar(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
     // CHECK: %r = firrtl.reg
-    %r = firrtl.reg %clock  : !firrtl.uint<1>
+    %r = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK: firrtl.regreset
-    %s = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %s = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %0 = firrtl.xor %a, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.strictconnect %r, %0 : !firrtl.uint<1>
@@ -351,10 +351,10 @@ firrtl.circuit "Oscillators"   {
   // CHECK: firrtl.module private @Baz
   firrtl.module private @Baz(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
     // CHECK: firrtl.reg
-    %r = firrtl.reg %clock  : !firrtl.uint<1>
+    %r = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK: firrtl.regreset
-    %s = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %s = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
     %0 = firrtl.not %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.strictconnect %r, %0 : !firrtl.uint<1>
     %1 = firrtl.not %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -367,10 +367,10 @@ firrtl.circuit "Oscillators"   {
   firrtl.module private @Qux(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
     %ext_a = firrtl.instance ext @Ext(in a: !firrtl.uint<1>)
     // CHECK: firrtl.reg
-    %r = firrtl.reg %clock  : !firrtl.uint<1>
+    %r = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK: firrtl.regreset
-    %s = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %s = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
     %0 = firrtl.not %ext_a : (!firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.strictconnect %r, %0 : !firrtl.uint<1>
     %1 = firrtl.not %ext_a : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -471,7 +471,7 @@ firrtl.circuit "Issue3372"  {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %other_zero = firrtl.instance other interesting_name  @Other(out zero: !firrtl.uint<1>)
-    %shared = firrtl.regreset interesting_name %clock, %other_zero, %c1_ui1  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %shared = firrtl.regreset interesting_name %clock, %other_zero, %c1_ui1  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.strictconnect %shared, %shared : !firrtl.uint<1>
     %test = firrtl.wire interesting_name  : !firrtl.uint<1>
     firrtl.strictconnect %test, %shared : !firrtl.uint<1>
@@ -557,7 +557,7 @@ firrtl.circuit "Verbatim"  {
 firrtl.circuit "Issue4498"  {
   firrtl.module @Issue4498(in %clock: !firrtl.clock) {
     %a = firrtl.wire : !firrtl.uint<1>
-    %r = firrtl.reg interesting_name %clock : !firrtl.uint<1>
+    %r = firrtl.reg interesting_name %clock : !firrtl.clock, !firrtl.uint<1>
     firrtl.strictconnect %r, %a : !firrtl.uint<1>
   }
 }

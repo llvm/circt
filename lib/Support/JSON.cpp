@@ -5,11 +5,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-//
-// Utilities for file system path handling, supplementing the ones from
-// llvm::sys::path.
-//
-//===----------------------------------------------------------------------===//
 
 #include "circt/Support/JSON.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -55,17 +50,14 @@ LogicalResult circt::convertAttributeToJSON(llvm::json::OStream &json,
         // If the integer can be accurately represented by a double, print
         // it as an integer. Otherwise, convert it to an exact decimal string.
         const auto &apint = attr.getValue();
-        if (apint.getActiveBits() >= std::numeric_limits<int64_t>::digits)
+        if (!apint.isSignedIntN(64))
           return failure();
         json.value(apint.getSExtValue());
         return success();
       })
       .Case<FloatAttr>([&](auto attr) -> LogicalResult {
         const auto &apfloat = attr.getValue();
-        double value = apfloat.convertToDouble();
-        if (!apfloat.isExactlyValue(value))
-          return failure();
-        json.value(value);
+        json.value(apfloat.convertToDouble());
         return success();
       })
       .Default([&](auto) -> LogicalResult { return failure(); });

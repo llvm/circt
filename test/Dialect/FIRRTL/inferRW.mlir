@@ -28,9 +28,9 @@ firrtl.circuit "TLRAM" {
       firrtl.connect %8, %_T_29 : !firrtl.uint<1>, !firrtl.uint<1>
       %9 = firrtl.not %wen : (!firrtl.uint<1>) -> !firrtl.uint<1>
       firrtl.connect %mem_MPORT_en, %9 : !firrtl.uint<1>, !firrtl.uint<1>
-      %REG = firrtl.reg %clock  : !firrtl.uint<1>
+      %REG = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
       firrtl.connect %REG, %9 : !firrtl.uint<1>, !firrtl.uint<1>
-      %r_0 = firrtl.reg %clock  : !firrtl.uint<8>
+      %r_0 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<8>
       %10 = firrtl.mux(%REG, %mem_MPORT_data_0, %r_0) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
       firrtl.connect %r_0, %10 : !firrtl.uint<8>, !firrtl.uint<8>
       %11 = firrtl.mux(%REG, %mem_MPORT_data_0, %r_0) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
@@ -273,9 +273,9 @@ firrtl.circuit "TLRAM" {
       firrtl.connect %8, %c1 : !firrtl.uint<2>, !firrtl.uint<2>
       %9 = firrtl.not %wen : (!firrtl.uint<1>) -> !firrtl.uint<1>
       firrtl.connect %mem_MPORT_en, %9 : !firrtl.uint<1>, !firrtl.uint<1>
-      %REG = firrtl.reg %clock  : !firrtl.uint<1>
+      %REG = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
       firrtl.connect %REG, %9 : !firrtl.uint<1>, !firrtl.uint<1>
-      %r_0 = firrtl.reg %clock  : !firrtl.uint<8>
+      %r_0 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<8>
       %10 = firrtl.mux(%REG, %mem_MPORT_data_0, %r_0) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
       firrtl.connect %r_0, %10 : !firrtl.uint<8>, !firrtl.uint<8>
       %11 = firrtl.mux(%REG, %mem_MPORT_data_0, %r_0) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>

@@ -35,12 +35,12 @@ firrtl.module @InferRead(in %cond: !firrtl.uint<1>, in %clock: !firrtl.clock, in
   %ram = chirrtl.combmem  sym @s1 : !chirrtl.cmemory<uint<1>, 256>
   %ramport_data, %ramport_port = chirrtl.memoryport Infer %ram {name = "ramport"} : (!chirrtl.cmemory<uint<1>, 256>) -> (!firrtl.uint<1>, !chirrtl.cmemoryport)
 
-  // CHECK: firrtl.when %cond {
+  // CHECK: firrtl.when %cond : !firrtl.uint<1> {
   // CHECK:   firrtl.strictconnect [[ADDR]], %addr
   // CHECK:   firrtl.strictconnect [[EN]], %c1_ui1
   // CHECK:   firrtl.strictconnect [[CLOCK]], %clock
   // CHECK: }
-  firrtl.when %cond {
+  firrtl.when %cond : !firrtl.uint<1> {
     chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
   }
 
@@ -70,13 +70,13 @@ firrtl.module @InferWrite(in %cond: !firrtl.uint<1>, in %clock: !firrtl.clock, i
   %ram = chirrtl.combmem : !chirrtl.cmemory<uint<1>, 256>
   %ramport_data, %ramport_port = chirrtl.memoryport Infer %ram {name = "ramport"} : (!chirrtl.cmemory<uint<1>, 256>) -> (!firrtl.uint<1>, !chirrtl.cmemoryport)
 
-  // CHECK: firrtl.when %cond {
+  // CHECK: firrtl.when %cond : !firrtl.uint<1> {
   // CHECK:   firrtl.strictconnect [[ADDR]], %addr
   // CHECK:   firrtl.strictconnect [[EN]], %c1_ui1
   // CHECK:   firrtl.strictconnect [[CLOCK]], %clock
   // CHECK:   firrtl.strictconnect [[MASK]], %c0_ui1
   // CHECK: }
-  firrtl.when %cond {
+  firrtl.when %cond : !firrtl.uint<1> {
     chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
   }
 
@@ -232,8 +232,8 @@ firrtl.module @EnableInference0(in %p: !firrtl.uint<1>, in %addr: !firrtl.uint<4
   %ramport_data, %ramport_port = chirrtl.memoryport Read %ram  {name = "ramport"}: (!chirrtl.cmemory<uint<32>, 16>) -> (!firrtl.uint<32>, !chirrtl.cmemoryport)
   chirrtl.memoryport.access %ramport_port[%w], %clock : !chirrtl.cmemoryport, !firrtl.uint<4>, !firrtl.clock
 
-  // CHECK: firrtl.when %p {
-  firrtl.when %p  {
+  // CHECK: firrtl.when %p : !firrtl.uint<1> {
+  firrtl.when %p : !firrtl.uint<1> {
     // CHECK-NEXT: firrtl.strictconnect [[EN]], %c1_ui1
     // CHECK-NEXT: firrtl.connect %w, %addr
     firrtl.connect %w, %addr : !firrtl.uint<4>, !firrtl.uint<4>
@@ -248,8 +248,8 @@ firrtl.module @EnableInference1(in %p: !firrtl.uint<1>, in %addr: !firrtl.uint<4
   firrtl.connect %v, %invalid_ui32 : !firrtl.uint<32>, !firrtl.uint<32>
   // CHECK: [[ADDR:%.*]] = firrtl.subfield %ram_ramport[addr]
   // CHECK: [[EN:%.*]] = firrtl.subfield %ram_ramport[en]
-  // CHECK: firrtl.when %p
-  firrtl.when %p  {
+  // CHECK: firrtl.when %p : !firrtl.uint<1>
+  firrtl.when %p : !firrtl.uint<1> {
    // CHECK-NEXT: firrtl.strictconnect [[EN]], %c1_ui1
    // CHECK-NEXT: %n = firrtl.node %addr
    // CHECK-NEXT: firrtl.strictconnect [[ADDR]], %n
@@ -308,7 +308,7 @@ firrtl.module @DbgsMemPort(in %clock: !firrtl.clock, in %addr : !firrtl.uint<1>,
   %port0_data = chirrtl.debugport %ram {name = "port0"} : (!chirrtl.cmemory<uint<1>, 2>) -> !firrtl.ref<vector<uint<1>, 2>>
   %ramport_data, %ramport_port = chirrtl.memoryport Read %ram {name = "ramport"} : (!chirrtl.cmemory<uint<1>, 2>) -> (!firrtl.uint<1>, !chirrtl.cmemoryport)
 
-  firrtl.when %cond {
+  firrtl.when %cond : !firrtl.uint<1> {
     chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<1>, !firrtl.clock
   }
   firrtl.strictconnect %_a, %port0_data : !firrtl.ref<vector<uint<1>, 2>>

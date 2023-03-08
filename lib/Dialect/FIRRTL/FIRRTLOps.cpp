@@ -19,6 +19,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -1948,7 +1949,7 @@ FIRRTLType MemOp::getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
     break;
   }
 
-  return BundleType::get(context, portFields).cast<BundleType>();
+  return BundleType::get(context, portFields);
 }
 
 /// Return the name and kind of ports supported by this memory.
@@ -2145,10 +2146,10 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 LogicalResult RegResetOp::verify() {
-  Value reset = getResetValue();
+  auto reset = getResetValue();
 
-  FIRRTLBaseType resetType = reset.getType().cast<FIRRTLBaseType>();
-  FIRRTLBaseType regType = getResult().getType().cast<FIRRTLBaseType>();
+  FIRRTLBaseType resetType = reset.getType();
+  FIRRTLBaseType regType = getResult().getType();
 
   // The type of the initialiser must be equivalent to the register type.
   if (!areTypesEquivalent(resetType, regType))
@@ -2228,8 +2229,8 @@ static LogicalResult checkConnectFlow(Operation *connect) {
 }
 
 LogicalResult ConnectOp::verify() {
-  auto dstType = getDest().getType().cast<FIRRTLType>();
-  auto srcType = getSrc().getType().cast<FIRRTLType>();
+  auto dstType = getDest().getType();
+  auto srcType = getSrc().getType();
   auto dstBaseType = dstType.dyn_cast<FIRRTLBaseType>();
   auto srcBaseType = srcType.dyn_cast<FIRRTLBaseType>();
   if (!dstBaseType || !srcBaseType) {
@@ -2436,7 +2437,7 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 
 LogicalResult ConstantOp::verify() {
   // If the result type has a bitwidth, then the attribute must match its width.
-  auto intType = getType().cast<IntType>();
+  auto intType = getType();
   auto width = intType.getWidthOrSentinel();
   if (width != -1 && (int)getValue().getBitWidth() != width)
     return emitError(
@@ -2477,22 +2478,19 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
 void ConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // For constants in particular, propagate the value into the result name to
   // make it easier to read the IR.
-  auto intTy = getType().dyn_cast<IntType>();
+  auto intTy = getType();
+  assert(intTy);
 
   // Otherwise, build a complex name with the value and type.
   SmallString<32> specialNameBuffer;
   llvm::raw_svector_ostream specialName(specialNameBuffer);
   specialName << 'c';
-  if (intTy) {
-    getValue().print(specialName, /*isSigned:*/ intTy.isSigned());
+  getValue().print(specialName, /*isSigned:*/ intTy.isSigned());
 
-    specialName << (intTy.isSigned() ? "_si" : "_ui");
-    auto width = intTy.getWidthOrSentinel();
-    if (width != -1)
-      specialName << width;
-  } else {
-    getValue().print(specialName, /*isSigned:*/ false);
-  }
+  specialName << (intTy.isSigned() ? "_si" : "_ui");
+  auto width = intTy.getWidthOrSentinel();
+  if (width != -1)
+    specialName << width;
   setNameFn(getResult(), specialName.str());
 }
 
@@ -2676,8 +2674,7 @@ void SubfieldOp::print(::mlir::OpAsmPrinter &printer) {
 }
 
 LogicalResult SubfieldOp::verify() {
-  if (getFieldIndex() >=
-      getInput().getType().cast<BundleType>().getNumElements())
+  if (getFieldIndex() >= getInput().getType().getNumElements())
     return emitOpError("subfield element index is greater than the number "
                        "of fields in the bundle type");
   return success();
@@ -2745,7 +2742,7 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
 }
 
 bool SubfieldOp::isFieldFlipped() {
-  auto bundle = getInput().getType().cast<BundleType>();
+  auto bundle = getInput().getType();
   return bundle.getElement(getFieldIndex()).isFlip;
 }
 
@@ -3660,46 +3657,20 @@ static void printNameKind(OpAsmPrinter &p, Operation *op,
 // ImplicitSSAName Custom Directive
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseImplicitSSAName(OpAsmParser &parser,
-                                        NamedAttrList &resultAttrs) {
+static ParseResult parseFIRRTLImplicitSSAName(OpAsmParser &parser,
+                                              NamedAttrList &resultAttrs) {
   if (parseElideAnnotations(parser, resultAttrs))
     return failure();
-
-  // If the attribute dictionary contains no 'name' attribute, infer it from
-  // the SSA name (if specified).
-  if (resultAttrs.get("name"))
-    return success();
-
-  auto resultName = parser.getResultName(0).first;
-  if (!resultName.empty() && isdigit(resultName[0]))
-    resultName = "";
-  auto nameAttr = parser.getBuilder().getStringAttr(resultName);
-  auto *context = parser.getBuilder().getContext();
-  resultAttrs.push_back({StringAttr::get(context, "name"), nameAttr});
+  inferImplicitSSAName(parser, resultAttrs);
   return success();
 }
 
-static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
-                                 DictionaryAttr attr,
-                                 ArrayRef<StringRef> extraElides = {}) {
-  // List of attributes to elide when printing the dictionary.
-  SmallVector<StringRef, 2> elides(extraElides.begin(), extraElides.end());
+static void printFIRRTLImplicitSSAName(OpAsmPrinter &p, Operation *op,
+                                       DictionaryAttr attrs) {
+  SmallVector<StringRef, 2> elides;
   elides.push_back(hw::InnerName::getInnerNameAttrName());
-
-  // Note that we only need to print the "name" attribute if the asmprinter
-  // result name disagrees with it.  This can happen in strange cases, e.g.
-  // when there are conflicts.
-  SmallString<32> resultNameStr;
-  llvm::raw_svector_ostream tmpStream(resultNameStr);
-  p.printOperand(op->getResult(0), tmpStream);
-  auto actualName = tmpStream.str().drop_front();
-  auto expectedName = op->getAttrOfType<StringAttr>("name").getValue();
-  // Anonymous names are printed as digits, which is fine.
-  if (actualName == expectedName ||
-      (expectedName.empty() && isdigit(actualName[0])))
-    elides.push_back("name");
-
-  printElideAnnotations(p, op, attr, elides);
+  elideImplicitSSAName(p, op, attrs, elides);
+  printElideAnnotations(p, op, attrs, elides);
 }
 
 //===----------------------------------------------------------------------===//
@@ -3968,6 +3939,8 @@ void RefSubOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
                                      ArrayRef<NamedAttribute> attrs,
                                      std::optional<Location> loc) {
+  // TODO: Don't cast without checking, we're careful to check in all the
+  // others.
   auto inType = operands[0].getType().cast<RefType>().getType();
   auto fieldIdx =
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
