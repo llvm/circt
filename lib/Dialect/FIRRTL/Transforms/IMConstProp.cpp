@@ -403,7 +403,7 @@ void IMConstPropPass::markWireOp(WireOp wire) {
   if (!type || !type.getPassiveType().isGround())
     return markOverdefined(resultValue);
 
-  if (hasDontTouch(wire.getResult(0)))
+  if (hasDontTouch(wire.getResult()))
     return markOverdefined(resultValue);
 
   // Otherwise, this starts out as unknown and is upgraded by connects.
