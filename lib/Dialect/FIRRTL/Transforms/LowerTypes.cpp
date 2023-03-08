@@ -1261,7 +1261,7 @@ bool TypeLoweringVisitor::visitExpr(RefResolveOp op) {
 
 bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   bool skip = true;
-  
+
   auto refMod = op.getReferencedModule(symTbl);
   if (isa<FInterfaceOp>(refMod))
     return false;
@@ -1271,8 +1271,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<Direction> newDirs;
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newPortAnno;
-  PreserveAggregate::PreserveMode mode =
-      getPreservatinoModeForModule(refMod);
+  PreserveAggregate::PreserveMode mode = getPreservatinoModeForModule(refMod);
 
   endFields.push_back(0);
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
