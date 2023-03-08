@@ -1142,16 +1142,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     node w_addr = UInt<36>(42) @[Cat.scala 31:58]
     write mport MPORT = testharness[w_addr], clock
 
-  module SomeModule:
+  ; Module as identifier
+  ; Test parsing of "module" as an identifier for instance and module names
+  extmodule SomeModule:
     input in: UInt
-    output out: UInt
-    out <= in
-
-    ; Module as identifier
-    ; Test parsing of "module" as an identifier for instance names
 
   module ModuleAsIdentifier:
     inst module of SomeModule
-    ; CHECK: %module_in, %module_out = firrtl.instance module
+    ; CHECK: firrtl.instance module interesting_name @SomeModule
     module.in <= UInt(1)
-    ; CHECK: firrtl.connect %module_in, %c1_ui : !firrtl.uint, !firrtl.uint
+
