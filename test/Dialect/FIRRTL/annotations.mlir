@@ -1013,7 +1013,9 @@ firrtl.circuit "GCTInterface"  attributes {
 // Interface
 // CHECK:    firrtl.interface @ViewName
 // CHECK-SAME:         in %_interFacePort_0: !firrtl.uint<1>, in %_interFacePort_1: !firrtl.uint<1>, in %_interFacePort_2: !firrtl.uint<1>, in %_interFacePort_3: !firrtl.uint<1>, in %_interFacePort_4: !firrtl.uint<1>)
+// CHECK-NEXT:      sv.verbatim "// the register in GCTInterface"
 // CHECK-NEXT:      %register = firrtl.wire sym @register : !firrtl<bundle "Register" <_2: vector<uint<1>, 2>, _0_inst: bundle "_0_def" <_1: uint<1>, _0: uint<1>>>>
+// CHECK-NEXT:      sv.verbatim "// the port 'a' in GCTInterface"
 // CHECK-NEXT:      %port = firrtl.wire sym @port : !firrtl.uint<1>
 // CHECK-NEXT:    }
     
@@ -1618,7 +1620,7 @@ firrtl.circuit "GrandCentralViewInsideCompanion" attributes {
   // CHECK:      firrtl.module @Companion
   firrtl.module @Companion(out %b: !firrtl.uint<2>) {
     %clock = firrtl.specialconstant 0 : !firrtl.clock
-    %a = firrtl.reg %clock : !firrtl.uint<1>
+    %a = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
     // CHECK:       %a_0 = firrtl.wire {name = "a"} : !firrtl.uint<1>
     // CHECK-NEXT:  %b_1 = firrtl.wire {name = "b"} : !firrtl.uint<2>
     // CHECK-NEXT:  %View__interFacePort_0, %View__interFacePort_1
