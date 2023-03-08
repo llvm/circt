@@ -161,7 +161,7 @@ static bool isDuplicatableExpression(Operation *op) {
     if (!indexOp || isa<ConstantOp>(indexOp))
       return true;
     if (auto read = dyn_cast<ReadInOutOp>(indexOp)) {
-      auto readSrc = read.getInput().getDefiningOp();
+      auto* readSrc = read.getInput().getDefiningOp();
       // A port or wire is ok to duplicate reads.
       return !readSrc || isa<WireOp, LogicOp>(readSrc);
     }
