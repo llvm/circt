@@ -67,28 +67,32 @@ void RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
     // constant may not dominate the register.  But it might be the next
     // operation, so we can't just move it.  Straight constants can be
     // rematerialized.  Derived constants are piped through wires.
-    bool dominatesAll = true;
-    for (auto *use : reg->getUsers()) {
-      if (use == con)
-        continue;
-      if (!dom.dominates(con.getSrc(), use)) {
-        dominatesAll = false;
-        break;
-      }
-    }
-    if (dominatesAll) {
-      // Dominance is fine, just replace the op.
-      reg.replaceAllUsesWith(con.getSrc());
-      toErase.push_back(con);
-    } else if (auto cst = con.getSrc().getDefiningOp<ConstantOp>()) {
+
+    if (auto cst = con.getSrc().getDefiningOp<ConstantOp>()) {
       // Simple constants we can move safely
       auto *fmodb = con->getParentOfType<FModuleOp>().getBodyBlock();
       cst->moveBefore(fmodb, fmodb->begin());
       reg.replaceAllUsesWith(cst.getResult());
       toErase.push_back(con);
     } else {
-      auto bounce = OpBuilder(reg).create<WireOp>(reg.getLoc(), reg.getType());
-      reg.replaceAllUsesWith(bounce.getResult());
+      bool dominatesAll = true;
+      for (auto *use : reg->getUsers()) {
+        if (use == con)
+          continue;
+        if (!dom.dominates(con.getSrc(), use)) {
+          dominatesAll = false;
+          break;
+        }
+      }
+      if (dominatesAll) {
+        // Dominance is fine, just replace the op.
+        reg.replaceAllUsesWith(con.getSrc());
+        toErase.push_back(con);
+      } else {
+        auto bounce =
+            OpBuilder(reg).create<WireOp>(reg.getLoc(), reg.getType());
+        reg.replaceAllUsesWith(bounce.getResult());
+      }
     }
     toErase.push_back(reg);
     return;
