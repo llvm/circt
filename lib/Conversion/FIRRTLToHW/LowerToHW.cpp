@@ -1230,10 +1230,14 @@ FIRRTLModuleLowering::lowerIntreface(FInterfaceOp interface,
   auto nameAttr = builder.getStringAttr(interface.getName());
   auto newInterface =
       builder.create<sv::InterfaceOp>(interface.getLoc(), nameAttr);
+  if (auto outputFile = interface->getAttr("output_file"))
+    newInterface->setAttr("output_file", outputFile);
+  if (auto comment = interface->getAttrOfType<StringAttr>("comment"))
+    newInterface.setCommentAttr(comment);
+  builder.setInsertionPointToEnd(newInterface.getBodyBlock());
   for (auto &op : interface) {
     if (auto wire = dyn_cast<WireOp>(op)) {
       auto type = lowerType(wire.getType().cast<FIRRTLBaseType>());
-      builder.setInsertionPointToEnd(newInterface.getBodyBlock());
       builder.create<sv::InterfaceSignalOp>(interface.getLoc(),
                                             wire.getNameAttr(), type);
     } else if (auto verbatim = dyn_cast<sv::VerbatimOp>(op))
