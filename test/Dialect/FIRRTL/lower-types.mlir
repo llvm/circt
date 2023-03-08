@@ -14,7 +14,7 @@ firrtl.circuit "TopLevel" {
   firrtl.module private @Simple(in %source: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>,
                         out %sink: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) {
 
-    // COMMON-NEXT: firrtl.when %[[SOURCE_VALID_NAME]]
+    // COMMON-NEXT: firrtl.when %[[SOURCE_VALID_NAME]] : !firrtl.uint<1>
     // COMMON-NEXT:   firrtl.connect %[[SINK_DATA_NAME]], %[[SOURCE_DATA_NAME]] : [[SINK_DATA_TYPE]], [[SOURCE_DATA_TYPE]]
     // COMMON-NEXT:   firrtl.connect %[[SINK_VALID_NAME]], %[[SOURCE_VALID_NAME]] : [[SINK_VALID_TYPE]], [[SOURCE_VALID_TYPE]]
     // COMMON-NEXT:   firrtl.connect %[[SOURCE_READY_NAME]], %[[SINK_READY_NAME]] : [[SOURCE_READY_TYPE]], [[SINK_READY_TYPE]]
@@ -25,7 +25,7 @@ firrtl.circuit "TopLevel" {
     %3 = firrtl.subfield %sink[valid] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
     %4 = firrtl.subfield %sink[ready] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
     %5 = firrtl.subfield %sink[data] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
-    firrtl.when %0 {
+    firrtl.when %0 : !firrtl.uint<1> {
       firrtl.connect %5, %2 : !firrtl.uint<64>, !firrtl.uint<64>
       firrtl.connect %3, %0 : !firrtl.uint<1>, !firrtl.uint<1>
       firrtl.connect %1, %4 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -298,10 +298,10 @@ firrtl.circuit "TopLevel" {
 
     // CHECK-LABEL: firrtl.module private @RegBundle(in %a_a: !firrtl.uint<1>, in %clk: !firrtl.clock, out %b_a: !firrtl.uint<1>)
     firrtl.module private @RegBundle(in %a: !firrtl.bundle<a: uint<1>>, in %clk: !firrtl.clock, out %b: !firrtl.bundle<a: uint<1>>) {
-      // CHECK-NEXT: %x_a = firrtl.reg %clk : !firrtl.uint<1>
+      // CHECK-NEXT: %x_a = firrtl.reg %clk : !firrtl.clock, !firrtl.uint<1>
       // CHECK-NEXT: firrtl.connect %x_a, %a_a : !firrtl.uint<1>, !firrtl.uint<1>
       // CHECK-NEXT: firrtl.connect %b_a, %x_a : !firrtl.uint<1>, !firrtl.uint<1>
-      %x = firrtl.reg %clk {name = "x"} : !firrtl.bundle<a: uint<1>>
+      %x = firrtl.reg %clk {name = "x"} : !firrtl.clock, !firrtl.bundle<a: uint<1>>
       %0 = firrtl.subfield %x[a] : !firrtl.bundle<a: uint<1>>
       %1 = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<1>>
       firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -312,10 +312,10 @@ firrtl.circuit "TopLevel" {
 
     // CHECK-LABEL: firrtl.module private @RegBundleWithBulkConnect(in %a_a: !firrtl.uint<1>, in %clk: !firrtl.clock, out %b_a: !firrtl.uint<1>)
     firrtl.module private @RegBundleWithBulkConnect(in %a: !firrtl.bundle<a: uint<1>>, in %clk: !firrtl.clock, out %b: !firrtl.bundle<a: uint<1>>) {
-      // CHECK-NEXT: %x_a = firrtl.reg %clk : !firrtl.uint<1>
+      // CHECK-NEXT: %x_a = firrtl.reg %clk : !firrtl.clock, !firrtl.uint<1>
       // CHECK-NEXT: firrtl.strictconnect %x_a, %a_a : !firrtl.uint<1>
       // CHECK-NEXT: firrtl.strictconnect %b_a, %x_a : !firrtl.uint<1>
-      %x = firrtl.reg %clk {name = "x"} : !firrtl.bundle<a: uint<1>>
+      %x = firrtl.reg %clk {name = "x"} : !firrtl.clock, !firrtl.bundle<a: uint<1>>
       firrtl.connect %x, %a : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
       firrtl.connect %b, %x : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
     }
@@ -393,7 +393,7 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     %1 = firrtl.subindex %init[1] : !firrtl.vector<uint<1>, 2>
     firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    %r = firrtl.regreset %clock, %reset, %init {name = "r"} : !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+    %r = firrtl.regreset %clock, %reset, %init {name = "r"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
     firrtl.connect %r, %a_d : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
     firrtl.connect %a_q, %r : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
@@ -402,8 +402,8 @@ firrtl.circuit "TopLevel" {
   // CHECK:   %init_1 = firrtl.wire  : !firrtl.uint<1>
   // CHECK:   firrtl.connect %init_0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:   firrtl.connect %init_1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-  // CHECK:   %r_0 = firrtl.regreset %clock, %reset, %init_0 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
-  // CHECK:   %r_1 = firrtl.regreset %clock, %reset, %init_1 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:   %r_0 = firrtl.regreset %clock, %reset, %init_0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:   %r_1 = firrtl.regreset %clock, %reset, %init_1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:   firrtl.strictconnect %r_0, %a_d_0 : !firrtl.uint<1>
   // CHECK:   firrtl.strictconnect %r_1, %a_d_1 : !firrtl.uint<1>
   // CHECK:   firrtl.strictconnect %a_q_0, %r_0 : !firrtl.uint<1>
@@ -414,7 +414,7 @@ firrtl.circuit "TopLevel" {
   // AGGREGATE-NEXT:  firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   // AGGREGATE-NEXT:  %1 = firrtl.subindex %init[1] : !firrtl.vector<uint<1>, 2>
   // AGGREGATE-NEXT:  firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-  // AGGREGATE-NEXT:  %r = firrtl.regreset %clock, %reset, %init  : !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+  // AGGREGATE-NEXT:  %r = firrtl.regreset %clock, %reset, %init  : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   // AGGREGATE-NEXT:  %2 = firrtl.subindex %a_d[0] : !firrtl.vector<uint<1>, 2>
   // AGGREGATE-NEXT:  %3 = firrtl.subindex %r[0] : !firrtl.vector<uint<1>, 2>
   // AGGREGATE-NEXT:  firrtl.strictconnect %3, %2 : !firrtl.uint<1>
@@ -438,7 +438,7 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     %1 = firrtl.subindex %init[1] : !firrtl.vector<uint<1>, 2>
     firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    %r = firrtl.regreset %clock, %reset, %init {name = ""} : !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+    %r = firrtl.regreset %clock, %reset, %init {name = ""} : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
     firrtl.connect %r, %a_d : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
     firrtl.connect %a_q, %r : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
@@ -447,8 +447,8 @@ firrtl.circuit "TopLevel" {
   // CHECK:   %init_1 = firrtl.wire  : !firrtl.uint<1>
   // CHECK:   firrtl.connect %init_0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:   firrtl.connect %init_1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-  // CHECK:   %0 = firrtl.regreset %clock, %reset, %init_0 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
-  // CHECK:   %1 = firrtl.regreset %clock, %reset, %init_1 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:   %0 = firrtl.regreset %clock, %reset, %init_0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:   %1 = firrtl.regreset %clock, %reset, %init_1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:   firrtl.strictconnect %0, %a_d_0 : !firrtl.uint<1>
   // CHECK:   firrtl.strictconnect %1, %a_d_1 : !firrtl.uint<1>
   // CHECK:   firrtl.strictconnect %a_q_0, %0 : !firrtl.uint<1>
@@ -458,12 +458,12 @@ firrtl.circuit "TopLevel" {
 // https://github.com/llvm/circt/issues/795
   // CHECK-LABEL: firrtl.module private @lowerRegOpNoName
   firrtl.module private @lowerRegOpNoName(in %clock: !firrtl.clock, in %a_d: !firrtl.vector<uint<1>, 2>, out %a_q: !firrtl.vector<uint<1>, 2>) {
-    %r = firrtl.reg %clock {name = ""} : !firrtl.vector<uint<1>, 2>
+    %r = firrtl.reg %clock {name = ""} : !firrtl.clock, !firrtl.vector<uint<1>, 2>
       firrtl.connect %r, %a_d : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
       firrtl.connect %a_q, %r : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
- // CHECK:    %0 = firrtl.reg %clock : !firrtl.uint<1>
- // CHECK:    %1 = firrtl.reg %clock : !firrtl.uint<1>
+ // CHECK:    %0 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
+ // CHECK:    %1 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
  // CHECK:    firrtl.strictconnect %0, %a_d_0 : !firrtl.uint<1>
  // CHECK:    firrtl.strictconnect %1, %a_d_1 : !firrtl.uint<1>
  // CHECK:    firrtl.strictconnect %a_q_0, %0 : !firrtl.uint<1>
@@ -534,8 +534,8 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     %1 = firrtl.subindex %bazInit[1] : !firrtl.vector<uint<1>, 2>
     firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    %bar = firrtl.reg %clock  {annotations = [{a = "a"}], name = "bar"} : !firrtl.vector<uint<1>, 2>
-    %baz = firrtl.regreset %clock, %reset, %bazInit  {annotations = [{b = "b"}], name = "baz"} : !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+    %bar = firrtl.reg %clock  {annotations = [{a = "a"}], name = "bar"} : !firrtl.clock, !firrtl.vector<uint<1>, 2>
+    %baz = firrtl.regreset %clock, %reset, %bazInit  {annotations = [{b = "b"}], name = "baz"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
   // CHECK: firrtl.reg
   // CHECK-SAME: annotations = [{a = "a"}]
@@ -552,14 +552,14 @@ firrtl.circuit "TopLevel" {
                          in %in : !firrtl.bundle<a: uint<1>, b: uint<1>>,
                          out %out : !firrtl.bundle<a: uint<1>, b: uint<1>>) {
     // No else region.
-    firrtl.when %p {
+    firrtl.when %p : !firrtl.uint<1> {
       // CHECK: firrtl.strictconnect %out_a, %in_a : !firrtl.uint<1>
       // CHECK: firrtl.strictconnect %out_b, %in_b : !firrtl.uint<1>
       firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
     }
 
     // Else region.
-    firrtl.when %p {
+    firrtl.when %p : !firrtl.uint<1> {
       // CHECK: firrtl.strictconnect %out_a, %in_a : !firrtl.uint<1>
       // CHECK: firrtl.strictconnect %out_b, %in_b : !firrtl.uint<1>
       firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
@@ -599,13 +599,13 @@ firrtl.circuit "TopLevel" {
     %bar = firrtl.reg %clock  {annotations = [
       {circt.fieldID = 3, one},
       {circt.fieldID = 5, two}
-    ]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    ]} : !firrtl.clock, !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
     // TODO: Enable this
-    // CHECK: %bar_0_baz = firrtl.reg %clock  : !firrtl.uint<1>
-    // CHECK: %bar_0_qux = firrtl.reg %clock  {annotations = [{one}]} : !firrtl.uint<1>
-    // CHECK: %bar_1_baz = firrtl.reg %clock  {annotations = [{two}]} : !firrtl.uint<1>
-    // CHECK: %bar_1_qux = firrtl.reg %clock  : !firrtl.uint<1>
+    // CHECK: %bar_0_baz = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_0_qux = firrtl.reg %clock  {annotations = [{one}]} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_1_baz = firrtl.reg %clock  {annotations = [{two}]} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_1_qux = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
   }
 
 // Test that subfield annotations on reg are lowred to appropriate instance based on fieldID. Ignore un-flattened array targets
@@ -618,21 +618,21 @@ firrtl.circuit "TopLevel" {
         {circt.fieldID = 6, one},
         {circt.fieldID = 12, two},
         {circt.fieldID = 8, three}
-      ]} : !firrtl.vector<bundle<baz: vector<uint<1>, 2>, qux: vector<uint<1>, 2>, yes: bundle<a: uint<1>, b: uint<1>>>, 2>
+      ]} : !firrtl.clock, !firrtl.vector<bundle<baz: vector<uint<1>, 2>, qux: vector<uint<1>, 2>, yes: bundle<a: uint<1>, b: uint<1>>>, 2>
 
     // TODO: Enable this
-    // CHECK: %bar_0_baz_0 = firrtl.reg %clock  : !firrtl.uint<1>
-    // CHECK: %bar_0_baz_1 = firrtl.reg %clock  : !firrtl.uint<1>
-    // CHECK: %bar_0_qux_0 = firrtl.reg %clock  {annotations = [{one}]} : !firrtl.uint<1>
-    // CHECK: %bar_0_qux_1 = firrtl.reg %clock  : !firrtl.uint<1>
-    // CHECK: %bar_0_yes_a = firrtl.reg %clock  {annotations = [{three}]} : !firrtl.uint<1>
-    // CHECK: %bar_0_yes_b = firrtl.reg %clock  {annotations = [{three}]} : !firrtl.uint<1>
-    // CHECK: %bar_1_baz_0 = firrtl.reg %clock  {annotations = [{two}]} : !firrtl.uint<1>
-    // CHECK: %bar_1_baz_1 = firrtl.reg %clock  {annotations = [{two}]} : !firrtl.uint<1>
-    // CHECK: %bar_1_qux_0 = firrtl.reg %clock  : !firrtl.uint<1>
-    // CHECK: %bar_1_qux_1 = firrtl.reg %clock  : !firrtl.uint<1>
-    // CHECK: %bar_1_yes_a = firrtl.reg %clock  : !firrtl.uint<1>
-    // CHECK: %bar_1_yes_b = firrtl.reg %clock  : !firrtl.uint<1>
+    // CHECK: %bar_0_baz_0 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_0_baz_1 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_0_qux_0 = firrtl.reg %clock  {annotations = [{one}]} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_0_qux_1 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_0_yes_a = firrtl.reg %clock  {annotations = [{three}]} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_0_yes_b = firrtl.reg %clock  {annotations = [{three}]} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_1_baz_0 = firrtl.reg %clock  {annotations = [{two}]} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_1_baz_1 = firrtl.reg %clock  {annotations = [{two}]} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_1_qux_0 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_1_qux_1 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_1_yes_a = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_1_yes_b = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
   }
 
 // Test wire connection semantics.  Based on the flippedness of the destination
@@ -800,12 +800,12 @@ firrtl.circuit "TopLevel" {
 // CHECK-NEXT:      firrtl.strictconnect %a_1, %default_1 : !firrtl.uint<1>
 // CHECK-NEXT:      %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
 // CHECK-NEXT:      %0 = firrtl.eq %sel, %c0_ui1 : (!firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      firrtl.when %0  {
+// CHECK-NEXT:      firrtl.when %0 : !firrtl.uint<1> {
 // CHECK-NEXT:        firrtl.strictconnect %a_0, %b : !firrtl.uint<1>
 // CHECK-NEXT:      }
 // CHECK-NEXT:      %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 // CHECK-NEXT:      %1 = firrtl.eq %sel, %c1_ui1 : (!firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      firrtl.when %1  {
+// CHECK-NEXT:      firrtl.when %1 : !firrtl.uint<1> {
 // CHECK-NEXT:        firrtl.strictconnect %a_1, %b : !firrtl.uint<1>
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
@@ -827,29 +827,29 @@ firrtl.circuit "TopLevel" {
 // CHECK-LABEL:    firrtl.module private @multidimWrite(in %sel: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %a_0_0: !firrtl.uint<2>, out %a_0_1: !firrtl.uint<2>, out %a_1_0: !firrtl.uint<2>, out %a_1_1: !firrtl.uint<2>) {
 // CHECK-NEXT:      %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
 // CHECK-NEXT:      %0 = firrtl.eq %sel, %c0_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      firrtl.when %0  {
+// CHECK-NEXT:      firrtl.when %0 : !firrtl.uint<1> {
 // CHECK-NEXT:        %c0_ui1_0 = firrtl.constant 0 : !firrtl.uint<1>
 // CHECK-NEXT:        %2 = firrtl.eq %sel, %c0_ui1_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:        firrtl.when %2  {
+// CHECK-NEXT:        firrtl.when %2 : !firrtl.uint<1> {
 // CHECK-NEXT:          firrtl.strictconnect %a_0_0, %b : !firrtl.uint<2>
 // CHECK-NEXT:        }
 // CHECK-NEXT:        %c1_ui1_1 = firrtl.constant 1 : !firrtl.uint<1>
 // CHECK-NEXT:        %3 = firrtl.eq %sel, %c1_ui1_1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:        firrtl.when %3  {
+// CHECK-NEXT:        firrtl.when %3 : !firrtl.uint<1> {
 // CHECK-NEXT:          firrtl.strictconnect %a_0_1, %b : !firrtl.uint<2>
 // CHECK-NEXT:        }
 // CHECK-NEXT:      }
 // CHECK-NEXT:      %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 // CHECK-NEXT:      %1 = firrtl.eq %sel, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      firrtl.when %1  {
+// CHECK-NEXT:      firrtl.when %1 : !firrtl.uint<1> {
 // CHECK-NEXT:        %c0_ui1_0 = firrtl.constant 0 : !firrtl.uint<1>
 // CHECK-NEXT:        %2 = firrtl.eq %sel, %c0_ui1_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:        firrtl.when %2  {
+// CHECK-NEXT:        firrtl.when %2 : !firrtl.uint<1> {
 // CHECK-NEXT:          firrtl.strictconnect %a_1_0, %b : !firrtl.uint<2>
 // CHECK-NEXT:        }
 // CHECK-NEXT:        %c1_ui1_1 = firrtl.constant 1 : !firrtl.uint<1>
 // CHECK-NEXT:        %3 = firrtl.eq %sel, %c1_ui1_1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:        firrtl.when %3  {
+// CHECK-NEXT:        firrtl.when %3 : !firrtl.uint<1> {
 // CHECK-NEXT:          firrtl.strictconnect %a_1_1, %b : !firrtl.uint<2>
 // CHECK-NEXT:        }
 // CHECK-NEXT:      }
@@ -879,12 +879,12 @@ firrtl.circuit "TopLevel" {
 // CHECK-NEXT:      firrtl.strictconnect %b_1_valid, %def_1_valid : !firrtl.uint<2>
 // CHECK-NEXT:      %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
 // CHECK-NEXT:      %0 = firrtl.eq %sel, %c0_ui1 : (!firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      firrtl.when %0  {
+// CHECK-NEXT:      firrtl.when %0 : !firrtl.uint<1> {
 // CHECK-NEXT:        firrtl.strictconnect %b_0_wo, %a_wo : !firrtl.uint<1>
 // CHECK-NEXT:      }
 // CHECK-NEXT:      %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 // CHECK-NEXT:      %1 = firrtl.eq %sel, %c1_ui1 : (!firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      firrtl.when %1  {
+// CHECK-NEXT:      firrtl.when %1 : !firrtl.uint<1> {
 // CHECK-NEXT:        firrtl.strictconnect %b_1_wo, %a_wo : !firrtl.uint<1>
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
