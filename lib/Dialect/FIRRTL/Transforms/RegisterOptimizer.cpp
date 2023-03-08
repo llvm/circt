@@ -36,22 +36,22 @@ namespace {
 struct RegisterOptimizerPass
     : public RegisterOptimizerBase<RegisterOptimizerPass> {
   void runOnOperation() override;
-  bool checkRegReset(mlir::DominanceInfo &dom,
+  void checkRegReset(mlir::DominanceInfo &dom,
                      SmallVector<Operation *> &toErase, RegResetOp reg);
-  bool checkReg(mlir::DominanceInfo &dom, SmallVector<Operation *> &toErase,
+  void checkReg(mlir::DominanceInfo &dom, SmallVector<Operation *> &toErase,
                 RegOp reg);
 };
 
 } // namespace
 
-bool RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
+void RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
                                      SmallVector<Operation *> &toErase,
                                      RegOp reg) {
   if (!canErase(reg))
-    return false;
+    return;
   auto con = getSingleConnectUserOf(reg.getResult());
   if (!con)
-    return false;
+    return;
 
   // Register is only written by itself, replace with invalid.
   if (con.getSrc() == reg) {
@@ -60,7 +60,7 @@ bool RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
     reg.replaceAllUsesWith(inv.getResult());
     toErase.push_back(reg);
     toErase.push_back(con);
-    return true;
+    return;
   }
   // Register is only written by a constant
   if (isConstant(con.getSrc())) {
@@ -91,20 +91,20 @@ bool RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
       reg.replaceAllUsesWith(bounce.getResult());
     }
     toErase.push_back(reg);
-    return true;
+    return;
   }
 
-  return false;
+  return;
 }
 
-bool RegisterOptimizerPass::checkRegReset(mlir::DominanceInfo &dom,
+void RegisterOptimizerPass::checkRegReset(mlir::DominanceInfo &dom,
                                           SmallVector<Operation *> &toErase,
                                           RegResetOp reg) {
   if (!canErase(reg))
-    return false;
+    return;
   auto con = getSingleConnectUserOf(reg.getResult());
   if (!con)
-    return false;
+    return;
 
   // Register is only written by itself, and reset with a constant.
   if (con.getSrc() == reg && isConstant(reg.getResetValue())) {
@@ -112,7 +112,7 @@ bool RegisterOptimizerPass::checkRegReset(mlir::DominanceInfo &dom,
     reg.replaceAllUsesWith(reg.getResetValue());
     toErase.push_back(reg);
     toErase.push_back(con);
-    return true;
+    return;
   }
   // Register is only written by a constant, and reset with the same constant.
   if (con.getSrc() == reg.getResetValue() && isConstant(reg.getResetValue())) {
@@ -120,10 +120,10 @@ bool RegisterOptimizerPass::checkRegReset(mlir::DominanceInfo &dom,
     reg.replaceAllUsesWith(reg.getResetValue());
     toErase.push_back(reg);
     toErase.push_back(con);
-    return true;
+    return;
   }
 
-  return false;
+  return;
 }
 
 void RegisterOptimizerPass::runOnOperation() {
@@ -132,20 +132,19 @@ void RegisterOptimizerPass::runOnOperation() {
                              "--------------------------------------===\n"
                           << "Module: '" << mod.getName() << "'\n";);
 
-  bool changed = false;
   SmallVector<Operation *> toErase;
   mlir::DominanceInfo dom(mod);
 
   for (auto &op : *mod.getBodyBlock()) {
     if (auto reg = dyn_cast<RegResetOp>(&op))
-      changed |= checkRegReset(dom, toErase, reg);
+      checkRegReset(dom, toErase, reg);
     else if (auto reg = dyn_cast<RegOp>(&op))
-      changed |= checkReg(dom, toErase, reg);
+      checkReg(dom, toErase, reg);
   }
   for (auto *op : toErase)
     op->erase();
 
-  if (!changed)
+  if (!toErase.empty())
     return markAllAnalysesPreserved();
 }
 
