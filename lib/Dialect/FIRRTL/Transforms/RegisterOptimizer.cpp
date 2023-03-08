@@ -82,7 +82,7 @@ void RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
       toErase.push_back(con);
     } else if (auto cst = con.getSrc().getDefiningOp<ConstantOp>()) {
       // Simple constants we can move safely
-      auto fmodb = con->getParentOfType<FModuleOp>().getBodyBlock();
+      auto *fmodb = con->getParentOfType<FModuleOp>().getBodyBlock();
       cst->moveBefore(fmodb, fmodb->begin());
       reg.replaceAllUsesWith(cst.getResult());
       toErase.push_back(con);
@@ -93,8 +93,6 @@ void RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
     toErase.push_back(reg);
     return;
   }
-
-  return;
 }
 
 void RegisterOptimizerPass::checkRegReset(mlir::DominanceInfo &dom,
@@ -122,8 +120,6 @@ void RegisterOptimizerPass::checkRegReset(mlir::DominanceInfo &dom,
     toErase.push_back(con);
     return;
   }
-
-  return;
 }
 
 void RegisterOptimizerPass::runOnOperation() {
