@@ -1141,3 +1141,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     smem testharness : UInt<8>[16] [34359738368]
     node w_addr = UInt<36>(42) @[Cat.scala 31:58]
     write mport MPORT = testharness[w_addr], clock
+
+  ; Module as identifier
+  ; Test parsing of "module" as an identifier for instance and module names
+  extmodule SomeModule:
+    input in: UInt
+
+  module ModuleAsIdentifier:
+    inst module of SomeModule
+    ; CHECK: firrtl.instance module interesting_name @SomeModule
+    module.in <= UInt(1)
+
