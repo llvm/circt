@@ -311,5 +311,230 @@ circuit PrintfExpr:
   module PrintfExpr:
     input clk: Clock
     input enable: UInt<1>
+
+;// -----
+
+circuit ProbeFlipType:
+  module ProbeFlipType:
+    output p : Probe<{a: UInt, flip b: UInt}> ; expected-error {{probe inner type must be passive}}
+
+;// -----
+
+circuit NestedProbes:
+  module NestedProbes:
+    output p : Probe<Probe<UInt>> ; expected-error {{cannot nest reference types}}
+
+;// -----
+
+circuit RefSubaccess:
+  module RefSubaccess:
+    input in : UInt<1>[3]
+    input sel : UInt<2>
     output out : UInt<1>
-    out <= printf(clk, enable, "b1") ; expected-error {{unexpected token in statement}}
+
+    out <= read(probe(in)[sel]) ; expected-error {{expected ')' in 'read'}}
+
+;// -----
+
+circuit ProbeBase:
+  extmodule ProbeGen:
+    output p : Probe<UInt<2>>
+    ref p is "x.y"
+
+  module ProbeBase:
+    input in : UInt<1>
+    output out : UInt
+
+    inst pg of ProbeGen
+    out <= probe(pg.p) ; expected-error {{expected non-reference-type expression in 'probe', got}}
+
+;// -----
+
+circuit ProbeProbe:
+  module ProbeProbe:
+    input in : UInt<1>
+    output out : UInt
+
+    out <= probe(probe(in)) ; expected-error {{expected static reference expression in 'probe'}}
+
+;// -----
+
+circuit ReadBase:
+  module ReadBase:
+    input in : UInt<1>
+    output out : UInt
+
+    out <= read(in) ; expected-error {{expected reference-type expression in 'read', got}}
+
+;// -----
+
+circuit DefineBaseLHS:
+  module DefineBaseLHS:
+    input in : UInt<1>
+    output out : UInt
+
+    define out = probe(in) ; expected-error {{expected reference-type expression in 'define' target (LHS), got}}
+
+;// -----
+
+circuit DefineBaseRHS:
+  module DefineBaseRHS:
+    input in : UInt<1>
+    output out : Probe<UInt>
+
+    define out = in ; expected-error {{expected reference-type expression in 'define' source (RHS), got}}
+
+;// -----
+circuit RefSubaccess:
+  module RefSubaccess:
+    input in : UInt<1>[3]
+    input sel : UInt<2>
+    output out : UInt<1>
+
+    out <= read(probe(in[sel])) ; expected-error {{subaccess not allowed here}}
+
+;// -----
+
+circuit DefineTwice:
+  module DefineTwice:
+    input in: UInt<1>
+    output out : Probe<UInt<1>>
+    define out = probe(in) ; expected-error {{output reference port cannot be reused by multiple operations}}
+    define out = probe(in)
+
+;// -----
+
+circuit DefineIntoSubindex:
+  module DefineIntoSubindex:
+    input in : UInt<1>[3]
+    output out : Probe<UInt<1>[3]>
+
+    define out[0] = probe(in) ; expected-error {{cannot define into a sub-element of a reference}}
+
+;// -----
+
+circuit DefineIntoProbe:
+  module DefineIntoProbe:
+    input in : UInt<1>
+    output out : UInt<1>
+
+    define probe(out) = probe(in) ; expected-error {{expected static reference expression in 'define'}}
+
+;// -----
+
+circuit InProbeTop:
+  module InProbeTop:
+    input p : Probe<UInt<1>> ; expected-error {{main module may not contain input references}}
+
+;// -----
+
+circuit InProbeExt:
+  extmodule BadExtMod:
+    input p : Probe<UInt<1>> ; expected-error {{references in ports must be output on extmodule and intmodule}}
+
+  module InProbeExt:
+    inst e of BadExtMod
+
+;// -----
+
+circuit RefDupe:
+  extmodule RefDupe:
+    output p : Probe<UInt<2>>
+    ref p is "x.y"
+    ref p is "a.z" ; expected-error {{duplicate ref statement for 'p'}}
+
+;// -----
+
+circuit MissingRef:
+  extmodule MissingRef:
+    output p : Probe<UInt<2>> ; expected-error {{no ref statement found for ref port "p"}}
+
+;// -----
+
+circuit UnusedRef:
+  extmodule UnusedRef:
+    ref p is "x.y" ; expected-error {{unused ref statement}}
+
+;// -----
+
+circuit RefNotString:
+  extmodule RefNotString:
+    output p : Probe<UInt<2>>
+    ref p is a.b ; expected-error {{expected string in ref statement}}
+
+;// -----
+
+circuit ProbeConnect:
+  module ProbeConnect:
+    input in : UInt<1>
+    output p : Probe<UInt<1>>
+
+    p <= probe(in) ; expected-error {{cannot connect reference types}}
+
+;// -----
+
+circuit ProbePartialConnect:
+  module ProbePartialConnect:
+    input in : UInt<1>
+    output p : Probe<UInt<1>>
+
+    p <- probe(in) ; expected-error {{cannot connect reference types}}
+
+;// -----
+
+circuit ProbeMem:
+  module ProbeMem:
+    output out : Probe<UInt<3>> ; (wrong probe type, can't probe memories)
+
+    mem memory:
+      data-type => UInt<8>
+      depth => 4
+      reader => r
+      writer => w
+      read-latency => 1
+      write-latency => 1
+      read-under-write => undefined
+
+    memory.r is invalid
+    memory.w is invalid
+    define out = probe(memory.r) ; expected-error {{cannot probe memories or their ports}}
+
+
+;// -----
+
+circuit ProbeSMem:
+  module ProbeSMem:
+    input clock : Clock
+    input reset : Reset
+    output io : { flip addr : UInt<3>, dataOut : UInt<8>}
+    output out : Probe<UInt<8>>
+
+    smem mem : UInt<8> [8]
+    infer mport read = mem[io.addr], clock
+    io.dataOut <= read
+    define out = probe(read) ; expected-error {{cannot probe memories or their ports}}
+
+;// -----
+
+; Reject if connect doesn't model behavior yet.
+circuit Nested:
+  module Nested:
+    input in: UInt<1>
+    output out : Probe<UInt<1>>
+    when in:
+      define out = probe(in) ; expected-error {{cannot define out of a block yet}}
+
+
+;// -----
+
+circuit LeadingRead:
+  module LeadingRead:
+    input in : UInt<1>
+    read(probe(in)) ; expected-error {{unexpected read() as start of statement}}
+
+;// -----
+
+circuit LeadingProbe:
+  module LeadingProbe:
+    input in : UInt<1>
+    probe(in) ; expected-error {{unexpected probe() as start of statement}}
