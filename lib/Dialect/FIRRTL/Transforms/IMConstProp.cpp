@@ -238,7 +238,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
 
   /// Mark the given block as executable.
   void markBlockExecutable(Block *block);
-  void markWireOp(Operation *wireOrReg);
+  void markWireOp(WireOp wireOrReg);
   void markMemOp(MemOp mem);
 
   void markInvalidValueOp(InvalidValueOp invalid);
@@ -370,8 +370,8 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
     // Handle each of the special operations in the firrtl dialect.
     if (isa<RegOp, RegResetOp>(&op))
       markOverdefined(op.getResult(0));
-    else if (isa<WireOp>(&op))
-      markWireOp(&op);
+    else if (auto wire = dyn_cast<WireOp>(&op))
+      markWireOp(wire);
     else if (isAggregate(&op))
       markOverdefined(op.getResult(0));
     else if (auto constant = dyn_cast<ConstantOp>(op))
@@ -394,7 +394,7 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
   }
 }
 
-void IMConstPropPass::markWireOp(Operation *wire) {
+void IMConstPropPass::markWireOp(WireOp wire) {
   // If the wire/reg/node has a non-ground type, then it is too complex for us
   // to handle, mark it as overdefined.
   // TODO: Eventually add a field-sensitive model.
@@ -403,7 +403,7 @@ void IMConstPropPass::markWireOp(Operation *wire) {
   if (!type || !type.getPassiveType().isGround())
     return markOverdefined(resultValue);
 
-  if (hasDontTouch(wire))
+  if (hasDontTouch(wire.getResult(0)))
     return markOverdefined(resultValue);
 
   // Otherwise, this starts out as unknown and is upgraded by connects.

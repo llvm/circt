@@ -3758,8 +3758,29 @@ void FIRRTLLowering::lowerRegConnect(const FieldRef &fieldRef, Value dest,
 }
 
 LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
-  op.emitError("Connects should be legalized earlier");
-  return failure();
+  auto dest = op.getDest();
+  // The source can be a smaller integer, extend it as appropriate if so.
+  auto destType = dest.getType().cast<FIRRTLBaseType>().getPassiveType();
+  auto srcVal = getLoweredAndExtendedValue(op.getSrc(), destType);
+  if (!srcVal)
+    return handleZeroBit(op.getSrc(), []() { return success(); });
+
+  auto destVal = getPossiblyInoutLoweredValue(dest);
+  if (!destVal)
+    return failure();
+
+  auto fieldRef = getFieldRefFromValue(dest);
+  auto definingOp = fieldRef.getValue().getDefiningOp();
+  if (isa<RegOp>(definingOp) || isa<RegResetOp>(definingOp)) {
+    lowerRegConnect(fieldRef, dest, srcVal);
+    return success();
+  }
+
+  if (!destVal.getType().isa<hw::InOutType>())
+    return op.emitError("destination isn't an inout type");
+
+  builder.create<sv::AssignOp>(destVal, srcVal);
+  return success();
 }
 
 LogicalResult FIRRTLLowering::visitStmt(StrictConnectOp op) {
