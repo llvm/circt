@@ -155,15 +155,17 @@ static bool isDuplicatableExpression(Operation *op) {
   if (isa<comb::ExtractOp, hw::StructExtractOp>(op))
     return true;
 
-  // We only inline array_get with a constant or wire index.
+  // We only inline array_get with a constant, port or wire index.
   if (auto array = dyn_cast<hw::ArrayGetOp>(op)) {
     auto *indexOp = array.getIndex().getDefiningOp();
-    if (isa<ConstantOp>(indexOp))
+    if (!indexOp || isa<ConstantOp>(indexOp))
       return true;
     if (auto read = dyn_cast<ReadInOutOp>(indexOp)) {
-      auto *op = read.getInput().getDefiningOp();
-      return isa<WireOp, LogicOp>(op);
+      auto readSrc = read.getInput().getDefiningOp();
+      // A port or wire is ok to duplicate reads.
+      return !readSrc || isa<WireOp, LogicOp>(readSrc);
     }
+
     return false;
   }
 
