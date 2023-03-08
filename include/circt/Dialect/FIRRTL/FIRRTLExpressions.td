@@ -464,7 +464,7 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
   code inferType = "";
   let inferTypeDecl = !if(!empty(inferType), [{
     /// Infer the return type of this unary operation.
-    static FIRRTLType inferUnaryReturnType(FIRRTLType arg,
+    static FIRRTLType inferUnaryReturnType(FIRRTLType input,
                                            std::optional<Location> loc);
     }], "") # !subst("$_infer", !if(!empty(inferType), "inferUnaryReturnType",
       inferType), [{

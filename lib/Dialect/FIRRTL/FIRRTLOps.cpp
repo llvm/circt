@@ -3045,9 +3045,9 @@ LogicalResult impl::validateUnaryOpArguments(ValueRange operands,
 }
 
 FIRRTLType
-SizeOfIntrinsicOp::inferUnaryReturnType(FIRRTLType arg,
+SizeOfIntrinsicOp::inferUnaryReturnType(FIRRTLType input,
                                         std::optional<Location> loc) {
-  return UIntType::get(arg.getContext(), 32);
+  return UIntType::get(input.getContext(), 32);
 }
 
 FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
