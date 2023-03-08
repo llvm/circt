@@ -641,6 +641,8 @@ ParseResult FIRParser::parseFieldId(StringRef &result, const Twine &message) {
 ///      ::= 'Analog' optional-width
 ///      ::= {' field* '}'
 ///      ::= type '[' intLit ']'
+///      ::= 'Probe' '<' type '>'
+///      ::= 'RWProbe' '<' type '>'
 ///
 /// field: 'flip'? fieldId ':' type
 ///
@@ -683,6 +685,33 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
       assert(kind == FIRToken::kw_Analog);
       result = AnalogType::get(getContext(), width);
     }
+    break;
+  }
+
+  case FIRToken::kw_Probe:
+  case FIRToken::kw_RWProbe: {
+    auto kind = getToken().getKind();
+    auto loc = getToken().getLoc();
+    consumeToken();
+    FIRRTLType type;
+
+    if (parseToken(FIRToken::less, "expected '<' in reference type") ||
+        parseType(type, "expected probe data type") ||
+        parseToken(FIRToken::greater, "expected '>' in reference type"))
+      return failure();
+
+    if (kind == FIRToken::kw_RWProbe)
+      emitWarning(translateLocation(loc),
+                  "RWProbe not yet supported, converting to Probe");
+
+    auto innerType = dyn_cast<FIRRTLBaseType>(type);
+    if (!innerType) // "innerType.containsReference()"
+      return emitError(loc, "cannot nest reference types");
+
+    if (!innerType.isPassive())
+      return emitError(loc, "probe types must be passive");
+
+    result = RefType::get(innerType);
     break;
   }
 
@@ -1142,6 +1171,10 @@ private:
     return parseExpImpl(result, message, /*isLeadingStmt:*/ true);
   }
 
+  template <typename subop>
+  FailureOr<Value> emitCachedSubAccess(Value base,
+                                       ArrayRef<NamedAttribute> attrs,
+                                       unsigned indexNo, SMLoc loc);
   ParseResult parseOptionalExpPostscript(Value &result);
   ParseResult parsePostFixFieldId(Value &result);
   ParseResult parsePostFixIntSubscript(Value &result);
@@ -1161,6 +1194,10 @@ private:
   ParseResult parseAssume();
   ParseResult parseCover();
   ParseResult parseWhen(unsigned whenIndent);
+  ParseResult parseRefDefine();
+  ParseResult parseRefRead(Value &result);
+  ParseResult parseProbe(Value &result);
+  ParseResult parseRWProbe(Value &result);
   ParseResult parseLeadingExpStmt(Value lhs);
 
   // Declarations
@@ -1331,11 +1368,26 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     // redundant definition of TOK_LPKEYWORD_PRIM which is needed to get
     // around a bug in the MSVC preprocessor to properly paste together the
     // tokens lp_##SPELLING.
-#define TOK_LPKEYWORD(SPELLING) case FIRToken::lp_##SPELLING:
+#define TOK_LPKEYWORD(SPELLING)
 #define TOK_LPKEYWORD_PRIM(SPELLING, CLASS, NUMOPERANDS)                       \
   case FIRToken::lp_##SPELLING:
 #include "FIRTokenKinds.def"
     if (parsePrimExp(result))
+      return failure();
+    break;
+
+  case FIRToken::lp_read:
+    // TODO: reject if leading?
+    if (parseRefRead(result /*, message*/))
+      return failure();
+    break;
+
+  case FIRToken::lp_probe:
+    if (parseProbe(result /*, message*/))
+      return failure();
+    break;
+  case FIRToken::lp_rwprobe:
+    if (parseRWProbe(result /*, message*/))
       return failure();
     break;
 
@@ -1432,6 +1484,35 @@ ParseResult FIRStmtParser::parseOptionalExpPostscript(Value &result) {
   }
 }
 
+template <typename subop>
+FailureOr<Value>
+FIRStmtParser::emitCachedSubAccess(Value base, ArrayRef<NamedAttribute> attrs,
+                                   unsigned indexNo, SMLoc loc) {
+  // Make sure the field name matches up with the input value's type and
+  // compute the result type for the expression.
+  auto resultType = subop::inferReturnType({base}, attrs, {});
+  if (!resultType) {
+    // Emit the error at the right location.  translateLocation is expensive.
+    (void)subop::inferReturnType({base}, attrs, translateLocation(loc));
+    return failure();
+  }
+
+  // Check if we already have created this Subindex op.
+  auto &value = moduleContext.getCachedSubaccess(base, indexNo);
+  if (value)
+    return value;
+
+  // Create the result operation, inserting at the location of the declaration.
+  // This will cache the subfield operation for further uses.
+  locationProcessor.setLoc(loc);
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPointAfterValue(base);
+  auto op = builder.create<subop>(resultType, base, attrs);
+
+  // Insert the newly created operation into the cache.
+  return value = op.getResult();
+}
+
 /// exp ::= exp '.' fieldId
 ///
 /// The "exp '.'" part of the production has already been parsed.
@@ -1441,7 +1522,9 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
   StringRef fieldName;
   if (parseFieldId(fieldName, "expected field name"))
     return failure();
-  auto bundle = result.getType().dyn_cast<BundleType>();
+  auto bundle =
+      dyn_cast<BundleType>(getBaseType(cast<FIRRTLType>(result.getType())));
+
   if (!bundle)
     return emitError(loc, "subfield requires bundle operand ");
   auto indexV = bundle.getElementIndex(fieldName);
@@ -1450,35 +1533,20 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
            << result.getType();
   auto indexNo = *indexV;
 
-  // Make sure the field name matches up with the input value's type and
-  // compute the result type for the expression.
-  NamedAttribute attrs = {getConstants().fieldIndexIdentifier,
-                          builder.getI32IntegerAttr(indexNo)};
-  auto resultType = SubfieldOp::inferReturnType({result}, attrs, {});
-  if (!resultType) {
-    // Emit the error at the right location.  translateLocation is expensive.
-    (void)SubfieldOp::inferReturnType({result}, attrs, translateLocation(loc));
+  FailureOr<Value> subResult;
+  if (isa<RefType>(result.getType())) {
+    NamedAttribute attrs = {getConstants().indexIdentifier,
+                            builder.getI32IntegerAttr(indexNo)};
+    subResult = emitCachedSubAccess<RefSubOp>(result, attrs, indexNo, loc);
+  } else {
+    NamedAttribute attrs = {getConstants().fieldIndexIdentifier,
+                            builder.getI32IntegerAttr(indexNo)};
+    subResult = emitCachedSubAccess<SubfieldOp>(result, attrs, indexNo, loc);
+  }
+
+  if (failed(subResult))
     return failure();
-  }
-
-  // Check if we already have created this Subindex op.
-  auto &value = moduleContext.getCachedSubaccess(result, indexNo);
-  if (value) {
-    result = value;
-    return success();
-  }
-
-  // Create the result operation, inserting at the location of the declaration.
-  // This will cache the subfield operation for further uses.
-  locationProcessor.setLoc(loc);
-  OpBuilder::InsertionGuard guard(builder);
-  builder.setInsertionPointAfterValue(result);
-  auto op = builder.create<SubfieldOp>(resultType, result, attrs);
-
-  // Insert the newly creatd operation into the cache.
-  value = op.getResult();
-
-  result = value;
+  result = *subResult;
   return success();
 }
 
@@ -1502,31 +1570,16 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
   // builder (https://llvm.discourse.group/t/3504).
   NamedAttribute attrs = {getConstants().indexIdentifier,
                           builder.getI32IntegerAttr(indexNo)};
-  auto resultType = SubindexOp::inferReturnType({result}, attrs, {});
-  if (!resultType) {
-    // Emit the error at the right location.  translateLocation is expensive.
-    (void)SubindexOp::inferReturnType({result}, attrs, translateLocation(loc));
+
+  FailureOr<Value> subResult;
+  if (isa<RefType>(result.getType()))
+    subResult = emitCachedSubAccess<RefSubOp>(result, attrs, indexNo, loc);
+  else
+    subResult = emitCachedSubAccess<SubindexOp>(result, attrs, indexNo, loc);
+
+  if (failed(subResult))
     return failure();
-  }
-
-  // Check if we already have created this Subindex op.
-  auto &value = moduleContext.getCachedSubaccess(result, indexNo);
-  if (value) {
-    result = value;
-    return success();
-  }
-
-  // Create the result operation, inserting at the location of the declaration.
-  // This will cache the subindex operation for further uses.
-  locationProcessor.setLoc(loc);
-  OpBuilder::InsertionGuard guard(builder);
-  builder.setInsertionPointAfterValue(result);
-  auto op = builder.create<SubindexOp>(resultType, result, attrs);
-
-  // Insert the newly creatd operation into the cache.
-  value = op.getResult();
-
-  result = value;
+  result = *subResult;
   return success();
 }
 
@@ -1843,6 +1896,7 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
 ///      ::= stop
 ///      ::= when
 ///      ::= leading-exp-stmt
+///      ::= define
 ///
 /// stmt ::= instance
 ///      ::= cmem | smem | mem
@@ -1876,6 +1930,9 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseCover();
   case FIRToken::kw_when:
     return parseWhen(stmtIndent);
+  case FIRToken::kw_define:
+    return parseRefDefine();
+
   default: {
     // Statement productions that start with an expression.
     Value lhs;
@@ -2224,6 +2281,109 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 
   // TODO(firrtl spec): There is no reason for the 'else :' grammar to take an
   // info.  It doesn't appear to be generated either.
+  return success();
+}
+
+/// define ::= 'define' static_reference '=' ref_expr info?
+ParseResult FIRStmtParser::parseRefDefine() {
+  auto startTok = consumeToken(FIRToken::kw_define);
+
+  Value src, target;
+  // TODO: parse "reference" expression helper + target
+  if (parseExp(target, "expected target expression in 'define'") ||
+      parseToken(FIRToken::equal,
+                 "expected '=' after define reference expression") ||
+      parseExp(src, "expected reference expression in 'define'") ||
+      parseOptionalInfo())
+    return failure();
+
+   // TODO: Check static_reference, ref_expr
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+   // TODO: define.  For now, connect.
+  emitConnect(builder, target, src);
+
+  return success();
+}
+
+/// read ::= 
+ParseResult FIRStmtParser::parseRefRead(Value &result) {
+  auto startTok = consumeToken(FIRToken::lp_read);
+
+  Value ref;
+  if (parseExp(ref, "expected reference expression in 'read'") ||
+      parseToken(FIRToken::r_paren, "expected ')' in 'read'") ||
+      parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  // Checks:
+  // 1) Ref type argument
+  // 2) statically-indexed ref type argument (verifier?)
+  if (!isa<RefType>(ref.getType()))
+    return emitError(startTok.getLoc(),
+                     "expected reference expression in 'read', got ")
+           << ref.getType();
+
+  result = builder.create<RefResolveOp>(ref);
+
+  return success();
+}
+
+/// probe ::= 'probe' '(' static_ref ')' info?
+ParseResult FIRStmtParser::parseProbe(Value &result) {
+  auto startTok = consumeToken(FIRToken::lp_probe);
+
+  Value static_ref;
+  if (parseExp(static_ref, "expected static reference expression in 'probe'") ||
+      parseToken(FIRToken::r_paren, "expected ')' in 'probe'") ||
+      parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  // Checks:
+  // Not a reference type.
+  // "Static reference"
+  if (isa<RefType>(static_ref.getType()))
+    return emitError(startTok.getLoc(),
+                     "expected non-reference expression in 'probe', got ")
+           << static_ref.getType();
+
+  // TODO: static_reference checking / parse helper.
+
+  result = builder.create<RefSendOp>(static_ref);
+
+  return success();
+}
+
+/// rwprobe ::= 'rwprobe' '(' static_ref ')' info?
+ParseResult FIRStmtParser::parseRWProbe(Value &result) {
+  auto startTok = consumeToken(FIRToken::lp_rwprobe);
+
+  Value static_ref;
+  if (parseExp(static_ref, "expected static reference expression in 'rwprobe'") ||
+      parseToken(FIRToken::r_paren, "expected ')' in 'rwprobe'") ||
+      parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  // Checks:
+  // Not a reference type.
+  // "Static reference"
+  // Not public port (verifier)
+  if (isa<RefType>(static_ref.getType()))
+    return emitError(startTok.getLoc(),
+                     "expected non-reference expression in 'rwprobe', got ")
+           << static_ref.getType();
+
+  // TODO: static_reference checking / parse helper.
+
+  result = builder.create<RefSendOp>(static_ref);
+
   return success();
 }
 
