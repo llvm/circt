@@ -30,7 +30,9 @@ circuit Top:
     ; CHECK:        input [[port:[a-zA-Z0-9_]+]]
     ; CHECK:      );
     ; CHECK:        MyInterface MyView();
-    ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = [[port]];
+    ; CHECK-NEXT:   wire [[signed_wire:.+]];
+    ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = [[signed_wire]];
+    ; CHECK-NEXT:   assign [[signed_wire]] = [[port]];
     ; CHECK-NEXT: endmodule
 
     ; CHECK:      module DUT

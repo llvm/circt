@@ -226,8 +226,7 @@ circuit Top :
 
     ; CHECK:          module DUT
     ; CHECK-NOT:      endmodule
-    ; EXTRACT:          /* This instance is elsewhere emitted as a bind statement.
-    ; EXTRACT-NEXT:        MyView_companion MyView_companion (
+    ; EXTRACT:        MyView_companion MyView_companion (
     ; EXTRACT-NEXT:          .[[in_uint_port:[a-zA-Z0-9_]+]]                             (in_uint),
     ; EXTRACT-NEXT:          .[[in_vec_0_port:[a-zA-Z0-9_]+]]                            (in_vec_0),
     ; EXTRACT-NEXT:          .[[in_vec_1_port:[a-zA-Z0-9_]+]]                            (in_vec_1),
@@ -251,7 +250,6 @@ circuit Top :
     ; EXTRACT-NEXT:          .[[DUT_submodule_in_vecOfBundle_1_uint_port:[a-zA-Z0-9_]+]] (DUT.submodule.in_vecOfBundle_1_uint),
     ; EXTRACT-NEXT:          .[[ExtModuleWithPort_source_1_port:[a-zA-Z0-9_]+]]          ([[ExtModuleWithPort_source_1_wire:[a-zA-Z0-9_]+]])
     ; EXTRACT-NEXT:        );
-    ; EXTRACT-NEXT:     */
     ; NOEXTRACT:        {{^ *}}MyView_companion MyView_companion (
     ; NOEXTRACT-NEXT:        .[[DUT_w_uint]]                               (w_uint),
     ; NOEXTRACT-NEXT:        .[[DUT_w_vec_0]]                              (w_vec_0),

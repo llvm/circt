@@ -1013,8 +1013,8 @@ firrtl.circuit "GCTInterface"  attributes {
 // Interface
 // CHECK:    firrtl.interface @ViewName
 // CHECK-SAME:         in %_interFacePort_0: !firrtl.uint<1>, in %_interFacePort_1: !firrtl.uint<1>, in %_interFacePort_2: !firrtl.uint<1>, in %_interFacePort_3: !firrtl.uint<1>, in %_interFacePort_4: !firrtl.uint<1>)
-// CHECK-NEXT:      %register = firrtl.wire : !firrtl<bundle "Register" <_2: vector<uint<1>, 2>, _0_inst: bundle "_0_def" <_1: uint<1>, _0: uint<1>>>>
-// CHECK-NEXT:      %port = firrtl.wire : !firrtl.uint<1>
+// CHECK-NEXT:      %register = firrtl.wire sym @register : !firrtl<bundle "Register" <_2: vector<uint<1>, 2>, _0_inst: bundle "_0_def" <_1: uint<1>, _0: uint<1>>>>
+// CHECK-NEXT:      %port = firrtl.wire sym @port : !firrtl.uint<1>
 // CHECK-NEXT:    }
     
 
@@ -1363,7 +1363,7 @@ firrtl.circuit "GrandCentralViewsBundle"  attributes {
   }
   // CHECK:       firrtl.interface @MyInterface
   // CHECK-SAME:   (in %_interFacePort_0: !firrtl.uint<1>, in %_interFacePort_1: !firrtl.uint<2>) {
-  // CHECK-NEXT:    %b = firrtl.wire : !firrtl<bundle "SubInterface" <a: uint<1>, b: uint<2>>>
+  // CHECK-NEXT:    %b = firrtl.wire sym @b : !firrtl<bundle "SubInterface" <a: uint<1>, b: uint<2>>>
   // CHECK-NEXT:  }
 }
 
@@ -1534,7 +1534,7 @@ firrtl.circuit "GrandCentralParentIsNotLCA"  attributes {
   }
  // CHECK:   firrtl.interface @MyInterface(
  // CHECK-SAME: in %_interFacePort_0: !firrtl.uint<1>
- // CHECK-NEXT:     %b = firrtl.wire : !firrtl.uint<1>
+ // CHECK-NEXT:     %b = firrtl.wire sym @b : !firrtl.uint<1>
 }
 
 // -----
@@ -1633,8 +1633,8 @@ firrtl.circuit "GrandCentralViewInsideCompanion" attributes {
   }
   // CHECK:  firrtl.interface @MyInterface
   // CHECK-SAME: (in %_interFacePort_0: !firrtl.uint<1>, in %_interFacePort_1: !firrtl.uint<2>)
-  // CHECK-NEXT:    %a = firrtl.wire : !firrtl.uint<1>
-  // CHECK-NEXT:    %b = firrtl.wire : !firrtl.uint<2>
+  // CHECK-NEXT:    %a = firrtl.wire sym @a : !firrtl.uint<1>
+  // CHECK-NEXT:    %b = firrtl.wire sym @b : !firrtl.uint<2>
 }
 
 // -----
