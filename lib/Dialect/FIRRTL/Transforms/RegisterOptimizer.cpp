@@ -12,6 +12,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "mlir/IR/Dominance.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-register-optimizer"
@@ -35,14 +36,17 @@ namespace {
 struct RegisterOptimizerPass
     : public RegisterOptimizerBase<RegisterOptimizerPass> {
   void runOnOperation() override;
-  bool checkRegReset(RegResetOp reg, SmallVector<Operation *> &toErase);
-  bool checkReg(RegOp reg, SmallVector<Operation *> &toErase);
+  bool checkRegReset(mlir::DominanceInfo &dom,
+                     SmallVector<Operation *> &toErase, RegResetOp reg);
+  bool checkReg(mlir::DominanceInfo &dom, SmallVector<Operation *> &toErase,
+                RegOp reg);
 };
 
 } // namespace
 
-bool RegisterOptimizerPass::checkReg(RegOp reg,
-                                     SmallVector<Operation *> &toErase) {
+bool RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
+                                     SmallVector<Operation *> &toErase,
+                                     RegOp reg) {
   if (!canErase(reg))
     return false;
   auto con = getSingleConnectUserOf(reg.getResult());
@@ -54,15 +58,48 @@ bool RegisterOptimizerPass::checkReg(RegOp reg,
     auto inv =
         OpBuilder(reg).create<InvalidValueOp>(reg.getLoc(), reg.getType());
     reg.replaceAllUsesWith(inv.getResult());
-    reg.erase();
+    toErase.push_back(reg);
     toErase.push_back(con);
     return true;
   }
+  // Register is only written by a constant
+  if (isConstant(con.getSrc())) {
+    // constant may not dominate the register.  But it might be the next
+    // operation, so we can't just move it.  Straight constants can be
+    // rematerialized.  Derived constants are piped through wires.
+    bool dominatesAll = true;
+    for (auto use : reg->getUsers()) {
+      if (use == con)
+        continue;
+      if (!dom.dominates(con.getSrc(), use)) {
+        dominatesAll = false;
+        break;
+      }
+    }
+    if (dominatesAll) {
+      // Dominance is fine, just replace the op.
+      reg.replaceAllUsesWith(con.getSrc());
+      toErase.push_back(con);
+    } else if (auto cst = con.getSrc().getDefiningOp<ConstantOp>()) {
+      // Simple constants we can move safely
+      auto fmodb = con->getParentOfType<FModuleOp>().getBodyBlock();
+      cst->moveBefore(fmodb, fmodb->begin());
+      reg.replaceAllUsesWith(cst.getResult());
+      toErase.push_back(con);
+    } else {
+      auto bounce = OpBuilder(reg).create<WireOp>(reg.getLoc(), reg.getType());
+      reg.replaceAllUsesWith(bounce.getResult());
+    }
+    toErase.push_back(reg);
+    return true;
+  }
+
   return false;
 }
 
-bool RegisterOptimizerPass::checkRegReset(RegResetOp reg,
-                                          SmallVector<Operation *> &toErase) {
+bool RegisterOptimizerPass::checkRegReset(mlir::DominanceInfo &dom,
+                                          SmallVector<Operation *> &toErase,
+                                          RegResetOp reg) {
   if (!canErase(reg))
     return false;
   auto con = getSingleConnectUserOf(reg.getResult());
@@ -73,7 +110,7 @@ bool RegisterOptimizerPass::checkRegReset(RegResetOp reg,
   if (con.getSrc() == reg && isConstant(reg.getResetValue())) {
     // constant obviously dominates the register.
     reg.replaceAllUsesWith(reg.getResetValue());
-    reg.erase();
+    toErase.push_back(reg);
     toErase.push_back(con);
     return true;
   }
@@ -81,7 +118,7 @@ bool RegisterOptimizerPass::checkRegReset(RegResetOp reg,
   if (con.getSrc() == reg.getResetValue() && isConstant(reg.getResetValue())) {
     // constant obviously dominates the register.
     reg.replaceAllUsesWith(reg.getResetValue());
-    reg.erase();
+    toErase.push_back(reg);
     toErase.push_back(con);
     return true;
   }
@@ -97,11 +134,13 @@ void RegisterOptimizerPass::runOnOperation() {
 
   bool changed = false;
   SmallVector<Operation *> toErase;
-  for (auto &op : llvm::make_early_inc_range(*mod.getBodyBlock())) {
+  mlir::DominanceInfo dom(mod);
+
+  for (auto &op : *mod.getBodyBlock()) {
     if (auto reg = dyn_cast<RegResetOp>(&op))
-      changed |= checkRegReset(reg, toErase);
+      changed |= checkRegReset(dom, toErase, reg);
     else if (auto reg = dyn_cast<RegOp>(&op))
-      changed |= checkReg(reg, toErase);
+      changed |= checkReg(dom, toErase, reg);
   }
   for (auto *op : toErase)
     op->erase();
