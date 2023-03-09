@@ -8,10 +8,11 @@ add_circt_dialect_library(
   HWOps.cpp
   HWTypeInterfaces.cpp
   HWTypes.cpp
+  InnerSymbolTable.cpp
   InstanceGraphBase.cpp
   InstanceImplementation.cpp
   ModuleImplementation.cpp
-  InnerSymbolTable.cpp
+  PortsInterfaces.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/HW

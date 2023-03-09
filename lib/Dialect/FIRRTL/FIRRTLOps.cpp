@@ -211,7 +211,7 @@ DeclKind firrtl::getDeclarationKind(Value val) {
 }
 
 size_t firrtl::getNumPorts(Operation *op) {
-  if (auto module = dyn_cast<hw::HWModuleLike>(*op))
+  if (auto module = dyn_cast<hw::HWPorts>(*op))
     return module.getNumPorts();
   return op->getNumResults();
 }
@@ -450,7 +450,7 @@ static SmallVector<PortInfo> getPorts(FModuleLike module) {
   for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
     results.push_back({module.getPortNameAttr(i), module.getPortType(i),
                        module.getPortDirection(i),
-                       cast<hw::HWModuleLike>(*module).getPortSymbolAttr(i),
+                       cast<hw::HWPortsSymbols>(*module).getPortSymbolAttr(i),
                        module.getPortLocation(i),
                        AnnotationSet::forPort(module, i)});
   }
@@ -517,7 +517,8 @@ static void insertPorts(FModuleLike op,
       newNames.push_back(existingNames[oldIdx]);
       newTypes.push_back(existingTypes[oldIdx]);
       newAnnos.push_back(op.getAnnotationsAttrForPort(oldIdx));
-      newSyms.push_back(cast<hw::HWModuleLike>(*op).getPortSymbolAttr(oldIdx));
+      newSyms.push_back(
+          cast<hw::HWPortsSymbols>(*op).getPortSymbolAttr(oldIdx));
       newLocs.push_back(existingLocs[oldIdx]);
       ++oldIdx;
     }

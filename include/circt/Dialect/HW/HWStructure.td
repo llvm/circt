@@ -30,6 +30,7 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     HWOp<mnemonic, traits # [
       DeclareOpInterfaceMethods<HWModuleLike>,
+      DeclareOpInterfaceMethods<HWPortsSymbols>,
       DeclareOpInterfaceMethods<HWMutableModuleLike>,
       FunctionOpInterface, Symbol,
       OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {

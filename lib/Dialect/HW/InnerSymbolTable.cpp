@@ -94,8 +94,7 @@ LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
                  return WalkResult::interrupt();
 
            // Check for ports
-           // TODO: Add fields per port, once they work that way (use addSyms)
-           if (auto mod = dyn_cast<HWModuleLike>(curOp)) {
+           if (auto mod = dyn_cast<HWPortsSymbols>(curOp)) {
              for (size_t i = 0, e = mod.getNumPorts(); i < e; ++i) {
                if (auto symAttr = mod.getPortSymbolAttr(i))
                  if (failed(walkSyms(symAttr, InnerSymTarget(i, curOp))))
@@ -143,8 +142,7 @@ StringAttr InnerSymbolTable::getInnerSymbol(const InnerSymTarget &target) {
   // Obtain the base InnerSymAttr for the specified target.
   auto getBase = [](auto &target) -> hw::InnerSymAttr {
     if (target.isPort()) {
-      // TODO: This needs to be made to work with HWModuleLike
-      if (auto mod = dyn_cast<HWModuleLike>(target.getOp())) {
+      if (auto mod = dyn_cast<HWPortsSymbols>(target.getOp())) {
         assert(target.getPort() < mod.getNumPorts());
         return mod.getPortSymbolAttr(target.getPort());
       }
@@ -166,7 +164,7 @@ void InnerSymbolTable::dropSymbol(const InnerSymTarget &target) {
   assert(getInnerSymbol(target));
 
   if (target.isPort()) {
-    auto mod = cast<HWModuleLike>(target.getOp());
+    auto mod = cast<HWPortsSymbols>(target.getOp());
     assert(target.getPort() < mod.getNumPorts());
     auto base = mod.getPortSymbolAttr(target.getPort());
     mod.setPortSymbolAttr(target.getPort(), base.erase(target.getField()));

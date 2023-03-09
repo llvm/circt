@@ -65,7 +65,8 @@ def AppIDArrayAttr : TypedArrayAttrBase<AppIDAttr, "Array of AppIDs">;
 class MSFTModuleOpBase<string mnemonic, list<Trait> traits = []> :
     MSFTOp<mnemonic, traits # [
       IsolatedFromAbove, Symbol, FunctionOpInterface, OpAsmOpInterface,
-      HasParent<"mlir::ModuleOp">, DeclareOpInterfaceMethods<HWModuleLike>
+      HasParent<"mlir::ModuleOp">,
+      DeclareOpInterfaceMethods<HWModuleLike>,
     ]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;
@@ -181,30 +182,6 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
     size_t $cppClass::getNumPorts() {
       auto ports = getPorts();
       return ports.inputs.size() + ports.outputs.size();
-    }
-
-    circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
-      for (NamedAttribute argAttr :
-           mlir::function_interface_impl::getArgAttrs(*this, portIndex))
-        if (auto sym = argAttr.getValue().dyn_cast<circt::hw::InnerSymAttr>())
-          return sym;
-      return circt::hw::InnerSymAttr();
-    }
-
-    void $cppClass::setPortSymbolAttr(size_t portIndex, circt::hw::InnerSymAttr symbol) {
-      for (NamedAttribute argAttr :
-           mlir::function_interface_impl::getArgAttrs(*this, portIndex))
-        if (auto sym = argAttr.getValue().dyn_cast<circt::hw::InnerSymAttr>()) {
-          if (symbol && !symbol.empty())
-            mlir::function_interface_impl::setArgAttr(*this, portIndex, argAttr.getName(), symbol);
-          else
-            mlir::function_interface_impl::removeArgAttr(*this, portIndex, argAttr.getName());
-          return;
-        }
-      // We cannot add symbols to arguments without assuming the attribute name,
-      // which we're careful above to avoid.  For now, error/assert if this is attempted.
-      emitOpError("adding symbol to port without any symbols is not yet supported");
-      assert(!symbol || symbol.empty() && "cannot add symbols to ports");
     }
   }];
 

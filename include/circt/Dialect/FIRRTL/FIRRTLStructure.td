@@ -65,6 +65,7 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
     IsolatedFromAbove, Symbol, HasParent<"CircuitOp">,
     DeclareOpInterfaceMethods<FModuleLike>,
     DeclareOpInterfaceMethods<HWModuleLike>,
+    DeclareOpInterfaceMethods<HWPortsSymbols>,
     OpAsmOpInterface, InnerSymbolTable]> {
 
   /// Additional class definitions inside the module op.

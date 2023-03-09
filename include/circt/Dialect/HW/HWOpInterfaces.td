@@ -13,9 +13,9 @@
 #ifndef CIRCT_DIALECT_HW_HWOPINTERFACES
 #define CIRCT_DIALECT_HW_HWOPINTERFACES
 
-include "mlir/IR/OpBase.td"
+include "circt/Dialect/HW/PortsInterfaces.td"
 
-def HWModuleLike : OpInterface<"HWModuleLike"> {
+def HWModuleLike : OpInterface<"HWModuleLike", [DeclareOpInterfaceMethods<HWPorts>]> {
   let cppNamespace = "circt::hw";
   let description = "Provide common module information.";
 
@@ -36,41 +36,6 @@ def HWModuleLike : OpInterface<"HWModuleLike"> {
     "::mlir::StringAttr", "moduleNameAttr", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{ return $_op.getNameAttr(); }]>,
-
-    //===------------------------------------------------------------------===//
-    // Ports and their symbols.
-    //===------------------------------------------------------------------===//
-    // TODO: Refactor this into separate reusable component.
-
-    // Getters
-    InterfaceMethod<"Get the number of ports",
-    "size_t", "getNumPorts">,
-
-    InterfaceMethod<"Get a port symbol attribute",
-    "::circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex)>,
-
-    InterfaceMethod<"Check if port has symbol attribute",
-    "bool", "hasPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
-      assert(portIndex < $_op.getNumPorts());
-      auto symAttr = $_op.getPortSymbolAttr(portIndex);
-      return symAttr && !symAttr.empty();
-    }]>,
-
-    // Setters
-    InterfaceMethod<"Set the symbols for a port including its fields", "void",
-    "setPortSymbolAttr", (ins "size_t":$portIndex, "circt::hw::InnerSymAttr":$symbol)>,
-
-    // Convenience methods wrapping setPortSymbolAttr.
-    InterfaceMethod<"Set a port's top-level symbol to the specified string, dropping any symbols on its fields", "void",
-    "setPortSymbolString", (ins "size_t":$portIndex, "StringRef":$symbol), [{}], [{
-      $_op.setPortSymbolStringAttr(portIndex, StringAttr::get($_op.getContext(),
-        symbol));
-    }]>,
-
-    InterfaceMethod<"Set a port's top-level symbol to the specified string, dropping any symbols on its fields", "void",
-    "setPortSymbolStringAttr", (ins "size_t":$portIndex, "StringAttr":$symbol), [{}], [{
-      return $_op.setPortSymbolAttr(portIndex, hw::InnerSymAttr::get(symbol));
-    }]>,
   ];
 
   let verify = [{
