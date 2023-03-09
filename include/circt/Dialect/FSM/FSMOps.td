@@ -83,14 +83,6 @@ def MachineOp : FSMOp<"machine", [
       auto machineType = getFunctionType();
       return machineType.getNumInputs() + machineType.getNumResults();
     }
-
-    circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
-      for (NamedAttribute argAttr :
-           mlir::function_interface_impl::getArgAttrs(*this, portIndex))
-        if (auto sym = argAttr.getValue().dyn_cast<circt::hw::InnerSymAttr>())
-          return sym;
-      return circt::hw::InnerSymAttr();
-    }
   }];
 
   let skipDefaultBuilders = 1;

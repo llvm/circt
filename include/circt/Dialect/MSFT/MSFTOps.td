@@ -65,7 +65,8 @@ def AppIDArrayAttr : TypedArrayAttrBase<AppIDAttr, "Array of AppIDs">;
 class MSFTModuleOpBase<string mnemonic, list<Trait> traits = []> :
     MSFTOp<mnemonic, traits # [
       IsolatedFromAbove, Symbol, FunctionOpInterface, OpAsmOpInterface,
-      HasParent<"mlir::ModuleOp">, DeclareOpInterfaceMethods<HWModuleLike>
+      HasParent<"mlir::ModuleOp">,
+      DeclareOpInterfaceMethods<HWModuleLike>,
     ]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;
@@ -181,14 +182,6 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
     size_t $cppClass::getNumPorts() {
       auto ports = getPorts();
       return ports.inputs.size() + ports.outputs.size();
-    }
-
-    circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
-      for (NamedAttribute argAttr :
-           mlir::function_interface_impl::getArgAttrs(*this, portIndex))
-        if (auto sym = argAttr.getValue().dyn_cast<circt::hw::InnerSymAttr>())
-          return sym;
-      return circt::hw::InnerSymAttr();
     }
   }];
 

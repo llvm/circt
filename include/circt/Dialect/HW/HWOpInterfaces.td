@@ -13,9 +13,9 @@
 #ifndef CIRCT_DIALECT_HW_HWOPINTERFACES
 #define CIRCT_DIALECT_HW_HWOPINTERFACES
 
-include "mlir/IR/OpBase.td"
+include "circt/Dialect/HW/PortsInterfaces.td"
 
-def HWModuleLike : OpInterface<"HWModuleLike"> {
+def HWModuleLike : OpInterface<"HWModuleLike", [DeclareOpInterfaceMethods<HWPorts>]> {
   let cppNamespace = "circt::hw";
   let description = "Provide common module information.";
 
@@ -36,12 +36,6 @@ def HWModuleLike : OpInterface<"HWModuleLike"> {
     "::mlir::StringAttr", "moduleNameAttr", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{ return $_op.getNameAttr(); }]>,
-
-    InterfaceMethod<"Get the number of ports",
-    "size_t", "getNumPorts">,
-
-    InterfaceMethod<"Get a port symbol attribute",
-    "::circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex)>
   ];
 
   let verify = [{

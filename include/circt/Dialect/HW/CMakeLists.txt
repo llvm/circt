@@ -16,6 +16,12 @@ set(LLVM_TARGET_DEFINITIONS Passes.td)
 mlir_tablegen(Passes.h.inc -gen-pass-decls)
 add_public_tablegen_target(CIRCTHWTransformsIncGen)
 
+set(LLVM_TARGET_DEFINITIONS PortsInterfaces.td)
+mlir_tablegen(PortsInterfaces.h.inc -gen-op-interface-decls)
+mlir_tablegen(PortsInterfaces.cpp.inc -gen-op-interface-defs)
+add_public_tablegen_target(CIRCTPortsInterfacesIncGen)
+add_dependencies(circt-headers CIRCTPortsInterfacesIncGen)
+
 set(LLVM_TARGET_DEFINITIONS HWOpInterfaces.td)
 mlir_tablegen(HWOpInterfaces.h.inc -gen-op-interface-decls)
 mlir_tablegen(HWOpInterfaces.cpp.inc -gen-op-interface-defs)

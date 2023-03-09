@@ -592,7 +592,9 @@ StringAttr circt::firrtl::getOrAddInnerSym(
     FModuleLike mod, size_t portIdx, StringRef nameHint,
     std::function<ModuleNamespace &(FModuleLike)> getNamespace) {
 
-  auto attr = cast<hw::HWModuleLike>(*mod).getPortSymbolAttr(portIdx);
+  auto hwmod = cast<hw::HWPortsSymbols>(*mod);
+  auto attr = hwmod.getPortSymbolAttr(portIdx);
+  // TODO: check getSymName if empty, that fields don't have symbols.
   if (attr)
     return attr.getSymName();
   if (nameHint.empty()) {
@@ -603,7 +605,7 @@ StringAttr circt::firrtl::getOrAddInnerSym(
   }
   auto name = getNamespace(mod).newName(nameHint);
   auto sAttr = StringAttr::get(mod.getContext(), name);
-  mod.setPortSymbolAttr(portIdx, sAttr);
+  hwmod.setPortSymbolStringAttr(portIdx, sAttr);
   return sAttr;
 }
 
