@@ -733,9 +733,9 @@ firrtl.module @reg_cst_prop1(in %clock: !firrtl.clock, out %out_b: !firrtl.uint<
   %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
   %_tmp_a = firrtl.reg droppable_name %clock {name = "_tmp_a"} : !firrtl.clock, !firrtl.uint<8>
   %tmp_b = firrtl.reg droppable_name %clock {name = "_tmp_b"} : !firrtl.clock, !firrtl.uint<8>
-  firrtl.connect %_tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
-  firrtl.connect %tmp_b, %_tmp_a : !firrtl.uint<8>, !firrtl.uint<8>
-  firrtl.connect %out_b, %tmp_b : !firrtl.uint<8>, !firrtl.uint<8>
+  firrtl.strictconnect %_tmp_a, %c5_ui8 : !firrtl.uint<8>
+  firrtl.strictconnect %tmp_b, %_tmp_a : !firrtl.uint<8>
+  firrtl.strictconnect %out_b, %tmp_b : !firrtl.uint<8>
 }
 
 // Check for DontTouch annotation
@@ -751,9 +751,9 @@ firrtl.module @reg_cst_prop1_DontTouch(in %clock: !firrtl.clock, out %out_b: !fi
   %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
   %_tmp_a = firrtl.reg  sym @reg1 %clock {name = "tmp_a"} : !firrtl.clock, !firrtl.uint<8>
   %_tmp_b = firrtl.reg %clock {name = "tmp_b"} : !firrtl.clock, !firrtl.uint<8>
-  firrtl.connect %_tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
-  firrtl.connect %_tmp_b, %_tmp_a : !firrtl.uint<8>, !firrtl.uint<8>
-  firrtl.connect %out_b, %_tmp_b : !firrtl.uint<8>, !firrtl.uint<8>
+  firrtl.strictconnect %_tmp_a, %c5_ui8 : !firrtl.uint<8>
+  firrtl.strictconnect %_tmp_b, %_tmp_a : !firrtl.uint<8>
+  firrtl.strictconnect %out_b, %_tmp_b : !firrtl.uint<8>
 }
 // CHECK-LABEL: @reg_cst_prop2
 // CHECK-NEXT:   %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
@@ -761,7 +761,7 @@ firrtl.module @reg_cst_prop1_DontTouch(in %clock: !firrtl.clock, out %out_b: !fi
 // CHECK-NEXT:  }
 firrtl.module @reg_cst_prop2(in %clock: !firrtl.clock, out %out_b: !firrtl.uint<8>) {
   %_tmp_b = firrtl.reg droppable_name %clock {name = "_tmp_b"} : !firrtl.clock, !firrtl.uint<8>
-  firrtl.connect %out_b, %_tmp_b : !firrtl.uint<8>, !firrtl.uint<8>
+  firrtl.strictconnect %out_b, %_tmp_b : !firrtl.uint<8>
 
   %_tmp_a = firrtl.reg droppable_name %clock {name = "_tmp_a"} : !firrtl.clock, !firrtl.uint<8>
   %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
@@ -1658,10 +1658,10 @@ firrtl.module @regsyncreset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>
   // CHECK-NEXT:  firrtl.strictconnect %d, %foo : !firrtl.uint<2>
   // CHECK-NEXT: }
   %d = firrtl.reg %clock {firrtl.random_init_end = 1 : ui64, firrtl.random_init_start = 0 : ui64} : !firrtl.clock, !firrtl.uint<2>
-  firrtl.connect %bar, %d : !firrtl.uint<2>, !firrtl.uint<2>
+  firrtl.strictconnect %bar, %d : !firrtl.uint<2>
   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
   %1 = firrtl.mux(%reset, %c1_ui2, %foo) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-  firrtl.connect %d, %1 : !firrtl.uint<2>, !firrtl.uint<2>
+  firrtl.strictconnect %d, %1 : !firrtl.uint<2>
 }
 
 // CHECK-LABEL: firrtl.module @regsyncreset_no
