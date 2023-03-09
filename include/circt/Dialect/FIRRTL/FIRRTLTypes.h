@@ -171,6 +171,12 @@ bool areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
 /// hold their counterparts.
 bool isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType);
 
+
+/// Returns true if destination and source types are the same (was widthless) AND
+/// recursively checks that types are identical or the destination is uninferred
+/// of the source type.
+bool isTypeSameOrUninferred(FIRRTLBaseType dstType, FIRRTLBaseType srcType);
+
 mlir::Type getVectorElementType(mlir::Type array);
 mlir::Type getPassiveType(mlir::Type anyBaseFIRRTLType);
 

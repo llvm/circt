@@ -1060,7 +1060,7 @@ firrtl.circuit "Top" {
   firrtl.module @Foo (in %in: !firrtl.ref<uint<2>>) {}
   firrtl.module @Top (in %in: !firrtl.ref<uint<1>>) {
     %foo_in = firrtl.instance foo @Foo(in in: !firrtl.ref<uint<2>>)
-    // expected-error @+1 {{may not connect different non-base types}}
+    // expected-error @+1 {{may not connect references of different width}}
     firrtl.connect %foo_in, %in : !firrtl.ref<uint<2>>, !firrtl.ref<uint<1>>
   }
 }
