@@ -45,7 +45,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
 
   // Non-base types don't need special handling.
   if (!srcType || !dstType) {
-    builder.create<ConnectOp>(dst, src);
+    builder.create<RefConnectOp>(dst, src);
     return;
   }
 

@@ -2283,6 +2283,18 @@ LogicalResult StrictConnectOp::verify() {
   return success();
 }
 
+LogicalResult RefConnectOp::verify() {
+  // Check that the flows make sense.
+  if (failed(checkConnectFlow(*this)))
+    return failure();
+
+  // Check constraints on RefType.
+  if (failed(checkRefTypeFlow(*this)))
+    return failure();
+
+  return success();
+}
+
 void WhenOp::createElseRegion() {
   assert(!hasElseRegion() && "already has an else region");
   getElseRegion().push_back(new Block());

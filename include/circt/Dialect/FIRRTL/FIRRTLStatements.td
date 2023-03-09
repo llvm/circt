@@ -68,6 +68,25 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]
     "$dest `,` $src  attr-dict `:` qualified(type($dest))";
 }
 
+def RefConnectOp : FIRRTLOp<"refconnect", [SameTypeOperands, FConnectLike]> {
+  let summary = "Connect two references";
+  let description =  [{
+    Connect two references with strict constraints:
+    ```
+      firrtl.strictconnect %dest, %src : ref<t1>
+    ```
+    }];
+
+  let arguments = (ins RefType:$dest,
+                       RefType:$src);
+  let results = (outs);
+
+  let hasVerifier = 1;
+
+  let assemblyFormat =
+    "$dest `,` $src  attr-dict `:` qualified(type($dest))";
+}
+
 def PrintFOp : FIRRTLOp<"printf"> {
   let summary = "Formatted Print Statement";
 

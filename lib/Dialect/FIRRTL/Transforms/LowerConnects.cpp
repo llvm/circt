@@ -44,11 +44,7 @@ static void emitStrictConnect(ImplicitLocOpBuilder &builder, Value dst,
 
   // Non-base types don't need special handling.
   if (!srcType || !dstType) {
-    llvm::errs() << "Non-base types\n";
-    dstFType.dump();
-    srcFType.dump();
-    assert(0 && "FIXME");
-    builder.create<ConnectOp>(dst, src);
+    builder.create<RefConnectOp>(dst, src);
     return;
   }
 

@@ -1069,6 +1069,10 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
         if (auto extmodule = dyn_cast<FExtModuleOp>(
                 *instanceGraph->getReferencedModule(instOp)))
           extmoduleWorklist.insert({extmodule, instOp});
+      if (auto uncast = dyn_cast_or_null<UninferredResetCastOp>(value.getDefiningOp())) {
+        uncast.replaceAllUsesWith(uncast.getInput());
+        uncast.erase();
+      }  
     }
   }
 
@@ -1763,7 +1767,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     insertResetMux(builder, regOp, reset, value);
     builder.setInsertionPointAfterValue(regOp);
     auto mux = builder.create<MuxPrimOp>(reset, value, regOp);
-    builder.create<ConnectOp>(regOp, mux);
+    builder.create<StrictConnectOp>(regOp, mux);
 
     // Replace the existing reset with the async reset.
     builder.setInsertionPoint(regOp);

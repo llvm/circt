@@ -74,7 +74,7 @@ firrtl.circuit "Arithmetic" {
 
     // Lowers to nothing.
     %wire = firrtl.wire : !firrtl.sint<0>
-    firrtl.connect %wire, %sin0c : !firrtl.sint<0>, !firrtl.sint<0>
+    firrtl.strictconnect %wire, %sin0c : !firrtl.sint<0>
 
     // CHECK-NEXT: hw.output
   }
