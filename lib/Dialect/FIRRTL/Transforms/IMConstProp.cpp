@@ -574,16 +574,14 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect) {
     return markOverdefined(connect.getDest());
   }
 
-  FIRRTLBaseType baseType;
-  if (auto refType = connect.getDest().getType().dyn_cast<RefType>())
-    baseType = refType.getType();
-  else
-    baseType = connect.getDest().getType().cast<FIRRTLBaseType>();
+  FIRRTLBaseType baseType = getBaseType(destTypeFIRRTL);
 
   auto fieldRefSrc = getOrCacheFieldRefFromValue(connect.getSrc());
   auto fieldRefDest = getOrCacheFieldRefFromValue(connect.getDest());
   if (auto subaccess = fieldRefDest.getValue().getDefiningOp<SubaccessOp>()) {
-    // If the destination is subaccess, we give up.
+    // If the destination is subaccess, we give up to precisely track
+    // lattice values and marke entire aggregate as overdefined. These code
+    // should be dead unless we stop lowering of subaccess in LowerTypes,
     Value parent = subaccess.getInput();
     while (parent.getDefiningOp() &&
            parent.getDefiningOp()->getNumOperands() > 0)
@@ -592,8 +590,7 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect) {
   }
 
   auto propagateElementLattice = [&](unsigned fieldID,
-                                     FIRRTLBaseType destTypeFIRRTL) {
-    auto destType = getBaseType(destTypeFIRRTL).getPassiveType();
+                                     FIRRTLBaseType destType) {
     auto fieldRefDestConnected = fieldRefDest.getSubField(fieldID);
 
     // Handle implicit extensions.
