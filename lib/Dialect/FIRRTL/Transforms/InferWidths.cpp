@@ -1703,7 +1703,7 @@ void InferenceMapping::constrainTypes(Expr *larger, Expr *smaller,
   // If the larger expr is a free variable, create a `expr >= x` constraint for
   // it that we can try to satisfy with the smallest width.
   if (auto largerVar = dyn_cast<VarExpr>(larger)) {
-    LLVM_ATTRIBUTE_UNUSED auto c = solver.addGeqConstraint(largerVar, smaller);
+    LLVM_ATTRIBUTE_UNUSED auto *c = solver.addGeqConstraint(largerVar, smaller);
     LLVM_DEBUG(llvm::dbgs()
                << "Constrained " << *largerVar << " >= " << *c << "\n");
     return;
@@ -1714,9 +1714,9 @@ void InferenceMapping::constrainTypes(Expr *larger, Expr *smaller,
   // satisfied. Since we are always picking the smallest width to satisfy all
   // `>=` constraints, any `<=` constraints have no effect on the solution
   // besides indicating that a width is unsatisfiable.
-  if (auto smallerVar = dyn_cast<VarExpr>(smaller)) {
+  if (auto *smallerVar = dyn_cast<VarExpr>(smaller)) {
     if (imposeUpperBounds) {
-      LLVM_ATTRIBUTE_UNUSED auto c =
+      LLVM_ATTRIBUTE_UNUSED auto *c =
           solver.addLeqConstraint(smallerVar, larger);
       LLVM_DEBUG(llvm::dbgs()
                  << "Constrained " << *smallerVar << " <= " << *c << "\n");
