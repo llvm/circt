@@ -109,7 +109,7 @@ circuit invalid_name :
 circuit invalid_name :
   module invalid_name :
    input out_0 : SInt<8>[5]
-   ; expected-error @+1 {{out of range index '5' in vector type '!firrtl.vector<sint<8>, 5>'}}
+   ; expected-error @+1 {{index must be in-bounds}}
    out_0[4] <- out_0[5]
 
 ;// -----

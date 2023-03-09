@@ -2778,18 +2778,7 @@ bool SubfieldOp::isFieldFlipped() {
 FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
                                        std::optional<Location> loc) {
-  Type inType = operands[0].getType();
-  auto fieldIdx =
-      getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
-
-  if (auto vectorType = inType.dyn_cast<FVectorType>()) {
-    if (fieldIdx < vectorType.getNumElements())
-      return vectorType.getElementType();
-    return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
-                                 "' in vector type ", inType);
-  }
-
-  return emitInferRetTypeError(loc, "subindex requires vector operand");
+  return operands[0].getType().cast<FVectorType>().getElementType();
 }
 
 FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
