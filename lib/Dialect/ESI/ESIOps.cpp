@@ -556,6 +556,10 @@ hw::InnerSymAttr ESIPureModuleOp::getPortSymbolAttr(size_t portIndex) {
   assert(false);
   return {};
 }
+void ESIPureModuleOp::setPortSymbolAttr(size_t portIndex,
+                                        hw::InnerSymAttr symbol) {
+  assert(false);
+}
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/ESI/ESI.cpp.inc"
