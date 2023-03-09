@@ -1107,6 +1107,7 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
 
   auto id = state.newID();
   auto *context = state.circuit.getContext();
+  auto circuitNamespace = CircuitNamespace(state.circuit);
   auto loc = state.circuit.getLoc();
   NamedAttrList companionAttrs;
   companionAttrs.append("class", StringAttr::get(context, companionAnnoClass));
@@ -1156,7 +1157,10 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
     } while (!description.empty());
     return std::string(out);
   };
-  auto interfaceModule = builder.create<FInterfaceOp>(loc, defName, ports);
+  auto interfaceModule = builder.create<FInterfaceOp>(
+      loc,
+      StringAttr::get(context, circuitNamespace.newName(defName.getValue())),
+      ports);
   ImplicitLocOpBuilder b(loc, context);
   b.setInsertionPointToStart(interfaceModule.getBodyBlock());
   // Create one wire for each field of the BundleType. The Wires are left
@@ -1756,30 +1760,6 @@ void GrandCentralPass::runOnOperation() {
     ++i;
   }
 
-  // Maybe return the lone instance of a module.  Generate errors on the op if
-  // the module is not instantiated or is multiply instantiated.
-  auto exactlyOneInstance = [&](FModuleOp op,
-                                StringRef msg) -> std::optional<InstanceOp> {
-    auto *node = instancePaths->instanceGraph[op];
-
-    switch (node->getNumUses()) {
-    case 0:
-      op->emitOpError() << "is marked as a GrandCentral '" << msg
-                        << "', but is never instantiated";
-      return std::nullopt;
-    case 1:
-      return cast<InstanceOp>(*(*node->uses().begin())->getInstance());
-    default:
-      auto diag = op->emitOpError()
-                  << "is marked as a GrandCentral '" << msg
-                  << "', but it is instantiated more than once";
-      for (auto *instance : node->uses())
-        diag.attachNote(instance->getInstance()->getLoc())
-            << "it is instantiated here";
-      return std::nullopt;
-    }
-  };
-
   nlaTable = &getAnalysis<NLATable>();
 
   /// Walk the circuit and extract all information related to scattered Grand
@@ -1895,37 +1875,46 @@ void GrandCentralPass::runOnOperation() {
 
               companionIDMap[id] = {name.getValue(), op, isNonlocal};
 
-              // Assert that the companion is instantiated once and only once.
-              auto instance = exactlyOneInstance(op, "companion");
-              if (!instance)
+              auto *node = instancePaths->instanceGraph[op];
+              if (node->getNumUses() == 0) {
+                op->emitOpError() << "is marked as a GrandCentral 'companion'"
+                                  << "', but is never instantiated";
                 goto FModuleOp_error;
-
-              // If no extraction info was provided, exit.  Otherwise, setup the
-              // lone instance of the companion to be lowered as a bind.
-              if (!maybeExtractInfo) {
-                ++numAnnosRemoved;
-                return true;
               }
+              // There can be multiple instances of the companion, handle each
+              // of them.
+              for (auto *instanceNode : node->uses()) {
+                // Assert that the companion is instantiated once and only once.
+                auto instance = cast<InstanceOp>(instanceNode->getInstance());
+                if (!instance)
+                  goto FModuleOp_error;
 
-              // If the companion is instantiated above the DUT, then don't
-              // extract it.
-              if (dut && !instancePaths->instanceGraph.isAncestor(
-                             op, cast<hw::HWModuleLike>(*dut))) {
-                ++numAnnosRemoved;
-                return true;
+                // If no extraction info was provided, exit.  Otherwise, setup
+                // the lone instance of the companion to be lowered as a bind.
+                if (!maybeExtractInfo) {
+                  ++numAnnosRemoved;
+                  return true;
+                }
+
+                // If the companion is instantiated above the DUT, then don't
+                // extract it.
+                if (dut && !instancePaths->instanceGraph.isAncestor(
+                               op, cast<hw::HWModuleLike>(*dut))) {
+                  ++numAnnosRemoved;
+                  return true;
+                }
+
+                // Lower the companion to a bind unless the user told us
+                // explicitly not to.
+                if (!instantiateCompanionOnly)
+                  instance->setAttr("lowerToBind", builder.getUnitAttr());
+
+                instance->setAttr("output_file",
+                                  hw::OutputFileAttr::getFromFilename(
+                                      &getContext(),
+                                      maybeExtractInfo->bindFilename.getValue(),
+                                      /*excludeFromFileList=*/true));
               }
-
-              // Lower the companion to a bind unless the user told us
-              // explicitly not to.
-              if (!instantiateCompanionOnly)
-                (*instance)->setAttr("lowerToBind", builder.getUnitAttr());
-
-              (*instance)->setAttr(
-                  "output_file",
-                  hw::OutputFileAttr::getFromFilename(
-                      &getContext(), maybeExtractInfo->bindFilename.getValue(),
-                      /*excludeFromFileList=*/true));
-
               // Look for any modules/extmodules _only_ instantiated by the
               // companion.  If these have no output file attribute, then mark
               // them as being extracted into the Grand Central directory.
