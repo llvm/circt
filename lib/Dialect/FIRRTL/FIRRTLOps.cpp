@@ -2224,6 +2224,37 @@ static LogicalResult checkRefTypeFlow(Operation *connect) {
   return success();
 }
 
+/// Check recursively if types are identical OR destination is uninferred.
+static bool isTypeSameOrUninferred(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
+  if (dstType.getWidthlessType() != srcType.getWidthlessType())
+    return false;
+  // Okay, need to check each element.
+  return TypeSwitch<FIRRTLBaseType, bool>(dstType)
+      .Case<BundleType>([&](auto dstBundle) {
+        auto srcBundle = srcType.cast<BundleType>();
+        for (size_t i = 0, n = dstBundle.getNumElements(); i < n; ++i) {
+          auto srcElem = srcBundle.getElement(i);
+          auto dstElem = dstBundle.getElement(i);
+          if (dstElem.isFlip) {
+            if (!isTypeSameOrUninferred(srcElem.type, dstElem.type))
+              return false;
+          } else {
+            if (!isTypeSameOrUninferred(dstElem.type, srcElem.type))
+              return false;
+          }
+        }
+        return true;
+      })
+      .Case<FVectorType>([&](auto vector) {
+        return isTypeSameOrUninferred(
+            vector.getElementType(),
+            srcType.cast<FVectorType>().getElementType());
+      })
+      .Default([&](auto dstGround) {
+        return dstType == srcType || dstType.getBitWidthOrSentinel() == -1;
+      });
+}
+
 /// Check if the source and sink are of appropriate flow.
 static LogicalResult checkConnectFlow(Operation *connect) {
   Value dst = connect->getOperand(0);
@@ -2265,7 +2296,12 @@ LogicalResult ConnectOp::verify() {
   auto dstBaseType = dstType.dyn_cast<FIRRTLBaseType>();
   auto srcBaseType = srcType.dyn_cast<FIRRTLBaseType>();
   if (!dstBaseType || !srcBaseType) {
-    if (dstType != srcType)
+    if (auto dstRef = dyn_cast<RefType>(dstType),
+        srcRef = dyn_cast<RefType>(srcType);
+        dstRef && srcRef) {
+      if (!isTypeSameOrUninferred(dstRef.getType(), srcRef.getType()))
+        return emitError("may not connect references of different widths");
+    } else if (dstType != srcType)
       return emitError("may not connect different non-base types");
   } else {
     // Analog types cannot be connected and must be attached.
