@@ -1129,3 +1129,14 @@ firrtl.circuit "hi" {
     // expected-error @below {{redefinition of symbol named 'hi'}}
     firrtl.module @hi() {}
 }
+
+// -----
+
+firrtl.circuit "AnalogDifferentWidths" {
+  firrtl.module @AnalogDifferentWidths() {
+    %a = firrtl.wire : !firrtl.analog<1>
+    %b = firrtl.wire : !firrtl.analog<2>
+    // expected-error @below {{not all known operand widths match}}
+    firrtl.attach %a, %b : !firrtl.analog<1>, !firrtl.analog<2>
+  }
+}

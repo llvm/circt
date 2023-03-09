@@ -27,6 +27,7 @@ def AttachOp : FIRRTLOp<"attach"> {
 
   let assemblyFormat = "$attached attr-dict `:` qualified(type($attached))";
 
+  let hasVerifier = 1;
   let hasCanonicalizeMethod = true;
 }
 

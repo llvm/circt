@@ -2185,6 +2185,23 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // Statements
 //===----------------------------------------------------------------------===//
 
+LogicalResult AttachOp::verify() {
+  // All known widths must match.
+  std::optional<int32_t> commonWidth;
+  for (auto operand : getOperands()) {
+    auto thisWidth = operand.getType().cast<AnalogType>().getWidth();
+    if (!thisWidth)
+      continue;
+    if (!commonWidth) {
+      commonWidth = thisWidth;
+      continue;
+    }
+    if (commonWidth != thisWidth)
+      return emitOpError("is inavlid as not all known operand widths match");
+  }
+  return success();
+}
+
 /// If the connect is for RefType, implement the constraint for downward only
 /// references. We cannot connect :
 ///   1. an input reference port to the output reference port.
