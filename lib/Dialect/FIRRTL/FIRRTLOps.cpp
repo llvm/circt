@@ -85,6 +85,15 @@ removeElementsAtIndices(ArrayRef<T> input,
   return result;
 }
 
+/// Emit an error if optional location is non-null, return null of return type.
+template <typename RetTy = FIRRTLType, typename... Args>
+static RetTy emitInferRetTypeError(std::optional<Location> loc,
+                                   const Twine &message, Args &&...args) {
+  if (loc)
+    (mlir::emitError(*loc, message) << ... << std::forward<Args>(args));
+  return {};
+}
+
 bool firrtl::isDuplexValue(Value val) {
   // Block arguments are not duplex values.
   while (Operation *op = val.getDefiningOp()) {
@@ -2734,12 +2743,10 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
   auto fieldIndex =
       getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
 
-  if (fieldIndex >= inType.getNumElements()) {
-    if (loc)
-      mlir::emitError(*loc, "subfield element index is greater than the number "
-                            "of fields in the bundle type");
-    return {};
-  }
+  if (fieldIndex >= inType.getNumElements())
+    return emitInferRetTypeError(loc,
+                                 "subfield element index is greater than the "
+                                 "number of fields in the bundle type");
 
   // SubfieldOp verifier checks that the field index is valid with number of
   // subelements.
@@ -2754,22 +2761,18 @@ bool SubfieldOp::isFieldFlipped() {
 FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
                                        std::optional<Location> loc) {
-  auto inType = operands[0].getType();
+  Type inType = operands[0].getType();
   auto fieldIdx =
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
 
   if (auto vectorType = inType.dyn_cast<FVectorType>()) {
     if (fieldIdx < vectorType.getNumElements())
       return vectorType.getElementType();
-    if (loc)
-      mlir::emitError(*loc, "out of range index '")
-          << fieldIdx << "' in vector type " << inType;
-    return {};
+    return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
+                                 "' in vector type ", inType);
   }
 
-  if (loc)
-    mlir::emitError(*loc, "subindex requires vector operand");
-  return {};
+  return emitInferRetTypeError(loc, "subindex requires vector operand");
 }
 
 FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
@@ -2778,19 +2781,15 @@ FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
   auto inType = operands[0].getType();
   auto indexType = operands[1].getType();
 
-  if (!indexType.isa<UIntType>()) {
-    if (loc)
-      mlir::emitError(*loc, "subaccess index must be UInt type, not ")
-          << indexType;
-    return {};
-  }
+  if (!indexType.isa<UIntType>())
+    return emitInferRetTypeError(loc, "subaccess index must be UInt type, not ",
+                                 indexType);
 
   if (auto vectorType = inType.dyn_cast<FVectorType>())
     return vectorType.getElementType();
 
-  if (loc)
-    mlir::emitError(*loc, "subaccess requires vector operand, not ") << inType;
-  return {};
+  return emitInferRetTypeError(loc, "subaccess requires vector operand, not ",
+                               inType);
 }
 
 ParseResult MultibitMuxOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -2823,20 +2822,14 @@ void MultibitMuxOp::print(OpAsmPrinter &p) {
 FIRRTLType MultibitMuxOp::inferReturnType(ValueRange operands,
                                           ArrayRef<NamedAttribute> attrs,
                                           std::optional<Location> loc) {
-  if (operands.size() < 2) {
-    if (loc)
-      mlir::emitError(*loc, "at least one input is required");
-    return FIRRTLType();
-  }
+  if (operands.size() < 2)
+    return emitInferRetTypeError(loc, "at least one input is required");
 
   // Check all mux inputs have the same type.
   if (!llvm::all_of(operands.drop_front(2), [&](auto op) {
         return operands[1].getType() == op.getType();
-      })) {
-    if (loc)
-      mlir::emitError(*loc, "all inputs must have the same type");
-    return FIRRTLType();
-  }
+      }))
+    return emitInferRetTypeError(loc, "all inputs must have the same type");
 
   return operands[1].getType().cast<FIRRTLType>();
 }
@@ -2976,12 +2969,9 @@ FIRRTLType DShlPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
                                              std::optional<Location> loc) {
   auto lhsi = lhs.dyn_cast<IntType>();
   auto rhsui = rhs.dyn_cast<UIntType>();
-  if (!rhsui || !lhsi) {
-    if (loc)
-      mlir::emitError(*loc,
-                      "first operand should be integer, second unsigned int");
-    return {};
-  }
+  if (!rhsui || !lhsi)
+    return emitInferRetTypeError(
+        loc, "first operand should be integer, second unsigned int");
 
   // If the left or right has unknown result type, then the operation does
   // too.
@@ -2990,19 +2980,15 @@ FIRRTLType DShlPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
     width = -1;
   } else {
     auto amount = *rhsui.getWidth();
-    if (amount >= 32) {
-      if (loc)
-        mlir::emitError(*loc, "shift amount too large: second operand of dshl "
-                              "is wider than 31 bits");
-      return {};
-    }
+    if (amount >= 32)
+      return emitInferRetTypeError(loc,
+                                   "shift amount too large: second operand of "
+                                   "dshl is wider than 31 bits");
     int64_t newWidth = (int64_t)width + ((int64_t)1 << amount) - 1;
-    if (newWidth > INT32_MAX) {
-      if (loc)
-        mlir::emitError(*loc, "shift amount too large: first operand shifted "
-                              "by maximum amount exceeds maximum width");
-      return {};
-    }
+    if (newWidth > INT32_MAX)
+      return emitInferRetTypeError(
+          loc, "shift amount too large: first operand shifted by maximum "
+               "amount exceeds maximum width");
     width = newWidth;
   }
   return IntType::get(lhs.getContext(), lhsi.isSigned(), width);
@@ -3010,23 +2996,17 @@ FIRRTLType DShlPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 
 FIRRTLType DShlwPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
                                               std::optional<Location> loc) {
-  if (!lhs.isa<IntType>() || !rhs.isa<UIntType>()) {
-    if (loc)
-      mlir::emitError(*loc,
-                      "first operand should be integer, second unsigned int");
-    return {};
-  }
+  if (!lhs.isa<IntType>() || !rhs.isa<UIntType>())
+    return emitInferRetTypeError(
+        loc, "first operand should be integer, second unsigned int");
   return lhs;
 }
 
 FIRRTLType DShrPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
                                              std::optional<Location> loc) {
-  if (!lhs.isa<IntType>() || !rhs.isa<UIntType>()) {
-    if (loc)
-      mlir::emitError(*loc,
-                      "first operand should be integer, second unsigned int");
-    return {};
-  }
+  if (!lhs.isa<IntType>() || !rhs.isa<UIntType>())
+    return emitInferRetTypeError(
+        loc, "first operand should be integer, second unsigned int");
   return lhs;
 }
 
@@ -3053,34 +3033,22 @@ SizeOfIntrinsicOp::inferUnaryReturnType(FIRRTLType input,
 FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
                                               std::optional<Location> loc) {
   auto base = input.dyn_cast<FIRRTLBaseType>();
-  if (!base) {
-    if (loc)
-      mlir::emitError(*loc, "operand must be a scalar base type");
-    return {};
-  }
+  if (!base)
+    return emitInferRetTypeError(loc, "operand must be a scalar base type");
   int32_t width = base.getBitWidthOrSentinel();
-  if (width == -2) {
-    if (loc)
-      mlir::emitError(*loc, "operand must be a scalar type");
-    return {};
-  }
+  if (width == -2)
+    return emitInferRetTypeError(loc, "operand must be a scalar type");
   return SIntType::get(input.getContext(), width);
 }
 
 FIRRTLType AsUIntPrimOp::inferUnaryReturnType(FIRRTLType input,
                                               std::optional<Location> loc) {
   auto base = input.dyn_cast<FIRRTLBaseType>();
-  if (!base) {
-    if (loc)
-      mlir::emitError(*loc, "operand must be a scalar base type");
-    return {};
-  }
+  if (!base)
+    return emitInferRetTypeError(loc, "operand must be a scalar base type");
   int32_t width = base.getBitWidthOrSentinel();
-  if (width == -2) {
-    if (loc)
-      mlir::emitError(*loc, "operand must be a scalar type");
-    return {};
-  }
+  if (width == -2)
+    return emitInferRetTypeError(loc, "operand must be a scalar type");
   return UIntType::get(input.getContext(), width);
 }
 
@@ -3088,17 +3056,12 @@ FIRRTLType
 AsAsyncResetPrimOp::inferUnaryReturnType(FIRRTLType input,
                                          std::optional<Location> loc) {
   auto base = input.dyn_cast<FIRRTLBaseType>();
-  if (!base) {
-    if (loc)
-      mlir::emitError(*loc, "operand must be single bit scalar base type");
-    return {};
-  }
+  if (!base)
+    return emitInferRetTypeError(loc,
+                                 "operand must be single bit scalar base type");
   int32_t width = base.getBitWidthOrSentinel();
-  if (width == -2 || width == 0 || width > 1) {
-    if (loc)
-      mlir::emitError(*loc, "operand must be single bit scalar type");
-    return {};
-  }
+  if (width == -2 || width == 0 || width > 1)
+    return emitInferRetTypeError(loc, "operand must be single bit scalar type");
   return AsyncResetType::get(input.getContext());
 }
 
@@ -3119,20 +3082,14 @@ FIRRTLType CvtPrimOp::inferUnaryReturnType(FIRRTLType input,
   if (input.isa<SIntType>())
     return input;
 
-  if (loc)
-    mlir::emitError(*loc, "operand must have integer type");
-  return {};
+  return emitInferRetTypeError(loc, "operand must have integer type");
 }
 
 FIRRTLType NegPrimOp::inferUnaryReturnType(FIRRTLType input,
                                            std::optional<Location> loc) {
   auto inputi = input.dyn_cast<IntType>();
-  if (!inputi) {
-    if (loc)
-      mlir::emitError(*loc, "operand must have integer type");
-
-    return {};
-  }
+  if (!inputi)
+    return emitInferRetTypeError(loc, "operand must have integer type");
   int32_t width = inputi.getWidthOrSentinel();
   if (width != -1)
     ++width;
@@ -3142,12 +3099,8 @@ FIRRTLType NegPrimOp::inferUnaryReturnType(FIRRTLType input,
 FIRRTLType NotPrimOp::inferUnaryReturnType(FIRRTLType input,
                                            std::optional<Location> loc) {
   auto inputi = input.dyn_cast<IntType>();
-  if (!inputi) {
-    if (loc)
-      mlir::emitError(*loc, "operand must have integer type");
-
-    return {};
-  }
+  if (!inputi)
+    return emitInferRetTypeError(loc, "operand must have integer type");
   return UIntType::get(input.getContext(), inputi.getWidthOrSentinel());
 }
 
@@ -3178,38 +3131,27 @@ FIRRTLType BitsPrimOp::inferReturnType(ValueRange operands,
   auto low = getAttr<IntegerAttr>(attrs, "lo").getValue().getSExtValue();
 
   auto inputi = input.dyn_cast<IntType>();
-  if (!inputi) {
-    if (loc)
-      mlir::emitError(*loc, "input type should be the int type but got ")
-          << input;
-    return {};
-  }
+  if (!inputi)
+    return emitInferRetTypeError(
+        loc, "input type should be the int type but got ", input);
 
   // High must be >= low and both most be non-negative.
-  if (high < low) {
-    if (loc)
-      mlir::emitError(*loc,
-                      "high must be equal or greater than low, but got high = ")
-          << high << ", low = " << low;
-    return {};
-  }
+  if (high < low)
+    return emitInferRetTypeError(
+        loc, "high must be equal or greater than low, but got high = ", high,
+        ", low = ", low);
 
-  if (low < 0) {
-    if (loc)
-      mlir::emitError(*loc, "low must be non-negative but got ") << low;
-    return {};
-  }
+  if (low < 0)
+    return emitInferRetTypeError(loc, "low must be non-negative but got ", low);
 
   // If the input has staticly known width, check it.  Both and low must be
   // strictly less than width.
   int32_t width = inputi.getWidthOrSentinel();
-  if (width != -1 && high >= width) {
-    if (loc)
-      mlir::emitError(*loc)
-          << "high must be smaller than the width of input, but got high = "
-          << high << ", width = " << width;
-    return {};
-  }
+  if (width != -1 && high >= width)
+    return emitInferRetTypeError(
+        loc,
+        "high must be smaller than the width of input, but got high = ", high,
+        ", width = ", width);
 
   return UIntType::get(input.getContext(), high - low + 1);
 }
@@ -3231,19 +3173,13 @@ FIRRTLType HeadPrimOp::inferReturnType(ValueRange operands,
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
   auto inputi = input.dyn_cast<IntType>();
-  if (amount < 0 || !inputi) {
-    if (loc)
-      mlir::emitError(*loc,
-                      "operand must have integer type and amount must be >= 0");
-    return {};
-  }
+  if (amount < 0 || !inputi)
+    return emitInferRetTypeError(
+        loc, "operand must have integer type and amount must be >= 0");
 
   int32_t width = inputi.getWidthOrSentinel();
-  if (width != -1 && amount > width) {
-    if (loc)
-      mlir::emitError(*loc, "amount larger than input width");
-    return {};
-  }
+  if (width != -1 && amount > width)
+    return emitInferRetTypeError(loc, "amount larger than input width");
 
   return UIntType::get(input.getContext(), amount);
 }
@@ -3276,14 +3212,10 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
     return low;
 
   // The base types need to be equivalent.
-  if (high.getTypeID() != low.getTypeID()) {
-    if (loc) {
-      auto d = mlir::emitError(*loc, "incompatible mux operand types");
-      d.attachNote() << "true value type:  " << high;
-      d.attachNote() << "false value type: " << low;
-    }
-    return {};
-  }
+  if (high.getTypeID() != low.getTypeID())
+    return emitInferRetTypeError<FIRRTLBaseType>(
+        loc, "incompatible mux operand types, true value type: ", high,
+        ", false value type: ", low);
 
   // Two different Int types can be compatible.  If either has unknown width,
   // then return it.  If both are known but different width, then return the
@@ -3337,22 +3269,16 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
       if (!failed)
         return BundleType::get(low.getContext(), newElements);
     }
-    if (loc) {
-      auto d = mlir::emitError(*loc, "incompatible mux operand bundle fields");
-      d.attachNote() << "true value type:  " << high;
-      d.attachNote() << "false value type: " << low;
-    }
-    return {};
+    return emitInferRetTypeError<FIRRTLBaseType>(
+        loc, "incompatible mux operand bundle fields, true value type: ", high,
+        ", false value type: ", low);
   }
 
   // If we arrive here the types of the two mux arms are fundamentally
   // incompatible.
-  if (loc) {
-    auto d = mlir::emitError(*loc, "invalid mux operand types");
-    d.attachNote() << "true value type:  " << high;
-    d.attachNote() << "false value type: " << low;
-  }
-  return {};
+  return emitInferRetTypeError<FIRRTLBaseType>(
+      loc, "invalid mux operand types, true value type: ", high,
+      ", false value type: ", low);
 }
 
 FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
@@ -3360,11 +3286,8 @@ FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
                                       std::optional<Location> loc) {
   auto highType = operands[1].getType().dyn_cast<FIRRTLBaseType>();
   auto lowType = operands[2].getType().dyn_cast<FIRRTLBaseType>();
-  if (!highType || !lowType) {
-    if (loc)
-      mlir::emitError(*loc, "operands must be base type");
-    return {};
-  }
+  if (!highType || !lowType)
+    return emitInferRetTypeError(loc, "operands must be base type");
   return inferMuxReturnType(highType, lowType, loc);
 }
 
@@ -3375,12 +3298,9 @@ FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
   auto inputi = input.dyn_cast<IntType>();
-  if (amount < 0 || !inputi) {
-    if (loc)
-      mlir::emitError(*loc,
-                      "pad input must be integer and amount must be >= 0");
-    return {};
-  }
+  if (amount < 0 || !inputi)
+    return emitInferRetTypeError(
+        loc, "pad input must be integer and amount must be >= 0");
 
   int32_t width = inputi.getWidthOrSentinel();
   if (width == -1)
@@ -3397,12 +3317,9 @@ FIRRTLType ShlPrimOp::inferReturnType(ValueRange operands,
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
   auto inputi = input.dyn_cast<IntType>();
-  if (amount < 0 || !inputi) {
-    if (loc)
-      mlir::emitError(*loc,
-                      "shl input must be integer and amount must be >= 0");
-    return {};
-  }
+  if (amount < 0 || !inputi)
+    return emitInferRetTypeError(
+        loc, "shl input must be integer and amount must be >= 0");
 
   int32_t width = inputi.getWidthOrSentinel();
   if (width != -1)
@@ -3418,12 +3335,9 @@ FIRRTLType ShrPrimOp::inferReturnType(ValueRange operands,
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
   auto inputi = input.dyn_cast<IntType>();
-  if (amount < 0 || !inputi) {
-    if (loc)
-      mlir::emitError(*loc,
-                      "shr input must be integer and amount must be >= 0");
-    return {};
-  }
+  if (amount < 0 || !inputi)
+    return emitInferRetTypeError(
+        loc, "shr input must be integer and amount must be >= 0");
 
   int32_t width = inputi.getWidthOrSentinel();
   if (width != -1)
@@ -3439,21 +3353,15 @@ FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
   auto inputi = input.dyn_cast<IntType>();
-  if (amount < 0 || !inputi) {
-    if (loc)
-      mlir::emitError(*loc,
-                      "tail input must be integer and amount must be >= 0");
-    return {};
-  }
+  if (amount < 0 || !inputi)
+    return emitInferRetTypeError(
+        loc, "tail input must be integer and amount must be >= 0");
 
   int32_t width = inputi.getWidthOrSentinel();
   if (width != -1) {
-    if (width < amount) {
-      if (loc)
-        mlir::emitError(*loc,
-                        "amount must be less than or equal operand width");
-      return {};
-    }
+    if (width < amount)
+      return emitInferRetTypeError(
+          loc, "amount must be less than or equal operand width");
     width -= amount;
   }
 
@@ -3904,28 +3812,22 @@ void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
                                          ArrayRef<NamedAttribute> attrs,
                                          std::optional<Location> loc) {
-  auto inType = operands[0].getType();
+  Type inType = operands[0].getType();
   auto inRefType = inType.dyn_cast<RefType>();
-  if (!inRefType) {
-    if (loc)
-      mlir::emitError(*loc, "ref.resolve operand must be ref type, not ")
-          << inType;
-    return {};
-  }
+  if (!inRefType)
+    return emitInferRetTypeError(
+        loc, "ref.resolve operand must be ref type, not ", inType);
   return inRefType.getType();
 }
 
 FIRRTLType RefSendOp::inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
                                       std::optional<Location> loc) {
-  auto inType = operands[0].getType();
+  Type inType = operands[0].getType();
   auto inBaseType = inType.dyn_cast<FIRRTLBaseType>();
-  if (!inBaseType) {
-    if (loc)
-      mlir::emitError(*loc, "ref.send operand must be base type, not ")
-          << inType;
-    return {};
-  }
+  if (!inBaseType)
+    return emitInferRetTypeError(
+        loc, "ref.send operand must be base type, not ", inType);
   return RefType::get(inBaseType);
 }
 
@@ -3953,27 +3855,21 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
   if (auto vectorType = inType.dyn_cast<FVectorType>()) {
     if (fieldIdx < vectorType.getNumElements())
       return RefType::get(vectorType.getElementType());
-    if (loc)
-      mlir::emitError(*loc, "out of range index '")
-          << fieldIdx << "' in RefType of vector type "
-          << operands[0].getType();
-    return {};
+    return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
+                                 "' in RefType of vector type ",
+                                 operands[0].getType());
   }
   if (auto bundleType = inType.dyn_cast<BundleType>()) {
     if (fieldIdx >= bundleType.getNumElements()) {
-      if (loc)
-        mlir::emitError(*loc,
-                        "subfield element index is greater than the number "
-                        "of fields in the bundle type");
-      return {};
+      return emitInferRetTypeError(loc,
+                                   "subfield element index is greater than "
+                                   "the number of fields in the bundle type");
     }
     return RefType::get(bundleType.getElement(fieldIdx).type);
   }
 
-  if (loc)
-    mlir::emitError(
-        *loc, "ref.sub op requires a RefType of vector or bundle base type");
-  return {};
+  return emitInferRetTypeError(
+      loc, "ref.sub op requires a RefType of vector or bundle base type");
 }
 
 //===----------------------------------------------------------------------===//
