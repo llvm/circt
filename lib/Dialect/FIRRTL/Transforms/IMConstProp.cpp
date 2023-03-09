@@ -213,6 +213,8 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     return it != latticeValues.end() && it->second.isOverdefined();
   }
 
+  // Mark the given value as overdefined. If the value is an aggregate,
+  // we mark all ground elements as overdefined.
   void markOverdefined(Value value) {
     FieldRef fieldRef = getOrCacheFieldRefFromValue(value);
     auto firrtlType = value.getType().dyn_cast<FIRRTLType>();
@@ -238,15 +240,6 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
       entry.markOverdefined();
       changedLatticeValueWorklist.push_back(value);
     }
-  }
-
-  FieldRef getOrCacheFieldRefFromValue(Value value) {
-    if (!value.getDefiningOp() || !isAggregate(value.getDefiningOp()))
-      return FieldRef(value, 0);
-    auto &fieldRef = valueToFieldRef[value];
-    if (fieldRef)
-      return fieldRef;
-    return fieldRef = getFieldRefFromValue(value);
   }
 
   /// Merge information from the 'from' lattice value into value.  If it
@@ -307,6 +300,18 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
       changedLatticeValueWorklist.push_back(value);
       valueEntry = source;
     }
+  }
+
+  // This function returns a field ref of the given value. This function caches
+  // the result to avoid extra IR traversal if the value is an aggregate
+  // element.
+  FieldRef getOrCacheFieldRefFromValue(Value value) {
+    if (!value.getDefiningOp() || !isAggregate(value.getDefiningOp()))
+      return FieldRef(value, 0);
+    auto &fieldRef = valueToFieldRef[value];
+    if (fieldRef)
+      return fieldRef;
+    return fieldRef = getFieldRefFromValue(value);
   }
 
   /// Return the lattice value for the specified SSA value, extended to the
