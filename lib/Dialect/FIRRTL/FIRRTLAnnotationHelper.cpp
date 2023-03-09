@@ -374,7 +374,8 @@ static Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
                                    const AnnoPathValue &moduleTarget,
                                    const AnnoPathValue &target,
                                    StringAttr internalPathAttr,
-                                   FIRRTLType targetType, ApplyState &state) {
+                                   FIRRTLBaseType targetType,
+                                   ApplyState &state) {
   Value sendVal;
   FModuleLike mod = cast<FModuleLike>(moduleTarget.ref.getOp());
   InstanceOp modInstance;
@@ -392,7 +393,7 @@ static Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
   }
   ImplicitLocOpBuilder builder(modInstance.getLoc(), modInstance);
   builder.setInsertionPointAfter(modInstance);
-  auto portRefType = RefType::get(targetType.cast<FIRRTLBaseType>());
+  auto portRefType = RefType::get(targetType);
   SmallString<32> refName;
   for (auto c : internalPathAttr.getValue()) {
     switch (c) {

@@ -203,9 +203,7 @@ static bool isNotSubAccess(Operation *op) {
   if (!sao)
     return true;
   ConstantOp arg = dyn_cast_or_null<ConstantOp>(sao.getIndex().getDefiningOp());
-  if (arg && sao.getInput().getType().cast<FVectorType>().getNumElements() != 0)
-    return true;
-  return false;
+  return arg && sao.getInput().getType().getNumElements() != 0;
 }
 
 /// Look through and collect subfields leading to a subaccess.
@@ -354,10 +352,12 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
   TypeLoweringVisitor(MLIRContext *context,
                       PreserveAggregate::PreserveMode preserveAggregate,
+                      PreserveAggregate::PreserveMode memoryPreservationMode,
                       bool preservePublicTypes, SymbolTable &symTbl,
                       const AttrCache &cache,
                       const llvm::DenseSet<FModuleLike> &publicModuleSet)
       : context(context), aggregatePreservationMode(preserveAggregate),
+        memoryPreservationMode(memoryPreservationMode),
         preservePublicTypes(preservePublicTypes), symTbl(symTbl), cache(cache),
         publicModuleSet(publicModuleSet) {}
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitDecl;
@@ -429,6 +429,7 @@ private:
 
   /// Aggregate preservation mode.
   PreserveAggregate::PreserveMode aggregatePreservationMode;
+  PreserveAggregate::PreserveMode memoryPreservationMode;
 
   /// Exteranal modules and toplevel modules should have lowered types if this
   /// flag is enabled.
@@ -669,7 +670,7 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
                           "with non-ground type elements");
           return;
         }
-        if (val.getType().cast<FIRRTLType>().isa<FVectorType>())
+        if (isa<FVectorType>(val.getType()))
           accumulate =
               (accumulate ? b.createOrFold<CatPrimOp>(v, accumulate) : v);
         else
@@ -770,7 +771,7 @@ static Value cloneAccess(ImplicitLocOpBuilder *builder, Operation *op,
 void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
                                            ArrayRef<Operation *> writePath) {
   SubaccessOp sao = cast<SubaccessOp>(writePath.back());
-  auto saoType = sao.getInput().getType().cast<FVectorType>();
+  auto saoType = sao.getInput().getType();
   auto selectWidth = llvm::Log2_64_Ceil(saoType.getNumElements());
 
   for (size_t index = 0, e = saoType.getNumElements(); index < e; ++index) {
@@ -874,7 +875,7 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
   SmallVector<FlatBundleFieldEntry> fields;
 
   // MemOp should have ground types so we can't preserve aggregates.
-  if (!peelType(op.getDataType(), fields, PreserveAggregate::None))
+  if (!peelType(op.getDataType(), fields, memoryPreservationMode))
     return false;
 
   SmallVector<MemOp> newMemories;
@@ -1327,7 +1328,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
 bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   auto input = op.getInput();
-  auto vType = input.getType().cast<FVectorType>();
+  auto vType = input.getType();
 
   // Check for empty vectors
   if (vType.getNumElements() == 0) {
@@ -1394,8 +1395,10 @@ namespace {
 struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
   LowerTypesPass(
       circt::firrtl::PreserveAggregate::PreserveMode preserveAggregateFlag,
+      circt::firrtl::PreserveAggregate::PreserveMode preserveMemoriesFlag,
       bool preservePublicTypesFlag) {
     preserveAggregate = preserveAggregateFlag;
+    preserveMemories = preserveMemoriesFlag;
     preservePublicTypes = preservePublicTypesFlag;
   }
   void runOnOperation() override;
@@ -1431,8 +1434,8 @@ void LowerTypesPass::runOnOperation() {
   // This lambda, executes in parallel for each Op within the circt.
   auto lowerModules = [&](FModuleLike op) -> LogicalResult {
     auto tl = TypeLoweringVisitor(&getContext(), preserveAggregate,
-                                  preservePublicTypes, symTbl, cache,
-                                  publicModuleSet);
+                                  preserveMemories, preservePublicTypes, symTbl,
+                                  cache, publicModuleSet);
     tl.lowerModule(op);
 
     return LogicalResult::failure(tl.isFailed());
@@ -1445,9 +1448,9 @@ void LowerTypesPass::runOnOperation() {
 }
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createLowerFIRRTLTypesPass(PreserveAggregate::PreserveMode mode,
-                                          bool preservePublicTypes) {
-
-  return std::make_unique<LowerTypesPass>(mode, preservePublicTypes);
+std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLTypesPass(
+    PreserveAggregate::PreserveMode mode,
+    PreserveAggregate::PreserveMode memoryMode, bool preservePublicTypes) {
+  return std::make_unique<LowerTypesPass>(mode, memoryMode,
+                                          preservePublicTypes);
 }

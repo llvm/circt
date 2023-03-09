@@ -822,7 +822,7 @@ out <= myport
 ```mlir
 %mymem = chirrtl.seqmem Undefined  : !chirrtl.cmemory<uint<1>, 8>
 %myport_data, %myport_port = chirrtl.memoryport Infer %mymem {name = "myport"}  : (!chirrtl.cmemory<uint<1>, 8>) -> (!firrtl.uint<1>, !chirrtl.cmemoryport)
-firrtl.when %cond  {
+firrtl.when %cond : !firrtl.uint<1> {
   chirrtl.memoryport.access %myport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<3>, !firrtl.clock
 }
 firrtl.connect %out, %myport_data : !firrtl.uint<1>, !firrtl.uint<1

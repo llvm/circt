@@ -41,6 +41,7 @@ struct SeqFIRRTLToSVPass
   using LowerSeqFIRRTLToSVBase<
       SeqFIRRTLToSVPass>::addVivadoRAMAddressConflictSynthesisBugWorkaround;
   using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::LowerSeqFIRRTLToSVBase;
+  using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::numSubaccessRestored;
 };
 } // anonymous namespace
 
@@ -116,6 +117,8 @@ public:
 
   void lower();
 
+  unsigned numSubaccessRestored = 0;
+
 private:
   struct RegLowerInfo {
     sv::RegOp reg;
@@ -132,6 +135,9 @@ private:
                                   Value rand, unsigned &pos);
 
   void createTree(OpBuilder &builder, Value reg, Value term, Value next);
+  std::optional<std::tuple<Value, Value, Value>>
+  tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
+                        hw::ArrayCreateOp nextArray);
 
   void addToAlwaysBlock(Block *block, sv::EventControl clockEdge, Value clock,
                         std::function<void(OpBuilder &)> body,
@@ -325,6 +331,104 @@ static bool areEquivalentValues(Value term, Value next) {
   return false;
 }
 
+static llvm::SetVector<Value> extractConditions(Value value) {
+  auto andOp = value.getDefiningOp<comb::AndOp>();
+  // If the value is not AndOp with a bin flag, use it as a condition.
+  if (!andOp || !andOp.getTwoState()) {
+    llvm::SetVector<Value> ret;
+    ret.insert(value);
+    return ret;
+  }
+
+  return llvm::SetVector<Value>(andOp.getOperands().begin(),
+                                andOp.getOperands().end());
+}
+
+static std::optional<APInt> getConstantValue(Value value) {
+  auto constantIndex = value.template getDefiningOp<hw::ConstantOp>();
+  if (constantIndex)
+    return constantIndex.getValue();
+  return {};
+}
+
+// Return a tuple <cond, idx, val> if the array register update can be
+// represented with a dynamic index assignment:
+// if (cond)
+//   reg[idx] <= val;
+//
+std::optional<std::tuple<Value, Value, Value>>
+FirRegLower::tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
+                                   hw::ArrayCreateOp nextRegValue) {
+  Value trueVal;
+  SmallVector<Value> muxConditions;
+  if (!llvm::all_of(
+          llvm::enumerate(llvm::reverse(nextRegValue.getOperands())),
+          [&](auto idxAndValue) {
+            // Check that `nextRegValue[i]` is `cond_i ? val : reg[i]`.
+            auto [i, value] = idxAndValue;
+            auto mux = value.template getDefiningOp<comb::MuxOp>();
+            // Ensure that mux has binary flag.
+            if (!mux || !mux.getTwoState())
+              return false;
+            // The next value must be same.
+            if (trueVal && trueVal != mux.getTrueValue())
+              return false;
+            if (!trueVal)
+              trueVal = mux.getTrueValue();
+            muxConditions.push_back(mux.getCond());
+            // Check that ith element is an element of the register we are
+            // currently lowering.
+            auto arrayGet =
+                mux.getFalseValue().template getDefiningOp<hw::ArrayGetOp>();
+            if (!arrayGet)
+              return false;
+            return areEquivalentValues(arrayGet.getInput(), term) &&
+                   getConstantValue(arrayGet.getIndex()) == i;
+          }))
+    return {};
+
+  // Extract common expressions among mux conditions.
+  llvm::SetVector<Value> commonConditions =
+      extractConditions(muxConditions.front());
+  for (auto condition : ArrayRef(muxConditions).drop_front()) {
+    auto cond = extractConditions(condition);
+    commonConditions.remove_if([&](auto v) { return !cond.contains(v); });
+  }
+  Value indexValue;
+  for (auto [idx, condition] : llvm::enumerate(muxConditions)) {
+    llvm::SetVector<Value> extractedConditions = extractConditions(condition);
+    // Remove common conditions and check the remaining condition is only an
+    // index comparision.
+    extractedConditions.remove_if(
+        [&](auto v) { return commonConditions.contains(v); });
+    if (extractedConditions.size() != 1)
+      return {};
+
+    auto indexCompare =
+        (*extractedConditions.begin()).getDefiningOp<comb::ICmpOp>();
+    if (!indexCompare || !indexCompare.getTwoState() ||
+        indexCompare.getPredicate() != comb::ICmpPredicate::eq)
+      return {};
+    // `IndexValue` must be same.
+    if (indexValue && indexValue != indexCompare.getLhs())
+      return {};
+    if (!indexValue)
+      indexValue = indexCompare.getLhs();
+    if (getConstantValue(indexCompare.getRhs()) != idx)
+      return {};
+  }
+
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPointAfterValue(reg);
+  Value commonConditionValue;
+  if (commonConditions.empty())
+    commonConditionValue = getOrCreateConstant(reg.getLoc(), APInt(1, 1));
+  else
+    commonConditionValue = builder.createOrFold<comb::AndOp>(
+        reg.getLoc(), builder.getI1Type(), commonConditions.takeVector(), true);
+  return std::make_tuple(commonConditionValue, indexValue, trueVal);
+}
+
 void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
                              Value next) {
   // If term and next values are equivalent, we don't have to create an
@@ -341,6 +445,25 @@ void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
     // If the next value is an array creation, split the value into
     // invidial elements and construct trees recursively.
     if (auto array = next.getDefiningOp<hw::ArrayCreateOp>()) {
+      // First, try restoring subaccess assignments.
+      if (auto matchResultOpt =
+              tryRestoringSubaccess(builder, reg, term, array)) {
+        Value cond, index, trueValue;
+        std::tie(cond, index, trueValue) = *matchResultOpt;
+        addToIfBlock(
+            builder, cond,
+            [&]() {
+              auto nextReg = builder.create<sv::ArrayIndexInOutOp>(reg.getLoc(),
+                                                                   reg, index);
+              auto termElement =
+                  builder.create<hw::ArrayGetOp>(term.getLoc(), term, index);
+              createTree(builder, nextReg, termElement, trueValue);
+              termElement.erase();
+            },
+            []() {});
+        ++numSubaccessRestored;
+        return;
+      }
       for (auto [idx, value] :
            llvm::enumerate(llvm::reverse(array.getOperands()))) {
 
@@ -437,9 +560,9 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
   return svReg;
 }
 
-// Initialize registers by assingning each element recursively instead of
-// intializing entire registers. This is necessary as a workaound for verilator
-// which allocates many local variables for concat.
+// Initialize registers by assigning each element recursively instead of
+// initializing entire registers. This is necessary as a workaround for
+// verilator which allocates many local variables for concat op.
 void FirRegLower::initializeRegisterElements(Location loc, OpBuilder &builder,
                                              Value reg, Value randomSource,
                                              unsigned &pos) {
@@ -581,9 +704,10 @@ void SeqToSVPass::runOnOperation() {
 
 void SeqFIRRTLToSVPass::runOnOperation() {
   hw::HWModuleOp module = getOperation();
-  FirRegLower(module, disableRegRandomization,
-              addVivadoRAMAddressConflictSynthesisBugWorkaround)
-      .lower();
+  FirRegLower firRegLower(module, disableRegRandomization,
+                          addVivadoRAMAddressConflictSynthesisBugWorkaround);
+  firRegLower.lower();
+  numSubaccessRestored += firRegLower.numSubaccessRestored;
 }
 
 std::unique_ptr<Pass> circt::seq::createSeqLowerToSVPass() {

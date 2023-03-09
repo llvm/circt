@@ -2586,12 +2586,6 @@ void UnionExtractOp::print(OpAsmPrinter &printer) {
 // ArrayGetOp
 //===----------------------------------------------------------------------===//
 
-void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
-                       Value index) {
-  auto resultType = type_cast<ArrayType>(input.getType()).getElementType();
-  build(builder, result, resultType, input, index);
-}
-
 // An array_get of an array_create with a constant index can just be the
 // array_create operand at the constant index. If the array_create has a
 // single uniform value for each element, just return that value regardless of

@@ -92,7 +92,10 @@ def AnalogTypeImpl : FIRRTLImplType<"Analog",
 def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
   let summary = "a fixed size collection of elements, like an array.";
   let genStorageClass = false;
-  let parameters = (ins "FIRRTLBaseType":$elementType, "size_t":$numElements);
+  let parameters = (ins
+      TypeParameter<"::circt::firrtl::FIRRTLBaseType", "Type of vector elements">:$elementType,
+     "size_t":$numElements
+  );
   let skipDefaultBuilders = true;
   let builders = [
     TypeBuilderWithInferredContext<(ins
@@ -243,12 +246,13 @@ def RefImpl : FIRRTLImplType<"Ref", [], "::circt::firrtl::FIRRTLType"> {
     Values of this type are used to capture dataflow paths,
     and do not represent a circuit element or entity.
   }];
-  let parameters = (ins "FIRRTLBaseType":$type);
+  let parameters = (ins TypeParameter<"::circt::firrtl::FIRRTLBaseType",
+                                      "Type of reference target">:$type);
   let genVerifyDecl = true;
 
   let skipDefaultBuilders = true;
   let builders = [
-    TypeBuilderWithInferredContext<(ins "FIRRTLBaseType":$type)>
+    TypeBuilderWithInferredContext<(ins "::circt::firrtl::FIRRTLBaseType":$type)>
   ];
 }
 

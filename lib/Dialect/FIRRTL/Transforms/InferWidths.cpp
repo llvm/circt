@@ -1242,7 +1242,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
     else
       allWidthsKnown = false;
   }
-  if (allWidthsKnown && !isa<ConnectOp, StrictConnectOp, AttachOp>(op))
+  if (allWidthsKnown && !isa<FConnectLike, AttachOp>(op))
     return success();
 
   // Actually generate the necessary constraint expressions.
@@ -1306,7 +1306,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 
       // Aggregate Values
       .Case<SubfieldOp>([&](auto op) {
-        auto bundleType = op.getInput().getType().template cast<BundleType>();
+        auto bundleType = op.getInput().getType();
         auto fieldID = bundleType.getFieldID(op.getFieldIndex());
         unifyTypes(FieldRef(op.getResult(), 0),
                    FieldRef(op.getInput(), fieldID), op.getType());
@@ -1380,7 +1380,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
       .Case<CvtPrimOp>([&](auto op) {
         auto input = getExpr(op.getInput());
-        auto e = op.getInput().getType().template cast<IntType>().isSigned()
+        auto e = op.getInput().getType().isSigned()
                      ? input
                      : solver.add(input, solver.known(1));
         setExpr(op.getResult(), e);
@@ -1438,7 +1438,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
 
       // Handle the various connect statements that imply a type constraint.
-      .Case<ConnectOp, StrictConnectOp>([&](auto op) {
+      .Case<FConnectLike>([&](auto op) {
         // If the source is an invalid value, we don't set a constraint between
         // these two types.
         if (dyn_cast_or_null<InvalidValueOp>(op.getSrc().getDefiningOp()))
@@ -1507,7 +1507,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         unsigned nonDebugPort = 0;
         for (const auto &result : llvm::enumerate(op.getResults())) {
           declareVars(result.value(), op.getLoc());
-          if (!result.value().getType().cast<FIRRTLType>().isa<RefType>())
+          if (!isa<RefType>(result.value().getType()))
             nonDebugPort = result.index();
         }
 
@@ -1545,7 +1545,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         auto dataType = op.getDataType();
         for (unsigned i = 0, e = op.getResults().size(); i < e; ++i) {
           auto result = op.getResult(i);
-          if (result.getType().cast<FIRRTLType>().isa<RefType>()) {
+          if (isa<RefType>(result.getType())) {
             // Debug ports are firrtl.ref<vector<data-type, depth>>
             // Use FieldRef of 1, to indicate the first vector element must be
             // of the dataType.
@@ -1844,8 +1844,7 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
   // operand width will have definitely been mapped in.
   if (isa<InvalidValueOp>(op) &&
       hasUninferredWidth(op->getResultTypes().front())) {
-    if (op->use_empty() ||
-        !isa<ConnectOp, StrictConnectOp>(*op->getUsers().begin())) {
+    if (op->use_empty() || !isa<FConnectLike>(*op->getUsers().begin())) {
       auto diag = mlir::emitError(
           op->getLoc(), "uninferred width: invalid value is unconstrained");
       anyFailed = true;
@@ -2014,7 +2013,7 @@ bool InferenceTypeUpdate::updateValue(Value value) {
   // the value, but may be larger. This can trip up the verifier.
   if (auto op = value.getDefiningOp<ConstantOp>()) {
     auto k = op.getValue();
-    auto bitwidth = op.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel();
+    auto bitwidth = op.getType().getBitWidthOrSentinel();
     if (k.getBitWidth() > unsigned(bitwidth))
       k = k.trunc(bitwidth);
     op->setAttr("value", IntegerAttr::get(op.getContext(), k));

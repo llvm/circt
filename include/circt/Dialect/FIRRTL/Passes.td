@@ -71,6 +71,15 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
             clEnumValN(PreserveAggregate::OneDimVec, "1d-vec", "Preserve 1d vectors"),
             clEnumValN(PreserveAggregate::Vec, "vec", "Preserve vectors"),
             clEnumValN(PreserveAggregate::All, "all", "Preserve vectors and bundles")
+          )}]>,
+    Option<"preserveMemories", "preserve-memories", "PreserveAggregate::PreserveMode",
+          "PreserveAggregate::None",
+          "Specify memory preservation mode",
+          [{::llvm::cl::values(
+            clEnumValN(PreserveAggregate::None, "none", "Preserve no aggregate"),
+            clEnumValN(PreserveAggregate::OneDimVec, "1d-vec", "Preserve 1d vectors"),
+            clEnumValN(PreserveAggregate::Vec, "vec", "Preserve vectors"),
+            clEnumValN(PreserveAggregate::All, "all", "Preserve vectors and bundles")
           )}]>
   ];
   let dependentDialects = ["hw::HWDialect"];
@@ -97,6 +106,16 @@ def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
     Statistic<"numFoldedOp", "num-folded-op", "Number of operations folded">,
     Statistic<"numErasedOp", "num-erased-op", "Number of operations erased">
   ];
+}
+
+def RegisterOptimizer : Pass<"firrtl-register-optimizer", "firrtl::FModuleOp"> {
+  let summary = "Optimizer Registers";
+  let description = [{
+    This pass applies classic FIRRTL register optimizations.  These 
+    optimizations are isolated to this pass as they can change the visible 
+    behavior of the register, especially before reset.
+  }];
+  let constructor = "circt::firrtl::createRegisterOptimizerPass()";
 }
 
 def RemoveUnusedPorts : Pass<"firrtl-remove-unused-ports", "firrtl::CircuitOp"> {

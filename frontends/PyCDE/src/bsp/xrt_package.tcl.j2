@@ -46,11 +46,13 @@ ipx::associate_bus_interfaces -busif s_axi_control -clock ap_clk $core
 set mem_map     [::ipx::add_memory_map -quiet "s_axi_control" $core]
 set addr_block  [::ipx::add_address_block -quiet "reg0" $mem_map]
 
-set reg      [::ipx::add_register "required_for_vitis" $addr_block]
-  # Required so we don't get the error "ERROR: [Common 17-69] Command failed: No kernel args have been found from IP"
-  set_property description    "Vitis requires a register here." $reg
-  set_property address_offset 16 $reg
-  set_property size           8 $reg
+set reg      [::ipx::add_register "EsiMagicNumber" $addr_block]
+  set_property address_offset 16  $reg
+  set_property size           64 $reg
+
+set reg      [::ipx::add_register "EsiVersionNumber" $addr_block]
+  set_property address_offset 24  $reg
+  set_property size           32 $reg
 
 set_property slave_memory_map_ref "s_axi_control" [::ipx::get_bus_interfaces -of $core "s_axi_control"]
 

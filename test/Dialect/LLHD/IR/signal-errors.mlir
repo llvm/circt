@@ -40,3 +40,10 @@ llhd.entity @check_unique_sig_names2 () -> () {
   %sig1 = llhd.sig "sigI1" %cI1 : i1
   %sig2 = llhd.output "sigI1" %cI1 after %time : i1
 }
+
+// -----
+
+func.func @illegal_sig_parent (%arg0: i1) {
+  // expected-error @+1 {{expects parent op to be one of 'llhd.entity, llhd.proc'}}
+  %0 = llhd.sig "sig" %arg0 : i1
+}

@@ -242,6 +242,7 @@ static void loadFIRRTLLoweringPipeline(OpPassManager &pm) {
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
       /*preserveAggregate=*/firrtl::PreserveAggregate::PreserveMode::None,
+      /*preserveMemories=*/firrtl::PreserveAggregate::PreserveMode::None,
       /*preservePublicTypes=*/false));
   auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
   modulePM.addPass(firrtl::createExpandWhensPass());

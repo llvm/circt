@@ -36,7 +36,7 @@ firrtl.circuit "Foo" {
 
     %found4, %result1 = firrtl.instance "" @NameDoesNotMatter4(out found : !firrtl.uint<1>, out result: !firrtl.uint<5>)
     // CHECK-NOT: NameDoesNotMatter4
-    // CHECK: %5:2 = firrtl.int.plusargs.value "foo" : !firrtl.uint<5>
+    // CHECK: %5:2 = firrtl.int.plusargs.value "foo" : !firrtl.uint<1>, !firrtl.uint<5>
     firrtl.strictconnect %io3, %found4 : !firrtl.uint<1>
     firrtl.strictconnect %io4, %result1 : !firrtl.uint<5>
   }
@@ -75,7 +75,7 @@ firrtl.circuit "Foo" {
 
     %found4, %result1 = firrtl.instance "" @NameDoesNotMatter8(out found : !firrtl.uint<1>, out result: !firrtl.uint<5>)
     // CHECK-NOT: NameDoesNotMatter8
-    // CHECK: %5:2 = firrtl.int.plusargs.value "foo" : !firrtl.uint<5>
+    // CHECK: %5:2 = firrtl.int.plusargs.value "foo" : !firrtl.uint<1>, !firrtl.uint<5>
     firrtl.strictconnect %io3, %found4 : !firrtl.uint<1>
     firrtl.strictconnect %io4, %result1 : !firrtl.uint<5>
   }

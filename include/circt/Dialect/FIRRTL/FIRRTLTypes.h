@@ -22,7 +22,6 @@
 namespace circt {
 namespace firrtl {
 namespace detail {
-struct WidthTypeStorage;
 struct BundleTypeStorage;
 struct VectorTypeStorage;
 struct CMemoryTypeStorage;
@@ -250,6 +249,9 @@ ParseResult parseNestedBaseType(FIRRTLBaseType &result, AsmParser &parser);
 
 // Print a FIRRTL type without a leading `!firrtl.` dialect tag.
 void printNestedType(Type type, AsmPrinter &os);
+
+using FIRRTLValue = mlir::TypedValue<FIRRTLType>;
+using FIRRTLBaseValue = mlir::TypedValue<FIRRTLBaseType>;
 
 } // namespace firrtl
 } // namespace circt

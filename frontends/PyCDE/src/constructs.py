@@ -121,7 +121,7 @@ def Wire(type: Type, name: str = None):
 def Reg(type: Type,
         clk: Signal = None,
         rst: Signal = None,
-        rst_value=None,
+        rst_value=0,
         ce: Signal = None):
   """Declare a register. Must assign exactly once."""
 

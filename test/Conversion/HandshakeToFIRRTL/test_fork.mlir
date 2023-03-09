@@ -24,7 +24,7 @@
 // CHECK:   firrtl.connect %notAllDone, %7 : !firrtl.uint<1>, !firrtl.uint<1>
 
 // Result 0 logic.
-// CHECK:   %emtd0 = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   %emtd0 = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:   %8 = firrtl.and %done0, %notAllDone : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:   firrtl.connect %emtd0, %8 : !firrtl.uint<1>, !firrtl.uint<1>
 
@@ -42,7 +42,7 @@
 // CHECK:   firrtl.connect %done0, %12 : !firrtl.uint<1>, !firrtl.uint<1>
 
 // Result1 logic.
-// CHECK:   %emtd1 = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   %emtd1 = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:   %13 = firrtl.and %done1, %notAllDone : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:   firrtl.connect %emtd1, %13 : !firrtl.uint<1>, !firrtl.uint<1>
 

@@ -301,8 +301,8 @@ firrtl.circuit "Foo" attributes {rawAnnotations = [
   ) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %bar = firrtl.node %c0_ui1  : !firrtl.uint<1>
-    firrtl.when %cond_0 {
-      firrtl.when %cond_1 {
+    firrtl.when %cond_0 : !firrtl.uint<1> {
+      firrtl.when %cond_1 : !firrtl.uint<1> {
         %baz = firrtl.node %c0_ui1  : !firrtl.uint<1>
       }
     }
@@ -358,9 +358,9 @@ firrtl.circuit "Foo" attributes {rawAnnotations = [
   }
 ]} {
   firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
-    %bar = firrtl.reg %clock  : !firrtl.uint<1>
+    %bar = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %baz = firrtl.regreset %clock, %reset, %c0_ui1  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %baz = firrtl.regreset %clock, %reset, %c0_ui1  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 
@@ -438,7 +438,7 @@ firrtl.circuit "Foo" attributes {rawAnnotations = [
   }
 ]} {
   firrtl.module @Foo(in %clock: !firrtl.clock) {
-    %bar = firrtl.reg %clock : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    %bar = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
   }
 }
 
@@ -752,11 +752,11 @@ firrtl.circuit "Foo"  attributes {
     // CHECK-NEXT: %_T_1 = firrtl.node %_T_0 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     %_T_1 = firrtl.node %_T_0  : !firrtl.uint<1>
     // CHECK-NEXT: %_T_2 = firrtl.reg %clock {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
-    %_T_2 = firrtl.reg %clock  : !firrtl.uint<1>
+    %_T_2 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
     // CHECK: %_T_3 = firrtl.regreset
     // CHECK-SAME: {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
-    %_T_3 = firrtl.regreset %clock, %reset, %c0_ui4  : !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>
+    %_T_3 = firrtl.regreset %clock, %reset, %c0_ui4  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>
     // CHECK-NEXT: %_T_4 = chirrtl.seqmem
     // CHECK-SAME: {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     %_T_4 = chirrtl.seqmem Undefined  : !chirrtl.cmemory<vector<uint<1>, 9>, 256>
@@ -960,7 +960,7 @@ firrtl.circuit "GCTInterface"  attributes {
     firrtl.skip
   }
   firrtl.module @GCTInterface(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %a: !firrtl.uint<1>) {
-    %r = firrtl.reg %clock  : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
+    %r = firrtl.reg %clock  : !firrtl.clock, !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
     firrtl.instance view_companion  @view_companion()
   }
 }
@@ -1032,7 +1032,7 @@ firrtl.circuit "GCTInterface"  attributes {
 // The RefSend must be generated.
 // CHECK: firrtl.module @GCTInterface
 // CHECK-SAME: %a: !firrtl.uint<1>
-// CHECK:      %r = firrtl.reg  %clock  : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
+// CHECK:      %r = firrtl.reg  %clock  : !firrtl.clock, !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
 // CHECK:      %[[view_companion_view__2refPort:.+]], %[[view_companion_view__2refPort_1:.+]], %[[view_companion_view__1refPort:.+]], %[[view_companion_view__0refPort:.+]], %[[view_companion_view_portrefPort:.+]] = firrtl.instance view_companion  @view_companion(in {{.*}}: !firrtl.uint<1>, in {{.*}}: !firrtl.uint<1>, in {{.*}}: !firrtl.uint<1>, in {{.*}}: !firrtl.uint<1>, in {{.*}}: !firrtl.uint<1>)
 // CHECK:      %0 = firrtl.subfield %r[_2] : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
 // CHECK:      %1 = firrtl.subindex %0[0] : !firrtl.vector<uint<1>, 2>
@@ -1179,7 +1179,7 @@ firrtl.circuit "GCTDataTap" attributes {rawAnnotations = [{
     %w = firrtl.wire : !firrtl.uint<1>
   }
   firrtl.module @GCTDataTap(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
-    %r = firrtl.reg %clock  : !firrtl.uint<1>
+    %r = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
     %w = firrtl.wire : !firrtl.bundle<a: uint<1>>
     %tap_0 = firrtl.wire : !firrtl.uint<1>
     %tap_1 = firrtl.wire : !firrtl.vector<uint<1>, 1>
@@ -1643,7 +1643,7 @@ firrtl.circuit "GrandCentralViewInsideCompanion" attributes {
   // CHECK:      firrtl.module @Companion
   firrtl.module @Companion(out %b: !firrtl.uint<2>) {
     %clock = firrtl.specialconstant 0 : !firrtl.clock
-    %a = firrtl.reg %clock : !firrtl.uint<1>
+    %a = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
     // CHECK:      firrtl.node %a
     // CHECK-SAME:   {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = [[aId]] : i64}
     // CHECK-SAME:   : !firrtl.uint<1>

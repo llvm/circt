@@ -50,6 +50,7 @@ enum PreserveMode {
 
 std::unique_ptr<mlir::Pass> createLowerFIRRTLTypesPass(
     PreserveAggregate::PreserveMode mode = PreserveAggregate::None,
+    PreserveAggregate::PreserveMode memoryMode = PreserveAggregate::None,
     bool preservePublicTypes = true);
 
 std::unique_ptr<mlir::Pass> createLowerFIRRTLConnectsPass();
@@ -146,6 +147,8 @@ std::unique_ptr<mlir::Pass> createExtractInstancesPass();
 std::unique_ptr<mlir::Pass> createIMDeadCodeElimPass();
 
 std::unique_ptr<mlir::Pass> createRandomizeRegisterInitPass();
+
+std::unique_ptr<mlir::Pass> createRegisterOptimizerPass();
 
 std::unique_ptr<mlir::Pass> createLowerXMRPass();
 

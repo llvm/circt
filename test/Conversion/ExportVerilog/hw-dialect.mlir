@@ -1328,12 +1328,20 @@ hw.module @ParamsParensPrecedence<param: i32>() -> (a:i32, b:i32, c:i32) {
 }
 
 // CHECK-LABEL: module ArrayGetInline
-hw.module @ArrayGetInline(%a: !hw.array<4xstruct<a: i32>>) -> (out: i32) {
+hw.module @ArrayGetInline(%a: !hw.array<4xstruct<a: i32>>, %b: !hw.array<4xi1>, %idx: i2, %idx_port: !hw.inout<i2>)
+                          -> (out: i32, out2: i1, out3: i1, out4: i1, out5: i1) {
   %c0_i2 = hw.constant 0 : i2
   %x = hw.array_get %a[%c0_i2] : !hw.array<4xstruct<a: i32>>, i2
   %y = hw.struct_extract %x["a"] : !hw.struct<a: i32>
-  // CHECK: assign out = a[2'h0].a;
-  hw.output %y : i32
+  // CHECK:      assign out = a[2'h0].a;
+  // CHECK-NEXT: assign out2 = b[idx];
+  // CHECK-NEXT: assign out3 = b[idx];
+  // CHECK-NEXT: assign out4 = b[idx_port];
+  // CHECK-NEXT: assign out5 = b[idx_port];
+  %array_get_idx = hw.array_get %b[%idx] : !hw.array<4xi1>, i2
+  %read = sv.read_inout %idx_port : !hw.inout<i2>
+  %array_get_idx_port = hw.array_get %b[%read] : !hw.array<4xi1>, i2
+  hw.output %y, %array_get_idx, %array_get_idx, %array_get_idx_port, %array_get_idx_port : i32, i1, i1, i1, i1
 }
 
 // CHECK-LABEL: module UniformArrayCreate

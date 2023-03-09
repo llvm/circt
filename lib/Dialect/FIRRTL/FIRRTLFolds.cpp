@@ -31,8 +31,8 @@ using namespace firrtl;
 static Value dropWrite(PatternRewriter &rewriter, OpResult old,
                        Value passthrough) {
   for (auto *user : llvm::make_early_inc_range(old.getUsers())) {
-    if (isa<StrictConnectOp, ConnectOp>(user)) {
-      if (user->getOperand(0) == old)
+    if (auto connect = dyn_cast<FConnectLike>(user)) {
+      if (connect.getDest() == old)
         rewriter.eraseOp(user);
     }
   }
@@ -605,14 +605,14 @@ void LEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 OpFoldResult LEQPrimOp::fold(FoldAdaptor adaptor) {
-  bool isUnsigned = getLhs().getType().isa<UIntType>();
+  bool isUnsigned = getLhs().getType().isUnsigned();
 
   // leq(x, x) -> 1
   if (getLhs() == getRhs())
     return getIntAttr(getType(), APInt(1, 1));
 
   // Comparison against constant outside type bounds.
-  if (auto width = getLhs().getType().cast<IntType>().getWidth()) {
+  if (auto width = getLhs().getType().getWidth()) {
     if (auto rhsCst = getConstant(adaptor.getRhs())) {
       auto commonWidth = std::max<int32_t>(*width, rhsCst->getBitWidth());
       commonWidth = std::max(commonWidth, 1);
@@ -650,7 +650,7 @@ void LTPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 OpFoldResult LTPrimOp::fold(FoldAdaptor adaptor) {
-  bool isUnsigned = getLhs().getType().isa<UIntType>();
+  bool isUnsigned = getLhs().getType().isUnsigned();
 
   // lt(x, x) -> 0
   if (getLhs() == getRhs())
@@ -658,12 +658,12 @@ OpFoldResult LTPrimOp::fold(FoldAdaptor adaptor) {
 
   // lt(x, 0) -> 0 when x is unsigned
   if (auto rhsCst = getConstant(adaptor.getRhs())) {
-    if (rhsCst->isZero() && getLhs().getType().isa<UIntType>())
+    if (rhsCst->isZero() && getLhs().getType().isUnsigned())
       return getIntAttr(getType(), APInt(1, 0));
   }
 
   // Comparison against constant outside type bounds.
-  if (auto width = getLhs().getType().cast<IntType>().getWidth()) {
+  if (auto width = getLhs().getType().getWidth()) {
     if (auto rhsCst = getConstant(adaptor.getRhs())) {
       auto commonWidth = std::max<int32_t>(*width, rhsCst->getBitWidth());
       commonWidth = std::max(commonWidth, 1);
@@ -701,7 +701,7 @@ void GEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 OpFoldResult GEQPrimOp::fold(FoldAdaptor adaptor) {
-  bool isUnsigned = getLhs().getType().isa<UIntType>();
+  bool isUnsigned = getLhs().getType().isUnsigned();
 
   // geq(x, x) -> 1
   if (getLhs() == getRhs())
@@ -709,12 +709,12 @@ OpFoldResult GEQPrimOp::fold(FoldAdaptor adaptor) {
 
   // geq(x, 0) -> 1 when x is unsigned
   if (auto rhsCst = getConstant(adaptor.getRhs())) {
-    if (rhsCst->isZero() && getLhs().getType().isa<UIntType>())
+    if (rhsCst->isZero() && isUnsigned)
       return getIntAttr(getType(), APInt(1, 1));
   }
 
   // Comparison against constant outside type bounds.
-  if (auto width = getLhs().getType().cast<IntType>().getWidth()) {
+  if (auto width = getLhs().getType().getWidth()) {
     if (auto rhsCst = getConstant(adaptor.getRhs())) {
       auto commonWidth = std::max<int32_t>(*width, rhsCst->getBitWidth());
       commonWidth = std::max(commonWidth, 1);
@@ -752,14 +752,14 @@ void GTPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 OpFoldResult GTPrimOp::fold(FoldAdaptor adaptor) {
-  bool isUnsigned = getLhs().getType().isa<UIntType>();
+  bool isUnsigned = getLhs().getType().isUnsigned();
 
   // gt(x, x) -> 0
   if (getLhs() == getRhs())
     return getIntAttr(getType(), APInt(1, 0));
 
   // Comparison against constant outside type bounds.
-  if (auto width = getLhs().getType().cast<IntType>().getWidth()) {
+  if (auto width = getLhs().getType().getWidth()) {
     if (auto rhsCst = getConstant(adaptor.getRhs())) {
       auto commonWidth = std::max<int32_t>(*width, rhsCst->getBitWidth());
       commonWidth = std::max(commonWidth, 1);
@@ -815,8 +815,7 @@ LogicalResult EQPrimOp::canonicalize(EQPrimOp op, PatternRewriter &rewriter) {
   return canonicalizePrimOp(
       op, rewriter, [&](ArrayRef<Attribute> operands) -> OpFoldResult {
         if (auto rhsCst = getConstant(operands[1])) {
-          auto width =
-              op.getLhs().getType().cast<IntType>().getBitWidthOrSentinel();
+          auto width = op.getLhs().getType().getBitWidthOrSentinel();
 
           // eq(x, 0) ->  not(x) when x is 1 bit.
           if (rhsCst->isZero() && op.getLhs().getType() == op.getType() &&
@@ -867,8 +866,7 @@ LogicalResult NEQPrimOp::canonicalize(NEQPrimOp op, PatternRewriter &rewriter) {
   return canonicalizePrimOp(
       op, rewriter, [&](ArrayRef<Attribute> operands) -> OpFoldResult {
         if (auto rhsCst = getConstant(operands[1])) {
-          auto width =
-              op.getLhs().getType().cast<IntType>().getBitWidthOrSentinel();
+          auto width = op.getLhs().getType().getBitWidthOrSentinel();
 
           // neq(x, 1) -> not(x) when x is 1 bit
           if (rhsCst->isAllOnes() && op.getLhs().getType() == op.getType() &&
@@ -900,7 +898,7 @@ LogicalResult NEQPrimOp::canonicalize(NEQPrimOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult SizeOfIntrinsicOp::fold(FoldAdaptor) {
-  auto base = getInput().getType().cast<FIRRTLBaseType>();
+  auto base = getInput().getType();
   auto w = base.getBitWidthOrSentinel();
   if (w >= 0)
     return getIntAttr(getType(), APInt(32, w));
@@ -1144,7 +1142,7 @@ OpFoldResult BitCastOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult BitsPrimOp::fold(FoldAdaptor adaptor) {
-  auto inputType = getInput().getType().cast<FIRRTLBaseType>();
+  auto inputType = getInput().getType();
   // If we are extracting the entire input, then return it.
   if (inputType == getType() && getType().hasWidth())
     return getInput();
@@ -1246,10 +1244,8 @@ public:
     if (width < 0)
       return failure();
 
-    auto pad = [&](Value input) -> Value {
-      auto inputWidth = input.getType()
-                            .template cast<FIRRTLBaseType>()
-                            .getBitWidthOrSentinel();
+    auto pad = [&](FIRRTLBaseValue input) -> Value {
+      auto inputWidth = input.getType().getBitWidthOrSentinel();
       if (inputWidth < 0 || width == inputWidth)
         return input;
       return rewriter
@@ -1286,7 +1282,7 @@ OpFoldResult PadPrimOp::fold(FoldAdaptor adaptor) {
     return input;
 
   // Need to know the input width.
-  auto inputType = input.getType().cast<IntType>();
+  auto inputType = input.getType();
   int32_t width = inputType.getWidthOrSentinel();
   if (width == -1)
     return {};
@@ -1307,7 +1303,7 @@ OpFoldResult PadPrimOp::fold(FoldAdaptor adaptor) {
 
 OpFoldResult ShlPrimOp::fold(FoldAdaptor adaptor) {
   auto input = this->getInput();
-  auto inputType = input.getType().cast<IntType>();
+  auto inputType = input.getType();
   int shiftAmount = getAmount();
 
   // shl(x, 0) -> x
@@ -1328,7 +1324,7 @@ OpFoldResult ShlPrimOp::fold(FoldAdaptor adaptor) {
 
 OpFoldResult ShrPrimOp::fold(FoldAdaptor adaptor) {
   auto input = this->getInput();
-  auto inputType = input.getType().cast<IntType>();
+  auto inputType = input.getType();
   int shiftAmount = getAmount();
 
   // shr(x, 0) -> x
@@ -1360,8 +1356,7 @@ OpFoldResult ShrPrimOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ShrPrimOp::canonicalize(ShrPrimOp op, PatternRewriter &rewriter) {
-  auto inputWidth =
-      op.getInput().getType().cast<IntType>().getWidthOrSentinel();
+  auto inputWidth = op.getInput().getType().getWidthOrSentinel();
   if (inputWidth <= 0)
     return failure();
 
@@ -1384,8 +1379,7 @@ LogicalResult ShrPrimOp::canonicalize(ShrPrimOp op, PatternRewriter &rewriter) {
 
 LogicalResult HeadPrimOp::canonicalize(HeadPrimOp op,
                                        PatternRewriter &rewriter) {
-  auto inputWidth =
-      op.getInput().getType().cast<IntType>().getWidthOrSentinel();
+  auto inputWidth = op.getInput().getType().getWidthOrSentinel();
   if (inputWidth <= 0)
     return failure();
 
@@ -1400,9 +1394,7 @@ LogicalResult HeadPrimOp::canonicalize(HeadPrimOp op,
 OpFoldResult HeadPrimOp::fold(FoldAdaptor adaptor) {
   if (hasKnownWidthIntTypes(*this))
     if (auto cst = getConstant(adaptor.getInput())) {
-      int shiftAmount =
-          getInput().getType().cast<IntType>().getWidthOrSentinel() -
-          getAmount();
+      int shiftAmount = getInput().getType().getWidthOrSentinel() - getAmount();
       return getIntAttr(getType(), cst->lshr(shiftAmount).trunc(getAmount()));
     }
 
@@ -1418,8 +1410,7 @@ OpFoldResult TailPrimOp::fold(FoldAdaptor adaptor) {
 
 LogicalResult TailPrimOp::canonicalize(TailPrimOp op,
                                        PatternRewriter &rewriter) {
-  auto inputWidth =
-      op.getInput().getType().cast<IntType>().getWidthOrSentinel();
+  auto inputWidth = op.getInput().getType().getWidthOrSentinel();
   if (inputWidth <= 0)
     return failure();
 
@@ -1481,9 +1472,8 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
     return failure();
 
   // TODO: Handle even when `index` doesn't have uint<1>.
-  auto uintType =
-      op.getIndex().getType().cast<FIRRTLBaseType>().dyn_cast<UIntType>();
-  if (!uintType || uintType.getBitWidthOrSentinel() != 1)
+  auto uintType = op.getIndex().getType();
+  if (uintType.getBitWidthOrSentinel() != 1)
     return failure();
 
   // multibit_mux(index, {lhs, rhs}) -> mux(index, lhs, rhs)
@@ -1515,7 +1505,7 @@ StrictConnectOp firrtl::getSingleConnectUserOf(Value value) {
 
     if (auto aConnect = dyn_cast<StrictConnectOp>(user))
       if (aConnect.getDest() == value) {
-        if (!connect)
+        if (!connect || connect == aConnect)
           connect = aConnect;
         else
           return {};
@@ -2821,4 +2811,19 @@ void AssumeOp::getCanonicalizationPatterns(RewritePatternSet &results,
 void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                           MLIRContext *context) {
   results.add(canonicalizeImmediateVerifOp<CoverOp, /* EraseIfZero = */ true>);
+}
+
+//===----------------------------------------------------------------------===//
+// References.
+//===----------------------------------------------------------------------===//
+
+void RefResolveOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                               MLIRContext *context) {
+  results.insert<patterns::RefResolveOfSend>(context);
+}
+
+void RefSubOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
+  results.insert<patterns::RefSubOfSendVector, patterns::RefSubOfSendBundle>(
+      context);
 }

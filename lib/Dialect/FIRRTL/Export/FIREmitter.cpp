@@ -676,17 +676,20 @@ void Emitter::emitExpression(SpecialConstantOp op) {
       });
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 void Emitter::emitExpression(SubfieldOp op) {
-  auto type = op.getInput().getType().cast<BundleType>();
+  auto type = op.getInput().getType();
   emitExpression(op.getInput());
   os << "." << type.getElementName(op.getFieldIndex());
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 void Emitter::emitExpression(SubindexOp op) {
   emitExpression(op.getInput());
   os << "[" << op.getIndex() << "]";
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 void Emitter::emitExpression(SubaccessOp op) {
   emitExpression(op.getInput());
   os << "[";

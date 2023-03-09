@@ -270,7 +270,7 @@ def SubindexOp : FIRRTLExprOp<"subindex", [
     ```
     }];
 
-  let arguments = (ins FIRRTLBaseType:$input, I32Attr:$index);
+  let arguments = (ins FVectorType:$input, I32Attr:$index);
   let results = (outs FIRRTLBaseType:$result);
   let hasFolder = 1;
   let hasCanonicalizer = 1;
@@ -281,8 +281,7 @@ def SubindexOp : FIRRTLExprOp<"subindex", [
   let firrtlExtraClassDeclaration = [{
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType().cast<FVectorType>()
-                                            .getFieldID(getIndex()));
+      return FieldRef(getInput(), getInput().getType().getFieldID(getIndex()));
     }
   }];
 }
@@ -300,7 +299,7 @@ def SubaccessOp : FIRRTLExprOp<"subaccess", [
     ```
     }];
 
-  let arguments = (ins FIRRTLBaseType:$input, UIntType:$index);
+  let arguments = (ins FVectorType:$input, UIntType:$index);
   let results = (outs FIRRTLBaseType:$result);
 
   let assemblyFormat =
@@ -465,7 +464,7 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
   code inferType = "";
   let inferTypeDecl = !if(!empty(inferType), [{
     /// Infer the return type of this unary operation.
-    static FIRRTLType inferUnaryReturnType(FIRRTLType arg,
+    static FIRRTLType inferUnaryReturnType(FIRRTLType input,
                                            std::optional<Location> loc);
     }], "") # !subst("$_infer", !if(!empty(inferType), "inferUnaryReturnType",
       inferType), [{
@@ -667,7 +666,7 @@ def PlusArgsValueIntrinsicOp
 
   let arguments = (ins StrAttr:$formatString);
   let results = (outs UInt1Type:$found, AnyType:$result);
-  let assemblyFormat = "$formatString attr-dict `:` type($result)";
+  let assemblyFormat = "$formatString attr-dict `:` type($found) `,` type($result)";
 }
 
 //===----------------------------------------------------------------------===//
@@ -825,6 +824,7 @@ def RefResolveOp: FIRRTLExprOp<"ref.resolve",
   let results = (outs FIRRTLBaseType:$result);
 
   let assemblyFormat = "$ref attr-dict `:` qualified(type($ref))";
+  let hasCanonicalizer = true;
 }
 
 def RefSendOp: FIRRTLExprOp<"ref.send", [RefResultTypeConstraint<"base", "result">]> {
@@ -857,6 +857,7 @@ def RefSubOp : FIRRTLExprOp<"ref.sub"> {
 
   let assemblyFormat =
      "$input `[` $index `]` attr-dict `:` qualified(type($input))";
+  let hasCanonicalizer = true;
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLEXPRESSIONS_TD

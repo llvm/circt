@@ -53,8 +53,8 @@ void FieldSource::visitOp(Operation *op) {
   // Track all other definitions of aggregates.
   if (op->getNumResults()) {
     auto type = op->getResult(0).getType();
-    if (dyn_cast<FIRRTLBaseType>(type) &&
-        !cast<FIRRTLBaseType>(type).isGround())
+    if (auto baseType = dyn_cast<FIRRTLBaseType>(type);
+        baseType && !baseType.isGround())
       makeNodeForValue(op->getResult(0), op->getResult(0), {},
                        foldFlow(op->getResult(0)));
   }

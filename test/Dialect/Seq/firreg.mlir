@@ -612,3 +612,118 @@ hw.module @AsyncResetUndriven(%clock: i1, %reset: i1) -> (q: i32) {
   // CHECK-NEXT:   } else {
   // CHECK-NEXT:     sv.passign %r, %[[regRead]]
 }
+
+// CHECK-LABEL: @Subaccess
+hw.module @Subaccess(%clock: i1, %en: i1, %addr: i2, %data: i32) -> (out: !hw.array<3xi32>) {
+  %c0_i2 = hw.constant 0 : i2
+  %c1_i2 = hw.constant 1 : i2
+  %c-2_i2 = hw.constant -2 : i2
+  %r = seq.firreg %12 clock %clock {firrtl.random_init_start = 0 : ui64} : !hw.array<3xi32>
+  %0 = hw.array_get %r[%c0_i2] : !hw.array<3xi32>, i2
+  %1 = hw.array_get %r[%c1_i2] : !hw.array<3xi32>, i2
+  %2 = hw.array_get %r[%c-2_i2] : !hw.array<3xi32>, i2
+  %3 = comb.icmp bin eq %addr, %c0_i2 : i2
+  %4 = comb.and bin %en, %3 : i1
+  %5 = comb.mux bin %4, %data, %0 : i32
+  %6 = comb.icmp bin eq %addr, %c1_i2 : i2
+  %7 = comb.and bin %en, %6 : i1
+  %8 = comb.mux bin %7, %data, %1 : i32
+  %9 = comb.icmp bin eq %addr, %c-2_i2 : i2
+  %10 = comb.and bin %en, %9 : i1
+  %11 = comb.mux bin %10, %data, %2 : i32
+  %12 = hw.array_create %11, %8, %5 : i32
+  hw.output %r : !hw.array<3xi32>
+  // CHECK:      sv.always posedge %clock {
+  // CHECK-NEXT:   sv.if %en {
+  // CHECK-NEXT:     %[[IDX:.+]] = sv.array_index_inout %r[%addr] : !hw.inout<array<3xi32>>, i2
+  // CHECK-NEXT:     sv.passign %[[IDX]], %data : i32
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT:   }
+  // CHECK-NEXT: }
+}
+
+// CHECK-LABEL: @NestedSubaccess
+// Check subaccess is restored for nested whens.
+// The following test case is generated from:
+//  when en_0:
+//    when en_1:
+//      r[addr_0] <= data_0
+//    else when en_2:
+//      r[addr_1] <= data_1
+//    else:
+//      r[addr_2] <= data_2
+//  else:
+//    r[addr_3] <= data_3
+//
+hw.module @NestedSubaccess(%clock: i1, %en_0: i1, %en_1: i1, %en_2: i1, %addr_0: i2, %addr_1: i2, %addr_2: i2, %addr_3: i2, %data_0: i32, %data_1: i32, %data_2: i32, %data_3: i32) -> () {
+  %c0_i2 = hw.constant 0 : i2
+  %c1_i2 = hw.constant 1 : i2
+  %c-2_i2 = hw.constant -2 : i2
+  %r = seq.firreg %33 clock %clock : !hw.array<3xi32>
+  %0 = hw.array_get %r[%c0_i2] : !hw.array<3xi32>, i2
+  %1 = hw.array_get %r[%c1_i2] : !hw.array<3xi32>, i2
+  %2 = hw.array_get %r[%c-2_i2] : !hw.array<3xi32>, i2
+  %3 = comb.icmp bin eq %addr_0, %c0_i2 : i2
+  %4 = comb.mux bin %3, %data_0, %0 : i32
+  %5 = comb.icmp bin eq %addr_0, %c1_i2 : i2
+  %6 = comb.mux bin %5, %data_0, %1 : i32
+  %7 = comb.icmp bin eq %addr_0, %c-2_i2 : i2
+  %8 = comb.mux bin %7, %data_0, %2 : i32
+  %9 = comb.icmp bin eq %addr_1, %c0_i2 : i2
+  %10 = comb.mux bin %9, %data_1, %0 : i32
+  %11 = comb.icmp bin eq %addr_1, %c1_i2 : i2
+  %12 = comb.mux bin %11, %data_1, %1 : i32
+  %13 = comb.icmp bin eq %addr_1, %c-2_i2 : i2
+  %14 = comb.mux bin %13, %data_1, %2 : i32
+  %15 = comb.icmp bin eq %addr_2, %c0_i2 : i2
+  %16 = comb.mux bin %15, %data_2, %0 : i32
+  %17 = comb.icmp bin eq %addr_2, %c1_i2 : i2
+  %18 = comb.mux bin %17, %data_2, %1 : i32
+  %19 = comb.icmp bin eq %addr_2, %c-2_i2 : i2
+  %20 = comb.mux bin %19, %data_2, %2 : i32
+  %21 = comb.icmp bin eq %addr_3, %c0_i2 : i2
+  %22 = comb.mux bin %21, %data_3, %0 : i32
+  %23 = comb.icmp bin eq %addr_3, %c1_i2 : i2
+  %24 = comb.mux bin %23, %data_3, %1 : i32
+  %25 = comb.icmp bin eq %addr_3, %c-2_i2 : i2
+  %26 = comb.mux bin %25, %data_3, %2 : i32
+  %27 = hw.array_create %8, %6, %4 : i32
+  %28 = hw.array_create %14, %12, %10 : i32
+  %29 = hw.array_create %20, %18, %16 : i32
+  %30 = comb.mux bin %en_2, %28, %29 : !hw.array<3xi32>
+  %31 = comb.mux bin %en_1, %27, %30 : !hw.array<3xi32>
+  %32 = hw.array_create %26, %24, %22 : i32
+  %33 = comb.mux bin %en_0, %31, %32 : !hw.array<3xi32>
+  // CHECK:        sv.always posedge %clock {
+  // CHECK-NEXT:   sv.if %en_0 {
+  // CHECK-NEXT:     sv.if %en_1 {
+  // CHECK-NEXT:       sv.if %true {
+  // CHECK-NEXT:         %[[IDX1:.+]] = sv.array_index_inout %r[%addr_0] : !hw.inout<array<3xi32>>, i2
+  // CHECK-NEXT:         sv.passign %[[IDX1]], %data_0 : i32
+  // CHECK-NEXT:       } else {
+  // CHECK-NEXT:       }
+  // CHECK-NEXT:     } else {
+  // CHECK-NEXT:       sv.if %en_2 {
+  // CHECK-NEXT:         sv.if %true {
+  // CHECK-NEXT:           %[[IDX2:.+]] = sv.array_index_inout %r[%addr_1] : !hw.inout<array<3xi32>>, i2
+  // CHECK-NEXT:           sv.passign %[[IDX2]], %data_1 : i32
+  // CHECK-NEXT:         } else {
+  // CHECK-NEXT:         }
+  // CHECK-NEXT:       } else {
+  // CHECK-NEXT:         sv.if %true {
+  // CHECK-NEXT:           %[[IDX3:.+]] = sv.array_index_inout %r[%addr_2] : !hw.inout<array<3xi32>>, i2
+  // CHECK-NEXT:           sv.passign %[[IDX3]], %data_2 : i32
+  // CHECK-NEXT:         } else {
+  // CHECK-NEXT:         }
+  // CHECK-NEXT:       }
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT:     sv.if %true {
+  // CHECK-NEXT:       %[[IDX4:.+]] = sv.array_index_inout %r[%addr_3] : !hw.inout<array<3xi32>>, i2
+  // CHECK-NEXT:       sv.passign %[[IDX4]], %data_3 : i32
+  // CHECK-NEXT:     } else {
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:   }
+  // CHECK-NEXT: }
+  hw.output
+}

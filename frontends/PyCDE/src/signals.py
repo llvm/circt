@@ -116,9 +116,8 @@ class Signal:
                                           name=give_name,
                                           sym_name=give_name)
       if sv_attributes is not None:
-        reg.value.owner.attributes["sv.attributes"] = sv.SVAttributesAttr.get(
-            ir.ArrayAttr.get(
-                [sv.SVAttributeAttr.get(attr) for attr in sv_attributes]))
+        reg.value.owner.attributes["sv.attributes"] = ir.ArrayAttr.get(
+            [sv.SVAttributeAttr.get(attr) for attr in sv_attributes])
       if appid is not None:
         reg.appid = appid
       return reg

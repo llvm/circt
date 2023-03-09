@@ -241,13 +241,12 @@ Value circt::firrtl::getModuleScopedDriver(Value val, bool lookThroughWires,
   return val;
 }
 
-bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
+bool circt::firrtl::walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
                                 bool lookThroughNodes, bool lookThroughCasts,
                                 WalkDriverCallback callback) {
   // TODO: what do we want to happen when there are flips in the type? Do we
   // want to filter out fields which have reverse flow?
-  assert(val.getType().cast<FIRRTLBaseType>().isPassive() &&
-         "this code was not tested with flips");
+  assert(value.getType().isPassive() && "this code was not tested with flips");
 
   // This method keeps a stack of wires (or ports) and subfields of those that
   // it still has to process.  It keeps track of which fields in the
@@ -289,7 +288,7 @@ bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
 
   // Create an initial fieldRef from the input value.  As a starting state, the
   // dst and src are the same value.
-  auto original = getFieldRefFromValue(val);
+  auto original = getFieldRefFromValue(value);
   auto fieldRef = original;
 
   // This loop wraps the worklist, which processes wires. Initially the worklist
@@ -390,7 +389,7 @@ bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
       auto fieldID = back.fieldID;
 
       if (auto subfield = dyn_cast<SubfieldOp>(user)) {
-        auto bundleType = subfield.getInput().getType().cast<BundleType>();
+        auto bundleType = subfield.getInput().getType();
         auto index = subfield.getFieldIndex();
         auto subID = bundleType.getFieldID(index);
         // If the index of this operation doesn't match the target, skip it.
@@ -401,7 +400,7 @@ bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
         auto value = subfield.getResult();
         workStack.emplace_back(subOriginal, subRef, value, fieldID - subID);
       } else if (auto subindex = dyn_cast<SubindexOp>(user)) {
-        auto vectorType = subindex.getInput().getType().cast<FVectorType>();
+        auto vectorType = subindex.getInput().getType();
         auto index = subindex.getIndex();
         auto subID = vectorType.getFieldID(index);
         // If the index of this operation doesn't match the target, skip it.
@@ -443,12 +442,12 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
 
     if (auto subfieldOp = dyn_cast<SubfieldOp>(op)) {
       value = subfieldOp.getInput();
-      auto bundleType = value.getType().cast<BundleType>();
+      auto bundleType = subfieldOp.getInput().getType();
       // Rebase the current index on the parent field's index.
       id += bundleType.getFieldID(subfieldOp.getFieldIndex());
     } else if (auto subindexOp = dyn_cast<SubindexOp>(op)) {
       value = subindexOp.getInput();
-      auto vecType = value.getType().cast<FVectorType>();
+      auto vecType = subindexOp.getInput().getType();
       // Rebase the current index on the parent field's index.
       id += vecType.getFieldID(subindexOp.getIndex());
     } else {
@@ -499,6 +498,10 @@ circt::firrtl::getFieldName(const FieldRef &fieldRef, bool nameSafe) {
   auto type = value.getType();
   auto localID = fieldRef.getFieldID();
   while (localID) {
+    // Index directly into ref inner type.
+    if (auto refTy = dyn_cast<RefType>(type))
+      type = refTy.getType();
+
     if (auto bundleType = type.dyn_cast<BundleType>()) {
       auto index = bundleType.getIndexForFieldID(localID);
       // Add the current field string, and recurse into a subfield.

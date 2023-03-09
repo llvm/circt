@@ -313,9 +313,7 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
   for (auto *op : structValue.getUsers()) {
     assert(isa<SubfieldOp>(op));
     auto fieldAccess = cast<SubfieldOp>(op);
-    auto elemIndex =
-        fieldAccess.getInput().getType().cast<BundleType>().getElementIndex(
-            field);
+    auto elemIndex = fieldAccess.getInput().getType().getElementIndex(field);
     if (elemIndex && *elemIndex == fieldAccess.getFieldIndex())
       accesses.push_back(fieldAccess);
   }
@@ -389,12 +387,10 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
       auto getDriver = [&](StringRef field) -> Operation * {
         auto accesses = getAllFieldAccesses(op.getResult(i), field);
         for (auto a : accesses) {
-          for (auto *connect : a->getUsers()) {
-            // If this is some use that isn't a connect, move on.
-            if (!isa<ConnectOp, StrictConnectOp>(connect))
-              continue;
-            // If this connect is driving a value to the field, return it.
-            if (connect->getOperand(0) == a)
+          for (auto *user : a->getUsers()) {
+            // If this is a connect driving a value to the field, return it.
+            if (auto connect = dyn_cast<FConnectLike>(user);
+                connect && connect.getDest() == a)
               return connect;
           }
         }

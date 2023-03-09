@@ -8,7 +8,9 @@ set_source_files_properties("${VERSION_CPP}" PROPERTIES GENERATED TRUE)
 add_circt_library(CIRCTSupport
   APInt.cpp
   BackedgeBuilder.cpp
+  CustomDirectiveImpl.cpp
   FieldRef.cpp
+  JSON.cpp
   LoweringOptions.cpp
   Path.cpp
   PrettyPrinter.cpp
