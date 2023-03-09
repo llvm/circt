@@ -3843,7 +3843,7 @@ FIRRTLType RefSendOp::inferReturnType(ValueRange operands,
   if (!inBaseType)
     return emitInferRetTypeError(
         loc, "ref.send operand must be base type, not ", inType);
-  return RefType::get(inBaseType);
+  return RefType::get(inBaseType.getPassiveType());
 }
 
 void RefResolveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
