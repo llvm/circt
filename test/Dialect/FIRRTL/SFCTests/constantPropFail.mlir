@@ -106,3 +106,17 @@ firrtl.circuit "constPropRegMux"   {
     // CHECK: firrtl.strictconnect %out, %[[C23]]
   }
 }
+
+
+//"Registers with ONLY constant connection" should "be replaced with that constant"
+firrtl.circuit "constReg2"   {
+  // CHECK-LABEL: firrtl.module @constReg2
+  firrtl.module @constReg2(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %z: !firrtl.sint<8>) {
+    %r = firrtl.reg %clock  :  !firrtl.clock, !firrtl.sint<8>
+    %c-5_si4 = firrtl.constant -5 : !firrtl.sint<4>
+    firrtl.connect %r, %c-5_si4 : !firrtl.sint<8>, !firrtl.sint<4>
+    firrtl.strictconnect %z, %r : !firrtl.sint<8>
+    // CHECK: %[[C12:.+]] = firrtl.constant -5 : !firrtl.sint<8>
+    // CHECK: firrtl.strictconnect %z, %[[C12]] : !firrtl.sint<8>
+  }
+}
