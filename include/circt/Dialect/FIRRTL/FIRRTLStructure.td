@@ -71,7 +71,7 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
   /// Additional class definitions inside the module op.
   code extraModuleClassDefinition = [{}];
 
-  /// Implement HWModuleLike methods for ports and their symbols.
+  /// Implement HWPortsSymbols methods for ports and their symbols.
   let extraClassDefinition = extraModuleClassDefinition # [{
     size_t $cppClass::getNumPorts() {
       return getPortTypesAttr().size();
