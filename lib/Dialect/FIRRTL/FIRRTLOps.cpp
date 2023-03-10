@@ -2327,7 +2327,6 @@ LogicalResult RefConnectOp::verify() {
   return success();
 }
 
-
 void WhenOp::createElseRegion() {
   assert(!hasElseRegion() && "already has an else region");
   getElseRegion().push_back(new Block());

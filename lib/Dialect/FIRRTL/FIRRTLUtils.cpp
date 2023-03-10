@@ -35,7 +35,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
 
   // Special Connects
   if (!dstType) {
-    if (dstFType.isa<RefType>() && 
+    if (dstFType.isa<RefType>() &&
         !dstFType.cast<RefType>().getType().hasUninferredWidth())
       builder.create<RefConnectOp>(dst, src);
     else // Other types, give up and leave a connect
@@ -44,10 +44,9 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   }
 
   // If the types are the exact same we can just connect them.
-    // Strict connect does not allow uninferred widths.
-  if (dstType == srcType && !
-    dstType.hasUninferredWidth()) {
-      builder.create<StrictConnectOp>(dst, src);
+  // Strict connect does not allow uninferred widths.
+  if (dstType == srcType && !dstType.hasUninferredWidth()) {
+    builder.create<StrictConnectOp>(dst, src);
     return;
   }
 
