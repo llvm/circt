@@ -99,7 +99,7 @@ def LowerLUT : Pass<"arc-lower-lut", "arc::DefineOp"> {
 def LowerState : Pass<"arc-lower-state", "mlir::ModuleOp"> {
   let summary = "Split state into read and write ops grouped by clock tree";
   let constructor = "circt::arc::createLowerStatePass()";
-  let dependentDialects = ["arc::ArcDialect"];
+  let dependentDialects = ["arc::ArcDialect", "mlir::scf::SCFDialect"];
 }
 
 def MakeTables : Pass<"arc-make-tables", "mlir::ModuleOp"> {

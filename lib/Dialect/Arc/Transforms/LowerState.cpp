@@ -8,6 +8,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -374,10 +375,34 @@ LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
   SmallVector<Value> materializedOperands;
   materializedOperands.reserve(stateOp.getInputs().size());
   SmallVector<Value> inputs(stateOp.getInputs());
-  stateOp->dropAllReferences();
+
   for (auto input : inputs)
     materializedOperands.push_back(info.clock.materializeValue(input));
-  auto newStateOp = info.clock.builder.create<StateOp>(
+
+  OpBuilder &nonResetBuilder = info.clock.builder;
+  if (stateOp.getReset()) {
+    auto materializedReset = info.clock.materializeValue(stateOp.getReset());
+    auto ifOp = info.clock.builder.create<scf::IfOp>(stateOp.getLoc(),
+                                                     materializedReset, true);
+
+    for (auto [alloc, resTy] :
+         llvm::zip(allocatedStates, stateOp.getResultTypes())) {
+      if (!resTy.isa<IntegerType>())
+        stateOp->emitOpError("Non-integer result not supported yet!");
+
+      auto thenBuilder = ifOp.getThenBodyBuilder();
+      Value constZero =
+          thenBuilder.create<hw::ConstantOp>(stateOp.getLoc(), resTy, 0);
+      thenBuilder.create<StateWriteOp>(stateOp.getLoc(), alloc, constZero,
+                                       Value());
+    }
+
+    nonResetBuilder = ifOp.getElseBodyBuilder();
+  }
+
+  stateOp->dropAllReferences();
+
+  auto newStateOp = nonResetBuilder.create<StateOp>(
       stateOp.getLoc(), stateOp.getArcAttr(), stateOp.getResultTypes(), Value{},
       Value{}, 0, materializedOperands);
 
@@ -385,8 +410,8 @@ LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
   // allocated state storage.
   for (auto [alloc, result] :
        llvm::zip(allocatedStates, newStateOp.getResults()))
-    info.clock.builder.create<StateWriteOp>(stateOp.getLoc(), alloc, result,
-                                            info.enable);
+    nonResetBuilder.create<StateWriteOp>(stateOp.getLoc(), alloc, result,
+                                         info.enable);
 
   // Replace all uses of the arc with reads from the allocated state.
   for (auto [alloc, result] : llvm::zip(allocatedStates, stateOp.getResults()))
