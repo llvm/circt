@@ -52,7 +52,7 @@ s.package()
 # TOP:         input  [31:0] s_axi_control_WDATA,
 # TOP:         input  [3:0]  s_axi_control_WSTRB,
 # TOP:         input         s_axi_control_ARVALID,
-# TOP:         input  [23:0] s_axi_control_ARADDR,
+# TOP:         input  [31:0] s_axi_control_ARADDR,
 # TOP:         input         s_axi_control_RREADY,
 # TOP:                       s_axi_control_BREADY,
 # TOP:         output        s_axi_control_AWREADY,
