@@ -1042,11 +1042,11 @@ firrtl.circuit "GCTInterface"  attributes {
 // CHECK:      %5 = firrtl.subfield %4[_1] : !firrtl.bundle<_0: uint<1>, _1: uint<1>>
 // CHECK:      %6 = firrtl.subfield %r[_0] : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
 // CHECK:      %7 = firrtl.subfield %6[_0] : !firrtl.bundle<_0: uint<1>, _1: uint<1>>
-// CHECK:      firrtl.strictconnect %view_companion_view_register__2_0__bore, %1 : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:      firrtl.strictconnect %view_companion_view_register__2_1__bore, %3 : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:      firrtl.strictconnect %view_companion_view_register__0_inst__1__bore, %5 : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:      firrtl.strictconnect %view_companion_view_register__0_inst__0__bore, %7 : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:      firrtl.strictconnect %view_companion_view_port__bore, %a : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      firrtl.strictconnect %view_companion_view_register__2_0__bore, %1 : !firrtl.uint<1>
+// CHECK:      firrtl.strictconnect %view_companion_view_register__2_1__bore, %3 : !firrtl.uint<1>
+// CHECK:      firrtl.strictconnect %view_companion_view_register__0_inst__1__bore, %5 : !firrtl.uint<1>
+// CHECK:      firrtl.strictconnect %view_companion_view_register__0_inst__0__bore, %7 : !firrtl.uint<1>
+// CHECK:      firrtl.strictconnect %view_companion_view_port__bore, %a : !firrtl.uint<1>
 
 // -----
 
@@ -1544,7 +1544,7 @@ firrtl.circuit "GrandCentralParentIsNotLCA"  attributes {
   firrtl.module @Bar() {
     %a = firrtl.wire : !firrtl.uint<1>
     // CHECK:        %[[a_ref:[a-zA-Z0-9_]+]] = firrtl.ref.send %a
-    // CHECK-NEXT:   firrtl.strictconnect %[[a_refPort]], %[[a_ref]]
+    // CHECK-NEXT:   firrtl.refconnect %[[a_refPort]], %[[a_ref]]
   }
   // CHECK:        firrtl.module @Companion()
   firrtl.module @Companion() {
