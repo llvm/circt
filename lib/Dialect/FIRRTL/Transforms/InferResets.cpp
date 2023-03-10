@@ -1076,7 +1076,7 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
   while (!worklist.empty()) {
     auto wop = worklist.pop_back_val();
     SmallVector<Type, 2> types;
-    if (auto op = dyn_cast<InferTypeOpInterface>(wop)) {
+    if (auto *op = dyn_cast<InferTypeOpInterface>(wop)) {
       // Determine the new result types.
       SmallVector<Type, 2> types;
       if (failed(op.inferReturnTypes(op->getContext(), op->getLoc(),
@@ -1091,12 +1091,12 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
         if (std::get<0>(it).getType() == newType)
           continue;
         std::get<0>(it).setType(newType);
-        for (auto user : std::get<0>(it).getUsers())
+        for (auto *user : std::get<0>(it).getUsers())
           worklist.insert(user);
       }
       LLVM_DEBUG(llvm::dbgs() << "- Inferred " << *op << "\n");
     } else if (auto uop = dyn_cast<UninferredResetCastOp>(wop)) {
-      for (auto user : uop.getResult().getUsers())
+      for (auto *user : uop.getResult().getUsers())
         worklist.insert(user);
       uop.replaceAllUsesWith(uop.getInput());
       LLVM_DEBUG(llvm::dbgs() << "- Inferred " << uop << "\n");
