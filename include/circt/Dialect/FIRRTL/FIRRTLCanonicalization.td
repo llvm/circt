@@ -74,7 +74,7 @@ def KnownWidth : Constraint<CPred<[{
   $0.getType().isa<FIRRTLBaseType>() &&
     !$0.getType().cast<FIRRTLBaseType>().getRecursiveTypeProperties().hasUninferredWidth
   }]>>;
-  
+
 /// Constraint that matches a zero ConstantOp or SpecialConstantOp.
 def ZeroConstantOp : Constraint<Or<[
   CPred<"$0.getDefiningOp<ConstantOp>() &&"
