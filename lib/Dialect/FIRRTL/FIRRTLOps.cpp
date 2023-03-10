@@ -3834,6 +3834,10 @@ void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
+void UninferredResetCastOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
 //===----------------------------------------------------------------------===//
 // RefOps
 //===----------------------------------------------------------------------===//
