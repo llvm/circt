@@ -98,8 +98,8 @@ struct ConvertWiresOp : public OpConversionPattern<WiresOp> {
     rewriter.inlineRegionBefore(wires.getBody(), hwMod.getBodyRegion(),
                                 hwMod.getBodyRegion().end());
     rewriter.eraseOp(wires);
-    rewriter.mergeBlockBefore(&hwMod.getBodyRegion().getBlocks().back(),
-                              &hwMod.getBodyBlock()->back());
+    rewriter.inlineBlockBefore(&hwMod.getBodyRegion().getBlocks().back(),
+                               &hwMod.getBodyBlock()->back());
     return success();
   }
 };
