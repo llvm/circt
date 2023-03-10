@@ -319,27 +319,6 @@ enum {
   HasUninferredWidthBitMask = 0x4,
 };
 
-/// Unpack `RecursiveTypeProperties` from a bunch of bits.
-RecursiveTypeProperties RecursiveTypeProperties::fromFlags(unsigned flags) {
-  return RecursiveTypeProperties{
-      (flags & IsPassiveBitMask) != 0,
-      (flags & ContainsAnalogBitMask) != 0,
-      (flags & HasUninferredWidthBitMask) != 0,
-  };
-}
-
-/// Pack `RecursiveTypeProperties` as a bunch of bits.
-unsigned RecursiveTypeProperties::toFlags() const {
-  unsigned flags = 0;
-  if (isPassive)
-    flags |= IsPassiveBitMask;
-  if (containsAnalog)
-    flags |= ContainsAnalogBitMask;
-  if (hasUninferredWidth)
-    flags |= HasUninferredWidthBitMask;
-  return flags;
-}
-
 //===----------------------------------------------------------------------===//
 // FIRRTLBaseType Implementation
 //===----------------------------------------------------------------------===//
@@ -359,14 +338,17 @@ bool FIRRTLBaseType::isGround() {
 /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
 RecursiveTypeProperties FIRRTLBaseType::getRecursiveTypeProperties() {
   return TypeSwitch<FIRRTLBaseType, RecursiveTypeProperties>(*this)
-      .Case<ClockType, ResetType, AsyncResetType>([](Type) {
-        return RecursiveTypeProperties{true, false, false};
+      .Case<ClockType, ResetType, AsyncResetType>([](Type type) {
+        return RecursiveTypeProperties{true, false, false, false,
+                                       type.isa<ResetType>()};
       })
       .Case<SIntType, UIntType>([](auto type) {
-        return RecursiveTypeProperties{true, false, !type.hasWidth()};
+        return RecursiveTypeProperties{true, false, false, !type.hasWidth(),
+                                       false};
       })
       .Case<AnalogType>([](auto type) {
-        return RecursiveTypeProperties{true, true, !type.hasWidth()};
+        return RecursiveTypeProperties{true, false, true, !type.hasWidth(),
+                                       false};
       })
       .Case<BundleType>([](BundleType bundleType) {
         return bundleType.getRecursiveTypeProperties();
@@ -763,8 +745,8 @@ struct circt::firrtl::detail::BundleTypeStorage : mlir::TypeStorage {
   using KeyTy = ArrayRef<BundleType::BundleElement>;
 
   BundleTypeStorage(KeyTy elements)
-      : elements(elements.begin(), elements.end()) {
-    RecursiveTypeProperties props{true, false, false};
+      : elements(elements.begin(), elements.end()), props{true, false, false,
+                                                          false, false} {
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
@@ -772,14 +754,15 @@ struct circt::firrtl::detail::BundleTypeStorage : mlir::TypeStorage {
       auto eltInfo = type.getRecursiveTypeProperties();
       props.isPassive &= eltInfo.isPassive & !element.isFlip;
       props.containsAnalog |= eltInfo.containsAnalog;
+      props.containsReference |= eltInfo.containsReference;
       props.hasUninferredWidth |= eltInfo.hasUninferredWidth;
+      props.hasUninferredReset |= eltInfo.hasUninferredReset;
       fieldID += 1;
       fieldIDs.push_back(fieldID);
       // Increment the field ID for the next field by the number of subfields.
       fieldID += type.getMaxFieldID();
     }
     maxFieldID = fieldID;
-    passiveContainsAnalogTypeInfo.setInt(props.toFlags());
   }
 
   bool operator==(const KeyTy &key) const { return key == KeyTy(elements); }
@@ -799,8 +782,8 @@ struct circt::firrtl::detail::BundleTypeStorage : mlir::TypeStorage {
 
   /// This holds the bits for the type's recursive properties, and can hold a
   /// pointer to a passive version of the type.
-  llvm::PointerIntPair<Type, RecursiveTypeProperties::numBits, unsigned>
-      passiveContainsAnalogTypeInfo;
+  RecursiveTypeProperties props;
+  BundleType passiveType;
 };
 
 auto BundleType::getElements() const -> ArrayRef<BundleElement> {
@@ -809,8 +792,7 @@ auto BundleType::getElements() const -> ArrayRef<BundleElement> {
 
 /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
 RecursiveTypeProperties BundleType::getRecursiveTypeProperties() {
-  auto flags = getImpl()->passiveContainsAnalogTypeInfo.getInt();
-  return RecursiveTypeProperties::fromFlags(flags);
+  return getImpl()->props;
 }
 
 /// Return this type with any flip types recursively removed from itself.
@@ -818,12 +800,12 @@ FIRRTLBaseType BundleType::getPassiveType() {
   auto *impl = getImpl();
 
   // If we've already determined and cached the passive type, use it.
-  if (auto passiveType = impl->passiveContainsAnalogTypeInfo.getPointer())
-    return passiveType.cast<FIRRTLBaseType>();
+  if (impl->passiveType)
+    return impl->passiveType;
 
   // If this type is already passive, use it and remember for next time.
-  if (impl->passiveContainsAnalogTypeInfo.getInt() & IsPassiveBitMask) {
-    impl->passiveContainsAnalogTypeInfo.setPointer(*this);
+  if (impl->props.isPassive) {
+    impl->passiveType = *this;
     return *this;
   }
 
@@ -835,7 +817,7 @@ FIRRTLBaseType BundleType::getPassiveType() {
   }
 
   auto passiveType = BundleType::get(getContext(), newElements);
-  impl->passiveContainsAnalogTypeInfo.setPointer(passiveType);
+  impl->passiveType = passiveType;
   return passiveType;
 }
 
@@ -949,10 +931,7 @@ std::pair<uint64_t, bool> BundleType::rootChildFieldID(uint64_t fieldID,
 struct circt::firrtl::detail::FVectorTypeStorage : mlir::TypeStorage {
   using KeyTy = std::pair<FIRRTLBaseType, size_t>;
 
-  FVectorTypeStorage(KeyTy value) : value(value) {
-    auto properties = value.first.getRecursiveTypeProperties();
-    passiveContainsAnalogTypeInfo.setInt(properties.toFlags());
-  }
+  FVectorTypeStorage(KeyTy value) : value(value) {}
 
   bool operator==(const KeyTy &key) const { return key == value; }
 
@@ -966,8 +945,7 @@ struct circt::firrtl::detail::FVectorTypeStorage : mlir::TypeStorage {
 
   /// This holds the bits for the type's recursive properties, and can hold a
   /// pointer to a passive version of the type.
-  llvm::PointerIntPair<Type, RecursiveTypeProperties::numBits, size_t>
-      passiveContainsAnalogTypeInfo;
+  FIRRTLBaseType passiveType;
 };
 
 FVectorType FVectorType::get(FIRRTLBaseType elementType, size_t numElements) {
@@ -983,8 +961,7 @@ size_t FVectorType::getNumElements() const { return getImpl()->value.second; }
 
 /// Return the recursive properties of the type.
 RecursiveTypeProperties FVectorType::getRecursiveTypeProperties() {
-  auto flags = getImpl()->passiveContainsAnalogTypeInfo.getInt();
-  return RecursiveTypeProperties::fromFlags(flags);
+  return getImpl()->value.first.getRecursiveTypeProperties();
 }
 
 /// Return this type with any flip types recursively removed from itself.
@@ -992,19 +969,19 @@ FIRRTLBaseType FVectorType::getPassiveType() {
   auto *impl = getImpl();
 
   // If we've already determined and cached the passive type, use it.
-  if (auto passiveType = impl->passiveContainsAnalogTypeInfo.getPointer())
-    return passiveType.cast<FIRRTLBaseType>();
+  if (impl->passiveType)
+    return impl->passiveType;
 
   // If this type is already passive, return it and remember for next time.
-  if (impl->passiveContainsAnalogTypeInfo.getInt() & IsPassiveBitMask) {
-    impl->passiveContainsAnalogTypeInfo.setPointer(*this);
+  if (impl->value.first.getRecursiveTypeProperties().isPassive) {
+    impl->passiveType = *this;
     return *this;
   }
 
   // Otherwise, rebuild a passive version.
   auto passiveType =
       FVectorType::get(getElementType().getPassiveType(), getNumElements());
-  impl->passiveContainsAnalogTypeInfo.setPointer(passiveType);
+  impl->passiveType = passiveType;
   return passiveType;
 }
 

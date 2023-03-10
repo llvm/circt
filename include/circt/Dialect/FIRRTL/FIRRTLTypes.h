@@ -42,17 +42,14 @@ class RefType;
 struct RecursiveTypeProperties {
   /// Whether the type only contains passive elements.
   bool isPassive : 1;
+  /// Whether the type contains a reference type.
+  bool containsReference : 1;
   /// Whether the type contains an analog type.
   bool containsAnalog : 1;
   /// Whether the type has any uninferred bit widths.
   bool hasUninferredWidth : 1;
-
-  /// The number of bits required to represent a type's recursive properties.
-  static constexpr unsigned numBits = 3;
-  /// Unpack `RecursiveTypeProperties` from a bunch of bits.
-  static RecursiveTypeProperties fromFlags(unsigned bits);
-  /// Pack `RecursiveTypeProperties` as a bunch of bits.
-  unsigned toFlags() const;
+  /// Whether the type has any uninferred reset.
+  bool hasUninferredReset : 1;
 };
 
 // This is a common base class for all FIRRTL types.
@@ -70,22 +67,32 @@ protected:
 // Common base class for all base FIRRTL types.
 class FIRRTLBaseType : public FIRRTLType {
 public:
-  /// Return true if this is a "passive" type - one that contains no "flip"
-  /// types recursively within itself.
-  bool isPassive() { return getRecursiveTypeProperties().isPassive; }
-
   /// Returns true if this is a "passive" that which is not analog.
   bool isRegisterType() { return isPassive() && !containsAnalog(); }
 
   /// Return true if this is a 'ground' type, aka a non-aggregate type.
   bool isGround();
 
+  /// Return true if this is a "passive" type - one that contains no "flip"
+  /// types recursively within itself.
+  bool isPassive() { return getRecursiveTypeProperties().isPassive; }
+
   /// Return true if this is or contains an Analog type.
   bool containsAnalog() { return getRecursiveTypeProperties().containsAnalog; }
+
+  /// Return true if this is or contains a Reference type.
+  bool containsReference() {
+    return getRecursiveTypeProperties().containsReference;
+  }
 
   /// Return true if this type contains an uninferred bit width.
   bool hasUninferredWidth() {
     return getRecursiveTypeProperties().hasUninferredWidth;
+  }
+
+  /// Return true if this type contains an uninferred bit width.
+  bool hasUninferredReset() {
+    return getRecursiveTypeProperties().hasUninferredReset;
   }
 
   /// Return the recursive properties of the type, containing the `isPassive`,

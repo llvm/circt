@@ -1076,7 +1076,7 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
   while (!worklist.empty()) {
     auto wop = worklist.pop_back_val();
     SmallVector<Type, 2> types;
-    if (auto *op = dyn_cast<InferTypeOpInterface>(wop)) {
+    if (auto op = dyn_cast<InferTypeOpInterface>(wop)) {
       // Determine the new result types.
       SmallVector<Type, 2> types;
       if (failed(op.inferReturnTypes(op->getContext(), op->getLoc(),
