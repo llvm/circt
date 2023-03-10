@@ -145,17 +145,26 @@ def InnerSymAttr : AttrDef<HWDialect, "InnerSym"> {
   let extraClassDeclaration = [{
     /// Get the inner sym name for fieldID, if it exists.
     mlir::StringAttr getSymIfExists(unsigned fieldID) const;
+
     /// Get the inner sym name for fieldID=0, if it exists.
     mlir::StringAttr getSymName() const { return getSymIfExists(0); }
+
     /// Get the number of inner symbols defined.
     size_t size() const { return getProps().size(); }
+
     /// Check if this is an empty array, no sym names stored.
     bool empty() const { return getProps().empty(); }
+
+    /// Return an InnerSymAttr with the inner symbol for the specified fieldID removed.
+    InnerSymAttr erase(unsigned fieldID) const;
+
     using iterator = mlir::ArrayRef<InnerSymPropertiesAttr>::iterator;
     /// Iterator begin for all the InnerSymProperties.
     iterator begin() const { return getProps().begin(); }
+
     /// Iterator end for all the InnerSymProperties.
     iterator end() const { return getProps().end(); }
+
     /// Invoke the func, for all sym names. Return success(),
     /// if the callback function never returns failure().
     mlir::LogicalResult walkSymbols(llvm::function_ref<

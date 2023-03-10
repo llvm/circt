@@ -822,7 +822,7 @@ bool TypeLoweringVisitor::visitStmt(StrictConnectOp op) {
   for (const auto &field : llvm::enumerate(fields)) {
     Value src = getSubWhatever(op.getSrc(), field.index());
     Value dest = getSubWhatever(op.getDest(), field.index());
-    if (field.value().isOutput && !op.getDest().getType().isa<RefType>())
+    if (field.value().isOutput)
       std::swap(src, dest);
     builder->create<StrictConnectOp>(dest, src);
   }
@@ -847,8 +847,6 @@ bool TypeLoweringVisitor::visitStmt(RefConnectOp op) {
   for (const auto &field : llvm::enumerate(fields)) {
     Value src = getSubWhatever(op.getSrc(), field.index());
     Value dest = getSubWhatever(op.getDest(), field.index());
-    if (field.value().isOutput && !op.getDest().getType().isa<RefType>())
-      std::swap(src, dest);
     builder->create<RefConnectOp>(dest, src);
   }
   return true;

@@ -80,4 +80,16 @@ firrtl.circuit "invalidReg"   {
     // CHECK: firrtl.strictconnect %result7, %c0_ui4
     firrtl.strictconnect %result7, %reg: !firrtl.uint<4>
   }
+
+  // CHECK-LABEL: RegResetImplicitExtOrTrunc
+  firrtl.module @RegResetImplicitExtOrTrunc(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %out: !firrtl.uint<4>) {
+    // CHECK:      %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+    // CHECK-NEXT: %0 = firrtl.cat %c0_ui2, %c0_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
+    // CHECK-NEXT: firrtl.strictconnect %out, %0 : !firrtl.uint<4>
+    %c0_ui3 = firrtl.constant 0 : !firrtl.uint<3>
+    %r = firrtl.regreset %clock, %reset, %c0_ui3 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<2>
+    %0 = firrtl.cat %r, %r : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
+    firrtl.strictconnect %r, %r : !firrtl.uint<2>
+    firrtl.strictconnect %out, %0 : !firrtl.uint<4>
+  }
 }

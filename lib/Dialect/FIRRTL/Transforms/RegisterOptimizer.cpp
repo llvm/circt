@@ -13,6 +13,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/Dominance.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-register-optimizer"
@@ -99,6 +100,41 @@ void RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
   }
 }
 
+static Value getExtOrTruncValue(Operation *op, Value src,
+                                FIRRTLBaseType dstType) {
+  auto srcType = src.getType().cast<FIRRTLBaseType>();
+  if (dstType == srcType)
+    return src;
+
+  if (!dstType.isa<IntType>())
+    // TODO: Handle aggregate as well and move this help helper function to
+    // FIRRTLUtils.
+    return {};
+  ImplicitLocOpBuilder builder(op->getLoc(), op);
+
+  // Handle ground types with possibly uninferred widths.
+  auto dstWidth = dstType.getBitWidthOrSentinel();
+  auto srcWidth = srcType.getBitWidthOrSentinel();
+  if (dstWidth < 0 || srcWidth < 0)
+    return {};
+
+  // The source must be extended or truncated.
+  if (dstWidth < srcWidth) {
+    // firrtl.tail always returns uint even for sint operands.
+    IntType tmpType = dstType.cast<IntType>();
+    if (tmpType.isSigned())
+      tmpType = UIntType::get(dstType.getContext(), dstWidth);
+    src = builder.createOrFold<TailPrimOp>(tmpType, src, srcWidth - dstWidth);
+    // Insert the cast back to signed if needed.
+    if (tmpType != dstType)
+      src = builder.createOrFold<AsSIntPrimOp>(dstType, src);
+  } else if (srcWidth < dstWidth) {
+    // Need to extend arg.
+    src = builder.createOrFold<PadPrimOp>(src, dstWidth);
+  }
+  return src;
+}
+
 void RegisterOptimizerPass::checkRegReset(mlir::DominanceInfo &dom,
                                           SmallVector<Operation *> &toErase,
                                           RegResetOp reg) {
@@ -110,19 +146,25 @@ void RegisterOptimizerPass::checkRegReset(mlir::DominanceInfo &dom,
 
   // Register is only written by itself, and reset with a constant.
   if (con.getSrc() == reg && isConstant(reg.getResetValue())) {
-    // constant obviously dominates the register.
-    reg.replaceAllUsesWith(reg.getResetValue());
-    toErase.push_back(reg);
-    toErase.push_back(con);
-    return;
+    if (auto resetValue =
+            getExtOrTruncValue(reg, reg.getResetValue(), reg.getType())) {
+      // constant obviously dominates the register.
+      reg.replaceAllUsesWith(resetValue);
+      toErase.push_back(reg);
+      toErase.push_back(con);
+      return;
+    }
   }
   // Register is only written by a constant, and reset with the same constant.
   if (con.getSrc() == reg.getResetValue() && isConstant(reg.getResetValue())) {
-    // constant obviously dominates the register.
-    reg.replaceAllUsesWith(reg.getResetValue());
-    toErase.push_back(reg);
-    toErase.push_back(con);
-    return;
+    if (auto resetValue =
+            getExtOrTruncValue(reg, reg.getResetValue(), reg.getType())) {
+      // constant obviously dominates the register.
+      reg.replaceAllUsesWith(resetValue);
+      toErase.push_back(reg);
+      toErase.push_back(con);
+      return;
+    }
   }
 }
 

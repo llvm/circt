@@ -27,6 +27,7 @@ def AttachOp : FIRRTLOp<"attach"> {
 
   let assemblyFormat = "$attached attr-dict `:` qualified(type($attached))";
 
+  let hasVerifier = 1;
   let hasCanonicalizeMethod = true;
 }
 
@@ -57,8 +58,8 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]
     ```
     }];
 
-  let arguments = (ins SizedBaseOrRefTypeOrForeignType:$dest,
-                       SizedBaseOrRefTypeOrForeignType:$src);
+  let arguments = (ins SizedOrForeignType:$dest,
+                       SizedOrForeignType:$src);
   let results = (outs);
   let hasCanonicalizeMethod = true;
 
@@ -73,12 +74,12 @@ def RefConnectOp : FIRRTLOp<"refconnect", [SameTypeOperands, FConnectLike]> {
   let description =  [{
     Connect two references with strict constraints:
     ```
-      firrtl.strictconnect %dest, %src : ref<t1>
+      firrtl.refconnect %dest, %src : ref<t1>
     ```
     }];
 
-  let arguments = (ins RefType:$dest,
-                       RefType:$src);
+  let arguments = (ins SizedRefType:$dest,
+                       SizedRefType:$src);
   let results = (outs);
 
   let hasVerifier = 1;
