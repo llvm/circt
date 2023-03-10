@@ -21,6 +21,8 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
+#include "llvm/ADT/BreadthFirstIterator.h"
+#include "llvm/ADT/STLExtras.h"
 
 #include <set>
 
@@ -711,46 +713,55 @@ void SVExtractTestCodeImplPass::runOnOperation() {
   BindTable bindTable;
   addExistingBinds(topLevelModule, bindTable);
 
-  for (auto &op : llvm::make_early_inc_range(topLevelModule->getOperations())) {
-    if (auto rtlmod = dyn_cast<hw::HWModuleOp>(op)) {
-      // Extract two sets of ops to different modules.  This will add modules,
-      // but not affect modules in the symbol table.  If any instance of the
-      // module is bound, then extraction is skipped.  This avoids problems
-      // where certain simulators dislike having binds that target bound
-      // modules.
-      if (isBound(rtlmod, *instanceGraph))
-        continue;
+  // Collect modules according to the hierarchy of the instance graph. Modules
+  // are sorted so that modules whose instances are higher in the hierarchy come
+  // first. This allows us to process modules "bottom up", so test code is
+  // extracted from children before parents. That allows the parents to
+  // potentially extract test code from their children.
+  SetVector<hw::HWModuleOp> sortedModules;
+  for (auto *child : llvm::breadth_first(instanceGraph))
+    if (auto hwMod = dyn_cast_or_null<hw::HWModuleOp>(child->getModule()))
+      sortedModules.insert(hwMod);
 
-      // In the module is in test harness, we don't have to extract from it.
-      if (rtlmod->hasAttr("firrtl.extract.do_not_extract")) {
-        rtlmod->removeAttr("firrtl.extract.do_not_extract");
-        continue;
-      }
+  for (auto &rtlmod :
+       llvm::make_early_inc_range(llvm::reverse(sortedModules))) {
+    // Extract two sets of ops to different modules.  This will add modules,
+    // but not affect modules in the symbol table.  If any instance of the
+    // module is bound, then extraction is skipped.  This avoids problems
+    // where certain simulators dislike having binds that target bound
+    // modules.
+    if (isBound(rtlmod, *instanceGraph))
+      continue;
 
-      SmallPtrSet<Operation *, 32> opsToErase;
-      bool anyThingExtracted = false;
-      anyThingExtracted |= doModule(rtlmod, isAssert, "_assert", assertDir,
-                                    assertBindFile, bindTable, opsToErase);
-      anyThingExtracted |= doModule(rtlmod, isAssume, "_assume", assumeDir,
-                                    assumeBindFile, bindTable, opsToErase);
-      anyThingExtracted |= doModule(rtlmod, isCover, "_cover", coverDir,
-                                    coverBindFile, bindTable, opsToErase);
+    // In the module is in test harness, we don't have to extract from it.
+    if (rtlmod->hasAttr("firrtl.extract.do_not_extract")) {
+      rtlmod->removeAttr("firrtl.extract.do_not_extract");
+      continue;
+    }
 
-      // Inline any modules that only have inputs for test code.
-      if (!disableModuleInlining && anyThingExtracted)
-        inlineInputOnly(rtlmod, *instanceGraph, bindTable, opsToErase);
+    SmallPtrSet<Operation *, 32> opsToErase;
+    bool anyThingExtracted = false;
+    anyThingExtracted |= doModule(rtlmod, isAssert, "_assert", assertDir,
+                                  assertBindFile, bindTable, opsToErase);
+    anyThingExtracted |= doModule(rtlmod, isAssume, "_assume", assumeDir,
+                                  assumeBindFile, bindTable, opsToErase);
+    anyThingExtracted |= doModule(rtlmod, isCover, "_cover", coverDir,
+                                  coverBindFile, bindTable, opsToErase);
 
-      // Erase any instances that were extracted, and their forward dataflow.
-      // Also erase old instances that were inlined and can now be cleaned up.
-      // Parts of the forward dataflow may have been nested under other ops to
-      // erase, so as we visit ops to erase, we remove them and all their
-      // children from the set of ops to erase until nothing is left.
-      while (!opsToErase.empty()) {
-        Operation *op = *opsToErase.begin();
-        op->walk([&](Operation *erasedOp) { opsToErase.erase(erasedOp); });
-        op->dropAllUses();
-        op->erase();
-      }
+    // Inline any modules that only have inputs for test code.
+    if (!disableModuleInlining && anyThingExtracted)
+      inlineInputOnly(rtlmod, *instanceGraph, bindTable, opsToErase);
+
+    // Erase any instances that were extracted, and their forward dataflow.
+    // Also erase old instances that were inlined and can now be cleaned up.
+    // Parts of the forward dataflow may have been nested under other ops to
+    // erase, so as we visit ops to erase, we remove them and all their
+    // children from the set of ops to erase until nothing is left.
+    while (!opsToErase.empty()) {
+      Operation *op = *opsToErase.begin();
+      op->walk([&](Operation *erasedOp) { opsToErase.erase(erasedOp); });
+      op->dropAllUses();
+      op->erase();
     }
   }
 
