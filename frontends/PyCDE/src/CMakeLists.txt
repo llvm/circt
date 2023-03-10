@@ -61,7 +61,7 @@ set(PYCDE_PYTHON_PACKAGE_DIR "${CIRCT_PYTHON_PACKAGES_DIR}/pycde/")
 # Bundle our own, self-contained CAPI library with all of our deps.
 add_mlir_python_common_capi_library(PyCDE_CIRCTPythonCAPI
   INSTALL_COMPONENT CIRCTBindingsPythonModules
-  INSTALL_DESTINATION python_packages/pycde/pycde/circt/_mlir_libs
+  INSTALL_DESTINATION python_packages/pycde/circt/_mlir_libs
   OUTPUT_DIRECTORY "${PYCDE_PYTHON_PACKAGE_DIR}/pycde/circt/_mlir_libs"
   RELATIVE_INSTALL_ROOT "../../.."
   DECLARED_SOURCES
@@ -71,7 +71,7 @@ add_mlir_python_common_capi_library(PyCDE_CIRCTPythonCAPI
 
 add_mlir_python_modules(PyCDE_CIRCTPythonModules
   ROOT_PREFIX "${PYCDE_PYTHON_PACKAGE_DIR}/pycde/circt"
-  INSTALL_PREFIX "python_packages/pycde/pycde/circt"
+  INSTALL_PREFIX "python_packages/pycde/circt"
   DECLARED_SOURCES
     MLIRPythonSources.Core
     CIRCTBindingsPythonExtension
@@ -82,7 +82,7 @@ add_mlir_python_modules(PyCDE_CIRCTPythonModules
 
 add_mlir_python_modules(PyCDE
   ROOT_PREFIX "${PYCDE_PYTHON_PACKAGE_DIR}/pycde"
-  INSTALL_PREFIX "python_packages/pycde/pycde"
+  INSTALL_PREFIX "python_packages/pycde"
   DECLARED_SOURCES
     PyCDESources
   COMMON_CAPI_LINK_LIBS
@@ -91,4 +91,14 @@ add_mlir_python_modules(PyCDE
 
 add_dependencies(PyCDE
   PyCDE_CIRCTPythonModules
+)
+
+install(IMPORTED_RUNTIME_ARTIFACTS PyCDE_CIRCTPythonCAPI
+  RUNTIME_DEPENDENCY_SET PyCDE_RUNTIME_DEPS
+  DESTINATION python_packages/pycde/circt/_mlir_libs
+)
+install(RUNTIME_DEPENDENCY_SET PyCDE_RUNTIME_DEPS
+  DESTINATION python_packages/pycde/circt/_mlir_libs
+  POST_EXCLUDE_REGEXES .*
+  POST_INCLUDE_REGEXES capnp kj
 )
