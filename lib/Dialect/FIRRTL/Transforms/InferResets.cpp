@@ -1098,7 +1098,6 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
     } else if (auto uop = dyn_cast<UninferredResetCastOp>(wop)) {
       for (auto user : uop.getResult().getUsers())
         worklist.insert(user);
-      worklist.insert(user);
       uop.replaceAllUsesWith(uop.getInput());
       LLVM_DEBUG(llvm::dbgs() << "- Inferred " << uop << "\n");
       uop.erase();
