@@ -2624,22 +2624,22 @@ firrtl.module @RefResolveSend(in %x: !firrtl.uint<1>, out %y : !firrtl.uint<1>) 
 firrtl.module @RefSubHoistVector(in %x: !firrtl.vector<uint<1>,2>, out %y : !firrtl.ref<uint<1>>) {
   // CHECK-NEXT: %[[sub:.+]] = firrtl.subindex %x[1]
   // CHECK-NEXT: %[[ref:.+]] = firrtl.ref.send %[[sub]]
-  // CHECK-NEXT: firrtl.strictconnect %y, %[[ref]]
+  // CHECK-NEXT: firrtl.refconnect %y, %[[ref]]
   // CHECK-NEXT: }
   %ref = firrtl.ref.send %x : !firrtl.vector<uint<1>,2>
   %sub = firrtl.ref.sub %ref[1] : !firrtl.ref<vector<uint<1>,2>>
-  firrtl.strictconnect %y, %sub: !firrtl.ref<uint<1>>
+  firrtl.refconnect %y, %sub: !firrtl.ref<uint<1>>
 }
 
 // CHECK-LABEL: @RefSubHoistBundle
 firrtl.module @RefSubHoistBundle(in %x: !firrtl.bundle<a: uint<1>, b: uint<2>>, out %y : !firrtl.ref<uint<2>>) {
   // CHECK-NEXT: %[[sub:.+]] = firrtl.subfield %x[b]
   // CHECK-NEXT: %[[ref:.+]] = firrtl.ref.send %[[sub]]
-  // CHECK-NEXT: firrtl.strictconnect %y, %[[ref]]
+  // CHECK-NEXT: firrtl.refconnect %y, %[[ref]]
   // CHECK-NEXT: }
   %ref = firrtl.ref.send %x : !firrtl.bundle<a: uint<1>, b: uint<2>>
   %sub = firrtl.ref.sub %ref[1] : !firrtl.ref<bundle<a: uint<1>, b: uint<2>>>
-  firrtl.strictconnect %y, %sub: !firrtl.ref<uint<2>>
+  firrtl.refconnect %y, %sub: !firrtl.ref<uint<2>>
 }
 
 // CHECK-LABEL: @RefResolveSubSend
