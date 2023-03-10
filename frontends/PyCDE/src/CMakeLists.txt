@@ -96,9 +96,15 @@ add_dependencies(PyCDE
 install(IMPORTED_RUNTIME_ARTIFACTS PyCDE_CIRCTPythonCAPI
   RUNTIME_DEPENDENCY_SET PyCDE_RUNTIME_DEPS
   DESTINATION python_packages/pycde/circt/_mlir_libs
+  COMPONENT PyCDE
 )
 install(RUNTIME_DEPENDENCY_SET PyCDE_RUNTIME_DEPS
   DESTINATION python_packages/pycde/circt/_mlir_libs
   POST_EXCLUDE_REGEXES .*
   POST_INCLUDE_REGEXES capnp kj
+  COMPONENT PyCDE
+)
+
+add_dependencies(install-PyCDE
+  install-PyCDE_CIRCTPythonModules
 )

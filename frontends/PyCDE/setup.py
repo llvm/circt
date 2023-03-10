@@ -54,7 +54,6 @@ class CMakeBuild(build_py):
     src_dir = os.path.abspath(os.path.join(circt_dir, "llvm", "llvm"))
     cfg = "Release"
     cmake_args = [
-        "-GNinja",
         "-DCMAKE_INSTALL_PREFIX={}".format(os.path.abspath(cmake_install_dir)),
         "-DPython3_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
         "-DCMAKE_BUILD_TYPE={}".format(cfg),  # not used on MSVC, but no harm
@@ -85,11 +84,8 @@ class CMakeBuild(build_py):
     subprocess.check_call(["cmake", "--build", ".", "--target", "check-pycde"] +
                           build_args,
                           cwd=cmake_build_dir)
-    install_cmd = [
-        "cmake", "--build", ".", "--target",
-        "tools/circt/frontends/PyCDE/install"
-    ] + build_args
-    subprocess.check_call(install_cmd, cwd=cmake_build_dir)
+    install_cmd = ["cmake", "--build", ".", "--target", "install-PyCDE"]
+    subprocess.check_call(install_cmd + build_args, cwd=cmake_build_dir)
     shutil.copytree(os.path.join(cmake_install_dir, "python_packages"),
                     target_dir,
                     symlinks=False,
