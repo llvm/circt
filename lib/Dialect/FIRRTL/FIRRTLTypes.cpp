@@ -683,10 +683,11 @@ bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
       });
 }
 
-/// Returns true if destination and source types are the same (was widthless) AND
-/// recursively checks that types are identical or the destination is uninferred
-/// of the source type.
-bool firrtl::isTypeSameOrUninferred(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
+/// Returns true if destination and source types are the same (was widthless)
+/// AND recursively checks that types are identical or the destination is
+/// uninferred of the source type.
+bool firrtl::isTypeSameOrUninferred(FIRRTLBaseType dstType,
+                                    FIRRTLBaseType srcType) {
   if (dstType.getWidthlessType() != srcType.getWidthlessType())
     return false;
   // Okay, need to check each element.
@@ -715,7 +716,6 @@ bool firrtl::isTypeSameOrUninferred(FIRRTLBaseType dstType, FIRRTLBaseType srcTy
         return dstType == srcType || dstType.getBitWidthOrSentinel() == -1;
       });
 }
-
 
 /// Return the element of an array type or null.  This strips flip types.
 Type firrtl::getVectorElementType(Type array) {
