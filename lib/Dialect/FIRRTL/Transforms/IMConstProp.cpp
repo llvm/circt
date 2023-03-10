@@ -50,9 +50,7 @@ static bool isDeletableWireOrRegOrNode(Operation *op) {
 static void
 foreachFIRRTLGroundType(FIRRTLType firrtlType,
                         llvm::function_ref<void(unsigned, FIRRTLBaseType)> fn) {
-  auto type = firrtlType.dyn_cast<FIRRTLBaseType>();
-  if (!type)
-    type = firrtlType.cast<RefType>().getType();
+  auto type = getBaseType(firrtlType);
   // The type is always a ground type if aggregate types don't appear.
   // So it is better to try a ground type first.
   if (type.isGround())
