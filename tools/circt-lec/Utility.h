@@ -67,16 +67,6 @@ inline void printAPInt(const mlir::APInt &value) {
 } // namespace lec
 
 // Grant access to command-line option values to users of this header.
-extern bool verboseOpt;
 extern bool statisticsOpt;
-
-// This macro allows executing instructions only when the tool is invoked with
-// the `verbose` command-line option set to true.
-#define VERBOSE(X)                                                             \
-  do {                                                                         \
-    if (verboseOpt) {                                                          \
-      X;                                                                       \
-    }                                                                          \
-  } while (false)
 
 #endif // TOOLS_CIRCT_LEC_UTILITY_H

@@ -51,14 +51,13 @@ static cl::opt<std::string> fileName1(cl::Positional, cl::Required,
 static cl::opt<std::string> fileName2(cl::Positional, cl::desc("[input file]"),
                                       cl::cat(mainCategory));
 
-// The following options are stored externally for their value to be accessible
-// to other components of the tool; see `Utility.h` for more definitions.
-bool verboseOpt;
-static cl::opt<bool, true>
-    verbose("v", cl::location(verboseOpt), cl::init(false),
+static cl::opt<bool>
+    verbose("v", cl::init(false),
             cl::desc("Print extensive execution progress information"),
             cl::cat(mainCategory));
 
+// The following options are stored externally for their value to be accessible
+// to other components of the tool; see `Utility.h` for more definitions.
 bool statisticsOpt;
 static cl::opt<bool, true> statistics(
     "s", cl::location(statisticsOpt), cl::init(false),
@@ -76,7 +75,8 @@ static cl::opt<bool, true> statistics(
 /// compared and solved for equivalence.
 static mlir::LogicalResult executeLEC(mlir::MLIRContext &context) {
   // Parse the provided input files.
-  VERBOSE(lec::outs() << "Parsing input file\n");
+  if (verbose)
+    lec::outs() << "Parsing input file\n";
   mlir::OwningOpRef<mlir::ModuleOp> file1 =
       mlir::parseSourceFile<mlir::ModuleOp>(fileName1, &context);
   if (!file1)
@@ -84,12 +84,13 @@ static mlir::LogicalResult executeLEC(mlir::MLIRContext &context) {
 
   mlir::OwningOpRef<mlir::ModuleOp> file2;
   if (!fileName2.empty()) {
-    VERBOSE(lec::outs() << "Parsing second input file\n");
+    if (verbose)
+      lec::outs() << "Parsing second input file\n";
     file2 = mlir::parseSourceFile<mlir::ModuleOp>(fileName2, &context);
     if (!file2)
       return mlir::failure();
-  } else
-    VERBOSE(lec::outs() << "Second input file not specified\n");
+  } else if (verbose)
+    lec::outs() << "Second input file not specified\n";
 
   // Initiliaze the constraints solver and the circuits to be compared.
   Solver s(&context);
@@ -98,7 +99,8 @@ static mlir::LogicalResult executeLEC(mlir::MLIRContext &context) {
 
   // Initialize the logic-exporting pass for the first circuit then run the
   // pass manager on the top-level module of the first input file.
-  VERBOSE(lec::outs() << "Analyzing the first circuit\n";);
+  if (verbose)
+    lec::outs() << "Analyzing the first circuit\n";
   mlir::PassManager pm(&context);
   pm.addPass(std::make_unique<LogicExporter>(moduleName1, c1));
   mlir::ModuleOp m = file1.get();
@@ -106,7 +108,8 @@ static mlir::LogicalResult executeLEC(mlir::MLIRContext &context) {
     return mlir::failure();
 
   // Repeat the same procedure for the second circuit.
-  VERBOSE(lec::outs() << "Analyzing the second circuit\n");
+  if (verbose)
+    lec::outs() << "Analyzing the second circuit\n";
   mlir::PassManager pm2(&context);
   pm2.addPass(std::make_unique<LogicExporter>(moduleName2, c2));
   // In case a second input file was not specified, the first input file will
@@ -117,7 +120,8 @@ static mlir::LogicalResult executeLEC(mlir::MLIRContext &context) {
 
   // The logical constraints have been exported to their respective circuit
   // representations and can now be solved for equivalence.
-  VERBOSE(lec::outs() << "Solving constraints\n");
+  if (verbose)
+    lec::outs() << "Solving constraints\n";
   return s.solve();
 }
 
@@ -156,6 +160,7 @@ int main(int argc, char **argv) {
 
   // Perform the logical equivalence checking; using `exit` to avoid the slow
   // teardown of the MLIR context.
-  VERBOSE(lec::outs() << "Starting execution\n");
+  if (verbose)
+    lec::outs() << "Starting execution\n";
   exit(failed(executeLEC(context)));
 }
