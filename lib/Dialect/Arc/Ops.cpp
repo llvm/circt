@@ -18,6 +18,52 @@ using namespace arc;
 using namespace mlir;
 
 //===----------------------------------------------------------------------===//
+// Helpers
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verifyArcSymbolUse(Operation *op, ValueRange inputs,
+                                        ValueRange results,
+                                        SymbolTableCollection &symbolTable) {
+  // Check that the arc attribute was specified.
+  auto arcName = op->getAttrOfType<FlatSymbolRefAttr>("arc");
+  // The arc attribute is verified by the tablegen generated verifier as it is
+  // an ODS defined attribute.
+  assert(arcName && "FlatSymbolRefAttr called 'arc' missing");
+  DefineOp arc = symbolTable.lookupNearestSymbolFrom<DefineOp>(op, arcName);
+  if (!arc)
+    return op->emitOpError() << "`" << arcName.getValue()
+                             << "` does not reference a valid `arc.define`";
+
+  // Verify that the operand and result types match the arc.
+  auto type = arc.getFunctionType();
+  if (type.getNumInputs() != inputs.size())
+    return op->emitOpError("incorrect number of operands for arc");
+
+  for (unsigned i = 0, e = type.getNumInputs(); i != e; ++i) {
+    if (inputs[i].getType() != type.getInput(i)) {
+      auto diag = op->emitOpError("operand type mismatch: operand ") << i;
+      diag.attachNote() << "expected type: " << type.getInput(i);
+      diag.attachNote() << "  actual type: " << inputs[i].getType();
+      return diag;
+    }
+  }
+
+  if (type.getNumResults() != results.size())
+    return op->emitOpError("incorrect number of results for arc");
+
+  for (unsigned i = 0, e = type.getNumResults(); i != e; ++i) {
+    if (results[i].getType() != type.getResult(i)) {
+      auto diag = op->emitOpError("result type mismatch: result ") << i;
+      diag.attachNote() << "expected type: " << type.getResult(i);
+      diag.attachNote() << "  actual type: " << results[i].getType();
+      return diag;
+    }
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // DefineOp
 //===----------------------------------------------------------------------===//
 
@@ -94,42 +140,7 @@ LogicalResult OutputOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult StateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  // Check that the arc attribute was specified.
-  auto arcName = (*this)->getAttrOfType<FlatSymbolRefAttr>("arc");
-  if (!arcName)
-    return emitOpError("requires a `arc` symbol reference attribute");
-  DefineOp arc = symbolTable.lookupNearestSymbolFrom<DefineOp>(*this, arcName);
-  if (!arc)
-    return emitOpError() << "`" << arcName.getValue()
-                         << "` does not reference a valid function";
-
-  // Verify that the operand and result types match the arc.
-  auto type = arc.getFunctionType();
-  if (type.getNumInputs() != getInputs().size())
-    return emitOpError("incorrect number of operands for arc");
-
-  for (unsigned i = 0, e = type.getNumInputs(); i != e; ++i) {
-    if (getInputs()[i].getType() != type.getInput(i)) {
-      auto diag = emitOpError("operand type mismatch: operand ") << i;
-      diag.attachNote() << "expected type: " << type.getInput(i);
-      diag.attachNote() << "  actual type: " << getInputs()[i].getType();
-      return diag;
-    }
-  }
-
-  if (type.getNumResults() != getNumResults())
-    return emitOpError("incorrect number of results for arc");
-
-  for (unsigned i = 0, e = type.getNumResults(); i != e; ++i) {
-    if (getResult(i).getType() != type.getResult(i)) {
-      auto diag = emitOpError("result type mismatch: result ") << i;
-      diag.attachNote() << "expected type: " << type.getResult(i);
-      diag.attachNote() << "  actual type: " << getResult(i).getType();
-      return diag;
-    }
-  }
-
-  return success();
+  return verifyArcSymbolUse(*this, getInputs(), getResults(), symbolTable);
 }
 
 LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
@@ -155,6 +166,14 @@ LogicalResult StateOp::verify() {
   }
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// CallOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyArcSymbolUse(*this, getInputs(), getResults(), symbolTable);
 }
 
 //===----------------------------------------------------------------------===//
