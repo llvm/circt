@@ -152,11 +152,25 @@ static void lowerAlwaysInlineOperation(Operation *op) {
     }
   };
 
+  // If an operation is an assignment that immediately follows the declaration
+  // of its wire, return that wire. Otherwise return the original op. This
+  // ensures that the declaration and assignment don't get split apart by
+  // inlined operations, which allows `ExportVerilog` to trivially emit the
+  // expression inline in the declaration.
+  auto skipToWireImmediatelyBefore = [](Operation *user) {
+    if (!isa<BPAssignOp, AssignOp>(user))
+      return user;
+    auto *wireOp = user->getOperand(0).getDefiningOp();
+    if (wireOp && wireOp->getNextNode() == user)
+      return wireOp;
+    return user;
+  };
+
   // If this operation has multiple uses, duplicate it into N-1 of them in
   // turn.
   while (!op->hasOneUse()) {
     OpOperand &use = *op->getUses().begin();
-    Operation *user = use.getOwner();
+    Operation *user = skipToWireImmediatelyBefore(use.getOwner());
 
     // Clone the op before the user.
     auto *newOp = op->clone();
@@ -171,7 +185,7 @@ static void lowerAlwaysInlineOperation(Operation *op) {
 
   // Finally, ensures the op is in the same block as its user so it can be
   // inlined.
-  Operation *user = *op->getUsers().begin();
+  Operation *user = skipToWireImmediatelyBefore(*op->getUsers().begin());
   op->moveBefore(user);
 
   // If any of the operations of the moved op are always inline, recursively

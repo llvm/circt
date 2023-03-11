@@ -347,6 +347,17 @@ hw.module @SimpleConstPrintReset(%clock: i1, %reset: i1, %in4: i4) -> () {
 
 }
 
+// CHECK-LABEL: module InlineDeclAssignment
+hw.module @InlineDeclAssignment(%a: i1) {
+  // CHECK: wire b = a;
+  %b = sv.wire : !hw.inout<i1>
+  sv.assign %b, %a : i1
+
+  // CHECK: wire c = a + a;
+  %0 = comb.add %a, %a : i1
+  %c = sv.wire : !hw.inout<i1>
+  sv.assign %c, %0 : i1
+}
 
 // CHECK-LABEL: module ordered_region
 // CHECK-NEXT: input a
