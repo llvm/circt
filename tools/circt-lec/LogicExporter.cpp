@@ -1,4 +1,4 @@
-//===- LogicExporter.cpp - Pass to extrapolate CIRCT IR logic ---*- C++ -*-===//
+//===- LogicExporter.cpp - class to extrapolate CIRCT IR logic --*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 ///
-/// This file defines the logic-exporting pass for the `circt-lec` tool.
+/// This file defines the logic-exporting class for the `circt-lec` tool.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -16,7 +16,7 @@
 #include "Utility.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-#define DEBUG_TYPE "pass"
+#define DEBUG_TYPE "exporter"
 
 namespace {
 /// Helper function to provide a common debug formatting for
@@ -64,18 +64,11 @@ debugAttributes(llvm::ArrayRef<mlir::NamedAttribute> attributes) {
 }
 } // anonymous namespace
 
-/// Initializes the pass by visiting the builtin module.
-void LogicExporter::runOnOperation() {
-  mlir::Operation *op = mlir::Pass::getOperation();
-  if (auto builtinModule = llvm::dyn_cast<mlir::ModuleOp>(op)) {
-    mlir::LogicalResult outcome =
-        Visitor::visitBuiltin(builtinModule, circuit, moduleName);
-    if (mlir::failed(outcome))
-      mlir::Pass::signalPassFailure();
-  } else {
-    op->emitError("expected `builtin.module`");
-    mlir::Pass::signalPassFailure();
-  }
+/// Initializes the exporter by visiting the builtin module.
+mlir::LogicalResult LogicExporter::run(mlir::ModuleOp &builtinModule) {
+  mlir::LogicalResult outcome =
+      Visitor::visitBuiltin(builtinModule, circuit, moduleName);
+  return outcome;
 }
 
 //===----------------------------------------------------------------------===//

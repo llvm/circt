@@ -20,7 +20,6 @@
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OwningOpRef.h"
 #include "mlir/Parser/Parser.h"
-#include "mlir/Pass/PassManager.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/PrettyStackTrace.h"
@@ -70,7 +69,7 @@ static cl::opt<bool, true> statistics(
 
 /// This functions initializes the various components of the tool and
 /// orchestrates the work to be done. It first parses the input files, then it
-/// runs a pass to export the logical constraints from the given circuit
+/// traverses their IR to export the logical constraints from the given circuit
 /// description to an internal circuit representation, lastly, these will be
 /// compared and solved for equivalence.
 static mlir::LogicalResult executeLEC(mlir::MLIRContext &context) {
@@ -97,25 +96,23 @@ static mlir::LogicalResult executeLEC(mlir::MLIRContext &context) {
   Solver::Circuit *c1 = s.addCircuit(moduleName1, true);
   Solver::Circuit *c2 = s.addCircuit(moduleName2, false);
 
-  // Initialize the logic-exporting pass for the first circuit then run the
-  // pass manager on the top-level module of the first input file.
+  // Initialize a logic exporter for the first circuit then run it on the
+  // top-level module of the first input file.
   if (verbose)
     lec::outs() << "Analyzing the first circuit\n";
-  mlir::PassManager pm(&context);
-  pm.addPass(std::make_unique<LogicExporter>(moduleName1, c1));
+  auto exporter = std::make_unique<LogicExporter>(moduleName1, c1);
   mlir::ModuleOp m = file1.get();
-  if (failed(pm.run(m)))
+  if (failed(exporter->run(m)))
     return mlir::failure();
 
   // Repeat the same procedure for the second circuit.
   if (verbose)
     lec::outs() << "Analyzing the second circuit\n";
-  mlir::PassManager pm2(&context);
-  pm2.addPass(std::make_unique<LogicExporter>(moduleName2, c2));
+  auto exporter2 = std::make_unique<LogicExporter>(moduleName2, c2);
   // In case a second input file was not specified, the first input file will
   // be used instead.
   mlir::ModuleOp m2 = fileName2.empty() ? m : file2.get();
-  if (failed(pm2.run(m2)))
+  if (failed(exporter2->run(m2)))
     return mlir::failure();
 
   // The logical constraints have been exported to their respective circuit
