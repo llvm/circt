@@ -31,12 +31,12 @@ firrtl.circuit "Top" {
     // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK:  %0 = firrtl.node sym @[[xmrSym]] %c0_ui1  : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
   firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
     %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
     // CHECK:  firrtl.instance bar sym @barXMR  @XmrSrcMod()
-    firrtl.strictconnect %_a, %xmr   : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %xmr   : !firrtl.ref<uint<1>>
   }
   firrtl.module @Top() {
     %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.ref<uint<1>>)
@@ -79,12 +79,12 @@ firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1>, out %_a: !firrtl.ref<uint<1>>) {
     // CHECK: firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1> sym @[[xmrSym]]) {
     %1 = firrtl.ref.send %pa : !firrtl.uint<1>
-    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
   firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
     %pa, %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(in pa: !firrtl.uint<1>, out _a: !firrtl.ref<uint<1>>)
     // CHECK: %bar_pa = firrtl.instance bar sym @barXMR  @XmrSrcMod(in pa: !firrtl.uint<1>)
-    firrtl.strictconnect %_a, %xmr   : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %xmr   : !firrtl.ref<uint<1>>
   }
   firrtl.module @Top() {
     %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.ref<uint<1>>)
@@ -114,12 +114,12 @@ firrtl.circuit "Top" {
     // CHECK:   %c0_ui1 = firrtl.constant 0
     // CHECK:  %0 = firrtl.node sym @[[xmrSym]] %c0_ui1  : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
   firrtl.module @Foo(out %_a: !firrtl.ref<uint<1>>) {
     %xmr   = firrtl.instance bar sym @fooXMR @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
     // CHECK:  firrtl.instance bar sym @fooXMR  @XmrSrcMod()
-    firrtl.strictconnect %_a, %xmr   : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %xmr   : !firrtl.ref<uint<1>>
     %0 = firrtl.ref.resolve %xmr   : !firrtl.ref<uint<1>>
     // CHECK:      %[[#xmr:]] = sv.xmr.ref @[[path_0]]
     // CHECK-NEXT: %[[#cast:]] = builtin.unrealized_conversion_cast %[[#xmr]]
@@ -130,7 +130,7 @@ firrtl.circuit "Top" {
   firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
     %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
     // CHECK:  firrtl.instance bar sym @barXMR  @XmrSrcMod()
-    firrtl.strictconnect %_a, %xmr   : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %xmr   : !firrtl.ref<uint<1>>
     %0 = firrtl.ref.resolve %xmr   : !firrtl.ref<uint<1>>
     // CHECK:      %[[#xmr:]] = sv.xmr.ref @[[path_1]]
     // CHECK-NEXT: %[[#cast:]] = builtin.unrealized_conversion_cast %[[#xmr]]
@@ -178,12 +178,12 @@ firrtl.circuit "Top" {
     // CHECK:  %c0_ui1 = firrtl.constant 0
     // CHECK:  %0 = firrtl.node sym @[[xmrSym]] %c0_ui1  : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
   firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
     %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
     // CHECK:  firrtl.instance bar sym @barXMR  @XmrSrcMod()
-    firrtl.strictconnect %_a, %xmr   : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %xmr   : !firrtl.ref<uint<1>>
   }
   firrtl.module @Top() {
     %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.ref<uint<1>>)
@@ -195,7 +195,7 @@ firrtl.circuit "Top" {
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
     // CHECK-NEXT: firrtl.strictconnect %a, %[[#cast]]
     %c_a = firrtl.instance child @Child(in  _a: !firrtl.ref<uint<1>>)
-    firrtl.strictconnect %c_a, %bar_a : !firrtl.ref<uint<1>>
+    firrtl.refconnect %c_a, %bar_a : !firrtl.ref<uint<1>>
   }
   firrtl.module @Child(in  %_a: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
@@ -214,12 +214,12 @@ firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1>, out %_a: !firrtl.ref<uint<1>>) {
     // CHECK: firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1> sym @xmr_sym) {
     %1 = firrtl.ref.send %pa : !firrtl.uint<1>
-    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
   firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
     %pa, %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(in pa: !firrtl.uint<1>, out _a: !firrtl.ref<uint<1>>)
     // CHECK: %bar_pa = firrtl.instance bar sym @barXMR  @XmrSrcMod(in pa: !firrtl.uint<1>)
-    firrtl.strictconnect %_a, %xmr   : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %xmr   : !firrtl.ref<uint<1>>
   }
   firrtl.module @Top() {
     %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.ref<uint<1>>)
@@ -231,7 +231,7 @@ firrtl.circuit "Top" {
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
     // CHECK-NEXT: firrtl.strictconnect %a, %[[#cast]]
     %c_a = firrtl.instance child @Child(in  _a: !firrtl.ref<uint<1>>)
-    firrtl.strictconnect %c_a, %bar_a : !firrtl.ref<uint<1>>
+    firrtl.refconnect %c_a, %bar_a : !firrtl.ref<uint<1>>
   }
   firrtl.module @Child(in  %_a: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
@@ -250,20 +250,20 @@ firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %1 : !firrtl.ref<uint<1>>
     // CHECK: firrtl.node sym @[[xmrSym]]
   }
   firrtl.module @Foo(out %_a: !firrtl.ref<uint<1>>) {
     %xmr   = firrtl.instance bar sym @fooXMR @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
-    firrtl.strictconnect %_a, %xmr   : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %xmr   : !firrtl.ref<uint<1>>
   }
   firrtl.module @Top() {
     %foo_a = firrtl.instance foo sym @foo @Foo(out _a: !firrtl.ref<uint<1>>)
     %xmr_a = firrtl.instance xmr sym @xmr @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
     %c_a, %c_b = firrtl.instance child @Child2p(in _a: !firrtl.ref<uint<1>>, in _b: !firrtl.ref<uint<1>> )
     // CHECK:  firrtl.instance child  @Child2p()
-    firrtl.strictconnect %c_a, %foo_a : !firrtl.ref<uint<1>>
-    firrtl.strictconnect %c_b, %xmr_a : !firrtl.ref<uint<1>>
+    firrtl.refconnect %c_a, %foo_a : !firrtl.ref<uint<1>>
+    firrtl.refconnect %c_b, %xmr_a : !firrtl.ref<uint<1>>
   }
   firrtl.module @Child2p(in  %_a: !firrtl.ref<uint<1>>, in  %_b: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
@@ -284,13 +284,13 @@ firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %1 : !firrtl.ref<uint<1>>
     // CHECK: firrtl.node sym @[[xmrSym]]
   }
   firrtl.module @Top() {
     %xmr_a = firrtl.instance xmr sym @xmr @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
     %c_a = firrtl.instance child @Child1(in _a: !firrtl.ref<uint<1>>)
-    firrtl.strictconnect %c_a, %xmr_a : !firrtl.ref<uint<1>>
+    firrtl.refconnect %c_a, %xmr_a : !firrtl.ref<uint<1>>
   }
   // CHECK-LABEL: firrtl.module @Child1() {
   firrtl.module @Child1(in  %_a: !firrtl.ref<uint<1>>) {
@@ -298,10 +298,10 @@ firrtl.circuit "Top" {
     // CHECK:      %[[#xmr:]] = sv.xmr.ref @[[path]]
     // CHECK-NEXT: %[[#cast:]] = builtin.unrealized_conversion_cast %[[#xmr]]
     %c_a, %c_b = firrtl.instance child @Child2(in _a: !firrtl.ref<uint<1>>, in _b: !firrtl.ref<uint<1>> )
-    firrtl.strictconnect %c_a, %_a : !firrtl.ref<uint<1>>
-    firrtl.strictconnect %c_b, %_a : !firrtl.ref<uint<1>>
+    firrtl.refconnect %c_a, %_a : !firrtl.ref<uint<1>>
+    firrtl.refconnect %c_b, %_a : !firrtl.ref<uint<1>>
     %c3 = firrtl.instance child @Child3(in _a: !firrtl.ref<uint<1>>)
-    firrtl.strictconnect %c3 , %_a : !firrtl.ref<uint<1>>
+    firrtl.refconnect %c3 , %_a : !firrtl.ref<uint<1>>
   }
   firrtl.module @Child2(in  %_a: !firrtl.ref<uint<1>>, in  %_b: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
@@ -330,13 +330,13 @@ firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %1 : !firrtl.ref<uint<1>>
     // CHECK: firrtl.node sym @[[xmrSym]]
   }
   firrtl.module @Top() {
     %xmr_a = firrtl.instance xmr sym @xmr @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
     %c_a = firrtl.instance child @Child1(in _a: !firrtl.ref<uint<1>>)
-    firrtl.strictconnect %c_a, %xmr_a : !firrtl.ref<uint<1>>
+    firrtl.refconnect %c_a, %xmr_a : !firrtl.ref<uint<1>>
   }
   // CHECK-LABEL: firrtl.module @Child1() {
   firrtl.module @Child1(in  %_a: !firrtl.ref<uint<1>>) {
@@ -344,10 +344,10 @@ firrtl.circuit "Top" {
     // CHECK:      %[[#xmr:]] = sv.xmr.ref @[[path]]
     // CHECK-NEXT: %[[#cast:]] = builtin.unrealized_conversion_cast %[[#xmr]]
     %c_a, %c_b = firrtl.instance child @Child2(in _a: !firrtl.ref<uint<1>>, in _b: !firrtl.ref<uint<1>> )
-    firrtl.strictconnect %c_a, %_a : !firrtl.ref<uint<1>>
-    firrtl.strictconnect %c_b, %_a : !firrtl.ref<uint<1>>
+    firrtl.refconnect %c_a, %_a : !firrtl.ref<uint<1>>
+    firrtl.refconnect %c_b, %_a : !firrtl.ref<uint<1>>
     %c3 = firrtl.instance child @Child3(in _a: !firrtl.ref<uint<1>>)
-    firrtl.strictconnect %c3 , %_a : !firrtl.ref<uint<1>>
+    firrtl.refconnect %c3 , %_a : !firrtl.ref<uint<1>>
   }
   firrtl.module @Child2(in  %_a: !firrtl.ref<uint<1>>, in  %_b: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
@@ -375,7 +375,7 @@ firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.ref<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %1 : !firrtl.ref<uint<1>>
     // CHECK: firrtl.node sym @[[xmrSym]]
   }
   firrtl.module @Top() {
@@ -387,7 +387,7 @@ firrtl.circuit "Top" {
   firrtl.module @Dut() {
     %xmr_a = firrtl.instance xmr sym @xmr @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
     %c_a = firrtl.instance child @Child1(in _a: !firrtl.ref<uint<1>>)
-    firrtl.strictconnect %c_a, %xmr_a : !firrtl.ref<uint<1>>
+    firrtl.refconnect %c_a, %xmr_a : !firrtl.ref<uint<1>>
   }
   // CHECK-LABEL: firrtl.module @Child1() {
   firrtl.module @Child1(in  %_a: !firrtl.ref<uint<1>>) {
@@ -395,10 +395,10 @@ firrtl.circuit "Top" {
     // CHECK:      %[[#xmr:]] = sv.xmr.ref @[[path]]
     // CHECK-NEXT: %[[#cast:]] = builtin.unrealized_conversion_cast %[[#xmr]]
     %c_a, %c_b = firrtl.instance child @Child2(in _a: !firrtl.ref<uint<1>>, in _b: !firrtl.ref<uint<1>> )
-    firrtl.strictconnect %c_a, %_a : !firrtl.ref<uint<1>>
-    firrtl.strictconnect %c_b, %_a : !firrtl.ref<uint<1>>
+    firrtl.refconnect %c_a, %_a : !firrtl.ref<uint<1>>
+    firrtl.refconnect %c_b, %_a : !firrtl.ref<uint<1>>
     %c3 = firrtl.instance child @Child3(in _a: !firrtl.ref<uint<1>>)
-    firrtl.strictconnect %c3 , %_a : !firrtl.ref<uint<1>>
+    firrtl.refconnect %c3 , %_a : !firrtl.ref<uint<1>>
   }
   firrtl.module @Child2(in  %_a: !firrtl.ref<uint<1>>, in  %_b: !firrtl.ref<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.ref<uint<1>>
@@ -513,9 +513,9 @@ firrtl.circuit "Top"  {
     %rf_memTap, %rf_read, %rf_write = firrtl.mem  Undefined  {depth = 2 : i64, groupID = 1 : ui32, name = "rf", portNames = ["memTap", "read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.ref<vector<uint<8>, 2>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
     // CHECK:  %rf_read, %rf_write = firrtl.mem sym @xmr_sym  Undefined  {depth = 2 : i64, groupID = 1 : ui32, name = "rf", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
     %9 = firrtl.ref.sub %rf_memTap[0] : !firrtl.ref<vector<uint<8>, 2>>
-    firrtl.strictconnect %_gen_memTap_0, %9 : !firrtl.ref<uint<8>>
+    firrtl.refconnect %_gen_memTap_0, %9 : !firrtl.ref<uint<8>>
     %10 = firrtl.ref.sub %rf_memTap[1] : !firrtl.ref<vector<uint<8>, 2>>
-    firrtl.strictconnect %_gen_memTap_1, %10 : !firrtl.ref<uint<8>>
+    firrtl.refconnect %_gen_memTap_1, %10 : !firrtl.ref<uint<8>>
   }
   firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io_addr: !firrtl.uint<3>, in %io_dataIn: !firrtl.uint<8>, in %io_wen: !firrtl.uint<1>, out %io_dataOut: !firrtl.uint<8>) {
     %dut_clock, %dut_io_addr, %dut_io_dataIn, %dut_io_wen, %dut_io_dataOut, %dut__gen_memTap_0, %dut__gen_memTap_1 = firrtl.instance dut  @DUTModule(in clock: !firrtl.clock, in io_addr: !firrtl.uint<3>, in io_dataIn: !firrtl.uint<8>, in io_wen: !firrtl.uint<1>, out io_dataOut: !firrtl.uint<8>, out _gen_memTap_0: !firrtl.ref<uint<8>>, out _gen_memTap_1: !firrtl.ref<uint<8>>)
@@ -546,12 +546,12 @@ firrtl.circuit "Top" {
     // CHECK-NEXT: }
     %z = firrtl.verbatim.expr "internal.path" : () -> !firrtl.uint<1>
     %1 = firrtl.ref.send %z : !firrtl.uint<1>
-    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
   firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
     %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
     // CHECK:  firrtl.instance bar sym @barXMR  @XmrSrcMod()
-    firrtl.strictconnect %_a, %xmr   : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %xmr   : !firrtl.ref<uint<1>>
   }
   firrtl.module @Top() {
     %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.ref<uint<1>>)
@@ -577,12 +577,12 @@ firrtl.circuit "Top" {
     // CHECK:  = firrtl.node sym @xmr_sym  %[[internal:.+]]  : !firrtl.uint<1>
     %z = firrtl.verbatim.expr "internal.path" : () -> !firrtl.uint<1> {symbols = [@XmrSrcMod]}
     %1 = firrtl.ref.send %z : !firrtl.uint<1>
-    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
   firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
     %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
     // CHECK:  firrtl.instance bar sym @barXMR  @XmrSrcMod()
-    firrtl.strictconnect %_a, %xmr   : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %xmr   : !firrtl.ref<uint<1>>
   }
   firrtl.module @Top() {
     %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.ref<uint<1>>)
@@ -603,11 +603,11 @@ firrtl.circuit "Top"  {
   firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<0>, out %_a: !firrtl.ref<uint<0>>) {
   // CHECK-LABEL: firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<0>)
     %0 = firrtl.ref.send %pa : !firrtl.uint<0>
-    firrtl.strictconnect %_a, %0 : !firrtl.ref<uint<0>>
+    firrtl.refconnect %_a, %0 : !firrtl.ref<uint<0>>
   }
   firrtl.module @Bar(out %_a: !firrtl.ref<uint<0>>) {
     %bar_pa, %bar__a = firrtl.instance bar sym @barXMR  @XmrSrcMod(in pa: !firrtl.uint<0>, out _a: !firrtl.ref<uint<0>>)
-    firrtl.strictconnect %_a, %bar__a : !firrtl.ref<uint<0>>
+    firrtl.refconnect %_a, %bar__a : !firrtl.ref<uint<0>>
   }
   firrtl.module @Top() {
     %bar__a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.ref<uint<0>>)
