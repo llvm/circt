@@ -66,7 +66,4 @@ inline void printAPInt(const mlir::APInt &value) {
 }
 } // namespace lec
 
-// Grant access to command-line option values to users of this header.
-extern bool statisticsOpt;
-
 #endif // TOOLS_CIRCT_LEC_UTILITY_H

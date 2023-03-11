@@ -57,7 +57,7 @@ static cl::opt<bool>
             cl::cat(mainCategory));
 
 // The following options are stored externally for their value to be accessible
-// to other components of the tool; see `Utility.h` for more definitions.
+// to other components of the tool.
 bool statisticsOpt;
 static cl::opt<bool, true> statistics(
     "s", cl::location(statisticsOpt), cl::init(false),
@@ -93,7 +93,7 @@ static mlir::LogicalResult executeLEC(mlir::MLIRContext &context) {
     lec::outs() << "Second input file not specified\n";
 
   // Initiliaze the constraints solver and the circuits to be compared.
-  Solver s(&context);
+  Solver s(&context, statisticsOpt);
   Solver::Circuit *c1 = s.addCircuit(moduleName1, true);
   Solver::Circuit *c2 = s.addCircuit(moduleName2, false);
 

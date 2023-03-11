@@ -20,8 +20,10 @@
 
 #define DEBUG_TYPE "solver"
 
-Solver::Solver(mlir::MLIRContext *mlirCtx)
-    : circuits{}, mlirCtx(mlirCtx), context(), solver(context) {}
+Solver::Solver(mlir::MLIRContext *mlirCtx, bool statisticsOpt)
+    : circuits{}, mlirCtx(mlirCtx), context(), solver(context) {
+  this->statisticsOpt = statisticsOpt;
+}
 
 Solver::~Solver() {
   delete circuits[0];

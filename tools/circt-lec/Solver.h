@@ -28,7 +28,7 @@
 /// acting as a counterexample.
 class Solver {
 public:
-  Solver(mlir::MLIRContext *mlirCtx);
+  Solver(mlir::MLIRContext *mlirCtx, bool statisticsOpt);
   ~Solver();
 
   /// Solve the equivalence problem between the two circuits, then present the
@@ -68,6 +68,8 @@ private:
   z3::context context;
   /// The Z3 solver acting as the logical engine backend.
   z3::solver solver;
+  /// The value of the `statistics` command-line option.
+  bool statisticsOpt;
 };
 
 #endif // TOOLS_CIRCT_LEC_SOLVER_H
