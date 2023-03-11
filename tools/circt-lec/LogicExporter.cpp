@@ -364,5 +364,3 @@ mlir::LogicalResult LogicExporter::Visitor::dispatch(mlir::Operation *op,
   // visitor.
   return dispatchStmtVisitor(op, circuit);
 }
-
-#undef DEBUG_TYPE

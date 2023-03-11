@@ -382,5 +382,3 @@ z3::expr Solver::Circuit::boolToBv(const z3::expr &condition) {
   return z3::ite(condition, solver->context.bv_val(1, 1),
                  solver->context.bv_val(0, 1));
 }
-
-#undef DEBUG_TYPE
