@@ -10,6 +10,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 using namespace circt;
@@ -129,6 +130,17 @@ LogicalResult StateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   }
 
   return success();
+}
+
+LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
+  // When there are no names attached, the state is not externaly observable.
+  // When there are also no internal users, we can remove it.
+  if (op->use_empty() && !op->hasAttr("name") && !op->hasAttr("names")) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  return failure();
 }
 
 LogicalResult StateOp::verify() {
