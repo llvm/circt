@@ -21,7 +21,7 @@
 
 /// Add an input to the circuit; internally a new value gets allocated.
 void Solver::Circuit::addInput(mlir::Value value) {
-  LLVM_DEBUG(lec::dbgs << name << " addInput\n");
+  LLVM_DEBUG(lec::dbgs() << name << " addInput\n");
   INDENT();
   z3::expr input = allocateValue(value);
   inputs.insert(inputs.end(), input);
@@ -29,7 +29,7 @@ void Solver::Circuit::addInput(mlir::Value value) {
 
 /// Add an output to the circuit.
 void Solver::Circuit::addOutput(mlir::Value value) {
-  LLVM_DEBUG(lec::dbgs << name << " addOutput\n");
+  LLVM_DEBUG(lec::dbgs() << name << " addOutput\n");
   // Referenced value already assigned, fetching from expression table.
   z3::expr output = fetchExpr(value);
   outputs.insert(outputs.end(), output);
@@ -47,7 +47,7 @@ llvm::ArrayRef<z3::expr> Solver::Circuit::getOutputs() { return outputs; }
 
 void Solver::Circuit::addConstant(mlir::Value opResult,
                                   const mlir::APInt &opValue) {
-  LLVM_DEBUG(lec::dbgs << name << " addConstant\n");
+  LLVM_DEBUG(lec::dbgs() << name << " addConstant\n");
   INDENT();
   allocateConstant(opResult, opValue);
 }
@@ -56,10 +56,10 @@ void Solver::Circuit::addInstance(llvm::StringRef instanceName,
                                   circt::hw::HWModuleOp op,
                                   mlir::OperandRange arguments,
                                   mlir::ResultRange results) {
-  LLVM_DEBUG(lec::dbgs << name << " addInstance\n");
+  LLVM_DEBUG(lec::dbgs() << name << " addInstance\n");
   INDENT();
-  LLVM_DEBUG(lec::dbgs << "instance name: " << instanceName << "\n");
-  LLVM_DEBUG(lec::dbgs << "module name: " << op->getName() << "\n");
+  LLVM_DEBUG(lec::dbgs() << "instance name: " << instanceName << "\n");
+  LLVM_DEBUG(lec::dbgs() << "module name: " << op->getName() << "\n");
   // There is no preventing multiple instances holding the same name.
   // As an hack, a suffix is used to differentiate them.
   std::string suffix = "_" + std::to_string(assignments);
@@ -72,17 +72,17 @@ void Solver::Circuit::addInstance(llvm::StringRef instanceName,
   // Constrain the inputs and outputs of the instanced circuit to, respectively,
   // the arguments and results of the instance operation.
   {
-    LLVM_DEBUG(lec::dbgs << "instance inputs:\n");
+    LLVM_DEBUG(lec::dbgs() << "instance inputs:\n");
     INDENT();
     auto *input = instance.inputs.begin();
     for (mlir::Value argument : arguments) {
-      LLVM_DEBUG(lec::dbgs << "input\n");
+      LLVM_DEBUG(lec::dbgs() << "input\n");
       z3::expr argExpr = fetchExpr(argument);
       solver->solver.add(argExpr == *input++);
     }
   }
   {
-    LLVM_DEBUG(lec::dbgs << "instance results:\n");
+    LLVM_DEBUG(lec::dbgs() << "instance results:\n");
     INDENT();
     auto *output = instance.outputs.begin();
     for (circt::OpResult result : results) {
@@ -101,7 +101,7 @@ void Solver::Circuit::addInstance(llvm::StringRef instanceName,
 #define performVariadicCombOp(OP_NAME, Z3_OPERATION)                           \
   void Solver::Circuit::perform##OP_NAME(mlir::Value result,                   \
                                          mlir::OperandRange operands) {        \
-    LLVM_DEBUG(lec::dbgs << name << " perform" #OP_NAME "\n");                 \
+    LLVM_DEBUG(lec::dbgs() << name << " perform" #OP_NAME "\n");               \
     INDENT();                                                                  \
     variadicOperation(result, operands,                                        \
                       [](auto op1, auto op2) { return Z3_OPERATION; });        \
@@ -112,11 +112,11 @@ void Solver::Circuit::addInstance(llvm::StringRef instanceName,
 #define performBinaryCombOp(OP_NAME, Z3_OPERATION)                             \
   void Solver::Circuit::perform##OP_NAME(mlir::Value result, mlir::Value lhs,  \
                                          mlir::Value rhs) {                    \
-    LLVM_DEBUG(lec::dbgs << name << " perform" #OP_NAME "\n");                 \
+    LLVM_DEBUG(lec::dbgs() << name << " perform" #OP_NAME "\n");               \
     INDENT();                                                                  \
-    LLVM_DEBUG(lec::dbgs << "lhs:\n");                                         \
+    LLVM_DEBUG(lec::dbgs() << "lhs:\n");                                       \
     z3::expr lhsExpr = fetchExpr(lhs);                                         \
-    LLVM_DEBUG(lec::dbgs << "rhs:\n");                                         \
+    LLVM_DEBUG(lec::dbgs() << "rhs:\n");                                       \
     z3::expr rhsExpr = fetchExpr(rhs);                                         \
     z3::expr op = z3::Z3_OPERATION(lhsExpr, rhsExpr);                          \
     constrainResult(result, op);                                               \
@@ -134,12 +134,12 @@ performBinaryCombOp(DivU, udiv);
 
 void Solver::Circuit::performExtract(mlir::Value result, mlir::Value input,
                                      uint32_t lowBit) {
-  LLVM_DEBUG(lec::dbgs << name << " performExtract\n");
+  LLVM_DEBUG(lec::dbgs() << name << " performExtract\n");
   INDENT();
-  LLVM_DEBUG(lec::dbgs << "input:\n");
+  LLVM_DEBUG(lec::dbgs() << "input:\n");
   z3::expr inputExpr = fetchExpr(input);
   unsigned width = result.getType().getIntOrFloatBitWidth();
-  LLVM_DEBUG(lec::dbgs << "width: " << width << "\n");
+  LLVM_DEBUG(lec::dbgs() << "width: " << width << "\n");
   z3::expr extract = inputExpr.extract(lowBit + width - 1, lowBit);
   constrainResult(result, extract);
 }
@@ -148,11 +148,11 @@ mlir::LogicalResult
 Solver::Circuit::performICmp(mlir::Value result,
                              circt::comb::ICmpPredicate predicate,
                              mlir::Value lhs, mlir::Value rhs) {
-  LLVM_DEBUG(lec::dbgs << name << " performICmp\n");
+  LLVM_DEBUG(lec::dbgs() << name << " performICmp\n");
   INDENT();
-  LLVM_DEBUG(lec::dbgs << "lhs:\n");
+  LLVM_DEBUG(lec::dbgs() << "lhs:\n");
   z3::expr lhsExpr = fetchExpr(lhs);
-  LLVM_DEBUG(lec::dbgs << "rhs:\n");
+  LLVM_DEBUG(lec::dbgs() << "rhs:\n");
   z3::expr rhsExpr = fetchExpr(rhs);
   z3::expr icmp(solver->context);
 
@@ -208,13 +208,13 @@ performVariadicCombOp(Mul, op1 *op2);
 void Solver::Circuit::performMux(mlir::Value result, mlir::Value cond,
                                  mlir::Value trueValue,
                                  mlir::Value falseValue) {
-  LLVM_DEBUG(lec::dbgs << name << " performMux\n");
+  LLVM_DEBUG(lec::dbgs() << name << " performMux\n");
   INDENT();
-  LLVM_DEBUG(lec::dbgs << "cond:\n");
+  LLVM_DEBUG(lec::dbgs() << "cond:\n");
   z3::expr condExpr = fetchExpr(cond);
-  LLVM_DEBUG(lec::dbgs << "trueValue:\n");
+  LLVM_DEBUG(lec::dbgs() << "trueValue:\n");
   z3::expr tvalue = fetchExpr(trueValue);
-  LLVM_DEBUG(lec::dbgs << "falseValue:\n");
+  LLVM_DEBUG(lec::dbgs() << "falseValue:\n");
   z3::expr fvalue = fetchExpr(falseValue);
   // Conversion due to z3::ite requiring a bool rather than a bitvector.
   z3::expr mux = z3::ite(bvToBool(condExpr), tvalue, fvalue);
@@ -224,9 +224,9 @@ void Solver::Circuit::performMux(mlir::Value result, mlir::Value cond,
 performVariadicCombOp(Or, op1 | op2);
 
 void Solver::Circuit::performParity(mlir::Value result, mlir::Value input) {
-  LLVM_DEBUG(lec::dbgs << name << " performParity\n");
+  LLVM_DEBUG(lec::dbgs() << name << " performParity\n");
   INDENT();
-  LLVM_DEBUG(lec::dbgs << "input:\n");
+  LLVM_DEBUG(lec::dbgs() << "input:\n");
   z3::expr inputExpr = fetchExpr(input);
 
   unsigned width = inputExpr.get_sort().bv_size();
@@ -242,15 +242,15 @@ void Solver::Circuit::performParity(mlir::Value result, mlir::Value input) {
 }
 
 void Solver::Circuit::performReplicate(mlir::Value result, mlir::Value input) {
-  LLVM_DEBUG(lec::dbgs << name << " performReplicate\n");
+  LLVM_DEBUG(lec::dbgs() << name << " performReplicate\n");
   INDENT();
-  LLVM_DEBUG(lec::dbgs << "input:\n");
+  LLVM_DEBUG(lec::dbgs() << "input:\n");
   z3::expr inputExpr = fetchExpr(input);
 
   unsigned int final = result.getType().getIntOrFloatBitWidth();
   unsigned int initial = input.getType().getIntOrFloatBitWidth();
   unsigned int times = final / initial;
-  LLVM_DEBUG(lec::dbgs << "replies: " << times << "\n");
+  LLVM_DEBUG(lec::dbgs() << "replies: " << times << "\n");
 
   z3::expr replicate = inputExpr;
   for (unsigned int i = 1; i < times; i++) {
@@ -278,14 +278,14 @@ void Solver::Circuit::variadicOperation(
     mlir::Value result, mlir::OperandRange operands,
     llvm::function_ref<z3::expr(const z3::expr &, const z3::expr &)>
         operation) {
-  LLVM_DEBUG(lec::dbgs << "variadic operation\n");
+  LLVM_DEBUG(lec::dbgs() << "variadic operation\n");
   INDENT();
   // Vacuous base case.
   auto it = operands.begin();
   mlir::Value operand = *it;
   z3::expr varOp = exprTable.find(operand)->second;
   {
-    LLVM_DEBUG(lec::dbgs << "first operand:\n");
+    LLVM_DEBUG(lec::dbgs() << "first operand:\n");
     INDENT();
     LLVM_DEBUG(lec::printValue(operand));
   }
@@ -295,7 +295,7 @@ void Solver::Circuit::variadicOperation(
     operand = *it;
     varOp = operation(varOp, exprTable.find(operand)->second);
     {
-      LLVM_DEBUG(lec::dbgs << "next operand:\n");
+      LLVM_DEBUG(lec::dbgs() << "next operand:\n");
       INDENT();
       LLVM_DEBUG(lec::printValue(operand));
     }
@@ -308,7 +308,7 @@ void Solver::Circuit::variadicOperation(
 /// expression.
 z3::expr Solver::Circuit::allocateValue(mlir::Value value) {
   std::string valueName = name + "%" + std::to_string(assignments++);
-  LLVM_DEBUG(lec::dbgs << "allocating value:\n");
+  LLVM_DEBUG(lec::dbgs() << "allocating value:\n");
   INDENT();
   mlir::Type type = value.getType();
   assert(type.isSignlessInteger() && "Unsupported type");
@@ -354,19 +354,19 @@ z3::expr Solver::Circuit::fetchExpr(mlir::Value &value) {
 /// Constrains the result of a MLIR operation to be equal a given logical
 /// express, simulating an assignment.
 void Solver::Circuit::constrainResult(mlir::Value &result, z3::expr &expr) {
-  LLVM_DEBUG(lec::dbgs << "constraining result:\n");
+  LLVM_DEBUG(lec::dbgs() << "constraining result:\n");
   INDENT();
   {
-    LLVM_DEBUG(lec::dbgs << "result expression:\n");
+    LLVM_DEBUG(lec::dbgs() << "result expression:\n");
     INDENT();
     LLVM_DEBUG(lec::printExpr(expr));
   }
   z3::expr resExpr = allocateValue(result);
   z3::expr constraint = resExpr == expr;
   {
-    LLVM_DEBUG(lec::dbgs << "adding constraint:\n");
+    LLVM_DEBUG(lec::dbgs() << "adding constraint:\n");
     INDENT();
-    LLVM_DEBUG(lec::dbgs << constraint.to_string() << "\n");
+    LLVM_DEBUG(lec::dbgs() << constraint.to_string() << "\n");
   }
   solver->solver.add(constraint);
 }

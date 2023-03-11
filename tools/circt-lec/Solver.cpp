@@ -42,16 +42,16 @@ mlir::LogicalResult Solver::solve() {
   mlir::LogicalResult outcome = mlir::success();
   switch (solver.check()) {
   case z3::unsat:
-    lec::outs << "c1 == c2\n";
+    lec::outs() << "c1 == c2\n";
     break;
   case z3::sat:
-    lec::outs << "c1 != c2\n";
+    lec::outs() << "c1 != c2\n";
     printModel();
     outcome = mlir::failure();
     break;
   case z3::unknown:
     outcome = mlir::failure();
-    lec::errs << "circt-lec error: solver ran out of time\n";
+    lec::errs() << "circt-lec error: solver ran out of time\n";
   }
 
   // Print further relevant information as requested.
@@ -76,7 +76,7 @@ Solver::Circuit *Solver::addCircuit(llvm::StringRef name, bool firstCircuit) {
 
 /// Prints a model satisfying the solved constraints.
 void Solver::printModel() {
-  lec::dbgs << "Model:\n";
+  lec::dbgs() << "Model:\n";
   INDENT();
   z3::model model = solver.get_model();
   for (unsigned int i = 0; i < model.size(); i++) {
@@ -98,16 +98,16 @@ void Solver::printModel() {
       mlir::Operation *parentOp = value.getParentRegion()->getParentOp();
       if (auto op = llvm::dyn_cast<circt::hw::HWModuleOp>(parentOp)) {
         // Argument of a `hw.module`.
-        lec::dbgs << "argument name: " << op.getArgNames()[arg.getArgNumber()]
-                  << "\n";
+        lec::dbgs() << "argument name: " << op.getArgNames()[arg.getArgNumber()]
+                    << "\n";
       } else {
         // Argument of a different operation.
-        lec::dbgs << arg << "\n";
+        lec::dbgs() << arg << "\n";
       }
     }
     // Accompanying model information.
-    lec::dbgs << "internal symbol: " << symbol << "\n";
-    lec::dbgs << "model interpretation: " << e.to_string() << "\n\n";
+    lec::dbgs() << "internal symbol: " << symbol << "\n";
+    lec::dbgs() << "model interpretation: " << e.to_string() << "\n\n";
   }
 }
 
@@ -115,21 +115,21 @@ void Solver::printModel() {
 /// Compared to solver.assertions().to_string() this method exposes each
 /// assertion as a z3::expression for eventual in-depth debugging.
 void Solver::printAssertions() {
-  lec::dbgs << "Assertions:\n";
+  lec::dbgs() << "Assertions:\n";
   INDENT();
   for (z3::expr assertion : solver.assertions()) {
-    lec::dbgs << assertion.to_string() << "\n";
+    lec::dbgs() << assertion.to_string() << "\n";
   }
 }
 
 /// Prints the internal statistics of the SMT solver for benchmarking purposes
 /// and operational insight.
 void Solver::printStatistics() {
-  lec::dbgs << "SMT solver statistics:\n";
+  lec::dbgs() << "SMT solver statistics:\n";
   INDENT();
   z3::stats stats = solver.statistics();
   for (unsigned i = 0; i < stats.size(); i++) {
-    lec::dbgs << stats.key(i) << " : " << stats.uint_value(i) << "\n";
+    lec::dbgs() << stats.key(i) << " : " << stats.uint_value(i) << "\n";
   }
 }
 
@@ -148,7 +148,7 @@ mlir::LogicalResult Solver::constrainCircuits() {
 
   // Can't compare two circuits with different number of inputs.
   if (nc1Inputs != nc2Inputs) {
-    lec::errs << "circt-lec error: different input arity\n";
+    lec::errs() << "circt-lec error: different input arity\n";
     return mlir::failure();
   }
 
@@ -157,7 +157,7 @@ mlir::LogicalResult Solver::constrainCircuits() {
   for (unsigned i = 0; i < nc1Inputs; i++) {
     // Can't compare two circuits when their ith inputs differ in type.
     if (c1inIt->get_sort().bv_size() != c2inIt->get_sort().bv_size()) {
-      lec::errs << "circt-lec error: input #" << i + 1 << " type mismatch\n";
+      lec::errs() << "circt-lec error: input #" << i + 1 << " type mismatch\n";
       return mlir::failure();
     }
     // Their ith inputs have to be equivalent.
@@ -171,7 +171,7 @@ mlir::LogicalResult Solver::constrainCircuits() {
 
   // Can't compare two circuits with different number of outputs.
   if (nc1Outputs != nc2Outputs) {
-    lec::errs << "circt-lec error: different output arity\n";
+    lec::errs() << "circt-lec error: different output arity\n";
     return mlir::failure();
   }
 
@@ -180,7 +180,7 @@ mlir::LogicalResult Solver::constrainCircuits() {
   for (unsigned i = 0; i < nc1Outputs; i++) {
     // Can't compare two circuits when their ith outputs differ in type.
     if (c1outIt->get_sort().bv_size() != c2outIt->get_sort().bv_size()) {
-      lec::errs << "circt-lec error: output #" << i + 1 << " type mismatch\n";
+      lec::errs() << "circt-lec error: output #" << i + 1 << " type mismatch\n";
       return mlir::failure();
     }
     // Their ith outputs have to be equivalent.
