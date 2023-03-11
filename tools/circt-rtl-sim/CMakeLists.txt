@@ -6,16 +6,18 @@
 #
 # ===-----------------------------------------------------------------------===//
 
+# The Python script requires that it be configured.
 configure_file("circt-rtl-sim.py.in" "${CIRCT_TOOLS_DIR}/circt-rtl-sim.py")
 add_custom_target(circt-rtl-sim
   SOURCES "${CIRCT_TOOLS_DIR}/circt-rtl-sim.py"
   DEPENDS circt-std-sim-drivers)
 
+# Separate out the drviers (which don't need to be configured) since they are
+# useful beyond just circt-rtl-sim.
 set(SOURCES
   driver.cpp
   driver.sv
 )
-
 foreach(SOURCE ${SOURCES})
   get_filename_component(DST ${SOURCE} NAME)
   get_filename_component(SRC ${SOURCE} REALPATH)

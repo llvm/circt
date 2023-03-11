@@ -80,7 +80,9 @@ foreach(CP_FILE ${CP_FILES})
     COMMAND ${CMAKE_COMMAND} -E
     copy ${SRC} ${CIRCT_BINARY_DIR}/include/circt/Dialect/ESI/${DST})
 endforeach()
-  
+
+# Create a package of ESI collateral for any compiler to include with its
+# distribution.
 add_library(esi-collateral INTERFACE)
 set_target_properties(esi-collateral PROPERTIES PUBLIC_HEADER "${ABS_CFILES}")
 
