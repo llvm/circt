@@ -207,15 +207,26 @@ def CosimBSP(user_module):
     @staticmethod
     def package(sys: System):
       """Run the packaging to create a cosim package."""
-      # TODO: this only works in-tree. Make it work in packages as well.
-      build_dir = __dir__.parents[4]
-      bin_dir = build_dir / "bin"
-      lib_dir = build_dir / "lib"
-      circt_inc_dir = build_dir / "tools" / "circt" / "include" / "circt"
-      assert circt_inc_dir.exists(), "Only works in the CIRCT build directory"
-      esi_inc_dir = circt_inc_dir / "Dialect" / "ESI"
+
+      # When pycde is installed through a proper install, all of the collateral
+      # files are under a dir called "collateral".
+      collateral_dir = __dir__ / "collateral"
+      if collateral_dir.exists():
+        bin_dir = collateral_dir
+        lib_dir = collateral_dir
+        esi_inc_dir = collateral_dir
+      else:
+        # Build we also want to allow pycde to work in-tree for developers. The
+        # necessary files are screwn around the build tree.
+        build_dir = __dir__.parents[4]
+        bin_dir = build_dir / "bin"
+        lib_dir = build_dir / "lib"
+        circt_inc_dir = build_dir / "tools" / "circt" / "include" / "circt"
+        esi_inc_dir = circt_inc_dir / "Dialect" / "ESI"
+
       hw_src = sys.hw_output_dir
       shutil.copy(lib_dir / "libEsiCosimDpiServer.so", hw_src)
+      shutil.copy(lib_dir / "libMtiPli.so", hw_src)
       shutil.copy(bin_dir / "driver.cpp", hw_src)
       shutil.copy(bin_dir / "driver.sv", hw_src)
       shutil.copy(esi_inc_dir / "ESIPrimitives.sv", hw_src)
