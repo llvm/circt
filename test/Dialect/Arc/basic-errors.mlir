@@ -39,3 +39,17 @@ hw.module @Foo(%enable: i1) {
 arc.define @Bar() {
   arc.output
 }
+
+// -----
+
+// expected-error @+1 {{body contains non-pure operation}}
+arc.define @SupportRecurisveMemoryEffects(%arg0: i1, %arg1: i1) {
+  // expected-note @+1 {{first non-pure operation here:}}
+  scf.if %arg0 {
+    arc.state @Bar() clock %arg1 lat 1 : () -> ()
+  }
+  arc.output
+}
+arc.define @Bar() {
+  arc.output
+}

@@ -39,29 +39,25 @@ void DefineOp::print(OpAsmPrinter &p) {
 }
 
 LogicalResult DefineOp::verifyRegions() {
-  Operation *firstNonPureOp;
-  auto result = getBody().walk([&](Operation *op) {
-    if (!isPure(op)) {
-      firstNonPureOp = op;
-      return WalkResult::interrupt();
-    }
+  // Check that the body does not contain any side-effecting operations. We can
+  // simply iterate over the ops directly within the body; operations with
+  // regions, like scf::IfOp, implement the `HasRecursiveMemoryEffects` trait
+  // which causes the `isMemoryEffectFree` check to already recur into their
+  // regions.
+  for (auto &op : getBodyBlock()) {
+    if (isMemoryEffectFree(&op))
+      continue;
 
-    return WalkResult::advance();
-  });
-
-  if (result.wasInterrupted()) {
     // We don't use a op-error here because that leads to the whole arc being
-    // printed. This can be switched of when creating the context, but one might
-    // not want to switch that off for other error messages. Here it's
+    // printed. This can be switched of when creating the context, but one
+    // might not want to switch that off for other error messages. Here it's
     // definitely not desirable as arcs can be very big and would fill up the
     // error log, making it hard to read. Currently, only the signature (first
     // line) of the arc is printed.
     auto diag = mlir::emitError(getLoc(), "body contains non-pure operation");
-    diag.attachNote(firstNonPureOp->getLoc())
-        .append("first non-pure operation here: ");
+    diag.attachNote(op.getLoc()).append("first non-pure operation here: ");
     return diag;
   }
-
   return success();
 }
 
