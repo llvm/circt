@@ -1,5 +1,6 @@
 add_circt_dialect_library(CIRCTArcTransforms
   Dedup.cpp
+  InlineModules.cpp
 
   DEPENDS
   CIRCTArcTransformsIncGen

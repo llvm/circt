@@ -20,6 +20,7 @@ namespace circt {
 namespace arc {
 
 std::unique_ptr<mlir::Pass> createDedupPass();
+std::unique_ptr<mlir::Pass> createInlineModulesPass();
 
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/Arc/Passes.h.inc"
