@@ -89,6 +89,12 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     return;
   }
 
+  if ((dstType.hasUninferredReset() || srcType.hasUninferredReset()) &&
+      dstType != srcType) {
+    src = builder.create<UninferredResetCastOp>(dstType, src);
+    srcType = dstType;
+  }
+
   // Handle ground types with possibly uninferred widths.
   auto dstWidth = dstType.getBitWidthOrSentinel();
   auto srcWidth = srcType.getBitWidthOrSentinel();

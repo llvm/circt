@@ -1074,7 +1074,7 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
   // reset types in aggregates, and then need all the subindex, subfield, and
   // subaccess operations to be updated as appropriate.
   while (!worklist.empty()) {
-    auto wop = worklist.pop_back_val();
+    auto *wop = worklist.pop_back_val();
     SmallVector<Type, 2> types;
     if (auto op = dyn_cast<InferTypeOpInterface>(wop)) {
       // Determine the new result types.

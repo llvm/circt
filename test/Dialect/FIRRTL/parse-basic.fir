@@ -925,7 +925,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output out: Reset
     out <= UInt(1)
     ; CHECK: %[[c1:.*]] = firrtl.constant 1 : !firrtl.uint
-    ; CHECK-NEXT: firrtl.connect %out, %[[c1]] : !firrtl.reset, !firrtl.uint
+    ; CHECK-NEXT: %[[c2:.*]] = firrtl.resetCast %[[c1]]
+    ; CHECK-NEXT: firrtl.strictconnect %out, %[[c2]] : !firrtl.reset
 
 
   ; CHECK-LABEL: @resetBundle
@@ -935,10 +936,12 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     b <= a
     ; CHECK: %1 = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<1>, b: asyncreset>
-    ; CHECK: firrtl.connect %0, %1 : !firrtl.reset, !firrtl.uint<1>
-    ; CHECK: %2 = firrtl.subfield %b[b] : !firrtl.bundle<a: reset, b: reset>
-    ; CHECK: %3 = firrtl.subfield %a[b] : !firrtl.bundle<a: uint<1>, b: asyncreset>
-    ; CHECK: firrtl.connect %2, %3 : !firrtl.reset, !firrtl.asyncreset
+    ; CHECK: %[[r1:.*]] = firrtl.resetCast %1
+    ; CHECK: firrtl.strictconnect %0, %[[r1]] : !firrtl.reset
+    ; CHECK: %3 = firrtl.subfield %b[b] : !firrtl.bundle<a: reset, b: reset>
+    ; CHECK: %4 = firrtl.subfield %a[b] : !firrtl.bundle<a: uint<1>, b: asyncreset>
+    ; CHECK: %[[r4:.*]] = firrtl.resetCast %4
+    ; CHECK: firrtl.strictconnect %3, %[[r4]] : !firrtl.reset
 
   ; CHECK-LABEL: @WhenEncodedVerification
   module WhenEncodedVerification:
