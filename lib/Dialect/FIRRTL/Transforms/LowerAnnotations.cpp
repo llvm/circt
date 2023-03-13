@@ -684,10 +684,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     }
 
     // Otherwise, just connect to the source.
-    if (isa<RefType>(dest.getType()))
-      builder.create<RefDefineOp>(dest, src);
-    else
-      builder.create<ConnectOp>(dest, src);
+    emitConnect(builder, dest, src);
 
     return success();
   };
