@@ -51,8 +51,8 @@ jobs:
           retention-days: 7
 
       - name: Upload wheels (Tag)
-        uses: AButler/upload-release-assets@v2.0
+        uses: pypa/gh-action-pypi-publish@release/v1
         if: github.ref_type == 'tag'
         with:
-          files: ./wheelhouse/*.whl
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.PYPI_CIRCT_API_TOKEN }}
+          packages-dir: wheelhouse/
