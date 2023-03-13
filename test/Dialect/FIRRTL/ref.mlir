@@ -133,3 +133,23 @@ firrtl.circuit "RefTypeVector" {
     %rb = firrtl.ref.resolve %12 : !firrtl.ref<uint<2>>
   }
 }
+
+// -----
+
+// https://github.com/llvm/circt/issues/3715
+firrtl.circuit "Issue3715" {
+  firrtl.module private @Test(in %p: !firrtl.uint<1>, out %x: !firrtl.ref<uint<2>>) {
+    firrtl.when %p : !firrtl.uint<1> {
+      %zero = firrtl.constant 1 : !firrtl.uint<2>
+      %w = firrtl.wire : !firrtl.uint<2>
+      %1 = firrtl.ref.send %w : !firrtl.uint<2>
+      firrtl.ref.define %x, %1 : !firrtl.ref<uint<2>>
+      firrtl.strictconnect %w, %zero : !firrtl.uint<2>
+    }
+  }
+  firrtl.module @Issue3715(in %p: !firrtl.uint<1>) {
+    %test_in, %test_x = firrtl.instance test @Test(in p: !firrtl.uint<1>, out x: !firrtl.ref<uint<2>>)
+    firrtl.strictconnect %test_in, %p : !firrtl.uint<1>
+    %x = firrtl.ref.resolve %test_x : !firrtl.ref<uint<2>>
+  }
+}
