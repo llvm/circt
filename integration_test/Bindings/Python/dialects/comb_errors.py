@@ -19,11 +19,11 @@ with Context() as ctx, Location.unknown():
       const1 = hw.ConstantOp(IntegerAttr.get(i32, 1))
       const2 = hw.ConstantOp(IntegerAttr.get(i31, 1))
 
-      # CHECK: op requires all operands to have the same type
+      # CHECK-DAG: op requires all operands to have the same type
       div = comb.DivSOp.create(const1.result, const2.result)
       div.opview.verify()
 
-      # CHECK: result type cannot be None
+      # CHECK-DAG: result type cannot be None
       try:
         comb.DivSOp.create()
       except ValueError as e:
