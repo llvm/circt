@@ -808,7 +808,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       // Use RefType ports if possible
       RefType refType = TypeSwitch<Type, RefType>(source.getType())
                             .Case<FIRRTLBaseType>([](FIRRTLBaseType base) {
-                              return RefType::get(base);
+                              return RefType::get(base.getPassiveType());
                             })
                             .Case<RefType>([](RefType ref) { return ref; });
       sourceType = refType;
@@ -841,6 +841,14 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
         return failure();
       }
     }
+    // If wiring using references, check that the sink value we connect to is
+    // passive.
+    if (auto sinkFType = dyn_cast<FIRRTLType>(sink.getType());
+        sinkFType && isa<RefType>(sourceType) &&
+        !getBaseType(sinkFType).isPassive())
+      return emitError(sink.getLoc())
+             << "Wiring Problem sink type \"" << sink.getType()
+             << "\" must be passive (no flips) when using references";
 
     // Record module modifications related to adding ports to modules.
     auto addPorts = [&](ArrayRef<hw::HWInstanceLike> insts, Value val, Type tpe,
