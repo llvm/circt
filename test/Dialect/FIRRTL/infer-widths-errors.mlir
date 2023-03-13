@@ -126,11 +126,11 @@ firrtl.circuit "Foo"  {
 // Unsatisfiable widths through AttachOp on analog types should error.
 // https://github.com/llvm/circt/issues/4786
 firrtl.circuit "AnalogWidths" {
-  // expected-error @+1 {{uninferred width: port "a" cannot satisfy all width requirements}}
+  // expected-error @below {{uninferred width: port "a" cannot satisfy all width requirements}}
+  // expected-note @below {{width is constrained to be at least 2 here:}}
+  // expected-note @below {{width is constrained to be at most 1 here:}}
   firrtl.module @AnalogWidths(in %a: !firrtl.analog, out %b: !firrtl.analog<2>, out %c: !firrtl.analog<1>) {
     firrtl.attach %a, %b : !firrtl.analog, !firrtl.analog<2>
-    // expected-note @+2 {{width is constrained to be at least 2 here:}}
-    // expected-note @+1 {{width is constrained to be at most 1 here:}}
     firrtl.attach %a, %c : !firrtl.analog, !firrtl.analog<1>
   }
 }
