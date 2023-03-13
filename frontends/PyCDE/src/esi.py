@@ -225,8 +225,10 @@ def CosimBSP(user_module):
         esi_inc_dir = circt_inc_dir / "Dialect" / "ESI"
 
       hw_src = sys.hw_output_dir
-      shutil.copy(lib_dir / "libEsiCosimDpiServer.so", hw_src)
-      shutil.copy(lib_dir / "libMtiPli.so", hw_src)
+      for f in lib_dir.glob("*.so"):
+        shutil.copy(f, hw_src)
+      for f in lib_dir.glob("*.dll"):
+        shutil.copy(f, hw_src)
       shutil.copy(bin_dir / "driver.cpp", hw_src)
       shutil.copy(bin_dir / "driver.sv", hw_src)
       shutil.copy(esi_inc_dir / "ESIPrimitives.sv", hw_src)
