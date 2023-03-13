@@ -124,11 +124,6 @@ def RefType : FIRRTLDialectType<
   CPred<"$_self.isa<RefType>()">,
    "reference type", "::circt::firrtl::RefType">;
 
-def SizedRefType : FIRRTLDialectType<
-  CPred<"$_self.isa<RefType>() &&  "
-        "!$_self.cast<RefType>().getType().hasUninferredWidth()">,
-   "sized reference type", "::circt::firrtl::RefType">;
-
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates
 //===----------------------------------------------------------------------===//

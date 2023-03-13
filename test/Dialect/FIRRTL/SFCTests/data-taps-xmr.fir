@@ -72,7 +72,7 @@ circuit Top : %[[
 
   module Bar :
 
-    wire inv : UInt<2>
+    wire inv : UInt<1>
     inv is invalid
 
   module Foo :
@@ -83,13 +83,13 @@ circuit Top : %[[
 
     inst foo of Foo
 
-    wire tap : UInt<2>
+    wire tap : UInt<1>
     tap is invalid
 
-    wire tap2 : UInt<4>
+    wire tap2 : UInt<1>
     tap2 is invalid
 
-    wire tap3 : UInt<5>
+    wire tap3 : UInt<1>
     tap3 is invalid
 
     inst unsigned of ChildWrapper

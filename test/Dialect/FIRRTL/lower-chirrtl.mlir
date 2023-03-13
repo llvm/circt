@@ -311,9 +311,9 @@ firrtl.module @DbgsMemPort(in %clock: !firrtl.clock, in %addr : !firrtl.uint<1>,
   firrtl.when %cond : !firrtl.uint<1> {
     chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<1>, !firrtl.clock
   }
-  firrtl.refconnect %_a, %port0_data : !firrtl.ref<vector<uint<1>, 2>>
+  firrtl.strictconnect %_a, %port0_data : !firrtl.ref<vector<uint<1>, 2>>
   // CHECK:    %[[ram_port0:.+]], %ram_ramport = firrtl.mem Undefined {depth = 2 : i64, name = "ram", portNames = ["port0", "ramport"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.ref<vector<uint<1>, 2>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-  // CHECK:    firrtl.refconnect %_a, %[[ram_port0]] : !firrtl.ref<vector<uint<1>, 2>>
+  // CHECK:    firrtl.strictconnect %_a, %[[ram_port0]] : !firrtl.ref<vector<uint<1>, 2>>
 }
 
 }

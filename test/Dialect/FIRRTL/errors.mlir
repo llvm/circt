@@ -840,7 +840,7 @@ firrtl.circuit "Top"   {
 firrtl.circuit "Top" {
   firrtl.module @Top (in %in : !firrtl.uint) {
     %a = firrtl.wire : !firrtl.uint
-    // expected-error @+1 {{op operand #0 must be a sized type}}
+    // expected-error @+1 {{op operand #0 must be a sized base or ref type}}
     firrtl.strictconnect %a, %in : !firrtl.uint
   }
 }
@@ -1042,14 +1042,26 @@ firrtl.circuit "BitcastRef" {
 }
 
 // -----
-// Cannot refconnect unsized types, even when ref's.
+// Cannot strictconnect unsized types, even when ref's.
 
 firrtl.circuit "Top" {
   firrtl.module @Foo (in %in: !firrtl.ref<uint>) {}
   firrtl.module @Top (in %in : !firrtl.ref<uint>) {
     %foo_in = firrtl.instance foo @Foo(in in: !firrtl.ref<uint>)
-    // expected-error @+1 {{op operand #0 must be sized reference type}}
-    firrtl.refconnect %foo_in, %in : !firrtl.ref<uint>
+    // expected-error @+1 {{op operand #0 must be a sized base or ref type}}
+    firrtl.strictconnect %foo_in, %in : !firrtl.ref<uint>
+  }
+}
+
+// -----
+// Cannot connect different ref types
+
+firrtl.circuit "Top" {
+  firrtl.module @Foo (in %in: !firrtl.ref<uint<2>>) {}
+  firrtl.module @Top (in %in: !firrtl.ref<uint<1>>) {
+    %foo_in = firrtl.instance foo @Foo(in in: !firrtl.ref<uint<2>>)
+    // expected-error @+1 {{may not connect different non-base types}}
+    firrtl.connect %foo_in, %in : !firrtl.ref<uint<2>>, !firrtl.ref<uint<1>>
   }
 }
 
@@ -1062,7 +1074,7 @@ firrtl.circuit "Foo" {
     %a = firrtl.wire : !firrtl.uint<1>
     %1 = firrtl.ref.send %a : !firrtl.uint<1>
     // expected-error @+1 {{connect has invalid flow: the destination expression "_a" has source flow, expected sink or duplex flow}}
-    firrtl.refconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
 }
 
@@ -1074,8 +1086,8 @@ firrtl.circuit "Bar" {
     %x = firrtl.instance x @Bar2(out _a: !firrtl.ref<uint<1>>)
     %y = firrtl.instance y @Bar2(out _a: !firrtl.ref<uint<1>>)
     // expected-error @+1 {{output reference port cannot be reused by multiple operations, it can only capture a unique dataflow}}
-    firrtl.refconnect %_a, %x : !firrtl.ref<uint<1>>
-    firrtl.refconnect %_a, %y : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %_a, %x : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %_a, %y : !firrtl.ref<uint<1>>
   }
 }
 
@@ -1087,9 +1099,9 @@ firrtl.circuit "Bar" {
     %x = firrtl.instance x @Bar2(out _a: !firrtl.ref<uint<1>>)
     %y = firrtl.wire : !firrtl.uint<1>
     // expected-error @+1 {{output reference port cannot be reused by multiple operations, it can only capture a unique dataflow}}
-    firrtl.refconnect %_a, %x : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %_a, %x : !firrtl.ref<uint<1>>
     %1 = firrtl.ref.send %y : !firrtl.uint<1>
-    firrtl.refconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
 }
 
@@ -1103,8 +1115,8 @@ firrtl.circuit "Bar" {
     %1 = firrtl.ref.send %x : !firrtl.uint<1>
     %2 = firrtl.ref.send %y : !firrtl.uint<1>
     // expected-error @+1 {{output reference port cannot be reused by multiple operations, it can only capture a unique dataflow}}
-    firrtl.refconnect %_a, %1 : !firrtl.ref<uint<1>>
-    firrtl.refconnect %_a, %2 : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %_a, %2 : !firrtl.ref<uint<1>>
   }
 }
 

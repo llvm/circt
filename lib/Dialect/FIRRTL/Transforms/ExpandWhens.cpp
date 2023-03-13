@@ -305,10 +305,6 @@ public:
     setLastConnect(getFieldRefFromValue(op.getDest()), op);
   }
 
-  void visitStmt(RefConnectOp op) {
-    setLastConnect(getFieldRefFromValue(op.getDest()), op);
-  }
-
   void processWhenOp(WhenOp whenOp, Value outerCondition);
 
   /// Combine the connect statements from each side of the block. There are 5
@@ -566,7 +562,6 @@ public:
   void visitStmt(WhenOp whenOp);
   void visitStmt(ConnectOp connectOp);
   void visitStmt(StrictConnectOp connectOp);
-  void visitStmt(RefConnectOp connectOp);
 
   bool run(FModuleOp op);
   LogicalResult checkInitialization();
@@ -604,10 +599,6 @@ void ModuleVisitor::visitStmt(ConnectOp op) {
 }
 
 void ModuleVisitor::visitStmt(StrictConnectOp op) {
-  anythingChanged |= setLastConnect(getFieldRefFromValue(op.getDest()), op);
-}
-
-void ModuleVisitor::visitStmt(RefConnectOp op) {
   anythingChanged |= setLastConnect(getFieldRefFromValue(op.getDest()), op);
 }
 
