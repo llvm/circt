@@ -9,6 +9,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Support/BackedgeBuilder.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/InliningUtils.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/Debug.h"
