@@ -452,7 +452,7 @@ ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
     // truncate off the extra width.  This is important for extmodules which
     // like parameters to be 32-bits, and insulates us from some arbitraryness
     // in StringRef::getAsInteger.
-    if (result.getBitWidth() > 32 && result.getMinSignedBits() <= 32)
+    if (result.getBitWidth() > 32 && result.getSignificantBits() <= 32)
       result = result.trunc(32);
 
     consumeToken();
