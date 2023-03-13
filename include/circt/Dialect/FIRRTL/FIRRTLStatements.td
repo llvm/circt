@@ -59,29 +59,10 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]
     ```
     }];
 
-  let arguments = (ins SizedOrForeignType:$dest,
-                       SizedOrForeignType:$src);
+  let arguments = (ins SizedBaseOrRefTypeOrForeignType:$dest,
+                       SizedBaseOrRefTypeOrForeignType:$src);
   let results = (outs);
   let hasCanonicalizeMethod = true;
-
-  let hasVerifier = 1;
-
-  let assemblyFormat =
-    "$dest `,` $src  attr-dict `:` qualified(type($dest))";
-}
-
-def RefConnectOp : FIRRTLOp<"refconnect", [SameTypeOperands, FConnectLike]> {
-  let summary = "Connect two references";
-  let description =  [{
-    Connect two references with strict constraints:
-    ```
-      firrtl.refconnect %dest, %src : ref<t1>
-    ```
-    }];
-
-  let arguments = (ins SizedRefType:$dest,
-                       SizedRefType:$src);
-  let results = (outs);
 
   let hasVerifier = 1;
 

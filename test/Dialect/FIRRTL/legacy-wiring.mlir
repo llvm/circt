@@ -73,21 +73,21 @@ firrtl.circuit "FooBar" attributes {
   firrtl.module @Foo(out %io: !firrtl.bundle<out: uint<1>>) {
     firrtl.skip
     // CHECK: %0 = firrtl.subfield %io[out] : !firrtl.bundle<out: uint<1>>
-    // CHECK: firrtl.strictconnect %0, %io_out__bore : !firrtl.uint<1>
+    // CHECK: firrtl.connect %0, %io_out__bore : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // CHECK: firrtl.module @Foo_1
   // CHECK-SAME: in %io_out__bore: !firrtl.uint<1>
   firrtl.module @Foo_1(out %io: !firrtl.bundle<out: uint<1>>) {
     firrtl.skip
     // CHECK: %0 = firrtl.subfield %io[out] : !firrtl.bundle<out: uint<1>>
-    // CHECK: firrtl.strictconnect %0, %io_out__bore : !firrtl.uint<1>
+    // CHECK: firrtl.connect %0, %io_out__bore : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // CHECK: firrtl.module @Bar
   // CHECK-SAME: in %io_out__bore: !firrtl.uint<1>
   firrtl.module @Bar(out %io: !firrtl.bundle<out: uint<1>>) {
     firrtl.skip
     // CHECK: %0 = firrtl.subfield %io[out] : !firrtl.bundle<out: uint<1>>
-    // CHECK: firrtl.strictconnect %0, %io_out__bore : !firrtl.uint<1>
+    // CHECK: firrtl.connect %0, %io_out__bore : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // CHECK: firrtl.module @FooBar
   firrtl.module @FooBar(out %io: !firrtl.bundle<in flip: uint<1>, out_foo0: uint<1>, out_foo1: uint<1>, out_bar: uint<1>>) {
@@ -110,9 +110,9 @@ firrtl.circuit "FooBar" attributes {
     firrtl.strictconnect %2, %3 : !firrtl.uint<1>
     firrtl.strictconnect %1, %4 : !firrtl.uint<1>
     firrtl.strictconnect %0, %5 : !firrtl.uint<1>
-    // CHECK: firrtl.strictconnect %foo0_io_out__bore, %0 : !firrtl.uint<1>
-    // CHECK: firrtl.strictconnect %foo1_io_out__bore, %0 : !firrtl.uint<1>
-    // CHECK: firrtl.strictconnect %bar_io_out__bore, %0 : !firrtl.uint<1>
+    // CHECK: firrtl.connect %foo0_io_out__bore, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %foo1_io_out__bore, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %bar_io_out__bore, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 

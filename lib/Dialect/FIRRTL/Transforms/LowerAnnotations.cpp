@@ -683,7 +683,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       return success();
     }
     // Otherwise, just connect to the source.
-    emitConnect(builder, dest, src);
+    builder.create<ConnectOp>(dest, src);
     return success();
   };
 
