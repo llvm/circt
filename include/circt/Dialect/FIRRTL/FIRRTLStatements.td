@@ -73,12 +73,16 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]
 def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOperands, FConnectLike]> {
   let summary = "FIRRTL Define References";
   let description = [{
-    Define a target reference to the source reference.
+    Define a target reference to the source reference:
+    ```
+      firrtl.ref.define %dest, %src : ref<t1>
+    ```
     Used to statically route reference from source to destination
     through the design, one module at a time.
-    Similar to "connect" but cannot have multiple assigns to same
-    destination and the assignment is never conditional even when
-    assigning out from under a "when" block (no "last-connect" semantics).
+
+    Similar to "connect" but cannot have multiple define's to same
+    destination and the define is never conditional even if under
+    a "when".
 
     Source and destination must resolve statically.
   }];
