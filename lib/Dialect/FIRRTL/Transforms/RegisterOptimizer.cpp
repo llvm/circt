@@ -100,7 +100,6 @@ void RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
   }
 }
 
-
 void RegisterOptimizerPass::checkRegReset(mlir::DominanceInfo &dom,
                                           SmallVector<Operation *> &toErase,
                                           RegResetOp reg) {
@@ -111,21 +110,22 @@ void RegisterOptimizerPass::checkRegReset(mlir::DominanceInfo &dom,
     return;
 
   // Register is only written by itself, and reset with a constant.
-  if(reg.getResetValue().getType() == reg.getType()){
+  if (reg.getResetValue().getType() == reg.getType()) {
     if (con.getSrc() == reg && isConstant(reg.getResetValue())) {
-        // constant obviously dominates the register.
-        reg.replaceAllUsesWith(reg.getResetValue());
-        toErase.push_back(reg);
-        toErase.push_back(con);
-        return;
+      // constant obviously dominates the register.
+      reg.replaceAllUsesWith(reg.getResetValue());
+      toErase.push_back(reg);
+      toErase.push_back(con);
+      return;
     }
     // Register is only written by a constant, and reset with the same constant.
-    if (con.getSrc() == reg.getResetValue() && isConstant(reg.getResetValue())) {
-        // constant obviously dominates the register.
-        reg.replaceAllUsesWith(reg.getResetValue());
-        toErase.push_back(reg);
-        toErase.push_back(con);
-        return;
+    if (con.getSrc() == reg.getResetValue() &&
+        isConstant(reg.getResetValue())) {
+      // constant obviously dominates the register.
+      reg.replaceAllUsesWith(reg.getResetValue());
+      toErase.push_back(reg);
+      toErase.push_back(con);
+      return;
     }
   }
 }
