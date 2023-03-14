@@ -405,14 +405,17 @@ static void mapResultsToWires(IRMapping &mapper, SmallVectorImpl<Value> &wires,
 /// Resolve RefType 'backedge' placeholder values.
 /// These should have at most one driver that isn't self-connect,
 /// replace each with their driver and remove connections to them.
+/// Insert RefCastOp's as needed.
 /// Also clears out 'edges'.
-static void replaceRefEdges(SmallVectorImpl<Backedge> &edges) {
+static void replaceRefEdges(SmallVectorImpl<Backedge> &edges, OpBuilder &b) {
   /// Find connections to `val` and:
   /// * Mark for removal.
   /// * Identify the single non-self-connect as driver, return it.
   /// * Check for other drivers and error.
-  auto getDriverAndRemoveConnects = [&](Value val) -> Value {
+  auto getDriverAndLocAndRemoveConnects =
+      [&](Value val) -> std::pair<Value, Location> {
     Value driver;
+    Location loc = val.getLoc();
     llvm::SmallPtrSet<Operation *, 16> toRemove;
     for (Operation *use : val.getUsers())
       if (auto connect = dyn_cast<FConnectLike>(use))
@@ -434,13 +437,14 @@ static void replaceRefEdges(SmallVectorImpl<Backedge> &edges) {
           }
           assert(!driver && "unable to resolve through multiple drivers");
           driver = newdriver;
+          loc = connect.getLoc();
         }
 
     // Drop connections to placeholder values.
     for (auto *op : toRemove)
       op->erase();
 
-    return driver;
+    return {driver, loc};
   };
 
   // Ensure that all users of the `opToRemove` are defined after the driver.
@@ -455,7 +459,7 @@ static void replaceRefEdges(SmallVectorImpl<Backedge> &edges) {
     Value v = edge;
     assert(v.getType().isa<RefType>());
 
-    auto driver = getDriverAndRemoveConnects(v);
+    auto [driver, loc] = getDriverAndLocAndRemoveConnects(v);
     if (!driver) {
       v.getDefiningOp()->emitError(
           "unable to find driver for refty placeholder");
@@ -463,6 +467,12 @@ static void replaceRefEdges(SmallVectorImpl<Backedge> &edges) {
     }
     if (!driver.isa<BlockArgument>())
       moveUseAfterDef(v.getDefiningOp(), driver.getDefiningOp());
+
+    // Insert any needed RefCastOp.
+    if (driver.getType() != v.getType()) {
+      b.setInsertionPointAfter(driver.getDefiningOp());
+      driver = b.create<RefCastOp>(loc, v.getType(), driver);
+    }
     // Resolve the edge (RAUW to driver).
     edge.setValue(driver);
   }
@@ -974,7 +984,7 @@ void Inliner::flattenInstances(FModuleOp module) {
   }
 
   // Fixup edges for ref types.
-  replaceRefEdges(edges);
+  replaceRefEdges(edges, b);
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
@@ -1178,7 +1188,7 @@ void Inliner::inlineInstances(FModuleOp parent) {
   }
 
   // Fixup edges for ref types.
-  replaceRefEdges(edges);
+  replaceRefEdges(edges, b);
 }
 
 void Inliner::identifyNLAsTargetingOnlyModules() {

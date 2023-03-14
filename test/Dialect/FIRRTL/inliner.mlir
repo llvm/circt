@@ -1113,3 +1113,24 @@ firrtl.circuit "Top" {
     firrtl.ref.define %_a, %1 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
   }
 }
+
+// -----
+
+// CHECK-LABEL: RefCastForInlinedPort
+firrtl.circuit "RefCastForInlinedPort" {
+   // CHECK-NOT: @Child
+  firrtl.module private @Child(in %in: !firrtl.ref<uint>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} { }
+  // CHECK: @RefCastForInlinedPort
+  firrtl.module @RefCastForInlinedPort(in %in: !firrtl.uint<1>, out %out: !firrtl.uint) {
+    // CHECK-NEXT: %[[REF:.+]] = firrtl.ref.send %in
+    // CHECK-NEXT: %[[CAST:.+]] = firrtl.ref.cast %[[REF]]
+    // CHECK-NEXT: %[[RES:.+]] = firrtl.ref.resolve %[[CAST]]
+    // CHECK-NEXT: firrtl.connect %out, %[[RES]]
+    // CHECK-NEXT: }
+    %child_ref = firrtl.instance child @Child(in in: !firrtl.ref<uint>)
+    %ref = firrtl.ref.send %in : !firrtl.uint<1>
+    firrtl.ref.define %child_ref, %ref : !firrtl.ref<uint>, !firrtl.ref<uint<1>>
+    %res = firrtl.ref.resolve %child_ref : !firrtl.ref<uint>
+    firrtl.connect %out, %res : !firrtl.uint, !firrtl.uint
+  }
+}
