@@ -1031,6 +1031,8 @@ def RefCastOp : FIRRTLOp<"ref.cast",
   let arguments = (ins RefType:$input);
   let results = (outs RefType:$result);
 
+  let hasFolder = 1;
+
   let assemblyFormat =
      "$input attr-dict `:` functional-type($input, $result)";
 }

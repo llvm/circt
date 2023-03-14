@@ -2960,3 +2960,14 @@ firrtl.module @RefTypes(
 }
 
 }
+
+// CHECK-LABEL: @RefCastSame
+firrtl.module @RefCastSame(in %in: !firrtl.probe<uint<1>>, out %out: !firrtl.probe<uint<1>>) {
+  // Drop no-op ref.cast's.
+  // CHECK-NEXT:  firrtl.ref.define %out, %in
+  // CHECK-NEXT:  }
+  %same_as_in = firrtl.ref.cast %in : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>>
+  firrtl.ref.define %out, %same_as_in : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
+}
+
+}
