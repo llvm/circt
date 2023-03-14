@@ -1,4 +1,4 @@
-; RUN: firtool --disable-opt %s | FileCheck %s
+; RUN: firtool %s | FileCheck %s
 
 ; This is testing that CHIRRTL enable inference is working as intended.  If the
 ; no-op wires and nodes are not optimized away, then both ports should always
@@ -13,6 +13,7 @@ circuit test: %[[{
     input p: UInt<1>
     input addr: UInt<4>
     input clock: Clock
+    input data: UInt<8>
     output out0: UInt<8>
     output out1: UInt<8>
 
@@ -31,3 +32,8 @@ circuit test: %[[{
     when p:
       read mport testport1 = testmem[_T_1], clock
     out1 <= testport1
+
+    node writeAddr = addr
+    when p:
+      write mport testport2 = testmem[writeAddr], clock
+    testport2 <= data
