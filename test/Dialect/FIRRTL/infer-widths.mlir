@@ -812,7 +812,8 @@ firrtl.circuit "Foo" {
   firrtl.module private @SubRef(out %x: !firrtl.ref<uint>) {
     %w = firrtl.wire : !firrtl.uint
     %ref_w = firrtl.ref.send %w : !firrtl.uint
-    firrtl.ref.define %x, %ref_w : !firrtl.ref<uint>, !firrtl.ref<uint>
+    %cast_ref_w = firrtl.ref.cast %ref_w : (!firrtl.ref<uint>) -> !firrtl.ref<uint>
+    firrtl.ref.define %x, %cast_ref_w : !firrtl.ref<uint>, !firrtl.ref<uint>
 
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     firrtl.connect %w, %c0_ui2 : !firrtl.uint, !firrtl.uint<2>
