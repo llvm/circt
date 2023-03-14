@@ -760,8 +760,8 @@ firrtl.circuit "Foo" {
     firrtl.connect %m_p1_data, %c0_ui5 : !firrtl.uint, !firrtl.uint<5>
     firrtl.connect %m_p2_wdata, %c0_ui7 : !firrtl.uint, !firrtl.uint<7>
     firrtl.connect %out, %m_p0_data : !firrtl.uint, !firrtl.uint
-    firrtl.ref.define %dbg, %m_dbg : !firrtl.probe<vector<uint, 8>>
-    // CHECK:  firrtl.ref.define %dbg, %m_dbg : !firrtl.probe<vector<uint<7>, 8>>
+    firrtl.ref.define %dbg, %m_dbg : !firrtl.probe<vector<uint, 8>>, !firrtl.probe<vector<uint, 8>>
+    // CHECK:  firrtl.ref.define %dbg, %m_dbg : !firrtl.probe<vector<uint<7>, 8>>, !firrtl.probe<vector<uint<7>, 8>>
   }
 
   // CHECK-LABEL: @MemBundle
@@ -838,8 +838,8 @@ firrtl.circuit "Foo" {
     firrtl.ref.define %bov_ref, %bov_rw : !firrtl.rwprobe<bundle<a: vector<uint, 2>, b : uint>>
 
     %ref_w = firrtl.ref.send %w : !firrtl.uint
-    firrtl.ref.define %x, %ref_w : !firrtl.probe<uint>
-    firrtl.ref.define %y, %w_rw : !firrtl.rwprobe<uint>
+    firrtl.ref.define %x, %ref_w : !firrtl.probe<uint>, !firrtl.probe<uint>
+    firrtl.ref.define %y, %w_rw : !firrtl.rwprobe<uint>, !firrtl.rwprobe<uint>
 
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     firrtl.connect %w, %c0_ui2 : !firrtl.uint, !firrtl.uint<2>

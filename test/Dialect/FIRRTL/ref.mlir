@@ -9,7 +9,7 @@ firrtl.circuit "xmr" {
     %zero = firrtl.constant 0 : !firrtl.uint<2>
     firrtl.strictconnect %w, %zero : !firrtl.uint<2>
     %1 = firrtl.ref.send %w : !firrtl.uint<2>
-    firrtl.ref.define %x, %1 : !firrtl.probe<uint<2>>
+    firrtl.ref.define %x, %1 : !firrtl.probe<uint<2>>, !firrtl.probe<uint<2>>
   }
   firrtl.module @xmr() {
     %test_x = firrtl.instance test @Test(out x: !firrtl.probe<uint<2>>)
@@ -24,7 +24,7 @@ firrtl.circuit "SimpleRead" {
   firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @SimpleRead() {
     %bar_a = firrtl.instance bar @Bar(out _a: !firrtl.probe<uint<1>>)
@@ -41,11 +41,11 @@ firrtl.circuit "ForwardToInstance" {
   firrtl.module @Bar2(out %_a: !firrtl.probe<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>) {
     %bar_2 = firrtl.instance bar @Bar2(out _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %_a, %bar_2 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %bar_2 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @ForwardToInstance() {
     %bar_a = firrtl.instance bar @Bar(out _a: !firrtl.probe<uint<1>>)
@@ -62,11 +62,11 @@ firrtl.circuit "ForwardToInstance" {
   firrtl.module @Bar2(out %_a: !firrtl.probe<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1    : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %1    : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>) {
     %bar_2 = firrtl.instance bar @Bar2(out _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %_a, %bar_2 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %bar_2 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
     // Reader 1
     %0 = firrtl.ref.resolve %bar_2 : !firrtl.probe<uint<1>>
     %a = firrtl.wire : !firrtl.uint<1>
@@ -90,12 +90,12 @@ firrtl.circuit "DUT" {
     %w_data1 = firrtl.wire : !firrtl.uint<1>
     firrtl.strictconnect %w_data1, %zero : !firrtl.uint<1>
     %1 = firrtl.ref.send %w_data1 : !firrtl.uint<1>
-    firrtl.ref.define %ref_out1, %1 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %ref_out1, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
     %w_data2 = firrtl.wire : !firrtl.uint<4>
     %zero4 = firrtl.constant 0 : !firrtl.uint<4>
     firrtl.strictconnect %w_data2, %zero4 : !firrtl.uint<4>
     %2 = firrtl.ref.send %w_data2 : !firrtl.uint<4>
-    firrtl.ref.define %ref_out2, %2 : !firrtl.probe<uint<4>>
+    firrtl.ref.define %ref_out2, %2 : !firrtl.probe<uint<4>>, !firrtl.probe<uint<4>>
   }
   firrtl.module @DUT() {
     %view_out1, %view_out2 = firrtl.instance sub @Submodule(out ref_out1: !firrtl.probe<uint<1>>, out ref_out2: !firrtl.probe<uint<4>>)
@@ -150,7 +150,7 @@ firrtl.circuit "Issue3715" {
       %zero = firrtl.constant 1 : !firrtl.uint<2>
       %w = firrtl.wire : !firrtl.uint<2>
       %1 = firrtl.ref.send %w : !firrtl.uint<2>
-      firrtl.ref.define %x, %1 : !firrtl.probe<uint<2>>
+      firrtl.ref.define %x, %1 : !firrtl.probe<uint<2>>, !firrtl.probe<uint<2>>
       firrtl.strictconnect %w, %zero : !firrtl.uint<2>
     }
   }
@@ -171,18 +171,18 @@ firrtl.circuit "UseRefsWithSinkFlow" {
   }
   firrtl.module private @OutChild(in %x: !firrtl.uint, out %y: !firrtl.uint, out %p: !firrtl.probe<uint>) {
     %0 = firrtl.ref.send %x : !firrtl.uint
-    firrtl.ref.define %p, %0 : !firrtl.probe<uint>
+    firrtl.ref.define %p, %0 : !firrtl.probe<uint>, !firrtl.probe<uint>
     %1 = firrtl.ref.resolve %p : !firrtl.probe<uint>
     firrtl.connect %y, %1 : !firrtl.uint, !firrtl.uint
   }
   firrtl.module @UseRefsWithSinkFlow(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>, out %z: !firrtl.uint<1>, out %zz: !firrtl.uint<1>, out %p: !firrtl.probe<uint<1>>) {
     %0 = firrtl.ref.send %x : !firrtl.uint<1>
-    firrtl.ref.define %p, %0 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %p, %0 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
     %1 = firrtl.ref.resolve %p : !firrtl.probe<uint<1>>
     firrtl.strictconnect %y, %1 : !firrtl.uint<1>
     %ic_p = firrtl.instance ic interesting_name @InChild(in p: !firrtl.probe<uint<1>>)
     %2 = firrtl.ref.send %x : !firrtl.uint<1>
-    firrtl.ref.define %ic_p, %2 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %ic_p, %2 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
     %3 = firrtl.ref.resolve %ic_p : !firrtl.probe<uint<1>>
     firrtl.strictconnect %z, %3 : !firrtl.uint<1>
     %oc_x, %oc_y, %oc_p = firrtl.instance oc interesting_name @OutChild(in x: !firrtl.uint, out y: !firrtl.uint, out p: !firrtl.probe<uint>)

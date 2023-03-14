@@ -494,7 +494,7 @@ firrtl.circuit "SendThroughRef" {
   firrtl.module private @Bar(out %_a: !firrtl.probe<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %ref_zero = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %ref_zero : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %ref_zero : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   // CHECK:  firrtl.strictconnect %a, %c0_ui1 : !firrtl.uint<1>
   firrtl.module @SendThroughRef(out %a: !firrtl.uint<1>) {
@@ -511,11 +511,11 @@ firrtl.circuit "ForwardRef" {
   firrtl.module private @RefForward2(out %_a: !firrtl.probe<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %ref_zero = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %ref_zero : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %ref_zero : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module private @RefForward(out %_a: !firrtl.probe<uint<1>>) {
     %fwd_2 = firrtl.instance fwd_2 @RefForward2(out _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %_a, %fwd_2 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %fwd_2 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   // CHECK:  firrtl.strictconnect %a, %c0_ui1 : !firrtl.uint<1>
   firrtl.module @ForwardRef(out %a: !firrtl.uint<1>) {

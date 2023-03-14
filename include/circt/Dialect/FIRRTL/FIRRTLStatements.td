@@ -19,6 +19,14 @@ include "FIRRTLOpInterfaces.td"
 include "FIRRTLTypes.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
+class SameTypeOrUninferredConstraint<string dst, string src>
+  : PredOpTrait<"Destination " # dst #
+                " type not recursively same or same and uninferred of " 
+                # src # " type",
+                CPred<"circt::firrtl::isTypeSameOrUninferred("
+                     "cast<RefType>($" # dst # ".getType()).getType(), "
+                     "cast<RefType>($" # src # ".getType()).getType())">>;
+
 def AttachOp : FIRRTLOp<"attach"> {
   let summary = "Analog Attach Statement";
 
@@ -70,7 +78,7 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]
     "$dest `,` $src  attr-dict `:` qualified(type($dest))";
 }
 
-def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOperands, FConnectLike]> {
+def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOrUninferredConstraint<"dest", "src">, FConnectLike]> {
   let summary = "FIRRTL Define References";
   let description = [{
     Define a target reference to the source reference:
@@ -91,7 +99,7 @@ def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOperands, FConnectLike]> {
   let hasVerifier = 1;
 
   let assemblyFormat =
-    "$dest `,` $src  attr-dict `:` qualified(type($dest))";
+    "$dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
 
   let extraClassDeclaration = [{
     static ConnectBehaviorKind getConnectBehaviorKind() {

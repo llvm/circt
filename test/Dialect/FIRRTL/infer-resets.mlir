@@ -844,7 +844,7 @@ firrtl.circuit "RefReset" {
   // CHECK-NEXT: probe<asyncreset>
   firrtl.module private @SendReset(in %r: !firrtl.reset, out %ref: !firrtl.probe<reset>) {
     %ref_r = firrtl.ref.send %r : !firrtl.reset
-    firrtl.ref.define %ref, %ref_r : !firrtl.probe<reset>
+    firrtl.ref.define %ref, %ref_r : !firrtl.probe<reset>, !firrtl.probe<reset>
   }
   // CHECK-LABEL: firrtl.module @RefReset
   // CHECK-NEXT: in r: !firrtl.asyncreset

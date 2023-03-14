@@ -531,16 +531,16 @@ firrtl.module @aggregate_regreset(in %clock: !firrtl.clock, in %reset: !firrtl.u
   // CHECK-NEXT: firrtl.connect %2, %2
 }
 
-// CHECK-LABEL: @refdefine
-firrtl.module @refdefine(in %x : !firrtl.uint<1>, out %out : !firrtl.probe<uint<1>>) {
-  // CHECK-NEXT: %[[REF:.+]] = firrtl.ref.send %x
-  // CHECK-NEXT: firrtl.ref.define %out, %[[REF]]
-  // CHECK-NEXT: }
-  firrtl.when %x : !firrtl.uint<1> {
-    %ref = firrtl.ref.send %x : !firrtl.uint<1>
-    firrtl.ref.define %out, %ref : !firrtl.probe<uint<1>>
-  }
-}
+ // CHECK-LABEL: @refdefine
+ firrtl.module @refdefine(in %x : !firrtl.uint<1>, out %out : !firrtl.probe<uint<1>>) {
+   // CHECK-NEXT: %[[REF:.+]] = firrtl.ref.send %x
+   // CHECK-NEXT: firrtl.ref.define %out, %[[REF]]
+   // CHECK-NEXT: }
+   firrtl.when %x : !firrtl.uint<1> {
+     %ref = firrtl.ref.send %x : !firrtl.uint<1>
+     firrtl.ref.define %out, %ref : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
+   }
+ }
 
 // CHECK-LABEL: @WhenCForce
 firrtl.module @WhenCForce(in %c: !firrtl.uint<1>, in %clock : !firrtl.clock, in %x: !firrtl.uint<4>) {

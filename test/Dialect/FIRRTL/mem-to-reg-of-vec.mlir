@@ -13,8 +13,8 @@ firrtl.circuit "Mem" attributes {annotations = [{class = "sifive.enterprise.firr
     } : !firrtl.probe<vector<uint<8>, 8>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>,
         !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>,
         !firrtl.probe<vector<uint<8>, 8>>
-    firrtl.ref.define %d, %debug : !firrtl.probe<vector<uint<8>, 8>>
-    firrtl.ref.define %d2, %dbg : !firrtl.probe<vector<uint<8>, 8>>
+    firrtl.ref.define %d, %debug : !firrtl.probe<vector<uint<8>, 8>>, !firrtl.probe<vector<uint<8>, 8>>
+    firrtl.ref.define %d2, %dbg : !firrtl.probe<vector<uint<8>, 8>>, !firrtl.probe<vector<uint<8>, 8>>
   }
     // CHECK-LABEL: firrtl.circuit "Mem" {
     // CHECK:         firrtl.module public @Mem(
@@ -44,8 +44,8 @@ firrtl.circuit "Mem" attributes {annotations = [{class = "sifive.enterprise.firr
     // CHECK:           }
     // CHECK:           %11 = firrtl.ref.send %mem : !firrtl.vector<uint<8>, 8>
     // CHECK:           %12 = firrtl.ref.send %mem : !firrtl.vector<uint<8>, 8>
-    // CHECK:           firrtl.ref.define %d, %12 : !firrtl.probe<vector<uint<8>, 8>>
-    // CHECK:           firrtl.ref.define %d2, %11 : !firrtl.probe<vector<uint<8>, 8>>
+    // CHECK:           firrtl.ref.define %d, %12 : !firrtl.probe<vector<uint<8>, 8>>, !firrtl.probe<vector<uint<8>, 8>>
+    // CHECK:           firrtl.ref.define %d2, %11 : !firrtl.probe<vector<uint<8>, 8>>, !firrtl.probe<vector<uint<8>, 8>>
 
 
 }

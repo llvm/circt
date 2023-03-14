@@ -1123,7 +1123,7 @@ firrtl.circuit "Foo" {
     %a = firrtl.wire : !firrtl.uint<1>
     %1 = firrtl.ref.send %a : !firrtl.uint<1>
     // expected-error @+1 {{connect has invalid flow: the destination expression "_a" has source flow, expected sink or duplex flow}}
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
 }
 
@@ -1136,8 +1136,8 @@ firrtl.circuit "Bar" {
     %x = firrtl.instance x @Bar2(out _a: !firrtl.probe<uint<1>>)
     %y = firrtl.instance y @Bar2(out _a: !firrtl.probe<uint<1>>)
     // expected-error @below {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
-    firrtl.ref.define %_a, %x : !firrtl.probe<uint<1>>
-    firrtl.ref.define %_a, %y : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %x : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %y : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
 }
 
@@ -1150,9 +1150,9 @@ firrtl.circuit "Bar" {
     %x = firrtl.instance x @Bar2(out _a: !firrtl.probe<uint<1>>)
     %y = firrtl.wire : !firrtl.uint<1>
     // expected-error @below {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
-    firrtl.ref.define %_a, %x : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %x : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
     %1 = firrtl.ref.send %y : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
 }
 
@@ -1166,8 +1166,8 @@ firrtl.circuit "Bar" {
     %1 = firrtl.ref.send %x : !firrtl.uint<1>
     %2 = firrtl.ref.send %y : !firrtl.uint<1>
     // expected-error @below {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
-    firrtl.ref.define %_a, %2 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %2 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
 }
 
@@ -1180,7 +1180,7 @@ firrtl.circuit "NoDefineIntoRefSub" {
     %x = firrtl.wire : !firrtl.uint<1>
     %xref = firrtl.ref.send %x : !firrtl.uint<1>
     // expected-error @below {{destination reference cannot be a sub-element of a reference}}
-    firrtl.ref.define %sub, %xref : !firrtl.probe<uint<1>>
+    firrtl.ref.define %sub, %xref : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
 }
 

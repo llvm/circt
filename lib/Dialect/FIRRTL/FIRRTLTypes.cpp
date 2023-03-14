@@ -1009,6 +1009,40 @@ bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
       });
 }
 
+/// Returns true if destination and source types are the same (was widthless)
+/// AND recursively checks that types are identical or the destination is
+/// uninferred of the source type.
+bool firrtl::isTypeSameOrUninferred(FIRRTLBaseType dstType,
+                                    FIRRTLBaseType srcType) {
+  if (dstType.getWidthlessType() != srcType.getWidthlessType())
+    return false;
+  // Okay, need to check each element.
+  return TypeSwitch<FIRRTLBaseType, bool>(dstType)
+      .Case<BundleType>([&](auto dstBundle) {
+        auto srcBundle = srcType.cast<BundleType>();
+        for (size_t i = 0, n = dstBundle.getNumElements(); i < n; ++i) {
+          auto srcElem = srcBundle.getElement(i);
+          auto dstElem = dstBundle.getElement(i);
+          if (dstElem.isFlip) {
+            if (!isTypeSameOrUninferred(srcElem.type, dstElem.type))
+              return false;
+          } else {
+            if (!isTypeSameOrUninferred(dstElem.type, srcElem.type))
+              return false;
+          }
+        }
+        return true;
+      })
+      .Case<FVectorType>([&](auto vector) {
+        return isTypeSameOrUninferred(
+            vector.getElementType(),
+            srcType.cast<FVectorType>().getElementType());
+      })
+      .Default([&](auto dstGround) {
+        return dstType == srcType || dstType.getBitWidthOrSentinel() == -1;
+      });
+}
+
 /// Return the passive version of a firrtl type
 /// top level for ODS constraint usage
 Type firrtl::getPassiveType(Type anyBaseFIRRTLType) {

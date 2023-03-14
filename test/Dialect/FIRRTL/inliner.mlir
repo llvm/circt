@@ -832,14 +832,14 @@ firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %_a, %xmr   : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %xmr   : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
     // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK:  %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
-    // CHECK:  firrtl.ref.define %_a, %0 : !firrtl.probe<uint<1>>
+    // CHECK:  firrtl.ref.define %_a, %0 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @Top() {
     %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.probe<uint<1>>)
@@ -861,14 +861,14 @@ firrtl.circuit "Top" {
 firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1>, out %_a: !firrtl.probe<uint<1>>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %1 = firrtl.ref.send %pa : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %pa, %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(in pa: !firrtl.uint<1>, out _a: !firrtl.probe<uint<1>>)
     // CHECK:  %bar_pa = firrtl.wire   : !firrtl.uint<1>
     // CHECK:  %0 = firrtl.ref.send %bar_pa : !firrtl.uint<1>
-    // CHECK:  firrtl.ref.define %_a, %0 : !firrtl.probe<uint<1>>
-    firrtl.ref.define %_a, %xmr   : !firrtl.probe<uint<1>>
+    // CHECK:  firrtl.ref.define %_a, %0 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %xmr   : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @Top() {
     %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.probe<uint<1>>)
@@ -890,18 +890,18 @@ firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @Foo(out %_a: !firrtl.probe<uint<1>>) {
     %xmr   = firrtl.instance bar sym @fooXMR @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %_a, %xmr   : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %xmr   : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
     %0 = firrtl.ref.resolve %xmr   : !firrtl.probe<uint<1>>
     %a = firrtl.wire : !firrtl.uint<1>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
   }
   firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>) {
     %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %_a, %xmr   : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %xmr   : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
     %0 = firrtl.ref.resolve %xmr   : !firrtl.probe<uint<1>>
     %a = firrtl.wire : !firrtl.uint<1>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
@@ -948,7 +948,7 @@ firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @Top() {
     %xmr = firrtl.instance xmr sym @TopXMR @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
@@ -956,15 +956,15 @@ firrtl.circuit "Top" {
     %0 = firrtl.ref.resolve %xmr : !firrtl.probe<uint<1>>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
     %c_a = firrtl.instance child @Child(in  _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %c_a, %xmr : !firrtl.probe<uint<1>>
+    firrtl.ref.define %c_a, %xmr : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
     // CHECK:  %1 = firrtl.ref.resolve %xmr__a : !firrtl.probe<uint<1>>
     // CHECK:  %child_child__a = firrtl.instance child_child  @Child2(in _a: !firrtl.probe<uint<1>>)
-    // CHECK:  firrtl.ref.define %child_child__a, %xmr__a : !firrtl.probe<uint<1>>
+    // CHECK:  firrtl.ref.define %child_child__a, %xmr__a : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @Child(in  %_a: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
     %c_a = firrtl.instance child @Child2(in  _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>
+    firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @Child2(in  %_a: !firrtl.probe<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
@@ -979,7 +979,7 @@ firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @Top() {
     %xmr = firrtl.instance xmr sym @TopXMR @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
@@ -987,14 +987,14 @@ firrtl.circuit "Top" {
     %0 = firrtl.ref.resolve %xmr : !firrtl.probe<uint<1>>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
     %c_a = firrtl.instance child @Child(in  _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %c_a, %xmr : !firrtl.probe<uint<1>>
+    firrtl.ref.define %c_a, %xmr : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
     // CHECK:  %1 = firrtl.ref.resolve %xmr__a : !firrtl.probe<uint<1>>
     // CHECK:  %2 = firrtl.ref.resolve %xmr__a : !firrtl.probe<uint<1>>
   }
   firrtl.module @Child(in  %_a: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
     %c_a = firrtl.instance child @Child2(in  _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>
+    firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @Child2(in  %_a: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
@@ -1009,15 +1009,15 @@ firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @Top() {
     %xmr = firrtl.instance xmr sym @TopXMR @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
     %a = firrtl.wire : !firrtl.uint<1>
     %xmr2 = firrtl.ref.send %a : !firrtl.uint<1>
     %c_a1, %c_a2  = firrtl.instance child @Child(in  _a1: !firrtl.probe<uint<1>>, in  _a2: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %c_a1, %xmr : !firrtl.probe<uint<1>>
-    firrtl.ref.define %c_a2, %xmr2 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %c_a1, %xmr : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
+    firrtl.ref.define %c_a2, %xmr2 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
     // CHECK:  %1 = firrtl.ref.resolve %xmr__a : !firrtl.probe<uint<1>>
     // CHECK:  %2 = firrtl.ref.resolve %xmr__a : !firrtl.probe<uint<1>>
     // CHECK:  %3 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
@@ -1028,7 +1028,7 @@ firrtl.circuit "Top" {
     %c_a = firrtl.instance child @Child2(in  _a: !firrtl.probe<uint<1>>)
     // CHECK:  %0 = firrtl.ref.resolve %_a1 : !firrtl.probe<uint<1>>
     // CHECK:  %1 = firrtl.ref.resolve %_a1 : !firrtl.probe<uint<1>>
-    firrtl.ref.define %c_a, %_a1 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %c_a, %_a1 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
     %0 = firrtl.ref.resolve %_a2 : !firrtl.probe<uint<1>>
     %cw = firrtl.wire : !firrtl.uint<1>
     firrtl.strictconnect %cw, %0 : !firrtl.uint<1>
@@ -1036,7 +1036,7 @@ firrtl.circuit "Top" {
   firrtl.module @Child2(in  %_a: !firrtl.probe<uint<1>>)   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
     %c_a = firrtl.instance child @Child3(in  _b: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>
+    firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @Child3(in  %_b: !firrtl.probe<uint<1>>)   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %0 = firrtl.ref.resolve %_b : !firrtl.probe<uint<1>>
@@ -1051,7 +1051,7 @@ firrtl.circuit "Top" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @Top() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]}{
     %xmr = firrtl.instance xmr sym @TopXMR @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
@@ -1068,12 +1068,12 @@ firrtl.circuit "Top" {
     // CHECK:  %5 = firrtl.ref.resolve %1 : !firrtl.probe<uint<1>>
     // CHECK:  %child_cw = firrtl.wire   : !firrtl.uint<1>
     // CHECK:  firrtl.strictconnect %child_cw, %5 : !firrtl.uint<1>
-    firrtl.ref.define %c_a1, %xmr : !firrtl.probe<uint<1>>
-    firrtl.ref.define %c_a2, %xmr2 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %c_a1, %xmr : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
+    firrtl.ref.define %c_a2, %xmr2 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @Child(in  %_a1: !firrtl.probe<uint<1>>, in  %_a2: !firrtl.probe<uint<1>>)  {
     %c_a = firrtl.instance child @Child2(in  _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %c_a, %_a1 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %c_a, %_a1 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
     %0 = firrtl.ref.resolve %_a2 : !firrtl.probe<uint<1>>
     %cw = firrtl.wire : !firrtl.uint<1>
     firrtl.strictconnect %cw, %0 : !firrtl.uint<1>
@@ -1081,7 +1081,7 @@ firrtl.circuit "Top" {
   firrtl.module @Child2(in  %_a: !firrtl.probe<uint<1>>){
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
     %c_a = firrtl.instance child @Child3(in  _b: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>
+    firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @Child3(in  %_b: !firrtl.probe<uint<1>>){
     %0 = firrtl.ref.resolve %_b : !firrtl.probe<uint<1>>
@@ -1095,22 +1095,22 @@ firrtl.circuit "Top" {
 firrtl.circuit "Top" {
   firrtl.module @Top() {
     %c_a, %c_o = firrtl.instance child @Child(in  _a: !firrtl.probe<uint<1>>, out  o_a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %c_a, %c_o : !firrtl.probe<uint<1>>
+    firrtl.ref.define %c_a, %c_o : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
     // CHECK:  %child_bar__a = firrtl.instance child_bar sym @bar  @Bar(out _a: !firrtl.probe<uint<1>>)
     // CHECK:  %0 = firrtl.ref.resolve %child_bar__a : !firrtl.probe<uint<1>>
   }
   firrtl.module @Child(in  %_a: !firrtl.probe<uint<1>>, out  %o_a: !firrtl.probe<uint<1>>)   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
     %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %o_a, %bar_a : !firrtl.probe<uint<1>>
+    firrtl.ref.define %o_a, %bar_a : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>) {
     %pa, %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(in pa: !firrtl.uint<1>, out _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %_a, %xmr   : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %xmr   : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
   firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1>, out %_a: !firrtl.probe<uint<1>>) {
     %1 = firrtl.ref.send %pa : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
   }
 }
 

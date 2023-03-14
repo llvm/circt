@@ -1026,9 +1026,9 @@ firrtl.circuit "Top" attributes {
     %companion_w1__gen_uint = firrtl.instance companion_w1  @Companion_w1(in _gen_uint: !firrtl.probe<uint<1>>)
     %companion_w2__gen_uint = firrtl.instance companion_w2  @Companion_w2(in _gen_uint: !firrtl.probe<uint<2>>)
     %0 = firrtl.ref.send %a_w1 : !firrtl.uint<1>
-    firrtl.ref.define %companion_w1__gen_uint, %0 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %companion_w1__gen_uint, %0 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
     %1 = firrtl.ref.send %a_w2 : !firrtl.uint<2>
-    firrtl.ref.define %companion_w2__gen_uint, %1 : !firrtl.probe<uint<2>>
+    firrtl.ref.define %companion_w2__gen_uint, %1 : !firrtl.probe<uint<2>>, !firrtl.probe<uint<2>>
   }
   firrtl.module @Top() {
     firrtl.instance dut  @DUT()
