@@ -1124,6 +1124,18 @@ firrtl.circuit "NoDefineIntoRefSub" {
 }
 
 // -----
+// Can't gain width information along define path.
+
+firrtl.circuit "DefineIntoWidth" {
+  firrtl.module @DefineIntoWidth(out %r: !firrtl.ref<uint<1>>) {
+    %zero = firrtl.constant 0 : !firrtl.uint
+    %xref = firrtl.ref.send %zero : !firrtl.uint
+    // expected-error @below {{ reference dest must be compatible with reference src: recursively same or uninferred of same}}
+    firrtl.ref.define %r, %xref : !firrtl.ref<uint<1>>, !firrtl.ref<uint>
+  }
+}
+
+// -----
 // Issue 4174-- handle duplicate module names.
 
 firrtl.circuit "hi" {
