@@ -1111,10 +1111,10 @@ firrtl.circuit "Bar" {
 }
 
 // -----
-// Can't assign into a ref.sub.
+// Can't define into a ref.sub.
 
-firrtl.circuit "NoAssignIntoRefSub" {
-  firrtl.module @NoAssignIntoRefSub(out %r: !firrtl.ref<vector<uint<1>,2>>) {
+firrtl.circuit "NoDefineIntoRefSub" {
+  firrtl.module @NoDefineIntoRefSub(out %r: !firrtl.ref<vector<uint<1>,2>>) {
     %sub = firrtl.ref.sub %r[1] : !firrtl.ref<vector<uint<1>,2>>
     %x = firrtl.wire : !firrtl.uint<1>
     %xref = firrtl.ref.send %x : !firrtl.uint<1>
