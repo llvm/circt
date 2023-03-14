@@ -24,3 +24,10 @@ relative_to = "setup.py"
 tag_regex = "^pycde-(\\d+\\.\\d+\\.\\d+)?$"
 local_scheme = "no-local-version"
 git_describe_command = "git describe --dirty --tags --long --match pycde*"
+
+[tool.cibuildwheel]
+manylinux-x86_64-image = "ghcr.io/circt/images/pycde-build"
+
+[tool.cibuildwheel.linux]
+# Disable auditwheel repair. It screws up some of the .so collateral.
+repair-wheel-command = "cp {wheel} {dest_dir}"

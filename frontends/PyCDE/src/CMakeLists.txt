@@ -92,6 +92,9 @@ add_mlir_python_modules(PyCDE
 add_dependencies(PyCDE
   PyCDE_CIRCTPythonModules
 )
+add_dependencies(install-PyCDE
+  install-PyCDE_CIRCTPythonModules
+)
 
 install(IMPORTED_RUNTIME_ARTIFACTS PyCDE_CIRCTPythonCAPI
   RUNTIME_DEPENDENCY_SET PyCDE_RUNTIME_DEPS
@@ -105,6 +108,31 @@ install(RUNTIME_DEPENDENCY_SET PyCDE_RUNTIME_DEPS
   COMPONENT PyCDE
 )
 
-add_dependencies(install-PyCDE
-  install-PyCDE_CIRCTPythonModules
+# Add necessary ESI collateral to the package.
+install(TARGETS esi-collateral
+  PUBLIC_HEADER DESTINATION python_packages/pycde/collateral
+  COMPONENT PyCDE
 )
+install(TARGETS circt-std-sim-drivers
+  PUBLIC_HEADER DESTINATION python_packages/pycde/collateral
+  COMPONENT PyCDE
+)
+if(ESI_COSIM)
+  add_dependencies(PyCDE EsiCosimDpiServer)
+  set_property(TARGET EsiCosimDpiServer PROPERTY INSTALL_RPATH "$ORIGIN")
+  install(TARGETS EsiCosimDpiServer
+    RUNTIME_DEPENDENCY_SET EsiCosimDpiServer_RUNTIME_DEPS
+    DESTINATION python_packages/pycde/collateral
+    COMPONENT PyCDE
+  )
+  install(RUNTIME_DEPENDENCY_SET EsiCosimDpiServer_RUNTIME_DEPS
+    DESTINATION python_packages/pycde/collateral
+    PRE_EXCLUDE_REGEXES .*
+    PRE_INCLUDE_REGEXES capnp kj
+    COMPONENT PyCDE
+  )
+  install(TARGETS MtiPli
+    DESTINATION python_packages/pycde/collateral
+    COMPONENT PyCDE
+  )
+endif()
