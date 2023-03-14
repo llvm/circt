@@ -538,7 +538,7 @@ firrtl.module @aggregate_regreset(in %clock: !firrtl.clock, in %reset: !firrtl.u
    // CHECK-NEXT: }
    firrtl.when %x : !firrtl.uint<1> {
      %ref = firrtl.ref.send %x : !firrtl.uint<1>
-     firrtl.ref.define %out, %ref : !firrtl.ref<uint<1>>
+     firrtl.ref.define %out, %ref : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
    }
  }
 }

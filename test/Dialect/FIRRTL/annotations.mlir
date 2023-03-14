@@ -1410,13 +1410,13 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [{
   firrtl.module private @Bar() {
     %inv = firrtl.wire interesting_name  : !firrtl.uint<1>
     // CHECK:  %0 = firrtl.ref.send %inv : !firrtl.uint<1>
-    // CHECK:  firrtl.ref.define %inv__bore, %0 : !firrtl.ref<uint<1>>
+    // CHECK:  firrtl.ref.define %inv__bore, %0 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
   }
   // CHECK-LABEL: firrtl.module private @Foo(out %b_inv__bore: !firrtl.ref<uint<1>>)
   firrtl.module private @Foo() {
     firrtl.instance b interesting_name  @Bar()
     // CHECK:  %[[b_inv:[a-zA-Z0-9_]+]] = firrtl.instance b interesting_name  @Bar(out inv__bore: !firrtl.ref<uint<1>>)
-    // CHECK:  firrtl.ref.define %b_inv__bore, %[[b_inv]] : !firrtl.ref<uint<1>>
+    // CHECK:  firrtl.ref.define %b_inv__bore, %[[b_inv]] : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
   }
   // CHECK: firrtl.module @Top()
   firrtl.module @Top() {
@@ -1453,7 +1453,7 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [
   // CHECK:  firrtl.module private @Bar(out %[[_gen_ref2:.+]]: !firrtl.ref<uint<1>>)
   // CHECK:  %[[random:.+]] = firrtl.verbatim.expr "random.something" : () -> !firrtl.uint<1>
   // CHECK:  %0 = firrtl.ref.send %[[random]] : !firrtl.uint<1>
-  // CHECK:  firrtl.ref.define %[[_gen_ref2]], %0 : !firrtl.ref<uint<1>>
+  // CHECK:  firrtl.ref.define %[[_gen_ref2]], %0 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
   firrtl.module private @Bar() {
   }
 

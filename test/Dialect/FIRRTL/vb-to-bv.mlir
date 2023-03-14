@@ -693,10 +693,10 @@ firrtl.circuit "Test" {
   firrtl.module @RefSender(out %port: !firrtl.ref<vector<bundle<a: uint<4>, b: uint<8>>, 2>>) {
    // CHECK: %w = firrtl.wire : !firrtl.bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>
     // CHECK: %0 = firrtl.ref.send %w : !firrtl.bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>
-    // CHECK: firrtl.ref.define %port, %0 : !firrtl.ref<bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>>
+    // CHECK: firrtl.ref.define %port, %0 : !firrtl.ref<bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>>, !firrtl.ref<bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>>
     %w = firrtl.wire : !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2>
     %ref = firrtl.ref.send %w : !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2>
-    firrtl.ref.define %port, %ref : !firrtl.ref<vector<bundle<a: uint<4>, b: uint<8>>, 2>>
+    firrtl.ref.define %port, %ref : !firrtl.ref<vector<bundle<a: uint<4>, b: uint<8>>, 2>>, !firrtl.ref<vector<bundle<a: uint<4>, b: uint<8>>, 2>>
   }
 
   firrtl.module @RefResolver() {
