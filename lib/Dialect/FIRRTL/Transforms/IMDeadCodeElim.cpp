@@ -469,7 +469,13 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
         auto rd = getRefDefine(result);
         assert(rd && "input ref port to instance is alive, but no driver?");
         assert(isKnownAlive(rd.getSrc()));
-        result.replaceAllUsesWith(rd.getSrc());
+        auto source = rd.getSrc();
+        if (result.getType() != source.getType()) { // cast if needed
+          ImplicitLocOpBuilder::InsertionGuard g(builder);
+          builder.setInsertionPointAfterValue(source);
+          source = builder.create<RefCastOp>(result.getType(), source);
+        }
+        result.replaceAllUsesWith(source);
         ++numErasedOps;
         rd.erase();
         continue;
