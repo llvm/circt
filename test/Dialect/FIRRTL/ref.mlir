@@ -190,3 +190,13 @@ firrtl.circuit "UseRefsWithSinkFlow" {
     firrtl.connect %zz, %oc_y : !firrtl.uint<1>, !firrtl.uint
   }
 }
+
+// -----
+
+firrtl.circuit "RefDefineAndCastWidths" {
+  firrtl.module @RefDefineAndCastWidths(in %x: !firrtl.uint<2>, out %p : !firrtl.ref<uint>) {
+    %ref = firrtl.ref.send %x : !firrtl.uint<2>
+    %cast = firrtl.ref.cast %ref : (!firrtl.ref<uint<2>>) -> !firrtl.ref<uint>
+    firrtl.ref.define %p, %cast : !firrtl.ref<uint>, !firrtl.ref<uint>
+  }
+}
