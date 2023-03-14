@@ -90,7 +90,9 @@ def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOperands, FConnectLike]> {
     "$dest `,` $src  attr-dict `:` qualified(type($dest))";
 
   let extraClassDeclaration = [{
-    static bool isStaticSingleConnect() { return true; }
+    static ConnectBehaviorKind getConnectBehaviorKind() {
+      return ConnectBehaviorKind::StaticSingleConnect;
+    }
   }];
 }
 
