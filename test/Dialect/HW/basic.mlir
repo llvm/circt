@@ -77,6 +77,20 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i5
   // CHECK-NEXT: %after3 = sv.wire {someAttr = "foo"} : !hw.inout<i4>
   %before3 = sv.wire name "after3" {someAttr = "foo"} : !hw.inout<i4>
 
+  // CHECK-NEXT: %w2 = hw.wire [[RES2]] : i7
+  %w2 = hw.wire %d : i7
+
+  // CHECK-NEXT: %after4 = hw.wire [[RES2]] : i7
+  %before4 = hw.wire %d name "after4" : i7
+
+  // CHECK-NEXT: %after5_conflict = hw.wire [[RES2]] : i7
+  // CHECK-NEXT: %after5_conflict_1 = hw.wire [[RES2]] name "after5_conflict" : i7
+  %before5_0 = hw.wire %d name "after5_conflict" : i7
+  %before5_1 = hw.wire %d name "after5_conflict" : i7
+
+  // CHECK-NEXT: %after6 = hw.wire [[RES2]] {someAttr = "foo"} : i7
+  %before6 = hw.wire %d name "after6" {someAttr = "foo"} : i7
+
   // CHECK-NEXT: = comb.mux %arg1, [[RES2]], [[RES2]] : i7
   %mux = comb.mux %arg1, %d, %d : i7
 
@@ -89,8 +103,8 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i5
   // CHECK-NEXT: = hw.struct_inject [[STR]]["foo"], {{.*}} : !hw.struct<foo: i19, bar: i7>
   %s1 = hw.struct_inject %s0["foo"], %foo : !hw.struct<foo: i19, bar: i7>
 
-  // CHECK-NEXT:  %foo_1, %bar = hw.struct_explode [[STR]] : !hw.struct<foo: i19, bar: i7>
-  %foo_1, %bar = hw.struct_explode %s0 : !hw.struct<foo: i19, bar: i7>
+  // CHECK-NEXT:  %foo_2, %bar = hw.struct_explode [[STR]] : !hw.struct<foo: i19, bar: i7>
+  %foo_2, %bar = hw.struct_explode %s0 : !hw.struct<foo: i19, bar: i7>
 
   // CHECK-NEXT: hw.bitcast [[STR]] : (!hw.struct<foo: i19, bar: i7>)
   %structBits = hw.bitcast %s0 : (!hw.struct<foo: i19, bar: i7>) -> i26

@@ -49,7 +49,7 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
   auto readSrc = read.getInput().getDefiningOp();
   if (!readSrc)
     return false;
-  return isa<WireOp, RegOp, LogicOp, XMROp, XMRRefOp>(readSrc);
+  return isa<sv::WireOp, RegOp, LogicOp, XMROp, XMRRefOp>(readSrc);
 }
 
 // Check if the value is deemed worth spilling into a wire.
@@ -83,7 +83,7 @@ static void spillWiresForInstanceInputs(InstanceOp op) {
     else
       nameTmp += std::to_string(nextOpNo - 1);
 
-    auto newWire = builder.create<WireOp>(src.getType(), nameTmp);
+    auto newWire = builder.create<sv::WireOp>(src.getType(), nameTmp);
     auto newWireRead = builder.create<ReadInOutOp>(newWire);
     auto connect = builder.create<AssignOp>(newWire, src);
     newWireRead->moveBefore(op);
@@ -121,7 +121,7 @@ static void lowerInstanceResults(InstanceOp op) {
       nameTmp += port.name.getValue().str();
     else
       nameTmp += std::to_string(nextResultNo - 1);
-    Value newWire = builder.create<WireOp>(result.getType(), nameTmp);
+    Value newWire = builder.create<sv::WireOp>(result.getType(), nameTmp);
 
     while (!result.use_empty()) {
       auto newWireRead = builder.create<ReadInOutOp>(newWire);
@@ -223,7 +223,7 @@ static void lowerUsersToTemporaryWire(Operation &op,
     if (isProceduralRegion)
       newWire = builder.create<LogicOp>(result.getType(), name);
     else
-      newWire = builder.create<WireOp>(result.getType(), name);
+      newWire = builder.create<sv::WireOp>(result.getType(), name);
 
     while (!result.use_empty()) {
       auto newWireRead = builder.create<ReadInOutOp>(newWire);
@@ -789,7 +789,7 @@ static LogicalResult legalizeHWModule(Block &block,
       Value readOp;
       if (auto maybeReadOp =
               op.getOperand(1).getDefiningOp<sv::ReadInOutOp>()) {
-        if (isa_and_nonnull<WireOp, LogicOp>(
+        if (isa_and_nonnull<sv::WireOp, LogicOp>(
                 maybeReadOp.getInput().getDefiningOp())) {
           wireOp = maybeReadOp.getInput();
           readOp = maybeReadOp;
@@ -805,7 +805,7 @@ static LogicalResult legalizeHWModule(Block &block,
           wireOp = builder.create<LogicOp>(type, name);
           builder.create<BPAssignOp>(wireOp, op.getOperand(1));
         } else {
-          wireOp = builder.create<WireOp>(type, name);
+          wireOp = builder.create<sv::WireOp>(type, name);
           builder.create<AssignOp>(wireOp, op.getOperand(1));
         }
         readOp = builder.create<ReadInOutOp>(wireOp);
