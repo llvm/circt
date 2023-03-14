@@ -4,7 +4,7 @@
 import circt
 from circt.dialects import comb, hw
 
-from circt.ir import Context, Location, InsertionPoint, IntegerType, IntegerAttr, Module
+from circt.ir import Context, Location, InsertionPoint, IntegerType, IntegerAttr, Module, MLIRError
 
 with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
@@ -21,7 +21,10 @@ with Context() as ctx, Location.unknown():
 
       # CHECK: op requires all operands to have the same type
       div = comb.DivSOp.create(const1.result, const2.result)
-      div.opview.verify()
+      try:
+        div.opview.verify()
+      except MLIRError as e:
+        print(e)
 
       # CHECK: result type cannot be None
       try:
