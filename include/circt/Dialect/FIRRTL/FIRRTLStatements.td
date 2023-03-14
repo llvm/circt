@@ -19,14 +19,6 @@ include "FIRRTLOpInterfaces.td"
 include "FIRRTLTypes.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
-class SameTypeOrUninferredConstraint<string dst, string src>
-  : PredOpTrait<"Destination " # dst #
-                " type not recursively same or same and uninferred of " 
-                # src # " type",
-                CPred<"circt::firrtl::isTypeSameOrUninferred("
-                     "cast<RefType>($" # dst # ".getType()).getType(), "
-                     "cast<RefType>($" # src # ".getType()).getType())">>;
-
 def AttachOp : FIRRTLOp<"attach"> {
   let summary = "Analog Attach Statement";
 
