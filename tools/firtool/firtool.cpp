@@ -90,6 +90,7 @@ static cl::list<std::string> includeDirs(
     "include-dir",
     cl::desc("Directory to search in when resolving source references"),
     cl::value_desc("directory"), cl::cat(mainCategory));
+
 static cl::alias includeDirsShort(
     "I", cl::desc("Alias for --include-dir.  Example: -I<directory>"),
     cl::aliasopt(includeDirs), cl::Prefix, cl::NotHidden,
@@ -104,11 +105,6 @@ static cl::opt<bool>
 static cl::opt<bool> disableOptimization("disable-opt",
                                          cl::desc("Disable optimizations"),
                                          cl::cat(mainCategory));
-
-static cl::opt<bool> disableInliner("disable-inliner",
-                                    cl::desc("Disable the Inliner pass"),
-                                    cl::init(false), cl::Hidden,
-                                    cl::cat(mainCategory));
 
 static cl::opt<bool> enableAnnotationWarning(
     "warn-on-unprocessed-annotations",
@@ -146,11 +142,6 @@ static cl::opt<bool> lowerAnnotationsNoRefTypePorts(
     cl::desc("Create real ports instead of ref type ports when resolving "
              "wiring problems inside the LowerAnnotations pass"),
     cl::init(false), cl::Hidden, cl::cat(mainCategory));
-
-static cl::opt<bool>
-    emitMetadata("emit-metadata",
-                 cl::desc("Emit metadata for metadata annotations"),
-                 cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool> emitOMIR("emit-omir",
                               cl::desc("Emit OMIR annotations to a JSON file"),
@@ -215,35 +206,10 @@ static cl::opt<bool>
                                  "assigning X on read disable"),
                         cl::init(false), cl::cat(mainCategory));
 
-static cl::opt<bool> disableIMCP("disable-imcp",
-                                 cl::desc("Disable the IMCP pass"),
-                                 cl::init(false), cl::Hidden,
-                                 cl::cat(mainCategory));
-
-static cl::opt<bool>
-    disableLowerMemory("disable-lower-memory",
-                       cl::desc("Disable the LowerMemory pass"),
-                       cl::init(false), cl::Hidden, cl::cat(mainCategory));
-
 static cl::opt<bool>
     vbToBV("vb-to-bv",
            cl::desc("Transform vectors of bundles to bundles of vectors"),
            cl::init(false), cl::cat(mainCategory));
-
-static cl::opt<bool> disableLowerTypes("disable-lower-types",
-                                       cl::desc("Disable the LowerTypes pass"),
-                                       cl::init(false), cl::Hidden,
-                                       cl::cat(mainCategory));
-
-static cl::opt<bool>
-    disableExpandWhens("disable-expand-whens",
-                       cl::desc("Disable the ExpandWhens pass"),
-                       cl::init(false), cl::Hidden, cl::cat(mainCategory));
-
-static cl::opt<bool>
-    disableAddSeqMemPorts("disable-add-seqmem-ports",
-                          cl::desc("Disable the AddSeqMemPorts pass"),
-                          cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
 static cl::opt<bool>
     dedup("dedup", cl::desc("Deduplicate structurally identical modules"),
@@ -253,26 +219,6 @@ static cl::opt<bool>
     ignoreFIRLocations("ignore-fir-locators",
                        cl::desc("Ignore the @info locations in the .fir file"),
                        cl::init(false), cl::cat(mainCategory));
-
-static cl::opt<bool>
-    disableLowerChirrtl("disable-lower-chirrtl",
-                        cl::desc("Disable the LowerCHIRRTL pass"),
-                        cl::init(false), cl::Hidden, cl::cat(mainCategory));
-
-static cl::opt<bool> disableWireDFT("disable-wire-dft",
-                                    cl::desc("Disable the WireDFT pass"),
-                                    cl::init(false), cl::Hidden,
-                                    cl::cat(mainCategory));
-
-static cl::opt<bool>
-    disableInferWidths("disable-infer-widths",
-                       cl::desc("Disable the InferWidths pass"),
-                       cl::init(false), cl::Hidden, cl::cat(mainCategory));
-
-static cl::opt<bool>
-    disableInferResets("disable-infer-resets",
-                       cl::desc("Disable the InferResets pass"),
-                       cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
 static cl::opt<bool> exportChiselInterface(
     "export-chisel-interface",
@@ -285,35 +231,9 @@ static cl::opt<std::string> chiselInterfaceOutDirectory(
     cl::desc("The output directory for generated Chisel interface files"),
     cl::init(""), cl::cat(mainCategory));
 
-static cl::opt<bool>
-    disableInjectDutHierarchy("disable-inject-dut-hierarchy",
-                              cl::desc("Disable the InjectDutHierarchy pass"),
-                              cl::init(false), cl::Hidden,
-                              cl::cat(mainCategory));
-
-static cl::opt<bool>
-    disableExtractInstances("disable-extract-instances",
-                            cl::desc("Disable the ExtractInstances pass"),
-                            cl::init(false), cl::Hidden, cl::cat(mainCategory));
-
-static cl::opt<bool>
-    disableMemToRegOfVec("disable-mem-to-reg-of-vec",
-                         cl::desc("Disable the MemToRegOfVec pass"),
-                         cl::init(false), cl::Hidden, cl::cat(mainCategory));
-
-static cl::opt<bool>
-    disablePrefixModules("disable-prefix-modules",
-                         cl::desc("Disable the PrefixModules pass"),
-                         cl::init(false), cl::Hidden, cl::cat(mainCategory));
-
 static cl::opt<bool> extractTestCode("extract-test-code",
                                      cl::desc("Run the extract test code pass"),
                                      cl::init(false), cl::cat(mainCategory));
-
-static cl::opt<bool>
-    disableGrandCentral("disable-grand-central",
-                        cl::desc("Disable the Grand Central passes"),
-                        cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
 static cl::opt<bool> grandCentralInstantiateCompanionOnly(
     "grand-central-instantiate-companion",
@@ -329,38 +249,16 @@ static cl::opt<bool> exportModuleHierarchy(
     cl::desc("Export module and instance hierarchy as JSON"), cl::init(false),
     cl::cat(mainCategory));
 
-static cl::opt<bool>
-    disableCheckCombCycles("disable-check-comb-cycles",
-                           cl::desc("Disable the CheckCombCycles pass"),
-                           cl::init(false), cl::Hidden, cl::cat(mainCategory));
-
 static cl::opt<bool> useOldCheckCombCycles(
     "use-old-check-comb-cycles",
     cl::desc("Use old CheckCombCycles pass, that does not support aggregates"),
     cl::init(false), cl::Hidden, cl::cat(mainCategory));
-
-static cl::opt<bool> disableIMDCE("disable-imdce",
-                                  cl::desc("Disable the IMDCE pass"),
-                                  cl::init(false), cl::Hidden,
-                                  cl::cat(mainCategory));
-
-static cl::opt<bool>
-    disableMergeConnections("disable-merge-connections",
-                            cl::desc("Disable the MergeConnections pass"),
-                            cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
 static cl::opt<bool> disableAggressiveMergeConnections(
     "disable-aggressive-merge-connections",
     cl::desc("Disable aggressive merge connections (i.e. merge all field-level "
              "connections into bulk connections)"),
     cl::init(false), cl::cat(mainCategory));
-
-/// Enable the pass to merge the read and write ports of a memory, if their
-/// enable conditions are mutually exclusive.
-static cl::opt<bool> disableInferRW("disable-infer-rw",
-                                    cl::desc("Disable the InferRW pass"),
-                                    cl::init(false), cl::Hidden,
-                                    cl::cat(mainCategory));
 
 static cl::opt<bool> etcDisableInstanceExtraction(
     "etc-disable-instance-extraction",
@@ -628,24 +526,18 @@ static LogicalResult processBuffer(
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createCSEPass());
 
-  if (!disableInjectDutHierarchy)
-    pm.nest<firrtl::CircuitOp>().addPass(
-        firrtl::createInjectDUTHierarchyPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
 
-  if (!disableLowerChirrtl)
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        firrtl::createLowerCHIRRTLPass());
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      firrtl::createLowerCHIRRTLPass());
 
   // Width inference creates canonicalization opportunities.
-  if (!disableInferWidths)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
 
-  if (!disableMemToRegOfVec)
-    pm.nest<firrtl::CircuitOp>().addPass(
-        firrtl::createMemToRegOfVecPass(replSeqMem, ignoreReadEnableMem));
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createMemToRegOfVecPass(replSeqMem, ignoreReadEnableMem));
 
-  if (!disableInferResets)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
 
   if (exportChiselInterface) {
     if (chiselInterfaceOutDirectory.empty()) {
@@ -656,14 +548,13 @@ static LogicalResult processBuffer(
     }
   }
 
-  if (!disableOptimization && dedup)
+  if (dedup)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
 
-  if (!disableWireDFT)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createWireDFTPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createWireDFTPass());
 
   if (vbToBV) {
-    if (!disableLowerTypes && preservePublicTypes)
+    if (preservePublicTypes)
       pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
           firrtl::PreserveAggregate::All, firrtl::PreserveAggregate::All,
           preservePublicTypes));
@@ -676,20 +567,15 @@ static LogicalResult processBuffer(
 
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
-  if (!disableLowerTypes) {
-    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
-        preserveAggregate, firrtl::PreserveAggregate::None,
-        preservePublicTypes));
-    // Only enable expand whens if lower types is also enabled.
-    if (!disableExpandWhens) {
-      auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-      modulePM.addPass(firrtl::createExpandWhensPass());
-      modulePM.addPass(firrtl::createSFCCompatPass());
-    }
-  }
+  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
+      preserveAggregate, firrtl::PreserveAggregate::None, preservePublicTypes));
+  //
+  // Only enable expand whens if lower types is also enabled.
+  auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
+  modulePM.addPass(firrtl::createExpandWhensPass());
+  modulePM.addPass(firrtl::createSFCCompatPass());
 
-  if (!disableInliner)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
   // Preset the random initialization parameters for each module. The current
   // implementation assumes it can run at a time where every register is
@@ -699,18 +585,15 @@ static LogicalResult processBuffer(
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createRandomizeRegisterInitPass());
 
-  if (!disableCheckCombCycles) {
-    if (useOldCheckCombCycles) {
-      if (preserveAggregate == firrtl::PreserveAggregate::None)
-        pm.nest<firrtl::CircuitOp>().addPass(
-            firrtl::createCheckCombCyclesPass());
-      else
-        emitWarning(module->getLoc())
-            << "CheckCombCyclesPass doens't support aggregate "
-               "values yet so it is skipped\n";
-    } else
-      pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombLoopsPass());
-  }
+  if (useOldCheckCombCycles) {
+    if (preserveAggregate == firrtl::PreserveAggregate::None)
+      pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombCyclesPass());
+    else
+      emitWarning(module->getLoc())
+          << "CheckCombCyclesPass doens't support aggregate "
+             "values yet so it is skipped\n";
+  } else
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombLoopsPass());
 
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!disableOptimization)
@@ -719,36 +602,31 @@ static LogicalResult processBuffer(
 
   // Run the infer-rw pass, which merges read and write ports of a memory with
   // mutually exclusive enables.
-  if (!disableInferRW)
+  if (!disableOptimization)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createInferReadWritePass());
 
-  if (replSeqMem && !disableLowerMemory)
+  if (replSeqMem)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerMemoryPass());
 
-  if (!disablePrefixModules)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
 
-  if (!disableIMCP && !disableOptimization)
+  if (!disableOptimization)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
 
-  if (!disableAddSeqMemPorts)
-    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
+  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
 
-  if (emitMetadata)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCreateSiFiveMetadataPass(
-        replSeqMem, replSeqMemCircuit, replSeqMemFile));
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCreateSiFiveMetadataPass(
+      replSeqMem, replSeqMemCircuit, replSeqMemFile));
 
-  if (!disableExtractInstances)
-    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
+  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
 
   // Run passes to resolve Grand Central features.  This should run before
   // BlackBoxReader because Grand Central needs to inform BlackBoxReader where
   // certain black boxes should be placed.  Note: all Grand Central Taps related
   // collateral is resolved entirely by LowerAnnotations.
-  if (!disableGrandCentral)
-    pm.addNestedPass<firrtl::CircuitOp>(
-        firrtl::createGrandCentralPass(grandCentralInstantiateCompanionOnly));
+  pm.addNestedPass<firrtl::CircuitOp>(
+      firrtl::createGrandCentralPass(grandCentralInstantiateCompanionOnly));
 
   // Read black box source files into the IR.
   StringRef blackBoxRoot = blackBoxRootPath.empty()
@@ -775,8 +653,7 @@ static LogicalResult processBuffer(
         createSimpleCanonicalizerPass());
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         circt::firrtl::createRegisterOptimizerPass());
-    if (!disableIMDCE)
-      pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMDeadCodeElimPass());
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMDeadCodeElimPass());
   }
 
   if (emitOMIR)
@@ -784,8 +661,7 @@ static LogicalResult processBuffer(
         firrtl::createEmitOMIRPass(omirOutFile));
 
   if (!disableOptimization &&
-      preserveAggregate != firrtl::PreserveAggregate::None &&
-      !disableMergeConnections)
+      preserveAggregate != firrtl::PreserveAggregate::None)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createMergeConnectionsPass(
             !disableAggressiveMergeConnections.getValue()));

@@ -1,4 +1,4 @@
-; RUN: firtool --repl-seq-mem --repl-seq-mem-file="dummy" -disable-imdce %s | FileCheck %s
+; RUN: firtool --disable-opt %s | FileCheck %s
 
 ; This is testing that CHIRRTL enable inference is working as intended.  If the
 ; no-op wires and nodes are not optimized away, then both ports should always
@@ -8,9 +8,6 @@
 circuit test: %[[{
     "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
     "target":"~test|test"
-  }, 
-  {
-    "class": "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"
   }]]
   module test:
     input p: UInt<1>
@@ -19,22 +16,18 @@ circuit test: %[[{
     output out0: UInt<8>
     output out1: UInt<8>
 
-    smem testmem : UInt<8>[16]
+    ; CHECK: testmem_combMem testmem_ext (
+    smem testmem : UInt<8>[16], undefined
 
+    ; CHECK: .R0_en (1'h1)
     node _T_0 = addr
     when p:
       read mport testport0 = testmem[_T_0], clock
     out0 <= testport0
 
+    ; CHECK: .R1_en (1'h1),
     wire _T_1: UInt<4>
     _T_1 <= addr
     when p:
       read mport testport1 = testmem[_T_1], clock
     out1 <= testport1
-  ; No write to the memory, initialized with invalid, hence optimized away.
-
-  ; CHEC-OLD: assign out0 = 8'h0;
-  ; CHEC-OLD: assign out1 = 8'h0;
-
-  ; CHECK: assign out0 = 8'h0;
-  ; CHECK: assign out1 = 8'h0;
