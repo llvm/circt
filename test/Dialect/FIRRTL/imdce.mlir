@@ -428,3 +428,26 @@ firrtl.circuit "Top" {
     firrtl.instance baz2 sym @baz2 @Baz()
   }
 }
+
+// -----
+// Note this only works because dominance happens to work out.  See imdce-nyi.mlir.
+
+// CHECK-LABEL: firrtl.circuit "NoWireForLiveRefInputPort"
+firrtl.circuit "NoWireForLiveRefInputPort" {
+   // CHECK-NOT: @Child
+  firrtl.module private @Child(in %in: !firrtl.probe<uint>) { }
+  // CHECK: @NoWireForLiveRefInputPort
+  firrtl.module @NoWireForLiveRefInputPort(in %in: !firrtl.uint<1>, out %out: !firrtl.uint) {
+    // CHECK-NEXT: %[[REF:.+]] = firrtl.ref.send %in
+    // CHECK-NEXT: %[[CAST:.+]] = firrtl.ref.cast %[[REF]]
+    // CHECK-NEXT: %[[RES:.+]] = firrtl.ref.resolve %[[CAST]]
+    // CHECK-NEXT: firrtl.connect %out, %[[RES]]
+    // CHECK-NEXT: }
+    %child_ref = firrtl.instance child @Child(in in: !firrtl.probe<uint>)
+    %ref = firrtl.ref.send %in : !firrtl.uint<1>
+    %refcast = firrtl.ref.cast %ref : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint>
+    firrtl.ref.define %child_ref, %refcast : !firrtl.probe<uint>
+    %res = firrtl.ref.resolve %child_ref : !firrtl.probe<uint>
+    firrtl.connect %out, %res : !firrtl.uint, !firrtl.uint
+  }
+}

@@ -1193,8 +1193,9 @@ circuit EnumTypes:
   ; CHECK-LABEL: module private @Refs(
   module Refs :
     input in : UInt<1>
-    output r : Probe<UInt<1>>
-    output rw : RWProbe<UInt<1>>
+    output r : Probe<UInt>
+    output rw : RWProbe<UInt>
+    output notrw : Probe<UInt>
     output out : UInt<1>
     output out2 : UInt<1>
     output out3 : UInt<3>
@@ -1205,11 +1206,18 @@ circuit EnumTypes:
     inst rc of RefsChild
     rc.in <= in
     ; CHECK: %[[OUTREF:.+]] = firrtl.ref.send %out
-    ; CHECK-NEXT: ref.define %r, %[[OUTREF]]
+    ; CHECK-NEXT: %[[OUTREF_CAST:.+]] = firrtl.ref.cast %[[OUTREF]] : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint>
+    ; CHECK-NEXT: ref.define %r, %[[OUTREF_CAST]]
     define r = probe(out)
-    ; CHECK-NEXT: ref.define %rw, %[[RC_RW]]
-    ; CHECK-SAME: rwprobe
+    ; CHECK-NEXT: %[[RC_RW_CAST:.+]] = firrtl.ref.cast %[[RC_RW]] : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint>
+    ; CHECK-NEXT: ref.define %rw, %[[RC_RW_CAST]]
+    ; CHECK-SAME: rwprobe<uint>
     define rw = rc.rw
+
+    ; CHECK-NEXT: %[[RC_RW_CAST_PROBE:.+]] = firrtl.ref.cast %[[RC_RW]] : (!firrtl.rwprobe<uint<1>>) -> !firrtl.probe<uint>
+    ; CHECK-NEXT: ref.define %notrw, %[[RC_RW_CAST_PROBE]]
+    ; CHECK-SAME: firrtl.probe
+    define notrw = rc.rw
 
     ; CHECK-NEXT: %[[READ_RC_R:.+]] = firrtl.ref.resolve %[[RC_R]]
     ; CHECK-NEXT: connect %out, %[[READ_RC_R]]

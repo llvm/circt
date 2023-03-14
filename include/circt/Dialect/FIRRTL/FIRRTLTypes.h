@@ -209,7 +209,8 @@ bool containsConst(Type type);
 bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType,
                         bool destOuterTypeIsConst = false,
                         bool srcOuterTypeIsConst = false,
-                        bool requireSameWidths = false);
+                        bool requireSameWidths = false,
+                        bool requireDestSameOrUninferred = false);
 
 /// Returns true if two types are weakly equivalent.  See the FIRRTL spec,
 /// Section 4.6, for a full definition of this.  Roughly, the oriented types
@@ -232,6 +233,10 @@ bool areTypesConstCastable(FIRRTLType destType, FIRRTLType srcType,
 /// field-by-field.  Types with unresolved widths are assumed to fit into or
 /// hold their counterparts.
 bool isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType);
+
+/// Return true if destination can be set using source ref type,
+/// e.g., in a ref.define or ref.cast.  Rejects if not ref types.
+bool isCompatibleRefType(Type dstType, Type srcType);
 
 mlir::Type getPassiveType(mlir::Type anyBaseFIRRTLType);
 

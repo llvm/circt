@@ -1125,7 +1125,7 @@ firrtl.module private @is1436_FOO() {
 
     // Define using forceable ref preserved.
     // CHECK-NEXT: firrtl.ref.define %{{.+}}, %[[X_REF]] : !firrtl.rwprobe<bundle<a: vector<uint<1>, 2>, b: uint<2>>>
-    firrtl.ref.define %bov_ref, %x_ref : !firrtl.rwprobe<bundle<a: vector<uint<1> ,2>, b: uint<2>>>
+    firrtl.ref.define %bov_ref, %x_ref : !firrtl.rwprobe<bundle<a: vector<uint<1>, 2>, b: uint<2>>>
 
     // Preserve ref.sub uses.
     // CHECK-NEXT: %[[X_REF_A:.+]] = firrtl.ref.sub %[[X_REF]][0]
@@ -1150,8 +1150,10 @@ firrtl.module private @is1436_FOO() {
     %x_ref_b = firrtl.ref.sub %x_ref[1] : !firrtl.rwprobe<bundle<a: vector<uint<1>, 2>, b: uint<2>>>
     %x_b = firrtl.ref.resolve %x_ref_b : !firrtl.rwprobe<uint<2>>
 
-    // TODO: Handle rwprobe --> probe define, enable this.
-    // firrtl.ref.define %probe, %x_ref_b : !firrtl.probe<uint<2>>
+    // CHECK-NEXT: %[[X_B_REF_PROBE:.+]] = firrtl.ref.cast %[[X_B_REF]]
+    // CHECK-NEXT: firrtl.ref.define %probe, %[[X_B_REF_PROBE]] : !firrtl.probe<uint<2>>
+    %x_ref_b_probe = firrtl.ref.cast %x_ref_b : (!firrtl.rwprobe<uint<2>>) -> !firrtl.probe<uint<2>>
+    firrtl.ref.define %probe, %x_ref_b_probe : !firrtl.probe<uint<2>>
 
     // Check resolve of rwprobe is preserved.
     // CHECK-NEXT: = firrtl.ref.resolve %[[X_REF]]

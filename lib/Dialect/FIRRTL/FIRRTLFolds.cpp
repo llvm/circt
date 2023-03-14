@@ -3126,7 +3126,7 @@ LogicalResult ClockGateIntrinsicOp::canonicalize(ClockGateIntrinsicOp op,
 }
 
 //===----------------------------------------------------------------------===//
-// RefOps
+// Reference Ops.
 //===----------------------------------------------------------------------===//
 
 // refresolve(forceable.ref) -> forceable.data
@@ -3145,4 +3145,11 @@ void RefResolveOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                MLIRContext *context) {
   results.insert<patterns::RefResolveOfRefSend>(context);
   results.insert(canonicalizeRefResolveOfForceable);
+}
+
+OpFoldResult RefCastOp::fold(FoldAdaptor adaptor) {
+  // RefCast is unnecessary if types match.
+  if (getInput().getType() == getType())
+    return getInput();
+  return {};
 }
