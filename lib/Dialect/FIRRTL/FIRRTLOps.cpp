@@ -4398,6 +4398,22 @@ void ElementwiseAndPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // RefOps
 //===----------------------------------------------------------------------===//
 
+void RefCastOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void RefResolveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void RefSendOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void RefSubOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
 FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
                                          ArrayRef<NamedAttribute> attrs,
                                          std::optional<Location> loc) {
@@ -4418,18 +4434,6 @@ FIRRTLType RefSendOp::inferReturnType(ValueRange operands,
     return emitInferRetTypeError(
         loc, "ref.send operand must be base type, not ", inType);
   return RefType::get(inBaseType.getPassiveType());
-}
-
-void RefResolveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  genericAsmResultNames(*this, setNameFn);
-}
-
-void RefSendOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  genericAsmResultNames(*this, setNameFn);
-}
-
-void RefSubOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  genericAsmResultNames(*this, setNameFn);
 }
 
 FIRRTLType RefSubOp::inferReturnType(ValueRange operands,

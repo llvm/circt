@@ -195,4 +195,11 @@ class RefResultTypeConstraint<string base, string ref>
                    base, ref,
                    "RefType::get($_self.cast<FIRRTLBaseType>().getPassiveType())">;
 
+class SameTypeOrUninferredConstraint<string dst, string src>
+  : PredOpTrait<"reference " # dst # " must be compatible with reference " # src #
+                ": recursively same or uninferred of same",
+                CPred<"circt::firrtl::isTypeSameOrUninferred("
+                     "cast<RefType>($" # dst # ".getType()).getType(), "
+                     "cast<RefType>($" # src # ".getType()).getType())">>;
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD
