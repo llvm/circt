@@ -58,9 +58,10 @@ public:
             RefResolveOp, RefSubOp,
             // Casts to deal with weird stuff
             UninferredResetCastOp, UninferredWidthCastOp, ConstCastOp,
-            mlir::UnrealizedConversionCastOp>([&](auto expr) -> ResultType {
-          return thisCast->visitExpr(expr, args...);
-        })
+            RefCastOp, mlir::UnrealizedConversionCastOp>(
+            [&](auto expr) -> ResultType {
+              return thisCast->visitExpr(expr, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidExpr(op, args...);
         });
@@ -189,6 +190,7 @@ public:
   HANDLE(ConstCastOp, Unhandled);
   HANDLE(mlir::UnrealizedConversionCastOp, Unhandled);
   HANDLE(BitCastOp, Unhandled);
+  HANDLE(RefCastOp, Unhandled);
 #undef HANDLE
 };
 

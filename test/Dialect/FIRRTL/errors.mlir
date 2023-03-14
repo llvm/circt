@@ -1185,6 +1185,59 @@ firrtl.circuit "NoDefineIntoRefSub" {
 }
 
 // -----
+// Can't define into a ref.cast.
+
+firrtl.circuit "NoDefineIntoRefCast" {
+  firrtl.module @NoDefineIntoRefCast(out %r: !firrtl.probe<uint<1>>) {
+    // expected-note @below {{the destination was defined here}}
+    %dest_cast = firrtl.ref.cast %r : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint>
+    %x = firrtl.wire : !firrtl.uint
+    %xref = firrtl.ref.send %x : !firrtl.uint
+    // expected-error @below {{has invalid flow: the destination expression has source flow, expected sink or duplex flow}}
+    firrtl.ref.define %dest_cast, %xref : !firrtl.probe<uint>
+  }
+}
+
+// -----
+// Can't cast to gain width information.
+
+firrtl.circuit "CastAwayRefWidth" {
+  firrtl.module @CastAwayRefWidth(out %r: !firrtl.probe<uint<1>>) {
+    %zero = firrtl.constant 0 : !firrtl.uint
+    %xref = firrtl.ref.send %zero : !firrtl.uint
+    // expected-error @below {{reference result must be compatible with reference input: recursively same or uninferred of same}}
+    %source = firrtl.ref.cast %xref : (!firrtl.probe<uint>) -> !firrtl.probe<uint<1>>
+    firrtl.ref.define %r, %source : !firrtl.probe<uint<1>>
+  }
+}
+
+// -----
+// Can't promote to rwprobe.
+
+firrtl.circuit "CastPromoteToRWProbe" {
+  firrtl.module @CastPromoteToRWProbe(out %r: !firrtl.rwprobe<uint>) {
+    %zero = firrtl.constant 0 : !firrtl.uint
+    %xref = firrtl.ref.send %zero : !firrtl.uint
+    // expected-error @below {{reference result must be compatible with reference input: recursively same or uninferred of same}}
+    %source = firrtl.ref.cast %xref : (!firrtl.probe<uint>) -> !firrtl.rwprobe<uint>
+    firrtl.ref.define %r, %source : !firrtl.rwprobe<uint>
+  }
+}
+
+// -----
+// Can't add const-ness via ref.cast
+
+firrtl.circuit "CastToMoreConst" {
+  firrtl.module @CastToMoreConst(out %r: !firrtl.probe<const.uint<3>>) {
+    %zero = firrtl.wire : !firrtl.uint<3>
+    %zref = firrtl.ref.send %zero : !firrtl.uint<3>
+    // expected-error @below {{reference result must be compatible with reference input: recursively same or uninferred of same}}
+    %zconst_ref= firrtl.ref.cast %zref : (!firrtl.probe<uint<3>>) -> !firrtl.probe<const.uint<3>>
+    firrtl.ref.define %r, %zconst_ref : !firrtl.probe<const.uint<3>>
+  }
+}
+
+// -----
 // Check that you can't drive a source.
 
 firrtl.circuit "PropertyDriveSource" {
@@ -1207,6 +1260,7 @@ firrtl.circuit "PropertyDoubleDrive" {
     firrtl.propassign %out, %0 : !firrtl.string
   }
 }
+
 
 // -----
 // Issue 4174-- handle duplicate module names.

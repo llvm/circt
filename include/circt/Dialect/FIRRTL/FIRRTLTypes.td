@@ -192,6 +192,11 @@ class RefResultTypeConstraint<string base, string ref>
                    base, ref,
                    "RefType::get($_self.cast<FIRRTLBaseType>().getPassiveType())">;
 
+class CompatibleRefTypes<string dst, string src>
+  : PredOpTrait<"reference " # dst # " must be compatible with reference " # src #
+                ": recursively same or uninferred of same and can only demote rwprobe to probe",
+                CPred<"circt::firrtl::areTypesRefCastable($" # dst # ".getType(), $" # src # ".getType())">>;
+
 //===----------------------------------------------------------------------===//
 // Property Types
 //===----------------------------------------------------------------------===//
