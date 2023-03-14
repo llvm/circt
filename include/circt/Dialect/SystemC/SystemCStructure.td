@@ -180,7 +180,9 @@ def SCFuncOp : SystemCOp<"func", [
     Block *getBodyBlock() { return &getBody().front(); }
   }];
 
-  let assemblyFormat = "custom<ImplicitSSAName>($name) attr-dict-with-keyword $body";
+  let assemblyFormat = [{
+    `` custom<ImplicitSSAName>($name) attr-dict-with-keyword $body
+  }];
 
   let hasVerifier = true;
   let skipDefaultBuilders = 1;

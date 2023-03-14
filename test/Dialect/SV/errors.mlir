@@ -183,7 +183,7 @@ sv.bind #hw.innerNameRef<@InternSrcMod::@A>
 
 hw.module @test() {
   // expected-error @+1 {{op invalid parameter value @test}}
-  %param_x = sv.localparam : i42 {value = @test}
+  %param_x = sv.localparam {value = @test} : i42
 }
 
 // -----

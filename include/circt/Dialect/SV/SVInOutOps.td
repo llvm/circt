@@ -38,7 +38,8 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? `` custom<SVImplicitSSAName>(attr-dict) `:` qualified(type($result))
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
+    `:` qualified(type($result))
   }];
   let hasCanonicalizeMethod = true;
 
@@ -68,8 +69,8 @@ def RegOp : SVOp<"reg", [
 
   // We handle the name in a custom way, so we use a customer parser/printer.
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? `` custom<SVImplicitSSAName>(attr-dict)
-     `:` qualified(type($result))
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
+    `:` qualified(type($result))
   }];
   let hasCanonicalizeMethod = true;
 
@@ -236,8 +237,8 @@ def LogicOp : SVOp<"logic", [DeclareOpInterfaceMethods<OpAsmOpInterface,
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? `` custom<SVImplicitSSAName>(attr-dict) `:`
-                                                qualified(type($result))
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
+    `:` qualified(type($result))
   }];
 
   let extraClassDeclaration = [{

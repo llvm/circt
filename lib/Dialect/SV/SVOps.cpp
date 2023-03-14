@@ -91,22 +91,6 @@ static Operation *lookupSymbolInNested(Operation *symbolTableOp,
 }
 
 //===----------------------------------------------------------------------===//
-// ImplicitSSAName Custom Directive
-//===----------------------------------------------------------------------===//
-
-static ParseResult parseSVImplicitSSAName(OpAsmParser &parser,
-                                          NamedAttrList &resultAttrs) {
-  return parseImplicitSSAName(parser, resultAttrs);
-}
-
-static void printSVImplicitSSAName(OpAsmPrinter &printer, Operation *op,
-                                   DictionaryAttr attrs) {
-  printImplicitSSAName(printer, op, attrs,
-                       {SymbolTable::getSymbolAttrName(),
-                        hw::InnerName::getInnerNameAttrName(), "svAttributes"});
-}
-
-//===----------------------------------------------------------------------===//
 // VerbatimExprOp
 //===----------------------------------------------------------------------===//
 

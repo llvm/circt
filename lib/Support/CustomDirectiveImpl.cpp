@@ -11,6 +11,24 @@
 
 using namespace circt;
 
+ParseResult circt::parseImplicitSSAName(OpAsmParser &parser, StringAttr &attr) {
+  // Use the explicit name if one is provided as `name "xyz"`.
+  if (!parser.parseOptionalKeyword("name")) {
+    std::string str;
+    if (parser.parseString(&str))
+      return failure();
+    attr = parser.getBuilder().getStringAttr(str);
+    return success();
+  }
+
+  // Infer the name from the SSA name of the operation's first result.
+  auto resultName = parser.getResultName(0).first;
+  if (!resultName.empty() && isdigit(resultName[0]))
+    resultName = "";
+  attr = parser.getBuilder().getStringAttr(resultName);
+  return success();
+}
+
 ParseResult circt::parseImplicitSSAName(OpAsmParser &parser,
                                         NamedAttrList &attrs) {
   if (parser.parseOptionalAttrDict(attrs))
@@ -32,6 +50,21 @@ bool circt::inferImplicitSSAName(OpAsmParser &parser, NamedAttrList &attrs) {
   auto *context = parser.getBuilder().getContext();
   attrs.push_back({StringAttr::get(context, "name"), nameAttr});
   return true;
+}
+
+void circt::printImplicitSSAName(OpAsmPrinter &printer, Operation *op,
+                                 StringAttr attr) {
+  SmallString<32> resultNameStr;
+  llvm::raw_svector_ostream tmpStream(resultNameStr);
+  printer.printOperand(op->getResult(0), tmpStream);
+  auto actualName = tmpStream.str().drop_front();
+  auto expectedName = attr.getValue();
+  // Anonymous names are printed as digits, which is fine.
+  if (actualName == expectedName ||
+      (expectedName.empty() && isdigit(actualName[0])))
+    return;
+
+  printer << " name " << attr;
 }
 
 void circt::printImplicitSSAName(OpAsmPrinter &printer, Operation *op,
