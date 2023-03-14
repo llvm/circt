@@ -70,7 +70,7 @@ utils/get-verilator.sh
 utils/get-or-tools
 ```
 
-Install PyCDE with CMake:
+Install PyCDE with CMake. PyCDE requires cmake version >= 3.21:
 
 ```bash
 mkdir build
