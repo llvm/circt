@@ -2308,6 +2308,9 @@ LogicalResult RefDefineOp::verify() {
     if (isa<RefSubOp>(op))
       return emitError(
           "destination reference cannot be a sub-element of a reference");
+    if (isa<RefCastOp>(op)) // Source flow, check anyway for now.
+      return emitError(
+          "destination reference cannot be a cast of another reference");
   }
 
   return success();
