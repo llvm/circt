@@ -1124,14 +1124,41 @@ firrtl.circuit "NoDefineIntoRefSub" {
 }
 
 // -----
+// Can't define into a ref.cast.
+
+firrtl.circuit "NoDefineIntoRefCast" {
+  firrtl.module @NoDefineIntoRefCast(out %r: !firrtl.ref<uint<1>>) {
+    // expected-note @below {{the destination was defined here}}
+    %dest_cast = firrtl.ref.cast %r : (!firrtl.ref<uint<1>>) -> !firrtl.ref<uint>
+    %x = firrtl.wire : !firrtl.uint<1>
+    %xref = firrtl.ref.send %x : !firrtl.uint<1>
+    // expected-error @below {{has invalid flow: the destination expression has source flow, expected sink or duplex flow}}
+    firrtl.ref.define %dest_cast, %xref : !firrtl.ref<uint>, !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
 // Can't gain width information along define path.
 
 firrtl.circuit "DefineIntoWidth" {
   firrtl.module @DefineIntoWidth(out %r: !firrtl.ref<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint
     %xref = firrtl.ref.send %zero : !firrtl.uint
-    // expected-error @below {{ reference dest must be compatible with reference src: recursively same or uninferred of same}}
+    // expected-error @below {{reference dest must be compatible with reference src: recursively same or uninferred of same}}
     firrtl.ref.define %r, %xref : !firrtl.ref<uint<1>>, !firrtl.ref<uint>
+  }
+}
+
+// -----
+// Can't cast to gain width information.
+
+firrtl.circuit "CastAwayRefWidth" {
+  firrtl.module @CastAwayRefWidth(out %r: !firrtl.ref<uint<1>>) {
+    %zero = firrtl.constant 0 : !firrtl.uint
+    %xref = firrtl.ref.send %zero : !firrtl.uint
+    // expected-error @below {{reference result must be compatible with reference input: recursively same or uninferred of same}}
+    %source = firrtl.ref.cast %xref : (!firrtl.ref<uint>) -> !firrtl.ref<uint<1>>
+    firrtl.ref.define %r, %source : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
   }
 }
 
