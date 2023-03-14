@@ -33,25 +33,20 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   auto dstType = dstFType.dyn_cast<FIRRTLBaseType>();
   auto srcType = srcFType.dyn_cast<FIRRTLBaseType>();
 
-  // References use ref.assign.  Types should match, leave to verifier if not.
-  if (isa<RefType>(dstFType)) {
-    builder.create<RefDefineOp>(dst, src);
+  // Special Connects (non-base, foreign):
+  if (!dstType) {
+    // References use ref.define.  Types should match, leave to verifier if not.
+    if (isa<RefType>(dstFType))
+      builder.create<RefDefineOp>(dst, src);
+    else // Other types, give up and leave a connect
+      builder.create<ConnectOp>(dst, src);
     return;
   }
 
   // If the types are the exact same we can just connect them.
-  if (dstFType == srcFType) {
-    // Strict connect does not allow uninferred widths.
-    if (dstType && dstType.hasUninferredWidth())
-      builder.create<ConnectOp>(dst, src);
-    else
-      builder.create<StrictConnectOp>(dst, src);
-    return;
-  }
-
-  // Non-base types don't need special handling.
-  if (!srcType || !dstType) {
-    builder.create<ConnectOp>(dst, src);
+  // Strict connect does not allow uninferred widths.
+  if (dstType == srcType && !dstType.hasUninferredWidth()) {
+    builder.create<StrictConnectOp>(dst, src);
     return;
   }
 
