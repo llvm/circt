@@ -360,9 +360,15 @@ def FConnectLike : OpInterface<"FConnectLike"> {
     "Value", "getDest", (ins)>,
     InterfaceMethod<"Return a source of connection.",
     "Value", "getSrc", (ins)>,
-    StaticInterfaceMethod<"Return whether this connection is static single connect.",
-    "bool", "isStaticSingleConnect", (ins), [{}],
-     /*defaultImplementation=*/[{ return false; }]>
+    StaticInterfaceMethod<"Return connection behavior kind.",
+    "ConnectBehaviorKind", "getConnectBehaviorKind", (ins), [{}],
+     /*defaultImplementation=*/[{ return ConnectBehaviorKind::LastConnect; }]>,
+    StaticInterfaceMethod<"Returns true if ConnectBehavior is StaticSingleConnect.",
+    "bool", "hasStaticSingleConnectBehavior", (ins),
+     /*methodBody=*/[{ return getConnectBehaviorKind() == ConnectBehaviorKind::StaticSingleConnect; }]>,
+    StaticInterfaceMethod<"Returns true if ConnectBehavior is LastConnect.",
+    "bool", "hasLastConnectBehavior", (ins),
+     /*methodBody=*/[{ return getConnectBehaviorKind() == ConnectBehaviorKind::LastConnect; }]>
   ];
 }
 

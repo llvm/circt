@@ -96,6 +96,14 @@ struct PortInfo {
         annotations(annos) {}
 };
 
+enum class ConnectBehaviorKind {
+  /// Classic FIRRTL connections: last connect 'wins' across paths;
+  /// conditionally applied under 'when'.
+  LastConnect,
+  /// Exclusive connection to the destination, unconditional.
+  StaticSingleConnect,
+};
+
 /// Verification hook for verifying module like operations.
 LogicalResult verifyModuleLikeOpInterface(FModuleLike module);
 
