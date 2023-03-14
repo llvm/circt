@@ -2611,4 +2611,13 @@ firrtl.module @MuxCondWidth(in %cond: !firrtl.uint<1>, out %foo: !firrtl.uint<3>
   firrtl.strictconnect %foo, %0 : !firrtl.uint<3>
 }
 
+// CHECK-LABEL: @RefCastSame
+firrtl.module @RefCastSame(in %in: !firrtl.ref<uint<1>>, out %out: !firrtl.ref<uint<1>>) {
+  // Drop no-op ref.cast's.
+  // CHECK-NEXT:  firrtl.ref.define %out, %in
+  // CHECK-NEXT:  }
+  %same_as_in = firrtl.ref.cast %in : (!firrtl.ref<uint<1>>) -> !firrtl.ref<uint<1>>
+  firrtl.ref.define %out, %same_as_in : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+}
+
 }

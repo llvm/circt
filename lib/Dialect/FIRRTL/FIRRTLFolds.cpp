@@ -2818,3 +2818,14 @@ void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                           MLIRContext *context) {
   results.add(canonicalizeImmediateVerifOp<CoverOp, /* EraseIfZero = */ true>);
 }
+
+//===----------------------------------------------------------------------===//
+// Reference Ops.
+//===----------------------------------------------------------------------===//
+
+OpFoldResult RefCastOp::fold(FoldAdaptor adaptor) {
+  // RefCast is unnecessary if types match.
+  if (getInput().getType() == getType())
+    return getInput();
+  return {};
+}
