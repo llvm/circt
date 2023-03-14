@@ -3038,9 +3038,11 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
 ///
 /// module ::= 'module' id ':' info? INDENT pohwist simple_stmt_block DEDENT
 /// module ::=
-///        'extmodule' id ':' info? INDENT pohwist defname? parameter* DEDENT
+///        'extmodule' id ':' info? INDENT pohwist defname? parameter* ref*
+///        DEDENT
 /// module ::=
-///        'intmodule' id ':' info? INDENT pohwist intname parameter* DEDENT
+///        'intmodule' id ':' info? INDENT pohwist intname parameter* ref*
+///        DEDENT
 /// defname   ::= 'defname' '=' id NEWLINE
 /// intname   ::= 'intrinsic' '=' id NEWLINE
 ///
@@ -3048,6 +3050,7 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
 /// parameter ::= 'parameter' id '=' StringLit NEWLINE
 /// parameter ::= 'parameter' id '=' floatingpoint NEWLINE
 /// parameter ::= 'parameter' id '=' RawString NEWLINE
+/// ref ::= 'ref' static_reference 'is' StringLit NEWLINE
 ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
                                           StringRef circuitTarget,
                                           unsigned indent) {
@@ -3145,7 +3148,11 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   }
 
   SmallVector<Attribute> parameters;
+  struct RefStatementInfo { StringAttr refName; StringAttr resolvedPath; SMLoc loc; };
+  SmallVector<RefStatementInfo> refStatements;
+  ArrayAttr internalPaths;
   SmallPtrSet<StringAttr, 8> seenNames;
+  SmallPtrSet<StringAttr, 8> seenRefs;
 
   // Parse the parameter list.
   while (consumeIf(FIRToken::kw_parameter)) {
@@ -3205,13 +3212,66 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
       return emitError(loc, "redefinition of parameter '" + paramName + "'");
     parameters.push_back(ParamDeclAttr::get(nameId, value));
   }
+  while (consumeIf(FIRToken::kw_ref)) {
+    auto loc = getToken().getLoc();
+    // ref x is "a.b.c"
+    // Support "ref x.y is " once aggregate-of-ref supported.
+    StringAttr refName, resolved;
+    if (parseId(refName, "expected ref name") ||
+        parseToken(FIRToken::kw_is, "expected 'is' in ref statement"))
+      return failure();
+
+    if (!seenRefs.insert(refName).second)
+      return emitError(loc, "duplicate ref statement for '" + refName.strref() +
+                                "'");
+
+    auto kind = getToken().getKind();
+    if (kind != FIRToken::string)
+      return emitError(loc, "expected string in ref statement");
+    resolved = builder.getStringAttr(getToken().getStringValue());
+    consumeToken(FIRToken::string);
+
+    refStatements.push_back(RefStatementInfo{refName, resolved, loc});
+  }
+
+  // Build paths array.  One entry for each ref-type port.
+  SmallVector<Attribute> internalPathAttrs;
+  auto refPorts = llvm::make_filter_range(
+      portList, [&](auto &port) { return isa<RefType>(port.type); });
+  llvm::SmallBitVector usedRefs(refStatements.size());
+  for (auto &port : refPorts) {
+    // Reject input reftype ports on extmodule's, probably intmodule's too.
+    if (!port.isOutput())
+      return emitError(portIds[port.name],
+                       "ref ports must be output on extmodule and intmodule");
+    auto refStmtIt = llvm::find_if(
+        refStatements, [&](const auto &r) { return r.refName == port.name; });
+    // Error if no ref statement found.
+    if (refStmtIt == refStatements.end())
+      return mlir::emitError(port.loc,
+          "no ref statement found for ref port ")
+        .append(port.name);
+
+    usedRefs.set(std::distance(refStatements.begin(), refStmtIt));
+    internalPathAttrs.push_back(refStmtIt->resolvedPath);
+  }
+  if (internalPathAttrs.size() != refStatements.size()) {
+    assert(internalPathAttrs.size() < refStatements.size());
+    assert(!usedRefs.all());
+    auto idx = usedRefs.find_first_unset();
+    assert(idx != -1);
+    return emitError(refStatements[idx].loc, "unused ref statement");
+  }
+  internalPaths = builder.getArrayAttr(internalPathAttrs);
 
   if (isExtModule)
     builder.create<FExtModuleOp>(info.getLoc(), name, portList, defName,
-                                 annotations, builder.getArrayAttr(parameters));
+                                 annotations, builder.getArrayAttr(parameters),
+                                 internalPaths);
   else
     builder.create<FIntModuleOp>(info.getLoc(), name, portList, intName,
-                                 annotations, builder.getArrayAttr(parameters));
+                                 annotations, builder.getArrayAttr(parameters),
+                                 internalPaths);
 
   return success();
 }
