@@ -838,7 +838,8 @@ firrtl.circuit "Foo" {
     firrtl.ref.define %bov_ref, %bov_rw : !firrtl.rwprobe<bundle<a: vector<uint, 2>, b : uint>>
 
     %ref_w = firrtl.ref.send %w : !firrtl.uint
-    firrtl.ref.define %x, %ref_w : !firrtl.probe<uint>, !firrtl.probe<uint>
+    %cast_ref_w = firrtl.ref.cast %ref_w : (!firrtl.probe<uint>) -> !firrtl.probe<uint>
+    firrtl.ref.define %x, %cast_ref_w : !firrtl.probe<uint>, !firrtl.probe<uint>
     firrtl.ref.define %y, %w_rw : !firrtl.rwprobe<uint>, !firrtl.rwprobe<uint>
 
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
