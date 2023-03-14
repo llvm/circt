@@ -676,6 +676,96 @@ static void prettifyAfterLegalization(
   }
 }
 
+struct WireLowering {
+  hw::WireOp wireOp;
+  Block::iterator declarePoint;
+  Block::iterator assignPoint;
+};
+
+/// Determine the insertion location of declaration and assignment ops for
+/// `hw::WireOp`s in a block. This function tries to place the declaration point
+/// as late as possible, right before the very first use of the wire. It also
+/// tries to place the assign point as early as possible, right after the
+/// assigned value becomes available.
+static void buildWireLowerings(Block &block,
+                               SmallVectorImpl<WireLowering> &wireLowerings) {
+  for (auto hwWireOp : block.getOps<hw::WireOp>()) {
+    // Find the earliest point in the block at which the input operand is
+    // available. The assign operation will have to go after that to not create
+    // a use-before-def situation.
+    Block::iterator assignPoint = block.begin();
+    if (auto *defOp = hwWireOp.getInput().getDefiningOp())
+      if (defOp && defOp->getBlock() == &block)
+        assignPoint = ++Block::iterator(defOp);
+
+    // Find the earliest use of the wire within the block. The wire declaration
+    // will have to go somewhere before this point to not create a
+    // use-before-def situation.
+    Block::iterator declarePoint = assignPoint;
+    for (auto *user : hwWireOp->getUsers()) {
+      while (user->getBlock() != &block)
+        user = user->getParentOp();
+      if (user->isBeforeInBlock(&*declarePoint))
+        declarePoint = Block::iterator(user);
+    }
+
+    wireLowerings.push_back({hwWireOp, declarePoint, assignPoint});
+  }
+}
+
+/// Materialize the SV wire declaration and assignment operations in the
+/// locations previously determined by a call to `buildWireLowerings`. This
+/// replaces all `hw::WireOp`s with their appropriate SV counterpart.
+static void applyWireLowerings(Block &block,
+                               ArrayRef<WireLowering> wireLowerings) {
+  bool isProceduralRegion = block.getParentOp()->hasTrait<ProceduralRegion>();
+
+  for (auto [hwWireOp, declarePoint, assignPoint] : wireLowerings) {
+    // Create the declaration.
+    ImplicitLocOpBuilder builder(hwWireOp.getLoc(), &block, declarePoint);
+    Value decl;
+    if (isProceduralRegion) {
+      decl = builder.create<LogicOp>(hwWireOp.getType(), hwWireOp.getNameAttr(),
+                                     hwWireOp.getInnerSymAttr());
+    } else {
+      decl =
+          builder.create<sv::WireOp>(hwWireOp.getType(), hwWireOp.getNameAttr(),
+                                     hwWireOp.getInnerSymAttr());
+    }
+
+    // Carry attributes over to the lowered operation.
+    auto defaultAttrNames = hwWireOp.getAttributeNames();
+    for (auto namedAttr : hwWireOp->getAttrs())
+      if (!llvm::is_contained(defaultAttrNames, namedAttr.getName()))
+        decl.getDefiningOp()->setAttr(namedAttr.getName(),
+                                      namedAttr.getValue());
+
+    // Create the assignment. If it is supposed to be at a different point than
+    // the declaration, reposition the builder there. Otherwise we'll just build
+    // the assignment immediately after the declaration.
+    if (assignPoint != declarePoint)
+      builder.setInsertionPoint(&block, assignPoint);
+    if (isProceduralRegion)
+      builder.create<BPAssignOp>(decl, hwWireOp.getInput());
+    else
+      builder.create<AssignOp>(decl, hwWireOp.getInput());
+
+    // Create the read. If we have created the assignment at a different point
+    // than the declaration, reposition the builder to immediately after the
+    // declaration. Otherwise we'll just build the read immediately after the
+    // assignment.
+    if (assignPoint != declarePoint)
+      builder.setInsertionPointAfterValue(decl);
+    auto readOp = builder.create<sv::ReadInOutOp>(decl);
+
+    // Replace the HW wire.
+    hwWireOp.replaceAllUsesWith(readOp.getResult());
+  }
+
+  for (auto [hwWireOp, declarePoint, assignPoint] : wireLowerings)
+    hwWireOp.erase();
+}
+
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 static LogicalResult legalizeHWModule(Block &block,
@@ -690,6 +780,15 @@ static LogicalResult legalizeHWModule(Block &block,
         if (failed(legalizeHWModule(region.front(), options)))
           return failure();
     }
+  }
+
+  // Lower HW wires into SV wires in the appropriate spots. Try to put the
+  // declaration close to the first use in the block, and the assignment right
+  // after the assigned value becomes available.
+  {
+    SmallVector<WireLowering> wireLowerings;
+    buildWireLowerings(block, wireLowerings);
+    applyWireLowerings(block, wireLowerings);
   }
 
   // Next, walk all of the operations at this level.
