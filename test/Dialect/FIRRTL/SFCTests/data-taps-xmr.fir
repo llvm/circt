@@ -157,6 +157,13 @@ circuit Top : %[[
       inst leaf of Leaf
       leaf.c <= c
 
+  ; CHECK-LABEL: module Top(
+  ; CHECK-NEXT:    input c
+  ; CHECK-NEXT:    output [2:0] o
+  ; CHECK-NEXT:  );
+  ; CHECK-EMPTY:
+  ; CHECK-NEXT:    assign o = 3'h2;
+  ; CHECK-NEXT:  endmodule
   module Top :
     input c: UInt<1>
     output o: UInt
