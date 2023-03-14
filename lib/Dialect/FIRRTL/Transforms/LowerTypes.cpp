@@ -866,7 +866,7 @@ bool TypeLoweringVisitor::visitStmt(RefDefineOp op) {
   for (const auto &field : llvm::enumerate(fields)) {
     Value src = getSubWhatever(op.getSrc(), field.index());
     Value dest = getSubWhatever(op.getDest(), field.index());
-    assert(!field.value().isOutput);
+    assert(!field.value().isOutput && "unexpected flip in reftype destination");
     builder->create<RefDefineOp>(dest, src);
   }
   return true;
