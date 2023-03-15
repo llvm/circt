@@ -10,6 +10,7 @@ add_circt_dialect_library(
   CIRCTOM
 
   OMDialect.cpp
+  OMOps.cpp
 
   DEPENDS
   MLIROMIncGen

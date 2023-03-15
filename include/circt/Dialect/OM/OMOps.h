@@ -1,4 +1,4 @@
-//===- OM.td - Object Model dialect definition ----------------------------===//
+//===- OMOps.h - Object Model operation declarations ----------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,17 +6,17 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This is the top level file for the Object Model dialect.
+// This file contains the Object Model operation declarations.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_OM_OM_TD
-#define CIRCT_DIALECT_OM_OM_TD
+#ifndef CIRCT_DIALECT_OM_OMOPS_H
+#define CIRCT_DIALECT_OM_OMOPS_H
 
-include "mlir/IR/OpBase.td"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/OpDefinition.h"
 
-include "circt/Dialect/OM/OMDialect.td"
+#define GET_OP_CLASSES
+#include "circt/Dialect/OM/OM.h.inc"
 
-include "circt/Dialect/OM/OMOps.td"
-
-#endif // CIRCT_DIALECT_OM_OM_TD
+#endif // CIRCT_DIALECT_OM_OMOPS_H
