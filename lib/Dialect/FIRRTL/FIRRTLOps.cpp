@@ -716,22 +716,28 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<PortInfo> ports,
                          StringRef defnameAttr, ArrayAttr annotations,
-                         ArrayAttr parameters) {
+                         ArrayAttr parameters, ArrayAttr internalPaths) {
   buildModule(builder, result, name, ports, annotations);
   if (!defnameAttr.empty())
     result.addAttribute("defname", builder.getStringAttr(defnameAttr));
   if (!parameters)
-    result.addAttribute("parameters", builder.getArrayAttr({}));
+    parameters = builder.getArrayAttr({});
+  result.addAttribute(getParametersAttrName(result.name), parameters);
+  if (internalPaths && !internalPaths.empty())
+    result.addAttribute(getInternalPathsAttrName(result.name), internalPaths);
 }
 
 void FIntModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<PortInfo> ports,
                          StringRef intrinsicNameAttr, ArrayAttr annotations,
-                         ArrayAttr parameters) {
+                         ArrayAttr parameters, ArrayAttr internalPaths) {
   buildModule(builder, result, name, ports, annotations);
   result.addAttribute("intrinsic", builder.getStringAttr(intrinsicNameAttr));
   if (!parameters)
-    result.addAttribute("parameters", builder.getArrayAttr({}));
+    parameters = builder.getArrayAttr({});
+  result.addAttribute(getParametersAttrName(result.name), parameters);
+  if (internalPaths && !internalPaths.empty())
+    result.addAttribute(getInternalPathsAttrName(result.name), internalPaths);
 }
 
 void FMemModuleOp::build(OpBuilder &builder, OperationState &result,

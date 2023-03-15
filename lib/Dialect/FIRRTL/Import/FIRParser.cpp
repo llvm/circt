@@ -3206,15 +3206,12 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     parameters.push_back(ParamDeclAttr::get(nameId, value));
   }
 
-  FModuleLike fmodule;
   if (isExtModule)
-    fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList,
-                                           defName, annotations);
+    builder.create<FExtModuleOp>(info.getLoc(), name, portList, defName,
+                                 annotations, builder.getArrayAttr(parameters));
   else
-    fmodule = builder.create<FIntModuleOp>(info.getLoc(), name, portList,
-                                           intName, annotations);
-
-  fmodule->setAttr("parameters", builder.getArrayAttr(parameters));
+    builder.create<FIntModuleOp>(info.getLoc(), name, portList, intName,
+                                 annotations, builder.getArrayAttr(parameters));
 
   return success();
 }
