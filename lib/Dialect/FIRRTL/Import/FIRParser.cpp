@@ -2297,17 +2297,17 @@ ParseResult FIRStmtParser::parseRefDefine() {
       parseOptionalInfo())
     return failure();
 
-   // TODO: Check static_reference, ref_expr
+  // TODO: Check static_reference, ref_expr
 
   locationProcessor.setLoc(startTok.getLoc());
 
-   // TODO: define.  For now, connect.
+  // TODO: define.  For now, connect.
   emitConnect(builder, target, src);
 
   return success();
 }
 
-/// read ::= 
+/// read ::=
 ParseResult FIRStmtParser::parseRefRead(Value &result) {
   auto startTok = consumeToken(FIRToken::lp_read);
 
@@ -2364,7 +2364,8 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
   auto startTok = consumeToken(FIRToken::lp_rwprobe);
 
   Value static_ref;
-  if (parseExp(static_ref, "expected static reference expression in 'rwprobe'") ||
+  if (parseExp(static_ref,
+               "expected static reference expression in 'rwprobe'") ||
       parseToken(FIRToken::r_paren, "expected ')' in 'rwprobe'") ||
       parseOptionalInfo())
     return failure();
@@ -3148,7 +3149,11 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   }
 
   SmallVector<Attribute> parameters;
-  struct RefStatementInfo { StringAttr refName; StringAttr resolvedPath; SMLoc loc; };
+  struct RefStatementInfo {
+    StringAttr refName;
+    StringAttr resolvedPath;
+    SMLoc loc;
+  };
   SmallVector<RefStatementInfo> refStatements;
   ArrayAttr internalPaths;
   SmallPtrSet<StringAttr, 8> seenNames;
@@ -3248,9 +3253,8 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
         refStatements, [&](const auto &r) { return r.refName == port.name; });
     // Error if no ref statement found.
     if (refStmtIt == refStatements.end())
-      return mlir::emitError(port.loc,
-          "no ref statement found for ref port ")
-        .append(port.name);
+      return mlir::emitError(port.loc, "no ref statement found for ref port ")
+          .append(port.name);
 
     usedRefs.set(std::distance(refStatements.begin(), refStmtIt));
     internalPathAttrs.push_back(refStmtIt->resolvedPath);
