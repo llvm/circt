@@ -28,3 +28,18 @@ def ESIAnyType : ESI_Type<"Any"> {
     static AnyType get(MLIRContext *context);
   }];
 }
+
+def ESIListType : ESI_Type<"List"> {
+  let summary = "a runtime-variably size list";
+  let description = [{
+    In software, a chunk of memory with runtime-specified length. In hardware, a
+    stream of runtime-specified amount of data transmitted over many cycles in
+    compile-time specified specified windows (chunks).
+  }];
+
+  let mnemonic = "list";
+  let parameters = (ins "Type":$elementType);
+  let assemblyFormat = [{
+    `<` $elementType `>`
+  }];
+}
