@@ -58,4 +58,25 @@ def ClassFieldOp : OMOp<"class.field",
   }];
 }
 
+//===----------------------------------------------------------------------===//
+// Object instantiations
+//===----------------------------------------------------------------------===//
+
+def ObjectOp : OMOp<"object",
+    [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let arguments = (ins
+    SymbolNameAttr:$className,
+    Variadic<AnyType>:$actualParams
+  );
+
+  let results = (outs
+    ClassType:$result
+  );
+
+  let assemblyFormat = [{
+    $className `(` $actualParams `)` `:`
+      functional-type($actualParams, $result) attr-dict
+  }];
+}
+
 #endif // CIRCT_DIALECT_OM_OMOPS_TD

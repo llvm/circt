@@ -1,8 +1,18 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
 // CHECK-LABEL: om.class @Thingy
-// CHECK-SAME: (%blue_1: i8)
-om.class @Thingy(%blue_1: i8) {
+// CHECK-SAME: (%blue_1: i8, %blue_2: i32)
+om.class @Thingy(%blue_1: i8, %blue_2: i32) {
+  // CHECK: %[[widget:.+]] = om.object @Widget(%blue_1, %blue_2) : (i8, i32) -> !om.class.type<@Widget>
+  %0 = om.object @Widget(%blue_1, %blue_2) : (i8, i32) -> !om.class.type<@Widget>
+  // CHECK: om.class.field @widget, %[[widget]] : !om.class.type<@Widget>
+  om.class.field @widget, %0 : !om.class.type<@Widget>
+
+  // CHECK: %[[gadget:.+]] = om.object @Gadget(%blue_1, %blue_2) : (i8, i32) -> !om.class.type<@Gadget>
+  %1 = om.object @Gadget(%blue_1, %blue_2) : (i8, i32) -> !om.class.type<@Gadget>
+  // CHECK: om.class.field @gadget, %[[gadget]] : !om.class.type<@Gadget>
+  om.class.field @gadget, %1 : !om.class.type<@Gadget>
+
   // CHECK: om.class.field @blue_1, %blue_1 : i8
   om.class.field @blue_1, %blue_1 : i8
 }
