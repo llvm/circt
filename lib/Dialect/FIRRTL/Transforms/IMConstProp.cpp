@@ -46,40 +46,6 @@ static bool isDeletableWireOrRegOrNode(Operation *op) {
          !hasDontTouch(op) && hasDroppableName(op);
 }
 
-/// This function recursively applies `fn` to leaf ground types of `type`.
-static void
-foreachFIRRTLGroundType(FIRRTLType firrtlType,
-                        llvm::function_ref<void(unsigned, FIRRTLBaseType)> fn) {
-  auto type = getBaseType(firrtlType);
-  // The type is always a ground type if aggregate types don't appear.
-  // So it is better to try a ground type first.
-  if (type.isGround())
-    return fn(0, type);
-
-  unsigned fieldID = 0;
-  auto recurse = [&](auto &&f, FIRRTLBaseType type) -> void {
-    TypeSwitch<FIRRTLBaseType>(type)
-        .Case<BundleType>([&](BundleType bundle) {
-          for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
-            fieldID++;
-            f(f, bundle.getElementType(i));
-          }
-        })
-        .template Case<FVectorType>([&](FVectorType vector) {
-          for (size_t i = 0, e = vector.getNumElements(); i < e; ++i) {
-            fieldID++;
-            f(f, vector.getElementType());
-          }
-        })
-        .Default([&](auto groundType) {
-          assert(groundType.template cast<FIRRTLBaseType>().isGround() &&
-                 "only ground types are expected here");
-          fn(fieldID, groundType.template cast<FIRRTLBaseType>());
-        });
-  };
-  recurse(recurse, type);
-}
-
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
@@ -221,7 +187,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
       return;
     }
 
-    foreachFIRRTLGroundType(firrtlType, [&](unsigned fieldID, auto) {
+    walkGroundTypes(firrtlType, [&](uint64_t fieldID, auto) {
       markOverdefined(fieldRef.getSubField(fieldID));
     });
   }
@@ -275,11 +241,11 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     FieldRef fieldRefResult = getOrCacheFieldRefFromValue(result);
     if (!result.getType().isa<FIRRTLType>())
       return mergeLatticeValue(fieldRefResult, fieldRefFrom);
-    foreachFIRRTLGroundType(
-        result.getType().cast<FIRRTLType>(), [&](unsigned fieldID, auto) {
-          mergeLatticeValue(fieldRefResult.getSubField(fieldID),
-                            fieldRefFrom.getSubField(fieldID));
-        });
+    walkGroundTypes(result.getType().cast<FIRRTLType>(),
+                    [&](uint64_t fieldID, auto) {
+                      mergeLatticeValue(fieldRefResult.getSubField(fieldID),
+                                        fieldRefFrom.getSubField(fieldID));
+                    });
   }
 
   /// setLatticeValue - This is used when a new LatticeValue is computed for
@@ -352,7 +318,7 @@ private:
   DenseMap<FieldRef, llvm::TinyPtrVector<Operation *>> fieldRefToUsers;
 
   // A map to cache results of getFieldRefFromValue since it's costly traverse
-  // the IR>
+  // the IR.
   llvm::DenseMap<Value, FieldRef> valueToFieldRef;
 
   /// This keeps track of users the instance results that correspond to output
@@ -487,7 +453,7 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
         auto firrtlType = operand.getType().dyn_cast<FIRRTLType>();
         if (!firrtlType)
           continue;
-        foreachFIRRTLGroundType(firrtlType, [&](unsigned fieldID, auto type) {
+        walkGroundTypes(firrtlType, [&](uint64_t fieldID, auto type) {
           fieldRefToUsers[fieldRef.getSubField(fieldID)].push_back(&op);
         });
       }
@@ -597,7 +563,7 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect) {
     return markOverdefined(parent);
   }
 
-  auto propagateElementLattice = [&](unsigned fieldID,
+  auto propagateElementLattice = [&](uint64_t fieldID,
                                      FIRRTLBaseType destType) {
     auto fieldRefDestConnected = fieldRefDest.getSubField(fieldID);
 
@@ -652,7 +618,7 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect) {
         << "connect destination is here";
   };
 
-  foreachFIRRTLGroundType(baseType, propagateElementLattice);
+  walkGroundTypes(baseType, propagateElementLattice);
 }
 
 void IMConstPropPass::visitRefSend(RefSendOp send) {
