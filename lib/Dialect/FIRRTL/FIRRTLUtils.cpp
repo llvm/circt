@@ -484,8 +484,22 @@ static void getDeclName(Value value, SmallString<64> &string, bool nameSafe) {
           value = nullptr;
         })
         .Case<mlir::UnrealizedConversionCastOp>(
-            [&](auto cast) { value = cast.getInputs()[0]; })
-        .Default([&](auto) { value = nullptr; });
+            [&](mlir::UnrealizedConversionCastOp cast) {
+              // Forward through 1:1 conversion cast ops.
+              if (cast.getNumResults() == 1 && cast.getNumOperands() == 1 &&
+                  cast.getResult(0).getType() == cast.getOperand(0).getType()) {
+                value = cast.getInputs()[0];
+              } else {
+                // Can't name this.
+                string.clear();
+                value = nullptr;
+              }
+            })
+        .Default([&](auto) {
+          // Can't name this.
+          string.clear();
+          value = nullptr;
+        });
   }
 }
 
