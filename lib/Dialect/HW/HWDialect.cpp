@@ -50,10 +50,12 @@ struct HWInlinerInterface : public mlir::DialectInlinerInterface {
 
   bool isLegalToInline(Operation *op, Region *, bool,
                        mlir::IRMapping &) const final {
-    return isa<ConstantOp>(op) || isa<BitcastOp>(op) ||
+    return isa<ConstantOp>(op) || isa<AggregateConstantOp>(op) ||
+           isa<EnumConstantOp>(op) || isa<BitcastOp>(op) ||
            isa<ArrayCreateOp>(op) || isa<ArrayConcatOp>(op) ||
            isa<ArraySliceOp>(op) || isa<ArrayGetOp>(op) ||
-           isa<StructCreateOp>(op) || isa<StructInjectOp>(op) ||
+           isa<StructCreateOp>(op) || isa<StructExplodeOp>(op) ||
+           isa<StructExtractOp>(op) || isa<StructInjectOp>(op) ||
            isa<UnionCreateOp>(op) || isa<UnionExtractOp>(op);
   }
 
