@@ -2,7 +2,7 @@
 //RUN: circt-opt %s --convert-llhd-to-llvm --split-input-file | FileCheck %s
 
 // CHECK-LABEL:   llvm.func @convert_empty(
-// CHECK-SAME:                             %[[VAL_0:.*]]: !llvm.ptr<i8>,
+// CHECK-SAME:                             %[[VAL_0:.*]]: !llvm.ptr,
 // CHECK-SAME:                             %[[VAL_1:.*]]: !llvm.ptr<struct<()>>,
 // CHECK-SAME:                             %[[VAL_2:.*]]: !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>) {
 // CHECK:           llvm.return
@@ -10,7 +10,7 @@
 llhd.entity @convert_empty () -> () {}
 
 // CHECK-LABEL:   llvm.func @convert_one_input(
-// CHECK-SAME:                                 %[[VAL_0:.*]]: !llvm.ptr<i8>,
+// CHECK-SAME:                                 %[[VAL_0:.*]]: !llvm.ptr,
 // CHECK-SAME:                                 %[[VAL_1:.*]]: !llvm.ptr<struct<()>>,
 // CHECK-SAME:                                 %[[VAL_2:.*]]: !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>) {
 // CHECK:           %[[VAL_3:.*]] = llvm.mlir.constant(0 : i32) : i32
@@ -20,7 +20,7 @@ llhd.entity @convert_empty () -> () {}
 llhd.entity @convert_one_input (%in0 : !llhd.sig<i1>) -> () {}
 
 // CHECK-LABEL:   llvm.func @convert_one_output(
-// CHECK-SAME:                                  %[[VAL_0:.*]]: !llvm.ptr<i8>,
+// CHECK-SAME:                                  %[[VAL_0:.*]]: !llvm.ptr,
 // CHECK-SAME:                                  %[[VAL_1:.*]]: !llvm.ptr<struct<()>>,
 // CHECK-SAME:                                  %[[VAL_2:.*]]: !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>) {
 // CHECK:           %[[VAL_3:.*]] = llvm.mlir.constant(0 : i32) : i32
@@ -30,7 +30,7 @@ llhd.entity @convert_one_input (%in0 : !llhd.sig<i1>) -> () {}
 llhd.entity @convert_one_output () -> (%out0 : !llhd.sig<i1>) {}
 
 // CHECK-LABEL:   llvm.func @convert_input_and_output(
-// CHECK-SAME:                                        %[[VAL_0:.*]]: !llvm.ptr<i8>,
+// CHECK-SAME:                                        %[[VAL_0:.*]]: !llvm.ptr,
 // CHECK-SAME:                                        %[[VAL_1:.*]]: !llvm.ptr<struct<()>>,
 // CHECK-SAME:                                        %[[VAL_2:.*]]: !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>) {
 // CHECK:           %[[VAL_3:.*]] = llvm.mlir.constant(0 : i32) : i32
