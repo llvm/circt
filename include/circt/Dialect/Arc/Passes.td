@@ -21,6 +21,14 @@ def Dedup : Pass<"arc-dedup", "mlir::ModuleOp"> {
   let dependentDialects = ["arc::ArcDialect"];
 }
 
+def InferMemories : Pass<"arc-infer-memories", "mlir::ModuleOp"> {
+  let summary = "Convert `FIRRTL_Memory` instances to dedicated memory ops";
+  let constructor = "circt::arc::createInferMemoriesPass()";
+  let dependentDialects = [
+    "arc::ArcDialect", "comb::CombDialect", "seq::SeqDialect"
+  ];
+}
+
 def InlineModules : Pass<"arc-inline-modules", "mlir::ModuleOp"> {
   let summary = "Eagerly inline private modules";
   let description = [{
@@ -51,6 +59,12 @@ def SplitLoops : Pass<"arc-split-loops", "mlir::ModuleOp"> {
   let summary = "Split arcs to break zero latency loops";
   let constructor = "circt::arc::createSplitLoopsPass()";
   let dependentDialects = ["arc::ArcDialect"];
+}
+
+def StripSV : Pass<"arc-strip-sv", "mlir::ModuleOp"> {
+  let summary = "Remove SV wire, reg, and assigns";
+  let constructor = "circt::arc::createStripSVPass()";
+  let dependentDialects = ["seq::SeqDialect", "arc::ArcDialect"];
 }
 
 #endif // CIRCT_DIALECT_ARC_PASSES_TD

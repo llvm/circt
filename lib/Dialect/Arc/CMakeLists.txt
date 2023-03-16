@@ -1,6 +1,7 @@
 add_circt_dialect_library(CIRCTArc
   Dialect.cpp
   Ops.cpp
+  Types.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Arc
