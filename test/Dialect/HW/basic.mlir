@@ -64,18 +64,18 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i5
   %w = sv.wire : !hw.inout<i4>
 
   // CHECK-NEXT: %after1 = sv.wire : !hw.inout<i4>
-  %before1 = sv.wire {name = "after1"} : !hw.inout<i4>
+  %before1 = sv.wire name "after1" : !hw.inout<i4>
 
   // CHECK-NEXT: sv.read_inout %after1 : !hw.inout<i4>
   %read_before1 = sv.read_inout %before1 : !hw.inout<i4>
 
   // CHECK-NEXT: %after2_conflict = sv.wire : !hw.inout<i4>
-  // CHECK-NEXT: %after2_conflict_0 = sv.wire {name = "after2_conflict"} : !hw.inout<i4>
-  %before2_0 = sv.wire {name = "after2_conflict"} : !hw.inout<i4>
-  %before2_1 = sv.wire {name = "after2_conflict"} : !hw.inout<i4>
+  // CHECK-NEXT: %after2_conflict_0 = sv.wire name "after2_conflict" : !hw.inout<i4>
+  %before2_0 = sv.wire name "after2_conflict" : !hw.inout<i4>
+  %before2_1 = sv.wire name "after2_conflict" : !hw.inout<i4>
 
   // CHECK-NEXT: %after3 = sv.wire {someAttr = "foo"} : !hw.inout<i4>
-  %before3 = sv.wire {name = "after3", someAttr = "foo"} : !hw.inout<i4>
+  %before3 = sv.wire name "after3" {someAttr = "foo"} : !hw.inout<i4>
 
   // CHECK-NEXT: = comb.mux %arg1, [[RES2]], [[RES2]] : i7
   %mux = comb.mux %arg1, %d, %d : i7

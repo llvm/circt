@@ -65,19 +65,6 @@ ParseResult parseOptionalParameterList(OpAsmParser &parser,
 void printOptionalParameterList(OpAsmPrinter &p, Operation *op,
                                 ArrayAttr parameters);
 
-//===----------------------------------------------------------------------===//
-// ImplicitSSAName Custom Directive
-//===----------------------------------------------------------------------===//
-
-inline ParseResult parseImplicitSSAName(OpAsmParser &parser,
-                                        StringAttr &nameAttr) {
-  nameAttr = parser.getBuilder().getStringAttr(parser.getResultName(0).first);
-  return success();
-}
-
-inline void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
-                                 StringAttr nameAttr) {}
-
 } // namespace circt
 
 #endif // CIRCT_DIALECT_HW_CUSTOMDIRECTIVEIMPL_H
