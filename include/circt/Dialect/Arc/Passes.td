@@ -49,6 +49,21 @@ def MakeTables : Pass<"arc-make-tables", "mlir::ModuleOp"> {
   let dependentDialects = ["arc::ArcDialect"];
 }
 
+def SimplifyVariadicOps : Pass<"arc-simplify-variadic-ops", "mlir::ModuleOp"> {
+  let summary = "Convert variadic ops into distributed binary ops";
+  let constructor = "circt::arc::createSimplifyVariadicOpsPass()";
+  let statistics = [
+    Statistic<"numOpsSkippedMultipleBlocks", "skipped-multiple-blocks",
+      "Ops skipped due to operands in different blocks">,
+    Statistic<"numOpsSimplified", "simplified",
+      "Ops simplified into binary ops">,
+    Statistic<"numOpsCreated", "created",
+      "Ops created as part of simplification">,
+    Statistic<"numOpsReordered", "reordered",
+      "Ops where simplification reordered operands">,
+  ];
+}
+
 def SinkInputs : Pass<"arc-sink-inputs", "mlir::ModuleOp"> {
   let summary = "Sink constant inputs into arcs";
   let constructor = "circt::arc::createSinkInputsPass()";
