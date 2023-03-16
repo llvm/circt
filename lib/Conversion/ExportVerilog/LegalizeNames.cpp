@@ -169,7 +169,7 @@ static void legalizeModuleLocalNames(HWModuleOp module,
       if (auto name = op->getAttrOfType<StringAttr>(verilogNameAttr)) {
         nameResolver.insertUsedName(
             op->getAttrOfType<StringAttr>(verilogNameAttr));
-      } else if (isa<WireOp, RegOp, LogicOp, LocalParamOp, hw::InstanceOp,
+      } else if (isa<sv::WireOp, RegOp, LogicOp, LocalParamOp, hw::InstanceOp,
                      sv::InterfaceInstanceOp, sv::GenerateOp>(op)) {
         // Otherwise, get a verilog name via `getSymOpName`.
         nameEntries.emplace_back(
