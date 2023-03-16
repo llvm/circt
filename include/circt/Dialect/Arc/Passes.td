@@ -35,6 +35,12 @@ def InlineModules : Pass<"arc-inline-modules", "mlir::ModuleOp"> {
   let constructor = "circt::arc::createInlineModulesPass()";
 }
 
+def SinkInputs : Pass<"arc-sink-inputs", "mlir::ModuleOp"> {
+  let summary = "Sink constant inputs into arcs";
+  let constructor = "circt::arc::createSinkInputsPass()";
+  let dependentDialects = ["arc::ArcDialect"];
+}
+
 def SplitLoops : Pass<"arc-split-loops", "mlir::ModuleOp"> {
   let summary = "Split arcs to break zero latency loops";
   let constructor = "circt::arc::createSplitLoopsPass()";
