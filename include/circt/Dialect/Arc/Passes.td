@@ -49,6 +49,13 @@ def MakeTables : Pass<"arc-make-tables", "mlir::ModuleOp"> {
   let dependentDialects = ["arc::ArcDialect"];
 }
 
+def RemoveUnusedArcArguments : Pass<"arc-remove-unused-arc-arguments",
+    "mlir::ModuleOp"> {
+  let summary =
+    "Remove unused arc args from the arc itself and the referencing states";
+  let constructor = "circt::arc::createRemoveUnusedArcArgumentsPass()";
+}
+
 def SimplifyVariadicOps : Pass<"arc-simplify-variadic-ops", "mlir::ModuleOp"> {
   let summary = "Convert variadic ops into distributed binary ops";
   let constructor = "circt::arc::createSimplifyVariadicOpsPass()";

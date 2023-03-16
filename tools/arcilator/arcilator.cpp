@@ -142,6 +142,7 @@ static void populatePipeline(PassManager &pm) {
   pm.addPass(arc::createMakeTablesPass());
   pm.addPass(createCSEPass());
   pm.addPass(createSimpleCanonicalizerPass());
+  pm.addPass(arc::createRemoveUnusedArcArgumentsPass());
 }
 
 static LogicalResult
