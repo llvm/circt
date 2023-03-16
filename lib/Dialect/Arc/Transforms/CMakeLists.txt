@@ -1,4 +1,5 @@
 add_circt_dialect_library(CIRCTArcTransforms
+  AddTaps.cpp
   Dedup.cpp
   InferMemories.cpp
   InlineArcs.cpp

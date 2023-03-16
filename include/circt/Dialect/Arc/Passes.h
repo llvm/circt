@@ -19,6 +19,9 @@ class Pass;
 namespace circt {
 namespace arc {
 
+std::unique_ptr<mlir::Pass>
+createAddTapsPass(llvm::Optional<bool> tapPorts = {},
+                  llvm::Optional<bool> tapWires = {});
 std::unique_ptr<mlir::Pass> createDedupPass();
 std::unique_ptr<mlir::Pass> createInferMemoriesPass();
 std::unique_ptr<mlir::Pass> createInlineArcsPass();
