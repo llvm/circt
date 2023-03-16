@@ -548,6 +548,18 @@ let inferType = "impl::inferBitwiseResult" in {
   }
 }
 
+// Element-wise and/or/xor operations whose result and operands are 1d vectors with
+// a same type. Apply bitwise operation to each element.
+let inferType = "impl::inferElementwiseResult" in
+let hasFolder = 0 in {
+  def ElementwiseAndPrimOp : BinaryPrimOp<"elementwise_and", 1DVecIntType,
+                                1DVecIntType, 1DVecUIntType, [Commutative]>;
+  def ElementwiseOrPrimOp  : BinaryPrimOp<"elementwise_or", 1DVecIntType,
+                                1DVecIntType, 1DVecUIntType, [Commutative]>;
+  def ElementwiseXorPrimOp : BinaryPrimOp<"elementwise_xor", 1DVecUIntType,
+                                1DVecIntType, 1DVecUIntType, [Commutative]>;
+}
+
 // Comparison Operations
 let inferType = "impl::inferComparisonResult" in {
   let hasCanonicalizer = true in {

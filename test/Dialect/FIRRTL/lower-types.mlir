@@ -1247,6 +1247,26 @@ firrtl.module private @is1436_FOO() {
     } @SubmoduleWithAggregate(out a: !firrtl.vector<uint<1>, 1>)
   }
 
+  // COMMON-LABEL: firrtl.module @ElementWise
+  firrtl.module @ElementWise(in %a: !firrtl.vector<uint<1>, 1>, in %b: !firrtl.vector<uint<1>, 1>, out %c_0: !firrtl.vector<uint<1>, 1>, out %c_1: !firrtl.vector<uint<1>, 1>, out %c_2: !firrtl.vector<uint<1>, 1>) {
+    // CHECK-NEXT: %0 = firrtl.or %a_0, %b_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %c_0_0, %0 : !firrtl.uint<1>
+    // CHECK-NEXT: %1 = firrtl.and %a_0, %b_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %c_1_0, %1 : !firrtl.uint<1>
+    // CHECK-NEXT: %2 = firrtl.xor %a_0, %b_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %c_2_0, %2 : !firrtl.uint<1>
+    // Check that elementwise_* are preserved.
+    // AGGREGATE: firrtl.elementwise_or
+    // AGGREGATE: firrtl.elementwise_and
+    // AGGREGATE: firrtl.elementwise_xor
+    %0 = firrtl.elementwise_or %a, %b : (!firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
+    firrtl.strictconnect %c_0, %0 : !firrtl.vector<uint<1>, 1>
+    %1 = firrtl.elementwise_and %a, %b : (!firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
+    firrtl.strictconnect %c_1, %1 : !firrtl.vector<uint<1>, 1>
+    %2 = firrtl.elementwise_xor %a, %b : (!firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
+    firrtl.strictconnect %c_2, %2 : !firrtl.vector<uint<1>, 1>
+  }
+
 } // CIRCUIT
 
 // Check that we don't lose the DontTouchAnnotation when it is not the last

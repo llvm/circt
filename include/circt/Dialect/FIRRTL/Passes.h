@@ -121,6 +121,8 @@ std::unique_ptr<mlir::Pass> createSFCCompatPass();
 std::unique_ptr<mlir::Pass>
 createMergeConnectionsPass(bool enableAggressiveMerging = false);
 
+std::unique_ptr<mlir::Pass> createVectorizationPass();
+
 std::unique_ptr<mlir::Pass> createInjectDUTHierarchyPass();
 
 /// Configure which values will be explicitly preserved by the DropNames pass.

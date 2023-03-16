@@ -161,6 +161,14 @@ def UIntSIntClockType : AnyTypeOf<[SIntType, UIntType, ClockType],
                                   "sint, uint, or clock",
                                   "::circt::firrtl::FIRRTLBaseType">;
 
+def 1DVecUIntType : FIRRTLDialectType<
+  CPred<"isa<FVectorType>($_self) && isa<UIntType>(cast<FVectorType>($_self).getElementType())">,
+  "1d vector with UInt element type", "::circt::firrtl::FIRRTLBaseType">;
+
+def 1DVecIntType : FIRRTLDialectType<
+  CPred<"isa<FVectorType>($_self) && isa<IntType>(cast<FVectorType>($_self).getElementType())">,
+  "1d vector with Int element type", "::circt::firrtl::FIRRTLBaseType">;
+
 def OneBitCastableType : AnyTypeOf<
   [OneBitType, AnyResetType, AsyncResetType, ClockType],
   "1-bit uint/sint/analog, reset, asyncreset, or clock",

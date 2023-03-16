@@ -37,6 +37,8 @@ public:
             // Arithmetic and Logical Binary Primitives.
             AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
             OrPrimOp, XorPrimOp,
+            // Elementwise operations,
+            ElementwiseOrPrimOp, ElementwiseAndPrimOp, ElementwiseXorPrimOp,
             // Comparisons.
             LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp, EQPrimOp, NEQPrimOp,
             // Misc Binary Primitives.
@@ -141,6 +143,10 @@ public:
   HANDLE(AndRPrimOp, Unary);
   HANDLE(OrRPrimOp, Unary);
   HANDLE(XorRPrimOp, Unary);
+
+  HANDLE(ElementwiseOrPrimOp, Unhandled);
+  HANDLE(ElementwiseAndPrimOp, Unhandled);
+  HANDLE(ElementwiseXorPrimOp, Unhandled);
 
   // Intrinsic Expr.
   HANDLE(IsXIntrinsicOp, Unhandled);

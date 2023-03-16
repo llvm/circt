@@ -1653,4 +1653,31 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.strictconnect %r, %a : !firrtl.uint<1>
     firrtl.strictconnect %b2, %r : !firrtl.uint<1>
   }
+
+  // CHECK-LABEL: Elementwise
+  firrtl.module @Elementwise(in %a: !firrtl.vector<uint<1>, 2>, in %b: !firrtl.vector<uint<1>, 2>, out %c_0: !firrtl.vector<uint<1>, 2>, out %c_1: !firrtl.vector<uint<1>, 2>, out %c_2: !firrtl.vector<uint<1>, 2>) {
+    %0 = firrtl.elementwise_or %a, %b : (!firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>) -> !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %c_0, %0 : !firrtl.vector<uint<1>, 2>
+    %1 = firrtl.elementwise_and %a, %b : (!firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>) -> !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %c_1, %1 : !firrtl.vector<uint<1>, 2>
+    %2 = firrtl.elementwise_xor %a, %b : (!firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>) -> !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %c_2, %2 : !firrtl.vector<uint<1>, 2>
+
+    // CHECK-NEXT: %0 = hw.bitcast %a : (!hw.array<2xi1>) -> i2
+    // CHECK-NEXT: %1 = hw.bitcast %b : (!hw.array<2xi1>) -> i2
+    // CHECK-NEXT: %2 = comb.or %0, %1 : i2
+    // CHECK-NEXT: %[[OR:.+]] = hw.bitcast %2 : (i2) -> !hw.array<2xi1>
+
+    // CHECK-NEXT: %4 = hw.bitcast %a : (!hw.array<2xi1>) -> i2
+    // CHECK-NEXT: %5 = hw.bitcast %b : (!hw.array<2xi1>) -> i2
+    // CHECK-NEXT: %6 = comb.and %4, %5 : i2
+    // CHECK-NEXT: %[[AND:.+]] = hw.bitcast %6 : (i2) -> !hw.array<2xi1>
+
+    // CHECK-NEXT: %8 = hw.bitcast %a : (!hw.array<2xi1>) -> i2
+    // CHECK-NEXT: %9 = hw.bitcast %b : (!hw.array<2xi1>) -> i2
+    // CHECK-NEXT: %10 = comb.xor %8, %9 : i2
+    // CHECK-NEXT: %[[XOR:.+]] = hw.bitcast %10 : (i2) -> !hw.array<2xi1>
+
+    // CHECK-NEXT: hw.output %[[OR]], %[[AND]], %[[XOR]] : !hw.array<2xi1>, !hw.array<2xi1>, !hw.array<2xi1>
+  }
 }
