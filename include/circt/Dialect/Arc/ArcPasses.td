@@ -191,6 +191,12 @@ def SimplifyVariadicOps : Pass<"arc-simplify-variadic-ops", "mlir::ModuleOp"> {
   ];
 }
 
+def SinkPureArcs : Pass<"arc-sink-pure-arcs", "mlir::ModuleOp"> {
+  let summary = "Sink pure arcs into non-pure arcs";
+  let constructor = "circt::arc::createSinkPureArcsPass()";
+  let dependentDialects = ["arc::ArcDialect"];
+}
+
 def SplitLoops : Pass<"arc-split-loops", "mlir::ModuleOp"> {
   let summary = "Split arcs to break zero latency loops";
   let constructor = "circt::arc::createSplitLoopsPass()";

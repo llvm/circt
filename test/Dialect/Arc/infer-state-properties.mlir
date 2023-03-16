@@ -170,6 +170,15 @@ arc.define @onlyOneReset(%arg0: i1, %arg1: i1, %arg2: i1) -> (i1, i1) {
   // CHECK-NEXT: arc.output [[V2]], [[V1]] : i1, i1
 }
 
+arc.define @MUXBasedReset2(%arg0: i1, %arg1: i1, %arg2: i1) -> i1 {
+  %false = hw.constant false
+  // CHECK: [[OUT2:%.+]] = comb.or %arg1, %arg2 : i1
+  %0 = comb.or %arg1, %arg2 : i1
+  %1 = comb.mux %arg0, %false, %0 : i1
+  // CHECK: arc.output [[OUT2]] : i1
+  arc.output %1 : i1
+}
+
 // CHECK-LABEL: hw.module @testModule
 hw.module @testModule (%arg0: i1, %arg1: i1, %arg2: i1, %arg3: i1, %clock: i1) {
   // COM: Test: AND based reset pattern detected
@@ -243,6 +252,9 @@ hw.module @testModule (%arg0: i1, %arg1: i1, %arg2: i1, %arg3: i1, %clock: i1) {
   // COM: Test: When the feedback loop has another use inside the arc, we can not simply replace it with constant 0
   // CHECK: [[EN3:%.+]] = arc.state @enableFeedbackHasOtherUse(%true{{(_[0-9]+)?}}, %arg1, [[EN3]]) clock %clock enable %arg0 lat 1 : (i1, i1, i1) -> i1
   %23 = arc.state @enableFeedbackHasOtherUse(%arg0, %arg1, %23) clock %clock lat 1 : (i1, i1, i1) -> i1
+
+  %24 = arc.state @MUXBasedReset2(%arg0, %arg1, %arg2) clock %clock lat 1 : (i1, i1, i1) -> i1
+  %25 = arc.state @MUXBasedReset2(%arg0, %arg1, %arg2) lat 0 : (i1, i1, i1) -> i1
 }
 
 // TODO: test that patterns handle the case where the output is used for another thing as well properly
