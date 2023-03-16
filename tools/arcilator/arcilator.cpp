@@ -76,6 +76,21 @@ static cl::opt<bool>
                             "chunk independently"),
                    cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
+// Options to control early-out from pipeline.
+enum Until { UntilArcConversion, UntilArcOpt, UntilEnd };
+static auto runUntilValues = cl::values(
+    clEnumValN(UntilArcConversion, "arc-conv", "Conversion of modules to arcs"),
+    clEnumValN(UntilArcOpt, "arc-opt", "Arc optimizations"),
+    clEnumValN(UntilEnd, "all", "Run entire pipeline (default)"));
+static cl::opt<Until>
+    runUntilBefore("until-before",
+                   cl::desc("Stop pipeline before a specified point"),
+                   runUntilValues, cl::init(UntilEnd), cl::cat(mainCategory));
+static cl::opt<Until>
+    runUntilAfter("until-after",
+                  cl::desc("Stop pipeline after a specified point"),
+                  runUntilValues, cl::init(UntilEnd), cl::cat(mainCategory));
+
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -91,10 +106,25 @@ static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
 /// Populate a pass manager with the arc simulator pipeline for the given
 /// command line options.
 static void populatePipeline(PassManager &pm) {
+  auto untilReached = [](Until until) {
+    return until >= runUntilBefore || until > runUntilAfter;
+  };
+
   // Restructure the input from a `hw.module` hierarchy to a collection of arcs.
+  if (untilReached(UntilArcConversion))
+    return;
   pm.addPass(createConvertToArcsPass());
   pm.addPass(arc::createDedupPass());
   pm.addPass(arc::createInlineModulesPass());
+  pm.addPass(createCSEPass());
+  pm.addPass(createSimpleCanonicalizerPass());
+
+  // Perform arc-level optimizations that are not specific to software
+  // simulation.
+  if (untilReached(UntilArcOpt))
+    return;
+  pm.addPass(arc::createSplitLoopsPass());
+  pm.addPass(arc::createDedupPass());
   pm.addPass(createCSEPass());
   pm.addPass(createSimpleCanonicalizerPass());
 }

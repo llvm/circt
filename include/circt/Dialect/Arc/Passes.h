@@ -21,6 +21,7 @@ namespace arc {
 
 std::unique_ptr<mlir::Pass> createDedupPass();
 std::unique_ptr<mlir::Pass> createInlineModulesPass();
+std::unique_ptr<mlir::Pass> createSplitLoopsPass();
 
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/Arc/Passes.h.inc"
