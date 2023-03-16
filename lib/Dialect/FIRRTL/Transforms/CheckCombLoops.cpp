@@ -398,27 +398,52 @@ public:
   }
 
   void reportLoopFound(Value childVal, VisitingSet visiting) {
-    auto getName = [&](FieldRef node) {
-      if (isa<SubfieldOp, SubindexOp, SubaccessOp>(node.getDefiningOp())) {
-        assert(!valRefersTo[node.getValue()].empty());
-        return getFieldName(*valRefersTo[node.getValue()].begin()).first;
+    auto getName = [&](Value v) {
+      if (isa_and_nonnull<SubfieldOp, SubindexOp, SubaccessOp>(
+              v.getDefiningOp())) {
+        assert(!valRefersTo[v].empty());
+        // TODO: Indicate to user if "alias set" if > 1, and/or pick
+        // representative with "best" name.  Note the selection here is
+        // not deterministic.
+        return getFieldName(*valRefersTo[v].begin()).first;
       }
-      return getFieldName(node).first;
+      return getFieldName(FieldRef(v, 0)).first;
     };
-    FieldRef childNode(childVal, 0);
-    auto lastSignalName = getName(childNode);
     auto errorDiag = mlir::emitError(
-        module.getLoc(),
-        "detected combinational cycle in a FIRRTL module, sample path: ");
-    if (!lastSignalName.empty())
-      errorDiag << module.getName() << "." << lastSignalName << " <- ";
-    visiting.popUntilVal(childVal, [&](Value visitingVal) {
-      auto signalName = getName(FieldRef(visitingVal, 0));
-      if (!signalName.empty())
-        errorDiag << module.getName() << "." << signalName << " <- ";
-    });
-    if (!lastSignalName.empty())
-      errorDiag << module.getName() << "." << lastSignalName;
+        module.getLoc(), "detected combinational cycle in a FIRRTL module");
+
+    SmallVector<Value, 16> path;
+    path.push_back(childVal);
+    visiting.popUntilVal(
+        childVal, [&](Value visitingVal) { path.push_back(visitingVal); });
+    assert(path.back() == childVal);
+    path.pop_back();
+
+    // Find a value we can name
+    auto *it = llvm::find_if(path, [&](Value v) { return !getName(v).empty(); });
+    if (it == path.end()) {
+      errorDiag.append(", but unable to find names for any involved values.");
+      errorDiag.attachNote(childVal.getLoc()) << "cycle detected here";
+      return;
+    }
+    errorDiag.append(", sample path: ");
+
+    bool lastWasDots = false;
+    errorDiag << module.getName() << ".{" << getName(*it);
+    for (auto v :
+         llvm::concat<Value>(llvm::make_range(std::next(it), path.end()),
+                             llvm::make_range(path.begin(), std::next(it)))) {
+      auto name = getName(v);
+      if (!name.empty()) {
+        errorDiag << " <- " << name;
+        lastWasDots = false;
+      } else {
+        if (!lastWasDots)
+          errorDiag << " <- ...";
+        lastWasDots = true;
+      }
+    }
+    errorDiag << "}";
   }
 
   LogicalResult handleConnects(Value dst,
