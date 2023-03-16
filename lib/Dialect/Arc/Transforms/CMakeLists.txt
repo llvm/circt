@@ -1,6 +1,7 @@
 add_circt_dialect_library(CIRCTArcTransforms
   Dedup.cpp
   InferMemories.cpp
+  InlineArcs.cpp
   InlineModules.cpp
   LowerLUT.cpp
   MakeTables.cpp
