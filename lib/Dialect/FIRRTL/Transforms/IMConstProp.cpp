@@ -167,11 +167,6 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     return executableBlocks.count(block);
   }
 
-  bool isConstantLattice(FieldRef value) const {
-    auto it = latticeValues.find(value);
-    return it != latticeValues.end() && it->second.isConstant();
-  }
-
   bool isOverdefined(FieldRef value) const {
     auto it = latticeValues.find(value);
     return it != latticeValues.end() && it->second.isOverdefined();
@@ -447,6 +442,27 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markOverdefined(verbatim.getResult());
     else if (auto verbatim = dyn_cast<VerbatimWireOp>(op))
       markOverdefined(verbatim.getResult());
+    else if (auto subaccess = dyn_cast<SubaccessOp>(op)) {
+      markOverdefined(subaccess);
+    } else if (!isa<SubindexOp, SubfieldOp, NodeOp>(&op) &&
+               op.getNumResults() > 0) {
+      // If an unknown operation has a result and an aggregate operand, mark
+      // results overdefined since we cannot track the dataflow. Similar if the
+      // operations create aggregate values, we mark them overdefined.
+
+      // TODO: We should handle vector_create, bundle_create and aggregate
+      // constant.
+
+      bool hasAggregateOperand =
+          llvm::any_of(op.getOperandTypes(), [](Type type) {
+            return type.isa<FVectorType, BundleType>();
+          });
+
+      for (auto result : op.getResults())
+        if (hasAggregateOperand ||
+            result.getType().isa<FVectorType, BundleType>())
+          markOverdefined(result);
+    }
 
     // This tracks a dependency from field refs to operations which need to be
     // added to worklist when lattice values change.
@@ -853,9 +869,12 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
         // the aggregate value cannot be replaced. We can forward the constant
         // to its users, so IMDCE (or SV/HW canonicalizer) should remove the
         // aggregate if entire aggregate is dead.
-        if (isDeletableWireOrRegOrNode(destOp) && isConstantLattice(fieldRef)) {
-          connect.erase();
-          ++numErasedOp;
+        if (auto type = connect.getDest().getType().dyn_cast<FIRRTLType>()) {
+          if (getBaseType(type).isGround() &&
+              isDeletableWireOrRegOrNode(destOp) && !isOverdefined(fieldRef)) {
+            connect.erase();
+            ++numErasedOp;
+          }
         }
       }
       continue;
