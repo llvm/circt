@@ -31,3 +31,25 @@ arc.define @SupportRecurisveMemoryEffects(%arg0: i42, %arg1: i1) {
   }
   arc.output
 }
+
+// CHECK-LABEL: @LookupTable(%arg0: i32, %arg1: i8)
+arc.define @LookupTable(%arg0: i32, %arg1: i8) -> () {
+  // CHECK-NEXT: %{{.+}} = arc.lut() : () -> i32 {
+  // CHECK-NEXT:   %c0_i32 = hw.constant 0 : i32
+  // CHECK-NEXT:   arc.output %c0_i32 : i32
+  // CHECK-NEXT: }
+  %0 = arc.lut () : () -> i32 {
+    ^bb0():
+      %0 = hw.constant 0 : i32
+      arc.output %0 : i32
+  }
+  // CHECK-NEXT: %{{.+}} = arc.lut(%arg1, %arg0) : (i8, i32) -> i32 {
+  // CHECK-NEXT: ^bb0(%arg2: i8, %arg3: i32):
+  // CHECK-NEXT:   arc.output %arg3 : i32
+  // CHECK-NEXT: }
+  %1 = arc.lut (%arg1, %arg0) : (i8, i32) -> i32 {
+    ^bb0(%arg2: i8, %arg3: i32):
+      arc.output %arg3 : i32
+  }
+  arc.output
+}

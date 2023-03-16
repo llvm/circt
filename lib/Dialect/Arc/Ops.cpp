@@ -156,5 +156,33 @@ LogicalResult MemoryWriteOp::verify() {
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// LutOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult LutOp::verify() {
+  Location firstSideEffectOpLoc = UnknownLoc::get(getContext());
+  const WalkResult result = getBody().walk([&](Operation *op) {
+    if (auto memOp = dyn_cast<MemoryEffectOpInterface>(op)) {
+      SmallVector<SideEffects::EffectInstance<MemoryEffects::Effect>> effects;
+      memOp.getEffects(effects);
+
+      if (!effects.empty()) {
+        firstSideEffectOpLoc = memOp->getLoc();
+        return WalkResult::interrupt();
+      }
+    }
+
+    return WalkResult::advance();
+  });
+
+  if (result.wasInterrupted())
+    return emitOpError("no operations with side-effects allowed inside a LUT")
+               .attachNote(firstSideEffectOpLoc)
+           << "first operation with side-effects here";
+
+  return success();
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/Arc/Arc.cpp.inc"
