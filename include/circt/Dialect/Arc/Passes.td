@@ -35,6 +35,12 @@ def InlineModules : Pass<"arc-inline-modules", "mlir::ModuleOp"> {
   let constructor = "circt::arc::createInlineModulesPass()";
 }
 
+def MakeTables : Pass<"arc-make-tables", "mlir::ModuleOp"> {
+  let summary = "Transform appropriate arc logic into lookup tables";
+  let constructor = "circt::arc::createMakeTablesPass()";
+  let dependentDialects = ["arc::ArcDialect"];
+}
+
 def SinkInputs : Pass<"arc-sink-inputs", "mlir::ModuleOp"> {
   let summary = "Sink constant inputs into arcs";
   let constructor = "circt::arc::createSinkInputsPass()";
