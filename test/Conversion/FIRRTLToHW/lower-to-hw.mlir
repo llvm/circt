@@ -83,7 +83,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %500 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
     %501 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<5>
 
-    // CHECK: sv.wire sym @__Simple__dntnode
+    // CHECK: %dntnode = hw.wire %in1 sym @__Simple__dntnode
     %dntnode = firrtl.node %in1 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
 
     // CHECK: %clockWire = sv.wire
@@ -204,22 +204,15 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %21 = firrtl.rem %3, %in3 : (!firrtl.sint<3>, !firrtl.sint<8>) -> !firrtl.sint<3>
 
     // Nodes with names become wires.
-    // CHECK-NEXT: %n1 = sv.wire
-    // CHECK-NEXT: sv.assign %n1, %in2
-    // CHECK-NEXT: sv.read_inout %n1
+    // CHECK-NEXT: %n1 = hw.wire %in2
+    // CHECK-NEXT: %n2 = hw.wire %in2 sym @__Simple__n2 : i2
     %n1 = firrtl.node interesting_name %in2 {name = "n1"} : !firrtl.uint<2>
-
-    // CHECK-NEXT: [[WIRE:%n2]] = sv.wire sym @__Simple__n2 : !hw.inout<i2>
-    // CHECK-NEXT: sv.assign [[WIRE]], %in2 : i2
-    // CHECK-NEXT: sv.read_inout %n2
     %n2 = firrtl.node interesting_name %in2  {name = "n2", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
 
     // Nodes with no names are just dropped.
     %22 = firrtl.node droppable_name %in2 {name = ""} : !firrtl.uint<2>
 
-    // CHECK-NEXT: [[WIRE:%n3]] = sv.wire sym @nodeSym : !hw.inout<i2>
-    // CHECK-NEXT: sv.assign [[WIRE]], %in2 : i2
-    // CHECK-NEXT: sv.read_inout [[WIRE]]
+    // CHECK-NEXT: %n3 = hw.wire %in2 sym @nodeSym : i2
     %n3 = firrtl.node sym @nodeSym %in2 : !firrtl.uint<2>
 
     // CHECK-NEXT: [[CVT:%.+]] = comb.concat %false, %in2 : i1, i2
@@ -600,8 +593,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %i, %io_cpu_flush.wire : !firrtl.uint<1>, !firrtl.uint<1>
 
     %hits_1_7 = firrtl.node %io_cpu_flush.wire {name = "hits_1_7", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
-    // CHECK-NEXT:  %hits_1_7 = sv.wire sym @__foo__hits_1_7
-    // CHECK-NEXT:  sv.assign %hits_1_7, [[IO]] : i1
+    // CHECK-NEXT:  %hits_1_7 = hw.wire [[IO]] sym @__foo__hits_1_7 : i1
     %1455 = builtin.unrealized_conversion_cast %hits_1_7 : !firrtl.uint<1> to !firrtl.uint<1>
   }
 
@@ -1068,8 +1060,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.instance instName sym @instSym @BitCast1()
     // CHECK: hw.instance "instName" sym @instSym @BitCast1
     %nodeName = firrtl.node sym @nodeSym %value : !firrtl.uint<42>
-    // CHECK: [[WIRE:%nodeName]] = sv.wire sym @nodeSym : !hw.inout<i42>
-    // CHECK-NEXT: sv.assign [[WIRE]], %value
+    // CHECK: %nodeName = hw.wire %value sym @nodeSym : i42
     %wireName = firrtl.wire sym @wireSym : !firrtl.uint<42>
     // CHECK: %wireName = sv.wire sym @wireSym : !hw.inout<i42>
     %regName = firrtl.reg sym @regSym %clock : !firrtl.clock, !firrtl.uint<42>

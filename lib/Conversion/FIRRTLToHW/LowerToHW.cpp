@@ -2736,11 +2736,8 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
                                     name.getValue());
   }
 
-  if (symName) {
-    auto wire = builder.create<sv::WireOp>(operand.getType(), name, symName);
-    builder.create<sv::AssignOp>(wire, operand);
-    operand = builder.create<sv::ReadInOutOp>(wire);
-  }
+  if (symName)
+    operand = builder.create<hw::WireOp>(operand, name, symName);
 
   return setLowering(op, operand);
 }
