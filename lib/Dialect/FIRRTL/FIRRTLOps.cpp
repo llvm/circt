@@ -2631,6 +2631,26 @@ LogicalResult AggregateConstantOp::verify() {
   return failure();
 }
 
+Attribute AggregateConstantOp::getAttributeFromFieldID(uint64_t fieldID) {
+  FIRRTLBaseType type = getType();
+  Attribute value = getFields();
+  while (fieldID != 0) {
+    if (auto bundle = type.dyn_cast<BundleType>()) {
+      auto index = bundle.getIndexForFieldID(fieldID);
+      fieldID -= bundle.getFieldID(index);
+      type = bundle.getElementType(index);
+      value = value.cast<ArrayAttr>()[index];
+    } else {
+      auto vector = type.cast<FVectorType>();
+      auto index = vector.getIndexForFieldID(fieldID);
+      fieldID -= vector.getFieldID(index);
+      type = vector.getElementType();
+      value = value.cast<ArrayAttr>()[index];
+    }
+  }
+  return value;
+}
+
 LogicalResult BundleCreateOp::verify() {
   if (getType().getNumElements() != getFields().size())
     return emitOpError("number of fields doesn't match type");

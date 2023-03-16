@@ -260,3 +260,16 @@ firrtl.circuit "Issue4369"  {
     firrtl.strictconnect %b, %bar_out : !firrtl.uint<1>
   }
 }
+
+// -----
+firrtl.circuit "AggregateConstant"  {
+  // CHECK-LABEL: AggregateConstant
+  firrtl.module @AggregateConstant(out %out: !firrtl.uint<1>) {
+    %0 = firrtl.aggregateconstant [0 : ui1, 1 : ui1] : !firrtl.vector<uint<1>, 2>
+    %w = firrtl.wire : !firrtl.vector<uint<1>, 2>
+    %1 = firrtl.subindex %w[1] : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %out, %1 : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %out, %c1_ui1
+    firrtl.strictconnect %w, %0 : !firrtl.vector<uint<1>, 2>
+  }
+}

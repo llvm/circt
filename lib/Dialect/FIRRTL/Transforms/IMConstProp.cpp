@@ -291,6 +291,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
 
   void markInvalidValueOp(InvalidValueOp invalid);
   void markConstantOp(ConstantOp constant);
+  void markAggregateConstantOp(AggregateConstantOp constant);
   void markSpecialConstantOp(SpecialConstantOp specialConstant);
   void markInstanceOp(InstanceOp instance);
 
@@ -429,6 +430,8 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markWireOp(wire);
     else if (auto constant = dyn_cast<ConstantOp>(op))
       markConstantOp(constant);
+    else if (auto aggregateConstant = dyn_cast<AggregateConstantOp>(op))
+      markAggregateConstantOp(aggregateConstant);
     else if (auto specialConstant = dyn_cast<SpecialConstantOp>(op))
       markSpecialConstantOp(specialConstant);
     else if (auto invalid = dyn_cast<InvalidValueOp>(op))
@@ -480,6 +483,15 @@ void IMConstPropPass::markMemOp(MemOp mem) {
 void IMConstPropPass::markConstantOp(ConstantOp constant) {
   mergeLatticeValue(getOrCacheFieldRefFromValue(constant),
                     LatticeValue(constant.getValueAttr()));
+}
+
+void IMConstPropPass::markAggregateConstantOp(AggregateConstantOp constant) {
+  walkGroundTypes(constant.getType(), [&](uint64_t fieldID, auto) {
+    mergeLatticeValue(
+        FieldRef(constant, fieldID),
+        LatticeValue(
+            constant.getAttributeFromFieldID(fieldID).cast<IntegerAttr>()));
+  });
 }
 
 void IMConstPropPass::markSpecialConstantOp(SpecialConstantOp specialConstant) {
