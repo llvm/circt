@@ -188,3 +188,40 @@ def UnwrapSVInterfaceOp : ESI_Op<"unwrap.iface", [
 
   let hasVerifier = 1;
 }
+
+//===----------------------------------------------------------------------===//
+// Data windows
+//===----------------------------------------------------------------------===//
+
+def WindowOp : ESI_Op<"window",
+      [IsolatedFromAbove, Symbol, SingleBlock, NoTerminator]> {
+  let summary = "Declare a data window into a particular type";
+
+  let arguments = (ins SymbolNameAttr:$sym_name, TypeAttr:$type);
+  let results = (outs);
+  let regions = (region AnyRegion:$body);
+
+  let assemblyFormat = [{
+    $sym_name `into` $type attr-dict-with-keyword $body
+  }];
+}
+
+def WindowFrameOp : ESI_Op<"window.frame", [
+    SingleBlock, NoTerminator, HasParent<"WindowOp">]> {
+  let summary = "Declare a data window into a particular type";
+
+  let arguments = (ins);
+  let results = (outs);
+  let regions = (region AnyRegion:$body);
+
+  let assemblyFormat = [{
+    attr-dict-with-keyword $body
+  }];
+}
+
+def WindowFieldOp : ESI_Op<"window.field", []> {
+  let arguments = (ins StrAttr:$fieldName, TypeAttr:$fieldType);
+  let assemblyFormat = [{
+    $fieldName `:` $fieldType attr-dict
+  }];
+}

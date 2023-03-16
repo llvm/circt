@@ -28,3 +28,11 @@ def ESIAnyType : ESI_Type<"Any"> {
     static AnyType get(MLIRContext *context);
   }];
 }
+
+def ESIWindowType : ESI_Type<"Window"> {
+  let summary = "a window defined by the `esi.data_window` op";
+  let mnemonic = "window";
+
+  let parameters = (ins "FlatSymbolRefAttr":$window_sym);
+  let assemblyFormat = [{ `<` $window_sym `>` }];
+}
