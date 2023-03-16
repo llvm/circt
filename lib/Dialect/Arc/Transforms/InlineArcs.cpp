@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/InliningUtils.h"
 #include "llvm/Support/Debug.h"
 
