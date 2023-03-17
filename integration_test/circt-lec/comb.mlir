@@ -7,7 +7,7 @@ hw.module @basic(%in: i1) -> (out: i1) {
 
 hw.module @not(%in: i1) -> (out: i1) {
   %true = hw.constant true
-  %out = comb.xor %in, %true : i1
+  %out = comb.xor bin %in, %true : i1
   hw.output %out : i1
 }
 
@@ -16,13 +16,13 @@ hw.module @not(%in: i1) -> (out: i1) {
 //  COMB_ADD: c1 == c2
 
 hw.module @adder(%in1: i2, %in2: i2) -> (out: i2) {
-  %sum = comb.add %in1, %in2 : i2
+  %sum = comb.add bin %in1, %in2 : i2
   hw.output %sum : i2
 }
 
 hw.module @halfAdder(%in1: i1, %in2: i1) -> (carry: i1, sum: i1) {
-  %sum = comb.xor %in1, %in2 : i1
-  %carry = comb.and %in1, %in2 : i1
+  %sum = comb.xor bin %in1, %in2 : i1
+  %carry = comb.and bin %in1, %in2 : i1
   hw.output %carry, %sum: i1, i1
 }
 
@@ -43,14 +43,14 @@ hw.module @completeAdder(%in1: i2, %in2 : i2) -> (out: i2) {
 //  COMB_AND: c1 == c2
 
 hw.module @and(%in1: i1, %in2: i1) -> (out: i1) {
-  %out = comb.and %in1, %in2 : i1
+  %out = comb.and bin %in1, %in2 : i1
   hw.output %out : i1
 }
 
 hw.module @decomposedAnd(%in1: i1, %in2: i1) -> (out: i1) {
   %not_in1 = hw.instance "n_in1" @not(in: %in1: i1) -> (out: i1)
   %not_in2 = hw.instance "n_in2" @not(in: %in2: i1) -> (out: i1)
-  %not_and = comb.or %not_in1, %not_in2 : i1
+  %not_and = comb.or bin %not_in1, %not_in2 : i1
   %and = hw.instance "and" @not(in: %not_and: i1) -> (out: i1)
   hw.output %and : i1
 }
@@ -82,12 +82,12 @@ hw.module @decomposedAnd(%in1: i1, %in2: i1) -> (out: i1) {
 
 hw.module @mulBy2(%in: i2) -> (out: i2) {
   %two = hw.constant 2 : i2
-  %res = comb.mul %in, %two : i2
+  %res = comb.mul bin %in, %two : i2
   hw.output %res : i2
 }
 
 hw.module @addTwice(%in: i2) -> (out: i2) {
-  %res = comb.add %in, %in : i2
+  %res = comb.add bin %in, %in : i2
   hw.output %res : i2
 }
 
@@ -96,7 +96,7 @@ hw.module @addTwice(%in: i2) -> (out: i2) {
 //  COMB_MUX: c1 == c2
 
 hw.module @mux(%cond: i1, %tvalue: i8, %fvalue: i8) -> (out: i8) {
-  %res = comb.mux %cond, %tvalue, %fvalue : i8
+  %res = comb.mux bin %cond, %tvalue, %fvalue : i8
   hw.output %res : i8
 }
 
@@ -105,9 +105,9 @@ hw.module @decomposedMux(%cond: i1, %tvalue: i8, %fvalue: i8) -> (out: i8) {
   %lead_0 = hw.constant 0 : i7
   %c_t = comb.concat %lead_0, %cond : i7, i1
   %c_f = comb.concat %lead_0, %cond_bar : i7, i1
-  %t = comb.mul %tvalue, %c_t : i8
-  %f = comb.mul %fvalue, %c_f : i8
-  %res = comb.add %t, %f : i8
+  %t = comb.mul bin %tvalue, %c_t : i8
+  %f = comb.mul bin %fvalue, %c_f : i8
+  %res = comb.add bin %t, %f : i8
   hw.output %res : i8
 }
 
@@ -116,14 +116,14 @@ hw.module @decomposedMux(%cond: i1, %tvalue: i8, %fvalue: i8) -> (out: i8) {
 //  COMB_OR: c1 == c2
 
 hw.module @or(%in1: i1, %in2: i1) -> (out: i1) {
-  %out = comb.or %in1, %in2 : i1
+  %out = comb.or bin %in1, %in2 : i1
   hw.output %out : i1
 }
 
 hw.module @decomposedOr(%in1: i1, %in2: i1) -> (out: i1) {
   %not_in1 = hw.instance "n_in1" @not(in: %in1: i1) -> (out: i1)
   %not_in2 = hw.instance "n_in2" @not(in: %in2: i1) -> (out: i1)
-  %not_or = comb.and %not_in1, %not_in2 : i1
+  %not_or = comb.and bin %not_in1, %not_in2 : i1
   %or = hw.instance "or" @not(in: %not_or: i1) -> (out: i1)
   hw.output %or : i1
 }
@@ -133,7 +133,7 @@ hw.module @decomposedOr(%in1: i1, %in2: i1) -> (out: i1) {
 //  COMB_PARITY: c1 == c2
 
 hw.module @parity(%in: i8) -> (out: i1) {
-  %res = comb.parity %in : i8
+  %res = comb.parity bin %in : i8
   hw.output %res : i1
 }
 
@@ -146,7 +146,7 @@ hw.module @decomposedParity(%in: i8) -> (out: i1) {
   %b5 = comb.extract %in from 5 : (i8) -> i1
   %b6 = comb.extract %in from 6 : (i8) -> i1
   %b7 = comb.extract %in from 7 : (i8) -> i1
-  %res = comb.xor %b0, %b1, %b2, %b3, %b4, %b5, %b6, %b7 : i1
+  %res = comb.xor bin %b0, %b1, %b2, %b3, %b4, %b5, %b6, %b7 : i1
   hw.output %res : i1
 }
 
@@ -169,7 +169,7 @@ hw.module @decomposedReplicate(%in: i2) -> (out: i8) {
 //  COMB_SHL: c1 == c2
 
 hw.module @shl(%in1: i2, %in2: i2) -> (out: i2) {
-  %res = comb.shl %in1, %in2 : i2
+  %res = comb.shl bin %in1, %in2 : i2
   hw.output %res : i2
 }
 
@@ -178,17 +178,17 @@ hw.module @decomposedShl(%in1: i2, %in2: i2) -> (out: i2) {
   %one = hw.constant 1 : i2
   %two = hw.constant 2 : i2
   // first possible shift
-  %cond1 = comb.icmp ugt %in2, %zero : i2
-  %mul1 = comb.mux %cond1, %two, %one : i2
-  %shl1 = comb.mul %in1, %mul1 : i2
+  %cond1 = comb.icmp bin ugt %in2, %zero : i2
+  %mul1 = comb.mux bin %cond1, %two, %one : i2
+  %shl1 = comb.mul bin %in1, %mul1 : i2
   // avoid subtraction underflow
-  %cond1_1 = comb.icmp eq %in2, %zero : i2
-  %sub1 = comb.mux %cond1_1, %zero, %one : i2
-  %in2_2 = comb.sub %in2, %sub1 : i2
+  %cond1_1 = comb.icmp bin eq %in2, %zero : i2
+  %sub1 = comb.mux bin %cond1_1, %zero, %one : i2
+  %in2_2 = comb.sub bin %in2, %sub1 : i2
   // second possible shift
-  %cond2 = comb.icmp ugt %in2_2, %zero : i2
-  %mul2 = comb.mux %cond2, %two, %one : i2
-  %shl2 = comb.mul %shl1, %mul2 : i2
+  %cond2 = comb.icmp bin ugt %in2_2, %zero : i2
+  %mul2 = comb.mux bin %cond2, %two, %one : i2
+  %shl2 = comb.mul bin %shl1, %mul2 : i2
   hw.output %shl2 : i2
 }
 
@@ -203,21 +203,21 @@ hw.module @decomposedShl(%in1: i2, %in2: i2) -> (out: i2) {
 //  COMB_SUB: c1 == c2
 
 hw.module @subtractor(%in1: i8, %in2: i8) -> (out: i8) {
-  %diff = comb.sub %in1, %in2 : i8
+  %diff = comb.sub bin %in1, %in2 : i8
   hw.output %diff : i8
 }
 
 hw.module @halfSubtractor(%in1: i1, %in2: i1) -> (borrow: i1, diff: i1) {
-  %diff = comb.xor %in1, %in2 : i1
+  %diff = comb.xor bin %in1, %in2 : i1
   %not_in1 = hw.instance "n_in1" @not(in: %in1: i1) -> (out: i1)
-  %borrow = comb.and %not_in1, %in2 : i1
+  %borrow = comb.and bin %not_in1, %in2 : i1
   hw.output %borrow, %diff: i1, i1
 }
 
 hw.module @fullSubtractor(%in1: i1, %in2: i1, %b_in: i1) -> (borrow: i1, diff: i1) {
   %b1, %d1 = hw.instance "s1" @halfSubtractor(in1: %in1: i1, in2: %in2: i1) -> (borrow: i1, diff: i1)
   %b2, %d_out = hw.instance "s2" @halfSubtractor(in1: %d1: i1, in2: %b_in: i1) -> (borrow: i1, diff: i1)
-  %b_out = comb.or %b1, %b2 : i1
+  %b_out = comb.or bin %b1, %b2 : i1
   hw.output %b_out, %d_out: i1, i1
 }
 

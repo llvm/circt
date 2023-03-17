@@ -18,6 +18,8 @@ The circuits to be compared can be specified as their module's name with the
 `c1` and `c2` options, otherwise the first module in the appropriate file will
 be selected.
 
+`comb` operations are currently supported only on binary state logic.
+
 ##### Command-line options
 - `--c1=<module name>` specifies a module name for the first circuit
 - `--c2=<module name>` specifies a module name for the second circuit

@@ -12,7 +12,7 @@ hw.module @basic(%in: i1) -> (out: i1) {
 hw.module @onePlusTwo() -> (out: i2) {
   %one = hw.constant 1 : i2
   %two = hw.constant 2 : i2
-  %three = comb.add %one, %two : i2
+  %three = comb.add bin %one, %two : i2
   hw.output %three : i2
 }
 
@@ -27,7 +27,7 @@ hw.module @three() -> (out: i2) {
 
 hw.module @not(%in: i1) -> (out: i1) {
   %true = hw.constant true
-  %out = comb.xor %in, %true : i1
+  %out = comb.xor bin %in, %true : i1
   hw.output %out : i1
 }
 

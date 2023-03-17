@@ -204,6 +204,8 @@ Solver::Circuit::performICmp(mlir::Value result,
   case circt::comb::ICmpPredicate::weq:
   case circt::comb::ICmpPredicate::cne:
   case circt::comb::ICmpPredicate::wne:
+    result.getDefiningOp()->emitError(
+        "n-state logic predicates are not supported");
     return mlir::failure();
   };
 

@@ -168,6 +168,14 @@ LogicExporter::Visitor::visitInvalidTypeOp(mlir::Operation *op,
 // CombinationalVisitor implementation
 //===----------------------------------------------------------------------===//
 
+// This macro is used to reject the visited operation when n-state logic is
+// not supported.
+#define REJECT_N_STATE_LOGIC()                                                 \
+  if (!twoState) {                                                             \
+    op.emitError("`bin` attribute unset, but n-state logic is not supported"); \
+    return mlir::failure();                                                    \
+  }
+
 // This macro implements the visiting function for a `comb` operation accepting
 // a variadic number of operands.
 #define visitVariadicCombOp(OP_NAME, MLIR_NAME, TYPE)                          \
@@ -176,6 +184,8 @@ LogicExporter::Visitor::visitInvalidTypeOp(mlir::Operation *op,
     LLVM_DEBUG(lec::dbgs() << "Visiting " #MLIR_NAME "\n");                    \
     INDENT();                                                                  \
     LLVM_DEBUG(debugOperands(op));                                             \
+    bool twoState = op.getTwoState();                                          \
+    REJECT_N_STATE_LOGIC();                                                    \
     mlir::Value result = op.getResult();                                       \
     LLVM_DEBUG(debugOpResult(result));                                         \
     circuit->perform##OP_NAME(result, op.getOperands());                       \
@@ -190,6 +200,8 @@ LogicExporter::Visitor::visitInvalidTypeOp(mlir::Operation *op,
     LLVM_DEBUG(lec::dbgs() << "Visiting " #MLIR_NAME "\n");                    \
     INDENT();                                                                  \
     LLVM_DEBUG(debugOperands(op));                                             \
+    bool twoState = op.getTwoState();                                          \
+    REJECT_N_STATE_LOGIC();                                                    \
     mlir::Value lhs = op.getLhs();                                             \
     mlir::Value rhs = op.getRhs();                                             \
     mlir::Value result = op.getResult();                                       \
@@ -206,6 +218,8 @@ LogicExporter::Visitor::visitInvalidTypeOp(mlir::Operation *op,
     LLVM_DEBUG(lec::dbgs() << "Visiting " #MLIR_NAME "\n");                    \
     INDENT();                                                                  \
     LLVM_DEBUG(debugOperands(op));                                             \
+    bool twoState = op.getTwoState();                                          \
+    REJECT_N_STATE_LOGIC();                                                    \
     mlir::Value input = op.getInput();                                         \
     mlir::Value result = op.getResult();                                       \
     LLVM_DEBUG(debugOpResult(result));                                         \
@@ -217,7 +231,17 @@ visitVariadicCombOp(Add, comb.add, circt::comb::AddOp &);
 
 visitVariadicCombOp(And, comb.and, circt::comb::AndOp &);
 
-visitVariadicCombOp(Concat, comb.concat, circt::comb::ConcatOp &);
+mlir::LogicalResult
+LogicExporter::Visitor::visitComb(circt::comb::ConcatOp &op,
+                                  Solver::Circuit *circuit) {
+  LLVM_DEBUG(lec::dbgs() << "Visiting comb.concat\n");
+  INDENT();
+  LLVM_DEBUG(debugOperands(op));
+  mlir::Value result = op.getResult();
+  LLVM_DEBUG(debugOpResult(result));
+  circuit->performConcat(result, op.getOperands());
+  return mlir::success();
+}
 
 visitBinaryCombOp(DivS, comb.divs, circt::comb::DivSOp &);
 
@@ -244,6 +268,8 @@ LogicExporter::Visitor::visitComb(circt::comb::ICmpOp &op,
   LLVM_DEBUG(lec::dbgs() << "Visiting comb.icmp\n");
   INDENT();
   LLVM_DEBUG(debugOperands(op));
+  bool twoState = op.getTwoState();
+  REJECT_N_STATE_LOGIC();
   circt::comb::ICmpPredicate predicate = op.getPredicate();
   mlir::Value lhs = op.getLhs();
   mlir::Value rhs = op.getRhs();
@@ -251,8 +277,6 @@ LogicExporter::Visitor::visitComb(circt::comb::ICmpOp &op,
   LLVM_DEBUG(debugOpResult(result));
   mlir::LogicalResult comparisonResult =
       circuit->performICmp(result, predicate, lhs, rhs);
-  if (failed(comparisonResult))
-    op.emitError("n-state logic predicate are not supported");
   return comparisonResult;
 }
 
@@ -268,6 +292,8 @@ LogicExporter::Visitor::visitComb(circt::comb::MuxOp &op,
   LLVM_DEBUG(lec::dbgs() << "Visiting comb.mux\n");
   INDENT();
   LLVM_DEBUG(debugOperands(op));
+  bool twoState = op.getTwoState();
+  REJECT_N_STATE_LOGIC();
   mlir::Value cond = op.getCond();
   mlir::Value trueValue = op.getTrueValue();
   mlir::Value falseValue = op.getFalseValue();
@@ -281,7 +307,18 @@ visitVariadicCombOp(Or, comb.or, circt::comb::OrOp &);
 
 visitUnaryCombOp(Parity, comb.parity, circt::comb::ParityOp &);
 
-visitUnaryCombOp(Replicate, comb.replicate, circt::comb::ReplicateOp &);
+mlir::LogicalResult
+LogicExporter::Visitor::visitComb(circt::comb::ReplicateOp &op,
+                                  Solver::Circuit *circuit) {
+  LLVM_DEBUG(lec::dbgs() << "Visiting comb.replicate\n");
+  INDENT();
+  LLVM_DEBUG(debugOperands(op));
+  mlir::Value input = op.getInput();
+  mlir::Value result = op.getResult();
+  LLVM_DEBUG(debugOpResult(result));
+  circuit->performReplicate(result, input);
+  return mlir::success();
+}
 
 visitBinaryCombOp(Shl, comb.shl, circt::comb::ShlOp &);
 
