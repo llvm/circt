@@ -420,7 +420,8 @@ public:
     path.pop_back();
 
     // Find a value we can name
-    auto *it = llvm::find_if(path, [&](Value v) { return !getName(v).empty(); });
+    auto *it =
+        llvm::find_if(path, [&](Value v) { return !getName(v).empty(); });
     if (it == path.end()) {
       errorDiag.append(", but unable to find names for any involved values.");
       errorDiag.attachNote(childVal.getLoc()) << "cycle detected here";
