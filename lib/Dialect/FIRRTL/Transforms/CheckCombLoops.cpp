@@ -398,13 +398,14 @@ public:
   }
 
   void reportLoopFound(Value childVal, VisitingSet visiting) {
+    // TODO: Work harder to provide best information possible to user,
+    // especially across instances or when we trace through aliasing values.
+    // We're about to exit, and can afford to do some slower work here.
     auto getName = [&](Value v) {
       if (isa_and_nonnull<SubfieldOp, SubindexOp, SubaccessOp>(
               v.getDefiningOp())) {
         assert(!valRefersTo[v].empty());
-        // TODO: Indicate to user if "alias set" if > 1, and/or pick
-        // representative with "best" name.  Note the selection here is
-        // not deterministic.
+        // Pick representative of the "alias set", not deterministic.
         return getFieldName(*valRefersTo[v].begin()).first;
       }
       return getFieldName(FieldRef(v, 0)).first;
