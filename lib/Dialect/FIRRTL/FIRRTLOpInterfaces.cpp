@@ -98,6 +98,31 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   if (module->getNumRegions() != 1)
     return module.emitOpError("requires one region");
 
+  if (module.isPublic()) {
+    for (auto &pi : module.getPorts()) {
+      // Helper to check for input-oriented refs.
+      std::function<bool(Type, bool)> hasInputRef = [&](Type type,
+                                                        bool output) -> bool {
+        auto ftype = type_dyn_cast<FIRRTLType>(type);
+        if (!ftype || !ftype.containsReference())
+          return false;
+        return FIRRTLTypeSwitch<FIRRTLType, bool>(ftype)
+            .Case<RefType>([&](auto reftype) { return !output; })
+            .Case<OpenVectorType>([&](OpenVectorType ovt) {
+              return hasInputRef(ovt.getElementType(), output);
+            })
+            .Case<OpenBundleType>([&](OpenBundleType obt) {
+              for (auto field : obt.getElements())
+                if (hasInputRef(field.type, field.isFlip ^ output))
+                  return true;
+              return false;
+            });
+      };
+      if (hasInputRef(pi.type, pi.isOutput()))
+        return emitError(pi.loc, "input probe not allowed on public module");
+    }
+  }
+
   return success();
 }
 

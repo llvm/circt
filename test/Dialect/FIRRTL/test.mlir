@@ -227,14 +227,14 @@ firrtl.module @EnumTest(in %in : !firrtl.enum<a: uint<1>, b: uint<2>>,
 }
 
 // CHECK-LABEL: OpenAggTest
-// CHECK-SAME: !firrtl.openbundle<a: bundle<data: uint<1>>, b: openvector<openbundle<x: uint<2>, y: probe<uint<2>>>, 2>>
-firrtl.module @OpenAggTest(in %in: !firrtl.openbundle<a: bundle<data: uint<1>>, b: openvector<openbundle<x: uint<2>, y: probe<uint<2>>>, 2>>) {
-  %a = firrtl.opensubfield %in[a] : !firrtl.openbundle<a: bundle<data: uint<1>>, b: openvector<openbundle<x: uint<2>, y: probe<uint<2>>>, 2>>
+// CHECK-SAME: !firrtl.openbundle<a: bundle<data: uint<1>>, b: openvector<openbundle<x: uint<2>, y flip: probe<uint<2>>>, 2>>
+firrtl.module @OpenAggTest(in %in: !firrtl.openbundle<a: bundle<data: uint<1>>, b: openvector<openbundle<x: uint<2>, y flip: probe<uint<2>>>, 2>>) {
+  %a = firrtl.opensubfield %in[a] : !firrtl.openbundle<a: bundle<data: uint<1>>, b: openvector<openbundle<x: uint<2>, y flip: probe<uint<2>>>, 2>>
   %data = firrtl.subfield %a[data] : !firrtl.bundle<data: uint<1>>
-  %b = firrtl.opensubfield %in[b] : !firrtl.openbundle<a: bundle<data: uint<1>>, b: openvector<openbundle<x: uint<2>, y: probe<uint<2>>>, 2>>
-  %b_0 = firrtl.opensubindex %b[0] : !firrtl.openvector<openbundle<x: uint<2>, y: probe<uint<2>>>, 2>
-  %b_1 = firrtl.opensubindex %b[1] : !firrtl.openvector<openbundle<x: uint<2>, y: probe<uint<2>>>, 2>
-  %b_0_y = firrtl.opensubfield %b_0[y] : !firrtl.openbundle<x : uint<2>, y: probe<uint<2>>>
+  %b = firrtl.opensubfield %in[b] : !firrtl.openbundle<a: bundle<data: uint<1>>, b: openvector<openbundle<x: uint<2>, y flip: probe<uint<2>>>, 2>>
+  %b_0 = firrtl.opensubindex %b[0] : !firrtl.openvector<openbundle<x: uint<2>, y flip: probe<uint<2>>>, 2>
+  %b_1 = firrtl.opensubindex %b[1] : !firrtl.openvector<openbundle<x: uint<2>, y flip: probe<uint<2>>>, 2>
+  %b_0_y = firrtl.opensubfield %b_0[y] : !firrtl.openbundle<x : uint<2>, y flip: probe<uint<2>>>
 }
 
 // CHECK-LABEL: StringTest
