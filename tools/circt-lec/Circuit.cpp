@@ -96,41 +96,53 @@ void Solver::Circuit::addInstance(llvm::StringRef instanceName,
 // `comb` dialect operations
 //===----------------------------------------------------------------------===//
 
-// This macro implements the perform function for a `comb` operation accepting
-// a variadic number of operands.
-#define performVariadicCombOp(OP_NAME, Z3_OPERATION)                           \
-  void Solver::Circuit::perform##OP_NAME(mlir::Value result,                   \
-                                         mlir::OperandRange operands) {        \
-    LLVM_DEBUG(lec::dbgs() << name << " perform" #OP_NAME "\n");               \
-    INDENT();                                                                  \
-    variadicOperation(result, operands,                                        \
-                      [](auto op1, auto op2) { return Z3_OPERATION; });        \
-  }
+void Solver::Circuit::performAdd(mlir::Value result,
+                                 mlir::OperandRange operands) {
+  LLVM_DEBUG(lec::dbgs() << name << " perform Add\n");
+  INDENT();
+  variadicOperation(result, operands,
+                    [](auto op1, auto op2) { return op1 + op2; });
+}
 
-// This macro implements the perform function for a `comb` operation accepting
-// two operands.
-#define performBinaryCombOp(OP_NAME, Z3_OPERATION)                             \
-  void Solver::Circuit::perform##OP_NAME(mlir::Value result, mlir::Value lhs,  \
-                                         mlir::Value rhs) {                    \
-    LLVM_DEBUG(lec::dbgs() << name << " perform" #OP_NAME "\n");               \
-    INDENT();                                                                  \
-    LLVM_DEBUG(lec::dbgs() << "lhs:\n");                                       \
-    z3::expr lhsExpr = fetchExpr(lhs);                                         \
-    LLVM_DEBUG(lec::dbgs() << "rhs:\n");                                       \
-    z3::expr rhsExpr = fetchExpr(rhs);                                         \
-    z3::expr op = z3::Z3_OPERATION(lhsExpr, rhsExpr);                          \
-    constrainResult(result, op);                                               \
-  }
+void Solver::Circuit::performAnd(mlir::Value result,
+                                 mlir::OperandRange operands) {
+  LLVM_DEBUG(lec::dbgs() << name << " perform And\n");
+  INDENT();
+  variadicOperation(result, operands,
+                    [](auto op1, auto op2) { return z3::operator&(op1, op2); });
+}
 
-performVariadicCombOp(Add, op1 + op2);
+void Solver::Circuit::performConcat(mlir::Value result,
+                                    mlir::OperandRange operands) {
+  LLVM_DEBUG(lec::dbgs() << name << " perform Concat\n");
+  INDENT();
+  variadicOperation(result, operands,
+                    [](auto op1, auto op2) { return z3::concat(op1, op2); });
+}
 
-performVariadicCombOp(And, z3::operator&(op1, op2));
+void Solver::Circuit::performDivS(mlir::Value result, mlir::Value lhs,
+                                  mlir::Value rhs) {
+  LLVM_DEBUG(lec::dbgs() << name << " perform DivS\n");
+  INDENT();
+  LLVM_DEBUG(lec::dbgs() << "lhs:\n");
+  z3::expr lhsExpr = fetchExpr(lhs);
+  LLVM_DEBUG(lec::dbgs() << "rhs:\n");
+  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr op = z3::operator/(lhsExpr, rhsExpr);
+  constrainResult(result, op);
+}
 
-performVariadicCombOp(Concat, z3::concat(op1, op2));
-
-performBinaryCombOp(DivS, operator/);
-
-performBinaryCombOp(DivU, udiv);
+void Solver::Circuit::performDivU(mlir::Value result, mlir::Value lhs,
+                                  mlir::Value rhs) {
+  LLVM_DEBUG(lec::dbgs() << name << " perform DivU\n");
+  INDENT();
+  LLVM_DEBUG(lec::dbgs() << "lhs:\n");
+  z3::expr lhsExpr = fetchExpr(lhs);
+  LLVM_DEBUG(lec::dbgs() << "rhs:\n");
+  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr op = z3::udiv(lhsExpr, rhsExpr);
+  constrainResult(result, op);
+}
 
 void Solver::Circuit::performExtract(mlir::Value result, mlir::Value input,
                                      uint32_t lowBit) {
@@ -199,11 +211,37 @@ Solver::Circuit::performICmp(mlir::Value result,
   return mlir::success();
 }
 
-performBinaryCombOp(ModS, smod);
+void Solver::Circuit::performModS(mlir::Value result, mlir::Value lhs,
+                                  mlir::Value rhs) {
+  LLVM_DEBUG(lec::dbgs() << name << " perform ModS\n");
+  INDENT();
+  LLVM_DEBUG(lec::dbgs() << "lhs:\n");
+  z3::expr lhsExpr = fetchExpr(lhs);
+  LLVM_DEBUG(lec::dbgs() << "rhs:\n");
+  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr op = z3::smod(lhsExpr, rhsExpr);
+  constrainResult(result, op);
+}
 
-performBinaryCombOp(ModU, urem);
+void Solver::Circuit::performModU(mlir::Value result, mlir::Value lhs,
+                                  mlir::Value rhs) {
+  LLVM_DEBUG(lec::dbgs() << name << " perform ModU\n");
+  INDENT();
+  LLVM_DEBUG(lec::dbgs() << "lhs:\n");
+  z3::expr lhsExpr = fetchExpr(lhs);
+  LLVM_DEBUG(lec::dbgs() << "rhs:\n");
+  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr op = z3::urem(lhsExpr, rhsExpr);
+  constrainResult(result, op);
+}
 
-performVariadicCombOp(Mul, op1 *op2);
+void Solver::Circuit::performMul(mlir::Value result,
+                                 mlir::OperandRange operands) {
+  LLVM_DEBUG(lec::dbgs() << name << " perform Mul\n");
+  INDENT();
+  variadicOperation(result, operands,
+                    [](auto op1, auto op2) { return op1 * op2; });
+}
 
 void Solver::Circuit::performMux(mlir::Value result, mlir::Value cond,
                                  mlir::Value trueValue,
@@ -221,7 +259,13 @@ void Solver::Circuit::performMux(mlir::Value result, mlir::Value cond,
   constrainResult(result, mux);
 }
 
-performVariadicCombOp(Or, op1 | op2);
+void Solver::Circuit::performOr(mlir::Value result,
+                                mlir::OperandRange operands) {
+  LLVM_DEBUG(lec::dbgs() << name << " perform Or\n");
+  INDENT();
+  variadicOperation(result, operands,
+                    [](auto op1, auto op2) { return op1 | op2; });
+}
 
 void Solver::Circuit::performParity(mlir::Value result, mlir::Value input) {
   LLVM_DEBUG(lec::dbgs() << name << " performParity\n");
@@ -260,17 +304,59 @@ void Solver::Circuit::performReplicate(mlir::Value result, mlir::Value input) {
   constrainResult(result, replicate);
 }
 
-performBinaryCombOp(Shl, shl);
+void Solver::Circuit::performShl(mlir::Value result, mlir::Value lhs,
+                                 mlir::Value rhs) {
+  LLVM_DEBUG(lec::dbgs() << name << " perform Shl\n");
+  INDENT();
+  LLVM_DEBUG(lec::dbgs() << "lhs:\n");
+  z3::expr lhsExpr = fetchExpr(lhs);
+  LLVM_DEBUG(lec::dbgs() << "rhs:\n");
+  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr op = z3::shl(lhsExpr, rhsExpr);
+  constrainResult(result, op);
+}
 
 // Arithmetic shift right.
-performBinaryCombOp(ShrS, ashr);
+void Solver::Circuit::performShrS(mlir::Value result, mlir::Value lhs,
+                                  mlir::Value rhs) {
+  LLVM_DEBUG(lec::dbgs() << name << " perform ShrS\n");
+  INDENT();
+  LLVM_DEBUG(lec::dbgs() << "lhs:\n");
+  z3::expr lhsExpr = fetchExpr(lhs);
+  LLVM_DEBUG(lec::dbgs() << "rhs:\n");
+  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr op = z3::ashr(lhsExpr, rhsExpr);
+  constrainResult(result, op);
+}
 
 // Logical shift right.
-performBinaryCombOp(ShrU, lshr);
+void Solver::Circuit::performShrU(mlir::Value result, mlir::Value lhs,
+                                  mlir::Value rhs) {
+  LLVM_DEBUG(lec::dbgs() << name << " perform ShrU\n");
+  INDENT();
+  LLVM_DEBUG(lec::dbgs() << "lhs:\n");
+  z3::expr lhsExpr = fetchExpr(lhs);
+  LLVM_DEBUG(lec::dbgs() << "rhs:\n");
+  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr op = z3::lshr(lhsExpr, rhsExpr);
+  constrainResult(result, op);
+}
 
-performVariadicCombOp(Sub, op1 - op2);
+void Solver::Circuit::performSub(mlir::Value result,
+                                 mlir::OperandRange operands) {
+  LLVM_DEBUG(lec::dbgs() << name << " perform Sub\n");
+  INDENT();
+  variadicOperation(result, operands,
+                    [](auto op1, auto op2) { return op1 - op2; });
+}
 
-performVariadicCombOp(Xor, op1 ^ op2);
+void Solver::Circuit::performXor(mlir::Value result,
+                                 mlir::OperandRange operands) {
+  LLVM_DEBUG(lec::dbgs() << name << " perform Xor\n");
+  INDENT();
+  variadicOperation(result, operands,
+                    [](auto op1, auto op2) { return op1 ^ op2; });
+}
 
 /// Helper function for performing a variadic operation: it executes a lambda
 /// over a range of operands.
