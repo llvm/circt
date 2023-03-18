@@ -58,6 +58,7 @@ class HWMemSimImpl {
   bool addVivadoRAMAddressConflictSynthesisBugWorkaround;
 
   SmallVector<sv::RegOp> registers;
+  SmallVector<sv::RegOp> garbageReadRegisters;
 
   Value addPipelineStages(ImplicitLocOpBuilder &b,
                           ModuleNamespace &moduleNamespace, size_t stages,
@@ -237,6 +238,16 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   sv::RegOp reg = b.create<sv::RegOp>(
       UnpackedArrayType::get(dataType, mem.depth), b.getStringAttr("Memory"));
 
+  if (!disableMemRandomization) {
+    b.create<sv::IfDefOp>("RANDOMIZE_GARBAGE_ASSIGN", [&]() {
+      for (size_t readPort = 0; readPort < mem.numReadPorts; ++readPort) {
+        auto regName =
+            b.getStringAttr(moduleNamespace.newName("_GARBAGE_READ"));
+        garbageReadRegisters.push_back(
+            b.create<sv::RegOp>(dataType, regName, regName));
+      }
+    });
+  }
   // If the read latency is zero, we regard the memory as write-first.
   // We add a SV attribute to specify a ram style to use LUTs for Vivado to
   // avoid a bug that miscompiles the write-first memory. See "RAM address
@@ -272,8 +283,43 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     // Read Logic
     Value rdata = getMemoryRead(b, reg, addr, addMuxPragmas);
     if (!ignoreReadEnableMem) {
-      Value x = b.create<sv::ConstantXOp>(rdata.getType());
-      rdata = b.create<comb::MuxOp>(en, rdata, x, false);
+      size_t addrRange = 1ULL << addr.getType().getIntOrFloatBitWidth();
+      if (!disableMemRandomization && mem.depth < addrRange) {
+        // If out-of-bounds access is possible, then add a check.
+        auto readWire = b.create<sv::WireOp>(rdata.getType());
+        // Create constant for mem.depth
+        auto maxAddr =
+            b.create<ConstantOp>(b.getIntegerAttr(addr.getType(), mem.depth));
+        // Is enable and in-bounds.
+        auto isEnAndInBounds = b.create<comb::AndOp>(
+            en, b.create<comb::ICmpOp>(comb::ICmpPredicate::ult, addr, maxAddr,
+                                       false));
+        b.create<sv::IfDefOp>(
+            "RANDOMIZE_GARBAGE_ASSIGN",
+            [&]() {
+              auto garbageReg = b.create<sv::VerbatimExprOp>(
+                  rdata.getType(), b.getStringAttr("{{0}}"), ValueRange{},
+                  b.getArrayAttr(hw::InnerRefAttr::get(
+                      op.getNameAttr(),
+                      garbageReadRegisters[i].getInnerSymAttr())));
+              // If enable and is-in-bounds then get memory read, else get
+              // random.
+              b.create<sv::AssignOp>(
+                  readWire, b.create<comb::MuxOp>(isEnAndInBounds, rdata,
+                                                  garbageReg, false));
+            },
+            [&]() {
+              // If enable and is-in-bounds then get memory read, else get X.
+              Value x = b.create<sv::ConstantXOp>(rdata.getType());
+              b.create<sv::AssignOp>(
+                  readWire,
+                  b.create<comb::MuxOp>(isEnAndInBounds, rdata, x, false));
+            });
+        rdata = b.create<sv::ReadInOutOp>(readWire);
+      } else {
+        Value x = b.create<sv::ConstantXOp>(rdata.getType());
+        rdata = b.create<comb::MuxOp>(en, rdata, x, false);
+      }
     }
     outputs.push_back(rdata);
   }
@@ -600,6 +646,14 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       // TODO: This shares a lot of common logic with LowerToHW.  Combine
       // these two in a common randomization utility.
       if (!disableRegRandomization) {
+        b.create<sv::IfDefProceduralOp>("RANDOMIZE_GARBAGE_ASSIGN", [&]() {
+          for (auto &reg : garbageReadRegisters) {
+            b.create<sv::VerbatimOp>(
+                b.getStringAttr("{{0}} = {`RANDOM};"), ValueRange{},
+                b.getArrayAttr(hw::InnerRefAttr::get(op.getNameAttr(),
+                                                     reg.getInnerSymAttr())));
+          }
+        });
         b.create<sv::IfDefProceduralOp>("RANDOMIZE_REG_INIT", [&]() {
           unsigned bits = randomWidth;
           for (sv::RegOp &reg : randRegs)

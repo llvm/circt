@@ -78,10 +78,26 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK:       %Memory = sv.reg
 //VIVADO-SAME:  #sv.attribute<"ram_style" = "\22distributed\22">
 //CHECK-SAME:  !hw.inout<uarray<10xi16>>
+// CHECK-NEXT: sv.ifdef  "RANDOMIZE_GARBAGE_ASSIGN" {
+// CHECK-NEXT:   %[[_GARBAGE_READ:.+]] = sv.reg sym @[[_GARBAGE_READ]]  : !hw.inout<i16>
+// CHECK-NEXT: }
 //CHECK-NEXT:  %[[rslot:.+]] = sv.array_index_inout %Memory[%ro_addr_0]
 //CHECK-NEXT:  %[[read:.+]] = sv.read_inout %[[rslot]]
-//CHECK-NEXT:  %[[x:.+]] = sv.constantX
-//CHECK-NEXT:  %[[readres:.+]] = comb.mux %ro_en_0, %[[read]], %[[x]]
+//CHECK-NEXT:  %[[wire2:.+]] = sv.wire  :
+//CHECK-NEXT:  %[[c6:.+]] = hw.constant -6 :
+//CHECK-NEXT:  %[[v3:.+]] = comb.icmp ult %ro_addr_0, %[[c6]] :
+//CHECK-NEXT:  %[[v4:.+]] = comb.and %ro_en_0, %[[v3]] :
+//CHECK-NEXT:  sv.ifdef  "RANDOMIZE_GARBAGE_ASSIGN"
+//CHECK-NEXT:      %[[RANDOM:.+]] = sv.verbatim.expr
+//CHECK-SAME:      () -> i16 {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[_GARBAGE_READ]]>]}
+//CHECK-NEXT:      %[[v13:.+]] = comb.mux %[[v4]], %[[read]], %[[RANDOM]] :
+//CHECK-NEXT:      sv.assign %[[wire2]], %[[v13]] :
+//CHECK-NEXT:    } else {
+//CHECK-NEXT:      %[[x_i16_1:.+]] = sv.constantX :
+//CHECK-NEXT:      %[[v13:.+]] = comb.mux %[[v4]], %[[read]], %[[x_i16_1]] :
+//CHECK-NEXT:      sv.assign %[[wire2]], %[[v13]] :
+//CHECK-NEXT:    }
+//CHECK-NEXT:  %[[readres:.+]] = sv.read_inout %2 :
 //CHECK-NEXT:  %true = hw.constant true
 //CHECK-NEXT:  %[[rwtmp:.+]] = sv.wire
 //CHECK-NEXT:  %[[rwres:.+]] = sv.read_inout %[[rwtmp]]
@@ -102,7 +118,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:        sv.passign %[[rwwslot]], %rw_wdata_0
 //CHECK-NEXT:      }
 //CHECK-NEXT:    }
-//CHECK-NEXT:  %true_1 = hw.constant true
+//CHECK-NEXT:  %[[true_1:.+]] = hw.constant true
 //CHECK-NEXT:  sv.always posedge %wo_clock_0 {
 //CHECK-NEXT:    sv.if %wo_en_0 {
 //CHECK-NEXT:      %[[wslot:.+]] = sv.array_index_inout %Memory[%wo_addr_0]
@@ -128,7 +144,10 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-SAME:          end"
 //CHECK-SAME:          {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[_RANDOM_MEM]]>]}
 //CHECK-NEXT:      }
-//CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_REG_INIT" {
+//CHECK-NEXT:        sv.ifdef.procedural  "RANDOMIZE_GARBAGE_ASSIGN" {
+//CHECK-NEXT{LITERAL}:          sv.verbatim "{{0}} = {`RANDOM};"
+//CHECK-SAME:                   symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[_GARBAGE_READ]]>]
+//CHECK:      sv.ifdef.procedural "RANDOMIZE_REG_INIT" {
 //CHECK-NEXT:      }
 //CHECK-NEXT:    }
 //CHECK-NEXT:  }
@@ -139,7 +158,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_2_4_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //COMMON-LABEL: @FIRRTLMem_1_1_1_16_10_2_4_0_0
 //COM: This produces a lot of output, we check one field's pipeline
 //CHECK:         %Memory = sv.reg
-//CHECK-NEXT:    [[EN_0:%.+]] = sv.reg {{.+}} : !hw.inout<i1>
+//CHECK:    [[EN_0:%.+]] = sv.reg {{.+}} : !hw.inout<i1>
 //CHECK-NEXT:    [[EN_1:%.+]] = sv.reg {{.+}} : !hw.inout<i1>
 //CHECK-NEXT:    [[ADDR_0:%.+]] = sv.reg {{.+}} : !hw.inout<i4>
 //CHECK-NEXT:    [[ADDR_1:%.+]] = sv.reg {{.+}} : !hw.inout<i4>
@@ -392,3 +411,21 @@ hw.module.generated @ReadWriteWithHighWriteLatency, @FIRRTLMem(%rw_addr: i4, %rw
 // CHECK: [[TMP:%.+]] = comb.and %true, [[WRITE_WMODE_3R]]
 // CHECK: [[WCOND:%.+]] comb.and [[WRITE_EN_3R]], [[TMP]]
 // CHECK: [[WPTR:%.+]] = sv.array_index_inout [[MEM]][[[WRITE_ADDR_3R]]]
+
+hw.module.generated @mem_2Reads, @FIRRTLMem(%R0_addr: i2, %R0_en: i1, %R0_clk: i1, %R1_addr: i2, %R1_en: i1, %R1_clk: i1, %W0_addr: i2, %W0_en: i1, %W0_clk: i1, %W0_data: i32) -> (R0_data: i32, R1_data: i32) attributes {depth = 3 : i64, maskGran = 32 : ui32, numReadPorts = 2 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : ui32, width = 32 : ui32, writeClockIDs = [0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+hw.module @Example(%clock: i1, %reset: i1, %io_enable: i1, %io_write: i1, %io_addr: i2, %io_dataIn: i32) -> (io_dataOut1: i32, io_dataOut2: i32) {
+  %true = hw.constant true
+  %mem_ext.R0_data, %mem_ext.R1_data = hw.instance "mem_ext" @mem_2Reads(R0_addr: %io_addr: i2, R0_en: %io_enable: i1, R0_clk: %clock: i1, R1_addr: %io_addr: i2, R1_en: %io_enable: i1, R1_clk: %clock: i1, W0_addr: %io_addr: i2, W0_en: %true: i1, W0_clk: %clock: i1, W0_data: %io_dataIn: i32) -> (R0_data: i32, R1_data: i32)
+  hw.output %mem_ext.R0_data, %mem_ext.R1_data : i32, i32
+}
+// CHECK-LABEL: hw.module @mem_2Reads(%R0_addr: i2, %R0_en: i1, %R0_clk: i1, %R1_addr: i2, %R1_en: i1, %R1_clk: i1, %W0_addr: i2, %W0_en: i1, %W0_clk: i1, %W0_data: i32) -> (R0_data: i32, R1_data: i32)
+// CHECK:  sv.ifdef  "RANDOMIZE_GARBAGE_ASSIGN" {
+// CHECK-NEXT:    %[[_GARBAGE_READ:.+]] = sv.reg sym @[[_GARBAGE_READ]]  : !hw.inout<i32>
+// CHECK-NEXT:    %[[_GARBAGE_READ_0:.+]] = sv.reg sym @[[_GARBAGE_READ_0]]  : !hw.inout<i32>
+// CHECK-NEXT:  }
+// CHECK:  sv.ifdef  "RANDOMIZE_GARBAGE_ASSIGN" {
+// CHECK-NEXT:    sv.verbatim.expr
+// CHECK-SAME: symbols = [#hw.innerNameRef<@mem_2Reads::@[[_GARBAGE_READ]]>]
+// CHECK:  sv.ifdef  "RANDOMIZE_GARBAGE_ASSIGN" {
+// CHECK-NEXT:    sv.verbatim.expr
+// CHECK-SAME: symbols = [#hw.innerNameRef<@mem_2Reads::@[[_GARBAGE_READ_0]]>]

@@ -657,7 +657,8 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
                                             CircuitLoweringState &state) {
   assert(!mems.empty());
   auto namesp = CircuitNamespace(state.circuitOp);
-  state.used_RANDOMIZE_MEM_INIT = 1;
+  state.used_RANDOMIZE_MEM_INIT = true;
+  state.used_RANDOMIZE_GARBAGE_ASSIGN = true;
   // Insert memories at the bottom of the file.
   OpBuilder b(state.circuitOp);
   b.setInsertionPointAfter(state.circuitOp);
@@ -897,25 +898,6 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
                 "INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end");
           },
           [&]() { emitString("`define INIT_RANDOM_PROLOG_"); });
-    });
-  }
-
-  if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
-    emitString("\n// RANDOMIZE_GARBAGE_ASSIGN enable range checks for mem "
-               "assignments.");
-    emitGuard("RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK", [&]() {
-      b.create<sv::IfDefOp>(
-          "RANDOMIZE_GARBAGE_ASSIGN",
-          [&]() {
-            emitString(
-                "`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, VALUE, "
-                "SIZE) \\");
-            emitString("  ((INDEX) < (SIZE) ? (VALUE) : {`RANDOM})");
-          },
-          [&]() {
-            emitString("`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, "
-                       "VALUE, SIZE) (VALUE)");
-          });
     });
   }
 
