@@ -31,7 +31,8 @@ namespace calyx {
 void appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
                                   Value memref, unsigned memoryID,
                                   SmallVectorImpl<calyx::PortInfo> &inPorts,
-                                  SmallVectorImpl<calyx::PortInfo> &outPorts) {
+                                  SmallVectorImpl<calyx::PortInfo> &outPorts,
+                                  bool seqReads) {
   MemRefType memrefType = memref.getType().cast<MemRefType>();
 
   // Ports constituting a memory interface are added a set of attributes under
@@ -90,6 +91,15 @@ void appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
       calyx::Direction::Output,
       DictionaryAttr::get(rewriter.getContext(),
                           {getMemoryInterfaceAttr("write_en")})});
+
+  if (seqReads) {
+    // Read enable
+    outPorts.push_back(calyx::PortInfo{
+        rewriter.getStringAttr(memName + "_read_en"), rewriter.getI1Type(),
+        calyx::Direction::Output,
+        DictionaryAttr::get(rewriter.getContext(),
+                            {getMemoryInterfaceAttr("read_en")})});
+  }
 }
 
 WalkResult
@@ -143,15 +153,13 @@ Type convIndexType(OpBuilder &builder, Type type) {
 
 void buildAssignmentsForRegisterWrite(OpBuilder &builder,
                                       calyx::GroupOp groupOp,
-                                      calyx::ComponentOp componentOp,
-                                      calyx::RegisterOp &reg,
-                                      Value inputValue) {
+                                      calyx::RegisterOp &reg, Value inputValue,
+                                      Value writeEnValue) {
   mlir::IRRewriter::InsertionGuard guard(builder);
   auto loc = inputValue.getLoc();
   builder.setInsertionPointToEnd(groupOp.getBodyBlock());
   builder.create<calyx::AssignOp>(loc, reg.getIn(), inputValue);
-  builder.create<calyx::AssignOp>(
-      loc, reg.getWriteEn(), createConstant(loc, builder, componentOp, 1, 1));
+  builder.create<calyx::AssignOp>(loc, reg.getWriteEn(), writeEnValue);
   builder.create<calyx::GroupDoneOp>(loc, reg.getDone());
 }
 
@@ -191,11 +199,25 @@ Value MemoryInterface::writeEn() {
   return std::get<MemoryPortsImpl>(impl).writeEn;
 }
 
+Value MemoryInterface::readEn() {
+  if (std::holds_alternative<calyx::MemoryOp>(impl)) {
+    return Value();
+  }
+  return std::get<MemoryPortsImpl>(impl).readEn;
+}
+
 ValueRange MemoryInterface::addrPorts() {
   if (auto *memOp = std::get_if<calyx::MemoryOp>(&impl); memOp) {
     return memOp->addrPorts();
   }
   return std::get<MemoryPortsImpl>(impl).addrPorts;
+}
+
+bool MemoryInterface::sequentialReads() {
+  if (std::holds_alternative<calyx::MemoryOp>(impl)) {
+    return false;
+  }
+  return std::get<MemoryPortsImpl>(impl).seqReads;
 }
 
 //===----------------------------------------------------------------------===//

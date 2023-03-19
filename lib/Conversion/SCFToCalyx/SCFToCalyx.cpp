@@ -298,52 +298,84 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   Value memref = loadOp.getMemref();
   auto memoryInterface =
       getState<ComponentLoweringState>().getMemoryInterface(memref);
-  if (calyx::noStoresToMemory(memref) && calyx::singleLoadFromMemory(memref)) {
-    // Single load from memory; we do not need to write the
-    // output to a register. This is essentially a "combinational read" under
-    // current Calyx semantics with memory, and thus can be done in a
-    // combinational group. Note that if any stores are done to this memory,
-    // we require that the load and store be in separate non-combinational
-    // groups to avoid reading and writing to the same memory in the same group.
-    auto combGroup = createGroupForOp<calyx::CombGroupOp>(rewriter, loadOp);
-    assignAddressPorts(rewriter, loadOp.getLoc(), combGroup, memoryInterface,
-                       loadOp.getIndices());
-
-    // We refrain from replacing the loadOp result with
-    // memoryInterface.readData, since multiple loadOp's need to be converted
-    // to a single memory's ReadData. If this replacement is done now, we lose
-    // the link between which SSA memref::LoadOp values map to which groups for
-    // loading a value from the Calyx memory. At this point of lowering, we
-    // keep the memref::LoadOp SSA value, and do value replacement _after_
-    // control has been generated (see LateSSAReplacement). This is *vital* for
-    // things such as calyx::InlineCombGroups to be able to properly track which
-    // memory assignment groups belong to which accesses.
-    getState<ComponentLoweringState>().registerEvaluatingGroup(
-        loadOp.getResult(), combGroup);
-  } else {
+  if (memoryInterface.sequentialReads()) {
     auto group = createGroupForOp<calyx::GroupOp>(rewriter, loadOp);
-    assignAddressPorts(rewriter, loadOp.getLoc(), group, memoryInterface,
-                       loadOp.getIndices());
-
-    // Multiple loads from the same memory; In this case, we _may_ have a
-    // structural hazard in the design we generate. To get around this, we
-    // conservatively place a register in front of each load operation, and
-    // replace all uses of the loaded value with the register output. Proper
-    // handling of this requires the combinational group inliner/scheduler to
-    // be aware of when a combinational expression references multiple loaded
-    // values from the same memory, and then schedule assignments to temporary
-    // registers to get around the structural hazard.
+    // Create a register to store the data loaded from memory.
     auto reg = createRegister(
         loadOp.getLoc(), rewriter, getComponent(),
         loadOp.getMemRefType().getElementTypeBitWidth(),
-        getState<ComponentLoweringState>().getUniqueName("load"));
-    calyx::buildAssignmentsForRegisterWrite(
-        rewriter, group, getState<ComponentLoweringState>().getComponentOp(),
-        reg, memoryInterface.readData());
+        getState<ComponentLoweringState>().getUniqueName("load_seq"));
+
+    assignAddressPorts(rewriter, loadOp.getLoc(), group, memoryInterface,
+                       loadOp.getIndices());
+    rewriter.setInsertionPointToEnd(group.getBodyBlock());
+    rewriter.create<calyx::AssignOp>(
+        loadOp.getLoc(), memoryInterface.readEn(),
+        createConstant(loadOp.getLoc(), rewriter, getComponent(), 1, 1));
+
+    // Assign the memory read data to the register input, and the memory read
+    // done signal to the register "write enable". Group done is driven
+    // by the register done signal.
+    calyx::buildAssignmentsForRegisterWrite(rewriter, group, reg,
+                                            memoryInterface.readData(),
+                                            memoryInterface.done());
     loadOp.getResult().replaceAllUsesWith(reg.getOut());
+
+    // This is a sequential group, so register it as being scheduleable for the
+    // block.
     getState<ComponentLoweringState>().addBlockScheduleable(loadOp->getBlock(),
                                                             group);
+  } else {
+    if (calyx::noStoresToMemory(memref) &&
+        calyx::singleLoadFromMemory(memref)) {
+      // Single load from memory; we do not need to write the
+      // output to a register. This is essentially a "combinational read" under
+      // current Calyx semantics with memory, and thus can be done in a
+      // combinational group. Note that if any stores are done to this memory,
+      // we require that the load and store be in separate non-combinational
+      // groups to avoid reading and writing to the same memory in the same
+      // group.
+      auto combGroup = createGroupForOp<calyx::CombGroupOp>(rewriter, loadOp);
+      assignAddressPorts(rewriter, loadOp.getLoc(), combGroup, memoryInterface,
+                         loadOp.getIndices());
+
+      // We refrain from replacing the loadOp result with
+      // memoryInterface.readData, since multiple loadOp's need to be converted
+      // to a single memory's ReadData. If this replacement is done now, we lose
+      // the link between which SSA memref::LoadOp values map to which groups
+      // for loading a value from the Calyx memory. At this point of lowering,
+      // we keep the memref::LoadOp SSA value, and do value replacement _after_
+      // control has been generated (see LateSSAReplacement). This is *vital*
+      // for things such as calyx::InlineCombGroups to be able to properly track
+      // which memory assignment groups belong to which accesses.
+      getState<ComponentLoweringState>().registerEvaluatingGroup(
+          loadOp.getResult(), combGroup);
+    } else {
+      auto group = createGroupForOp<calyx::GroupOp>(rewriter, loadOp);
+      assignAddressPorts(rewriter, loadOp.getLoc(), group, memoryInterface,
+                         loadOp.getIndices());
+
+      // Multiple loads from the same memory; In this case, we _may_ have a
+      // structural hazard in the design we generate. To get around this, we
+      // conservatively place a register in front of each load operation, and
+      // replace all uses of the loaded value with the register output. Proper
+      // handling of this requires the combinational group inliner/scheduler to
+      // be aware of when a combinational expression references multiple loaded
+      // values from the same memory, and then schedule assignments to temporary
+      // registers to get around the structural hazard.
+      auto reg = createRegister(
+          loadOp.getLoc(), rewriter, getComponent(),
+          loadOp.getMemRefType().getElementTypeBitWidth(),
+          getState<ComponentLoweringState>().getUniqueName("load"));
+      calyx::buildAssignmentsForRegisterWrite(
+          rewriter, group, reg, memoryInterface.readData(),
+          createConstant(loadOp.getLoc(), rewriter, getComponent(), 1, 1));
+      loadOp.getResult().replaceAllUsesWith(reg.getOut());
+      getState<ComponentLoweringState>().addBlockScheduleable(
+          loadOp->getBlock(), group);
+    }
   }
+
   return success();
 }
 
@@ -511,9 +543,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     for (auto arg : enumerate(succOperands.getForwardedOperands())) {
       auto reg = dstBlockArgRegs[arg.index()];
       calyx::buildAssignmentsForRegisterWrite(
-          rewriter, groupOp,
-          getState<ComponentLoweringState>().getComponentOp(), reg,
-          arg.value());
+          rewriter, groupOp, reg, arg.value(),
+          createConstant(brOp.getLoc(), rewriter, getComponent(), 1, 1));
     }
     /// Register the group as a block argument group, to be executed
     /// when entering the successor block from this block (srcBlock).
@@ -537,8 +568,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   for (auto op : enumerate(retOp.getOperands())) {
     auto reg = getState<ComponentLoweringState>().getReturnReg(op.index());
     calyx::buildAssignmentsForRegisterWrite(
-        rewriter, groupOp, getState<ComponentLoweringState>().getComponentOp(),
-        reg, op.value());
+        rewriter, groupOp, reg, op.value(),
+        createConstant(retOp.getLoc(), rewriter, getComponent(), 1, 1));
   }
   /// Schedule group for execution for when executing the return op block.
   getState<ComponentLoweringState>().addBlockScheduleable(retOp->getBlock(),
@@ -725,12 +756,17 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
     DenseMap<unsigned, unsigned> funcOpResultMapping;
 
     /// Maintain a mapping between an external memory argument (identified by a
-    /// memref) and eventual component input- and output port indices that will
-    /// map to the memory ports. The pair denotes the start index of the memory
-    /// ports in the in- and output ports of the component. Ports are expected
-    /// to be ordered in the same manner as they are added by
-    /// calyx::appendPortsForExternalMemref.
-    DenseMap<Value, std::pair<unsigned, unsigned>> extMemoryCompPortIndices;
+    /// memref) and eventual component information: start index of the memory
+    /// ports in the in- and output ports of the component, and a boolean
+    /// indicating whether the memory has sequential reads, and thus requiring a
+    /// "read enable" signal. Ports are expected to be ordered in the same
+    /// manner as they are added by calyx::appendPortsForExternalMemref.
+    struct ExtMemoryCompInfo {
+      size_t inPortsIndex;
+      size_t outPortsIndex;
+      bool seqReads;
+    };
+    DenseMap<Value, ExtMemoryCompInfo> extMemoryCompPortInfo;
 
     /// Create I/O ports. Maintain separate in/out port vectors to determine
     /// which port index each function argument will eventually map to.
@@ -740,12 +776,16 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
     for (auto arg : enumerate(funcOp.getArguments())) {
       if (arg.value().getType().isa<MemRefType>()) {
         /// External memories
-        auto memName =
-            "ext_mem" + std::to_string(extMemoryCompPortIndices.size());
-        extMemoryCompPortIndices[arg.value()] = {inPorts.size(),
-                                                 outPorts.size()};
+        auto memName = "ext_mem" + std::to_string(extMemoryCompPortInfo.size());
+        bool seqReads = false;
+        if (auto seqReadsAttr = funcOp.getArgAttrOfType<BoolAttr>(
+                arg.index(), scfToCalyx::sSequentialReads))
+          seqReads = seqReadsAttr.getValue();
+        extMemoryCompPortInfo[arg.value()] = {inPorts.size(), outPorts.size(),
+                                              seqReads};
         calyx::appendPortsForExternalMemref(rewriter, memName, arg.value(),
-                                            extMemCounter++, inPorts, outPorts);
+                                            extMemCounter++, inPorts, outPorts,
+                                            seqReads);
       } else {
         /// Single-port arguments
         std::string inName;
@@ -800,28 +840,33 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
           compOp.getArgument(mapping.getSecond()));
 
     /// Register external memories
-    for (auto extMemPortIndices : extMemoryCompPortIndices) {
+    for (auto extMemPortInfo : extMemoryCompPortInfo) {
       /// Create a mapping for the in- and output ports using the Calyx memory
       /// port structure.
       calyx::MemoryPortsImpl extMemPorts;
-      unsigned inPortsIt = extMemPortIndices.getSecond().first;
-      unsigned outPortsIt = extMemPortIndices.getSecond().second +
+      unsigned inPortsIt = extMemPortInfo.getSecond().inPortsIndex;
+      unsigned outPortsIt = extMemPortInfo.getSecond().outPortsIndex +
                             compOp.getInputPortInfo().size();
+      bool seqReads = extMemPortInfo.getSecond().seqReads;
       extMemPorts.readData = compOp.getArgument(inPortsIt++);
       extMemPorts.done = compOp.getArgument(inPortsIt);
       extMemPorts.writeData = compOp.getArgument(outPortsIt++);
-      unsigned nAddresses = extMemPortIndices.getFirst()
+      unsigned nAddresses = extMemPortInfo.getFirst()
                                 .getType()
                                 .cast<MemRefType>()
                                 .getShape()
                                 .size();
       for (unsigned j = 0; j < nAddresses; ++j)
         extMemPorts.addrPorts.push_back(compOp.getArgument(outPortsIt++));
-      extMemPorts.writeEn = compOp.getArgument(outPortsIt);
+      extMemPorts.writeEn = compOp.getArgument(outPortsIt++);
+
+      extMemPorts.seqReads = seqReads;
+      if (seqReads)
+        extMemPorts.readEn = compOp.getArgument(outPortsIt);
 
       /// Register the external memory ports as a memory interface within the
       /// component.
-      compState->registerMemoryInterface(extMemPortIndices.getFirst(),
+      compState->registerMemoryInterface(extMemPortInfo.getFirst(),
                                          calyx::MemoryInterface(extMemPorts));
     }
 

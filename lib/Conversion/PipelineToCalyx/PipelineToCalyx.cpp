@@ -437,8 +437,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
         loadOp.getMemRefType().getElementTypeBitWidth(),
         getState<ComponentLoweringState>().getUniqueName("load"));
     calyx::buildAssignmentsForRegisterWrite(
-        rewriter, group, getState<ComponentLoweringState>().getComponentOp(),
-        reg, memoryInterface.readData());
+        rewriter, group, reg, memoryInterface.readData(),
+        createConstant(loadOp.getLoc(), rewriter, getComponent(), 1, 1));
     loadOp.getResult().replaceAllUsesWith(reg.getOut());
     getState<ComponentLoweringState>().addBlockScheduleable(loadOp->getBlock(),
                                                             group);
@@ -582,9 +582,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     for (auto arg : enumerate(succOperands.getForwardedOperands())) {
       auto reg = dstBlockArgRegs[arg.index()];
       calyx::buildAssignmentsForRegisterWrite(
-          rewriter, groupOp,
-          getState<ComponentLoweringState>().getComponentOp(), reg,
-          arg.value());
+          rewriter, groupOp, reg, arg.value(),
+          createConstant(brOp.getLoc(), rewriter, getComponent(), 1, 1));
     }
     /// Register the group as a block argument group, to be executed
     /// when entering the successor block from this block (srcBlock).
@@ -608,8 +607,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   for (auto op : enumerate(retOp.getOperands())) {
     auto reg = getState<ComponentLoweringState>().getReturnReg(op.index());
     calyx::buildAssignmentsForRegisterWrite(
-        rewriter, groupOp, getState<ComponentLoweringState>().getComponentOp(),
-        reg, op.value());
+        rewriter, groupOp, reg, op.value(),
+        createConstant(retOp.getLoc(), rewriter, getComponent(), 1, 1));
   }
   /// Schedule group for execution for when executing the return op block.
   getState<ComponentLoweringState>().addBlockScheduleable(retOp->getBlock(),
@@ -1085,8 +1084,8 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
 
     // Stitch evaluating group to register.
     calyx::buildAssignmentsForRegisterWrite(
-        rewriter, group, getState<ComponentLoweringState>().getComponentOp(),
-        pipelineRegister, value);
+        rewriter, group, pipelineRegister, value,
+        createConstant(combGroup.getLoc(), rewriter, getComponent(), 1, 1));
 
     // Mark the new group as the evaluating group.
     for (auto assign : group.getOps<calyx::AssignOp>())

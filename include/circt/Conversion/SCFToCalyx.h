@@ -21,9 +21,15 @@
 namespace circt {
 
 namespace scfToCalyx {
-// If this attribute is set as a FuncOp argument or result attribute, it will be
-// used as the Calyx port name.
+// If this string attribute is set as a FuncOp argument or result attribute, it
+// will be used as the Calyx port name.
 static constexpr std::string_view sPortNameAttr = "calyx.port_name";
+
+// If this bool attribute is set as a FuncOp argument of type MemRefType,
+// the memory will be considered as having sequential reads.
+// This adds a "read_en" signal to the external memory interface, driven by
+// memref::LoadOp.
+static constexpr std::string_view sSequentialReads = "calyx.sequential_reads";
 
 } // namespace scfToCalyx
 

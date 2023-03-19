@@ -37,7 +37,8 @@ namespace calyx {
 void appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
                                   Value memref, unsigned memoryID,
                                   SmallVectorImpl<calyx::PortInfo> &inPorts,
-                                  SmallVectorImpl<calyx::PortInfo> &outPorts);
+                                  SmallVectorImpl<calyx::PortInfo> &outPorts,
+                                  bool seqReads = false);
 
 // Walks the control of this component, and appends source information for leaf
 // nodes. It also appends a position attribute that connects the source location
@@ -79,8 +80,8 @@ TGroup createGroup(OpBuilder &builder, calyx::ComponentOp compOp, Location loc,
 /// The component operation will house the constants.
 void buildAssignmentsForRegisterWrite(OpBuilder &builder,
                                       calyx::GroupOp groupOp,
-                                      calyx::ComponentOp componentOp,
-                                      calyx::RegisterOp &reg, Value inputValue);
+                                      calyx::RegisterOp &reg, Value inputValue,
+                                      Value writeEnValue);
 
 // A structure representing a set of ports which act as a memory interface for
 // external memories.
@@ -90,6 +91,8 @@ struct MemoryPortsImpl {
   Value writeData;
   SmallVector<Value> addrPorts;
   Value writeEn;
+  bool seqReads = false;
+  Value readEn;
 };
 
 // Represents the interface of memory in Calyx. The various lowering passes
@@ -105,7 +108,11 @@ struct MemoryInterface {
   Value done();
   Value writeData();
   Value writeEn();
+  // Only available if the memory has sequential reads.
+  Value readEn();
   ValueRange addrPorts();
+
+  bool sequentialReads();
 
 private:
   std::variant<calyx::MemoryOp, MemoryPortsImpl> impl;
@@ -258,8 +265,9 @@ public:
     /// MultipleGroupDonePattern.
     for (OpOperand &arg : ops) {
       auto reg = getLoopIterReg(op, arg.getOperandNumber());
-      buildAssignmentsForRegisterWrite(builder, groupOp, componentOp, reg,
-                                       arg.get());
+      buildAssignmentsForRegisterWrite(
+          builder, groupOp, reg, arg.get(),
+          createConstant(op.getLoc(), builder, componentOp, 1, 1));
     }
     return groupOp;
   }
