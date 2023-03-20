@@ -417,13 +417,13 @@ circuit DefineIntoProbe:
 
 circuit InProbeTop:
   module InProbeTop:
-    input p : Probe<UInt<1>> ; expected-error {{main module may not contain input references}}
+    input p : Probe<UInt<1>> ; expected-error {{input probes not yet supported}}
 
 ;// -----
 
 circuit InProbeExt:
   extmodule BadExtMod:
-    input p : Probe<UInt<1>> ; expected-error {{references in ports must be output on extmodule and intmodule}}
+    input p : Probe<UInt<1>> ; expected-error {{input probes not yet supported}}
 
   module InProbeExt:
     inst e of BadExtMod

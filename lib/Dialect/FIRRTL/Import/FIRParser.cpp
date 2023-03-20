@@ -3174,6 +3174,9 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   SmallDenseMap<Attribute, SMLoc> portIds;
   for (auto portAndLoc : llvm::zip(portList, portLocs)) {
     PortInfo &port = std::get<0>(portAndLoc);
+    if (!port.isOutput() && isa<RefType>(port.type))
+      return emitError(std::get<1>(portAndLoc),
+                       "input probes not yet supported");
     auto &entry = portIds[port.name];
     if (!entry.isValid()) {
       entry = std::get<1>(portAndLoc);
