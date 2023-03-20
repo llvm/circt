@@ -80,7 +80,6 @@ findInstantiatedModule(firrtl::InstanceOp instOp, SymbolCache &symbols) {
 
 /// Utility to track the transitive size of modules.
 struct ModuleSizeCache {
-  ModuleSizeCache() {}
   void clear() { moduleSizes.clear(); }
 
   uint64_t getModuleSize(Operation *module, SymbolCache &symbols) {
