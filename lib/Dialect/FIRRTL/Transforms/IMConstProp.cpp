@@ -446,12 +446,12 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markOverdefined(subaccess);
     } else if (!isa<SubindexOp, SubfieldOp, NodeOp>(&op) &&
                op.getNumResults() > 0) {
-      // If an unknown operation has a result and an aggregate operand, mark
-      // results overdefined since we cannot track the dataflow. Similar if the
+      // If an unknown operation has an aggregate operand, mark results as
+      // overdefined since we cannot track the dataflow. Similarly if the
       // operations create aggregate values, we mark them overdefined.
 
-      // TODO: We should handle vector_create, bundle_create and aggregate
-      // constant.
+      // TODO: We should handle aggregate operations such as vector_create,
+      // bundle_create or vector operations.
 
       bool hasAggregateOperand =
           llvm::any_of(op.getOperandTypes(), [](Type type) {
