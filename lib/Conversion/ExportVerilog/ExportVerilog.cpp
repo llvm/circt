@@ -4122,6 +4122,8 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
             ps << "/* Zero width */";
           else
             emitExpression(portVal, ops, LowestPrecedence);
+        } else if (portVal.use_empty()) {
+          ps << "/* unused */";
         } else if (portVal.hasOneUse() &&
                    (output = dyn_cast_or_null<OutputOp>(
                         portVal.getUses().begin()->getOwner()))) {
@@ -4637,10 +4639,12 @@ void ModuleEmitter::emitBind(BindOp op) {
       ps << " (";
       llvm::SmallPtrSet<Operation *, 4> ops;
       if (elt.isOutput()) {
-        assert(portVal.hasOneUse() && "output port must have a single use");
-
-        if (auto output = dyn_cast_or_null<OutputOp>(
-                portVal.getUses().begin()->getOwner())) {
+        assert((portVal.hasOneUse() || portVal.use_empty()) &&
+               "output port must have either single or no use");
+        if (portVal.use_empty()) {
+          ps << "/* unused */";
+        } else if (auto output = dyn_cast_or_null<OutputOp>(
+                       portVal.getUses().begin()->getOwner())) {
           // If this is directly using the output port of the containing
           // module, just specify that directly.
           size_t outputPortNo = portVal.getUses().begin()->getOperandNumber();

@@ -105,6 +105,11 @@ static void lowerInstanceResults(InstanceOp op) {
     auto result = op.getResult(nextResultNo);
     ++nextResultNo;
 
+    // If the result has no user, Emitter will omit the connection so don't
+    // create a wire for it.
+    if (result.use_empty())
+      continue;
+
     if (result.hasOneUse()) {
       OpOperand &use = *result.getUses().begin();
       if (dyn_cast_or_null<OutputOp>(use.getOwner()))
