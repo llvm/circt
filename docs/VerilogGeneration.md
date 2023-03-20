@@ -134,7 +134,8 @@ The current set of "lint warnings fix" Lowering Options is:
 This section presents a list of recommended `LoweringOptions` for various tools.
 Unlike LLVM, CIRCT doesn't use target triples to specify options. Instead,
 depending on the target you may use, you'll need to manually specify the
-appropriate options.
+appropriate options. Please refer [ToolsWorkarounds](./ToolsWorkarounds.md)
+for the more details of each issue.
 
 ### Questa
 For Questa, we recommend using the `emitWireInPorts` option. This option is
