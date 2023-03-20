@@ -326,7 +326,7 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
 
   // Descend into bundles by creating subfield ops.
   if (auto bundleType = type.dyn_cast<firrtl::BundleType>()) {
-    for (auto &element : llvm::enumerate(bundleType.getElements())) {
+    for (auto element : llvm::enumerate(bundleType.getElements())) {
       auto subfield =
           builder.createOrFold<firrtl::SubfieldOp>(value, element.index());
       invalidateOutputs(builder, subfield, invalidCache,
@@ -366,7 +366,7 @@ static void connectToLeafs(ImplicitLocOpBuilder &builder, Value dest,
   if (!type)
     return;
   if (auto bundleType = type.dyn_cast<firrtl::BundleType>()) {
-    for (auto &element : llvm::enumerate(bundleType.getElements()))
+    for (auto element : llvm::enumerate(bundleType.getElements()))
       connectToLeafs(builder,
                      builder.create<firrtl::SubfieldOp>(dest, element.index()),
                      value);
@@ -400,7 +400,7 @@ static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
   if (!type)
     return;
   if (auto bundleType = type.dyn_cast<firrtl::BundleType>()) {
-    for (auto &element : llvm::enumerate(bundleType.getElements()))
+    for (auto element : llvm::enumerate(bundleType.getElements()))
       reduceXor(
           builder, into,
           builder.createOrFold<firrtl::SubfieldOp>(value, element.index()));

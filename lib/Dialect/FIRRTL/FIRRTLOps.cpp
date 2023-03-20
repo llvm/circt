@@ -531,7 +531,7 @@ static void insertPorts(FModuleLike op,
       ++oldIdx;
     }
   };
-  for (auto &pair : llvm::enumerate(ports)) {
+  for (auto pair : llvm::enumerate(ports)) {
     auto idx = pair.value().first;
     auto &port = pair.value().second;
     migrateOldPorts(idx);
