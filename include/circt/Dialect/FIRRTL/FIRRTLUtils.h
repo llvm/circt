@@ -98,6 +98,11 @@ std::pair<std::string, bool> getFieldName(const FieldRef &fieldRef,
 Value getValueByFieldID(ImplicitLocOpBuilder builder, Value value,
                         unsigned fieldID);
 
+/// Walk leaf ground types in the `firrtlType` and apply the function `fn`.
+/// The first argument of `fn` is field ID, and the second argument is a
+/// leaf ground type.
+void walkGroundTypes(FIRRTLType firrtlType,
+                     llvm::function_ref<void(uint64_t, FIRRTLBaseType)> fn);
 //===----------------------------------------------------------------------===//
 // Inner symbol and InnerRef helpers.
 //===----------------------------------------------------------------------===//
