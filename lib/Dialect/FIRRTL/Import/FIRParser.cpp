@@ -1474,7 +1474,7 @@ ParseResult FIRStmtParser::parseOptionalExpPostscript(Value &result,
                                                       bool allowDynamic) {
 
   // Handle postfix expressions.
-  while (1) {
+  while (true) {
     // Subfield: exp ::= exp '.' fieldId
     if (consumeIf(FIRToken::period)) {
       if (parsePostFixFieldId(result))
