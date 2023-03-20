@@ -646,6 +646,7 @@ ParseResult FIRParser::parseFieldId(StringRef &result, const Twine &message) {
 ///
 /// field: 'flip'? fieldId ':' type
 ///
+// NOLINTNEXTLINE(misc-no-recursion)
 ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
   switch (getToken().getKind()) {
   default:
@@ -1225,6 +1226,7 @@ private:
 } // end anonymous namespace
 
 /// Attach invalid values to every element of the value.
+// NOLINTNEXTLINE(misc-no-recursion)
 void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
   auto tpe = val.getType().dyn_cast<FIRRTLBaseType>();
   // Invalidate does nothing for non-base types.
@@ -1368,6 +1370,7 @@ void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
 /// expression in a statement.  We can handle some weird cases due to this if
 /// we end up parsing the whole statement.  In that case we return success, but
 /// set the 'result' value to null.
+// NOLINTNEXTLINE(misc-no-recursion)
 ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
                                         bool isLeadingStmt) {
   switch (getToken().getKind()) {
@@ -2296,6 +2299,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 }
 
 /// ref_expr ::= probe | rwprobe | static_reference
+// NOLINTNEXTLINE(misc-no-recursion)
 ParseResult FIRStmtParser::parseRefExp(Value &result, const Twine &message) {
   auto token = getToken().getKind();
   if (token == FIRToken::lp_probe)
@@ -2310,6 +2314,7 @@ ParseResult FIRStmtParser::parseRefExp(Value &result, const Twine &message) {
 /// static_reference ::= id
 ///                  ::= static_reference '.' id
 ///                  ::= static_reference '[' int ']'
+// NOLINTNEXTLINE(misc-no-recursion)
 ParseResult FIRStmtParser::parseStaticRefExp(Value &result,
                                              const Twine &message) {
   auto parseIdOrInstance = [&]() -> ParseResult {
