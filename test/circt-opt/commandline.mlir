@@ -26,6 +26,7 @@
 // DIALECT-SAME: memref
 // DIALECT-SAME: moore
 // DIALECT-SAME: msft
+// DIALECT-SAME: om
 // DIALECT-SAME: pipeline
 // DIALECT-SAME: scf
 // DIALECT-SAME: seq
