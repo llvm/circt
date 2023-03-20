@@ -233,20 +233,35 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   // Each mask bit controls mask-granularity number of data bits.
   auto dataType = b.getIntegerType(mem.dataWidth);
 
+  // Count the total number of ports.
+  unsigned numPorts =
+      mem.numReadPorts + mem.numWritePorts + mem.numReadWritePorts;
+
   // Create registers for the memory.
   sv::RegOp reg = b.create<sv::RegOp>(
       UnpackedArrayType::get(dataType, mem.depth), b.getStringAttr("Memory"));
 
-  // If the read latency is zero, we regard the memory as write-first.
-  // We add a SV attribute to specify a ram style to use LUTs for Vivado to
-  // avoid a bug that miscompiles the write-first memory. See "RAM address
-  // conflict and Vivado synthesis bug" issue in the vivado forum for the more
-  // detail.
-  if (addVivadoRAMAddressConflictSynthesisBugWorkaround && mem.readLatency == 0)
-    circt::sv::setSVAttributes(
-        reg,
-        sv::SVAttributeAttr::get(b.getContext(), "ram_style",
-                                 R"("distributed")", /*emitAsComment=*/false));
+  if (addVivadoRAMAddressConflictSynthesisBugWorkaround) {
+    if (mem.readLatency == 0) {
+      // If the read latency is zero, we regard the memory as write-first.
+      // We add a SV attribute to specify a ram style to use LUTs for Vivado
+      // to avoid a bug that miscompiles the write-first memory. See "RAM
+      // address conflict and Vivado synthesis bug" issue in the vivado forum
+      // for the more detail.
+      circt::sv::setSVAttributes(
+          reg, sv::SVAttributeAttr::get(b.getContext(), "ram_style",
+                                        R"("distributed")",
+                                        /*emitAsComment=*/false));
+    } else if (mem.readLatency == 1 && numPorts > 1) {
+      // If the read address is registered and the RAM has multiple ports,
+      // force write-first behaviour by setting rw_addr_collision. This avoids
+      // unpredictable behaviour. Downstreams flows should watch for `VPL
+      // 8-6430`.
+      circt::sv::setSVAttributes(
+          reg, sv::SVAttributeAttr::get(b.getContext(), "rw_addr_collision",
+                                        R"("yes")", /*emitAsComment=*/false));
+    }
+  }
 
   SmallVector<Value, 4> outputs;
 
