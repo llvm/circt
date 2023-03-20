@@ -125,6 +125,8 @@ def StateOp : ArcOp<"state", [
     `:` functional-type($inputs, results)
   }];
 
+  let hasCanonicalizeMethod = 1;
+
   let builders = [
     OpBuilder<(ins "DefineOp":$arc, "mlir::Value":$clock, "mlir::Value":$enable,
       "unsigned":$latency, CArg<"mlir::ValueRange", "{}">:$inputs), [{
