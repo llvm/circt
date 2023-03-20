@@ -538,3 +538,21 @@ circuit LeadingProbe:
   module LeadingProbe:
     input in : UInt<1>
     probe(in) ; expected-error {{unexpected probe() as start of statement}}
+
+;// -----
+
+; This should be supported, needs internal support to land first.
+circuit DefineWidths:
+  module DefineWidths:
+    input in : UInt<1>
+    output p : Probe<UInt>
+    define p = probe(in) ; expected-error {{may not connect different non-base types}}
+
+;// -----
+
+; This should be supported, needs internal support to land first.
+circuit ProbeNonPassive:
+  module ProbeNonPassive:
+    input in : {a: UInt<1>, flip b: UInt<1>}
+    output p : Probe<{a: UInt<1>, b: UInt<1>}>
+    define p = probe(in) ; expected-error {{probe of non-passive types not yet supported}}
