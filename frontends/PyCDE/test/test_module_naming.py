@@ -1,7 +1,9 @@
-# RUN: %PYTHON% %s 2>&1 | FileCheck %s
+# RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
 
 import pycde
 import pycde.dialects.hw
+
+import sys
 
 
 @pycde.modparams
@@ -48,7 +50,7 @@ class Test(pycde.Module):
 # CHECK-NOT: hw.module @TestModule_param2
 # CHECK: hw.module @UnParameterized
 # CHECK-NOT: hw.module @UnParameterized
-t = pycde.System([Test])
+t = pycde.System([Test], output_directory=sys.argv[1])
 t.generate()
 t.run_passes()
 t.print()

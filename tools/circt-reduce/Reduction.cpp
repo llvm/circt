@@ -78,81 +78,27 @@ findInstantiatedModule(firrtl::InstanceOp instOp, SymbolCache &symbols) {
   return moduleOp ? std::optional(moduleOp) : std::nullopt;
 }
 
-/// Compute the number of operations in a module. Recursively add the number of
-/// operations in instantiated modules.
-/// @param countMultipleInstantiations: If a module is instantiated multiple
-/// times and this flag is false, count it only once (to better represent code
-/// size reduction rather than area reduction of the actual hardware).
-/// @param countElsewhereInstantiated: If a module is also instantiated in
-/// another subtree of the design then don't count it if this flag is false.
-static uint64_t computeTransitiveModuleSize(
-    SmallVector<std::pair<firrtl::FModuleOp, uint64_t>> &modules,
-    SmallVector<Operation *> &instances, bool countMultipleInstantiations,
-    bool countElsewhereInstantiated) {
-  std::sort(instances.begin(), instances.end());
-  std::sort(modules.begin(), modules.end(),
-            [](auto a, auto b) { return a.first < b.first; });
+/// Utility to track the transitive size of modules.
+struct ModuleSizeCache {
+  void clear() { moduleSizes.clear(); }
 
-  auto *end = modules.end();
-  if (!countMultipleInstantiations)
-    end = std::unique(modules.begin(), modules.end(),
-                      [](auto a, auto b) { return a.first == b.first; });
-
-  uint64_t totalOperations = 0;
-
-  for (auto *iter = modules.begin(); iter != end; ++iter) {
-    auto moduleOp = iter->first;
-
-    auto allInstancesCovered = [&]() {
-      return llvm::all_of(
-          *moduleOp.getSymbolUses(moduleOp->getParentOfType<ModuleOp>()),
-          [&](auto symbolUse) {
-            return std::binary_search(instances.begin(), instances.end(),
-                                      symbolUse.getUser());
-          });
-    };
-
-    if (countElsewhereInstantiated || allInstancesCovered())
-      totalOperations += iter->second;
+  uint64_t getModuleSize(Operation *module, SymbolCache &symbols) {
+    if (auto it = moduleSizes.find(module); it != moduleSizes.end())
+      return it->second;
+    uint64_t size = 1;
+    module->walk([&](Operation *op) {
+      size += 1;
+      if (auto instOp = dyn_cast<firrtl::InstanceOp>(op))
+        if (auto instModule = findInstantiatedModule(instOp, symbols))
+          size += getModuleSize(*instModule, symbols);
+    });
+    moduleSizes.insert({module, size});
+    return size;
   }
 
-  return totalOperations;
-}
-
-static LogicalResult collectInstantiatedModules(
-    std::optional<firrtl::FModuleOp> fmoduleOp, SymbolCache &symbols,
-    SmallVector<std::pair<firrtl::FModuleOp, uint64_t>> &modules,
-    SmallVector<Operation *> &instances) {
-  if (!fmoduleOp)
-    return failure();
-
-  uint64_t opCount = 0;
-  WalkResult result = fmoduleOp->walk([&](Operation *op) {
-    if (auto instOp = dyn_cast<firrtl::InstanceOp>(op)) {
-      auto moduleOp = findInstantiatedModule(instOp, symbols);
-      if (!moduleOp) {
-        LLVM_DEBUG(llvm::dbgs()
-                   << "- `" << fmoduleOp->moduleName()
-                   << "` recursively instantiated non-FIRRTL module.\n");
-        return WalkResult::interrupt();
-      }
-
-      if (failed(collectInstantiatedModules(moduleOp, symbols, modules,
-                                            instances)))
-        return WalkResult::interrupt();
-
-      instances.push_back(instOp);
-    }
-
-    return WalkResult::advance();
-  });
-  if (result.wasInterrupted())
-    return failure();
-
-  modules.push_back(std::make_pair(*fmoduleOp, opCount));
-
-  return success();
-}
+private:
+  llvm::DenseMap<Operation *, uint64_t> moduleSizes;
+};
 
 /// Check that all connections to a value are invalids.
 static bool onlyInvalidated(Value arg) {
@@ -278,20 +224,13 @@ struct ModuleExternalizer : public Reduction {
   void beforeReduction(mlir::ModuleOp op) override {
     nlaRemover.clear();
     symbols.clear();
+    moduleSizes.clear();
   }
   void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
 
   uint64_t match(Operation *op) override {
-    if (auto fmoduleOp = dyn_cast<firrtl::FModuleOp>(op)) {
-      SmallVector<std::pair<firrtl::FModuleOp, uint64_t>> modules;
-      SmallVector<Operation *> instances;
-      if (failed(collectInstantiatedModules(fmoduleOp, symbols, modules,
-                                            instances)))
-        return 0;
-      return computeTransitiveModuleSize(modules, instances,
-                                         /*countMultipleInstantiations=*/false,
-                                         /*countElsewhereInstantiated=*/true);
-    }
+    if (isa<firrtl::FModuleOp>(op))
+      return moduleSizes.getModuleSize(op, symbols);
     return 0;
   }
 
@@ -311,6 +250,7 @@ struct ModuleExternalizer : public Reduction {
 
   SymbolCache symbols;
   NLARemover nlaRemover;
+  ModuleSizeCache moduleSizes;
 };
 
 /// Invalidate all the leaf fields of a value with a given flippedness by
@@ -430,6 +370,7 @@ struct InstanceStubber : public Reduction {
     erasedModules.clear();
     symbols.clear();
     nlaRemover.clear();
+    moduleSizes.clear();
   }
   void afterReduction(mlir::ModuleOp op) override {
     // Look into deleted modules to find additional instances that are no longer
@@ -464,17 +405,9 @@ struct InstanceStubber : public Reduction {
   }
 
   uint64_t match(Operation *op) override {
-    if (auto instOp = dyn_cast<firrtl::InstanceOp>(op)) {
-      auto fmoduleOp = findInstantiatedModule(instOp, symbols);
-      SmallVector<std::pair<firrtl::FModuleOp, uint64_t>> modules;
-      SmallVector<Operation *> instances;
-      if (failed(collectInstantiatedModules(fmoduleOp, symbols, modules,
-                                            instances)))
-        return 0;
-      return computeTransitiveModuleSize(modules, instances,
-                                         /*countMultipleInstantiations=*/false,
-                                         /*countElsewhereInstantiated=*/false);
-    }
+    if (auto instOp = dyn_cast<firrtl::InstanceOp>(op))
+      if (auto fmoduleOp = findInstantiatedModule(instOp, symbols))
+        return moduleSizes.getModuleSize(*fmoduleOp, symbols);
     return 0;
   }
 
@@ -516,6 +449,7 @@ struct InstanceStubber : public Reduction {
   NLARemover nlaRemover;
   llvm::DenseSet<Operation *> erasedInsts;
   llvm::DenseSet<Operation *> erasedModules;
+  ModuleSizeCache moduleSizes;
 };
 
 /// A sample reduction pattern that maps `firrtl.mem` to a set of invalidated

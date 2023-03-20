@@ -11,6 +11,7 @@ target_link_libraries(circt-opt
   CIRCTAffineToPipeline
   CIRCTAnalysisTestPasses
   CIRCTArc
+  CIRCTArcTransforms
   CIRCTCalyx
   CIRCTCalyxToHW
   CIRCTCalyxToFSM
@@ -32,6 +33,7 @@ target_link_libraries(circt-opt
   CIRCTLLHD
   CIRCTLLHDToLLVM
   CIRCTHWToLLVM
+  CIRCTCombToArith
   CIRCTCombToLLVM
   CIRCTLLHDTransforms
   CIRCTMoore
@@ -52,6 +54,7 @@ target_link_libraries(circt-opt
   CIRCTSSP
   CIRCTSSPTransforms
   CIRCTStandardToHandshake
+  CIRCTOM
   CIRCTPipelineOps
   CIRCTPipelineToHW
   CIRCTPipelineTransforms

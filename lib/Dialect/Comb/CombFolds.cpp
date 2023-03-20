@@ -281,8 +281,7 @@ OpFoldResult ReplicateOp::fold(FoldAdaptor adaptor) {
 OpFoldResult ParityOp::fold(FoldAdaptor adaptor) {
   // Constant fold.
   if (auto input = adaptor.getInput().dyn_cast_or_null<IntegerAttr>())
-    return getIntAttr(APInt(1, input.getValue().countPopulation() & 1),
-                      getContext());
+    return getIntAttr(APInt(1, input.getValue().popcount() & 1), getContext());
 
   return {};
 }
@@ -599,7 +598,7 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
         // contiguous series of ones.
         unsigned lz = extractedCst.countLeadingZeros();
         unsigned tz = extractedCst.countTrailingZeros();
-        unsigned pop = extractedCst.countPopulation();
+        unsigned pop = extractedCst.popcount();
         if (extractedCst.getBitWidth() - lz - tz == pop) {
           auto resultTy = rewriter.getIntegerType(pop);
           SmallVector<Value> resultElts;

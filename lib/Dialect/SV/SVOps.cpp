@@ -91,22 +91,6 @@ static Operation *lookupSymbolInNested(Operation *symbolTableOp,
 }
 
 //===----------------------------------------------------------------------===//
-// ImplicitSSAName Custom Directive
-//===----------------------------------------------------------------------===//
-
-static ParseResult parseSVImplicitSSAName(OpAsmParser &parser,
-                                          NamedAttrList &resultAttrs) {
-  return parseImplicitSSAName(parser, resultAttrs);
-}
-
-static void printSVImplicitSSAName(OpAsmPrinter &printer, Operation *op,
-                                   DictionaryAttr attrs) {
-  printImplicitSSAName(printer, op, attrs,
-                       {SymbolTable::getSymbolAttrName(),
-                        hw::InnerName::getInnerNameAttrName(), "svAttributes"});
-}
-
-//===----------------------------------------------------------------------===//
 // VerbatimExprOp
 //===----------------------------------------------------------------------===//
 
@@ -413,7 +397,7 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
 
   if (auto constant = op.getCond().getDefiningOp<hw::ConstantOp>()) {
 
-    if (constant.getValue().isAllOnesValue())
+    if (constant.getValue().isAllOnes())
       replaceOpWithRegion(rewriter, op, op.getThenRegion());
     else if (!op.getElseRegion().empty())
       replaceOpWithRegion(rewriter, op, op.getElseRegion());

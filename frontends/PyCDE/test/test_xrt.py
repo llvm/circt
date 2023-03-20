@@ -1,7 +1,7 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1
 # RUN: ls %t/hw/top.sv
-# RUN: ls %t/hw/Top.sv
+# RUN: ls %t/hw/Main.sv
 # RUN: ls %t/hw/services.json
 # RUN: ls %t/hw/ESILoopback.tcl
 # RUN: ls %t/hw/filelist.f
@@ -24,7 +24,7 @@ from pycde.bsp import XrtBSP
 import sys
 
 
-class Top(Module):
+class Main(Module):
   clk = Clock(types.i1)
   rst = Input(types.i1)
 
@@ -34,7 +34,7 @@ class Top(Module):
 
 
 gendir = sys.argv[1]
-s = pycde.System(XrtBSP(Top),
+s = pycde.System(XrtBSP(Main),
                  name="ESILoopback",
                  output_directory=gendir,
                  sw_api_langs=["python"])
@@ -72,8 +72,8 @@ s.package()
 # TOP:           .axil_out (_XrtService_axil_out)
 # TOP:         );
 
-# TOP:         Top #(
-# TOP:         ) Top (
+# TOP:         Main #(
+# TOP:         ) Main (
 # TOP:           .clk (ap_clk),
 # TOP:           .rst (~ap_resetn)
 # TOP:         );

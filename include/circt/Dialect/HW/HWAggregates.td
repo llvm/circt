@@ -211,7 +211,10 @@ def StructExtractOp : HWOp<"struct_extract",
 
   let builders = [
     OpBuilder<(ins "Value":$input, "StructType::FieldInfo":$field)>,
-    OpBuilder<(ins "Value":$input, "StringAttr":$field)>
+    OpBuilder<(ins "Value":$input, "StringAttr":$field)>,
+    OpBuilder<(ins "Value":$input, "StringRef":$field), [{
+      build(odsBuilder, odsState, input, odsBuilder.getStringAttr(field));
+    }]>
   ];
 
   let hasFolder = 1;

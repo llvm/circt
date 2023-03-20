@@ -162,7 +162,8 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
                       "ArrayRef<PortInfo>":$ports,
                       CArg<"StringRef", "StringRef()">:$defnamAttr,
                       CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
-                      CArg<"ArrayAttr", "ArrayAttr()">:$parameters)>
+                      CArg<"ArrayAttr", "ArrayAttr()">:$parameters,
+                      CArg<"ArrayAttr", "ArrayAttr()">:$internalPaths)>
   ];
 
   let extraClassDeclaration = [{
@@ -195,7 +196,8 @@ def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
                       "ArrayRef<PortInfo>":$ports,
                       CArg<"StringRef", "StringRef()">:$intrinsicNameAttr,
                       CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
-                      CArg<"ArrayAttr", "ArrayAttr()">:$parameters)>
+                      CArg<"ArrayAttr", "ArrayAttr()">:$parameters,
+                      CArg<"ArrayAttr", "ArrayAttr()">:$internalPaths)>
   ];
 
   let extraClassDeclaration = [{

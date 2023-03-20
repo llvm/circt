@@ -24,7 +24,7 @@ sv.interface @IValidReady_Struct  {
 // CHECK-NEXT:          _GEN_0,
 // CHECK-NEXT:          _GEN_0})};{{.*}}
 hw.module @structs(%clk: i1, %rstn: i1) {
-  %0 = sv.interface.instance {name = "iface"} : !sv.interface<@IValidReady_Struct>
+  %0 = sv.interface.instance name "iface" : !sv.interface<@IValidReady_Struct>
   sv.interface.signal.assign %0(@IValidReady_Struct::@data) = %s : !hw.struct<foo: !hw.array<72xi1>, bar: !hw.array<128xi1>, baz: !hw.array<224xi1>>
   %c0 = hw.constant 0 : i8
   %c64 = hw.constant 100000 : i64

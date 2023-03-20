@@ -1657,6 +1657,10 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(AttachOp op);
   LogicalResult visitStmt(ProbeOp op);
 
+  FailureOr<Value> lowerSubindex(SubindexOp op, Value input);
+  FailureOr<Value> lowerSubaccess(SubaccessOp op, Value input);
+  FailureOr<Value> lowerSubfield(SubfieldOp op, Value input);
+
 private:
   /// The module we're lowering into.
   hw::HWModuleOp theModule;
@@ -2506,52 +2510,89 @@ LogicalResult FIRRTLLowering::visitExpr(SpecialConstantOp op) {
       op, getOrCreateIntConstant(APInt(/*bitWidth*/ 1, op.getValue())));
 }
 
-LogicalResult FIRRTLLowering::visitExpr(SubindexOp op) {
-  if (isZeroBitFIRRTLType(op->getResult(0).getType()))
-    return setLowering(op, Value());
-
-  auto resultType = lowerType(op->getResult(0).getType());
-  Value value = getPossiblyInoutLoweredValue(op.getInput());
-  if (!resultType || !value) {
-    op.emitError() << "input lowering failed";
-    return failure();
-  }
-
+FailureOr<Value> FIRRTLLowering::lowerSubindex(SubindexOp op, Value input) {
   auto iIdx = getOrCreateIntConstant(
       getBitWidthFromVectorSize(
           op.getInput().getType().cast<FVectorType>().getNumElements()),
       op.getIndex());
 
-  // If the value has an inout type, we need to lower to ArrayIndexInOutOp.
-  if (value.getType().isa<sv::InOutType>())
-    return setLoweringTo<sv::ArrayIndexInOutOp>(op, value, iIdx);
-  // Otherwise, hw::ArrayGetOp
-  return setLoweringTo<hw::ArrayGetOp>(op, value, iIdx);
+  // If the input has an inout type, we need to lower to ArrayIndexInOutOp;
+  // otherwise hw::ArrayGetOp.
+  Value result;
+  if (input.getType().isa<sv::InOutType>())
+    result = builder.createOrFold<sv::ArrayIndexInOutOp>(input, iIdx);
+  else
+    result = builder.createOrFold<hw::ArrayGetOp>(input, iIdx);
+  tryCopyName(result.getDefiningOp(), op);
+  return result;
 }
 
-LogicalResult FIRRTLLowering::visitExpr(SubaccessOp op) {
-  if (isZeroBitFIRRTLType(op->getResult(0).getType()))
-    return setLowering(op, Value());
-
-  auto resultType = lowerType(op->getResult(0).getType());
-  Value value = getPossiblyInoutLoweredValue(op.getInput());
+FailureOr<Value> FIRRTLLowering::lowerSubaccess(SubaccessOp op, Value input) {
   Value valueIdx = getLoweredAndExtOrTruncValue(
       op.getIndex(),
       UIntType::get(
-          op.getContext(),
+          op->getContext(),
           getBitWidthFromVectorSize(
               op.getInput().getType().cast<FVectorType>().getNumElements())));
-
-  if (!resultType || !value || !valueIdx) {
-    op.emitError() << "input lowering failed";
+  if (!valueIdx) {
+    op->emitError() << "input lowering failed";
     return failure();
   }
 
-  // If the value has an inout type, we need to lower to ArrayIndexInOutOp.
-  if (value.getType().isa<sv::InOutType>())
-    return setLoweringTo<sv::ArrayIndexInOutOp>(op, value, valueIdx);
-  // Otherwise, lower the op to array indexing.
-  return setLowering(op, createArrayIndexing(value, valueIdx));
+  // If the input has an inout type, we need to lower to ArrayIndexInOutOp;
+  // otherwise, lower the op to array indexing.
+  Value result;
+  if (input.getType().isa<sv::InOutType>())
+    result = builder.createOrFold<sv::ArrayIndexInOutOp>(input, valueIdx);
+  else
+    result = createArrayIndexing(input, valueIdx);
+  tryCopyName(result.getDefiningOp(), op);
+  return result;
+}
+
+FailureOr<Value> FIRRTLLowering::lowerSubfield(SubfieldOp op, Value input) {
+  auto resultType = lowerType(op->getResult(0).getType());
+  assert(resultType && input && "subfield type lowering failed");
+
+  // If the input has an inout type, we need to lower to StructFieldInOutOp;
+  // otherwise, StructExtractOp.
+  auto field = op.getInput().getType().cast<BundleType>().getElementName(
+      op.getFieldIndex());
+  Value result;
+  if (input.getType().isa<sv::InOutType>())
+    result = builder.createOrFold<sv::StructFieldInOutOp>(input, field);
+  else
+    result = builder.createOrFold<hw::StructExtractOp>(input, field);
+  tryCopyName(result.getDefiningOp(), op);
+  return result;
+}
+
+LogicalResult FIRRTLLowering::visitExpr(SubindexOp op) {
+  if (isZeroBitFIRRTLType(op.getType()))
+    return setLowering(op, Value());
+
+  auto input = getPossiblyInoutLoweredValue(op.getInput());
+  if (!input)
+    return op.emitError() << "input lowering failed";
+
+  auto result = lowerSubindex(op, input);
+  if (failed(result))
+    return failure();
+  return setLowering(op, *result);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(SubaccessOp op) {
+  if (isZeroBitFIRRTLType(op.getType()))
+    return setLowering(op, Value());
+
+  auto input = getPossiblyInoutLoweredValue(op.getInput());
+  if (!input)
+    return op.emitError() << "input lowering failed";
+
+  auto result = lowerSubaccess(op, input);
+  if (failed(result))
+    return failure();
+  return setLowering(op, *result);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
@@ -2560,26 +2601,17 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
   if (getLoweredValue(op) || !op.getInput())
     return success();
 
-  // Extracting a zero bit value from a struct is defined but doesn't do
-  // anything.
-  if (isZeroBitFIRRTLType(op->getResult(0).getType()))
+  if (isZeroBitFIRRTLType(op.getType()))
     return setLowering(op, Value());
 
-  auto resultType = lowerType(op->getResult(0).getType());
-  Value value = getPossiblyInoutLoweredValue(op.getInput());
-  assert(resultType && value && "subfield type lowering failed");
+  auto input = getPossiblyInoutLoweredValue(op.getInput());
+  if (!input)
+    return op.emitError() << "input lowering failed";
 
-  // If the value has an inout type, we need to lower to StructFieldInOutOp.
-  if (value.getType().isa<sv::InOutType>()) {
-    auto field = op.getInput().getType().cast<BundleType>().getElementName(
-        op.getFieldIndex());
-    return setLoweringTo<sv::StructFieldInOutOp>(op, value, field);
-  }
-
-  return setLoweringTo<hw::StructExtractOp>(
-      op, resultType, value,
-      op.getInput().getType().cast<BundleType>().getElementName(
-          op.getFieldIndex()));
+  auto result = lowerSubfield(op, input);
+  if (failed(result))
+    return failure();
+  return setLowering(op, *result);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(VectorCreateOp op) {
@@ -2704,11 +2736,8 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
                                     name.getValue());
   }
 
-  if (symName) {
-    auto wire = builder.create<sv::WireOp>(operand.getType(), name, symName);
-    builder.create<sv::AssignOp>(wire, operand);
-    operand = builder.create<sv::ReadInOutOp>(wire);
-  }
+  if (symName)
+    operand = builder.create<hw::WireOp>(operand, name, symName);
 
   return setLowering(op, operand);
 }

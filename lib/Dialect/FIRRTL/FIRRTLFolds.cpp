@@ -1049,7 +1049,7 @@ OpFoldResult XorRPrimOp::fold(FoldAdaptor adaptor) {
 
   // popcount(x) & 1
   if (auto cst = getConstant(adaptor.getInput()))
-    return getIntAttr(getType(), APInt(1, cst->countPopulation() & 1));
+    return getIntAttr(getType(), APInt(1, cst->popcount() & 1));
 
   // one bit is identity.  Only applies to UInt since we can't make a cast here.
   if (isUInt1(getInput().getType()))
@@ -1434,7 +1434,7 @@ OpFoldResult MultibitMuxOp::fold(FoldAdaptor adaptor) {
 
   if (auto constIndex = getConstant(adaptor.getIndex())) {
     auto index = constIndex->getZExtValue();
-    if (index >= 0 && index < getInputs().size())
+    if (index < getInputs().size())
       return getInputs()[getInputs().size() - 1 - index];
   }
 

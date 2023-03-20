@@ -10,6 +10,7 @@
 #define CIRCT_DIALECT_ARC_OPS_TD
 
 include "circt/Dialect/Arc/Dialect.td"
+include "circt/Dialect/Arc/Types.td"
 include "mlir/IR/FunctionInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/RegionKindInterface.td"
@@ -89,7 +90,7 @@ def DefineOp : ArcOp<"define", [
 
 def OutputOp : ArcOp<"output", [
   Terminator,
-  ParentOneOf<["DefineOp"]>,
+  ParentOneOf<["DefineOp", "LutOp"]>,
   Pure,
   ReturnLike
 ]> {
@@ -123,6 +124,8 @@ def StateOp : ArcOp<"state", [
     $arc `(` $inputs `)` (`clock` $clock^)? (`enable` $enable^)? `lat` $latency attr-dict
     `:` functional-type($inputs, results)
   }];
+
+  let hasCanonicalizeMethod = 1;
 
   let builders = [
     OpBuilder<(ins "DefineOp":$arc, "mlir::Value":$clock, "mlir::Value":$enable,
@@ -173,6 +176,118 @@ def StateOp : ArcOp<"state", [
       return (*this)->getAttrOfType<mlir::SymbolRefAttr>("arc");
     }
   }];
+}
+
+def ClockGateOp : ArcOp<"clock_gate", [Pure]> {
+  let summary = "Clock gate";
+  let arguments = (ins I1:$input, I1:$enable);
+  let results = (outs I1:$output);
+  let assemblyFormat = [{
+    $input `,` $enable attr-dict
+  }];
+  let builders = [
+    OpBuilder<(ins "mlir::Value":$input, "mlir::Value":$enable), [{
+      build($_builder, $_state, input.getType(), input, enable);
+    }]>
+  ];
+}
+
+def MemoryOp : ArcOp<"memory", [MemoryEffects<[MemAlloc]>]> {
+  let summary = "Memory";
+  let results = (outs MemoryType:$memory);
+  let assemblyFormat = [{
+    type($memory) attr-dict
+  }];
+}
+
+class MemoryAndDataTypesMatch<string mem, string data> : TypesMatchWith<
+  "memory and data types must match", mem, data,
+  "$_self.cast<MemoryType>().getWordType()">;
+
+def MemoryReadOp : ArcOp<"memory_read", [
+  MemoryEffects<[MemRead]>,
+  MemoryAndDataTypesMatch<"memory", "data">
+]> {
+  let summary = "Read word from memory";
+  let arguments = (ins
+    MemoryType:$memory,
+    AnyInteger:$address,
+    I1:$clock,
+    I1:$enable
+  );
+  let results = (outs AnyInteger:$data);
+  let assemblyFormat = [{
+    $memory `[` $address `]` `,` $clock `,` $enable
+    attr-dict `:` type($memory) `,` type($address)
+  }];
+}
+
+def MemoryWriteOp : ArcOp<"memory_write", [
+  MemoryEffects<[MemWrite]>,
+  MemoryAndDataTypesMatch<"memory", "data">,
+  AttrSizedOperandSegments
+]> {
+  let summary = "Write word to memory";
+  let arguments = (ins
+    MemoryType:$memory,
+    AnyInteger:$address,
+    I1:$clock,
+    I1:$enable,
+    AnyInteger:$data,
+    Optional<AnyInteger>:$mask,
+    Variadic<AnyType>:$reads
+  );
+  let assemblyFormat = [{
+    $memory `[` $address `]` `,` $clock `,` $enable `,` $data
+    ( `mask` `(` $mask^ `:` type($mask) `)`)?
+    (` ` `(` `reads` $reads^ `:` type($reads) `)`)?
+    attr-dict `:` type($memory) `,` type($address)
+  }];
+
+  let hasVerifier = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// Miscellaneous
+//===----------------------------------------------------------------------===//
+
+def TapOp : ArcOp<"tap"> {
+  let summary = "A tracker op to observe a value under a given name";
+  let arguments = (ins AnySignlessInteger:$value, StrAttr:$name);
+  let assemblyFormat = [{ $value attr-dict `:` type($value) }];
+}
+
+def LutOp : ArcOp<"lut", [
+  IsolatedFromAbove,
+  SingleBlockImplicitTerminator<"arc::OutputOp">,
+  Pure
+]> {
+  let summary = "A lookup-table.";
+  let description = [{
+    Represents a lookup-table as one operation. The operations that map the
+    lookup/input values to the corresponding table-entry are collected inside
+    the body of this operation.
+    Note that the operation is marked to be isolated from above to guarantee
+    that all input values have to be passed as an operand. This allows for
+    simpler analyses and canonicalizations of the LUT as well as lowering.
+    Only combinational operations are allowed inside the LUT, i.e., no
+    side-effects, state, time delays, etc.
+  }];
+
+  let arguments = (ins Variadic<AnySignlessInteger>:$inputs);
+  let results = (outs AnySignlessInteger:$output);
+  let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = [{
+    `(` $inputs `)` `:` functional-type($inputs, $output)
+    attr-dict-with-keyword $body
+  }];
+
+  let extraClassDeclaration = [{
+    mlir::Block *getBodyBlock() { return &getBody().front(); }
+  }];
+
+  let hasVerifier = 1;
 }
 
 #endif // CIRCT_DIALECT_ARC_OPS_TD

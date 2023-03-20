@@ -20,12 +20,12 @@ circuit Foo:
     x <= _x
 
     ; Unnamed nodes are always removed.
-    ; CHECK-NOT: wire _y_a
-    node _y_a = x.a
+    ; CHECK-NOT: wire _y_b
+    node _y_b = x.b
 
     ; Default behavior is to preserve named nodes.
     ; CHECK:        wire y
-    node y = _y_a
+    node y = _y_b
 
     b.a <= y
     x.b <= b.b

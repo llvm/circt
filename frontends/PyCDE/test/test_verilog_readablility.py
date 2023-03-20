@@ -1,6 +1,8 @@
-# RUN: %PYTHON% %s | FileCheck %s
+# RUN: %PYTHON% %s %t | FileCheck %s
 
 from pycde import (Output, Input, Module, generator, types, dim, System)
+
+import sys
 
 
 class WireNames(Module):
@@ -20,7 +22,7 @@ class WireNames(Module):
     self.b = arr_data[self.sel]
 
 
-sys = System([WireNames])
+sys = System([WireNames], output_directory=sys.argv[1])
 sys.generate()
 sys.run_passes()
 sys.print()

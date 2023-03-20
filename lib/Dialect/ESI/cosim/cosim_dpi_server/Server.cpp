@@ -127,7 +127,7 @@ kj::Promise<void> EndpointServer::send(SendContext context) {
       msgSize.wordCount + 1, AllocationStrategy::FIXED_SIZE);
   builder->setRoot(capnpMsgPointer);
   auto segments = builder->getSegmentsForOutput();
-  KJ_ASSERT(segments.size() == 1);
+  KJ_REQUIRE(segments.size() == 1, "Messages must be one segment");
 
   // Now copy it into a blob and queue it.
   auto fstSegmentData = segments[0].asBytes();

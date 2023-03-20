@@ -452,7 +452,7 @@ ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
     // truncate off the extra width.  This is important for extmodules which
     // like parameters to be 32-bits, and insulates us from some arbitraryness
     // in StringRef::getAsInteger.
-    if (result.getBitWidth() > 32 && result.getMinSignedBits() <= 32)
+    if (result.getBitWidth() > 32 && result.getSignificantBits() <= 32)
       result = result.trunc(32);
 
     consumeToken();
@@ -3046,15 +3046,12 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     parameters.push_back(ParamDeclAttr::get(nameId, value));
   }
 
-  FModuleLike fmodule;
   if (isExtModule)
-    fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList,
-                                           defName, annotations);
+    builder.create<FExtModuleOp>(info.getLoc(), name, portList, defName,
+                                 annotations, builder.getArrayAttr(parameters));
   else
-    fmodule = builder.create<FIntModuleOp>(info.getLoc(), name, portList,
-                                           intName, annotations);
-
-  fmodule->setAttr("parameters", builder.getArrayAttr(parameters));
+    builder.create<FIntModuleOp>(info.getLoc(), name, portList, intName,
+                                 annotations, builder.getArrayAttr(parameters));
 
   return success();
 }

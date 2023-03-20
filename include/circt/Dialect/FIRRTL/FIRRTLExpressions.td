@@ -145,6 +145,10 @@ def AggregateConstantOp : FIRRTLOp<"aggregateconstant", [Pure, ConstantLike]> {
     ```
   }];
 
+  let extraClassDeclaration = [{
+    Attribute getAttributeFromFieldID(uint64_t fieldID);
+  }];
+
   let arguments = (ins ArrayAttr:$fields);
   let results = (outs AggregateType:$result);
 

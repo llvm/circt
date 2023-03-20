@@ -128,7 +128,7 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
           })
           .Case<SIntType, UIntType>([&](auto type) {
             return builder.create<ConstantOp>(
-                type, APInt::getNullValue(type.getWidth().value_or(1)));
+                type, APInt::getZero(type.getWidth().value_or(1)));
           })
           .Case<BundleType>([&](auto type) {
             auto wireOp = builder.create<WireOp>(type);
