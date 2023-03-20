@@ -694,7 +694,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
   LLVM_DEBUG({ llvm::dbgs() << "Analyzing wiring problems:\n"; });
   DenseMap<FModuleLike, ModuleModifications> moduleModifications;
   DenseSet<Value> visitedSinks;
-  for (auto &e : llvm::enumerate(state.wiringProblems)) {
+  for (auto e : llvm::enumerate(state.wiringProblems)) {
     auto index = e.index();
     auto problem = e.value();
     // This is a unique index that is assigned to this specific wiring problem

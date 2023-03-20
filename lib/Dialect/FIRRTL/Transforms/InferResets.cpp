@@ -132,7 +132,7 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
           })
           .Case<BundleType>([&](auto type) {
             auto wireOp = builder.create<WireOp>(type);
-            for (auto &field : llvm::enumerate(type)) {
+            for (auto field : llvm::enumerate(type)) {
               auto zero = createZeroValue(builder, field.value().type, cache);
               auto acc = builder.create<SubfieldOp>(field.value().type, wireOp,
                                                     field.index());

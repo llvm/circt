@@ -1883,7 +1883,7 @@ Attribute FIRRTLLowering::getOrCreateAggregateConstantAttribute(Attribute value,
 
   // Recursively construct elements.
   SmallVector<Attribute> values;
-  for (auto &e : llvm::enumerate(value.cast<ArrayAttr>())) {
+  for (auto e : llvm::enumerate(value.cast<ArrayAttr>())) {
     Type subType;
     if (auto array = hw::type_dyn_cast<hw::ArrayType>(type))
       subType = array.getElementType();

@@ -264,7 +264,7 @@ hw::ModulePortInfo getPortInfoForOpTypes(Operation *op, TypeRange inputs,
 
   // Add all inputs of funcOp.
   unsigned inIdx = 0;
-  for (auto &arg : llvm::enumerate(inputs)) {
+  for (auto arg : llvm::enumerate(inputs)) {
     ports.inputs.push_back({portNames.inputName(arg.index()),
                             hw::PortDirection::INPUT, esiWrapper(arg.value()),
                             arg.index(), hw::InnerSymAttr{}});
@@ -272,7 +272,7 @@ hw::ModulePortInfo getPortInfoForOpTypes(Operation *op, TypeRange inputs,
   }
 
   // Add all outputs of funcOp.
-  for (auto &res : llvm::enumerate(outputs)) {
+  for (auto res : llvm::enumerate(outputs)) {
     ports.outputs.push_back({portNames.outputName(res.index()),
                              hw::PortDirection::OUTPUT, esiWrapper(res.value()),
                              res.index(), hw::InnerSymAttr{}});

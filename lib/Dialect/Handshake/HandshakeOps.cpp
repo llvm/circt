@@ -169,7 +169,7 @@ struct EliminateUnusedForkResultsPattern : mlir::OpRewritePattern<ForkOp> {
                                 PatternRewriter &rewriter) const override {
     std::set<unsigned> unusedIndexes;
 
-    for (auto &res : llvm::enumerate(op.getResults()))
+    for (auto res : llvm::enumerate(op.getResults()))
       if (res.value().getUses().empty())
         unusedIndexes.insert(res.index());
 
@@ -183,7 +183,7 @@ struct EliminateUnusedForkResultsPattern : mlir::OpRewritePattern<ForkOp> {
         op.getLoc(), operand, op.getNumResults() - unusedIndexes.size());
     rewriter.updateRootInPlace(op, [&] {
       unsigned i = 0;
-      for (auto &oldRes : llvm::enumerate(op.getResults()))
+      for (auto oldRes : llvm::enumerate(op.getResults()))
         if (unusedIndexes.count(oldRes.index()) == 0)
           oldRes.value().replaceAllUsesWith(newFork.getResults()[i++]);
     });
