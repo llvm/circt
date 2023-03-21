@@ -86,7 +86,7 @@ struct Reduction {
   virtual bool isOneShot() const { return false; }
 
   /// An optional callback for reductions to communicate removal of operations.
-  llvm::function_ref<void(mlir::Operation *)> notifyOpErasedCallback = nullptr;
+  std::function<void(mlir::Operation *)> notifyOpErasedCallback = nullptr;
 
   void notifyOpErased(mlir::Operation *op) {
     if (notifyOpErasedCallback)
