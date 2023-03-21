@@ -19,16 +19,16 @@ include "FIRRTLStatements.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/PatternBase.td"
 
-/// Constraint that matches a ConstantOp, SpecialConstantOp, AggregateConstantOp, or InvalidValueOp.
+/// Constraint that matches a ConstantOp, SpecialConstantOp, or AggregateConstantOp.
 def AnyConstantOp : Constraint<CPred<[{
-  isa_and_nonnull<ConstantOp, SpecialConstantOp, InvalidValueOp, AggregateConstantOp>
+  isa_and_nonnull<ConstantOp, SpecialConstantOp, AggregateConstantOp>
     ($0.getDefiningOp())
   }]>>;
 
 /// Constraint that matches non-constant operations. Used to ensure that the
 /// const-on-LHS rewriting patterns converge in case both operands are constant.
 def NonConstantOp : Constraint<CPred<[{
-  !isa_and_nonnull<ConstantOp, SpecialConstantOp, InvalidValueOp, AggregateConstantOp>
+  !isa_and_nonnull<ConstantOp, SpecialConstantOp, AggregateConstantOp>
     ($0.getDefiningOp())
   }]>>;
 
@@ -138,7 +138,7 @@ def DShlOfConstant : Pat<
   (PadPrimOp (MoveNameHint $old, (ShlPrimOp $x, (LimitConstant32 $cst))), (TypeWidth32 $old)),
   [(KnownWidth $x)]>;
 
-// dshr(a, const) -> shl(a, const)
+// dshr(a, const) -> shr(a, const)
 def DShrOfConstant : Pat<
   (DShrPrimOp:$old $x, (ConstantOp $cst)),
   (PadPrimOp (MoveNameHint $old, (ShrPrimOp $x, (LimitConstant32 $cst))), (TypeWidth32 $old)),
@@ -205,6 +205,18 @@ def AddOfSelf : Pat <
   (AddPrimOp:$old $x, $x),
   (MoveNameHint $old, (ShlPrimOp $x, (NativeCodeCall<"1">))),
   [(KnownWidth $x)]>;
+
+def minSize : NativeCodeCall<"$_builder.getI32IntegerAttr(std::min($0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel(), $1.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel()))">;
+
+def NonIdentPad : Constraint<CPred<"$1.getValue() != $0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel()">>;
+
+// add((zext a, n), (zext b, m)) -> zext(add(a, (zext b, m-n)), n)
+def AddOfZExt : Pat <
+  (AddPrimOp:$old (PadPrimOp $a, $m), (PadPrimOp $b, $n)),
+  (PadPrimOp (AddPrimOp (PadPrimOp $a, (minSize $a, $b)), 
+                        (PadPrimOp $b, (minSize $a, $b))),
+             (TypeWidth32 $old)),
+  [(KnownWidth $a), (KnownWidth $b), (NonIdentPad $a, $m), (NonIdentPad $b, $n)]>;
 
 // sub(a, 0) -> a
 def SubOfZero : Pat <
