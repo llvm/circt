@@ -526,7 +526,7 @@ struct MemoryStubber : public Reduction {
 
 /// Starting at the given `op`, traverse through it and its operands and erase
 /// operations that have no more uses.
-static void pruneUnusedOps(Operation *initialOp) {
+static void pruneUnusedOps(Operation *initialOp, Reduction &reduction) {
   SmallVector<Operation *> worklist;
   SmallSet<Operation *, 4> handled;
   worklist.push_back(initialOp);
@@ -538,6 +538,7 @@ static void pruneUnusedOps(Operation *initialOp) {
       if (auto argOp = arg.getDefiningOp())
         if (handled.insert(argOp).second)
           worklist.push_back(argOp);
+    reduction.notifyOpErased(op);
     op->erase();
   }
 }
@@ -590,7 +591,7 @@ struct OperandForwarder : public Reduction {
       newOp = operand;
     LLVM_DEBUG(llvm::dbgs() << "Forwarding " << newOp << " in " << *op << "\n");
     result.replaceAllUsesWith(newOp);
-    pruneUnusedOps(op);
+    pruneUnusedOps(op, *this);
     return success();
   }
   std::string getName() const override {
@@ -619,7 +620,7 @@ struct Constantifier : public Reduction {
     auto newOp = builder.create<firrtl::ConstantOp>(
         op->getLoc(), type, APSInt(width, type.isa<firrtl::UIntType>()));
     op->replaceAllUsesWith(newOp);
-    pruneUnusedOps(op);
+    pruneUnusedOps(op, *this);
     return success();
   }
   std::string getName() const override { return "constantifier"; }
@@ -646,7 +647,7 @@ struct ConnectInvalidator : public Reduction {
     auto rhsOp = rhs.getDefiningOp();
     op->setOperand(1, invOp);
     if (rhsOp)
-      pruneUnusedOps(rhsOp);
+      pruneUnusedOps(rhsOp, *this);
     return success();
   }
   std::string getName() const override { return "connect-invalidator"; }
@@ -665,7 +666,7 @@ struct OperationPruner : public Reduction {
   }
   LogicalResult rewrite(Operation *op) override {
     assert(match(op));
-    pruneUnusedOps(op);
+    pruneUnusedOps(op, *this);
     return success();
   }
   std::string getName() const override { return "operation-pruner"; }
@@ -890,7 +891,7 @@ struct ConnectSourceOperandForwarder : public Reduction {
     // because destination has only one use.
     op->erase();
     destOp->erase();
-    pruneUnusedOps(srcOp);
+    pruneUnusedOps(srcOp, *this);
 
     return success();
   }
