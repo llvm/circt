@@ -2611,4 +2611,11 @@ firrtl.module @MuxCondWidth(in %cond: !firrtl.uint<1>, out %foo: !firrtl.uint<3>
   firrtl.strictconnect %foo, %0 : !firrtl.uint<3>
 }
 
+// CHECK-LABEL: firrtl.module @RemoveUnusedInvalid
+firrtl.module @RemoveUnusedInvalid() {
+  // CHECK-NOT: firrtl.invalidvalue
+  %0 = firrtl.invalidvalue : !firrtl.uint<1>
+}
+// CHECK-NEXT: }
+
 }
