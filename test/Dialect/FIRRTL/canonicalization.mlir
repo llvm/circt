@@ -1755,14 +1755,24 @@ firrtl.module @add_double(out %out: !firrtl.uint<5>, in %in: !firrtl.uint<4>) {
 }
 
 // CHECK-LABEL: @add_narrow
-// CHECK: %[[add:.+]] = firrtl.add %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<5> 
-// CHECK-NEXT: %[[pad:.+]] = firrtl.pad %[[add]], 7 : (!firrtl.uint<5>) -> !firrtl.uint<7> 
-// CHECK-NEXT: firrtl.strictconnect %out, %[[pad]]
-firrtl.module @add_narrow(out %out: !firrtl.uint<7>, in %in1: !firrtl.uint<4>, in %in2: !firrtl.uint<2>) {
+// CHECK-NEXT: %[[add1:.+]] = firrtl.add %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<5> 
+// CHECK-NEXT: %[[pad1:.+]] = firrtl.pad %[[add1]], 7 : (!firrtl.uint<5>) -> !firrtl.uint<7> 
+// CHECK-NEXT: %[[add2:.+]] = firrtl.add %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<5> 
+// CHECK-NEXT: %[[pad2:.+]] = firrtl.pad %[[add2]], 7 : (!firrtl.uint<5>) -> !firrtl.uint<7> 
+// CHECK-NEXT: %[[add3:.+]] = firrtl.add %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<5> 
+// CHECK-NEXT: %[[pad3:.+]] = firrtl.pad %[[add3]], 7 : (!firrtl.uint<5>) -> !firrtl.uint<7> 
+// CHECK-NEXT: firrtl.strictconnect %out1, %[[pad1]]
+// CHECK-NEXT: firrtl.strictconnect %out2, %[[pad2]]
+// CHECK-NEXT: firrtl.strictconnect %out3, %[[pad3]]
+firrtl.module @add_narrow(out %out1: !firrtl.uint<7>, out %out2: !firrtl.uint<7>, out %out3: !firrtl.uint<7>, in %in1: !firrtl.uint<4>, in %in2: !firrtl.uint<2>) {
   %t1 = firrtl.pad %in1, 6 : (!firrtl.uint<4>) -> !firrtl.uint<6>
   %t2 = firrtl.pad %in2, 6 : (!firrtl.uint<2>) -> !firrtl.uint<6>
-  %add = firrtl.add %t1, %t2 : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<7>
-  firrtl.strictconnect %out, %add : !firrtl.uint<7>
+  %add1 = firrtl.add %t1, %t2 : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<7>
+  %add2 = firrtl.add %in1, %t2 : (!firrtl.uint<4>, !firrtl.uint<6>) -> !firrtl.uint<7>
+  %add3 = firrtl.add %t1, %in2 : (!firrtl.uint<6>, !firrtl.uint<2>) -> !firrtl.uint<7>
+  firrtl.strictconnect %out1, %add1 : !firrtl.uint<7>
+  firrtl.strictconnect %out2, %add2 : !firrtl.uint<7>
+  firrtl.strictconnect %out3, %add3 : !firrtl.uint<7>
 }
 
 // CHECK-LABEL: @sub_cst_prop1

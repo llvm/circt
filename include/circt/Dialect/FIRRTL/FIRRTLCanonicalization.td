@@ -211,12 +211,15 @@ def minSize : NativeCodeCall<"$_builder.getI32IntegerAttr(std::min($0.getType().
 def NonIdentPad : Constraint<CPred<"$1.getValue() != $0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel()">>;
 
 // add((zext a, n), (zext b, m)) -> zext(add(a, (zext b, m-n)), n)
-def AddOfZExt : Pat <
-  (AddPrimOp:$old (PadPrimOp $a, $m), (PadPrimOp $b, $n)),
-  (PadPrimOp (AddPrimOp (PadPrimOp $a, (minSize $a, $b)), 
-                        (PadPrimOp $b, (minSize $a, $b))),
-             (TypeWidth32 $old)),
-  [(KnownWidth $a), (KnownWidth $b), (NonIdentPad $a, $m), (NonIdentPad $b, $n)]>;
+def AddOfZExtL : Pat <
+  (AddPrimOp:$old (PadPrimOp $a, $m), $b),
+  (PadPrimOp (AddPrimOp $a, $b), (TypeWidth32 $old)),
+  [(KnownWidth $a), (KnownWidth $b), (NonIdentPad $a, $m)]>;
+
+def AddOfZExtR : Pat <
+  (AddPrimOp:$old $b, (PadPrimOp $a, $m)),
+  (PadPrimOp (AddPrimOp $b, $a), (TypeWidth32 $old)),
+  [(KnownWidth $a), (KnownWidth $b), (NonIdentPad $a, $m)]>;
 
 // sub(a, 0) -> a
 def SubOfZero : Pat <
