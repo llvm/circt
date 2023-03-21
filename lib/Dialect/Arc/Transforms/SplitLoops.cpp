@@ -298,12 +298,52 @@ void SplitLoopsPass::replaceArcUse(StateOp arcUse, ArrayRef<DefineOp> splitDefs,
   // Collect the operands for each split and create a new use for each. These
   // are either operands of the original arc, or values from other splits
   // exported as results.
-  for (auto [splitDef, split, newUse] : llvm::zip(splitDefs, splits, newUses)) {
-    SmallVector<Value> operands;
-    for (auto importedValue : split->importedValues)
+  DenseMap<unsigned, unsigned> splitIdxMap;
+  for (auto [i, split] : llvm::enumerate(splits))
+    splitIdxMap[split->index] = i;
+
+  DenseSet<unsigned> splitsDone;
+  SmallVector<std::pair<const DefineOp, const Split *>> worklist;
+
+  auto getMappedValuesOrSchedule = [&](ArrayRef<ImportedValue> importedValues,
+                                       SmallVector<Value> &operands) {
+    for (auto importedValue : importedValues) {
+      if (!importedValue.isInput && !splitsDone.contains(importedValue.split)) {
+        unsigned idx = splitIdxMap[importedValue.split];
+        worklist.push_back({splitDefs[idx], splits[idx]});
+        return false;
+      }
+
       operands.push_back(getMappedValue(importedValue));
-    newUse = builder.create<StateOp>(splitDef, Value{}, Value{}, 0, operands);
+    }
+
+    return true;
+  };
+
+  // Initialize worklist
+  for (auto [splitDef, split] : llvm::reverse(llvm::zip(splitDefs, splits)))
+    worklist.push_back({splitDef, split});
+
+  // Process worklist
+  while (!worklist.empty()) {
+    auto [splitDef, split] = worklist.back();
+
+    if (splitsDone.contains(split->index)) {
+      worklist.pop_back();
+      continue;
+    }
+
+    SmallVector<Value> operands;
+    if (!getMappedValuesOrSchedule(split->importedValues, operands))
+      continue;
+
+    auto newUse =
+        builder.create<StateOp>(splitDef, Value{}, Value{}, 0, operands);
     allArcUses.insert(newUse);
+    newUses[split->index] = newUse;
+
+    splitsDone.insert(split->index);
+    worklist.pop_back();
   }
 
   // Update the users of the original arc results.
