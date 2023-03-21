@@ -372,7 +372,7 @@ void AddPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results
       .insert<patterns::moveConstAdd, patterns::AddOfZero, patterns::AddOfSelf,
-              patterns::AddOfZExtL, patterns::AddOfZExtR>(context);
+              patterns::AddOfPadL, patterns::AddOfPadR>(context);
 }
 
 OpFoldResult SubPrimOp::fold(FoldAdaptor adaptor) {
