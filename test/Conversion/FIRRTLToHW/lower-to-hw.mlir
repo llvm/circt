@@ -1616,4 +1616,22 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:      }
   // CHECK-NEXT:    }
   // CHECK-NEXT:  }
+
+  firrtl.module @NamedBundles() {
+    %uint = firrtl.wire sym @uint : !firrtl.uint<1>
+    %vec = firrtl.wire sym @vec : !firrtl.vector<uint<1>, 2>
+    %multivec = firrtl.wire sym @multivec : !firrtl.vector<vector<uint<1>, 3>, 2>
+    %vecOfBundle = firrtl.wire sym @vecOfBundle : !firrtl.vector<bundle "VecOfBundle" <sint: sint<2>, uint: uint<4>>, 2>
+    %otherOther = firrtl.wire sym @otherOther : !firrtl<bundle "OtherOther" <other: bundle "Other" <sint: sint<2>, uint: uint<4>>>>
+    // CHECK-LABEL: hw.type_scope @NamedBundles__TYPESCOPE_ {
+    // CHECK-NEXT:   hw.typedecl @VecOfBundle : !hw.struct<sint: i2, uint: i4>
+    // CHECK-NEXT:   hw.typedecl @Other : !hw.struct<sint: i2, uint: i4>
+    // CHECK-NEXT:   hw.typedecl @OtherOther : !hw.struct<other: !hw.typealias<@NamedBundles__TYPESCOPE_::@Other, !hw.struct<sint: i2, uint: i4>>>
+    // CHECK-NEXT: }
+    // CHECK-NEXT: %uint = sv.wire sym @uint : !hw.inout<i1>
+    // CHECK-NEXT: %vec = sv.wire sym @vec : !hw.inout<array<2xi1>>
+    // CHECK-NEXT: %multivec = sv.wire sym @multivec : !hw.inout<array<2xarray<3xi1>>>
+    // CHECK-NEXT: %vecOfBundle = sv.wire sym @vecOfBundle : !hw.inout<array<2xtypealias<@NamedBundles__TYPESCOPE_::@VecOfBundle, !hw.struct<sint: i2, uint: i4>>>>
+    // CHECK-NEXT: %otherOther = sv.wire sym @otherOther : !hw.inout<typealias<@NamedBundles__TYPESCOPE_::@OtherOther, !hw.struct<other: !hw.typealias<@NamedBundles__TYPESCOPE_::@Other, !hw.struct<sint: i2, uint: i4>>>>>
+  }
 }
