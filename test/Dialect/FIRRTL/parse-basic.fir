@@ -1158,7 +1158,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module RefsChild :
     input in : UInt<1>
     output r : Probe<UInt<1>>
-    output rw : RWProbe<UInt<1>> ; expected-warning {{RWProbe not yet supported}}
+    output rw : RWProbe<UInt<1>>
 
     ; CHECK-NEXT: %[[NODE:.+]] = firrtl.node
     node n = in
@@ -1173,7 +1173,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module Refs :
     input in : UInt<1>
     output r : Probe<UInt<1>>
-    output rw : RWProbe<UInt<1>> ; expected-warning {{RWProbe not yet supported}}
+    output rw : RWProbe<UInt<1>>
     output out : UInt<1>
     output out2 : UInt<1>
     output out3 : UInt<3>

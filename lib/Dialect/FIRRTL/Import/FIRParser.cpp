@@ -701,9 +701,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
         parseToken(FIRToken::greater, "expected '>' in reference type"))
       return failure();
 
-    if (kind == FIRToken::kw_RWProbe)
-      emitWarning(translateLocation(loc),
-                  "RWProbe not yet supported, converting to Probe");
+    bool forceable = kind == FIRToken::kw_RWProbe;
 
     auto innerType = dyn_cast<FIRRTLBaseType>(type);
     if (!innerType) // TODO: "innerType.containsReference()"
@@ -712,7 +710,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     if (!innerType.isPassive())
       return emitError(loc, "probe inner type must be passive");
 
-    result = RefType::get(innerType);
+    result = RefType::get(innerType, forceable);
     break;
   }
 
@@ -2470,6 +2468,7 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
           staticRef.getDefiningOp()))
     return emitError(startTok.getLoc(), "cannot probe memories or their ports");
 
+  // TODO: RWProbe<T>.  rework ref.send, not good for force.
   result = builder.create<RefSendOp>(staticRef);
 
   return success();
