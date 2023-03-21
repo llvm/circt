@@ -1754,6 +1754,17 @@ firrtl.module @add_double(out %out: !firrtl.uint<5>, in %in: !firrtl.uint<4>) {
   firrtl.connect %out, %add : !firrtl.uint<5>, !firrtl.uint<5>
 }
 
+// CHECK-LABEL: @add_narrow
+// CHECK: %[[add:.+]] = firrtl.add %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<5> 
+// CHECK-NEXT: %[[pad:.+]] = firrtl.pad %[[add]], 7 : (!firrtl.uint<5>) -> !firrtl.uint<7> 
+// CHECK-NEXT: firrtl.strictconnect %out, %[[pad]]
+firrtl.module @add_narrow(out %out: !firrtl.uint<7>, in %in1: !firrtl.uint<4>, in %in2: !firrtl.uint<2>) {
+  %t1 = firrtl.pad %in1, 6 : (!firrtl.uint<4>) -> !firrtl.uint<6>
+  %t2 = firrtl.pad %in2, 6 : (!firrtl.uint<2>) -> !firrtl.uint<6>
+  %add = firrtl.add %t1, %t2 : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<7>
+  firrtl.strictconnect %out, %add : !firrtl.uint<7>
+}
+
 // CHECK-LABEL: @sub_cst_prop1
 // CHECK-NEXT:      %c1_ui9 = firrtl.constant 1 : !firrtl.uint<9>
 // CHECK-NEXT:      firrtl.strictconnect %out_b, %c1_ui9 : !firrtl.uint<9>
