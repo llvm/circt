@@ -206,21 +206,17 @@ def AddOfSelf : Pat <
   (MoveNameHint $old, (ShlPrimOp $x, (NativeCodeCall<"1">))),
   [(KnownWidth $x)]>;
 
-def minSize : NativeCodeCall<"$_builder.getI32IntegerAttr(std::min($0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel(), $1.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel()))">;
-
-def NonIdentPad : Constraint<CPred<"$1.getValue() != $0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel()">>;
-
 // add((pad a, n), b) -> pad(add(a, b), n)
 def AddOfPadL : Pat <
   (AddPrimOp:$old (PadPrimOp $a, $m), $b),
   (PadPrimOp (MoveNameHint $old, (AddPrimOp $a, $b)), (TypeWidth32 $old)),
-  [(KnownWidth $a), (KnownWidth $b), (NonIdentPad $a, $m)]>;
+  [(KnownWidth $a), (KnownWidth $b)]>;
 
 // add(b, (pad a, n)) -> pad(add(b, a), n)
 def AddOfPadR : Pat <
   (AddPrimOp:$old $b, (PadPrimOp $a, $m)),
   (PadPrimOp (MoveNameHint $old, (AddPrimOp $b, $a)), (TypeWidth32 $old)),
-  [(KnownWidth $a), (KnownWidth $b), (NonIdentPad $a, $m)]>;
+  [(KnownWidth $a), (KnownWidth $b)]>;
 
 // sub(a, 0) -> a
 def SubOfZero : Pat <
