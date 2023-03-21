@@ -5144,7 +5144,7 @@ void SharedEmitterState::collectOpsForFile(const FileInfo &file,
                                            EmissionList &thingsToEmit,
                                            bool emitHeader) {
   // Include the version string comment when the file is verilog.
-  if (file.isVerilog)
+  if (file.isVerilog && !options.omitVersionComment)
     thingsToEmit.emplace_back(circt::getCirctVersionComment());
 
   // If we're emitting replicated ops, keep track of where we are in the list.
