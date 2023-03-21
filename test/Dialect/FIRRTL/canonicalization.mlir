@@ -1775,6 +1775,27 @@ firrtl.module @add_narrow(out %out1: !firrtl.uint<7>, out %out2: !firrtl.uint<7>
   firrtl.strictconnect %out3, %add3 : !firrtl.uint<7>
 }
 
+// CHECK-LABEL: @sub_narrow
+// CHECK-NEXT: %[[add1:.+]] = firrtl.sub %in1, %in2 : (!firrtl.sint<4>, !firrtl.sint<2>) -> !firrtl.sint<5> 
+// CHECK-NEXT: %[[pad1:.+]] = firrtl.pad %[[add1]], 7 : (!firrtl.sint<5>) -> !firrtl.sint<7> 
+// CHECK-NEXT: %[[add2:.+]] = firrtl.sub %in1, %in2 : (!firrtl.sint<4>, !firrtl.sint<2>) -> !firrtl.sint<5> 
+// CHECK-NEXT: %[[pad2:.+]] = firrtl.pad %[[add2]], 7 : (!firrtl.sint<5>) -> !firrtl.sint<7> 
+// CHECK-NEXT: %[[add3:.+]] = firrtl.sub %in1, %in2 : (!firrtl.sint<4>, !firrtl.sint<2>) -> !firrtl.sint<5> 
+// CHECK-NEXT: %[[pad3:.+]] = firrtl.pad %[[add3]], 7 : (!firrtl.sint<5>) -> !firrtl.sint<7> 
+// CHECK-NEXT: firrtl.strictconnect %out1, %[[pad1]]
+// CHECK-NEXT: firrtl.strictconnect %out2, %[[pad2]]
+// CHECK-NEXT: firrtl.strictconnect %out3, %[[pad3]]
+firrtl.module @sub_narrow(out %out1: !firrtl.sint<7>, out %out2: !firrtl.sint<7>, out %out3: !firrtl.sint<7>, in %in1: !firrtl.sint<4>, in %in2: !firrtl.sint<2>) {
+  %t1 = firrtl.pad %in1, 6 : (!firrtl.sint<4>) -> !firrtl.sint<6>
+  %t2 = firrtl.pad %in2, 6 : (!firrtl.sint<2>) -> !firrtl.sint<6>
+  %add1 = firrtl.sub %t1, %t2 : (!firrtl.sint<6>, !firrtl.sint<6>) -> !firrtl.sint<7>
+  %add2 = firrtl.sub %in1, %t2 : (!firrtl.sint<4>, !firrtl.sint<6>) -> !firrtl.sint<7>
+  %add3 = firrtl.sub %t1, %in2 : (!firrtl.sint<6>, !firrtl.sint<2>) -> !firrtl.sint<7>
+  firrtl.strictconnect %out1, %add1 : !firrtl.sint<7>
+  firrtl.strictconnect %out2, %add2 : !firrtl.sint<7>
+  firrtl.strictconnect %out3, %add3 : !firrtl.sint<7>
+}
+
 // CHECK-LABEL: @sub_cst_prop1
 // CHECK-NEXT:      %c1_ui9 = firrtl.constant 1 : !firrtl.uint<9>
 // CHECK-NEXT:      firrtl.strictconnect %out_b, %c1_ui9 : !firrtl.uint<9>

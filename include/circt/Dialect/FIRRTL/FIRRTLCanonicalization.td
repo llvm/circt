@@ -242,6 +242,18 @@ def SubOfSelf : Pat <
   (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), $0.getType().cast<IntType>(), getIntZerosAttr($0.getType()))"> $old),
   [(KnownWidth $x)]>;
 
+// sub((pad a, n), b) -> pad(sub(a, b), n)
+def SubOfPadL : Pat <
+  (SubPrimOp:$old (PadPrimOp $a, $m), $b),
+  (PadPrimOp (MoveNameHint $old, (SubPrimOp $a, $b)), (TypeWidth32 $old)),
+  [(KnownWidth $a), (KnownWidth $b)]>;
+
+// sub(b, (pad a, n)) -> pad(sub(b, a), n)
+def SubOfPadR : Pat <
+  (SubPrimOp:$old $b, (PadPrimOp $a, $m)),
+  (PadPrimOp (MoveNameHint $old, (SubPrimOp $b, $a)), (TypeWidth32 $old)),
+  [(KnownWidth $a), (KnownWidth $b)]>;
+
 // and(x, 0) -> 0, fold can't handle all cases
 def AndOfZero : Pat <
   (AndPrimOp:$old $x, (ConstantOp:$zcst $cst)),
