@@ -1763,8 +1763,12 @@ LogicalResult InferResetsPass::verifyNoAbstractReset() {
     for (PortInfo port : module.getPorts()) {
       if (auto portType = port.type.dyn_cast<FIRRTLType>()) {
         if (getBaseType(portType).isa<ResetType>()) {
-          module->emitOpError() << "has an abstract reset type port \""
-                                << port.getName() << "\" after InferResets";
+          auto diag = emitError(port.loc)
+                      << "a port \"" << port.getName()
+                      << "\" with abstract reset type was unable to be "
+                         "inferred by InferResets (is this a top-level port?)";
+          diag.attachNote(module->getLoc())
+              << "the module with this uninferred reset port was defined here";
           hasAbstractResetPorts = true;
         }
       }
