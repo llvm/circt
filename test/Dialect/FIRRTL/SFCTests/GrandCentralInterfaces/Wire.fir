@@ -188,6 +188,10 @@ circuit Top :
     out.multivec[1][2] <= dut.out.multivec[1][2]
     out.uint <= dut.out.uint
 
+    ; CHECK:      typedef struct packed {logic [1:0] sint; logic [3:0] uint; } VecOfBundle;
+    ; CHECK-NEXT: typedef struct packed {logic [1:0] sint; logic [3:0] uint; } Other;
+    ; CHECK-NEXT: typedef struct packed {Other other; } OtherOther;
+    ; CHECK-NEXT: typedef struct packed {logic [1:0] sint; logic [3:0] uint; } Sub_vecOfBundle;
     ; PREFIX:         module FOO_BAR_MyView_companion(
     ; PREFIX:         FOO_BAR_BAZ_MyInterface MyView(
 
@@ -372,16 +376,16 @@ circuit Top :
     ; CHECK-NEXT:       // a 2D vector called 'multivec'
     ; CHECK-NEXT:       logic [1:0][2:0] multivec;
     ; CHECK-NEXT:       // a vector of a bundle
-    ; CHECK-NEXT:       struct packed {logic [1:0] sint; logic [3:0] uint; }[1:0] vecOfBundle;
+    ; CHECK-NEXT:       VecOfBundle[1:0] vecOfBundle;
     ; CHECK-NEXT:       // another bundle
-    ; CHECK-NEXT:       struct packed {struct packed {logic [1:0] sint; logic [3:0] uint; } other; } otherOther;
+    ; CHECK-NEXT:       OtherOther otherOther;
     ; CHECK-NEXT:       // a wire called 'uint' in the submodule
     ; CHECK-NEXT:       logic sub_uint;
     ; CHECK-NEXT:       // a vector called 'vec' in the submodule
     ; CHECK-NEXT:       logic [1:0] sub_vec;
     ; CHECK-NEXT:       // a vector of a bundle in the submodule with a
     ; CHECK-NEXT:       // multiline comment
-    ; CHECK-NEXT:       struct packed {logic [1:0] sint; logic [3:0] uint; }[1:0] sub_vecOfBundle;
+    ; CHECK-NEXT:       Sub_vecOfBundle[1:0] sub_vecOfBundle;
     ; CHECK-NEXT:       // The second element of an external port
     ; CHECK-NEXT:       logic ext_port_1;
     ; CHECK-NEXT:     endinterface
