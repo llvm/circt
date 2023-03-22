@@ -1272,6 +1272,7 @@ public:
   MuxSharedCond(MLIRContext *context)
       : RewritePattern(MuxPrimOp::getOperationName(), 0, context) {}
 
+  // Walk a dependent mux tree assuming the condition cond is true.
   Value tryCondTrue(Value op, Value cond,
                     mlir::PatternRewriter &rewriter) const {
     MuxPrimOp mux = op.getDefiningOp<MuxPrimOp>();
@@ -1294,6 +1295,7 @@ public:
     return {};
   }
 
+  // Walk a dependent mux tree assuming the condition cond is false.
   Value tryCondFalse(Value op, Value cond,
                      mlir::PatternRewriter &rewriter) const {
     MuxPrimOp mux = op.getDefiningOp<MuxPrimOp>();
