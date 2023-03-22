@@ -9,6 +9,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 "sifive.enterprise.firrtl.ExtractCoverageAnnotation", directory = "dir2",  filename = "./dir2/filename2" }, {class =
 "sifive.enterprise.firrtl.ExtractAssertionsAnnotation", directory = "dir3",  filename = "./dir3/filename3" }]}
 {
+  // CHECK-LABEL:  hw.type_scope @MyInterface__TYPESCOPE_ {
+  // CHECK-NEXT:    hw.typedecl @VecOfBundle : !hw.struct<sint: i2, uint: i4>
+  // CHECK-NEXT:    hw.typedecl @Other : !hw.struct<sint: i2, uint: i4>
+  // CHECK-NEXT:    hw.typedecl @OtherOther : !hw.struct<other: !hw.typealias<@MyInterface__TYPESCOPE_::@Other, !hw.struct<sint: i2, uint: i4>>>
+  // CHECK-NEXT:    hw.typedecl @Sub_vecOfBundle : !hw.struct<sint: i2, uint: i4>
+  // CHECK-NEXT:  }
   // Headers
   // CHECK:      sv.ifdef  "PRINTF_COND_" {
   // CHECK-NEXT: } else {
@@ -1851,4 +1857,18 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:    hw.instance "iOut" @AnalogOutModA(a: %a: !hw.inout<i8>) -> ()
   // CHECK-NEXT:    hw.output
   // CHECK-NEXT:  }
+
+ firrtl.interface @MyInterface() {
+   %vecOfBundle = firrtl.wire sym @vecOfBundle : !firrtl.vector<bundle "VecOfBundle" <sint: sint<2>, uint: uint<4>>, 2>
+   %otherOther = firrtl.wire sym @otherOther : !firrtl<bundle "OtherOther" <other: bundle "Other" <sint: sint<2>, uint: uint<4>>>>
+   %sub_vecOfBundle = firrtl.wire sym @sub_vecOfBundle : !firrtl.vector<bundle "Sub_vecOfBundle" <sint: sint<2>, uint: uint<4>>, 2>
+ }
+ // CHECK-LABEL:   sv.interface @MyInterface {
+ // CHECK-NEXT:     sv.interface.signal @vecOfBundle
+ // CHECK-SAME:  !hw.array<2xtypealias<@MyInterface__TYPESCOPE_::@VecOfBundle, !hw.struct<sint: i2, uint: i4>>>
+ // CHECK-NEXT:     sv.interface.signal @otherOther
+ // CHECK-SAME:  !hw.typealias<@MyInterface__TYPESCOPE_::@OtherOther, !hw.struct<other: !hw.typealias<@MyInterface__TYPESCOPE_::@Other, !hw.struct<sint: i2, uint: i4>>>>
+ // CHECK-NEXT:     sv.interface.signal @sub_vecOfBundle
+ // CHECK-SAME: !hw.array<2xtypealias<@MyInterface__TYPESCOPE_::@Sub_vecOfBundle, !hw.struct<sint: i2, uint: i4>>>
+ // CHECK-NEXT:   }
 }
