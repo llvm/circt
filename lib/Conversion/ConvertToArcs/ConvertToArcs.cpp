@@ -157,6 +157,7 @@ LogicalResult Converter::analyzeFanIn() {
     }
 
     auto duplicateOp = faninMasks.insert({op, mask});
+    (void)duplicateOp;
     assert(duplicateOp.second && "duplicate op in order");
   }
 

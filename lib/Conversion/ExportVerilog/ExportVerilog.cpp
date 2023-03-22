@@ -816,6 +816,7 @@ StringRef getVerilogValueName(Value val) {
     return getPortVerilogName(port.getParentBlock()->getParentOp(),
                               port.getArgNumber());
   assert(false && "unhandled value");
+  return {};
 }
 
 //===----------------------------------------------------------------------===//

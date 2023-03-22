@@ -82,8 +82,9 @@ void SimplifyVariadicOpsPass::simplifyOp(Operation *op) {
       return false;
     return aOp->isBeforeInBlock(bOp);
   });
-  for (auto value : operands)
-    LLVM_DEBUG(llvm::dbgs() << "- " << value << "\n");
+  LLVM_DEBUG(for (auto value
+                  : operands) llvm::dbgs()
+                 << "- " << value << "\n";);
 
   // Keep some statistics whether we actually did do some reordering.
   for (auto [a, b] : llvm::zip(operands, op->getOperands())) {

@@ -2552,7 +2552,10 @@ FailureOr<Value> FIRRTLLowering::lowerSubaccess(SubaccessOp op, Value input) {
 
 FailureOr<Value> FIRRTLLowering::lowerSubfield(SubfieldOp op, Value input) {
   auto resultType = lowerType(op->getResult(0).getType());
-  assert(resultType && input && "subfield type lowering failed");
+  if (!resultType || !input) {
+    op->emitError() << "subfield type lowering failed";
+    return failure();
+  }
 
   // If the input has an inout type, we need to lower to StructFieldInOutOp;
   // otherwise, StructExtractOp.

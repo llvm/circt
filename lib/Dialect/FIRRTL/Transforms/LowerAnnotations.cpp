@@ -605,6 +605,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       return src.getParentBlock();
 
     // If connecting across blocks, figure out where to connect.
+    (void)getModule;
     assert(getModule(src) == getModule(dest));
     // Helper to determine if 'a' is available at 'b's block.
     auto safelyDoms = [&](Value a, Value b) {
