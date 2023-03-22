@@ -1281,15 +1281,15 @@ public:
       return mux.getLow();
 
     if (Value v = tryCondTrue(mux.getHigh(), cond, rewriter))
-      return replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-                 rewriter, mux, mux.getType(),
-                 ValueRange{mux.getSel(), v, mux.getLow()})
+      return rewriter
+          .create<MuxPrimOp>(mux.getLoc(), mux.getType(),
+                             ValueRange{mux.getSel(), v, mux.getLow()})
           .getResult();
 
     if (Value v = tryCondTrue(mux.getLow(), cond, rewriter))
-      return replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-                 rewriter, mux, mux.getType(),
-                 ValueRange{mux.getSel(), mux.getHigh(), v})
+      return rewriter
+          .create<MuxPrimOp>(mux.getLoc(), mux.getType(),
+                             ValueRange{mux.getSel(), mux.getHigh(), v})
           .getResult();
     return {};
   }
@@ -1302,15 +1302,15 @@ public:
     if (mux.getSel() == cond)
       return mux.getHigh();
     if (Value v = tryCondFalse(mux.getHigh(), cond, rewriter))
-      return replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-                 rewriter, mux, mux.getType(),
-                 ValueRange{mux.getSel(), v, mux.getLow()})
+      return rewriter
+          .create<MuxPrimOp>(mux.getLoc(), mux.getType(),
+                             ValueRange{mux.getSel(), v, mux.getLow()})
           .getResult();
 
     if (Value v = tryCondFalse(mux.getLow(), cond, rewriter))
-      return replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-                 rewriter, mux, mux.getType(),
-                 ValueRange{mux.getSel(), mux.getHigh(), v})
+      return rewriter
+          .create<MuxPrimOp>(mux.getLoc(), mux.getType(),
+                             ValueRange{mux.getSel(), mux.getHigh(), v})
           .getResult();
     return {};
   }
