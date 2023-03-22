@@ -1272,49 +1272,46 @@ public:
   MuxSharedCond(MLIRContext *context)
       : RewritePattern(MuxPrimOp::getOperationName(), 0, context) {}
 
-  Value tryCondTrue(MuxPrimOp mux, Value cond,
+  Value tryCondTrue(Value op, Value cond,
                     mlir::PatternRewriter &rewriter) const {
+    MuxPrimOp mux = op.getDefiningOp<MuxPrimOp>();
+    if (!mux)
+      return {};
     if (mux.getSel() == cond)
       return mux.getLow();
 
-    if (auto trueMux =
-            dyn_cast_or_null<MuxPrimOp>(mux.getHigh().getDefiningOp()))
-      if (Value v = tryCondTrue(trueMux, cond, rewriter))
-        return replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-                   rewriter, mux, mux.getType(),
-                   ValueRange{mux.getSel(), v, mux.getLow()})
-            .getResult();
+    if (Value v = tryCondTrue(mux.getHigh(), cond, rewriter))
+      return replaceOpWithNewOpAndCopyName<MuxPrimOp>(
+                 rewriter, mux, mux.getType(),
+                 ValueRange{mux.getSel(), v, mux.getLow()})
+          .getResult();
 
-    if (auto falseMux =
-            dyn_cast_or_null<MuxPrimOp>(mux.getLow().getDefiningOp()))
-      if (Value v = tryCondTrue(falseMux, cond, rewriter))
-        return replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-                   rewriter, mux, mux.getType(),
-                   ValueRange{mux.getSel(), mux.getHigh(), v})
-            .getResult();
+    if (Value v = tryCondTrue(mux.getLow(), cond, rewriter))
+      return replaceOpWithNewOpAndCopyName<MuxPrimOp>(
+                 rewriter, mux, mux.getType(),
+                 ValueRange{mux.getSel(), mux.getHigh(), v})
+          .getResult();
     return {};
   }
 
-  Value tryCondFalse(MuxPrimOp mux, Value cond,
+  Value tryCondFalse(Value op, Value cond,
                      mlir::PatternRewriter &rewriter) const {
+    MuxPrimOp mux = op.getDefiningOp<MuxPrimOp>();
+    if (!mux)
+      return {};
     if (mux.getSel() == cond)
       return mux.getHigh();
+    if (Value v = tryCondFalse(mux.getHigh(), cond, rewriter))
+      return replaceOpWithNewOpAndCopyName<MuxPrimOp>(
+                 rewriter, mux, mux.getType(),
+                 ValueRange{mux.getSel(), v, mux.getLow()})
+          .getResult();
 
-    if (auto trueMux =
-            dyn_cast_or_null<MuxPrimOp>(mux.getHigh().getDefiningOp()))
-      if (Value v = tryCondTrue(trueMux, cond, rewriter))
-        return replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-                   rewriter, mux, mux.getType(),
-                   ValueRange{mux.getSel(), v, mux.getLow()})
-            .getResult();
-
-    if (auto falseMux =
-            dyn_cast_or_null<MuxPrimOp>(mux.getLow().getDefiningOp()))
-      if (Value v = tryCondTrue(falseMux, cond, rewriter))
-        return replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-                   rewriter, mux, mux.getType(),
-                   ValueRange{mux.getSel(), mux.getHigh(), v})
-            .getResult();
+    if (Value v = tryCondFalse(mux.getLow(), cond, rewriter))
+      return replaceOpWithNewOpAndCopyName<MuxPrimOp>(
+                 rewriter, mux, mux.getType(),
+                 ValueRange{mux.getSel(), mux.getHigh(), v})
+          .getResult();
     return {};
   }
 
@@ -1326,23 +1323,19 @@ public:
     if (width < 0)
       return failure();
 
-    if (auto trueMux =
-            dyn_cast_or_null<MuxPrimOp>(mux.getHigh().getDefiningOp()))
-      if (Value v = tryCondTrue(trueMux, mux.getSel(), rewriter)) {
-        replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-            rewriter, op, mux.getType(),
-            ValueRange{mux.getSel(), v, mux.getLow()});
-        return success();
-      }
+    if (Value v = tryCondTrue(mux.getHigh(), mux.getSel(), rewriter)) {
+      replaceOpWithNewOpAndCopyName<MuxPrimOp>(
+          rewriter, op, mux.getType(),
+          ValueRange{mux.getSel(), v, mux.getLow()});
+      return success();
+    }
 
-    if (auto falseMux =
-            dyn_cast_or_null<MuxPrimOp>(mux.getLow().getDefiningOp()))
-      if (Value v = tryCondFalse(falseMux, mux.getSel(), rewriter)) {
-        replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-            rewriter, op, mux.getType(),
-            ValueRange{mux.getSel(), mux.getHigh(), v});
-        return success();
-      }
+    if (Value v = tryCondFalse(mux.getLow(), mux.getSel(), rewriter)) {
+      replaceOpWithNewOpAndCopyName<MuxPrimOp>(
+          rewriter, op, mux.getType(),
+          ValueRange{mux.getSel(), mux.getHigh(), v});
+      return success();
+    }
 
     return failure();
   }
