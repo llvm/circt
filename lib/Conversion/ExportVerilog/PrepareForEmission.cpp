@@ -105,9 +105,11 @@ static void lowerInstanceResults(InstanceOp op) {
     auto result = op.getResult(nextResultNo);
     ++nextResultNo;
 
-    // If the result has no user, Emitter will omit the connection so don't
-    // create a wire for it.
-    if (result.use_empty())
+    // If the result doesn't have a user, the connection won't be emitted by
+    // Emitter, so there's no need to create a wire for it. However, if the
+    // result is a zero bit value, the normal emission code path should be used,
+    // as zero bit values require special handling by the emitter.
+    if (result.use_empty() && !ExportVerilog::isZeroBitType(result.getType()))
       continue;
 
     if (result.hasOneUse()) {

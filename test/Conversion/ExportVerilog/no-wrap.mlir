@@ -39,9 +39,12 @@ hw.module @TestZero(%a: i4, %zeroBitWithAVeryLongNameWhichMightSeemUnlikelyButHa
 // CHECK-NEXT: // input  [2:0]/*Zero Width*/ aarrZero
 // CHECK:      // output /*Zero Width*/      rZeroOutputWithAVeryLongNameYepThisToo
 
+// Wire:
+// CHECK: // Zero width: wire /*Zero Width*/ [[ZERO_WIRE:.+]];
+
 // Instance ports:
 // CHECK: //.zeroBitWithAVeryLongNameWhichMightSeemUnlikelyButHappensAllTheTime (azeroBit),
-// CHECK: //.rZeroOutputWithAVeryLongName_YepThisToo_LongNamesAreTheWay_MoreText_GoGoGoGoGo (/* unused */)
+// CHECK: //.rZeroOutputWithAVeryLongName_YepThisToo_LongNamesAreTheWay_MoreText_GoGoGoGoGo ([[ZERO_WIRE]])
 
 // Output:
 // CHECK: // Zero width: assign
