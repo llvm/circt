@@ -245,13 +245,13 @@ def SubOfSelf : Pat <
 // sub((pad a, n), b) -> pad(sub(a, b), n)
 def SubOfPadL : Pat <
   (SubPrimOp:$old (PadPrimOp $a, $m), $b),
-  (PadPrimOp (MoveNameHint $old, (SubPrimOp $a, $b)), (TypeWidth32 $old)),
+  (MoveNameHint $old, (PadPrimOp (SubPrimOp $a, $b), (TypeWidth32 $old))),
   [(KnownWidth $a), (KnownWidth $b)]>;
 
 // sub(b, (pad a, n)) -> pad(sub(b, a), n)
 def SubOfPadR : Pat <
   (SubPrimOp:$old $b, (PadPrimOp $a, $m)),
-  (PadPrimOp (MoveNameHint $old, (SubPrimOp $b, $a)), (TypeWidth32 $old)),
+  (MoveNameHint $old, (PadPrimOp (SubPrimOp $b, $a), (TypeWidth32 $old))),
   [(KnownWidth $a), (KnownWidth $b)]>;
 
 // and(x, 0) -> 0, fold can't handle all cases
@@ -279,14 +279,14 @@ def TypeWidthAdjust32 : NativeCodeCall<
 /// And takes an unsigned, so pad must produce an unsigned, which means it's input is unsigned
 def AndOfPadRhs : Pat <
   (AndPrimOp:$old $x, (PadPrimOp:$pad $y, $n)),
-  (PadPrimOp (AndPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y), $n),
+  (MoveNameHint $old, (PadPrimOp (AndPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y), $n)),
   [(KnownWidth $x), (EqualTypes $x, $pad)]>;
 
 /// and(x, pad(y, n)) -> pad(and(tail(x), y), n), x is unsigned
 /// And takes an unsigned, so pad must produce an unsigned, which means it's input is unsigned
 def AndOfPadLhs : Pat <
   (AndPrimOp:$old (PadPrimOp:$pad $y, $n), $x),
-  (PadPrimOp (AndPrimOp $y, (TailPrimOp $x, (TypeWidthAdjust32 $x, $y))), $n),
+  (MoveNameHint $old, (PadPrimOp (AndPrimOp $y, (TailPrimOp $x, (TypeWidthAdjust32 $x, $y))), $n)),
   [(KnownWidth $x), (EqualTypes $x, $pad)]>;
 
 // or(x, 0) -> x, fold can't handle all cases
