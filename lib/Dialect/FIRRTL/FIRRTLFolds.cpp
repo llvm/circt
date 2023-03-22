@@ -1265,89 +1265,89 @@ public:
   }
 };
 
-  class MuxSharedCond : public mlir::RewritePattern {
-  public:
-    MuxSharedCond(MLIRContext *context)
-        : RewritePattern(MuxPrimOp::getOperationName(), 0, context) {}
+// Find muxes which have conditions dominated by other muxes with the same
+// condition.
+class MuxSharedCond : public mlir::RewritePattern {
+public:
+  MuxSharedCond(MLIRContext *context)
+      : RewritePattern(MuxPrimOp::getOperationName(), 0, context) {}
 
-    Value tryCondTrue(MuxPrimOp mux, Value cond,
-                      mlir::PatternRewriter &rewriter) const {
-      if (mux.getSel() == cond)
-        return mux.getLow();
+  Value tryCondTrue(MuxPrimOp mux, Value cond,
+                    mlir::PatternRewriter &rewriter) const {
+    if (mux.getSel() == cond)
+      return mux.getLow();
 
-      if (auto trueMux =
-              dyn_cast_or_null<MuxPrimOp>(mux.getHigh().getDefiningOp()))
-        if (Value v = tryCondTrue(trueMux, cond, rewriter))
-          return replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-                     rewriter, mux, mux.getType(),
-                     ValueRange{mux.getSel(), v, mux.getLow()})
-              .getResult();
+    if (auto trueMux =
+            dyn_cast_or_null<MuxPrimOp>(mux.getHigh().getDefiningOp()))
+      if (Value v = tryCondTrue(trueMux, cond, rewriter))
+        return replaceOpWithNewOpAndCopyName<MuxPrimOp>(
+                   rewriter, mux, mux.getType(),
+                   ValueRange{mux.getSel(), v, mux.getLow()})
+            .getResult();
 
-      if (auto falseMux =
-              dyn_cast_or_null<MuxPrimOp>(mux.getLow().getDefiningOp()))
-        if (Value v = tryCondTrue(falseMux, cond, rewriter))
-          return replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-                     rewriter, mux, mux.getType(),
-                     ValueRange{mux.getSel(), mux.getHigh(), v})
-              .getResult();
-      return {};
-    }
+    if (auto falseMux =
+            dyn_cast_or_null<MuxPrimOp>(mux.getLow().getDefiningOp()))
+      if (Value v = tryCondTrue(falseMux, cond, rewriter))
+        return replaceOpWithNewOpAndCopyName<MuxPrimOp>(
+                   rewriter, mux, mux.getType(),
+                   ValueRange{mux.getSel(), mux.getHigh(), v})
+            .getResult();
+    return {};
+  }
 
-    Value tryCondFalse(MuxPrimOp mux, Value cond,
-                       mlir::PatternRewriter &rewriter) const {
-      if (mux.getSel() == cond)
-        return mux.getHigh();
+  Value tryCondFalse(MuxPrimOp mux, Value cond,
+                     mlir::PatternRewriter &rewriter) const {
+    if (mux.getSel() == cond)
+      return mux.getHigh();
 
-      if (auto trueMux =
-              dyn_cast_or_null<MuxPrimOp>(mux.getHigh().getDefiningOp()))
-        if (Value v = tryCondTrue(trueMux, cond, rewriter))
-          return replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-                     rewriter, mux, mux.getType(),
-                     ValueRange{mux.getSel(), v, mux.getLow()})
-              .getResult();
+    if (auto trueMux =
+            dyn_cast_or_null<MuxPrimOp>(mux.getHigh().getDefiningOp()))
+      if (Value v = tryCondTrue(trueMux, cond, rewriter))
+        return replaceOpWithNewOpAndCopyName<MuxPrimOp>(
+                   rewriter, mux, mux.getType(),
+                   ValueRange{mux.getSel(), v, mux.getLow()})
+            .getResult();
 
-      if (auto falseMux =
-              dyn_cast_or_null<MuxPrimOp>(mux.getLow().getDefiningOp()))
-        if (Value v = tryCondTrue(falseMux, cond, rewriter))
-          return replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-                     rewriter, mux, mux.getType(),
-                     ValueRange{mux.getSel(), mux.getHigh(), v})
-              .getResult();
-      return {};
-    }
+    if (auto falseMux =
+            dyn_cast_or_null<MuxPrimOp>(mux.getLow().getDefiningOp()))
+      if (Value v = tryCondTrue(falseMux, cond, rewriter))
+        return replaceOpWithNewOpAndCopyName<MuxPrimOp>(
+                   rewriter, mux, mux.getType(),
+                   ValueRange{mux.getSel(), mux.getHigh(), v})
+            .getResult();
+    return {};
+  }
 
-    LogicalResult
-    matchAndRewrite(Operation *op,
-                    mlir::PatternRewriter &rewriter) const override {
-      auto mux = cast<MuxPrimOp>(op);
-      auto width = mux.getType().getBitWidthOrSentinel();
-      if (width < 0)
-        return failure();
-
-      if (auto trueMux =
-              dyn_cast_or_null<MuxPrimOp>(mux.getHigh().getDefiningOp()))
-        if (Value v = tryCondTrue(trueMux, mux.getSel(), rewriter)) {
-          replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-              rewriter, op, mux.getType(),
-              ValueRange{mux.getSel(), v, mux.getLow()});
-          return success();
-        }
-
-      if (auto falseMux =
-              dyn_cast_or_null<MuxPrimOp>(mux.getLow().getDefiningOp()))
-        if (Value v = tryCondFalse(falseMux, mux.getSel(), rewriter)) {
-          replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-              rewriter, op, mux.getType(),
-              ValueRange{mux.getSel(), mux.getHigh(), v});
-          return success();
-        }
-
+  LogicalResult
+  matchAndRewrite(Operation *op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto mux = cast<MuxPrimOp>(op);
+    auto width = mux.getType().getBitWidthOrSentinel();
+    if (width < 0)
       return failure();
-    }
-  };
+
+    if (auto trueMux =
+            dyn_cast_or_null<MuxPrimOp>(mux.getHigh().getDefiningOp()))
+      if (Value v = tryCondTrue(trueMux, mux.getSel(), rewriter)) {
+        replaceOpWithNewOpAndCopyName<MuxPrimOp>(
+            rewriter, op, mux.getType(),
+            ValueRange{mux.getSel(), v, mux.getLow()});
+        return success();
+      }
+
+    if (auto falseMux =
+            dyn_cast_or_null<MuxPrimOp>(mux.getLow().getDefiningOp()))
+      if (Value v = tryCondFalse(falseMux, mux.getSel(), rewriter)) {
+        replaceOpWithNewOpAndCopyName<MuxPrimOp>(
+            rewriter, op, mux.getType(),
+            ValueRange{mux.getSel(), mux.getHigh(), v});
+        return success();
+      }
+
+    return failure();
+  }
+};
 } // namespace
-
-
 
 void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
