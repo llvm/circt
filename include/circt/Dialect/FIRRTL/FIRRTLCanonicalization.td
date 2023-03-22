@@ -283,7 +283,7 @@ def AndOfPadRhs : Pat <
   [(KnownWidth $x), (EqualTypes $x, $pad)]>;
 
 /// and(x, pad(y, n)) -> pad(and(tail(x), y), n), x is unsigned
-/// And takes an unsigned, so pad must produce an unsigned, which means it's input is unsigned
+/// And takes an unsigned, so pad must produce an unsigned, which means its input is unsigned
 def AndOfPadLhs : Pat <
   (AndPrimOp:$old (PadPrimOp:$pad $y, $n), $x),
   (MoveNameHint $old, (PadPrimOp (AndPrimOp $y, (TailPrimOp $x, (TypeWidthAdjust32 $x, $y))), $n)),
