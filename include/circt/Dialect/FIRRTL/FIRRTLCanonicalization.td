@@ -19,16 +19,16 @@ include "FIRRTLStatements.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/PatternBase.td"
 
-/// Constraint that matches a ConstantOp, SpecialConstantOp, AggregateConstantOp, or InvalidValueOp.
+/// Constraint that matches a ConstantOp, SpecialConstantOp, or AggregateConstantOp.
 def AnyConstantOp : Constraint<CPred<[{
-  isa_and_nonnull<ConstantOp, SpecialConstantOp, InvalidValueOp, AggregateConstantOp>
+  isa_and_nonnull<ConstantOp, SpecialConstantOp, AggregateConstantOp>
     ($0.getDefiningOp())
   }]>>;
 
 /// Constraint that matches non-constant operations. Used to ensure that the
 /// const-on-LHS rewriting patterns converge in case both operands are constant.
 def NonConstantOp : Constraint<CPred<[{
-  !isa_and_nonnull<ConstantOp, SpecialConstantOp, InvalidValueOp, AggregateConstantOp>
+  !isa_and_nonnull<ConstantOp, SpecialConstantOp, AggregateConstantOp>
     ($0.getDefiningOp())
   }]>>;
 
@@ -138,7 +138,7 @@ def DShlOfConstant : Pat<
   (PadPrimOp (MoveNameHint $old, (ShlPrimOp $x, (LimitConstant32 $cst))), (TypeWidth32 $old)),
   [(KnownWidth $x)]>;
 
-// dshr(a, const) -> shl(a, const)
+// dshr(a, const) -> shr(a, const)
 def DShrOfConstant : Pat<
   (DShrPrimOp:$old $x, (ConstantOp $cst)),
   (PadPrimOp (MoveNameHint $old, (ShrPrimOp $x, (LimitConstant32 $cst))), (TypeWidth32 $old)),
@@ -206,6 +206,18 @@ def AddOfSelf : Pat <
   (MoveNameHint $old, (ShlPrimOp $x, (NativeCodeCall<"1">))),
   [(KnownWidth $x)]>;
 
+// add((pad a, n), b) -> pad(add(a, b), n)
+def AddOfPadL : Pat <
+  (AddPrimOp:$old (PadPrimOp $a, $m), $b),
+  (PadPrimOp (MoveNameHint $old, (AddPrimOp $a, $b)), (TypeWidth32 $old)),
+  [(KnownWidth $a), (KnownWidth $b)]>;
+
+// add(b, (pad a, n)) -> pad(add(b, a), n)
+def AddOfPadR : Pat <
+  (AddPrimOp:$old $b, (PadPrimOp $a, $m)),
+  (PadPrimOp (MoveNameHint $old, (AddPrimOp $b, $a)), (TypeWidth32 $old)),
+  [(KnownWidth $a), (KnownWidth $b)]>;
+
 // sub(a, 0) -> a
 def SubOfZero : Pat <
   (SubPrimOp:$old $x, (ConstantOp:$zcst $cst)),
@@ -229,6 +241,18 @@ def SubOfSelf : Pat <
   (SubPrimOp:$old $x, $x),
   (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), $0.getType().cast<IntType>(), getIntZerosAttr($0.getType()))"> $old),
   [(KnownWidth $x)]>;
+
+// sub((pad a, n), b) -> pad(sub(a, b), n)
+def SubOfPadL : Pat <
+  (SubPrimOp:$old (PadPrimOp $a, $m), $b),
+  (PadPrimOp (MoveNameHint $old, (SubPrimOp $a, $b)), (TypeWidth32 $old)),
+  [(KnownWidth $a), (KnownWidth $b)]>;
+
+// sub(b, (pad a, n)) -> pad(sub(b, a), n)
+def SubOfPadR : Pat <
+  (SubPrimOp:$old $b, (PadPrimOp $a, $m)),
+  (PadPrimOp (MoveNameHint $old, (SubPrimOp $b, $a)), (TypeWidth32 $old)),
+  [(KnownWidth $a), (KnownWidth $b)]>;
 
 // and(x, 0) -> 0, fold can't handle all cases
 def AndOfZero : Pat <
