@@ -74,7 +74,7 @@ hw.module @inout(%inout: i1) -> (output: i1) {
 hw.module @inout_inst(%a: i1) {
   // CHECK: inout_0 foo (
   // CHECK:   .inout_0  (a),
-  // CHECK:   .output_0 (_foo_output)
+  // CHECK:   .output_0 (/* unused */)
   // CHECK: );
   %0 = hw.instance "foo" @inout (inout: %a: i1) -> (output: i1)
 }

@@ -1793,7 +1793,7 @@ hw.module @NastyPort(%.lots$of.dots: i1) -> (".more.dots": i1) {
 sv.bind #hw.innerNameRef<@NastyPortParent::@foo>
 // CHECK-LABEL: bind NastyPortParent NastyPort foo (
 // CHECK-NEXT:    ._lots24of_dots (1'h0)
-// CHECK-NEXT:    ._more_dots     (_foo__more_dots)
+// CHECK-NEXT:    ._more_dots     (/* unused */)
 // CHECK-NEXT:  );
 
 sv.bind #hw.innerNameRef<@InlineBind::@foo1>
