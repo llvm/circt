@@ -1272,48 +1272,56 @@ public:
   MuxSharedCond(MLIRContext *context)
       : RewritePattern(MuxPrimOp::getOperationName(), 0, context) {}
 
+  Value updateOrClone(MuxPrimOp mux, Value high, Value low,
+                      mlir::PatternRewriter &rewriter, bool chain) const {
+    if (chain) {
+      rewriter.updateRootInPlace(mux, [&] {
+        mux.setOperand(1, high);
+        mux.setOperand(2, low);
+      });
+      return {};
+    }
+    rewriter.setInsertionPointAfter(mux);
+    return rewriter
+        .create<MuxPrimOp>(mux.getLoc(), mux.getType(),
+                           ValueRange{mux.getSel(), high, low})
+        .getResult();
+  }
+
   // Walk a dependent mux tree assuming the condition cond is true.
-  Value tryCondTrue(Value op, Value cond,
-                    mlir::PatternRewriter &rewriter) const {
+  Value tryCondTrue(Value op, Value cond, mlir::PatternRewriter &rewriter,
+                    bool chain) const {
     MuxPrimOp mux = op.getDefiningOp<MuxPrimOp>();
     if (!mux)
       return {};
     if (mux.getSel() == cond)
       return mux.getLow();
+    chain &= mux->hasOneUse();
 
-    if (Value v = tryCondTrue(mux.getHigh(), cond, rewriter))
-      return rewriter
-          .create<MuxPrimOp>(mux.getLoc(), mux.getType(),
-                             ValueRange{mux.getSel(), v, mux.getLow()})
-          .getResult();
+    if (Value v = tryCondTrue(mux.getHigh(), cond, rewriter, chain))
+      return updateOrClone(mux, v, mux.getLow(), rewriter, chain);
 
-    if (Value v = tryCondTrue(mux.getLow(), cond, rewriter))
-      return rewriter
-          .create<MuxPrimOp>(mux.getLoc(), mux.getType(),
-                             ValueRange{mux.getSel(), mux.getHigh(), v})
-          .getResult();
+    if (Value v = tryCondTrue(mux.getLow(), cond, rewriter, chain))
+      return updateOrClone(mux, mux.getHigh(), v, rewriter, chain);
     return {};
   }
 
   // Walk a dependent mux tree assuming the condition cond is false.
-  Value tryCondFalse(Value op, Value cond,
-                     mlir::PatternRewriter &rewriter) const {
+  Value tryCondFalse(Value op, Value cond, mlir::PatternRewriter &rewriter,
+                     bool chain) const {
     MuxPrimOp mux = op.getDefiningOp<MuxPrimOp>();
     if (!mux)
       return {};
     if (mux.getSel() == cond)
       return mux.getHigh();
-    if (Value v = tryCondFalse(mux.getHigh(), cond, rewriter))
-      return rewriter
-          .create<MuxPrimOp>(mux.getLoc(), mux.getType(),
-                             ValueRange{mux.getSel(), v, mux.getLow()})
-          .getResult();
+    chain &= mux->hasOneUse();
 
-    if (Value v = tryCondFalse(mux.getLow(), cond, rewriter))
-      return rewriter
-          .create<MuxPrimOp>(mux.getLoc(), mux.getType(),
-                             ValueRange{mux.getSel(), mux.getHigh(), v})
-          .getResult();
+    if (Value v = tryCondFalse(mux.getHigh(), cond, rewriter, chain))
+      return updateOrClone(mux, v, mux.getLow(), rewriter, chain);
+
+    if (Value v = tryCondFalse(mux.getLow(), cond, rewriter, chain))
+      return updateOrClone(mux, mux.getHigh(), v, rewriter, chain);
+
     return {};
   }
 
@@ -1325,17 +1333,13 @@ public:
     if (width < 0)
       return failure();
 
-    if (Value v = tryCondTrue(mux.getHigh(), mux.getSel(), rewriter)) {
-      replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-          rewriter, op, mux.getType(),
-          ValueRange{mux.getSel(), v, mux.getLow()});
+    if (Value v = tryCondTrue(mux.getHigh(), mux.getSel(), rewriter, true)) {
+      rewriter.updateRootInPlace(mux, [&] { mux.setOperand(1, v); });
       return success();
     }
 
-    if (Value v = tryCondFalse(mux.getLow(), mux.getSel(), rewriter)) {
-      replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-          rewriter, op, mux.getType(),
-          ValueRange{mux.getSel(), mux.getHigh(), v});
+    if (Value v = tryCondFalse(mux.getLow(), mux.getSel(), rewriter, true)) {
+      rewriter.updateRootInPlace(mux, [&] { mux.setOperand(2, v); });
       return success();
     }
 
