@@ -1766,12 +1766,12 @@ firrtl.module @add_double(out %out: !firrtl.uint<5>, in %in: !firrtl.uint<4>) {
 }
 
 // CHECK-LABEL: @add_narrow
-// CHECK-NEXT: %[[add1:.+]] = firrtl.add %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<5> 
-// CHECK-NEXT: %[[pad1:.+]] = firrtl.pad %[[add1]], 7 : (!firrtl.uint<5>) -> !firrtl.uint<7> 
-// CHECK-NEXT: %[[add2:.+]] = firrtl.add %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<5> 
-// CHECK-NEXT: %[[pad2:.+]] = firrtl.pad %[[add2]], 7 : (!firrtl.uint<5>) -> !firrtl.uint<7> 
-// CHECK-NEXT: %[[add3:.+]] = firrtl.add %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<5> 
-// CHECK-NEXT: %[[pad3:.+]] = firrtl.pad %[[add3]], 7 : (!firrtl.uint<5>) -> !firrtl.uint<7> 
+// CHECK-NEXT: %[[add1:.+]] = firrtl.add %in2, %in1
+// CHECK-NEXT: %[[pad1:.+]] = firrtl.pad %[[add1]], 7
+// CHECK-NEXT: %[[add2:.+]] = firrtl.add %in2, %in1
+// CHECK-NEXT: %[[pad2:.+]] = firrtl.pad %[[add2]], 7
+// CHECK-NEXT: %[[add3:.+]] = firrtl.add %in1, %in2
+// CHECK-NEXT: %[[pad3:.+]] = firrtl.pad %[[add3]], 7
 // CHECK-NEXT: firrtl.strictconnect %out1, %[[pad1]]
 // CHECK-NEXT: firrtl.strictconnect %out2, %[[pad2]]
 // CHECK-NEXT: firrtl.strictconnect %out3, %[[pad3]]
@@ -1787,12 +1787,12 @@ firrtl.module @add_narrow(out %out1: !firrtl.uint<7>, out %out2: !firrtl.uint<7>
 }
 
 // CHECK-LABEL: @adds_narrow
-// CHECK-NEXT: %[[add1:.+]] = firrtl.add %in1, %in2 : (!firrtl.sint<4>, !firrtl.sint<2>) -> !firrtl.sint<5> 
-// CHECK-NEXT: %[[pad1:.+]] = firrtl.pad %[[add1]], 7 : (!firrtl.sint<5>) -> !firrtl.sint<7> 
-// CHECK-NEXT: %[[add2:.+]] = firrtl.add %in1, %in2 : (!firrtl.sint<4>, !firrtl.sint<2>) -> !firrtl.sint<5> 
-// CHECK-NEXT: %[[pad2:.+]] = firrtl.pad %[[add2]], 7 : (!firrtl.sint<5>) -> !firrtl.sint<7> 
-// CHECK-NEXT: %[[add3:.+]] = firrtl.add %in1, %in2 : (!firrtl.sint<4>, !firrtl.sint<2>) -> !firrtl.sint<5> 
-// CHECK-NEXT: %[[pad3:.+]] = firrtl.pad %[[add3]], 7 : (!firrtl.sint<5>) -> !firrtl.sint<7> 
+// CHECK-NEXT: %[[add1:.+]] = firrtl.add %in2, %in1
+// CHECK-NEXT: %[[pad1:.+]] = firrtl.pad %[[add1]], 7
+// CHECK-NEXT: %[[add2:.+]] = firrtl.add %in2, %in1
+// CHECK-NEXT: %[[pad2:.+]] = firrtl.pad %[[add2]], 7
+// CHECK-NEXT: %[[add3:.+]] = firrtl.add %in1, %in2
+// CHECK-NEXT: %[[pad3:.+]] = firrtl.pad %[[add3]], 7
 // CHECK-NEXT: firrtl.strictconnect %out1, %[[pad1]]
 // CHECK-NEXT: firrtl.strictconnect %out2, %[[pad2]]
 // CHECK-NEXT: firrtl.strictconnect %out3, %[[pad3]]

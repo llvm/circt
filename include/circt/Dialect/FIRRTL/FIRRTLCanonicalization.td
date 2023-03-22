@@ -196,7 +196,7 @@ def moveConstXor : Pat <
 
 // add(a, 0) -> a
 def AddOfZero : Pat <
-  (AddPrimOp:$old $x, (ConstantOp:$zcst $_)),
+  (AddPrimOp:$old (either $x, (ConstantOp:$zcst $_))),
   (PadPrimOp $x, (TypeWidth32 $old)),
   [(KnownWidth $x), (ZeroConstantOp $zcst)]>;
 
@@ -207,15 +207,9 @@ def AddOfSelf : Pat <
   [(KnownWidth $x)]>;
 
 // add((pad a, n), b) -> pad(add(a, b), n)
-def AddOfPadL : Pat <
-  (AddPrimOp:$old (PadPrimOp $a, $m), $b),
+def AddOfPad : Pat <
+  (AddPrimOp:$old (either (PadPrimOp $a, $m), $b)),
   (PadPrimOp (MoveNameHint $old, (AddPrimOp $a, $b)), (TypeWidth32 $old)),
-  [(KnownWidth $a), (KnownWidth $b)]>;
-
-// add(b, (pad a, n)) -> pad(add(b, a), n)
-def AddOfPadR : Pat <
-  (AddPrimOp:$old $b, (PadPrimOp $a, $m)),
-  (PadPrimOp (MoveNameHint $old, (AddPrimOp $b, $a)), (TypeWidth32 $old)),
   [(KnownWidth $a), (KnownWidth $b)]>;
 
 // sub(a, 0) -> a
