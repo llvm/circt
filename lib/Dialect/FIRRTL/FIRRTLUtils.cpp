@@ -778,7 +778,8 @@ circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
 /// Given a type, return the corresponding lowered type for the HW dialect.
 /// Non-FIRRTL types are simply passed through. This returns a null type if it
 /// cannot be lowered.
-Type circt::firrtl::lowerType(Type type) {
+Type circt::firrtl::lowerType(Type type, Block *bodyBlock,
+                              StringRef scopeNamePrefix) {
   auto firType = type.dyn_cast<FIRRTLBaseType>();
   if (!firType)
     return type;
@@ -789,15 +790,41 @@ Type circt::firrtl::lowerType(Type type) {
   if (BundleType bundle = firType.dyn_cast<BundleType>()) {
     mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
     for (auto element : bundle) {
-      Type etype = lowerType(element.type);
+      Type etype = lowerType(element.type, bodyBlock, scopeNamePrefix);
       if (!etype)
         return {};
       hwfields.push_back(hw::StructType::FieldInfo{element.name, etype});
     }
-    return hw::StructType::get(type.getContext(), hwfields);
+    Type rawType = hw::StructType::get(type.getContext(), hwfields);
+    auto bundleName = bundle.getBundleName();
+    if (bodyBlock && bundleName) {
+      hw::TypeScopeOp typeScope;
+      // Get the first TypeScope if it exists in the block.
+      auto scopesInBlock = bodyBlock->getOps<hw::TypeScopeOp>();
+      if (!scopesInBlock.empty())
+        typeScope = *scopesInBlock.begin();
+      else {
+        // Create a TypeScopeOp
+        auto b = OpBuilder(bodyBlock->getParentOp());
+        b.setInsertionPointToStart(bodyBlock);
+        typeScope = b.create<hw::TypeScopeOp>(
+            bodyBlock->getParentOp()->getLoc(),
+            b.getStringAttr(scopeNamePrefix + "__TYPESCOPE_"));
+        typeScope.getBodyRegion().push_back(new Block());
+      }
+      auto b = OpBuilder(typeScope);
+      b.setInsertionPointToEnd(&typeScope.getBodyRegion().front());
+      auto typeDecl = b.create<hw::TypedeclOp>(
+          bodyBlock->getParentOp()->getLoc(), bundleName, rawType, nullptr);
+      rawType = hw::TypeAliasType::get(
+          SymbolRefAttr::get(typeScope.getSymNameAttr(),
+                             {FlatSymbolRefAttr::get(typeDecl)}),
+          rawType);
+    }
+    return rawType;
   }
   if (FVectorType vec = firType.dyn_cast<FVectorType>()) {
-    auto elemTy = lowerType(vec.getElementType());
+    auto elemTy = lowerType(vec.getElementType(), bodyBlock, scopeNamePrefix);
     if (!elemTy)
       return {};
     return hw::ArrayType::get(elemTy, vec.getNumElements());

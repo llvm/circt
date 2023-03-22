@@ -1237,7 +1237,8 @@ FIRRTLModuleLowering::lowerIntreface(FInterfaceOp interface,
   builder.setInsertionPointToEnd(newInterface.getBodyBlock());
   for (auto &op : interface) {
     if (auto wire = dyn_cast<WireOp>(op)) {
-      auto type = lowerType(wire.getType().cast<FIRRTLBaseType>());
+      auto type = lowerType(wire.getType().cast<FIRRTLBaseType>(),
+                            topLevelModule, nameAttr.getValue());
       builder.create<sv::InterfaceSignalOp>(interface.getLoc(),
                                             wire.getNameAttr(), type);
     } else if (auto verbatim = dyn_cast<sv::VerbatimOp>(op))
@@ -3060,7 +3061,11 @@ void FIRRTLLowering::flattenTypeFields(Value val,
   // Every val must be of InOutType, so use sv::StructFieldInOutOp and
   // sv::ArrayIndexInOutOp.
   assert(val.getType().isa<sv::InOutType>() && "Expecting only sv::InOutType");
-  TypeSwitch<Type>(val.getType().cast<sv::InOutType>().getElementType())
+  auto valType = val.getType().cast<sv::InOutType>().getElementType();
+  if (auto aliasType = valType.dyn_cast<hw::TypeAliasType>())
+    valType = aliasType.getInnerType();
+
+  TypeSwitch<Type>(valType)
       .Case<hw::StructType>([&](hw::StructType bundle) {
         for (auto elem : bundle.getElements())
           flattenTypeFields(
