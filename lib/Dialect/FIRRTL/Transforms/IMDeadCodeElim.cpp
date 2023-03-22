@@ -72,6 +72,10 @@ struct IMDeadCodeElimPass : public IMDeadCodeElimBase<IMDeadCodeElimPass> {
   void visitConnect(FConnectLike connect);
   void visitSubelement(Operation *op);
   void markBlockExecutable(Block *block);
+  void markBlockUndeletable(Block *block) { undeletableBlocks.insert(block); }
+  bool isBlockUndeletable(Block *block) const {
+    return undeletableBlocks.contains(block);
+  }
   void markDeclaration(Operation *op);
   void markInstanceOp(InstanceOp instanceOp);
   void markUnknownSideEffectOp(Operation *op);
@@ -90,14 +94,25 @@ private:
   /// users need to be reprocessed.
   SmallVector<Value, 64> worklist;
   llvm::DenseSet<Value> liveSet;
+  llvm::DenseSet<InstanceOp> liveInstance;
+
+  /// The set of modules that cannot be removed for several reasons (side
+  /// effects, ports/decls have don't touch).
+  DenseSet<Block *> undeletableBlocks;
+
+  /// This keeps track of input ports that need to be kept if the associated
+  /// instance is alive.
+  DenseMap<InstanceOp, SmallVector<Value>> lazyLiveInputPorts;
 };
 } // namespace
 
 void IMDeadCodeElimPass::markDeclaration(Operation *op) {
   assert(isDeclaration(op) && "only a declaration is expected");
-  if (!isDeletableDeclaration(op))
+  if (!isDeletableDeclaration(op)) {
     for (auto result : op->getResults())
       markAlive(result);
+    markBlockUndeletable(op->getBlock());
+  }
 }
 
 void IMDeadCodeElimPass::markUnknownSideEffectOp(Operation *op) {
@@ -107,6 +122,7 @@ void IMDeadCodeElimPass::markUnknownSideEffectOp(Operation *op) {
     markAlive(result);
   for (auto operand : op->getOperands())
     markAlive(operand);
+  markBlockUndeletable(op->getBlock());
 }
 
 void IMDeadCodeElimPass::visitUser(Operation *op) {
@@ -134,12 +150,18 @@ void IMDeadCodeElimPass::markInstanceOp(InstanceOp instance) {
       // Otherwise this is an inuput from it or an inout, mark it as alive.
       markAlive(portVal);
     }
+    markBlockUndeletable(instance->getBlock());
+    liveInstance.insert(instance);
     return;
   }
 
   // Otherwise this is a defined module.
   auto fModule = cast<FModuleOp>(op);
   markBlockExecutable(fModule.getBodyBlock());
+  if (isBlockUndeletable(fModule.getBodyBlock()) || instance.getInnerSym()) {
+    markBlockUndeletable(instance->getBlock());
+    liveInstance.insert(instance);
+  }
 
   // Ok, it is a normal internal module reference so populate
   // resultPortToInstanceResultMapping.
@@ -158,10 +180,15 @@ void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
   if (!executableBlocks.insert(block).second)
     return; // Already executable.
 
+  if (!cast<FModuleOp>(block->getParentOp()).getAnnotationsAttr().empty())
+    markBlockUndeletable(block);
+
   // Mark ports with don't touch as alive.
   for (auto blockArg : block->getArguments())
-    if (hasDontTouch(blockArg))
+    if (hasDontTouch(blockArg)) {
       markAlive(blockArg);
+      markBlockUndeletable(block);
+    }
 
   for (auto &op : *block) {
     if (isDeclaration(&op))
@@ -223,11 +250,19 @@ void IMDeadCodeElimPass::runOnOperation() {
   auto circuit = getOperation();
   instanceGraph = &getAnalysis<InstanceGraph>();
 
+  // Create a vector of modules in the post order of instance graph.
+  // FIXME: We copy the list of modules into a vector first to avoid iterator
+  // invalidation while we mutate the instance graph. See issue 3387.
+  SmallVector<FModuleOp, 0> modules(llvm::make_filter_range(
+      llvm::map_range(
+          llvm::post_order(instanceGraph),
+          [](auto *node) { return dyn_cast<FModuleOp>(*node->getModule()); }),
+      [](auto module) { return module; }));
+
   // Forward constant output ports to caller sides so that we can eliminate
   // constant outputs.
-  for (auto *node : llvm::post_order(instanceGraph))
-    if (auto module = dyn_cast_or_null<FModuleOp>(*node->getModule()))
-      forwardConstantOutputPort(module);
+  for (auto module : modules)
+    forwardConstantOutputPort(module);
 
   for (auto module : circuit.getBodyBlock()->getOps<FModuleOp>()) {
     // Mark the ports of public modules as alive.
@@ -252,16 +287,6 @@ void IMDeadCodeElimPass::runOnOperation() {
                         circuit.getBodyBlock()->getOps<FModuleOp>(),
                         [&](auto op) { rewriteModuleBody(op); });
 
-  // Erase empty modules. To erase empty modules transitively, it is necessary
-  // to visit modules in the post order of instance graph.
-  // FIXME: We copy the list of modules into a vector first to avoid iterator
-  // invalidation while we mutate the instance graph. See issue 3387.
-  SmallVector<FModuleOp, 0> modules(llvm::make_filter_range(
-      llvm::map_range(
-          llvm::post_order(instanceGraph),
-          [](auto *node) { return dyn_cast<FModuleOp>(*node->getModule()); }),
-      [](auto module) { return module; }));
-
   for (auto module : modules)
     eraseEmptyModule(module);
 }
@@ -280,9 +305,16 @@ void IMDeadCodeElimPass::visitValue(Value value) {
     // If the port is input, it's necessary to mark corresponding input ports of
     // instances as alive. We don't have to propagate the liveness of output
     // ports.
-    if (portDirection == Direction::In)
-      for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
-        markAlive(userOfResultPort);
+    if (portDirection == Direction::In) {
+      for (auto userOfResultPort :
+           resultPortToInstanceResultMapping[blockArg]) {
+        auto instance = userOfResultPort.getDefiningOp<InstanceOp>();
+        if (liveInstance.contains(instance))
+          markAlive(userOfResultPort);
+        else
+          lazyLiveInputPorts[instance].push_back(userOfResultPort);
+      }
+    }
     return;
   }
 
@@ -298,6 +330,12 @@ void IMDeadCodeElimPass::visitValue(Value value) {
     if (!module || module.getPortDirection(instanceResult.getResultNumber()) ==
                        Direction::In)
       return;
+
+    // If the output port is alive, mark the instnace as alive. Propagate the
+    // liveness of input ports accumulated so far.
+    if (liveInstance.insert(instance).second)
+      for (auto inputPort : lazyLiveInputPorts[instance])
+        markAlive(inputPort);
 
     BlockArgument modulePortVal =
         module.getArgument(instanceResult.getResultNumber());
@@ -370,14 +408,43 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
   if (!isBlockExecutable(module.getBodyBlock()))
     return;
 
-  // Ports of public modules cannot be modified.
-  if (module.isPublic())
-    return;
-
   InstanceGraphNode *instanceGraphNode =
       instanceGraph->lookup(module.moduleNameAttr());
   LLVM_DEBUG(llvm::dbgs() << "Prune ports of module: " << module.getName()
                           << "\n");
+
+  auto replaceInstanceResultWithWire =
+      [&](ImplicitLocOpBuilder &builder, unsigned index, InstanceOp instance) {
+        auto result = instance.getResult(index);
+        WireOp wire = builder.create<WireOp>(result.getType());
+        result.replaceAllUsesWith(wire);
+        // If a module port is dead but its instance result is alive, the port
+        // is used as a temporary wire so make sure that a replaced wire is
+        // putted into `liveSet`.
+        if (isKnownAlive(result)) {
+          liveSet.erase(result);
+          liveSet.insert(wire);
+        }
+      };
+
+  // First, delete dead instances.
+  for (auto *use : llvm::make_early_inc_range(instanceGraphNode->uses())) {
+    auto instance = cast<InstanceOp>(*use->getInstance());
+    if (!liveInstance.count(instance)) {
+      // Replace old instance results with dummy wires.
+      ImplicitLocOpBuilder builder(instance.getLoc(), instance);
+      for (auto index : llvm::seq(0u, instance.getNumResults()))
+        replaceInstanceResultWithWire(builder, index, instance);
+      // Make sure that we update the instance graph.
+      use->erase();
+      instance.erase();
+    }
+  }
+
+  // Ports of public modules cannot be modified.
+  if (module.isPublic())
+    return;
+
   unsigned numOldPorts = module.getNumPorts();
   llvm::BitVector deadPortIndexes(numOldPorts);
 
@@ -446,24 +513,12 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
     liveSet.insert(arg);
 
   // Rewrite all uses.
-  for (auto *use : instanceGraphNode->uses()) {
+  for (auto *use : llvm::make_early_inc_range(instanceGraphNode->uses())) {
     auto instance = cast<InstanceOp>(*use->getInstance());
     ImplicitLocOpBuilder builder(instance.getLoc(), instance);
     // Replace old instance results with dummy wires.
-    for (auto index : deadPortIndexes.set_bits()) {
-      auto result = instance.getResult(index);
-      WireOp wire = builder.create<WireOp>(result.getType());
-      result.replaceAllUsesWith(wire);
-      // If a module port is dead but its instance result is alive, the port is
-      // used as a temporary wire so make sure that a replaced wire is putted
-      // into `liveSet`.
-      if (isKnownAlive(result)) {
-        assert(oldPorts[index].direction == Direction::In &&
-               "If a dead module port is alive in instance results, the "
-               "corresponding port must be input");
-        liveSet.insert(wire);
-      }
-    }
+    for (auto index : deadPortIndexes.set_bits())
+      replaceInstanceResultWithWire(builder, index, instance);
 
     // Since we will rewrite instance op, it is necessary to remove old
     // instance results from liveSet.
@@ -478,6 +533,10 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
       liveSet.insert(newResult);
 
     instanceGraph->replaceInstance(instance, newInstance);
+    if (liveInstance.contains(instance)) {
+      liveInstance.erase(instance);
+      liveInstance.insert(newInstance);
+    }
     // Remove old one.
     instance.erase();
   }
