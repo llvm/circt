@@ -473,6 +473,16 @@ firrtl.circuit "CombMemNonPassiveReturnType" {
 
 // -----
 
+firrtl.circuit "CombMemDupSym" {
+  firrtl.module @CombMemDupSym() {
+    // expected-note @below {{see existing inner symbol definition here}}
+    // expected-error @below {{redefinition of inner symbol named 'x'}}
+    %mem = chirrtl.combmem sym [<@x,0,public>,<@x,0,public>] : !chirrtl.cmemory<bundle<a: uint<1>>, 1>
+  }
+}
+
+// -----
+
 firrtl.circuit "SeqMemInvalidReturnType" {
   firrtl.module @SeqMemInvalidReturnType() {
     // expected-error @+1 {{'chirrtl.seqmem' op result #0 must be a behavioral memory, but got '!firrtl.uint<1>'}}
@@ -486,6 +496,16 @@ firrtl.circuit "SeqMemNonPassiveReturnType" {
   firrtl.module @SeqMemNonPassiveReturnType() {
     // expected-error @+1 {{behavioral memory element type must be passive}}
     %mem = chirrtl.seqmem Undefined : !chirrtl.cmemory<bundle<a flip : uint<1>>, 1>
+  }
+}
+
+// -----
+
+firrtl.circuit "SeqMemDupSym" {
+  firrtl.module @SeqMemDupSym() {
+    // expected-note @below {{see existing inner symbol definition here}}
+    // expected-error @below {{redefinition of inner symbol named 'x'}}
+    %mem = chirrtl.seqmem sym [<@x,0,public>,<@x,0,public>] Undefined : !chirrtl.cmemory<bundle<a: uint<1>>, 1>
   }
 }
 
