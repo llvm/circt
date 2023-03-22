@@ -289,7 +289,7 @@ void CompRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 LogicalResult CompRegOp::verify() {
-  if (getReset() == nullptr ^ getResetValue() == nullptr)
+  if ((getReset() == nullptr) ^ (getResetValue() == nullptr))
     return emitOpError(
         "either reset and resetValue or neither must be specified");
   return success();
@@ -310,7 +310,7 @@ void CompRegClockEnabledOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 LogicalResult CompRegClockEnabledOp::verify() {
-  if (getReset() == nullptr ^ getResetValue() == nullptr)
+  if ((getReset() == nullptr) ^ (getResetValue() == nullptr))
     return emitOpError(
         "either reset and resetValue or neither must be specified");
   return success();
