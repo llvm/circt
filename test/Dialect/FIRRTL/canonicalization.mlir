@@ -95,10 +95,12 @@ firrtl.module @Div(in %a: !firrtl.uint<4>,
 
 // CHECK-LABEL: firrtl.module @And
 firrtl.module @And(in %in: !firrtl.uint<4>,
+                   in %in6: !firrtl.uint<6>,
                    in %sin: !firrtl.sint<4>,
                    in %zin1: !firrtl.uint<0>,
                    in %zin2: !firrtl.uint<0>,
                    out %out: !firrtl.uint<4>,
+                   out %out6: !firrtl.uint<6>,
                    out %outz: !firrtl.uint<0>) {
   // CHECK: firrtl.strictconnect %out, %c1_ui4
   %c1_ui4 = firrtl.constant 1 : !firrtl.uint<4>
@@ -133,8 +135,10 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
   // Mixed type inputs - the constant is zero extended, not sign extended, so it
   // cannot be folded!
 
-  // CHECK: firrtl.and %in, %c3_ui4
-  // CHECK-NEXT: firrtl.strictconnect %out,
+  // Narrows, then folds away
+  // CHECK: %0 = firrtl.bits %in 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2> 
+  // CHECK-NEXT: %1 = firrtl.pad %0, 4 : (!firrtl.uint<2>) -> !firrtl.uint<4> 
+  // CHECK-NEXT: firrtl.strictconnect %out, %1
   %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
   %4 = firrtl.and %in, %c3_ui2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<4>
   firrtl.connect %out, %4 : !firrtl.uint<4>, !firrtl.uint<4>
@@ -156,6 +160,13 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
   %7 = firrtl.and %sin, %c0_si2 : (!firrtl.sint<4>, !firrtl.sint<2>) -> !firrtl.uint<4>
   firrtl.connect %out, %7 : !firrtl.uint<4>, !firrtl.uint<4>
 
+  // CHECK: %[[trunc:.*]] = firrtl.bits %in6
+  // CHECK: %[[ANDPAD:.*]] = firrtl.and %[[trunc]], %in
+  // CHECK: %[[POST:.*]] = firrtl.pad %[[ANDPAD]]
+  // CHECK: firrtl.strictconnect %out6, %[[POST]]
+  %8 = firrtl.pad %in, 6 : (!firrtl.uint<4>) -> !firrtl.uint<6>
+  %9 = firrtl.and %in6, %8  : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<6>
+  firrtl.connect %out6, %9 : !firrtl.uint<6>, !firrtl.uint<6>
 }
 
 // CHECK-LABEL: firrtl.module @Or

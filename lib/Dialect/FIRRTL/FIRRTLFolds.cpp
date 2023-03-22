@@ -532,7 +532,8 @@ void AndPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results
       .insert<patterns::extendAnd, patterns::moveConstAnd, patterns::AndOfZero,
-              patterns::AndOfAllOne, patterns::AndOfSelf>(context);
+              patterns::AndOfAllOne, patterns::AndOfSelf, patterns::AndOfPadRhs,
+              patterns::AndOfPadLhs>(context);
 }
 
 OpFoldResult OrPrimOp::fold(FoldAdaptor adaptor) {

@@ -272,6 +272,24 @@ def AndOfSelf : Pat <
   (MoveNameHint $old, (AsUIntPrimOp $x)),
   [(KnownWidth $x)]>;
 
+def TypeWidthAdjust32 : NativeCodeCall<
+  "$_builder.getI32IntegerAttr($0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel() - $1.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel())">;
+
+/// and(x, pad(y, n)) -> pad(and(tail(x), y), n), x is unsigned
+/// And takes an unsigned, so pad must produce an unsigned, which means it's input is unsigned
+def AndOfPadRhs : Pat <
+  (AndPrimOp:$old $x, (PadPrimOp:$pad $y, $n)),
+  (PadPrimOp (AndPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y), $n),
+  [(KnownWidth $x), (EqualTypes $x, $pad)]>;
+
+/// and(x, pad(y, n)) -> pad(and(tail(x), y), n), x is unsigned
+/// And takes an unsigned, so pad must produce an unsigned, which means it's input is unsigned
+def AndOfPadLhs : Pat <
+  (AndPrimOp:$old (PadPrimOp:$pad $y, $n), $x),
+  (PadPrimOp (AndPrimOp $y, (TailPrimOp $x, (TypeWidthAdjust32 $x, $y))), $n),
+  [(KnownWidth $x), (EqualTypes $x, $pad)]>;
+
+
 // or(x, 0) -> x, fold can't handle all cases
 def OrOfZero : Pat <
   (OrPrimOp:$old $x, (ConstantOp:$zcst $cst)),
