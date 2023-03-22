@@ -276,15 +276,9 @@ def TypeWidthAdjust32 : NativeCodeCall<
   "$_builder.getI32IntegerAttr($0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel() - $1.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel())">;
 
 /// and(x, pad(y, n)) -> pad(and(tail(x), y), n), x is unsigned
-def AndOfPadRhs : Pat <
-  (AndPrimOp:$old $x, (PadPrimOp:$pad $y, $n)),
+def AndOfPad : Pat <
+  (AndPrimOp:$old (either $x, (PadPrimOp:$pad $y, $n))),
   (MoveNameHint $old, (PadPrimOp (AndPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y), $n)),
-  [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
-
-/// and(pad(y, n), x) -> pad(y, and(tail(x)), n), x is unsigned
-def AndOfPadLhs : Pat <
-  (AndPrimOp:$old (PadPrimOp:$pad $y, $n), $x),
-  (MoveNameHint $old, (PadPrimOp (AndPrimOp $y, (TailPrimOp $x, (TypeWidthAdjust32 $x, $y))), $n)),
   [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
 
 // or(x, 0) -> x, fold can't handle all cases
