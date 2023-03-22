@@ -171,10 +171,12 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
 
 // CHECK-LABEL: firrtl.module @Or
 firrtl.module @Or(in %in: !firrtl.uint<4>,
+                  in %in6: !firrtl.uint<6>,
                   in %sin: !firrtl.sint<4>,
                   in %zin1: !firrtl.uint<0>,
                   in %zin2: !firrtl.uint<0>,
                   out %out: !firrtl.uint<4>,
+                  out %out6: !firrtl.uint<6>,
                   out %outz: !firrtl.uint<0>) {
   // CHECK: firrtl.strictconnect %out, %c7_ui4
   %c4_ui4 = firrtl.constant 4 : !firrtl.uint<4>
@@ -222,14 +224,26 @@ firrtl.module @Or(in %in: !firrtl.uint<4>,
   %c0_si2 = firrtl.constant -1 : !firrtl.sint<2>
   %7 = firrtl.or %sin, %c0_si2 : (!firrtl.sint<4>, !firrtl.sint<2>) -> !firrtl.uint<4>
   firrtl.connect %out, %7 : !firrtl.uint<4>, !firrtl.uint<4>
+
+  // CHECK: %[[trunc:.*]] = firrtl.bits %in6
+  // CHECK: %[[trunc2:.*]] = firrtl.bits %in6
+  // CHECK: %[[OR:.*]] = firrtl.or %[[trunc2]], %in
+  // CHECK: %[[CAT:.*]] = firrtl.cat %[[trunc]], %[[OR]]
+  // CHECK: firrtl.strictconnect %out6, %[[CAT]]
+  %8 = firrtl.pad %in, 6 : (!firrtl.uint<4>) -> !firrtl.uint<6>
+  %9 = firrtl.or %in6, %8  : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<6>
+  firrtl.connect %out6, %9 : !firrtl.uint<6>, !firrtl.uint<6>
+
 }
 
 // CHECK-LABEL: firrtl.module @Xor
 firrtl.module @Xor(in %in: !firrtl.uint<4>,
+                   in %in6: !firrtl.uint<6>,
                    in %sin: !firrtl.sint<4>,
                    in %zin1: !firrtl.uint<0>,
                    in %zin2: !firrtl.uint<0>,
                    out %out: !firrtl.uint<4>,
+                   out %out6: !firrtl.uint<6>,
                    out %outz: !firrtl.uint<0>) {
   // CHECK: firrtl.strictconnect %out, %c2_ui4
   %c1_ui4 = firrtl.constant 1 : !firrtl.uint<4>
@@ -263,6 +277,16 @@ firrtl.module @Xor(in %in: !firrtl.uint<4>,
   %c0_si2 = firrtl.constant 0 : !firrtl.sint<2>
   %7 = firrtl.xor %sin, %c0_si2 : (!firrtl.sint<4>, !firrtl.sint<2>) -> !firrtl.uint<4>
   firrtl.connect %out, %7 : !firrtl.uint<4>, !firrtl.uint<4>
+
+  // CHECK: %[[trunc:.*]] = firrtl.bits %in6
+  // CHECK: %[[trunc2:.*]] = firrtl.bits %in6
+  // CHECK: %[[XOR:.*]] = firrtl.xor %[[trunc2]], %in
+  // CHECK: %[[CAT:.*]] = firrtl.cat %[[trunc]], %[[XOR]]
+  // CHECK: firrtl.strictconnect %out6, %[[CAT]]
+  %8 = firrtl.pad %in, 6 : (!firrtl.uint<4>) -> !firrtl.uint<6>
+  %9 = firrtl.xor %in6, %8  : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<6>
+  firrtl.connect %out6, %9 : !firrtl.uint<6>, !firrtl.uint<6>
+
 }
 
 // CHECK-LABEL: firrtl.module @EQ

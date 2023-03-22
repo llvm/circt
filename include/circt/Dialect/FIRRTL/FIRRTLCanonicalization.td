@@ -81,6 +81,10 @@ def OneConstantOp : Constraint<Or<[
 /// Constraint that matches an all ones ConstantOp.
 def AllOneConstantOp : Constraint<CPred<"$0.getDefiningOp<ConstantOp>() && $0.getDefiningOp<ConstantOp>().getValue().isAllOnes()">>;
 
+// Delta between type widths
+def TypeWidthAdjust32 : NativeCodeCall<
+  "$_builder.getI32IntegerAttr($0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel() - $1.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel())">;
+
 /// Drop the writer to the first argument and passthrough the second
 def DropWrite : NativeCodeCall<"dropWrite($_builder, $0, $1)">;
 
@@ -196,7 +200,7 @@ def moveConstXor : Pat <
 
 // add(a, 0) -> a
 def AddOfZero : Pat <
-  (AddPrimOp:$old (either $x, (ConstantOp:$zcst $_))),
+  (AddPrimOp:$old $x, (ConstantOp:$zcst $_)),
   (PadPrimOp $x, (TypeWidth32 $old)),
   [(KnownWidth $x), (ZeroConstantOp $zcst)]>;
 
@@ -266,9 +270,6 @@ def AndOfSelf : Pat <
   (MoveNameHint $old, (AsUIntPrimOp $x)),
   [(KnownWidth $x)]>;
 
-def TypeWidthAdjust32 : NativeCodeCall<
-  "$_builder.getI32IntegerAttr($0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel() - $1.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel())">;
-
 /// and(x, pad(y, n)) -> pad(and(tail(x), y), n), x is unsigned
 def AndOfPad : Pat <
   (AndPrimOp:$old (either $x, (PadPrimOp:$pad $y, $n))),
@@ -293,6 +294,13 @@ def OrOfSelf : Pat <
   (MoveNameHint $old, (AsUIntPrimOp $x)),
   [(KnownWidth $x)]>;
 
+/// or(x, pad(y, n)) -> cat(head(x), or(tail(x), y))
+def OrOfPad : Pat <
+  (OrPrimOp:$old $x, (PadPrimOp:$pad $y, $n)),
+  (MoveNameHint $old, (CatPrimOp (HeadPrimOp $x, (TypeWidthAdjust32 $x, $y)),
+                                 (OrPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y))),
+  [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
+
 // xor(x, 0) -> x, fold can't handle all cases
 def XorOfZero : Pat <
   (XorPrimOp:$old $x, (ConstantOp:$zcst $_)),
@@ -304,6 +312,13 @@ def XorOfSelf : Pat <
   (XorPrimOp:$old $x, $x),
   (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), $0.getType().cast<IntType>(), getIntZerosAttr($0.getType()))"> $old),
   [(KnownWidth $x)]>;
+
+/// xor(x, pad(y, n)) -> cat(head(x), xor(tail(x), y))
+def XorOfPad : Pat <
+  (XorPrimOp:$old $x, (PadPrimOp:$pad $y, $n)),
+  (MoveNameHint $old, (CatPrimOp (HeadPrimOp $x, (TypeWidthAdjust32 $x, $y)),
+                                 (XorPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y))),
+  [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
 
 // bits(bits(x, ...), ...) -> bits(x, ...)
 def BitsOfBits : Pat<

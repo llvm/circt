@@ -570,7 +570,8 @@ OpFoldResult OrPrimOp::fold(FoldAdaptor adaptor) {
 void OrPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
   results.insert<patterns::extendOr, patterns::moveConstOr, patterns::OrOfZero,
-                 patterns::OrOfAllOne, patterns::OrOfSelf>(context);
+                 patterns::OrOfAllOne, patterns::OrOfSelf, patterns::OrOfPad>(
+      context);
 }
 
 OpFoldResult XorPrimOp::fold(FoldAdaptor adaptor) {
@@ -597,7 +598,8 @@ OpFoldResult XorPrimOp::fold(FoldAdaptor adaptor) {
 void XorPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results.insert<patterns::extendXor, patterns::moveConstXor,
-                 patterns::XorOfZero, patterns::XorOfSelf>(context);
+                 patterns::XorOfZero, patterns::XorOfSelf, patterns::XorOfPad>(
+      context);
 }
 
 void LEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
