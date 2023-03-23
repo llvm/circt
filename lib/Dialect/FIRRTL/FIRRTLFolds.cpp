@@ -1003,6 +1003,11 @@ OpFoldResult NotPrimOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+void NotPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.insert<patterns::NotNot>(context);
+}
+
 OpFoldResult AndRPrimOp::fold(FoldAdaptor adaptor) {
   if (!hasKnownWidthIntTypes(*this))
     return {};

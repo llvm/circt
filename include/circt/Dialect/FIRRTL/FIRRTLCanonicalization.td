@@ -113,6 +113,12 @@ def GTWithConstLHS : Pat<
   (MoveNameHint $old, (LTPrimOp $rhs, $lhs)),
   [(AnyConstantOp $lhs), (NonConstantOp $rhs)]>;
 
+// not(not(x)) -> x
+def NotNot : Pat <
+  (NotPrimOp (NotPrimOp $x)),
+  (AsUIntPrimOp $x),
+  []>;
+
 // connect(a:t,b:t) -> strictconnect(a,b)
 def ConnectSameType : Pat<
   (ConnectOp $dst, $src),

@@ -254,6 +254,22 @@ firrtl.module @Xor(in %in: !firrtl.uint<4>,
   firrtl.connect %out, %7 : !firrtl.uint<4>, !firrtl.uint<4>
 }
 
+// CHECK-LABEL: firrtl.module @Not
+firrtl.module @Not(in %in: !firrtl.uint<4>,
+                   in %sin: !firrtl.sint<4>,
+                   out %outu: !firrtl.uint<4>,
+                   out %outs: !firrtl.uint<4>) {
+  %0 = firrtl.not %in : (!firrtl.uint<4>) -> !firrtl.uint<4>
+  %1 = firrtl.not %0 : (!firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.connect %outu, %1 : !firrtl.uint<4>, !firrtl.uint<4>
+  %2 = firrtl.not %sin : (!firrtl.sint<4>) -> !firrtl.uint<4>
+  %3 = firrtl.not %2 : (!firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.connect %outs, %3 : !firrtl.uint<4>, !firrtl.uint<4>
+  // CHECK: firrtl.strictconnect %outu, %in
+  // CHECK: %[[cast:.*]] = firrtl.asUInt %sin
+  // CHECK: firrtl.strictconnect %outs, %[[cast]]
+}
+
 // CHECK-LABEL: firrtl.module @EQ
 firrtl.module @EQ(in %in1: !firrtl.uint<1>,
                   in %in4: !firrtl.uint<4>,
