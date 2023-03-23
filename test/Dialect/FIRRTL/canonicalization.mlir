@@ -289,6 +289,22 @@ firrtl.module @Xor(in %in: !firrtl.uint<4>,
 
 }
 
+// CHECK-LABEL: firrtl.module @Not
+firrtl.module @Not(in %in: !firrtl.uint<4>,
+                   in %sin: !firrtl.sint<4>,
+                   out %outu: !firrtl.uint<4>,
+                   out %outs: !firrtl.uint<4>) {
+  %0 = firrtl.not %in : (!firrtl.uint<4>) -> !firrtl.uint<4>
+  %1 = firrtl.not %0 : (!firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.connect %outu, %1 : !firrtl.uint<4>, !firrtl.uint<4>
+  %2 = firrtl.not %sin : (!firrtl.sint<4>) -> !firrtl.uint<4>
+  %3 = firrtl.not %2 : (!firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.connect %outs, %3 : !firrtl.uint<4>, !firrtl.uint<4>
+  // CHECK: firrtl.strictconnect %outu, %in
+  // CHECK: %[[cast:.*]] = firrtl.asUInt %sin
+  // CHECK: firrtl.strictconnect %outs, %[[cast]]
+}
+
 // CHECK-LABEL: firrtl.module @EQ
 firrtl.module @EQ(in %in1: !firrtl.uint<1>,
                   in %in4: !firrtl.uint<4>,
@@ -354,12 +370,15 @@ firrtl.module @NEQ(in %in1: !firrtl.uint<1>,
 
 // CHECK-LABEL: firrtl.module @Cat
 firrtl.module @Cat(in %in4: !firrtl.uint<4>,
+                   in %sin4: !firrtl.sint<4>,
                    out %out4: !firrtl.uint<4>,
                    out %outcst: !firrtl.uint<8>,
                    out %outcst2: !firrtl.uint<8>,
                    in %in0 : !firrtl.uint<0>,
                    out %outpt1: !firrtl.uint<4>,
                    out %outpt2 : !firrtl.uint<4>) {
+  %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+  %c0_si2 = firrtl.constant 0 : !firrtl.sint<2>
 
   // CHECK: firrtl.strictconnect %out4, %in4
   %0 = firrtl.bits %in4 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
@@ -379,6 +398,17 @@ firrtl.module @Cat(in %in4: !firrtl.uint<4>,
   // CHECK: firrtl.strictconnect %outpt2, %in4
   %6 = firrtl.cat %in4, %in0 : (!firrtl.uint<4>, !firrtl.uint<0>) -> !firrtl.uint<4>
   firrtl.connect %outpt2, %6 : !firrtl.uint<4>, !firrtl.uint<4>
+
+  // CHECK: firrtl.cat %c0_ui4, %in4
+  %7 = firrtl.cat %c0_ui2, %in4 : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<6>
+  %8 = firrtl.cat %c0_ui2, %7 : (!firrtl.uint<2>, !firrtl.uint<6>) -> !firrtl.uint<8>
+  firrtl.connect %outcst, %8 : !firrtl.uint<8>, !firrtl.uint<8>
+
+  // CHECK: firrtl.asUInt %sin4
+  // CHECK-NEXT: firrtl.cat %c0_ui4
+  %9  = firrtl.cat %c0_si2, %sin4 : (!firrtl.sint<2>, !firrtl.sint<4>) -> !firrtl.uint<6>
+  %10 = firrtl.cat %c0_ui2, %9 : (!firrtl.uint<2>, !firrtl.uint<6>) -> !firrtl.uint<8>
+  firrtl.connect %outcst, %10 : !firrtl.uint<8>, !firrtl.uint<8>
 }
 
 // CHECK-LABEL: firrtl.module @Bits
