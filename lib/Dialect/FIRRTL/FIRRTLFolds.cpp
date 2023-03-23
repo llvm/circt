@@ -30,12 +30,13 @@ using namespace firrtl;
 // write.
 static Value dropWrite(PatternRewriter &rewriter, OpResult old,
                        Value passthrough) {
-  for (auto *user : llvm::make_early_inc_range(old.getUsers())) {
-    if (auto connect = dyn_cast<FConnectLike>(user)) {
+  SmallPtrSet<Operation *, 8> users;
+  for (auto *user : old.getUsers())
+    users.insert(user);
+  for (Operation *user : users)
+    if (auto connect = dyn_cast<FConnectLike>(user))
       if (connect.getDest() == old)
         rewriter.eraseOp(user);
-    }
-  }
   return passthrough;
 }
 
