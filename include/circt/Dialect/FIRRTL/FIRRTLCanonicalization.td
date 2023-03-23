@@ -349,6 +349,11 @@ def NarrowMuxRHS : Pat <
   (MoveNameHint $old, (CatPrimOp (MuxPrimOp $cond, $a, $c), $b)),
   [(EqualTypes $lhs, $rhs), (KnownWidth $lhs)]>;
 
+def CatDoubleConst : Pat <
+  (CatPrimOp:$old $cst1, (CatPrimOp $cst2, $v)),
+  (MoveNameHint $old, (CatPrimOp (CatPrimOp $cst1, $cst2), $v)),
+  [(KnownWidth $v), (AnyConstantOp $cst1), (AnyConstantOp $cst2)]>;
+
 // regreset(clock, constant_zero, resetValue) -> reg(clock)
 def RegResetWithZeroReset : Pat<
   (RegResetOp $clock, $reset, $_, $name, $nameKind, $annotations, $inner_sym),

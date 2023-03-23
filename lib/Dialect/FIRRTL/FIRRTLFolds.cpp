@@ -1124,7 +1124,7 @@ struct CatBitsBits : public mlir::RewritePattern {
 
 void CatPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.insert<CatBitsBits>(context);
+  results.insert<CatBitsBits, patterns::CatDoubleConst>(context);
 }
 
 OpFoldResult BitCastOp::fold(FoldAdaptor adaptor) {
