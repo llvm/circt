@@ -115,8 +115,8 @@ def GTWithConstLHS : Pat<
 
 // not(not(x)) -> x
 def NotNot : Pat <
-  (NotPrimOp (NotPrimOp $x)),
-  (AsUIntPrimOp $x),
+  (NotPrimOp:$old (NotPrimOp $x)),
+  (MoveNameHint $old, (AsUIntPrimOp $x)),
   []>;
 
 // connect(a:t,b:t) -> strictconnect(a,b)
@@ -357,7 +357,7 @@ def NarrowMuxRHS : Pat <
 
 def CatDoubleConst : Pat <
   (CatPrimOp:$old $cst1, (CatPrimOp $cst2, $v)),
-  (MoveNameHint $old, (CatPrimOp (CatPrimOp $cst1, $cst2), $v)),
+  (MoveNameHint $old, (CatPrimOp (CatPrimOp $cst1, (AsUIntPrimOp $cst2)), (AsUIntPrimOp $v))),
   [(KnownWidth $v), (AnyConstantOp $cst1), (AnyConstantOp $cst2)]>;
 
 // regreset(clock, constant_zero, resetValue) -> reg(clock)
