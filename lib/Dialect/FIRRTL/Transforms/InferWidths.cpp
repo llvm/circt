@@ -1161,13 +1161,29 @@ static bool hasUninferredWidth(Type type) {
       .Default([](auto) { return false; });
 }
 
+static Block::BlockArgListType getArguments(FModuleLike modLike) {
+  if (auto mod = dyn_cast<FModuleOp>(*modLike))
+    return mod.getArguments();
+  if (auto mod = dyn_cast<FInterfaceOp>(*modLike))
+    return mod.getArguments();
+  return {};
+}
+
+static Block *getBodyBlock(FModuleLike modLike) {
+  if (auto mod = dyn_cast<FModuleOp>(*modLike))
+    return mod.getBodyBlock();
+  if (auto mod = dyn_cast<FInterfaceOp>(*modLike))
+    return mod.getBodyBlock();
+  return {};
+}
+
 LogicalResult InferenceMapping::map(CircuitOp op) {
   LLVM_DEBUG(llvm::dbgs()
              << "\n===----- Mapping ops to constraint exprs -----===\n\n");
 
   // Ensure we have constraint variables established for all module ports.
-  op.walk<WalkOrder::PostOrder>([&](FModuleOp module) {
-    for (auto arg : module.getArguments()) {
+  op.walk<WalkOrder::PostOrder>([&](FModuleLike module) {
+    for (auto arg : getArguments(module)) {
       solver.setCurrentContextInfo(FieldRef(arg, 0));
       declareVars(arg, module.getLoc());
     }
@@ -1175,11 +1191,14 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
   });
 
   // Go through the module bodies and populate the constraint problem.
-  auto result = op.walk<WalkOrder::PostOrder>([&](FModuleOp module) {
+  auto result = op.walk<WalkOrder::PostOrder>([&](FModuleLike module) {
+    if (!isa<FModuleOp, FInterfaceOp>(module))
+      return WalkResult::skip(); // walk above already visited module body
+
     // Check if the module contains *any* uninferred widths. This allows us to
     // do an early skip if the module is already fully inferred.
     bool anyUninferred = false;
-    for (auto arg : module.getArguments()) {
+    for (auto arg : getArguments(module)) {
       anyUninferred |= hasUninferredWidth(arg.getType());
       if (anyUninferred)
         break;
@@ -1193,7 +1212,7 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
     });
     if (!anyUninferred) {
       LLVM_DEBUG(llvm::dbgs() << "Skipping fully-inferred module '"
-                              << module.getName() << "'\n");
+                              << module->getName() << "'\n");
       skippedModules.insert(module);
       return WalkResult::skip();
     }
@@ -1201,7 +1220,7 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
 
     // Go through operations in the module, creating type variables for results,
     // and generating constraints.
-    auto result = module.getBodyBlock()->walk(
+    auto result = getBodyBlock(module)->walk(
         [&](Operation *op) { return WalkResult(mapOperation(op)); });
     if (result.wasInterrupted())
       return WalkResult::interrupt();
@@ -1456,9 +1475,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 
       // Handle instances of other modules.
       .Case<InstanceOp>([&](auto op) {
-        auto refdModule = op.getReferencedModule(symtbl);
-        auto module = dyn_cast<FModuleOp>(&*refdModule);
-        if (!module) {
+        FModuleLike refdModule = op.getReferencedModule(symtbl);
+        if (!isa<FModuleOp, FInterfaceOp>(refdModule)) {
           auto diag = mlir::emitError(op.getLoc());
           diag << "extern module `" << op.getModuleName()
                << "` has ports of uninferred width";
@@ -1484,7 +1502,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // module's ports, and use them for instance port wires. This way,
         // constraints imposed onto the ports of the instance will transparently
         // apply to the ports of the instantiated module.
-        for (auto it : llvm::zip(op->getResults(), module.getArguments())) {
+        for (auto it : llvm::zip(op->getResults(), getArguments(refdModule))) {
           unifyTypes(FieldRef(std::get<0>(it), 0), FieldRef(std::get<1>(it), 0),
                      std::get<0>(it).getType().template cast<FIRRTLType>());
         }
@@ -1903,12 +1921,13 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
   }
 
   // If this is a module, update its ports.
-  else if (auto module = dyn_cast<FModuleOp>(op)) {
+  else if (auto module = dyn_cast<FModuleLike>(op)) {
     // Update the block argument types.
     bool argsChanged = false;
     SmallVector<Attribute> argTypes;
-    argTypes.reserve(module.getNumPorts());
-    for (auto arg : module.getArguments()) {
+    auto args = getArguments(module);
+    argTypes.reserve(args.size());
+    for (auto arg : args) {
       argsChanged |= updateValue(arg);
       argTypes.push_back(TypeAttr::get(arg.getType()));
       if (anyFailed)
