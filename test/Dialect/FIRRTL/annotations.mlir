@@ -980,11 +980,11 @@ firrtl.circuit "GCTInterface"  attributes {
 // CHECK-NEXT:      %port = firrtl.wire : !firrtl.uint<1>
 // CHECK-NEXT:      %view__interFacePort_0, %view__interFacePort_1, %view__interFacePort_2, %view__interFacePort_3, %view__interFacePort_4
 // CHECK-SAME:      firrtl.instance view @ViewName(in _interFacePort_0: !firrtl.uint<1>, in _interFacePort_1: !firrtl.uint<1>, in _interFacePort_2: !firrtl.uint<1>, in _interFacePort_3: !firrtl.uint<1>, in _interFacePort_4: !firrtl.uint<1>)
-// CHECK-NEXT:      firrtl.strictconnect %view__interFacePort_0, %_2 : !firrtl.uint<1>
-// CHECK-NEXT:      firrtl.strictconnect %view__interFacePort_1, %_2_0 : !firrtl.uint<1>
-// CHECK-NEXT:      firrtl.strictconnect %view__interFacePort_2, %_1 : !firrtl.uint<1>
-// CHECK-NEXT:      firrtl.strictconnect %view__interFacePort_3, %_0 : !firrtl.uint<1>
-// CHECK-NEXT:      firrtl.strictconnect %view__interFacePort_4, %port
+// CHECK-NEXT:      firrtl.connect %view__interFacePort_0, %_2 : !firrtl.uint<1>
+// CHECK-NEXT:      firrtl.connect %view__interFacePort_1, %_2_0 : !firrtl.uint<1>
+// CHECK-NEXT:      firrtl.connect %view__interFacePort_2, %_1 : !firrtl.uint<1>
+// CHECK-NEXT:      firrtl.connect %view__interFacePort_3, %_0 : !firrtl.uint<1>
+// CHECK-NEXT:      firrtl.connect %view__interFacePort_4, %port
 // CHECK-NEXT:      firrtl.strictconnect %_2, %view_register__2_0__bore
 // CHECK-NEXT:      firrtl.strictconnect %_2_0, %view_register__2_1__bore
 // CHECK-NEXT:      firrtl.strictconnect %_1, %view_register__0_inst__1__bore
@@ -1337,8 +1337,8 @@ firrtl.circuit "GrandCentralViewsBundle"  attributes {
   // CHECK:    %a = firrtl.wire : !firrtl.uint<1>
   // CHECK-NEXT:    %b = firrtl.wire : !firrtl.uint<2>
   // CHECK-NEXT:    %View__interFacePort_0, %View__interFacePort_1 = firrtl.instance View @MyInterface(in _interFacePort_0: !firrtl.uint<1>, in _interFacePort_1: !firrtl.uint<2>)
-  // CHECK-NEXT:    firrtl.strictconnect %View__interFacePort_0, %a : !firrtl.uint<1>
-  // CHECK-NEXT:    firrtl.strictconnect %View__interFacePort_1, %b : !firrtl.uint<2>
+  // CHECK-NEXT:    firrtl.connect %View__interFacePort_0, %a : !firrtl.uint<1>
+  // CHECK-NEXT:    firrtl.connect %View__interFacePort_1, %b : !firrtl.uint<2>
   }
   // CHECK:      firrtl.module @Bar
   // CHECK-SAME:   out %[[refPort_0:[a-zA-Z0-9_]+]]: !firrtl.ref<uint<1>>
@@ -1527,7 +1527,7 @@ firrtl.circuit "GrandCentralParentIsNotLCA"  attributes {
     // CHECK-NEXT:   %[[bar_a_refPort:[a-zA-Z0-9_]+]] = firrtl.instance bar
     // CHECK-NEXT:   %b = firrtl.wire : !firrtl.uint<1>
     // CHECK-NEXT:   %View__interFacePort_0 = firrtl.instance View @MyInterface(in _interFacePort_0: !firrtl.uint<1>)
-    // CHECK-NEXT:   firrtl.strictconnect %View__interFacePort_0, %b : !firrtl.uint<1>
+    // CHECK-NEXT:   firrtl.connect %View__interFacePort_0, %b : !firrtl.uint<1>
     // CHECK-NEXT:   %[[b_refResolve:[a-zA-Z0-9_]+]] = firrtl.ref.resolve %[[bar_a_refPort]]
     // CHECK-NEXT:   firrtl.strictconnect %b, %[[b_refResolve]]
   }
@@ -1625,8 +1625,8 @@ firrtl.circuit "GrandCentralViewInsideCompanion" attributes {
     // CHECK-NEXT:  %b_1 = firrtl.wire {name = "b"} : !firrtl.uint<2>
     // CHECK-NEXT:  %View__interFacePort_0, %View__interFacePort_1
     // CHECK-SAME:  firrtl.instance View @MyInterface(in _interFacePort_0: !firrtl.uint<1>, in _interFacePort_1: !firrtl.uint<2>)
-    // CHECK-NEXT:  firrtl.strictconnect %View__interFacePort_0, %a_0 : !firrtl.uint<1>
-    // CHECK-NEXT:  firrtl.strictconnect %View__interFacePort_1, %b_1 : !firrtl.uint<2>
+    // CHECK-NEXT:  firrtl.connect %View__interFacePort_0, %a_0 : !firrtl.uint<1>
+    // CHECK-NEXT:  firrtl.connect %View__interFacePort_1, %b_1 : !firrtl.uint<2>
     // CHECK-NEXT:  firrtl.strictconnect %a_0, %a
     // CHECK-NEXT:  firrtl.strictconnect %b_1, %b
   }

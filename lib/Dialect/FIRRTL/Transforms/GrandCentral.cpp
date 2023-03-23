@@ -1184,7 +1184,7 @@ LogicalResult circt::firrtl::applyGCTView(const AnnoPathValue &target,
 
   for (auto &[num, leafSignal] : llvm::enumerate(interfaceSrcVals)) {
     auto instRes = interfaceInstance.getResult(num);
-    companionBuilder.create<StrictConnectOp>(instRes, leafSignal);
+    companionBuilder.create<ConnectOp>(instRes, leafSignal);
   }
   return success();
 }
