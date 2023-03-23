@@ -221,7 +221,7 @@ def AddOfPadR : Pat <
 // sub(a, 0) -> a
 def SubOfZero : Pat <
   (SubPrimOp:$old $x, (ConstantOp:$zcst $cst)),
-  (PadPrimOp $x, (TypeWidth32 $old)),
+  (MoveNameHint $old, (PadPrimOp $x, (TypeWidth32 $old))),
   [(KnownWidth $x), (ZeroConstantOp $zcst)]>;
 
 // sub(0, a) -> -a
