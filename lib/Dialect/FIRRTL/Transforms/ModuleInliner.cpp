@@ -1347,7 +1347,7 @@ void Inliner::run() {
         // earlier in the pass.  We only need to update NLA paths which are
         // not the root.
         auto newTops = mnla.getAdditionalSymbols();
-        if (newTops.size() == 0 || mnla.hasRoot(fmodule))
+        if (newTops.empty() || mnla.hasRoot(fmodule))
           return false;
 
         // Add NLAs to the non-root portion of the NLA.  This only needs to
