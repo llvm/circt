@@ -1273,9 +1273,12 @@ public:
   MuxSharedCond(MLIRContext *context)
       : RewritePattern(MuxPrimOp::getOperationName(), 0, context) {}
 
+  static const int depthLimit = 5;
+
   Value updateOrClone(MuxPrimOp mux, Value high, Value low,
-                      mlir::PatternRewriter &rewriter, bool chain) const {
-    if (chain) {
+                      mlir::PatternRewriter &rewriter,
+                      bool updateInPlace) const {
+    if (updateInPlace) {
       rewriter.updateRootInPlace(mux, [&] {
         mux.setOperand(1, high);
         mux.setOperand(2, low);
@@ -1291,37 +1294,45 @@ public:
 
   // Walk a dependent mux tree assuming the condition cond is true.
   Value tryCondTrue(Value op, Value cond, mlir::PatternRewriter &rewriter,
-                    bool chain) const {
+                    bool updateInPlace, int limit) const {
     MuxPrimOp mux = op.getDefiningOp<MuxPrimOp>();
     if (!mux)
       return {};
     if (mux.getSel() == cond)
       return mux.getHigh();
-    chain &= mux->hasOneUse();
+    if (limit > depthLimit)
+      return {};
+    updateInPlace &= mux->hasOneUse();
 
-    if (Value v = tryCondTrue(mux.getHigh(), cond, rewriter, chain))
-      return updateOrClone(mux, v, mux.getLow(), rewriter, chain);
+    if (Value v = tryCondTrue(mux.getHigh(), cond, rewriter, updateInPlace,
+                              limit + 1))
+      return updateOrClone(mux, v, mux.getLow(), rewriter, updateInPlace);
 
-    if (Value v = tryCondTrue(mux.getLow(), cond, rewriter, chain))
-      return updateOrClone(mux, mux.getHigh(), v, rewriter, chain);
+    if (Value v =
+            tryCondTrue(mux.getLow(), cond, rewriter, updateInPlace, limit + 1))
+      return updateOrClone(mux, mux.getHigh(), v, rewriter, updateInPlace);
     return {};
   }
 
   // Walk a dependent mux tree assuming the condition cond is false.
   Value tryCondFalse(Value op, Value cond, mlir::PatternRewriter &rewriter,
-                     bool chain) const {
+                     bool updateInPlace, int limit) const {
     MuxPrimOp mux = op.getDefiningOp<MuxPrimOp>();
     if (!mux)
       return {};
     if (mux.getSel() == cond)
       return mux.getLow();
-    chain &= mux->hasOneUse();
+    if (limit > depthLimit)
+      return {};
+    updateInPlace &= mux->hasOneUse();
 
-    if (Value v = tryCondFalse(mux.getHigh(), cond, rewriter, chain))
-      return updateOrClone(mux, v, mux.getLow(), rewriter, chain);
+    if (Value v = tryCondFalse(mux.getHigh(), cond, rewriter, updateInPlace,
+                               limit + 1))
+      return updateOrClone(mux, v, mux.getLow(), rewriter, updateInPlace);
 
-    if (Value v = tryCondFalse(mux.getLow(), cond, rewriter, chain))
-      return updateOrClone(mux, mux.getHigh(), v, rewriter, chain);
+    if (Value v = tryCondFalse(mux.getLow(), cond, rewriter, updateInPlace,
+                               limit + 1))
+      return updateOrClone(mux, mux.getHigh(), v, rewriter, updateInPlace);
 
     return {};
   }
@@ -1334,12 +1345,12 @@ public:
     if (width < 0)
       return failure();
 
-    if (Value v = tryCondTrue(mux.getHigh(), mux.getSel(), rewriter, true)) {
+    if (Value v = tryCondTrue(mux.getHigh(), mux.getSel(), rewriter, true, 0)) {
       rewriter.updateRootInPlace(mux, [&] { mux.setOperand(1, v); });
       return success();
     }
 
-    if (Value v = tryCondFalse(mux.getLow(), mux.getSel(), rewriter, true)) {
+    if (Value v = tryCondFalse(mux.getLow(), mux.getSel(), rewriter, true, 0)) {
       rewriter.updateRootInPlace(mux, [&] { mux.setOperand(2, v); });
       return success();
     }
