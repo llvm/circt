@@ -1296,7 +1296,7 @@ public:
     if (!mux)
       return {};
     if (mux.getSel() == cond)
-      return mux.getLow();
+      return mux.getHigh();
     chain &= mux->hasOneUse();
 
     if (Value v = tryCondTrue(mux.getHigh(), cond, rewriter, chain))
@@ -1314,7 +1314,7 @@ public:
     if (!mux)
       return {};
     if (mux.getSel() == cond)
-      return mux.getHigh();
+      return mux.getLow();
     chain &= mux->hasOneUse();
 
     if (Value v = tryCondFalse(mux.getHigh(), cond, rewriter, chain))
@@ -1351,8 +1351,7 @@ public:
 
 void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.add<MuxPad, MuxSharedCond, patterns::MuxNot, patterns::MuxSameCondLow,
-              patterns::MuxSameCondHigh, patterns::MuxSameTrue,
+  results.add<MuxPad, MuxSharedCond, patterns::MuxNot, patterns::MuxSameTrue,
               patterns::MuxSameFalse, patterns::NarrowMuxLHS,
               patterns::NarrowMuxRHS>(context);
 }

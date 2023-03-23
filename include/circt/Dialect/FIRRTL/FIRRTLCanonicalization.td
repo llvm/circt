@@ -325,20 +325,6 @@ def MuxNot : Pat<
     (ZeroConstantOp $zcst) , (OneConstantOp $ocst)
   ]>;
 
-// mux(cond, x, mux(cond, y, z)) -> mux(cond, x, z)
-def MuxSameCondLow : Pat<
-  (MuxPrimOp:$old $cond, $x, (MuxPrimOp $cond, $y, $z)),
-  (MoveNameHint $old, (MuxPrimOp $cond, $x, $z)), [
-    (EqualTypes $x, $y), (EqualTypes $x, $z), (KnownWidth $x)
-  ]>;
-
-// mux(cond, mux(cond, y, z), x) -> mux(cond, y, x)
-def MuxSameCondHigh : Pat<
-  (MuxPrimOp:$old $cond, (MuxPrimOp $cond, $y, $z), $x),
-  (MoveNameHint $old, (MuxPrimOp $cond, $y, $x)), [
-    (EqualTypes $x, $y), (EqualTypes $x, $z), (KnownWidth $x)
-  ]>;
-
 // mux(cond1, t, mux(cond2, t ,f)) -> mux(or(cond1, cond2), t, f)
 def MuxSameTrue : Pat <
   (MuxPrimOp:$old $cond1, $t, (MuxPrimOp $cond2, $t, $f)),

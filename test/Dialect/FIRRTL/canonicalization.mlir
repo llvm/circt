@@ -1959,10 +1959,10 @@ firrtl.module @MuxShorten(
   firrtl.connect %foo, %11 : !firrtl.uint<5>, !firrtl.uint<5>
   firrtl.connect %foo2, %3 : !firrtl.uint<5>, !firrtl.uint<5>
 
-  // CHECK: %[[n1:.*]] = firrtl.mux(%c2, %d3, %d1)
+  // CHECK: %[[n1:.*]] = firrtl.mux(%c2, %d2, %d1)
   // CHECK: %[[rem1:.*]] = firrtl.mux(%c1, %d4, %d5)
   // CHECK: %[[rem:.*]] = firrtl.mux(%c2, %[[rem1]], %d6)
-  // CHECK: %[[n2:.*]] = firrtl.mux(%c2, %d4, %d6)
+  // CHECK: %[[n2:.*]] = firrtl.mux(%c2, %d5, %d6)
   // CHECK: %[[prim:.*]] = firrtl.mux(%c1, %[[n1]], %[[n2]])
   // CHECK: firrtl.strictconnect %foo, %[[prim]]
   // CHECK: firrtl.strictconnect %foo2, %[[rem]]
