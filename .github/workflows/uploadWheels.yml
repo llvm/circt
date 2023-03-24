@@ -56,3 +56,4 @@ jobs:
         with:
           password: ${{ secrets.PYPI_CIRCT_API_TOKEN }}
           packages-dir: wheelhouse/
+	  verify-metadata: false
