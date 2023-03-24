@@ -656,8 +656,9 @@ def InnerSymbolDCE : Pass<"firrtl-inner-symbol-dce", "mlir::ModuleOp"> {
   }];
   let constructor = "circt::firrtl::createInnerSymbolDCEPass()";
   let statistics = [
-    Statistic<"numSymbolsFound", "num-sym-found", "Number of symbols found">,
-    Statistic<"numSymbolsRemoved", "num-sym-removed", "Number of symbols removed">
+    Statistic<"numInnerRefsFound", "num-inner-refs-found", "Number of inner-refs found">,
+    Statistic<"numInnerSymbolsFound", "num-inner-sym-found", "Number of inner symbols found">,
+    Statistic<"numInnerSymbolsRemoved", "num-inner-sym-removed", "Number of inner symbols removed">
   ];
 }
 
