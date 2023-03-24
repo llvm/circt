@@ -2468,8 +2468,18 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
           staticRef.getDefiningOp()))
     return emitError(startTok.getLoc(), "cannot probe memories or their ports");
 
-  // TODO: RWProbe<T>.  rework ref.send, not good for force.
-  result = builder.create<RefSendOp>(staticRef);
+  // TODO: Support for non-public ports.
+  if (isa<BlockArgument>(staticRef))
+    return emitError(startTok.getLoc(), "rwprobe of port not yet supported");
+  auto *op = staticRef.getDefiningOp();
+  if (!op)
+    return emitError(startTok.getLoc(), "rwprobe value must be defined by an operation");
+  auto forceable = dyn_cast<Forceable>(op);
+  if (!forceable)
+    return emitError(startTok.getLoc(), "rwprobe target not forceable")
+        .attachNote(op->getLoc());
+
+  result = forceable.markForceable(true).getDataRef();
 
   return success();
 }

@@ -254,7 +254,7 @@ def ProbeOp : FIRRTLOp<"probe"> {
 class StatementRefTypeConstraint<string ref, string base>
   : TypesMatchWith<"reference type of " # ref # " should be RWProbe of " # base,
                    base, ref,
-                   "RefType::get($_self.cast<FIRRTLBaseType>())">;
+                   "RefType::get($_self.cast<FIRRTLBaseType>(), true)">;
 
 // TODO: Take RWProbe not Probe (or ref).
 
