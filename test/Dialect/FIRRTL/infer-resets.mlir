@@ -876,6 +876,7 @@ firrtl.circuit "RefResetBundle" {
    %r_b = firrtl.subfield %r[b] : !firrtl.bundle<a: reset, b flip: reset>
    firrtl.connect %r_a, %driver : !firrtl.reset, !firrtl.asyncreset
    firrtl.connect %r_b, %driver : !firrtl.reset, !firrtl.asyncreset
+  }
 }
 
 // -----
