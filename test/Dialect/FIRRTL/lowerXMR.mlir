@@ -654,3 +654,41 @@ firrtl.circuit "ReadForceable" {
     // CHECK:      firrtl.strictconnect %o, %[[#cast]] : !firrtl.uint<2>
   }
 }
+
+// -----
+
+// CHECK-LABEL: firrtl.circuit "ForceRelease"
+firrtl.circuit "ForceRelease" {
+  // CHECK: hw.hierpath private @[[XMRPATH:.+]] [@ForceRelease::@[[INST_SYM:.+]], @RefMe::@[[TARGET_SYM:.+]]]
+  // CHECK: firrtl.module private @RefMe() {
+  firrtl.module private @RefMe(out %p: !firrtl.rwprobe<uint<4>>) {
+    // CHECK-NEXT: %x, %x_ref = firrtl.wire sym @[[TARGET_SYM]] forceable : !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
+    %x, %x_ref = firrtl.wire forceable : !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
+    // CHECK-NEXT: }
+    firrtl.ref.define %p, %x_ref : !firrtl.rwprobe<uint<4>>
+  }
+  // CHECK-LABEL: firrtl.module @ForceRelease
+  firrtl.module @ForceRelease(in %c: !firrtl.uint<1>, in %clock: !firrtl.clock, in %x: !firrtl.uint<4>) {
+      // CHECK-NEXT: firrtl.instance r sym @[[INST_SYM]] @RefMe()
+      %r_p = firrtl.instance r @RefMe(out p: !firrtl.rwprobe<uint<4>>)
+      // CHECK-NEXT: %[[REF1:.+]] = sv.xmr.ref @[[XMRPATH]] : !hw.inout<i4>
+      // CHECK-NEXT: %[[CAST1:.+]] = builtin.unrealized_conversion_cast %[[REF1]] : !hw.inout<i4> to !firrtl.rwprobe<uint<4>>
+   
+      // CHECK-NEXT: firrtl.ref.force %clock, %c, %[[CAST1]], %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>
+
+      firrtl.ref.force %clock, %c, %r_p, %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>
+      // CHECK-NEXT: %[[REF2:.+]] = sv.xmr.ref @[[XMRPATH]] : !hw.inout<i4>
+      // CHECK-NEXT: %[[CAST2:.+]] = builtin.unrealized_conversion_cast %[[REF2]] : !hw.inout<i4> to !firrtl.rwprobe<uint<4>>
+
+      // CHECK-NEXT: firrtl.ref.force_initial %c, %[[CAST2]], %x : !firrtl.uint<1>, !firrtl.uint<4>
+      firrtl.ref.force_initial %c, %r_p, %x : !firrtl.uint<1>, !firrtl.uint<4>
+      // CHECK-NEXT: %[[REF3:.+]] = sv.xmr.ref @[[XMRPATH]] : !hw.inout<i4>
+      // CHECK-NEXT: %[[CAST3:.+]] = builtin.unrealized_conversion_cast %[[REF3]] : !hw.inout<i4> to !firrtl.rwprobe<uint<4>>
+      // CHECK-NEXT: firrtl.ref.release %clock, %c, %[[CAST3]] : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
+      firrtl.ref.release %clock, %c, %r_p : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
+      // CHECK-NEXT: %[[REF4:.+]] = sv.xmr.ref @[[XMRPATH]] : !hw.inout<i4>
+      // CHECK-NEXT: %[[CAST4:.+]] = builtin.unrealized_conversion_cast %[[REF4]] : !hw.inout<i4> to !firrtl.rwprobe<uint<4>>
+      // CHECK-NEXT: firrtl.ref.release_initial %c, %[[CAST4]] : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
+      firrtl.ref.release_initial %c, %r_p : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
+    }
+  }
