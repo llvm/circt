@@ -50,6 +50,7 @@ enum PreserveMode {
 
 std::unique_ptr<mlir::Pass> createLowerFIRRTLTypesPass(
     PreserveAggregate::PreserveMode mode = PreserveAggregate::None,
+    PreserveAggregate::PreserveMode memoryMode = PreserveAggregate::None,
     bool preservePublicTypes = true);
 
 std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
@@ -74,6 +75,8 @@ createCreateSiFiveMetadataPass(bool replSeqMem = false,
 
 std::unique_ptr<mlir::Pass> createWireDFTPass();
 
+std::unique_ptr<mlir::Pass> createVBToBVPass();
+
 std::unique_ptr<mlir::Pass> createAddSeqMemPortsPass();
 
 std::unique_ptr<mlir::Pass> createDedupPass();
@@ -95,6 +98,8 @@ std::unique_ptr<mlir::Pass>
 createMemToRegOfVecPass(bool replSeqMem = false, bool ignoreReadEnable = false);
 
 std::unique_ptr<mlir::Pass> createPrefixModulesPass();
+
+std::unique_ptr<mlir::Pass> createFIRRTLFieldSourcePass();
 
 std::unique_ptr<mlir::Pass> createPrintInstanceGraphPass();
 
@@ -140,6 +145,8 @@ std::unique_ptr<mlir::Pass> createExtractInstancesPass();
 std::unique_ptr<mlir::Pass> createIMDeadCodeElimPass();
 
 std::unique_ptr<mlir::Pass> createRandomizeRegisterInitPass();
+
+std::unique_ptr<mlir::Pass> createRegisterOptimizerPass();
 
 std::unique_ptr<mlir::Pass> createLowerXMRPass();
 

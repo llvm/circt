@@ -59,9 +59,9 @@ firrtl.circuit "unprocessedAnnotations" {
     // expected-warning @+1 {{unprocessed annotation:'firrtl.transforms.RemainingAnnotation2'}}
     %2 = firrtl.node %1 {annotations = [{class = "firrtl.transforms.RemainingAnnotation2"}]} : !firrtl.uint<1>
     // expected-warning @+1 {{unprocessed annotation:'firrtl.transforms.RemainingAnnotation3'}}
-    %3 = firrtl.reg %clock {annotations = [{class = "firrtl.transforms.RemainingAnnotation3"}]} : !firrtl.uint<1>
+    %3 = firrtl.reg %clock {annotations = [{class = "firrtl.transforms.RemainingAnnotation3"}]} : !firrtl.clock, !firrtl.uint<1>
     // expected-warning @+1 {{unprocessed annotation:'firrtl.transforms.RemainingAnnotation4'}}
-    %4 = firrtl.regreset %clock, %reset, %1 {annotations = [{class = "firrtl.transforms.RemainingAnnotation4"}]} : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %4 = firrtl.regreset %clock, %reset, %1 {annotations = [{class = "firrtl.transforms.RemainingAnnotation4"}]} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     // expected-warning @+1 {{unprocessed annotation:'firrtl.transforms.RemainingAnnotation5'}}
     %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read", "rw",
     "write"], readLatency = 0 : i32, writeLatency = 1 : i32, annotations = [{class =
@@ -120,7 +120,23 @@ firrtl.circuit "Foo" attributes {annotations = [
 // -----
 
 firrtl.circuit "SymArgZero" {
-  // expected-error @+1 {{zero width port "foo" is referenced by name [#hw<innerSym@symfoo>] (e.g. in an XMR).}}
+  // expected-error @+1 {{zero width port "foo" is referenced by name [#hw<innerSym@symfoo>] (e.g. in an XMR) but must be removed}}
   firrtl.module @SymArgZero(in %foo :!firrtl.uint<0> sym @symfoo) {
+  }
+}
+
+// -----
+
+firrtl.circuit "DTArgZero" {
+  // expected-warning @below {{zero width port "foo" has dontTouch annotation, removing anyway}}
+  firrtl.module @DTArgZero(in %foo :!firrtl.uint<0> [{class = "firrtl.transforms.DontTouchAnnotation"}]) {
+  }
+}
+
+// -----
+
+firrtl.circuit "ArgWithFieldSym" {
+  // expected-error @below {{cannot lower aggregate port "foo" with field sensitive symbols, HW dialect does not support per field symbols yet}}
+  firrtl.module @ArgWithFieldSym(in %foo :!firrtl.vector<uint<1>,2> sym [<@x,1,public>]) {
   }
 }

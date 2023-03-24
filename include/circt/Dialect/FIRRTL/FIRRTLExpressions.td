@@ -145,6 +145,10 @@ def AggregateConstantOp : FIRRTLOp<"aggregateconstant", [Pure, ConstantLike]> {
     ```
   }];
 
+  let extraClassDeclaration = [{
+    Attribute getAttributeFromFieldID(uint64_t fieldID);
+  }];
+
   let arguments = (ins ArrayAttr:$fields);
   let results = (outs AggregateType:$result);
 
@@ -208,6 +212,7 @@ def InvalidValueOp : FIRRTLOp<"invalidvalue",
 
   let arguments = (ins);
   let results = (outs FIRRTLBaseType:$result);
+  let hasCanonicalizeMethod = 1;
 
   let assemblyFormat = "attr-dict `:` qualified(type($result))";
 }
@@ -270,7 +275,7 @@ def SubindexOp : FIRRTLExprOp<"subindex", [
     ```
     }];
 
-  let arguments = (ins FIRRTLBaseType:$input, I32Attr:$index);
+  let arguments = (ins FVectorType:$input, I32Attr:$index);
   let results = (outs FIRRTLBaseType:$result);
   let hasFolder = 1;
   let hasCanonicalizer = 1;
@@ -281,8 +286,7 @@ def SubindexOp : FIRRTLExprOp<"subindex", [
   let firrtlExtraClassDeclaration = [{
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType().cast<FVectorType>()
-                                            .getFieldID(getIndex()));
+      return FieldRef(getInput(), getInput().getType().getFieldID(getIndex()));
     }
   }];
 }
@@ -300,7 +304,7 @@ def SubaccessOp : FIRRTLExprOp<"subaccess", [
     ```
     }];
 
-  let arguments = (ins FIRRTLBaseType:$input, UIntType:$index);
+  let arguments = (ins FVectorType:$input, UIntType:$index);
   let results = (outs FIRRTLBaseType:$result);
 
   let assemblyFormat =
@@ -465,7 +469,7 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
   code inferType = "";
   let inferTypeDecl = !if(!empty(inferType), [{
     /// Infer the return type of this unary operation.
-    static FIRRTLType inferUnaryReturnType(FIRRTLType arg,
+    static FIRRTLType inferUnaryReturnType(FIRRTLType input,
                                            std::optional<Location> loc);
     }], "") # !subst("$_infer", !if(!empty(inferType), "inferUnaryReturnType",
       inferType), [{
@@ -489,6 +493,7 @@ def AsAsyncResetPrimOp
 def AsClockPrimOp : UnaryPrimOp<"asClock", OneBitCastableType, ClockType>;
 def CvtPrimOp : UnaryPrimOp<"cvt", IntType, SIntType>;
 def NegPrimOp : UnaryPrimOp<"neg", IntType, SIntType>;
+let hasCanonicalizer = true in
 def NotPrimOp : UnaryPrimOp<"not", IntType, UIntType>;
 
 let inferType = "impl::inferReductionResult" in {
@@ -651,7 +656,7 @@ def PlusArgsValueIntrinsicOp
 
   let arguments = (ins StrAttr:$formatString);
   let results = (outs UInt1Type:$found, AnyType:$result);
-  let assemblyFormat = "$formatString attr-dict `:` type($result)";
+  let assemblyFormat = "$formatString attr-dict `:` type($found) `,` type($result)";
 }
 
 //===----------------------------------------------------------------------===//
@@ -748,7 +753,7 @@ def BitCastOp: FIRRTLOp<"bitcast", [Pure]> {
   }];
 
   let arguments = (ins FIRRTLBaseType:$input);
-  let results = (outs FIRRTLBaseType:$result);
+  let results = (outs PassiveType:$result);
   let hasVerifier = 1;
   let hasFolder = 1;
 

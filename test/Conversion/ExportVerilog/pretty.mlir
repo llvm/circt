@@ -24,7 +24,7 @@ sv.interface @IValidReady_Struct  {
 // CHECK-NEXT:          _GEN_0,
 // CHECK-NEXT:          _GEN_0})};{{.*}}
 hw.module @structs(%clk: i1, %rstn: i1) {
-  %0 = sv.interface.instance {name = "iface"} : !sv.interface<@IValidReady_Struct>
+  %0 = sv.interface.instance name "iface" : !sv.interface<@IValidReady_Struct>
   sv.interface.signal.assign %0(@IValidReady_Struct::@data) = %s : !hw.struct<foo: !hw.array<72xi1>, bar: !hw.array<128xi1>, baz: !hw.array<224xi1>>
   %c0 = hw.constant 0 : i8
   %c64 = hw.constant 100000 : i64
@@ -157,4 +157,80 @@ hw.module @MuxChain(%a_0: i1, %a_1: i1, %a_2: i1, %c_0: i1, %c_1: i1, %c_2: i1) 
 // CHECK-NEXT:                                                                                                                    : c_0)
 // CHECK-NEXT:                                                                                                               : c_2)
 // CHECK-NEXT:                                                                                                          : c_1;{{.*}}
+}
+
+// -----
+
+// CHECK-LABEL:module svattrs{{.*}}
+hw.module @svattrs() {
+//      CHECK:  (* dont_merge, dont_retime = true, foo0 = bar0, foo1 = bar1, foo2 = bar2, foo3 = bar3,
+// CHECK-NEXT:     foo4 = bar4, foo5 = bar5, foo6 = bar6 *)
+// CHECK-NEXT:  reg [9:0] reg0;{{.*}}
+  %reg0 = sv.reg {
+    sv.attributes = [
+      #sv.attribute<"dont_merge">,
+      #sv.attribute<"dont_retime" ="true">,
+      #sv.attribute<"foo0"="bar0">,
+      #sv.attribute<"foo1"="bar1">,
+      #sv.attribute<"foo2"="bar2">,
+      #sv.attribute<"foo3"="bar3">,
+      #sv.attribute<"foo4"="bar4">,
+      #sv.attribute<"foo5"="bar5">,
+      #sv.attribute<"foo6"="bar6">
+   ]} : !hw.inout<i10>
+
+//      CHECK:  (* start *)
+// CHECK-NEXT:  /* foo0 = bar0, foo1 = bar1, foo2 = bar2, foo3 = bar3, foo4 = bar4, foo5 = bar5,
+// CHECK-NEXT:     foo6 = bar6 */
+// CHECK-NEXT:  (* foo0 = bar0, foo1 = bar1, foo2 = bar2, foo3 = bar3, foo4 = bar4, foo5 = bar5,
+// CHECK-NEXT:     foo6 = bar6 *)
+// CHECK-NEXT:  reg [9:0] reg1;{{.*}}
+  %reg1 = sv.reg {
+    sv.attributes = [
+      #sv.attribute<"start">,
+      #sv.attribute<"foo0"="bar0", emitAsComment>,
+      #sv.attribute<"foo1"="bar1", emitAsComment>,
+      #sv.attribute<"foo2"="bar2", emitAsComment>,
+      #sv.attribute<"foo3"="bar3", emitAsComment>,
+      #sv.attribute<"foo4"="bar4", emitAsComment>,
+      #sv.attribute<"foo5"="bar5", emitAsComment>,
+      #sv.attribute<"foo6"="bar6", emitAsComment>,
+      #sv.attribute<"foo0"="bar0">,
+      #sv.attribute<"foo1"="bar1">,
+      #sv.attribute<"foo2"="bar2">,
+      #sv.attribute<"foo3"="bar3">,
+      #sv.attribute<"foo4"="bar4">,
+      #sv.attribute<"foo5"="bar5">,
+      #sv.attribute<"foo6"="bar6">
+   ]} : !hw.inout<i10>
+
+// Put containers on same line if they fit!
+//      CHECK:  (* start *) /* comment */ (* end *)
+// CHECK-NEXT:  reg [9:0] reg2;{{.*}}
+  %reg2 = sv.reg {
+    sv.attributes = [
+      #sv.attribute<"start">,
+      #sv.attribute<"comment", emitAsComment>,
+      #sv.attribute<"end">
+   ]} : !hw.inout<i10>
+
+// Check behavior where some fit and some don't:
+// (notably don't glue '(* end *)' after the comment container)
+//      CHECK:  (* start *)
+// CHECK-NEXT:  /* foo0 = bar0, foo1 = bar1, foo2 = bar2, foo3 = bar3, foo4 = bar4, foo5 = bar5,
+// CHECK-NEXT:     foo6 = bar6 */
+// CHECK-NEXT:  (* end *)
+// CHECK-NEXT:  reg [9:0] reg3;{{.*}}
+  %reg3 = sv.reg {
+    sv.attributes = [
+      #sv.attribute<"start">,
+      #sv.attribute<"foo0"="bar0", emitAsComment>,
+      #sv.attribute<"foo1"="bar1", emitAsComment>,
+      #sv.attribute<"foo2"="bar2", emitAsComment>,
+      #sv.attribute<"foo3"="bar3", emitAsComment>,
+      #sv.attribute<"foo4"="bar4", emitAsComment>,
+      #sv.attribute<"foo5"="bar5", emitAsComment>,
+      #sv.attribute<"foo6"="bar6", emitAsComment>,
+      #sv.attribute<"end">
+   ]} : !hw.inout<i10>
 }

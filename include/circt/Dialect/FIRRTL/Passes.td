@@ -71,6 +71,15 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
             clEnumValN(PreserveAggregate::OneDimVec, "1d-vec", "Preserve 1d vectors"),
             clEnumValN(PreserveAggregate::Vec, "vec", "Preserve vectors"),
             clEnumValN(PreserveAggregate::All, "all", "Preserve vectors and bundles")
+          )}]>,
+    Option<"preserveMemories", "preserve-memories", "PreserveAggregate::PreserveMode",
+          "PreserveAggregate::None",
+          "Specify memory preservation mode",
+          [{::llvm::cl::values(
+            clEnumValN(PreserveAggregate::None, "none", "Preserve no aggregate"),
+            clEnumValN(PreserveAggregate::OneDimVec, "1d-vec", "Preserve 1d vectors"),
+            clEnumValN(PreserveAggregate::Vec, "vec", "Preserve vectors"),
+            clEnumValN(PreserveAggregate::All, "all", "Preserve vectors and bundles")
           )}]>
   ];
   let dependentDialects = ["hw::HWDialect"];
@@ -86,6 +95,16 @@ def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
     Statistic<"numFoldedOp", "num-folded-op", "Number of operations folded">,
     Statistic<"numErasedOp", "num-erased-op", "Number of operations erased">
   ];
+}
+
+def RegisterOptimizer : Pass<"firrtl-register-optimizer", "firrtl::FModuleOp"> {
+  let summary = "Optimizer Registers";
+  let description = [{
+    This pass applies classic FIRRTL register optimizations.  These 
+    optimizations are isolated to this pass as they can change the visible 
+    behavior of the register, especially before reset.
+  }];
+  let constructor = "circt::firrtl::createRegisterOptimizerPass()";
 }
 
 def RemoveUnusedPorts : Pass<"firrtl-remove-unused-ports", "firrtl::CircuitOp"> {
@@ -402,6 +421,12 @@ def PrefixModules : Pass<"firrtl-prefix-modules", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createPrefixModulesPass()";
 }
 
+def PrintFIRRTLFieldSourcePass
+    : Pass<"firrtl-print-field-source", "firrtl::FModuleOp"> {
+  let summary = "Print field source information.";
+  let constructor =  "circt::firrtl::createFIRRTLFieldSourcePass()";
+}
+
 def PrintInstanceGraph
     : Pass<"firrtl-print-instance-graph", "firrtl::CircuitOp"> {
   let summary = "Print a DOT graph of the module hierarchy.";
@@ -643,6 +668,15 @@ def UndefAnalysis : Pass<"firrtl-undef", "firrtl::CircuitOp"> {
     post-reset behavior of the circuit.
   }];
   let constructor = "circt::firrtl::createUndefAnalysisPass()";
+}
+
+def VBToBV : Pass<"firrtl-vb-to-bv", "firrtl::CircuitOp"> {
+  let summary = "Transform vector-of-bundles to bundle-of-vectors";
+  let description = [{
+    This pass converts vectors containing bundles, into bundles containing
+    vectors.
+  }];
+  let constructor = "circt::firrtl::createVBToBVPass()";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

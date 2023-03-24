@@ -61,6 +61,7 @@ add_circt_dialect_library(CIRCTESI
 
   DEPENDS
   MLIRESITransformsIncGen
+  MLIRESIEnumsIncGen
   ${ESI_Deps}
 
   LINK_COMPONENTS
@@ -71,14 +72,19 @@ add_circt_dialect_library(CIRCTESI
   ${ESI_LinkLibs}
   )
 
-
 foreach(CP_FILE ${CP_FILES})
   get_filename_component(DST ${CP_FILE} NAME)
   get_filename_component(SRC ${CP_FILE} REALPATH)
+  list(APPEND ABS_CFILES ${SRC})
   add_custom_command(TARGET CIRCTESI PRE_BUILD
     COMMAND ${CMAKE_COMMAND} -E
     copy ${SRC} ${CIRCT_BINARY_DIR}/include/circt/Dialect/ESI/${DST})
 endforeach()
+
+# Create a package of ESI collateral for any compiler to include with its
+# distribution.
+add_library(esi-collateral INTERFACE)
+set_target_properties(esi-collateral PROPERTIES PUBLIC_HEADER "${ABS_CFILES}")
 
 if (ESI_CAPNP)
   target_compile_definitions(obj.CIRCTESI PRIVATE CAPNP)

@@ -216,11 +216,11 @@ struct IfOpHoisting : OpConversionPattern<IfOp> {
     rewriter.updateRootInPlace(op, [&]() {
       if (!op.thenBlock()->without_terminator().empty()) {
         rewriter.splitBlock(op.thenBlock(), --op.thenBlock()->end());
-        rewriter.mergeBlockBefore(&op.getThenRegion().front(), op);
+        rewriter.inlineBlockBefore(&op.getThenRegion().front(), op);
       }
       if (op.elseBlock() && !op.elseBlock()->without_terminator().empty()) {
         rewriter.splitBlock(op.elseBlock(), --op.elseBlock()->end());
-        rewriter.mergeBlockBefore(&op.getElseRegion().front(), op);
+        rewriter.inlineBlockBefore(&op.getElseRegion().front(), op);
       }
     });
 

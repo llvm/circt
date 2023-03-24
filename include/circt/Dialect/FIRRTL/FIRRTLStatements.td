@@ -27,6 +27,7 @@ def AttachOp : FIRRTLOp<"attach"> {
 
   let assemblyFormat = "$attached attr-dict `:` qualified(type($attached))";
 
+  let hasVerifier = 1;
   let hasCanonicalizeMethod = true;
 }
 
@@ -58,10 +59,29 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]
     ```
     }];
 
-  let arguments = (ins SizedBaseOrRefTypeOrForeignType:$dest,
-                       SizedBaseOrRefTypeOrForeignType:$src);
+  let arguments = (ins SizedOrForeignType:$dest,
+                       SizedOrForeignType:$src);
   let results = (outs);
   let hasCanonicalizeMethod = true;
+
+  let hasVerifier = 1;
+
+  let assemblyFormat =
+    "$dest `,` $src  attr-dict `:` qualified(type($dest))";
+}
+
+def RefConnectOp : FIRRTLOp<"refconnect", [SameTypeOperands, FConnectLike]> {
+  let summary = "Connect two references";
+  let description =  [{
+    Connect two references with strict constraints:
+    ```
+      firrtl.refconnect %dest, %src : ref<t1>
+    ```
+    }];
+
+  let arguments = (ins SizedRefType:$dest,
+                       SizedRefType:$src);
+  let results = (outs);
 
   let hasVerifier = 1;
 
@@ -78,7 +98,7 @@ def PrintFOp : FIRRTLOp<"printf"> {
 
   let assemblyFormat = [{
     $clock `,` $cond `,` $formatString `` custom<PrintfAttrs>(attr-dict) ` `
-    (`(` $substitutions^ `)` `:` qualified(type($substitutions)))?
+    (`(` $substitutions^ `)`)? `:` type($clock) `,` type($cond) (`,` qualified(type($substitutions))^)?
   }];
 }
 
@@ -106,7 +126,7 @@ def StopOp : FIRRTLOp<"stop"> {
                        StrAttr:$name);
   let results = (outs);
 
-  let assemblyFormat = "$clock `,` $cond `,` $exitCode `` custom<StopAttrs>(attr-dict)";
+  let assemblyFormat = "$clock `,` $cond `,` $exitCode `` custom<StopAttrs>(attr-dict) `:` type($clock) `,` type($cond)";
 }
 
 class VerifOp<string mnemonic, list<Trait> traits = []> :
@@ -126,7 +146,7 @@ class VerifOp<string mnemonic, list<Trait> traits = []> :
 
   let assemblyFormat = [{
     $clock `,` $predicate `,` $enable `,`
-    $message (`(` $substitutions^ `)` `:` qualified(type($substitutions)))?
+    $message (`(` $substitutions^ `)`)? `:` type($clock) `,` type($predicate) `,` type($enable) (`,` qualified(type($substitutions))^)?
     custom<VerifAttrs>(attr-dict)
   }];
 }
@@ -164,7 +184,7 @@ def WhenOp : FIRRTLOp<"when", [SingleBlock, NoTerminator, NoRegionArguments,
   ];
 
   let assemblyFormat =
-    "$condition $thenRegion (`else` $elseRegion^)? attr-dict-with-keyword";
+    "$condition `:` type($condition) $thenRegion (`else` $elseRegion^)? attr-dict-with-keyword";
 
   let extraClassDeclaration = [{
 

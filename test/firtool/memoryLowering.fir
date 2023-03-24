@@ -1,4 +1,4 @@
-; RUN: firtool %s --annotation-file %s.anno.json -emit-metadata -repl-seq-mem -repl-seq-mem-file="test.conf" |  FileCheck %s
+; RUN: firtool %s --annotation-file %s.anno.json -repl-seq-mem -repl-seq-mem-file="test.conf" |  FileCheck %s
 
 circuit test:
   module test:

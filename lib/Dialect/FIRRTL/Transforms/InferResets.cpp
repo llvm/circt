@@ -128,11 +128,11 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
           })
           .Case<SIntType, UIntType>([&](auto type) {
             return builder.create<ConstantOp>(
-                type, APInt::getNullValue(type.getWidth().value_or(1)));
+                type, APInt::getZero(type.getWidth().value_or(1)));
           })
           .Case<BundleType>([&](auto type) {
             auto wireOp = builder.create<WireOp>(type);
-            for (auto &field : llvm::enumerate(type)) {
+            for (auto field : llvm::enumerate(type)) {
               auto zero = createZeroValue(builder, field.value().type, cache);
               auto acc = builder.create<SubfieldOp>(field.value().type, wireOp,
                                                     field.index());
@@ -733,7 +733,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
       llvm::dbgs() << "\n===----- Tracing uninferred resets -----===\n\n");
   circuit.walk([&](Operation *op) {
     TypeSwitch<Operation *>(op)
-        .Case<ConnectOp, StrictConnectOp>([&](auto op) {
+        .Case<FConnectLike>([&](auto op) {
           traceResets(op.getDest(), op.getSrc(), op.getLoc());
         })
 
@@ -741,14 +741,13 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
         .Case<RefSendOp>([&](auto op) {
           // Trace using base types.
           traceResets(op.getType().getType(), op.getResult(), 0,
-                      op.getBase().getType().template cast<FIRRTLBaseType>(),
-                      op.getBase(), 0, op.getLoc());
+                      op.getBase().getType(), op.getBase(), 0, op.getLoc());
         })
         .Case<RefResolveOp>([&](auto op) {
           // Trace using base types.
           traceResets(op.getType(), op.getResult(), 0,
-                      op.getRef().getType().template cast<RefType>().getType(),
-                      op.getRef(), 0, op.getLoc());
+                      op.getRef().getType().getType(), op.getRef(), 0,
+                      op.getLoc());
         })
 
         .Case<InvalidValueOp>([&](auto op) {
@@ -776,7 +775,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
 
         .Case<SubfieldOp>([&](auto op) {
           // Associate the input bundle's resets with the output field's resets.
-          auto bundleType = op.getInput().getType().template cast<BundleType>();
+          auto bundleType = op.getInput().getType();
           auto index = op.getFieldIndex();
           traceResets(op.getType(), op.getResult(), 0,
                       bundleType.getElements()[index].type, op.getInput(),
@@ -795,8 +794,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
           // connected. However for the sake of type inference, this is
           // indistinguishable from them having to share the same type (namely
           // the vector element type).
-          auto vectorType =
-              op.getInput().getType().template cast<FVectorType>();
+          auto vectorType = op.getInput().getType();
           traceResets(op.getType(), op.getResult(), 0,
                       vectorType.getElementType(), op.getInput(),
                       getFieldID(vectorType), op.getLoc());
@@ -1765,8 +1763,12 @@ LogicalResult InferResetsPass::verifyNoAbstractReset() {
     for (PortInfo port : module.getPorts()) {
       if (auto portType = port.type.dyn_cast<FIRRTLType>()) {
         if (getBaseType(portType).isa<ResetType>()) {
-          module->emitOpError() << "has an abstract reset type port \""
-                                << port.getName() << "\" after InferResets";
+          auto diag = emitError(port.loc)
+                      << "a port \"" << port.getName()
+                      << "\" with abstract reset type was unable to be "
+                         "inferred by InferResets (is this a top-level port?)";
+          diag.attachNote(module->getLoc())
+              << "the module with this uninferred reset port was defined here";
           hasAbstractResetPorts = true;
         }
       }

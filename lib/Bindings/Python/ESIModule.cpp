@@ -70,14 +70,19 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
         py::arg("impl_type"), py::arg("generator"));
 
   mlir_type_subclass(m, "ChannelType", circtESITypeIsAChannelType)
-      .def_classmethod("get",
-                       [](py::object cls, MlirType inner) {
-                         if (circtESITypeIsAChannelType(inner))
-                           return cls(inner);
-                         return cls(circtESIChannelTypeGet(inner));
-                       })
+      .def_classmethod(
+          "get",
+          [](py::object cls, MlirType inner, uint32_t signaling = 0) {
+            if (circtESITypeIsAChannelType(inner))
+              return cls(inner);
+            return cls(circtESIChannelTypeGet(inner, signaling));
+          },
+          py::arg("cls"), py::arg("inner"), py::arg("signaling") = 0)
       .def_property_readonly(
-          "inner", [](MlirType self) { return circtESIChannelGetInner(self); });
+          "inner", [](MlirType self) { return circtESIChannelGetInner(self); })
+      .def_property_readonly("signaling", [](MlirType self) {
+        return circtESIChannelGetSignaling(self);
+      });
 
   mlir_type_subclass(m, "AnyType", circtESITypeIsAnAnyType)
       .def_classmethod(

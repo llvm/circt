@@ -17,6 +17,7 @@
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVAttributes.h"
+#include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
@@ -87,68 +88,6 @@ static Operation *lookupSymbolInNested(Operation *symbolTableOp,
       }
     }
   return nullptr;
-}
-
-//===----------------------------------------------------------------------===//
-// ImplicitSSAName Custom Directive
-//===----------------------------------------------------------------------===//
-
-static ParseResult parseImplicitSSAName(OpAsmParser &parser,
-                                        NamedAttrList &resultAttrs) {
-
-  if (parser.parseOptionalAttrDict(resultAttrs))
-    return failure();
-
-  // If the attribute dictionary contains no 'name' attribute, infer it from
-  // the SSA name (if specified).
-  bool hadName = llvm::any_of(resultAttrs, [](NamedAttribute attr) {
-    return attr.getName() == "name";
-  });
-
-  // If there was no name specified, check to see if there was a useful name
-  // specified in the asm file.
-  if (hadName)
-    return success();
-
-  // If there is no explicit name attribute, get it from the SSA result name.
-  // If numeric, just use an empty name.
-  auto resultName = parser.getResultName(0).first;
-  if (!resultName.empty() && isdigit(resultName[0]))
-    resultName = "";
-  auto nameAttr = parser.getBuilder().getStringAttr(resultName);
-  auto *context = parser.getBuilder().getContext();
-  resultAttrs.push_back({StringAttr::get(context, "name"), nameAttr});
-  return success();
-}
-
-static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
-                                 DictionaryAttr attr) {
-  // Note that we only need to print the "name" attribute if the asmprinter
-  // result name disagrees with it.  This can happen in strange cases, e.g.
-  // when there are conflicts.
-  bool namesDisagree = false;
-
-  SmallString<32> resultNameStr;
-  llvm::raw_svector_ostream tmpStream(resultNameStr);
-  p.printOperand(op->getResult(0), tmpStream);
-  auto expectedName = op->getAttrOfType<StringAttr>("name").getValue();
-  auto actualName = tmpStream.str().drop_front();
-  if (actualName != expectedName) {
-    // Anonymous names are printed as digits, which is fine.
-    if (!expectedName.empty() || !isdigit(actualName[0]))
-      namesDisagree = true;
-  }
-
-  if (namesDisagree)
-    p.printOptionalAttrDict(op->getAttrs(),
-                            {SymbolTable::getSymbolAttrName(),
-                             hw::InnerName::getInnerNameAttrName(),
-                             "svAttributes"});
-  else
-    p.printOptionalAttrDict(op->getAttrs(),
-                            {"name", SymbolTable::getSymbolAttrName(),
-                             hw::InnerName::getInnerNameAttrName(),
-                             "svAttributes"});
 }
 
 //===----------------------------------------------------------------------===//
@@ -458,7 +397,7 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
 
   if (auto constant = op.getCond().getDefiningOp<hw::ConstantOp>()) {
 
-    if (constant.getValue().isAllOnesValue())
+    if (constant.getValue().isAllOnes())
       replaceOpWithRegion(rewriter, op, op.getThenRegion());
     else if (!op.getElseRegion().empty())
       replaceOpWithRegion(rewriter, op, op.getElseRegion());

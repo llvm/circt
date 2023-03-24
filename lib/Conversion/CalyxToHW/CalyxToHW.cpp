@@ -98,8 +98,8 @@ struct ConvertWiresOp : public OpConversionPattern<WiresOp> {
     rewriter.inlineRegionBefore(wires.getBody(), hwMod.getBodyRegion(),
                                 hwMod.getBodyRegion().end());
     rewriter.eraseOp(wires);
-    rewriter.mergeBlockBefore(&hwMod.getBodyRegion().getBlocks().back(),
-                              &hwMod.getBodyBlock()->back());
+    rewriter.inlineBlockBefore(&hwMod.getBodyRegion().getBlocks().back(),
+                               &hwMod.getBodyBlock()->back());
     return success();
   }
 };
@@ -377,15 +377,15 @@ private:
 
   ReadInOutOp wireIn(Value source, StringRef instanceName, StringRef portName,
                      ImplicitLocOpBuilder &b) const {
-    auto wire =
-        b.create<WireOp>(source.getType(), createName(instanceName, portName));
+    auto wire = b.create<sv::WireOp>(source.getType(),
+                                     createName(instanceName, portName));
     return b.create<ReadInOutOp>(wire);
   }
 
   ReadInOutOp wireOut(Value source, StringRef instanceName, StringRef portName,
                       ImplicitLocOpBuilder &b) const {
-    auto wire =
-        b.create<WireOp>(source.getType(), createName(instanceName, portName));
+    auto wire = b.create<sv::WireOp>(source.getType(),
+                                     createName(instanceName, portName));
     b.create<sv::AssignOp>(wire, source);
     return b.create<ReadInOutOp>(wire);
   }

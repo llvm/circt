@@ -424,7 +424,7 @@ private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
   LogicalResult lowerPorts(ArrayRef<PortInfo> firrtlPorts,
                            SmallVectorImpl<hw::PortInfo> &ports,
-                           Operation *moduleOp,
+                           Operation *moduleOp, StringRef moduleName,
                            CircuitLoweringState &loweringState);
   bool handleForceNameAnnos(FModuleLike oldModule, AnnotationSet &annos,
                             CircuitLoweringState &loweringState);
@@ -923,9 +923,11 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   emitString("");
 }
 
-LogicalResult FIRRTLModuleLowering::lowerPorts(
-    ArrayRef<PortInfo> firrtlPorts, SmallVectorImpl<hw::PortInfo> &ports,
-    Operation *moduleOp, CircuitLoweringState &loweringState) {
+LogicalResult
+FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
+                                 SmallVectorImpl<hw::PortInfo> &ports,
+                                 Operation *moduleOp, StringRef moduleName,
+                                 CircuitLoweringState &loweringState) {
   ports.reserve(firrtlPorts.size());
   size_t numArgs = 0;
   size_t numResults = 0;
@@ -935,14 +937,24 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
     hwPort.type = lowerType(firrtlPort.type);
     if (firrtlPort.sym)
       if (firrtlPort.sym.size() > 1 ||
-          (firrtlPort.sym.size() == 1 && !firrtlPort.sym.getSymName())) {
-        moduleOp->emitError("cannot lower aggregate port `" +
-                            firrtlPort.name.getValue() +
-                            "` with field sensitive symbols, HW dialect does  "
-                            "not support per field symbols yet.");
-        return failure();
-      }
+          (firrtlPort.sym.size() == 1 && !firrtlPort.sym.getSymName()))
+        return emitError(firrtlPort.loc)
+               << "cannot lower aggregate port " << firrtlPort.name
+               << " with field sensitive symbols, HW dialect does not support "
+                  "per field symbols yet.";
     hwPort.sym = firrtlPort.sym;
+    bool hadDontTouch = firrtlPort.annotations.removeDontTouch();
+    if (hadDontTouch && !hwPort.sym) {
+      if (hwPort.type.isInteger(0)) {
+        mlir::emitWarning(firrtlPort.loc)
+            << "zero width port " << hwPort.name
+            << " has dontTouch annotation, removing anyway";
+        continue;
+      }
+      hwPort.sym = hw::InnerSymAttr::get(StringAttr::get(
+          moduleOp->getContext(),
+          Twine("__") + moduleName + Twine("__") + firrtlPort.name.strref()));
+    }
 
     // We can't lower all types, so make sure to cleanly reject them.
     if (!hwPort.type) {
@@ -954,10 +966,10 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
     // input, output, or inout.  We don't want these at the HW level.
     if (hwPort.type.isInteger(0)) {
       if (hwPort.sym && !hwPort.sym.empty()) {
-        moduleOp->emitError("zero width port ")
-            << hwPort.name << " is referenced by name [" << hwPort.sym
-            << "] (e.g. in an XMR).";
-        return failure();
+        return mlir::emitError(firrtlPort.loc)
+               << "zero width port " << hwPort.name
+               << " is referenced by name [" << hwPort.sym
+               << "] (e.g. in an XMR) but must be removed";
       }
       continue;
     }
@@ -1083,7 +1095,8 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   // Map the ports over, lowering their types as we go.
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<hw::PortInfo, 8> ports;
-  if (failed(lowerPorts(firrtlPorts, ports, oldModule, loweringState)))
+  if (failed(lowerPorts(firrtlPorts, ports, oldModule, oldModule.getName(),
+                        loweringState)))
     return {};
 
   StringRef verilogName;
@@ -1124,7 +1137,8 @@ FIRRTLModuleLowering::lowerMemModule(FMemModuleOp oldModule,
   // Map the ports over, lowering their types as we go.
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<hw::PortInfo, 8> ports;
-  if (failed(lowerPorts(firrtlPorts, ports, oldModule, loweringState)))
+  if (failed(lowerPorts(firrtlPorts, ports, oldModule, oldModule.getName(),
+                        loweringState)))
     return {};
 
   // Build the new hw.module op.
@@ -1145,7 +1159,8 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   // Map the ports over, lowering their types as we go.
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<hw::PortInfo, 8> ports;
-  if (failed(lowerPorts(firrtlPorts, ports, oldModule, loweringState)))
+  if (failed(lowerPorts(firrtlPorts, ports, oldModule, oldModule.getName(),
+                        loweringState)))
     return {};
 
   // Build the new hw.module op.
@@ -1310,12 +1325,10 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
 static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
                                                    StringRef field) {
   SmallVector<SubfieldOp> accesses;
-  for (auto op : structValue.getUsers()) {
+  for (auto *op : structValue.getUsers()) {
     assert(isa<SubfieldOp>(op));
     auto fieldAccess = cast<SubfieldOp>(op);
-    auto elemIndex =
-        fieldAccess.getInput().getType().cast<BundleType>().getElementIndex(
-            field);
+    auto elemIndex = fieldAccess.getInput().getType().getElementIndex(field);
     if (elemIndex && *elemIndex == fieldAccess.getFieldIndex())
       accesses.push_back(fieldAccess);
   }
@@ -1644,6 +1657,10 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(AttachOp op);
   LogicalResult visitStmt(ProbeOp op);
 
+  FailureOr<Value> lowerSubindex(SubindexOp op, Value input);
+  FailureOr<Value> lowerSubaccess(SubaccessOp op, Value input);
+  FailureOr<Value> lowerSubfield(SubfieldOp op, Value input);
+
 private:
   /// The module we're lowering into.
   hw::HWModuleOp theModule;
@@ -1866,7 +1883,7 @@ Attribute FIRRTLLowering::getOrCreateAggregateConstantAttribute(Attribute value,
 
   // Recursively construct elements.
   SmallVector<Attribute> values;
-  for (auto &e : llvm::enumerate(value.cast<ArrayAttr>())) {
+  for (auto e : llvm::enumerate(value.cast<ArrayAttr>())) {
     Type subType;
     if (auto array = hw::type_dyn_cast<hw::ArrayType>(type))
       subType = array.getElementType();
@@ -2493,52 +2510,92 @@ LogicalResult FIRRTLLowering::visitExpr(SpecialConstantOp op) {
       op, getOrCreateIntConstant(APInt(/*bitWidth*/ 1, op.getValue())));
 }
 
-LogicalResult FIRRTLLowering::visitExpr(SubindexOp op) {
-  if (isZeroBitFIRRTLType(op->getResult(0).getType()))
-    return setLowering(op, Value());
-
-  auto resultType = lowerType(op->getResult(0).getType());
-  Value value = getPossiblyInoutLoweredValue(op.getInput());
-  if (!resultType || !value) {
-    op.emitError() << "input lowering failed";
-    return failure();
-  }
-
+FailureOr<Value> FIRRTLLowering::lowerSubindex(SubindexOp op, Value input) {
   auto iIdx = getOrCreateIntConstant(
       getBitWidthFromVectorSize(
           op.getInput().getType().cast<FVectorType>().getNumElements()),
       op.getIndex());
 
-  // If the value has an inout type, we need to lower to ArrayIndexInOutOp.
-  if (value.getType().isa<sv::InOutType>())
-    return setLoweringTo<sv::ArrayIndexInOutOp>(op, value, iIdx);
-  // Otherwise, hw::ArrayGetOp
-  return setLoweringTo<hw::ArrayGetOp>(op, value, iIdx);
+  // If the input has an inout type, we need to lower to ArrayIndexInOutOp;
+  // otherwise hw::ArrayGetOp.
+  Value result;
+  if (input.getType().isa<sv::InOutType>())
+    result = builder.createOrFold<sv::ArrayIndexInOutOp>(input, iIdx);
+  else
+    result = builder.createOrFold<hw::ArrayGetOp>(input, iIdx);
+  tryCopyName(result.getDefiningOp(), op);
+  return result;
 }
 
-LogicalResult FIRRTLLowering::visitExpr(SubaccessOp op) {
-  if (isZeroBitFIRRTLType(op->getResult(0).getType()))
-    return setLowering(op, Value());
-
-  auto resultType = lowerType(op->getResult(0).getType());
-  Value value = getPossiblyInoutLoweredValue(op.getInput());
+FailureOr<Value> FIRRTLLowering::lowerSubaccess(SubaccessOp op, Value input) {
   Value valueIdx = getLoweredAndExtOrTruncValue(
       op.getIndex(),
       UIntType::get(
-          op.getContext(),
+          op->getContext(),
           getBitWidthFromVectorSize(
               op.getInput().getType().cast<FVectorType>().getNumElements())));
-
-  if (!resultType || !value || !valueIdx) {
-    op.emitError() << "input lowering failed";
+  if (!valueIdx) {
+    op->emitError() << "input lowering failed";
     return failure();
   }
 
-  // If the value has an inout type, we need to lower to ArrayIndexInOutOp.
-  if (value.getType().isa<sv::InOutType>())
-    return setLoweringTo<sv::ArrayIndexInOutOp>(op, value, valueIdx);
-  // Otherwise, lower the op to array indexing.
-  return setLowering(op, createArrayIndexing(value, valueIdx));
+  // If the input has an inout type, we need to lower to ArrayIndexInOutOp;
+  // otherwise, lower the op to array indexing.
+  Value result;
+  if (input.getType().isa<sv::InOutType>())
+    result = builder.createOrFold<sv::ArrayIndexInOutOp>(input, valueIdx);
+  else
+    result = createArrayIndexing(input, valueIdx);
+  tryCopyName(result.getDefiningOp(), op);
+  return result;
+}
+
+FailureOr<Value> FIRRTLLowering::lowerSubfield(SubfieldOp op, Value input) {
+  auto resultType = lowerType(op->getResult(0).getType());
+  if (!resultType || !input) {
+    op->emitError() << "subfield type lowering failed";
+    return failure();
+  }
+
+  // If the input has an inout type, we need to lower to StructFieldInOutOp;
+  // otherwise, StructExtractOp.
+  auto field = op.getInput().getType().cast<BundleType>().getElementName(
+      op.getFieldIndex());
+  Value result;
+  if (input.getType().isa<sv::InOutType>())
+    result = builder.createOrFold<sv::StructFieldInOutOp>(input, field);
+  else
+    result = builder.createOrFold<hw::StructExtractOp>(input, field);
+  tryCopyName(result.getDefiningOp(), op);
+  return result;
+}
+
+LogicalResult FIRRTLLowering::visitExpr(SubindexOp op) {
+  if (isZeroBitFIRRTLType(op.getType()))
+    return setLowering(op, Value());
+
+  auto input = getPossiblyInoutLoweredValue(op.getInput());
+  if (!input)
+    return op.emitError() << "input lowering failed";
+
+  auto result = lowerSubindex(op, input);
+  if (failed(result))
+    return failure();
+  return setLowering(op, *result);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(SubaccessOp op) {
+  if (isZeroBitFIRRTLType(op.getType()))
+    return setLowering(op, Value());
+
+  auto input = getPossiblyInoutLoweredValue(op.getInput());
+  if (!input)
+    return op.emitError() << "input lowering failed";
+
+  auto result = lowerSubaccess(op, input);
+  if (failed(result))
+    return failure();
+  return setLowering(op, *result);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
@@ -2547,26 +2604,17 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
   if (getLoweredValue(op) || !op.getInput())
     return success();
 
-  // Extracting a zero bit value from a struct is defined but doesn't do
-  // anything.
-  if (isZeroBitFIRRTLType(op->getResult(0).getType()))
+  if (isZeroBitFIRRTLType(op.getType()))
     return setLowering(op, Value());
 
-  auto resultType = lowerType(op->getResult(0).getType());
-  Value value = getPossiblyInoutLoweredValue(op.getInput());
-  assert(resultType && value && "subfield type lowering failed");
+  auto input = getPossiblyInoutLoweredValue(op.getInput());
+  if (!input)
+    return op.emitError() << "input lowering failed";
 
-  // If the value has an inout type, we need to lower to StructFieldInOutOp.
-  if (value.getType().isa<sv::InOutType>()) {
-    auto field = op.getInput().getType().cast<BundleType>().getElementName(
-        op.getFieldIndex());
-    return setLoweringTo<sv::StructFieldInOutOp>(op, value, field);
-  }
-
-  return setLoweringTo<hw::StructExtractOp>(
-      op, resultType, value,
-      op.getInput().getType().cast<BundleType>().getElementName(
-          op.getFieldIndex()));
+  auto result = lowerSubfield(op, input);
+  if (failed(result))
+    return failure();
+  return setLowering(op, *result);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(VectorCreateOp op) {
@@ -2691,11 +2739,8 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
                                     name.getValue());
   }
 
-  if (symName) {
-    auto wire = builder.create<sv::WireOp>(operand.getType(), name, symName);
-    builder.create<sv::AssignOp>(wire, operand);
-    operand = builder.create<sv::ReadInOutOp>(wire);
-  }
+  if (symName)
+    operand = builder.create<hw::WireOp>(operand, name, symName);
 
   return setLowering(op, operand);
 }
@@ -3586,14 +3631,14 @@ Value FIRRTLLowering::createArrayIndexing(Value array, Value index) {
     // Use SV attributes to annotate pragmas.
     circt::sv::setSVAttributes(
         arrayGet,
-        sv::SVAttributesAttr::get(builder.getContext(), {"cadence map_to_mux"},
-                                  /*emitAsComments=*/true));
+        sv::SVAttributeAttr::get(builder.getContext(), "cadence map_to_mux",
+                                 /*emitAsComment=*/true));
 
     auto assignOp = builder.create<sv::AssignOp>(valWire, arrayGet);
-    sv::setSVAttributes(
-        assignOp, sv::SVAttributesAttr::get(builder.getContext(),
-                                            {"synopsys infer_mux_override"},
-                                            /*emitAsComments=*/true));
+    sv::setSVAttributes(assignOp,
+                        sv::SVAttributeAttr::get(builder.getContext(),
+                                                 "synopsys infer_mux_override",
+                                                 /*emitAsComment=*/true));
     inBoundsRead = builder.create<sv::ReadInOutOp>(valWire);
   }
 

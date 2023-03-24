@@ -25,7 +25,6 @@ def ESI_Dialect : Dialect {
 
   let hasConstantMaterializer = 1;
   let useDefaultTypePrinterParser = 1;
-  let useFoldAPI = kEmitFoldAdaptorFolder;
 
   let extraClassDeclaration = [{
     /// Register all ESI types.
@@ -55,5 +54,6 @@ include "circt/Dialect/ESI/ESIOps.td"
 include "circt/Dialect/ESI/ESIServices.td"
 include "circt/Dialect/ESI/ESIStdServices.td"
 include "circt/Dialect/ESI/ESIPasses.td"
+include "circt/Dialect/ESI/ESIStructure.td"
 
 #endif // ESI_TD

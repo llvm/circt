@@ -137,6 +137,23 @@ struct LoweringOptions {
   /// Some lint tools dislike expressions being inlined into input ports so this
   /// option avoids such warnings.
   bool disallowExpressionInliningInPorts = false;
+
+  /// If true, every expression used as an array index is driven by a wire, and
+  /// the wire is marked as `(* keep = "true" *)`. Certain versions of Vivado
+  /// produce incorrect synthesis results for certain arithmetic ops inlined
+  /// into the array index.
+  bool mitigateVivadoArrayIndexConstPropBug = false;
+
+  /// If true, emit `wire` in port lists rather than nothing. Used in cases
+  /// where `default_nettype is not set to wire.
+  bool emitWireInPorts = false;
+
+  /// If true, emit a comment wherever an instance wasn't printed, because
+  /// it's emitted elsewhere as a bind.
+  bool emitBindComments = false;
+
+  /// If true, do not emit a version comment at the top of each verilog file.
+  bool omitVersionComment = false;
 };
 } // namespace circt
 

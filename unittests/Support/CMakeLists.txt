@@ -1,4 +1,5 @@
 add_circt_unittest(CIRCTSupportTests
+  JSONTest.cpp
   PrettyPrinterTest.cpp
 )
 

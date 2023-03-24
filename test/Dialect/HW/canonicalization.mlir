@@ -1678,3 +1678,56 @@ hw.module @ConcatOfSlicesAndGets(%a: !hw.array<5xi1>, %b: !hw.array<5xi1>, %c: !
 
   hw.output %result : !hw.array<13xi1>
 }
+
+// CHECK-LABEL: SwapConstantIndex
+hw.module @SwapConstantIndex(%a_0: !hw.array<4xi1>, %a_1: !hw.array<4xi1>, %a_2: !hw.array<4xi1>, %a_3: !hw.array<4xi1>, %sel: i2) -> (b: i1) {
+  %c0_i2 = hw.constant 0 : i2
+  %0 = hw.array_create %a_3, %a_2, %a_1, %a_0 : !hw.array<4xi1>
+  %1 = hw.array_get %0[%sel] : !hw.array<4xarray<4xi1>>, i2
+  %2 = hw.array_get %1[%c0_i2] : !hw.array<4xi1>, i2
+  hw.output %2 : i1
+  // CHECK-NEXT: %c0_i2 = hw.constant 0 : i2
+  // CHECK-NEXT: %0 = hw.array_get %a_3[%c0_i2] : !hw.array<4xi1>, i2
+  // CHECK-NEXT: %1 = hw.array_get %a_2[%c0_i2] : !hw.array<4xi1>, i2
+  // CHECK-NEXT: %2 = hw.array_get %a_1[%c0_i2] : !hw.array<4xi1>, i2
+  // CHECK-NEXT: %3 = hw.array_get %a_0[%c0_i2] : !hw.array<4xi1>, i2
+  // CHECK-NEXT: %4 = hw.array_create %0, %1, %2, %3 : i1
+  // CHECK-NEXT: %5 = hw.array_get %4[%sel] : !hw.array<4xi1>, i2
+  // CHECK-NEXT: hw.output %5 : i1
+}
+
+// CHECK-LABEL: @Wires
+hw.module @Wires(%a: i42) {
+  // Trivial wires should fold to their input.
+  %0 = hw.wire %a : i42
+  %1 = hw.wire %a {sv.namehint = "foo"} : i42
+  hw.instance "fold1" @WiresKeep(keep: %0: i42) -> ()
+  hw.instance "fold2" @WiresKeep(keep: %1: i42) -> ()
+  // CHECK-NOT: hw.wire
+  // CHECK-NEXT: hw.instance "fold1" @WiresKeep(keep: %a: i42)
+  // CHECK-NEXT: hw.instance "fold2" @WiresKeep(keep: %a: i42)
+
+  // Wires shouldn't fold if they have a symbol or other attributes.
+  hw.wire %a sym @someSym : i42
+  hw.wire %a {someAttr} : i42
+  // CHECK-NEXT: hw.wire %a sym @someSym
+  // CHECK-NEXT: hw.wire %a {someAttr}
+
+  // Wires should push their name or name hint onto their input when folding.
+  %2 = comb.mul %a, %a : i42
+  %3 = comb.mul %a, %a : i42
+  %4 = comb.mul %a, %a : i42
+  %someName1 = hw.wire %2 : i42
+  %5 = hw.wire %3 {sv.namehint = "someName2"} : i42
+  %someName3 = hw.wire %4 {sv.namehint = "ignoredName"} : i42
+  hw.instance "names1" @WiresKeep(keep: %someName1: i42) -> ()
+  hw.instance "names2" @WiresKeep(keep: %5: i42) -> ()
+  hw.instance "names3" @WiresKeep(keep: %someName3: i42) -> ()
+  // CHECK-NEXT: %2 = comb.mul %a, %a {sv.namehint = "someName1"}
+  // CHECK-NEXT: %3 = comb.mul %a, %a {sv.namehint = "someName2"}
+  // CHECK-NEXT: %4 = comb.mul %a, %a {sv.namehint = "someName3"}
+  // CHECK-NEXT: hw.instance "names1" @WiresKeep(keep: %2: i42)
+  // CHECK-NEXT: hw.instance "names2" @WiresKeep(keep: %3: i42)
+  // CHECK-NEXT: hw.instance "names3" @WiresKeep(keep: %4: i42)
+}
+hw.module.extern @WiresKeep(%keep: i42)

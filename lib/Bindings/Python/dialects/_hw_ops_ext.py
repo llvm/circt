@@ -409,7 +409,7 @@ class ArrayGetOp:
                                   idx).result
     else:
       idx_val = support.get_value(idx)
-    return hw.ArrayGetOp(array_type.element_type, array_value, idx_val)
+    return hw.ArrayGetOp(array_value, idx_val)
 
 
 class ArraySliceOp:

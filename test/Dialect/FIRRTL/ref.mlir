@@ -6,7 +6,7 @@ firrtl.circuit "xmr" {
   firrtl.module private @Test(out %x: !firrtl.ref<uint<2>>) {
     %w = firrtl.wire : !firrtl.uint<2>
     %1 = firrtl.ref.send %w : !firrtl.uint<2>
-    firrtl.strictconnect %x, %1 : !firrtl.ref<uint<2>>
+    firrtl.refconnect %x, %1 : !firrtl.ref<uint<2>>
   }
   firrtl.module @xmr() {
     %test_x = firrtl.instance test @Test(out x: !firrtl.ref<uint<2>>)
@@ -21,7 +21,7 @@ firrtl.circuit "SimpleRead" {
   firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
   firrtl.module @SimpleRead() {
     %bar_a = firrtl.instance bar @Bar(out _a: !firrtl.ref<uint<1>>)
@@ -38,11 +38,11 @@ firrtl.circuit "ForwardToInstance" {
   firrtl.module @Bar2(out %_a: !firrtl.ref<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.strictconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
   firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
     %bar_2 = firrtl.instance bar @Bar2(out _a: !firrtl.ref<uint<1>>)
-    firrtl.strictconnect %_a, %bar_2 : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %bar_2 : !firrtl.ref<uint<1>>
   }
   firrtl.module @ForwardToInstance() {
     %bar_a = firrtl.instance bar @Bar(out _a: !firrtl.ref<uint<1>>)
@@ -59,11 +59,11 @@ firrtl.circuit "ForwardToInstance" {
   firrtl.module @Bar2(out %_a: !firrtl.ref<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.strictconnect %_a, %1    : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %1    : !firrtl.ref<uint<1>>
   }
   firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
     %bar_2 = firrtl.instance bar @Bar2(out _a: !firrtl.ref<uint<1>>)
-    firrtl.strictconnect %_a, %bar_2 : !firrtl.ref<uint<1>>
+    firrtl.refconnect %_a, %bar_2 : !firrtl.ref<uint<1>>
     // Reader 1
     %0 = firrtl.ref.resolve %bar_2 : !firrtl.ref<uint<1>>
     %a = firrtl.wire : !firrtl.uint<1>
@@ -85,10 +85,10 @@ firrtl.circuit "DUT" {
   firrtl.module private @Submodule (out %ref_out1: !firrtl.ref<uint<1>>, out %ref_out2: !firrtl.ref<uint<4>>) {
     %w_data1 = firrtl.wire : !firrtl.uint<1>
     %1 = firrtl.ref.send %w_data1 : !firrtl.uint<1>
-    firrtl.strictconnect %ref_out1, %1 : !firrtl.ref<uint<1>>
+    firrtl.refconnect %ref_out1, %1 : !firrtl.ref<uint<1>>
     %w_data2 = firrtl.wire : !firrtl.uint<4>
     %2 = firrtl.ref.send %w_data2 : !firrtl.uint<4>
-    firrtl.strictconnect %ref_out2, %2 : !firrtl.ref<uint<4>>
+    firrtl.refconnect %ref_out2, %2 : !firrtl.ref<uint<4>>
   }
   firrtl.module @DUT() {
     %w = firrtl.wire sym @w : !firrtl.uint<1>

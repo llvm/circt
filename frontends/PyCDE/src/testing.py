@@ -36,7 +36,7 @@ def unittestmodule(generate=True,
     # module generator functions
     setattr(builtins, mod.__name__, mod)
 
-    sys = System([mod])
+    sys = System([mod], output_directory=f"out_{func_or_class.__name__}")
     if generate:
       sys.generate()
       if print:

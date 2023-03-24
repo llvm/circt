@@ -33,19 +33,20 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   auto dstType = dstFType.dyn_cast<FIRRTLBaseType>();
   auto srcType = srcFType.dyn_cast<FIRRTLBaseType>();
 
-  // If the types are the exact same we can just connect them.
-  if (dstFType == srcFType) {
-    // Strict connect does not allow uninferred widths.
-    if (dstType && dstType.hasUninferredWidth())
+  // Special Connects
+  if (!dstType) {
+    if (dstFType.isa<RefType>() &&
+        !dstFType.cast<RefType>().getType().hasUninferredWidth())
+      builder.create<RefConnectOp>(dst, src);
+    else // Other types, give up and leave a connect
       builder.create<ConnectOp>(dst, src);
-    else
-      builder.create<StrictConnectOp>(dst, src);
     return;
   }
 
-  // Non-base types don't need special handling.
-  if (!srcType || !dstType) {
-    builder.create<ConnectOp>(dst, src);
+  // If the types are the exact same we can just connect them.
+  // Strict connect does not allow uninferred widths.
+  if (dstType == srcType && !dstType.hasUninferredWidth()) {
+    builder.create<StrictConnectOp>(dst, src);
     return;
   }
 
@@ -241,13 +242,12 @@ Value circt::firrtl::getModuleScopedDriver(Value val, bool lookThroughWires,
   return val;
 }
 
-bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
+bool circt::firrtl::walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
                                 bool lookThroughNodes, bool lookThroughCasts,
                                 WalkDriverCallback callback) {
   // TODO: what do we want to happen when there are flips in the type? Do we
   // want to filter out fields which have reverse flow?
-  assert(val.getType().cast<FIRRTLBaseType>().isPassive() &&
-         "this code was not tested with flips");
+  assert(value.getType().isPassive() && "this code was not tested with flips");
 
   // This method keeps a stack of wires (or ports) and subfields of those that
   // it still has to process.  It keeps track of which fields in the
@@ -289,7 +289,7 @@ bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
 
   // Create an initial fieldRef from the input value.  As a starting state, the
   // dst and src are the same value.
-  auto original = getFieldRefFromValue(val);
+  auto original = getFieldRefFromValue(value);
   auto fieldRef = original;
 
   // This loop wraps the worklist, which processes wires. Initially the worklist
@@ -390,7 +390,7 @@ bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
       auto fieldID = back.fieldID;
 
       if (auto subfield = dyn_cast<SubfieldOp>(user)) {
-        auto bundleType = subfield.getInput().getType().cast<BundleType>();
+        auto bundleType = subfield.getInput().getType();
         auto index = subfield.getFieldIndex();
         auto subID = bundleType.getFieldID(index);
         // If the index of this operation doesn't match the target, skip it.
@@ -401,7 +401,7 @@ bool circt::firrtl::walkDrivers(Value val, bool lookThroughWires,
         auto value = subfield.getResult();
         workStack.emplace_back(subOriginal, subRef, value, fieldID - subID);
       } else if (auto subindex = dyn_cast<SubindexOp>(user)) {
-        auto vectorType = subindex.getInput().getType().cast<FVectorType>();
+        auto vectorType = subindex.getInput().getType();
         auto index = subindex.getIndex();
         auto subID = vectorType.getFieldID(index);
         // If the index of this operation doesn't match the target, skip it.
@@ -443,12 +443,12 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
 
     if (auto subfieldOp = dyn_cast<SubfieldOp>(op)) {
       value = subfieldOp.getInput();
-      auto bundleType = value.getType().cast<BundleType>();
+      auto bundleType = subfieldOp.getInput().getType();
       // Rebase the current index on the parent field's index.
       id += bundleType.getFieldID(subfieldOp.getFieldIndex());
     } else if (auto subindexOp = dyn_cast<SubindexOp>(op)) {
       value = subindexOp.getInput();
-      auto vecType = value.getType().cast<FVectorType>();
+      auto vecType = subindexOp.getInput().getType();
       // Rebase the current index on the parent field's index.
       id += vecType.getFieldID(subindexOp.getIndex());
     } else {
@@ -499,6 +499,10 @@ circt::firrtl::getFieldName(const FieldRef &fieldRef, bool nameSafe) {
   auto type = value.getType();
   auto localID = fieldRef.getFieldID();
   while (localID) {
+    // Index directly into ref inner type.
+    if (auto refTy = dyn_cast<RefType>(type))
+      type = refTy.getType();
+
     if (auto bundleType = type.dyn_cast<BundleType>()) {
       auto index = bundleType.getIndexForFieldID(localID);
       // Add the current field string, and recurse into a subfield.
@@ -551,6 +555,41 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
     }
   }
   return value;
+}
+
+/// Walk leaf ground types in the `firrtlType` and apply the function `fn`.
+/// The first argument of `fn` is field ID, and the second argument is a
+/// leaf ground type.
+void circt::firrtl::walkGroundTypes(
+    FIRRTLType firrtlType,
+    llvm::function_ref<void(uint64_t, FIRRTLBaseType)> fn) {
+  auto type = getBaseType(firrtlType);
+  // If this is a ground type, don't call recursive functions.
+  if (type.isGround())
+    return fn(0, type);
+
+  uint64_t fieldID = 0;
+  auto recurse = [&](auto &&f, FIRRTLBaseType type) -> void {
+    TypeSwitch<FIRRTLBaseType>(type)
+        .Case<BundleType>([&](BundleType bundle) {
+          for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
+            fieldID++;
+            f(f, bundle.getElementType(i));
+          }
+        })
+        .template Case<FVectorType>([&](FVectorType vector) {
+          for (size_t i = 0, e = vector.getNumElements(); i < e; ++i) {
+            fieldID++;
+            f(f, vector.getElementType());
+          }
+        })
+        .Default([&](FIRRTLBaseType groundType) {
+          assert(groundType.isGround() &&
+                 "only ground types are expected here");
+          fn(fieldID, groundType);
+        });
+  };
+  recurse(recurse, type);
 }
 
 /// Returns an operation's `inner_sym`, adding one if necessary.

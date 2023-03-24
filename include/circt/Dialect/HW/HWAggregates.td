@@ -18,6 +18,7 @@ include "circt/Dialect/HW/HWDialect.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/IR/OpAsmInterface.td"
 
 //===----------------------------------------------------------------------===//
@@ -175,10 +176,6 @@ def ArrayGetOp : HWOp<"array_get",
     $input`[`$index`]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))
   }];
 
-  let builders = [
-    OpBuilder<(ins "Value":$input, "Value":$index)>
-  ];
-
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
 }
@@ -214,7 +211,10 @@ def StructExtractOp : HWOp<"struct_extract",
 
   let builders = [
     OpBuilder<(ins "Value":$input, "StructType::FieldInfo":$field)>,
-    OpBuilder<(ins "Value":$input, "StringAttr":$field)>
+    OpBuilder<(ins "Value":$input, "StringAttr":$field)>,
+    OpBuilder<(ins "Value":$input, "StringRef":$field), [{
+      build(odsBuilder, odsState, input, odsBuilder.getStringAttr(field));
+    }]>
   ];
 
   let hasFolder = 1;
@@ -252,6 +252,11 @@ def StructExplodeOp : HWOp<"struct_explode", [Pure,
   let arguments = (ins StructType:$input);
   let results = (outs Variadic<HWNonInOutType>:$result);
   let hasCustomAssemblyFormat = 1;
+
+  let builders = [
+    OpBuilder<(ins "Value":$input)>
+  ];
+
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
  }

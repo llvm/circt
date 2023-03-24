@@ -2,8 +2,9 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from .common import Input, Output, InputChannel, OutputChannel, _PyProxy
-from .module import Generator, Module, ModuleLikeBuilderBase
+from .common import (Input, Output, InputChannel, OutputChannel, Clock,
+                     _PyProxy, PortError)
+from .module import Generator, Module, ModuleLikeBuilderBase, PortProxyBase
 from .signals import ChannelSignal, Signal, _FromCirctValue
 from .system import System
 from .types import Channel, Type, types, _FromCirctType
@@ -16,6 +17,14 @@ import shutil
 from typing import Dict, List, Optional
 
 __dir__ = Path(__file__).parent
+
+FlattenStructPorts = "esi.portFlattenStructs"
+PortInSuffix = "esi.portInSuffix"
+PortOutSuffix = "esi.portOutSuffix"
+PortValidSuffix = "esi.portValidSuffix"
+PortReadySuffix = "esi.portReadySuffix"
+PortRdenSuffix = "esi.portRdenSuffix"
+PortEmptySuffix = "esi.portEmptySuffix"
 
 ToServer = InputChannel
 FromServer = OutputChannel
@@ -198,15 +207,28 @@ def CosimBSP(user_module):
     @staticmethod
     def package(sys: System):
       """Run the packaging to create a cosim package."""
-      # TODO: this only works in-tree. Make it work in packages as well.
-      build_dir = __dir__.parents[4]
-      bin_dir = build_dir / "bin"
-      lib_dir = build_dir / "lib"
-      circt_inc_dir = build_dir / "tools" / "circt" / "include" / "circt"
-      assert circt_inc_dir.exists(), "Only works in the CIRCT build directory"
-      esi_inc_dir = circt_inc_dir / "Dialect" / "ESI"
+
+      # When pycde is installed through a proper install, all of the collateral
+      # files are under a dir called "collateral".
+      collateral_dir = __dir__ / "collateral"
+      if collateral_dir.exists():
+        bin_dir = collateral_dir
+        lib_dir = collateral_dir
+        esi_inc_dir = collateral_dir
+      else:
+        # Build we also want to allow pycde to work in-tree for developers. The
+        # necessary files are screwn around the build tree.
+        build_dir = __dir__.parents[4]
+        bin_dir = build_dir / "bin"
+        lib_dir = build_dir / "lib"
+        circt_inc_dir = build_dir / "tools" / "circt" / "include" / "circt"
+        esi_inc_dir = circt_inc_dir / "Dialect" / "ESI"
+
       hw_src = sys.hw_output_dir
-      shutil.copy(lib_dir / "libEsiCosimDpiServer.so", hw_src)
+      for f in lib_dir.glob("*.so"):
+        shutil.copy(f, hw_src)
+      for f in lib_dir.glob("*.dll"):
+        shutil.copy(f, hw_src)
       shutil.copy(bin_dir / "driver.cpp", hw_src)
       shutil.copy(bin_dir / "driver.sv", hw_src)
       shutil.copy(esi_inc_dir / "ESIPrimitives.sv", hw_src)
@@ -266,10 +288,13 @@ class _ServiceGeneratorChannels:
 
     # Find the output channel requests and store the settable proxies.
     num_output_ports = len(mod.outputs)
+    to_client_reqs = [
+        req for req in portReqsBlock
+        if isinstance(req, raw_esi.RequestToClientConnectionOp)
+    ]
     self._output_reqs = [
         _OutputChannelSetter(req, self._req.results[num_output_ports + idx])
-        for idx, req in enumerate(portReqsBlock)
-        if isinstance(req, raw_esi.RequestToClientConnectionOp)
+        for idx, req in enumerate(to_client_reqs)
     ]
     assert len(self._output_reqs) == len(req.results) - num_output_ports
 
@@ -312,7 +337,8 @@ class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
         impl_opts=opts,
         loc=self.loc)
 
-  def generate_svc_impl(self, serviceReq: raw_esi.ServiceInstanceOp):
+  def generate_svc_impl(self,
+                        serviceReq: raw_esi.ServiceImplementReqOp) -> bool:
     """"Generate the service inline and replace the `ServiceInstanceOp` which is
     being implemented."""
 
@@ -452,3 +478,83 @@ def _import_ram_decl(sys: "System", ram_op: raw_esi.RandomAccessMemoryDeclOp):
   ram.symbol = ir.StringAttr.get(sym)
   install(ram_op)
   return ram
+
+
+class PureModuleBuilder(ModuleLikeBuilderBase):
+  """Defines how an ESI `PureModule` gets built."""
+
+  @property
+  def circt_mod(self):
+    from .system import System
+    sys: System = System.current()
+    ret = sys._op_cache.get_circt_mod(self)
+    if ret is None:
+      return sys._create_circt_mod(self)
+    return ret
+
+  def create_op(self, sys: System, symbol):
+    """Callback for creating a ESIPureModule op."""
+    mod = raw_esi.ESIPureModuleOp(symbol, loc=self.loc, ip=sys._get_ip())
+    for k, v in self.attributes.items():
+      mod.attributes[k] = v
+    return mod
+
+  def scan_cls(self):
+    """Scan the class for input/output ports and generators. (Most `ModuleLike`
+    will use these.) Store the results for later use."""
+
+    super().scan_cls()
+
+    if len(self.inputs) != 0 or len(self.outputs) != 0 or len(self.clocks) != 0:
+      raise PortError("ESI pure modules cannot have ports")
+
+  def create_port_proxy(self):
+    """Since pure ESI modules don't have any ports, this function is pretty
+    boring."""
+    proxy_attrs = {}
+    return type(self.modcls.__name__ + "Ports", (PortProxyBase,), proxy_attrs)
+
+  def add_external_port_accessors(self):
+    """Since we don't have ports, do nothing."""
+    pass
+
+  def generate(self):
+    """Fill in (generate) this module. Only supports a single generator
+    currently."""
+    if len(self.generators) != 1:
+      raise ValueError("Must have exactly one generator.")
+    g: Generator = list(self.generators.values())[0]
+
+    entry_block = self.circt_mod.add_entry_block()
+    ports = self.generator_port_proxy(None, self)
+    with self.GeneratorCtxt(self, ports, entry_block, g.loc):
+      g.gen_func(ports)
+
+
+class PureModule(Module):
+  """A pure ESI module has no ports and contains only instances of modules with
+  only ESI ports and connections between said instances. Use ESI services for
+  external communication."""
+
+  BuilderType = PureModuleBuilder
+
+  @staticmethod
+  def input_port(name: str, type: Type):
+    from .dialects import esi
+    return esi.ESIPureModuleInputOp(type, name)
+
+  @staticmethod
+  def output_port(name: str, signal: Signal):
+    from .dialects import esi
+    return esi.ESIPureModuleOutputOp(name, signal)
+
+  @staticmethod
+  def param(name: str, type: Type = None):
+    """Create a parameter in the resulting module."""
+    from .dialects import esi
+    from .circt import ir
+    if type is None:
+      type_attr = ir.TypeAttr.get(ir.NoneType.get())
+    else:
+      type_attr = ir.TypeAttr.get(type._type)
+    esi.ESIPureModuleParamOp(name, type_attr)

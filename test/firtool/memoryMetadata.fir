@@ -63,7 +63,7 @@ circuit test:
 ; CHECK-LABEL: module dutModule2
 ; CHECK:  dutMemory dutMemory
 
-  module hier1: 
+  module hier1:
     input clock: Clock
     input rAddr: UInt<4>
     input rEn: UInt<1>
@@ -94,7 +94,7 @@ circuit test:
 ; CHECK:  tbMemoryKind1_0 tbMemoryKind1
 
 
-  module hier2: 
+  module hier2:
     input clock: Clock
     input rAddr: UInt<4>
     input rEn: UInt<1>
@@ -111,7 +111,7 @@ circuit test:
     m.wMask <= wMask
     m.wData <= wData
 
-  module test: 
+  module test:
     input clock: Clock
     input rAddr: UInt<4>
     input rEn: UInt<1>
@@ -175,37 +175,6 @@ circuit test:
 ; CHECK-LABEL: external module tbMemoryKind1_0_ext
 
 
-; CHECK-LABEL: FILE "metadata{{[/\]}}tb_seq_mems.json"
-; CHECK:      [
-; CHECK-NEXT:   {
-; CHECK-NEXT:     "module_name": "tbMemoryKind1_ext",
-; CHECK-NEXT:     "depth": 16,
-; CHECK-NEXT:     "width": 8,
-; CHECK-NEXT:     "masked": false,
-; CHECK-NEXT:     "read": true,
-; CHECK-NEXT:     "write": true,
-; CHECK-NEXT:     "readwrite": false,
-; CHECK-NEXT:     "extra_ports": [],
-; CHECK-NEXT:     "hierarchy": [
-; CHECK-NEXT:       "test.h2.m.tbMemoryKind1.tbMemoryKind1_ext"
-; CHECK-NEXT:     ]
-; CHECK-NEXT:   },
-; CHECK-NEXT:   {
-; CHECK-NEXT:     "module_name": "tbMemoryKind1_0_ext",
-; CHECK-NEXT:     "depth": 16,
-; CHECK-NEXT:     "width": 8,
-; CHECK-NEXT:     "masked": false,
-; CHECK-NEXT:     "read": true,
-; CHECK-NEXT:     "write": true,
-; CHECK-NEXT:     "readwrite": false,
-; CHECK-NEXT:     "extra_ports": [],
-; CHECK-NEXT:     "hierarchy": [
-; CHECK-NEXT:       "test.h1.tbMemoryKind1.tbMemoryKind1_0_ext"
-; CHECK-NEXT:     ]
-; CHECK-NEXT:   }
-; CHECK-NEXT: ]
-
-
 ; CHECK-LABEL: FILE "metadata{{[/\]}}seq_mems.json"
 ; CHECK:      [
 ; CHECK-NEXT:   {
@@ -225,6 +194,6 @@ circuit test:
 
 
 ; CHECK-LABEL: FILE "dutModule.conf"
-; CHECK: name dutMemory_ext depth 32 width 8 ports write,read
 ; CHECK: name tbMemoryKind1_ext depth 16 width 8 ports write,read
+; CHECK: name dutMemory_ext depth 32 width 8 ports write,read
 ; CHECK: name tbMemoryKind1_0_ext depth 16 width 8 ports write,read

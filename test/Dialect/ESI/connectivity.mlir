@@ -6,7 +6,7 @@ hw.module @Sender() -> (x: !esi.channel<i1>) {
   %ch, %rcvrRdy = esi.wrap.vr %0, %0 : i1
   hw.output %ch : !esi.channel<i1>
 }
-hw.module @Reciever(%a: !esi.channel<i1>) {
+hw.module @Reciever(%a: !esi.channel<i1, ValidReady>) {
   %rdy = arith.constant 1 : i1
   // Recieve bits.
   %data, %valid = esi.unwrap.vr %a, %rdy : i1
@@ -97,4 +97,16 @@ hw.module @i0Typed(%a: !esi.channel<i0>, %clk : i1, %rst : i1) -> (x: !esi.chann
   %rawOutput, %valid = esi.unwrap.vr %stagedA, %rcvrRdy : i0
   %ch, %rcvrRdy = esi.wrap.vr %rawOutput, %valid : i0
   hw.output %ch : !esi.channel<i0>
+}
+
+hw.module.extern @i1Fifo0(%in: !esi.channel<i1, FIFO0>) -> (out: !esi.channel<i1, FIFO0>)
+
+// CHECK-LABEL:  hw.module @fifo0WrapUnwrap()
+// CHECK-NEXT:     %chanOutput, %rden = esi.wrap.fifo %data, %empty : !esi.channel<i1, FIFO0>
+// CHECK-NEXT:     %foo.out = hw.instance "foo" @i1Fifo0(in: %chanOutput: !esi.channel<i1, FIFO0>) -> (out: !esi.channel<i1, FIFO0>)
+// CHECK-NEXT:     %data, %empty = esi.unwrap.fifo %foo.out, %rden : !esi.channel<i1, FIFO0>
+hw.module @fifo0WrapUnwrap() -> () {
+  %in, %rden = esi.wrap.fifo %data, %empty : !esi.channel<i1, FIFO0>
+  %out = hw.instance "foo" @i1Fifo0(in: %in: !esi.channel<i1, FIFO0>) -> (out: !esi.channel<i1, FIFO0>)
+  %data, %empty = esi.unwrap.fifo %out, %rden : !esi.channel<i1, FIFO0>
 }

@@ -204,7 +204,7 @@ def LocalParamOp : SVOp<"localparam",
   let results = (outs HWValueType:$result);
 
   let assemblyFormat = [{
-    `:` qualified(type($result)) `` custom<ImplicitSSAName>(attr-dict)
+    `` custom<ImplicitSSAName>($name) attr-dict `:` qualified(type($result))
   }];
 
   let hasVerifier = 1;

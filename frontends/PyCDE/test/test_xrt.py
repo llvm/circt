@@ -1,7 +1,7 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1
 # RUN: ls %t/hw/top.sv
-# RUN: ls %t/hw/Top.sv
+# RUN: ls %t/hw/Main.sv
 # RUN: ls %t/hw/services.json
 # RUN: ls %t/hw/ESILoopback.tcl
 # RUN: ls %t/hw/filelist.f
@@ -13,8 +13,7 @@
 # RUN: ls %t/Makefile.xrt
 # RUN: ls %t/xrt.ini
 # RUN: ls %t/xsim.tcl
-# RUN: ls %t/ESILoopback
-# RUN: ls %t/ESILoopback/EsiXrtPython.cpp
+# RUN: ls %t/runtime/ESILoopback/EsiXrtPython.cpp
 
 # RUN: FileCheck %s --input-file %t/hw/top.sv --check-prefix=TOP
 
@@ -25,7 +24,7 @@ from pycde.bsp import XrtBSP
 import sys
 
 
-class Top(Module):
+class Main(Module):
   clk = Clock(types.i1)
   rst = Input(types.i1)
 
@@ -35,7 +34,7 @@ class Top(Module):
 
 
 gendir = sys.argv[1]
-s = pycde.System(XrtBSP(Top),
+s = pycde.System(XrtBSP(Main),
                  name="ESILoopback",
                  output_directory=gendir,
                  sw_api_langs=["python"])
@@ -53,7 +52,7 @@ s.package()
 # TOP:         input  [31:0] s_axi_control_WDATA,
 # TOP:         input  [3:0]  s_axi_control_WSTRB,
 # TOP:         input         s_axi_control_ARVALID,
-# TOP:         input  [23:0] s_axi_control_ARADDR,
+# TOP:         input  [31:0] s_axi_control_ARADDR,
 # TOP:         input         s_axi_control_RREADY,
 # TOP:                       s_axi_control_BREADY,
 # TOP:         output        s_axi_control_AWREADY,
@@ -64,18 +63,28 @@ s.package()
 # TOP:         output [1:0]  s_axi_control_RRESP,
 # TOP:         output        s_axi_control_BVALID,
 # TOP:         output [1:0]  s_axi_control_BRESP
-# TOP:         Top #(
-# TOP:           .__INST_HIER({__INST_HIER, ".Top"})
-# TOP:         ) Top (
+
+# TOP:         XrtService #(
+# TOP:         ) XrtService (
+# TOP:           .clk      (ap_clk),
+# TOP:           .rst      (~ap_resetn),
+# TOP:           .axil_in  (_GEN),
+# TOP:           .axil_out (_XrtService_axil_out)
+# TOP:         );
+
+# TOP:         Main #(
+# TOP:         ) Main (
 # TOP:           .clk (ap_clk),
 # TOP:           .rst (~ap_resetn)
 # TOP:         );
-# TOP:         assign s_axi_control_AWREADY = 1'h0;
-# TOP:         assign s_axi_control_WREADY = 1'h0;
-# TOP:         assign s_axi_control_ARREADY = 1'h0;
-# TOP:         assign s_axi_control_RVALID = 1'h0;
-# TOP:         assign s_axi_control_RDATA = 32'h0;
-# TOP:         assign s_axi_control_RRESP = 2'h0;
-# TOP:         assign s_axi_control_BVALID = 1'h0;
-# TOP:         assign s_axi_control_BRESP = 2'h0;
+
+# TOP:         assign s_axi_control_AWREADY = _XrtService_axil_out.awready;
+# TOP:         assign s_axi_control_WREADY = _XrtService_axil_out.wready;
+# TOP:         assign s_axi_control_ARREADY = _XrtService_axil_out.arready;
+# TOP:         assign s_axi_control_RVALID = _XrtService_axil_out.rvalid;
+# TOP:         assign s_axi_control_RDATA = _XrtService_axil_out.rdata;
+# TOP:         assign s_axi_control_RRESP = _XrtService_axil_out.rresp;
+# TOP:         assign s_axi_control_BVALID = _XrtService_axil_out.bvalid;
+# TOP:         assign s_axi_control_BRESP = _XrtService_axil_out.bresp;
+
 # TOP:       endmodule

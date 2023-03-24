@@ -275,6 +275,16 @@ StringAttr InnerSymAttr::getSymIfExists(unsigned fieldId) const {
   return {};
 }
 
+InnerSymAttr InnerSymAttr::erase(unsigned fieldID) const {
+  SmallVector<InnerSymPropertiesAttr> syms(getProps());
+  const auto *it = llvm::find_if(syms, [fieldID](InnerSymPropertiesAttr p) {
+    return p.getFieldID() == fieldID;
+  });
+  assert(it != syms.end());
+  syms.erase(it);
+  return InnerSymAttr::get(getContext(), syms);
+}
+
 LogicalResult InnerSymAttr::walkSymbols(
     llvm::function_ref<LogicalResult(StringAttr)> callback) const {
   for (auto p : getImpl()->props)

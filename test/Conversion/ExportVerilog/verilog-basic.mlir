@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s -test-apply-lowering-options='options=emitBindComments' -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: module inputs_only(
 // CHECK-NEXT:   input a,{{.*}}
@@ -286,6 +286,43 @@ hw.module @CmpSign(%a: i4, %b: i4, %c: i4, %d: i4) ->
   hw.output %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15 : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
 }
 
+// CHECK-LABEL: module Wires(
+hw.hierpath @myWirePath [@Wires::@myWire]
+hw.module @Wires(%a: i4) -> (x: i4, y: i4) {
+  // CHECK-DAG: wire [3:0] wire1 = a;
+  // CHECK-DAG: assign x = wire1;
+  %wire1 = hw.wire %a : i4
+
+  // Use before def
+  // CHECK-DAG: wire [3:0] wire2 = wire1;
+  // CHECK-DAG: assign y = wire2 * wire2;
+  %0 = comb.mul %wire2, %wire2 : i4
+  %wire2 = hw.wire %wire1 : i4
+
+  // Nested use before def
+  // CHECK-DAG: wire [3:0] wire4 = a;
+  sv.always {
+    // CHECK-DAG: logic [3:0] wire3 = a;
+    %wire3 = hw.wire %a : i4
+    // CHECK-DAG: assert(wire3 == wire4);
+    %1 = comb.icmp eq %wire3, %wire4 : i4
+    sv.assert %1, immediate
+  }
+  %wire4 = hw.wire %a : i4
+
+  // Inner symbol references
+  // CHECK-DAG: wire [3:0] wire5 = a;
+  // CHECK-DAG: symRef1(wire5);
+  // CHECK-DAG: symRef2(Wires.wire5);
+  %wire5 = hw.wire %a sym @myWire : i4
+  sv.verbatim "symRef1({{0}});" {symbols = [#hw.innerNameRef<@Wires::@myWire>]}
+  %2 = sv.xmr.ref @myWirePath : !hw.inout<i4>
+  %3 = sv.read_inout %2 : !hw.inout<i4>
+  sv.verbatim "symRef2({{0}});"(%3) : i4
+
+  hw.output %wire1, %0 : i4, i4
+}
+
 // CHECK-LABEL: module MultiUseExpr
 hw.module @MultiUseExpr(%a: i4) -> (b0: i1, b1: i1, b2: i1, b3: i1, b4: i2) {
   %false = hw.constant false
@@ -347,6 +384,17 @@ hw.module @SimpleConstPrintReset(%clock: i1, %reset: i1, %in4: i4) -> () {
 
 }
 
+// CHECK-LABEL: module InlineDeclAssignment
+hw.module @InlineDeclAssignment(%a: i1) {
+  // CHECK: wire b = a;
+  %b = sv.wire : !hw.inout<i1>
+  sv.assign %b, %a : i1
+
+  // CHECK: wire c = a + a;
+  %0 = comb.add %a, %a : i1
+  %c = sv.wire : !hw.inout<i1>
+  sv.assign %c, %0 : i1
+}
 
 // CHECK-LABEL: module ordered_region
 // CHECK-NEXT: input a

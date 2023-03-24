@@ -84,9 +84,9 @@ class CMakeBuild(build_py):
     subprocess.check_call(["cmake", "--build", ".", "--target", "check-pycde"] +
                           build_args,
                           cwd=cmake_build_dir)
-    cmake_python_package = os.path.join(cmake_build_dir, "tools", "circt",
-                                        "python_packages")
-    shutil.copytree(os.path.join(cmake_python_package, "pycde"),
+    install_cmd = ["cmake", "--build", ".", "--target", "install-PyCDE"]
+    subprocess.check_call(install_cmd + build_args, cwd=cmake_build_dir)
+    shutil.copytree(os.path.join(cmake_install_dir, "python_packages"),
                     target_dir,
                     symlinks=False,
                     dirs_exist_ok=True)

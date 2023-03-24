@@ -19,6 +19,7 @@
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/HW/InstanceImplementation.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
+#include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
@@ -365,6 +366,65 @@ void ConstantOp::getAsmResultNames(
 OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
   assert(adaptor.getOperands().empty() && "constant has no operands");
   return getValueAttr();
+}
+
+//===----------------------------------------------------------------------===//
+// WireOp
+//===----------------------------------------------------------------------===//
+
+/// Check whether an operation has any additional attributes set beyond its
+/// standard list of attributes returned by `getAttributeNames`.
+template <class Op>
+static bool hasAdditionalAttributes(Op op,
+                                    ArrayRef<StringRef> ignoredAttrs = {}) {
+  auto names = op.getAttributeNames();
+  llvm::SmallDenseSet<StringRef> nameSet;
+  nameSet.reserve(names.size() + ignoredAttrs.size());
+  nameSet.insert(names.begin(), names.end());
+  nameSet.insert(ignoredAttrs.begin(), ignoredAttrs.end());
+  return llvm::any_of(op->getAttrs(), [&](auto namedAttr) {
+    return !nameSet.contains(namedAttr.getName());
+  });
+}
+
+void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the wire has an optional 'name' attribute, use it.
+  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
+  if (!nameAttr.getValue().empty())
+    setNameFn(getResult(), nameAttr.getValue());
+}
+
+OpFoldResult WireOp::fold(FoldAdaptor adaptor) {
+  // If the wire has no additional attributes, no name, and no symbol, just
+  // forward its input.
+  if (!hasAdditionalAttributes(*this, {"sv.namehint"}) && !getNameAttr() &&
+      !getInnerSymAttr())
+    return getInput();
+  return {};
+}
+
+LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
+  // Block if the wire has any attributes.
+  if (hasAdditionalAttributes(wire, {"sv.namehint"}))
+    return failure();
+
+  // If the wire has a symbol, then we can't delete it.
+  if (wire.getInnerSymAttr())
+    return failure();
+
+  // If the wire has a name or an `sv.namehint` attribute, propagate it as an
+  // `sv.namehint` to the expression.
+  if (auto *inputOp = wire.getInput().getDefiningOp()) {
+    auto name = wire.getNameAttr();
+    if (!name || name.getValue().empty())
+      name = wire->getAttrOfType<StringAttr>("sv.namehint");
+    if (name)
+      rewriter.updateRootInPlace(
+          inputOp, [&] { inputOp->setAttr("sv.namehint", name); });
+  }
+
+  rewriter.replaceOp(wire, wire.getInput());
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -835,7 +895,7 @@ void HWModuleOp::modifyPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
     ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
   hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
-                        eraseOutputs, getBodyBlock());
+                        eraseOutputs);
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -1321,15 +1381,18 @@ HWModuleOp::insertInput(unsigned index, StringAttr name, Type ty) {
     ns.newName(port.name.getValue());
   auto nameAttr = StringAttr::get(getContext(), ns.newName(name.getValue()));
 
+  Block *body = getBodyBlock();
+
   // Create a new port for the host clock.
   PortInfo port;
   port.name = nameAttr;
   port.direction = PortDirection::INPUT;
   port.type = ty;
-  insertPorts({std::make_pair(index, port)}, {});
+  hw::modifyModulePorts(getOperation(), {std::make_pair(index, port)}, {}, {},
+                        {}, body);
 
   // Add a new argument.
-  return {nameAttr, getBody().getArgument(index)};
+  return {nameAttr, body->getArgument(index)};
 }
 
 void HWModuleOp::insertOutputs(unsigned index,
@@ -1347,7 +1410,8 @@ void HWModuleOp::insertOutputs(unsigned index,
     port.type = value.getType();
     indexedNewPorts.emplace_back(index, port);
   }
-  insertPorts({}, indexedNewPorts);
+  hw::modifyModulePorts(getOperation(), {}, indexedNewPorts, {}, {},
+                        getBodyBlock());
 
   // Rewrite the output op.
   for (auto &[name, value] : outputs)
@@ -2307,6 +2371,16 @@ void StructExplodeOp::getAsmResultNames(
     setNameFn(res, field.name.str());
 }
 
+void StructExplodeOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                            Value input) {
+  StructType inputType = input.getType().dyn_cast<StructType>();
+  assert(inputType);
+  SmallVector<Type, 16> fieldTypes;
+  for (auto field : inputType.getElements())
+    fieldTypes.push_back(field.type);
+  build(odsBuilder, odsState, fieldTypes, input);
+}
+
 //===----------------------------------------------------------------------===//
 // StructExtractOp
 //===----------------------------------------------------------------------===//
@@ -2572,12 +2646,6 @@ void UnionExtractOp::print(OpAsmPrinter &printer) {
 // ArrayGetOp
 //===----------------------------------------------------------------------===//
 
-void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
-                       Value index) {
-  auto resultType = type_cast<ArrayType>(input.getType()).getElementType();
-  build(builder, result, resultType, input, index);
-}
-
 // An array_get of an array_create with a constant index can just be the
 // array_create operand at the constant index. If the array_create has a
 // single uniform value for each element, just return that value regardless of
@@ -2679,6 +2747,28 @@ LogicalResult ArrayGetOp::canonicalize(ArrayGetOp op,
       return success();
     }
     return failure();
+  }
+
+  // array_get const, (array_get sel, (array_create a, b, c, d)) -->
+  //   array_get sel, (array_create (array_get const a), (array_get const b),
+  //   (array_get const, c), (array_get const, d))
+  if (auto innerGet = dyn_cast_or_null<hw::ArrayGetOp>(inputOp)) {
+    if (!innerGet.getIndex().getDefiningOp<hw::ConstantOp>()) {
+      if (auto create =
+              innerGet.getInput().getDefiningOp<hw::ArrayCreateOp>()) {
+
+        SmallVector<Value> newValues;
+        for (auto operand : create.getOperands())
+          newValues.push_back(rewriter.createOrFold<hw::ArrayGetOp>(
+              op.getLoc(), operand, op.getIndex()));
+
+        rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(
+            op,
+            rewriter.createOrFold<hw::ArrayCreateOp>(op.getLoc(), newValues),
+            innerGet.getIndex());
+        return success();
+      }
+    }
   }
 
   return failure();

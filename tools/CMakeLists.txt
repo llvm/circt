@@ -1,4 +1,4 @@
-
+add_subdirectory(arcilator)
 add_subdirectory(circt-as)
 add_subdirectory(circt-dis)
 add_subdirectory(circt-lsp-server)

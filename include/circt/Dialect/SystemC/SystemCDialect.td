@@ -35,7 +35,6 @@ def SystemCDialect : Dialect {
   }];
 
   let useDefaultTypePrinterParser = 0;
-  let useFoldAPI = kEmitFoldAdaptorFolder;
 }
 
 #endif // CIRCT_DIALECT_SYSTEMC_SYSTEMCDIALECT

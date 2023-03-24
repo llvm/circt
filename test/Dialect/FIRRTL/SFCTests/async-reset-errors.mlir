@@ -13,7 +13,7 @@ firrtl.circuit "Foo" {
     firrtl.connect %bundle0.a, %v : !firrtl.uint<8>, !firrtl.uint<8>
     // expected-error @+2 {{register with async reset requires constant reset value}}
     // expected-error @+1 {{'firrtl.regreset' op LowerToHW couldn't handle this operation}}
-    %2 = firrtl.regreset %clock, %reset, %bundle0 : !firrtl.asyncreset, !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint<8>>
+    %2 = firrtl.regreset %clock, %reset, %bundle0 : !firrtl.clock, !firrtl.asyncreset, !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint<8>>
   }
 }
 
@@ -30,7 +30,7 @@ firrtl.circuit "Foo" {
     firrtl.connect %bundle1, %bundle0 : !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint<8>>
     // expected-error @+2 {{register with async reset requires constant reset value}}
     // expected-error @+1 {{'firrtl.regreset' op LowerToHW couldn't handle this operation}}
-    %3 = firrtl.regreset %clock, %reset, %bundle1 : !firrtl.asyncreset, !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint<8>>
+    %3 = firrtl.regreset %clock, %reset, %bundle1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint<8>>
   }
 }
 
@@ -45,7 +45,7 @@ firrtl.circuit "Foo" {
     firrtl.connect %vector0.a, %v : !firrtl.uint<8>, !firrtl.uint<8>
     // expected-error @+2 {{register with async reset requires constant reset value}}
     // expected-error @+1 {{'firrtl.regreset' op LowerToHW couldn't handle this operation}}
-    %4 = firrtl.regreset %clock, %reset, %vector0 : !firrtl.asyncreset, !firrtl.vector<uint<8>, 1>, !firrtl.vector<uint<8>, 1>
+    %4 = firrtl.regreset %clock, %reset, %vector0 : !firrtl.clock, !firrtl.asyncreset, !firrtl.vector<uint<8>, 1>, !firrtl.vector<uint<8>, 1>
   }
 }
 
@@ -62,7 +62,7 @@ firrtl.circuit "Foo" {
     firrtl.connect %vector1, %vector0 : !firrtl.vector<uint<8>, 1>, !firrtl.vector<uint<8>, 1>
     // expected-error @+2 {{register with async reset requires constant reset value}}
     // expected-error @+1 {{'firrtl.regreset' op LowerToHW couldn't handle this operation}}
-    %5 = firrtl.regreset %clock, %reset, %vector1 : !firrtl.asyncreset, !firrtl.vector<uint<8>, 1>, !firrtl.vector<uint<8>, 1>
+    %5 = firrtl.regreset %clock, %reset, %vector1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.vector<uint<8>, 1>, !firrtl.vector<uint<8>, 1>
   }
 }
 
@@ -84,7 +84,7 @@ firrtl.circuit "Foo" {
     firrtl.connect %3, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     // expected-error @+2 {{register with async reset requires constant reset value}}
     // expected-error @+1 {{'firrtl.regreset' op LowerToHW couldn't handle this operation}}
-    %r = firrtl.regreset %clock, %reset, %literal  : !firrtl.asyncreset, !firrtl.vector<uint<1>, 4>, !firrtl.vector<uint<1>, 4>
+    %r = firrtl.regreset %clock, %reset, %literal  : !firrtl.clock, !firrtl.asyncreset, !firrtl.vector<uint<1>, 4>, !firrtl.vector<uint<1>, 4>
     firrtl.connect %r, %x : !firrtl.vector<uint<1>, 4>, !firrtl.vector<uint<1>, 4>
     firrtl.connect %z, %r : !firrtl.vector<uint<1>, 4>, !firrtl.vector<uint<1>, 4>
   }
@@ -99,12 +99,12 @@ firrtl.circuit "Foo"   {
     %w = firrtl.wire  : !firrtl.uint<1>
     %c1_ui = firrtl.constant 1 : !firrtl.uint
     firrtl.connect %w, %c1_ui : !firrtl.uint<1>, !firrtl.uint
-    firrtl.when %cond  {
+    firrtl.when %cond : !firrtl.uint<1> {
       firrtl.connect %w, %y : !firrtl.uint<1>, !firrtl.uint<1>
     }
     // expected-error @+2 {{register with async reset requires constant reset value}}
     // expected-error @+1 {{'firrtl.regreset' op LowerToHW couldn't handle this operation}}
-    %r = firrtl.regreset %clock, %reset, %w  : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %r = firrtl.regreset %clock, %reset, %w  : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %r, %x : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %z, %r : !firrtl.uint<1>, !firrtl.uint<1>
   }

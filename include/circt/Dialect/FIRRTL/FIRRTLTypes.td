@@ -45,8 +45,7 @@ def ForeignType : FIRRTLDialectType<CPred<"!$_self.isa<FIRRTLType>()">,
                                     "foreign type", "::mlir::Type">;
 
 def ClockType : FIRRTLDialectType<CPred<"$_self.isa<ClockType>()">,
-    "clock", "::circt::firrtl::ClockType">,
-  BuildableType<"ClockType::get($_builder.getContext())">;
+    "clock", "::circt::firrtl::ClockType">;
 
 def IntType : FIRRTLDialectType<CPred<"$_self.isa<IntType>()">,
  "sint or uint type", "::circt::firrtl::IntType">;
@@ -102,44 +101,33 @@ def UInt1Type : FIRRTLDialectType<
     CPred<"$_self.isa<UIntType>() && "
           "($_self.cast<UIntType>().getWidth() == 1 ||"
           " $_self.cast<UIntType>().getWidth() == std::nullopt)">,
-    "UInt<1> or UInt", "::circt::firrtl::UIntType">,
-  BuildableType<"UIntType::get($_builder.getContext(), 1)">;
+    "UInt<1> or UInt", "::circt::firrtl::UIntType">;
 
 def UInt32Type : FIRRTLDialectType<
     CPred<"$_self.isa<UIntType>() && "
           "$_self.cast<UIntType>().getWidth() == 32">,
-    "UInt<32>", "::circt::firrtl::UIntType">,
-  BuildableType<"UIntType::get($_builder.getContext(), 32)">;
+    "UInt<32>", "::circt::firrtl::UIntType">;
 
 def AsyncResetType : FIRRTLDialectType<
     CPred<"$_self.isa<AsyncResetType>()">,
-    "AsyncReset", "::circt::firrtl::AsyncResetType">,
-  BuildableType<"AsyncResetType::get($_builder.getContext())">;
+    "AsyncReset", "::circt::firrtl::AsyncResetType">;
 
 def ResetType : FIRRTLDialectType<
     CPred<"$_self.isa<ResetType>()">,
-    "Reset", "::circt::firrtl::ResetType">,
-  BuildableType<"ResetType::get($_builder.getContext())">;
+    "Reset", "::circt::firrtl::ResetType">;
 
 def PassiveType : FIRRTLDialectType<
   CPred<"$_self.isa<FIRRTLBaseType>() && $_self.cast<FIRRTLBaseType>().isPassive()">,
   "a passive base type (contain no flips)", "::circt::firrtl::FIRRTLBaseType">;
 
 def RefType : FIRRTLDialectType<
-   CPred<"$_self.isa<RefType>()">,
-  "reference type", "::circt::firrtl::RefType", [{
-    A reference type, such as `firrtl.ref<uint<1>>`.
+  CPred<"$_self.isa<RefType>()">,
+   "reference type", "::circt::firrtl::RefType">;
 
-    Used for remote reads and writes of the wrapped base type.
-
-    Parameterized over the referenced base type,
-    which must be passive and for now must also be ground.
-
-    Not a base type.
-
-    Values of this type are used to capture dataflow paths,
-    and do not represent a circuit element or entity.
-  }]>;
+def SizedRefType : FIRRTLDialectType<
+  CPred<"$_self.isa<RefType>() &&  "
+        "!$_self.cast<RefType>().getType().hasUninferredWidth()">,
+   "sized reference type", "::circt::firrtl::RefType">;
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates

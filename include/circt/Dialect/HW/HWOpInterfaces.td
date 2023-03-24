@@ -99,6 +99,14 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike"> {
       return $_op->template getAttrOfType<ArrayAttr>("resultLocs");
     }]>,
 
+    InterfaceMethod<
+    "Decode information about the input and output ports on this module.",
+    "::circt::hw::ModulePortInfo", "getPorts", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return getModulePortInfo($_op);
+    }]>,
+
     /// Insert and remove input and output ports of this module. Does not modify
     /// the block arguments of the module body. The insertion and removal
     /// indices must be in ascending order. The indices refer to the port
@@ -212,7 +220,7 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
 
   let cppNamespace = "::circt::hw";
   let methods = [
-    InterfaceMethod<"Returns the name of this inner symbol.",
+    InterfaceMethod<"Returns the name of the top-level inner symbol defined by this operation, if present.",
       "::mlir::StringAttr", "getInnerNameAttr", (ins), [{}],
       /*defaultImplementation=*/[{
         if (auto attr =
@@ -222,21 +230,31 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
         return {};
       }]
     >,
-    InterfaceMethod<"Returns the name of this inner symbol.",
+    InterfaceMethod<"Returns the name of the top-level inner symbol defined by this operation, if present.",
       "::std::optional<::mlir::StringRef>", "getInnerName", (ins), [{}],
       /*defaultImplementation=*/[{
         auto attr = this->getInnerNameAttr();
         return attr ? ::std::optional<StringRef>(attr.getValue()) : ::std::nullopt;
       }]
     >,
-    InterfaceMethod<"Sets the name of this inner symbol.",
+    InterfaceMethod<"Sets the name of the top-level inner symbol defined by this operation to the specified string, dropping any symbols on fields.",
       "void", "setInnerSymbol", (ins "::mlir::StringAttr":$name), [{}],
       /*defaultImplementation=*/[{
         this->getOperation()->setAttr(
             InnerSymbolTable::getInnerSymbolAttrName(), hw::InnerSymAttr::get(name));
       }]
     >,
-    InterfaceMethod<"Returns an InnerRef to this operation.  Must have inner symbol.",
+    InterfaceMethod<"Sets the inner symbols defined by this operation.",
+      "void", "setInnerSymbolAttr", (ins "::circt::hw::InnerSymAttr":$sym), [{}],
+      /*defaultImplementation=*/[{
+        if (sym && !sym.empty())
+          this->getOperation()->setAttr(
+              InnerSymbolTable::getInnerSymbolAttrName(), sym);
+        else
+          this->getOperation()->removeAttr(InnerSymbolTable::getInnerSymbolAttrName());
+      }]
+    >,
+    InterfaceMethod<"Returns an InnerRef to this operation's top-level inner symbol, which must be present.",
       "::circt::hw::InnerRefAttr", "getInnerRef", (ins), [{}],
       /*defaultImplementation=*/[{
         auto *op = this->getOperation();
@@ -246,7 +264,7 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
             InnerSymbolTable::getInnerSymbol(op));
       }]
     >,
-    InterfaceMethod<"Returns the InnerSymAttr.",
+    InterfaceMethod<"Returns the InnerSymAttr representing all inner symbols defined by this operation.",
       "::circt::hw::InnerSymAttr", "getInnerSymAttr", (ins), [{}],
       /*defaultImplementation=*/[{
         return this->getOperation()->template getAttrOfType<hw::InnerSymAttr>(

@@ -39,7 +39,6 @@ def CalyxDialect : Dialect {
   // Depends on the HWDialect to support external primitives using hw.module.extern
   let dependentDialects = ["circt::hw::HWDialect"];
   let cppNamespace = "::circt::calyx";
-  let useFoldAPI = kEmitFoldAdaptorFolder;
 }
 
 class SameTypeConstraint<string lhs, string rhs>

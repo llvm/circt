@@ -72,8 +72,8 @@ static bool isModuleScopedDrivenBy(Value val, bool lookThroughWires,
 /// if walking was broken, and true otherwise.
 using WalkDriverCallback =
     llvm::function_ref<bool(const FieldRef &dst, const FieldRef &src)>;
-bool walkDrivers(Value value, bool lookThroughWires,
-                 bool lookTWalkDriverCallbackhroughNodes, bool lookThroughCasts,
+bool walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
+                 bool lookThroughNodes, bool lookThroughCasts,
                  WalkDriverCallback callback);
 
 /// Get the FieldRef from a value.  This will travel backwards to through the
@@ -98,6 +98,11 @@ std::pair<std::string, bool> getFieldName(const FieldRef &fieldRef,
 Value getValueByFieldID(ImplicitLocOpBuilder builder, Value value,
                         unsigned fieldID);
 
+/// Walk leaf ground types in the `firrtlType` and apply the function `fn`.
+/// The first argument of `fn` is field ID, and the second argument is a
+/// leaf ground type.
+void walkGroundTypes(FIRRTLType firrtlType,
+                     llvm::function_ref<void(uint64_t, FIRRTLBaseType)> fn);
 //===----------------------------------------------------------------------===//
 // Inner symbol and InnerRef helpers.
 //===----------------------------------------------------------------------===//

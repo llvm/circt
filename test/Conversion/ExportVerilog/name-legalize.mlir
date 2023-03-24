@@ -22,7 +22,7 @@ hw.module @parametersNameConflict<p2: i42 = 17, wire: i1>(%p1: i8) {
   // CHECK: `ifdef SOMEMACRO
   sv.ifdef "SOMEMACRO" {
     // CHECK: localparam local_0 = wire_0;
-    %local = sv.localparam : i1 { value = #hw.param.decl.ref<"wire">: i1 }
+    %local = sv.localparam { value = #hw.param.decl.ref<"wire">: i1 } : i1
 
     // CHECK: assign myWire = wire_0;
     %0 = hw.param.value i1 = #hw.param.decl.ref<"wire">
@@ -55,7 +55,7 @@ hw.module @useParametersNameConflict(%xxx: i8) {
   // CHECK: `ifdef SOMEMACRO
   sv.ifdef "SOMEMACRO" {
     // CHECK: reg [3:0] xxx_0;
-    %0 = sv.reg  { name = "xxx" } : !hw.inout<i4>
+    %0 = sv.reg name "xxx" : !hw.inout<i4>
   }
 }
 
@@ -74,7 +74,7 @@ hw.module @inout(%inout: i1) -> (output: i1) {
 hw.module @inout_inst(%a: i1) {
   // CHECK: inout_0 foo (
   // CHECK:   .inout_0  (a),
-  // CHECK:   .output_0 (_foo_output)
+  // CHECK:   .output_0 (/* unused */)
   // CHECK: );
   %0 = hw.instance "foo" @inout (inout: %a: i1) -> (output: i1)
 }

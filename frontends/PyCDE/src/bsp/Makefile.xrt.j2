@@ -90,7 +90,7 @@ esiXrtPython: runtime/$(NAME)/esiXrtPython$(PY_EXT)
 
 clean:
 	rm -rf $(BUILD) .Xil vivado* kernel *.jou *.log *.wdb *.wcfg *.protoinst *.csv
-	rm runtime/*.so
+	rm -f runtime/*.so
 
 # Targets which only apply to image builds.
 ifeq ($(TARGET), hw)
