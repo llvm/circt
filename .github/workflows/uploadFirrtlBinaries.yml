@@ -1,4 +1,4 @@
-name: Upload Binaries
+name: Upload Firrtl Binaries
 
 on:
   release:
@@ -110,7 +110,7 @@ jobs:
             -DCMAKE_INSTALL_PREFIX=`pwd`/../install
           ninja
           ninja check-circt check-circt-unit
-          ninja install
+          ninja install-firtool
           cd ..
 
       - name: Display Files
@@ -128,21 +128,21 @@ jobs:
       - name: Package Binaries
         run: |
           mv install ${{ steps.name_dir.outputs.value }}
-          ${{ matrix.tar }} czf circt-bin-${{ matrix.runner }}.tar.gz ${{ steps.name_dir.outputs.value }}
+          ${{ matrix.tar }} czf firrtl-bin-${{ matrix.runner }}.tar.gz ${{ steps.name_dir.outputs.value }}
       - name: Show Tarball
         run: |
-          ls -l circt-bin-${{ matrix.runner }}.tar.gz
-          shasum -a 256 circt-bin-${{ matrix.runner }}.tar.gz
+          ls -l firrtl-bin-${{ matrix.runner }}.tar.gz
+          shasum -a 256 firrtl-bin-${{ matrix.runner }}.tar.gz
       - name: Upload Binaries (Non-Tag)
         uses: actions/upload-artifact@v3
         if: github.ref_type != 'tag'
         with:
-          name: circt-bin-${{ matrix.runner }}.tar.gz
-          path: circt-bin-${{ matrix.runner }}.tar.gz
+          name: firrtl-bin-${{ matrix.runner }}.tar.gz
+          path: firrtl-bin-${{ matrix.runner }}.tar.gz
           retention-days: 7
       - name: Upload Binaries (Tag)
         uses: AButler/upload-release-assets@v2.0
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: circt-bin-${{ matrix.runner }}.tar.gz
+          files: firrtl-bin-${{ matrix.runner }}.tar.gz
           repo-token: ${{ secrets.GITHUB_TOKEN }}
