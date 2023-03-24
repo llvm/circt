@@ -2919,3 +2919,17 @@ void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                           MLIRContext *context) {
   results.add(canonicalizeImmediateVerifOp<CoverOp, /* EraseIfZero = */ true>);
 }
+
+//===----------------------------------------------------------------------===//
+// InvalidValueOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult InvalidValueOp::canonicalize(InvalidValueOp op,
+                                           PatternRewriter &rewriter) {
+  // Remove `InvalidValueOp`s with no uses.
+  if (op.use_empty()) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+  return failure();
+}
