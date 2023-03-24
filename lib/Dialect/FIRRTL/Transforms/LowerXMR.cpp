@@ -194,6 +194,11 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             resolveOps.push_back(resolve);
             return success();
           })
+          .Case<RefForceOp, RefForceInitialOp, RefReleaseOp,
+                RefReleaseInitialOp>([&](auto op) {
+            return op.emitError(
+                "force and release not supported in LowerXMR yet");
+          })
           .Default([&](auto) { return success(); });
     };
 
