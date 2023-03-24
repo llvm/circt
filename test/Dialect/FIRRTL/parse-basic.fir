@@ -1157,19 +1157,20 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK-LABEL: module private @RefsChild(
   ; CHECK-SAME: out %r: !firrtl.probe<uint<1>>
-  ; CHECK-SAME: out %rw: !firrtl.probe<uint<1>>
+  ; CHECK-SAME: out %rw: !firrtl.rwprobe<uint<1>>
   module RefsChild :
     input in : UInt<1>
     output r : Probe<UInt<1>>
     output rw : RWProbe<UInt<1>>
 
-    ; CHECK-NEXT: %[[NODE:.+]] = firrtl.node
+    ; CHECK-NEXT: %[[NODE:.+]], %[[NODE_RWREF:.+]] = firrtl.node
+    ; CHECK-SAME: forceable
     node n = in
     ; CHECK-NEXT: %[[REF:.+]] = firrtl.ref.send %[[NODE]]
     ; CHECK-NEXT: ref.define %r, %[[REF]]
     define r = probe(n)
-    ; CHECK-NEXT: %[[RWREF:.+]] = firrtl.ref.send %[[NODE]]
-    ; CHECK-NEXT: ref.define %rw, %[[RWREF]]
+    ; CHECK-NOT: ref.send
+    ; CHECK-NEXT: ref.define %rw, %[[NODE_RWREF]]
     define rw = rwprobe(n)
 
   ; CHECK-LABEL: module private @Refs(
@@ -1190,6 +1191,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: ref.define %r, %[[OUTREF]]
     define r = probe(out)
     ; CHECK-NEXT: ref.define %rw, %[[RC_RW]]
+    ; CHECK-SAME: rwprobe
     define rw = rc.rw
 
     ; CHECK-NEXT: %[[READ_RC_R:.+]] = firrtl.ref.resolve %[[RC_R]]

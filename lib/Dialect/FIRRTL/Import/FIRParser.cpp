@@ -2456,8 +2456,19 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
           staticRef.getDefiningOp()))
     return emitError(startTok.getLoc(), "cannot probe memories or their ports");
 
-  // TODO: RWProbe<T>.  rework ref.send, not good for force.
-  result = builder.create<RefSendOp>(staticRef);
+  // TODO: Support for non-public ports.
+  if (isa<BlockArgument>(staticRef))
+    return emitError(startTok.getLoc(), "rwprobe of port not yet supported");
+  auto *op = staticRef.getDefiningOp();
+  if (!op)
+    return emitError(startTok.getLoc(),
+                     "rwprobe value must be defined by an operation");
+  auto forceable = dyn_cast<Forceable>(op);
+  if (!forceable)
+    return emitError(startTok.getLoc(), "rwprobe target not forceable")
+        .attachNote(op->getLoc());
+
+  result = forceable.getDataRef();
 
   return success();
 }
@@ -2830,7 +2841,7 @@ ParseResult FIRStmtParser::parseNode() {
   auto annotations = getConstants().emptyArrayAttr;
   StringAttr sym = {};
   auto result = builder.create<NodeOp>(
-      initializer, id, NameKindEnum::InterestingName, annotations, sym);
+      initializer, id, NameKindEnum::InterestingName, annotations, sym, true);
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }
@@ -2857,7 +2868,7 @@ ParseResult FIRStmtParser::parseWire() {
   StringAttr sym = {};
 
   auto result = builder.create<WireOp>(type, id, NameKindEnum::InterestingName,
-                                       annotations, sym);
+                                       annotations, sym, true);
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }
@@ -2948,15 +2959,15 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   Value result;
   StringAttr sym = {};
   if (resetSignal)
-    result =
-        builder
-            .create<RegResetOp>(type, clock, resetSignal, resetValue, id,
-                                NameKindEnum::InterestingName, annotations, sym)
-            .getResult();
+    result = builder
+                 .create<RegResetOp>(type, clock, resetSignal, resetValue, id,
+                                     NameKindEnum::InterestingName, annotations,
+                                     sym, true)
+                 .getResult();
   else
     result = builder
                  .create<RegOp>(type, clock, id, NameKindEnum::InterestingName,
-                                annotations, sym)
+                                annotations, sym, true)
                  .getResult();
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
@@ -3434,6 +3445,12 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
     if (failed(result))
       return result;
   }
+
+  // Demote any forceable operations that aren't being forced.
+  deferredModule.moduleOp.walk([](Forceable fop) {
+    if (fop.isForceable() && fop.getDataRef().use_empty())
+      firrtl::detail::replaceWithNewForceability(fop, false);
+  });
 
   return success();
 }
