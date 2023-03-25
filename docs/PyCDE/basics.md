@@ -1,6 +1,6 @@
 # PyCDE Basics
 
-So you know what's more difficult than forcing yourself to write documentation?
+You know what's more difficult than forcing yourself to write documentation?
 Maintaining it! We apologize for the inevitable inaccuracies.
 
 ## Modules, Generators, and Systems
@@ -95,13 +95,24 @@ sometimes that fails.
 In those cases, you must manually specify the Type. So `Bits(16)(i)` would
 create a 16-bit constant of `i`.
 
+### Scalars
+
+`Bits(width)` models a bitvector. Allows indexing, slicing, bitwise operations, etc. No math operations.
+
+`UInt(width)`, `SInt(width)` math.
+
+### Arrays
+
+`Bits(32) * 10` creates an array of 32-bits of length 10.
+
+`Bits(32) * 10 * 12` creates an array of arrays.
+
 ### Structs
 
 ```python
 from pycde import Input, Output, generator, System, Module
 from pycde.types import Bits
 from pycde.signals import Struct, BitsSignal
-
 
 class ExStruct(Struct):
   a: Bits(4)
@@ -115,11 +126,13 @@ class StructExample(Module):
   inp1 = Input(ExStruct)
   out1 = Output(Bits(32))
   out2 = Output(Bits(4))
+  out3 = Output(ExStruct)
 
   @generator
   def build(self):
     self.out1 = self.inp1.get_b_xor(5432)
     self.out2 = self.inp1.a
+    self.out3 = ExStruct(a=self.inp1.a, b=42)
 ```
 
 
