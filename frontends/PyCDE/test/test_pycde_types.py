@@ -15,7 +15,7 @@ array1 = dim(types.ui6)
 # CHECK: UInt<6>
 print(array1)
 
-array2 = dim(6, 10, 12)
+array2 = Bits(6) * 10 * 12
 # CHECK: Bits<6>[10][12]
 print(array2)
 
