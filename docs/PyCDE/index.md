@@ -1,156 +1,41 @@
-# PyCDE
+# Python CIRCT Design Entry (PyCDE)
 
-PyCDE stands for Python circuit design entry. It is an experimental, opinionated, Python-based fronted for CIRCT's Python bindings. The goal is to make the definition of hardware modules using the bindings simple.
+PyCDE is a python API for hardware related activities. It was intended to make
+CIRCT functionality easy to expose to Python developers. PyCDE, therefore,
+mostly maps down to CIRCT operations through "a bit" of syntactic sugar. The
+vast majority of the work is done by CIRCT.
 
-## To Install PyCDE only via pip
+## Installation
 
-PyCDE is now being released on PyPI: <https://pypi.org/project/pycde/>
-
-## For CIRCT-based Developers
-
-### Cloning the repo
-
-If you havent already, you need to clone the CIRCT repo. Unless you already
-have contributor permissions to the LLVM project, the easiest way to develop
-(with the ability to create and push branches) is to fork the repo in your
-GitHub account. You can then clone your fork. The clone command should look
-like this:
-
-```bash
-git clone git@github.com:<your_github_username>/circt.git <optional_repo_name>
-```
-
-If you don't envision needing that ability, you can clone the main repo
-following the directions in step 2 of the [GettingStarted](GettingStarted.md) page.
-
-After cloning, navigate to your repo root (circt is the default) and use the
-following to pull down LLVM:
-
-```bash
-git submodule update --init
-```
-
-## PyCDE Installation
-
-### Installing and Building with Wheels
-
-The simplest way to get started using PyCDE is to install it with the `pip install` command:
+Because PyCDE is rapidly evolving, we recommend always using the latest
+pre-release. New packages are posted nightly if there have been updates (and so
+long as the build and CI are working).
 
 ```
-$ cd circt
-$ pip install frontends/PyCDE --use-feature=in-tree-build
+pip install pycde --pre
 ```
 
-If you just want to build the wheel, use the `pip wheel` command:
+or [compile it yourself](compiling.md) (not recommended).
 
-```
-$ cd circt
-$ pip wheel frontends/PyCDE --use-feature=in-tree-build
-```
-
-This will create a `pycde-<version>-<python version>-<platform>.whl` file in the root of the repo.
-
-### Manual Compilation
-
-Follow these steps to setup your repository for installing PyCDE via CMake.
-Ensure that your repo has the proper Python requirements by running the
-following from your CIRCT repo root:
-
-```bash
-python -m pip install -r PyCDE/python/requirements.txt
-```
-
-Although not scrictly needed for PyCDE develoment, scripts for some tools you
-might want to install are located in utils/
-(Cap'n Proto, Verilator, OR-Tools):
-
-```bash
-utils/get-capnp.sh
-utils/get-verilator.sh
-utils/get-or-tools
-```
-
-Install PyCDE with CMake. PyCDE requires cmake version >= 3.21:
-
-```bash
-mkdir build
-cd build
-cmake \
-    -DCMAKE_BUILD_TYPE=Debug \
-    -DLLVM_ENABLE_PROJECTS=mlir \
-    -DLLVM_ENABLE_ASSERTIONS=ON \
-    -DLLVM_EXTERNAL_PROJECTS=circt \
-    -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=.. \
-    -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
-    -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
-    -DCIRCT_ENABLE_FRONTENDS=PyCDE
-    -G Ninja ../llvm/llvm
-```
-
-Alternatively, you can pass the source and build paths to the CMake command and
-build in the specified folder:
-
-```bash
-cmake \
-    -DCMAKE_BUILD_TYPE=Debug \
-    -DLLVM_ENABLE_PROJECTS=mlir \
-    -DLLVM_ENABLE_ASSERTIONS=ON \
-    -DLLVM_EXTERNAL_PROJECTS=circt \
-    -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
-    -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
-    -DCIRCT_ENABLE_FRONTENDS=PyCDE \
-    -G Ninja \
-    -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=<your_circt_repo_root_path> \
-    -B<path_to_desired_build_dir> \
-    <your_circt_repo_root_path>/llvm/llvm
-```
-
-Afterwards, use the following commands to ensure that CIRCT and PyCDE are built
-and the tests pass:
-
-```bash
-ninja -C <path_to_your_circt_build> check-circt
-ninja -C <path_to_your_circt_build> check-pycde
-ninja -C <path_to_your_circt_build> check-pycde-integration
-```
-
-If you want to use PyCDE after compiling it, you must add the core CIRCT
-bindings and PyCDE to your PYTHONPATH:
-
-```bash
-export PYTHONPATH="<full_path_to_your_circt_build>/tools/circt/python_packages/circt_core:<full_path_to_your_circt_build>/tools/circt/python_packages/pycde"
-```
-
-If you are installing PyCDE through `ninja install`, the libraries and Python modules will be installed into the correct location automatically.
-
-## Usage
-
-### Getting Started
+## Hello world!
 
 The following example demonstrates a simple module that adds two integers:
 
 ```python
 import pycde
 
-from pycde.dialects import comb
-
-
-@pycde.module
-class AddInts:
+class AddInts(pycde.Module):
     a = pycde.Input(pycde.types.i32)
     b = pycde.Input(pycde.types.i32)
     c = pycde.Output(pycde.types.i32)
 
     @pycde.generator
-    def construct(mod):
-        mod.c = comb.AddOp(mod.a, mod.b)
+    def construct(self):
+        self.c = self.a + self.b
 
 
-system = pycde.System([AddInts], name="ExampleSystem")
-system.print()
-system.generate()
-system.print()
-system.emit_outputs()
+system = pycde.System([AddInts], name="ExampleSystem", output_directory="exsys")
+system.compile()
 ```
 
 ### Modules, Generators, and Systems
