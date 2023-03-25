@@ -30,7 +30,8 @@ git submodule update --init
 
 ### Installing and Building with Wheels
 
-The simplest way to get started using PyCDE is to install it with the `pip install` command:
+The simplest way to compile PyCDE for local use is to install it with the `pip
+install` command:
 
 ```
 $ cd circt
@@ -53,7 +54,7 @@ Ensure that your repo has the proper Python requirements by running the
 following from your CIRCT repo root:
 
 ```bash
-python -m pip install -r PyCDE/python/requirements.txt
+python -m pip install -r frontends/PyCDE/python/requirements.txt
 ```
 
 Although not scrictly needed for PyCDE develoment, scripts for some tools you
@@ -117,7 +118,7 @@ Ninja uses links in the build dir rather than copying the files as it does
 during install.
 
 ```bash
-export PYTHONPATH="<full_path_to_your_circt_build>/tools/circt/python_packages/circt_core:<full_path_to_your_circt_build>/tools/circt/python_packages/pycde"
+export PYTHONPATH="<full_path_to_your_circt_build>/tools/circt/python_packages/pycde"
 ```
 
 If you are installing PyCDE through `ninja install`, the libraries and Python modules will be installed into the correct location automatically.

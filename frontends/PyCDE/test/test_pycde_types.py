@@ -30,15 +30,20 @@ print(struct)
 
 dim_alias = dim(1, 8, name="myname5")
 
+
+class Dummy(Module):
+  pass
+
+
 # CHECK: hw.type_scope @pycde
 # CHECK: hw.typedecl @myname1 : i8
 # CHECK: hw.typedecl @myname5 : !hw.array<8xi1>
 # CHECK-NOT: hw.typedecl @myname1
 # CHECK-NOT: hw.typedecl @myname5
-m = System([]).mod
+m = System(Dummy)
 TypeAlias.declare_aliases(m)
 TypeAlias.declare_aliases(m)
-print(m)
+m.print()
 
 assert bit == Bits(1)
 
