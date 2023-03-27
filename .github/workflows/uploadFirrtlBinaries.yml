@@ -106,7 +106,7 @@ jobs:
             -DLLVM_PARALLEL_LINK_JOBS=1 \
             -DLLVM_FORCE_ENABLE_STATS=${{ matrix.build_config.stats }} \
             -DCIRCT_RELEASE_TAG_ENABLED=ON \
-            -DCIRCT_RELEASE_TAG=${{ github.ref_name }} \
+            -DCIRCT_RELEASE_TAG=firtool \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF \
             -DCMAKE_INSTALL_PREFIX=`pwd`/../install
           ninja
