@@ -1121,13 +1121,13 @@ firrtl.circuit "Top" {
 // Due to coincidental name collisions, renaming was not updating the actual hierpath.
 firrtl.circuit "Bug4882Rename"  {
   hw.hierpath private @nla_5560 [@Bug4882Rename::@w, @Bar2::@x]
-  firrtl.module @Bar2() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+  firrtl.module private @Bar2() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %x = firrtl.wire sym @x  {annotations = [{circt.nonlocal = @nla_5560, class = "test0"}]} : !firrtl.uint<8>
   }
-  firrtl.module @Bar1() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+  firrtl.module private @Bar1() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     firrtl.instance bar3 sym @w  @Bar3()
   }
-  firrtl.module @Bar3()  {
+  firrtl.module private @Bar3()  {
     %w = firrtl.wire sym @w1   : !firrtl.uint<8>
   }
   firrtl.module @Bug4882Rename() {
