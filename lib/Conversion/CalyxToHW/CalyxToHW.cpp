@@ -263,15 +263,14 @@ private:
                             op.portName(op.getClk()), b);
           auto reset = wireIn(op.getReset(), op.instanceName(),
                               op.portName(op.getReset()), b);
-
-          auto outReg =
-              regCe(in, clk, writeEn, reset, op.instanceName() + "_reg", b);
           auto doneReg =
               reg(writeEn, clk, reset, op.instanceName() + "_done_reg", b);
-
-          auto out = wireOut(outReg, op.instanceName(), "", b);
           auto done =
               wireOut(doneReg, op.instanceName(), op.portName(op.getDone()), b);
+          auto clockEn = b.create<AndOp>(writeEn, createOrFoldNot(done, b));
+          auto outReg =
+              regCe(in, clk, clockEn, reset, op.instanceName() + "_reg", b);
+          auto out = wireOut(outReg, op.instanceName(), "", b);
           wires.append({in.getInput(), writeEn.getInput(), clk.getInput(),
                         reset.getInput(), out, done});
         })
