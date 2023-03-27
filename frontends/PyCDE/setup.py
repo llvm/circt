@@ -109,6 +109,7 @@ setup(name="pycde",
           CMakeExtension("pycde.circt._mlir_libs._mlir"),
           CMakeExtension("pycde.circt._mlir_libs._circt"),
       ],
+      install_requires=["numpy", "jinja2"],
       cmdclass={
           "build": CustomBuild,
           "built_ext": NoopBuildExtension,

@@ -45,7 +45,7 @@ class System:
 
   def __init__(self,
                top_modules: Union[list, Module],
-               name: str = "PyCDESystem",
+               name: str = None,
                output_directory: str = None,
                sw_api_langs: List[str] = None):
     from .module import Module
@@ -55,7 +55,10 @@ class System:
       self.top_modules = list(top_modules)
     else:
       self.top_modules = [top_modules]
-    self.name = name
+    if name is None:
+      self.name = self.top_modules[0].__name__
+    else:
+      self.name = name
     self._op_cache: _OpCache = _OpCache(self.mod)
 
     self._generate_queue = []

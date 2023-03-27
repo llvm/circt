@@ -295,7 +295,7 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   SmallVector<hw::PortInfo> ports;
   {
     auto srcPorts = op.getArgNames();
-    for (auto &port : llvm::enumerate(realInputs)) {
+    for (auto port : llvm::enumerate(realInputs)) {
       auto name = getNameForPort(port.value(), srcPorts);
       ports.push_back({name, hw::PortDirection::INPUT, port.value().getType(),
                        port.index()});
@@ -311,7 +311,7 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   newMod.setCommentAttr(b.getStringAttr("VCS coverage exclude_file"));
 
   // Update the mapping from old values to cloned values
-  for (auto &port : llvm::enumerate(realInputs)) {
+  for (auto port : llvm::enumerate(realInputs)) {
     cutMap.map(port.value(), newMod.getBody().getArgument(port.index()));
     for (auto extra : realReads[port.value()])
       cutMap.map(extra, newMod.getBody().getArgument(port.index()));

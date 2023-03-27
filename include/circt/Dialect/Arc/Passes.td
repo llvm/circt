@@ -11,6 +11,16 @@
 
 include "mlir/Pass/PassBase.td"
 
+def AddTaps : Pass<"arc-add-taps", "mlir::ModuleOp"> {
+  let summary = "Add taps to ports and wires such that they remain observable";
+  let constructor = "circt::arc::createAddTapsPass()";
+  let dependentDialects = ["arc::ArcDialect"];
+  let options = [
+    Option<"tapPorts", "ports", "bool", "true", "Make module ports observable">,
+    Option<"tapWires", "wires", "bool", "true", "Make wires observable">
+  ];
+}
+
 def Dedup : Pass<"arc-dedup", "mlir::ModuleOp"> {
   let summary = "Deduplicate identical arc definitions";
   let description = [{
@@ -19,6 +29,26 @@ def Dedup : Pass<"arc-dedup", "mlir::ModuleOp"> {
   }];
   let constructor = "circt::arc::createDedupPass()";
   let dependentDialects = ["arc::ArcDialect"];
+}
+
+def InferMemories : Pass<"arc-infer-memories", "mlir::ModuleOp"> {
+  let summary = "Convert `FIRRTL_Memory` instances to dedicated memory ops";
+  let constructor = "circt::arc::createInferMemoriesPass()";
+  let dependentDialects = [
+    "arc::ArcDialect", "comb::CombDialect", "seq::SeqDialect"
+  ];
+}
+
+def InlineArcs : Pass<"arc-inline" , "mlir::ModuleOp"> {
+  let summary = "Inline very small arcs";
+  let constructor = "circt::arc::createInlineArcsPass()";
+  let statistics = [
+    Statistic<"numInlinedArcs", "inlined-arcs", "Arcs inlined at a use site">,
+    Statistic<"numRemovedArcs", "removed-arcs",
+      "Arcs removed after full inlining">,
+    Statistic<"numTrivialArcs", "trivial-arcs", "Arcs with very few ops">,
+    Statistic<"numSingleUseArcs", "single-use-arcs", "Arcs with a single use">,
+  ];
 }
 
 def InlineModules : Pass<"arc-inline-modules", "mlir::ModuleOp"> {
@@ -33,6 +63,58 @@ def InlineModules : Pass<"arc-inline-modules", "mlir::ModuleOp"> {
     analysis and optimization of state transfer arcs.
   }];
   let constructor = "circt::arc::createInlineModulesPass()";
+}
+
+def LowerLUT : Pass<"arc-lower-lut", "arc::DefineOp"> {
+  let summary = "Lowers arc.lut into a comb and hw only representation.";
+  let constructor = "circt::arc::createLowerLUTPass()";
+  let dependentDialects = ["hw::HWDialect", "comb::CombDialect"];
+}
+
+def MakeTables : Pass<"arc-make-tables", "mlir::ModuleOp"> {
+  let summary = "Transform appropriate arc logic into lookup tables";
+  let constructor = "circt::arc::createMakeTablesPass()";
+  let dependentDialects = ["arc::ArcDialect"];
+}
+
+def RemoveUnusedArcArguments : Pass<"arc-remove-unused-arc-arguments",
+    "mlir::ModuleOp"> {
+  let summary =
+    "Remove unused arc args from the arc itself and the referencing states";
+  let constructor = "circt::arc::createRemoveUnusedArcArgumentsPass()";
+}
+
+def SimplifyVariadicOps : Pass<"arc-simplify-variadic-ops", "mlir::ModuleOp"> {
+  let summary = "Convert variadic ops into distributed binary ops";
+  let constructor = "circt::arc::createSimplifyVariadicOpsPass()";
+  let statistics = [
+    Statistic<"numOpsSkippedMultipleBlocks", "skipped-multiple-blocks",
+      "Ops skipped due to operands in different blocks">,
+    Statistic<"numOpsSimplified", "simplified",
+      "Ops simplified into binary ops">,
+    Statistic<"numOpsCreated", "created",
+      "Ops created as part of simplification">,
+    Statistic<"numOpsReordered", "reordered",
+      "Ops where simplification reordered operands">,
+  ];
+}
+
+def SinkInputs : Pass<"arc-sink-inputs", "mlir::ModuleOp"> {
+  let summary = "Sink constant inputs into arcs";
+  let constructor = "circt::arc::createSinkInputsPass()";
+  let dependentDialects = ["arc::ArcDialect"];
+}
+
+def SplitLoops : Pass<"arc-split-loops", "mlir::ModuleOp"> {
+  let summary = "Split arcs to break zero latency loops";
+  let constructor = "circt::arc::createSplitLoopsPass()";
+  let dependentDialects = ["arc::ArcDialect"];
+}
+
+def StripSV : Pass<"arc-strip-sv", "mlir::ModuleOp"> {
+  let summary = "Remove SV wire, reg, and assigns";
+  let constructor = "circt::arc::createStripSVPass()";
+  let dependentDialects = ["seq::SeqDialect", "arc::ArcDialect"];
 }
 
 #endif // CIRCT_DIALECT_ARC_PASSES_TD

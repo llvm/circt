@@ -5,6 +5,7 @@ target_link_libraries(arcilator
   PRIVATE
   CIRCTArc
   CIRCTArcTransforms
+  CIRCTCombToArith
   CIRCTConvertToArcs
   CIRCTSupport
   MLIRParser

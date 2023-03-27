@@ -1326,75 +1326,73 @@ void Inliner::run() {
   // Garbage collect any annotations which are now dead.  Duplicate annotations
   // which are now split.
   for (auto fmodule : circuit.getBodyBlock()->getOps<FModuleOp>()) {
-    for (auto &op : *fmodule.getBodyBlock()) {
-      AnnotationSet annotations(&op);
+    SmallVector<Attribute> newAnnotations;
+    auto processNLAs = [&](Annotation anno) -> bool {
+      if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
+        // If the symbol isn't in the NLA map, just skip it.  This avoids
+        // problems where the nlaMap "[]" will try to construct a default
+        // MutableNLA map (which it should never do).
+        if (!nlaMap.count(sym.getAttr()))
+          return false;
+
+        auto mnla = nlaMap[sym.getAttr()];
+
+        // Garbage collect dead NLA references.  This cleans up NLAs that go
+        // through modules which we never visited.
+        if (mnla.isDead())
+          return true;
+
+        // Do nothing if there are no additional NLAs to add or if we're
+        // dealing with a root module.  Root modules have already been updated
+        // earlier in the pass.  We only need to update NLA paths which are
+        // not the root.
+        auto newTops = mnla.getAdditionalSymbols();
+        if (newTops.empty() || mnla.hasRoot(fmodule))
+          return false;
+
+        // Add NLAs to the non-root portion of the NLA.  This only needs to
+        // add symbols for NLAs which are after the first one.  We reused the
+        // old symbol name for the first NLA.
+        NamedAttrList newAnnotation;
+        for (auto rootAndSym : newTops.drop_front()) {
+          for (auto pair : anno.getDict()) {
+            if (pair.getName().getValue() != "circt.nonlocal") {
+              newAnnotation.push_back(pair);
+              continue;
+            }
+            newAnnotation.push_back(
+                {pair.getName(), FlatSymbolRefAttr::get(rootAndSym.getName())});
+          }
+          newAnnotations.push_back(DictionaryAttr::get(context, newAnnotation));
+        }
+      }
+      return false;
+    };
+    fmodule.walk([&](Operation *op) {
+      AnnotationSet annotations(op);
       // Early exit to avoid adding an empty annotations attribute to operations
       // which did not previously have annotations.
       if (annotations.empty())
-        continue;
+        return;
 
-      SmallVector<Attribute> newAnnotations;
-      auto processNLAs = [&](Annotation anno) -> bool {
-        if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-          // If the symbol isn't in the NLA map, just skip it.  This avoids
-          // problems where the nlaMap "[]" will try to construct a default
-          // MutableNLA map (which it should never do).
-          if (!nlaMap.count(sym.getAttr()))
-            return false;
-
-          auto mnla = nlaMap[sym.getAttr()];
-
-          // Garbage collect dead NLA references.  This cleans up NLAs that go
-          // through modules which we never visited.
-          if (mnla.isDead())
-            return true;
-
-          // Do nothing if there are no additional NLAs to add or if we're
-          // dealing with a root module.  Root modules have already been updated
-          // earlier in the pass.  We only need to update NLA paths which are
-          // not the root.
-          auto newTops = mnla.getAdditionalSymbols();
-          if (newTops.size() == 0 || mnla.hasRoot(fmodule))
-            return false;
-
-          // Add NLAs to the non-root portion of the NLA.  This only needs to
-          // add symbols for NLAs which are after the first one.  We reused the
-          // old symbol name for the first NLA.
-          NamedAttrList newAnnotation;
-          for (auto rootAndSym : newTops.drop_front()) {
-            for (auto pair : anno.getDict()) {
-              if (pair.getName().getValue() != "circt.nonlocal") {
-                newAnnotation.push_back(pair);
-                continue;
-              }
-              newAnnotation.push_back(
-                  {pair.getName(),
-                   FlatSymbolRefAttr::get(rootAndSym.getName())});
-            }
-            newAnnotations.push_back(
-                DictionaryAttr::get(op.getContext(), newAnnotation));
-          }
-        }
-        return false;
-      };
-
-      // Update annotations on the module.
+      // Update annotations on the op.
+      newAnnotations.clear();
       annotations.removeAnnotations(processNLAs);
       annotations.addAnnotations(newAnnotations);
-      annotations.applyToOperation(&op);
+      annotations.applyToOperation(op);
+    });
 
-      // Update annotations on the ports.
-      SmallVector<Attribute> newPortAnnotations;
-      for (auto port : fmodule.getPorts()) {
-        newAnnotations.clear();
-        port.annotations.removeAnnotations(processNLAs);
-        port.annotations.addAnnotations(newAnnotations);
-        newPortAnnotations.push_back(
-            ArrayAttr::get(op.getContext(), port.annotations.getArray()));
-      }
-      fmodule->setAttr("portAnnotations",
-                       ArrayAttr::get(op.getContext(), newPortAnnotations));
+    // Update annotations on the ports.
+    SmallVector<Attribute> newPortAnnotations;
+    for (auto port : fmodule.getPorts()) {
+      newAnnotations.clear();
+      port.annotations.removeAnnotations(processNLAs);
+      port.annotations.addAnnotations(newAnnotations);
+      newPortAnnotations.push_back(
+          ArrayAttr::get(context, port.annotations.getArray()));
     }
+    fmodule->setAttr("portAnnotations",
+                     ArrayAttr::get(context, newPortAnnotations));
   }
 }
 

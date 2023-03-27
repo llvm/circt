@@ -10,6 +10,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 using namespace circt;
@@ -131,6 +132,17 @@ LogicalResult StateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
+LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
+  // When there are no names attached, the state is not externaly observable.
+  // When there are also no internal users, we can remove it.
+  if (op->use_empty() && !op->hasAttr("name") && !op->hasAttr("names")) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  return failure();
+}
+
 LogicalResult StateOp::verify() {
   if (getLatency() > 0 && !getClock())
     return emitOpError("with non-zero latency requires a clock");
@@ -141,6 +153,45 @@ LogicalResult StateOp::verify() {
     if (getEnable())
       return emitOpError("with zero latency cannot have an enable");
   }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// MemoryWriteOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult MemoryWriteOp::verify() {
+  if (getMask() && getMask().getType() != getData().getType())
+    return emitOpError("mask and data operand types do not match");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// LutOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult LutOp::verify() {
+  Location firstSideEffectOpLoc = UnknownLoc::get(getContext());
+  const WalkResult result = getBody().walk([&](Operation *op) {
+    if (auto memOp = dyn_cast<MemoryEffectOpInterface>(op)) {
+      SmallVector<SideEffects::EffectInstance<MemoryEffects::Effect>> effects;
+      memOp.getEffects(effects);
+
+      if (!effects.empty()) {
+        firstSideEffectOpLoc = memOp->getLoc();
+        return WalkResult::interrupt();
+      }
+    }
+
+    return WalkResult::advance();
+  });
+
+  if (result.wasInterrupted())
+    return emitOpError("no operations with side-effects allowed inside a LUT")
+               .attachNote(firstSideEffectOpLoc)
+           << "first operation with side-effects here";
 
   return success();
 }

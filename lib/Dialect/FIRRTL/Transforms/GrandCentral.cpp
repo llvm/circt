@@ -1089,7 +1089,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     if (!elementsAttr)
       return std::nullopt;
     SmallVector<Attribute> elements;
-    for (auto &[i, elt] : llvm::enumerate(elementsAttr)) {
+    for (auto [i, elt] : llvm::enumerate(elementsAttr)) {
       auto eltAttr = parseAugmentedType(
           state, elt.cast<DictionaryAttr>(), root, companion, name,
           StringAttr::get(context, ""), id, std::nullopt, clazz, companionAttr,

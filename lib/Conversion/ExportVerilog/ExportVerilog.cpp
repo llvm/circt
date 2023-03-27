@@ -816,6 +816,7 @@ StringRef getVerilogValueName(Value val) {
     return getPortVerilogName(port.getParentBlock()->getParentOp(),
                               port.getArgNumber());
   assert(false && "unhandled value");
+  return {};
 }
 
 //===----------------------------------------------------------------------===//
@@ -4122,6 +4123,8 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
             ps << "/* Zero width */";
           else
             emitExpression(portVal, ops, LowestPrecedence);
+        } else if (portVal.use_empty()) {
+          ps << "/* unused */";
         } else if (portVal.hasOneUse() &&
                    (output = dyn_cast_or_null<OutputOp>(
                         portVal.getUses().begin()->getOwner()))) {
@@ -4637,10 +4640,12 @@ void ModuleEmitter::emitBind(BindOp op) {
       ps << " (";
       llvm::SmallPtrSet<Operation *, 4> ops;
       if (elt.isOutput()) {
-        assert(portVal.hasOneUse() && "output port must have a single use");
-
-        if (auto output = dyn_cast_or_null<OutputOp>(
-                portVal.getUses().begin()->getOwner())) {
+        assert((portVal.hasOneUse() || portVal.use_empty()) &&
+               "output port must have either single or no use");
+        if (portVal.use_empty()) {
+          ps << "/* unused */";
+        } else if (auto output = dyn_cast_or_null<OutputOp>(
+                       portVal.getUses().begin()->getOwner())) {
           // If this is directly using the output port of the containing
           // module, just specify that directly.
           size_t outputPortNo = portVal.getUses().begin()->getOperandNumber();
@@ -5144,7 +5149,7 @@ void SharedEmitterState::collectOpsForFile(const FileInfo &file,
                                            EmissionList &thingsToEmit,
                                            bool emitHeader) {
   // Include the version string comment when the file is verilog.
-  if (file.isVerilog)
+  if (file.isVerilog && !options.omitVersionComment)
     thingsToEmit.emplace_back(circt::getCirctVersionComment());
 
   // If we're emitting replicated ops, keep track of where we are in the list.

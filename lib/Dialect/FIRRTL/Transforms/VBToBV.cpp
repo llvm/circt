@@ -791,7 +791,7 @@ Value Visitor::sinkVecDimIntoOperands(ImplicitLocOpBuilder &builder,
   if (auto bundleType = type.dyn_cast<BundleType>()) {
     SmallVector<Value> newFields;
     SmallVector<BundleType::BundleElement> newElements;
-    for (auto &[i, elt] : llvm::enumerate(bundleType)) {
+    for (auto [i, elt] : llvm::enumerate(bundleType)) {
       SmallVector<Value> subValues;
       for (auto v : values)
         subValues.push_back(getSubfield(v, i));
@@ -919,7 +919,7 @@ LogicalResult Visitor::visit(FModuleOp op) {
     SmallVector<std::pair<unsigned, PortInfo>> newPorts;
     auto ports = op.getPorts();
     auto count = 0;
-    for (auto &[index, port] : llvm::enumerate(ports)) {
+    for (auto [index, port] : llvm::enumerate(ports)) {
       auto oldType = port.type;
       auto newType = convertType(oldType);
       if (newType == oldType)

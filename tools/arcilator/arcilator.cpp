@@ -59,6 +59,14 @@ static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
                                            cl::init("-"),
                                            cl::cat(mainCategory));
 
+static cl::opt<bool> observePorts("observe-ports",
+                                  cl::desc("Make all ports observable"),
+                                  cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool> observeWires("observe-wires",
+                                  cl::desc("Make all wires observable"),
+                                  cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool>
     verifyPasses("verify-each",
                  cl::desc("Run the verifier after each transformation pass"),
@@ -76,6 +84,22 @@ static cl::opt<bool>
                             "chunk independently"),
                    cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
+// Options to control early-out from pipeline.
+enum Until { UntilPreprocessing, UntilArcConversion, UntilArcOpt, UntilEnd };
+static auto runUntilValues = cl::values(
+    clEnumValN(UntilPreprocessing, "preproc", "Input preprocessing"),
+    clEnumValN(UntilArcConversion, "arc-conv", "Conversion of modules to arcs"),
+    clEnumValN(UntilArcOpt, "arc-opt", "Arc optimizations"),
+    clEnumValN(UntilEnd, "all", "Run entire pipeline (default)"));
+static cl::opt<Until>
+    runUntilBefore("until-before",
+                   cl::desc("Stop pipeline before a specified point"),
+                   runUntilValues, cl::init(UntilEnd), cl::cat(mainCategory));
+static cl::opt<Until>
+    runUntilAfter("until-after",
+                  cl::desc("Stop pipeline after a specified point"),
+                  runUntilValues, cl::init(UntilEnd), cl::cat(mainCategory));
+
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -91,12 +115,43 @@ static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
 /// Populate a pass manager with the arc simulator pipeline for the given
 /// command line options.
 static void populatePipeline(PassManager &pm) {
+  auto untilReached = [](Until until) {
+    return until >= runUntilBefore || until > runUntilAfter;
+  };
+
+  // Pre-process the input such that it no longer contains any SV dialect ops
+  // and external modules that are relevant to the arc transformation are
+  // represented as intrinsic ops.
+  if (untilReached(UntilPreprocessing))
+    return;
+  pm.addPass(arc::createAddTapsPass(observePorts, observeWires));
+  pm.addPass(arc::createStripSVPass());
+  pm.addPass(arc::createInferMemoriesPass());
+  pm.addPass(createCSEPass());
+  pm.addPass(createSimpleCanonicalizerPass());
+
   // Restructure the input from a `hw.module` hierarchy to a collection of arcs.
+  if (untilReached(UntilArcConversion))
+    return;
   pm.addPass(createConvertToArcsPass());
   pm.addPass(arc::createDedupPass());
   pm.addPass(arc::createInlineModulesPass());
   pm.addPass(createCSEPass());
   pm.addPass(createSimpleCanonicalizerPass());
+
+  // Perform arc-level optimizations that are not specific to software
+  // simulation.
+  if (untilReached(UntilArcOpt))
+    return;
+  pm.addPass(arc::createSplitLoopsPass());
+  pm.addPass(arc::createDedupPass());
+  pm.addPass(arc::createSinkInputsPass());
+  pm.addPass(createCSEPass());
+  pm.addPass(createSimpleCanonicalizerPass());
+  pm.addPass(arc::createMakeTablesPass());
+  pm.addPass(createCSEPass());
+  pm.addPass(createSimpleCanonicalizerPass());
+  pm.addPass(arc::createRemoveUnusedArcArgumentsPass());
 }
 
 static LogicalResult

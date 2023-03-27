@@ -1327,11 +1327,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
                                         bool isLeadingStmt) {
   switch (getToken().getKind()) {
 
-    // Handle all the primitive ops: primop exp* intLit*  ')'.  There is a
-    // redundant definition of TOK_LPKEYWORD_PRIM which is needed to get
-    // around a bug in the MSVC preprocessor to properly paste together the
-    // tokens lp_##SPELLING.
-#define TOK_LPKEYWORD(SPELLING) case FIRToken::lp_##SPELLING:
+    // Handle all primitive's.
 #define TOK_LPKEYWORD_PRIM(SPELLING, CLASS, NUMOPERANDS)                       \
   case FIRToken::lp_##SPELLING:
 #include "FIRTokenKinds.def"
@@ -3046,15 +3042,12 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     parameters.push_back(ParamDeclAttr::get(nameId, value));
   }
 
-  FModuleLike fmodule;
   if (isExtModule)
-    fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList,
-                                           defName, annotations);
+    builder.create<FExtModuleOp>(info.getLoc(), name, portList, defName,
+                                 annotations, builder.getArrayAttr(parameters));
   else
-    fmodule = builder.create<FIntModuleOp>(info.getLoc(), name, portList,
-                                           intName, annotations);
-
-  fmodule->setAttr("parameters", builder.getArrayAttr(parameters));
+    builder.create<FIntModuleOp>(info.getLoc(), name, portList, intName,
+                                 annotations, builder.getArrayAttr(parameters));
 
   return success();
 }

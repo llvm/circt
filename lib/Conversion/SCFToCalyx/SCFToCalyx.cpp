@@ -287,7 +287,7 @@ private:
     assert(addrPorts.size() == addressValues.size() &&
            "Mismatch between number of address ports of the provided memory "
            "and address assignment values");
-    for (auto &address : enumerate(addressValues))
+    for (auto address : enumerate(addressValues))
       rewriter.create<calyx::AssignOp>(loc, addrPorts[address.index()],
                                        address.value());
   }
@@ -737,7 +737,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
     SmallVector<calyx::PortInfo> inPorts, outPorts;
     FunctionType funcType = funcOp.getFunctionType();
     unsigned extMemCounter = 0;
-    for (auto &arg : enumerate(funcOp.getArguments())) {
+    for (auto arg : enumerate(funcOp.getArguments())) {
       if (arg.value().getType().isa<MemRefType>()) {
         /// External memories
         auto memName =
@@ -748,7 +748,12 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
                                             extMemCounter++, inPorts, outPorts);
       } else {
         /// Single-port arguments
-        auto inName = "in" + std::to_string(arg.index());
+        std::string inName;
+        if (auto portNameAttr = funcOp.getArgAttrOfType<StringAttr>(
+                arg.index(), scfToCalyx::sPortNameAttr))
+          inName = portNameAttr.str();
+        else
+          inName = "in" + std::to_string(arg.index());
         funcOpArgRewrites[arg.value()] = inPorts.size();
         inPorts.push_back(calyx::PortInfo{
             rewriter.getStringAttr(inName),
@@ -757,10 +762,16 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
             DictionaryAttr::get(rewriter.getContext(), {})});
       }
     }
-    for (auto &res : enumerate(funcType.getResults())) {
+    for (auto res : enumerate(funcType.getResults())) {
+      std::string resName;
+      if (auto portNameAttr = funcOp.getResultAttrOfType<StringAttr>(
+              res.index(), scfToCalyx::sPortNameAttr))
+        resName = portNameAttr.str();
+      else
+        resName = "out" + std::to_string(res.index());
       funcOpResultMapping[res.index()] = outPorts.size();
       outPorts.push_back(calyx::PortInfo{
-          rewriter.getStringAttr("out" + std::to_string(res.index())),
+          rewriter.getStringAttr(resName),
           calyx::convIndexType(rewriter, res.value()), calyx::Direction::Output,
           DictionaryAttr::get(rewriter.getContext(), {})});
     }

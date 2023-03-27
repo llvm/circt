@@ -4,6 +4,61 @@ This documents various bugs found in EDA tools and their workarounds in circt.
 Each but will have a brief description, example code, and the mitigation added
 (with links to the commit when possible).  
 
+# Automatic Variables Cause Latch Warnings
+
+Verilator issues a latch warning for fully-initialized, automatic variables.  This precludes using locally scoped variables.
+https://github.com/verilator/verilator/issues/4022
+
+## Example
+```
+module ALU(
+  input         clock,
+  input  [4:0]  operation,
+  input  [63:0] inputs_1,
+                inputs_0,
+                inputs_2,
+  input  [16:0] immediate,
+  output [63:0] output_0
+);
+  reg  [63:0]  casez_tmp_1;
+  always_comb begin
+    automatic logic [63:0] lowHigh;
+    casez (operation)
+      5'b00011:
+        casez_tmp_1 = inputs_0 & inputs_1;
+      5'b00100:
+        casez_tmp_1 = inputs_0 | inputs_1;
+      5'b00101:
+        casez_tmp_1 = inputs_0 ^ inputs_1;
+      5'b01001: begin
+        automatic logic [16:0] _aluOutput_T_22 =
+          immediate >> {14'h0, inputs_2, inputs_1[0], inputs_0[0]};
+        casez_tmp_1 = {63'h0, _aluOutput_T_22[0]};
+      end
+      default:
+        casez_tmp_1 = inputs_0;
+    endcase
+  end
+endmodule
+```
+Gives:
+```
+$ verilator --version
+Verilator 5.008 2023-03-04 rev v5.008
+$ verilator --lint-only ALU.sv
+%Warning-LATCH: ALU.sv:11:3: Latch inferred for signal 'ALU.unnamedblk1.unnamedblk2._aluOutput_T_22' (not all control paths of combinational always assign a value)
+                           : ... Suggest use of always_latch for intentional latches
+   11 |   always_comb begin
+      |   ^~~~~~~~~~~
+                ... For warning description see https://verilator.org/warn/LATCH?v=4.218
+                ... Use "/* verilator lint_off LATCH */" and lint_on around source to disable this message.
+%Error: Exiting due to 1 warning(s)
+```
+
+## Workaround
+
+Flag added to promote all storage to the top level of a module.
+https://github.com/llvm/circt/commit/3c8b4b47b600ea6bcc6da56fe9b81d6fe4022e4c
 
 # Inline Array calculations can cause synthesis failures
 

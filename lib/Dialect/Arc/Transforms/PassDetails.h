@@ -15,6 +15,8 @@
 #include "circt/Dialect/Arc/Dialect.h"
 #include "circt/Dialect/Arc/Ops.h"
 #include "circt/Dialect/Arc/Passes.h"
+#include "circt/Dialect/Arc/Types.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/Pass/Pass.h"
