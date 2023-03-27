@@ -49,7 +49,7 @@
     // CHECK-DAG:  %buf_reset = sv.wire
     // CHECK-DAG:  %[[BUF_RESET_VAL:.+]] = sv.read_inout %buf_reset
     // CHECK-DAG:  %[[C0_I32:.+]] = hw.constant 0 : i32
-    // CHECK-DAG:  %[[BUF_REG:.+]] = seq.compreg sym @buf_reg %[[BUF_IN_VAL]], %[[BUF_CLK_VAL]], %[[BUF_RESET_VAL]], %[[C0_I32]]
+    // CHECK-DAG:  %[[BUF_REG:.+]] = seq.compreg.ce sym @buf_reg %[[BUF_IN_VAL]], %[[BUF_CLK_VAL]], %[[BUF_WRITE_EN_VAL]], %[[BUF_RESET_VAL]], %[[C0_I32]]
     // CHECK-DAG:  %[[FALSE:.+]] = hw.constant false
     // CHECK-DAG:  %[[BUF_DONE_REG:.+]] = seq.compreg sym @buf_done_reg %[[BUF_WRITE_EN_VAL]], %[[BUF_CLK_VAL]], %[[BUF_RESET_VAL]], %[[FALSE]]  : i1
     // CHECK-DAG:  %buf = sv.wire
