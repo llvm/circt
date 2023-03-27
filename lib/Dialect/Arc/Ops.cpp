@@ -169,6 +169,39 @@ LogicalResult MemoryWriteOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// RootInputOp
+//===----------------------------------------------------------------------===//
+
+void RootInputOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  SmallString<32> buf("in_");
+  buf += getName();
+  setNameFn(getState(), buf);
+}
+
+//===----------------------------------------------------------------------===//
+// RootOutputOp
+//===----------------------------------------------------------------------===//
+
+void RootOutputOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  SmallString<32> buf("out_");
+  buf += getName();
+  setNameFn(getState(), buf);
+}
+
+//===----------------------------------------------------------------------===//
+// ModelOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ModelOp::verify() {
+  if (getBodyBlock().getArguments().size() != 1)
+    return emitOpError("must have exactly one argument");
+  if (auto type = getBodyBlock().getArgument(0).getType();
+      !isa<StorageType>(type))
+    return emitOpError("argument must be of storage type");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // LutOp
 //===----------------------------------------------------------------------===//
 

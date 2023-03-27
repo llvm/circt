@@ -248,6 +248,137 @@ def MemoryWriteOp : ArcOp<"memory_write", [
 }
 
 //===----------------------------------------------------------------------===//
+// Trigger Grouping
+//===----------------------------------------------------------------------===//
+
+def ClockTreeOp : ArcOp<"clock_tree", [NoTerminator, NoRegionArguments]> {
+  let summary = "A clock tree";
+  let arguments = (ins I1:$clock, Optional<I1>:$enable);
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{
+    $clock (`if` $enable^)? attr-dict-with-keyword $body
+  }];
+  let extraClassDeclaration = [{
+    mlir::Block &getBodyBlock() { return getBody().front(); }
+  }];
+}
+
+def PassThroughOp : ArcOp<"passthrough", [NoTerminator, NoRegionArguments]> {
+  let summary = "Clock-less logic that is on the pass-through path";
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{
+    attr-dict-with-keyword $body
+  }];
+  let extraClassDeclaration = [{
+    mlir::Block &getBodyBlock() { return getBody().front(); }
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Storage Allocation
+//===----------------------------------------------------------------------===//
+
+def AllocStateOp : ArcOp<"alloc_state", [MemoryEffects<[MemAlloc]>]> {
+  let summary = "Allocate internal state";
+  let arguments = (ins StorageType:$storage, UnitAttr:$tap);
+  let results = (outs StateType:$state);
+  let assemblyFormat = [{
+    $storage (`tap` $tap^)? attr-dict `:` functional-type($storage, $state)
+  }];
+}
+
+def AllocMemoryOp : ArcOp<"alloc_memory", [MemoryEffects<[MemAlloc]>]> {
+  let summary = "Allocate a memory";
+  let arguments = (ins StorageType:$storage);
+  let results = (outs MemoryType:$memory);
+  let assemblyFormat = [{
+    $storage attr-dict `:` functional-type($storage, $memory)
+  }];
+}
+
+def AllocStorageOp : ArcOp<"alloc_storage", [MemoryEffects<[MemAlloc]>]> {
+  let summary = "Allocate contiguous storage space from a larger storage space";
+  let arguments = (ins StorageType:$input, OptionalAttr<I32Attr>:$offset);
+  let results = (outs StorageType:$output);
+  let assemblyFormat = [{
+    $input (`[` $offset^ `]`)? attr-dict `:` functional-type($input, $output)
+  }];
+}
+
+def RootInputOp : ArcOp<"root_input", [
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
+]> {
+  let summary = "A root input";
+  let arguments = (ins StrAttr:$name, StorageType:$storage);
+  let results = (outs StateType:$state);
+  let assemblyFormat = [{
+    $name `,` $storage attr-dict `:` functional-type($storage, $state)
+  }];
+}
+
+def RootOutputOp : ArcOp<"root_output", [
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
+]> {
+  let summary = "A root output";
+  let arguments = (ins StrAttr:$name, StorageType:$storage);
+  let results = (outs StateType:$state);
+  let assemblyFormat = [{
+    $name `,` $storage attr-dict `:` functional-type($storage, $state)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// State Read/Write
+//===----------------------------------------------------------------------===//
+
+class StateAndValueTypesMatch<string state, string value> : TypesMatchWith<
+  "state and value types must match", state, value,
+  "$_self.cast<StateType>().getType()">;
+
+def StateReadOp : ArcOp<"state_read", [
+  MemoryEffects<[MemRead]>,
+  StateAndValueTypesMatch<"state", "value">
+]> {
+  let summary = "Get a state's current value";
+  let arguments = (ins StateType:$state);
+  let results = (outs AnyInteger:$value);
+  let assemblyFormat = [{
+    $state attr-dict `:` type($state)
+  }];
+  let builders = [
+    OpBuilder<(ins "mlir::Value":$state), [{
+      build($_builder, $_state, state.getType().cast<StateType>().getType(),
+            state);
+    }]>
+  ];
+}
+
+def StateWriteOp : ArcOp<"state_write", [
+  MemoryEffects<[MemWrite]>,
+  StateAndValueTypesMatch<"state", "value">
+]> {
+  let summary = "Update a state's value";
+  let description = [{
+    Changes the value of a state. This operation is treated as a deferred
+    assignment by most transformation passes, which allows them to change the
+    order of `arc.state_read` and `arc.state_write` ops on the same state
+    without affecting the correctness of the model. The reads are always assumed
+    to produce the current value of the state and writes to be deferred until
+    all operations in the model have been executed for the current time step.
+
+    The only exceptions to this are the state update legalization pass, which
+    inserts the necessary temporary variables such that writes can be performed
+    immediately without affecting correctness. This allows later lowering passes
+    to treat `arc.state_write` as an immediate assignment (without defering).
+  }];
+  let arguments = (ins StateType:$state, AnyInteger:$value,
+                       Optional<I1>:$condition);
+  let assemblyFormat = [{
+    $state `=` $value (`if` $condition^)? attr-dict `:` type($state)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Miscellaneous
 //===----------------------------------------------------------------------===//
 
@@ -255,6 +386,26 @@ def TapOp : ArcOp<"tap"> {
   let summary = "A tracker op to observe a value under a given name";
   let arguments = (ins AnySignlessInteger:$value, StrAttr:$name);
   let assemblyFormat = [{ $value attr-dict `:` type($value) }];
+}
+
+def ModelOp : ArcOp<"model", [RegionKindInterface, IsolatedFromAbove,
+                              NoTerminator]> {
+  let summary = "A model with stratified clocks";
+  let arguments = (ins StrAttr:$name);
+  let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = [{
+    $name attr-dict-with-keyword $body
+  }];
+
+  let extraClassDeclaration = [{
+    static mlir::RegionKind getRegionKind(unsigned index) {
+      return mlir::RegionKind::Graph;
+    }
+    mlir::Block &getBodyBlock() { return getBody().front(); }
+  }];
+
+  let hasVerifier = 1;
 }
 
 def LutOp : ArcOp<"lut", [
