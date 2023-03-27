@@ -367,19 +367,21 @@ private:
     wires.append({clk.getInput(), reset.getInput(), go.getInput(),
                   left.getInput(), right.getInput()});
 
-    auto targetOp = b.create<TargetOpTy>(left, right, false);
-    for (auto &&[targetRes, sourceRes] :
-         llvm::zip(targetOp->getResults(), op.getOutputPorts())) {
-      auto portName = op.portName(sourceRes);
-      auto resReg = reg(targetRes, clk, reset,
-                        createName(op.instanceName(), portName), b);
-      wires.push_back(wireOut(resReg, op.instanceName(), portName, b));
-    }
-
     auto doneReg = reg(go, clk, reset,
                        op.instanceName() + "_" + op.portName(op.getDone()), b);
     auto done =
         wireOut(doneReg, op.instanceName(), op.portName(op.getDone()), b);
+
+    auto targetOp = b.create<TargetOpTy>(left, right, false);
+    for (auto &&[targetRes, sourceRes] :
+         llvm::zip(targetOp->getResults(), op.getOutputPorts())) {
+      auto portName = op.portName(sourceRes);
+      auto clockEn = b.create<AndOp>(go, createOrFoldNot(done, b));
+      auto resReg = regCe(targetRes, clk, clockEn, reset,
+                          createName(op.instanceName(), portName), b);
+      wires.push_back(wireOut(resReg, op.instanceName(), portName, b));
+    }
+
     wires.push_back(done);
   }
 
