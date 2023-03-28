@@ -1386,19 +1386,19 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
   case FIRToken::lp_read:
     if (isLeadingStmt)
       return emitError("unexpected read() as start of statement");
-    if (parseRefRead(result /*, message*/))
+    if (parseRefRead(result))
       return failure();
     break;
   case FIRToken::lp_probe:
     if (isLeadingStmt)
       return emitError("unexpected probe() as start of statement");
-    if (parseProbe(result /*, message*/))
+    if (parseProbe(result))
       return failure();
     break;
   case FIRToken::lp_rwprobe:
     if (isLeadingStmt)
       return emitError("unexpected rwprobe() as start of statement");
-    if (parseRWProbe(result /*, message*/))
+    if (parseRWProbe(result))
       return failure();
     break;
 
