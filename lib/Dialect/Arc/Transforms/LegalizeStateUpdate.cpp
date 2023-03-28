@@ -217,16 +217,19 @@ void AccessAnalysis::visitOperation(Operation *op) {
         }
       })
       .Case<CallOpInterface>([&](auto callOp) {
-        if (auto calleeOp = dyn_cast_or_null<CallableOpInterface>(
-                callOp.resolveCallable(&symbolTable))) {
-          auto operands = callOp.getArgOperands();
-          const auto *calleeArgAccesses =
-              getOrCreateFor<ArgumentAccessState>(callOp, calleeOp);
-          for (auto access : calleeArgAccesses->accesses)
-            if (auto arg = access.getPointer()
-                               .template dyn_cast_or_null<BlockArgument>())
-              result |=
-                  accesses->add(operands[arg.getArgNumber()], access.getInt());
+        auto calleeOp = dyn_cast_or_null<CallableOpInterface>(
+            callOp.resolveCallable(&symbolTable));
+        if (!calleeOp)
+          return;
+        auto operands = callOp.getArgOperands();
+        const auto *calleeArgAccesses =
+            getOrCreateFor<ArgumentAccessState>(callOp, calleeOp);
+        for (auto access : calleeArgAccesses->accesses) {
+          auto arg =
+              access.getPointer().template dyn_cast_or_null<BlockArgument>();
+          if (arg)
+            result |=
+                accesses->add(operands[arg.getArgNumber()], access.getInt());
         }
       });
 
