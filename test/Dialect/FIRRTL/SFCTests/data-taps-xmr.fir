@@ -111,9 +111,9 @@ circuit Top : %[[
 
 ; CHECK-LABEL: module Top(
 ; CHECK-NOT:   endmodule
-; CHECK:         assign tap = Top.foo.b.inv;
-; CHECK-NEXT:    assign tap2 = Top.unsigned_0.signed_0.localparam_0.random.something;
-; CHECK-NEXT:    assign tap3 = Top.unsigned_0.signed_0.localparam_0.random.something_else;
+; CHECK:         tap = Top.foo.b.inv;
+; CHECK-NEXT:    tap2 = Top.unsigned_0.signed_0.localparam_0.random.something;
+; CHECK-NEXT:    tap3 = Top.unsigned_0.signed_0.localparam_0.random.something_else;
 ; CHECK:         ChildWrapper unsigned_0 (
 ; CHECK-NEXT:      .[[ChildWrapper_boredPort]] (Top.int_0.io_out)
 ; CHECK:       endmodule

@@ -1464,6 +1464,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   }
   Attribute getOrCreateAggregateConstantAttribute(Attribute value, Type type);
   Value getOrCreateXConstant(unsigned numBits);
+  Value getOrCreateZConstant(Type type);
   Value getPossiblyInoutLoweredValue(Value value);
   Value getLoweredValue(Value value);
   Value getLoweredAndExtendedValue(Value value, Type destType);
@@ -1684,6 +1685,7 @@ private:
   /// This keeps track of constant X that we have created so we can reuse them.
   /// This is populated by the getOrCreateXConstant method.
   DenseMap<unsigned, Value> hwConstantXMap;
+  DenseMap<Type, Value> hwConstantZMap;
 
   /// We auto-unique "ReadInOut" ops from wires and regs, enabling
   /// optimizations and CSEs of the read values to be more obvious.  This
@@ -1950,6 +1952,15 @@ Value FIRRTLLowering::getOrCreateXConstant(unsigned numBits) {
   OpBuilder entryBuilder(&theModule.getBodyBlock()->front());
   entry = entryBuilder.create<sv::ConstantXOp>(
       builder.getLoc(), entryBuilder.getIntegerType(numBits));
+  return entry;
+}
+
+Value FIRRTLLowering::getOrCreateZConstant(Type type) {
+  auto &entry = hwConstantZMap[type];
+  if (!entry) {
+    OpBuilder entryBuilder(&theModule.getBodyBlock()->front());
+    entry = entryBuilder.create<sv::ConstantZOp>(builder.getLoc(), type);
+  }
   return entry;
 }
 
@@ -2712,7 +2723,8 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   }
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
-  return setLoweringTo<sv::WireOp>(op, resultType, name, symName);
+  return setLoweringTo<hw::WireOp>(op, getOrCreateZConstant(resultType), name,
+                                   symName);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
