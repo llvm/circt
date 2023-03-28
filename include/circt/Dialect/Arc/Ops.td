@@ -193,6 +193,30 @@ def StateOp : ArcOp<"state", [
   }];
 }
 
+def CallOp : ArcOp<"call", [
+  CallOpInterface, MemRefsNormalizable, Pure,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "calls an arc";
+
+  let arguments = (ins FlatSymbolRefAttr:$arc, Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>:$outputs);
+
+  let assemblyFormat = [{
+    $arc `(` $inputs `)` attr-dict `:` functional-type(operands, results)
+  }];
+
+  let extraClassDeclaration = [{
+    operand_range getArgOperands() {
+      return {operand_begin(), operand_end()};
+    }
+
+    mlir::CallInterfaceCallable getCallableForCallee() {
+      return (*this)->getAttrOfType<mlir::SymbolRefAttr>("arc");
+    }
+  }];
+}
+
 def ClockGateOp : ArcOp<"clock_gate", [Pure]> {
   let summary = "Clock gate";
   let arguments = (ins I1:$input, I1:$enable);

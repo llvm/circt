@@ -148,3 +148,14 @@ func.func @zeroCount(%arg0 : i32) {
   %1 = arc.zero_count trailing %arg0  : i32
   return
 }
+
+// CHECK-LABEL: llvm.func @callOp
+func.func @callOp(%arg0: i32) -> i32 {
+  // CHECK-NEXT: [[V0:%.+]] = llvm.call @dummyCallee(%arg0) : (i32) -> i32
+  %0 = arc.call @dummyCallee(%arg0) : (i32) -> i32
+  // CHECK-NEXT: return [[V0]] : i32
+  return %0 : i32
+}
+arc.define @dummyCallee(%arg0: i32) -> i32 {
+  arc.output %arg0 : i32
+}

@@ -61,6 +61,21 @@ struct OutputOpLowering : public OpConversionPattern<arc::OutputOp> {
   }
 };
 
+struct CallOpLowering : public OpConversionPattern<arc::CallOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(arc::CallOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    SmallVector<Type> newResultTypes;
+    if (failed(
+            typeConverter->convertTypes(op.getResultTypes(), newResultTypes)))
+      return failure();
+    rewriter.replaceOpWithNewOp<func::CallOp>(
+        op, newResultTypes, op.getArcAttr(), adaptor.getInputs());
+    return success();
+  }
+};
+
 struct StateOpLowering : public OpConversionPattern<arc::StateOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -377,6 +392,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
     AllocStateLikeOpLowering<arc::RootInputOp>,
     AllocStateLikeOpLowering<arc::RootOutputOp>,
     AllocStorageOpLowering,
+    CallOpLowering,
     ClockGateOpLowering,
     DefineOpLowering,
     MemoryReadOpLowering,

@@ -73,3 +73,18 @@ func.func @zeroCount(%arg0 : i32) {
   %1 = arc.zero_count trailing %arg0  : i32
   return
 }
+
+// CHECK-LABEL: @testCallOp
+arc.define @testCallOp(%arg0: i1, %arg1: i32) {
+  // CHECK-NEXT: {{.*}} = arc.call @dummyCallee1(%arg0, %arg1) : (i1, i32) -> i32
+  %0 = arc.call @dummyCallee1(%arg0, %arg1) : (i1, i32) -> i32
+  // CHECK-NEXT: arc.call @dummyCallee2()
+  arc.call @dummyCallee2() : () -> ()
+  arc.output
+}
+arc.define @dummyCallee1(%arg0: i1, %arg1: i32) -> i32 {
+  arc.output %arg1 : i32
+}
+arc.define @dummyCallee2() {
+  arc.output
+}
