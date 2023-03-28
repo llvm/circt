@@ -1512,6 +1512,14 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
     return result;
   }
 
+  // Create a temporary wire to act as a destination for connect operations.
+  // These wires are removed after all connects have been lowered.
+  hw::WireOp createTmpHWWireOp(Type type, StringAttrOrRef name = {}) {
+    auto wire = builder.create<hw::WireOp>(getOrCreateZConstant(type), name);
+    tmpWiresToRemove.push_back(wire);
+    return wire;
+  }
+
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitExpr;
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitDecl;
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitStmt;
@@ -1707,6 +1715,11 @@ private:
   /// lowering.
   SmallVector<sv::WireOp> tmpWiresToOptimize;
 
+  /// A list of wires created as a temporary destination to for connect-like
+  /// operations to hook up to. These wires are deleted again and replaced with
+  /// their connected value after all operations have been lowered.
+  SmallVector<hw::WireOp> tmpWiresToRemove;
+
   /// A namespace that can be used to generte new symbol names that are unique
   /// within this module.
   hw::ModuleNamespace moduleNamespace;
@@ -1831,6 +1844,15 @@ LogicalResult FIRRTLLowering::run() {
   // inserted by MemOp insertions.
   for (auto wire : tmpWiresToOptimize)
     optimizeTemporaryWire(wire);
+
+  // Remove all temporary wires created solely for the purpose of facilitating
+  // the lowering of connect-like operations.
+  for (auto wire : tmpWiresToRemove) {
+    if (wire.getInnerSymAttr())
+      return wire.emitError("temporary wire was given an inner symbol");
+    wire.replaceAllUsesWith(wire.getInput());
+    wire.erase();
+  }
 
   return backedgeBuilder.clearOrEmitError();
 }
@@ -2928,8 +2950,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
             IntegerType::get(op.getContext(), std::max((size_t)1, width));
         auto accesses = getAllFieldAccesses(op.getResult(i), field);
 
-        Value wire = createTmpWireOp(
-            portType, ("." + portName + "." + field + ".wire").str());
+        Value wire =
+            createTmpHWWireOp(portType, "." + portName + "." + field + ".wire");
 
         for (auto a : accesses) {
           if (a.getType()
@@ -2940,12 +2962,12 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
           else
             a->eraseOperand(0);
         }
-        wire = getReadValue(wire);
+
         if (!field2.empty()) {
           // This handles the case, when the single bit mask field is removed,
           // and the enable is updated after 'And' with mask bit.
-          Value wire2 = createTmpWireOp(
-              portType, ("." + portName + "." + field2 + ".wire").str());
+          Value wire2 = createTmpHWWireOp(portType, "." + portName + "." +
+                                                        field2 + ".wire");
           auto accesses2 = getAllFieldAccesses(op.getResult(i), field2);
 
           for (auto a : accesses2) {
@@ -2957,8 +2979,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
             else
               a->eraseOperand(0);
           }
-          wire = builder.createOrFold<comb::AndOp>(wire, getReadValue(wire2),
-                                                   true);
+          wire = builder.createOrFold<comb::AndOp>(wire, wire2, true);
         }
 
         operands.push_back(wire);
@@ -3117,16 +3138,16 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
     // Create a wire for each input/inout operand, so there is
     // something to connect to.
-    Value wire =
-        createTmpWireOp(portType, "." + port.getName().str() + ".wire");
+    Value wire;
+    if (port.isInOut()) {
+      wire = createTmpWireOp(portType, "." + port.getName().str() + ".wire");
+    } else {
+      wire = createTmpHWWireOp(portType, "." + port.getName() + ".wire");
+    }
 
     // Know that the argument FIRRTL value is equal to this wire, allowing
     // connects to it to be lowered.
     (void)setLowering(portResult, wire);
-
-    // inout ports directly use the wire, but normal inputs read it.
-    if (!port.isInOut())
-      wire = getReadValue(wire);
 
     operands.push_back(wire);
   }
