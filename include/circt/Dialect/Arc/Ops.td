@@ -328,6 +328,22 @@ def RootOutputOp : ArcOp<"root_output", [
 }
 
 //===----------------------------------------------------------------------===//
+// Storage Access
+//===----------------------------------------------------------------------===//
+
+def AllocatableType : AnyTypeOf<[StateType, MemoryType, StorageType]>;
+
+def StorageGetOp : ArcOp<"storage.get", [MemoryEffects<[MemRead]>]> {
+  let summary = "Access an allocated state, memory, or storage slice";
+  let arguments = (ins StorageType:$storage, I32Attr:$offset);
+  let results = (outs AllocatableType:$result);
+  let assemblyFormat = [{
+    $storage `[` $offset `]` attr-dict
+    `:` qualified(type($storage)) `->` type($result)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // State Read/Write
 //===----------------------------------------------------------------------===//
 

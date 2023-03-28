@@ -53,3 +53,14 @@ arc.define @LookupTable(%arg0: i32, %arg1: i8) -> () {
   }
   arc.output
 }
+
+// CHECK-LABEL: func.func @StorageAccess
+func.func @StorageAccess(%arg0: !arc.storage<10000>) {
+  // CHECK-NEXT: arc.storage.get %arg0[42] : !arc.storage<10000> -> !arc.state<i9>
+  // CHECK-NEXT: arc.storage.get %arg0[1337] : !arc.storage<10000> -> !arc.memory<4 x i19, 4>
+  // CHECK-NEXT: arc.storage.get %arg0[9001] : !arc.storage<10000> -> !arc.storage<123>
+  %0 = arc.storage.get %arg0[42] : !arc.storage<10000> -> !arc.state<i9>
+  %1 = arc.storage.get %arg0[1337] : !arc.storage<10000> -> !arc.memory<4 x i19, 4>
+  %2 = arc.storage.get %arg0[9001] : !arc.storage<10000> -> !arc.storage<123>
+  return
+}
