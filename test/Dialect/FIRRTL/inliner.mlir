@@ -1113,3 +1113,29 @@ firrtl.circuit "Top" {
     firrtl.refconnect %_a, %1 : !firrtl.ref<uint<1>>
   }
 }
+
+
+// -----
+
+// PR #4882 fixes a bug, which was producing invalid NLAs.
+// error: 'hw.hierpath' op  module: "instNameRename" does not contain any instance with symbol: "w"
+// Due to coincidental name collisions, renaming was not updating the actual hierpath.
+firrtl.circuit "Bug4882Rename"  {
+  hw.hierpath private @nla_5560 [@Bug4882Rename::@w, @Bar2::@x]
+  firrtl.module private @Bar2() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    %x = firrtl.wire sym @x  {annotations = [{circt.nonlocal = @nla_5560, class = "test0"}]} : !firrtl.uint<8>
+  }
+  firrtl.module private @Bar1() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    firrtl.instance bar3 sym @w  @Bar3()
+  }
+  firrtl.module private @Bar3()  {
+    %w = firrtl.wire sym @w1   : !firrtl.uint<8>
+  }
+  firrtl.module @Bug4882Rename() {
+  // CHECK-LABEL: firrtl.module @Bug4882Rename() {
+    firrtl.instance no sym @no  @Bar1()
+    // CHECK-NEXT: firrtl.instance no_bar3 sym @w_0 @Bar3()
+    firrtl.instance bar2 sym @w  @Bar2()
+    // CHECK-NEXT: %bar2_x = firrtl.wire sym @x {annotations = [{class = "test0"}]}
+  }
+}
