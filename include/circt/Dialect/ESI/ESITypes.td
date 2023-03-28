@@ -37,7 +37,7 @@ def ESIWindowType : ESI_Type<"Window"> {
   let summary = "a data window";
   let description = [{
     A 'data window' allows designers to break up large messages into multiple
-    frames (aka fits) spread across multiple cycles. Windows are specified in
+    frames (aka phits) spread across multiple cycles. Windows are specified in
     terms of a mapping of struct fields to frames. The width of a window is the
     maximum frame size + the union tag (log2(#frames)).
 

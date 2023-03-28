@@ -31,7 +31,7 @@ LogicalResult
 WindowType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
                    StringAttr name, Type into,
                    ArrayRef<WindowFrameType> frames) {
-  auto structInto = into.dyn_cast<hw::StructType>();
+  auto structInto = hw::type_dyn_cast<hw::StructType>(into);
   if (!structInto)
     return emitError() << "only windows into structs are currently supported";
 
@@ -57,7 +57,7 @@ WindowType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
       // If 'numItems' is specified, gotta run more checks.
       uint64_t numItems = f->getSecond().getNumItems();
       if (numItems > 0) {
-        auto arrField = field.type.dyn_cast<hw::ArrayType>();
+        auto arrField = hw::type_dyn_cast<hw::ArrayType>(field.type);
         if (!arrField)
           return emitError() << "cannot specify num items on non-array field "
                              << field.name;
