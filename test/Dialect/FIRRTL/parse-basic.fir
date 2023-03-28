@@ -1197,10 +1197,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     out <= read(rc.rw)
 
     ; ref.sub parsing
-    ; CHECK-DAG: %[[AGG:.+]] = firrtl.wire interesting_name : !firrtl.bundle<a: uint<1>, b: uint>
-    ; CHECK-DAG: %[[AGG2:.+]] = firrtl.wire interesting_name : !firrtl.bundle<a: uint, b: uint<1>>
-    wire agg : { a : UInt<1>, b : UInt }
-    wire agg2 : { a : UInt, b : UInt<1> }
+    ; CHECK-DAG: %[[AGG:.+]] = firrtl.wire interesting_name : !firrtl.bundle<a flip: uint<1>, b: uint>
+    ; CHECK-DAG: %[[AGG2:.+]] = firrtl.wire interesting_name : !firrtl.bundle<a: uint, b flip: uint<1>>
+    wire agg : { flip a : UInt<1>, b : UInt }
+    wire agg2 : { a : UInt, flip b : UInt<1> }
     ; CHECK-DAG: %[[AGG_B:.+]] = firrtl.subfield %[[AGG]][b]
     ; CHECK-DAG: %[[AGG_B_PROBE:.+]] = firrtl.ref.send %[[AGG_B]]
     ; CHECK-DAG: %[[READ_AGG_B_PROBE:.+]] = firrtl.ref.resolve %[[AGG_B_PROBE]]

@@ -2429,11 +2429,6 @@ ParseResult FIRStmtParser::parseProbe(Value &result) {
           staticRef.getDefiningOp()))
     return emitError(startTok.getLoc(), "cannot probe memories or their ports");
 
-  // TODO: Once PR 4801 lands, remove this.
-  if (!cast<FIRRTLBaseType>(staticRef.getType()).isPassive())
-    return emitError(startTok.getLoc(),
-                     "probe of non-passive types not yet supported");
-
   result = builder.create<RefSendOp>(staticRef);
 
   return success();
@@ -2467,11 +2462,6 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
                       MemoryDebugPortOp, MemoryPortAccessOp>(
           staticRef.getDefiningOp()))
     return emitError(startTok.getLoc(), "cannot probe memories or their ports");
-
-  // TODO: Once PR 4801 lands, remove this.
-  if (!cast<FIRRTLBaseType>(staticRef.getType()).isPassive())
-    return emitError(startTok.getLoc(),
-                     "probe of non-passive types not yet supported");
 
   result = builder.create<RefSendOp>(staticRef);
 
