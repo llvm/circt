@@ -18,7 +18,7 @@ jobs:
           fetch-depth: 2
           submodules: "true"
 
-      # Package up sources for distribution, as the default source bundles from GitHub don't include LLVM. Only runs on the ubuntu-20.04 runner.
+      # Package up sources for distribution, as the default source bundles from GitHub don't include LLVM.
       - name: Create Source Archive
         run: |
           touch circt-full-sources.tar.gz
