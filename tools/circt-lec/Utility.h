@@ -40,10 +40,12 @@ inline mlir::raw_indented_ostream &outs() {
   return stream;
 };
 
-#define INDENT()                                                               \
-  auto _indentDbgs = lec::dbgs().scope();                                      \
-  auto _indentErrs = lec::errs().scope();                                      \
-  auto _indentOuts = lec::outs().scope()
+/// RAII struct to indent the output streams.
+struct Scope {
+  mlir::raw_indented_ostream::DelimitedScope indentDbgs = lec::dbgs().scope();
+  mlir::raw_indented_ostream::DelimitedScope indentErrs = lec::errs().scope();
+  mlir::raw_indented_ostream::DelimitedScope indentOuts = lec::outs().scope();
+};
 
 /// Helper function to provide a common debug formatting for z3 expressions.
 inline void printExpr(const z3::expr &expr) {

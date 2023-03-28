@@ -26,7 +26,7 @@ static inline void debugOperands(ConcreteOp op) {
   for (const mlir::OpOperand &operand : op->getOpOperands()) {
     mlir::Value value = operand.get();
     lec::dbgs() << "Operand:\n";
-    INDENT();
+    lec::Scope indent;
     lec::printValue(value);
   }
 }
@@ -35,7 +35,7 @@ static inline void debugOperands(ConcreteOp op) {
 /// an operation's result.
 static inline void debugOpResult(const mlir::Value &result) {
   lec::dbgs() << "Result:\n";
-  INDENT();
+  lec::Scope indent;
   lec::printValue(result);
 }
 
@@ -46,7 +46,7 @@ static inline void
 debugOpResults(mlir::OpTrait::VariadicResults<ConcreteOp> *op) {
   lec::dbgs() << "Results:\n";
   for (mlir::OpResult result : op->getResults()) {
-    INDENT();
+    lec::Scope indent;
     lec::dbgs() << "#" << result.getResultNumber() << " ";
     debugOpResult(result);
   }
@@ -57,7 +57,7 @@ debugOpResults(mlir::OpTrait::VariadicResults<ConcreteOp> *op) {
 static inline void
 debugAttributes(llvm::ArrayRef<mlir::NamedAttribute> attributes) {
   lec::dbgs() << "Attributes:\n";
-  INDENT();
+  lec::Scope indent;
   for (mlir::NamedAttribute attr : attributes) {
     lec::dbgs() << attr.getName().getValue() << ": " << attr.getValue() << "\n";
   }
@@ -81,7 +81,7 @@ mlir::LogicalResult
 LogicExporter::Visitor::visitStmt(circt::hw::InstanceOp &op,
                                   Solver::Circuit *circuit) {
   LLVM_DEBUG(lec::dbgs() << "Visiting hw.instance\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << op->getName() << "\n");
   LLVM_DEBUG(debugAttributes(op->getAttrs()));
   LLVM_DEBUG(debugOperands(op));
@@ -108,7 +108,7 @@ mlir::LogicalResult
 LogicExporter::Visitor::visitStmt(circt::hw::OutputOp &op,
                                   Solver::Circuit *circuit) {
   LLVM_DEBUG(lec::dbgs() << "Visiting hw.output\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(debugOperands(op));
   for (auto operand : op.getOperands())
     circuit->addOutput(operand);
@@ -139,7 +139,7 @@ mlir::LogicalResult
 LogicExporter::Visitor::visitTypeOp(circt::hw::ConstantOp &op,
                                     Solver::Circuit *circuit) {
   LLVM_DEBUG(lec::dbgs() << "Visiting hw.constant\n");
-  INDENT();
+  lec::Scope indent;
   mlir::Value result = op.getResult();
   LLVM_DEBUG(lec::printValue(result));
   mlir::APInt value = op.getValue();
@@ -182,7 +182,7 @@ LogicExporter::Visitor::visitInvalidTypeOp(mlir::Operation *op,
   mlir::LogicalResult LogicExporter::Visitor::visitComb(                       \
       TYPE op, Solver::Circuit *circuit) {                                     \
     LLVM_DEBUG(lec::dbgs() << "Visiting " #MLIR_NAME "\n");                    \
-    INDENT();                                                                  \
+    lec::Scope indent;                                                         \
     LLVM_DEBUG(debugOperands(op));                                             \
     bool twoState = op.getTwoState();                                          \
     REJECT_N_STATE_LOGIC();                                                    \
@@ -198,7 +198,7 @@ LogicExporter::Visitor::visitInvalidTypeOp(mlir::Operation *op,
   mlir::LogicalResult LogicExporter::Visitor::visitComb(                       \
       TYPE op, Solver::Circuit *circuit) {                                     \
     LLVM_DEBUG(lec::dbgs() << "Visiting " #MLIR_NAME "\n");                    \
-    INDENT();                                                                  \
+    lec::Scope indent;                                                         \
     LLVM_DEBUG(debugOperands(op));                                             \
     bool twoState = op.getTwoState();                                          \
     REJECT_N_STATE_LOGIC();                                                    \
@@ -216,7 +216,7 @@ LogicExporter::Visitor::visitInvalidTypeOp(mlir::Operation *op,
   mlir::LogicalResult LogicExporter::Visitor::visitComb(                       \
       TYPE op, Solver::Circuit *circuit) {                                     \
     LLVM_DEBUG(lec::dbgs() << "Visiting " #MLIR_NAME "\n");                    \
-    INDENT();                                                                  \
+    lec::Scope indent;                                                         \
     LLVM_DEBUG(debugOperands(op));                                             \
     bool twoState = op.getTwoState();                                          \
     REJECT_N_STATE_LOGIC();                                                    \
@@ -235,7 +235,7 @@ mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::ConcatOp &op,
                                   Solver::Circuit *circuit) {
   LLVM_DEBUG(lec::dbgs() << "Visiting comb.concat\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(debugOperands(op));
   mlir::Value result = op.getResult();
   LLVM_DEBUG(debugOpResult(result));
@@ -251,7 +251,7 @@ mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::ExtractOp &op,
                                   Solver::Circuit *circuit) {
   LLVM_DEBUG(lec::dbgs() << "Visiting comb.extract\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(debugOperands(op));
   mlir::Value input = op.getInput();
   uint32_t lowBit = op.getLowBit();
@@ -266,7 +266,7 @@ mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::ICmpOp &op,
                                   Solver::Circuit *circuit) {
   LLVM_DEBUG(lec::dbgs() << "Visiting comb.icmp\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(debugOperands(op));
   bool twoState = op.getTwoState();
   REJECT_N_STATE_LOGIC();
@@ -290,7 +290,7 @@ mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::MuxOp &op,
                                   Solver::Circuit *circuit) {
   LLVM_DEBUG(lec::dbgs() << "Visiting comb.mux\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(debugOperands(op));
   bool twoState = op.getTwoState();
   REJECT_N_STATE_LOGIC();
@@ -311,7 +311,7 @@ mlir::LogicalResult
 LogicExporter::Visitor::visitComb(circt::comb::ReplicateOp &op,
                                   Solver::Circuit *circuit) {
   LLVM_DEBUG(lec::dbgs() << "Visiting comb.replicate\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(debugOperands(op));
   mlir::Value input = op.getInput();
   mlir::Value result = op.getResult();
@@ -340,7 +340,7 @@ LogicExporter::Visitor::visitBuiltin(mlir::ModuleOp &op,
                                      Solver::Circuit *circuit,
                                      llvm::StringRef targetModule) {
   LLVM_DEBUG(lec::dbgs() << "Visiting `builtin.module`\n");
-  INDENT();
+  lec::Scope indent;
   // Currently only `hw.module` handling is implemented.
   for (auto hwModule : op.getOps<circt::hw::HWModuleOp>()) {
     llvm::StringRef moduleName = hwModule.getName();
@@ -349,7 +349,7 @@ LogicExporter::Visitor::visitBuiltin(mlir::ModuleOp &op,
     // When no module name is specified the first module encountered is
     // selected.
     if (targetModule.empty() || moduleName == targetModule) {
-      INDENT();
+      lec::Scope indent;
       LLVM_DEBUG(lec::dbgs() << "proceeding with this module\n");
       return visitHW(hwModule, circuit);
     }
@@ -362,14 +362,14 @@ LogicExporter::Visitor::visitBuiltin(mlir::ModuleOp &op,
 mlir::LogicalResult LogicExporter::Visitor::visitHW(circt::hw::HWModuleOp &op,
                                                     Solver::Circuit *circuit) {
   LLVM_DEBUG(lec::dbgs() << "Visiting `hw.module@" << op.getName() << "`\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(debugAttributes(op->getAttrs()));
   LLVM_DEBUG(lec::dbgs() << "Arguments:\n");
   for (mlir::BlockArgument argument : op.getArguments()) {
-    INDENT();
+    lec::Scope indent;
     LLVM_DEBUG(lec::dbgs() << "Argument\n");
     {
-      INDENT();
+      lec::Scope indent;
       LLVM_DEBUG(lec::printValue(argument));
     }
     circuit->addInput(argument);

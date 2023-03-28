@@ -79,7 +79,7 @@ Solver::Circuit *Solver::addCircuit(llvm::StringRef name, bool firstCircuit) {
 /// Prints a model satisfying the solved constraints.
 void Solver::printModel() {
   lec::dbgs() << "Model:\n";
-  INDENT();
+  lec::Scope indent;
   z3::model model = solver.get_model();
   for (unsigned int i = 0; i < model.size(); i++) {
     // Recover the corresponding mlir::Value for the z3::expression
@@ -118,7 +118,7 @@ void Solver::printModel() {
 /// assertion as a z3::expression for eventual in-depth debugging.
 void Solver::printAssertions() {
   lec::dbgs() << "Assertions:\n";
-  INDENT();
+  lec::Scope indent;
   for (z3::expr assertion : solver.assertions()) {
     lec::dbgs() << assertion.to_string() << "\n";
   }
@@ -128,7 +128,7 @@ void Solver::printAssertions() {
 /// and operational insight.
 void Solver::printStatistics() {
   lec::dbgs() << "SMT solver statistics:\n";
-  INDENT();
+  lec::Scope indent;
   z3::stats stats = solver.statistics();
   for (unsigned i = 0; i < stats.size(); i++) {
     lec::dbgs() << stats.key(i) << " : " << stats.uint_value(i) << "\n";

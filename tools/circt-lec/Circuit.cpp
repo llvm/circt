@@ -22,7 +22,7 @@
 /// Add an input to the circuit; internally a new value gets allocated.
 void Solver::Circuit::addInput(mlir::Value value) {
   LLVM_DEBUG(lec::dbgs() << name << " addInput\n");
-  INDENT();
+  lec::Scope indent;
   z3::expr input = allocateValue(value);
   inputs.insert(inputs.end(), input);
 }
@@ -48,7 +48,7 @@ llvm::ArrayRef<z3::expr> Solver::Circuit::getOutputs() { return outputs; }
 void Solver::Circuit::addConstant(mlir::Value opResult,
                                   const mlir::APInt &opValue) {
   LLVM_DEBUG(lec::dbgs() << name << " addConstant\n");
-  INDENT();
+  lec::Scope indent;
   allocateConstant(opResult, opValue);
 }
 
@@ -57,7 +57,7 @@ void Solver::Circuit::addInstance(llvm::StringRef instanceName,
                                   mlir::OperandRange arguments,
                                   mlir::ResultRange results) {
   LLVM_DEBUG(lec::dbgs() << name << " addInstance\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "instance name: " << instanceName << "\n");
   LLVM_DEBUG(lec::dbgs() << "module name: " << op->getName() << "\n");
   // There is no preventing multiple instances holding the same name.
@@ -73,7 +73,7 @@ void Solver::Circuit::addInstance(llvm::StringRef instanceName,
   // the arguments and results of the instance operation.
   {
     LLVM_DEBUG(lec::dbgs() << "instance inputs:\n");
-    INDENT();
+    lec::Scope indent;
     auto *input = instance.inputs.begin();
     for (mlir::Value argument : arguments) {
       LLVM_DEBUG(lec::dbgs() << "input\n");
@@ -83,7 +83,7 @@ void Solver::Circuit::addInstance(llvm::StringRef instanceName,
   }
   {
     LLVM_DEBUG(lec::dbgs() << "instance results:\n");
-    INDENT();
+    lec::Scope indent;
     auto *output = instance.outputs.begin();
     for (circt::OpResult result : results) {
       z3::expr resultExpr = allocateValue(result);
@@ -99,7 +99,7 @@ void Solver::Circuit::addInstance(llvm::StringRef instanceName,
 void Solver::Circuit::performAdd(mlir::Value result,
                                  mlir::OperandRange operands) {
   LLVM_DEBUG(lec::dbgs() << name << " perform Add\n");
-  INDENT();
+  lec::Scope indent;
   variadicOperation(result, operands,
                     [](auto op1, auto op2) { return op1 + op2; });
 }
@@ -107,7 +107,7 @@ void Solver::Circuit::performAdd(mlir::Value result,
 void Solver::Circuit::performAnd(mlir::Value result,
                                  mlir::OperandRange operands) {
   LLVM_DEBUG(lec::dbgs() << name << " perform And\n");
-  INDENT();
+  lec::Scope indent;
   variadicOperation(result, operands,
                     [](auto op1, auto op2) { return z3::operator&(op1, op2); });
 }
@@ -115,7 +115,7 @@ void Solver::Circuit::performAnd(mlir::Value result,
 void Solver::Circuit::performConcat(mlir::Value result,
                                     mlir::OperandRange operands) {
   LLVM_DEBUG(lec::dbgs() << name << " perform Concat\n");
-  INDENT();
+  lec::Scope indent;
   variadicOperation(result, operands,
                     [](auto op1, auto op2) { return z3::concat(op1, op2); });
 }
@@ -123,7 +123,7 @@ void Solver::Circuit::performConcat(mlir::Value result,
 void Solver::Circuit::performDivS(mlir::Value result, mlir::Value lhs,
                                   mlir::Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform DivS\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
   z3::expr lhsExpr = fetchExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
@@ -135,7 +135,7 @@ void Solver::Circuit::performDivS(mlir::Value result, mlir::Value lhs,
 void Solver::Circuit::performDivU(mlir::Value result, mlir::Value lhs,
                                   mlir::Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform DivU\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
   z3::expr lhsExpr = fetchExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
@@ -147,7 +147,7 @@ void Solver::Circuit::performDivU(mlir::Value result, mlir::Value lhs,
 void Solver::Circuit::performExtract(mlir::Value result, mlir::Value input,
                                      uint32_t lowBit) {
   LLVM_DEBUG(lec::dbgs() << name << " performExtract\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "input:\n");
   z3::expr inputExpr = fetchExpr(input);
   unsigned width = result.getType().getIntOrFloatBitWidth();
@@ -161,7 +161,7 @@ Solver::Circuit::performICmp(mlir::Value result,
                              circt::comb::ICmpPredicate predicate,
                              mlir::Value lhs, mlir::Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " performICmp\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
   z3::expr lhsExpr = fetchExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
@@ -216,7 +216,7 @@ Solver::Circuit::performICmp(mlir::Value result,
 void Solver::Circuit::performModS(mlir::Value result, mlir::Value lhs,
                                   mlir::Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform ModS\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
   z3::expr lhsExpr = fetchExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
@@ -228,7 +228,7 @@ void Solver::Circuit::performModS(mlir::Value result, mlir::Value lhs,
 void Solver::Circuit::performModU(mlir::Value result, mlir::Value lhs,
                                   mlir::Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform ModU\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
   z3::expr lhsExpr = fetchExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
@@ -240,7 +240,7 @@ void Solver::Circuit::performModU(mlir::Value result, mlir::Value lhs,
 void Solver::Circuit::performMul(mlir::Value result,
                                  mlir::OperandRange operands) {
   LLVM_DEBUG(lec::dbgs() << name << " perform Mul\n");
-  INDENT();
+  lec::Scope indent;
   variadicOperation(result, operands,
                     [](auto op1, auto op2) { return op1 * op2; });
 }
@@ -249,7 +249,7 @@ void Solver::Circuit::performMux(mlir::Value result, mlir::Value cond,
                                  mlir::Value trueValue,
                                  mlir::Value falseValue) {
   LLVM_DEBUG(lec::dbgs() << name << " performMux\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "cond:\n");
   z3::expr condExpr = fetchExpr(cond);
   LLVM_DEBUG(lec::dbgs() << "trueValue:\n");
@@ -264,14 +264,14 @@ void Solver::Circuit::performMux(mlir::Value result, mlir::Value cond,
 void Solver::Circuit::performOr(mlir::Value result,
                                 mlir::OperandRange operands) {
   LLVM_DEBUG(lec::dbgs() << name << " perform Or\n");
-  INDENT();
+  lec::Scope indent;
   variadicOperation(result, operands,
                     [](auto op1, auto op2) { return op1 | op2; });
 }
 
 void Solver::Circuit::performParity(mlir::Value result, mlir::Value input) {
   LLVM_DEBUG(lec::dbgs() << name << " performParity\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "input:\n");
   z3::expr inputExpr = fetchExpr(input);
 
@@ -289,7 +289,7 @@ void Solver::Circuit::performParity(mlir::Value result, mlir::Value input) {
 
 void Solver::Circuit::performReplicate(mlir::Value result, mlir::Value input) {
   LLVM_DEBUG(lec::dbgs() << name << " performReplicate\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "input:\n");
   z3::expr inputExpr = fetchExpr(input);
 
@@ -309,7 +309,7 @@ void Solver::Circuit::performReplicate(mlir::Value result, mlir::Value input) {
 void Solver::Circuit::performShl(mlir::Value result, mlir::Value lhs,
                                  mlir::Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform Shl\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
   z3::expr lhsExpr = fetchExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
@@ -322,7 +322,7 @@ void Solver::Circuit::performShl(mlir::Value result, mlir::Value lhs,
 void Solver::Circuit::performShrS(mlir::Value result, mlir::Value lhs,
                                   mlir::Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform ShrS\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
   z3::expr lhsExpr = fetchExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
@@ -335,7 +335,7 @@ void Solver::Circuit::performShrS(mlir::Value result, mlir::Value lhs,
 void Solver::Circuit::performShrU(mlir::Value result, mlir::Value lhs,
                                   mlir::Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform ShrU\n");
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
   z3::expr lhsExpr = fetchExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
@@ -347,7 +347,7 @@ void Solver::Circuit::performShrU(mlir::Value result, mlir::Value lhs,
 void Solver::Circuit::performSub(mlir::Value result,
                                  mlir::OperandRange operands) {
   LLVM_DEBUG(lec::dbgs() << name << " perform Sub\n");
-  INDENT();
+  lec::Scope indent;
   variadicOperation(result, operands,
                     [](auto op1, auto op2) { return op1 - op2; });
 }
@@ -355,7 +355,7 @@ void Solver::Circuit::performSub(mlir::Value result,
 void Solver::Circuit::performXor(mlir::Value result,
                                  mlir::OperandRange operands) {
   LLVM_DEBUG(lec::dbgs() << name << " perform Xor\n");
-  INDENT();
+  lec::Scope indent;
   variadicOperation(result, operands,
                     [](auto op1, auto op2) { return op1 ^ op2; });
 }
@@ -367,14 +367,14 @@ void Solver::Circuit::variadicOperation(
     llvm::function_ref<z3::expr(const z3::expr &, const z3::expr &)>
         operation) {
   LLVM_DEBUG(lec::dbgs() << "variadic operation\n");
-  INDENT();
+  lec::Scope indent;
   // Vacuous base case.
   auto it = operands.begin();
   mlir::Value operand = *it;
   z3::expr varOp = exprTable.find(operand)->second;
   {
     LLVM_DEBUG(lec::dbgs() << "first operand:\n");
-    INDENT();
+    lec::Scope indent;
     LLVM_DEBUG(lec::printValue(operand));
   }
   ++it;
@@ -384,7 +384,7 @@ void Solver::Circuit::variadicOperation(
     varOp = operation(varOp, exprTable.find(operand)->second);
     {
       LLVM_DEBUG(lec::dbgs() << "next operand:\n");
-      INDENT();
+      lec::Scope indent;
       LLVM_DEBUG(lec::printValue(operand));
     }
     ++it;
@@ -397,7 +397,7 @@ void Solver::Circuit::variadicOperation(
 z3::expr Solver::Circuit::allocateValue(mlir::Value value) {
   std::string valueName = name + "%" + std::to_string(assignments++);
   LLVM_DEBUG(lec::dbgs() << "allocating value:\n");
-  INDENT();
+  lec::Scope indent;
   mlir::Type type = value.getType();
   assert(type.isSignlessInteger() && "Unsupported type");
   unsigned int width = type.getIntOrFloatBitWidth();
@@ -433,7 +433,7 @@ void Solver::Circuit::allocateConstant(mlir::Value result,
 /// Fetches the corresponding logical expression for a given IR value.
 z3::expr Solver::Circuit::fetchExpr(mlir::Value &value) {
   z3::expr expr = exprTable.find(value)->second;
-  INDENT();
+  lec::Scope indent;
   LLVM_DEBUG(lec::printExpr(expr));
   LLVM_DEBUG(lec::printValue(value));
   return expr;
@@ -443,17 +443,17 @@ z3::expr Solver::Circuit::fetchExpr(mlir::Value &value) {
 /// express, simulating an assignment.
 void Solver::Circuit::constrainResult(mlir::Value &result, z3::expr &expr) {
   LLVM_DEBUG(lec::dbgs() << "constraining result:\n");
-  INDENT();
+  lec::Scope indent;
   {
     LLVM_DEBUG(lec::dbgs() << "result expression:\n");
-    INDENT();
+    lec::Scope indent;
     LLVM_DEBUG(lec::printExpr(expr));
   }
   z3::expr resExpr = allocateValue(result);
   z3::expr constraint = resExpr == expr;
   {
     LLVM_DEBUG(lec::dbgs() << "adding constraint:\n");
-    INDENT();
+    lec::Scope indent;
     LLVM_DEBUG(lec::dbgs() << constraint.to_string() << "\n");
   }
   solver->solver.add(constraint);
