@@ -245,7 +245,7 @@ GatedClockLowering ModuleLowering::getOrCreateClockLowering(Value clock) {
   // Create the `ClockTreeOp` that corresponds to this ungated clock.
   auto &slot = clockLowerings[clock];
   if (!slot) {
-    auto treeOp = builder.create<ClockTreeOp>(clock.getLoc(), clock, Value{});
+    auto treeOp = builder.create<ClockTreeOp>(clock.getLoc(), clock);
     treeOp.getBody().emplaceBlock();
     slot = std::make_unique<ClockLowering>(clock, treeOp, stats);
   }

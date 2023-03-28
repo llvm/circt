@@ -77,6 +77,12 @@ def LegalizeStateUpdate : Pass<"arc-legalize-state-update", "mlir::ModuleOp"> {
   let dependentDialects = ["arc::ArcDialect"];
 }
 
+def LowerClocksToFuncs : Pass<"arc-lower-clocks-to-funcs", "mlir::ModuleOp"> {
+  let summary = "Lower clock trees into functions";
+  let constructor = "circt::arc::createLowerClocksToFuncsPass()";
+  let dependentDialects = ["mlir::func::FuncDialect"];
+}
+
 def LowerLUT : Pass<"arc-lower-lut", "arc::DefineOp"> {
   let summary = "Lowers arc.lut into a comb and hw only representation.";
   let constructor = "circt::arc::createLowerLUTPass()";

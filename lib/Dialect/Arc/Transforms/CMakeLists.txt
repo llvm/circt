@@ -6,6 +6,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   InlineArcs.cpp
   InlineModules.cpp
   LegalizeStateUpdate.cpp
+  LowerClocksToFuncs.cpp
   LowerLUT.cpp
   LowerState.cpp
   MakeTables.cpp
@@ -26,6 +27,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   CIRCTSV
   CIRCTSeq
   CIRCTSupport
+  MLIRFuncDialect
   MLIRIR
   MLIRPass
   MLIRTransformUtils
