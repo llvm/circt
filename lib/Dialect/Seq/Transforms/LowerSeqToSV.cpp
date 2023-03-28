@@ -361,30 +361,31 @@ FirRegLower::tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
                                    hw::ArrayCreateOp nextRegValue) {
   Value trueVal;
   SmallVector<Value> muxConditions;
-  if (!llvm::all_of(
-          llvm::enumerate(llvm::reverse(nextRegValue.getOperands())),
-          [&](auto idxAndValue) {
-            // Check that `nextRegValue[i]` is `cond_i ? val : reg[i]`.
-            auto [i, value] = idxAndValue;
-            auto mux = value.template getDefiningOp<comb::MuxOp>();
-            // Ensure that mux has binary flag.
-            if (!mux || !mux.getTwoState())
-              return false;
-            // The next value must be same.
-            if (trueVal && trueVal != mux.getTrueValue())
-              return false;
-            if (!trueVal)
-              trueVal = mux.getTrueValue();
-            muxConditions.push_back(mux.getCond());
-            // Check that ith element is an element of the register we are
-            // currently lowering.
-            auto arrayGet =
-                mux.getFalseValue().template getDefiningOp<hw::ArrayGetOp>();
-            if (!arrayGet)
-              return false;
-            return areEquivalentValues(arrayGet.getInput(), term) &&
-                   getConstantValue(arrayGet.getIndex()) == i;
-          }))
+  // Compat fix for GCC12's libstdc++, cannot use
+  // llvm::enumerate(llvm::reverse(OperandRange)).  See #4900.
+  SmallVector<Value> reverseOpValues(llvm::reverse(nextRegValue.getOperands()));
+  if (!llvm::all_of(llvm::enumerate(reverseOpValues), [&](auto idxAndValue) {
+        // Check that `nextRegValue[i]` is `cond_i ? val : reg[i]`.
+        auto [i, value] = idxAndValue;
+        auto mux = value.template getDefiningOp<comb::MuxOp>();
+        // Ensure that mux has binary flag.
+        if (!mux || !mux.getTwoState())
+          return false;
+        // The next value must be same.
+        if (trueVal && trueVal != mux.getTrueValue())
+          return false;
+        if (!trueVal)
+          trueVal = mux.getTrueValue();
+        muxConditions.push_back(mux.getCond());
+        // Check that ith element is an element of the register we are
+        // currently lowering.
+        auto arrayGet =
+            mux.getFalseValue().template getDefiningOp<hw::ArrayGetOp>();
+        if (!arrayGet)
+          return false;
+        return areEquivalentValues(arrayGet.getInput(), term) &&
+               getConstantValue(arrayGet.getIndex()) == i;
+      }))
     return {};
 
   // Extract common expressions among mux conditions.
@@ -464,8 +465,10 @@ void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
         ++numSubaccessRestored;
         return;
       }
-      for (auto [idx, value] :
-           llvm::enumerate(llvm::reverse(array.getOperands()))) {
+      // Compat fix for GCC12's libstdc++, cannot use
+      // llvm::enumerate(llvm::reverse(OperandRange)).  See #4900.
+      SmallVector<Value> reverseOpValues(llvm::reverse(array.getOperands()));
+      for (auto [idx, value] : llvm::enumerate(reverseOpValues)) {
 
         // Create an index constant.
         auto idxVal = getOrCreateConstant(
