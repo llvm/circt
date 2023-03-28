@@ -189,3 +189,35 @@ hw.module @MaterializeOpsWithRegions(%clk0: i1, %clk1: i1) -> (z: i42) {
   %2 = arc.state @DummyArc(%0) clock %clk1 lat 1 : (i42) -> i42
   hw.output %0 : i42
 }
+
+arc.define @i1Identity(%arg0: i1) -> i1 {
+  arc.output %arg0 : i1
+}
+
+arc.define @DummyArc2(%arg0: i42) -> (i42, i42) {
+  arc.output %arg0, %arg0 : i42, i42
+}
+
+hw.module @stateReset(%clk: i1, %arg0: i42, %rst: i1) -> (out0: i42, out1: i42) {
+  %0 = arc.state @i1Identity(%rst) lat 0 : (i1) -> (i1)
+  %1 = arc.state @i1Identity(%rst) lat 0 : (i1) -> (i1)
+  %2, %3 = arc.state @DummyArc2(%arg0) clock %clk enable %0 reset %1 lat 1 : (i42) -> (i42, i42)
+  hw.output %2, %3 : i42, i42
+}
+// CHECK-LABEL: arc.model "stateReset"
+// CHECK: arc.clock_tree %{{.*}} {
+// CHECK:   [[IN_RST:%.+]] = arc.state_read %in_rst : <i1>
+// CHECK:   [[EN:%.+]] = arc.state @i1Identity([[IN_RST]]) lat 0 : (i1) -> i1
+// CHECK:   [[RST:%.+]] = arc.state @i1Identity([[IN_RST]]) lat 0 : (i1) -> i1
+// CHECK:   scf.if [[RST]] {
+// CHECK:     arc.state_write [[ALLOC1:%.+]] = %c0_i42{{.*}} : <i42>
+// CHECK:     arc.state_write [[ALLOC2:%.+]] = %c0_i42{{.*}} : <i42>
+// CHECK:   } else {
+// CHECK:     [[ARG:%.+]] = arc.state_read %in_arg0 : <i42>
+// CHECK:     [[STATE:%.+]]:2 = arc.state @DummyArc2([[ARG]]) lat 0 : (i42) -> (i42, i42)
+// CHECK:     arc.state_write [[ALLOC1]] = [[STATE]]#0 if [[EN]] : <i42>
+// CHECK:     arc.state_write [[ALLOC2]] = [[STATE]]#1 if [[EN]] : <i42>
+// CHECK:   }
+// CHECK: }
+// CHECK: [[ALLOC1]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
+// CHECK: [[ALLOC2]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
