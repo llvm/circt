@@ -57,7 +57,7 @@ jobs:
         uses: AButler/upload-release-assets@v2.0
         if: ${{ matrix.runner }} == ubuntu-20.04 && startsWith(github.ref, 'refs/tags/')
         with:
-          files: circt-full-sources-${{ matrix.runner }}.tar.gz
+          files: circt-full-sources.tar.gz
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Delete Sources Archive
         if: ${{ matrix.runner }} == ubuntu-20.04
