@@ -47,6 +47,7 @@ jobs:
       - name: Archive Sources
         if: ${{ matrix.runner }} == ubuntu-20.04
         run: |
+          touch circt-full-sources.tar.gz
           tar \
             --exclude-vcs \
             --exclude=circt-full-sources.tar.gz \
