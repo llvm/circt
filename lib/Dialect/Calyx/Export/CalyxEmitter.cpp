@@ -60,8 +60,8 @@ constexpr std::array<StringRef, 7> integerAttributes{
 };
 
 /// A list of boolean attributes supported by the native Calyx compiler.
-constexpr std::array<StringRef, 7> booleanAttributes{
-    "clk", "done", "go", "reset", "generated", "precious", "toplevel",
+constexpr std::array<StringRef, 8> booleanAttributes{
+    "clk", "done", "go", "reset", "generated", "precious", "toplevel", "stable",
 };
 
 static std::optional<StringRef> getCalyxAttrIdentifier(NamedAttribute attr) {
