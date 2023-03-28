@@ -794,7 +794,7 @@ class RefTypeConstraint<string ref, string base>
 class RefResultTypeConstraint<string base, string ref>
   : TypesMatchWith<"reference base type should match",
                    base, ref,
-                   "RefType::get($_self.cast<FIRRTLBaseType>())">;
+                   "RefType::get($_self.cast<FIRRTLBaseType>().getPassiveType())">;
 
 //===----------------------------------------------------------------------===//
 // RefOps

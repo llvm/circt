@@ -741,7 +741,8 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
         .Case<RefSendOp>([&](auto op) {
           // Trace using base types.
           traceResets(op.getType().getType(), op.getResult(), 0,
-                      op.getBase().getType(), op.getBase(), 0, op.getLoc());
+                      op.getBase().getType().getPassiveType(), op.getBase(), 0,
+                      op.getLoc());
         })
         .Case<RefResolveOp>([&](auto op) {
           // Trace using base types.
