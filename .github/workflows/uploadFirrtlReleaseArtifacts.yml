@@ -1,4 +1,4 @@
-name: Upload Firrtl Binaries
+name: Upload Firrtl Release Artifacts
 
 on:
   release:
@@ -6,6 +6,33 @@ on:
   workflow_dispatch:
 
 jobs:
+  publish-sources: 
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-20.04
+    steps:
+      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
+      # time.
+      - name: Get CIRCT and LLVM
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
+          submodules: "true"
+
+      # Package up sources for distribution, as the default source bundles from GitHub don't include LLVM.
+      - name: Create Source Archive
+        run: |
+          touch circt-full-sources.tar.gz
+          tar \
+            --exclude-vcs \
+            --exclude=circt-full-sources.tar.gz \
+            -czf \
+            circt-full-sources.tar.gz .
+      - name: Upload Source Archive
+        uses: AButler/upload-release-assets@v2.0
+        with:
+          files: circt-full-sources.tar.gz
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
   publish:
     strategy:
       matrix:
