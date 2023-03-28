@@ -1077,15 +1077,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %r1 = firrtl.reg %clock  : !firrtl.clock, !firrtl.vector<uint<2>, 1>
     firrtl.connect %r1, %a : !firrtl.vector<uint<2>, 1>, !firrtl.vector<uint<1>, 1>
     firrtl.connect %b, %r1 : !firrtl.vector<uint<3>, 1>, !firrtl.vector<uint<2>, 1>
-    // CHECK:      %r1 = seq.firreg %3 clock %clock : !hw.array<1xi2>
-    // CHECK-NEXT: %1 = hw.array_get %a[%false] : !hw.array<1xi1>
-    // CHECK-NEXT: %2 = comb.concat %false, %1 : i1, i1
-    // CHECK-NEXT: %3 = hw.array_create %2 : i2
-    // CHECK-NEXT: %4 = hw.array_get %r1[%false] : !hw.array<1xi2>
-    // CHECK-NEXT: %5 = comb.concat %false, %4 : i1, i2
-    // CHECK-NEXT: %6 = hw.array_create %5 : i3
-    // CHECK-NEXT: sv.assign %.b.output, %6 : !hw.array<1xi3>
-    // CHECK-NEXT: hw.output %0 : !hw.array<1xi3>
+    // CHECK:      %r1 = seq.firreg [[T3:%.+]] clock %clock : !hw.array<1xi2>
+    // CHECK-NEXT: [[T1:%.+]] = hw.array_get %a[%false] : !hw.array<1xi1>
+    // CHECK-NEXT: [[T2:%.+]] = comb.concat %false, [[T1]] : i1, i1
+    // CHECK-NEXT: [[T3]] = hw.array_create [[T2]] : i2
+    // CHECK-NEXT: [[T4:%.+]] = hw.array_get %r1[%false] : !hw.array<1xi2>
+    // CHECK-NEXT: [[T5:%.+]] = comb.concat %false, [[T4]] : i1, i2
+    // CHECK-NEXT: [[T6:%.+]] = hw.array_create [[T5]] : i3
+    // CHECK-NEXT: sv.assign %.b.output, [[T6]] : !hw.array<1xi3>
   }
 
   // CHECK-LABEL: hw.module private @connectNarrowSIntVector
@@ -1093,16 +1092,15 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %r1 = firrtl.reg %clock  : !firrtl.clock, !firrtl.vector<sint<2>, 1>
     firrtl.connect %r1, %a : !firrtl.vector<sint<2>, 1>, !firrtl.vector<sint<1>, 1>
     firrtl.connect %b, %r1 : !firrtl.vector<sint<3>, 1>, !firrtl.vector<sint<2>, 1>
-    // CHECK:      %r1 = seq.firreg %3 clock %clock : !hw.array<1xi2>
-    // CHECK-NEXT: %1 = hw.array_get %a[%false] : !hw.array<1xi1>
-    // CHECK-NEXT: %2 = comb.concat %1, %1 : i1, i1
-    // CHECK-NEXT: %3 = hw.array_create %2 : i2
-    // CHECK-NEXT: %4 = hw.array_get %r1[%false] : !hw.array<1xi2>
-    // CHECK-NEXT: %5 = comb.extract %4 from 1 : (i2) -> i1
-    // CHECK-NEXT: %6 = comb.concat %5, %4 : i1, i2
-    // CHECK-NEXT: %7 = hw.array_create %6 : i3
-    // CHECK-NEXT: sv.assign %.b.output, %7 : !hw.array<1xi3>
-    // CHECK-NEXT: hw.output %0 : !hw.array<1xi3>
+    // CHECK:      %r1 = seq.firreg [[T3:%.+]] clock %clock : !hw.array<1xi2>
+    // CHECK-NEXT: [[T1:%.+]] = hw.array_get %a[%false] : !hw.array<1xi1>
+    // CHECK-NEXT: [[T2:%.+]] = comb.concat [[T1]], [[T1]] : i1, i1
+    // CHECK-NEXT: [[T3]] = hw.array_create [[T2]] : i2
+    // CHECK-NEXT: [[T4:%.+]] = hw.array_get %r1[%false] : !hw.array<1xi2>
+    // CHECK-NEXT: [[T5:%.+]] = comb.extract [[T4]] from 1 : (i2) -> i1
+    // CHECK-NEXT: [[T6:%.+]] = comb.concat [[T5]], [[T4]] : i1, i2
+    // CHECK-NEXT: [[T7:%.+]] = hw.array_create [[T6]] : i3
+    // CHECK-NEXT: sv.assign %.b.output, [[T7]] : !hw.array<1xi3>
   }
 
   // CHECK-LABEL: hw.module private @SubIndex
@@ -1238,25 +1236,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK:      %c0_i101 = hw.constant 0 : i101
     // CHECK-NEXT: %0 = hw.bitcast %c0_i101 : (i101) -> !hw.struct<a: i1, b: !hw.array<10xi10>>
     // CHECK-NEXT: %reg = seq.firreg %reg clock %clock reset sync %reset, %0 : !hw.struct<a: i1, b: !hw.array<10xi10>>
-  }
-
-  // CHECK-LABEL: hw.module private @AggregateRegAssign
-  firrtl.module private @AggregateRegAssign(in %clock: !firrtl.clock, in %value: !firrtl.uint<1>) {
-    %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<uint<1>, 1>
-    %reg_0 = firrtl.subindex %reg[0] : !firrtl.vector<uint<1>, 1>
-    firrtl.connect %reg_0, %value : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: %reg = seq.firreg [[INPUT:%.+]] clock %clock : !hw.array<1xi1>
-    // CHECK: [[INPUT]] = hw.array_create %value : i1
-  }
-
-  // CHECK-LABEL: hw.module private @AggregateRegResetAssign
-  firrtl.module private @AggregateRegResetAssign(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
-                                         in %init: !firrtl.vector<uint<1>, 1>, in %value: !firrtl.uint<1>) {
-    %reg = firrtl.regreset %clock, %reset, %init  : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
-    %reg_0 = firrtl.subindex %reg[0] : !firrtl.vector<uint<1>, 1>
-    firrtl.connect %reg_0, %value : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: %reg = seq.firreg [[INPUT:%.+]] clock %clock reset sync %reset, %init : !hw.array<1xi1>
-    // CHECK: [[INPUT]] = hw.array_create %value : i1
   }
 
   // CHECK-LABEL: hw.module private @ForceNameSubmodule
@@ -1409,248 +1388,18 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.strictconnect %1, %0 : !firrtl.uint<1>
   }
 
-  // CHECK-LABEL: hw.module @LowerToFirReg(%clock: i1, %reset: i1, %value: i2) -> (result: i2)
-  firrtl.module @LowerToFirReg(in %clock: !firrtl.clock,
-                     in %reset: !firrtl.uint<1>,
-                     in %value: !firrtl.uint<2>,
-                     out %result: !firrtl.uint<2>) {
-    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.uint<2>
-    // CHECK: %count = seq.firreg %value clock %clock : i2
-
-    firrtl.strictconnect %result, %count : !firrtl.uint<2>
-    firrtl.strictconnect %count, %value : !firrtl.uint<2>
-
-    // CHECK: hw.output %count : i2
-  }
-
-  // CHECK-LABEL: hw.module @ConnectSubfield(%clock: i1, %reset: i1, %value: i2) -> (result: !hw.struct<a: i2>)
-  firrtl.module @ConnectSubfield(in %clock: !firrtl.clock,
-                                 in %reset: !firrtl.uint<1>,
-                                 in %value: !firrtl.uint<2>,
-                                 out %result: !firrtl.bundle<a: uint<2>>) {
-    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.bundle<a: uint<2>>
-    // CHECK: %count = seq.firreg %0 clock %clock : !hw.struct<a: i2>
-
-    firrtl.strictconnect %result, %count : !firrtl.bundle<a: uint<2>>
-    %field = firrtl.subfield %count[a] : !firrtl.bundle<a: uint<2>>
-    firrtl.strictconnect %field, %value : !firrtl.uint<2>
-
-    // CHECK: %a = hw.struct_extract %count["a"] : !hw.struct<a: i2>
-    // CHECK: %0 = hw.struct_inject %count["a"], %value : !hw.struct<a: i2>
-
-    // CHECK: hw.output %count : !hw.struct<a: i2>
-  }
-
-  // CHECK-LABEL: hw.module @ConnectSubfields(%clock: i1, %reset: i1, %value2: i2, %value3: i3) -> (result: !hw.struct<a: i2, b: i3>)
-  firrtl.module @ConnectSubfields(in %clock: !firrtl.clock,
-                                 in %reset: !firrtl.uint<1>,
-                                 in %value2: !firrtl.uint<2>,
-                                 in %value3: !firrtl.uint<3>,
-                                 out %result: !firrtl.bundle<a: uint<2>, b: uint<3>>) {
-    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.bundle<a: uint<2>, b: uint<3>>
-    // CHECK: %count = seq.firreg [[AFTER_B:%.+]] clock %clock : !hw.struct<a: i2, b: i3>
-
-    firrtl.strictconnect %result, %count : !firrtl.bundle<a: uint<2>, b: uint<3>>
-
-    %fieldA = firrtl.subfield %count[a] : !firrtl.bundle<a: uint<2>, b: uint<3>>
-    firrtl.strictconnect %fieldA, %value2 : !firrtl.uint<2>
-    %fieldB = firrtl.subfield %count[b] : !firrtl.bundle<a: uint<2>, b: uint<3>>
-    firrtl.strictconnect %fieldB, %value3 : !firrtl.uint<3>
-
-    // CHECK: [[AFTER_A:%.+]] = hw.struct_inject %count["a"], %value2 : !hw.struct<a: i2, b: i3>
-    // CHECK: [[AFTER_B]] = hw.struct_inject [[AFTER_A]]["b"], %value3 : !hw.struct<a: i2, b: i3>
-
-    // CHECK: hw.output %count : !hw.struct<a: i2, b: i3>
-  }
-
-  // CHECK-LABEL: hw.module @ConnectNestedSubfield(%clock: i1, %reset: i1, %value: i2) -> (result: !hw.struct<a: !hw.struct<b: i2>>)
-  firrtl.module @ConnectNestedSubfield(in %clock: !firrtl.clock,
-                                       in %reset: !firrtl.uint<1>,
-                                       in %value: !firrtl.uint<2>,
-                                       out %result: !firrtl.bundle<a: bundle<b: uint<2>>>) {
-    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.bundle<a: bundle<b: uint<2>>>
-    // CHECK: %count = seq.firreg %1 clock %clock : !hw.struct<a: !hw.struct<b: i2>>
-
-    firrtl.strictconnect %result, %count : !firrtl.bundle<a: bundle<b: uint<2>>>
-    %field0 = firrtl.subfield %count[a] : !firrtl.bundle<a: bundle<b: uint<2>>>
-    %field1 = firrtl.subfield %field0[b] : !firrtl.bundle<b: uint<2>>
-    firrtl.strictconnect %field1, %value : !firrtl.uint<2>
-
-    // CHECK: %a = hw.struct_extract %count["a"] : !hw.struct<a: !hw.struct<b: i2>>
-    // CHECK: %b = hw.struct_extract %a["b"] : !hw.struct<b: i2>
-    // CHECK: %a_0 = hw.struct_extract %count["a"] : !hw.struct<a: !hw.struct<b: i2>>
-    // CHECK: %0 = hw.struct_inject %a_0["b"], %value : !hw.struct<b: i2>
-    // CHECK: %1 = hw.struct_inject %count["a"], %0 : !hw.struct<a: !hw.struct<b: i2>>
-
-    // CHECK: hw.output %count : !hw.struct<a: !hw.struct<b: i2>>
-  }
-
-  // CHECK-LABEL: hw.module @ConnectNestedFieldsAndIndices(%clock: i1, %reset: i1, %value: i2) -> (result: !hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>)
-  firrtl.module @ConnectNestedFieldsAndIndices(in %clock: !firrtl.clock,
-                                 in %reset: !firrtl.uint<1>,
-                                 in %value: !firrtl.uint<2>,
-                                 out %result: !firrtl.vector<bundle<a: vector<bundle<b: uint<2>>, 3>>, 5>) {
-    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.vector<bundle<a: vector<bundle<b: uint<2>>, 3>>, 5>
-    %field1 = firrtl.subindex %count[1] : !firrtl.vector<bundle<a: vector<bundle<b: uint<2>>, 3>>, 5>
-    %field2 = firrtl.subfield %field1[a] : !firrtl.bundle<a: vector<bundle<b: uint<2>>, 3>>
-    %field3 = firrtl.subindex %field2[1] : !firrtl.vector<bundle<b: uint<2>>, 3>
-    %field4 = firrtl.subfield %field3[b] : !firrtl.bundle<b: uint<2>>
-    firrtl.strictconnect %field4, %value : !firrtl.uint<2>
-
-    // CHECK:           %[[VAL_10:.*]] = seq.firreg %[[VAL_11:.*]] clock %clock : !hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>
-    // CHECK:           %[[VAL_12:.*]] = hw.array_get %[[VAL_10]]{{\[}}%c1_i3] : !hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>
-    // CHECK:           %[[VAL_13:.*]] = hw.struct_extract %[[VAL_12]]["a"] : !hw.struct<a: !hw.array<3xstruct<b: i2>>>
-    // CHECK:           %[[VAL_14:.*]] = hw.array_get %[[VAL_13]]{{\[}}%c1_i2] : !hw.array<3xstruct<b: i2>>
-    // CHECK:           %[[VAL_15:.*]] = hw.struct_extract %[[VAL_14]]["b"] : !hw.struct<b: i2>
-    // CHECK:           %[[VAL_16:.*]] = hw.constant 1 : i3
-    // CHECK:           %[[VAL_17:.*]] = hw.array_get %[[VAL_10]]{{\[}}%[[VAL_16]]] : !hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>
-    // CHECK:           %[[VAL_18:.*]] = hw.struct_extract %[[VAL_17]]["a"] : !hw.struct<a: !hw.array<3xstruct<b: i2>>>
-    // CHECK:           %[[VAL_20:.*]] = hw.array_get %[[VAL_18]]{{\[}}%c1_i2_2] : !hw.array<3xstruct<b: i2>>
-    // CHECK:           %[[VAL_21:.*]] = hw.struct_inject %[[VAL_20]]["b"], %value : !hw.struct<b: i2>
-    // CHECK:           %[[L0_HI:.*]] = hw.array_slice %[[VAL_18]]{{\[}}%c-2_i2] : (!hw.array<3xstruct<b: i2>>) -> !hw.array<1xstruct<b: i2>>
-    // CHECK:           %[[L0_MID:.*]] = hw.array_create %[[VAL_21]] : !hw.struct<b: i2>
-    // CHECK:           %[[L0_LO:.*]] = hw.array_slice %[[VAL_18]]{{\[}}%c0_i2] : (!hw.array<3xstruct<b: i2>>) -> !hw.array<1xstruct<b: i2>>
-    // CHECK:           %[[VAL_25:.*]] = hw.array_concat %[[L0_HI]], %[[L0_MID]], %[[L0_LO]] : !hw.array<1xstruct<b: i2>>, !hw.array<1xstruct<b: i2>>, !hw.array<1xstruct<b: i2>>
-    // CHECK:           %[[VAL_26:.*]] = hw.struct_inject %[[VAL_17]]["a"], %[[VAL_25]] : !hw.struct<a: !hw.array<3xstruct<b: i2>>>
-    // CHECK:           %[[L1_HI:.*]] = hw.array_slice %[[VAL_10]]{{\[}}%c2_i3] : (!hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>) -> !hw.array<3xstruct<a: !hw.array<3xstruct<b: i2>>>>
-    // CHECK:           %[[L1_MID:.*]] = hw.array_create %[[VAL_26]] : !hw.struct<a: !hw.array<3xstruct<b: i2>>>
-    // CHECK:           %[[L1_LO:.*]] = hw.array_slice %[[VAL_10]]{{\[}}%c0_i3] : (!hw.array<5xstruct<a: !hw.array<3xstruct<b: i2>>>>) -> !hw.array<1xstruct<a: !hw.array<3xstruct<b: i2>>>>
-    // CHECK:           %[[VAL_11]] = hw.array_concat %[[L1_HI]], %[[L1_MID]], %[[L1_LO]] : !hw.array<3xstruct<a: !hw.array<3xstruct<b: i2>>>>, !hw.array<1xstruct<a: !hw.array<3xstruct<b: i2>>>>, !hw.array<1xstruct<a: !hw.array<3xstruct<b: i2>>>>
-  }
-
-  // CHECK-LABEL: hw.module @ConnectSubindex(%clock: i1, %reset: i1, %value: i2) -> (result: !hw.array<3xi2>)
-  firrtl.module @ConnectSubindex(in %clock: !firrtl.clock,
-                                 in %reset: !firrtl.uint<1>,
-                                 in %value: !firrtl.uint<2>,
-                                 out %result: !firrtl.vector<uint<2>, 3>) {
-    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.vector<uint<2>, 3>
-    // CHECK: %count = seq.firreg [[REG:%.+]] clock %clock : !hw.array<3xi2>
-
-    firrtl.strictconnect %result, %count : !firrtl.vector<uint<2>, 3>
-    %field = firrtl.subindex %count[1] : !firrtl.vector<uint<2>, 3>
-    firrtl.strictconnect %field, %value : !firrtl.uint<2>
-
-    // CHECK: [[HI:%.+]] = hw.array_slice %count[%c-2_i2] : (!hw.array<3xi2>) -> !hw.array<1xi2>
-    // CHECK: [[MID:%.+]] = hw.array_create %value : i2
-    // CHECK: [[LO:%.+]] = hw.array_slice %count[%c0_i2] : (!hw.array<3xi2>) -> !hw.array<1xi2>
-    // CHECK: [[REG]] = hw.array_concat [[HI]], [[MID]], [[LO]] : !hw.array<1xi2>, !hw.array<1xi2>, !hw.array<1xi2>
-
-    // CHECK: hw.output %count : !hw.array<3xi2>
-  }
-
-  // CHECK-LABEL: hw.module @ConnectSubindexSingleton(%clock: i1, %reset: i1, %value: i2) -> (result: !hw.array<1xi2>)
-  firrtl.module @ConnectSubindexSingleton(in %clock: !firrtl.clock,
-                                 in %reset: !firrtl.uint<1>,
-                                 in %value: !firrtl.uint<2>,
-                                 out %result: !firrtl.vector<uint<2>, 1>) {
-    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.vector<uint<2>, 1>
-    // CHECK: %count = seq.firreg [[INPUT:%.+]] clock %clock : !hw.array<1xi2>
-
-    firrtl.strictconnect %result, %count : !firrtl.vector<uint<2>, 1>
-    %field = firrtl.subindex %count[0] : !firrtl.vector<uint<2>, 1>
-    firrtl.strictconnect %field, %value : !firrtl.uint<2>
-
-    // CHECK: [[INPUT]] = hw.array_create %value : i2
-    // CHECK: hw.output %count : !hw.array<1xi2>
-  }
-
-  // CHECK-LABEL: hw.module @ConnectSubindexLHS(%clock: i1, %reset: i1, %value: i2) -> (result: !hw.array<3xi2>)
-  firrtl.module @ConnectSubindexLHS(in %clock: !firrtl.clock,
-                                 in %reset: !firrtl.uint<1>,
-                                 in %value: !firrtl.uint<2>,
-                                 out %result: !firrtl.vector<uint<2>, 3>) {
-    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.vector<uint<2>, 3>
-    // CHECK: %count = seq.firreg [[INPUT:%.+]] clock %clock : !hw.array<3xi2>
-
-    firrtl.strictconnect %result, %count : !firrtl.vector<uint<2>, 3>
-    %field = firrtl.subindex %count[0] : !firrtl.vector<uint<2>, 3>
-    firrtl.strictconnect %field, %value : !firrtl.uint<2>
-
-    // CHECK: [[REST:%.+]] = hw.array_slice %count[%c1_i2] : (!hw.array<3xi2>) -> !hw.array<2xi2>
-    // CHECK: [[ELEM:%.+]] = hw.array_create %value : i2
-    // CHECK: [[INPUT]] = hw.array_concat [[REST]], [[ELEM]] : !hw.array<2xi2>, !hw.array<1xi2>
-
-    // CHECK: hw.output %count : !hw.array<3xi2>
-  }
-
-  // CHECK-LABEL: hw.module @ConnectSubindexRHS(%clock: i1, %reset: i1, %value: i2) -> (result: !hw.array<3xi2>)
-  firrtl.module @ConnectSubindexRHS(in %clock: !firrtl.clock,
-                                 in %reset: !firrtl.uint<1>,
-                                 in %value: !firrtl.uint<2>,
-                                 out %result: !firrtl.vector<uint<2>, 3>) {
-    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.vector<uint<2>, 3>
-    // CHECK: %count = seq.firreg [[INPUT:%.+]] clock %clock : !hw.array<3xi2>
-
-    firrtl.strictconnect %result, %count : !firrtl.vector<uint<2>, 3>
-    %field = firrtl.subindex %count[2] : !firrtl.vector<uint<2>, 3>
-    firrtl.strictconnect %field, %value : !firrtl.uint<2>
-
-    // CHECK: [[ELEM:%.+]] = hw.array_create %value : i2
-    // CHECK: [[REST:%.+]] = hw.array_slice %count[%c0_i2] : (!hw.array<3xi2>) -> !hw.array<2xi2>
-    // CHECK: [[INPUT]] = hw.array_concat  [[ELEM]], [[REST]] : !hw.array<1xi2>, !hw.array<2xi2>
-
-    // CHECK: hw.output %count : !hw.array<3xi2>
-  }
-
-  // CHECK-LABEL: hw.module @ConnectSubindices(%clock: i1, %reset: i1, %value: i2) -> (result: !hw.array<5xi2>)
-  firrtl.module @ConnectSubindices(in %clock: !firrtl.clock,
-                                 in %reset: !firrtl.uint<1>,
-                                 in %value: !firrtl.uint<2>,
-                                 out %result: !firrtl.vector<uint<2>, 5>) {
-    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.vector<uint<2>, 5>
-    // CHECK: %count = seq.firreg [[NEXT:%.+]] clock %clock : !hw.array<5xi2>
-
-    firrtl.strictconnect %result, %count : !firrtl.vector<uint<2>, 5>
-
-    %field1 = firrtl.subindex %count[1] : !firrtl.vector<uint<2>, 5>
-    firrtl.strictconnect %field1, %value : !firrtl.uint<2>
-    %field2 = firrtl.subindex %count[2] : !firrtl.vector<uint<2>, 5>
-    firrtl.strictconnect %field2, %value : !firrtl.uint<2>
-    %field5 = firrtl.subindex %count[4] : !firrtl.vector<uint<2>, 5>
-    firrtl.strictconnect %field5, %value : !firrtl.uint<2>
-
-    // CHECK-DAG: [[L0_LO:%.+]] = hw.array_slice %count[%c0_i3] : (!hw.array<5xi2>) -> !hw.array<1xi2>
-    // CHECK-DAG: [[L0_MID:%.+]] = hw.array_create %value : i2
-    // CHECK-DAG: [[L0_HI:%.+]] = hw.array_slice %count[%c2_i3] : (!hw.array<5xi2>) -> !hw.array<3xi2>
-    // CHECK-DAG: [[IN:%.+]] = hw.array_concat [[L0_HI]], [[L0_MID]], [[L0_LO]] : !hw.array<3xi2>, !hw.array<1xi2>, !hw.array<1xi2>
-    // CHECK-DAG: [[L1_LO:%.+]] = hw.array_slice [[IN]][%c0_i3] : (!hw.array<5xi2>) -> !hw.array<2xi2>
-    // CHECK-DAG: [[L1_MID:%.+]] = hw.array_create %value : i2
-    // CHECK-DAG: [[L1_HI:%.+]] = hw.array_slice %4[%c3_i3] : (!hw.array<5xi2>) -> !hw.array<2xi2>
-    // CHECK-DAG: [[L2_LO:%.+]] = hw.array_concat [[L1_HI]], [[L1_MID]], [[L1_LO]] : !hw.array<2xi2>, !hw.array<1xi2>, !hw.array<2xi2>
-    // CHECK-DAG: [[L3_LO:%.+]] = hw.array_slice [[L2_LO]][%c0_i3] : (!hw.array<5xi2>) -> !hw.array<4xi2>
-    // CHECK-DAG: [[L3_MID:%.+]] = hw.array_create %value : i2
-    // CHECK-DAG: [[NEXT]] = hw.array_concat [[L3_MID]], [[L3_LO]] : !hw.array<1xi2>, !hw.array<4xi2>
-
-    // CHECK: hw.output %count : !hw.array<5xi2>
-  }
-
-  // CHECK-LABEL: hw.module @ConnectNestedSubindex(%clock: i1, %reset: i1, %value: i2) -> (result: !hw.array<3xarray<3xi2>>)
-  firrtl.module @ConnectNestedSubindex(in %clock: !firrtl.clock,
-                                       in %reset: !firrtl.uint<1>,
-                                       in %value: !firrtl.uint<2>,
-                                       out %result: !firrtl.vector<vector<uint<2>, 3>, 3>) {
-    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.vector<vector<uint<2>, 3>, 3>
-    // CHECK: %count = seq.firreg %10 clock %clock : !hw.array<3xarray<3xi2>>
-
-    firrtl.strictconnect %result, %count : !firrtl.vector<vector<uint<2>, 3>, 3>
-    %field0 = firrtl.subindex %count[1] : !firrtl.vector<vector<uint<2>, 3>, 3>
-    %field1 = firrtl.subindex %field0[1] : !firrtl.vector<uint<2>, 3>
-    firrtl.strictconnect %field1, %value : !firrtl.uint<2>
-
-    // CHECK-DAG: %0 = hw.array_get %count[%c1_i2] : !hw.array<3xarray<3xi2>>
-    // CHECK-DAG: %1 = hw.array_get %0[%c1_i2] : !hw.array<3xi2>
-    // CHECK-DAG: %2 = hw.array_get %count[%c1_i2_0] : !hw.array<3xarray<3xi2>>
-    // CHECK-DAG: [[IN_LO:%.+]] = hw.array_slice %2[%c0_i2] : (!hw.array<3xi2>) -> !hw.array<1xi2>
-    // CHECK-DAG: %4 = hw.array_create %value : i2
-    // CHECK-DAG: [[IN_HI:%.+]] = hw.array_slice %2[%c-2_i2] : (!hw.array<3xi2>) -> !hw.array<1xi2>
-    // CHECK-DAG: %6 = hw.array_concat [[IN_HI]], %4, [[IN_LO]] : !hw.array<1xi2>, !hw.array<1xi2>, !hw.array<1xi2>
-    // CHECK-DAG: [[OUT_LO:%.+]] = hw.array_slice %count[%c0_i2] : (!hw.array<3xarray<3xi2>>) -> !hw.array<1xarray<3xi2>>
-    // CHECK-DAG: [[OUT_MID:%.+]] = hw.array_create %6 : !hw.array<3xi2>
-    // CHECK-DAG: [[OUT_HI:%.+]] = hw.array_slice %count[%c-2_i2] : (!hw.array<3xarray<3xi2>>) -> !hw.array<1xarray<3xi2>>
-
-    // CHECK-DAG: %10 = hw.array_concat [[OUT_HI]], [[OUT_MID]], [[OUT_LO]] : !hw.array<1xarray<3xi2>>, !hw.array<1xarray<3xi2>>, !hw.array<1xarray<3xi2>>
-
-    // CHECK: hw.output %count : !hw.array<3xarray<3xi2>>
+  // CHECK-LABEL: hw.module @LowerToFirReg(%clock: i1, %reset: i1, %value: i2)
+  firrtl.module @LowerToFirReg(
+    in %clock: !firrtl.clock,
+    in %reset: !firrtl.uint<1>,
+    in %value: !firrtl.uint<2>
+  ) {
+    %regA = firrtl.reg %clock: !firrtl.clock, !firrtl.uint<2>
+    %regB = firrtl.regreset %clock, %reset, %value: !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
+    firrtl.strictconnect %regA, %value : !firrtl.uint<2>
+    firrtl.strictconnect %regB, %value : !firrtl.uint<2>
+    // CHECK-NEXT: %regA = seq.firreg %value clock %clock : i2
+    // CHECK-NEXT: %regB = seq.firreg %value clock %clock reset sync %reset, %value : i2
   }
 
   // CHECK-LABEL: hw.module @SyncReset(%clock: i1, %reset: i1, %value: i2) -> (result: i2)

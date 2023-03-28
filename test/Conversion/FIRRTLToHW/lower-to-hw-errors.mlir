@@ -140,3 +140,39 @@ firrtl.circuit "ArgWithFieldSym" {
   firrtl.module @ArgWithFieldSym(in %foo :!firrtl.vector<uint<1>,2> sym [<@x,1,public>]) {
   }
 }
+
+// -----
+
+firrtl.circuit "ConnectDestSubfield" {
+  firrtl.module @ConnectDestSubfield(in %clock: !firrtl.clock, in %value: !firrtl.uint<1>) {
+    %0 = firrtl.reg %clock : !firrtl.clock, !firrtl.bundle<a: uint<1>>
+    // expected-error @below {{'hw.struct_extract' op used as connect destination}}
+    %1 = firrtl.subfield %0[a] : !firrtl.bundle<a: uint<1>>
+    // expected-error @below {{'firrtl.strictconnect' op LowerToHW couldn't handle this operation}}
+    firrtl.strictconnect %1, %value : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "ConnectDestSubindex" {
+  firrtl.module @ConnectDestSubindex(in %clock: !firrtl.clock, in %value: !firrtl.uint<1>) {
+    %0 = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<uint<1>, 1>
+    // expected-error @below {{'hw.array_get' op used as connect destination}}
+    %1 = firrtl.subindex %0[0] : !firrtl.vector<uint<1>, 1>
+    // expected-error @below {{'firrtl.strictconnect' op LowerToHW couldn't handle this operation}}
+    firrtl.strictconnect %1, %value : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "ConnectDestSubaccess" {
+  firrtl.module @ConnectDestSubaccess(in %clock: !firrtl.clock, in %index: !firrtl.uint<1>, in %value: !firrtl.uint<1>) {
+    %0 = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<uint<1>, 1>
+    // expected-error @below {{'hw.array_get' op used as connect destination}}
+    %1 = firrtl.subaccess %0[%index] : !firrtl.vector<uint<1>, 1>, !firrtl.uint<1>
+    // expected-error @below {{'firrtl.strictconnect' op LowerToHW couldn't handle this operation}}
+    firrtl.strictconnect %1, %value : !firrtl.uint<1>
+  }
+}
