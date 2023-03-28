@@ -3772,8 +3772,12 @@ FailureOr<bool> FIRRTLLowering::lowerConnect(Value destVal, Value srcVal) {
         op.getNextMutable().assign(srcVal);
         return true;
       })
-      .Case<hw::StructExtractOp, hw::ArrayGetOp>(
-          [](auto op) { return op.emitOpError("used as connect destination"); })
+      .Case<hw::StructExtractOp, hw::ArrayGetOp>([](auto op) {
+        // NOTE: msvc thinks `return op.emitOpError(...);` is ambiguous. So
+        // return `failure()` separately.
+        op.emitOpError("used as connect destination");
+        return failure();
+      })
       .Default([](auto) { return false; });
 }
 
