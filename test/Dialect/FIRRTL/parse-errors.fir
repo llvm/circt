@@ -311,6 +311,8 @@ circuit PrintfExpr:
   module PrintfExpr:
     input clk: Clock
     input enable: UInt<1>
+    output out : UInt<1>
+    out <= printf(clk, enable, "b1") ; expected-error {{unexpected token in statement}}
 
 ;// -----
 
