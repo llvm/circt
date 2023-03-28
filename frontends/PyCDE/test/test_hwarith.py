@@ -2,7 +2,7 @@
 
 from pycde import Input, Output, generator, Module
 from pycde.testing import unittestmodule
-from pycde.types import types
+from pycde.types import types, UInt
 
 
 # CHECK: msft.module @InfixArith {} (%in0: si16, %in1: ui16)
@@ -181,3 +181,20 @@ class Constants(Module):
     ports.sin + 1
     ports.sin + -1
     ports.sin == 1
+
+
+# -----
+
+
+@unittestmodule(generate=True,
+                run_passes=True,
+                print_after_passes=True,
+                debug=True)
+class AddInts(Module):
+  a = Input(UInt(32))
+  b = Input(UInt(32))
+  c = Output(UInt(33))
+
+  @generator
+  def construct(self):
+    self.c = self.a + self.b
