@@ -37,29 +37,40 @@ WindowType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
 
   auto fields = structInto.getElements();
   for (auto frame : frames) {
+    // Efficiently look up fields in the frame.
     DenseMap<StringAttr, WindowFieldType> frameFields;
     for (auto field : frame.getMembers())
       frameFields[field.getFieldName()] = field;
 
+    // Iterate through the list of struct fields until we've encountered all the
+    // fields listed in the frame.
     while (!fields.empty() && !frameFields.empty()) {
       hw::StructType::FieldInfo field = fields.front();
-      auto f = frameFields.find(field.name);
-      if (f != frameFields.end()) {
-        uint64_t numItems = f->getSecond().getNumItems();
-        if (numItems > 0) {
-          auto arrField = field.type.dyn_cast<hw::ArrayType>();
-          if (!arrField)
-            return emitError() << "cannot specify num items on non-array field "
-                               << field.name;
-          if (numItems > arrField.getSize())
-            return emitError()
-                   << "num items is larger than array size in field "
-                   << field.name;
-        }
-        frameFields.erase(f);
-      }
       fields = fields.drop_front();
+      auto f = frameFields.find(field.name);
+
+      // If a field in the struct isn't listed, it's being omitted from the
+      // window so we just skip it.
+      if (f == frameFields.end())
+        continue;
+
+      // If 'numItems' is specified, gotta run more checks.
+      uint64_t numItems = f->getSecond().getNumItems();
+      if (numItems > 0) {
+        auto arrField = field.type.dyn_cast<hw::ArrayType>();
+        if (!arrField)
+          return emitError() << "cannot specify num items on non-array field "
+                             << field.name;
+        if (numItems > arrField.getSize())
+          return emitError() << "num items is larger than array size in field "
+                             << field.name;
+      }
+      frameFields.erase(f);
     }
+
+    // If there is anything left in the frame list, it either refers to a
+    // non-existant field or said frame was already consumed by a previous
+    // frame.
     if (!frameFields.empty())
       return emitError() << "invalid field name: "
                          << frameFields.begin()->getSecond().getFieldName();
