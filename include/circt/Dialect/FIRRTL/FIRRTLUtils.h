@@ -140,6 +140,20 @@ inline FIRRTLBaseType getBaseType(FIRRTLType type) {
       .Case<RefType>([](auto ref) { return ref.getType(); });
 }
 
+/// Return base type or passthrough if FIRRTLType, else null.
+inline FIRRTLBaseType getBaseTypeOrNull(Type type) {
+  auto ftype = dyn_cast_or_null<FIRRTLType>(type);
+  if (!ftype)
+    return {};
+  return getBaseType(ftype);
+}
+
+/// Get base type if isa<> the requested type, else null.
+template <typename T>
+inline T getBaseOfType(Type type) {
+  return dyn_cast_or_null<T>(getBaseTypeOrNull(type));
+}
+
 /// Return a FIRRTLType with its base type component mutated by the given
 /// function. (i.e., ref<T> -> ref<f(T)> and T -> f(T)).
 inline FIRRTLType mapBaseType(FIRRTLType type,

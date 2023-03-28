@@ -1536,9 +1536,7 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
   StringRef fieldName;
   if (parseFieldId(fieldName, "expected field name"))
     return failure();
-  auto bundle =
-      dyn_cast<BundleType>(getBaseType(cast<FIRRTLType>(result.getType())));
-
+  auto bundle = getBaseOfType<BundleType>(result.getType());
   if (!bundle)
     return emitError(loc, "subfield requires bundle operand ");
   auto indexV = bundle.getElementIndex(fieldName);
