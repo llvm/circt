@@ -128,7 +128,8 @@ static void computeFanIn(Operation *mux, Value useValue,
 /// bad when the hot part would otherwise fit in instruction cache (but doesn't
 /// really matter when it doesn't fit anyways as there is no temporal locality
 /// anyways).
-static void cloneOpsIntoBranchesWhenUsedInBoth(mlir::scf::IfOp ifOp) {
+[[maybe_unused]] static void
+cloneOpsIntoBranchesWhenUsedInBoth(mlir::scf::IfOp ifOp) {
   // Iterate over all operations at the same nesting level as the if-statement
   // (not the operations inside the if-statement).
   for (auto &op : llvm::reverse(*ifOp->getBlock())) {
