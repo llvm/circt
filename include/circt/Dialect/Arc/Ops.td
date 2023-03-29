@@ -100,7 +100,7 @@ def DefineOp : ArcOp<"define", [
 
 def OutputOp : ArcOp<"output", [
   Terminator,
-  ParentOneOf<["DefineOp", "LutOp"]>,
+  ParentOneOf<["DefineOp", "LutOp", "ClockDomainOp"]>,
   Pure,
   ReturnLike
 ]> {
@@ -295,6 +295,33 @@ def MemoryWriteOp : ArcOp<"memory_write", [
 //===----------------------------------------------------------------------===//
 // Trigger Grouping
 //===----------------------------------------------------------------------===//
+
+def ClockDomainOp : ArcOp<"clock_domain", [
+  IsolatedFromAbove,
+  RegionKindInterface,
+  RecursiveMemoryEffects,
+  SingleBlockImplicitTerminator<"arc::OutputOp">
+]> {
+  let summary = "a clock domain";
+
+  let arguments = (ins Variadic<AnyType>:$inputs, I1:$clock);
+  let results = (outs Variadic<AnyType>:$outputs);
+  let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = [{
+    ` ` `(` $inputs `)` `clock` $clock attr-dict `:`
+    functional-type($inputs, results) $body
+  }];
+
+  let extraClassDeclaration = [{
+    static mlir::RegionKind getRegionKind(unsigned index) {
+      return mlir::RegionKind::Graph;
+    }
+    mlir::Block &getBodyBlock() { return getBody().front(); }
+  }];
+
+  let hasRegionVerifier = 1;
+}
 
 def ClockTreeOp : ArcOp<"clock_tree", [NoTerminator, NoRegionArguments]> {
   let summary = "A clock tree";
