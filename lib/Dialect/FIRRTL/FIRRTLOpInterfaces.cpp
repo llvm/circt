@@ -101,4 +101,15 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   return success();
 }
 
+InFlightDiagnostic
+circt::firrtl::PortInfo::emitError(Location modLoc,
+                                   const Twine &message) const {
+  return mlir::emitError(isa<UnknownLoc>(loc) ? modLoc : loc, message);
+}
+InFlightDiagnostic
+circt::firrtl::PortInfo::emitWarning(Location modLoc,
+                                     const Twine &message) const {
+  return mlir::emitWarning(isa<UnknownLoc>(loc) ? modLoc : loc, message);
+}
+
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.cpp.inc"
