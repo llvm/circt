@@ -32,7 +32,7 @@
 /// declaring new constraints over a Z3 context.
 class Solver::Circuit {
 public:
-  Circuit(llvm::Twine name, Solver *solver) : name(name.str()), solver(solver) {
+  Circuit(llvm::Twine name, Solver &solver) : name(name.str()), solver(solver) {
     assignments = 0;
   };
   /// Add an input to the circuit; internally a new value gets allocated.
@@ -103,8 +103,8 @@ private:
   /// name new values as they have to be represented within the logical engine's
   /// context.
   unsigned assignments;
-  /// A pointer to the solver environment the circuit belongs to.
-  Solver *solver;
+  /// The solver environment the circuit belongs to.
+  Solver &solver;
   /// The list for the circuit's inputs.
   llvm::SmallVector<z3::expr> inputs;
   /// The list for the circuit's outputs.

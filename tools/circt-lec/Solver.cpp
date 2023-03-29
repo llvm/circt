@@ -18,7 +18,7 @@
 #include <string>
 #include <z3++.h>
 
-#define DEBUG_TYPE "solver"
+#define DEBUG_TYPE "lec-solver"
 
 Solver::Solver(mlir::MLIRContext *mlirCtx, bool statisticsOpt)
     : circuits{}, mlirCtx(mlirCtx), context(), solver(context) {
@@ -71,7 +71,7 @@ Solver::Circuit *Solver::addCircuit(llvm::StringRef name, bool firstCircuit) {
   // similar module naming scheme.
   // To avoid that, they're differentiated by a prefix.
   std::string prefix = firstCircuit ? "c1@" : "c2@";
-  circuits.push_back(new Solver::Circuit(prefix + name, this));
+  circuits.push_back(new Solver::Circuit(prefix + name, *this));
   assert(circuits.size() <= 2 && "expected to solve two circuits"); // NOLINT
   return circuits.back();
 }

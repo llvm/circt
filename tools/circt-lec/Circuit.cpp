@@ -17,7 +17,7 @@
 #include "Utility.h"
 #include "mlir/IR/Builders.h"
 
-#define DEBUG_TYPE "circuit"
+#define DEBUG_TYPE "lec-circuit"
 
 /// Add an input to the circuit; internally a new value gets allocated.
 void Solver::Circuit::addInput(mlir::Value value) {
@@ -78,7 +78,7 @@ void Solver::Circuit::addInstance(llvm::StringRef instanceName,
     for (mlir::Value argument : arguments) {
       LLVM_DEBUG(lec::dbgs() << "input\n");
       z3::expr argExpr = fetchExpr(argument);
-      solver->solver.add(argExpr == *input++);
+      solver.solver.add(argExpr == *input++);
     }
   }
   {
@@ -87,7 +87,7 @@ void Solver::Circuit::addInstance(llvm::StringRef instanceName,
     auto *output = instance.outputs.begin();
     for (circt::OpResult result : results) {
       z3::expr resultExpr = allocateValue(result);
-      solver->solver.add(resultExpr == *output++);
+      solver.solver.add(resultExpr == *output++);
     }
   }
 }
@@ -166,7 +166,7 @@ Solver::Circuit::performICmp(mlir::Value result,
   z3::expr lhsExpr = fetchExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
   z3::expr rhsExpr = fetchExpr(rhs);
-  z3::expr icmp(solver->context);
+  z3::expr icmp(solver.context);
 
   switch (predicate) {
   case circt::comb::ICmpPredicate::eq:
@@ -404,14 +404,14 @@ z3::expr Solver::Circuit::allocateValue(mlir::Value value) {
   // Technically allowed for the `hw` dialect but
   // disallowed for `comb` operations; should check separately.
   assert(width > 0 && "0-width integers are not supported"); // NOLINT
-  z3::expr expr = solver->context.bv_const(valueName.c_str(), width);
+  z3::expr expr = solver.context.bv_const(valueName.c_str(), width);
   LLVM_DEBUG(lec::printExpr(expr));
   LLVM_DEBUG(lec::printValue(value));
   auto exprInsertion = exprTable.insert(std::pair(value, expr));
   assert(exprInsertion.second && "Value not inserted in expression table");
-  mlir::Builder builder(solver->mlirCtx);
+  mlir::Builder builder(solver.mlirCtx);
   mlir::StringAttr symbol = builder.getStringAttr(valueName);
-  auto symInsertion = solver->symbolTable.insert(std::pair(symbol, value));
+  auto symInsertion = solver.symbolTable.insert(std::pair(symbol, value));
   assert(symInsertion.second && "Value not inserted in symbol table");
   return expr;
 }
@@ -423,7 +423,7 @@ void Solver::Circuit::allocateConstant(mlir::Value result,
   // `The constant operation produces a constant value
   //  of standard integer type without a sign`
   const z3::expr constant =
-      solver->context.bv_val(value.getZExtValue(), value.getBitWidth());
+      solver.context.bv_val(value.getZExtValue(), value.getBitWidth());
   auto insertion = exprTable.insert(std::pair(result, constant));
   assert(insertion.second && "Constant not inserted in expression table");
   LLVM_DEBUG(lec::printExpr(constant));
@@ -456,7 +456,7 @@ void Solver::Circuit::constrainResult(mlir::Value &result, z3::expr &expr) {
     lec::Scope indent;
     LLVM_DEBUG(lec::dbgs() << constraint.to_string() << "\n");
   }
-  solver->solver.add(constraint);
+  solver.solver.add(constraint);
 }
 
 /// Convert from bitvector to bool sort.
@@ -467,6 +467,6 @@ z3::expr Solver::Circuit::bvToBool(const z3::expr &condition) {
 
 /// Convert from a boolean sort to the corresponding 1-width bitvector.
 z3::expr Solver::Circuit::boolToBv(const z3::expr &condition) {
-  return z3::ite(condition, solver->context.bv_val(1, 1),
-                 solver->context.bv_val(0, 1));
+  return z3::ite(condition, solver.context.bv_val(1, 1),
+                 solver.context.bv_val(0, 1));
 }

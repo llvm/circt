@@ -16,13 +16,13 @@
 #include "Utility.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-#define DEBUG_TYPE "exporter"
+#define DEBUG_TYPE "lec-exporter"
 
 namespace {
 /// Helper function to provide a common debug formatting for
 /// an operation's list of operands.
 template <class ConcreteOp>
-static inline void debugOperands(ConcreteOp op) {
+static void debugOperands(ConcreteOp op) {
   for (const mlir::OpOperand &operand : op->getOpOperands()) {
     mlir::Value value = operand.get();
     lec::dbgs() << "Operand:\n";
@@ -33,7 +33,7 @@ static inline void debugOperands(ConcreteOp op) {
 
 /// Helper function to provide a common debug formatting for
 /// an operation's result.
-static inline void debugOpResult(const mlir::Value &result) {
+static void debugOpResult(const mlir::Value &result) {
   lec::dbgs() << "Result:\n";
   lec::Scope indent;
   lec::printValue(result);
@@ -42,8 +42,7 @@ static inline void debugOpResult(const mlir::Value &result) {
 /// Helper function to provide a common debug formatting for
 /// an operation's list of results.
 template <class ConcreteOp>
-static inline void
-debugOpResults(mlir::OpTrait::VariadicResults<ConcreteOp> *op) {
+static void debugOpResults(mlir::OpTrait::VariadicResults<ConcreteOp> *op) {
   lec::dbgs() << "Results:\n";
   for (mlir::OpResult result : op->getResults()) {
     lec::Scope indent;
@@ -54,8 +53,7 @@ debugOpResults(mlir::OpTrait::VariadicResults<ConcreteOp> *op) {
 
 /// Helper function to provide a common debug formatting for
 /// an operation's list of attributes.
-static inline void
-debugAttributes(llvm::ArrayRef<mlir::NamedAttribute> attributes) {
+static void debugAttributes(llvm::ArrayRef<mlir::NamedAttribute> attributes) {
   lec::dbgs() << "Attributes:\n";
   lec::Scope indent;
   for (mlir::NamedAttribute attr : attributes) {
@@ -202,9 +200,9 @@ LogicExporter::Visitor::visitInvalidTypeOp(mlir::Operation *op,
     LLVM_DEBUG(debugOperands(op));                                             \
     bool twoState = op.getTwoState();                                          \
     REJECT_N_STATE_LOGIC();                                                    \
-    mlir::Value lhs = op.getLhs();                                             \
-    mlir::Value rhs = op.getRhs();                                             \
-    mlir::Value result = op.getResult();                                       \
+    auto lhs = op.getLhs();                                                    \
+    auto rhs = op.getRhs();                                                    \
+    auto result = op.getResult();                                              \
     LLVM_DEBUG(debugOpResult(result));                                         \
     circuit->perform##OP_NAME(result, lhs, rhs);                               \
     return mlir::success();                                                    \
@@ -220,8 +218,8 @@ LogicExporter::Visitor::visitInvalidTypeOp(mlir::Operation *op,
     LLVM_DEBUG(debugOperands(op));                                             \
     bool twoState = op.getTwoState();                                          \
     REJECT_N_STATE_LOGIC();                                                    \
-    mlir::Value input = op.getInput();                                         \
-    mlir::Value result = op.getResult();                                       \
+    auto input = op.getInput();                                                \
+    auto result = op.getResult();                                              \
     LLVM_DEBUG(debugOpResult(result));                                         \
     circuit->perform##OP_NAME(result, input);                                  \
     return mlir::success();                                                    \
@@ -253,10 +251,10 @@ LogicExporter::Visitor::visitComb(circt::comb::ExtractOp &op,
   LLVM_DEBUG(lec::dbgs() << "Visiting comb.extract\n");
   lec::Scope indent;
   LLVM_DEBUG(debugOperands(op));
-  mlir::Value input = op.getInput();
+  auto input = op.getInput();
   uint32_t lowBit = op.getLowBit();
   LLVM_DEBUG(lec::dbgs() << "lowBit: " << lowBit << "\n");
-  mlir::Value result = op.getResult();
+  auto result = op.getResult();
   LLVM_DEBUG(debugOpResult(result));
   circuit->performExtract(result, input, lowBit);
   return mlir::success();
@@ -271,9 +269,9 @@ LogicExporter::Visitor::visitComb(circt::comb::ICmpOp &op,
   bool twoState = op.getTwoState();
   REJECT_N_STATE_LOGIC();
   circt::comb::ICmpPredicate predicate = op.getPredicate();
-  mlir::Value lhs = op.getLhs();
-  mlir::Value rhs = op.getRhs();
-  mlir::Value result = op.getResult();
+  auto lhs = op.getLhs();
+  auto rhs = op.getRhs();
+  auto result = op.getResult();
   LLVM_DEBUG(debugOpResult(result));
   mlir::LogicalResult comparisonResult =
       circuit->performICmp(result, predicate, lhs, rhs);
@@ -294,10 +292,10 @@ LogicExporter::Visitor::visitComb(circt::comb::MuxOp &op,
   LLVM_DEBUG(debugOperands(op));
   bool twoState = op.getTwoState();
   REJECT_N_STATE_LOGIC();
-  mlir::Value cond = op.getCond();
-  mlir::Value trueValue = op.getTrueValue();
-  mlir::Value falseValue = op.getFalseValue();
-  mlir::Value result = op.getResult();
+  auto cond = op.getCond();
+  auto trueValue = op.getTrueValue();
+  auto falseValue = op.getFalseValue();
+  auto result = op.getResult();
   LLVM_DEBUG(debugOpResult(result));
   circuit->performMux(result, cond, trueValue, falseValue);
   return mlir::success();
@@ -313,8 +311,8 @@ LogicExporter::Visitor::visitComb(circt::comb::ReplicateOp &op,
   LLVM_DEBUG(lec::dbgs() << "Visiting comb.replicate\n");
   lec::Scope indent;
   LLVM_DEBUG(debugOperands(op));
-  mlir::Value input = op.getInput();
-  mlir::Value result = op.getResult();
+  auto input = op.getInput();
+  auto result = op.getResult();
   LLVM_DEBUG(debugOpResult(result));
   circuit->performReplicate(result, input);
   return mlir::success();

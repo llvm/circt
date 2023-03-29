@@ -27,7 +27,7 @@ be selected.
 - `-s` turns on printing statistics about the execution of the logical engine
 - `-debug` turns on printing debug information
 - `-debug-only=<component list>` only prints debug information for the specified
-  components (among `pass`, `solver`, `circuit`)
+  components (among `lec-exporter`, `lec-solver`, `lec-circuit`)
 
 #### Developement
 ##### Regression testing
