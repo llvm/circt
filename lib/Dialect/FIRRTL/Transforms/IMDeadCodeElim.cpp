@@ -469,6 +469,12 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
         auto rd = getRefDefine(result);
         assert(rd && "input ref port to instance is alive, but no driver?");
         assert(isKnownAlive(rd.getSrc()));
+        auto *srcDefOp = rd.getSrc().getDefiningOp();
+        if (srcDefOp && llvm::any_of(result.getUsers(), [&](auto user) {
+              return user->getBlock() != rd.getSrc().getParentBlock() ||
+                     user->isBeforeInBlock(rd.getSrc().getDefiningOp());
+            }))
+          llvm::report_fatal_error("unsupported IR with references in IMDCE");
         result.replaceAllUsesWith(rd.getSrc());
         ++numErasedOps;
         rd.erase();
