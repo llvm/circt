@@ -2371,11 +2371,6 @@ ParseResult FIRStmtParser::parseRefDefine() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  // TODO: define.  For now, connect.
-  // Until have 'define' semantics, reject if won't be handled properly.
-  if (target.getParentBlock() != builder.getBlock())
-    return emitError(startTok.getLoc(), "cannot define out of a block yet");
-
   emitConnect(builder, target, src);
 
   return success();
