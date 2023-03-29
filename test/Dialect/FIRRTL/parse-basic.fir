@@ -1163,10 +1163,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: %[[NODE:.+]] = firrtl.node
     node n = in
     ; CHECK-NEXT: %[[REF:.+]] = firrtl.ref.send %[[NODE]]
-    ; CHECK-NEXT: refconnect %r, %[[REF]]
+    ; CHECK-NEXT: ref.define %r, %[[REF]]
     define r = probe(n)
     ; CHECK-NEXT: %[[RWREF:.+]] = firrtl.ref.send %[[NODE]]
-    ; CHECK-NEXT: refconnect %rw, %[[RWREF]]
+    ; CHECK-NEXT: ref.define %rw, %[[RWREF]]
     define rw = rwprobe(n)
 
   ; CHECK-LABEL: module private @Refs(
@@ -1184,9 +1184,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     inst rc of RefsChild
     rc.in <= in
     ; CHECK: %[[OUTREF:.+]] = firrtl.ref.send %out
-    ; CHECK-NEXT: refconnect %r, %[[OUTREF]]
+    ; CHECK-NEXT: ref.define %r, %[[OUTREF]]
     define r = probe(out)
-    ; CHECK-NEXT: refconnect %rw, %[[RC_RW]]
+    ; CHECK-NEXT: ref.define %rw, %[[RC_RW]]
     define rw = rc.rw
 
     ; CHECK-NEXT: %[[READ_RC_R:.+]] = firrtl.ref.resolve %[[RC_R]]
@@ -1215,8 +1215,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %[[AGG3:.+]] = firrtl.wire
     wire agg3 : { a : UInt<1>, b : UInt }
     ; CHECK-NEXT: %[[AGG3_PROBE:.+]] = firrtl.ref.send %[[AGG3]]
-    ; Doesn't use 'refconnect' because of uninferred width within.
-    ; CHECK-NEXT: connect %agg_out, %[[AGG3_PROBE]]
+    ; CHECK-NEXT: ref.define %agg_out, %[[AGG3_PROBE]]
     define agg_out = probe(agg3)
 
     ; CHECK: %{{.+}}, %[[REM_R:.+]], %{{.+}}, %[[REM_R2:.+]] = firrtl.instance rem
