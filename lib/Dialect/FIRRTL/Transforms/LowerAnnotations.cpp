@@ -682,8 +682,10 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       opsToErase.push_back(destOp);
       return success();
     }
+
     // Otherwise, just connect to the source.
     emitConnect(builder, dest, src);
+
     return success();
   };
 

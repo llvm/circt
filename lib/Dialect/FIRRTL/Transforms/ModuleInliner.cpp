@@ -445,6 +445,14 @@ static void replaceRefEdges(SmallVectorImpl<Backedge> &edges) {
 
   // Ensure that all users of the `opToRemove` are defined after the driver.
   // This is required to ensure the driver dominates the users.
+  // XXX: This is fragile and incomplete and known to be broken.
+  // 1) If there are when's (or multiple blocks), this strategy is dead.
+  //    Inliner doesn't presently work before ExpandWhen's, however.
+  // 2) Even today this could be wrong as we have no place to put references
+  //    and inlining instances removes ref "storage" points, such that use
+  //    and defs cannot be maintained by moving things around.
+  // 3) This assumes you can freely move the user(s) which may depend on other
+  //    users or otherwise be unsafe to move (side-effects).
   auto moveUseAfterDef = [&](Operation *opToRemove, Operation *driver) {
     for (Operation *user : opToRemove->getUsers())
       if (user->isBeforeInBlock(driver))

@@ -1042,14 +1042,14 @@ firrtl.circuit "BitcastRef" {
 }
 
 // -----
-// Cannot refconnect unsized types, even when ref's.
+// Cannot connect ref types
 
 firrtl.circuit "Top" {
-  firrtl.module @Foo (in %in: !firrtl.ref<uint>) {}
-  firrtl.module @Top (in %in : !firrtl.ref<uint>) {
-    %foo_in = firrtl.instance foo @Foo(in in: !firrtl.ref<uint>)
-    // expected-error @+1 {{op operand #0 must be sized reference type}}
-    firrtl.refconnect %foo_in, %in : !firrtl.ref<uint>
+  firrtl.module @Foo (in %in: !firrtl.ref<uint<2>>) {}
+  firrtl.module @Top (in %in: !firrtl.ref<uint<2>>) {
+    %foo_in = firrtl.instance foo @Foo(in in: !firrtl.ref<uint<2>>)
+    // expected-error @below {{must be a sized type (contains no uninferred widths) or foreign type}}
+    firrtl.strictconnect %foo_in, %in : !firrtl.ref<uint<2>>
   }
 }
 
@@ -1062,7 +1062,7 @@ firrtl.circuit "Foo" {
     %a = firrtl.wire : !firrtl.uint<1>
     %1 = firrtl.ref.send %a : !firrtl.uint<1>
     // expected-error @+1 {{connect has invalid flow: the destination expression "_a" has source flow, expected sink or duplex flow}}
-    firrtl.refconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.ref.define %_a, %1 : !firrtl.ref<uint<1>>
   }
 }
 
@@ -1070,12 +1070,13 @@ firrtl.circuit "Foo" {
 // Output reference port cannot be reused
 
 firrtl.circuit "Bar" {
+  firrtl.extmodule @Bar2(out _a: !firrtl.ref<uint<1>>)
   firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
     %x = firrtl.instance x @Bar2(out _a: !firrtl.ref<uint<1>>)
     %y = firrtl.instance y @Bar2(out _a: !firrtl.ref<uint<1>>)
-    // expected-error @+1 {{output reference port cannot be reused by multiple operations, it can only capture a unique dataflow}}
-    firrtl.refconnect %_a, %x : !firrtl.ref<uint<1>>
-    firrtl.refconnect %_a, %y : !firrtl.ref<uint<1>>
+    // expected-error @below {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    firrtl.ref.define %_a, %x : !firrtl.ref<uint<1>>
+    firrtl.ref.define %_a, %y : !firrtl.ref<uint<1>>
   }
 }
 
@@ -1083,13 +1084,14 @@ firrtl.circuit "Bar" {
 // Output reference port cannot be reused
 
 firrtl.circuit "Bar" {
+  firrtl.extmodule @Bar2(out _a: !firrtl.ref<uint<1>>)
   firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
     %x = firrtl.instance x @Bar2(out _a: !firrtl.ref<uint<1>>)
     %y = firrtl.wire : !firrtl.uint<1>
-    // expected-error @+1 {{output reference port cannot be reused by multiple operations, it can only capture a unique dataflow}}
-    firrtl.refconnect %_a, %x : !firrtl.ref<uint<1>>
+    // expected-error @below {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    firrtl.ref.define %_a, %x : !firrtl.ref<uint<1>>
     %1 = firrtl.ref.send %y : !firrtl.uint<1>
-    firrtl.refconnect %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.ref.define %_a, %1 : !firrtl.ref<uint<1>>
   }
 }
 
@@ -1102,9 +1104,22 @@ firrtl.circuit "Bar" {
     %y = firrtl.wire : !firrtl.uint<1>
     %1 = firrtl.ref.send %x : !firrtl.uint<1>
     %2 = firrtl.ref.send %y : !firrtl.uint<1>
-    // expected-error @+1 {{output reference port cannot be reused by multiple operations, it can only capture a unique dataflow}}
-    firrtl.refconnect %_a, %1 : !firrtl.ref<uint<1>>
-    firrtl.refconnect %_a, %2 : !firrtl.ref<uint<1>>
+    // expected-error @below {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    firrtl.ref.define %_a, %1 : !firrtl.ref<uint<1>>
+    firrtl.ref.define %_a, %2 : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Can't define into a ref.sub.
+
+firrtl.circuit "NoDefineIntoRefSub" {
+  firrtl.module @NoDefineIntoRefSub(out %r: !firrtl.ref<vector<uint<1>,2>>) {
+    %sub = firrtl.ref.sub %r[1] : !firrtl.ref<vector<uint<1>,2>>
+    %x = firrtl.wire : !firrtl.uint<1>
+    %xref = firrtl.ref.send %x : !firrtl.uint<1>
+    // expected-error @below {{destination reference cannot be a sub-element of a reference}}
+    firrtl.ref.define %sub, %xref : !firrtl.ref<uint<1>>
   }
 }
 

@@ -401,7 +401,7 @@ circuit DefineTwice:
   module DefineTwice:
     input in: UInt<1>
     output out : Probe<UInt<1>>
-    define out = probe(in) ; expected-error {{output reference port cannot be reused by multiple operations}}
+    define out = probe(in) ; expected-error {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
     define out = probe(in)
 
 ;// -----
@@ -516,16 +516,6 @@ circuit ProbeSMem:
     io.dataOut <= read
     define out = probe(read) ; expected-error {{cannot probe memories or their ports}}
 
-;// -----
-
-; Reject if connect doesn't model behavior yet.
-circuit Nested:
-  module Nested:
-    input in: UInt<1>
-    output out : Probe<UInt<1>>
-    when in:
-      define out = probe(in) ; expected-error {{cannot define out of a block yet}}
-
 
 ;// -----
 
@@ -548,5 +538,5 @@ circuit DefineWidths:
   module DefineWidths:
     input in : UInt<1>
     output p : Probe<UInt>
-    define p = probe(in) ; expected-error {{may not connect different non-base types}}
+    define p = probe(in) ; expected-error {{'firrtl.ref.define' op requires all operands to have the same type}}
 

@@ -2371,11 +2371,6 @@ ParseResult FIRStmtParser::parseRefDefine() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  // TODO: define.  For now, connect.
-  // Until have 'define' semantics, reject if won't be handled properly.
-  if (target.getParentBlock() != builder.getBlock())
-    return emitError(startTok.getLoc(), "cannot define out of a block yet");
-
   emitConnect(builder, target, src);
 
   return success();
@@ -3163,6 +3158,8 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   SmallDenseMap<Attribute, SMLoc> portIds;
   for (auto portAndLoc : llvm::zip(portList, portLocs)) {
     PortInfo &port = std::get<0>(portAndLoc);
+    // See #4812 and look through the reference input test collection
+    // and ensure they work before allowing them from user input.
     if (!port.isOutput() && isa<RefType>(port.type))
       return emitError(std::get<1>(portAndLoc),
                        "input probes not yet supported");

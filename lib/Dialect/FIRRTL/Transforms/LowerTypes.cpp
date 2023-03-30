@@ -397,7 +397,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitExpr(RefResolveOp op);
   bool visitStmt(ConnectOp op);
   bool visitStmt(StrictConnectOp op);
-  bool visitStmt(RefConnectOp op);
+  bool visitStmt(RefDefineOp op);
   bool visitStmt(WhenOp op);
 
   bool isFailed() const { return encounteredError; }
@@ -848,8 +848,8 @@ bool TypeLoweringVisitor::visitStmt(StrictConnectOp op) {
   return true;
 }
 
-// Expand connects of aggregates
-bool TypeLoweringVisitor::visitStmt(RefConnectOp op) {
+// Expand connects of references-of-aggregates
+bool TypeLoweringVisitor::visitStmt(RefDefineOp op) {
   if (!canLowerConnect(op, aggregatePreservationMode))
     return false;
   if (processSAPath(op))
@@ -866,7 +866,8 @@ bool TypeLoweringVisitor::visitStmt(RefConnectOp op) {
   for (const auto &field : llvm::enumerate(fields)) {
     Value src = getSubWhatever(op.getSrc(), field.index());
     Value dest = getSubWhatever(op.getDest(), field.index());
-    builder->create<RefConnectOp>(dest, src);
+    assert(!field.value().isOutput && "unexpected flip in reftype destination");
+    builder->create<RefDefineOp>(dest, src);
   }
   return true;
 }
