@@ -1,4 +1,4 @@
-//===- ArcDialect.h - Arc dialect definition --------------------*- C++ -*-===//
+//===- DCDialect.h - DC dialect definition ----------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,17 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_ARC_ARCDIALECT_H
-#define CIRCT_DIALECT_ARC_ARCDIALECT_H
+#ifndef CIRCT_DIALECT_DC_DIALECT_H
+#define CIRCT_DIALECT_DC_DIALECT_H
 
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dialect.h"
 
-namespace dc {}
-
 // Pull in the dialect definition.
-#include "circt/Dialect/Arc/ArcDialect.h.inc"
-#include "circt/Dialect/Arc/ArcEnums.h.inc"
+#include "circt/Dialect/DC/DCDialect.h.inc"
 
-#endif // CIRCT_DIALECT_ARC_ARCDIALECT_H
+#endif // CIRCT_DIALECT_DC_DIALECT_H
