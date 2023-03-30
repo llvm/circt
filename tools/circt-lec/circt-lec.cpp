@@ -93,8 +93,8 @@ static mlir::LogicalResult executeLEC(mlir::MLIRContext &context) {
 
   // Initiliaze the constraints solver and the circuits to be compared.
   Solver s(&context, statisticsOpt);
-  Solver::Circuit *c1 = s.addCircuit(moduleName1, true);
-  Solver::Circuit *c2 = s.addCircuit(moduleName2, false);
+  Solver::Circuit *c1 = s.addCircuit(moduleName1);
+  Solver::Circuit *c2 = s.addCircuit(moduleName2);
 
   // Initialize a logic exporter for the first circuit then run it on the
   // top-level module of the first input file.

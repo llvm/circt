@@ -29,7 +29,7 @@
 class Solver {
 public:
   Solver(mlir::MLIRContext *mlirCtx, bool statisticsOpt);
-  ~Solver();
+  ~Solver() = default;
 
   /// Solve the equivalence problem between the two circuits, then present the
   /// results to the user.
@@ -37,7 +37,7 @@ public:
 
   class Circuit;
   /// Create a new circuit to be compared and return it.
-  Circuit *addCircuit(llvm::StringRef name, bool firstCircuit);
+  Circuit *addCircuit(llvm::StringRef name);
 
 private:
   /// Prints a model satisfying the solved constraints.
@@ -60,7 +60,7 @@ private:
   /// A map from internal solver symbols to the IR values they represent.
   llvm::DenseMap<mlir::StringAttr, mlir::Value> symbolTable;
   /// The two circuits to be compared.
-  llvm::SmallVector<Circuit *, 2> circuits;
+  Circuit *circuits[2];
   /// The MLIR context of reference, owning all the MLIR entities.
   mlir::MLIRContext *mlirCtx;
   /// The Z3 context of reference, owning all the declared values, constants

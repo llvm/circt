@@ -21,14 +21,8 @@
 #define DEBUG_TYPE "lec-solver"
 
 Solver::Solver(mlir::MLIRContext *mlirCtx, bool statisticsOpt)
-    : circuits{}, mlirCtx(mlirCtx), context(), solver(context) {
-  this->statisticsOpt = statisticsOpt;
-}
-
-Solver::~Solver() {
-  delete circuits[0];
-  delete circuits[1];
-}
+    : circuits{}, mlirCtx(mlirCtx), context(), solver(context),
+      statisticsOpt(statisticsOpt) {}
 
 /// Solve the equivalence problem between the two circuits, then present the
 /// results to the user.
@@ -65,20 +59,22 @@ mlir::LogicalResult Solver::solve() {
 }
 
 /// Create a new circuit to be compared and return it.
-Solver::Circuit *Solver::addCircuit(llvm::StringRef name, bool firstCircuit) {
+Solver::Circuit *Solver::addCircuit(llvm::StringRef name) {
+  // NOLINTNEXTLINE
+  assert(!(circuits[0] && circuits[1]) && "already added two circuits");
   // Hack: entities within the logical engine are namespaced by the circuit
   // they belong to, which may cause shadowing when parsing two files with a
   // similar module naming scheme.
   // To avoid that, they're differentiated by a prefix.
-  std::string prefix = firstCircuit ? "c1@" : "c2@";
-  circuits.push_back(new Solver::Circuit(prefix + name, *this));
-  assert(circuits.size() <= 2 && "expected to solve two circuits"); // NOLINT
-  return circuits.back();
+  unsigned n = circuits[0] ? 1 : 0;
+  std::string prefix = n == 0 ? "c1@" : "c2@";
+  circuits[n] = new Solver::Circuit(prefix + name, *this);
+  return circuits[n];
 }
 
 /// Prints a model satisfying the solved constraints.
 void Solver::printModel() {
-  lec::dbgs() << "Model:\n";
+  lec::outs() << "Model:\n";
   lec::Scope indent;
   z3::model model = solver.get_model();
   for (unsigned int i = 0; i < model.size(); i++) {
@@ -91,25 +87,22 @@ void Solver::printModel() {
     mlir::Value value = symbolTable.find(symbol)->second;
     z3::expr e = model.get_const_interp(f);
     mlir::emitRemark(value.getLoc(), "");
-    // Explicitly unfolded the asm printing for `mlir::Value`.
-    if (auto *op = value.getDefiningOp()) {
-      // It's a SSA'ed value of an operation.
-    } else {
-      // Value is an argument.
-      mlir::BlockArgument arg = value.cast<mlir::BlockArgument>();
+    // Explicitly unfolded asm printing for `mlir::Value`.
+    if (auto arg = value.dyn_cast<mlir::BlockArgument>()) {
+      // Value is an argument rather than a SSA'ed value of an operation.
       mlir::Operation *parentOp = value.getParentRegion()->getParentOp();
       if (auto op = llvm::dyn_cast<circt::hw::HWModuleOp>(parentOp)) {
         // Argument of a `hw.module`.
-        lec::dbgs() << "argument name: " << op.getArgNames()[arg.getArgNumber()]
+        lec::outs() << "argument name: " << op.getArgNames()[arg.getArgNumber()]
                     << "\n";
       } else {
         // Argument of a different operation.
-        lec::dbgs() << arg << "\n";
+        lec::outs() << arg << "\n";
       }
     }
     // Accompanying model information.
-    lec::dbgs() << "internal symbol: " << symbol << "\n";
-    lec::dbgs() << "model interpretation: " << e.to_string() << "\n\n";
+    lec::outs() << "internal symbol: " << symbol << "\n";
+    lec::outs() << "model interpretation: " << e.to_string() << "\n\n";
   }
 }
 
@@ -127,11 +120,11 @@ void Solver::printAssertions() {
 /// Prints the internal statistics of the SMT solver for benchmarking purposes
 /// and operational insight.
 void Solver::printStatistics() {
-  lec::dbgs() << "SMT solver statistics:\n";
+  lec::outs() << "SMT solver statistics:\n";
   lec::Scope indent;
   z3::stats stats = solver.statistics();
   for (unsigned i = 0; i < stats.size(); i++) {
-    lec::dbgs() << stats.key(i) << " : " << stats.uint_value(i) << "\n";
+    lec::outs() << stats.key(i) << " : " << stats.uint_value(i) << "\n";
   }
 }
 
