@@ -746,10 +746,12 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
         b.getNamedAttr("writeClockIDs", b.getI32ArrayAttr(mem.writeClockIDs)),
         b.getNamedAttr("initFilename",
                        mem.init ? mem.init.getFilename() : b.getStringAttr("")),
-        b.getNamedAttr("initIsBinary", mem.init ? mem.init.getIsBinary()
-                                                : b.getBoolAttr(false)),
-        b.getNamedAttr("initIsInline", mem.init ? mem.init.getIsInline()
-                                                : b.getBoolAttr(false))};
+        b.getNamedAttr(
+            "initIsBinary",
+            b.getBoolAttr(mem.init ? mem.init.getIsBinary() : false)),
+        b.getNamedAttr(
+            "initIsInline",
+            b.getBoolAttr(mem.init ? mem.init.getIsInline() : false))};
 
     // Make the global module for the memory
     // Set a name for the memory wrapper module, the combMem is an arbitrary
