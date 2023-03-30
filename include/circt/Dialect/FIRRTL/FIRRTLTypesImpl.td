@@ -135,13 +135,15 @@ def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
   let summary = "a fixed size collection of elements, like an array.";
   let parameters = (ins
       TypeParameter<"::circt::firrtl::FIRRTLBaseType", "Type of vector elements">:$elementType,
-     "size_t":$numElements
+     "size_t":$numElements,
+     "bool":$isConst
   );
   let skipDefaultBuilders = true;
   let builders = [
     TypeBuilderWithInferredContext<(ins
       "FIRRTLBaseType":$elementType,
-      "size_t":$numElements)
+      "size_t":$numElements,
+       CArg<"bool", "false">:$isConst)
     >
   ];
   let extraClassDeclaration = [{
@@ -187,7 +189,11 @@ def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
 
 def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
   let summary = "an aggregate of named elements. This is effectively a struct.";
-  let parameters = (ins "ArrayRef<BundleElement>":$elements);
+  let parameters = (ins "ArrayRef<BundleElement>":$elements, "bool":$isConst);
+  let skipDefaultBuilders = true;
+  let builders = [
+    TypeBuilder<(ins "ArrayRef<BundleElement>":$elements, CArg<"bool", "false">:$isConst)>
+  ];
   let extraClassDeclaration = [{
     /// Each element of a bundle, which is a name and type.
     struct BundleElement {

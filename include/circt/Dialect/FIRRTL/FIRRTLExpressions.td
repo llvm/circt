@@ -291,9 +291,7 @@ def SubindexOp : FIRRTLExprOp<"subindex", [
   }];
 }
 
-def SubaccessOp : FIRRTLExprOp<"subaccess", [
-    IndexConstraint<"input", "result">
-  ]> {
+def SubaccessOp : FIRRTLExprOp<"subaccess"> {
   let summary = "Extract a dynamic element of a vector value";
   let description = [{
     The subaccess expression dynamically refers to a subelement of a

@@ -1157,14 +1157,15 @@ static FIRRTLBaseType updateType(FIRRTLBaseType oldType, unsigned fieldID,
                                                   bundleType.end());
     fields[index].type = updateType(
         fields[index].type, fieldID - getFieldID(bundleType, index), fieldType);
-    return BundleType::get(oldType.getContext(), fields);
+    return BundleType::get(oldType.getContext(), fields, bundleType.isConst());
   }
 
   // If this is a vector type, update the element type.
   if (auto vectorType = oldType.dyn_cast<FVectorType>()) {
     auto newType = updateType(vectorType.getElementType(),
                               fieldID - getFieldID(vectorType), fieldType);
-    return FVectorType::get(newType, vectorType.getNumElements());
+    return FVectorType::get(newType, vectorType.getNumElements(),
+                            vectorType.isConst());
   }
 
   llvm_unreachable("unknown aggregate type");

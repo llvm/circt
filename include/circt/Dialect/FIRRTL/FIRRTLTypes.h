@@ -177,14 +177,16 @@ public:
 /// definition of type equivalence in the FIRRTL spec.  If the types being
 /// compared have any outer flips that encode FIRRTL module directions (input or
 /// output), these should be stripped before using this method.
-bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType);
+bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType,
+                        bool srcOuterTypeIsConst = false);
 
 /// Returns true if two types are weakly equivalent.  See the FIRRTL spec,
 /// Section 4.6, for a full definition of this.  Roughly, the oriented types
 /// (the types with any flips pushed to the leaves) must match.  This allows for
 /// types with flips in different positions to be equivalent.
 bool areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
-                              bool destFlip = false, bool srcFlip = false);
+                              bool destFlip = false, bool srcFlip = false,
+                              bool srcOuterTypeIsConst = false);
 
 /// Returns true if the destination is at least as wide as a source.  The source
 /// and destination types must be equivalent non-analog types.  The types are
@@ -273,11 +275,10 @@ std::optional<int64_t> getBitWidth(FIRRTLBaseType type,
 
 // Parse a FIRRTL type without a leading `!firrtl.` dialect tag.
 ParseResult parseNestedType(FIRRTLType &result, AsmParser &parser);
-ParseResult parseNestedBaseType(FIRRTLBaseType &result, AsmParser &parser,
-                                bool isConst = false);
+ParseResult parseNestedBaseType(FIRRTLBaseType &result, AsmParser &parser);
 
 // Print a FIRRTL type without a leading `!firrtl.` dialect tag.
-void printNestedType(Type type, AsmPrinter &os, bool includeConst = true);
+void printNestedType(Type type, AsmPrinter &os);
 
 using FIRRTLValue = mlir::TypedValue<FIRRTLType>;
 using FIRRTLBaseValue = mlir::TypedValue<FIRRTLBaseType>;

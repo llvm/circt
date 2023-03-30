@@ -2039,15 +2039,16 @@ bool InferenceTypeUpdate::updateValue(Value value) {
         elements.emplace_back(element.name, element.isFlip,
                               updateBase(element.type));
       }
-      return BundleType::get(context, elements);
+      return BundleType::get(context, elements, bundleType.isConst());
     } else if (auto vecType = type.dyn_cast<FVectorType>()) {
       fieldID++;
       auto save = fieldID;
       // TODO: this should recurse into the element type of 0 length vectors and
       // set any unknown width to 0.
       if (vecType.getNumElements() > 0) {
-        auto newType = FVectorType::get(updateBase(vecType.getElementType()),
-                                        vecType.getNumElements());
+        auto newType =
+            FVectorType::get(updateBase(vecType.getElementType()),
+                             vecType.getNumElements(), vecType.isConst());
         fieldID = save + vecType.getMaxFieldID();
         return newType;
       }

@@ -181,6 +181,11 @@ firrtl.module @MixedConstBundle(in %in : !firrtl.bundle<a: uint<1>, b: const.sin
   firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: const.sint<2>>, !firrtl.bundle<a: uint<1>, b: const.sint<2>>
 }
 
+firrtl.module @ConstToExplicitConstElementsBundle(in %in : !firrtl.const.bundle<a: uint<1>, b: sint<2>>, out %out : !firrtl.const.bundle<a: const.uint<1>, b: const.sint<2>>) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.const.bundle<a: const.uint<1>, b: const.sint<2>>, !firrtl.const.bundle<a: uint<1>, b: sint<2>>
+  firrtl.connect %out, %in : !firrtl.const.bundle<a: const.uint<1>, b: const.sint<2>>, !firrtl.const.bundle<a: uint<1>, b: sint<2>>
+}
+
 firrtl.module @ConstToNonConstClock(in %in : !firrtl.const.clock, out %out : !firrtl.clock) {
   // CHECK: firrtl.connect %out, %in : !firrtl.clock, !firrtl.const.clock
   firrtl.connect %out, %in : !firrtl.clock, !firrtl.const.clock
@@ -201,9 +206,19 @@ firrtl.module @ConstToNonConstUInt(in %in : !firrtl.const.uint<2>, out %out : !f
   firrtl.connect %out, %in : !firrtl.uint<2>, !firrtl.const.uint<2>
 }
 
+firrtl.module @ConstToNonConstBundle(in %in : !firrtl.const.bundle<a: uint<1>, b: sint<2>>, out %out : !firrtl.bundle<a: uint<1>, b: sint<2>>) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: sint<2>>, !firrtl.const.bundle<a: uint<1>, b: sint<2>>
+  firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: sint<2>>, !firrtl.const.bundle<a: uint<1>, b: sint<2>>
+}
+
 firrtl.module @MixedConstToNonConstBundle(in %in : !firrtl.bundle<a: uint<1>, b: const.sint<2>>, out %out : !firrtl.bundle<a: uint<1>, b: sint<2>>) {
   // CHECK: firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: sint<2>>, !firrtl.bundle<a: uint<1>, b: const.sint<2>>
   firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: sint<2>>, !firrtl.bundle<a: uint<1>, b: const.sint<2>>
+}
+
+firrtl.module @ConstToExplicitConstElementsVec(in %in : !firrtl.const.vector<uint<1>, 3>, out %out : !firrtl.vector<const.uint<1>, 3>) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.vector<const.uint<1>, 3>, !firrtl.const.vector<uint<1>, 3>
+  firrtl.connect %out, %in : !firrtl.vector<const.uint<1>, 3>, !firrtl.const.vector<uint<1>, 3>
 }
 
 firrtl.module @ConstToNonConstVec(in %in : !firrtl.const.vector<uint<1>, 3>, out %out : !firrtl.vector<uint<1>, 3>) {
