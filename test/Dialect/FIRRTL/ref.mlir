@@ -190,3 +190,13 @@ firrtl.circuit "UseRefsWithSinkFlow" {
     firrtl.connect %zz, %oc_y : !firrtl.uint<1>, !firrtl.uint
   }
 }
+
+// -----
+
+firrtl.circuit "ProbeAndRWProbe" {
+  // Dead, just check it parses.
+  firrtl.module private @Probes(in %ro : !firrtl.probe<uint<1>>, in %rw : !firrtl.rwprobe<uint<2>>) { }
+  firrtl.module @ProbeAndRWProbe() {
+  }
+}
+
