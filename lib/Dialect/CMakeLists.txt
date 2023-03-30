@@ -12,6 +12,7 @@
 add_subdirectory(Arc)
 add_subdirectory(Calyx)
 add_subdirectory(Comb)
+add_subdirectory(DC)
 add_subdirectory(ESI)
 add_subdirectory(FIRRTL)
 add_subdirectory(FSM)
