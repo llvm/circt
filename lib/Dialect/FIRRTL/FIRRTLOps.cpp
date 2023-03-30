@@ -2152,9 +2152,9 @@ FirMemory MemOp::getSummary() {
             (c >= '0' && c <= '9'))
           initStr.push_back(c);
       initStr.push_back('_');
-      initStr.push_back(init.getIsBinary().getValue() ? 't' : 'f');
+      initStr.push_back(init.getIsBinary() ? 't' : 'f');
       initStr.push_back('_');
-      initStr.push_back(init.getIsInline().getValue() ? 't' : 'f');
+      initStr.push_back(init.getIsInline() ? 't' : 'f');
     }
     modName = StringAttr::get(
         op->getContext(),

@@ -397,11 +397,8 @@ static LogicalResult applyLoadMemoryAnno(const AnnoPathValue &target,
     return failure();
   }
 
-  op->setAttr("init",
-              MemoryInitAttr::get(
-                  op->getContext(), filename,
-                  BoolAttr::get(op->getContext(), hexOrBinaryValue == "b"),
-                  BoolAttr::get(op->getContext(), isInline)));
+  op->setAttr("init", MemoryInitAttr::get(op->getContext(), filename,
+                                          hexOrBinaryValue == "b", isInline));
 
   return success();
 }
