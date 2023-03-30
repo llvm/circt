@@ -24,11 +24,17 @@ firrtl.module @ConstAsyncReset(in %a: !firrtl.const.asyncreset) {}
 // CHECK-LABEL: firrtl.module @ConstVec(in %a: !firrtl.const.vector<uint<1>, 3>) {
 firrtl.module @ConstVec(in %a: !firrtl.const.vector<uint<1>, 3>) {}
 
+// CHECK-LABEL: firrtl.module @ConstVecExplicitElements(in %a: !firrtl.const.vector<const.uint<1>, 3>) {
+firrtl.module @ConstVecExplicitElements(in %a: !firrtl.const.vector<const.uint<1>, 3>) {}
+
 // CHECK-LABEL: firrtl.module @ConstBundle(in %a: !firrtl.const.bundle<a: uint<1>, b: sint<2>>) {
 firrtl.module @ConstBundle(in %a: !firrtl.const.bundle<a: uint<1>, b: sint<2>>) {}
 
 // CHECK-LABEL: firrtl.module @MixedConstBundle(in %a: !firrtl.bundle<a: uint<1>, b: const.sint<2>>) {
 firrtl.module @MixedConstBundle(in %a: !firrtl.bundle<a: uint<1>, b: const.sint<2>>) {}
+
+// CHECK-LABEL: firrtl.module @ConstBundleExplicitElements(in %a: !firrtl.const.bundle<a: const.uint<1>, b: const.sint<2>>) {
+firrtl.module @ConstBundleExplicitElements(in %a: !firrtl.const.bundle<a: const.uint<1>, b: const.sint<2>>) {}
 
 // Subaccess of a const vector should always have a const result
 // CHECK-LABEL: firrtl.module @ConstSubindex
