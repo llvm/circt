@@ -302,18 +302,18 @@ firrtl.module @LargeMem(in %clock: !firrtl.clock, in %addr: !firrtl.uint<35>, ou
   firrtl.connect %out, %r_data : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
-firrtl.module @DbgsMemPort(in %clock: !firrtl.clock, in %addr : !firrtl.uint<1>, out %_a: !firrtl.ref<vector<uint<1>, 2>>, in %cond : !firrtl.uint<1>) {
+firrtl.module @DbgsMemPort(in %clock: !firrtl.clock, in %addr : !firrtl.uint<1>, out %_a: !firrtl.probe<vector<uint<1>, 2>>, in %cond : !firrtl.uint<1>) {
   %ram = chirrtl.combmem : !chirrtl.cmemory<uint<1>, 2>
   // This port should be deleted.
-  %port0_data = chirrtl.debugport %ram {name = "port0"} : (!chirrtl.cmemory<uint<1>, 2>) -> !firrtl.ref<vector<uint<1>, 2>>
+  %port0_data = chirrtl.debugport %ram {name = "port0"} : (!chirrtl.cmemory<uint<1>, 2>) -> !firrtl.probe<vector<uint<1>, 2>>
   %ramport_data, %ramport_port = chirrtl.memoryport Read %ram {name = "ramport"} : (!chirrtl.cmemory<uint<1>, 2>) -> (!firrtl.uint<1>, !chirrtl.cmemoryport)
 
   firrtl.when %cond : !firrtl.uint<1> {
     chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<1>, !firrtl.clock
   }
-  firrtl.ref.define %_a, %port0_data : !firrtl.ref<vector<uint<1>, 2>>
-  // CHECK:    %[[ram_port0:.+]], %ram_ramport = firrtl.mem Undefined {depth = 2 : i64, name = "ram", portNames = ["port0", "ramport"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.ref<vector<uint<1>, 2>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-  // CHECK:    firrtl.ref.define %_a, %[[ram_port0]] : !firrtl.ref<vector<uint<1>, 2>>
+  firrtl.ref.define %_a, %port0_data : !firrtl.probe<vector<uint<1>, 2>>
+  // CHECK:    %[[ram_port0:.+]], %ram_ramport = firrtl.mem Undefined {depth = 2 : i64, name = "ram", portNames = ["port0", "ramport"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.probe<vector<uint<1>, 2>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+  // CHECK:    firrtl.ref.define %_a, %[[ram_port0]] : !firrtl.probe<vector<uint<1>, 2>>
 }
 
 }

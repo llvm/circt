@@ -690,29 +690,29 @@ firrtl.circuit "Test" {
   //===--------------------------------------------------------------------===//
 
   // CHECK-LABEL @RefSender
-  firrtl.module @RefSender(out %port: !firrtl.ref<vector<bundle<a: uint<4>, b: uint<8>>, 2>>) {
+  firrtl.module @RefSender(out %port: !firrtl.probe<vector<bundle<a: uint<4>, b: uint<8>>, 2>>) {
    // CHECK: %w = firrtl.wire : !firrtl.bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>
     // CHECK: %0 = firrtl.ref.send %w : !firrtl.bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>
-    // CHECK: firrtl.ref.define %port, %0 : !firrtl.ref<bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>>
+    // CHECK: firrtl.ref.define %port, %0 : !firrtl.probe<bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>>
     %w = firrtl.wire : !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2>
     %ref = firrtl.ref.send %w : !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2>
-    firrtl.ref.define %port, %ref : !firrtl.ref<vector<bundle<a: uint<4>, b: uint<8>>, 2>>
+    firrtl.ref.define %port, %ref : !firrtl.probe<vector<bundle<a: uint<4>, b: uint<8>>, 2>>
   }
 
   firrtl.module @RefResolver() {
-    // CHECK: %sender_port = firrtl.instance sender @RefSender(out port: !firrtl.ref<bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>>)
-    // CHECK: %0 = firrtl.ref.sub %sender_port[1] : !firrtl.ref<bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>>
-    // CHECK: %1 = firrtl.ref.sub %0[1] : !firrtl.ref<vector<uint<8>, 2>>
-    // CHECK: %2 = firrtl.ref.sub %sender_port[0] : !firrtl.ref<bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>>
-    // CHECK: %3 = firrtl.ref.sub %2[1] : !firrtl.ref<vector<uint<4>, 2>>
-    // CHECK: %4 = firrtl.ref.resolve %3 : !firrtl.ref<uint<4>>
-    // CHECK: %5 = firrtl.ref.resolve %1 : !firrtl.ref<uint<8>>
+    // CHECK: %sender_port = firrtl.instance sender @RefSender(out port: !firrtl.probe<bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>>)
+    // CHECK: %0 = firrtl.ref.sub %sender_port[1] : !firrtl.probe<bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>>
+    // CHECK: %1 = firrtl.ref.sub %0[1] : !firrtl.probe<vector<uint<8>, 2>>
+    // CHECK: %2 = firrtl.ref.sub %sender_port[0] : !firrtl.probe<bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>>
+    // CHECK: %3 = firrtl.ref.sub %2[1] : !firrtl.probe<vector<uint<4>, 2>>
+    // CHECK: %4 = firrtl.ref.resolve %3 : !firrtl.probe<uint<4>>
+    // CHECK: %5 = firrtl.ref.resolve %1 : !firrtl.probe<uint<8>>
     // CHECK: %6 = firrtl.bundlecreate %4, %5 : (!firrtl.uint<4>, !firrtl.uint<8>) -> !firrtl.bundle<a: uint<4>, b: uint<8>>
     // CHECK: %w = firrtl.wire : !firrtl.bundle<a: uint<4>, b: uint<8>>
     // CHECK: firrtl.strictconnect %w, %6 : !firrtl.bundle<a: uint<4>, b: uint<8>>
-    %vector_ref = firrtl.instance sender @RefSender(out port: !firrtl.ref<vector<bundle<a: uint<4>, b: uint<8>>, 2>>)
-    %bundle_ref = firrtl.ref.sub     %vector_ref[1] : !firrtl.ref<vector<bundle<a: uint<4>, b: uint<8>>, 2>>
-    %bundle_val = firrtl.ref.resolve %bundle_ref    : !firrtl.ref<bundle<a: uint<4>, b: uint<8>>>
+    %vector_ref = firrtl.instance sender @RefSender(out port: !firrtl.probe<vector<bundle<a: uint<4>, b: uint<8>>, 2>>)
+    %bundle_ref = firrtl.ref.sub     %vector_ref[1] : !firrtl.probe<vector<bundle<a: uint<4>, b: uint<8>>, 2>>
+    %bundle_val = firrtl.ref.resolve %bundle_ref    : !firrtl.probe<bundle<a: uint<4>, b: uint<8>>>
     %w = firrtl.wire: !firrtl.bundle<a: uint<4>, b: uint<8>>
     firrtl.strictconnect %w, %bundle_val : !firrtl.bundle<a: uint<4>, b: uint<8>>
   }

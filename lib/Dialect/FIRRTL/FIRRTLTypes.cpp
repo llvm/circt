@@ -80,7 +80,9 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         os << ", " << vectorType.getNumElements() << '>';
       })
       .Case<RefType>([&](auto refType) {
-        os << "ref<";
+        if (refType.getForceable())
+          os << "rw";
+        os << "probe<";
         printNestedType(refType.getType(), os);
         os << '>';
       })
@@ -206,17 +208,32 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     return result = FVectorType::get(elementType, width), success();
   }
 
-  if (name.equals("ref")) {
+  // For now, support both firrtl.ref and firrtl.probe.
+  if (name.equals("ref") || name.equals("probe")) {
     FIRRTLBaseType type;
     if (parser.parseLess() || parseNestedBaseType(type, parser) ||
         parser.parseGreater())
       return failure();
 
     if (failed(RefType::verify(
-            [&]() { return parser.emitError(parser.getNameLoc()); }, type)))
+            [&]() { return parser.emitError(parser.getNameLoc()); }, type,
+            false)))
       return failure();
 
-    return result = RefType::get(type), success();
+    return result = RefType::get(type, false), success();
+  }
+  if (name.equals("rwprobe")) {
+    FIRRTLBaseType type;
+    if (parser.parseLess() || parseNestedBaseType(type, parser) ||
+        parser.parseGreater())
+      return failure();
+
+    if (failed(RefType::verify(
+            [&]() { return parser.emitError(parser.getNameLoc()); }, type,
+            true)))
+      return failure();
+
+    return result = RefType::get(type, true), success();
   }
 
   return {};
@@ -1052,12 +1069,12 @@ std::pair<uint64_t, bool> FVectorType::rootChildFieldID(uint64_t fieldID,
 // RefType
 //===----------------------------------------------------------------------===//
 
-auto RefType::get(FIRRTLBaseType type) -> RefType {
-  return Base::get(type.getContext(), type);
+auto RefType::get(FIRRTLBaseType type, bool forceable) -> RefType {
+  return Base::get(type.getContext(), type, forceable);
 }
 
 auto RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
-                     FIRRTLBaseType base) -> LogicalResult {
+                     FIRRTLBaseType base, bool forceable) -> LogicalResult {
   if (!base.isPassive())
     return emitErrorFn() << "reference base type must be passive";
   return success();
