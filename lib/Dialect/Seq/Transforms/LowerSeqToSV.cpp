@@ -217,11 +217,17 @@ void FirRegLower::lower() {
   for (auto reg : toInit)
     if (reg.randStart >= 0)
       maxBit = std::max(maxBit, (uint64_t)reg.randStart + reg.width);
-  for (auto &reg : toInit)
+
+  // This is a map from async reset signals to register info.
+  llvm::MapVector<Value, SmallVector<RegLowerInfo>> asyncResets;
+  for (auto &reg : toInit) {
     if (reg.randStart == -1) {
       reg.randStart = maxBit;
       maxBit += reg.width;
     }
+    if (reg.asyncResetSignal)
+      asyncResets[reg.asyncResetSignal].emplace_back(reg);
+  }
 
   // Create an initial block at the end of the module where random
   // initialisation will be inserted.  Create two builders into the two
@@ -235,7 +241,7 @@ void FirRegLower::lower() {
   //     `INIT_RANDOM_PROLOG_
   //     ... initBuilder ..
   // `endif
-  if (toInit.empty() || disableRegRandomization)
+  if (toInit.empty() || (disableRegRandomization && asyncResets.empty()))
     return;
 
   auto loc = module.getLoc();
@@ -244,6 +250,7 @@ void FirRegLower::lower() {
 
   auto builder =
       ImplicitLocOpBuilder::atBlockTerminator(loc, module.getBodyBlock());
+
   builder.create<sv::IfDefOp>(
       "SYNTHESIS", [] {},
       [&] {
@@ -253,51 +260,42 @@ void FirRegLower::lower() {
           });
 
           builder.create<sv::InitialOp>([&] {
-            builder.create<sv::IfDefProceduralOp>("INIT_RANDOM_PROLOG_", [&] {
-              builder.create<sv::VerbatimOp>("`INIT_RANDOM_PROLOG_");
-            });
-            llvm::MapVector<Value, SmallVector<RegLowerInfo>> resets;
-            builder.create<sv::IfDefProceduralOp>(randInitRef, [&] {
-              // Create randomization vector
-              SmallVector<Value> randValues;
-              for (uint64_t x = 0; x < (maxBit + 31) / 32; ++x) {
-                auto lhs =
-                    builder.create<sv::LogicOp>(loc, builder.getIntegerType(32),
-                                                "_RANDOM_" + llvm::utostr(x));
-                auto rhs = builder.create<sv::MacroRefExprSEOp>(
-                    loc, builder.getIntegerType(32), "RANDOM");
-                builder.create<sv::BPAssignOp>(loc, lhs, rhs);
-                randValues.push_back(lhs.getResult());
-              }
-
-              // Create initialisers for all registers.
-              for (auto &svReg : toInit) {
-                initialize(builder, svReg, randValues);
-
-                if (svReg.asyncResetSignal)
-                  resets[svReg.asyncResetSignal].emplace_back(svReg);
-              }
-            });
-
-            if (!resets.empty()) {
-              builder.create<sv::IfDefProceduralOp>("RANDOMIZE", [&] {
-                // If the register is async reset, we need to insert extra
-                // initialization in post-randomization so that we can set the
-                // reset value to register if the reset signal is enabled.
-                for (auto &reset : resets) {
-                  // Create a block guarded by the RANDOMIZE macro and the
-                  // reset: `ifdef RANDOMIZE
-                  //   if (reset) begin
-                  //     ..
-                  //   end
-                  // `endif
-                  builder.create<sv::IfOp>(reset.first, [&] {
-                    for (auto &reg : reset.second)
-                      builder.create<sv::BPAssignOp>(reg.reg.getLoc(), reg.reg,
-                                                     reg.asyncResetValue);
-                  });
-                }
+            if (!disableRegRandomization) {
+              builder.create<sv::IfDefProceduralOp>("INIT_RANDOM_PROLOG_", [&] {
+                builder.create<sv::VerbatimOp>("`INIT_RANDOM_PROLOG_");
               });
+              builder.create<sv::IfDefProceduralOp>(randInitRef, [&] {
+                // Create randomization vector
+                SmallVector<Value> randValues;
+                for (uint64_t x = 0; x < (maxBit + 31) / 32; ++x) {
+                  auto lhs = builder.create<sv::LogicOp>(
+                      loc, builder.getIntegerType(32),
+                      "_RANDOM_" + llvm::utostr(x));
+                  auto rhs = builder.create<sv::MacroRefExprSEOp>(
+                      loc, builder.getIntegerType(32), "RANDOM");
+                  builder.create<sv::BPAssignOp>(loc, lhs, rhs);
+                  randValues.push_back(lhs.getResult());
+                }
+
+                // Create initialisers for all registers.
+                for (auto &svReg : toInit)
+                  initialize(builder, svReg, randValues);
+              });
+            }
+            if (!asyncResets.empty()) {
+              // If the register is async reset, we need to insert extra
+              // initialization in post-randomization so that we can set the
+              // reset value to register if the reset signal is enabled.
+              for (auto &reset : asyncResets) {
+                //  if (reset) begin
+                //    ..
+                //  end
+                builder.create<sv::IfOp>(reset.first, [&] {
+                  for (auto &reg : reset.second)
+                    builder.create<sv::BPAssignOp>(reg.reg.getLoc(), reg.reg,
+                                                   reg.asyncResetValue);
+                });
+              }
             }
           });
 
