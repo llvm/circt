@@ -1973,10 +1973,36 @@ static Attribute collectFields(MLIRContext *context,
 }
 
 OpFoldResult BundleCreateOp::fold(FoldAdaptor adaptor) {
+  // bundle_create(%foo["a"], %foo["b"]) -> %foo when the type of %foo is
+  // bundle<a:..., b:...>.
+  if (SubfieldOp first = getOperand(0).getDefiningOp<SubfieldOp>())
+    if (first.getFieldIndex() == 0 && first.getInput().getType() == getType() &&
+        llvm::all_of(
+            llvm::enumerate(getOperands().drop_front()), [&](auto elem) {
+              auto index = elem.index() + 1;
+              auto subindex = elem.value().template getDefiningOp<SubfieldOp>();
+              return subindex && subindex.getInput() == first.getInput() &&
+                     subindex.getFieldIndex() == index;
+            }))
+      return first.getInput();
+
   return collectFields(getContext(), adaptor.getOperands());
 }
 
 OpFoldResult VectorCreateOp::fold(FoldAdaptor adaptor) {
+  // vector_create(%foo[0], %foo[1]) -> %foo when the type of %foo is
+  // vector<..., 2>.
+  if (SubindexOp first = getOperand(0).getDefiningOp<SubindexOp>())
+    if (first.getIndex() == 0 && first.getInput().getType() == getType() &&
+        llvm::all_of(
+            llvm::enumerate(getOperands().drop_front()), [&](auto elem) {
+              auto index = elem.index() + 1;
+              auto subindex = elem.value().template getDefiningOp<SubindexOp>();
+              return subindex && subindex.getInput() == first.getInput() &&
+                     subindex.getIndex() == index;
+            }))
+      return first.getInput();
+
   return collectFields(getContext(), adaptor.getOperands());
 }
 

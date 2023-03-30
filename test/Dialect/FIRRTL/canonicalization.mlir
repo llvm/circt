@@ -2793,4 +2793,22 @@ firrtl.module @RemoveUnusedInvalid() {
 }
 // CHECK-NEXT: }
 
+// CHECK-LABEL: firrtl.module @AggregateCreate
+firrtl.module @AggregateCreate(in %vector_in: !firrtl.vector<uint<1>, 2>,
+                               in %bundle_in: !firrtl.bundle<a: uint<1>, b: uint<1>>,
+                               out %vector_out: !firrtl.vector<uint<1>, 2>,
+                               out %bundle_out: !firrtl.bundle<a: uint<1>, b: uint<1>>) {
+  %0 = firrtl.subindex %vector_in[0] : !firrtl.vector<uint<1>, 2>
+  %1 = firrtl.subindex %vector_in[1] : !firrtl.vector<uint<1>, 2>
+  %vector = firrtl.vectorcreate %0, %1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 2>
+  firrtl.strictconnect %vector_out, %vector : !firrtl.vector<uint<1>, 2>
+
+  %2 = firrtl.subfield %bundle_in["a"] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+  %3 = firrtl.subfield %bundle_in["b"] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+  %bundle = firrtl.bundlecreate %2, %3 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.bundle<a: uint<1>, b: uint<1>>
+  firrtl.strictconnect %bundle_out, %bundle : !firrtl.bundle<a: uint<1>, b: uint<1>>
+  // CHECK-NEXT: firrtl.strictconnect %vector_out, %vector_in : !firrtl.vector<uint<1>, 2>
+  // CHECK-NEXT: firrtl.strictconnect %bundle_out, %bundle_in : !firrtl.bundle<a: uint<1>, b: uint<1>>
+}
+
 }
