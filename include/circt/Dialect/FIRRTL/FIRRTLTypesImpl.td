@@ -24,6 +24,11 @@ class FIRRTLImplType<string name,
   // Storage classes must be defined in C++ and 
   // inherit from FIRRTLBaseTypeStorage
   let genStorageClass = false;
+  
+  // MLIR generates awkward accessor "getIsConst" for the "isConst" parameter, 
+  // which is common on FIRRTLBaseType anyway, so we generate the other 
+  // accessors manually
+  let genAccessors = false;
 }
 
 //===----------------------------------------------------------------------===//
@@ -52,6 +57,7 @@ def SIntImpl : FIRRTLImplType<"SInt",
   let extraClassDeclaration = [{
     using WidthQualifiedTypeTrait<SIntType>::getWidth;
     using WidthQualifiedTypeTrait<SIntType>::hasWidth;
+    int32_t getWidthOrSentinel() const;
     SIntType getConstType(bool isConst);
   }];
 }
@@ -70,6 +76,7 @@ def UIntImpl : FIRRTLImplType<"UInt",
   let extraClassDeclaration = [{
     using WidthQualifiedTypeTrait<UIntType>::getWidth;
     using WidthQualifiedTypeTrait<UIntType>::hasWidth;
+    int32_t getWidthOrSentinel() const;
     UIntType getConstType(bool isConst);
   }];
 }
@@ -126,6 +133,7 @@ def AnalogTypeImpl : FIRRTLImplType<"Analog",
     TypeBuilder<(ins)>,
   ];
   let extraClassDeclaration = [{
+    int32_t getWidthOrSentinel() const;
     AnalogType getConstType(bool isConst);
   }];
   let genVerifyDecl = true;
@@ -147,6 +155,9 @@ def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
     >
   ];
   let extraClassDeclaration = [{
+    FIRRTLBaseType getElementType() const;
+    size_t getNumElements() const;
+
     /// Return the recursive properties of the type.
     RecursiveTypeProperties getRecursiveTypeProperties() const;
 
@@ -215,6 +226,8 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
         return llvm::hash_combine(arg.name, arg.isFlip, arg.type);
       }
     };
+
+    ArrayRef<BundleElement> getElements() const;
 
     size_t getNumElements() { return getElements().size(); }
 
@@ -395,6 +408,7 @@ def RefImpl : FIRRTLImplType<"Ref", [], "::circt::firrtl::FIRRTLType"> {
   let parameters = (ins TypeParameter<"::circt::firrtl::FIRRTLBaseType",
                                       "Type of reference target">:$type,
                         "bool":$forceable);
+  let genAccessors = true;
   let genStorageClass = true;
   let genVerifyDecl = true;
 
