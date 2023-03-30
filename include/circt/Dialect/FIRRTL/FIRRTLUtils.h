@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "llvm/Support/Parallel.h"
 
@@ -166,7 +167,10 @@ inline FIRRTLType mapBaseType(FIRRTLType type,
 /// Given a type, return the corresponding lowered type for the HW dialect.
 /// Non-FIRRTL types are simply passed through. This returns a null type if it
 /// cannot be lowered.
-Type lowerType(Type type);
+/// This lowers named bundles to sv::TypeAliasType. It creates Typescope inside
+/// the Block (if it doesn't exist) and adds Typedecl for named bundles.
+Type lowerType(Type type, Block *bodyBlock = nullptr,
+               StringRef typeScopeNamePrefix = "");
 
 //===----------------------------------------------------------------------===//
 // Parser-related utilities

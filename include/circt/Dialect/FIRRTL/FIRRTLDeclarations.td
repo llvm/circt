@@ -381,6 +381,12 @@ def WireOp : ReferableDeclOp<"wire"> {
                    inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "StringRef":$name,
+              "StringAttr":$inner_sym) , [{
+      return build($_builder, $_state, elementType, name,
+      NameKindEnum::DroppableName, $_builder.getArrayAttr({}),
+             inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
+    }]>,
+    OpBuilder<(ins "::mlir::Type":$elementType, "StringRef":$name,
                    "NameKindEnum":$nameKind, "::mlir::ArrayAttr":$annotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
       return build($_builder, $_state, elementType, name, nameKind, annotations,

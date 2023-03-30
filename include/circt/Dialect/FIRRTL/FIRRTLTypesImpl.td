@@ -143,16 +143,29 @@ def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
 def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
   let summary = "an aggregate of named elements. This is effectively a struct.";
   let genStorageClass = false;
-  let parameters = (ins "ArrayRef<BundleElement>":$elements);
+  let parameters = (ins "ArrayRef<BundleElement>":$elements, "StringAttr":$bundleName);
+  let skipDefaultBuilders = true;
+  let builders = [
+    TypeBuilder<(ins
+      "ArrayRef<BundleElement>":$elements)>,
+    TypeBuilderWithInferredContext<(ins
+      "ArrayRef<BundleElement>":$elements, "StringAttr":$bundleName)>,
+  ];
   let extraClassDeclaration = [{
     /// Each element of a bundle, which is a name and type.
     struct BundleElement {
       StringAttr name;
       bool isFlip;
       FIRRTLBaseType type;
+      // Optional description of the field.
+      StringAttr description;
 
       BundleElement(StringAttr name, bool isFlip, FIRRTLBaseType type)
           : name(name), isFlip(isFlip), type(type) {}
+
+      BundleElement(StringAttr name, bool isFlip, FIRRTLBaseType type,
+          StringAttr description)
+          : name(name), isFlip(isFlip), type(type), description(description) {}
 
       bool operator==(const BundleElement &rhs) const {
         return name == rhs.name && isFlip == rhs.isFlip && type == rhs.type;

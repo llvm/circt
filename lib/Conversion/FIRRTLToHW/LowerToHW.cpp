@@ -430,6 +430,8 @@ private:
                             CircuitLoweringState &loweringState);
   hw::HWModuleOp lowerModule(FModuleOp oldModule, Block *topLevelModule,
                              CircuitLoweringState &loweringState);
+  sv::InterfaceOp lowerIntreface(FInterfaceOp oldModule, Block *topLevelModule,
+                                 CircuitLoweringState &loweringState);
   hw::HWModuleExternOp lowerExtModule(FExtModuleOp oldModule,
                                       Block *topLevelModule,
                                       CircuitLoweringState &loweringState);
@@ -538,6 +540,13 @@ void FIRRTLModuleLowering::runOnOperation() {
           if (!loweredMod)
             return signalPassFailure();
           state.oldToNewModuleMap[&op] = loweredMod;
+        })
+        .Case<FInterfaceOp>([&](auto module) {
+          auto loweredInterface = lowerIntreface(module, topLevelModule, state);
+          if (!loweredInterface)
+            return signalPassFailure();
+
+          state.oldToNewModuleMap[&op] = loweredInterface;
         })
         .Default([&](Operation *op) {
           // We don't know what this op is.  If it has no illegal FIRRTL types,
@@ -1205,6 +1214,44 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   return newModule;
 }
 
+sv::InterfaceOp
+FIRRTLModuleLowering::lowerIntreface(FInterfaceOp interface,
+                                     Block *topLevelModule,
+                                     CircuitLoweringState &loweringState) {
+
+  // Map the ports over, lowering their types as we go.
+  SmallVector<PortInfo> firrtlPorts = interface.getPorts();
+  SmallVector<hw::PortInfo, 8> ports;
+  if (failed(lowerPorts(firrtlPorts, ports, interface, interface.getName(),
+                        loweringState)))
+    return {};
+
+  auto builder = OpBuilder::atBlockEnd(topLevelModule);
+  auto nameAttr = builder.getStringAttr(interface.getName());
+  auto newInterface =
+      builder.create<sv::InterfaceOp>(interface.getLoc(), nameAttr);
+  if (auto outputFile = interface->getAttr("output_file"))
+    newInterface->setAttr("output_file", outputFile);
+  if (auto comment = interface->getAttrOfType<StringAttr>("comment"))
+    newInterface.setCommentAttr(comment);
+  builder.setInsertionPointToEnd(newInterface.getBodyBlock());
+  for (auto &op : interface) {
+    if (auto wire = dyn_cast<WireOp>(op)) {
+      auto type = lowerType(wire.getType().cast<FIRRTLBaseType>(),
+                            topLevelModule, nameAttr.getValue());
+      builder.create<sv::InterfaceSignalOp>(interface.getLoc(),
+                                            wire.getNameAttr(), type);
+    } else if (auto verbatim = dyn_cast<sv::VerbatimOp>(op))
+      builder.create<sv::VerbatimOp>(
+          verbatim.getLoc(), verbatim.getFormatStringAttr(),
+          verbatim.getSubstitutions(), verbatim.getSymbolsAttr());
+    else {
+      op.emitOpError("Unhandled op inside firrtl.interface");
+      return {};
+    }
+  }
+  return newInterface;
+}
 /// Given a value of analog type, check to see the only use of it is an
 /// attach. If so, remove the attach and return the value being attached to
 /// it, converted to an HW inout type.  If this isn't a situation we can
@@ -1665,6 +1712,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(CoverOp op);
   LogicalResult visitStmt(AttachOp op);
   LogicalResult visitStmt(ProbeOp op);
+  void flattenTypeFields(Value wire, SmallVectorImpl<Value> &fields);
 
   FailureOr<Value> lowerSubindex(SubindexOp op, Value input);
   FailureOr<Value> lowerSubaccess(SubaccessOp op, Value input);
@@ -3062,6 +3110,32 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   return success();
 }
 
+void FIRRTLLowering::flattenTypeFields(Value val,
+                                       SmallVectorImpl<Value> &fields) {
+
+  // Every val must be of InOutType, so use sv::StructFieldInOutOp and
+  // sv::ArrayIndexInOutOp.
+  assert(val.getType().isa<sv::InOutType>() && "Expecting only sv::InOutType");
+  auto valType = val.getType().cast<sv::InOutType>().getElementType();
+  if (auto aliasType = valType.dyn_cast<hw::TypeAliasType>())
+    valType = aliasType.getInnerType();
+
+  TypeSwitch<Type>(valType)
+      .Case<hw::StructType>([&](hw::StructType bundle) {
+        for (auto elem : bundle.getElements())
+          flattenTypeFields(
+              builder.create<sv::StructFieldInOutOp>(val, elem.name), fields);
+      })
+      .Case<hw::ArrayType>([&](hw::ArrayType arrayType) {
+        unsigned indexWidth = getBitWidthFromVectorSize(arrayType.getSize());
+        for (size_t i = 0, e = arrayType.getSize(); i != e; ++i)
+          flattenTypeFields(builder.create<sv::ArrayIndexInOutOp>(
+                                val, getOrCreateIntConstant(indexWidth, i)),
+                            fields);
+      })
+      .Default([&](auto groundType) { fields.push_back(val); });
+}
+
 LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   Operation *oldModule =
       circuitState.getInstanceGraph()->getReferencedModule(oldInstance);
@@ -3070,6 +3144,27 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     oldInstance->emitOpError("could not find module [")
         << oldInstance.getModuleName() << "] referenced by instance";
     return failure();
+  }
+  if (auto interface = dyn_cast<sv::InterfaceOp>(newModule)) {
+    auto interfaceInstance = builder.create<sv::InterfaceInstanceOp>(
+        interface.getInterfaceType(), oldInstance.getNameAttr(),
+        builder.getStringAttr("__" + oldInstance.getName() + "__"));
+    SmallVector<Value, 8> fields;
+    for (auto &op : interface) {
+      if (auto signal = dyn_cast<sv::InterfaceSignalOp>(op)) {
+        auto tmpWire =
+            createTmpWireOp(signal.getType(), signal.getName().str() + "_wire");
+        builder.create<sv::AssignInterfaceSignalOp>(
+            interfaceInstance, signal.getSymName(), tmpWire);
+        flattenTypeFields(tmpWire, fields);
+      }
+    }
+    assert(fields.size() == oldInstance.getNumResults() &&
+           "failed to lower firrtl.interface signals");
+    for (auto [port, field] : llvm::zip(oldInstance.getResults(), fields))
+      (void)setLowering(port, field);
+
+    return success();
   }
 
   // If this is a referenced to a parameterized extmodule, then bring the
