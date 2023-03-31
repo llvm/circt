@@ -135,3 +135,25 @@ firrtl.circuit "NLARenamingNewNLAs" attributes {
     %dut_in = firrtl.instance dut sym @dut @DUT(in in: !firrtl.uint<1>)
   }
 }
+
+// -----
+
+// CHECK-LABEL: firrtl.circuit "Refs"
+firrtl.circuit "Refs" attributes {
+    annotations = [{class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo"}]
+  } {
+
+  firrtl.module private @DUT(
+    in %in: !firrtl.uint<1>, out %out: !firrtl.ref<uint<1>>
+  ) attributes {
+    annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+    ]}
+  {
+    %ref = firrtl.ref.send %in : !firrtl.uint<1>
+    firrtl.ref.define %out, %ref : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Refs() {
+    %dut_in, %dut_tap = firrtl.instance dut sym @dut @DUT(in in: !firrtl.uint<1>, out out: !firrtl.ref<uint<1>>)
+  }
+}
