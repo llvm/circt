@@ -1978,11 +1978,11 @@ OpFoldResult BundleCreateOp::fold(FoldAdaptor adaptor) {
   if (SubfieldOp first = getOperand(0).getDefiningOp<SubfieldOp>())
     if (first.getFieldIndex() == 0 && first.getInput().getType() == getType() &&
         llvm::all_of(
-            llvm::enumerate(getOperands().drop_front()), [&](auto elem) {
-              auto index = elem.index() + 1;
+            llvm::drop_begin(llvm::enumerate(getOperands().drop_front())),
+            [&](auto elem) {
               auto subindex = elem.value().template getDefiningOp<SubfieldOp>();
               return subindex && subindex.getInput() == first.getInput() &&
-                     subindex.getFieldIndex() == index;
+                     subindex.getFieldIndex() == elem.index();
             }))
       return first.getInput();
 
@@ -1995,11 +1995,10 @@ OpFoldResult VectorCreateOp::fold(FoldAdaptor adaptor) {
   if (SubindexOp first = getOperand(0).getDefiningOp<SubindexOp>())
     if (first.getIndex() == 0 && first.getInput().getType() == getType() &&
         llvm::all_of(
-            llvm::enumerate(getOperands().drop_front()), [&](auto elem) {
-              auto index = elem.index() + 1;
+            llvm::drop_begin(llvm::enumerate(getOperands())), [&](auto elem) {
               auto subindex = elem.value().template getDefiningOp<SubindexOp>();
               return subindex && subindex.getInput() == first.getInput() &&
-                     subindex.getIndex() == index;
+                     subindex.getIndex() == elem.index();
             }))
       return first.getInput();
 
