@@ -1336,7 +1336,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       .Case<NodeOp>([&](auto op) {
         // Nodes have the same type as their input.
         unifyTypes(FieldRef(op.getResult(), 0), FieldRef(op.getInput(), 0),
-                   op.getType());
+                   op.getResult().getType());
       })
 
       // Aggregate Values

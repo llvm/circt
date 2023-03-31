@@ -214,8 +214,10 @@ def MemOp : ReferableDeclOp<"mem"> {
   }];
 }
 
-def NodeOp : ReferableDeclOp<"node",
-      [SameOperandsAndResultType, InferTypeOpInterface]> {
+def NodeOp : ReferableDeclOp<"node", [
+      AllTypesMatch<["input","result"]>,
+      DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>,
+      Forceable]> {
   let summary = "No-op to name a value";
   let description = [{
     A node is simply a named intermediate value in a circuit. The node must
@@ -231,39 +233,44 @@ def NodeOp : ReferableDeclOp<"node",
   let arguments = (ins PassiveType:$input, StrAttr:$name,
                        NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
-                       OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs FIRRTLBaseType:$result);
+                       OptionalAttr<InnerSymAttr>:$inner_sym,
+                       UnitAttr:$forceable); // ReferenceKinds
+  let results = (outs FIRRTLBaseType:$result, Optional<RefType>:$ref);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$input,
                   CArg<"StringRef", "{}">:$name,
                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
-                  CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+                  CArg<"StringAttr", "StringAttr()">:$inner_sym,
+                  CArg<"bool", "false">:$forceable), [{
       return build($_builder, $_state, elementType, input, name, nameKind,
                    $_builder.getArrayAttr(annotations),
-                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
+                   forceable);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$input,
                   "StringRef":$name, "NameKindEnum":$nameKind,
                   "::mlir::ArrayAttr":$annotations,
-                  CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+                  CArg<"StringAttr", "StringAttr()">:$inner_sym,
+                  CArg<"bool", "false">:$forceable), [{
       return build($_builder, $_state, elementType, input, name, nameKind,
                    annotations,
-                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
+                   forceable);
     }]>
   ];
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
-    $input `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` qualified(type($input))
+    $input (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` qualified(type($input))
   }];
 
   let hasCanonicalizer = true;
   let hasFolder = 1;
 }
 
-def RegOp : ReferableDeclOp<"reg"> {
+def RegOp : ReferableDeclOp<"reg", [Forceable]> {
   let summary = "Define a new register";
   let description = [{
     Declare a new register:
@@ -276,36 +283,45 @@ def RegOp : ReferableDeclOp<"reg"> {
   let arguments = (
     ins ClockType:$clockVal, StrAttr:$name, NameKindAttr:$nameKind,
         AnnotationArrayAttr:$annotations,
-        OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs AnyRegisterType:$result);
+        OptionalAttr<InnerSymAttr>:$inner_sym,
+        UnitAttr:$forceable);
+  let results = (outs AnyRegisterType:$result, Optional<RefType>:$ref);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    CArg<"StringRef", "{}">:$name,
                    CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayRef<Attribute>","{}">:$annotations,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
-      return build($_builder, $_state, elementType, clockVal, name,
-                   nameKind, $_builder.getArrayAttr(annotations),
-                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym,
+                   CArg<"bool", "false">:$forceable), [{
+      return build($_builder, $_state, elementType,
+                   detail::getForceableResultType(forceable, elementType),
+                   clockVal, name, nameKind,
+                   $_builder.getArrayAttr(annotations),
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
+                   forceable);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    "StringRef":$name, "NameKindEnum":$nameKind,
-                   "::mlir::ArrayAttr":$annotation, "StringAttr":$inner_sym), [{
-      return build($_builder, $_state, elementType, clockVal, name,
-                   nameKind, annotation,
-                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
+                   "::mlir::ArrayAttr":$annotation, "StringAttr":$inner_sym,
+                   CArg<"bool", "false">:$forceable), [{
+      return build($_builder, $_state, elementType,
+                   detail::getForceableResultType(forceable, elementType),
+                   clockVal, name, nameKind, annotation,
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
+                   forceable);
     }]>
   ];
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
-    operands `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` type($clockVal) `,` qualified(type($result))
+    operands (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` type($clockVal) `,` qualified(type($result)) (`,` qualified(type($ref))^)?
+
   }];
   let hasCanonicalizeMethod = true;
 }
 
-def RegResetOp : ReferableDeclOp<"regreset"> {
+def RegResetOp : ReferableDeclOp<"regreset", [Forceable]> {
   let summary = "Define a new register with a reset";
   let description = [{
     Declare a new register:
@@ -319,8 +335,9 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
         AnyRegisterType:$resetValue,
         StrAttr:$name, NameKindAttr:$nameKind,
         AnnotationArrayAttr:$annotations,
-        OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs AnyRegisterType:$result);
+        OptionalAttr<InnerSymAttr>:$inner_sym,
+        UnitAttr:$forceable);
+  let results = (outs AnyRegisterType:$result, Optional<RefType>:$ref);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
@@ -328,33 +345,42 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
                    CArg<"StringRef", "{}">:$name,
                    CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayRef<Attribute>","{}">:$annotations,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
-      return build($_builder, $_state, elementType, clockVal, resetSignal,
-                   resetValue, name, nameKind,
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym,
+                   CArg<"bool", "false">:$forceable), [{
+      return build($_builder, $_state, elementType,
+                   detail::getForceableResultType(forceable, elementType),
+                   clockVal, resetSignal, resetValue,
+                   name, nameKind,
                    $_builder.getArrayAttr(annotations),
-                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
+                   forceable);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    "::mlir::Value":$resetSignal, "::mlir::Value":$resetValue,
                    "StringRef":$name, "NameKindEnum":$nameKind,
-                    "::mlir::ArrayAttr":$annotation, "StringAttr":$inner_sym), [{
-      return build($_builder, $_state, elementType, clockVal, resetSignal,
-                   resetValue, name, nameKind, annotation,
-                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
+                    "::mlir::ArrayAttr":$annotation, "StringAttr":$inner_sym,
+                    CArg<"bool", "false">:$forceable), [{
+      return build($_builder, $_state, elementType,
+                   detail::getForceableResultType(forceable, elementType),
+                   clockVal, resetSignal, resetValue,
+                   name, nameKind, annotation,
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
+                   forceable);
     }]>
   ];
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
-    operands `` custom<FIRRTLImplicitSSAName>(attr-dict)
-    `:` type($clockVal) `,` qualified(type($resetSignal)) `,` qualified(type($resetValue)) `,` qualified(type($result))
+    operands (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict)
+    `:` type($clockVal) `,` qualified(type($resetSignal)) `,` qualified(type($resetValue)) `,` qualified(type($result)) (`,` qualified(type($ref))^)?
+
   }];
 
   let hasCanonicalizer = true;
   let hasVerifier = 1;
 }
 
-def WireOp : ReferableDeclOp<"wire"> {
+def WireOp : ReferableDeclOp<"wire", [Forceable]> {
   let summary = "Define a new wire";
   let description = [{
     Declare a new wire:
@@ -365,8 +391,9 @@ def WireOp : ReferableDeclOp<"wire"> {
 
   let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
-                       OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs AnyType:$result);
+                       OptionalAttr<InnerSymAttr>:$inner_sym,
+                       UnitAttr:$forceable); // ReferenceKinds
+  let results = (outs AnyType:$result, Optional<RefType>:$ref);
 
   let hasCanonicalizer = true;
 
@@ -375,23 +402,31 @@ def WireOp : ReferableDeclOp<"wire"> {
                       CArg<"StringRef", "{}">:$name,
                       CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                       CArg<"ArrayRef<Attribute>","{}">:$annotations,
-                      CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
-      return build($_builder, $_state, elementType, name, nameKind,
+                      CArg<"StringAttr", "StringAttr()">:$inner_sym,
+                      CArg<"bool", "false">:$forceable), [{
+      return build($_builder, $_state, elementType,
+                   detail::getForceableResultType(forceable, elementType),
+                   name, nameKind,
                    $_builder.getArrayAttr(annotations),
-                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
+                   forceable);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "StringRef":$name,
                    "NameKindEnum":$nameKind, "::mlir::ArrayAttr":$annotations,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
-      return build($_builder, $_state, elementType, name, nameKind, annotations,
-                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym,
+                   CArg<"bool", "false">:$forceable), [{
+      return build($_builder, $_state, elementType,
+                   detail::getForceableResultType(forceable, elementType),
+                   name, nameKind, annotations,
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
+                   forceable);
     }]>
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? `` custom<NameKind>($nameKind) ``
-    custom<FIRRTLImplicitSSAName>(attr-dict) `:`
-    qualified(type($result))
+    (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
+    (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict) `:`
+    qualified(type($result)) (`,` qualified(type($ref))^)?
   }];
 }
 

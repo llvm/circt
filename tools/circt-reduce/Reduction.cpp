@@ -424,7 +424,7 @@ struct InstanceStubber : public Reduction {
                                         instOp.getPortNameStr(i));
       auto wire = builder.create<firrtl::WireOp>(
           result.getType(), name, firrtl::NameKindEnum::DroppableName,
-          instOp.getPortAnnotation(i), StringAttr{});
+          instOp.getPortAnnotation(i), StringAttr{}).getResult();
       invalidateOutputs(builder, wire, invalidCache,
                         instOp.getPortDirection(i) == firrtl::Direction::In);
       result.replaceAllUsesWith(wire);
@@ -472,7 +472,7 @@ struct MemoryStubber : public Reduction {
                                         memOp.getPortNameStr(i));
       auto wire = builder.create<firrtl::WireOp>(
           result.getType(), name, firrtl::NameKindEnum::DroppableName,
-          memOp.getPortAnnotation(i), StringAttr{});
+          memOp.getPortAnnotation(i), StringAttr{}).getResult();
       invalidateOutputs(builder, wire, invalidCache, true);
       result.replaceAllUsesWith(wire);
 
@@ -759,7 +759,7 @@ struct ExtmoduleInstanceRemover : public Reduction {
     SmallVector<Value> replacementWires;
     for (firrtl::PortInfo info : portInfo) {
       auto wire = builder.create<firrtl::WireOp>(
-          info.type, (Twine(instOp.getName()) + "_" + info.getName()).str());
+          info.type, (Twine(instOp.getName()) + "_" + info.getName()).str()).getResult();
       if (info.isOutput()) {
         auto inv = builder.create<firrtl::InvalidValueOp>(info.type);
         builder.create<firrtl::ConnectOp>(wire, inv);
@@ -871,14 +871,14 @@ struct ConnectSourceOperandForwarder : public Reduction {
     Value newDest;
     if (auto wire = dyn_cast<firrtl::WireOp>(destOp))
       newDest = builder.create<firrtl::WireOp>(forwardedOperand.getType(),
-                                               wire.getName());
+                                               wire.getName()).getResult();
     else {
       auto regName = destOp->getAttrOfType<StringAttr>("name");
       // We can promote the register into a wire but we wouldn't do here because
       // the error might be caused by the register.
       auto clock = destOp->getOperand(0);
       newDest = builder.create<firrtl::RegOp>(forwardedOperand.getType(), clock,
-                                              regName ? regName.str() : "");
+                                              regName ? regName.str() : "").getResult();
     }
 
     // Create new connection between a new wire and the forwarded operand.
@@ -1001,7 +1001,7 @@ struct EagerInliner : public Reduction {
                                         instOp.getPortNameStr(i));
       auto wire = builder.create<firrtl::WireOp>(
           result.getType(), name, firrtl::NameKindEnum::DroppableName,
-          instOp.getPortAnnotation(i), StringAttr{});
+          instOp.getPortAnnotation(i), StringAttr{}).getResult();
       result.replaceAllUsesWith(wire);
       argReplacements.push_back(wire);
     }

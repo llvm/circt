@@ -1148,3 +1148,30 @@ firrtl.circuit "AnalogDifferentWidths" {
     firrtl.attach %a, %b : !firrtl.analog<1>, !firrtl.analog<2>
   }
 }
+
+// -----
+
+firrtl.circuit "ForceableWithoutRefResult" {
+  firrtl.module @ForceableWithoutRefResult() {
+    // expected-error @below {{op must have ref result iff marked forceable}}
+    %w = firrtl.wire forceable : !firrtl.uint<2>
+  }
+}
+
+// -----
+
+firrtl.circuit "RefResultButNotForceable" {
+  firrtl.module @RefResultButNotForceable() {
+    // expected-error @below {{op must have ref result iff marked forceable}}
+    %w, %w_f = firrtl.wire : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
+  }
+}
+
+// -----
+
+firrtl.circuit "ForceableTypeMismatch" {
+  firrtl.module @ForceableTypeMismatch() {
+    // expected-error @below {{reference result of incorrect type, found}}
+    %w, %w_f = firrtl.wire forceable : !firrtl.uint, !firrtl.rwprobe<uint<2>>
+  }
+}

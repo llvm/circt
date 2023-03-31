@@ -804,7 +804,7 @@ void Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b, IRMapping &mapper,
               return b.create<WireOp>(
                   target.getLoc(), base, (prefix + portInfo[i].getName()).str(),
                   NameKindEnum::DroppableName,
-                  ArrayAttr::get(context, newAnnotations), newSym);
+                  ArrayAttr::get(context, newAnnotations), newSym).getResult();
             })
             .Case<RefType>([&](auto refty) {
               // Symbols and annotations are not allowed, warn if dropping.

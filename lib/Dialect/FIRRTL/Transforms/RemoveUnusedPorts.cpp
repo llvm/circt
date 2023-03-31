@@ -96,7 +96,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
         auto builder = ImplicitLocOpBuilder::atBlockBegin(
             arg.getLoc(), module.getBodyBlock());
         auto wire = builder.create<WireOp>(arg.getType());
-        arg.replaceAllUsesWith(wire);
+        arg.replaceAllUsesWith(wire.getResult());
         outputPortConstants.push_back(std::nullopt);
       } else if (arg.hasOneUse()) {
         // If the port has a single use, check the port is only connected to
@@ -162,7 +162,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
           return false;
         });
 
-        result.replaceUsesWithIf(wire, [&](OpOperand &op) -> bool {
+        result.replaceUsesWithIf(wire.getResult(), [&](OpOperand &op) -> bool {
           // Connects can be deleted directly.
           if (onlyWritten && isa<FConnectLike>(op.getOwner())) {
             op.getOwner()->erase();

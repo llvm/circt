@@ -2188,7 +2188,27 @@ void MemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 StringAttr FirMemory::getFirMemoryName() const { return modName; }
 
 void NodeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), getName());
+  StringRef name = getName();
+  if (!name.empty()) {
+    setNameFn(getResult(), name);
+    if (getForceable())
+      setNameFn(getRef(), (name + "_ref").str());
+  }
+}
+
+LogicalResult NodeOp::inferReturnTypes(
+    mlir::MLIRContext *context, std::optional<mlir::Location> location,
+    ::mlir::ValueRange operands, ::mlir::DictionaryAttr attributes,
+    ::mlir::RegionRange regions,
+    ::llvm::SmallVectorImpl<::mlir::Type> &inferredReturnTypes) {
+  if (operands.empty())
+    return failure();
+  inferredReturnTypes.push_back(operands[0].getType());
+  for (auto &attr : attributes)
+    if (attr.getName() == Forceable::getForceableAttrName())
+      inferredReturnTypes.push_back(
+          firrtl::detail::getForceableResultType(true, operands[0].getType()));
+  return success();
 }
 
 void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -3651,8 +3671,9 @@ static ParseResult parseFIRRTLImplicitSSAName(OpAsmParser &parser,
 
 static void printFIRRTLImplicitSSAName(OpAsmPrinter &p, Operation *op,
                                        DictionaryAttr attrs) {
-  SmallVector<StringRef, 2> elides;
+  SmallVector<StringRef, 4> elides;
   elides.push_back(hw::InnerName::getInnerNameAttrName());
+  elides.push_back(Forceable::getForceableAttrName());
   elideImplicitSSAName(p, op, attrs, elides);
   printElideAnnotations(p, op, attrs, elides);
 }

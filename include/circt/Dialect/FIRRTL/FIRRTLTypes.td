@@ -141,4 +141,18 @@ def OneBitCastableType : AnyTypeOf<
   "1-bit uint/sint/analog, reset, asyncreset, or clock",
                                   "::circt::firrtl::FIRRTLBaseType">;
 
+//===----------------------------------------------------------------------===//
+// Constraints on RefOps
+//===----------------------------------------------------------------------===//
+
+class RefTypeConstraint<string ref, string base>
+  : TypesMatchWith<"reference base type should match",
+                   ref, base,
+                   "$_self.cast<RefType>().getType()">;
+
+class RefResultTypeConstraint<string base, string ref>
+  : TypesMatchWith<"reference base type should match",
+                   base, ref,
+                   "RefType::get($_self.cast<FIRRTLBaseType>().getPassiveType())">;
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD

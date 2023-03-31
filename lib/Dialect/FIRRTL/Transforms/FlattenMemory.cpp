@@ -121,8 +121,8 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
         auto wire = builder.create<WireOp>(
             result.getType(),
             (memOp.getName() + "_" + memOp.getPortName(index).getValue())
-                .str());
-        result.replaceAllUsesWith(wire.getResult());
+                .str()).getResult();
+        result.replaceAllUsesWith(wire);
         result = wire;
         auto newResult = flatMem.getResult(index);
         auto rType = result.getType().cast<BundleType>();

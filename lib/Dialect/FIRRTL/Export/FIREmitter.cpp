@@ -360,25 +360,25 @@ void Emitter::emitStatement(WhenOp op, bool noIndent) {
 }
 
 void Emitter::emitStatement(WireOp op) {
-  addValueName(op, op.getNameAttr());
+  addValueName(op.getResult(), op.getNameAttr());
   indent() << "wire " << op.getName() << " : ";
-  emitType(op.getType());
+  emitType(op.getResult().getType());
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(RegOp op) {
-  addValueName(op, op.getNameAttr());
+  addValueName(op.getResult(), op.getNameAttr());
   indent() << "reg " << op.getName() << " : ";
-  emitType(op.getType());
+  emitType(op.getResult().getType());
   os << ", ";
   emitExpression(op.getClockVal());
   emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(RegResetOp op) {
-  addValueName(op, op.getNameAttr());
+  addValueName(op.getResult(), op.getNameAttr());
   indent() << "reg " << op.getName() << " : ";
-  emitType(op.getType());
+  emitType(op.getResult().getType());
   os << ", ";
   emitExpression(op.getClockVal());
   os << " with :\n";
@@ -391,7 +391,7 @@ void Emitter::emitStatement(RegResetOp op) {
 }
 
 void Emitter::emitStatement(NodeOp op) {
-  addValueName(op, op.getNameAttr());
+  addValueName(op.getResult(), op.getNameAttr());
   indent() << "node " << op.getName() << " = ";
   emitExpression(op.getInput());
   emitLocationAndNewLine(op);
