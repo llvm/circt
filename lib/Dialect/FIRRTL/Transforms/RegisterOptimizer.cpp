@@ -24,7 +24,7 @@ using namespace firrtl;
 // Instantiated for RegOp and RegResetOp
 template <typename T>
 static bool canErase(T op) {
-  return !(hasDontTouch(op.getResult()) ||
+  return !(hasDontTouch(op.getResult()) || op.isForceable() ||
            (op.getAnnotationsAttr() && !op.getAnnotationsAttr().empty()));
 }
 
@@ -92,7 +92,7 @@ void RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
       } else {
         auto bounce = OpBuilder(reg).create<WireOp>(reg.getLoc(),
                                                     reg.getResult().getType());
-        reg.replaceAllUsesWith(bounce.getResult());
+        reg.replaceAllUsesWith(bounce);
       }
     }
     toErase.push_back(reg);

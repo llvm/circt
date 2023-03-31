@@ -822,20 +822,6 @@ def BitCastOp: FIRRTLOp<"bitcast", [Pure]> {
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
-// Constraints on RefOps
-//===----------------------------------------------------------------------===//
-
-class RefTypeConstraint<string ref, string base>
-  : TypesMatchWith<"reference base type should match",
-                   ref, base,
-                   "$_self.cast<RefType>().getType()">;
-
-class RefResultTypeConstraint<string base, string ref>
-  : TypesMatchWith<"reference base type should match",
-                   base, ref,
-                   "RefType::get($_self.cast<FIRRTLBaseType>().getPassiveType())">;
-
-//===----------------------------------------------------------------------===//
 // RefOps
 //===----------------------------------------------------------------------===//
 

@@ -419,4 +419,40 @@ def FNamableOp : OpInterface<"FNamableOp"> {
   ];
 }
 
+def Forceable : OpInterface<"Forceable"> {
+  let cppNamespace = "circt::firrtl";
+  let description = [{
+    Interaction with declarations of forceable hardware components,
+    and managing references to them.
+  }];
+
+  let methods = [
+    InterfaceMethod<"Return true if the operation is forceable.",
+    "bool", "isForceable", (ins), [{}], /*defaultImplementation=*/[{
+      return $_op.getForceable();
+    }]>,
+    InterfaceMethod<"Return data value that will be targeted.",
+    "mlir::TypedValue<FIRRTLBaseType>", "getData", (ins), [{}], /*defaultImplementation=*/[{
+      return llvm::cast<mlir::TypedValue<FIRRTLBaseType>>($_op.getDataRaw());
+    }]>,
+    InterfaceMethod<"Return raw data value that will be targeted.",
+    "Value", "getDataRaw", (ins), [{}], /*defaultImplementation=*/[{
+      return $_op.getResult();
+    }]>,
+    InterfaceMethod<"Return data type that will be referenced.",
+    "FIRRTLBaseType", "getDataType", (ins), [{}], /*defaultImplementation=*/[{
+      return cast<FIRRTLBaseType>($_op.getDataRaw().getType());
+    }]>,
+    InterfaceMethod<"Return reference result, or null if not active.",
+    "mlir::TypedValue<RefType>", "getDataRef", (ins), [{}], /*defaultImplementation=*/[{
+      return llvm::cast_or_null<mlir::TypedValue<RefType>>($_op.getRef());
+    }]>
+  ];
+  let extraClassDeclaration = [{
+    /// Attribute name for 'forceable' tracking.
+    static StringRef getForceableAttrName() { return "forceable"; }
+  }];
+  let verify = [{ return detail::verifyForceableOp($_op); }];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLOPINTERFACES_TD
