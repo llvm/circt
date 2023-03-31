@@ -20,6 +20,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/SymCache.h"
@@ -1389,6 +1390,532 @@ void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
 }
 
 //===----------------------------------------------------------------------===//
+// ESI Wrap Combinational External Module pass.
+//===----------------------------------------------------------------------===//
+
+/// Convert all the hw.external.modules with the esiWrap.type attribute set to
+/// combinational. There are 3 steps that need to be done:
+/// 1. Change the external module into a regular module with same interface
+/// 2. Instantiate the module which is specified in the esiWrap.target
+/// 3. Add the wrapping logic to embed the combinational module into a dynamic
+/// surrounding
+
+// Here are all the Helper functions
+
+// helper function to get esiWrap target
+std::string getEsiWrapTarget(HWModuleExternOp extMod) {
+  DictionaryAttr esiWrapAttr = extMod.getEsiWrapAttr();
+  if (esiWrapAttr) {
+    FlatSymbolRefAttr targetAttr =
+        dyn_cast<FlatSymbolRefAttr>(esiWrapAttr.get("target"));
+    if (targetAttr) {
+      return targetAttr.getAttr().str();
+    }
+  }
+  return std::string();
+}
+
+// helper function to get esiWrap type
+std::string getEsiWrapType(HWModuleExternOp extMod) {
+  DictionaryAttr esiWrapAttr = extMod.getEsiWrapAttr();
+  if (esiWrapAttr) {
+    StringAttr typeAttr = dyn_cast<StringAttr>(esiWrapAttr.get("type"));
+    if (typeAttr) {
+      return typeAttr.str();
+    }
+  }
+  return std::string();
+}
+
+std::string getEsiWrapSynchronizer(HWModuleExternOp extMod) {
+  DictionaryAttr esiWrapAttr = extMod.getEsiWrapAttr();
+  if (esiWrapAttr) {
+    StringAttr syncAttr = dyn_cast<StringAttr>(esiWrapAttr.get("synchronizer"));
+    if (syncAttr) {
+      return syncAttr.str();
+    }
+  }
+  return std::string();
+}
+
+namespace {
+struct ESIWrapCombinationalPass
+    : public ESIWrapCombinationalBase<ESIWrapCombinationalPass> {
+  void runOnOperation() override;
+
+private:
+  void wrapCombinationalModule(HWModuleOp wrappingMod, HWModuleOp targetMod);
+};
+} // anonymous namespace
+
+void ESIWrapCombinationalPass::runOnOperation() {
+  ModuleOp top = getOperation();
+
+  OpBuilder moduleBuilder(top.getContext());
+
+  for (auto extMod :
+       llvm::make_early_inc_range(top.getOps<hw::HWModuleExternOp>())) {
+    if (getEsiWrapType(extMod) == "combinational") {
+      // collect target module that we wrap arround
+      auto targetMod =
+          top.lookupSymbol<hw::HWModuleOp>(getEsiWrapTarget(extMod));
+      // Todo: SignalPassFailure if targetMod does not exists?
+      if (targetMod) {
+        // contract is valid
+        // can build the wrapping module
+        moduleBuilder.setInsertionPoint(extMod);
+        auto wrappingModName =
+            StringAttr::get(moduleBuilder.getContext(),
+                            extMod.getNameAttr().str() + "_wrap_combinational");
+        auto wrappingMod = moduleBuilder.create<hw::HWModuleOp>(
+            extMod.getLoc(), wrappingModName, extMod.getPorts());
+        wrapCombinationalModule(wrappingMod, targetMod);
+        // replace all symbol uses with new name
+        SymbolTable::replaceAllSymbolUses(extMod, wrappingMod.moduleNameAttr(),
+                                          top);
+        extMod.erase();
+      }
+    }
+  }
+}
+
+void ESIWrapCombinationalPass::wrapCombinationalModule(HWModuleOp wrappingMod,
+                                                       HWModuleOp targetMod) {
+  // Need a Builder and a BackedgeBuilder
+  auto body = wrappingMod.getBodyBlock();
+  OpBuilder b(body, body->begin());
+  // Correct location ?
+  BackedgeBuilder beb(b, wrappingMod.getLoc());
+
+  // Unwrap all inputs
+  // %in0_valid, %in0_data = esi.unwrap_vr (%in0, %all_valid_ready)
+  // We need a backedge for all_valid_ready
+  // Todo: maybe check if inputs are ESI Channels?
+  auto allValidReady = beb.get(b.getI1Type());
+  SmallVector<Value, 16> validReady;
+  SmallVector<Value, 16> rawData;
+
+  // the last two arguments are clock and reset which we don't need to unwrap
+  auto numArgs = body->getNumArguments();
+  for (unsigned int i = 0; i < numArgs - 2; i++) {
+    auto input = body->getArgument(i);
+    auto unwrap = b.create<esi::UnwrapValidReadyOp>(wrappingMod.getLoc(), input,
+                                                    allValidReady);
+    validReady.push_back(unwrap.getValid());
+    rawData.push_back(unwrap.getRawOutput());
+  }
+
+  // Instantiate targetMod
+  auto targetInst = b.create<hw::InstanceOp>(wrappingMod.getLoc(), targetMod,
+                                             targetMod.getNameAttr(), rawData);
+
+  // Wrap all outputs
+  SmallVector<Value, 16> wrappedOutputs;
+  for (auto result : targetInst.getResults()) {
+    auto wrap = b.create<esi::WrapValidReadyOp>(wrappingMod.getLoc(), result,
+                                                allValidReady);
+    validReady.push_back(wrap.getReady());
+    wrappedOutputs.push_back(wrap.getChanOutput());
+  }
+
+  // Build Ready valid network
+  auto andValidReady =
+      b.createOrFold<comb::AndOp>(wrappingMod.getLoc(), validReady, false);
+  // // set the backedge
+  allValidReady.setValue(andValidReady);
+
+  // // Update terminator with wrappedOutputs
+  auto outOp = cast<hw::OutputOp>(body->getTerminator());
+  outOp->setOperands(wrappedOutputs);
+}
+
+//===----------------------------------------------------------------------===//
+// ESI Wrap Pipeline External Module pass.
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct ESIWrapPipelinePass : public ESIWrapPipelineBase<ESIWrapPipelinePass> {
+  void runOnOperation() override;
+
+private:
+  void wrapPipelineModule(HWModuleOp wrappingMod, HWModuleOp shiftRegisterMod,
+                          HWModuleOp targetMod, HWModuleOp syncMod);
+  void buildShiftRegisterModule(HWModuleOp shiftRegisterMod,
+                                unsigned int numPipelineStages);
+};
+} // anonymous namespace
+
+void ESIWrapPipelinePass::runOnOperation() {
+  ModuleOp top = getOperation();
+
+  OpBuilder moduleBuilder(top.getContext());
+
+  for (auto extMod :
+       llvm::make_early_inc_range(top.getOps<hw::HWModuleExternOp>())) {
+    if (getEsiWrapType(extMod) == "pipeline") {
+      // collect target module that we wrap arround
+      auto targetMod =
+          top.lookupSymbol<hw::HWModuleOp>(getEsiWrapTarget(extMod));
+      if (targetMod) {
+        // contract is valid
+        moduleBuilder.setInsertionPoint(extMod);
+
+        // build valid tag shift register module (helper module)
+        // only build the shift register if it has not been
+        // previously build by another pipeline wrapper
+        auto numPipelineStages =
+            dyn_cast<IntegerAttr>(targetMod->getAttr("latency")).getInt();
+        auto shiftRegisterName =
+            StringAttr::get(moduleBuilder.getContext(),
+                            "valid_tag_shift_register_" +
+                                std::to_string(numPipelineStages) + "stages");
+        auto shiftRegisterMod =
+            top.lookupSymbol<hw::HWModuleOp>(shiftRegisterName.str());
+        if (!shiftRegisterMod) {
+          // shift register is not present
+          SmallVector<hw::PortInfo, 4> shiftRegisterPorts;
+          auto i1Type = moduleBuilder.getI1Type();
+          shiftRegisterPorts.push_back(
+              hw::PortInfo{moduleBuilder.getStringAttr("in_valid"),
+                           hw::PortDirection::INPUT, i1Type, 0});
+          shiftRegisterPorts.push_back(
+              hw::PortInfo{moduleBuilder.getStringAttr("clock"),
+                           hw::PortDirection::INPUT, i1Type, 1});
+          shiftRegisterPorts.push_back(
+              hw::PortInfo{moduleBuilder.getStringAttr("reset"),
+                           hw::PortDirection::INPUT, i1Type, 2});
+          shiftRegisterPorts.push_back(
+              hw::PortInfo{moduleBuilder.getStringAttr("out_valid"),
+                           hw::PortDirection::OUTPUT, i1Type, 0});
+          ModulePortInfo shiftRegisterPortInfo(shiftRegisterPorts);
+          shiftRegisterMod = moduleBuilder.create<hw::HWModuleOp>(
+              extMod.getLoc(), shiftRegisterName, shiftRegisterPortInfo);
+
+          // build the content of the shiftRegisterModule
+          buildShiftRegisterModule(shiftRegisterMod, numPipelineStages);
+        }
+        // build wrapping module
+        auto wrappingModName =
+            StringAttr::get(moduleBuilder.getContext(),
+                            extMod.getNameAttr().str() + "_wrap_pipeline");
+        auto wrappingMod = moduleBuilder.create<hw::HWModuleOp>(
+            extMod.getLoc(), wrappingModName, extMod.getPorts());
+        // collect the synchronizer that we built during the handshake to hw
+        // lowering
+        auto syncMod =
+            top.lookupSymbol<hw::HWModuleOp>(getEsiWrapSynchronizer(extMod));
+        wrapPipelineModule(wrappingMod, shiftRegisterMod, targetMod, syncMod);
+        SymbolTable::replaceAllSymbolUses(extMod, wrappingMod.moduleNameAttr(),
+                                          top);
+        extMod.erase();
+      }
+    }
+  }
+}
+
+void ESIWrapPipelinePass::buildShiftRegisterModule(
+    HWModuleOp shiftRegisterMod, unsigned int numPipelineStages) {
+  // Need a Builder
+  auto body = shiftRegisterMod.getBodyBlock();
+  OpBuilder b(body, body->begin());
+
+  // collect inputs
+  auto inValid = body->getArgument(0);
+  auto clock = body->getArgument(1);
+  auto reset = body->getArgument(2);
+
+  // create true and false values
+  auto i1Type = b.getI1Type();
+  auto falseValue =
+      b.create<hw::ConstantOp>(shiftRegisterMod.getLoc(), i1Type, false);
+
+  // build shift registers
+  Value propagateValid = inValid;
+  for (unsigned int i = 0; i < numPipelineStages; i++) {
+    auto validReg = b.create<seq::CompRegOp>(
+        shiftRegisterMod.getLoc(), propagateValid, clock, reset, falseValue,
+        "propagate_valid" + std::to_string(i));
+    // propagate valid bit to next stage
+    propagateValid = validReg;
+  }
+  // // Update terminator with last propagated valid bit
+  auto outOp = cast<hw::OutputOp>(body->getTerminator());
+  outOp->setOperands(propagateValid);
+}
+
+// Todo: Write some comments from the published paper that describes this
+// wrapping logic in detail
+void ESIWrapPipelinePass::wrapPipelineModule(HWModuleOp wrappingMod,
+                                             HWModuleOp shiftRegisterMod,
+                                             HWModuleOp targetMod,
+                                             HWModuleOp syncMod) {
+  // Need a Builder and a BackedgeBuilder
+  auto body = wrappingMod.getBodyBlock();
+  OpBuilder b(body, body->begin());
+  BackedgeBuilder beb(b, wrappingMod.getLoc());
+
+  // collect all data inputs
+  SmallVector<Value, 16> inputs;
+  auto numArgs = body->getNumArguments();
+  for (unsigned int i = 0; i < numArgs - 2; i++) {
+    inputs.push_back(body->getArgument(i));
+  }
+  // the last two arguments are clock and reset which we don't need to unwrap
+  auto clock = body->getArgument(numArgs - 2);
+  auto reset = body->getArgument(numArgs - 1);
+
+  // Synchronize all inputs
+  if (syncMod) {
+    // instantiate sync mod with inputs
+    // need to first push clock and reset back to the inputs
+    inputs.push_back(clock);
+    inputs.push_back(reset);
+    auto syncInst = b.create<hw::InstanceOp>(
+        wrappingMod.getLoc(), syncMod,
+        StringAttr::get(b.getContext(), "handshake_sync"), inputs);
+    SmallVector<Value, 16> syncInputs(syncInst.getResults());
+    // swap the inputs with the synchronized inputs
+    std::swap(inputs, syncInputs);
+  }
+
+  // Unwrap and collect all the now synchronized inputs
+  auto apReady = beb.get(b.getI1Type());
+  SmallVector<Value, 16> inValidAll;
+  SmallVector<Value, 16> targetInputs;
+  for (auto input : inputs) {
+    auto unwrap =
+        b.create<esi::UnwrapValidReadyOp>(wrappingMod.getLoc(), input, apReady);
+    inValidAll.push_back(unwrap.getValid());
+    targetInputs.push_back(unwrap.getRawOutput());
+  }
+
+  // instantiate the target module (static pipeline)
+  auto apClockEnable = beb.get(b.getI1Type());
+  // need to add apClockEnable clock and reset to the inputs
+  targetInputs.push_back(apClockEnable);
+  targetInputs.push_back(clock);
+  targetInputs.push_back(reset);
+  auto targetInst = b.create<hw::InstanceOp>(
+      wrappingMod.getLoc(), targetMod, targetMod.getNameAttr(), targetInputs);
+
+  // collect the outputs from target module
+  // the two last outputs are apReady and apDone
+  auto numResults = targetInst->getNumResults();
+  // set apReady and apDone
+  apReady.setValue(targetInst->getResult(numResults - 2));
+  auto apDone = targetInst->getResult(numResults - 1);
+
+  // Wrapping Logic
+
+  // instantiate the previously generated shift register (helper module)
+  // the i-th register keeps track if the data in the i-th pipeline stage
+  // is valid or not. This prevents the static pipeline from unnecessary
+  // stalling. See the paper for more details
+
+  // all data input should be valid since we synchronized the input
+  inValidAll.push_back(apReady);
+  auto inValid =
+      b.createOrFold<comb::AndOp>(wrappingMod.getLoc(), inValidAll, false);
+  auto ctrClock =
+      b.create<comb::AndOp>(wrappingMod.getLoc(), clock, apClockEnable);
+  SmallVector<Value, 4> shiftRegisterInputs;
+  shiftRegisterInputs.push_back(inValid);
+  shiftRegisterInputs.push_back(ctrClock);
+  shiftRegisterInputs.push_back(reset);
+  auto shiftRegisterInst = b.create<hw::InstanceOp>(
+      wrappingMod.getLoc(), shiftRegisterMod, shiftRegisterMod.getNameAttr(),
+      shiftRegisterInputs);
+  // collect output
+  auto outValid = shiftRegisterInst->getResult(0);
+
+  // Build rest of ready valid network
+  auto apDoneOutValid =
+      b.create<comb::AndOp>(wrappingMod.getLoc(), apDone, outValid);
+  auto outReadyAll = beb.get(b.getI1Type());
+  auto trueValue =
+      b.create<hw::ConstantOp>(wrappingMod.getLoc(), b.getI1Type(), true);
+  auto outNotReadyAll =
+      b.create<comb::XorOp>(wrappingMod.getLoc(), outReadyAll, trueValue);
+  auto notApClockEnable = b.create<comb::AndOp>(wrappingMod.getLoc(),
+                                                apDoneOutValid, outNotReadyAll);
+  apClockEnable.setValue(
+      b.create<comb::XorOp>(wrappingMod.getLoc(), notApClockEnable, trueValue));
+
+  // Wrap all outputs back into channels
+  SmallVector<Value, 16> wrappedOutputs;
+  SmallVector<Value, 16> outReady;
+  for (unsigned int i = 0; i < numResults - 2; i++) {
+    auto dataOut = targetInst->getResult(i);
+    auto wrap = b.create<esi::WrapValidReadyOp>(wrappingMod.getLoc(), dataOut,
+                                                apDoneOutValid);
+    outReady.push_back(wrap.getReady());
+    wrappedOutputs.push_back(wrap.getChanOutput());
+  }
+  outReadyAll.setValue(
+      b.createOrFold<comb::AndOp>(wrappingMod.getLoc(), outReady, false));
+
+  // Update terminator
+  auto outOp = cast<hw::OutputOp>(body->getTerminator());
+  outOp->setOperands(wrappedOutputs);
+}
+
+//===----------------------------------------------------------------------===//
+// ESI Wrap Calyx Pipeline External Module pass.
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct ESIWrapCalyxPipelinePass
+    : public ESIWrapCalyxPipelineBase<ESIWrapCalyxPipelinePass> {
+  void runOnOperation() override;
+
+private:
+  void wrapCalyxPipelineModule(HWModuleOp wrappingMod, HWModuleOp targetMod);
+};
+} // anonymous namespace
+
+void ESIWrapCalyxPipelinePass::runOnOperation() {
+  ModuleOp top = getOperation();
+
+  OpBuilder moduleBuilder(top.getContext());
+
+  for (auto extMod :
+       llvm::make_early_inc_range(top.getOps<hw::HWModuleExternOp>())) {
+    if (getEsiWrapType(extMod) == "calyx_pipeline") {
+      // collect target module that we wrap arround
+      auto targetMod =
+          top.lookupSymbol<hw::HWModuleOp>(getEsiWrapTarget(extMod));
+      if (targetMod) {
+        moduleBuilder.setInsertionPoint(extMod);
+
+        // build portInfo for wrapper module
+        SmallVector<hw::PortInfo, 16> wrappingModPorts;
+        unsigned int numInputs = getModuleNumInputs(extMod);
+        unsigned int numOutputs = getModuleNumOutputs(extMod);
+        auto i1Type = moduleBuilder.getI1Type();
+        auto funcType = extMod.getFunctionType();
+        // push all unwrapped data inputs
+        for (unsigned int i = 0; i < numInputs - 2; i++) {
+          Type argTy = funcType.getInput(i);
+          auto dataType = dyn_cast<ChannelType>(argTy).getInner();
+          wrappingModPorts.push_back(hw::PortInfo{
+              moduleBuilder.getStringAttr("din" + std::to_string(i)),
+              hw::PortDirection::INPUT, dataType, i});
+        }
+        // push ap_ce, clock and reset
+        wrappingModPorts.push_back(
+            hw::PortInfo{moduleBuilder.getStringAttr("ap_ce"),
+                         hw::PortDirection::INPUT, i1Type, numInputs - 2});
+        wrappingModPorts.push_back(
+            hw::PortInfo{moduleBuilder.getStringAttr("clock"),
+                         hw::PortDirection::INPUT, i1Type, numInputs - 1});
+        wrappingModPorts.push_back(
+            hw::PortInfo{moduleBuilder.getStringAttr("reset"),
+                         hw::PortDirection::INPUT, i1Type, numInputs});
+        // push all unwrapped data outputs
+        for (unsigned int i = 0; i < numOutputs; i++) {
+          Type resTy = funcType.getResult(i);
+          auto dataType = dyn_cast<ChannelType>(resTy).getInner();
+          wrappingModPorts.push_back(hw::PortInfo{
+              moduleBuilder.getStringAttr("dout" + std::to_string(i)),
+              hw::PortDirection::OUTPUT, dataType, i});
+        }
+        // push ap_ready and ap_done
+        wrappingModPorts.push_back(
+            hw::PortInfo{moduleBuilder.getStringAttr("ap_ready"),
+                         hw::PortDirection::OUTPUT, i1Type, numOutputs});
+        wrappingModPorts.push_back(
+            hw::PortInfo{moduleBuilder.getStringAttr("ap_done"),
+                         hw::PortDirection::OUTPUT, i1Type, numOutputs + 1});
+
+        ModulePortInfo wrappingModPortInfo(wrappingModPorts);
+
+        auto wrappingModName = StringAttr::get(moduleBuilder.getContext(),
+                                               targetMod.getNameAttr().str() +
+                                                   "_wrap_calyx_pipeline");
+        // build wrapper module
+        auto wrappingMod = moduleBuilder.create<hw::HWModuleOp>(
+            extMod.getLoc(), wrappingModName, wrappingModPortInfo);
+        wrapCalyxPipelineModule(wrappingMod, targetMod);
+        // set latency from targetMod
+        wrappingMod->setAttr(
+            "latency", dyn_cast<IntegerAttr>(targetMod->getAttr("latency")));
+
+        // update the extMod such that it now references the newly wrapped
+        // module and that the type is now set to pipeline. It also gets a new
+        // name with the suffix _wrap_calyx_pipeline
+        auto newExtModName = StringAttr::get(moduleBuilder.getContext(),
+                                             extMod.getNameAttr().str() +
+                                                 "_wrap_calyx_pipeline");
+        SymbolTable::replaceAllSymbolUses(extMod, newExtModName, top);
+
+        auto newTarget = SymbolRefAttr::get(moduleBuilder.getContext(),
+                                            wrappingMod.getNameAttr());
+        auto newType = StringAttr::get(moduleBuilder.getContext(), "pipeline");
+        auto synchronizer = StringAttr::get(moduleBuilder.getContext(),
+                                            getEsiWrapSynchronizer(extMod));
+        auto targetIdent =
+            StringAttr::get(moduleBuilder.getContext(), "target");
+        auto typeIdent = StringAttr::get(moduleBuilder.getContext(), "type");
+        auto synchronizerIdent =
+            StringAttr::get(moduleBuilder.getContext(), "synchronizer");
+        auto esiWrapper = moduleBuilder.getDictionaryAttr(
+            {{targetIdent, newTarget},
+             {typeIdent, newType},
+             {synchronizerIdent, synchronizer}});
+        // update Name
+        extMod.setName(newExtModName);
+        // update EsiWrapAttr
+        extMod.setEsiWrapAttr(esiWrapper);
+      }
+    }
+  }
+}
+
+void ESIWrapCalyxPipelinePass::wrapCalyxPipelineModule(HWModuleOp wrappingMod,
+                                                       HWModuleOp targetMod) {
+  // Need a Builder and a BackedgeBuilder
+  auto body = wrappingMod.getBodyBlock();
+  OpBuilder b(body, body->begin());
+
+  // Collect all inputs
+  SmallVector<Value, 16> targetInputs;
+  auto numArgs = body->getNumArguments();
+  auto apClockEnable = body->getArgument(numArgs - 3);
+  auto clock = body->getArgument(numArgs - 2);
+  auto reset = body->getArgument(numArgs - 1);
+  for (unsigned int i = 0; i < numArgs - 3; i++) {
+    auto input = body->getArgument(i);
+    targetInputs.push_back(input);
+  }
+
+  auto ctrClock =
+      b.create<comb::AndOp>(wrappingMod.getLoc(), clock, apClockEnable);
+  // push ap_ce as go and ctrClock as clock and reset as reset
+  targetInputs.push_back(apClockEnable);
+  targetInputs.push_back(ctrClock);
+  targetInputs.push_back(reset);
+
+  // instantiate calyx pipeline module
+  auto targetInst = b.create<hw::InstanceOp>(
+      wrappingMod.getLoc(), targetMod, targetMod.getNameAttr(), targetInputs);
+
+  // Update terminator with dout, ap_ready, ap_done
+  SmallVector<Value, 16> targetOutputs;
+  unsigned int numOutputs = getModuleNumOutputs(targetInst);
+  // the last output is the ap_done signal
+  for (unsigned int i = 0; i < numOutputs - 1; i++) {
+    targetOutputs.push_back(targetInst->getResult(i));
+  }
+  // push ap_ce as ap_ready
+  targetOutputs.push_back(apClockEnable);
+  // push ap_done
+  targetOutputs.push_back(targetInst->getResult(numOutputs - 1));
+
+  auto outOp = cast<hw::OutputOp>(body->getTerminator());
+  outOp->setOperands(targetOutputs);
+}
+
+//===----------------------------------------------------------------------===//
 // Lower to HW/SV conversions and pass.
 //===----------------------------------------------------------------------===//
 
@@ -2150,6 +2677,18 @@ circt::esi::createESIPhysicalLoweringPass() {
 std::unique_ptr<OperationPass<ModuleOp>>
 circt::esi::createESIPortLoweringPass() {
   return std::make_unique<ESIPortsPass>();
+}
+std::unique_ptr<OperationPass<ModuleOp>>
+circt::esi::createESIWrapCombinationalPass() {
+  return std::make_unique<ESIWrapCombinationalPass>();
+}
+std::unique_ptr<OperationPass<ModuleOp>>
+circt::esi::createESIWrapPipelinePass() {
+  return std::make_unique<ESIWrapPipelinePass>();
+}
+std::unique_ptr<OperationPass<ModuleOp>>
+circt::esi::createESIWrapCalyxPipelinePass() {
+  return std::make_unique<ESIWrapCalyxPipelinePass>();
 }
 std::unique_ptr<OperationPass<ModuleOp>> circt::esi::createESItoHWPass() {
   return std::make_unique<ESItoHWPass>();

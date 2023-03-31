@@ -299,7 +299,6 @@ def EnumFieldAttr : AttrDef<HWDialect, "EnumField"> {
   }];
 }
 
-
 let cppNamespace = "circt::hw" in {
 def WUW_Undefined : I32EnumAttrCase<"Undefined", 0>;
 def WUW_PortOrder : I32EnumAttrCase<"PortOrder", 1>;

@@ -172,6 +172,11 @@ static std::string getSubModuleName(Operation *oldOp) {
 
   std::string subModuleName = getBareSubModuleName(oldOp);
 
+  // Construct name for handshake.external_instance
+  if (auto externalInstanceOp = dyn_cast<handshake::ExternalInstanceOp>(oldOp);
+      externalInstanceOp)
+    return subModuleName + "_" + externalInstanceOp.getModule().str();
+
   // Add value of the constant operation.
   if (auto constOp = dyn_cast<handshake::ConstantOp>(oldOp)) {
     if (auto intAttr = constOp.getValue().dyn_cast<IntegerAttr>()) {
@@ -725,9 +730,8 @@ public:
     // instantiate the submodule. Else, run the pattern-defined module
     // builder.
     hw::HWModuleLike implModule = checkSubModuleOp(ls.parentModule, op);
-    if (!implModule) {
+    if (!implModule && !isa<handshake::InstanceOp>(op)) {
       auto portInfo = ModulePortInfo(getPortInfoForOp(op));
-
       implModule = submoduleBuilder.create<hw::HWModuleOp>(
           op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
           portInfo, [&](OpBuilder &b, hw::HWModulePortAccessor &ports) {
@@ -950,7 +954,7 @@ public:
     return priorityArb;
   }
 
-private:
+  // private:
   OpBuilder &submoduleBuilder;
   HandshakeLoweringState &ls;
 };
@@ -1106,6 +1110,15 @@ public:
     buildUnitRateJoinLogic(s, unwrappedIO,
                            [&](ValueRange inputs) { return s.pack(inputs); });
   };
+};
+
+class InstanceConversionPattern
+    : public HandshakeConversionPattern<handshake::InstanceOp> {
+public:
+  using HandshakeConversionPattern<
+      handshake::InstanceOp>::HandshakeConversionPattern;
+  void buildModule(handshake::InstanceOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override{};
 };
 
 class StructCreateConversionPattern
@@ -1787,7 +1800,8 @@ public:
   LogicalResult
   matchAndRewrite(T op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-
+    // Check if a external submodule has already been created for the op. If so,
+    // Instantiate the external submodule. Else, build the external module
     hw::HWModuleLike implModule = checkSubModuleOp(ls.parentModule, op);
     if (!implModule) {
       auto portInfo = ModulePortInfo(getPortInfoForOp(op));
@@ -1806,6 +1820,158 @@ public:
 private:
   OpBuilder &submoduleBuilder;
   HandshakeLoweringState &ls;
+};
+
+// some helper functions
+
+static StringAttr getSyncOpModName(ExternalInstanceOp op) {
+  std::string subModuleName = "handshake_sync";
+  std::vector<Type> inTypes, outTypes;
+  // same input types as output types
+  llvm::transform(op->getOperands(), std::back_inserter(inTypes),
+                  getOperandDataType);
+  llvm::transform(op->getOperands(), std::back_inserter(outTypes),
+                  getOperandDataType);
+  if (!inTypes.empty())
+    subModuleName += "_in";
+  for (auto inType : inTypes)
+    subModuleName += getTypeName(op->getLoc(), inType);
+
+  if (!outTypes.empty())
+    subModuleName += "_out";
+  for (auto outType : outTypes)
+    subModuleName += getTypeName(op->getLoc(), outType);
+
+  return StringAttr::get(op.getContext(), subModuleName);
+}
+
+class ExternalInstanceConversionPattern
+    : public HandshakeConversionPattern<handshake::ExternalInstanceOp> {
+public:
+  using HandshakeConversionPattern<
+      handshake::ExternalInstanceOp>::HandshakeConversionPattern;
+  // copied from sync op with removed operation
+  void buildModule(handshake::ExternalInstanceOp op, BackedgeBuilder &bb,
+                   RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = unwrapIO(s, bb, ports);
+
+    // A helper wire that will be used to connect the two built logics
+    HandshakeWire wire(bb, s.b.getNoneType());
+
+    OutputHandshake output = wire.getAsOutput();
+    buildJoinLogic(s, unwrappedIO.inputs, output);
+
+    InputHandshake input = wire.getAsInput();
+
+    // The state-keeping fork logic is required here, as the circuit isn't
+    // allowed to wait for all the consumers to be ready. Connecting the ready
+    // signals of the outputs to their corresponding valid signals leads to
+    // combinatorial cycles. The paper which introduced compositional dataflow
+    // circuits explicitly mentions this limitation:
+    // http://arcade.cs.columbia.edu/df-memocode17.pdf
+    buildForkLogic(s, bb, input, unwrappedIO.outputs);
+
+    // Directly connect the data wires, only the control signals need to be
+    // combined.
+    for (auto &&[in, out] : llvm::zip(unwrappedIO.inputs, unwrappedIO.outputs))
+      out.data->setValue(in.data);
+  }
+
+  LogicalResult
+  matchAndRewrite(handshake::ExternalInstanceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Check if a external submodule has already been created for the op. If so,
+    // Instantiate the external submodule. Else, build the external module
+
+    auto implModule = checkSubModuleOp(ls.parentModule, op);
+    if (!implModule) {
+      auto portInfo = ModulePortInfo(getPortInfoForOp(op));
+      implModule = submoduleBuilder.create<hw::HWModuleExternOp>(
+          op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
+          portInfo);
+
+      // if the type is not combinational and we have more than one input we
+      // need to sync all inputs. We build the sync module here that we then
+      // later instantiate in the esi wrapping passes
+      auto type = op.getTypeAttr();
+      auto syncModName = StringAttr::get(submoduleBuilder.getContext(), "none");
+      if (type.str() != "combinational" && op->getNumOperands() > 1) {
+        // build name of desired sync op that we need
+        syncModName = getSyncOpModName(op);
+        // check if the syncModule already exists
+        hw::HWModuleOp syncMod =
+            ls.parentModule.lookupSymbol<hw::HWModuleOp>(syncModName.str());
+        // build sync
+        if (!syncMod) {
+          // build input and output ports based on external module for sync op
+          SmallVector<hw::PortInfo, 16> syncModPorts;
+          unsigned int numInputs = getModuleNumInputs(implModule);
+          auto i1Type = submoduleBuilder.getI1Type();
+          // hw::HWModuleExternOp extMod =
+          //   dyn_cast<hw::HWModuleExternOp>(implModule);
+          auto funcType =
+              dyn_cast<hw::HWModuleExternOp>(implModule).getFunctionType();
+          // push all data input and output ports
+          for (unsigned int i = 0; i < numInputs - 2; i++) {
+            // extract the esi channel type
+            Type dataType = funcType.getInput(i);
+            syncModPorts.push_back(hw::PortInfo{
+                submoduleBuilder.getStringAttr("in" + std::to_string(i)),
+                hw::PortDirection::INPUT, dataType, i});
+            syncModPorts.push_back(hw::PortInfo{
+                submoduleBuilder.getStringAttr("out" + std::to_string(i)),
+                hw::PortDirection::OUTPUT, dataType, i});
+          }
+          // push clock and reset
+          syncModPorts.push_back(
+              hw::PortInfo{submoduleBuilder.getStringAttr("clock"),
+                           hw::PortDirection::INPUT, i1Type, numInputs - 2});
+          syncModPorts.push_back(
+              hw::PortInfo{submoduleBuilder.getStringAttr("reset"),
+                           hw::PortDirection::INPUT, i1Type, numInputs - 1});
+
+          ModulePortInfo syncModPortInfo(syncModPorts);
+          // build the sync module
+          syncMod = submoduleBuilder.create<hw::HWModuleOp>(
+              op.getLoc(), syncModName, syncModPortInfo,
+              [&](OpBuilder &b, hw::HWModulePortAccessor &ports) {
+                // clock and reset are present
+                Value clk = ports.getInput("clock");
+                Value rst = ports.getInput("reset");
+                BackedgeBuilder bb(b, op.getLoc());
+                RTLBuilder s(ports.getModulePortInfo(), b, op.getLoc(), clk,
+                             rst);
+                this->buildModule(op, bb, s, ports);
+              });
+        }
+      }
+      // add Esi Wrap Attribute with synchronizer
+
+      auto target = op.getModuleAttr();
+      auto synchronizer = syncModName;
+      auto targetIdent =
+          StringAttr::get(submoduleBuilder.getContext(), "target");
+      auto typeIdent = StringAttr::get(submoduleBuilder.getContext(), "type");
+      auto synchronizerIdent =
+          StringAttr::get(submoduleBuilder.getContext(), "synchronizer");
+      auto esiWrapper = submoduleBuilder.getDictionaryAttr(
+          {{targetIdent, target},
+           {typeIdent, type},
+           {synchronizerIdent, synchronizer}});
+      implModule->setAttr("esiWrap", esiWrapper);
+    }
+
+    llvm::SmallVector<Value> operands = adaptor.getOperands();
+    addSequentialIOOperandsIfNeeded(op, operands);
+    rewriter.replaceOpWithNewOp<hw::InstanceOp>(
+        op, implModule, rewriter.getStringAttr(ls.nameUniquer(op)), operands);
+    return success();
+  }
+
+private:
+  // OpBuilder &builder;
+  // HandshakeLoweringState &ls;
 };
 
 class FuncOpConversionPattern : public OpConversionPattern<handshake::FuncOp> {
@@ -1882,6 +2048,7 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
   RewritePatternSet patterns(op.getContext());
   patterns.insert<FuncOpConversionPattern, ReturnConversionPattern>(
       op.getContext());
+
   patterns.insert<JoinConversionPattern, ForkConversionPattern,
                   SyncConversionPattern>(typeConverter, op.getContext(),
                                          moduleBuilder, ls);
@@ -1910,6 +2077,7 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
       SourceConversionPattern, SinkConversionPattern, ConstantConversionPattern,
       MergeConversionPattern, ControlMergeConversionPattern,
       LoadConversionPattern, StoreConversionPattern, MemoryConversionPattern,
+      ExternalInstanceConversionPattern, InstanceConversionPattern,
       // Arith operations.
       ExtendConversionPattern<arith::ExtUIOp, /*signExtend=*/false>,
       ExtendConversionPattern<arith::ExtSIOp, /*signExtend=*/true>,
@@ -1964,6 +2132,7 @@ public:
     submoduleBuilder.setInsertionPointToStart(mod.getBody());
     for (auto &funcName : llvm::reverse(sortedFuncs)) {
       auto funcOp = mod.lookupSymbol<handshake::FuncOp>(funcName);
+      submoduleBuilder.setInsertionPoint(funcOp);
       assert(funcOp && "handshake.func not found in module!");
       if (failed(
               convertFuncOp(typeConverter, target, funcOp, submoduleBuilder))) {

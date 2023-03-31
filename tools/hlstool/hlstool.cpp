@@ -366,6 +366,11 @@ static LogicalResult doHLSFlowDynamic(
       pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
       pm.addPass(circt::createHandshakeToHWPass());
       pm.addPass(createSimpleCanonicalizerPass());
+      // target specific wrapping passes
+      pm.addPass(circt::esi::createESIWrapCalyxPipelinePass());
+      // general wrapping passes
+      pm.addPass(circt::esi::createESIWrapCombinationalPass());
+      pm.addPass(circt::esi::createESIWrapPipelinePass());
     });
     addIRLevel(HLSFlowDynamicIRLevel::Rtl,
                [&]() { loadESILoweringPipeline(pm); });

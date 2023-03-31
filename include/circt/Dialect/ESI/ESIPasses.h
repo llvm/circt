@@ -27,6 +27,9 @@ std::unique_ptr<OperationPass<ModuleOp>> createESIPhysicalLoweringPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESIPortLoweringPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESItoHWPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESIConnectServicesPass();
+std::unique_ptr<OperationPass<ModuleOp>> createESIWrapCombinationalPass();
+std::unique_ptr<OperationPass<ModuleOp>> createESIWrapPipelinePass();
+std::unique_ptr<OperationPass<ModuleOp>> createESIWrapCalyxPipelinePass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
