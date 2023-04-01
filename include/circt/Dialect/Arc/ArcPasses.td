@@ -78,6 +78,12 @@ def InferStateProperties : Pass<"arc-infer-state-properties",
   let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
 }
 
+def IsolateClocks : Pass<"arc-isolate-clocks", "mlir::ModuleOp"> {
+  let summary = "Group clocked operations into clock domains";
+  let constructor = "circt::arc::createIsolateClocksPass()";
+  let dependentDialects = ["arc::ArcDialect"];
+}
+
 def LatencyRetiming : Pass<"arc-latency-retiming", "mlir::ModuleOp"> {
   let summary = "Push latencies through the design";
   let constructor = "circt::arc::createLatencyRetimingPass()";
