@@ -248,5 +248,7 @@ LogicalResult LutOp::verify() {
   return success();
 }
 
+#include "circt/Dialect/Arc/ArcInterfaces.cpp.inc"
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/Arc/Arc.cpp.inc"

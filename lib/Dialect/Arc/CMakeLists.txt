@@ -8,6 +8,7 @@ add_circt_dialect_library(CIRCTArc
 
   DEPENDS
   CIRCTArcEnumsIncGen
+  CIRCTArcInterfacesIncGen
   MLIRArcIncGen
 
   LINK_COMPONENTS

@@ -11,6 +11,7 @@
 
 include "circt/Dialect/Arc/Dialect.td"
 include "circt/Dialect/Arc/Types.td"
+include "circt/Dialect/Arc/ArcInterfaces.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/FunctionInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
@@ -117,6 +118,7 @@ def OutputOp : ArcOp<"output", [
 
 def StateOp : ArcOp<"state", [
   CallOpInterface, MemRefsNormalizable,
+  CallOpMutableInterface,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
   AttrSizedOperandSegments
 ]> {
@@ -197,6 +199,9 @@ def StateOp : ArcOp<"state", [
     operand_range getArgOperands() {
       return {operand_begin(), operand_end()};
     }
+    MutableOperandRange getArgOperandsMutable() {
+      return getInputsMutable();
+    }
 
     mlir::CallInterfaceCallable getCallableForCallee() {
       return (*this)->getAttrOfType<mlir::SymbolRefAttr>("arc");
@@ -206,6 +211,7 @@ def StateOp : ArcOp<"state", [
 
 def CallOp : ArcOp<"call", [
   CallOpInterface, MemRefsNormalizable, Pure,
+  CallOpMutableInterface,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "calls an arc";
@@ -220,6 +226,9 @@ def CallOp : ArcOp<"call", [
   let extraClassDeclaration = [{
     operand_range getArgOperands() {
       return {operand_begin(), operand_end()};
+    }
+    MutableOperandRange getArgOperandsMutable() {
+      return getInputsMutable();
     }
 
     mlir::CallInterfaceCallable getCallableForCallee() {
