@@ -28,6 +28,7 @@ class ArcOp<string mnemonic, list<Trait> traits = []> :
 def DefineOp : ArcOp<"define", [
   IsolatedFromAbove,
   FunctionOpInterface,
+  CallableOpInterface,
   Symbol,
   RegionKindInterface,
   SingleBlockImplicitTerminator<"arc::OutputOp">,
@@ -100,6 +101,15 @@ def DefineOp : ArcOp<"define", [
     /// Returns true if the arc returns the inputs directly and in the same
     /// order, otherwise false.
     bool isPassthrough();
+
+    //===------------------------------------------------------------------===//
+    // CallableOpInterface
+    //===------------------------------------------------------------------===//
+
+    mlir::Region *getCallableRegion() { return &getBody(); }
+    ArrayRef<mlir::Type> getCallableResults() { return getResultTypes(); }
+    mlir::ArrayAttr getCallableArgAttrs() { return nullptr; }
+    mlir::ArrayAttr getCallableResAttrs() { return nullptr; }
   }];
 }
 

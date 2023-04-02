@@ -55,6 +55,12 @@ def InlineArcs : Pass<"arc-inline" , "mlir::ModuleOp"> {
     Statistic<"numTrivialArcs", "trivial-arcs", "Arcs with very few ops">,
     Statistic<"numSingleUseArcs", "single-use-arcs", "Arcs with a single use">,
   ];
+  let options = [
+    Option<"intoArcsOnly", "into-arcs-only", "bool", "false",
+           "Call operations to inline">,
+    Option<"maxNonTrivialOpsInBody", "max-body-ops", "unsigned", "3",
+           "Max number of non-trivial ops in the region to be inlined">,
+  ];
 }
 
 def InlineModules : Pass<"arc-inline-modules", "mlir::ModuleOp"> {
