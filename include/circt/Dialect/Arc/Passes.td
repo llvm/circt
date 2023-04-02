@@ -109,7 +109,7 @@ def MakeTables : Pass<"arc-make-tables", "mlir::ModuleOp"> {
 }
 
 def MuxToControlFlow : Pass<"arc-mux-to-control-flow", "mlir::ModuleOp"> {
-  let summary = "Converts muxes with large independent fan-ins to if-statements";
+  let summary = "Convert muxes with large independent fan-ins to if-statements";
   let constructor = "circt::arc::createMuxToControlFlowPass()";
   let dependentDialects = ["mlir::scf::SCFDialect"];
 }

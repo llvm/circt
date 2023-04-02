@@ -46,11 +46,15 @@ def DefineOp : ArcOp<"define", [
   let hasRegionVerifier = 1;
 
   let builders = [
-    OpBuilder<(ins "mlir::StringAttr":$sym_name, "mlir::TypeAttr":$function_type), [{
-      build($_builder, $_state, sym_name, function_type, mlir::ArrayAttr(), mlir::ArrayAttr());
+    OpBuilder<(ins "mlir::StringAttr":$sym_name,
+                   "mlir::TypeAttr":$function_type), [{
+      build($_builder, $_state, sym_name, function_type, mlir::ArrayAttr(),
+            mlir::ArrayAttr());
     }]>,
-    OpBuilder<(ins "mlir::StringRef":$sym_name, "mlir::FunctionType":$function_type), [{
-      build($_builder, $_state, sym_name, function_type, mlir::ArrayAttr(), mlir::ArrayAttr());
+    OpBuilder<(ins "mlir::StringRef":$sym_name, 
+                   "mlir::FunctionType":$function_type), [{
+      build($_builder, $_state, sym_name, function_type, mlir::ArrayAttr(),
+            mlir::ArrayAttr());
     }]>,
   ];
 
@@ -73,10 +77,14 @@ def DefineOp : ArcOp<"define", [
     }
 
     /// Returns the argument types of this function.
-    mlir::ArrayRef<mlir::Type> getArgumentTypes() { return getFunctionType().getInputs(); }
+    mlir::ArrayRef<mlir::Type> getArgumentTypes() {
+      return getFunctionType().getInputs();
+    }
 
     /// Returns the result types of this function.
-    mlir::ArrayRef<mlir::Type> getResultTypes() { return getFunctionType().getResults(); }
+    mlir::ArrayRef<mlir::Type> getResultTypes() {
+      return getFunctionType().getResults();
+    }
 
     /// Verify the type attribute of this function. Returns failure and emits
     /// an error if the attribute is invalid.
@@ -166,16 +174,19 @@ def StateOp : ArcOp<"state", [
           static_cast<int32_t>(inputs.size())}));
       $_state.addTypes(results);
     }]>,
-    OpBuilder<(ins "mlir::StringAttr":$arc, "mlir::TypeRange":$results, "mlir::Value":$clock,
-      "mlir::Value":$enable, "unsigned":$latency, CArg<"mlir::ValueRange", "{}">:$inputs
+    OpBuilder<(ins "mlir::StringAttr":$arc, "mlir::TypeRange":$results,
+      "mlir::Value":$clock, "mlir::Value":$enable, "unsigned":$latency,
+      CArg<"mlir::ValueRange", "{}">:$inputs
     ), [{
-      build($_builder, $_state, mlir::SymbolRefAttr::get(arc), results, clock, enable,
-            latency, inputs);
+      build($_builder, $_state, mlir::SymbolRefAttr::get(arc), results, clock,
+            enable, latency, inputs);
     }]>,
-    OpBuilder<(ins "mlir::StringRef":$arc, "mlir::TypeRange":$results, "mlir::Value":$clock,
-      "mlir::Value":$enable, "unsigned":$latency, CArg<"mlir::ValueRange", "{}">:$inputs
+    OpBuilder<(ins "mlir::StringRef":$arc, "mlir::TypeRange":$results,
+      "mlir::Value":$clock, "mlir::Value":$enable, "unsigned":$latency,
+      CArg<"mlir::ValueRange", "{}">:$inputs
     ), [{
-      build($_builder, $_state, mlir::StringAttr::get($_builder.getContext(), arc),
+      build($_builder, $_state,
+            mlir::StringAttr::get($_builder.getContext(), arc),
             results, clock, enable, latency, inputs);
     }]>
   ];
