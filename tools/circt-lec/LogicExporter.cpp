@@ -33,7 +33,7 @@ static void debugOperands(ConcreteOp op) {
 
 /// Helper function to provide a common debug formatting for
 /// an operation's result.
-static void debugOpResult(const mlir::Value &result) {
+static void debugOpResult(mlir::Value result) {
   lec::dbgs() << "Result:\n";
   lec::Scope indent;
   lec::printValue(result);
