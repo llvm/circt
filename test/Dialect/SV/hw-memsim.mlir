@@ -112,21 +112,23 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:  }
 //CHECK-NEXT:  sv.ifdef "SYNTHESIS" {
 //CHECK-NEXT:  } else {
-//CHECK-NEXT:    sv.ifdef "RANDOMIZE_MEM_INIT" {
-//CHECK-NEXT:      sv.verbatim "integer [[INITVAR:.+]];\0A"
-//CHECK-NEXT:      %[[RANDOM_MEM:.+]] = sv.reg sym @[[_RANDOM_MEM:.+]] : !hw.inout<i32>
-//CHECK-NEXT:    }
 //CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT" {
 //CHECK-NEXT:    }
+//CHECK-NEXT:    %_RANDOM_MEM = sv.reg : !hw.inout<i32>
 //CHECK-NEXT:    sv.initial {
 //CHECK-NEXT:      sv.verbatim "`INIT_RANDOM_PROLOG_"
 //CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_MEM_INIT" {
-//CHECK-NEXT:        sv.verbatim "for ([[INITVAR]] = 0; [[INITVAR]] < 10; [[INITVAR]] = [[INITVAR]] + 1) begin\0A
-//CHECK-SAME{LITERAL}: {{0}} = {`RANDOM};\0A
-//CHECK-SAME:          Memory[[[INITVAR]]] =
-//CHECK-SAME{LITERAL}:   {{0}}[15:0];\0A
-//CHECK-SAME:          end"
-//CHECK-SAME:          {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[_RANDOM_MEM]]>]}
+//CHECK:             sv.for %i = %c0_i4 to %c-6_i4 step %c1_i4 : i4 {
+//CHECK:               sv.for %j = %c0_i6 to %c-32_i6 step %c-32_i6_2 : i6 {
+//CHECK:                 %RANDOM = sv.macro.ref.se< "RANDOM"> : i32
+//CHECK:                 %[[PART_SELECT:.+]] = sv.indexed_part_select_inout %_RANDOM_MEM[%j : 32] : !hw.inout<i32>, i6
+//CHECK:                 sv.bpassign %[[PART_SELECT]], %RANDOM : i32
+//CHECK:               }
+//CHECK:               %[[MEM_INDEX:.+]] = sv.array_index_inout %Memory[%i] : !hw.inout<uarray<10xi16>>, i4
+//CHECK:               %[[READ:.+]] = sv.read_inout %_RANDOM_MEM : !hw.inout<i32>
+//CHECK:               %[[EXTRACT:.+]] = comb.extract %[[READ]] from 0 : (i32) -> i16
+//CHECK:               sv.bpassign %[[MEM_INDEX]], %[[EXTRACT]] : i16
+//CHECK:             }
 //CHECK-NEXT:      }
 //CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_REG_INIT" {
 //CHECK-NEXT:      }
@@ -294,7 +296,9 @@ hw.module.generated @PR2769, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_
 
 // COMMON-LABEL: hw.module @RandomizeWeirdWidths
 // CHECK: sv.ifdef.procedural "RANDOMIZE_MEM_INIT"
-// CHECK-NEXT{LITERAL}: sv.verbatim "for (initvar = 0; initvar < 10; initvar = initvar + 1) begin\0A  {{0}} = {{`RANDOM}, {`RANDOM}, {`RANDOM}, {`RANDOM}, {`RANDOM}};\0A  Memory[initvar] = {{0}}[144:0];\0Aend"
+// CHECK: %[[INOUT:.+]] = sv.array_index_inout %Memory[%i]
+// CHECK: %[[EXTRACT:.+]] = comb.extract %{{.+}} from 0 : (i160) -> i145
+// CHECK-NEXT: sv.bpassign %[[INOUT]], %[[EXTRACT]] : i145
 hw.module.generated @RandomizeWeirdWidths, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0: i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i145, %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1, %wo_data_0: i145) -> (ro_data_0: i145, rw_rdata_0: i145) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : ui32, width = 145 : ui32, writeClockIDs = [], writeLatency = 4 : ui32, writeUnderWrite = 0 : i32, initFilename = "", initIsBinary = false, initIsInline = false}
 
 // COMMON-LABEL: hw.module @ReadWriteWithHighReadLatency

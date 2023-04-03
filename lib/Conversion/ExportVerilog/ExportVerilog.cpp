@@ -813,9 +813,13 @@ StringRef getVerilogValueName(Value val) {
   if (auto *op = val.getDefiningOp())
     return getSymOpName(op);
 
-  if (auto port = val.dyn_cast<BlockArgument>())
+  if (auto port = val.dyn_cast<BlockArgument>()) {
+    // If the value is defined by for op, use its associated verilog name.
+    if (auto forOp = dyn_cast<ForOp>(port.getParentBlock()->getParentOp()))
+      return forOp->getAttrOfType<StringAttr>("hw.verilogName");
     return getPortVerilogName(port.getParentBlock()->getParentOp(),
                               port.getArgNumber());
+  }
   assert(false && "unhandled value");
   return {};
 }
@@ -2989,6 +2993,8 @@ private:
   LogicalResult visitSV(GenerateOp op);
   LogicalResult visitSV(GenerateCaseOp op);
 
+  LogicalResult visitSV(ForOp op);
+
   void emitAssertionLabel(Operation *op, StringRef opName);
   void emitAssertionMessage(StringAttr message, ValueRange args,
                             SmallPtrSetImpl<Operation *> &ops,
@@ -3538,6 +3544,30 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
   startStatement();
   ps << "endcase";
   setPendingNewline();
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(ForOp op) {
+  emitSVAttributes(op);
+  llvm::SmallPtrSet<Operation *, 8> ops;
+  startStatement();
+  auto inductionVarName = op->getAttrOfType<StringAttr>("hw.verilogName");
+  ps << "for (" << PP::ibox2 << "logic ";
+  ps.invokeWithStringOS([&](auto &os) {
+    emitter.emitTypeDims(op.getInductionVar().getType(), op.getLoc(), os);
+  });
+  ps << PP::nbsp << inductionVarName << " = ";
+  emitExpression(op.getLowerBound(), ops);
+  ps << "; " << PPExtString(inductionVarName) << " < ";
+  emitExpression(op.getUpperBound(), ops);
+  ps << "; " << PPExtString(inductionVarName) << " += ";
+  emitExpression(op.getStep(), ops);
+  ps << PP::end << ") begin";
+  setPendingNewline();
+  emitStatementBlock(op.getBody().getBlocks().front());
+  startStatement();
+  ps << "end";
+  emitLocationInfoAndNewLine(ops);
   return success();
 }
 
