@@ -1069,10 +1069,10 @@ firrtl.module private @is1436_FOO() {
     // CHECK:  %0 = firrtl.ref.send %source_valid : !firrtl.uint<1>
     // CHECK:  %1 = firrtl.ref.send %source_ready : !firrtl.uint<1>
     // CHECK:  %2 = firrtl.ref.send %source_data : !firrtl.uint<64>
-    firrtl.refconnect %sink, %0 : !firrtl.ref<bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>>
-    // CHECK:  firrtl.refconnect %sink_valid, %0 : !firrtl.ref<uint<1>>
-    // CHECK:  firrtl.refconnect %sink_ready, %1 : !firrtl.ref<uint<1>>
-    // CHECK:  firrtl.refconnect %sink_data, %2 : !firrtl.ref<uint<64>>
+    firrtl.ref.define %sink, %0 : !firrtl.ref<bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>>
+    // CHECK:  firrtl.ref.define %sink_valid, %0 : !firrtl.ref<uint<1>>
+    // CHECK:  firrtl.ref.define %sink_ready, %1 : !firrtl.ref<uint<1>>
+    // CHECK:  firrtl.ref.define %sink_data, %2 : !firrtl.ref<uint<64>>
   }
   firrtl.module private @SendRefTypeVectors1(in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.ref<vector<uint<1>, 2>>) {
     // CHECK-LABEL: firrtl.module private @SendRefTypeVectors1
@@ -1080,9 +1080,9 @@ firrtl.module private @is1436_FOO() {
     %0 = firrtl.ref.send %a : !firrtl.vector<uint<1>, 2>
     // CHECK:  %0 = firrtl.ref.send %a_0 : !firrtl.uint<1>
     // CHECK:  %1 = firrtl.ref.send %a_1 : !firrtl.uint<1>
-    firrtl.refconnect %b, %0 : !firrtl.ref<vector<uint<1>, 2>>
-    // CHECK:  firrtl.refconnect %b_0, %0 : !firrtl.ref<uint<1>>
-    // CHECK:  firrtl.refconnect %b_1, %1 : !firrtl.ref<uint<1>>
+    firrtl.ref.define %b, %0 : !firrtl.ref<vector<uint<1>, 2>>
+    // CHECK:  firrtl.ref.define %b_0, %0 : !firrtl.ref<uint<1>>
+    // CHECK:  firrtl.ref.define %b_1, %1 : !firrtl.ref<uint<1>>
   }
   firrtl.module private @RefTypeBundles2() {
     %x = firrtl.wire   : !firrtl.bundle<a: uint<1>, b: uint<2>>

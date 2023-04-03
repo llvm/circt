@@ -179,7 +179,9 @@ hw.module.generated @FIRRTLMemTwoAlways, @FIRRTLMem( %wo_addr_0: i4, %wo_en_0: i
   }
   // COMMON-LABEL: hw.module @FIRRTLMem_1_1_0_32_16_1_1_0_1_a
   // CHECK-SAME: (%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i32, %W0_mask: i4) -> (R0_data: i32)
-  // CHECK-NEXT:   %[[Memory:.+]] = sv.reg : !hw.inout<uarray<16xi32>>
+  // CHECK-NEXT:   %[[Memory:.+]] = sv.reg
+  // VIVADO-SAME:  #sv.attribute<"rw_addr_collision" = "\22yes\22">
+  // CHECK-SAME: !hw.inout<uarray<16xi32>>
   // CHECK:        %[[slot:.+]] = sv.array_index_inout %[[Memory]][%[[v3:.+]]] :
   // PRAMGAS: sv.attributes
   // CHECK-NEXT:   %[[v12:.+]] = sv.read_inout %[[slot]]

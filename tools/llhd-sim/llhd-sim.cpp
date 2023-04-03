@@ -24,6 +24,7 @@
 #include "mlir/Parser/Parser.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
+#include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/Passes.h"
@@ -193,6 +194,7 @@ int main(int argc, char **argv) {
   context.loadDialect<llhd::LLHDDialect, LLVM::LLVMDialect, FuncDialect,
                       hw::HWDialect, comb::CombDialect>();
   mlir::registerLLVMDialectTranslation(context);
+  mlir::registerBuiltinDialectTranslation(context);
 
   mlir::OwningOpRef<mlir::ModuleOp> module(
       parseSourceFile<ModuleOp>(mgr, &context));

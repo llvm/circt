@@ -26,8 +26,9 @@ local_scheme = "no-local-version"
 git_describe_command = "git describe --dirty --tags --long --match pycde*"
 
 [tool.cibuildwheel]
+build-frontend = "build"
 manylinux-x86_64-image = "ghcr.io/circt/images/pycde-build"
 
 [tool.cibuildwheel.linux]
-# Disable auditwheel repair. It screws up some of the .so collateral.
-repair-wheel-command = "cp {wheel} {dest_dir}"
+# Use our internal auditwheel script so as to not mess up the collateral.
+repair-wheel-command = "frontends/PyCDE/auditwheel.sh {dest_dir} {wheel}"

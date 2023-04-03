@@ -15,9 +15,11 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
+#include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 #include "circt/Dialect/Arc/Dialect.h"
+#include "circt/Dialect/Arc/Types.h"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Arc/Arc.h.inc"

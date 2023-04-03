@@ -605,6 +605,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       return src.getParentBlock();
 
     // If connecting across blocks, figure out where to connect.
+    (void)getModule;
     assert(getModule(src) == getModule(dest));
     // Helper to determine if 'a' is available at 'b's block.
     auto safelyDoms = [&](Value a, Value b) {
@@ -681,8 +682,10 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       opsToErase.push_back(destOp);
       return success();
     }
+
     // Otherwise, just connect to the source.
     emitConnect(builder, dest, src);
+
     return success();
   };
 
@@ -694,7 +697,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
   LLVM_DEBUG({ llvm::dbgs() << "Analyzing wiring problems:\n"; });
   DenseMap<FModuleLike, ModuleModifications> moduleModifications;
   DenseSet<Value> visitedSinks;
-  for (auto &e : llvm::enumerate(state.wiringProblems)) {
+  for (auto e : llvm::enumerate(state.wiringProblems)) {
     auto index = e.index();
     auto problem = e.value();
     // This is a unique index that is assigned to this specific wiring problem
@@ -807,7 +810,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       // Use RefType ports if possible
       RefType refType = TypeSwitch<Type, RefType>(source.getType())
                             .Case<FIRRTLBaseType>([](FIRRTLBaseType base) {
-                              return RefType::get(base);
+                              return RefType::get(base.getPassiveType());
                             })
                             .Case<RefType>([](RefType ref) { return ref; });
       sourceType = refType;
@@ -840,6 +843,14 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
         return failure();
       }
     }
+    // If wiring using references, check that the sink value we connect to is
+    // passive.
+    if (auto sinkFType = dyn_cast<FIRRTLType>(sink.getType());
+        sinkFType && isa<RefType>(sourceType) &&
+        !getBaseType(sinkFType).isPassive())
+      return emitError(sink.getLoc())
+             << "Wiring Problem sink type \"" << sink.getType()
+             << "\" must be passive (no flips) when using references";
 
     // Record module modifications related to adding ports to modules.
     auto addPorts = [&](ArrayRef<hw::HWInstanceLike> insts, Value val, Type tpe,

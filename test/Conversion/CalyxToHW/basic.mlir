@@ -30,6 +30,10 @@
 
 // module attributes {calyx.entrypoint = "main"} {
   calyx.component @main(%a: i32, %b: i32, %go: i1 {go = 1 : i64}, %clk: i1 {clk = 1 : i64}, %reset: i1 {reset = 1 : i64}) -> (%out: i32, %done: i1 {done = 1 : i64}) {
+    // CHECK-DAG:  %out = sv.wire
+    // CHECK-DAG:  %[[OUT_VAL:.+]] = sv.read_inout %out
+    // CHECK-DAG:  %done = sv.wire
+    // CHECK-DAG:  %[[DONE_VAL:.+]] = sv.read_inout %done
     // CHECK-DAG:  %add_left = sv.wire
     // CHECK-DAG:  %[[ADD_LEFT_VAL:.+]] = sv.read_inout %add_left
     // CHECK-DAG:  %add_right = sv.wire
@@ -48,16 +52,19 @@
     // CHECK-DAG:  %[[BUF_CLK_VAL:.+]] = sv.read_inout %buf_clk
     // CHECK-DAG:  %buf_reset = sv.wire
     // CHECK-DAG:  %[[BUF_RESET_VAL:.+]] = sv.read_inout %buf_reset
-    // CHECK-DAG:  %[[C0_I32:.+]] = hw.constant 0 : i32
-    // CHECK-DAG:  %[[BUF_REG:.+]] = seq.compreg sym @buf_reg %[[BUF_IN_VAL]], %[[BUF_CLK_VAL]], %[[BUF_RESET_VAL]], %[[C0_I32]]
     // CHECK-DAG:  %[[FALSE:.+]] = hw.constant false
     // CHECK-DAG:  %[[BUF_DONE_REG:.+]] = seq.compreg sym @buf_done_reg %[[BUF_WRITE_EN_VAL]], %[[BUF_CLK_VAL]], %[[BUF_RESET_VAL]], %[[FALSE]]  : i1
-    // CHECK-DAG:  %buf = sv.wire
-    // CHECK-DAG:  sv.assign %buf, %[[BUF_REG]]
-    // CHECK-DAG:  %[[BUF_VAL:.+]] = sv.read_inout %buf
     // CHECK-DAG:  %buf_done = sv.wire
     // CHECK-DAG:  sv.assign %buf_done, %[[BUF_DONE_REG]]
     // CHECK-DAG:  %[[BUF_DONE_VAL:.+]] = sv.read_inout %buf_done
+    // CHECK-DAG:  %[[TRUE:.+]] = hw.constant true
+    // CHECK-DAG:  %[[BUF_DONE_VAL_NEG:.+]] = comb.xor %[[BUF_DONE_VAL]], %true : i1
+    // CHECK-DAG:  %[[BUF_REG_WRITE_EN:.+]] = comb.and %[[BUF_WRITE_EN_VAL]], %[[BUF_DONE_VAL_NEG]] : i1
+    // CHECK-DAG:  %[[C0_I32:.+]] = hw.constant 0 : i32
+    // CHECK-DAG:  %[[BUF_REG:.+]] = seq.compreg.ce sym @buf_reg %[[BUF_IN_VAL]], %[[BUF_CLK_VAL]], %[[BUF_REG_WRITE_EN]], %[[BUF_RESET_VAL]], %[[C0_I32]]
+    // CHECK-DAG:  %buf = sv.wire
+    // CHECK-DAG:  sv.assign %buf, %[[BUF_REG]]
+    // CHECK-DAG:  %[[BUF_VAL:.+]] = sv.read_inout %buf
     %buf.in, %buf.write_en, %buf.clk, %buf.reset, %buf.out, %buf.done = calyx.register @buf : i32, i1, i1, i1, i32, i1
 
     // CHECK-DAG:  %g0_go = sv.wire
@@ -73,13 +80,13 @@
       %true = hw.constant true
 
       // CHECK-DAG:  %[[FALSE_0:.+]] = hw.constant false
-      // CHECK-DAG:  %[[DONE_VAL:.+]] = comb.mux %[[G0_DONE_VAL]], %[[TRUE]], %[[FALSE_0]]
-      // CHECK-DAG:  sv.assign %done, %[[DONE_VAL]]
+      // CHECK-DAG:  %[[VAL_TO_DONE:.+]] = comb.mux %[[G0_DONE_VAL]], %[[TRUE]], %[[FALSE_0]]
+      // CHECK-DAG:  sv.assign %done, %[[VAL_TO_DONE]]
       calyx.assign %done = %g0_done.out ? %true : i1
 
       // CHECK-DAG:  %[[C0_I32_0:.+]] = hw.constant 0
-      // CHECK-DAG:  %[[OUT_VAL:.+]] = comb.mux %[[TRUE]], %[[BUF_VAL]], %[[C0_I32_0]]
-      // CHECK-DAG:  sv.assign %out, %[[OUT_VAL]]
+      // CHECK-DAG:  %[[VAL_TO_OUT:.+]] = comb.mux %[[TRUE]], %[[BUF_VAL]], %[[C0_I32_0]]
+      // CHECK-DAG:  sv.assign %out, %[[VAL_TO_OUT]]
       calyx.assign %out = %true ? %buf.out : i32
 
       // CHECK-DAG:  %[[C0_I32_1:.+]] = hw.constant 0
@@ -122,10 +129,6 @@
       // CHECK-DAG:  sv.assign %g0_go, %[[G0_GO_IN]]
       calyx.assign %g0_go.in = %true ? %go : i1
 
-      // CHECK-DAG:  %out = sv.wire
-      // CHECK-DAG:  %[[OUT_VAL:.+]] = sv.read_inout %out
-      // CHECK-DAG:  %done = sv.wire
-      // CHECK-DAG:  %[[DONE_VAL:.+]] = sv.read_inout %done
       // CHECK-DAG:  hw.output %[[OUT_VAL]], %[[DONE_VAL]]
     }
     calyx.control {

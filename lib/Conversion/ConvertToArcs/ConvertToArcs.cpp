@@ -23,7 +23,8 @@ using llvm::MapVector;
 
 static bool isArcBreakingOp(Operation *op) {
   return op->hasTrait<OpTrait::ConstantLike>() ||
-         isa<hw::InstanceOp, seq::CompRegOp, StateOp>(op) ||
+         isa<hw::InstanceOp, seq::CompRegOp, StateOp, ClockGateOp, MemoryOp,
+             MemoryReadOp, MemoryWriteOp>(op) ||
          op->getNumResults() > 1;
 }
 
@@ -156,6 +157,7 @@ LogicalResult Converter::analyzeFanIn() {
     }
 
     auto duplicateOp = faninMasks.insert({op, mask});
+    (void)duplicateOp;
     assert(duplicateOp.second && "duplicate op in order");
   }
 

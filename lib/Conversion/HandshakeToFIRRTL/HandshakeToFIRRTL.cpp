@@ -645,7 +645,7 @@ createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   llvm::SmallVector<PortInfo> ports;
 
   // Add all inputs of funcOp.
-  for (auto &[i, argType] :
+  for (auto [i, argType] :
        llvm::enumerate(funcOp.getFunctionType().getInputs())) {
     auto portName = funcOp.getArgName(i);
     FIRRTLBaseType bundlePortType;
@@ -739,7 +739,7 @@ static void inlineFuncRegion(handshake::FuncOp funcOp, FModuleOp topModuleOp,
 
   // Replace uses of each argument of the second block with the corresponding
   // argument of the entry block.
-  for (auto &oldArg : enumerate(secondBlock->getArguments()))
+  for (auto oldArg : enumerate(secondBlock->getArguments()))
     oldArg.value().replaceAllUsesWith(entryBlock->getArgument(oldArg.index()));
 
   // Move all operations of the second block to the entry block.

@@ -49,7 +49,7 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
   auto readSrc = read.getInput().getDefiningOp();
   if (!readSrc)
     return false;
-  return isa<WireOp, RegOp, LogicOp, XMROp, XMRRefOp>(readSrc);
+  return isa<sv::WireOp, RegOp, LogicOp, XMROp, XMRRefOp>(readSrc);
 }
 
 // Check if the value is deemed worth spilling into a wire.
@@ -83,7 +83,7 @@ static void spillWiresForInstanceInputs(InstanceOp op) {
     else
       nameTmp += std::to_string(nextOpNo - 1);
 
-    auto newWire = builder.create<WireOp>(src.getType(), nameTmp);
+    auto newWire = builder.create<sv::WireOp>(src.getType(), nameTmp);
     auto newWireRead = builder.create<ReadInOutOp>(newWire);
     auto connect = builder.create<AssignOp>(newWire, src);
     newWireRead->moveBefore(op);
@@ -105,6 +105,13 @@ static void lowerInstanceResults(InstanceOp op) {
     auto result = op.getResult(nextResultNo);
     ++nextResultNo;
 
+    // If the result doesn't have a user, the connection won't be emitted by
+    // Emitter, so there's no need to create a wire for it. However, if the
+    // result is a zero bit value, the normal emission code path should be used,
+    // as zero bit values require special handling by the emitter.
+    if (result.use_empty() && !ExportVerilog::isZeroBitType(result.getType()))
+      continue;
+
     if (result.hasOneUse()) {
       OpOperand &use = *result.getUses().begin();
       if (dyn_cast_or_null<OutputOp>(use.getOwner()))
@@ -121,7 +128,7 @@ static void lowerInstanceResults(InstanceOp op) {
       nameTmp += port.name.getValue().str();
     else
       nameTmp += std::to_string(nextResultNo - 1);
-    Value newWire = builder.create<WireOp>(result.getType(), nameTmp);
+    Value newWire = builder.create<sv::WireOp>(result.getType(), nameTmp);
 
     while (!result.use_empty()) {
       auto newWireRead = builder.create<ReadInOutOp>(newWire);
@@ -223,7 +230,7 @@ static void lowerUsersToTemporaryWire(Operation &op,
     if (isProceduralRegion)
       newWire = builder.create<LogicOp>(result.getType(), name);
     else
-      newWire = builder.create<WireOp>(result.getType(), name);
+      newWire = builder.create<sv::WireOp>(result.getType(), name);
 
     while (!result.use_empty()) {
       auto newWireRead = builder.create<ReadInOutOp>(newWire);
@@ -676,6 +683,96 @@ static void prettifyAfterLegalization(
   }
 }
 
+struct WireLowering {
+  hw::WireOp wireOp;
+  Block::iterator declarePoint;
+  Block::iterator assignPoint;
+};
+
+/// Determine the insertion location of declaration and assignment ops for
+/// `hw::WireOp`s in a block. This function tries to place the declaration point
+/// as late as possible, right before the very first use of the wire. It also
+/// tries to place the assign point as early as possible, right after the
+/// assigned value becomes available.
+static void buildWireLowerings(Block &block,
+                               SmallVectorImpl<WireLowering> &wireLowerings) {
+  for (auto hwWireOp : block.getOps<hw::WireOp>()) {
+    // Find the earliest point in the block at which the input operand is
+    // available. The assign operation will have to go after that to not create
+    // a use-before-def situation.
+    Block::iterator assignPoint = block.begin();
+    if (auto *defOp = hwWireOp.getInput().getDefiningOp())
+      if (defOp && defOp->getBlock() == &block)
+        assignPoint = ++Block::iterator(defOp);
+
+    // Find the earliest use of the wire within the block. The wire declaration
+    // will have to go somewhere before this point to not create a
+    // use-before-def situation.
+    Block::iterator declarePoint = assignPoint;
+    for (auto *user : hwWireOp->getUsers()) {
+      while (user->getBlock() != &block)
+        user = user->getParentOp();
+      if (user->isBeforeInBlock(&*declarePoint))
+        declarePoint = Block::iterator(user);
+    }
+
+    wireLowerings.push_back({hwWireOp, declarePoint, assignPoint});
+  }
+}
+
+/// Materialize the SV wire declaration and assignment operations in the
+/// locations previously determined by a call to `buildWireLowerings`. This
+/// replaces all `hw::WireOp`s with their appropriate SV counterpart.
+static void applyWireLowerings(Block &block,
+                               ArrayRef<WireLowering> wireLowerings) {
+  bool isProceduralRegion = block.getParentOp()->hasTrait<ProceduralRegion>();
+
+  for (auto [hwWireOp, declarePoint, assignPoint] : wireLowerings) {
+    // Create the declaration.
+    ImplicitLocOpBuilder builder(hwWireOp.getLoc(), &block, declarePoint);
+    Value decl;
+    if (isProceduralRegion) {
+      decl = builder.create<LogicOp>(hwWireOp.getType(), hwWireOp.getNameAttr(),
+                                     hwWireOp.getInnerSymAttr());
+    } else {
+      decl =
+          builder.create<sv::WireOp>(hwWireOp.getType(), hwWireOp.getNameAttr(),
+                                     hwWireOp.getInnerSymAttr());
+    }
+
+    // Carry attributes over to the lowered operation.
+    auto defaultAttrNames = hwWireOp.getAttributeNames();
+    for (auto namedAttr : hwWireOp->getAttrs())
+      if (!llvm::is_contained(defaultAttrNames, namedAttr.getName()))
+        decl.getDefiningOp()->setAttr(namedAttr.getName(),
+                                      namedAttr.getValue());
+
+    // Create the assignment. If it is supposed to be at a different point than
+    // the declaration, reposition the builder there. Otherwise we'll just build
+    // the assignment immediately after the declaration.
+    if (assignPoint != declarePoint)
+      builder.setInsertionPoint(&block, assignPoint);
+    if (isProceduralRegion)
+      builder.create<BPAssignOp>(decl, hwWireOp.getInput());
+    else
+      builder.create<AssignOp>(decl, hwWireOp.getInput());
+
+    // Create the read. If we have created the assignment at a different point
+    // than the declaration, reposition the builder to immediately after the
+    // declaration. Otherwise we'll just build the read immediately after the
+    // assignment.
+    if (assignPoint != declarePoint)
+      builder.setInsertionPointAfterValue(decl);
+    auto readOp = builder.create<sv::ReadInOutOp>(decl);
+
+    // Replace the HW wire.
+    hwWireOp.replaceAllUsesWith(readOp.getResult());
+  }
+
+  for (auto [hwWireOp, declarePoint, assignPoint] : wireLowerings)
+    hwWireOp.erase();
+}
+
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 static LogicalResult legalizeHWModule(Block &block,
@@ -690,6 +787,15 @@ static LogicalResult legalizeHWModule(Block &block,
         if (failed(legalizeHWModule(region.front(), options)))
           return failure();
     }
+  }
+
+  // Lower HW wires into SV wires in the appropriate spots. Try to put the
+  // declaration close to the first use in the block, and the assignment right
+  // after the assigned value becomes available.
+  {
+    SmallVector<WireLowering> wireLowerings;
+    buildWireLowerings(block, wireLowerings);
+    applyWireLowerings(block, wireLowerings);
   }
 
   // Next, walk all of the operations at this level.
@@ -789,7 +895,7 @@ static LogicalResult legalizeHWModule(Block &block,
       Value readOp;
       if (auto maybeReadOp =
               op.getOperand(1).getDefiningOp<sv::ReadInOutOp>()) {
-        if (isa_and_nonnull<WireOp, LogicOp>(
+        if (isa_and_nonnull<sv::WireOp, LogicOp>(
                 maybeReadOp.getInput().getDefiningOp())) {
           wireOp = maybeReadOp.getInput();
           readOp = maybeReadOp;
@@ -805,7 +911,7 @@ static LogicalResult legalizeHWModule(Block &block,
           wireOp = builder.create<LogicOp>(type, name);
           builder.create<BPAssignOp>(wireOp, op.getOperand(1));
         } else {
-          wireOp = builder.create<WireOp>(type, name);
+          wireOp = builder.create<sv::WireOp>(type, name);
           builder.create<AssignOp>(wireOp, op.getOperand(1));
         }
         readOp = builder.create<ReadInOutOp>(wireOp);

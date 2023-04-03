@@ -8,11 +8,13 @@
 
 #include "circt/Dialect/Arc/Dialect.h"
 #include "circt/Dialect/Arc/Ops.h"
+#include "circt/Dialect/Arc/Types.h"
 
 using namespace circt;
 using namespace arc;
 
 void ArcDialect::initialize() {
+  registerTypes();
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/Arc/Arc.cpp.inc"
@@ -20,3 +22,4 @@ void ArcDialect::initialize() {
 }
 
 #include "circt/Dialect/Arc/ArcDialect.cpp.inc"
+#include "circt/Dialect/Arc/ArcEnums.cpp.inc"

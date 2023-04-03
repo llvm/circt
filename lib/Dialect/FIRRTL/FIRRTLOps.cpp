@@ -531,7 +531,7 @@ static void insertPorts(FModuleLike op,
       ++oldIdx;
     }
   };
-  for (auto &pair : llvm::enumerate(ports)) {
+  for (auto pair : llvm::enumerate(ports)) {
     auto idx = pair.value().first;
     auto &port = pair.value().second;
     migrateOldPorts(idx);
@@ -716,22 +716,28 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<PortInfo> ports,
                          StringRef defnameAttr, ArrayAttr annotations,
-                         ArrayAttr parameters) {
+                         ArrayAttr parameters, ArrayAttr internalPaths) {
   buildModule(builder, result, name, ports, annotations);
   if (!defnameAttr.empty())
     result.addAttribute("defname", builder.getStringAttr(defnameAttr));
   if (!parameters)
-    result.addAttribute("parameters", builder.getArrayAttr({}));
+    parameters = builder.getArrayAttr({});
+  result.addAttribute(getParametersAttrName(result.name), parameters);
+  if (internalPaths && !internalPaths.empty())
+    result.addAttribute(getInternalPathsAttrName(result.name), internalPaths);
 }
 
 void FIntModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<PortInfo> ports,
                          StringRef intrinsicNameAttr, ArrayAttr annotations,
-                         ArrayAttr parameters) {
+                         ArrayAttr parameters, ArrayAttr internalPaths) {
   buildModule(builder, result, name, ports, annotations);
   result.addAttribute("intrinsic", builder.getStringAttr(intrinsicNameAttr));
   if (!parameters)
-    result.addAttribute("parameters", builder.getArrayAttr({}));
+    parameters = builder.getArrayAttr({});
+  result.addAttribute(getParametersAttrName(result.name), parameters);
+  if (internalPaths && !internalPaths.empty())
+    result.addAttribute(getInternalPathsAttrName(result.name), internalPaths);
 }
 
 void FMemModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -2202,28 +2208,6 @@ LogicalResult AttachOp::verify() {
   return success();
 }
 
-/// If the connect is for RefType, implement the constraint for downward only
-/// references. We cannot connect :
-///   1. an input reference port to the output reference port.
-///   2. instance reference results to each other.
-/// This means, the connect can only be used for forwarding RefType module
-/// ports to Instance ports.
-static LogicalResult checkRefTypeFlow(Operation *connect) {
-  Value dst = connect->getOperand(0);
-
-  if (dst.getType().isa<RefType>()) {
-    // RefType supports multiple readers. That is, there can be multiple
-    // RefResolveOps remotely connected to a single RefSendOp.
-    // But multiple RefSendOps should not be remotely connected to a single
-    // RefResolveOp.
-    if (!dst.hasOneUse())
-      return emitError(connect->getLoc())
-             << "output reference port cannot be reused by multiple operations"
-             << ", it can only capture a unique dataflow";
-  }
-  return success();
-}
-
 /// Check if the source and sink are of appropriate flow.
 static LogicalResult checkConnectFlow(Operation *connect) {
   Value dst = connect->getOperand(0);
@@ -2288,10 +2272,6 @@ LogicalResult ConnectOp::verify() {
   if (failed(checkConnectFlow(*this)))
     return failure();
 
-  // Check constraints on RefType.
-  if (failed(checkRefTypeFlow(*this)))
-    return failure();
-
   return success();
 }
 
@@ -2308,21 +2288,33 @@ LogicalResult StrictConnectOp::verify() {
   if (failed(checkConnectFlow(*this)))
     return failure();
 
-  // Check constraints on RefType.
-  if (failed(checkRefTypeFlow(*this)))
-    return failure();
-
   return success();
 }
 
-LogicalResult RefConnectOp::verify() {
+LogicalResult RefDefineOp::verify() {
   // Check that the flows make sense.
   if (failed(checkConnectFlow(*this)))
     return failure();
 
-  // Check constraints on RefType.
-  if (failed(checkRefTypeFlow(*this)))
-    return failure();
+  // For now, refs can't be in bundles so this is sufficient.
+  // In the future need to ensure no other define's to same "fieldSource".
+  // (When aggregates can have references, we can define a reference within,
+  // but this must be unique.  Checking this here may be expensive,
+  // consider adding something to FModuleLike's to check it there instead)
+  for (auto *user : getDest().getUsers()) {
+    if (auto conn = dyn_cast<FConnectLike>(user);
+        conn && conn.getDest() == getDest() && conn != *this)
+      return emitError("destination reference cannot be reused by multiple "
+                       "operations, it can only capture a unique dataflow");
+  }
+
+  // Check "static" source/dest
+  if (auto *op = getDest().getDefiningOp()) {
+    // TODO: Make ref.sub only source flow?
+    if (isa<RefSubOp>(op))
+      return emitError(
+          "destination reference cannot be a sub-element of a reference");
+  }
 
   return success();
 }
@@ -2641,6 +2633,26 @@ LogicalResult AggregateConstantOp::verify() {
   if (checkAggConstant(getOperation(), getFields(), getType()))
     return success();
   return failure();
+}
+
+Attribute AggregateConstantOp::getAttributeFromFieldID(uint64_t fieldID) {
+  FIRRTLBaseType type = getType();
+  Attribute value = getFields();
+  while (fieldID != 0) {
+    if (auto bundle = type.dyn_cast<BundleType>()) {
+      auto index = bundle.getIndexForFieldID(fieldID);
+      fieldID -= bundle.getFieldID(index);
+      type = bundle.getElementType(index);
+      value = value.cast<ArrayAttr>()[index];
+    } else {
+      auto vector = type.cast<FVectorType>();
+      auto index = vector.getIndexForFieldID(fieldID);
+      fieldID -= vector.getFieldID(index);
+      type = vector.getElementType();
+      value = value.cast<ArrayAttr>()[index];
+    }
+  }
+  return value;
 }
 
 LogicalResult BundleCreateOp::verify() {
@@ -3857,7 +3869,7 @@ FIRRTLType RefSendOp::inferReturnType(ValueRange operands,
   if (!inBaseType)
     return emitInferRetTypeError(
         loc, "ref.send operand must be base type, not ", inType);
-  return RefType::get(inBaseType);
+  return RefType::get(inBaseType.getPassiveType());
 }
 
 void RefResolveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
