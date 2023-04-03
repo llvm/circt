@@ -41,6 +41,16 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     /*methodBody=*/[{ return $_op.getParameters(); }]>,
 
     //===------------------------------------------------------------------===//
+    // Instantiation Convention
+    //===------------------------------------------------------------------===//
+
+    InterfaceMethod<"Get the module's instantiation convention",
+      "ConventionAttr", "getConventionAttr">,
+
+    InterfaceMethod<"Get the module's instantiation convention",
+      "Convention", "getConvention">,
+
+    //===------------------------------------------------------------------===//
     // Port Directions
     //===------------------------------------------------------------------===//
 

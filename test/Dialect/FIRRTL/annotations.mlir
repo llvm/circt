@@ -730,6 +730,15 @@ firrtl.circuit "Test" attributes {rawAnnotations = [
 
 // -----
 
+firrtl.circuit "Test" attributes {rawAnnotations =[
+  {class = "circt.ConventionAnnotation", target = "~Test|Test", convention = "scalarized"}
+  ]} {
+  // CHECK: attributes {convention = #firrtl<convention scalarized>}
+  firrtl.module @Test() attributes {convention = #firrtl<convention internal>} {}
+}
+
+// -----
+
 // DontTouchAnnotations are placed on the things they target.
 
 firrtl.circuit "Foo"  attributes {

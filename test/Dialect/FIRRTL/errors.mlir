@@ -89,7 +89,8 @@ firrtl.module @foo(in %a: !firrtl.uint<1> ["hello"]) {}
 firrtl.circuit "foo" {
 // expected-error @+1 {{requires one region}}
 "firrtl.module"() ( { }, { })
-   {sym_name = "foo", portTypes = [!firrtl.uint], portDirections = 1 : i1,
+   {sym_name = "foo", convention = #firrtl<convention internal>,
+    portTypes = [!firrtl.uint], portDirections = 1 : i1,
     portNames = ["in0"], portAnnotations = [], portSyms = []} : () -> ()
 }
 
@@ -99,7 +100,8 @@ firrtl.circuit "foo" {
 // expected-error @+1 {{requires valid port locations}}
 "firrtl.module"() ( {
   ^entry:
-}) {sym_name = "foo", portTypes = [!firrtl.uint], portDirections = 1 : i1,
+}) { sym_name = "foo", convention = #firrtl<convention internal>,
+    portTypes = [!firrtl.uint], portDirections = 1 : i1,
     portNames = ["in0"], portAnnotations = [], portSyms = []} : () -> ()
 }
 
@@ -109,7 +111,8 @@ firrtl.circuit "foo" {
 // expected-error @+1 {{requires 1 port locations}}
 "firrtl.module"() ( {
   ^entry:
-}) {sym_name = "foo", portTypes = [!firrtl.uint], portDirections = 1 : i1,
+}) {sym_name = "foo", convention = #firrtl<convention internal>,
+    portTypes = [!firrtl.uint], portDirections = 1 : i1,
     portNames = ["in0"], portAnnotations = [], portSyms = [],
     portLocations = []} : () -> ()
 }
@@ -123,7 +126,8 @@ firrtl.circuit "foo" {
 // expected-error @+1 {{entry block must have 1 arguments to match module signature}}
 "firrtl.module"() ( {
   ^entry:
-}) {sym_name = "foo", portTypes = [!firrtl.uint], portDirections = 1 : i1,
+}) {sym_name = "foo", convention = #firrtl<convention internal>,
+    portTypes = [!firrtl.uint], portDirections = 1 : i1,
     portNames = ["in0"], portAnnotations = [], portSyms = [],
     portLocations = [loc("loc")]} : () -> ()
 }
@@ -134,7 +138,8 @@ firrtl.circuit "foo" {
 // expected-error @+1 {{block argument types should match signature types}}
 "firrtl.module"() ( {
   ^entry(%a: i1):
-}) {sym_name = "foo", portTypes = [!firrtl.uint], portDirections = 1 : i1,
+}) {sym_name = "foo", convention = #firrtl<convention internal>,
+    portTypes = [!firrtl.uint], portDirections = 1 : i1,
     portNames = ["in0"], portAnnotations = [], portSyms = [],
     portLocations = [loc("foo")]} : () -> ()
 }
