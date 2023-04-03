@@ -3,7 +3,7 @@ from pycde import generator
 from pycde.types import Bits
 
 
-class AddInts(Module):
+class OrInts(Module):
   a = Input(Bits(32))
   b = Input(Bits(32))
   c = Output(Bits(32))
@@ -20,7 +20,7 @@ class Top(Module):
 
   @generator
   def construct(self):
-    add_ints = AddInts(a=self.a, b=self.b)
+    add_ints = OrInts(a=self.a, b=self.b)
     self.c = add_ints.c
 
 

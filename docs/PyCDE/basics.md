@@ -10,7 +10,7 @@ from pycde import Input, Output, Module, System
 from pycde import generator
 from pycde.types import Bits
 
-class AddInts(Module):
+class OrInts(Module):
     a = Input(Bits(32))
     b = Input(Bits(32))
     c = Output(Bits(32))
@@ -20,7 +20,7 @@ class AddInts(Module):
         self.c = self.a | self.b
 
 
-system = System([AddInts], name="ExampleSystem", output_directory="exsys")
+system = System([OrInts], name="ExampleSystem", output_directory="exsys")
 system.compile()
 ```
 
@@ -51,8 +51,8 @@ class Top(Module):
 
     @generator
     def construct(self):
-        add_ints = AddInts(a=self.a, b=self.b)
-        self.c = add_ints.c
+        or_ints = OrInts(a=self.a, b=self.b)
+        self.c = or_ints.c
 
 
 system = System([Top], name="ExampleSystem")
@@ -213,20 +213,21 @@ from pycde import modparams
 def AddInts(width: int):
 
   class AddInts(Module):
-    a = Input(Bits(width))
-    b = Input(Bits(width))
-    c = Output(Bits(width))
+    a = Input(UInt(width))
+    b = Input(UInt(width))
+    c = Output(UInt(width + 1))
 
     @generator
-    def construct(self):
-      self.c = self.a | self.b
+    def build(self):
+      self.c = self.a + self.b
 
   return AddInts
 
+
 class Top(Module):
-  a = Input(Bits(32))
-  b = Input(Bits(32))
-  c = Output(Bits(32))
+  a = Input(UInt(32))
+  b = Input(UInt(32))
+  c = Output(UInt(33))
 
   @generator
   def construct(self):

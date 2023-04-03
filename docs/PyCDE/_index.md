@@ -26,7 +26,7 @@ from pycde import Input, Output, Module, System
 from pycde import generator
 from pycde.types import Bits
 
-class AddInts(Module):
+class OrInts(Module):
     a = Input(Bits(32))
     b = Input(Bits(32))
     c = Output(Bits(32))
@@ -36,6 +36,6 @@ class AddInts(Module):
         self.c = self.a | self.b
 
 
-system = System([AddInts], name="ExampleSystem", output_directory="exsys")
+system = System([OrInts], name="ExampleSystem", output_directory="exsys")
 system.compile()
 ```

@@ -1,23 +1,27 @@
 from pycde import Input, Output, Module, System
 from pycde import generator, modparams
-from pycde.types import Bits
+from pycde.types import UInt
 
 
 @modparams
 def AddInts(width: int):
 
   class AddInts(Module):
-    a = Input(Bits(width))
-    b = Input(Bits(width))
-    c = Output(Bits(width))
+    a = Input(UInt(width))
+    b = Input(UInt(width))
+    c = Output(UInt(width + 1))
+
+    @generator
+    def build(self):
+      self.c = self.a + self.b
 
   return AddInts
 
 
 class Top(Module):
-  a = Input(Bits(32))
-  b = Input(Bits(32))
-  c = Output(Bits(32))
+  a = Input(UInt(32))
+  b = Input(UInt(32))
+  c = Output(UInt(33))
 
   @generator
   def construct(self):
