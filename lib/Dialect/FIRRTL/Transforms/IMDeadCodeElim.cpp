@@ -31,6 +31,10 @@ static bool isDeletableDeclaration(Operation *op) {
   if (auto name = dyn_cast<FNamableOp>(op))
     if (!name.hasDroppableName())
       return false;
+  // TODO: If uses are DCE'd, can delete this.
+  if (auto fop = dyn_cast<Forceable>(op))
+    if (fop.isForceable())
+      return false;
   return !hasDontTouch(op);
 }
 
