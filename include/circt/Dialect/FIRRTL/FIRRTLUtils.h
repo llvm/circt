@@ -160,7 +160,9 @@ inline FIRRTLType mapBaseType(FIRRTLType type,
                               function_ref<FIRRTLBaseType(FIRRTLBaseType)> fn) {
   return TypeSwitch<FIRRTLType, FIRRTLType>(type)
       .Case<FIRRTLBaseType>([&](auto base) { return fn(base); })
-      .Case<RefType>([&](auto ref) { return RefType::get(fn(ref.getType())); });
+      .Case<RefType>([&](auto ref) {
+        return RefType::get(fn(ref.getType()), ref.getForceable());
+      });
 }
 
 /// Given a type, return the corresponding lowered type for the HW dialect.
