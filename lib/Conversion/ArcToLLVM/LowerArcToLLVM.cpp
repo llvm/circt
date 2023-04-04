@@ -13,6 +13,7 @@
 #include "circt/Dialect/Arc/Ops.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Support/Namespace.h"
+#include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
@@ -475,6 +476,7 @@ LogicalResult LowerArcToLLVMPass::lowerArcToLLVM() {
                                      constAggregateGlobalsMap);
   populateHWToLLVMTypeConversions(converter);
   populateCombToLLVMConversionPatterns(converter, patterns);
+  arith::populateArithToLLVMConversionPatterns(converter, patterns);
 
   return applyFullConversion(getOperation(), target, std::move(patterns));
 }
