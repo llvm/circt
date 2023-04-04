@@ -3952,8 +3952,7 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
     if (fieldIdx < vectorType.getNumElements())
       return RefType::get(vectorType.getElementType());
     return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
-                                 "' in RefType of vector type ",
-                                 refType);
+                                 "' in RefType of vector type ", refType);
   }
   if (auto bundleType = inType.dyn_cast<BundleType>()) {
     if (fieldIdx >= bundleType.getNumElements()) {

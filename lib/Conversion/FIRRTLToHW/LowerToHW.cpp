@@ -1393,8 +1393,10 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
     // We lower zero width inout and outputs to a wire that isn't connected to
     // anything outside the module.  Inputs are lowered to zero.
     if (isZeroWidth && port.isInput()) {
-      Value newArg = bodyBuilder.create<WireOp>(
-          port.type, "." + port.getName().str() + ".0width_input").getResult();
+      Value newArg = bodyBuilder
+                         .create<WireOp>(port.type, "." + port.getName().str() +
+                                                        ".0width_input")
+                         .getResult();
       oldArg.replaceAllUsesWith(newArg);
       continue;
     }
@@ -1409,8 +1411,10 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
 
     // Outputs need a temporary wire so they can be connect'd to, which we
     // then return.
-    Value newArg = bodyBuilder.create<WireOp>(
-        port.type, "." + port.getName().str() + ".output").getResult();
+    Value newArg =
+        bodyBuilder
+            .create<WireOp>(port.type, "." + port.getName().str() + ".output")
+            .getResult();
     // Switch all uses of the old operands to the new ones.
     oldArg.replaceAllUsesWith(newArg);
 
@@ -2776,8 +2780,8 @@ LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   auto operand = getLoweredValue(op.getInput());
   if (!operand)
-    return handleZeroBit(op.getInput(),
-                         [&]() { return setLowering(op.getResult(), Value()); });
+    return handleZeroBit(
+        op.getInput(), [&]() { return setLowering(op.getResult(), Value()); });
 
   // Node operations are logical noops, but may carry annotations or be
   // referred to through an inner name. If a don't touch is present, ensure

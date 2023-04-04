@@ -134,8 +134,8 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
             auto wireOp = builder.create<WireOp>(type);
             for (auto field : llvm::enumerate(type)) {
               auto zero = createZeroValue(builder, field.value().type, cache);
-              auto acc = builder.create<SubfieldOp>(field.value().type, wireOp.getResult(),
-                                                    field.index());
+              auto acc = builder.create<SubfieldOp>(
+                  field.value().type, wireOp.getResult(), field.index());
               builder.create<StrictConnectOp>(acc, zero);
             }
             return wireOp.getResult();
@@ -144,7 +144,8 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
             auto wireOp = builder.create<WireOp>(type);
             auto zero = createZeroValue(builder, type.getElementType(), cache);
             for (unsigned i = 0, e = type.getNumElements(); i < e; ++i) {
-              auto acc = builder.create<SubindexOp>(zero.getType(), wireOp.getResult(), i);
+              auto acc = builder.create<SubindexOp>(zero.getType(),
+                                                    wireOp.getResult(), i);
               builder.create<StrictConnectOp>(acc, zero);
             }
             return wireOp.getResult();
@@ -1600,8 +1601,9 @@ LogicalResult InferResetsPass::implementAsyncReset(FModuleOp module,
                    << "- Promoting node to wire for move: " << nodeOp << "\n");
         ImplicitLocOpBuilder builder(nodeOp.getLoc(), nodeOp);
         auto wireOp = builder.create<WireOp>(
-            nodeOp.getResult().getType(), nodeOp.getNameAttr(), nodeOp.getNameKind(),
-            nodeOp.getAnnotationsAttr(), nodeOp.getInnerSymAttr());
+            nodeOp.getResult().getType(), nodeOp.getNameAttr(),
+            nodeOp.getNameKind(), nodeOp.getAnnotationsAttr(),
+            nodeOp.getInnerSymAttr());
         builder.create<StrictConnectOp>(wireOp.getResult(), nodeOp.getInput());
         nodeOp->replaceAllUsesWith(wireOp);
         nodeOp.erase();

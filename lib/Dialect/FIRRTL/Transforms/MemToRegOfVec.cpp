@@ -353,8 +353,10 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
     auto vecType = op.getResult().getType().cast<FVectorType>();
     for (auto anno : annos) {
       if (anno.isClass(memTapSourceClass)) {
-        for (size_t i = 0,
-                    e = op.getResult().getType().cast<FVectorType>().getNumElements();
+        for (size_t i = 0, e = op.getResult()
+                                   .getType()
+                                   .cast<FVectorType>()
+                                   .getNumElements();
              i != e; ++i) {
           NamedAttrList newAnno;
           newAnno.append("class", anno.getMember("class"));
@@ -421,7 +423,8 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
         generateRead(firMem, clk, adr, enb, dta, regOfVec.getResult(), builder);
       } else if (portKind == MemOp::PortKind::Write) {
         auto mask = getMask(builder, result);
-        generateWrite(firMem, clk, adr, enb, mask, dta, regOfVec.getResult(), builder);
+        generateWrite(firMem, clk, adr, enb, mask, dta, regOfVec.getResult(),
+                      builder);
       } else {
         auto wmode = getWmode(builder, result);
         auto wDta = getData(builder, result, true);

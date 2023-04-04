@@ -1815,7 +1815,8 @@ struct NodeBypass : public mlir::RewritePattern {
 } // namespace
 
 // Interesting names and symbols and don't touch force nodes to stick around.
-LogicalResult NodeOp::fold(FoldAdaptor adaptor, SmallVectorImpl<OpFoldResult>& results) {
+LogicalResult NodeOp::fold(FoldAdaptor adaptor,
+                           SmallVectorImpl<OpFoldResult> &results) {
   if (!hasDroppableName())
     return failure();
   if (hasDontTouch(getResult())) // handles inner symbols
@@ -2078,7 +2079,8 @@ static bool isDefinedByOneConstantOp(Value v) {
   return false;
 }
 
-static LogicalResult canonicalizeRegResetWithOneReset(RegResetOp reg, PatternRewriter &rewriter) {
+static LogicalResult
+canonicalizeRegResetWithOneReset(RegResetOp reg, PatternRewriter &rewriter) {
   if (!isDefinedByOneConstantOp(reg.getResetSignal()))
     return failure();
 
@@ -2412,7 +2414,8 @@ struct FoldReadWritePorts : public mlir::RewritePattern {
       if (deadReads[i]) {
         // Create a wire to replace the old result. Wire the sub-fields of the
         // old result to the relevant sub-fields of the write port.
-        auto wire = rewriter.create<WireOp>(result.getLoc(), result.getType()).getResult();
+        auto wire = rewriter.create<WireOp>(result.getLoc(), result.getType())
+                        .getResult();
         result.replaceAllUsesWith(wire);
 
         auto connect = [&](Value to, StringRef toName, Value from,
@@ -2715,7 +2718,8 @@ struct FoldRegMems : public mlir::RewritePattern {
     // Create a new register to store the data.
     auto ty = mem.getDataType();
     rewriter.setInsertionPointAfterValue(clock);
-    auto reg = rewriter.create<RegOp>(mem.getLoc(), ty, clock, mem.getName()).getResult();
+    auto reg = rewriter.create<RegOp>(mem.getLoc(), ty, clock, mem.getName())
+                   .getResult();
 
     // Helper to insert a given number of pipeline stages through registers.
     auto pipeline = [&](Value value, Value clock, const Twine &name,
@@ -2727,8 +2731,10 @@ struct FoldRegMems : public mlir::RewritePattern {
           os << mem.getName() << "_" << name << "_" << i;
         }
 
-        auto reg = rewriter.create<RegOp>(mem.getLoc(), value.getType(), clock,
-                                          rewriter.getStringAttr(regName)).getResult();
+        auto reg = rewriter
+                       .create<RegOp>(mem.getLoc(), value.getType(), clock,
+                                      rewriter.getStringAttr(regName))
+                       .getResult();
         rewriter.create<StrictConnectOp>(value.getLoc(), reg, value);
         value = reg;
       }
@@ -2903,9 +2909,9 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   if (!constReg) {
     SmallVector<NamedAttribute, 2> attrs(reg->getDialectAttrs());
     auto newReg = replaceOpWithNewOpAndCopyName<RegResetOp>(
-        rewriter, reg, reg.getResult().getType(), reg.getClockVal(), mux.getSel(),
-        mux.getHigh(), reg.getName(), reg.getNameKind(), reg.getAnnotations(),
-        reg.getInnerSymAttr());
+        rewriter, reg, reg.getResult().getType(), reg.getClockVal(),
+        mux.getSel(), mux.getHigh(), reg.getName(), reg.getNameKind(),
+        reg.getAnnotations(), reg.getInnerSymAttr());
     newReg->setDialectAttrs(attrs);
   }
   auto pt = rewriter.saveInsertionPoint();

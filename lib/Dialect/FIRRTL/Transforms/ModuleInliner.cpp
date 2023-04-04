@@ -801,10 +801,13 @@ void Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b, IRMapping &mapper,
     Value wire =
         TypeSwitch<FIRRTLType, Value>(type)
             .Case<FIRRTLBaseType>([&](auto base) {
-              return b.create<WireOp>(
-                  target.getLoc(), base, (prefix + portInfo[i].getName()).str(),
-                  NameKindEnum::DroppableName,
-                  ArrayAttr::get(context, newAnnotations), newSym).getResult();
+              return b
+                  .create<WireOp>(target.getLoc(), base,
+                                  (prefix + portInfo[i].getName()).str(),
+                                  NameKindEnum::DroppableName,
+                                  ArrayAttr::get(context, newAnnotations),
+                                  newSym)
+                  .getResult();
             })
             .Case<RefType>([&](auto refty) {
               // Symbols and annotations are not allowed, warn if dropping.

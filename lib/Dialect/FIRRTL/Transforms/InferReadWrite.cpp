@@ -154,10 +154,14 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       auto writeData = builder.create<SubfieldOp>(rwPort, "wdata");
       auto mask = builder.create<SubfieldOp>(rwPort, "wmask");
       // Temp wires to replace the original memory connects.
-      auto rAddr = builder.create<WireOp>(addr.getType(), "readAddr").getResult();
-      auto wAddr = builder.create<WireOp>(addr.getType(), "writeAddr").getResult();
-      auto wEnWire = builder.create<WireOp>(enb.getType(), "writeEnable").getResult();
-      auto rEnWire = builder.create<WireOp>(enb.getType(), "readEnable").getResult();
+      auto rAddr =
+          builder.create<WireOp>(addr.getType(), "readAddr").getResult();
+      auto wAddr =
+          builder.create<WireOp>(addr.getType(), "writeAddr").getResult();
+      auto wEnWire =
+          builder.create<WireOp>(enb.getType(), "writeEnable").getResult();
+      auto rEnWire =
+          builder.create<WireOp>(enb.getType(), "readEnable").getResult();
       auto writeClock =
           builder.create<WireOp>(ClockType::get(enb.getContext())).getResult();
       // addr = Mux(WriteEnable, WriteAddress, ReadAddress).

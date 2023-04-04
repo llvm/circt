@@ -56,8 +56,8 @@ void RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
 
   // Register is only written by itself, replace with invalid.
   if (con.getSrc() == reg.getResult()) {
-    auto inv =
-        OpBuilder(reg).create<InvalidValueOp>(reg.getLoc(), reg.getResult().getType());
+    auto inv = OpBuilder(reg).create<InvalidValueOp>(reg.getLoc(),
+                                                     reg.getResult().getType());
     reg.getResult().replaceAllUsesWith(inv.getResult());
     toErase.push_back(reg);
     toErase.push_back(con);
@@ -90,8 +90,8 @@ void RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
         reg.getResult().replaceAllUsesWith(con.getSrc());
         toErase.push_back(con);
       } else {
-        auto bounce =
-            OpBuilder(reg).create<WireOp>(reg.getLoc(), reg.getResult().getType());
+        auto bounce = OpBuilder(reg).create<WireOp>(reg.getLoc(),
+                                                    reg.getResult().getType());
         reg.replaceAllUsesWith(bounce);
       }
     }
