@@ -1611,6 +1611,12 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         mappingFailed = true;
       });
 
+  // Forceable declarations should have the ref constrained to data result.
+  if (auto fop = dyn_cast<Forceable>(op); fop && fop.isForceable()) {
+    declareVars(fop.getDataRef(), fop.getLoc());
+    constrainTypes(fop.getDataRef(), fop.getDataRaw());
+  }
+
   return failure(mappingFailed);
 }
 
