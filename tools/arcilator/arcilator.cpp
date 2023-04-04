@@ -254,7 +254,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   PassManager pm(&context);
   pm.enableVerifier(verifyPasses);
   pm.enableTiming(ts);
-  applyPassManagerCLOptions(pm);
+  if (failed(applyPassManagerCLOptions(pm)))
+    return failure();
   populatePipeline(pm);
 
   if (failed(pm.run(module.get())))
