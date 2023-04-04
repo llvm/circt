@@ -2035,7 +2035,7 @@ firrtl.module @MuxShorten(
 
 
 // CHECK-LABEL: firrtl.module @RegresetToReg
-firrtl.module @RegresetToReg(in %clock: !firrtl.clock, in %dummy : !firrtl.uint<1>, out %foo1: !firrtl.uint<1>, out %foo2: !firrtl.uint<1>, out %bar2_ref : !firrtl.rwprobe<uint<1>>) {
+firrtl.module @RegresetToReg(in %clock: !firrtl.clock, in %dummy : !firrtl.uint<1>, out %foo1: !firrtl.uint<1>, out %foo2: !firrtl.uint<1>) {
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   %zero_asyncreset = firrtl.asAsyncReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
@@ -2043,13 +2043,25 @@ firrtl.module @RegresetToReg(in %clock: !firrtl.clock, in %dummy : !firrtl.uint<
   // CHECK: %bar1 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %foo2, %dummy : !firrtl.uint<1>
   %bar1 = firrtl.regreset %clock, %zero_asyncreset, %dummy : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
-  %bar2, %bar2_f = firrtl.regreset %clock, %one_asyncreset, %dummy forceable : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
-  firrtl.ref.define %bar2_ref, %bar2_f : !firrtl.rwprobe<uint<1>>
+  %bar2 = firrtl.regreset %clock, %one_asyncreset, %dummy : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
 
   firrtl.strictconnect %bar2, %bar1 : !firrtl.uint<1> // Force a use to trigger a crash on a sink replacement
 
   firrtl.connect %foo1, %bar1 : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %foo2, %bar2 : !firrtl.uint<1>, !firrtl.uint<1>
+}
+
+// CHECK-LABEL: firrtl.module @ForceableRegResetToNode
+// Correctness, revisit if this is "valid" if forceable.
+firrtl.module @ForceableRegResetToNode(in %clock: !firrtl.clock, in %dummy : !firrtl.uint<1>, out %foo: !firrtl.uint<1>, out %ref : !firrtl.rwprobe<uint<1>>) {
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %one_asyncreset = firrtl.asAsyncReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+  // CHECK: %reg, %reg_ref = firrtl.node %dummy forceable : !firrtl.uint<1>
+  %reg, %reg_f = firrtl.regreset %clock, %one_asyncreset, %dummy forceable : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+  firrtl.ref.define %ref, %reg_f: !firrtl.rwprobe<uint<1>>
+
+  firrtl.connect %reg, %dummy: !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %foo, %reg: !firrtl.uint<1>, !firrtl.uint<1>
 }
 
 // https://github.com/llvm/circt/issues/929
