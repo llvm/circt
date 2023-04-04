@@ -224,6 +224,25 @@ firrtl.module @ConstToExplicitConstElementsVec(in %in : !firrtl.const.vector<uin
 firrtl.module @ConstToNonConstVec(in %in : !firrtl.const.vector<uint<1>, 3>, out %out : !firrtl.vector<uint<1>, 3>) {
   // CHECK: firrtl.connect %out, %in : !firrtl.vector<uint<1>, 3>, !firrtl.const.vector<uint<1>, 3>
   firrtl.connect %out, %in : !firrtl.vector<uint<1>, 3>, !firrtl.const.vector<uint<1>, 3>
+
 }
 
+firrtl.module @namedBundles(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>) {
+  %w = firrtl.wire : !firrtl<bundle "B1" <a "description a b c" : uint<1>>>
+  %0 = firrtl.subfield %w[a] : !firrtl<bundle "B1" <a "description a b c" : uint<1>>>
+  firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: %w = firrtl.wire : !firrtl<bundle "B1" <a "description a b c" : uint<1>>>
+  // CHECK: %0 = firrtl.subfield %w[a] : !firrtl<bundle "B1" <a "description a b c" : uint<1>>>
+  // CHECK: firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  %w1 = firrtl.wire : !firrtl<bundle "B1" <a "desc 1" : uint<1>, b : uint<1>>>
+  %w2 = firrtl.wire : !firrtl<bundle "B1" <a "desc 1" : uint<1>, b : uint<1>>>
+  %w3 = firrtl.wire : !firrtl<bundle "B2" <a : uint<1>, b : uint<1>>>
+  firrtl.strictconnect %w2, %w1 : !firrtl<bundle "B1" <a : uint<1>, b : uint<1>>>
+  // CHECK: %w1 = firrtl.wire : !firrtl<bundle "B1" <a "desc 1" : uint<1>, b: uint<1>>>
+  // CHECK: %w2 = firrtl.wire : !firrtl<bundle "B1" <a "desc 1" : uint<1>, b: uint<1>>>
+  // CHECK: firrtl.strictconnect %w2, %w1 : !firrtl<bundle "B1" <a "desc 1" : uint<1>, b: uint<1>>>
+  firrtl.connect %w2, %w3 : !firrtl<bundle "B1" <a : uint<1>, b : uint<1>>>, !firrtl<bundle "B2" <a : uint<1>, b : uint<1>>>
+  // CHECK: firrtl.connect %w2, %w3 : !firrtl<bundle "B1" <a "desc 1" : uint<1>, b: uint<1>>>, !firrtl<bundle "B2" <a: uint<1>, b: uint<1>>>
 }
