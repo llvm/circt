@@ -2473,7 +2473,8 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
     return emitError(startTok.getLoc(), "rwprobe of port not yet supported");
   auto *op = staticRef.getDefiningOp();
   if (!op)
-    return emitError(startTok.getLoc(), "rwprobe value must be defined by an operation");
+    return emitError(startTok.getLoc(),
+                     "rwprobe value must be defined by an operation");
   auto forceable = dyn_cast<Forceable>(op);
   if (!forceable)
     return emitError(startTok.getLoc(), "rwprobe target not forceable")
@@ -2552,7 +2553,8 @@ ParseResult FIRStmtParser::parseRefRelease() {
   Value clock, pred, dest;
   if (parseExp(clock, "expected clock expression in release") ||
       parseExp(pred, "expected predicate expression in release") ||
-      parseRefExp(dest, "expected destination reference expression in release") ||
+      parseRefExp(dest,
+                  "expected destination reference expression in release") ||
       parseToken(FIRToken::r_paren, "expected ')' in release") ||
       parseOptionalInfo())
     return failure();
@@ -2566,7 +2568,7 @@ ParseResult FIRStmtParser::parseRefRelease() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  builder.create<RefReleaseOp>(clock, pred, dest );
+  builder.create<RefReleaseOp>(clock, pred, dest);
 
   return success();
 }
@@ -2577,7 +2579,8 @@ ParseResult FIRStmtParser::parseRefReleaseInitial() {
 
   Value dest;
   if (parseRefExp(
-          dest, "expected destination reference expression in release_initial") ||
+          dest,
+          "expected destination reference expression in release_initial") ||
       parseToken(FIRToken::r_paren, "expected ')' in release_initial") ||
       parseOptionalInfo())
     return failure();
@@ -2594,7 +2597,6 @@ ParseResult FIRStmtParser::parseRefReleaseInitial() {
 
   return success();
 }
-
 
 /// leading-exp-stmt ::= exp '<=' exp info?
 ///                  ::= exp '<-' exp info?
