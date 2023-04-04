@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -split-input-file
+// RUN: circt-opt %s -split-input-file | circt-opt -split-input-file
 // RUN: firtool %s -split-input-file
 // These tests are just for demonstrating RefOps, and expected to not error.
 
