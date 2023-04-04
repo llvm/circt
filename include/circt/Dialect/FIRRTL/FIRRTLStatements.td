@@ -250,39 +250,36 @@ def ProbeOp : FIRRTLOp<"probe"> {
 
 //===- Reference force/release --------------------------------------------===//
 
-// TODO: Refactor constraints to common location, share.
-class StatementRefTypeConstraint<string ref, string base>
+class ForceRefTypeConstraint<string ref, string base>
   : TypesMatchWith<"reference type of " # ref # " should be RWProbe of " # base,
                    base, ref,
                    "RefType::get($_self.cast<FIRRTLBaseType>(), true)">;
 
-// TODO: Take RWProbe not Probe (or ref).
-
-def RefForceOp : FIRRTLOp<"ref.force",[StatementRefTypeConstraint<"dest", "src">]> {
+def RefForceOp : FIRRTLOp<"ref.force",[ForceRefTypeConstraint<"dest", "src">]> {
   let summary = "FIRRTL force statement";
   let description = "Force a RWProbe to the specified value using the specified clock and predicate.";
-  let arguments = (ins ClockType:$clock, UInt1Type:$predicate, RefType:$dest, FIRRTLBaseType:$src);
+  let arguments = (ins ClockType:$clock, UInt1Type:$predicate, RWProbe:$dest, FIRRTLBaseType:$src);
   let assemblyFormat =
     "$clock `,` $predicate `,` $dest `,` $src attr-dict `:` type($clock) `,` type($predicate) `,` qualified(type($src))";
 }
-def RefForceInitialOp : FIRRTLOp<"ref.force_initial",[StatementRefTypeConstraint<"dest", "src">]> {
+def RefForceInitialOp : FIRRTLOp<"ref.force_initial",[ForceRefTypeConstraint<"dest", "src">]> {
   let summary = "FIRRTL force_initial statement";
   let description = "Force a RWProbe to the specified value continuously.";
-  let arguments = (ins RefType:$dest, FIRRTLBaseType:$src);
+  let arguments = (ins RWProbe:$dest, FIRRTLBaseType:$src);
   let assemblyFormat =
     "$dest `,` $src attr-dict `:` qualified(type($src))";
 }
 def RefReleaseOp : FIRRTLOp<"ref.release"> {
   let summary = "FIRRTL release statement";
   let description = "Release the target RWProbe using the specified clock and predicate.";
-  let arguments = (ins ClockType:$clock, UInt1Type:$predicate, RefType:$dest);
+  let arguments = (ins ClockType:$clock, UInt1Type:$predicate, RWProbe:$dest);
   let assemblyFormat =
     "$clock `,` $predicate `,` $dest attr-dict `:` type($clock) `,` type($predicate) `,` qualified(type($dest))";
 }
 def RefReleaseInitialOp : FIRRTLOp<"ref.release_initial"> {
   let summary = "FIRRTL release_initial statement";
   let description = "Release the target RWProbe.";
-  let arguments = (ins RefType:$dest);
+  let arguments = (ins RWProbe:$dest);
   let assemblyFormat = "$dest attr-dict `:` qualified(type($dest))";
 }
 
