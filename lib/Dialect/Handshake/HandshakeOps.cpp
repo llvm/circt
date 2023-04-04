@@ -464,8 +464,7 @@ LogicalResult ControlMergeOp::inferReturnTypes(
 ParseResult ControlMergeOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
   Type resultType, indexType;
-  ArrayRef<Type> operandTypes(resultType);
-  SmallVector<Type, 1> resultTypes, dataOperandsTypes;
+  SmallVector<Type> resultTypes, dataOperandsTypes;
   llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
   int size;
   if (parseSostOperation(parser, allOperands, result, size, resultType, false))
