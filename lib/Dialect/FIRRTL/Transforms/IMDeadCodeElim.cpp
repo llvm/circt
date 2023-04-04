@@ -43,16 +43,21 @@ struct IMDeadCodeElimPass : public IMDeadCodeElimBase<IMDeadCodeElimPass> {
   void eraseEmptyModule(FModuleOp module);
   void forwardConstantOutputPort(FModuleOp module);
 
+  void markAlive(InstanceOp instance) {
+    markBlockUndeletable(instance->getBlock());
+    liveInstances.insert(instance);
+  }
+
   void markAlive(Value value) {
     //  If the value is already in `liveSet`, skip it.
-    if (liveSet.insert(value).second)
+    if (liveValues.insert(value).second)
       worklist.push_back(value);
   }
 
   /// Return true if the value is known alive.
   bool isKnownAlive(Value value) const {
     assert(value && "null should not be used");
-    return liveSet.count(value);
+    return liveValues.count(value);
   }
 
   /// Return true if the value is assumed dead.
@@ -93,8 +98,8 @@ private:
   /// A worklist of values whose liveness recently changed, indicating the
   /// users need to be reprocessed.
   SmallVector<Value, 64> worklist;
-  llvm::DenseSet<Value> liveSet;
-  llvm::DenseSet<InstanceOp> liveInstance;
+  llvm::DenseSet<Value> liveValues;
+  llvm::DenseSet<InstanceOp> liveInstances;
 
   /// The set of modules that cannot be removed for several reasons (side
   /// effects, ports/decls have don't touch).
@@ -150,18 +155,16 @@ void IMDeadCodeElimPass::markInstanceOp(InstanceOp instance) {
       // Otherwise this is an inuput from it or an inout, mark it as alive.
       markAlive(portVal);
     }
-    markBlockUndeletable(instance->getBlock());
-    liveInstance.insert(instance);
+    markAlive(instance);
+
     return;
   }
 
   // Otherwise this is a defined module.
   auto fModule = cast<FModuleOp>(op);
   markBlockExecutable(fModule.getBodyBlock());
-  if (isBlockUndeletable(fModule.getBodyBlock()) || instance.getInnerSym()) {
-    markBlockUndeletable(instance->getBlock());
-    liveInstance.insert(instance);
-  }
+  if (isBlockUndeletable(fModule.getBodyBlock()) || instance.getInnerSym())
+    markAlive(instance);
 
   // Ok, it is a normal internal module reference so populate
   // resultPortToInstanceResultMapping.
@@ -180,7 +183,8 @@ void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
   if (!executableBlocks.insert(block).second)
     return; // Already executable.
 
-  if (!cast<FModuleOp>(block->getParentOp()).getAnnotationsAttr().empty())
+  auto fmodule = cast<FModuleOp>(block->getParentOp());
+  if (fmodule.isPublic() || !fmodule.getAnnotationsAttr().empty())
     markBlockUndeletable(block);
 
   // Mark ports with don't touch as alive.
@@ -309,7 +313,7 @@ void IMDeadCodeElimPass::visitValue(Value value) {
       for (auto userOfResultPort :
            resultPortToInstanceResultMapping[blockArg]) {
         auto instance = userOfResultPort.getDefiningOp<InstanceOp>();
-        if (liveInstance.contains(instance))
+        if (liveInstances.contains(instance))
           markAlive(userOfResultPort);
         else
           lazyLiveInputPorts[instance].push_back(userOfResultPort);
@@ -333,7 +337,7 @@ void IMDeadCodeElimPass::visitValue(Value value) {
 
     // If the output port is alive, mark the instnace as alive. Propagate the
     // liveness of input ports accumulated so far.
-    if (liveInstance.insert(instance).second)
+    if (liveInstances.insert(instance).second)
       for (auto inputPort : lazyLiveInputPorts[instance])
         markAlive(inputPort);
 
@@ -413,48 +417,59 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
   LLVM_DEBUG(llvm::dbgs() << "Prune ports of module: " << module.getName()
                           << "\n");
 
-  auto replaceInstanceResultWithWire =
-      [&](ImplicitLocOpBuilder &builder, unsigned index, InstanceOp instance) {
-        auto result = instance.getResult(index);
-        // If RefType and live, don't want to leave wire around.
-        if (isa<RefType>(result.getType()) && isKnownAlive(result)) {
-          auto getRefDefine = [](Value result) -> RefDefineOp {
-            for (auto *user : result.getUsers()) {
-              if (auto rd = dyn_cast<RefDefineOp>(user);
-                  rd && rd.getDest() == result)
-                return rd;
-            }
-            return {};
-          };
-          auto rd = getRefDefine(result);
-          assert(rd && "input ref port to instance is alive, but no driver?");
-          assert(isKnownAlive(rd.getSrc()));
-          auto *srcDefOp = rd.getSrc().getDefiningOp();
-          if (srcDefOp && llvm::any_of(result.getUsers(), [&](auto user) {
-                return user->getBlock() != rd.getSrc().getParentBlock() ||
-                       user->isBeforeInBlock(rd.getSrc().getDefiningOp());
-              }))
-            llvm::report_fatal_error("unsupported IR with references in IMDCE");
-          result.replaceAllUsesWith(rd.getSrc());
-          ++numErasedOps;
-          rd.erase();
-          return;
+  auto replaceInstanceResultWithWire = [&](ImplicitLocOpBuilder &builder,
+                                           unsigned index,
+                                           InstanceOp instance) {
+    auto result = instance.getResult(index);
+    if (isAssumedDead(result)) {
+      // If the result is dead, replace the result with an unrealiazed
+      // conversion cast which works as a dummy placeholder.
+      auto wire = builder
+                      .create<mlir::UnrealizedConversionCastOp>(
+                          ArrayRef<Type>{result.getType()}, ArrayRef<Value>{})
+                      ->getResult(0);
+      result.replaceAllUsesWith(wire);
+      return;
+    }
+
+    // If RefType and live, don't want to leave wire around.
+    if (isa<RefType>(result.getType())) {
+      auto getRefDefine = [](Value result) -> RefDefineOp {
+        for (auto *user : result.getUsers()) {
+          if (auto rd = dyn_cast<RefDefineOp>(user);
+              rd && rd.getDest() == result)
+            return rd;
         }
-        WireOp wire = builder.create<WireOp>(result.getType());
-        result.replaceAllUsesWith(wire);
-        // If a module port is dead but its instance result is alive, the port
-        // is used as a temporary wire so make sure that a replaced wire is
-        // putted into `liveSet`.
-        if (isKnownAlive(result)) {
-          liveSet.erase(result);
-          liveSet.insert(wire);
-        }
+        return {};
       };
+      auto rd = getRefDefine(result);
+      assert(rd && "input ref port to instance is alive, but no driver?");
+      assert(isKnownAlive(rd.getSrc()));
+      auto *srcDefOp = rd.getSrc().getDefiningOp();
+      if (srcDefOp && llvm::any_of(result.getUsers(), [&](auto user) {
+            return user->getBlock() != rd.getSrc().getParentBlock() ||
+                   user->isBeforeInBlock(rd.getSrc().getDefiningOp());
+          }))
+        llvm::report_fatal_error("unsupported IR with references in IMDCE");
+      result.replaceAllUsesWith(rd.getSrc());
+      ++numErasedOps;
+      rd.erase();
+      return;
+    }
+
+    Value wire = builder.create<WireOp>(result.getType()).getResult();
+    result.replaceAllUsesWith(wire);
+    // If a module port is dead but its instance result is alive, the port
+    // is used as a temporary wire so make sure that a replaced wire is
+    // putted into `liveSet`.
+    liveValues.erase(result);
+    liveValues.insert(wire);
+  };
 
   // First, delete dead instances.
   for (auto *use : llvm::make_early_inc_range(instanceGraphNode->uses())) {
     auto instance = cast<InstanceOp>(*use->getInstance());
-    if (!liveInstance.count(instance)) {
+    if (!liveInstances.count(instance)) {
       // Replace old instance results with dummy wires.
       ImplicitLocOpBuilder builder(instance.getLoc(), instance);
       for (auto index : llvm::seq(0u, instance.getNumResults()))
@@ -505,8 +520,8 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
       WireOp wire = builder.create<WireOp>(argument.getType());
 
       // Since `liveSet` contains the port, we have to erase it from the set.
-      liveSet.erase(argument);
-      liveSet.insert(wire);
+      liveValues.erase(argument);
+      liveValues.insert(wire);
       argument.replaceAllUsesWith(wire);
       deadPortIndexes.set(index);
       continue;
@@ -514,9 +529,13 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
 
     // Replace the port with a dummy wire. This wire should be erased within
     // `rewriteModuleBody`.
-    WireOp wire = builder.create<WireOp>(argument.getType());
+    Value wire = builder
+                     .create<mlir::UnrealizedConversionCastOp>(
+                         ArrayRef<Type>{argument.getType()}, ArrayRef<Value>{})
+                     ->getResult(0);
+
     argument.replaceAllUsesWith(wire);
-    assert(isAssumedDead(wire.getResult()) && "dummy wire must be dead");
+    assert(isAssumedDead(wire) && "dummy wire must be dead");
     deadPortIndexes.set(index);
   }
 
@@ -527,14 +546,14 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
   // Erase arguments of the old module from liveSet to prevent from creating
   // dangling pointers.
   for (auto arg : module.getArguments())
-    liveSet.erase(arg);
+    liveValues.erase(arg);
 
   // Delete ports from the module.
   module.erasePorts(deadPortIndexes);
 
   // Add arguments of the new module to liveSet.
   for (auto arg : module.getArguments())
-    liveSet.insert(arg);
+    liveValues.insert(arg);
 
   // Rewrite all uses.
   for (auto *use : llvm::make_early_inc_range(instanceGraphNode->uses())) {
@@ -547,19 +566,19 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
     // Since we will rewrite instance op, it is necessary to remove old
     // instance results from liveSet.
     for (auto oldResult : instance.getResults())
-      liveSet.erase(oldResult);
+      liveValues.erase(oldResult);
 
     // Create a new instance op without dead ports.
     auto newInstance = instance.erasePorts(builder, deadPortIndexes);
 
     // Mark new results as alive.
     for (auto newResult : newInstance.getResults())
-      liveSet.insert(newResult);
+      liveValues.insert(newResult);
 
     instanceGraph->replaceInstance(instance, newInstance);
-    if (liveInstance.contains(instance)) {
-      liveInstance.erase(instance);
-      liveInstance.insert(newInstance);
+    if (liveInstances.contains(instance)) {
+      liveInstances.erase(instance);
+      liveInstances.insert(newInstance);
     }
     // Remove old one.
     instance.erase();
