@@ -942,25 +942,13 @@ UIntType UIntType::getConstType(bool isConst) {
 // Bundle Type
 //===----------------------------------------------------------------------===//
 
-<<<<<<< HEAD
-struct circt::firrtl::detail::BundleTypeStorage
-    : detail::FIRRTLBaseTypeStorage {
-  using KeyTy = std::pair<ArrayRef<BundleType::BundleElement>, char>;
-
-  BundleTypeStorage(ArrayRef<BundleType::BundleElement> elements, bool isConst)
-      : detail::FIRRTLBaseTypeStorage(isConst),
-        elements(elements.begin(), elements.end()), props{true, false, false,
-                                                          false, false} {
-=======
 struct circt::firrtl::detail::BundleTypeStorage : mlir::TypeStorage {
   using ElementsType = ArrayRef<BundleType::BundleElement>;
-  using KeyTy = std::pair<ArrayRef<BundleType::BundleElement>, StringAttr>;
+  using KeyTy = std::tuple<ArrayRef<BundleType::BundleElement>, char, StringAttr>;
 
-  BundleTypeStorage(KeyTy value)
-      : elements(value.first.begin(), value.first.end()),
-        bundleName(value.second) {
-    RecursiveTypeProperties props{true, false, false};
->>>>>>> e7259f548... [FIRRTLType] Add bundle name and field description to BundleType
+  BundleTypeStorage(ArrayRef<BundleType::BundleElement> elements, bool isConst, StringAttr bundleName)
+      : detail::FIRRTLBaseTypeStorage(isConst),
+      elements(value.first.begin(), value.first.end()), bundleName(value.second), props{true, false, false} {
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
@@ -980,26 +968,14 @@ struct circt::firrtl::detail::BundleTypeStorage : mlir::TypeStorage {
   }
 
   bool operator==(const KeyTy &key) const {
-<<<<<<< HEAD
-    return key == KeyTy(elements, isConst);
+    return key == KeyTy(elements, isConst, bundleName);
   }
 
   static llvm::hash_code hashKey(const KeyTy &key) {
     return llvm::hash_combine(
-        llvm::hash_combine_range(key.first.begin(), key.first.end()),
-        key.second);
-=======
-    return key.first == (ElementsType)elements && key.second == bundleName;
-  }
+        llvm::hash_combine_range(std::get<0>(key).begin(), std::get<0>(key).end()),
+        std::get<1>(key), std::get<2>(key));
 
-  static llvm::hash_code hashKey(const KeyTy &key) {
-    if (key.second)
-      return llvm::hash_combine(
-          llvm::hash_combine_range(key.first.begin(), key.first.end()),
-          llvm::hash_value(key.second));
-    else
-      return llvm::hash_combine_range(key.first.begin(), key.first.end());
->>>>>>> e7259f548... [FIRRTLType] Add bundle name and field description to BundleType
   }
 
   static BundleTypeStorage *construct(TypeStorageAllocator &allocator,
@@ -1019,24 +995,22 @@ struct circt::firrtl::detail::BundleTypeStorage : mlir::TypeStorage {
   BundleType passiveType;
 };
 
-<<<<<<< HEAD
 BundleType BundleType::get(MLIRContext *context,
                            ArrayRef<BundleElement> elements, bool isConst) {
   return Base::get(context, elements, isConst);
-=======
+}
 auto BundleType::getBundleName() const -> StringAttr {
   return getImpl()->bundleName;
->>>>>>> e7259f548... [FIRRTLType] Add bundle name and field description to BundleType
 }
 
 auto BundleType::getElements() const -> ArrayRef<BundleElement> {
   return getImpl()->elements;
 }
 
-BundleType BundleType::get(ArrayRef<BundleElement> elements,
+BundleType BundleType::get(ArrayRef<BundleElement> elements, bool isConst,
                            StringAttr bundleName) {
   return Base::get(bundleName.getContext(),
-                   std::make_pair(elements, bundleName));
+                   std::make_tuple(elements, isConst, bundleName));
 }
 
 BundleType BundleType::get(MLIRContext *context,
