@@ -262,7 +262,7 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
 }
 
 def SubindexOp : FIRRTLExprOp<"subindex", [
-    IndexConstraint<"input", "result">
+    InBoundsIndex
   ]> {
   let summary = "Extract an element of a vector value";
   let description = [{

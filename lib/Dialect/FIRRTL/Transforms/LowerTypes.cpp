@@ -1344,9 +1344,10 @@ bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
     return true;
   }
 
-  // Check for constant instances
-  if (ConstantOp arg =
-          dyn_cast_or_null<ConstantOp>(op.getIndex().getDefiningOp())) {
+  // Check for constant instances.  Only use this path if the constant fits in
+  // the subaccess.
+  ConstantOp arg = dyn_cast_or_null<ConstantOp>(op.getIndex().getDefiningOp());
+  if (arg && arg.getValue().getZExtValue() < vType.getNumElements()) {
     auto sio = builder->create<SubindexOp>(op.getInput(),
                                            arg.getValue().getExtValue());
     op.replaceAllUsesWith(sio.getResult());

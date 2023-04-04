@@ -141,4 +141,10 @@ def OneBitCastableType : AnyTypeOf<
   "1-bit uint/sint/analog, reset, asyncreset, or clock",
                                   "::circt::firrtl::FIRRTLBaseType">;
 
+def InBoundsIndex
+  : PredOpTrait<
+    "index must be in-bounds",
+    CPred<"$_op.getOperand(0).getType().cast<FVectorType>().getNumElements() > $index">
+  >;
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD
