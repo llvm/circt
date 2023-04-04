@@ -30,6 +30,15 @@ using namespace sv;
 
 using BindTable = DenseMap<Attribute, SmallDenseMap<Attribute, sv::BindOp>>;
 
+/// Track information about an InstanceOp that might be extracted.
+struct InstanceInfo {
+  // A set vector of this instance's forward dataflow slice.
+  SetVector<Operation *> forwardSlice;
+
+  // A vector of other instances that are dataflow sinks from this instance.
+  SmallVector<hw::InstanceOp> instanceSinks;
+};
+
 //===----------------------------------------------------------------------===//
 // StubExternalModules Helpers
 //===----------------------------------------------------------------------===//
@@ -90,8 +99,7 @@ static void getBackwardSliceSimple(Operation *rootOp,
 // in the backward slice, and return true.
 static bool getForwardSliceSimple(Operation *rootOp,
                                   SetVector<Operation *> &opsToClone,
-                                  SetVector<Operation *> &forwardSlice,
-                                  SmallVector<hw::InstanceOp> &instanceSinks) {
+                                  InstanceInfo &instanceInfo) {
   SmallPtrSet<Operation *, 32> visited;
   SmallVector<Operation *> worklist;
   worklist.push_back(rootOp);
@@ -99,14 +107,14 @@ static bool getForwardSliceSimple(Operation *rootOp,
 
   while (!worklist.empty()) {
     Operation *op = worklist.pop_back_val();
-    forwardSlice.insert(op);
+    instanceInfo.forwardSlice.insert(op);
 
     for (auto *user : op->getUsers()) {
       // If the dataflow is into an instance, mark it and move along.
       if (auto sinkInstance = dyn_cast<hw::InstanceOp>(user)) {
         assert(!opsToClone.contains(sinkInstance) &&
                "expected instances to not be present in opsToClone");
-        instanceSinks.push_back(sinkInstance);
+        instanceInfo.instanceSinks.push_back(sinkInstance);
         continue;
       }
 
@@ -184,12 +192,8 @@ static void addInstancesToCloneSet(
   // Track instances to potentially extract.
   llvm::SmallDenseSet<hw::InstanceOp> instancesToExtract;
 
-  // Track a mapping from instances to other instances that are dataflow sinks.
-  SmallDenseMap<hw::InstanceOp, SmallVector<hw::InstanceOp>>
-      instancesToInstanceSinks;
-
-  // Track a mapping from instances to their forward dataflow slice.
-  SmallDenseMap<hw::InstanceOp, SetVector<Operation *>> instancesToDataflow;
+  // Track info about instances to potentially extract.
+  SmallDenseMap<hw::InstanceOp, InstanceInfo> instanceInfo;
 
   // Check each input into the clone set.
   for (auto value : inputs) {
@@ -207,9 +211,7 @@ static void addInstancesToCloneSet(
 
     // Compute the instance's forward slice. If it wasn't fully contained in
     // the clone set, move along.
-    if (!getForwardSliceSimple(instance, opsToClone,
-                               instancesToDataflow[instance],
-                               instancesToInstanceSinks[instance]))
+    if (!getForwardSliceSimple(instance, opsToClone, instanceInfo[instance]))
       continue;
 
     instancesToExtract.insert(instance);
@@ -221,7 +223,7 @@ static void addInstancesToCloneSet(
     // test code or other instances. Check if all of the other instances are
     // also marked for extraction.
     bool allInstanceSinksExtractable = llvm::all_of(
-        instancesToInstanceSinks[instance], [&](hw::InstanceOp sinkInstance) {
+        instanceInfo[instance].instanceSinks, [&](hw::InstanceOp sinkInstance) {
           return instancesToExtract.contains(sinkInstance);
         });
 
@@ -263,7 +265,7 @@ static void addInstancesToCloneSet(
     // in general. The forward dataflow must be erased because the instance is
     // being erased, and we can't leave null operands after this pass. Also
     // erase any intermediate parents of the forward slice.
-    SetVector<Operation *> forwardSlice = instancesToDataflow[instance];
+    SetVector<Operation *> forwardSlice = instanceInfo[instance].forwardSlice;
     opsToErase.insert(instance);
     for (auto *forwardOp : forwardSlice)
       opsToErase.insert(forwardOp);
