@@ -242,5 +242,5 @@ firrtl.circuit "UninferredReset" {
 firrtl.circuit "UninferredRefReset" {
   // expected-error @+2 {{a port "reset" with abstract reset type was unable to be inferred by InferResets}}
   // expected-note @+1 {{the module with this uninferred reset port was defined here}}
-  firrtl.module @UninferredRefReset(in %reset: !firrtl.ref<reset>) {}
+  firrtl.module @UninferredRefReset(in %reset: !firrtl.probe<reset>) {}
 }

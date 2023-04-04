@@ -140,7 +140,7 @@ firrtl.module @CheckInitialization(in %p : !firrtl.uint<1>, out %out: !firrtl.ve
 
 // Check initialization error is produced for out-references
 firrtl.circuit "RefInitOut" {
-firrtl.module @RefInitOut(out %out : !firrtl.ref<uint<1>>) {
+firrtl.module @RefInitOut(out %out : !firrtl.probe<uint<1>>) {
   // expected-error @above {{port "out" not fully initialized in module "RefInitOut"}}
 }
 }
@@ -149,9 +149,9 @@ firrtl.module @RefInitOut(out %out : !firrtl.ref<uint<1>>) {
 
 // Check initialization error is produced for in-references
 firrtl.circuit "RefInitIn" {
-firrtl.module @Child(in %in: !firrtl.ref<uint<1>>) { }
+firrtl.module @Child(in %in: !firrtl.probe<uint<1>>) { }
 firrtl.module @RefInitIn() {
-  %child_in = firrtl.instance child @Child(in in : !firrtl.ref<uint<1>>)
+  %child_in = firrtl.instance child @Child(in in : !firrtl.probe<uint<1>>)
   // expected-error @above {{sink "child.in" not fully initialized in module "RefInitIn"}}
 }
 }

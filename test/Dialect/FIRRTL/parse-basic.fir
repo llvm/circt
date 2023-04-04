@@ -1153,8 +1153,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     module.in <= UInt(1)
 
   ; CHECK-LABEL: module private @RefsChild(
-  ; CHECK-SAME: out %r: !firrtl.ref<uint<1>>
-  ; CHECK-SAME: out %rw: !firrtl.ref<uint<1>>
+  ; CHECK-SAME: out %r: !firrtl.probe<uint<1>>
+  ; CHECK-SAME: out %rw: !firrtl.probe<uint<1>>
   module RefsChild :
     input in : UInt<1>
     output r : Probe<UInt<1>>
@@ -1177,7 +1177,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output out : UInt<1>
     output out2 : UInt<1>
     output out3 : UInt<3>
-    ; CHECK-SAME: out %agg_out: !firrtl.ref<bundle<a: uint<1>, b: uint>>
+    ; CHECK-SAME: out %agg_out: !firrtl.probe<bundle<a: uint<1>, b: uint>>
     output agg_out : Probe<{a: UInt<1>, b: UInt}>
 
     ; CHECK-NEXT: %[[RC_IN:.+]], %[[RC_R:.+]], %[[RC_RW:.+]] = firrtl.instance rc
@@ -1232,7 +1232,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     out <= and(read(probe(in)), UInt(1))
 
   ; CHECK-LABEL: extmodule private @RefExt(
-  ; CHECK-SAME:  in in: !firrtl.uint<1>, out r: !firrtl.ref<uint<1>> 
+  ; CHECK-SAME:  in in: !firrtl.uint<1>, out r: !firrtl.probe<uint<1>> 
   ; CHECK-SAME: internalPaths = ["in"]
   extmodule RefExt :
     input in : UInt<1>
@@ -1241,9 +1241,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK-LABEL: extmodule private @RefExtMore(
   ; CHECK-SAME:  in in: !firrtl.uint<1>
-  ; CHECK-SAME: out r: !firrtl.ref<uint<1>> 
+  ; CHECK-SAME: out r: !firrtl.probe<uint<1>> 
   ; CHECK-SAME: out data: !firrtl.uint<3> 
-  ; CHECK-SAME: out r2: !firrtl.ref<vector<bundle<a: uint<3>>, 3>>
+  ; CHECK-SAME: out r2: !firrtl.probe<vector<bundle<a: uint<3>>, 3>>
   ; CHECK-SAME: internalPaths = ["path.to.internal.signal", "in"]
   extmodule RefExtMore :
     input in : UInt<1>

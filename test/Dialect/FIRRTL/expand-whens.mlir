@@ -532,13 +532,13 @@ firrtl.module @aggregate_regreset(in %clock: !firrtl.clock, in %reset: !firrtl.u
 }
 
  // CHECK-LABEL: @refdefine
- firrtl.module @refdefine(in %x : !firrtl.uint<1>, out %out : !firrtl.ref<uint<1>>) {
+ firrtl.module @refdefine(in %x : !firrtl.uint<1>, out %out : !firrtl.probe<uint<1>>) {
    // CHECK-NEXT: %[[REF:.+]] = firrtl.ref.send %x
    // CHECK-NEXT: firrtl.ref.define %out, %[[REF]]
    // CHECK-NEXT: }
    firrtl.when %x : !firrtl.uint<1> {
      %ref = firrtl.ref.send %x : !firrtl.uint<1>
-     firrtl.ref.define %out, %ref : !firrtl.ref<uint<1>>
+     firrtl.ref.define %out, %ref : !firrtl.probe<uint<1>>
    }
  }
 }

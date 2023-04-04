@@ -236,7 +236,7 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
 
 def RefImpl : FIRRTLImplType<"Ref", [], "::circt::firrtl::FIRRTLType"> {
   let summary = [{
-    A reference type, such as `firrtl.ref<uint<1>>`.
+    A reference type, such as `firrtl.probe<uint<1>>` or `firrtl.rwprobe<uint<2>>`.
 
     Used for remote reads and writes of the wrapped base type.
 
@@ -247,14 +247,18 @@ def RefImpl : FIRRTLImplType<"Ref", [], "::circt::firrtl::FIRRTLType"> {
 
     Values of this type are used to capture dataflow paths,
     and do not represent a circuit element or entity.
+    
+    Generally read-only (probe), optionally forceable (rwprobe).
   }];
   let parameters = (ins TypeParameter<"::circt::firrtl::FIRRTLBaseType",
-                                      "Type of reference target">:$type);
+                                      "Type of reference target">:$type,
+                        "bool":$forceable);
   let genVerifyDecl = true;
 
   let skipDefaultBuilders = true;
   let builders = [
-    TypeBuilderWithInferredContext<(ins "::circt::firrtl::FIRRTLBaseType":$type)>
+    TypeBuilderWithInferredContext<(ins "::circt::firrtl::FIRRTLBaseType":$type,
+                                        CArg<"bool", "false">:$forceable)>
   ];
 }
 
