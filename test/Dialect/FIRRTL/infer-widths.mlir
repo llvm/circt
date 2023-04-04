@@ -532,13 +532,13 @@ firrtl.circuit "Foo" {
   ) {
     // CHECK: %0 = firrtl.regreset %clk, %rst, %c0_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<6>
     // CHECK: %1 = firrtl.regreset %clk, %rst, %c0_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<6>
-    // CHECK: %2 = firrtl.regreset %clk, %rst, %c0_ui17 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<17>, !firrtl.uint<17>
+    // CHECK: %2:2 = firrtl.regreset %clk, %rst, %c0_ui17 forceable : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<17>, !firrtl.uint<17>, !firrtl.rwprobe<uint<17>>
     // CHECK: %3 = firrtl.regreset %clk, %rst, %c0_ui17 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<17>, !firrtl.uint<17>
     %c0_ui = firrtl.constant 0 : !firrtl.uint
     %c0_ui17 = firrtl.constant 0 : !firrtl.uint<17>
     %0 = firrtl.regreset %clk, %rst, %c0_ui : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint, !firrtl.uint
     %1 = firrtl.regreset %clk, %rst, %c0_ui : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint, !firrtl.uint
-    %2 = firrtl.regreset %clk, %rst, %c0_ui17 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<17>, !firrtl.uint
+    %2:2 = firrtl.regreset %clk, %rst, %c0_ui17 forceable : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<17>, !firrtl.uint, !firrtl.rwprobe<uint>
     %3 = firrtl.regreset %clk, %rst, %c0_ui17 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<17>, !firrtl.uint
     %4 = firrtl.wire : !firrtl.uint
     %5 = firrtl.xor %1, %4 : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
@@ -817,22 +817,29 @@ firrtl.circuit "Foo" {
   firrtl.module @Foo() {}
 
   // CHECK-LABEL: @SubRef
-  // CHECK: out %x: !firrtl.probe<uint<2>>
-  firrtl.module private @SubRef(out %x: !firrtl.probe<uint>) {
-    %w = firrtl.wire : !firrtl.uint
+  // CHECK-SAME: out %x: !firrtl.probe<uint<2>>
+  // CHECK-SAME: out %y: !firrtl.rwprobe<uint<2>>
+  firrtl.module private @SubRef(out %x: !firrtl.probe<uint>, out %y : !firrtl.rwprobe<uint>) {
+    // CHECK: firrtl.wire forceable : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
+    %w, %w_rw = firrtl.wire forceable : !firrtl.uint, !firrtl.rwprobe<uint>
     %ref_w = firrtl.ref.send %w : !firrtl.uint
     firrtl.ref.define %x, %ref_w : !firrtl.probe<uint>
+    firrtl.ref.define %y, %w_rw : !firrtl.rwprobe<uint>
 
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     firrtl.connect %w, %c0_ui2 : !firrtl.uint, !firrtl.uint<2>
   }
   // CHECK-LABEL: @Ref
   // CHECK: out x: !firrtl.probe<uint<2>>
-  // CHECK: %sub_x : !firrtl.probe<uint<2>>
-  firrtl.module @Ref(out %r : !firrtl.uint) {
-    %sub_x = firrtl.instance sub @SubRef(out x: !firrtl.probe<uint>)
-    %res = firrtl.ref.resolve %sub_x : !firrtl.probe<uint>
-    firrtl.connect %r, %res : !firrtl.uint, !firrtl.uint
+  // CHECK-SAME: out y: !firrtl.rwprobe<uint<2>>
+  // CHECK: firrtl.ref.resolve %sub_x : !firrtl.probe<uint<2>>
+  // CHECK: firrtl.ref.resolve %sub_y : !firrtl.rwprobe<uint<2>>
+  firrtl.module @Ref(out %r : !firrtl.uint, out %s : !firrtl.uint) {
+    %sub_x, %sub_y = firrtl.instance sub @SubRef(out x: !firrtl.probe<uint>, out y: !firrtl.rwprobe<uint>)
+    %res_x = firrtl.ref.resolve %sub_x : !firrtl.probe<uint>
+    %res_y = firrtl.ref.resolve %sub_y : !firrtl.rwprobe<uint>
+    firrtl.connect %r, %res_x : !firrtl.uint, !firrtl.uint
+    firrtl.connect %s, %res_y : !firrtl.uint, !firrtl.uint
   }
 
   // CHECK-LABEL: @ForeignTypes
