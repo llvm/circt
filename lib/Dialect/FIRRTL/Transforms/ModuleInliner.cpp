@@ -562,7 +562,7 @@ private:
   /// the target, and does not trigger inlining on the target itself.
   void inlineInto(StringRef prefix, OpBuilder &b, IRMapping &mapper,
                   BackedgeBuilder &beb, SmallVectorImpl<Backedge> &edges,
-                  FModuleOp target,
+                  FModuleOp target, FModuleOp inlineToParent,
                   DenseMap<Attribute, Attribute> &symbolRenames,
                   ModuleNamespace &moduleNamespace);
 
@@ -1017,7 +1017,7 @@ void Inliner::flattenInstances(FModuleOp module) {
 // NOLINTNEXTLINE(misc-no-recursion)
 void Inliner::inlineInto(StringRef prefix, OpBuilder &b, IRMapping &mapper,
                          BackedgeBuilder &beb, SmallVectorImpl<Backedge> &edges,
-                         FModuleOp target,
+                         FModuleOp target, FModuleOp inlineToParent,
                          DenseMap<Attribute, Attribute> &symbolRenames,
                          ModuleNamespace &moduleNamespace) {
   auto moduleName = target.getNameAttr();
@@ -1074,7 +1074,7 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b, IRMapping &mapper,
     if (!rootMap[childModule.getNameAttr()].empty()) {
       for (auto sym : rootMap[childModule.getNameAttr()]) {
         auto &mnla = nlaMap[sym];
-        sym = mnla.reTop(target);
+        sym = mnla.reTop(inlineToParent);
         StringAttr instSym = getInnerSymName(instance);
         if (!instSym) {
           instSym = StringAttr::get(
@@ -1107,7 +1107,7 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b, IRMapping &mapper,
                   moduleNamespace);
     } else {
       inlineInto(nestedPrefix, b, mapper, beb, edges, childModule,
-                 symbolRenames, moduleNamespace);
+                 inlineToParent, symbolRenames, moduleNamespace);
     }
     currentPath.pop_back();
     activeHierpaths = parentActivePaths;
@@ -1203,8 +1203,8 @@ void Inliner::inlineInstances(FModuleOp parent) {
       flattenInto(nestedPrefix, b, mapper, beb, edges, target, {},
                   moduleNamespace);
     } else {
-      inlineInto(nestedPrefix, b, mapper, beb, edges, target, symbolRenames,
-                 moduleNamespace);
+      inlineInto(nestedPrefix, b, mapper, beb, edges, target, parent,
+                 symbolRenames, moduleNamespace);
     }
     currentPath.pop_back();
     activeHierpaths = parentActivePaths;

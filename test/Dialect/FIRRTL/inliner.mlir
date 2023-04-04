@@ -1139,3 +1139,26 @@ firrtl.circuit "Bug4882Rename"  {
     // CHECK-NEXT: %bar2_x = firrtl.wire sym @x {annotations = [{class = "test0"}]}
   }
 }
+
+// -----
+
+// Issue #4920 fixes a bug, the recursive inlining should consider the correct retop for NLAs.
+
+firrtl.circuit "DidNotContainSymbol" {
+  hw.hierpath private @path [@Bar1::@w, @Bar3]
+  firrtl.module private @Bar2() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance no sym @no @Bar1()
+  }
+  firrtl.module private @Bar1() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance bar3 sym @w @Bar3()
+  }
+  firrtl.module private @Bar3() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @path , class = "test0"}]} : !firrtl.uint<8>
+  }
+  firrtl.module @DidNotContainSymbol() {
+    firrtl.instance bar2 sym @w @Bar2()
+  }
+	// CHECK-LABEL: firrtl.module @DidNotContainSymbol() {
+  // CHECK-NEXT:     %bar2_no_bar3_w = firrtl.wire sym @w_0 {annotations = [{class = "test0"}]} : !firrtl.uint<8>
+  // CHECK-NEXT:  }
+}
