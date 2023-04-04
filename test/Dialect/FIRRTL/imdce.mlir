@@ -239,10 +239,9 @@ firrtl.circuit "RefPorts" {
     %dest3_resolved = firrtl.ref.resolve %dest3 : !firrtl.ref<uint<1>>
     firrtl.strictconnect %dest, %dest3_resolved : !firrtl.uint<1>
 
-    // Check dead resolve is deleted, even if send isn't.
-    // (Instance is dead too but need context-sensitive analysis to show that.)
-    // CHECK: @live_ref
-    %source4, %dest4 = firrtl.instance live_ref @live_ref(in source: !firrtl.uint<1>, out dest: !firrtl.ref<uint<1>>)
+    // Check dead resolve is deleted.
+    // CHECK-NOT: dead_instance
+    %source4, %dest4 = firrtl.instance dead_instance @live_ref(in source: !firrtl.uint<1>, out dest: !firrtl.ref<uint<1>>)
     firrtl.strictconnect %source4, %source : !firrtl.uint<1>
     // CHECK-NOT: firrtl.ref.resolve
     %unused5 = firrtl.ref.resolve %dest4 : !firrtl.ref<uint<1>>
@@ -316,5 +315,39 @@ firrtl.circuit "DeadInputPort"  {
     %bar_a = firrtl.instance bar  @Bar(in a: !firrtl.uint<1>)
     firrtl.strictconnect %bar_a, %a : !firrtl.uint<1>
     firrtl.strictconnect %b, %bar_a : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "DeleteInstance" {
+  firrtl.module private @SideEffect1(in %a: !firrtl.uint<1>, in %clock: !firrtl.clock) {
+    firrtl.printf %clock, %a, "foo"  : !firrtl.clock, !firrtl.uint<1>
+  }
+  firrtl.module private @SideEffect2(in %a: !firrtl.uint<1>, in %clock: !firrtl.clock) {
+    %s1_a, %s1_clock = firrtl.instance s1 @SideEffect1(in a: !firrtl.uint<1>, in clock: !firrtl.clock)
+    firrtl.strictconnect %s1_a, %a : !firrtl.uint<1>
+    firrtl.strictconnect %s1_clock, %clock : !firrtl.clock
+  }
+  firrtl.module private @PassThrough(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    firrtl.strictconnect %b, %a : !firrtl.uint<1>
+  }
+  // CHECK-LABEL: DeleteInstance
+  firrtl.module @DeleteInstance(in %a: !firrtl.uint<1>, in %clock: !firrtl.clock, out %b: !firrtl.uint<1>) {
+    // CHECK-NOT: p1
+    // CHECK: instance p2 @PassThrough
+    // CHECK-NEXT: instance s @SideEffect2
+    %p1_a, %p1_b = firrtl.instance p1 @PassThrough(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
+    %p2_a, %p2_b = firrtl.instance p2 @PassThrough(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
+    %s_a, %s_clock = firrtl.instance s @SideEffect2(in a: !firrtl.uint<1>, in clock: !firrtl.clock)
+    // CHECK-NEXT: firrtl.strictconnect %s_a, %a : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %s_clock, %clock : !firrtl.clock
+    // CHECK-NEXT: firrtl.strictconnect %p2_a, %a : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %b, %p2_b : !firrtl.uint<1>
+    firrtl.strictconnect %s_a, %a : !firrtl.uint<1>
+    firrtl.strictconnect %s_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %p1_a, %a : !firrtl.uint<1>
+    firrtl.strictconnect %p2_a, %a : !firrtl.uint<1>
+    firrtl.strictconnect %b, %p2_b : !firrtl.uint<1>
   }
 }
