@@ -1,5 +1,7 @@
-// RUN: circt-opt --firrtl-inliner %s
-// XFAIL: *
+// This test is expected to crash.  Use "not --crash" instead of XFAIL to work
+// around llvm-symbolizer being slow.  For more information, see:
+//   https://discourse.llvm.org/t/llvm-symbolizer-has-gotten-extremely-slow/67262
+// RUN: not --crash circt-opt --firrtl-inliner %s
 
 // Inliner does not support running before expand when's,
 // here was crash the reference-handling code because it assumes
