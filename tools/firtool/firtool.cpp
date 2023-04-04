@@ -518,13 +518,12 @@ static LogicalResult processBuffer(
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerIntrinsicsPass());
 
-  // TODO: Move this to the O1 pipeline.
-  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-      firrtl::createDropNamesPass(preserveMode));
-
   if (!disableOptimization)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createCSEPass());
+
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      firrtl::createDropNamesPass(preserveMode));
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
 
@@ -634,9 +633,6 @@ static LogicalResult processBuffer(
                                : blackBoxRootPath;
   pm.nest<firrtl::CircuitOp>().addPass(
       firrtl::createBlackBoxReaderPass(blackBoxRoot));
-
-  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-      firrtl::createDropNamesPass(preserveMode));
 
   // Run SymbolDCE as late as possible, but before InnerSymbolDCE. This is for
   // hierpathop's and just for general cleanup.
