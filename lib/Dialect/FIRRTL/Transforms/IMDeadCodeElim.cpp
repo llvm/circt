@@ -416,6 +416,30 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
   auto replaceInstanceResultWithWire =
       [&](ImplicitLocOpBuilder &builder, unsigned index, InstanceOp instance) {
         auto result = instance.getResult(index);
+        // If RefType and live, don't want to leave wire around.
+        if (isa<RefType>(result.getType()) && isKnownAlive(result)) {
+          auto getRefDefine = [](Value result) -> RefDefineOp {
+            for (auto *user : result.getUsers()) {
+              if (auto rd = dyn_cast<RefDefineOp>(user);
+                  rd && rd.getDest() == result)
+                return rd;
+            }
+            return {};
+          };
+          auto rd = getRefDefine(result);
+          assert(rd && "input ref port to instance is alive, but no driver?");
+          assert(isKnownAlive(rd.getSrc()));
+          auto *srcDefOp = rd.getSrc().getDefiningOp();
+          if (srcDefOp && llvm::any_of(result.getUsers(), [&](auto user) {
+                return user->getBlock() != rd.getSrc().getParentBlock() ||
+                       user->isBeforeInBlock(rd.getSrc().getDefiningOp());
+              }))
+            llvm::report_fatal_error("unsupported IR with references in IMDCE");
+          result.replaceAllUsesWith(rd.getSrc());
+          ++numErasedOps;
+          rd.erase();
+          return;
+        }
         WireOp wire = builder.create<WireOp>(result.getType());
         result.replaceAllUsesWith(wire);
         // If a module port is dead but its instance result is alive, the port

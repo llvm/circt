@@ -36,6 +36,8 @@ struct FIRParserOptions {
   /// This, along with numOMIRFiles provides structure to the buffers in the
   /// source manager.
   unsigned numAnnotationFiles;
+  bool scalarizeTopModule = false;
+  bool scalarizeExtModules = false;
 };
 
 mlir::OwningOpRef<mlir::ModuleOp> importFIRFile(llvm::SourceMgr &sourceMgr,

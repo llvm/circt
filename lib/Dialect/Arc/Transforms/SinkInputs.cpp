@@ -8,6 +8,7 @@
 
 #include "PassDetails.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "arc-sink-inputs"
@@ -25,38 +26,42 @@ struct SinkInputsPass : public SinkInputsBase<SinkInputsPass> {
 
 void SinkInputsPass::runOnOperation() {
   DenseMap<StringAttr, SmallVector<Operation *>> arcConstArgs;
-  DenseMap<StringAttr, SmallVector<StateOp>> arcUses;
+  DenseMap<StringAttr, SmallVector<Operation *>> arcUses;
 
   // Find all arc uses that use constant operands.
   auto module = getOperation();
-  module.walk([&](StateOp stateOp) {
-    auto arcName = stateOp.getArcAttr().getAttr();
-    arcUses[arcName].push_back(stateOp);
+  module.walk([&](Operation *op) {
+    TypeSwitch<Operation *>(op)
+        .Case<StateOp, CallOp>([&arcUses, &arcConstArgs](auto op) {
+          auto arcName = op.getArcAttr().getAttr();
+          arcUses[arcName].push_back(op);
 
-    SmallVector<Operation *> stateConsts(stateOp.getInputs().size());
-    for (auto [constArg, input] : llvm::zip(stateConsts, stateOp.getInputs()))
-      if (auto *op = input.getDefiningOp())
-        if (op->hasTrait<OpTrait::ConstantLike>())
-          constArg = op;
+          SmallVector<Operation *> stateConsts(op.getInputs().size());
+          for (auto [constArg, input] : llvm::zip(stateConsts, op.getInputs()))
+            if (auto *op = input.getDefiningOp())
+              if (op->template hasTrait<OpTrait::ConstantLike>())
+                constArg = op;
 
-    auto &arcConsts = arcConstArgs[arcName];
-    bool isFirst = arcConsts.empty();
-    if (isFirst)
-      arcConsts.resize(stateOp.getInputs().size());
+          auto &arcConsts = arcConstArgs[arcName];
+          bool isFirst = arcConsts.empty();
+          if (isFirst)
+            arcConsts.resize(op.getInputs().size());
 
-    for (auto [arcConstArg, stateConstArg] :
-         llvm::zip(arcConsts, stateConsts)) {
-      if (isFirst) {
-        arcConstArg = stateConstArg;
-        continue;
-      }
-      if (arcConstArg && stateConstArg &&
-          arcConstArg->getName() == stateConstArg->getName() &&
-          arcConstArg->getAttrDictionary() ==
-              stateConstArg->getAttrDictionary())
-        continue;
-      arcConstArg = nullptr;
-    }
+          for (auto [arcConstArg, stateConstArg] :
+               llvm::zip(arcConsts, stateConsts)) {
+            if (isFirst) {
+              arcConstArg = stateConstArg;
+              continue;
+            }
+            if (arcConstArg && stateConstArg &&
+                arcConstArg->getName() == stateConstArg->getName() &&
+                arcConstArg->getAttrDictionary() ==
+                    stateConstArg->getAttrDictionary())
+              continue;
+            arcConstArg = nullptr;
+          }
+        })
+        .Default([](auto) {});
   });
 
   // Now we go through all the defines and move the constant ops into the
@@ -78,19 +83,22 @@ void SinkInputsPass::runOnOperation() {
         defOp.getBodyBlock().getArgumentTypes(), defOp.getResultTypes()));
 
     // Rewrite all arc uses to not pass in the constant anymore.
-    for (auto stateOp : arcUses[defOp.getNameAttr()]) {
-      SmallPtrSet<Value, 4> maybeUnusedValues;
-      SmallVector<Value> newInputs;
-      for (auto [index, value] : llvm::enumerate(stateOp.getInputs())) {
-        if (toDelete[index])
-          maybeUnusedValues.insert(value);
-        else
-          newInputs.push_back(value);
-      }
-      stateOp.getInputsMutable().assign(newInputs);
-      for (auto value : maybeUnusedValues)
-        if (value.use_empty())
-          value.getDefiningOp()->erase();
+    for (auto *stateOp : arcUses[defOp.getNameAttr()]) {
+      TypeSwitch<Operation *>(stateOp).Case<StateOp, CallOp>(
+          [&toDelete](auto op) {
+            SmallPtrSet<Value, 4> maybeUnusedValues;
+            SmallVector<Value> newInputs;
+            for (auto [index, value] : llvm::enumerate(op.getInputs())) {
+              if (toDelete[index])
+                maybeUnusedValues.insert(value);
+              else
+                newInputs.push_back(value);
+            }
+            op.getInputsMutable().assign(newInputs);
+            for (auto value : maybeUnusedValues)
+              if (value.use_empty())
+                value.getDefiningOp()->erase();
+          });
     }
   }
 }

@@ -43,6 +43,15 @@ firrtl.circuit "Foo" {
     %c2_ui = firrtl.constant 2 : !firrtl.uint
     firrtl.connect %w, %invalid_ui : !firrtl.uint, !firrtl.uint
     firrtl.connect %w, %c2_ui : !firrtl.uint, !firrtl.uint
+
+    // Check that invalid values are inferred to width zero if not used in a
+    // connect.
+    // CHECK: firrtl.invalidvalue : !firrtl.uint<0>
+    // CHECK: firrtl.invalidvalue : !firrtl.bundle<x: uint<0>>
+    // CHECK: firrtl.invalidvalue : !firrtl.vector<uint<0>, 2>
+    %invalid_0 = firrtl.invalidvalue : !firrtl.uint
+    %invalid_1 = firrtl.invalidvalue : !firrtl.bundle<x: uint>
+    %invalid_2 = firrtl.invalidvalue : !firrtl.vector<uint, 2>
   }
 
   // CHECK-LABEL: @InferOutput
@@ -740,8 +749,8 @@ firrtl.circuit "Foo" {
     firrtl.connect %m_p1_data, %c0_ui5 : !firrtl.uint, !firrtl.uint<5>
     firrtl.connect %m_p2_wdata, %c0_ui7 : !firrtl.uint, !firrtl.uint<7>
     firrtl.connect %out, %m_p0_data : !firrtl.uint, !firrtl.uint
-    firrtl.connect %dbg, %m_dbg : !firrtl.ref<vector<uint, 8>>, !firrtl.ref<vector<uint, 8>>
-    // CHECK:  firrtl.connect %dbg, %m_dbg : !firrtl.ref<vector<uint<7>, 8>>, !firrtl.ref<vector<uint<7>, 8>>
+    firrtl.ref.define %dbg, %m_dbg : !firrtl.ref<vector<uint, 8>>
+    // CHECK:  firrtl.ref.define %dbg, %m_dbg : !firrtl.ref<vector<uint<7>, 8>>
   }
 
   // CHECK-LABEL: @MemBundle
@@ -812,7 +821,7 @@ firrtl.circuit "Foo" {
   firrtl.module private @SubRef(out %x: !firrtl.ref<uint>) {
     %w = firrtl.wire : !firrtl.uint
     %ref_w = firrtl.ref.send %w : !firrtl.uint
-    firrtl.connect %x, %ref_w : !firrtl.ref<uint>, !firrtl.ref<uint>
+    firrtl.ref.define %x, %ref_w : !firrtl.ref<uint>
 
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     firrtl.connect %w, %c0_ui2 : !firrtl.uint, !firrtl.uint<2>
@@ -835,5 +844,12 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: [[W0:%.+]] = firrtl.wire : index
     // CHECK-NEXT: [[W1:%.+]] = firrtl.wire : index
     // CHECK-NEXT: firrtl.strictconnect [[W0]], [[W1]] : index
+  }
+
+  // CHECK-LABEL: @Issue4859
+  firrtl.module @Issue4859() {
+    %invalid = firrtl.invalidvalue : !firrtl.bundle<a: vector<uint, 2>>
+    %0 = firrtl.subfield %invalid[a] : !firrtl.bundle<a: vector<uint, 2>>
+    %1 = firrtl.subindex %0[0] : !firrtl.vector<uint, 2>
   }
 }

@@ -113,11 +113,9 @@ hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d:
   // CHECK-NEXT:          %15 = sv.read_inout %_RANDOM_7 : !hw.inout<i32>
   // CHECK-NEXT:          sv.bpassign %rNoSym, %15 : i32
   // CHECK-NEXT:       }
-  // CHECK-NEXT:       sv.ifdef.procedural  "RANDOMIZE" {
-  // CHECK-NEXT:         sv.if %rst {
-  // CHECK-NEXT:           sv.bpassign %rC, %c0_i32 : i32
-  // CHECK-NEXT:           sv.bpassign %rF, %c0_i32 : i32
-  // CHECK-NEXT:         }
+  // CHECK-NEXT:       sv.if %rst {
+  // CHECK-NEXT:         sv.bpassign %rC, %c0_i32 : i32
+  // CHECK-NEXT:         sv.bpassign %rF, %c0_i32 : i32
   // CHECK-NEXT:       }
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.ifdef  "FIRRTL_AFTER_INITIAL" {
@@ -228,44 +226,44 @@ hw.module private @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (
   %3 = comb.extract %2 from 1 : (i33) -> i32
   %4 = comb.mux bin %io_en, %io_d, %3 : i32
 
-  // CHECK:      %reg = sv.reg sym @[[reg_sym:.+]] : !hw.inout<i32>
-  // CHECK-NEXT: %0 = sv.read_inout %reg : !hw.inout<i32>
-  // CHECK-NEXT: %reg2 = sv.reg sym @[[reg2_sym:.+]] : !hw.inout<i32>
-  // CHECK-NEXT: %1 = sv.read_inout %reg2 : !hw.inout<i32>
-  // CHECK-NEXT: %reg3 = sv.reg sym @[[reg3_sym:.+]] : !hw.inout<i32
-  // CHECK-NEXT: %2 = sv.read_inout %reg3 : !hw.inout<i32>
-  // CHECK-NEXT: %3 = comb.concat %false, %0 : i1, i32
-  // CHECK-NEXT: %4 = comb.concat %false, %1 : i1, i32
-  // CHECK-NEXT: %5 = comb.add %3, %4 : i33
-  // CHECK-NEXT: %6 = comb.extract %5 from 1 : (i33) -> i32
-  // CHECK-NEXT: %7 = comb.mux bin %io_en, %io_d, %6 : i32
-  // CHECK-NEXT: sv.always posedge %clock, posedge %reset  {
-  // CHECK-NEXT:   sv.if %reset {
-  // CHECK-NEXT:     sv.passign %reg, %c0_i32 : i32
-  // CHECK-NEXT:     sv.passign %reg3, %c1_i32 : i32
-  // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     sv.if %io_en {
-  // CHECK-NEXT:       sv.passign %reg, %io_d : i32
-  // CHECK-NEXT:     } else {
-  // CHECK-NEXT:       sv.passign %reg, %6 : i32
-  // CHECK-NEXT:     }
-  // CHECK-NEXT:     sv.passign %reg3, %2 : i32
-  // CHECK-NEXT:   }
-  // CHECK-NEXT: }
-  // CHECK-NEXT: sv.always posedge %clock  {
-  // CHECK-NEXT:   sv.if %reset  {
-  // CHECK-NEXT:     sv.passign %reg2, %c0_i32 : i32
-  // CHECK-NEXT:   } else  {
-  // CHECK-NEXT:   }
-  // CHECK-NEXT: }
-  // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
-  // CHECK-NEXT: } else {
-  // CHECK-NEXT:   sv.ordered {
-  // CHECK-NEXT:     sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
-  // CHECK-NEXT:       sv.verbatim "`FIRRTL_BEFORE_INITIAL"
-  // CHECK-NEXT:     }
-  // CHECK-NEXT:     sv.initial {
-  // CHECK-NEXT:       sv.ifdef.procedural "INIT_RANDOM_PROLOG_" {
+  // COMMON:       %reg = sv.reg sym @[[reg_sym:.+]] : !hw.inout<i32>
+  // COMMON-NEXT:  %0 = sv.read_inout %reg : !hw.inout<i32>
+  // COMMON-NEXT:  %reg2 = sv.reg sym @[[reg2_sym:.+]] : !hw.inout<i32>
+  // COMMON-NEXT:  %1 = sv.read_inout %reg2 : !hw.inout<i32>
+  // COMMON-NEXT:  %reg3 = sv.reg sym @[[reg3_sym:.+]] : !hw.inout<i32
+  // COMMON-NEXT:  %2 = sv.read_inout %reg3 : !hw.inout<i32>
+  // COMMON-NEXT:  %3 = comb.concat %false, %0 : i1, i32
+  // COMMON-NEXT:  %4 = comb.concat %false, %1 : i1, i32
+  // COMMON-NEXT:  %5 = comb.add %3, %4 : i33
+  // COMMON-NEXT:  %6 = comb.extract %5 from 1 : (i33) -> i32
+  // COMMON-NEXT:  %7 = comb.mux bin %io_en, %io_d, %6 : i32
+  // COMMON-NEXT:  sv.always posedge %clock, posedge %reset  {
+  // COMMON-NEXT:    sv.if %reset {
+  // COMMON-NEXT:      sv.passign %reg, %c0_i32 : i32
+  // COMMON-NEXT:      sv.passign %reg3, %c1_i32 : i32
+  // COMMON-NEXT:    } else {
+  // COMMON-NEXT:      sv.if %io_en {
+  // COMMON-NEXT:        sv.passign %reg, %io_d : i32
+  // COMMON-NEXT:      } else {
+  // COMMON-NEXT:        sv.passign %reg, %6 : i32
+  // COMMON-NEXT:      }
+  // COMMON-NEXT:      sv.passign %reg3, %2 : i32
+  // COMMON-NEXT:    }
+  // COMMON-NEXT:  }
+  // COMMON-NEXT:  sv.always posedge %clock  {
+  // COMMON-NEXT:    sv.if %reset  {
+  // COMMON-NEXT:      sv.passign %reg2, %c0_i32 : i32
+  // COMMON-NEXT:    } else  {
+  // COMMON-NEXT:    }
+  // COMMON-NEXT:  }
+  // COMMON-NEXT:  sv.ifdef "SYNTHESIS"  {
+  // COMMON-NEXT:  } else {
+  // COMMON-NEXT:    sv.ordered {
+  // COMMON-NEXT:      sv.ifdef  "FIRRTL_BEFORE_INITIAL" {
+  // COMMON-NEXT:        sv.verbatim "`FIRRTL_BEFORE_INITIAL"
+  // COMMON-NEXT:      }
+  // COMMON-NEXT:      sv.initial {
+  // CHECK:            sv.ifdef.procedural "INIT_RANDOM_PROLOG_" {
   // CHECK-NEXT:         sv.verbatim "`INIT_RANDOM_PROLOG_"
   // CHECK-NEXT:       }
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
@@ -285,19 +283,17 @@ hw.module private @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (
   // CHECK-NEXT:         %10 = sv.read_inout %_RANDOM_2 : !hw.inout<i32>
   // CHECK-NEXT:         sv.bpassign %reg3, %10 : i32
   // CHECK-NEXT:       }
-  // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE"  {
-  // CHECK-NEXT:         sv.if %reset {
-  // CHECK-NEXT:           sv.bpassign %reg, %c0_i32 : i32
-  // CHECK-NEXT:           sv.bpassign %reg3, %c1_i32 : i32
-  // CHECK-NEXT:         }
-  // CHECK-NEXT:       }
-  // CHECK-NEXT:     }
-  // CHECK-NEXT:     sv.ifdef  "FIRRTL_AFTER_INITIAL" {
-  // CHECK-NEXT:       sv.verbatim "`FIRRTL_AFTER_INITIAL"
-  // CHECK-NEXT:     }
-  // CHECK-NEXT:   }
-  // CHECK-NEXT: }
-  // CHECK-NEXT: hw.output %0 : i32
+  // COMMON-NEXT:      sv.if %reset {
+  // COMMON-NEXT:        sv.bpassign %reg, %c0_i32 : i32
+  // COMMON-NEXT:        sv.bpassign %reg3, %c1_i32 : i32
+  // COMMON-NEXT:      }
+  // COMMON-NEXT:    }
+  // COMMON-NEXT:    sv.ifdef  "FIRRTL_AFTER_INITIAL" {
+  // COMMON-NEXT:      sv.verbatim "`FIRRTL_AFTER_INITIAL"
+  // COMMON-NEXT:    }
+  // COMMON-NEXT:  }
+  // COMMON-NEXT: }
+  // COMMON-NEXT: hw.output %0 : i32
   hw.output %reg : i32
 }
 

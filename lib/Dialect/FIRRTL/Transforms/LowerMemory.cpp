@@ -222,7 +222,9 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
 
   // Create the wrapper module, inserting it into the bottom of the circuit.
   auto b = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
-  auto wrapper = b.create<FModuleOp>(mem->getLoc(), wrapperName, ports);
+  auto wrapper = b.create<FModuleOp>(
+      mem->getLoc(), wrapperName,
+      ConventionAttr::get(context, Convention::Internal), ports);
   SymbolTable::setSymbolVisibility(wrapper, SymbolTable::Visibility::Private);
 
   // Create an instance of the external memory module. The instance has the

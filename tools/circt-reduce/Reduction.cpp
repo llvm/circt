@@ -241,7 +241,8 @@ struct ModuleExternalizer : public Reduction {
     builder.create<firrtl::FExtModuleOp>(
         module->getLoc(),
         module->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()),
-        module.getPorts(), StringRef(), module.getAnnotationsAttr());
+        module.getConventionAttr(), module.getPorts(), StringRef(),
+        module.getAnnotationsAttr());
     module->erase();
     return success();
   }

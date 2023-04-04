@@ -30,12 +30,13 @@ using namespace firrtl;
 // write.
 static Value dropWrite(PatternRewriter &rewriter, OpResult old,
                        Value passthrough) {
-  for (auto *user : llvm::make_early_inc_range(old.getUsers())) {
-    if (auto connect = dyn_cast<FConnectLike>(user)) {
+  SmallPtrSet<Operation *, 8> users;
+  for (auto *user : old.getUsers())
+    users.insert(user);
+  for (Operation *user : users)
+    if (auto connect = dyn_cast<FConnectLike>(user))
       if (connect.getDest() == old)
         rewriter.eraseOp(user);
-    }
-  }
   return passthrough;
 }
 
@@ -371,8 +372,7 @@ OpFoldResult AddPrimOp::fold(FoldAdaptor adaptor) {
 void AddPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results.insert<patterns::moveConstAdd, patterns::AddOfZero,
-                 patterns::AddOfSelf, patterns::AddOfPadL, patterns::AddOfPadR>(
-      context);
+                 patterns::AddOfSelf, patterns::AddOfPad>(context);
 }
 
 OpFoldResult SubPrimOp::fold(FoldAdaptor adaptor) {
@@ -532,7 +532,8 @@ void AndPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results
       .insert<patterns::extendAnd, patterns::moveConstAnd, patterns::AndOfZero,
-              patterns::AndOfAllOne, patterns::AndOfSelf>(context);
+              patterns::AndOfAllOne, patterns::AndOfSelf, patterns::AndOfPad>(
+          context);
 }
 
 OpFoldResult OrPrimOp::fold(FoldAdaptor adaptor) {
@@ -570,7 +571,8 @@ OpFoldResult OrPrimOp::fold(FoldAdaptor adaptor) {
 void OrPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
   results.insert<patterns::extendOr, patterns::moveConstOr, patterns::OrOfZero,
-                 patterns::OrOfAllOne, patterns::OrOfSelf>(context);
+                 patterns::OrOfAllOne, patterns::OrOfSelf, patterns::OrOfPad>(
+      context);
 }
 
 OpFoldResult XorPrimOp::fold(FoldAdaptor adaptor) {
@@ -597,7 +599,8 @@ OpFoldResult XorPrimOp::fold(FoldAdaptor adaptor) {
 void XorPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results.insert<patterns::extendXor, patterns::moveConstXor,
-                 patterns::XorOfZero, patterns::XorOfSelf>(context);
+                 patterns::XorOfZero, patterns::XorOfSelf, patterns::XorOfPad>(
+      context);
 }
 
 void LEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -1003,6 +1006,11 @@ OpFoldResult NotPrimOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+void NotPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.insert<patterns::NotNot>(context);
+}
+
 OpFoldResult AndRPrimOp::fold(FoldAdaptor adaptor) {
   if (!hasKnownWidthIntTypes(*this))
     return {};
@@ -1124,7 +1132,7 @@ struct CatBitsBits : public mlir::RewritePattern {
 
 void CatPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.insert<CatBitsBits>(context);
+  results.insert<CatBitsBits, patterns::CatDoubleConst>(context);
 }
 
 OpFoldResult BitCastOp::fold(FoldAdaptor adaptor) {
@@ -1265,12 +1273,104 @@ public:
     return success();
   }
 };
+
+// Find muxes which have conditions dominated by other muxes with the same
+// condition.
+class MuxSharedCond : public mlir::RewritePattern {
+public:
+  MuxSharedCond(MLIRContext *context)
+      : RewritePattern(MuxPrimOp::getOperationName(), 0, context) {}
+
+  static const int depthLimit = 5;
+
+  Value updateOrClone(MuxPrimOp mux, Value high, Value low,
+                      mlir::PatternRewriter &rewriter,
+                      bool updateInPlace) const {
+    if (updateInPlace) {
+      rewriter.updateRootInPlace(mux, [&] {
+        mux.setOperand(1, high);
+        mux.setOperand(2, low);
+      });
+      return {};
+    }
+    rewriter.setInsertionPointAfter(mux);
+    return rewriter
+        .create<MuxPrimOp>(mux.getLoc(), mux.getType(),
+                           ValueRange{mux.getSel(), high, low})
+        .getResult();
+  }
+
+  // Walk a dependent mux tree assuming the condition cond is true.
+  Value tryCondTrue(Value op, Value cond, mlir::PatternRewriter &rewriter,
+                    bool updateInPlace, int limit) const {
+    MuxPrimOp mux = op.getDefiningOp<MuxPrimOp>();
+    if (!mux)
+      return {};
+    if (mux.getSel() == cond)
+      return mux.getHigh();
+    if (limit > depthLimit)
+      return {};
+    updateInPlace &= mux->hasOneUse();
+
+    if (Value v = tryCondTrue(mux.getHigh(), cond, rewriter, updateInPlace,
+                              limit + 1))
+      return updateOrClone(mux, v, mux.getLow(), rewriter, updateInPlace);
+
+    if (Value v =
+            tryCondTrue(mux.getLow(), cond, rewriter, updateInPlace, limit + 1))
+      return updateOrClone(mux, mux.getHigh(), v, rewriter, updateInPlace);
+    return {};
+  }
+
+  // Walk a dependent mux tree assuming the condition cond is false.
+  Value tryCondFalse(Value op, Value cond, mlir::PatternRewriter &rewriter,
+                     bool updateInPlace, int limit) const {
+    MuxPrimOp mux = op.getDefiningOp<MuxPrimOp>();
+    if (!mux)
+      return {};
+    if (mux.getSel() == cond)
+      return mux.getLow();
+    if (limit > depthLimit)
+      return {};
+    updateInPlace &= mux->hasOneUse();
+
+    if (Value v = tryCondFalse(mux.getHigh(), cond, rewriter, updateInPlace,
+                               limit + 1))
+      return updateOrClone(mux, v, mux.getLow(), rewriter, updateInPlace);
+
+    if (Value v = tryCondFalse(mux.getLow(), cond, rewriter, updateInPlace,
+                               limit + 1))
+      return updateOrClone(mux, mux.getHigh(), v, rewriter, updateInPlace);
+
+    return {};
+  }
+
+  LogicalResult
+  matchAndRewrite(Operation *op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto mux = cast<MuxPrimOp>(op);
+    auto width = mux.getType().getBitWidthOrSentinel();
+    if (width < 0)
+      return failure();
+
+    if (Value v = tryCondTrue(mux.getHigh(), mux.getSel(), rewriter, true, 0)) {
+      rewriter.updateRootInPlace(mux, [&] { mux.setOperand(1, v); });
+      return success();
+    }
+
+    if (Value v = tryCondFalse(mux.getLow(), mux.getSel(), rewriter, true, 0)) {
+      rewriter.updateRootInPlace(mux, [&] { mux.setOperand(2, v); });
+      return success();
+    }
+
+    return failure();
+  }
+};
 } // namespace
 
 void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.add<MuxPad, patterns::MuxNot, patterns::MuxSameCondLow,
-              patterns::MuxSameCondHigh, patterns::MuxSameTrue,
+  results.add<MuxPad, MuxSharedCond, patterns::MuxNot, patterns::MuxSameTrue,
               patterns::MuxSameFalse, patterns::NarrowMuxLHS,
               patterns::NarrowMuxRHS>(context);
 }
@@ -1873,10 +1973,35 @@ static Attribute collectFields(MLIRContext *context,
 }
 
 OpFoldResult BundleCreateOp::fold(FoldAdaptor adaptor) {
+  // bundle_create(%foo["a"], %foo["b"]) -> %foo when the type of %foo is
+  // bundle<a:..., b:...>.
+  if (SubfieldOp first = getOperand(0).getDefiningOp<SubfieldOp>())
+    if (first.getFieldIndex() == 0 && first.getInput().getType() == getType() &&
+        llvm::all_of(
+            llvm::drop_begin(llvm::enumerate(getOperands().drop_front())),
+            [&](auto elem) {
+              auto subindex = elem.value().template getDefiningOp<SubfieldOp>();
+              return subindex && subindex.getInput() == first.getInput() &&
+                     subindex.getFieldIndex() == elem.index();
+            }))
+      return first.getInput();
+
   return collectFields(getContext(), adaptor.getOperands());
 }
 
 OpFoldResult VectorCreateOp::fold(FoldAdaptor adaptor) {
+  // vector_create(%foo[0], %foo[1]) -> %foo when the type of %foo is
+  // vector<..., 2>.
+  if (SubindexOp first = getOperand(0).getDefiningOp<SubindexOp>())
+    if (first.getIndex() == 0 && first.getInput().getType() == getType() &&
+        llvm::all_of(
+            llvm::drop_begin(llvm::enumerate(getOperands())), [&](auto elem) {
+              auto subindex = elem.value().template getDefiningOp<SubindexOp>();
+              return subindex && subindex.getInput() == first.getInput() &&
+                     subindex.getIndex() == elem.index();
+            }))
+      return first.getInput();
+
   return collectFields(getContext(), adaptor.getOperands());
 }
 
@@ -2818,4 +2943,18 @@ void AssumeOp::getCanonicalizationPatterns(RewritePatternSet &results,
 void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                           MLIRContext *context) {
   results.add(canonicalizeImmediateVerifOp<CoverOp, /* EraseIfZero = */ true>);
+}
+
+//===----------------------------------------------------------------------===//
+// InvalidValueOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult InvalidValueOp::canonicalize(InvalidValueOp op,
+                                           PatternRewriter &rewriter) {
+  // Remove `InvalidValueOp`s with no uses.
+  if (op.use_empty()) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+  return failure();
 }

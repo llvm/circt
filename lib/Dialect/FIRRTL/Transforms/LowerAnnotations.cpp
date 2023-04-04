@@ -304,6 +304,56 @@ static LogicalResult applyDUTAnno(const AnnoPathValue &target,
   return success();
 }
 
+// Like symbolizeConvention, but disallows the internal convention.
+static std::optional<Convention> parseConvention(llvm::StringRef str) {
+  return ::llvm::StringSwitch<::std::optional<Convention>>(str)
+      .Case("scalarized", Convention::Scalarized)
+      .Default(std::nullopt);
+}
+
+static LogicalResult applyConventionAnno(const AnnoPathValue &target,
+                                         DictionaryAttr anno,
+                                         ApplyState &state) {
+  auto *op = target.ref.getOp();
+  auto loc = op->getLoc();
+  auto error = [&]() {
+    auto diag = mlir::emitError(loc);
+    diag << "circuit.ConventionAnnotation ";
+    return diag;
+  };
+
+  auto opTarget = target.ref.dyn_cast<OpAnnoTarget>();
+  if (!opTarget)
+    return error() << "must target a module object";
+
+  if (!target.isLocal())
+    return error() << "must be local";
+
+  auto conventionStrAttr =
+      tryGetAs<StringAttr>(anno, anno, "convention", loc, conventionAnnoClass);
+  if (!conventionStrAttr)
+    return failure();
+
+  auto conventionStr = conventionStrAttr.getValue();
+  auto conventionOpt = parseConvention(conventionStr);
+  if (!conventionOpt)
+    return error() << "unknown convention " << conventionStr;
+
+  auto convention = *conventionOpt;
+
+  if (auto moduleOp = dyn_cast<FModuleOp>(op)) {
+    moduleOp.setConvention(convention);
+    return success();
+  }
+
+  if (auto extModuleOp = dyn_cast<FExtModuleOp>(op)) {
+    extModuleOp.setConvention(convention);
+    return success();
+  }
+
+  return error() << "can only target to a module or extmodule";
+}
+
 /// Update a memory op with attributes about memory file loading.
 template <bool isInline>
 static LogicalResult applyLoadMemoryAnno(const AnnoPathValue &target,
@@ -420,6 +470,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {omirTrackerAnnoClass, {stdResolve, applyWithoutTarget<true>}},
     {omirFileAnnoClass, NoTargetAnnotation},
     // Miscellaneous Annotations
+    {conventionAnnoClass, {stdResolve, applyConventionAnno}},
     {dontTouchAnnoClass,
      {stdResolve, applyWithoutTarget<true, true, WireOp, NodeOp, RegOp,
                                      RegResetOp, InstanceOp, MemOp, CombMemOp,
@@ -682,8 +733,10 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       opsToErase.push_back(destOp);
       return success();
     }
+
     // Otherwise, just connect to the source.
     emitConnect(builder, dest, src);
+
     return success();
   };
 
@@ -808,7 +861,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       // Use RefType ports if possible
       RefType refType = TypeSwitch<Type, RefType>(source.getType())
                             .Case<FIRRTLBaseType>([](FIRRTLBaseType base) {
-                              return RefType::get(base);
+                              return RefType::get(base.getPassiveType());
                             })
                             .Case<RefType>([](RefType ref) { return ref; });
       sourceType = refType;
@@ -841,6 +894,14 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
         return failure();
       }
     }
+    // If wiring using references, check that the sink value we connect to is
+    // passive.
+    if (auto sinkFType = dyn_cast<FIRRTLType>(sink.getType());
+        sinkFType && isa<RefType>(sourceType) &&
+        !getBaseType(sinkFType).isPassive())
+      return emitError(sink.getLoc())
+             << "Wiring Problem sink type \"" << sink.getType()
+             << "\" must be passive (no flips) when using references";
 
     // Record module modifications related to adding ports to modules.
     auto addPorts = [&](ArrayRef<hw::HWInstanceLike> insts, Value val, Type tpe,

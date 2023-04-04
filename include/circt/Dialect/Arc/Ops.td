@@ -11,12 +11,14 @@
 
 include "circt/Dialect/Arc/Dialect.td"
 include "circt/Dialect/Arc/Types.td"
+include "mlir/IR/EnumAttr.td"
 include "mlir/IR/FunctionInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 class ArcOp<string mnemonic, list<Trait> traits = []> :
@@ -44,11 +46,15 @@ def DefineOp : ArcOp<"define", [
   let hasRegionVerifier = 1;
 
   let builders = [
-    OpBuilder<(ins "mlir::StringAttr":$sym_name, "mlir::TypeAttr":$function_type), [{
-      build($_builder, $_state, sym_name, function_type, mlir::ArrayAttr(), mlir::ArrayAttr());
+    OpBuilder<(ins "mlir::StringAttr":$sym_name,
+                   "mlir::TypeAttr":$function_type), [{
+      build($_builder, $_state, sym_name, function_type, mlir::ArrayAttr(),
+            mlir::ArrayAttr());
     }]>,
-    OpBuilder<(ins "mlir::StringRef":$sym_name, "mlir::FunctionType":$function_type), [{
-      build($_builder, $_state, sym_name, function_type, mlir::ArrayAttr(), mlir::ArrayAttr());
+    OpBuilder<(ins "mlir::StringRef":$sym_name, 
+                   "mlir::FunctionType":$function_type), [{
+      build($_builder, $_state, sym_name, function_type, mlir::ArrayAttr(),
+            mlir::ArrayAttr());
     }]>,
   ];
 
@@ -71,10 +77,14 @@ def DefineOp : ArcOp<"define", [
     }
 
     /// Returns the argument types of this function.
-    mlir::ArrayRef<mlir::Type> getArgumentTypes() { return getFunctionType().getInputs(); }
+    mlir::ArrayRef<mlir::Type> getArgumentTypes() {
+      return getFunctionType().getInputs();
+    }
 
     /// Returns the result types of this function.
-    mlir::ArrayRef<mlir::Type> getResultTypes() { return getFunctionType().getResults(); }
+    mlir::ArrayRef<mlir::Type> getResultTypes() {
+      return getFunctionType().getResults();
+    }
 
     /// Verify the type attribute of this function. Returns failure and emits
     /// an error if the attribute is invalid.
@@ -116,12 +126,14 @@ def StateOp : ArcOp<"state", [
     FlatSymbolRefAttr:$arc,
     Optional<I1>:$clock,
     Optional<I1>:$enable,
+    Optional<I1>:$reset,
     I32Attr:$latency,
     Variadic<AnyType>:$inputs);
-  let results = (outs Variadic<AnyType>);
+  let results = (outs Variadic<AnyType>:$outputs);
 
   let assemblyFormat = [{
-    $arc `(` $inputs `)` (`clock` $clock^)? (`enable` $enable^)? `lat` $latency attr-dict
+    $arc `(` $inputs `)` (`clock` $clock^)? (`enable` $enable^)?
+    (`reset` $reset^)? `lat` $latency attr-dict
     `:` functional-type($inputs, results)
   }];
 
@@ -134,13 +146,23 @@ def StateOp : ArcOp<"state", [
             arc.getFunctionType().getResults(), clock, enable, latency,
             inputs);
     }]>,
-    OpBuilder<(ins "mlir::SymbolRefAttr":$arc, "mlir::TypeRange":$results, "mlir::Value":$clock,
-      "mlir::Value":$enable, "unsigned":$latency, CArg<"mlir::ValueRange", "{}">:$inputs
+    OpBuilder<(ins "mlir::SymbolRefAttr":$arc, "mlir::TypeRange":$results,
+      "mlir::Value":$clock, "mlir::Value":$enable, "unsigned":$latency,
+      CArg<"mlir::ValueRange", "{}">:$inputs
+    ), [{
+      build($_builder, $_state, arc, results, clock, enable, Value(), latency,
+      inputs);
+    }]>,
+    OpBuilder<(ins "mlir::SymbolRefAttr":$arc, "mlir::TypeRange":$results,
+      "mlir::Value":$clock, "mlir::Value":$enable, "mlir::Value":$reset,
+      "unsigned":$latency, CArg<"mlir::ValueRange", "{}">:$inputs
     ), [{
       if (clock)
         $_state.addOperands(clock);
       if (enable)
         $_state.addOperands(enable);
+      if (reset)
+        $_state.addOperands(reset);
       $_state.addOperands(inputs);
       $_state.addAttribute("arc", arc);
       $_state.addAttribute("latency", $_builder.getI32IntegerAttr(latency));
@@ -148,24 +170,52 @@ def StateOp : ArcOp<"state", [
         $_builder.getDenseI32ArrayAttr({
           clock ? 1 : 0,
           enable ? 1 : 0,
+          reset ? 1 : 0,
           static_cast<int32_t>(inputs.size())}));
       $_state.addTypes(results);
     }]>,
-    OpBuilder<(ins "mlir::StringAttr":$arc, "mlir::TypeRange":$results, "mlir::Value":$clock,
-      "mlir::Value":$enable, "unsigned":$latency, CArg<"mlir::ValueRange", "{}">:$inputs
+    OpBuilder<(ins "mlir::StringAttr":$arc, "mlir::TypeRange":$results,
+      "mlir::Value":$clock, "mlir::Value":$enable, "unsigned":$latency,
+      CArg<"mlir::ValueRange", "{}">:$inputs
     ), [{
-      build($_builder, $_state, mlir::SymbolRefAttr::get(arc), results, clock, enable,
-            latency, inputs);
+      build($_builder, $_state, mlir::SymbolRefAttr::get(arc), results, clock,
+            enable, latency, inputs);
     }]>,
-    OpBuilder<(ins "mlir::StringRef":$arc, "mlir::TypeRange":$results, "mlir::Value":$clock,
-      "mlir::Value":$enable, "unsigned":$latency, CArg<"mlir::ValueRange", "{}">:$inputs
+    OpBuilder<(ins "mlir::StringRef":$arc, "mlir::TypeRange":$results,
+      "mlir::Value":$clock, "mlir::Value":$enable, "unsigned":$latency,
+      CArg<"mlir::ValueRange", "{}">:$inputs
     ), [{
-      build($_builder, $_state, mlir::StringAttr::get($_builder.getContext(), arc),
+      build($_builder, $_state,
+            mlir::StringAttr::get($_builder.getContext(), arc),
             results, clock, enable, latency, inputs);
     }]>
   ];
   let skipDefaultBuilders = 1;
   let hasVerifier = 1;
+
+  let extraClassDeclaration = [{
+    operand_range getArgOperands() {
+      return {operand_begin(), operand_end()};
+    }
+
+    mlir::CallInterfaceCallable getCallableForCallee() {
+      return (*this)->getAttrOfType<mlir::SymbolRefAttr>("arc");
+    }
+  }];
+}
+
+def CallOp : ArcOp<"call", [
+  CallOpInterface, MemRefsNormalizable, Pure,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "calls an arc";
+
+  let arguments = (ins FlatSymbolRefAttr:$arc, Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>:$outputs);
+
+  let assemblyFormat = [{
+    $arc `(` $inputs `)` attr-dict `:` functional-type(operands, results)
+  }];
 
   let extraClassDeclaration = [{
     operand_range getArgOperands() {
@@ -185,11 +235,6 @@ def ClockGateOp : ArcOp<"clock_gate", [Pure]> {
   let assemblyFormat = [{
     $input `,` $enable attr-dict
   }];
-  let builders = [
-    OpBuilder<(ins "mlir::Value":$input, "mlir::Value":$enable), [{
-      build($_builder, $_state, input.getType(), input, enable);
-    }]>
-  ];
 }
 
 def MemoryOp : ArcOp<"memory", [MemoryEffects<[MemAlloc]>]> {
@@ -248,6 +293,147 @@ def MemoryWriteOp : ArcOp<"memory_write", [
 }
 
 //===----------------------------------------------------------------------===//
+// Trigger Grouping
+//===----------------------------------------------------------------------===//
+
+def ClockTreeOp : ArcOp<"clock_tree", [NoTerminator, NoRegionArguments]> {
+  let summary = "A clock tree";
+  let arguments = (ins I1:$clock);
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{
+    $clock attr-dict-with-keyword $body
+  }];
+  let extraClassDeclaration = [{
+    mlir::Block &getBodyBlock() { return getBody().front(); }
+  }];
+}
+
+def PassThroughOp : ArcOp<"passthrough", [NoTerminator, NoRegionArguments]> {
+  let summary = "Clock-less logic that is on the pass-through path";
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{
+    attr-dict-with-keyword $body
+  }];
+  let extraClassDeclaration = [{
+    mlir::Block &getBodyBlock() { return getBody().front(); }
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Storage Allocation
+//===----------------------------------------------------------------------===//
+
+def AllocStateOp : ArcOp<"alloc_state", [MemoryEffects<[MemAlloc]>]> {
+  let summary = "Allocate internal state";
+  let arguments = (ins StorageType:$storage, UnitAttr:$tap);
+  let results = (outs StateType:$state);
+  let assemblyFormat = [{
+    $storage (`tap` $tap^)? attr-dict `:` functional-type($storage, $state)
+  }];
+}
+
+def AllocMemoryOp : ArcOp<"alloc_memory", [MemoryEffects<[MemAlloc]>]> {
+  let summary = "Allocate a memory";
+  let arguments = (ins StorageType:$storage);
+  let results = (outs MemoryType:$memory);
+  let assemblyFormat = [{
+    $storage attr-dict `:` functional-type($storage, $memory)
+  }];
+}
+
+def AllocStorageOp : ArcOp<"alloc_storage", [MemoryEffects<[MemAlloc]>]> {
+  let summary = "Allocate contiguous storage space from a larger storage space";
+  let arguments = (ins StorageType:$input, OptionalAttr<I32Attr>:$offset);
+  let results = (outs StorageType:$output);
+  let assemblyFormat = [{
+    $input (`[` $offset^ `]`)? attr-dict `:` functional-type($input, $output)
+  }];
+}
+
+def RootInputOp : ArcOp<"root_input", [
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
+]> {
+  let summary = "A root input";
+  let arguments = (ins StrAttr:$name, StorageType:$storage);
+  let results = (outs StateType:$state);
+  let assemblyFormat = [{
+    $name `,` $storage attr-dict `:` functional-type($storage, $state)
+  }];
+}
+
+def RootOutputOp : ArcOp<"root_output", [
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
+]> {
+  let summary = "A root output";
+  let arguments = (ins StrAttr:$name, StorageType:$storage);
+  let results = (outs StateType:$state);
+  let assemblyFormat = [{
+    $name `,` $storage attr-dict `:` functional-type($storage, $state)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Storage Access
+//===----------------------------------------------------------------------===//
+
+def AllocatableType : AnyTypeOf<[StateType, MemoryType, StorageType]>;
+
+def StorageGetOp : ArcOp<"storage.get", [MemoryEffects<[MemRead]>]> {
+  let summary = "Access an allocated state, memory, or storage slice";
+  let arguments = (ins StorageType:$storage, I32Attr:$offset);
+  let results = (outs AllocatableType:$result);
+  let assemblyFormat = [{
+    $storage `[` $offset `]` attr-dict
+    `:` qualified(type($storage)) `->` type($result)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// State Read/Write
+//===----------------------------------------------------------------------===//
+
+class StateAndValueTypesMatch<string state, string value> : TypesMatchWith<
+  "state and value types must match", state, value,
+  "$_self.cast<StateType>().getType()">;
+
+def StateReadOp : ArcOp<"state_read", [
+  MemoryEffects<[MemRead]>,
+  StateAndValueTypesMatch<"state", "value">
+]> {
+  let summary = "Get a state's current value";
+  let arguments = (ins StateType:$state);
+  let results = (outs AnyInteger:$value);
+  let assemblyFormat = [{
+    $state attr-dict `:` type($state)
+  }];
+}
+
+def StateWriteOp : ArcOp<"state_write", [
+  MemoryEffects<[MemWrite]>,
+  StateAndValueTypesMatch<"state", "value">
+]> {
+  let summary = "Update a state's value";
+  let description = [{
+    Changes the value of a state. This operation is treated as a deferred
+    assignment by most transformation passes, which allows them to change the
+    order of `arc.state_read` and `arc.state_write` ops on the same state
+    without affecting the correctness of the model. The reads are always assumed
+    to produce the current value of the state and writes to be deferred until
+    all operations in the model have been executed for the current time step.
+
+    The only exceptions to this are the state update legalization pass, which
+    inserts the necessary temporary variables such that writes can be performed
+    immediately without affecting correctness. This allows later lowering passes
+    to treat `arc.state_write` as an immediate assignment (without defering).
+  }];
+  let arguments = (ins StateType:$state, AnyInteger:$value,
+                       Optional<I1>:$condition);
+  let assemblyFormat = [{
+    $state `=` $value (`if` $condition^)? attr-dict `:` type($state)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Miscellaneous
 //===----------------------------------------------------------------------===//
 
@@ -255,6 +441,26 @@ def TapOp : ArcOp<"tap"> {
   let summary = "A tracker op to observe a value under a given name";
   let arguments = (ins AnySignlessInteger:$value, StrAttr:$name);
   let assemblyFormat = [{ $value attr-dict `:` type($value) }];
+}
+
+def ModelOp : ArcOp<"model", [RegionKindInterface, IsolatedFromAbove,
+                              NoTerminator]> {
+  let summary = "A model with stratified clocks";
+  let arguments = (ins StrAttr:$name);
+  let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = [{
+    $name attr-dict-with-keyword $body
+  }];
+
+  let extraClassDeclaration = [{
+    static mlir::RegionKind getRegionKind(unsigned index) {
+      return mlir::RegionKind::Graph;
+    }
+    mlir::Block &getBodyBlock() { return getBody().front(); }
+  }];
+
+  let hasVerifier = 1;
 }
 
 def LutOp : ArcOp<"lut", [
@@ -288,6 +494,22 @@ def LutOp : ArcOp<"lut", [
   }];
 
   let hasVerifier = 1;
+}
+
+def ZeroCountPredicateLeading  : I32EnumAttrCase<"leading", 0>;
+def ZeroCountPredicateTrailing  : I32EnumAttrCase<"trailing", 1>;
+def ZeroCountPredicate : I32EnumAttr<
+    "ZeroCountPredicate", "arc.zero_count predicate",
+    [ZeroCountPredicateLeading, ZeroCountPredicateTrailing]> {
+  let cppNamespace = "circt::arc";
+}
+
+def ZeroCountOp : ArcOp<"zero_count", [Pure, SameOperandsAndResultType]> {
+  let summary = "leading/trailing zero count operation";
+  let arguments = (ins AnySignlessInteger:$input,
+                       ZeroCountPredicate:$predicate);
+  let results = (outs AnySignlessInteger:$output);
+  let assemblyFormat = "$predicate $input attr-dict `:` type($input)";
 }
 
 #endif // CIRCT_DIALECT_ARC_OPS_TD

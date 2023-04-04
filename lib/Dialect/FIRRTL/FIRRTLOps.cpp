@@ -699,9 +699,10 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
-                      StringAttr name, ArrayRef<PortInfo> ports,
-                      ArrayAttr annotations) {
+                      StringAttr name, ConventionAttr convention,
+                      ArrayRef<PortInfo> ports, ArrayAttr annotations) {
   buildModule(builder, result, name, ports, annotations);
+  result.addAttribute("convention", convention);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -714,10 +715,12 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 }
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
-                         StringAttr name, ArrayRef<PortInfo> ports,
-                         StringRef defnameAttr, ArrayAttr annotations,
-                         ArrayAttr parameters, ArrayAttr internalPaths) {
+                         StringAttr name, ConventionAttr convention,
+                         ArrayRef<PortInfo> ports, StringRef defnameAttr,
+                         ArrayAttr annotations, ArrayAttr parameters,
+                         ArrayAttr internalPaths) {
   buildModule(builder, result, name, ports, annotations);
+  result.addAttribute("convention", convention);
   if (!defnameAttr.empty())
     result.addAttribute("defname", builder.getStringAttr(defnameAttr));
   if (!parameters)
@@ -994,9 +997,12 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
       p, body, portDirections, op.getPortNames(), op.getPortTypes(),
       op.getPortAnnotations(), op.getPortSymbols(), op.getPortLocations());
 
-  SmallVector<StringRef, 11> omittedAttrs = {
+  SmallVector<StringRef, 12> omittedAttrs = {
       "sym_name", "portDirections", "portTypes",  "portAnnotations",
       "portSyms", "portLocations",  "parameters", visibilityAttrName};
+
+  if (op.getConvention() == Convention::Internal)
+    omittedAttrs.push_back("convention");
 
   // We can omit the portNames if they were able to be printed as properly as
   // block arguments.
@@ -1166,11 +1172,23 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
 }
 
 ParseResult FModuleOp::parse(OpAsmParser &parser, OperationState &result) {
-  return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/true);
+  if (parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/true))
+    return failure();
+  if (!result.attributes.get("convention"))
+    result.addAttribute(
+        "convention",
+        ConventionAttr::get(result.getContext(), Convention::Internal));
+  return success();
 }
 
 ParseResult FExtModuleOp::parse(OpAsmParser &parser, OperationState &result) {
-  return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false);
+  if (parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false))
+    return failure();
+  if (!result.attributes.get("convention"))
+    result.addAttribute(
+        "convention",
+        ConventionAttr::get(result.getContext(), Convention::Internal));
+  return success();
 }
 
 ParseResult FIntModuleOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -1272,6 +1290,18 @@ void FMemModuleOp::getAsmBlockArgumentNames(
 ArrayAttr FMemModuleOp::getParameters() { return {}; }
 
 ArrayAttr FModuleOp::getParameters() { return {}; }
+
+Convention FIntModuleOp::getConvention() { return Convention::Internal; }
+
+ConventionAttr FIntModuleOp::getConventionAttr() {
+  return ConventionAttr::get(getContext(), getConvention());
+}
+
+Convention FMemModuleOp::getConvention() { return Convention::Internal; }
+
+ConventionAttr FMemModuleOp::getConventionAttr() {
+  return ConventionAttr::get(getContext(), getConvention());
+}
 
 //===----------------------------------------------------------------------===//
 // Declarations
@@ -2208,28 +2238,6 @@ LogicalResult AttachOp::verify() {
   return success();
 }
 
-/// If the connect is for RefType, implement the constraint for downward only
-/// references. We cannot connect :
-///   1. an input reference port to the output reference port.
-///   2. instance reference results to each other.
-/// This means, the connect can only be used for forwarding RefType module
-/// ports to Instance ports.
-static LogicalResult checkRefTypeFlow(Operation *connect) {
-  Value dst = connect->getOperand(0);
-
-  if (dst.getType().isa<RefType>()) {
-    // RefType supports multiple readers. That is, there can be multiple
-    // RefResolveOps remotely connected to a single RefSendOp.
-    // But multiple RefSendOps should not be remotely connected to a single
-    // RefResolveOp.
-    if (!dst.hasOneUse())
-      return emitError(connect->getLoc())
-             << "output reference port cannot be reused by multiple operations"
-             << ", it can only capture a unique dataflow";
-  }
-  return success();
-}
-
 /// Check if the source and sink are of appropriate flow.
 static LogicalResult checkConnectFlow(Operation *connect) {
   Value dst = connect->getOperand(0);
@@ -2294,10 +2302,6 @@ LogicalResult ConnectOp::verify() {
   if (failed(checkConnectFlow(*this)))
     return failure();
 
-  // Check constraints on RefType.
-  if (failed(checkRefTypeFlow(*this)))
-    return failure();
-
   return success();
 }
 
@@ -2314,21 +2318,33 @@ LogicalResult StrictConnectOp::verify() {
   if (failed(checkConnectFlow(*this)))
     return failure();
 
-  // Check constraints on RefType.
-  if (failed(checkRefTypeFlow(*this)))
-    return failure();
-
   return success();
 }
 
-LogicalResult RefConnectOp::verify() {
+LogicalResult RefDefineOp::verify() {
   // Check that the flows make sense.
   if (failed(checkConnectFlow(*this)))
     return failure();
 
-  // Check constraints on RefType.
-  if (failed(checkRefTypeFlow(*this)))
-    return failure();
+  // For now, refs can't be in bundles so this is sufficient.
+  // In the future need to ensure no other define's to same "fieldSource".
+  // (When aggregates can have references, we can define a reference within,
+  // but this must be unique.  Checking this here may be expensive,
+  // consider adding something to FModuleLike's to check it there instead)
+  for (auto *user : getDest().getUsers()) {
+    if (auto conn = dyn_cast<FConnectLike>(user);
+        conn && conn.getDest() == getDest() && conn != *this)
+      return emitError("destination reference cannot be reused by multiple "
+                       "operations, it can only capture a unique dataflow");
+  }
+
+  // Check "static" source/dest
+  if (auto *op = getDest().getDefiningOp()) {
+    // TODO: Make ref.sub only source flow?
+    if (isa<RefSubOp>(op))
+      return emitError(
+          "destination reference cannot be a sub-element of a reference");
+  }
 
   return success();
 }
@@ -3883,7 +3899,7 @@ FIRRTLType RefSendOp::inferReturnType(ValueRange operands,
   if (!inBaseType)
     return emitInferRetTypeError(
         loc, "ref.send operand must be base type, not ", inType);
-  return RefType::get(inBaseType);
+  return RefType::get(inBaseType.getPassiveType());
 }
 
 void RefResolveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

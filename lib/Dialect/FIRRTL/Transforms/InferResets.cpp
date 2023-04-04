@@ -741,7 +741,8 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
         .Case<RefSendOp>([&](auto op) {
           // Trace using base types.
           traceResets(op.getType().getType(), op.getResult(), 0,
-                      op.getBase().getType(), op.getBase(), 0, op.getLoc());
+                      op.getBase().getType().getPassiveType(), op.getBase(), 0,
+                      op.getLoc());
         })
         .Case<RefResolveOp>([&](auto op) {
           // Trace using base types.
@@ -1761,16 +1762,14 @@ LogicalResult InferResetsPass::verifyNoAbstractReset() {
   for (FModuleLike module :
        getOperation().getBodyBlock()->getOps<FModuleLike>()) {
     for (PortInfo port : module.getPorts()) {
-      if (auto portType = port.type.dyn_cast<FIRRTLType>()) {
-        if (getBaseType(portType).isa<ResetType>()) {
-          auto diag = emitError(port.loc)
-                      << "a port \"" << port.getName()
-                      << "\" with abstract reset type was unable to be "
-                         "inferred by InferResets (is this a top-level port?)";
-          diag.attachNote(module->getLoc())
-              << "the module with this uninferred reset port was defined here";
-          hasAbstractResetPorts = true;
-        }
+      if (getBaseOfType<ResetType>(port.type)) {
+        auto diag = emitError(port.loc)
+                    << "a port \"" << port.getName()
+                    << "\" with abstract reset type was unable to be "
+                       "inferred by InferResets (is this a top-level port?)";
+        diag.attachNote(module->getLoc())
+            << "the module with this uninferred reset port was defined here";
+        hasAbstractResetPorts = true;
       }
     }
   }

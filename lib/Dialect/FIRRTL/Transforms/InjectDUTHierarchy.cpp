@@ -14,6 +14,7 @@
 #include "PassDetails.h"
 
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -169,7 +170,8 @@ void InjectDUTHierarchy::runOnOperation() {
   {
     b.setInsertionPointAfter(dut);
     auto newDUT = b.create<FModuleOp>(dut.getLoc(), dut.getNameAttr(),
-                                      dut.getPorts(), dut.getAnnotations());
+                                      dut.getConventionAttr(), dut.getPorts(),
+                                      dut.getAnnotations());
 
     SymbolTable::setSymbolVisibility(newDUT, dut.getVisibility());
     dut.setName(b.getStringAttr(circuitNS.newName(wrapperName.getValue())));
@@ -197,7 +199,7 @@ void InjectDUTHierarchy::runOnOperation() {
     Value rhs = pair.value();
     if (dut.getPortDirection(pair.index()) == Direction::In)
       std::swap(lhs, rhs);
-    b.create<ConnectOp>(b.getUnknownLoc(), lhs, rhs);
+    emitConnect(b, b.getUnknownLoc(), lhs, rhs);
   }
 
   // Compute a set of paths that are used _inside_ the wrapper.

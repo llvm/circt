@@ -1,4 +1,5 @@
 add_subdirectory(AffineToPipeline)
+add_subdirectory(ArcToLLVM)
 add_subdirectory(CalyxToFSM)
 add_subdirectory(ConvertToArcs)
 add_subdirectory(CalyxToHW)
