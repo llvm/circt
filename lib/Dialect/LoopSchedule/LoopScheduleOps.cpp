@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/LoopSchedule/LoopScheduleOps.h"
+#include "circt/Dialect/ESI/ESITypes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
@@ -21,8 +21,6 @@ using namespace mlir;
 using namespace circt;
 using namespace circt::loopschedule;
 
-void LoopScheduleDialect::initialize() {
-}
+void LoopScheduleDialect::initialize() {}
 
 #include "circt/Dialect/LoopSchedule/LoopScheduleDialect.cpp.inc"
-
