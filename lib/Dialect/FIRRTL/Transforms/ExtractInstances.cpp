@@ -325,9 +325,9 @@ void ExtractInstancesPass::collectAnnos() {
     worklist.push_back(instanceGraph->lookup(cast<hw::HWModuleLike>(op)));
   while (!worklist.empty()) {
     auto *module = worklist.pop_back_val();
-    dutModuleNames.insert(module->getModule().moduleNameAttr());
+    dutModuleNames.insert(module->getModule().getModuleNameAttr());
     LLVM_DEBUG(llvm::dbgs()
-               << "- " << module->getModule().moduleName() << "\n");
+               << "- " << module->getModule().getModuleName() << "\n");
     for (auto *instRecord : *module) {
       auto *target = instRecord->getTarget();
       if (dutModules.insert(target->getModule()).second)
@@ -345,7 +345,7 @@ void ExtractInstancesPass::collectAnnos() {
       if (module.getDefnameAttr() != clkgateDefNameAttr)
         continue;
       LLVM_DEBUG(llvm::dbgs()
-                 << "Clock gate `" << module.moduleName() << "`\n");
+                 << "Clock gate `" << module.getModuleName() << "`\n");
       if (!dutModules.contains(module)) {
         LLVM_DEBUG(llvm::dbgs() << "- Ignored (outside DUT)\n");
         continue;
@@ -386,7 +386,7 @@ void ExtractInstancesPass::collectAnnos() {
                                             /*excludeFromFilelist=*/true));
 
     for (auto module : circuit.getOps<FMemModuleOp>()) {
-      LLVM_DEBUG(llvm::dbgs() << "Memory `" << module.moduleName() << "`\n");
+      LLVM_DEBUG(llvm::dbgs() << "Memory `" << module.getModuleName() << "`\n");
       if (!dutModules.contains(module)) {
         LLVM_DEBUG(llvm::dbgs() << "- Ignored (outside DUT)\n");
         continue;
@@ -456,7 +456,7 @@ void ExtractInstancesPass::collectAnno(InstanceOp inst, Annotation anno) {
 static unsigned findInstanceInNLA(InstanceOp inst, hw::HierPathOp nla) {
   unsigned nlaLen = nla.getNamepath().size();
   auto instName = getInnerSymName(inst);
-  auto parentName = cast<FModuleOp>(inst->getParentOp()).moduleNameAttr();
+  auto parentName = cast<FModuleOp>(inst->getParentOp()).getModuleNameAttr();
   for (unsigned nlaIdx = 0; nlaIdx < nlaLen; ++nlaIdx) {
     auto refPart = nla.refPart(nlaIdx);
     if (nla.modPart(nlaIdx) == parentName && (!refPart || refPart == instName))
@@ -741,9 +741,9 @@ void ExtractInstancesPass::extractInstances() {
             // entire subhierarchy and go replicate all annotations with the old
             // names.
             inst.emitWarning("extraction of instance `")
-                << inst.instanceName()
+                << inst.getInstanceName()
                 << "` could break non-local annotations rooted at `"
-                << parent.moduleName() << "`";
+                << parent.getModuleName() << "`";
           }
           continue;
         }
@@ -864,8 +864,8 @@ void ExtractInstancesPass::groupInstances() {
     auto [parentOp, wrapperName] = parentAndWrapperName;
     auto parent = cast<FModuleOp>(parentOp);
     LLVM_DEBUG(llvm::dbgs() << "- Wrapper `" << wrapperName << "` in `"
-                            << parent.moduleName() << "` with " << insts.size()
-                            << " instances\n");
+                            << parent.getModuleName() << "` with "
+                            << insts.size() << " instances\n");
     OpBuilder builder(parentOp);
 
     // Uniquify the wrapper name.
@@ -922,7 +922,8 @@ void ExtractInstancesPass::groupInstances() {
         // The relevant part of the NLA is of the form `Top::bb`, which we want
         // to expand to `Top::wrapperInst` and `Wrapper::bb`.
         auto wrapperNameAttr = builder.getStringAttr(wrapperName);
-        auto ref1 = InnerRefAttr::get(parent.moduleNameAttr(), wrapperInstName);
+        auto ref1 =
+            InnerRefAttr::get(parent.getModuleNameAttr(), wrapperInstName);
         Attribute ref2;
         if (auto innerRef = nlaPath[nlaIdx].dyn_cast<InnerRefAttr>())
           ref2 = InnerRefAttr::get(wrapperNameAttr, innerRef.getName());

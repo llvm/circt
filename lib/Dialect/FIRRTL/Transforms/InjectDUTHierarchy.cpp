@@ -50,7 +50,7 @@ static void addHierarchy(hw::HierPathOp path, FModuleOp dut,
   newNamepath.reserve(namepath.size() + 1);
   while (path.modPart(nlaIdx) != dut.getNameAttr())
     newNamepath.push_back(namepath[nlaIdx++]);
-  newNamepath.push_back(hw::InnerRefAttr::get(dut.moduleNameAttr(),
+  newNamepath.push_back(hw::InnerRefAttr::get(dut.getModuleNameAttr(),
                                               getInnerSymName(wrapperInst)));
 
   // Add the extra level of hierarchy.
@@ -132,7 +132,7 @@ void InjectDUTHierarchy::runOnOperation() {
     if (dut) {
       auto diag = emitError(mod.getLoc())
                   << "is marked with a '" << dutAnnoClass << "', but '"
-                  << dut.moduleName()
+                  << dut.getModuleName()
                   << "' also had such an annotation (this should "
                      "be impossible!)";
       diag.attachNote(dut.getLoc()) << "the first DUT was found here";
@@ -191,9 +191,9 @@ void InjectDUTHierarchy::runOnOperation() {
   b.setInsertionPointToStart(dut.getBodyBlock());
   ModuleNamespace dutNS(dut);
   auto wrapperInst = b.create<InstanceOp>(
-      b.getUnknownLoc(), wrapper, wrapper.moduleName(),
+      b.getUnknownLoc(), wrapper, wrapper.getModuleName(),
       NameKindEnum::DroppableName, ArrayRef<Attribute>{}, ArrayRef<Attribute>{},
-      false, b.getStringAttr(dutNS.newName(wrapper.moduleName())));
+      false, b.getStringAttr(dutNS.newName(wrapper.getModuleName())));
   for (const auto &pair : llvm::enumerate(wrapperInst.getResults())) {
     Value lhs = dut.getArgument(pair.index());
     Value rhs = pair.value();

@@ -89,7 +89,7 @@ LogicalResult Converter::runOnModule(HWModuleOp module) {
   if (module.getBodyBlock()->without_terminator().empty() &&
       isa<hw::OutputOp>(module.getBodyBlock()->getTerminator()))
     return success();
-  LLVM_DEBUG(llvm::dbgs() << "Analyzing " << module.moduleNameAttr() << " ("
+  LLVM_DEBUG(llvm::dbgs() << "Analyzing " << module.getModuleNameAttr() << " ("
                           << arcBreakers.size() << " breakers)\n");
 
   // For each operation, figure out the set of breaker ops it contributes to,
@@ -236,7 +236,7 @@ void Converter::extractArcs(HWModuleOp module) {
     auto defOp = builder.create<DefineOp>(
         lastOp->getLoc(),
         builder.getStringAttr(
-            globalNamespace.newName(module.moduleName() + "_arc")),
+            globalNamespace.newName(module.getModuleName() + "_arc")),
         builder.getFunctionType(inputTypes, outputTypes));
     defOp.getBody().push_back(block.release());
 
@@ -357,7 +357,7 @@ void Converter::absorbRegs(HWModuleOp module) {
     auto defOp =
         builder.create<DefineOp>(loc,
                                  builder.getStringAttr(globalNamespace.newName(
-                                     module.moduleName() + "_arc")),
+                                     module.getModuleName() + "_arc")),
                                  builder.getFunctionType(types, types));
     defOp.getBody().push_back(block.release());
 

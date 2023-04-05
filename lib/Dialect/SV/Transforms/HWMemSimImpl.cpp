@@ -525,7 +525,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
           boundModule, boundModule.getName(), ArrayRef<Value>());
       boundInstance->setAttr("inner_sym",
                              b.getStringAttr(moduleNamespace.newName(
-                                 boundInstance.getName().getValue())));
+                                 boundInstance.getInstanceName())));
       boundInstance->setAttr("doNotPrint", b.getBoolAttr(true));
 
       // Bind the new module.

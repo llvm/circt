@@ -593,7 +593,7 @@ void LowerStatePass::runOnOperation() {
 }
 
 LogicalResult LowerStatePass::runOnModule(HWModuleOp moduleOp) {
-  LLVM_DEBUG(llvm::dbgs() << "Lowering state in `" << moduleOp.moduleName()
+  LLVM_DEBUG(llvm::dbgs() << "Lowering state in `" << moduleOp.getModuleName()
                           << "`\n");
   ModuleLowering lowering(moduleOp, stats);
   lowering.addStorageArg();
@@ -630,7 +630,7 @@ LogicalResult LowerStatePass::runOnModule(HWModuleOp moduleOp) {
   moduleOp.getBodyBlock()->getTerminator()->erase();
   ImplicitLocOpBuilder builder(moduleOp.getLoc(), moduleOp);
   auto modelOp =
-      builder.create<ModelOp>(moduleOp.getLoc(), moduleOp.moduleNameAttr());
+      builder.create<ModelOp>(moduleOp.getLoc(), moduleOp.getModuleNameAttr());
   modelOp.getBody().takeBody(moduleOp.getBody());
   moduleOp->erase();
   return success();

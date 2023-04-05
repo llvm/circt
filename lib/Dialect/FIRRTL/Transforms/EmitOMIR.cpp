@@ -745,7 +745,7 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
   };
   // Add the path up to where the NLA starts.
   for (auto inst : paths[0])
-    addToPath(inst, inst.instanceNameAttr());
+    addToPath(inst, inst.getInstanceNameAttr());
   // Add the path from the NLA to the op.
   if (tracker.nla) {
     auto path = tracker.nla.getNamepath().getValue();

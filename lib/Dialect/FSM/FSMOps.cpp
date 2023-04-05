@@ -240,6 +240,11 @@ LogicalResult TriggerOp::verify() { return verifyCallerTypes(*this); }
 // HWInstanceOp
 //===----------------------------------------------------------------------===//
 
+// HWInstanceLike interface
+StringRef HWInstanceOp::getInstanceName() { return getSymName(); }
+
+StringAttr HWInstanceOp::getInstanceNameAttr() { return getSymNameAttr(); }
+
 Operation *HWInstanceOp::getReferencedModule() { return getMachineOp(); }
 
 /// Lookup the machine for the symbol.  This returns null on invalid IR.

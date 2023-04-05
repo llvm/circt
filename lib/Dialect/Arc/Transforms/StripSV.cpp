@@ -47,7 +47,7 @@ void StripSVPass::runOnOperation() {
       if (extModOp.getArgNames() != expectedClockGateInputs ||
           extModOp.getResultNames() != expectedClockGateOutputs) {
         extModOp.emitError("clock gate module `")
-            << extModOp.moduleName() << "` has incompatible port names "
+            << extModOp.getModuleName() << "` has incompatible port names "
             << extModOp.getArgNamesAttr() << " -> "
             << extModOp.getResultNamesAttr();
         return signalPassFailure();
@@ -56,14 +56,14 @@ void StripSVPass::runOnOperation() {
               ArrayRef<Type>{i1Type, i1Type, i1Type} ||
           extModOp.getResultTypes() != ArrayRef<Type>{i1Type}) {
         extModOp.emitError("clock gate module `")
-            << extModOp.moduleName() << "` has incompatible port types "
+            << extModOp.getModuleName() << "` has incompatible port types "
             << extModOp.getArgumentTypes() << " -> "
             << extModOp.getResultTypes();
         return signalPassFailure();
       }
-      clockGateModuleNames.insert(extModOp.moduleNameAttr());
+      clockGateModuleNames.insert(extModOp.getModuleNameAttr());
     } else {
-      externModuleNames.insert(extModOp.moduleNameAttr());
+      externModuleNames.insert(extModOp.getModuleNameAttr());
     }
     opsToDelete.push_back(extModOp);
   }

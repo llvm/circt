@@ -448,6 +448,9 @@ void InstanceDeclOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getInstanceHandle(), getName());
 }
 
+StringRef InstanceDeclOp::getInstanceName() { return getName(); }
+StringAttr InstanceDeclOp::getInstanceNameAttr() { return getNameAttr(); }
+
 Operation *InstanceDeclOp::getReferencedModule(const hw::HWSymbolCache *cache) {
   if (cache)
     if (auto *result = cache->getDefinition(getModuleNameAttr()))

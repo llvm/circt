@@ -45,7 +45,7 @@ void InferMemoriesPass::runOnOperation() {
   for (auto genOp : module.getOps<hw::HWModuleGeneratedOp>()) {
     if (!schemaNames.contains(genOp.getGeneratorKindAttr().getAttr()))
       continue;
-    memoryParams[genOp.moduleNameAttr()] = genOp->getAttrDictionary();
+    memoryParams[genOp.getModuleNameAttr()] = genOp->getAttrDictionary();
     opsToDelete.push_back(genOp);
   }
   LLVM_DEBUG(llvm::dbgs() << "Found " << memoryParams.size()
@@ -79,7 +79,7 @@ void InferMemoriesPass::runOnOperation() {
     auto wordType = builder.getIntegerType(width);
     auto memType = MemoryType::get(&getContext(), depth, wordType, {});
     auto memOp = builder.create<MemoryOp>(memType);
-    if (!instOp.instanceName().empty())
+    if (!instOp.getInstanceName().empty())
       memOp->setAttr("name", instOp.getInstanceNameAttr());
 
     unsigned argIdx = 0;
