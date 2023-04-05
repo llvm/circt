@@ -728,7 +728,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     // If the sink is a wire with no users, then convert this to a node.
     auto destOp = dyn_cast_or_null<WireOp>(dest.getDefiningOp());
     if (destOp && dest.getUses().empty()) {
-      builder.create<NodeOp>(src.getType(), src, destOp.getName())
+      builder.create<NodeOp>(src, destOp.getName())
           .setAnnotationsAttr(destOp.getAnnotations());
       opsToErase.push_back(destOp);
       return success();

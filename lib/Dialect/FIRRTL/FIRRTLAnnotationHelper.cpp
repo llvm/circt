@@ -615,8 +615,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
                                                       lastInst->getBlock());
       builder.setInsertionPointAfter(lastInst);
       // Instance port cannot be used as an annotation target, so use a NodeOp.
-      auto node = builder.create<NodeOp>(lastInst.getType(portNo),
-                                         lastInst.getResult(portNo));
+      auto node = builder.create<NodeOp>(lastInst.getResult(portNo));
       AnnotationSet::addDontTouch(node);
       srcTarget->ref = AnnoTarget(circt::firrtl::detail::AnnoTargetImpl(node));
     }

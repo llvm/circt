@@ -2830,9 +2830,8 @@ ParseResult FIRStmtParser::parseNode() {
 
   auto annotations = getConstants().emptyArrayAttr;
   StringAttr sym = {};
-  auto result =
-      builder.create<NodeOp>(initializer.getType(), initializer, id,
-                             NameKindEnum::InterestingName, annotations, sym);
+  auto result = builder.create<NodeOp>(
+      initializer, id, NameKindEnum::InterestingName, annotations, sym);
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }
