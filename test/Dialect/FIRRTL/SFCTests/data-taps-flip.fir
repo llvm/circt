@@ -3,10 +3,12 @@
 
 ; Test tapping a bundle with flips, tap sink is passive.
 
-; CHECK-DAG: firrtl.ref.send
-; CHECK-DAG-SAME: !firrtl.probe<bundle<a: uint<2>, b flip: uint<2>>>
-; CHECK-DAG: firrtl.ref.resolve
-; CHECK-DAG-SAME: !firrtl.probe<bundle<a: uint<2>, b: uint<2>>>
+; CHECK-LABEL: module private @Child(
+; CHECK: firrtl.ref.send
+; CHECK-SAME: !firrtl.bundle<a: uint<2>, b flip: uint<2>>
+; CHECK-LABEL: module @Top(
+; CHECK: firrtl.ref.resolve
+; CHECK-SAME: !firrtl.probe<bundle<a: uint<2>, b: uint<2>>>
 circuit Top : %[[
   {
     "class": "sifive.enterprise.grandcentral.DataTapsAnnotation",
