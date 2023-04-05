@@ -413,7 +413,7 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
     return;
 
   InstanceGraphNode *instanceGraphNode =
-      instanceGraph->lookup(module.moduleNameAttr());
+      instanceGraph->lookup(module.getModuleNameAttr());
   LLVM_DEBUG(llvm::dbgs() << "Prune ports of module: " << module.getName()
                           << "\n");
 
@@ -622,7 +622,7 @@ void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
   LLVM_DEBUG(llvm::dbgs() << "Erase " << module.getName() << "\n");
 
   InstanceGraphNode *instanceGraphNode =
-      instanceGraph->lookup(module.moduleNameAttr());
+      instanceGraph->lookup(module.getModuleNameAttr());
 
   SmallVector<Location> instancesWithSymbols;
   for (auto *use : llvm::make_early_inc_range(instanceGraphNode->uses())) {

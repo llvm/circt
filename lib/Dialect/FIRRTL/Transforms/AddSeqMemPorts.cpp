@@ -305,7 +305,7 @@ void AddSeqMemPortsPass::createOutputFile(hw::HWModuleLike module) {
 
   // The current sram we are processing.
   unsigned sramIndex = 0;
-  auto dutSymbol = FlatSymbolRefAttr::get(module.moduleNameAttr());
+  auto dutSymbol = FlatSymbolRefAttr::get(module.getModuleNameAttr());
   auto &instancePaths = memInfoMap[module].instancePaths;
   for (auto instancePath : instancePaths) {
     os << sramIndex++ << " -> ";

@@ -1618,7 +1618,7 @@ void InstanceOp::setResultName(size_t i, StringAttr name) {
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  instance_like_impl::getAsmResultNames(setNameFn, instanceName(),
+  instance_like_impl::getAsmResultNames(setNameFn, getInstanceName(),
                                         getResultNames(), getResults());
 }
 
@@ -3069,7 +3069,7 @@ LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
       return emitOpError() << " module: " << innerRef.getModule()
                            << " does not contain any instance with symbol: "
                            << innerRef.getName();
-    expectedModuleName = instOp.referencedModuleNameAttr();
+    expectedModuleName = instOp.getReferencedModuleNameAttr();
   }
   // The instance path has been verified. Now verify the last element.
   auto leafRef = getNamepath()[getNamepath().size() - 1];

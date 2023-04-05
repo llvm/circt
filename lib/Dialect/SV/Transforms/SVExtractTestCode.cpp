@@ -536,7 +536,7 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
             sv::BindOp bind = it->second;
             auto oldInnerRef = bind.getInstanceAttr();
             auto newInnerRef = hw::InnerRefAttr::get(
-                instParent.moduleNameAttr(), oldInnerRef.getName());
+                instParent.getModuleNameAttr(), oldInnerRef.getName());
             bind.setInstanceAttr(newInnerRef);
           }
         }

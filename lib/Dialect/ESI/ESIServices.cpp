@@ -413,10 +413,10 @@ void ESIConnectServicesPass::copyMetadata(hw::HWModuleLike mod) {
 
   for (auto inst : moduleInstantiations[mod]) {
     OpBuilder b(inst);
-    auto instName = b.getStringAttr(inst.instanceName());
+    auto instName = inst.getInstanceNameAttr();
     for (auto metadata : metadataOps) {
       SmallVector<Attribute, 4> path;
-      path.push_back(hw::InnerRefAttr::get(mod.moduleNameAttr(), instName));
+      path.push_back(hw::InnerRefAttr::get(mod.getModuleNameAttr(), instName));
       for (auto attr : metadata.getServerNamePathAttr())
         path.push_back(attr);
 
@@ -627,7 +627,7 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
     for (auto [toClient, newPort] : llvm::zip(toClientReqs, newInputs)) {
       auto instToClient = cast<RequestToClientConnectionOp>(b.clone(*toClient));
       instToClient.setClientNamePathAttr(prependNamePart(
-          instToClient.getClientNamePath(), inst.instanceName()));
+          instToClient.getClientNamePath(), inst.getInstanceName()));
       newOperands.push_back(instToClient.getToClient());
     }
 
@@ -662,7 +662,7 @@ LogicalResult ESIConnectServicesPass::surfaceReqs(
     for (auto [toServer, newPort] : llvm::zip(toServerReqs, newOutputs)) {
       auto instToServer = cast<RequestToServerConnectionOp>(b.clone(*toServer));
       instToServer.setClientNamePathAttr(prependNamePart(
-          instToServer.getClientNamePath(), inst.instanceName()));
+          instToServer.getClientNamePath(), inst.getInstanceName()));
       instToServer->setOperand(0, newHWInst->getResult(outputCounter++));
     }
   }

@@ -1144,8 +1144,8 @@ FIRRTLModuleLowering::lowerMemModule(FMemModuleOp oldModule,
   // Build the new hw.module op.
   auto builder = OpBuilder::atBlockEnd(topLevelModule);
   auto newModule = builder.create<hw::HWModuleExternOp>(
-      oldModule.getLoc(), oldModule.moduleNameAttr(), ports,
-      oldModule.moduleNameAttr());
+      oldModule.getLoc(), oldModule.getModuleNameAttr(), ports,
+      oldModule.getModuleNameAttr());
   loweringState.processRemainingAnnotations(oldModule,
                                             AnnotationSet(oldModule));
   return newModule;

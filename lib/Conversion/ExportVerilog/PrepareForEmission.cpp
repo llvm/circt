@@ -66,7 +66,7 @@ static void spillWiresForInstanceInputs(InstanceOp op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
-  SmallString<32> nameTmp{"_", op.instanceName(), "_"};
+  SmallString<32> nameTmp{"_", op.getInstanceName(), "_"};
   auto namePrefixSize = nameTmp.size();
 
   size_t nextOpNo = 0;
@@ -97,7 +97,7 @@ static void lowerInstanceResults(InstanceOp op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
-  SmallString<32> nameTmp{"_", op.instanceName(), "_"};
+  SmallString<32> nameTmp{"_", op.getInstanceName(), "_"};
   auto namePrefixSize = nameTmp.size();
 
   size_t nextResultNo = 0;
