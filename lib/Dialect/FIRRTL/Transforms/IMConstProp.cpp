@@ -43,7 +43,8 @@ static bool isAggregate(Operation *op) {
 /// Return true if this is a wire or register we're allowed to delete.
 static bool isDeletableWireOrRegOrNode(Operation *op) {
   return (isWireOrReg(op) || isa<NodeOp>(op)) && AnnotationSet(op).empty() &&
-         !hasDontTouch(op) && hasDroppableName(op);
+         !hasDontTouch(op) && hasDroppableName(op) &&
+         !cast<Forceable>(op).isForceable();
 }
 
 //===----------------------------------------------------------------------===//
@@ -485,7 +486,7 @@ void IMConstPropPass::markWireOp(WireOp wire) {
   if (!type)
     return markOverdefined(wire.getResult());
 
-  if (hasDontTouch(wire.getResult()))
+  if (hasDontTouch(wire.getResult()) || wire.isForceable())
     return markOverdefined(wire.getResult());
 
   // Otherwise, this starts out as unknown and is upgraded by connects.
@@ -664,7 +665,8 @@ void IMConstPropPass::visitNode(NodeOp node) {
   // Nodes don't fold if they have interesting names, but they should still
   // propagate values.
   if (hasDontTouch(node.getResult()) ||
-      (node.getAnnotationsAttr() && !node.getAnnotationsAttr().empty()))
+      (node.getAnnotationsAttr() && !node.getAnnotationsAttr().empty()) ||
+      node.isForceable())
     return markOverdefined(node.getResult());
 
   return mergeLatticeValue(node.getResult(), node.getInput());
