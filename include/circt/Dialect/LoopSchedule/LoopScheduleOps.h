@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_LOOP_SCHEDULE_OPS_H
-#define CIRCT_LOOP_SCHEDULE_OPS_H
+#ifndef CIRCT_DIALECT_LOOPSCHEDULE_LOOPSCHEDULEOPS_H
+#define CIRCT_DIALECT_LOOPSCHEDULE_LOOPSCHEDULEOPS_H
 
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Attributes.h"
@@ -24,4 +24,4 @@
 #define GET_OP_CLASSES
 #include "circt/Dialect/LoopSchedule/LoopSchedule.h.inc"
 
-#endif // CIRCT_LOOP_SCHEDULE_OPS_H
+#endif // CIRCT_DIALECT_LOOPSCHEDULE_LOOPSCHEDULEOPS_H

@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_LOOP_SCHEDULE_DIALECT_H
-#define CIRCT_LOOP_SCHEDULE_DIALECT_H
+#ifndef CIRCT_DIALECT_LOOPSCHEDULE_LOOPSCHEDULEDIALECT_H
+#define CIRCT_DIALECT_LOOPSCHEDULE_LOOPSCHEDULEDIALECT_H
 
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -19,4 +19,4 @@
 
 #include "circt/Dialect/LoopSchedule/LoopScheduleDialect.h.inc"
 
-#endif // CIRCT_LOOP_SCHEDULE_DIALECT_H
+#endif // CIRCT_DIALECT_LOOPSCHEDULE_LOOPSCHEDULEDIALECT_H
