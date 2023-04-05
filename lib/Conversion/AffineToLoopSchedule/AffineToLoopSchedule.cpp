@@ -1,4 +1,4 @@
-//===- AffineToStaticlogic.cpp --------------------------------------------===//
+//===- AffineToLoopSchedule.cpp --------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,11 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/AffineToPipeline.h"
+#include "circt/Conversion/AffineToLoopSchedule.h"
 #include "../PassDetail.h"
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Analysis/SchedulingAnalysis.h"
-#include "circt/Dialect/Pipeline/Pipeline.h"
+#include "circt/Dialect/LoopSchedule/LoopScheduleOps.h"
 #include "circt/Scheduling/Algorithms.h"
 #include "circt/Scheduling/Problems.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
@@ -36,7 +36,7 @@
 #include <cassert>
 #include <limits>
 
-#define DEBUG_TYPE "affine-to-pipeline"
+#define DEBUG_TYPE "affine-to-loopschedule"
 
 using namespace mlir;
 using namespace mlir::arith;
@@ -46,11 +46,11 @@ using namespace mlir::func;
 using namespace circt;
 using namespace circt::analysis;
 using namespace circt::scheduling;
-using namespace circt::pipeline;
+using namespace circt::loopschedule;
 
 namespace {
 
-struct AffineToPipeline : public AffineToPipelineBase<AffineToPipeline> {
+struct AffineToLoopSchedule : public AffineToLoopScheduleBase<AffineToLoopSchedule> {
   void runOnOperation() override;
 
 private:
@@ -61,7 +61,7 @@ private:
                                       ModuloProblem &problem);
   LogicalResult solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest,
                                        ModuloProblem &problem);
-  LogicalResult createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
+  LogicalResult createLoopSchedulePipeline(SmallVectorImpl<AffineForOp> &loopNest,
                                        ModuloProblem &problem);
 
   CyclicSchedulingAnalysis *schedulingAnalysis;
@@ -69,7 +69,7 @@ private:
 
 } // namespace
 
-ModuloProblem AffineToPipeline::getModuloProblem(CyclicProblem &prob) {
+ModuloProblem AffineToLoopSchedule::getModuloProblem(CyclicProblem &prob) {
   auto modProb = ModuloProblem::get(prob.getContainingOp());
   for (auto *op : prob.getOperations()) {
     auto opr = prob.getLinkedOperatorType(op);
@@ -98,7 +98,7 @@ ModuloProblem AffineToPipeline::getModuloProblem(CyclicProblem &prob) {
   return modProb;
 }
 
-void AffineToPipeline::runOnOperation() {
+void AffineToLoopSchedule::runOnOperation() {
   // Get dependence analysis for the whole function.
   auto dependenceAnalysis = getAnalysis<MemoryDependenceAnalysis>();
 
@@ -131,7 +131,7 @@ void AffineToPipeline::runOnOperation() {
       return signalPassFailure();
 
     // Convert the IR.
-    if (failed(createPipelinePipeline(nestedLoops, moduloProblem)))
+    if (failed(createLoopSchedulePipeline(nestedLoops, moduloProblem)))
       return signalPassFailure();
   }
 }
@@ -247,7 +247,7 @@ static bool yieldOpLegalityCallback(AffineYieldOp op) {
 /// computations in the condition of ifs, or the addresses of loads and stores.
 /// The dependence analysis will be updated so the dependences from the affine
 /// loads and stores are now on the memref loads and stores.
-LogicalResult AffineToPipeline::lowerAffineStructures(
+LogicalResult AffineToLoopSchedule::lowerAffineStructures(
     MemoryDependenceAnalysis &dependenceAnalysis) {
   auto *context = &getContext();
   auto op = getOperation();
@@ -276,7 +276,7 @@ LogicalResult AffineToPipeline::lowerAffineStructures(
 /// well-defined operator latencies. Ultimately, we should move this to a
 /// dialect interface in the Scheduling dialect.
 LogicalResult
-AffineToPipeline::populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest,
+AffineToLoopSchedule::populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest,
                                         ModuloProblem &problem) {
   // Scheduling analyis only considers the innermost loop nest for now.
   auto forOp = loopNest.back();
@@ -353,7 +353,7 @@ AffineToPipeline::populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest,
 
 /// Solve the pre-computed scheduling problem.
 LogicalResult
-AffineToPipeline::solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest,
+AffineToLoopSchedule::solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest,
                                          ModuloProblem &problem) {
   // Scheduling analyis only considers the innermost loop nest for now.
   auto forOp = loopNest.back();
@@ -397,9 +397,9 @@ AffineToPipeline::solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest,
   return success();
 }
 
-/// Create the pipeline op for a loop nest.
+/// Create the loopschedule pipeline op for a loop nest.
 LogicalResult
-AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
+AffineToLoopSchedule::createLoopSchedulePipeline(SmallVectorImpl<AffineForOp> &loopNest,
                                          ModuloProblem &problem) {
   // Scheduling analyis only considers the innermost loop nest for now.
   auto forOp = loopNest.back();
@@ -433,7 +433,7 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
     tripCountAttr = builder.getI64IntegerAttr(*tripCount);
 
   auto pipeline =
-      builder.create<PipelineWhileOp>(resultTypes, ii, tripCountAttr, iterArgs);
+      builder.create<LoopSchedulePipelineWhileOp>(resultTypes, ii, tripCountAttr, iterArgs);
 
   // Create the condition, which currently just compares the induction variable
   // to the upper bound.
@@ -562,7 +562,7 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
     auto startTimeAttr = builder.getIntegerAttr(
         builder.getIntegerType(64, /*isSigned=*/true), startTime);
     auto stage =
-        builder.create<PipelineWhileStageOp>(stageTypes, startTimeAttr);
+        builder.create<LoopSchedulePipelineStageOp>(stageTypes, startTimeAttr);
     auto &stageBlock = stage.getBodyBlock();
     auto *stageTerminator = stageBlock.getTerminator();
     builder.setInsertionPointToStart(&stageBlock);
@@ -609,7 +609,7 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
 
   // Add the iter args and results to the terminator.
   auto stagesTerminator =
-      cast<PipelineTerminatorOp>(stagesBlock.getTerminator());
+      cast<LoopScheduleTerminatorOp>(stagesBlock.getTerminator());
 
   // Collect iter args and results from the induction variable increment and any
   // mapped values that were originally yielded.
@@ -644,6 +644,6 @@ AffineToPipeline::createPipelinePipeline(SmallVectorImpl<AffineForOp> &loopNest,
   return success();
 }
 
-std::unique_ptr<mlir::Pass> circt::createAffineToPipeline() {
-  return std::make_unique<AffineToPipeline>();
+std::unique_ptr<mlir::Pass> circt::createAffineToLoopSchedule() {
+  return std::make_unique<AffineToLoopSchedule>();
 }
