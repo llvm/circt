@@ -2187,13 +2187,18 @@ void MemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // Construct name of the module which will be used for the memory definition.
 StringAttr FirMemory::getFirMemoryName() const { return modName; }
 
+/// Helper for naming forceable declarations (and their optional ref result).
+static void forceableAsmResultNames(Forceable op, StringRef name,
+                                    OpAsmSetValueNameFn setNameFn) {
+  if (name.empty())
+    return;
+  setNameFn(op.getDataRaw(), name);
+  if (op.isForceable())
+    setNameFn(op.getDataRef(), (name + "_ref").str());
+}
+
 void NodeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  StringRef name = getName();
-  if (!name.empty()) {
-    setNameFn(getResult(), name);
-    if (getForceable())
-      setNameFn(getRef(), (name + "_ref").str());
-  }
+  return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
 LogicalResult NodeOp::inferReturnTypes(
@@ -2212,7 +2217,7 @@ LogicalResult NodeOp::inferReturnTypes(
 }
 
 void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), getName());
+  return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
 LogicalResult RegResetOp::verify() {
@@ -2230,11 +2235,11 @@ LogicalResult RegResetOp::verify() {
 }
 
 void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), getName());
+  return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
 void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), getName());
+  return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
 //===----------------------------------------------------------------------===//
