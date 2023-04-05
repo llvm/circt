@@ -126,10 +126,7 @@ def WrapWindow : ESI_Physical_Op<"window.wrap", [Pure]> {
   }];
 }
 
-def UnwrapWindow : ESI_Physical_Op<"window.unwrap", [
-      Pure,
-      DeclareOpInterfaceMethods<InferTypeOpInterface>
-  ]> {
+def UnwrapWindow : ESI_Physical_Op<"window.unwrap", [Pure]> {
   let summary = "unwrap a data window into a union";
 
   let arguments = (ins ESIWindowType:$window);
@@ -137,6 +134,6 @@ def UnwrapWindow : ESI_Physical_Op<"window.unwrap", [
   let hasFolder = 1;
 
   let assemblyFormat = [{
-     $window attr-dict `:` qualified(type($window))
+     $window attr-dict `:` qualified(type($window)) `->` type($frame)
   }];
 }

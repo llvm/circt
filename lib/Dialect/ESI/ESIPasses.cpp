@@ -1389,6 +1389,141 @@ void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
 }
 
 //===----------------------------------------------------------------------===//
+// Lower high-level ESI types to HW conversions and pass.
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Lower all "high-level" ESI types on modules to some lower construct.
+struct ESITypesPass : public LowerESITypesBase<ESITypesPass> {
+  void runOnOperation() override;
+
+private:
+  bool updateFunc(HWMutableModuleLike mod);
+  void updateInstance(HWMutableModuleLike mod, HWInstanceLike inst);
+};
+} // anonymous namespace
+
+void ESITypesPass::runOnOperation() {
+  auto design = cast<ModuleOp>(getOperation());
+  OpBuilder b = OpBuilder::atBlockBegin(design.getBody());
+  DenseMap<WindowType, hw::UnionType> typeCache;
+
+  auto lowerPort = [&](HWMutableModuleLike mod, hw::PortInfo &port) -> bool {
+    auto window = hw::type_dyn_cast<WindowType>(port.type);
+    if (!window)
+      return false;
+    hw::UnionType &lowered = typeCache[window];
+    if (!lowered)
+      lowered = window.getLoweredType();
+    port.type = lowered;
+    return true;
+  };
+
+  DenseMap<StringAttr, hw::HWMutableModuleLike> modsMutated;
+  for (auto mod : design.getOps<hw::HWMutableModuleLike>()) {
+    hw::ModulePortInfo ports = mod.getPorts();
+    Block *body = nullptr;
+    Operation *terminator;
+    if (!mod->getRegions().empty() && !mod->getRegion(0).empty()) {
+      body = &mod->getRegion(0).getBlocks().front();
+      b.setInsertionPointToStart(body);
+      terminator = body->getTerminator();
+    }
+
+    SmallVector<std::pair<unsigned, hw::PortInfo>> loweredInputs;
+    SmallVector<unsigned> loweredInputIdxs;
+    for (auto port : ports.inputs) {
+      if (!lowerPort(mod, port))
+        continue;
+      loweredInputs.emplace_back(port.argNum, port);
+      loweredInputIdxs.push_back(port.argNum);
+      if (!body)
+        continue;
+
+      BlockArgument oldArg = body->getArgument(port.argNum);
+      auto arg = body->insertArgument(port.argNum, port.type, oldArg.getLoc());
+      auto wrap = b.create<WrapWindow>(arg.getLoc(), oldArg.getType(), arg);
+      oldArg.replaceAllUsesWith(wrap);
+      body->eraseArgument(port.argNum + 1);
+    }
+
+    SmallVector<std::pair<unsigned, hw::PortInfo>> loweredOutputs;
+    SmallVector<unsigned> loweredOutputIdxs;
+    if (body)
+      b.setInsertionPoint(terminator);
+    for (auto port : ports.outputs) {
+      if (!lowerPort(mod, port))
+        continue;
+      loweredOutputs.emplace_back(port.argNum, port);
+      loweredOutputIdxs.push_back(port.argNum);
+      if (!body)
+        continue;
+
+      assert(terminator->getNumOperands() > port.argNum);
+      auto unwrap = b.create<UnwrapWindow>(port.loc, port.type,
+                                           terminator->getOperand(port.argNum));
+      terminator->setOperand(port.argNum, unwrap.getFrame());
+    }
+
+    if (loweredInputs.empty() && loweredOutputs.empty())
+      continue;
+
+    modsMutated[SymbolTable::getSymbolName(mod)] = mod;
+    mod.modifyPorts(loweredInputs, loweredOutputs, loweredInputIdxs,
+                    loweredOutputIdxs);
+  }
+
+  design.walk([&](hw::HWInstanceLike inst) {
+    if (!modsMutated.contains(inst.getReferencedModuleNameAttr()))
+      return;
+
+    SmallVector<Value> newOperands;
+    b.setInsertionPoint(inst);
+    for (Value operand : inst->getOperands()) {
+      WindowType window = hw::type_dyn_cast<WindowType>(operand.getType());
+      if (!window) {
+        newOperands.push_back(operand);
+        continue;
+      }
+      assert(typeCache.contains(window));
+      auto unwrapped =
+          b.create<UnwrapWindow>(inst.getLoc(), typeCache[window], operand);
+      newOperands.push_back(unwrapped.getFrame());
+    }
+
+    SmallVector<Type> newResultTypes;
+    b.setInsertionPointAfter(inst);
+    for (OpResult result : inst->getResults()) {
+      WindowType window = hw::type_dyn_cast<WindowType>(result.getType());
+      if (!window) {
+        newResultTypes.push_back(result.getType());
+        continue;
+      }
+      assert(typeCache.contains(window));
+      newResultTypes.push_back(typeCache[window]);
+    }
+
+    Operation *newInst =
+        Operation::create(inst.getLoc(), inst->getName(), newResultTypes,
+                          newOperands, inst->getAttrs());
+    b.insert(newInst);
+    for (auto [oldResult, newResult] :
+         llvm::zip(inst->getResults(), newInst->getResults())) {
+      WindowType window = hw::type_dyn_cast<WindowType>(oldResult.getType());
+      if (!window) {
+        oldResult.replaceAllUsesWith(newResult);
+        continue;
+      }
+      auto wrap =
+          b.create<WrapWindow>(inst.getLoc(), oldResult.getType(), newResult);
+      oldResult.replaceAllUsesWith(wrap.getWindow());
+    }
+
+    inst->erase();
+  });
+}
+
+//===----------------------------------------------------------------------===//
 // Lower to HW/SV conversions and pass.
 //===----------------------------------------------------------------------===//
 
@@ -2150,6 +2285,10 @@ circt::esi::createESIPhysicalLoweringPass() {
 std::unique_ptr<OperationPass<ModuleOp>>
 circt::esi::createESIPortLoweringPass() {
   return std::make_unique<ESIPortsPass>();
+}
+std::unique_ptr<OperationPass<ModuleOp>>
+circt::esi::createESITypeLoweringPass() {
+  return std::make_unique<ESITypesPass>();
 }
 std::unique_ptr<OperationPass<ModuleOp>> circt::esi::createESItoHWPass() {
   return std::make_unique<ESItoHWPass>();
