@@ -1158,7 +1158,7 @@ firrtl.circuit "DidNotContainSymbol" {
   firrtl.module @DidNotContainSymbol() {
     firrtl.instance bar2 sym @w @Bar2()
   }
-	// CHECK-LABEL: firrtl.module @DidNotContainSymbol() {
+  // CHECK-LABEL: firrtl.module @DidNotContainSymbol() {
   // CHECK-NEXT:     %bar2_no_bar3_w = firrtl.wire sym @w_0 {annotations = [{class = "test0"}]} : !firrtl.uint<8>
   // CHECK-NEXT:  }
 }
