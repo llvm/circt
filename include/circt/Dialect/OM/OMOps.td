@@ -30,7 +30,7 @@ def ClassOp : OMOp<"class",
     ]> {
   let arguments = (ins
     SymbolNameAttr:$sym_name,
-    ArrayAttr:$formalParamNames
+    StrArrayAttr:$formalParamNames
   );
 
   let regions = (region

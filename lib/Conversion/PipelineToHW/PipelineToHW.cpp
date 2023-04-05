@@ -51,7 +51,7 @@ static LogicalResult lowerPipeline(PipelineOp pipeline, OpBuilder &builder) {
               Value(), StringAttr());
           stage.getValid().replaceAllUsesWith(validReg);
 
-          for (auto &it : llvm::enumerate(stage.getRegIns())) {
+          for (auto it : llvm::enumerate(stage.getRegIns())) {
             auto regIdx = it.index();
             auto regIn = it.value();
             auto regName =

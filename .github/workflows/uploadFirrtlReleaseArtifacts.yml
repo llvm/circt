@@ -1,4 +1,4 @@
-name: Upload Binaries
+name: Upload Firrtl Release Artifacts
 
 on:
   release:
@@ -6,6 +6,33 @@ on:
   workflow_dispatch:
 
 jobs:
+  publish-sources: 
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-20.04
+    steps:
+      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
+      # time.
+      - name: Get CIRCT and LLVM
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
+          submodules: "true"
+
+      # Package up sources for distribution, as the default source bundles from GitHub don't include LLVM.
+      - name: Create Source Archive
+        run: |
+          touch circt-full-sources.tar.gz
+          tar \
+            --exclude-vcs \
+            --exclude=circt-full-sources.tar.gz \
+            -czf \
+            circt-full-sources.tar.gz .
+      - name: Upload Source Archive
+        uses: AButler/upload-release-assets@v2.0
+        with:
+          files: circt-full-sources.tar.gz
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
   publish:
     strategy:
       matrix:
@@ -66,6 +93,7 @@ jobs:
               -DCMAKE_C_COMPILER=${{ matrix.cc }} \
               -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
               -DBUILD_SHARED_LIBS=${{ matrix.build_config.shared }} \
+              -DLLVM_BUILD_TOOLS=OFF \
               -DLLVM_BUILD_EXAMPLES=OFF \
               -DLLVM_ENABLE_ASSERTIONS=${{ matrix.build_config.assert }} \
               -DLLVM_ENABLE_BINDINGS=OFF \
@@ -105,12 +133,12 @@ jobs:
             -DLLVM_PARALLEL_LINK_JOBS=1 \
             -DLLVM_FORCE_ENABLE_STATS=${{ matrix.build_config.stats }} \
             -DCIRCT_RELEASE_TAG_ENABLED=ON \
-            -DCIRCT_RELEASE_TAG=${{ github.ref_name }} \
+            -DCIRCT_RELEASE_TAG=firtool \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF \
             -DCMAKE_INSTALL_PREFIX=`pwd`/../install
           ninja
           ninja check-circt check-circt-unit
-          ninja install
+          ninja install-firtool
           cd ..
 
       - name: Display Files
@@ -128,21 +156,21 @@ jobs:
       - name: Package Binaries
         run: |
           mv install ${{ steps.name_dir.outputs.value }}
-          ${{ matrix.tar }} czf circt-bin-${{ matrix.runner }}.tar.gz ${{ steps.name_dir.outputs.value }}
+          ${{ matrix.tar }} czf firrtl-bin-${{ matrix.runner }}.tar.gz ${{ steps.name_dir.outputs.value }}
       - name: Show Tarball
         run: |
-          ls -l circt-bin-${{ matrix.runner }}.tar.gz
-          shasum -a 256 circt-bin-${{ matrix.runner }}.tar.gz
+          ls -l firrtl-bin-${{ matrix.runner }}.tar.gz
+          shasum -a 256 firrtl-bin-${{ matrix.runner }}.tar.gz
       - name: Upload Binaries (Non-Tag)
         uses: actions/upload-artifact@v3
         if: github.ref_type != 'tag'
         with:
-          name: circt-bin-${{ matrix.runner }}.tar.gz
-          path: circt-bin-${{ matrix.runner }}.tar.gz
+          name: firrtl-bin-${{ matrix.runner }}.tar.gz
+          path: firrtl-bin-${{ matrix.runner }}.tar.gz
           retention-days: 7
       - name: Upload Binaries (Tag)
         uses: AButler/upload-release-assets@v2.0
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: circt-bin-${{ matrix.runner }}.tar.gz
+          files: firrtl-bin-${{ matrix.runner }}.tar.gz
           repo-token: ${{ secrets.GITHUB_TOKEN }}

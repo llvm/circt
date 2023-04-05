@@ -126,7 +126,8 @@ def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
 
     /// Strip off a single layer of this type and return the sub-type and a
     /// field ID targeting the same field, but rebased on the sub-type.
-    std::pair<FIRRTLBaseType, uint64_t> getSubTypeByFieldID(uint64_t fieldID);
+    std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
+    getSubTypeByFieldID(uint64_t fieldID);
 
     /// Get the maximum field ID in this vector.  This is helpful for
     /// constructing field IDs when this VectorType is nested in another
@@ -213,7 +214,8 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
 
     /// Strip off a single layer of this type and return the sub-type and a
     /// field ID targeting the same field, but rebased on the sub-type.
-    std::pair<FIRRTLBaseType, uint64_t> getSubTypeByFieldID(uint64_t fieldID);
+    std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
+    getSubTypeByFieldID(uint64_t fieldID);
 
     /// Get the maximum field ID in this bundle.  This is helpful for
     /// constructing field IDs when this BundleType is nested in another
@@ -234,7 +236,7 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
 
 def RefImpl : FIRRTLImplType<"Ref", [], "::circt::firrtl::FIRRTLType"> {
   let summary = [{
-    A reference type, such as `firrtl.ref<uint<1>>`.
+    A reference type, such as `firrtl.probe<uint<1>>` or `firrtl.rwprobe<uint<2>>`.
 
     Used for remote reads and writes of the wrapped base type.
 
@@ -245,14 +247,18 @@ def RefImpl : FIRRTLImplType<"Ref", [], "::circt::firrtl::FIRRTLType"> {
 
     Values of this type are used to capture dataflow paths,
     and do not represent a circuit element or entity.
+    
+    Generally read-only (probe), optionally forceable (rwprobe).
   }];
   let parameters = (ins TypeParameter<"::circt::firrtl::FIRRTLBaseType",
-                                      "Type of reference target">:$type);
+                                      "Type of reference target">:$type,
+                        "bool":$forceable);
   let genVerifyDecl = true;
 
   let skipDefaultBuilders = true;
   let builders = [
-    TypeBuilderWithInferredContext<(ins "::circt::firrtl::FIRRTLBaseType":$type)>
+    TypeBuilderWithInferredContext<(ins "::circt::firrtl::FIRRTLBaseType":$type,
+                                        CArg<"bool", "false">:$forceable)>
   ];
 }
 

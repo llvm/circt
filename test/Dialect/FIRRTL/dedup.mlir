@@ -590,11 +590,11 @@ firrtl.circuit "NoDedup" {
 // CHECK-LABEL:   firrtl.circuit "InputRefTypePorts"
 // CHECK-COUNT-3: firrtl.module
 firrtl.circuit "InputRefTypePorts" {
-  firrtl.module @Foo(in %a: !firrtl.ref<uint<1>>) {}
-  firrtl.module @Bar(in %a: !firrtl.ref<uint<1>>) {}
+  firrtl.module @Foo(in %a: !firrtl.probe<uint<1>>) {}
+  firrtl.module @Bar(in %a: !firrtl.probe<uint<1>>) {}
   firrtl.module @InputRefTypePorts() {
-    %foo_a = firrtl.instance foo @Foo(in a: !firrtl.ref<uint<1>>)
-    %bar_a = firrtl.instance bar @Bar(in a: !firrtl.ref<uint<1>>)
+    %foo_a = firrtl.instance foo @Foo(in a: !firrtl.probe<uint<1>>)
+    %bar_a = firrtl.instance bar @Bar(in a: !firrtl.probe<uint<1>>)
   }
 }
 

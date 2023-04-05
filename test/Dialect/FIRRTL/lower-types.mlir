@@ -1057,50 +1057,50 @@ firrtl.module private @is1436_FOO() {
     // CHECK-NEXT: firrtl.connect %z, %0 : !firrtl.uint<10>, !firrtl.uint<10>
   }
 
-  firrtl.module private @SendRefTypeBundles1(in %source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>, out %sink: !firrtl.ref<bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>>) {
+  firrtl.module private @SendRefTypeBundles1(in %source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>, out %sink: !firrtl.probe<bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>>) {
     // CHECK:  firrtl.module private @SendRefTypeBundles1(
     // CHECK-SAME:  in %source_valid: !firrtl.uint<1>,
     // CHECK-SAME:  in %source_ready: !firrtl.uint<1>,
     // CHECK-SAME:  in %source_data: !firrtl.uint<64>,
-    // CHECK-SAME:  out %sink_valid: !firrtl.ref<uint<1>>,
-    // CHECK-SAME:  out %sink_ready: !firrtl.ref<uint<1>>,
-    // CHECK-SAME:  out %sink_data: !firrtl.ref<uint<64>>) {
+    // CHECK-SAME:  out %sink_valid: !firrtl.probe<uint<1>>,
+    // CHECK-SAME:  out %sink_ready: !firrtl.probe<uint<1>>,
+    // CHECK-SAME:  out %sink_data: !firrtl.probe<uint<64>>) {
     %0 = firrtl.ref.send %source : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
     // CHECK:  %0 = firrtl.ref.send %source_valid : !firrtl.uint<1>
     // CHECK:  %1 = firrtl.ref.send %source_ready : !firrtl.uint<1>
     // CHECK:  %2 = firrtl.ref.send %source_data : !firrtl.uint<64>
-    firrtl.refconnect %sink, %0 : !firrtl.ref<bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>>
-    // CHECK:  firrtl.refconnect %sink_valid, %0 : !firrtl.ref<uint<1>>
-    // CHECK:  firrtl.refconnect %sink_ready, %1 : !firrtl.ref<uint<1>>
-    // CHECK:  firrtl.refconnect %sink_data, %2 : !firrtl.ref<uint<64>>
+    firrtl.ref.define %sink, %0 : !firrtl.probe<bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>>
+    // CHECK:  firrtl.ref.define %sink_valid, %0 : !firrtl.probe<uint<1>>
+    // CHECK:  firrtl.ref.define %sink_ready, %1 : !firrtl.probe<uint<1>>
+    // CHECK:  firrtl.ref.define %sink_data, %2 : !firrtl.probe<uint<64>>
   }
-  firrtl.module private @SendRefTypeVectors1(in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.ref<vector<uint<1>, 2>>) {
+  firrtl.module private @SendRefTypeVectors1(in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.probe<vector<uint<1>, 2>>) {
     // CHECK-LABEL: firrtl.module private @SendRefTypeVectors1
-    // CHECK-SAME: in %a_0: !firrtl.uint<1>, in %a_1: !firrtl.uint<1>, out %b_0: !firrtl.ref<uint<1>>, out %b_1: !firrtl.ref<uint<1>>)
+    // CHECK-SAME: in %a_0: !firrtl.uint<1>, in %a_1: !firrtl.uint<1>, out %b_0: !firrtl.probe<uint<1>>, out %b_1: !firrtl.probe<uint<1>>)
     %0 = firrtl.ref.send %a : !firrtl.vector<uint<1>, 2>
     // CHECK:  %0 = firrtl.ref.send %a_0 : !firrtl.uint<1>
     // CHECK:  %1 = firrtl.ref.send %a_1 : !firrtl.uint<1>
-    firrtl.refconnect %b, %0 : !firrtl.ref<vector<uint<1>, 2>>
-    // CHECK:  firrtl.refconnect %b_0, %0 : !firrtl.ref<uint<1>>
-    // CHECK:  firrtl.refconnect %b_1, %1 : !firrtl.ref<uint<1>>
+    firrtl.ref.define %b, %0 : !firrtl.probe<vector<uint<1>, 2>>
+    // CHECK:  firrtl.ref.define %b_0, %0 : !firrtl.probe<uint<1>>
+    // CHECK:  firrtl.ref.define %b_1, %1 : !firrtl.probe<uint<1>>
   }
   firrtl.module private @RefTypeBundles2() {
     %x = firrtl.wire   : !firrtl.bundle<a: uint<1>, b: uint<2>>
     %0 = firrtl.ref.send %x : !firrtl.bundle<a: uint<1>, b: uint<2>>
     // CHECK:   %0 = firrtl.ref.send %x_a : !firrtl.uint<1>
     // CHECK:   %1 = firrtl.ref.send %x_b : !firrtl.uint<2>
-    %1 = firrtl.ref.resolve %0 : !firrtl.ref<bundle<a: uint<1>, b: uint<2>>>
-    // CHECK:   %2 = firrtl.ref.resolve %0 : !firrtl.ref<uint<1>>
-    // CHECK:   %3 = firrtl.ref.resolve %1 : !firrtl.ref<uint<2>>
+    %1 = firrtl.ref.resolve %0 : !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>
+    // CHECK:   %2 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
+    // CHECK:   %3 = firrtl.ref.resolve %1 : !firrtl.probe<uint<2>>
   }
   firrtl.module private @RefTypeVectors(out %c: !firrtl.vector<uint<1>, 2>) {
     %x = firrtl.wire   : !firrtl.vector<uint<1>, 2>
     %0 = firrtl.ref.send %x : !firrtl.vector<uint<1>, 2>
     // CHECK:  %0 = firrtl.ref.send %x_0 : !firrtl.uint<1>
     // CHECK:  %1 = firrtl.ref.send %x_1 : !firrtl.uint<1>
-    %1 = firrtl.ref.resolve %0 : !firrtl.ref<vector<uint<1>, 2>>
-    // CHECK:  %2 = firrtl.ref.resolve %0 : !firrtl.ref<uint<1>>
-    // CHECK:  %3 = firrtl.ref.resolve %1 : !firrtl.ref<uint<1>>
+    %1 = firrtl.ref.resolve %0 : !firrtl.probe<vector<uint<1>, 2>>
+    // CHECK:  %2 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
+    // CHECK:  %3 = firrtl.ref.resolve %1 : !firrtl.probe<uint<1>>
     firrtl.strictconnect %c, %1 : !firrtl.vector<uint<1>, 2>
     // CHECK:  firrtl.strictconnect %c_0, %2 : !firrtl.uint<1>
     // CHECK:  firrtl.strictconnect %c_1, %3 : !firrtl.uint<1>

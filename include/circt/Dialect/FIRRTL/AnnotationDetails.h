@@ -28,6 +28,7 @@ constexpr const char *rawAnnotations = "rawAnnotations";
 // Annotation Class Names
 //===----------------------------------------------------------------------===//
 
+constexpr const char *conventionAnnoClass = "circt.ConventionAnnotation";
 constexpr const char *dontTouchAnnoClass =
     "firrtl.transforms.DontTouchAnnotation";
 constexpr const char *enumComponentAnnoClass =

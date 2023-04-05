@@ -27,11 +27,11 @@ handshake.func @simple(%arg0: none, ...) -> none {
 // -----
 
 // CHECK:   handshake.func @cmerge_with_control_used(%[[VAL_0:.*]]: none, %[[VAL_1:.*]]: none, %[[VAL_2:.*]]: none, ...) -> (none, index, none)
-// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = control_merge %[[VAL_0]], %[[VAL_1]] : none
+// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = control_merge %[[VAL_0]], %[[VAL_1]] : none, index
 // CHECK:           return %[[VAL_3]], %[[VAL_4]], %[[VAL_2]] : none, index, none
 // CHECK:         }
 handshake.func @cmerge_with_control_used(%arg0: none, %arg1: none, %arg2: none) -> (none, index, none) {
-  %result, %index = control_merge %arg0, %arg1 : none
+  %result, %index = control_merge %arg0, %arg1 : none, index
   handshake.return %result, %index, %arg2 : none, index, none
 }
 
@@ -43,7 +43,7 @@ handshake.func @cmerge_with_control_used(%arg0: none, %arg1: none, %arg2: none) 
 // CHECK:           return %[[VAL_3]], %[[VAL_2]] : none, none
 // CHECK:         }
 handshake.func @cmerge_with_control_sunk(%arg0: none, %arg1: none, %arg2: none) -> (none, none) {
-  %result, %index = control_merge %arg0, %arg1 : none
+  %result, %index = control_merge %arg0, %arg1 : none, index
   sink %index : index
   handshake.return %result, %arg2 : none, none
 }
@@ -55,7 +55,7 @@ handshake.func @cmerge_with_control_sunk(%arg0: none, %arg1: none, %arg2: none) 
 // CHECK:           return %[[VAL_3]], %[[VAL_2]] : none, none
 // CHECK:         }
 handshake.func @cmerge_with_control_ignored(%arg0: none, %arg1: none, %arg2: none) -> (none, none) {
-  %result, %index = control_merge %arg0, %arg1 : none
+  %result, %index = control_merge %arg0, %arg1 : none, index
   handshake.return %result, %arg2 : none, none
 }
 

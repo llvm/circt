@@ -566,4 +566,29 @@ def ConvertToArcs : Pass<"convert-to-arcs", "mlir::ModuleOp"> {
   let dependentDialects = ["circt::arc::ArcDialect"];
 }
 
+//===----------------------------------------------------------------------===//
+// ConvertCombToArith
+//===----------------------------------------------------------------------===//
+
+def ConvertCombToArith : Pass<"convert-comb-to-arith", "mlir::ModuleOp"> {
+  let summary = "Convert combinational ops and constants into arith ops";
+  let constructor = "circt::createConvertCombToArithPass()";
+  let dependentDialects = ["mlir::arith::ArithDialect"];
+}
+
+//===----------------------------------------------------------------------===//
+// ConvertArcToLLVM
+//===----------------------------------------------------------------------===//
+
+def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "mlir::ModuleOp"> {
+  let summary = "Lower state transfer arc representation to LLVM";
+  let constructor = "circt::createLowerArcToLLVMPass()";
+  let dependentDialects = [
+    "arc::ArcDialect",
+    "mlir::LLVM::LLVMDialect",
+    "mlir::scf::SCFDialect",
+    "mlir::func::FuncDialect"
+  ];
+}
+
 #endif // CIRCT_CONVERSION_PASSES_TD

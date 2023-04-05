@@ -562,7 +562,8 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
       AnnoPathValue internalPathSrc;
       auto targetType = wireTarget->ref.getType().cast<FIRRTLBaseType>();
       if (wireTarget->fieldIdx)
-        targetType = targetType.getFinalTypeByFieldID(wireTarget->fieldIdx);
+        targetType = cast<FIRRTLBaseType>(
+            targetType.getFinalTypeByFieldID(wireTarget->fieldIdx));
       sendVal = lowerInternalPathAnno(internalPathSrc, *moduleTarget, target,
                                       internalPathAttr, targetType, state);
       if (!sendVal)

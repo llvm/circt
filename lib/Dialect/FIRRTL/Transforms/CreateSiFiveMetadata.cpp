@@ -157,7 +157,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
             auto parentModule = inst->getParentOfType<FModuleOp>();
             if (dutMod == parentModule)
               hierName = parentModule.getName().str();
-            hierName = (Twine(hierName) + "." + inst.instanceName()).str();
+            hierName = (Twine(hierName) + "." + inst.getInstanceName()).str();
           }
           hierNames.push_back(hierName);
           // Only include the memory path if it is under the DUT or we are in a

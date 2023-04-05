@@ -204,7 +204,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       if (!module)
         continue;
       LLVM_DEBUG(llvm::dbgs()
-                 << "Traversing module:" << module.moduleNameAttr() << "\n");
+                 << "Traversing module:" << module.getModuleNameAttr() << "\n");
       for (Operation &op : module.getBodyBlock()->getOperations())
         if (transferFunc(op).failed())
           return signalPassFailure();

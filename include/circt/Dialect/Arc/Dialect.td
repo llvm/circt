@@ -17,6 +17,12 @@ def ArcDialect : Dialect {
     in a circuit.
   }];
   let cppNamespace = "circt::arc";
+
+  let useDefaultTypePrinterParser = 1;
+
+  let extraClassDeclaration = [{
+    void registerTypes();
+  }];
 }
 
 #endif // CIRCT_DIALECT_ARC_DIALECT_TD

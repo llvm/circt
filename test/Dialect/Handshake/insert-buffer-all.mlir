@@ -5,7 +5,7 @@ module {
     // CHECK: buffer
     %0 = br %arg0 : none
     // CHECK: buffer
-    %1:2 = control_merge %0 : none
+    %1:2 = control_merge %0 : none, index
     // CHECK: buffer
     %2:3 = fork [3] %1#0 : none
     // CHECK: buffer
@@ -28,7 +28,7 @@ module {
     %9:2 = fork [2] %8 : index
     // CHECK: buffer
     // CHECK: buffer
-    %10:2 = control_merge %23, %5 : none  
+    %10:2 = control_merge %23, %5 : none, index
     // CHECK: buffer
     %11:2 = fork [2] %10#1 : index
     // CHECK: buffer
@@ -60,7 +60,7 @@ module {
     // CHECK: buffer
     %17 = merge %trueResult : index
     // CHECK: buffer
-    %18:2 = control_merge %trueResult_0 : none
+    %18:2 = control_merge %trueResult_0 : none, index
     // CHECK: buffer
     %19:2 = fork [2] %18#0 : none
     // CHECK: buffer
@@ -77,7 +77,7 @@ module {
     // CHECK: buffer
     %24 = br %21 : index
     // CHECK: buffer
-    %25:2 = control_merge %falseResult_1 : none
+    %25:2 = control_merge %falseResult_1 : none, index
     // CHECK: buffer
     sink %25#1 : index
     return %25#0 : none

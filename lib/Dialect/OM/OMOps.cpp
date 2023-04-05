@@ -34,6 +34,10 @@ ParseResult circt::om::ClassOp::parse(OpAsmParser &parser,
                                /*allowType=*/true, /*allowAttrs=*/false))
     return failure();
 
+  // Parse the optional attribute dictionary.
+  if (failed(parser.parseOptionalAttrDictWithKeyword(state.attributes)))
+    return failure();
+
   // Parse the body.
   Region *region = state.addRegion();
   if (parser.parseRegion(*region, args))
@@ -72,6 +76,12 @@ void circt::om::ClassOp::print(OpAsmPrinter &printer) {
       printer << ", ";
   }
   printer << ") ";
+
+  // Print the optional attribute dictionary.
+  SmallVector<StringRef> elidedAttrs{getSymNameAttrName(),
+                                     getFormalParamNamesAttrName()};
+  printer.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
+                                           elidedAttrs);
 
   // Print the body.
   printer.printRegion(getBody(), /*printEntryBlockArgs=*/false,

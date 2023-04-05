@@ -1040,16 +1040,16 @@ hw.module @renameKeyword(%a: !hw.struct<repeat: i1, repeat_0: i1>) -> (r1: !hw.s
 // CHECK-NEXT:  inout  struct packed {logic repeat_0; logic repeat_0_0; } a,
 // CHECK-NEXT:  output                                                    r1,
 // CHECK-NEXT:                                                            r2,
-// CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_0; } r3
+// CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_0; } r3, 
+// CHECK-NEXT:                                                            r4
 // CHECK-NEXT:  );
-hw.module @useRenamedStruct(%a: !hw.inout<struct<repeat: i1, repeat_0: i1>>) -> (r1: i1, r2: i1, r3: !hw.struct<repeat: i1, repeat_0: i1>) {
-  // CHECK: wire struct packed {logic repeat_0; logic repeat_0_0; } _inst1_r1;
+hw.module @useRenamedStruct(%a: !hw.inout<struct<repeat: i1, repeat_0: i1>>) -> (r1: i1, r2: i1, r3: !hw.struct<repeat: i1, repeat_0: i1>, r4: !hw.struct<repeat: i1, repeat_0: i1>) {
   %read = sv.read_inout %a : !hw.inout<struct<repeat: i1, repeat_0: i1>>
 
   %i0 = hw.instance "inst1" @renameKeyword(a: %read: !hw.struct<repeat: i1, repeat_0: i1>) -> (r1: !hw.struct<repeat: i1, repeat_0: i1>)
   // CHECK:      renameKeyword inst1 (
   // CHECK-NEXT:   .a  (a),
-  // CHECK-NEXT:   .r1 (_inst1_r1)
+  // CHECK-NEXT:   .r1 (r4)
   // CHECK-NEXT: )
 
   %0 = sv.struct_field_inout %a["repeat"] : !hw.inout<struct<repeat: i1, repeat_0: i1>>
@@ -1060,7 +1060,7 @@ hw.module @useRenamedStruct(%a: !hw.inout<struct<repeat: i1, repeat_0: i1>>) -> 
   %true = hw.constant true
   %3 = hw.struct_inject %read["repeat_0"], %true : !hw.struct<repeat: i1, repeat_0: i1>
   // assign r3 = '{repeat_0: a.repeat_0, repeat_0_0: (1'h1)};
-  hw.output %1, %2, %3 : i1, i1, !hw.struct<repeat: i1, repeat_0: i1>
+  hw.output %1, %2, %3, %i0 : i1, i1, !hw.struct<repeat: i1, repeat_0: i1>, !hw.struct<repeat: i1, repeat_0: i1>
 }
 
 
@@ -1283,20 +1283,21 @@ hw.module @parameterizedArrays<param: i32, N: i32>
 // CHECK-LABEL: module UseParameterizedArrays(
 // CHECK-NEXT: input [41:0][11:0] a,
 // CHECK-NEXT: input [23:0][11:0] b
+// CHECK-NEXT: output [23:0][11:0] c
 // CHECK-NEXT: );
-hw.module @UseParameterizedArrays(%a: !hw.array<42xint<12>>, %b: !hw.array<24xint<12>>) {
-// CHECK:  wire [23:0][11:0] _inst_c;
+hw.module @UseParameterizedArrays(%a: !hw.array<42xint<12>>, %b: !hw.array<24xint<12>>) -> (c: !hw.array<24xint<12>>) {
 // CHECK:  parameterizedArrays #(
 // CHECK-NEXT:    .param(12),
 // CHECK-NEXT:    .N(24)
 // CHECK-NEXT:  ) inst (
 // CHECK-NEXT:    .a (a),
 // CHECK-NEXT:    .b (b),
-// CHECK-NEXT:    .c (_inst_c)
+// CHECK-NEXT:    .c (c)
 // CHECK-NEXT:  );
 // CHECK-NEXT: endmodule
   %c = hw.instance "inst" @parameterizedArrays<param: i32 = 12, N: i32 = 24>
     (a: %a : !hw.array<42xint<12>>, b: %b : !hw.array<24xint<12>>) -> (c: !hw.array<24xint<12>>) {}
+  hw.output %c: !hw.array<24xint<12>>
 }
 
 // CHECK-LABEL: module NoneTypeParam

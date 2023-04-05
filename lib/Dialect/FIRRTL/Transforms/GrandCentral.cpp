@@ -1089,7 +1089,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     if (!elementsAttr)
       return std::nullopt;
     SmallVector<Attribute> elements;
-    for (auto &[i, elt] : llvm::enumerate(elementsAttr)) {
+    for (auto [i, elt] : llvm::enumerate(elementsAttr)) {
       auto eltAttr = parseAugmentedType(
           state, elt.cast<DictionaryAttr>(), root, companion, name,
           StringAttr::get(context, ""), id, std::nullopt, clazz, companionAttr,
@@ -1406,9 +1406,10 @@ std::optional<TypeSum> GrandCentralPass::computeField(
             FieldRef fieldRef = leafMap.lookup(ground.getID()).field;
             auto value = fieldRef.getValue();
             auto fieldID = fieldRef.getFieldID();
-            auto tpe =
-                value.getType().cast<FIRRTLBaseType>().getFinalTypeByFieldID(
-                    fieldID);
+            auto tpe = cast<FIRRTLBaseType>(
+                value.getType()
+                    .cast<circt::hw::FieldIDTypeInterface>()
+                    .getFinalTypeByFieldID(fieldID));
             if (!tpe.isGround()) {
               value.getDefiningOp()->emitOpError()
                   << "cannot be added to interface with id '"
@@ -1656,7 +1657,7 @@ void GrandCentralPass::runOnOperation() {
       llvm::dbgs() << "  <none>\n";
     llvm::dbgs() << "DUT: ";
     if (dut)
-      llvm::dbgs() << dut.moduleName() << "\n";
+      llvm::dbgs() << dut.getModuleName() << "\n";
     else
       llvm::dbgs() << "<none>\n";
     llvm::dbgs()
@@ -1921,10 +1922,11 @@ void GrandCentralPass::runOnOperation() {
                   instancePaths->instanceGraph.lookup(op);
 
               LLVM_DEBUG({
-                llvm::dbgs() << "Found companion module: "
-                             << companionNode->getModule().moduleName() << "\n"
-                             << "  submodules exclusively instantiated "
-                                "(including companion):\n";
+                llvm::dbgs()
+                    << "Found companion module: "
+                    << companionNode->getModule().getModuleName() << "\n"
+                    << "  submodules exclusively instantiated "
+                       "(including companion):\n";
               });
 
               for (auto &node : llvm::depth_first(companionNode)) {
