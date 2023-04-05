@@ -48,6 +48,7 @@ target_link_libraries(circt-opt
   CIRCTHWToLLHD
   CIRCTHWToSystemC
   CIRCTHWTransforms
+  CIRCTLoopSchedule
   CIRCTSCFToCalyx
   CIRCTScheduling
   CIRCTSeq
