@@ -307,6 +307,7 @@ namespace detail {
 bool operator==(const OffsetFieldInfo &a, const OffsetFieldInfo &b) {
   return a.name == b.name && a.type == b.type && a.offset == b.offset;
 }
+// NOLINTNEXTLINE
 llvm::hash_code hash_value(const OffsetFieldInfo &fi) {
   return llvm::hash_combine(fi.name, fi.type, fi.offset);
 }
@@ -334,15 +335,15 @@ Type UnionType::parse(AsmParser &p) {
   return get(p.getContext(), parameters);
 }
 
-void UnionType::print(AsmPrinter &p) const {
-  p << '<';
-  llvm::interleaveComma(getElements(), p,
-                        [&](const UnionType::FieldInfo &field) {
-                          p << field.name.getValue() << ": " << field.type;
-                          if (field.offset)
-                            p << " offset " << field.offset;
-                        });
-  p << ">";
+void UnionType::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << '<';
+  llvm::interleaveComma(
+      getElements(), odsPrinter, [&](const UnionType::FieldInfo &field) {
+        odsPrinter << field.name.getValue() << ": " << field.type;
+        if (field.offset)
+          odsPrinter << " offset " << field.offset;
+      });
+  odsPrinter << ">";
 }
 
 Type UnionType::getFieldType(mlir::StringRef fieldName) {
