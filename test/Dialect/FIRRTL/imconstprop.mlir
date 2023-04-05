@@ -527,6 +527,28 @@ firrtl.circuit "ForwardRef" {
 
 // -----
 
+// Don't prop through a rwprobe ref.
+
+// CHECK-LABEL: "SendThroughRWProbe"
+firrtl.circuit "SendThroughRWProbe" {
+  // CHECK-LABEL: firrtl.module private @Bar
+  firrtl.module private @Bar(out %rw: !firrtl.rwprobe<uint<1>>) {
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK: firrtl.node
+    // CHECK-SAME: forceable
+    %n, %n_ref = firrtl.node %zero forceable : !firrtl.uint<1>
+    firrtl.ref.define %rw, %n_ref : !firrtl.rwprobe<uint<1>>
+  }
+  // CHECK:  firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+  firrtl.module @SendThroughRWProbe(out %a: !firrtl.uint<1>) {
+    %bar_rw = firrtl.instance bar @Bar(out rw: !firrtl.rwprobe<uint<1>>)
+    %0 = firrtl.ref.resolve %bar_rw : !firrtl.rwprobe<uint<1>>
+    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+  }
+}
+
+// -----
+
 // Verbatim expressions should not be optimized away.
 firrtl.circuit "Verbatim"  {
   firrtl.module @Verbatim() {
