@@ -78,6 +78,32 @@ parseSostOperation(OpAsmParser &parser,
   return success();
 }
 
+/// Verifies whether an indexing value is wide enough to index into a provided
+/// number of operands.
+static LogicalResult verifyIndexWideEnough(Operation *op, Value indexVal,
+                                           uint64_t numOperands) {
+  auto indexType = indexVal.getType();
+  unsigned indexWidth;
+
+  // Determine the bitwidth of the indexing value
+  if (auto integerType = indexType.dyn_cast<IntegerType>())
+    indexWidth = integerType.getWidth();
+  else if (indexType.isIndex())
+    indexWidth = IndexType::kInternalStorageBitWidth;
+  else
+    return op->emitError("unsupported type for indexing operand: ")
+           << indexType;
+
+  // Check whether the bitwidth can support the provided number of operands
+  uint64_t maxNumOperands =
+      indexWidth >= UINT64_WIDTH ? UINT64_MAX : (uint64_t)1 << indexWidth;
+  if (numOperands > maxNumOperands)
+    return op->emitError("bitwidth of indexing operand is ")
+           << indexWidth << ", which can index into " << maxNumOperands
+           << " operands, but found " << numOperands << " operands";
+  return success();
+}
+
 static bool isControlCheckTypeAndOperand(Type dataType, Value operand) {
   // The operation is a control operation if its operand data type is a
   // NoneType.
@@ -413,25 +439,8 @@ void MuxOp::print(OpAsmPrinter &p) {
 }
 
 LogicalResult MuxOp::verify() {
-  unsigned numDataOperands = static_cast<int>(getDataOperands().size());
-  auto selectType = getSelectOperand().getType();
-
-  unsigned selectBits;
-  if (auto integerType = selectType.dyn_cast<IntegerType>())
-    selectBits = integerType.getWidth();
-  else if (selectType.isIndex())
-    selectBits = IndexType::kInternalStorageBitWidth;
-  else
-    return emitError("unsupported type for select operand: ") << selectType;
-
-  double maxDataOperands = std::pow(2, selectBits);
-  if (numDataOperands > maxDataOperands)
-    return emitError("select bitwidth was ")
-           << selectBits << ", which can mux "
-           << static_cast<int64_t>(maxDataOperands) << " operands, but found "
-           << numDataOperands << " operands";
-
-  return success();
+  return verifyIndexWideEnough(*this, getSelectOperand(),
+                               getDataOperands().size());
 }
 
 std::string handshake::ControlMergeOp::getResultName(unsigned int idx) {
@@ -446,7 +455,7 @@ LogicalResult ControlMergeOp::inferReturnTypes(
   // ControlMerge must have at least one data operand
   if (operands.empty())
     return failure();
-  // Result type is type of any data operand and index type
+  // Result type is type of any data operand and, by default, an index type
   inferredReturnTypes.push_back(operands[0].getType());
   inferredReturnTypes.push_back(IndexType::get(context));
   return success();
@@ -454,17 +463,19 @@ LogicalResult ControlMergeOp::inferReturnTypes(
 
 ParseResult ControlMergeOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
-  Type type;
-  ArrayRef<Type> operandTypes(type);
-  SmallVector<Type, 1> resultTypes, dataOperandsTypes;
+  Type resultType, indexType;
+  SmallVector<Type> resultTypes, dataOperandsTypes;
   llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
   int size;
-  if (parseSostOperation(parser, allOperands, result, size, type, false))
+  if (parseSostOperation(parser, allOperands, result, size, resultType, false))
+    return failure();
+  // Parse type of index result
+  if (parser.parseComma() || parser.parseType(indexType))
     return failure();
 
-  dataOperandsTypes.assign(size, type);
-  resultTypes.push_back(type);
-  resultTypes.push_back(IndexType::get(parser.getContext()));
+  dataOperandsTypes.assign(size, resultType);
+  resultTypes.push_back(resultType);
+  resultTypes.push_back(indexType);
   result.addTypes(resultTypes);
   if (parser.resolveOperands(allOperands, dataOperandsTypes, allOperandLoc,
                              result.operands))
@@ -472,7 +483,20 @@ ParseResult ControlMergeOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-void ControlMergeOp::print(OpAsmPrinter &p) { sostPrint(p, false); }
+void ControlMergeOp::print(OpAsmPrinter &p) {
+  sostPrint(p, false);
+  // Print type of index result
+  p << ", " << getIndex().getType();
+}
+
+LogicalResult ControlMergeOp::verify() {
+  auto operands = getOperands();
+  if (operands.empty())
+    return emitOpError("operation must have at least one operand");
+  if (operands[0].getType() != getResult().getType())
+    return emitOpError("type of first result should match type of operands");
+  return verifyIndexWideEnough(*this, getIndex(), getNumOperands());
+}
 
 LogicalResult FuncOp::verify() {
   // If this function is external there is nothing to do.

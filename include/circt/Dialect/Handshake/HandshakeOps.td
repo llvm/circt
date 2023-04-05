@@ -400,19 +400,19 @@ def ControlMergeOp : Handshake_Op<"control_merge", [
     (nondeterministic) control merge.  Any input is propagated to the
     first output and the index of the propagated input is sent to the
     second output.  The number of inputs corresponds to the number of
-    predecessor blocks.  ControlMerge is a control-only
-    component(i.e., has no data but only bidirectional handshake).
+    predecessor blocks.
 
     Example:
     ```
-    %0, %idx = control_merge %a, %b, %c : i32
+    %0, %idx = control_merge %a, %b, %c {attributes} : i32, index
     ```
   }];
 
   let arguments = (ins Variadic<AnyType> : $dataOperands);
-  let results = (outs AnyType : $result, Index : $index);
-  let hasCanonicalizer = 1;
+  let results = (outs AnyType : $result, AnyType : $index);
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+  let hasCanonicalizer = 1;
 }
 
 def BranchOp : Handshake_Op<"br", [
