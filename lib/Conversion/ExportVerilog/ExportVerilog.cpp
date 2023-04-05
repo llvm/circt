@@ -634,7 +634,8 @@ static bool isExpressionUnableToInline(Operation *op,
     //     assign bar = {{a}, {b}, {c}, {d}}[idx];
     //
     // To handle these, we push the subexpression into a temporary.
-    if (isa<ExtractOp, ArraySliceOp, ArrayGetOp, StructExtractOp>(user))
+    if (isa<ExtractOp, ArraySliceOp, ArrayGetOp, StructExtractOp,
+            IndexedPartSelectOp>(user))
       if (op->getResult(0) == user->getOperand(0) && // ignore index operands.
           !isOkToBitSelectFrom(op->getResult(0)))
         return true;
