@@ -26,10 +26,17 @@ class HWSymbolCache;
 class ParamDeclAttr;
 class TypedeclOp;
 namespace detail {
-/// Struct defining a field. Used in structs and unions.
+/// Struct defining a field. Used in structs.
 struct FieldInfo {
   mlir::StringAttr name;
   mlir::Type type;
+};
+
+/// Struct defining a field with an offset. Used in unions.
+struct OffsetFieldInfo {
+  StringAttr name;
+  Type type;
+  size_t offset;
 };
 } // namespace detail
 } // namespace hw

@@ -181,7 +181,7 @@ def UnionTypeImpl : HWType<"Union"> {
   let hasCustomAssemblyFormat = 1;
 
   let extraClassDeclaration = [{
-    using FieldInfo = ::circt::hw::detail::FieldInfo;
+    using FieldInfo = ::circt::hw::detail::OffsetFieldInfo;
     mlir::Type getFieldType(mlir::StringRef fieldName);
   }];
 }
