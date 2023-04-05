@@ -95,12 +95,13 @@ static LogicalResult verifyIndexWideEnough(Operation *op, Value indexVal,
            << indexType;
 
   // Check whether the bitwidth can support the provided number of operands
-  uint64_t maxNumOperands =
-      indexWidth >= UINT64_WIDTH ? UINT64_MAX : (uint64_t)1 << indexWidth;
-  if (numOperands > maxNumOperands)
-    return op->emitError("bitwidth of indexing operand is ")
-           << indexWidth << ", which can index into " << maxNumOperands
-           << " operands, but found " << numOperands << " operands";
+  if (indexWidth < 64) {
+    uint64_t maxNumOperands = (uint64_t)1 << indexWidth;
+    if (numOperands > maxNumOperands)
+      return op->emitError("bitwidth of indexing operand is ")
+            << indexWidth << ", which can index into " << maxNumOperands
+            << " operands, but found " << numOperands << " operands";
+  }
   return success();
 }
 
