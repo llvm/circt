@@ -12,7 +12,6 @@ add_circt_dialect_library(CIRCTLoopSchedule
   ${PROJECT_BINARY_DIR}/include
 
   LINK_LIBS PUBLIC
-  CIRCTESI
   MLIRArithDialect
   MLIRFuncDialect
   MLIRIR
