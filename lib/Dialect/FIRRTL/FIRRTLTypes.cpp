@@ -1116,7 +1116,7 @@ std::pair<uint64_t, bool> FVectorType::rootChildFieldID(uint64_t fieldID,
 }
 
 //===----------------------------------------------------------------------===//
-// Bundle Type
+// Enum Type
 //===----------------------------------------------------------------------===//
 
 struct circt::firrtl::detail::EnumTypeStorage : mlir::TypeStorage {
@@ -1138,7 +1138,8 @@ struct circt::firrtl::detail::EnumTypeStorage : mlir::TypeStorage {
       fieldID += type.getMaxFieldID();
     }
     maxFieldID = fieldID;
-    passiveContainsAnalogTypeInfo.setInt(props.toFlags());
+    recProps = props;
+    assert(!props.containsAnalog && props.isPassive);
   }
 
   bool operator==(const KeyTy &key) const { return key == KeyTy(elements); }
@@ -1156,10 +1157,7 @@ struct circt::firrtl::detail::EnumTypeStorage : mlir::TypeStorage {
   SmallVector<uint64_t, 4> fieldIDs;
   uint64_t maxFieldID;
 
-  /// This holds the bits for the type's recursive properties, and can hold a
-  /// pointer to a passive version of the type.
-  llvm::PointerIntPair<Type, RecursiveTypeProperties::numBits, unsigned>
-      passiveContainsAnalogTypeInfo;
+  RecursiveTypeProperties recProps;
 };
 
 auto EnumType::getElements() const -> ArrayRef<EnumElement> {
@@ -1168,8 +1166,7 @@ auto EnumType::getElements() const -> ArrayRef<EnumElement> {
 
 /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
 RecursiveTypeProperties EnumType::getRecursiveTypeProperties() {
-  auto flags = getImpl()->passiveContainsAnalogTypeInfo.getInt();
-  return RecursiveTypeProperties::fromFlags(flags);
+  return getImpl()->recProps;
 }
 
 std::optional<unsigned> EnumType::getElementIndex(StringAttr name) {
@@ -1192,6 +1189,12 @@ std::optional<unsigned> EnumType::getElementIndex(StringRef name) {
   return std::nullopt;
 }
 
+StringRef EnumType::getElementName(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in enum");
+  return getElements()[index].name.getValue();
+}
+
 std::optional<EnumType::EnumElement> EnumType::getElement(StringAttr name) {
   if (auto maybeIndex = getElementIndex(name))
     return getElements()[*maybeIndex];
@@ -1207,7 +1210,7 @@ std::optional<EnumType::EnumElement> EnumType::getElement(StringRef name) {
 /// Look up an element by index.
 EnumType::EnumElement EnumType::getElement(size_t index) {
   assert(index < getNumElements() &&
-         "index must be less than number of fields in bundle");
+         "index must be less than number of fields in enum");
   return getElements()[index];
 }
 
@@ -1223,8 +1226,48 @@ FIRRTLBaseType EnumType::getElementType(StringRef name) {
 
 FIRRTLBaseType EnumType::getElementType(size_t index) {
   assert(index < getNumElements() &&
-         "index must be less than number of fields in bundle");
+         "index must be less than number of fields in enum");
   return getElements()[index].type;
+}
+
+uint64_t EnumType::getFieldID(uint64_t index) {
+  return getImpl()->fieldIDs[index];
+}
+
+uint64_t EnumType::getIndexForFieldID(uint64_t fieldID) {
+  assert(getElements().size() && "Enum must have >0 fields");
+  auto fieldIDs = getImpl()->fieldIDs;
+  auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
+  return std::distance(fieldIDs.begin(), it);
+}
+
+std::pair<uint64_t, uint64_t>
+EnumType::getIndexAndSubfieldID(uint64_t fieldID) {
+  auto index = getIndexForFieldID(fieldID);
+  auto elementFieldID = getFieldID(index);
+  return {index, fieldID - elementFieldID};
+}
+
+std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
+EnumType::getSubTypeByFieldID(uint64_t fieldID) {
+  if (fieldID == 0)
+    return {*this, 0};
+  auto fieldIDs = getImpl()->fieldIDs;
+  auto subfieldIndex = getIndexForFieldID(fieldID);
+  auto subfieldType = getElementType(subfieldIndex);
+  auto subfieldID = fieldID - getFieldID(subfieldIndex);
+  return {subfieldType, subfieldID};
+}
+
+uint64_t EnumType::getMaxFieldID() { return getImpl()->maxFieldID; }
+
+std::pair<uint64_t, bool> EnumType::rootChildFieldID(uint64_t fieldID,
+                                                     uint64_t index) {
+  auto childRoot = getFieldID(index);
+  auto rangeEnd = index + 1 >= getNumElements() ? getMaxFieldID()
+                                                : (getFieldID(index + 1) - 1);
+  return std::make_pair(fieldID - childRoot,
+                        fieldID >= childRoot && fieldID <= rangeEnd);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1296,6 +1339,16 @@ std::optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
             width += *w;
           }
           return width;
+        })
+        .Case<EnumType>([&](EnumType fenum) -> std::optional<int64_t> {
+          int64_t width = 0;
+          for (auto &elt : fenum) {
+            auto w = getBitWidth(elt.type);
+            if (!w.has_value())
+              return std::nullopt;
+            width = std::max(width, *w);
+          }
+          return width + llvm::PowerOf2Ceil(fenum.getNumElements());
         })
         .Case<FVectorType>([&](auto vector) -> std::optional<int64_t> {
           auto w = getBitWidth(vector.getElementType());

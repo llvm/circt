@@ -285,8 +285,37 @@ def EnumImpl : FIRRTLImplType<"Enum", [FieldIDTypeInterface]> {
     /// Return the recursive properties of the type.
     RecursiveTypeProperties getRecursiveTypeProperties();
 
-    /// Return this type with any flip types recursively removed from itself.
-    FIRRTLBaseType getPassiveType();
+    /// Get an integer ID for the field. Field IDs start at 1, and are assigned
+    /// to each field in a enum in a recursive pre-order walk of all fields,
+    /// visiting all nested enum fields.  A field ID of 0 is used to reference
+    /// the enum itself. The ID can be used to uniquely identify any specific
+    /// field in this enum.
+    uint64_t getFieldID(uint64_t index);
+
+    /// Find the element index corresponding to the desired fieldID.  If the
+    /// fieldID corresponds to a field in a nested enum, it will return the
+    /// index of the parent field.
+    uint64_t getIndexForFieldID(uint64_t fieldID);
+
+    /// Find the index of the element that contains the given fieldID.
+    /// As well, rebase the fieldID to the element.
+    std::pair<uint64_t, uint64_t> getIndexAndSubfieldID(uint64_t fieldID);
+
+    /// Strip off a single layer of this type and return the sub-type and a
+    /// field ID targeting the same field, but rebased on the sub-type.
+    std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
+    getSubTypeByFieldID(uint64_t fieldID);
+
+    /// Get the maximum field ID in this bundle.  This is helpful for
+    /// constructing field IDs when this EnumType is nested in another
+    /// aggregate type.
+    uint64_t getMaxFieldID();
+
+    /// Returns the effective field id when treating the index field as the root
+    /// of the type.  Essentially maps a fieldID to a fieldID after a subfield
+    /// op. Returns the new id and whether the id is in the given child.
+    std::pair<uint64_t, bool> rootChildFieldID(uint64_t fieldID,
+                                               uint64_t index);
 
     using iterator = ArrayRef<EnumElement>::iterator;
     iterator begin() const { return getElements().begin(); }
