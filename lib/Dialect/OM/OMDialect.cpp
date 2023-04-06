@@ -20,4 +20,6 @@ void circt::om::OMDialect::initialize() {
 #define GET_OP_LIST
 #include "circt/Dialect/OM/OM.cpp.inc"
       >();
+
+  registerTypes();
 }

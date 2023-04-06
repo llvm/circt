@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_OM_OMOPS_TD
 #define CIRCT_DIALECT_OM_OMOPS_TD
 
+include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
@@ -55,6 +56,27 @@ def ClassFieldOp : OMOp<"class.field",
 
   let assemblyFormat = [{
     $sym_name `,` $value `:` type($value) attr-dict
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Object instantiations
+//===----------------------------------------------------------------------===//
+
+def ObjectOp : OMOp<"object",
+    [DeclareOpInterfaceMethods<SymbolUserOpInterface>, Pure]> {
+  let arguments = (ins
+    SymbolNameAttr:$className,
+    Variadic<AnyType>:$actualParams
+  );
+
+  let results = (outs
+    ClassType:$result
+  );
+
+  let assemblyFormat = [{
+    $className `(` $actualParams `)` `:`
+      functional-type($actualParams, $result) attr-dict
   }];
 }
 

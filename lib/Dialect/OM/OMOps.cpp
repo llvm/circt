@@ -116,6 +116,54 @@ void circt::om::ClassOp::getAsmBlockArgumentNames(
 }
 
 //===----------------------------------------------------------------------===//
+// ObjectOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Get the containing ModuleOp.
+  auto moduleOp = getOperation()->getParentOfType<ModuleOp>();
+
+  // Verify the result type is the same as the referred-to class.
+  StringAttr resultClassName = getResult().getType().getClassName().getAttr();
+  StringAttr className = getClassNameAttr();
+  if (resultClassName != className)
+    return emitOpError("result type (")
+           << resultClassName << ") does not match referred to class ("
+           << className << ')';
+
+  // Verify the referred to ClassOp exists.
+  auto classDef = dyn_cast_or_null<ClassOp>(
+      symbolTable.lookupSymbolIn(moduleOp, className));
+  if (!classDef)
+    return emitOpError("refers to non-existant class (") << className << ')';
+
+  auto actualTypes = getActualParams().getTypes();
+  auto formalTypes = classDef.getBodyBlock()->getArgumentTypes();
+
+  // Verify the actual parameter list matches the formal parameter list.
+  if (actualTypes.size() != formalTypes.size()) {
+    auto error = emitOpError(
+        "actual parameter list doesn't match formal parameter list");
+    error.attachNote(classDef.getLoc())
+        << "formal parameters: " << classDef.getBodyBlock()->getArguments();
+    error.attachNote(getLoc()) << "actual parameters: " << getActualParams();
+    return error;
+  }
+
+  // Verify the actual parameter types match the formal parameter types.
+  for (size_t i = 0, e = actualTypes.size(); i < e; ++i) {
+    if (actualTypes[i] != formalTypes[i]) {
+      return emitOpError("actual parameter type (")
+             << actualTypes[i] << ") doesn't match formal parameter type ("
+             << formalTypes[i] << ')';
+    }
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
