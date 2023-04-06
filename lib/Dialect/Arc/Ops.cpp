@@ -190,12 +190,32 @@ LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
-// MemoryWriteOp
+// MemoryReadPortOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult MemoryWriteOp::verify() {
+LogicalResult MemoryReadPortOp::verify() {
+  if (!getOperation()->getParentOfType<ClockDomainOp>() && !getClock())
+    return emitOpError("outside a clock domain requires a clock");
+
+  if (getOperation()->getParentOfType<ClockDomainOp>() && getClock())
+    return emitOpError("inside a clock domain cannot have a clock");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// MemoryWritePortOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult MemoryWritePortOp::verify() {
   if (getMask() && getMask().getType() != getData().getType())
     return emitOpError("mask and data operand types do not match");
+
+  if (!getOperation()->getParentOfType<ClockDomainOp>() && !getClock())
+    return emitOpError("outside a clock domain requires a clock");
+
+  if (getOperation()->getParentOfType<ClockDomainOp>() && getClock())
+    return emitOpError("inside a clock domain cannot have a clock");
 
   return success();
 }
