@@ -74,9 +74,9 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
                               });
         os << '>';
       })
-      .Case<FEnumType>([&](auto FEnumType) {
+      .Case<FEnumType>([&](auto fenumType) {
         os << "enum<";
-        llvm::interleaveComma(FEnumType, os,
+        llvm::interleaveComma(fenumType, os,
                               [&](FEnumType::EnumElement element) {
                                 os << element.name.getValue();
                                 os << ": ";
@@ -1236,7 +1236,7 @@ uint64_t FEnumType::getFieldID(uint64_t index) {
 }
 
 uint64_t FEnumType::getIndexForFieldID(uint64_t fieldID) {
-  assert(getElements().size() && "Enum must have >0 fields");
+  assert(!getElements().empty() && "Enum must have >0 fields");
   auto fieldIDs = getImpl()->fieldIDs;
   auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
   return std::distance(fieldIDs.begin(), it);
