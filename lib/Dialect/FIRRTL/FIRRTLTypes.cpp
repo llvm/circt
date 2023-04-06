@@ -1161,7 +1161,7 @@ struct circt::firrtl::detail::FEnumTypeStorage : mlir::TypeStorage {
   RecursiveTypeProperties recProps;
 };
 
-auto FEnumType::getElements() const -> ArrayRef<EnumElement> {
+ArrayRef<EnumElement> FEnumType::getElements() const {
   return getImpl()->elements;
 }
 
