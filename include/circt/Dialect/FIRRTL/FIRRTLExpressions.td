@@ -313,6 +313,45 @@ def SubaccessOp : FIRRTLExprOp<"subaccess", [
   let hasCanonicalizer = true;
 }
 
+def SubtagOp : FIRRTLExprOp<"subtag"> {
+  let summary = "Extract an element of a enum value";
+  let description = [{
+    The subtag expression refers to a subelement of a
+    enum-typed expression.
+    ```
+      %result = firrtl.subtag %input[field-name] : !input-type
+    ```
+    }];
+
+  let arguments = (ins FEnumType:$input, I32Attr:$fieldIndex);
+  let results = (outs FIRRTLBaseType:$result);
+  let hasVerifier = 1;
+  let hasCustomAssemblyFormat = 1;
+
+  let builders = [
+    OpBuilder<(ins "Value":$input, "StringRef":$fieldName), [{
+      auto enumType = input.getType().cast<FEnumType>();
+      auto fieldIndex = enumType.getElementIndex(fieldName);
+      assert(fieldIndex.has_value() && "subtag operation to unknown field");
+      return build($_builder, $_state, input, *fieldIndex);
+    }]>
+  ];
+
+  let firrtlExtraClassDeclaration = [{
+    /// Return a `FieldRef` to the accessed field.
+    FieldRef getAccessedField() {
+      return FieldRef(getInput(), getInput().getType().cast<FEnumType>()
+                                            .getFieldID(getFieldIndex()));
+    }
+
+    /// Return the name of the accessed field.
+    StringRef getFieldName() {
+      return getInput().getType().cast<FEnumType>()
+        .getElementName(getFieldIndex());
+    }
+  }];
+}
+
 def MultibitMuxOp : FIRRTLExprOp<"multibit_mux"> {
   let summary = "Multibit multiplexer";
   let description = [{

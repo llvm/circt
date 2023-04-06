@@ -193,4 +193,12 @@ firrtl.module @InnerSymAttr() {
   %w3 = firrtl.wire sym [<@w3,2,public>,<@x2,1,private>,<@syh2,0,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
   // CHECK: %w3 = firrtl.wire sym [<@syh2,0,public>, <@x2,1,private>, <@w3,2,public>]
 }
+
+// CHECK-LABEL: firrtl.module @EnumTest
+firrtl.module @EnumTest(in %in : !firrtl.enum<a: uint<1>, b: uint<2>>,
+                        out %out : !firrtl.uint<2>) {
+  %t = firrtl.subtag %in[b] : !firrtl.enum<a: uint<1>, b: uint<2>>
+  firrtl.strictconnect %out, %t : !firrtl.uint<2>
+}
+
 }
