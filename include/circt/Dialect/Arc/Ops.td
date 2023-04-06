@@ -258,6 +258,49 @@ class MemoryAndDataTypesMatch<string mem, string data> : TypesMatchWith<
   "memory and data types must match", mem, data,
   "$_self.cast<MemoryType>().getWordType()">;
 
+def MemoryReadPortOp : ArcOp<"memory_read_port", [
+  MemoryEffects<[MemRead]>,
+  MemoryAndDataTypesMatch<"memory", "data">
+]> {
+  let summary = "Read port from a memory";
+  let arguments = (ins
+    MemoryType:$memory,
+    AnyInteger:$address,
+    Optional<I1>:$clock,
+    I1:$enable
+  );
+  let results = (outs AnyInteger:$data);
+  let assemblyFormat = [{
+    $memory `[` $address `]` `,` $enable ( `clock` $clock^ )?
+    attr-dict `:` type($memory) `,` type($address)
+  }];
+
+  let hasVerifier = 1;
+}
+
+def MemoryWritePortOp : ArcOp<"memory_write_port", [
+  MemoryEffects<[MemWrite]>,
+  MemoryAndDataTypesMatch<"memory", "data">,
+  AttrSizedOperandSegments
+]> {
+  let summary = "Write port to a memory";
+  let arguments = (ins
+    MemoryType:$memory,
+    AnyInteger:$address,
+    Optional<I1>:$clock,
+    I1:$enable,
+    AnyInteger:$data,
+    Optional<AnyInteger>:$mask
+  );
+  let assemblyFormat = [{
+    $memory `[` $address `]` `,` $enable `,` $data
+    ( `mask` `(` $mask^ `:` type($mask) `)`)? (`clock` $clock^)?
+    attr-dict `:` type($memory) `,` type($address)
+  }];
+
+  let hasVerifier = 1;
+}
+
 def MemoryReadOp : ArcOp<"memory_read", [
   MemoryEffects<[MemRead]>,
   MemoryAndDataTypesMatch<"memory", "data">
@@ -265,40 +308,29 @@ def MemoryReadOp : ArcOp<"memory_read", [
   let summary = "Read word from memory";
   let arguments = (ins
     MemoryType:$memory,
-    AnyInteger:$address,
-    I1:$clock,
-    I1:$enable
+    AnyInteger:$address
   );
   let results = (outs AnyInteger:$data);
   let assemblyFormat = [{
-    $memory `[` $address `]` `,` $clock `,` $enable
-    attr-dict `:` type($memory) `,` type($address)
+    $memory `[` $address `]` attr-dict `:` type($memory) `,` type($address)
   }];
 }
 
 def MemoryWriteOp : ArcOp<"memory_write", [
   MemoryEffects<[MemWrite]>,
-  MemoryAndDataTypesMatch<"memory", "data">,
-  AttrSizedOperandSegments
+  MemoryAndDataTypesMatch<"memory", "data">
 ]> {
   let summary = "Write word to memory";
   let arguments = (ins
     MemoryType:$memory,
     AnyInteger:$address,
-    I1:$clock,
     I1:$enable,
-    AnyInteger:$data,
-    Optional<AnyInteger>:$mask,
-    Variadic<AnyType>:$reads
+    AnyInteger:$data
   );
   let assemblyFormat = [{
-    $memory `[` $address `]` `,` $clock `,` $enable `,` $data
-    ( `mask` `(` $mask^ `:` type($mask) `)`)?
-    (` ` `(` `reads` $reads^ `:` type($reads) `)`)?
+    $memory `[` $address `]` `,` $enable `,` $data
     attr-dict `:` type($memory) `,` type($address)
   }];
-
-  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//
