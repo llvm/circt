@@ -196,6 +196,7 @@ Value ClockLowering::materializeValue(Value value) {
         return {};
     } else {
       auto *newOp = builder.clone(*op, materializedValues);
+      (void) newOp;
       LLVM_DEBUG(llvm::dbgs() << "Cloned " << *newOp << "\n");
       seen.erase(op);
       worklist.pop_back();
