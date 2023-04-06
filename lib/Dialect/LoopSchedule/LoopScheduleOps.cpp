@@ -26,7 +26,7 @@ using namespace circt::loopschedule;
 //===----------------------------------------------------------------------===//
 
 ParseResult LoopSchedulePipelineWhileOp::parse(OpAsmParser &parser,
-                                   OperationState &result) {
+                                               OperationState &result) {
   // Parse initiation interval.
   IntegerAttr ii;
   if (parser.parseKeyword("II") || parser.parseEqual() ||
@@ -159,8 +159,9 @@ LogicalResult LoopSchedulePipelineWhileOp::verify() {
     // Verify the stages block contains only `loopschedule.pipeline_stage` and
     // `loopschedule.terminator` ops.
     if (!isa<LoopSchedulePipelineStageOp, LoopScheduleTerminatorOp>(inner))
-      return emitOpError("stages may only contain 'loopschedule.pipeline_stage' or "
-                         "'loopschedule.terminator' ops, found ")
+      return emitOpError(
+                 "stages may only contain 'loopschedule.pipeline_stage' or "
+                 "'loopschedule.terminator' ops, found ")
              << inner;
 
     // Verify the stage start times are monotonically increasing.
@@ -181,10 +182,11 @@ LogicalResult LoopSchedulePipelineWhileOp::verify() {
   return success();
 }
 
-void LoopSchedulePipelineWhileOp::build(OpBuilder &builder, OperationState &state,
-                            TypeRange resultTypes, IntegerAttr ii,
-                            std::optional<IntegerAttr> tripCount,
-                            ValueRange iterArgs) {
+void LoopSchedulePipelineWhileOp::build(OpBuilder &builder,
+                                        OperationState &state,
+                                        TypeRange resultTypes, IntegerAttr ii,
+                                        std::optional<IntegerAttr> tripCount,
+                                        ValueRange iterArgs) {
   OpBuilder::InsertionGuard g(builder);
 
   state.addTypes(resultTypes);
@@ -207,8 +209,8 @@ void LoopSchedulePipelineWhileOp::build(OpBuilder &builder, OperationState &stat
   Block &stagesBlock = stagesRegion->emplaceBlock();
   stagesBlock.addArguments(iterArgs.getTypes(), argLocs);
   builder.setInsertionPointToEnd(&stagesBlock);
-  builder.create<LoopScheduleTerminatorOp>(builder.getUnknownLoc(), ValueRange(),
-                                       ValueRange());
+  builder.create<LoopScheduleTerminatorOp>(builder.getUnknownLoc(),
+                                           ValueRange(), ValueRange());
 }
 
 //===----------------------------------------------------------------------===//
@@ -222,8 +224,10 @@ LogicalResult LoopSchedulePipelineStageOp::verify() {
   return success();
 }
 
-void LoopSchedulePipelineStageOp::build(OpBuilder &builder, OperationState &state,
-                                 TypeRange resultTypes, IntegerAttr start) {
+void LoopSchedulePipelineStageOp::build(OpBuilder &builder,
+                                        OperationState &state,
+                                        TypeRange resultTypes,
+                                        IntegerAttr start) {
   OpBuilder::InsertionGuard g(builder);
 
   state.addTypes(resultTypes);
@@ -252,7 +256,8 @@ unsigned LoopSchedulePipelineStageOp::getStageNumber() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult LoopScheduleRegisterOp::verify() {
-  LoopSchedulePipelineStageOp stage = (*this)->getParentOfType<LoopSchedulePipelineStageOp>();
+  LoopSchedulePipelineStageOp stage =
+      (*this)->getParentOfType<LoopSchedulePipelineStageOp>();
 
   // If this doesn't terminate a stage, it is terminating the condition.
   if (stage == nullptr)
@@ -274,7 +279,8 @@ LogicalResult LoopScheduleRegisterOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult LoopScheduleTerminatorOp::verify() {
-  LoopSchedulePipelineWhileOp pipeline = (*this)->getParentOfType<LoopSchedulePipelineWhileOp>();
+  LoopSchedulePipelineWhileOp pipeline =
+      (*this)->getParentOfType<LoopSchedulePipelineWhileOp>();
 
   // Verify pipeline terminates with the same `iter_args` types as the pipeline.
   auto iterArgs = getIterArgs();

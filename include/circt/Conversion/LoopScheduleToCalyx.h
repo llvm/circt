@@ -1,4 +1,5 @@
-//===- LoopScheduleToCalyx.h - LoopSchedule to Calyx pass entry point -----------*-===//
+//===- LoopScheduleToCalyx.h - LoopSchedule to Calyx pass entry point
+//-----------*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -14,8 +15,8 @@
 #ifndef CIRCT_CONVERSION_LOOPSCHEDULETOCALYX_H
 #define CIRCT_CONVERSION_LOOPSCHEDULETOCALYX_H
 
-#include "circt/Support/LLVM.h"
 #include "circt/Dialect/LoopSchedule/LoopScheduleDialect.h"
+#include "circt/Support/LLVM.h"
 #include <memory>
 
 namespace circt {

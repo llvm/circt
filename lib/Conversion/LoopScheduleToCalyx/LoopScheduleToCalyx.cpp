@@ -1,4 +1,5 @@
-//=== LoopScheduleToCalyx.cpp - LoopSchedule to Calyx pass entry point ------*-----===//
+//=== LoopScheduleToCalyx.cpp - LoopSchedule to Calyx pass entry point
+//------*-----===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -546,9 +547,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   return buildAllocOp(getState<ComponentLoweringState>(), rewriter, allocOp);
 }
 
-LogicalResult
-BuildOpGroups::buildOp(PatternRewriter &rewriter,
-                       LoopScheduleTerminatorOp term) const {
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     LoopScheduleTerminatorOp term) const {
   if (term.getOperands().size() == 0)
     return success();
 
@@ -926,8 +926,7 @@ class BuildPipelineRegs : public calyx::FuncOpPartialLoweringPattern {
         Value stageResult = stage.getResult(i);
         bool isIterArg = false;
         for (auto &use : stageResult.getUses()) {
-          if (auto term =
-                  dyn_cast<LoopScheduleTerminatorOp>(use.getOwner())) {
+          if (auto term = dyn_cast<LoopScheduleTerminatorOp>(use.getOwner())) {
             if (use.getOperandNumber() < term.getIterArgs().size()) {
               PipelineWhileOp whileOp(
                   dyn_cast<LoopSchedulePipelineWhileOp>(stage->getParentOp()));
@@ -1367,7 +1366,8 @@ class CleanupFuncOps : public calyx::FuncOpPartialLoweringPattern {
 //===----------------------------------------------------------------------===//
 // Pass driver
 //===----------------------------------------------------------------------===//
-class LoopScheduleToCalyxPass : public LoopScheduleToCalyxBase<LoopScheduleToCalyxPass> {
+class LoopScheduleToCalyxPass
+    : public LoopScheduleToCalyxBase<LoopScheduleToCalyxPass> {
 public:
   LoopScheduleToCalyxPass()
       : LoopScheduleToCalyxBase<LoopScheduleToCalyxPass>(),

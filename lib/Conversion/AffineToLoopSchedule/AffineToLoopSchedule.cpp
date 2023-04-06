@@ -1,4 +1,5 @@
-//===- AffineToLoopSchedule.cpp --------------------------------------------===//
+//===- AffineToLoopSchedule.cpp
+//--------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -50,7 +51,8 @@ using namespace circt::loopschedule;
 
 namespace {
 
-struct AffineToLoopSchedule : public AffineToLoopScheduleBase<AffineToLoopSchedule> {
+struct AffineToLoopSchedule
+    : public AffineToLoopScheduleBase<AffineToLoopSchedule> {
   void runOnOperation() override;
 
 private:
@@ -61,8 +63,9 @@ private:
                                       ModuloProblem &problem);
   LogicalResult solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest,
                                        ModuloProblem &problem);
-  LogicalResult createLoopSchedulePipeline(SmallVectorImpl<AffineForOp> &loopNest,
-                                       ModuloProblem &problem);
+  LogicalResult
+  createLoopSchedulePipeline(SmallVectorImpl<AffineForOp> &loopNest,
+                             ModuloProblem &problem);
 
   CyclicSchedulingAnalysis *schedulingAnalysis;
 };
@@ -275,9 +278,8 @@ LogicalResult AffineToLoopSchedule::lowerAffineStructures(
 /// targetting. Right now, we assume Calyx, which has a standard library with
 /// well-defined operator latencies. Ultimately, we should move this to a
 /// dialect interface in the Scheduling dialect.
-LogicalResult
-AffineToLoopSchedule::populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest,
-                                        ModuloProblem &problem) {
+LogicalResult AffineToLoopSchedule::populateOperatorTypes(
+    SmallVectorImpl<AffineForOp> &loopNest, ModuloProblem &problem) {
   // Scheduling analyis only considers the innermost loop nest for now.
   auto forOp = loopNest.back();
 
@@ -352,9 +354,8 @@ AffineToLoopSchedule::populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNe
 }
 
 /// Solve the pre-computed scheduling problem.
-LogicalResult
-AffineToLoopSchedule::solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest,
-                                         ModuloProblem &problem) {
+LogicalResult AffineToLoopSchedule::solveSchedulingProblem(
+    SmallVectorImpl<AffineForOp> &loopNest, ModuloProblem &problem) {
   // Scheduling analyis only considers the innermost loop nest for now.
   auto forOp = loopNest.back();
 
@@ -398,9 +399,8 @@ AffineToLoopSchedule::solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopN
 }
 
 /// Create the loopschedule pipeline op for a loop nest.
-LogicalResult
-AffineToLoopSchedule::createLoopSchedulePipeline(SmallVectorImpl<AffineForOp> &loopNest,
-                                         ModuloProblem &problem) {
+LogicalResult AffineToLoopSchedule::createLoopSchedulePipeline(
+    SmallVectorImpl<AffineForOp> &loopNest, ModuloProblem &problem) {
   // Scheduling analyis only considers the innermost loop nest for now.
   auto forOp = loopNest.back();
 
@@ -432,8 +432,8 @@ AffineToLoopSchedule::createLoopSchedulePipeline(SmallVectorImpl<AffineForOp> &l
   if (auto tripCount = getConstantTripCount(forOp))
     tripCountAttr = builder.getI64IntegerAttr(*tripCount);
 
-  auto pipeline =
-      builder.create<LoopSchedulePipelineWhileOp>(resultTypes, ii, tripCountAttr, iterArgs);
+  auto pipeline = builder.create<LoopSchedulePipelineWhileOp>(
+      resultTypes, ii, tripCountAttr, iterArgs);
 
   // Create the condition, which currently just compares the induction variable
   // to the upper bound.
