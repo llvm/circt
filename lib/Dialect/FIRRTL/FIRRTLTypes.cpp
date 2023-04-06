@@ -74,6 +74,15 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
                               });
         os << '>';
       })
+      .Case<EnumType>([&](auto enumType) {
+        os << "enum<";
+        llvm::interleaveComma(enumType, os, [&](EnumType::EnumElement element) {
+          os << element.name.getValue();
+          os << ": ";
+          printNestedType(element.type, os);
+        });
+        os << '>';
+      })
       .Case<FVectorType>([&](auto vectorType) {
         os << "vector<";
         printNestedType(vectorType.getElementType(), os);
@@ -122,9 +131,11 @@ void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
 ///   ::= uint ('<' int '>')?
 ///   ::= analog ('<' int '>')?
 ///   ::= bundle '<' (bundle-elt (',' bundle-elt)*)? '>'
+///   ::= enum '<' (enum-elt (',' enum-elt)*)? '>'
 ///   ::= vector '<' type ',' int '>'
 ///
-/// bundle-elt ::= identifier ':' type
+/// bundle-elt ::= identifier flip? ':' type
+/// enum-elt ::= identifier ':' type
 /// ```
 static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
                                             Type &result) {
@@ -194,6 +205,42 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       return failure();
 
     return result = BundleType::get(context, elements), success();
+  }
+
+  if (name.equals("enum")) {
+    SmallVector<EnumType::EnumElement, 4> elements;
+
+    auto parseEnumElement = [&]() -> ParseResult {
+      std::string nameStr;
+      StringRef name;
+      FIRRTLBaseType type;
+
+      // The 'name' can be an identifier or an integer.
+      uint32_t fieldIntName;
+      auto intName = parser.parseOptionalInteger(fieldIntName);
+      if (intName.has_value()) {
+        if (failed(intName.value()))
+          return failure();
+        nameStr = llvm::utostr(fieldIntName);
+        name = nameStr;
+      } else {
+        // Otherwise must be an identifier.
+        if (parser.parseKeyword(&name))
+          return failure();
+      }
+
+      if (parser.parseColon() || parseNestedBaseType(type, parser))
+        return failure();
+
+      elements.push_back({StringAttr::get(context, name), type});
+      return success();
+    };
+
+    if (parser.parseCommaSeparatedList(mlir::AsmParser::Delimiter::LessGreater,
+                                       parseEnumElement))
+      return failure();
+
+    return result = EnumType::get(context, elements), success();
   }
 
   if (name.equals("vector")) {
@@ -367,7 +414,7 @@ bool FIRRTLBaseType::isGround() {
   return TypeSwitch<FIRRTLBaseType, bool>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType>([](Type) { return true; })
-      .Case<BundleType, FVectorType>([](Type) { return false; })
+      .Case<BundleType, FVectorType, EnumType>([](Type) { return false; })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return false;
@@ -392,6 +439,9 @@ RecursiveTypeProperties FIRRTLBaseType::getRecursiveTypeProperties() {
       .Case<FVectorType>([](FVectorType vectorType) {
         return vectorType.getRecursiveTypeProperties();
       })
+      .Case<EnumType>([](EnumType enumType) {
+        return enumType.getRecursiveTypeProperties();
+      })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return RecursiveTypeProperties{};
@@ -402,7 +452,7 @@ RecursiveTypeProperties FIRRTLBaseType::getRecursiveTypeProperties() {
 FIRRTLBaseType FIRRTLBaseType::getPassiveType() {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
-            AnalogType>([&](Type) { return *this; })
+            AnalogType, EnumType>([&](Type) { return *this; })
       .Case<BundleType>(
           [](BundleType bundleType) { return bundleType.getPassiveType(); })
       .Case<FVectorType>(
@@ -1066,6 +1116,118 @@ std::pair<uint64_t, bool> FVectorType::rootChildFieldID(uint64_t fieldID,
 }
 
 //===----------------------------------------------------------------------===//
+// Bundle Type
+//===----------------------------------------------------------------------===//
+
+struct circt::firrtl::detail::EnumTypeStorage : mlir::TypeStorage {
+  using KeyTy = ArrayRef<EnumType::EnumElement>;
+
+  EnumTypeStorage(KeyTy elements) : elements(elements.begin(), elements.end()) {
+    RecursiveTypeProperties props{true, false, false};
+    uint64_t fieldID = 0;
+    fieldIDs.reserve(elements.size());
+    for (auto &element : elements) {
+      auto type = element.type;
+      auto eltInfo = type.getRecursiveTypeProperties();
+      props.isPassive &= eltInfo.isPassive;
+      props.containsAnalog |= eltInfo.containsAnalog;
+      props.hasUninferredWidth |= eltInfo.hasUninferredWidth;
+      fieldID += 1;
+      fieldIDs.push_back(fieldID);
+      // Increment the field ID for the next field by the number of subfields.
+      fieldID += type.getMaxFieldID();
+    }
+    maxFieldID = fieldID;
+    passiveContainsAnalogTypeInfo.setInt(props.toFlags());
+  }
+
+  bool operator==(const KeyTy &key) const { return key == KeyTy(elements); }
+
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_combine_range(key.begin(), key.end());
+  }
+
+  static EnumTypeStorage *construct(TypeStorageAllocator &allocator,
+                                    KeyTy key) {
+    return new (allocator.allocate<EnumTypeStorage>()) EnumTypeStorage(key);
+  }
+
+  SmallVector<EnumType::EnumElement, 4> elements;
+  SmallVector<uint64_t, 4> fieldIDs;
+  uint64_t maxFieldID;
+
+  /// This holds the bits for the type's recursive properties, and can hold a
+  /// pointer to a passive version of the type.
+  llvm::PointerIntPair<Type, RecursiveTypeProperties::numBits, unsigned>
+      passiveContainsAnalogTypeInfo;
+};
+
+auto EnumType::getElements() const -> ArrayRef<EnumElement> {
+  return getImpl()->elements;
+}
+
+/// Return a pair with the 'isPassive' and 'containsAnalog' bits.
+RecursiveTypeProperties EnumType::getRecursiveTypeProperties() {
+  auto flags = getImpl()->passiveContainsAnalogTypeInfo.getInt();
+  return RecursiveTypeProperties::fromFlags(flags);
+}
+
+std::optional<unsigned> EnumType::getElementIndex(StringAttr name) {
+  for (const auto &it : llvm::enumerate(getElements())) {
+    auto element = it.value();
+    if (element.name == name) {
+      return unsigned(it.index());
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<unsigned> EnumType::getElementIndex(StringRef name) {
+  for (const auto &it : llvm::enumerate(getElements())) {
+    auto element = it.value();
+    if (element.name.getValue() == name) {
+      return unsigned(it.index());
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<EnumType::EnumElement> EnumType::getElement(StringAttr name) {
+  if (auto maybeIndex = getElementIndex(name))
+    return getElements()[*maybeIndex];
+  return std::nullopt;
+}
+
+std::optional<EnumType::EnumElement> EnumType::getElement(StringRef name) {
+  if (auto maybeIndex = getElementIndex(name))
+    return getElements()[*maybeIndex];
+  return std::nullopt;
+}
+
+/// Look up an element by index.
+EnumType::EnumElement EnumType::getElement(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in bundle");
+  return getElements()[index];
+}
+
+FIRRTLBaseType EnumType::getElementType(StringAttr name) {
+  auto element = getElement(name);
+  return element ? element->type : FIRRTLBaseType();
+}
+
+FIRRTLBaseType EnumType::getElementType(StringRef name) {
+  auto element = getElement(name);
+  return element ? element->type : FIRRTLBaseType();
+}
+
+FIRRTLBaseType EnumType::getElementType(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in bundle");
+  return getElements()[index].type;
+}
+
+//===----------------------------------------------------------------------===//
 // RefType
 //===----------------------------------------------------------------------===//
 
@@ -1109,7 +1271,7 @@ LogicalResult AnalogType::verify(function_ref<InFlightDiagnostic()> emitError,
 void FIRRTLDialect::registerTypes() {
   addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
            // Derived Types
-           BundleType, FVectorType, RefType>();
+           BundleType, FVectorType, EnumType, RefType>();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike

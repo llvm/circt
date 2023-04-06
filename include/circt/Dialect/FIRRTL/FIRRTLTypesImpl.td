@@ -234,6 +234,66 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
   }];
 }
 
+def EnumImpl : FIRRTLImplType<"Enum", [FieldIDTypeInterface]> {
+  let summary = "a sum type of named elements.";
+  let genStorageClass = false;
+  let parameters = (ins "ArrayRef<EnumElement>":$elements);
+  let extraClassDeclaration = [{
+    /// Each element of an enum, which is a name and type.
+    struct EnumElement {
+      StringAttr name;
+      FIRRTLBaseType type;
+
+      EnumElement(StringAttr name, FIRRTLBaseType type)
+          : name(name), type(type) {}
+
+      bool operator==(const EnumElement &rhs) const {
+        return name == rhs.name && type == rhs.type;
+      }
+      bool operator!=(const EnumElement &rhs) const {
+        return !operator==(rhs);
+      }
+
+      friend llvm::hash_code hash_value(const EnumType::EnumElement &arg) {
+        return mlir::hash_value(arg.name) ^ mlir::hash_value(arg.type);
+      }
+    };
+
+    size_t getNumElements() { return getElements().size(); }
+
+    /// Look up an element's index by name.  This returns None on failure.
+    std::optional<unsigned> getElementIndex(StringAttr name);
+    std::optional<unsigned> getElementIndex(StringRef name);
+
+    /// Look up an element's name by index. This asserts if index is invalid.
+    StringRef getElementName(size_t index);
+
+    /// Look up an element by name.  This returns None on failure.
+    std::optional<EnumElement> getElement(StringAttr name);
+    std::optional<EnumElement> getElement(StringRef name);
+
+    /// Look up an element by index.  This asserts if index is invalid.
+    EnumElement getElement(size_t index);
+
+    /// Look up an element type by name.
+    FIRRTLBaseType getElementType(StringAttr name);
+    FIRRTLBaseType getElementType(StringRef name);
+
+    /// Look up an element type by index.
+    FIRRTLBaseType getElementType(size_t index);
+
+    /// Return the recursive properties of the type.
+    RecursiveTypeProperties getRecursiveTypeProperties();
+
+    /// Return this type with any flip types recursively removed from itself.
+    FIRRTLBaseType getPassiveType();
+
+    using iterator = ArrayRef<EnumElement>::iterator;
+    iterator begin() const { return getElements().begin(); }
+    iterator end() const { return getElements().end(); }
+  }];
+}
+
 def RefImpl : FIRRTLImplType<"Ref", [], "::circt::firrtl::FIRRTLType"> {
   let summary = [{
     A reference type, such as `firrtl.probe<uint<1>>` or `firrtl.rwprobe<uint<2>>`.

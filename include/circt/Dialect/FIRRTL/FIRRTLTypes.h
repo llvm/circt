@@ -24,6 +24,7 @@ namespace firrtl {
 namespace detail {
 struct BundleTypeStorage;
 struct VectorTypeStorage;
+struct EnumTypeStorage;
 struct CMemoryTypeStorage;
 struct RefTypeStorage;
 } // namespace detail.
@@ -36,6 +37,7 @@ class UIntType;
 class AnalogType;
 class BundleType;
 class FVectorType;
+class EnumType;
 class RefType;
 
 /// A collection of bits indicating the recursive properties of a type.
