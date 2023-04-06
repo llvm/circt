@@ -65,14 +65,14 @@ def BundleType : FIRRTLDialectType<CPred<"$_self.isa<BundleType>()">,
 def FVectorType : FIRRTLDialectType<CPred<"$_self.isa<FVectorType>()">,
   "FVectorType", "::circt::firrtl::FVectorType">;
 
-def FEnumType : FIRRTLDialectType<CPred<"$_self.isa<EnumType>()">,
- "EnumType", "::circt::firrtl::EnumType">;
+def FEnumType : FIRRTLDialectType<CPred<"$_self.isa<FEnumType>()">,
+ "FEnumType", "::circt::firrtl::FEnumType">;
 
 def AggregateType : FIRRTLDialectType<
   Or<[
     CPred<"$_self.isa<FVectorType>()">,
     CPred<"$_self.isa<BundleType>()">,
-    CPred<"$_self.isa<EnumType>()">
+    CPred<"$_self.isa<FEnumType>()">
   ]>,
   "a aggregate type", "::circt::firrtl::FIRRTLBaseType">;
 

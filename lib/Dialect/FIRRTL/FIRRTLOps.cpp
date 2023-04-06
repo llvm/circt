@@ -2748,6 +2748,47 @@ ParseResult SubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
+ParseResult SubtagOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto *context = parser.getContext();
+
+  OpAsmParser::UnresolvedOperand input;
+  std::string fieldName;
+  Type inputType;
+  if (parser.parseOperand(input) || parser.parseLSquare() ||
+      parser.parseKeywordOrString(&fieldName) || parser.parseRSquare() ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(inputType))
+    return failure();
+
+  if (parser.resolveOperand(input, inputType, result.operands))
+    return failure();
+
+  auto enumType = inputType.dyn_cast<FEnumType>();
+  if (!enumType)
+    return parser.emitError(parser.getNameLoc(),
+                            "input must be enum type, got ")
+           << inputType;
+  auto fieldIndex = enumType.getElementIndex(fieldName);
+  if (!fieldIndex)
+    return parser.emitError(parser.getNameLoc(),
+                            "unknown field " + fieldName + " in enum type ")
+           << enumType;
+
+  result.addAttribute(
+      "fieldIndex",
+      IntegerAttr::get(IntegerType::get(context, 32), *fieldIndex));
+
+  SmallVector<Type> inferredReturnTypes;
+  if (failed(
+          SubtagOp::inferReturnTypes(context, result.location, result.operands,
+                                     result.attributes.getDictionary(context),
+                                     result.regions, inferredReturnTypes)))
+    return failure();
+  result.addTypes(inferredReturnTypes);
+
+  return success();
+}
+
 void SubfieldOp::print(::mlir::OpAsmPrinter &printer) {
   printer << ' ' << getInput() << '[';
   printer.printKeywordOrString(getFieldName());
@@ -2758,7 +2799,24 @@ void SubfieldOp::print(::mlir::OpAsmPrinter &printer) {
   printer << " : " << getInput().getType();
 }
 
+void SubtagOp::print(::mlir::OpAsmPrinter &printer) {
+  printer << ' ' << getInput() << '[';
+  printer.printKeywordOrString(getFieldName());
+  printer << ']';
+  ::llvm::SmallVector<::llvm::StringRef, 2> elidedAttrs;
+  elidedAttrs.push_back("fieldIndex");
+  printer.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
+  printer << " : " << getInput().getType();
+}
+
 LogicalResult SubfieldOp::verify() {
+  if (getFieldIndex() >= getInput().getType().getNumElements())
+    return emitOpError("subfield element index is greater than the number "
+                       "of fields in the bundle type");
+  return success();
+}
+
+LogicalResult SubtagOp::verify() {
   if (getFieldIndex() >= getInput().getType().getNumElements())
     return emitOpError("subfield element index is greater than the number "
                        "of fields in the bundle type");
@@ -2844,6 +2902,23 @@ FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
   }
 
   return emitInferRetTypeError(loc, "subindex requires vector operand");
+}
+
+FIRRTLType SubtagOp::inferReturnType(ValueRange operands,
+                                     ArrayRef<NamedAttribute> attrs,
+                                     std::optional<Location> loc) {
+  auto inType = operands[0].getType().cast<FEnumType>();
+  auto fieldIndex =
+      getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
+
+  if (fieldIndex >= inType.getNumElements())
+    return emitInferRetTypeError(loc,
+                                 "subtag element index is greater than the "
+                                 "number of fields in the enum type");
+
+  // SubtagOp verifier checks that the field index is valid with number of
+  // subelements.
+  return inType.getElement(fieldIndex).type;
 }
 
 FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
@@ -3857,6 +3932,10 @@ void SubaccessOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 void SubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void SubtagOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 

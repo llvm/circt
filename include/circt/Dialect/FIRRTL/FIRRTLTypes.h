@@ -24,7 +24,7 @@ namespace firrtl {
 namespace detail {
 struct BundleTypeStorage;
 struct VectorTypeStorage;
-struct EnumTypeStorage;
+struct FEnumTypeStorage;
 struct CMemoryTypeStorage;
 struct RefTypeStorage;
 } // namespace detail.
@@ -37,7 +37,7 @@ class UIntType;
 class AnalogType;
 class BundleType;
 class FVectorType;
-class EnumType;
+class FEnumType;
 class RefType;
 
 /// A collection of bits indicating the recursive properties of a type.
@@ -74,7 +74,7 @@ class FIRRTLBaseType : public FIRRTLType {
 public:
   /// Return true if this is a "passive" type - one that contains no "flip"
   /// types recursively within itself.
-  bool isPassive() { return getRecursiveTypeProperties().isPassive; }
+  bool isPassive() const { return getRecursiveTypeProperties().isPassive; }
 
   /// Returns true if this is a "passive" that which is not analog.
   bool isRegisterType() { return isPassive() && !containsAnalog(); }
@@ -92,7 +92,7 @@ public:
 
   /// Return the recursive properties of the type, containing the `isPassive`,
   /// `containsAnalog`, and `hasUninferredWidth` bits.
-  RecursiveTypeProperties getRecursiveTypeProperties();
+  RecursiveTypeProperties getRecursiveTypeProperties() const;
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLBaseType getPassiveType();

@@ -105,7 +105,7 @@ def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
   ];
   let extraClassDeclaration = [{
     /// Return the recursive properties of the type.
-    RecursiveTypeProperties getRecursiveTypeProperties();
+    RecursiveTypeProperties getRecursiveTypeProperties() const;
 
     /// Return this type with any flip types recursively removed from itself.
     FIRRTLBaseType getPassiveType();
@@ -191,7 +191,7 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
     FIRRTLBaseType getElementType(size_t index);
 
     /// Return the recursive properties of the type.
-    RecursiveTypeProperties getRecursiveTypeProperties();
+    RecursiveTypeProperties getRecursiveTypeProperties() const;
 
     /// Return this type with any flip types recursively removed from itself.
     FIRRTLBaseType getPassiveType();
@@ -234,10 +234,11 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
   }];
 }
 
-def EnumImpl : FIRRTLImplType<"Enum", [FieldIDTypeInterface]> {
+def FEnumImpl : FIRRTLImplType<"FEnum", [FieldIDTypeInterface]> {
   let summary = "a sum type of named elements.";
   let genStorageClass = false;
   let parameters = (ins "ArrayRef<EnumElement>":$elements);
+  let genVerifyDecl = true;
   let extraClassDeclaration = [{
     /// Each element of an enum, which is a name and type.
     struct EnumElement {
@@ -254,7 +255,7 @@ def EnumImpl : FIRRTLImplType<"Enum", [FieldIDTypeInterface]> {
         return !operator==(rhs);
       }
 
-      friend llvm::hash_code hash_value(const EnumType::EnumElement &arg) {
+      friend llvm::hash_code hash_value(const FEnumType::EnumElement &arg) {
         return mlir::hash_value(arg.name) ^ mlir::hash_value(arg.type);
       }
     };
@@ -283,7 +284,7 @@ def EnumImpl : FIRRTLImplType<"Enum", [FieldIDTypeInterface]> {
     FIRRTLBaseType getElementType(size_t index);
 
     /// Return the recursive properties of the type.
-    RecursiveTypeProperties getRecursiveTypeProperties();
+    RecursiveTypeProperties getRecursiveTypeProperties() const;
 
     /// Get an integer ID for the field. Field IDs start at 1, and are assigned
     /// to each field in a enum in a recursive pre-order walk of all fields,
@@ -307,7 +308,7 @@ def EnumImpl : FIRRTLImplType<"Enum", [FieldIDTypeInterface]> {
     getSubTypeByFieldID(uint64_t fieldID);
 
     /// Get the maximum field ID in this bundle.  This is helpful for
-    /// constructing field IDs when this EnumType is nested in another
+    /// constructing field IDs when this FEnumType is nested in another
     /// aggregate type.
     uint64_t getMaxFieldID();
 

@@ -196,8 +196,9 @@ firrtl.module @InnerSymAttr() {
 
 // CHECK-LABEL: firrtl.module @EnumTest
 firrtl.module @EnumTest(in %in : !firrtl.enum<a: uint<1>, b: uint<2>>,
-                        out %out : !firrtl.enum<a: uint<1>, b: uint<2>>) {
-  firrtl.strictconnect %out, %in : !firrtl.enum<a: uint<1>, b: uint<2>>
+                        out %out : !firrtl.uint<2>) {
+  %t = firrtl.subtag %in[b] : !firrtl.enum<a: uint<1>, b: uint<2>>
+  firrtl.strictconnect %out, %t : !firrtl.uint<2>
 }
 
 }
