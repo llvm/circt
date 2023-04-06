@@ -1218,7 +1218,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: ref.define %agg_out, %[[AGG3_PROBE]]
     define agg_out = probe(agg3)
 
-    ; CHECK: %{{.+}}, %[[REM_R:.+]], %{{.+}}, %[[REM_R2:.+]] = firrtl.instance rem
+    ; CHECK: %{{.+}}, %[[REM_R:.+]], %{{.+}}, %[[REM_R2:.+]], %[[REM_UNUSED_REF:.+]] = firrtl.instance rem
     ; CHECK-NEXT: %[[REM_R2_1:.+]] = firrtl.ref.sub %[[REM_R2]][1]
     ; CHECK-NEXT: %[[REM_R2_1_A:.+]] = firrtl.ref.sub %[[REM_R2_1]][0]
     ; CHECK-NEXT: %[[READ_REM_R2_1_A:.+]] = firrtl.ref.resolve %[[REM_R2_1_A]]
@@ -1250,9 +1250,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output r : Probe<UInt<1>>
     output data : UInt<3>
     output r2 : Probe<{a : UInt<3>}[3]>
+    output no_ref_for_this : Probe<UInt<1>>
     ref r2 is "in"
     ref r is "path.to.internal.signal"
-
 
   ; CHECK-LABEL: module private @ProbeInvalidate
   ; CHECK-NEXT: }

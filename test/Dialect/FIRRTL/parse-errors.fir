@@ -447,12 +447,6 @@ circuit RefDupe:
 
 ;// -----
 
-circuit MissingRef:
-  extmodule MissingRef:
-    output p : Probe<UInt<2>> ; expected-error {{no ref statement found for ref port "p"}}
-
-;// -----
-
 circuit UnusedRef:
   extmodule UnusedRef:
     ref p is "x.y" ; expected-error {{unused ref statement}}
