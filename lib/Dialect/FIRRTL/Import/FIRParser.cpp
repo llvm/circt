@@ -2502,11 +2502,11 @@ ParseResult FIRStmtParser::parseRefForce() {
   if (auto ref = dyn_cast<RefType>(dest.getType()); !ref || !ref.getForceable())
     return emitError(
                startTok.getLoc(),
-               "expected rwprobe-type expression for force destination, got")
+               "expected rwprobe-type expression for force destination, got ")
            << dest.getType();
   if (isa<RefType>(src.getType()))
     return emitError(startTok.getLoc(),
-                     "expected non-reference-type for force source, got")
+                     "expected non-reference-type for force source, got ")
            << src.getType();
 
   locationProcessor.setLoc(startTok.getLoc());
@@ -2531,12 +2531,12 @@ ParseResult FIRStmtParser::parseRefForceInitial() {
   // Check reference expression is of reference type.
   if (auto ref = dyn_cast<RefType>(dest.getType()); !ref || !ref.getForceable())
     return emitError(startTok.getLoc(), "expected rwprobe-type expression for "
-                                        "force_initial destination, got")
+                                        "force_initial destination, got ")
            << dest.getType();
   if (isa<RefType>(src.getType()))
     return emitError(startTok.getLoc(),
                      "expected non-reference-type expression for force_initial "
-                     "source, got")
+                     "source, got ")
            << src.getType();
 
   locationProcessor.setLoc(startTok.getLoc());
@@ -2563,7 +2563,7 @@ ParseResult FIRStmtParser::parseRefRelease() {
   if (auto ref = dyn_cast<RefType>(dest.getType()); !ref || !ref.getForceable())
     return emitError(
                startTok.getLoc(),
-               "expected rwprobe-type expression for release destination, got")
+               "expected rwprobe-type expression for release destination, got ")
            << dest.getType();
 
   locationProcessor.setLoc(startTok.getLoc());
@@ -2588,7 +2588,7 @@ ParseResult FIRStmtParser::parseRefReleaseInitial() {
   // Check reference expression is of reference type.
   if (auto ref = dyn_cast<RefType>(dest.getType()); !ref || !ref.getForceable())
     return emitError(startTok.getLoc(), "expected rwprobe-type expression for "
-                                        "release_initial destination, got")
+                                        "release_initial destination, got ")
            << dest.getType();
 
   locationProcessor.setLoc(startTok.getLoc());
