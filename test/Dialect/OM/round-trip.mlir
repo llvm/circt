@@ -39,4 +39,5 @@ om.class @Gadget(%green_1: i8, %green_2: i32) {
 om.class @Empty() {}
 
 // CHECK-LABEL: om.class @DiscardableAttrs
+// CHECK-SAME: attributes {foo.bar = "baz"}
 om.class @DiscardableAttrs() attributes {foo.bar="baz"} {}
