@@ -15,6 +15,7 @@
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Seq/SeqAttributes.td"
 include "circt/Dialect/Seq/SeqOpInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 
 // Base class for the operation in this dialect.
 class SeqOp<string mnemonic, list<Trait> traits = []> :
@@ -85,6 +86,10 @@ def CompRegClockEnabledOp : SeqOp<"compreg.ce",
     }]>,
   ];
 }
+
+//===----------------------------------------------------------------------===//
+// FIRRTL-flavored register
+//===----------------------------------------------------------------------===//
 
 def FirRegOp : SeqOp<"firreg",
     [Pure, Clocked, Resettable,
@@ -219,4 +224,114 @@ def WritePortOp : SeqOp<"write", [
   );
   let results = (outs);
   let hasCustomAssemblyFormat = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// FIRRTL-flavored memory
+//===----------------------------------------------------------------------===//
+
+def FirMemOp : SeqOp<"firmem", [
+  MemoryEffects<[MemAlloc]>,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
+]> {
+  let summary = "A FIRRTL-flavored memory";
+  let description = [{
+    The `seq.firmem` op represents memories lowered from the FIRRTL dialect. It
+    is used to capture some of the peculiarities of what FIRRTL expects from
+    memories, while still representing them at the HW dialect level.
+
+    A `seq.firmem` declares the memory and captures the memory-level parameters
+    such as width and depth or how read/write collisions are resolved. The read,
+    write, and read-write ports are expressed as separate operations that take
+    the declared memory as an operand.
+  }];
+
+  // TODO: Add debug access port for ref to storage array
+  let arguments = (ins
+    I32Attr:$readLatency,
+    I32Attr:$writeLatency,
+    RUWAttr:$ruw,
+    WUWAttr:$wuw,
+    OptionalAttr<StrAttr>:$name,
+    OptionalAttr<SymbolNameAttr>:$inner_sym,
+    OptionalAttr<FirMemInitAttr>:$init,
+    OptionalAttr<StrAttr>:$prefix,
+    OptionalAttr<AnyAttr>:$output_file
+  );
+  let results = (outs FirMemType:$memory);
+
+  // let hasVerifier = 1;
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name)
+    $readLatency `,` $writeLatency `,` $ruw `,` $wuw
+    attr-dict `:` type($memory)
+  }];
+}
+
+class AddressMatchesFirMem<string memoryValue, string addressValue> :
+  TypesMatchWith<"address type should match clog2 of memory depth",
+    memoryValue, addressValue, [{
+      IntegerType::get(
+        $_self.getContext(),
+        std::max(1U, llvm::Log2_64_Ceil(cast<FirMemType>($_self).getDepth())))
+    }]>;
+
+class DataMatchesFirMem<string memoryValue, string dataValue> :
+  TypesMatchWith<"data type should match memory width",
+    memoryValue, dataValue, [{
+      IntegerType::get(
+        $_self.getContext(),
+        std::max(1U, cast<FirMemType>($_self).getWidth()))
+    }]>;
+
+def FirMemReadOp : SeqOp<"firmem.read_port", [
+  MemoryEffects<[MemRead]>,
+  AddressMatchesFirMem<"memory", "address">,
+  DataMatchesFirMem<"memory", "data">
+]> {
+  // TODO: Add summary
+  // TODO: Add description
+  let arguments = (ins FirMemType:$memory, AnySignlessInteger:$address, I1:$clock, Optional<I1>:$enable);
+  let results = (outs AnySignlessInteger:$data);
+  let assemblyFormat = [{
+    $memory `[` $address `]` `,` `clock` $clock (`enable` $enable^)?
+    attr-dict `:` type($memory)
+  }];
+  let hasCanonicalizeMethod = 1;
+}
+
+def FirMemWriteOp : SeqOp<"firmem.write_port", [
+  MemoryEffects<[MemWrite]>,
+  AddressMatchesFirMem<"memory", "address">,
+  DataMatchesFirMem<"memory", "data">,
+  AttrSizedOperandSegments
+]> {
+  // TODO: Add summary
+  // TODO: Add description
+  let arguments = (ins FirMemType:$memory, AnySignlessInteger:$address, I1:$clock, Optional<I1>:$enable, AnySignlessInteger:$data, Optional<AnySignlessInteger>:$mask);
+  let assemblyFormat = [{
+    $memory `[` $address `]` `=` $data `,` `clock` $clock (`enable` $enable^)? (`mask` $mask^)?
+    attr-dict `:` type($memory) (`,` type($mask)^)?
+  }];
+  let hasVerifier = 1;
+  let hasCanonicalizeMethod = 1;
+}
+
+def FirMemReadWriteOp : SeqOp<"firmem.read_write_port", [
+  MemoryEffects<[MemRead, MemWrite]>,
+  AddressMatchesFirMem<"memory", "address">,
+  DataMatchesFirMem<"memory", "writeData">,
+  DataMatchesFirMem<"memory", "readData">,
+  AttrSizedOperandSegments
+]> {
+  // TODO: Add summary
+  // TODO: Add description
+  let arguments = (ins FirMemType:$memory, AnySignlessInteger:$address, I1:$clock, Optional<I1>:$enable, AnySignlessInteger:$writeData, I1:$mode, Optional<AnySignlessInteger>:$mask);
+  let results = (outs AnySignlessInteger:$readData);
+  let assemblyFormat = [{
+    $memory `[` $address `]` `=` $writeData `if` $mode `,` `clock` $clock (`enable` $enable^)? (`mask` $mask^)?
+    attr-dict `:` type($memory) (`,` type($mask)^)?
+  }];
+  let hasVerifier = 1;
+  let hasCanonicalizeMethod = 1;
 }

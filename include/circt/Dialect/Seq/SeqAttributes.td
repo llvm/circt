@@ -30,4 +30,16 @@ def WUWAttr : I32EnumAttr<"WUW", "Write-Under-Write Behavior",
 
 }
 
+/// An attribute holding information about memory initialization.
+def FirMemInitAttr : AttrDef<SeqDialect, "FirMemInit"> {
+  let mnemonic = "firmem.init";
+  let summary = "Memory initialization information";
+  let parameters = (ins
+    "mlir::StringAttr":$filename,
+    "bool":$isBinary,
+    "bool":$isInline
+  );
+  let assemblyFormat = "`<` $filename `,` $isBinary `,` $isInline `>`";
+}
+
 #endif // CIRCT_DIALECT_SEQ_SEQATTRIBUTES_TD

@@ -14,5 +14,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 
 #include "circt/Dialect/Seq/SeqEnums.h.inc"
+#define GET_ATTRDEF_CLASSES
+#include "circt/Dialect/Seq/SeqAttributes.h.inc"
 
 #endif // CIRCT_DIALECT_SEQ_SEQATTRIBUTES_H

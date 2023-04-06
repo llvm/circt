@@ -26,6 +26,7 @@ using namespace seq;
 
 void SeqDialect::initialize() {
   registerTypes();
+  registerAttributes();
 
   // Register operations.
   addOperations<
