@@ -60,7 +60,7 @@ def ClassFieldOp : OMOp<"class.field",
 }
 
 //===----------------------------------------------------------------------===//
-// Object instantiations
+// Object instantiations and fields
 //===----------------------------------------------------------------------===//
 
 def ObjectOp : OMOp<"object",
@@ -77,6 +77,22 @@ def ObjectOp : OMOp<"object",
   let assemblyFormat = [{
     $className `(` $actualParams `)` `:`
       functional-type($actualParams, $result) attr-dict
+  }];
+}
+
+def ObjectFieldOp : OMOp<"object.field",
+    [DeclareOpInterfaceMethods<SymbolUserOpInterface>, Pure]> {
+  let arguments = (ins
+    ClassType:$object,
+    FlatSymbolRefArrayAttr:$fieldPath
+  );
+
+  let results = (outs
+    AnyType:$result
+  );
+
+  let assemblyFormat = [{
+    $object `,` $fieldPath `:` functional-type($object, $result) attr-dict
   }];
 }
 
