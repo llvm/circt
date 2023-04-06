@@ -1303,6 +1303,24 @@ hw.module @flatten_multi_use_and(%arg0: i8, %arg1: i8, %arg2: i8)
   hw.output %0, %1 : i8, i8
 }
 
+// CHECK-LABEL: @flatten_and_no_name_hint
+hw.module @flatten_and_no_name_hint(%arg0: i8, %arg1: i8, %arg2: i8) -> (o1: i8) {
+  // CHECK: comb.and
+  // CHECK-NOT: comb.and
+  %0 = comb.and %arg0, %arg1 : i8
+  %1 = comb.and %0, %arg2 : i8
+  hw.output %1 : i8
+}
+
+// CHECK-LABEL: @flatten_and_name_hint
+hw.module @flatten_and_name_hint(%arg0: i8, %arg1: i8, %arg2: i8) -> (o1: i8) {
+  // CHECK: comb.and
+  %0 = comb.and %arg0, %arg1 {sv.namehint = "myname"} : i8
+  // CHECK: comb.and
+  %1 = comb.and %0, %arg2 : i8
+  hw.output %1 : i8
+}
+
 // CHECK-LABEL: hw.module @muxCommonOp(
 // This handles various cases of mux(cond, someop(...), someop(...)).
 hw.module @muxCommonOp(%cond: i1,

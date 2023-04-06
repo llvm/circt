@@ -134,6 +134,10 @@ static bool tryFlatteningOperands(Operation *op, PatternRewriter &rewriter) {
     if (flattenOp == op)
       continue;
 
+    // Don't flatten if the operand has a name hint.
+    if (flattenOp->hasAttrOfType<StringAttr>("sv.namehint"))
+      continue;
+
     // Don't duplicate logic when it has multiple uses.
     if (!inputs[i].hasOneUse()) {
       // We can fold a multi-use binary operation into this one if this allows a
