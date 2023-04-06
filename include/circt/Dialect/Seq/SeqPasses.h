@@ -21,12 +21,12 @@ namespace seq {
 
 #define GEN_PASS_DECL
 #include "circt/Dialect/Seq/SeqPasses.h.inc"
-#undef GEN_PASS_DECL
 
 std::unique_ptr<mlir::Pass> createSeqLowerToSVPass();
 std::unique_ptr<mlir::Pass>
 createSeqFIRRTLLowerToSVPass(const LowerSeqFIRRTLToSVOptions &options = {});
 std::unique_ptr<mlir::Pass> createLowerSeqHLMemPass();
+std::unique_ptr<mlir::Pass> createLowerFirMemPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

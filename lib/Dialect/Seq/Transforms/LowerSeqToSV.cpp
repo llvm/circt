@@ -31,17 +31,24 @@ using namespace circt;
 using namespace seq;
 
 namespace {
+#define GEN_PASS_DEF_LOWERSEQTOSV
+#define GEN_PASS_DEF_LOWERSEQFIRRTLTOSV
+#include "circt/Dialect/Seq/SeqPasses.h.inc"
+
 struct SeqToSVPass : public impl::LowerSeqToSVBase<SeqToSVPass> {
   void runOnOperation() override;
 };
+
 struct SeqFIRRTLToSVPass
     : public impl::LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass> {
   void runOnOperation() override;
-  using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::disableRegRandomization;
-  using LowerSeqFIRRTLToSVBase<
-      SeqFIRRTLToSVPass>::addVivadoRAMAddressConflictSynthesisBugWorkaround;
-  using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::LowerSeqFIRRTLToSVBase;
-  using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::numSubaccessRestored;
+
+  using LowerSeqFIRRTLToSVBase::LowerSeqFIRRTLToSVBase;
+
+  using LowerSeqFIRRTLToSVBase::
+      addVivadoRAMAddressConflictSynthesisBugWorkaround;
+  using LowerSeqFIRRTLToSVBase::disableRegRandomization;
+  using LowerSeqFIRRTLToSVBase::numSubaccessRestored;
 };
 } // anonymous namespace
 

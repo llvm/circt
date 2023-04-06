@@ -43,6 +43,7 @@ using namespace circt;
 using namespace firrtl;
 using circt::comb::ICmpPredicate;
 using hw::PortDirection;
+using llvm::Optional;
 
 /// Attribute that indicates that the module hierarchy starting at the
 /// annotated module should be dumped to a file.
@@ -179,20 +180,6 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
   }
 }
 
-static SmallVector<FirMemory>
-mergeFIRRTLMemories(const SmallVector<FirMemory> &lhs,
-                    SmallVector<FirMemory> rhs) {
-  if (rhs.empty())
-    return lhs;
-  // lhs is always sorted and uniqued
-  llvm::sort(rhs);
-  rhs.erase(std::unique(rhs.begin(), rhs.end()), rhs.end());
-  SmallVector<FirMemory> retval;
-  std::set_union(lhs.begin(), lhs.end(), rhs.begin(), rhs.end(),
-                 std::back_inserter(retval));
-  return retval;
-}
-
 static unsigned getBitWidthFromVectorSize(unsigned size) {
   return size == 1 ? 1 : llvm::Log2_64_Ceil(size);
 }
@@ -295,14 +282,6 @@ struct CircuitLoweringState {
 
   InstanceGraph *getInstanceGraph() { return instanceGraph; }
 
-  // Given the FirMemory name, return the generated op module name. This map
-  // maintains the appropriate names for the deduped memories.
-  StringAttr getGenOpMemName(StringAttr oldName) const {
-    auto iter = memoryNameMap.find(oldName);
-    assert(iter != memoryNameMap.end() && "Memory name map not found");
-    return iter->getSecond();
-  }
-
 private:
   friend struct FIRRTLModuleLowering;
   friend struct FIRRTLLowering;
@@ -345,12 +324,6 @@ private:
   /// A mapping of instances to their forced instantiation names (if
   /// applicable).
   DenseMap<std::pair<Attribute, Attribute>, Attribute> instanceForceNames;
-
-  /// Map of original FirMemory name to the Generated Op name. All the deduped
-  /// memories have the same FirMemory name (because it is derived from the
-  /// memory parameters), but the generated op name depends on the MemOp name,
-  /// which is selected after dedup.
-  DenseMap<StringAttr, StringAttr> memoryNameMap;
 
   /// Cached nla table analysis.
   NLATable *nlaTable = nullptr;
@@ -441,9 +414,6 @@ private:
                                 CircuitLoweringState &loweringState);
   LogicalResult lowerModuleOperations(hw::HWModuleOp module,
                                       CircuitLoweringState &loweringState);
-
-  void lowerMemoryDecls(ArrayRef<FirMemory> mems,
-                        CircuitLoweringState &loweringState);
 };
 
 } // end anonymous namespace
@@ -589,43 +559,6 @@ void FIRRTLModuleLowering::runOnOperation() {
         moduleHierarchyFileAttrName,
         ArrayAttr::get(&getContext(), testHarnessHierarchyFiles));
 
-  // Collect all the memories in the module. Construct the FirMemory, set the
-  // DUT flag and also record the Memop.
-  auto collectFIRRTLMemories =
-      [&state](FModuleOp module) -> SmallVector<FirMemory> {
-    SmallVector<FirMemory> retval;
-    // Check if this module is in the DUT hierarchy.
-    bool isInDut = state.isInDUT(module);
-    for (auto op : module.getBodyBlock()->getOps<MemOp>()) {
-      auto sum = op.getSummary();
-      sum.isInDut = isInDut;
-      sum.op = op;
-      retval.push_back(sum);
-    }
-    return retval;
-  };
-
-  // 1. First collect the memories as FirMemory, set the DUT flag and also
-  // record the MemOp.
-  // 2. Then Dedup the memories using the mergeFIRRTLMemories routine. This uses
-  // the memory parameters to merge memories with the exactly same parameters.
-  // 3. Then For each of the deduped memories, create the HWModuleGeneratedOp,
-  // and assign a unique name to the wrapper module based on the MemOp name. It
-  // is important to use the MemOp name because appropriate prefixes have to be
-  // respected, also the correct output directory needs to be set based on the
-  // DUT or testbench hierarchy.
-  SmallVector<FirMemory> memories;
-  if (getContext().isMultithreadingEnabled()) {
-    memories = llvm::parallelTransformReduce(
-        modulesToProcess.begin(), modulesToProcess.end(),
-        SmallVector<FirMemory>(), mergeFIRRTLMemories, collectFIRRTLMemories);
-  } else {
-    for (auto m : modulesToProcess)
-      memories = mergeFIRRTLMemories(memories, collectFIRRTLMemories(m));
-  }
-  if (!memories.empty())
-    lowerMemoryDecls(memories, state);
-
   // Now that we've lowered all of the modules, move the bodies over and
   // update any instances that refer to the old modules.
   auto result = mlir::failableParallelForEachN(
@@ -651,128 +584,6 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   // Now that the modules are moved over, remove the Circuit.
   circuit.erase();
-}
-
-void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
-                                            CircuitLoweringState &state) {
-  assert(!mems.empty());
-  auto namesp = CircuitNamespace(state.circuitOp);
-  state.used_RANDOMIZE_MEM_INIT = 1;
-  // Insert memories at the bottom of the file.
-  OpBuilder b(state.circuitOp);
-  b.setInsertionPointAfter(state.circuitOp);
-  std::array<StringRef, 14> schemaFields = {
-      "depth",          "numReadPorts",    "numWritePorts", "numReadWritePorts",
-      "readLatency",    "writeLatency",    "width",         "maskGran",
-      "readUnderWrite", "writeUnderWrite", "writeClockIDs", "initFilename",
-      "initIsBinary",   "initIsInline"};
-  auto schemaFieldsAttr = b.getStrArrayAttr(schemaFields);
-  auto schema = b.create<hw::HWGeneratorSchemaOp>(
-      mems.front().loc, "FIRRTLMem", "FIRRTL_Memory", schemaFieldsAttr);
-  auto memorySchema = SymbolRefAttr::get(schema);
-
-  Type b1Type = IntegerType::get(&getContext(), 1);
-
-  for (auto &mem : mems) {
-    SmallVector<hw::PortInfo> ports;
-    size_t inputPin = 0;
-    size_t outputPin = 0;
-    // We don't need a single bit mask, it can be combined with enable. Create
-    // an unmasked memory if maskBits = 1.
-
-    auto makePortCommon = [&](StringRef prefix, size_t idx, Type bAddrType) {
-      ports.push_back({b.getStringAttr(prefix + Twine(idx) + "_addr"),
-                       PortDirection::INPUT, bAddrType, inputPin++});
-      ports.push_back({b.getStringAttr(prefix + Twine(idx) + "_en"),
-                       PortDirection::INPUT, b1Type, inputPin++});
-      ports.push_back({b.getStringAttr(prefix + Twine(idx) + "_clk"),
-                       PortDirection::INPUT, b1Type, inputPin++});
-    };
-
-    Type bDataType =
-        IntegerType::get(&getContext(), std::max((size_t)1, mem.dataWidth));
-    Type maskType = IntegerType::get(&getContext(), mem.maskBits);
-
-    Type bAddrType = IntegerType::get(
-        &getContext(), std::max(1U, llvm::Log2_64_Ceil(mem.depth)));
-
-    for (size_t i = 0, e = mem.numReadPorts; i != e; ++i) {
-      makePortCommon("R", i, bAddrType);
-      ports.push_back({b.getStringAttr("R" + Twine(i) + "_data"),
-                       PortDirection::OUTPUT, bDataType, outputPin++});
-    }
-    for (size_t i = 0, e = mem.numReadWritePorts; i != e; ++i) {
-      makePortCommon("RW", i, bAddrType);
-      ports.push_back({b.getStringAttr("RW" + Twine(i) + "_wmode"),
-                       PortDirection::INPUT, b1Type, inputPin++});
-      ports.push_back({b.getStringAttr("RW" + Twine(i) + "_wdata"),
-                       PortDirection::INPUT, bDataType, inputPin++});
-      ports.push_back({b.getStringAttr("RW" + Twine(i) + "_rdata"),
-                       PortDirection::OUTPUT, bDataType, outputPin++});
-      // Ignore mask port, if maskBits =1
-      if (mem.isMasked)
-        ports.push_back({b.getStringAttr("RW" + Twine(i) + "_wmask"),
-                         PortDirection::INPUT, maskType, inputPin++});
-    }
-
-    for (size_t i = 0, e = mem.numWritePorts; i != e; ++i) {
-      makePortCommon("W", i, bAddrType);
-      ports.push_back({b.getStringAttr("W" + Twine(i) + "_data"),
-                       PortDirection::INPUT, bDataType, inputPin++});
-      // Ignore mask port, if maskBits =1
-      if (mem.isMasked)
-        ports.push_back({b.getStringAttr("W" + Twine(i) + "_mask"),
-                         PortDirection::INPUT, maskType, inputPin++});
-    }
-
-    // Mask granularity is the number of data bits that each mask bit can
-    // guard. By default it is equal to the data bitwidth.
-    auto maskGran = mem.isMasked ? mem.dataWidth / mem.maskBits : mem.dataWidth;
-    NamedAttribute genAttrs[] = {
-        b.getNamedAttr("depth", b.getI64IntegerAttr(mem.depth)),
-        b.getNamedAttr("numReadPorts", b.getUI32IntegerAttr(mem.numReadPorts)),
-        b.getNamedAttr("numWritePorts",
-                       b.getUI32IntegerAttr(mem.numWritePorts)),
-        b.getNamedAttr("numReadWritePorts",
-                       b.getUI32IntegerAttr(mem.numReadWritePorts)),
-        b.getNamedAttr("readLatency", b.getUI32IntegerAttr(mem.readLatency)),
-        b.getNamedAttr("writeLatency", b.getUI32IntegerAttr(mem.writeLatency)),
-        b.getNamedAttr("width", b.getUI32IntegerAttr(mem.dataWidth)),
-        b.getNamedAttr("maskGran", b.getUI32IntegerAttr(maskGran)),
-        b.getNamedAttr("readUnderWrite",
-                       seq::RUWAttr::get(b.getContext(), mem.readUnderWrite)),
-        b.getNamedAttr("writeUnderWrite",
-                       seq::WUWAttr::get(b.getContext(), mem.writeUnderWrite)),
-        b.getNamedAttr("writeClockIDs", b.getI32ArrayAttr(mem.writeClockIDs)),
-        b.getNamedAttr("initFilename",
-                       mem.init ? mem.init.getFilename() : b.getStringAttr("")),
-        b.getNamedAttr(
-            "initIsBinary",
-            b.getBoolAttr(mem.init ? mem.init.getIsBinary() : false)),
-        b.getNamedAttr(
-            "initIsInline",
-            b.getBoolAttr(mem.init ? mem.init.getIsInline() : false))};
-
-    // Make the global module for the memory
-    // Set a name for the memory wrapper module, the combMem is an arbitrary
-    // suffix. It is important to derive the name from the original MemOp name,
-    // to respect the corresponding prefixes..
-    auto memoryName = b.getStringAttr(
-        namesp.newName((mem.prefix ? mem.prefix.getValue() : "") +
-                       cast<MemOp>(mem.op).getName() + "_combMem"));
-    // Now record this generated name for the corresponding FirMemory name,
-    // because all the memories that have the same FirMemory name, will now use
-    // this new generated name at the Instance Op. Basically this is the name
-    // used for all the deduped memories.
-    state.memoryNameMap[mem.getFirMemoryName()] = memoryName;
-    auto genOp = b.create<hw::HWModuleGeneratedOp>(
-        mem.loc, memorySchema, memoryName, ports, StringRef(), ArrayAttr(),
-        genAttrs);
-    // Also set the appropriate directory.
-    if (!mem.isInDut)
-      if (auto testBenchDir = state.getTestBenchDirectory())
-        genOp->setAttr("output_file", testBenchDir);
-  }
 }
 
 /// Emit the file header that defines a bunch of macros.
@@ -2901,10 +2712,6 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
-  auto memName = op.getName();
-  if (memName.empty())
-    memName = "mem";
-
   // TODO: Remove this restriction and preserve aggregates in
   // memories.
   if (op.getDataType()
@@ -2920,161 +2727,117 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
   FirMemory memSummary = op.getSummary();
 
-  // Process each port in turn.
-  SmallVector<Type, 8> resultTypes;
-  SmallVector<Value, 8> operands;
-  DenseMap<Operation *, size_t> returnHolder;
-  SmallVector<Attribute> argNames, resultNames;
+  // Create the memory declaration.
+  auto memType = seq::FirMemType::get(
+      op.getContext(), memSummary.depth, memSummary.dataWidth,
+      memSummary.isMasked ? Optional<uint32_t>(memSummary.maskBits)
+                          : Optional<uint32_t>());
 
-  // The result values of the memory are not necessarily in the same order as
-  // the memory module that we're lowering to.  We need to lower the read
-  // ports before the read/write ports, before the write ports.
-  for (unsigned memportKindIdx = 0; memportKindIdx != 3; ++memportKindIdx) {
-    MemOp::PortKind memportKind;
-    switch (memportKindIdx) {
-    default:
-      assert(0 && "invalid idx");
-      break; // Silence warning
-    case 0:
-      memportKind = MemOp::PortKind::Read;
-      break;
-    case 1:
-      memportKind = MemOp::PortKind::ReadWrite;
-      break;
-    case 2:
-      memportKind = MemOp::PortKind::Write;
-      break;
-    }
+  seq::FirMemInitAttr memInit;
+  if (auto init = op.getInitAttr())
+    memInit = seq::FirMemInitAttr::get(init.getContext(), init.getFilename(),
+                                       init.getIsBinary(), init.getIsInline());
 
-    // This is set to the count of the kind of memport we're emitting, for
-    // label names.
-    unsigned portNumber = 0;
+  auto memDecl = builder.create<seq::FirMemOp>(
+      memType, memSummary.readLatency, memSummary.writeLatency,
+      memSummary.readUnderWrite, memSummary.writeUnderWrite, op.getNameAttr(),
+      getInnerSymName(op), memInit, op.getPrefixAttr(), Attribute{});
 
-    // Memories return multiple structs, one for each port, which means we
-    // have two layers of type to split apart.
-    for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-      // Process all of one kind before the next.
-      if (memportKind != op.getPortKind(i))
-        continue;
+  // If the module is outside the DUT, set the appropriate output directory for
+  // the memory.
+  if (!circuitState.isInDUT(theModule))
+    if (auto testBenchDir = circuitState.getTestBenchDirectory())
+      memDecl.setOutputFileAttr(testBenchDir);
 
-      auto portName = op.getPortName(i).getValue();
+  // Memories return multiple structs, one for each port, which means we
+  // have two layers of type to split apart.
+  for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
+    auto addInput = [&](StringRef field, size_t width,
+                        StringRef field2 = "") -> Value {
+      auto portType =
+          IntegerType::get(op.getContext(), std::max<size_t>(1, width));
 
-      auto addInput = [&](StringRef portLabel, StringRef portLabel2,
-                          StringRef field, size_t width,
-                          StringRef field2 = "") {
-        auto portType =
-            IntegerType::get(op.getContext(), std::max((size_t)1, width));
-        auto accesses = getAllFieldAccesses(op.getResult(i), field);
+      Value wire = createTmpHWWireOp(portType);
+      auto accesses = getAllFieldAccesses(op.getResult(i), field);
 
-        Value wire =
-            createTmpHWWireOp(portType, "." + portName + "." + field + ".wire");
+      for (auto a : accesses) {
+        if (a.getType()
+                .cast<FIRRTLBaseType>()
+                .getPassiveType()
+                .getBitWidthOrSentinel() > 0)
+          (void)setLowering(a, wire);
+        else
+          a->eraseOperand(0);
+      }
 
-        for (auto a : accesses) {
+      // This handles the case, when the single bit mask field is removed,
+      // and the enable is updated after 'And' with mask bit.
+      if (!field2.empty()) {
+        Value wire2 = createTmpHWWireOp(portType);
+        auto accesses2 = getAllFieldAccesses(op.getResult(i), field2);
+
+        for (auto a : accesses2) {
           if (a.getType()
                   .cast<FIRRTLBaseType>()
                   .getPassiveType()
                   .getBitWidthOrSentinel() > 0)
-            (void)setLowering(a, wire);
+            (void)setLowering(a, wire2);
           else
             a->eraseOperand(0);
         }
-
-        if (!field2.empty()) {
-          // This handles the case, when the single bit mask field is removed,
-          // and the enable is updated after 'And' with mask bit.
-          Value wire2 = createTmpHWWireOp(portType, "." + portName + "." +
-                                                        field2 + ".wire");
-          auto accesses2 = getAllFieldAccesses(op.getResult(i), field2);
-
-          for (auto a : accesses2) {
-            if (a.getType()
-                    .cast<FIRRTLBaseType>()
-                    .getPassiveType()
-                    .getBitWidthOrSentinel() > 0)
-              (void)setLowering(a, wire2);
-            else
-              a->eraseOperand(0);
-          }
-          wire = builder.createOrFold<comb::AndOp>(wire, wire2, true);
-        }
-
-        operands.push_back(wire);
-        argNames.push_back(
-            builder.getStringAttr(portLabel + Twine(portNumber) + portLabel2));
-      };
-      auto addOutput = [&](StringRef portLabel, StringRef portLabel2,
-                           StringRef field, size_t width) {
-        auto portType =
-            IntegerType::get(op.getContext(), std::max((size_t)1, width));
-        resultTypes.push_back(portType);
-
-        // Now collect the data for the instance.  A op produces multiple
-        // structures, so we need to look through SubfieldOps to see the
-        // true inputs and outputs.
-        auto accesses = getAllFieldAccesses(op.getResult(i), field);
-        // Read data ports are tracked to be updated later
-        for (auto &a : accesses) {
-          if (width)
-            returnHolder[a] = resultTypes.size() - 1;
-          else
-            a->eraseOperand(0);
-        }
-        resultNames.push_back(
-            builder.getStringAttr(portLabel + Twine(portNumber) + portLabel2));
-      };
-
-      if (memportKind == MemOp::PortKind::Read) {
-        addInput("R", "_addr", "addr", llvm::Log2_64_Ceil(memSummary.depth));
-        addInput("R", "_en", "en", 1);
-        addInput("R", "_clk", "clk", 1);
-        addOutput("R", "_data", "data", memSummary.dataWidth);
-      } else if (memportKind == MemOp::PortKind::ReadWrite) {
-        addInput("RW", "_addr", "addr", llvm::Log2_64_Ceil(memSummary.depth));
-        addInput("RW", "_en", "en", 1);
-        addInput("RW", "_clk", "clk", 1);
-        // If maskBits =1, then And the mask field with enable, and update the
-        // enable. Else keep mask port.
-        if (memSummary.isMasked)
-          addInput("RW", "_wmode", "wmode", 1);
-        else
-          addInput("RW", "_wmode", "wmode", 1, "wmask");
-        addInput("RW", "_wdata", "wdata", memSummary.dataWidth);
-        addOutput("RW", "_rdata", "rdata", memSummary.dataWidth);
-        // Ignore mask port, if maskBits =1
-        if (memSummary.isMasked)
-          addInput("RW", "_wmask", "wmask", memSummary.maskBits);
-      } else {
-        addInput("W", "_addr", "addr", llvm::Log2_64_Ceil(memSummary.depth));
-        // If maskBits =1, then And the mask field with enable, and update the
-        // enable. Else keep mask port.
-        if (memSummary.isMasked)
-          addInput("W", "_en", "en", 1);
-        else
-          addInput("W", "_en", "en", 1, "mask");
-        addInput("W", "_clk", "clk", 1);
-        addInput("W", "_data", "data", memSummary.dataWidth);
-        // Ignore mask port, if maskBits =1
-        if (memSummary.isMasked)
-          addInput("W", "_mask", "mask", memSummary.maskBits);
+        wire = builder.createOrFold<comb::AndOp>(wire, wire2, true);
       }
+      return wire;
+    };
 
-      ++portNumber;
+    auto addOutput = [&](StringRef field, size_t width, Value value) {
+      auto accesses = getAllFieldAccesses(op.getResult(i), field);
+      for (auto &a : accesses) {
+        if (width > 0)
+          (void)setLowering(a, value);
+        else
+          a->eraseOperand(0);
+      }
+    };
+
+    auto memportKind = op.getPortKind(i);
+    if (memportKind == MemOp::PortKind::Read) {
+      auto addr = addInput("addr", llvm::Log2_64_Ceil(memSummary.depth));
+      auto en = addInput("en", 1);
+      auto clk = addInput("clk", 1);
+      auto data = builder.create<seq::FirMemReadOp>(memDecl, addr, clk, en);
+      addOutput("data", memSummary.dataWidth, data);
+    } else if (memportKind == MemOp::PortKind::ReadWrite) {
+      auto addr = addInput("addr", llvm::Log2_64_Ceil(memSummary.depth));
+      auto en = addInput("en", 1);
+      auto clk = addInput("clk", 1);
+      // If maskBits =1, then And the mask field with enable, and update the
+      // enable. Else keep mask port.
+      auto mode = addInput("wmode", 1, memSummary.isMasked ? "" : "wmask");
+      auto wdata = addInput("wdata", memSummary.dataWidth);
+      // Ignore mask port, if maskBits =1
+      Value mask;
+      if (memSummary.isMasked)
+        mask = addInput("wmask", memSummary.maskBits);
+      auto rdata = builder.create<seq::FirMemReadWriteOp>(
+          memDecl, addr, clk, en, wdata, mode, mask);
+      addOutput("rdata", memSummary.dataWidth, rdata);
+    } else {
+      auto addr = addInput("addr", llvm::Log2_64_Ceil(memSummary.depth));
+      // If maskBits =1, then And the mask field with enable, and update the
+      // enable. Else keep mask port.
+      auto en = addInput("en", 1, memSummary.isMasked ? "" : "mask");
+      auto clk = addInput("clk", 1);
+      auto data = addInput("data", memSummary.dataWidth);
+      // Ignore mask port, if maskBits =1
+      Value mask;
+      if (memSummary.isMasked)
+        mask = addInput("mask", memSummary.maskBits);
+      builder.create<seq::FirMemWriteOp>(memDecl, addr, clk, en, data, mask);
     }
   }
 
-  auto memModuleAttr =
-      circuitState.getGenOpMemName(memSummary.getFirMemoryName());
-
-  // Create the instance to replace the memop.
-  auto inst = builder.create<hw::InstanceOp>(
-      resultTypes, builder.getStringAttr(memName + "_ext"), memModuleAttr,
-      operands, builder.getArrayAttr(argNames),
-      builder.getArrayAttr(resultNames),
-      /*parameters=*/builder.getArrayAttr({}),
-      /*sym_name=*/getInnerSymName(op));
-  // Update all users of the result of read ports
-  for (auto &ret : returnHolder)
-    (void)setLowering(ret.first->getResult(0), inst.getResult(ret.second));
+  circuitState.used_RANDOMIZE_MEM_INIT = 1;
   return success();
 }
 

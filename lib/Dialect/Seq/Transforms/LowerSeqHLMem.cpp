@@ -148,8 +148,10 @@ public:
   }
 };
 
-struct LowerSeqHLMemPass
-    : public circt::seq::impl::LowerSeqHLMemBase<LowerSeqHLMemPass> {
+#define GEN_PASS_DEF_LOWERSEQHLMEM
+#include "circt/Dialect/Seq/SeqPasses.h.inc"
+
+struct LowerSeqHLMemPass : public impl::LowerSeqHLMemBase<LowerSeqHLMemPass> {
   void runOnOperation() override;
 };
 

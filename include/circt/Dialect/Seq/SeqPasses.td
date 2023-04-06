@@ -44,4 +44,10 @@ def LowerSeqHLMem: Pass<"lower-seq-hlmem", "hw::HWModuleOp"> {
   let dependentDialects = ["circt::sv::SVDialect"];
 }
 
+def LowerFirMem : Pass<"lower-seq-firmem", "mlir::ModuleOp"> {
+  let summary = "Lower seq.firmem ops to instances of hw.module.generated ops";
+  let constructor = "circt::seq::createLowerFirMemPass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
+}
+
 #endif // CIRCT_DIALECT_SEQ_SEQPASSES

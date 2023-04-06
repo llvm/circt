@@ -707,6 +707,7 @@ static LogicalResult processBuffer(
           {/*disableRandomization=*/!isRandomEnabled(RandomKind::Reg),
            /*addVivadoRAMAddressConflictSynthesisBugWorkaround=*/
            addVivadoRAMAddressConflictSynthesisBugWorkaround}));
+      pm.addPass(seq::createLowerFirMemPass());
       pm.addPass(sv::createHWMemSimImplPass(
           replSeqMem, ignoreReadEnableMem, addMuxPragmas,
           !isRandomEnabled(RandomKind::Mem), !isRandomEnabled(RandomKind::Reg),

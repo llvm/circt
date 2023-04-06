@@ -20,15 +20,4 @@
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "mlir/Pass/Pass.h"
 
-namespace circt {
-namespace seq {
-
-#define GEN_PASS_DEF_LOWERSEQFIRRTLTOSV
-#define GEN_PASS_DEF_LOWERSEQHLMEM
-#define GEN_PASS_DEF_LOWERSEQTOSV
-#include "circt/Dialect/Seq/SeqPasses.h.inc"
-
-} // namespace seq
-} // namespace circt
-
 #endif // DIALECT_SEQ_TRANSFORMS_PASSDETAILS_H
