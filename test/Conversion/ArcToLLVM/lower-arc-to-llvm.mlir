@@ -106,7 +106,7 @@ func.func @MemoryUpdates(%arg0: !arc.storage<24>, %enable: i1) {
   // CHECK-NEXT: [[THREE:%.+]] = llvm.mlir.constant(3
 
   %1 = arc.memory_read %0[%c3_i19], %clk, %enable : <4 x i42, 6>, i19
-  %2 = comb.add %1, %1 : i42
+  %2 = arith.addi %1, %1 : i42
   // CHECK-NEXT:   [[ADDR:%.+]] = llvm.zext [[THREE]] : i19 to i20
   // CHECK-NEXT:   [[FOUR:%.+]] = llvm.mlir.constant(4
   // CHECK-NEXT:   [[INBOUNDS:%.+]] = llvm.icmp "ult" [[ADDR]], [[FOUR]]
@@ -158,4 +158,14 @@ func.func @callOp(%arg0: i32) -> i32 {
 }
 arc.define @dummyCallee(%arg0: i32) -> i32 {
   arc.output %arg0 : i32
+}
+
+// FIXME: this does not really belong here, but there is no better place either.
+// CHECK-LABEL: llvm.func @lowerCombParity
+func.func @lowerCombParity(%arg0: i32) -> i1 {
+  // CHECK: %[[CNT:.*]] = llvm.intr.ctpop(%arg0) : (i32) -> i32
+  // CHECK: llvm.trunc %[[CNT]] : i32 to i1
+  %0 = comb.parity %arg0 : i32
+
+  return %0 : i1
 }
