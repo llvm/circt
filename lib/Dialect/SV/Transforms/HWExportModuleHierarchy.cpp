@@ -45,7 +45,7 @@ static void printHierarchy(hw::InstanceOp &inst, SymbolTable &symbolTable,
   auto moduleOp = symbolTable.lookup(inst.getModuleNameAttr().getValue());
 
   j.object([&] {
-    j.attribute("instance_name", inst.instanceName());
+    j.attribute("instance_name", inst.getInstanceName());
     j.attribute("module_name", hw::getVerilogModuleName(moduleOp));
     j.attributeArray("instances", [&] {
       // Only recurse on module ops, not extern or generated ops, whose internal

@@ -84,6 +84,14 @@ struct Reduction {
   /// keep applying to the same operations and the tool keeps accepting the
   /// unmodified input as an improvement.
   virtual bool isOneShot() const { return false; }
+
+  /// An optional callback for reductions to communicate removal of operations.
+  std::function<void(mlir::Operation *)> notifyOpErasedCallback = nullptr;
+
+  void notifyOpErased(mlir::Operation *op) {
+    if (notifyOpErasedCallback)
+      notifyOpErasedCallback(op);
+  }
 };
 
 /// A reduction pattern that applies an `mlir::Pass`.

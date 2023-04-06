@@ -645,7 +645,7 @@ createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   llvm::SmallVector<PortInfo> ports;
 
   // Add all inputs of funcOp.
-  for (auto &[i, argType] :
+  for (auto [i, argType] :
        llvm::enumerate(funcOp.getFunctionType().getInputs())) {
     auto portName = funcOp.getArgName(i);
     FIRRTLBaseType bundlePortType;
@@ -706,7 +706,8 @@ createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   }
   // Create a FIRRTL module and inline the funcOp into the FIRRTL module.
   auto topModuleOp = rewriter.create<TModuleOp>(
-      funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()), ports);
+      funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()),
+      ConventionAttr::get(rewriter.getContext(), Convention::Internal), ports);
 
   if (setFlattenAttr)
     topModuleOp->setAttr(
@@ -739,7 +740,7 @@ static void inlineFuncRegion(handshake::FuncOp funcOp, FModuleOp topModuleOp,
 
   // Replace uses of each argument of the second block with the corresponding
   // argument of the entry block.
-  for (auto &oldArg : enumerate(secondBlock->getArguments()))
+  for (auto oldArg : enumerate(secondBlock->getArguments()))
     oldArg.value().replaceAllUsesWith(entryBlock->getArgument(oldArg.index()));
 
   // Move all operations of the second block to the entry block.
@@ -778,7 +779,7 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
   auto ports = getPortInfoForOp(rewriter, oldOp);
   return rewriter.create<FModuleOp>(
       topModuleOp.getLoc(), rewriter.getStringAttr(getSubModuleName(oldOp)),
-      ports);
+      ConventionAttr::get(rewriter.getContext(), Convention::Internal), ports);
 }
 
 /// Extract all subfields of all ports of the sub-module.
@@ -2078,7 +2079,9 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
                    Direction::In, StringAttr{}, loc});
 
   builder.setInsertionPointToStart(circuit.getBodyBlock());
-  auto moduleOp = builder.create<FModuleOp>(strAttr(moduleName), ports);
+  auto moduleOp = builder.create<FModuleOp>(
+      strAttr(moduleName),
+      ConventionAttr::get(builder.getContext(), Convention::Internal), ports);
   builder.setInsertionPointToStart(moduleOp.getBodyBlock());
 
   // Unpack module arguments.

@@ -206,9 +206,13 @@ static bool lowerCirctPlusArgValue(InstancePathCache &instancePathCache,
 std::pair<const char *, std::function<bool(InstancePathCache &, FModuleLike)>>
     intrinsics[] = {
         {"circt.sizeof", lowerCirctSizeof},
+        {"circt_sizeof", lowerCirctSizeof},
         {"circt.isX", lowerCirctIsX},
+        {"circt_isX", lowerCirctIsX},
         {"circt.plusargs.test", lowerCirctPlusArgTest},
+        {"circt_plusargs_test", lowerCirctPlusArgTest},
         {"circt.plusargs.value", lowerCirctPlusArgValue},
+        {"circt_plusargs_value", lowerCirctPlusArgValue},
 };
 
 // This is the main entrypoint for the lowering pass.

@@ -137,7 +137,7 @@ void ExplicitRegsPass::runOnOperation() {
     stageOp.getValid().replaceAllUsesWith(newStageOp.getValid());
 
     // Replace backedges with the outputs of the new stage.
-    for (auto &it : llvm::enumerate(regMap)) {
+    for (auto it : llvm::enumerate(regMap)) {
       auto index = it.index();
       auto &[value, backedge] = it.value();
       backedge.setValue(newStageOp.getRegOuts()[index]);

@@ -51,6 +51,10 @@ om.class @Gadget(%green_1: i8, %green_2: i32) {
 // CHECK-LABEL: om.class @Empty
 om.class @Empty() {}
 
+// CHECK-LABEL: om.class @DiscardableAttrs
+// CHECK-SAME: attributes {foo.bar = "baz"}
+om.class @DiscardableAttrs() attributes {foo.bar="baz"} {}
+
 om.class @NestedField1() {
   %0 = om.constant 1 : i1
   om.class.field @baz, %0 : i1

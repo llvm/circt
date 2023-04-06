@@ -10,11 +10,64 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 using namespace circt;
 using namespace arc;
 using namespace mlir;
+
+//===----------------------------------------------------------------------===//
+// Helpers
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verifyTypeListEquivalence(Operation *op,
+                                               TypeRange expectedTypeList,
+                                               TypeRange actualTypeList,
+                                               StringRef elementName) {
+  if (expectedTypeList.size() != actualTypeList.size())
+    return op->emitOpError("incorrect number of ")
+           << elementName << "s: expected " << expectedTypeList.size()
+           << ", but got " << actualTypeList.size();
+
+  for (unsigned i = 0, e = expectedTypeList.size(); i != e; ++i) {
+    if (expectedTypeList[i] != actualTypeList[i]) {
+      auto diag = op->emitOpError(elementName)
+                  << " type mismatch: " << elementName << " #" << i;
+      diag.attachNote() << "expected type: " << expectedTypeList[i];
+      diag.attachNote() << "  actual type: " << actualTypeList[i];
+      return diag;
+    }
+  }
+
+  return success();
+}
+
+static LogicalResult verifyArcSymbolUse(Operation *op, ValueRange inputs,
+                                        ValueRange results,
+                                        SymbolTableCollection &symbolTable) {
+  // Check that the arc attribute was specified.
+  auto arcName = op->getAttrOfType<FlatSymbolRefAttr>("arc");
+  // The arc attribute is verified by the tablegen generated verifier as it is
+  // an ODS defined attribute.
+  assert(arcName && "FlatSymbolRefAttr called 'arc' missing");
+  DefineOp arc = symbolTable.lookupNearestSymbolFrom<DefineOp>(op, arcName);
+  if (!arc)
+    return op->emitOpError() << "`" << arcName.getValue()
+                             << "` does not reference a valid `arc.define`";
+
+  // Verify that the operand and result types match the arc.
+  auto type = arc.getFunctionType();
+  if (failed(verifyTypeListEquivalence(op, type.getInputs(), inputs.getTypes(),
+                                       "operand")))
+    return failure();
+
+  if (failed(verifyTypeListEquivalence(op, type.getResults(),
+                                       results.getTypes(), "result")))
+    return failure();
+
+  return success();
+}
 
 //===----------------------------------------------------------------------===//
 // DefineOp
@@ -93,57 +146,138 @@ LogicalResult OutputOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult StateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  // Check that the arc attribute was specified.
-  auto arcName = (*this)->getAttrOfType<FlatSymbolRefAttr>("arc");
-  if (!arcName)
-    return emitOpError("requires a `arc` symbol reference attribute");
-  DefineOp arc = symbolTable.lookupNearestSymbolFrom<DefineOp>(*this, arcName);
-  if (!arc)
-    return emitOpError() << "`" << arcName.getValue()
-                         << "` does not reference a valid function";
+  return verifyArcSymbolUse(*this, getInputs(), getResults(), symbolTable);
+}
 
-  // Verify that the operand and result types match the arc.
-  auto type = arc.getFunctionType();
-  if (type.getNumInputs() != getInputs().size())
-    return emitOpError("incorrect number of operands for arc");
-
-  for (unsigned i = 0, e = type.getNumInputs(); i != e; ++i) {
-    if (getInputs()[i].getType() != type.getInput(i)) {
-      auto diag = emitOpError("operand type mismatch: operand ") << i;
-      diag.attachNote() << "expected type: " << type.getInput(i);
-      diag.attachNote() << "  actual type: " << getInputs()[i].getType();
-      return diag;
-    }
+LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
+  // When there are no names attached, the state is not externaly observable.
+  // When there are also no internal users, we can remove it.
+  if (op->use_empty() && !op->hasAttr("name") && !op->hasAttr("names")) {
+    rewriter.eraseOp(op);
+    return success();
   }
 
-  if (type.getNumResults() != getNumResults())
-    return emitOpError("incorrect number of results for arc");
-
-  for (unsigned i = 0, e = type.getNumResults(); i != e; ++i) {
-    if (getResult(i).getType() != type.getResult(i)) {
-      auto diag = emitOpError("result type mismatch: result ") << i;
-      diag.attachNote() << "expected type: " << type.getResult(i);
-      diag.attachNote() << "  actual type: " << getResult(i).getType();
-      return diag;
-    }
-  }
-
-  return success();
+  return failure();
 }
 
 LogicalResult StateOp::verify() {
-  if (getLatency() > 0 && !getClock())
-    return emitOpError("with non-zero latency requires a clock");
+  if (getLatency() > 0 && !getOperation()->getParentOfType<ClockDomainOp>() &&
+      !getClock())
+    return emitOpError(
+        "with non-zero latency outside a clock domain requires a clock");
 
   if (getLatency() == 0) {
     if (getClock())
       return emitOpError("with zero latency cannot have a clock");
     if (getEnable())
       return emitOpError("with zero latency cannot have an enable");
+    if (getReset())
+      return emitOpError("with zero latency cannot have a reset");
   }
+
+  if (getOperation()->getParentOfType<ClockDomainOp>() && getClock())
+    return emitOpError("inside a clock domain cannot have a clock");
 
   return success();
 }
+
+//===----------------------------------------------------------------------===//
+// CallOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyArcSymbolUse(*this, getInputs(), getResults(), symbolTable);
+}
+
+//===----------------------------------------------------------------------===//
+// MemoryWriteOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult MemoryWriteOp::verify() {
+  if (getMask() && getMask().getType() != getData().getType())
+    return emitOpError("mask and data operand types do not match");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ClockDomainOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ClockDomainOp::verifyRegions() {
+  if (failed(verifyTypeListEquivalence(*this, getBodyBlock().getArgumentTypes(),
+                                       getInputs().getTypes(), "input")))
+    return failure();
+  if (failed(verifyTypeListEquivalence(
+          *this, getOutputs().getTypes(),
+          getBodyBlock().getTerminator()->getOperandTypes(), "output")))
+    return failure();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// RootInputOp
+//===----------------------------------------------------------------------===//
+
+void RootInputOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  SmallString<32> buf("in_");
+  buf += getName();
+  setNameFn(getState(), buf);
+}
+
+//===----------------------------------------------------------------------===//
+// RootOutputOp
+//===----------------------------------------------------------------------===//
+
+void RootOutputOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  SmallString<32> buf("out_");
+  buf += getName();
+  setNameFn(getState(), buf);
+}
+
+//===----------------------------------------------------------------------===//
+// ModelOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ModelOp::verify() {
+  if (getBodyBlock().getArguments().size() != 1)
+    return emitOpError("must have exactly one argument");
+  if (auto type = getBodyBlock().getArgument(0).getType();
+      !isa<StorageType>(type))
+    return emitOpError("argument must be of storage type");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// LutOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult LutOp::verify() {
+  Location firstSideEffectOpLoc = UnknownLoc::get(getContext());
+  const WalkResult result = getBody().walk([&](Operation *op) {
+    if (auto memOp = dyn_cast<MemoryEffectOpInterface>(op)) {
+      SmallVector<SideEffects::EffectInstance<MemoryEffects::Effect>> effects;
+      memOp.getEffects(effects);
+
+      if (!effects.empty()) {
+        firstSideEffectOpLoc = memOp->getLoc();
+        return WalkResult::interrupt();
+      }
+    }
+
+    return WalkResult::advance();
+  });
+
+  if (result.wasInterrupted())
+    return emitOpError("no operations with side-effects allowed inside a LUT")
+               .attachNote(firstSideEffectOpLoc)
+           << "first operation with side-effects here";
+
+  return success();
+}
+
+#include "circt/Dialect/Arc/ArcInterfaces.cpp.inc"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Arc/Arc.cpp.inc"

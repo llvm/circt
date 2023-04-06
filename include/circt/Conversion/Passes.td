@@ -428,7 +428,10 @@ def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "mlir::ModuleOp"> {
     This pass translates LLHD to LLVM.
   }];
   let constructor = "circt::createConvertLLHDToLLVMPass()";
-  let dependentDialects = ["mlir::LLVM::LLVMDialect"];
+  let dependentDialects = [
+    "mlir::arith::ArithDialect",
+    "mlir::LLVM::LLVMDialect"
+  ];
 }
 
 //===----------------------------------------------------------------------===//
@@ -441,19 +444,6 @@ def ConvertHWToLLVM : Pass<"convert-hw-to-llvm", "mlir::ModuleOp"> {
     This pass translates HW to LLVM.
   }];
   let constructor = "circt::createConvertHWToLLVMPass()";
-  let dependentDialects = ["mlir::LLVM::LLVMDialect"];
-}
-
-//===----------------------------------------------------------------------===//
-// CombToLLVM
-//===----------------------------------------------------------------------===//
-
-def ConvertCombToLLVM : Pass<"convert-comb-to-llvm", "mlir::ModuleOp"> {
-  let summary = "Convert Comb to LLVM";
-  let description = [{
-    This pass translates Comb to LLVM.
-  }];
-  let constructor = "circt::createConvertCombToLLVMPass()";
   let dependentDialects = ["mlir::LLVM::LLVMDialect"];
 }
 
@@ -564,6 +554,31 @@ def ConvertToArcs : Pass<"convert-to-arcs", "mlir::ModuleOp"> {
   }];
   let constructor = "circt::createConvertToArcsPass()";
   let dependentDialects = ["circt::arc::ArcDialect"];
+}
+
+//===----------------------------------------------------------------------===//
+// ConvertCombToArith
+//===----------------------------------------------------------------------===//
+
+def ConvertCombToArith : Pass<"convert-comb-to-arith", "mlir::ModuleOp"> {
+  let summary = "Convert combinational ops and constants into arith ops";
+  let constructor = "circt::createConvertCombToArithPass()";
+  let dependentDialects = ["mlir::arith::ArithDialect"];
+}
+
+//===----------------------------------------------------------------------===//
+// ConvertArcToLLVM
+//===----------------------------------------------------------------------===//
+
+def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "mlir::ModuleOp"> {
+  let summary = "Lower state transfer arc representation to LLVM";
+  let constructor = "circt::createLowerArcToLLVMPass()";
+  let dependentDialects = [
+    "arc::ArcDialect",
+    "mlir::LLVM::LLVMDialect",
+    "mlir::scf::SCFDialect",
+    "mlir::func::FuncDialect"
+  ];
 }
 
 #endif // CIRCT_CONVERSION_PASSES_TD

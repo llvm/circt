@@ -239,3 +239,48 @@ firrtl.circuit "GCTDataTapUnsupportedLiteral" attributes {rawAnnotations = [{
     %tap = firrtl.wire : !firrtl.uint<1>
   }
 }
+
+// -----
+// Check instance port target that doesn't exist.
+
+// expected-error @below {{cannot find port 'a' in module Ext}}
+// expected-error @below {{Unable to resolve target of annotation}}
+firrtl.circuit "InstancePortNotFound" attributes {rawAnnotations = [{
+  class = "circt.test",
+  target = "~InstancePortNotFound|InstancePortNotFound>inst.a"
+}]} {
+  firrtl.extmodule @Ext()
+  firrtl.module @InstancePortNotFound() {
+    firrtl.instance inst @Ext()
+  }
+}
+
+// -----
+// Check ref-type instance port is rejected.
+
+// expected-error @below {{annotation cannot target reference-type port 'ref' in module Ext}}
+// expected-error @below {{Unable to resolve target of annotation}}
+firrtl.circuit "InstancePortRef" attributes {rawAnnotations = [{
+  class = "circt.test",
+  target = "~InstancePortRef|InstancePortRef>inst.ref"
+}]} {
+  firrtl.extmodule @Ext(out ref : !firrtl.ref<uint<1>>)
+  firrtl.module @InstancePortRef() {
+    %ref = firrtl.instance inst @Ext(out ref : !firrtl.ref<uint<1>>)
+  }
+}
+
+// -----
+// Reject annotations on references.
+
+// expected-error @below {{cannot target reference-type 'out' in RefAnno}}
+// expected-error @below {{Unable to resolve target of annotation}}
+firrtl.circuit "RefAnno" attributes {rawAnnotations = [{
+  class = "circt.test",
+  target = "~RefAnno|RefAnno>out"
+}]} {
+  firrtl.module @RefAnno(in %in : !firrtl.uint<1>, out %out : !firrtl.ref<uint<1>>) {
+    %ref = firrtl.ref.send %in : !firrtl.uint<1>
+    firrtl.ref.define %out, %ref : !firrtl.ref<uint<1>>
+  }
+}

@@ -33,11 +33,11 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   auto dstType = dstFType.dyn_cast<FIRRTLBaseType>();
   auto srcType = srcFType.dyn_cast<FIRRTLBaseType>();
 
-  // Special Connects
+  // Special Connects (non-base, foreign):
   if (!dstType) {
-    if (dstFType.isa<RefType>() &&
-        !dstFType.cast<RefType>().getType().hasUninferredWidth())
-      builder.create<RefConnectOp>(dst, src);
+    // References use ref.define.  Types should match, leave to verifier if not.
+    if (isa<RefType>(dstFType))
+      builder.create<RefDefineOp>(dst, src);
     else // Other types, give up and leave a connect
       builder.create<ConnectOp>(dst, src);
     return;
@@ -484,8 +484,22 @@ static void getDeclName(Value value, SmallString<64> &string, bool nameSafe) {
           value = nullptr;
         })
         .Case<mlir::UnrealizedConversionCastOp>(
-            [&](auto cast) { value = cast.getInputs()[0]; })
-        .Default([&](auto) { value = nullptr; });
+            [&](mlir::UnrealizedConversionCastOp cast) {
+              // Forward through 1:1 conversion cast ops.
+              if (cast.getNumResults() == 1 && cast.getNumOperands() == 1 &&
+                  cast.getResult(0).getType() == cast.getOperand(0).getType()) {
+                value = cast.getInputs()[0];
+              } else {
+                // Can't name this.
+                string.clear();
+                value = nullptr;
+              }
+            })
+        .Default([&](auto) {
+          // Can't name this.
+          string.clear();
+          value = nullptr;
+        });
   }
 }
 
@@ -555,6 +569,41 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
     }
   }
   return value;
+}
+
+/// Walk leaf ground types in the `firrtlType` and apply the function `fn`.
+/// The first argument of `fn` is field ID, and the second argument is a
+/// leaf ground type.
+void circt::firrtl::walkGroundTypes(
+    FIRRTLType firrtlType,
+    llvm::function_ref<void(uint64_t, FIRRTLBaseType)> fn) {
+  auto type = getBaseType(firrtlType);
+  // If this is a ground type, don't call recursive functions.
+  if (type.isGround())
+    return fn(0, type);
+
+  uint64_t fieldID = 0;
+  auto recurse = [&](auto &&f, FIRRTLBaseType type) -> void {
+    TypeSwitch<FIRRTLBaseType>(type)
+        .Case<BundleType>([&](BundleType bundle) {
+          for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
+            fieldID++;
+            f(f, bundle.getElementType(i));
+          }
+        })
+        .template Case<FVectorType>([&](FVectorType vector) {
+          for (size_t i = 0, e = vector.getNumElements(); i < e; ++i) {
+            fieldID++;
+            f(f, vector.getElementType());
+          }
+        })
+        .Default([&](FIRRTLBaseType groundType) {
+          assert(groundType.isGround() &&
+                 "only ground types are expected here");
+          fn(fieldID, groundType);
+        });
+  };
+  recurse(recurse, type);
 }
 
 /// Returns an operation's `inner_sym`, adding one if necessary.

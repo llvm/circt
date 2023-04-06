@@ -234,6 +234,10 @@ static LogicalResult execute(MLIRContext &context) {
       mlir::OwningOpRef<mlir::ModuleOp> newModule = module->clone();
       pattern.beforeReduction(*newModule);
       SmallVector<std::pair<Operation *, uint64_t>, 16> opBenefits;
+      SmallDenseSet<Operation *> opsTouched;
+      pattern.notifyOpErasedCallback = [&](Operation *op) {
+        opsTouched.insert(op);
+      };
       newModule->walk([&](Operation *op) {
         uint64_t benefit = pattern.match(op);
         if (benefit > 0) {
@@ -243,13 +247,19 @@ static LogicalResult execute(MLIRContext &context) {
       });
       std::sort(opBenefits.begin(), opBenefits.end(),
                 [](auto a, auto b) { return a.second > b.second; });
-      for (size_t i = rangeBase;
-           i < rangeBase + rangeLength && i < opBenefits.size(); i++) {
-        auto *op = opBenefits[i].first;
-        if (pattern.match(op))
+      for (size_t idx = rangeBase, num = 0;
+           num < rangeLength && idx < opBenefits.size(); ++idx) {
+        auto *op = opBenefits[idx].first;
+        if (opsTouched.contains(op))
+          continue;
+        if (pattern.match(op)) {
+          op->walk([&](Operation *subop) { opsTouched.insert(subop); });
           (void)pattern.rewrite(op);
+          ++num;
+        }
       }
       pattern.afterReduction(*newModule);
+      pattern.notifyOpErasedCallback = nullptr;
       if (opIdx == 0) {
         VERBOSE({
           clearSummary();

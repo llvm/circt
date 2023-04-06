@@ -1237,7 +1237,7 @@ static StringRef getOperandName(Value operand) {
   } else {
     auto srcOp = operand.getDefiningOp();
     if (auto instOp = dyn_cast<InstanceOp>(srcOp))
-      return instOp.instanceName();
+      return instOp.getInstanceName();
 
     if (auto srcName = srcOp->getAttrOfType<StringAttr>("name"))
       return srcName.getValue();
@@ -1256,8 +1256,8 @@ static std::string &constructInstanceName(Value operand, InterfaceOp iface,
   if (operand.hasOneUse()) {
     Operation *dstOp = *operand.getUsers().begin();
     if (auto instOp = dyn_cast<InstanceOp>(dstOp))
-      s << "To" << llvm::toUpper(instOp.instanceName()[0])
-        << instOp.instanceName().substr(1);
+      s << "To" << llvm::toUpper(instOp.getInstanceName()[0])
+        << instOp.getInstanceName().substr(1);
     else if (auto dstName = dstOp->getAttrOfType<StringAttr>("name"))
       s << "To" << dstName.getValue();
   }
@@ -2063,7 +2063,7 @@ void ESIEmitCollateralPass::emitServiceJSON() {
         hw::HWModuleLike hwmod = nameMdPair.first;
         auto &mdOps = nameMdPair.second;
         j.object([&] {
-          j.attribute("symbol", hwmod.moduleName());
+          j.attribute("symbol", hwmod.getModuleName());
           j.attributeArray("services", [&] {
             for (ServiceHierarchyMetadataOp metadata : mdOps) {
               j.object([&] {

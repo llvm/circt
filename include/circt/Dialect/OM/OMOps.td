@@ -32,7 +32,7 @@ def ClassOp : OMOp<"class",
     ]> {
   let arguments = (ins
     SymbolNameAttr:$sym_name,
-    ArrayAttr:$formalParamNames
+    StrArrayAttr:$formalParamNames
   );
 
   let regions = (region
@@ -65,7 +65,7 @@ def ClassFieldOp : OMOp<"class.field",
 //===----------------------------------------------------------------------===//
 
 def ObjectOp : OMOp<"object",
-    [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+    [DeclareOpInterfaceMethods<SymbolUserOpInterface>, Pure]> {
   let arguments = (ins
     SymbolNameAttr:$className,
     Variadic<AnyType>:$actualParams
@@ -82,7 +82,7 @@ def ObjectOp : OMOp<"object",
 }
 
 def ObjectFieldOp : OMOp<"object.field",
-    [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+    [DeclareOpInterfaceMethods<SymbolUserOpInterface>, Pure]> {
   let arguments = (ins
     ClassType:$object,
     FlatSymbolRefArrayAttr:$fieldPath

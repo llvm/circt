@@ -145,6 +145,10 @@ def AggregateConstantOp : FIRRTLOp<"aggregateconstant", [Pure, ConstantLike]> {
     ```
   }];
 
+  let extraClassDeclaration = [{
+    Attribute getAttributeFromFieldID(uint64_t fieldID);
+  }];
+
   let arguments = (ins ArrayAttr:$fields);
   let results = (outs AggregateType:$result);
 
@@ -208,6 +212,7 @@ def InvalidValueOp : FIRRTLOp<"invalidvalue",
 
   let arguments = (ins);
   let results = (outs FIRRTLBaseType:$result);
+  let hasCanonicalizeMethod = 1;
 
   let assemblyFormat = "attr-dict `:` qualified(type($result))";
 }
@@ -488,6 +493,7 @@ def AsAsyncResetPrimOp
 def AsClockPrimOp : UnaryPrimOp<"asClock", OneBitCastableType, ClockType>;
 def CvtPrimOp : UnaryPrimOp<"cvt", IntType, SIntType>;
 def NegPrimOp : UnaryPrimOp<"neg", IntType, SIntType>;
+let hasCanonicalizer = true in
 def NotPrimOp : UnaryPrimOp<"not", IntType, UIntType>;
 
 let inferType = "impl::inferReductionResult" in {
@@ -788,7 +794,7 @@ class RefTypeConstraint<string ref, string base>
 class RefResultTypeConstraint<string base, string ref>
   : TypesMatchWith<"reference base type should match",
                    base, ref,
-                   "RefType::get($_self.cast<FIRRTLBaseType>())">;
+                   "RefType::get($_self.cast<FIRRTLBaseType>().getPassiveType())">;
 
 //===----------------------------------------------------------------------===//
 // RefOps

@@ -173,14 +173,6 @@ def HWInstanceOp : FSMOp<"hw_instance", [
     FlatSymbolRefAttr getModuleNameAttr() {
       return getMachineAttr();
     }
-
-    // HWInstanceLike interface
-    StringRef getInstanceName() {
-      return getSymName();
-    }
-    StringAttr getInstanceNameAttr() {
-      return getSymNameAttr();
-    }
   }];
 
   let hasVerifier = 1;

@@ -515,16 +515,6 @@ def InstanceOp : HWOp<"instance", [
     /// invalid IR.
     Operation *getReferencedModule(const HWSymbolCache *cache);
 
-    /// Get the instances's name.
-    StringAttr getName() {
-      return getInstanceNameAttr();
-    }
-
-    /// Set the instance's name.
-    void setName(StringAttr name) {
-      setInstanceNameAttr(name);
-    }
-
     //===------------------------------------------------------------------===//
     // SymbolOpInterface Methods
     //===------------------------------------------------------------------===//

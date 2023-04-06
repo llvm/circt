@@ -66,7 +66,7 @@ static void spillWiresForInstanceInputs(InstanceOp op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
-  SmallString<32> nameTmp{"_", op.instanceName(), "_"};
+  SmallString<32> nameTmp{"_", op.getInstanceName(), "_"};
   auto namePrefixSize = nameTmp.size();
 
   size_t nextOpNo = 0;
@@ -97,13 +97,20 @@ static void lowerInstanceResults(InstanceOp op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
-  SmallString<32> nameTmp{"_", op.instanceName(), "_"};
+  SmallString<32> nameTmp{"_", op.getInstanceName(), "_"};
   auto namePrefixSize = nameTmp.size();
 
   size_t nextResultNo = 0;
   for (auto &port : getModulePortInfo(op).outputs) {
     auto result = op.getResult(nextResultNo);
     ++nextResultNo;
+
+    // If the result doesn't have a user, the connection won't be emitted by
+    // Emitter, so there's no need to create a wire for it. However, if the
+    // result is a zero bit value, the normal emission code path should be used,
+    // as zero bit values require special handling by the emitter.
+    if (result.use_empty() && !ExportVerilog::isZeroBitType(result.getType()))
+      continue;
 
     if (result.hasOneUse()) {
       OpOperand &use = *result.getUses().begin();

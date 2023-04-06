@@ -15,6 +15,7 @@
 
 include "FIRRTLAttributes.td"
 include "FIRRTLDialect.td"
+include "FIRRTLEnums.td"
 include "FIRRTLOpInterfaces.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
@@ -95,7 +96,8 @@ def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
     the module.
   }];
   let arguments =
-            (ins DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+            (ins ConventionAttr:$convention,
+                 DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
 
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
@@ -104,8 +106,9 @@ def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
-               CArg<"ArrayAttr","ArrayAttr()">:$annotations)>
+    OpBuilder<(ins "StringAttr":$name, "ConventionAttr":$convention,
+               "ArrayRef<PortInfo>":$ports,
+               CArg<"ArrayAttr", "ArrayAttr()">:$annotations)>,
   ];
 
   let extraClassDeclaration = [{
@@ -148,6 +151,7 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
   }];
   let arguments = (ins
                    OptionalAttr<StrAttr>:$defname,
+                   ConventionAttr:$convention,
                    ParamDeclArrayAttr:$parameters,
                    DefaultValuedAttr<AnnotationArrayAttr,
                    "ArrayAttr()">:$annotations,
@@ -159,10 +163,12 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "StringAttr":$name,
+                      "ConventionAttr":$convention,
                       "ArrayRef<PortInfo>":$ports,
                       CArg<"StringRef", "StringRef()">:$defnamAttr,
                       CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
-                      CArg<"ArrayAttr", "ArrayAttr()">:$parameters)>
+                      CArg<"ArrayAttr", "ArrayAttr()">:$parameters,
+                      CArg<"ArrayAttr", "ArrayAttr()">:$internalPaths)>
   ];
 
   let extraClassDeclaration = [{
@@ -195,7 +201,8 @@ def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
                       "ArrayRef<PortInfo>":$ports,
                       CArg<"StringRef", "StringRef()">:$intrinsicNameAttr,
                       CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
-                      CArg<"ArrayAttr", "ArrayAttr()">:$parameters)>
+                      CArg<"ArrayAttr", "ArrayAttr()">:$parameters,
+                      CArg<"ArrayAttr", "ArrayAttr()">:$internalPaths)>
   ];
 
   let extraClassDeclaration = [{
