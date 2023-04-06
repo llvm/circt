@@ -1525,4 +1525,19 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:    hw.instance "iOut" @AnalogOutModA(a: %a: !hw.inout<i8>) -> ()
   // CHECK-NEXT:    hw.output
   // CHECK-NEXT:  }
+
+  // Check forceable declarations are kept alive with symbols.
+  // CHECK-LABEL: hw.module private @ForceableToSym(
+  firrtl.module private @ForceableToSym(in %in: !firrtl.uint<4>, in %clk: !firrtl.clock, out %out: !firrtl.uint<4>) {
+    // CHECK-NEXT: %n = hw.wire %in sym @__ForceableToSym__n : i4
+    // CHECK-NEXT: %w = hw.wire %n sym @__ForceableToSym__w : i4
+    // CHECK-NEXT: %r = seq.firreg %w clock %clk sym @r : i4
+    %n, %n_ref = firrtl.node %in forceable : !firrtl.uint<4>
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
+    %r, %r_ref = firrtl.reg %clk forceable : !firrtl.clock, !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
+
+    firrtl.strictconnect %w, %n : !firrtl.uint<4>
+    firrtl.strictconnect %r, %w : !firrtl.uint<4>
+    firrtl.strictconnect %out, %r : !firrtl.uint<4>
+  }
 }
