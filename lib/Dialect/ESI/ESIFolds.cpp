@@ -61,12 +61,12 @@ LogicalResult WrapFIFOOp::canonicalize(WrapFIFOOp op,
   return failure();
 }
 
-OpFoldResult WrapWindow::fold(FoldAdaptor adapter) {
+OpFoldResult WrapWindow::fold(FoldAdaptor) {
   if (auto unwrap = dyn_cast_or_null<UnwrapWindow>(getFrame().getDefiningOp()))
     return unwrap.getWindow();
   return {};
 }
-OpFoldResult UnwrapWindow::fold(FoldAdaptor adapter) {
+OpFoldResult UnwrapWindow::fold(FoldAdaptor) {
   if (auto wrap = dyn_cast_or_null<WrapWindow>(getWindow().getDefiningOp()))
     return wrap.getFrame();
   return {};

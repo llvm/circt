@@ -123,9 +123,11 @@ hw::UnionType WindowType::getLoweredType() const {
           fields.push_back(
               {field.getFieldName(),
                hw::ArrayType::get(array.getElementType(), leftOver)});
-          Twine leftOverName(frame.getName().getValue(), "_leftOver");
-          unionFields.push_back({StringAttr::get(getContext(), leftOverName),
-                                 hw::StructType::get(getContext(), fields)});
+
+          unionFields.push_back(
+              {StringAttr::get(getContext(),
+                               Twine(frame.getName().getValue(), "_leftOver")),
+               hw::StructType::get(getContext(), fields)});
           fields.clear();
         }
       }
