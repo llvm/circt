@@ -684,6 +684,12 @@ bool Inliner::renameInstance(
     StringRef prefix, InstanceOp oldInst, InstanceOp newInst,
     ModuleNamespace &moduleNamespace,
     const DenseMap<Attribute, Attribute> &symbolRenames) {
+  // Add this instance to the activeHierpaths. This ensures that NLAs that this
+  // instance participates in will be updated correctly.
+  auto parentActivePaths = activeHierpaths;
+  if (auto instSym = getInnerSymName(oldInst))
+    setActiveHierPaths(oldInst->getParentOfType<FModuleOp>().getNameAttr(),
+                       instSym);
   // List of HierPathOps that are valid based on the InstanceOp being inlined
   // and the InstanceOp which is being replaced after inlining. That is the set
   // of HierPathOps that is common between these two.
@@ -750,6 +756,7 @@ bool Inliner::renameInstance(
         nlaList[en.index()] = newSym.cast<StringAttr>();
     }
   }
+  activeHierpaths = std::move(parentActivePaths);
   return symbolChanged;
 }
 
@@ -1074,6 +1081,8 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b, IRMapping &mapper,
     if (!rootMap[childModule.getNameAttr()].empty()) {
       for (auto sym : rootMap[childModule.getNameAttr()]) {
         auto &mnla = nlaMap[sym];
+        // Retop to the new parent, which is the topmost module (and not
+        // immediate parent) in case of recursive inlining.
         sym = mnla.reTop(inlineToParent);
         StringAttr instSym = getInnerSymName(instance);
         if (!instSym) {
@@ -1203,6 +1212,8 @@ void Inliner::inlineInstances(FModuleOp parent) {
       flattenInto(nestedPrefix, b, mapper, beb, edges, target, {},
                   moduleNamespace);
     } else {
+      // Recursively inline all the child modules under `parent`, that are
+      // marked to be inlined.
       inlineInto(nestedPrefix, b, mapper, beb, edges, target, parent,
                  symbolRenames, moduleNamespace);
     }
