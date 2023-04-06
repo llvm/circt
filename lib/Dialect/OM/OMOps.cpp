@@ -124,11 +124,19 @@ circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // Get the containing ModuleOp.
   auto moduleOp = getOperation()->getParentOfType<ModuleOp>();
 
+  // Verify the result type is the same as the referred-to class.
+  StringAttr resultClassName = getResult().getType().getClassName().getAttr();
+  StringAttr className = getClassNameAttr();
+  if (resultClassName != className)
+    return emitOpError("result type (")
+           << resultClassName << ") does not match referred to class ("
+           << className << ')';
+
   // Verify the referred to ClassOp exists.
-  auto classDef = cast_or_null<ClassOp>(
-      symbolTable.lookupSymbolIn(moduleOp, getClassNameAttr()));
+  auto classDef = dyn_cast_or_null<ClassOp>(
+      symbolTable.lookupSymbolIn(moduleOp, className));
   if (!classDef)
-    return emitOpError("refers to non-existant class ") << getClassName();
+    return emitOpError("refers to non-existant class (") << className << ')';
 
   auto actualTypes = getActualParams().getTypes();
   auto formalTypes = classDef.getBodyBlock()->getArgumentTypes();
