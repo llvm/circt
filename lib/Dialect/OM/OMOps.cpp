@@ -205,8 +205,12 @@ circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
       // an ObjectInstOp, which already verifies the class exists.
       classDef = cast<ClassOp>(
           symbolTable.lookupSymbolIn(moduleOp, classType.getClassName()));
+
+      // Proceed to the next field in the path.
+      continue;
     }
 
+    // On the last iteration down the path, save the final field being accessed.
     finalField = fieldDef.getValue();
   }
 
