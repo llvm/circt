@@ -289,12 +289,11 @@ private:
         .Case([&](NotLibOp op) {
           auto in =
               wireIn(op.getIn(), op.instanceName(), op.portName(op.getIn()), b);
-          auto one = b.create<hw::ConstantOp>(op.getIn().getType(), 0);
 
-          auto xorOp = b.create<XorOp>(in, one, false);
+          auto notOp = comb::createOrFoldNot(in, b);
 
           auto out =
-              wireOut(xorOp, op.instanceName(), op.portName(op.getOut()), b);
+              wireOut(notOp, op.instanceName(), op.portName(op.getOut()), b);
           wires.append({in.getInput(), out});
         })
         .Case([&](WireLibOp op) {
