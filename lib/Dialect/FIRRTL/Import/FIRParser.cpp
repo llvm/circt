@@ -2857,9 +2857,8 @@ ParseResult FIRStmtParser::parseWire() {
   auto annotations = getConstants().emptyArrayAttr;
   StringAttr sym = {};
 
-  auto result = builder.create<WireOp>(
-      type, id, NameKindEnum::InterestingName, annotations,
-      sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
+  auto result = builder.create<WireOp>(type, id, NameKindEnum::InterestingName,
+                                       annotations, sym);
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }

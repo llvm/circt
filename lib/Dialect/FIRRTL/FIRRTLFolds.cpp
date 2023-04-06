@@ -2910,8 +2910,8 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
     SmallVector<NamedAttribute, 2> attrs(reg->getDialectAttrs());
     auto newReg = replaceOpWithNewOpAndCopyName<RegResetOp>(
         rewriter, reg, reg.getResult().getType(), reg.getClockVal(),
-        mux.getSel(), mux.getHigh(), reg.getName(), reg.getNameKind(),
-        reg.getAnnotations(), reg.getInnerSymAttr());
+        mux.getSel(), mux.getHigh(), reg.getNameAttr(), reg.getNameKindAttr(),
+        reg.getAnnotationsAttr(), reg.getInnerSymAttr(), reg.getForceableAttr());
     newReg->setDialectAttrs(attrs);
   }
   auto pt = rewriter.saveInsertionPoint();

@@ -287,7 +287,49 @@ def RegOp : ReferableDeclOp<"reg", [Forceable]> {
         UnitAttr:$forceable);
   let results = (outs AnyRegisterType:$result, Optional<RefType>:$ref);
 
+  let skipDefaultBuilders = true;
   let builders = [
+    OpBuilder<(ins "::mlir::TypeRange":$resultTypes, "::mlir::ValueRange":$operands,
+                   CArg<"::llvm::ArrayRef<::mlir::NamedAttribute>","{}">:$attributes), [{
+      assert(operands.size() == 1u && "mismatched number of parameters");
+      odsState.addOperands(operands);
+      odsState.addAttributes(attributes);
+      assert(resultTypes.size() >= 1u && "mismatched number of return types");
+      odsState.addTypes(resultTypes);
+    }]>,
+    OpBuilder<(ins "::mlir::Type":$elementType,
+                   "::mlir::Value":$clockVal,
+                   "::mlir::StringAttr":$name,
+                   "::circt::firrtl::NameKindEnumAttr":$nameKind,
+                   "::mlir::ArrayAttr":$annotations,
+                   "::circt::hw::InnerSymAttr":$inner_sym,
+                   "::mlir::UnitAttr":$forceable), [{
+      $_state.addOperands(clockVal);
+      $_state.addAttribute(getNameAttrName($_state.name), name);
+      $_state.addAttribute(getNameKindAttrName($_state.name), nameKind);
+      $_state.addAttribute(getAnnotationsAttrName($_state.name), annotations);
+      if (inner_sym) {
+        $_state.addAttribute(getInnerSymAttrName($_state.name), inner_sym);
+      }
+      $_state.addTypes(elementType);
+      if (forceable) {
+        $_state.addAttribute(getForceableAttrName($_state.name), forceable);
+        $_state.addTypes(detail::getForceableResultType(true, elementType));
+      }
+    }]>,
+    OpBuilder<(ins "::mlir::Type":$elementType,
+                   "::mlir::Value":$clockVal,
+                   "::llvm::StringRef":$name,
+                   "::circt::firrtl::NameKindEnum":$nameKind,
+                   "::mlir::ArrayAttr":$annotations,
+                   "::circt::hw::InnerSymAttr":$inner_sym,
+                   "bool":$forceable), [{
+      return build($_builder, $_state, elementType, clockVal,
+                   $_builder.getStringAttr(name),
+                   ::circt::firrtl::NameKindEnumAttr::get(odsBuilder.getContext(), nameKind),
+                   annotations, inner_sym,
+                   forceable ? $_builder.getUnitAttr() : nullptr);
+    }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    CArg<"StringRef", "{}">:$name,
                    CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
@@ -295,8 +337,7 @@ def RegOp : ReferableDeclOp<"reg", [Forceable]> {
                    CArg<"StringAttr", "StringAttr()">:$inner_sym,
                    CArg<"bool", "false">:$forceable), [{
       return build($_builder, $_state, elementType,
-                   detail::getForceableResultType(forceable, elementType),
-                   clockVal, name, nameKind,
+                   clockVal, $_builder.getStringAttr(name), nameKind,
                    $_builder.getArrayAttr(annotations),
                    inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
                    forceable);
@@ -306,8 +347,7 @@ def RegOp : ReferableDeclOp<"reg", [Forceable]> {
                    "::mlir::ArrayAttr":$annotation, "StringAttr":$inner_sym,
                    CArg<"bool", "false">:$forceable), [{
       return build($_builder, $_state, elementType,
-                   detail::getForceableResultType(forceable, elementType),
-                   clockVal, name, nameKind, annotation,
+                   clockVal, $_builder.getStringAttr(name), nameKind, annotation,
                    inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
                    forceable);
     }]>
@@ -339,7 +379,39 @@ def RegResetOp : ReferableDeclOp<"regreset", [Forceable]> {
         UnitAttr:$forceable);
   let results = (outs AnyRegisterType:$result, Optional<RefType>:$ref);
 
+  let skipDefaultBuilders = true;
   let builders = [
+    OpBuilder<(ins "::mlir::TypeRange":$resultTypes, "::mlir::ValueRange":$operands,
+                   CArg<"::llvm::ArrayRef<::mlir::NamedAttribute>","{}">:$attributes), [{
+      assert(operands.size() == 3u && "mismatched number of parameters");
+      odsState.addOperands(operands);
+      odsState.addAttributes(attributes);
+      assert(resultTypes.size() >= 1u && "mismatched number of return types");
+      odsState.addTypes(resultTypes);
+    }]>,
+    OpBuilder<(ins "::mlir::Type":$elementType,
+                   "::mlir::Value":$clockVal,
+                   "::mlir::Value":$resetSignal, "::mlir::Value":$resetValue,
+                   "::mlir::StringAttr":$name,
+                   "::circt::firrtl::NameKindEnumAttr":$nameKind,
+                   "::mlir::ArrayAttr":$annotations,
+                   "::circt::hw::InnerSymAttr":$inner_sym,
+                   "::mlir::UnitAttr":$forceable), [{
+      $_state.addOperands(clockVal);
+      odsState.addOperands(resetSignal);
+      odsState.addOperands(resetValue);
+      $_state.addAttribute(getNameAttrName($_state.name), name);
+      $_state.addAttribute(getNameKindAttrName($_state.name), nameKind);
+      $_state.addAttribute(getAnnotationsAttrName($_state.name), annotations);
+      if (inner_sym) {
+        $_state.addAttribute(getInnerSymAttrName($_state.name), inner_sym);
+      }
+      $_state.addTypes(elementType);
+      if (forceable) {
+        $_state.addAttribute(getForceableAttrName($_state.name), forceable);
+        $_state.addTypes(detail::getForceableResultType(true, elementType));
+      }
+    }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    "::mlir::Value":$resetSignal, "::mlir::Value":$resetValue,
                    CArg<"StringRef", "{}">:$name,
@@ -348,12 +420,12 @@ def RegResetOp : ReferableDeclOp<"regreset", [Forceable]> {
                    CArg<"StringAttr", "StringAttr()">:$inner_sym,
                    CArg<"bool", "false">:$forceable), [{
       return build($_builder, $_state, elementType,
-                   detail::getForceableResultType(forceable, elementType),
                    clockVal, resetSignal, resetValue,
-                   name, nameKind,
+                   $_builder.getStringAttr(name),
+                   ::circt::firrtl::NameKindEnumAttr::get(odsBuilder.getContext(), nameKind),
                    $_builder.getArrayAttr(annotations),
                    inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
-                   forceable);
+                   forceable ? $_builder.getUnitAttr() : nullptr);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    "::mlir::Value":$resetSignal, "::mlir::Value":$resetValue,
@@ -361,11 +433,12 @@ def RegResetOp : ReferableDeclOp<"regreset", [Forceable]> {
                     "::mlir::ArrayAttr":$annotation, "StringAttr":$inner_sym,
                     CArg<"bool", "false">:$forceable), [{
       return build($_builder, $_state, elementType,
-                   detail::getForceableResultType(forceable, elementType),
                    clockVal, resetSignal, resetValue,
-                   name, nameKind, annotation,
+                   $_builder.getStringAttr(name),
+                   ::circt::firrtl::NameKindEnumAttr::get(odsBuilder.getContext(), nameKind),
+                   annotation,
                    inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
-                   forceable);
+                   forceable ? $_builder.getUnitAttr() : nullptr);
     }]>
   ];
 
@@ -396,8 +469,47 @@ def WireOp : ReferableDeclOp<"wire", [Forceable]> {
   let results = (outs AnyType:$result, Optional<RefType>:$ref);
 
   let hasCanonicalizer = true;
+  let skipDefaultBuilders = true;
 
   let builders = [
+    OpBuilder<(ins "::mlir::TypeRange":$resultTypes, "::mlir::ValueRange":$operands,
+                   CArg<"::llvm::ArrayRef<::mlir::NamedAttribute>","{}">:$attributes), [{
+      assert(operands.size() == 0u && "mismatched number of parameters");
+      odsState.addOperands(operands);
+      odsState.addAttributes(attributes);
+      assert(resultTypes.size() >= 1u && "mismatched number of return types");
+      odsState.addTypes(resultTypes);
+    }]>,
+    OpBuilder<(ins "::mlir::Type":$elementType,
+                   "::mlir::StringAttr":$name,
+                   "::circt::firrtl::NameKindEnumAttr":$nameKind,
+                   "::mlir::ArrayAttr":$annotations,
+                   "::circt::hw::InnerSymAttr":$inner_sym,
+                   "::mlir::UnitAttr":$forceable), [{
+      $_state.addAttribute(getNameAttrName($_state.name), name);
+      $_state.addAttribute(getNameKindAttrName($_state.name), nameKind);
+      $_state.addAttribute(getAnnotationsAttrName($_state.name), annotations);
+      if (inner_sym) {
+        $_state.addAttribute(getInnerSymAttrName($_state.name), inner_sym);
+      }
+      $_state.addTypes(elementType);
+      if (forceable) {
+        $_state.addAttribute(getForceableAttrName($_state.name), forceable);
+        $_state.addTypes(detail::getForceableResultType(true, elementType));
+      }
+    }]>,
+    OpBuilder<(ins "::mlir::Type":$elementType,
+                   "::llvm::StringRef":$name,
+                   "::circt::firrtl::NameKindEnum":$nameKind,
+                   "::mlir::ArrayAttr":$annotations,
+                   "::circt::hw::InnerSymAttr":$inner_sym,
+                   "bool":$forceable), [{
+      return build($_builder, $_state, elementType,
+                   $_builder.getStringAttr(name),
+                   ::circt::firrtl::NameKindEnumAttr::get(odsBuilder.getContext(), nameKind),
+                   annotations, inner_sym,
+                   forceable ? $_builder.getUnitAttr() : nullptr);
+    }]>,
     OpBuilder<(ins "::mlir::Type":$elementType,
                       CArg<"StringRef", "{}">:$name,
                       CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
@@ -405,7 +517,6 @@ def WireOp : ReferableDeclOp<"wire", [Forceable]> {
                       CArg<"StringAttr", "StringAttr()">:$inner_sym,
                       CArg<"bool", "false">:$forceable), [{
       return build($_builder, $_state, elementType,
-                   detail::getForceableResultType(forceable, elementType),
                    name, nameKind,
                    $_builder.getArrayAttr(annotations),
                    inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
@@ -416,7 +527,6 @@ def WireOp : ReferableDeclOp<"wire", [Forceable]> {
                    CArg<"StringAttr", "StringAttr()">:$inner_sym,
                    CArg<"bool", "false">:$forceable), [{
       return build($_builder, $_state, elementType,
-                   detail::getForceableResultType(forceable, elementType),
                    name, nameKind, annotations,
                    inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
                    forceable);

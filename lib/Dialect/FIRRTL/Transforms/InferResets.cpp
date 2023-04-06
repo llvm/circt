@@ -1602,8 +1602,8 @@ LogicalResult InferResetsPass::implementAsyncReset(FModuleOp module,
         ImplicitLocOpBuilder builder(nodeOp.getLoc(), nodeOp);
         auto wireOp = builder.create<WireOp>(
             nodeOp.getResult().getType(), nodeOp.getNameAttr(),
-            nodeOp.getNameKind(), nodeOp.getAnnotationsAttr(),
-            nodeOp.getInnerSymAttr());
+            nodeOp.getNameKindAttr(), nodeOp.getAnnotationsAttr(),
+            nodeOp.getInnerSymAttr(), nodeOp.getForceableAttr());
         builder.create<StrictConnectOp>(wireOp.getResult(), nodeOp.getInput());
         nodeOp->replaceAllUsesWith(wireOp);
         nodeOp.erase();
