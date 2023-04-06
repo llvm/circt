@@ -19,6 +19,11 @@ mlir_tablegen(SeqEnums.cpp.inc -gen-enum-defs)
 add_public_tablegen_target(MLIRSeqEnumsIncGen)
 add_dependencies(circt-headers MLIRSeqEnumsIncGen)
 
+mlir_tablegen(SeqAttributes.h.inc -gen-attrdef-decls -attrdefs-dialect=seq)
+mlir_tablegen(SeqAttributes.cpp.inc -gen-attrdef-defs -attrdefs-dialect=seq)
+add_public_tablegen_target(MLIRSeqAttributesIncGen)
+add_dependencies(circt-headers MLIRSeqAttributesIncGen)
+
 set(LLVM_TARGET_DEFINITIONS SeqPasses.td)
 mlir_tablegen(SeqPasses.h.inc -gen-pass-decls)
 add_public_tablegen_target(CIRCTSeqTransformsIncGen)

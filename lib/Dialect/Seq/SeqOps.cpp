@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/Matchers.h"
@@ -221,6 +222,7 @@ void HLMemOp::build(OpBuilder &builder, OperationState &result, Value clk,
 
 //===----------------------------------------------------------------------===//
 // CompRegOp
+//===----------------------------------------------------------------------===//
 
 template <bool ClockEnabled>
 static ParseResult parseCompReg(OpAsmParser &parser, OperationState &result) {
@@ -350,6 +352,7 @@ void CompRegClockEnabledOp::print(::mlir::OpAsmPrinter &p) {
 
 //===----------------------------------------------------------------------===//
 // FirRegOp
+//===----------------------------------------------------------------------===//
 
 void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
                      Value clk, StringAttr name, StringAttr innerSym) {
@@ -656,6 +659,120 @@ LogicalResult ClockGateOp::canonicalize(ClockGateOp op,
   }
 
   return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// FirMemOp
+//===----------------------------------------------------------------------===//
+
+void FirMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
+  if (!nameAttr.getValue().empty())
+    setNameFn(getResult(), nameAttr.getValue());
+}
+
+template <class Op>
+static LogicalResult verifyFirMemMask(Op op) {
+  if (auto mask = op.getMask()) {
+    auto memType = op.getMemory().getType();
+    if (!memType.getMaskWidth())
+      return op.emitOpError("has mask operand but memory type '")
+             << memType << "' has no mask";
+    auto expected = IntegerType::get(op.getContext(), *memType.getMaskWidth());
+    if (mask.getType() != expected)
+      return op.emitOpError("has mask operand of type '")
+             << mask.getType() << "', but memory type requires '" << expected
+             << "'";
+  }
+  return success();
+}
+
+LogicalResult FirMemWriteOp::verify() { return verifyFirMemMask(*this); }
+LogicalResult FirMemReadWriteOp::verify() { return verifyFirMemMask(*this); }
+
+static bool isConst(Value value) {
+  if (value)
+    return value.getDefiningOp<hw::ConstantOp>();
+  return false;
+}
+
+static bool isConstZero(Value value) {
+  if (value)
+    if (auto constOp = value.getDefiningOp<hw::ConstantOp>())
+      return constOp.getValue().isZero();
+  return false;
+}
+
+static bool isConstAllOnes(Value value) {
+  if (value)
+    if (auto constOp = value.getDefiningOp<hw::ConstantOp>())
+      return constOp.getValue().isAllOnes();
+  return false;
+}
+
+LogicalResult FirMemReadOp::canonicalize(FirMemReadOp op,
+                                         PatternRewriter &rewriter) {
+  // Remove the enable if it is constant true.
+  if (isConstAllOnes(op.getEnable())) {
+    rewriter.updateRootInPlace(op, [&] { op.getEnableMutable().erase(0); });
+    return success();
+  }
+  return failure();
+}
+
+LogicalResult FirMemWriteOp::canonicalize(FirMemWriteOp op,
+                                          PatternRewriter &rewriter) {
+  // Remove the write port if it is trivially dead.
+  if (isConstZero(op.getEnable()) || isConstZero(op.getMask()) ||
+      isConst(op.getClock())) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+  bool anyChanges = false;
+
+  // Remove the enable if it is constant true.
+  if (auto enable = op.getEnable(); isConstAllOnes(enable)) {
+    rewriter.updateRootInPlace(op, [&] { op.getEnableMutable().erase(0); });
+    anyChanges = true;
+  }
+
+  // Remove the mask if it is all ones.
+  if (auto mask = op.getMask(); isConstAllOnes(mask)) {
+    rewriter.updateRootInPlace(op, [&] { op.getMaskMutable().erase(0); });
+    anyChanges = true;
+  }
+
+  return success(anyChanges);
+}
+
+LogicalResult FirMemReadWriteOp::canonicalize(FirMemReadWriteOp op,
+                                              PatternRewriter &rewriter) {
+  // Replace the read-write port with a read port if the write behavior is
+  // trivially disabled.
+  if (isConstZero(op.getEnable()) || isConstZero(op.getMask()) ||
+      isConst(op.getClock()) || isConstZero(op.getMode())) {
+    auto newOp = rewriter.replaceOpWithNewOp<FirMemReadOp>(
+        op, op.getMemory(), op.getAddress(), op.getClock(), op.getEnable());
+    for (auto namedAttr : op->getAttrs())
+      if (!llvm::is_contained(op.getAttributeNames(), namedAttr.getName()))
+        newOp->setAttr(namedAttr.getName(), namedAttr.getValue());
+    return success();
+  }
+  bool anyChanges = false;
+
+  // Remove the enable if it is constant true.
+  if (auto enable = op.getEnable(); isConstAllOnes(enable)) {
+    rewriter.updateRootInPlace(op, [&] { op.getEnableMutable().erase(0); });
+    anyChanges = true;
+  }
+
+  // Remove the mask if it is all ones.
+  if (auto mask = op.getMask(); isConstAllOnes(mask)) {
+    rewriter.updateRootInPlace(op, [&] { op.getMaskMutable().erase(0); });
+    anyChanges = true;
+  }
+
+  return success(anyChanges);
 }
 
 //===----------------------------------------------------------------------===//

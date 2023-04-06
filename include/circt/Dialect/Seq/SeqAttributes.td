@@ -30,4 +30,28 @@ def WUWAttr : I32EnumAttr<"WUW", "Write-Under-Write Behavior",
 
 }
 
+/// An attribute holding information about memory initialization.
+def FirMemInitAttr : AttrDef<SeqDialect, "FirMemInit"> {
+  let mnemonic = "firmem.init";
+  let summary = "Memory initialization information";
+  let description = [{
+    This attribute captures what the initial contents of a memory should be.
+    At the moment this is modeled primarily with simulation in mind, where the
+    memory contents are pre-loaded from a file at simulation startup.
+
+    The `filename` specifies a file on disk that contains the initial contents
+    for this memory. If `isBinary` is set, the file is interpreted as a binary
+    file, otherwise it is treated as hexadecimal. This is modeled after the
+    `$readmemh` and `$readmemb` SystemVerilog functions. If `isInline` is set,
+    the initialization is emitted directly in the memory model; otherwise it is
+    split out into a separate module that can be bound in.
+  }];
+  let parameters = (ins
+    "mlir::StringAttr":$filename,
+    "bool":$isBinary,
+    "bool":$isInline
+  );
+  let assemblyFormat = "`<` $filename `,` $isBinary `,` $isInline `>`";
+}
+
 #endif // CIRCT_DIALECT_SEQ_SEQATTRIBUTES_TD
