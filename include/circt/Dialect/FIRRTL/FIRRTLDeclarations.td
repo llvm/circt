@@ -130,8 +130,8 @@ def MemOp : ReferableDeclOp<"mem"> {
          AnnotationArrayAttr:$annotations,
          PortAnnotationsAttr:$portAnnotations,
          OptionalAttr<InnerSymAttr>:$inner_sym,
-         OptionalAttr<UI32Attr>:$groupID,
-         OptionalAttr<MemoryInitAttr>:$init);
+         OptionalAttr<MemoryInitAttr>:$init,
+         OptionalAttr<StrAttr>:$prefix);
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat = [{

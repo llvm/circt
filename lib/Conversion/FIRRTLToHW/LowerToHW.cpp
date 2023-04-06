@@ -758,7 +758,8 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
     // suffix. It is important to derive the name from the original MemOp name,
     // to respect the corresponding prefixes..
     auto memoryName = b.getStringAttr(
-        namesp.newName(static_cast<MemOp>(mem.op).getName() + "_combMem"));
+        namesp.newName((mem.prefix ? mem.prefix.getValue() : "") +
+                       cast<MemOp>(mem.op).getName() + "_combMem"));
     // Now record this generated name for the corresponding FirMemory name,
     // because all the memories that have the same FirMemory name, will now use
     // this new generated name at the Instance Op. Basically this is the name

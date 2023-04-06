@@ -55,8 +55,14 @@ firrtl.circuit "Top" {
       prefix = "T_",
       inclusive = true
     }]} {
-    // CHECK: name = "T_ram"
-    %ram_ramport = firrtl.mem Undefined {depth = 256 : i64, name = "ram", portNames = ["ramport"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<8>, en: uint<1>, clk: clock, data flip: uint<1>>
+    // CHECK: firrtl.mem
+    // CHECK-SAME: name = "ram1"
+    // CHECK-SAME: prefix = "T_"
+    %ram1_r = firrtl.mem Undefined {depth = 256 : i64, name = "ram1", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<8>, en: uint<1>, clk: clock, data flip: uint<1>>
+    // CHECK: firrtl.mem
+    // CHECK-SAME: name = "ram2"
+    // CHECK-SAME: prefix = "T_foo_"
+    %ram2_r = firrtl.mem Undefined {depth = 256 : i64, name = "ram2", portNames = ["r"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<8>, en: uint<1>, clk: clock, data flip: uint<1>>
   }
 }
 

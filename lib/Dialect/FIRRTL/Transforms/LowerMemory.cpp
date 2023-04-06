@@ -72,14 +72,11 @@ FirMemory getSummary(MemOp op) {
     op.emitError("'firrtl.mem' should have simple type and known width");
     width = 0;
   }
-  uint32_t groupID = 0;
-  if (auto gID = op.getGroupIDAttr())
-    groupID = gID.getUInt();
   return {numReadPorts,         numWritePorts,    numReadWritePorts,
           (size_t)width,        op.getDepth(),    op.getReadLatency(),
           op.getWriteLatency(), op.getMaskBits(), (size_t)op.getRuw(),
           hw::WUW::PortOrder,   writeClockIDs,    op.getNameAttr(),
-          op.getMaskBits() > 1, groupID,          op.getInitAttr(),
+          op.getMaskBits() > 1, op.getInitAttr(), op.getPrefixAttr(),
           op.getLoc()};
 }
 
