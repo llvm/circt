@@ -1671,6 +1671,10 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(CoverOp op);
   LogicalResult visitStmt(AttachOp op);
   LogicalResult visitStmt(ProbeOp op);
+  LogicalResult visitStmt(RefForceOp op);
+  LogicalResult visitStmt(RefForceInitialOp op);
+  LogicalResult visitStmt(RefReleaseOp op);
+  LogicalResult visitStmt(RefReleaseInitialOp op);
 
   FailureOr<Value> lowerSubindex(SubindexOp op, Value input);
   FailureOr<Value> lowerSubaccess(SubaccessOp op, Value input);
@@ -2266,8 +2270,7 @@ LogicalResult FIRRTLLowering::setLowering(Value orig, Value result) {
            "Lowering didn't turn a FIRRTL value into a non-FIRRTL value");
 
 #ifndef NDEBUG
-    // Only base types should reach this point.
-    auto baseType = origType.cast<FIRRTLBaseType>();
+    auto baseType = getBaseType(origType);
     auto srcWidth = baseType.getPassiveType().getBitWidthOrSentinel();
 
     // Caller should pass null value iff this was a zero bit value.
@@ -3860,6 +3863,76 @@ LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
 
   addToIfDefBlock("VERILATOR", std::function<void()>(), [&]() {
     addToInitialBlock([&]() { builder.create<sv::ForceOp>(destVal, srcVal); });
+  });
+  return success();
+}
+
+LogicalResult FIRRTLLowering::visitStmt(RefForceOp op) {
+  auto src = getLoweredValue(op.getSrc());
+  auto clock = getLoweredValue(op.getClock());
+  auto pred = getLoweredValue(op.getPredicate());
+  if (!src || !clock || !pred)
+    return failure();
+
+  auto destVal = getPossiblyInoutLoweredValue(op.getDest());
+  if (!destVal)
+    return failure();
+
+  addToIfDefBlock("VERILATOR", std::function<void()>(), [&]() {
+    addToAlwaysBlock(clock, [&]() {
+      addIfProceduralBlock(
+          pred, [&]() { builder.create<sv::ForceOp>(destVal, src); });
+    });
+  });
+  return success();
+}
+LogicalResult FIRRTLLowering::visitStmt(RefForceInitialOp op) {
+  auto src = getLoweredValue(op.getSrc());
+  auto pred = getLoweredValue(op.getPredicate());
+  if (!src || !pred)
+    return failure();
+
+  auto destVal = getPossiblyInoutLoweredValue(op.getDest());
+  if (!destVal)
+    return failure();
+
+  addToIfDefBlock("VERILATOR", std::function<void()>(), [&]() {
+    addToInitialBlock([&]() {
+      addIfProceduralBlock(
+          pred, [&]() { builder.create<sv::ForceOp>(destVal, src); });
+    });
+  });
+  return success();
+}
+LogicalResult FIRRTLLowering::visitStmt(RefReleaseOp op) {
+  auto clock = getLoweredValue(op.getClock());
+  auto pred = getLoweredValue(op.getPredicate());
+  if (!clock || !pred)
+    return failure();
+
+  auto destVal = getPossiblyInoutLoweredValue(op.getDest());
+  if (!destVal)
+    return failure();
+
+  addToIfDefBlock("VERILATOR", std::function<void()>(), [&]() {
+    addToAlwaysBlock(clock, [&]() {
+      addIfProceduralBlock(pred,
+                           [&]() { builder.create<sv::ReleaseOp>(destVal); });
+    });
+  });
+  return success();
+}
+LogicalResult FIRRTLLowering::visitStmt(RefReleaseInitialOp op) {
+  auto destVal = getPossiblyInoutLoweredValue(op.getDest());
+  auto pred = getLoweredValue(op.getPredicate());
+  if (!destVal || !pred)
+    return failure();
+
+  addToIfDefBlock("VERILATOR", std::function<void()>(), [&]() {
+    addToInitialBlock([&]() {
+      addIfProceduralBlock(pred,
+                           [&]() { builder.create<sv::ReleaseOp>(destVal); });
+    });
   });
   return success();
 }
