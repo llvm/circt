@@ -1,4 +1,5 @@
-// RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s | circt-opt -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s -canonicalize | circt-opt -verify-diagnostics | FileCheck %s --check-prefix=CANON
 
 !TypeA = !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>
 !TypeAwin1 = !esi.window<
@@ -32,11 +33,21 @@ hw.module @TypeAModuleUnwrap(%a: !TypeAwin1) -> (x: !lowered) {
 }
 
 
-// CHECK-LABEL: hw.module @TypeAModuleWrapUnwrap
+// CHECK-LABEL: hw.module @TypeAModuleUnwrapWrap
 // CHECK:         [[r0:%.+]] = esi.window.unwrap %a : !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>
 // CHECK:         [[r1:%.+]] = esi.window.wrap [[r0]] : !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>
-hw.module @TypeAModuleWrapUnwrap(%a: !TypeAwin1) -> (x: !TypeAwin1) {
+// CANON-LABEL: hw.module @TypeAModuleUnwrapWrap
+// CANON-NEXT:    hw.output %a
+hw.module @TypeAModuleUnwrapWrap(%a: !TypeAwin1) -> (x: !TypeAwin1) {
   %u = esi.window.unwrap %a : !TypeAwin1
   %x = esi.window.wrap %u : !TypeAwin1
   hw.output %x : !TypeAwin1
+}
+
+// CANON-LABEL: hw.module @TypeAModuleWrapUnwrap
+// CANON-NEXT:    hw.output %a
+hw.module @TypeAModuleWrapUnwrap(%a: !lowered) -> (x: !lowered) {
+  %w = esi.window.wrap %a : !TypeAwin1
+  %u = esi.window.unwrap %w : !TypeAwin1
+  hw.output %u : !lowered
 }

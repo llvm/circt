@@ -92,18 +92,20 @@ hw::UnionType WindowType::getLoweredType() const {
   // Build the union, frame by frame
   SmallVector<hw::UnionType::FieldInfo, 4> unionFields;
   for (WindowFrameType frame : getFrames()) {
+
+    // ... field by field.
     SmallVector<hw::StructType::FieldInfo, 4> fields;
     for (WindowFieldType field : frame.getMembers()) {
-      auto f = intoFields.find(field.getFieldName());
-      assert(f != intoFields.end());
+      auto fieldTypeIter = intoFields.find(field.getFieldName());
+      assert(fieldTypeIter != intoFields.end());
 
       // If the number of items isn't specified, just use the type.
       if (field.getNumItems() == 0) {
-        fields.push_back({field.getFieldName(), f->getSecond()});
+        fields.push_back({field.getFieldName(), fieldTypeIter->getSecond()});
       } else {
         // If the number of items is specified, we can assume that it's an array
         // type.
-        auto array = hw::type_cast<hw::ArrayType>(f->getSecond());
+        auto array = hw::type_cast<hw::ArrayType>(fieldTypeIter->getSecond());
         assert(fields.empty()); // Checked by the validator.
 
         // The first union entry should be an array of length numItems.

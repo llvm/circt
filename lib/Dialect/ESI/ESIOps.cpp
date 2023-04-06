@@ -315,6 +315,7 @@ UnwrapWindow::inferReturnTypes(MLIRContext *context, std::optional<Location>,
   return success();
 }
 
+/// Determine the input type ('frame') from the return type ('window').
 static bool parseInferWindowRet(OpAsmParser &p, Type &frame, Type &windowOut) {
   WindowType window;
   if (p.parseType(window))
