@@ -701,7 +701,7 @@ LogicalResult circt::firrtl::extractDUT(const FModuleOp mod, FModuleOp &dut) {
   if (dut) {
     auto diag = emitError(mod->getLoc())
                 << "is marked with a '" << dutAnnoClass << "', but '"
-                << dut.moduleName()
+                << dut.getModuleName()
                 << "' also had such an annotation (this should "
                    "be impossible!)";
     diag.attachNote(dut.getLoc()) << "the first DUT was found here";

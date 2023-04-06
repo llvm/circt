@@ -1,4 +1,5 @@
-// RUN: arcilator %s | FileCheck %s
+// RUN: arcilator %s --inline=0 --until-before=llvm-lowering | FileCheck %s
+// RUN: arcilator %s | FileCheck %s --check-prefix=LLVM
 
 // CHECK:      arc.define @[[XOR_ARC:.+]](
 // CHECK-NEXT:   comb.xor
@@ -15,30 +16,55 @@
 // CHECK-NEXT:   arc.output
 // CHECK-NEXT: }
 
-// CHECK-LABEL: hw.module @Top
+// CHECK-NOT: hw.module @Top
+// CHECK-LABEL: arc.model "Top" {
+// CHECK-NEXT: ^bb0(%arg0: !arc.storage<6>):
 hw.module @Top(%clock: i1, %i0: i4, %i1: i4) -> (out: i4) {
-  // CHECK-NOT: hw.instance
-  // CHECK-DAG: [[T0:%.+]] = arc.state @[[ADD_ARC]](%i0, %i1) lat 0
+  // CHECK-DAG: arc.root_input "clock", %arg0 {offset = 0
+  // CHECK-DAG: arc.root_input "i0", %arg0 {offset = 1
+  // CHECK-DAG: arc.root_input "i1", %arg0 {offset = 2
+  // CHECK-DAG: arc.root_output "out", %arg0 {offset = 3
+  // CHECK-DAG: arc.alloc_state %arg0 {name = "foo", offset = 4
+  // CHECK-DAG: arc.alloc_state %arg0 {name = "bar", offset = 5
+
+  // CHECK-DAG: arc.passthrough {
+  // CHECK-DAG:   [[FOO:%.+]] = arc.storage.get %arg0[4]
+  // CHECK-DAG:   [[READ_FOO:%.+]] = arc.state_read [[FOO]]
+  // CHECK-DAG:   [[BAR:%.+]] = arc.storage.get %arg0[5]
+  // CHECK-DAG:   [[READ_BAR:%.+]] = arc.state_read [[BAR]]
+  // CHECK-DAG:   [[MUL:%.+]] = arc.state @[[MUL_ARC]]([[READ_FOO]], [[READ_BAR]]) lat 0
+  // CHECK-DAG:   [[PTR_OUT:%.+]] = arc.storage.get %arg0[3]
+  // CHECK-DAG:   arc.state_write [[PTR_OUT]] = [[MUL]]
+  // CHECK-DAG: }
+
+  // CHECK-DAG: [[CLOCK:%.+]] = arc.storage.get %arg0[0]
+  // CHECK-DAG: [[READ_CLOCK:%.+]] = arc.state_read [[CLOCK]]
+  // CHECK-DAG:  arc.clock_tree [[READ_CLOCK]] {
+  // CHECK-DAG:   [[I0:%.+]] = arc.storage.get %arg0[1]
+  // CHECK-DAG:   [[READ_I0:%.+]] = arc.state_read [[I0]]
+  // CHECK-DAG:   [[I1:%.+]] = arc.storage.get %arg0[2]
+  // CHECK-DAG:   [[READ_I1:%.+]] = arc.state_read [[I1]]
+  // CHECK-DAG:   [[ADD:%.+]] = arc.state @[[ADD_ARC]]([[READ_I0]], [[READ_I1]]) lat 0
+  // CHECK-DAG:   [[XOR1:%.+]] = arc.state @[[XOR_ARC]]([[ADD]], [[READ_I0]]) lat 0
+  // CHECK-DAG:   [[XOR2:%.+]] = arc.state @[[XOR_ARC]]([[ADD]], [[READ_I1]]) lat 0
+  // CHECK-DAG:   [[FOO:%.+]] = arc.storage.get %arg0[4]
+  // CHECK-DAG:   arc.state_write [[FOO]] = [[XOR1]]
+  // CHECK-DAG:   [[BAR:%.+]] = arc.storage.get %arg0[5]
+  // CHECK-DAG:   arc.state_write [[BAR]] = [[XOR2]]
+  // CHECK-DAG:  }
+
   %0 = comb.add %i0, %i1 : i4
-  // CHECK-DAG: [[T3:%.+]] = arc.state @[[XOR_ARC]]([[T0]], %i0) clock %clock lat 1
-  // CHECK-DAG: [[T4:%.+]] = arc.state @[[XOR_ARC]]([[T0]], %i1) clock %clock lat 1
   %1 = comb.xor %0, %i0 : i4
   %2 = comb.xor %0, %i1 : i4
-  %3 = seq.compreg %1, %clock : i4
-  %4 = seq.compreg %2, %clock : i4
-  // CHECK-DAG: [[T5:%.+]] = arc.state @[[MUL_ARC]]([[T3]], [[T4]]) lat 0
-  %5 = comb.mul %3, %4 : i4
-  // CHECK-DAG: [[K:%.+]] = hw.constant 6 :
-  // CHECK-DAG: [[T6:%.+]] = arc.state @[[ADD_ARC]]([[T5]], [[K]]) clock %clock lat 1
-  %6 = hw.instance "child" @Child(clock: %clock: i1, a: %5: i4) -> (z: i4)
-  // CHECK-DAG: hw.output [[T6]]
-  hw.output %6 : i4
+  %foo = seq.compreg %1, %clock : i4
+  %bar = seq.compreg %2, %clock : i4
+  %3 = comb.mul %foo, %bar : i4
+  hw.output %3 : i4
 }
 
-// CHECK-NOT: hw.module private @Child
-hw.module private @Child(%clock: i1, %a: i4) -> (z: i4) {
-  %c6_i4 = hw.constant 6 : i4
-  %0 = comb.add %a, %c6_i4 : i4
-  %1 = seq.compreg %0, %clock : i4
-  hw.output %1 : i4
-}
+// LLVM: define void @Top_passthrough(ptr %0)
+// LLVM:   mul i4
+// LLVM: define void @Top_clock(ptr %0)
+// LLVM:   add i4
+// LLVM:   xor i4
+// LLVM:   xor i4

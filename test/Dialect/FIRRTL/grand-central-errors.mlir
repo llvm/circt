@@ -39,7 +39,7 @@ firrtl.circuit "NonGroundType" attributes {
        name = "View"}]} {
     %_vector = firrtl.verbatim.expr "???" : () -> !firrtl.vector<uint<2>, 1>
     %ref_vector = firrtl.ref.send %_vector : !firrtl.vector<uint<2>, 1>
-    %vector = firrtl.ref.resolve %ref_vector : !firrtl.ref<vector<uint<2>, 1>>
+    %vector = firrtl.ref.resolve %ref_vector : !firrtl.probe<vector<uint<2>, 1>>
     // expected-error @+1 {{'firrtl.node' op cannot be added to interface with id '0' because it is not a ground type}}
     %a = firrtl.node %vector {
       annotations = [

@@ -98,6 +98,11 @@ std::pair<std::string, bool> getFieldName(const FieldRef &fieldRef,
 Value getValueByFieldID(ImplicitLocOpBuilder builder, Value value,
                         unsigned fieldID);
 
+/// Walk leaf ground types in the `firrtlType` and apply the function `fn`.
+/// The first argument of `fn` is field ID, and the second argument is a
+/// leaf ground type.
+void walkGroundTypes(FIRRTLType firrtlType,
+                     llvm::function_ref<void(uint64_t, FIRRTLBaseType)> fn);
 //===----------------------------------------------------------------------===//
 // Inner symbol and InnerRef helpers.
 //===----------------------------------------------------------------------===//
@@ -135,13 +140,29 @@ inline FIRRTLBaseType getBaseType(FIRRTLType type) {
       .Case<RefType>([](auto ref) { return ref.getType(); });
 }
 
+/// Return base type or passthrough if FIRRTLType, else null.
+inline FIRRTLBaseType getBaseTypeOrNull(Type type) {
+  auto ftype = dyn_cast_or_null<FIRRTLType>(type);
+  if (!ftype)
+    return {};
+  return getBaseType(ftype);
+}
+
+/// Get base type if isa<> the requested type, else null.
+template <typename T>
+inline T getBaseOfType(Type type) {
+  return dyn_cast_or_null<T>(getBaseTypeOrNull(type));
+}
+
 /// Return a FIRRTLType with its base type component mutated by the given
 /// function. (i.e., ref<T> -> ref<f(T)> and T -> f(T)).
 inline FIRRTLType mapBaseType(FIRRTLType type,
                               function_ref<FIRRTLBaseType(FIRRTLBaseType)> fn) {
   return TypeSwitch<FIRRTLType, FIRRTLType>(type)
       .Case<FIRRTLBaseType>([&](auto base) { return fn(base); })
-      .Case<RefType>([&](auto ref) { return RefType::get(fn(ref.getType())); });
+      .Case<RefType>([&](auto ref) {
+        return RefType::get(fn(ref.getType()), ref.getForceable());
+      });
 }
 
 /// Given a type, return the corresponding lowered type for the HW dialect.

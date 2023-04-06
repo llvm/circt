@@ -1841,7 +1841,7 @@ public:
           SymbolTable::lookupSymbolIn(parentOp, predecl.getValue());
       if (predeclModule) {
         if (failed(SymbolTable::replaceAllSymbolUses(
-                predeclModule, hwModule.moduleNameAttr(), parentOp)))
+                predeclModule, hwModule.getModuleNameAttr(), parentOp)))
           return failure();
         rewriter.eraseOp(predeclModule);
       }

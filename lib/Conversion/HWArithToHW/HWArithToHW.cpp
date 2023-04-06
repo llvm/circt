@@ -102,6 +102,63 @@ static Value extendTypeWidth(OpBuilder &builder, Location loc, Value value,
   return extOp->getOpResult(0);
 }
 
+static bool isSignednessType(Type type) {
+  auto match =
+      llvm::TypeSwitch<Type, bool>(type)
+          .Case<IntegerType>([](auto type) { return !type.isSignless(); })
+          .Case<hw::ArrayType>(
+              [](auto type) { return isSignednessType(type.getElementType()); })
+          .Case<hw::StructType>([](auto type) {
+            return llvm::any_of(type.getElements(), [](auto element) {
+              return isSignednessType(element.type);
+            });
+          })
+          .Case<hw::InOutType>(
+              [](auto type) { return isSignednessType(type.getElementType()); })
+          .Default([](auto type) { return false; });
+
+  return match;
+}
+
+static bool isSignednessAttr(Attribute attr) {
+  if (auto typeAttr = attr.dyn_cast<TypeAttr>())
+    return isSignednessType(typeAttr.getValue());
+  return false;
+}
+
+/// Returns true if the given `op` is considered as legal for HWArith
+/// conversion.
+static bool isLegalOp(Operation *op) {
+  if (auto funcOp = dyn_cast<FunctionOpInterface>(op)) {
+    return llvm::none_of(funcOp.getArgumentTypes(), isSignednessType) &&
+           llvm::none_of(funcOp.getResultTypes(), isSignednessType) &&
+           llvm::none_of(funcOp.getFunctionBody().getArgumentTypes(),
+                         isSignednessType);
+  }
+
+  auto attrs = llvm::map_range(op->getAttrs(), [](const NamedAttribute &attr) {
+    return attr.getValue();
+  });
+
+  bool operandsOK = llvm::none_of(op->getOperandTypes(), isSignednessType);
+  bool resultsOK = llvm::none_of(op->getResultTypes(), isSignednessType);
+  bool attrsOK = llvm::none_of(attrs, isSignednessAttr);
+  return operandsOK && resultsOK && attrsOK;
+}
+
+// Converts a function type wrt. the given type converter.
+static FunctionType convertFunctionType(TypeConverter &typeConverter,
+                                        FunctionType type) {
+  // Convert the original function types.
+  llvm::SmallVector<Type> res, arg;
+  llvm::transform(type.getResults(), std::back_inserter(res),
+                  [&](Type t) { return typeConverter.convertType(t); });
+  llvm::transform(type.getInputs(), std::back_inserter(arg),
+                  [&](Type t) { return typeConverter.convertType(t); });
+
+  return FunctionType::get(type.getContext(), arg, res);
+}
+
 //===----------------------------------------------------------------------===//
 // Conversion patterns
 //===----------------------------------------------------------------------===//
@@ -118,9 +175,6 @@ struct ConstantOpLowering : public OpConversionPattern<ConstantOp> {
     return success();
   }
 };
-} // namespace
-
-namespace {
 struct DivOpLowering : public OpConversionPattern<DivOp> {
   using OpConversionPattern<DivOp>::OpConversionPattern;
 
@@ -267,11 +321,7 @@ struct ICmpOpLowering : public OpConversionPattern<ICmpOp> {
     return success();
   }
 };
-} // namespace
 
-// Templated patterns
-
-namespace {
 template <class BinOp, class ReplaceOp>
 struct BinaryOpLowering : public OpConversionPattern<BinOp> {
   using OpConversionPattern<BinOp>::OpConversionPattern;
@@ -299,87 +349,68 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
   }
 };
 
-template <class TOp>
-struct ArgResOpConversion : public OpConversionPattern<TOp> {
-  // Generic pattern which replaces an op by one of the same type, but with
-  // converted operands and result types.
-  using OpConversionPattern<TOp>::OpConversionPattern;
-  using OpAdaptor = typename OpConversionPattern<TOp>::OpAdaptor;
+struct TypeConversionPattern : public ConversionPattern {
+public:
+  TypeConversionPattern(MLIRContext *context, TypeConverter &converter)
+      : ConversionPattern(converter, MatchAnyOpTypeTag(), 1, context) {}
+  using ConversionPattern::ConversionPattern;
 
-  // Function that will replace the op with a type-converted new op.
-  using ReplacementFunc = std::function<void(
-      ConversionPatternRewriter &, TOp, llvm::SmallVector<Type>, OpAdaptor &)>;
-
-  ArgResOpConversion(TypeConverter &tc, MLIRContext *ctx, ReplacementFunc f)
-      : OpConversionPattern<TOp>(tc, ctx), replacementFunc(f) {}
+  // Generic pattern which replaces an operation by one of the same type, but
+  // with converted operands and result types. Uses generic builders based on
+  // OperationState to make sure that this pattern can apply to _any_ operation
+  // which uses HWArith types.
 
   LogicalResult
-  matchAndRewrite(TOp op, OpAdaptor adaptor,
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    llvm::SmallVector<Type> convResTypes;
-    if (failed(this->getTypeConverter()->convertTypes(op->getResultTypes(),
-                                                      convResTypes)))
-      return failure();
-    replacementFunc(rewriter, op, convResTypes, adaptor);
+    llvm::SmallVector<NamedAttribute, 4> newAttrs;
+    newAttrs.reserve(op->getAttrs().size());
+    for (auto attr : op->getAttrs()) {
+      if (auto typeAttr = attr.getValue().dyn_cast<TypeAttr>()) {
+        auto innerType = typeAttr.getValue();
+        // TypeConvert::convertType doesn't handle function types, so we need to
+        // handle them manually.
+        if (auto funcType = innerType.dyn_cast<FunctionType>(); innerType) {
+          innerType = convertFunctionType(*getTypeConverter(), funcType);
+        } else {
+          innerType = getTypeConverter()->convertType(innerType);
+        }
+        newAttrs.emplace_back(attr.getName(), TypeAttr::get(innerType));
+      } else {
+        newAttrs.push_back(attr);
+      }
+    }
+
+    llvm::SmallVector<Type, 4> newResults;
+    (void)getTypeConverter()->convertTypes(op->getResultTypes(), newResults);
+
+    OperationState state(op->getLoc(), op->getName().getStringRef(), operands,
+                         newResults, newAttrs, op->getSuccessors());
+
+    for (Region &region : op->getRegions()) {
+      // TypeConverter::SignatureConversion drops argument locations, so we need
+      // to manually copy them over (a verifier in e.g. HWModule checks this).
+      llvm::SmallVector<Location, 4> argLocs;
+      for (auto arg : region.getArguments())
+        argLocs.push_back(arg.getLoc());
+
+      Region *newRegion = state.addRegion();
+      rewriter.inlineRegionBefore(region, *newRegion, newRegion->begin());
+      TypeConverter::SignatureConversion result(newRegion->getNumArguments());
+      (void)getTypeConverter()->convertSignatureArgs(
+          newRegion->getArgumentTypes(), result);
+      rewriter.applySignatureConversion(newRegion, result);
+
+      // Apply the argument locations.
+      for (auto [arg, loc] : llvm::zip(newRegion->getArguments(), argLocs))
+        arg.setLoc(loc);
+    }
+
+    Operation *newOp = rewriter.create(state);
+    rewriter.replaceOp(op, newOp->getResults());
     return success();
   }
-
-  ReplacementFunc replacementFunc;
 };
-
-// Adds the ArgResOpConversion for 'TOp' to the set of conversion patterns,
-// using TReplFunc as the replacement function inside the pattern, as well as a
-// legality check on the conversion status of the op's operands and results.
-template <typename TOp, typename TReplFunc>
-static void addOperandConversion(ConversionTarget &target,
-                                 RewritePatternSet &patterns,
-                                 HWArithToHWTypeConverter &typeConverter,
-                                 TReplFunc replFunc) {
-  patterns.add<ArgResOpConversion<TOp>>(typeConverter, patterns.getContext(),
-                                        replFunc);
-
-  target.addDynamicallyLegalOp<TOp>([&](auto op) {
-    return !typeConverter.hasSignednessSemantics(op->getOperandTypes()) &&
-           !typeConverter.hasSignednessSemantics(op->getResultTypes());
-  });
-}
-
-// Generic version of addOperandConversion (above) which uses the generic
-// operation builder signature.
-template <typename... TOp>
-static void addOperandConversion(ConversionTarget &target,
-                                 RewritePatternSet &patterns,
-                                 HWArithToHWTypeConverter &typeConverter) {
-  (addOperandConversion<TOp>(
-       target, patterns, typeConverter,
-       [](ConversionPatternRewriter &rewriter, TOp op,
-          llvm::ArrayRef<Type> convResTypes,
-          typename ArgResOpConversion<TOp>::OpAdaptor &adaptor) {
-         // Use the generic builder to allow this pattern to apply to all ops
-         // with default builders.
-         rewriter.replaceOpWithNewOp<TOp>(
-             op, convResTypes, adaptor.getOperands(), op->getAttrs());
-       }),
-   ...);
-}
-
-template <typename... TOp>
-static void addSignatureConversion(ConversionTarget &target,
-                                   RewritePatternSet &patterns,
-                                   HWArithToHWTypeConverter &typeConverter) {
-  (mlir::populateFunctionOpInterfaceTypeConversionPattern<TOp>(patterns,
-                                                               typeConverter),
-   ...);
-
-  target.addDynamicallyLegalOp<TOp...>([&](FunctionOpInterface moduleLikeOp) {
-    // Legal if all results and args have no signedness integers.
-    bool legalResults =
-        !typeConverter.hasSignednessSemantics(moduleLikeOp.getResultTypes());
-    bool legalArgs =
-        !typeConverter.hasSignednessSemantics(moduleLikeOp.getArgumentTypes());
-    return legalResults && legalArgs;
-  });
-}
 
 } // namespace
 
@@ -416,45 +447,6 @@ Type HWArithToHWTypeConverter::removeSignedness(Type type) {
   return convertedType;
 }
 
-bool HWArithToHWTypeConverter::hasSignednessSemantics(Type type) {
-  auto it = conversionCache.find(type);
-  if (it != conversionCache.end())
-    return it->second.hadSignednessSemantics;
-
-  auto match =
-      llvm::TypeSwitch<Type, bool>(type)
-          .Case<IntegerType>([](auto type) { return !type.isSignless(); })
-          .Case<hw::ArrayType>([this](auto type) {
-            return hasSignednessSemantics(type.getElementType());
-          })
-          .Case<hw::StructType>([this](auto type) {
-            return llvm::any_of(type.getElements(), [this](auto element) {
-              return this->hasSignednessSemantics(element.type);
-            });
-          })
-          .Case<hw::InOutType>([this](auto type) {
-            return hasSignednessSemantics(type.getElementType());
-          })
-          .Default([](auto type) { return false; });
-
-  if (match) {
-    // Prime the conversion cache by pre-converting the type.
-    conversionCache[type] = {removeSignedness(type), true};
-  } else {
-    // Prime the conversion cache by not converting the type - this prevents
-    // iterating through the type on future removeSignedness calls for this
-    // type.
-    conversionCache[type] = {type, false};
-  }
-
-  return match;
-}
-
-bool HWArithToHWTypeConverter::hasSignednessSemantics(TypeRange types) {
-  return llvm::any_of(types,
-                      [this](Type t) { return hasSignednessSemantics(t); });
-}
-
 HWArithToHWTypeConverter::HWArithToHWTypeConverter() {
   // Pass any type through the signedness remover.
   addConversion([this](Type type) { return removeSignedness(type); });
@@ -478,28 +470,9 @@ HWArithToHWTypeConverter::HWArithToHWTypeConverter() {
       });
 }
 
-template <class TOp>
-void wireRegReplacementFunction(
-    ConversionPatternRewriter &rewriter, TOp op,
-    llvm::ArrayRef<Type> convResTypes,
-    typename ArgResOpConversion<TOp>::OpAdaptor &adaptor) {
-  hw::InOutType convIOType = convResTypes.front().cast<hw::InOutType>();
-  rewriter.replaceOpWithNewOp<TOp>(op, convIOType.getElementType(),
-                                   op.getNameAttr());
-}
-
 //===----------------------------------------------------------------------===//
 // Pass driver
 //===----------------------------------------------------------------------===//
-
-void circt::populateHWArithToHWConversionPatterns(
-    HWArithToHWTypeConverter &typeConverter, RewritePatternSet &patterns) {
-  patterns.add<ConstantOpLowering, CastOpLowering, ICmpOpLowering,
-               BinaryOpLowering<AddOp, comb::AddOp>,
-               BinaryOpLowering<SubOp, comb::SubOp>,
-               BinaryOpLowering<MulOp, comb::MulOp>, DivOpLowering>(
-      typeConverter, patterns.getContext());
-}
 
 namespace {
 
@@ -509,47 +482,28 @@ public:
     ModuleOp module = getOperation();
 
     ConversionTarget target(getContext());
+    target.markUnknownOpDynamicallyLegal(isLegalOp);
     RewritePatternSet patterns(&getContext());
     HWArithToHWTypeConverter typeConverter;
     target.addIllegalDialect<HWArithDialect>();
-    target.addLegalDialect<comb::CombDialect, hw::HWDialect>();
 
-    // Signature conversion and legalization patterns.
-    addSignatureConversion<hw::HWModuleOp, hw::HWModuleExternOp,
-                           msft::MSFTModuleOp, msft::MSFTModuleExternOp>(
-        target, patterns, typeConverter);
+    // Add HWArith-specific conversion patterns.
+    patterns.add<ConstantOpLowering, CastOpLowering, ICmpOpLowering,
+                 BinaryOpLowering<hwarith::AddOp, comb::AddOp>,
+                 BinaryOpLowering<hwarith::SubOp, comb::SubOp>,
+                 BinaryOpLowering<hwarith::MulOp, comb::MulOp>, DivOpLowering>(
+        typeConverter, patterns.getContext());
 
-    // Generic conversion and legalization patterns for operations that we
-    // expect to be using in conjunction with the signedness values of hwarith.
-    addOperandConversion<sv::ReadInOutOp, sv::AssignOp, hw::OutputOp,
-                         comb::MuxOp, seq::CompRegOp, hw::ArrayCreateOp,
-                         hw::ArrayGetOp, hw::ArrayConcatOp, hw::ArraySliceOp,
-                         hw::StructCreateOp, hw::StructExplodeOp,
-                         hw::StructExtractOp, hw::StructInjectOp,
-                         hw::UnionCreateOp, hw::UnionExtractOp>(
-        target, patterns, typeConverter);
+    // ALL other operations are converted via the TypeConversionPattern which
+    // will replace an operation to an identical operation with replaced
+    // result types and operands.
+    patterns.add<TypeConversionPattern>(patterns.getContext(), typeConverter);
 
-    addOperandConversion<sv::WireOp>(target, patterns, typeConverter,
-                                     wireRegReplacementFunction<sv::WireOp>);
-
-    addOperandConversion<sv::RegOp>(target, patterns, typeConverter,
-                                    wireRegReplacementFunction<sv::RegOp>);
-
-    populateHWArithToHWConversionPatterns(typeConverter, patterns);
-
-    if (failed(applyPartialConversion(module, target, std::move(patterns))))
+    // Apply a full conversion - all operations must either be legal, be caught
+    // by one of the HWArith patterns or be converted by the
+    // TypeConversionPattern.
+    if (failed(applyFullConversion(module, target, std::move(patterns))))
       return signalPassFailure();
-
-    // Fix up block argument locations since the signature converter drops
-    // all locations.
-    for (auto &op : module.getOps()) {
-      auto argLocs = op.getAttrOfType<ArrayAttr>("argLocs");
-      if (argLocs && op.getNumRegions() == 1 && op.getRegion(0).hasOneBlock()) {
-        auto *block = &op.getRegion(0).front();
-        for (auto [arg, loc] : llvm::zip(block->getArguments(), argLocs))
-          arg.setLoc(loc.cast<LocationAttr>());
-      }
-    }
   }
 };
 } // namespace

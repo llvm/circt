@@ -34,6 +34,10 @@ ParseResult circt::om::ClassOp::parse(OpAsmParser &parser,
                                /*allowType=*/true, /*allowAttrs=*/false))
     return failure();
 
+  // Parse the optional attribute dictionary.
+  if (failed(parser.parseOptionalAttrDictWithKeyword(state.attributes)))
+    return failure();
+
   // Parse the body.
   Region *region = state.addRegion();
   if (parser.parseRegion(*region, args))
@@ -72,6 +76,12 @@ void circt::om::ClassOp::print(OpAsmPrinter &printer) {
       printer << ", ";
   }
   printer << ") ";
+
+  // Print the optional attribute dictionary.
+  SmallVector<StringRef> elidedAttrs{getSymNameAttrName(),
+                                     getFormalParamNamesAttrName()};
+  printer.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
+                                           elidedAttrs);
 
   // Print the body.
   printer.printRegion(getBody(), /*printEntryBlockArgs=*/false,
@@ -114,11 +124,19 @@ circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // Get the containing ModuleOp.
   auto moduleOp = getOperation()->getParentOfType<ModuleOp>();
 
+  // Verify the result type is the same as the referred-to class.
+  StringAttr resultClassName = getResult().getType().getClassName().getAttr();
+  StringAttr className = getClassNameAttr();
+  if (resultClassName != className)
+    return emitOpError("result type (")
+           << resultClassName << ") does not match referred to class ("
+           << className << ')';
+
   // Verify the referred to ClassOp exists.
-  auto classDef = cast_or_null<ClassOp>(
-      symbolTable.lookupSymbolIn(moduleOp, getClassNameAttr()));
+  auto classDef = dyn_cast_or_null<ClassOp>(
+      symbolTable.lookupSymbolIn(moduleOp, className));
   if (!classDef)
-    return emitOpError("refers to non-existant class ") << getClassName();
+    return emitOpError("refers to non-existant class (") << className << ')';
 
   auto actualTypes = getActualParams().getTypes();
   auto formalTypes = classDef.getBodyBlock()->getArgumentTypes();

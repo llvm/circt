@@ -15,5 +15,6 @@
 
 // Pull in the dialect definition.
 #include "circt/Dialect/Arc/ArcDialect.h.inc"
+#include "circt/Dialect/Arc/ArcEnums.h.inc"
 
 #endif // CIRCT_DIALECT_ARC_DIALECT_H

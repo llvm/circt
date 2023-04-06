@@ -168,7 +168,7 @@ struct ParametricTypeConversionPattern : public ConversionPattern {
     bool ok = true;
     rewriter.updateRootInPlace(op, [&]() {
       // Mutate result types
-      for (auto &it : llvm::enumerate(op->getResultTypes())) {
+      for (auto it : llvm::enumerate(op->getResultTypes())) {
         FailureOr<Type> res =
             evaluateParametricType(op->getLoc(), parameters, it.value());
         ok &= succeeded(res);
@@ -274,14 +274,14 @@ static LogicalResult specializeModule(
   // Update the types of the source module ports based on evaluating any
   // parametric in/output ports.
   auto ports = source.getPorts();
-  for (auto &in : llvm::enumerate(source.getFunctionType().getInputs())) {
+  for (auto in : llvm::enumerate(source.getFunctionType().getInputs())) {
     FailureOr<Type> resType =
         evaluateParametricType(source.getLoc(), parameters, in.value());
     if (failed(resType))
       return failure();
     ports.inputs[in.index()].type = *resType;
   }
-  for (auto &out : llvm::enumerate(source.getFunctionType().getResults())) {
+  for (auto out : llvm::enumerate(source.getFunctionType().getResults())) {
     FailureOr<Type> resolvedType =
         evaluateParametricType(source.getLoc(), parameters, out.value());
     if (failed(resolvedType))

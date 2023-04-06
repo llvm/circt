@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_OM_OMOPS_TD
 #define CIRCT_DIALECT_OM_OMOPS_TD
 
+include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
@@ -30,7 +31,7 @@ def ClassOp : OMOp<"class",
     ]> {
   let arguments = (ins
     SymbolNameAttr:$sym_name,
-    ArrayAttr:$formalParamNames
+    StrArrayAttr:$formalParamNames
   );
 
   let regions = (region
@@ -63,7 +64,7 @@ def ClassFieldOp : OMOp<"class.field",
 //===----------------------------------------------------------------------===//
 
 def ObjectOp : OMOp<"object",
-    [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+    [DeclareOpInterfaceMethods<SymbolUserOpInterface>, Pure]> {
   let arguments = (ins
     SymbolNameAttr:$className,
     Variadic<AnyType>:$actualParams

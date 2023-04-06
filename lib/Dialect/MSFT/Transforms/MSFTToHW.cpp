@@ -95,14 +95,14 @@ InstanceOpLowering::matchAndRewrite(InstanceOp msftInst, OpAdaptor adaptor,
       // mod is the top level.
       std::string instHier;
       llvm::raw_string_ostream(instHier)
-          << mod.moduleName() << "." << msftInst.instanceName();
+          << mod.getModuleName() << "." << msftInst.getInstanceName();
       paramValues = rewriter.getArrayAttr({hw::ParamDeclAttr::get(
           "__INST_HIER", rewriter.getStringAttr(instHier))});
     }
   }
 
   auto hwInst = rewriter.create<hw::InstanceOp>(
-      msftInst.getLoc(), referencedModule, msftInst.instanceNameAttr(),
+      msftInst.getLoc(), referencedModule, msftInst.getInstanceNameAttr(),
       SmallVector<Value>(adaptor.getOperands().begin(),
                          adaptor.getOperands().end()),
       paramValues, msftInst.getSymNameAttr());

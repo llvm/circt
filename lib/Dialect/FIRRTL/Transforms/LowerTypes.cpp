@@ -350,16 +350,14 @@ struct AttrCache {
 // not.
 struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
-  TypeLoweringVisitor(MLIRContext *context,
-                      PreserveAggregate::PreserveMode preserveAggregate,
-                      PreserveAggregate::PreserveMode memoryPreservationMode,
-                      bool preservePublicTypes, SymbolTable &symTbl,
-                      const AttrCache &cache,
-                      const llvm::DenseSet<FModuleLike> &publicModuleSet)
+  TypeLoweringVisitor(
+      MLIRContext *context, PreserveAggregate::PreserveMode preserveAggregate,
+      PreserveAggregate::PreserveMode memoryPreservationMode,
+      SymbolTable &symTbl, const AttrCache &cache,
+      const llvm::DenseMap<FModuleLike, Convention> &conventionTable)
       : context(context), aggregatePreservationMode(preserveAggregate),
-        memoryPreservationMode(memoryPreservationMode),
-        preservePublicTypes(preservePublicTypes), symTbl(symTbl), cache(cache),
-        publicModuleSet(publicModuleSet) {}
+        memoryPreservationMode(memoryPreservationMode), symTbl(symTbl),
+        cache(cache), conventionTable(conventionTable) {}
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitStmt;
@@ -397,7 +395,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitExpr(RefResolveOp op);
   bool visitStmt(ConnectOp op);
   bool visitStmt(StrictConnectOp op);
-  bool visitStmt(RefConnectOp op);
+  bool visitStmt(RefDefineOp op);
   bool visitStmt(WhenOp op);
 
   bool isFailed() const { return encounteredError; }
@@ -431,10 +429,6 @@ private:
   PreserveAggregate::PreserveMode aggregatePreservationMode;
   PreserveAggregate::PreserveMode memoryPreservationMode;
 
-  /// Exteranal modules and toplevel modules should have lowered types if this
-  /// flag is enabled.
-  bool preservePublicTypes;
-
   /// The builder is set and maintained in the main loop.
   ImplicitLocOpBuilder *builder;
 
@@ -444,8 +438,7 @@ private:
   // Cache some attributes
   const AttrCache &cache;
 
-  // Keep track of public modules.
-  const llvm::DenseSet<FModuleLike> &publicModuleSet;
+  const llvm::DenseMap<FModuleLike, Convention> &conventionTable;
 
   // Set true if the lowering failed.
   bool encounteredError = false;
@@ -453,22 +446,18 @@ private:
 } // namespace
 
 /// Return aggregate preservation mode for the module. If the module has a
-/// public linkage, then it is not allowed to preserve aggregate values on ports
-/// unless `preservePublicTypes` flag is disabled.
+/// scalarized linkage, then we may not preserve it's aggregate ports.
 PreserveAggregate::PreserveMode
 TypeLoweringVisitor::getPreservatinoModeForModule(FModuleLike module) {
-  // We cannot preserve external module ports.
-  if (!isa<FModuleOp>(module))
+  auto lookup = conventionTable.find(module);
+  if (lookup == conventionTable.end())
+    return aggregatePreservationMode;
+  switch (lookup->second) {
+  case Convention::Scalarized:
     return PreserveAggregate::None;
-
-  // If preservePublicTypes is true, we have to lower ports of public modules.
-  // Query the module visibility to `publicModuleSet`. Don't call
-  // `module.isPublic` since the attributes could be mutated in a different
-  // thread.
-  if (aggregatePreservationMode != PreserveAggregate::None &&
-      preservePublicTypes && publicModuleSet.count(module))
-    return PreserveAggregate::None;
-  return aggregatePreservationMode;
+  case Convention::Internal:
+    return aggregatePreservationMode;
+  }
 }
 
 Value TypeLoweringVisitor::getSubWhatever(Value val, size_t index) {
@@ -848,8 +837,8 @@ bool TypeLoweringVisitor::visitStmt(StrictConnectOp op) {
   return true;
 }
 
-// Expand connects of aggregates
-bool TypeLoweringVisitor::visitStmt(RefConnectOp op) {
+// Expand connects of references-of-aggregates
+bool TypeLoweringVisitor::visitStmt(RefDefineOp op) {
   if (!canLowerConnect(op, aggregatePreservationMode))
     return false;
   if (processSAPath(op))
@@ -866,7 +855,8 @@ bool TypeLoweringVisitor::visitStmt(RefConnectOp op) {
   for (const auto &field : llvm::enumerate(fields)) {
     Value src = getSubWhatever(op.getSrc(), field.index());
     Value dest = getSubWhatever(op.getDest(), field.index());
-    builder->create<RefConnectOp>(dest, src);
+    assert(!field.value().isOutput && "unexpected flip in reftype destination");
+    builder->create<RefDefineOp>(dest, src);
   }
   return true;
 }
@@ -1412,11 +1402,9 @@ namespace {
 struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
   LowerTypesPass(
       circt::firrtl::PreserveAggregate::PreserveMode preserveAggregateFlag,
-      circt::firrtl::PreserveAggregate::PreserveMode preserveMemoriesFlag,
-      bool preservePublicTypesFlag) {
+      circt::firrtl::PreserveAggregate::PreserveMode preserveMemoriesFlag) {
     preserveAggregate = preserveAggregateFlag;
     preserveMemories = preserveMemoriesFlag;
-    preservePublicTypes = preservePublicTypesFlag;
   }
   void runOnOperation() override;
 };
@@ -1428,31 +1416,25 @@ void LowerTypesPass::runOnOperation() {
       llvm::dbgs() << "===- Running LowerTypes Pass "
                       "------------------------------------------------===\n");
   std::vector<FModuleLike> ops;
-  llvm::DenseSet<FModuleLike> publicModuleSet;
   // Symbol Table
   SymbolTable symTbl(getOperation());
   // Cached attr
   AttrCache cache(&getContext());
 
-  // Record all operations in the circuit.
-  llvm::for_each(getOperation().getBodyBlock()->getOperations(),
-                 [&](Operation &op) {
-                   // Creating a map of all ops in the circt, but only modules
-                   // are relevant.
-                   if (auto module = dyn_cast<FModuleLike>(op)) {
-                     ops.push_back(module);
-                     if (cast<hw::HWModuleLike>(op).isPublic())
-                       publicModuleSet.insert(module);
-                   }
-                 });
+  DenseMap<FModuleLike, Convention> conventionTable;
+  auto circuit = getOperation();
+  for (auto module : circuit.getOps<FModuleLike>()) {
+    conventionTable.insert({module, module.getConvention()});
+    ops.push_back(module);
+  }
 
   LLVM_DEBUG(llvm::dbgs() << "Recording Inner Symbol Renames:\n");
 
   // This lambda, executes in parallel for each Op within the circt.
   auto lowerModules = [&](FModuleLike op) -> LogicalResult {
-    auto tl = TypeLoweringVisitor(&getContext(), preserveAggregate,
-                                  preserveMemories, preservePublicTypes, symTbl,
-                                  cache, publicModuleSet);
+    auto tl =
+        TypeLoweringVisitor(&getContext(), preserveAggregate, preserveMemories,
+                            symTbl, cache, conventionTable);
     tl.lowerModule(op);
 
     return LogicalResult::failure(tl.isFailed());
@@ -1467,7 +1449,6 @@ void LowerTypesPass::runOnOperation() {
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLTypesPass(
     PreserveAggregate::PreserveMode mode,
-    PreserveAggregate::PreserveMode memoryMode, bool preservePublicTypes) {
-  return std::make_unique<LowerTypesPass>(mode, memoryMode,
-                                          preservePublicTypes);
+    PreserveAggregate::PreserveMode memoryMode) {
+  return std::make_unique<LowerTypesPass>(mode, memoryMode);
 }

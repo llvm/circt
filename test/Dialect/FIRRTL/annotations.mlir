@@ -730,6 +730,15 @@ firrtl.circuit "Test" attributes {rawAnnotations = [
 
 // -----
 
+firrtl.circuit "Test" attributes {rawAnnotations =[
+  {class = "circt.ConventionAnnotation", target = "~Test|Test", convention = "scalarized"}
+  ]} {
+  // CHECK: attributes {convention = #firrtl<convention scalarized>}
+  firrtl.module @Test() attributes {convention = #firrtl<convention internal>} {}
+}
+
+// -----
+
 // DontTouchAnnotations are placed on the things they target.
 
 firrtl.circuit "Foo"  attributes {
@@ -1195,14 +1204,14 @@ firrtl.circuit "GCTDataTap" attributes {rawAnnotations = [{
 }
 
 // CHECK-LABEL: firrtl.extmodule private @BlackBox
-// CHECK-SAME:    out [[tap_4:[a-zA-Z0-9_]+]]: !firrtl.ref<uint<1>>
-// CHECk-SAME:    out [[tap_5_0:[[a-zA-Z09-_]+]]]: !firrtl.ref<uint<1>>
+// CHECK-SAME:    out [[tap_4:[a-zA-Z0-9_]+]]: !firrtl.probe<uint<1>>
+// CHECk-SAME:    out [[tap_5_0:[[a-zA-Z09-_]+]]]: !firrtl.probe<uint<1>>
 // CHECK-SAME:    internalPaths = ["baz.qux", "baz.quz"]
 
 // CHECK-LABEL: firrtl.module private @InnerMod
-// CHECK-SAME:    out %[[tap_6:[a-zA-Z0-9_]+]]: !firrtl.ref<uint<1>>
+// CHECK-SAME:    out %[[tap_6:[a-zA-Z0-9_]+]]: !firrtl.probe<uint<1>>
 // CHECK:         %[[w_ref:[a-zA-Z09_]+]] = firrtl.ref.send %w
-// CHECK:         firrtl.refconnect %[[tap_6]], %[[w_ref]]
+// CHECK:         firrtl.ref.define %[[tap_6]], %[[w_ref]]
 
 // CHECK-LABEL: firrtl.module @GCTDataTap
 // CHECK:         %[[w_a0:[a-zA-Z0-9_]+]] = firrtl.subfield %w[a]
@@ -1250,7 +1259,7 @@ firrtl.circuit "GCTMemTap" attributes {rawAnnotations = [{
 // CHECK:      firrtl.module @GCTMemTap
 // CHECK:        %[[debug_port:[a-zA-Z0-9_]+]] = chirrtl.debugport %mem
 // CHECK-SAME:     {name = "memTap"}
-// CHECK-SAME:     (!chirrtl.cmemory<uint<1>, 2>) -> !firrtl.ref<vector<uint<1>, 2>>
+// CHECK-SAME:     (!chirrtl.cmemory<uint<1>, 2>) -> !firrtl.probe<vector<uint<1>, 2>>
 // CHECK-NEXT:   %[[debug_port_resolve:[a-zA-Z0-9_]+]] = firrtl.ref.resolve %[[debug_port]]
 // CHECK-NEXT:   %memTap = firrtl.node %[[debug_port_resolve]]
 
@@ -1370,16 +1379,16 @@ firrtl.circuit "GrandCentralViewsBundle"  attributes {
     // CHECK-SAME:   !firrtl.uint<2>
   }
   // CHECK:      firrtl.module @Bar
-  // CHECK-SAME:   out %[[refPort_0:[a-zA-Z0-9_]+]]: !firrtl.ref<uint<1>>
-  // CHECK-SAME:   out %[[refPort_1:[a-zA-Z0-9_]+]]: !firrtl.ref<uint<2>>
+  // CHECK-SAME:   out %[[refPort_0:[a-zA-Z0-9_]+]]: !firrtl.probe<uint<1>>
+  // CHECK-SAME:   out %[[refPort_1:[a-zA-Z0-9_]+]]: !firrtl.probe<uint<2>>
   firrtl.module @Bar() {
     %a = firrtl.wire interesting_name  : !firrtl.bundle<a: uint<1>, b: uint<2>>
     // CHECK:      %[[a_0:[a-zA-Z0-9_]+]] = firrtl.subfield %a[a]
     // CHECK-NEXT: %[[a_1:[a-zA-Z0-9_]+]] = firrtl.subfield %a[b]
     // CHECK-NEXT: %[[a_0_ref:[a-zA-Z0-9_]+]] = firrtl.ref.send %[[a_0]]
-    // CHECK-NEXT: firrtl.refconnect %[[refPort_0]], %[[a_0_ref]]
+    // CHECK-NEXT: firrtl.ref.define %[[refPort_0]], %[[a_0_ref]]
     // CHECK-NEXT: %[[a_1_ref:[a-zA-Z0-9_]+]] = firrtl.ref.send %[[a_1]]
-    // CHECK-NEXT: firrtl.refconnect %[[refPort_1]], %[[a_1_ref]]
+    // CHECK-NEXT: firrtl.ref.define %[[refPort_1]], %[[a_1_ref]]
   }
   // CHECK:      firrtl.module @GrandCentralViewsBundle()
   firrtl.module @GrandCentralViewsBundle() {
@@ -1406,24 +1415,24 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [{
   ]}]} {
   // CHECK-LABEL: firrtl.circuit "Top"  {
   // CHECK-NOT:   "sifive.enterprise.grandcentral.DataTapsAnnotation"
-  // CHECK:  firrtl.module private @Bar(out %inv__bore: !firrtl.ref<uint<1>>)
+  // CHECK:  firrtl.module private @Bar(out %inv__bore: !firrtl.probe<uint<1>>)
   firrtl.module private @Bar() {
     %inv = firrtl.wire interesting_name  : !firrtl.uint<1>
     // CHECK:  %0 = firrtl.ref.send %inv : !firrtl.uint<1>
-    // CHECK:  firrtl.refconnect %inv__bore, %0 : !firrtl.ref<uint<1>>
+    // CHECK:  firrtl.ref.define %inv__bore, %0 : !firrtl.probe<uint<1>>
   }
-  // CHECK-LABEL: firrtl.module private @Foo(out %b_inv__bore: !firrtl.ref<uint<1>>)
+  // CHECK-LABEL: firrtl.module private @Foo(out %b_inv__bore: !firrtl.probe<uint<1>>)
   firrtl.module private @Foo() {
     firrtl.instance b interesting_name  @Bar()
-    // CHECK:  %[[b_inv:[a-zA-Z0-9_]+]] = firrtl.instance b interesting_name  @Bar(out inv__bore: !firrtl.ref<uint<1>>)
-    // CHECK:  firrtl.refconnect %b_inv__bore, %[[b_inv]] : !firrtl.ref<uint<1>>
+    // CHECK:  %[[b_inv:[a-zA-Z0-9_]+]] = firrtl.instance b interesting_name  @Bar(out inv__bore: !firrtl.probe<uint<1>>)
+    // CHECK:  firrtl.ref.define %b_inv__bore, %[[b_inv]] : !firrtl.probe<uint<1>>
   }
   // CHECK: firrtl.module @Top()
   firrtl.module @Top() {
     firrtl.instance foo interesting_name  @Foo()
     %tap = firrtl.wire interesting_name  : !firrtl.uint<1>
-    // CHECK:  %[[foo_b_inv:[a-zA-Z0-9_]+]] = firrtl.instance foo interesting_name  @Foo(out b_inv__bore: !firrtl.ref<uint<1>>)
-    // CHECK:  %0 = firrtl.ref.resolve %[[foo_b_inv]] : !firrtl.ref<uint<1>>
+    // CHECK:  %[[foo_b_inv:[a-zA-Z0-9_]+]] = firrtl.instance foo interesting_name  @Foo(out b_inv__bore: !firrtl.probe<uint<1>>)
+    // CHECK:  %0 = firrtl.ref.resolve %[[foo_b_inv]] : !firrtl.probe<uint<1>>
     // CHECK:  %tap = firrtl.node %0 : !firrtl.uint<1>
   }
 }
@@ -1448,23 +1457,23 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [
       }
     ]}]} {
   firrtl.extmodule private @ExtBar()
-  // CHECK: firrtl.extmodule private @ExtBar(out random_something_external: !firrtl.ref<uint<1>>)
+  // CHECK: firrtl.extmodule private @ExtBar(out random_something_external: !firrtl.probe<uint<1>>)
   // CHECK-SAME: internalPaths = ["random.something.external"]
-  // CHECK:  firrtl.module private @Bar(out %[[_gen_ref2:.+]]: !firrtl.ref<uint<1>>)
+  // CHECK:  firrtl.module private @Bar(out %[[_gen_ref2:.+]]: !firrtl.probe<uint<1>>)
   // CHECK:  %[[random:.+]] = firrtl.verbatim.expr "random.something" : () -> !firrtl.uint<1>
   // CHECK:  %0 = firrtl.ref.send %[[random]] : !firrtl.uint<1>
-  // CHECK:  firrtl.refconnect %[[_gen_ref2]], %0 : !firrtl.ref<uint<1>>
+  // CHECK:  firrtl.ref.define %[[_gen_ref2]], %0 : !firrtl.probe<uint<1>>
   firrtl.module private @Bar() {
   }
 
   // CHECK-LABEL:  firrtl.module private @Foo(
-  // CHECK-SAME: out %b_random_something__bore: !firrtl.ref<uint<1>>, out %b2_random_something_external__bore: !firrtl.ref<uint<1>>
+  // CHECK-SAME: out %b_random_something__bore: !firrtl.probe<uint<1>>, out %b2_random_something_external__bore: !firrtl.probe<uint<1>>
   firrtl.module private @Foo() {
     firrtl.instance b interesting_name  @Bar()
     // CHECK:  %[[gen_refPort:.+]] = firrtl.instance b interesting_name @Bar
-    // CHECK-SAME: (out [[_gen_ref2]]: !firrtl.ref<uint<1>>)
+    // CHECK-SAME: (out [[_gen_ref2]]: !firrtl.probe<uint<1>>)
     firrtl.instance b2 interesting_name  @ExtBar()
-    // CHECK: %b2_random_something_external = firrtl.instance b2 interesting_name  @ExtBar(out random_something_external: !firrtl.ref<uint<1>>)
+    // CHECK: %b2_random_something_external = firrtl.instance b2 interesting_name  @ExtBar(out random_something_external: !firrtl.probe<uint<1>>)
   }
   // CHECK-LABEL firrtl.module @Top()
   firrtl.module @Top() {
@@ -1472,8 +1481,8 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [
     %tap = firrtl.wire interesting_name  : !firrtl.uint<1>
     %tap2 = firrtl.wire interesting_name  : !firrtl.uint<1>
     // CHECK:  %[[foo__gen_tap:.+]], %[[foo__gen_tap2:.+]] = firrtl.instance foo interesting_name  @Foo
-    // CHECK-SAME: (out b_random_something__bore: !firrtl.ref<uint<1>>, out b2_random_something_external__bore: !firrtl.ref<uint<1>>)
-    // CHECK:  %[[v0:.+]] = firrtl.ref.resolve %[[foo__gen_tap]] : !firrtl.ref<uint<1>>
+    // CHECK-SAME: (out b_random_something__bore: !firrtl.probe<uint<1>>, out b2_random_something_external__bore: !firrtl.probe<uint<1>>)
+    // CHECK:  %[[v0:.+]] = firrtl.ref.resolve %[[foo__gen_tap]] : !firrtl.probe<uint<1>>
     // CHECK:  %tap = firrtl.node %[[v0]] : !firrtl.uint<1>
   }
 }
@@ -1540,11 +1549,11 @@ firrtl.circuit "GrandCentralParentIsNotLCA"  attributes {
   ]
 } {
   // CHECK:        firrtl.module @Bar
-  // CHECK-SAME:     out %[[a_refPort:[a-zA-Z0-9_]+]]: !firrtl.ref<uint<1>>
+  // CHECK-SAME:     out %[[a_refPort:[a-zA-Z0-9_]+]]: !firrtl.probe<uint<1>>
   firrtl.module @Bar() {
     %a = firrtl.wire : !firrtl.uint<1>
     // CHECK:        %[[a_ref:[a-zA-Z0-9_]+]] = firrtl.ref.send %a
-    // CHECK-NEXT:   firrtl.refconnect %[[a_refPort]], %[[a_ref]]
+    // CHECK-NEXT:   firrtl.ref.define %[[a_refPort]], %[[a_ref]]
   }
   // CHECK:        firrtl.module @Companion()
   firrtl.module @Companion() {
@@ -1722,7 +1731,7 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [{
   firrtl.module @Top() {
     firrtl.instance foo interesting_name  @Foo()
     %tap = firrtl.wire interesting_name  : !firrtl.uint<8>
-    // CHECK:   %[[v0:.+]] = firrtl.ref.resolve %foo_sum__bore : !firrtl.ref<uint>
+    // CHECK:   %[[v0:.+]] = firrtl.ref.resolve %foo_sum__bore : !firrtl.probe<uint>
     // CHECK:   %tap = firrtl.node %[[v0]] : !firrtl.uint
   }
 }
@@ -1740,13 +1749,13 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [{
     }]}]} {
   firrtl.extmodule private @BlackBox() attributes {defname = "BlackBox"}
   // CHECK:  firrtl.extmodule private @BlackBox
-  // CHECK-SAME:  out [[gen_ref:.+]]: !firrtl.ref<uint<1>>)
+  // CHECK-SAME:  out [[gen_ref:.+]]: !firrtl.probe<uint<1>>)
   // CHECK-SAME: attributes {defname = "BlackBox", internalPaths = ["random.something"]}
   firrtl.module @Top(in %in: !firrtl.uint<1>) {
     %tap2 = firrtl.wire : !firrtl.bundle<wid: uint<1>>
     firrtl.instance localparam @BlackBox()
-    // CHECK:  %[[localparam__gen_ref:.+]] = firrtl.instance localparam @BlackBox(out [[gen_ref]]: !firrtl.ref<uint<1>>)
-    // CHECK:  firrtl.ref.resolve %[[localparam__gen_ref]] : !firrtl.ref<uint<1>>
+    // CHECK:  %[[localparam__gen_ref:.+]] = firrtl.instance localparam @BlackBox(out [[gen_ref]]: !firrtl.probe<uint<1>>)
+    // CHECK:  firrtl.ref.resolve %[[localparam__gen_ref]] : !firrtl.probe<uint<1>>
   }
 }
 

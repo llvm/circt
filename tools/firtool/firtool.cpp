@@ -174,11 +174,6 @@ static cl::opt<circt::firrtl::PreserveAggregate::PreserveMode>
         cl::init(circt::firrtl::PreserveAggregate::None),
         cl::cat(mainCategory));
 
-static cl::opt<bool> preservePublicTypes(
-    "preserve-public-types",
-    cl::desc("Force to lower ports of toplevel and external modules"),
-    cl::init(true), cl::cat(mainCategory));
-
 static cl::opt<firrtl::PreserveValues::PreserveMode>
     preserveMode("preserve-values",
                  cl::desc("Specify the values which can be optimized away"),
@@ -290,6 +285,16 @@ static cl::opt<RandomKind> disableRandom(
                clEnumValN(RandomKind::All, "disable-all-randomization",
                           "Disable emission of all randomization code")),
     cl::init(RandomKind::None), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    scalarizeTopModule("scalarize-top-module",
+                       cl::desc("Scalarize the ports of the top module"),
+                       cl::init(true), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    scalarizeExtModules("scalarize-ext-modules",
+                        cl::desc("Scalarize the ports of any external modules"),
+                        cl::init(true), cl::cat(mainCategory));
 
 static bool isRandomEnabled(RandomKind kind) {
   return disableRandom != RandomKind::All && disableRandom != kind;
@@ -475,6 +480,8 @@ static LogicalResult processBuffer(
     firrtl::FIRParserOptions options;
     options.ignoreInfoLocators = ignoreFIRLocations;
     options.numAnnotationFiles = numAnnotationFiles;
+    options.scalarizeTopModule = scalarizeTopModule;
+    options.scalarizeExtModules = scalarizeExtModules;
     module = importFIRFile(sourceMgr, &context, parserTimer, options);
   } else {
     auto parserTimer = ts.nest("MLIR Parser");
@@ -501,7 +508,8 @@ static LogicalResult processBuffer(
         std::make_unique<
             VerbosePassInstrumentation<firrtl::CircuitOp, mlir::ModuleOp>>(
             "firtool"));
-  applyPassManagerCLOptions(pm);
+  if (failed(applyPassManagerCLOptions(pm)))
+    return failure();
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
       disableAnnotationsUnknown, disableAnnotationsClassless,
@@ -518,13 +526,12 @@ static LogicalResult processBuffer(
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerIntrinsicsPass());
 
-  // TODO: Move this to the O1 pipeline.
-  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-      firrtl::createDropNamesPass(preserveMode));
-
   if (!disableOptimization)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createCSEPass());
+
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      firrtl::createDropNamesPass(preserveMode));
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
 
@@ -554,10 +561,8 @@ static LogicalResult processBuffer(
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createWireDFTPass());
 
   if (vbToBV) {
-    if (preservePublicTypes)
-      pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
-          firrtl::PreserveAggregate::All, firrtl::PreserveAggregate::All,
-          preservePublicTypes));
+    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
+        firrtl::PreserveAggregate::All, firrtl::PreserveAggregate::All));
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createVBToBVPass());
   }
 
@@ -568,8 +573,7 @@ static LogicalResult processBuffer(
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
-      preserveAggregate, firrtl::PreserveAggregate::None, preservePublicTypes));
-  //
+      preserveAggregate, firrtl::PreserveAggregate::None));
   // Only enable expand whens if lower types is also enabled.
   auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
   modulePM.addPass(firrtl::createExpandWhensPass());
@@ -634,9 +638,6 @@ static LogicalResult processBuffer(
                                : blackBoxRootPath;
   pm.nest<firrtl::CircuitOp>().addPass(
       firrtl::createBlackBoxReaderPass(blackBoxRoot));
-
-  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-      firrtl::createDropNamesPass(preserveMode));
 
   // Run SymbolDCE as late as possible, but before InnerSymbolDCE. This is for
   // hierpathop's and just for general cleanup.
@@ -739,7 +740,8 @@ static LogicalResult processBuffer(
       outputFormat == OutputIRVerilog) {
     PassManager exportPm(&context);
     exportPm.enableTiming(ts);
-    applyPassManagerCLOptions(exportPm);
+    if (failed(applyPassManagerCLOptions(exportPm)))
+      return failure();
     if (verbosePassExecutions)
       exportPm.addInstrumentation(
           std::make_unique<

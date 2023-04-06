@@ -1,7 +1,14 @@
 // RUN: circt-opt %s -verify-diagnostics -split-input-file
 
 om.class @Class() {
-  // expected-error @+1 {{'om.object' op refers to non-existant class NonExistant}}
+  // expected-error @+1 {{'om.object' op result type ("Bar") does not match referred to class ("Foo")}}
+  %0 = om.object @Foo() : () -> !om.class.type<@Bar>
+}
+
+// -----
+
+om.class @Class() {
+  // expected-error @+1 {{'om.object' op refers to non-existant class ("NonExistant")}}
   %0 = om.object @NonExistant() : () -> !om.class.type<@NonExistant>
 }
 

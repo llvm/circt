@@ -299,6 +299,30 @@ Example:
 }
 ```
 
+### Convention
+
+| Property   | Type   | Description                             |
+| ---------- | ------ | --------------------------------------- |
+| class      | string | `circt.ConventionAnnotation`            |
+| convention | string | `scalarized`                            |
+| target     | string | Reference target                        |
+
+Specify the port convention for a module. The port convention controls how a
+module's ports are transformed, and how that module can be instantiated, in the
+output format.
+
+The options are:
+- `scalarized`: Convert aggregate ports (i.e. vector or bundles) into multiple
+  ground-typed ports.
+
+```json
+{
+  "class": "circt.ConventionAnnotation",
+  "convention": "scalarized",
+  "target": "~Foo|Bar/d:Baz"
+}
+```
+
 ### ElaborationArtefactsDirectory
 
 | Property   | Type   | Description                                              |
