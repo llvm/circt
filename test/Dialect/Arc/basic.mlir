@@ -88,3 +88,21 @@ arc.define @dummyCallee1(%arg0: i1, %arg1: i32) -> i32 {
 arc.define @dummyCallee2() {
   arc.output
 }
+
+// CHECK-LABEL: hw.module @clockDomainTest
+hw.module @clockDomainTest(%clk: i1, %in0: i32, %in1: i16) {
+  // CHECK-NEXT: %{{.+}} = arc.clock_domain (%in0, %in1) clock %clk {someattr} : (i32, i16) -> i32 {
+  %0 = arc.clock_domain (%in0, %in1) clock %clk {someattr} : (i32, i16) -> i32 {
+  // CHECK-NEXT: ^bb0(%arg0: i32, %arg1: i16):
+  ^bb0(%arg0: i32, %arg1: i16):
+    // CHECK-NEXT: [[AND:%.+]] = comb.and %arg0, [[AND]] : i32
+    // COM: check that it is a graph region
+    %1 = comb.and %arg0, %1 : i32
+    // CHECK-NEXT: arc.output [[AND]] : i32
+    arc.output %1 : i32
+  // CHECK-NEXT: }
+  }
+
+  // CHECK-NEXT: arc.clock_domain () clock %clk : () -> () {
+  arc.clock_domain () clock %clk : () -> () {}
+}

@@ -17,3 +17,12 @@ arc.define @Bar(%arg0: i32) -> i32{
   %c0_i32 = hw.constant 0 : i32
   arc.output %c0_i32 : i32
 }
+
+// CHECK-LABEL: hw.module @clockDomainDCE
+hw.module @clockDomainDCE(%clk: i1) {
+  // CHECK-NOT: arc.clock_domain
+  arc.clock_domain () clock %clk : () -> () {
+  ^bb0:
+    arc.output
+  }
+}

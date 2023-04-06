@@ -21,6 +21,28 @@ using namespace mlir;
 // Helpers
 //===----------------------------------------------------------------------===//
 
+static LogicalResult verifyTypeListEquivalence(Operation *op,
+                                               TypeRange expectedTypeList,
+                                               TypeRange actualTypeList,
+                                               StringRef elementName) {
+  if (expectedTypeList.size() != actualTypeList.size())
+    return op->emitOpError("incorrect number of ")
+           << elementName << "s: expected " << expectedTypeList.size()
+           << ", but got " << actualTypeList.size();
+
+  for (unsigned i = 0, e = expectedTypeList.size(); i != e; ++i) {
+    if (expectedTypeList[i] != actualTypeList[i]) {
+      auto diag = op->emitOpError(elementName)
+                  << " type mismatch: " << elementName << " #" << i;
+      diag.attachNote() << "expected type: " << expectedTypeList[i];
+      diag.attachNote() << "  actual type: " << actualTypeList[i];
+      return diag;
+    }
+  }
+
+  return success();
+}
+
 static LogicalResult verifyArcSymbolUse(Operation *op, ValueRange inputs,
                                         ValueRange results,
                                         SymbolTableCollection &symbolTable) {
@@ -36,29 +58,13 @@ static LogicalResult verifyArcSymbolUse(Operation *op, ValueRange inputs,
 
   // Verify that the operand and result types match the arc.
   auto type = arc.getFunctionType();
-  if (type.getNumInputs() != inputs.size())
-    return op->emitOpError("incorrect number of operands for arc");
+  if (failed(verifyTypeListEquivalence(op, type.getInputs(), inputs.getTypes(),
+                                       "operand")))
+    return failure();
 
-  for (unsigned i = 0, e = type.getNumInputs(); i != e; ++i) {
-    if (inputs[i].getType() != type.getInput(i)) {
-      auto diag = op->emitOpError("operand type mismatch: operand ") << i;
-      diag.attachNote() << "expected type: " << type.getInput(i);
-      diag.attachNote() << "  actual type: " << inputs[i].getType();
-      return diag;
-    }
-  }
-
-  if (type.getNumResults() != results.size())
-    return op->emitOpError("incorrect number of results for arc");
-
-  for (unsigned i = 0, e = type.getNumResults(); i != e; ++i) {
-    if (results[i].getType() != type.getResult(i)) {
-      auto diag = op->emitOpError("result type mismatch: result ") << i;
-      diag.attachNote() << "expected type: " << type.getResult(i);
-      diag.attachNote() << "  actual type: " << results[i].getType();
-      return diag;
-    }
-  }
+  if (failed(verifyTypeListEquivalence(op, type.getResults(),
+                                       results.getTypes(), "result")))
+    return failure();
 
   return success();
 }
@@ -155,15 +161,22 @@ LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
 }
 
 LogicalResult StateOp::verify() {
-  if (getLatency() > 0 && !getClock())
-    return emitOpError("with non-zero latency requires a clock");
+  if (getLatency() > 0 && !getOperation()->getParentOfType<ClockDomainOp>() &&
+      !getClock())
+    return emitOpError(
+        "with non-zero latency outside a clock domain requires a clock");
 
   if (getLatency() == 0) {
     if (getClock())
       return emitOpError("with zero latency cannot have a clock");
     if (getEnable())
       return emitOpError("with zero latency cannot have an enable");
+    if (getReset())
+      return emitOpError("with zero latency cannot have a reset");
   }
+
+  if (getOperation()->getParentOfType<ClockDomainOp>() && getClock())
+    return emitOpError("inside a clock domain cannot have a clock");
 
   return success();
 }
@@ -183,6 +196,22 @@ LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 LogicalResult MemoryWriteOp::verify() {
   if (getMask() && getMask().getType() != getData().getType())
     return emitOpError("mask and data operand types do not match");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ClockDomainOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ClockDomainOp::verifyRegions() {
+  if (failed(verifyTypeListEquivalence(*this, getBodyBlock().getArgumentTypes(),
+                                       getInputs().getTypes(), "input")))
+    return failure();
+  if (failed(verifyTypeListEquivalence(
+          *this, getOutputs().getTypes(),
+          getBodyBlock().getTerminator()->getOperandTypes(), "output")))
+    return failure();
 
   return success();
 }
