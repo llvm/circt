@@ -2165,17 +2165,25 @@ FirMemory MemOp::getSummary() {
             op.getPrefix().value_or(""), numReadPorts, numWritePorts,
             numReadWritePorts, (size_t)width, op.getDepth(),
             op.getReadLatency(), op.getWriteLatency(), op.getMaskBits(),
-            (size_t)op.getRuw(), (unsigned)hw::WUW::PortOrder,
+            (unsigned)op.getRuw(), (unsigned)seq::WUW::PortOrder,
             clocks.empty() ? "" : "_" + clocks, init ? initStr.str() : ""));
   }
-  return {numReadPorts,         numWritePorts,
-          numReadWritePorts,    (size_t)width,
-          op.getDepth(),        op.getReadLatency(),
-          op.getWriteLatency(), op.getMaskBits(),
-          (size_t)op.getRuw(),  hw::WUW::PortOrder,
-          writeClockIDs,        modName,
-          op.getMaskBits() > 1, init,
-          op.getPrefixAttr(),   op.getLoc()};
+  return {numReadPorts,
+          numWritePorts,
+          numReadWritePorts,
+          (size_t)width,
+          op.getDepth(),
+          op.getReadLatency(),
+          op.getWriteLatency(),
+          op.getMaskBits(),
+          *seq::symbolizeRUW(unsigned(op.getRuw())),
+          seq::WUW::PortOrder,
+          writeClockIDs,
+          modName,
+          op.getMaskBits() > 1,
+          init,
+          op.getPrefixAttr(),
+          op.getLoc()};
 }
 
 void MemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
