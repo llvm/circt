@@ -2365,7 +2365,7 @@ struct FoldUnusedPorts : public mlir::RewritePattern {
           mem.getWriteLatency(), mem.getDepth(), mem.getRuw(),
           rewriter.getStrArrayAttr(portNames), mem.getName(), mem.getNameKind(),
           mem.getAnnotations(), rewriter.getArrayAttr(portAnnotations),
-          mem.getInnerSymAttr(), mem.getGroupIDAttr(), mem.getInitAttr());
+          mem.getInnerSymAttr(), mem.getInitAttr(), mem.getPrefixAttr());
 
     // Replace the dead ports with dummy wires.
     unsigned nextPort = 0;
@@ -2426,7 +2426,7 @@ struct FoldReadWritePorts : public mlir::RewritePattern {
         mem.getDepth(), mem.getRuw(), rewriter.getStrArrayAttr(portNames),
         mem.getName(), mem.getNameKind(), mem.getAnnotations(),
         rewriter.getArrayAttr(portAnnotations), mem.getInnerSymAttr(),
-        mem.getGroupIDAttr(), mem.getInitAttr());
+        mem.getInitAttr(), mem.getPrefixAttr());
 
     for (unsigned i = 0, n = mem.getNumResults(); i < n; ++i) {
       auto result = mem.getResult(i);
@@ -2596,7 +2596,7 @@ struct FoldUnusedBits : public mlir::RewritePattern {
         mem, portTypes, mem.getReadLatency(), mem.getWriteLatency(),
         mem.getDepth(), mem.getRuw(), mem.getPortNames(), mem.getName(),
         mem.getNameKind(), mem.getAnnotations(), mem.getPortAnnotations(),
-        mem.getInnerSymAttr(), mem.getGroupIDAttr(), mem.getInitAttr());
+        mem.getInnerSymAttr(), mem.getInitAttr(), mem.getPrefixAttr());
 
     // Rewrite bundle users to the new data type.
     auto rewriteSubfield = [&](Value port, StringRef field) {

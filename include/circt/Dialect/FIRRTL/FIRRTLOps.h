@@ -191,8 +191,8 @@ struct FirMemory {
   SmallVector<int32_t> writeClockIDs;
   StringAttr modName;
   bool isMasked;
-  uint32_t groupID;
   MemoryInitAttr init;
+  StringAttr prefix;
 
   // Location is carried along but not considered part of the identity of this.
   Location loc;
@@ -202,15 +202,13 @@ struct FirMemory {
   // The original MemOp, only used in LowerToHW.  Also not part of the identity.
   Operation *op = nullptr;
 
-  std::tuple<size_t, size_t, size_t, size_t, size_t, size_t, size_t, size_t,
-             size_t, hw::WUW, SmallVector<int32_t>, uint32_t, StringRef, bool,
-             bool>
-  getTuple() const {
+  auto getTuple() const {
     return std::make_tuple(
         numReadPorts, numWritePorts, numReadWritePorts, dataWidth, depth,
         readLatency, writeLatency, maskBits, readUnderWrite, writeUnderWrite,
-        writeClockIDs, groupID, init ? init.getFilename().getValue() : "",
-        init ? init.getIsBinary() : false, init ? init.getIsInline() : false);
+        writeClockIDs, init ? init.getFilename().getValue() : "",
+        init ? init.getIsBinary() : false, init ? init.getIsInline() : false,
+        prefix ? prefix.getValue() : "");
   }
   bool operator<(const FirMemory &rhs) const {
     return getTuple() < rhs.getTuple();
