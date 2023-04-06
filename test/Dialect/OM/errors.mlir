@@ -45,24 +45,26 @@ om.class @Class2() {
 
 // -----
 
-om.class @Class1(%arg0: i1) {
-  om.class.field @foo, %arg0 : i1
+om.class @Class1() {
+  %0 = om.constant 1 : i1
+  om.class.field @foo, %0 : i1
 }
 
-om.class @Class2(%arg0: i1) {
-  %0 = om.object @Class1(%arg0) : (i1) -> !om.class.type<@Class1>
+om.class @Class2() {
+  %0 = om.object @Class1() : () -> !om.class.type<@Class1>
   // expected-error @+1 {{'om.object.field' op nested field access into @foo requires a ClassType, but found 'i1'}}
   om.object.field %0, [@foo, @bar] : (!om.class.type<@Class1>) -> i1
 }
 
 // -----
 
-om.class @Class1(%arg0: i1) {
-  om.class.field @foo, %arg0 : i1
+om.class @Class1() {
+  %0 = om.constant 1 : i1
+  om.class.field @foo, %0 : i1
 }
 
 om.class @Class2(%arg0: i1) {
-  %0 = om.object @Class1(%arg0) : (i1) -> !om.class.type<@Class1>
+  %0 = om.object @Class1() : () -> !om.class.type<@Class1>
   // expected-error @+1 {{'om.object.field' op expected type 'i2', but accessed field has type 'i1'}}
   om.object.field %0, [@foo] : (!om.class.type<@Class1>) -> i2
 }
