@@ -544,8 +544,7 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
   // For array registers, we annotate ram_style attributes if
   // `addVivadoRAMAddressConflictSynthesisBugWorkaround` is enabled so that we
   // can workaround incorrect optimizations of vivado. See "RAM address conflict
-  // and Vivado synthesis bug" issue in the vivado forum for the more
-  // detail.
+  // and Vivado synthesis bug" issue in the vivado forum for the more detail.
   if (addVivadoRAMAddressConflictSynthesisBugWorkaround &&
       hw::type_isa<hw::ArrayType, hw::UnpackedArrayType>(reg.getType()))
     circt::sv::setSVAttributes(
