@@ -807,14 +807,6 @@ bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
       });
 }
 
-/// Return the element of an array type or null.  This strips flip types.
-Type firrtl::getVectorElementType(Type array) {
-  auto vectorType = array.dyn_cast<FVectorType>();
-  if (!vectorType)
-    return Type();
-  return vectorType.getElementType().getConstType(vectorType.isConst());
-}
-
 /// Return the passive version of a firrtl type
 /// top level for ODS constraint usage
 Type firrtl::getPassiveType(Type anyBaseFIRRTLType) {
