@@ -1817,15 +1817,13 @@ struct NodeBypass : public mlir::RewritePattern {
 
 template <typename OpTy>
 static LogicalResult demoteForceableIfUnused(OpTy op,
-                                                  PatternRewriter &rewriter) {
+                                             PatternRewriter &rewriter) {
   if (!op.isForceable() || !op.getDataRef().use_empty())
     return failure();
 
   op.markForceable(false);
   return success();
 }
-
-
 
 // Interesting names and symbols and don't touch force nodes to stick around.
 LogicalResult NodeOp::fold(FoldAdaptor adaptor,

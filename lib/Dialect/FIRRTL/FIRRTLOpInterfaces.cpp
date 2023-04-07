@@ -131,13 +131,15 @@ LogicalResult circt::firrtl::detail::verifyForceableOp(Forceable op) {
   return success();
 }
 
-Forceable circt::firrtl::detail::replaceWithNewForceability(Forceable op, bool forceable){
+Forceable circt::firrtl::detail::replaceWithNewForceability(Forceable op,
+                                                            bool forceable) {
   if (forceable == op.isForceable())
     return op;
 
   assert(op->getNumRegions() == 0);
 
-  // Create copy of this operation with/without the forceable marker + result type.
+  // Create copy of this operation with/without the forceable marker + result
+  // type.
   OpBuilder b(op.getContext());
 
   // Grab the current operation's results and attributes.
@@ -149,12 +151,14 @@ Forceable circt::firrtl::detail::replaceWithNewForceability(Forceable op, bool f
   if (forceable)
     resultTypes.push_back(refType);
   else {
-    assert(resultTypes.back() == refType && "expected forceable type as last result");
+    assert(resultTypes.back() == refType &&
+           "expected forceable type as last result");
     resultTypes.pop_back();
   }
 
   // Add/remove the forceable marker.
-  auto forceableMarker = b.getNamedAttr(op.getForceableAttrName(), b.getUnitAttr());
+  auto forceableMarker =
+      b.getNamedAttr(op.getForceableAttrName(), b.getUnitAttr());
   if (forceable)
     attributes.push_back(forceableMarker);
   else {
