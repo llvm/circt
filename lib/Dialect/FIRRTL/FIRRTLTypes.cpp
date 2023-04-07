@@ -1044,10 +1044,8 @@ FIRRTLBaseType FVectorType::getPassiveType() {
     return impl->passiveType;
 
   // If this type is already passive, return it and remember for next time.
-  if (impl->value.first.getRecursiveTypeProperties().isPassive) {
-    impl->passiveType = *this;
-    return *this;
-  }
+  if (impl->value.first.getRecursiveTypeProperties().isPassive)
+    return impl->passiveType = *this;
 
   // Otherwise, rebuild a passive version.
   auto passiveType =
