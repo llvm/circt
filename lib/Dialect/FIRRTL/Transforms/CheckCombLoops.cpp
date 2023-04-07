@@ -184,7 +184,9 @@ public:
               if (isa<RegResetOp, RegOp>(owner))
                 continue;
               Value childVal;
-              if (owner->getNumResults() == 1)
+              if (auto fop = dyn_cast<Forceable>(owner))
+                childVal = fop.getDataRaw();
+              else if (owner->getNumResults() == 1)
                 childVal = owner->getResult(0);
               else if (auto connect = dyn_cast<FConnectLike>(owner))
                 if (use.getOperandNumber() == 1) {

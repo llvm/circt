@@ -573,3 +573,14 @@ firrtl.circuit "CycleStartsUnnammed"   {
     firrtl.strictconnect %0, %n : !firrtl.uint<1>
   }
 }
+
+// -----
+
+firrtl.circuit "CycleThroughForceable"   {
+  // expected-error @below {{sample path: CycleThroughForceable.{w <- n <- w}}}
+  firrtl.module @CycleThroughForceable() {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+    %n, %n_ref = firrtl.node %w forceable : !firrtl.uint<1>
+    firrtl.strictconnect %w, %n : !firrtl.uint<1>
+  }
+}
