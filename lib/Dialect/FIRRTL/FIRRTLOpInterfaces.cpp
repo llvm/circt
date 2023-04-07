@@ -131,8 +131,18 @@ LogicalResult circt::firrtl::detail::verifyForceableOp(Forceable op) {
   return success();
 }
 
-Forceable circt::firrtl::detail::replaceWithNewForceability(Forceable op,
-                                                            bool forceable) {
+namespace {
+/// Simple wrapper to allow construction from a context for local use.
+class TrivialPatternRewriter : public PatternRewriter {
+public:
+  explicit TrivialPatternRewriter(MLIRContext *context)
+      : PatternRewriter(context) {}
+};
+} // end namespace
+
+Forceable
+circt::firrtl::detail::replaceWithNewForceability(Forceable op, bool forceable,
+                                                  PatternRewriter *rewriter) {
   if (forceable == op.isForceable())
     return op;
 
@@ -140,7 +150,9 @@ Forceable circt::firrtl::detail::replaceWithNewForceability(Forceable op,
 
   // Create copy of this operation with/without the forceable marker + result
   // type.
-  OpBuilder b(op.getContext());
+
+  TrivialPatternRewriter localRewriter(op.getContext());
+  PatternRewriter &rw = rewriter ? *rewriter : localRewriter;
 
   // Grab the current operation's results and attributes.
   SmallVector<Type, 8> resultTypes(op->getResultTypes());
@@ -158,7 +170,7 @@ Forceable circt::firrtl::detail::replaceWithNewForceability(Forceable op,
 
   // Add/remove the forceable marker.
   auto forceableMarker =
-      b.getNamedAttr(op.getForceableAttrName(), b.getUnitAttr());
+      rw.getNamedAttr(op.getForceableAttrName(), rw.getUnitAttr());
   if (forceable)
     attributes.push_back(forceableMarker);
   else {
@@ -169,16 +181,16 @@ Forceable circt::firrtl::detail::replaceWithNewForceability(Forceable op,
   // Create the replacement operation.
   OperationState state(op.getLoc(), op->getName(), op->getOperands(),
                        resultTypes, attributes, op->getSuccessors());
-  b.setInsertionPoint(op);
-  auto *replace = b.create(state);
+  rw.setInsertionPoint(op);
+  auto *replace = rw.create(state);
 
   // Dropping forceability (!forceable) -> no uses of forceable ref handle.
   assert(forceable || op.getDataRef().use_empty());
 
   // Replace results.
   for (auto result : llvm::drop_end(op->getResults(), forceable ? 0 : 1))
-    result.replaceAllUsesWith(replace->getResult(result.getResultNumber()));
-  op->erase();
+    rw.replaceAllUsesWith(result, replace->getResult(result.getResultNumber()));
+  rw.eraseOp(op);
   return cast<Forceable>(replace);
 }
 

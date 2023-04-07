@@ -447,10 +447,6 @@ def Forceable : OpInterface<"Forceable"> {
     "mlir::TypedValue<RefType>", "getDataRef", (ins), [{}], /*defaultImplementation=*/[{
       return llvm::cast_or_null<mlir::TypedValue<RefType>>($_op.getRef());
     }]>,
-    InterfaceMethod<"Mark operation as forceable (or not), replacing this op as needed.",
-    "Forceable", "markForceable", (ins "bool":$forceable), [{}], /*defaultImplementation=*/[{
-      return detail::replaceWithNewForceability($_op, forceable);
-    }]>
   ];
   let extraClassDeclaration = [{
     /// Attribute name for 'forceable' tracking.

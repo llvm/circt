@@ -1821,7 +1821,7 @@ static LogicalResult demoteForceableIfUnused(OpTy op,
   if (!op.isForceable() || !op.getDataRef().use_empty())
     return failure();
 
-  op.markForceable(false);
+  firrtl::detail::replaceWithNewForceability(op, false, &rewriter);
   return success();
 }
 

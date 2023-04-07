@@ -25,6 +25,10 @@
 #include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/TypeSwitch.h"
 
+namespace mlir {
+class PatternRewriter;
+} // end namespace mlir
+
 namespace circt {
 namespace firrtl {
 
@@ -115,7 +119,9 @@ RefType getForceableResultType(bool forceable, Type type);
 LogicalResult verifyForceableOp(Forceable op);
 /// Replace a Forceable op with equivalent, changing whether forceable.
 /// No-op if already has specified forceability.
-Forceable replaceWithNewForceability(Forceable op, bool forceable);
+Forceable
+replaceWithNewForceability(Forceable op, bool forceable,
+                           ::mlir::PatternRewriter *rewriter = nullptr);
 } // end namespace detail
 
 } // namespace firrtl
