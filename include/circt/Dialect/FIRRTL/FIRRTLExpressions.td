@@ -352,13 +352,13 @@ def SubtagOp : FIRRTLExprOp<"subtag"> {
   }];
 }
 
-def TagExtractOp : FIRRTLExprOp<"tagof", [InferTypeOpInterface]> {
+def TagExtractOp : FIRRTLExprOp<"tagextract", [InferTypeOpInterface]> {
   let summary = "Extract the tag from a value";
   let description = [{
-    The tagof expression returns the binary value of the current tag of an
+    The tagextract expression returns the binary value of the current tag of an
     enum value.
     ```
-      %result = firrtl.tagof %input : !input-type
+      %result = firrtl.tagextract %input : !input-type
     ```
     }];
 
