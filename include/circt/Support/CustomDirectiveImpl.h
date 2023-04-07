@@ -23,6 +23,13 @@ namespace circt {
 // ImplicitSSAName Custom Directive
 //===----------------------------------------------------------------------===//
 
+/// Parse an implicit SSA name string attribute. If the name is not provided in
+/// the input text, its value is inferred from the SSA name of the operation's
+/// first result.
+///
+/// implicit-name ::= (`name` str-attr)?
+ParseResult parseImplicitSSAName(OpAsmParser &parser, StringAttr &attr);
+
 /// Parse an attribute dictionary and ensure that it contains a `name` field by
 /// inferring its value from the SSA name of the operation's first result if
 /// necessary.
@@ -32,6 +39,14 @@ ParseResult parseImplicitSSAName(OpAsmParser &parser, NamedAttrList &attrs);
 /// the SSA name of the operation's first result if necessary. Returns true if a
 /// name was inferred, false if `attrs` already contained a `name`.
 bool inferImplicitSSAName(OpAsmParser &parser, NamedAttrList &attrs);
+
+/// Print an implicit SSA name string attribute. If the given string attribute
+/// does not match the SSA name of the operation's first result, the name is
+/// explicitly printed. Prints a leading space in front of `name` if any name is
+/// present.
+///
+/// implicit-name ::= (`name` str-attr)?
+void printImplicitSSAName(OpAsmPrinter &p, Operation *op, StringAttr attr);
 
 /// Print an attribute dictionary and elide the `name` field if its value
 /// matches the SSA name of the operation's first result.

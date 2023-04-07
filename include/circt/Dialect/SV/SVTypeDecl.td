@@ -223,7 +223,7 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [HasCustomSSAName]> {
   let results = (outs InterfaceType : $result);
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? `` custom<SVImplicitSSAName>(attr-dict)
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
     `:` qualified(type($result))
   }];
 

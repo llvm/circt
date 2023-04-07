@@ -111,7 +111,7 @@ LogicalResult scheduling::scheduleCPSAT(SharedOperatorsProblem &prob,
     // constrained to satisfy maximum resource requirements.
     // See https://or.stackexchange.com/a/3363 for more details.
     CumulativeConstraint cumu = cpModel.AddCumulative(capacity.value());
-    for (auto &item : llvm::enumerate(taskIntervals)) {
+    for (const auto &item : llvm::enumerate(taskIntervals)) {
       auto i = item.index();
       auto taskInterval = item.value();
       IntVar demandVar = cpModel.NewIntVar(Domain(1)).WithName(

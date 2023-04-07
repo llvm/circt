@@ -14,6 +14,7 @@ def unittestmodule(generate=True,
                    run_passes=False,
                    print_after_passes=False,
                    emit_outputs=False,
+                   debug=False,
                    **kwargs):
   """
   Like @module, but additionally performs system instantiation, generation,
@@ -36,13 +37,13 @@ def unittestmodule(generate=True,
     # module generator functions
     setattr(builtins, mod.__name__, mod)
 
-    sys = System([mod])
+    sys = System([mod], output_directory=f"out_{func_or_class.__name__}")
     if generate:
       sys.generate()
       if print:
         sys.print()
       if run_passes:
-        sys.run_passes()
+        sys.run_passes(debug)
       if print_after_passes:
         sys.print()
       if emit_outputs:

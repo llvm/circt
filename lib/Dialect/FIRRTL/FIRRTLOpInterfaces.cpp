@@ -101,4 +101,34 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// Forceable
+//===----------------------------------------------------------------------===//
+
+RefType circt::firrtl::detail::getForceableResultType(bool forceable,
+                                                      Type type) {
+  auto base = dyn_cast_or_null<FIRRTLBaseType>(type);
+  if (!forceable || !base)
+    return {};
+  return circt::firrtl::RefType::get(base.getPassiveType(), forceable);
+}
+
+LogicalResult circt::firrtl::detail::verifyForceableOp(Forceable op) {
+  bool forceable = op.isForceable();
+  auto ref = op.getDataRef();
+  if ((bool)ref != forceable)
+    return op.emitOpError("must have ref result iff marked forceable");
+  if (!forceable)
+    return success();
+  auto data = op.getDataRaw();
+  auto baseType = dyn_cast<FIRRTLBaseType>(data.getType());
+  if (!baseType)
+    return op.emitOpError("has data that is not a base type");
+  auto expectedRefType = getForceableResultType(forceable, baseType);
+  if (ref.getType() != expectedRefType)
+    return op.emitOpError("reference result of incorrect type, found ")
+           << ref.getType() << ", expected " << expectedRefType;
+  return success();
+}
+
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.cpp.inc"

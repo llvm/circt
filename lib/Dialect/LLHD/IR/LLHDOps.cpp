@@ -123,7 +123,7 @@ struct constant_int_all_ones_matcher {
   bool match(Operation *op) {
     APInt value;
     return mlir::detail::constant_int_op_binder(&value).match(op) &&
-           value.isAllOnesValue();
+           value.isAllOnes();
   }
 };
 
@@ -537,6 +537,14 @@ ArrayRef<Type> llhd::EntityOp::getCallableResults() {
   return getFunctionType().getResults();
 }
 
+ArrayAttr llhd::EntityOp::getCallableArgAttrs() {
+  return getArgAttrs().value_or(nullptr);
+}
+
+ArrayAttr llhd::EntityOp::getCallableResAttrs() {
+  return getResAttrs().value_or(nullptr);
+}
+
 //===----------------------------------------------------------------------===//
 // ProcOp
 //===----------------------------------------------------------------------===//
@@ -704,6 +712,14 @@ Region *llhd::ProcOp::getCallableRegion() {
 
 ArrayRef<Type> llhd::ProcOp::getCallableResults() {
   return getFunctionType().getResults();
+}
+
+ArrayAttr llhd::ProcOp::getCallableArgAttrs() {
+  return getArgAttrs().value_or(nullptr);
+}
+
+ArrayAttr llhd::ProcOp::getCallableResAttrs() {
+  return getResAttrs().value_or(nullptr);
 }
 
 //===----------------------------------------------------------------------===//

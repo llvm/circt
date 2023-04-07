@@ -78,7 +78,8 @@ jobs:
             -DMLIR_DIR="$(pwd)/../llvm/install/lib/cmake/mlir/" `
             -DLLVM_DIR="$(pwd)/../llvm/install/lib/cmake/llvm/" `
             -DLLVM_EXTERNAL_LIT="$(pwd)/../llvm/build/bin/llvm-lit.py" `
-            -DCMAKE_BUILD_TYPE=RelWithDebInfo
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo `
+            -DLLVM_LIT_ARGS="-v"
           cmake --build . --config RelWithDebInfo
           cmake --build . --target check-circt
 

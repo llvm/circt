@@ -1826,9 +1826,9 @@ public:
       auto hwModuleOp = rewriter.create<hw::HWModuleOp>(
           op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
       auto args = hwModuleOp.getArguments().drop_back(2);
-      rewriter.mergeBlockBefore(&op.getBody().front(),
-                                hwModuleOp.getBodyBlock()->getTerminator(),
-                                args);
+      rewriter.inlineBlockBefore(&op.getBody().front(),
+                                 hwModuleOp.getBodyBlock()->getTerminator(),
+                                 args);
       hwModule = hwModuleOp;
     }
 
@@ -1841,7 +1841,7 @@ public:
           SymbolTable::lookupSymbolIn(parentOp, predecl.getValue());
       if (predeclModule) {
         if (failed(SymbolTable::replaceAllSymbolUses(
-                predeclModule, hwModule.moduleNameAttr(), parentOp)))
+                predeclModule, hwModule.getModuleNameAttr(), parentOp)))
           return failure();
         rewriter.eraseOp(predeclModule);
       }

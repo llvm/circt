@@ -95,7 +95,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
       return pipeInput;
 
     while (stages--) {
-      auto reg = b.create<RegOp>(pipeInput.getType(), clock, name);
+      auto reg = b.create<RegOp>(pipeInput.getType(), clock, name).getResult();
       if (gate) {
         b.create<WhenOp>(gate, /*withElseRegion*/ false,
                          [&]() { b.create<StrictConnectOp>(reg, pipeInput); });
@@ -350,11 +350,13 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
                          ImplicitLocOpBuilder &builder) {
     AnnotationSet annos(attr);
     SmallVector<Attribute> regAnnotations;
-    auto vecType = op.getType().cast<FVectorType>();
+    auto vecType = op.getResult().getType().cast<FVectorType>();
     for (auto anno : annos) {
       if (anno.isClass(memTapSourceClass)) {
-        for (size_t i = 0,
-                    e = op.getType().cast<FVectorType>().getNumElements();
+        for (size_t i = 0, e = op.getResult()
+                                   .getType()
+                                   .cast<FVectorType>()
+                                   .getNumElements();
              i != e; ++i) {
           NamedAttrList newAnno;
           newAnno.append("class", anno.getMember("class"));
@@ -398,7 +400,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
           (memOp.getName() + "_" + memOp.getPortName(index).getValue()).str(),
           memOp.getNameKind());
       result.replaceAllUsesWith(wire.getResult());
-      result = wire;
+      result = wire.getResult();
       // Create an access to all the common subfields.
       auto adr = getAddr(builder, result);
       auto enb = getEnable(builder, result);
@@ -418,16 +420,17 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
       }
       auto portKind = memOp.getPortKind(index);
       if (portKind == MemOp::PortKind::Read) {
-        generateRead(firMem, clk, adr, enb, dta, regOfVec, builder);
+        generateRead(firMem, clk, adr, enb, dta, regOfVec.getResult(), builder);
       } else if (portKind == MemOp::PortKind::Write) {
         auto mask = getMask(builder, result);
-        generateWrite(firMem, clk, adr, enb, mask, dta, regOfVec, builder);
+        generateWrite(firMem, clk, adr, enb, mask, dta, regOfVec.getResult(),
+                      builder);
       } else {
         auto wmode = getWmode(builder, result);
         auto wDta = getData(builder, result, true);
         auto mask = getMask(builder, result);
         generateReadWrite(firMem, clk, adr, enb, mask, wDta, dta, wmode,
-                          regOfVec, builder);
+                          regOfVec.getResult(), builder);
       }
     }
     // If a valid register is created, then replace all the debug port users
@@ -435,7 +438,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
     // RefSend on the register.
     if (regOfVec)
       for (auto r : debugPorts)
-        r.replaceAllUsesWith(builder.create<RefSendOp>(regOfVec));
+        r.replaceAllUsesWith(builder.create<RefSendOp>(regOfVec.getResult()));
   }
 
 private:

@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -73,13 +74,25 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
                               });
         os << '>';
       })
+      .Case<FEnumType>([&](auto fenumType) {
+        os << "enum<";
+        llvm::interleaveComma(fenumType, os,
+                              [&](FEnumType::EnumElement element) {
+                                os << element.name.getValue();
+                                os << ": ";
+                                printNestedType(element.type, os);
+                              });
+        os << '>';
+      })
       .Case<FVectorType>([&](auto vectorType) {
         os << "vector<";
         printNestedType(vectorType.getElementType(), os);
         os << ", " << vectorType.getNumElements() << '>';
       })
       .Case<RefType>([&](auto refType) {
-        os << "ref<";
+        if (refType.getForceable())
+          os << "rw";
+        os << "probe<";
         printNestedType(refType.getType(), os);
         os << '>';
       })
@@ -119,9 +132,11 @@ void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
 ///   ::= uint ('<' int '>')?
 ///   ::= analog ('<' int '>')?
 ///   ::= bundle '<' (bundle-elt (',' bundle-elt)*)? '>'
+///   ::= enum '<' (enum-elt (',' enum-elt)*)? '>'
 ///   ::= vector '<' type ',' int '>'
 ///
-/// bundle-elt ::= identifier ':' type
+/// bundle-elt ::= identifier flip? ':' type
+/// enum-elt ::= identifier ':' type
 /// ```
 static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
                                             Type &result) {
@@ -193,6 +208,42 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     return result = BundleType::get(context, elements), success();
   }
 
+  if (name.equals("enum")) {
+    SmallVector<FEnumType::EnumElement, 4> elements;
+
+    auto parseEnumElement = [&]() -> ParseResult {
+      std::string nameStr;
+      StringRef name;
+      FIRRTLBaseType type;
+
+      // The 'name' can be an identifier or an integer.
+      uint32_t fieldIntName;
+      auto intName = parser.parseOptionalInteger(fieldIntName);
+      if (intName.has_value()) {
+        if (failed(intName.value()))
+          return failure();
+        nameStr = llvm::utostr(fieldIntName);
+        name = nameStr;
+      } else {
+        // Otherwise must be an identifier.
+        if (parser.parseKeyword(&name))
+          return failure();
+      }
+
+      if (parser.parseColon() || parseNestedBaseType(type, parser))
+        return failure();
+
+      elements.push_back({StringAttr::get(context, name), type});
+      return success();
+    };
+
+    if (parser.parseCommaSeparatedList(mlir::AsmParser::Delimiter::LessGreater,
+                                       parseEnumElement))
+      return failure();
+
+    return result = FEnumType::get(context, elements), success();
+  }
+
   if (name.equals("vector")) {
     FIRRTLBaseType elementType;
     uint64_t width = 0;
@@ -205,17 +256,32 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     return result = FVectorType::get(elementType, width), success();
   }
 
-  if (name.equals("ref")) {
+  // For now, support both firrtl.ref and firrtl.probe.
+  if (name.equals("ref") || name.equals("probe")) {
     FIRRTLBaseType type;
     if (parser.parseLess() || parseNestedBaseType(type, parser) ||
         parser.parseGreater())
       return failure();
 
     if (failed(RefType::verify(
-            [&]() { return parser.emitError(parser.getNameLoc()); }, type)))
+            [&]() { return parser.emitError(parser.getNameLoc()); }, type,
+            false)))
       return failure();
 
-    return result = RefType::get(type), success();
+    return result = RefType::get(type, false), success();
+  }
+  if (name.equals("rwprobe")) {
+    FIRRTLBaseType type;
+    if (parser.parseLess() || parseNestedBaseType(type, parser) ||
+        parser.parseGreater())
+      return failure();
+
+    if (failed(RefType::verify(
+            [&]() { return parser.emitError(parser.getNameLoc()); }, type,
+            true)))
+      return failure();
+
+    return result = RefType::get(type, true), success();
   }
 
   return {};
@@ -349,7 +415,7 @@ bool FIRRTLBaseType::isGround() {
   return TypeSwitch<FIRRTLBaseType, bool>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType>([](Type) { return true; })
-      .Case<BundleType, FVectorType>([](Type) { return false; })
+      .Case<BundleType, FVectorType, FEnumType>([](Type) { return false; })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return false;
@@ -357,7 +423,7 @@ bool FIRRTLBaseType::isGround() {
 }
 
 /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
-RecursiveTypeProperties FIRRTLBaseType::getRecursiveTypeProperties() {
+RecursiveTypeProperties FIRRTLBaseType::getRecursiveTypeProperties() const {
   return TypeSwitch<FIRRTLBaseType, RecursiveTypeProperties>(*this)
       .Case<ClockType, ResetType, AsyncResetType>([](Type) {
         return RecursiveTypeProperties{true, false, false};
@@ -374,6 +440,9 @@ RecursiveTypeProperties FIRRTLBaseType::getRecursiveTypeProperties() {
       .Case<FVectorType>([](FVectorType vectorType) {
         return vectorType.getRecursiveTypeProperties();
       })
+      .Case<FEnumType>([](FEnumType enumType) {
+        return enumType.getRecursiveTypeProperties();
+      })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return RecursiveTypeProperties{};
@@ -384,7 +453,7 @@ RecursiveTypeProperties FIRRTLBaseType::getRecursiveTypeProperties() {
 FIRRTLBaseType FIRRTLBaseType::getPassiveType() {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
-            AnalogType>([&](Type) { return *this; })
+            AnalogType, FEnumType>([&](Type) { return *this; })
       .Case<BundleType>(
           [](BundleType bundleType) { return bundleType.getPassiveType(); })
       .Case<FVectorType>(
@@ -486,9 +555,10 @@ uint64_t FIRRTLBaseType::getMaxFieldID() {
       });
 }
 
-std::pair<FIRRTLBaseType, uint64_t>
+std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
 FIRRTLBaseType::getSubTypeByFieldID(uint64_t fieldID) {
-  return TypeSwitch<FIRRTLBaseType, std::pair<FIRRTLBaseType, uint64_t>>(*this)
+  return TypeSwitch<FIRRTLBaseType,
+                    std::pair<circt::hw::FieldIDTypeInterface, unsigned>>(*this)
       .Case<AnalogType, ClockType, ResetType, AsyncResetType, SIntType,
             UIntType>([&](FIRRTLBaseType t) {
         assert(!fieldID && "non-aggregate types must have a field id of 0");
@@ -502,8 +572,9 @@ FIRRTLBaseType::getSubTypeByFieldID(uint64_t fieldID) {
       });
 }
 
-FIRRTLBaseType FIRRTLBaseType::getFinalTypeByFieldID(uint64_t fieldID) {
-  std::pair<FIRRTLBaseType, uint64_t> pair(*this, fieldID);
+circt::hw::FieldIDTypeInterface
+FIRRTLBaseType::getFinalTypeByFieldID(uint64_t fieldID) {
+  std::pair<circt::hw::FieldIDTypeInterface, uint64_t> pair(*this, fieldID);
   while (pair.second)
     pair = pair.first.getSubTypeByFieldID(pair.second);
   return pair.first;
@@ -808,7 +879,7 @@ auto BundleType::getElements() const -> ArrayRef<BundleElement> {
 }
 
 /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
-RecursiveTypeProperties BundleType::getRecursiveTypeProperties() {
+RecursiveTypeProperties BundleType::getRecursiveTypeProperties() const {
   auto flags = getImpl()->passiveContainsAnalogTypeInfo.getInt();
   return RecursiveTypeProperties::fromFlags(flags);
 }
@@ -920,7 +991,7 @@ BundleType::getIndexAndSubfieldID(uint64_t fieldID) {
   return {index, fieldID - elementFieldID};
 }
 
-std::pair<FIRRTLBaseType, uint64_t>
+std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
 BundleType::getSubTypeByFieldID(uint64_t fieldID) {
   if (fieldID == 0)
     return {*this, 0};
@@ -982,7 +1053,7 @@ FIRRTLBaseType FVectorType::getElementType() const {
 size_t FVectorType::getNumElements() const { return getImpl()->value.second; }
 
 /// Return the recursive properties of the type.
-RecursiveTypeProperties FVectorType::getRecursiveTypeProperties() {
+RecursiveTypeProperties FVectorType::getRecursiveTypeProperties() const {
   auto flags = getImpl()->passiveContainsAnalogTypeInfo.getInt();
   return RecursiveTypeProperties::fromFlags(flags);
 }
@@ -1025,7 +1096,7 @@ FVectorType::getIndexAndSubfieldID(uint64_t fieldID) {
   return {index, fieldID - elementFieldID};
 }
 
-std::pair<FIRRTLBaseType, uint64_t>
+std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
 FVectorType::getSubTypeByFieldID(uint64_t fieldID) {
   if (fieldID == 0)
     return {*this, 0};
@@ -1046,15 +1117,183 @@ std::pair<uint64_t, bool> FVectorType::rootChildFieldID(uint64_t fieldID,
 }
 
 //===----------------------------------------------------------------------===//
+// Enum Type
+//===----------------------------------------------------------------------===//
+
+struct circt::firrtl::detail::FEnumTypeStorage : mlir::TypeStorage {
+  using KeyTy = ArrayRef<FEnumType::EnumElement>;
+
+  FEnumTypeStorage(KeyTy elements)
+      : elements(elements.begin(), elements.end()) {
+    RecursiveTypeProperties props{true, false, false};
+    uint64_t fieldID = 0;
+    fieldIDs.reserve(elements.size());
+    for (auto &element : elements) {
+      auto type = element.type;
+      auto eltInfo = type.getRecursiveTypeProperties();
+      props.isPassive &= eltInfo.isPassive;
+      props.containsAnalog |= eltInfo.containsAnalog;
+      props.hasUninferredWidth |= eltInfo.hasUninferredWidth;
+      fieldID += 1;
+      fieldIDs.push_back(fieldID);
+      // Increment the field ID for the next field by the number of subfields.
+      fieldID += type.getMaxFieldID();
+    }
+    maxFieldID = fieldID;
+    recProps = props;
+  }
+
+  bool operator==(const KeyTy &key) const { return key == KeyTy(elements); }
+
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_combine_range(key.begin(), key.end());
+  }
+
+  static FEnumTypeStorage *construct(TypeStorageAllocator &allocator,
+                                     KeyTy key) {
+    return new (allocator.allocate<FEnumTypeStorage>()) FEnumTypeStorage(key);
+  }
+
+  SmallVector<FEnumType::EnumElement, 4> elements;
+  SmallVector<uint64_t, 4> fieldIDs;
+  uint64_t maxFieldID;
+
+  RecursiveTypeProperties recProps;
+};
+
+ArrayRef<FEnumType::EnumElement> FEnumType::getElements() const {
+  return getImpl()->elements;
+}
+
+/// Return a pair with the 'isPassive' and 'containsAnalog' bits.
+RecursiveTypeProperties FEnumType::getRecursiveTypeProperties() const {
+  return getImpl()->recProps;
+}
+
+std::optional<unsigned> FEnumType::getElementIndex(StringAttr name) {
+  for (const auto &it : llvm::enumerate(getElements())) {
+    auto element = it.value();
+    if (element.name == name) {
+      return unsigned(it.index());
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<unsigned> FEnumType::getElementIndex(StringRef name) {
+  for (const auto &it : llvm::enumerate(getElements())) {
+    auto element = it.value();
+    if (element.name.getValue() == name) {
+      return unsigned(it.index());
+    }
+  }
+  return std::nullopt;
+}
+
+StringRef FEnumType::getElementName(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in enum");
+  return getElements()[index].name.getValue();
+}
+
+std::optional<FEnumType::EnumElement> FEnumType::getElement(StringAttr name) {
+  if (auto maybeIndex = getElementIndex(name))
+    return getElements()[*maybeIndex];
+  return std::nullopt;
+}
+
+std::optional<FEnumType::EnumElement> FEnumType::getElement(StringRef name) {
+  if (auto maybeIndex = getElementIndex(name))
+    return getElements()[*maybeIndex];
+  return std::nullopt;
+}
+
+/// Look up an element by index.
+FEnumType::EnumElement FEnumType::getElement(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in enum");
+  return getElements()[index];
+}
+
+FIRRTLBaseType FEnumType::getElementType(StringAttr name) {
+  auto element = getElement(name);
+  return element ? element->type : FIRRTLBaseType();
+}
+
+FIRRTLBaseType FEnumType::getElementType(StringRef name) {
+  auto element = getElement(name);
+  return element ? element->type : FIRRTLBaseType();
+}
+
+FIRRTLBaseType FEnumType::getElementType(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in enum");
+  return getElements()[index].type;
+}
+
+uint64_t FEnumType::getFieldID(uint64_t index) {
+  return getImpl()->fieldIDs[index];
+}
+
+uint64_t FEnumType::getIndexForFieldID(uint64_t fieldID) {
+  assert(!getElements().empty() && "Enum must have >0 fields");
+  auto fieldIDs = getImpl()->fieldIDs;
+  auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
+  return std::distance(fieldIDs.begin(), it);
+}
+
+std::pair<uint64_t, uint64_t>
+FEnumType::getIndexAndSubfieldID(uint64_t fieldID) {
+  auto index = getIndexForFieldID(fieldID);
+  auto elementFieldID = getFieldID(index);
+  return {index, fieldID - elementFieldID};
+}
+
+std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
+FEnumType::getSubTypeByFieldID(uint64_t fieldID) {
+  if (fieldID == 0)
+    return {*this, 0};
+  auto fieldIDs = getImpl()->fieldIDs;
+  auto subfieldIndex = getIndexForFieldID(fieldID);
+  auto subfieldType = getElementType(subfieldIndex);
+  auto subfieldID = fieldID - getFieldID(subfieldIndex);
+  return {subfieldType, subfieldID};
+}
+
+uint64_t FEnumType::getMaxFieldID() { return getImpl()->maxFieldID; }
+
+std::pair<uint64_t, bool> FEnumType::rootChildFieldID(uint64_t fieldID,
+                                                      uint64_t index) {
+  auto childRoot = getFieldID(index);
+  auto rangeEnd = index + 1 >= getNumElements() ? getMaxFieldID()
+                                                : (getFieldID(index + 1) - 1);
+  return std::make_pair(fieldID - childRoot,
+                        fieldID >= childRoot && fieldID <= rangeEnd);
+}
+
+auto FEnumType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
+                       ArrayRef<EnumElement> elements) -> LogicalResult {
+  for (auto &elt : elements) {
+    auto r = elt.type.getRecursiveTypeProperties();
+    if (!r.isPassive)
+      return emitErrorFn() << "enum field '" << elt.name << "' not passive";
+    if (r.containsAnalog)
+      return emitErrorFn() << "enum field '" << elt.name << "' contains analog";
+    // TODO: exclude reference containing
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // RefType
 //===----------------------------------------------------------------------===//
 
-auto RefType::get(FIRRTLBaseType type) -> RefType {
-  return Base::get(type.getContext(), type);
+auto RefType::get(FIRRTLBaseType type, bool forceable) -> RefType {
+  return Base::get(type.getContext(), type, forceable);
 }
 
 auto RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
-                     FIRRTLBaseType base) -> LogicalResult {
+                     FIRRTLBaseType base, bool forceable) -> LogicalResult {
   if (!base.isPassive())
     return emitErrorFn() << "reference base type must be passive";
   return success();
@@ -1089,7 +1328,7 @@ LogicalResult AnalogType::verify(function_ref<InFlightDiagnostic()> emitError,
 void FIRRTLDialect::registerTypes() {
   addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
            // Derived Types
-           BundleType, FVectorType, RefType>();
+           BundleType, FVectorType, FEnumType, RefType>();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike
@@ -1114,6 +1353,16 @@ std::optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
             width += *w;
           }
           return width;
+        })
+        .Case<FEnumType>([&](FEnumType fenum) -> std::optional<int64_t> {
+          int64_t width = 0;
+          for (auto &elt : fenum) {
+            auto w = getBitWidth(elt.type);
+            if (!w.has_value())
+              return std::nullopt;
+            width = std::max(width, *w);
+          }
+          return width + llvm::PowerOf2Ceil(fenum.getNumElements());
         })
         .Case<FVectorType>([&](auto vector) -> std::optional<int64_t> {
           auto w = getBitWidth(vector.getElementType());

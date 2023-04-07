@@ -128,26 +128,27 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
           })
           .Case<SIntType, UIntType>([&](auto type) {
             return builder.create<ConstantOp>(
-                type, APInt::getNullValue(type.getWidth().value_or(1)));
+                type, APInt::getZero(type.getWidth().value_or(1)));
           })
           .Case<BundleType>([&](auto type) {
             auto wireOp = builder.create<WireOp>(type);
-            for (auto &field : llvm::enumerate(type)) {
+            for (auto field : llvm::enumerate(type)) {
               auto zero = createZeroValue(builder, field.value().type, cache);
-              auto acc = builder.create<SubfieldOp>(field.value().type, wireOp,
-                                                    field.index());
+              auto acc = builder.create<SubfieldOp>(
+                  field.value().type, wireOp.getResult(), field.index());
               builder.create<StrictConnectOp>(acc, zero);
             }
-            return wireOp;
+            return wireOp.getResult();
           })
           .Case<FVectorType>([&](auto type) {
             auto wireOp = builder.create<WireOp>(type);
             auto zero = createZeroValue(builder, type.getElementType(), cache);
             for (unsigned i = 0, e = type.getNumElements(); i < e; ++i) {
-              auto acc = builder.create<SubindexOp>(zero.getType(), wireOp, i);
+              auto acc = builder.create<SubindexOp>(zero.getType(),
+                                                    wireOp.getResult(), i);
               builder.create<StrictConnectOp>(acc, zero);
             }
-            return wireOp;
+            return wireOp.getResult();
           })
           .Case<ResetType, AnalogType>(
               [&](auto type) { return builder.create<InvalidValueOp>(type); })
@@ -748,7 +749,8 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
         .Case<RefSendOp>([&](auto op) {
           // Trace using base types.
           traceResets(op.getType().getType(), op.getResult(), 0,
-                      op.getBase().getType(), op.getBase(), 0, op.getLoc());
+                      op.getBase().getType().getPassiveType(), op.getBase(), 0,
+                      op.getLoc());
         })
         .Case<RefResolveOp>([&](auto op) {
           // Trace using base types.
@@ -1618,14 +1620,15 @@ LogicalResult InferResetsPass::implementAsyncReset(FModuleOp module,
                    << "- Promoting node to wire for move: " << nodeOp << "\n");
         ImplicitLocOpBuilder builder(nodeOp.getLoc(), nodeOp);
         auto wireOp = builder.create<WireOp>(
-            nodeOp.getType(), nodeOp.getNameAttr(), nodeOp.getNameKind(),
-            nodeOp.getAnnotationsAttr(), nodeOp.getInnerSymAttr());
-        builder.create<StrictConnectOp>(wireOp, nodeOp.getInput());
+            nodeOp.getResult().getType(), nodeOp.getNameAttr(),
+            nodeOp.getNameKindAttr(), nodeOp.getAnnotationsAttr(),
+            nodeOp.getInnerSymAttr(), nodeOp.getForceableAttr());
+        builder.create<StrictConnectOp>(wireOp.getResult(), nodeOp.getInput());
         nodeOp->replaceAllUsesWith(wireOp);
         nodeOp.erase();
         resetOp = wireOp;
-        actualReset = wireOp;
-        domain.existingValue = wireOp;
+        actualReset = wireOp.getResult();
+        domain.existingValue = wireOp.getResult();
       }
 
       // Determine the block into which the reset declaration needs to be moved.
@@ -1732,12 +1735,14 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
       return;
 
     LLVM_DEBUG(llvm::dbgs() << "- Adding async reset to " << regOp << "\n");
-    auto zero = createZeroValue(builder, regOp.getType());
+    auto zero = createZeroValue(builder, regOp.getResult().getType());
     auto newRegOp = builder.create<RegResetOp>(
-        regOp.getType(), regOp.getClockVal(), actualReset, zero,
+        regOp.getResult().getType(), regOp.getClockVal(), actualReset, zero,
         regOp.getNameAttr(), regOp.getNameKindAttr(), regOp.getAnnotations(),
-        regOp.getInnerSymAttr());
-    regOp.getResult().replaceAllUsesWith(newRegOp);
+        regOp.getInnerSymAttr(), regOp.getForceableAttr());
+    regOp.getResult().replaceAllUsesWith(newRegOp.getResult());
+    if (regOp.getForceable())
+      regOp.getRef().replaceAllUsesWith(newRegOp.getRef());
     regOp->erase();
     return;
   }
@@ -1769,7 +1774,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
 
     // Replace the existing reset with the async reset.
     builder.setInsertionPoint(regOp);
-    auto zero = createZeroValue(builder, regOp.getType());
+    auto zero = createZeroValue(builder, regOp.getResult().getType());
     regOp.getResetSignalMutable().assign(actualReset);
     regOp.getResetValueMutable().assign(zero);
   }
@@ -1780,12 +1785,14 @@ LogicalResult InferResetsPass::verifyNoAbstractReset() {
   for (FModuleLike module :
        getOperation().getBodyBlock()->getOps<FModuleLike>()) {
     for (PortInfo port : module.getPorts()) {
-      if (auto portType = port.type.dyn_cast<FIRRTLType>()) {
-        if (getBaseType(portType).isa<ResetType>()) {
-          module->emitOpError() << "has an abstract reset type port \""
-                                << port.getName() << "\" after InferResets";
-          hasAbstractResetPorts = true;
-        }
+      if (getBaseOfType<ResetType>(port.type)) {
+        auto diag = emitError(port.loc)
+                    << "a port \"" << port.getName()
+                    << "\" with abstract reset type was unable to be "
+                       "inferred by InferResets (is this a top-level port?)";
+        diag.attachNote(module->getLoc())
+            << "the module with this uninferred reset port was defined here";
+        hasAbstractResetPorts = true;
       }
     }
   }

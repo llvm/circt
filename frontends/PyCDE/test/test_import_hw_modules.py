@@ -1,10 +1,12 @@
-# RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
+# RUN: %PYTHON% %s %t | FileCheck %s
 
 from pycde.circt.ir import Module as IrModule
 from pycde.circt.dialects import hw
 
 from pycde import Input, Output, System, generator, Module, types
 from pycde.module import import_hw_module
+
+import sys
 
 mlir_module = IrModule.parse("""
 hw.module @add(%a: i1, %b: i1) -> (out: i1) {
@@ -41,7 +43,7 @@ class Top(Module):
     ports.out1 = outs[1]
 
 
-system = System([Top])
+system = System([Top], output_directory=sys.argv[1])
 system.generate()
 
 # CHECK: msft.module @Top {} (%a: i1, %b: i1) -> (out0: i1, out1: i1)

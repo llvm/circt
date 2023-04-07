@@ -386,7 +386,7 @@ private:
     assert(addrPorts.size() == addressValues.size() &&
            "Mismatch between number of address ports of the provided memory "
            "and address assignment values");
-    for (auto &address : enumerate(addressValues))
+    for (auto address : enumerate(addressValues))
       rewriter.create<calyx::AssignOp>(loc, addrPorts[address.index()],
                                        address.value());
   }
@@ -751,7 +751,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
     SmallVector<calyx::PortInfo> inPorts, outPorts;
     FunctionType funcType = funcOp.getFunctionType();
     unsigned extMemCounter = 0;
-    for (auto &arg : enumerate(funcOp.getArguments())) {
+    for (auto arg : enumerate(funcOp.getArguments())) {
       if (arg.value().getType().isa<MemRefType>()) {
         /// External memories
         auto memName =
@@ -771,7 +771,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
             DictionaryAttr::get(rewriter.getContext(), {})});
       }
     }
-    for (auto &res : enumerate(funcType.getResults())) {
+    for (auto res : enumerate(funcType.getResults())) {
       funcOpResultMapping[res.index()] = outPorts.size();
       outPorts.push_back(calyx::PortInfo{
           rewriter.getStringAttr("out" + std::to_string(res.index())),

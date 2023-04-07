@@ -33,14 +33,6 @@ def InstanceOp : MSFTOp<"instance", [
     // determined.
     StringAttr getResultName(size_t i);
 
-    /// Instance name is the same as the symbol name. This may change in the
-    /// future.
-    StringRef instanceName() {
-      return getSymName();
-    }
-    StringAttr instanceNameAttr() {
-      return getSymNameAttr();
-    }
     /// Check that the operands and results match the module specified.
     LogicalResult verifySignatureMatch(const circt::hw::ModulePortInfo&);
 

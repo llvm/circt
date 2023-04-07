@@ -206,7 +206,7 @@ void WireDFTPass::runOnOperation() {
       instanceGraph.lookup(dut), [&](InstanceRecord *node) {
         auto module = node->getTarget()->getModule();
         // If this is a clock gate, record the module and return true.
-        if (module.moduleName().startswith("EICG_wrapper")) {
+        if (module.getModuleName().startswith("EICG_wrapper")) {
           clockGates.insert(node);
           return true;
         }

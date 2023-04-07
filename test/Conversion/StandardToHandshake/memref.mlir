@@ -47,13 +47,13 @@ func.func @load_store(%1 : index) {
 // CHECK:           %[[VAL_12:.*]], %[[VAL_13:.*]] = cond_br %[[VAL_8]], %[[VAL_10]] : index
 // CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]] = cond_br %[[VAL_8]], %[[VAL_11]] : none
 // CHECK:           %[[VAL_16:.*]] = merge %[[VAL_12]] : index
-// CHECK:           %[[VAL_17:.*]], %[[VAL_18:.*]] = control_merge %[[VAL_14]] : none
+// CHECK:           %[[VAL_17:.*]], %[[VAL_18:.*]] = control_merge %[[VAL_14]] : none, index
 // CHECK:           %[[VAL_19:.*]] = join %[[VAL_17]], %[[VAL_3]]#0 : none, none
 // CHECK:           %[[VAL_20:.*]] = constant %[[VAL_17]] {value = 1 : i32} : i32
 // CHECK:           %[[VAL_4]], %[[VAL_5]] = store {{\[}}%[[VAL_16]]] %[[VAL_20]], %[[VAL_17]] : index, i32
 // CHECK:           %[[VAL_21:.*]] = br %[[VAL_19]] : none
 // CHECK:           %[[VAL_22:.*]] = merge %[[VAL_13]] : index
-// CHECK:           %[[VAL_23:.*]], %[[VAL_24:.*]] = control_merge %[[VAL_15]] : none
+// CHECK:           %[[VAL_23:.*]], %[[VAL_24:.*]] = control_merge %[[VAL_15]] : none, index
 // CHECK:           %[[VAL_25:.*]] = join %[[VAL_23]], %[[VAL_3]]#1 : none, none
 // CHECK:           %[[VAL_26:.*]] = constant %[[VAL_23]] {value = 2 : i32} : i32
 // CHECK:           %[[VAL_6]], %[[VAL_7]] = store {{\[}}%[[VAL_22]]] %[[VAL_26]], %[[VAL_23]] : index, i32
@@ -94,7 +94,7 @@ func.func @store_mul_blocks(%arg0 : i1, %arg1 : index) {
 // CHECK:           %[[VAL_12:.*]], %[[VAL_13:.*]] = cond_br %[[VAL_6]], %[[VAL_10]] : none
 // CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]] = cond_br %[[VAL_6]], %[[VAL_11]] : i32
 // CHECK:           %[[VAL_16:.*]] = merge %[[VAL_14]] : i32
-// CHECK:           %[[VAL_17:.*]], %[[VAL_18:.*]] = control_merge %[[VAL_12]] : none
+// CHECK:           %[[VAL_17:.*]], %[[VAL_18:.*]] = control_merge %[[VAL_12]] : none, index
 // CHECK:           %[[VAL_19:.*]] = constant %[[VAL_17]] {value = 1 : i32} : i32
 // CHECK:           %[[VAL_20:.*]] = arith.addi %[[VAL_16]], %[[VAL_19]] : i32
 // CHECK:           %[[VAL_21:.*]] = br %[[VAL_17]] : none

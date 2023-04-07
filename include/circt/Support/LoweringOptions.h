@@ -151,6 +151,9 @@ struct LoweringOptions {
   /// If true, emit a comment wherever an instance wasn't printed, because
   /// it's emitted elsewhere as a bind.
   bool emitBindComments = false;
+
+  /// If true, do not emit a version comment at the top of each verilog file.
+  bool omitVersionComment = false;
 };
 } // namespace circt
 

@@ -18,6 +18,7 @@ configure_lit_site_cfg(
 set(CIRCT_TEST_DEPENDS
   FileCheck count not
   split-file
+  arcilator
   circt-capi-ir-test
   circt-as
   circt-dis

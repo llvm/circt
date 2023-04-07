@@ -78,81 +78,27 @@ findInstantiatedModule(firrtl::InstanceOp instOp, SymbolCache &symbols) {
   return moduleOp ? std::optional(moduleOp) : std::nullopt;
 }
 
-/// Compute the number of operations in a module. Recursively add the number of
-/// operations in instantiated modules.
-/// @param countMultipleInstantiations: If a module is instantiated multiple
-/// times and this flag is false, count it only once (to better represent code
-/// size reduction rather than area reduction of the actual hardware).
-/// @param countElsewhereInstantiated: If a module is also instantiated in
-/// another subtree of the design then don't count it if this flag is false.
-static uint64_t computeTransitiveModuleSize(
-    SmallVector<std::pair<firrtl::FModuleOp, uint64_t>> &modules,
-    SmallVector<Operation *> &instances, bool countMultipleInstantiations,
-    bool countElsewhereInstantiated) {
-  std::sort(instances.begin(), instances.end());
-  std::sort(modules.begin(), modules.end(),
-            [](auto a, auto b) { return a.first < b.first; });
+/// Utility to track the transitive size of modules.
+struct ModuleSizeCache {
+  void clear() { moduleSizes.clear(); }
 
-  auto *end = modules.end();
-  if (!countMultipleInstantiations)
-    end = std::unique(modules.begin(), modules.end(),
-                      [](auto a, auto b) { return a.first == b.first; });
-
-  uint64_t totalOperations = 0;
-
-  for (auto *iter = modules.begin(); iter != end; ++iter) {
-    auto moduleOp = iter->first;
-
-    auto allInstancesCovered = [&]() {
-      return llvm::all_of(
-          *moduleOp.getSymbolUses(moduleOp->getParentOfType<ModuleOp>()),
-          [&](auto symbolUse) {
-            return std::binary_search(instances.begin(), instances.end(),
-                                      symbolUse.getUser());
-          });
-    };
-
-    if (countElsewhereInstantiated || allInstancesCovered())
-      totalOperations += iter->second;
+  uint64_t getModuleSize(Operation *module, SymbolCache &symbols) {
+    if (auto it = moduleSizes.find(module); it != moduleSizes.end())
+      return it->second;
+    uint64_t size = 1;
+    module->walk([&](Operation *op) {
+      size += 1;
+      if (auto instOp = dyn_cast<firrtl::InstanceOp>(op))
+        if (auto instModule = findInstantiatedModule(instOp, symbols))
+          size += getModuleSize(*instModule, symbols);
+    });
+    moduleSizes.insert({module, size});
+    return size;
   }
 
-  return totalOperations;
-}
-
-static LogicalResult collectInstantiatedModules(
-    std::optional<firrtl::FModuleOp> fmoduleOp, SymbolCache &symbols,
-    SmallVector<std::pair<firrtl::FModuleOp, uint64_t>> &modules,
-    SmallVector<Operation *> &instances) {
-  if (!fmoduleOp)
-    return failure();
-
-  uint64_t opCount = 0;
-  WalkResult result = fmoduleOp->walk([&](Operation *op) {
-    if (auto instOp = dyn_cast<firrtl::InstanceOp>(op)) {
-      auto moduleOp = findInstantiatedModule(instOp, symbols);
-      if (!moduleOp) {
-        LLVM_DEBUG(llvm::dbgs()
-                   << "- `" << fmoduleOp->moduleName()
-                   << "` recursively instantiated non-FIRRTL module.\n");
-        return WalkResult::interrupt();
-      }
-
-      if (failed(collectInstantiatedModules(moduleOp, symbols, modules,
-                                            instances)))
-        return WalkResult::interrupt();
-
-      instances.push_back(instOp);
-    }
-
-    return WalkResult::advance();
-  });
-  if (result.wasInterrupted())
-    return failure();
-
-  modules.push_back(std::make_pair(*fmoduleOp, opCount));
-
-  return success();
-}
+private:
+  llvm::DenseMap<Operation *, uint64_t> moduleSizes;
+};
 
 /// Check that all connections to a value are invalids.
 static bool onlyInvalidated(Value arg) {
@@ -278,20 +224,13 @@ struct ModuleExternalizer : public Reduction {
   void beforeReduction(mlir::ModuleOp op) override {
     nlaRemover.clear();
     symbols.clear();
+    moduleSizes.clear();
   }
   void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
 
   uint64_t match(Operation *op) override {
-    if (auto fmoduleOp = dyn_cast<firrtl::FModuleOp>(op)) {
-      SmallVector<std::pair<firrtl::FModuleOp, uint64_t>> modules;
-      SmallVector<Operation *> instances;
-      if (failed(collectInstantiatedModules(fmoduleOp, symbols, modules,
-                                            instances)))
-        return 0;
-      return computeTransitiveModuleSize(modules, instances,
-                                         /*countMultipleInstantiations=*/false,
-                                         /*countElsewhereInstantiated=*/true);
-    }
+    if (isa<firrtl::FModuleOp>(op))
+      return moduleSizes.getModuleSize(op, symbols);
     return 0;
   }
 
@@ -302,7 +241,8 @@ struct ModuleExternalizer : public Reduction {
     builder.create<firrtl::FExtModuleOp>(
         module->getLoc(),
         module->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()),
-        module.getPorts(), StringRef(), module.getAnnotationsAttr());
+        module.getConventionAttr(), module.getPorts(), StringRef(),
+        module.getAnnotationsAttr());
     module->erase();
     return success();
   }
@@ -311,6 +251,7 @@ struct ModuleExternalizer : public Reduction {
 
   SymbolCache symbols;
   NLARemover nlaRemover;
+  ModuleSizeCache moduleSizes;
 };
 
 /// Invalidate all the leaf fields of a value with a given flippedness by
@@ -326,7 +267,7 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
 
   // Descend into bundles by creating subfield ops.
   if (auto bundleType = type.dyn_cast<firrtl::BundleType>()) {
-    for (auto &element : llvm::enumerate(bundleType.getElements())) {
+    for (auto element : llvm::enumerate(bundleType.getElements())) {
       auto subfield =
           builder.createOrFold<firrtl::SubfieldOp>(value, element.index());
       invalidateOutputs(builder, subfield, invalidCache,
@@ -366,7 +307,7 @@ static void connectToLeafs(ImplicitLocOpBuilder &builder, Value dest,
   if (!type)
     return;
   if (auto bundleType = type.dyn_cast<firrtl::BundleType>()) {
-    for (auto &element : llvm::enumerate(bundleType.getElements()))
+    for (auto element : llvm::enumerate(bundleType.getElements()))
       connectToLeafs(builder,
                      builder.create<firrtl::SubfieldOp>(dest, element.index()),
                      value);
@@ -400,7 +341,7 @@ static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
   if (!type)
     return;
   if (auto bundleType = type.dyn_cast<firrtl::BundleType>()) {
-    for (auto &element : llvm::enumerate(bundleType.getElements()))
+    for (auto element : llvm::enumerate(bundleType.getElements()))
       reduceXor(
           builder, into,
           builder.createOrFold<firrtl::SubfieldOp>(value, element.index()));
@@ -430,6 +371,7 @@ struct InstanceStubber : public Reduction {
     erasedModules.clear();
     symbols.clear();
     nlaRemover.clear();
+    moduleSizes.clear();
   }
   void afterReduction(mlir::ModuleOp op) override {
     // Look into deleted modules to find additional instances that are no longer
@@ -464,17 +406,9 @@ struct InstanceStubber : public Reduction {
   }
 
   uint64_t match(Operation *op) override {
-    if (auto instOp = dyn_cast<firrtl::InstanceOp>(op)) {
-      auto fmoduleOp = findInstantiatedModule(instOp, symbols);
-      SmallVector<std::pair<firrtl::FModuleOp, uint64_t>> modules;
-      SmallVector<Operation *> instances;
-      if (failed(collectInstantiatedModules(fmoduleOp, symbols, modules,
-                                            instances)))
-        return 0;
-      return computeTransitiveModuleSize(modules, instances,
-                                         /*countMultipleInstantiations=*/false,
-                                         /*countElsewhereInstantiated=*/false);
-    }
+    if (auto instOp = dyn_cast<firrtl::InstanceOp>(op))
+      if (auto fmoduleOp = findInstantiatedModule(instOp, symbols))
+        return moduleSizes.getModuleSize(*fmoduleOp, symbols);
     return 0;
   }
 
@@ -488,9 +422,12 @@ struct InstanceStubber : public Reduction {
       auto result = instOp.getResult(i);
       auto name = builder.getStringAttr(Twine(instOp.getName()) + "_" +
                                         instOp.getPortNameStr(i));
-      auto wire = builder.create<firrtl::WireOp>(
-          result.getType(), name, firrtl::NameKindEnum::DroppableName,
-          instOp.getPortAnnotation(i), StringAttr{});
+      auto wire =
+          builder
+              .create<firrtl::WireOp>(result.getType(), name,
+                                      firrtl::NameKindEnum::DroppableName,
+                                      instOp.getPortAnnotation(i), StringAttr{})
+              .getResult();
       invalidateOutputs(builder, wire, invalidCache,
                         instOp.getPortDirection(i) == firrtl::Direction::In);
       result.replaceAllUsesWith(wire);
@@ -516,6 +453,7 @@ struct InstanceStubber : public Reduction {
   NLARemover nlaRemover;
   llvm::DenseSet<Operation *> erasedInsts;
   llvm::DenseSet<Operation *> erasedModules;
+  ModuleSizeCache moduleSizes;
 };
 
 /// A sample reduction pattern that maps `firrtl.mem` to a set of invalidated
@@ -535,9 +473,12 @@ struct MemoryStubber : public Reduction {
       auto result = memOp.getResult(i);
       auto name = builder.getStringAttr(Twine(memOp.getName()) + "_" +
                                         memOp.getPortNameStr(i));
-      auto wire = builder.create<firrtl::WireOp>(
-          result.getType(), name, firrtl::NameKindEnum::DroppableName,
-          memOp.getPortAnnotation(i), StringAttr{});
+      auto wire =
+          builder
+              .create<firrtl::WireOp>(result.getType(), name,
+                                      firrtl::NameKindEnum::DroppableName,
+                                      memOp.getPortAnnotation(i), StringAttr{})
+              .getResult();
       invalidateOutputs(builder, wire, invalidCache, true);
       result.replaceAllUsesWith(wire);
 
@@ -592,7 +533,7 @@ struct MemoryStubber : public Reduction {
 
 /// Starting at the given `op`, traverse through it and its operands and erase
 /// operations that have no more uses.
-static void pruneUnusedOps(Operation *initialOp) {
+static void pruneUnusedOps(Operation *initialOp, Reduction &reduction) {
   SmallVector<Operation *> worklist;
   SmallSet<Operation *, 4> handled;
   worklist.push_back(initialOp);
@@ -604,6 +545,7 @@ static void pruneUnusedOps(Operation *initialOp) {
       if (auto argOp = arg.getDefiningOp())
         if (handled.insert(argOp).second)
           worklist.push_back(argOp);
+    reduction.notifyOpErased(op);
     op->erase();
   }
 }
@@ -656,7 +598,7 @@ struct OperandForwarder : public Reduction {
       newOp = operand;
     LLVM_DEBUG(llvm::dbgs() << "Forwarding " << newOp << " in " << *op << "\n");
     result.replaceAllUsesWith(newOp);
-    pruneUnusedOps(op);
+    pruneUnusedOps(op, *this);
     return success();
   }
   std::string getName() const override {
@@ -685,7 +627,7 @@ struct Constantifier : public Reduction {
     auto newOp = builder.create<firrtl::ConstantOp>(
         op->getLoc(), type, APSInt(width, type.isa<firrtl::UIntType>()));
     op->replaceAllUsesWith(newOp);
-    pruneUnusedOps(op);
+    pruneUnusedOps(op, *this);
     return success();
   }
   std::string getName() const override { return "constantifier"; }
@@ -712,7 +654,7 @@ struct ConnectInvalidator : public Reduction {
     auto rhsOp = rhs.getDefiningOp();
     op->setOperand(1, invOp);
     if (rhsOp)
-      pruneUnusedOps(rhsOp);
+      pruneUnusedOps(rhsOp, *this);
     return success();
   }
   std::string getName() const override { return "connect-invalidator"; }
@@ -731,7 +673,7 @@ struct OperationPruner : public Reduction {
   }
   LogicalResult rewrite(Operation *op) override {
     assert(match(op));
-    pruneUnusedOps(op);
+    pruneUnusedOps(op, *this);
     return success();
   }
   std::string getName() const override { return "operation-pruner"; }
@@ -822,8 +764,12 @@ struct ExtmoduleInstanceRemover : public Reduction {
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
     SmallVector<Value> replacementWires;
     for (firrtl::PortInfo info : portInfo) {
-      auto wire = builder.create<firrtl::WireOp>(
-          info.type, (Twine(instOp.getName()) + "_" + info.getName()).str());
+      auto wire =
+          builder
+              .create<firrtl::WireOp>(
+                  info.type,
+                  (Twine(instOp.getName()) + "_" + info.getName()).str())
+              .getResult();
       if (info.isOutput()) {
         auto inv = builder.create<firrtl::InvalidValueOp>(info.type);
         builder.create<firrtl::ConnectOp>(wire, inv);
@@ -934,15 +880,19 @@ struct ConnectSourceOperandForwarder : public Reduction {
     ImplicitLocOpBuilder builder(destOp->getLoc(), destOp);
     Value newDest;
     if (auto wire = dyn_cast<firrtl::WireOp>(destOp))
-      newDest = builder.create<firrtl::WireOp>(forwardedOperand.getType(),
-                                               wire.getName());
+      newDest = builder
+                    .create<firrtl::WireOp>(forwardedOperand.getType(),
+                                            wire.getName())
+                    .getResult();
     else {
       auto regName = destOp->getAttrOfType<StringAttr>("name");
       // We can promote the register into a wire but we wouldn't do here because
       // the error might be caused by the register.
       auto clock = destOp->getOperand(0);
-      newDest = builder.create<firrtl::RegOp>(forwardedOperand.getType(), clock,
-                                              regName ? regName.str() : "");
+      newDest = builder
+                    .create<firrtl::RegOp>(forwardedOperand.getType(), clock,
+                                           regName ? regName.str() : "")
+                    .getResult();
     }
 
     // Create new connection between a new wire and the forwarded operand.
@@ -956,7 +906,7 @@ struct ConnectSourceOperandForwarder : public Reduction {
     // because destination has only one use.
     op->erase();
     destOp->erase();
-    pruneUnusedOps(srcOp);
+    pruneUnusedOps(srcOp, *this);
 
     return success();
   }
@@ -1063,9 +1013,12 @@ struct EagerInliner : public Reduction {
       auto result = instOp.getResult(i);
       auto name = builder.getStringAttr(Twine(instOp.getName()) + "_" +
                                         instOp.getPortNameStr(i));
-      auto wire = builder.create<firrtl::WireOp>(
-          result.getType(), name, firrtl::NameKindEnum::DroppableName,
-          instOp.getPortAnnotation(i), StringAttr{});
+      auto wire =
+          builder
+              .create<firrtl::WireOp>(result.getType(), name,
+                                      firrtl::NameKindEnum::DroppableName,
+                                      instOp.getPortAnnotation(i), StringAttr{})
+              .getResult();
       result.replaceAllUsesWith(wire);
       argReplacements.push_back(wire);
     }

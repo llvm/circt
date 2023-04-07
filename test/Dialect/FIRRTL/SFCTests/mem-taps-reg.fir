@@ -54,12 +54,12 @@ circuit Top : %[[
 
 ; CHECK:      module Top(
 ; CHECK-NOT:  module
-; CHECK:  assign memTap_0 = Top.dut.rf_0;
-; CHECK:  assign memTap_1 = Top.dut.rf_1;
-; CHECK:  assign memTap_2 = Top.dut.rf_2;
-; CHECK:  assign memTap_3 = Top.dut.rf_3;
-; CHECK:  assign memTap_4 = Top.dut.rf_4;
-; CHECK:  assign memTap_5 = Top.dut.rf_5;
-; CHECK:  assign memTap_6 = Top.dut.rf_6;
-; CHECK:  assign memTap_7 = Top.dut.rf_7;
+; CHECK:        wire [7:0] memTap_0 = Top.dut.rf_0;
+; CHECK-NEXT:   wire [7:0] memTap_1 = Top.dut.rf_1;
+; CHECK-NEXT:   wire [7:0] memTap_2 = Top.dut.rf_2;
+; CHECK-NEXT:   wire [7:0] memTap_3 = Top.dut.rf_3;
+; CHECK-NEXT:   wire [7:0] memTap_4 = Top.dut.rf_4;
+; CHECK-NEXT:   wire [7:0] memTap_5 = Top.dut.rf_5;
+; CHECK-NEXT:   wire [7:0] memTap_6 = Top.dut.rf_6;
+; CHECK-NEXT:   wire [7:0] memTap_7 = Top.dut.rf_7;
 ; CHECK:      endmodule

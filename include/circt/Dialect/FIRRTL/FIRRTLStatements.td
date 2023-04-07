@@ -69,24 +69,36 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]
     "$dest `,` $src  attr-dict `:` qualified(type($dest))";
 }
 
-def RefConnectOp : FIRRTLOp<"refconnect", [SameTypeOperands, FConnectLike]> {
-  let summary = "Connect two references";
-  let description =  [{
-    Connect two references with strict constraints:
+def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOperands, FConnectLike]> {
+  let summary = "FIRRTL Define References";
+  let description = [{
+    Define a target reference to the source reference:
     ```
-      firrtl.refconnect %dest, %src : ref<t1>
+      firrtl.ref.define %dest, %src : ref<t1>
     ```
-    }];
+    Used to statically route reference from source to destination
+    through the design, one module at a time.
 
-  let arguments = (ins SizedRefType:$dest,
-                       SizedRefType:$src);
-  let results = (outs);
+    Similar to "connect" but cannot have multiple define's to same
+    destination and the define is never conditional even if under
+    a "when".
+
+    Source and destination must resolve statically.
+  }];
+  let arguments = (ins RefType:$dest, RefType:$src);
 
   let hasVerifier = 1;
 
   let assemblyFormat =
     "$dest `,` $src  attr-dict `:` qualified(type($dest))";
+
+  let extraClassDeclaration = [{
+    static ConnectBehaviorKind getConnectBehaviorKind() {
+      return ConnectBehaviorKind::StaticSingleConnect;
+    }
+  }];
 }
+
 
 def PrintFOp : FIRRTLOp<"printf"> {
   let summary = "Formatted Print Statement";

@@ -120,6 +120,10 @@ class Type:
     from .signals import UntypedSignal
     return UntypedSignal
 
+  def __mul__(self, len: int):
+    """Create an array type"""
+    return Array(self, len)
+
   def __repr__(self):
     return self._type.__repr__()
 

@@ -163,7 +163,7 @@ static bool isDuplicatableExpression(Operation *op) {
     if (auto read = dyn_cast<ReadInOutOp>(indexOp)) {
       auto *readSrc = read.getInput().getDefiningOp();
       // A port or wire is ok to duplicate reads.
-      return !readSrc || isa<WireOp, LogicOp>(readSrc);
+      return !readSrc || isa<sv::WireOp, LogicOp>(readSrc);
     }
 
     return false;
@@ -395,7 +395,7 @@ static StringRef getVerilogDeclWord(Operation *op,
 
     return "reg";
   }
-  if (isa<WireOp>(op))
+  if (isa<sv::WireOp>(op))
     return "wire";
   if (isa<ConstantOp, AggregateConstantOp, LocalParamOp, ParamValueOp>(op))
     return "localparam";
@@ -634,7 +634,8 @@ static bool isExpressionUnableToInline(Operation *op,
     //     assign bar = {{a}, {b}, {c}, {d}}[idx];
     //
     // To handle these, we push the subexpression into a temporary.
-    if (isa<ExtractOp, ArraySliceOp, ArrayGetOp, StructExtractOp>(user))
+    if (isa<ExtractOp, ArraySliceOp, ArrayGetOp, StructExtractOp,
+            IndexedPartSelectOp>(user))
       if (op->getResult(0) == user->getOperand(0) && // ignore index operands.
           !isOkToBitSelectFrom(op->getResult(0)))
         return true;
@@ -643,7 +644,7 @@ static bool isExpressionUnableToInline(Operation *op,
     if (!options.allowExprInEventControl && isa<AlwaysOp, AlwaysFFOp>(user)) {
       // Anything other than a read of a wire must be out of line.
       if (auto read = dyn_cast<ReadInOutOp>(op))
-        if (read.getInput().getDefiningOp<WireOp>() ||
+        if (read.getInput().getDefiningOp<sv::WireOp>() ||
             read.getInput().getDefiningOp<RegOp>())
           continue;
       return true;
@@ -816,6 +817,7 @@ StringRef getVerilogValueName(Value val) {
     return getPortVerilogName(port.getParentBlock()->getParentOp(),
                               port.getArgNumber());
   assert(false && "unhandled value");
+  return {};
 }
 
 //===----------------------------------------------------------------------===//
@@ -1151,7 +1153,7 @@ StringAttr ExportVerilog::inferStructuralNameForTemporary(Value expr) {
 
   } else if (auto *op = expr.getDefiningOp()) {
     // Uses of a wire, register or logic can be done inline.
-    if (isa<WireOp, RegOp, LogicOp>(op)) {
+    if (isa<sv::WireOp, RegOp, LogicOp>(op)) {
       StringRef name = getSymOpName(op);
       result = StringAttr::get(expr.getContext(), name);
 
@@ -2931,7 +2933,7 @@ private:
   LogicalResult visitUnhandledSV(Operation *op) { return failure(); }
   LogicalResult visitInvalidSV(Operation *op) { return failure(); }
 
-  LogicalResult visitSV(WireOp op) { return emitDeclaration(op); }
+  LogicalResult visitSV(sv::WireOp op) { return emitDeclaration(op); }
   LogicalResult visitSV(RegOp op) { return emitDeclaration(op); }
   LogicalResult visitSV(LogicOp op) { return emitDeclaration(op); }
   LogicalResult visitSV(LocalParamOp op) { return emitDeclaration(op); }
@@ -4122,6 +4124,8 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
             ps << "/* Zero width */";
           else
             emitExpression(portVal, ops, LowestPrecedence);
+        } else if (portVal.use_empty()) {
+          ps << "/* unused */";
         } else if (portVal.hasOneUse() &&
                    (output = dyn_cast_or_null<OutputOp>(
                         portVal.getUses().begin()->getOwner()))) {
@@ -4297,7 +4301,7 @@ isExpressionEmittedInlineIntoProceduralDeclaration(Operation *op,
         return false;
 
       // If the operand is a wire, it's OK to inline the read.
-      if (isa<WireOp>(defOp))
+      if (isa<sv::WireOp>(defOp))
         continue;
 
       // Reject struct_field_inout/array_index_inout for now because it's
@@ -4435,7 +4439,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     }
 
     // Try inlining an assignment into declarations.
-    if (isa<WireOp, LogicOp>(op) &&
+    if (isa<sv::WireOp, LogicOp>(op) &&
         !op->getParentOp()->hasTrait<ProceduralRegion>()) {
       // Get a single assignments if any.
       if (auto singleAssign = getSingleAssignAndCheckUsers<AssignOp>(op)) {
@@ -4637,10 +4641,12 @@ void ModuleEmitter::emitBind(BindOp op) {
       ps << " (";
       llvm::SmallPtrSet<Operation *, 4> ops;
       if (elt.isOutput()) {
-        assert(portVal.hasOneUse() && "output port must have a single use");
-
-        if (auto output = dyn_cast_or_null<OutputOp>(
-                portVal.getUses().begin()->getOwner())) {
+        assert((portVal.hasOneUse() || portVal.use_empty()) &&
+               "output port must have either single or no use");
+        if (portVal.use_empty()) {
+          ps << "/* unused */";
+        } else if (auto output = dyn_cast_or_null<OutputOp>(
+                       portVal.getUses().begin()->getOwner())) {
           // If this is directly using the output port of the containing
           // module, just specify that directly.
           size_t outputPortNo = portVal.getUses().begin()->getOperandNumber();
@@ -5144,7 +5150,7 @@ void SharedEmitterState::collectOpsForFile(const FileInfo &file,
                                            EmissionList &thingsToEmit,
                                            bool emitHeader) {
   // Include the version string comment when the file is verilog.
-  if (file.isVerilog)
+  if (file.isVerilog && !options.omitVersionComment)
     thingsToEmit.emplace_back(circt::getCirctVersionComment());
 
   // If we're emitting replicated ops, keep track of where we are in the list.

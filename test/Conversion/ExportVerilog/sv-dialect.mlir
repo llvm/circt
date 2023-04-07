@@ -11,10 +11,10 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
 
   %c11_i42 = hw.constant 11: i42
   // CHECK: localparam [41:0]{{ *}} param_x = 42'd11;
-  %param_x = sv.localparam : i42 { value = 11: i42 }
+  %param_x = sv.localparam { value = 11 : i42 } : i42
 
   // CHECK: localparam [41:0]{{ *}} param_y = param1;
-  %param_y = sv.localparam : i42 { value = #hw.param.decl.ref<"param1">: i42 }
+  %param_y = sv.localparam { value = #hw.param.decl.ref<"param1"> : i42 } : i42
 
   // CHECK:        logic{{ *}} [7:0]{{ *}} logic_op = val;
   // CHECK-NEXT: struct packed {logic b; } logic_op_struct;
@@ -1708,6 +1708,16 @@ hw.module @IndexPartSelectInoutArray(%a: !hw.array<2xi1>, %c: i1, %d: i1) {
   hw.output
 }
 
+hw.module @IndexPartSelect() -> (a : i3) {
+  // CHECK-LABEL: module IndexPartSelect(
+  // CHECK: wire [17:0] _GEN = 18'h3;
+  // CHECK-NEXT: assign a = _GEN[4'h3 +: 3];
+  %c3_i3 = hw.constant 3 : i4
+  %c3_i18 = hw.constant 3 : i18
+  %c = sv.indexed_part_select %c3_i18[%c3_i3 : 3] : i18,i4
+  hw.output %c : i3
+}
+
 // CHECK-LABEL: module ConditionalComments(
 hw.module @ConditionalComments() {
   sv.ifdef "FOO"  {             // CHECK-NEXT: `ifdef FOO
@@ -1793,7 +1803,7 @@ hw.module @NastyPort(%.lots$of.dots: i1) -> (".more.dots": i1) {
 sv.bind #hw.innerNameRef<@NastyPortParent::@foo>
 // CHECK-LABEL: bind NastyPortParent NastyPort foo (
 // CHECK-NEXT:    ._lots24of_dots (1'h0)
-// CHECK-NEXT:    ._more_dots     (_foo__more_dots)
+// CHECK-NEXT:    ._more_dots     (/* unused */)
 // CHECK-NEXT:  );
 
 sv.bind #hw.innerNameRef<@InlineBind::@foo1>

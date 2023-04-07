@@ -19,6 +19,7 @@
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/HW/InstanceImplementation.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
+#include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
@@ -365,6 +366,65 @@ void ConstantOp::getAsmResultNames(
 OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
   assert(adaptor.getOperands().empty() && "constant has no operands");
   return getValueAttr();
+}
+
+//===----------------------------------------------------------------------===//
+// WireOp
+//===----------------------------------------------------------------------===//
+
+/// Check whether an operation has any additional attributes set beyond its
+/// standard list of attributes returned by `getAttributeNames`.
+template <class Op>
+static bool hasAdditionalAttributes(Op op,
+                                    ArrayRef<StringRef> ignoredAttrs = {}) {
+  auto names = op.getAttributeNames();
+  llvm::SmallDenseSet<StringRef> nameSet;
+  nameSet.reserve(names.size() + ignoredAttrs.size());
+  nameSet.insert(names.begin(), names.end());
+  nameSet.insert(ignoredAttrs.begin(), ignoredAttrs.end());
+  return llvm::any_of(op->getAttrs(), [&](auto namedAttr) {
+    return !nameSet.contains(namedAttr.getName());
+  });
+}
+
+void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the wire has an optional 'name' attribute, use it.
+  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
+  if (!nameAttr.getValue().empty())
+    setNameFn(getResult(), nameAttr.getValue());
+}
+
+OpFoldResult WireOp::fold(FoldAdaptor adaptor) {
+  // If the wire has no additional attributes, no name, and no symbol, just
+  // forward its input.
+  if (!hasAdditionalAttributes(*this, {"sv.namehint"}) && !getNameAttr() &&
+      !getInnerSymAttr())
+    return getInput();
+  return {};
+}
+
+LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
+  // Block if the wire has any attributes.
+  if (hasAdditionalAttributes(wire, {"sv.namehint"}))
+    return failure();
+
+  // If the wire has a symbol, then we can't delete it.
+  if (wire.getInnerSymAttr())
+    return failure();
+
+  // If the wire has a name or an `sv.namehint` attribute, propagate it as an
+  // `sv.namehint` to the expression.
+  if (auto *inputOp = wire.getInput().getDefiningOp()) {
+    auto name = wire.getNameAttr();
+    if (!name || name.getValue().empty())
+      name = wire->getAttrOfType<StringAttr>("sv.namehint");
+    if (name)
+      rewriter.updateRootInPlace(
+          inputOp, [&] { inputOp->setAttr("sv.namehint", name); });
+  }
+
+  rewriter.replaceOp(wire, wire.getInput());
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1558,7 +1618,7 @@ void InstanceOp::setResultName(size_t i, StringAttr name) {
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  instance_like_impl::getAsmResultNames(setNameFn, instanceName(),
+  instance_like_impl::getAsmResultNames(setNameFn, getInstanceName(),
                                         getResultNames(), getResults());
 }
 
@@ -3009,7 +3069,7 @@ LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
       return emitOpError() << " module: " << innerRef.getModule()
                            << " does not contain any instance with symbol: "
                            << innerRef.getName();
-    expectedModuleName = instOp.referencedModuleNameAttr();
+    expectedModuleName = instOp.getReferencedModuleNameAttr();
   }
   // The instance path has been verified. Now verify the last element.
   auto leafRef = getNamepath()[getNamepath().size() - 1];

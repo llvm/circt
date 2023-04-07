@@ -48,8 +48,9 @@ LogicalResult scheduleSimplex(SharedOperatorsProblem &prob, Operation *lastOp);
 /// heuristic. The approach tries to determine the smallest feasible initiation
 /// interval, and to minimize the start time of the given \p lastOp, but
 /// optimality is not guaranteed. Fails if the dependence graph contains cycles
-/// that do not include at least one edge with a non-zero distance, or \p prob
-/// does not include \p lastOp.
+/// that do not include at least one edge with a non-zero distance, \p prob
+/// does not include \p lastOp, or \p lastOp is not the unique sink of the
+/// dependence graph.
 LogicalResult scheduleSimplex(ModuloProblem &prob, Operation *lastOp);
 
 /// Solve the acyclic, chaining-enabled problem using linear programming and a

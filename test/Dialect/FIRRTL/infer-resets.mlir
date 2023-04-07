@@ -631,6 +631,23 @@ firrtl.circuit "UnmovableNodeShouldDominate" {
 
 // -----
 
+// Same test as above, ensure works w/forceable node.
+firrtl.circuit "UnmovableForceableNodeShouldDominate" {
+  // CHECK-LABEL: firrtl.module @UnmovableForceableNodeShouldDominate
+  firrtl.module @UnmovableForceableNodeShouldDominate(in %clock: !firrtl.clock, in %ui1: !firrtl.uint<1>) {
+    %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8> // gets wired to localReset
+    %0 = firrtl.asAsyncReset %ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset // blocks move of node
+    %localReset, %ref = firrtl.node sym @theReset %0 forceable {annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]} : !firrtl.asyncreset
+    // CHECK-NEXT: %localReset, %{{.+}} = firrtl.wire sym @theReset
+    // CHECK-NEXT: [[RV:%.+]] = firrtl.constant 0
+    // CHECK-NEXT: %reg = firrtl.regreset %clock, %localReset, [[RV]]
+    // CHECK-NEXT: %0 = firrtl.asAsyncReset %ui1
+    // CHECK-NEXT: firrtl.strictconnect %localReset, %0
+  }
+}
+
+// -----
+
 // Move of local async resets should work across blocks.
 firrtl.circuit "MoveAcrossBlocks1" {
   // CHECK-LABEL: firrtl.module @MoveAcrossBlocks1
@@ -820,21 +837,42 @@ firrtl.circuit "ZeroVec"  {
 firrtl.circuit "RefReset" {
   // CHECK-LABEL: firrtl.module private @SendReset
   // CHECK-SAME: in %r: !firrtl.asyncreset
-  // CHECK-SAME: out %ref: !firrtl.ref<asyncreset>
+  // CHECK-SAME: out %ref: !firrtl.probe<asyncreset>
   // CHECK-NEXT: send %r : !firrtl.asyncreset
-  // CHECK-NEXT: ref<asyncreset>
-  firrtl.module private @SendReset(in %r: !firrtl.reset, out %ref: !firrtl.ref<reset>) {
+  // CHECK-NEXT: probe<asyncreset>
+  firrtl.module private @SendReset(in %r: !firrtl.reset, out %ref: !firrtl.probe<reset>) {
     %ref_r = firrtl.ref.send %r : !firrtl.reset
-    firrtl.refconnect %ref, %ref_r : !firrtl.ref<reset>
+    firrtl.ref.define %ref, %ref_r : !firrtl.probe<reset>
   }
   // CHECK-LABEL: firrtl.module @RefReset
   // CHECK-NEXT: in r: !firrtl.asyncreset
-  // CHECK-SAME: out ref: !firrtl.ref<asyncreset>
+  // CHECK-SAME: out ref: !firrtl.probe<asyncreset>
   // CHECK-NEXT: !firrtl.asyncreset, !firrtl.asyncreset
-  // CHECK-NEXT: %s_ref : !firrtl.ref<asyncreset>
+  // CHECK-NEXT: %s_ref : !firrtl.probe<asyncreset>
   firrtl.module @RefReset(in %r: !firrtl.asyncreset) {
-    %s_r, %s_ref = firrtl.instance s @SendReset(in r: !firrtl.reset, out ref: !firrtl.ref<reset>)
+    %s_r, %s_ref = firrtl.instance s @SendReset(in r: !firrtl.reset, out ref: !firrtl.probe<reset>)
     firrtl.connect %s_r, %r : !firrtl.reset, !firrtl.asyncreset
-    %reset = firrtl.ref.resolve %s_ref : !firrtl.ref<reset>
+    %reset = firrtl.ref.resolve %s_ref : !firrtl.probe<reset>
+  }
+}
+
+// -----
+
+// Check resets are inferred through references to bundles w/flips.
+
+// CHECK-LABEL: "RefResetBundle"
+firrtl.circuit "RefResetBundle" {
+  // CHECK-LABEL: firrtl.module @RefResetBundle
+  // CHECK-NOT: firrtl.reset
+  firrtl.module @RefResetBundle(in %driver: !firrtl.asyncreset, out %out: !firrtl.bundle<a: reset, b: reset>) {
+  %r = firrtl.wire : !firrtl.bundle<a: reset, b flip: reset> 
+  %ref_r = firrtl.ref.send %r : !firrtl.bundle<a: reset, b flip: reset>
+  %reset = firrtl.ref.resolve %ref_r : !firrtl.probe<bundle<a: reset, b: reset>>
+  firrtl.strictconnect %out, %reset : !firrtl.bundle<a: reset, b: reset>
+
+   %r_a = firrtl.subfield %r[a] : !firrtl.bundle<a: reset, b flip: reset>
+   %r_b = firrtl.subfield %r[b] : !firrtl.bundle<a: reset, b flip: reset>
+   firrtl.connect %r_a, %driver : !firrtl.reset, !firrtl.asyncreset
+   firrtl.connect %r_b, %driver : !firrtl.reset, !firrtl.asyncreset
   }
 }

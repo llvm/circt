@@ -6,8 +6,8 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK: [[FD:%.*]] = hw.constant -2147483646 : i32
   %fd = hw.constant 0x80000002 : i32
 
-  // CHECK: %param_x = sv.localparam : i42 {value = 11 : i42}
-  %param_x = sv.localparam : i42 {value = 11 : i42}
+  // CHECK: %param_x = sv.localparam {value = 11 : i42} : i42
+  %param_x = sv.localparam {value = 11 : i42} : i42
 
 
   // This corresponds to this block of system verilog code:

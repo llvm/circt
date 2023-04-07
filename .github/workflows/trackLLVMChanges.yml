@@ -42,7 +42,8 @@ jobs:
             -DLLVM_ENABLE_BINDINGS=OFF \
             -DLLVM_ENABLE_ASSERTIONS=ON \
             -DLLVM_EXTERNAL_PROJECTS=circt \
-            -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$PWD/..
+            -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$PWD/.. \
+            -DLLVM_LIT_ARGS="-v"
 
       - name: Build current LLVM commit
         id: build-current-llvm-commit

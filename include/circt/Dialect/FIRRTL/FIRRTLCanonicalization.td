@@ -19,16 +19,16 @@ include "FIRRTLStatements.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/PatternBase.td"
 
-/// Constraint that matches a ConstantOp, SpecialConstantOp, AggregateConstantOp, or InvalidValueOp.
+/// Constraint that matches a ConstantOp, SpecialConstantOp, or AggregateConstantOp.
 def AnyConstantOp : Constraint<CPred<[{
-  isa_and_nonnull<ConstantOp, SpecialConstantOp, InvalidValueOp, AggregateConstantOp>
+  isa_and_nonnull<ConstantOp, SpecialConstantOp, AggregateConstantOp>
     ($0.getDefiningOp())
   }]>>;
 
 /// Constraint that matches non-constant operations. Used to ensure that the
 /// const-on-LHS rewriting patterns converge in case both operands are constant.
 def NonConstantOp : Constraint<CPred<[{
-  !isa_and_nonnull<ConstantOp, SpecialConstantOp, InvalidValueOp, AggregateConstantOp>
+  !isa_and_nonnull<ConstantOp, SpecialConstantOp, AggregateConstantOp>
     ($0.getDefiningOp())
   }]>>;
 
@@ -81,6 +81,10 @@ def OneConstantOp : Constraint<Or<[
 /// Constraint that matches an all ones ConstantOp.
 def AllOneConstantOp : Constraint<CPred<"$0.getDefiningOp<ConstantOp>() && $0.getDefiningOp<ConstantOp>().getValue().isAllOnes()">>;
 
+// Delta between type widths
+def TypeWidthAdjust32 : NativeCodeCall<
+  "$_builder.getI32IntegerAttr($0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel() - $1.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel())">;
+
 /// Drop the writer to the first argument and passthrough the second
 def DropWrite : NativeCodeCall<"dropWrite($_builder, $0, $1)">;
 
@@ -113,6 +117,25 @@ def GTWithConstLHS : Pat<
   (MoveNameHint $old, (LTPrimOp $rhs, $lhs)),
   [(AnyConstantOp $lhs), (NonConstantOp $rhs)]>;
 
+// not(not(x)) -> x
+def NotNot : Pat <
+  (NotPrimOp:$old (NotPrimOp $x)),
+  (MoveNameHint $old, (AsUIntPrimOp $x)),
+  []>;
+
+// connect(a:t,b:t) -> strictconnect(a,b)
+def ConnectSameType : Pat<
+  (ConnectOp $dst, $src),
+  (StrictConnectOp $dst, $src),
+  [(EqualTypes $dst, $src), (KnownWidth $dst)]>;
+
+// connect(a:t1,b:(t2<t1) -> strictconnect(a,(pad b))
+def ConnectExtension : Pat<
+  (ConnectOp $dst, $src),
+  (StrictConnectOp $dst, (PadPrimOp $src,
+    (NativeCodeCall<"$0.getType().cast<FIRRTLBaseType>().getBitWidthOrSentinel()"> $dst))),
+  [(IntType $dst), (IntType $src), (KnownWidth $dst), (KnownWidth $src), (mismatchTypes $src, $dst)]>;
+
 def LimitConstant32 : NativeCodeCall<
   "$_builder.getI32IntegerAttr($0.getValue().getLimitedValue(1ULL << 31))">;
 
@@ -125,7 +148,7 @@ def DShlOfConstant : Pat<
   (PadPrimOp (MoveNameHint $old, (ShlPrimOp $x, (LimitConstant32 $cst))), (TypeWidth32 $old)),
   [(KnownWidth $x)]>;
 
-// dshr(a, const) -> shl(a, const)
+// dshr(a, const) -> shr(a, const)
 def DShrOfConstant : Pat<
   (DShrPrimOp:$old $x, (ConstantOp $cst)),
   (PadPrimOp (MoveNameHint $old, (ShrPrimOp $x, (LimitConstant32 $cst))), (TypeWidth32 $old)),
@@ -193,10 +216,16 @@ def AddOfSelf : Pat <
   (MoveNameHint $old, (ShlPrimOp $x, (NativeCodeCall<"1">))),
   [(KnownWidth $x)]>;
 
+// add((pad a, n), b) -> pad(add(a, b), n)
+def AddOfPad : Pat <
+  (AddPrimOp:$old (either (PadPrimOp $a, $m), $b)),
+  (PadPrimOp (MoveNameHint $old, (AddPrimOp $a, $b)), (TypeWidth32 $old)),
+  [(KnownWidth $a), (KnownWidth $b)]>;
+
 // sub(a, 0) -> a
 def SubOfZero : Pat <
   (SubPrimOp:$old $x, (ConstantOp:$zcst $cst)),
-  (PadPrimOp $x, (TypeWidth32 $old)),
+  (MoveNameHint $old, (PadPrimOp $x, (TypeWidth32 $old))),
   [(KnownWidth $x), (ZeroConstantOp $zcst)]>;
 
 // sub(0, a) -> -a
@@ -217,6 +246,18 @@ def SubOfSelf : Pat <
   (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), $0.getType().cast<IntType>(), getIntZerosAttr($0.getType()))"> $old),
   [(KnownWidth $x)]>;
 
+// sub((pad a, n), b) -> pad(sub(a, b), n)
+def SubOfPadL : Pat <
+  (SubPrimOp:$old (PadPrimOp $a, $m), $b),
+  (MoveNameHint $old, (PadPrimOp (SubPrimOp $a, $b), (TypeWidth32 $old))),
+  [(KnownWidth $a), (KnownWidth $b)]>;
+
+// sub(b, (pad a, n)) -> pad(sub(b, a), n)
+def SubOfPadR : Pat <
+  (SubPrimOp:$old $b, (PadPrimOp $a, $m)),
+  (MoveNameHint $old, (PadPrimOp (SubPrimOp $b, $a), (TypeWidth32 $old))),
+  [(KnownWidth $a), (KnownWidth $b)]>;
+
 // and(x, 0) -> 0, fold can't handle all cases
 def AndOfZero : Pat <
   (AndPrimOp:$old $x, (ConstantOp:$zcst $cst)),
@@ -234,6 +275,12 @@ def AndOfSelf : Pat <
   (AndPrimOp:$old $x, $x),
   (MoveNameHint $old, (AsUIntPrimOp $x)),
   [(KnownWidth $x)]>;
+
+/// and(x, pad(y, n)) -> pad(and(tail(x), y), n), x is unsigned
+def AndOfPad : Pat <
+  (AndPrimOp:$old (either $x, (PadPrimOp:$pad $y, $n))),
+  (MoveNameHint $old, (PadPrimOp (AndPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y), $n)),
+  [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
 
 // or(x, 0) -> x, fold can't handle all cases
 def OrOfZero : Pat <
@@ -253,6 +300,13 @@ def OrOfSelf : Pat <
   (MoveNameHint $old, (AsUIntPrimOp $x)),
   [(KnownWidth $x)]>;
 
+/// or(x, pad(y, n)) -> cat(head(x), or(tail(x), y))
+def OrOfPad : Pat <
+  (OrPrimOp:$old $x, (PadPrimOp:$pad $y, $n)),
+  (MoveNameHint $old, (CatPrimOp (HeadPrimOp $x, (TypeWidthAdjust32 $x, $y)),
+                                 (OrPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y))),
+  [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
+
 // xor(x, 0) -> x, fold can't handle all cases
 def XorOfZero : Pat <
   (XorPrimOp:$old $x, (ConstantOp:$zcst $_)),
@@ -264,6 +318,13 @@ def XorOfSelf : Pat <
   (XorPrimOp:$old $x, $x),
   (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), $0.getType().cast<IntType>(), getIntZerosAttr($0.getType()))"> $old),
   [(KnownWidth $x)]>;
+
+/// xor(x, pad(y, n)) -> cat(head(x), xor(tail(x), y))
+def XorOfPad : Pat <
+  (XorPrimOp:$old $x, (PadPrimOp:$pad $y, $n)),
+  (MoveNameHint $old, (CatPrimOp (HeadPrimOp $x, (TypeWidthAdjust32 $x, $y)),
+                                 (XorPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y))),
+  [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
 
 // bits(bits(x, ...), ...) -> bits(x, ...)
 def BitsOfBits : Pat<
@@ -286,20 +347,6 @@ def MuxNot : Pat<
   (MoveNameHint $old, (NotPrimOp $cond)), [
     (EqualTypes $cond, $zcst), (EqualTypes $cond, $ocst),
     (ZeroConstantOp $zcst) , (OneConstantOp $ocst)
-  ]>;
-
-// mux(cond, x, mux(cond, y, z)) -> mux(cond, x, z)
-def MuxSameCondLow : Pat<
-  (MuxPrimOp:$old $cond, $x, (MuxPrimOp $cond, $y, $z)),
-  (MoveNameHint $old, (MuxPrimOp $cond, $x, $z)), [
-    (EqualTypes $x, $y), (EqualTypes $x, $z), (KnownWidth $x)
-  ]>;
-
-// mux(cond, mux(cond, y, z), x) -> mux(cond, y, x)
-def MuxSameCondHigh : Pat<
-  (MuxPrimOp:$old $cond, (MuxPrimOp $cond, $y, $z), $x),
-  (MoveNameHint $old, (MuxPrimOp $cond, $y, $x)), [
-    (EqualTypes $x, $y), (EqualTypes $x, $z), (KnownWidth $x)
   ]>;
 
 // mux(cond1, t, mux(cond2, t ,f)) -> mux(or(cond1, cond2), t, f)
@@ -326,15 +373,14 @@ def NarrowMuxRHS : Pat <
   (MoveNameHint $old, (CatPrimOp (MuxPrimOp $cond, $a, $c), $b)),
   [(EqualTypes $lhs, $rhs), (KnownWidth $lhs)]>;
 
+def CatDoubleConst : Pat <
+  (CatPrimOp:$old $cst1, (CatPrimOp $cst2, $v)),
+  (MoveNameHint $old, (CatPrimOp (CatPrimOp $cst1, (AsUIntPrimOp $cst2)), (AsUIntPrimOp $v))),
+  [(KnownWidth $v), (AnyConstantOp $cst1), (AnyConstantOp $cst2)]>;
+
 // regreset(clock, constant_zero, resetValue) -> reg(clock)
 def RegResetWithZeroReset : Pat<
-  (RegResetOp $clock, $reset, $_, $name, $nameKind, $annotations, $inner_sym),
-  (RegOp $clock, $name, $nameKind, $annotations, $inner_sym), [(ZeroConstantOp $reset)]>;
-
-// regreset(clock, constant_one, resetValue) -> node(resetValue)
-def RegResetWithOneReset : Pat<
-  (RegResetOp:$reg $clock, $reset, $resetVal, $name, $nameKind, $annotations, $inner_sym),
-  (DropWrite $reg, (NodeOp $resetVal, $name, $nameKind, $annotations, $inner_sym)),
-  [(OneConstantOp $reset)]>;
+  (RegResetOp $clock, $reset, $_, $name, $nameKind, $annotations, $inner_sym, $forceable),
+  (RegOp $clock, $name, $nameKind, $annotations, $inner_sym, $forceable), [(ZeroConstantOp $reset)]>;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD

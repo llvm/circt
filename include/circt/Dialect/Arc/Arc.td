@@ -11,7 +11,8 @@
 
 include "mlir/IR/OpBase.td"
 
-include "circt/Dialect/Arc/Dialect.td"
-include "circt/Dialect/Arc/Ops.td"
+include "circt/Dialect/Arc/ArcDialect.td"
+include "circt/Dialect/Arc/ArcTypes.td"
+include "circt/Dialect/Arc/ArcOps.td"
 
 #endif // CIRCT_DIALECT_ARC_ARC_TD

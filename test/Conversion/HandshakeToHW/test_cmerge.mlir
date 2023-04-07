@@ -51,7 +51,7 @@
 // CHECK:         }
 
 handshake.func @test_cmerge(%arg0: none, %arg1: none, %arg2: none, ...) -> (none, index, none) {
-  %0:2 = control_merge %arg0, %arg1 : none
+  %0:2 = control_merge %arg0, %arg1 : none, index
   return %0#0, %0#1, %arg2 : none, index, none
 }
 
@@ -118,6 +118,6 @@ handshake.func @test_cmerge(%arg0: none, %arg1: none, %arg2: none, ...) -> (none
 // CHECK:         }
 
 handshake.func @test_cmerge_data(%arg0: index, %arg1: index, %arg2: index) -> (index, index) {
-  %0:2 = control_merge %arg0, %arg1, %arg2 : index
+  %0:2 = control_merge %arg0, %arg1, %arg2 : index, index
   return %0#0, %0#1 : index, index
 }

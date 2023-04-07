@@ -115,6 +115,13 @@ firrtl.circuit "Simple" {
     firrtl.strictconnect %outB, %inB : !firrtl.uint<4>
     // CHECK: sv.assign %.outB.output, %inB : i4
 
+    // Unconnected port outC reads as sv.constantZ.
+    // CHECK:      [[OUTB:%.+]] = hw.wire %inB
+    // CHECK-NEXT: [[OUTC:%.+]] = hw.wire %z_i4
+    // CHECK-NEXT: [[OUTD:%.+]] = hw.wire %z_i4
+    // CHECK-NEXT: [[T0:%.+]] = comb.concat %false, %inA
+    // CHECK-NEXT: [[T1:%.+]] = comb.concat %false, [[OUTC]]
+    // CHECK-NEXT: comb.sub bin [[T0]], [[T1]]
     %0 = firrtl.sub %inA, %outC : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
     // No connections to outD.

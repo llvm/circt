@@ -465,15 +465,15 @@ firrtl.circuit "Issue3372"  {
 
 // CHECK-LABEL: "SendThroughRef"
 firrtl.circuit "SendThroughRef" {
-  firrtl.module private @Bar(out %_a: !firrtl.ref<uint<1>>) {
+  firrtl.module private @Bar(out %_a: !firrtl.probe<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %ref_zero = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.refconnect %_a, %ref_zero : !firrtl.ref<uint<1>>
+    firrtl.ref.define %_a, %ref_zero : !firrtl.probe<uint<1>>
   }
   // CHECK:  firrtl.strictconnect %a, %c0_ui1 : !firrtl.uint<1>
   firrtl.module @SendThroughRef(out %a: !firrtl.uint<1>) {
-    %bar_a = firrtl.instance bar @Bar(out _a: !firrtl.ref<uint<1>>)
-    %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
+    %bar_a = firrtl.instance bar @Bar(out _a: !firrtl.probe<uint<1>>)
+    %0 = firrtl.ref.resolve %bar_a : !firrtl.probe<uint<1>>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
   }
 }
@@ -482,19 +482,45 @@ firrtl.circuit "SendThroughRef" {
 
 // CHECK-LABEL: "ForwardRef"
 firrtl.circuit "ForwardRef" {
-  firrtl.module private @RefForward2(out %_a: !firrtl.ref<uint<1>>) {
+  firrtl.module private @RefForward2(out %_a: !firrtl.probe<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %ref_zero = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.refconnect %_a, %ref_zero : !firrtl.ref<uint<1>>
+    firrtl.ref.define %_a, %ref_zero : !firrtl.probe<uint<1>>
   }
-  firrtl.module private @RefForward(out %_a: !firrtl.ref<uint<1>>) {
-    %fwd_2 = firrtl.instance fwd_2 @RefForward2(out _a: !firrtl.ref<uint<1>>)
-    firrtl.refconnect %_a, %fwd_2 : !firrtl.ref<uint<1>>
+  firrtl.module private @RefForward(out %_a: !firrtl.probe<uint<1>>) {
+    %fwd_2 = firrtl.instance fwd_2 @RefForward2(out _a: !firrtl.probe<uint<1>>)
+    firrtl.ref.define %_a, %fwd_2 : !firrtl.probe<uint<1>>
   }
   // CHECK:  firrtl.strictconnect %a, %c0_ui1 : !firrtl.uint<1>
   firrtl.module @ForwardRef(out %a: !firrtl.uint<1>) {
-    %fwd_a = firrtl.instance fwd @RefForward(out _a: !firrtl.ref<uint<1>>)
-    %0 = firrtl.ref.resolve %fwd_a : !firrtl.ref<uint<1>>
+    %fwd_a = firrtl.instance fwd @RefForward(out _a: !firrtl.probe<uint<1>>)
+    %0 = firrtl.ref.resolve %fwd_a : !firrtl.probe<uint<1>>
+    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Don't prop through a rwprobe ref.
+
+// CHECK-LABEL: "SendThroughRWProbe"
+firrtl.circuit "SendThroughRWProbe" {
+  // CHECK-LABEL: firrtl.module private @Bar
+  firrtl.module private @Bar(out %rw: !firrtl.rwprobe<uint<1>>, out %out : !firrtl.uint<1>) {
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK: %[[N:.+]], %{{.+}} = firrtl.node
+    // CHECK-SAME: forceable
+    %n, %n_ref = firrtl.node %zero forceable : !firrtl.uint<1>
+    // CHECK: firrtl.node %[[N]]
+    %user = firrtl.node %n : !firrtl.uint<1>
+    firrtl.strictconnect %out, %user : !firrtl.uint<1>
+    firrtl.ref.define %rw, %n_ref : !firrtl.rwprobe<uint<1>>
+  }
+  // CHECK:  firrtl.strictconnect %a, %0 : !firrtl.uint<1>
+  firrtl.module @SendThroughRWProbe(out %a: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+    %bar_rw, %bar_out = firrtl.instance bar @Bar(out rw: !firrtl.rwprobe<uint<1>>, out out: !firrtl.uint<1>)
+    firrtl.strictconnect %out, %bar_out : !firrtl.uint<1>
+    %0 = firrtl.ref.resolve %bar_rw : !firrtl.rwprobe<uint<1>>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
   }
 }
