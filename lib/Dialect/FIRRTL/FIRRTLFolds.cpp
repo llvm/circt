@@ -2014,6 +2014,12 @@ OpFoldResult VectorCreateOp::fold(FoldAdaptor adaptor) {
   return collectFields(getContext(), adaptor.getOperands());
 }
 
+OpFoldResult UninferredResetCastOp::fold(FoldAdaptor adaptor) {
+  if (getOperand().getType() == getType())
+    return getOperand();
+  return {};
+}
+
 namespace {
 // A register with constant reset and all connection to either itself or the
 // same constant, must be replaced by the constant.

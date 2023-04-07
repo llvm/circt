@@ -780,7 +780,7 @@ def UninferredResetCastOp : FIRRTLOp<"resetCast", [HasCustomSSAName, Pure]> {
   }];
   let arguments = (ins AnyResetType:$input);
   let results = (outs AnyResetType:$result);
-
+  let hasFolder = 1;
   let assemblyFormat =
     "$input attr-dict `:` functional-type($input, $result)";
 }

@@ -5,6 +5,7 @@ firrtl.circuit "Casts" {
 // CHECK-LABEL: firrtl.module @Casts
 firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
     in %clock : !firrtl.clock, in %asyncreset : !firrtl.asyncreset,
+    in %inreset : !firrtl.reset, out %outreset : !firrtl.reset,
     out %out_ui1 : !firrtl.uint<1>, out %out_si1 : !firrtl.sint<1>,
     out %out_clock : !firrtl.clock, out %out_asyncreset : !firrtl.asyncreset) {
 
@@ -42,6 +43,9 @@ firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
   // CHECK: firrtl.strictconnect %out_asyncreset, %c1_asyncreset : !firrtl.asyncreset
   %7 = firrtl.asAsyncReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
   firrtl.connect %out_asyncreset, %7 : !firrtl.asyncreset, !firrtl.asyncreset
+  // CHECK: firrtl.strictconnect %outreset, %inreset : !firrtl.reset
+  %8 = firrtl.resetCast %inreset : (!firrtl.reset) -> !firrtl.reset
+  firrtl.strictconnect %outreset, %8 : !firrtl.reset
 }
 
 // CHECK-LABEL: firrtl.module @Div
