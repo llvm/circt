@@ -3794,28 +3794,8 @@ FailureOr<bool> FIRRTLLowering::lowerConnect(Value destVal, Value srcVal) {
 }
 
 LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
-  auto dest = op.getDest();
-  // The source can be a smaller integer, extend it as appropriate if so.
-  auto destType = dest.getType().cast<FIRRTLBaseType>().getPassiveType();
-  auto srcVal = getLoweredAndExtendedValue(op.getSrc(), destType);
-  if (!srcVal)
-    return handleZeroBit(op.getSrc(), []() { return success(); });
-
-  auto destVal = getPossiblyInoutLoweredValue(dest);
-  if (!destVal)
-    return failure();
-
-  auto result = lowerConnect(destVal, srcVal);
-  if (failed(result))
-    return failure();
-  if (*result)
-    return success();
-
-  if (!destVal.getType().isa<hw::InOutType>())
-    return op.emitError("destination isn't an inout type");
-
-  builder.create<sv::AssignOp>(destVal, srcVal);
-  return success();
+  op.emitError("(ICE) Connect should have been lowered to strictconnect");
+  return failure();
 }
 
 LogicalResult FIRRTLLowering::visitStmt(StrictConnectOp op) {

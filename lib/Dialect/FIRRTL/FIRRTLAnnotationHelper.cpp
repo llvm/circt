@@ -660,13 +660,10 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
         valType.getWidthlessType() != wireType.getWidthlessType()) {
       // Helper: create a wire, cast it with callback, connect cast to sink.
       auto addWireWithCast = [&](auto createCast) {
-        auto wire =
-            sinkBuilder
-                .create<WireOp>(
-                    valType,
-                    state.getNamespace(wireModule).newName(tapName.getValue()))
-                .getResult();
-        sinkBuilder.create<ConnectOp>(sink, createCast(wire));
+        auto wire = sinkBuilder.create<WireOp>(
+            valType,
+            state.getNamespace(wireModule).newName(tapName.getValue()));
+        sinkBuilder.create<StrictConnectOp>(sink, createCast(wire));
         sink = wire;
       };
       if (isa<IntType>(wireType))

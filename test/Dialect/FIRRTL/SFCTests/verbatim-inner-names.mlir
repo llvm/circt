@@ -17,8 +17,8 @@ firrtl.circuit "Foo" {
     %regResetName = firrtl.regreset sym @regResetSym %clock, %reset, %value : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
 
     %invalid_ui42 = firrtl.invalidvalue : !firrtl.uint<42>
-    firrtl.connect %instName_clockIn, %clock : !firrtl.clock, !firrtl.clock
-    firrtl.connect %wireName, %invalid_ui42 : !firrtl.uint<42>, !firrtl.uint<42>
+    firrtl.strictconnect %instName_clockIn, %clock : !firrtl.clock
+    firrtl.strictconnect %wireName, %invalid_ui42 : !firrtl.uint<42>
   }
 }
 

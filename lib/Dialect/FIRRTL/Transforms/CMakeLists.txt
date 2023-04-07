@@ -21,6 +21,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LegacyWiring.cpp
   LowerAnnotations.cpp
   LowerCHIRRTL.cpp
+  LowerConnects.cpp
   LowerIntrinsics.cpp
   LowerMemory.cpp
   LowerTypes.cpp

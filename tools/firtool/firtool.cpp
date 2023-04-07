@@ -538,6 +538,8 @@ static LogicalResult processBuffer(
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createLowerCHIRRTLPass());
 
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(firrtl::createLowerFIRRTLConnectsPass());
+
   // Width inference creates canonicalization opportunities.
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
 

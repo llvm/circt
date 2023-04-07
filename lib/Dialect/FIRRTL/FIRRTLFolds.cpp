@@ -1690,12 +1690,6 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   return success();
 }
 
-void ConnectOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                            MLIRContext *context) {
-  results.insert<patterns::ConnectExtension, patterns::ConnectSameType>(
-      context);
-}
-
 LogicalResult StrictConnectOp::canonicalize(StrictConnectOp op,
                                             PatternRewriter &rewriter) {
   // TODO: Canonicalize towards explicit extensions and flips here.
@@ -2918,7 +2912,7 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   auto pt = rewriter.saveInsertionPoint();
   rewriter.setInsertionPoint(con);
   auto v = constReg ? (Value)constOp.getResult() : (Value)mux.getLow();
-  replaceOpWithNewOpAndCopyName<ConnectOp>(rewriter, con, con.getDest(), v);
+  replaceOpWithNewOpAndCopyName<StrictConnectOp>(rewriter, con, con.getDest(), v);
   rewriter.restoreInsertionPoint(pt);
   return success();
 }

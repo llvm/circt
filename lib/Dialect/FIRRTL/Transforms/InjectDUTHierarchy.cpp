@@ -199,7 +199,7 @@ void InjectDUTHierarchy::runOnOperation() {
     Value rhs = pair.value();
     if (dut.getPortDirection(pair.index()) == Direction::In)
       std::swap(lhs, rhs);
-    emitConnect(b, b.getUnknownLoc(), lhs, rhs);
+    b.create<StrictConnectOp>(b.getUnknownLoc(), lhs, rhs);
   }
 
   // Compute a set of paths that are used _inside_ the wrapper.

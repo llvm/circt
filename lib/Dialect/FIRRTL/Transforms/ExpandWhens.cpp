@@ -231,7 +231,7 @@ public:
 
   /// Take two connection operations and merge them into a new connect under a
   /// condition.  Destination of both connects should be `dest`.
-  ConnectOp flattenConditionalConnections(OpBuilder &b, Location loc,
+  StrictConnectOp flattenConditionalConnections(OpBuilder &b, Location loc,
                                           Value dest, Value cond,
                                           Operation *whenTrueConn,
                                           Operation *whenFalseConn) {
@@ -255,7 +255,7 @@ public:
       newValue = b.createOrFold<MuxPrimOp>(fusedLoc, cond, whenTrue, whenFalse);
     else if (trueIsInvalid)
       newValue = whenFalse;
-    return b.create<ConnectOp>(loc, dest, newValue);
+    return b.create<StrictConnectOp>(loc, dest, newValue);
   }
 
   void visitDecl(WireOp op) { declareSinks(op.getResult(), Flow::Duplex); }
@@ -287,7 +287,7 @@ public:
     // aggergate type, connect each ground type element.
     auto builder = OpBuilder(op->getBlock(), ++Block::iterator(op));
     auto fn = [&](Value value) {
-      auto connect = builder.create<ConnectOp>(value.getLoc(), value, value);
+      auto connect = builder.create<StrictConnectOp>(value.getLoc(), value, value);
       driverMap[getFieldRefFromValue(value)] = connect;
     };
     foreachSubelement(builder, op.getResult(), fn);
@@ -298,7 +298,7 @@ public:
     // aggergate type, connect each ground type element.
     auto builder = OpBuilder(op->getBlock(), ++Block::iterator(op));
     auto fn = [&](Value value) {
-      auto connect = builder.create<ConnectOp>(value.getLoc(), value, value);
+      auto connect = builder.create<StrictConnectOp>(value.getLoc(), value, value);
       driverMap[getFieldRefFromValue(value)] = connect;
     };
     foreachSubelement(builder, op.getResult(), fn);
