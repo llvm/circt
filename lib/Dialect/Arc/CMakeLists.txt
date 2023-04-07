@@ -1,13 +1,14 @@
 add_circt_dialect_library(CIRCTArc
-  Dialect.cpp
-  Ops.cpp
-  Types.cpp
+  ArcDialect.cpp
+  ArcOps.cpp
+  ArcTypes.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Arc
 
   DEPENDS
   CIRCTArcEnumsIncGen
+  CIRCTArcInterfacesIncGen
   MLIRArcIncGen
 
   LINK_COMPONENTS

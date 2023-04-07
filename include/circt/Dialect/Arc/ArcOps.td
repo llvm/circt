@@ -1,4 +1,4 @@
-//===- Ops.td - Arc dialect operations ---------------------*- tablegen -*-===//
+//===- ArcOps.td - Arc dialect operations ------------------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,11 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_ARC_OPS_TD
-#define CIRCT_DIALECT_ARC_OPS_TD
+#ifndef CIRCT_DIALECT_ARC_ARCOPS_TD
+#define CIRCT_DIALECT_ARC_ARCOPS_TD
 
-include "circt/Dialect/Arc/Dialect.td"
-include "circt/Dialect/Arc/Types.td"
+include "circt/Dialect/Arc/ArcDialect.td"
+include "circt/Dialect/Arc/ArcTypes.td"
+include "circt/Dialect/Arc/ArcInterfaces.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/FunctionInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
@@ -100,7 +101,7 @@ def DefineOp : ArcOp<"define", [
 
 def OutputOp : ArcOp<"output", [
   Terminator,
-  ParentOneOf<["DefineOp", "LutOp"]>,
+  ParentOneOf<["DefineOp", "LutOp", "ClockDomainOp"]>,
   Pure,
   ReturnLike
 ]> {
@@ -117,6 +118,7 @@ def OutputOp : ArcOp<"output", [
 
 def StateOp : ArcOp<"state", [
   CallOpInterface, MemRefsNormalizable,
+  CallOpMutableInterface,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
   AttrSizedOperandSegments
 ]> {
@@ -197,6 +199,9 @@ def StateOp : ArcOp<"state", [
     operand_range getArgOperands() {
       return {operand_begin(), operand_end()};
     }
+    MutableOperandRange getArgOperandsMutable() {
+      return getInputsMutable();
+    }
 
     mlir::CallInterfaceCallable getCallableForCallee() {
       return (*this)->getAttrOfType<mlir::SymbolRefAttr>("arc");
@@ -206,6 +211,7 @@ def StateOp : ArcOp<"state", [
 
 def CallOp : ArcOp<"call", [
   CallOpInterface, MemRefsNormalizable, Pure,
+  CallOpMutableInterface,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "calls an arc";
@@ -220,6 +226,9 @@ def CallOp : ArcOp<"call", [
   let extraClassDeclaration = [{
     operand_range getArgOperands() {
       return {operand_begin(), operand_end()};
+    }
+    MutableOperandRange getArgOperandsMutable() {
+      return getInputsMutable();
     }
 
     mlir::CallInterfaceCallable getCallableForCallee() {
@@ -249,6 +258,49 @@ class MemoryAndDataTypesMatch<string mem, string data> : TypesMatchWith<
   "memory and data types must match", mem, data,
   "$_self.cast<MemoryType>().getWordType()">;
 
+def MemoryReadPortOp : ArcOp<"memory_read_port", [
+  MemoryEffects<[MemRead]>,
+  MemoryAndDataTypesMatch<"memory", "data">
+]> {
+  let summary = "Read port from a memory";
+  let arguments = (ins
+    MemoryType:$memory,
+    AnyInteger:$address,
+    Optional<I1>:$clock,
+    I1:$enable
+  );
+  let results = (outs AnyInteger:$data);
+  let assemblyFormat = [{
+    $memory `[` $address `]` `,` $enable ( `clock` $clock^ )?
+    attr-dict `:` type($memory) `,` type($address)
+  }];
+
+  let hasVerifier = 1;
+}
+
+def MemoryWritePortOp : ArcOp<"memory_write_port", [
+  MemoryEffects<[MemWrite]>,
+  MemoryAndDataTypesMatch<"memory", "data">,
+  AttrSizedOperandSegments
+]> {
+  let summary = "Write port to a memory";
+  let arguments = (ins
+    MemoryType:$memory,
+    AnyInteger:$address,
+    Optional<I1>:$clock,
+    I1:$enable,
+    AnyInteger:$data,
+    Optional<AnyInteger>:$mask
+  );
+  let assemblyFormat = [{
+    $memory `[` $address `]` `,` $enable `,` $data
+    ( `mask` `(` $mask^ `:` type($mask) `)`)? (`clock` $clock^)?
+    attr-dict `:` type($memory) `,` type($address)
+  }];
+
+  let hasVerifier = 1;
+}
+
 def MemoryReadOp : ArcOp<"memory_read", [
   MemoryEffects<[MemRead]>,
   MemoryAndDataTypesMatch<"memory", "data">
@@ -256,45 +308,61 @@ def MemoryReadOp : ArcOp<"memory_read", [
   let summary = "Read word from memory";
   let arguments = (ins
     MemoryType:$memory,
-    AnyInteger:$address,
-    I1:$clock,
-    I1:$enable
+    AnyInteger:$address
   );
   let results = (outs AnyInteger:$data);
   let assemblyFormat = [{
-    $memory `[` $address `]` `,` $clock `,` $enable
-    attr-dict `:` type($memory) `,` type($address)
+    $memory `[` $address `]` attr-dict `:` type($memory) `,` type($address)
   }];
 }
 
 def MemoryWriteOp : ArcOp<"memory_write", [
   MemoryEffects<[MemWrite]>,
-  MemoryAndDataTypesMatch<"memory", "data">,
-  AttrSizedOperandSegments
+  MemoryAndDataTypesMatch<"memory", "data">
 ]> {
   let summary = "Write word to memory";
   let arguments = (ins
     MemoryType:$memory,
     AnyInteger:$address,
-    I1:$clock,
     I1:$enable,
-    AnyInteger:$data,
-    Optional<AnyInteger>:$mask,
-    Variadic<AnyType>:$reads
+    AnyInteger:$data
   );
   let assemblyFormat = [{
-    $memory `[` $address `]` `,` $clock `,` $enable `,` $data
-    ( `mask` `(` $mask^ `:` type($mask) `)`)?
-    (` ` `(` `reads` $reads^ `:` type($reads) `)`)?
+    $memory `[` $address `]` `,` $enable `,` $data
     attr-dict `:` type($memory) `,` type($address)
   }];
-
-  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//
 // Trigger Grouping
 //===----------------------------------------------------------------------===//
+
+def ClockDomainOp : ArcOp<"clock_domain", [
+  IsolatedFromAbove,
+  RegionKindInterface,
+  RecursiveMemoryEffects,
+  SingleBlockImplicitTerminator<"arc::OutputOp">
+]> {
+  let summary = "a clock domain";
+
+  let arguments = (ins Variadic<AnyType>:$inputs, I1:$clock);
+  let results = (outs Variadic<AnyType>:$outputs);
+  let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = [{
+    ` ` `(` $inputs `)` `clock` $clock attr-dict `:`
+    functional-type($inputs, results) $body
+  }];
+
+  let extraClassDeclaration = [{
+    static mlir::RegionKind getRegionKind(unsigned index) {
+      return mlir::RegionKind::Graph;
+    }
+    mlir::Block &getBodyBlock() { return getBody().front(); }
+  }];
+
+  let hasRegionVerifier = 1;
+}
 
 def ClockTreeOp : ArcOp<"clock_tree", [NoTerminator, NoRegionArguments]> {
   let summary = "A clock tree";
@@ -512,4 +580,4 @@ def ZeroCountOp : ArcOp<"zero_count", [Pure, SameOperandsAndResultType]> {
   let assemblyFormat = "$predicate $input attr-dict `:` type($input)";
 }
 
-#endif // CIRCT_DIALECT_ARC_OPS_TD
+#endif // CIRCT_DIALECT_ARC_ARCOPS_TD

@@ -24,7 +24,7 @@ using namespace firrtl;
 // Instantiated for RegOp and RegResetOp
 template <typename T>
 static bool canErase(T op) {
-  return !(hasDontTouch(op.getResult()) ||
+  return !(hasDontTouch(op.getResult()) || op.isForceable() ||
            (op.getAnnotationsAttr() && !op.getAnnotationsAttr().empty()));
 }
 
@@ -55,10 +55,10 @@ void RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
     return;
 
   // Register is only written by itself, replace with invalid.
-  if (con.getSrc() == reg) {
-    auto inv =
-        OpBuilder(reg).create<InvalidValueOp>(reg.getLoc(), reg.getType());
-    reg.replaceAllUsesWith(inv.getResult());
+  if (con.getSrc() == reg.getResult()) {
+    auto inv = OpBuilder(reg).create<InvalidValueOp>(reg.getLoc(),
+                                                     reg.getResult().getType());
+    reg.getResult().replaceAllUsesWith(inv.getResult());
     toErase.push_back(reg);
     toErase.push_back(con);
     return;
@@ -73,7 +73,7 @@ void RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
       // Simple constants we can move safely
       auto *fmodb = con->getParentOfType<FModuleOp>().getBodyBlock();
       cst->moveBefore(fmodb, fmodb->begin());
-      reg.replaceAllUsesWith(cst.getResult());
+      reg.getResult().replaceAllUsesWith(cst.getResult());
       toErase.push_back(con);
     } else {
       bool dominatesAll = true;
@@ -87,12 +87,12 @@ void RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
       }
       if (dominatesAll) {
         // Dominance is fine, just replace the op.
-        reg.replaceAllUsesWith(con.getSrc());
+        reg.getResult().replaceAllUsesWith(con.getSrc());
         toErase.push_back(con);
       } else {
-        auto bounce =
-            OpBuilder(reg).create<WireOp>(reg.getLoc(), reg.getType());
-        reg.replaceAllUsesWith(bounce.getResult());
+        auto bounce = OpBuilder(reg).create<WireOp>(reg.getLoc(),
+                                                    reg.getResult().getType());
+        reg.replaceAllUsesWith(bounce);
       }
     }
     toErase.push_back(reg);
@@ -110,10 +110,10 @@ void RegisterOptimizerPass::checkRegReset(mlir::DominanceInfo &dom,
     return;
 
   // Register is only written by itself, and reset with a constant.
-  if (reg.getResetValue().getType() == reg.getType()) {
-    if (con.getSrc() == reg && isConstant(reg.getResetValue())) {
+  if (reg.getResetValue().getType() == reg.getResult().getType()) {
+    if (con.getSrc() == reg.getResult() && isConstant(reg.getResetValue())) {
       // constant obviously dominates the register.
-      reg.replaceAllUsesWith(reg.getResetValue());
+      reg.getResult().replaceAllUsesWith(reg.getResetValue());
       toErase.push_back(reg);
       toErase.push_back(con);
       return;
@@ -122,7 +122,7 @@ void RegisterOptimizerPass::checkRegReset(mlir::DominanceInfo &dom,
     if (con.getSrc() == reg.getResetValue() &&
         isConstant(reg.getResetValue())) {
       // constant obviously dominates the register.
-      reg.replaceAllUsesWith(reg.getResetValue());
+      reg.getResult().replaceAllUsesWith(reg.getResetValue());
       toErase.push_back(reg);
       toErase.push_back(con);
       return;

@@ -75,35 +75,29 @@ arc.define @DummyArc(%arg0: i42) -> i42 {
   arc.output %arg0 : i42
 }
 
-// CHECK-LABEL: arc.model "MemoryWriteDependencyUpdates"
-hw.module @MemoryWriteDependencyUpdates(%clk0: i1, %clk1: i1) {
+// CHECK-LABEL: arc.model "MemoryReadAndNonMaskedWrite"
+hw.module @MemoryReadAndNonMaskedWrite(%clk0: i1) {
   %true = hw.constant true
   %c0_i2 = hw.constant 0 : i2
-  %c1_i2 = hw.constant 1 : i2
   %c9001_i42 = hw.constant 9001 : i42
   %mem = arc.memory <4 x i42>
-  %read0 = arc.memory_read %mem[%c0_i2], %clk0, %true : <4 x i42>, i2
-  %read1 = arc.memory_read %mem[%c1_i2], %clk1, %true : <4 x i42>, i2
-  arc.memory_write %mem[%c0_i2], %clk0, %true, %c9001_i42 (reads %read0, %read1 : i42, i42) : <4 x i42>, i2
-  arc.memory_write %mem[%c1_i2], %clk1, %true, %c9001_i42 (reads %read0, %read1 : i42, i42) : <4 x i42>, i2
+  arc.memory_write_port %mem[%c0_i2], %true, %c9001_i42 clock %clk0 : <4 x i42>, i2
+  // COM: also checks that the read is properly reordered to be before the write
+  %read0 = arc.memory_read_port %mem[%c0_i2], %true clock %clk0 : <4 x i42>, i2
+
   // CHECK-NEXT: ([[PTR:%.+]]: !arc.storage):
   // CHECK-NEXT: [[INCLK0:%.+]] = arc.root_input "clk0", [[PTR]] : (!arc.storage) -> !arc.state<i1>
-  // CHECK-NEXT: [[INCLK1:%.+]] = arc.root_input "clk1", [[PTR]] : (!arc.storage) -> !arc.state<i1>
-  // CHECK-NEXT: [[MEM:%.+]] = arc.alloc_memory [[PTR]] : (!arc.storage) -> !arc.memory<4 x i42>
   // CHECK-NEXT: [[CLK0:%.+]] = arc.state_read [[INCLK0]] : <i1>
   // CHECK-NEXT: arc.clock_tree [[CLK0]] {
-  // CHECK:        [[CLK:%.+]] = arc.state_read [[INCLK0]]
-  // CHECK-NEXT:   [[TMP:%.+]] = arc.memory_read [[MEM]][%c0_i2], [[CLK]], %true : <4 x i42>, i2
-  //               Only one read should remain.
-  // CHECK-NEXT:   arc.memory_write [[MEM]][%c0_i2], [[CLK]], %true, %c9001_i42 (reads [[TMP]] : i42) : <4 x i42>, i2
+  // CHECK:        %2 = scf.if %true -> (i42) {
+  // CHECK-NEXT:     [[TMP:%.+]] = arc.memory_read [[MEM:%.+]][%c0_i2] : <4 x i42>, i2
+  // CHECK-NEXT:     scf.yield [[TMP]] : i42
+  // CHECK-NEXT:   } else {
+  // CHECK:          scf.yield %c0_i42 : i42
+  // CHECK-NEXT:   }
+  // CHECK:        arc.memory_write [[MEM]][%c0_i2], %true, %c9001_i42 : <4 x i42>, i2
   // CHECK-NEXT: }
-  // CHECK-NEXT: [[CLK1:%.+]] = arc.state_read [[INCLK1]] : <i1>
-  // CHECK-NEXT: arc.clock_tree [[CLK1]] {
-  // CHECK:        [[CLK:%.+]] = arc.state_read [[INCLK1]]
-  // CHECK-NEXT:   [[TMP:%.+]] = arc.memory_read [[MEM]][%c1_i2], [[CLK]], %true : <4 x i42>, i2
-  //               Only one read should remain.
-  // CHECK-NEXT:   arc.memory_write [[MEM]][%c1_i2], [[CLK]], %true, %c9001_i42 (reads [[TMP]] : i42) : <4 x i42>, i2
-  // CHECK-NEXT: }
+  // CHECK-NEXT: [[MEM]] = arc.alloc_memory [[PTR]] : (!arc.storage) -> !arc.memory<4 x i42>
 }
 
 // CHECK-LABEL:  arc.model "maskedMemoryWrite"
@@ -113,17 +107,17 @@ hw.module @maskedMemoryWrite(%clk: i1) {
   %c9001_i42 = hw.constant 9001 : i42
   %c1010_i42 = hw.constant 1010 : i42
   %mem = arc.memory <4 x i42>
-  arc.memory_write %mem[%c0_i2], %clk, %true, %c9001_i42 mask (%c1010_i42 : i42) : <4 x i42>, i2
+  arc.memory_write_port %mem[%c0_i2], %true, %c9001_i42 mask (%c1010_i42 : i42) clock %clk : <4 x i42>, i2
 }
 // CHECK:      %c9001_i42 = hw.constant 9001 : i42
 // CHECK:      %c1010_i42 = hw.constant 1010 : i42
-// CHECK:      [[RD:%.+]] = arc.memory_read [[MEM:%.+]][%c0_i2], [[CLK:%.+]], %true : <4 x i42>, i2
+// CHECK:      [[RD:%.+]] = arc.memory_read [[MEM:%.+]][%c0_i2] : <4 x i42>, i2
 // CHECK:      %c-1_i42 = hw.constant -1 : i42
 // CHECK:      [[NEG_MASK:%.+]] = comb.xor bin %c1010_i42, %c-1_i42 : i42
 // CHECK:      [[OLD_MASKED:%.+]] = comb.and bin [[NEG_MASK]], [[RD]] : i42
 // CHECK:      [[NEW_MASKED:%.+]] = comb.and bin %c1010_i42, %c9001_i42 : i42
 // CHECK:      [[DATA:%.+]] = comb.or bin [[OLD_MASKED]], [[NEW_MASKED]] : i42
-// CHECK:      arc.memory_write [[MEM]][%c0_i2], [[CLK]], %true, [[DATA]] : <4 x i42>, i2
+// CHECK:      arc.memory_write [[MEM]][%c0_i2], %true, [[DATA]] : <4 x i42>, i2
 
 // CHECK-LABEL: arc.model "Taps"
 hw.module @Taps() {

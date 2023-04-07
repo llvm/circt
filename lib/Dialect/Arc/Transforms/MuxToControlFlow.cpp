@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
-#include "circt/Dialect/Arc/Interfaces.h"
+#include "circt/Dialect/Arc/ArcInterfaces.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"

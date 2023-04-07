@@ -8,7 +8,7 @@
 
 #include "circt/Conversion/ConvertToArcs.h"
 #include "../PassDetail.h"
-#include "circt/Dialect/Arc/Ops.h"
+#include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/Namespace.h"
@@ -24,7 +24,7 @@ using llvm::MapVector;
 static bool isArcBreakingOp(Operation *op) {
   return op->hasTrait<OpTrait::ConstantLike>() ||
          isa<hw::InstanceOp, seq::CompRegOp, StateOp, ClockGateOp, MemoryOp,
-             MemoryReadOp, MemoryWriteOp>(op) ||
+             MemoryReadPortOp, MemoryWritePortOp>(op) ||
          op->getNumResults() > 1;
 }
 

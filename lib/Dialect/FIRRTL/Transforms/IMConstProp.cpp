@@ -481,12 +481,12 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
 }
 
 void IMConstPropPass::markWireOp(WireOp wire) {
-  auto type = wire.getType().dyn_cast<FIRRTLType>();
+  auto type = wire.getResult().getType().dyn_cast<FIRRTLType>();
   if (!type)
-    return markOverdefined(wire);
+    return markOverdefined(wire.getResult());
 
   if (hasDontTouch(wire.getResult()))
-    return markOverdefined(wire);
+    return markOverdefined(wire.getResult());
 
   // Otherwise, this starts out as unknown and is upgraded by connects.
 }
@@ -665,7 +665,7 @@ void IMConstPropPass::visitNode(NodeOp node) {
   // propagate values.
   if (hasDontTouch(node.getResult()) ||
       (node.getAnnotationsAttr() && !node.getAnnotationsAttr().empty()))
-    return markOverdefined(node);
+    return markOverdefined(node.getResult());
 
   return mergeLatticeValue(node.getResult(), node.getInput());
 }

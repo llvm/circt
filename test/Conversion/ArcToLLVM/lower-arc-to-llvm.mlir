@@ -105,14 +105,13 @@ func.func @MemoryUpdates(%arg0: !arc.storage<24>, %enable: i1) {
   // CHECK-NEXT: llvm.mlir.constant(true
   // CHECK-NEXT: [[THREE:%.+]] = llvm.mlir.constant(3
 
-  %1 = arc.memory_read %0[%c3_i19], %clk, %enable : <4 x i42, 6>, i19
-  %2 = comb.add %1, %1 : i42
+  %1 = arc.memory_read %0[%c3_i19] : <4 x i42, 6>, i19
+  %2 = arith.addi %1, %1 : i42
   // CHECK-NEXT:   [[ADDR:%.+]] = llvm.zext [[THREE]] : i19 to i20
   // CHECK-NEXT:   [[FOUR:%.+]] = llvm.mlir.constant(4
   // CHECK-NEXT:   [[INBOUNDS:%.+]] = llvm.icmp "ult" [[ADDR]], [[FOUR]]
   // CHECK-NEXT:   [[GEP:%.+]] = llvm.getelementptr [[PTR]][[[ADDR]]] : (!llvm.ptr<i48>, i20) -> !llvm.ptr<i42>
-  // CHECK-NEXT:   [[COND:%.+]] = llvm.and %arg1, [[INBOUNDS]]
-  // CHECK-NEXT:   llvm.cond_br [[COND]], [[BB_LOAD:\^.+]], [[BB_SKIP:\^.+]]
+  // CHECK-NEXT:   llvm.cond_br [[INBOUNDS]], [[BB_LOAD:\^.+]], [[BB_SKIP:\^.+]]
   // CHECK-NEXT: [[BB_LOAD]]:
   // CHECK-NEXT:   [[TMP:%.+]] = llvm.load [[GEP]]
   // CHECK-NEXT:   llvm.br [[BB_RESUME:\^.+]]([[TMP]] : i42)
@@ -122,7 +121,7 @@ func.func @MemoryUpdates(%arg0: !arc.storage<24>, %enable: i1) {
   // CHECK-NEXT: [[BB_RESUME]]([[LOADED:%.+]]: i42):
   // CHECK:        [[ADDED:%.+]] = llvm.add [[LOADED]], [[LOADED]]
 
-  arc.memory_write %0[%c3_i19], %clk, %enable, %2 : <4 x i42, 6>, i19
+  arc.memory_write %0[%c3_i19], %enable, %2 : <4 x i42, 6>, i19
   // CHECK-NEXT:   [[ADDR:%.+]] = llvm.zext [[THREE]] : i19 to i20
   // CHECK-NEXT:   [[FOUR:%.+]] = llvm.mlir.constant(4
   // CHECK-NEXT:   [[INBOUNDS:%.+]] = llvm.icmp "ult" [[ADDR]], [[FOUR]]
@@ -158,4 +157,14 @@ func.func @callOp(%arg0: i32) -> i32 {
 }
 arc.define @dummyCallee(%arg0: i32) -> i32 {
   arc.output %arg0 : i32
+}
+
+// FIXME: this does not really belong here, but there is no better place either.
+// CHECK-LABEL: llvm.func @lowerCombParity
+func.func @lowerCombParity(%arg0: i32) -> i1 {
+  // CHECK: %[[CNT:.*]] = llvm.intr.ctpop(%arg0) : (i32) -> i32
+  // CHECK: llvm.trunc %[[CNT]] : i32 to i1
+  %0 = comb.parity %arg0 : i32
+
+  return %0 : i1
 }

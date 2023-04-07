@@ -1,4 +1,4 @@
-//===- Dialect.td - Arc dialect definition -----------------*- tablegen -*-===//
+//===- ArcDialect.td - Arc dialect definition --------------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_ARC_DIALECT_TD
-#define CIRCT_DIALECT_ARC_DIALECT_TD
+#ifndef CIRCT_DIALECT_ARC_ARCDIALECT_TD
+#define CIRCT_DIALECT_ARC_ARCDIALECT_TD
 
 def ArcDialect : Dialect {
   let name = "arc";
@@ -25,4 +25,4 @@ def ArcDialect : Dialect {
   }];
 }
 
-#endif // CIRCT_DIALECT_ARC_DIALECT_TD
+#endif // CIRCT_DIALECT_ARC_ARCDIALECT_TD

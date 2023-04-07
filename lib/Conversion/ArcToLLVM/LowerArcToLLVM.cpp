@@ -10,9 +10,10 @@
 #include "circt/Conversion/ArcToLLVM.h"
 #include "circt/Conversion/CombToLLVM.h"
 #include "circt/Conversion/HWToLLVM.h"
-#include "circt/Dialect/Arc/Ops.h"
+#include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Support/Namespace.h"
+#include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
@@ -232,13 +233,11 @@ struct MemoryReadOpLowering : public OpConversionPattern<arc::MemoryReadOp> {
     auto access = prepareMemoryAccess(
         op.getLoc(), adaptor.getMemory(), adaptor.getAddress(),
         op.getMemory().getType().cast<MemoryType>(), rewriter);
-    auto enable = rewriter.create<LLVM::AndOp>(op.getLoc(), adaptor.getEnable(),
-                                               access.withinBounds);
 
     // Only attempt to read the memory if the address is within bounds,
     // otherwise produce a zero value.
     rewriter.replaceOpWithNewOp<scf::IfOp>(
-        op, enable,
+        op, access.withinBounds,
         [&](auto &builder, auto loc) {
           Value loadOp = builder.template create<LLVM::LoadOp>(loc, access.ptr);
           builder.template create<scf::YieldOp>(loc, loadOp);
@@ -257,9 +256,6 @@ struct MemoryWriteOpLowering : public OpConversionPattern<arc::MemoryWriteOp> {
   LogicalResult
   matchAndRewrite(arc::MemoryWriteOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    if (op.getMask())
-      return op->emitError("not allowed to have a write mask at this stage");
-
     auto access = prepareMemoryAccess(
         op.getLoc(), adaptor.getMemory(), adaptor.getAddress(),
         op.getMemory().getType().cast<MemoryType>(), rewriter);
@@ -475,6 +471,7 @@ LogicalResult LowerArcToLLVMPass::lowerArcToLLVM() {
                                      constAggregateGlobalsMap);
   populateHWToLLVMTypeConversions(converter);
   populateCombToLLVMConversionPatterns(converter, patterns);
+  arith::populateArithToLLVMConversionPatterns(converter, patterns);
 
   return applyFullConversion(getOperation(), target, std::move(patterns));
 }

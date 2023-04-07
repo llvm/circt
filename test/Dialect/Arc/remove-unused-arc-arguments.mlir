@@ -1,5 +1,14 @@
 // RUN: circt-opt %s --arc-remove-unused-arc-arguments | FileCheck %s
 
+// COM: this has to be before @OneOfThreeUsed to check that arguments that
+// COM: become unused during the process are removed as well.
+// CHECK: arc.define @NestedCall(%arg0: i1) -> i1 {
+arc.define @NestedCall(%arg0: i1, %arg1: i1, %arg2: i1) -> i1 {
+  // CHECK: arc.call @OneOfThreeUsed(%arg0) : (i1) -> i1
+  %0 = arc.call @OneOfThreeUsed(%arg0, %arg1, %arg2) : (i1, i1, i1) -> i1
+  arc.output %0 : i1
+}
+
 // CHECK-LABEL: arc.define @OneOfThreeUsed(%arg0: i1)
 arc.define @OneOfThreeUsed(%arg0: i1, %arg1: i1, %arg2: i1) -> i1 {
   // CHECK-NEXT: arc.output %arg0

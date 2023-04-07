@@ -1,4 +1,4 @@
-//===- InitAllExternalInterfaces.h ------------------------------*- C++ -*-===//
+//===- ArcInterfaces.h ------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_ARC_INTERFACES_H
-#define CIRCT_DIALECT_ARC_INTERFACES_H
+#ifndef CIRCT_DIALECT_ARC_ARCINTERFACES_H
+#define CIRCT_DIALECT_ARC_ARCINTERFACES_H
 
 #include "mlir/IR/DialectInterface.h"
 
@@ -49,4 +49,4 @@ public:
 } // namespace arc
 } // namespace circt
 
-#endif // CIRCT_DIALECT_ARC_INTERFACES_H
+#endif // CIRCT_DIALECT_ARC_ARCINTERFACES_H

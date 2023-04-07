@@ -1628,7 +1628,8 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   if (!isa<WireOp>(connectedDecl) && !isa<RegOp>(connectedDecl))
     return failure();
   if (hasDontTouch(connectedDecl) || !AnnotationSet(connectedDecl).empty() ||
-      !hasDroppableName(connectedDecl))
+      !hasDroppableName(connectedDecl) ||
+      cast<Forceable>(connectedDecl).isForceable())
     return failure();
 
   // Only forward if the types exactly match and there is one connect.
@@ -1752,7 +1753,8 @@ LogicalResult AttachOp::canonicalize(AttachOp op, PatternRewriter &rewriter) {
     // TODO: May need to be sensitive to "don't touch" or other
     // annotations.
     if (auto wire = dyn_cast_or_null<WireOp>(operand.getDefiningOp())) {
-      if (!hasDontTouch(wire.getOperation()) && wire->hasOneUse()) {
+      if (!hasDontTouch(wire.getOperation()) && wire->hasOneUse() &&
+          !wire.isForceable()) {
         SmallVector<Value> newOperands;
         for (auto newOperand : op.getOperands())
           if (newOperand != operand) // Don't the add wire.
@@ -1779,7 +1781,7 @@ struct FoldNodeName : public mlir::RewritePattern {
     auto node = cast<NodeOp>(op);
     auto name = node.getNameAttr();
     if (!node.hasDroppableName() || node.getInnerSym() ||
-        !node.getAnnotations().empty())
+        !node.getAnnotations().empty() || node.isForceable())
       return failure();
     auto *newOp = node.getInput().getDefiningOp();
     // Best effort
@@ -1802,10 +1804,10 @@ struct NodeBypass : public mlir::RewritePattern {
                                 PatternRewriter &rewriter) const override {
     auto node = cast<NodeOp>(op);
     if (node.getInnerSym() || !node.getAnnotations().empty() ||
-        node.use_empty())
+        node.use_empty() || node.isForceable())
       return failure();
     rewriter.startRootUpdate(node);
-    node.replaceAllUsesWith(node.getInput());
+    node.getResult().replaceAllUsesWith(node.getInput());
     rewriter.finalizeRootUpdate(node);
     return success();
   }
@@ -1813,14 +1815,21 @@ struct NodeBypass : public mlir::RewritePattern {
 } // namespace
 
 // Interesting names and symbols and don't touch force nodes to stick around.
-OpFoldResult NodeOp::fold(FoldAdaptor adaptor) {
+LogicalResult NodeOp::fold(FoldAdaptor adaptor,
+                           SmallVectorImpl<OpFoldResult> &results) {
   if (!hasDroppableName())
-    return {};
+    return failure();
   if (hasDontTouch(getResult())) // handles inner symbols
-    return {};
+    return failure();
   if (getAnnotationsAttr() && !getAnnotationsAttr().empty())
-    return {};
-  return adaptor.getInput();
+    return failure();
+  if (isForceable())
+    return failure();
+  if (!adaptor.getInput())
+    return failure();
+
+  results.push_back(adaptor.getInput());
+  return success();
 }
 
 void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -2017,7 +2026,7 @@ struct FoldResetMux : public mlir::RewritePattern {
     auto reset =
         dyn_cast_or_null<ConstantOp>(reg.getResetValue().getDefiningOp());
     if (!reset || hasDontTouch(reg.getOperation()) ||
-        !reg.getAnnotations().empty())
+        !reg.getAnnotations().empty() || reg.isForceable())
       return failure();
     // Find the one true connect, or bail
     auto con = getSingleConnectUserOf(reg.getResult());
@@ -2041,7 +2050,7 @@ struct FoldResetMux : public mlir::RewritePattern {
       return failure();
 
     // Check all types should be typed by now
-    auto regTy = reg.getType();
+    auto regTy = reg.getResult().getType();
     if (con.getDest().getType() != regTy || con.getSrc().getType() != regTy ||
         mux.getHigh().getType() != regTy || mux.getLow().getType() != regTy ||
         regTy.getBitWidthOrSentinel() < 0)
@@ -2062,10 +2071,31 @@ struct FoldResetMux : public mlir::RewritePattern {
 };
 } // namespace
 
+static bool isDefinedByOneConstantOp(Value v) {
+  if (auto c = v.getDefiningOp<ConstantOp>())
+    return c.getValue().isOne();
+  if (auto sc = v.getDefiningOp<SpecialConstantOp>())
+    return sc.getValue();
+  return false;
+}
+
+static LogicalResult
+canonicalizeRegResetWithOneReset(RegResetOp reg, PatternRewriter &rewriter) {
+  if (!isDefinedByOneConstantOp(reg.getResetSignal()))
+    return failure();
+
+  // Ignore 'passthrough'.
+  (void)dropWrite(rewriter, reg->getResult(0), {});
+  replaceOpWithNewOpAndCopyName<NodeOp>(
+      rewriter, reg, reg.getResetValue(), reg.getNameAttr(), reg.getNameKind(),
+      reg.getAnnotationsAttr(), reg.getInnerSymAttr(), reg.getForceable());
+  return success();
+}
+
 void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results.insert<patterns::RegResetWithZeroReset,
-                 patterns::RegResetWithOneReset, FoldResetMux>(context);
+  results.add<patterns::RegResetWithZeroReset, FoldResetMux>(context);
+  results.add(canonicalizeRegResetWithOneReset);
 }
 
 // Returns the value connected to a port, if there is only one.
@@ -2151,7 +2181,7 @@ static void erasePort(PatternRewriter &rewriter, Value port) {
     if (!subfield) {
       auto ty = port.getType();
       auto reg = rewriter.create<RegOp>(port.getLoc(), ty, getClock());
-      port.replaceAllUsesWith(reg);
+      port.replaceAllUsesWith(reg.getResult());
       return;
     }
   }
@@ -2177,8 +2207,8 @@ static void erasePort(PatternRewriter &rewriter, Value port) {
     // Replace read values with a register that is never written, handing off
     // the canonicalization of such a register to another canonicalizer.
     auto ty = access.getType();
-    Value reg = rewriter.create<RegOp>(access.getLoc(), ty, getClock());
-    rewriter.replaceOp(access, reg);
+    auto reg = rewriter.create<RegOp>(access.getLoc(), ty, getClock());
+    rewriter.replaceOp(access, reg.getResult());
   }
   assert(port.use_empty() && "port should have no remaining uses");
 }
@@ -2384,7 +2414,8 @@ struct FoldReadWritePorts : public mlir::RewritePattern {
       if (deadReads[i]) {
         // Create a wire to replace the old result. Wire the sub-fields of the
         // old result to the relevant sub-fields of the write port.
-        auto wire = rewriter.create<WireOp>(result.getLoc(), result.getType());
+        auto wire = rewriter.create<WireOp>(result.getLoc(), result.getType())
+                        .getResult();
         result.replaceAllUsesWith(wire);
 
         auto connect = [&](Value to, StringRef toName, Value from,
@@ -2687,7 +2718,8 @@ struct FoldRegMems : public mlir::RewritePattern {
     // Create a new register to store the data.
     auto ty = mem.getDataType();
     rewriter.setInsertionPointAfterValue(clock);
-    auto reg = rewriter.create<RegOp>(mem.getLoc(), ty, clock, mem.getName());
+    auto reg = rewriter.create<RegOp>(mem.getLoc(), ty, clock, mem.getName())
+                   .getResult();
 
     // Helper to insert a given number of pipeline stages through registers.
     auto pipeline = [&](Value value, Value clock, const Twine &name,
@@ -2699,8 +2731,10 @@ struct FoldRegMems : public mlir::RewritePattern {
           os << mem.getName() << "_" << name << "_" << i;
         }
 
-        auto reg = rewriter.create<RegOp>(mem.getLoc(), value.getType(), clock,
-                                          rewriter.getStringAttr(regName));
+        auto reg = rewriter
+                       .create<RegOp>(mem.getLoc(), value.getType(), clock,
+                                      rewriter.getStringAttr(regName))
+                       .getResult();
         rewriter.create<StrictConnectOp>(value.getLoc(), reg, value);
         value = reg;
       }
@@ -2860,7 +2894,7 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
     return failure();
 
   // Check all types should be typed by now
-  auto regTy = reg.getType();
+  auto regTy = reg.getResult().getType();
   if (con.getDest().getType() != regTy || con.getSrc().getType() != regTy ||
       mux.getHigh().getType() != regTy || mux.getLow().getType() != regTy ||
       regTy.getBitWidthOrSentinel() < 0)
@@ -2875,9 +2909,10 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   if (!constReg) {
     SmallVector<NamedAttribute, 2> attrs(reg->getDialectAttrs());
     auto newReg = replaceOpWithNewOpAndCopyName<RegResetOp>(
-        rewriter, reg, reg.getType(), reg.getClockVal(), mux.getSel(),
-        mux.getHigh(), reg.getName(), reg.getNameKind(), reg.getAnnotations(),
-        reg.getInnerSymAttr());
+        rewriter, reg, reg.getResult().getType(), reg.getClockVal(),
+        mux.getSel(), mux.getHigh(), reg.getNameAttr(), reg.getNameKindAttr(),
+        reg.getAnnotationsAttr(), reg.getInnerSymAttr(),
+        reg.getForceableAttr());
     newReg->setDialectAttrs(attrs);
   }
   auto pt = rewriter.saveInsertionPoint();
@@ -2889,7 +2924,7 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
 }
 
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
-  if (!hasDontTouch(op.getOperation()) &&
+  if (!hasDontTouch(op.getOperation()) && !op.isForceable() &&
       succeeded(foldHiddenReset(op, rewriter)))
     return success();
 

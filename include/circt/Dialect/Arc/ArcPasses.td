@@ -1,4 +1,4 @@
-//===- Passes.td - Arc dialect passes ----------------------*- tablegen -*-===//
+//===- ArcPasses.td - Arc dialect passes -------------------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_ARC_PASSES_TD
-#define CIRCT_DIALECT_ARC_PASSES_TD
+#ifndef CIRCT_DIALECT_ARC_ARCPASSES_TD
+#define CIRCT_DIALECT_ARC_ARCPASSES_TD
 
 include "mlir/Pass/PassBase.td"
 
@@ -128,6 +128,17 @@ def RemoveUnusedArcArguments : Pass<"arc-remove-unused-arc-arguments",
   let summary =
     "Remove unused arc args from the arc itself and the referencing states";
   let constructor = "circt::arc::createRemoveUnusedArcArgumentsPass()";
+
+  let statistics = [
+    Statistic<"numArcArgsRemoved", "num-arc-args-removed",
+      "Number of arguments removed from DefineOps">,
+    Statistic<"numArcsTouched", "num-arcs-touched",
+      "Number of arcs that got modified, if an arc had to be modified multiple "
+      "times, it is counted multiple times">,
+    Statistic<"numArcArgsMissed", "num-arc-args-missed",
+      "Number of arguments that could not be removed from DefineOps because "
+      "at least one user did not implement support for argument removal">,
+  ];
 }
 
 def SimplifyVariadicOps : Pass<"arc-simplify-variadic-ops", "mlir::ModuleOp"> {
@@ -163,4 +174,4 @@ def StripSV : Pass<"arc-strip-sv", "mlir::ModuleOp"> {
   let dependentDialects = ["seq::SeqDialect", "arc::ArcDialect"];
 }
 
-#endif // CIRCT_DIALECT_ARC_PASSES_TD
+#endif // CIRCT_DIALECT_ARC_ARCPASSES_TD

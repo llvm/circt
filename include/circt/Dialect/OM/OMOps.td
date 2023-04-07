@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_OM_OMOPS_TD
 
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/BuiltinAttributeInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
@@ -60,7 +61,7 @@ def ClassFieldOp : OMOp<"class.field",
 }
 
 //===----------------------------------------------------------------------===//
-// Object instantiations
+// Object instantiations and fields
 //===----------------------------------------------------------------------===//
 
 def ObjectOp : OMOp<"object",
@@ -77,6 +78,41 @@ def ObjectOp : OMOp<"object",
   let assemblyFormat = [{
     $className `(` $actualParams `)` `:`
       functional-type($actualParams, $result) attr-dict
+  }];
+}
+
+def ObjectFieldOp : OMOp<"object.field",
+    [DeclareOpInterfaceMethods<SymbolUserOpInterface>, Pure]> {
+  let arguments = (ins
+    ClassType:$object,
+    FlatSymbolRefArrayAttr:$fieldPath
+  );
+
+  let results = (outs
+    AnyType:$result
+  );
+
+  let assemblyFormat = [{
+    $object `,` $fieldPath `:` functional-type($object, $result) attr-dict
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Primitives and containers
+//===----------------------------------------------------------------------===//
+
+def ConstantOp : OMOp<"constant",
+    [ConstantLike, Pure, AllTypesMatch<["value", "result"]>]> {
+  let arguments = (ins
+    TypedAttrInterface:$value
+  );
+
+  let results = (outs
+    AnyType:$result
+  );
+
+  let assemblyFormat = [{
+    $value attr-dict
   }];
 }
 

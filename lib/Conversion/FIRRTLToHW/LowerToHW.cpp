@@ -746,10 +746,12 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
         b.getNamedAttr("writeClockIDs", b.getI32ArrayAttr(mem.writeClockIDs)),
         b.getNamedAttr("initFilename",
                        mem.init ? mem.init.getFilename() : b.getStringAttr("")),
-        b.getNamedAttr("initIsBinary", mem.init ? mem.init.getIsBinary()
-                                                : b.getBoolAttr(false)),
-        b.getNamedAttr("initIsInline", mem.init ? mem.init.getIsInline()
-                                                : b.getBoolAttr(false))};
+        b.getNamedAttr(
+            "initIsBinary",
+            b.getBoolAttr(mem.init ? mem.init.getIsBinary() : false)),
+        b.getNamedAttr(
+            "initIsInline",
+            b.getBoolAttr(mem.init ? mem.init.getIsInline() : false))};
 
     // Make the global module for the memory
     // Set a name for the memory wrapper module, the combMem is an arbitrary
@@ -1393,8 +1395,10 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
     // We lower zero width inout and outputs to a wire that isn't connected to
     // anything outside the module.  Inputs are lowered to zero.
     if (isZeroWidth && port.isInput()) {
-      Value newArg = bodyBuilder.create<WireOp>(
-          port.type, "." + port.getName().str() + ".0width_input");
+      Value newArg = bodyBuilder
+                         .create<WireOp>(port.type, "." + port.getName().str() +
+                                                        ".0width_input")
+                         .getResult();
       oldArg.replaceAllUsesWith(newArg);
       continue;
     }
@@ -1409,8 +1413,10 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
 
     // Outputs need a temporary wire so they can be connect'd to, which we
     // then return.
-    Value newArg = bodyBuilder.create<WireOp>(
-        port.type, "." + port.getName().str() + ".output");
+    Value newArg =
+        bodyBuilder
+            .create<WireOp>(port.type, "." + port.getName().str() + ".output")
+            .getResult();
     // Switch all uses of the old operands to the new ones.
     oldArg.replaceAllUsesWith(newArg);
 
@@ -2715,17 +2721,18 @@ LogicalResult FIRRTLLowering::visitExpr(AggregateConstantOp op) {
 LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   // Foreign types lower to a backedge that needs to be resolved by a later
   // connect op.
-  if (!op.getType().isa<FIRRTLType>()) {
-    createBackedge(op, op.getType());
+  auto origResultType = op.getResult().getType();
+  if (!origResultType.isa<FIRRTLType>()) {
+    createBackedge(op.getResult(), origResultType);
     return success();
   }
 
-  auto resultType = lowerType(op.getResult().getType());
+  auto resultType = lowerType(origResultType);
   if (!resultType)
     return failure();
 
   if (resultType.isInteger(0))
-    return setLowering(op, Value());
+    return setLowering(op.getResult(), Value());
 
   // Name attr is required on sv.wire but optional on firrtl.wire.
   StringAttr symName = getInnerSymName(op);
@@ -2775,8 +2782,8 @@ LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   auto operand = getLoweredValue(op.getInput());
   if (!operand)
-    return handleZeroBit(op.getInput(),
-                         [&]() { return setLowering(op, Value()); });
+    return handleZeroBit(
+        op.getInput(), [&]() { return setLowering(op.getResult(), Value()); });
 
   // Node operations are logical noops, but may carry annotations or be
   // referred to through an inner name. If a don't touch is present, ensure
@@ -2800,7 +2807,7 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   if (symName)
     operand = builder.create<hw::WireOp>(operand, name, symName);
 
-  return setLowering(op, operand);
+  return setLowering(op.getResult(), operand);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
@@ -2808,7 +2815,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   if (!resultType)
     return failure();
   if (resultType.isInteger(0))
-    return setLowering(op, Value());
+    return setLowering(op.getResult(), Value());
 
   Value clockVal = getLoweredValue(op.getClockVal());
   if (!clockVal)
@@ -2836,7 +2843,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
 
   inputEdge.setValue(reg);
   circuitState.used_RANDOMIZE_REG_INIT = 1;
-  (void)setLowering(op, reg);
+  (void)setLowering(op.getResult(), reg);
   return success();
 }
 
@@ -2845,13 +2852,13 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   if (!resultType)
     return failure();
   if (resultType.isInteger(0))
-    return setLowering(op, Value());
+    return setLowering(op.getResult(), Value());
 
   Value clockVal = getLoweredValue(op.getClockVal());
   Value resetSignal = getLoweredValue(op.getResetSignal());
   // Reset values may be narrower than the register.  Extend appropriately.
   Value resetValue = getLoweredAndExtOrTruncValue(
-      op.getResetValue(), op.getType().cast<FIRRTLBaseType>());
+      op.getResetValue(), op.getResult().getType().cast<FIRRTLBaseType>());
 
   if (!clockVal || !resetSignal || !resetValue)
     return failure();
@@ -2879,7 +2886,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
 
   inputEdge.setValue(reg);
   circuitState.used_RANDOMIZE_REG_INIT = 1;
-  (void)setLowering(op, reg);
+  (void)setLowering(op.getResult(), reg);
 
   return success();
 }

@@ -11,15 +11,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/Arc/Dialect.h"
-#include "circt/Dialect/Arc/Interfaces.h"
-#include "circt/Dialect/Arc/Ops.h"
-#include "circt/Dialect/Arc/Passes.h"
+#include "circt/Conversion/CombToArith.h"
+#include "circt/Dialect/Arc/ArcDialect.h"
+#include "circt/Dialect/Arc/ArcInterfaces.h"
+#include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/InitAllDialects.h"
 #include "circt/InitAllPasses.h"
 #include "circt/Support/Version.h"
 #include "mlir/Bytecode/BytecodeReader.h"
 #include "mlir/Bytecode/BytecodeWriter.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -235,6 +237,7 @@ static void populatePipeline(PassManager &pm) {
   if (untilReached(UntilLLVMLowering))
     return;
   pm.addPass(arc::createLowerClocksToFuncsPass());
+  pm.addPass(createConvertCombToArithPass());
   pm.addPass(createLowerArcToLLVMPass());
   pm.addPass(createCSEPass());
   pm.addPass(createSimpleCanonicalizerPass());
@@ -346,7 +349,7 @@ static LogicalResult executeArcilator(MLIRContext &context) {
   // Register our dialects.
   DialectRegistry registry;
   registry.insert<hw::HWDialect, comb::CombDialect, seq::SeqDialect,
-                  sv::SVDialect, arc::ArcDialect>();
+                  sv::SVDialect, arc::ArcDialect, mlir::arith::ArithDialect>();
 
   arc::initAllExternalInterfaces(registry);
   mlir::registerBuiltinDialectTranslation(registry);
