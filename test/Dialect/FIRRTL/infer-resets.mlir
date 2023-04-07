@@ -631,6 +631,23 @@ firrtl.circuit "UnmovableNodeShouldDominate" {
 
 // -----
 
+// Same test as above, ensure works w/forceable node.
+firrtl.circuit "UnmovableForceableNodeShouldDominate" {
+  // CHECK-LABEL: firrtl.module @UnmovableForceableNodeShouldDominate
+  firrtl.module @UnmovableForceableNodeShouldDominate(in %clock: !firrtl.clock, in %ui1: !firrtl.uint<1>) {
+    %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8> // gets wired to localReset
+    %0 = firrtl.asAsyncReset %ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset // blocks move of node
+    %localReset, %ref = firrtl.node sym @theReset %0 forceable {annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]} : !firrtl.asyncreset
+    // CHECK-NEXT: %localReset, %{{.+}} = firrtl.wire sym @theReset
+    // CHECK-NEXT: [[RV:%.+]] = firrtl.constant 0
+    // CHECK-NEXT: %reg = firrtl.regreset %clock, %localReset, [[RV]]
+    // CHECK-NEXT: %0 = firrtl.asAsyncReset %ui1
+    // CHECK-NEXT: firrtl.strictconnect %localReset, %0
+  }
+}
+
+// -----
+
 // Move of local async resets should work across blocks.
 firrtl.circuit "MoveAcrossBlocks1" {
   // CHECK-LABEL: firrtl.module @MoveAcrossBlocks1

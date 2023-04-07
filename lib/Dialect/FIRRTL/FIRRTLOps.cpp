@@ -2187,12 +2187,37 @@ void MemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // Construct name of the module which will be used for the memory definition.
 StringAttr FirMemory::getFirMemoryName() const { return modName; }
 
+/// Helper for naming forceable declarations (and their optional ref result).
+static void forceableAsmResultNames(Forceable op, StringRef name,
+                                    OpAsmSetValueNameFn setNameFn) {
+  if (name.empty())
+    return;
+  setNameFn(op.getDataRaw(), name);
+  if (op.isForceable())
+    setNameFn(op.getDataRef(), (name + "_ref").str());
+}
+
 void NodeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), getName());
+  return forceableAsmResultNames(*this, getName(), setNameFn);
+}
+
+LogicalResult NodeOp::inferReturnTypes(
+    mlir::MLIRContext *context, std::optional<mlir::Location> location,
+    ::mlir::ValueRange operands, ::mlir::DictionaryAttr attributes,
+    ::mlir::RegionRange regions,
+    ::llvm::SmallVectorImpl<::mlir::Type> &inferredReturnTypes) {
+  if (operands.empty())
+    return failure();
+  inferredReturnTypes.push_back(operands[0].getType());
+  for (auto &attr : attributes)
+    if (attr.getName() == Forceable::getForceableAttrName())
+      inferredReturnTypes.push_back(
+          firrtl::detail::getForceableResultType(true, operands[0].getType()));
+  return success();
 }
 
 void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), getName());
+  return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
 LogicalResult RegResetOp::verify() {
@@ -2210,11 +2235,11 @@ LogicalResult RegResetOp::verify() {
 }
 
 void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), getName());
+  return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
 void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), getName());
+  return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
 //===----------------------------------------------------------------------===//
@@ -3726,8 +3751,9 @@ static ParseResult parseFIRRTLImplicitSSAName(OpAsmParser &parser,
 
 static void printFIRRTLImplicitSSAName(OpAsmPrinter &p, Operation *op,
                                        DictionaryAttr attrs) {
-  SmallVector<StringRef, 2> elides;
+  SmallVector<StringRef, 4> elides;
   elides.push_back(hw::InnerName::getInnerNameAttrName());
+  elides.push_back(Forceable::getForceableAttrName());
   elideImplicitSSAName(p, op, attrs, elides);
   printElideAnnotations(p, op, attrs, elides);
 }
@@ -3996,18 +4022,21 @@ void RefSubOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
                                      ArrayRef<NamedAttribute> attrs,
                                      std::optional<Location> loc) {
-  // TODO: Don't cast without checking, we're careful to check in all the
-  // others.
-  auto inType = operands[0].getType().cast<RefType>().getType();
+  auto refType = operands[0].getType().dyn_cast<RefType>();
+  if (!refType)
+    return emitInferRetTypeError(loc, "input must be of reference type");
+  auto inType = refType.getType();
   auto fieldIdx =
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
 
+  // TODO: Determine ref.sub + rwprobe behavior, test.
+  // Probably best to demote to non-rw, but that has implications
+  // for any LowerTypes behavior being relied on.
   if (auto vectorType = inType.dyn_cast<FVectorType>()) {
     if (fieldIdx < vectorType.getNumElements())
       return RefType::get(vectorType.getElementType());
     return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
-                                 "' in RefType of vector type ",
-                                 operands[0].getType());
+                                 "' in RefType of vector type ", refType);
   }
   if (auto bundleType = inType.dyn_cast<BundleType>()) {
     if (fieldIdx >= bundleType.getNumElements()) {
