@@ -45,10 +45,10 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
   registry.insert<
     arc::ArcDialect,
     calyx::CalyxDialect,
-    chirrtl::CHIRRTLDialect,
     comb::CombDialect,
     esi::ESIDialect,
     firrtl::FIRRTLDialect,
+    chirrtl::CHIRRTLDialect,
     fsm::FSMDialect,
     handshake::HandshakeDialect,
     interop::InteropDialect,

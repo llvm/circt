@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -39,7 +41,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     if (isa<RefType>(dstFType))
       builder.create<RefDefineOp>(dst, src);
     else // Other types, give up and leave a connect
-      builder.create<ConnectOp>(dst, src);
+      builder.create<chirrtl::ConnectOp>(dst, src);
     return;
   }
 
@@ -57,7 +59,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     // connect and let the verifier catch it.
     auto srcBundle = srcType.dyn_cast<BundleType>();
     if (!srcBundle || numElements != srcBundle.getNumElements()) {
-      builder.create<ConnectOp>(dst, src);
+      builder.create<chirrtl::ConnectOp>(dst, src);
       return;
     }
     for (size_t i = 0; i < numElements; ++i) {
@@ -77,7 +79,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     // connect and let the verifier catch it.
     auto srcVector = srcType.dyn_cast<FVectorType>();
     if (!srcVector || numElements != srcVector.getNumElements()) {
-      builder.create<ConnectOp>(dst, src);
+      builder.create<chirrtl::ConnectOp>(dst, src);
       return;
     }
     for (size_t i = 0; i < numElements; ++i) {
@@ -94,7 +96,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   if (dstWidth < 0 || srcWidth < 0) {
     // If one of these types has an uninferred width, we connect them with a
     // regular connect operation.
-    builder.create<ConnectOp>(dst, src);
+    builder.create<chirrtl::ConnectOp>(dst, src);
     return;
   }
 
@@ -118,7 +120,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   if (dstType == src.getType())
     builder.create<StrictConnectOp>(dst, src);
   else
-    builder.create<ConnectOp>(dst, src);
+    builder.create<chirrtl::ConnectOp>(dst, src);
 }
 
 IntegerAttr circt::firrtl::getIntAttr(Type type, const APInt &value) {

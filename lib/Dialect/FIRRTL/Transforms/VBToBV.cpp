@@ -59,7 +59,6 @@ public:
   template <typename Op>
   void handleConnect(Op);
 
-  LogicalResult visitStmt(ConnectOp);
   LogicalResult visitStmt(StrictConnectOp);
 
   LogicalResult visitExpr(AggregateConstantOp);
@@ -681,11 +680,6 @@ void Visitor::handleConnect(Op op) {
   }
 
   toDelete.push_back(op);
-}
-
-LogicalResult Visitor::visitStmt(ConnectOp op) {
-  handleConnect(op);
-  return success();
 }
 
 LogicalResult Visitor::visitStmt(StrictConnectOp op) {

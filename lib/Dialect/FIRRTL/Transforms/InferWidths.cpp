@@ -1918,7 +1918,7 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
   // If this is a connect operation, width inference might have inferred a RHS
   // that is wider than the LHS, in which case an additional BitsPrimOp is
   // necessary to truncate the value.
-  if (auto con = dyn_cast<ConnectOp>(op)) {
+  if (auto con = dyn_cast<StrictConnectOp>(op)) {
     auto lhs = con.getDest();
     auto rhs = con.getSrc();
     auto lhsType = lhs.getType().dyn_cast<FIRRTLBaseType>();

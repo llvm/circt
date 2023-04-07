@@ -13,7 +13,7 @@ firrtl.module @ConstantPropagationSingleModule() {}
 firrtl.module @Top01(in %x: !firrtl.uint<5>, out %y: !firrtl.uint<1>) {
   %c0_ui = firrtl.constant 0 : !firrtl.uint
   %0 = firrtl.geq %x, %c0_ui : (!firrtl.uint<5>, !firrtl.uint) -> !firrtl.uint<1>
-  firrtl.connect %y, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %y, %0 : firrtl.uint<1>
 }
 // CHECK-LABEL: firrtl.module @Top01
 // CHECK-NEXT: %[[K:.+]] = firrtl.constant 1
@@ -24,7 +24,7 @@ firrtl.module @Top01(in %x: !firrtl.uint<5>, out %y: !firrtl.uint<1>) {
 firrtl.module @Top02(in %x: !firrtl.uint<5>, out %y: !firrtl.uint<1>) {
   %c0_ui = firrtl.constant 0 : !firrtl.uint
   %0 = firrtl.lt %x, %c0_ui : (!firrtl.uint<5>, !firrtl.uint) -> !firrtl.uint<1>
-  firrtl.connect %y, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %y, %0 : firrtl.uint<1>
 }
 // CHECK-LABEL: firrtl.module @Top02
 // CHECK-NEXT: %[[K:.+]] = firrtl.constant 0
@@ -35,7 +35,7 @@ firrtl.module @Top02(in %x: !firrtl.uint<5>, out %y: !firrtl.uint<1>) {
 firrtl.module @Top03(in %x: !firrtl.uint<5>, out %y: !firrtl.uint<1>) {
   %c0_ui = firrtl.constant 0 : !firrtl.uint
   %0 = firrtl.leq %c0_ui, %x : (!firrtl.uint, !firrtl.uint<5>) -> !firrtl.uint<1>
-  firrtl.connect %y, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %y, %0 : firrtl.uint<1>
 }
 // CHECK-LABEL: firrtl.module @Top03
 // CHECK-NEXT: %[[K:.+]] = firrtl.constant 1
@@ -46,7 +46,7 @@ firrtl.module @Top03(in %x: !firrtl.uint<5>, out %y: !firrtl.uint<1>) {
 firrtl.module @Top04(in %x: !firrtl.uint<5>, out %y: !firrtl.uint<1>) {
   %c0_ui = firrtl.constant 0 : !firrtl.uint
   %0 = firrtl.gt %c0_ui, %x : (!firrtl.uint, !firrtl.uint<5>) -> !firrtl.uint<1>
-  firrtl.connect %y, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %y, %0 : firrtl.uint<1>
 }
 // CHECK-LABEL: firrtl.module @Top04
 // CHECK-NEXT: %[[K:.+]] = firrtl.constant 0
@@ -58,7 +58,7 @@ firrtl.module @Top05(out %y: !firrtl.uint<1>) {
   %c1_ui = firrtl.constant 1 : !firrtl.uint
   %c3_ui = firrtl.constant 3 : !firrtl.uint
   %0 = firrtl.lt %c1_ui, %c3_ui : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
-  firrtl.connect %y, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %y, %0 : firrtl.uint<1>
 }
 // CHECK-LABEL: firrtl.module @Top05
 // CHECK-NEXT: %[[K:.+]] = firrtl.constant 1
@@ -69,7 +69,7 @@ firrtl.module @Top05(out %y: !firrtl.uint<1>) {
 firrtl.module @Top06(in %x: !firrtl.uint<3>, out %y: !firrtl.uint<1>) {
   %c8_ui = firrtl.constant 8 : !firrtl.uint
   %0 = firrtl.lt %x, %c8_ui : (!firrtl.uint<3>, !firrtl.uint) -> !firrtl.uint<1>
-  firrtl.connect %y, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %y, %0 : firrtl.uint<1>
 }
 // CHECK-LABEL: firrtl.module @Top06
 // CHECK-NEXT: %[[K:.+]] = firrtl.constant 1
@@ -80,7 +80,7 @@ firrtl.module @Top06(in %x: !firrtl.uint<3>, out %y: !firrtl.uint<1>) {
 firrtl.module @Top07(in %x: !firrtl.uint<3>, out %y: !firrtl.uint<1>) {
   %c7_ui = firrtl.constant 7 : !firrtl.uint
   %0 = firrtl.leq %x, %c7_ui : (!firrtl.uint<3>, !firrtl.uint) -> !firrtl.uint<1>
-  firrtl.connect %y, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %y, %0 : firrtl.uint<1>
 }
 // CHECK-LABEL: firrtl.module @Top07
 // CHECK-NEXT: %[[K:.+]] = firrtl.constant 1
@@ -91,7 +91,7 @@ firrtl.module @Top07(in %x: !firrtl.uint<3>, out %y: !firrtl.uint<1>) {
 firrtl.module @Top08(in %x: !firrtl.uint<3>, out %y: !firrtl.uint<1>) {
   %c8_ui = firrtl.constant 8 : !firrtl.uint
   %0 = firrtl.gt %c8_ui, %x : (!firrtl.uint, !firrtl.uint<3>) -> !firrtl.uint<1>
-  firrtl.connect %y, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %y, %0 : firrtl.uint<1>
 }
 // CHECK-LABEL: firrtl.module @Top08
 // CHECK-NEXT: %[[K:.+]] = firrtl.constant 1
@@ -102,7 +102,7 @@ firrtl.module @Top08(in %x: !firrtl.uint<3>, out %y: !firrtl.uint<1>) {
 firrtl.module @Top09(in %x: !firrtl.uint<3>, out %y: !firrtl.uint<1>) {
   %c7_ui = firrtl.constant 7 : !firrtl.uint
   %0 = firrtl.geq %c7_ui, %x : (!firrtl.uint, !firrtl.uint<3>) -> !firrtl.uint<1>
-  firrtl.connect %y, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %y, %0 : firrtl.uint<1>
 }
 // CHECK-LABEL: firrtl.module @Top09
 // CHECK-NEXT: %[[K:.+]] = firrtl.constant 1
@@ -113,7 +113,7 @@ firrtl.module @Top09(in %x: !firrtl.uint<3>, out %y: !firrtl.uint<1>) {
 firrtl.module @Top10(out %y: !firrtl.uint<1>) {
   %c10_ui = firrtl.constant 10 : !firrtl.uint
   %0 = firrtl.eq %c10_ui, %c10_ui : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
-  firrtl.connect %y, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %y, %0 : firrtl.uint<1>
 }
 // CHECK-LABEL: firrtl.module @Top10
 // CHECK-NEXT: %[[K:.+]] = firrtl.constant 1
@@ -123,7 +123,7 @@ firrtl.module @Top10(out %y: !firrtl.uint<1>) {
 // The rule x == z should not be true even if they have the same number of bits
 firrtl.module @Top11(in %x: !firrtl.uint<3>, in %z: !firrtl.uint<3>, out %y: !firrtl.uint<1>) {
   %0 = firrtl.eq %x, %z : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<1>
-  firrtl.connect %y, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %y, %0 : firrtl.uint<1>
 }
 // CHECK-LABEL: firrtl.module @Top11
 // CHECK-NEXT: %[[K:.+]] = firrtl.eq %x, %z
@@ -134,7 +134,7 @@ firrtl.module @Top11(in %x: !firrtl.uint<3>, in %z: !firrtl.uint<3>, out %y: !fi
 firrtl.module @Top12(out %y: !firrtl.uint<1>) {
   %c10_ui = firrtl.constant 10 : !firrtl.uint
   %0 = firrtl.neq %c10_ui, %c10_ui : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
-  firrtl.connect %y, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %y, %0 : firrtl.uint<1>
 }
 // CHECK-LABEL: firrtl.module @Top12
 // CHECK-NEXT: %[[K:.+]] = firrtl.constant 0
@@ -146,7 +146,7 @@ firrtl.module @Top13(out %y: !firrtl.uint<1>) {
   %c1_ui = firrtl.constant 1 : !firrtl.uint
   %c3_ui = firrtl.constant 3 : !firrtl.uint
   %0 = firrtl.geq %c1_ui, %c3_ui : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
-  firrtl.connect %y, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %y, %0 : firrtl.uint<1>
 }
 // CHECK-LABEL: firrtl.module @Top13
 // CHECK-NEXT: %[[K:.+]] = firrtl.constant 0
@@ -157,7 +157,7 @@ firrtl.module @Top13(out %y: !firrtl.uint<1>) {
 firrtl.module @Top14(in %x: !firrtl.uint<3>, out %y: !firrtl.uint<1>) {
   %c8_ui = firrtl.constant 8 : !firrtl.uint
   %0 = firrtl.geq %x, %c8_ui : (!firrtl.uint<3>, !firrtl.uint) -> !firrtl.uint<1>
-  firrtl.connect %y, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %y, %0 : firrtl.uint<1>
 }
 // CHECK-LABEL: firrtl.module @Top14
 // CHECK-NEXT: %[[K:.+]] = firrtl.constant 0
@@ -168,7 +168,7 @@ firrtl.module @Top14(in %x: !firrtl.uint<3>, out %y: !firrtl.uint<1>) {
 firrtl.module @Top15(in %x: !firrtl.uint<3>, out %y: !firrtl.uint<1>) {
   %c7_ui = firrtl.constant 7 : !firrtl.uint
   %0 = firrtl.gt %x, %c7_ui : (!firrtl.uint<3>, !firrtl.uint) -> !firrtl.uint<1>
-  firrtl.connect %y, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %y, %0 : firrtl.uint<1>
 }
 // CHECK-LABEL: firrtl.module @Top15
 // CHECK-NEXT: %[[K:.+]] = firrtl.constant 0
@@ -179,7 +179,7 @@ firrtl.module @Top15(in %x: !firrtl.uint<3>, out %y: !firrtl.uint<1>) {
 firrtl.module @Top16(in %x: !firrtl.uint<3>, out %y: !firrtl.uint<1>) {
   %c8_ui = firrtl.constant 8 : !firrtl.uint
   %0 = firrtl.leq %c8_ui, %x : (!firrtl.uint, !firrtl.uint<3>) -> !firrtl.uint<1>
-  firrtl.connect %y, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %y, %0 : firrtl.uint<1>
 }
 // CHECK-LABEL: firrtl.module @Top16
 // CHECK-NEXT: %[[K:.+]] = firrtl.constant 0
@@ -190,7 +190,7 @@ firrtl.module @Top16(in %x: !firrtl.uint<3>, out %y: !firrtl.uint<1>) {
 firrtl.module @Top17(in %x: !firrtl.uint<3>, out %y: !firrtl.uint<1>) {
   %c7_ui = firrtl.constant 7 : !firrtl.uint
   %0 = firrtl.lt %c7_ui, %x : (!firrtl.uint, !firrtl.uint<3>) -> !firrtl.uint<1>
-  firrtl.connect %y, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %y, %0 : firrtl.uint<1>
 }
 // CHECK-LABEL: firrtl.module @Top17
 // CHECK-NEXT: %[[K:.+]] = firrtl.constant 0

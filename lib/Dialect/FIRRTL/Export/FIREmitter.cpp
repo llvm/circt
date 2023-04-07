@@ -11,9 +11,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIREmitter.h"
-#include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -611,7 +613,7 @@ void Emitter::emitStatement(InvalidValueOp op) {
   // a connect.
   if (llvm::all_of(op->getUses(), [&](OpOperand &use) {
         return use.getOperandNumber() == 1 &&
-               isa<ConnectOp, StrictConnectOp>(use.getOwner());
+               isa<chirrtl::ConnectOp, StrictConnectOp>(use.getOwner());
       }))
     return;
 

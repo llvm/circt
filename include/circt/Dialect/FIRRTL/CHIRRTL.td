@@ -248,4 +248,23 @@ def MemoryDebugPortOp : CHIRRTLOp<"debugport", [InferTypeOpInterface,
                                           SmallVectorImpl<Type> &results);
   }];
 }
+
+def ConnectOp : CHIRRTLOp<"connect", [FConnectLike]> {
+  let summary = "Connect two signals";
+  let description = [{
+    Connect Operation:
+    ```
+      chirrtl.connect %dest, %src : t1, t2
+    ```
+    }];
+
+  let arguments = (ins ConnectableType:$dest, ConnectableType:$src);
+  let results = (outs);
+
+  let assemblyFormat =
+    "$dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
+
+  let hasVerifier = 1;
+}
+
 #endif // CHIRRTL_TD

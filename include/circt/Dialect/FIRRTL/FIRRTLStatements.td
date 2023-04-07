@@ -31,25 +31,6 @@ def AttachOp : FIRRTLOp<"attach"> {
   let hasCanonicalizeMethod = true;
 }
 
-def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
-  let summary = "Connect two signals";
-  let description = [{
-    Connect Operation:
-    ```
-      firrtl.connect %dest, %src : t1, t2
-    ```
-    }];
-
-  let arguments = (ins ConnectableType:$dest, ConnectableType:$src);
-  let results = (outs);
-
-  let assemblyFormat =
-    "$dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
-
-  let hasVerifier = 1;
-  let hasCanonicalizer = true;
-}
-
 def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]> {
   let summary = "Connect two signals";
   let description =  [{

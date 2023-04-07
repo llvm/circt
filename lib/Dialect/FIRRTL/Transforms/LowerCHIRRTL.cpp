@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
@@ -42,6 +44,7 @@ struct LowerCHIRRTLPass : public LowerCHIRRTLPassBase<LowerCHIRRTLPass>,
   void visitCHIRRTL(MemoryPortOp op);
   void visitCHIRRTL(MemoryDebugPortOp op);
   void visitCHIRRTL(MemoryPortAccessOp op);
+  void visitCHIRRTL(ConnectOp op);
   void visitExpr(SubaccessOp op);
   void visitExpr(SubfieldOp op);
   void visitExpr(SubindexOp op);
@@ -513,7 +516,7 @@ void LowerCHIRRTLPass::visitCHIRRTL(MemoryPortAccessOp memPortAccess) {
   opsToDelete.push_back(memPortAccess);
 }
 
-void LowerCHIRRTLPass::visitStmt(ConnectOp connect) {
+void LowerCHIRRTLPass::visitCHIRRTL(ConnectOp connect) {
   // Check if we are writing to a memory and, if we are, replace the
   // destination.
   auto writeIt = wdataValues.find(connect.getDest());

@@ -13,9 +13,10 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLANNOTATIONHELPER_H
 #define CIRCT_DIALECT_FIRRTL_FIRRTLANNOTATIONHELPER_H
 
-#include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "llvm/ADT/TypeSwitch.h"
 

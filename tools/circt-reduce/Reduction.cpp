@@ -12,6 +12,8 @@
 
 #include "Reduction.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/InitAllDialects.h"
 #include "mlir/IR/AsmState.h"
@@ -104,7 +106,7 @@ private:
 static bool onlyInvalidated(Value arg) {
   return llvm::all_of(arg.getUses(), [](OpOperand &use) {
     auto *op = use.getOwner();
-    if (!isa<firrtl::ConnectOp, firrtl::StrictConnectOp>(op))
+    if (!isa<chirrtl::ConnectOp, firrtl::StrictConnectOp>(op))
       return false;
     if (use.getOperandNumber() != 0)
       return false;
@@ -297,7 +299,7 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
     invalid = builder.create<firrtl::InvalidValueOp>(type);
     invalidCache.insert({type, invalid});
   }
-  builder.create<firrtl::ConnectOp>(value, invalid);
+  builder.create<chirrtl::ConnectOp>(value, invalid);
 }
 
 /// Connect a value to every leave of a destination value.
@@ -332,7 +334,7 @@ static void connectToLeafs(ImplicitLocOpBuilder &builder, Value dest,
     else
       return;
   }
-  builder.create<firrtl::ConnectOp>(dest, value);
+  builder.create<chirrtl::ConnectOp>(dest, value);
 }
 
 /// Reduce all leaf fields of a value through an XOR tree.
@@ -634,12 +636,12 @@ struct Constantifier : public Reduction {
 };
 
 /// A sample reduction pattern that replaces the right-hand-side of
-/// `firrtl.connect` and `firrtl.strictconnect` operations with a
+/// `chirrtl.connect` and `firrtl.strictconnect` operations with a
 /// `firrtl.invalidvalue`. This removes uses from the fanin cone to these
 /// connects and creates opportunities for reduction in DCE/CSE.
 struct ConnectInvalidator : public Reduction {
   uint64_t match(Operation *op) override {
-    if (!isa<firrtl::ConnectOp, firrtl::StrictConnectOp>(op))
+    if (!isa<chirrtl::ConnectOp, firrtl::StrictConnectOp>(op))
       return false;
     auto type = op->getOperand(1).getType().dyn_cast<firrtl::FIRRTLBaseType>();
     return type && type.isPassive() &&
@@ -772,7 +774,7 @@ struct ExtmoduleInstanceRemover : public Reduction {
               .getResult();
       if (info.isOutput()) {
         auto inv = builder.create<firrtl::InvalidValueOp>(info.type);
-        builder.create<firrtl::ConnectOp>(wire, inv);
+        builder.create<chirrtl::ConnectOp>(wire, inv);
       }
       replacementWires.push_back(wire);
     }
@@ -848,7 +850,7 @@ struct ConnectForwarder : public Reduction {
 template <unsigned OpNum>
 struct ConnectSourceOperandForwarder : public Reduction {
   uint64_t match(Operation *op) override {
-    if (!isa<firrtl::ConnectOp, firrtl::StrictConnectOp>(op))
+    if (!isa<chirrtl::ConnectOp, firrtl::StrictConnectOp>(op))
       return 0;
     auto dest = op->getOperand(0);
     auto *destOp = dest.getDefiningOp();
@@ -897,8 +899,8 @@ struct ConnectSourceOperandForwarder : public Reduction {
 
     // Create new connection between a new wire and the forwarded operand.
     builder.setInsertionPointAfter(op);
-    if (isa<firrtl::ConnectOp>(op))
-      builder.create<firrtl::ConnectOp>(newDest, forwardedOperand);
+    if (isa<chirrtl::ConnectOp>(op))
+      builder.create<chirrtl::ConnectOp>(newDest, forwardedOperand);
     else
       builder.create<firrtl::StrictConnectOp>(newDest, forwardedOperand);
 

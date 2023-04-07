@@ -42,7 +42,7 @@ firrtl.circuit "Simple" {
     // CHECK: [[RESULT:%.+]] = comb.xor
     %5 = firrtl.xor %in2, %4 : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
-    firrtl.connect %out4, %5 : !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.strictconnect %out4, %5 : firrtl.uint<4>
     // CHECK-NEXT: hw.output [[RESULT]] : i4
   }
 
@@ -55,12 +55,12 @@ firrtl.circuit "Simple" {
     %xyz:4 = firrtl.instance xyz @Simple(in in1: !firrtl.uint<4>, in in2: !firrtl.uint<2>, in in3: !firrtl.sint<8>, out out4: !firrtl.uint<4>)
 
     // CHECK: [[ARG1]] = comb.concat %c0_i2, %u2 : i2, i2
-    firrtl.connect %xyz#0, %u2 : !firrtl.uint<4>, !firrtl.uint<2>
+    firrtl.strictconnect %xyz#0, %u2 : firrtl.uint<4>
 
     // CHECK-NOT: hw.connect
-    firrtl.connect %xyz#1, %u2 : !firrtl.uint<2>, !firrtl.uint<2>
+    firrtl.strictconnect %xyz#1, %u2 : firrtl.uint<2>
 
-    firrtl.connect %xyz#2, %s8 : !firrtl.sint<8>, !firrtl.sint<8>
+    firrtl.strictconnect %xyz#2, %s8 : firrtl.sint<8>
 
     firrtl.printf %clock, %reset, "%x"(%xyz#3) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>
 
@@ -74,7 +74,7 @@ firrtl.circuit "Simple" {
     // CHECK: sv.fwrite [[FD]], "%x"(%xyz.out4) : i4
     // CHECK: sv.fwrite [[FD]], "Something interesting! %x"(%myext.out) : i8
 
-    firrtl.connect %myext#0, %reset : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %myext#0, %reset : firrtl.uint<1>
 
     firrtl.printf %clock, %reset, "Something interesting! %x"(%myext#1) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>
   }
@@ -83,7 +83,7 @@ firrtl.circuit "Simple" {
   firrtl.module private @OutputFirst(out %out4: !firrtl.uint<4>,
                              in %in1: !firrtl.uint<1>,
                              in %in4: !firrtl.uint<4>) {
-    firrtl.connect %out4, %in4 : !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.strictconnect %out4, %in4 : firrtl.uint<4>
 
     // CHECK-NEXT: hw.output %in4 : i4
   }
@@ -101,11 +101,11 @@ firrtl.circuit "Simple" {
                              in %inE: !firrtl.uint<3>,
                              out %outE: !firrtl.uint<4>) {
     // Normal
-    firrtl.connect %outA, %inA : !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.strictconnect %outA, %inA : firrtl.uint<4>
 
     // Multi connect
-    firrtl.connect %outB, %inA : !firrtl.uint<4>, !firrtl.uint<4>
-    firrtl.connect %outB, %inB : !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.strictconnect %outB, %inA : firrtl.uint<4>
+    firrtl.strictconnect %outB, %inB : firrtl.uint<4>
 
     // Unconnected port outC reads as sv.constantZ.
     // CHECK:      [[OUTB:%.+]] = hw.wire %inB
@@ -118,7 +118,7 @@ firrtl.circuit "Simple" {
 
     // No connections to outD.
 
-    firrtl.connect %outE, %inE : !firrtl.uint<4>, !firrtl.uint<3>
+    firrtl.strictconnect %outE, %inE : firrtl.uint<4>
 
     // Extension for outE
     // CHECK: [[OUTE:%.+]] = comb.concat %false, %inE : i1, i3
@@ -132,7 +132,7 @@ firrtl.circuit "Simple" {
                         out %outClock: !firrtl.clock) {
 
     %clock = firrtl.asClock %a1 : (!firrtl.analog<1>) -> !firrtl.clock
-    firrtl.connect %outClock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.strictconnect %outClock, %clock : firrtl.clock
   }
 
   // Issue #373: https://github.com/llvm/circt/issues/373
@@ -154,9 +154,9 @@ firrtl.circuit "Simple" {
     // Multiple uses of the add.
     %a = firrtl.eq %0, %arg2 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<1>
     // CHECK-NEXT: [[ARG]] = comb.icmp bin eq [[ADD]], %arg2 : i3
-    firrtl.connect %myext#0, %a : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %myext#0, %a : firrtl.uint<1>
 
-    firrtl.connect %out0, %myext#1 : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.strictconnect %out0, %myext#1 : firrtl.uint<8>
 
     // CHECK-NEXT: hw.output %myext.out
   }
@@ -170,7 +170,7 @@ firrtl.circuit "Simple" {
     %11 = firrtl.bits %myext#1 2 to 2 : (!firrtl.uint<8>) -> !firrtl.uint<1>
     // CHECK: %0 = comb.extract %myext.out from 2 : (i8) -> i1
 
-    firrtl.connect %myext#0, %11 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %myext#0, %11 : firrtl.uint<1>
   }
 
   // CHECK-LABEL: hw.module private @ZeroWidthPorts(%inA: i4) -> (outa: i4) {
@@ -180,10 +180,10 @@ firrtl.circuit "Simple" {
                                 out %outa: !firrtl.uint<4>,
                                 out %outb: !firrtl.uint<0>) {
      %0 = firrtl.mul %inA, %inB : (!firrtl.uint<4>, !firrtl.uint<0>) -> !firrtl.uint<4>
-    firrtl.connect %outa, %0 : !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.strictconnect %outa, %0 : firrtl.uint<4>
 
     %1 = firrtl.mul %inB, %inB : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<0>
-    firrtl.connect %outb, %1 : !firrtl.uint<0>, !firrtl.uint<0>
+    firrtl.strictconnect %outb, %1 : firrtl.uint<0>
 
     firrtl.attach %inC, %inC : !firrtl.analog<0>, !firrtl.analog<0>
 
@@ -210,11 +210,11 @@ firrtl.circuit "Simple" {
       in inA: !firrtl.uint<4>, in inA: !firrtl.uint<1>, in inA: !firrtl.analog<1>, out outa: !firrtl.uint<4>, out outa: !firrtl.uint<1>)
 
     // Output of the instance is fed into the input!
-    firrtl.connect %myinst#0, %iA : !firrtl.uint<4>, !firrtl.uint<4>
-    firrtl.connect %myinst#1, %iB : !firrtl.uint<0>, !firrtl.uint<0>
+    firrtl.strictconnect %myinst#0, %iA : firrtl.uint<4>
+    firrtl.strictconnect %myinst#1, %iB : firrtl.uint<0>
     firrtl.attach %myinst#2, %iC : !firrtl.analog<0>, !firrtl.analog<0>
-    firrtl.connect %oA, %myinst#3 : !firrtl.uint<4>, !firrtl.uint<4>
-    firrtl.connect %oB, %myinst#4 : !firrtl.uint<0>, !firrtl.uint<0>
+    firrtl.strictconnect %oA, %myinst#3 : firrtl.uint<4>
+    firrtl.strictconnect %oB, %myinst#4 : firrtl.uint<0>
 
     // CHECK: hw.output %myinst.outa
   }
@@ -223,7 +223,7 @@ firrtl.circuit "Simple" {
   // CHECK-NEXT:    hw.output %source : !hw.struct<valid: i1, ready: i1, data: i64>
   firrtl.module private @SimpleStruct(in %source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>,
                               out %sink: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>) {
-    firrtl.connect %sink, %source : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+    firrtl.strictconnect %sink, %source : firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready: uint<1>
   }
 
   // https://github.com/llvm/circt/issues/690

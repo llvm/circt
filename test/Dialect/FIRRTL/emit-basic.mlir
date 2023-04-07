@@ -91,17 +91,17 @@ firrtl.circuit "Foo" {
     firrtl.assume %someClock, %ui1, %ui1, "msg" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {name = "foo"}
     firrtl.cover %someClock, %ui1, %ui1, "msg" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {name = "foo"}
     // CHECK: someOut <= ui1
-    firrtl.connect %someOut, %ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %someOut, %ui1 : firrtl.uint<1>
     // CHECK: inst someInst of Simple
     // CHECK: someInst.someIn <= ui1
     // CHECK: someOut <= someInst.someOut
     %someInst_someIn, %someInst_someOut = firrtl.instance someInst @Simple(in someIn: !firrtl.uint<1>, out someOut: !firrtl.uint<1>)
-    firrtl.connect %someInst_someIn, %ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %someOut, %someInst_someOut : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %someInst_someIn, %ui1 : firrtl.uint<1>
+    firrtl.strictconnect %someOut, %someInst_someOut : firrtl.uint<1>
     // CHECK-NOT: _invalid
     // CHECK: someOut is invalid
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-    firrtl.connect %someOut, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %someOut, %invalid_ui1 : firrtl.uint<1>
     // CHECK-NOT: _invalid
     // CHECK: someOut is invalid
     %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<1>
@@ -263,9 +263,9 @@ firrtl.circuit "Foo" {
     %MyMem_a_clk = firrtl.subfield %MyMem_a[clk] : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<4>>
     %MyMem_b_clk = firrtl.subfield %MyMem_b[clk] : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<4>, mask: uint<1>>
     %MyMem_c_clk = firrtl.subfield %MyMem_c[clk] : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, rdata flip: uint<4>, wmode: uint<1>, wdata: uint<4>, wmask: uint<1>>
-    firrtl.connect %MyMem_a_clk, %someClock : !firrtl.clock, !firrtl.clock
-    firrtl.connect %MyMem_b_clk, %someClock : !firrtl.clock, !firrtl.clock
-    firrtl.connect %MyMem_c_clk, %someClock : !firrtl.clock, !firrtl.clock
+    firrtl.strictconnect %MyMem_a_clk, %someClock : firrtl.clock
+    firrtl.strictconnect %MyMem_b_clk, %someClock : firrtl.clock
+    firrtl.strictconnect %MyMem_c_clk, %someClock : firrtl.clock
     // CHECK:       mem MyMem :
     // CHECK-NEXT:    data-type => UInt<4>
     // CHECK-NEXT:    depth => 8
@@ -297,7 +297,7 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: when ui1 :
     // CHECK-NEXT:   infer mport port1 = seqmem[someAddr], someClock
 
-    firrtl.connect %port0_data, %port1_data : !firrtl.uint<3>, !firrtl.uint<3>
+    firrtl.strictconnect %port0_data, %port1_data : firrtl.uint<3>
     // CHECK: port0 <= port1
 
     %invalid_clock = firrtl.invalidvalue : !firrtl.clock

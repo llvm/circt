@@ -45,7 +45,7 @@ firrtl.circuit "PrimOps" {
     %a_b = firrtl.subfield %a[b] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
     %a_c = firrtl.subfield %a[c] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
     %0 = firrtl.xor %a_a, %a_b: (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-    firrtl.connect %a_c, %a_b: !firrtl.uint<2>, !firrtl.uint<2>
+    firrtl.strictconnect %a_c, %a_b: firrtl.uint<2>
   }
   // CHECK-NOT: firrtl.module @PrimOps1
   firrtl.module @PrimOps1(in %b: !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>) {
@@ -53,7 +53,7 @@ firrtl.circuit "PrimOps" {
     %b_b = firrtl.subfield %b[b] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
     %b_c = firrtl.subfield %b[c] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
     %0 = firrtl.xor %b_a, %b_b: (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-    firrtl.connect %b_c, %b_b: !firrtl.uint<2>, !firrtl.uint<2>
+    firrtl.strictconnect %b_c, %b_b: firrtl.uint<2>
   }
   firrtl.module @PrimOps() {
     // CHECK: firrtl.instance primops0 @PrimOps0
@@ -505,7 +505,7 @@ firrtl.circuit "Bundle" {
     %w0 = firrtl.wire : !firrtl.bundle<g flip: uint<1>, h: uint<1>>
 
     // CHECK: firrtl.connect %w0, [[F]]
-    firrtl.connect %w0, %f : !firrtl.bundle<g flip: uint<1>, h: uint<1>>, !firrtl.bundle<g flip: uint<1>, h: uint<1>>
+    firrtl.strictconnect %w0, %f : firrtl.bundle<g flip: uint<1>, h: uint<1>>, !firrtl.bundle<g flip: uint<1>
   }
 }
 
@@ -544,20 +544,20 @@ firrtl.circuit "Flip" {
   firrtl.module @Flip0(out %io: !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>) {
     %0 = firrtl.subfield %io[foo] : !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>
     %1 = firrtl.subfield %io[fuzz] : !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>
-    firrtl.connect %1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %1, %0 : firrtl.uint<1>
   }
   firrtl.module @Flip1(out %io: !firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>) {
     %0 = firrtl.subfield %io[bar] : !firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>
     %1 = firrtl.subfield %io[buzz] : !firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>
-    firrtl.connect %1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %1, %0 : firrtl.uint<1>
   }
   firrtl.module @Flip(out %io: !firrtl.bundle<foo: bundle<foo flip: uint<1>, fuzz: uint<1>>, bar: bundle<bar flip: uint<1>, buzz: uint<1>>>) {
     %0 = firrtl.subfield %io[bar] : !firrtl.bundle<foo: bundle<foo flip: uint<1>, fuzz: uint<1>>, bar: bundle<bar flip: uint<1>, buzz: uint<1>>>
     %1 = firrtl.subfield %io[foo] : !firrtl.bundle<foo: bundle<foo flip: uint<1>, fuzz: uint<1>>, bar: bundle<bar flip: uint<1>, buzz: uint<1>>>
     %foo_io = firrtl.instance foo  @Flip0(out io: !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>)
     %bar_io = firrtl.instance bar  @Flip1(out io: !firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>)
-    firrtl.connect %1, %foo_io : !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>, !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>
-    firrtl.connect %0, %bar_io : !firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>, !firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>
+    firrtl.strictconnect %1, %foo_io : firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>, !firrtl.bundle<foo flip: uint<1>
+    firrtl.strictconnect %0, %bar_io : firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>, !firrtl.bundle<bar flip: uint<1>
   }
 }
 
@@ -572,16 +572,16 @@ firrtl.circuit "DelayedFixup"  {
   // CHECK: firrtl.module @Parent0
   firrtl.module @Parent0(out %a: !firrtl.bundle<a: uint<1>>, out %b: !firrtl.bundle<b: uint<1>>) {
     %foo_a = firrtl.instance foo  @Foo(out a: !firrtl.bundle<a: uint<1>>)
-    firrtl.connect %a, %foo_a : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
+    firrtl.strictconnect %a, %foo_a : firrtl.bundle<a: uint<1>>
     %bar_b = firrtl.instance bar  @Bar(out b: !firrtl.bundle<b: uint<1>>)
-    firrtl.connect %b, %bar_b : !firrtl.bundle<b: uint<1>>, !firrtl.bundle<b: uint<1>>
+    firrtl.strictconnect %b, %bar_b : firrtl.bundle<b: uint<1>>
   }
   // CHECK-NOT: firrtl.module @Parent1
   firrtl.module @Parent1(out %a: !firrtl.bundle<a: uint<1>>, out %b: !firrtl.bundle<b: uint<1>>) {
     %foo_a = firrtl.instance foo  @Foo(out a: !firrtl.bundle<a: uint<1>>)
-    firrtl.connect %a, %foo_a : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
+    firrtl.strictconnect %a, %foo_a : firrtl.bundle<a: uint<1>>
     %bar_b = firrtl.instance bar  @Bar(out b: !firrtl.bundle<b: uint<1>>)
-    firrtl.connect %b, %bar_b : !firrtl.bundle<b: uint<1>>, !firrtl.bundle<b: uint<1>>
+    firrtl.strictconnect %b, %bar_b : firrtl.bundle<b: uint<1>>
   }
   firrtl.module @DelayedFixup() {
     // CHECK: firrtl.instance parent0  @Parent0

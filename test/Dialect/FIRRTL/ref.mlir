@@ -173,7 +173,7 @@ firrtl.circuit "UseRefsWithSinkFlow" {
     %0 = firrtl.ref.send %x : !firrtl.uint
     firrtl.ref.define %p, %0 : !firrtl.probe<uint>
     %1 = firrtl.ref.resolve %p : !firrtl.probe<uint>
-    firrtl.connect %y, %1 : !firrtl.uint, !firrtl.uint
+    firrtl.strictconnect %y, %1 : firrtl.uint
   }
   firrtl.module @UseRefsWithSinkFlow(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>, out %z: !firrtl.uint<1>, out %zz: !firrtl.uint<1>, out %p: !firrtl.probe<uint<1>>) {
     %0 = firrtl.ref.send %x : !firrtl.uint<1>
@@ -186,8 +186,8 @@ firrtl.circuit "UseRefsWithSinkFlow" {
     %3 = firrtl.ref.resolve %ic_p : !firrtl.probe<uint<1>>
     firrtl.strictconnect %z, %3 : !firrtl.uint<1>
     %oc_x, %oc_y, %oc_p = firrtl.instance oc interesting_name @OutChild(in x: !firrtl.uint, out y: !firrtl.uint, out p: !firrtl.probe<uint>)
-    firrtl.connect %oc_x, %x : !firrtl.uint, !firrtl.uint<1>
-    firrtl.connect %zz, %oc_y : !firrtl.uint<1>, !firrtl.uint
+    firrtl.strictconnect %oc_x, %x : firrtl.uint
+    firrtl.strictconnect %zz, %oc_y : firrtl.uint<1>
   }
 }
 
@@ -219,7 +219,7 @@ firrtl.circuit "Forceable" {
     // TODO: infer ref result existence + type based on "forceable" or other ref-kind(s) indicator.
     %w, %w_f = firrtl.wire forceable : !firrtl.uint, !firrtl.rwprobe<uint>
     firrtl.ref.define %wire_ref, %w_f : !firrtl.rwprobe<uint>
-    firrtl.connect %w, %value : !firrtl.uint, !firrtl.uint<2>
+    firrtl.strictconnect %w, %value : firrtl.uint
 
     %reg, %reg_f = firrtl.reg %clock forceable : !firrtl.clock, !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
     firrtl.ref.define %reg_ref, %reg_f : !firrtl.rwprobe<uint<2>>

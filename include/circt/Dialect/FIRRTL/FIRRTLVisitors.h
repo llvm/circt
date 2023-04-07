@@ -170,7 +170,7 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<AttachOp, ConnectOp, StrictConnectOp, RefDefineOp,
+        .template Case<AttachOp, StrictConnectOp, RefDefineOp,
                        ForceOp, PrintFOp, SkipOp, StopOp, WhenOp, AssertOp,
                        AssumeOp, CoverOp, ProbeOp>(
             [&](auto opNode) -> ResultType {
@@ -199,7 +199,6 @@ public:
   }
 
   HANDLE(AttachOp);
-  HANDLE(ConnectOp);
   HANDLE(StrictConnectOp);
   HANDLE(RefDefineOp);
   HANDLE(ForceOp);

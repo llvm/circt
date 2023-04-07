@@ -185,7 +185,7 @@ static bool insertResetMux(ImplicitLocOpBuilder &builder, Value target,
     TypeSwitch<Operation *>(useOp)
         // Insert a mux on the value connected to the target:
         // connect(dst, src) -> connect(dst, mux(reset, resetValue, src))
-        .Case<ConnectOp, StrictConnectOp>([&](auto op) {
+        .Case<StrictConnectOp>([&](auto op) {
           if (op.getDest() != target)
             return;
           LLVM_DEBUG(llvm::dbgs() << "  - Insert mux into " << op << "\n");
@@ -1751,7 +1751,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     insertResetMux(builder, regOp.getResult(), reset, value);
     builder.setInsertionPointAfterValue(regOp.getResult());
     auto mux = builder.create<MuxPrimOp>(reset, value, regOp.getResult());
-    builder.create<ConnectOp>(regOp.getResult(), mux);
+    builder.create<StrictConnectOp>(regOp.getResult(), mux);
 
     // Replace the existing reset with the async reset.
     builder.setInsertionPoint(regOp);

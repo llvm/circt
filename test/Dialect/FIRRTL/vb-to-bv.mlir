@@ -334,11 +334,11 @@ firrtl.circuit "Test" {
     // CHECK: %0 = firrtl.subfield %port[a] : !firrtl.bundle<a flip: vector<uint<8>, 4>>
     // CHECK: %1 = firrtl.subindex %0[3] : !firrtl.vector<uint<8>, 4>
     // CHECK: %c7_ui8 = firrtl.constant 7 : !firrtl.uint<8>
-    // CHECK: firrtl.connect %1, %c7_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
+    // CHECK: firrtl.strictconnect %1, %c7_ui8 : firrtl.uint<8>
     %bundle = firrtl.subindex %port[3] : !firrtl.vector<bundle<a flip: uint<8>>, 4>
     %field  = firrtl.subfield %bundle[a] : !firrtl.bundle<a flip: uint<8>>
     %value  = firrtl.constant 7 : !firrtl.uint<8>
-    firrtl.connect %field, %value : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.strictconnect %field, %value : firrtl.uint<8>
 
     // Connect two exploded bundles.
   
@@ -681,8 +681,8 @@ firrtl.circuit "Test" {
     // CHECK: %8 = firrtl.bundlecreate %6, %7 : (!firrtl.vector<uint<8>, 2>, !firrtl.vector<uint<16>, 2>) -> !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>
     %vector  = firrtl.vectorcreate %bundle1, %bundle2 : (!firrtl.bundle<a: uint<8>, b: uint<16>>, !firrtl.bundle<a: uint<8>, b: uint<16>>) -> !firrtl.vector<bundle<a: uint<8>, b: uint<16>>, 2>
     
-    // CHECK firrtl.connect %out, %8 : !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>, !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>
-    firrtl.connect %out, %vector : !firrtl.vector<bundle<a: uint<8>, b: uint<16>>, 2>, !firrtl.vector<bundle<a: uint<8>, b: uint<16>>, 2>
+    // CHECK firrtl.strictconnect %out, %8 : firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>, !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>
+    firrtl.strictconnect %out, %vector : firrtl.vector<bundle<a: uint<8>, b: uint<16>>, 2>, !firrtl.vector<bundle<a: uint<8>, b: uint<16>>
   }
 
   //===--------------------------------------------------------------------===//

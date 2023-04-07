@@ -33,6 +33,8 @@ namespace firrtl {
 
 class StrictConnectOp;
 
+LogicalResult checkConnectFlow(Operation *connect);
+
 // is the name useless?
 bool isUselessName(circt::StringRef name);
 

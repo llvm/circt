@@ -12,7 +12,8 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
-#include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"

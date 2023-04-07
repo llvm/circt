@@ -7,7 +7,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input in: UInt
     output out: UInt<8>
 
-    ; CHECK: firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint
+    ; CHECK: chirrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint
     out <= in
 
   ; CHECK: }
@@ -477,7 +477,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module expr_stmt_ambiguity :
     ; CHECK: %reg = firrtl.wire interesting_name : !firrtl.uint
     wire reg : UInt
-    ; CHECK: firrtl.connect %reg,
+    ; CHECK: chirrtl.connect %reg,
     reg <= UInt(42)
 
     ; CHECK: %write = firrtl.wire

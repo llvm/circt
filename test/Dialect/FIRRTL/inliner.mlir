@@ -183,26 +183,26 @@ firrtl.module @InlineMe0(in %in0: !firrtl.uint<4>, in %in1: !firrtl.uint<4>,
                          out %out0: !firrtl.uint<4>, out %out1: !firrtl.uint<4>)
         attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
   %0 = firrtl.and %in0, %in1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  firrtl.connect %out0, %0 : !firrtl.uint<4>, !firrtl.uint<4>
+  firrtl.strictconnect %out0, %0 : firrtl.uint<4>
   %1 = firrtl.and %in0, %in1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  firrtl.connect %out1, %1 : !firrtl.uint<4>, !firrtl.uint<4>
+  firrtl.strictconnect %out1, %1 : firrtl.uint<4>
 }
 firrtl.module @InlineMe1(in %in0: !firrtl.uint<4>, in %in1: !firrtl.uint<4>,
                    out %out0: !firrtl.uint<4>, out %out1: !firrtl.uint<4>)
         attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
   %a_in0, %a_in1, %a_out0, %a_out1 = firrtl.instance a @InlineMe0(in in0: !firrtl.uint<4>, in in1: !firrtl.uint<4>, out out0: !firrtl.uint<4>, out out1: !firrtl.uint<4>)
-  firrtl.connect %a_in0, %in0 : !firrtl.uint<4>, !firrtl.uint<4>
-  firrtl.connect %a_in1, %in1 : !firrtl.uint<4>, !firrtl.uint<4>
-  firrtl.connect %out0, %a_out0 : !firrtl.uint<4>, !firrtl.uint<4>
-  firrtl.connect %out1, %a_out1 : !firrtl.uint<4>, !firrtl.uint<4>
+  firrtl.strictconnect %a_in0, %in0 : firrtl.uint<4>
+  firrtl.strictconnect %a_in1, %in1 : firrtl.uint<4>
+  firrtl.strictconnect %out0, %a_out0 : firrtl.uint<4>
+  firrtl.strictconnect %out1, %a_out1 : firrtl.uint<4>
 }
 firrtl.module @TestConnections(in %in0: !firrtl.uint<4>, in %in1: !firrtl.uint<4>,
                    out %out0: !firrtl.uint<4>, out %out1: !firrtl.uint<4>) {
   %b_in0, %b_in1, %b_out0, %b_out1 = firrtl.instance b @InlineMe1(in in0: !firrtl.uint<4>, in in1: !firrtl.uint<4>, out out0: !firrtl.uint<4>, out out1: !firrtl.uint<4>)
-  firrtl.connect %b_in0, %in0 : !firrtl.uint<4>, !firrtl.uint<4>
-  firrtl.connect %b_in1, %in1 : !firrtl.uint<4>, !firrtl.uint<4>
-  firrtl.connect %out0, %b_out0 : !firrtl.uint<4>, !firrtl.uint<4>
-  firrtl.connect %out1, %b_out1 : !firrtl.uint<4>, !firrtl.uint<4>
+  firrtl.strictconnect %b_in0, %in0 : firrtl.uint<4>
+  firrtl.strictconnect %b_in1, %in1 : firrtl.uint<4>
+  firrtl.strictconnect %out0, %b_out0 : firrtl.uint<4>
+  firrtl.strictconnect %out1, %b_out1 : firrtl.uint<4>
 }
 }
 // CHECK-LABEL: firrtl.module @TestConnections(in %in0: !firrtl.uint<4>, in %in1: !firrtl.uint<4>, out %out0: !firrtl.uint<4>, out %out1: !firrtl.uint<4>) {
@@ -215,17 +215,17 @@ firrtl.module @TestConnections(in %in0: !firrtl.uint<4>, in %in1: !firrtl.uint<4
 // CHECK-NEXT:   %b_a_out0 = firrtl.wire  : !firrtl.uint<4>
 // CHECK-NEXT:   %b_a_out1 = firrtl.wire  : !firrtl.uint<4>
 // CHECK-NEXT:   %0 = firrtl.and %b_a_in0, %b_a_in1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-// CHECK-NEXT:   firrtl.connect %b_a_out0, %0 : !firrtl.uint<4>, !firrtl.uint<4>
+// CHECK-NEXT:   firrtl.strictconnect %b_a_out0, %0 : firrtl.uint<4>
 // CHECK-NEXT:   %1 = firrtl.and %b_a_in0, %b_a_in1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-// CHECK-NEXT:   firrtl.connect %b_a_out1, %1 : !firrtl.uint<4>, !firrtl.uint<4>
-// CHECK-NEXT:   firrtl.connect %b_a_in0, %b_in0 : !firrtl.uint<4>, !firrtl.uint<4>
-// CHECK-NEXT:   firrtl.connect %b_a_in1, %b_in1 : !firrtl.uint<4>, !firrtl.uint<4>
-// CHECK-NEXT:   firrtl.connect %b_out0, %b_a_out0 : !firrtl.uint<4>, !firrtl.uint<4>
-// CHECK-NEXT:   firrtl.connect %b_out1, %b_a_out1 : !firrtl.uint<4>, !firrtl.uint<4>
-// CHECK-NEXT:   firrtl.connect %b_in0, %in0 : !firrtl.uint<4>, !firrtl.uint<4>
-// CHECK-NEXT:   firrtl.connect %b_in1, %in1 : !firrtl.uint<4>, !firrtl.uint<4>
-// CHECK-NEXT:   firrtl.connect %out0, %b_out0 : !firrtl.uint<4>, !firrtl.uint<4>
-// CHECK-NEXT:   firrtl.connect %out1, %b_out1 : !firrtl.uint<4>, !firrtl.uint<4>
+// CHECK-NEXT:   firrtl.strictconnect %b_a_out1, %1 : firrtl.uint<4>
+// CHECK-NEXT:   firrtl.strictconnect %b_a_in0, %b_in0 : firrtl.uint<4>
+// CHECK-NEXT:   firrtl.strictconnect %b_a_in1, %b_in1 : firrtl.uint<4>
+// CHECK-NEXT:   firrtl.strictconnect %b_out0, %b_a_out0 : firrtl.uint<4>
+// CHECK-NEXT:   firrtl.strictconnect %b_out1, %b_a_out1 : firrtl.uint<4>
+// CHECK-NEXT:   firrtl.strictconnect %b_in0, %in0 : firrtl.uint<4>
+// CHECK-NEXT:   firrtl.strictconnect %b_in1, %in1 : firrtl.uint<4>
+// CHECK-NEXT:   firrtl.strictconnect %out0, %b_out0 : firrtl.uint<4>
+// CHECK-NEXT:   firrtl.strictconnect %out1, %b_out1 : firrtl.uint<4>
 // CHECK-NEXT: }
 
 
@@ -234,18 +234,18 @@ firrtl.circuit "TestBulkConnections" {
 firrtl.module @InlineMe0(in %in0: !firrtl.bundle<a: uint<4>, b flip: uint<4>>,
                          out %out0: !firrtl.bundle<a: uint<4>, b flip: uint<4>>)
         attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
-  firrtl.connect %out0, %in0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
+  firrtl.strictconnect %out0, %in0 : firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>
 }
 firrtl.module @TestBulkConnections(in %in0: !firrtl.bundle<a: uint<4>, b flip: uint<4>>,
                                    out %out0: !firrtl.bundle<a: uint<4>, b flip: uint<4>>) {
   %i_in0, %i_out0 = firrtl.instance i @InlineMe0(in in0: !firrtl.bundle<a: uint<4>, b flip: uint<4>>, out out0: !firrtl.bundle<a: uint<4>, b flip: uint<4>>)
-  firrtl.connect %i_in0, %in0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
-  firrtl.connect %out0, %i_out0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
+  firrtl.strictconnect %i_in0, %in0 : firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>
+  firrtl.strictconnect %out0, %i_out0 : firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>
 // CHECK: %i_in0 = firrtl.wire  : !firrtl.bundle<a: uint<4>, b flip: uint<4>>
 // CHECK: %i_out0 = firrtl.wire  : !firrtl.bundle<a: uint<4>, b flip: uint<4>>
-// CHECK: firrtl.connect %i_out0, %i_in0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
-// CHECK: firrtl.connect %i_in0, %in0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
-// CHECK: firrtl.connect %out0, %i_out0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
+// CHECK: firrtl.strictconnect %i_out0, %i_in0 : firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>
+// CHECK: firrtl.strictconnect %i_in0, %in0 : firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>
+// CHECK: firrtl.strictconnect %out0, %i_out0 : firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>
 }
 }
 

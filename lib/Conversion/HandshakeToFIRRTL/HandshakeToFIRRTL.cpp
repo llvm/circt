@@ -42,7 +42,7 @@ using NameUniquer = std::function<std::string(Operation *)>;
 
 static void legalizeFModule(FModuleOp moduleOp) {
   SmallVector<Operation *, 8> connectOps;
-  moduleOp.walk([&](ConnectOp op) { connectOps.push_back(op); });
+  moduleOp.walk([&](StrictConnectOp op) { connectOps.push_back(op); });
   for (auto op : connectOps)
     op->moveBefore(&moduleOp.getBodyBlock()->back());
 }
@@ -620,7 +620,7 @@ static void createMergeArgReady(ArrayRef<Value> outputs, Value fired,
     Value argReadyWire = rewriter.create<EQPrimOp>(insertLoc, bitType,
                                                    winnerOrDefault, constIndex);
 
-    rewriter.create<ConnectOp>(insertLoc, outputs[i], argReadyWire);
+    rewriter.create<StrictConnectOp>(insertLoc, outputs[i], argReadyWire);
   }
 }
 
@@ -914,15 +914,15 @@ bool StdExprBuilder::buildSignExtendOp(unsigned dstWidth) {
   if (isSignedOp)
     resultDataOp = rewriter.create<AsUIntPrimOp>(insertLoc, resultDataOp);
 
-  rewriter.create<ConnectOp>(insertLoc, resultData, resultDataOp);
+  rewriter.create<StrictConnectOp>(insertLoc, resultData, resultDataOp);
 
   // Generate valid signal.
-  rewriter.create<ConnectOp>(insertLoc, resultValid, arg0Valid);
+  rewriter.create<StrictConnectOp>(insertLoc, resultValid, arg0Valid);
 
   // Generate ready signal.
   auto argReadyOp = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
                                                resultReady, arg0Valid);
-  rewriter.create<ConnectOp>(insertLoc, arg0Ready, argReadyOp);
+  rewriter.create<StrictConnectOp>(insertLoc, arg0Ready, argReadyOp);
   return true;
 }
 
@@ -939,15 +939,15 @@ bool StdExprBuilder::buildTruncateOp(unsigned int dstWidth) {
 
   Value resultDataOp =
       rewriter.create<BitsPrimOp>(insertLoc, arg0Data, dstWidth - 1, 0);
-  rewriter.create<ConnectOp>(insertLoc, resultData, resultDataOp);
+  rewriter.create<StrictConnectOp>(insertLoc, resultData, resultDataOp);
 
   // Generate valid signal.
-  rewriter.create<ConnectOp>(insertLoc, resultValid, arg0Valid);
+  rewriter.create<StrictConnectOp>(insertLoc, resultValid, arg0Valid);
 
   // Generate ready signal.
   auto argReadyOp = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
                                                resultReady, arg0Valid);
-  rewriter.create<ConnectOp>(insertLoc, arg0Ready, argReadyOp);
+  rewriter.create<StrictConnectOp>(insertLoc, arg0Ready, argReadyOp);
   return true;
 }
 
@@ -1019,18 +1019,18 @@ void StdExprBuilder::buildBinaryLogic() {
     resultDataOp = rewriter.create<AsUIntPrimOp>(insertLoc, resultDataOp);
   }
 
-  rewriter.create<ConnectOp>(insertLoc, resultData, resultDataOp);
+  rewriter.create<StrictConnectOp>(insertLoc, resultData, resultDataOp);
 
   // Generate valid signal.
   auto resultValidOp = rewriter.create<AndPrimOp>(
       insertLoc, arg0Valid.getType(), arg0Valid, arg1Valid);
-  rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidOp);
+  rewriter.create<StrictConnectOp>(insertLoc, resultValid, resultValidOp);
 
   // Generate ready signals.
   auto argReadyOp = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
                                                resultReady, resultValidOp);
-  rewriter.create<ConnectOp>(insertLoc, arg0Ready, argReadyOp);
-  rewriter.create<ConnectOp>(insertLoc, arg1Ready, argReadyOp);
+  rewriter.create<StrictConnectOp>(insertLoc, arg0Ready, argReadyOp);
+  rewriter.create<StrictConnectOp>(insertLoc, arg1Ready, argReadyOp);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1116,7 +1116,7 @@ bool HandshakeBuilder::visitHandshake(SinkOp op) {
   auto signalType = argValid.getType().cast<FIRRTLBaseType>();
   Value highSignal =
       createConstantOp(signalType, APInt(1, 1), insertLoc, rewriter);
-  rewriter.create<ConnectOp>(insertLoc, argReady, highSignal);
+  rewriter.create<StrictConnectOp>(insertLoc, argReady, highSignal);
 
   rewriter.eraseOp(argValid.getDefiningOp());
 
@@ -1140,7 +1140,7 @@ bool HandshakeBuilder::visitHandshake(SourceOp op) {
   auto signalType = argValid.getType().cast<FIRRTLBaseType>();
   Value highSignal =
       createConstantOp(signalType, APInt(1, 1), insertLoc, rewriter);
-  rewriter.create<ConnectOp>(insertLoc, argValid, highSignal);
+  rewriter.create<StrictConnectOp>(insertLoc, argValid, highSignal);
 
   rewriter.eraseOp(argReady.getDefiningOp());
 
@@ -1184,7 +1184,7 @@ Value HandshakeBuilder::buildReductionTree(ArrayRef<Value> inputs,
     tmpValue = rewriter.create<OpType>(insertLoc, tmpValue.getType(), inputs[i],
                                        tmpValue);
 
-  rewriter.create<ConnectOp>(insertLoc, output, tmpValue);
+  rewriter.create<StrictConnectOp>(insertLoc, output, tmpValue);
 
   return tmpValue;
 }
@@ -1201,7 +1201,7 @@ void HandshakeBuilder::buildAllReadyLogic(SmallVector<ValueVector *, 4> inputs,
   for (unsigned i = 0, e = inputs.size(); i < e; ++i) {
     auto currentInput = *inputs[i];
     auto inputReady = currentInput[1];
-    rewriter.create<ConnectOp>(insertLoc, inputReady, validAndReady);
+    rewriter.create<StrictConnectOp>(insertLoc, inputReady, validAndReady);
   }
 }
 
@@ -1249,7 +1249,7 @@ bool HandshakeBuilder::visitHandshake(SyncOp op) {
     if (in->size() == 2)
       continue;
 
-    rewriter.create<ConnectOp>(insertLoc, (*out)[2], (*in)[2]);
+    rewriter.create<StrictConnectOp>(insertLoc, (*out)[2], (*in)[2]);
   }
 
   if (!buildJoinLogic(inputs, &connector))
@@ -1302,7 +1302,7 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
     auto muxedData = createMuxTree(argData, selectData, insertLoc, rewriter);
 
     // Connect the selected data signal to the result data.
-    rewriter.create<ConnectOp>(insertLoc, resultData, muxedData);
+    rewriter.create<StrictConnectOp>(insertLoc, resultData, muxedData);
   }
 
   // Mux the arg valids.
@@ -1313,7 +1313,7 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
       insertLoc, muxedValid.getType(), muxedValid, selectValid);
 
   // Connect that to the result valid.
-  rewriter.create<ConnectOp>(insertLoc, resultValid, muxedAndSelectValid);
+  rewriter.create<StrictConnectOp>(insertLoc, resultValid, muxedAndSelectValid);
 
   // And the result valid with the result ready.
   auto resultValidAndReady =
@@ -1321,7 +1321,7 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
                                  muxedAndSelectValid, resultReady);
 
   // Connect that to the select ready.
-  rewriter.create<ConnectOp>(insertLoc, selectReady, resultValidAndReady);
+  rewriter.create<StrictConnectOp>(insertLoc, selectReady, resultValidAndReady);
 
   // Since addresses coming from Handshake are IndexType and have a hardcoded
   // 64-bit width in this pass, we may need to truncate down to the actual
@@ -1350,7 +1350,7 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
         insertLoc, oneHot.getType(), oneHot, resultValidAndReady);
 
     // Connect that to this arg ready.
-    rewriter.create<ConnectOp>(insertLoc, argReady[i],
+    rewriter.create<StrictConnectOp>(insertLoc, argReady[i],
                                oneHotAndResultValidAndReady);
   }
 
@@ -1385,7 +1385,7 @@ bool HandshakeBuilder::visitHandshake(handshake::SelectOp op) {
       createMuxTree({falseData, trueData}, selectData, insertLoc, rewriter);
 
   // Connect the selected data signal to the result data.
-  rewriter.create<ConnectOp>(insertLoc, resultData, muxedData);
+  rewriter.create<StrictConnectOp>(insertLoc, resultData, muxedData);
 
   // 'and' the arg valids and select valid
   Value allValid =
@@ -1393,7 +1393,7 @@ bool HandshakeBuilder::visitHandshake(handshake::SelectOp op) {
   buildReductionTree<AndPrimOp>({trueValid, falseValid, selectValid}, allValid);
 
   // Connect that to the result valid.
-  rewriter.create<ConnectOp>(insertLoc, resultValid, allValid);
+  rewriter.create<StrictConnectOp>(insertLoc, resultValid, allValid);
 
   // 'and' the result valid with the result ready.
   auto resultValidAndReady =
@@ -1402,9 +1402,9 @@ bool HandshakeBuilder::visitHandshake(handshake::SelectOp op) {
   // Connect that to the 'ready' signal of all inputs. This implies that all
   // inputs + select is transacted when all are valid (and the output is ready),
   // but only the selected data is forwarded.
-  rewriter.create<ConnectOp>(insertLoc, selectReady, resultValidAndReady);
-  rewriter.create<ConnectOp>(insertLoc, trueReady, resultValidAndReady);
-  rewriter.create<ConnectOp>(insertLoc, falseReady, resultValidAndReady);
+  rewriter.create<StrictConnectOp>(insertLoc, selectReady, resultValidAndReady);
+  rewriter.create<StrictConnectOp>(insertLoc, trueReady, resultValidAndReady);
+  rewriter.create<StrictConnectOp>(insertLoc, falseReady, resultValidAndReady);
 
   return true;
 }
@@ -1464,17 +1464,17 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
   auto priorityArb = createPriorityArbiter(argValid, noWinner, argIndexValues,
                                            insertLoc, rewriter);
 
-  rewriter.create<ConnectOp>(insertLoc, win, priorityArb);
+  rewriter.create<StrictConnectOp>(insertLoc, win, priorityArb);
 
   // Create the logic to assign the result outputs. The result valid and data
   // outputs will always be assigned. The win wire from the arbiter is used to
   // index into a tree of muxes to select the chosen input's signal(s). The
   // result outputs are gated on the win wire being non-zero.
-  rewriter.create<ConnectOp>(insertLoc, resultValid, hasWinnerCondition);
+  rewriter.create<StrictConnectOp>(insertLoc, resultValid, hasWinnerCondition);
 
   if (!isControlOp(op)) {
     auto resultDataMux = createOneHotMuxTree(argData, win, insertLoc, rewriter);
-    rewriter.create<ConnectOp>(insertLoc, resultData, resultDataMux);
+    rewriter.create<StrictConnectOp>(insertLoc, resultData, resultDataMux);
   }
 
   // Create the logic to set the done wires for the result. The done wire is
@@ -1483,7 +1483,7 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
   auto resultValidAndReady = rewriter.create<AndPrimOp>(
       insertLoc, bitType, hasWinnerCondition, resultReady);
 
-  rewriter.create<ConnectOp>(insertLoc, resultDone, resultValidAndReady);
+  rewriter.create<StrictConnectOp>(insertLoc, resultDone, resultValidAndReady);
 
   // Create the logic to assign the arg ready outputs. The logic is identical
   // for each arg. If the fired wire is asserted, and the win wire holds an
@@ -1589,7 +1589,7 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   priorityArb = rewriter.create<MuxPrimOp>(
       insertLoc, indexType, hadWinnerCondition, won, priorityArb);
 
-  rewriter.create<ConnectOp>(insertLoc, win, priorityArb);
+  rewriter.create<StrictConnectOp>(insertLoc, win, priorityArb);
 
   // Create the logic to assign the result and control outputs. The result valid
   // output will always be assigned, and if isControl is not set, the result
@@ -1603,12 +1603,12 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
 
   auto resultValidWire = rewriter.create<AndPrimOp>(
       insertLoc, bitType, hasWinnerCondition, resultNotEmitted);
-  rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidWire);
+  rewriter.create<StrictConnectOp>(insertLoc, resultValid, resultValidWire);
 
   if (!isControl) {
     Value resultData = resultSubfields[2];
     auto resultDataMux = createOneHotMuxTree(argData, win, insertLoc, rewriter);
-    rewriter.create<ConnectOp>(insertLoc, resultData, resultDataMux);
+    rewriter.create<StrictConnectOp>(insertLoc, resultData, resultDataMux);
   }
 
   auto controlNotEmitted =
@@ -1616,7 +1616,7 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
 
   auto controlValidWire = rewriter.create<AndPrimOp>(
       insertLoc, bitType, hasWinnerCondition, controlNotEmitted);
-  rewriter.create<ConnectOp>(insertLoc, controlValid, controlValidWire);
+  rewriter.create<StrictConnectOp>(insertLoc, controlValid, controlValidWire);
 
   // Use the one-hot win wire to select the index to output in the control data.
   size_t controlOutputBits = getNumIndexBits(numInputs);
@@ -1628,7 +1628,7 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
 
   auto controlOutput =
       createOneHotMuxTree(controlOutputs, win, insertLoc, rewriter);
-  rewriter.create<ConnectOp>(insertLoc, controlData, controlOutput);
+  rewriter.create<StrictConnectOp>(insertLoc, controlData, controlOutput);
 
   // Create the logic to set the won register. If the fired wire is asserted, we
   // have finished this round and can and reset the register to the sentinel
@@ -1636,7 +1636,7 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   // value of the win register until we can fire.
   auto wonMux =
       rewriter.create<MuxPrimOp>(insertLoc, indexType, fired, noWinner, win);
-  rewriter.create<ConnectOp>(insertLoc, won, wonMux);
+  rewriter.create<StrictConnectOp>(insertLoc, won, wonMux);
 
   // Create the logic to set the done wires for the result and control. For both
   // outputs, the done wire is asserted when the output is valid and ready, or
@@ -1646,20 +1646,20 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
 
   auto resultDoneWire = rewriter.create<OrPrimOp>(
       insertLoc, bitType, resultEmitted, resultValidAndReady);
-  rewriter.create<ConnectOp>(insertLoc, resultDone, resultDoneWire);
+  rewriter.create<StrictConnectOp>(insertLoc, resultDone, resultDoneWire);
 
   auto controlValidAndReady = rewriter.create<AndPrimOp>(
       insertLoc, bitType, controlValidWire, controlReady);
 
   auto controlDoneWire = rewriter.create<OrPrimOp>(
       insertLoc, bitType, controlEmitted, controlValidAndReady);
-  rewriter.create<ConnectOp>(insertLoc, controlDone, controlDoneWire);
+  rewriter.create<StrictConnectOp>(insertLoc, controlDone, controlDoneWire);
 
   // Create the logic to set the fired wire. It is asserted when both result and
   // control are done.
   auto firedWire =
       rewriter.create<AndPrimOp>(insertLoc, bitType, resultDone, controlDone);
-  rewriter.create<ConnectOp>(insertLoc, fired, firedWire);
+  rewriter.create<StrictConnectOp>(insertLoc, fired, firedWire);
 
   // Create the logic to assign the emitted registers. If the fired wire is
   // asserted, we have finished this round and can reset the registers to 0.
@@ -1667,11 +1667,11 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   // fire.
   auto resultEmittedWire = rewriter.create<MuxPrimOp>(insertLoc, bitType, fired,
                                                       falseConst, resultDone);
-  rewriter.create<ConnectOp>(insertLoc, resultEmitted, resultEmittedWire);
+  rewriter.create<StrictConnectOp>(insertLoc, resultEmitted, resultEmittedWire);
 
   auto controlEmittedWire = rewriter.create<MuxPrimOp>(
       insertLoc, bitType, fired, falseConst, controlDone);
-  rewriter.create<ConnectOp>(insertLoc, controlEmitted, controlEmittedWire);
+  rewriter.create<StrictConnectOp>(insertLoc, controlEmitted, controlEmittedWire);
 
   // Create the logic to assign the arg ready outputs. The logic is identical
   // for each arg. If the fired wire is asserted, and the win wire holds an
@@ -1691,13 +1691,13 @@ bool HandshakeBuilder::visitHandshake(handshake::BranchOp op) {
   Value resultValid = resultSubfields[0];
   Value resultReady = resultSubfields[1];
 
-  rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
-  rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
+  rewriter.create<StrictConnectOp>(insertLoc, resultValid, argValid);
+  rewriter.create<StrictConnectOp>(insertLoc, argReady, resultReady);
 
   if (!isControlOp(op)) {
     Value argData = argSubfields[2];
     Value resultData = resultSubfields[2];
-    rewriter.create<ConnectOp>(insertLoc, resultData, argData);
+    rewriter.create<StrictConnectOp>(insertLoc, resultData, argData);
   }
   return true;
 }
@@ -1727,12 +1727,12 @@ bool HandshakeBuilder::visitHandshake(ConditionalBranchOp op) {
       insertLoc, conditionData.getType(), conditionData);
 
   // Connect valid signal of both results.
-  rewriter.create<ConnectOp>(
+  rewriter.create<StrictConnectOp>(
       insertLoc, trueResultValid,
       rewriter.create<AndPrimOp>(insertLoc, conditionData.getType(),
                                  conditionData, conditionArgValid));
 
-  rewriter.create<ConnectOp>(
+  rewriter.create<StrictConnectOp>(
       insertLoc, falseResultValid,
       rewriter.create<AndPrimOp>(insertLoc, conditionNot.getType(),
                                  conditionNot, conditionArgValid));
@@ -1742,8 +1742,8 @@ bool HandshakeBuilder::visitHandshake(ConditionalBranchOp op) {
     Value argData = argSubfields[2];
     Value trueResultData = trueResultSubfields[2];
     Value falseResultData = falseResultSubfields[2];
-    rewriter.create<ConnectOp>(insertLoc, trueResultData, argData);
-    rewriter.create<ConnectOp>(insertLoc, falseResultData, argData);
+    rewriter.create<StrictConnectOp>(insertLoc, trueResultData, argData);
+    rewriter.create<StrictConnectOp>(insertLoc, falseResultData, argData);
   }
 
   // Connect ready signal of input and condition.
@@ -1755,8 +1755,8 @@ bool HandshakeBuilder::visitHandshake(ConditionalBranchOp op) {
       rewriter.create<AndPrimOp>(insertLoc, selectedResultReady.getType(),
                                  selectedResultReady, conditionArgValid);
 
-  rewriter.create<ConnectOp>(insertLoc, argReady, conditionArgReady);
-  rewriter.create<ConnectOp>(insertLoc, conditionReady, conditionArgReady);
+  rewriter.create<StrictConnectOp>(insertLoc, argReady, conditionArgReady);
+  rewriter.create<StrictConnectOp>(insertLoc, conditionReady, conditionArgReady);
 
   return true;
 }
@@ -1774,7 +1774,7 @@ bool HandshakeBuilder::visitHandshake(LazyForkOp op) {
     *tmpReady = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
                                            resultReady, *tmpReady);
   }
-  rewriter.create<ConnectOp>(insertLoc, argReady, *tmpReady);
+  rewriter.create<StrictConnectOp>(insertLoc, argReady, *tmpReady);
 
   // All outputs must be ready for the LazyFork to send the token.
   auto resultValidOp = rewriter.create<AndPrimOp>(insertLoc, argValid.getType(),
@@ -1782,12 +1782,12 @@ bool HandshakeBuilder::visitHandshake(LazyForkOp op) {
   for (unsigned i = 1, e = portList.size(); i < e; ++i) {
     ValueVector resultfield = portList[i];
     Value resultValid = resultfield[0];
-    rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidOp);
+    rewriter.create<StrictConnectOp>(insertLoc, resultValid, resultValidOp);
 
     if (!isControlOp(op)) {
       Value argData = argSubfields[2];
       Value resultData = resultfield[2];
-      rewriter.create<ConnectOp>(insertLoc, resultData, argData);
+      rewriter.create<StrictConnectOp>(insertLoc, resultData, argData);
     }
   }
   return true;
@@ -1826,12 +1826,12 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
   buildReductionTree<AndPrimOp>(doneWires, allDoneWire);
 
   // Connect the allDoneWire to the input ready.
-  rewriter.create<ConnectOp>(insertLoc, argReady, allDoneWire);
+  rewriter.create<StrictConnectOp>(insertLoc, argReady, allDoneWire);
 
   // Create a notAllDoneWire for later use.
   auto notAllDoneWire =
       rewriter.create<WireOp>(insertLoc, bitType, "notAllDone").getResult();
-  rewriter.create<ConnectOp>(
+  rewriter.create<StrictConnectOp>(
       insertLoc, notAllDoneWire,
       rewriter.create<NotPrimOp>(insertLoc, bitType, allDoneWire));
 
@@ -1851,7 +1851,7 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
     if (!isControl) {
       Value argData = argSubfields[2];
       Value resultData = resultSubfields[2];
-      rewriter.create<ConnectOp>(insertLoc, resultData, argData);
+      rewriter.create<StrictConnectOp>(insertLoc, resultData, argData);
     }
 
     // Create a emitted register.
@@ -1866,14 +1866,14 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
     // all emtdRegs will be cleared to zero.
     auto emtd = rewriter.create<AndPrimOp>(insertLoc, bitType, doneWire,
                                            notAllDoneWire);
-    rewriter.create<ConnectOp>(insertLoc, emtdReg, emtd);
+    rewriter.create<StrictConnectOp>(insertLoc, emtdReg, emtd);
 
     // Create a notEmtdWire for later use.
     auto notEmtdWire =
         rewriter
             .create<WireOp>(insertLoc, bitType, "notEmtd" + std::to_string(idx))
             .getResult();
-    rewriter.create<ConnectOp>(
+    rewriter.create<StrictConnectOp>(
         insertLoc, notEmtdWire,
         rewriter.create<NotPrimOp>(insertLoc, bitType, emtdReg));
 
@@ -1881,7 +1881,7 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
     // AndPrimOp is each result can only be emitted once.
     auto valid =
         rewriter.create<AndPrimOp>(insertLoc, bitType, notEmtdWire, argValid);
-    rewriter.create<ConnectOp>(insertLoc, resultValid, valid);
+    rewriter.create<StrictConnectOp>(insertLoc, resultValid, valid);
 
     // Create validReady wire signal, which indicates a successful handshake in
     // the current clock cycle.
@@ -1890,14 +1890,14 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
             .create<WireOp>(insertLoc, bitType,
                             "validReady" + std::to_string(idx))
             .getResult();
-    rewriter.create<ConnectOp>(
+    rewriter.create<StrictConnectOp>(
         insertLoc, validReadyWire,
         rewriter.create<AndPrimOp>(insertLoc, bitType, resultReady, valid));
 
     // Finally, we can drive the doneWire we created in the beginning with
     // {validReadyWire || emtdReg}, where emtdReg indicates a successful
     // handshake in a previous clock cycle.
-    rewriter.create<ConnectOp>(
+    rewriter.create<StrictConnectOp>(
         insertLoc, doneWire,
         rewriter.create<OrPrimOp>(insertLoc, bitType, validReadyWire, emtdReg));
 
@@ -1942,9 +1942,9 @@ bool HandshakeBuilder::visitHandshake(handshake::ConstantOp op) {
   auto constantType = resultData.getType().cast<FIRRTLBaseType>();
   auto constantValue = op->getAttrOfType<IntegerAttr>("value").getValue();
 
-  rewriter.create<ConnectOp>(insertLoc, resultValid, controlValid);
-  rewriter.create<ConnectOp>(insertLoc, controlReady, resultReady);
-  rewriter.create<ConnectOp>(
+  rewriter.create<StrictConnectOp>(insertLoc, resultValid, controlValid);
+  rewriter.create<StrictConnectOp>(insertLoc, controlReady, resultReady);
+  rewriter.create<StrictConnectOp>(
       insertLoc, resultData,
       createConstantOp(constantType, constantValue, insertLoc, rewriter));
   return true;
@@ -1965,16 +1965,16 @@ void HandshakeBuilder::buildControlBufferLogic(Value predValid, Value predReady,
                        .create<RegResetOp>(insertLoc, bitType, clock, reset,
                                            falseConst, "readyReg")
                        .getResult();
-  rewriter.create<ConnectOp>(insertLoc, readyReg, readyRegWire);
+  rewriter.create<StrictConnectOp>(insertLoc, readyReg, readyRegWire);
 
   // Create the logic to drive the successor valid and potentially data.
   auto validResult = rewriter.create<MuxPrimOp>(insertLoc, bitType, readyReg,
                                                 readyReg, predValid);
-  rewriter.create<ConnectOp>(insertLoc, succValid, validResult);
+  rewriter.create<StrictConnectOp>(insertLoc, succValid, validResult);
 
   // Create the logic to drive the predecessor ready.
   auto notReady = rewriter.create<NotPrimOp>(insertLoc, bitType, readyReg);
-  rewriter.create<ConnectOp>(insertLoc, predReady, notReady);
+  rewriter.create<StrictConnectOp>(insertLoc, predReady, notReady);
 
   // Create the logic for successor and register are both low.
   auto succNotReady = rewriter.create<NotPrimOp>(insertLoc, bitType, succReady);
@@ -1992,7 +1992,7 @@ void HandshakeBuilder::buildControlBufferLogic(Value predValid, Value predReady,
   // Create a mux for emptying the register when both are ready.
   auto resetSignal = rewriter.create<MuxPrimOp>(insertLoc, bitType, bothReady,
                                                 falseConst, ctrlNotReadyMux);
-  rewriter.create<ConnectOp>(insertLoc, readyRegWire, resetSignal);
+  rewriter.create<StrictConnectOp>(insertLoc, readyRegWire, resetSignal);
 
   // Add same logic for the data path if necessary.
   if (predData) {
@@ -2009,18 +2009,18 @@ void HandshakeBuilder::buildControlBufferLogic(Value predValid, Value predReady,
                                 ctrlZeroConst, "ctrlDataReg")
             .getResult();
 
-    rewriter.create<ConnectOp>(insertLoc, ctrlDataReg, ctrlDataRegWire);
+    rewriter.create<StrictConnectOp>(insertLoc, ctrlDataReg, ctrlDataRegWire);
 
     auto dataResult = rewriter.create<MuxPrimOp>(insertLoc, dataType, readyReg,
                                                  ctrlDataReg, predData);
-    rewriter.create<ConnectOp>(insertLoc, succData, dataResult);
+    rewriter.create<StrictConnectOp>(insertLoc, succData, dataResult);
 
     auto dataNotReadyMux = rewriter.create<MuxPrimOp>(
         insertLoc, dataType, neitherReady, predData, ctrlDataReg);
 
     auto dataResetSignal = rewriter.create<MuxPrimOp>(
         insertLoc, dataType, bothReady, ctrlZeroConst, dataNotReadyMux);
-    rewriter.create<ConnectOp>(insertLoc, ctrlDataRegWire, dataResetSignal);
+    rewriter.create<StrictConnectOp>(insertLoc, ctrlDataRegWire, dataResetSignal);
   }
 }
 
@@ -2036,7 +2036,7 @@ void HandshakeBuilder::buildDataBufferLogic(Value predValid, Value validReg,
   auto emptyOrReady =
       rewriter.create<OrPrimOp>(insertLoc, bitType, notValidReg, succReady);
 
-  rewriter.create<ConnectOp>(insertLoc, predReady, emptyOrReady);
+  rewriter.create<StrictConnectOp>(insertLoc, predReady, emptyOrReady);
 
   // Create a mux that drives the register input. If the emptyOrReady signal
   // is asserted, the mux selects the predValid signal. Otherwise, it selects
@@ -2045,7 +2045,7 @@ void HandshakeBuilder::buildDataBufferLogic(Value predValid, Value validReg,
       insertLoc, bitType, emptyOrReady, predValid, validReg);
 
   // Now we can drive the valid register.
-  rewriter.create<ConnectOp>(insertLoc, validReg, validRegMux);
+  rewriter.create<StrictConnectOp>(insertLoc, validReg, validRegMux);
 
   // If data is not nullptr, create data logic.
   if (predData && dataReg) {
@@ -2054,7 +2054,7 @@ void HandshakeBuilder::buildDataBufferLogic(Value predValid, Value validReg,
     // Create a mux that drives the date register.
     auto dataRegMux = rewriter.create<MuxPrimOp>(
         insertLoc, dataType, emptyOrReady, predData, dataReg);
-    rewriter.create<ConnectOp>(insertLoc, dataReg, dataRegMux);
+    rewriter.create<StrictConnectOp>(insertLoc, dataReg, dataRegMux);
   }
 }
 
@@ -2068,7 +2068,7 @@ static void connectSrcToAllElements(ImplicitLocOpBuilder &builder, Value dest,
       connectSrcToAllElements(builder, field, src);
     }
   } else {
-    builder.create<ConnectOp>(dest, src);
+    builder.create<StrictConnectOp>(dest, src);
   }
 }
 
@@ -2174,28 +2174,28 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
   };
 
   // Full when number of elements in fifo is == depth
-  builder.create<ConnectOp>(
+  builder.create<StrictConnectOp>(
       full,
       builder.create<EQPrimOp>(count, getConstantOfEqWidth(depth, count)));
 
   // Empty when number of elements in fifo is == 0
-  builder.create<ConnectOp>(
+  builder.create<StrictConnectOp>(
       empty, builder.create<EQPrimOp>(count, getConstantOfEqWidth(0, count)));
 
   // Ready if there is space in the FIFO.
-  builder.create<ConnectOp>(
+  builder.create<StrictConnectOp>(
       readyOut,
       builder.create<OrPrimOp>(builder.create<NotPrimOp>(full), readyIn));
 
   // Ready if next can accept and there is something in the FIFO to read.
-  builder.create<ConnectOp>(readEn,
+  builder.create<StrictConnectOp>(readEn,
                             builder.create<AndPrimOp>(notEmpty, readyIn));
 
   // Valid when not empty
-  builder.create<ConnectOp>(validOut, notEmpty);
+  builder.create<StrictConnectOp>(validOut, notEmpty);
 
   // Writing when input is valid and is not full or input ready.
-  builder.create<ConnectOp>(
+  builder.create<StrictConnectOp>(
       writeEn, builder.create<AndPrimOp>(
                    validIn, builder.create<OrPrimOp>(
                                 builder.create<NotPrimOp>(full), readyIn)));
@@ -2229,10 +2229,10 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
     // Get the clock out of the bundle and connect them.
     auto readClock = builder.create<SubfieldOp>(
         readBundle, *readType.getElementIndex("clk"));
-    builder.create<ConnectOp>(readClock, clk);
+    builder.create<StrictConnectOp>(readClock, clk);
     auto writeClock = builder.create<SubfieldOp>(
         writeBundle, *writeType.getElementIndex("clk"));
-    builder.create<ConnectOp>(writeClock, clk);
+    builder.create<StrictConnectOp>(writeClock, clk);
 
     // Get the addresses out of the bundle
     auto readAddr = builder.create<SubfieldOp>(
@@ -2241,8 +2241,8 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
         writeBundle, *readType.getElementIndex("addr"));
 
     // Connect read and write to head and tail registers.
-    builder.create<ConnectOp>(readAddr, head);
-    builder.create<ConnectOp>(writeAddr, tail);
+    builder.create<StrictConnectOp>(readAddr, head);
+    builder.create<StrictConnectOp>(writeAddr, tail);
 
     // Get the memory enable out of the bundles.
     auto memReadEn =
@@ -2250,17 +2250,17 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
     auto memWriteEn = builder.create<SubfieldOp>(
         writeBundle, *writeType.getElementIndex("en"));
     // Always read
-    builder.create<ConnectOp>(memReadEn, oneConst);
+    builder.create<StrictConnectOp>(memReadEn, oneConst);
     // Write on writeEn
-    builder.create<ConnectOp>(memWriteEn, writeEn);
+    builder.create<StrictConnectOp>(memWriteEn, writeEn);
 
     // Connect read and write data.
     auto readData = builder.create<SubfieldOp>(
         readBundle, *readType.getElementIndex("data"));
     auto writeData = builder.create<SubfieldOp>(
         writeBundle, *writeType.getElementIndex("data"));
-    builder.create<ConnectOp>(dataOut, readData);
-    builder.create<ConnectOp>(writeData, dataIn);
+    builder.create<StrictConnectOp>(dataOut, readData);
+    builder.create<StrictConnectOp>(writeData, dataIn);
 
     // Get the store mask out of the bundle.
     auto writeMask = builder.create<SubfieldOp>(
@@ -2274,7 +2274,7 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
   // Next-state tail register; tail <- writeEn ? tail + 1 % depth : tail
   // (tail + 1 % depth) may be wider than tail, so also add truncation.
   auto tail1 = builder.create<AddPrimOp>(tail, oneConst);
-  builder.create<ConnectOp>(
+  builder.create<StrictConnectOp>(
       tail, builder.create<MuxPrimOp>(
                 writeEn,
                 trunc(builder.create<RemPrimOp>(
@@ -2285,7 +2285,7 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
   // Next-state head register; head <- readEn ? head + 1 % depth : head
   // (head + 1 % depth) may be wider than tail, so also add truncation.
   auto head1 = builder.create<AddPrimOp>(head, oneConst);
-  builder.create<ConnectOp>(
+  builder.create<StrictConnectOp>(
       head, builder.create<MuxPrimOp>(
                 readEn,
                 trunc(builder.create<RemPrimOp>(
@@ -2304,7 +2304,7 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
       readXorWrite,
       trunc(builder.create<MuxPrimOp>(writeEn, countp1, countn1), depthType),
       count);
-  builder.create<ConnectOp>(count, nsCountMux);
+  builder.create<StrictConnectOp>(count, nsCountMux);
   return moduleOp;
 }
 
@@ -2349,21 +2349,21 @@ bool HandshakeBuilder::buildFIFOBufferLogic(int64_t numStage,
   }
 
   // Connect output valid and ready signals.
-  builder.create<ConnectOp>(outputValid,
+  builder.create<StrictConnectOp>(outputValid,
                             builder.create<OrPrimOp>(inputValid, fifoValid));
-  builder.create<ConnectOp>(inputReady,
+  builder.create<StrictConnectOp>(inputReady,
                             builder.create<OrPrimOp>(fifoReady, outputReady));
 
-  builder.create<ConnectOp>(
+  builder.create<StrictConnectOp>(
       fifoPValid,
       builder.create<AndPrimOp>(
           inputValid, builder.create<OrPrimOp>(
                           builder.create<NotPrimOp>(outputReady), fifoValid)));
 
-  builder.create<ConnectOp>(muxSelWire, fifoValid);
-  builder.create<ConnectOp>(fifoNReady, outputReady);
+  builder.create<StrictConnectOp>(muxSelWire, fifoValid);
+  builder.create<StrictConnectOp>(fifoNReady, outputReady);
   if (!isControl)
-    builder.create<ConnectOp>(fifoIn, inputData);
+    builder.create<StrictConnectOp>(fifoIn, inputData);
 
   std::string innerFifoModName = "innerFIFO_" + std::to_string(numStage);
   if (!isControl)
@@ -2398,22 +2398,22 @@ bool HandshakeBuilder::buildFIFOBufferLogic(int64_t numStage,
   auto fifoClk = innerFIFOInst.getResult(portIdx++);
   auto fifoRst = innerFIFOInst.getResult(portIdx++);
 
-  builder.create<ConnectOp>(fifoClk, clock);
-  builder.create<ConnectOp>(fifoRst, reset);
-  builder.create<ConnectOp>(fifoValidIn, fifoPValid);
-  builder.create<ConnectOp>(fifoReadyIn, fifoNReady);
-  builder.create<ConnectOp>(fifoValid, fifoValidOut);
-  builder.create<ConnectOp>(fifoReady, fifoReadyOut);
+  builder.create<StrictConnectOp>(fifoClk, clock);
+  builder.create<StrictConnectOp>(fifoRst, reset);
+  builder.create<StrictConnectOp>(fifoValidIn, fifoPValid);
+  builder.create<StrictConnectOp>(fifoReadyIn, fifoNReady);
+  builder.create<StrictConnectOp>(fifoValid, fifoValidOut);
+  builder.create<StrictConnectOp>(fifoReady, fifoReadyOut);
   if (!isControl) {
-    builder.create<ConnectOp>(fifoDataIn, fifoIn);
-    builder.create<ConnectOp>(fifoOut, fifoDataOut);
+    builder.create<StrictConnectOp>(fifoDataIn, fifoIn);
+    builder.create<StrictConnectOp>(fifoOut, fifoDataOut);
   }
 
   // Select fifo or bypass input based on mux selection.
   if (!isControl) {
     auto outputData = outputSubfields[2];
     auto muxOut = builder.create<MuxPrimOp>(muxSelWire, fifoOut, inputData);
-    builder.create<ConnectOp>(outputData, muxOut);
+    builder.create<StrictConnectOp>(outputData, muxOut);
   }
 
   return true;
@@ -2530,11 +2530,11 @@ bool HandshakeBuilder::buildSeqBufferLogic(int64_t numStage, ValueVector *input,
   }
 
   // Connect to the output ports.
-  rewriter.create<ConnectOp>(insertLoc, outputValid, currentValid);
-  rewriter.create<ConnectOp>(insertLoc, currentReady, outputReady);
+  rewriter.create<StrictConnectOp>(insertLoc, outputValid, currentValid);
+  rewriter.create<StrictConnectOp>(insertLoc, currentReady, outputReady);
   if (!isControl) {
     auto outputData = outputSubfields[2];
-    rewriter.create<ConnectOp>(insertLoc, outputData, currentData);
+    rewriter.create<StrictConnectOp>(insertLoc, outputData, currentData);
   }
 
   return true;
@@ -2601,9 +2601,9 @@ bool HandshakeBuilder::visitHandshake(ExternalMemoryOp op) {
       }
 
       if (outerFlip ^ innerFlip)
-        rewriter.create<ConnectOp>(loc, extInputSubfield, field.value());
+        rewriter.create<StrictConnectOp>(loc, extInputSubfield, field.value());
       else
-        rewriter.create<ConnectOp>(loc, field.value(), extInputSubfield);
+        rewriter.create<StrictConnectOp>(loc, field.value(), extInputSubfield);
     }
   }
 
@@ -2694,7 +2694,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     // Get the clock out of the bundle and connect it.
     auto memClock = rewriter.create<SubfieldOp>(
         insertLoc, memBundle, *memType.getElementIndex("clk"));
-    rewriter.create<ConnectOp>(insertLoc, memClock, clock);
+    rewriter.create<StrictConnectOp>(insertLoc, memClock, clock);
 
     // Get the load address out of the bundle.
     auto memAddr = rewriter.create<SubfieldOp>(
@@ -2714,21 +2714,21 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     }
 
     // Connect the load address to the memory.
-    rewriter.create<ConnectOp>(insertLoc, memAddr, loadAddrData);
+    rewriter.create<StrictConnectOp>(insertLoc, memAddr, loadAddrData);
 
     // Get the load data out of the bundle.
     auto memData = rewriter.create<SubfieldOp>(
         insertLoc, memBundle, *memType.getElementIndex("data"));
 
     // Connect the memory to the load data.
-    rewriter.create<ConnectOp>(insertLoc, loadDataData, memData);
+    rewriter.create<StrictConnectOp>(insertLoc, loadDataData, memData);
 
     // Get the load enable out of the bundle.
     auto memEnable = rewriter.create<SubfieldOp>(
         insertLoc, memBundle, *memType.getElementIndex("en"));
 
     // Connect the address valid signal to the memory enable.
-    rewriter.create<ConnectOp>(insertLoc, memEnable, loadAddrValid);
+    rewriter.create<StrictConnectOp>(insertLoc, memEnable, loadAddrValid);
 
     // Create control-only fork for the load address valid and ready signal.
     buildForkLogic(&loadAddr, {&loadData, &loadControl}, clock, reset, true);
@@ -2762,7 +2762,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     // Get the clock out of the bundle and connect it.
     auto memClock = rewriter.create<SubfieldOp>(
         insertLoc, memBundle, *memType.getElementIndex("clk"));
-    rewriter.create<ConnectOp>(insertLoc, memClock, clock);
+    rewriter.create<StrictConnectOp>(insertLoc, memClock, clock);
 
     // Get the store address out of the bundle.
     auto memAddr = rewriter.create<SubfieldOp>(
@@ -2782,14 +2782,14 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     }
 
     // Connect the store address to the memory.
-    rewriter.create<ConnectOp>(insertLoc, memAddr, storeAddrData);
+    rewriter.create<StrictConnectOp>(insertLoc, memAddr, storeAddrData);
 
     // Get the store data out of the bundle.
     auto memData = rewriter.create<SubfieldOp>(
         insertLoc, memBundle, *memType.getElementIndex("data"));
 
     // Connect the store data to the memory.
-    rewriter.create<ConnectOp>(insertLoc, memData, storeDataData);
+    rewriter.create<StrictConnectOp>(insertLoc, memData, storeDataData);
 
     // Create a register to buffer the valid path by 1 cycle, to match the write
     // latency of 1.
@@ -2802,7 +2802,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
             .getResult();
 
     // Connect the write valid buffer to the store control valid.
-    rewriter.create<ConnectOp>(insertLoc, storeControlValid, writeValidBuffer);
+    rewriter.create<StrictConnectOp>(insertLoc, storeControlValid, writeValidBuffer);
 
     // Create the logic for when both the buffered write valid signal and the
     // store complete ready signal are asserted.
@@ -2822,8 +2822,8 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
         insertLoc, bitType, notWriteValidBuffer, storeCompleted);
 
     // Connect the gate to both the store address ready and store data ready.
-    rewriter.create<ConnectOp>(insertLoc, storeAddrReady, emptyOrComplete);
-    rewriter.create<ConnectOp>(insertLoc, storeDataReady, emptyOrComplete);
+    rewriter.create<StrictConnectOp>(insertLoc, storeAddrReady, emptyOrComplete);
+    rewriter.create<StrictConnectOp>(insertLoc, storeDataReady, emptyOrComplete);
 
     // Create a wire for when both the store address and data are valid.
     SmallVector<Value, 2> storeValids;
@@ -2839,7 +2839,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     auto writeValidBufferMux = rewriter.create<MuxPrimOp>(
         insertLoc, bitType, emptyOrComplete, writeValid, writeValidBuffer);
 
-    rewriter.create<ConnectOp>(insertLoc, writeValidBuffer,
+    rewriter.create<StrictConnectOp>(insertLoc, writeValidBuffer,
                                writeValidBufferMux);
 
     // Get the store enable out of the bundle.
@@ -2847,7 +2847,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
         insertLoc, memBundle, *memType.getElementIndex("en"));
 
     // Connect the write valid signal to the memory enable.
-    rewriter.create<ConnectOp>(insertLoc, memEnable, writeValid);
+    rewriter.create<StrictConnectOp>(insertLoc, memEnable, writeValid);
 
     // Get the store mask out of the bundle.
     auto memMask = rewriter.create<SubfieldOp>(
@@ -2855,7 +2855,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     // Since we are not storing bundles in the memory, we can assume the mask is
     // a single bit.
-    rewriter.create<ConnectOp>(insertLoc, memMask, writeValid);
+    rewriter.create<StrictConnectOp>(insertLoc, memMask, writeValid);
   }
 
   return true;
@@ -2901,12 +2901,12 @@ bool HandshakeBuilder::visitHandshake(handshake::StoreOp op) {
   buildJoinLogic({&inputData, &inputAddr, &control}, &joinLogicOutput);
 
   // Output address and data signals are connected directly.
-  rewriter.create<ConnectOp>(insertLoc, outputAddrData, inputAddrData);
-  rewriter.create<ConnectOp>(insertLoc, outputDataData, inputDataData);
+  rewriter.create<StrictConnectOp>(insertLoc, outputAddrData, inputAddrData);
+  rewriter.create<StrictConnectOp>(insertLoc, outputDataData, inputDataData);
 
   // Output valid signals are connected from the inputsValid wire.
-  rewriter.create<ConnectOp>(insertLoc, outputDataValid, inputsValid);
-  rewriter.create<ConnectOp>(insertLoc, outputAddrValid, inputsValid);
+  rewriter.create<StrictConnectOp>(insertLoc, outputDataValid, inputsValid);
+  rewriter.create<StrictConnectOp>(insertLoc, outputAddrValid, inputsValid);
 
   return true;
 }
@@ -2944,24 +2944,24 @@ bool HandshakeBuilder::visitHandshake(handshake::LoadOp op) {
   auto bitType = UIntType::get(rewriter.getContext(), 1);
 
   // Address and data are connected accordingly.
-  rewriter.create<ConnectOp>(insertLoc, memoryAddrData, inputAddrData);
-  rewriter.create<ConnectOp>(insertLoc, outputDataData, memoryDataData);
+  rewriter.create<StrictConnectOp>(insertLoc, memoryAddrData, inputAddrData);
+  rewriter.create<StrictConnectOp>(insertLoc, outputDataData, memoryDataData);
 
   // The valid/ready logic between inputAddr, control, and memoryAddr is similar
   // to a JoinOp logic.
   auto addrValid = rewriter.create<AndPrimOp>(insertLoc, bitType,
                                               inputAddrValid, controlValid);
-  rewriter.create<ConnectOp>(insertLoc, memoryAddrValid, addrValid);
+  rewriter.create<StrictConnectOp>(insertLoc, memoryAddrValid, addrValid);
 
   auto addrCompleted = rewriter.create<AndPrimOp>(insertLoc, bitType, addrValid,
                                                   memoryAddrReady);
-  rewriter.create<ConnectOp>(insertLoc, inputAddrReady, addrCompleted);
-  rewriter.create<ConnectOp>(insertLoc, controlReady, addrCompleted);
+  rewriter.create<StrictConnectOp>(insertLoc, inputAddrReady, addrCompleted);
+  rewriter.create<StrictConnectOp>(insertLoc, controlReady, addrCompleted);
 
   // The valid/ready logic between memoryData and outputData is a direct
   // connection.
-  rewriter.create<ConnectOp>(insertLoc, outputDataValid, memoryDataValid);
-  rewriter.create<ConnectOp>(insertLoc, memoryDataReady, outputDataReady);
+  rewriter.create<StrictConnectOp>(insertLoc, outputDataValid, memoryDataValid);
+  rewriter.create<StrictConnectOp>(insertLoc, memoryDataReady, outputDataReady);
 
   return true;
 }
@@ -2985,7 +2985,7 @@ bool HandshakeBuilder::visitHandshake(PackOp op) {
 
   // Connect each input to the corresponding part of the output bundle
   for (auto [element, input] : llvm::zip(elements, inputs))
-    rewriter.create<ConnectOp>(insertLoc, element, (*input)[2]);
+    rewriter.create<StrictConnectOp>(insertLoc, element, (*input)[2]);
 
   return buildJoinLogic(inputs, &tuple);
 }
@@ -3010,7 +3010,7 @@ bool HandshakeBuilder::visitHandshake(UnpackOp op) {
 
   // Connect each bundle element to the corresponding output
   for (auto &&[element, output] : llvm::zip(elements, outputs))
-    rewriter.create<ConnectOp>(insertLoc, (*output)[2], element);
+    rewriter.create<StrictConnectOp>(insertLoc, (*output)[2], element);
 
   auto clock = portList[portNum - 2][0];
   auto reset = portList[portNum - 1][0];
@@ -3051,7 +3051,7 @@ static void createInstOp(Operation *oldOp, FModuleLike subModuleOp,
 
     if (portIndex < numIns) {
       // Connect input ports.
-      rewriter.create<ConnectOp>(oldOp->getLoc(), result,
+      rewriter.create<StrictConnectOp>(oldOp->getLoc(), result,
                                  oldOp->getOperand(portIndex));
     } else if (portIndex < numArgs) {
       // Connect output ports.
@@ -3063,7 +3063,7 @@ static void createInstOp(Operation *oldOp, FModuleLike subModuleOp,
           firstClkIdx + 2 * clockDomain + portIndex - numArgs;
       assert(topArgs.size() > clkOrResetIdx);
       auto signal = topArgs[clkOrResetIdx];
-      rewriter.create<ConnectOp>(oldOp->getLoc(), result, signal);
+      rewriter.create<StrictConnectOp>(oldOp->getLoc(), result, signal);
     }
     ++portIndex;
   }
@@ -3080,7 +3080,7 @@ static void convertReturnOp(Operation *oldOp, FModuleOp topModuleOp,
   // output ports.
   unsigned argIndex = 0;
   for (auto result : oldOp->getOperands()) {
-    rewriter.create<ConnectOp>(
+    rewriter.create<StrictConnectOp>(
         oldOp->getLoc(), topModuleOp.getArgument(numIns + argIndex), result);
     ++argIndex;
   }

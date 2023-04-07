@@ -10,10 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -263,6 +266,42 @@ void CombMemOp::build(OpBuilder &builder, OperationState &result,
 
 void CombMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), getName());
+}
+
+//===----------------------------------------------------------------------===//
+// ConnectOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ConnectOp::verify() {
+  auto dstType = getDest().getType();
+  auto srcType = getSrc().getType();
+  auto dstBaseType = dstType.dyn_cast<FIRRTLBaseType>();
+  auto srcBaseType = srcType.dyn_cast<FIRRTLBaseType>();
+  if (!dstBaseType || !srcBaseType) {
+    if (dstType != srcType)
+      return emitError("may not connect different non-base types");
+  } else {
+    // Analog types cannot be connected and must be attached.
+    if (dstBaseType.containsAnalog() || srcBaseType.containsAnalog())
+      return emitError("analog types may not be connected");
+
+    // Destination and source types must be equivalent.
+    if (!areTypesEquivalent(dstBaseType, srcBaseType))
+      return emitError("type mismatch between destination ")
+             << dstBaseType << " and source " << srcBaseType;
+
+    // Truncation is banned in a connection: destination bit width must be
+    // greater than or equal to source bit width.
+    if (!isTypeLarger(dstBaseType, srcBaseType))
+      return emitError("destination ")
+             << dstBaseType << " is not as wide as the source " << srcBaseType;
+  }
+
+  // Check that the flows make sense.
+  if (failed(checkConnectFlow(*this)))
+    return failure();
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
